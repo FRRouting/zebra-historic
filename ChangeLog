@@ -1,4 +1,21 @@
-1999-04-07    <kunihiro@zebra.org>
+1999-04-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* guile.m4: Added from guile package.
+
+1999-04-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version 0.60 for beta release.
+
+1999-04-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: Add noninst_LIBRARIES each directory's Makefile.am.
+	This change is for linking these libraries to guile.
+
+1999-04-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (LIBS): Add struct rt_addrinfo check.
+
+1999-04-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: AC_STDC_HEADERS added.
 

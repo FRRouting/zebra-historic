@@ -1,3 +1,30 @@
+1999-04-16  Toshiaki Takada  <takada@zebra.org>
+	* ospfd.c: DEFUN (show_ip_ospf_interface) Added.
+	* ospf_neighbor.c: ospf_nbr_count () Added.
+	
+1999-04-15  Toshiaki Takada  <takada@zebra.org>
+	* ospfd.h: struct ospf { } Changed.
+	* ospfd.c: ospf_lookup_by_process_id () Deleted.
+	* ospf_ism.c: ospf_wait_timer () Added. WaitTimer will work.
+	
+1999-04-14  Toshiaki Takada  <takada@zebra.org>
+	* ospf_ism.c: ospf_elect_dr () Added.
+	* ospf_network.c: ospf_if_ipmulticast () Added.
+	
+1999-04-11  Toshiaki Takada  <takada@zebra.org>
+	* ospf_interface.c: interface_config_write (),
+	DEFUN (if_ip_ospf_cost),
+	DEFUN (if_ip_ospf_dead_interval),
+	DEFUN (if_ip_ospf_hello_interval),
+	DEFUN (if_ip_ospf_priority),
+	DEFUN (if_ip_ospf_retransmit_interval) and
+	DEFUN (if_ip_ospf_transmit_delay) Added.
+
+1999-04-08  Toshiaki Takada  <takada@zebra.org>
+	* ospf_dump.c: ospf_packet_db_desc_dump () Added.
+	* ospf_neighbor.c: ospf_nbr_bidirectional () Added.
+	* ospf_nsm.c: nsm_twoway_received () Added.
+	
 1999-04-02  Toshiaki Takada  <takada@zebra.org>
 	* ospf_neighbor.c: New file.
 	* ospf_neighbor.h: New file.

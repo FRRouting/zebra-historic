@@ -65,8 +65,8 @@ enum
 #define OSPF_ROUTER_DEAD_INTERVAL_DEFAULT  40
 
 #define OSPF_ROUTER_PRIORITY_DEFAULT	    1
-#define OSPF_TRANSMIT_DELAY_DEFAULT        30
-#define OSPF_OUTPUT_COST_DEFAULT          100
+#define OSPF_TRANSMIT_DELAY_DEFAULT         1
+#define OSPF_OUTPUT_COST_DEFAULT           10
 #define OSPF_RETRANSMIT_INTERVAL_DEFAULT   30
 
 #define OSPF_AREA_ID_FORMAT_ADDRESS         1
@@ -76,9 +76,9 @@ enum
 struct ospf
 {
   u_int32_t process_id;			/* OSPF Process ID. */
+  struct in_addr router_id;		/* OSPF Router ID. */
 
   struct _list *if_list;		/* Zebra interface list. */
-  struct _list *neighbor;		/* OSPF neighbor list. */
 
   /* configuration data. */
   struct route_table *network_area;	/* OSPF config network_area. */
@@ -111,5 +111,6 @@ void ospf_init (void);
 void ospf_if_update (void);
 
 extern struct thread_master *master;
+extern struct ospf *ospf_top;
 
 #endif /* _ZEBRA_OSPFD_H */

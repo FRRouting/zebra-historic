@@ -1,6 +1,4 @@
 /*
- * $Id: ipforward_solaris.c,v 1.3 1999/02/19 17:26:36 developer Exp $
- *
  * ipforward value get function for solaris.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

@@ -1,6 +1,4 @@
 /*
- * $Id: ripng_route.c,v 1.5 1999/02/19 17:35:39 developer Exp $
- *
  * RIPng routes function.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

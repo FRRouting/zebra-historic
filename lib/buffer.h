@@ -1,6 +1,4 @@
 /*
- * $Id: buffer.h,v 1.24 1999/02/19 17:01:47 developer Exp $
- *
  * Buffering to output and input. 
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
@@ -35,14 +33,15 @@ struct buffer
   struct buffer_data *head;
   struct buffer_data *tail;
 
-  /* Current print out head. */
-  struct buffer_data *rhead;
-  struct buffer_data *whead;
-
+  /* Current allocated data. */
   unsigned long alloc;
 
   /* Total length of buffer. */
   unsigned long size;
+
+  /* For allocation. */
+  struct buffer_data *unused_head;
+  struct buffer_data *unused_tail;
 };
 
 /* Data container. */
@@ -60,9 +59,6 @@ struct buffer_data
 
   /* Start pointer. */
   unsigned long sp;
-
-  /* End of buffer. */
-  unsigned long ep;
 };
 
 /* Buffer type index. */

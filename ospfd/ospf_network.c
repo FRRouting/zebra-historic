@@ -88,3 +88,19 @@ ospf_if_add_alldrouters (int sock, struct prefix *p)
   return ret;
 }
 
+int
+ospf_if_ipmulticast (int sock, struct prefix *p)
+{
+  int ret;
+  struct in_addr addr;
+
+  addr = p->u.prefix4;
+
+  ret = setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof (addr));
+  if (ret < 0)
+    zlog (NULL, LOG_WARNING, "can't setsockopt IP_MULTICAST_IF:%s\n",
+	  strerror (errno));
+
+  return ret;
+}
+

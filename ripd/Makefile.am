@@ -4,14 +4,23 @@ INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 INSTALL_SDATA=@INSTALL@ -m 600
 
+noinst_LIBRARIES = librip.a
 sbin_PROGRAMS = ripd
 
+librip_a_SOURCES = \
+	ripd.c rip_zebra.c rip_interface.c
+
+noinst_HEADERS = \
+	ripd.h
+
 ripd_SOURCES = \
-	rip_main.c ripd.c rip_zebra.c rip_interface.c
+	rip_main.c $(librip_a_SOURCES)
 
 ripd_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = ripd.conf.sample
+
+EXTRA_DIST = $(sysconf_DATA)
 
 install-sysconfDATA: $(sysconf_DATA)
 	@$(NORMAL_INSTALL)

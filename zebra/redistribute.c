@@ -1,6 +1,4 @@
 /*
- * $Id: redistribute.c,v 1.7 1999/02/19 17:26:37 developer Exp $
- *
  * Redistribution Handler
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

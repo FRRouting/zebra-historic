@@ -1,6 +1,4 @@
 /*
- * $Id: ripd.h,v 1.46 1999/02/19 17:28:42 developer Exp $
- *
  * RIP related values and structures.
  * Copyright (C) 1997, 1998 Kunihiro Ishiguro
  *

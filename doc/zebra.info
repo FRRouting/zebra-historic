@@ -16,7 +16,7 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for snapshot zebra-19990408.
+   This is the Zebra Manual for snapshot zebra-19990416.
 
    This manual describes `zebra' and some other beasts.
 

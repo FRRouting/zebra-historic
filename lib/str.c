@@ -1,6 +1,4 @@
 /*
- * $Id: str.c,v 1.5 1999/02/20 19:00:22 developer Exp $
- *
  * zebra string function
  *
  * these functions are just very basic wrappers around exiting ones and

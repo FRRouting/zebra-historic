@@ -63,6 +63,9 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 LIB_IPV6 = @LIB_IPV6@
@@ -82,24 +85,38 @@ INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 INSTALL_SDATA = @INSTALL@ -m 600
 
+noinst_LIBRARIES = libospf6.a
 sbin_PROGRAMS = ospf6d
 
-ospf6d_SOURCES =  	ospf_main.c ospf_dump.c ospfd.c ospf_interface.c 	ospf_network.c ospf_neighbor.c ospf_mesg.c ospf_lsa.c 	ospf_spf.c
+libospf6_a_SOURCES =  	ospf6_dump.c ospf6d.c ospf6_interface.c ospf6_network.c 	ospf6_neighbor.c ospf6_mesg.c ospf6_lsa.c ospf6_spf.c
+
+
+noinst_HEADERS =  	ospf6_area.h ospf6_dump.h ospf6_interface.h ospf6_lsa.h 	ospf6_mesg.h ospf6_neighbor.h ospf6_network.h ospf6_proto.h 	ospf6_spf.h ospf6_types.h ospf6_zebra.h ospf6d.h
+
+
+ospf6d_SOURCES =  	ospf6_main.c $(libospf6_a_SOURCES)
 
 
 ospf6d_LDADD = ../lib/libzebra.a
 
-sysconf_DATA = 
+sysconf_DATA = ospf6d.conf.sample
+
+EXTRA_DIST = $(sysconf_DATA)
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
-PROGRAMS =  $(sbin_PROGRAMS)
+LIBRARIES =  $(noinst_LIBRARIES)
 
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-ospf6d_OBJECTS =  ospf_main.o ospf_dump.o ospfd.o ospf_interface.o \
-ospf_network.o ospf_neighbor.o ospf_mesg.o ospf_lsa.o ospf_spf.o
+libospf6_a_LIBADD = 
+libospf6_a_OBJECTS =  ospf6_dump.o ospf6d.o ospf6_interface.o \
+ospf6_network.o ospf6_neighbor.o ospf6_mesg.o ospf6_lsa.o ospf6_spf.o
+PROGRAMS =  $(sbin_PROGRAMS)
+
+ospf6d_OBJECTS =  ospf6_main.o ospf6_dump.o ospf6d.o ospf6_interface.o \
+ospf6_network.o ospf6_neighbor.o ospf6_mesg.o ospf6_lsa.o ospf6_spf.o
 ospf6d_DEPENDENCIES =  ../lib/libzebra.a
 ospf6d_LDFLAGS = 
 CFLAGS = @CFLAGS@
@@ -108,6 +125,8 @@ CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
 DATA =  $(sysconf_DATA)
 
+HEADERS =  $(noinst_HEADERS)
+
 DIST_COMMON =  README ChangeLog Makefile.am Makefile.in
 
 
@@ -115,8 +134,8 @@ DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
 
 TAR = tar
 GZIP_ENV = --best
-SOURCES = $(ospf6d_SOURCES)
-OBJECTS = $(ospf6d_OBJECTS)
+SOURCES = $(libospf6_a_SOURCES) $(ospf6d_SOURCES)
+OBJECTS = $(libospf6_a_OBJECTS) $(ospf6d_OBJECTS)
 
 all: all-redirect
 .SUFFIXES:
@@ -128,6 +147,39 @@ Makefile: $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) \
 	  && CONFIG_FILES=$(subdir)/$@ CONFIG_HEADERS= $(SHELL) ./config.status
 
+
+mostlyclean-noinstLIBRARIES:
+
+clean-noinstLIBRARIES:
+	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
+
+distclean-noinstLIBRARIES:
+
+maintainer-clean-noinstLIBRARIES:
+
+.c.o:
+	$(COMPILE) -c $<
+
+.s.o:
+	$(COMPILE) -c $<
+
+.S.o:
+	$(COMPILE) -c $<
+
+mostlyclean-compile:
+	-rm -f *.o core *.core
+
+clean-compile:
+
+distclean-compile:
+	-rm -f *.tab.c
+
+maintainer-clean-compile:
+
+libospf6.a: $(libospf6_a_OBJECTS) $(libospf6_a_DEPENDENCIES)
+	-rm -f libospf6.a
+	$(AR) cru libospf6.a $(libospf6_a_OBJECTS) $(libospf6_a_LIBADD)
+	$(RANLIB) libospf6.a
 
 mostlyclean-sbinPROGRAMS:
 
@@ -153,25 +205,6 @@ uninstall-sbinPROGRAMS:
 	list='$(sbin_PROGRAMS)'; for p in $$list; do \
 	  rm -f $(DESTDIR)$(sbindir)/`echo $$p|sed 's/$(EXEEXT)$$//'|sed '$(transform)'|sed 's/$$/$(EXEEXT)/'`; \
 	done
-
-.c.o:
-	$(COMPILE) -c $<
-
-.s.o:
-	$(COMPILE) -c $<
-
-.S.o:
-	$(COMPILE) -c $<
-
-mostlyclean-compile:
-	-rm -f *.o core *.core
-
-clean-compile:
-
-distclean-compile:
-	-rm -f *.tab.c
-
-maintainer-clean-compile:
 
 ospf6d: $(ospf6d_OBJECTS) $(ospf6d_DEPENDENCIES)
 	@rm -f ospf6d
@@ -246,7 +279,7 @@ install-am: all-am
 install: install-am
 uninstall-am: uninstall-sbinPROGRAMS uninstall-sysconfDATA
 uninstall: uninstall-am
-all-am: Makefile $(PROGRAMS) $(DATA)
+all-am: Makefile $(LIBRARIES) $(PROGRAMS) $(DATA) $(HEADERS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install
@@ -263,33 +296,38 @@ distclean-generic:
 	-rm -f config.cache config.log stamp-h stamp-h[0-9]*
 
 maintainer-clean-generic:
-mostlyclean-am:  mostlyclean-sbinPROGRAMS mostlyclean-compile \
-		mostlyclean-tags mostlyclean-generic
+mostlyclean-am:  mostlyclean-noinstLIBRARIES mostlyclean-compile \
+		mostlyclean-sbinPROGRAMS mostlyclean-tags \
+		mostlyclean-generic
 
 mostlyclean: mostlyclean-am
 
-clean-am:  clean-sbinPROGRAMS clean-compile clean-tags clean-generic \
-		mostlyclean-am
+clean-am:  clean-noinstLIBRARIES clean-compile clean-sbinPROGRAMS \
+		clean-tags clean-generic mostlyclean-am
 
 clean: clean-am
 
-distclean-am:  distclean-sbinPROGRAMS distclean-compile distclean-tags \
-		distclean-generic clean-am
+distclean-am:  distclean-noinstLIBRARIES distclean-compile \
+		distclean-sbinPROGRAMS distclean-tags distclean-generic \
+		clean-am
 
 distclean: distclean-am
 
-maintainer-clean-am:  maintainer-clean-sbinPROGRAMS \
-		maintainer-clean-compile maintainer-clean-tags \
-		maintainer-clean-generic distclean-am
+maintainer-clean-am:  maintainer-clean-noinstLIBRARIES \
+		maintainer-clean-compile maintainer-clean-sbinPROGRAMS \
+		maintainer-clean-tags maintainer-clean-generic \
+		distclean-am
 	@echo "This command is intended for maintainers to use;"
 	@echo "it deletes files that may require special tools to rebuild."
 
 maintainer-clean: maintainer-clean-am
 
-.PHONY: mostlyclean-sbinPROGRAMS distclean-sbinPROGRAMS \
-clean-sbinPROGRAMS maintainer-clean-sbinPROGRAMS uninstall-sbinPROGRAMS \
-install-sbinPROGRAMS mostlyclean-compile distclean-compile \
-clean-compile maintainer-clean-compile uninstall-sysconfDATA \
+.PHONY: mostlyclean-noinstLIBRARIES distclean-noinstLIBRARIES \
+clean-noinstLIBRARIES maintainer-clean-noinstLIBRARIES \
+mostlyclean-compile distclean-compile clean-compile \
+maintainer-clean-compile mostlyclean-sbinPROGRAMS \
+distclean-sbinPROGRAMS clean-sbinPROGRAMS maintainer-clean-sbinPROGRAMS \
+uninstall-sbinPROGRAMS install-sbinPROGRAMS uninstall-sysconfDATA \
 install-sysconfDATA tags mostlyclean-tags distclean-tags clean-tags \
 maintainer-clean-tags distdir info-am info dvi-am dvi check check-am \
 installcheck-am installcheck install-exec-am install-exec \

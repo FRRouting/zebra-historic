@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_dump.h,v 1.14 1999/02/19 17:17:26 developer Exp $
- *
  * BGP message dump header.
  * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
  *

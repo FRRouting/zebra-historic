@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_fsm.c,v 1.94 1999/02/23 17:33:08 developer Exp $
- *
  * BGP-4 Finite State Machine   
  * From RFC1771 [A Border Gateway Protocol 4 (BGP-4)]
  * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro

@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_packet.h,v 1.3 1999/02/19 17:17:27 developer Exp $
- *
  * BGP packet management header.
  * Copyright (C) 1999 Kunihiro Ishiguro
  *

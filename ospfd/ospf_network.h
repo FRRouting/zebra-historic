@@ -28,5 +28,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 int ospf_serv_sock (struct interface *, int);
 int ospf_if_add_allspfrouters (int, struct prefix *);
 int ospf_if_add_alldrouters (int, struct prefix *);
+int ospf_if_ipmulticast (int, struct prefix *);
 
 #endif /* _ZEBRA_OSPF_NETWORK_H */

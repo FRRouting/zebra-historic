@@ -19,7 +19,7 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospfd.h"
+#include "ospf6d.h"
 
 void
 print_vertex (struct vertex *W)

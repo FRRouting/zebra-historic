@@ -1,6 +1,4 @@
 /*
- * $Id: ripngd.h,v 1.12 1999/02/19 17:35:39 developer Exp $
- *
  * RIPng related value and structure.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

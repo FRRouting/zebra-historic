@@ -1,6 +1,4 @@
 /*
- * $Id: rtread_sysctl.c,v 1.26 1999/02/22 12:15:40 developer Exp $
- *
  * Kernel routing table read by sysctl function.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

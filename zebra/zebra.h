@@ -1,6 +1,4 @@
 /*
- * $Id: zebra.h,v 1.18 1999/02/19 17:26:38 developer Exp $
- *
  * zebra daemon header.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *
@@ -50,6 +48,7 @@
 #define ZEBRA_ROUTE_RIP            4
 #define ZEBRA_ROUTE_RIPNG          5
 #define ZEBRA_ROUTE_BGP            6
+#define ZEBRA_ROUTE_OSPF           7
 
 /* Default port information. */
 #define ZEBRA_PORT           2600

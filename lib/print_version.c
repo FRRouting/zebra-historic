@@ -1,6 +1,4 @@
 /*
- * $Id: print_version.c,v 1.6 1999/02/19 17:01:49 developer Exp $
- *
  * Print version function.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

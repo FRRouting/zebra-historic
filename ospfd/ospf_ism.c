@@ -1,5 +1,5 @@
 /* OSPF version 2  Interface State Machine
-   From RFC2328 [OSPF Version 2]
+   From RFC2328 [OSPF Version 2] 
    Copyright (C) 1999 Toshiaki Takada
 
 This file is part of GNU Zebra.
@@ -24,42 +24,177 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "thread.h"
 #include "linklist.h"
 #include "if.h"
+#include "prefix.h"
+#include "table.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_neighbor.h"
+#include "ospfd/ospf_nsm.h"
+#include "ospfd/ospf_network.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_packet.h"
+
+/* elect DR and BDR. Refer to RFC2319 section 9.4 */
+struct in_addr
+ospf_elect_dr_election (struct _list *routers)
+{
+  listnode node;
+  struct ospf_neighbor *max, *r;
 
-/* OSPF ISM functions. */
+  max = NULL;
+
+  /* Choose highest router priority. In case of tie,
+     choose highest Router ID. */
+  for (node = listhead (routers); node; nextnode (node))
+    {
+      r = getdata (node);
+
+      if (max == NULL)
+	{
+	  max = r;
+	  continue;
+	}
+
+      if (max->priority < r->priority)
+	max = r;
+      else if (max->priority == r->priority)
+	if (ntohl (max->router_id.s_addr) < ntohl (r->router_id.s_addr))
+	  max = r;
+    }
+
+  return max->router_id;
+}
 
 int
-ism_hello_timer (struct thread *thread)
+ospf_elect_dr_sub (struct ospf_interface *oi)
+{
+  struct _list *dr_list, *bdr_list, *el_list;
+  struct route_node *rn;
+  struct ospf_neighbor *nbr;
+
+  dr_list = list_init ();
+  bdr_list = list_init ();
+  el_list = list_init ();
+
+  /* Add neighbors to the list. */
+  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      nbr = rn->info;
+
+      /* Is neighbor eligible? */
+      if (nbr->priority == 0)
+ 	continue;
+
+      /* Is neighbor upper 2-Way? */
+      if (nbr->status < NSM_TwoWay)
+	continue;
+
+      /* neighbor declared to be DR. */
+      if (ADDRESS_SAME (&nbr->router_id, &nbr->d_router))
+	list_add_node (dr_list, nbr);
+
+      /* neighbor declared to be BDR. */
+      else if (ADDRESS_SAME (&nbr->router_id, &nbr->bd_router))
+	list_add_node (bdr_list, nbr);
+
+      list_add_node (el_list, nbr);
+    }
+
+  /* Elect Backup Designated Router. */
+  if (list_isempty (bdr_list))
+    oi->bd_router = ospf_elect_dr_election (el_list);
+  else
+    oi->bd_router = ospf_elect_dr_election (bdr_list);
+
+  /* Elect Designated Router. */
+  if (list_isempty (dr_list))
+    oi->d_router = oi->bd_router;
+  else
+    oi->d_router = ospf_elect_dr_election (dr_list);
+
+  list_delete_all (dr_list);
+  list_delete_all (bdr_list);
+  list_delete_all (el_list);
+
+  if (ADDRESS_SAME (&oi->d_router, &ospf_top->router_id))
+    return ISM_DR;
+  else if (ADDRESS_SAME (&oi->bd_router, &ospf_top->router_id))
+    return ISM_Backup;
+  else
+    return ISM_DROther;
+}
+
+
+int
+ospf_elect_dr (struct ospf_interface *oi)
+{
+  struct in_addr old_dr, old_bdr;
+  int old_status, new_status;
+
+  /* backup current values. */
+  old_dr = oi->d_router;
+  old_bdr = oi->bd_router;
+  old_status = oi->status;
+
+  new_status = ospf_elect_dr_sub (oi);
+
+#ifdef DEBUG
+  zlog (NULL, LOG_INFO, "d_router = %s", inet_ntoa (oi->d_router));
+  zlog (NULL, LOG_INFO, "bd_router = %s", inet_ntoa (oi->bd_router));
+#endif /* DEBUG */
+
+  if (old_status < ISM_DROther || old_status != new_status)
+    {
+      new_status = ospf_elect_dr_sub (oi);
+#ifdef DEBUG
+      zlog (NULL, LOG_INFO, "d_router = %s", inet_ntoa (oi->d_router));
+      zlog (NULL, LOG_INFO, "bd_router = %s", inet_ntoa (oi->bd_router));
+#endif /* DEBUG */
+    }
+
+  return new_status;
+}
+
+
+int
+ospf_hello_timer (struct thread *thread)
 {
   struct ospf_interface *oi;
 
   oi = THREAD_ARG (thread);
   oi->t_hello = 0;
 
-  zlog (NULL, LOG_DEBUG, "ISM [%s]:  Timer (Hello timer expire)",
+  zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Hello timer expire)",
 	oi->ifp->name);
 
   /* sending hello packet. */
   /* add write thread and fire. */
   ospf_hello_send (oi);
 
-  OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
-  /*
-    THREAD_VAL (thread) = Hello_timer_expired; */
-  /* ospf_ism_event (thread); */
+  OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
 
   return 0;
 }
 
 int
-ism_wait_timer ()
+ospf_wait_timer (struct thread *thread)
 {
+  struct ospf_interface *oi;
+
+  oi = THREAD_ARG (thread);
+  oi->t_wait = 0;
+
+  zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Wait timer expire)",
+	oi->ifp->name);
+
+  OSPF_ISM_EVENT_ADD (oi, ISM_WaitTimer);
+
   return 0;
 }
 
@@ -87,32 +222,33 @@ ism_timer_set (struct ospf_interface *oi)
     case ISM_Waiting:
       /* The router is trying to determine the identity of DRouter and
 	 BDRouter. The router begin to receive and send Hello Packets. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
-      OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
+      OSPF_ISM_TIMER_ON (oi->t_wait, ospf_wait_timer, oi->v_wait);
       break;
     case ISM_PointToPoint:
       /* The interface connects to a physical Point-to-point network or
 	 virtual link. The router attempts to form an adjacency with
 	 neighboring router. Hello packets are also sent. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_DROther:
-      /* The network type of the interface is broadcast or NBMA network, and
-	 the router itself is Designated Router. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
+      /* The network type of the interface is broadcast or NBMA network,
+	 and the router itself is neither Designated Router nor
+	 Backup Designated Router. */
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_Backup:
-      /* The network type of the interface is broadcast os NBMA network, and
-	 the router is Backup Designated Router. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
+      /* The network type of the interface is broadcast os NBMA network,
+	 and the router is Backup Designated Router. */
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_DR:
-      /* The network type of the interface is broadcast or NBMA network, and
-       */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
+      /* The network type of the interface is broadcast or NBMA network,
+	 and the router is Designated Router. */
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     }
@@ -146,7 +282,7 @@ ism_interface_up (struct ospf_interface *oi)
     return ISM_PointToPoint;
   /* Else if the router is not eligible to DR, the state transitions to
      DROther. */
-  else if (0) /* router is eligible? */
+  else if (oi->priority == 0) /* router is eligible? */
     return ISM_DROther;
   else
     /* Otherwise, the state transitions to Waiting. */
@@ -174,15 +310,33 @@ ism_interface_down ()
 
 
 int
-ism_backup_seen ()
+ism_backup_seen (struct ospf_interface *oi)
 {
-  return 0;
+  int status;
+
+  status = ospf_elect_dr (oi);
+
+  return status;
 }
 
 int
-ism_neighbor_change ()
+ism_wait_timer (struct ospf_interface *oi)
 {
-  return 0;
+  int status;
+
+  status = ospf_elect_dr (oi);
+
+  return status;
+}
+
+int
+ism_neighbor_change (struct ospf_interface *oi)
+{
+  int status;
+
+  status = ospf_elect_dr (oi);
+
+  return status;
 }
 
 int
@@ -201,20 +355,19 @@ struct {
 } ISM [OSPF_ISM_STATUS_MAX][OSPF_ISM_EVENT_MAX] =
 {
   {
-    /* NoState: dummy state. */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
-    { ism_ignore,          ISM_NoState },       /* InterfaceUp    */
-    { ism_ignore,          ISM_NoState },       /* WaitTimer      */
-    { ism_ignore,          ISM_NoState },       /* BackupSeen     */
-    { ism_ignore,          ISM_NoState },       /* NeighborChange */
-    { ism_ignore,          ISM_NoState },       /* LoopInd        */
-    { ism_ignore,          ISM_NoState },       /* UnloopInd      */
-    { ism_ignore,          ISM_NoState },       /* InterfaceDown  */
+    /* DependUpon: dummy state. */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
+    { ism_ignore,          ISM_DependUpon },    /* InterfaceUp    */
+    { ism_ignore,          ISM_DependUpon },    /* WaitTimer      */
+    { ism_ignore,          ISM_DependUpon },    /* BackupSeen     */
+    { ism_ignore,          ISM_DependUpon },    /* NeighborChange */
+    { ism_ignore,          ISM_DependUpon },    /* LoopInd        */
+    { ism_ignore,          ISM_DependUpon },    /* UnloopInd      */
+    { ism_ignore,          ISM_DependUpon },    /* InterfaceDown  */
   },
   {
-    /* Down: 
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
+    /* Down:*/
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
     { ism_interface_up,    ISM_DependUpon },    /* InterfaceUp    */
     { ism_ignore,          ISM_Down },          /* WaitTimer      */
     { ism_ignore,          ISM_Down },          /* BackupSeen     */
@@ -224,9 +377,8 @@ struct {
     { ism_ignore,          ISM_Down },          /* InterfaceDown  */
   },
   {
-    /* Loopback:
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
+    /* Loopback: */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
     { ism_ignore,          ISM_Loopback },      /* InterfaceUp    */
     { ism_ignore,          ISM_Loopback },      /* WaitTimer      */
     { ism_ignore,          ISM_Loopback },      /* BackupSeen     */
@@ -236,9 +388,8 @@ struct {
     { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
   },
   {
-    /* Waiting:
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
+    /* Waiting: */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
     { ism_ignore,          ISM_Waiting },       /* InterfaceUp    */
     { ism_wait_timer,	   ISM_DependUpon },    /* WaitTimer      */
     { ism_backup_seen,     ISM_DependUpon },    /* BackupSeen     */
@@ -248,9 +399,8 @@ struct {
     { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
   },
   {
-    /* Point-to-Point:
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
+    /* Point-to-Point: */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
     { ism_ignore,          ISM_PointToPoint },  /* InterfaceUp    */
     { ism_ignore,          ISM_PointToPoint },  /* WaitTimer      */
     { ism_ignore,          ISM_PointToPoint },  /* BackupSeen     */
@@ -260,21 +410,8 @@ struct {
     { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
   },
   {
-    /* Backup:
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
-    { ism_ignore,          ISM_Backup },        /* InterfaceUp    */
-    { ism_ignore,          ISM_Backup },        /* WaitTimer      */
-    { ism_ignore,          ISM_Backup },        /* BackupSeen     */
-    { ism_neighbor_change, ISM_DependUpon },    /* NeighborChange */
-    { ism_loop_ind,        ISM_Loopback },      /* LoopInd        */
-    { ism_ignore,          ISM_Backup },        /* UnloopInd      */
-    { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
-  },
-  {
-    /* DROther:
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
+    /* DROther: */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
     { ism_ignore,          ISM_DROther },       /* InterfaceUp    */
     { ism_ignore,          ISM_DROther },       /* WaitTimer      */
     { ism_ignore,          ISM_DROther },       /* BackupSeen     */
@@ -284,9 +421,19 @@ struct {
     { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
   },
   {
-    /* DR:
-     */
-    { ism_ignore,          ISM_NoState },       /* NoEvent        */
+    /* Backup: */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
+    { ism_ignore,          ISM_Backup },        /* InterfaceUp    */
+    { ism_ignore,          ISM_Backup },        /* WaitTimer      */
+    { ism_ignore,          ISM_Backup },        /* BackupSeen     */
+    { ism_neighbor_change, ISM_DependUpon },    /* NeighborChange */
+    { ism_loop_ind,        ISM_Loopback },      /* LoopInd        */
+    { ism_ignore,          ISM_Backup },        /* UnloopInd      */
+    { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
+  },
+  {
+    /* DR: */
+    { ism_ignore,          ISM_DependUpon },    /* NoEvent        */
     { ism_ignore,          ISM_DR },            /* InterfaceUp    */
     { ism_ignore,          ISM_DR },            /* WaitTimer      */
     { ism_ignore,          ISM_DR },            /* BackupSeen     */

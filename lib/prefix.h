@@ -1,6 +1,4 @@
 /*
- * $Id: prefix.h,v 1.19 1999/02/19 17:01:48 developer Exp $
- *
  * Prefix structure.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
@@ -86,6 +84,7 @@ struct prefix_ipv6
 #define PSIZE(a) (((a) + 7) / (8))
 
 /* Prototypes. */
+int prefix2str (struct prefix *, char *, int);
 int str2prefix (char *, struct prefix *);
 struct prefix *prefix_new ();
 void prefix_free (struct prefix *p);

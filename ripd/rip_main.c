@@ -1,6 +1,4 @@
 /*
- * $Id: rip_main.c,v 1.45 1999/02/22 12:15:39 developer Exp $
- *
  * RIPd main routine.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

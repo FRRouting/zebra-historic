@@ -1,6 +1,4 @@
 /*
- * $Id: rib.c,v 1.106 1999/02/22 12:15:40 developer Exp $
- *
  * Routing Information Base.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *
@@ -61,7 +59,8 @@ struct
   { ZEBRA_ROUTE_STATIC,  "S", "static",     10},
   { ZEBRA_ROUTE_RIP,     "R", "rip",        20},
   { ZEBRA_ROUTE_RIPNG,   "R", "ripng",      30},
-  { ZEBRA_ROUTE_BGP,     "B", "bgp",        40},
+  { ZEBRA_ROUTE_OSPF,    "O", "ospf",       40},
+  { ZEBRA_ROUTE_BGP,     "B", "bgp",        50},
 };
 
 /* New routing information base. */
@@ -262,7 +261,7 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
   int ret;
   struct route_node *np;
   struct rib *rib;
-  struct rib *fib;
+  struct rib *fib = NULL;
   
   ret = 0;
   apply_mask (p);
@@ -296,7 +295,8 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
 
   if (rib->fib)
     {
-      ret = kernel_delete_ipv4 (p, gate, ifindex, 0);
+      if (!rib_system_route (type))
+	  ret = kernel_delete_ipv4 (p, gate, ifindex, 0);
 
       /* We should reparse rib and check if new fib appear or not. */
       fib = np->info;

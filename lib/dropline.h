@@ -1,6 +1,5 @@
 /*
- * $Id: dropline.h,v 1.2 1999/02/19 17:01:47 developer Exp $
- *
+ * dropline() prototype.
  */
 
 #ifndef _ZEBRA_DROPLINE_H

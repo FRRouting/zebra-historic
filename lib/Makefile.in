@@ -63,6 +63,9 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 LIB_IPV6 = @LIB_IPV6@
@@ -85,6 +88,9 @@ noinst_LIBRARIES = libzebra.a
 
 libzebra_a_SOURCES =  	version.c network.c pid_output.c getopt.c getopt1.c daemon.c 	print_version.c checksum.c vector.c linklist.c dropline.c 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c 	distribute.c stream.c str.c log.c regex.c
 
+
+noinst_HEADERS =  	buffer.h client.h command.h dropline.h filter.h getopt.h hash.h 	if.h linklist.h log.h memory.h network.h prefix.h regex-gnu.h 	roken.h routemap.h sockunion.h str.h stream.h table.h thread.h 	vector.h version.h vty.h zebra.h
+
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
@@ -103,6 +109,8 @@ CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
+HEADERS =  $(noinst_HEADERS)
+
 DIST_COMMON =  ChangeLog Makefile.am Makefile.in
 
 
@@ -220,7 +228,7 @@ install-am: all-am
 install: install-am
 uninstall-am:
 uninstall: uninstall-am
-all-am: Makefile $(LIBRARIES)
+all-am: Makefile $(LIBRARIES) $(HEADERS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install

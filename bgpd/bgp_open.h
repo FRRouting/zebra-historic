@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_open.h,v 1.1 1999/03/01 20:21:05 developer Exp $
- *
  * BGP open message handling
  * Copyright (C) 1999 Kunihiro Ishiguro
  *

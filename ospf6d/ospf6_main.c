@@ -19,7 +19,7 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospfd.h"
+#include "ospf6d.h"
 
 extern void start_msg (void);
 extern void rotate_log (void);
@@ -207,17 +207,13 @@ main (int argc, char **argv)
 #ifdef OLD
   get_interface_all();
 #else
-  zebra_get_interface ();
+  /* This should be called from router zebra. */
+  /* zebra_get_interface (); */
 #endif
 
   access_list_init ();
-
-#if 0
-  memory_init_vty ();
-#else
   memory_init ();
   sort_node ();
-#endif
 
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
@@ -242,5 +238,7 @@ main (int argc, char **argv)
       thread_master_debug (master);
 #endif /* DEBUG */
     }
+
+  /* Not reached. */
+  exit (0);
 }
-

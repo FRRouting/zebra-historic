@@ -1,6 +1,4 @@
 /*
- * $Id: rt_ioctl.c,v 1.39 1999/02/19 17:26:37 developer Exp $
- *
  * kernel routing table update by ioctl().
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

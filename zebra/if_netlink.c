@@ -1,6 +1,4 @@
 /*
- * $Id: if_netlink.c,v 1.4 1999/02/19 17:26:36 developer Exp $
- *
  * Interface looking up by netlink.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

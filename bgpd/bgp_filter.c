@@ -29,6 +29,7 @@
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
+#include "bgpd/bgp_regex.h"
 
 enum as_filter_type
 {
@@ -67,7 +68,8 @@ struct as_filter
 
   enum as_filter_type type;
 
-  ASPATH_regex *reg;
+  regex_t *reg;
+  char *reg_str;
 };
 
 enum as_list_type
@@ -115,31 +117,35 @@ as_filter_new ()
 void
 as_filter_free (struct as_filter *asfilter)
 {
+  if (asfilter->reg)
+    bgp_regex_free (asfilter->reg);
+  if (asfilter->reg_str)
+    free (asfilter->reg_str);
   XFREE (MTYPE_AS_FILTER, asfilter);
 }
 
 /* Make new AS filter. */
 struct as_filter *
-as_filter_make (ASPATH_regex *reg, enum as_filter_type type)
+as_filter_make (regex_t *reg, char *reg_str, enum as_filter_type type)
 {
   struct as_filter *asfilter;
 
   asfilter = as_filter_new ();
   asfilter->reg = reg;
   asfilter->type = type;
+  asfilter->reg_str = strdup (reg_str);
 
   return asfilter;
 }
 
 struct as_filter *
-as_filter_lookup (struct as_list *aslist, ASPATH_regex *reg,
+as_filter_lookup (struct as_list *aslist, char *reg_str,
 		  enum as_filter_type type)
 {
   struct as_filter *asfilter;
 
   for (asfilter = aslist->head; asfilter; asfilter = asfilter->next)
-    if (strcmp (aspath_regex_string (reg), 
-		aspath_regex_string (asfilter->reg)) == 0)
+    if (strcmp (reg_str, asfilter->reg_str) == 0)
       return asfilter;
   return NULL;
 }
@@ -320,7 +326,7 @@ as_list_print (struct as_list *aslist)
   struct as_filter *asfilter;
 
   for (asfilter = aslist->head; asfilter; asfilter = asfilter->next)
-    printf ("regexp %s %s\n", aspath_regex_string (asfilter->reg),
+    printf ("regexp %s %s\n", asfilter->reg_str, 
 	    filter_type_str (asfilter->type));
 }
 
@@ -394,7 +400,7 @@ as_list_filter_delete (struct as_list *aslist, struct as_filter *asfilter)
 static int
 as_filter_match (struct as_filter *asfilter, struct aspath *aspath)
 {
-  if (aspath_regex_exec (asfilter->reg, aspath) >= 0)
+  if (bgp_regexec (asfilter->reg, aspath) != REG_NOMATCH)
     return 1;
   return 0;
 }
@@ -443,7 +449,11 @@ DEFUN (ip_as_path, ip_as_path_cmd,
   enum as_filter_type type;
   struct as_filter *asfilter;
   struct as_list *aslist;
-  ASPATH_regex *rp;
+  regex_t *regex;
+  struct buffer *b;
+  int i;
+  char *regstr;
+  int first = 0;
 
   /* Check the filter type. */
   if (strcmp (argv[1], "permit") == 0)
@@ -457,33 +467,33 @@ DEFUN (ip_as_path, ip_as_path_cmd,
     }
 
   /* Check AS path regex. */
-  {
-    struct buffer *b;
-    int i;
-    char *regstr;
-
-    b = buffer_new (BUFFER_STRING, 1024);
-    for (i = 2; i < argc; i++)
-      {
-	buffer_putstr (b, argv[i]);
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 2; i < argc; i++)
+    {
+      if (first)
 	buffer_putc (b, ' ');
-      }
-    buffer_putc (b, '\0');
+      else
+	first = 1;
 
-    regstr = buffer_getstr (b);
-    buffer_free (b);
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
 
-    rp = aspath_regex_comp (regstr);
-    free (regstr);
-    if (!rp)
-      {
-	vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
-	return CMD_WARNING;
-      }
-  }
+  regstr = buffer_getstr (b);
+  buffer_free (b);
 
-  asfilter = as_filter_make (rp, type);
+  regex = bgp_regcomp (regstr);
+  if (!regex)
+    {
+      free (regstr);
+      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  asfilter = as_filter_make (regex, regstr, type);
   
+  free (regstr);
+
   /* Install new filter to the access_list. */
   aslist = as_list_get (argv[0]);
   as_list_filter_add (aslist, asfilter);
@@ -505,7 +515,11 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
   enum as_filter_type type;
   struct as_filter *asfilter;
   struct as_list *aslist;
-  ASPATH_regex *rp;
+  struct buffer *b;
+  int i;
+  int first = 0;
+  char *regstr;
+  regex_t *regex;
 
   /* Lookup AS list from AS path list. */
   aslist = as_list_lookup (argv[0]);
@@ -527,34 +541,34 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
     }
   
   /* Compile AS path. */
-  {
-    struct buffer *b;
-    int i;
-    char *regstr;
-
-    b = buffer_new (BUFFER_STRING, 1024);
-    for (i = 2; i < argc; i++)
-      {
-	buffer_putstr (b, argv[i]);
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 2; i < argc; i++)
+    {
+      if (first)
 	buffer_putc (b, ' ');
-      }
-    buffer_putc (b, '\0');
+      else
+	first = 1;
 
-    regstr = buffer_getstr (b);
-    buffer_free (b);
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
 
-    rp = aspath_regex_comp (regstr);
-    free (regstr);
-    if (!rp)
-      {
-	vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
-	return CMD_WARNING;
-      }
-  }
+  regstr = buffer_getstr (b);
+  buffer_free (b);
+
+  regex = bgp_regcomp (regstr);
+  if (!regex)
+    {
+      free (regstr);
+      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
 
   /* Lookup asfilter. */
-  asfilter = as_filter_lookup (aslist, rp, type);
-  aspath_regex_free (rp);
+  asfilter = as_filter_lookup (aslist, regstr, type);
+
+  free (regstr);
+  bgp_regex_free (regex);
 
   if (asfilter == NULL)
     {
@@ -578,7 +592,7 @@ config_write_as_list (struct vty *vty)
       {
 	vty_out (vty, "ip as-path access-list %s %s %s%s",
 		 aslist->name, filter_type_str (asfilter->type), 
-		 aspath_regex_string (asfilter->reg), VTY_NEWLINE);
+		 asfilter->reg_str, VTY_NEWLINE);
       }
 
   for (aslist = as_list_master.str.head; aslist; aslist = aslist->next)
@@ -586,7 +600,7 @@ config_write_as_list (struct vty *vty)
       {
 	vty_out (vty, "ip as-path access-list %s %s %s%s",
 		 aslist->name, filter_type_str (asfilter->type), 
-		 aspath_regex_string (asfilter->reg), VTY_NEWLINE);
+		 asfilter->reg_str, VTY_NEWLINE);
       }
   return 0;
 }
@@ -611,19 +625,19 @@ bgp_filter_init ()
 void
 bgp_filter_test ()
 {
-  ASPATH_regex *rp;
+  regex_t *regex;
   struct as_list *aslist;
   struct as_filter *asfilter;
 
-  char buf[] = "AS1 AS2";
+  char buf[] = "1 2";
 
-  rp = aspath_regex_comp (buf);
-  if (rp == NULL)
+  regex = bgp_regcomp (buf);
+  if (regex == NULL)
     fprintf (stderr, "aspath regex compile errror\n");
 
   /* ip as-path access-list 1 permit AS1. */
   aslist = as_list_get ("1");
-  asfilter = as_filter_make (rp, FILTER_PERMIT);
+  asfilter = as_filter_make (regex, buf, FILTER_PERMIT);
   as_list_filter_add (aslist, asfilter);
 
   as_list_print_all ();

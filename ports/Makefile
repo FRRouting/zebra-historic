@@ -3,8 +3,6 @@
 # Date created:		28 Feb 1998
 # Whom:			seirios@matrix.iri.co.jp
 #
-# $Id: Makefile,v 1.4 1998/03/01 07:14:21 anoncvs Exp $
-#
 
 #DISTNAME=	zebra-980224
 DISTNAME=	zebra-current

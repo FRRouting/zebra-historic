@@ -1,6 +1,4 @@
 /*
- * $Id: buffer.c,v 1.45 1999/02/19 17:01:47 developer Exp $
- *
  * Buffering of output and input. 
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
@@ -36,10 +34,6 @@ buffer_data_new (size_t size)
 
   d = XMALLOC (MTYPE_BUFFER_DATA, sizeof (struct buffer_data));
   bzero (d, sizeof (struct buffer_data));
-
-  d->cp = 0;
-  d->sp = 0;
-  d->ep = 0;
   d->data = XMALLOC (MTYPE_BUFFER_DATA, size);
 
   return d;
@@ -65,12 +59,6 @@ buffer_new (int type, size_t size)
   b->type = type;
   b->size = size;
 
-  /* In case of BUFFER_STREAM, allocate buffer at first time. */
-  if (type == BUFFER_STREAM)
-    b->head = b->tail = buffer_data_new (size);
-  else
-    b->head = b->tail = NULL;
-
   return b;
 }
 
@@ -88,6 +76,15 @@ buffer_free (struct buffer *b)
       buffer_data_free (d);
       d = next;
     }
+
+  d = b->unused_head;
+  while (d)
+    {
+      next = d->next;
+      buffer_data_free (d);
+      d = next;
+    }
+  
   XFREE (MTYPE_BUFFER, b);
 }
 
@@ -102,21 +99,26 @@ buffer_getstr (struct buffer *b)
 int
 buffer_empty (struct buffer *b)
 {
-  if (b->rhead == NULL || (b->rhead == b->head && b->rhead->cp == 0))
+  if (b->tail == NULL || b->tail->cp == b->tail->sp)
     return 1;
   else
     return 0;
 }
 
+/* Clear and free all allocated data. */
 void
 buffer_reset (struct buffer *b)
 {
-  struct buffer_data *d;
+  struct buffer_data *data;
+  struct buffer_data *next;
   
-  for (d = b->head; d; d = d->next)
-    d->sp = d->cp = d->ep = 0;
-
-  b->rhead = b->whead = b->head;
+  for (data = b->head; data; data = next)
+    {
+      next = data->next;
+      buffer_data_free (data);
+    }
+  b->head = b->tail = NULL;
+  b->alloc = 0;
 }
 
 /* Add buffer_data to the end of buffer. */
@@ -133,8 +135,6 @@ buffer_add (struct buffer *b)
       d->next = NULL;
       b->head = d;
       b->tail = d;
-      b->rhead = d;
-      b->whead = d;
     }
   else
     {
@@ -152,50 +152,36 @@ buffer_add (struct buffer *b)
 int
 buffer_write (struct buffer *b, u_char *ptr, size_t size)
 {
-  struct buffer_data *d;
+  struct buffer_data *data;
 
-  d = b->whead;
-
-  /* If there is no data buffer add it. */
-  if (d == NULL)
-    {
-      buffer_add (b);
-      d = b->whead;
-    }
+  data = b->tail;
 
   /* We use even last one byte of data buffer. */
   while (size)    
     {
-      /* Last data. */
-      if (size < (b->size - d->ep))
+      /* If there is no data buffer add it. */
+      if (data == NULL || data->cp == b->size)
 	{
-	  memcpy ((d->data + d->cp), ptr, size);
-	  d->cp += size;
-	  if (d->cp > d->ep)
-	    d->ep = d->cp;
+	  buffer_add (b);
+	  data = b->tail;
+	}
+
+      /* Last data. */
+      if (size <= (b->size - data->cp))
+	{
+	  memcpy ((data->data + data->cp), ptr, size);
+
+	  data->cp += size;
 	  size = 0;
 	}
       else
 	{
-	  /* If current data buffer can't contain all of data. Make
-             link list of data buffer and store data to there. */
-	  memcpy ((d->data + d->cp), ptr, (b->size - d->ep));
+	  memcpy ((data->data + data->cp), ptr, (b->size - data->cp));
 
-	  size -= (b->size - d->ep);
-	  ptr += (b->size - d->ep);
+	  size -= (b->size - data->cp);
+	  ptr += (b->size - data->cp);
 
-	  d->cp += (b->size - d->ep);
-	  if (d->cp > d->ep)
-	    d->ep = d->cp;
-
-	  if (d->next)
-	    {
-	      d = d->next;
-	      b->whead = d;
-	    }
-	  else
-	    buffer_add (b);
-	  d = b->whead;
+	  data->cp = b->size;
 	}
     }
   return 1;
@@ -205,11 +191,7 @@ buffer_write (struct buffer *b, u_char *ptr, size_t size)
 int
 buffer_putc (struct buffer *b, u_char c)
 {
-  struct buffer_data *d = b->tail;
-
-  d->data[d->cp] = c;
-  d->cp++;
-  d->ep++;
+  buffer_write (b, &c, 1);
   return 1;
 }
 
@@ -217,12 +199,7 @@ buffer_putc (struct buffer *b, u_char c)
 int
 buffer_putw (struct buffer *b, u_short c)
 {
-  struct buffer_data *d = b->tail;
-
-  memcpy (d->data, &c, 2);
-
-  d->cp += 2;
-  d->ep += 2;
+  buffer_write (b, (char *)&c, 2);
   return 1;
 }
 
@@ -237,38 +214,55 @@ buffer_putstr (struct buffer *b, u_char *c)
   return 1;
 }
 
-#define DATA_SIZE(D)  ((D)->ep - (D)->sp)
-#define DATA_PNT(D)   ((D)->data + (D)->sp)
-
 /* Flush specified size to the fd. */
 void
 buffer_flush (struct buffer *b, int fd, size_t size)
 {
-  struct buffer_data *d;
   int iov_index;
   struct iovec *iovec;
+  struct buffer_data *data;
+  struct buffer_data *out;
+  struct buffer_data *next;
 
   iovec = malloc (sizeof (struct iovec) * b->alloc);
   iov_index = 0;
 
-  for (d = b->head; d; d = d->next)
+  for (data = b->head; data; data = data->next)
     {
-      iovec[iov_index].iov_base = (char *)DATA_PNT(d);
-      if (size <= DATA_SIZE (d))
+      iovec[iov_index].iov_base = (char *)(data->data + data->sp);
+
+      if (size <= (data->cp - data->sp))
 	{
-	  iovec[iov_index].iov_len = size;
-	  d->sp += size;
-	  iov_index++;
+	  iovec[iov_index++].iov_len = size;
+	  data->sp += size;
+	  if (data->sp == data->cp)
+	    data = data->next;
 	  break;
 	}
       else
 	{
-	  iovec[iov_index].iov_len = DATA_SIZE (d);
-	  size -= DATA_SIZE (d);
+	  iovec[iov_index++].iov_len = data->cp - data->sp;
+	  size -= data->cp - data->sp;
+	  data->sp = data->cp;
 	}
-      iov_index++;
     }
+
+  /* Write buffer to the fd. */
   writev (fd, iovec, iov_index);
+
+  /* Free printed buffer data. */
+  for (out = b->head; out && out != data; out = next)
+    {
+      next = out->next;
+      if (next)
+	next->prev = NULL;
+      else
+	b->tail = next;
+      b->head = next;
+
+      buffer_data_free (out);
+      b->alloc--;
+    }
 
   free (iovec);
 }
@@ -290,13 +284,14 @@ buffer_flush_all (struct buffer *b, int fd)
 
   for (d = b->head; d; d = d->next)
     {
-      iovec[iov_index].iov_base = (char *)d->data + d->sp;
-      iovec[iov_index].iov_len = d->ep - d->sp;
+      iovec[iov_index].iov_base = (char *)(d->data + d->sp);
+      iovec[iov_index].iov_len = d->cp - d->sp;
       iov_index++;
     }
   ret = writev (fd, iovec, iov_index);
 
   free (iovec);
+
   buffer_reset (b);
 
   return ret;
@@ -305,7 +300,7 @@ buffer_flush_all (struct buffer *b, int fd)
 /* Flush buffer to the file descriptor.  Mainly used from vty
    interface. */
 int
-buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
+buffer_flush_vty (struct buffer *b, int fd, int size, int erase_flag)
 {
   int nbytes;
   int iov_index;
@@ -315,7 +310,9 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
   char erase[] = { 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
 		   ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
 		   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08};
-  struct buffer_data *d;
+  struct buffer_data *data;
+  struct buffer_data *out;
+  struct buffer_data *next;
 
   /* For erase and more data add two to b's buffer_data count.*/
   if (b->alloc == 1)
@@ -323,7 +320,7 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
   else
     iov = XMALLOC (MTYPE_TMP, sizeof (struct iovec) * (b->alloc + 2));
 
-  d = b->rhead;
+  data = b->head;
   iov_index = 0;
 
   /* Previously print out is performed. */
@@ -334,45 +331,29 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
       iov_index++;
     }
 
-  /* Real data. */
-  while (length && d)
+  /* Output data. */
+  for (data = b->head; data; data = data->next)
     {
-      if (length <= DATA_SIZE (d))
-	{
-	  iov[iov_index].iov_base = (char *) DATA_PNT (d);
-	  iov[iov_index].iov_len = length;
-	  iov_index++;
+      iov[iov_index].iov_base = (char *)(data->data + data->sp);
 
-	  d->sp += length;
+      if (size <= (data->cp - data->sp))
+	{
+	  iov[iov_index++].iov_len = size;
+	  data->sp += size;
+	  if (data->sp == data->cp)
+	    data = data->next;
 	  break;
 	}
       else
 	{
-	  iov[iov_index].iov_base = (char *) DATA_PNT (d);
-	  iov[iov_index].iov_len = DATA_SIZE(d);
-	  iov_index++;
-
-	  length -= DATA_SIZE (d);
-	  d->sp += DATA_SIZE (d);
-	}
-      
-      if (d->sp == d->ep)
-	{
-	  d->cp = 0;
-	  d->sp = 0;
-	  d->ep = 0;
-	  d = d->next;
-	  b->rhead = d;
+	  iov[iov_index++].iov_len = data->cp - data->sp;
+	  size -= (data->cp - data->sp);
+	  data->sp = data->cp;
 	}
     }
 
   /* In case of `more' display need. */
-  if (buffer_empty (b))
-    {
-      b->rhead = b->head;
-      b->whead = b->head;
-    }
-  else
+  if (!buffer_empty (b))
     {
       iov[iov_index].iov_base = more;
       iov[iov_index].iov_len = sizeof more;
@@ -390,7 +371,22 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
       if (errno == EWOULDBLOCK)
 	;
     }
-  if (b->alloc != 1)
+
+  /* Free printed buffer data. */
+  for (out = b->head; out && out != data; out = next)
+    {
+      next = out->next;
+      if (next)
+	next->prev = NULL;
+      else
+	b->tail = next;
+      b->head = next;
+
+      buffer_data_free (out);
+      b->alloc--;
+    }
+
+  if (iov != small_iov)
     XFREE (MTYPE_TMP, iov);
 
   return nbytes;
@@ -403,11 +399,11 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height,
 		     int erase)
 {
   unsigned long cp;
-  unsigned long length;
+  unsigned long size;
   int lp;
   int lineno;
   int ret;
-  struct buffer_data *d = b->rhead;
+  struct buffer_data *data;
 
   if (height >= 2)
     height--;
@@ -415,85 +411,84 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height,
   /* We have to calculate how many bytes should be written. */
   lp = 0;
   lineno = 0;
-  length = 0;
+  size = 0;
   
-  while (d && d->ep)
+  for (data = b->head; data; data = data->next)
     {
-      cp = d->sp;
+      cp = data->sp;
 
-      while (cp <= d->ep)
+      while (cp < data->cp)
 	{
-	  if (d->data[cp] == '\n')
+	  if (data->data[cp] == '\n' || lp == width)
 	    {
 	      lineno++;
 	      if (lineno == height)
 		{
 		  cp++;
-		  length++;
+		  size++;
 		  goto flush;
 		}
 	      lp = 0;
 	    }
-	  else if (lp == width)
-	    {
-	      lineno++;
-	      if (lineno == height)
-		{
-		  cp++;
-		  length++;
-		  goto flush;
-		}
-	      lp = 0;
-	    }
-	  lp++;
-	  length++;
 	  cp++;
+	  lp++;
+	  size++;
 	}
-#ifdef DEBUG
-      printf ("(cp:%ld ep:%ld lp:%d length:%ld lineno:%d)\n", 
-	      cp, d->ep, lp, length, lineno);
-#endif /* DEBUG */
-
-      if (d->ep == b->size)
-	{
-	  length--;
-	  lp--;
-	}
-      d = d->next;
     }
 
   /* Write data to the file descriptor. */
  flush:
+
 #ifdef DEBUG
-  printf ("cp:%ld lp:%d length:%ld ineno:%d\n",
-	  cp, lp, length, lineno);
+  printf ("cp:%ld lp:%d size:%ld ineno:%d\n",
+	  cp, lp, size, lineno);
 #endif /* DEBUG */
 
-  ret = buffer_flush_vty (b, fd, length, erase);
+  ret = buffer_flush_vty (b, fd, size, erase);
 
   return ret;
 }
 
 void
-buffer_debug (struct buffer *b)
+buffer_dump (struct buffer *b)
 {
-  printf ("alloc %ld\n", b->alloc);
+  struct buffer_data *d;
+
+  printf ("buffer type %d size %ld alloc %ld\n", b->type, b->size, b->alloc);
+
+  for (d = b->head; d; d = d->next)
+    printf ("  data cp:%ld sp:%ld\n", d->cp, d->sp);
 }
 
 #ifdef TEST
 main ()
 {
   struct buffer *b;
-  char kuni[] = "kunihi\n";
+  char kuni[] = "kunihiro\n";
+  char mio[] = "miomiomi\n";
 
-  b = buffer_new (BUFFER_VTY, 10);
+  b = buffer_new (BUFFER_VTY, 3);
+  buffer_write (b, kuni, sizeof kuni);
+  buffer_write (b, mio, sizeof mio);
+
+  buffer_dump (b);
+
+  buffer_flush_vty (b, 0, 20, 0);
+  buffer_flush_vty (b, 0, 5, 0);
+  /* buffer_dump (b); */
+  buffer_flush_vty (b, 0, 5, 0);
+  /* buffer_dump (b); */
+  printf ("\n");
+
+  exit (0);
+
+  printf ("cleared\n");
+  buffer_reset (b);
+  buffer_dump (b);
+
   buffer_write (b, kuni, sizeof kuni);
   buffer_write (b, kuni, sizeof kuni);
-  buffer_write (b, kuni, sizeof kuni);
 
-  buffer_debug (b);
-
-  buffer_flush (b, 0, 11);
   printf ("\n");
   buffer_flush_all (b, 0);
 }

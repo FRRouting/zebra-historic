@@ -1,6 +1,4 @@
 /*
- * $Id: connected.h,v 1.8 1999/02/19 17:26:36 developer Exp $
- *
  * Interface's address and mask.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

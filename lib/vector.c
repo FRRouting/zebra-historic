@@ -1,6 +1,4 @@
 /*
- * $Id: vector.c,v 1.9 1999/02/19 17:01:49 developer Exp $
- *
  * generic vector interface routine
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

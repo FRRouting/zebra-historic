@@ -28,11 +28,28 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "log.h"
 
 #include "ospfd/ospfd.h"
+#include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
+#include "ospfd/ospf_network.h"
 #include "ospfd/ospf_dump.h"
-
+
 /* OSPF NSM functions. */
+
+int
+ospf_inactivity_timer (struct thread *thread)
+{
+  struct ospf_neighbor *nbr;
+
+  nbr = THREAD_ARG (thread);
+
+  OSPF_NSM_EVENT_ADD (nbr, NSM_InactivityTimer);
+
+  zlog (NULL, LOG_DEBUG, "NSM [%s]: Timer (Inactivity timer expire)",
+	inet_ntoa (nbr->router_id));
+
+  return 0;
+}
 
 int
 nsm_ignore (struct ospf_neighbor *nbr)
@@ -46,7 +63,12 @@ nsm_ignore (struct ospf_neighbor *nbr)
 int
 nsm_hello_received (struct ospf_neighbor *nbr)
 {
-  /* Start Inactivity Timer. */
+  /* Start or Restart Inactivity Timer. */
+  if (nbr->t_inactivity)
+    OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
+  
+  OSPF_NSM_TIMER_ON (nbr->t_inactivity, ospf_inactivity_timer,
+		     nbr->v_inactivity);
 
   return 0;
 }
@@ -60,7 +82,27 @@ nsm_start (struct ospf_neighbor *nbr)
 int
 nsm_twoway_received (struct ospf_neighbor *nbr)
 {
-  return 0;
+  struct ospf_interface *oi;
+
+  oi = nbr->oi;
+
+  /* These netowork types must be adjacency. */
+  if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
+      oi->type == OSPF_IFTYPE_POINTOMULTIPOINT ||
+      oi->type == OSPF_IFTYPE_VIRTUALLINK)
+      return NSM_ExStart;
+
+  /* Router itself is the DRouter or the BDRouter. */
+  if (ADDRESS_SAME (&ospf_top->router_id, &oi->d_router) ||
+      ADDRESS_SAME (&ospf_top->router_id, &oi->bd_router))
+    return NSM_ExStart;
+
+  /* Neighboring Router is the DRouter or the BDRouter. */
+  if (ADDRESS_SAME (&nbr->router_id, &nbr->d_router) ||
+      ADDRESS_SAME (&nbr->router_id, &nbr->bd_router))
+    return NSM_ExStart;
+
+  return NSM_TwoWay;
 }
 
 int
@@ -124,25 +166,25 @@ struct {
 } NSM [OSPF_NSM_STATUS_MAX][OSPF_NSM_EVENT_MAX] =
 {
   {
-    /* NoState: dummy state. */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
-    { nsm_ignore,              NSM_NoState    }, /* HelloReceived     */
-    { nsm_ignore,              NSM_NoState    }, /* Start             */
-    { nsm_ignore,              NSM_NoState    }, /* 2-WayReceived     */
-    { nsm_ignore,              NSM_NoState    }, /* NegotiationDone   */
-    { nsm_ignore,              NSM_NoState    }, /* ExchangeDone      */
-    { nsm_ignore,              NSM_NoState    }, /* BadLSReq          */
-    { nsm_ignore,              NSM_NoState    }, /* LoadingDone       */
-    { nsm_ignore,              NSM_NoState    }, /* AdjOK?            */
-    { nsm_ignore,              NSM_NoState    }, /* SeqNumberMismatch */
-    { nsm_ignore,              NSM_NoState    }, /* 1-WayReceived     */
-    { nsm_ignore,              NSM_NoState    }, /* KillNbr           */
-    { nsm_ignore,              NSM_NoState    }, /* InactivityTimer   */
-    { nsm_ignore,              NSM_NoState    }, /* LLDown            */
+    /* DependUpon: dummy state. */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* HelloReceived     */
+    { nsm_ignore,              NSM_DependUpon }, /* Start             */
+    { nsm_ignore,              NSM_DependUpon }, /* 2-WayReceived     */
+    { nsm_ignore,              NSM_DependUpon }, /* NegotiationDone   */
+    { nsm_ignore,              NSM_DependUpon }, /* ExchangeDone      */
+    { nsm_ignore,              NSM_DependUpon }, /* BadLSReq          */
+    { nsm_ignore,              NSM_DependUpon }, /* LoadingDone       */
+    { nsm_ignore,              NSM_DependUpon }, /* AdjOK?            */
+    { nsm_ignore,              NSM_DependUpon }, /* SeqNumberMismatch */
+    { nsm_ignore,              NSM_DependUpon }, /* 1-WayReceived     */
+    { nsm_ignore,              NSM_DependUpon }, /* KillNbr           */
+    { nsm_ignore,              NSM_DependUpon }, /* InactivityTimer   */
+    { nsm_ignore,              NSM_DependUpon }, /* LLDown            */
   },
   {
     /* Down: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_Init       }, /* HelloReceived     */
     { nsm_start,               NSM_Attempt    }, /* Start             */
     { nsm_ignore,              NSM_Down       }, /* 2-WayReceived     */
@@ -159,7 +201,7 @@ struct {
   },
   {
     /* Attempt: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_Init       }, /* HelloReceived     */
     { nsm_ignore,              NSM_Attempt    }, /* Start             */
     { nsm_ignore,              NSM_Attempt    }, /* 2-WayReceived     */
@@ -176,7 +218,7 @@ struct {
   },
   {
     /* Init: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_Init       }, /* HelloReceived     */
     { nsm_ignore,              NSM_Init       }, /* Start             */
     { nsm_twoway_received,     NSM_DependUpon }, /* 2-WayReceived     */
@@ -193,7 +235,7 @@ struct {
   },
   {
     /* 2-Way: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_TwoWay     }, /* HelloReceived     */
     { nsm_ignore,              NSM_TwoWay     }, /* Start             */
     { nsm_ignore,              NSM_TwoWay     }, /* 2-WayReceived     */
@@ -210,7 +252,7 @@ struct {
   },
   {
     /* ExStart: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_ExStart    }, /* HelloReceived     */
     { nsm_ignore,              NSM_ExStart    }, /* Start             */
     { nsm_ignore,              NSM_ExStart    }, /* 2-WayReceived     */
@@ -227,7 +269,7 @@ struct {
   },
   {
     /* Exchange: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_Exchange   }, /* HelloReceived     */
     { nsm_ignore,              NSM_Exchange   }, /* Start             */
     { nsm_ignore,              NSM_Exchange   }, /* 2-WayReceived     */
@@ -244,7 +286,7 @@ struct {
   },
   {
     /* Loading: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_Loading    }, /* HelloReceived     */
     { nsm_ignore,              NSM_Loading    }, /* Start             */
     { nsm_ignore,              NSM_Loading    }, /* 2-WayReceived     */
@@ -260,7 +302,7 @@ struct {
     { nsm_ll_down,             NSM_Down       }, /* LLDown            */
   },
   { /* Full: */
-    { nsm_ignore,              NSM_NoState    }, /* NoEvent           */
+    { nsm_ignore,              NSM_DependUpon }, /* NoEvent           */
     { nsm_hello_received,      NSM_Full       }, /* HelloReceived     */
     { nsm_ignore,              NSM_Full       }, /* Start             */
     { nsm_ignore,              NSM_Full       }, /* 2-WayReceived     */

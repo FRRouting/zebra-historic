@@ -1,8 +1,6 @@
 /*
- * $Id: rt_netlink.c,v 1.26 1999/02/19 17:26:37 developer Exp $
- *
  * Kernel routing table updates using netlink over GNU/Linux system.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -66,6 +64,8 @@ netlink_socket ()
   bzero (&snl, sizeof snl);
   snl.nl_family = AF_NETLINK;
   snl.nl_groups = 0;
+
+  snl.nl_groups = RTMGRP_IPV6_ROUTE|RTMGRP_IPV4_ROUTE;
   
   /* Bind the socket to the netlink structure for anything. */
   ret = bind (netlink.sock, (struct sockaddr *) &snl, sizeof snl);
@@ -127,6 +127,7 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
 {
   int status;
   int ret;
+  int seq = 0;
 
   while (1)
     {
@@ -162,8 +163,11 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
       for (h = (struct nlmsghdr *) buf; NLMSG_OK (h, status); 
 	   h = NLMSG_NEXT (h, status))
 	{
+	  /* Message sequence. */
+	  seq = h->nlmsg_seq;
+	  
 	  /* pid and seq check. */
-	  if (h->nlmsg_seq != netlink.seq)
+	  if (seq && seq != netlink.seq)
 	    continue;
 
 	  /* Finish of reading. */
@@ -201,6 +205,9 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
 	  log ("netlink error: data remnant size %d\n", status);
 	  return -1;
 	}
+      /* This message will be from kernel but reply to user request. */
+      if (seq == 0)
+	return 0;
     }
 
   return 0;
@@ -334,7 +341,6 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   struct rtmsg *rtm;
   struct rtattr *tb [RTA_MAX + 1];
   
-  /* char buf[BUFSIZ]; */
   char anyaddr[16] = {0};
 
   int index;
@@ -399,6 +405,95 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
       memcpy (&p.prefix, dest, 16);
       p.prefixlen = rtm->rtm_dst_len;
       rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, gate, index);
+    }
+#endif /* HAVE_IPV6 */
+
+  return 0;
+}
+
+/* Routing information change from the kernel. */
+int
+netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
+{
+  int len;
+  struct rtmsg *rtm;
+  struct rtattr *tb [RTA_MAX + 1];
+  
+  char anyaddr[16] = {0};
+
+  int index;
+  void *dest;
+  void *gate;
+
+  rtm = NLMSG_DATA (h);
+
+  if (! (h->nlmsg_type == RTM_NEWROUTE || h->nlmsg_type == RTM_DELROUTE))
+    {
+      /* If this is not route add/delete message print warning. */
+      zlog (NULL, LOG_WARNING, "Kernel message: %d\n", h->nlmsg_type);
+      return 0;
+    }
+
+  if (rtm->rtm_table != RT_TABLE_MAIN)
+    return 0;
+  if (rtm->rtm_type != RTN_UNICAST)
+    return 0;
+
+  len = h->nlmsg_len - NLMSG_LENGTH(sizeof (struct rtmsg));
+  if (len < 0)
+    return -1;
+
+  bzero (tb, sizeof tb);
+  netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
+
+  if (rtm->rtm_flags & RTM_F_CLONED)
+    return 0;
+  if (rtm->rtm_protocol == RTPROT_REDIRECT)
+    return 0;
+  if (rtm->rtm_protocol == RTPROT_KERNEL)
+    return 0;
+  if (rtm->rtm_src_len != 0)
+    return 0;
+  
+  index = 0;
+  dest = NULL;
+  gate = NULL;
+
+  if (tb[RTA_OIF])
+    index = *(int *) RTA_DATA (tb[RTA_OIF]);
+
+  if (tb[RTA_DST])
+    dest = RTA_DATA (tb[RTA_DST]);
+  else
+    dest = anyaddr;
+
+  if (tb[RTA_GATEWAY])
+    gate = RTA_DATA (tb[RTA_GATEWAY]);
+  else
+    return 0;
+
+  if (rtm->rtm_family == AF_INET)
+    {
+      struct prefix_ipv4 p;
+      p.family = rtm->rtm_family;
+      memcpy (&p.prefix, dest, 4);
+      p.prefixlen = rtm->rtm_dst_len;
+      if (h->nlmsg_type == RTM_NEWROUTE)
+	rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, gate, index);
+      else
+	rib_delete_ipv4 (ZEBRA_ROUTE_KERNEL, &p, gate, index);
+    }
+#ifdef HAVE_IPV6
+  if (rtm->rtm_family == AF_INET6)
+    {
+      struct prefix_ipv6 p;
+      p.family = rtm->rtm_family;
+      memcpy (&p.prefix, dest, 16);
+      p.prefixlen = rtm->rtm_dst_len;
+      if (h->nlmsg_type == RTM_NEWROUTE)
+	rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, gate, index);
+      else
+	rib_delete_ipv6 (ZEBRA_ROUTE_KERNEL, &p, gate, index);
     }
 #endif /* HAVE_IPV6 */
 
@@ -726,10 +821,31 @@ kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
 }
 #endif /* HAVE_IPV6 */
 
+#include "thread.h"
+
+extern struct thread_master *master;
+
+/* Kernel route reflection. */
+int
+kernel_read (struct thread *thread)
+{
+  int sock;
+
+  sock = THREAD_FD (thread);
+  netlink_parse_info (netlink_route_change);
+  thread_add_read (master, kernel_read, NULL, netlink.sock);
+
+  return 0;
+}
+
 /* Exported interface function.  This function simply calls
    netlink_socket (). */
 void
 kernel_init ()
 {
   netlink_socket ();
+
+  /* Register kernel socket. */
+  if (netlink.sock > 0)
+    thread_add_read (master, kernel_read, NULL, netlink.sock);
 }

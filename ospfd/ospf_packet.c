@@ -44,13 +44,6 @@ ospf_output_forward (struct stream *s, int size)
   s->putp += size;
 }
 
-/* elect DR or BDR. Refer to RFC2319 section 9.4 */
-void
-ospf_elect_dr (struct ospf_interface *oi)
-{
-
-}
-
 /* Write packet. */
 int
 ospf_write (struct ospf_interface *oi, int length)
@@ -75,10 +68,10 @@ ospf_make_header (struct ospf_interface *oi, struct ospf_header *ospfh)
   ospfh->version = (u_char) OSPF_VERSION;
   ospfh->type = (u_char) OSPF_MSG_HELLO;
 
-  ospfh->router_id = oi->address->u.prefix4;
+  ospfh->router_id = ospf_top->router_id;
 
   ospfh->checksum = 0;
-  ospfh->area_id.s_addr = 0;
+  ospfh->area_id = oi->area_id;
   ospfh->auth_type = oi->auth_type;
 
   bzero (ospfh->auth_data, sizeof (ospfh->auth_data));
@@ -91,8 +84,8 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
 {
   struct ospf_hello *hello;
   struct ospf_neighbor *nbr;
-  struct route_node *route_node;
-  struct prefix p;
+  struct route_node *rn;
+  struct prefix p, key;
 
   zlog (NULL, LOG_INFO, "OSPF Hello received from [%s]",
 	inet_ntoa (iph->ip_src));
@@ -110,7 +103,7 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
       oi->type != OSPF_IFTYPE_VIRTUALLINK)
     if (oi->address->prefixlen != p.prefixlen)
       {
-	zlog (NULL, LOG_WARNING, "neighbor [%S] NetworkMask mismatch.",
+	zlog (NULL, LOG_WARNING, "neighbor [%s] NetworkMask mismatch.",
 	      inet_ntoa (ospfh->router_id));
 	return;
       }
@@ -131,40 +124,72 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
       return;
     }
 
-  /* get neighbor information from table. */
-  route_node = route_node_get (oi->nbrs, &p);
-  if (route_node->info)
+  /* compare options. */
+  if (oi->options != hello->options)
     {
-      route_unlock_node (route_node);
+      zlog (NULL, LOG_WARNING, "neighbor [%s] Options mismacth.",
+	    inet_ntoa (ospfh->router_id));
       return;
     }
 
-  /* create OSPF Neighbor structure. */
-  nbr = ospf_nbr_new ();
-  nbr->status = NSM_Down;
-  nbr->host = strdup (inet_ntoa (iph->ip_src));
-  nbr->router_id = ospfh->router_id;
+  /* get neighbor information from table. */
+  key.family = AF_INET;
+  key.prefixlen = 32;
+  key.u.prefix4 = ospfh->router_id;
+
+  rn = route_node_get (oi->nbrs, &key);
+  if (rn->info)
+    {
+      route_unlock_node (rn);
+      nbr = rn->info;
+    }
+  else
+    {
+      /* Create new OSPF Neighbor structure. */
+      nbr = ospf_nbr_new ();
+      nbr->oi = oi;
+      nbr->status = NSM_Down;
+      nbr->host = strdup (inet_ntoa (iph->ip_src));
+      nbr->router_id = ospfh->router_id;
+      nbr->address = p;
+
+      rn->info = nbr;
+
+      /* if Hello is myself, silently add pseudo neighbor. */
+      if (! ADDRESS_SAME (&nbr->router_id, &ospf_top->router_id))
+	{
+	  zlog (NULL, LOG_INFO, "OSPF NSM[%s] start.",
+		inet_ntoa (nbr->router_id));
+	}
+    }
+
+  /* Latest neighbor information set. */
   nbr->priority = hello->priority;
-  nbr->address = p;
   nbr->options = hello->options;
   nbr->d_router = hello->d_router;
   nbr->bd_router = hello->bd_router;
 
-  route_node->info = nbr;
-
-  zlog (NULL, LOG_INFO, "OSPF NSM[%s] start.",
-	inet_ntoa (nbr->router_id));
+  /* This is myself. Do not add event thread. */
+  if (ADDRESS_SAME (&nbr->router_id, &ospf_top->router_id))
+    {
+      nbr->status = NSM_TwoWay;
+      return;
+    }
 
   /* Add event to thread. */
   OSPF_NSM_EVENT_ADD (nbr, NSM_HelloReceived);
 
   /* if neighbor itself is DR or no BDR exists,
      cause event BackupSeen */
-  if (ospf_nbr_bidirectional (nbr, hello->neighbor, size - 20))
+  if (ospf_nbr_bidirectional (&ospf_top->router_id, hello->neighbors,
+			      size - OSPF_HELLO_MIN_SIZE))
+    {
+      OSPF_NSM_EVENT_ADD (nbr, NSM_TwoWayReceived);
+
       if (ADDRESS_SAME (&nbr->router_id, &nbr->d_router) ||
 	  nbr->bd_router.s_addr == 0)
 	OSPF_ISM_EVENT_ADD (oi, ISM_BackupSeen);
-
+    }
 }
 
 void
@@ -193,13 +218,13 @@ ospf_hello_send (struct ospf_interface *oi)
     masklen2ip (oi->address->prefixlen, &hello->network_mask);
 
   hello->hello_interval = htons (oi->v_hello);
-  hello->options = 2;
-  hello->priority = oi->router_priority;
+  hello->options = oi->options;
+  hello->priority = oi->priority;
   hello->dead_interval = htonl (oi->v_wait);
   hello->d_router = oi->d_router;
   hello->bd_router = oi->bd_router;
 
-  ospf_output_forward (oi->obuf, 20);
+  ospf_output_forward (oi->obuf, OSPF_HELLO_MIN_SIZE);
 
   for (node = route_top (oi->nbrs); node; node = route_next (node))
     {
@@ -326,10 +351,14 @@ ospf_read (struct thread *thread)
 #endif /* DEBUG */
 
   /* get total ip length. */
+#ifdef GNU_LINUX
   length = ntohs (iph->ip_len);
+#else /* GNU_LINUX */
+  length = iph->ip_len;
+#endif /* GNU_LINUX */
 
   /* Packet size check. */
-  if (iph->ip_len > oi->ifp->mtu)
+  if (length > oi->ifp->mtu)
     {
       zlog (NULL, LOG_WARNING,
 	    "interface %s: ospf_read packet buffer over flow", oi->ifp->name);
@@ -337,17 +366,11 @@ ospf_read (struct thread *thread)
     }
 
   /* my packet should be discarded silently. */
-  if (iph->ip_src.s_addr == oi->address->u.prefix4.s_addr)
-    {
-#ifdef DEBUG
-      zlog (NULL, LOG_WARNING, "It's me.");
-#endif /* DEBUG */
-      return 0;
-    }
+  /*  if (ADDRESS_SAME (&iph->ip_src, &oi->address->u.prefix4))
+      return 0; */
 
   /* Adjust size to message length. */
   stream_forward (oi->ibuf, iph->ip_hl * 4);
-  length -= iph->ip_hl * 4;
 
   /* get ospf packet header. */
   ospfh = (struct ospf_header *) STREAM_PNT (oi->ibuf);

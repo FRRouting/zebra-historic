@@ -1,6 +1,4 @@
 /*
- * $Id: vty.c,v 1.80 1999/02/22 12:15:39 developer Exp $
- *
  * Virtual terminal [aka TeletYpe] interface routine.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

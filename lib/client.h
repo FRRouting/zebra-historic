@@ -1,6 +1,4 @@
 /*
- * $Id: client.h,v 1.5 1999/02/19 17:01:47 developer Exp $
- * 
  * zebra's client header.
  * Copyright (C) 1997, 1998 Kunihiro Ishiguro
  *
@@ -30,6 +28,7 @@
 int zebra_connect ();
 void zebra_get_hostinfo (int sock);
 void zebra_get_all_interface (int sock);
+int zebra_redistribute_send (int command, int sock, int type);
 
 /* IPv4 prefix add and delete function prototype. */
 int

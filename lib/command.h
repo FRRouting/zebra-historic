@@ -1,6 +1,4 @@
 /*
- * $Id: command.h,v 1.33 1999/02/19 17:01:47 developer Exp $
- *
  * Zebra configuration command interface routine
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *
@@ -195,7 +193,7 @@ struct desc
 
 /* Some macroes */
 #define CMD_OPT(X)  ((X) == '[')
-#define CMD_EXT(X)  ((X) >= 'A' && (X) <= 'Z')
+#define CMD_EXT(X)  (((X) >= 'A' && (X) <= 'Z') || ((X) == '<'))
 
 /* Description. */
 #define SHOW_STR "Show running system information\n"

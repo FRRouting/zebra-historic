@@ -1,6 +1,4 @@
 /*
- * $Id: ipforward_sysctl.c,v 1.9 1999/02/22 12:15:40 developer Exp $
- *
  * Ipforward value get by sysctl function.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

@@ -1,6 +1,4 @@
 /*
- * $Id: rt.h,v 1.4 1999/02/19 17:26:37 developer Exp $
- *
  * kernel routing table update prototype.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

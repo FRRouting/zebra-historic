@@ -1,6 +1,6 @@
 /*
  * AS path related definitions.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -23,9 +23,6 @@
 #ifndef _ZEBRA_BGP_ASPATH_H
 #define _ZEBRA_BGP_ASPATH_H
 
-/* We use radix's RPSL aspath regexp. */
-#define RADIX_REGEXP
-
 /* AS path segment type. */
 #define AS_SET             1
 #define AS_SEQUENCE        2
@@ -41,15 +38,18 @@ struct aspath
   /* Rawdata length */
   int length;
 
+  /* AS count. */
+  int count;
+
   /* Rawdata */
   caddr_t data;
 
-#ifdef RADIX_REGEXP
-  int hop_count;
-
-  u_int16_t *pasn;
-#endif /* RADIX_REGEXP*/
+  /* String expression of AS path.  This string is used by vty output
+     and AS path regular expression match. */
+  char *str;
 };
+
+#define ASPATH_STR_DEFAULT_LEN 32
 
 /* Prototypes. */
 void aspath_init ();
@@ -65,15 +65,5 @@ void aspath_print_vty (struct vty *, struct aspath *);
 void aspath_print_all_vty (struct vty *);
 unsigned int aspath_key_make (struct aspath *);
 int aspath_loop_check (struct aspath *, as_t);
-
-#ifdef RADIX_REGEXP
-typedef struct aspath ASPATH;
-typedef struct aspath_regex_t ASPATH_regex;
-
-void aspath_regex_free(ASPATH_regex *regex);
-int aspath_regex_exec(const ASPATH_regex *rp, const ASPATH *info);
-ASPATH_regex *aspath_regex_comp(const char *pat);
-const char *aspath_regex_string(const ASPATH_regex *regex);
-#endif /* RADIX_REGEXP */
 
 #endif /* _ZEBRA_BGP_ASPATH_H */

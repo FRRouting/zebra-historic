@@ -1,6 +1,4 @@
 /*
- * $Id: interface.c,v 1.22 1999/02/19 17:26:36 developer Exp $
- *
  * Interface function.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

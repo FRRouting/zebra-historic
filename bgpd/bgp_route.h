@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_route.h,v 1.23 1999/02/19 17:17:27 developer Exp $
- *
  * Route object related header for route server.
  * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
  *

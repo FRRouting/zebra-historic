@@ -118,10 +118,10 @@ route_match_aspath_compile (char *arg)
 {
   return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
   /*
-  ASPATH_regex *rp;
+  regex_t *regex;
 
-  rp = aspath_regex_comp (arg);
-  return rp;
+  regex = bgp_regcomp (arg);
+  return regex;
   */
 }
 

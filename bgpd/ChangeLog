@@ -1,3 +1,11 @@
+1999-04-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (noninst_HEADERS): Added for make dist.
+
+1999-04-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* aspath_regex.c: Removed from distribution.
+
 1999-04-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_attr.c (bgp_packet_attribute): Old draft-00 packet treatment

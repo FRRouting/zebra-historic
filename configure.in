@@ -67,6 +67,8 @@ AC_ARG_ENABLE(ospf6d,
 [  --disable-ospf6d        do not build ospf6d])
 AC_ARG_ENABLE(pthread,
 [  --disable-pthread       do not use pthread features])
+AC_ARG_ENABLE(guile,
+[  --enable-guile          build zebra-guile])
 
 dnl -------------------
 dnl Check header files.
@@ -94,6 +96,7 @@ case "$host" in
   ;;
   *-linux-*)
       opsys=gnu-linux
+      AC_DEFINE(GNU_LINUX)
   ;;
   *-nec-sysv4*)
       AC_CHECK_LIB(nsl, gethostbyname)
@@ -368,12 +371,20 @@ case "${enable_ospf6d}" in
   *    ) ;;
 esac
 
+case "${enable_guile}" in
+  "yes") GUILE="guile";
+         GUILE_FLAGS;;
+  "no" ) GUILE="";;
+  *    ) ;;
+esac
+
 AC_SUBST(ZEBRA)
 AC_SUBST(BGPD)
 AC_SUBST(RIPD)
 AC_SUBST(RIPNGD)
 AC_SUBST(OSPFD)
 AC_SUBST(OSPF6D)
+AC_SUBST(GUILE)
 AC_SUBST(INCLUDES)
 AC_CHECK_LIB(c, inet_ntop, [AC_DEFINE(HAVE_INET_NTOP)])
 AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
@@ -397,6 +408,16 @@ AC_EGREP_HEADER(ifaliasreq,
 net/if.h,
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_IFALIASREQ)],
+ AC_MSG_RESULT(no))
+
+dnl ---------------------------
+dnl check structure rt_addrinfo
+dnl ---------------------------
+AC_MSG_CHECKING(whether struct rt_addrinfo exist)
+AC_EGREP_HEADER(rt_addrinfo,
+net/route.h,
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_RT_ADDRINFO)],
  AC_MSG_RESULT(no))
 
 dnl -------------
@@ -476,7 +497,7 @@ if test "$ac_cv_htonl_works" = "no"; then
   fi
 fi
 
-AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile doc/Makefile)
+AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile guile/Makefile doc/Makefile)
 
 echo "
 zebra configuration

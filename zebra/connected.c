@@ -1,6 +1,4 @@
 /*
- * $Id: connected.c,v 1.21 1999/02/19 17:26:36 developer Exp $
- *
  * Address linked list routine.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

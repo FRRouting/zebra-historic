@@ -19,3 +19,9 @@
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.  
  */
+
+#include "regex-gnu.h"
+
+void bgp_regex_free (regex_t *regex);
+regex_t *bgp_regcomp (char *str);
+int bgp_regexec (regex_t *regex, struct aspath *aspath);

@@ -19,34 +19,29 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF_NETWORK_H
-#define OSPF_NETWORK_H
+#ifndef OSPF6_NETWORK_H
+#define OSPF6_NETWORK_H
 
-struct afswitch
+struct ospf6_prefix
 {
-  char *af_name;
-  short af_af;
-  int   ospf_sock;
-  size_t salen;
-  struct sockaddr *allspf;
-  struct sockaddr *alldr;
-};
-
-struct ospf_prefix
-{
-  u_int8_t prefix_length;
-  u_int8_t prefix_options;
-  u_int16_t prefix_reserved;
+  u_char         prefix_len;
+  u_char         prefix_opt;
+  unsigned short prefix_reserved;
   /* followed by address_prefix */
 };
 
-/* size_t PREFIX_SPACE (int prefixlength); */
-#define PREFIX_SPACE(x) ((((x) + 31) / 32) * 4)
-/* size_t PREFIX_SIZE (struct prefix *); meaning real (sizeof (struct prefix)) */
-#define PREFIX_SIZE(x)  ((PREFIX_SPACE ((x)->prefix_length)) + sizeof (struct prefix))
-/* struct prefix *NEXT_PREFIX (struct prefix *); */
-#define NEXT_PREFIX(x)   ((struct prefix *)((char *)(x) + PREFIX_SIZE (x)))
+/* size_t OSPF6_PREFIX_SPACE (int prefixlength); */
+#define OSPF6_PREFIX_SPACE(x) ((((x) + 31) / 32) * 4)
+/* size_t OSPF6_PREFIX_SIZE (struct ospf6_prefix *); */
+#define OSPF6_PREFIX_SIZE(x) \\
+   ((OSPF6_PREFIX_SPACE ((x)->prefix_len)) + sizeof (struct ospf6_prefix))
+/* struct prefix *OSPF6_NEXT_PREFIX (struct ospf6_prefix *); */
+#define OSPF6_NEXT_PREFIX(x) \\
+   ((struct ospf6_prefix *)((char *)(x) + OSPF6_PREFIX_SIZE (x)))
 
+
+
+/* Function Prototypes */
 int iov_clear (struct iovec *iov, size_t iovlen);
 int iov_count (struct iovec *iov);
 int iov_index (struct iovec *iov, void *base);
@@ -58,17 +53,18 @@ void *iov_attach_last (struct iovec *iov, void *base, size_t len);
 void *iov_attach_first (struct iovec *iov, void *base, size_t len);
 int iov_free (int mtype, struct iovec *iov, u_int begin, u_int end);
 
+int sockunion_ospf_socket (union sockunion *);
+int sockfd_to_family (int);
+int ospf6_recv (struct thread *);
+int ospf6_serv_sock ();
+int mcast_join (int, struct sockaddr *, char *, u_int);
+int mcast_leave (int, struct sockaddr *, char *, u_int);
+int ospf6_send (u_char, struct iovec *, struct sockaddr *, struct ospf6_if *);
+int send_hello (struct thread *);
 int send_database_description (struct thread *);
 int send_linkstate_request (struct thread *);
 int send_linkstate_update (struct thread *);
 int send_linkstate_ack (struct thread *);
 
-int ospf_send (u_int8_t, struct iovec *, struct sockaddr *, struct interface *);
-void ospf_terminate ();
-int ospf_serv_sock ();
+#endif /* OSPF6_NETWORK_H */
 
-int mcast_prepare ();
-int mcast_join (int, struct sockaddr *, size_t, char *, u_int);
-int mcast_leave (int, struct sockaddr *, size_t, char *, u_int);
-
-#endif /* OSPF_NETWORK_H */

@@ -1,6 +1,4 @@
 /*
- * $Id: ripng_interface.c,v 1.61 1999/02/19 17:35:38 developer Exp $
- *
  * Interface related function for RIPng.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

@@ -1,6 +1,4 @@
 /*
- * $Id: linklist.c,v 1.10 1999/02/19 17:01:48 developer Exp $
- *
  * Generic linked list routine.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *
@@ -111,11 +109,26 @@ list_add_node (list list, void *val)
   list_add_node_tail (list, val);
 }
 
+/* Delete all listnode from the list. */
+void
+list_delete_all_node (list list)
+{
+  listnode n;
+  listnode next;
+
+  for (n = list->head; n; n = next)
+    {
+      next = n->next;
+      listnode_free (n);
+    }
+}
+
 /* Delete all node from the list. */
 void
 list_delete_all (list list)
 {
-  
+  list_delete_all_node (list);
+  list_free (list);
 }
 
 /* Delete the node from list. */

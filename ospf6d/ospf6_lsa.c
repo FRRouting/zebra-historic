@@ -19,7 +19,7 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospfd.h"
+#include "ospf6d.h"
 
 char *lstype_name[] =
 {
@@ -114,7 +114,9 @@ free_lsa_internal_hdr (struct lsa_internal *lsi)
   return;
 }
 
-int list_clear_all (list l)
+/* This function may be seme as list_delete_all_node. */
+int
+list_clear_all (list l)
 {
   listnode n;
 
@@ -125,7 +127,8 @@ int list_clear_all (list l)
   return 0;
 }
 
-int lsa_list_clear_all (list l)
+int
+lsa_list_clear_all (list l)
 {
   listnode n;
 

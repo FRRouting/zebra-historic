@@ -1,6 +1,4 @@
 /*
- * $Id: rtread_netlink.c,v 1.3 1999/02/19 17:26:37 developer Exp $
- *
  * Kernel routing table readup by netlink
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

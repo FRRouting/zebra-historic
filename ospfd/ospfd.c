@@ -36,45 +36,34 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_zebra.h"
 
-/* List head of ospf instance list. */
-list ospf_list;
+/* OSPF instance top. */
+struct ospf *ospf_top;
+
+static char *ospf_network_type_str[] =
+{
+  "Null",
+  "POINTOPOINT",
+  "BROADCAST",
+  "NBMA",
+  "POINTOMULTIPOINT",
+  "VIRTUALLINK"
+};
 
 
 /* Allocate new ospf structure. */
 struct ospf *
-ospf_new (u_int16_t process_id)
+ospf_new ()
 {
-  struct ospf *new = (struct ospf *) malloc (sizeof (struct ospf));
+  struct ospf *new = XMALLOC (MTYPE_OSPF_TOP, sizeof (struct ospf));
   bzero (new, sizeof (struct ospf));
 
-  new->process_id = process_id;
   new->if_list = iflist;
-  new->neighbor = NULL;
   new->network_area = (struct route_table *) route_table_init ();
 
-  list_add_node (ospf_list, new);
-
   return new;
-}
-
-/* OSPF structure specify by process_id. */
-struct ospf *
-ospf_lookup_by_process_id (u_int16_t process_id)
-{
-  struct ospf *ospf;
-  listnode node;
-
-  node = listhead (ospf_list);
-  while (node)
-    {
-      ospf = getdata (node);
-      if (ospf->process_id == process_id)
-	return ospf;
-      nextnode (node);
-    }
-  return NULL;
 }
 
 
@@ -116,9 +105,9 @@ ospf_loopback_run (struct ospf *ospf)
 	{
 	  /* If interface is loopback, change state. */
 	  if (if_is_loopback (ifp))
-	    if (oi->flag == OSPF_FLAG_SLEEP)
+	    if (oi->flag == OSPF_IF_DISABLE)
 	      {	      
-		oi->flag = OSPF_FLAG_RUNNING;
+		oi->flag = OSPF_IF_ENABLE;
 		OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_LoopInd);
 	      }
 	}
@@ -126,7 +115,7 @@ ospf_loopback_run (struct ospf *ospf)
 }
 
 void
-ospf_interface_run (struct ospf *ospf, struct prefix *p)
+ospf_interface_run (struct ospf *ospf, struct prefix *p, struct area *a)
 {
   struct interface *ifp;
   listnode node;
@@ -136,7 +125,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p)
     {
       listnode cn;
       struct ospf_interface *oi;
-      u_char flag = OSPF_FLAG_SLEEP;
+      u_char flag = OSPF_IF_DISABLE;
 
       ifp = getdata (node);
       oi = ifp->if_data;
@@ -145,7 +134,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p)
       if (! if_is_up (ifp))
 	continue;
 
-      if (oi->flag == OSPF_FLAG_RUNNING)
+      if (oi->flag == OSPF_IF_ENABLE)
 	continue;
 
       /* if interface prefix is match specified prefix,
@@ -153,16 +142,19 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p)
       for (cn = listhead (ifp->connected); cn; nextnode (cn))
 	{
 	  struct connected *co;
-	  struct sockaddr_in sa;
 	  struct in_addr addr;
 	  int sock;
 
 	  co = getdata (cn);
+
 	  /* get pointer of interface prefix. */
 	  oi->address = co->address;
+	  oi->area_id = a->area_id;
 
 	  if (prefix_match (co->address, p))
 	    {
+	      addr = co->address->u.prefix4;
+
 	      /* create raw socket. */
 	      sock = ospf_serv_sock (ifp, AF_INET);
 	      if (sock < 0)
@@ -175,24 +167,14 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p)
 	      /* join mcast group. */
 	      ospf_if_add_allspfrouters (sock, co->address);
 
-	      /* */
-	      bzero ((char *) &sa, sizeof (sa));
-	      inet_aton (OSPF_ALLSPFROUTERS, &addr);
-	      sa.sin_family = AF_INET;
-	      sa.sin_addr = addr;
-	      sa.sin_port = htons (0);
-/* 	      if (bind (sock, (struct sockaddr *) &sa, sizeof (sa)) < 0)
-		{
-		  zlog (NULL, LOG_WARNING,
-			"interface %s can't bind socket", ifp->name);
-		  continue;
-		}
-*/
+	      /* select interface. */
+	      ospf_if_ipmulticast (sock, co->address);
+
 	      /* create input/output buffer stream. */
 	      ospf_if_stream_set (sock, ifp->if_data);
 
 	      /* Remember this interface is running. */
-	      flag = OSPF_FLAG_RUNNING;
+	      flag = OSPF_IF_ENABLE;
 
 	      OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_InterfaceUp);
 	    }
@@ -201,82 +183,93 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p)
     }
 }
 
+struct in_addr
+ospf_get_router_id (struct _list *if_list)
+{
+  listnode node;
+  struct in_addr router_id;
+  struct interface *ifp;
+
+  bzero (&router_id, sizeof (struct in_addr));
+
+  for (node = listhead (if_list); node; nextnode (node))
+    {
+      listnode cn;
+
+      ifp = getdata (node);
+
+      for (cn = listhead (ifp->connected); cn; nextnode (cn))
+	{
+	  struct connected *co;
+
+	  co = getdata (cn);
+
+	  if (co->address->family != AF_INET)
+	    continue;
+
+	  if (ntohl (router_id.s_addr) < ntohl (co->address->u.prefix4.s_addr))
+	    router_id = co->address->u.prefix4;
+	}
+    }
+
+  return router_id;
+}
+
+
 void
 ospf_if_update ()
 {
-  struct ospf *ospf;
-  listnode node;
   struct route_node *rn;
 
-  for (node = listhead (ospf_list); node; nextnode (node))
-    if ((ospf = getdata (node)) != NULL)
-      {
-	ospf_loopback_run (ospf);
+  if (ospf_top != NULL)
+    {
+      ospf_loopback_run (ospf_top);
 
-	for (rn = route_top (ospf->network_area); rn; rn = route_next (rn))
-	  ospf_interface_run (ospf, &rn->p);
-      }
+      for (rn = route_top (ospf_top->network_area); rn; rn = route_next (rn))
+	ospf_interface_run (ospf_top, &rn->p, rn->info);
+
+    }
 }
 
 /* router ospf command */
 DEFUN (router_ospf,
        router_ospf_cmd,
-       "router ospf PROCESS_ID",
+       "router ospf",
        "Enable a routing process\n"
-       "Start OSPF configuration\n"
-       "OSPF Process ID\n")
+       "Start OSPF configuration\n")
 {
-  u_int16_t process_id;
-  struct ospf *ospf;
-
-  process_id = strtol (argv[0], NULL, 10);
-  if (!process_id)
-    {
-      vty_out (vty, "OSPF Process ID is invalid\r\n");
-      return CMD_WARNING;
-    }
-
-  ospf = ospf_lookup_by_process_id (process_id);
-
   /* There is already active ospf instance. */
-  if (ospf != NULL)
+  if (ospf_top != NULL)
     {
       vty->node = OSPF_NODE;
-      vty->index = ospf;
+      vty->index = ospf_top;
       return CMD_SUCCESS;
     }
 
   /* Make new ospf instance. */
-  ospf = ospf_new (process_id);
+  ospf_top = ospf_new ();
 
   /* Set current ospf point. */
   vty->node = OSPF_NODE;
-  vty->index = ospf;
+  vty->index = ospf_top;
 
-  ospf_loopback_run (ospf);
+  ospf_loopback_run (ospf_top);
+
+  ospf_top->router_id = ospf_get_router_id (ospf_top->if_list);
 
   return CMD_SUCCESS;
 }
 
 DEFUN (no_router_ospf,
        no_router_ospf_cmd,
-       "no router ospf PROCESS_ID",
+       "no router ospf",
        NO_STR
        "Enable a routing process\n"
-       "Start OSPF configuration\n"
-       "OSPF Process ID\n")
+       "Start OSPF configuration\n")
 {
-  struct ospf *ospf;
-  u_int16_t process_id;
-
-  process_id = strtol (argv[0], NULL, 10);
-
-  /* Check existing ospf. */
-  ospf = ospf_lookup_by_process_id (process_id);
-
-  if (ospf == NULL)
+  if (ospf_top == NULL)
     {
-      vty_out (vty, "There isn't active ospf instance under process ID %d.\r\n", process_id);
+      vty_out (vty, "There isn't active ospf instance.\r\n");
       return CMD_WARNING;
     }
 
@@ -341,7 +334,8 @@ DEFUN (network_area,
     }
   route_node->info = area;
 
-  ospf_interface_run (ospf, &p);
+  /* Run Interface config now. */
+  ospf_interface_run (ospf, &p, area);
 
   return CMD_SUCCESS;
 }
@@ -403,47 +397,184 @@ DEFUN (no_network_area,
   return CMD_SUCCESS;
 }
 
+void
+show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
+{
+  struct ospf_interface *oi;
+  struct route_node *rn;
+  struct prefix key;
+  struct ospf_neighbor *nbr;
+
+  /* is interface up? */
+  if (if_is_up (ifp))
+    vty_out (vty, "%s is up, line protocol is up\r\n", ifp->name);
+  else
+    vty_out (vty, "%s is down, line protocol is down\r\n", ifp->name);
+
+  oi = ifp->if_data;
+
+  /* is interface OSPF enabled? */
+  if (oi == NULL)
+    {
+      vty_out (vty, "  OSPF not enabled on this interface\r\n");
+      return;
+    }
+  if (oi->flag == OSPF_IF_DISABLE || oi->address == NULL)
+    {
+      vty_out (vty, "   OSPF not enabled on this interface\r\n");
+      return;
+    }
+      
+  /* show OSPF interface information. */
+  vty_out (vty, "  Internet Address %s/%d,",
+	   inet_ntoa (oi->address->u.prefix4), oi->address->prefixlen);
+
+  vty_out (vty, " Area %s\r\n", inet_ntoa (oi->area_id));
+
+  vty_out (vty, "  Router ID %s, Network Type %s, Cost: %d\r\n",
+	   inet_ntoa (ospf_top->router_id),
+	   ospf_network_type_str[oi->type],
+	   oi->output_cost);
+
+  vty_out (vty, "  Transmit Delay is %d sec, State %s, Priority %d\r\n",
+	   oi->transmit_delay,
+	   LOOKUP (ospf_ism_status_msg, oi->status),
+	   oi->priority);
+
+  /* show DR information. */
+  if (oi->d_router.s_addr == 0)
+    vty_out (vty, "  No designated router on this network\r\n");
+  else
+    {
+      key.family = AF_INET;
+      key.prefixlen = 32;
+      key.u.prefix4 = oi->d_router;
+
+      rn = route_node_get (oi->nbrs, &key);
+      if (rn == NULL)
+	vty_out (vty, "  No designated router on this network\r\n");
+      else if (rn->info == NULL)
+	vty_out (vty, "  No designated router on this network\r\n");
+      else
+	{
+	  nbr = (struct ospf_neighbor *) rn->info;
+
+	  vty_out (vty, "  Designated Router (ID) %s,",
+		   inet_ntoa (oi->d_router));
+	  vty_out (vty, " Interface Address %s\r\n",
+		   inet_ntoa (nbr->address.u.prefix4));
+	}
+      route_unlock_node (rn);
+    }
+
+  /* show BDR information. */
+  if (oi->bd_router.s_addr == 0)
+    vty_out (vty, "  No backup designated router on this network\r\n");
+  else
+    {
+      key.family = AF_INET;
+      key.prefixlen = 32;
+      key.u.prefix4 = oi->bd_router;
+
+      rn = route_node_get (oi->nbrs, &key);
+      if (rn == NULL)
+	vty_out (vty, "  No backup designated router on this network\r\n");
+      else if (rn->info == NULL)
+	vty_out (vty, "  No backup designated router on this network\r\n");
+      else
+	{
+	  nbr = (struct ospf_neighbor *) rn->info;
+
+	  vty_out (vty, "  Backup Designated Router (ID) %s,",
+		   inet_ntoa (oi->bd_router));
+	  vty_out (vty, " Interface Address %s\r\n",
+		   inet_ntoa (nbr->address.u.prefix4));
+	}
+      route_unlock_node (rn);
+    }
+
+  vty_out (vty, "  Timer intarvals configured,");
+  vty_out (vty, " Hello %d, Dead %d, Wait %d, Retransmit %d\r\n",
+	   oi->v_hello, oi->v_wait, oi->v_wait, 0);
+
+  vty_out (vty, "    Hello due in \r\n");
+
+  vty_out (vty, "  Neighbor Count is %d, Adjacent neighbor count is %d\r\n",
+	   ospf_nbr_count (oi->nbrs), ospf_adjacent_count (oi->nbrs));
+}
+
+DEFUN (show_ip_ospf_interface,
+       show_ip_ospf_interface_cmd,
+       "show ip ospf interface [INTERFACE]",
+       SHOW_STR
+       IP_STR
+       "OSPF information\n"
+       "Interface information\n"
+       "Interface name")
+{
+  struct interface *ifp;
+  listnode node;
+
+  /* show All Interfaces. */
+  if (argc == 0)
+    for (node = listhead (iflist); node; nextnode (node))
+      {
+	ifp = getdata (node);
+	show_ip_ospf_interface_sub (vty, ifp);
+      }
+  /* Interface name is specified. */
+  else
+    {
+      ifp = if_lookup_by_name (argv[0]);
+      if (ifp == NULL)
+	vty_out (vty, "No such interface name\r\n");
+      else
+	show_ip_ospf_interface_sub (vty, ifp);
+    }
+
+  return CMD_SUCCESS;
+}
+
 /* OSPF configuration write function. */
 int
 ospf_config_write (struct vty *vty)
 {
-  struct route_node *node;
-  struct ospf *ospf;
+  struct route_node *rn;
 
-  ospf = vty->index;
-
-  /* no ospf instance. */
-  if (! ospf)
-    return 0;
-
-  /* router ospf print. */
-  vty_out (vty, "router ospf %u%s", ospf->process_id, VTY_NEWLINE);
-
-  /* network area print. */
-  for (node = route_top (ospf->network_area); node; node = route_next (node))
+  if (ospf_top != NULL)
     {
-      struct area *area;
-      u_char area_id_buf[16];
+      /* router ospf print. */
+      vty_out (vty, "router ospf%s", VTY_NEWLINE);
 
-      if (node->info == NULL)
-	continue;
+      if (! ospf_top->network_area)
+	return 0;
 
-      area = node->info;
-
-      /* print nework statement as specified Area ID format. */
-      if (area->area_id_format == OSPF_AREA_ID_FORMAT_ADDRESS)
+      /* network area print. */
+      for (rn = route_top (ospf_top->network_area); rn; rn = route_next (rn))
 	{
-	  bzero (&area_id_buf, 16);
-	  strncpy (area_id_buf, inet_ntoa (area->area_id), 16);
-	  vty_out (vty, " network %s/%d area %s%s",
-		   inet_ntoa (node->p.u.prefix4), node->p.prefixlen,
-		   area_id_buf, VTY_NEWLINE);
-	}
-      else
-	{
-	  vty_out (vty, " network %s/%d area %u%s",
-		   inet_ntoa (node->p.u.prefix4), node->p.prefixlen,
-		   area->area_id.s_addr, VTY_NEWLINE);
+	  struct area *area;
+	  u_char area_id_buf[16];
+
+	  if (rn->info == NULL)
+	    continue;
+
+	  area = rn->info;
+
+	  /* print nework statement as specified Area ID format. */
+	  if (area->area_id_format == OSPF_AREA_ID_FORMAT_ADDRESS)
+	    {
+	      bzero (&area_id_buf, 16);
+	      strncpy (area_id_buf, inet_ntoa (area->area_id), 16);
+	      vty_out (vty, " network %s/%d area %s%s",
+		       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
+		       area_id_buf, VTY_NEWLINE);
+	    }
+	  else
+	    {
+	      vty_out (vty, " network %s/%d area %u%s",
+		       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
+		       area->area_id.s_addr, VTY_NEWLINE);
+	    }
 	}
     }
 
@@ -464,6 +595,8 @@ ospf_init ()
   install_node (&ospf_node, ospf_config_write);
 
   /* Install ospf commands. */
+  install_element (VIEW_NODE, &show_ip_ospf_interface_cmd);
+  install_element (ENABLE_NODE, &show_ip_ospf_interface_cmd);
   install_element (CONFIG_NODE, &router_ospf_cmd);
   install_element (CONFIG_NODE, &no_router_ospf_cmd);
 
@@ -478,7 +611,7 @@ ospf_init ()
   */
 
   /* Make empty list of ospf list. */
-  ospf_list = list_init ();
+  ospf_top = NULL;
 
   zebra_init ();
 }

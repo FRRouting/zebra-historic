@@ -24,12 +24,13 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_HEADER_SIZE         24
 #define OSPF_AUTH_SIZE	          8
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
+#define OSPF_HELLO_MIN_SIZE	 20
 
-#define OSPF_MSG_HELLO	       1
-#define OSPF_MSG_DB_DESC       2
-#define OSPF_MSG_LS_REQ	       3
-#define OSPF_MSG_LS_UPD	       4
-#define OSPF_MSG_LS_ACK	       5
+#define OSPF_MSG_HELLO	       1      /* OSPF Hello Message. */
+#define OSPF_MSG_DB_DESC       2      /* OSPF Database Descriptoin Message. */
+#define OSPF_MSG_LS_REQ	       3      /* OSPF Link State Request Message. */
+#define OSPF_MSG_LS_UPD	       4      /* OSPF Link State Update Message. */
+#define OSPF_MSG_LS_ACK	       5      /* OSPF Link State Acknoledgement Message. */
 
 /* OSPF packet header structure. */
 struct ospf_header
@@ -54,7 +55,17 @@ struct ospf_hello
   u_int32_t dead_interval;
   struct in_addr d_router;
   struct in_addr bd_router;
-  struct in_addr neighbor[1];
+  struct in_addr neighbors[1];
+};
+
+/* OSPF Database Description body format. */
+struct ospf_db_desc
+{
+  u_int16_t mtu;
+  u_char options;
+  u_char flags;
+  u_int32_t seq_number;
+  /* struct ospf_lsa lsa[1]; */
 };
 
 /* OSPF LSA header structure. */
@@ -140,16 +151,6 @@ struct ospf_lsa
 #define ospf_network_lsa        u.network_lsa
 #define ospf_summary_lsa        u.summary_lsa
 #define ospf_as_external_lsa    u.as_external_lsa
-
-/* OSPF Database Description body format. */
-struct ospf_db_desc
-{
-  u_int16_t interface_mtu;
-  u_char options;
-  u_char flags;
-  u_int32_t seq_number;
-  struct ospf_lsa lsa[1];
-};
 
 /* OSPF Link State Request body format. */
 struct ospf_ls_req

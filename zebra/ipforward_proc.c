@@ -1,6 +1,4 @@
 /*
- * $Id: ipforward_proc.c,v 1.8 1999/02/19 17:26:36 developer Exp $
- *
  * Fetch ipforward value by reading /proc filesystem.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

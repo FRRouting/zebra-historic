@@ -1,6 +1,4 @@
 /*
- * $Id: table.h,v 1.11 1999/02/19 17:01:49 developer Exp $
- *
  * Routing Table
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

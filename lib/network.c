@@ -1,6 +1,4 @@
 /*
- * $Id: network.c,v 1.5 1999/02/19 17:01:48 developer Exp $
- *
  * Network library.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

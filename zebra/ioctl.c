@@ -1,6 +1,4 @@
 /*
- * $Id: ioctl.c,v 1.26 1999/02/22 12:15:40 developer Exp $
- *
  * Common ioctl functions.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

@@ -1,6 +1,4 @@
 /*
- * $Id: if_ioctl.c,v 1.55 1999/02/19 17:26:36 developer Exp $
- *
  * Interface looking up by ioctl ().
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

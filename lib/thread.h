@@ -1,6 +1,4 @@
 /*
- * $Id: thread.h,v 1.4 1999/02/19 17:01:49 developer Exp $
- *
  * Thread management routine header.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

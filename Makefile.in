@@ -63,6 +63,9 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 INCLUDES = @INCLUDES@
 IPFORWARD = @IPFORWARD@
@@ -79,7 +82,9 @@ RT_METHOD = @RT_METHOD@
 VERSION = @VERSION@
 ZEBRA = @ZEBRA@
 
-SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ doc
+SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ @GUILE@ doc
+
+EXTRA_DIST = guile.m4
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = config.h
@@ -286,6 +291,7 @@ distdir: $(DISTFILES)
 	      || exit 1; \
 	  fi; \
 	done
+	$(MAKE) $(AM_MAKEFLAGS) top_distdir="$(top_distdir)" distdir="$(distdir)" dist-hook
 info-am:
 info: info-recursive
 dvi-am:
@@ -359,6 +365,11 @@ install uninstall-am uninstall all-redirect all-am all installdirs-am \
 installdirs mostlyclean-generic distclean-generic clean-generic \
 maintainer-clean-generic clean mostlyclean distclean maintainer-clean
 
+
+dist-hook:
+	mkdir $(distdir)/tools
+	cp -p $(srcdir)/tools/*.pl $(distdir)/tools
+	cp -p $(srcdir)/tools/*.el $(distdir)/tools
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

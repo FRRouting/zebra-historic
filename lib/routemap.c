@@ -1,6 +1,4 @@
 /*
- * $Id: routemap.c,v 1.20 1999/02/21 17:12:27 developer Exp $
- *
  * Route map function.
  * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *

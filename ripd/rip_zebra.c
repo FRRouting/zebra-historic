@@ -1,6 +1,4 @@
 /*
- * $Id: rip_zebra.c,v 1.35 1999/02/22 17:24:56 developer Exp $
- *
  * RIPd and zebra interface.
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

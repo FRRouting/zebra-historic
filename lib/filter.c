@@ -1,6 +1,4 @@
 /*
- * $Id: filter.c,v 1.39 1999/02/19 17:01:47 developer Exp $
- *
  * Route filtering function.
  * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *

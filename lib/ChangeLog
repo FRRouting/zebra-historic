@@ -1,4 +1,15 @@
-1999-04-07    <kunihiro@zebra.org>
+1999-04-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* buffer.c: Rewrite buffer_write and buffer_flush related
+	functions for fixing bugs.  Reason of the problem and fix is
+	suggested by Alex Bligh <amb@gxn.net>.
+	
+1999-04-12  Alex Bligh <amb@gxn.net>
+
+	* command.c (cmd_entry_function_descr): Added for variable
+	argument help display.
+
+1999-04-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* regex.c, regex-gnu.h: Imported from GNU sed-3.02 distribution.
 

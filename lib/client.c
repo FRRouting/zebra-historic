@@ -29,6 +29,27 @@
 #include "network.h"
 #include "roken.h"
 
+/* Send redistribute message. */
+int
+zebra_redistribute_send (int command, int sock, int type)
+{
+  int ret;
+  struct stream *s;
+
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  stream_putw (s, 4);
+  
+  stream_putc (s, command);
+  stream_putc (s, type);
+
+  ret = writen (sock, s->data, 4);
+
+  stream_free (s);
+
+  return ret;
+}
+
 /* Make a IPv4 route add/delete packet and send it to zebra. */
 static int
 zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p, 

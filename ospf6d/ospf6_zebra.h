@@ -19,34 +19,6 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospfd.h"
-
-#include "log.h"
-#include "version.h"
-
-char *logfile_name;
-extern FILE *logfp;
-extern char *progname;
-
-/* Print OSPFd start messages. */
-void
-ospf_start_msg ()
-{
-  log ("OSPFd (%s) starts\n", ZEBRA_VERSION);
-}
-
-/* Reopen log file by HUP signal. */
-void
-rotate_log ()
-{
-  if (logfp == stdout)
-    return;
-
-  fflush (logfp);
-  fclose (logfp);
-
-  logfp = fopen (logfile_name, "a");
-
-  if (logfp == NULL)
-    fprintf (stderr, "%s: can't open logfile %s\n", progname, logfile_name);
-}
+void zebra_get_interface (int, u_int16_t);
+int ospf_zebra_read (struct thread *); 
+int ospf_zebra_init ();

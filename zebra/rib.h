@@ -1,6 +1,4 @@
 /*
- * $Id: rib.h,v 1.19 1999/02/19 17:26:37 developer Exp $
- *
  * Routing Information Base header
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

@@ -1,6 +1,4 @@
 /*
- * $Id: distribute.c,v 1.7 1999/02/19 17:01:47 developer Exp $
- *
  * Distribute list functions
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

@@ -1,6 +1,4 @@
 /*
- * $Id: rt_socket.c,v 1.48 1999/02/22 12:15:40 developer Exp $
- *
  * Kernel routing table updates by routing socket.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

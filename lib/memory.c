@@ -1,6 +1,4 @@
 /*
- * $Id: memory.c,v 1.28 1999/02/22 12:15:38 developer Exp $
- *
  * Memory management routine
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
@@ -261,6 +259,8 @@ struct memory_list
   { 0,                     "---------------------\r\n" },
   { MTYPE_DESC,            "Command desc    : %ld\r\n", },
   { 0,                     "---------------------\r\n" },
+  { MTYPE_BUFFER,          "Buffer          : %ld\r\n", },
+  { MTYPE_BUFFER_DATA,     "Buffer data     : %ld\r\n", },
   { MTYPE_STREAM,          "Stream          : %ld\r\n", },
   { -1, NULL },
 };

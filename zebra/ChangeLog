@@ -1,3 +1,8 @@
+1999-04-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (kernel_read): Function added for asynchronous
+	zebra between kernel communication.
+
 1999-03-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rtread_sysctl.c (rtm_read): Fix address memcopy overrun bug.

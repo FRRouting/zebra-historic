@@ -1,6 +1,4 @@
 /*
- * $Id: main.c,v 1.65 1999/02/22 12:15:40 developer Exp $
- *
  * zebra daemon main routine.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

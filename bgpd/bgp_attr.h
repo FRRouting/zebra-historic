@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_attr.h,v 1.20 1999/02/21 16:53:45 developer Exp $
- *
  * BGP attributes. 
  * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
  *

@@ -1,6 +1,37 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
-* Changes in zebra-199904XX snapshot
+* Changes in zebra-19990414 snapshot
+
+** Set version to 0.60 for preparation of beta release.
+
+** New directory guile is added for linking with guile interpreter.
+
+* Changes in zebra
+
+** On GNU/Linux Kernel 2.2.x (with netlink support), zebra detects
+asynchronous routing updates.  *BSD support is not yet finished.
+
+* Changes in bgpd
+
+** `show ip bgp regexp ASPATH_REGEX' uses CISCO like regular expression 
+instead of RPSL like regular expression.  I'm planing to provide RPSL
+like regular expression with `show ip bgp rpsl' or something.
+
+* Changes in lib
+
+** Press '?' at variable mandatory argument, vty prints nothing.  Now
+vty outputs description about the argument.  Fixed by Alex Bligh
+<amb@gxn.net>
+
+** buffer.c has some ugly bugs.  Due to the bug, vty interface hangs
+when large output date exists.  This bug is fixed. Reported by Alex
+Bligh <amb@gxn.net>.
+
+* Changes in ospfd
+
+** DR and BDR information is shown by `show ip ospf interface' command.
+
+* Changes in zebra-19990408 snapshot
 
 * Changes in bgpd
 

@@ -1,6 +1,4 @@
 /*
- * $Id: thread.c,v 1.21 1999/02/22 12:15:39 developer Exp $
- *
  * Thread management routine
  * Inspired by Ikuo Nakagawa's em.[ch] event manager.
  * Copyright (C) 1998 Kunihiro Ishiguro

@@ -1,6 +1,4 @@
 /*
- * $Id: vector.h,v 1.10 1999/02/19 17:01:49 developer Exp $
- *
  * Generic vector interface header.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

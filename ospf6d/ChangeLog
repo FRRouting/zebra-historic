@@ -1,3 +1,18 @@
+1999-04-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6_neighbor.c: Change list_clear_all to list_delete_all_node.
+	Remove list_delete_all fuction and use lib/linklist.c's one.
+	
+1999-04-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* mcast_join(),mcast_leave()'s argument socket length is removed.
+
+1999-04-08    <kunihiro@zebra.org>
+
+	* ospf6_zebra.h (ospf_zebra_read): Fix typo.
+
+	* ospf6_interface.h: Tempolary add struct rt_addrinfo.
+
 1999-03-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Merge from ospfd-zebra-990303 codes.

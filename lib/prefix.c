@@ -1,8 +1,6 @@
 /*
- * $Id: prefix.c,v 1.18 1999/02/22 12:15:39 developer Exp $
- *
  * Prefix related functions.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -34,6 +32,15 @@
 static u_char maskbit[] = {0x00, 0x80, 0xc0, 0xe0, 0xf0,
 			         0xf8, 0xfc, 0xfe, 0xff};
 
+/* Number of bits in prefix type. */
+#ifndef PNBBY
+#define PNBBY 8
+#endif /* PNBBY */
+
+#define MASKBIT(offset)  ((0xff << (PNBBY - (offset))) & 0xff)
+
+/* Is this code really return 1 when n>p?
+   I think "If p includes n" is correct. commented by yasu */
 /* If n includes p prefix then return 1 else return 0. */
 int
 prefix_match (struct prefix *n, struct prefix *p)
@@ -45,10 +52,12 @@ prefix_match (struct prefix *n, struct prefix *p)
   u_char *np = (u_char *)&n->u.prefix;
   u_char *pp = (u_char *)&p->u.prefix;
 
-  /* assert (n->prefixlen <= p->prefixlen); */
+  /* If n's prefix is longer than p's one return 0. */
+  if (n->prefixlen > p->prefixlen)
+    return 0;
 
-  offset = n->prefixlen / 8;
-  shift =  n->prefixlen % 8;
+  offset = n->prefixlen / PNBBY;
+  shift =  n->prefixlen % PNBBY;
 
   if (shift)
     if (maskbit[shift] & (np[offset] ^ pp[offset]))
@@ -442,6 +451,13 @@ str2prefix (char *str, struct prefix *p)
     return ret;
 #endif /* HAVE_IPV6 */
 
+  return 0;
+}
+
+int
+prefix2str (struct prefix *p, char *str, int size)
+{
+  inet_ntop (p->family, &p->u.prefix, str, size);
   return 0;
 }
 

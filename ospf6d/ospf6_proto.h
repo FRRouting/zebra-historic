@@ -19,70 +19,46 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF_PROTO_H
-#define OSPF_PROTO_H
+#ifndef OSPF6_PROTO_H
+#define OSPF6_PROTO_H
 
 /* OSPF protocol version */
-#define OSPF_V2		2
-#define OSPF_V3		3
+#define OSPF_V2                 2
+#define OSPF_V3                 3
 
 /* OSPF protocol number. */
 #ifndef IPPROTO_OSPFIGP
-#define IPPROTO_OSPFIGP		89
+#define IPPROTO_OSPFIGP         89
 #endif
 
 /* TOS field normaly null */
-#define TOS_VALUE		0x0
+#define TOS_VALUE               0x0
 
 /* Architectural Constants */
-#define LS_REFRESH_TIME		1800		/* 30 min */
-#define MIN_LS_INTERVAL		5
-#define MIN_LS_ARRIVAL		1
-#define MAXAGE			3600		/* 1 hour */
-#define CHECK_AGE		300		/* 5 min */
-#define MAX_AGE_DIFF		900		/* 15 min */
-#define LS_INFINITY		0xffffff	/* 24-bit binary value */
-#define DEFAULT_DESTINATION	0.0.0.0		/* IPv4 address */
-#define DEFAULT_DESTINATION_MASK	0.0.0.0
-				/* always for DEFAULT_DESTINATION */
-#define INITIAL_SEQUENCE_NUMBER	0x80000001	/* signed 32-bit integer */
-#define MAX_SEQUENCE_NUMBER	0x7fffffff	/* signed 32-bit integer */
+#define LS_REFRESH_TIME         1800       /* 30 min */
+#define MIN_LS_INTERVAL         5
+#define MIN_LS_ARRIVAL          1
+#define MAXAGE                  3600       /* 1 hour */
+#define CHECK_AGE               300        /* 5 min */
+#define MAX_AGE_DIFF            900        /* 15 min */
+#define LS_INFINITY             0xffffff   /* 24-bit binary value */
+#define INITIAL_SEQUENCE_NUMBER 0x80000001 /* signed 32-bit integer */
+#define MAX_SEQUENCE_NUMBER     0x7fffffff /* signed 32-bit integer */
 
 /* Configurable Constants */
-/* TopLevel Structure */
-struct ospf
-{
-	instance_id_t		instance_id;
-	vers_t			version;
-	rtr_id_t		router_id;
-	list			area_list;
-};
 
+
+/* TopLevel Structure */
+struct ospf6
+{
+  instance_id_t instance_id;
+  vers_t        version;
+  rtr_id_t      router_id;
+  list          area_list;
+};
 
 /* OSPF options */
 /* present in HELLO, DD, LSA */
-
-/* Old Version */
-#define OPT_E		0x02	/* ASExternal */
-#define OPT_MC		0x04	/* Multicast */
-#define OPT_NP		0x08	/* N/P-bit. hendle type7 LSA */
-#define OPT_EA		0x10	/* External Attribute LSA */
-#define OPT_DC		0x20	/* Demand circuits */
-
-#define EBITSET(x)	((x[2]) |= OPT_E)
-#define ISEBITSET(x)	((x[2]) & OPT_E)
-
-#define V3_IS_V6BIT_SET(x) (x[2] & 1)
-#define V3_V6BIT_SET(x) (x[2] |= 1)
-#define V3_IS_EBIT_SET(x) (x[2] & (1 << 1))
-#define V3_EBIT_SET(x) (x[2] |= (1 << 1))
-#define V3_IS_MCBIT_SET(x) (x[2] & (1 << 2))
-#define V3_IS_NBIT_SET(x) (x[2] & (1 << 3))
-#define V3_IS_RBIT_SET(x) (x[2] & (1 << 4))
-#define V3_RBIT_SET(x) (x[2] |= (1 << 4))
-#define V3_IS_DCBIT_SET(x) (x[2] & (1 << 5))
-
-/* Newer Version */
 #define V3OPT_SET(x,opt)       ((x)[2] |=  (opt))
 #define V3OPT_ISSET(x,opt)     ((x)[2] &   (opt))
 #define V3OPT_CLEAR(x,opt)     ((x)[2] &= ~(opt))
@@ -94,4 +70,5 @@ struct ospf
 #define V3OPT_R      (1 << 4)   /* Forwarding Capability (Any Protocol) */
 #define V3OPT_DC     (1 << 5)   /* Demand Circuit handling Capability */
 
-#endif /* OSPF_PROTO_H */
+#endif /* OSPF6_PROTO_H */
+

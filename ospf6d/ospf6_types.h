@@ -19,41 +19,26 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-
 #ifndef OSPF_TYPES_H
 #define OSPF_TYPES_H
 
-typedef u_int8_t	instance_id_t;
-typedef struct in_addr	rtr_id_t;
-typedef struct in_addr	area_id_t;
+typedef u_char         instance_id_t;
+typedef u_char         state_t;
+typedef u_char         vers_t;
+typedef u_char         opt_t;
+typedef u_char         rtr_pri_t;
+typedef u_char         prefixlen_t;
+typedef u_char         ddbits_t;
+typedef unsigned long  ddseqnum_t;
+typedef unsigned long  rtr_id_t;
+typedef unsigned long  ifid_t;
+typedef unsigned long  cost_t;
+typedef unsigned long  rxmt_int_t;
+typedef unsigned short hello_int_t;
+typedef unsigned short rtr_dead_int_t;
+typedef unsigned long  area_id_t;
 
-#define id_val(X) ((X).s_addr)
-#define IS_ROUTER_ID_EQUAL(x,y)	(id_val(x) == id_val(y))
-#define IS_AREA_ID_EQUAL(x,y)	(id_val(x) == id_val(y))
-
-typedef u_int8_t state_t;
-typedef u_int8_t vers_t;
-typedef u_int8_t opt_t;
-typedef u_int8_t rtr_pri_t;
-typedef u_int8_t prefixlen_t;
-typedef u_int8_t ddbits;
-typedef u_int16_t hello_int_t;
-typedef u_int16_t autype_t;
-typedef u_int32_t rtr_dead_int_t;
-typedef u_int32_t ifid_t;
-typedef u_int32_t cost_t;
-typedef u_int32_t rxmt_int_t;
-
-#define ALLSPFROUTERS	"224.0.0.5"
-#define ALLDROUTERS	"224.0.0.6"
-
-#ifdef HAVE_IPV6
-
-#define ALLSPFROUTERS6	"ff02::5"
-#define ALLDROUTERS6	"ff02::6"
-
-#define GET_IFID(x)     ((x).s6_addr8[3])
-#endif /* HAVE_IPV6 */
+#define ALLSPFROUTERS6 "ff02::5"
+#define ALLDROUTERS6   "ff02::6"
 
 #endif /* OSPF_TYPES_H */
-

@@ -373,7 +373,7 @@ DEFUN (no_bgp_multiple_instance,
 /* router bgp AS_NO command.*/
 DEFUN (router_bgp, 
        router_bgp_cmd, 
-       "router bgp AS_NO", 
+       "router bgp AS_NO",
        "Enable a routing process\n"
        "Start BGP configuration\n"
        "AS number\n")

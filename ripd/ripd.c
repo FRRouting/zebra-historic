@@ -1,6 +1,4 @@
 /*
- * $Id: ripd.c,v 1.123 1999/02/22 12:15:39 developer Exp $
- *
  * RIP version 1 and 2.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

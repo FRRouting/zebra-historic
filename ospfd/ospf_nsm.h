@@ -23,7 +23,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_NSM_H
 
 /* OSPF Neighbor State Machine Status. */
-#define NSM_NoState             0
+#define NSM_DependUpon          0
 #define NSM_Down		1
 #define NSM_Attempt		2
 #define NSM_Init		3
@@ -32,8 +32,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define NSM_Exchange		6
 #define NSM_Loading		7
 #define NSM_Full		8
-#define NSM_DependUpon		9
-#define OSPF_NSM_STATUS_MAX    10
+#define OSPF_NSM_STATUS_MAX     9
 
 /* OSPF Neighbor State Machine Event. */
 #define NSM_NoEvent	        0

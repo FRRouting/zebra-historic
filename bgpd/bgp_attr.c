@@ -277,6 +277,15 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
 
   /* In case of IBGP, length will be zero. */
   attr->aspath = aspath_parse (stream_pnt (peer->ibuf), length);
+  if (!attr->aspath)
+    {
+      zlog (peer->log, LOG_ERR, "Malformed AS path is coming", length);
+      bgp_notify_send (peer, 
+		       BGP_NOTIFY_UPDATE_ERR, 
+		       BGP_NOTIFY_UPDATE_MAL_AS_PATH,
+		       NULL);
+      return -1;
+    }
   stream_forward (peer->ibuf, length);
 
   /* Set aspath attribute flag. */

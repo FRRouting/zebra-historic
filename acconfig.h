@@ -7,6 +7,9 @@
 /* Package name of GNU Zebra */
 #undef PACKAGE
 
+/* Define if host is GNU/Linux */
+#undef GNU_LINUX
+
 /* Define if you have the AF_ROUTE socket.  */
 #undef HAVE_AF_ROUTE
 
@@ -36,6 +39,9 @@
 
 /* Define if there is ifaliasreq structure. */
 #undef HAVE_IFALIASREQ
+
+/* Define if there is rt_addrinfo structure. */
+#undef HAVE_RT_ADDRINFO
 
 /* Define if you have INRIA ipv6 stack.  */
 #undef INRIA_IPV6

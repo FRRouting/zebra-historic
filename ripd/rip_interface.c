@@ -1,6 +1,4 @@
 /*
- * $Id: rip_interface.c,v 1.85 1999/02/22 12:15:39 developer Exp $
- *
  * Interface related function for RIP.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

@@ -63,6 +63,9 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 MAKEINFO = @MAKEINFO@
@@ -95,12 +98,18 @@ sbin_PROGRAMS = zebra client
 zebra_SOURCES =  	zebra.c main.c interface.c connected.c ioctl.c rib.c redistribute.c
 
 
+noinst_HEADERS =  	connected.h ioctl.h rib.h rt.h zebra.h
+
+
 zebra_LDADD = ../lib/libzebra.a $(otherobj)
 
 client_SOURCES =  	client_main.c
 
 
 sysconf_DATA = zebra.conf.sample
+
+EXTRA_DIST = $(sysconf_DATA) if_ioctl.c if_netlink.c if_proc.c if_sysctl.c 	ipforward_aix.c ipforward_ews.c ipforward_proc.c 	ipforward_solaris.c ipforward_sysctl.c rt_ioctl.c rt_netlink.c 	rt_socket.c rtread_netlink.c rtread_proc.c rtread_sysctl.c
+
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
@@ -122,6 +131,8 @@ COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CF
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
 DATA =  $(sysconf_DATA)
+
+HEADERS =  $(noinst_HEADERS)
 
 DIST_COMMON =  ChangeLog Makefile.am Makefile.in
 
@@ -257,7 +268,7 @@ install-am: all-am
 install: install-am
 uninstall-am: uninstall-sbinPROGRAMS uninstall-sysconfDATA
 uninstall: uninstall-am
-all-am: Makefile $(PROGRAMS) $(DATA)
+all-am: Makefile $(PROGRAMS) $(DATA) $(HEADERS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install

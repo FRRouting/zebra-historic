@@ -211,6 +211,8 @@ main (int argc, char **argv)
 
   sort_node ();
 
+  /* aspath_test(); */
+
   /* Parse config file. */
   vty_read_config (config_file, config_current, config_default);
 

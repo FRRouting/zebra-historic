@@ -68,10 +68,25 @@ struct
   { AS_CONFED_SEQUENCE, "(", ")" }
 };
 
+/* Delimiter character of each AS type. */
+struct
+{
+  int type;
+  char start;
+  char end;
+} aspath_delimiter_char [] =
+{
+  { 0 },
+  { AS_SET,             '{', '}' },
+  { AS_SEQUENCE,        ' ', ' ' },
+  { AS_CONFED_SET,      '[', ']' },
+  { AS_CONFED_SEQUENCE, '(', ')' }
+};
+
 /* Hash for aspath.  This is top level structure of AS path. */
 struct Hash *ashash;
 
-struct aspath *
+static struct aspath *
 aspath_new ()
 {
   struct aspath *aspath;
@@ -100,10 +115,8 @@ aspath_free (struct aspath *aspath)
       if (aspath->data)
 	XFREE (MTYPE_AS_SEG, aspath->data);
 
-#ifdef RADIX_REGEXP
-      if (aspath->pasn)
-	XFREE (MTYPE_AS_PASN, aspath->pasn);
-#endif /* RADIX_REGEXP */
+      if (aspath->str)
+	XFREE (MTYPE_TMP, aspath->str);
 
       XFREE (MTYPE_AS_PATH, aspath);
     }
@@ -139,12 +152,105 @@ aspath_undup (struct aspath *aspath)
     {
       if (aspath->data)
 	XFREE (MTYPE_AS_SEG, aspath->data);
-#ifdef RADIX_REGEXP
-      if (aspath->pasn)
-	XFREE (MTYPE_AS_PASN, aspath->pasn);
-#endif /* RADIX_REGEXP */
       XFREE (MTYPE_AS_PATH, aspath);
     }
+}
+
+/* Convert aspath structure to string expression. */
+static char *
+aspath_make_str (struct aspath *as)
+{
+  int space;
+  u_char type;
+  caddr_t pnt;
+  caddr_t end;
+  struct assegment *assegment;
+  int str_size = ASPATH_STR_DEFAULT_LEN;
+  int str_pnt;
+  u_char *str_buf;
+  int count = 0;
+
+  /* Empty aspath. */
+  if (as->length == 0)
+    {
+      str_buf = XMALLOC (MTYPE_TMP, 1);
+      str_buf[0] = '\0';
+      return str_buf;
+    }
+
+  /* Set default value. */
+  space = 0;
+  type = AS_SEQUENCE;
+
+  /* Set initial pointer. */
+  pnt = as->data;
+  end = pnt + as->length;
+
+  str_buf = XMALLOC (MTYPE_TMP, str_size);
+  str_pnt = 0;
+
+  assegment = (struct assegment *) pnt;
+
+  while (pnt < end)
+    {
+      int i;
+      int estimate_len;
+
+      /* For fetch value. */
+      assegment = (struct assegment *) pnt;
+
+      /* Buffer length check. */
+      estimate_len = ((assegment->length * 6) + 4);
+      
+      /* String length check. */
+      while (str_pnt + estimate_len >= str_size)
+	{
+	  str_size *= 2;
+	  str_buf = XREALLOC (MTYPE_TMP, str_buf, str_size);
+	}
+
+      /* If assegment type is changed, print previous type's end
+         character. */
+      if (assegment->type != type)
+	{
+	  if (type != AS_SEQUENCE)
+	    str_buf[str_pnt++] = aspath_delimiter_char[type].end;
+	  type = assegment->type;
+	}
+
+      if (space)
+	str_buf[str_pnt++] = ' ';
+
+      if (assegment->type != AS_SEQUENCE)
+	str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].start;
+
+      space = 0;
+
+      /* Increment count. */
+      count += assegment->length;
+
+      for (i = 0; i < assegment->length; i++)
+	{
+	  int len;
+
+	  if (space)
+	    str_buf[str_pnt++] = ' ';
+	  else
+	    space = 1;
+
+	  len = sprintf (str_buf + str_pnt, "%d", ntohs (assegment->asval[i]));
+	  str_pnt += len;
+	}
+
+      pnt += (assegment->length * 2) + 2;
+    }
+
+  if (assegment->type != AS_SEQUENCE)
+    str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].end;
+
+  str_buf[str_pnt] = '\0';
+
+  return str_buf;
 }
 
 /* AS path parse function.  pnt is a pointer to byte stream and length
@@ -153,22 +259,22 @@ aspath_undup (struct aspath *aspath)
 struct aspath *
 aspath_parse (caddr_t pnt, int length)
 {
-  struct aspath astmp;
+  struct aspath as;
   struct aspath *find;
   struct aspath *aspath;
 
+  /* If length is odd it's malformed AS path. */
+  if (length % 2)
+    return NULL;
+
   /* Looking up aspath hash entry. */
-  astmp.data = pnt;
-  astmp.length = length;
+  as.data = pnt;
+  as.length = length;
 
-  find = hash_search (ashash, &astmp);
-
-  /* If already same aspath exists is ashash then return it. */
+  /* If already same aspath exist then return it. */
+  find = hash_search (ashash, &as);
   if (find)
-    {
-      /* find->refcnt++; */
-      return find;
-    }
+    return find;
 
   /* New aspath strucutre is needed. */
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
@@ -183,98 +289,11 @@ aspath_parse (caddr_t pnt, int length)
   else
     aspath->data = NULL;
 
-  /* aspath->refcnt = 1; */
   aspath->refcnt = 0;
   hash_push (ashash, aspath);
 
-  /* Make variable for aspath regexp. */
-#ifdef RADIX_REGEXP
-  {
-    int i;
-    int len;
-    u_char *p;
-    u_int16_t *pasn;
-
-    len = length;
-    p = pnt;
-    i = 0;
-    while (len > 0) {
-      int num;
-
-      /* data is <TYPE(1),LENGTH(1),DATA(variable)> */
-      switch (*p) {
-      case AS_SET:
-      case AS_SEQUENCE:
-      case AS_CONFED_SET:
-      case AS_CONFED_SEQUENCE:
-	break;
-      default:
-	zlog (NULL, LOG_INFO, "%d : unknown segment type", *p);
-	return NULL;
-      }
-
-      /* increment the pointer */
-      p++, len--;
-      
-      /* get # of ASs in this segment */
-      num = *p; /* path segment length (len < 256) */
-      p++, len--;
-      
-      /* update total # of ASs and calculate remaining length */
-      i += num;
-
-      /* check the length */
-      if (num * 2 > len) {
-	zlog (NULL, LOG_INFO, "num=%d too big", num);
-	return NULL;
-      }
-
-      /* convert variable length data to a string */
-      p += num * 2;
-      len -= num * 2;
-    }
-    if (len)
-      {
-	zlog (NULL, LOG_INFO, "len = %d remains", len);
-	return NULL;
-      }
-    aspath->hop_count = i;
-
-    /* for simply as-path array */
-    pasn = XMALLOC (MTYPE_AS_PASN, sizeof(*pasn) * (i + 1));
-
-    len = length;
-    p = pnt;
-    i = 0;
-    while (len > 0) {
-      int seg, num, k;
-
-      /* data is <TYPE(1),LENGTH(1),DATA(variable)> */
-      seg = *p; /* path segment type */
-      p++, len--;
-
-      /* get # of ASs in this segment */
-      num = *p; /* path segment length (len < 256) */
-      p++, len--;
-
-      /* check the length */
-      assert(num * 2 <= len);
-
-      /* convert variable length data to a string */
-      for (k = 0; k < num; k++) {
-	u_int16_t asn;
-
-	asn = (*p << 8); /* higher octet of AS# */
-	p++, len--;
-	asn |= *p; /* lower octet of AS# */
-	p++, len--;
-	assert(i < aspath->hop_count);
-	pasn[i++] = asn;
-      }
-    }
-    aspath->pasn = pasn;
-  }
-#endif /* RADIX_REGEXP */
+  /* Make AS path string. */
+  aspath->str = aspath_make_str (aspath);
 
   return aspath;
 }
@@ -553,6 +572,9 @@ aspath_str2aspath (char *str)
 	  break;
 	}
     }
+
+  aspath->str = aspath_make_str (aspath);
+
   return aspath;
 }
 
@@ -597,6 +619,9 @@ aspath_init ()
 const char *
 aspath_print (struct aspath *as)
 {
+  return as->str;
+
+#if 0
   static char buf[BUFSIZ];
   int space;
   u_char type;
@@ -650,12 +675,16 @@ aspath_print (struct aspath *as)
   strlcat(buf, aspath_delimiter[assegment->type].end, BUFSIZ);
 
   return buf;
+#endif /* 0 */
 }
 
 /* Printing functions */
 void
 aspath_print_vty (struct vty *vty, struct aspath *as)
 {
+  vty_out (vty, "%s", as->str);
+  
+#if 0
   int space;
   u_char type;
   caddr_t pnt;
@@ -703,6 +732,7 @@ aspath_print_vty (struct vty *vty, struct aspath *as)
     }
 
   vty_out (vty, "%s", aspath_delimiter[assegment->type].end);
+#endif /* 0 */
 }
 
 /* Print all aspath and hash information.  This function is used from
@@ -727,6 +757,9 @@ aspath_print_all_vty (struct vty *vty)
 
 #define ASPATH_TEST
 #ifdef ASPATH_TEST
+
+#include "regex-gnu.h"
+
 /* For test aspath functions. */
 void
 aspath_test ()
@@ -734,13 +767,32 @@ aspath_test ()
   struct aspath *as1;
   struct aspath *as2;
 
-  as1 = aspath_val2as (2519);
+  as1 = aspath_empty_aspath ();
   printf("%s\n", aspath_print (as1));
 
   as2 = aspath_val2as (2519);
   printf("%s\n", aspath_print (as2));
 
   printf ("hash check %p %p\n", as1, as2);
+
+
+  {
+    int ret;
+    regex_t regex;
+    ret = regcomp (&regex, "1", REG_EXTENDED);
+    if (ret != 0)
+      fprintf (stderr, "comple error\n");
+
+    ret = regexec (&regex, as1->str, 0, NULL, 0);
+    if (ret != REG_NOMATCH)
+      printf ("match\n");
+    else
+      printf ("not match\n");
+
+    regfree (&regex);
+
+    exit (0);
+  }
 
   as1 = aspath_str2aspath ("2519 2561");
   as2 = aspath_str2aspath ("2519 (2561) {1}");
@@ -757,5 +809,7 @@ aspath_test ()
   printf ("test: %s\n", aspath_print (as1));
 
   printf ("same %d\n", aspath_cmp (as1, as2));
+
+
 }
 #endif /* ASPATH_TEST */

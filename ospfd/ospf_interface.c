@@ -32,10 +32,10 @@
 #include "stream.h"
 #include "log.h"
 
-#include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_packet.h"
+#include "ospfd/ospfd.h"
 
 #include "zebra/zebra.h"
 
@@ -54,16 +54,16 @@ ospf_if_new (struct interface *ifp)
   oi->fd = -1;
 
   /* Set default values. */
-  oi->flag = OSPF_FLAG_SLEEP;
+  oi->flag = OSPF_IF_DISABLE;
   oi->type = OSPF_IFTYPE_BROADCAST;
   oi->status = ISM_Down;
 
   oi->auth_type = OSPF_AUTH_NULL;
-  inet_aton ("0.0.0.0", &oi->d_router);
-  inet_aton ("0.0.0.0", &oi->bd_router);
 
   /* Interface configurable values. */
-  oi->router_priority = OSPF_ROUTER_PRIORITY_DEFAULT;
+  oi->priority = OSPF_ROUTER_PRIORITY_DEFAULT;
+  oi->options = 2;
+
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
   oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
   oi->retransmit_interval = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
@@ -107,84 +107,235 @@ ospf_if_new_hook (struct interface *ifp)
 int
 interface_config_write (struct vty *vty)
 {
-  /*
   listnode node;
   struct interface *ifp;
   struct ospf_interface *oi;
-  */
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      oi = ifp->if_data;
+
+      if (oi->flag == OSPF_IF_DISABLE)
+	continue;
+
+      vty_out (vty, "!%s", VTY_NEWLINE);
+      vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
+
+      /* Interface Output Cost print. */
+      vty_out (vty, " ip ospf cost %u%s", oi->output_cost, VTY_NEWLINE);
+
+      /* Hello Interval print. */
+      vty_out (vty, " ip ospf hello-interval %u%s",
+	       oi->v_hello, VTY_NEWLINE);
+
+      /* Router Dead Interval print. */
+      vty_out (vty, " ip ospf dead-interval %u%s",
+	       oi->v_wait, VTY_NEWLINE);
+
+      /* Router Priority print. */
+      vty_out (vty, " ip ospf priority %u%s",
+	       oi->priority, VTY_NEWLINE);
+
+      /* Retransmit Interval print. */
+      vty_out (vty, " ip ospf retransmit-interval %u%s",
+	       oi->retransmit_interval, VTY_NEWLINE);
+
+      /* Transmit Delay print. */
+      vty_out (vty, " ip ospf transmit-delay %u%s",
+	       oi->transmit_delay, VTY_NEWLINE);
+    }
 
   return 0;
 }
 
-DEFUN (if_authentication_key,
-       if_authentication_key_cmd,
-       "authentication-key AUTH_KEY",
-       "help")
+
+DEFUN (if_ospf_authentication_key,
+       if_ospf_authentication_key_cmd,
+       "ospf authentication-key AUTH_KEY",
+       "OSPF interface commands\n"
+       "Authentication password (key)")
 {
+  /* not yet implemented. */
   return CMD_SUCCESS;
 }
 
-DEFUN (if_cost,
-       if_cost_cmd,
-       "cost COST",
-       "help")
+DEFUN (if_ospf_cost,
+       if_ospf_cost_cmd,
+       "ospf cost COST",
+       "OSPF interface commands\n"
+       "Interface cost\n"
+       "Cost")
 {
-  return CMD_SUCCESS;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  u_int32_t cost;
 
+  ifp = vty->index;
+  oi = ifp->if_data;
+
+  cost = strtol (argv[0], NULL, 10);
+
+  /* cost range is <1-65535>. */
+  if (cost < 1 || cost > 65535)
+    {
+      vty_out (vty, "Interface output cost is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  oi->output_cost = cost;
+
+  return CMD_SUCCESS;
 }
 
-DEFUN (if_dead_interval,
-       if_dead_interval_cmd,
-       "dead-interval INTERVAL",
-       "help")
+DEFUN (if_ospf_dead_interval,
+       if_ospf_dead_interval_cmd,
+       "ospf dead-interval INTERVAL",
+       "OSPF interface commands\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds")
 {
-  return CMD_SUCCESS;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  u_int32_t seconds;
 
+  ifp = vty->index;
+  oi = ifp->if_data;
+
+  seconds = strtol (argv[0], NULL, 10);
+
+  /* dead_interval range is <1-65535>. */
+  if (seconds < 1 || seconds > 65535)
+    {
+      vty_out (vty, "Router Dead Interval is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  oi->v_wait = seconds;
+
+  return CMD_SUCCESS;
 }
 
-DEFUN (if_hello_interval,
-       if_hello_interval_cmd,
-       "hello-interval INTERVAL",
-       "help")
+DEFUN (if_ospf_hello_interval,
+       if_ospf_hello_interval_cmd,
+       "ospf hello-interval INTERVAL",
+       "OSPF interface commands\n"
+       "Time between HELLO packets\n"
+       "Seconds")
 {
-  return CMD_SUCCESS;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  u_int32_t seconds;
 
+  ifp = vty->index;
+  oi = ifp->if_data;
+
+  seconds = strtol (argv[0], NULL, 10);
+
+  /* HelloInterval range is <1-65535>. */
+  if (seconds < 1 || seconds > 65535)
+    {
+      vty_out (vty, "Hello Interval is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  oi->v_hello = seconds;
+
+  return CMD_SUCCESS;
 }
 
-DEFUN (if_network,
-       if_network_cmd,
-       "network TYPE",
-       "help")
+DEFUN (if_ospf_network,
+       if_ospf_network_cmd,
+       "ospf network TYPE",
+       "OSPF interface commands\n"
+       "Network type")
 {
+  /* not yet implemented. */
   return CMD_SUCCESS;
-
 }
 
-DEFUN (if_priority,
-       if_priority_cmd,
-       "priority NUMBER",
-       "help")
+DEFUN (if_ospf_priority,
+       if_ospf_priority_cmd,
+       "ospf priority NUMBER",
+       "OSPF interface commands\n"
+       "Router priority"
+       "Priority")
 {
-  return CMD_SUCCESS;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  u_int32_t priority;
 
+  ifp = vty->index;
+  oi = ifp->if_data;
+
+  priority = strtol (argv[0], NULL, 10);
+
+  /* Router Priority range is <0-255>. */
+  if (priority < 0 || priority > 255)
+    {
+      vty_out (vty, "Router Priority is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  oi->priority = priority;
+
+  return CMD_SUCCESS;
 }
 
-DEFUN (if_retransmit_interval,
-       if_retransmit_interval_cmd,
-       "retransmit-interval NUMBER",
-       "help")
+DEFUN (if_ospf_retransmit_interval,
+       if_ospf_retransmit_interval_cmd,
+       "ospf retransmit-interval INTERVAL",
+       "OSPF interface commands\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds")
 {
-  return CMD_SUCCESS;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  u_int32_t seconds;
 
+  ifp = vty->index;
+  oi = ifp->if_data;
+
+  seconds = strtol (argv[0], NULL, 10);
+
+  /* Retransmit Interval range is <1-65535>. */
+  if (seconds < 1 || seconds > 65535)
+    {
+      vty_out (vty, "Retransmit Interval is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  oi->retransmit_interval = seconds;
+
+  return CMD_SUCCESS;
 }
 
-DEFUN (if_transmit_delay,
-       if_transmit_delay_cmd,
-       "transmit-delay NUMBER",
-       "help")
+DEFUN (if_ospf_transmit_delay,
+       if_ospf_transmit_delay_cmd,
+       "ospf transmit-delay DELAY",
+       "OSPF interface commands\n"
+       "Link state transmit delay\n"
+       "Seconds")
 {
-  return CMD_SUCCESS;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  u_int32_t seconds;
 
+  ifp = vty->index;
+  oi = ifp->if_data;
+
+  seconds = strtol (argv[0], NULL, 10);
+
+  /* Transmit Delay range is <1-65535>. */
+  if (seconds < 1 || seconds > 65535)
+    {
+      vty_out (vty, "Transmit Delay is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  oi->transmit_delay = seconds;
+
+  return CMD_SUCCESS;
 }
 
 /* ospfd's interface node. */
@@ -209,15 +360,15 @@ ospf_if_init ()
   install_element (INTERFACE_NODE, &config_end_cmd);
   install_element (INTERFACE_NODE, &config_exit_cmd);
   install_element (INTERFACE_NODE, &config_help_cmd);
-  /*
-  install_element (INTERFACE_NODE, &authentication_key_cmd);
-  install_element (INTERFACE_NODE, &cost_cmd);
-  install_element (INTERFACE_NODE, &dead_interval_cmd);
-  install_element (INTERFACE_NODE, &hello_interval_cmd);
-  install_element (INTERFACE_NODE, &network_cmd);
-  install_element (INTERFACE_NODE, &priority_cmd);
-  install_element (INTERFACE_NODE, &retransmit_interval_cmd);
-  install_element (INTERFACE_NODE, &transmit_delay_cmd);
-  */
+  install_element (INTERFACE_NODE, &interface_desc_cmd);
+  install_element (INTERFACE_NODE, &no_interface_desc_cmd);
+  /*  install_element (INTERFACE_NODE, &if_ospf_authentication_key_cmd); */
+  install_element (INTERFACE_NODE, &if_ospf_cost_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_dead_interval_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_hello_interval_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_network_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_priority_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_retransmit_interval_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_transmit_delay_cmd);
 }
 

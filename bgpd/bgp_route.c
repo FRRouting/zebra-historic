@@ -43,6 +43,7 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_packet.h"
+#include "bgpd/bgp_regex.h"
 
 /* For bgp_zebra.c */
 void bgp_zebra_announce (struct prefix *p, struct bgp_info *info);
@@ -106,9 +107,9 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
     return 0;
 
   /* AS path length check. */
-  if (new->attr->aspath->hop_count < exist->attr->aspath->hop_count)
+  if (new->attr->aspath->count < exist->attr->aspath->count)
     return 1;
-  if (new->attr->aspath->hop_count > exist->attr->aspath->hop_count)
+  if (new->attr->aspath->count > exist->attr->aspath->count)
     return 0;
 
   /* Local preference check. */
@@ -627,6 +628,9 @@ nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
       psize = PSIZE (p.prefixlen);
       memcpy (&p.u.prefix4, pnt, psize);
 
+      /* Input filter. */
+      
+
       nlri_delete (peer, &p);
 
       pnt += psize;
@@ -882,26 +886,32 @@ DEFUN (show_ip_bgp_regexp,
        "\n")
 {
   int i;
+  int ret;
   struct buffer *b;
   char *regstr;
-  ASPATH_regex *rp;
+  int first;
   struct route_node *node;
   struct bgp_info *route;
+  regex_t *regex;
   
+  first = 0;
   b = buffer_new (BUFFER_STRING, 1024);
   for (i = 0; i < argc; i++)
     {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
       buffer_putstr (b, argv[i]);
-      buffer_putc (b, ' ');
     }
   buffer_putc (b, '\0');
 
   regstr = buffer_getstr (b);
   buffer_free (b);
 
-  rp = aspath_regex_comp (regstr);
-  free (regstr);
-  if (!rp)
+  regex = bgp_regcomp (regstr);
+  if (! regex)
     {
       vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
       return CMD_WARNING;
@@ -909,10 +919,13 @@ DEFUN (show_ip_bgp_regexp,
 
   for (node = route_top (bgp_table_ipv4); node; node = route_next (node)) 
     for (route = node->info; route; route = route->next)
-      if (aspath_regex_exec (rp, route->attr->aspath) >= 0)
-	route_vty_out (vty, &node->p, route);
+      {
+	ret = bgp_regexec (regex, route->attr->aspath);
+	if (ret != REG_NOMATCH)
+	  route_vty_out (vty, &node->p, route);
+      }
+  bgp_regex_free (regex);
 
-  aspath_regex_free (rp);
   return CMD_SUCCESS;
 }
 

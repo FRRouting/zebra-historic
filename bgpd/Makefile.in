@@ -63,6 +63,9 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 LIB_IPV6 = @LIB_IPV6@
@@ -82,25 +85,40 @@ INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 INSTALL_SDATA = @INSTALL@ -m 600
 
+noinst_LIBRARIES = libbgp.a
 sbin_PROGRAMS = bgpd
 
-bgpd_SOURCES =  	bgp_main.c bgpd.c bgp_fsm.c bgp_aspath.c bgp_community.c bgp_attr.c 	bgp_dump.c bgp_route.c bgp_zebra.c bgp_open.c bgp_routemap.c 	aspath_regex.c bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c
+libbgp_a_SOURCES =  	bgpd.c bgp_fsm.c bgp_aspath.c bgp_community.c bgp_attr.c 	bgp_dump.c bgp_route.c bgp_zebra.c bgp_open.c bgp_routemap.c 	bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c
+
+
+noinst_HEADERS =  	bgp_aspath.h bgp_attr.h bgp_community.h bgp_dump.h bgp_fsm.h 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h 	bgpd.h
+
+
+bgpd_SOURCES =  	bgp_main.c $(libbgp_a_SOURCES)
 
 
 bgpd_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = bgpd.conf.sample
+
+EXTRA_DIST = $(sysconf_DATA)
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
-PROGRAMS =  $(sbin_PROGRAMS)
+LIBRARIES =  $(noinst_LIBRARIES)
 
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
+libbgp_a_LIBADD = 
+libbgp_a_OBJECTS =  bgpd.o bgp_fsm.o bgp_aspath.o bgp_community.o \
+bgp_attr.o bgp_dump.o bgp_route.o bgp_zebra.o bgp_open.o bgp_routemap.o \
+bgp_packet.o bgp_network.o bgp_filter.o bgp_regex.o
+PROGRAMS =  $(sbin_PROGRAMS)
+
 bgpd_OBJECTS =  bgp_main.o bgpd.o bgp_fsm.o bgp_aspath.o bgp_community.o \
 bgp_attr.o bgp_dump.o bgp_route.o bgp_zebra.o bgp_open.o bgp_routemap.o \
-aspath_regex.o bgp_packet.o bgp_network.o bgp_filter.o bgp_regex.o
+bgp_packet.o bgp_network.o bgp_filter.o bgp_regex.o
 bgpd_DEPENDENCIES =  ../lib/libzebra.a
 bgpd_LDFLAGS = 
 CFLAGS = @CFLAGS@
@@ -109,6 +127,8 @@ CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
 DATA =  $(sysconf_DATA)
 
+HEADERS =  $(noinst_HEADERS)
+
 DIST_COMMON =  ChangeLog Makefile.am Makefile.in
 
 
@@ -116,8 +136,8 @@ DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
 
 TAR = tar
 GZIP_ENV = --best
-SOURCES = $(bgpd_SOURCES)
-OBJECTS = $(bgpd_OBJECTS)
+SOURCES = $(libbgp_a_SOURCES) $(bgpd_SOURCES)
+OBJECTS = $(libbgp_a_OBJECTS) $(bgpd_OBJECTS)
 
 all: all-redirect
 .SUFFIXES:
@@ -129,6 +149,39 @@ Makefile: $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) \
 	  && CONFIG_FILES=$(subdir)/$@ CONFIG_HEADERS= $(SHELL) ./config.status
 
+
+mostlyclean-noinstLIBRARIES:
+
+clean-noinstLIBRARIES:
+	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
+
+distclean-noinstLIBRARIES:
+
+maintainer-clean-noinstLIBRARIES:
+
+.c.o:
+	$(COMPILE) -c $<
+
+.s.o:
+	$(COMPILE) -c $<
+
+.S.o:
+	$(COMPILE) -c $<
+
+mostlyclean-compile:
+	-rm -f *.o core *.core
+
+clean-compile:
+
+distclean-compile:
+	-rm -f *.tab.c
+
+maintainer-clean-compile:
+
+libbgp.a: $(libbgp_a_OBJECTS) $(libbgp_a_DEPENDENCIES)
+	-rm -f libbgp.a
+	$(AR) cru libbgp.a $(libbgp_a_OBJECTS) $(libbgp_a_LIBADD)
+	$(RANLIB) libbgp.a
 
 mostlyclean-sbinPROGRAMS:
 
@@ -154,25 +207,6 @@ uninstall-sbinPROGRAMS:
 	list='$(sbin_PROGRAMS)'; for p in $$list; do \
 	  rm -f $(DESTDIR)$(sbindir)/`echo $$p|sed 's/$(EXEEXT)$$//'|sed '$(transform)'|sed 's/$$/$(EXEEXT)/'`; \
 	done
-
-.c.o:
-	$(COMPILE) -c $<
-
-.s.o:
-	$(COMPILE) -c $<
-
-.S.o:
-	$(COMPILE) -c $<
-
-mostlyclean-compile:
-	-rm -f *.o core *.core
-
-clean-compile:
-
-distclean-compile:
-	-rm -f *.tab.c
-
-maintainer-clean-compile:
 
 bgpd: $(bgpd_OBJECTS) $(bgpd_DEPENDENCIES)
 	@rm -f bgpd
@@ -247,7 +281,7 @@ install-am: all-am
 install: install-am
 uninstall-am: uninstall-sbinPROGRAMS uninstall-sysconfDATA
 uninstall: uninstall-am
-all-am: Makefile $(PROGRAMS) $(DATA)
+all-am: Makefile $(LIBRARIES) $(PROGRAMS) $(DATA) $(HEADERS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install
@@ -264,33 +298,38 @@ distclean-generic:
 	-rm -f config.cache config.log stamp-h stamp-h[0-9]*
 
 maintainer-clean-generic:
-mostlyclean-am:  mostlyclean-sbinPROGRAMS mostlyclean-compile \
-		mostlyclean-tags mostlyclean-generic
+mostlyclean-am:  mostlyclean-noinstLIBRARIES mostlyclean-compile \
+		mostlyclean-sbinPROGRAMS mostlyclean-tags \
+		mostlyclean-generic
 
 mostlyclean: mostlyclean-am
 
-clean-am:  clean-sbinPROGRAMS clean-compile clean-tags clean-generic \
-		mostlyclean-am
+clean-am:  clean-noinstLIBRARIES clean-compile clean-sbinPROGRAMS \
+		clean-tags clean-generic mostlyclean-am
 
 clean: clean-am
 
-distclean-am:  distclean-sbinPROGRAMS distclean-compile distclean-tags \
-		distclean-generic clean-am
+distclean-am:  distclean-noinstLIBRARIES distclean-compile \
+		distclean-sbinPROGRAMS distclean-tags distclean-generic \
+		clean-am
 
 distclean: distclean-am
 
-maintainer-clean-am:  maintainer-clean-sbinPROGRAMS \
-		maintainer-clean-compile maintainer-clean-tags \
-		maintainer-clean-generic distclean-am
+maintainer-clean-am:  maintainer-clean-noinstLIBRARIES \
+		maintainer-clean-compile maintainer-clean-sbinPROGRAMS \
+		maintainer-clean-tags maintainer-clean-generic \
+		distclean-am
 	@echo "This command is intended for maintainers to use;"
 	@echo "it deletes files that may require special tools to rebuild."
 
 maintainer-clean: maintainer-clean-am
 
-.PHONY: mostlyclean-sbinPROGRAMS distclean-sbinPROGRAMS \
-clean-sbinPROGRAMS maintainer-clean-sbinPROGRAMS uninstall-sbinPROGRAMS \
-install-sbinPROGRAMS mostlyclean-compile distclean-compile \
-clean-compile maintainer-clean-compile uninstall-sysconfDATA \
+.PHONY: mostlyclean-noinstLIBRARIES distclean-noinstLIBRARIES \
+clean-noinstLIBRARIES maintainer-clean-noinstLIBRARIES \
+mostlyclean-compile distclean-compile clean-compile \
+maintainer-clean-compile mostlyclean-sbinPROGRAMS \
+distclean-sbinPROGRAMS clean-sbinPROGRAMS maintainer-clean-sbinPROGRAMS \
+uninstall-sbinPROGRAMS install-sbinPROGRAMS uninstall-sysconfDATA \
 install-sysconfDATA tags mostlyclean-tags distclean-tags clean-tags \
 maintainer-clean-tags distdir info-am info dvi-am dvi check check-am \
 installcheck-am installcheck install-exec-am install-exec \
@@ -316,11 +355,9 @@ install-sysconfDATA: $(sysconf_DATA)
 depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
-aspath_regex.o: aspath_regex.c ../lib/vector.h ../lib/vty.h \
- ../lib/log.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h
 bgp_aspath.o: bgp_aspath.c ../lib/hash.h ../lib/memory.h \
  ../lib/roken.h ../lib/vector.h ../lib/vty.h ../lib/str.h ../lib/log.h \
- ../bgpd/bgpd.h ../bgpd/bgp_aspath.h
+ ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../lib/regex-gnu.h
 bgp_attr.o: bgp_attr.c ../lib/linklist.h ../lib/prefix.h \
  ../lib/memory.h ../lib/roken.h ../lib/vector.h ../lib/vty.h \
  ../lib/stream.h ../lib/log.h ../lib/hash.h ../bgpd/bgpd.h \
@@ -336,12 +373,17 @@ bgpd.o: bgpd.c ../lib/prefix.h ../lib/thread.h ../lib/buffer.h \
  ../lib/memory.h ../lib/roken.h ../lib/filter.h ../lib/routemap.h \
  ../lib/str.h ../lib/log.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
  ../bgpd/bgp_route.h ../bgpd/bgp_dump.h ../bgpd/bgp_attr.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h
+ ../bgpd/bgp_community.h ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h \
+ ../zebra/zebra.h
 bgp_dump.o: bgp_dump.c ../lib/version.h ../lib/prefix.h \
  ../lib/linklist.h ../lib/stream.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/str.h ../lib/log.h ../lib/sockunion.h \
  ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h \
  ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h ../bgpd/bgp_community.h
+bgp_filter.o: bgp_filter.c ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/log.h ../lib/memory.h ../lib/buffer.h \
+ ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_regex.h \
+ ../lib/regex-gnu.h
 bgp_fsm.o: bgp_fsm.c ../lib/linklist.h ../lib/prefix.h ../lib/vty.h \
  ../lib/sockunion.h ../lib/thread.h ../lib/log.h ../lib/stream.h \
  ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
@@ -360,13 +402,17 @@ bgp_packet.o: bgp_packet.c ../lib/thread.h ../lib/stream.h \
  ../lib/network.h ../lib/prefix.h ../lib/log.h ../bgpd/bgpd.h \
  ../bgpd/bgp_dump.h ../bgpd/bgp_fsm.h ../bgpd/bgp_route.h \
  ../bgpd/bgp_attr.h ../bgpd/bgp_packet.h ../bgpd/bgp_open.h
+bgp_regex.o: bgp_regex.c ../lib/log.h ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/memory.h bgpd.h bgp_aspath.h bgp_regex.h \
+ ../lib/regex-gnu.h
 bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../zebra/zebra.h ../lib/linklist.h ../lib/memory.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/filter.h \
  ../lib/str.h ../lib/log.h ../lib/routemap.h ../lib/buffer.h \
  ../lib/sockunion.h ../bgpd/bgpd.h ../bgpd/bgp_route.h \
  ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h ../bgpd/bgp_aspath.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_packet.h
+ ../bgpd/bgp_community.h ../bgpd/bgp_packet.h ../bgpd/bgp_regex.h \
+ ../lib/regex-gnu.h
 bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/routemap.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/linklist.h ../lib/log.h ../bgpd/bgpd.h \

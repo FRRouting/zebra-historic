@@ -204,9 +204,16 @@ zebra_read (struct thread *t)
   switch (command)
     {
     case ZEBRA_IPV4_ROUTE_ADD:
+      printf ("IPv4 route is added from zebra\n");
+      break;
     case ZEBRA_IPV4_ROUTE_DELETE:
+      printf ("IPv4 route is deleted from zebra\n");
+      break;
     case ZEBRA_IPV6_ROUTE_ADD:
+      printf ("IPv6 route is added from zebra\n");
+      break;
     case ZEBRA_IPV6_ROUTE_DELETE:
+      printf ("IPv6 route is deleted from zebra\n");
       break;
     case ZEBRA_GET_ALL_INTERFACE:
       bgp_zebra_get_interface (zebra.ibuf);
@@ -249,6 +256,12 @@ bgp_zebra_redistribute (int type)
     return;
 
   zebra.redist_static = 1;
+
+  if (zebra.sock > 0)
+    {
+      zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra.sock,
+			       ZEBRA_ROUTE_STATIC);
+    }
 }
 
 void
@@ -258,6 +271,12 @@ bgp_zebra_no_redistribute (int type)
     return;
 
   zebra.redist_static = 0;
+
+  if (zebra.sock > 0)
+    {
+      zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra.sock,
+			       ZEBRA_ROUTE_STATIC);
+    }
 }
 
 void

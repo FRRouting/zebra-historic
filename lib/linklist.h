@@ -1,6 +1,4 @@
 /*
- * $Id: linklist.h,v 1.11 1999/02/19 17:01:48 developer Exp $
- *
  * generic linked list header
  * Copyright (C) 1997 Kunihiro Ishiguro
  *
@@ -54,5 +52,9 @@ list list_init();
 listnode list_lookup_node (list, void *);
 void list_add_node (list, void *);
 void list_delete_by_val (list, void *);
+void list_delete_all_node (list);
+void list_delete_all (list);
+void list_free (list);
+void list_delete_node (list, listnode);
 
 #endif /* _ZEBRA_LINKLIST_H */

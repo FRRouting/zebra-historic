@@ -1,0 +1,6 @@
+!
+! OSPF6d sample configuration file
+!
+hostname ospf6d
+password zebra
+!enable password please-set-at-here

@@ -4,15 +4,25 @@ INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 INSTALL_SDATA=@INSTALL@ -m 600
 
+noinst_LIBRARIES = libospf.a
 sbin_PROGRAMS = ospfd
 
+libospf_a_SOURCES = \
+	ospfd.c ospf_zebra.c ospf_interface.c ospf_ism.c ospf_neighbor.c \
+	ospf_nsm.c ospf_dump.c ospf_network.c ospf_packet.c
+
+noinst_HEADERS = \
+	ospf_dump.h ospf_interface.h ospf_ism.h ospf_neighbor.h \
+	ospf_network.h ospf_nsm.h ospf_packet.h ospf_zebra.h ospfd.h
+
 ospfd_SOURCES = \
-	ospf_main.c ospfd.c ospf_zebra.c ospf_interface.c ospf_ism.c \
-	ospf_neighbor.c ospf_nsm.c ospf_dump.c ospf_network.c ospf_packet.c
+	ospf_main.c $(libospf_a_SOURCES)
 
 ospfd_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = ospfd.conf.sample
+
+EXTRA_DIST = $(sysconf_DATA)
 
 install-sysconfDATA: $(sysconf_DATA)
 	@$(NORMAL_INSTALL)

@@ -38,21 +38,20 @@
 /* messages for OSPFv2 status */
 message ospf_ism_status_msg[] =
 {
-  { ISM_NoState,      "NoState" },
+  { ISM_DependUpon,   "DependUpon" },
   { ISM_Down,         "Down" },
   { ISM_Loopback,     "Loopback" },
   { ISM_Waiting,      "Waiting" },
   { ISM_PointToPoint, "Point-To-Point" },
-  { ISM_Backup,       "Backup" },
   { ISM_DROther,      "DROther" },
+  { ISM_Backup,       "Backup" },
   { ISM_DR,           "DR" },
-  { ISM_DependUpon,   "DependUpon" },
 };
 int ospf_ism_status_msg_max = OSPF_ISM_STATUS_MAX;
 
 message ospf_nsm_status_msg[] =
 {
-  { NSM_NoState,    "NoState" },
+  { NSM_DependUpon, "DependUpon" },
   { NSM_Down,       "Down" },
   { NSM_Attempt,    "Attempt" },
   { NSM_Init,       "Init" },
@@ -61,7 +60,6 @@ message ospf_nsm_status_msg[] =
   { NSM_Exchange,   "Exchange" },
   { NSM_Loading,    "Loading" },
   { NSM_Full,       "Full" },
-  { NSM_DependUpon, "DependUpon" },
 };
 int ospf_nsm_status_msg_max = OSPF_NSM_STATUS_MAX;
 
@@ -91,20 +89,53 @@ ospf_packet_hello_dump (struct stream *s, u_int16_t length)
 
   hello = (struct ospf_hello *) STREAM_PNT (s);
 
-  zlog (NULL, LOG_INFO, "hello network_mask %s",
+  zlog (NULL, LOG_INFO, "Hello NetworkMask %s",
 	inet_ntoa (hello->network_mask));
-  zlog (NULL, LOG_INFO, "hello hello_interval %d",
+  zlog (NULL, LOG_INFO, "Hello HelloInterval %d",
 	ntohs (hello->hello_interval));
-  zlog (NULL, LOG_INFO, "hello options %d", hello->options);
-  zlog (NULL, LOG_INFO, "hello priority %d", hello->priority);
-  zlog (NULL, LOG_INFO, "hello dead_interval %d",
+  zlog (NULL, LOG_INFO, "Hello Options %d", hello->options);
+  zlog (NULL, LOG_INFO, "Hello RtrPriority %d", hello->priority);
+  zlog (NULL, LOG_INFO, "Hello RtrDeadInterval %d",
 	ntohl (hello->dead_interval));
-  zlog (NULL, LOG_INFO, "hello d_router %s", inet_ntoa (hello->d_router));
-  zlog (NULL, LOG_INFO, "hello bd_router %s", inet_ntoa (hello->bd_router));
+  zlog (NULL, LOG_INFO, "Hello DRouter %s", inet_ntoa (hello->d_router));
+  zlog (NULL, LOG_INFO, "Hello BDRouter %s", inet_ntoa (hello->bd_router));
 
   length -= 44;
-  for (i = 0; length; i++, length -= 4)
-    zlog (NULL, LOG_INFO, "hello neighbor %s", inet_ntoa (hello->neighbor[i]));
+  for (i = 0; length; i++, length -= sizeof (struct in_addr))
+    zlog (NULL, LOG_INFO, "Hello neighbor %s", inet_ntoa (hello->neighbors[i]));
+}
+
+void
+ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
+{
+  struct ospf_db_desc *dd;
+
+  dd = (struct ospf_db_desc *) STREAM_PNT (s);
+
+  zlog (NULL, LOG_INFO, "DD Interface MTU %d", ntohs (dd->mtu));
+  zlog (NULL, LOG_INFO, "DD Options %d", dd->options);
+  zlog (NULL, LOG_INFO, "DD Flags %d", dd->flags);
+  zlog (NULL, LOG_INFO, "DD Sequence Number %d", ntohl (dd->seq_number));
+
+  /* LSA */
+}
+
+void
+ospf_packet_ls_req_dump (struct stream *s, u_int16_t length)
+{
+
+}
+
+void
+ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
+{
+
+}
+
+void
+ospf_packet_ls_ack_dump (struct stream *s, u_int16_t length)
+{
+
 }
 
 void
@@ -152,12 +183,16 @@ ospf_packet_dump (struct stream *s)
       ospf_packet_hello_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_DB_DESC:
+      ospf_packet_db_desc_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_LS_REQ:
+      ospf_packet_ls_req_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_LS_UPD:
+      ospf_packet_ls_upd_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_LS_ACK:
+      ospf_packet_ls_ack_dump (s, ntohs (ospfh->length));
       break;
     default:
       break;

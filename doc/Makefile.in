@@ -63,6 +63,9 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 INCLUDES = @INCLUDES@
 IPFORWARD = @IPFORWARD@
@@ -80,6 +83,7 @@ VERSION = @VERSION@
 ZEBRA = @ZEBRA@
 
 info_TEXINFOS = zebra.texi
+EXTRA_DIST = BGP-TypeCode draft-zebra-00.txt
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 

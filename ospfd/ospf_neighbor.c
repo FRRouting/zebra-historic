@@ -28,13 +28,14 @@
 #include "command.h"
 #include "thread.h"
 #include "stream.h"
+#include "table.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
+#include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_packet.h"
-#include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_network.h"
 
 struct ospf_neighbor *
@@ -62,18 +63,52 @@ ospf_nbr_new ()
   return nbr;
 }
 
+void
+ospf_nbr_free (struct ospf_neighbor *nbr)
+{
+  XFREE (MTYPE_OSPF_NEIGHBOR, nbr);
+}
+
 /* check myself is in the neighbor list. */
 int
-ospf_nbr_bidirectional (struct ospf_neighbor *nbr,
+ospf_nbr_bidirectional (struct in_addr *router_id,
 			struct in_addr *neighbors, int size)
 {
   int i;
+  int max;
 
-  for (i = size; i > 0; i -= sizeof (struct in_addr))
+  max = size / sizeof (struct in_addr);
+
+  for (i = 0; i < max; i ++)
+    if (ADDRESS_SAME (router_id, &neighbors[i]))
+      return 1;
+
+  return 0;
+}
+
+/* get neighbor count. */
+int
+ospf_nbr_count (struct route_table *nbrs)
+{
+  struct route_node *rn;
+  int count = 0;
+
+  if (nbrs == NULL)
+    return 0;
+
+  for (rn = route_top (nbrs); rn; rn = route_next (rn))
     {
-      if (ADDRESS_SAME (&nbr->router_id, &neighbors[i]))
-	return 1;
+      if (rn->info == NULL)
+	continue;
+
+      count++;
     }
 
+  return count;
+}
+
+int
+ospf_adjacent_count (struct route_table *nbrs)
+{
   return 0;
 }

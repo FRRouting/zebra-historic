@@ -1,0 +1,8 @@
+1999-04-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* guile/Makefile.am (INCLUDES): Use @GUILE_CFLAGS@ and
+	@GUILE_LDFLAGS@
+
+1999-04-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-guile work restarted.

@@ -44,10 +44,11 @@ struct ospf_neighbor
   u_int32_t last_received_db_desc;
 
   /* Neighbor Information from Hello. */
-  struct in_addr router_id;
-  u_char priority;
   struct prefix address;
+
+  struct in_addr router_id;
   u_char options;
+  u_char priority;
   struct in_addr d_router;
   struct in_addr bd_router;
 
@@ -69,6 +70,9 @@ struct ospf_neighbor
 
 /* Prototypes. */
 struct ospf_neighbor *ospf_nbr_new ();
-int ospf_nbr_bidirectional (struct ospf_neighbor *, struct in_addr *, int);
+void ospf_nbr_free (struct ospf_neighbor *);
+int ospf_nbr_bidirectional (struct in_addr *, struct in_addr *, int);
+int ospf_nbr_count (struct route_table *nbrs);
+int ospf_adjacent_count (struct route_table *nbrs);
 
 #endif /* _ZEBRA_OSPF_NEIGHBOR_H */

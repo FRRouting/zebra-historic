@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_community.h,v 1.10 1999/02/19 17:17:26 developer Exp $
- *
  * Community attribute related functions.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

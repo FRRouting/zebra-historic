@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_network.h,v 1.4 1999/02/19 17:17:27 developer Exp $
- *
  * BGP network related header
  * Copyright (C) 1999 Kunihiro Ishiguro
  *

@@ -23,7 +23,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_ISM_H
 
 /* OSPF Interface State Machine Status. */
-#define ISM_NoState                       0
+#define ISM_DependUpon                    0
 #define ISM_Down                          1
 #define ISM_Loopback                      2
 #define ISM_Waiting                       3
@@ -31,8 +31,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ISM_DROther                       5
 #define ISM_Backup                        6
 #define ISM_DR                            7
-#define ISM_DependUpon                    8
-#define OSPF_ISM_STATUS_MAX   	          9
+#define OSPF_ISM_STATUS_MAX   	          8
 
 /* OSPF Interface State Machine Event. */
 #define ISM_NoEvent                       0

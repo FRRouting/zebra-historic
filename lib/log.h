@@ -1,6 +1,4 @@
 /*
- * $Id: log.h,v 1.14 1999/02/22 13:57:31 developer Exp $
- *
  * Zebra logging funcions.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

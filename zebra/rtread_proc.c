@@ -1,6 +1,4 @@
 /*
- * $Id: rtread_proc.c,v 1.18 1999/02/19 17:26:37 developer Exp $
- *
  * Kernel routing readup by /proc filesystem
  * Copyright (C) 1997 Kunihiro Ishiguro
  *

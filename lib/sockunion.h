@@ -1,6 +1,4 @@
 /*
- * $Id: sockunion.h,v 1.21 1999/02/19 17:01:49 developer Exp $
- *
  * Socket union header.
  * Copyright (c) 1997 Kunihiro Ishiguro
  *

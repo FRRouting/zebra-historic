@@ -171,8 +171,8 @@ struct lsa_internal *make_lsa_hdr_internal (struct lsa_hdr *,
 char *print_lsahdr (struct lsa_hdr *lsh);
 
 int construct_router_lsa (struct area *);
-int construct_network_lsa (struct ospf_if *);
-int construct_intra_prefix_lsa (struct ospf_if *);
-int construct_link_lsa (struct ospf_if *);
+int construct_network_lsa (struct ospf6_if *);
+int construct_intra_prefix_lsa (struct ospf6_if *);
+int construct_link_lsa (struct ospf6_if *);
 
 #endif /* OSPF_LSA_H */

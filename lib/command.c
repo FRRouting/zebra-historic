@@ -573,6 +573,27 @@ cmd_entry_function (char *src, char *dst)
     return NULL;
 }
 
+/* If src matches dst return dst string, otherwise return NULL */
+/* This versio will return the dst string always if it is
+   CMD_EXT for '?' key processing */
+char *
+cmd_entry_function_descr (char *src, char *dst)
+{
+  /* Optional or variable commands always match on '?' */
+  if (CMD_OPT (dst[0]) || CMD_EXT (dst[0]))
+    return dst;
+
+  /* In case of 'command \t', given src is NULL string. */
+  if (src == NULL)
+    return dst;
+
+  if (strncmp (src, dst, strlen (src)) == 0)
+    return dst;
+  else
+    return NULL;
+}
+
+
 /* Check same string element existence.  If it isn't there return
     1. */
 int
@@ -658,8 +679,8 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
 	    if (index == vector_max (strvec))
 	      string = "<cr>";
 	    else
-	      string = cmd_entry_function (vector_slot (vline, index),
-					   vector_slot (strvec, index));
+	      string = cmd_entry_function_descr (vector_slot (vline, index),
+						 vector_slot (strvec, index));
 
 	    if (string)
 	      {

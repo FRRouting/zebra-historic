@@ -1,6 +1,4 @@
 /*
- * $Id: daemon.c,v 1.8 1999/02/23 21:08:02 developer Exp $
- *
  * Daemonize routine
  * Copyright (C) 1997, 1999 Kunihiro Ishiguro
  * 

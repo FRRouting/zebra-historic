@@ -1,6 +1,4 @@
 /*
- * $Id: zebra.c,v 1.130 1999/02/22 12:15:40 developer Exp $
- *
  * Zebra daemon core routine.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *
@@ -56,6 +54,7 @@ struct
 /* Event list of zebra. */
 enum event { ZEBRA_SERV, ZEBRA_READ, ZEBRA_WRITE };
 
+list client_list;
 
 /* For logging of zebra meesages. */
 char *zebra_command_str [] =
@@ -83,6 +82,9 @@ struct zebra_client
   /* Threads for read/write. */
   struct thread *t_read;
   struct thread *t_write;
+
+  /* This client's redistribute flag. */
+  int static_flag;
 };
 
 void zebra_event (enum event event, int sock, struct zebra_client *client);
@@ -316,6 +318,39 @@ zebra_request_hostinfo (int sock)
   writen (sock, buf, 10);
 }
 
+void
+zebra_static_redistribute (struct zebra_client *client)
+{
+  ;
+}
+
+void
+zebra_redistribute_add (int command, struct zebra_client *client, int length)
+{
+  int type;
+
+  type = stream_getc (client->ibuf);
+  printf ("redistrubte add message %d\n", type);
+
+  if (! client->static_flag)
+    {
+      client->static_flag = 1;
+
+      /* Send current static route to the client. */
+      zebra_static_redistribute (client);
+    }
+}     
+
+void
+zebra_redistribute_delete (int command, struct zebra_client *client, 
+			   int length)
+{
+  int type;
+
+  type = stream_getc (client->ibuf);
+  printf ("redistrubte delete message %d\n", type);
+}     
+
 /* Handler of zebra service request. */
 int
 zebra_read (struct thread *thread)
@@ -388,6 +423,12 @@ zebra_read (struct thread *thread)
     case ZEBRA_GET_HOSTINFO:
       zebra_request_hostinfo (sock);
       break;
+    case ZEBRA_REDISTRIBUTE_ADD:
+      zebra_redistribute_add (command, client, length);
+      break;
+    case ZEBRA_REDISTRIBUTE_DELETE:
+      zebra_redistribute_delete (command, client, length);
+      break;
     default:
       zlog (NULL, LOG_INFO, "Zebra received unknown command %d", command);
       break;
@@ -416,7 +457,7 @@ zebra_write (struct thread *thread)
 
 /* Add new client. */
 void
-zebra_create (int client_sock)
+client_new (int client_sock)
 {
   struct zebra_client *client;
 
@@ -427,8 +468,25 @@ zebra_create (int client_sock)
   client->fd = client_sock;
   client->ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
   client->obuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  list_add_node (client_list, client);
   
   zebra_event (ZEBRA_READ, client_sock, client);
+}
+
+struct zebra_client *
+client_lookup (int sock)
+{
+  struct zebra_client *client;
+  listnode node;
+  
+  for (node = listhead (client_list); node; nextnode (node))
+    {
+      client = getdata (node);
+      if (client->fd == sock)
+	return client;
+    }
+  return NULL;
 }
 
 /* Accept code of zebra server socket. */
@@ -447,7 +505,7 @@ zebra_accept (struct thread *thread)
   if (client_sock < 0)
     perror ("accept");
 
-  zebra_create (client_sock);
+  client_new (client_sock);
 
   zebra_event (ZEBRA_SERV, accept_sock, NULL);
 
@@ -943,6 +1001,9 @@ struct cmd_node ip_node =
 void
 zebra_init ()
 {
+  /* Client list init. */
+  client_list = list_init ();
+
   /* Make zebra server socket. */
   zebra_serv ();
 

@@ -19,8 +19,9 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospfd.h"
+#include "ospf6d.h"
 
+#if 0
 int
 proc_hello2 (struct sockaddr *src, struct iovec *iov, struct interface *iface)
 {
@@ -195,8 +196,9 @@ maskok:
 
   return retoff;
 }
+#endif /* 0 */
 
-
+#if 0
 int
 proc_hello3 (struct sockaddr *src, struct iovec *iov, struct interface *iface)
 {
@@ -370,6 +372,7 @@ proc_hello3 (struct sockaddr *src, struct iovec *iov, struct interface *iface)
 
   return retoff;
 }
+#endif /* 0 */
 
 int
 proc_database_description (struct sockaddr *src, struct iovec *iov,
@@ -1068,7 +1071,7 @@ proc_ospf (struct iovec *iov, struct interface *iface)
 
 
 int
-make_ospfhdr (u_int8_t msgtype, struct iovec *iov, struct interface *iface)
+make_ospf6_hdr (u_int8_t msgtype, struct iovec *iov, struct interface *iface)
 {
   struct ospf_msghdr *ospfhp;
   int i;
@@ -1182,7 +1185,7 @@ make_hello2 (struct iovec *iov, struct sockaddr *dst,
 }
 
 int
-make_hello3 (struct iovec *iov, struct sockaddr *dst,
+make_hello (struct iovec *iov, struct sockaddr *dst,
 	     struct interface *iface)
 {
   int i;

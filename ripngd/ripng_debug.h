@@ -1,6 +1,4 @@
 /*
- * $Id: ripng_debug.h,v 1.2 1999/02/19 17:35:38 developer Exp $
- *
  * RIPng debug output routines
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

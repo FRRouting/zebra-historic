@@ -19,7 +19,7 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospfd.h"
+#include "ospf6d.h"
 
 /* Global Interface List, list of (struct interface *) */
 list iflist;
@@ -40,6 +40,7 @@ zebra_get_interface (int sock, u_int16_t length)
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
+  unsigned long endp;
 
   /* Allocate read buffer */
   s = stream_new (length + 1);
@@ -53,12 +54,14 @@ zebra_get_interface (int sock, u_int16_t length)
   if (nbyte < 0)
     return;
 
-  while (s->sp < s->ep)
+  endp = stream_get_endp (s);
+
+  while (stream_get_getp (s) < endp)
     {
       char tmpnam[INTERFACE_NAMSIZ];
 
       /* Get interface's name */
-      strncpy (tmpnam, &s->data[s->sp], INTERFACE_NAMSIZ);
+      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
       stream_forward (s, INTERFACE_NAMSIZ);
 
       ifp = if_get_by_name (tmpnam);
@@ -84,13 +87,13 @@ zebra_get_interface (int sock, u_int16_t length)
           p->family = stream_getc (s);
           plen = prefix_blen (p);
 
-	  memcpy ((void *)&(p->u.prefix), (void *)&(s->data[s->sp]), plen);
+	  memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
 	  stream_forward (s, plen);
           p->prefixlen = stream_getc (s);
           connected->address = p;
 
           p = prefix_new ();
-	  memcpy ((void *)&(p->u.prefix), (void *)&(s->data[s->sp]), plen);
+	  memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
 	  stream_forward (s, plen);
           connected->destination = p;
 

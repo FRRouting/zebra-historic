@@ -1,6 +1,4 @@
 /*
- * $Id: sockunion.c,v 1.49 1999/02/22 12:15:39 developer Exp $
- *
  * Socket union related function.
  * Copyright (c) 1997, 98 Kunihiro Ishiguro
  *

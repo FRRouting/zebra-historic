@@ -1,6 +1,4 @@
 /*
- * $Id: ripng_route.h,v 1.2 1999/02/19 17:35:39 developer Exp $
- *
  * RIPng daemon
  * Copyright (C) 1998 Kunihiro Ishiguro
  *

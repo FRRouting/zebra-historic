@@ -1,6 +1,4 @@
 /*
- * $Id: hash.h,v 1.5 1999/02/19 17:01:48 developer Exp $
- *
  * Hash routine.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
