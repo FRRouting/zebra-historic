@@ -1,5 +1,5 @@
 /* BGP-4, BGP-4+ daemon program
- * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
+ * Copyright (C) 1996, 97, 98, 99, 2000 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -587,14 +587,21 @@ bgp_confederation_peers_set (struct vty *vty, int argc, char *argv[])
 	      /* Its not there already, so add it */
 	      bgp_confederation_peers_add(bgp, as);
 
-	      /* Now reset any peer who's remote AS has just joined the CONFED */
+	      /* Now reset any peer who's remote AS has just joined the CONFED
+	      ** unless its an iBGP peer
+	      */
 	      NEWLIST_LOOP (peer_list, peer, nn)
 		{
-		  if (peer->as == as)
+		  if (peer->as == as && peer->local_as != as)
 		    {
 		      if (! CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN))
 			{
 			  BGP_EVENT_ADD (peer, BGP_Stop);
+			}
+		      /* If the AS added to the list */
+		      if(peer->local_as != as)
+			{
+			  peer->local_as = bgp->as;
 			}
 		    }
 		}
@@ -642,11 +649,16 @@ bgp_confederation_peers_unset (struct vty *vty, int argc, char *argv[])
 	      /* Now reset any peer who's remote AS has just been removed from the CONFED */
 	      NEWLIST_LOOP (peer_list, peer, nn)
 		{
-		  if (peer->as == as)
+		  if (peer->as == as && peer->local_as != as)
 		    {
 		      if (! CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN))
 			{
 			  BGP_EVENT_ADD (peer, BGP_Stop);
+			}
+		      /* Set the peer's local-as correctly */
+		      if(peer->local_as != as)
+			{
+			  peer->local_as = bgp->confederation_id;
 			}
 		    }
 		}
@@ -708,7 +720,33 @@ DEFUN (no_bgp_confederation_identifier, no_bgp_confederation_identifier_cmd,
 {
   return bgp_confederation_id_unset(vty, argv[0]);
 }
+
+DEFUN (bgp_always_compare_med,
+       bgp_always_compare_med_cmd,
+       "bgp always-compare-med",
+       BGP_STR
+       "Compare MED from different neighboring AS\n")
+{
+  struct bgp *bgp;
 
+  bgp = vty->index;
+  SET_FLAG (bgp->config, BGP_CONFIG_ALWAYS_COMPARE_MED);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_always_compare_med,
+       no_bgp_always_compare_med_cmd,
+       "no bgp always-compare-med",
+       NO_STR
+       BGP_STR
+       "Compare MED from different neighboring AS\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  UNSET_FLAG (bgp->config, BGP_CONFIG_ALWAYS_COMPARE_MED);
+  return CMD_SUCCESS;
+}
 
 /* allocate new peer object */
 struct peer *
@@ -1400,6 +1438,10 @@ peer_remote_as (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
   bgp = vty->index;
 
   peer = peer_lookup_with_local_as (&su, bgp->as);
+  if (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION) && !peer)
+    {
+      peer = peer_lookup_with_local_as (&su, bgp->confederation_id);
+    }
 
   if (peer)
     {
@@ -1424,13 +1466,14 @@ peer_remote_as (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
   else
     {
       /* Real peer creation. */
-      /* If the peer is not part of our CONFED, then
+      /* If the peer is not part of our CONFED, and its not an iBGP peer then
 	 spoof the source AS */
       if(CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION) &&
-	 !bgp_confederation_peers_check(bgp, as))
-	{
-	  peer = peer_create (&su, bgp->confederation_id, bgp->id, as); 
-	}
+         !bgp_confederation_peers_check(bgp, as) &&
+          bgp->as != as)
+        {
+          peer = peer_create (&su, bgp->confederation_id, bgp->id, as); 
+        }
       else
 	{
 	  peer = peer_create (&su, bgp->as, bgp->id, as);
@@ -1530,6 +1573,11 @@ peer_destroy (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
   bgp = vty->index;
 
   peer = peer_lookup_with_local_as (&su, bgp->as);
+  if (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION) && !peer)
+    {
+      peer = peer_lookup_with_local_as (&su, bgp->confederation_id);
+    }
+
   if (! peer)
     {
       vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
@@ -3831,10 +3879,7 @@ bgp_distribute_set (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
 
   /* Check filter direction. */
   if (strncmp (direct_str, "in", 1) == 0)
@@ -3870,10 +3915,7 @@ bgp_distribute_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
   
   /* Check filter direction. */
   if (strcmp (direct_str, "in") == 0)
@@ -3908,7 +3950,7 @@ bgp_distribute_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 
 /* Update distribute list. */
 void
-bgp_distribute_update ()
+bgp_distribute_update (struct access_list *access)
 {
   struct newnode *nn, *nm;
   struct bgp *bgp;
@@ -4030,10 +4072,7 @@ bgp_prefix_list_set (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
 
   /* Check filter direction. */
   if (strncmp (direct_str, "in", 1) == 0)
@@ -4069,10 +4108,7 @@ bgp_prefix_list_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
   
   /* Check filter direction. */
   if (strcmp (direct_str, "in") == 0)
@@ -4225,10 +4261,7 @@ bgp_aslist_set (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
 
   /* Check filter direction. */
   if (strcmp (direct_str, "in") == 0)
@@ -4262,10 +4295,7 @@ bgp_aslist_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
   
   /* Check filter direction. */
   if (strcmp (direct_str, "in") == 0)
@@ -4395,10 +4425,7 @@ bgp_route_map_set (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
 
   /* Check filter direction. */
   if (strcmp (direct_str, "in") == 0)
@@ -4433,10 +4460,7 @@ bgp_route_map_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
   
   /* Check filter direction. */
   if (strcmp (direct_str, "in") == 0)
@@ -4536,10 +4560,7 @@ bgp_maximum_prefix_set (struct vty *vty, char *ip_str, u_int16_t afi,
   /* Lookup peer configuration. */
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
 
   /* Convert string to unsigned long. */
   num = strtoul (num_str, &endptr, 10);
@@ -4567,10 +4588,7 @@ bgp_maximum_prefix_unset (struct vty *vty, char *ip_str, u_int16_t afi,
   /* Lookup peer configuration. */
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
-    {
-      vty_out (vty, "Can't find peer: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+    return CMD_WARNING;
 
   /* Convert string to unsigned long. */
   if (num_str)
@@ -5814,10 +5832,12 @@ bgp_config_write (struct vty *vty)
       vty_out (vty, "%s", VTY_NEWLINE);
 
       /* BGP configuration. */
-      if (bgp->config & BGP_CONFIG_ROUTER_ID)
+      if (CHECK_FLAG (bgp->config, BGP_CONFIG_ALWAYS_COMPARE_MED))
+	vty_out (vty, " bgp always-compare-med%s", VTY_NEWLINE);
+      if (CHECK_FLAG (bgp->config, BGP_CONFIG_ROUTER_ID))
 	vty_out (vty, " bgp router-id %s%s", inet_ntoa (bgp->id), 
 		 VTY_NEWLINE);
-      if (bgp->config & BGP_CONFIG_CLUSTER_ID)
+      if (CHECK_FLAG (bgp->config, BGP_CONFIG_CLUSTER_ID))
 	vty_out (vty, " bgp cluster-id %s%s", inet_ntoa (bgp->cluster), 
 		 VTY_NEWLINE);
 
@@ -5909,6 +5929,10 @@ bgp_init ()
   /* "bgp cluster-id" commands. */
   install_element (BGP_NODE, &bgp_cluster_id_cmd);
   install_element (BGP_NODE, &no_bgp_cluster_id_cmd);
+
+  /* "bgp always-compare-med commands */
+  install_element (BGP_NODE, &bgp_always_compare_med_cmd);
+  install_element (BGP_NODE, &no_bgp_always_compare_med_cmd);
 
   /* "router bgp" commands. */
   install_element (CONFIG_NODE, &router_bgp_cmd);

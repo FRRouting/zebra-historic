@@ -22,11 +22,11 @@ sbin_PROGRAMS = zebra
 
 zebra_SOURCES = \
 	zserv.c main.c interface.c connected.c ioctl.c rib.c redistribute.c \
-	debug.c rtadv.c zebra_snmp.c
+	debug.c rtadv.c zebra_snmp.c irdp.c
 
 noinst_HEADERS = \
 	connected.h ioctl.h rib.h rt.h zserv.h redistribute.h debug.h rtadv.h \
-	interface.h ipforward.h
+	interface.h ipforward.h irdp.h
 
 zebra_LDADD = ../lib/libzebra.a $(otherobj)
 
@@ -39,7 +39,8 @@ EXTRA_DIST = $(sysconf_DATA) if_ioctl.c if_netlink.c if_proc.c if_sysctl.c \
 	ipforward_aix.c ipforward_ews.c ipforward_proc.c \
 	ipforward_solaris.c ipforward_sysctl.c rt_ioctl.c rt_netlink.c \
 	rt_socket.c rtread_netlink.c rtread_proc.c rtread_sysctl.c \
-	rtread_getmsg.c kernel_socket.c kernel_netlink.c mtu_kvm.c
+	rtread_getmsg.c kernel_socket.c kernel_netlink.c mtu_kvm.c \
+	GNOME-SMI GNOME-PRODUCT-ZEBRA-MIB
 
 zebra : $(zebra_OBJECTS) $(otherobj) ../lib/libzebra.a
 	$(CC) -g -o zebra $(zebra_OBJECTS) $(otherobj) ../lib/libzebra.a $(LIBS) $(LIB_IPV6)
@@ -81,7 +82,7 @@ if_sysctl.o: if_sysctl.c ../lib/if.h ../lib/linklist.h \
 interface.o: interface.c ../lib/if.h ../lib/linklist.h ../lib/vty.h \
  ../lib/sockunion.h ../lib/prefix.h ../lib/command.h ../lib/vector.h \
  ../lib/memory.h ioctl.h connected.h ../lib/log.h ../lib/zclient.h \
- ../zebra/interface.h ../zebra/rtadv.h ../zebra/zserv.h
+ ../zebra/interface.h ../zebra/rtadv.h ../zebra/zserv.h ../zebra/rib.h
 ioctl.o: ioctl.c ../lib/linklist.h ../lib/if.h ../lib/prefix.h ioctl.h \
  rt.h ../lib/log.h
 ipforward_aix.o: ipforward_aix.c
@@ -89,6 +90,9 @@ ipforward_ews.o: ipforward_ews.c
 ipforward_proc.o: ipforward_proc.c
 ipforward_solaris.o: ipforward_solaris.c ../lib/memory.h
 ipforward_sysctl.o: ipforward_sysctl.c ../lib/log.h
+irdp.o: irdp.c ../lib/if.h ../lib/linklist.h ../lib/stream.h \
+ ../lib/memory.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../lib/log.h ../lib/sockunion.h ../zebra/irdp.h
 kernel_netlink.o: kernel_netlink.c
 kernel_socket.o: kernel_socket.c ../lib/if.h ../lib/linklist.h \
  ../lib/prefix.h ../lib/sockunion.h connected.h ../lib/memory.h \
@@ -117,10 +121,12 @@ rt_socket.o: rt_socket.c ../lib/if.h ../lib/linklist.h ../lib/prefix.h \
 rtadv.o: rtadv.c ../lib/memory.h ../lib/sockopt.h ../lib/thread.h \
  ../lib/if.h ../lib/linklist.h ../lib/log.h ../lib/prefix.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../zebra/interface.h \
- ../zebra/rtadv.h
-rtread_getmsg.o: rtread_getmsg.c ../lib/prefix.h rib.h ../lib/log.h
+ ../zebra/rtadv.h ../zebra/debug.h
+rtread_getmsg.o: rtread_getmsg.c ../lib/prefix.h ../lib/log.h \
+ ../lib/if.h ../lib/linklist.h ../zebra/rib.h
 rtread_netlink.o: rtread_netlink.c
-rtread_proc.o: rtread_proc.c ../lib/prefix.h ../lib/log.h rib.h
+rtread_proc.o: rtread_proc.c ../lib/prefix.h ../lib/log.h ../lib/if.h \
+ ../lib/linklist.h rib.h
 rtread_sysctl.o: rtread_sysctl.c ../lib/memory.h ../lib/log.h
 zebra_snmp.o: zebra_snmp.c
 zserv.o: zserv.c ../lib/prefix.h ../lib/command.h ../lib/vector.h \

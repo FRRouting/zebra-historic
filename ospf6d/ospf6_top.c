@@ -130,7 +130,7 @@ ospf6_create (unsigned long process_id)
   /* initialize */
   gettimeofday (&ospf6->starttime, (struct timezone *)NULL);
   ospf6->process_id = process_id;
-  ospf6->version = OSPF_V3;
+  ospf6->version = OSPF6_VERSION;
   ospf6->area_list = list_init ();
   ospf6_lsdb_init_as (ospf6);
   ospf6->ospf6_interface_list = list_init ();

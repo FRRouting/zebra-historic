@@ -1,3 +1,9 @@
+2000-04-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6d.h: Include some headers for avoid warning.
+
+	* ospf6_routemap.h: Add newfile.
+
 1999-11-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf6_network.c: Respect IPV6_JOIN_GROUP and IPV6_LEAVE_GROUP

@@ -20,8 +20,6 @@
  * 02111-1307, USA.  
  */
 
-static const char rcsid[] = "$Id: bgp_attr.c,v 1.102 2000/03/07 09:25:43 kunihiro Exp $";
-
 #include <zebra.h>
 
 #include "linklist.h"
@@ -718,7 +716,6 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr,
   bgp_size_t nlri_len;
   int ret;
   struct stream *s;
-  char buf[INET6_ADDRSTRLEN];
   
   /* Set end of packet. */
   s = peer->ibuf;
@@ -746,6 +743,8 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr,
       stream_get (&attr->mp_nexthop_local, s, 16);
       if (! IN6_IS_ADDR_LINKLOCAL (&attr->mp_nexthop_local))
 	{
+	  char buf[INET6_ADDRSTRLEN];
+
 	  zlog_warn ("%s %s/%d is not link-local nexthop",
 		     peer->host, inet_ntop (AF_INET6, &attr->mp_nexthop_local,
 					    buf, INET6_ADDRSTRLEN));
@@ -1052,6 +1051,7 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
       && ! CHECK_FLAG (peer->flags, PEER_FLAG_TRANSPARENT_AS))
     {    
       aspath = aspath_dup (attr->aspath);
+
       if (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
 	{
 	  /* Strip the confed info, and then stuff our path CONFED_ID
@@ -1089,7 +1089,8 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
   stream_put (s, aspath->data, aspath->length);
 
   if (peer_sort (peer) == BGP_PEER_EBGP
-      && ! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT))
+      && ! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT)
+      && ! CHECK_FLAG (peer->flags, PEER_FLAG_TRANSPARENT_AS))
     aspath_free (aspath);
 
   /* Nexthop attribute. */
@@ -1099,16 +1100,12 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
   stream_put_ipv4 (s, attr->nexthop.s_addr);
 
   /* MED attribute. */
-  if (peer_sort (peer) == BGP_PEER_EBGP ||
-      peer_sort (peer) == BGP_PEER_CONFED)
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
     {
-      if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
-	{
-	  stream_putc (s, ATTR_FLAG_OPTIONAL);
-	  stream_putc (s, BGP_ATTR_MULTI_EXIT_DISC);
-	  stream_putc (s, 4);
-	  stream_putl (s, attr->med);
-	}
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_MULTI_EXIT_DISC);
+      stream_putc (s, 4);
+      stream_putl (s, attr->med);
     }
 
   /* Local preference. */

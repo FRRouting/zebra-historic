@@ -808,7 +808,7 @@ int
 ospf6_route_calc (struct thread *thread)
 {
   struct area *area;
-  struct route_node *rn;
+  struct route_node *rn, *rn2;
   struct prefix_ipv6 prefix;
   struct ospf6_route_node_info *info, newinfo;
   unsigned short lstype;
@@ -820,7 +820,8 @@ ospf6_route_calc (struct thread *thread)
   int prefix_count, i;
   list pll; /* prefix LSA list */
   listnode ln;
-  char rn_str[128], nh_str[128], dst_str[128];
+  char rn_str[128];
+  /*  char nh_str[128], dst_str[128]; */
 
   area = (struct area *) THREAD_ARG (thread);
   assert (area);
@@ -1053,6 +1054,20 @@ ospf6_route_calc (struct thread *thread)
           prefix.family = AF_INET6;
           ospf6_prefix_in6_addr (o6p, &prefix.prefix);
           prefix.prefixlen = o6p->o6p_prefix_len;
+
+          /* XXX must be reviewed XXX */
+          rn2 = route_node_lookup (ospf6->redistribute_map,
+                                   (struct prefix *)&prefix);
+          if (rn2)
+            {
+              if (! rn2->info)
+                zlog_info (" **********Mulformed********** ");
+              /* if route_node_lookup succeeded, router itself
+                 already have the route, ignore. */
+              route_unlock_node (rn2);
+              rn2 = NULL;
+              continue;
+            }
 
           /* set newinfo */
           memset (&newinfo, 0, sizeof (newinfo));

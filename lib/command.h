@@ -86,7 +86,7 @@ enum node_type
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
   MASC_NODE,			/* MASC for multicast.  */
-  RDISC_NODE,			/* ICMP Router Discovery Protocol mode. */ 
+  IRDP_NODE,			/* ICMP Router Discovery Protocol mode. */ 
   IP_NODE,			/* Static ip route node. */
   ACCESS_NODE,			/* Access list node. */
   PREFIX_NODE,			/* Prefix list node. */

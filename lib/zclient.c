@@ -723,10 +723,10 @@ zclient_read (struct thread *thread)
     }
 
   /* zebra read error. */
-  if (nbytes < 0)
+  if (nbytes < 0 || nbytes != ZEBRA_HEADER_SIZE)
     {
       if (zclient_debug)
-	zlog_info ("Can't read all packet.");
+	zlog_info ("Can't read all packet (length %d).", nbytes);
       zebra->fail++;
       zclient_stop (zebra);
       zclient_event (ZCLIENT_CONNECT, zebra);
@@ -746,7 +746,16 @@ zclient_read (struct thread *thread)
   length -= ZEBRA_HEADER_SIZE;
 
   /* Read rest of zebra packet. */
-  stream_read (zebra->ibuf, sock, length);
+  nbytes = stream_read (zebra->ibuf, sock, length);
+ if (nbytes != length)
+   {
+     if (zclient_debug)
+      zlog_info ("zclient connection closed socket [%d].", sock);
+     zebra->fail++;
+     zclient_stop (zebra);
+     zclient_event (ZCLIENT_CONNECT, zebra);
+     return -1;
+   }
 
   switch (command)
     {

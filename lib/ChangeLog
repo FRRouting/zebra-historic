@@ -1,3 +1,74 @@
+2000-04-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (show_version): Update copyright year.
+
+2000-04-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.c (route_map_apply): When map is NULL, return deny.
+
+2000-04-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c (access_list_apply): When access is NULL, return deny.
+
+	* plist.c (prefix_list_apply): When plist is NULL, return deny.
+
+2000-04-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Change RDISC_NODE to IRDP_NODE.
+
+2000-04-18  Toshiaki Takada  <takada@zebra.org>
+
+	* filter.[ch] (access_list_add_hook), (access_list_delete_hook):
+	Add argument for hook function to give struct access_list *.
+
+2000-04-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* plist.c (prefix_list_entry_match): In case of le nor ge is
+	specified, exact match is performed.
+	(prefix_list_entry_match): Add any entry matching check.
+
+2000-04-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (exec_timeout): Separate timeout setting to minutes and
+	seconds.
+	(no_exec_timeout): Add "no exec-timeout" command.
+
+	* vty.h (VTY_TIMEOUT_DEFAULT): Change default value from 300 to
+	600.
+
+2000-03-31  Jochen Friedrich <jochen@scram.de>
+
+	* smux.h (SMUX_CLOSE): The SMUX_CLOSE PDU is implicit integer, so
+	it is a primitive encoding and not constructed.
+
+2000-03-28  Toshiaki Takada  <takada@zebra.org>
+
+	* memory.[ch] (enum): Add MTYPE_OSPF_EXTERNAL_INFO.
+
+2000-03-26  Love <lha@s3.kth.se>
+
+	* zclient.c (zclient_read): Add nbytes size check for
+	ZEBRA_HEADER_SIZE.  Check return value of steam_read ().
+
+2000-03-26  Rick Payne <rickp@rossfell.co.uk>
+
+	* routemap.c: Add flexible route-map commands such as on-match
+	next, on-match goto N.
+
+	* routemap.h: Likewise
+
+2000-03-23  Adrian Bool <aid@u.net.uk>
+
+	* command.c (config_log_trap): Add new command "log trap
+	PRIORITY".
+
+2000-03-14  Toshiaki Takada  <takada@zebra.org>
+
+	* memory.c (struct memory_list): Add Link List and Link Node
+	to view.
+	
+	* memory.h (enum): Remove MTYPE_OSPF_EXTERNAL_ROUTE.
+	
 2000-01-20  Hideto Yamakawa <hideto.yamakawa@soliton.co.jp>
 
 	* str.c (snprintf): Fix bug of calling sprintf instead of

@@ -61,6 +61,7 @@
 /* RIP port number. */
 #define RIP_PORT_DEFAULT               520
 #define RIP_VTY_PORT                  2602
+#define RIP_VTYSH_PATH         "/tmp/ripd"
 
 /* Default configuration file name. */
 #define RIPD_DEFAULT_CONFIG "ripd.conf"
@@ -307,7 +308,6 @@ void rip_snmp_init ();
 void rip_zclient_init ();
 void rip_zclient_start ();
 void rip_zclient_reset ();
-
 int if_check_address (struct in_addr addr);
 int if_valid_neighbor (struct in_addr addr);
 
@@ -333,6 +333,8 @@ void rip_peer_display (struct vty *);
 struct rip_peer *rip_peer_lookup (struct in_addr *);
 struct rip_peer *rip_peer_lookup_next (struct in_addr *);
 
+/* functions to deal with rip Routing Table */
+void rip_info_free (struct rip_info *rinfo);
 /* There is only one rip strucutre. */
 extern struct rip *rip;
 

@@ -53,12 +53,13 @@ vector treevec;
 oid *smux_oid;
 size_t smux_oid_len;
 
+/* SMUX default oid. */
+oid *smux_default_oid;
+size_t smux_default_oid_len;
+
 /* SMUX password. */
 char *smux_passwd;
-
-/* SMUX registering MIB. */
-oid *register_oid;
-size_t register_oid_len;
+char *smux_default_passwd = "";
 
 /* SMUX read threads. */
 struct thread *smux_read_thread;
@@ -71,14 +72,6 @@ int debug_smux = 1;
 
 /* SMUX failure count. */
 int fail = 0;
-
-/* SMUX default oid. */
-
-/* Make it compatible with gated */
-oid smux_default_oid[] = {1,3,6,1,4,1,4,3,1,4};
-size_t smux_default_oid_len = sizeof smux_default_oid / sizeof (oid);
-
-char *smux_default_passwd = "";
 
 void *
 oid_copy (void *dest, void *src, size_t size)
@@ -233,7 +226,7 @@ smux_getresp_send (oid objid[], size_t objid_len, long reqid, long errstat,
 
   h1 = ptr;
   /* Place holder h1 for complete sequence */
-  ptr = asn_build_header (ptr, &len, (u_char) SMUX_GETRSP, 0);
+  ptr = asn_build_sequence (ptr, &len, (u_char) SMUX_GETRSP, 0);
   h1e = ptr;
  
   ptr = asn_build_int (ptr, &len,
@@ -255,19 +248,19 @@ smux_getresp_send (oid objid[], size_t objid_len, long reqid, long errstat,
 
   h2 = ptr;
   /* Place holder h2 for one variable */
-  ptr = asn_build_header (ptr, &len, 
-			  (u_char)(ASN_SEQUENCE | ASN_CONSTRUCTOR),
-			  0);
+  ptr = asn_build_sequence (ptr, &len, 
+			   (u_char)(ASN_SEQUENCE | ASN_CONSTRUCTOR),
+			   0);
   h2e = ptr;
 
   ptr = snmp_build_var_op (ptr, objid, &objid_len, 
 			   val_type, arg_len, arg, &len);
 
   /* Now variable size is known, fill in size */
-  asn_build_header(h2,&length,(u_char)(ASN_SEQUENCE|ASN_CONSTRUCTOR),ptr-h2e);
+  asn_build_sequence(h2,&length,(u_char)(ASN_SEQUENCE|ASN_CONSTRUCTOR),ptr-h2e);
 
   /* Fill in size of whole sequence */
-  asn_build_header(h1,&length,(u_char)SMUX_GETRSP,ptr-h1e);
+  asn_build_sequence(h1,&length,(u_char)SMUX_GETRSP,ptr-h1e);
 
   if (debug_smux)
     zlog_info ("SMUX getresp send: %d", ptr - buf);
@@ -364,7 +357,6 @@ int
 smux_get (oid *reqid, size_t *reqid_len, int exact, 
 	  u_char *val_type,void **val, size_t *val_len)
 {
-  int ret;
   int i, j;
   struct subtree *subtree;
   struct variable *v;
@@ -372,15 +364,14 @@ smux_get (oid *reqid, size_t *reqid_len, int exact,
   oid *suffix;
   int suffix_len;
   int result;
+  WriteMethod *write_method=NULL;
 
   /* Check */
   for (i = 0; i < vector_max (treevec); i++)
     {
       subtree = vector_slot (treevec, i);
-
       subresult = oid_compare_part (reqid, *reqid_len, 
 				    subtree->name, subtree->name_len);
-
 
       /* Subtree matched. */
       if (subresult == 0)
@@ -397,18 +388,19 @@ smux_get (oid *reqid, size_t *reqid_len, int exact,
 
 	      /* Always check suffix */
 	      result = oid_compare_part (suffix, suffix_len,
-					 v->suffix, v->suffix_len);
+					 v->name, v->namelen);
 
 	      /* This is exact match so result must be zero. */
 	      if (result == 0)
 		{
 		  if (debug_smux)
-		    zlog_info ("SMUX function call index is %d", v->index);
+		    zlog_info ("SMUX function call index is %d", v->magic);
 
-		  ret = (*v->func) (v, reqid, reqid_len, val, val_len, exact);
+		  *val = (*v->findVar) (v, suffix, &suffix_len, exact,
+		    val_len, &write_method);
 
 		  /* There is no instance. */
-		  if (ret != 0)
+		  if (*val == NULL)
 		    return SNMP_NOSUCHINSTANCE;
 
 		  /* Call is suceed. */
@@ -431,7 +423,6 @@ int
 smux_getnext (oid *reqid, size_t *reqid_len, int exact, 
 		 u_char *val_type,void **val, size_t *val_len)
 {
-  int ret;
   int i, j;
   oid save[MAX_OID_LEN];
   int savelen = 0;
@@ -441,9 +432,10 @@ smux_getnext (oid *reqid, size_t *reqid_len, int exact,
   oid *suffix;
   int suffix_len;
   int result;
+  WriteMethod *write_method=NULL;
 
   /* Save incoming request. */
-  memcpy (save, reqid, *reqid_len * sizeof (oid));
+  oid_copy (save, reqid, *reqid_len);
   savelen = *reqid_len;
 
   /* Check */
@@ -454,8 +446,9 @@ smux_getnext (oid *reqid, size_t *reqid_len, int exact,
       subresult = oid_compare_part (reqid, *reqid_len, 
 				    subtree->name, subtree->name_len);
 
-      /* If request is smaller than the tree. */
-      if (subresult <= 0)
+      /* If request is in the tree. The agent has to make sure we
+         only receive requests we have registered for. */
+      if (subresult == 0)
 	{
 
 	  /* Prepare suffix. */
@@ -470,15 +463,21 @@ smux_getnext (oid *reqid, size_t *reqid_len, int exact,
 	      /* Next then check result >= 0. */
 	      if (result >= 0)
 		result = oid_compare_part (suffix, suffix_len,
-					   v->suffix, v->suffix_len);
+					   v->name, v->namelen);
 
 	      if (result <= 0)
 		{
 		  if (debug_smux)
-		    zlog_info ("SMUX function call index is %d", v->index);
-		  
-		  ret = (*v->func) (v, reqid, reqid_len, val, val_len, exact);
-		  if (ret == 0)
+		    zlog_info ("SMUX function call index is %d", v->magic);
+		  if(result<0)
+		    {
+		      oid_copy(suffix, v->name, v->namelen);
+		      suffix_len = v->namelen;
+		    }
+		  *val = (*v->findVar) (v, suffix, &suffix_len, exact,
+		    val_len, &write_method);
+		  *reqid_len = suffix_len + subtree->name_len;
+		  if (*val)
 		    {
 		      *val_type = v->type;
 		      return 0;
@@ -765,46 +764,54 @@ smux_register (int sock)
 {
   u_char buf[BUFSIZ];
   u_char *ptr;
-  int len;
+  int len, i, ret;
   long priority;
   long operation;
+  struct subtree *subtree;
 
   ptr = buf;
   len = BUFSIZ;
+  ret = 0;
 
-  /* SMUX RReq Header. */
-  ptr = asn_build_header (ptr, &len, (u_char) SMUX_RREQ, 0);
-
-  /* Register MIB tree. */
-  ptr = asn_build_objid (ptr, &len,
-			 (u_char)
-			 (ASN_UNIVERSAL | ASN_PRIMITIVE | ASN_OBJECT_ID),
-			 register_oid, register_oid_len);
-
-  /* Priority. */
-  priority = -1;
-  ptr = asn_build_int (ptr, &len, 
-		       (u_char)(ASN_UNIVERSAL | ASN_PRIMITIVE | ASN_INTEGER),
-		       &priority, sizeof (u_long));
-
-  /* Operation. */
-  operation = 1;
-  ptr = asn_build_int (ptr, &len, 
-		       (u_char)(ASN_UNIVERSAL | ASN_PRIMITIVE | ASN_INTEGER),
-		       &operation, sizeof (u_long));
-
-  if (debug_smux)
+  for (i = 0; i < vector_max (treevec); i++)
     {
-      smux_oid_dump ("SMUX register oid", register_oid, register_oid_len);
-      zlog_info ("SMUX register priority: %d", priority);
-      zlog_info ("SMUX register operation: %d", operation);
+      subtree = vector_slot (treevec, i);
+
+      /* SMUX RReq Header. */
+      ptr = asn_build_header (ptr, &len, (u_char) SMUX_RREQ, 0);
+
+      /* Register MIB tree. */
+      ptr = asn_build_objid (ptr, &len,
+			    (u_char)
+			    (ASN_UNIVERSAL | ASN_PRIMITIVE | ASN_OBJECT_ID),
+			    subtree->name, subtree->name_len);
+
+      /* Priority. */
+      priority = -1;
+      ptr = asn_build_int (ptr, &len, 
+		          (u_char)(ASN_UNIVERSAL | ASN_PRIMITIVE | ASN_INTEGER),
+		          &priority, sizeof (u_long));
+
+      /* Operation. */
+      operation = 1;
+      ptr = asn_build_int (ptr, &len, 
+		          (u_char)(ASN_UNIVERSAL | ASN_PRIMITIVE | ASN_INTEGER),
+		          &operation, sizeof (u_long));
+
+      if (debug_smux)
+        {
+          smux_oid_dump ("SMUX register oid", subtree->name, subtree->name_len);
+          zlog_info ("SMUX register priority: %d", priority);
+          zlog_info ("SMUX register operation: %d", operation);
+        }
+
+      len = BUFSIZ;
+      asn_build_header (buf, &len, (u_char) SMUX_RREQ, (ptr - buf) - 2);
+      ret = send (sock, buf, (ptr - buf), 0);
+      if (ret < 0)
+        return ret;
     }
-  
-
-  len = BUFSIZ;
-  asn_build_header (buf, &len, (u_char) SMUX_RREQ, (ptr - buf) - 2);
-
-  return send (sock, buf, (ptr - buf), 0);
+  return ret;
 }
 
 /* Try to connect to SNMP agent. */
@@ -839,7 +846,7 @@ smux_connect (struct thread *t)
       return -1;
     }
 
-  /* Send register PDU. */
+  /* Send any outstanding register PDUs. */
   ret = smux_register (sock);
   if (ret < 0)
     {
@@ -976,37 +983,29 @@ smux_peer_oid (struct vty *vty, char *oid_str, char *passwd_str)
 }
 
 int
-smux_single_instance_check (struct variable *v, oid objid[], size_t *objid_len,
-			    int exact)
+smux_header_generic (struct variable *v, oid *name, size_t *length, int exact,
+		 size_t *var_len, WriteMethod **write_method)
 {
-  int ret;
   oid fulloid[MAX_OID_LEN];
-  int fulloid_len;
+  int ret;
 
-  oid_copy (fulloid, v->name, v->name_len);
-  fulloid_len = v->name_len;
-  fulloid[v->name_len] = 0;
-  fulloid_len++;
-
+  oid_copy (fulloid, v->name, v->namelen);
+  fulloid[v->namelen] = 0;
   /* Check against full instance. */
-  ret = oid_compare (objid, *objid_len, fulloid, fulloid_len);
+  ret = oid_compare (name, *length, fulloid, v->namelen + 1);
 
   /* Check single instance. */
-  if (exact)
-    {
-      if (ret != 0)
-	return -1;
-    }
-  else
-    {
-      if (ret >= 0)
-	return -1;
+  if ((exact && (ret != 0)) || (!exact && (ret >= 0)))
+	return MATCH_FAILED;
 
-      /* In case of getnext, fill in full instance. */
-      memcpy (objid, fulloid, fulloid_len * sizeof (oid));
-      *objid_len = fulloid_len;
-    }
-  return 0;
+  /* In case of getnext, fill in full instance. */
+  memcpy (name, fulloid, (v->namelen + 1) * sizeof (oid));
+  *length = v->namelen + 1;
+
+  *write_method = 0;
+  *var_len = sizeof(long);    /* default to 'long' results */
+
+  return MATCH_SUCCEEDED;
 }
 
 int
@@ -1083,27 +1082,19 @@ config_write_smux (struct vty *vty)
 
 /* Register subtree to smux master tree. */
 void
-smux_tree_register (struct subtree *tree, size_t size)
+smux_register_mib(char *descr, struct variable *var, size_t width, int num, 
+		  oid name[], size_t namelen)
 {
-  int i;
-  struct variable *v;
+  struct subtree *tree;
 
-  while (size--)
-    {
-      for (i = 0; i < tree->variables_num; i++)
-	{
-	  v = &tree->variables[i];
-
-	  /* Make real name from subtree's name and variable's
-             suffix. */
-	  oid_copy (v->name, tree->name, tree->name_len);
-	  oid_copy (v->name + tree->name_len, v->suffix, v->suffix_len);
-	  v->name_len = tree->name_len + v->suffix_len;
-	}
-
-      /* Add subtree to master vector. */
-      vector_set (treevec, tree++);
-    }
+  tree = (struct subtree *)malloc(sizeof(struct subtree));
+  oid_copy (tree->name, name, namelen);
+  tree->name_len = namelen;
+  tree->variables = var;
+  tree->variables_num = num;
+  tree->variables_width = width;
+  tree->registered = 0;
+  vector_set (treevec, tree);
 }
 
 void
@@ -1115,22 +1106,18 @@ smux_reset ()
 
 /* Initialize some values then schedule first SMUX connection. */
 void
-smux_init (oid oid[], size_t oid_len)
+smux_init (oid defoid[], size_t defoid_len)
 {
   /* Set default SMUX oid. */
+  smux_default_oid = defoid;
+  smux_default_oid_len = defoid_len;
+
   smux_oid = smux_default_oid;
   smux_oid_len = smux_default_oid_len;
   smux_passwd = smux_default_passwd;
   
-  /* Set registering MIB. */
-  register_oid = oid;
-  register_oid_len = oid_len;
-
   /* Make MIB tree. */
   treevec = vector_init (VECTOR_MIN_SIZE);
-
-  /* Schedule first connection. */
-  smux_event (SMUX_SCHEDULE, 0);
 
   /* Install commands. */
   install_element (CONFIG_NODE, &smux_peer_cmd);
@@ -1139,4 +1126,10 @@ smux_init (oid oid[], size_t oid_len)
   install_element (CONFIG_NODE, &no_smux_peer_password_cmd);
 }
 
+void
+smux_start(void)
+{
+  /* Schedule first connection. */
+  smux_event (SMUX_SCHEDULE, 0);
+}
 #endif /* HAVE_SNMP */

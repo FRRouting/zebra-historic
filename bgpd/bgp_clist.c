@@ -343,6 +343,21 @@ community_list_print (struct community_list *list)
 	    community_type_str (entry->type), community_print (entry->com));
 }
 
+int
+community_list_dup_check (struct community_list *list, 
+			  struct community_entry *new)
+{
+  struct community_entry *entry;
+  
+  for (entry = list->head; entry; entry = entry->next)
+    {
+      if (entry->type == new->type
+	  && community_cmp (entry->com, new->com))
+	return 1;
+    }
+  return 0;
+}
+
 DEFUN (ip_community_list, ip_community_list_cmd,
        "ip community-list NAME (deny|permit) .COMMUNITY",
        IP_STR
@@ -402,7 +417,11 @@ DEFUN (ip_community_list, ip_community_list_cmd,
 
   /* Install new community list to the community_list. */
   list = community_list_get (argv[0]);
-  community_list_entry_add (list, entry);
+
+  if (community_list_dup_check (list, entry))
+    community_entry_free (entry);
+  else
+    community_list_entry_add (list, entry);
 
   return CMD_SUCCESS;
 }

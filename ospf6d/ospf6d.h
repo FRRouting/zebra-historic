@@ -40,6 +40,7 @@
 #include "filter.h"
 #include "zclient.h"
 #include "table.h"
+#include "plist.h"
 
 #define HASHVAL 64
 #define MAXIOVLIST 1024
@@ -51,6 +52,7 @@
 #include "ospf6_spf.h"
 #include "ospf6_rtable.h"
 #include "ospf6_proto.h"
+#include "ospf6_redistribute.h"
 #include "ospf6_top.h"
 #include "ospf6_area.h"
 #include "ospf6_interface.h"
@@ -63,6 +65,7 @@
 #include "ospf6_network.h"
 #include "ospf6_zebra.h"
 #include "ospf6_dump.h"
+#include "ospf6_routemap.h"
 
 /* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
 /* #define DISABLE_IPV6_CHECKSUM */
@@ -85,7 +88,7 @@ extern char *recent_reason;
 
 /* Default port values. */
 #define OSPF6_VTY_PORT             2606
-
+#define OSPF6_VTYSH_PATH           "/tmp/ospf6d"
 
 #ifdef INRIA_IPV6
 #ifndef IPV6_PKTINFO

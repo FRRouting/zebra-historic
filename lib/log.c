@@ -40,6 +40,21 @@ const char *zlog_proto_names[] =
   "MASC",
   NULL,
 };
+
+const char *zlog_priority [] =
+  {
+  "emergencies",
+  "alerts",
+  "critical",
+  "errors",
+  "warnings",
+  "notifications",
+  "informational",
+  "debugging",
+  NULL
+  } ;
+  
+
 
 /* For time string format. */
 #define TIME_BUF 27
@@ -85,6 +100,10 @@ vzlog (struct zlog *zl, int priority, const char *format, va_list args)
       return;
     }
 
+  /* only log this information if it has not been masked out */
+  if ( priority > zl->maskpri )
+    return ;
+		
   /* Syslog output */
   if (zl->flags & ZLOG_SYSLOG)
     vsyslog (priority, format, args);
@@ -93,6 +112,7 @@ vzlog (struct zlog *zl, int priority, const char *format, va_list args)
   if (zl->flags & ZLOG_FILE)
     {
       time_print (zl->fp);
+      if (zl->record_priority) fprintf (zl->fp, "%s: ", zlog_priority[priority]);
       fprintf (zl->fp, "%s: ", zlog_proto_names[zl->protocol]);
       vfprintf (zl->fp, format, args);
       fprintf (zl->fp, "\n");
@@ -103,6 +123,7 @@ vzlog (struct zlog *zl, int priority, const char *format, va_list args)
   if (zl->flags & ZLOG_STDOUT)
     {
       time_print (stdout);
+      if (zl->record_priority) fprintf (stdout, "%s: ", zlog_priority[priority]);
       fprintf (stdout, "%s: ", zlog_proto_names[zl->protocol]);
       vfprintf (stdout, format, args);
       fprintf (stdout, "\n");
@@ -113,6 +134,7 @@ vzlog (struct zlog *zl, int priority, const char *format, va_list args)
   if (zl->flags & ZLOG_STDERR)
     {
       time_print (stderr);
+      if (zl->record_priority) fprintf (stderr, "%s: ", zlog_priority[priority]);
       fprintf (stderr, "%s: ", zlog_proto_names[zl->protocol]);
       vfprintf (stderr, format, args);
       fprintf (stderr, "\n");
@@ -236,6 +258,8 @@ openzlog (const char *progname, int flags, zlog_proto_t protocol,
   zl->flags = flags;
   zl->protocol = protocol;
   zl->facility = syslog_facility;
+  zl->maskpri = LOG_DEBUG;
+  zl->record_priority = 0;
 
   openlog (progname, syslog_flags, zl->facility);
   

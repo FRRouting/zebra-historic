@@ -25,13 +25,17 @@
 
 #define OSPF_ASBR_CHECK_DELAY 30
 
+void ospf_external_route_remove (struct prefix_ipv4 *p);
+
+void ospf_asbr_status_update (u_char);
+#if 0
 struct ospf_external_route *ospf_external_route_new ();
 struct ospf_external_route *ospf_external_route_lookup (struct prefix_ipv4 *);
-void ospf_asbr_status_update (u_char);
 void ospf_asbr_route_add (u_char, struct prefix_ipv4 *,
 			  unsigned int, struct in_addr);
 void ospf_asbr_route_delete (u_char, struct prefix_ipv4 *,
 			     unsigned int, struct in_addr);
+#endif
 void ospf_redistribute_withdraw (u_char);
 void ospf_asbr_check();
 void ospf_schedule_asbr_check ();

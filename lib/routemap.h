@@ -47,6 +47,13 @@ typedef enum
   RMAP_BGP
 } route_map_object_t;
 
+typedef enum
+{
+  RMAP_EXIT,
+  RMAP_GOTO,
+  RMAP_NEXT
+} route_map_end_t;
+
 /* Route map rule structure for matching and setting. */
 struct route_map_rule_cmd
 {
@@ -91,6 +98,12 @@ struct route_map_index
 
   /* Route map type permit or deny. */
   enum route_map_type type;			
+
+  /* Do we follow old rules, or hop forward? */
+  route_map_end_t exitpolicy;
+
+  /* If we're using "GOTO", to where do we go? */
+  int nextpref;
 
   /* Matching rule list. */
   struct route_map_rule_list match_list;

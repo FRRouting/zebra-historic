@@ -410,6 +410,9 @@ access_list_apply (struct access_list *access, void *object)
 
   p = (struct prefix *) object;
 
+  if (access == NULL)
+    return FILTER_DENY;
+
   for (filter = access->head; filter; filter = filter->next)
     if (filter->any || filter_match (filter, p))
       return filter->type;
@@ -419,7 +422,7 @@ access_list_apply (struct access_list *access, void *object)
 
 /* Add hook function. */
 void
-access_list_add_hook (void (*func) ())
+access_list_add_hook (void (*func) (struct access_list *access))
 {
   access_master_ipv4.add_hook = func;
 #ifdef HAVE_IPV6
@@ -429,7 +432,7 @@ access_list_add_hook (void (*func) ())
 
 /* Delete hook function. */
 void
-access_list_delete_hook (void (*func) ())
+access_list_delete_hook (void (*func) (struct access_list *access))
 {
   access_master_ipv4.delete_hook = func;
 #ifdef HAVE_IPV6
@@ -452,7 +455,7 @@ access_list_filter_add (struct access_list *access, struct filter *filter)
 
   /* Run hook function. */
   if (access->master->add_hook)
-    (*access->master->add_hook) ();
+    (*access->master->add_hook) (access);
 }
 
 /* If access_list has no filter then return 1. */
@@ -492,7 +495,7 @@ access_list_filter_delete (struct access_list *access, struct filter *filter)
 
   /* Run hook function. */
   if (master->delete_hook)
-    (*master->delete_hook) ();
+    (*master->delete_hook) (access);
 }
 
 /*
@@ -506,6 +509,21 @@ access_list_filter_delete (struct access_list *access, struct filter *filter)
   any                  Any source host
   host                 A single host address
 */
+
+int
+access_list_dup_check (struct access_list *access, struct filter *new)
+{
+  struct filter *filter;
+
+  for (filter = access->head; filter; filter = filter->next)
+    {
+      if (filter->any == new->any
+	  && filter->type == new->type
+	  && prefix_same (&filter->prefix, &new->prefix))
+	return 1;
+    }
+  return 0;
+}
 
 DEFUN (access_list, access_list_cmd,
        "access-list NAME (deny|permit) (A.B.C.D/M|any)",
@@ -528,7 +546,7 @@ DEFUN (access_list, access_list_cmd,
     type = FILTER_DENY;
   else
     {
-      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
+      vty_out (vty, "filter type must be permit or deny%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -541,7 +559,8 @@ DEFUN (access_list, access_list_cmd,
       ret = str2prefix_ipv4 (argv[2], (struct prefix_ipv4 *)&p);
       if (ret <= 0)
 	{
-	  vty_out (vty, "IP address prefix/prefixlen is malformed%s", VTY_NEWLINE);
+	  vty_out (vty, "IP address prefix/prefixlen is malformed%s",
+		   VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       filter = filter_make (&p, type);
@@ -549,7 +568,12 @@ DEFUN (access_list, access_list_cmd,
 
   /* Install new filter to the access_list. */
   access = access_list_get (AF_INET, argv[0]);
-  access_list_filter_add (access, filter);
+
+  /* Duplicate insertion check. */
+  if (access_list_dup_check (access, filter))
+    filter_free (filter);
+  else
+    access_list_filter_add (access, filter);
 
   return CMD_SUCCESS;
 }

@@ -171,6 +171,6 @@ void ospf_vl_shut_unapproved ();
 int ospf_full_virtual_nbrs (struct ospf_area *);
 int ospf_vls_in_area (struct ospf_area *);
 
-struct crypt_key *ospf_crypt_key_lookup (struct ospf_interface *, int);
+struct crypt_key *ospf_crypt_key_lookup (struct ospf_interface *, u_char);
 
 #endif /* _ZEBRA_OSPF_INTERFACE_H */

@@ -31,6 +31,7 @@ static struct vertex *
 make_vertex (struct ospf6_lsa *lsa)
 {
   struct vertex *v;
+  char buf[128];
 
   assert (lsa && lsa->lsa_hdr);
 
@@ -51,6 +52,12 @@ make_vertex (struct ospf6_lsa *lsa)
     default:
       return (struct vertex *)NULL;
     }
+
+  /* Identifier String */
+  snprintf (v->str, sizeof (v->str), "%s[%lu]",
+            inet_ntop (AF_INET, &v->vtx_id[0], buf, sizeof (buf)),
+            (unsigned long) ntohl (v->vtx_id[1]));
+
   v->vtx_lsa = lsa;
   v->vtx_nexthops = list_init ();
   v->vtx_distance = 0;
@@ -137,9 +144,12 @@ spf_install (struct vertex *v, struct area *area)
   listnode n;
   struct vertex *parent;
 
-  o6log.spf ("spf_install, depth:%lu, distance:%lu",
-             v->vtx_depth, v->vtx_distance);
-  print_vertex (v);
+  if (IS_OSPF6_DUMP_SPF)
+    {
+      zlog_info ("SPF Install: Depth:%lu Distance%lu",
+                 v->vtx_depth, v->vtx_distance);
+      zlog_info ("  %s[%lu]", inet4str (v->vtx_id[0]), ntohl (v->vtx_id[1]));
+    }
 
   if (v->vtx_depth == 0)
     area->spftree.root = v;
@@ -430,7 +440,7 @@ spf_list_add_list (list l, list m)
   listnode n;
 
   for (n = listhead (m); n; nextnode (n))
-    list_add_node (l, n);
+    list_add_node (l, getdata (n));
 
   return;
 }
@@ -507,6 +517,13 @@ spf_calculation (struct thread *thread)
                     }
                   if (p->vtx_distance == W->vtx_distance)
                     {
+                      if (IS_OSPF6_DUMP_SPF)
+                        {
+                          zlog_info ("SPF MultiPath found:");
+                          zlog_info ("  merge %s's parent to %s's",
+                                     W->str, p->str);
+                        }
+
                       /* This is ECMP */
                       spf_list_add_list (p->vtx_parent, W->vtx_parent);
                       vertex_free (W);

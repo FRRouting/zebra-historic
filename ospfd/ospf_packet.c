@@ -38,6 +38,7 @@
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_packet.h"
@@ -395,7 +396,8 @@ ospf_ls_upd_timer (struct thread *thread)
   /* Set LS Update retransmission timer. */
   OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
 
-  list_free (update);
+  list_delete_all (update);
+  /*  list_free (update); */
 
   return 0;
 }
@@ -472,11 +474,16 @@ ospf_write (struct thread *thread)
   sa_dst.sin_port = htons (0);
 
   /* Now send packet. */
-  sendto (sock, STREAM_DATA (op->s), op->length, 0,
-	  (struct sockaddr *) &sa_dst, sizeof (sa_dst));
-
+  ret = sendto (sock, STREAM_DATA (op->s), op->length, 0,
+		(struct sockaddr *) &sa_dst, sizeof (sa_dst));
   /* Immediately close socket. */
   close (sock);
+
+  if (ret < 0)
+    {
+      zlog_warn ("*** sendto in ospf_write failed with %s", strerror (errno));
+      return -1;
+    }
 
   /* Retrieve OSPF packet type. */
   stream_set_getp (op->s, 1);
@@ -997,8 +1004,9 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
   /* Send rest of Link State Update. */
   if (listcount (ls_upd) > 0)
     {
-      ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_DIRECT);
-      list_free (ls_upd);
+      ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_INDIRECT);
+      list_delete_all (ls_upd);
+      /*      list_free (ls_upd); */
     }
 }
 
@@ -1034,7 +1042,8 @@ ospf_ls_upd_list_lsa (struct stream *s, struct ospf_interface *oi, size_t size)
       sum = lsah->checksum;
       if (sum != ospf_lsa_checksum (lsah))
 	{
-	  zlog_warn ("Link State Update: LSA checksum error.");
+	  zlog_warn ("Link State Update: LSA checksum error %x, %x.",
+		     sum, lsah->checksum);
 	  continue;
 	}
 
@@ -1054,7 +1063,7 @@ ospf_ls_upd_list_lsa (struct stream *s, struct ospf_interface *oi, size_t size)
 
       /* Create OSPF LSA instance. */
       lsa = ospf_lsa_new ();
-      zlog_info("Z: ospf_lsa_new() in ospf_ls_upd_list_lsa(): %s", lsa);
+      zlog_info("Z: ospf_lsa_new() in ospf_ls_upd_list_lsa(): %x", lsa);
 
       lsa->data = ospf_lsa_data_new (length);
       memcpy (lsa->data, lsah, length);
@@ -1170,6 +1179,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
       if (current == NULL ||
 	  (ret = ospf_lsa_more_recent (current, lsa)) < 0)
 	{
+	  zlog_info ("T: ospf_flood(): start lsa = %x", lsa);
 	  /* Actual flooding procedure. */
 	  ospf_flood (nbr, current, lsa);
 	  continue;
@@ -2061,7 +2071,6 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
 
   zlog_info("Z: ospf_make_ls_upd: Start");
   
-  /* stream_putl (s, listcount (update)); */
   pp = stream_get_putp (s);
   ospf_output_forward (s, 4);
 
@@ -2077,7 +2086,7 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
       assert (lsa->data);
 
       /* Check packet size. */
-      /* Hope to be performed precisely -- takada. */
+      /* XXX: Hope to be performed precisely -- takada. */
       if (length + delta + ntohs (lsa->data->length) > OSPF_PACKET_MAX (oi))
 	break;
 
@@ -2088,7 +2097,12 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
       stream_put (s, lsa->data, ntohs (lsa->data->length));
 
       /* Set LS age. */
-      ls_age = LS_AGE (lsa);
+      /* each hop must increment an lsa_age by transmit_delay 
+         of OSPF interface */
+      ls_age = (LS_AGE (lsa) == OSPF_LSA_MAX_AGE ?
+	         OSPF_LSA_MAX_AGE : LS_AGE(lsa) + oi->transmit_delay);
+      if (ls_age > OSPF_LSA_MAX_AGE)
+	      ls_age = OSPF_LSA_MAX_AGE ;
       lsah->ls_age = htons (ls_age);
 
       length += ntohs (lsa->data->length);

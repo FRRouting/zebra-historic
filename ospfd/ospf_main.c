@@ -39,6 +39,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
@@ -240,7 +241,7 @@ main (int argc, char **argv)
   pid_output (PATH_OSPFD_PID);
 
   /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT, OSPF_VTYSH_PATH);
 
   /* Print banner. */
   zlog (NULL, LOG_INFO, "OSPFd (%s) starts", ZEBRA_VERSION);

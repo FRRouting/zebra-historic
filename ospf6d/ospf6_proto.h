@@ -23,8 +23,7 @@
 #define OSPF6_PROTO_H
 
 /* OSPF protocol version */
-#define OSPF_V2                 2
-#define OSPF_V3                 3
+#define OSPF6_VERSION		3
 
 /* OSPF protocol number. */
 #ifndef IPPROTO_OSPFIGP
@@ -32,12 +31,12 @@
 #endif
 
 /* TOS field normaly null */
-#define TOS_VALUE               0x0
+#define OSPF6_TOS_VALUE               0x0
 
 /* Architectural Constants */
-#define LS_REFRESH_TIME         1800       /* 30 min */
-#define MIN_LS_INTERVAL         5
-#define MIN_LS_ARRIVAL          1
+#define OSPF6_LS_REFRESH_TIME         1800       /* 30 min */
+#define OSPF6_MIN_LS_INTERVAL         5
+#define OSPF6_MIN_LS_ARRIVAL          1
 #define MAXAGE                  3600       /* 1 hour */
 #define CHECK_AGE               300        /* 5 min */
 #define MAX_AGE_DIFF            900        /* 15 min */

@@ -52,14 +52,13 @@ depend:
 ## File dependency.
 bgp_aspath.o: bgp_aspath.c ../lib/hash.h ../lib/memory.h \
  ../lib/roken.h ../lib/vector.h ../lib/vty.h ../lib/str.h ../lib/log.h \
- ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_aspath.h \
- ../lib/regex-gnu.h
+ ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_aspath.h
 bgp_attr.o: bgp_attr.c ../lib/linklist.h ../lib/prefix.h \
  ../lib/memory.h ../lib/roken.h ../lib/vector.h ../lib/vty.h \
- ../lib/stream.h ../lib/log.h ../lib/hash.h ../bgpd/bgpd.h \
- ../lib/sockunion.h ../bgpd/bgp_attr.h ../bgpd/bgp_route.h \
- ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h ../bgpd/bgp_debug.h \
- ../bgpd/bgp_packet.h
+ ../lib/stream.h ../lib/log.h ../lib/hash.h ../lib/newlist.h \
+ ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_attr.h \
+ ../bgpd/bgp_route.h ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h \
+ ../bgpd/bgp_debug.h ../bgpd/bgp_packet.h
 bgp_btoa.o: bgp_btoa.c ../lib/stream.h ../lib/log.h ../bgpd/bgpd.h \
  ../lib/sockunion.h ../bgpd/bgp_dump.h
 bgp_clist.o: bgp_clist.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
@@ -112,10 +111,11 @@ bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/linklist.h ../lib/memory.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/stream.h ../lib/filter.h ../lib/if.h ../lib/str.h \
  ../lib/log.h ../lib/routemap.h ../lib/buffer.h ../lib/sockunion.h \
- ../lib/plist.h ../lib/newlist.h ../bgpd/bgpd.h ../bgpd/bgp_route.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_debug.h ../bgpd/bgp_aspath.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_packet.h ../bgpd/bgp_regex.h \
- ../lib/regex-gnu.h ../bgpd/bgp_filter.h ../bgpd/bgp_fsm.h
+ ../lib/plist.h ../lib/newlist.h ../lib/thread.h ../bgpd/bgpd.h \
+ ../bgpd/bgp_route.h ../bgpd/bgp_attr.h ../bgpd/bgp_debug.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h ../bgpd/bgp_packet.h \
+ ../bgpd/bgp_regex.h ../lib/regex-gnu.h ../bgpd/bgp_filter.h \
+ ../bgpd/bgp_fsm.h
 bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/routemap.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/log.h \

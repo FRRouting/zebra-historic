@@ -23,20 +23,21 @@
 
 #include <zebra.h>
 
-#include "prefix.h"
-#include "linklist.h"
-#include "table.h"
-#include "memory.h"
 #include "thread.h"
-#include "log.h"
+#include "memory.h"
+#include "linklist.h"
+#include "prefix.h"
 #include "if.h"
+#include "table.h"
 #include "vty.h"
 #include "filter.h"
+#include "log.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_spf.h"
@@ -45,12 +46,11 @@
 #include "ospfd/ospf_ia.h"
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospf_flood.h"
-#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_ase.h"
 #include "ospfd/ospf_zebra.h"
 
 
-
+
 struct ospf_area_range *
 ospf_area_range_match (struct ospf_area *area, struct prefix_ipv4 *p)
 {
@@ -184,8 +184,7 @@ ospf_check_abr_status ()
   if (new_flags != ospf_top->flags)
     {
       ospf_spf_calculate_schedule ();
-      zlog_info ("Z: ospf_check_abr_status(): new router flags: %x",
-		 new_flags);
+      zlog_info ("Z: ospf_check_abr_status(): new router flags: %x",new_flags);
 
       ospf_top->flags = new_flags;
       ospf_schedule_update_router_lsas ();
@@ -253,8 +252,9 @@ ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 	  memcpy (old->data, lsa->data, sizeof (struct summary_lsa));
           old->ts = lsa->ts;
           old->originated = lsa->originated;
+	  old->flags = lsa->flags;
 	  ospf_lsa_free (lsa);
-          zlog_info("Z: ospf_lsa_free() in ospf_abr_announce_network_to_area(): %x", lsa);
+          zlog_info ("Z: ospf_lsa_free() in ospf_abr_announce_network_to_area(): %x", lsa);
 	  lsa = old;
 	  if (lsa->refresh_list)
 	    ospf_refresher_unregister_lsa (lsa);
@@ -284,39 +284,34 @@ ospf_abr_nexthops_belong_to_area (struct ospf_route *or,
   struct ospf_path *path;
   struct ospf_interface *oi;
 
-  LIST_ITERATOR (or->path, node)
+  for (node = listhead (or->path); node; nextnode (node))
     {
       path = getdata (node);
       oi = path->ifp->info;
 
-      if (oi == NULL)
-	continue;
-
-      if (oi->area == area)
-	return 1;
+      if (oi != NULL)
+	if (oi->area == area)
+	  return 1;
     }
 
   return 0;
 }
 
-
 int
 ospf_abr_should_accept (struct prefix *p, struct ospf_area *a)
 {
-  if (IMP_LIST_NAME (a))
+  if (IMPORT_NAME (a))
     {
-      if (IMP_LIST_PTR (a) == NULL)
-	IMP_LIST_PTR (a) = access_list_lookup (AF_INET, IMP_LIST_NAME (a));
+      if (IMPORT_LIST (a) == NULL)
+	IMPORT_LIST (a) = access_list_lookup (AF_INET, IMPORT_NAME (a));
 
-      if (IMP_LIST_PTR (a))
-        if (access_list_apply (IMP_LIST_PTR (a), p) == FILTER_DENY)
+      if (IMPORT_LIST (a))
+        if (access_list_apply (IMPORT_LIST (a), p) == FILTER_DENY)
            return 0;
     }
 
  return 1;
 }
-
-
 
 void
 ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
@@ -389,13 +384,13 @@ ospf_abr_should_announce (struct prefix *p, struct ospf_route *or)
 {
   struct ospf_area *a = or->u.std.area;
 
-  if (EXP_LIST_NAME (a))
+  if (EXPORT_NAME (a))
     {
-      if (EXP_LIST_PTR (a) == NULL)
-	EXP_LIST_PTR (a) = access_list_lookup (AF_INET, EXP_LIST_NAME (a));
+      if (EXPORT_LIST (a) == NULL)
+	EXPORT_LIST (a) = access_list_lookup (AF_INET, EXPORT_NAME (a));
 
-      if (EXP_LIST_PTR (a))
-        if (access_list_apply (EXP_LIST_PTR (a), p) == FILTER_DENY)
+      if (EXPORT_LIST (a))
+        if (access_list_apply (EXPORT_LIST (a), p) == FILTER_DENY)
            return 0;
     }
 
@@ -1008,7 +1003,7 @@ ospf_abr_task ()
       ospf_abr_process_router_rt (ospf_top->new_rtrs);
 
       zlog_info ("Z: ospf_abr_task(): announce aggregates");
-      ospf_abr_announce_aggregates (ospf_top->new_table);
+      ospf_abr_announce_aggregates ();
 
       zlog_info ("Z: ospf_abr_task(): announce stub defaults");
       ospf_abr_announce_stub_defaults ();

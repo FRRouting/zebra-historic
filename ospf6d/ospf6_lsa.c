@@ -22,20 +22,7 @@
 
 #include "ospf6d.h"
 
-/* return 1 if MIN_LS_INTERVAL have past, else 0 */
-int
-past_min_ls_interval (struct ospf6_lsa *lsa)
-{
-  struct timeval now;
-
-  assert (lsa && lsa->lsa_hdr);
-  gettimeofday (&now, (struct timezone *)NULL);
-
-  if (now.tv_sec - lsa->birth < MIN_LS_INTERVAL)
-    return 0;
-
-  return 1;
-}
+#include "ospf6_redistribute.h"
 
 /* check which is more recent. if a is more recent, return -1;
    if the same, return 0; otherwise(b is more recent), return 1 */
@@ -401,10 +388,10 @@ reconstruct_lsa (struct ospf6_lsa *lsa)
   struct interface *ifp;
   struct prefix p;
   struct as_external_lsa *ase;
-  char *ps = NULL;
   struct route_node *rn;
-  struct ospf6_route_node_info *info;
+  struct ospf6_redistribute_info *info;
   struct ospf6_lsa *new = NULL;
+  struct ospf6_prefix *o6_prefix;
 
   switch (ntohs (lsa->lsa_hdr->lsh_type))
     {
@@ -470,34 +457,30 @@ reconstruct_lsa (struct ospf6_lsa *lsa)
         break;
 
       case LST_AS_EXTERNAL_LSA:
-        ase = (struct as_external_lsa *)(lsa->lsa_hdr + 1);
-        ps = (char *)(ase + 1);
+        ase = (struct as_external_lsa *) (lsa->lsa_hdr + 1);
+        o6_prefix = (struct ospf6_prefix *) (&ase->ase_prefix_len);
         memset (&p, 0, sizeof (p));
         p.family = AF_INET6;
         p.prefixlen = ase->ase_prefix_len;
-        memcpy (&p.u.prefix, ps, sizeof (p.u.prefix6));
+        ospf6_prefix_in6_addr (o6_prefix, &p.u.prefix6);
 
-#if 1
-        /* xxx */
-        ospf6_lsa_create_as_external (htonl (lsa->lsa_hdr->lsh_id), 0, 0,
-                                      (struct prefix_ipv6 *) &p);
-#else
-
-        rn = route_node_get (ospf6->table_external, &p);
-        info = (struct ospf6_route_node_info *) rn->info;
-        if (!info)
+        rn = route_node_lookup (ospf6->redistribute_map, &p);
+        if (! rn)
           {
-            zlog_warn ("*** node info not found");
-            new = NULL;
+            ospf6_premature_aging (lsa);
+            return NULL;
           }
-        else
-          new = ospf6_make_as_external_lsa (rn);
-        if (!new)
-          break;
+        info = (struct ospf6_redistribute_info *) rn->info;
+        if (! info)
+          {
+            ospf6_premature_aging (lsa);
+            return NULL;
+          }
+
+        new = ospf6_lsa_create_as_external (info, (struct prefix_ipv6 *) &p);
         ospf6_lsa_flood (new);
         ospf6_lsdb_install (new);
         ospf6_lsa_unlock (new);
-#endif /*1*/
         break;
 
       default:
@@ -771,11 +754,19 @@ make_ospf6_lsa_data (struct ospf6_lsa_hdr *hdr, int size)
 struct ospf6_lsa *
 make_ospf6_lsa (struct ospf6_lsa_hdr *hdr)
 {
+  char buf[128];
   struct ospf6_lsa *lsa = malloc_ospf6_lsa ();
 
   /* increment reference counter */
   ospf6_lsa_lock (lsa);
 
+  /* dump string */
+  snprintf (lsa->str, sizeof (lsa->str), "%s AdvRtr:%s LS-ID:%lu",
+            lstype_name[typeindex (hdr->lsh_type)],
+            inet_ntop (AF_INET, &hdr->lsh_advrtr, buf, sizeof (buf)),
+            (unsigned long) ntohl (hdr->lsh_id));
+
+  /* body set */
   lsa->lsa_hdr = hdr;
 
   /* calculate birth and expire of this lsa */
@@ -996,7 +987,7 @@ ospf6_make_router_lsa (struct area *area)
   lsa->scope = (void *) area;
   lsa->from = (struct neighbor *) NULL;
   lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   LS_REFRESH_TIME);
+                                   OSPF6_LS_REFRESH_TIME);
 
   /* free temporary list */
   list_delete_all (described_link);
@@ -1078,7 +1069,7 @@ ospf6_make_network_lsa (struct ospf6_interface *o6if)
   lsa->scope = (void *) o6if->area;
   lsa->from = (struct neighbor *) NULL;
   lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   LS_REFRESH_TIME);
+                                   OSPF6_LS_REFRESH_TIME);
 
   return lsa;
 }
@@ -1200,7 +1191,7 @@ ospf6_make_link_lsa (struct ospf6_interface *o6if)
   lsa->scope = (void *) o6if;
   lsa->from = (struct neighbor *) NULL;
   lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   LS_REFRESH_TIME);
+                                   OSPF6_LS_REFRESH_TIME);
 
   return lsa;
 }
@@ -1359,7 +1350,7 @@ ospf6_make_intra_prefix_lsa (struct ospf6_interface *o6if)
   lsa->scope = (void *) o6if->area;
   lsa->from = (struct neighbor *) NULL;
   lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   LS_REFRESH_TIME);
+                                   OSPF6_LS_REFRESH_TIME);
 
   list_delete_all (advertise);
   return lsa;
@@ -1444,7 +1435,7 @@ ospf6_make_as_external_lsa (struct route_node *rn)
   lsa->scope = (void *) ospf6;
   lsa->from = (struct neighbor *) NULL;
   lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   LS_REFRESH_TIME);
+                                   OSPF6_LS_REFRESH_TIME);
 
   /* set ls origin here for as external */
   info->ls_origin = lsa;
@@ -1453,7 +1444,7 @@ ospf6_make_as_external_lsa (struct route_node *rn)
 }
 
 struct ospf6_lsa *
-ospf6_lsa_create_as_external (u_int32_t id, int type, int ifindex,
+ospf6_lsa_create_as_external (struct ospf6_redistribute_info *info,
                               struct prefix_ipv6 *p)
 {
   size_t space;
@@ -1473,7 +1464,7 @@ ospf6_lsa_create_as_external (u_int32_t id, int type, int ifindex,
   /* set lsa header */
   lsa_hdr->lsh_age = 0;
   lsa_hdr->lsh_type = htons (LST_AS_EXTERNAL_LSA);
-  lsa_hdr->lsh_id = htonl (id);
+  lsa_hdr->lsh_id = htonl (info->ls_id);
   lsa_hdr->lsh_advrtr = ospf6->router_id;
   lsa_hdr->lsh_seqnum = ospf6_seqnum_new (lsa_hdr->lsh_type,
                                           lsa_hdr->lsh_id,
@@ -1486,8 +1477,11 @@ ospf6_lsa_create_as_external (u_int32_t id, int type, int ifindex,
   /* set as_external_lsa */
   aselsa = (struct as_external_lsa *) (lsa_hdr + 1);
 
-  /* xxx, set ase_bits */
-  ASE_LSA_SET (aselsa, ASE_LSA_BIT_E);   /* type2 */
+  if (info->metric_type == 2)
+    ASE_LSA_SET (aselsa, ASE_LSA_BIT_E);   /* type2 */
+  else
+    ASE_LSA_CLEAR (aselsa, ASE_LSA_BIT_E);   /* type1 */
+
   ASE_LSA_CLEAR (aselsa, ASE_LSA_BIT_F); /* forwarding address */
   ASE_LSA_CLEAR (aselsa, ASE_LSA_BIT_T); /* external route tag */
 
@@ -1495,7 +1489,7 @@ ospf6_lsa_create_as_external (u_int32_t id, int type, int ifindex,
   aselsa->ase_pre_metric = 0;
 
   /* set metric. related to E bit */
-  aselsa->ase_metric = htons (100);
+  aselsa->ase_metric = htons (info->metric);
 
   /* prefixlen */
   aselsa->ase_prefix_len = p->prefixlen;
@@ -1516,7 +1510,7 @@ ospf6_lsa_create_as_external (u_int32_t id, int type, int ifindex,
   lsa->scope = (void *) ospf6;
   lsa->from = (struct neighbor *) NULL;
   lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   LS_REFRESH_TIME);
+                                   OSPF6_LS_REFRESH_TIME);
 
   return lsa;
 }

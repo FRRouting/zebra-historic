@@ -40,6 +40,8 @@ void ospf6_zebra_route_delete (struct prefix_ipv6 *,
 void ospf6_redist_route_add (int, int, struct prefix_ipv6 *);
 void ospf6_redist_route_delete (int, int, struct prefix_ipv6 *);
 
+void ospf6_redist_connected_route_add (int, int, struct prefix_ipv6 *);
+
 int ospf6_zebra_read_ipv6 (int, struct zebra *, zebra_size_t);
 
 #endif /*OSPF6_ZEBRA_H*/

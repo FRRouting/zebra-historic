@@ -23,18 +23,19 @@
 
 #include <zebra.h>
 
-#include "prefix.h"
-#include "linklist.h"
-#include "table.h"
-#include "memory.h"
 #include "thread.h"
-#include "log.h"
+#include "memory.h"
 #include "hash.h"
+#include "linklist.h"
+#include "prefix.h"
+#include "table.h"
+#include "log.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_spf.h"
@@ -42,7 +43,6 @@
 #include "ospfd/ospf_ase.h"
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospf_ia.h"
-#include "ospfd/ospf_lsdb.h"
 
 #define DEBUG
 

@@ -22,20 +22,21 @@
 
 #include <zebra.h>
 
-#include "prefix.h"
-#include "linklist.h"
-#include "table.h"
-#include "memory.h"
 #include "thread.h"
-#include "log.h"
-#include "if.h"
+#include "memory.h"
 #include "hash.h"
+#include "linklist.h"
+#include "prefix.h"
+#include "if.h"
+#include "table.h"
+#include "log.h"
 #include "sockunion.h"          /* for inet_ntop () */
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_spf.h"
@@ -43,7 +44,6 @@
 #include "ospfd/ospf_ia.h"
 #include "ospfd/ospf_ase.h"
 #include "ospfd/ospf_abr.h"
-#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_asbr.h"
 
 #define DEBUG
@@ -89,7 +89,7 @@ ospf_vertex_new (struct ospf_lsa *lsa)
   new = XMALLOC (MTYPE_OSPF_VERTEX, sizeof (struct vertex));
   memset (new, 0, sizeof (struct vertex));
 
-  new->flag = OSPF_SPF_FALSE;
+  new->flags = 0;
   new->type = lsa->data->type;
   new->id = lsa->data->id;
   new->lsa = lsa->data;
@@ -706,7 +706,13 @@ ospf_spf_process_stubs (struct ospf_area *area, struct vertex * v,
   for (cnode = listhead (v->child); cnode; nextnode (cnode))
     {
       child = getdata (cnode);
+
+      if (CHECK_FLAG (child->flags, OSPF_VERTEX_PROCESSED))
+	continue;
+
       ospf_spf_process_stubs (area, child, rt);
+
+      SET_FLAG (child->flags, OSPF_VERTEX_PROCESSED);
     }
 }
 
@@ -715,33 +721,25 @@ ospf_rtrs_free (struct route_table *rtrs)
 {
   struct route_node *rn;
   list or_list;
-  listnode ln;
-  listnode pn;
-  struct ospf_route *or;
+  listnode node;
 
   zlog_info ("ospf_rtrs_free()");
 
   for (rn = route_top (rtrs); rn; rn = route_next (rn))
-    {
-      if ((or_list = rn->info) != NULL)
-        {
-          for (ln = listhead (or_list); ln; nextnode (ln))
-            {
-              or = getdata (ln);
-              if (or->path && listcount (or->path) > 0)
-                for (pn = listhead (or->path); pn; nextnode (pn))
-                  ospf_path_free (pn->data);
+    if ((or_list = rn->info) != NULL)
+      {
+        for (node = listhead (or_list); node; nextnode (node))
+          {
+            ospf_route_free (node->data);
+            zlog_info ("T: ospf_route_free (node->data) = %x", node->data);
+          }
 
-              ospf_route_free (or);
-            }
+        list_delete_all (or_list);
 
-          list_delete_all (or_list);
-
-          /* Unlock the node. */
-          rn->info = NULL;
-          route_unlock_node (rn);
-        }
-    }
+        /* Unlock the node. */
+        rn->info = NULL;
+        route_unlock_node (rn);
+      }
 }
 
 void
@@ -764,34 +762,34 @@ ospf_rtrs_print (struct route_table *rtrs)
         {
           or = getdata (ln);
 
-	  switch (or->path_type)
-	    {
-	    case OSPF_PATH_INTRA_AREA:
-	      zlog_info ("%s   [%d] area: %s", 
-			 inet_ntop (AF_INET, &or->id, buf1, BUFSIZ), or->cost,
-			 inet_ntop (AF_INET, &or->u.std.area->area_id,
-				    buf2, BUFSIZ));
-	      break;
-	    case OSPF_PATH_INTER_AREA:
-	      zlog_info ("%s IA [%d] area: %s", 
-			 inet_ntop (AF_INET, &or->id, buf1, BUFSIZ), or->cost,
-			 inet_ntop (AF_INET, &or->u.std.area->area_id,
-				    buf2, BUFSIZ));
-	      break;
-	    default:
-	      break;
-	    }
+          switch (or->path_type)
+            {
+            case OSPF_PATH_INTRA_AREA:
+              zlog_info ("%s   [%d] area: %s", 
+                         inet_ntop (AF_INET, &or->id, buf1, BUFSIZ), or->cost,
+                         inet_ntop (AF_INET, &or->u.std.area->area_id,
+                                    buf2, BUFSIZ));
+              break;
+            case OSPF_PATH_INTER_AREA:
+              zlog_info ("%s IA [%d] area: %s", 
+                         inet_ntop (AF_INET, &or->id, buf1, BUFSIZ), or->cost,
+                         inet_ntop (AF_INET, &or->u.std.area->area_id,
+                                    buf2, BUFSIZ));
+              break;
+            default:
+              break;
+            }
 
-	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
-	    {
-	      path = getdata (pnode);
-	      if (path->nexthop.s_addr == 0)
-		zlog_info ("   directly attached to %s\r\n", path->ifp->name);
-	      else 
-		zlog_info ("   via %s, %s\r\n",
-			   inet_ntoa (path->nexthop), path->ifp->name);
-	    }
-	}
+          for (pnode = listhead (or->path); pnode; nextnode (pnode))
+            {
+              path = getdata (pnode);
+              if (path->nexthop.s_addr == 0)
+                zlog_info ("   directly attached to %s\r\n", path->ifp->name);
+              else 
+                zlog_info ("   via %s, %s\r\n",
+                           inet_ntoa (path->nexthop), path->ifp->name);
+            }
+        }
 
   zlog_info ("ospf_rtrs_print() end");
 }
@@ -952,14 +950,12 @@ ospf_spf_calculate_timer (struct thread *t)
       ospf_prune_unreachable_networks (new_table);
       ospf_prune_unreachable_routers (new_rtrs);
 
-      /* AS-external-LSA calculation. */
-#if 0
-      ospf_ase_routing (new_table, new_rtrs);
-#endif
+      /* AS-external-LSA calculation should not be performed here. */
+
       /* If new Router Route is installed,
-	 then schedule re-calculate External routes. */
+         then schedule re-calculate External routes. */
       if (1)
-	ospf_ase_calculate_schedule ();
+        ospf_ase_calculate_schedule ();
 
       ospf_ase_calculate_timer_add ();
 

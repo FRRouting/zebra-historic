@@ -45,6 +45,14 @@
 #define OSPF_DEBUG_NSM_TIMERS   0x04
 #define OSPF_DEBUG_NSM		0x07
 
+#define OSPF_DEBUG_LSA_GENERATE 0x01
+#define OSPF_DEBUG_LSA_FLOODING	0x02
+#define OSPF_DEBUG_LSA		0x03
+
+#define OSPF_DEBUG_ZEBRA_INTERFACE     0x01
+#define OSPF_DEBUG_ZEBRA_REDISTRIBUTE  0x02
+#define OSPF_DEBUG_ZEBRA	       0x03
+
 /* Macro for setting debug option. */
 #define DEBUG_PACKET_ON(a, b)		ospf_debug_packet[a] |= (b)
 #define DEBUG_PACKET_OFF(a, b)		ospf_debug_packet[a] &= ~(b)

@@ -62,7 +62,8 @@ struct
   { ZEBRA_ROUTE_RIP,     "R", "rip",       50},
   { ZEBRA_ROUTE_RIPNG,   "R", "ripng",     50},
   { ZEBRA_ROUTE_OSPF,    "O", "ospf",      60},
-  { ZEBRA_ROUTE_OSPF6,   "O", "ospf6",     60},
+  /* { ZEBRA_ROUTE_OSPF6,   "O", "ospf6",     60}, */
+  { ZEBRA_ROUTE_OSPF6,   "O", "ospf6",     49},
   { ZEBRA_ROUTE_BGP,     "B", "bgp",       70},
 };
 
@@ -116,10 +117,6 @@ rib_create (int type, u_char flags, int distance, int ifindex, int table)
 void
 rib_free (struct rib *rib)
 {
-#if 0
-  if (IS_RIB_LINK (rib))
-    XFREE (0, rib->u.ifname);
-#endif /* 0 */
   XFREE (MTYPE_RIB, rib);
 }
 
@@ -347,13 +344,6 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
     }
   else
     rib_if_set (rib, ifindex);
-
-#if 0
-  if (gate)
-    rib->u.gate4 = *gate;
-  else
-    rib_if_set (rib, ifindex);
-#endif /* 0 */
 
   /* Lookup route node. */
   np = route_node_get (ipv4_rib_table, (struct prefix *) p);
@@ -1402,10 +1392,8 @@ DEFUN (show_ipv6,
 
   /* Print out header. */
   vty_out (vty, "%sCodes: K - kernel route, C - connected, S - static,"
-	   " R - RIPng, B - BGP%s       * - FIB route.%s%s", VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE);
+	   " R - RIPng, O - OSPFv3,%s       B - BGP, * - FIB route.%s%s",
+           VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 
   for (np = route_top (ipv6_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
@@ -1559,4 +1547,79 @@ rib_init ()
   install_element (VIEW_NODE, &show_ipv6_cmd);
   install_element (ENABLE_NODE, &show_ipv6_cmd);
 #endif /* HAVE_IPV6 */
+}
+
+/* Interface change related functions. */
+
+/* Check all static routes then install it into the kernel. */
+void
+rib_if_up (struct interface *ifp)
+{
+  int ret;
+  struct route_node *rn;
+  struct rib *rib;
+  struct rib *best;
+  struct interface *ifp_gate;
+
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    {
+      best = rn->info;
+
+      /* Check most prefered route. */
+      for (rib = rn->info; rib; rib = rib->next)
+	{
+	  if (rib->distance < best->distance)
+	    best = rib;
+	}
+
+      if (best && ! IS_RIB_FIB (best))
+	{
+	  /* Check interface. */
+	  if (IS_RIB_LINK (best))
+	    {
+	      if (best->u.ifindex == ifp->ifindex)
+		{
+		  ret = kernel_add_ipv4 ((struct prefix_ipv4 *)&rn->p,
+					 NULL,
+					 best->u.ifindex, best->flags, 0);
+		  if (ret == 0)
+		    RIB_FIB_SET (best);
+		}
+	    }
+	  else
+	    {
+	      ifp_gate = if_lookup_address (best->u.gate4);
+	      if (ifp_gate->ifindex == ifp->ifindex)
+		{
+		  ret = kernel_add_ipv4 ((struct prefix_ipv4 *)&rn->p,
+					 &best->u.gate4,
+					 best->u.ifindex, best->flags, 0);
+		  if (ret == 0)
+		    RIB_FIB_SET (best);
+		}		  
+	    }
+	}
+    }
+}
+
+void
+rib_if_down (struct interface *ifp)
+{
+  struct route_node *rn;
+  struct rib *rib;
+
+  /* Walk down all routes. */
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    {
+      for (rib = rn->info; rib; rib = rib->next)
+	{
+	  if (ifp->ifindex == rib->u.ifindex)
+	    {
+	      if (IS_RIB_FIB (rib))
+		{
+		  RIB_FIB_UNSET (rib);
+		}
+	    }
+	}
+    }
 }

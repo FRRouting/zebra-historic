@@ -1,6 +1,6 @@
 /*
  * OSPF Neighbor functions.
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  * 
@@ -34,6 +34,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_packet.h"
@@ -134,10 +135,9 @@ ospf_nbr_delete (struct ospf_neighbor *nbr)
 	  route_unlock_node (rn);
 	}
       else
-	{
-	  zlog_info ("Can't find neighbor %s in the interface %s",
-		     inet_ntoa (nbr->src), oi->ifp->name);
-	}
+	zlog_info ("Can't find neighbor %s in the interface %s",
+		   inet_ntoa (nbr->src), oi->ifp->name);
+
       route_unlock_node (rn);
     }
 
@@ -182,23 +182,11 @@ ospf_nbr_add_self (struct ospf_interface *oi)
       route_unlock_node (rn);
     }
   else
-    {
-      /*
-      nbr = ospf_nbr_new (oi);
-      */
-      rn->info = oi->nbr_self;
-    }
-
-  /*
-  nbr->status = NSM_TwoWay;
-  nbr->router_id = ospf_top->router_id;
-  nbr->address = *oi->address;
-
-  oi->nbr_self = nbr;
-  */
+    rn->info = oi->nbr_self;
 }
 
-/* Get neighbor count by status. */
+/* Get neighbor count by status.
+   Specify status = 0, get all neighbor other than myself. */
 int
 ospf_nbr_count (struct route_table *nbrs, int status)
 {
@@ -206,25 +194,20 @@ ospf_nbr_count (struct route_table *nbrs, int status)
   struct ospf_neighbor *nbr;
   int count = 0;
 
+  /* Sanity check. */
   if (nbrs == NULL)
     return 0;
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-      nbr = rn->info;
-
-      /* this is myself. */
-      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
-	continue;
-
-      if (status == 0 || nbr->status == status)
-	count++;
-    }
+    if ((nbr = rn->info) != NULL)
+      /* Ignore myself. */
+      if (!IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	if (status == 0 || nbr->status == status)
+	  count++;
 
   return count;
 }
+
 
 struct ospf_neighbor *
 ospf_nbr_lookup_by_addr (struct route_table *nbrs,
@@ -263,16 +246,12 @@ ospf_nbr_lookup_by_routerid (struct route_table *nbrs,
   struct ospf_neighbor *nbr;
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
-    {
-      if ((nbr = rn->info) == NULL)
-	continue;
-
+    if ((nbr = rn->info) != NULL)
       if (IPV4_ADDR_SAME (&nbr->router_id, id))
 	{
 	  route_unlock_node(rn);
 	  return nbr;
 	}
-    }
 
   return NULL;
 }

@@ -23,12 +23,12 @@
 #define OSPF_VERTEX_ROUTER  1
 #define OSPF_VERTEX_NETWORK 2
 
-#define OSPF_SPF_FALSE	    0
-#define OSPF_SPF_TRUE	    1
+#define OSPF_VERTEX_PROCESSED      0x01
+
 
 struct vertex
 {
-  u_char flag;
+  u_char flags;
   u_char type;
   struct in_addr id;
   struct lsa_header *lsa;

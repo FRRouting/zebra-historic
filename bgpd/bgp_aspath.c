@@ -209,8 +209,11 @@ aspath_make_str_count (struct aspath *as)
 
       space = 0;
 
-      /* Increment count. */
-      count += assegment->length;
+      /* Increment count - ignoring CONFED SETS/SEQUENCES */
+      if(assegment->type != AS_CONFED_SEQUENCE && assegment->type != AS_CONFED_SET)
+        {
+          count += assegment->length;
+        }
 
       for (i = 0; i < assegment->length; i++)
 	{
@@ -598,6 +601,37 @@ aspath_add_left (struct aspath *aspath, as_t asno)
   return aspath;
 }
 
+/* Compare leftmost AS value for MED check.  If as1's leftmost AS and
+   as2's leftmost AS is same return 1. */
+int
+aspath_cmp_left (struct aspath *aspath1, struct aspath *aspath2)
+{
+  struct assegment *seg1;
+  struct assegment *seg2;
+  as_t as1;
+  as_t as2;
+
+  seg1 = (struct assegment *) aspath1->data;
+  seg2 = (struct assegment *) aspath2->data;
+
+  /* Check as1's */
+  if (seg1 == NULL || seg1->length == 0 || seg1->type != AS_SEQUENCE)
+    return 0;
+  as1 = seg1->asval[0];
+
+  if (seg2 == NULL || seg2->length == 0 || seg2->type != AS_SEQUENCE)
+    return 0;
+  as2 = seg2->asval[0];
+
+  printf ("as1: %d\n", ntohs (as1));
+  printf ("as2: %d\n", ntohs (as2));
+
+  if (as1 == as2)
+    return 1;
+
+  return 0;
+}
+
 /* Strip the CONFED stuff from the front of an AS Path */
 struct aspath *
 aspath_strip_confed (struct aspath *aspath)
@@ -619,7 +653,15 @@ aspath_strip_confed (struct aspath *aspath)
   memcpy(aspath->data,
 	 aspath->data + bytes,
 	 aspath->length - bytes);
-  aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+  if(aspath->length - bytes == 0)
+    {
+      XFREE(MTYPE_AS_SEG, aspath->data);
+      aspath->data = NULL;
+    }
+  else
+    {
+      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+    }
   aspath->length -= bytes;
   assegment = (struct assegment *)aspath->data;
 
@@ -630,7 +672,16 @@ aspath_strip_confed (struct aspath *aspath)
       memcpy(aspath->data,
 	     aspath->data + bytes,
 	     aspath->length - bytes);
-      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+
+      if(aspath->length - bytes == 0)
+	{
+	  XFREE(MTYPE_AS_SEG, aspath->data);
+	  aspath->data = NULL;
+	}
+      else
+	{ 
+	  aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+	}
       aspath->length -= bytes;
       assegment = (struct assegment *)aspath->data;
     }
@@ -981,7 +1032,6 @@ aspath_print_all_vty (struct vty *vty)
 	}
 }
 
-#define ASPATH_TEST
 #ifdef ASPATH_TEST
 
 #include "regex-gnu.h"
@@ -992,19 +1042,16 @@ aspath_test ()
 {
   struct aspath *as1;
   struct aspath *as2;
+  int ret;
 
   /* as1 = aspath_empty (); */
-  as1 = aspath_str2aspath ("{1 3 5 3} 12");
+  as1 = aspath_str2aspath ("");
   as2 = aspath_str2aspath ("7675 1 2 3");
+
   printf("%s (%d)\n", aspath_print (as1), as1->count);
   printf("%s (%d)\n", aspath_print (as2), as2->count);
 
-  /* aspath_prepend (as1, as2); */
-  aspath_merge (as1, as2);
-  printf ("prepend result: %s (%d)\n", aspath_make_str_count (as2),
-	  as2->count);
-  printf ("length: %d\n", as2->length);
-
-  /* printf("%s\n", aspath_print (aspath_aggregate (as1, as2))); */
+  ret =  aspath_cmp_left (as1, as2);
+  printf ("result: %d\n", ret);
 }
 #endif /* ASPATH_TEST */

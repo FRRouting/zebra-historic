@@ -30,7 +30,8 @@ struct vertex                /* Transit Vertex */
 #define vtx_rtrid vtx_id[0]
 #define vtx_ifid  vtx_id[1]
   unsigned long        vtx_id[2];    /* [Router-ID][Interface-ID] */
-                                     /* Network vertex when Interface-ID 0 */
+                                     /* Network vertex when Interface-ID !0 */
+  char str[128];                     /* Identifier String */
   struct ospf6_lsa    *vtx_lsa;      /* Associated LSA */
   list                 vtx_nexthops; /* For ECMP */
   cost_t               vtx_distance; /* Distance from Root (Cost) */

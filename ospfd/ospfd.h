@@ -34,6 +34,7 @@
 
 /* VTY port number. */
 #define OSPF_VTY_PORT          2604
+#define OSPF_VTYSH_PATH        "/tmp/ospfd"
 
 /* IP TTL for OSPF protocol. */
 #define OSPF_IP_TTL             1
@@ -50,7 +51,11 @@ enum
 };
 
 /* Architectual Constants */
+#ifdef DEBUG
+#define OSPF_LS_REFRESH_TIME                   300
+#else
 #define OSPF_LS_REFRESH_TIME                  1800
+#endif
 #define OSPF_MIN_LS_INTERVAL                     5
 #define OSPF_MIN_LS_ARRIVAL                      1
 #define OSPF_LSA_MAX_AGE                      3600
@@ -89,6 +94,7 @@ enum
 #define OSPF_AREA_DEFAULT                   0
 #define OSPF_AREA_STUB                      1
 #define OSPF_AREA_NSSA                      2
+#define OSPF_AREA_TYPE_MAX		    3
 
 /* OSPF options. */
 #define OSPF_OPTION_T                    0x01  /* TOS. */
@@ -130,7 +136,6 @@ enum
 /* Timer value. */
 #define OSPF_ROUTER_ID_UPDATE_DELAY             1
 
-
 /* OSPF instance structure. */
 struct ospf
 {
@@ -151,12 +156,18 @@ struct ospf
   struct ospf_area *backbone;           /* Pointer to the Backbone. */
   struct route_table *networks;         /* OSPF config networks. */
 
-  struct ospf_lsdb *external_lsa;	/* LSDB of AS-external-LSAs. */
+  struct new_lsdb *external_lsa;	/* LSDB of AS-external-LSAs. */
+
   struct route_table *external_self;    /* Self-originated ASE-LSAs. */
   struct route_table *external_route;   /* External Route. */
   struct route_table *rtrs_external;	/* Table for Looking up AS-external-LSA
 					   related to an ASBR route. */
-  list external_lsa_queue;		/* Initial queue of ASE-LSAs. */
+
+  struct route_table *external_info[ZEBRA_ROUTE_MAX];
+  					/* External information. */
+  /*  list external_lsa_queue;		 Initial queue of ASE-LSAs. */
+  int external_origin;			/* AS-external-LSA origin flag. */
+  struct thread *t_external_origin;	/* AS-external-LSA origin thread. */
 
   struct route_table *old_table;        /* Old routing table. */
   struct route_table *new_table;        /* Current routing table. */
@@ -184,28 +195,24 @@ struct ospf
   struct thread *t_asbr_check;          /* Thread to check ASE-LSAs. */
 
   int redistribute;                     /* Number of redistributed protocols. */
+  struct thread *t_distribute_update;   /* Distirbute list update timer. */
 
   /* Distribute lists out of other route sources. */
   struct 
   {
     char *name;
     struct access_list *list;
-  } dist_lists_proto [ZEBRA_ROUTE_MAX];
+  } dlist[ZEBRA_ROUTE_MAX];
 
-#define LIST_NAME(T) ospf_top->dist_lists_proto[T].name
-#define LIST_PTR(T)  ospf_top->dist_lists_proto[T].list
-
+  /* Redistribute metric info. */
   struct 
   {
-    u_char  metric_type;                /* Ext. metric type (E1 or E2).  */
-    u_char  metric_method;              /* How ext. metric is specified. */
+    u_char type;                /* External metric type (E1 or E2).  */
+    u_char method;              /* How external metric is specified. */
+    u_int32_t value;            /* Value for static metric (24-bit). */
+  } dmetric [ZEBRA_ROUTE_MAX];
 
-#define OSPF_EXT_METRIC_AUTO    0
-#define OSPF_EXT_METRIC_STATIC  1
-
-    u_int32_t metric_value;             /* Value for static metric (24-bit). */
-  } dist_info [ZEBRA_ROUTE_MAX];
-
+  /* Refresh queue. */
   list            refresh_queue;          /* LSA Refreshment Queue. */
   struct thread * t_lsa_refresher;        /* Refreshment Queue Server. */
   int             refresh_queue_interval; /* How often the is served. */
@@ -216,7 +223,11 @@ struct ospf
 #define OSPF_REFRESH_QUEUE_RATE     70
 #define OSPF_REFRESH_PER_SLICE      5
 
+#ifdef DEBUG
+#define OSPF_LS_REFRESH_SHIFT       30
+#else
 #define OSPF_LS_REFRESH_SHIFT       (60 * 15)
+#endif
 #define OSPF_LS_REFRESH_JITTER      10
 
   list            refresh_group;        /* LSA Refresh Group. */
@@ -229,7 +240,15 @@ struct ospf
 
 };
 
+/* Distribute list. */
+#define DISTRIBUTE_NAME(T) ospf_top->dlist[T].name
+#define DISTRIBUTE_LIST(T) ospf_top->dlist[T].list
 
+/* Metric determination flag. */
+#define OSPF_EXT_METRIC_AUTO    0
+#define OSPF_EXT_METRIC_STATIC  1
+
+/* Threads. */
 #define OSPF_SCHEDULE_MAXAGE(T, F) \
       if (!(T)) \
         (T) = thread_add_timer (master, (F), 0, 2)
@@ -278,20 +297,19 @@ struct ospf_area
   {
     char *name;
     struct access_list *list;
-  } export_list;                        /* area announce list. */
+  } export;                        /* area announce list. */
 
-#define EXP_LIST_NAME(A) (A)->export_list.name
-#define EXP_LIST_PTR(A)  (A)->export_list.list
+#define EXPORT_NAME(A)  (A)->export.name
+#define EXPORT_LIST(A)  (A)->export.list
 
   struct 
   {
     char *name;
     struct access_list *list;
-  } import_list;                        /* area acceptance list. */
+  } import;                        /* area acceptance list. */
 
-#define IMP_LIST_NAME(A) (A)->import_list.name
-#define IMP_LIST_PTR(A)  (A)->import_list.list
-
+#define IMPORT_NAME(A)  (A)->import.name
+#define IMPORT_LIST(A)  (A)->import.list
 
   /* Self originated LSAs reflesh thread test. */
   struct thread *t_router_lsa_self;
@@ -331,14 +349,11 @@ struct ospf_network
 /* Macro. */
 #define OSPF_AREA_SAME(X,Y)   (memcmp ((X->area_id), (Y->area_id), IPV4_MAX_BYTELEN) == 0)
 
-#define CHECK_FLAG(V,F)\
-        (V & F)
+#define CHECK_FLAG(V,F)        ((V) & (F))
 
-#define SET_FLAG(V,F)\
-        V = V | (F)
+#define SET_FLAG(V,F)          V = V | (F)
 
-#define UNSET_FLAG(V,F)\
-        V = V & ~(F)
+#define UNSET_FLAG(V,F)        V = V & ~(F)
 
 
 #define LIST_ITERATOR(L, N) \
@@ -362,10 +377,12 @@ extern struct message ospf_ism_status_msg[];
 extern struct message ospf_nsm_status_msg[];
 extern struct message ospf_lsa_type_msg[];
 extern struct message ospf_link_state_id_type_msg[];
+extern struct message ospf_redistributed_proto[];
 extern int ospf_ism_status_msg_max;
 extern int ospf_nsm_status_msg_max;
 extern int ospf_lsa_type_msg_max;
 extern int ospf_link_state_id_type_msg_max;
+extern int ospf_redistributed_proto_max;
 
 extern char *progname;
 

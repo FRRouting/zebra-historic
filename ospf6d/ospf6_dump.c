@@ -409,12 +409,12 @@ ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *lsa_hdr)
   char advrtr[64];
 
   inet_ntop (AF_INET, &lsa_hdr->lsh_advrtr, advrtr, sizeof (advrtr));
-  zlog_info ("  %s AdvRtr:%s LS-ID:%lu Age:%hu",
+  zlog_info ("  %s AdvRtr:%s LS-ID:%lu",
              lstype_name[typeindex (lsa_hdr->lsh_type)],
-             advrtr, ntohl (lsa_hdr->lsh_id), ntohs (lsa_hdr->lsh_age));
-  zlog_info ("    SeqNum:%#x Cksum:%#hx Len:%hu",
-             ntohl (lsa_hdr->lsh_seqnum), ntohs (lsa_hdr->lsh_cksum),
-             ntohs (lsa_hdr->lsh_len));
+             advrtr, ntohl (lsa_hdr->lsh_id));
+  zlog_info ("    Age:%hu SeqNum:%#x Cksum:%#hx Len:%hu",
+             ntohs (lsa_hdr->lsh_age), ntohl (lsa_hdr->lsh_seqnum),
+             ntohs (lsa_hdr->lsh_cksum), ntohs (lsa_hdr->lsh_len));
 }
 
 void
@@ -525,6 +525,31 @@ DEFUN (no_debug_ospf6_message,
   else
     return CMD_ERR_NO_MATCH;
 
+  return CMD_SUCCESS;
+}
+
+DEFUN (debug_ospf6_spf,
+       debug_ospf6_spf_cmd,
+       "debug ospf6 spf",
+       "Debugging infomation\n"
+       OSPF6_STR
+       "OSPF6 Calculation event\n"
+       )
+{
+  ospf6_spf_dump = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_ospf6_spf,
+       no_debug_ospf6_spf_cmd,
+       "no debug ospf6 spf",
+       NO_STR
+       "Debugging infomation\n"
+       OSPF6_STR
+       "OSPF6 Calculation event\n"
+       )
+{
+  ospf6_spf_dump = 0;
   return CMD_SUCCESS;
 }
 
@@ -810,6 +835,8 @@ ospf6_config_write_debug (struct vty *vty)
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
     vty_out (vty, "debug ospf6 neighbor%s", VTY_NEWLINE);
+  if (IS_OSPF6_DUMP_SPF)
+    vty_out (vty, "debug ospf6 spf%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_INTERFACE)
     vty_out (vty, "debug ospf6 interface%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_AREA)
@@ -840,6 +867,7 @@ ospf6_debug_init ()
 
   install_element (CONFIG_NODE, &debug_ospf6_message_cmd);
   install_element (CONFIG_NODE, &debug_ospf6_neighbor_cmd);
+  install_element (CONFIG_NODE, &debug_ospf6_spf_cmd);
   install_element (CONFIG_NODE, &debug_ospf6_interface_cmd);
   install_element (CONFIG_NODE, &debug_ospf6_area_cmd);
   install_element (CONFIG_NODE, &debug_ospf6_lsa_cmd);
@@ -847,6 +875,7 @@ ospf6_debug_init ()
   install_element (CONFIG_NODE, &debug_ospf6_config_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_message_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_neighbor_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf6_spf_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_interface_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_area_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_lsa_cmd);

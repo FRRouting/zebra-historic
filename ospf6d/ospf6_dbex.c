@@ -416,7 +416,7 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
 
       /* (a) MinLSArrival check */
       gettimeofday (&now, (struct timezone *)NULL);
-      if (have && now.tv_sec - have->installed <= MIN_LS_ARRIVAL)
+      if (have && now.tv_sec - have->installed <= OSPF6_MIN_LS_ARRIVAL)
         {
           if (IS_OSPF6_DUMP_DBEX)
             zlog_info ("  Arrived less than MinLSArrival(1sec), drop");
@@ -865,24 +865,39 @@ ospf6_lsa_flood (struct ospf6_lsa *lsa)
       case SCOPE_LINKLOCAL:
         o6if = (struct ospf6_interface *) lsa->scope;
         assert (o6if);
+
+        if (IS_OSPF6_DUMP_DBEX)
+          zlog_info ("Flood %s in Interface %s", lsa->str,
+                     o6if->interface->name);
+
         ospf6_lsa_flood_interface (lsa, o6if);
         return;
 
       case SCOPE_AREA:
         area = (struct area *) lsa->scope;
         assert (area);
+
+        if (IS_OSPF6_DUMP_DBEX)
+          zlog_info ("Flood %s in Area %s", lsa->str, area->str);
+
         ospf6_lsa_flood_area (lsa, area);
         return;
 
       case SCOPE_AS:
         ospf6 = (struct ospf6 *) lsa->scope;
         assert (ospf6);
+
+        if (IS_OSPF6_DUMP_DBEX)
+          zlog_info ("Flood %s in AS", lsa->str);
+
         ospf6_lsa_flood_as (lsa, ospf6);
         return;
 
       case SCOPE_RESERVED:
       default:
-        o6log.dbex ("unsupported scope, can't flood");
+
+        if (IS_OSPF6_DUMP_DBEX)
+          zlog_info ("Can't Flood %s: Scope unknown", lsa->str);
         break;
     }
   return;

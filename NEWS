@@ -1,5 +1,89 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.86
+
+* Changes in lib
+
+** Fix bug of exec-timeout command which may cause crush.
+
+** Multiple same policy for "access-list", "ip prefix-list, "as-path
+access-list", "ip community-list" is not duplicated.
+
+** It used to be "ip prefix-list A.B.C.D/M" match routes which mask >=
+M.  Now default behavior is exact match so it only match routes which
+mask == M.
+
+* Changes in bgpd
+
+** "match ip address prefix-list" is added to route-map.
+
+** A route without local preference is evaluated as 100 local preference.
+
+** Select smaller router-id route when other values are same.
+
+** Compare MED only both routes comes from same neighboring AS.
+
+** "bgp always-compare-med" command is added.
+
+** Now MED value is passed to IBGP peer.
+
+** When neighbor's filter is configured with non-existent access-list,
+as-path access-list, ip prefix-list, route-map.  The behavior is
+changed from all permit to all deny.
+
+* Changes in ospfd
+
+** Fix bug of external route tag byte order.
+
+** OSPF Neighbor deletion bug which cause crush is fixed.
+
+** Some route calculation bug are fixed.
+
+** Add sanity check with router	routing table.
+
+** Fix bug of memory leak about linklist.
+
+** Fix bug of 1-WayReceived in NSM.
+
+** Take care of BIGENDIAN architecture.
+
+** Fix bug of NSM state flapping between ExStart and Exchange.
+
+** Fix bug of Network-LSA originated in stub network.
+
+** Fix bug of MS flag unset.
+
+** Add to schedule router_lsa origination when the interface cost
+changes.
+
+** Increment LS age by configured interface transmit_delay.
+
+** distribute-list is reimplemented.
+
+** Fix bug of refresh never occurs.
+
+** Fix bug of summary-LSAs reorigination.  Correctly copy
+OSPF_LSA_APPROVED flag to new LSA. when summary-LSA is reoriginatd.
+
+** Fix bug of re-origination when a neighbor disappears.
+
+** Fix bug of segmentation fault with DD retransmission.
+
+** Fix network-LSA re-origination problem.
+
+** Fix problem of remaining withdrawn routes on zebra.
+
+* Changes in ripd
+
+** Do not leave from multicast group when interface goes down bug is
+fixed.
+
+* Changes in zebra
+
+** Remove client structure when client dies.
+
+** Take care static route when interface goes up/down.
+
 * Changes in zebra-0.85
 
 * Changes in bgpd

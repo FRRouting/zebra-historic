@@ -179,6 +179,13 @@ zebra_client_close (struct zebra_client *client)
     thread_cancel (client->t_read);
   if (client->t_write)
     thread_cancel (client->t_write);
+
+  /* Withdraw all routes comes from this client. */
+  ;
+
+  /* Free client structure. */
+  list_delete_by_val (client_list, client);
+  XFREE (0, client);
 }
 
 #if 0
@@ -589,6 +596,25 @@ DEFUN (no_ip_forwarding,
   return CMD_SUCCESS;
 }
 
+/* This command is for debugging purpose. */
+DEFUN (show_zebra_client,
+       show_zebra_client_cmd,
+       "show zebra client",
+       SHOW_STR
+       "Zebra information"
+       "Client information")
+{
+  listnode node;
+  struct zebra_client *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    {
+      client = getdata (node);
+      vty_out (vty, "Client fd %d%s", client->fd, VTY_NEWLINE);
+    }
+  return CMD_SUCCESS;
+}
+
 /* Table configuration write function. */
 int
 config_write_table (struct vty *vty)
@@ -655,6 +681,7 @@ DEFUN (ip_route,
 	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
+
   /* Gateway. */
   ret = inet_aton (argv[1], &gate);
   if (!ret)	
@@ -678,7 +705,7 @@ DEFUN (ip_route,
   else
     ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
 
-  /* Error checking and display meesage. */
+  /* Error checking and display message. */
   if (ret)
     {
       switch (ret)
@@ -1030,6 +1057,7 @@ zebra_init ()
   install_element (CONFIG_NODE, &no_ip_route_cmd);
   install_element (CONFIG_NODE, &no_ip_route_mask_cmd);
   install_element (CONFIG_NODE, &no_ip_forwarding_cmd);
+  install_element (ENABLE_NODE, &show_zebra_client_cmd);
 
 #ifdef HAVE_LINUX_RTNETLINK_H
   install_element (VIEW_NODE, &show_table_cmd);

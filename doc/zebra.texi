@@ -836,8 +836,17 @@ Set default motd string.
 No motd banner string will be printed.
 @end deffn
 
-@deffn {Line Command} {exec-timeout @var{second}} {}
-Set time out in seconds.
+@deffn {Line Command} {exec-timeout @var{minute}} {}
+@deffnx {Line Command} {exec-timeout @var{minute} @var{second}} {}
+Set VTY connection timeout value.  When only one argument is specified
+it is used for timeout value in minutes.  Optional second argument is
+used for timeout value in seconds. Default timeout value is 10 minutes.
+When timeout value is zero, it means no timeout.
+@end deffn
+
+@deffn {Line Command} {no exec-timeout} {}
+Do not perform timeout at all.  This command is as same as
+@command{exec-timeout 0 0}.
 @end deffn
 
 @deffn {Line Command} {access-class @var{access-list}} {}
@@ -2751,10 +2760,9 @@ filtering mechanism.  Adding to @command{access-list} functionality,
 sequential number specification.  You can add or delete prefix based
 filter to arbitrary point of prefix-list using sequential number.
 
-If there is no ip prefix-list is specified, it acts as permit.  Once ip
-prefix-list is defined, then there is no match is performed, default
-deny is applied.
-
+If no ip prefix-list is specified, it acts as permit.  Once ip
+prefix-list is defined, then no match is performed, default deny is
+applied.
 
 @c @deffn {Command} {ip prefix-list @var{name} [seq @var{number}] permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
 @deffn {Command} {ip prefix-list @var{name} (permit|deny) @var{prefix} [le @var{len}] [ge @var{len}]} {}
@@ -2765,20 +2773,58 @@ You can create @command{ip prefix-list} using above commands.
 @table @asis
 
 @item @asis{seq}
-seq @var{number}
+seq @var{number} can be set either automatically or manually.  In the
+case that sequential numbers are set manually, the user may pick any
+number less than 4294967295.  In the case that sequential number are set
+automatically, the sequential number will increase by a unit of five (5)
+per list.  If a list with no specified sequential number is created
+after a list with a specified sequential number, the list will
+automatically pick the next multiple of five (5) as the list number.
+For example, if a list with number 2 already exists and a new list with
+no specified number is created, the next list will be numbered 5.  If
+lists 2 and 7 already exist and a new list with no specified number is
+created, the new list will be numbered 10.
 
 @item @asis{le}
-@command{le} command specify prefix length.  If given prefix length is
-lesser then or equal to le prefix length.
+@command{le} command specify prefix length.  If the given prefix length
+is lesser than or equal to le prefix length.  Prefix Lists can be
+applied on the basis of prefix length.  The le command specifies prefix
+length.  The prefix list will be applied if the prefix length is lesser
+than or equal to the le prefix length.
 
 @item @asis{ge}
-@command{ge} command specify prefix length.  If given prefix length is
-lesser then or equal to le prefix length.
+@command{ge} command specify prefix length.  If the given prefix length
+is lesser than or equal to ge prefix length.  The ge command specifies
+prefix length.  The prefix list will be applied if the prefix length is
+greater than or equal to the ge prefix length.
 
 @end table
 
-
 @end deffn
+
+Lesser than or equal to prefix numbers and greater than or equal to
+prefix numbers can be used together.  The order of the le and ge
+commands does not matter.
+
+If a prefix list with a different sequential number but with the exact
+same rules as a previous list is created, an error will result.
+However, in the case that the sequential number and the rules are
+exactly similar, no error will result.
+
+If a list with the same sequential number as a previous list is created,
+the new list will overwrite the old list.
+
+Matching of IP Prefix is performed from the smaller sequential number to the
+larger.  The matching will stop once any rule has been applied.
+
+In the case of no le or ge command, 
+
+Version 0.85: the matching rule will apply to all prefix lengths that
+matched the prefix list.
+
+Version 0.86 or later: In the case of no le or ge command, the prefix
+length must match exactly the length specified in the prefix list.
+
 
 @deffn {Command} {no ip prefix-list @var{name}} {}
 @end deffn
@@ -2795,9 +2841,13 @@ lesser then or equal to le prefix length.
 @subsubsection ip prefix-list description
 
 @deffn {Command} {ip prefix-list @var{name} description @var{desc}} {}
+Descriptions may be added to prefix lists.  This command adds a
+description to the prefix list.
 @end deffn
 
 @deffn {Command} {no ip prefix-list @var{name} description [@var{desc}]} {}
+Deletes the description from a prefix list.  It is possible to use the
+command without the full description.
 @end deffn
 
 @node  ip prefix-list sequential number control, Showing ip prefix-list, ip prefix-list description, IP Prefix List
@@ -2805,9 +2855,13 @@ lesser then or equal to le prefix length.
 @subsubsection ip prefix-list sequential number control
 
 @deffn {Command} {ip prefix-list sequence-number} {}
+With this command, the IP prefix list sequential number is displayed.
+This is the default behavior.
 @end deffn
 
 @deffn {Command} {no ip prefix-list sequence-number} {}
+With this command, the IP prefix list sequential number is not
+displayed.
 @end deffn
 
 @node  Showing ip prefix-list, Clear counter of ip prefix-list, ip prefix-list sequential number control, IP Prefix List
@@ -2815,15 +2869,28 @@ lesser then or equal to le prefix length.
 @subsubsection Showing ip prefix-list
 
 @deffn {Command} {show ip prefix-list} {}
+Display all IP prefix lists.
 @end deffn
+
 @deffn {Command} {show ip prefix-list @var{name}} {}
+Show IP prefix list can be used with a prefix list name.
 @end deffn
+
 @deffn {Command} {show ip prefix-list @var{name} seq @var{num}} {}
+Show IP prefix list can be used with a prefix list name and sequential
+number.
 @end deffn
+
 @deffn {Command} {show ip prefix-list @var{name} @var{a.b.c.d/m}} {}
+If the command longer is used, all prefix lists with prefix lengths equal to
+or longer than the specified length will be displayed.
+If the command first match is used, the first prefix length match will be
+displayed.
 @end deffn
+
 @deffn {Command} {show ip prefix-list @var{name} @var{a.b.c.d/m} longer} {}
 @end deffn
+
 @deffn {Command} {show ip prefix-list @var{name} @var{a.b.c.d/m} first-match} {}
 @end deffn
 
@@ -2842,9 +2909,13 @@ lesser then or equal to le prefix length.
 @subsubsection Clear counter of ip prefix-list
 
 @deffn {Command} {clear ip prefix-list} {}
+Clears the counters of all IP prefix lists.  Clear IP Prefix List can be
+used with a specified name and prefix.
 @end deffn
+
 @deffn {Command} {clear ip prefix-list @var{name}} {}
 @end deffn
+
 @deffn {Command} {clear ip prefix-list @var{name} @var{a.b.c.d/m}} {}
 @end deffn
 

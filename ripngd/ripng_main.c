@@ -220,7 +220,7 @@ main (int argc, char **argv)
     daemon (0, 0);
 
   /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : RIPNG_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : RIPNG_VTY_PORT, RIPNG_VTYSH_PATH);
 
   /* Process id file create. */
   pid_output (PATH_RIPNGD_PID);

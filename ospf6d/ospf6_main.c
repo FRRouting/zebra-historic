@@ -28,6 +28,7 @@
 #include "vty.h"
 #include "memory.h"
 
+#include "ospf6d.h"
 #include "ospf6_network.h"
 
 void ospf6_init ();
@@ -234,6 +235,7 @@ main (int argc, char **argv)
   ospf6_init ();
   memory_init ();
   sort_node ();
+
   nexthop_init ();
 
   /* parse config file */
@@ -244,7 +246,7 @@ main (int argc, char **argv)
   thread_add_read (master, ospf6_receive_new, NULL, ospf6_sock);
 
   /* Make ospf vty socket. */
-  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, OSPF6_VTYSH_PATH);
 
   /* Print start message */
   zlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);

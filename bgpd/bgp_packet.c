@@ -467,6 +467,9 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
   return;
 #endif /* DISABLE_BGP_ANNOUNCE */
 
+  total_attr_len = 0;
+  pos = 0;
+
   zlog (peer->log, LOG_INFO, "%s [Withdraw:SEND] %s/%d",
 	peer->host, inet_ntop(p->family, &(p->u.prefix), buf, BUFSIZ),
 	p->prefixlen);

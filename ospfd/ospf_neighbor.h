@@ -1,6 +1,6 @@
 /*
  * OSPF Neighbor functions.
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  * 
@@ -22,17 +22,6 @@
 
 #ifndef _ZEBRA_OSPF_NEIGHBOR_H
 #define _ZEBRA_OSPF_NEIGHBOR_H
-
-/* For new ls_request. */
-struct new_lsdb
-{
-  struct
-  {
-    unsigned long count;
-    struct route_table *db;
-  } type[OSPF_MAX_LSA];
-  unsigned long total;
-};
 
 /* Neighbor Data Structure */
 struct ospf_neighbor

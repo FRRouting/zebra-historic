@@ -34,6 +34,7 @@
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_network.h"
@@ -41,7 +42,6 @@
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_abr.h"
-#include "ospfd/ospf_lsdb.h"
 
 extern unsigned long ospf_debug_ism;
 
@@ -249,8 +249,8 @@ ospf_dr_election (struct ospf_interface *oi)
   new_status = ospf_ism_status (oi);
 #define DEBUG
 #ifdef DEBUG
-  zlog (NULL, LOG_INFO, "Elect BDR = %s", inet_ntoa (BDR (oi)));
-  zlog (NULL, LOG_INFO, "Elect DR  = %s", inet_ntoa (DR (oi)));
+  zlog_info ("Elect BDR = %s", inet_ntoa (BDR (oi)));
+  zlog_info ("Elect DR  = %s", inet_ntoa (DR (oi)));
 #endif /* DEBUG */
 
   if (IPV4_ADDR_SAME (&DR (oi), &BDR (oi)))
@@ -263,8 +263,8 @@ ospf_dr_election (struct ospf_interface *oi)
       new_status = ospf_ism_status (oi);
 
 #ifdef DEBUG
-      zlog (NULL, LOG_INFO, "Elect BDR = %s", inet_ntoa (BDR (oi)));
-      zlog (NULL, LOG_INFO, "Elect DR  = %s", inet_ntoa (DR (oi)));
+      zlog_info ("Elect BDR = %s", inet_ntoa (BDR (oi)));
+      zlog_info ("Elect DR  = %s", inet_ntoa (DR (oi)));
 #endif /* DEBUG */
     }
 
@@ -296,7 +296,7 @@ ospf_hello_timer (struct thread *thread)
   oi->t_hello = NULL;
 
   if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
-    zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Hello timer expire)",
+    zlog (NULL, LOG_DEBUG, "ISM[%s]: Timer (Hello timer expire)",
 	  oi->ifp->name);
 
   /* Sending hello packet. */
@@ -317,7 +317,7 @@ ospf_wait_timer (struct thread *thread)
   oi->t_wait = NULL;
 
   if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
-    zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Wait timer expire)",
+    zlog (NULL, LOG_DEBUG, "ISM[%s]: Timer (Wait timer expire)",
 	  oi->ifp->name);
 
   OSPF_ISM_EVENT_SCHEDULE (oi, ISM_WaitTimer);
@@ -499,7 +499,7 @@ int
 ism_ignore (struct ospf_interface *oi)
 {
   if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
-    zlog (NULL, LOG_INFO, "ISM [%s]: ism_ignore called", oi->ifp->name);
+    zlog (NULL, LOG_INFO, "ISM[%s]: ism_ignore called", oi->ifp->name);
 
   return 0;
 }
@@ -620,7 +620,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (ism, ISM_STATUS))
-    zlog (NULL, LOG_INFO, "ISM Status change [%s] %s -> %s", oi->ifp->name,
+    zlog (NULL, LOG_INFO, "ISM[%s]: Status change %s -> %s", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  LOOKUP (ospf_ism_status_msg, status));
 

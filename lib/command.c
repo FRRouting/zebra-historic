@@ -435,6 +435,12 @@ config_write_host (struct vty *vty)
   if (host.log_syslog)
     vty_out (vty, "log syslog%s", VTY_NEWLINE);
 
+  if (zlog_default->maskpri != LOG_DEBUG)
+    vty_out (vty, "log trap %s%s", zlog_priority[zlog_default->maskpri], VTY_NEWLINE);
+
+  if (zlog_default->record_priority == 1)
+    vty_out (vty, "log record-priority%s", VTY_NEWLINE);
+
   if (host.advanced)
     vty_out (vty, "service advanced-vty%s", VTY_NEWLINE);
 
@@ -2015,7 +2021,7 @@ DEFUN (show_version,
   vty_out (vty, "Zebra %s (%s).%s", ZEBRA_VERSION,
 	   host_name,
 	   VTY_NEWLINE);
-  vty_out (vty, "Copyright 1996-1999, Kunihiro Ishiguro.%s", VTY_NEWLINE);
+  vty_out (vty, "Copyright 1996-2000, Kunihiro Ishiguro.%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -2525,6 +2531,59 @@ DEFUN (no_config_log_syslog,
   return CMD_SUCCESS;
 }
 
+DEFUN (config_log_trap,
+       config_log_trap_cmd,
+       "log trap (emergencies|alerts|critical|errors|warnings|notifications|informational|debugging)",
+       "Logging control\n"
+       "Limit logging to specifed level\n")
+{
+  int new_level ;
+  
+  for ( new_level = 0 ; zlog_priority [new_level] != NULL ; new_level ++ )
+    {
+    if ( strcmp ( argv[0], zlog_priority [new_level] ) == 0 )
+      /* found new logging level */
+      {
+      zlog_default->maskpri = new_level;
+      return CMD_SUCCESS;
+      }
+    }
+  return CMD_ERR_NO_MATCH;
+}
+
+DEFUN (no_config_log_trap,
+       no_config_log_trap_cmd,
+       "no log trap",
+       NO_STR
+       "Logging control\n"
+       "Permit all logging information\n")
+{
+  zlog_default->maskpri = LOG_DEBUG;
+  return CMD_SUCCESS;
+}
+
+DEFUN (config_log_record_priority,
+       config_log_record_priority_cmd,
+       "log record-priority",
+       "Logging control\n"
+       "Log the priority of the message within the message\n")
+{
+  zlog_default->record_priority = 1 ;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_config_log_record_priority,
+       no_config_log_record_priority_cmd,
+       "no log record-priority",
+       NO_STR
+       "Logging control\n"
+       "Do not log the priority of the message within the message\n")
+{
+  zlog_default->record_priority = 0 ;
+  return CMD_SUCCESS;
+}
+
+
 DEFUN (banner_motd_default,
        banner_motd_default_cmd,
        "banner motd default",
@@ -2622,6 +2681,12 @@ cmd_init ()
   install_element (CONFIG_NODE, &no_config_log_file_cmd);
   install_element (CONFIG_NODE, &config_log_syslog_cmd);
   install_element (CONFIG_NODE, &no_config_log_syslog_cmd);
+
+  install_element (CONFIG_NODE, &config_log_trap_cmd);
+  install_element (CONFIG_NODE, &no_config_log_trap_cmd);
+  install_element (CONFIG_NODE, &config_log_record_priority_cmd);
+  install_element (CONFIG_NODE, &no_config_log_record_priority_cmd);
+
   install_element (CONFIG_NODE, &service_password_encrypt_cmd);
   install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
   install_element (CONFIG_NODE, &banner_motd_default_cmd);

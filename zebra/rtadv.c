@@ -32,6 +32,7 @@
 
 #include "zebra/interface.h"
 #include "zebra/rtadv.h"
+#include "zebra/debug.h"
 
 #if defined (HAVE_IPV6) && defined (RTADV)
 
@@ -152,7 +153,8 @@ rtadv_send_packet (int sock, struct interface *ifp)
   listnode node;
 
   /* Logging of packet. */
-  zlog_info ("Router advertisement send to %s", ifp->name);
+  if (IS_ZEBRA_DEBUG_PACKET)
+    zlog_info ("Router advertisement send to %s", ifp->name);
 
   /* Fill in sockaddr_in6. */
   memset (&addr, 0, sizeof (struct sockaddr_in6));

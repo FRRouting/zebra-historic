@@ -280,7 +280,7 @@ main (int argc, char **argv)
   pid = getpid ();
 
   /* Make vty server socket. */
-  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT, ZEBRA_VTYSH_PATH);
 
   while (thread_fetch (master, &thread))
     thread_call (&thread);

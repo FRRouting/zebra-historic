@@ -252,16 +252,7 @@ ospf6_remove_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
   list_delete_by_val (lsa->retrans_nbr, nbr);
   ospf6_lsa_unlock (lsa);
 
-#if 0
-  /* if nbr's associated area has no neighbor in Exchange or Loading,
-     delete MaxAge LSAs. */
-  if (!count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_interface->area) &&
-      !count_nbr_in_state (NBS_LOADING, nbr->ospf6_interface->area) &&
-      ospf6_age_current (lsa) == MAXAGE)
-    ospf6_lsa_maxage_remove (lsa);
-#else
   ospf6_lsdb_check_maxage_lsa (ospf6);
-#endif
 }
 
 /* remove all lsa from retrans list of neighbor */

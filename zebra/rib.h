@@ -46,7 +46,6 @@ struct rib
   u_char flags;			/*  */
   unsigned int status;		/* Have this route goes to fib. */
   int distance;			/* Distance of this route. */
-  /* unsigned int ifindex;			 Interface index. */
   int table;			/* Which routing table */
   struct
   {
@@ -55,7 +54,6 @@ struct rib
     struct in6_addr gate6;
 #endif
     unsigned int ifindex;
-    /* char *ifname; */
   } u;
   struct
   {
@@ -64,7 +62,6 @@ struct rib
     struct in6_addr gate6;
 #endif
     unsigned int ifindex;
-    /* char *ifname; */
   } i;
 
   struct rib *next;
@@ -99,5 +96,8 @@ int
 rib_delete_ipv6 (int type, int flags, struct prefix_ipv6 *p,
 		 struct in6_addr *gate, unsigned int ifindex, int table);
 #endif /* HAVE_IPV6 */
+
+void rib_if_up (struct interface *);
+void rib_if_down (struct interface *);
 
 #endif /*_ZEBRA_RIB_H */

@@ -86,8 +86,8 @@ struct ospf_header
     struct
     {
       u_int16_t zero;                   /* Should be 0. */
-      u_int8_t key_id;                  /* Key ID. */
-      u_int8_t auth_data_len;           /* Auth Data Length. */
+      u_char key_id;                    /* Key ID. */
+      u_char auth_data_len;             /* Auth Data Length. */
       u_int32_t crypt_seqnum;           /* Cryptographic Sequence Number. */
     } crypt;
   } u;

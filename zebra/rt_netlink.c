@@ -777,13 +777,23 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	    {
 	      ifp->flags = ifi->ifi_flags & 0x0000fffff;
 	      if (! if_is_up (ifp))
-		if_down (ifp);
+		{
+		  if_down (ifp);
+#ifdef DEBUG
+		  printf ("Interface status changed to down message\n");
+#endif /* DEBUG */
+		}
 	    }
 	  else
 	    {
 	      ifp->flags = ifi->ifi_flags & 0x0000fffff;
 	      if (if_is_up (ifp))
-		if_up (ifp);
+		{
+		  if_up (ifp);
+#ifdef DEBUG
+		  printf ("Interface status changed to up message\n");
+#endif /* DEBUG */
+		}
 	    }
 	}
     }
@@ -913,7 +923,6 @@ netlink_route_read ()
 
   return 0;
 }
-
 
 /* Utility function  comes from iproute2. 
    Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru> */

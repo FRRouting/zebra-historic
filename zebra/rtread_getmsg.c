@@ -23,8 +23,10 @@
 #include <zebra.h>
 
 #include "prefix.h"
-#include "rib.h"
 #include "log.h"
+#include "if.h"
+
+#include "zebra/rib.h"
 
 #include <sys/stream.h>
 #include <sys/tihdr.h>

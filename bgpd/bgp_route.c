@@ -20,8 +20,6 @@
  * 02111-1307, USA.  
  */
 
-static const char rcsid[] = "$Id$";
-
 #include <zebra.h>
 
 #include "prefix.h"
@@ -60,21 +58,29 @@ void bgp_aggregate_increment (struct bgp *, struct prefix *, struct bgp_info *,
 void bgp_aggregate_decrement (struct bgp *, struct prefix *, struct bgp_info *,
 			      afi_t, safi_t);
 
-#define DISTRIBUTE_IN_V4(F)    ((F)->dlist[BGP_FILTER_IN].v4)
-#define DISTRIBUTE_OUT_V4(F)   ((F)->dlist[BGP_FILTER_OUT].v4)
-#define DISTRIBUTE_IN_V6(F)    ((F)->dlist[BGP_FILTER_IN].v6)
-#define DISTRIBUTE_OUT_V6(F)   ((F)->dlist[BGP_FILTER_OUT].v6)
+#define DISTRIBUTE_IN_NAME(F)   ((F)->dlist[BGP_FILTER_IN].name)
+#define DISTRIBUTE_IN_V4(F)     ((F)->dlist[BGP_FILTER_IN].v4)
+#define DISTRIBUTE_IN_V6(F)     ((F)->dlist[BGP_FILTER_IN].v6)
+#define DISTRIBUTE_OUT_NAME(F)  ((F)->dlist[BGP_FILTER_OUT].name)
+#define DISTRIBUTE_OUT_V4(F)    ((F)->dlist[BGP_FILTER_OUT].v4)
+#define DISTRIBUTE_OUT_V6(F)    ((F)->dlist[BGP_FILTER_OUT].v6)
 
-#define PREFIX_LIST_IN_V4(F)   ((F)->plist[BGP_FILTER_IN].v4)
-#define PREFIX_LIST_OUT_V4(F)  ((F)->plist[BGP_FILTER_OUT].v4)
-#define PREFIX_LIST_IN_V6(F)   ((F)->plist[BGP_FILTER_IN].v6)
-#define PREFIX_LIST_OUT_V6(F)  ((F)->plist[BGP_FILTER_OUT].v6)
+#define PREFIX_LIST_IN_NAME(F)  ((F)->plist[BGP_FILTER_IN].name)
+#define PREFIX_LIST_IN_V4(F)    ((F)->plist[BGP_FILTER_IN].v4)
+#define PREFIX_LIST_IN_V6(F)    ((F)->plist[BGP_FILTER_IN].v6)
+#define PREFIX_LIST_OUT_NAME(F) ((F)->plist[BGP_FILTER_OUT].name)
+#define PREFIX_LIST_OUT_V4(F)   ((F)->plist[BGP_FILTER_OUT].v4)
+#define PREFIX_LIST_OUT_V6(F)   ((F)->plist[BGP_FILTER_OUT].v6)
 
-#define FILTER_LIST_IN(F)      ((F)->aslist[BGP_FILTER_IN].aslist)
-#define FILTER_LIST_OUT(F)     ((F)->aslist[BGP_FILTER_OUT].aslist)
+#define FILTER_LIST_IN_NAME(F)  ((F)->aslist[BGP_FILTER_IN].name)
+#define FILTER_LIST_IN(F)       ((F)->aslist[BGP_FILTER_IN].aslist)
+#define FILTER_LIST_OUT_NAME(F) ((F)->aslist[BGP_FILTER_OUT].name)
+#define FILTER_LIST_OUT(F)      ((F)->aslist[BGP_FILTER_OUT].aslist)
 
-#define ROUTE_MAP_IN(F)        ((F)->map[BGP_FILTER_IN].map)
-#define ROUTE_MAP_OUT(F)       ((F)->map[BGP_FILTER_OUT].map)
+#define ROUTE_MAP_IN_NAME(F)    ((F)->map[BGP_FILTER_IN].name)
+#define ROUTE_MAP_IN(F)         ((F)->map[BGP_FILTER_IN].map)
+#define ROUTE_MAP_OUT_NAME(F)   ((F)->map[BGP_FILTER_OUT].name)
+#define ROUTE_MAP_OUT(F)        ((F)->map[BGP_FILTER_OUT].map)
 
 /* Static annoucement peer. */
 struct peer *peer_self;
@@ -128,10 +134,24 @@ bgp_info_delete (struct bgp_info **rp, struct bgp_info *ri)
     *rp = ri->next;
 }
 
+u_int32_t
+bgp_med_value (struct attr *attr)
+{
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
+    return attr->med;
+  else
+    return 0;
+}
+
 /* Compare two bgp route entity.  br is preferable then return 1. */
 int
-bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
+bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist)
 {
+  u_int32_t new_pref;
+  u_int32_t exist_pref;
+  u_int32_t new_med;
+  u_int32_t exist_med;
+
   if (new == NULL)
     return 0;
   if (exist == NULL)
@@ -164,14 +184,20 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
     return 0;
 
   /* Local preference check. */
-  if ((new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF)) &&
-      (exist->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF)))
-  {
-      if (new->attr->local_pref > exist->attr->local_pref)
-	return 1;
-      if (new->attr->local_pref < exist->attr->local_pref)
-	return 0;
-    }
+  if (new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
+    new_pref = new->attr->local_pref;
+  else
+    new_pref = DEFAULT_LOCAL_PREF;
+
+  if (exist->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
+    exist_pref = exist->attr->local_pref;
+  else
+    exist_pref = DEFAULT_LOCAL_PREF;
+    
+  if (new_pref > exist_pref)
+    return 1;
+  if (new_pref < exist_pref)
+    return 0;
 
   /* AS path length check. */
   if (new->attr->aspath->count < exist->attr->aspath->count)
@@ -185,14 +211,16 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (new->attr->origin > exist->attr->origin)
     return 0;
 
-  /* MED check. */
-  if (new->peer->as == exist->peer->as
-      && (new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC)) 
-      && (exist->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC)))
+  /* Compare MED. */
+  if (CHECK_FLAG (bgp->config, BGP_CONFIG_ALWAYS_COMPARE_MED)
+      || aspath_cmp_left (new->attr->aspath, exist->attr->aspath))
     {
-      if (new->attr->med < exist->attr->med)
+      new_med = bgp_med_value (new->attr);
+      exist_med = bgp_med_value (exist->attr);
+
+      if (new_med < exist_med)
 	return 1;
-      if (new->attr->med > exist->attr->med)
+      if (new_med > exist_med)
 	return 0;
     }
 
@@ -205,9 +233,9 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
     return 0;
 
   /* Rourter-ID comparision. */
-  if (htonl (new->peer->remote_id.s_addr) > htonl (exist->peer->remote_id.s_addr))
+  if (ntohl (new->peer->remote_id.s_addr) < ntohl (exist->peer->remote_id.s_addr))
     return 1;
-  if (htonl (new->peer->remote_id.s_addr) < htonl (exist->peer->remote_id.s_addr))
+  if (ntohl (new->peer->remote_id.s_addr) > ntohl (exist->peer->remote_id.s_addr))
     return 0;
 
   return 1;
@@ -222,30 +250,32 @@ bgp_input_filter (struct peer_conf *conf, struct prefix *p, struct attr *attr)
 
   if (p->family == AF_INET)
     {
-      if (DISTRIBUTE_IN_V4 (filter))
+      if (DISTRIBUTE_IN_NAME (filter))
 	if (access_list_apply (DISTRIBUTE_IN_V4 (filter), p) == FILTER_DENY)
 	  return FILTER_DENY;
 
-      if (PREFIX_LIST_IN_V4 (filter))
+      if (PREFIX_LIST_IN_NAME (filter))
 	if (prefix_list_apply (PREFIX_LIST_IN_V4 (filter), p) == PREFIX_DENY)
 	  return FILTER_DENY;
     }
 #ifdef HAVE_IPV6
   else if (p->family == AF_INET6)
     {
-      if (DISTRIBUTE_IN_V6 (filter))
+      if (DISTRIBUTE_IN_NAME (filter))
 	if (access_list_apply (DISTRIBUTE_IN_V6 (filter), p) == FILTER_DENY)
 	  return FILTER_DENY;
 
-      if (PREFIX_LIST_IN_V6 (filter))
+      if (PREFIX_LIST_IN_NAME (filter))
 	if (prefix_list_apply (PREFIX_LIST_IN_V6 (filter), p) == PREFIX_DENY)
 	  return FILTER_DENY;
     }
 #endif /* HAVE_IPV6 */
   
-  if (FILTER_LIST_IN (filter))
-    if (as_list_apply (FILTER_LIST_IN (filter), attr->aspath) == AS_FILTER_DENY)
-      return FILTER_DENY;
+  if (FILTER_LIST_IN_NAME (filter))
+    {
+      if (as_list_apply (FILTER_LIST_IN (filter), attr->aspath) == AS_FILTER_DENY)
+	return FILTER_DENY;
+    }
 
   return FILTER_PERMIT;
 }
@@ -259,28 +289,28 @@ bgp_output_filter (struct peer_conf *conf, struct prefix *p, struct attr *attr)
 
   if (p->family == AF_INET)
     {
-      if (DISTRIBUTE_OUT_V4 (filter))
+      if (DISTRIBUTE_OUT_NAME (filter))
 	if (access_list_apply (DISTRIBUTE_OUT_V4 (filter), p) == FILTER_DENY)
 	  return FILTER_DENY;
 
-      if (PREFIX_LIST_OUT_V4 (filter))
+      if (PREFIX_LIST_OUT_NAME (filter))
 	if (prefix_list_apply (PREFIX_LIST_OUT_V4 (filter), p) == PREFIX_DENY)
 	  return FILTER_DENY;
     }
 #ifdef HAVE_IPV6
   else if (p->family == AF_INET6)
     {
-      if (DISTRIBUTE_OUT_V6 (filter))
+      if (DISTRIBUTE_OUT_NAME (filter))
 	if (access_list_apply (DISTRIBUTE_OUT_V6 (filter), p) == FILTER_DENY)
 	  return FILTER_DENY;
 
-      if (PREFIX_LIST_OUT_V6 (filter))
+      if (PREFIX_LIST_OUT_NAME (filter))
 	if (prefix_list_apply (PREFIX_LIST_OUT_V6 (filter), p) == PREFIX_DENY)
 	  return FILTER_DENY;
     }
 #endif /* HAVE_IPV6 */  
 
-  if (FILTER_LIST_OUT (filter))
+  if (FILTER_LIST_OUT_NAME (filter))
     if (as_list_apply (FILTER_LIST_OUT (filter), attr->aspath) == AS_FILTER_DENY)
       return FILTER_DENY;
 
@@ -390,7 +420,7 @@ bgp_input_modifier (struct peer *peer, struct peer_conf *conf,
     attr->weight = peer->weight;
 
   /* Route map apply. */
-  if (ROUTE_MAP_IN (filter))
+  if (ROUTE_MAP_IN_NAME (filter))
     {
       /* Duplicate current value to new strucutre for modification. */
       new = *attr;
@@ -688,7 +718,7 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
 #endif /* HAVE_IPV6 */
 
   /* Route map apply. */
-  if (ROUTE_MAP_OUT (filter))
+  if (ROUTE_MAP_OUT_NAME (filter))
     {
       info.peer = peer;
       info.attr = attr;
@@ -783,7 +813,7 @@ bgp_process (struct bgp *bgp, struct route_node *rn, afi_t afi, safi_t safi,
       if (ri->suppress)
 	continue;
 
-      if (bgp_info_cmp (ri, new_select))
+      if (bgp_info_cmp (bgp, ri, new_select))
 	new_select = ri;
     }
 
@@ -2207,7 +2237,7 @@ route_vty_out_route (struct prefix *p, struct vty *vty)
   len = vty_out (vty, "%s/%d", 
 		 inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		 p->prefixlen);
-  len = 20 - len;
+  len = 19 - len;
   if (len < 0)
     len = 0;
   vty_out (vty, "%*s", len, " ");
@@ -2272,16 +2302,16 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 #endif /* HAVE_IPV6 */
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
-	vty_out (vty, "%10lu", attr->med);
+	vty_out (vty, "%7lu", attr->med);
       else
-	vty_out (vty, "          ");
+	vty_out (vty, "       ");
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
-	vty_out (vty, "%10lu", attr->local_pref);
+	vty_out (vty, "%7lu", attr->local_pref);
       else
-	vty_out (vty, "          ");
+	vty_out (vty, "       ");
 
-      vty_out (vty, "%10lu ",attr->weight);
+      vty_out (vty, "%7u ",attr->weight);
     
     /* Print aspath */
     if (attr->aspath)
@@ -2332,16 +2362,16 @@ route_vty_out_tmp (struct vty *vty, struct prefix *p, struct attr *attr)
 #endif /* HAVE_IPV6 */
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
-	vty_out (vty, "%10lu", attr->med);
+	vty_out (vty, "%7lu", attr->med);
       else
-	vty_out (vty, "          ");
+	vty_out (vty, "       ");
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
-	vty_out (vty, "%10lu", attr->local_pref);
+	vty_out (vty, "%7lu", attr->local_pref);
       else
-	vty_out (vty, "          ");
+	vty_out (vty, "       ");
 
-      vty_out (vty, "%10lu ",attr->weight);
+      vty_out (vty, "%7lu ",attr->weight);
     
     /* Print aspath */
     if (attr->aspath)
@@ -2662,9 +2692,10 @@ bgp_show (struct vty *vty, char *view_name, char *prefix_str,
   struct route_node *rn;
   struct bgp_info *ri;
   struct prefix match;
-  char v4_header[] = "   Network             Next Hop            Metric    LocPrf    Weight Path%s";
+  char v4_header[] = "   Network            Next Hop         Metric LocPrf Weight Path%s";
   char v6_header[] = "   Network                                LocPrf Weight Path%s";
   int first = 1;
+  int header = 1;
   int count;
   int limit;
 
@@ -2703,13 +2734,14 @@ bgp_show (struct vty *vty, char *view_name, char *prefix_str,
       for (rn = route_top (table); rn; rn = route_next (rn)) 
 	for (ri = rn->info; ri; ri = ri->next)
 	  {
-	    if (! write)
+	    if (header)
 	      {
 		if (afi == AFI_IP)
 		  vty_out (vty, v4_header, VTY_NEWLINE);
 		else if (afi == AFI_IP6)
 		  vty_out (vty, v6_header, VTY_NEWLINE);
 		count++;
+		header = 0;
 	      }
 
 	    if (afi == AFI_IP)

@@ -29,7 +29,7 @@ list nexthoplist = NULL;
 struct sockaddr_in6 allspfrouters6;
 struct sockaddr_in6 alldrouters6;
 char *recent_reason; /* set by ospf6_lsa_check_recent () */
-char rcsid[] = "$Id: ospf6d.c,v 1.80 2000/03/06 04:43:06 yasu Exp $";
+char rcsid[] = "$Id: ospf6d.c,v 1.82 2000/03/28 02:49:46 yasu Exp $";
 
 
 /* vty commands */
@@ -730,99 +730,6 @@ DEFUN (router_id,
   return CMD_SUCCESS;
 }
 
-DEFUN (ospf6_redistribute_static,
-       ospf6_redistribute_static_cmd,
-       "redistribute static",
-       "Redistribute\n"
-       "Static route\n")
-{
-  ospf6->redist_static = 1;
-  ospf6_zebra_redistribute (ZEBRA_ROUTE_STATIC);
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ospf6_redistribute_static,
-       no_ospf6_redistribute_static_cmd,
-       "no redistribute static",
-       NO_STR
-       "Redistribute\n"
-       "Static route\n")
-{
-  ospf6->redist_static = 0;
-  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_STATIC);
-  return CMD_SUCCESS;
-}
-
-DEFUN (ospf6_redistribute_connected,
-       ospf6_redistribute_connected_cmd,
-       "redistribute connected",
-       "Redistribute\n"
-       "Connected route\n")
-{
-  ospf6->redist_connected = 1;
-  ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ospf6_redistribute_connected,
-       no_ospf6_redistribute_connected_cmd,
-       "no redistribute connected",
-       NO_STR
-       "Redistribute\n"
-       "Connected route\n")
-{
-  ospf6->redist_connected = 0;
-  /* ospf6_route_external_withdraw (ZEBRA_ROUTE_CONNECT); */
-  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_CONNECT);
-  return CMD_SUCCESS;
-}
-
-DEFUN (ospf6_redistribute_ripng,
-       ospf6_redistribute_ripng_cmd,
-       "redistribute ripng",
-       "Redistribute\n"
-       "RIPng route\n")
-{
-  ospf6->redist_ripng = 1;
-  ospf6_zebra_redistribute (ZEBRA_ROUTE_RIPNG);
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ospf6_redistribute_ripng,
-       no_ospf6_redistribute_ripng_cmd,
-       "no redistribute ripng",
-       NO_STR
-       "Redistribute\n"
-       "RIPng route\n")
-{
-  ospf6->redist_ripng = 0;
-  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_RIPNG);
-  return CMD_SUCCESS;
-}
-
-DEFUN (ospf6_redistribute_bgp,
-       ospf6_redistribute_bgp_cmd,
-       "redistribute bgp",
-       "Redistribute\n"
-       "RIPng route\n")
-{
-  ospf6->redist_bgp = 1;
-  ospf6_zebra_redistribute (ZEBRA_ROUTE_BGP);
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ospf6_redistribute_bgp,
-       no_ospf6_redistribute_bgp_cmd,
-       "no redistribute bgp",
-       NO_STR
-       "Redistribute\n"
-       "RIPng route\n")
-{
-  ospf6->redist_bgp = 0;
-  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_BGP);
-  return CMD_SUCCESS;
-}
-
 DEFUN (interface_area,
        interface_area_cmd,
        "interface IFNAME area AREA_ID",
@@ -880,13 +787,7 @@ ospf6_config_write (struct vty *vty)
                  inet4str(ospf6->router_id),
                  VTY_NEWLINE);
 
-  /* redistribution */
-  if (!ospf6->redist_connected)
-    vty_out (vty, " no redistribute connected%s", VTY_NEWLINE);
-  if (ospf6->redist_static)
-    vty_out (vty, " redistribute static%s", VTY_NEWLINE);
-  if (ospf6->redist_ripng)
-    vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
+  ospf6_redistribute_config_write (vty);
 
   for (j = listhead (ospf6->area_list); j; nextnode (j))
     {
@@ -975,14 +876,6 @@ ospf6_init ()
   install_element (CONFIG_NODE, &interface_cmd);
 
   install_default (OSPF6_NODE);
-  install_element (OSPF6_NODE, &ospf6_redistribute_static_cmd);
-  install_element (OSPF6_NODE, &no_ospf6_redistribute_static_cmd);
-  install_element (OSPF6_NODE, &ospf6_redistribute_connected_cmd);
-  install_element (OSPF6_NODE, &no_ospf6_redistribute_connected_cmd);
-  install_element (OSPF6_NODE, &ospf6_redistribute_ripng_cmd);
-  install_element (OSPF6_NODE, &no_ospf6_redistribute_ripng_cmd);
-  install_element (OSPF6_NODE, &ospf6_redistribute_bgp_cmd);
-  install_element (OSPF6_NODE, &no_ospf6_redistribute_bgp_cmd);
   install_element (OSPF6_NODE, &router_id_cmd);
   install_element (OSPF6_NODE, &interface_area_cmd);
 
@@ -992,7 +885,23 @@ ospf6_init ()
   ospf6_interface_init ();
   ospf6_zebra_init ();
   ospf6_debug_init ();
+
+  /* Install access list */
   access_list_init ();
+#if 0
+  access_list_add_hook (xxx);
+  access_list_delete_hook (xxx);
+#endif
+
+  /* Install prefix list */
+  prefix_list_init ();
+#if 0
+  prefix_list_add_hook (xxx);
+  prefix_list_delete_hook (xxx);
+#endif
+
+  /* Install ospf6 route map */
+  ospf6_routemap_init ();
 }
 
 void

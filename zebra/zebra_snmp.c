@@ -37,15 +37,18 @@
 
 
 #define IPFWMIB 1,3,6,1,2,1,4,24
+/* #define ZEBRAOID 1,3,6,1,4,1,4,3,1,4 */
+#define ZEBRAOID 1,3,6,1,4,1,3317,1,2,1
 
 /* BGP4-MIB. */
 oid ipfw_oid [] = { IPFWMIB };
+oid zebra_oid [] = { ZEBRAOID };
 
 /* Hook functions. */
-int ipFwNumber ();
-int ipFwTable ();
-int ipCidrNumber ();
-int ipCidrTable ();
+u_char * ipFwNumber ();
+u_char * ipFwTable ();
+u_char * ipCidrNumber ();
+u_char * ipCidrTable ();
 
 /* ipForwardTable */
 #define IPFORWARDDEST                         1
@@ -89,113 +92,78 @@ int ipCidrTable ();
 #define IPADDRESS ASN_IPADDRESS
 #define OBJECTIDENTIFIER ASN_OBJECT_ID
 
-struct variable ipFwNumber_variables[] = 
+struct variable zebra_variables[] = 
 {
-  {0, GAUGE32, RONLY, ipFwNumber, {0}, 0}
+  {0, GAUGE32, RONLY, ipFwNumber, 1, {1}},
+  {IPFORWARDDEST, IPADDRESS, RONLY, ipFwTable, 3, {2, 1, 1}},
+  {IPFORWARDMASK, IPADDRESS, RONLY, ipFwTable, 3, {2, 1, 2}},
+  {IPFORWARDPOLICY, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 3}},
+  {IPFORWARDNEXTHOP, IPADDRESS, RONLY, ipFwTable, 3, {2, 1, 4}},
+  {IPFORWARDIFINDEX, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 5}},
+  {IPFORWARDTYPE, ENUMERATION, RONLY, ipFwTable, 3, {2, 1, 6}},
+  {IPFORWARDPROTO, ENUMERATION, RONLY, ipFwTable, 3, {2, 1, 7}},
+  {IPFORWARDAGE, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 8}},
+  {IPFORWARDINFO, OBJECTIDENTIFIER, RONLY, ipFwTable, 3, {2, 1, 9}},
+  {IPFORWARDNEXTHOPAS, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 10}},
+  {IPFORWARDMETRIC1, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 11}},
+  {IPFORWARDMETRIC2, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 12}},
+  {IPFORWARDMETRIC3, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 13}},
+  {IPFORWARDMETRIC4, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 14}},
+  {IPFORWARDMETRIC5, INTEGER32, RONLY, ipFwTable, 3, {2, 1, 15}},
+  {0, GAUGE32, RONLY, ipCidrNumber, 1, {3}},
+  {IPCIDRROUTEDEST, IPADDRESS, RONLY, ipCidrTable, 3, {4, 1, 1}},
+  {IPCIDRROUTEMASK, IPADDRESS, RONLY, ipCidrTable, 3, {4, 1, 2}},
+  {IPCIDRROUTETOS, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 3}},
+  {IPCIDRROUTENEXTHOP, IPADDRESS, RONLY, ipCidrTable, 3, {4, 1, 4}},
+  {IPCIDRROUTEIFINDEX, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 5}},
+  {IPCIDRROUTETYPE, ENUMERATION, RONLY, ipCidrTable, 3, {4, 1, 6}},
+  {IPCIDRROUTEPROTO, ENUMERATION, RONLY, ipCidrTable, 3, {4, 1, 7}},
+  {IPCIDRROUTEAGE, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 8}},
+  {IPCIDRROUTEINFO, OBJECTIDENTIFIER, RONLY, ipCidrTable, 3, {4, 1, 9}},
+  {IPCIDRROUTENEXTHOPAS, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 10}},
+  {IPCIDRROUTEMETRIC1, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 11}},
+  {IPCIDRROUTEMETRIC2, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 12}},
+  {IPCIDRROUTEMETRIC3, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 13}},
+  {IPCIDRROUTEMETRIC4, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 14}},
+  {IPCIDRROUTEMETRIC5, INTEGER32, RONLY, ipCidrTable, 3, {4, 1, 15}},
+  {IPCIDRROUTESTATUS, ROWSTATUS, RONLY, ipCidrTable, 3, {4, 1, 16}}
 };
 
-struct variable ipFwTable_variables[] =
-{
-  {IPFORWARDDEST, IPADDRESS, RONLY, ipFwTable, {1, 1}, 2},
-  {IPFORWARDMASK, IPADDRESS, RONLY, ipFwTable, {1, 2}, 2},
-  {IPFORWARDPOLICY, INTEGER32, RONLY, ipFwTable, {1, 3}, 2},
-  {IPFORWARDNEXTHOP, IPADDRESS, RONLY, ipFwTable, {1, 4}, 2},
-  {IPFORWARDIFINDEX, INTEGER32, RONLY, ipFwTable, {1, 5}, 2},
-  {IPFORWARDTYPE, ENUMERATION, RONLY, ipFwTable, {1, 6}, 2},
-  {IPFORWARDPROTO, ENUMERATION, RONLY, ipFwTable, {1, 7}, 2},
-  {IPFORWARDAGE, INTEGER32, RONLY, ipFwTable, {1, 8}, 2},
-  {IPFORWARDINFO, OBJECTIDENTIFIER, RONLY, ipFwTable, {1, 9}, 2},
-  {IPFORWARDNEXTHOPAS, INTEGER32, RONLY, ipFwTable, {1, 10}, 2},
-  {IPFORWARDMETRIC1, INTEGER32, RONLY, ipFwTable, {1, 11}, 2},
-  {IPFORWARDMETRIC2, INTEGER32, RONLY, ipFwTable, {1, 12}, 2},
-  {IPFORWARDMETRIC3, INTEGER32, RONLY, ipFwTable, {1, 13}, 2},
-  {IPFORWARDMETRIC4, INTEGER32, RONLY, ipFwTable, {1, 14}, 2},
-  {IPFORWARDMETRIC5, INTEGER32, RONLY, ipFwTable, {1, 15}, 2}
-};
-
-struct variable ipCidrNumber_variables[] = 
-{
-  {0, GAUGE32, RONLY, ipCidrNumber, {0}, 0}
-};
-
-struct variable ipCidrTable_variables[] = 
-{
-  {IPCIDRROUTEDEST, IPADDRESS, RONLY, ipCidrTable, {1, 1}, 2},
-  {IPCIDRROUTEMASK, IPADDRESS, RONLY, ipCidrTable, {1, 2}, 2},
-  {IPCIDRROUTETOS, INTEGER32, RONLY, ipCidrTable, {1, 3}, 2},
-  {IPCIDRROUTENEXTHOP, IPADDRESS, RONLY, ipCidrTable, {1, 4}, 2},
-  {IPCIDRROUTEIFINDEX, INTEGER32, RONLY, ipCidrTable, {1, 5}, 2},
-  {IPCIDRROUTETYPE, ENUMERATION, RONLY, ipCidrTable, {1, 6}, 2},
-  {IPCIDRROUTEPROTO, ENUMERATION, RONLY, ipCidrTable, {1, 7}, 2},
-  {IPCIDRROUTEAGE, INTEGER32, RONLY, ipCidrTable, {1, 8}, 2},
-  {IPCIDRROUTEINFO, OBJECTIDENTIFIER, RONLY, ipCidrTable, {1, 9}, 2},
-  {IPCIDRROUTENEXTHOPAS, INTEGER32, RONLY, ipCidrTable, {1, 10}, 2},
-  {IPCIDRROUTEMETRIC1, INTEGER32, RONLY, ipCidrTable, {1, 11}, 2},
-  {IPCIDRROUTEMETRIC2, INTEGER32, RONLY, ipCidrTable, {1, 12}, 2},
-  {IPCIDRROUTEMETRIC3, INTEGER32, RONLY, ipCidrTable, {1, 13}, 2},
-  {IPCIDRROUTEMETRIC4, INTEGER32, RONLY, ipCidrTable, {1, 14}, 2},
-  {IPCIDRROUTEMETRIC5, INTEGER32, RONLY, ipCidrTable, {1, 15}, 2},
-  {IPCIDRROUTESTATUS, ROWSTATUS, RONLY, ipCidrTable, {1, 16}, 2}
-};
-
-#define SUBTREE_ARG(V)  V, sizeof V / sizeof *V, sizeof *V
-
-struct subtree ipfw_tree[] =
-{
-  {{IPFWMIB, 1}, 9, SUBTREE_ARG (ipFwNumber_variables)},
-  {{IPFWMIB, 2}, 9, SUBTREE_ARG (ipFwTable_variables)},
-  {{IPFWMIB, 3}, 9, SUBTREE_ARG (ipCidrNumber_variables)},
-  {{IPFWMIB, 4}, 9, SUBTREE_ARG (ipCidrTable_variables)}
-};
 
-int
+u_char *
 ipFwNumber (struct variable *v, oid objid[], size_t *objid_len,
-	    void **val, size_t *val_len, int exact)
+	    int exact, size_t *val_len, WriteMethod **write_method)
 {
-  int ret;
-  static int result[1];
+  static int result;
   struct route_node *np;
 
-  ret = smux_single_instance_check (v, objid, objid_len, exact);
-
-  /* Wrong oid request. */
-  if (ret != 0)
-    return -1;
+  if (smux_header_generic(v, objid, objid_len, exact, val_len, write_method) == MATCH_FAILED)
+    return NULL;
 
   /* Return number of routing entries. */
-  result[0] = 0;
+  result = 0;
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
-    result[0]++;
+    result++;
 
-  *val_len  = sizeof(int);
-  *val = result;
-
-  return 0;
+  return (u_char *)&result;
 }
 
-int
+u_char *
 ipCidrNumber (struct variable *v, oid objid[], size_t *objid_len,
-	    void **val, size_t *val_len, int exact)
+	    int exact, size_t *val_len, WriteMethod **write_method)
 {
-  int ret;
-  static int result[1];
+  static int result;
   struct route_node *np;
 
-  ret = smux_single_instance_check (v, objid, objid_len, exact);
-
-  /* Wrong oid request. */
-  if (ret != 0)
-    return -1;
+  if (smux_header_generic(v, objid, objid_len, exact, val_len, write_method) == MATCH_FAILED)
+    return NULL;
 
   /* Return number of routing entries. */
-  result[0] = 0;
+  result = 0;
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
-    result[0]++;
+    result++;
 
-  *val_len  = sizeof(int);
-  *val = result;
-
-  return 0;
+  return (u_char *)&result;
 }
 
 int
@@ -275,7 +243,7 @@ check_replace(struct route_node *np2, struct rib *rib2,
       return;
     }
 
-  if (in_addr_cmp(&(*rib)->u.gate4, &rib2->u.gate4) <= 0)
+  if (in_addr_cmp((u_char *)&(*rib)->u.gate4, (u_char *)&rib2->u.gate4) <= 0)
     return;
 
   *np = np2;
@@ -316,29 +284,29 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 
 /* Short circuit exact matches of wrong length */
 
-  if (exact && (*objid_len != v->name_len + 10))
+  if (exact && (*objid_len != v->namelen + 10))
     return;
 
 /* Get INDEX information out of OID.
  * ipForwardDest, ipForwardProto, ipForwardPolicy, ipForwardNextHop
  */
 
-  if (*objid_len > v->name_len)
-    oid2in_addr (objid + v->name_len, MIN(4, *objid_len - v->name_len), &dest);
+  if (*objid_len > v->namelen)
+    oid2in_addr (objid + v->namelen, MIN(4, *objid_len - v->namelen), &dest);
 
-  if (*objid_len > v->name_len + 4)
-    proto = objid[v->name_len + 4];
+  if (*objid_len > v->namelen + 4)
+    proto = objid[v->namelen + 4];
 
-  if (*objid_len > v->name_len + 5)
-    policy = objid[v->name_len + 5];
+  if (*objid_len > v->namelen + 5)
+    policy = objid[v->namelen + 5];
 
-  if (*objid_len > v->name_len + 6)
-    oid2in_addr (objid + v->name_len + 6, MIN(4, *objid_len - v->name_len - 6), 
-		 &nexthop);
+  if (*objid_len > v->namelen + 6)
+    oid2in_addr (objid + v->namelen + 6, MIN(4, *objid_len - v->namelen - 6),
+      &nexthop);
 
   /* Apply GETNEXT on not exact search */
 
-  if (!exact && (*objid_len >= v->name_len + 10))
+  if (!exact && (*objid_len >= v->namelen + 10))
     {
       pnt = ((u_char *) &nexthop)+3;
       (*pnt)++;
@@ -352,11 +320,12 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
         return;
       for (*np = route_top (ipv4_rib_table); *np; *np = route_next (*np))
 	{
-	  if (!in_addr_cmp(&(*np)->p.u.prefix, &dest))
+	  if (!in_addr_cmp(&(*np)->p.u.prefix, (u_char *)&dest))
 	    {
 	      for (*rib = (*np)->info; *rib; *rib = (*rib)->next)
 	        {
-		  if (!in_addr_cmp(&(*rib)->u.gate4, &nexthop))
+		  if (!in_addr_cmp((u_char *)&(*rib)->u.gate4,
+		    (u_char *)&nexthop))
 		    if (proto == proto_trans((*rib)->type))
 		      return;
 		}
@@ -371,11 +340,11 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
     {
 
       /* Check destination first */
-      if (in_addr_cmp(&np2->p.u.prefix, &dest) > 0)
+      if (in_addr_cmp(&np2->p.u.prefix, (u_char *)&dest) > 0)
         for (rib2 = np2->info; rib2; rib2 = rib2->next)
 	  check_replace(np2, rib2, np, rib);
 
-      if (in_addr_cmp(&np2->p.u.prefix, &dest) == 0)
+      if (in_addr_cmp(&np2->p.u.prefix, (u_char *)&dest) == 0)
         { /* have to look at each rib individually */
           for (rib2 = np2->info; rib2; rib2 = rib2->next)
 	    {
@@ -387,7 +356,8 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 	      if (   (policy < policy2)
 	          || ((policy == policy2) && (proto < proto2))
 		  || ((policy == policy2) && (proto == proto2) &&
-		      (in_addr_cmp(&rib2->u.gate4, &nexthop) >= 0)))
+		      (in_addr_cmp((u_char *)&rib2->u.gate4,
+		      (u_char *) &nexthop) >= 0)))
 		check_replace(np2, rib2, np, rib);
 	    }
 	}
@@ -399,161 +369,139 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
   policy = 0;
   proto = proto_trans((*rib)->type);
 
-  *objid_len = v->name_len + 10;
+  *objid_len = v->namelen + 10;
   pnt = (u_char *) &(*np)->p.u.prefix;
   for (i = 0; i < 4; i++)
-    objid[v->name_len + i] = *pnt++;
+    objid[v->namelen + i] = *pnt++;
 
-  objid[v->name_len + 4] = proto;
-  objid[v->name_len + 5] = policy;
+  objid[v->namelen + 4] = proto;
+  objid[v->namelen + 5] = policy;
   pnt = (u_char *) &(*rib)->u.gate4;
   for (i = 0; i < 4; i++)
-    objid[v->name_len + i + 6] = *pnt++;
+    objid[i + v->namelen + 6] = *pnt++;
 
   return;
 }
 
-int
+u_char *
 ipFwTable (struct variable *v, oid objid[], size_t *objid_len,
-	   void **val, size_t *val_len, int exact)
+	   int exact, size_t *val_len, WriteMethod **write_method)
 {
   struct route_node *np;
   struct rib *rib;
-  static int result[2];
+  static int result;
+  static int resarr[2];
   static struct in_addr netmask;
-
-/* XXX */
-  if (objid[v->name_len - 1] != v->index)
-    *objid_len = v->name_len;
 
   get_fwtable_route_node(v, objid, objid_len, exact, &np, &rib);
   if (!np)
-    return -1;
+    return NULL;
 
-/* XXX */
-  objid[v->name_len - 1] = v->index;
-  objid[v->name_len - 2] = 1;
-  objid[v->name_len - 3] = 2;
-
-  switch (v->index)
+  switch (v->magic)
     {
     case IPFORWARDDEST:
       *val_len = 4;
-      *val = &np->p.u.prefix;
-      return 0;
+      return &np->p.u.prefix;
       break;
     case IPFORWARDMASK:
       masklen2ip(np->p.prefixlen, &netmask);
       *val_len = 4;
-      *val = &netmask;
-      return 0;
+      return (u_char *)&netmask;
       break;
     case IPFORWARDPOLICY:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDNEXTHOP:
       *val_len = 4;
-      *val = &rib->u.gate4;
-      return 0;
+      return (u_char *)&rib->u.gate4;
       break;
     case IPFORWARDIFINDEX:
       *val_len = sizeof(int);
-      *val = &rib->u.ifindex;
-      return 0;
+      return (u_char *)&rib->u.ifindex;
       break;
     case IPFORWARDTYPE:
       if (IS_RIB_LINK (rib))
-        result[0] = 3;
+        result = 3;
       else
-        result[0] = 4;
+        result = 4;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDPROTO:
-      result[0] = proto_trans(rib->type);
+      result = proto_trans(rib->type);
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDAGE:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDINFO:
-      result[0] = 0;
-      result[1] = 0;
+      resarr[0] = 0;
+      resarr[1] = 0;
       *val_len  = 2 * sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)resarr;
       break;
     case IPFORWARDNEXTHOPAS:
-      result[0] = -1;
+      result = -1;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDMETRIC1:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDMETRIC2:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDMETRIC3:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDMETRIC4:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     case IPFORWARDMETRIC5:
-      result[0] = 0;
+      result = 0;
       *val_len  = sizeof(int);
-      *val = result;
-      return 0;
+      return (u_char *)&result;
       break;
     default:
-      return -1;
+      return NULL;
       break;
     }  
-  return -1;
+  return NULL;
 }
 
-int
+u_char *
 ipCidrTable (struct variable *v, oid objid[], size_t *objid_len,
-	     void **val, size_t *val_len, int exact)
+	   int exact, size_t *val_len, WriteMethod **write_method)
 {
-  switch (v->index)
+  switch (v->magic)
     {
     case IPCIDRROUTEDEST:
       break;
     default:
-      return -1;
+      return NULL;
       break;
     }  
-  return -1;
+  return NULL;
 }
 
 void
 zebra_snmp_init ()
 {
-  smux_init (ipfw_oid, sizeof (ipfw_oid) / sizeof (oid));
-  smux_tree_register (ipfw_tree, sizeof (ipfw_tree) / sizeof (struct subtree));
+  smux_init (zebra_oid, sizeof (zebra_oid) / sizeof (oid));
+  REGISTER_MIB("mibII/ipforward", zebra_variables, variable, ipfw_oid);
+  smux_start ();
 }
 #endif /* HAVE_SNMP */

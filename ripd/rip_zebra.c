@@ -39,6 +39,8 @@ int rip_interface_add (int, struct zebra *, zebra_size_t);
 int rip_interface_delete (int, struct zebra *, zebra_size_t);
 int rip_interface_address_add (int, struct zebra *, zebra_size_t);
 int rip_interface_address_delete (int, struct zebra *, zebra_size_t);
+int rip_interface_up (int, struct zebra *, zebra_size_t);
+int rip_interface_down (int, struct zebra *, zebra_size_t);
 
 /* RIPd to zebra command interface. */
 void
@@ -381,6 +383,9 @@ rip_zclient_init ()
   zclient->interface_address_delete = rip_interface_address_delete;
   zclient->ipv4_route_add = rip_zebra_read_ipv4;
   zclient->ipv4_route_delete = rip_zebra_read_ipv4;
+  zclient->interface_up = rip_interface_up;
+  zclient->interface_down = rip_interface_down;
+  
 
   /* Install zebra node. */
   install_node (&zebra_node, config_write_zebra);

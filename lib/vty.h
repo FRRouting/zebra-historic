@@ -118,8 +118,7 @@ struct vty
 #define VTY_NEWLINE  ((vty->type == VTY_FILE) ? "\n" : "\r\n")
 
 /* Default time out value */
-/* #define VTY_TIMEOUT_DEFAULT 10 */
-#define VTY_TIMEOUT_DEFAULT 300
+#define VTY_TIMEOUT_DEFAULT 600
 
 /* Vty read buffer size. */
 #define VTY_READ_BUFSIZ 512
@@ -140,7 +139,7 @@ struct vty *vty_new (void);
 int vty_out (struct vty *, const char *, ...);
 void vty_read_config (char *, char *, char *);
 void vty_time_print (struct vty *);
-void vty_serv_sock (unsigned short);
+void vty_serv_sock (unsigned short, char *);
 void vty_close (struct vty *);
 char *vty_get_cwd (void);
 void vty_log (const char *, const char *, va_list);

@@ -913,9 +913,9 @@ prefix length range specification and sequential number specification.
 You can add or delete prefix based filter to arbitrary point of
 prefix-list using sequential number.
 
-   If there is no ip prefix-list is specified, it acts as permit.  Once
-ip prefix-list is defined, then there is no match is performed, default
-deny is applied.
+   If no ip prefix-list is specified, it acts as permit.  Once ip
+prefix-list is defined, then no match is performed, default deny is
+applied.
 
  - Command: ip prefix-list NAME (permit|deny) PREFIX [le LEN] [ge LEN]
  - Command: ip prefix-list NAME seq NUMBER (permit|deny) PREFIX [le
@@ -923,16 +923,59 @@ LEN] [ge LEN]
      You can create `ip prefix-list' using above commands.
 
     seq
-          seq NUMBER
+          seq NUMBER can be set either automatically or manually.  In
+          the case that sequential numbers are set manually, the user
+          may pick any number less than 4294967295.  In the case that
+          sequential number are set automatically, the sequential
+          number will increase by a unit of five (5) per list.  If a
+          list with no specified sequential number is created after a
+          list with a specified sequential number, the list will
+          automatically pick the next multiple of five (5) as the list
+          number.  For example, if a list with number 2 already exists
+          and a new list with no specified number is created, the next
+          list will be numbered 5.  If lists 2 and 7 already exist and
+          a new list with no specified number is created, the new list
+          will be numbered 10.
 
     le
-          `le' command specify prefix length.  If given prefix length is
-          lesser then or equal to le prefix length.
+          `le' command specify prefix length.  If the given prefix
+          length is lesser than or equal to le prefix length.  Prefix
+          Lists can be applied on the basis of prefix length.  The le
+          command specifies prefix length.  The prefix list will be
+          applied if the prefix length is lesser than or equal to the
+          le prefix length.
 
     ge
-          `ge' command specify prefix length.  If given prefix length is
-          lesser then or equal to le prefix length.
+          `ge' command specify prefix length.  If the given prefix
+          length is lesser than or equal to ge prefix length.  The ge
+          command specifies prefix length.  The prefix list will be
+          applied if the prefix length is greater than or equal to the
+          ge prefix length.
 
+
+   Lesser than or equal to prefix numbers and greater than or equal to
+prefix numbers can be used together.  The order of the le and ge
+commands does not matter.
+
+   If a prefix list with a different sequential number but with the
+exact same rules as a previous list is created, an error will result.
+However, in the case that the sequential number and the rules are
+exactly similar, no error will result.
+
+   If a list with the same sequential number as a previous list is
+created, the new list will overwrite the old list.
+
+   Matching of IP Prefix is performed from the smaller sequential
+number to the larger.  The matching will stop once any rule has been
+applied.
+
+   In the case of no le or ge command,
+
+   Version 0.85: the matching rule will apply to all prefix lengths that
+matched the prefix list.
+
+   Version 0.86 or later: In the case of no le or ge command, the prefix
+length must match exactly the length specified in the prefix list.
 
  - Command: no ip prefix-list NAME
 
@@ -950,8 +993,12 @@ ip prefix-list description
 ..........................
 
  - Command: ip prefix-list NAME description DESC
+     Descriptions may be added to prefix lists.  This command adds a
+     description to the prefix list.
 
  - Command: no ip prefix-list NAME description [DESC]
+     Deletes the description from a prefix list.  It is possible to use
+     the command without the full description.
 
 
 File: zebra.info,  Node: ip prefix-list sequential number control,  Next: Showing ip prefix-list,  Prev: ip prefix-list description,  Up: IP Prefix List
@@ -960,8 +1007,12 @@ ip prefix-list sequential number control
 ........................................
 
  - Command: ip prefix-list sequence-number
+     With this command, the IP prefix list sequential number is
+     displayed.  This is the default behavior.
 
  - Command: no ip prefix-list sequence-number
+     With this command, the IP prefix list sequential number is not
+     displayed.
 
 
 File: zebra.info,  Node: Showing ip prefix-list,  Next: Clear counter of ip prefix-list,  Prev: ip prefix-list sequential number control,  Up: IP Prefix List
@@ -970,12 +1021,20 @@ Showing ip prefix-list
 ......................
 
  - Command: show ip prefix-list
+     Display all IP prefix lists.
 
  - Command: show ip prefix-list NAME
+     Show IP prefix list can be used with a prefix list name.
 
  - Command: show ip prefix-list NAME seq NUM
+     Show IP prefix list can be used with a prefix list name and
+     sequential number.
 
  - Command: show ip prefix-list NAME A.B.C.D/M
+     If the command longer is used, all prefix lists with prefix
+     lengths equal to or longer than the specified length will be
+     displayed.  If the command first match is used, the first prefix
+     length match will be displayed.
 
  - Command: show ip prefix-list NAME A.B.C.D/M longer
 
@@ -996,6 +1055,8 @@ Clear counter of ip prefix-list
 ...............................
 
  - Command: clear ip prefix-list
+     Clears the counters of all IP prefix lists.  Clear IP Prefix List
+     can be used with a specified name and prefix.
 
  - Command: clear ip prefix-list NAME
 

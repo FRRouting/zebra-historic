@@ -102,7 +102,7 @@
 #undef BSDI_NRL
 
 /* Define if one-vty option is specified. */
-#undef ONE_VTY
+#undef VTYSH
 
 /* Define if disable-bgp-announce option is specified. */
 #undef DISABLE_BGP_ANNOUNCE

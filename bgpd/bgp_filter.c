@@ -409,6 +409,9 @@ as_list_apply (struct as_list *aslist, void *object)
 
   aspath = (struct aspath *) object;
 
+  if (aslist == NULL)
+    return AS_FILTER_DENY;
+
   for (asfilter = aslist->head; asfilter; asfilter = asfilter->next)
     {
       if (as_filter_match (asfilter, aspath))
@@ -431,6 +434,20 @@ as_list_delete_hook (void (*func) ())
   as_list_master.delete_hook = func;
 }
 
+int
+as_list_dup_check (struct as_list *aslist, struct as_filter *new)
+{
+  struct as_filter *asfilter;
+
+  for (asfilter = aslist->head; asfilter; asfilter = asfilter->next)
+    {
+      if (asfilter->type == new->type
+	  && strcmp (asfilter->reg_str, new->reg_str) == 0)
+	return 1;
+    }
+  return 0;
+}
+
 DEFUN (ip_as_path, ip_as_path_cmd,
        "ip as-path access-list NAME (deny|permit) .REGEXP",
        IP_STR
@@ -492,7 +509,12 @@ DEFUN (ip_as_path, ip_as_path_cmd,
 
   /* Install new filter to the access_list. */
   aslist = as_list_get (argv[0]);
-  as_list_filter_add (aslist, asfilter);
+
+  /* Duplicate insertion check. */;
+  if (as_list_dup_check (aslist, asfilter))
+    as_filter_free (asfilter);
+  else
+    as_list_filter_add (aslist, asfilter);
 
   return CMD_SUCCESS;
 }

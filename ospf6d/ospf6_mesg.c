@@ -1027,7 +1027,7 @@ ospf6_message_process (struct iovec *iov, struct ospf6_interface *o6if,
   ospf6_hdr = (struct ospf6_header *) iov[0].iov_base;
 
   /* version check */
-  if (ospf6_hdr->version != OSPF_V3)
+  if (ospf6_hdr->version != OSPF6_VERSION)
     {
       if (IS_OSPF6_DUMP_MESSAGE (ospf6_hdr->type))
         zlog_info ("version mismatch, drop");
@@ -1366,7 +1366,7 @@ ospf6_message_send (unsigned char type, struct iovec *message,
 
   /* set each field, checksum xxx */
   ospf6_hdr->instance_id = o6i->instance_id;
-  ospf6_hdr->version = OSPF_V3;
+  ospf6_hdr->version = OSPF6_VERSION;
   ospf6_hdr->type = type;
   ospf6_hdr->router_id = ospf6->router_id;
   ospf6_hdr->area_id = o6i->area->area_id;

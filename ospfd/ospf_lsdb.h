@@ -1,6 +1,6 @@
 /*
  * OSPF LSDB support.
- * Copyright (C) 1999 Alex Zinin
+ * Copyright (C) 1999, 2000 Alex Zinin, Kunihiro Ishiguro, Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  *
@@ -29,6 +29,17 @@
 
 #define OSPF_LSDB_DEF  OSPF_LSDB_HASH
 
+/* New LSDB structure. */
+struct new_lsdb
+{
+  struct
+  {
+    unsigned long count;
+    struct route_table *db;
+  } type[OSPF_MAX_LSA];
+  unsigned long total;
+};
+
 struct ospf_lsdb
 {
   u_char       flags;
@@ -41,6 +52,28 @@ struct ospf_lsdb
   struct ospf_area * area;	/* Associated area */
 };
 
+/* Macros. */
+#define EXTERNAL_LSDB(O) \
+        ((O)->external_lsa->type[OSPF_AS_EXTERNAL_LSA].db)
+
+/* Prototypes. */
+void foreach_lsa (struct route_table *, void *, int,
+		  int (*callback) (struct ospf_lsa *, void *, int));
+
+/* New LSDB related functions. */
+struct new_lsdb *new_lsdb_new ();
+void new_lsdb_init (struct new_lsdb *);
+void new_lsdb_add (struct new_lsdb *, struct ospf_lsa *);
+struct ospf_lsa *new_lsdb_insert (struct new_lsdb *, struct ospf_lsa *);
+void new_lsdb_delete (struct new_lsdb *, struct ospf_lsa *);
+void new_lsdb_delete_all (struct new_lsdb *);
+struct ospf_lsa *new_lsdb_lookup (struct new_lsdb *, struct ospf_lsa *);
+struct ospf_lsa *new_lsdb_lookup_by_id (struct new_lsdb *, u_char,
+					struct in_addr, struct in_addr);
+unsigned long new_lsdb_count (struct new_lsdb *);
+unsigned long new_lsdb_isempty (struct new_lsdb *);
+
+/* Old LSDB related functions. */
 struct ospf_lsdb* ospf_lsdb_new (u_char);
 void ospf_lsdb_free ();
 struct ospf_lsa *ospf_lsdb_add (struct ospf_lsdb *, struct ospf_lsa *);

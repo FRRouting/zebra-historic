@@ -37,10 +37,10 @@
 #define OSPF_MAX_LSA_SIZE	1500
 
 /* OSPF LSA origination flag. */
-#define OSPF_LSA_SELF		0x01
-#define OSPF_LSA_SELF_CHECKED	0x02
-#define OSPF_LSA_RECEIVED	0x04
-#define OSPF_LSA_APPROVED	0x08
+#define OSPF_LSA_SELF		  0x01
+#define OSPF_LSA_SELF_CHECKED	  0x02
+#define OSPF_LSA_RECEIVED	  0x04
+#define OSPF_LSA_APPROVED	  0x08
 
 /* OSPF LSA header. */
 struct lsa_header
@@ -60,6 +60,9 @@ struct ospf_lsa
 {
   /* LSA origin flag. */
   u_char flags;
+
+  /* LSA redistribute type. */
+  u_char redistribute;
 
   /* LSA data. */
   struct lsa_header *data;
@@ -166,6 +169,22 @@ struct as_external_lsa
   } e[1];
 };
 
+/* Redistributed external information. */
+struct external_info
+{
+  u_char flags;				/* Origination flag. */
+  struct prefix_ipv4 p;			/* Prefix. */
+  unsigned int ifindex;			/* Interface Index. */
+  struct in_addr nexthop;		/* Nexhoop address. */
+  u_int32_t tag;			/* Additional Route tag. */
+  /* struct ospf_lsa *lsa; */		/* Originated-LSA. */
+};
+
+#define EXTERNAL_INITIAL		0x00
+#define EXTERNAL_ORIGINATED		0x01
+#define EXTERNAL_FILTERED		0x02
+
+
 #define EXTERNAL_METRIC_TYPE_1      0
 #define EXTERNAL_METRIC_TYPE_2      1
 
@@ -190,6 +209,7 @@ struct as_external_lsa
                             ((struct prefix_ipv4 *) (P)), 0, find_external)
 
 struct ospf_route;
+struct new_lsdb;
 
 /* Prototypes. */
 struct ospf_lsa *ospf_router_lsa (struct ospf_area *);
@@ -216,12 +236,14 @@ struct ospf_lsa *ospf_summary_lsa_install (struct ospf_area *, struct ospf_lsa *
 struct ospf_lsa *ospf_summary_asbr_lsa_install (struct ospf_area *, struct ospf_lsa *);
 struct ospf_lsa *ospf_external_lsa_install (struct ospf_lsa *);
 
-void ospf_external_lsa_originate_from_queue ();
-void ospf_external_lsa_queue (u_char, struct prefix_ipv4,
+void ospf_external_lsa_flush (u_char, struct prefix_ipv4 *,
 			      unsigned int, struct in_addr);
-struct ospf_lsa *ospf_external_lsa_originate (u_char, struct prefix_ipv4 *,
-					      unsigned int, struct in_addr);
 
+struct ospf_lsa *ospf_external_lsa_originate (u_char, struct external_info *);
+int ospf_external_lsa_originate_timer (struct thread *);
+struct external_info *ospf_external_info_add (u_char, struct prefix_ipv4,
+					      unsigned int, struct in_addr);
+void ospf_external_info_delete (u_char, struct prefix_ipv4);
 
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
 				  struct in_addr, struct in_addr);
@@ -250,9 +272,13 @@ int ospf_lsa_maxage_walker (struct thread *);
 void ospf_schedule_update_router_lsas ();
 
 int ospf_network_lsa_refresh (struct thread *);
+struct ospf_lsa *ospf_external_lsa_refresh (struct ospf_lsa *);
+
 struct in_addr ospf_get_free_id_for_prefix (struct ospf_lsdb *,
 					    struct prefix_ipv4 *,
 					    struct in_addr);
+struct in_addr ospf_lsa_unique_id (struct new_lsdb *, u_char,
+				   struct prefix_ipv4 *);
 void ospf_schedule_lsa_flood_area (struct ospf_area *, struct ospf_lsa *);
 void ospf_schedule_lsa_flush_area (struct ospf_area *, struct ospf_lsa *);
 void ospf_schedule_router_lsa_originate (struct ospf_area *);

@@ -35,7 +35,17 @@
 #include "filter.h"
 
 /* Vty events */
-enum event {VTY_SERV, VTY_READ, VTY_WRITE, VTY_TIMEOUT_RESET};
+enum event 
+{
+  VTY_SERV,
+  VTY_READ,
+  VTY_WRITE,
+  VTY_TIMEOUT_RESET,
+#ifdef VTYSH
+  VTYSH_SERV,
+  VTYSH_READ
+#endif /* VTYSH */
+};
 
 static void vty_event (enum event, int, struct vty *);
 
@@ -1601,9 +1611,86 @@ vty_serv_sock_family (unsigned short port, int family)
   vty_event (VTY_SERV, accept_sock, NULL);
 }
 
+#ifdef VTYSH
+/* For sockaddr_un. */
+#include <sys/un.h>
+
+/* VTY shell UNIX domain socket. */
+void
+vty_serv_un (char *path)
+{
+  int ret;
+  int sock;
+  struct sockaddr_un serv;
+
+  /* First of all, unlink existing socket */
+  unlink (path);
+
+  /* Make UNIX domain socket. */
+  sock = socket (AF_UNIX, SOCK_STREAM, 0);
+  if (sock < 0)
+    {
+      perror ("sock");
+      return;
+    }
+
+  /* Make server socket. */
+  memset (&serv, 0, sizeof (struct sockaddr_un));
+  serv.sun_family = AF_LOCAL;
+  strncpy (serv.sun_path, path, strlen (path));
+
+  ret = bind (sock, &serv, sizeof (struct sockaddr_un));
+  if (ret < 0)
+    {
+      perror ("bind");
+      close (sock);
+      return;
+    }
+
+  listen (sock, 5);
+
+  vty_event (VTYSH_SERV, sock, NULL);
+}
+
+static int
+vtysh_accept (struct thread *thread)
+{
+  int accept_sock;
+  int sock;
+  int client_len;
+  struct sockaddr_un client;
+  struct vty *vty;
+  
+  accept_sock = THREAD_FD (thread);
+
+  sock = accept (accept_sock, &client, &client_len);
+
+  printf ("VTY shell accept\n");
+
+  vty = vty_new ();
+
+  vty_event (VTYSH_READ, sock, NULL);
+
+  return 0;
+}
+
+static int
+vtysh_read (struct thread *thread)
+{
+  int sock;
+  struct vty *vty;
+
+  sock = THREAD_FD (thread);
+  vty = THREAD_ARG (thread);
+  vty->t_read = NULL;
+
+  return 0;
+}
+#endif /* VTYSH */
+
 /* Determine address family to bind. */
 void
-vty_serv_sock (unsigned short port)
+vty_serv_sock (unsigned short port, char *path)
 {
 #ifdef HAVE_IPV6
 #ifdef NRL
@@ -1615,6 +1702,9 @@ vty_serv_sock (unsigned short port)
 #else /* ! HAVE_IPV6 */
   vty_serv_sock_family (port, AF_INET);
 #endif /* HAVE_IPV6 */
+#ifdef VTYSH
+  vty_serv_un (path);
+#endif /* VTYSH */
 }
 
 /* Close vty interface. */
@@ -1834,6 +1924,14 @@ vty_event (enum event event, int sock, struct vty *vty)
     case VTY_SERV:
       vty_serv_thread = thread_add_read (master, vty_accept, vty, sock);
       break;
+#ifdef VTYSH
+    case VTYSH_SERV:
+      thread_add_read (master, vtysh_accept, vty, sock);
+      break;
+    case VTYSH_READ:
+      thread_add_read (master, vtysh_read, vty, sock);
+      break;
+#endif /* VTYSH */
     case VTY_READ:
       vty->t_read = thread_add_read (master, vty_read, vty, sock);
 
@@ -1852,7 +1950,10 @@ vty_event (enum event event, int sock, struct vty *vty)
       break;
     case VTY_TIMEOUT_RESET:
       if (vty->t_timeout)
-	thread_cancel (vty->t_timeout);
+	{
+	  thread_cancel (vty->t_timeout);
+	  vty->t_timeout = NULL;
+	}
       if (vty->v_timeout)
 	{
 	  vty->t_timeout = 
@@ -1890,24 +1991,55 @@ DEFUN (line_vty,
 }
 
 /* Set time out value. */
-DEFUN (exec_timeout,
-       exec_timeout_cmd,
-       "exec-timeout VAL",
-       "Set timeout value\n"
-       "Timeout value\n")
+int
+exec_timeout (struct vty *vty, char *min_str, char *sec_str)
 {
-  if (all_digit (argv[0]))
+  unsigned long timeout = 0;
+
+  /* min_str and sec_str are already checked by parser.  So it must be
+     all digit string. */
+  if (min_str)
     {
-      vty_timeout_val = strtol (argv[0], NULL, 10);
-      vty->v_timeout = vty_timeout_val;
-      vty_event (VTY_TIMEOUT_RESET, 0, vty);
+      timeout = strtol (min_str, NULL, 10);
+      timeout *= 60;
     }
-  else
-    {
-      vty_out (vty, "Invalid timeout value%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+  if (sec_str)
+    timeout += strtol (sec_str, NULL, 10);
+
+  vty_timeout_val = timeout;
+  vty->v_timeout = timeout;
+  vty_event (VTY_TIMEOUT_RESET, 0, vty);
+
+
   return CMD_SUCCESS;
+}
+
+DEFUN (exec_timeout_min,
+       exec_timeout_min_cmd,
+       "exec-timeout <0-35791>",
+       "Set timeout value\n"
+       "Timeout value in minutes\n")
+{
+  return exec_timeout (vty, argv[0], NULL);
+}
+
+DEFUN (exec_timeout_sec,
+       exec_timeout_sec_cmd,
+       "exec-timeout <0-35791> <0-2147483>",
+       "Set timeout value\n"
+       "Timeout value in minutes\n"
+       "Timeout value in seconds\n")
+{
+  return exec_timeout (vty, argv[0], argv[1]);
+}
+
+DEFUN (no_exec_timeout,
+       no_exec_timeout_cmd,
+       "no exec-timeout",
+       NO_STR
+       "Unset timeout\n")
+{
+  return exec_timeout (vty, NULL, NULL);
 }
 
 /* Set vty access class. */
@@ -2043,8 +2175,11 @@ vty_config_write (struct vty *vty)
     {
       vty_out (vty, "line vty%s", VTY_NEWLINE);
 
+      /* exec-timeout */
       if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
-	vty_out (vty, " exec-timeout %d%s", vty_timeout_val, VTY_NEWLINE);
+	vty_out (vty, " exec-timeout %d %d%s", 
+		 vty_timeout_val / 60,
+		 vty_timeout_val % 60, VTY_NEWLINE);
 
       if (vty_accesslist_name)
 	vty_out (vty, " access-class %s%s",
@@ -2135,7 +2270,9 @@ vty_init ()
   install_element (ENABLE_NODE, &no_terminal_monitor_cmd);
 
   install_default (VTY_NODE);
-  install_element (VTY_NODE, &exec_timeout_cmd);
+  install_element (VTY_NODE, &exec_timeout_min_cmd);
+  install_element (VTY_NODE, &exec_timeout_sec_cmd);
+  install_element (VTY_NODE, &no_exec_timeout_cmd);
   install_element (VTY_NODE, &vty_access_class_cmd);
   install_element (VTY_NODE, &no_vty_access_class_cmd);
 #ifdef HAVE_IPV6

@@ -1,3 +1,24 @@
+2000-04-26  Jochen Friedrich <jochen@nwe.de>
+
+	* GNOME-PRODUCT-ZEBRA-MIB: New file.
+
+	* GNOME-SMI: New file.
+
+2000-04-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* irdp.c: New file from 1997 development code.
+	* irdp.h: Likewise.
+
+2000-04-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rtadv.c (rtadv_send_packet): Enclose router advertisement
+	logging with IS_ZEBRA_DEBUG_PACKET.
+
+2000-04-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.c (zebra_client_close): Remove client structure from
+	client_list when connection is terminated.
+
 2000-01-21  Hideto Yamakawa <hideto.yamakawa@soliton.co.jp>
 
 	* rtread_getmsg.c: Set some definition for Solaris 2.5 and Solaris

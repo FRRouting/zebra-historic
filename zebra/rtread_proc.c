@@ -24,6 +24,7 @@
 
 #include "prefix.h"
 #include "log.h"
+#include "if.h"
 #include "rib.h"
 
 /* Proc file system to read IPv4 routing table. */

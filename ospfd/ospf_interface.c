@@ -37,6 +37,7 @@
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_packet.h"
@@ -61,7 +62,7 @@ ospf_if_reset_variables (struct ospf_interface *oi)
 
   bzero (oi->auth_simple, OSPF_AUTH_SIMPLE_SIZE);
   if (oi->auth_crypt != NULL)
-    list_delete_all (oi->auth_crypt);
+    list_delete_all_node (oi->auth_crypt);
   else
     oi->auth_crypt = list_init ();
 
@@ -141,16 +142,20 @@ ospf_if_free (struct ospf_interface *oi)
   OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
 
   if (oi->t_network_lsa_self)
-     OSPF_TIMER_OFF (oi->t_network_lsa_self);
+    OSPF_TIMER_OFF (oi->t_network_lsa_self);
 
-  /* */
+  /* Delete all related neighbors. */
   for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
     if (rn->info != NULL)
       ospf_nbr_free ((struct ospf_neighbor *) rn->info);
 
   route_table_finish (oi->nbrs);
 
+  /* Cleanup Link State Acknowlegdment list. */
   list_delete_all (oi->ls_ack);
+
+  /* Cleanup crypt key list. */
+  list_delete_all (oi->auth_crypt);
 
   XFREE (MTYPE_OSPF_IF, oi);
 }
@@ -687,7 +692,7 @@ ospf_crypt_key_add (list crypt, struct crypt_key *ck)
 }
 
 struct crypt_key *
-ospf_crypt_key_lookup (struct ospf_interface *oi, int key_id)
+ospf_crypt_key_lookup (struct ospf_interface *oi, u_char key_id)
 {
   listnode node;
   struct crypt_key *ck;
@@ -695,7 +700,7 @@ ospf_crypt_key_lookup (struct ospf_interface *oi, int key_id)
   for (node = listhead (oi->auth_crypt); node; nextnode (node))
     {
       ck = getdata (node);
-      if ((int) ck->key_id == key_id)
+      if (ck->key_id == key_id)
         return ck;
     }
 
@@ -703,7 +708,7 @@ ospf_crypt_key_lookup (struct ospf_interface *oi, int key_id)
 }
 
 int
-ospf_crypt_key_delete (struct ospf_interface *oi, int key_id)
+ospf_crypt_key_delete (struct ospf_interface *oi, u_char key_id)
 {
   listnode node;
   struct crypt_key *ck;
@@ -711,7 +716,7 @@ ospf_crypt_key_delete (struct ospf_interface *oi, int key_id)
   for (node = listhead (oi->auth_crypt); node; nextnode (node))
     {
       ck = getdata (node);
-      if ((int) ck->key_id == key_id)
+      if (ck->key_id == key_id)
         {
           list_delete_by_val (oi->auth_crypt, ck);
           return 1;
@@ -968,7 +973,12 @@ DEFUN (ip_ospf_cost,
       return CMD_WARNING;
     }
 
-  oi->output_cost = cost;
+  if (oi->output_cost != cost)
+    {
+      oi->output_cost = cost;
+      if (oi->area)
+	ospf_schedule_router_lsa_originate (oi->area);
+    }
 
   return CMD_SUCCESS;
 }
@@ -994,7 +1004,12 @@ DEFUN (no_ip_ospf_cost,
   ifp = vty->index;
   oi = ifp->info;
 
-  oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
+  if (oi->output_cost != OSPF_OUTPUT_COST_DEFAULT)
+    {
+      oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
+      if (oi->area)
+	ospf_schedule_router_lsa_originate (oi->area);
+    }
 
   return CMD_SUCCESS;
 }

@@ -698,8 +698,17 @@ Basic Config Commands
  - Command: no banner motd
      No motd banner string will be printed.
 
- - Line Command: exec-timeout SECOND
-     Set time out in seconds.
+ - Line Command: exec-timeout MINUTE
+ - Line Command: exec-timeout MINUTE SECOND
+     Set VTY connection timeout value.  When only one argument is
+     specified it is used for timeout value in minutes.  Optional
+     second argument is used for timeout value in seconds. Default
+     timeout value is 10 minutes.  When timeout value is zero, it means
+     no timeout.
+
+ - Line Command: no exec-timeout
+     Do not perform timeout at all.  This command is as same as
+     `exec-timeout 0 0'.
 
  - Line Command: access-class ACCESS-LIST
      Restrict vty connections with an access list.

@@ -54,8 +54,8 @@ AC_AIX
 dnl ----------------------
 dnl Packages configuration
 dnl ----------------------
-AC_ARG_ENABLE(one-vty,
-[  --enable-one-vty,       Make integrated VTY version of zebra])
+AC_ARG_ENABLE(vtysh,
+[  --enable-vtysh,       Make integrated VTY version of zebra])
 AC_ARG_ENABLE(ipv6,
 [  --disable-ipv6          turn off IPv6 related features and daemons])
 AC_ARG_ENABLE(zebra,
@@ -427,13 +427,6 @@ if test x"$RIPNGD" = x""; then
 fi
 fi
 
-dnl ---------------------
-dnl Integrated VTY option
-dnl ---------------------
-if test "${enable_one_vty}" = "yes";then
-  AC_DEFINE(ONE_VTY)
-fi
-
 dnl --------------------
 dnl Daemon disable check
 dnl --------------------
@@ -480,6 +473,16 @@ case "${enable_guile}" in
   *    ) ;;
 esac
 
+dnl ---------------------
+dnl Integrated VTY option
+dnl ---------------------
+case "${enable_vtysh}" in
+  "yes") VTYSH="vtysh";
+         AC_DEFINE(VTYSH);;
+  "no" ) VTYSH="";;
+  *    ) ;;
+esac
+
 if test "${enable_bgp_announce}" = "no";then
   AC_DEFINE(DISABLE_BGP_ANNOUNCE)
 fi
@@ -491,6 +494,7 @@ AC_SUBST(RIPNGD)
 AC_SUBST(OSPFD)
 AC_SUBST(OSPF6D)
 AC_SUBST(GUILE)
+AC_SUBST(VTYSH)
 AC_SUBST(INCLUDES)
 AC_CHECK_LIB(c, inet_ntop, [AC_DEFINE(HAVE_INET_NTOP)])
 AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
@@ -713,7 +717,7 @@ if test "$ac_cv_htonl_works" = "no"; then
   fi
 fi
 
-AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile guile/Makefile doc/Makefile)
+AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile guile/Makefile vtysh/Makefile doc/Makefile)
 
 echo "
 zebra configuration

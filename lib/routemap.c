@@ -201,6 +201,10 @@ route_map_print ()
 	  printf (" match %s %s\n", rule->cmd->str, rule->rule_str);
 	for (rule = index->set_list.head; rule; rule = rule->next)
 	  printf (" set %s %s\n", rule->cmd->str, rule->rule_str);
+	if (index->exitpolicy == RMAP_GOTO)
+	  printf (" on-match goto %d\n", index->nextpref);
+	if (index->exitpolicy == RMAP_NEXT)
+	  printf (" on-match next\n");
       }
 }
 
@@ -213,6 +217,7 @@ route_map_index_new ()
 
   new =  XMALLOC (MTYPE_ROUTE_MAP_INDEX, sizeof (struct route_map_index));
   bzero (new, sizeof (struct route_map_index));
+  new->exitpolicy = RMAP_EXIT; /* Default to Cisco-style */
   return new;
 }
 
@@ -563,6 +568,8 @@ route_map_delete_set (struct route_map_index *index, char *set_name,
 /* Apply route map's each index to the object. */
 /*
 ** The matrix for a route-map looks like this:
+** (note, this includes the description for the "NEXT"
+** and "GOTO" frobs now
 **
 **            Match   |   No Match
 **                    |
@@ -574,11 +581,23 @@ route_map_delete_set (struct route_map_index *index, char *set_name,
 **                    |
 **
 ** a)   Apply Set statements, accept route
+**      If NEXT is specified, goto NEXT statement
+**      If GOTO is specified, goto the first clause where pref > nextpref
+**      If nothing is specified, do as Cisco and finish
 ** b)   Finish route-map processing, and deny route
 ** c) & d)   Goto Next index
 **
 ** If we get no matches after we've processed all updates, then the route
 ** is dropped too.
+**
+** Some notes on the new "NEXT" and "GOTO"
+**   on-match next    - If this clause is matched, then the set statements
+**                      are executed and then we drop through to the next clause
+**   on-match goto n  - If this clause is matched, then the set statments
+**                      are executed and then we goto the nth clause, or the
+**                      first clause greater than this. In order to ensure
+**                      route-maps *always* exit, you cannot jump backwards.
+**                      Sorry ;)
 **
 ** We need to make sure our route-map processing matches the above
 */
@@ -611,12 +630,6 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
       for (set = index->set_list.head; set; set = set->next)
 	{
 	  ret = (*set->cmd->func_apply)(set->value, prefix, type, object);
-
-	  /* I believe a Cisco will ignore set statements that don't
-	 apply to what we're filtering - think "set default interface"
-	 which is only applicable to policy routing */
-	/* if (ret != RM_OKAY) */
-	/*  return ret; */
 	}
       return RMAP_MATCH;
     }
@@ -636,13 +649,38 @@ route_map_apply (struct route_map *map, struct prefix *prefix,
   int ret = 0;
   struct route_map_index *index;
 
+  if (map == NULL)
+    return RMAP_DENYMATCH;
+
   for (index = map->head; index; index = index->next)
     {
       /* Apply this index. End here if we get a RM_NOMATCH */
       ret = route_map_apply_index (index, prefix, type, object);
 
       if (ret != RMAP_NOMATCH)
-	return ret;
+	{
+	  /* We now have to handle the NEXT and GOTO clauses */
+	  if(index->exitpolicy == RMAP_EXIT)
+	    return ret;
+	  if(index->exitpolicy == RMAP_GOTO)
+	    {
+	      /* Find the next clause to jump to */
+	      struct route_map_index *next;
+
+	      next = index->next;
+	      while(next && next->pref < index->nextpref)
+		{
+		  index = next;
+		  next = next->next;
+		}
+	      if (next == NULL)
+		{
+		  /* No clauses match! */
+		  return ret;
+		}
+	    }
+	  /* Otherwise, we fall through as it was a NEXT */
+	}
     }
   /* Finally route-map does not match at all. */
   return RMAP_DENYMATCH;
@@ -778,6 +816,91 @@ DEFUN (no_route_map, no_route_map_cmd,
   return CMD_SUCCESS;
 }
 
+DEFUN (rmap_onmatch_next,
+       rmap_onmatch_next_cmd,
+       "on-match next",
+       "Exit policy on matches\n"
+       "Next clause\n")
+{
+  struct route_map_index *index;
+
+  index = vty->index;
+  if(index)
+    {
+      index->exitpolicy = RMAP_NEXT;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_rmap_onmatch_next,
+       no_rmap_onmatch_next_cmd,
+       "no on-match next",
+       NO_STR
+       "Exit policy on matches\n"
+       "Next clause\n")
+{
+  struct route_map_index *index;
+
+  index = vty->index;
+  if(index)
+    {
+      index->exitpolicy = RMAP_EXIT;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (rmap_onmatch_goto,
+       rmap_onmatch_goto_cmd,
+       "on-match goto <1-65535>",
+       "Exit policy on matches\n"
+       "Goto Clause number\n"
+       "Number\n")
+{
+  int d=0;
+  struct route_map_index *index;
+
+  if(argv[0])
+    {
+      d = atoi(argv[0]);
+    }
+
+  index = vty->index;
+  if(index)
+    {
+      if(d <= index->pref)
+	{
+	  /* Can't allow you to do that, Dave */
+	  vty_out (vty, "can't jump backwards in route-maps%s", 
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      else
+	{
+	  index->exitpolicy = RMAP_GOTO;
+	  index->nextpref = d;
+	}
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_rmap_onmatch_goto,
+       no_rmap_onmatch_goto_cmd,
+       "no on-match goto",
+       NO_STR
+       "Exit policy on matches\n"
+       "Next clause\n")
+{
+  struct route_map_index *index;
+
+  index = vty->index;
+  if(index)
+    {
+      index->exitpolicy = RMAP_EXIT;
+    }
+  return CMD_SUCCESS;
+}
+
+
 /* Configuration write function. */
 int
 route_map_config_write (struct vty *vty)
@@ -810,6 +933,12 @@ route_map_config_write (struct vty *vty)
 	  vty_out (vty, " set %s %s%s", rule->cmd->str,
 		   rule->rule_str ? rule->rule_str : "",
 		   VTY_NEWLINE);
+	if (index->exitpolicy == RMAP_GOTO)
+	  vty_out (vty, " on-match goto %d%s", index->nextpref,
+		   VTY_NEWLINE);
+	if (index->exitpolicy == RMAP_NEXT)
+	  vty_out (vty," on-match next%s", VTY_NEWLINE);
+	
 	write++;
       }
   return write;
@@ -835,4 +964,10 @@ route_map_init_vty ()
   install_element (RMAP_NODE, &config_end_cmd);
   install_element (RMAP_NODE, &config_exit_cmd);
   install_element (RMAP_NODE, &config_help_cmd);
+
+  /* Install the on-match stuff */
+  install_element (RMAP_NODE, &rmap_onmatch_next_cmd);
+  install_element (RMAP_NODE, &no_rmap_onmatch_next_cmd);
+  install_element (RMAP_NODE, &rmap_onmatch_goto_cmd);
+  install_element (RMAP_NODE, &no_rmap_onmatch_goto_cmd);
 }

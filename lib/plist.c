@@ -545,18 +545,30 @@ prefix_list_entry_match (struct prefix_list_entry *pentry, struct prefix *p)
 {
   int ret;
 
+  /* This is any entry. */
+  if (pentry->any)
+    return 1;
+
   ret = prefix_match (&pentry->prefix, p);
   if (! ret)
     return 0;
   
-  if (pentry->le >= 0)
-    if (p->prefixlen > pentry->le)
-      return 0;
+  /* In case of le nor ge is specified, exact match is performed. */
+  if (pentry->le < 0 && pentry->ge < 0)
+    {
+      if (pentry->prefix.prefixlen != p->prefixlen)
+	return 0;
+    }
+  else
+    {  
+      if (pentry->le >= 0)
+	if (p->prefixlen > pentry->le)
+	  return 0;
 
-  if (pentry->ge >= 0)
-    if (p->prefixlen < pentry->ge)
-      return 0;
-
+      if (pentry->ge >= 0)
+	if (p->prefixlen < pentry->ge)
+	  return 0;
+    }
   return 1;
 }
 
@@ -567,6 +579,9 @@ prefix_list_apply (struct prefix_list *plist, void *object)
   struct prefix *p;
 
   p = (struct prefix *) object;
+
+  if (plist == NULL)
+    return PREFIX_DENY;
 
   if (plist->count == 0)
     return PREFIX_PERMIT;
@@ -622,6 +637,32 @@ prefix_list_print (struct prefix_list *plist)
 /* Description of the `prefix-list' statement.  */
 #define PREFIX_LIST_STR "prefix-list definition\n"
 
+/* Retrun 1 when plist already include pentry policy. */
+struct prefix_list_entry *
+prefix_entry_dup_check (struct prefix_list *plist,
+			struct prefix_list_entry *new)
+{
+  struct prefix_list_entry *pentry;
+  int seq = 0;
+
+  if (new->seq == -1)
+    seq = prefix_new_seq_get (plist);
+  else
+    seq = new->seq;
+
+  for (pentry = plist->head; pentry; pentry = pentry->next)
+    {
+      if ((pentry->any == new->any)
+	  && prefix_same (&pentry->prefix, &new->prefix)
+	  && pentry->type == new->type
+	  && pentry->le == new->le
+	  && pentry->ge == new->ge
+	  && pentry->seq != seq)
+	return pentry;
+    }
+  return NULL;
+}
+
 int
 vty_prefix_list_install (struct vty *vty, int family,
 			 char *name, char *seq, char *typestr,
@@ -631,6 +672,7 @@ vty_prefix_list_install (struct vty *vty, int family,
   enum prefix_list_type type;
   struct prefix_list *plist;
   struct prefix_list_entry *pentry;
+  struct prefix_list_entry *dup;
   struct prefix p;
   int any = 0;
   int seqnum = -1;
@@ -719,7 +761,17 @@ vty_prefix_list_install (struct vty *vty, int family,
   else
     pentry = prefix_list_entry_make (&p, type, seqnum, lenum, genum);
     
-  
+  /* Check same policy. */
+  dup = prefix_entry_dup_check (plist, pentry);
+
+  if (dup)
+    {
+      prefix_list_entry_free (pentry);
+      vty_out (vty, "%Insertion failed - prefix-list entry %d exists%s",
+	       dup->seq, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
   /* Install new filter to the access_list. */
   prefix_list_entry_add (plist, pentry);
 
@@ -1116,7 +1168,7 @@ DEFUN (ip_prefix_list,
 
 DEFUN (ip_prefix_list_ge,
        ip_prefix_list_ge_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge NUMBER",
+       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1133,7 +1185,7 @@ DEFUN (ip_prefix_list_ge,
 
 DEFUN (ip_prefix_list_ge_le,
        ip_prefix_list_ge_le_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge NUMBER le NUMBER",
+       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1152,7 +1204,7 @@ DEFUN (ip_prefix_list_ge_le,
 
 DEFUN (ip_prefix_list_le,
        ip_prefix_list_le_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le NUMBER",
+       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1169,7 +1221,7 @@ DEFUN (ip_prefix_list_le,
 
 DEFUN (ip_prefix_list_le_ge,
        ip_prefix_list_le_ge_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le NUMBER ge NUMBER",
+       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1188,7 +1240,7 @@ DEFUN (ip_prefix_list_le_ge,
 
 DEFUN (ip_prefix_list_seq,
        ip_prefix_list_seq_cmd,
-       "ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any)",
+       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any)",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1205,7 +1257,7 @@ DEFUN (ip_prefix_list_seq,
 
 DEFUN (ip_prefix_list_seq_ge,
        ip_prefix_list_seq_ge_cmd,
-       "ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) ge NUMBER",
+       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1224,7 +1276,7 @@ DEFUN (ip_prefix_list_seq_ge,
 
 DEFUN (ip_prefix_list_seq_ge_le,
        ip_prefix_list_seq_ge_le_cmd,
-       "ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) ge NUMBER le NUMBER",
+       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1245,7 +1297,7 @@ DEFUN (ip_prefix_list_seq_ge_le,
 
 DEFUN (ip_prefix_list_seq_le,
        ip_prefix_list_seq_le_cmd,
-       "ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) le NUMBER",
+       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1264,7 +1316,7 @@ DEFUN (ip_prefix_list_seq_le,
 
 DEFUN (ip_prefix_list_seq_le_ge,
        ip_prefix_list_seq_le_ge_cmd,
-       "ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) le NUMBER ge NUMBER",
+       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1313,7 +1365,7 @@ DEFUN (no_ip_prefix_list_prefix,
 
 DEFUN (no_ip_prefix_list_ge,
        no_ip_prefix_list_ge_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge NUMBER",
+       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1331,7 +1383,7 @@ DEFUN (no_ip_prefix_list_ge,
 
 DEFUN (no_ip_prefix_list_ge_le,
        no_ip_prefix_list_ge_le_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge NUMBER le NUMBER",
+       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1351,7 +1403,7 @@ DEFUN (no_ip_prefix_list_ge_le,
 
 DEFUN (no_ip_prefix_list_le,
        no_ip_prefix_list_le_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le NUMBER",
+       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1369,7 +1421,7 @@ DEFUN (no_ip_prefix_list_le,
 
 DEFUN (no_ip_prefix_list_le_ge,
        no_ip_prefix_list_le_ge_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le NUMBER ge NUMBER",
+       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1389,7 +1441,7 @@ DEFUN (no_ip_prefix_list_le_ge,
 
 DEFUN (no_ip_prefix_list_seq,
        no_ip_prefix_list_seq_cmd,
-       "no ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any)",
+       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any)",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1407,7 +1459,7 @@ DEFUN (no_ip_prefix_list_seq,
 
 DEFUN (no_ip_prefix_list_seq_ge,
        no_ip_prefix_list_seq_ge_cmd,
-       "no ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) ge NUMBER",
+       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1427,7 +1479,7 @@ DEFUN (no_ip_prefix_list_seq_ge,
 
 DEFUN (no_ip_prefix_list_seq_ge_le,
        no_ip_prefix_list_seq_ge_le_cmd,
-       "no ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) ge NUMBER le NUMBER",
+       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1449,7 +1501,7 @@ DEFUN (no_ip_prefix_list_seq_ge_le,
 
 DEFUN (no_ip_prefix_list_seq_le,
        no_ip_prefix_list_seq_le_cmd,
-       "no ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) le NUMBER",
+       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1469,7 +1521,7 @@ DEFUN (no_ip_prefix_list_seq_le,
 
 DEFUN (no_ip_prefix_list_seq_le_ge,
        no_ip_prefix_list_seq_le_ge_cmd,
-       "no ip prefix-list NAME seq NUMBER (deny|permit) (A.B.C.D/M|any) le NUMBER ge NUMBER",
+       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1594,7 +1646,7 @@ DEFUN (show_ip_prefix_list_name,
 
 DEFUN (show_ip_prefix_list_name_seq,
        show_ip_prefix_list_name_seq_cmd,
-       "show ip prefix-list NAME seq NUMBER",
+       "show ip prefix-list NAME seq <1-4294967295>",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
@@ -1741,7 +1793,7 @@ DEFUN (ipv6_prefix_list,
 
 DEFUN (ipv6_prefix_list_ge,
        ipv6_prefix_list_ge_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge NUMBER",
+       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1758,7 +1810,7 @@ DEFUN (ipv6_prefix_list_ge,
 
 DEFUN (ipv6_prefix_list_ge_le,
        ipv6_prefix_list_ge_le_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge NUMBER le NUMBER",
+       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1777,7 +1829,7 @@ DEFUN (ipv6_prefix_list_ge_le,
 
 DEFUN (ipv6_prefix_list_le,
        ipv6_prefix_list_le_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le NUMBER",
+       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1794,7 +1846,7 @@ DEFUN (ipv6_prefix_list_le,
 
 DEFUN (ipv6_prefix_list_le_ge,
        ipv6_prefix_list_le_ge_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le NUMBER ge NUMBER",
+       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1813,7 +1865,7 @@ DEFUN (ipv6_prefix_list_le_ge,
 
 DEFUN (ipv6_prefix_list_seq,
        ipv6_prefix_list_seq_cmd,
-       "ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any)",
+       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any)",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1830,7 +1882,7 @@ DEFUN (ipv6_prefix_list_seq,
 
 DEFUN (ipv6_prefix_list_seq_ge,
        ipv6_prefix_list_seq_ge_cmd,
-       "ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) ge NUMBER",
+       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1849,7 +1901,7 @@ DEFUN (ipv6_prefix_list_seq_ge,
 
 DEFUN (ipv6_prefix_list_seq_ge_le,
        ipv6_prefix_list_seq_ge_le_cmd,
-       "ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) ge NUMBER le NUMBER",
+       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1870,7 +1922,7 @@ DEFUN (ipv6_prefix_list_seq_ge_le,
 
 DEFUN (ipv6_prefix_list_seq_le,
        ipv6_prefix_list_seq_le_cmd,
-       "ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) le NUMBER",
+       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1889,7 +1941,7 @@ DEFUN (ipv6_prefix_list_seq_le,
 
 DEFUN (ipv6_prefix_list_seq_le_ge,
        ipv6_prefix_list_seq_le_ge_cmd,
-       "ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) le NUMBER ge NUMBER",
+       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
        "prefix-list name\n"
@@ -1938,7 +1990,7 @@ DEFUN (no_ipv6_prefix_list_prefix,
 
 DEFUN (no_ipv6_prefix_list_ge,
        no_ipv6_prefix_list_ge_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge NUMBER",
+       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -1956,7 +2008,7 @@ DEFUN (no_ipv6_prefix_list_ge,
 
 DEFUN (no_ipv6_prefix_list_ge_le,
        no_ipv6_prefix_list_ge_le_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge NUMBER le NUMBER",
+       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -1976,7 +2028,7 @@ DEFUN (no_ipv6_prefix_list_ge_le,
 
 DEFUN (no_ipv6_prefix_list_le,
        no_ipv6_prefix_list_le_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le NUMBER",
+       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -1994,7 +2046,7 @@ DEFUN (no_ipv6_prefix_list_le,
 
 DEFUN (no_ipv6_prefix_list_le_ge,
        no_ipv6_prefix_list_le_ge_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le NUMBER ge NUMBER",
+       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -2014,7 +2066,7 @@ DEFUN (no_ipv6_prefix_list_le_ge,
 
 DEFUN (no_ipv6_prefix_list_seq,
        no_ipv6_prefix_list_seq_cmd,
-       "no ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any)",
+       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any)",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -2032,7 +2084,7 @@ DEFUN (no_ipv6_prefix_list_seq,
 
 DEFUN (no_ipv6_prefix_list_seq_ge,
        no_ipv6_prefix_list_seq_ge_cmd,
-       "no ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) ge NUMBER",
+       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -2052,7 +2104,7 @@ DEFUN (no_ipv6_prefix_list_seq_ge,
 
 DEFUN (no_ipv6_prefix_list_seq_ge_le,
        no_ipv6_prefix_list_seq_ge_le_cmd,
-       "no ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) ge NUMBER le NUMBER",
+       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -2074,7 +2126,7 @@ DEFUN (no_ipv6_prefix_list_seq_ge_le,
 
 DEFUN (no_ipv6_prefix_list_seq_le,
        no_ipv6_prefix_list_seq_le_cmd,
-       "no ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) le NUMBER",
+       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -2094,7 +2146,7 @@ DEFUN (no_ipv6_prefix_list_seq_le,
 
 DEFUN (no_ipv6_prefix_list_seq_le_ge,
        no_ipv6_prefix_list_seq_le_ge_cmd,
-       "no ipv6 prefix-list NAME seq NUMBER (deny|permit) (IPV6_PREFIX|any) le NUMBER ge NUMBER",
+       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
@@ -2219,7 +2271,7 @@ DEFUN (show_ipv6_prefix_list_name,
 
 DEFUN (show_ipv6_prefix_list_name_seq,
        show_ipv6_prefix_list_name_seq_cmd,
-       "show ipv6 prefix-list NAME seq NUMBER",
+       "show ipv6 prefix-list NAME seq <1-4294967295>",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR

@@ -52,6 +52,7 @@ void ospf_flood_lsa_area (struct ospf_lsa *, struct ospf_area *);
 void ospf_flood_lsa_as (struct ospf_lsa *);
 void ospf_lsa_flush_area (struct ospf_lsa *, struct ospf_area *);
 void ospf_lsa_flush_as (struct ospf_lsa *);
+void ospf_flush_through_as (struct ospf_lsa *);
 
 void debug_ospf_ls_retransmit (struct ospf_neighbor *);
 

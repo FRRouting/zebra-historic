@@ -83,9 +83,10 @@ struct bgp
   char *name;
 
   /* BGP configuration. */
-#define BGP_CONFIG_ROUTER_ID     0x01
-#define BGP_CONFIG_CLUSTER_ID    0x02
-#define BGP_CONFIG_CONFEDERATION 0x04
+#define BGP_CONFIG_ROUTER_ID          0x01
+#define BGP_CONFIG_CLUSTER_ID         0x02
+#define BGP_CONFIG_CONFEDERATION      0x04
+#define BGP_CONFIG_ALWAYS_COMPARE_MED 0x08
   u_int16_t config;
 
   /* BGP identifier. */
@@ -470,6 +471,7 @@ struct bgp_nlri
 /* Default port values. */
 #define BGP_PORT_DEFAULT   179
 #define BGP_VTY_PORT      2605
+#define BGP_VTYSH_PATH    "/tmp/bgpd"
 
 /* Default configuration file name for bgpd. */
 #define BGP_DEFAULT_CONFIG "bgpd.conf"

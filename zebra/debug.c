@@ -199,7 +199,7 @@ config_write_debug (struct vty *vty)
 		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "debug zebra packet receive%s%s",
+	    vty_out (vty, "debug zebra packet recv%s%s",
 		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  write++;

@@ -418,7 +418,7 @@ rtm_read (struct rt_msghdr *rtm)
 #endif  /* DEBUG */
     }
 
-  if ((flags & RTF_PROTO2) && (flags & RTF_PROTO1))
+  if (flags & RTF_PROTO1)
     zebra_flags |= ZEBRA_FLAG_SELFROUTE;	
 
   if (dest.sa.sa_family == AF_INET)
@@ -535,7 +535,7 @@ rtm_write (int message,
     msg.rtm.rtm_flags |= RTF_HOST;
 
   /* Tagging route with flags */
-  msg.rtm.rtm_flags |= (RTF_PROTO2|RTF_PROTO1);
+  msg.rtm.rtm_flags |= (RTF_PROTO1);
 
   /* Additional flags. */
   if (zebra_flags & ZEBRA_FLAG_BLACKHOLE)

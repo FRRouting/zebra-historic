@@ -1,3 +1,15 @@
+2000-04-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to 0.86.
+
+2000-03-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to 0.85b for ospfd test.
+
+2000-03-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to 0.85a for ospfd test.
+
 2000-03-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Set version to 0.85.

@@ -23,6 +23,8 @@
 #ifndef OSPF6_TOP_H
 #define OSPF6_TOP_H
 
+#include "routemap.h"
+
 /* ospfv3 top level data structure */
 struct ospf6
 {
@@ -73,6 +75,13 @@ struct ospf6
   struct route_table *redistribute_map;
   /* XXX, next LS-ID of AS-external-LSA */
   unsigned long ase_ls_id;
+
+  /* redistribute route-map */
+  struct
+  {
+    char *name;
+    struct route_map *map;
+  } rmap[ZEBRA_ROUTE_MAX];
 
   /* Interfaces */
   list ospf6_interface_list;

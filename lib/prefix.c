@@ -645,10 +645,8 @@ void apply_classful_mask_ipv4 (struct prefix_ipv4 *p)
   
   destination = ntohl (p->prefix.s_addr);
   
-  if (destination & 0x000000ff) 
-    {
-     p->prefixlen=32;
-    }
+  if (p->prefixlen == 32);
+  /* do nothing for host routes */
   else if (IN_CLASSC (destination)) 
     {
       p->prefixlen=24;

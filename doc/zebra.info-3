@@ -296,7 +296,8 @@ Command Index
 * distribute-list NAME out rip:          Redistribute routes to OSPF.
 * distribute-list NAME out static:       Redistribute routes to OSPF.
 * enable password PASSWORD:              Basic Config Commands.
-* exec-timeout SECOND:                   Basic Config Commands.
+* exec-timeout MINUTE:                   Basic Config Commands.
+* exec-timeout MINUTE SECOND:            Basic Config Commands.
 * flush_timer TIME:                      ripngd Configuration.
 * hostname HOSTNAME:                     Basic Config Commands.
 * interface IFNAME:                      Interface Commands.
@@ -409,6 +410,7 @@ Command Index
 * no distribute-list NAME out kernel:    Redistribute routes to OSPF.
 * no distribute-list NAME out rip:       Redistribute routes to OSPF.
 * no distribute-list NAME out static:    Redistribute routes to OSPF.
+* no exec-timeout:                       Basic Config Commands.
 * no ip ospf authentication-key:         OSPF interface.
 * no ip ospf cost:                       OSPF interface.
 * no ip ospf dead-interval:              OSPF interface.

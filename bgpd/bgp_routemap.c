@@ -248,6 +248,46 @@ struct route_map_rule_cmd route_match_ip_prefix_list_cmd =
   route_match_ip_prefix_list_free
 };
 
+/* `match ip address prefix-list PREFIX_LIST' */
+
+route_map_result_t
+route_match_ip_address_prefix_list (void *rule, struct prefix *prefix, 
+				    route_map_object_t type, void *object)
+{
+  struct prefix_list *plist;
+
+  if (type == RMAP_BGP)
+    {
+      plist = prefix_list_lookup (AF_INET, (char *) rule);
+      if (plist == NULL)
+	return RMAP_NOMATCH;
+    
+      return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
+	      RMAP_NOMATCH : RMAP_MATCH);
+    }
+  return RMAP_NOMATCH;
+}
+
+void *
+route_match_ip_address_prefix_list_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ip_address_prefix_list_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ip_address_prefix_list_cmd =
+{
+  "ip address prefix-list",
+  route_match_ip_address_prefix_list,
+  route_match_ip_address_prefix_list_compile,
+  route_match_ip_address_prefix_list_free
+};
+
 /* `match metric METRIC' */
 
 /* Match function return 1 if match is success else return zero. */
@@ -1647,6 +1687,31 @@ DEFUN (no_match_ip_prefix_list,
   return bgp_route_match_delete (vty, vty->index, "ip prefix-list", argv[0]);
 }
 
+DEFUN (match_ip_address_prefix_list, 
+       match_ip_address_prefix_list_cmd,
+       "match ip address prefix-list PREFIX_LIST",
+       MATCH_STR
+       IP_STR
+       "IP address\n"
+       "prefix-list\n"
+       "prefix-list name\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ip address prefix-list", argv[0]);
+}
+
+DEFUN (no_match_ip_address_prefix_list,
+       no_match_ip_address_prefix_list_cmd,
+       "no match ip address prefix-list PREFIX_LIST",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "IP address\n"
+       "prefix-list\n"
+       "prefix-list name\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "ip address prefix-list", argv[0]);
+}
+
 DEFUN (match_metric, 
        match_metric_cmd,
        "match metric MED",
@@ -2026,21 +2091,25 @@ DEFUN (no_set_community,
 
 DEFUN (set_origin,
        set_origin_cmd,
-       "set origin ORIGIN",
+       "set origin (egp|igp|incomplete)",
        "Set value\n"
        "Origin attribute\n"
-       "Origin attribute value\n")
+       "remote EGP\n"
+       "local IGP\n"
+       "unknown origin\n")
 {
   return bgp_route_set_add (vty, vty->index, "origin", argv[0]);
 }
 
 DEFUN (no_set_origin,
        no_set_origin_cmd,
-       "no set origin ORIGIN",
+       "no set origin (egp|igp|incomplete)",
        NO_STR
        "Set value\n"
        "Origin attribute\n"
-       "Origin attribute value\n")
+       "remote EGP\n"
+       "local IGP\n"
+       "unknown origin\n")
 {
   return bgp_route_set_delete (vty, vty->index, "origin", argv[0]);
 }
@@ -2366,6 +2435,7 @@ bgp_route_map_init ()
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_ip_next_hop_cmd);
   route_map_install_match (&route_match_ip_prefix_list_cmd);
+  route_map_install_match (&route_match_ip_address_prefix_list_cmd);
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_community_cmd);
   route_map_install_match (&route_match_nlri_cmd);
@@ -2389,6 +2459,10 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &match_ip_prefix_list_cmd);
   install_element (RMAP_NODE, &no_match_ip_prefix_list_cmd);
+
+  install_element (RMAP_NODE, &match_ip_address_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_address_prefix_list_cmd);
+
   install_element (RMAP_NODE, &match_aspath_cmd);
   install_element (RMAP_NODE, &no_match_aspath_cmd);
   install_element (RMAP_NODE, &match_metric_cmd);

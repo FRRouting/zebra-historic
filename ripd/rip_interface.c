@@ -435,6 +435,103 @@ if_valid_neighbor (struct in_addr addr)
   return 0;
 }
 
+/* Inteface link down message processing. */
+int
+rip_interface_down (int command, struct zebra *zebra, zebra_size_t length)
+{
+  struct interface *ifp;
+  struct route_node *rp;
+  struct rip_info *rinfo;
+  struct stream *s;
+  struct rip_interface *ri = NULL;
+
+  s = zebra->ibuf;  
+  /* zebra_interface_state_read() updates interface structure in iflist */
+  ifp = zebra_interface_state_read(s);
+
+  if (ifp == NULL)
+    return 0;
+
+  /* Clear RIP dynamic routes on the interface*/
+  if (rip)
+    {
+      for (rp = route_top (rip->table); rp; rp = route_next (rp))
+	if ((rinfo = rp->info) != NULL)
+	  {
+	    /* routes got through RIP */
+	    if (rinfo->ifindex == ifp->ifindex &&
+		rinfo->type == ZEBRA_ROUTE_RIP &&
+		rinfo->sub_type == RIP_ROUTE_RTE){
+
+	      rip_zebra_ipv4_delete ( (struct prefix_ipv4 *)&rp->p,
+				      &rinfo->nexthop,rinfo->ifindex);
+
+	      RIP_TIMER_OFF (rinfo->t_timeout);
+	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+	      
+	      rp->info = NULL;
+	      route_unlock_node (rp);
+	      
+	      rip_info_free (rinfo);
+	    }
+	    else
+	      /* all redistributed routes but kernel and static and system */
+	      if ((rinfo->ifindex == ifp->ifindex) &&
+		  (rinfo->type != ZEBRA_ROUTE_STATIC) &&
+		  (rinfo->type != ZEBRA_ROUTE_KERNEL) &&
+		  (rinfo->type != ZEBRA_ROUTE_SYSTEM)){
+
+		rip_redistribute_delete(rinfo->type,rinfo->sub_type,
+					(struct prefix_ipv4 *)&rp->p,
+					rinfo->ifindex);
+	      }
+	  }
+    }
+	    
+  ri = ifp->info;
+  
+  if (ri->running)
+   {
+     if (IS_RIP_DEBUG_EVENT)
+       zlog_info ("turn off %s", ifp->name);
+
+     /* Leave from multicast group. */
+     rip_multicast_leave (ifp, rip->sock);
+
+     ri->running = 0;
+   }
+
+  if (IS_RIP_DEBUG_ZEBRA)
+    zlog_info ("interface %s index %d flags %d metric %d mtu %d is down",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+ 
+  return 0;
+}
+
+/* Inteface link up message processing */
+int
+rip_interface_up (int command, struct zebra *zebra, zebra_size_t length)
+{
+  struct interface *ifp;
+  /* zebra_interface_state_read() updates interface structure in iflist */
+  ifp = zebra_interface_state_read(zebra->ibuf);
+
+  if (ifp == NULL)
+    return 0;
+
+  if (IS_RIP_DEBUG_ZEBRA)
+    zlog_info ("interface %s index %d flags %d metric %d mtu %d is up",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+
+  /* Check if this interface is RIP enabled or not.*/
+  rip_enable_apply (ifp);
+ 
+  /* Apply distribute list to the all interface. */
+  rip_distribute_update_interface (ifp);
+
+  return 0;
+}
+
 /* Inteface addition message from zebra. */
 int
 rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
@@ -447,7 +544,7 @@ rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
     zlog_info ("interface add %s index %d flags %d metric %d mtu %d",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
-  /* Check is this interface is RIP enabled or not.*/
+  /* Check if this interface is RIP enabled or not.*/
   rip_enable_apply (ifp);
 
   /* Apply distribute list to the all interface. */

@@ -397,6 +397,15 @@ bgp_start (struct peer *peer)
   return 0;
 }
 
+/* Connect retry timer is expired when the peer status is Connect. */
+int
+bgp_reconnect (struct peer *peer)
+{
+  bgp_stop (peer);
+  bgp_start (peer);
+  return 0;
+}
+
 int
 fsm_open (struct peer *peer)
 {
@@ -536,7 +545,7 @@ struct {
     {bgp_stop, Idle},		/* TCP_connection_closed        */
     {bgp_connect_fail, Active}, /* TCP_connection_open_failed   */
     {bgp_connect_fail, Idle},	/* TCP_fatal_error              */
-    {bgp_ignore,  Connect},	/* ConnectRetry_timer_expired   */
+    {bgp_reconnect, Connect},	/* ConnectRetry_timer_expired   */
     {bgp_ignore,  Idle},	/* Hold_Timer_expired           */
     {bgp_ignore,  Idle},	/* KeepAlive_timer_expired      */
     {bgp_ignore,  Idle},	/* Receive_OPEN_message         */

@@ -226,7 +226,7 @@ config_write_debug (struct vty *vty)
 		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "debug rip packet receive%s%s",
+	    vty_out (vty, "debug rip packet recv%s%s",
 		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  write++;

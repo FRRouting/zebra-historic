@@ -123,7 +123,7 @@ sighup (int sig)
   vty_read_config (config_file, config_current, config_default);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT, RIP_VTYSH_PATH);
 
   /* Try to return to normal operation. */
 }
@@ -236,7 +236,7 @@ main (int argc, char **argv)
   pid_output (PATH_RIPD_PID);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT, RIP_VTYSH_PATH);
 
   /* Execute each thread. */
   while (thread_fetch (master, &thread))

@@ -36,6 +36,7 @@
 #include "zebra/interface.h"
 #include "zebra/rtadv.h"
 #include "zebra/zserv.h"
+#include "zebra/rib.h"
 
 /* Called when new interface is added. */
 int
@@ -98,7 +99,7 @@ zebra_interface_up_update (struct interface *ifp)
       zebra_interface_up (client->fd, ifp);
 }
 
-
+/* Interface is up. */
 void
 if_up (struct interface *ifp)
 {
@@ -130,10 +131,9 @@ if_up (struct interface *ifp)
 	}
     }
 
-  /* Examine all routes. */
-  ;
+  /* Examine all static routes. */
+  rib_if_up (ifp);
 }
-
 
 void
 zebra_interface_down_update (struct interface *ifp)
@@ -181,7 +181,7 @@ if_down (struct interface *ifp)
     }
 
   /* Examine all static routes which direct to the interface. */
-  ;
+  rib_if_down (ifp);
 }
 
 int

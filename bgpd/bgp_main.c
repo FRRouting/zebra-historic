@@ -104,7 +104,7 @@ sighup (int sig)
   vty_read_config (config_file, config_current, config_default);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT, BGP_VTYSH_PATH);
 
   /* Try to return to normal operation. */
 }
@@ -244,7 +244,7 @@ main (int argc, char **argv)
   pid_output (PATH_BGPD_PID);
 
   /* Make bgp vty socket. */
-  vty_serv_sock (vty_port);
+  vty_serv_sock (vty_port, BGP_VTYSH_PATH);
 
   /* Make BGP server socket. */
   bgp_serv_sock (bgp_port);

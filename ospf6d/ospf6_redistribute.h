@@ -24,6 +24,7 @@
 #define OSPF6_REDISTRIBUTE_H
 
 #include "prefix.h"
+#include "vty.h"
 
 #include "ospf6_top.h"
 
@@ -35,13 +36,23 @@ struct ospf6_redistribute_info
   /* if index */
   int ifindex;
 
-  /* LS ID */
+  /* ASE LS ID */
   u_int32_t ls_id;
+
+  /* ASE Metric-type */
+  int metric_type;
+
+  /* ASE Metric */
+  u_int32_t metric;
 };
 
 /* prototypes */
+void ospf6_redistribute_routemap_update ();
+u_int32_t ospf6_redistribute_ls_id_lookup (int , struct prefix_ipv6 *,
+                                           struct ospf6 *);
 void ospf6_redistribute_route_add (int, int, struct prefix_ipv6 *);
 void ospf6_redistribute_route_remove (int, int, struct prefix_ipv6 *);
+int ospf6_redistribute_config_write (struct vty *);
 void ospf6_redistribute_init (struct ospf6 *);
 void ospf6_redistribute_finish (struct ospf6 *);
 

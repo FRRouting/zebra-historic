@@ -1,3 +1,51 @@
+2000-04-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_info_cmp): Compare MED only both routes comes
+	from same neighboring AS.
+
+	* bgp_aspath.c (aspath_cmp_left): Compare leftmost AS value.
+
+	* bgp_route.c (bgp_info_cmp): Fix misused htonl() to ntohl().
+
+2000-04-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_output_filter): When distribute-list's
+	corresponding access-list does not exist, filter all routes.
+	(bgp_input_filter): Likewise.
+
+2000-04-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_packet_attribute): Propagate MED to IBGP peer.
+
+	* bgp_route.c (bgp_info_cmp): Add evaluation of local preference.
+
+2000-04-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_distribute_update): Add struct access_list *
+	argument.
+
+2000-04-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_clist.c (community_list_dup_check): Add duplicate insertion
+	check.
+
+	* bgp_filter.c (as_list_dup_check): Add duplicate insertion check.
+
+	* bgp_route.c (bgp_show): Fix undeclared write variable.
+
+2000-04-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c: Add "match ip address prefix-list".
+
+2000-03-29  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_aspath.c (aspath_strip_confed): Fix realloc problem.
+
+2000-03-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c (bgp_reconnect): Connect retry timer is expired when
+	the peer status is Connect.
+
 2000-03-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Fix bug of rewritten originator-id.

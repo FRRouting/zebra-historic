@@ -144,6 +144,8 @@ struct ospf6_lsa_hdr
 
 struct ospf6_lsa
 {
+  char                   str[256];  /* dump string */
+
   unsigned long          lock;      /* reference counter */
   int                    summary;   /* indicate this is LS header only */
   struct ospf6_lsa_hdr  *lsa_hdr;
@@ -178,7 +180,6 @@ struct ospf6_lsa
            (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
 
 /* Function Prototypes */
-int past_min_ls_interval (struct ospf6_lsa *);
 void originating_lsa (struct ospf6_lsa *);
 int show_router_lsa (struct vty *, void *);
 int show_network_lsa (struct vty *, void *);
@@ -216,9 +217,9 @@ struct ospf6_lsa *ospf6_make_network_lsa (struct ospf6_interface *);
 struct ospf6_lsa *ospf6_make_link_lsa (struct ospf6_interface *);
 struct ospf6_lsa *ospf6_make_intra_prefix_lsa (struct ospf6_interface *);
 
-struct
-ospf6_lsa *ospf6_lsa_create_as_external (u_int32_t, int, int,
-                                         struct prefix_ipv6 *);
+struct ospf6_lsa *
+ospf6_lsa_create_as_external (struct ospf6_redistribute_info *,
+                              struct prefix_ipv6 *);
 
 void ospf6_lsa_originate_link (struct ospf6_interface *);
 void ospf6_lsa_originate_intraprefix (struct ospf6_interface *);

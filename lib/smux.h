@@ -28,7 +28,7 @@
 #define SMUXMAXSTRLEN      256
 
 #define SMUX_OPEN       (ASN_APPLICATION | ASN_CONSTRUCTOR | 0)
-#define SMUX_CLOSE      (ASN_APPLICATION | ASN_CONSTRUCTOR | 1)
+#define SMUX_CLOSE      (ASN_APPLICATION | ASN_PRIMITIVE | 1)
 #define SMUX_RREQ       (ASN_APPLICATION | ASN_CONSTRUCTOR | 2)
 #define SMUX_RRSP       (ASN_APPLICATION | ASN_PRIMITIVE | 3)
 #define SMUX_SOUT       (ASN_APPLICATION | ASN_PRIMITIVE | 4)
@@ -40,11 +40,38 @@
 
 #define SMUX_MAX_FAILURE 3
 
+/* Structures here are mostly compatible with UCD SNMP 4.1.1 */
+
+#define MATCH_FAILED     (-1)
+#define MATCH_SUCCEEDED  0
+
+struct variable;
+
+#define REGISTER_MIB(descr, var, vartype, theoid)		\
+    smux_register_mib(descr, (struct variable *)var, sizeof(struct vartype), \
+    sizeof(var)/sizeof(struct vartype),			\
+    theoid, sizeof(theoid)/sizeof(oid))
+
+typedef int (WriteMethod)(int action,
+  u_char  *var_val,
+  u_char   var_val_type,
+  size_t   var_val_len,
+  u_char  *statP,
+  oid     *name,
+  size_t   length);
+
+typedef u_char *(FindVarMethod)(struct variable *vp,
+  oid     *name,
+  size_t  *length,
+  int      exact,
+  size_t  *var_len,
+  WriteMethod   **write_method);
+
 /* SNMP variable */
 struct variable
 {
   /* Index of the MIB.*/
-  u_char index;
+  u_char magic;
 
   /* Type of variable. */
   char type;
@@ -53,15 +80,11 @@ struct variable
   u_short acl;
 
   /* Callback function. */
-  int (*func) (struct variable *, oid [], size_t *, void **, size_t *, int);
+  FindVarMethod *findVar;
 
   /* Suffix of the MIB. */
-  oid suffix[MAX_OID_LEN];
-  u_char suffix_len;
-
-  /* Real oid of the MIB. */
+  u_char namelen;
   oid name[MAX_OID_LEN];
-  u_char name_len;
 };
 
 /* SNMP tree. */
@@ -79,11 +102,16 @@ struct subtree
 
   /* Width of the variables list. */
   int variables_width;
+
+  /* Registered flag. */
+  int registered;
 };
 
-void smux_init (oid oid[], size_t);
-void smux_tree_register (struct subtree *, size_t);
-int smux_single_instance_check (struct variable *, oid [], size_t *, int);
+void smux_init (oid [], size_t);
+void smux_start (void);
+void smux_register_mib(char *, struct variable *, size_t, int, oid [], size_t);
+int smux_header_generic (struct variable *, oid [], size_t *, int, size_t *, 
+    WriteMethod **);
 
 int oid_compare (oid *, int, oid *, int);
 void oid2in_addr (oid [], int, struct in_addr *);

@@ -64,6 +64,7 @@ struct aspath *aspath_aggregate (struct aspath *, struct aspath *);
 struct aspath *aspath_prepend (struct aspath *, struct aspath *);
 struct aspath *aspath_add_left (struct aspath *, as_t);
 struct aspath *aspath_add_left_confed (struct aspath *, as_t);
+int aspath_cmp_left (struct aspath *, struct aspath *);
 struct aspath *aspath_strip_confed (struct aspath *);
 struct aspath *aspath_empty ();
 struct aspath *aspath_str2aspath (char *);

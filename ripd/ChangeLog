@@ -1,3 +1,8 @@
+2000-04-27  Mirko Karanovic <mkaranov@torsel.alcatel.com>
+
+	* rip_interface.c (rip_interface_down): Remove interface from
+	multicast group when interface goes down.
+
 2000-02-15  Hidetoshi Shimokawa <simokawa@sat.t.u-tokyo.ac.jp>
 
 	* ripd.c (rip_write_rte): "set metic" in route-map has no effect

@@ -25,6 +25,7 @@
 /* Default port information. */
 #define ZEBRA_PORT                    2600
 #define ZEBRA_VTY_PORT                2601
+#define ZEBRA_VTYSH_PATH              "/tmp/zebra"
 
 /* Default configuration filename. */
 #define DEFAULT_CONFIG_FILE "zebra.conf"
