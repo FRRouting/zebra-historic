@@ -1,3 +1,75 @@
+2005-01-17  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 25 ***
+    : bgpd.h, bgp_snmp.c 
+	* Fix bug of snmp(connect timer was removed).
+
+2005-01-07  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 24 ***
+    : bgpd.[ch], bgp_vty.c 
+	* cleanup peer-group.
+	* neighbor timers connect commands are removed.
+
+2004-12-29  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 23 ***
+    : bgpd.[ch], bgp_vty.c 
+	* Fix bug of network/redistribute config display. 
+
+2004-12-29  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 22 ***
+    : bgpd.[ch], bgp_vty.c, bgp_route.c, bgp_routemap.c
+	* Configuration display was divided for every address-family. 
+	* neighbor weight command was supported for every address-family. 
+	* set weight value was changed in route-map. 
+
+2004-12-28  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 21 ***
+    : bgpd.[ch]
+	* Fix bug of bgp_delete().
+
+2004-12-28  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 20 ***
+    : bgpd.[ch], bgp_vty.c, bgp_fsm.c
+	* peer_group_active() was changed to peer_group_member().
+	* Fix bug of exit-address-family command.
+	* The connection timer was set to 120 seconds when a neighbor restarted
+	  under the environment of graceful restart.
+
+2004-12-14  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 19 ***
+    : bgpd.h, bgp_ecommunity.[ch], bgp_routemap.c
+	* The extcommunity display of route-map was corrected.
+	* Fix memory leak of set extcommunity of route-map.
+	* route-map "set extcommunity cost igp" command was added.
+
+2004-12-11  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* bgp_route.c: moreline support & line counting for more is fixed.
+
+2004-11-12  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 18 ***
+    : bgpd.[ch], bgp_clist.c, bgp_debug.c, bgp_ecommunity.[ch], bgp_route.c, bgp_vty.c
+	* bgp cost community was supported. but can not set it yet.
+
+2004-10-08  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 17 ***
+    : bgpd.[ch]
+	* Fix bug of "neighbor transport connection-mode" commands.
+
+2004-09-17  Akihiro Mizutani <mizutani@net-chef.net>
+
+  *** BGPd version 0.95 build 16 ***
+    : bgpd.h, bgp_fsm.c
+	* Fix bug of peer_down_str[].
+
 2004-09-10  Akihiro Mizutani <mizutani@net-chef.net>
 
   *** BGPd version 0.95 build 15 ***

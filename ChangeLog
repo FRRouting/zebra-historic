@@ -1,3 +1,7 @@
+2004-11-24  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* configure.ac: Net-SNMP support.
+
 2002-07-07  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* zebra-0.93 released.

@@ -21,6 +21,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <zebra.h>
 
 #ifdef HAVE_SNMP
+
+#ifdef HAVE_NETSNMP
+#include <net-snmp/net-snmp-config.h>
+#endif /* HAVE_NETSNMP */
+
 #include <asn1.h>
 #include <snmp.h>
 #include <snmp_impl.h>
@@ -419,11 +424,6 @@ write_bgpPeerTable (int action, u_char *var_val,
 	;			/* Do nothing. */
       else
 	return SNMP_ERR_NOSUCHNAME;
-      break;
-    case BGPPEERCONNECTRETRYINTERVAL:
-      SET_FLAG (peer->config, PEER_CONFIG_CONNECT);
-      peer->connect = intval;
-      peer->v_connect = intval;
       break;
     case BGPPEERHOLDTIMECONFIGURED:
       SET_FLAG (peer->config, PEER_CONFIG_TIMER);

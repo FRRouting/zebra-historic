@@ -425,17 +425,17 @@ ecommunity_gettoken (char *str, struct ecommunity_val *eval,
 
    When type is already known, please specify both str and type.  str
    should not include keyword such as "rt" and "soo".  Type is
-   ECOMMUNITY_ROUTE_TARGET or ECOMMUNITY_SITE_ORIGIN.
+   ECOMMUNITY_TYPE_ROUTE_TARGET or ECOMMUNITY_TYPE_SITE_ORIGIN.
    keyword_included should be zero.
 
    For example route-map's "set extcommunity" command case:
 
    "rt 100:1 100:2 100:3"        -> str = "100:1 100:2 100:3"
-                                    type = ECOMMUNITY_ROUTE_TARGET
+                                    type = ECOMMUNITY_TYPE_ROUTE_TARGET
                                     keyword_included = 0
 
    "soo 100:1"                   -> str = "100:1"
-                                    type = ECOMMUNITY_SITE_ORIGIN
+                                    type = ECOMMUNITY_TYPE_SITE_ORIGIN
                                     keyword_included = 0
 
    When string includes keyword for each extended community value.
@@ -471,11 +471,11 @@ ecommunity_str2com (char *str, int type, int keyword_included)
 
 	  if (token == ecommunity_token_rt)
 	    {
-	      type = ECOMMUNITY_ROUTE_TARGET;
+	      type = ECOMMUNITY_TYPE_ROUTE_TARGET;
 	    }
 	  if (token == ecommunity_token_soo)
 	    {
-	      type = ECOMMUNITY_SITE_ORIGIN;
+	      type = ECOMMUNITY_TYPE_SITE_ORIGIN;
 	    }
 	  break;
 	case ecommunity_token_val:
@@ -505,6 +505,46 @@ ecommunity_str2com (char *str, int type, int keyword_included)
   return ecom;
 }
 
+struct ecommunity *
+ecommunity_cost_str2com (char *str, u_char poi)
+{
+  struct ecommunity *ecom = NULL;
+  struct ecommunity_cost ecost;
+  u_int32_t id = 0;
+  u_int32_t val = 0;
+  char *p = str;
+
+  while (isspace ((int) *p))
+    p++;
+
+  while (isdigit ((int) *p))
+    {
+      id *= 10;
+      id += (*p - '0');
+      p++;
+    }
+
+  while (isspace ((int) *p))
+    p++;
+
+  while (isdigit ((int) *p))
+    {
+      val *= 10;
+      val += (*p - '0');
+      p++;
+    }
+
+  ecost.type = ntohs (ECOMMUNITY_COST_COMMUNITY);
+  ecost.poi = poi;
+  ecost.id = id;
+  ecost.val = ntohl (val);
+
+  ecom = ecommunity_new ();
+  ecommunity_add_val (ecom, (struct ecommunity_val *)&ecost);
+
+  return ecom;
+}
+
 /* Convert extended community attribute to string.  
 
    Due to historical reason of industry standard implementation, there
@@ -522,16 +562,27 @@ ecommunity_str2com (char *str, int type, int keyword_included)
 
    For each formath please use below definition for format:
 
-   ECOMMUNITY_FORMAT_ROUTE_MAP
-   ECOMMUNITY_FORMAT_COMMUNITY_LIST
+   ECOMMUNITY_FORMAT_CONFIG
    ECOMMUNITY_FORMAT_DISPLAY
 */
+
+
+char *
+ecommunity_cost_poi_print (u_char poi)
+{
+  if (poi == ECOMMUNITY_COST_POI_IGP)
+    return "igp";
+
+  return "?";
+}
+
 char *
 ecommunity_ecom2str (struct ecommunity *ecom, int format)
 {
   int i;
   u_char *pnt;
   int encode = 0;
+  int encode_check = 0;
   int type = 0;
 #define ECOMMUNITY_STR_DEFAULT_LEN  26
   int str_size;
@@ -568,6 +619,13 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 
   for (i = 0; i < ecom->size; i++)
     {
+      /* Make it sure size is enough.  */
+      while (str_pnt + ECOMMUNITY_STR_DEFAULT_LEN >= str_size)
+	{
+	  str_size *= 2;
+	  str_buf = XREALLOC (MTYPE_ECOMMUNITY_STR, str_buf, str_size);
+	}
+
       /* Space between each value.  */
       if (! first)
 	str_buf[str_pnt++] = ' ';
@@ -576,7 +634,11 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 
       /* High-order octet of type. */
       encode = *pnt++;
-      if (encode != ECOMMUNITY_ENCODE_AS && encode != ECOMMUNITY_ENCODE_IP)
+      encode_check = encode & ~ECOMMUNITY_FLAG_NON_TRANSITIVE;
+
+      if (encode_check != ECOMMUNITY_ENCODE_AS
+          && encode_check != ECOMMUNITY_ENCODE_IP
+          && encode_check != ECOMMUNITY_ENCODE_OPAQUE)
 	{
 	  len = sprintf (str_buf + str_pnt, "?");
 	  str_pnt += len;
@@ -586,7 +648,44 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
       
       /* Low-order octet of type. */
       type = *pnt++;
-      if (type !=  ECOMMUNITY_ROUTE_TARGET && type != ECOMMUNITY_SITE_ORIGIN)
+      if ((encode_check == ECOMMUNITY_ENCODE_AS
+	   || encode_check == ECOMMUNITY_ENCODE_IP
+	   || encode_check == ECOMMUNITY_ENCODE_4OCTET_AS)
+	  && (type == ECOMMUNITY_TYPE_ROUTE_TARGET || type == ECOMMUNITY_TYPE_SITE_ORIGIN)
+	  && ! CHECK_FLAG (encode, ECOMMUNITY_FLAG_NON_TRANSITIVE))
+	{
+	  switch (format)
+	    {
+	      case ECOMMUNITY_FORMAT_CONFIG:
+		prefix = (type == ECOMMUNITY_TYPE_ROUTE_TARGET ? "rt " : "soo ");
+		break;
+	      case ECOMMUNITY_FORMAT_DISPLAY:
+		prefix = (type == ECOMMUNITY_TYPE_ROUTE_TARGET ? "RT:" : "SoO:");
+		break;
+	      default:
+		prefix = "";
+		break;
+	    }
+	}
+      else if (encode_check == ECOMMUNITY_ENCODE_OPAQUE
+	       && type == ECOMMUNITY_TYPE_COST_COMMUNITY
+	       && CHECK_FLAG (encode, ECOMMUNITY_FLAG_NON_TRANSITIVE))
+	{
+	  u_int32_t val;
+	  u_char poi;
+	  u_char id;
+
+          poi = *pnt++;
+	  id =  *pnt++;
+	  memcpy (&val, pnt, 4);
+
+	  len = sprintf (str_buf + str_pnt, "Cost:%s:%d:%u",
+			 ecommunity_cost_poi_print (poi), id, ntohl (val));
+	  str_pnt += len;
+	  first = 0;
+	  continue;
+	}
+      else
 	{
 	  len = sprintf (str_buf + str_pnt, "?");
 	  str_pnt += len;
@@ -594,31 +693,8 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 	  continue;
 	}
 
-      switch (format)
-	{
-	case ECOMMUNITY_FORMAT_COMMUNITY_LIST:
-	  prefix = (type == ECOMMUNITY_ROUTE_TARGET ? "rt " : "soo ");
-	  break;
-	case ECOMMUNITY_FORMAT_DISPLAY:
-	  prefix = (type == ECOMMUNITY_ROUTE_TARGET ? "RT:" : "SoO:");
-	  break;
-	case ECOMMUNITY_FORMAT_ROUTE_MAP:
-	  prefix = "";
-	  break;
-	default:
-	  prefix = "";
-	  break;
-	}
-
-      /* Make it sure size is enough.  */
-      while (str_pnt + ECOMMUNITY_STR_DEFAULT_LEN >= str_size)
-	{
-	  str_size *= 2;
-	  str_buf = XREALLOC (MTYPE_ECOMMUNITY_STR, str_buf, str_size);
-	}
-
       /* Put string into buffer.  */
-      if (encode == ECOMMUNITY_ENCODE_AS)
+      if (encode_check == ECOMMUNITY_ENCODE_AS)
 	{
 	  eas.as = (*pnt++ << 8);
 	  eas.as |= (*pnt++);
@@ -633,7 +709,7 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 	  str_pnt += len;
 	  first = 0;
 	}
-      else if (encode == ECOMMUNITY_ENCODE_IP)
+      else if (encode_check == ECOMMUNITY_ENCODE_IP)
 	{
 	  memcpy (&eip.ip, pnt, 4);
 	  pnt += 4;
@@ -678,3 +754,90 @@ ecommunity_match (struct ecommunity *ecom1, struct ecommunity *ecom2)
     return 0;
 }
 
+int
+ecommunity_cost_cmp (struct ecommunity *ecom1, struct ecommunity *ecom2, u_char poi)
+{
+  int i = 0;
+  int j = 0;
+  int find1 = 0;
+  int find2 = 0;
+  u_char id1 = 0;
+  u_char id2 = 0;
+  u_int32_t val1 = 0;
+  u_int32_t val2 = 0;
+
+  /* For parse Extended Community attribute tupple. */
+  struct ecommunity_cost
+  {
+    u_int16_t type;
+    u_char poi;
+    u_char id;
+    u_int32_t val;
+  } ecost;
+
+  if (ecom1 == NULL && ecom2 == NULL)
+    return 0;
+
+  while (1)
+    {
+      while (ecom1 && i < ecom1->size)
+	{
+	  memcpy (&ecost, (ecom1->val + (i * 8)), sizeof (struct ecommunity_cost));
+
+	  if (ntohs (ecost.type) == ECOMMUNITY_COST_COMMUNITY
+	      && ecost.poi == poi)
+	    {
+	      id1 = ecost.id;
+	      val1 = ntohl (ecost.val);
+	      find1 = 1;
+	      break;
+	    }
+	  i++;
+	}
+
+      while (ecom2 && j < ecom2->size)
+	{
+	  memcpy (&ecost, ecom2->val + (j * 8), sizeof (struct ecommunity_cost));
+	  if (ntohs (ecost.type) == ECOMMUNITY_COST_COMMUNITY
+	      && ecost.poi == poi)
+	    {
+	      id2 = ecost.id;
+	      val2 = ntohl (ecost.val);
+	      find2 = 1;
+	      break;
+	    }
+	  j++;
+	}
+
+      if (! find1 || ! find2)
+	break;
+      if (id1 != id2)
+	break;
+      if (val1 != val2)
+	break;
+
+      find1 = 0;
+      find2 = 0;
+      i++;
+      j++;
+    }
+
+  if (! find1)
+    val1 = COST_COMMUNITY_DEFAULT_COST;
+  if (! find2)
+    val2 = COST_COMMUNITY_DEFAULT_COST;
+
+  if (find1 && find2)
+    {
+      if (id1 < id2)
+	return 1;
+      if (id1 > id2)
+	return -1;
+    }
+  if (val1 < val2)
+    return 1;
+  if (val1 > val2)
+    return -1;
+
+  return 0;
+}

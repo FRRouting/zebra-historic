@@ -147,6 +147,9 @@
 /* netlink */
 #undef HAVE_NETLINK
 
+/* NET-SNMP */
+#undef HAVE_NETSNMP
+
 /* Define to 1 if you have the <net/if_dl.h> header file. */
 #undef HAVE_NET_IF_DL_H
 

@@ -22,6 +22,11 @@
 #include <zebra.h>
 
 #ifdef HAVE_SNMP
+
+#ifdef HAVE_NETSNMP
+#include <net-snmp/net-snmp-config.h>
+#endif /* HAVE_NETSNMP */
+
 #include <asn1.h>
 #include <snmp.h>
 #include <snmp_impl.h>

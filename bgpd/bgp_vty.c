@@ -933,6 +933,39 @@ DEFUN (no_bgp_bestpath_compare_router_id,
   return CMD_SUCCESS;
 }
 
+/* "bgp bestpath cost-community ignore" configuration.  */
+DEFUN (bgp_bestpath_cost_community_ignore,
+       bgp_bestpath_cost_community_ignore_cmd,
+       "bgp bestpath cost-community ignore",
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "cost community\n"
+       "Ignore cost communities in bestpath selection\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  bgp_flag_set (bgp, BGP_FLAG_COST_COMMUNITY_IGNORE);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_bestpath_cost_community_ignore,
+       no_bgp_bestpath_cost_community_ignore_cmd,
+       "no bgp bestpath cost-community ignore",
+       NO_STR
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "cost community\n"
+       "Ignore cost communities in bestpath selection\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  bgp_flag_unset (bgp, BGP_FLAG_COST_COMMUNITY_IGNORE);
+  return CMD_SUCCESS;
+}
+
+
 /* "bgp bestpath as-path ignore" configuration.  */
 DEFUN (bgp_bestpath_aspath_ignore,
        bgp_bestpath_aspath_ignore_cmd,
@@ -2763,11 +2796,12 @@ ALIAS (no_neighbor_port,
 
 /* neighbor weight. */
 int
-peer_weight_set_vty (struct vty *vty, char *ip_str, char *weight_str)
+peer_weight_set_vty (struct vty *vty, char *ip_str, char *weight_str,
+		     afi_t afi, safi_t safi)
 {
   int ret;
   struct peer *peer;
-  unsigned long weight;
+  u_int16_t weight;
 
   peer = peer_and_group_lookup_vty (vty, ip_str);
   if (! peer)
@@ -2775,13 +2809,13 @@ peer_weight_set_vty (struct vty *vty, char *ip_str, char *weight_str)
 
   VTY_GET_INTEGER_RANGE("weight", weight, weight_str, 0, 65535);
 
-  ret = peer_weight_set (peer, weight);
+  ret = peer_weight_set (peer, weight, afi, safi);
 
   return CMD_SUCCESS;
 }
 
 int
-peer_weight_unset_vty (struct vty *vty, char *ip_str)
+peer_weight_unset_vty (struct vty *vty, char *ip_str, afi_t afi, safi_t safi)
 {
   struct peer *peer;
 
@@ -2789,7 +2823,7 @@ peer_weight_unset_vty (struct vty *vty, char *ip_str)
   if (! peer)
     return CMD_WARNING;
 
-  peer_weight_unset (peer);
+  peer_weight_unset (peer, afi, safi);
 
   return CMD_SUCCESS;
 }
@@ -2802,7 +2836,8 @@ DEFUN (neighbor_weight,
        "Set default weight for routes from this neighbor\n"
        "default weight\n")
 {
-  return peer_weight_set_vty (vty, argv[0], argv[1]);
+  return peer_weight_set_vty (vty, argv[0], argv[1], bgp_node_afi (vty),
+			      bgp_node_safi (vty));
 }
 
 DEFUN (no_neighbor_weight,
@@ -2813,7 +2848,7 @@ DEFUN (no_neighbor_weight,
        NEIGHBOR_ADDR_STR2
        "Set default weight for routes from this neighbor\n")
 {
-  return peer_weight_unset_vty (vty, argv[0]);
+  return peer_weight_unset_vty (vty, argv[0], bgp_node_afi (vty), bgp_node_safi (vty));
 }
 
 ALIAS (no_neighbor_weight,
@@ -2926,73 +2961,6 @@ DEFUN (no_neighbor_timers,
 {
   return peer_timers_unset_vty (vty, argv[0]);
 }
-
-int
-peer_timers_connect_set_vty (struct vty *vty, char *ip_str, char *time_str)
-{
-  int ret;
-  struct peer *peer;
-  u_int32_t connect;
-
-  peer = peer_lookup_vty (vty, ip_str);
-  if (! peer)
-    return CMD_WARNING;
-
-  VTY_GET_INTEGER_RANGE ("Connect time", connect, time_str, 0, 65535);
-
-  ret = peer_timers_connect_set (peer, connect);
-
-  return CMD_SUCCESS;
-}
-
-int
-peer_timers_connect_unset_vty (struct vty *vty, char *ip_str)
-{
-  int ret;
-  struct peer *peer;
-
-  peer = peer_and_group_lookup_vty (vty, ip_str);
-  if (! peer)
-    return CMD_WARNING;
-
-  ret = peer_timers_connect_unset (peer);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (neighbor_timers_connect,
-       neighbor_timers_connect_cmd,
-       NEIGHBOR_CMD "timers connect <0-65535>",
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
-       "BGP per neighbor timers\n"
-       "BGP connect timer\n"
-       "Connect timer\n")
-{
-  return peer_timers_connect_set_vty (vty, argv[0], argv[1]);
-}
-
-DEFUN (no_neighbor_timers_connect,
-       no_neighbor_timers_connect_cmd,
-       NO_NEIGHBOR_CMD "timers connect",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
-       "BGP per neighbor timers\n"
-       "BGP connect timer\n")
-{
-  return peer_timers_connect_unset_vty (vty, argv[0]);
-}
-
-ALIAS (no_neighbor_timers_connect,
-       no_neighbor_timers_connect_val_cmd,
-       NO_NEIGHBOR_CMD "timers connect <0-65535>",
-       NO_STR
-       NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
-       "BGP per neighbor timers\n"
-       "BGP connect timer\n"
-       "Connect timer\n");
 
 int
 peer_advertise_interval_vty (struct vty *vty, char *ip_str, char *time_str,
@@ -3784,7 +3752,8 @@ DEFUN (exit_address_family,
        "exit-address-family",
        "Exit from Address Family configuration mode\n")
 {
-  if (vty->node == BGP_IPV4M_NODE
+  if (vty->node == BGP_IPV4_NODE
+      || vty->node == BGP_IPV4M_NODE
       || vty->node == BGP_VPNV4_NODE
       || vty->node == BGP_IPV6_NODE)
     vty->node = BGP_NODE;
@@ -3897,9 +3866,6 @@ bgp_clear (struct vty *vty, struct bgp *bgp,  afi_t afi, safi_t safi,
 	      ret = peer_clear (peer);
 	      continue;
 	    }
-
-	  if (! peer->af_group[afi][safi])
-	    continue;
 
 	  ret = peer_clear_soft (peer, afi, safi, stype);
 
@@ -6443,8 +6409,53 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
   vty_out (vty, " For address family: %s%s", afi_safi_print (afi, safi),
 	   VTY_NEWLINE);
 
-  if (p->af_group[afi][safi])
+  vty_out (vty, "  Configuration flags 0x%x%s", p->af_config[afi][safi],
+	   VTY_NEWLINE);
+
+  if (peer_group_member (p))
     vty_out (vty, "  %s peer-group member%s", p->group->name, VTY_NEWLINE);
+
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_REFLECTOR_CLIENT))
+    vty_out (vty, "  Route-Reflector Client%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_RSERVER_CLIENT))
+    vty_out (vty, "  Route-Server Client%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SOFT_RECONFIG))
+    vty_out (vty, "  Inbound soft reconfiguration allowed%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_REMOVE_PRIVATE_AS))
+    vty_out (vty, "  Private AS number removed from updates to this neighbor%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_NEXTHOP_SELF))
+    vty_out (vty, "  NEXT_HOP is always this router%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_AS_PATH_UNCHANGED))
+    vty_out (vty, "  AS_PATH is propagated unchanged to this neighbor%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_NEXTHOP_UNCHANGED))
+    vty_out (vty, "  NEXT_HOP is propagated unchanged to this neighbor%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_MED_UNCHANGED))
+    vty_out (vty, "  MED is propagated unchanged to this neighbor%s", VTY_NEWLINE);
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_COMMUNITY)
+      || CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
+    {
+      vty_out (vty, "  Community attribute sent to this neighbor");
+      if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_COMMUNITY)
+	  && CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
+	vty_out (vty, "(both)%s", VTY_NEWLINE);
+      else if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
+	vty_out (vty, "(extended)%s", VTY_NEWLINE);
+      else 
+	vty_out (vty, "(standard)%s", VTY_NEWLINE);
+    }
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE))
+    {
+      vty_out (vty, "  Default information originate,");
+
+      if (p->default_rmap[afi][safi].name)
+	vty_out (vty, " default route-map %s%s,",
+		 p->default_rmap[afi][safi].map ? "*" : "",
+		 p->default_rmap[afi][safi].name);
+      if (CHECK_FLAG (p->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE))
+	vty_out (vty, " default sent%s", VTY_NEWLINE);
+      else
+	vty_out (vty, " default not sent%s", VTY_NEWLINE);
+    }
 
   if (CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV)
       || CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV)
@@ -6496,48 +6507,6 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
     }
   if (CHECK_FLAG (p->af_sflags[afi][safi], PEER_STATUS_ORF_WAIT_REFRESH))
     vty_out (vty, "  First update is deferred until ORF or ROUTE-REFRESH is received%s", VTY_NEWLINE);
-
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_REFLECTOR_CLIENT))
-    vty_out (vty, "  Route-Reflector Client%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_RSERVER_CLIENT))
-    vty_out (vty, "  Route-Server Client%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SOFT_RECONFIG))
-    vty_out (vty, "  Inbound soft reconfiguration allowed%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_REMOVE_PRIVATE_AS))
-    vty_out (vty, "  Private AS number removed from updates to this neighbor%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_NEXTHOP_SELF))
-    vty_out (vty, "  NEXT_HOP is always this router%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_AS_PATH_UNCHANGED))
-    vty_out (vty, "  AS_PATH is propagated unchanged to this neighbor%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_NEXTHOP_UNCHANGED))
-    vty_out (vty, "  NEXT_HOP is propagated unchanged to this neighbor%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_MED_UNCHANGED))
-    vty_out (vty, "  MED is propagated unchanged to this neighbor%s", VTY_NEWLINE);
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_COMMUNITY)
-      || CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
-    {
-      vty_out (vty, "  Community attribute sent to this neighbor");
-      if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_COMMUNITY)
-	  && CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
-	vty_out (vty, "(both)%s", VTY_NEWLINE);
-      else if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
-	vty_out (vty, "(extended)%s", VTY_NEWLINE);
-      else 
-	vty_out (vty, "(standard)%s", VTY_NEWLINE);
-    }
-  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE))
-    {
-      vty_out (vty, "  Default information originate,");
-
-      if (p->default_rmap[afi][safi].name)
-	vty_out (vty, " default route-map %s%s,",
-		 p->default_rmap[afi][safi].map ? "*" : "",
-		 p->default_rmap[afi][safi].name);
-      if (CHECK_FLAG (p->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE))
-	vty_out (vty, " default sent%s", VTY_NEWLINE);
-      else
-	vty_out (vty, " default not sent%s", VTY_NEWLINE);
-    }
 
   if (filter->plist[FILTER_IN].name
       || filter->dlist[FILTER_IN].name
@@ -6604,6 +6573,11 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
     vty_out (vty, "  Route map for selective unsuppress is %s%s%s",
 	     filter->usmap.map ? "*" : "",
 	     filter->usmap.name, VTY_NEWLINE);
+
+  /* Default weight */
+  if (CHECK_FLAG (p->af_config[afi][safi], PEER_AF_CONFIG_WEIGHT))
+    vty_out (vty, "  Default weight %d%s", p->weight[afi][safi],
+	     VTY_NEWLINE);
 
   /* Receive prefix count */
   vty_out (vty, "  %ld accepted prefixes%s", p->pcount[afi][safi], VTY_NEWLINE);
@@ -6772,20 +6746,20 @@ bgp_show_peer (struct vty *vty, struct peer *p)
 
 		  vty_out (vty, "      Remote Restart timer is %d seconds%s",
 			   p->v_gr_restart, VTY_NEWLINE);	
-		  vty_out (vty, "      Address families by peer:%s        ", VTY_NEWLINE);
 
+		  vty_out (vty, "      Address families preserved by peer:%s", VTY_NEWLINE);
+		  vty_out (vty, "        ");
 		  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
 		    for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
 		      if (CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_RESTART_AF_RCV))
 			{
-			  vty_out (vty, "%s%s(%s)", restart_af_count ? ", " : "",
-				   afi_safi_print (afi, safi),
-				   CHECK_FLAG (p->af_cap[afi][safi], PEER_CAP_RESTART_AF_PRESERVE_RCV) ?
-				   "preserved" : "not preserved");
+			  vty_out (vty, "%s%s", restart_af_count ? ", " : "",
+				   afi_safi_print (afi, safi));
 			  restart_af_count++;
 			}
 		  if (! restart_af_count)
 		    vty_out (vty, "none");
+
 		  vty_out (vty, "%s", VTY_NEWLINE);
 		}
 	    }
@@ -6869,11 +6843,6 @@ bgp_show_peer (struct vty *vty, struct peer *p)
 		 sockunion2str (p->update_source, buf1, SU_ADDRSTRLEN));
       vty_out (vty, "%s", VTY_NEWLINE);
     }
-
-  /* Default weight */
-  if (CHECK_FLAG (p->config, PEER_CONFIG_WEIGHT))
-    vty_out (vty, "  Default weight %d%s", p->weight,
-	     VTY_NEWLINE);
 
   vty_out (vty, "%s", VTY_NEWLINE);
 
@@ -7938,7 +7907,11 @@ bgp_vty_init ()
 
   /* Dummy commands (Currently not supported) */
   install_element (BGP_NODE, &no_synchronization_cmd);
+  install_element (BGP_IPV4_NODE, &no_synchronization_cmd);
+  install_element (BGP_IPV6_NODE, &no_synchronization_cmd);
   install_element (BGP_NODE, &no_auto_summary_cmd);
+  install_element (BGP_IPV4_NODE, &no_auto_summary_cmd);
+  install_element (BGP_IPV4M_NODE, &no_auto_summary_cmd);
 
   /* "router bgp" commands. */
   install_element (CONFIG_NODE, &router_bgp_cmd);
@@ -8003,6 +7976,10 @@ bgp_vty_init ()
   /* "bgp bestpath compare-routerid" commands */
   install_element (BGP_NODE, &bgp_bestpath_compare_router_id_cmd);
   install_element (BGP_NODE, &no_bgp_bestpath_compare_router_id_cmd);
+
+  /* "bgp bestpath cost-community ignore" commands */
+  install_element (BGP_NODE, &bgp_bestpath_cost_community_ignore_cmd);
+  install_element (BGP_NODE, &no_bgp_bestpath_cost_community_ignore_cmd);
 
   /* "bgp bestpath as-path ignore" commands */
   install_element (BGP_NODE, &bgp_bestpath_aspath_ignore_cmd);
@@ -8347,8 +8324,17 @@ bgp_vty_init ()
 
   /* "neighbor weight" commands. */
   install_element (BGP_NODE, &neighbor_weight_cmd);
+  install_element (BGP_IPV4_NODE, &neighbor_weight_cmd);
+  install_element (BGP_IPV4M_NODE, &neighbor_weight_cmd);
+  install_element (BGP_IPV6_NODE, &neighbor_weight_cmd);
   install_element (BGP_NODE, &no_neighbor_weight_cmd);
+  install_element (BGP_IPV4_NODE, &no_neighbor_weight_cmd);
+  install_element (BGP_IPV4M_NODE, &no_neighbor_weight_cmd);
+  install_element (BGP_IPV6_NODE, &no_neighbor_weight_cmd);
   install_element (BGP_NODE, &no_neighbor_weight_val_cmd);
+  install_element (BGP_IPV4_NODE, &no_neighbor_weight_val_cmd);
+  install_element (BGP_IPV4M_NODE, &no_neighbor_weight_val_cmd);
+  install_element (BGP_IPV6_NODE, &no_neighbor_weight_val_cmd);
 
   /* "neighbor override-capability" commands. */
   install_element (BGP_NODE, &neighbor_override_capability_cmd);
@@ -8361,11 +8347,6 @@ bgp_vty_init ()
   /* "neighbor timers" commands. */
   install_element (BGP_NODE, &neighbor_timers_cmd);
   install_element (BGP_NODE, &no_neighbor_timers_cmd);
-
-  /* "neighbor timers connect" commands. */
-  install_element (BGP_NODE, &neighbor_timers_connect_cmd);
-  install_element (BGP_NODE, &no_neighbor_timers_connect_cmd);
-  install_element (BGP_NODE, &no_neighbor_timers_connect_val_cmd);
 
   /* "neighbor advertisement-interval" commands. */
   install_element (BGP_NODE, &neighbor_advertise_interval_cmd);
@@ -8791,15 +8772,25 @@ bgp_vty_init ()
 
   /* "redistribute" commands.  */
   install_element (BGP_NODE, &bgp_redistribute_ipv4_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_ipv4_cmd);
   install_element (BGP_NODE, &bgp_redistribute_ipv4_rmap_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_ipv4_rmap_cmd);
   install_element (BGP_NODE, &bgp_redistribute_ipv4_metric_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_ipv4_metric_cmd);
   install_element (BGP_NODE, &bgp_redistribute_ipv4_rmap_metric_cmd);
   install_element (BGP_NODE, &bgp_redistribute_ipv4_metric_rmap_cmd);
+  install_element (BGP_IPV4_NODE, &bgp_redistribute_ipv4_cmd);
+  install_element (BGP_IPV4_NODE, &bgp_redistribute_ipv4_rmap_cmd);
+  install_element (BGP_IPV4_NODE, &bgp_redistribute_ipv4_metric_cmd);
+  install_element (BGP_IPV4_NODE, &bgp_redistribute_ipv4_rmap_metric_cmd);
+  install_element (BGP_IPV4_NODE, &bgp_redistribute_ipv4_metric_rmap_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ipv4_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ipv4_rmap_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ipv4_metric_cmd);
   install_element (BGP_NODE, &no_bgp_redistribute_ipv4_rmap_metric_cmd);
   install_element (BGP_NODE, &no_bgp_redistribute_ipv4_metric_rmap_cmd);
+  install_element (BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_cmd);
+  install_element (BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_rmap_cmd);
+  install_element (BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_metric_cmd);
+  install_element (BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_rmap_metric_cmd);
+  install_element (BGP_IPV4_NODE, &no_bgp_redistribute_ipv4_metric_rmap_cmd);
 #ifdef HAVE_IPV6
   install_element (BGP_IPV6_NODE, &bgp_redistribute_ipv6_cmd);
   install_element (BGP_IPV6_NODE, &no_bgp_redistribute_ipv6_cmd);

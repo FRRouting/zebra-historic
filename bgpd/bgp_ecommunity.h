@@ -18,24 +18,36 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+/* Extended Communities Transitive flag. */
+#define ECOMMUNITY_FLAG_NON_TRANSITIVE      0x40  
+
 /* High-order octet of the Extended Communities type field.  */
 #define ECOMMUNITY_ENCODE_AS                0x00
 #define ECOMMUNITY_ENCODE_IP                0x01
+#define ECOMMUNITY_ENCODE_4OCTET_AS         0x02
+#define ECOMMUNITY_ENCODE_OPAQUE            0x03
 
 /* Low-order octet of the Extended Communityes type field.  */
-#define ECOMMUNITY_ROUTE_TARGET             0x02
-#define ECOMMUNITY_SITE_ORIGIN              0x03
+#define ECOMMUNITY_TYPE_COST_COMMUNITY      0x01
+#define ECOMMUNITY_TYPE_ROUTE_TARGET        0x02
+#define ECOMMUNITY_TYPE_SITE_ORIGIN         0x03
+
+/* High-order octet and Low-order octet of the Extended Communityes type field.  */
+#define ECOMMUNITY_COST_COMMUNITY         0x4301
 
 /* Extended communities attribute string format.  */
-#define ECOMMUNITY_FORMAT_ROUTE_MAP            0
-#define ECOMMUNITY_FORMAT_COMMUNITY_LIST       1
-#define ECOMMUNITY_FORMAT_DISPLAY              2
+#define ECOMMUNITY_FORMAT_CONFIG               0
+#define ECOMMUNITY_FORMAT_DISPLAY              1
+#define ECOMMUNITY_FORMAT_RMAP                 2
 
-/* Extended Communities value is eight octet long.  */
+/* Extended communities Cost Community */
+#define ECOMMUNITY_COST_POI_IGP              129
+
+/* Extended Communities value is eight octet long. */
 #define ECOMMUNITY_SIZE                        8
-
-/* Extended Communities type flag.  */
-#define ECOMMUNITY_FLAG_NON_TRANSITIVE      0x40  
+ 
+/* Cost community default value. */
+#define COST_COMMUNITY_DEFAULT_COST   0x7FFFFFFF
 
 /* Extended Communities attribute.  */
 struct ecommunity
@@ -59,6 +71,14 @@ struct ecommunity_val
   char val[ECOMMUNITY_SIZE];
 };
 
+struct ecommunity_cost
+{
+  u_int16_t type;
+  u_char poi;
+  u_char id;
+  u_int32_t val;
+};
+
 #define ecom_length(X)    ((X)->size * ECOMMUNITY_SIZE)
 
 void ecommunity_init (void);
@@ -75,3 +95,5 @@ struct ecommunity *ecommunity_str2com (char *, int, int);
 char *ecommunity_ecom2str (struct ecommunity *, int);
 int ecommunity_match (struct ecommunity *, struct ecommunity *);
 char *ecommunity_str (struct ecommunity *);
+struct ecommunity *ecommunity_cost_str2com (char *, u_char);
+int ecommunity_cost_cmp (struct ecommunity *, struct ecommunity *, u_char);

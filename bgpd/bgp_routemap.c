@@ -905,7 +905,7 @@ route_map_result_t
 route_set_weight (void *rule, struct prefix *prefix, route_map_object_t type,
 		  void *object)
 {
-  u_int32_t *weight;
+  u_int16_t *weight;
   struct bgp_info *bgp_info;
 
   if (type == RMAP_BGP)
@@ -925,14 +925,14 @@ route_set_weight (void *rule, struct prefix *prefix, route_map_object_t type,
 void *
 route_set_weight_compile (char *arg)
 {
-  u_int32_t *weight;
+  u_int16_t *weight;
   char *endptr = NULL;
 
   /* Local preference value shoud be integer. */
   if (! all_digit (arg))
     return NULL;
 
-  weight = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
+  weight = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int16_t));
   *weight = strtoul (arg, &endptr, 10);
   if (*endptr != '\0' || *weight == ULONG_MAX)
     {
@@ -1334,6 +1334,8 @@ route_set_ecommunity_rt (void *rule, struct prefix *prefix,
 	new_ecom = ecommunity_dup (ecom);
 
       bgp_info->attr->ecommunity = new_ecom;
+      if (old_ecom)
+	ecommunity_free (old_ecom);
 
       bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
     }
@@ -1346,7 +1348,7 @@ route_set_ecommunity_rt_compile (char *arg)
 {
   struct ecommunity *ecom;
 
-  ecom = ecommunity_str2com (arg, ECOMMUNITY_ROUTE_TARGET, 0);
+  ecom = ecommunity_str2com (arg, ECOMMUNITY_TYPE_ROUTE_TARGET, 0);
   if (! ecom)
     return NULL;
   return ecom;
@@ -1377,6 +1379,8 @@ route_set_ecommunity_soo (void *rule, struct prefix *prefix,
 			 route_map_object_t type, void *object)
 {
   struct ecommunity *ecom;
+  struct ecommunity *new_ecom;
+  struct ecommunity *old_ecom;
   struct bgp_info *bgp_info;
 
   if (type == RMAP_BGP)
@@ -1386,9 +1390,20 @@ route_set_ecommunity_soo (void *rule, struct prefix *prefix,
     
       if (! ecom)
 	return RMAP_OKAY;
-    
+
+      /* We assume additive for Extended Community. */
+      old_ecom = bgp_info->attr->ecommunity;
+
+      if (old_ecom)
+        new_ecom = ecommunity_merge (ecommunity_dup (old_ecom), ecom);
+      else
+        new_ecom = ecommunity_dup (ecom);
+
+      bgp_info->attr->ecommunity = new_ecom;
+      if (old_ecom)
+	ecommunity_free (old_ecom);
+
       bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
-      bgp_info->attr->ecommunity = ecommunity_dup (ecom);
     }
   return RMAP_OKAY;
 }
@@ -1399,7 +1414,7 @@ route_set_ecommunity_soo_compile (char *arg)
 {
   struct ecommunity *ecom;
 
-  ecom = ecommunity_str2com (arg, ECOMMUNITY_SITE_ORIGIN, 0);
+  ecom = ecommunity_str2com (arg, ECOMMUNITY_TYPE_SITE_ORIGIN, 0);
   if (! ecom)
     return NULL;
   
@@ -1421,6 +1436,72 @@ struct route_map_rule_cmd route_set_ecommunity_soo_cmd =
   route_set_ecommunity_soo,
   route_set_ecommunity_soo_compile,
   route_set_ecommunity_soo_free,
+};
+
+/* `set extcommunity cost igp COMMUNITY' */
+
+/* For community set mechanism. */
+route_map_result_t
+route_set_ecommunity_cost_igp (void *rule, struct prefix *prefix, 
+			       route_map_object_t type, void *object)
+{
+  struct ecommunity *ecom;
+  struct ecommunity *new_ecom;
+  struct ecommunity *old_ecom;
+  struct bgp_info *bgp_info;
+
+  if (type == RMAP_BGP)
+    {
+      ecom = rule;
+      bgp_info = object;
+    
+      if (! ecom)
+	return RMAP_OKAY;
+    
+      /* We assume additive for Extended Community. */
+      old_ecom = bgp_info->attr->ecommunity;
+
+      if (old_ecom)
+	new_ecom = ecommunity_merge (ecommunity_dup (old_ecom), ecom);
+      else
+	new_ecom = ecommunity_dup (ecom);
+
+      bgp_info->attr->ecommunity = new_ecom;
+      if (old_ecom)
+	ecommunity_free (old_ecom);
+
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+    }
+  return RMAP_OKAY;
+}
+
+/* Compile function for set community. */
+void *
+route_set_ecommunity_cost_igp_compile (char *arg)
+{
+  struct ecommunity *ecom;
+
+  ecom = ecommunity_cost_str2com (arg, ECOMMUNITY_COST_POI_IGP);
+  if (! ecom)
+    return NULL;
+  return ecom;
+}
+
+/* Free function for set community. */
+void
+route_set_ecommunity_cost_igp_free (void *rule)
+{
+  struct ecommunity *ecom = rule;
+  ecommunity_free (ecom);
+}
+
+/* Set community rule structure. */
+struct route_map_rule_cmd route_set_ecommunity_cost_igp_cmd = 
+{
+  "extcommunity cost igp",
+  route_set_ecommunity_cost_igp,
+  route_set_ecommunity_cost_igp_compile,
+  route_set_ecommunity_cost_igp_free,
 };
 
 /* `set origin ORIGIN' */
@@ -2731,7 +2812,7 @@ ALIAS (no_set_local_pref,
 
 DEFUN (set_weight,
        set_weight_cmd,
-       "set weight <0-4294967295>",
+       "set weight <0-65535>",
        SET_STR
        "BGP weight for routing table\n"
        "Weight value\n")
@@ -2754,7 +2835,7 @@ DEFUN (no_set_weight,
 
 ALIAS (no_set_weight,
        no_set_weight_val_cmd,
-       "no set weight <0-4294967295>",
+       "no set weight <0-65535>",
        NO_STR
        SET_STR
        "BGP weight for routing table\n"
@@ -2978,12 +3059,22 @@ DEFUN (set_ecommunity_rt,
        "Route Target extened communityt\n"
        "VPN extended community\n")
 {
+  struct ecommunity *ecom;
   int ret;
   char *str;
 
   str = argv_concat (argv, argc, 0);
-  ret = bgp_route_set_add (vty, vty->index, "extcommunity rt", str);
+  ecom = ecommunity_str2com (str, ECOMMUNITY_TYPE_ROUTE_TARGET, 0);
   XFREE (MTYPE_TMP, str);
+  if (! ecom)
+    {
+      vty_out (vty, "%% Malformed communities attribute%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ecom->str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_RMAP);
+  ret = bgp_route_set_add (vty, vty->index, "extcommunity rt", ecom->str);
+  ecommunity_free (ecom);
 
   return ret;
 }
@@ -3016,12 +3107,23 @@ DEFUN (set_ecommunity_soo,
        "Site-of-Origin extended community\n"
        "VPN extended community\n")
 {
+  struct ecommunity *ecom;
   int ret;
   char *str;
 
   str = argv_concat (argv, argc, 0);
-  ret = bgp_route_set_add (vty, vty->index, "extcommunity soo", str);
+  ecom = ecommunity_str2com (str, ECOMMUNITY_TYPE_SITE_ORIGIN, 0);
   XFREE (MTYPE_TMP, str);
+  if (! ecom)
+    {
+      vty_out (vty, "%% Malformed communities attribute%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ecom->str = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_RMAP);
+  ret = bgp_route_set_add (vty, vty->index, "extcommunity soo", ecom->str);
+  ecommunity_free (ecom);
+
   return ret;
 }
 
@@ -3044,6 +3146,51 @@ ALIAS (no_set_ecommunity_soo,
        "BGP extended community attribute\n"
        "Site-of-Origin extended community\n"
        "VPN extended community\n");
+
+DEFUN (set_ecommunity_cost_igp,
+       set_ecommunity_cost_igp_cmd,
+       "set extcommunity cost igp <0-255> <0-4294967295>",
+       SET_STR
+       "BGP extended community attribute\n"
+       "Cost extended community\n"
+       "Compare following IGP cost comparison\n"
+       "Community ID\n"
+       "Cost Value\n"
+       "VPN extended community\n")
+{
+  int ret;
+  char *str;
+
+  str = argv_concat (argv, argc, 0);
+  ret = bgp_route_set_add (vty, vty->index, "extcommunity cost igp", str);
+  XFREE (MTYPE_TMP, str);
+
+  return ret;
+}
+
+DEFUN (no_set_ecommunity_cost_igp,
+       no_set_ecommunity_cost_igp_cmd,
+       "no set extcommunity cost igp",
+       NO_STR
+       SET_STR
+       "BGP extended community attribute\n"
+       "Cost extended community\n"
+       "Compare following IGP cost comparison\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "extcommunity cost igp", NULL);
+}
+
+ALIAS (no_set_ecommunity_cost_igp,
+       no_set_ecommunity_cost_igp_val_cmd,
+       "no set extcommunity cost igp <0-255> <0-4294967295>",
+       NO_STR
+       SET_STR
+       "BGP extended community attribute\n"
+       "Cost extended community\n"
+       "Compare following IGP cost comparison\n"
+       "Community ID\n"
+       "Cost Value\n"
+       "VPN extended community\n")
 
 DEFUN (set_origin,
        set_origin_cmd,
@@ -3446,6 +3593,7 @@ bgp_route_map_init ()
   route_map_install_set (&route_set_originator_id_cmd);
   route_map_install_set (&route_set_ecommunity_rt_cmd);
   route_map_install_set (&route_set_ecommunity_soo_cmd);
+  route_map_install_set (&route_set_ecommunity_cost_igp_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -3525,6 +3673,9 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &set_ecommunity_soo_cmd);
   install_element (RMAP_NODE, &no_set_ecommunity_soo_cmd);
   install_element (RMAP_NODE, &no_set_ecommunity_soo_val_cmd);
+  install_element (RMAP_NODE, &set_ecommunity_cost_igp_cmd);
+  install_element (RMAP_NODE, &no_set_ecommunity_cost_igp_cmd);
+  install_element (RMAP_NODE, &no_set_ecommunity_cost_igp_val_cmd);
   install_element (RMAP_NODE, &set_vpnv4_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_vpnv4_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_vpnv4_nexthop_val_cmd);

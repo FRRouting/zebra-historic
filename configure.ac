@@ -50,8 +50,9 @@ fi
 dnl -----------------------------------------
 dnl If linkbase specified expand it
 dnl -----------------------------------------
-if test "x$linkbase_specified" != "x" ; then
-  CFLAGS="$CFLAGS -I${with_linkbase}/include -L${with_linkbase}/lib" ;
+if test "$linkbase_specified" = "yes" ; then
+  CFLAGS="$CFLAGS -I${with_linkbase}/include" ;
+  LIBS="$LIBS -L${with_linkbase}/lib" ;
 fi
 
 dnl --------------
@@ -628,50 +629,93 @@ AC_SUBST(LIB_REGEX)
 dnl ------------------
 dnl check SNMP library
 dnl ------------------
-if test "${enable_snmp}" = "yes";then
-dnl  AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
-  old_libs="${LIBS}"
-  LIBS="-L/usr/local/lib"
-  unset ac_cv_lib_snmp_asn_parse_int
-  AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes, )
-  if test "${HAVE_SNMP}" = ""; then
-    unset ac_cv_lib_snmp_asn_parse_int
-    AC_CHECK_LIB(crypto, main, [NEED_CRYPTO=yes ], )
-	if test "${NEED_CRYPTO}" = ""; then 
-		AC_CHECK_LIB(snmp, asn_parse_int, [HAVE_SNMP=yes; NEED_CRYPTO=yes ],)
-	else
-	    AC_CHECK_LIB(snmp, asn_parse_int, [HAVE_SNMP=yes; NEED_CRYPTO=yes;LIBS="$LIBS -lcrypto" ],,"-lcrypto")
-	fi
-  fi
-  LIBS="${old_libs}"
+if test "${enable_snmp}" = "yes"; then
+  saved_libs="${LIBS}"
+  LIBS=""
 
+  unset link_dir link_dirs
+  test "${linkbase_specified}" = "yes" && link_dirs=${with_linkbase}
+  link_dirs="$link_dirs /usr/local"
+  for link_dir in '' ${link_dirs}; do
+    test "x${link_dir}" != "x" && link_dir="-L${link_dir}/lib"
+    LIBS=${link_dir}
+
+    AC_MSG_NOTICE(try linking with LIBS: $LIBS)
+    unset ac_cv_lib_netsnmp_asn_parse_int
+    AC_CHECK_LIB(netsnmp, asn_parse_int,
+      [HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lnetsnmp"])
+    test "${HAVE_SNMP}" = "yes" && break
+
+    unset ac_cv_lib_snmp_asn_parse_int
+    AC_CHECK_LIB(snmp, asn_parse_int,
+      [HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lsnmp"])
+    test "${HAVE_SNMP}" = "yes" && break
+
+    AC_CHECK_LIB(crypto, main, [NEED_CRYPTO=yes])
+    test "${NEED_CRYPTO}" != "yes" && continue
+    LIBS="$LIBS -lcrypto"
+
+    AC_MSG_NOTICE(try linking with LIBS: $LIBS)
+    unset ac_cv_lib_netsnmp_asn_parse_int
+    AC_CHECK_LIB(netsnmp, asn_parse_int,
+      [HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lnetsnmp"],, -lcrypto)
+    test "${HAVE_SNMP}" = "yes" && break
+
+    unset ac_cv_lib_snmp_asn_parse_int
+    AC_CHECK_LIB(snmp, asn_parse_int,
+      [HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lsnmp"],, -lcrypto)
+    test "${HAVE_SNMP}" = "yes" && break
+  done
   if test "${HAVE_SNMP}" = ""; then
-	old_libs="${LIBS}"
-	LIBS="-L/usr/local/lib"
-	AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
-	LIBS="${old_libs}"
+    AC_MSG_ERROR(cannot find valid snmp library)
   fi
-  if test "${HAVE_SNMP}" = "yes"; then
-    for ac_snmp in /usr/include/ucd-snmp/asn1.h /usr/local/include/ucd-snmp/asn1.h /dev/null
-    do
-      test -f "${ac_snmp}" && break
+  LIBS="${saved_libs} $ac_snmp_lib"
+
+  AC_MSG_CHECKING(for snmp library header)
+  unset link_dir link_dirs ac_snmp ac_snmps ac_snmp_dir ac_snmp_dirs
+  link_dirs="/usr/include";
+  if test "${linkbase_specified}" = "yes"; then
+    link_dirs="${link_dirs} ${with_linkbase}/include"
+  fi
+  link_dirs="${link_dirs} /usr/local/include"
+  ac_snmp_dirs="net-snmp net-snmp/library ucd-snmp"
+
+  for link_dir in '' ${link_dirs}; do
+    test -z $link_dir && continue
+    for ac_snmp_dir in '' ${ac_snmp_dirs}; do
+      test -z $ac_snmp_dir && continue
+      ac_snmps="${ac_snmps} ${link_dir}/${ac_snmp_dir}/asn1.h"
     done
-    case ${ac_snmp} in
-      /usr/include/ucd-snmp/*) 
-                  AC_DEFINE(HAVE_SNMP,,SNMP)
-                  CFLAGS="${CFLAGS} -I/usr/include/ucd-snmp"
-    		  LIBS="${LIBS} -lsnmp"
-                  ;;
-      /usr/local/include/ucd-snmp/*) 
-                  AC_DEFINE(HAVE_SNMP,,SNMP)
-  	          CFLAGS="${CFLAGS} -I/usr/local/include/ucd-snmp"
-  		  LIBS="${LIBS} -L/usr/local/lib -lsnmp"
-                  ;;
-    esac
-    if test "${NEED_CRYPTO}" = "yes"; then
-      LIBS="${LIBS} -lcrypto"
-    fi
-  fi
+  done
+  ac_snmps="${ac_snmps} /dev/null"
+
+  for ac_snmp in '' ${ac_snmps}; do
+    test -z ${ac_snmp} && continue
+    test -f ${ac_snmp} && break
+  done
+  ac_snmp_header=`echo ${ac_snmp} | sed -e 's/\/asn1.h//'`
+  ac_snmp_header="-I${ac_snmp_header}"
+
+  case ${ac_snmp} in
+    /usr/local/include/net-snmp/*)
+                AC_DEFINE(HAVE_SNMP,,SNMP)
+                AC_DEFINE(HAVE_NETSNMP,,NET-SNMP)
+                CFLAGS="${CFLAGS} -I/usr/local/include"
+                ;;
+    */net-snmp/*)
+                AC_DEFINE(HAVE_SNMP,,SNMP)
+                AC_DEFINE(HAVE_NETSNMP,,NET-SNMP)
+                ;;
+    /usr/local/include/ucd-snmp/*) 
+                AC_DEFINE(HAVE_SNMP,,SNMP)
+                CFLAGS="${CFLAGS} -I/usr/local/include"
+                ;;
+    */ucd-snmp/*)
+                AC_DEFINE(HAVE_SNMP,,SNMP)
+                ;;
+  esac
+  AC_MSG_RESULT($ac_snmp_header)
+  CFLAGS="${CFLAGS} ${ac_snmp_header}"
 fi
 
 dnl ----------------------------
@@ -864,5 +908,6 @@ host operationg system  : ${host_os}
 source code location    : ${srcdir}
 compiler                : ${CC}
 compiler flags          : ${CFLAGS}
+link libraries          : ${LIBS}
 directory for pid files : ${ac_piddir}
 "

@@ -167,6 +167,7 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist)
   int exist_cluster;
   int internal_as_route = 0;
   int confed_as_route = 0;
+  int cost_community = 0;
   int ret;
 
   /* 0. Null check. */
@@ -272,9 +273,20 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist)
   if (new->igpmetric > exist->igpmetric)
     return 0;
 
-  /* 9. Maximum path check. */
+  /* 9. cost community check. */
+  if (! bgp_flag_check (bgp, BGP_FLAG_COST_COMMUNITY_IGNORE))
+    {
+      cost_community = ecommunity_cost_cmp (new->attr->ecommunity,
+					    exist->attr->ecommunity, ECOMMUNITY_COST_POI_IGP);
+      if (cost_community > 0)
+	return 1;
+      if (cost_community < 0)
+	return 0;
+    }
 
-  /* 10. If both paths are external, prefer the path that was received
+  /* 10. Maximum path check. */
+
+  /* 11. If both paths are external, prefer the path that was received
      first (the oldest one).  This step minimizes route-flap, since a
      newer path won't displace an older one, even if it was the
      preferred route based on the additional decision criteria below.  */
@@ -288,7 +300,7 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist)
 	return 0;
     }
 
-  /* 11. Rourter-ID comparision. */
+  /* 12. Rourter-ID comparision. */
   if (new->attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
     new_id.s_addr = new->attr->originator_id.s_addr;
   else
@@ -303,7 +315,7 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist)
   if (ntohl (new_id.s_addr) > ntohl (exist_id.s_addr))
     return 0;
 
-  /* 12. Cluster length comparision. */
+  /* 13. Cluster length comparision. */
   if (new->attr->flag & ATTR_FLAG_BIT(BGP_ATTR_CLUSTER_LIST))
     new_cluster = new->attr->cluster->length;
   else
@@ -318,7 +330,7 @@ bgp_info_cmp (struct bgp *bgp, struct bgp_info *new, struct bgp_info *exist)
   if (new_cluster > exist_cluster)
     return 0;
 
-  /* 13. Neighbor address comparision. */
+  /* 14. Neighbor address comparision. */
   ret = sockunion_cmp (new->peer->su_remote, exist->peer->su_remote);
 
   if (ret == 1)
@@ -429,7 +441,10 @@ bgp_input_modifier (struct peer *peer, struct prefix *p, struct attr *attr,
   filter = &peer->filter[afi][safi];
 
   /* Apply default weight value. */
-  attr->weight = peer->weight;
+  if (CHECK_FLAG (peer->af_config[afi][safi], PEER_AF_CONFIG_WEIGHT))
+    attr->weight = peer->weight[afi][safi];
+  else
+    attr->weight = 0;
 
   /* Route map apply. */
   if (ROUTE_MAP_IN_NAME (filter))
@@ -3802,7 +3817,7 @@ bgp_redistribute_withdraw (struct bgp *bgp, afi_t afi, int type)
 }
 
 /* Static function to display route. */
-void
+static int
 route_vty_out_route (struct prefix *p, struct vty *vty)
 {
   int len;
@@ -3833,6 +3848,12 @@ route_vty_out_route (struct prefix *p, struct vty *vty)
     vty_out (vty, "%s%*s", VTY_NEWLINE, 20, " ");
   else
     vty_out (vty, "%*s", len, " ");
+
+  /* return 1 if it added extra newline */
+  if (len < 1)
+    return 1;
+  else
+    return 0;
 }
 
 /* Calculate line number of output data. */
@@ -3854,6 +3875,7 @@ route_vty_out (struct vty *vty, struct prefix *p,
 {
   struct attr *attr;
   unsigned long length = 0;
+  int extra_line = 0;
 
   length = vty->obuf->length;
 
@@ -3885,7 +3907,7 @@ route_vty_out (struct vty *vty, struct prefix *p,
   
   /* print prefix and mask */
   if (! display)
-    route_vty_out_route (p, vty);
+    extra_line += route_vty_out_route (p, vty);
   else
     vty_out (vty, "%*s", 17, " ");
 
@@ -3910,23 +3932,26 @@ route_vty_out (struct vty *vty, struct prefix *p,
 			 inet_ntop (AF_INET6, &attr->mp_nexthop_global, buf, BUFSIZ));
 	  len = 16 - len;
 	  if (len < 1)
-	    vty_out (vty, "%s%*s", VTY_NEWLINE, 36, " ");
+            {
+	      vty_out (vty, "%s%*s", VTY_NEWLINE, 36, " ");
+              extra_line++; /* Adjust More mode for newline above */
+            }
 	  else
 	    vty_out (vty, "%*s", len, " ");
 	}
 #endif /* HAVE_IPV6 */
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
-	vty_out (vty, "%10d", attr->med);
+	vty_out (vty, "%10u", attr->med);
       else
 	vty_out (vty, "          ");
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
-	vty_out (vty, "%7d", attr->local_pref);
+	vty_out (vty, "%7u", attr->local_pref);
       else
 	vty_out (vty, "       ");
 
-      vty_out (vty, "%7u ",attr->weight);
+      vty_out (vty, "%7d ",attr->weight);
     
     /* Print aspath */
     if (attr->aspath)
@@ -3940,7 +3965,7 @@ route_vty_out (struct vty *vty, struct prefix *p,
   }
   vty_out (vty, "%s", VTY_NEWLINE);
 
-  return vty_calc_line (vty, length);
+  return vty_calc_line (vty, length) + extra_line;
 }  
 
 /* called from terminal list command */
@@ -3983,12 +4008,12 @@ route_vty_out_tmp (struct vty *vty, struct prefix *p,
 #endif /* HAVE_IPV6 */
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
-	vty_out (vty, "%10d", attr->med);
+	vty_out (vty, "%10u", attr->med);
       else
 	vty_out (vty, "          ");
 
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
-	vty_out (vty, "%7d", attr->local_pref);
+	vty_out (vty, "%7u", attr->local_pref);
       else
 	vty_out (vty, "       ");
 
@@ -4015,6 +4040,7 @@ route_vty_out_tag (struct vty *vty, struct prefix *p,
   struct attr *attr;
   unsigned long length = 0;
   u_int32_t label = 0;
+  int extra_line = 0;
 
   length = vty->obuf->length;
 
@@ -4044,7 +4070,7 @@ route_vty_out_tag (struct vty *vty, struct prefix *p,
 
   /* print prefix and mask */
   if (! display)
-    route_vty_out_route (p, vty);
+    extra_line += route_vty_out_route (p, vty);
   else
     vty_out (vty, "%*s", 17, " ");
 
@@ -4082,7 +4108,7 @@ route_vty_out_tag (struct vty *vty, struct prefix *p,
 
   vty_out (vty, "%s", VTY_NEWLINE);
 
-  return vty_calc_line (vty, length);
+  return vty_calc_line (vty, length) + extra_line;
 }  
 
 /* dampening route */
@@ -4093,6 +4119,7 @@ damp_route_vty_out (struct vty *vty, struct prefix *p,
   struct attr *attr;
   unsigned long length = 0;
   int len;
+  int extra_line = 0;
 
   length = vty->obuf->length;
 
@@ -4118,14 +4145,17 @@ damp_route_vty_out (struct vty *vty, struct prefix *p,
 
   /* print prefix and mask */
   if (! display)
-    route_vty_out_route (p, vty);
+    extra_line += route_vty_out_route (p, vty);
   else
     vty_out (vty, "%*s", 17, " ");
 
   len = vty_out (vty, "%s", binfo->peer->host);
   len = 17 - len;
   if (len < 1)
-    vty_out (vty, "%s%*s", VTY_NEWLINE, 34, " ");
+    {
+      vty_out (vty, "%s%*s", VTY_NEWLINE, 34, " ");
+      extra_line++;
+    }
   else
     vty_out (vty, "%*s", len, " ");
 
@@ -4147,7 +4177,7 @@ damp_route_vty_out (struct vty *vty, struct prefix *p,
     }
   vty_out (vty, "%s", VTY_NEWLINE);
 
-  return vty_calc_line (vty, length);
+  return vty_calc_line (vty, length) + extra_line;
 }
 
 #define BGP_UPTIME_LEN 25
@@ -4162,6 +4192,7 @@ flap_route_vty_out (struct vty *vty, struct prefix *p,
   unsigned long length = 0;
   char timebuf[BGP_UPTIME_LEN];
   int len;
+  int extra_line = 0;
 
   length = vty->obuf->length;
   bdi = binfo->damp_info;
@@ -4188,14 +4219,17 @@ flap_route_vty_out (struct vty *vty, struct prefix *p,
 
   /* print prefix and mask */
   if (! display)
-    route_vty_out_route (p, vty);
+    extra_line += route_vty_out_route (p, vty);
   else
     vty_out (vty, "%*s", 17, " ");
 
   len = vty_out (vty, "%s", binfo->peer->host);
   len = 16 - len;
   if (len < 1)
-    vty_out (vty, "%s%*s", VTY_NEWLINE, 33, " ");
+    {
+      vty_out (vty, "%s%*s", VTY_NEWLINE, 33, " ");
+      extra_line++;
+    }
   else
     vty_out (vty, "%*s", len, " ");
 
@@ -4231,7 +4265,7 @@ flap_route_vty_out (struct vty *vty, struct prefix *p,
     }
   vty_out (vty, "%s", VTY_NEWLINE);
 
-  return vty_calc_line (vty, length);
+  return vty_calc_line (vty, length) + extra_line;
 }
 
 void
@@ -4323,12 +4357,12 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
       vty_out (vty, "      Origin %s", bgp_origin_long_str[attr->origin]);
 	  
       if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_MULTI_EXIT_DISC))
-	vty_out (vty, ", metric %d", attr->med);
+	vty_out (vty, ", metric %u", attr->med);
 	  
       if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF))
-	vty_out (vty, ", localpref %d", attr->local_pref);
+	vty_out (vty, ", localpref %u", attr->local_pref);
       else
-	vty_out (vty, ", localpref %d", bgp->default_local_pref);
+	vty_out (vty, ", localpref %u", bgp->default_local_pref);
 
       if (attr->weight != 0)
 	vty_out (vty, ", weight %d", attr->weight);
@@ -4441,10 +4475,12 @@ bgp_show_callback (struct vty *vty, int unlock)
 
   rn = vty->output_rn;
   count = 0;
-  limit = ((vty->lines == 0) 
-	   ? 10 : (vty->lines > 0 
-		   ? vty->lines : vty->height - 2));
-  limit = limit > 0 ? limit : 2;
+  limit = ((vty->lines == 0) ? 10 :
+           (vty->lines > 0 ? vty->lines : vty->height - 2));
+  if (vty->status == VTY_MORELINE)
+    limit = 1;
+  else
+    limit = limit > 0 ? limit : 2;
 
   /* Quit of display. */
   if (unlock && rn)

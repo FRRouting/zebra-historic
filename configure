@@ -2771,8 +2771,9 @@ if test "x$cflags_specified" = "x" ; then
   CFLAGS="$CFLAGS -Wall"
 fi
 
-if test "x$linkbase_specified" != "x" ; then
-  CFLAGS="$CFLAGS -I${with_linkbase}/include -L${with_linkbase}/lib" ;
+if test "$linkbase_specified" = "yes" ; then
+  CFLAGS="$CFLAGS -I${with_linkbase}/include" ;
+  LIBS="$LIBS -L${with_linkbase}/lib" ;
 fi
 
 ac_ext=c
@@ -6728,11 +6729,82 @@ fi
 
 
 
-if test "${enable_snmp}" = "yes";then
-  old_libs="${LIBS}"
-  LIBS="-L/usr/local/lib"
-  unset ac_cv_lib_snmp_asn_parse_int
-  echo "$as_me:$LINENO: checking for asn_parse_int in -lsnmp" >&5
+if test "${enable_snmp}" = "yes"; then
+  saved_libs="${LIBS}"
+  LIBS=""
+
+  unset link_dir link_dirs
+  test "${linkbase_specified}" = "yes" && link_dirs=${with_linkbase}
+  link_dirs="$link_dirs /usr/local"
+  for link_dir in '' ${link_dirs}; do
+    test "x${link_dir}" != "x" && link_dir="-L${link_dir}/lib"
+    LIBS=${link_dir}
+
+    { echo "$as_me:$LINENO: try linking with LIBS: $LIBS" >&5
+echo "$as_me: try linking with LIBS: $LIBS" >&6;}
+    unset ac_cv_lib_netsnmp_asn_parse_int
+    echo "$as_me:$LINENO: checking for asn_parse_int in -lnetsnmp" >&5
+echo $ECHO_N "checking for asn_parse_int in -lnetsnmp... $ECHO_C" >&6
+if test "${ac_cv_lib_netsnmp_asn_parse_int+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lnetsnmp  $LIBS"
+cat >conftest.$ac_ext <<_ACEOF
+#line $LINENO "configure"
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char asn_parse_int ();
+int
+main ()
+{
+asn_parse_int ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+         { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_lib_netsnmp_asn_parse_int=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_cv_lib_netsnmp_asn_parse_int=no
+fi
+rm -f conftest.$ac_objext conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+echo "$as_me:$LINENO: result: $ac_cv_lib_netsnmp_asn_parse_int" >&5
+echo "${ECHO_T}$ac_cv_lib_netsnmp_asn_parse_int" >&6
+if test $ac_cv_lib_netsnmp_asn_parse_int = yes; then
+  HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lnetsnmp"
+fi
+
+    test "${HAVE_SNMP}" = "yes" && break
+
+    unset ac_cv_lib_snmp_asn_parse_int
+    echo "$as_me:$LINENO: checking for asn_parse_int in -lsnmp" >&5
 echo $ECHO_N "checking for asn_parse_int in -lsnmp... $ECHO_C" >&6
 if test "${ac_cv_lib_snmp_asn_parse_int+set}" = set; then
   echo $ECHO_N "(cached) $ECHO_C" >&6
@@ -6787,11 +6859,11 @@ fi
 echo "$as_me:$LINENO: result: $ac_cv_lib_snmp_asn_parse_int" >&5
 echo "${ECHO_T}$ac_cv_lib_snmp_asn_parse_int" >&6
 if test $ac_cv_lib_snmp_asn_parse_int = yes; then
-  HAVE_SNMP=yes
+  HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lsnmp"
 fi
 
-  if test "${HAVE_SNMP}" = ""; then
-    unset ac_cv_lib_snmp_asn_parse_int
+    test "${HAVE_SNMP}" = "yes" && break
+
     echo "$as_me:$LINENO: checking for main in -lcrypto" >&5
 echo $ECHO_N "checking for main in -lcrypto... $ECHO_C" >&6
 if test "${ac_cv_lib_crypto_main+set}" = set; then
@@ -6844,14 +6916,80 @@ if test $ac_cv_lib_crypto_main = yes; then
   NEED_CRYPTO=yes
 fi
 
-	if test "${NEED_CRYPTO}" = ""; then
-		echo "$as_me:$LINENO: checking for asn_parse_int in -lsnmp" >&5
+    test "${NEED_CRYPTO}" != "yes" && continue
+    LIBS="$LIBS -lcrypto"
+
+    { echo "$as_me:$LINENO: try linking with LIBS: $LIBS" >&5
+echo "$as_me: try linking with LIBS: $LIBS" >&6;}
+    unset ac_cv_lib_netsnmp_asn_parse_int
+    echo "$as_me:$LINENO: checking for asn_parse_int in -lnetsnmp" >&5
+echo $ECHO_N "checking for asn_parse_int in -lnetsnmp... $ECHO_C" >&6
+if test "${ac_cv_lib_netsnmp_asn_parse_int+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lnetsnmp -lcrypto $LIBS"
+cat >conftest.$ac_ext <<_ACEOF
+#line $LINENO "configure"
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char asn_parse_int ();
+int
+main ()
+{
+asn_parse_int ();
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+         { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_lib_netsnmp_asn_parse_int=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_cv_lib_netsnmp_asn_parse_int=no
+fi
+rm -f conftest.$ac_objext conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+echo "$as_me:$LINENO: result: $ac_cv_lib_netsnmp_asn_parse_int" >&5
+echo "${ECHO_T}$ac_cv_lib_netsnmp_asn_parse_int" >&6
+if test $ac_cv_lib_netsnmp_asn_parse_int = yes; then
+  HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lnetsnmp"
+fi
+
+    test "${HAVE_SNMP}" = "yes" && break
+
+    unset ac_cv_lib_snmp_asn_parse_int
+    echo "$as_me:$LINENO: checking for asn_parse_int in -lsnmp" >&5
 echo $ECHO_N "checking for asn_parse_int in -lsnmp... $ECHO_C" >&6
 if test "${ac_cv_lib_snmp_asn_parse_int+set}" = set; then
   echo $ECHO_N "(cached) $ECHO_C" >&6
 else
   ac_check_lib_save_LIBS=$LIBS
-LIBS="-lsnmp  $LIBS"
+LIBS="-lsnmp -lcrypto $LIBS"
 cat >conftest.$ac_ext <<_ACEOF
 #line $LINENO "configure"
 /* confdefs.h.  */
@@ -6900,164 +7038,89 @@ fi
 echo "$as_me:$LINENO: result: $ac_cv_lib_snmp_asn_parse_int" >&5
 echo "${ECHO_T}$ac_cv_lib_snmp_asn_parse_int" >&6
 if test $ac_cv_lib_snmp_asn_parse_int = yes; then
-  HAVE_SNMP=yes; NEED_CRYPTO=yes
+  HAVE_SNMP=yes; ac_snmp_lib="$LIBS -lsnmp"
 fi
 
-	else
-	    echo "$as_me:$LINENO: checking for asn_parse_int in -lsnmp" >&5
-echo $ECHO_N "checking for asn_parse_int in -lsnmp... $ECHO_C" >&6
-if test "${ac_cv_lib_snmp_asn_parse_int+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lsnmp "-lcrypto" $LIBS"
-cat >conftest.$ac_ext <<_ACEOF
-#line $LINENO "configure"
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-/* Override any gcc2 internal prototype to avoid an error.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-/* We use char because int might match the return type of a gcc2
-   builtin and then its argument prototype would still apply.  */
-char asn_parse_int ();
-int
-main ()
-{
-asn_parse_int ();
-  ;
-  return 0;
-}
-_ACEOF
-rm -f conftest.$ac_objext conftest$ac_exeext
-if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
-  (eval $ac_link) 2>&5
-  ac_status=$?
-  echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } &&
-         { ac_try='test -s conftest$ac_exeext'
-  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
-  (eval $ac_try) 2>&5
-  ac_status=$?
-  echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  ac_cv_lib_snmp_asn_parse_int=yes
-else
-  echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-ac_cv_lib_snmp_asn_parse_int=no
-fi
-rm -f conftest.$ac_objext conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-echo "$as_me:$LINENO: result: $ac_cv_lib_snmp_asn_parse_int" >&5
-echo "${ECHO_T}$ac_cv_lib_snmp_asn_parse_int" >&6
-if test $ac_cv_lib_snmp_asn_parse_int = yes; then
-  HAVE_SNMP=yes; NEED_CRYPTO=yes;LIBS="$LIBS -lcrypto"
-fi
-
-	fi
-  fi
-  LIBS="${old_libs}"
-
+    test "${HAVE_SNMP}" = "yes" && break
+  done
   if test "${HAVE_SNMP}" = ""; then
-	old_libs="${LIBS}"
-	LIBS="-L/usr/local/lib"
-	echo "$as_me:$LINENO: checking for asn_parse_int in -lsnmp" >&5
-echo $ECHO_N "checking for asn_parse_int in -lsnmp... $ECHO_C" >&6
-if test "${ac_cv_lib_snmp_asn_parse_int+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lsnmp  $LIBS"
-cat >conftest.$ac_ext <<_ACEOF
-#line $LINENO "configure"
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-/* Override any gcc2 internal prototype to avoid an error.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-/* We use char because int might match the return type of a gcc2
-   builtin and then its argument prototype would still apply.  */
-char asn_parse_int ();
-int
-main ()
-{
-asn_parse_int ();
-  ;
-  return 0;
-}
-_ACEOF
-rm -f conftest.$ac_objext conftest$ac_exeext
-if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
-  (eval $ac_link) 2>&5
-  ac_status=$?
-  echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); } &&
-         { ac_try='test -s conftest$ac_exeext'
-  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
-  (eval $ac_try) 2>&5
-  ac_status=$?
-  echo "$as_me:$LINENO: \$? = $ac_status" >&5
-  (exit $ac_status); }; }; then
-  ac_cv_lib_snmp_asn_parse_int=yes
-else
-  echo "$as_me: failed program was:" >&5
-sed 's/^/| /' conftest.$ac_ext >&5
-
-ac_cv_lib_snmp_asn_parse_int=no
-fi
-rm -f conftest.$ac_objext conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-echo "$as_me:$LINENO: result: $ac_cv_lib_snmp_asn_parse_int" >&5
-echo "${ECHO_T}$ac_cv_lib_snmp_asn_parse_int" >&6
-if test $ac_cv_lib_snmp_asn_parse_int = yes; then
-  HAVE_SNMP=yes
-fi
-
-	LIBS="${old_libs}"
+    { { echo "$as_me:$LINENO: error: cannot find valid snmp library" >&5
+echo "$as_me: error: cannot find valid snmp library" >&2;}
+   { (exit 1); exit 1; }; }
   fi
-  if test "${HAVE_SNMP}" = "yes"; then
-    for ac_snmp in /usr/include/ucd-snmp/asn1.h /usr/local/include/ucd-snmp/asn1.h /dev/null
-    do
-      test -f "${ac_snmp}" && break
+  LIBS="${saved_libs} $ac_snmp_lib"
+
+  echo "$as_me:$LINENO: checking for snmp library header" >&5
+echo $ECHO_N "checking for snmp library header... $ECHO_C" >&6
+  unset link_dir link_dirs ac_snmp ac_snmps ac_snmp_dir ac_snmp_dirs
+  link_dirs="/usr/include";
+  if test "${linkbase_specified}" = "yes"; then
+    link_dirs="${link_dirs} ${with_linkbase}/include"
+  fi
+  link_dirs="${link_dirs} /usr/local/include"
+  ac_snmp_dirs="net-snmp net-snmp/library ucd-snmp"
+
+  for link_dir in '' ${link_dirs}; do
+    test -z $link_dir && continue
+    for ac_snmp_dir in '' ${ac_snmp_dirs}; do
+      test -z $ac_snmp_dir && continue
+      ac_snmps="${ac_snmps} ${link_dir}/${ac_snmp_dir}/asn1.h"
     done
-    case ${ac_snmp} in
-      /usr/include/ucd-snmp/*)
+  done
+  ac_snmps="${ac_snmps} /dev/null"
+
+  for ac_snmp in '' ${ac_snmps}; do
+    test -z ${ac_snmp} && continue
+    test -f ${ac_snmp} && break
+  done
+  ac_snmp_header=`echo ${ac_snmp} | sed -e 's/\/asn1.h//'`
+  ac_snmp_header="-I${ac_snmp_header}"
+
+  case ${ac_snmp} in
+    /usr/local/include/net-snmp/*)
 
 cat >>confdefs.h <<\_ACEOF
 #define HAVE_SNMP
 _ACEOF
 
-                  CFLAGS="${CFLAGS} -I/usr/include/ucd-snmp"
-    		  LIBS="${LIBS} -lsnmp"
-                  ;;
-      /usr/local/include/ucd-snmp/*)
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_NETSNMP
+_ACEOF
+
+                CFLAGS="${CFLAGS} -I/usr/local/include"
+                ;;
+    */net-snmp/*)
 
 cat >>confdefs.h <<\_ACEOF
 #define HAVE_SNMP
 _ACEOF
 
-  	          CFLAGS="${CFLAGS} -I/usr/local/include/ucd-snmp"
-  		  LIBS="${LIBS} -L/usr/local/lib -lsnmp"
-                  ;;
-    esac
-    if test "${NEED_CRYPTO}" = "yes"; then
-      LIBS="${LIBS} -lcrypto"
-    fi
-  fi
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_NETSNMP
+_ACEOF
+
+                ;;
+    /usr/local/include/ucd-snmp/*)
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_SNMP
+_ACEOF
+
+                CFLAGS="${CFLAGS} -I/usr/local/include"
+                ;;
+    */ucd-snmp/*)
+
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_SNMP
+_ACEOF
+
+                ;;
+  esac
+  echo "$as_me:$LINENO: result: $ac_snmp_header" >&5
+echo "${ECHO_T}$ac_snmp_header" >&6
+  CFLAGS="${CFLAGS} ${ac_snmp_header}"
 fi
 
 echo "$as_me:$LINENO: checking whether struct sockaddr has a sa_len field" >&5
@@ -8994,5 +9057,6 @@ host operationg system  : ${host_os}
 source code location    : ${srcdir}
 compiler                : ${CC}
 compiler flags          : ${CFLAGS}
+link libraries          : ${LIBS}
 directory for pid files : ${ac_piddir}
 "

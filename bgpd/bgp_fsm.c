@@ -129,8 +129,7 @@ bgp_timer_set (struct peer *peer)
          connect timer is expired, change status to Connect. */
       BGP_TIMER_OFF (peer->t_start);
       /* If peer is passive mode, do not set connect timer. */
-      if (CHECK_FLAG (peer->flags, PEER_FLAG_CONNECT_MODE_PASSIVE)
-	  || CHECK_FLAG (peer->sflags, PEER_STATUS_NSF_WAIT))
+      if (CHECK_FLAG (peer->flags, PEER_FLAG_CONNECT_MODE_PASSIVE))
 	{
 	  if (BGP_DEBUG (normal, NORMAL))
 	    zlog_info ("%s active open failed - TCP session must be opened passively", peer->host);
@@ -138,7 +137,8 @@ bgp_timer_set (struct peer *peer)
 	}
       else
 	{
-	  if (peer->ostatus == Idle)
+	  if (peer->ostatus == Idle
+	      && ! CHECK_FLAG (peer->sflags, PEER_STATUS_NSF_WAIT))
 	    {
 	      active_delay = peer->v_active_delay;
 	      active_delay += bgp_active_delay_jitter (BGP_ACTIVE_DELAY_TIMER);
@@ -439,7 +439,6 @@ char *peer_down_str[] =
   "Peer-group add member",
   "Peer-group delete member",
   "Capability changed",
-  "Passive config change",
   "Multihop config change",
   "Password change",
   "NSF peer closed the session"
@@ -469,8 +468,6 @@ bgp_graceful_restart_timer_expire (struct thread *thread)
       zlog_info ("%s graceful restart timer expired", peer->host);
       zlog_info ("%s graceful restart stalepath timer stopped", peer->host);
     }
-
-  bgp_timer_set (peer);
 
   return 0;
 }

@@ -1,4 +1,4 @@
-This is zebra.info, produced by makeinfo version 4.2 from zebra.texi.
+This is zebra.info, produced by makeinfo version 4.5 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software:
 START-INFO-DIR-ENTRY
@@ -138,7 +138,7 @@ Multicast routing protocols such as BGMP, PIM-SM, PIM-DM will be
 supported in Zebra 2.0.  MPLS support is going on.  In the future,
 TCP/IP filtering control, QoS control, diffserv configuration will be
 added to Zebra.  Zebra project's final goal is making a productive,
-quality free TCP/IP routing software.
+top-quality free TCP/IP routing software.
 
 
 File: zebra.info,  Node: System Architecture,  Next: Supported Platforms,  Prev: About Zebra,  Up: Overview
@@ -298,6 +298,7 @@ RFC2842
      `Capabilities Advertisement with BGP-4. R. Chandra, J. Scudder.
      May 2000.'
 
+
    When SNMP support is enabled, below RFC is also supported.
 
 RFC1227
@@ -314,6 +315,7 @@ RFC1724
 RFC1850
      `OSPF Version 2 Management Information Base. F. Baker, R. Coltun.
      November 1995.'
+
 
 
 File: zebra.info,  Node: How to get Zebra,  Next: Mailing List,  Prev: Supported RFC,  Up: Overview
@@ -501,6 +503,7 @@ CONFIG_IP_MULTICAST
      IP: multicasting.  This option should be specified when you use
      `ripd' or `ospfd' because these protocols use multicast.
 
+
    IPv6 support has been added in GNU/Linux kernel version 2.2.  If you
 try to use the Zebra IPv6 feature on a GNU/Linux kernel, please make
 sure the following libraries have been installed.  Please note that
@@ -518,6 +521,7 @@ upper.
      routing utility.  It contains `ifconfig', `route', `netstat', and
      other tools.  `net-tools' may be found at
      <http://www.tazenda.demon.co.uk/phil/net-tools/>.
+
 
 
 File: zebra.info,  Node: Build the Software,  Next: Install the Software,  Prev: Configure the Software,  Up: Installation
@@ -786,6 +790,7 @@ Common Invocation Options
 `--version'
      Print program version.
 
+
 
 File: zebra.info,  Node: Virtual Terminal Interfaces,  Prev: Common Invocation Options,  Up: Basic commands
 
@@ -929,6 +934,7 @@ means press the Control Key.
 `C-e'
      Move to the end of the line.
 
+
 
 File: zebra.info,  Node: CLI Editing Commands,  Next: CLI Advanced Commands,  Prev: CLI Movement Commands,  Up: VTY CLI Commands
 
@@ -960,6 +966,7 @@ character means press the Control Key.
 `C-t'
      Transpose character.
 
+
 
 File: zebra.info,  Node: CLI Advanced Commands,  Prev: CLI Editing Commands,  Up: VTY CLI Commands
 
@@ -990,6 +997,7 @@ completions, insta-help, and VTY session management.
      You can use command line help by typing `help' at the beginning of
      the line.  Typing `?' at any point in the line will show possible
      completions.
+
 
 
 File: zebra.info,  Node: Zebra,  Next: RIP,  Prev: Basic commands,  Up: Top
@@ -1033,6 +1041,7 @@ Options::), the `zebra' specific invocation options are listed below.
 `-r'
 `--retain'
      When program terminates, retain routes added by zebra.
+
 
 
 File: zebra.info,  Node: Interface Commands,  Next: Static Route Commands,  Prev: Invoking zebra,  Up: Zebra

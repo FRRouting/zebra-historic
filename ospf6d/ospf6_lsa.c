@@ -51,8 +51,8 @@ ospf6_unknown_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
   u_char *start, *end, *current;
   char byte[4];
 
-  start = (char *) lsa->header + sizeof (struct ospf6_lsa_header);
-  end = (char *) lsa->header + ntohs (lsa->header->length);
+  start = (u_char *) lsa->header + sizeof (struct ospf6_lsa_header);
+  end = (u_char *) lsa->header + ntohs (lsa->header->length);
 
   vty_out (vty, "        Unknown contents:%s", VNL);
   for (current = start; current < end; current ++)
@@ -92,10 +92,14 @@ ospf6_get_lsa_handler (u_int16_t type)
   struct ospf6_lsa_handler *handler = NULL;
   int index = ntohs (type) & OSPF6_LSTYPE_FCODE_MASK;
 
-  if (index >= vector_max (ospf6_lsa_handler_vector))
-    handler = &unknown_handler;
-  else
+  if (ospf6_lsa_handler_vector &&
+      index < vector_max (ospf6_lsa_handler_vector))
     handler = vector_slot (ospf6_lsa_handler_vector, index);
+  else
+    handler = &unknown_handler;
+
+  if (handler == NULL)
+    handler = &unknown_handler;
 
   return handler;
 }
@@ -366,8 +370,8 @@ ospf6_lsa_show_dump (struct vty *vty, struct ospf6_lsa *lsa)
   u_char *start, *end, *current;
   char byte[4];
 
-  start = (char *) lsa->header;
-  end = (char *) lsa->header + ntohs (lsa->header->length);
+  start = (u_char *) lsa->header;
+  end = (u_char *) lsa->header + ntohs (lsa->header->length);
 
   vty_out (vty, "%s", VNL);
   vty_out (vty, "%s:%s", lsa->name, VNL);
@@ -670,7 +674,7 @@ ospf6_lsa_checksum (struct ospf6_lsa_header *lsa_header)
 
   lsa_header->checksum = 0;
   length = ntohs (lsa_header->length) - 2;
-  sp = (char *) &lsa_header->type;
+  sp = (u_char *) &lsa_header->type;
 
   for (ep = sp + length; sp < ep; sp = q)
     {

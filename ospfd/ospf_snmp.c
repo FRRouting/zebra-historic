@@ -24,6 +24,11 @@
 #include <zebra.h>
 
 #ifdef HAVE_SNMP
+
+#ifdef HAVE_NETSNMP
+#include <net-snmp/net-snmp-config.h>
+#endif /* HAVE_NETSNMP */
+
 #include <asn1.h>
 #include <snmp.h>
 #include <snmp_impl.h>
@@ -1266,6 +1271,45 @@ ospfAreaRangeEntry (struct variable *v, oid *name, size_t *length, int exact,
       return NULL;
       break;
     }
+  return NULL;
+}
+
+struct ospf_nbr_nbma *
+ospf_nbr_nbma_lookup_next (struct ospf *ospf, struct in_addr *nbr_addr,
+			   int first)
+{
+  struct route_node *rn;
+  struct ospf_nbr_nbma *nbr_nbma;
+  struct ospf_nbr_nbma *min = NULL;
+
+  for (rn = route_top (ospf->nbr_nbma); rn; rn = route_next (rn))
+    if ((nbr_nbma = rn->info) != NULL
+        && nbr_nbma->nbr != nbr_nbma->oi->nbr_self /* just make sure */
+        && nbr_nbma->nbr->state != NSM_Down /* xxx */
+        && nbr_nbma->addr.s_addr != 0)
+      {
+        if (first)
+          {
+            if (! min)
+              min = nbr_nbma;
+            else if (ntohl (nbr_nbma->addr.s_addr) < ntohl (min->addr.s_addr))
+              min = nbr_nbma;
+          }
+        else if (ntohl (nbr_nbma->addr.s_addr) > ntohl (nbr_addr->s_addr))
+          {
+            if (! min)
+              min = nbr_nbma;
+            else if (ntohl (nbr_nbma->addr.s_addr) < ntohl (min->addr.s_addr))
+              min = nbr_nbma;
+          }
+      }
+
+  if (min)
+    {
+      *nbr_addr = min->addr;
+      return min;
+    }
+
   return NULL;
 }
 

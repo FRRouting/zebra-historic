@@ -1,4 +1,4 @@
-This is zebra.info, produced by makeinfo version 4.2 from zebra.texi.
+This is zebra.info, produced by makeinfo version 4.5 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software:
 START-INFO-DIR-ENTRY
@@ -710,6 +710,7 @@ LEN] [ge LEN]
           `ge' command specifies prefix length.  The prefix list will be
           applied if the prefix length is greater than or equal to the
           ge prefix length.
+
 
 
    Less than or equal to prefix numbers and greater than or equal to

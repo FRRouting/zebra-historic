@@ -1331,10 +1331,12 @@ vty_read (struct thread *thread)
 		(*vty->output_func) (vty, 1);
 	      vty_buffer_reset (vty);
 	      break;
-#if 0 /* More line does not work for "show ip bgp".  */
+#if 1 /* More line for "show ip bgp" is fixed */
 	    case '\n':
 	    case '\r':
 	      vty->status = VTY_MORELINE;
+	      if (vty->output_func)
+		(*vty->output_func) (vty, 0);
 	      break;
 #endif
 	    default:
@@ -1491,7 +1493,7 @@ vty_flush (struct thread *thread)
   /* Function execution continue. */
   if (vty->status == VTY_START || vty->status == VTY_CONTINUE)
     {
-      if (vty->status == VTY_CONTINUE)
+      if (vty->status == VTY_CONTINUE && vty->output_func)
 	erase = 1;
       else
 	erase = 0;

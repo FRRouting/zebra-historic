@@ -1,3 +1,7 @@
+2004-11-24  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf_snmp.c: ospf_nbr_nbma_lookup_next() added for SNMP.
+
 2003-12-20  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* ospf_packet.c (ospf_recv_packet): Merge fix of OpenBSD problem.

@@ -1,4 +1,4 @@
-This is zebra.info, produced by makeinfo version 4.2 from zebra.texi.
+This is zebra.info, produced by makeinfo version 4.5 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software:
 START-INFO-DIR-ENTRY
@@ -879,6 +879,7 @@ BGP decision process
 5. Origin check.
 
 6. MED check.
+
 
 File: zebra.info,  Node: BGP network,  Next: BGP Peer,  Prev: BGP router,  Up: BGP
 

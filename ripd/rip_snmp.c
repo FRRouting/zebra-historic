@@ -22,6 +22,11 @@
 #include <zebra.h>
 
 #ifdef HAVE_SNMP
+
+#ifdef HAVE_NETSNMP
+#include <net-snmp/net-snmp-config.h>
+#endif /* HAVE_NETSNMP */
+
 #include <asn1.h>
 #include <snmp.h>
 #include <snmp_impl.h>
@@ -509,7 +514,7 @@ rip2PeerTable (struct variable *v, oid name[], size_t *length,
 {
   static struct in_addr addr;
   static int version;
-  /* static time_t uptime; */
+  static time_t uptime;
 
   struct rip_peer *peer;
 

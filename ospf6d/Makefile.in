@@ -105,19 +105,22 @@ INSTALL_SDATA = @INSTALL@ -m 600
 
 noinst_LIBRARIES = libospf6.a
 sbin_PROGRAMS = ospf6d
+noinst_PROGRAMS = ospf6test
 
 libospf6_a_SOURCES = \
 	ospf6_network.c ospf6_message.c ospf6_lsa.c ospf6_lsdb.c \
 	ospf6_top.c ospf6_area.c ospf6_interface.c ospf6_neighbor.c \
 	ospf6_flood.c ospf6_route.c ospf6_intra.c ospf6_zebra.c \
-	ospf6_spf.c ospf6_proto.c ospf6_asbr.c ospf6_abr.c ospf6d.c
+	ospf6_spf.c ospf6_proto.c ospf6_asbr.c ospf6_abr.c ospf6_snmp.c \
+	ospf6d.c
 
 
 noinst_HEADERS = \
 	ospf6_network.h ospf6_message.h ospf6_lsa.h ospf6_lsdb.h \
 	ospf6_top.h ospf6_area.h ospf6_interface.h ospf6_neighbor.h \
 	ospf6_flood.h ospf6_route.h ospf6_intra.h ospf6_zebra.h \
-	ospf6_spf.h ospf6_proto.h ospf6_asbr.h ospf6_abr.h ospf6d.h
+	ospf6_spf.h ospf6_proto.h ospf6_asbr.h ospf6_abr.h ospf6_snmp.h \
+	ospf6d.h
 
 
 ospf6d_SOURCES = \
@@ -125,6 +128,12 @@ ospf6d_SOURCES = \
 
 
 ospf6d_LDADD = ../lib/libzebra.a
+
+ospf6test_SOURCES = \
+	ospf6_test.c $(libospf6_a_SOURCES)
+
+
+ospf6test_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = ospf6d.conf.sample
 
@@ -143,10 +152,12 @@ am_libospf6_a_OBJECTS = ospf6_network.$(OBJEXT) ospf6_message.$(OBJEXT) \
 	ospf6_neighbor.$(OBJEXT) ospf6_flood.$(OBJEXT) \
 	ospf6_route.$(OBJEXT) ospf6_intra.$(OBJEXT) \
 	ospf6_zebra.$(OBJEXT) ospf6_spf.$(OBJEXT) ospf6_proto.$(OBJEXT) \
-	ospf6_asbr.$(OBJEXT) ospf6_abr.$(OBJEXT) ospf6d.$(OBJEXT)
+	ospf6_asbr.$(OBJEXT) ospf6_abr.$(OBJEXT) ospf6_snmp.$(OBJEXT) \
+	ospf6d.$(OBJEXT)
 libospf6_a_OBJECTS = $(am_libospf6_a_OBJECTS)
+noinst_PROGRAMS = ospf6test$(EXEEXT)
 sbin_PROGRAMS = ospf6d$(EXEEXT)
-PROGRAMS = $(sbin_PROGRAMS)
+PROGRAMS = $(noinst_PROGRAMS) $(sbin_PROGRAMS)
 
 am__objects_1 = ospf6_network.$(OBJEXT) ospf6_message.$(OBJEXT) \
 	ospf6_lsa.$(OBJEXT) ospf6_lsdb.$(OBJEXT) ospf6_top.$(OBJEXT) \
@@ -154,11 +165,16 @@ am__objects_1 = ospf6_network.$(OBJEXT) ospf6_message.$(OBJEXT) \
 	ospf6_neighbor.$(OBJEXT) ospf6_flood.$(OBJEXT) \
 	ospf6_route.$(OBJEXT) ospf6_intra.$(OBJEXT) \
 	ospf6_zebra.$(OBJEXT) ospf6_spf.$(OBJEXT) ospf6_proto.$(OBJEXT) \
-	ospf6_asbr.$(OBJEXT) ospf6_abr.$(OBJEXT) ospf6d.$(OBJEXT)
+	ospf6_asbr.$(OBJEXT) ospf6_abr.$(OBJEXT) ospf6_snmp.$(OBJEXT) \
+	ospf6d.$(OBJEXT)
 am_ospf6d_OBJECTS = ospf6_main.$(OBJEXT) $(am__objects_1)
 ospf6d_OBJECTS = $(am_ospf6d_OBJECTS)
 ospf6d_DEPENDENCIES = ../lib/libzebra.a
 ospf6d_LDFLAGS =
+am_ospf6test_OBJECTS = ospf6_test.$(OBJEXT) $(am__objects_1)
+ospf6test_OBJECTS = $(am_ospf6test_OBJECTS)
+ospf6test_DEPENDENCIES = ../lib/libzebra.a
+ospf6test_LDFLAGS =
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
@@ -175,22 +191,24 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@	./$(DEPDIR)/ospf6_neighbor.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/ospf6_network.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/ospf6_proto.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/ospf6_route.Po ./$(DEPDIR)/ospf6_spf.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/ospf6_top.Po ./$(DEPDIR)/ospf6_zebra.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/ospf6d.Po
+@AMDEP_TRUE@	./$(DEPDIR)/ospf6_route.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/ospf6_snmp.Po ./$(DEPDIR)/ospf6_spf.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/ospf6_test.Po ./$(DEPDIR)/ospf6_top.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/ospf6_zebra.Po ./$(DEPDIR)/ospf6d.Po
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 CFLAGS = @CFLAGS@
-DIST_SOURCES = $(libospf6_a_SOURCES) $(ospf6d_SOURCES)
+DIST_SOURCES = $(libospf6_a_SOURCES) $(ospf6d_SOURCES) \
+	$(ospf6test_SOURCES)
 DATA = $(sysconf_DATA)
 
 HEADERS = $(noinst_HEADERS)
 
 DIST_COMMON = README $(noinst_HEADERS) ChangeLog Makefile.am \
 	Makefile.in
-SOURCES = $(libospf6_a_SOURCES) $(ospf6d_SOURCES)
+SOURCES = $(libospf6_a_SOURCES) $(ospf6d_SOURCES) $(ospf6test_SOURCES)
 
 all: all-am
 
@@ -208,6 +226,9 @@ libospf6.a: $(libospf6_a_OBJECTS) $(libospf6_a_DEPENDENCIES)
 	-rm -f libospf6.a
 	$(libospf6_a_AR) libospf6.a $(libospf6_a_OBJECTS) $(libospf6_a_LIBADD)
 	$(RANLIB) libospf6.a
+
+clean-noinstPROGRAMS:
+	-test -z "$(noinst_PROGRAMS)" || rm -f $(noinst_PROGRAMS)
 sbinPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 install-sbinPROGRAMS: $(sbin_PROGRAMS)
 	@$(NORMAL_INSTALL)
@@ -235,6 +256,9 @@ clean-sbinPROGRAMS:
 ospf6d$(EXEEXT): $(ospf6d_OBJECTS) $(ospf6d_DEPENDENCIES) 
 	@rm -f ospf6d$(EXEEXT)
 	$(LINK) $(ospf6d_LDFLAGS) $(ospf6d_OBJECTS) $(ospf6d_LDADD) $(LIBS)
+ospf6test$(EXEEXT): $(ospf6test_OBJECTS) $(ospf6test_DEPENDENCIES) 
+	@rm -f ospf6test$(EXEEXT)
+	$(LINK) $(ospf6test_LDFLAGS) $(ospf6test_OBJECTS) $(ospf6test_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT) core *.core
@@ -256,7 +280,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_network.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_proto.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_route.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_snmp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_spf.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_top.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6_zebra.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ospf6d.Po@am__quote@
@@ -381,8 +407,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-noinstLIBRARIES clean-sbinPROGRAMS \
-	mostlyclean-am
+clean-am: clean-generic clean-noinstLIBRARIES clean-noinstPROGRAMS \
+	clean-sbinPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 
@@ -419,8 +445,8 @@ uninstall-am: uninstall-info-am uninstall-sbinPROGRAMS \
 	uninstall-sysconfDATA
 
 .PHONY: GTAGS all all-am check check-am clean clean-generic \
-	clean-noinstLIBRARIES clean-sbinPROGRAMS distclean \
-	distclean-compile distclean-depend distclean-generic \
+	clean-noinstLIBRARIES clean-noinstPROGRAMS clean-sbinPROGRAMS \
+	distclean distclean-compile distclean-depend distclean-generic \
 	distclean-tags distdir dvi dvi-am info info-am install \
 	install-am install-data install-data-am install-exec \
 	install-exec-am install-info install-info-am install-man \

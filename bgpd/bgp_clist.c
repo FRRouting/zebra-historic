@@ -749,7 +749,7 @@ extcommunity_list_set (struct community_list_handler *ch,
   entry->style = style;
   entry->any = (str ? 0 : 1);
   if (ecom)
-    entry->config = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_COMMUNITY_LIST);
+    entry->config = ecommunity_ecom2str (ecom, ECOMMUNITY_FORMAT_CONFIG);
   else if (regex)
     entry->config = XSTRDUP (MTYPE_COMMUNITY_LIST_CONFIG, str);
   else

@@ -1,4 +1,4 @@
-This is zebra.info, produced by makeinfo version 4.2 from zebra.texi.
+This is zebra.info, produced by makeinfo version 4.5 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software:
 START-INFO-DIR-ENTRY
@@ -106,8 +106,8 @@ Command Index
 * default-metric <0-16777214>:           Redistribute routes to OSPF.
 * default-metric <1-16>:                 RIP Metric Manipulation.
 * description DESCRIPTION ...:           Interface Commands.
-* distance <1-255> <1>:                  Redistribute routes to OSPF.
-* distance <1-255>:                      RIP distance.
+* distance <1-255> <1>:                  RIP distance.
+* distance <1-255>:                      Redistribute routes to OSPF.
 * distance <1-255> A.B.C.D/M <1>:        BGP distance.
 * distance <1-255> A.B.C.D/M:            RIP distance.
 * distance <1-255> A.B.C.D/M ACCESS-LIST: RIP distance.
@@ -219,10 +219,10 @@ Command Index
 * network A.B.C.D/M:                     BGP route.
 * network A.B.C.D/M area <0-4294967295>: OSPF router.
 * network A.B.C.D/M area A.B.C.D:        OSPF router.
-* network IFNAME <1>:                    ripngd Configuration.
-* network IFNAME:                        RIP Configuration.
-* network NETWORK <1>:                   ripngd Configuration.
-* network NETWORK:                       RIP Configuration.
+* network IFNAME <1>:                    RIP Configuration.
+* network IFNAME:                        ripngd Configuration.
+* network NETWORK <1>:                   RIP Configuration.
+* network NETWORK:                       ripngd Configuration.
 * no aggregate-address A.B.C.D/M:        Route Aggregation.
 * no area <0-4294967295> authentication: OSPF area.
 * no area <0-4294967295> export-list NAME: OSPF area.
@@ -262,8 +262,8 @@ Command Index
 * no default-information originate:      Redistribute routes to OSPF.
 * no default-metric:                     Redistribute routes to OSPF.
 * no default-metric <1-16>:              RIP Metric Manipulation.
-* no distance <1-255> <1>:               Redistribute routes to OSPF.
-* no distance <1-255>:                   RIP distance.
+* no distance <1-255> <1>:               RIP distance.
+* no distance <1-255>:                   Redistribute routes to OSPF.
 * no distance <1-255> A.B.C.D/M:         RIP distance.
 * no distance <1-255> A.B.C.D/M ACCESS-LIST: RIP distance.
 * no distance ospf:                      Redistribute routes to OSPF.
@@ -356,13 +356,13 @@ Command Index
 * redistribute bgp:                      How to Announce RIP route.
 * redistribute bgp metric <0-16>:        How to Announce RIP route.
 * redistribute bgp route-map ROUTE-MAP:  How to Announce RIP route.
-* redistribute connected <1>:            Redistribute to BGP.
+* redistribute connected <1>:            How to Announce RIP route.
 * redistribute connected <2>:            Redistribute routes to OSPF6.
-* redistribute connected:                How to Announce RIP route.
+* redistribute connected:                Redistribute to BGP.
 * redistribute connected metric <0-16>:  How to Announce RIP route.
 * redistribute connected route-map ROUTE-MAP: How to Announce RIP route.
-* redistribute kernel <1>:               Redistribute to BGP.
-* redistribute kernel:                   How to Announce RIP route.
+* redistribute kernel <1>:               How to Announce RIP route.
+* redistribute kernel:                   Redistribute to BGP.
 * redistribute kernel metric <0-16>:     How to Announce RIP route.
 * redistribute kernel route-map ROUTE-MAP: How to Announce RIP route.
 * redistribute ospf <1>:                 Redistribute to BGP.
@@ -371,9 +371,9 @@ Command Index
 * redistribute ospf route-map ROUTE-MAP: How to Announce RIP route.
 * redistribute rip:                      Redistribute to BGP.
 * redistribute ripng:                    Redistribute routes to OSPF6.
-* redistribute static <1>:               Redistribute to BGP.
-* redistribute static <2>:               Redistribute routes to OSPF6.
-* redistribute static:                   How to Announce RIP route.
+* redistribute static <1>:               How to Announce RIP route.
+* redistribute static <2>:               Redistribute to BGP.
+* redistribute static:                   Redistribute routes to OSPF6.
 * redistribute static metric <0-16>:     How to Announce RIP route.
 * redistribute static route-map ROUTE-MAP: How to Announce RIP route.
 * refresh age-diff <0-10000>:            OSPF router.
@@ -424,10 +424,10 @@ Command Index
 * show ip bgp community COMMUNITY:       Display BGP Routes by Community.
 * show ip bgp community COMMUNITY exact-match <1>: More Show IP BGP.
 * show ip bgp community COMMUNITY exact-match: Display BGP Routes by Community.
-* show ip bgp community-list WORD <1>:   More Show IP BGP.
-* show ip bgp community-list WORD:       Display BGP Routes by Community.
-* show ip bgp community-list WORD exact-match <1>: More Show IP BGP.
-* show ip bgp community-list WORD exact-match: Display BGP Routes by Community.
+* show ip bgp community-list WORD <1>:   Display BGP Routes by Community.
+* show ip bgp community-list WORD:       More Show IP BGP.
+* show ip bgp community-list WORD exact-match <1>: Display BGP Routes by Community.
+* show ip bgp community-list WORD exact-match: More Show IP BGP.
 * show ip bgp neighbor [PEER]:           More Show IP BGP.
 * show ip bgp regexp LINE <1>:           More Show IP BGP.
 * show ip bgp regexp LINE:               Display BGP Routes by AS Path.

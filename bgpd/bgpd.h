@@ -22,7 +22,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "sockunion.h"
 
 /* ZEBRA BGPd Version */
-#define ZEBRA_BGPD_VERSION "0.95 build 15"
+#define ZEBRA_BGPD_VERSION "0.95 build 25"
 
 /* Typedef BGP specific types.  */
 typedef u_int16_t as_t;
@@ -105,6 +105,7 @@ struct bgp
 #define BGP_FLAG_NO_FAST_EXT_FAILOVER     (1 << 10)
 #define BGP_FLAG_LOG_NEIGHBOR_CHANGES     (1 << 11)
 #define BGP_FLAG_GRACEFUL_RESTART         (1 << 12)
+#define BGP_FLAG_COST_COMMUNITY_IGNORE    (1 << 13)
 
   /* BGP Per AF flags */
   u_int16_t af_flags[AFI_MAX][SAFI_MAX];
@@ -241,7 +242,6 @@ struct peer
 
   /* BGP peer group.  */
   struct peer_group *group;
-  u_char af_group[AFI_MAX][SAFI_MAX];
 
   /* Peer's remote AS number. */
   as_t as;			
@@ -351,6 +351,11 @@ struct peer
 #define PEER_FLAG_MAX_PREFIX                (1 << 14) /* maximum prefix */
 #define PEER_FLAG_MAX_PREFIX_WARNING        (1 << 15) /* maximum prefix warning-only */
 
+  /* address family configuration */
+  u_int32_t af_config[AFI_MAX][SAFI_MAX];
+#define PEER_AF_CONFIG_WEIGHT               (1 << 0) /* Default weight. */
+  u_int16_t weight[AFI_MAX][SAFI_MAX];
+
   /* password for TCP signature */
   char *password;
 
@@ -384,14 +389,10 @@ struct peer
 
   /* Default attribute value for the peer. */
   u_int32_t config;
-#define PEER_CONFIG_WEIGHT            (1 << 0) /* Default weight. */
 #define PEER_CONFIG_TIMER             (1 << 1) /* keepalive & holdtime */
-#define PEER_CONFIG_CONNECT           (1 << 2) /* connect */
-#define PEER_CONFIG_ROUTEADV          (1 << 3) /* route advertise */
-  u_int32_t weight;
+#define PEER_CONFIG_ROUTEADV          (1 << 2) /* route advertise */
   u_int32_t holdtime;
   u_int32_t keepalive;
-  u_int32_t connect;
   u_int32_t routeadv;
 
   /* Timer values. */
@@ -838,6 +839,7 @@ int peer_group_remote_as_delete (struct peer_group *);
 int peer_activate (struct peer *, afi_t, safi_t);
 int peer_deactivate (struct peer *, afi_t, safi_t);
 
+int peer_group_member (struct peer *);
 int peer_group_bind (struct bgp *, union sockunion *, struct peer_group *,
 		     afi_t, safi_t, as_t *);
 int peer_group_unbind (struct bgp *, struct peer *, struct peer_group *,
@@ -866,14 +868,11 @@ int peer_default_originate_unset (struct peer *, afi_t, safi_t);
 int peer_port_set (struct peer *, u_int16_t);
 int peer_port_unset (struct peer *);
 
-int peer_weight_set (struct peer *, u_int16_t);
-int peer_weight_unset (struct peer *);
+int peer_weight_set (struct peer *, u_int16_t, afi_t, safi_t);
+int peer_weight_unset (struct peer *, afi_t, safi_t);
 
 int peer_timers_set (struct peer *, u_int32_t, u_int32_t);
 int peer_timers_unset (struct peer *);
-
-int peer_timers_connect_set (struct peer *, u_int32_t);
-int peer_timers_connect_unset (struct peer *);
 
 int peer_advertise_interval_set (struct peer *, u_int32_t);
 int peer_advertise_interval_unset (struct peer *);

@@ -1593,13 +1593,13 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  /* End-of-RIB received */
 	  SET_FLAG (peer->af_sflags[AFI_IP][SAFI_UNICAST], PEER_STATUS_EOR_RECEIVED);
 
-	  /* NSF delete stale route */
-	  if (peer->nsf[AFI_IP][SAFI_UNICAST])
-	    bgp_clear_stale_route (peer, AFI_IP, SAFI_UNICAST);
-
 	  if (BGP_DEBUG (normal, NORMAL))
 	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv4 Unicast from %s",
 		  peer->host);
+
+	  /* NSF delete stale route */
+	  if (peer->nsf[AFI_IP][SAFI_UNICAST])
+	    bgp_clear_stale_route (peer, AFI_IP, SAFI_UNICAST);
 	}
     }
   if (peer->afc[AFI_IP][SAFI_MULTICAST])
@@ -1622,13 +1622,13 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  /* End-of-RIB received */
 	  SET_FLAG (peer->af_sflags[AFI_IP][SAFI_MULTICAST], PEER_STATUS_EOR_RECEIVED);
 
-	  /* NSF delete stale route */
-	  if (peer->nsf[AFI_IP][SAFI_MULTICAST])
-	    bgp_clear_stale_route (peer, AFI_IP, SAFI_MULTICAST);
-
 	  if (BGP_DEBUG (normal, NORMAL))
 	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv4 Multicast from %s",
 		  peer->host);
+
+	  /* NSF delete stale route */
+	  if (peer->nsf[AFI_IP][SAFI_MULTICAST])
+	    bgp_clear_stale_route (peer, AFI_IP, SAFI_MULTICAST);
 	}
     }
   if (peer->afc[AFI_IP6][SAFI_UNICAST])
@@ -1651,13 +1651,13 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  /* End-of-RIB received */
 	  SET_FLAG (peer->af_sflags[AFI_IP6][SAFI_UNICAST], PEER_STATUS_EOR_RECEIVED);
 
-	  /* NSF delete stale route */
-	  if (peer->nsf[AFI_IP6][SAFI_UNICAST])
-	    bgp_clear_stale_route (peer, AFI_IP6, SAFI_UNICAST);
-
 	  if (BGP_DEBUG (normal, NORMAL))
 	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv6 Unicast from %s",
 		  peer->host);
+
+	  /* NSF delete stale route */
+	  if (peer->nsf[AFI_IP6][SAFI_UNICAST])
+	    bgp_clear_stale_route (peer, AFI_IP6, SAFI_UNICAST);
 	}
     }
   if (peer->afc[AFI_IP6][SAFI_MULTICAST])
@@ -1678,14 +1678,15 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  && mp_withdraw.length == 0)
 	{
 	  /* End-of-RIB received */
-
-	  /* NSF delete stale route */
-	  if (peer->nsf[AFI_IP6][SAFI_MULTICAST])
-	    bgp_clear_stale_route (peer, AFI_IP6, SAFI_MULTICAST);
+	  SET_FLAG (peer->af_sflags[AFI_IP6][SAFI_MULTICAST], PEER_STATUS_EOR_RECEIVED);
 
 	  if (BGP_DEBUG (update, UPDATE_IN))
 	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv6 Multicast from %s",
 		  peer->host);
+
+	  /* NSF delete stale route */
+	  if (peer->nsf[AFI_IP6][SAFI_MULTICAST])
+	    bgp_clear_stale_route (peer, AFI_IP6, SAFI_MULTICAST);
 	}
     }
   if (peer->afc[AFI_IP][SAFI_MPLS_VPN])
