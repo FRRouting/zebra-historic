@@ -49,7 +49,7 @@ ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 		      unsigned int ifindex)
 {
   if (zebra->redist[ZEBRA_ROUTE_RIPNG])
-    zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_RIPNG, p, nexthop, ifindex);
+    zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
 }
 
 void
@@ -57,7 +57,7 @@ ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 			 unsigned int ifindex)
 {
   if (zebra->redist[ZEBRA_ROUTE_RIPNG])
-    zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_RIPNG, p, nexthop, ifindex);
+    zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
 }
 
 /* Zebra route add and delete treatment. */
@@ -65,6 +65,7 @@ int
 ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 {
   u_char type;
+  u_char flags;
   struct in6_addr nexthop;
   u_char *lim;
   struct stream *s;
@@ -75,6 +76,7 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
+  flags = stream_getc (s);
   memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
   stream_forward (s, sizeof (struct in6_addr));
 

@@ -93,6 +93,7 @@ make_ospf6_if (char *ifname)
     }
 
   ospf6_if->interface = interface;
+  ospf6_if->instance_id = 1; /* XXX multiple instance not yet */
   ospf6_if->ifid = interface->index;
   ospf6_if->area = (struct area *)NULL; /* not yet attached to Area. */
   ospf6_if->state = IFS_DOWN;

@@ -919,7 +919,7 @@ show_ip_ospf_neighbor_sub (struct vty *vty, struct interface *ifp)
 
       ospf_nbr_state_message (nbr, msgbuf, 16);
 
-      vty_out (vty, "%-15s %3d   %-15s %6s     %-15s %s\r\n",
+      vty_out (vty, "%-15s %3d   %-15s %8s    %-15s %s\r\n",
 	       inet_ntoa (nbr->router_id), nbr->priority,
 	       msgbuf, ospf_timer_dump (nbr->t_inactivity, timebuf, 9),
 	       nbr->host, ifp->name);

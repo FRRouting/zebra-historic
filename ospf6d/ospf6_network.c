@@ -214,8 +214,10 @@ iov_free (int mtype, struct iovec *iov, u_int begin, u_int end)
 void
 iov_trim_head (int mtype, struct iovec *iov)
 {
-  iov_free (mtype, iov, 0, 1);
-  iov_detach (iov, 1);
+  void *base;
+
+  base = iov_detach_first (iov);
+  XFREE (mtype, base);
   return;
 }
 
@@ -226,8 +228,6 @@ iov_free_all (int mtype, struct iovec *iov)
 
   for (i = 0; i < end; i++)
     {
-      if (mtype == MTYPE_OSPF6_LSA)
-        o6log.pointer ("free %#x in iov_free()", iov[i].iov_base);
       XFREE (mtype, iov[i].iov_base);
       iov[i].iov_base = NULL;
       iov[i].iov_len = 0;
@@ -608,7 +608,13 @@ ospf6_serv_sock ()
     }
 
   sockopt_reuseaddr (socket);
+
+#if 0
   thread_add_read (master, ospf6_recv, NULL, socket);
+#else
+  thread_add_read (master, ospf6_receive, NULL, socket);
+#endif
+
   ospf6_sock = socket;
 
   /* setup global sockaddr_in6, allspf6 & alldr6 for later use */
@@ -1019,6 +1025,9 @@ send_linkstate_ack (struct thread *thread)
 
       o6log.network ("LSAck(delayed): %s", print_lsahdr (p->lsa_hdr));
     }
+
+  if (iov_count (iov) == 0)
+    return 0;
 
   dst.sin6_family = AF_INET6;
 #ifdef SIN6_LEN

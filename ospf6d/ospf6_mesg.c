@@ -439,7 +439,7 @@ proc_linkstate_request (struct sockaddr_in6 *src, struct iovec *iov,
       if (!lsa)
         {
           o6log.packet ("requested %s from %s not found, BadLSReq",
-                        print_lsahdr((struct ospf6_lsa_hdr *)lsreq),
+                        print_lsreq (lsreq),
                         nbr->str);
           thread_add_event (master, bad_lsreq, nbr, 0);
           return 0;
@@ -790,8 +790,7 @@ make_linkstate_request (struct iovec *iov, struct sockaddr_in6 *dst,
       lsreq->lsreq_type = lsa->lsa_hdr->lsh_type;
       lsreq->lsreq_id = lsa->lsa_hdr->lsh_id;
       lsreq->lsreq_advrtr = lsa->lsa_hdr->lsh_advrtr;
-      o6log.packet ("LSReq: %s",
-                    print_lsahdr ((struct ospf6_lsa_hdr *)lsreq));
+      o6log.packet ("LSReq: %s", print_lsreq (lsreq));
       if (iov_totallen (iov) >= DEFAULT_INTERFACE_MTU
                                 - sizeof (struct ospf6_hdr))
         break;
@@ -852,7 +851,7 @@ ospf6_message_put_lsa_hdr (struct iovec *iov, struct ospf6_lsa_hdr *lsa_hdr)
   return;
 }
 
-static struct ospf6_lsa_hdr *
+struct ospf6_lsa_hdr *
 ospf6_message_get_lsa_hdr (struct iovec *iov)
 {
   struct ospf6_lsa_hdr *lsa_hdr;
@@ -874,267 +873,6 @@ ospf6_message_get_lsa (struct iovec *iov, struct ospf6_lsa_hdr *current)
   struct ospf6_lsa_hdr *lsa_hdr;
   lsa_hdr = make_ospf6_lsa_data (current, ntohs (current->lsh_len));
   return lsa_hdr;
-}
-
-
-/* Hello */
-void
-ospf6_set_hello_buffer (struct iovec *iov, size_t packetlen)
-{
-  assert (iov_count (iov) == 0);
-  /* hello buffer */
-  iov_prepend (MTYPE_OSPF6_MESSAGE, iov,
-               packetlen - sizeof (struct ospf6_hdr));
-  return;
-}
-
-void
-ospf6_clear_hello_buffer (struct iovec *iov)
-{
-  /* hello buffer */
-  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
-  assert (iov_count (iov) == 0);
-  return;
-}
-
-int
-ospf6_opt_is_mismatch (unsigned char opt, char *options1, char *options2)
-{
-  return (V3OPT_ISSET (options1, opt) ^ V3OPT_ISSET (options2, opt));
-}
-
-void
-ospf6_receive_hello (struct iovec *iov, struct neighbor *nbr)
-{
-  struct hello *hello;
-  char *my_options;
-  char changes = 0;
-#define CHANGE_RTRPRI (1 << 0)
-#define CHANGE_DR     (1 << 1)
-#define CHANGE_BDR    (1 << 2)
-  int twoway = 0, backupseen = 0, nbchange = 0;
-  unsigned long *router_id_ptr, my_router_id;
-  int i, seenrtrnum = 0, router_id_space = 0;
-
-  /* assert neighbor has been found or created */
-  assert (nbr);
-
-  /* set hello pointer */
-  hello = (struct hello *) iov[0].iov_base;
-
-  /* check options */
-  /* Ebit */
-  my_options = nbr->ospf6_if->area->options;
-  if (ospf6_opt_is_mismatch (V3OPT_E, hello->options, my_options))
-    {
-      o6log.packet ("Ebit mismatch with %s", nbr->str);
-      return;
-    }
-
-  /* HelloInterval check */
-  if (ntohs (hello->hello_interval)
-      != nbr->ospf6_if->hello_interval)
-    {
-      o6log.packet ("HelloInterval mismatch with %s", nbr->str);
-      return;
-    }
-
-  /* RouterDeadInterval check */
-  if (ntohs (hello->router_dead_interval)
-      != nbr->ospf6_if->rtr_dead_interval)
-    {
-      o6log.packet ("RouterDeadInterval mismatch with %s", nbr->str);
-      return;
-    }
-
-  /* RouterPriority set */
-  if (nbr->rtr_pri != hello->rtr_pri)
-    {
-      nbr->rtr_pri = hello->rtr_pri;
-      o6log.packet ("RouterPriority changed");
-      changes |= CHANGE_RTRPRI;
-    }
-
-  /* DR set */
-  if (nbr->dr != hello->dr)
-    {
-      /* save previous dr, set current */
-      nbr->prevdr = nbr->dr;
-      nbr->dr = hello->dr;
-      o6log.packet ("%s declare %s as DR", nbr->str, inet4str (nbr->dr));
-      changes |= CHANGE_DR;
-    }
-
-  /* BDR set */
-  if (nbr->bdr != hello->bdr)
-    {
-      /* save previous bdr, set current */
-      nbr->prevbdr = nbr->bdr;
-      nbr->bdr = hello->bdr;
-      o6log.packet ("%s declare %s as BDR", nbr->str, inet4str (nbr->bdr));
-      changes |= CHANGE_BDR;
-    }
-
-  /* TwoWay check */
-  router_id_space = iov[0].iov_len - sizeof (struct ospf6_hdr)
-                    - sizeof (struct hello);
-  seenrtrnum = router_id_space / sizeof (unsigned long);
-  my_router_id = nbr->ospf6_if->area->ospf6->router_id;
-  router_id_ptr = (unsigned long *) (hello + 1);
-  for (i = 0; i < seenrtrnum; i++)
-    {
-      if (*router_id_ptr == my_router_id)
-        twoway++;
-      router_id_ptr++;
-    }
-
-  /* execute neighbor events */
-  thread_execute (master, hello_received, nbr, 0);
-  if (twoway)
-    thread_execute (master, twoway_received, nbr, 0);
-  else
-    {
-      thread_execute (master, oneway_received, nbr, 0);
-      return;
-    }
-
-  /* BackupSeen check */
-  if (nbr->ospf6_if->state == IFS_WAITING)
-    {
-      if (hello->dr == hello->bdr == nbr->rtr_id)
-        assert (0);
-      else if (hello->bdr == nbr->rtr_id)
-        backupseen++;
-      else if (hello->dr == nbr->rtr_id && hello->bdr == 0)
-        backupseen++;
-    }
-
-  /* NeighborChange check */
-  if (changes & CHANGE_RTRPRI)
-    nbchange++;
-  if (changes & CHANGE_DR)
-    if (nbr->prevdr == nbr->rtr_id || nbr->dr == nbr->rtr_id)
-      nbchange++;
-  if (changes & CHANGE_BDR)
-    if (nbr->prevbdr == nbr->rtr_id || nbr->bdr == nbr->rtr_id)
-      nbchange++;
-
-  /* schedule interface events */
-  if (backupseen)
-    thread_add_event (master, backup_seen, nbr->ospf6_if, 0);
-  if (nbchange)
-    thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
-
-  return;
-}
-
-void
-ospf6_receive_dbdesc (struct iovec *iov)
-{
-}
-
-void
-ospf6_receive_lsreq (struct iovec *iov)
-{
-}
-
-void
-ospf6_receive_lsupdate (struct iovec *iov)
-{
-}
-
-void
-ospf6_receive_lsack (struct iovec *iov)
-{
-}
-
-/* peek only ospf6_hdr to get message type, message len,
-   received interface and sending neighbor */
-static void
-ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
-                unsigned char *msgtype, unsigned short *msglen,
-                struct ospf6_if **o6if, struct neighbor **nbr)
-{
-  struct ospf6_hdr *ospf6_hdr = NULL;
-  struct sockaddr_in6 *src = NULL;
-  struct in6_pktinfo *pktinfo = NULL;
-  struct interface *ifp;
-  unsigned long router_id;
-
-  /* set default to fail */
-  *msgtype = MSGT_NONE;
-  *msglen = 0;
-  *o6if = NULL;
-  *nbr = NULL;
-
-  /* set pointer to get ifindex and source ip address */
-  pktinfo = (struct in6_pktinfo *)
-    (CMSG_DATA ((struct cmsghdr *)rmsghdrp->msg_control));
-  src = (struct sockaddr_in6 *)rmsghdrp->msg_name;
-
-  /* prepare buffer for ospf6 header */
-  iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
-               sizeof (struct ospf6_hdr));
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* peek ospf6 header */
-  if (recvmsg (sockfd, rmsghdrp, MSG_PEEK) < 0)
-    return;
-
-  /* set ospf6_hdr pointer to head of buffer */
-  ospf6_hdr = (struct ospf6_hdr *) rmsghdrp->msg_iov[0].iov_base;
-
-  /* set message type and len */
-  *msgtype = ospf6_hdr->type;
-  *msglen = ntohs (ospf6_hdr->len);
-
-  /* save router id */
-  router_id = ospf6_hdr->router_id;
-
-  /* clear buffer for ospf6 header */
-  iov_trim_head (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov);
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* find received ospf6 interface */
-  ifp = if_lookup_by_index (pktinfo->ipi6_ifindex);
-  if (!ifp || !ifp->if_data)
-    return;
-  *o6if = (struct ospf6_if *)ifp->if_data;
-  if (!(*o6if)->area)
-    {
-      o6log.packet ("received interface %s not attached to area",
-                    ifp->name);
-      return;
-    }
-
-  /* find sending neighbor, allow return NULL as *nbr */
-  *nbr = nbr_lookup (router_id, (*o6if)->area->ospf6);
-
-  return;
-}
-
-/* failed before allocate buffer, before really read packet. */
-static void
-ospf6_receive_fail (int sockfd, struct msghdr *rmsghdrp)
-{
-  assert (iov_count (rmsghdrp->msg_iov) == 0);
-
-  /* prepare buffer for ospf6 packet */
-  iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
-               sizeof (struct ospf6_hdr));
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* read ospf6 packet to drop */
-  recvmsg (sockfd, rmsghdrp, 0);
-
-  /* clear buffer for ospf6 packet */
-  iov_trim_head (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov);
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* add thread next read */
-  thread_add_read (master, ospf6_receive, NULL, sockfd);
-
-  return;
 }
 
 
@@ -1295,9 +1033,1005 @@ ospf6_message_set_buffer (unsigned char msgtype, unsigned short msglen,
   return 0;
 }
 
-static void 
-ospf6_message_process (iov, nbr, o6if)
+int
+ospf6_opt_is_mismatch (unsigned char opt, char *options1, char *options2)
 {
+  return (V3OPT_ISSET (options1, opt) ^ V3OPT_ISSET (options2, opt));
+}
+
+
+static void
+ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
+                     struct sockaddr_in6 *src, unsigned long router_id)
+{
+  struct hello *hello;
+  char *my_options;
+  char changes = 0;
+#define CHANGE_RTRPRI (1 << 0)
+#define CHANGE_DR     (1 << 1)
+#define CHANGE_BDR    (1 << 2)
+  int twoway = 0, backupseen = 0, nbchange = 0;
+  unsigned long *router_id_ptr, my_router_id;
+  int i, seenrtrnum = 0, router_id_space = 0;
+  struct neighbor *nbr = NULL;
+  char dr_str[16], bdr_str[16];
+
+  /* assert interface */
+  assert (o6if);
+
+  /* set hello pointer */
+  hello = (struct hello *) iov[0].iov_base;
+
+  /* dump hello */
+  inet_ntop (AF_INET, &hello->dr, dr_str, sizeof (dr_str));
+  inet_ntop (AF_INET, &hello->bdr, bdr_str, sizeof (bdr_str));
+  o6log.packet ("receive Hello: ifid:%lu rtrpri:%d opt:xxx helloint: %hu"
+                " rtrdeadint: %hu dr:%s bdr:%s",
+                ntohl (hello->interface_id), hello->rtr_pri,
+                ntohs (hello->hello_interval),
+                ntohs (hello->router_dead_interval), dr_str, bdr_str);
+
+  /* HelloInterval check */
+  if (ntohs (hello->hello_interval)
+      != o6if->hello_interval)
+    {
+      o6log.packet ("HelloInterval mismatch with %s", nbr->str);
+      ospf6_message_clear_buffer (MSGT_HELLO, iov);
+      return;
+    }
+
+  /* RouterDeadInterval check */
+  if (ntohs (hello->router_dead_interval)
+      != o6if->rtr_dead_interval)
+    {
+      o6log.packet ("RouterDeadInterval mismatch with %s", nbr->str);
+      ospf6_message_clear_buffer (MSGT_HELLO, iov);
+      return;
+    }
+
+  /* check options */
+  /* Ebit */
+  my_options = o6if->area->options;
+  if (ospf6_opt_is_mismatch (V3OPT_E, hello->options, my_options))
+    {
+      o6log.packet ("Ebit mismatch with %s", nbr->str);
+      ospf6_message_clear_buffer (MSGT_HELLO, iov);
+      return;
+    }
+
+  /* find neighbor. if cannot be found, create */
+  nbr = nbr_lookup (router_id, o6if->area->ospf6);
+  if (!nbr)
+    {
+      nbr = make_neighbor (router_id, o6if);
+      nbr->ifid = ntohl (hello->interface_id);
+      nbr->prevdr = nbr->dr = hello->dr;
+      nbr->prevbdr = nbr->bdr = hello->bdr;
+      nbr->rtr_pri = hello->rtr_pri;
+      memcpy (&nbr->hisaddr, src, sizeof (struct sockaddr_in6));
+    }
+
+  /* RouterPriority set */
+  if (nbr->rtr_pri != hello->rtr_pri)
+    {
+      nbr->rtr_pri = hello->rtr_pri;
+      o6log.packet ("RouterPriority changed");
+      changes |= CHANGE_RTRPRI;
+    }
+
+  /* DR set */
+  if (nbr->dr != hello->dr)
+    {
+      /* save previous dr, set current */
+      nbr->prevdr = nbr->dr;
+      nbr->dr = hello->dr;
+      o6log.packet ("%s declare %s as DR", nbr->str, inet4str (nbr->dr));
+      changes |= CHANGE_DR;
+    }
+
+  /* BDR set */
+  if (nbr->bdr != hello->bdr)
+    {
+      /* save previous bdr, set current */
+      nbr->prevbdr = nbr->bdr;
+      nbr->bdr = hello->bdr;
+      o6log.packet ("%s declare %s as BDR", nbr->str, inet4str (nbr->bdr));
+      changes |= CHANGE_BDR;
+    }
+
+  /* TwoWay check */
+  router_id_space = iov[0].iov_len - sizeof (struct hello);
+  assert (router_id_space % sizeof (unsigned long) == 0);
+  seenrtrnum = router_id_space / sizeof (unsigned long);
+  my_router_id = nbr->ospf6_if->area->ospf6->router_id;
+  router_id_ptr = (unsigned long *) (hello + 1);
+  for (i = 0; i < seenrtrnum; i++)
+    {
+      if (*router_id_ptr == my_router_id)
+        twoway++;
+      router_id_ptr++;
+    }
+
+  /* execute neighbor events */
+  thread_execute (master, hello_received, nbr, 0);
+  if (twoway)
+    thread_execute (master, twoway_received, nbr, 0);
+  else
+    thread_execute (master, oneway_received, nbr, 0);
+
+  /* BackupSeen check */
+  if (nbr->ospf6_if->state == IFS_WAITING)
+    {
+      if (hello->dr == hello->bdr == nbr->rtr_id)
+        assert (0);
+      else if (hello->bdr == nbr->rtr_id)
+        backupseen++;
+      else if (hello->dr == nbr->rtr_id && hello->bdr == 0)
+        backupseen++;
+    }
+
+  /* NeighborChange check */
+  if (changes & CHANGE_RTRPRI)
+    nbchange++;
+  if (changes & CHANGE_DR)
+    if (nbr->prevdr == nbr->rtr_id || nbr->dr == nbr->rtr_id)
+      nbchange++;
+  if (changes & CHANGE_BDR)
+    if (nbr->prevbdr == nbr->rtr_id || nbr->bdr == nbr->rtr_id)
+      nbchange++;
+
+  /* schedule interface events */
+  if (backupseen)
+    thread_add_event (master, backup_seen, nbr->ospf6_if, 0);
+  if (nbchange)
+    thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
+
+  /* free hello space */
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+
+  return;
+}
+
+/* assume size of buf is bigger than 4 */
+static void
+ospf6_dbdesc_bit_str (unsigned char dbdesc_bit, char *buf)
+{
+  char *p = buf;
+
+  /* Initialize bit */
+  if (DD_IS_IBIT_SET (dbdesc_bit))
+    *p++ = 'I';
+  /* More bit */
+  if (DD_IS_MBIT_SET (dbdesc_bit))
+    *p++ = 'M';
+  /* Master/Slave bit */
+  if (DD_IS_MSBIT_SET (dbdesc_bit))
+    *p++ = 'm';
+  else
+    *p++ = 's';
+  *p = '\0';
+  return;
+}
+
+static int
+ospf6_dbdesc_is_master (struct neighbor *nbr, struct ospf6_if *o6if)
+{
+  if (nbr->rtr_id == o6if->area->ospf6->router_id)
+    {
+      o6log.packet ("***neighbor router id is the same of mine");
+      return -1;
+    }
+  else if (nbr->rtr_id > o6if->area->ospf6->router_id)
+    return 0;
+  return 1;
+}
+
+static void
+ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
+{
+  struct database_description *dbdesc;
+
+  /* set database description pointer */
+  dbdesc = (struct database_description *) iov[0].iov_base;
+
+  switch (nbr->state)
+    {
+      case NBS_DOWN:
+      case NBS_ATTEMPT:
+      case NBS_TWOWAY:
+        ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+        return;
+
+      case NBS_INIT:
+        thread_execute (master, twoway_received, nbr, 0);
+        if (nbr->state != NBS_EXSTART)
+          {
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        /* else fall through to ExStart */
+      case NBS_EXSTART:
+        if (!DD_IS_MSBIT_SET (dbdesc->bits) &&
+            !DD_IS_IBIT_SET (dbdesc->bits) &&
+            ntohl (dbdesc->sequence_number) == nbr->dd_seqnum)
+          {
+            prepare_neighbor_lsdb (nbr);
+            if (nbr->send_dd)
+              {
+                thread_cancel (nbr->send_dd);
+                nbr->send_dd = (struct thread *)NULL;
+              }
+            thread_add_event (master, negotiation_done, nbr, 0);
+          }
+        else
+          {
+            o6log.packet ("negotiation failed");
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        break;
+
+      case NBS_EXCHANGE:
+        /* duplicate dbdesc dropped by master */
+        if (!memcmp (dbdesc, &nbr->last_dd,
+                     sizeof (struct database_description)))
+          {
+            o6log.packet ("duplicate dbdesc, drop");
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+
+        /* check Initialize bit and Master/Slave bit */
+        if (DD_IS_IBIT_SET (dbdesc->bits))
+          {
+            o6log.packet ("Initialize bit mismatch");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        if (DD_IS_MSBIT_SET (dbdesc->bits))
+          {
+            o6log.packet ("Master/Slave bit mismatch");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+
+        /* dbdesc option check */
+        if (memcmp (dbdesc->options, nbr->last_dd.options,
+                    sizeof (dbdesc->options)))
+          {
+            o6log.packet ("dbdesc option field changed");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+
+        /* dbdesc sequence number check */
+        if (ntohl (dbdesc->sequence_number) != nbr->dd_seqnum)
+          {
+            o6log.packet ("dbdesc seqnumber mismatch");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        break;
+
+      case NBS_LOADING:
+      case NBS_FULL:
+        /* duplicate dbdesc dropped by master */
+        if (!memcmp (dbdesc, &nbr->last_dd,
+                     sizeof (struct database_description)))
+          {
+            o6log.packet ("duplicate dbdesc, drop");
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        else
+          {
+            o6log.packet ("not duplicate dbdesc in state %s",
+                          nbs_name[nbr->state]);
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        break; /* not reached */
+
+      default:
+        assert (0);
+        break; /* not reached */
+    }
+
+  /* take dbdesc header from message */
+  iov_detach_first (iov);
+
+  /* process LSA headers */
+  if (check_neighbor_lsdb (iov, nbr) < 0)
+    {
+      /* one possible situation to come here is to find as-external
+      lsa found when this area is stub */
+      thread_add_event (master, seqnumber_mismatch, nbr, 0);
+      iov_free_all (MTYPE_OSPF6_LSA, iov);
+      return;
+    }
+
+  /* increment dbdesc seqnum */
+  nbr->dd_seqnum++;
+
+  /* more bit check */
+  if (!DD_IS_MBIT_SET (dbdesc->bits) && !DD_IS_MBIT_SET (nbr->dd_bits))
+    {
+      thread_add_event (master, exchange_done, nbr, 0);
+      if (nbr->send_dd)
+        {
+          thread_cancel (nbr->send_dd);
+          nbr->send_dd = (struct thread *)NULL;
+        }
+    }
+  else
+    {
+      /* proceed summary LSA to transmit, set more bit */
+      proceed_summarylist (nbr);
+
+      /* cancel retransmit and schedule new dbdesc to send */
+      if (nbr->send_dd)
+        thread_cancel (nbr->send_dd);
+      thread_add_event (master, send_database_description, nbr, 0);
+    }
+
+  /* save last received dbdesc , and free */
+  memcpy (&nbr->last_dd, dbdesc, sizeof (struct database_description));
+  XFREE (MTYPE_OSPF6_MESSAGE, dbdesc);
+
+  return;
+}
+
+static void
+ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
+{
+  struct database_description *dbdesc;
+
+  /* set database description pointer */
+  dbdesc = (struct database_description *) iov[0].iov_base;
+
+  switch (nbr->state)
+    {
+      case NBS_DOWN:
+      case NBS_ATTEMPT:
+      case NBS_TWOWAY:
+        ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+        return;
+      case NBS_INIT:
+        thread_execute (master, twoway_received, nbr, 0);
+        if (nbr->state != NBS_EXSTART)
+          {
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        /* else fall through to ExStart */
+      case NBS_EXSTART:
+        if (DD_IS_IBIT_SET (dbdesc->bits) &&
+            DD_IS_MBIT_SET (dbdesc->bits) &&
+            DD_IS_MSBIT_SET (dbdesc->bits) &&
+            iov_count (iov) == 1)
+          {
+            /* Master/Slave bit set to slave */
+            DD_MSBIT_CLEAR (nbr->dd_bits);
+            /* Initialize bit clear */
+            DD_IBIT_CLEAR (nbr->dd_bits);
+            /* sequence number set to master's */
+            nbr->dd_seqnum = ntohl (dbdesc->sequence_number);
+            prepare_neighbor_lsdb (nbr);
+            if (nbr->send_dd)
+              {
+                thread_cancel (nbr->send_dd);
+                nbr->send_dd = (struct thread *)NULL;
+              }
+            thread_add_event (master, negotiation_done, nbr, 0);
+          }
+        else
+          {
+            o6log.packet ("negotiation failed");
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        break;
+
+      case NBS_EXCHANGE:
+        /* duplicate dbdesc dropped by master */
+        if (!memcmp (dbdesc, &nbr->last_dd,
+                     sizeof (struct database_description)))
+          {
+            o6log.packet ("duplicate dbdesc, retransmit dbdesc");
+            if (nbr->send_dd)
+              {
+                thread_cancel (nbr->send_dd);
+                nbr->send_dd = (struct thread *)NULL;
+              }
+            thread_add_event (master, send_database_description, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+
+        /* check Initialize bit and Master/Slave bit */
+        if (DD_IS_IBIT_SET (dbdesc->bits))
+          {
+            o6log.packet ("Initialize bit mismatch");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        if (!DD_IS_MSBIT_SET (dbdesc->bits))
+          {
+            o6log.packet ("Master/Slave bit mismatch");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+
+        /* dbdesc option check */
+        if (memcmp (dbdesc->options, nbr->last_dd.options,
+                    sizeof (dbdesc->options)))
+          {
+            o6log.packet ("dbdesc option field changed");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+
+        /* dbdesc sequence number check */
+        if (ntohl (dbdesc->sequence_number) != nbr->dd_seqnum + 1)
+          {
+            o6log.packet ("dbdesc seqnumber mismatch");
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        break;
+
+      case NBS_LOADING:
+      case NBS_FULL:
+        /* duplicate dbdesc cause slave to retransmit */
+        if (!memcmp (dbdesc, &nbr->last_dd,
+                     sizeof (struct database_description)))
+          {
+            o6log.packet ("duplicate dbdesc, retransmit");
+            if (nbr->send_dd)
+              {
+                thread_cancel (nbr->send_dd);
+                nbr->send_dd = (struct thread *)NULL;
+              }
+            thread_add_event (master, send_database_description, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        else
+          {
+            o6log.packet ("not duplicate dbdesc in state %s",
+                          nbs_name[nbr->state]);
+            thread_add_event (master, seqnumber_mismatch, nbr, 0);
+            ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+            return;
+          }
+        break; /* not reached */
+
+      default:
+        assert (0);
+        break; /* not reached */
+    }
+
+  /* take dbdesc header from message */
+  iov_detach_first (iov);
+
+  /* process LSA headers */
+  if (check_neighbor_lsdb (iov, nbr) < 0)
+    {
+      /* one possible situation to come here is to find as-external
+      lsa found when this area is stub */
+      thread_add_event (master, seqnumber_mismatch, nbr, 0);
+      iov_free_all (MTYPE_OSPF6_LSA, iov);
+      return;
+    }
+
+  /* set dbdesc seqnum to master's */
+  nbr->dd_seqnum = ntohl (dbdesc->sequence_number);
+
+  /* proceed summary LSA to transmit, set more bit */
+  proceed_summarylist (nbr);
+
+  /* more bit check */
+  if (!DD_IS_MBIT_SET (dbdesc->bits) && !DD_IS_MBIT_SET (nbr->dd_bits))
+    {
+      thread_add_event (master, exchange_done, nbr, 0);
+    }
+  thread_add_event (master, send_database_description, nbr, 0);
+
+  /* save last received dbdesc , and free */
+  memcpy (&nbr->last_dd, dbdesc, sizeof (struct database_description));
+  XFREE (MTYPE_OSPF6_MESSAGE, dbdesc);
+
+  ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+  return;
+}
+
+static void
+ospf6_process_dbdesc (struct iovec *iov, struct ospf6_if *o6if,
+                     struct sockaddr_in6 *src, unsigned long router_id)
+{
+  struct neighbor *nbr;
+  struct database_description *dbdesc;
+  char dbdesc_bit_str[4];
+  int Im_master = 0;
+
+  /* assert interface */
+  assert (o6if);
+
+  /* set database description pointer */
+  dbdesc = (struct database_description *) iov[0].iov_base;
+
+  /* dump database description */
+  ospf6_dbdesc_bit_str (dbdesc->bits, dbdesc_bit_str);
+  o6log.packet ("DbDesc: opt:xxx ifmtu:%hu bit:%s seqnum:%lu",
+                ntohs (dbdesc->interface_mtu), dbdesc_bit_str,
+                ntohl (dbdesc->sequence_number));
+
+  /* find neighbor. if cannot be found, reject this message */
+  nbr = nbr_lookup (router_id, o6if->area->ospf6);
+  if (!nbr)
+    {
+      ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+      o6log.packet ("neighbor not found, reject");
+      return;
+    }
+
+  /* interface mtu check */
+    /* xxx */
+
+  /* check am I master */
+  Im_master = ospf6_dbdesc_is_master (nbr, o6if);
+  if (Im_master < 0)
+    {
+      ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
+      return; /* can't decide which is master, return */
+    }
+
+  if (Im_master)
+    ospf6_process_dbdesc_master (iov, nbr);
+  else
+    ospf6_process_dbdesc_slave (iov, nbr);
+
+  return;
+}
+
+static void
+ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
+                     struct sockaddr_in6 *src, unsigned long router_id)
+{
+  struct neighbor *nbr;
+  struct linkstate_request *lsreq;
+  struct iovec response[MAXIOVLIST];
+  struct ospf6_lsa *lsa;
+  void *scope;
+  unsigned long lsanum = 0;
+  struct linkstate_update *lsupdate;
+
+  /* assert interface */
+  assert (o6if);
+
+  /* find neighbor. if cannot be found, reject this message */
+  nbr = nbr_lookup (router_id, o6if->area->ospf6);
+  if (!nbr)
+    {
+      ospf6_message_clear_buffer (MSGT_LINKSTATE_REQUEST, iov);
+      o6log.packet ("neighbor not found, reject");
+      return;
+    }
+
+  /* if neighbor state less than ExChange, reject this message */
+  if (nbr->state < NBS_EXCHANGE)
+    {
+      ospf6_message_clear_buffer (MSGT_LINKSTATE_REQUEST, iov);
+      o6log.packet ("neighbor state less than Exchange, reject");
+      return;
+    }
+
+  /* clear buffer for response LSUpdate packet */
+  iov_clear (response, MAXIOVLIST);
+
+  /* process each request */
+  lsreq = (struct linkstate_request *) iov_detach_first (iov);
+  while (lsreq)
+    {
+      o6log.packet (" requested: %s", print_lsreq (lsreq));
+
+      /* get scope from request type */
+      switch (ospf6_lsa_get_scope_type (lsreq->lsreq_type))
+        {
+          case SCOPE_LINKLOCAL:
+            scope = (void *) nbr->ospf6_if;
+            break;
+          case SCOPE_AREA:
+            scope = (void *) nbr->ospf6_if->area;
+            break;
+          case SCOPE_AS:
+          case SCOPE_RESERVED:
+          default:
+            o6log.packet ("unsupported type requested, ignore");
+            XFREE (MTYPE_OSPF6_MESSAGE, lsreq);
+            lsreq = (struct linkstate_request *) iov_detach_first (iov);
+            continue;
+        }
+
+      /* find instance of database copy */
+      lsa = ospf6_lsdb_lookup (lsreq->lsreq_type, lsreq->lsreq_id,
+                               lsreq->lsreq_advrtr, scope);
+      if (!lsa)
+        {
+          o6log.packet ("requested %s not found, BadLSReq",
+                        print_lsreq (lsreq));
+          thread_add_event (master, bad_lsreq, nbr, 0);
+          XFREE (MTYPE_OSPF6_MESSAGE, lsreq);
+          ospf6_message_clear_buffer (MSGT_LINKSTATE_REQUEST, iov);
+          return;
+        }
+
+      o6log.packet ("LSUpdate(response): %s", print_lsahdr (lsa->lsa_hdr));
+      attach_lsa_to_iov (lsa, response);
+      lsanum++;
+      lsreq = (struct linkstate_request *) iov_detach_first (iov);
+    }
+
+  /* send response LSUpdate to this request */
+  assert (lsanum == iov_count (response));
+  if (iov_count (response))
+    {
+      lsupdate = (struct linkstate_update *)
+                 iov_prepend (MTYPE_OSPF6_MESSAGE, response,
+                              sizeof (struct linkstate_update));
+      assert (lsupdate);
+      lsupdate->lsupdate_num = htonl (lsanum);
+
+      ospf6_send (MSGT_LINKSTATE_UPDATE, response,
+                 (struct sockaddr *)&nbr->hisaddr, nbr->ospf6_if);
+      iov_trim_head (MTYPE_OSPF6_MESSAGE, response);
+      iov_clear (iov, MAXIOVLIST);
+    }
+
+  return;
+}
+
+static void
+ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
+                        struct sockaddr_in6 *src, unsigned long router_id)
+{
+  struct linkstate_update *lsupdate;
+  struct neighbor *nbr;
+  unsigned long lsanum;
+  struct ospf6_lsa_hdr *lsa_hdr;
+
+  /* assert interface */
+  assert (o6if);
+
+  /* find neighbor. if cannot be found, reject this message */
+  nbr = nbr_lookup (router_id, o6if->area->ospf6);
+  if (!nbr)
+    {
+      ospf6_message_clear_buffer (MSGT_LINKSTATE_UPDATE, iov);
+      o6log.packet ("neighbor not found, reject");
+      return;
+    }
+
+  /* if neighbor state less than ExChange, reject this message */
+  if (nbr->state < NBS_EXCHANGE)
+    {
+      ospf6_message_clear_buffer (MSGT_LINKSTATE_UPDATE, iov);
+      o6log.packet ("neighbor state less than Exchange, reject");
+      return;
+    }
+
+  /* set linkstate update pointer */
+  lsupdate = (struct linkstate_update *) iov[0].iov_base;
+
+  /* save linkstate update info */
+  lsanum = ntohl (lsupdate->lsupdate_num);
+
+  /* decapsulation */
+  lsupdate = (struct linkstate_update *) NULL;
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+
+  /* dump message and process LSAs */
+  o6log.packet ("LSUpdate: %lu LSAs", lsanum);
+  for (lsa_hdr = (struct ospf6_lsa_hdr *) iov[0].iov_base;
+       lsanum; lsanum--)
+    {
+      lsa_receive (lsa_hdr, nbr);
+      lsa_hdr = LSA_NEXT (lsa_hdr);
+    }
+
+  /* free LSA space */
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+
+  return;
+}
+
+static void
+ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
+                     struct sockaddr_in6 *src, unsigned long router_id)
+{
+  struct neighbor *nbr;
+  struct ospf6_lsa_hdr *lsa_hdr;
+  struct ospf6_lsa *lsa, *copy;
+  void *scope;
+
+  /* assert interface */
+  assert (o6if);
+
+  /* find neighbor. if cannot be found, reject this message */
+  nbr = nbr_lookup (router_id, o6if->area->ospf6);
+  if (!nbr)
+    {
+      ospf6_message_clear_buffer (MSGT_LINKSTATE_ACK, iov);
+      o6log.packet ("neighbor not found, reject");
+      return;
+    }
+
+  /* if neighbor state less than ExChange, reject this message */
+  if (nbr->state < NBS_EXCHANGE)
+    {
+      ospf6_message_clear_buffer (MSGT_LINKSTATE_ACK, iov);
+      o6log.packet ("neighbor state less than Exchange, reject");
+      return;
+    }
+
+  /* process each LSA header */
+  while (iov[0].iov_base)
+    {
+      /* make each LSA header treated as LSA */
+      lsa_hdr = (struct ospf6_lsa_hdr *) iov[0].iov_base;
+      lsa = make_ospf6_lsa (lsa_hdr);
+      lsa->from = nbr;
+
+      /* detach from message */
+      iov_detach_first (iov);
+
+      /* set scope for this LSA */
+      switch (ospf6_lsa_get_scope_type (lsa_hdr->lsh_type))
+        {
+          case SCOPE_LINKLOCAL:
+            scope = (void *) nbr->ospf6_if;
+            break;
+          case SCOPE_AREA:
+            scope = (void *) nbr->ospf6_if->area;
+            break;
+          case SCOPE_AS:
+          case SCOPE_RESERVED:
+          default:
+            o6log.packet ("unsupported scope acknowledge, ignore");
+            ospf6_lsa_unlock (lsa);
+            continue;
+        }
+
+      /* dump acknowledged LSA */
+      o6log.packet ("acknowledge %s", print_lsahdr (lsa_hdr));
+
+      /* find database copy */
+      copy = ospf6_lsdb_lookup (lsa_hdr->lsh_type, lsa_hdr->lsh_id,
+                                lsa_hdr->lsh_advrtr, scope);
+
+      /* if no database copy */
+      if (!copy)
+        {
+          o6log.packet ("no database copy, ignore");
+          ospf6_lsa_unlock (lsa);
+          continue;
+        }
+
+      /* if not on his retrans list */
+      if (!ospf6_lookup_retrans (copy, nbr))
+        {
+          o6log.packet ("not on %s's retranslist, ignore",
+                        nbr->str);
+          ospf6_lsa_unlock (lsa);
+          continue;
+        }
+
+      /* if the same instance, remove from retrans list.
+         else, log and ignore */
+      if (which_is_more_recent (lsa, copy) == 0)
+        ospf6_remove_retrans (copy, nbr);
+      else
+        {
+          /* Log the questionable acknowledgement,
+             and examine the next one. */
+          o6log.packet ("questionable acknowledgement");
+        }
+
+      /* release temporary LSA from Ack message */
+      ospf6_lsa_unlock (lsa);
+    }
+
+  return;
+}
+
+/* process ospf6 protocol header. then, call next process function
+   for each message type */
+static void 
+ospf6_message_process (struct iovec *iov, struct ospf6_if *o6if,
+                       struct sockaddr_in6 *src)
+{
+  struct ospf6_hdr *ospf6_hdr = NULL;
+  char rtr_id_str[16], area_id_str[16];
+  unsigned char type;
+  unsigned long router_id;
+
+  assert (iov);
+  assert (o6if);
+  assert (src);
+
+  /* set ospf6_hdr pointer to head of buffer */
+  ospf6_hdr = (struct ospf6_hdr *) iov[0].iov_base;
+
+  /* dump ospf6 header */
+  inet_ntop (AF_INET, &ospf6_hdr->router_id, rtr_id_str, sizeof (rtr_id_str));
+  inet_ntop (AF_INET, &ospf6_hdr->area_id, area_id_str, sizeof (area_id_str));
+  o6log.packet("receive ospfv%d type:%d len:%hu"
+               " rtrid:%s areaid:%s instance:%d",
+               ospf6_hdr->version, ospf6_hdr->type, ntohs (ospf6_hdr->len),
+               rtr_id_str, area_id_str, ospf6_hdr->instance_id);
+
+  /* version check */
+  if (ospf6_hdr->version != OSPF_V3)
+    {
+      o6log.packet ("version mismatch, drop");
+      return;
+    }
+
+  /* area id check */
+  if (ospf6_hdr->area_id != o6if->area->area_id)
+    {
+      if (ospf6_hdr->area_id == 0)
+        {
+          o6log.packet ("virtual link not yet, drop");
+          return;
+        }
+
+      o6log.packet ("area id mismatch, drop");
+      return;
+    }
+
+  /* checksum */
+    /* XXX */
+
+  /* instance id check */
+  if (ospf6_hdr->instance_id != o6if->instance_id)
+    {
+      o6log.packet ("instance id mismatch, drop");
+      return;
+    }
+
+  /* save message type and router id */
+  type = ospf6_hdr->type;
+  router_id = ospf6_hdr->router_id;
+
+  /* trim ospf6_hdr */
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+
+  /* futher process */
+  switch (type)
+    {
+      case MSGT_HELLO:
+        ospf6_process_hello (iov, o6if, src, router_id);
+        break;
+      case MSGT_DATABASE_DESCRIPTION:
+        ospf6_process_dbdesc (iov, o6if, src, router_id);
+        break;
+      case MSGT_LINKSTATE_REQUEST:
+        ospf6_process_lsreq (iov, o6if, src, router_id);
+        break;
+      case MSGT_LINKSTATE_UPDATE:
+        ospf6_process_lsupdate (iov, o6if, src, router_id);
+        break;
+      case MSGT_LINKSTATE_ACK:
+        ospf6_process_lsack (iov, o6if, src, router_id);
+        break;
+      default:
+        o6log.packet ("unknown message type, drop");
+        ospf6_message_clear_buffer (type, iov);
+        break;
+    }
+
+  /* check for memory leak */
+  assert (iov_count (iov) == 0);
+
+  return;
+}
+
+/* peek only ospf6_hdr to get message type, message len,
+   received interface and sending neighbor */
+static void
+ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
+                unsigned char *msgtype, unsigned short *msglen,
+                struct ospf6_if **o6if)
+{
+  struct ospf6_hdr *ospf6_hdr = NULL;
+  struct sockaddr_in6 *src = NULL;
+  struct in6_pktinfo *pktinfo = NULL;
+  struct interface *ifp;
+  unsigned long router_id;
+
+  /* set default to fail */
+  *msgtype = MSGT_NONE;
+  *msglen = 0;
+  *o6if = NULL;
+
+  /* set pointer to get ifindex and source ip address */
+  pktinfo = (struct in6_pktinfo *)
+    (CMSG_DATA ((struct cmsghdr *)rmsghdrp->msg_control));
+  src = (struct sockaddr_in6 *)rmsghdrp->msg_name;
+
+  /* prepare buffer for ospf6 header */
+  iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
+               sizeof (struct ospf6_hdr));
+  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
+
+  /* peek ospf6 header */
+  if (recvmsg (sockfd, rmsghdrp, MSG_PEEK) < 0)
+    {
+      o6log.packet ("can't peek ospf6_hdr: %s", strerror (errno));
+      return;
+    }
+
+  /* set ospf6_hdr pointer to head of buffer */
+  ospf6_hdr = (struct ospf6_hdr *) rmsghdrp->msg_iov[0].iov_base;
+
+  /* set message type and len */
+  *msgtype = ospf6_hdr->type;
+  *msglen = ntohs (ospf6_hdr->len);
+
+  /* save router id */
+  router_id = ospf6_hdr->router_id;
+
+  /* clear buffer for ospf6 header */
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov);
+  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
+
+  /* find received ospf6 interface */
+  ifp = if_lookup_by_index (pktinfo->ipi6_ifindex);
+  if (!ifp || !ifp->if_data)
+    return;
+  *o6if = (struct ospf6_if *)ifp->if_data;
+  if (!(*o6if)->area)
+    {
+      o6log.packet ("received interface %s not attached to area",
+                    ifp->name);
+      return;
+    }
+
+  return;
+}
+
+/* failed before allocate buffer, before really read packet. */
+static void
+ospf6_receive_fail (int sockfd, struct msghdr *rmsghdrp)
+{
+  assert (iov_count (rmsghdrp->msg_iov) == 0);
+
+  /* prepare buffer for ospf6 packet */
+  iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
+               sizeof (struct ospf6_hdr));
+  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
+
+  /* read ospf6 packet to drop */
+  recvmsg (sockfd, rmsghdrp, 0);
+
+  /* clear buffer for ospf6 packet */
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov);
+  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
+
+  /* add thread next read */
+  thread_add_read (master, ospf6_receive, NULL, sockfd);
+
+  return;
 }
 
 
@@ -1317,7 +2051,6 @@ ospf6_receive (struct thread *thread)
   unsigned char msgtype = MSGT_NONE;
   unsigned short msglen = 0;
   struct ospf6_if *o6if = NULL;
-  struct neighbor *nbr = NULL;
 
   /* get socket */
   sockfd = THREAD_FD (thread);
@@ -1347,7 +2080,7 @@ ospf6_receive (struct thread *thread)
 
   /* peek ospf6_hdr to get message type, sending neighbor
      and  received ospf6 interface */
-  ospf6_peek_hdr (sockfd, &rmsghdr, &msgtype, &msglen, &o6if, &nbr);
+  ospf6_peek_hdr (sockfd, &rmsghdr, &msgtype, &msglen, &o6if);
   if (msgtype == MSGT_NONE || msglen == 0 || o6if == NULL)
     {
       o6log.packet ("ospf6_hdr peek failed, drop");
@@ -1364,6 +2097,9 @@ ospf6_receive (struct thread *thread)
       return -1;
     }
 
+  /* update iovlen */
+  rmsghdr.msg_iovlen = iov_count (iov);
+
   /* receive message */
   if (recvmsg (sockfd, &rmsghdr, 0) != msglen)
     {
@@ -1378,7 +2114,7 @@ ospf6_receive (struct thread *thread)
     }
 
   /* process message received */
-  ospf6_message_process (iov, nbr, o6if);
+  ospf6_message_process (iov, o6if, src);
 
   /* add thread next read */
   thread_add_read (master, ospf6_receive, NULL, sockfd);

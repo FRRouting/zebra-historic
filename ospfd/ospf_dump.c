@@ -67,6 +67,17 @@ message ospf_nsm_status_msg[] =
 };
 int ospf_nsm_status_msg_max = OSPF_NSM_STATUS_MAX;
 
+message ospf_lsa_type_msg[] =
+{
+  { OSPF_UNKNOWN_LSA,      "unknown" },
+  { OSPF_ROUTER_LSA,       "router-LSA" },
+  { OSPF_NETWORK_LSA,      "network-LSA" },
+  { OSPF_SUMMARY_LSA,      "summary-LSA" },
+  { OSPF_SUMMARY_LSA_ASBR, "summary-LSA" },
+  { OSPF_AS_EXTERNAL_LSA,  "AS-external-LSA" },
+};
+int ospf_lsa_type_msg_max = OSPF_MAX_LSA;
+
 /* Debug option variables. */
 unsigned long ospf_debug_packet[5] = {0, 0, 0, 0, 0};
 unsigned long ospf_debug_event = 0;
@@ -88,10 +99,11 @@ void
 ospf_nbr_state_message (struct ospf_neighbor *nbr, char *buf, size_t size)
 {
   int status;
+  struct ospf_interface *oi = nbr->oi;
 
-  if (IPV4_ADDR_SAME (&nbr->d_router, &nbr->address.u.prefix4))
+  if (IPV4_ADDR_SAME (&oi->d_router, &nbr->address.u.prefix4))
     status = ISM_DR;
-  else if (IPV4_ADDR_SAME (&nbr->bd_router, &nbr->address.u.prefix4))
+  else if (IPV4_ADDR_SAME (&oi->bd_router, &nbr->address.u.prefix4))
     status = ISM_Backup;
   else
     status = ISM_DROther;
@@ -195,7 +207,7 @@ ospf_lsa_header_dump (struct ospf_lsa *lsa)
   zlog (NULL, LOG_INFO, "LS age %d", ntohs (lsa->ls_age));
   zlog (NULL, LOG_INFO, "Options %d", lsa->options);
   zlog (NULL, LOG_INFO, "LS type %d (%s)",
-	lsa->type, ospf_lsa_type_str[lsa->type]);
+	lsa->type, LOOKUP (ospf_lsa_type_msg, lsa->type));
   zlog (NULL, LOG_INFO, "Link State ID %s", inet_ntoa (lsa->id));
   zlog (NULL, LOG_INFO, "Advertising Router %s",
 	inet_ntoa (lsa->adv_router));

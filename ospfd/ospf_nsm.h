@@ -98,7 +98,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_NSM_EVENT_EXECUTE(N,E) \
       thread_execute (master, ospf_nsm_event, (N), (E))
 
-#define LOOKUP(x, y)	mes_lookup(x, x ## _max, y)
+/* #define LOOKUP(x, y)	mes_lookup(x, x ## _max, y) */
 
 /* Prototypes. */
 int ospf_nsm_event (struct thread *);

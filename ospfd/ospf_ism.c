@@ -42,15 +42,14 @@ extern unsigned long ospf_debug_ism;
 
 
 /* elect DR and BDR. Refer to RFC2319 section 9.4 */
-struct in_addr
-ospf_dr_election_sub (struct _list *routers)
+struct ospf_neighbor *
+ospf_dr_election_sub (list routers)
 {
   listnode node;
   struct ospf_neighbor *r, *max = NULL;
-  struct in_addr ret;
 
-  /* Choose highest router priority. In case of tie,
-     choose highest Router ID. */
+  /* Choose highest router priority.
+     In case of tie, choose highest Router ID. */
   for (node = listhead (routers); node; nextnode (node))
     {
       r = getdata (node);
@@ -68,20 +67,16 @@ ospf_dr_election_sub (struct _list *routers)
 	  max = r;
     }
 
-  if (max == NULL)
-    ret.s_addr = 0;
-  else
-    ret = max->address.u.prefix4;
-
-  return ret;
+  return max;
 }
 
-void
-ospf_elect_dr (struct ospf_interface *oi, list el_list)
+struct ospf_neighbor *
+ospf_elect_dr (struct ospf_interface *oi, list el_list,
+	       struct ospf_neighbor *myself)
 {
   list dr_list;
   listnode node;
-  struct ospf_neighbor *nbr;
+  struct ospf_neighbor *nbr, *dr = NULL, *bdr = NULL;
 
   dr_list = list_init ();
 
@@ -93,23 +88,33 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
       /* neighbor declared to be DR. */
       if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router))
 	list_add_node (dr_list, nbr);
+
+      /* Preserve neighbor BDR. */
+      if (IPV4_ADDR_SAME (&oi->bd_router, &nbr->address.u.prefix4))
+	bdr = nbr;
     }
 
-  /* Elect Backup Designated Router. */
-  if (list_isempty (dr_list))
-    oi->d_router = oi->bd_router;
+  /* Elect Designated Router. */
+  if (listcount (dr_list) > 0)
+    dr = ospf_dr_election_sub (dr_list);
   else
-    oi->d_router = ospf_dr_election_sub (dr_list);
+    dr = bdr;
+
+  /* Set DR to interface. */
+  oi->d_router = myself->d_router = dr->address.u.prefix4;
 
   list_delete_all (dr_list);
+
+  return dr;
 }
 
-void
-ospf_elect_bdr (struct ospf_interface *oi, list el_list)
+struct ospf_neighbor *
+ospf_elect_bdr (struct ospf_interface *oi, list el_list,
+		struct ospf_neighbor *myself)
 {
   list bdr_list, no_dr_list;
   listnode node;
-  struct ospf_neighbor *nbr;
+  struct ospf_neighbor *nbr, *bdr = NULL;
 
   bdr_list = list_init ();
   no_dr_list = list_init ();
@@ -131,13 +136,22 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
     }
 
   /* Elect Backup Designated Router. */
-  if (list_isempty (bdr_list))
-    oi->bd_router = ospf_dr_election_sub (no_dr_list);
+  if (listcount (bdr_list) > 0)
+    bdr = ospf_dr_election_sub (bdr_list);
   else
-    oi->bd_router = ospf_dr_election_sub (bdr_list);
+    bdr = ospf_dr_election_sub (no_dr_list);
+
+  /* Set BDR to interface. */
+  if (bdr)
+    oi->bd_router = myself->bd_router = bdr->address.u.prefix4;
+  else
+    oi->bd_router.s_addr = myself->bd_router.s_addr = 0;
+
 
   list_delete_all (bdr_list);
   list_delete_all (no_dr_list);
+
+  return bdr;
 }
 
 int
@@ -151,30 +165,22 @@ ospf_ism_status (struct ospf_interface *oi)
     return ISM_DROther;
 }
 
-int
-ospf_dr_election (struct ospf_interface *oi)
+struct ospf_neighbor *
+ospf_dr_eligible_routers (struct route_table *nbrs, list el_list)
 {
-  struct in_addr old_dr, old_bdr;
-  int old_status, new_status;
-  list el_list;
   struct route_node *rn;
-  struct ospf_neighbor *nbr, *myself;
+  struct ospf_neighbor *nbr, *myself = NULL;
 
-  /* backup current values. */
-  old_dr = oi->d_router;
-  old_bdr = oi->bd_router;
-  old_status = oi->status;
-
-  el_list = list_init ();
-
-  myself = NULL;
-
-  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+  for (rn = route_top (nbrs); rn; rn = route_next (rn))
     {
       if (rn->info == NULL)
 	continue;
 
       nbr = rn->info;
+
+      /* keep myself. */
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	myself = nbr;
 
       /* ignore 0.0.0.0 node*/
       if (nbr->router_id.s_addr == 0)
@@ -188,45 +194,89 @@ ospf_dr_election (struct ospf_interface *oi)
       if (nbr->status < NSM_TwoWay)
 	continue;
 
-      /* keep myself. */
-      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
-	myself = nbr;
-
       list_add_node (el_list, nbr);
     }
 
-  ospf_elect_bdr (oi, el_list);
-  ospf_elect_dr (oi, el_list);
+  return myself;
+}
+
+void
+ospf_dr_change (struct route_table *nbrs)
+{
+  struct route_node *rn;
+  struct ospf_neighbor *nbr;
+
+  for (rn = route_top (nbrs); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      nbr = rn->info;
+
+      /* ignore 0.0.0.0 node*/
+      if (nbr->router_id.s_addr == 0)
+	continue;
+
+      /* Is neighbor upper 2-Way? */
+      if (nbr->status < NSM_TwoWay)
+	continue;
+
+      /* ignore myself. */
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	continue;
+
+      OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_AdjOK);
+    }
+}
+
+int
+ospf_dr_election (struct ospf_interface *oi)
+{
+  struct in_addr old_dr, old_bdr;
+  int old_status, new_status;
+  list el_list;
+  struct ospf_neighbor *dr, *bdr, *myself;
+
+  /* backup current values. */
+  old_dr = oi->d_router;
+  old_bdr = oi->bd_router;
+  old_status = oi->status;
+
+  el_list = list_init ();
+
+  /* List eligible routers. */
+  myself = ospf_dr_eligible_routers (oi->nbrs, el_list);
+
+  /* First election of DR and BDR. */
+  bdr = ospf_elect_bdr (oi, el_list, myself);
+  dr = ospf_elect_dr (oi, el_list, myself);
 
   new_status = ospf_ism_status (oi);
+#define DEBUG
 #ifdef DEBUG
-  zlog (NULL, LOG_INFO, "d_router = %s", inet_ntoa (oi->d_router));
-  zlog (NULL, LOG_INFO, "bd_router = %s", inet_ntoa (oi->bd_router));
+  zlog (NULL, LOG_INFO, "Elect BDR = %s", inet_ntoa (oi->bd_router));
+  zlog (NULL, LOG_INFO, "Elect DR  = %s", inet_ntoa (oi->d_router));
 #endif /* DEBUG */
 
-  if (old_status < ISM_DROther || old_status != new_status)
+  /*if (old_status < ISM_DROther || old_status != new_status) */
+  /*
+  if ((old_status != ISM_DR && new_status == ISM_DR) ||
+      (old_status != ISM_Backup && new_status == ISM_Backup) ||
+      (old_status == ISM_DR && new_status != ISM_DR) ||
+      (old_status == ISM_Backup && new_status != ISM_Backup))
+  */
+  if (IPV4_ADDR_SAME (&oi->d_router, &oi->bd_router))
     {
-      /* declare DR and BDR in myself. */
-      if (myself)
-	{
-	  myself->d_router = oi->d_router;
-	  myself->bd_router = oi->bd_router;
-	}
+      list_delete_by_val (el_list, dr);
 
-      ospf_elect_bdr (oi, el_list);
-      ospf_elect_dr (oi, el_list);
+      ospf_elect_bdr (oi, el_list, myself);
+      /*      ospf_elect_dr (oi, el_list, myself); */
 
       new_status = ospf_ism_status (oi);
 
-      if (myself)
-	{
-	  myself->d_router = oi->d_router;
-	  myself->bd_router = oi->bd_router;
-	}
-
 #ifdef DEBUG
-      zlog (NULL, LOG_INFO, "d_router = %s", inet_ntoa (oi->d_router));
-      zlog (NULL, LOG_INFO, "bd_router = %s", inet_ntoa (oi->bd_router));
+      zlog (NULL, LOG_INFO, "Elect BDR = %s", inet_ntoa (oi->bd_router));
+      zlog (NULL, LOG_INFO, "Elect DR  = %s", inet_ntoa (oi->d_router));
 #endif /* DEBUG */
     }
 
@@ -235,29 +285,7 @@ ospf_dr_election (struct ospf_interface *oi)
   /* if DR or BDR changes, cause AdjOK? neighbor event. */
   if (!IPV4_ADDR_SAME (&old_dr, &oi->d_router) ||
       !IPV4_ADDR_SAME (&old_bdr, &oi->bd_router))
-    {
-      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
-	{
-	  if (rn->info == NULL)
-	    continue;
-
-	  nbr = rn->info;
-
-	  /* ignore 0.0.0.0 node*/
-	  if (nbr->router_id.s_addr == 0)
-	    continue;
-
-	  /* Is neighbor upper 2-Way? */
-	  if (nbr->status < NSM_TwoWay)
-	    continue;
-
-	  /* ignore myself. */
-	  if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
-	    continue;
-
-	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_AdjOK);
-	}
-    }
+    ospf_dr_change (oi->nbrs);
 
   /* Multicast group change. */
   if ((old_status != ISM_DR && old_status != ISM_Backup) &&
@@ -531,7 +559,7 @@ struct {
     { ism_ignore,          ISM_Waiting },       /* InterfaceUp    */
     { ism_wait_timer,	   ISM_DependUpon },    /* WaitTimer      */
     { ism_backup_seen,     ISM_DependUpon },    /* BackupSeen     */
-    { ism_neighbor_change, ISM_Waiting },       /* NeighborChange */
+    { ism_ignore,          ISM_Waiting },       /* NeighborChange */
     { ism_loop_ind,	   ISM_Loopback },      /* LoopInd        */
     { ism_ignore,          ISM_Waiting },       /* UnloopInd      */
     { ism_interface_down,  ISM_Down },          /* InterfaceDown  */

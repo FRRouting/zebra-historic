@@ -22,6 +22,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_LSA_H
 
 /* OSPF LSA Type definition. */
+#define OSPF_UNKNOWN_LSA	0
 #define OSPF_MIN_LSA		1
 #define OSPF_ROUTER_LSA         1
 #define OSPF_NETWORK_LSA        2

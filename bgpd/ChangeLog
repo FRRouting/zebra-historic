@@ -1,3 +1,22 @@
+1999-08-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c: Set network statement route's origin attribute as
+	igp.
+
+	* bgp_zebra.c: Set redistribute route's origin attribute as
+	incomplete.
+
+	* bgp_route.c (bgp_info_cmp): Add attribute existance check,
+	origin attribute check, BGP peer type check.
+
+1999-07-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_peer_delete): Reselect of IPv6 route.
+
+1999-07-29  Rick Payne <rickp@rossfell.co.uk>
+
+	* Changed route-maps to behave in a more cisco-like fashion
+
 1999-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_fsm.c (bgp_stop): Very serious bug of bgp_stop () is fixed.

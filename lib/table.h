@@ -47,6 +47,9 @@ struct route_node
 
   /* Each node of route. */
   void *info;
+
+  /* Aggregation. */
+  void *aggregate;
 };
 
 /* Prototypes. */

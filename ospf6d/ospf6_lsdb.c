@@ -263,6 +263,7 @@ void
 ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
   list_add_node (o6if->delayed_ack, lsa);
+  list_add_node (lsa->delayed_ack_if, o6if);
   ospf6_lsa_lock (lsa);
   return;
 }
@@ -272,6 +273,7 @@ void
 ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
   list_delete_by_val (o6if->delayed_ack, lsa);
+  list_delete_by_val (lsa->delayed_ack_if, o6if);
   ospf6_lsa_unlock (lsa);
   return;
 }
@@ -539,6 +541,17 @@ ospf6_lsdb_remove (struct ospf6_lsa *lsa)
 {
   struct ospf6_if *o6if;
   struct area *area;
+  listnode n;
+
+  /* LSA going to be removed from lsdb should not be (delayed)
+     acknowledged. I must prevent from being delayed acknowledged
+     here */
+  for (n = listhead (lsa->delayed_ack_if); n;
+       n = listhead (lsa->delayed_ack_if))
+    {
+      o6if = (struct ospf6_if *) getdata (n);
+      ospf6_remove_delayed_ack (lsa, o6if);
+    }
 
   switch (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type))
     {

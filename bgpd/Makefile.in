@@ -391,7 +391,7 @@ bgp_filter.o: bgp_filter.c ../lib/command.h ../lib/vector.h \
  ../bgpd/bgp_filter.h
 bgp_fsm.o: bgp_fsm.c ../lib/linklist.h ../lib/prefix.h ../lib/vty.h \
  ../lib/sockunion.h ../lib/thread.h ../lib/log.h ../lib/stream.h \
- ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
+ ../lib/memory.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
  ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h ../bgpd/bgp_network.h \
  ../bgpd/bgp_route.h
 bgp_main.o: bgp_main.c ../lib/vector.h ../lib/vty.h ../lib/command.h \

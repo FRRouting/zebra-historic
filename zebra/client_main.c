@@ -44,10 +44,10 @@ zebra_test_ipv4 (int command, int type, char *prefix, char *gateway)
   switch (command)
     {
     case ZEBRA_IPV4_ROUTE_ADD:
-      zebra_ipv4_add (sock, type, 0, &p, &gate, 0);
+      zebra_ipv4_add (sock, type, ZEBRA_FLAGS_INTERNAL, &p, &gate, 0);
       break;
     case ZEBRA_IPV4_ROUTE_DELETE:
-      zebra_ipv4_delete (sock, type, 0, &p, &gate, 0);
+      zebra_ipv4_delete (sock, type, ZEBRA_FLAGS_INTERNAL, &p, &gate, 0);
       break;
     }
 }
@@ -63,10 +63,10 @@ zebra_test_v6 (int sock)
   str2prefix_ipv6 ("3ffe:506::2/128", &p);
   inet_pton (AF_INET6, "::1", &nexthop);
 
-  zebra_ipv6_add (sock, ZEBRA_ROUTE_STATIC, &p, &nexthop, 1);
+  zebra_ipv6_add (sock, ZEBRA_ROUTE_STATIC, 0, &p, &nexthop, 1);
 
   sleep (5);
-  zebra_ipv6_delete (sock, ZEBRA_ROUTE_STATIC, &p, &nexthop, 1);
+  zebra_ipv6_delete (sock, ZEBRA_ROUTE_STATIC, 0, &p, &nexthop, 1);
 }
 #endif /* HAVE_IPV6 */
 

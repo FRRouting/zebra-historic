@@ -116,8 +116,9 @@ zebra_ipv4_delete (int sock, int type, int flags, struct prefix_ipv4 *p,
 #ifdef HAVE_IPV6
 /* Make a IPv6 route add/delete packet and send it to zebra. */
 static int
-zebra_ipv6_route (int command, int sock, int type, struct prefix_ipv6 *p,
-		  struct in6_addr *nexthop, unsigned int ifindex)
+zebra_ipv6_route (int command, int sock, int type, int flags,
+		  struct prefix_ipv6 *p, struct in6_addr *nexthop, 
+		  unsigned int ifindex)
 {
   int ret;
   struct stream *s;
@@ -129,6 +130,7 @@ zebra_ipv6_route (int command, int sock, int type, struct prefix_ipv6 *p,
   stream_putw (s, 0);
   stream_putc (s, command);
   stream_putc (s, type);
+  stream_putc (s, flags);
   stream_write (s, (u_char *)nexthop, 16);
 
   /* Put prefix information. */
@@ -149,18 +151,18 @@ zebra_ipv6_route (int command, int sock, int type, struct prefix_ipv6 *p,
 }
 
 int
-zebra_ipv6_add (int sock, int type, struct prefix_ipv6 *p,
+zebra_ipv6_add (int sock, int type, int flags, struct prefix_ipv6 *p,
 		struct in6_addr *nexthop, unsigned int ifindex)
 {
-  return zebra_ipv6_route (ZEBRA_IPV6_ROUTE_ADD, sock, type, p, 
+  return zebra_ipv6_route (ZEBRA_IPV6_ROUTE_ADD, sock, type, flags, p, 
 			   nexthop, ifindex);
 }
 
 int
-zebra_ipv6_delete (int sock, int type, struct prefix_ipv6 *p,
-		struct in6_addr *nexthop, unsigned int ifindex)
+zebra_ipv6_delete (int sock, int type, int flags, struct prefix_ipv6 *p,
+		   struct in6_addr *nexthop, unsigned int ifindex)
 {
-  return zebra_ipv6_route (ZEBRA_IPV6_ROUTE_DELETE, sock, type, p, 
+  return zebra_ipv6_route (ZEBRA_IPV6_ROUTE_DELETE, sock, type, flags, p, 
 			   nexthop, ifindex);
 }
 #endif /* HAVE_IPV6 */

@@ -23,22 +23,31 @@
 #ifndef _ZEBRA_RIPNG_ROUTE_H
 #define _ZEBRA_RIPNG_ROUTE_H
 
-void
-ripng_slot_check (struct route_node *node);
+struct ripng_aggregate
+{
+  /* Aggregate route count. */
+  unsigned int count;
+
+  /* Suppressed route count. */
+  unsigned int suppress;
+
+  /* Metric of this route.  */
+  u_char metric;		
+
+  /* Tag field of RIPng packet.*/
+  u_short tag;		
+};
 
 void
-ripng_slot_add (struct route_node *node);
+ripng_aggregate_increment (struct route_node *rp, struct ripng_info *rinfo);
+
+void
+ripng_aggregate_decrement (struct route_node *rp, struct ripng_info *rinfo);
 
 int
-ripng_static_add (struct route_node *node, u_char metric, int sub_type);
+ripng_aggregate_add (struct prefix *p);
 
 int
-ripng_static_delete (struct route_node *node);
-
-int
-ripng_aggregate_add (struct route_node *node, u_char metric);
-
-int
-ripng_aggregate_delete (struct route_node *node);
+ripng_aggregate_delete (struct prefix *p);
 
 #endif /* _ZEBRA_RIPNG_ROUTE_H */

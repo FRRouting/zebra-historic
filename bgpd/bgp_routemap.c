@@ -97,16 +97,16 @@ o Local extention
 
 /* Match function should return 1 if match is success else return
    zero. */
-int
+route_map_result_t
 route_match_ip_address (void *rule, struct prefix *prefix, void *object)
 {
   struct access_list *alist;
 
   alist = access_list_lookup ((char *) rule);
   if (alist == NULL)
-    return 0;
+    return RM_NOMATCH;
 
-  return access_list_apply (alist, prefix);
+  return (access_list_apply (alist, prefix) == FILTER_DENY ? RM_NOMATCH : RM_MATCH);
 }
 
 /* Route map `ip address' match statement.  `arg' should be
@@ -136,7 +136,7 @@ struct route_map_rule_cmd route_match_ip_address_cmd =
 /* `match ip next-hop IP_ADDRESS' */
 
 /* Match function return 1 if match is success else return zero. */
-int
+route_map_result_t
 route_match_ip_next_hop (void *rule, struct prefix *prefix, void *object)
 {
   struct in_addr *addr;
@@ -146,9 +146,9 @@ route_match_ip_next_hop (void *rule, struct prefix *prefix, void *object)
   bgp_info = object;
 
   if (IPV4_ADDR_CMP (&bgp_info->attr->nexthop, rule) == 0)
-    return 1;
+    return RM_MATCH;
   else
-    return 0;
+    return RM_NOMATCH;
 }
 
 /* Route map `ip next-hop' match statement. `arg' is IP address
@@ -190,7 +190,7 @@ struct route_map_rule_cmd route_match_ip_next_hop_cmd =
 /* `match metric METRIC' */
 
 /* Match function return 1 if match is success else return zero. */
-int
+route_map_result_t
 route_match_metric (void *rule, struct prefix *prefix, void *object)
 {
   u_int32_t *med;
@@ -200,9 +200,9 @@ route_match_metric (void *rule, struct prefix *prefix, void *object)
   bgp_info = object;
 
   if (bgp_info->attr->med == *med)
-    return 1;
+    return RM_MATCH;
   else
-    return 0;
+    return RM_NOMATCH;
 }
 
 /* Route map `match metric' match statement. `arg' is MED value */
@@ -236,7 +236,7 @@ struct route_map_rule_cmd route_match_metric_cmd =
 /* `match as-path ASPATH' */
 
 /* Match function for as-path match.  I assume given object is */
-int
+route_map_result_t
 route_match_aspath (void *rule, struct prefix *prefix, void *object)
 {
   
@@ -245,12 +245,12 @@ route_match_aspath (void *rule, struct prefix *prefix, void *object)
 
   as_list = as_list_lookup ((char *) rule);
   if (as_list == NULL)
-    return 0;
+    return RM_NOMATCH;
 
   bgp_info = object;
   
   /* Perform match. */
-  return as_list_apply (as_list, bgp_info->attr->aspath);
+  return ((as_list_apply (as_list, bgp_info->attr->aspath) == AS_FILTER_DENY) ? RM_NOMATCH : RM_MATCH);
 }
 
 /* Compile function for as-path match. */
@@ -328,7 +328,7 @@ struct route_map_rule_cmd route_match_aspath_cmd =
 /* `match community COMMUNIY' */
 
 /* Match function for community match. */
-int
+route_map_result_t
 route_match_community (void *rule, struct prefix *prefix, void *object)
 {
   struct community_list *list;
@@ -338,10 +338,10 @@ route_match_community (void *rule, struct prefix *prefix, void *object)
   bgp_info = object;
 
   if (list == NULL || bgp_info->attr->community == NULL)
-    return 0;
+    return RM_NOMATCH;
   
   /* Perform match. */
-  return community_list_match (bgp_info->attr->community, list);
+  return (community_list_match (bgp_info->attr->community, list) ? RM_MATCH : RM_NOMATCH);
 }
 
 /* Compile function for community match. */
@@ -370,7 +370,7 @@ struct route_map_rule_cmd route_match_community_cmd =
 /* `set ip next-hop IP_ADDRESS' */
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
-int
+route_map_result_t
 route_set_ip_nexthop (void *rule, struct prefix *prefix, void *object)
 {
   struct in_addr *address;
@@ -383,7 +383,7 @@ route_set_ip_nexthop (void *rule, struct prefix *prefix, void *object)
   /* Set next hop value. */ 
   bgp_info->attr->nexthop = *address;
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* Route map `ip nexthop' compile function.  Given string is converted
@@ -427,7 +427,7 @@ struct route_map_rule_cmd route_set_ip_nexthop_cmd =
 /* `set ipv6 nexthop global IP_ADDRESS' */
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
-int
+route_map_result_t
 route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, void *object)
 {
   struct in6_addr *address;
@@ -444,7 +444,7 @@ route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, void *object)
   if (bgp_info->attr->mp_nexthop_len == 0)
     bgp_info->attr->mp_nexthop_len = 16;
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* Route map `ip next-hop' compile function.  Given string is converted
@@ -487,7 +487,7 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_global_cmd =
 /* `set ipv6 nexthop local IP_ADDRESS' */
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
-int
+route_map_result_t
 route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix, void *object)
 {
   struct in6_addr *address;
@@ -504,7 +504,7 @@ route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix, void *object)
   if (bgp_info->attr->mp_nexthop_len != 32)
     bgp_info->attr->mp_nexthop_len = 32;
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* Route map `ip nexthop' compile function.  Given string is converted
@@ -548,7 +548,7 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
 /* `set local-preference LOCAL_PREF' */
 
 /* Set local preference. */
-int
+route_map_result_t
 route_set_local_pref (void *rule, struct prefix *prefix, void *object)
 {
   u_int32_t *local_pref;
@@ -561,7 +561,7 @@ route_set_local_pref (void *rule, struct prefix *prefix, void *object)
   /* Set local preference value. */ 
   bgp_info->attr->local_pref = *local_pref;
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* set local preference compilation. */
@@ -604,7 +604,7 @@ struct route_map_rule_cmd route_set_local_pref_cmd =
 /* `set weight WEIGHT' */
 
 /* Set weight. */
-int
+route_map_result_t
 route_set_weight (void *rule, struct prefix *prefix, void *object)
 {
   u_int32_t *weight;
@@ -617,7 +617,7 @@ route_set_weight (void *rule, struct prefix *prefix, void *object)
   /* Set weight value. */ 
   bgp_info->attr->weight = *weight;
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* set local preference compilation. */
@@ -660,7 +660,7 @@ struct route_map_rule_cmd route_set_weight_cmd =
 /* `set metric METRIC' */
 
 /* Set metric to attribute. */
-int
+route_map_result_t
 route_set_metric (void *rule, struct prefix *prefix, void *object)
 {
   char *metric;
@@ -674,7 +674,7 @@ route_set_metric (void *rule, struct prefix *prefix, void *object)
   bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC);
   bgp_info->attr->med = atoi (metric);
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* set metric compilation. */
@@ -704,7 +704,7 @@ struct route_map_rule_cmd route_set_metric_cmd =
 /* `set as-path prepend ASPATH' */
 
 /* For AS path prepend mechanism. */
-int
+route_map_result_t
 route_set_aspath_prepend (void *rule, struct prefix *prefix, void *object)
 {
   struct aspath *aspath;
@@ -715,7 +715,7 @@ route_set_aspath_prepend (void *rule, struct prefix *prefix, void *object)
   
   aspath_prepend (aspath, bgp_info->attr->aspath);
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* Compile function for as-path prepend. */
@@ -750,7 +750,7 @@ struct route_map_rule_cmd route_set_aspath_prepend_cmd =
 /* `set community COMMUNITY' */
 
 /* For community set mechanism. */
-int
+route_map_result_t
 route_set_community (void *rule, struct prefix *prefix, void *object)
 {
   struct community *com;
@@ -760,7 +760,7 @@ route_set_community (void *rule, struct prefix *prefix, void *object)
   bgp_info = object;
   
   if (!com)
-    return 0;
+    return RM_OKAY;
 
   if (bgp_info->attr->community)
     community_free (bgp_info->attr->community);
@@ -768,7 +768,7 @@ route_set_community (void *rule, struct prefix *prefix, void *object)
   bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
   bgp_info->attr->community = community_dup (com);
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* Compile function for set community. */
@@ -802,7 +802,7 @@ struct route_map_rule_cmd route_set_community_cmd =
 /* `set origin ORIGIN' */
 
 /* For origin set. */
-int
+route_map_result_t
 route_set_origin (void *rule, struct prefix *prefix, void *object)
 {
   u_char *origin;
@@ -813,7 +813,7 @@ route_set_origin (void *rule, struct prefix *prefix, void *object)
 
   bgp_info->attr->origin = *origin;
 
-  return 0;
+  return RM_OKAY;
 }
 
 /* Compile function for origin set. */
@@ -862,14 +862,14 @@ struct route_map_rule_cmd route_set_origin_cmd =
 /* `set atomic-aggregate' */
 
 /* For atomic aggregate set. */
-int
+route_map_result_t
 route_set_atomic_aggregate (void *rule, struct prefix *prefix, void *object)
 {
   struct bgp_info *bgp_info;
 
   bgp_info = object;
   bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE);
-  return 0;
+  return RM_OKAY;
 }
 
 /* Compile function for atomic aggregate. */
@@ -902,7 +902,7 @@ struct aggregator
   struct in_addr address;
 };
 
-int
+route_map_result_t
 route_set_aggregator_as (void *rule, struct prefix *prefix, void *object)
 {
   struct bgp_info *bgp_info;
@@ -915,7 +915,7 @@ route_set_aggregator_as (void *rule, struct prefix *prefix, void *object)
   bgp_info->attr->aggregator_addr = aggregator->address;
   bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR);
 
-  return 0;
+  return RM_OKAY;
 }
 
 void *
@@ -1452,7 +1452,7 @@ DEFUN (set_origin,
 
 DEFUN (no_set_origin,
        no_set_origin_cmd,
-       "set origin ORIGIN",
+       "no set origin ORIGIN",
        NO_STR
        "Set value\n"
        "Origin attribute\n"

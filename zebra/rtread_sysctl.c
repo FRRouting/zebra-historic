@@ -26,9 +26,10 @@
 #include "sockunion.h"
 #include "memory.h"
 #include "str.h"
-#include "zebra/zebra.h"
 #include "rib.h"
 #include "log.h"
+
+#include "zebra/zebra.h"
 
 /* Socket length roundup function. */
 #define ROUNDUP(a) \
@@ -172,6 +173,7 @@ route_read ()
   struct rt_msghdr *rtm;
   union sockunion dest, mask, gate;
   int flags;
+  u_char zebra_flags;
   
 #define MIBSIZ 6
   int mib[MIBSIZ] = { CTL_NET,
@@ -199,6 +201,7 @@ route_read ()
   for (end = buf + bufsiz; buf < end; buf += rtm->rtm_msglen) 
     {
       rtm = (struct rt_msghdr *) buf;
+      zebra_flags = 0;
 
       /* Read destination and netmask and gateway from rtm message
 	 structure. */
@@ -212,6 +215,9 @@ route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
+      if ((flags & RTF_PROTO2) && (flags & RTF_PROTO1))
+	zebra_flags |= ZEBRA_FLAGS_ZEBRA;	
+
       if (dest.sa.sa_family == AF_INET)
 	{
 	  struct prefix_ipv4 p;
@@ -220,7 +226,8 @@ route_read ()
 	  p.prefix = dest.sin.sin_addr;
 	  p.prefixlen = ip_masklen (mask.sin.sin_addr);
 
-	  rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, &gate.sin.sin_addr, 0, 0);
+	  rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, zebra_flags, 
+			&p, &gate.sin.sin_addr, 0, 0);
 	}
 #ifdef HAVE_IPV6
       if (dest.sa.sa_family == AF_INET6)
@@ -231,7 +238,8 @@ route_read ()
 	  p.prefix = dest.sin6.sin6_addr;
 	  p.prefixlen = ip6_masklen (mask.sin6.sin6_addr);
 
-	  rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, &gate.sin6.sin6_addr, 0, 0);
+	  rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, zebra_flags,
+			&p, &gate.sin6.sin6_addr, 0, 0);
 	}
 #endif /* HAVE_IPV6 */
     }

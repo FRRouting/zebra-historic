@@ -64,6 +64,8 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 LIB_IPV6 = @LIB_IPV6@
@@ -299,7 +301,8 @@ daemon.o: daemon.c
 distribute.o: distribute.c hash.h linklist.h if.h filter.h memory.h \
  vector.h vty.h command.h
 dropline.o: dropline.c
-filter.o: filter.c prefix.h filter.h memory.h vector.h vty.h command.h
+filter.o: filter.c prefix.h filter.h if.h linklist.h memory.h \
+ command.h vector.h vty.h
 getopt1.o: getopt1.c getopt.h
 getopt.o: getopt.c
 hash.o: hash.c hash.h memory.h log.h
@@ -313,9 +316,9 @@ pid_output.o: pid_output.c
 plist.o: plist.c prefix.h command.h vector.h vty.h memory.h plist.h
 prefix.o: prefix.c prefix.h vty.h sockunion.h memory.h log.h
 print_version.o: print_version.c version.h
-regex.o: regex.c regex-gnu.h
+regex.o: regex.c
 routemap.o: routemap.c linklist.h memory.h vector.h prefix.h \
- routemap.h vty.h command.h
+ routemap.h command.h vty.h
 sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h roken.h \
  str.h log.h
 str.o: str.c str.h
@@ -325,7 +328,7 @@ thread.o: thread.c thread.h memory.h log.h
 vector.o: vector.c vector.h memory.h
 version.o: version.c
 vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
- sockunion.h thread.h memory.h str.h log.h prefix.h filter.h
+ sockunion.h thread.h memory.h str.h log.h prefix.h filter.h if.h
 zclient.o: zclient.c ../zebra/zebra.h stream.h network.h thread.h \
  memory.h prefix.h client.h zclient.h log.h
 

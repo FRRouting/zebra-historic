@@ -41,6 +41,7 @@ kernel_read (int sock)
   return;
 }
 
+#if 0
 /* Initialization prototype of struct sockaddr_in. */
 static struct sockaddr_in sin_proto =
 {
@@ -49,6 +50,7 @@ static struct sockaddr_in sin_proto =
 #endif /* HAVE_SIN_LEN */
   AF_INET, 0, {0}, {0}
 };
+#endif /* 0 */
 
 /* Solaris has ortentry. */
 #ifdef HAVE_OLD_RTENTRY
@@ -66,10 +68,31 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
   struct sockaddr_in sin_dest, sin_mask, sin_gate;
 
   bzero (&rtentry, sizeof (struct rtentry));
-  sin_dest = sin_mask = sin_gate = sin_proto;
+
+  /* Make destination. */
+  bzero (&sin_dest, sizeof (struct sockaddr_in));
+  sin_dest.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+  sin_dest.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
   sin_dest.sin_addr = dest->prefix;
+
+  /* Make gateway. */
   if (gate)
-    sin_gate.sin_addr = *gate;
+    {
+      bzero (&sin_gate, sizeof (struct sockaddr_in));
+      sin_gate.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+      sin_gate.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
+      sin_gate.sin_addr = *gate;
+    }
+
+  bzero (&sin_mask, sizeof (struct sockaddr_in));
+  sin_mask.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+      sin_gate.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
   masklen2ip (dest->prefixlen, &sin_mask.sin_addr);
 
   /* Set destination address, mask and gateway.*/
@@ -88,6 +111,9 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
     rtentry.rt_flags |= RTF_GATEWAY;
 
   rtentry.rt_flags |= RTF_UP;
+
+  /* For tagging route. */
+  /* rtentry.rt_flags |= RTF_DYNAMIC; */
 
   /* Open socket for ioctl. */
   sock = socket (AF_INET, SOCK_DGRAM, 0);
@@ -183,6 +209,10 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
   */
 
   rtm.rtmsg_flags |= RTF_GATEWAY;
+
+  /* For tagging route. */
+  /* rtm.rtmsg_flags |= RTF_DYNAMIC; */
+
   memcpy (&rtm.rtmsg_gateway, gate, sizeof (struct in6_addr));
 
   if (index)

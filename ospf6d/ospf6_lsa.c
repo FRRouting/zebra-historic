@@ -48,12 +48,12 @@ which_is_more_recent (struct ospf6_lsa *a, struct ospf6_lsa *b)
   assert (b && b->lsa_hdr);
   assert (ospf6_lsa_issame (a->lsa_hdr, b->lsa_hdr));
 
-  o6log.lsa ("comparing two of %s", print_lsahdr (a->lsa_hdr));
+  seqnuma = ((signed long) ntohl (a->lsa_hdr->lsh_seqnum))
+              - (signed long)INITIAL_SEQUENCE_NUMBER;
+  seqnumb = ((signed long) ntohl (b->lsa_hdr->lsh_seqnum))
+              - (signed long)INITIAL_SEQUENCE_NUMBER;
 
-  seqnuma = ntohl (a->lsa_hdr->lsh_seqnum) - (int32_t)INITIAL_SEQUENCE_NUMBER;
-  seqnumb = ntohl (b->lsa_hdr->lsh_seqnum) - (int32_t)INITIAL_SEQUENCE_NUMBER;
-
-  /* XXX, Care about Wrapping */
+  /* XXX, care about LS sequence number wrapping */
   if (seqnuma > seqnumb)
     {
       o6log.lsa ("a is more recent (seqnum)");
@@ -1051,7 +1051,7 @@ update_ls_seqnum (struct ospf6_lsa *p)
         break;
       case LST_LINK_LSA:
         o6if = (struct ospf6_if *) p->scope;
-        area->link_lsa_seqnum = seqnum;
+        o6if->area->link_lsa_seqnum = seqnum;
         break;
       default:
         break;
@@ -1197,6 +1197,8 @@ ospf6_lsa_unlock (struct ospf6_lsa *lsa)
       list_delete_all (lsa->request_nbr);
       assert (list_isempty (lsa->retrans_nbr));
       list_delete_all (lsa->retrans_nbr);
+      assert (list_isempty (lsa->delayed_ack_if));
+      list_delete_all (lsa->delayed_ack_if);
 
       /* do free */
       free_ospf6_lsa_data (lsa->lsa_hdr);
@@ -1331,6 +1333,7 @@ make_ospf6_lsa (struct ospf6_lsa_hdr *hdr)
   lsa->summary_nbr = list_init ();
   lsa->request_nbr = list_init ();
   lsa->retrans_nbr = list_init ();
+  lsa->delayed_ack_if = list_init ();
 
   /* log appearance */
   o6log.pointer ("allocate LSA %#x", lsa);

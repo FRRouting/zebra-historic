@@ -64,6 +64,8 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 LIB_REGEX = @LIB_REGEX@
@@ -365,9 +367,10 @@ ipforward_ews.o: ipforward_ews.c
 ipforward_proc.o: ipforward_proc.c ../lib/dropline.h
 ipforward_solaris.o: ipforward_solaris.c ../lib/memory.h
 ipforward_sysctl.o: ipforward_sysctl.c ../lib/log.h
-main.o: main.c ../zebra/zebra.h ../lib/version.h ../lib/getopt.h \
- ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/thread.h \
- ../lib/filter.h ../lib/memory.h ../lib/log.h ../zebra/debug.h
+main.o: main.c ../zebra/zebra.h ../lib/version.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../lib/thread.h ../lib/filter.h \
+ ../lib/if.h ../lib/linklist.h ../lib/memory.h ../lib/prefix.h \
+ ../lib/log.h ../zebra/debug.h ../zebra/rib.h
 redistribute.o: redistribute.c ../lib/vector.h ../lib/vty.h \
  ../lib/command.h ../lib/prefix.h ../lib/table.h ../lib/stream.h \
  ../lib/client.h ../lib/linklist.h ../zebra/zebra.h ../zebra/rib.h \
@@ -383,7 +386,7 @@ rtread_netlink.o: rtread_netlink.c
 rtread_proc.o: rtread_proc.c ../zebra/zebra.h ../lib/prefix.h \
  ../lib/log.h rib.h
 rtread_sysctl.o: rtread_sysctl.c ../lib/prefix.h ../lib/sockunion.h \
- ../lib/memory.h ../lib/str.h ../zebra/zebra.h rib.h ../lib/log.h
+ ../lib/memory.h ../lib/str.h rib.h ../lib/log.h ../zebra/zebra.h
 rt_socket.o: rt_socket.c ../zebra/zebra.h ../lib/thread.h \
  ../lib/prefix.h ../lib/sockunion.h ../lib/log.h ../lib/linklist.h \
  ../lib/if.h

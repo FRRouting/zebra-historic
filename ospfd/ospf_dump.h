@@ -57,6 +57,9 @@
                                          OSPF_DEBUG_ ## b)
 #define IS_OSPF_DEBUG(a, b)		(ospf_debug_ ## a & OSPF_DEBUG_ ## b)
 
+/* Message Lookup */
+#define LOOKUP(x, y)		mes_lookup(x, x ## _max, y)
+
 /* Message Strings. */
 extern char *ospf_packet_type_str[];
 extern char *ospf_lsa_type_str[];

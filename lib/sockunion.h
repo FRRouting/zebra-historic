@@ -61,6 +61,20 @@ enum connect_result
 #define AF_INET_UNION AF_INET
 #endif
 
+/* Macro to set link local index to the IPv6 address.  For KAME IPv6
+   stack. */
+#ifdef KAME
+#define	IN6_LINKLOCAL_IFINDEX(a)  ((a).s6_addr8[2] << 8 | (a).s6_addr8[3])
+#define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
+  do { \
+    (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
+    (a).s6_addr8[3] = (i) & 0xff; \
+  } while (0)
+#else
+#define	IN6_LINKLOCAL_IFINDEX(a)
+#define SET_IN6_LINKLOCAL_IFINDEX(a, i)
+#endif /* KAME */
+
 /* shortcut macro to specify address field of struct sockaddr */
 #define sock2ip(X)   (((struct sockaddr_in *)(X))->sin_addr.s_addr)
 #ifdef HAVE_IPV6
@@ -84,8 +98,9 @@ int sockunion_socket (union sockunion *su);
 const char *inet_sutop (union sockunion *su, char *str);
 char *sockunion_log (union sockunion *su);
 enum connect_result
-sockunion_connect (int fd, union sockunion *su, unsigned short port);
+sockunion_connect (int fd, union sockunion *su, unsigned short port, unsigned int);
 union sockunion *sockunion_getsockname (int);
+union sockunion *sockunion_getpeername (int);
 
 #ifndef HAVE_INET_NTOP
 const char *

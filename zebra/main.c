@@ -25,15 +25,15 @@
 #include "zebra/zebra.h"
 #include "version.h"
 #include "getopt.h"
-#include "vector.h"
-#include "vty.h"
 #include "command.h"
 #include "thread.h"
 #include "filter.h"
 #include "memory.h"
+#include "prefix.h"
 #include "log.h"
 
 #include "zebra/debug.h"
+#include "zebra/rib.h"
 
 /* Master of threads. */
 struct thread_master *master;
@@ -44,11 +44,15 @@ char *progname;
 /* Route retain mode flag. */
 int retain_mode = 0;
 
+/* Don't delete kernel route. */
+int keep_kernel_mode = 0;
+
 /* Command line options. */
 struct option longopts[] = 
 {
   { "batch",       no_argument,       NULL, 'b'},
   { "daemon",      no_argument,       NULL, 'd'},
+  { "keep_kernel", no_argument,       NULL, 'k'},
   { "log_mode",    no_argument,       NULL, 'l'},
   { "config_file", required_argument, NULL, 'f'},
   { "help",        no_argument,       NULL, 'h'},
@@ -76,6 +80,7 @@ redistribution between different routing protocols.\n\n\
 -b, --batch        Runs in batch mode\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
+-k, --keep_kernel  Don't delete old routes which installed by zebra.\n\
 -l, --log_mode     Set verbose log mode flag\n\
 -P, --vty_port     Set vty's port number\n\
 -r, --retain       When program terminates, retain added route by zebra.\n\
@@ -157,7 +162,7 @@ main (int argc, char **argv)
     {
       int opt;
   
-      opt = getopt_long (argc, argv, "bdlf:hP:rv", longopts, 0);
+      opt = getopt_long (argc, argv, "bdklf:hP:rv", longopts, 0);
 
       if (opt == EOF)
 	break;
@@ -170,6 +175,9 @@ main (int argc, char **argv)
 	  batch_mode = 1;
 	case 'd':
 	  daemon_mode = 1;
+	  break;
+	case 'k':
+	  keep_kernel_mode = 1;
 	  break;
 	case 'l':
 	  /* log_mode = 1; */
@@ -219,13 +227,18 @@ main (int argc, char **argv)
   interface_list ();
   route_read ();
 
+  /* Sort VTY commands. */
   sort_node ();
+
+  /* Clean up self inserted route. */
+  if (! keep_kernel_mode)
+    zebra_sweep_route ();
 
   /* Configuration file read*/
   vty_read_config (config_file, config_current, config_default);
 
   /* Clean up rib. */
-  rib_weed_tables();
+  rib_weed_tables ();
 
   /* Exit when zebra is working in batch mode. */
   if (batch_mode)

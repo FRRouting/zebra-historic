@@ -27,6 +27,7 @@
 struct ospf6_if
 {
   struct interface *interface;       /* IF info from zebra */
+  unsigned char     instance_id;
   ifid_t            ifid;
 
   struct area      *area;            /* back pointer to area */

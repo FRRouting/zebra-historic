@@ -53,8 +53,9 @@
 #define ZEBRA_ROUTE_MAX            9
 
 /* Zebra message flags */
-#define ZEBRA_ROUTE_EXTERNAL       0
-#define ZEBRA_ROUTE_INTERNAL       1
+/* #define ZEBRA_FLAG_EXTERNAL       0 */
+#define ZEBRA_FLAGS_INTERNAL       1
+#define ZEBRA_FLAGS_ZEBRA          2
 
 /* Default port information. */
 #define ZEBRA_PORT           2600

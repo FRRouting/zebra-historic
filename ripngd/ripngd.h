@@ -144,6 +144,9 @@ struct ripng_info
   /* Tag field of RIPng packet.*/
   u_short tag;		
 
+  /* For aggregation. */
+  unsigned int suppress;
+
   /* Flags of RIPng route. */
 #define RIPNG_RTF_FIB      1
 #define RIPNG_RTF_CHANGED  2
@@ -189,8 +192,10 @@ enum event
 #ifdef KAME
 #define	IN6_LINKLOCAL_IFINDEX(a)  ((a).s6_addr8[2] << 8 | (a).s6_addr8[3])
 #define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
-  (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
-  (a).s6_addr8[3] = (i) & 0xff
+  do { \
+    (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
+    (a).s6_addr8[3] = (i) & 0xff; \
+  } while (0)
 #else
 #define	IN6_LINKLOCAL_IFINDEX(a)
 #define SET_IN6_LINKLOCAL_IFINDEX(a, i)

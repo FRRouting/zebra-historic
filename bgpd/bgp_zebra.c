@@ -180,7 +180,7 @@ zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       bgp_info = bgp_info_new ();
       bgp_info->type = type;
       bgp_info->peer = peer_self;
-      bgp_info->attr = bgp_attr_make_default ();
+      bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_INCOMPLETE);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
 	nlri_process ((struct prefix *)&p, bgp_info);
@@ -196,6 +196,7 @@ int
 zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 {
   u_char type;
+  u_char flags;
   struct in6_addr nexthop;
   u_char *lim;
   struct stream *s;
@@ -206,6 +207,7 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
+  flags = stream_getc (s);
   memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
   stream_forward (s, sizeof (struct in6_addr));
 
@@ -229,7 +231,7 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
       bgp_info = bgp_info_new ();
       bgp_info->type = type;
       bgp_info->peer = peer_self;
-      bgp_info->attr = bgp_attr_make_default ();
+      bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_INCOMPLETE);
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
 	nlri_process ((struct prefix *)&p, bgp_info);
@@ -263,6 +265,207 @@ bgp_zebra_no_redistribute (int type)
 
   if (zebra->sock > 0)
     zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+}
+
+struct interface *
+if_lookup_by_ipv4 (struct in_addr *addr)
+{
+  listnode ifnode;
+  listnode cnode;
+  struct interface *ifp;
+  struct connected *connected;
+  struct prefix_ipv4 p;
+  struct prefix *cp; 
+  
+  p.family = AF_INET;
+  p.prefix = *addr;
+  p.prefixlen = IPV4_MAX_BITLEN;
+
+  for (ifnode = listhead (iflist); ifnode; nextnode (ifnode))
+    {
+      ifp = getdata (ifnode);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  connected = getdata (cnode);
+	  cp = connected->address;
+	    
+	  if (cp->family == AF_INET)
+	    if (prefix_match (cp, (struct prefix *)&p))
+	      return ifp;
+	}
+    }
+  return NULL;
+}
+
+#ifdef HAVE_IPV6
+struct interface *
+if_lookup_by_ipv6 (struct in6_addr *addr)
+{
+  listnode ifnode;
+  listnode cnode;
+  struct interface *ifp;
+  struct connected *connected;
+  struct prefix_ipv6 p;
+  struct prefix *cp; 
+  
+  p.family = AF_INET6;
+  p.prefix = *addr;
+  p.prefixlen = IPV6_MAX_BITLEN;
+
+  for (ifnode = listhead (iflist); ifnode; nextnode (ifnode))
+    {
+      ifp = getdata (ifnode);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  connected = getdata (cnode);
+	  cp = connected->address;
+	    
+	  if (cp->family == AF_INET6)
+	    if (prefix_match (cp, (struct prefix *)&p))
+	      return ifp;
+	}
+    }
+  return NULL;
+}
+#endif /* HAVE_IPV6 */
+
+#ifdef HAVE_IPV6
+int
+if_get_ipv6_global (struct interface *ifp, struct in6_addr *addr)
+{
+  listnode cnode;
+  struct connected *connected;
+  struct prefix *cp; 
+  
+  for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+    {
+      connected = getdata (cnode);
+      cp = connected->address;
+	    
+      if (cp->family == AF_INET6)
+	if (! IN6_IS_ADDR_LINKLOCAL (&cp->u.prefix6))
+	  {
+	    memcpy (addr, &cp->u.prefix6, IPV6_MAX_BYTELEN);
+	    return 1;
+	  }
+    }
+  return 0;
+}
+
+int
+if_get_ipv6_local (struct interface *ifp, struct in6_addr *addr)
+{
+  listnode cnode;
+  struct connected *connected;
+  struct prefix *cp; 
+  
+  for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+    {
+      connected = getdata (cnode);
+      cp = connected->address;
+	    
+      if (cp->family == AF_INET6)
+	if (IN6_IS_ADDR_LINKLOCAL (&cp->u.prefix6))
+	  {
+	    memcpy (addr, &cp->u.prefix6, IPV6_MAX_BYTELEN);
+	    return 1;
+	  }
+    }
+  return 0;
+}
+#endif /* HAVE_IPV6 */
+
+int
+bgp_nexthop_set (union sockunion *local, union sockunion *remote, 
+		 struct bgp_nexthop *nexthop, struct peer *peer)
+{
+  int ret;
+  struct interface *ifp = NULL;
+  struct interface *direct = NULL;
+
+  memset (nexthop, 0, sizeof (struct bgp_nexthop));
+
+  if (!local)
+    return -1;
+  if (!remote)
+    return -1;
+
+  if (local->sa.sa_family == AF_INET)
+    ifp = if_lookup_by_ipv4 (&local->sin.sin_addr);
+#ifdef HAVE_IPV6
+  if (local->sa.sa_family == AF_INET6)
+    {
+      if (IN6_IS_ADDR_LINKLOCAL (&local->sin6.sin6_addr))
+	{
+	  if (peer->ifname)
+	    ifp = if_lookup_by_index (if_nametoindex (peer->ifname));
+	}
+      else
+	ifp = if_lookup_by_ipv6 (&local->sin6.sin6_addr);
+    }
+#endif /* HAVE_IPV6 */
+
+  if (!ifp)
+    return -1;
+
+  nexthop->ifp = ifp;
+
+  /* IPv4 connection. */
+  if (local->sa.sa_family == AF_INET)
+    {
+      nexthop->v4 = local->sin.sin_addr;
+
+#ifdef HAVE_IPV6
+      /* IPv6 nexthop*/
+      ret = if_get_ipv6_global (ifp, &nexthop->v6_global);
+
+      /* There is no global nexthop. */
+      if (!ret)
+	if_get_ipv6_local (ifp, &nexthop->v6_global);
+      else
+	if_get_ipv6_local (ifp, &nexthop->v6_local);
+#endif /* HAVE_IPV6 */
+    }
+
+#ifdef HAVE_IPV6
+  /* IPv6 connection. */
+  if (local->sa.sa_family == AF_INET6)
+    {
+      /* IPv4 nexthop.  I don't care about it. */
+      if (peer->bgp->ident)
+	nexthop->v4.s_addr = peer->bgp->ident;
+
+      /* Global address*/
+      if (! IN6_IS_ADDR_LINKLOCAL (&local->sin6.sin6_addr))
+	{
+	  memcpy (&nexthop->v6_global, &local->sin6.sin6_addr, 
+		  IPV6_MAX_BYTELEN);
+
+	  /* If directory connected set link-local address. */
+	  direct = if_lookup_by_ipv6 (&remote->sin6.sin6_addr);
+	  if (direct)
+	    if_get_ipv6_local (ifp, &nexthop->v6_local);
+	}
+      else
+	/* Link-local address. */
+	{
+	  ret = if_get_ipv6_global (ifp, &nexthop->v6_global);
+
+	  /* If there is no global address.  Set link-local address as
+             global.  I know this break RFC specification... */
+	  if (!ret)
+	    memcpy (&nexthop->v6_global, &local->sin6.sin6_addr, 
+		    IPV6_MAX_BYTELEN);
+	  else
+	    memcpy (&nexthop->v6_local, &local->sin6.sin6_addr, 
+		    IPV6_MAX_BYTELEN);
+	}
+    }
+#endif /* HAVE_IPV6 */
+
+  return 0;
 }
 
 #ifdef HAVE_IPV6
@@ -304,7 +507,7 @@ bgp_ifindex_by_nexthop (struct in6_addr *addr)
 void
 bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 {
-  int flags;
+  int flags = 0;
 
   if (zebra->sock < 0)
     return;
@@ -313,9 +516,7 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
     return;
 
   if (bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
-    flags = ZEBRA_ROUTE_INTERNAL;
-  else
-    flags = ZEBRA_ROUTE_EXTERNAL;
+    flags |= ZEBRA_FLAGS_INTERNAL;
 
   if (p->family == AF_INET)
     {
@@ -341,7 +542,8 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
       if (info->attr->mp_nexthop_len == 32)
 	{
 	  nexthop = &info->attr->mp_nexthop_local;
-	  ifindex = bgp_ifindex_by_nexthop (&info->attr->mp_nexthop_global);
+	  if (info->peer->nexthop.ifp)
+	    ifindex = info->peer->nexthop.ifp->index;
 	}
 
       if (nexthop == NULL)
@@ -351,8 +553,8 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 	if (info->peer->ifname)
 	  ifindex = if_nametoindex (info->peer->ifname);
 
-      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
-		      nexthop, ifindex);
+      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_BGP, flags,
+		      (struct prefix_ipv6 *)p, nexthop, ifindex);
     }
 #endif /* HAVE_IPV6 */
 }
@@ -360,7 +562,7 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 void
 bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
 {
-  int flags;
+  int flags = 0;
 
   if (zebra->sock < 0)
     return;
@@ -369,9 +571,7 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
     return;
 
   if (bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
-    flags = ZEBRA_ROUTE_INTERNAL;
-  else
-    flags = ZEBRA_ROUTE_EXTERNAL;
+    flags |= ZEBRA_FLAGS_INTERNAL;
 
   if (p->family == AF_INET)
     zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_BGP, flags,
@@ -394,7 +594,8 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
       if (info->attr->mp_nexthop_len == 32)
 	{
 	  nexthop = &info->attr->mp_nexthop_local;
-	  ifindex = bgp_ifindex_by_nexthop (&info->attr->mp_nexthop_global);
+	  if (info->peer->nexthop.ifp)
+	    ifindex = info->peer->nexthop.ifp->index;
 	}
 
       if (nexthop == NULL)
@@ -404,8 +605,8 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
 	if (info->peer->ifname)
 	  ifindex = if_nametoindex (info->peer->ifname);
 
-      zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
-			 nexthop, ifindex);
+      zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_BGP, flags,
+			 (struct prefix_ipv6 *)p, nexthop, ifindex);
     }
 #endif /* HAVE_IPV6 */
 }

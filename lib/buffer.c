@@ -300,7 +300,8 @@ buffer_flush_all (struct buffer *b, int fd)
 /* Flush buffer to the file descriptor.  Mainly used from vty
    interface. */
 int
-buffer_flush_vty (struct buffer *b, int fd, int size, int erase_flag)
+buffer_flush_vty (struct buffer *b, int fd, int size, 
+		  int erase_flag, int no_more_flag)
 {
   int nbytes;
   int iov_index;
@@ -353,7 +354,7 @@ buffer_flush_vty (struct buffer *b, int fd, int size, int erase_flag)
     }
 
   /* In case of `more' display need. */
-  if (!buffer_empty (b))
+  if (!buffer_empty (b) && !no_more_flag)
     {
       iov[iov_index].iov_base = more;
       iov[iov_index].iov_len = sizeof more;
@@ -396,7 +397,7 @@ buffer_flush_vty (struct buffer *b, int fd, int size, int erase_flag)
    descriptor. */
 int
 buffer_flush_window (struct buffer *b, int fd, int width, int height, 
-		     int erase)
+		     int erase, int no_more)
 {
   unsigned long cp;
   unsigned long size;
@@ -444,7 +445,7 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height,
 	  cp, lp, size, lineno);
 #endif /* DEBUG */
 
-  ret = buffer_flush_vty (b, fd, size, erase);
+  ret = buffer_flush_vty (b, fd, size, erase, no_more);
 
   return ret;
 }

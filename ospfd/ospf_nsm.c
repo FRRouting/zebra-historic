@@ -188,7 +188,7 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
     }
 
   /* Schedule DR Election. */
-  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+  /*  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange); */
 
   return next_state;
 }
@@ -302,8 +302,10 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
     next_state = NSM_TwoWay;
 
   /* Schedule DR Election. */
+  /*
   if (nbr->status != next_state)
     OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+  */
 
   return next_state;
 }
@@ -567,6 +569,11 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
       oi->area->router_lsa_self = lsa;
     }
     
+  /* Generete NeighborChange ISM event. */
+  if ((old_status < NSM_TwoWay && status >= NSM_TwoWay) ||
+      (old_status >= NSM_TwoWay && status < NSM_TwoWay))
+      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+
   /* Preserve old status? */
 }
 

@@ -1,3 +1,7 @@
+1999-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* main.c (longopts): -k, --keep_kernel option added.
+
 1999-07-18  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
 
 	* rt_socket.c (rtm_write): forgot closing socket bug fixed.

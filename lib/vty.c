@@ -1154,8 +1154,17 @@ static int
 vty_flush (struct thread *thread)
 {
   int erase;
+  int vty_sock = THREAD_FD (thread);
   struct vty *vty = THREAD_ARG (thread);
   vty->t_write = NULL;
+
+  /* Tempolary disable read thread. */
+  if (vty->lines == 0)
+    if (vty->t_read)
+      {
+	thread_cancel (vty->t_read);
+	vty->t_read = NULL;
+      }
 
   if (vty->status == VTY_MORE)
     erase = 1;
@@ -1163,21 +1172,29 @@ vty_flush (struct thread *thread)
     erase = 0;
 
   if (vty->lines == 0)
-    buffer_flush_all (vty->obuf, vty->fd);
+    buffer_flush_window (vty->obuf, vty->fd, vty->width, 25, 0, 1);
   else
-    buffer_flush_window (vty->obuf, vty->fd, vty->width, 
-			 vty->lines >= 0 ? vty->lines : vty->height, erase);
+    buffer_flush_window (vty->obuf, vty->fd, vty->width,
+			 vty->lines >= 0 ? vty->lines : vty->height,
+			 erase, 0);
   
-
   if (buffer_empty (vty->obuf))
     {
       if (vty->status == VTY_CLOSE)
 	vty_close (vty);
       else
 	vty->status = VTY_NORMAL;
+
+      if (vty->lines == 0)
+	vty_event (VTY_READ, vty_sock, vty);
     }
   else
-    vty->status = VTY_MORE;
+    {
+      vty->status = VTY_MORE;
+
+      if (vty->lines == 0)
+	vty_event (VTY_WRITE, vty_sock, vty);
+    }
 
   return 0;
 }

@@ -297,13 +297,13 @@ bgp_attr_intern (struct attr *attr)
 
 /* Called from bgp_view.c. Make network statement's attribute. */
 struct attr *
-bgp_attr_make_default ()
+bgp_attr_make_default (u_char origin)
 {
   struct attr attr;
 
   bzero (&attr, sizeof attr);
 
-  attr.origin = BGP_ORIGIN_IGP;
+  attr.origin = origin;
   attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGIN);
 
   attr.aspath = aspath_empty_aspath (0);

@@ -1,3 +1,18 @@
+1999-07-29  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_ism.c (ospf_dr_election): Fix bug of DR election.
+
+1999-07-28  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_network.c (ospf_serv_sock_init): Set IP precedence field
+	with IPTOS_PREC_INTERNET_CONTROL.
+
+	* ospf_nsm.c (nsm_change_status): Schedule NeighborChange event
+	if NSM status change.
+	
+	* ospf_packet.c (ospf_make_hello): Never include a neighbor in
+	Hello packet, when the neighbor goes down.
+
 1999-07-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am (noinst_HEADERS): Add ospf_route.h.

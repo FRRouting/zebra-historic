@@ -27,6 +27,7 @@
 #include "vector.h"
 #include "prefix.h"
 #include "routemap.h"
+#include "command.h"
 
 /* Vector for route match rules. */
 static vector route_match_vec;
@@ -560,7 +561,28 @@ route_map_delete_set (struct route_map_index *index, char *set_name,
 }
 
 /* Apply route map's each index to the object. */
-int
+/*
+** The matrix for a route-map looks like this:
+**
+**            Match   |   No Match
+**                    |
+**  permit      a     |      c
+**                    |
+**  ------------------+---------------
+**                    |
+**  deny        b     |      d
+**                    |
+**
+** a)   Apply Set statements, accept route
+** b)   Finish route-map processing, and deny route
+** c) & d)   Goto Next index
+**
+** If we get no matches after we've processed all updates, then the route
+** is dropped too.
+**
+** We need to make sure our route-map processing matches the above
+*/
+route_map_result_t
 route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
                        void *object)
 {
@@ -571,24 +593,42 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
   /* Check all match rule and if there is no match rule return 0. */
   for (match = index->match_list.head; match; match = match->next)
     {
-      /* Match function return zero for unsuccessful match. */
+      /* Try each match statement in turn. If any return something
+       other than RM_MATCH then we don't need to check anymore and can
+       return */
       ret = (*match->cmd->func_apply)(match->value, prefix, object);
-      if (ret == 0)
+      if (ret != RM_MATCH)
 	return ret;
     }
 
+  /* We get here if all match statements matched From the matrix
+   above, if this is PERMIT we go on and apply the SET functions.  If
+   we're deny, we return indicating we matched a deny */
+
   /* Apply set statement to the object. */
-  for (set = index->set_list.head; set; set = set->next)
+  if (index->type == ROUTE_MAP_PERMIT)
     {
-      ret = (*set->cmd->func_apply)(set->value, prefix, object);
-      if (ret)
-	return ret;
+      for (set = index->set_list.head; set; set = set->next)
+	{
+	  ret = (*set->cmd->func_apply)(set->value, prefix, object);
+
+	  /* I believe a Cisco will ignore set statements that don't
+	 apply to what we're filtering - think "set default interface"
+	 which is only applicable to policy routing */
+	/* if (ret != RM_OKAY) */
+	/*  return ret; */
+	}
     }
-  return 0;
+  else 
+    {
+      return RM_DENYMATCH;
+    }
+  /* Should not get here! */
+  return RM_ERROR;
 }
 
 /* Apply route map to the object. */
-int
+route_map_result_t
 route_map_apply (struct route_map *map, struct prefix *prefix, void *object)
 {
   int ret;
@@ -596,11 +636,12 @@ route_map_apply (struct route_map *map, struct prefix *prefix, void *object)
 
   for (index = map->head; index; index = index->next)
     {
+      /* Apply this index. End here if we get a RM_DENYMATCH */
       ret = route_map_apply_index (index, prefix, object);
-      if (ret)
+      if (ret == RM_DENYMATCH)
 	return ret;
     }
-  return 0;
+  return RM_OKAY;
 }
 
 void
@@ -624,9 +665,6 @@ route_map_init ()
 }
 
 /* VTY related functions. */
-#include "vty.h"
-#include "command.h"
-
 DEFUN (route_map, route_map_cmd,
        "route-map WORD (deny|permit) <0-65535>",
        "Create route-map or enter route-map command mode\n"

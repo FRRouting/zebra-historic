@@ -391,12 +391,6 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
       zlog_info ("OSPF NSM[%s] start.", inet_ntoa (nbr->router_id));
     }
 
-  /* set neighbor information. */
-  nbr->priority = hello->priority;
-  nbr->options = hello->options;
-  nbr->d_router = hello->d_router;
-  nbr->bd_router = hello->bd_router;
-
   /* Add event to thread. */
   OSPF_NSM_EVENT_EXECUTE (nbr, NSM_HelloReceived);
 
@@ -409,9 +403,10 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
       return;
     }
 
-  /* Neighbor priority check. */
-  if (nbr->priority >= 0 && nbr->priority != hello->priority)
-    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+  /* neighbor itself declares BDR. */
+  if (oi->status == ISM_Waiting &&
+      IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->bd_router))
+    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_BackupSeen);
 
   /* if neighbor itself is DR or no BDR exists,
      cause event BackupSeen */
@@ -421,22 +416,27 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
 
   /* had not previously. */
   if ((IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->d_router) &&
-       IPV4_ADDR_CMP (&nbr->router_id, &nbr->d_router)) ||
+       IPV4_ADDR_CMP (&nbr->address.u.prefix4, &nbr->d_router)) ||
       (IPV4_ADDR_CMP (&nbr->address.u.prefix4, &hello->d_router) &&
-       IPV4_ADDR_SAME (&nbr->router_id, &nbr->d_router)))
+       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router)))
     OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
-
-  /* neighbor itself declares BDR. */
-  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->bd_router) &&
-      oi->status == ISM_Waiting)
-    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_BackupSeen);
 
   /* had not previously. */
   if ((IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->bd_router) &&
-       IPV4_ADDR_CMP (&nbr->router_id, &nbr->bd_router)) ||
+       IPV4_ADDR_CMP (&nbr->address.u.prefix4, &nbr->bd_router)) ||
       (IPV4_ADDR_CMP (&nbr->address.u.prefix4, &hello->bd_router) &&
-       IPV4_ADDR_SAME (&nbr->router_id, &nbr->bd_router)))
+       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router)))
     OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+
+  /* Neighbor priority check. */
+  if (nbr->priority >= 0 && nbr->priority != hello->priority)
+    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+
+  /* set neighbor information. */
+  nbr->priority = hello->priority;
+  nbr->options = hello->options;
+  nbr->d_router = hello->d_router;
+  nbr->bd_router = hello->bd_router;
 }
 
 /* Process rest of DD packet */
@@ -1293,6 +1293,8 @@ ospf_make_hello (struct ospf_interface *oi, struct stream *s)
   struct route_node *node;
   u_int16_t length = OSPF_HELLO_MIN_SIZE;
   struct in_addr mask;
+  unsigned long p;
+  int flag = 0;
 
   /* Set netmask of interface. */
   if (oi->type != OSPF_IFTYPE_POINTOPOINT &&
@@ -1317,6 +1319,8 @@ ospf_make_hello (struct ospf_interface *oi, struct stream *s)
   /* Set Designated Router. */
   stream_put_ipv4 (s, oi->d_router.s_addr);
 
+  p = s->putp;
+
   /* Set Backup Designated Router. */
   stream_put_ipv4 (s, oi->bd_router.s_addr);
 
@@ -1332,12 +1336,29 @@ ospf_make_hello (struct ospf_interface *oi, struct stream *s)
       if (nbr->router_id.s_addr == 0)
 	continue;
 
+      /* ignore Down neighbor. */
+      if (nbr->status == NSM_Down)
+	continue;
+
       /* this is myself for DR election. */
       if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
+      /* Check neighbor is sane? */
+      if (nbr->d_router.s_addr != 0 &&
+	  IPV4_ADDR_SAME (&nbr->d_router, &oi->address->u.prefix4) &&
+	  IPV4_ADDR_SAME (&nbr->bd_router, &oi->address->u.prefix4))
+	flag = 1;
+
       stream_put_ipv4 (s, nbr->router_id.s_addr);
       length += 4;
+    }
+
+  /* Let neighbor generate BackupSeen. */
+  if (flag == 1)
+    {
+      stream_set_putp (s, p);
+      stream_put_ipv4 (s, 0);
     }
 
   return length;

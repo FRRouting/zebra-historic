@@ -120,6 +120,9 @@ int make_linkstate_request (struct iovec *, struct sockaddr_in6 *,
 int make_linkstate_update (struct iovec *, struct sockaddr_in6 *,
                            struct neighbor *);
 
+struct ospf6_lsa_hdr *
+ospf6_message_get_lsa_hdr (struct iovec *);
+
 int ospf6_receive (struct thread *);
 
 #endif /* OSPF6_MESG_H */

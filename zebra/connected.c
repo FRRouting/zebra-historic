@@ -163,7 +163,7 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   connected_add (ifp, connected);
 
-  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, &rib, NULL, ifp->index, 0);
+  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->index, 0);
 }
 
 void
@@ -182,6 +182,6 @@ connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   apply_mask_ipv6 (&mp);
 
-  rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, &mp, NULL, ifp->index, 0);
+  rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->index, 0);
 }
 #endif /* HAVE_IPV6 */

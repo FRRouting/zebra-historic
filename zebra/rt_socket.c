@@ -33,8 +33,10 @@
 #ifdef KAME
 #define	IN6_LINKLOCAL_IFINDEX(a)  ((a).s6_addr8[2] << 8 | (a).s6_addr8[3])
 #define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
-  (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
-  (a).s6_addr8[3] = (i) & 0xff
+  do { \
+    (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
+    (a).s6_addr8[3] = (i) & 0xff; \
+  } while (0)
 #else
 #define	IN6_LINKLOCAL_IFINDEX(a)
 #define SET_IN6_LINKLOCAL_IFINDEX(a, i)
@@ -116,7 +118,11 @@ rtm_write (int message,
   else if (message == RTM_ADD) 
     msg.rtm.rtm_flags |= RTF_HOST;
 
-  /* Route to the interface test. */
+  /* Tagging route with flags */
+  msg.rtm.rtm_flags |= (RTF_PROTO2|RTF_PROTO1);
+
+  /* Route to the interface test.  This should be rewritten later on
+     -- Kunihiro*/
   if (!gate)
     {
       #define MAX_IFACES 400
@@ -130,7 +136,10 @@ rtm_write (int message,
 
       ifp = if_lookup_by_index (index);      
       if (!ifp)
-        zlog (NULL, LOG_WARNING, "can't find interface of index %s", index);
+        {
+          zlog (NULL, LOG_WARNING, "can't find interface of index %u", index);
+	  goto noifname;
+	}
       s = ifp->name;
 
       if ((sock = socket (AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -167,7 +176,9 @@ rtm_write (int message,
       else
         zlog (NULL, LOG_WARNING, "can't find interface: %s", s);
     }
-  /* if still we don't have gate to specify, use previous way */
+noifname:
+
+  /* if still we don't have gate to specify, use previous way. */
   if (! gate )
     {
       struct interface *ifp;
@@ -200,6 +211,12 @@ rtm_write (int message,
               }
 #endif /* HAVE_IPV6 */
 	  }
+    }
+
+  if (!gate)
+    {
+      zlog (NULL, LOG_WARNING, "no gateway");
+      return -1;
     }
 
 /* Socket length roundup function. */
@@ -294,14 +311,6 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
   else 
     mask = NULL;
 
-#if 0
-  /* Convert prefixlen to struct sockaddr_in. */
-  masklen2ip (dest->prefixlen, &sin_mask.sin_addr);
-  sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
-  sin_mask.sin_family = AF_UNSPEC;
-  mask = &sin_mask;
-#endif /* 0 */
-
   return rtm_write (message,
 		    (union sockunion *)&sin_dest, 
 		    (union sockunion *)mask, 
@@ -392,16 +401,6 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
     }
   else
     mask = NULL;
-
-#if 0
-  /* Check and convert prefixlen. */
-  masklen2ip6 (dest->prefixlen, &sin_mask.sin6_addr);
-  sin_mask.sin6_family = AF_UNSPEC;
-#ifdef SIN6_LEN
-  sin_mask.sin6_len = sin6_masklen (sin_mask.sin6_addr);
-#endif /* SIN6_LEN */
-  mask = &sin_mask;
-#endif /* 0 */
 
   return rtm_write (message, 
 		   (union sockunion *) &sin_dest,

@@ -89,14 +89,43 @@ char *rlsatype_name[] =
   NULL
 };
 
-char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
+char *print_lsreq (struct linkstate_request *lsreq)
 {
   static char buf[256];
   char advrtr[64], id[64];
   char *type, unknown[64];
 
+  inet_ntop (AF_INET, &lsreq->lsreq_advrtr, advrtr, sizeof (advrtr));
+  snprintf (id, sizeof (id), "%lu", ntohl (lsreq->lsreq_id));
+  switch (ntohs (lsreq->lsreq_type))
+    {
+      case LST_ROUTER_LSA:
+      case LST_NETWORK_LSA:
+      case LST_LINK_LSA:
+      case LST_INTRA_AREA_PREFIX_LSA:
+        type = lstype_name[typeindex(lsreq->lsreq_type)];
+        break;
+      default:
+        snprintf (unknown, sizeof (unknown),
+                  "Unknown(%#x)", ntohs (lsreq->lsreq_type));
+        type = unknown;
+        break;
+    }
+
+  snprintf (buf, sizeof (buf), "%s[id:%s,adv:%s]",
+            type, id, advrtr);
+  return buf;
+}
+
+char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
+{
+  static char buf[256];
+  char advrtr[64], id[64], seqnum[64];
+  char *type, unknown[64];
+
   inet_ntop (AF_INET, &lsh->lsh_advrtr, advrtr, sizeof (advrtr));
   snprintf (id, sizeof (id), "%lu", ntohl (lsh->lsh_id));
+  snprintf (seqnum, sizeof (seqnum), "%lx", ntohl (lsh->lsh_seqnum));
   switch (ntohs (lsh->lsh_type))
     {
       case LST_ROUTER_LSA:
@@ -112,7 +141,8 @@ char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
         break;
     }
 
-  snprintf (buf, sizeof (buf), "[%s,id:%s,Adv:%s]", type, id, advrtr);
+  snprintf (buf, sizeof (buf), "%s[id:%s,adv:%s,seq:%s]",
+            type, id, advrtr, seqnum);
   return buf;
 }
 

@@ -140,6 +140,7 @@ struct ospf6_lsa
   list                  summary_nbr;
   list                  request_nbr;
   list                  retrans_nbr;
+  list                  delayed_ack_if;
 };
 #define OSPF6_LSA_FLOODBACK   (1 << 0)
 #define OSPF6_LSA_DUPLICATE   (1 << 1)

@@ -128,6 +128,7 @@ void
 zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
 {
   u_char type;
+  u_char flags;
   struct in6_addr nexthop, *gate;
   u_char *lim;
   u_char *pnt;
@@ -137,6 +138,7 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
   lim = pnt + length;
 
   type = stream_getc (client->ibuf);
+  flags = stream_getc (client->ibuf);
   memcpy (&nexthop, stream_pnt (client->ibuf), sizeof (struct in6_addr));
   stream_forward (client->ibuf, sizeof (struct in6_addr));
   
@@ -160,9 +162,9 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
         gate = &nexthop;
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
-	rib_add_ipv6 (type, &p, gate, ifindex, 0);
+	rib_add_ipv6 (type, flags, &p, gate, ifindex, 0);
       else
-	rib_delete_ipv6 (type, &p, gate, ifindex, 0);
+	rib_delete_ipv6 (type, flags, &p, gate, ifindex, 0);
     }
 }
 #endif /* HAVE_IPV6 */

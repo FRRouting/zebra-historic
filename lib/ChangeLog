@@ -1,3 +1,15 @@
+1999-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h (ZEBRA_VERSION): Release zebra-0.75
+
+1999-08-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_RIPNG_AGGREGATE.
+
+1999-07-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* sockunion.h: Add sockunion_getpeername ().
+
 1999-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* version.h: Release zebra-0.74

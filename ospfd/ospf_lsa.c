@@ -37,8 +37,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
+#include "ospfd/ospf_dump.h"
 
 /* LSA Type String. */
+/*
 char *ospf_lsa_type_str[] =
 {
   "unknown-LSA",
@@ -48,7 +50,7 @@ char *ospf_lsa_type_str[] =
   "summary-LSA",
   "AS-external-LSA",
 };
-
+*/
 
 
 /* Fletcher Checksum -- Refer to RFC1008. */
@@ -649,7 +651,7 @@ show_ip_ospf_database_header (struct vty *vty, struct ospf_lsa *lsa)
 {
   vty_out (vty, "  LS age: %d\r\n", ntohs (lsa->ls_age));
   vty_out (vty, "  Options: %d\r\n", lsa->options);
-  vty_out (vty, "  LS Type: Network Links\r\n");
+  vty_out (vty, "  LS Type: %s\r\n", LOOKUP (ospf_lsa_type_msg, lsa->type));
   vty_out (vty, "  Link State ID: %s\r\n", inet_ntoa (lsa->id));
   vty_out (vty, "  Advertising Router: %s\r\n", inet_ntoa (lsa->adv_router));
   vty_out (vty, "  LS Seq Number: %08x\r\n", ntohl (lsa->ls_seqnum));

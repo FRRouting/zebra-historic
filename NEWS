@@ -1,5 +1,52 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.75
+
+* Changes in lib
+
+** `termnal length 0' bug is fixed.
+
+* Changes in zebra
+
+** When zebra starts up, sweep all zebra installed routes.  If -k or
+--keep_kernel option is specified to zebra dameon.  This function is
+not performed.
+
+* Changes in ripngd
+
+** Aggreagte address command supported.  In router ripngd,
+`aggregate-address IPV6PREFIX' works.
+
+* Changes in bgpd
+
+** Input route-map's bug which cause segmentation violation is fixed.
+
+** route-map method improved.
+
+** BGP-4+ nexthop detection improved.
+
+** BGP-4+ route re-selection bug is fixed.
+
+** BGP-4+ iBGP route's nexthop calculation works.
+
+** After connection Established `show ip bgp neighbor' display BGP TCP
+connection's source and destination address.
+
+** In case of BGP-4+ `show ip bgp neighbor' display BGP-4+ global and
+local nexthop which used for originated route.  This address will be
+used when `next-hop-self'.
+
+* Changes in ospfd
+
+** Fix bug of DR election.
+
+** Set IP precedence field with IPTOS_PREC_INTERNET_CONTROL.
+
+** Schedule NeighborChange event if NSM status change.
+
+** Never include a neighbor in Hello packet, when the neighbor goes
+down.
+
 * Changes in zebra-0.74
 
 * Changes in lib

@@ -57,12 +57,15 @@
    ripng->fd must be negative value. */
 struct ripng *ripng = NULL;
 
-/* RIPng routing table which hold routing table entry and static and
-   aggregate network configuration. */
+/* RIPng routing table which hold routing table entry and static
+   network configuration. */
 struct route_table *ripng_table;
 
 /* RIPng only static route table. */
 struct route_table *ripng_static;
+
+/* RIPng aggregate route. */
+struct route_table *ripng_aggregate;
 
 /* Master of the thread. */
 extern struct thread_master *master;
@@ -486,6 +489,9 @@ ripng_garbage_collect (struct thread *t)
 			   &rinfo->nexthop, rinfo->ifindex);
   rinfo->flags &= ~RIPNG_RTF_FIB;
 
+  /* Aggregate count decrement. */
+  ripng_aggregate_decrement (rp, rinfo);
+
   /* Unlock route_node. */
   rp->info = NULL;
   route_unlock_node (rp);
@@ -622,6 +628,9 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
 
 	  ripng_zebra_ipv6_add (&p, &rinfo->nexthop, rinfo->ifindex);
 	  rinfo->flags |= RIPNG_RTF_FIB;
+
+	  /* Aggregate check. */
+	  ripng_aggregate_increment (rp, rinfo);
 	}
     }
   else
@@ -738,7 +747,10 @@ ripng_redistribute_add (int type, int sub_type, struct prefix_ipv6 *p,
       route_unlock_node (rp);
     }
   else
-    rinfo = ripng_info_new ();
+    {
+      rinfo = ripng_info_new ();
+      ripng_aggregate_increment (rp, rinfo);
+    }
 
   rinfo->type = type;
   rinfo->sub_type = sub_type;
@@ -1228,6 +1240,7 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
   struct stream *s;
   struct route_node *rp;
   struct ripng_info *rinfo;
+  struct ripng_aggregate *aggregate;
   struct prefix_ipv6 *p;
   int num;
   int rtemax;
@@ -1245,43 +1258,79 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
   rtemax = (STREAM_SIZE(s) - 4) / 20;
 
   for (rp = route_top (ripng_table); rp; rp = route_next (rp))
-    if ((rinfo = rp->info) != NULL)
-      {
-	p = (struct prefix_ipv6 *) &rp->p;
+    {
+      if ((rinfo = rp->info) != NULL && rinfo->suppress == 0)
+	{
+	  p = (struct prefix_ipv6 *) &rp->p;
 
-	/* Output distribute-list filter.*/
-	if (distribute_apply_out (ifp, (struct prefix *) p) == FILTER_DENY)
-	  {
-	    if (IS_RIPNG_DEBUG_PACKET)
-	      zlog_info ("RIPng %s/%d is filtered by distribute out",
-			 inet6_ntop (&p->prefix), p->prefixlen);
+	  /* Output distribute-list filter.*/
+	  if (distribute_apply_out (ifp, (struct prefix *) p) == FILTER_DENY)
+	    {
+	      if (IS_RIPNG_DEBUG_PACKET)
+		zlog_info ("RIPng %s/%d is filtered by distribute out",
+			   inet6_ntop (&p->prefix), p->prefixlen);
+	      continue;
+	    }
+
+	  /* Changed route only output. */
+	  if (route_type == output_changed_route &&
+	      (! (rinfo->flags & RIPNG_RTF_CHANGED)))
 	    continue;
-	  }
 
-	/* Changed route only output. */
-	if (route_type == output_changed_route &&
-	    (! (rinfo->flags & RIPNG_RTF_CHANGED)))
-	  continue;
-
-	/* Split horizon. */
-	if (split_horizon == output_split_horizon &&
-	    rinfo->ifindex == ifp->index)
-	  continue;
+	  /* Split horizon. */
+	  if (split_horizon == output_split_horizon &&
+	      rinfo->ifindex == ifp->index)
+	    continue;
 	
-	/* Write RTE to the stream. */
-	num = ripng_write_rte (num, s, p, rinfo->tag, rinfo->metric);
-	if (num == rtemax)
-	  {
-	    ret = ripng_send_packet (STREAM_DATA (s), stream_get_endp (s),
-				     to, ifp->index);
+	  /* Write RTE to the stream. */
+	  num = ripng_write_rte (num, s, p, rinfo->tag, rinfo->metric);
+	  if (num == rtemax)
+	    {
+	      ret = ripng_send_packet (STREAM_DATA (s), stream_get_endp (s),
+				       to, ifp->index);
 
-	    if (ret >= 0 && IS_RIPNG_DEBUG_PACKET)
-	      ripng_packet_dump ((struct ripng_packet *)STREAM_DATA (s),
-				 stream_get_endp(s));
-	    num = 0;
-	    stream_reset (s);
-	  }
-      }
+	      if (ret >= 0 && IS_RIPNG_DEBUG_PACKET)
+		ripng_packet_dump ((struct ripng_packet *)STREAM_DATA (s),
+				   stream_get_endp(s));
+	      num = 0;
+	      stream_reset (s);
+	    }
+	}
+      if ((aggregate = rp->aggregate) != NULL && 
+	  aggregate->count > 0 && 
+	  aggregate->suppress == 0)
+	{
+	  p = (struct prefix_ipv6 *) &rp->p;
+
+	  /* Output distribute-list filter.*/
+	  if (distribute_apply_out (ifp, (struct prefix *) p) == FILTER_DENY)
+	    {
+	      if (IS_RIPNG_DEBUG_PACKET)
+		zlog_info ("RIPng %s/%d is filtered by distribute out",
+			   inet6_ntop (&p->prefix), p->prefixlen);
+	      continue;
+	    }
+
+	  /* Changed route only output. */
+	  if (route_type == output_changed_route)
+	    continue;
+
+	  /* Write RTE to the stream. */
+	  num = ripng_write_rte (num, s, p, aggregate->tag, aggregate->metric);
+	  if (num == rtemax)
+	    {
+	      ret = ripng_send_packet (STREAM_DATA (s), stream_get_endp (s),
+				       to, ifp->index);
+
+	      if (ret >= 0 && IS_RIPNG_DEBUG_PACKET)
+		ripng_packet_dump ((struct ripng_packet *)STREAM_DATA (s),
+				   stream_get_endp(s));
+	      num = 0;
+	      stream_reset (s);
+	    }
+	}
+
+    }
   
   /* If unwritten RTE exist, flush it. */
   if (num != 0)
@@ -1327,7 +1376,7 @@ ripng_create ()
 
   /* Threads. */
   ripng_event (RIPNG_READ, ripng->sock);
-  ripng_event (RIPNG_UPDATE_EVENT, 0);
+  ripng_event (RIPNG_UPDATE_EVENT, 1);
 
   return 0;
 }
@@ -1390,7 +1439,7 @@ ripng_event (enum event event, int sock)
 	  ripng->t_update = NULL;
 	}
       ripng->t_update = thread_add_timer (master, ripng_update, NULL, 
-					  ripng->update_time);
+					  sock ? 1 : ripng->update_time);
       break;
     case RIPNG_TRIGGERED_UPDATE:
       if (ripng->t_triggered_interval)
@@ -1432,7 +1481,7 @@ struct message
 } ripng_route_info[] =
 {
   { RIPNG_ROUTE_RTE,       " "},
-  { RIPNG_ROUTE_STATIC,    "s"},
+  { RIPNG_ROUTE_STATIC,    "S"},
   { RIPNG_ROUTE_AGGREGATE, "a"}
 };
 
@@ -1474,41 +1523,72 @@ DEFUN (show_ipv6_ripng,
 {
   struct route_node *rp;
   struct ripng_info *rinfo;
+  struct ripng_aggregate *aggregate;
   struct prefix_ipv6 *p;
   int len;
 
   /* Header of display. */ 
   vty_out (vty, "\r\nCodes: R - RIPng\r\n\r\n"
-	   "  Network                             "
+	   "   Network                            "
 	   "Next Hop                Metric Tag Time\r\n");
   
   for (rp = route_top (ripng_table); rp; rp = route_next (rp))
-    if ((rinfo = rp->info) != NULL)
-      {
-	p = (struct prefix_ipv6 *) &rp->p;
+    {
+      if ((aggregate = rp->aggregate) != NULL)
+	{
+	  p = (struct prefix_ipv6 *) &rp->p;
 
-	len = vty_out (vty, "%s%s %s/%d ",
-		       route_info[rinfo->type].str,
-		       rinfo->type == ZEBRA_ROUTE_RIPNG ?
-		       ripng_route_info[rinfo->sub_type].str : " ",
-		       inet6_ntop (&p->prefix), p->prefixlen);
-	len = 38 - len;
-	if (len > 0)
-	  vty_out (vty, "%*s", len, " ");
+#ifdef DEBUG
+	  len = vty_out (vty, "Ra %d/%d %s/%d ",
+			 aggregate->count, aggregate->suppress,
+			 inet6_ntop (&p->prefix), p->prefixlen);
+#else
+	  len = vty_out (vty, "Ra %s/%d ", 
+			 inet6_ntop (&p->prefix), p->prefixlen);
+#endif /* DEBUG */
 
-	len = vty_out (vty, "%s", inet6_ntop (&rinfo->nexthop));
+	  len = 38 - len;
+	  if (len > 0)
+	    vty_out (vty, "%*s", len, " ");
 
-	len = 26 - len;
-	if (len > 0)
-	  vty_out (vty, "%*s", len, " ");
+	  vty_out (vty, "%*s", 26, " ");
+	  vty_out (vty, "%4d %3d\r\n", aggregate->metric, aggregate->tag);
+	}
 
-	vty_out (vty, "%4d %3d ", rinfo->metric, rinfo->tag);
+      if ((rinfo = rp->info) != NULL)
+	{
+	  p = (struct prefix_ipv6 *) &rp->p;
 
-	if (rinfo->sub_type == RIPNG_ROUTE_RTE)
-	  ripng_vty_out_uptime (vty, rinfo);
+#ifdef DEBUG
+	  len = vty_out (vty, "%s%s 0/%d %s/%d ",
+			 route_info[rinfo->type].str,
+			 rinfo->suppress ? "s" : " ",
+			 rinfo->suppress,
+			 inet6_ntop (&p->prefix), p->prefixlen);
+#else
+	  len = vty_out (vty, "%s%s %s/%d ",
+			 route_info[rinfo->type].str,
+			 rinfo->suppress ? "s" : " ",
+			 inet6_ntop (&p->prefix), p->prefixlen);
+#endif /* DEBUG */
+	  len = 38 - len;
+	  if (len > 0)
+	    vty_out (vty, "%*s", len, " ");
 
-	vty_out (vty, "\r\n");
-      }
+	  len = vty_out (vty, "%s", inet6_ntop (&rinfo->nexthop));
+
+	  len = 26 - len;
+	  if (len > 0)
+	    vty_out (vty, "%*s", len, " ");
+
+	  vty_out (vty, "%4d %3d ", rinfo->metric, rinfo->tag);
+
+	  if (rinfo->sub_type == RIPNG_ROUTE_RTE)
+	    ripng_vty_out_uptime (vty, rinfo);
+
+	  vty_out (vty, "\r\n");
+	}
+    }
 
   return CMD_SUCCESS;
 }
@@ -1603,18 +1683,16 @@ DEFUN (no_ripng_route,
   return CMD_SUCCESS;
 }
 
-DEFUN (ripng_aggregate,
-       ripng_aggregate_cmd,
-       "aggregate IPV6ADDR",
+DEFUN (ripng_aggregate_address,
+       ripng_aggregate_address_cmd,
+       "aggregate-address IPV6ADDR",
        "Set aggregate RIPng route announcement\n"
-       "IP address\n")
+       "Aggregate network\n")
 {
   int ret;
-  u_char metric;
   struct prefix p;
   struct route_node *node;
 
-  metric = 1;
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
   if (ret < 0)
     {
@@ -1622,25 +1700,27 @@ DEFUN (ripng_aggregate,
       return CMD_WARNING;
     }
 
-  node = route_node_get (ripng_table, &p);
-
-  /* Metric should be configurable. */
-  ret = ripng_aggregate_add (node, metric);
-  if (ret < 0)
+  /* Check aggregate alredy exist or not. */
+  node = route_node_get (ripng_aggregate, &p);
+  if (node->info)
     {
       vty_out (vty, "There is already same aggregate route.\r\n");
       route_unlock_node (node);
       return CMD_WARNING;
     }
+  node->info = (void *)1;
+
+  ripng_aggregate_add (&p);
+
   return CMD_SUCCESS;
 }
 
-DEFUN (no_ripng_aggregate,
-       no_ripng_aggregate_cmd,
-       "no aggregate IPV6ADDR",
+DEFUN (no_ripng_aggregate_address,
+       no_ripng_aggregate_address_cmd,
+       "no aggregate-address IPV6ADDR",
        NO_STR
        "Delete aggregate RIPng route announcement\n"
-       "IP address")
+       "Aggregate network")
 {
   int ret;
   struct prefix p;
@@ -1653,16 +1733,17 @@ DEFUN (no_ripng_aggregate,
       return CMD_WARNING;
     }
 
-  node = route_node_get (ripng_table, &p);
-
-  ret = ripng_aggregate_delete (node);
-  if (ret < 0)
+  node = route_node_lookup (ripng_aggregate, &p);
+  if (! node)
     {
       vty_out (vty, "Can't find aggregate route.\r\n");
-      route_unlock_node (node);
       return CMD_WARNING;
     }
   route_unlock_node (node);
+  node->info = NULL;
+  route_unlock_node (node);
+
+  ripng_aggregate_delete (&p);
 
   return CMD_SUCCESS;
 }
@@ -1720,7 +1801,19 @@ DEFUN (show_ipv6_protocols, show_ipv6_protocols_cmd,
        IP_STR
        "Routing protocol information")
 {
-  ;
+  if (! ripng)
+    return CMD_SUCCESS;
+
+  vty_out (vty, "Routing Protocol is \"ripng\"\r\n");
+  
+  vty_out (vty, "Sending updates every %d seconds, next due in %d seconds\r\n",
+	   ripng->update_time, 0);
+
+  vty_out (vty, "Timerout after %d seconds, garbage correct %d\r\n",
+	   ripng->timeout_time, ripng->garbage_time);
+
+  vty_out (vty, "Outgoing update filter list for all interfaces is not set");
+  vty_out (vty, "Incoming update filter list for all interfaces is not set");
 
   return CMD_SUCCESS;
 }
@@ -1759,13 +1852,6 @@ DEFUN (no_default_information_originate,
   return CMD_SUCCESS;
 }
 
-/* Dump aggregate RIPng routing setup to the vty. */
-void
-ripng_aggregate_dump (struct route_node *node, struct vty *vty)
-{
-  ;
-}
-
 /* RIPng configuration write function. */
 int
 ripng_config_write (struct vty *vty)
@@ -1788,11 +1874,12 @@ ripng_config_write (struct vty *vty)
 
       ripng_redistribute_write (vty);
       
-#if 0
       /* RIPng aggregate routes. */
-      for (node = route_top (ripng_table); node; node = route_next (node))
-	ripng_aggregate_dump (node, vty);
-#endif /* 0 */
+      for (rp = route_top (ripng_aggregate); rp; rp = route_next (rp))
+	if (rp->info != NULL)
+	  vty_out (vty, " aggregate-address %s/%d%s", 
+		   inet6_ntop (&rp->p.u.prefix6), rp->p.prefixlen, 
+		   VTY_NEWLINE);
 
       /* RIPng static routes. */
       for (rp = route_top (ripng_static); rp; rp = route_next (rp))
@@ -1823,6 +1910,7 @@ ripng_init ()
   /* RIPng routig table. */
   ripng_table = route_table_init ();
   ripng_static = route_table_init ();
+  ripng_aggregate = route_table_init ();
 
   /* Install RIPNG_NODE. */
   install_node (&cmd_ripng_node, ripng_config_write);
@@ -1837,8 +1925,8 @@ ripng_init ()
   install_default (RIPNG_NODE);
   install_element (RIPNG_NODE, &ripng_route_cmd);
   install_element (RIPNG_NODE, &no_ripng_route_cmd);
-  install_element (RIPNG_NODE, &ripng_aggregate_cmd);
-  install_element (RIPNG_NODE, &no_ripng_aggregate_cmd);
+  install_element (RIPNG_NODE, &ripng_aggregate_address_cmd);
+  install_element (RIPNG_NODE, &no_ripng_aggregate_address_cmd);
   install_element (RIPNG_NODE, &ripng_flush_timer_cmd);
   install_element (RIPNG_NODE, &default_information_originate_cmd);
   install_element (RIPNG_NODE, &no_default_information_originate_cmd);

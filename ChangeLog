@@ -1,3 +1,11 @@
+1999-08-02  Arkadiusz Mi¶kiewicz <misiek@misiek.eu.org>
+
+	* configure.in: Improve Linux IPv6 feature check.
+
+1999-07-29  Rick Payne <rickp@rossfell.co.uk>
+
+	* Changed route-maps to behave in a more cisco-like fashion
+
 1999-07-27  Gerhard Poul <gpoul@gnu.org>
 
 	* SERVICES: New file added.

@@ -134,10 +134,14 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
     return 0;
 
   /* Local preference check. */
-  if (new->attr->local_pref > exist->attr->local_pref)
-    return 1;
-  if (new->attr->local_pref < exist->attr->local_pref)
-    return 0;
+  if ((new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF)) &&
+      (exist->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF)))
+  {
+      if (new->attr->local_pref > exist->attr->local_pref)
+	return 1;
+      if (new->attr->local_pref < exist->attr->local_pref)
+	return 0;
+    }
 
   /* AS path length check. */
   if (new->attr->aspath->count < exist->attr->aspath->count)
@@ -145,10 +149,28 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (new->attr->aspath->count > exist->attr->aspath->count)
     return 0;
 
-  /* MED check. */
-  if (new->attr->med < exist->attr->med)
+  /* Origin check. */
+  if (new->attr->origin < exist->attr->origin)
     return 1;
-  if (new->attr->med > exist->attr->med)
+  if (new->attr->origin > exist->attr->origin)
+    return 0;
+
+  /* MED check. */
+  if ((new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC)) &&
+      (new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC)))
+    {
+      if (new->attr->med < exist->attr->med)
+	return 1;
+      if (new->attr->med > exist->attr->med)
+	return 0;
+    }
+
+  /* Peer type. */
+  if (bgp_peer_sort (new->peer) == BGP_PEER_EBGP &&
+      bgp_peer_sort (exist->peer) == BGP_PEER_IBGP)
+    return 1;
+  if (bgp_peer_sort (new->peer) == BGP_PEER_IBGP &&
+      bgp_peer_sort (exist->peer) == BGP_PEER_EBGP)
     return 0;
 
   return 1;
@@ -282,6 +304,7 @@ bgp_community_filter (struct peer *peer, struct bgp_info *info)
 void
 bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 {
+  route_map_result_t ret;
   struct attr attr;
   struct bgp_info bgp_info;
 
@@ -344,37 +367,44 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 
   /* When route is static then set nexthop to self. */
   if (peer->nexthop_self ||
+      bgp_peer_sort (peer) == BGP_PEER_EBGP ||
       info->type == ZEBRA_ROUTE_STATIC || 
       info->type == ZEBRA_ROUTE_CONNECT ||
       info->sub_type == BGP_ROUTE_STATIC || 
       info->sub_type == BGP_ROUTE_AGGREGATE)
     {
-      if (p->family == AF_INET && peer->su_local &&
-	  peer->su_local->sa.sa_family == AF_INET)
-	memcpy (&attr.nexthop, &peer->su_local->sin.sin_addr, 
-		IPV4_MAX_BYTELEN);
-#ifdef HAVE_IPV6
-      if (p->family == AF_INET6 && peer->su_local)
-	{
-	  if (peer->su_local->sa.sa_family == AF_INET)
-	    attr.nexthop = peer->su_local->sin.sin_addr;
+      memcpy (&attr.nexthop, &peer->nexthop.v4, IPV4_MAX_BYTELEN);
 
-	  if (peer->su_local->sa.sa_family == AF_INET6)
+#ifdef HAVE_IPV6
+      if (p->family == AF_INET6)
+	{
+	  memcpy (&attr.mp_nexthop_global, &peer->nexthop.v6_global, 
+		  IPV6_MAX_BYTELEN);
+	  if (attr.mp_nexthop_len < 16)
+	    attr.mp_nexthop_len = 16;
+
+	  if (!IN6_IS_ADDR_UNSPECIFIED (&peer->nexthop.v6_local))
 	    {
-	      if (! IN6_IS_ADDR_LINKLOCAL(&peer->su_local->sin6.sin6_addr))
-		{
-		  attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
-		  if (attr.mp_nexthop_len < 16)
-		    attr.mp_nexthop_len = 16;
-		}
-	      else
-		/* This is not RFC compliant. */
-		{
-		  attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
-		  if (attr.mp_nexthop_len < 16)
-		    attr.mp_nexthop_len = 16;
-		}
+	      memcpy (&attr.mp_nexthop_local, &peer->nexthop.v6_local, 
+		      IPV6_MAX_BYTELEN);
+	      if (attr.mp_nexthop_len < 32)
+		attr.mp_nexthop_len = 32;
 	    }
+	}
+#endif /* HAVE_IPV6 */
+    }
+  else
+    {
+#ifdef HAVE_IPV6
+      /* Link-local address should not be transit to different peer. */
+      attr.mp_nexthop_len = 16;
+
+      if (!IN6_IS_ADDR_UNSPECIFIED (&peer->nexthop.v6_local))
+	{
+	  memcpy (&attr.mp_nexthop_local, &peer->nexthop.v6_local, 
+		  IPV6_MAX_BYTELEN);
+	  if (attr.mp_nexthop_len < 32)
+	    attr.mp_nexthop_len = 32;
 	}
 #endif /* HAVE_IPV6 */
     }
@@ -402,10 +432,11 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
       bgp_info.attr = &attr;
       
       /* Apply route map to duplicated attribute. */
-      route_map_apply (ROUTE_MAP_OUT (peer), p, &bgp_info);
+      ret = route_map_apply (ROUTE_MAP_OUT (peer), p, &bgp_info);
 
-      /* Send packet to the peer. */
-      bgp_update_send (peer, p, &attr);
+      /* Send packet to the peer, only if it wasn't denied by the route-map. */
+      if(ret != RM_DENYMATCH)
+	bgp_update_send (peer, p, &attr);
 
       /* Free tempolary aspath. */
       if (attr.aspath)
@@ -491,7 +522,7 @@ nlri_withdraw (struct prefix *p, struct bgp_info *info)
 	bgp_withdraw_send (peer, p);
 
   /* Kernel routing update. */
-  if (info->type == ZEBRA_ROUTE_BGP)
+  if (info->type == ZEBRA_ROUTE_BGP && info->sub_type == BGP_ROUTE_NORMAL)
     bgp_zebra_withdraw (p, info);
 }
 
@@ -630,6 +661,7 @@ bgp_input_filter (struct prefix *p, struct peer *peer, struct attr *attr)
 struct attr *
 bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
 {
+  route_map_result_t ret;
   struct attr newattr;
   struct bgp_info bgp_info;
   struct aspath *aspath;
@@ -643,23 +675,29 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
     {
       newattr = *attr;
 
+      /* Duplicate AS path and community for modification. */
       if (attr->aspath)
-	{
-	  newattr.aspath = aspath_dup (attr->aspath);
-	  aspath_unintern (attr->aspath);
-	}
+	newattr.aspath = aspath_dup (attr->aspath);
+
       if (attr->community)
-	{
-	  newattr.community = community_dup (attr->community);
-	  community_unintern (attr->community);
-	}
+	newattr.community = community_dup (attr->community);
       
       /* Make routemap object. */
       bgp_info.peer = peer;
       bgp_info.attr = &newattr;
 
       /* Apply route map to duplicated attribute. */
-      route_map_apply (ROUTE_MAP_IN (peer), p, &bgp_info);
+      ret = route_map_apply (ROUTE_MAP_IN (peer), p, &bgp_info);
+
+      if (ret == RM_DENYMATCH)
+	{
+	  aspath_free (newattr.aspath);
+
+	  if (newattr.community)
+	    community_free (newattr.community);
+
+	  return NULL;
+	}
 
       /* To intern new attribute it's important to aspath points out
          real interned aspath structure. */
@@ -908,6 +946,10 @@ bgp_peer_delete (struct peer *peer)
 	if (br->peer == peer)
 	  {
 	    bgp_info_delete ((struct bgp_info **) &np->info, br);
+
+	    /* If withdraw or new announcement needed. */
+	    nlri_reselect (&np->p, (struct bgp_info *)np->info, br);
+
 	    bgp_info_free (br);
 	    route_unlock_node (np);
 	  }
@@ -988,6 +1030,73 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 
   vty_out (vty, "\r\n");
 }  
+
+#ifdef HAVE_IPV6      
+void
+route_vty_out_route_ipv6 (struct prefix *p, struct vty *vty)
+{
+  int len;
+  char buf[BUFSIZ];
+
+  len = vty_out (vty, "%s/%d", 
+		 inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+		 p->prefixlen);
+  len = 40 - len;
+  if (len < 0)
+    len = 0;
+  vty_out (vty, "%*s", len, " ");
+}
+
+
+/* called from terminal list command */
+void
+route_vty_out_ipv6 (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
+{
+  struct attr *attr;
+
+  /* Selected tag display. */
+  vty_out (vty, "%s%s ", binfo->selected ? "*" : " ", 
+	   binfo->suppress_count ? "s" : " ");
+
+  /* print prefix and mask */
+  route_vty_out_route_ipv6 (p, vty);
+
+  /* Print attribute */
+  attr = binfo->attr;
+
+  /* Local-pref */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
+    vty_out (vty, "%6lu", attr->local_pref);
+  else
+    vty_out (vty, "      ");
+
+  /* Weight */
+  vty_out (vty, "%6lu ",attr->weight);
+    
+  /* Print aspath */
+  if (attr->aspath)
+    aspath_print_vty (vty, attr->aspath);
+
+  /* Print origin */
+  vty_out (vty, " %s", bgp_origin_str[attr->origin]);
+
+  vty_out (vty, "\r\n");
+
+  if (attr) 
+    {
+      char buf[BUFSIZ];
+      char buf1[BUFSIZ];
+
+      if (attr->mp_nexthop_len == 16)
+	vty_out (vty, "     %s\r\n", 
+		 inet_ntop (AF_INET6, &attr->mp_nexthop_global, buf, BUFSIZ));
+      else if (attr->mp_nexthop_len == 32)
+	vty_out (vty, "     %s(%s)\r\n",
+		 inet_ntop (AF_INET6, &attr->mp_nexthop_global, buf, BUFSIZ),
+		 inet_ntop (AF_INET6, &attr->mp_nexthop_local, buf1, BUFSIZ));
+    }
+}  
+#endif /* HAVE_IPV6 */
 
 void
 route_vty_out_detail (struct vty *vty, struct prefix *p, 
@@ -1227,12 +1336,12 @@ DEFUN (show_ipv6_bgp,
   struct route_node *node;
   struct bgp_info *route;
   
-  vty_out (vty, "\r\nNetwork                  Next Hop       Metric    LocPrf Path\r\n");
+  vty_out (vty, "\r\n   Network                                LocPrf Weight Path\r\n");
 
   /* Start processing of routes. */
   for (node = route_top (bgp_table_ipv6); node; node = route_next (node)) 
     for (route = node->info; route; route = route->next)
-      route_vty_out (vty, &node->p, route);
+      route_vty_out_ipv6 (vty, &node->p, route);
 
   return CMD_SUCCESS;
 }
@@ -1320,7 +1429,7 @@ bgp_network_config_ipv6 (struct vty *vty, char *address_str)
   bgp_info->type = ZEBRA_ROUTE_BGP;
   bgp_info->sub_type = BGP_ROUTE_STATIC;
   bgp_info->peer = peer_self;
-  bgp_info->attr = bgp_attr_make_default ();
+  bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_IGP);
   node->info = bgp_info;
 
   nlri_process (&p, bgp_info);
@@ -1404,7 +1513,7 @@ DEFUN (bgp_network,
   bgp_info->type = ZEBRA_ROUTE_BGP;
   bgp_info->sub_type = BGP_ROUTE_STATIC;
   bgp_info->peer = peer_self;
-  bgp_info->attr = bgp_attr_make_default ();
+  bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_IGP);
   node->info = bgp_info;
 
   nlri_process (&p, bgp_info);
@@ -1493,7 +1602,7 @@ DEFUN (aggregate_address,
       bgp_info->type = ZEBRA_ROUTE_BGP;
       bgp_info->sub_type = BGP_ROUTE_AGGREGATE;
       bgp_info->peer = peer_self;
-      bgp_info->attr = bgp_attr_make_default ();
+      bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_INCOMPLETE);
 
       node->info = bgp_info;
 

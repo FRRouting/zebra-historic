@@ -165,6 +165,8 @@ peer_free (struct peer *peer)
     XFREE (MTYPE_TMP, peer->su);
   if (peer->su_local)
     XFREE (MTYPE_TMP, peer->su_local);
+  if (peer->su_remote)
+    XFREE (MTYPE_TMP, peer->su_remote);
   XFREE (MTYPE_BGP_PEER, peer);
 }
 
@@ -589,6 +591,7 @@ DEFUN (show_ip_bgp_neighbors,
 {
   struct peer *p;
   listnode node;
+  char buf[BUFSIZ];
 
   vty_out (vty, "Neighbor        V     AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down.\r\n");
 
@@ -615,6 +618,11 @@ DEFUN (show_ip_bgp_neighbors,
 
       peer_uptime_vty (vty, p);
 
+      /* Description. */
+      if (p->desc)
+	  vty_out (vty, "\r\n  Description: %s", p->desc);
+
+      /* Remote router ID */
       {
 	struct in_addr bgp_ident;
 	bgp_ident.s_addr = p->ident;
@@ -622,13 +630,32 @@ DEFUN (show_ip_bgp_neighbors,
 		 inet_ntoa (bgp_ident));
       }
 
+      /* Local address. */
       vty_out (vty, "  Local address: ");
-
       if (p->su_local)
 	sockunion_vty_out (vty, p->su_local);
       else
 	vty_out (vty, "None");
+
+      /* Remote address. */
+      vty_out (vty, "  Remote address: ");
+      if (p->su_remote)
+	sockunion_vty_out (vty, p->su_remote);
+      else
+	vty_out (vty, "None");
       vty_out (vty, "\r\n");
+
+      /* Nexthop display. */
+      if (p->su_local)
+	{
+	  vty_out (vty, "  Nexthop: %s\r\n", inet_ntoa (p->nexthop.v4));
+#ifdef HAVE_IPV6
+	  vty_out (vty, "  Nexthop global: %s", 
+		   inet_ntop (AF_INET6, &p->nexthop.v6_global, buf, BUFSIZ));
+	  vty_out (vty, "  Nexthop local: %s\r\n",
+		   inet_ntop (AF_INET6, &p->nexthop.v6_local, buf, BUFSIZ));
+#endif /* HAVE_IPV6 */
+	}
 
       vty_out (vty,
 	       "  Status: %-12s keepalive: %d holdtime: %d"

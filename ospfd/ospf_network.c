@@ -156,7 +156,7 @@ int
 ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
 {
   struct ospf_interface *oi;
-  int ret, sock;
+  int ret, sock, tos;
 
   oi = ifp->if_data;
 
@@ -175,6 +175,15 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
   ret = sockopt_ttl (AF_INET, sock, OSPF_IP_TTL);
   if (ret < 0)
     return ret;
+
+  /* Set precedence field. */
+  tos = IPTOS_PREC_INTERNETCONTROL;
+  ret = setsockopt (sock, IPPROTO_IP, IP_TOS, (char *) &tos, sizeof (int));
+  if (ret < 0)
+    {
+      zlog_warn ("can't set sockopt IP_TOS %d to socket %d", tos, sock);
+      return ret;
+    }
 
   /* Point-to-Point and Broadcast Network should be joined to
      ALLSPFROUTERS multicast group. */

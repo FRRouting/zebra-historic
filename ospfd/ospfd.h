@@ -174,8 +174,10 @@ typedef struct message
 /* Messages */
 extern message ospf_ism_status_msg[];
 extern message ospf_nsm_status_msg[];
+extern message ospf_lsa_type_msg[];
 extern int ospf_ism_status_msg_max;
 extern int ospf_nsm_status_msg_max;
+extern int ospf_lsa_type_msg_max;
 
 extern char *progname;
 

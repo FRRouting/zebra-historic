@@ -92,7 +92,7 @@ int buffer_putc (struct buffer *, u_char);
 int buffer_putstr (struct buffer *, u_char *);
 void buffer_reset (struct buffer *);
 int buffer_flush_all (struct buffer *, int);
-int buffer_flush_window (struct buffer *, int, int, int, int);
+int buffer_flush_window (struct buffer *, int, int, int, int, int);
 int buffer_empty (struct buffer *);
 
 #endif /* _ZEBRA_BUFFER_H */

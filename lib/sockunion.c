@@ -147,6 +147,9 @@ sockunion_str2su (char *str)
   if (ret > 0)			/* Valid IPv4 address format. */
     {
       su->sin.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+      su->sin.sin_len = sizeof(struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
       return su;
     }
 #ifdef HAVE_IPV6
@@ -154,6 +157,9 @@ sockunion_str2su (char *str)
   if (ret > 0)			/* Valid IPv6 address format. */
     {
       su->sin6.sin6_family = AF_INET6;
+#ifdef SIN6_LEN
+      su->sin6.sin6_len = sizeof(struct sockaddr_in6);
+#endif /* SIN6_LEN */
       return su;
     }
 #endif /* HAVE_IPV6 */
@@ -277,19 +283,29 @@ sockunion_log (union sockunion *su)
    0 : connect success
    1 : connect is in progress */
 enum connect_result
-sockunion_connect (int fd, union sockunion *su, unsigned short port)
+sockunion_connect (int fd, union sockunion *peersu, unsigned short port,
+		   unsigned int ifindex)
 {
   int ret;
   int val;
-  
-  switch (su->sa.sa_family)
+  union sockunion su;
+
+  memcpy (&su, peersu, sizeof (union sockunion));
+
+  switch (su.sa.sa_family)
     {
     case AF_INET:
-      su->sin.sin_port = port;
+      su.sin.sin_port = port;
       break;
 #ifdef HAVE_IPV6
     case AF_INET6:
-      su->sin6.sin6_port  = port;
+      su.sin6.sin6_port  = port;
+#ifdef KAME
+      if (IN6_IS_ADDR_LINKLOCAL(&su.sin6.sin6_addr) && ifindex)
+	{
+	  SET_IN6_LINKLOCAL_IFINDEX (su.sin6.sin6_addr, ifindex);
+	}
+#endif /* KAME */
       break;
 #endif /* HAVE_IPV6 */
     }      
@@ -299,7 +315,7 @@ sockunion_connect (int fd, union sockunion *su, unsigned short port)
   fcntl (fd, F_SETFL, val|O_NONBLOCK);
 
   /* Call connect function. */
-  ret = connect (fd, (struct sockaddr *) su, sockunion_sizeof (su));
+  ret = connect (fd, (struct sockaddr *) &su, sockunion_sizeof (&su));
 
   /* Immediate success */
   if (ret == 0)
@@ -313,8 +329,8 @@ sockunion_connect (int fd, union sockunion *su, unsigned short port)
     {
       if (errno != EINPROGRESS)
 	{
-	  zlog (NULL, LOG_INFO, "can't connect to %s fd %d : %s",
-		  sockunion_log (su), fd, strerror (errno));
+	  zlog_info ("can't connect to %s fd %d : %s",
+		     sockunion_log (&su), fd, strerror (errno));
 	  return connect_error;
 	}
     }
@@ -512,6 +528,59 @@ sockunion_getsockname (int fd)
   if (ret < 0)
     {
       zlog (NULL, LOG_WARNING, "Can't get local address and port: %s",
+	    strerror (errno));
+      return NULL;
+    }
+
+  if (name.sa.sa_family == AF_INET)
+    {
+      su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
+      memcpy (su, &name, sizeof (struct sockaddr_in));
+      return su;
+    }
+#ifdef HAVE_IPV6
+  if (name.sa.sa_family == AF_INET6)
+    {
+      su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
+      memcpy (su, &name, sizeof (struct sockaddr_in6));
+
+      if (IN6_IS_ADDR_V4MAPPED (&su->sin6.sin6_addr))
+	{
+	  struct sockaddr_in sin;
+
+	  sin.sin_family = AF_INET;
+	  memcpy (&sin.sin_addr, ((char *)&su->sin6.sin6_addr) + 12, 4);
+	  memcpy (su, &sin, sizeof (struct sockaddr_in));
+	}
+      return su;
+    }
+#endif /* HAVE_IPV6 */
+  return NULL;
+}
+
+/* After TCP connection is established.  Get remote address and port. */
+union sockunion *
+sockunion_getpeername (int fd)
+{
+  int ret;
+  int len;
+  union
+  {
+    struct sockaddr sa;
+    struct sockaddr_in sin;
+#ifdef HAVE_IPV6
+    struct sockaddr_in6 sin6;
+#endif /* HAVE_IPV6 */
+    char temporary_buffer[128];
+  } name;
+  union sockunion *su;
+
+  memset (&name, 0, sizeof name);
+  len = sizeof name;
+  ret = getpeername (fd, (struct sockaddr *)&name, &len);
+  if (ret < 0)
+    {
+      zlog (NULL, LOG_WARNING, "Can't get remote address and port: %s",
 	    strerror (errno));
       return NULL;
     }

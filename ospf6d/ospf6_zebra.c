@@ -130,7 +130,7 @@ ospf6_zebra_add (struct ospf6_rtentry *p)
   for (n = listhead (p->nexthops); n; nextnode (n))
     {
       q = getdata (n);
-      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, &p->dest_id.prefix,
+      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, &p->dest_id.prefix,
                       &q->ipaddr, q->ifindex);
       prefix2str ((struct prefix *)&p->dest_id.prefix, buf, sizeof (buf));
       o6log.zebra ("zebra add %s", buf);
@@ -156,7 +156,7 @@ ospf6_zebra_delete (struct ospf6_rtentry *p)
   for (n = listhead (p->nexthops); n; nextnode (n))
     {
       q = getdata (n);
-      zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_OSPF6, &p->dest_id.prefix,
+      zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, &p->dest_id.prefix,
                          &q->ipaddr, q->ifindex);
       prefix2str ((struct prefix *)&p->dest_id.prefix, buf, sizeof (buf));
       o6log.zebra ("zebra delete %s", buf);

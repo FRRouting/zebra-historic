@@ -30,6 +30,7 @@
 #include "thread.h"
 #include "log.h"
 #include "stream.h"
+#include "memory.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -271,6 +272,18 @@ bgp_stop (struct peer *peer)
     {
       close (peer->fd);
       peer->fd = -1;
+    }
+
+  if (peer->su_local)
+    {
+      XFREE (MTYPE_TMP, peer->su_local);
+      peer->su_local = NULL;
+    }
+
+  if (peer->su_remote)
+    {
+      XFREE (MTYPE_TMP, peer->su_remote);
+      peer->su_remote = NULL;
     }
 }
 

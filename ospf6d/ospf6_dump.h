@@ -57,6 +57,7 @@ extern char   *rlsatype_name[];
 
 /* Function Prototypes */
 char *print_lsahdr (struct ospf6_lsa_hdr *);
+char *print_lsreq (struct linkstate_request *);
 void ospf6_log_init ();
 char *inet4str(unsigned long);
 void log_pointer (const char *, ...);

@@ -55,6 +55,17 @@ struct bgp
   struct _list *peer;		/* BGP neighbor list */
 };
 
+/* Next hop self address. */
+struct bgp_nexthop
+{
+  struct interface *ifp;
+  struct in_addr v4;
+#ifdef HAVE_IPV6
+  struct in6_addr v6_global;
+  struct in6_addr v6_local;
+#endif /* HAVE_IPV6 */  
+};
+
 /* BGP neighbor structure. */
 struct peer
 {
@@ -69,9 +80,11 @@ struct peer
   char *host;			/* Printable address of the peer. */
   union sockunion *su;		/* Sockunion address of the peer. */
   union sockunion *su_local;	/* Sockunion of local address.  */
+  union sockunion *su_remote;	/* Sockunion of remote address.  */
   int fd;			/* File descriptor */
   int ttl;			/* TTL of TCP connection to the peer. */
   char *desc;			/* Description of the peer. */
+  struct bgp_nexthop nexthop;	/* Nexthop */
   int nexthop_self;		/* Nexthop self. */
   int shutdown;			/* Shutdown flag. */
   int passive;			/* Passive flag. */
@@ -371,6 +384,9 @@ void bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify);
 
 void bgp_zebra_redistribute (int);
 void bgp_zebra_no_redistribute (int);
+int
+bgp_nexthop_set (union sockunion *, union sockunion *, 
+		 struct bgp_nexthop *, struct peer *);
 
 extern struct thread_master *master;
 

@@ -64,9 +64,12 @@ bgp_bind_address (int sock, struct in_addr *addr)
 
   memset (&local, 0, sizeof (struct sockaddr_in));
   local.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+  local.sin_len = sizeof(struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
   memcpy (&local.sin_addr, addr, sizeof (struct in_addr));
 
-  ret = bind (sock, &local, sizeof (struct sockaddr_in));
+  ret = bind (sock, (struct sockaddr *)&local, sizeof (struct sockaddr_in));
   if (ret < 0)
     ;
   return 0;
@@ -124,6 +127,7 @@ bgp_connect (struct peer *peer)
 {
   struct servent *sp;
   unsigned short port;
+  unsigned int ifindex = 0;
 
   /* Make socket for the peer. */
   peer->fd = sockunion_socket (peer->su);
@@ -150,8 +154,13 @@ bgp_connect (struct peer *peer)
   else
     port = htons (BGP_PORT_DEFAULT);
 
+#ifdef HAVE_IPV6
+  if (peer->ifname)
+    ifindex = if_nametoindex (peer->ifname);
+#endif /* HAVE_IPV6 */
+
   /* Connect to the remote peer. */
-  return sockunion_connect (peer->fd, peer->su, port);
+  return sockunion_connect (peer->fd, peer->su, port, ifindex);
 }
 
 /* Accept bgp connection. */
@@ -310,6 +319,19 @@ void
 bgp_getsockname (struct peer *peer)
 {
   if (peer->su_local)
-    XFREE (MTYPE_TMP, peer->su_local);
+    {
+      XFREE (MTYPE_TMP, peer->su_local);
+      peer->su_local = NULL;
+    }
+
+  if (peer->su_remote)
+    {
+      XFREE (MTYPE_TMP, peer->su_remote);
+      peer->su_remote = NULL;
+    }
+
   peer->su_local = sockunion_getsockname (peer->fd);
+  peer->su_remote = sockunion_getpeername (peer->fd);
+
+  bgp_nexthop_set (peer->su_local, peer->su_remote, &peer->nexthop, peer);
 }

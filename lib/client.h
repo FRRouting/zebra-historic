@@ -43,10 +43,10 @@ zebra_ipv4_delete (int sock, int type, int flags, struct prefix_ipv4 *p,
 #ifdef HAVE_IPV6
 /* IPv6 prefix add and delete function prototype. */
 int
-zebra_ipv6_add (int sock, int type, struct prefix_ipv6 *p,
+zebra_ipv6_add (int sock, int type, int flags, struct prefix_ipv6 *p,
 		struct in6_addr *nexthop, unsigned int ifindex);
 int
-zebra_ipv6_delete (int sock, int type, struct prefix_ipv6 *p,
+zebra_ipv6_delete (int sock, int type, int flags, struct prefix_ipv6 *p,
 		   struct in6_addr *nexthop, unsigned int ifindex);
 #endif /* HAVE_IPV6 */
 

@@ -93,7 +93,6 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
 int
 check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
 {
-  int i;
   struct ospf6_lsa *have, *received;
   struct ospf6_lsa_hdr *lsh;
   void *scope;
@@ -103,9 +102,9 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
   o6log.dbex ("check DD from %s", nbr->str);
 
   /* for each LSA listed in DD */
-  for (i = 0; iov[i].iov_base; i++)
+  while (iov_count (iov))
     {
-      lsh = (struct ospf6_lsa_hdr *)iov[i].iov_base;
+      lsh = ospf6_message_get_lsa_hdr (iov);
       o6log.dbex ("checking %s", print_lsahdr (lsh));
 
       /* make lsa structure for this LSA */
@@ -236,9 +235,11 @@ delayed_acknowledge (struct ospf6_lsa *lsa)
   ospf6_add_delayed_ack (lsa, o6if);
 
   /* if not yet, schedule delayed acknowledge RxmtInterval later */
+    /* timers should be *less than* RxmtInterval
+       or needless retrans will ensue */
   if (o6if->send_ack == (struct thread *)NULL)
     o6if->send_ack = thread_add_timer (master, send_linkstate_ack,
-                                        o6if, o6if->rxmt_interval);
+                                        o6if, o6if->rxmt_interval - 1);
 
   return;
 }

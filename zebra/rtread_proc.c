@@ -70,6 +70,7 @@ proc_route_read ()
       struct prefix_ipv4 p;
       struct in_addr tmpmask;
       struct in_addr gateway;
+      u_char zebra_flags = 0;
 
       n = sscanf (buf, "%s %s %s %x %d %d %d %s %d %d %d",
 		  iface, dest, gate, &flags, &refcnt, &use, &metric, 
@@ -84,13 +85,16 @@ proc_route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
+      if (flags & RTF_DYNAMIC)
+	zebra_flags |= ZEBRA_FLAGS_ZEBRA;
+
       p.family = AF_INET;
       sscanf (dest, "%lX", (unsigned long *)&p.prefix);
       sscanf (mask, "%lX", (unsigned long *)&tmpmask);
       p.prefixlen = ip_masklen (tmpmask);
       sscanf (gate, "%lX", (unsigned long *)&gateway);
 
-      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, &gateway, 0, 0);
+      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, zebra_flags, &p, &gateway, 0, 0);
     }
 
   return 0;
@@ -123,6 +127,7 @@ proc_ipv6_route_read ()
       int metric, use, refcnt, flags;
       struct prefix_ipv6 p;
       struct in6_addr gateway;
+      u_char zebra_flags = 0;
 
       /* Linux 2.1.x write this information at net/ipv6/route.c
          rt6_info_node () */
@@ -141,12 +146,15 @@ proc_ipv6_route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
+      if (flags & RTF_DYNAMIC)
+	zebra_flags |= ZEBRA_FLAGS_ZEBRA;
+
       p.family = AF_INET6;
       str2in6_addr (dest, &p.prefix);
       str2in6_addr (gate, &gateway);
       p.prefixlen = dest_plen;
 
-      rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0, 0);
+      rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, zebra_flags, &p, &gateway, 0, 0);
     }
 
   return 0;
