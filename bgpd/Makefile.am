@@ -27,3 +27,6 @@ install-sysconfDATA: $(sysconf_DATA)
 	    $(INSTALL_SDATA) $$p $(DESTDIR)$(sysconfdir)/$$p; \
 	  fi; fi; \
 	done
+
+#depend:
+#        $(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c | sed -e 's/\.\./$$\(srcdir\)/g'

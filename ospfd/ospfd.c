@@ -27,6 +27,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "prefix.h"
 #include "table.h"
 #include "if.h"
+#include "memory.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
@@ -83,13 +84,19 @@ ospf_area_new (int format, struct in_addr area_id)
   struct area *new;
 
   /* Allocate new config_network. */
-  new = (struct area *) malloc (sizeof (struct area));
+  new = XMALLOC (MTYPE_OSPF_AREA, sizeof (struct area));
   bzero (new, sizeof (struct area));
 
   new->area_id_format = format;
   new->area_id = area_id;
 
   return new;
+}
+
+void
+ospf_area_free (struct area *area)
+{
+  XFREE (MTYPE_OSPF_AREA, area);
 }
 
 
@@ -227,7 +234,6 @@ DEFUN (network_area,
       route_unlock_node (route_node);
       return CMD_WARNING;
     }
-
   route_node->info = area;
 
   /* get target interface. */
@@ -245,6 +251,8 @@ DEFUN (network_area,
       for (cn = listhead (ifp->connected); cn; nextnode (cn))
 	{
 	  struct connected *co;
+	  struct sockaddr_in sa;
+	  struct in_addr addr;
 	  int sock;
 
 	  co = getdata (cn);
@@ -258,9 +266,23 @@ DEFUN (network_area,
 			"interface %s can't create raw socket", ifp->name);
 		  continue;
 		}
-       
+
 	      /* join mcast group. */
 	      ospf_if_add_allspfrouters (sock, co->address);
+
+	      /* */
+	      bzero ((char *) &sa, sizeof (sa));
+	      inet_aton (OSPF_ALLSPFROUTERS, &addr);
+	      sa.sin_family = AF_INET;
+	      sa.sin_addr = addr;
+	      sa.sin_port = htons (0);
+	      if (bind (sock, (struct sockaddr *) &sa, sizeof (sa)) < 0)
+		{
+		  zlog (NULL, LOG_WARNING,
+			"interface %s can't bind socket", ifp->name);
+		  continue;
+		}
+
 	      /* create input/output buffer stream. */
 	      ospf_if_stream_set (sock, ifp->if_data);
 
@@ -273,15 +295,57 @@ DEFUN (network_area,
 
 DEFUN (no_network_area,
        no_network_area_cmd,
-       "no network IPV4_NETWORK IPV4_WILDCARD area AREA_ID",
+       "no network IPV4_PREFIX area AREA_ID",
        NO_STR
        "Enable routing on an IP network\n"
-       "Network Number\n"
-       "OSPF wild card bits\n"
+       "OSPF network prefix\n"
        "Set the OSPF area ID\n"
        "OSPF Area ID\n")
 {
-  
+  int ret;
+  struct ospf *ospf;
+  struct prefix_ipv4 p;
+  struct in_addr area_id;
+  u_int32_t area_id_dec;
+  struct route_node *np;
+
+  ospf = (struct ospf *) vty->index;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
+
+  if (strchr (argv[1], '.') != NULL)
+    {
+      ret = inet_aton (argv[1], &area_id);
+      if (!ret)
+	{
+	  vty_out (vty, "OSPF Area ID is invalid\r\n");
+	  return CMD_WARNING;
+	}
+    }
+  else
+    {
+      area_id_dec = strtol (argv[1], NULL, 10);
+      area_id.s_addr = htonl (area_id_dec);
+    }
+
+  apply_mask (&p);
+
+  np = route_node_get (ospf->network_area, (struct prefix *) &p);
+  if (!np->info)
+    {
+      vty_out (vty, "Can't find specified network area configuration.\r\n");
+      route_unlock_node (np);
+      return CMD_WARNING;
+    }
+
+  ospf_area_free (np->info);
+  np->info = NULL;
+  route_unlock_node (np);
 
   return CMD_SUCCESS;
 }

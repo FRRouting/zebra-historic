@@ -21,7 +21,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPF_PACKET_H
 #define _ZEBRA_OSPF_PACKET_H
 
-#define OSPF_HEADER_SIZE         20
+#define OSPF_HEADER_SIZE         24
 #define OSPF_AUTH_SIZE	          8
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
 

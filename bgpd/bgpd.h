@@ -55,10 +55,14 @@ struct peer
   struct stream_fifo *obuf;
 
   /* Peer information */
-  char *host;			/* Printable address of this peer. */
-  union sockunion *su;		/* Sockunion address of this peer. */
+  char *host;			/* Printable address of the peer. */
+  union sockunion *su;		/* Sockunion address of the peer. */
+  union sockunion *su_local;	/* Sockunion of local address.  */
   int fd;			/* File descriptor */
-  int ttl;			/* TTL of TCP connection to this peer. */
+  int ttl;			/* TTL of TCP connection to the peer. */
+  char *desc;			/* Description of the peer. */
+  int shutdown;			/* Shutdown flag. */
+  char *ifname;			/* bind interface name. */
   ZLOG *log;			/* ZLOG stream to use for this peer -
 				   NULL means use main log */
 
@@ -304,7 +308,8 @@ enum
 enum
 {
   BGP_PEER_IBGP,
-  BGP_PEER_EBGP
+  BGP_PEER_EBGP,
+  BGP_PEER_INTERNAL
 };
 
 #define PACKET_SEND 1

@@ -86,6 +86,7 @@ const char *inet_sutop (union sockunion *su, char *str);
 char *sockunion_log (union sockunion *su);
 enum connect_result
 sockunion_connect (int fd, union sockunion *su, unsigned short port);
+union sockunion *sockunion_getsockname (int);
 
 #ifndef HAVE_INET_NTOP
 const char *

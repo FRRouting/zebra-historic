@@ -1,7 +1,52 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
-Changes from previous snapshot
+* Changes in zebra-19990327 snapshot
+
+* Changes in bgp
+
+** When BGP-4+ connection is done by IPv6 link-local address.  One
+have to specify interface index for the connection.  So I've added
+interface statement to the neighbor commmand.  Please specify
+interface name for getting interface index like below.  This statement
+only works on GNU/Linux.  I'll support BSD ASAP.
+
+router bgp 7675
+ neighbor fe80::200:f8ff:fe01:5fd3 remote-as 2500
+ neighbor fe80::200:f8ff:fe01:5fd3 interface sit3
+
+** For disable BGP peering `shutdown' command is added.
+
+router bgp 7675
+ neighbor 10.0.0.1 shutdown
+
+** `description' command is added to neighbor statement.
+
+router bgp 7675
+ neighbor 10.0.0.1 description peering with Norway.
+
+** `show ip bgp regexp AS-REGEXP' works again.
+
+show ip bgp regexp AS7675
+
+will show routes which include AS7675.
+
+** When a route which is made from `network' statement is send to
+neighbor.  Set it's nexthop to self.  So 10.0.0.0/8 is announced to
+the peer A with source address 192.168.1.1.  The routes nexthop is set
+to 192.168.1.1.
+
+* Changes in zebra
+
+** In zebra/rtread_sysctl.c, function rtm_read() may overrun allocated
+buffer when the address family is not supported and the length is big
+(i.e link address).  Reported Achim Patzner <ap@bnc.net>.
+
+* Changes in ospfd
+
+** Now ospfd receive OSPF packet.
 
+* Changes in zebra-19990319 snapshot
+
 * Changes in configuration and libraries
 
 ** User can disable IPv6 feature and/or pthread feature by configure

@@ -1,8 +1,6 @@
 /*
- * $Id: ripng_main.c,v 1.32 1999/02/23 22:26:21 developer Exp $
- *
  * RIPngd main routine.
- * Copyright (C) 1998 Kunihiro Ishiguro
+ * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -47,12 +45,16 @@ struct option longopts[] =
   { "log_mode",    no_argument,       NULL, 'l'},
   { "help",        no_argument,       NULL, 'h'},
   { "vty_port",    required_argument, NULL, 'P'},
+  { "retain",      no_argument,       NULL, 'r'},
   { "version",     no_argument,       NULL, 'v'},
   { 0 }
 };
 
 /* RIPngd program name */
 char *progname;
+
+/* Route retain mode flag. */
+int retain_mode = 0;
 
 /* Master of threads. */
 struct thread_master *master;
@@ -71,6 +73,7 @@ Daemon which manages RIPng.\n\n\
 -f, --config_file  Set configuration file name\n\
 -l. --log_mode     Set verbose log mode flag\n\
 -P, --vty_port     Set vty's port number\n\
+-r, --retain       When program terminates, retain added route by ripngd.\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
@@ -119,6 +122,9 @@ main (int argc, char **argv)
 	  break;
 	case 'P':
 	  vty_port = atoi (optarg);
+	  break;
+	case 'r':
+	  retain_mode = 1;
 	  break;
 	case 'v':
 	  print_version ();

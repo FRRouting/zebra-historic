@@ -101,6 +101,17 @@ ospf_ls_ack_send ()
 }
 
 int
+ospf_recv_packet (struct ospf_interface *oi)
+{
+  int ret;
+
+  ret = recvfrom (oi->fd, STREAM_DATA (oi->ibuf), STREAM_SIZE (oi->ibuf),
+		  0, NULL, 0);
+
+  return ret;
+}
+
+int
 ospf_read_packet (struct ospf_interface *oi, int size)
 {
   int nbytes;
@@ -146,13 +157,13 @@ ospf_read_packet (struct ospf_interface *oi, int size)
 int
 ospf_check_auth (u_char type, u_char *auth_data)
 {
-  return 0;
+  return 1;
 }
 
 int
 ospf_check_sum (struct ospf_interface *oi, u_int16_t check_sum)
 {
-  return 0;
+  return 1;
 }
 
 /* Starting point of packet process function. */
@@ -161,6 +172,8 @@ ospf_read (struct thread *thread)
 {
   int ret;
   struct ospf_interface *oi;
+  struct ip *iph;
+  struct ospf_header *ospfh;
   u_char version, type;
   u_int16_t length, check_sum, auth_type; 
   struct in_addr router_id, area_id;
@@ -172,12 +185,23 @@ ospf_read (struct thread *thread)
 
   /* Clear input buffer. */
   stream_reset (oi->ibuf);
+  iph = (struct ip *) STREAM_DATA (oi->ibuf);
 
-  /* read packet header to determin type of packet. */
-  ret = ospf_read_packet (oi, OSPF_HEADER_SIZE);
-
+  /* read OSPF packet. */
+  ret = ospf_recv_packet (oi);
   if (ret < 0)
     return ret;
+
+  /* check packet size. if packet size is larger than interface MTU,
+     then allocate new buffer. */
+  if (ntohs (iph->ip_len) > oi->ifp->mtu)
+    {
+      oi->lbuf = stream_new (OSPF_MAX_PACKET_SIZE);
+    }
+
+  stream_forward (oi->ibuf, iph->ip_hl * 4);
+
+  ospfh = (struct ospf_header *) STREAM_PNT (oi->ibuf);
 
   /* get header information. */
   version = stream_getc (oi->ibuf);
@@ -212,10 +236,6 @@ ospf_read (struct thread *thread)
   /* Adjust size to message length. */
   length -= OSPF_HEADER_SIZE;
 
-  ret = ospf_read_packet (oi, length);
-  if (ret < 0)
-    return ret;
-
   /* if check sum is invalid, packet is discarded. */
   if (! ospf_check_sum (oi, check_sum))
     {
@@ -224,6 +244,29 @@ ospf_read (struct thread *thread)
 	    oi->ifp->name);
       return -1;
     }
+
+  /* IP Packet dump */
+#define DEBUG
+#ifdef DEBUG
+  zlog (NULL, LOG_INFO, "packet length %d", ret);
+  zlog (NULL, LOG_INFO, "ip_v=%d", iph->ip_v);
+  zlog (NULL, LOG_INFO, "ip_hl=%d", iph->ip_hl);
+  zlog (NULL, LOG_INFO, "ip_tos=%d", iph->ip_tos);
+  zlog (NULL, LOG_INFO, "ip_len=%d", ntohs (iph->ip_len));
+  zlog (NULL, LOG_INFO, "ip_id=%u", (u_int32_t) iph->ip_id);
+  zlog (NULL, LOG_INFO, "ip_off=%u", (u_int32_t) iph->ip_off);
+  zlog (NULL, LOG_INFO, "ip_ttl=%d", iph->ip_ttl);
+  zlog (NULL, LOG_INFO, "ip_p=%d", iph->ip_p);
+  zlog (NULL, LOG_INFO, "ip_sum=%u", (u_int32_t) iph->ip_sum);
+  zlog (NULL, LOG_INFO, "ip_src=%s",  inet_ntoa (iph->ip_src));
+  zlog (NULL, LOG_INFO, "ip_dst=%s", inet_ntoa (iph->ip_dst));
+  zlog (NULL, LOG_INFO, "ospf version %d", ospfh->version);
+  zlog (NULL, LOG_INFO, "ospf type %d", ospfh->type);
+  zlog (NULL, LOG_INFO, "ospf packet len %d", ntohs (ospfh->length));
+  zlog (NULL, LOG_INFO, "ospf router id %s", inet_ntoa (ospfh->router_id));
+  zlog (NULL, LOG_INFO, "ospf area id %s", inet_ntoa (ospfh->area_id));
+#endif /* DEBUG */
+
 
   /* ospf_packet_dump (oi->ibuf); */
 

@@ -1,3 +1,7 @@
+1999-03-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c: Add ospf_recv_packet ().  Now OSPF Hello can receive.
+
 1999-03-19  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_packet.c: New file.

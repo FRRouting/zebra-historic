@@ -1,3 +1,8 @@
+1999-03-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rtread_sysctl.c (rtm_read): Fix address memcopy overrun bug.
+	Reported by Achim Patzner <ap@bnc.net>.
+
 1999-03-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am: Install configuration sample with 600 permission.

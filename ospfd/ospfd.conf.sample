@@ -9,7 +9,7 @@ password zebra
 !
 router zebra
 !
-!router ospf
+!router ospf 100
 !  network 192.168.1.0/24 area 0
 !
 log stdout

@@ -288,6 +288,7 @@ void
 bgp_connect_success (struct peer *peer)
 {
   BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
+  bgp_getsockname (peer);
   bgp_open_send (peer);
 }
 
@@ -432,7 +433,7 @@ struct {
     {bgp_start, Idle},		/* TCP_connection_open          */
     {bgp_stop, Idle},		/* TCP_connection_closed        */
     {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_ignore, Idle},		/* TCP_fatal_error              */
+    {bgp_stop, Idle},		/* TCP_fatal_error              */
     {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
     {bgp_ignore, Idle},		/* Hold_Timer_expired           */
     {bgp_ignore, Idle},		/* KeepAlive_timer_expired      */
@@ -480,7 +481,7 @@ struct {
     {bgp_ignore, Idle},		/* TCP_connection_open          */
     {bgp_stop,   Active},	/* TCP_connection_closed        */
     {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_ignore, Idle},		/* TCP_fatal_error              */
+    {bgp_stop, Idle},		/* TCP_fatal_error              */
     {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
     {fsm_holdtime, Idle},	/* Hold_Timer_expired           */
     {bgp_ignore, Idle},		/* KeepAlive_timer_expired      */
@@ -496,7 +497,7 @@ struct {
     {bgp_ignore, Idle},		/* TCP_connection_open          */
     {bgp_stop, Idle},		/* TCP_connection_closed        */
     {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_ignore, Idle},		/* TCP_fatal_error              */
+    {bgp_stop, Idle},		/* TCP_fatal_error              */
     {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
     {fsm_holdtime, Idle},	/* Hold_Timer_expired           */
     {bgp_ignore, OpenConfirm},	/* KeepAlive_timer_expired      */

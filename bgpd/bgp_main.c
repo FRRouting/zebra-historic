@@ -1,8 +1,6 @@
 /*
- * $Id: bgp_main.c,v 1.65 1999/02/23 23:16:06 developer Exp $
- *
  * Main routine of bgpd.
- * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+ * Copyright (C) 1996, 97, 98, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -158,7 +156,7 @@ main (int argc, char **argv)
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_BGP,
+  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_BGP,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   /* Command line argument treatment. */
@@ -223,12 +221,6 @@ main (int argc, char **argv)
   /* pid file create */
   pid_output (PATH_BGPD_PID);
 
-#if 0
-  /* Test */
-  aspath_test ();
-  exit (0);
-#endif /* 0 */
-  
   /* Make bgp vty socket. */
   vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
 

@@ -72,5 +72,6 @@
 int bgp_event (struct thread *);
 void bgp_timer_set (struct peer *);
 void bgp_stop (struct peer *peer);
+void fsm_change_status (struct peer *peer, int status);
 
 #endif /* _ZEBRA_BGP_FSM_H */

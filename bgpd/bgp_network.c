@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_network.c,v 1.11 1999/02/22 12:15:37 developer Exp $
- *
  * BGP network related fucntions
  * Copyright (C) 1999 Kunihiro Ishiguro
  *
@@ -31,6 +29,30 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
 
+/* BGP socket bind. */
+int
+bgp_bind (struct peer *peer)
+{
+#ifdef SO_BINDTODEVICE
+  int ret;
+  struct ifreq ifreq;
+
+  if (!peer->ifname)
+    return 0;
+
+  strncpy ((char *)&ifreq.ifr_name, peer->ifname, sizeof (ifreq.ifr_name));
+
+  ret = setsockopt (peer->fd, SOL_SOCKET, SO_BINDTODEVICE, 
+		    &ifreq, sizeof (ifreq));
+  if (ret < 0)
+    {
+      zlog (peer->log, LOG_INFO, "bind to interface %s failed", peer->ifname);
+      return ret;
+    }
+#endif /* SO_BINDTODEVICE */
+  return 0;
+}
+
 /* BGP try to connect to the peer.  */
 int
 bgp_connect (struct peer *peer)
@@ -46,6 +68,9 @@ bgp_connect (struct peer *peer)
   /* If we can get socket for the peer, adjest TTL and make connection. */
   if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
     sockopt_ttl (peer->su->sa.sa_family, peer->fd, peer->ttl);
+
+  /* Bind socket. */
+  bgp_bind (peer);
 
   /* Get service port number. */
   sp = getservbyname ("bgp", "tcp");
@@ -123,11 +148,19 @@ bgp_serv_sock (unsigned short port, int family)
   ret = listen (bgp_sock, 3);
   if (ret < 0) 
     {
-      zlog (NULL, LOG_INFO, "can't listen bgp server socket : %m");
+      zlog (NULL, LOG_INFO, "can't listen bgp server socket : %s",
+	    strerror (errno));
       return ret;
     }
 
   thread_add_read (master, bgp_accept, NULL, bgp_sock);
 
   return bgp_sock;
+}
+
+/* After TCP connection is established.  Get local address and port. */
+void
+bgp_getsockname (struct peer *peer)
+{
+  peer->su_local = sockunion_getsockname (peer->fd);
 }

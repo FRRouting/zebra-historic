@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_aspath.h,v 1.26 1999/02/20 19:00:21 developer Exp $
- *
  * AS path related definitions.
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *
@@ -66,6 +64,7 @@ const char *aspath_print (struct aspath *);
 void aspath_print_vty (struct vty *, struct aspath *);
 void aspath_print_all_vty (struct vty *);
 unsigned int aspath_key_make (struct aspath *);
+int aspath_loop_check (struct aspath *, as_t);
 
 #ifdef RADIX_REGEXP
 typedef struct aspath ASPATH;

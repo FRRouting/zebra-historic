@@ -390,4 +390,6 @@ stream_fifo_free (struct stream_fifo *fifo)
       next = s->next;
       stream_free (s);
     }
+  fifo->head = fifo->tail = NULL;
+  fifo->count = 0;
 }

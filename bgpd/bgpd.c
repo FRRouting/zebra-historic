@@ -83,7 +83,13 @@ bgp_new (u_int16_t as)
 int
 bgp_peer_sort (struct peer *peer)
 {
-  return (peer->as == peer->bgp->as) ? BGP_PEER_IBGP : BGP_PEER_EBGP;
+  if (peer->bgp == NULL)
+    return BGP_PEER_INTERNAL;
+
+  if (peer->as == peer->bgp->as)
+    return BGP_PEER_IBGP;
+  else
+    return BGP_PEER_EBGP;
 }
 
 /* BGP structure specify by asno. */
@@ -135,6 +141,10 @@ peer_new ()
 void
 peer_free (struct peer *peer)
 {
+  if (peer->su)
+    XFREE (MTYPE_TMP, peer->su);
+  if (peer->su_local)
+    XFREE (MTYPE_TMP, peer->su_local);
   XFREE (MTYPE_BGP_PEER, peer);
 }
 
@@ -333,7 +343,7 @@ peer_uptime_vty (struct vty *vty, struct peer *peer)
   /* Out puts to vty. */
   vty_out (vty, "%8s", timebuf);
 }
-
+
 /* Enable BGP mutliple instance configuration. */
 DEFUN (bgp_multiple_instance_func,
        bgp_multiple_instance_cmd,
@@ -627,58 +637,6 @@ DEFUN (show_ip_bgp_community,
   vty_out (vty, "Address Refcnt Community\r\n");
   community_print_all_vty (vty);
 
-  return CMD_SUCCESS;
-}
-
-void
-bgp_regexp (struct prefix_ipv4 *pin, struct vty *vty, ASPATH_regex *rp)
-{
-  struct bgp_info *br;
-  struct aspath *aspath;
-
-  br = (struct bgp_info *) pin;
-  if (br->attr && (aspath = br->attr->aspath))
-    {
-      if (aspath_regex_exec (rp, aspath) >= 0)
-	;
-      /* route_vty_out (vty, pin); */
-    }
-}
-
-DEFUN (show_ip_bgp_regexp, 
-       show_ip_bgp_regexp_cmd,
-       "show ip bgp regexp ...",
-       SHOW_STR
-       IP_STR
-       BGP_STR
-       "Show regular expression matched bgp routes\n"
-       "\n")
-{
-  int i;
-  struct buffer *b;
-  char *regstr;
-  ASPATH_regex *rp;
-  
-  b = buffer_new (BUFFER_STRING, 1024);
-  for (i = 0; i < argc; i++)
-    {
-      buffer_putstr (b, argv[i]);
-      buffer_putc (b, ' ');
-    }
-  buffer_putc (b, '\0');
-
-  regstr = buffer_getstr (b);
-  buffer_free (b);
-
-  rp = aspath_regex_comp (regstr);
-  if (!rp)
-    {
-      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
-      return CMD_WARNING;
-    }
-  /* radix_apply_func2 (bgp_radix, bgp_regexp, vty, rp); */
-
-  aspath_regex_free (rp);
   return CMD_SUCCESS;
 }
 
@@ -1060,6 +1018,159 @@ DEFUN (no_neighbor_route_map,
   return CMD_SUCCESS;
 }
 
+DEFUN (neighbor_desc,
+       neighbor_desc_cmd,
+       "neighbor IP_ADDR description ...",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Description\n"
+       "Description")
+{
+  int i;
+  struct bgp *bgp;
+  struct peer *peer;
+  struct buffer *b;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (argc == 1)
+    return CMD_SUCCESS;
+
+  if (peer->desc)
+    XFREE (MTYPE_TMP, peer->desc);
+
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 1; i < argc; i++)
+    {
+      buffer_putstr (b, (u_char *)argv[i]);
+      buffer_putc (b, ' ');
+    }
+  buffer_putc (b, '\0');
+
+  peer->desc = buffer_getstr (b);
+  buffer_free (b);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_desc,
+       no_neighbor_desc_cmd,
+       "no neighbor IP_ADDR description ...",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Description\n"
+       "Description")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (peer->desc)
+    XFREE (MTYPE_TMP, peer->desc);
+  peer->desc = NULL;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_shutdown,
+       neighbor_shutdown_cmd,
+       "neighbor IP_ADDR shutdown",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Shutdown\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  bgp_stop (peer);
+  fsm_change_status (peer, Idle);
+  
+  peer->shutdown = 1;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_shutdown,
+       no_neighbor_shutdown_cmd,
+       "no neighbor IP_ADDR shutdown",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Shutdown\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  bgp_timer_set (peer);
+  peer->shutdown = 0;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_interface,
+       neighbor_interface_cmd,
+       "neighbor IP_ADDR interface IFNAME",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Interface\n"
+       "Interface name\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->ifname = strdup (argv[1]);
+
+  return CMD_SUCCESS;
+}
+
 /* Make peer and enable further neighbor configuration. */
 DEFUN (neighbor, 
        neighbor_cmd, 
@@ -1132,7 +1243,6 @@ DEFUN (neighbor,
 
   return CMD_SUCCESS;
 }
-
 
 DEFUN (no_neighbor,
        no_neighbor_cmd,
@@ -1249,6 +1359,22 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
       sockunion_vty_out (vty, peer->su);
       vty_out (vty, " remote-as %d%s", peer->as, VTY_NEWLINE);
 
+      /* Shutdown or not. */
+      if (peer->shutdown)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " shutdown%s", VTY_NEWLINE);
+	}
+
+      /* Description. */
+      if (peer->desc)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " description %s%s", peer->desc, VTY_NEWLINE);
+	}
+
       /* BGP version print. */
       if (peer->version != BGP_VERSION_4)
 	{
@@ -1362,12 +1488,10 @@ bgp_init ()
   install_element (VIEW_NODE, &show_ip_bgp_neighbors_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_paths_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_community_cmd);
-  install_element (VIEW_NODE, &show_ip_bgp_regexp_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_summary_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_neighbors_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_paths_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_community_cmd);
-  install_element (ENABLE_NODE, &show_ip_bgp_regexp_cmd);
   install_element (ENABLE_NODE, &clear_ip_bgp_cmd);
   install_element (CONFIG_NODE, &router_bgp_cmd);
   install_element (CONFIG_NODE, &no_router_bgp_cmd);
@@ -1386,6 +1510,11 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_distribute_list_cmd);
   install_element (BGP_NODE, &neighbor_route_map_cmd);
   install_element (BGP_NODE, &no_neighbor_route_map_cmd);
+  install_element (BGP_NODE, &neighbor_desc_cmd);
+  install_element (BGP_NODE, &no_neighbor_desc_cmd);
+  install_element (BGP_NODE, &neighbor_shutdown_cmd);
+  install_element (BGP_NODE, &no_neighbor_shutdown_cmd);
+  install_element (BGP_NODE, &neighbor_interface_cmd);
 
   /* Make empty list of bgp and peer list. */
   bgp_list = list_init ();

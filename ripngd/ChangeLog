@@ -1,3 +1,9 @@
+1999-03-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c: Old non Advanced API version ripng_send_packet and
+	ripng_recv_packet is removed.
+	* ripng_radix.c: File removed.
+
 1998-12-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Now I assume KAME support Advanced API and use sendmsg/recvmsg.

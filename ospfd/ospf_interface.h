@@ -39,8 +39,9 @@ struct ospf_interface
   struct ospf *ospf;
 
   /* Packet receive and send buffer. */
-  struct stream *ibuf;
-  struct stream *obuf;
+  struct stream *ibuf;			/* input buffer */
+  struct stream *lbuf;			/* large input buffer */
+  struct stream *obuf;			/* output buffer */
 
   /* Interface data from zebra. */
   struct interface *ifp;

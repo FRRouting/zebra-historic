@@ -1,3 +1,7 @@
+1999-03-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* stream.c: stream_fifo_free bug is fixed.
+
 1999-03-19  Toshiaki Takada  <takada@zebra.org>
 
 	* stream.c (stream_strncpy): Added for getting any length bytes

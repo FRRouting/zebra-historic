@@ -216,6 +216,7 @@ main (int argc, char **argv)
   kernel_init ();
   interface_list ();
   route_read ();
+
   hostinfo_get ();
   sort_node ();
 

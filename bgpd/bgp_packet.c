@@ -551,13 +551,16 @@ bgp_update (struct peer *peer, bgp_size_t size)
   if (ret < 0)
     return;
 
-  /* Attribute check. */
+#if 0
+  /* Attribute check. In case of IPv6 withdraw with MBGP has attribute
+     but don't have mandatory attribute.  So we have to check that. */
   if (attr_total_len)
     {
       ret = bgp_attr_check (peer, &attr);
       if (ret < 0)
 	return;
     }
+#endif /* 0 */
 
   /* Network Layer Reachability Information. */
   nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s), AF_INET);

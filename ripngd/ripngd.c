@@ -151,50 +151,8 @@ ripng_make_socket ()
   return sock;
 }
 
-/* Send UDP RIPng packet to the socket. If under KAME index is
-   already specified in the address. */
-#ifdef KAME_NOADVAPI
 int
-ripng_send_packet (caddr_t pnt, 
-		   int size, 
-		   struct in6_addr *to,
-		   unsigned int ifindex)
-{
-  int ret;
-  struct sockaddr_in6 addr;
-  
-  addr.sin6_len = sizeof (struct sockaddr_in6);
-  addr.sin6_family = AF_INET6;
-  addr.sin6_port = htons (RIPNG_PORT_DEFAULT);
-  addr.sin6_flowinfo = htonl (RIPNG_PRIORITY_DEFAULT);
-  if (to != NULL)
-    addr.sin6_addr = *to;
-  else
-    inet_pton (AF_INET6, RIPNG_GROUP, &addr.sin6_addr);
-
-  SET_IN6_LINKLOCAL_IFINDEX (addr.sin6_addr, ifindex);
-
-  if (debug (DEBUG_EVENT))
-    zlog (NULL, LOG_INFO, "[Event] RIPng send packet");
-
-  ret = sendto (ripng->sock, pnt, size, 0,
-		(struct sockaddr *)&addr, sizeof (struct sockaddr_in6));
-  if (ret < 0)
-    {
-      struct interface *ifp;
-
-      ifp = if_lookup_by_index (ifindex);
-      zlog (NULL, LOG_ERR, "*Error* RIPng send fail on %s : %s", 
-	    ifp->name, strerror (errno));
-    }
-
-  return ret;
-}
-#else
-int
-ripng_send_packet (caddr_t buf,
-		   int bufsize, 
-		   struct in6_addr *to, 
+ripng_send_packet (caddr_t buf, int bufsize, struct in6_addr *to, 
 		   unsigned int ifindex)
 {
   int ret;
@@ -247,27 +205,9 @@ ripng_send_packet (caddr_t buf,
 
   return ret;
 }
-#endif /* KAME_NOADVAPI */
 
-/* Receive UDP RIPng packet from socket.  This part highly depends on
-   operating system. I'll merge KAME part when it's supports
-   Advanced API. */
-#ifdef KAME_NOADVAPI
-ripng_recv_packet (int sock, u_char *buf, int bufsize, 
-		   struct sockaddr_in6 *from, unsigned int *ifindex)
-{
-  int len;
-  int fromlen;
 
-  fromlen = sizeof (struct sockaddr_in6);
-  len = recvfrom (sock, (void *)buf, sizeof(buf), 0,
-		  (struct sockaddr *) from, &fromlen);
-
-  *ifindex = IN6_LINKLOCAL_IFINDEX (from->sin6_addr);
-
-  return len;
-}
-#else 
+/* Receive UDP RIPng packet from socket. */
 int
 ripng_recv_packet (int sock, u_char *buf, int bufsize,
 		   struct sockaddr_in6 *from, unsigned int *ifindex)
@@ -311,7 +251,6 @@ ripng_recv_packet (int sock, u_char *buf, int bufsize,
     }
   return ret;
 }
-#endif /* KAME_NOADVAPI */
 
 /* Dump rip packet */
 void
@@ -719,12 +658,6 @@ ripng_read (struct thread *thread)
   return 0;
 }
 
-void
-ripng_expire ()
-{
-  ;
-}
-
 /* Age ripng routes. */
 void
 ripng_age ()
@@ -753,7 +686,10 @@ ripng_age ()
       /* Check RIPng routing entry is aged. */
       if (rinfo)
 	if (rinfo->timer < (current_time - ripng->timeout_time))
-	  ripng_expire ();
+	  {
+	    ;
+	    /* route_unlock_node () */
+	  }
     }
 }
 

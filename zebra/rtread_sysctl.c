@@ -88,6 +88,19 @@ rtm_flag_dump (int flag)
   return buf;
 }
 
+/* Supported address family check. */
+int
+af_check (int family)
+{
+  if (family == AF_INET)
+    return 1;
+#ifdef HAVE_IPV6
+  if (family == AF_INET6)
+    return 1;
+#endif /* HAVE_IPV6 */
+  return 0;
+}
+
 /* Interface function for reading kernel routing table information. */
 int
 rtm_read (struct rt_msghdr *rtm,
@@ -111,7 +124,7 @@ rtm_read (struct rt_msghdr *rtm,
     if (rtm->rtm_addrs & (R)) \
       { \
 	int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
-	if ((X) != NULL) \
+        if (((X) != NULL) && af_check (((struct sockaddr *)pnt)->sa_family)) \
 	  memcpy ((caddr_t)(X), pnt, len); \
 	pnt += len; \
       }

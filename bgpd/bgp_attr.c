@@ -648,6 +648,14 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
     {
       if ((attr->flag & IBGP_ATTR_BIT) != IBGP_ATTR_BIT)
 	{
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGIN)))
+	    zlog (NULL, LOG_ERR, "Origin attribute is missing");
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_AS_PATH)))
+	    zlog (NULL, LOG_ERR, "AS path attribute is missing");
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP)))
+	    zlog (NULL, LOG_ERR, "Nexthop attribute is missing");
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF)))
+	    zlog (NULL, LOG_ERR, "Local preference attribute is missing");
 #ifdef DEBUG
 	  printf ("IBGP_ATTR_BIT %d\n", IBGP_ATTR_BIT);
 	  printf ("appried attr flag %d\n", attr->flag & IBGP_ATTR_BIT);
@@ -664,6 +672,13 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
     {
       if ((attr->flag & EBGP_ATTR_BIT) != EBGP_ATTR_BIT)
 	{
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGIN)))
+	    zlog (NULL, LOG_ERR, "Origin attribute is missing");
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_AS_PATH)))
+	    zlog (NULL, LOG_ERR, "AS path attribute is missing");
+	  if (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP)))
+	    zlog (NULL, LOG_ERR, "Nexthop attribute is missing");
+
 	  /* Missing well known attribute. */
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 

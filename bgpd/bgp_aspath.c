@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_aspath.c,v 1.67 1999/02/23 23:16:06 developer Exp $ 
- *
  * AS path management routines.
  * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
  *
@@ -279,6 +277,35 @@ aspath_parse (caddr_t pnt, int length)
 #endif /* RADIX_REGEXP */
 
   return aspath;
+}
+
+/* AS path loop check.  If aspath contains asno then return 1. */
+int
+aspath_loop_check (struct aspath *aspath, as_t asno)
+{
+  caddr_t pnt;
+  caddr_t end;
+  struct assegment *assegment;
+
+  if (aspath == NULL)
+    return 0;
+
+  pnt = aspath->data;
+  end = aspath->data + aspath->length;
+
+  while (pnt < end)
+    {
+      int i;
+      assegment = (struct assegment *) pnt;
+      
+      for (i = 0; i < assegment->length; i++)
+	{
+	  if (assegment->asval[i] == htons(asno))
+	    return 1;
+	}
+      pnt += (assegment->length * 2) + 2;
+    }
+  return 0;
 }
 
 /* Add specified as to the leftmost of aspath. */

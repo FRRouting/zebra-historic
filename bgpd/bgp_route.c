@@ -33,6 +33,8 @@
 #include "str.h"
 #include "log.h"
 #include "routemap.h"
+#include "buffer.h"
+#include "sockunion.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_route.h"
@@ -176,19 +178,19 @@ bgp_info_delete (struct bgp_info **rp, struct bgp_info *rib)
     *rp = rib->next;
 }
 
-/* called from BGP Update packet */
-void
-bgp_log_route(struct prefix *p,struct bgp_info *info, int dup)
+enum filter_type
+bgp_output_filter (struct peer *peer, struct prefix *p, struct bgp_info *info)
 {
-  struct attr *attr;
-  char addr[BUFSIZ];
+  /* Distribute list apply. */
+  if (DISTRIBUTE_OUT (peer))
+    if (access_list_apply (DISTRIBUTE_OUT (peer), p) == FILTER_DENY)
+      return FILTER_DENY;
 
-  attr = info->attr;
+  /* Filter list apply. */
+  if (FILTER_LIST_OUT (peer))
+    ;
 
-  strlcpy(addr, inet_ntoa(p->u.prefix4), BUFSIZ);
-
-  zlog (info->peer->log, LOG_INFO, "    NLRI: %s/%d %s", addr, p->prefixlen, 
-	dup ? "[replace]" : "");
+  return FILTER_PERMIT;
 }
 
 /* Announce the prefix and information. */
@@ -198,21 +200,54 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
   struct attr attr;
   struct bgp_info bgp_info;
 
-  /* Distribute list apply. */
-  if (DISTRIBUTE_OUT (peer))
-    if (access_list_apply (DISTRIBUTE_OUT (peer), p) == FILTER_DENY)
-      return;
+  /* Apply output filter. */
+  if (bgp_output_filter (peer, p, info) == FILTER_DENY)
+    return;
 
-  /* Filter list apply. */
-  if (FILTER_LIST_OUT (peer))
-    ;
+  /* AS path loop check */
+  if (aspath_loop_check (info->attr->aspath, peer->as))
+    {
+      zlog (peer->log, LOG_INFO, 
+	    "suppress announcement due to peer %d is in aspath.",
+	    peer->as);
+      return;
+    }
+
+  /* IBGP reflection check. */
+  if (bgp_peer_sort (peer) == BGP_PEER_IBGP &&
+      bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
+    {
+      zlog (peer->log, LOG_INFO, 
+	    "suppress announcement due to iBGP reflection.");
+      return;
+    }
+
+  /* For modify attribute, copy it to temporary structure. */
+  attr = *info->attr;
+
+  /* When route is static then set nexthop to self. */
+  if (info->type == ZEBRA_ROUTE_STATIC)
+    {
+      if (p->family == AF_INET && peer->su_local &&
+	  peer->su_local->sa.sa_family == AF_INET)
+	attr.nexthop = peer->su_local->sin.sin_addr;
+#ifdef HAVE_IPV6
+      if (p->family == AF_INET6 && peer->su_local &&
+	  peer->su_local->sa.sa_family == AF_INET6)
+	if (! IN6_IS_ADDR_LINKLOCAL(&peer->su_local->sin6.sin6_addr))
+	  {
+	    attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
+	    if (attr.mp_nexthop_len < 16)
+	      attr.mp_nexthop_len = 16;
+	  }
+#endif /* HAVE_IPV6 */
+    }
 
   /* Route map apply. */
   if (ROUTE_MAP_OUT (peer))
     {
       /* Route map may generates new attribute.  So we copy
          attribute to new one. */
-      attr = *info->attr;
       if (attr.aspath)
 	attr.aspath = aspath_dup (attr.aspath);
 
@@ -231,7 +266,7 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 	aspath_undup (attr.aspath);
     }
   else
-    bgp_update_send (peer, p, info->attr);
+    bgp_update_send (peer, p, &attr);
 }
 
 /* Announce current routing table to the peer. */
@@ -385,28 +420,31 @@ nlri_process (struct prefix *p, struct bgp_info *info)
 
   if (updated != announced)
     nlri_update (p, info);
-
-  /* Now bgpd's route loggin is one line for one prefix so this line
-     is commented out. */
-  /* bgp_log_route (p, info, repflag); */
 }
 
-/* Apply filters and return interned struct attr. */
-struct attr *
-nlri_apply (struct prefix *p, struct peer *peer, struct attr *attr)
+/* Input BGP packet filter.  This function apply distribute-list and
+   filter-list to the route. */
+enum filter_type
+bgp_input_filter (struct prefix *p, struct peer *peer)
 {
-  struct attr newattr;
-  struct bgp_info bgp_info;
-  struct aspath *aspath;
-
   /* Distribute list apply. */
   if (DISTRIBUTE_IN (peer))
-    if (access_list_apply (DISTRIBUTE_IN (peer), p) == FILTER_DENY)
-      return NULL;
+    return access_list_apply (DISTRIBUTE_IN (peer), p);
 
   /* Filter list apply. */
   if (FILTER_LIST_IN (peer))
     ;
+
+  return FILTER_PERMIT;
+}
+
+/* Apply filters and return interned struct attr. */
+struct attr *
+bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
+{
+  struct attr newattr;
+  struct bgp_info bgp_info;
+  struct aspath *aspath;
 
   /* Route map apply. */
   if (ROUTE_MAP_IN (peer))
@@ -444,7 +482,7 @@ nlri_parse (struct peer *peer, struct attr *attr,
   int psize;
   struct prefix p;
   u_char *end;
-  struct attr *newattr;
+  struct attr *attrnew;
   char attrstr[BUFSIZ];
   struct bgp_info *br;
   char buf[BUFSIZ];
@@ -453,13 +491,7 @@ nlri_parse (struct peer *peer, struct attr *attr,
   if (!len) 
     return;
 
-  /* Make attribute dump string. */
-  bgp_dump_attr (peer, attr, attrstr, BUFSIZ);
-
-  /* Set end pointer. */
-  end = pnt + len;
-
-  while (pnt < end)
+  for (end = pnt + len; pnt < end; pnt += psize)
     {
       /* Fetch one prefix from NLRI. */
       bzero (&p, sizeof p);
@@ -476,6 +508,7 @@ nlri_parse (struct peer *peer, struct attr *attr,
 	  return;
 	}
 
+      /* Fetch prefix length. */
       psize = PSIZE (p.prefixlen);
 
       if (pnt + psize > end)
@@ -485,28 +518,38 @@ nlri_parse (struct peer *peer, struct attr *attr,
 	  return;
 	}
 
+      /* Copy prefix from nlri. */
       memcpy (&p.u.prefix, pnt, psize);
+
+      /* Incoming packet filter. */
+      if (bgp_input_filter (&p, peer) == FILTER_DENY)
+	{
+	  zlog (peer->log, LOG_INFO, "Update:[%s] %s/%d is filtered",
+		peer->host, inet_ntop(family, &p.u.prefix, buf, BUFSIZ),
+		p.prefixlen);
+	  continue;
+	}
+
+      /* Incoming packet modifier by route-maps. */
+      attrnew = bgp_input_modifier (&p, peer, attr);
+      if (attrnew == NULL)
+	continue;
+
+      /* Make attribute dump string. */
+      bgp_dump_attr (peer, attrnew, attrstr, BUFSIZ);
 
       /* Logging. */
       zlog (peer->log, LOG_INFO, "Update:[%s] %s/%d %s",
 	    peer->host, inet_ntop(family, &p.u.prefix, buf, BUFSIZ),
 	    p.prefixlen, attrstr);
 
-      /* Apply filters route-maps. */
-      newattr = nlri_apply (&p, peer, attr);
-      if (newattr == NULL)
-	return;
-
       br = bgp_info_new ();
       br->type = ZEBRA_ROUTE_BGP;
       br->peer = peer;
-      br->attr = newattr;
+      br->attr = attrnew;
 
       /* Process this information. */
       nlri_process (&p, br);
-
-      /* Forward pointer. */
-      pnt += psize;
     }
   return;
 }
@@ -820,6 +863,49 @@ DEFUN (show_ip_bgp, show_ip_bgp_cmd,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_ip_bgp_regexp, 
+       show_ip_bgp_regexp_cmd,
+       "show ip bgp regexp ...",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Show regular expression matched bgp routes\n"
+       "\n")
+{
+  int i;
+  struct buffer *b;
+  char *regstr;
+  ASPATH_regex *rp;
+  struct route_node *node;
+  struct bgp_info *route;
+  
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      buffer_putstr (b, argv[i]);
+      buffer_putc (b, ' ');
+    }
+  buffer_putc (b, '\0');
+
+  regstr = buffer_getstr (b);
+  buffer_free (b);
+
+  rp = aspath_regex_comp (regstr);
+  if (!rp)
+    {
+      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  for (node = route_top (bgp_table_ipv4); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      if (aspath_regex_exec (rp, route->attr->aspath) >= 0)
+	route_vty_out (vty, &node->p, route);
+
+  aspath_regex_free (rp);
+  return CMD_SUCCESS;
+}
+
 #ifdef HAVE_IPV6
 DEFUN (show_ipv6_bgp,
        show_ipv6_bgp_cmd,
@@ -1005,9 +1091,11 @@ bgp_route_init ()
   bgp_static_ipv4 = route_table_init ();
 
   install_element (VIEW_NODE, &show_ip_bgp_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_regexp_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_cmd);
   install_element (BGP_NODE, &bgp_network_cmd);
   install_element (BGP_NODE, &no_bgp_network_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_regexp_cmd);
 
 #ifdef HAVE_IPV6
   /* IPv6 related table and commands. */

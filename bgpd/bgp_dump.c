@@ -185,10 +185,23 @@ bgp_dump_header (struct bgp_header *bgp_header)
 void
 bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
 {
+  char addrbuf[BUFSIZ];
+
   if (attr == NULL)
     return;
 
   snprintf (buf, size, "nexthop: %s", inet_ntoa (attr->nexthop));
+
+#ifdef HAVE_IPV6
+  /* Add MP case. */
+  if (attr->mp_nexthop_len == 16 || attr->mp_nexthop_len == 32)
+    snprintf (buf + strlen (buf), size - strlen (buf), " mp_nexthop: %s",
+	      inet_ntop (AF_INET6, &attr->mp_nexthop_global, addrbuf, BUFSIZ));
+
+  if (attr->mp_nexthop_len == 32)
+    snprintf (buf + strlen (buf), size - strlen (buf), "(%s)",
+	      inet_ntop (AF_INET6, &attr->mp_nexthop_local, addrbuf, BUFSIZ));
+#endif /* HAVE_IPV6 */
 
   if (bgp_peer_sort (peer) == BGP_PEER_IBGP)
     {

@@ -1,3 +1,8 @@
+1999-03-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_main.c (main): Default loggin method changed from syslog to
+	stdout.
+
 1999-03-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_route.c: Delete obsolete default attribute DEFUN.

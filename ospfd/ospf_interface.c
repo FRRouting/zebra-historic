@@ -113,6 +113,78 @@ interface_config_write (struct vty *vty)
   return 0;
 }
 
+
+DEFUN (if_authentication_key,
+       if_authentication_key_cmd,
+       "authentication-key AUTH_KEY",
+       "help")
+{
+  return CMD_SUCCESS;
+}
+
+DEFUN (if_cost,
+       if_cost_cmd,
+       "cost COST",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
+DEFUN (if_dead_interval,
+       if_dead_interval_cmd,
+       "dead-interval INTERVAL",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
+DEFUN (if_hello_interval,
+       if_hello_interval_cmd,
+       "hello-interval INTERVAL",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
+DEFUN (if_network,
+       if_network_cmd,
+       "network TYPE",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
+DEFUN (if_priority,
+       if_priority_cmd,
+       "priority NUMBER",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
+DEFUN (if_retransmit_interval,
+       if_retransmit_interval_cmd,
+       "retransmit-interval NUMBER",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
+DEFUN (if_transmit_delay,
+       if_transmit_delay_cmd,
+       "transmit-delay NUMBER",
+       "help")
+{
+  return CMD_SUCCESS;
+
+}
+
 /* ospfd's interface node. */
 struct cmd_node interface_node =
 {

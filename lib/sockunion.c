@@ -142,7 +142,7 @@ sockunion_str2su (char *str)
   int ret;
   union sockunion *su;
 
-  su = XMALLOC (0, sizeof (union sockunion));
+  su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
   bzero (su, sizeof (union sockunion));
 
   ret = inet_pton (AF_INET, str, &su->sin.sin_addr);
@@ -484,22 +484,70 @@ sockunion_sameprefix (union sockunion *su1, union sockunion *su2)
     return 0;
 }
 
+/* After TCP connection is established.  Get local address and port. */
+union sockunion *
+sockunion_getsockname (int fd)
+{
+  int ret;
+  int len;
+  union
+  {
+    struct sockaddr sa;
+    struct sockaddr_in sin;
+#ifdef HAVE_IPV6
+    struct sockaddr_in6 sin6;
+#endif /* HAVE_IPV6 */
+    char temporary_buffer[128];
+  } name;
+  union sockunion *su;
+
+  len = sizeof name;
+  ret = getsockname (fd, (struct sockaddr *)&name, &len);
+  if (ret < 0)
+    {
+      zlog (NULL, LOG_WARNING, "Can't get local address and port: %s",
+	    strerror (errno));
+      return NULL;
+    }
+
+  if (name.sa.sa_family == AF_INET)
+    {
+      su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
+      bzero (su, sizeof (union sockunion));
+      su->sin = name.sin;
+      return su;
+    }
+#ifdef HAVE_IPV6
+  if (name.sa.sa_family == AF_INET6)
+    {
+      su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
+      bzero (su, sizeof (union sockunion));
+      su->sin6 = name.sin6;
+      return su;
+    }
+#endif /* HAVE_IPV6 */
+
+  return NULL;
+}
+
 /* Print sockunion structure */
 void
 sockunion_print (union sockunion *su)
 {
+  if (su == NULL)
+    return;
 
   switch (su->sa.sa_family) 
     {
     case AF_INET:
-      printf ("%s", inet_ntoa (su->sin.sin_addr));
+      printf ("%s\n", inet_ntoa (su->sin.sin_addr));
       break;
 #ifdef HAVE_IPV6
     case AF_INET6:
       {
 	char buf [64];
 
-	printf ("%s", inet_ntop (AF_INET6, &(su->sin6.sin6_addr),
+	printf ("%s\n", inet_ntop (AF_INET6, &(su->sin6.sin6_addr),
 				 buf, sizeof (buf)));
       }
       break;
@@ -511,7 +559,7 @@ sockunion_print (union sockunion *su)
 	struct sockaddr_dl *sdl;
 
 	sdl = (struct sockaddr_dl *)&(su->sa);
-	printf ("link#%d", sdl->sdl_index);
+	printf ("link#%d\n", sdl->sdl_index);
       }
       break;
 #endif /* AF_LINK */
