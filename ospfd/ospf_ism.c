@@ -47,6 +47,7 @@ ospf_dr_election_sub (struct _list *routers)
 {
   listnode node;
   struct ospf_neighbor *r, *max = NULL;
+  struct in_addr ret;
 
   /* Choose highest router priority. In case of tie,
      choose highest Router ID. */
@@ -67,7 +68,12 @@ ospf_dr_election_sub (struct _list *routers)
 	  max = r;
     }
 
-  return max->address.u.prefix4;
+  if (max == NULL)
+    ret.s_addr = 0;
+  else
+    ret = max->address.u.prefix4;
+
+  return ret;
 }
 
 void

@@ -228,7 +228,7 @@ bgp_keepalive_timer (struct thread *thread)
   peer = THREAD_ARG (thread);
   peer->t_keepalive = NULL;
 
-  zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (keepalive timer expire)", peer->host);
+  /* zlog_info ("FSM[%s]: Timer (keepalive timer expire)", peer->host); */
 
   THREAD_VAL (thread) = KeepAlive_timer_expired;
   bgp_event (thread);

@@ -348,7 +348,10 @@ ospf_if_update ()
 
       for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
 	{
+	  if (rn->info == NULL)
+	    continue;
 	  network = (struct ospf_network *) rn->info;
+
 	  area = ospf_area_lookup_by_area_id (network->area_id);
 
 	  ospf_interface_run (ospf_top, &rn->p, area);

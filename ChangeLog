@@ -1,3 +1,11 @@
+1999-07-07  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* configure.in, acconfig.h: Add check for FreeBSD 3.2.
+
+1999-07-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Delete check for netinet/ip6.h.
+
 1999-06-30  Gerhard Poul  <gpoul@gnu.org>
 
 	* README: remixed the old files and added some new parts.

@@ -87,8 +87,8 @@ o mrt extension
 
 o Local extention
 
-  set ipv6 nexthop global: Done
-  set ipv6 nexthop local : Done
+  set ipv6 next-hop global: Done
+  set ipv6 next-hop local : Done
 
 */ 
 
@@ -432,7 +432,7 @@ route_set_ipv6_nexthop_global_free (void *rule)
 /* Route map commands for ip nexthop set. */
 struct route_map_rule_cmd route_set_ipv6_nexthop_global_cmd =
 {
-  "ipv6 nexthop global",
+  "ipv6 next-hop global",
   route_set_ipv6_nexthop_global,
   route_set_ipv6_nexthop_global_compile,
   route_set_ipv6_nexthop_global_free
@@ -492,7 +492,7 @@ route_set_ipv6_nexthop_local_free (void *rule)
 /* Route map commands for ip nexthop set. */
 struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
 {
-  "ipv6 nexthop local",
+  "ipv6 next-hop local",
   route_set_ipv6_nexthop_local,
   route_set_ipv6_nexthop_local_compile,
   route_set_ipv6_nexthop_local_free
@@ -1097,7 +1097,7 @@ DEFUN (set_ip_nexthop,
        "Next hop\n"
        "IP Address\n")
 {
-  return bgp_route_set_add (vty, vty->index, "ip nexthop", argv[0]);
+  return bgp_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_set_ip_nexthop,
@@ -1109,7 +1109,7 @@ DEFUN (no_set_ip_nexthop,
        "Next hop\n"
        "IP Address\n")
 {
-  return bgp_route_set_delete (vty, vty->index, "ip nexthop", argv[0]);
+  return bgp_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (set_metric,
@@ -1327,19 +1327,19 @@ DEFUN (no_set_origin,
 
 DEFUN (set_ipv6_nexthop_global,
        set_ipv6_nexthop_global_cmd,
-       "set ipv6 nexthop global IP_ADDR",
+       "set ipv6 next-hop global IP_ADDR",
        "Set value\n"
        "IPv6 address\n"
        "Next hop\n"
        "Global\n"
        "IP Address\n")
 {
-  return bgp_route_set_add (vty, vty->index, "ipv6 nexthop global", argv[0]);
+  return bgp_route_set_add (vty, vty->index, "ipv6 next-hop global", argv[0]);
 }
 
 DEFUN (no_set_ipv6_nexthop_global,
        no_set_ipv6_nexthop_global_cmd,
-       "no set ipv6 nexthop global IP_ADDR",
+       "no set ipv6 next-hop global IP_ADDR",
        NO_STR
        "Set value\n"
        "IPv6 address\n"
@@ -1347,24 +1347,24 @@ DEFUN (no_set_ipv6_nexthop_global,
        "Global\n"
        "IP Address\n")
 {
-  return bgp_route_set_delete (vty, vty->index, "ipv6 nexthop global", argv[0]);
+  return bgp_route_set_delete (vty, vty->index, "ipv6 next-hop global", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_local,
        set_ipv6_nexthop_local_cmd,
-       "set ipv6 nexthop local IP_ADDR",
+       "set ipv6 next-hop local IP_ADDR",
        "Set value\n"
        "IPv6 address\n"
        "Next hop\n"
        "Local\n"
        "IP Address\n")
 {
-  return bgp_route_set_add (vty, vty->index, "ipv6 nexthop local", argv[0]);
+  return bgp_route_set_add (vty, vty->index, "ipv6 next-hop local", argv[0]);
 }
 
 DEFUN (no_set_ipv6_nexthop_local,
        no_set_ipv6_nexthop_local_cmd,
-       "no set ipv6 nexthop local IP_ADDR",
+       "no set ipv6 next-hop local IP_ADDR",
        NO_STR
        "Set value\n"
        "IPv6 address\n"
@@ -1372,7 +1372,7 @@ DEFUN (no_set_ipv6_nexthop_local,
        "Local\n"
        "IP Address\n")
 {
-  return bgp_route_set_delete (vty, vty->index, "ipv6 nexthop local", argv[0]);
+  return bgp_route_set_delete (vty, vty->index, "ipv6 next-hop local", argv[0]);
 }
 
 /* Initialization of route map. */

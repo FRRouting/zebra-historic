@@ -36,7 +36,12 @@ vector cmdvec;
 /* Host information structure. */
 struct host host;
 
-char *default_motd = "\r\nHello, this is zebra (version " ZEBRA_VERSION ")\r\nCopyright 1996-1999 Kunihiro Ishiguro\r\n\r\n";
+/* Default motd string. */
+char *default_motd = 
+"\r\n\
+Hello, this is zebra (version " ZEBRA_VERSION ")\r\n\
+Copyright 1996-1999 Kunihiro Ishiguro\r\n\
+\r\n";
 
 /* Standard command node structures. */
 struct cmd_node auth_node =

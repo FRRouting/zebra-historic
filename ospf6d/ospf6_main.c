@@ -199,8 +199,10 @@ main (int argc, char **argv)
   cmd_init ();
   vty_init ();
   ospf6_init ();
+  ospf6_if_init ();
   memory_init ();
   sort_node ();
+  nexthop_init ();
 
   /* Connect to zebra. */
   zebra_start ();

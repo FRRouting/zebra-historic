@@ -1,5 +1,26 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.72
+
+* Changes in lib
+
+** When getsockname return IPv4 mapped IPv6 address.  Convert it to
+IPv4 address.
+
+* Changes in bgp
+
+** Change route-map's next-hop related settings.
+
+set ip nexthop          -> set ip next-hop
+set ipv6 nexthop global -> set ipv6 next-hop global
+set ipv6 nexthop local  -> set ipv6 next-hop local
+
+** Add `next-hop-self' command.
+
+* Changes in ospfd
+
+** Fix bug of multiple `network area' directive crashes.
+
 * Changes in zebra-0.71
 
 * Changes in lib

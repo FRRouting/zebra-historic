@@ -141,7 +141,7 @@ sockunion_str2su (char *str)
   union sockunion *su;
 
   su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
-  bzero (su, sizeof (union sockunion));
+  memset (su, 0, sizeof (union sockunion));
 
   ret = inet_pton (AF_INET, str, &su->sin.sin_addr);
   if (ret > 0)			/* Valid IPv4 address format. */
@@ -506,6 +506,7 @@ sockunion_getsockname (int fd)
   } name;
   union sockunion *su;
 
+  memset (&name, 0, sizeof name);
   len = sizeof name;
   ret = getsockname (fd, (struct sockaddr *)&name, &len);
   if (ret < 0)
@@ -526,6 +527,15 @@ sockunion_getsockname (int fd)
     {
       su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
       memcpy (su, &name, sizeof (struct sockaddr_in6));
+
+      if (IN6_IS_ADDR_V4MAPPED (&su->sin6.sin6_addr))
+	{
+	  struct sockaddr_in sin;
+
+	  sin.sin_family = AF_INET;
+	  memcpy (&sin.sin_addr, ((char *)&su->sin6.sin6_addr) + 12, 4);
+	  memcpy (su, &sin, sizeof (struct sockaddr_in));
+	}
       return su;
     }
 #endif /* HAVE_IPV6 */

@@ -21,8 +21,11 @@
 
 #include "ospf6d.h"
 
-/* Global logging stream variable */
+/* Global logging buf */
 char strbuf[16];
+
+/* Logging function switch */
+struct ospf6_log o6log;
 
 /* Strings for logging */
 char *ifs_name[] =
@@ -110,6 +113,19 @@ ospf6_log_init ()
                  LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
                  LOG_DAEMON);
 
+  /* default logging */
+  o6log.interface = o6log_on;
+  o6log.neighbor = o6log_on;
+  o6log.ism = o6log_on;
+  o6log.nsm = o6log_on;
+  o6log.lsa = o6log_on;
+  o6log.lsdb = o6log_on;
+  o6log.dbex = o6log_on;
+  o6log.packet = o6log_on;
+  o6log.spf = o6log_on;
+  o6log.rtable = o6log_on;
+  o6log.zebra = o6log_on;
+  o6log.pointer = o6log_off; /* for debug */
   return;
 }
 
@@ -142,5 +158,21 @@ log_spf (const char *format, ...)
   zvlog (NULL, LOG_DEBUG, format, args);
   return;
 #endif /*DEBUG_SPF*/
+}
+
+void
+o6log_off (const char *format, ...)
+{
+  return;
+}
+
+void
+o6log_on (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_INFO, format, args);
+  return;
 }
 

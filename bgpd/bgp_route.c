@@ -329,14 +329,16 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
   attr = *info->attr;
 
   /* When route is static then set nexthop to self. */
-  if (info->type == ZEBRA_ROUTE_STATIC || 
+  if (peer->nexthop_self ||
+      info->type == ZEBRA_ROUTE_STATIC || 
       info->type == ZEBRA_ROUTE_CONNECT ||
       info->sub_type == BGP_ROUTE_STATIC || 
       info->sub_type == BGP_ROUTE_AGGREGATE)
     {
       if (p->family == AF_INET && peer->su_local &&
 	  peer->su_local->sa.sa_family == AF_INET)
-	attr.nexthop = peer->su_local->sin.sin_addr;
+	memcpy (&attr.nexthop, &peer->su_local->sin.sin_addr, 
+		IPV4_MAX_BYTELEN);
 #ifdef HAVE_IPV6
       if (p->family == AF_INET6 && peer->su_local)
 	{

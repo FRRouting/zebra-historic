@@ -1692,13 +1692,99 @@ DEFUN (neighbor_interface,
   return CMD_SUCCESS;
 }
 
-ALIAS (neighbor_interface,
+DEFUN (neighbor_update_source,
        neighbor_update_source_cmd,
        "neighbor A.B.C.D update-source IFNAME",
        NEIGHBOR_STR
        "IP address\n"
        "Update source\n"
        "Interface name\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->update_source = sockunion_str2su (argv[1]);
+
+  if (peer->update_source == NULL)
+    {
+      peer->update_if = strdup (argv[1]);
+      if (peer->update_source)
+	{
+	  free (peer->update_source);
+	  peer->update_source = NULL;
+	}
+      return CMD_SUCCESS;
+    }
+
+  if (peer->update_if)
+    {
+      free (peer->update_if);
+      peer->update_if = NULL;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_nexthop_self,
+       neighbor_nexthop_self_cmd,
+       "neighbor A.B.C.D next-hop-self",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Set nexthop value to self\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->nexthop_self = 1;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_nexthop_self,
+       no_neighbor_nexthop_self_cmd,
+       "no neighbor A.B.C.D next-hop-self",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Set nexthop value to self\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->nexthop_self = 0;
+
+  return CMD_SUCCESS;
+}
 
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
@@ -2206,6 +2292,14 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	    vty_out (vty, " version %s%s", "4-", VTY_NEWLINE);
 	}
 
+      /* Nexthop self. */
+      if (peer->nexthop_self)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " next-hop-self%s", VTY_NEWLINE);
+	}
+
       /* Route reflector client. */
       if (peer->reflector_client)
 	{
@@ -2440,6 +2534,10 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_route_reflector_client_cmd);
   install_element (BGP_NODE, &neighbor_interface_cmd);
   install_element (BGP_NODE, &neighbor_update_source_cmd);
+
+  install_element (BGP_NODE, &neighbor_nexthop_self_cmd);
+  install_element (BGP_NODE, &no_neighbor_nexthop_self_cmd);
+
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &neighbor_send_community_cmd);

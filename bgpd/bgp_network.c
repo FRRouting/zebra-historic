@@ -26,6 +26,7 @@
 #include "sockunion.h"
 #include "memory.h"
 #include "log.h"
+#include "if.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
@@ -54,6 +55,27 @@ bgp_bind (struct peer *peer)
   return 0;
 }
 
+int
+bgp_update_source (struct peer *peer)
+{
+  struct interface *ifp;
+
+  /* Ifname is exist. */
+  if (peer->update_if)
+    {
+      ifp = if_lookup_by_name (peer->update_if);
+      if (!ifp)
+	return -1;
+      return 0;
+    }
+
+  if (peer->update_source)
+    return sockunion_bind (peer->fd, peer->update_source, 
+			   BGP_PORT_DEFAULT, peer->update_source);
+
+  return 0;
+}
+
 /* BGP try to connect to the peer.  */
 int
 bgp_connect (struct peer *peer)
@@ -72,6 +94,9 @@ bgp_connect (struct peer *peer)
 
   /* Bind socket. */
   bgp_bind (peer);
+
+  /* Update source bind. */
+  bgp_update_source (peer);
 
   /* Get service port number. */
   sp = getservbyname ("bgp", "tcp");

@@ -81,6 +81,9 @@
 /* Define if Solaris */
 #undef SUNOS_5
 
+/* Define if FreeBSD 3.2 */
+#undef FREEBSD_32
+
 #ifndef HAVE_BCOPY
 # define bcopy(s,d,n) memcpy((d),(s),(n))
 #endif /* HAVE_BCOPY */

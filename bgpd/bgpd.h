@@ -72,9 +72,12 @@ struct peer
   int fd;			/* File descriptor */
   int ttl;			/* TTL of TCP connection to the peer. */
   char *desc;			/* Description of the peer. */
+  int nexthop_self;		/* Nexthop self. */
   int shutdown;			/* Shutdown flag. */
   int passive;			/* Passive flag. */
   char *ifname;			/* bind interface name. */
+  char *update_if;
+  union sockunion *update_source;
   ZLOG *log;			/* ZLOG stream to use for this peer -
 				   NULL means use main log */
 

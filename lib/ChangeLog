@@ -1,3 +1,7 @@
+1999-07-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Bump up to 0.72.
+
 1999-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* command.c (install_default): New function for install default

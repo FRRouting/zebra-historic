@@ -50,6 +50,7 @@
 /* OSPF stuffs */
 #include "ospf6_types.h"
 #include "ospf6_interface.h"
+#include "ospf6_ism.h"
 #include "ospf6_lsa.h"
 #include "ospf6_spf.h"
 #include "ospf6_rtable.h"

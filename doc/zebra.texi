@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.71
+@subtitle for zebra-0.72
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -22,10 +22,10 @@
 @top Zebra
 		     
 Zebra is a multi-server routing software package which provides TCP/IP
-based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
-your machine into a full powered router.
+based routing protocols such as RIPv1, RIPv2, OSPFv2, OSPFv3, BGP-4,
+BGP-4+ and so on.  Zebra turns your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.71.
+This is the Zebra Manual for zebra-0.72.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -37,12 +37,12 @@ This manual describes @code{zebra} and some other beasts.
 * VTY::                         Virtual terminal interface.
 
 Zebra beasts
-* zebra::                       @code{zebra} daemon.
-* ripd::                        @code{ripd} daemon.
-* ripngd::                      @code{ripngd} daemon.
-* ospfd::                       @code{ospfd} daemon.
-* ospf6d::                      @code{ospf6d} daemon.
-* bgpd::                        @code{bgpd} daemon.
+* zebra::                       Routing manager daemon.
+* ripd::                        RIPv2,RIPv1 protocol daemon.
+* ripngd::                      RIPng protocol daemon.
+* ospfd::                       OSPFv2 protocol daemon.
+* ospf6d::                      OSPFv3 protocol daemon.
+* bgpd::                        BGP-4,BGP-4+ protocol daemon.
 
 Advanced Features
 * Filtering::                   How to filter routes.
@@ -456,6 +456,14 @@ Show the current version of the Zebra and it's build host information.
 Enter vty configuration mode
 @end deffn
 
+@deffn Command {banner motd default} {}
+Set default motd string.
+@end deffn
+
+@deffn Command {no banner motd} {}
+No motd banner string print out.
+@end deffn
+
 @deffn {Line Command} {exec-timeout @var{second}} {}
 Set time out seconds.
 @end deffn
@@ -800,13 +808,16 @@ Display host's IP version 6 forward is enabled or not.
 @comment  node-name,  next,  previous,  up
 @chapter ripd
 
-@code{ripd} supports legendary routing protocol RIP.  @code{ripd}
-conforms to RFC2452 RIP Version 2.
+The Routing Information Protocol RIP is legendary protoocl.  It is very
+simple distance vector routing protocol. @code{ripd} supports RIP
+version 2 described in RFC2453 and RIP version 1 described in RFC1058.
 
 @menu
 * Invoking ripd::               
 * ripd configuration::          
+* Filtering RIP route::         
 * ripd terminal mode commands::  
+* ripd debug commands::         
 @end menu
 
 @node Invoking ripd, ripd configuration, ripd, ripd
@@ -817,54 +828,79 @@ conforms to RFC2452 RIP Version 2.
 specified (@pxref{Common invoking options}).
 
 @table @samp
-
 @item -r
 @itemx --retain
 When program terminates, retain added route by ripd.
-
 @end table
 
-@node ripd configuration, ripd terminal mode commands, Invoking ripd, ripd
+@node ripd configuration, Filtering RIP route, Invoking ripd, ripd
 @comment  node-name,  next,  previous,  up
 @section ripd configuration
+
+What is RIP.  16 hop limitation. First used in Xerox.
 
 @deffn Command {router rip} {}
 Enable RIP process.
 @end deffn
 
+Difference between version 1 and 2.
+
 @deffn {RIP Command} {version @var{version}} {}
 Set RIP process's version.  @var{version} can be `1' or `2'.
 @end deffn
 
+How to specify enable network.
+
 @deffn {RIP Command} {network @var{network}} {}
+@deffnx {RIP Command} {no network @var{network}} {}
 Set RIP enable interface by @var{network}.  The interfaces which has
 address matched to @var{network} is enabled.
 @end deffn
 
 @deffn {RIP Command} {network @var{ifname}} {}
+@deffnx {RIP Command} {no network @var{ifname}} {}
 Set RIP enable interface by @var{ifname}.
 @end deffn
 
+When neighbor doesn't understand multicast then specivy neighbor.
+
 @deffn {RIP Command} {neighbor @var{a.b.c.d}} {}
+@deffnx {RIP Command} {no neighobr @var{a.b.c.d}} {}
 Specify RIP neighbor.
 @end deffn
 
+How to announce RIP route.
+
 @deffn {RIP commnad} {redistribute static} {}
+@deffnx {RIP command} {no redistribute static} {}
 Redistribute static route.
 @end deffn
 
 @deffn {RIP commnad} {redistribute connected} {}
+@deffnx {RIP commnad} {no redistribute connected} {}
 Redistribute connected route.
 @end deffn
 
+If you want to specify RIP only static route.
+
 @deffn {RIP command} {route @var{a.b.c.d/m}} {}
+@deffnx {RIP command} {no route @var{a.b.c.d/m}} {}
 RIP only static route configuration.  In normal case, please set static
 route in zebra and redistribute it by `redistribute static'.
 @end deffn
 
+There is four timers in RIP.  One is
+
 @deffn {RIP command} {timers basic @var{update} @var{invalid} @var{holddown} @var{flush}} {}
+@end deffn
+
+Make it back to default configuation.
+
+@deffn {RIP command} {no timers basic} {}
 Set RIP's timer.
 @end deffn
+
+
 
 @deffn {Interface command} {ip rip send version @var{varsion}} {}
 @var{varsion} can be `1', `2', `1 2'.  This configuration override
@@ -875,12 +911,56 @@ router rip's version setting.
 Version setting for incoming RIP packet.
 @end deffn
 
-@node ripd terminal mode commands,  , ripd configuration, ripd
+@node  Filtering RIP route, ripd terminal mode commands, ripd configuration, ripd
+@comment  node-name,  next,  previous,  up
+@section Filtering RIP route
+
+RIP routes can be filtered by distribute-list.
+
+@deffn Command {distribute-list @var{access_list} @var{direct} @var{ifname}} {}
+You can apply access list to the interface by distribute-list command.
+@var{access_list} is access list name.  @var{direct} is @samp{in} or
+@samp{out}.  If @var{direct} is @samp{in} access list is applied to
+input packet.
+
+@example
+distribute-list local-only out eth0
+distribute-list remote-route in ppp0
+@end example
+@end deffn
+
+@node ripd terminal mode commands, ripd debug commands, Filtering RIP route, ripd
 @comment  node-name,  next,  previous,  up
 @section ripd terminal mode commands
 
+To display RIP routes.
+
 @deffn Command {show ip rip} {}
 Show RIP routes.
+@end deffn
+
+Exmaple here.
+
+@node  ripd debug commands,  , ripd terminal mode commands, ripd
+@comment  node-name,  next,  previous,  up
+@section ripd debug commands
+
+Debug for RIP protocol.
+
+@deffn Command {debug rip events} {}
+Debug rip events.
+@end deffn
+
+@deffn Command {debug rip packet} {}
+Debug rip packet.
+@end deffn
+
+@deffn Command {debug rip zebra} {}
+Debug rip between zebra communication.
+@end deffn
+
+@deffn Command {show debugging rip} {}
+Display ripd's debugging option.
 @end deffn
 
 @node ripngd, ospfd, ripd, Top
@@ -1117,6 +1197,10 @@ remote-as is not specified, bgpd will complain like this
 @example
 can't find neighbor 10.0.0.1
 @end example
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} next-hop-self} {}
+This command specify announce route's nexthop to self address.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} shutdown} {}
@@ -1370,7 +1454,7 @@ Match specified @var{community_list}
 @comment  node-name,  next,  previous,  up
 @section Route map set command
 
-@deffn {Route-map Command} {set ip nexthop @var{ipv4_address}} {}
+@deffn {Route-map Command} {set ip next-hop @var{ipv4_address}} {}
 Set BGP nexthop address.
 @end deffn
 
@@ -1394,11 +1478,11 @@ Set BGP AS path to prepend.
 Set BGP Community attribute.
 @end deffn
 
-@deffn {Route-map Command} {set ipv6 nexthop global @var{ipv6_address}} {}
+@deffn {Route-map Command} {set ipv6 next-hop global @var{ipv6_address}} {}
 Set BGP-4+ global IPv6 nexthop address.
 @end deffn
 
-@deffn {Route-map Command} {set ipv6 nexthop local @var{ipv6_address}} {}
+@deffn {Route-map Command} {set ipv6 next-hop local @var{ipv6_address}} {}
 Set BGP-4+ link local IPv6 nexthop address.
 @end deffn
 

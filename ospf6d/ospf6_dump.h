@@ -22,8 +22,27 @@
 #ifndef OSPF6_DUMP_H
 #define OSPF6_DUMP_H
 
-/* Global logging stream variable */
+struct ospf6_log
+{
+  void (*interface) (const char *format, ...);
+  void (*neighbor)  (const char *format, ...);
+  void (*ism)       (const char *format, ...);
+  void (*nsm)       (const char *format, ...);
+  void (*lsa)       (const char *format, ...);
+  void (*lsdb)      (const char *format, ...);
+  void (*dbex)      (const char *format, ...);
+  void (*packet)    (const char *format, ...);
+  void (*spf)       (const char *format, ...);
+  void (*rtable)    (const char *format, ...);
+  void (*zebra)     (const char *format, ...);
+  void (*pointer)   (const char *format, ...);
+};
+
+/* Global logging buffer */
 extern char strbuf[16];
+
+/* Logging function switch */
+extern struct ospf6_log o6log;
 
 /* Strings for logging */
 extern char   *ifs_name[];
@@ -38,6 +57,9 @@ void ospf6_log_init ();
 char *inet4str(unsigned long);
 void log_pointer (const char *, ...);
 void log_spf (const char *, ...);
+
+void o6log_off (const char *, ...);
+void o6log_on (const char *, ...);
 
 #endif /* OSPF6_DUMP_H */
 
