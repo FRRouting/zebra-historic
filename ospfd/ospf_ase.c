@@ -150,24 +150,16 @@ ospf_ase_complete_direct_routes (struct ospf_route *ro, struct in_addr nexthop)
 int
 ospf_ase_forward_address_check (struct in_addr fwd_addr)
 {
-  listnode ifn, cn;
-  struct interface *ifp;
+  listnode ifn;
   struct ospf_interface *oi;
-  struct connected *co;
 
-  for (ifn = listhead (ospf_top->iflist); ifn; nextnode (ifn))
-    if ((ifp = getdata (ifn)) != NULL)
-      if (if_is_up (ifp))
-	if ((oi = ifp->info) != NULL)
-	  if (oi->type != OSPF_IFTYPE_VIRTUALLINK &&
-	      oi->flag != OSPF_IF_DISABLE)
-	    /* Check each connected. */
-	    for (cn = listhead (ifp->connected); cn; nextnode (cn))
-	      if ((co = getdata (cn)) != NULL)
-		/* Address matches. */
-		if (IPV4_ADDR_SAME (&co->address->u.prefix4, &fwd_addr))
-		  return 0;
-
+  for (ifn = listhead (ospf_top->oiflist); ifn; nextnode (ifn))
+    if ((oi = getdata (ifn)) != NULL)
+      if (if_is_up (oi->ifp))
+	if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
+	  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &fwd_addr))
+	    return 0;
+  
   return 1;
 }
 

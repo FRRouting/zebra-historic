@@ -82,15 +82,22 @@ struct zlog *openzlog (const char *, int, zlog_proto_t, int, int);
 /* Close zlog function. */
 void closezlog (struct zlog *zl);
 
+/* GCC have printf type attribute check.  */
+#ifdef __GNUC__
+#define PRINTF_ATTRIBUTE(a,b) __attribute__ ((__format__ (__printf__, a, b)))
+#else
+#define PRINTF_ATTRIBUTE(a,b)
+#endif /* __GNUC__ */
+
 /* Generic function for zlog. */
-void zlog (struct zlog *zl, int priority, const char *format, ...);
+void zlog (struct zlog *zl, int priority, const char *format, ...) PRINTF_ATTRIBUTE(3, 4);
 
 /* Handy zlog functions. */
-void zlog_err (const char *format, ...);
-void zlog_warn (const char *format, ...);
-void zlog_info (const char *format, ...);
-void zlog_notice (const char *format, ...);
-void zlog_debug (const char *format, ...);
+void zlog_err (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
+void zlog_warn (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
+void zlog_info (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
+void zlog_notice (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
+void zlog_debug (const char *format, ...) PRINTF_ATTRIBUTE(1, 2);
 
 /* For bgpd's peer oriented log. */
 void plog_err (struct zlog *, const char *format, ...);

@@ -20,8 +20,6 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospf6d.h"
-
 #include <zebra.h>
 
 #include "log.h"
@@ -31,10 +29,21 @@
 #include "table.h"
 #include "linklist.h"
 #include "routemap.h"
+#include "command.h"
 
 #include "ospf6_top.h"
 #include "ospf6_redistribute.h"
 #include "ospf6_dump.h"
+#include "ospf6_prefix.h"
+#include "ospf6_lsa.h"
+#include "ospf6_lsdb.h"
+
+#include "ospf6_route.h"
+#include "ospf6_zebra.h"
+
+#include "ospf6_message.h"
+#include "ospf6_neighbor.h"
+#include "ospf6_interface.h"
 
 /* xxx */
 extern struct ospf6 *ospf6;
@@ -89,6 +98,7 @@ ospf6_redistribute_get_id (struct prefix_ipv6 *p)
     {
       lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
                                htonl (id), ospf6->router_id);
+
       if (! lsa)
         break;
 
@@ -163,7 +173,7 @@ ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
 
   /* log */
   if (IS_OSPF6_DUMP_REDISTRIBUTE)
-    zlog_info ("Redistribute: add: type: %d index: %d prefix: %s/%d id: %lu",
+    zlog_info ("Redistribute: add: type: %d index: %d prefix: %s/%d id: %d",
                type, ifindex, buf, p->prefixlen, ri->id);
 
   /* install new external info */
@@ -217,6 +227,7 @@ ospf6_redistribute_route_remove (int type, int ifindex, struct prefix_ipv6 *p)
 
   lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
                            htonl (ri->id), ospf6->router_id);
+
   if (lsa)
     ospf6_lsa_premature_aging (lsa);
 

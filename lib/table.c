@@ -351,7 +351,6 @@ route_node_get (struct route_table *table, struct prefix *p)
       new = route_node_new ();
       route_common (&node->p, p, &new->p);
       new->p.family = p->family;
-      new->p.safi = p->safi;
       new->table = table;
       set_link (new, node);
 

@@ -148,7 +148,6 @@ community_include (struct community *com, u_int32_t val)
   return 0;
 }
 
-#ifdef SUNOS_5
 u_int32_t
 community_val_get (struct community *com, int i)
 {
@@ -162,7 +161,6 @@ community_val_get (struct community *com, int i)
 
   return ntohl (val);
 }
-#endif /* SUNOS_5 */
 
 /* Sort and uniq given community. */
 struct community *
@@ -176,12 +174,7 @@ community_uniq_sort (struct community *com)
   
   for (i = 0; i < com->size; i++)
     {
-#ifdef SUNOS_5
       val = community_val_get (com, i);
-#else /* SUNOS_5 */
-      memcpy (&val, com_nthval (com, i), sizeof (u_int32_t));
-      val = ntohl (val);
-#endif /* SUNOS_5 */
 
       if (! community_include (new, val))
 	community_add_val (new, val);
@@ -352,6 +345,12 @@ community_match (struct community *com1, struct community *com2)
   int i = 0;
   int j = 0;
 
+  if (com1 == NULL && com2 == NULL)
+    return 1;
+
+  if (com1 == NULL || com2 == NULL)
+    return 0;
+
   if (com1->size < com2->size)
     return 0;
 
@@ -374,6 +373,11 @@ community_match (struct community *com1, struct community *com2)
 int
 community_cmp (struct community *com1, struct community *com2)
 {
+  if (com1 == NULL && com2 == NULL)
+    return 1;
+  if (com1 == NULL || com2 == NULL)
+    return 0;
+
   if (com1->size == com2->size)
     if (memcmp (com1->val, com2->val, com1->size * 4) == 0)
       return 1;
@@ -455,7 +459,7 @@ community_print_all_vty (struct vty *vty)
 
 	  com = (struct community *) mp->data;
 
-	  vty_out (vty, "[%x:%d] (%d)", mp, i, com->refcnt);
+	  vty_out (vty, "[%p:%d] (%ld)", mp, i, com->refcnt);
 	  community_print_vty (vty, com);
 	  vty_out (vty, "%s", VTY_NEWLINE);
 	  mp = mp->next;

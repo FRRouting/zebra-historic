@@ -1,6 +1,5 @@
-/*
- * Zebra version
- * Copyright (c) 1997, 1999 Kunihiro Ishiguro
+/* Zebra version
+ * Copyright (C) 1997, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -23,7 +22,7 @@
 #ifndef _ZEBRA_VERSION_H
 #define _ZEBRA_VERSION_H
 
-#define ZEBRA_VERSION     "0.91a"
+#define ZEBRA_VERSION     "0.92a"
 
 #define ZEBRA_BUG_ADDRESS "bug-zebra@gnu.org"
 

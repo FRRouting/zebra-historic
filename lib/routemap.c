@@ -279,8 +279,8 @@ route_map_index_lookup (struct route_map *map, enum route_map_type type,
   struct route_map_index *index;
 
   for (index = map->head; index; index = index->next)
-    if (index->type == type &&
-	index->pref == pref)
+    if ((index->type == type || type == RMAP_ANY)
+	&& index->pref == pref)
       return index;
   return NULL;
 }
@@ -344,7 +344,13 @@ route_map_index_get (struct route_map *map, enum route_map_type type,
 {
   struct route_map_index *index;
 
-  index = route_map_index_lookup (map, type, pref);
+  index = route_map_index_lookup (map, RMAP_ANY, pref);
+  if (index && index->type != type)
+    {
+      /* Delete index from route map. */
+      route_map_index_delete (index, 1);
+      index = NULL;
+    }
   if (index == NULL)
     index = route_map_index_add (map, type, pref);
   return index;
@@ -422,6 +428,9 @@ static void
 route_map_rule_delete (struct route_map_rule_list *list,
 		       struct route_map_rule *rule)
 {
+  if (rule->cmd->func_free)
+    (*rule->cmd->func_free) (rule->value);
+
   if (rule->rule_str)
     XFREE (MTYPE_ROUTE_MAP_RULE_STR, rule->rule_str);
 
@@ -464,8 +473,10 @@ route_map_add_match (struct route_map_index *index, char *match_name,
 		     char *match_arg)
 {
   struct route_map_rule *rule;
+  struct route_map_rule *next;
   struct route_map_rule_cmd *cmd;
   void *compile;
+  int replaced = 0;
 
   /* First lookup rule for add match statement. */
   cmd = route_map_lookup_match (match_name);
@@ -483,10 +494,14 @@ route_map_add_match (struct route_map_index *index, char *match_name,
     compile = NULL;
 
   /* If argument is completely same ignore it. */
-  for (rule = index->match_list.head; rule; rule = rule->next)
+  for (rule = index->match_list.head; rule; rule = next)
     {
-      if (rule->cmd == cmd && rulecmp (rule->rule_str, match_arg) == 0)
-	return 0;
+      next = rule->next;
+      if (rule->cmd == cmd)
+	{	
+	  route_map_rule_delete (&index->match_list, rule);
+	  replaced = 1;
+	}
     }
 
   /* Add new route map match rule. */
@@ -503,7 +518,9 @@ route_map_add_match (struct route_map_index *index, char *match_name,
 
   /* Execute event hook. */
   if (route_map_master.event_hook)
-    (*route_map_master.event_hook) (RMAP_EVENT_MATCH_ADDED,
+    (*route_map_master.event_hook) (replaced ?
+				    RMAP_EVENT_MATCH_REPLACED:
+				    RMAP_EVENT_MATCH_ADDED,
 				    index->map->name);
 
   return 0;

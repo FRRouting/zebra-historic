@@ -25,7 +25,7 @@
 
 /* Prototypes. */
 void ifreq_set_name (struct ifreq *, struct interface *);
-int if_ioctl (int, caddr_t);
+int if_ioctl (u_long, caddr_t);
 
 int if_set_flags (struct interface *, unsigned long);
 int if_unset_flags (struct interface *, unsigned long);

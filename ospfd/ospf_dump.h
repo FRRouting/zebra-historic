@@ -23,6 +23,8 @@
 #ifndef _ZEBRA_OSPF_DUMP_H
 #define _ZEBRA_OSPF_DUMP_H
 
+#include "stream.h"
+
 /* Debug Flags. */
 #define OSPF_DEBUG_HELLO	0x01
 #define OSPF_DEBUG_DB_DESC	0x02

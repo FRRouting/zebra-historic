@@ -259,10 +259,10 @@ ospf_dr_election (struct ospf_interface *oi)
       /* Multicast group change. */
       if ((old_status != ISM_DR && old_status != ISM_Backup) &&
 	  (new_status == ISM_DR || new_status == ISM_Backup))
-	ospf_if_add_alldrouters (oi->ifp, oi->fd, oi->address);
+	ospf_if_add_alldrouters (ospf_top, oi->address, oi->ifp->ifindex);
       else if ((old_status == ISM_DR || old_status == ISM_Backup) &&
 	       (new_status != ISM_DR && new_status != ISM_Backup))
-	ospf_if_drop_alldrouters (oi->ifp, oi->fd, oi->address);
+	ospf_if_drop_alldrouters (ospf_top, oi->address, oi->ifp->ifindex);
     }
 
   return new_status;
@@ -279,13 +279,14 @@ ospf_hello_timer (struct thread *thread)
 
   if (IS_DEBUG_OSPF (ism, ISM_TIMERS))
     zlog (NULL, LOG_DEBUG, "ISM[%s]: Timer (Hello timer expire)",
-	  oi->ifp->name);
+	  IF_NAME (oi));
 
   /* Sending hello packet. */
   ospf_hello_send (oi);
 
   /* Hello timer set. */
-  OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
+  OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer,
+		     OSPF_IF_PARAM (oi, v_hello));
 
   return 0;
 }
@@ -300,7 +301,7 @@ ospf_wait_timer (struct thread *thread)
 
   if (IS_DEBUG_OSPF (ism, ISM_TIMERS))
     zlog (NULL, LOG_DEBUG, "ISM[%s]: Timer (Wait timer expire)",
-	  oi->ifp->name);
+	  IF_NAME (oi));
 
   OSPF_ISM_EVENT_SCHEDULE (oi, ISM_WaitTimer);
 
@@ -333,15 +334,19 @@ ism_timer_set (struct ospf_interface *oi)
     case ISM_Waiting:
       /* The router is trying to determine the identity of DRouter and
 	 BDRouter. The router begin to receive and send Hello Packets. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
-      OSPF_ISM_TIMER_ON (oi->t_wait, ospf_wait_timer, oi->v_wait);
+      /* send first hello immediately */
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, 1);
+      OSPF_ISM_TIMER_ON (oi->t_wait, ospf_wait_timer,
+			 OSPF_IF_PARAM (oi, v_wait));
       OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
       break;
     case ISM_PointToPoint:
       /* The interface connects to a physical Point-to-point network or
 	 virtual link. The router attempts to form an adjacency with
 	 neighboring router. Hello packets are also sent. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
+      /* send first hello immediately */
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, 1);
+      
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
@@ -349,21 +354,24 @@ ism_timer_set (struct ospf_interface *oi)
       /* The network type of the interface is broadcast or NBMA network,
 	 and the router itself is neither Designated Router nor
 	 Backup Designated Router. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer,
+			 OSPF_IF_PARAM (oi, v_hello));
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
     case ISM_Backup:
       /* The network type of the interface is broadcast os NBMA network,
 	 and the router is Backup Designated Router. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer,
+			 OSPF_IF_PARAM (oi, v_hello));
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
     case ISM_DR:
       /* The network type of the interface is broadcast or NBMA network,
 	 and the router is Designated Router. */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer,
+			 OSPF_IF_PARAM (oi, v_hello));
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
@@ -428,59 +436,7 @@ ism_loop_ind (struct ospf_interface *oi)
 int
 ism_interface_down (struct ospf_interface *oi)
 {
-  struct route_node *rn;
-  struct ospf_neighbor *nbr;
-
-  listnode node;
-
-  /* delete all static neighbors attached to this interface */
-  for (node = listhead (oi->nbr_static); node; )
-    {
-      struct ospf_nbr_static *nbr_static;
-
-      nbr_static = getdata (node);
-      nextnode (node);
-
-      OSPF_POLL_TIMER_OFF (nbr_static->t_poll);
-
-      if (nbr_static->neighbor)
-	{
-	  nbr_static->neighbor->nbr_static = NULL;
-	  nbr_static->neighbor = NULL;
-	}
-
-      nbr_static->oi = NULL;
-
-      listnode_delete (oi->nbr_static, nbr_static);
-    }
-
-  /* send Neighbor event KillNbr to all associated neighbors. */
-  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
-    if ((nbr = rn->info) != NULL)
-      {
-	/* It's bad idea comparing router_id for detecting this is
-           self neighbor or not.  -- kunihiro  */
-	/* if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id)) */
-	/* This is myself. */
-	if (nbr == oi->nbr_self)
-	  {
-	    nbr->d_router.s_addr = 0;
-	    nbr->bd_router.s_addr = 0;
-	    continue;
-	  }
-
-	OSPF_NSM_EVENT_EXECUTE (nbr, NSM_KillNbr);
-      }
-
-  /* Reset interface variables. */
-  /* ospf_if_reset_variables (oi); */
-
-  /* Cancel Threads. */
-  OSPF_ISM_TIMER_OFF (oi->t_hello);
-  OSPF_ISM_TIMER_OFF (oi->t_wait);
-  OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
-
-  ospf_lsa_unlock (oi->network_lsa_self);
+  ospf_if_cleanup (oi);
   return 0;
 }
 
@@ -507,7 +463,7 @@ int
 ism_ignore (struct ospf_interface *oi)
 {
   if (IS_DEBUG_OSPF (ism, ISM_EVENTS))
-    zlog (NULL, LOG_INFO, "ISM[%s]: ism_ignore called", oi->ifp->name);
+    zlog (NULL, LOG_INFO, "ISM[%s]: ism_ignore called", IF_NAME (oi));
 
   return 0;
 }
@@ -628,7 +584,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 
   /* Logging change of status. */
   if (IS_DEBUG_OSPF (ism, ISM_STATUS))
-    zlog (NULL, LOG_INFO, "ISM[%s]: Status change %s -> %s", oi->ifp->name,
+    zlog (NULL, LOG_INFO, "ISM[%s]: Status change %s -> %s", IF_NAME (oi),
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  LOOKUP (ospf_ism_status_msg, status));
 
@@ -663,8 +619,6 @@ ism_change_status (struct ospf_interface *oi, int status)
       lsa = oi->network_lsa_self;
       if (lsa)
 	{
-/*	  new_lsdb_delete ((struct new_lsdb *) lsa->lsdb, lsa);
-	  ospf_lsa_free (lsa); */
 	  ospf_lsa_flush_area (lsa, oi->area);
 	  OSPF_TIMER_OFF (oi->t_network_lsa_self);
 	}
@@ -697,7 +651,7 @@ ospf_ism_event (struct thread *thread)
     next_state = ISM [oi->status][event].next_state;
 
   if (IS_DEBUG_OSPF (ism, ISM_EVENTS))
-    zlog (NULL, LOG_INFO, "ISM[%s]: %s (%s)", oi->ifp->name,
+    zlog (NULL, LOG_INFO, "ISM[%s]: %s (%s)", IF_NAME (oi),
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  ospf_ism_event_str[event]);
 

@@ -45,11 +45,11 @@ rip_route_match_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case RMAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case RMAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -70,11 +70,11 @@ rip_route_match_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case RMAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case RMAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -95,11 +95,11 @@ rip_route_set_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case RMAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case RMAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -120,11 +120,11 @@ rip_route_set_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case RMAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case RMAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+	  vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -259,7 +259,7 @@ struct route_map_rule_cmd route_match_interface_cmd =
 
 /* Match function return 1 if match is success else return zero. */
 route_map_result_t
-route_match_ip_nexthop (void *rule, struct prefix *prefix,
+route_match_ip_next_hop (void *rule, struct prefix *prefix,
 			route_map_object_t type, void *object)
 {
   struct access_list *alist;
@@ -273,7 +273,7 @@ route_match_ip_nexthop (void *rule, struct prefix *prefix,
       p.prefix = rinfo->nexthop;
       p.prefixlen = IPV4_MAX_BITLEN;
 
-      alist = access_list_lookup (AF_INET, (char *) rule);
+      alist = access_list_lookup (AFI_IP, (char *) rule);
       if (alist == NULL)
 	return RMAP_NOMATCH;
 
@@ -286,27 +286,74 @@ route_match_ip_nexthop (void *rule, struct prefix *prefix,
 /* Route map `ip next-hop' match statement.  `arg' should be
    access-list name. */
 void *
-route_match_ip_nexthop_compile (char *arg)
+route_match_ip_next_hop_compile (char *arg)
 {
   return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
 }
 
 /* Free route map's compiled `. */
 void
-route_match_ip_nexthop_free (void *rule)
+route_match_ip_next_hop_free (void *rule)
 {
   XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
 }
 
 /* Route map commands for ip next-hop matching. */
-struct route_map_rule_cmd route_match_ip_nexthop_cmd =
+struct route_map_rule_cmd route_match_ip_next_hop_cmd =
 {
   "ip next-hop",
-  route_match_ip_nexthop,
-  route_match_ip_nexthop_compile,
-  route_match_ip_nexthop_free
+  route_match_ip_next_hop,
+  route_match_ip_next_hop_compile,
+  route_match_ip_next_hop_free
 };
+
+/* `match ip next-hop prefix-list PREFIX_LIST' */
 
+route_map_result_t
+route_match_ip_next_hop_prefix_list (void *rule, struct prefix *prefix,
+                                    route_map_object_t type, void *object)
+{
+  struct prefix_list *plist;
+  struct rip_info *rinfo;
+  struct prefix_ipv4 p;
+
+  if (type == RMAP_RIP)
+    {
+      rinfo = object;
+      p.family = AF_INET;
+      p.prefix = rinfo->nexthop;
+      p.prefixlen = IPV4_MAX_BITLEN;
+
+      plist = prefix_list_lookup (AFI_IP, (char *) rule);
+      if (plist == NULL)
+        return RMAP_NOMATCH;
+
+      return (prefix_list_apply (plist, &p) == PREFIX_DENY ?
+              RMAP_NOMATCH : RMAP_MATCH);
+    }
+  return RMAP_NOMATCH;
+}
+
+void *
+route_match_ip_next_hop_prefix_list_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ip_next_hop_prefix_list_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ip_next_hop_prefix_list_cmd =
+{
+  "ip next-hop prefix-list",
+  route_match_ip_next_hop_prefix_list,
+  route_match_ip_next_hop_prefix_list_compile,
+  route_match_ip_next_hop_prefix_list_free
+};
+
 /* `match ip address IP_ACCESS_LIST' */
 
 /* Match function should return 1 if match is success else return
@@ -319,7 +366,7 @@ route_match_ip_address (void *rule, struct prefix *prefix,
 
   if (type == RMAP_RIP)
     {
-      alist = access_list_lookup (AF_INET, (char *) rule);
+      alist = access_list_lookup (AFI_IP, (char *) rule);
       if (alist == NULL)
 	return RMAP_NOMATCH;
     
@@ -363,7 +410,7 @@ route_match_ip_address_prefix_list (void *rule, struct prefix *prefix,
 
   if (type == RMAP_RIP)
     {
-      plist = prefix_list_lookup (AF_INET, (char *) rule);
+      plist = prefix_list_lookup (AFI_IP, (char *) rule);
       if (plist == NULL)
 	return RMAP_NOMATCH;
     
@@ -529,14 +576,24 @@ DEFUN (match_metric,
 
 DEFUN (no_match_metric,
        no_match_metric_cmd,
+       "no match metric",
+       NO_STR
+       MATCH_STR
+       "Match metric of route\n")
+{
+  if (argc == 0)
+    return rip_route_match_delete (vty, vty->index, "metric", NULL);
+
+  return rip_route_match_delete (vty, vty->index, "metric", argv[0]);
+}
+
+ALIAS (no_match_metric,
+       no_match_metric_val_cmd,
        "no match metric <0-4294967295>",
        NO_STR
        MATCH_STR
        "Match metric of route\n"
        "Metric value\n")
-{
-  return rip_route_match_delete (vty, vty->index, "metric", argv[0]);
-}
 
 DEFUN (match_interface,
        match_interface_cmd,
@@ -550,37 +607,95 @@ DEFUN (match_interface,
 
 DEFUN (no_match_interface,
        no_match_interface_cmd,
+       "no match interface",
+       NO_STR
+       MATCH_STR
+       "Match first hop interface of route\n")
+{
+  if (argc == 0)
+    return rip_route_match_delete (vty, vty->index, "interface", NULL);
+
+  return rip_route_match_delete (vty, vty->index, "interface", argv[0]);
+}
+
+ALIAS (no_match_interface,
+       no_match_interface_val_cmd,
        "no match interface WORD",
        NO_STR
        MATCH_STR
        "Match first hop interface of route\n"
        "Interface name\n")
-{
-  return rip_route_match_delete (vty, vty->index, "interface", argv[0]);
-}
 
-DEFUN (match_ip_nexthop,
-       match_ip_nexthop_cmd,
+DEFUN (match_ip_next_hop,
+       match_ip_next_hop_cmd,
        "match ip next-hop WORD",
        MATCH_STR
        IP_STR
-       "Next hop address\n"
+       "Match next-hop address of route\n"
        "IP access-list name\n")
 {
   return rip_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
-DEFUN (no_match_ip_nexthop,
-       no_match_ip_nexthop_cmd,
+DEFUN (no_match_ip_next_hop,
+       no_match_ip_next_hop_cmd,
+       "no match ip next-hop",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match next-hop address of route\n")
+{
+  if (argc == 0)
+    return rip_route_match_delete (vty, vty->index, "ip next-hop", NULL);
+
+  return rip_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+ALIAS (no_match_ip_next_hop,
+       no_match_ip_next_hop_val_cmd,
        "no match ip next-hop WORD",
        NO_STR
        MATCH_STR
        IP_STR
-       "Next hop address\n"
+       "Match next-hop address of route\n"
        "IP access-list name\n")
+
+DEFUN (match_ip_next_hop_prefix_list,
+       match_ip_next_hop_prefix_list_cmd,
+       "match ip next-hop prefix-list WORD",
+       MATCH_STR
+       IP_STR
+       "Match next-hop address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 {
-  return rip_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
+  return rip_route_match_add (vty, vty->index, "ip next-hop prefix-list", argv[0]);
 }
+
+DEFUN (no_match_ip_next_hop_prefix_list,
+       no_match_ip_next_hop_prefix_list_cmd,
+       "no match ip next-hop prefix-list",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match next-hop address of route\n"
+       "Match entries of prefix-lists\n")
+{
+  if (argc == 0)
+    return rip_route_match_delete (vty, vty->index, "ip next-hop prefix-list", NULL);
+
+  return rip_route_match_delete (vty, vty->index, "ip next-hop prefix-list", argv[0]);
+}
+
+ALIAS (no_match_ip_next_hop_prefix_list,
+       no_match_ip_next_hop_prefix_list_val_cmd,
+       "no match ip next-hop prefix-list WORD",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match next-hop address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 
 DEFUN (match_ip_address, 
        match_ip_address_cmd,
@@ -595,18 +710,29 @@ DEFUN (match_ip_address,
 
 DEFUN (no_match_ip_address, 
        no_match_ip_address_cmd,
+       "no match ip address",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match address of route\n")
+{
+  if (argc == 0)
+    return rip_route_match_delete (vty, vty->index, "ip address", NULL);
+
+  return rip_route_match_delete (vty, vty->index, "ip address", argv[0]);
+}
+
+ALIAS (no_match_ip_address, 
+       no_match_ip_address_val_cmd,
        "no match ip address WORD",
        NO_STR
        MATCH_STR
        IP_STR
        "Match address of route\n"
        "IP access-list name\n")
-{
-  return rip_route_match_delete (vty, vty->index, "ip address", argv[0]);
-}
 
-DEFUN (rip_match_ip_address_prefix_list, 
-       rip_match_ip_address_prefix_list_cmd,
+DEFUN (match_ip_address_prefix_list, 
+       match_ip_address_prefix_list_cmd,
        "match ip address prefix-list WORD",
        MATCH_STR
        IP_STR
@@ -617,8 +743,23 @@ DEFUN (rip_match_ip_address_prefix_list,
   return rip_route_match_add (vty, vty->index, "ip address prefix-list", argv[0]);
 }
 
-DEFUN (rip_no_match_ip_address_prefix_list,
-       rip_no_match_ip_address_prefix_list_cmd,
+DEFUN (no_match_ip_address_prefix_list,
+       no_match_ip_address_prefix_list_cmd,
+       "no match ip address prefix-list",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n")
+{
+  if (argc == 0)
+    return rip_route_match_delete (vty, vty->index, "ip address prefix-list", NULL);
+
+  return rip_route_match_delete (vty, vty->index, "ip address prefix-list", argv[0]);
+}
+
+ALIAS (no_match_ip_address_prefix_list,
+       no_match_ip_address_prefix_list_val_cmd,
        "no match ip address prefix-list WORD",
        NO_STR
        MATCH_STR
@@ -626,9 +767,6 @@ DEFUN (rip_no_match_ip_address_prefix_list,
        "Match address of route\n"
        "Match entries of prefix-lists\n"
        "IP prefix-list name\n")
-{
-  return rip_route_match_delete (vty, vty->index, "ip address prefix-list", argv[0]);
-}
 
 /* set functions */
 
@@ -724,7 +862,8 @@ rip_route_map_init ()
 
   route_map_install_match (&route_match_metric_cmd);
   route_map_install_match (&route_match_interface_cmd);
-  route_map_install_match (&route_match_ip_nexthop_cmd);
+  route_map_install_match (&route_match_ip_next_hop_cmd);
+  route_map_install_match (&route_match_ip_next_hop_prefix_list_cmd);
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_ip_address_prefix_list_cmd);
 
@@ -733,14 +872,22 @@ rip_route_map_init ()
 
   install_element (RMAP_NODE, &match_metric_cmd);
   install_element (RMAP_NODE, &no_match_metric_cmd);
+  install_element (RMAP_NODE, &no_match_metric_val_cmd);
   install_element (RMAP_NODE, &match_interface_cmd);
   install_element (RMAP_NODE, &no_match_interface_cmd);
-  install_element (RMAP_NODE, &match_ip_nexthop_cmd);
-  install_element (RMAP_NODE, &no_match_ip_nexthop_cmd);
+  install_element (RMAP_NODE, &no_match_interface_val_cmd);
+  install_element (RMAP_NODE, &match_ip_next_hop_cmd);
+  install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
+  install_element (RMAP_NODE, &no_match_ip_next_hop_val_cmd);
+  install_element (RMAP_NODE, &match_ip_next_hop_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_next_hop_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_next_hop_prefix_list_val_cmd);
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
-  install_element (RMAP_NODE, &rip_match_ip_address_prefix_list_cmd);
-  install_element (RMAP_NODE, &rip_no_match_ip_address_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_address_val_cmd);
+  install_element (RMAP_NODE, &match_ip_address_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_address_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_address_prefix_list_val_cmd);
 
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);

@@ -44,7 +44,7 @@ struct ospf6
   list area_list;
 
   /* AS scope link state database */
-  list lsdb;
+  struct ospf6_lsdb *lsdb;
 
   /* redistribute route-map */
   struct
@@ -60,12 +60,24 @@ struct ospf6
   struct route_table *route_table_previous;
   struct route_table *external_table;
 
+  void (*foreach_area) (struct ospf6 *, void *arg, int val,
+                        void (*func) (void *, int, void *));
+  void (*foreach_if)   (struct ospf6 *, void *arg, int val,
+                        void (*func) (void *, int, void *));
+  void (*foreach_nei)  (struct ospf6 *, void *arg, int val,
+                        void (*func) (void *, int, void *));
+
+  struct thread *maxage_remover;
+
   list nexthop_list;
 };
 
 /* prototypes */
 int
 ospf6_top_count_neighbor_in_state (u_char state, struct ospf6 *o6);
+
+void
+ospf6_top_schedule_maxage_remover (void *arg, int val, struct ospf6 *o6);
 
 void ospf6_show (struct vty *);
 void ospf6_statistics_show (struct vty *vty, struct ospf6 *o6);

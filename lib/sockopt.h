@@ -22,10 +22,19 @@
 #ifndef _ZEBRA_SOCKOPT_H
 #define _ZEBRA_SOCKOPT_H
 
+#ifdef HAVE_IPV6
 int setsockopt_ipv6_pktinfo (int, int);
 int setsockopt_ipv6_checksum (int, int);
 int setsockopt_ipv6_multicast_hops (int, int);
 int setsockopt_ipv6_unicast_hops (int, int);
 int setsockopt_ipv6_hoplimit (int, int);
+#endif /* HAVE_IPV6 */
+
+int setsockopt_multicast_ipv4(int sock, 
+			     int optname, 
+			     struct in_addr if_addr,
+			     unsigned int mcast_addr,
+			     unsigned int ifindex);
+
 
 #endif /*_ZEBRA_SOCKOPT_H */

@@ -35,6 +35,7 @@
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_nexthop.h"
+#include "bgpd/bgp_debug.h"
 #include "zebra/rib.h"
 #include "zebra/zserv.h"	/* For ZEBRA_SERV_PATH. */
 
@@ -422,11 +423,12 @@ bgp_scan_ipv4 ()
   struct route_node *rn;
   struct bgp *bgp;
   struct bgp_info *bi;
+  struct peer_conf *conf;
+  struct listnode *nn;
   int valid;
   int current;
   int changed;
   int metricchanged;
-  int need_process;
 
   /* Change cache. */
   if (bgp_nexthop_cache_ipv4 == cache1)
@@ -439,11 +441,23 @@ bgp_scan_ipv4 ()
   if (bgp == NULL)
     return;
 
+  /* Maximum prefix check */
+  LIST_LOOP (bgp->peer_conf, conf, nn)
+    {
+      if (conf->peer->status != Established)
+	continue;
+
+      if (conf->peer->afc[AFI_IP][SAFI_UNICAST])
+	bgp_maximum_prefix_overflow (conf, AFI_IP, SAFI_UNICAST);
+      if (conf->peer->afc[AFI_IP][SAFI_MULTICAST])
+	bgp_maximum_prefix_overflow (conf, AFI_IP, SAFI_MULTICAST);
+      if (conf->peer->afc[AFI_IP][SAFI_MPLS_VPN])
+	bgp_maximum_prefix_overflow (conf, AFI_IP, SAFI_MPLS_VPN);
+    }
+
   for (rn = route_top (bgp->rib[AFI_IP][SAFI_UNICAST]); rn;
        rn = route_next (rn))
     {
-      need_process = 0;
-
       for (bi = rn->info; bi; bi = bi->next)
 	{
 	  if (bi->type == ZEBRA_ROUTE_BGP && bi->sub_type == BGP_ROUTE_NORMAL)
@@ -478,14 +492,10 @@ bgp_scan_ipv4 ()
 		      bgp_aggregate_increment (bgp, &rn->p, bi, AFI_IP,
 					       SAFI_UNICAST);
 		    }
-		  need_process = 1;
 		}
-	      else if (valid && (changed || metricchanged))
-		need_process = 1;
 	    }
 	}
-      if (need_process)
-	bgp_process (bgp, rn, AFI_IP, SAFI_UNICAST, NULL, NULL, NULL);
+      bgp_process (bgp, rn, AFI_IP, SAFI_UNICAST, NULL, NULL, NULL);
     }
 
   /* Flash old cache. */
@@ -502,11 +512,12 @@ bgp_scan_ipv6 ()
   struct route_node *rn;
   struct bgp *bgp;
   struct bgp_info *bi;
+  struct peer_conf *conf;
+  struct listnode *nn;
   int valid;
   int current;
   int changed;
   int metricchanged;
-  int need_process;
 
   /* Change cache. */
   if (bgp_nexthop_cache_ipv6 == cache6_1)
@@ -519,11 +530,21 @@ bgp_scan_ipv6 ()
   if (bgp == NULL)
     return;
 
+  /* Maximum prefix check */
+  LIST_LOOP (bgp->peer_conf, conf, nn)
+    {
+      if (conf->peer->status != Established)
+	continue;
+
+      if (conf->peer->afc[AFI_IP6][SAFI_UNICAST])
+	bgp_maximum_prefix_overflow (conf, AFI_IP6, SAFI_UNICAST);
+      if (conf->peer->afc[AFI_IP6][SAFI_MULTICAST])
+	bgp_maximum_prefix_overflow (conf, AFI_IP6, SAFI_MULTICAST);
+    }
+
   for (rn = route_top (bgp->rib[AFI_IP6][SAFI_UNICAST]); rn;
        rn = route_next (rn))
     {
-      need_process = 0;
-
       for (bi = rn->info; bi; bi = bi->next)
 	{
 	  if (bi->type == ZEBRA_ROUTE_BGP && bi->sub_type == BGP_ROUTE_NORMAL)
@@ -558,14 +579,10 @@ bgp_scan_ipv6 ()
 		      bgp_aggregate_increment (bgp, &rn->p, bi, AFI_IP6,
 					       SAFI_UNICAST);
 		    }
-		  need_process = 1;
 		}
-	      else if (valid && (changed || metricchanged))
-		need_process = 1;
 	    }
 	}
-      if (need_process)
-	bgp_process (bgp, rn, AFI_IP6, SAFI_UNICAST, NULL, NULL, NULL);
+      bgp_process (bgp, rn, AFI_IP6, SAFI_UNICAST, NULL, NULL, NULL);
     }
 
   /* Flash old cache. */
@@ -582,6 +599,9 @@ bgp_scan (struct thread *t)
 {
   bgp_scan_thread =
     thread_add_timer (master, bgp_scan, NULL, bgp_scan_interval);
+
+  if (BGP_DEBUG (normal, NORMAL))
+    zlog_info ("Performing BGP general scanning");
 
   bgp_scan_ipv4 ();
 
@@ -1080,7 +1100,8 @@ bgp_import (struct thread *t)
   if (! bgp)
     return 0;
 
-  for (rn = route_top (bgp->route[AFI_IP]); rn; rn = route_next (rn))
+  for (rn = route_top (bgp->route[AFI_IP][SAFI_UNICAST]); rn;
+       rn = route_next (rn))
     if ((bgp_static = rn->info) != NULL)
       {
 	valid = bgp_static->valid;
@@ -1198,7 +1219,7 @@ DEFUN (bgp_scan_time,
        bgp_scan_time_cmd,
        "bgp scan-time <5-60>",
        "BGP specific commands\n"
-       "Setting BGP route next-hop scanning interval time\n"
+       "Configure background scanner interval\n"
        "Scanner interval (seconds)\n")
 {
   bgp_scan_interval = atoi (argv[0]);
@@ -1218,7 +1239,7 @@ DEFUN (no_bgp_scan_time,
        "no bgp scan-time",
        NO_STR
        "BGP specific commands\n"
-       "Setting BGP route next-hop scanning interval time\n")
+       "Configure background scanner interval\n")
 {
   bgp_scan_interval = BGP_SCAN_INTERVAL_DEFAULT;
 
@@ -1237,7 +1258,7 @@ ALIAS (no_bgp_scan_time,
        "no bgp scan-time <5-60>",
        NO_STR
        "BGP specific commands\n"
-       "Setting BGP route next-hop scanning interval time\n"
+       "Configure background scanner interval\n"
        "Scanner interval (seconds)\n")
 
 DEFUN (show_ip_bgp_scan,

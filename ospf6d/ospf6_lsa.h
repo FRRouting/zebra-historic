@@ -191,6 +191,16 @@ struct ospf6_lsa_header
   u_int16_t checksum;  /* LS checksum */
   u_int16_t length;    /* LSA length */
 };
+struct ospf6_lsa_header__
+{
+  u_int16_t age;        /* LS age */
+  u_int16_t type;       /* LS type */
+  u_int32_t id;         /* Link State ID */
+  u_int32_t adv_router; /* Advertising Router */
+  u_int32_t seqnum;     /* LS sequence number */
+  u_int16_t checksum;   /* LS checksum */
+  u_int16_t length;     /* LSA length */
+};
 
 #define OSPF6_LSA_NEXT(x) ((struct ospf6_lsa_header *) \
                              ((char *)(x) + ntohs ((x)->length)))
@@ -209,14 +219,9 @@ struct ospf6_lsa
   struct thread         *refresh;   /* For self-originated LSA */
   u_int32_t              from;      /* from which neighbor */
 
-  list                   summary_nbr;
-  list                   request_nbr;
-  list                   retrans_nbr;
-
-  list                   delayed_ack_if;
-  list                   dbdesc_neighbor;
-
-  struct ospf6_lsa_hdr  *lsa_hdr;   /* lsa instance */
+  /* lsa instance */
+  struct ospf6_lsa_hdr  *lsa_hdr;
+  struct ospf6_lsa_header__ *header;
 
   /* statistics */
   u_long turnover_num;
@@ -253,8 +258,10 @@ get_router_lsd (u_int32_t, struct ospf6_lsa *);
 unsigned long get_ifindex_to_router (u_int32_t, struct ospf6_lsa *);
 
 /* new */
+#if 0
 void
 ospf6_lsa_remove_all_reference (struct ospf6_lsa *);
+#endif
 
 int ospf6_lsa_issame (struct ospf6_lsa_header *, struct ospf6_lsa_header *);
 int ospf6_lsa_differ (struct ospf6_lsa *lsa1, struct ospf6_lsa *lsa2);
@@ -267,7 +274,9 @@ ospf6_lsa_show (struct vty *, struct ospf6_lsa *);
 struct ospf6_lsa *
 ospf6_lsa_create (struct ospf6_lsa_header *);
 struct ospf6_lsa *
-ospf6_lsa_summary_create (struct ospf6_lsa_header *);
+ospf6_lsa_summary_create (struct ospf6_lsa_header__ *);
+void
+ospf6_lsa_delete (struct ospf6_lsa *);
 
 void ospf6_lsa_lock (struct ospf6_lsa *);
 void ospf6_lsa_unlock (struct ospf6_lsa *);

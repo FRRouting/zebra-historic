@@ -58,10 +58,10 @@ ospf_nbr_new (struct ospf_interface *oi)
   nbr->status = NSM_Down;
 
   /* Set inheritance values. */
-  nbr->v_inactivity = oi->v_wait;
-  nbr->v_db_desc = oi->retransmit_interval;
-  nbr->v_ls_req = oi->retransmit_interval;
-  nbr->v_ls_upd = oi->retransmit_interval;
+  nbr->v_inactivity = OSPF_IF_PARAM (oi, v_wait);
+  nbr->v_db_desc = OSPF_IF_PARAM (oi, retransmit_interval);
+  nbr->v_ls_req = OSPF_IF_PARAM (oi, retransmit_interval);
+  nbr->v_ls_upd = OSPF_IF_PARAM (oi, retransmit_interval);
   nbr->priority = -1;
 
   /* DD flags. */
@@ -72,9 +72,9 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   nbr->nbr_static = NULL;
 
-  new_lsdb_init (&nbr->db_sum);
-  new_lsdb_init (&nbr->ls_rxmt);
-  new_lsdb_init (&nbr->ls_req);
+  ospf_lsdb_init (&nbr->db_sum);
+  ospf_lsdb_init (&nbr->ls_rxmt);
+  ospf_lsdb_init (&nbr->ls_req);
 
   nbr->crypt_seqnum = 0;
 
@@ -98,9 +98,9 @@ ospf_nbr_free (struct ospf_neighbor *nbr)
     ospf_ls_retransmit_clear (nbr);
 
   /* Cleanup LSDBs. */
-  new_lsdb_cleanup (&nbr->db_sum);
-  new_lsdb_cleanup (&nbr->ls_req);
-  new_lsdb_cleanup (&nbr->ls_rxmt);
+  ospf_lsdb_cleanup (&nbr->db_sum);
+  ospf_lsdb_cleanup (&nbr->ls_req);
+  ospf_lsdb_cleanup (&nbr->ls_rxmt);
   
   /* Clear last send packet. */
   if (nbr->last_send)
@@ -146,7 +146,7 @@ ospf_nbr_delete (struct ospf_neighbor *nbr)
 	}
       else
 	zlog_info ("Can't find neighbor %s in the interface %s",
-		   inet_ntoa (nbr->src), oi->ifp->name);
+		   inet_ntoa (nbr->src), IF_NAME (oi));
 
       route_unlock_node (rn);
     }

@@ -35,8 +35,9 @@
 
 int peer_activate (struct vty *, char *, int, int);
 int peer_deactivate (struct vty *, char *, int, int);
-int route_vty_out (struct vty *, struct prefix *, struct bgp_info *, int);
-int route_vty_out_tag (struct vty *, struct prefix *, struct bgp_info *, int);
+int route_vty_out (struct vty *, struct prefix *, struct bgp_info *, int, safi_t);
+int route_vty_out_tag (struct vty *, struct prefix *, struct bgp_info *, int, safi_t);
+void route_vty_out_tmp (struct vty *, struct prefix *, struct attr *, safi_t);
 
 u_int16_t
 decode_rd_type (u_char *pnt)
@@ -108,7 +109,6 @@ nlri_parse_vpnv4 (struct peer *peer, struct attr *attr,
   
   /* Make prefix_rd */
   prd.family = AF_UNSPEC;
-  prd.safi = SAFI_MPLS_VPN;
   prd.prefixlen = 64;
 
   pnt = packet->nlri;
@@ -122,7 +122,6 @@ nlri_parse_vpnv4 (struct peer *peer, struct attr *attr,
       /* Fetch prefix length. */
       prefixlen = *pnt++;
       p.family = AF_INET;
-      p.safi = SAFI_MPLS_VPN;
       psize = PSIZE (prefixlen);
 
       if (prefixlen < 88)
@@ -199,16 +198,6 @@ ALIAS (address_family_vpnv4,
        "Address family\n"
        "Address Family Modifier\n")
 
-DEFUN (exit_address_family,
-       exit_address_family_cmd,
-       "exit-address-family",
-       "Exit from Address Family configuration mode\n")
-{
-  if (vty->node == BGP_VPNV4_NODE)
-    vty->node = BGP_NODE;
-  return CMD_SUCCESS;
-}
-
 DEFUN (vpnv4_activate,
        vpnv4_activate_cmd,
        "neighbor A.B.C.D activate",
@@ -245,7 +234,6 @@ str2prefix_rd (u_char *str, struct prefix_rd *prd)
   s = stream_new (8);
 
   prd->family = AF_UNSPEC;
-  prd->safi = SAFI_MPLS_VPN;
   prd->prefixlen = 64;
 
   p = strchr (str, ':');
@@ -303,6 +291,37 @@ str2tag (u_char *str, u_char *tag)
   return 1;
 }
 
+char *
+prefix_rd2str (struct prefix_rd *prd, char *buf, size_t size)
+{
+  u_char *pnt;
+  u_int16_t type;
+  struct rd_as rd_as;
+  struct rd_ip rd_ip;
+
+  if (size < RD_ADDRSTRLEN)
+    return NULL;
+
+  pnt = prd->val;
+
+  type = decode_rd_type (pnt);
+
+  if (type == RD_TYPE_AS)
+    {
+      decode_rd_as (pnt + 2, &rd_as);
+      snprintf (buf, size, "%d:%d", rd_as.as, rd_as.val);
+      return buf;
+    }
+  else if (type == RD_TYPE_IP)
+    {
+      decode_rd_ip (pnt + 2, &rd_ip);
+      snprintf (buf, size, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
+      return buf;
+    }
+
+  return NULL;
+}
+
 /* For testing purpose, static route of MPLS-VPN. */
 DEFUN (vpnv4_network,
        vpnv4_network_cmd,
@@ -333,7 +352,101 @@ DEFUN (no_vpnv4_network,
 }
 
 int
-bgp_show_mpls_vpn (struct vty *vty, int tags)
+show_adj_route_vpn (struct vty *vty, struct peer *peer, struct prefix_rd *prd)
+{
+  struct bgp *bgp;
+  struct route_table *table;
+  struct route_node *rn;
+  struct route_node *rm;
+  struct attr *attr;
+  int rd_header;
+  int header = 1;
+  char v4_header[] = "   Network          Next Hop            Metric LocPrf Weight Path%s";
+
+  bgp = bgp_get_default ();
+  if (bgp == NULL)
+    {
+      vty_out (vty, "No BGP process is configured%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  for (rn = route_top (peer->adj_out[AFI_IP][SAFI_MPLS_VPN]); rn; rn = route_next (rn))
+    {
+      if (prd && memcmp (rn->p.u.val, prd->val, 8) != 0)
+        continue;
+
+      if ((table = rn->info) != NULL)
+        {
+          rd_header = 1;
+
+          for (rm = route_top (table); rm; rm = route_next (rm))
+            if ((attr = rm->info) != NULL)
+              {
+                if (header)
+                  {
+                    vty_out (vty, "BGP table version is 0, local router ID is %s%s",
+                             inet_ntoa (bgp->id), VTY_NEWLINE);
+                    vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s",
+                             VTY_NEWLINE);
+                    vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s",
+                             VTY_NEWLINE, VTY_NEWLINE);
+                    vty_out (vty, v4_header, VTY_NEWLINE);
+                    header = 0;
+                  }
+
+                if (rd_header)
+                  {
+                    u_int16_t type;
+                    struct rd_as rd_as;
+                    struct rd_ip rd_ip;
+                    u_char *pnt;
+
+                    pnt = rn->p.u.val;
+
+                    /* Decode RD type. */
+                    type = decode_rd_type (pnt);
+                    /* Decode RD value. */
+                    if (type == RD_TYPE_AS)
+                      decode_rd_as (pnt + 2, &rd_as);
+                    else if (type == RD_TYPE_IP)
+                      decode_rd_ip (pnt + 2, &rd_ip);
+
+                    vty_out (vty, "Route Distinguisher: ");
+
+                    if (type == RD_TYPE_AS)
+                      vty_out (vty, "%d:%d", rd_as.as, rd_as.val);
+                    else if (type == RD_TYPE_IP)
+                      vty_out (vty, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
+
+                    vty_out (vty, "%s", VTY_NEWLINE);
+                    rd_header = 0;
+                  }
+                route_vty_out_tmp (vty, &rm->p, attr, SAFI_MPLS_VPN);
+              }
+        }
+    }
+  return CMD_SUCCESS;
+}
+
+enum bgp_show_type
+{
+  bgp_show_type_normal,
+  bgp_show_type_regexp,
+  bgp_show_type_prefix_list,
+  bgp_show_type_filter_list,
+  bgp_show_type_neighbor,
+  bgp_show_type_cidr_only,
+  bgp_show_type_prefix_longer,
+  bgp_show_type_community_all,
+  bgp_show_type_community,
+  bgp_show_type_community_exact,
+  bgp_show_type_community_list,
+  bgp_show_type_community_list_exact
+};
+
+int
+bgp_show_mpls_vpn (struct vty *vty, struct prefix_rd *prd, enum bgp_show_type type,
+		   void *output_arg, int tags)
 {
   struct bgp *bgp;
   struct route_table *table;
@@ -343,7 +456,7 @@ bgp_show_mpls_vpn (struct vty *vty, int tags)
   int rd_header;
   int header = 1;
   char v4_header[] = "   Network          Next Hop            Metric LocPrf Weight Path%s";
-  char v4_header_tag[] = "   Network          Next Hop                Tag%s";
+  char v4_header_tag[] = "   Network          Next Hop      In tag/Out tag%s";
 
   bgp = bgp_get_default ();
   if (bgp == NULL)
@@ -353,100 +466,41 @@ bgp_show_mpls_vpn (struct vty *vty, int tags)
     }
   
   for (rn = route_top (bgp->rib[AFI_IP][SAFI_MPLS_VPN]); rn; rn = route_next (rn))
-    if ((table = rn->info) != NULL)
-      {
-	rd_header = 1;
-
-	for (rm = route_top (table); rm; rm = route_next (rm))
-	  for (ri = rm->info; ri; ri = ri->next)
-	    {
-	      if (header)
-		{
-		  if (tags)
-		    vty_out (vty, v4_header_tag, VTY_NEWLINE);
-		  else
-		    vty_out (vty, v4_header, VTY_NEWLINE);
-		  header = 0;
-		}
-
-	      if (rd_header)
-		{
-		  u_int16_t type;
-		  struct rd_as rd_as;
-		  struct rd_ip rd_ip;
-		  u_char *pnt;
-
-		  pnt = rn->p.u.val;
-
-		  /* Decode RD type. */
-		  type = decode_rd_type (pnt);
-		  /* Decode RD value. */
-		  if (type == RD_TYPE_AS)
-		    decode_rd_as (pnt + 2, &rd_as);
-		  else if (type == RD_TYPE_IP)
-		    decode_rd_ip (pnt + 2, &rd_ip);
-
-		  vty_out (vty, "Route Distinguisher: ");
-
-		  if (type == RD_TYPE_AS)
-		    vty_out (vty, "%ld:%ld", rd_as.as, rd_as.val);
-		  else if (type == RD_TYPE_IP)
-		    vty_out (vty, "%s:%ld", inet_ntoa (rd_ip.ip), rd_ip.val);
-		  
-		  vty_out (vty, "%s", VTY_NEWLINE);		  
-		  rd_header = 0;
-		}
-	      if (tags)
-		route_vty_out_tag (vty, &rm->p, ri, 0);
-	      else
-		route_vty_out (vty, &rm->p, ri, 0);
-	    }
-      }
-  return CMD_SUCCESS;
-}
-
-int
-bgp_show_mpls_vpn_route (struct vty *vty, char *ip_str)
-{
-  int ret;
-  struct bgp *bgp;
-  struct route_table *table;
-  struct route_node *rn;
-  struct route_node *rm;
-  struct bgp_info *ri;
-  int rd_header;
-  struct prefix match;
-  int display = 0;
-
-  /* Check IP address argument. */
-  ret = str2prefix (ip_str, &match);
-  if (! ret)
     {
-      vty_out (vty, "address is malformed%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+      if (prd && memcmp (rn->p.u.val, prd->val, 8) != 0)
+	continue;
 
-  match.family = AF_INET;
-  match.safi = SAFI_MPLS_VPN;
-  match.prefixlen = IPV4_MAX_BITLEN;
+      if ((table = rn->info) != NULL)
+	{
+	  rd_header = 1;
 
-  bgp = bgp_get_default ();
-  if (bgp == NULL)
-    {
-      vty_out (vty, "No BGP process is configured%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-  
-  for (rn = route_top (bgp->rib[AFI_IP][SAFI_MPLS_VPN]); rn;
-       rn = route_next (rn))
-    if ((table = rn->info) != NULL)
-      {
-	rd_header = 1;
-
-	if ((rm = route_node_match (table, &match)) != NULL)
-	  {
+	  for (rm = route_top (table); rm; rm = route_next (rm))
 	    for (ri = rm->info; ri; ri = ri->next)
 	      {
+		if (type == bgp_show_type_neighbor)
+		  {
+		    union sockunion *su = output_arg;
+
+		    if (ri->peer->su_remote == NULL || ! sockunion_same(ri->peer->su_remote, su))
+		      continue;
+		  }
+		if (header)
+		  {
+		    if (tags)
+		      vty_out (vty, v4_header_tag, VTY_NEWLINE);
+		    else
+		      {
+			vty_out (vty, "BGP table version is 0, local router ID is %s%s",
+				 inet_ntoa (bgp->id), VTY_NEWLINE);
+			vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s",
+				 VTY_NEWLINE);
+			vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s",
+				 VTY_NEWLINE, VTY_NEWLINE);
+			vty_out (vty, v4_header, VTY_NEWLINE);
+		      }
+		    header = 0;
+		  }
+
 		if (rd_header)
 		  {
 		    u_int16_t type;
@@ -463,22 +517,113 @@ bgp_show_mpls_vpn_route (struct vty *vty, char *ip_str)
 		      decode_rd_as (pnt + 2, &rd_as);
 		    else if (type == RD_TYPE_IP)
 		      decode_rd_ip (pnt + 2, &rd_ip);
-		
+
 		    vty_out (vty, "Route Distinguisher: ");
 
 		    if (type == RD_TYPE_AS)
-		      vty_out (vty, "%ld:%ld", rd_as.as, rd_as.val);
+		      vty_out (vty, "%d:%d", rd_as.as, rd_as.val);
 		    else if (type == RD_TYPE_IP)
-		      vty_out (vty, "%s:%ld", inet_ntoa (rd_ip.ip), rd_ip.val);
+		      vty_out (vty, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
 		  
 		    vty_out (vty, "%s", VTY_NEWLINE);		  
 		    rd_header = 0;
 		  }
-		display++;
-		route_vty_out_detail (vty, &rm->p, ri);
+	        if (tags)
+		  route_vty_out_tag (vty, &rm->p, ri, 0, SAFI_MPLS_VPN);
+	        else
+		  route_vty_out (vty, &rm->p, ri, 0, SAFI_MPLS_VPN);
 	      }
-	  }
-      }
+        }
+    }
+  return CMD_SUCCESS;
+}
+
+int
+bgp_show_mpls_vpn_route (struct vty *vty, char *ip_str, struct prefix_rd *prd,
+			 int prefix_check)
+{
+  int ret;
+  struct bgp *bgp;
+  struct route_table *table;
+  struct route_node *rn;
+  struct route_node *rm;
+  struct bgp_info *ri;
+  int rd_header;
+  struct prefix match;
+  int display = 0;
+  char buf[INET6_ADDRSTRLEN];
+
+  /* Check IP address argument. */
+  ret = str2prefix (ip_str, &match);
+  if (! ret)
+    {
+      vty_out (vty, "address is malformed%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  match.family = AF_INET;
+/*  match.prefixlen = IPV4_MAX_BITLEN; */
+
+  bgp = bgp_get_default ();
+  if (bgp == NULL)
+    {
+      vty_out (vty, "%% No BGP process is configured%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  
+  for (rn = route_top (bgp->rib[AFI_IP][SAFI_MPLS_VPN]); rn;
+       rn = route_next (rn))
+    {
+      if (prd && memcmp (rn->p.u.val, prd->val, 8) != 0)
+	continue;
+
+      if ((table = rn->info) != NULL)
+	{
+	  rd_header = 1;
+
+	  if ((rm = route_node_match (table, &match)) != NULL)
+	    {
+	      if (prefix_check && rm->p.prefixlen != match.prefixlen)
+		continue;
+
+	      for (ri = rm->info; ri; ri = ri->next)
+		{
+		  if (rd_header)
+		    {
+		      u_int16_t type;
+		      struct rd_as rd_as;
+		      struct rd_ip rd_ip;
+		      u_char *pnt;
+
+		      pnt = rn->p.u.val;
+
+		      /* Decode RD type. */
+		      type = decode_rd_type (pnt);
+		      /* Decode RD value. */
+		      if (type == RD_TYPE_AS)
+			decode_rd_as (pnt + 2, &rd_as);
+		      else if (type == RD_TYPE_IP)
+			decode_rd_ip (pnt + 2, &rd_ip);
+		
+		      vty_out (vty, "BGP routing table entry for ");
+
+		      if (type == RD_TYPE_AS)
+			vty_out (vty, "%d:%d", rd_as.as, rd_as.val);
+		      else if (type == RD_TYPE_IP)
+			vty_out (vty, "%s:%d", inet_ntoa (rd_ip.ip), rd_ip.val);
+
+		      vty_out (vty, ":%s/%d", inet_ntop (rm->p.family, &rm->p.u.prefix, buf, INET6_ADDRSTRLEN),
+			       rm->p.prefixlen);
+
+		      vty_out (vty, "%s", VTY_NEWLINE);		  
+		      rd_header = 0;
+		    }
+		  display++;
+		  route_vty_out_detail (vty, &rm->p, ri, AFI_IP, SAFI_MPLS_VPN);
+		}
+	    }
+	}
+    }
   if (! display)
     {
       vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
@@ -497,9 +642,30 @@ DEFUN (show_ip_bgp_vpnv4_all,
        "Display VPNv4 NLRI specific information\n"
        "Display information about all VPNv4 NLRIs\n")
 {
-  return bgp_show_mpls_vpn (vty, 0);
+  return bgp_show_mpls_vpn (vty, NULL, bgp_show_type_normal, NULL, 0);
 }
 
+DEFUN (show_ip_bgp_vpnv4_rd,
+       show_ip_bgp_vpnv4_rd_cmd,
+       "show ip bgp vpnv4 rd ASN:nn_or_IP-address:nn",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information for a route distinguisher\n"
+       "VPN Route Distinguisher\n")
+{
+  int ret;
+  struct prefix_rd prd;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return bgp_show_mpls_vpn (vty, &prd, bgp_show_type_normal, NULL, 0);
+}
 
 DEFUN (show_ip_bgp_vpnv4_all_tags,
        show_ip_bgp_vpnv4_all_tags_cmd,
@@ -511,7 +677,30 @@ DEFUN (show_ip_bgp_vpnv4_all_tags,
        "Display information about all VPNv4 NLRIs\n"
        "Display BGP tags for prefixes\n")
 {
-  return bgp_show_mpls_vpn (vty, 1);
+  return bgp_show_mpls_vpn (vty, NULL, bgp_show_type_normal, NULL,  1);
+}
+
+DEFUN (show_ip_bgp_vpnv4_rd_tags,
+       show_ip_bgp_vpnv4_rd_tags_cmd,
+       "show ip bgp vpnv4 rd ASN:nn_or_IP-address:nn tags",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information for a route distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "Display BGP tags for prefixes\n")
+{
+  int ret;
+  struct prefix_rd prd;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return bgp_show_mpls_vpn (vty, &prd, bgp_show_type_normal, NULL, 1);
 }
 
 DEFUN (show_ip_bgp_vpnv4_all_route,
@@ -524,7 +713,213 @@ DEFUN (show_ip_bgp_vpnv4_all_route,
        "Display information about all VPNv4 NLRIs\n"
        "Network in the BGP routing table to display\n")
 {
-  return bgp_show_mpls_vpn_route (vty, argv[0]);
+  return bgp_show_mpls_vpn_route (vty, argv[0], NULL, 0);
+}
+
+DEFUN (show_ip_bgp_vpnv4_all_prefix,
+       show_ip_bgp_vpnv4_all_prefix_cmd,
+       "show ip bgp vpnv4 all A.B.C.D/M",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n")
+{
+  return bgp_show_mpls_vpn_route (vty, argv[0], NULL, 1);
+}
+
+DEFUN (show_ip_bgp_vpnv4_rd_route,
+       show_ip_bgp_vpnv4_rd_route_cmd,
+       "show ip bgp vpnv4 rd ASN:nn_or_IP-address:nn A.B.C.D",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information for a route distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "Network in the BGP routing table to display\n")
+{
+  int ret;
+  struct prefix_rd prd;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return bgp_show_mpls_vpn_route (vty, argv[1], &prd, 0);
+}
+
+DEFUN (show_ip_bgp_vpnv4_rd_prefix,
+       show_ip_bgp_vpnv4_rd_prefix_cmd,
+       "show ip bgp vpnv4 rd ASN:nn_or_IP-address:nn A.B.C.D/M",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information for a route distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n")
+{
+  int ret;
+  struct prefix_rd prd;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return bgp_show_mpls_vpn_route (vty, argv[1], &prd, 1);
+}
+
+DEFUN (show_ip_bgp_vpnv4_all_neighbor_routes,
+       show_ip_bgp_vpnv4_all_neighbor_routes_cmd,
+       "show ip bgp vpnv4 all neighbors A.B.C.D routes",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Display routes learned from neighbor\n")
+{
+  union sockunion *su;
+  struct peer *peer;
+
+  su = sockunion_str2su (argv[0]);
+  if (su == NULL)
+    {
+      vty_out (vty, "Malformed address: %s%s", argv[0], VTY_NEWLINE);
+               return CMD_WARNING;
+    }
+
+  peer = peer_lookup_by_su (su);
+  if (! peer || ! peer->afc[AFI_IP][SAFI_MPLS_VPN])
+    {
+      vty_out (vty, "%% No such neighbor or address family%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return bgp_show_mpls_vpn (vty, NULL, bgp_show_type_neighbor, su, 0);
+}
+
+DEFUN (show_ip_bgp_vpnv4_rd_neighbor_routes,
+       show_ip_bgp_vpnv4_rd_neighbor_routes_cmd,
+       "show ip bgp vpnv4 rd ASN:nn_or_IP-address:nn neighbors A.B.C.D routes",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information for a route distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Display routes learned from neighbor\n")
+{
+  int ret;
+  union sockunion *su;
+  struct peer *peer;
+  struct prefix_rd prd;
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  su = sockunion_str2su (argv[1]);
+  if (su == NULL)
+    {
+      vty_out (vty, "Malformed address: %s%s", argv[0], VTY_NEWLINE);
+               return CMD_WARNING;
+    }
+
+  peer = peer_lookup_by_su (su);
+  if (! peer || ! peer->afc[AFI_IP][SAFI_MPLS_VPN])
+    {
+      vty_out (vty, "%% No such neighbor or address family%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return bgp_show_mpls_vpn (vty, &prd, bgp_show_type_neighbor, su, 0);
+}
+
+DEFUN (show_ip_bgp_vpnv4_all_neighbor_advertised_routes,
+       show_ip_bgp_vpnv4_all_neighbor_advertised_routes_cmd,
+       "show ip bgp vpnv4 all neighbors A.B.C.D advertised-routes",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Display the routes advertised to a BGP neighbor\n")
+{
+  int ret;
+  struct peer *peer;
+  union sockunion su;
+
+  ret = str2sockunion (argv[0], &su);
+  if (ret < 0)
+    {
+      vty_out (vty, "%% Malformed address: %s%s", argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  peer = peer_lookup_by_su (&su);
+  if (! peer || ! peer->afc[AFI_IP][SAFI_MPLS_VPN])
+    {
+      vty_out (vty, "%% No such neighbor or address family%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return show_adj_route_vpn (vty, peer, NULL);
+}
+
+DEFUN (show_ip_bgp_vpnv4_rd_neighbor_advertised_routes,
+       show_ip_bgp_vpnv4_rd_neighbor_advertised_routes_cmd,
+       "show ip bgp vpnv4 rd ASN:nn_or_IP-address:nn neighbors A.B.C.D advertised-routes",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display VPNv4 NLRI specific information\n"
+       "Display information for a route distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Display the routes advertised to a BGP neighbor\n")
+{
+  int ret;
+  struct peer *peer;
+  struct prefix_rd prd;
+  union sockunion su;
+
+  ret = str2sockunion (argv[1], &su);
+  if (ret < 0)
+    {
+      vty_out (vty, "%% Malformed address: %s%s", argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  peer = peer_lookup_by_su (&su);
+  if (! peer || ! peer->afc[AFI_IP][SAFI_MPLS_VPN])
+    {
+      vty_out (vty, "%% No such neighbor or address family%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = str2prefix_rd (argv[0], &prd);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Route Distinguisher%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return show_adj_route_vpn (vty, peer, &prd);
 }
 
 /* BGP_VPNV4_NODE. */
@@ -550,11 +945,58 @@ bgp_mplsvpn_init ()
   install_element (BGP_VPNV4_NODE, &vpnv4_network_cmd);
   install_element (BGP_VPNV4_NODE, &no_vpnv4_network_cmd);
 
+  install_element (BGP_VPNV4_NODE, &neighbor_maximum_prefix_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_maximum_prefix_warning_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_val_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_val2_cmd);
+
+  install_element (BGP_VPNV4_NODE, &neighbor_nexthop_self_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_nexthop_self_cmd);
+
+  install_element (BGP_VPNV4_NODE, &neighbor_send_community_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_send_community_type_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_send_community_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_send_community_type_cmd);
+
+  install_element (BGP_VPNV4_NODE, &neighbor_route_reflector_client_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_route_reflector_client_cmd);
+
+  install_element (BGP_VPNV4_NODE, &neighbor_route_server_client_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_route_server_client_cmd);
+
+  install_element (BGP_VPNV4_NODE, &neighbor_distribute_list_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_distribute_list_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_prefix_list_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_prefix_list_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_filter_list_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_filter_list_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_route_map_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_route_map_cmd);
+
   install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_rd_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_route_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_prefix_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_rd_route_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_rd_prefix_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_tags_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_rd_tags_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_neighbor_routes_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_rd_neighbor_routes_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_neighbor_advertised_routes_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_vpnv4_rd_neighbor_advertised_routes_cmd);
 
   install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_rd_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_route_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_prefix_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_rd_route_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_rd_prefix_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_tags_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_rd_tags_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_neighbor_routes_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_rd_neighbor_routes_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_neighbor_advertised_routes_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_rd_neighbor_advertised_routes_cmd);
 }

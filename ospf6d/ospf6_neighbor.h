@@ -52,14 +52,14 @@ struct ospf6_neighbor
   /* IPaddr of I/F on our side link */
   struct in6_addr hisaddr;
 
-  /* LSA lists for this neighbor */
-  list summarylist;
-  list requestlist;
-  list retranslist;
+  /* new */
+  struct ospf6_lsdb *summary_list;
+  struct ospf6_lsdb *request_list;
+  struct ospf6_lsdb *retrans_list;
 
   /* For Database Exchange */
-  u_char dbdesc_bits;
-  u_int32_t dbdesc_seqnum;
+  u_char               dbdesc_bits;
+  u_int32_t            dbdesc_seqnum;
   struct ospf6_dbdesc *dbdesc_previous;
 
   /* last received DD , including OSPF capability of this neighbor */
@@ -74,10 +74,10 @@ struct ospf6_neighbor
   struct thread *inactivity_timer;
 
   /* DbDesc */
-  struct thread *thread_dbdesc;
   struct thread *thread_send_dbdesc;
   struct thread *thread_rxmt_dbdesc;
   list dbdesclist;
+  struct ospf6_lsdb *dbdesc_list;
 
   /* LSReq */
   struct thread *thread_send_lsreq;
@@ -111,46 +111,36 @@ extern char *ospf6_neighbor_state_string[];
 int
 ospf6_neighbor_last_dbdesc_release (struct thread *);
 
-struct ospf6_lsa *
-ospf6_neighbor_dbdesc_lsa_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
-ospf6_neighbor_dbdesc_lsa_add (struct ospf6_lsa *, struct ospf6_neighbor *);
-void
-ospf6_neighbor_dbdesc_lsa_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
-void
-ospf6_neighbor_dbdesc_lsa_remove_all (struct ospf6_neighbor *);
+ospf6_neighbor_lslist_clear (struct ospf6_neighbor *);
 
-struct ospf6_lsa *
-ospf6_neighbor_summary_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
 ospf6_neighbor_summary_add (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
 ospf6_neighbor_summary_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
-void
-ospf6_neighbor_summary_remove_all (struct ospf6_neighbor *);
 
-struct ospf6_lsa *
-ospf6_neighbor_request_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
 ospf6_neighbor_request_add (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
 ospf6_neighbor_request_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
-void
-ospf6_neighbor_request_remove_all (struct ospf6_neighbor *);
 
-struct ospf6_lsa *
-ospf6_neighbor_retrans_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
 ospf6_neighbor_retrans_add (struct ospf6_lsa *, struct ospf6_neighbor *);
 void
 ospf6_neighbor_retrans_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
+
 void
-ospf6_neighbor_retrans_remove_all (struct ospf6_neighbor *);
+ospf6_neighbor_dbdesc_add (struct ospf6_lsa *lsa,
+                           struct ospf6_neighbor *nei);
+void
+ospf6_neighbor_dbdesc_remove (struct ospf6_lsa *lsa,
+                              struct ospf6_neighbor *nei);
+
+void
+ospf6_neighbor_dbex_init (struct ospf6_neighbor *nei);
 
 void
 ospf6_neighbor_thread_cancel_all (struct ospf6_neighbor *);
-void
-ospf6_neighbor_list_remove_all (struct ospf6_neighbor *);
 
 struct ospf6_neighbor *
 ospf6_neighbor_create (u_int32_t, struct ospf6_interface *);

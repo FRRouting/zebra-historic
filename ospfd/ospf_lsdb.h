@@ -23,14 +23,8 @@
 #ifndef _ZEBRA_OSPF_LSDB_H
 #define _ZEBRA_OSPF_LSDB_H
 
-#define OSPF_LSDB_HASH 0x1
-#define OSPF_LSDB_LIST 0x2
-#define OSPF_LSDB_RT   0x4
-
-#define OSPF_LSDB_DEF  OSPF_LSDB_HASH
-
-/* New LSDB structure. */
-struct new_lsdb
+/* OSPF LSDB structure. */
+struct ospf_lsdb
 {
   struct
   {
@@ -40,20 +34,6 @@ struct new_lsdb
   } type[OSPF_MAX_LSA];
   unsigned long total;
 };
-
-#if 0
-struct ospf_lsdb
-{
-  u_char       flags;
-
-  struct Hash *hash;		/* Hash table for LSAs. */
-  list	       list;		/* List version. */
-  struct route_table *rt;	/* RT version. */
-  u_int	       count;
-  u_int	       count_self;
-  struct ospf_area * area;	/* Associated area */
-};
-#endif
 
 /* Macros. */
 #define ROUTER_LSDB(A)       ((A)->lsdb->type[OSPF_ROUTER_LSA].db)
@@ -71,28 +51,25 @@ struct ospf_lsdb
 #endif /* HAVE_NSSA */
 #define AREA_LSDB(A,T)       ((A)->lsdb->type[(T)].db)
 
-/* Prototypes. */
-struct ospf_lsa *foreach_lsa (struct route_table *, void *, int,
-	              int (*callback) (struct ospf_lsa *, void *, int));
-
-/* New LSDB related functions. */
-struct new_lsdb *new_lsdb_new ();
-void new_lsdb_init (struct new_lsdb *);
-void new_lsdb_free (struct new_lsdb *);
-void new_lsdb_cleanup (struct new_lsdb *);
-void new_lsdb_add (struct new_lsdb *, struct ospf_lsa *);
-struct ospf_lsa *new_lsdb_insert (struct new_lsdb *, struct ospf_lsa *);
-void new_lsdb_delete (struct new_lsdb *, struct ospf_lsa *);
-void new_lsdb_delete_all (struct new_lsdb *);
-struct ospf_lsa *new_lsdb_lookup (struct new_lsdb *, struct ospf_lsa *);
-struct ospf_lsa *new_lsdb_lookup_by_id (struct new_lsdb *, u_char,
+/* OSPF LSDB related functions. */
+struct ospf_lsdb *ospf_lsdb_new ();
+void ospf_lsdb_init (struct ospf_lsdb *);
+void ospf_lsdb_free (struct ospf_lsdb *);
+void ospf_lsdb_cleanup (struct ospf_lsdb *);
+void ospf_lsdb_add (struct ospf_lsdb *, struct ospf_lsa *);
+void ospf_lsdb_delete (struct ospf_lsdb *, struct ospf_lsa *);
+void ospf_lsdb_delete_all (struct ospf_lsdb *);
+struct ospf_lsa *ospf_lsdb_lookup (struct ospf_lsdb *, struct ospf_lsa *);
+struct ospf_lsa *ospf_lsdb_lookup_by_id (struct ospf_lsdb *, u_char,
 					struct in_addr, struct in_addr);
-struct ospf_lsa *new_lsdb_lookup_by_id_next (struct new_lsdb *, u_char,
+struct ospf_lsa *ospf_lsdb_lookup_by_id_next (struct ospf_lsdb *, u_char,
 					     struct in_addr, struct in_addr,
 					     int);
-unsigned long new_lsdb_count_all (struct new_lsdb *);
-unsigned long new_lsdb_count (struct new_lsdb *, int);
-unsigned long new_lsdb_count_self (struct new_lsdb *, int);
-unsigned long new_lsdb_isempty (struct new_lsdb *);
+unsigned long ospf_lsdb_count_all (struct ospf_lsdb *);
+unsigned long ospf_lsdb_count (struct ospf_lsdb *, int);
+unsigned long ospf_lsdb_count_self (struct ospf_lsdb *, int);
+unsigned long ospf_lsdb_isempty (struct ospf_lsdb *);
+struct ospf_lsa *foreach_lsa (struct route_table *, void *, int,
+	              int (*callback) (struct ospf_lsa *, void *, int));
 
 #endif /* _ZEBRA_OSPF_LSDB_H */

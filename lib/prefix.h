@@ -27,9 +27,7 @@
 struct prefix
 {
   u_char family;
-  u_char safi;
   u_char prefixlen;
-  u_char padding;
   union 
   {
     u_char prefix;
@@ -43,17 +41,15 @@ struct prefix
       struct in_addr adv_router;
     } lp;
     u_char val[8];
-  } u;
+  } u __attribute__ ((aligned (8)));
 };
 
 /* IPv4 prefix structure. */
 struct prefix_ipv4
 {
   u_char family;
-  u_char safi;
   u_char prefixlen;
-  u_char padding;
-  struct in_addr prefix;
+  struct in_addr prefix __attribute__ ((aligned (8)));
 };
 
 /* IPv6 prefix structure. */
@@ -61,20 +57,16 @@ struct prefix_ipv4
 struct prefix_ipv6
 {
   u_char family;
-  u_char safi;
   u_char prefixlen;
-  u_char padding;
-  struct in6_addr prefix;
+  struct in6_addr prefix __attribute__ ((aligned (8)));
 };
 #endif /* HAVE_IPV6 */
 
 struct prefix_ls
 {
   u_char family;
-  u_char safi;
   u_char prefixlen;
-  u_char padding;
-  struct in_addr id;
+  struct in_addr id __attribute__ ((aligned (8)));
   struct in_addr adv_router;
 };
 
@@ -82,10 +74,8 @@ struct prefix_ls
 struct prefix_rd
 {
   u_char family;
-  u_char safi;
   u_char prefixlen;
-  u_char padding;
-  u_char val[8];
+  u_char val[8] __attribute__ ((aligned (8)));
 };
 
 #ifndef INET_ADDRSTRLEN
@@ -166,5 +156,6 @@ int prefix_cmp (struct prefix *, struct prefix *);
 void prefix_copy (struct prefix *, struct prefix *);
 
 int all_digit (char *);
+int netmask_str2prefix_str (char *, char *, char *);
 
 #endif /* _ZEBRA_PREFIX_H */

@@ -25,12 +25,6 @@
 #include "ospf6_prefix.h"
 #include "ospf6_lsa.h"
 
-/* Message Definition */
-
-#define IS_OVER_MTU(message,mtu,addsize) \
-          (iov_totallen(message)+(addsize) >= \
-            (mtu)-sizeof(struct ospf6_header))
-
 /* Type */
 #define OSPF6_MESSAGE_TYPE_NONE     0x0
 #define OSPF6_MESSAGE_TYPE_UNKNOWN  0x0
@@ -120,6 +114,52 @@ struct ospf6_lsupdate
   /* no need for structure,
      it will include only LSA header in the packet body.*/
 
+/* definition for ospf6_message.c */
+#define OSPF6_MESSAGE_RECEIVE_BUFSIZE 5120
+#define OSPF6_MESSAGE_IOVEC_END       1024
+
+#define IS_OVER_MTU(message,mtu,addsize) \
+          (iov_totallen(message)+(addsize) >= \
+            (mtu)-sizeof(struct ospf6_header))
+
+#define OSPF6_MESSAGE_IOVEC_SIZE  1024
+#define OSPF6_MESSAGE_CLEAR(msg) \
+do { \
+  int x; \
+  for (x = 0; x < OSPF6_MESSAGE_IOVEC_SIZE; x++) \
+    { \
+      (msg)[x].iov_base = NULL; \
+      (msg)[x].iov_len = 0; \
+    } \
+} while (0)
+
+#define OSPF6_MESSAGE_ATTACH(msg,buf,bufsize) \
+do { \
+  int x; \
+  for (x = 0; x < OSPF6_MESSAGE_IOVEC_SIZE; x++) \
+    if ((msg)[x].iov_base == (void *)NULL && (msg)[x].iov_len == 0) \
+      break; \
+  if (x < OSPF6_MESSAGE_IOVEC_SIZE - 1) \
+    { \
+      (msg)[x].iov_base = (void *)(buf); \
+      (msg)[x].iov_len = (bufsize); \
+    } \
+} while (0)
+
+#define OSPF6_MESSAGE_JOIN(msg,join) \
+do { \
+  int x,y; \
+  for (x = 0; x < OSPF6_MESSAGE_IOVEC_SIZE; x++) \
+    if ((msg)[x].iov_base == NULL && (msg)[x].iov_len == 0) \
+      break; \
+  for (y = x; y < OSPF6_MESSAGE_IOVEC_SIZE; y++) \
+    { \
+      (msg)[y].iov_base = (join)[y - x].iov_base; \
+      (msg)[y].iov_len = (join)[y - x].iov_len; \
+    } \
+} while (0)
+
+
 /* Statistics */
 struct ospf6_message_stat
 {
@@ -133,20 +173,24 @@ struct ospf6_message_stat
 extern char *ospf6_message_type_string[];
 
 /* Function Prototypes */
-struct ospf6_lsa_hdr *
-attach_lsa_hdr_to_iov (struct ospf6_lsa *, struct iovec *);
-struct ospf6_lsa_hdr *
-attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov);
-
 int ospf6_receive (struct thread *);
 
 int ospf6_send_hello (struct thread *);
-int ospf6_send_hello_new (struct thread *);
-int ospf6_send_dbdesc_retrans (struct thread *);
+int ospf6_send_dbdesc_rxmt (struct thread *);
 int ospf6_send_dbdesc (struct thread *);
 int ospf6_send_lsreq (struct thread *);
-int ospf6_send_lsupdate_retrans (struct thread *);
+
+struct ospf6_neighbor;
+struct ospf6_interface;
+int
+ospf6_send_lsupdate_rxmt (struct thread *);
+void
+ospf6_send_lsupdate_direct (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_send_lsupdate_flood (struct ospf6_lsa *, struct ospf6_interface *);
+
 int ospf6_send_lsack_delayed (struct thread *);
+int ospf6_send_lsack_direct (struct thread *);
 
 void ospf6_message_send (u_char, struct iovec *, struct in6_addr *, u_int);
 

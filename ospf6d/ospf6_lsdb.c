@@ -21,101 +21,78 @@
 
 #include "ospf6d.h"
 
-
-/* new */
-static void
-ospf6_lsdb_changed (struct ospf6_lsa *lsa)
+#include "linklist.h"
+#include "ospf6_lsa.h"
+
+struct ospf6_lsdb *
+ospf6_lsdb_create ()
 {
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-  struct ospf6 *o6;
-  struct ospf6_lsa_header *lsa_header;
+  struct ospf6_lsdb *lsdb;
 
-  lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-
-  switch (ntohs (lsa_header->type))
+  lsdb = XMALLOC (MTYPE_OSPF6_LSDB, sizeof (struct ospf6_lsdb));
+  if (lsdb == NULL)
     {
-    case OSPF6_LSA_TYPE_ROUTER:
-    case OSPF6_LSA_TYPE_NETWORK:
-      o6a = (struct ospf6_area *) lsa->scope;
+      zlog_warn ("Can't malloc lsdb");
+      return NULL;
+    }
 
-      ospf6_spf_calculation_schedule (o6a->area_id);
-      ospf6_route_calculation_schedule ();
-      break;
+  memset (lsdb, 0, sizeof (struct ospf6_lsdb));
+  return lsdb;
+}
 
-    case OSPF6_LSA_TYPE_LINK:
-      o6i = (struct ospf6_interface *) lsa->scope;
-      o6a = (struct ospf6_area *) o6i->area;
+void
+ospf6_lsdb_delete (struct ospf6_lsdb *lsdb)
+{
+  ospf6_lsdb_remove_all (lsdb);
+  XFREE (MTYPE_OSPF6_LSDB, lsdb);
+}
 
-      ospf6_spf_calculation_schedule (o6a->area_id);
-      ospf6_route_calculation_schedule ();
-      break;
+void
+ospf6_lsdb_remove_maxage (struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+  struct ospf6_lsa *lsa;
 
-    case OSPF6_LSA_TYPE_INTRA_PREFIX:
-      o6a = (struct ospf6_area *) lsa->scope;
+  for (node = ospf6_lsdb_head (lsdb); node; node = ospf6_lsdb_next (node))
+    {
+      lsa = node->lsa;
 
-      ospf6_route_calculation_schedule ();
-      break;
+      /* contiue if it's not MaxAge */
+      if (! ospf6_lsa_is_maxage (lsa))
+        continue;
 
-    case OSPF6_LSA_TYPE_AS_EXTERNAL:
-      o6 = (struct ospf6 *) lsa->scope;
+      /* continue if it's referenced by some retrans-lists */
+      if (lsa->lock != 1)
+        continue;
 
-      ospf6_route_external_incremental (lsa);
-      break;
+      if (IS_OSPF6_DUMP_LSDB)
+        zlog_info ("Remove MaxAge LSA: %s", lsa->str);
 
-    default:
-      break;
+      ospf6_lsdb_remove (lsa, lsdb);
+      ospf6_lsa_unlock (lsa);
+      ospf6_lsa_delete (lsa);
     }
 }
 
 struct ospf6_lsa *
-ospf6_lsdb_lookup_from_lsdb (u_int16_t type, u_int32_t ls_id,
-                             u_int32_t advrtr, list lsdb)
-{
-  struct ospf6_lsa *lsa, *found;
-  struct ospf6_lsa_header *lsa_header;
-  listnode i;
-
-  found = (struct ospf6_lsa *) NULL;
-  for (i = listhead (lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-      lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-
-      if (lsa_header->advrtr != advrtr)
-        continue;
-      if (lsa_header->ls_id != ls_id)
-        continue;
-      if (lsa_header->type != type)
-        continue;
-      found = lsa;
-    }
-  return found;
-}
-
-/* new ordinary lookup function */
-struct ospf6_lsa *
-ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id, u_int32_t advrtr)
+ospf6_lsdb_lookup (u_int16_t type, u_int32_t id, u_int32_t adv_router)
 {
   struct ospf6_interface *o6i;
   struct ospf6_area *o6a;
-  struct ospf6_lsa *found;
   listnode i, j;
-
-  found = (struct ospf6_lsa *) NULL;
+  struct ospf6_lsa *lsa;
 
   if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (type)))
     {
       for (i = listhead (ospf6->area_list); i; nextnode (i))
         {
-          o6a = (struct ospf6_area *) getdata (i);
+          o6a = getdata (i);
           for (j = listhead (o6a->if_list); j; nextnode (j))
             {
-              o6i = (struct ospf6_interface *) getdata (j);
-              found = ospf6_lsdb_lookup_from_lsdb (type, ls_id, advrtr,
-                                                   o6i->lsdb);
-              if (found)
-                return found;
+              o6i = getdata (j);
+              lsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, o6i->lsdb);
+              if (lsa)
+                return lsa;
             }
         }
     }
@@ -123,358 +100,187 @@ ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id, u_int32_t advrtr)
     {
       for (i = listhead (ospf6->area_list); i; nextnode (i))
         {
-          o6a = (struct ospf6_area *) getdata (i);
-          found = ospf6_lsdb_lookup_from_lsdb (type, ls_id, advrtr, o6a->lsdb);
-          if (found)
-            return found;
+          o6a = getdata (i);
+          lsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, o6a->lsdb);
+          if (lsa)
+            return lsa;
         }
     }
   else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (type)))
     {
-      found = ospf6_lsdb_lookup_from_lsdb (type, ls_id, advrtr, ospf6->lsdb);
-      if (found)
-        return found;
+      lsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, ospf6->lsdb);
+      if (lsa)
+        return lsa;
     }
   else
-    zlog_warn ("LSDB: lookup unknown scope: LSA type: %#x", ntohs (type));
+    zlog_warn ("Can't lookup lsdb: unknown scope: type %#x", ntohs (type));
 
-  return (struct ospf6_lsa *) NULL;
+  return NULL;
 }
 
 static void
-ospf6_lsdb_add (struct ospf6_lsa *lsa, list lsdb)
+ospf6_lsdb_stat_turnover (struct ospf6_lsa *old, struct ospf6_lsa *new)
 {
   struct timeval now;
+  u_long turnover_interval;
 
-  assert (lsa && lsa->lsa_hdr);
+  /* update LSDB turnover statistics */
+  gettimeofday (&now, (struct timezone *) NULL);
+  turnover_interval = now.tv_sec - old->installed;
+  new->turnover_total = old->turnover_total + turnover_interval;
+  if (old->turnover_num)
+    {
+      if (old->turnover_min > turnover_interval)
+        new->turnover_min = turnover_interval;
+      else
+        new->turnover_min = old->turnover_min;
 
-  /* set installed time */
-  if (gettimeofday (&now, (struct timezone *)NULL) < 0)
-    zlog_warn ("gettimeofday () failed, can't set installed: %s",
-               strerror (errno));
-  lsa->installed = now.tv_sec;
-
-  listnode_add (lsdb, lsa);
-  ospf6_lsa_lock (lsa);
+      if (old->turnover_max < turnover_interval)
+        new->turnover_max = turnover_interval;
+      else
+        new->turnover_max = old->turnover_max;
+    }
+  else
+    {
+      new->turnover_min = turnover_interval;
+      new->turnover_max = turnover_interval;
+    }
+  new->turnover_num = old->turnover_num + 1;
 }
 
 static void
-ospf6_lsdb_remove (struct ospf6_lsa *lsa, list lsdb)
+ospf6_lsdb_recalc_router (struct ospf6_lsa *lsa)
 {
-#if 0
-  assert (lsa->lock == 1);
-#else
-  if (lsa->lock != 1)
-    {
-      zlog_err ("lsdb: illegal LSA lock: %s %d", lsa->str, lsa->lock);
-    }
-#endif
+  struct ospf6_area *o6a = (struct ospf6_area *) lsa->scope;
 
-  listnode_delete (lsdb, lsa);
-  ospf6_lsa_unlock (lsa);
+  ospf6_spf_calculation_schedule (o6a->area_id);
+  ospf6_route_calculation_schedule ();
 }
 
-void
-ospf6_lsdb_remove_all (list lsdb)
+static void
+ospf6_lsdb_recalc_network (struct ospf6_lsa *lsa)
 {
-  struct ospf6_lsa *lsa;
-  listnode n;
+  struct ospf6_area *o6a = (struct ospf6_area *) lsa->scope;
 
-  while (listcount (lsdb))
-    {
-      n = listhead (lsdb);
-      lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_lsa_remove_all_reference (lsa);
-      if (lsa->lock)
-        ospf6_lsdb_remove (lsa, lsdb);
-    }
+  ospf6_spf_calculation_schedule (o6a->area_id);
+  ospf6_route_calculation_schedule ();
 }
 
-/* must replace old one when installing more recent LSA */
+static void
+ospf6_lsdb_recalc_link (struct ospf6_lsa *lsa)
+{
+  struct ospf6_interface *o6i = (struct ospf6_interface *) lsa->scope;
+  struct ospf6_area *o6a = (struct ospf6_area *) o6i->area;
+
+  if (o6i->state == IFS_DR)
+    ospf6_lsa_update_intra_prefix_transit (o6i->interface->name);
+
+  ospf6_spf_calculation_schedule (o6a->area_id);
+  ospf6_route_calculation_schedule ();
+}
+
+static void
+ospf6_lsdb_recalc_intra_prefix (struct ospf6_lsa *lsa)
+{
+  ospf6_route_calculation_schedule ();
+}
+
+static void
+ospf6_lsdb_recalc_as_external (struct ospf6_lsa *lsa)
+{
+  ospf6_route_external_incremental (lsa);
+}
+
+static void
+ospf6_lsdb_recalc_unknown (struct ospf6_lsa *lsa)
+{
+  zlog_notice ("*** Unknown LSA Received");
+}
+
+static void
+(*ospf6_lsdb_recalc[OSPF6_LSA_TYPE_MAX]) (struct ospf6_lsa *lsa) =
+{
+  ospf6_lsdb_recalc_unknown,
+  ospf6_lsdb_recalc_router,
+  ospf6_lsdb_recalc_network,
+  ospf6_lsdb_recalc_unknown,
+  ospf6_lsdb_recalc_unknown,
+  ospf6_lsdb_recalc_as_external,
+  ospf6_lsdb_recalc_unknown,
+  ospf6_lsdb_recalc_unknown,
+  ospf6_lsdb_recalc_link,
+  ospf6_lsdb_recalc_intra_prefix
+};
+
 void
 ospf6_lsdb_install (struct ospf6_lsa *new)
 {
-  list lsdb;
+  struct ospf6_lsdb *lsdb;
   struct ospf6_lsa *old;
-  struct ospf6_lsa_header *lsa_header;
-  int contents_changed;
-
-  struct timeval now;
-  u_long turnover_interval;
+  int recalc = 0;
 
   struct ospf6 *as = NULL;
   struct ospf6_area *area = NULL;
   struct ospf6_interface *linklocal = NULL;
 
-  lsa_header = (struct ospf6_lsa_header *) new->lsa_hdr;
-
-  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (lsa_header->type)))
+  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (new->header->type)))
     {
       linklocal = (struct ospf6_interface *) new->scope;
       lsdb = linklocal->lsdb;
     }
-  else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
+  else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (new->header->type)))
     {
       area = (struct ospf6_area *) new->scope;
       lsdb = area->lsdb;
     }
-  else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (lsa_header->type)))
+  else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (new->header->type)))
     {
       as = (struct ospf6 *) new->scope;
       lsdb = as->lsdb;
     }
   else
     {
-      zlog_err ("lsdb: install failed: scope unknown: %s", new->str);
+      zlog_err ("Can't install lsdb: scope unknown: %s", new->str);
       return;
     }
 
-  /* find old one to decide whether schedule calculation or not */
-  contents_changed = 1;
-  old = ospf6_lsdb_lookup_from_lsdb (lsa_header->type, lsa_header->ls_id,
-                                     lsa_header->advrtr, lsdb);
-  if (old)
+  /* whether schedule calculation or not */
+  old = ospf6_lsdb_lookup_lsdb (new->header->type, new->header->id,
+                                new->header->adv_router, lsdb);
+  if (old && ospf6_lsa_differ (old, new))
+    recalc = 1;
+
+  /* log */
+  if (IS_OSPF6_DUMP_LSDB)
     {
-      /* check contents change */
-      contents_changed = ospf6_lsa_differ (new, old);
-      if (IS_OSPF6_DUMP_LSDB)
-        {
-          if (contents_changed)
-            zlog_info ("LSDB: Turnover %s: contents changed", new->str);
-          else
-            zlog_info ("LSDB: Turnover %s: contents not changed", new->str);
-        }
-
-      /* update LSDB turnover statistics */
-      gettimeofday (&now, (struct timezone *) NULL);
-      turnover_interval = now.tv_sec - old->installed;
-      new->turnover_total = old->turnover_total + turnover_interval;
-      if (old->turnover_num)
-        {
-          if (old->turnover_min > turnover_interval)
-            new->turnover_min = turnover_interval;
-          else
-            new->turnover_min = old->turnover_min;
-
-          if (old->turnover_max < turnover_interval)
-            new->turnover_max = turnover_interval;
-          else
-            new->turnover_max = old->turnover_max;
-        }
-      else
-        {
-          new->turnover_min = turnover_interval;
-          new->turnover_max = turnover_interval;
-        }
-      new->turnover_num = old->turnover_num + 1;
+      zlog_info ("LSA Install %s(%p): %s", new->str, new,
+                 (recalc ? "recalc scheduled" : "recalc not scheduled"));
     }
 
-  /* RFC 2328 section 13.2 last paragraph
-        Also, any old instance of the LSA must be removed from the
-        database when the new LSA is installed.  This old instance must
-        also be removed from all neighbors' Link state retransmission
-        lists (see Section 10).
-     This seems to require removing all references to this LSA;
-     not only retransmission list but also summarylist, list for delayed
-     acknowledgement...  */
   if (old)
-    ospf6_lsa_remove_all_reference (old);
-
-  /* Replace:
-     ospf6_remove_all_reference may have deleted the "old" LSA if the
-     LSA is MaxAge LSA (by ospf6_lsdb_remove_maxage_lsa()).
-     To check whether if the "old" LSA have been deleted or not,
-     re-find LSA from LSDB. */
-  old = ospf6_lsdb_lookup_from_lsdb (lsa_header->type, lsa_header->ls_id,
-                                     lsa_header->advrtr, lsdb);
-  if (old)
-    ospf6_lsdb_remove (old, lsdb);
+    {
+      ospf6_lsdb_stat_turnover (old, new);
+      ospf6_lsdb_remove (old, lsdb);
+    }
 
   ospf6_lsdb_add (new, lsdb);
 
   /* schedule SPF/Route calculation */
-  if (contents_changed)
-    ospf6_lsdb_changed (new);
+  if (recalc)
+    (*ospf6_lsdb_recalc[OSPF6_LSA_TYPESW(new->header->type)]) (new);
 }
 
-/* maxage LSA remover */
-/* from RFC2328 14.
-    A MaxAge LSA must be removed immediately from the router's link
-    state database as soon as both a) it is no longer contained on any
-    neighbor Link state retransmission lists and b) none of the router's
-    neighbors are in states Exchange or Loading.
- */
-static void
-ospf6_lsdb_remove_maxage_lsa (struct ospf6_lsa *lsa)
-{
-  list lsdb = NULL;
-  struct ospf6 *o6;
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-  struct ospf6_lsa_header *lsa_header;
-
-  lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-
-  /* assert MaxAge */
-  assert (ospf6_lsa_is_maxage (lsa));
-
-  /* assert this LSA is still on database */
-  assert (ospf6_lsdb_lookup (lsa_header->type, lsa_header->ls_id,
-                             lsa_header->advrtr));
-
-  /* delayed acknowledge may remain... clear reference */
-  ospf6_lsa_delayed_ack_remove_all (lsa);
-
-  /* log */
-  if (IS_OSPF6_DUMP_LSDB)
-    zlog_info ("lsdb: remove MaxAge LSA: %s", lsa->str);
-
-  /* remove from lsdb. this will free lsa */
-  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (lsa_header->type)))
-    {
-      o6i = (struct ospf6_interface *) lsa->scope;
-      lsdb = o6i->lsdb;
-    }
-  else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
-    {
-      o6a = (struct ospf6_area *) lsa->scope;
-      lsdb = o6a->lsdb;
-    }
-  else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (lsa_header->type)))
-    {
-      o6 = (struct ospf6 *) lsa->scope;
-      lsdb = o6->lsdb;
-    }
-
-  ospf6_lsdb_remove (lsa, lsdb);
-}
-
-static void
-ospf6_lsdb_check_maxage_lsdb (list lsdb)
-{
-  listnode n;
-  struct ospf6_lsa *lsa;
-  list l = list_new ();
-
-  for (n = listhead (lsdb); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      if (ospf6_lsa_is_maxage (lsa) && listcount (lsa->retrans_nbr) == 0)
-        listnode_add (l, lsa);
-    }
-
-  for (n = listhead (l); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_lsdb_remove_maxage_lsa (lsa);
-    }
-
-  list_delete (l);
-}
-
-void
-ospf6_lsdb_check_maxage_linklocal (char *ifname)
-{
-  listnode i;
-  struct interface *ifp;
-  struct ospf6_interface *o6i;
-  struct ospf6_neighbor *o6n;
-
-  ifp = if_lookup_by_name (ifname);
-  if (! ifp)
-    {
-      zlog_warn ("LSDB: Check MaxAge Linklocal: No such Interface: %s",
-                 ifname);
-      return;
-    }
-  o6i = (struct ospf6_interface *) ifp->info;
-  if (! o6i)
-    {
-      zlog_warn ("LSDB: Check MaxAge Linklocal: Interface not enabled: %s",
-                 ifname);
-      return;
-    }
-
-  /* immediately stop when (exchange|loading) neighbor found */
-  for (i = listhead (o6i->neighbor_list); i; nextnode (i))
-    {
-      o6n = (struct ospf6_neighbor *) getdata (i);
-      if (o6n->state == NBS_EXCHANGE || o6n->state == NBS_LOADING)
-        return;
-    }
-
-  ospf6_lsdb_check_maxage_lsdb (o6i->lsdb);
-}
-
-void
-ospf6_lsdb_check_maxage_area (u_int32_t area_id)
-{
-  listnode i, j;
-  char buf[32];
-  struct ospf6_area *o6a;
-  struct ospf6_neighbor *o6n;
-  struct ospf6_interface *o6i;
-
-  o6a = ospf6_area_lookup (area_id, ospf6);
-  if (! o6a)
-    {
-      inet_ntop (AF_INET, &area_id, buf, sizeof (buf));
-      zlog_warn ("LSDB: Check MaxAge Area: No such Area: %s", buf);
-      return;
-    }
-
-  /* immediately stop when (exchange|loading) neighbor found */
-  for (i = listhead (o6a->if_list); i; nextnode (i))
-    {
-      o6i = (struct ospf6_interface *) getdata (i);
-      for (j = listhead (o6i->neighbor_list); j; nextnode (j))
-        {
-          o6n = (struct ospf6_neighbor *) getdata (j);
-          if (o6n->state == NBS_EXCHANGE || o6n->state == NBS_LOADING)
-            return;
-        }
-    }
-
-  ospf6_lsdb_check_maxage_lsdb (o6a->lsdb);
-}
-
-void
-ospf6_lsdb_check_maxage_as ()
-{
-  listnode i, j, k;
-  struct ospf6_neighbor *o6n;
-  struct ospf6_interface *o6i;
-  struct ospf6_area *o6a;
-
-  /* immediately stop when (exchange|loading) neighbor found */
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->if_list); j; nextnode (j))
-        {
-          o6i = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6i->neighbor_list); k; nextnode (k))
-            {
-              o6n = (struct ospf6_neighbor *) getdata (k);
-              if (o6n->state == NBS_EXCHANGE || o6n->state == NBS_LOADING)
-                return;
-            }
-        }
-    }
-
-  ospf6_lsdb_check_maxage_lsdb (ospf6->lsdb);
-}
+
 
 /* vty functions */
 static void
 show_ipv6_ospf6_dbsummary (struct vty *vty, struct ospf6 *o6)
 {
   char buf[32];
-  listnode i, j, k;
+  listnode i, j;
   struct ospf6_area *o6a;
   struct ospf6_interface *o6i;
-  struct ospf6_lsa *lsa;
-  struct ospf6_lsa_header *lsa_header;
+  struct ospf6_lsdb_node *node;
 
   u_int MaxAgeTotal, ActiveTotal, Total;
   u_int MaxAgeArea, ActiveArea, TotalArea;
@@ -486,27 +292,25 @@ show_ipv6_ospf6_dbsummary (struct vty *vty, struct ospf6 *o6)
   u_int MaxAgeASExternal, ActiveASExternal, TotalASExternal;
   u_int MaxAgeLink, ActiveLink, TotalLink;
 
-  MaxAgeTotal = ActiveTotal = Total
-  = MaxAgeASExternal = ActiveASExternal = TotalASExternal
-  = 0;
+  MaxAgeTotal = ActiveTotal = Total = MaxAgeASExternal
+              = ActiveASExternal = TotalASExternal
+              = 0;
 
   inet_ntop (AF_INET, &o6->router_id, buf, sizeof (buf));
   vty_out (vty, "%s", VTY_NEWLINE);
-  vty_out (vty, "        OSPFv3 Router with ID (%s) (Process ID %d)%s%s",
+  vty_out (vty, "        OSPFv3 Router with ID (%s) (Process ID %ld)%s%s",
            buf, o6->process_id, VTY_NEWLINE, VTY_NEWLINE);
 
-  for (k = listhead (o6->lsdb); k; nextnode (k))
+  for (node = ospf6_lsdb_head (o6->lsdb); node;
+       node = ospf6_lsdb_next (node))
     {
-      lsa = (struct ospf6_lsa *) getdata (k);
-      lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
+      if (ntohs (node->lsa->header->type) != OSPF6_LSA_TYPE_AS_EXTERNAL)
+        continue;
 
-      if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_AS_EXTERNAL)
-	{
-	  if (ospf6_lsa_is_maxage (lsa))
-	    MaxAgeASExternal++;
-	  else
-	    ActiveASExternal++;
-	}
+      if (ospf6_lsa_is_maxage (node->lsa))
+        MaxAgeASExternal++;
+      else
+        ActiveASExternal++;
     }
 
   vty_out (vty, "AS:%s", VTY_NEWLINE);
@@ -532,37 +336,46 @@ show_ipv6_ospf6_dbsummary (struct vty *vty, struct ospf6 *o6)
       = MaxAgeInterPrefix = ActiveInterPrefix = TotalInterPrefix
       = 0;
 
-      for (k = listhead (o6a->lsdb); k; nextnode (k))
+      for (node = ospf6_lsdb_head (o6a->lsdb); node;
+           node = ospf6_lsdb_next (node))
         {
-          lsa = (struct ospf6_lsa *) getdata (k);
-          lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-
-          if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_ROUTER)
-            if (ospf6_lsa_is_maxage (lsa))
-              MaxAgeRouter++;
-            else
-              ActiveRouter++;
-          else if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_NETWORK)
-            if (ospf6_lsa_is_maxage (lsa))
-              MaxAgeNetwork++;
-            else
-              ActiveNetwork++;
-          else if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_INTER_ROUTER)
-            if (ospf6_lsa_is_maxage (lsa))
-              MaxAgeInterRouter++;
-            else
-              ActiveInterRouter++;
-          else if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_INTER_PREFIX)
-            if (ospf6_lsa_is_maxage (lsa))
-              MaxAgeInterPrefix++;
-            else
-              ActiveInterPrefix++;
-          else if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_INTRA_PREFIX)
+          if (ntohs (node->lsa->header->type) == OSPF6_LSA_TYPE_ROUTER)
+            {
+              if (ospf6_lsa_is_maxage (node->lsa))
+                MaxAgeRouter++;
+              else
+                ActiveRouter++;
+            }
+          else if (ntohs (node->lsa->header->type) == OSPF6_LSA_TYPE_NETWORK)
+            {
+              if (ospf6_lsa_is_maxage (node->lsa))
+                MaxAgeNetwork++;
+              else
+                ActiveNetwork++;
+            }
+          else if (ntohs (node->lsa->header->type) ==
+                   OSPF6_LSA_TYPE_INTER_ROUTER)
+            {
+              if (ospf6_lsa_is_maxage (node->lsa))
+                MaxAgeInterRouter++;
+              else
+                ActiveInterRouter++;
+            }
+          else if (ntohs (node->lsa->header->type) ==
+                   OSPF6_LSA_TYPE_INTER_PREFIX)
+            {
+              if (ospf6_lsa_is_maxage (node->lsa))
+                MaxAgeInterPrefix++;
+              else
+                ActiveInterPrefix++;
+            }
+          else if (ntohs (node->lsa->header->type) ==
+                   OSPF6_LSA_TYPE_INTRA_PREFIX)
 	    {
-	      if (ospf6_lsa_is_maxage (lsa))
-		MaxAgeIntraPrefix++;
-	      else
-		ActiveIntraPrefix++;
+              if (ospf6_lsa_is_maxage (node->lsa))
+                MaxAgeIntraPrefix++;
+              else
+                ActiveIntraPrefix++;
 	    }
         }
 
@@ -599,17 +412,15 @@ show_ipv6_ospf6_dbsummary (struct vty *vty, struct ospf6 *o6)
 
           MaxAgeLink = ActiveLink = TotalLink = 0;
 
-          for (k = listhead (o6i->lsdb); k; nextnode (k))
+          for (node = ospf6_lsdb_head (o6i->lsdb); node;
+               node = ospf6_lsdb_next (node))
             {
-              lsa = (struct ospf6_lsa *) getdata (k);
-              lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-
-              if (ntohs (lsa_header->type) == OSPF6_LSA_TYPE_LINK)
+              if (ntohs (node->lsa->header->type) == OSPF6_LSA_TYPE_LINK)
 		{
-		  if (ospf6_lsa_is_maxage (lsa))
-		    MaxAgeLink++;
-		  else
-		    ActiveLink++;
+                  if (ospf6_lsa_is_maxage (node->lsa))
+                    MaxAgeLink++;
+                  else
+                    ActiveLink++;
 		}
             }
 
@@ -630,183 +441,6 @@ show_ipv6_ospf6_dbsummary (struct vty *vty, struct ospf6 *o6)
            MaxAgeTotal + ActiveTotal, MaxAgeTotal, VTY_NEWLINE);
 }
 
-static void
-show_ipv6_ospf6_lsdb (struct vty *vty, list lsdb)
-{
-  listnode i;
-  struct ospf6_lsa *lsa;
-
-  for (i = listhead (lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-      ospf6_lsa_show (vty, lsa);
-    }
-}
-
-static void
-show_ipv6_ospf6_lsdb_lsid (struct vty *vty, u_int32_t lsid)
-{
-  listnode i, j, k;
-  /* struct ospf6 *o6; */
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-  struct ospf6_lsa *lsa;
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->if_list); j; nextnode (j))
-        {
-          o6i = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6i->lsdb); k; nextnode (k))
-            {
-              lsa = (struct ospf6_lsa *) getdata (k);
-
-              if (lsa->lsa_hdr->lsh_id != lsid)
-                continue;
-
-              ospf6_lsa_show (vty, lsa);
-            }
-        }
-    }
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->lsdb); j; nextnode (j))
-        {
-          lsa = (struct ospf6_lsa *) getdata (j);
-
-          if (lsa->lsa_hdr->lsh_id != lsid)
-            continue;
-
-          ospf6_lsa_show (vty, lsa);
-        }
-    }
-
-  for (i = listhead (ospf6->lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-
-      if (lsa->lsa_hdr->lsh_id != lsid)
-        continue;
-
-      ospf6_lsa_show (vty, lsa);
-    }
-}
-
-static void
-show_ipv6_ospf6_lsdb_advrtr (struct vty *vty, u_int32_t advrtr)
-{
-  listnode i, j, k;
-  /* struct ospf6 *o6; */
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-  struct ospf6_lsa *lsa;
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->if_list); j; nextnode (j))
-        {
-          o6i = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6i->lsdb); k; nextnode (k))
-            {
-              lsa = (struct ospf6_lsa *) getdata (k);
-
-              if (lsa->lsa_hdr->lsh_advrtr != advrtr)
-                continue;
-
-              ospf6_lsa_show (vty, lsa);
-            }
-        }
-    }
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->lsdb); j; nextnode (j))
-        {
-          lsa = (struct ospf6_lsa *) getdata (j);
-
-          if (lsa->lsa_hdr->lsh_advrtr != advrtr)
-            continue;
-
-          ospf6_lsa_show (vty, lsa);
-        }
-    }
-
-  for (i = listhead (ospf6->lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-
-      if (lsa->lsa_hdr->lsh_advrtr != advrtr)
-        continue;
-
-      ospf6_lsa_show (vty, lsa);
-    }
-}
-
-static void
-show_ipv6_ospf6_lsdb_type (struct vty *vty, u_int16_t type, list lsdb)
-{
-  listnode i;
-  struct ospf6_lsa *lsa;
-
-  for (i = listhead (lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-
-      if (lsa->lsa_hdr->lsh_type != type)
-        continue;
-
-      ospf6_lsa_show (vty, lsa);
-    }
-}
-
-static void
-show_ipv6_ospf6_lsdb_type_advrtr (struct vty *vty, u_int16_t type,
-                                  u_int32_t advrtr, list lsdb)
-{
-  listnode i;
-  struct ospf6_lsa *lsa;
-
-  for (i = listhead (lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-
-      if (lsa->lsa_hdr->lsh_type != type)
-        continue;
-      if (lsa->lsa_hdr->lsh_advrtr != advrtr)
-        continue;
-
-      ospf6_lsa_show (vty, lsa);
-    }
-}
-
-static void
-show_ipv6_ospf6_lsdb_type_advrtr_lsid (struct vty *vty, u_int16_t type,
-                                       u_int32_t advrtr, u_int32_t lsid,
-                                       list lsdb)
-{
-  listnode i;
-  struct ospf6_lsa *lsa;
-
-  for (i = listhead (lsdb); i; nextnode (i))
-    {
-      lsa = (struct ospf6_lsa *) getdata (i);
-
-      if (lsa->lsa_hdr->lsh_type != type)
-        continue;
-      if (lsa->lsa_hdr->lsh_advrtr != advrtr)
-        continue;
-      if (lsa->lsa_hdr->lsh_id != lsid)
-        continue;
-
-      ospf6_lsa_show (vty, lsa);
-    }
-}
-
 DEFUN (show_ipv6_ospf6_database_dababase_summary,
        show_ipv6_ospf6_database_database_summary_cmd,
        "show ipv6 ospf6 database database-summary",
@@ -816,239 +450,8 @@ DEFUN (show_ipv6_ospf6_database_dababase_summary,
        "Database Summary\n"
        "Summary of Database\n")
 {
+  OSPF6_CMD_CHECK_RUNNING ();
   show_ipv6_ospf6_dbsummary (vty, ospf6);
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database_type_advrtr_lsid,
-       show_ipv6_ospf6_database_type_advrtr_lsid_cmd,
-       "show ipv6 ospf6 database (router|network|intra-prefix|link|as-external) advrtr A.B.C.D lsid <0-4294967295>",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSAs\n"
-       "Network-LSAs\n"
-       "Intra-Area-Prefix-LSAs\n"
-       "Link-LSAs\n"
-       "AS-External-LSAs\n"
-       "Specify Advertising Router\n"
-       "Advertising Router ID\n"
-       "Specify Link State ID\n"
-       "Link State ID\n"
-       )
-{
-  listnode i, j;
-  u_int16_t scope_type = 0;
-  u_int16_t type = 0;
-  u_int32_t advrtr = 0;
-  u_int32_t lsid = 0;
-  /*struct ospf6 *o6;*/
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-
-  if (strncmp (argv[0], "r", 1) == 0)
-    type = htons (OSPF6_LSA_TYPE_ROUTER);
-  else if (strncmp (argv[0], "n", 1) == 0)
-    type = htons (OSPF6_LSA_TYPE_NETWORK);
-  else if (strncmp (argv[0], "i", 1) == 0)
-    type = htons (OSPF6_LSA_TYPE_INTRA_PREFIX);
-  else if (strncmp (argv[0], "l", 1) == 0)
-    type = htons (OSPF6_LSA_TYPE_LINK);
-  else if (strncmp (argv[0], "a", 1) == 0)
-    type = htons (OSPF6_LSA_TYPE_AS_EXTERNAL);
-
-  if (argc > 1)
-    inet_pton (AF_INET, argv[1], &advrtr);
-
-  if (argc > 2)
-    lsid = htonl (strtoul (argv[2], (char **) NULL, 10));
-
-  scope_type = (ntohs (type) & OSPF6_LSA_SCOPE_MASK);
-
-  switch (scope_type)
-    {
-      case OSPF6_LSA_SCOPE_AS:
-        if (argc > 2)
-          show_ipv6_ospf6_lsdb_type_advrtr_lsid (vty, type, advrtr,
-                                                 lsid, ospf6->lsdb);
-        else if (argc > 1)
-          show_ipv6_ospf6_lsdb_type_advrtr (vty, type, advrtr,
-                                            ospf6->lsdb);
-        else
-          show_ipv6_ospf6_lsdb_type (vty, type, ospf6->lsdb);
-        break;
-
-      case OSPF6_LSA_SCOPE_AREA:
-        for (i = listhead (ospf6->area_list); i; nextnode (i))
-          {
-            o6a = (struct ospf6_area *) getdata (i);
-            if (argc > 2)
-              show_ipv6_ospf6_lsdb_type_advrtr_lsid (vty, type, advrtr,
-                                                     lsid, o6a->lsdb);
-            else if (argc > 1)
-              show_ipv6_ospf6_lsdb_type_advrtr (vty, type, advrtr,
-                                                o6a->lsdb);
-            else
-              show_ipv6_ospf6_lsdb_type (vty, type, o6a->lsdb);
-          }
-        break;
-
-      case OSPF6_LSA_SCOPE_LINKLOCAL:
-        for (i = listhead (ospf6->area_list); i; nextnode (i))
-          {
-            o6a = (struct ospf6_area *) getdata (i);
-            for (j = listhead (o6a->if_list); j; nextnode (j))
-              {
-                o6i = (struct ospf6_interface *) getdata (j);
-                if (argc > 2)
-                  show_ipv6_ospf6_lsdb_type_advrtr_lsid (vty, type, advrtr,
-                                                         lsid, o6i->lsdb);
-                else if (argc > 1)
-                  show_ipv6_ospf6_lsdb_type_advrtr (vty, type, advrtr,
-                                                    o6i->lsdb);
-                else
-                  show_ipv6_ospf6_lsdb_type (vty, type, o6i->lsdb);
-              }
-          }
-        break;
-
-      default:
-        break;
-    }
-  return CMD_SUCCESS;
-}
-
-ALIAS (show_ipv6_ospf6_database_type_advrtr_lsid,
-       show_ipv6_ospf6_database_type_advrtr_cmd,
-       "show ipv6 ospf6 database (router|network|intra-prefix|link|as-external) advrtr A.B.C.D",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSAs\n"
-       "Network-LSAs\n"
-       "Intra-Area-Prefix-LSAs\n"
-       "Link-LSAs\n"
-       "AS-External-LSAs\n"
-       "Specify Advertising Router\n"
-       "Advertising Router ID\n"
-       )
-
-ALIAS (show_ipv6_ospf6_database_type_advrtr_lsid,
-       show_ipv6_ospf6_database_type_cmd,
-       "show ipv6 ospf6 database (router|network|intra-prefix|link|as-external)",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSAs\n"
-       "Network-LSAs\n"
-       "Intra-Area-Prefix-LSAs\n"
-       "Link-LSAs\n"
-       "AS-External-LSAs\n"
-       )
-
-DEFUN (show_ipv6_ospf6_database_scope,
-       show_ipv6_ospf6_database_scope_cmd,
-       "show ipv6 ospf6 database (as-scope|area-scope|linklocal-scope|)",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "AS scoped LSAs\n"
-       "Area scoped LSAs\n"
-       "Linklocal scoped LSAs\n"
-       )
-{
-  listnode i, j;
-  struct ospf6 *o6;
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-  int all, as_scope, area_scope, linklocal_scope;
-
-  all = as_scope = area_scope = linklocal_scope = 0;
-  if (argc == 0)
-    all = 1;
-  else if (strncmp (argv[0], "as", 2) == 0)
-    as_scope = 1;
-  else if (strncmp (argv[0], "ar", 2) == 0)
-    area_scope = 1;
-  else if (strncmp (argv[0], "li", 2) == 0)
-    linklocal_scope = 1;
-  else
-    all = 1;
-  
-  o6 = ospf6;
-
-  if (all || as_scope)
-    show_ipv6_ospf6_lsdb (vty, o6->lsdb);
-  if (as_scope)
-    return CMD_SUCCESS;
-
-  for (i = listhead (o6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-
-      if (all || area_scope)
-        show_ipv6_ospf6_lsdb (vty, o6a->lsdb);
-      if (area_scope)
-        continue;
-
-      for (j = listhead (o6a->if_list); j; nextnode (j))
-        {
-          o6i = (struct ospf6_interface *) getdata (j);
-
-          if (all || linklocal_scope)
-            show_ipv6_ospf6_lsdb (vty, o6i->lsdb);
-        }
-    }
-
-  return CMD_SUCCESS;
-}      
-
-ALIAS (show_ipv6_ospf6_database_scope,
-       show_ipv6_ospf6_database_cmd,
-       "show ipv6 ospf6 database",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       )
-
-DEFUN (show_ipv6_ospf6_database_lsid,
-       show_ipv6_ospf6_database_lsid_cmd,
-       "show ipv6 ospf6 database lsid <0-4294967295>",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Specify Link State ID\n"
-       "Link State ID\n"
-       )
-{
-  u_int32_t ls_id;
-
-  ls_id = htonl (strtol (argv[0], NULL, 10));
-  show_ipv6_ospf6_lsdb_lsid (vty, ls_id);
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database_advrtr,
-       show_ipv6_ospf6_database_advrtr_cmd,
-       "show ipv6 ospf6 database advrtr A.B.C.D",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Specify Advertising Router\n"
-       "Router ID\n"
-       )
-{
-  u_int32_t advrtr;
-
-  inet_pton (AF_INET, argv[0], &advrtr);
-  show_ipv6_ospf6_lsdb_advrtr (vty, advrtr);
   return CMD_SUCCESS;
 }
 
@@ -1062,11 +465,13 @@ DEFUN (show_ipv6_ospf6_database_turnover,
        "Statistics of Database turn over\n"
        )
 {
-  listnode i, j, k;
+  listnode i, j;
   struct ospf6_area *o6a;
   struct ospf6_interface *o6i;
-  struct ospf6_lsa *lsa;
   char adv_router[15];
+  struct ospf6_lsdb_node *node;
+
+  OSPF6_CMD_CHECK_RUNNING ();
 
   vty_out (vty, "%-16s %-2s %-15s %4s %7s  %7s  %7s%s",
            "Type", "ID", "Adv-router", "Num", "Min", "Max", "Avg",
@@ -1079,18 +484,19 @@ DEFUN (show_ipv6_ospf6_database_turnover,
       for (j = listhead (o6a->if_list); j; nextnode (j))
         {
           o6i = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6i->lsdb); k; nextnode (k))
+          for (node = ospf6_lsdb_head (o6i->lsdb); node;
+               node = ospf6_lsdb_next (node))
             {
-              lsa = (struct ospf6_lsa *) getdata (k);
-              inet_ntop (AF_INET, &lsa->lsa_hdr->lsh_advrtr,
+              inet_ntop (AF_INET, &node->lsa->header->adv_router,
                          adv_router, sizeof (adv_router));
-              vty_out (vty, "%-16s %-2d %-15s %4d %7ds %7ds %7ds%s",
-                       ospf6_lsa_type_string(lsa->lsa_hdr->lsh_type),
-                       ntohl (lsa->lsa_hdr->lsh_id),
-                       adv_router, lsa->turnover_num,
-                       lsa->turnover_min, lsa->turnover_max,
-                       (lsa->turnover_num ?
-                        (lsa->turnover_total / lsa->turnover_num): 0),
+              vty_out (vty, "%-16s %-2d %-15s %4ld %7lds %7lds %7lds%s",
+                       ospf6_lsa_type_string(node->lsa->header->type),
+                       ntohl (node->lsa->header->id),
+                       adv_router, node->lsa->turnover_num,
+                       node->lsa->turnover_min, node->lsa->turnover_max,
+                       (node->lsa->turnover_num ?
+                        (node->lsa->turnover_total / node->lsa->turnover_num):
+                        0),
                        VTY_NEWLINE);
             }
         }
@@ -1100,35 +506,35 @@ DEFUN (show_ipv6_ospf6_database_turnover,
   for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
       o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->lsdb); j; nextnode (j))
+      for (node = ospf6_lsdb_head (o6a->lsdb); node;
+           node = ospf6_lsdb_next (node))
         {
-          lsa = (struct ospf6_lsa *) getdata (j);
-          inet_ntop (AF_INET, &lsa->lsa_hdr->lsh_advrtr,
+          inet_ntop (AF_INET, &node->lsa->header->adv_router,
                      adv_router, sizeof (adv_router));
-          vty_out (vty, "%-16s %-2d %-15s %4d %7ds %7ds %7ds%s",
-                   ospf6_lsa_type_string(lsa->lsa_hdr->lsh_type),
-                   ntohl (lsa->lsa_hdr->lsh_id),
-                   adv_router, lsa->turnover_num,
-                   lsa->turnover_min, lsa->turnover_max,
-                   (lsa->turnover_num ?
-                    (lsa->turnover_total / lsa->turnover_num): 0),
+          vty_out (vty, "%-16s %-2d %-15s %4ld %7lds %7lds %7lds%s",
+                   ospf6_lsa_type_string(node->lsa->header->type),
+                   ntohl (node->lsa->header->id),
+                   adv_router, node->lsa->turnover_num,
+                   node->lsa->turnover_min, node->lsa->turnover_max,
+                   (node->lsa->turnover_num ?
+                    (node->lsa->turnover_total / node->lsa->turnover_num): 0),
                    VTY_NEWLINE);
         }
     }
 
   /* AS scope */
-  for (i = listhead (ospf6->lsdb); i; nextnode (i))
+  for (node = ospf6_lsdb_head (ospf6->lsdb); node;
+       node = ospf6_lsdb_next (node))
     {
-      lsa = (struct ospf6_lsa *) getdata (i);
-      inet_ntop (AF_INET, &lsa->lsa_hdr->lsh_advrtr,
+      inet_ntop (AF_INET, &node->lsa->header->adv_router,
                  adv_router, sizeof (adv_router));
-      vty_out (vty, "%-16s %-2d %-15s %4d %7ds %7ds %7ds%s",
-               ospf6_lsa_type_string(lsa->lsa_hdr->lsh_type),
-               ntohl (lsa->lsa_hdr->lsh_id),
-               adv_router, lsa->turnover_num,
-               lsa->turnover_min, lsa->turnover_max,
-               (lsa->turnover_num ?
-                (lsa->turnover_total / lsa->turnover_num): 0),
+      vty_out (vty, "%-16s %-2d %-15s %4ld %7lds %7lds %7lds%s",
+               ospf6_lsa_type_string (node->lsa->header->type),
+               ntohl (node->lsa->header->id),
+               adv_router, node->lsa->turnover_num,
+               node->lsa->turnover_min, node->lsa->turnover_max,
+               (node->lsa->turnover_num ?
+                (node->lsa->turnover_total / node->lsa->turnover_num): 0),
                VTY_NEWLINE);
     }
 
@@ -1145,10 +551,10 @@ DEFUN (show_ipv6_ospf6_database_turnover_summary,
        "Statistics summary of Database turn over\n"
        )
 {
-  listnode i, j, k;
+  listnode i, j;
   struct ospf6_area *o6a;
   struct ospf6_interface *o6i;
-  struct ospf6_lsa *lsa;
+  struct ospf6_lsdb_node *node;
   u_long num_total[OSPF6_LSA_TYPE_MAX];
   u_long num_min[OSPF6_LSA_TYPE_MAX];
   u_long num_max[OSPF6_LSA_TYPE_MAX];
@@ -1158,6 +564,8 @@ DEFUN (show_ipv6_ospf6_database_turnover_summary,
   u_long max[OSPF6_LSA_TYPE_MAX];
   u_long size[OSPF6_LSA_TYPE_MAX];
   int index;
+
+  OSPF6_CMD_CHECK_RUNNING ();
 
   for (index = 0; index < OSPF6_LSA_TYPE_MAX; index++)
     {
@@ -1172,28 +580,27 @@ DEFUN (show_ipv6_ospf6_database_turnover_summary,
       for (j = listhead (o6a->if_list); j; nextnode (j))
         {
           o6i = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6i->lsdb); k; nextnode (k))
+          for (node = ospf6_lsdb_head (o6i->lsdb); node;
+               node = ospf6_lsdb_next (node))
             {
-              lsa = (struct ospf6_lsa *) getdata (k);
-
-              index = OSPF6_LSA_TYPESW (lsa->lsa_hdr->lsh_type);
+              index = OSPF6_LSA_TYPESW (node->lsa->header->type);
 
               if (num_min[index] == 0)
-                num_min[index] = lsa->turnover_num;
-              else if (num_min[index] > lsa->turnover_num)
-                num_min[index] = lsa->turnover_num;
-              if (num_max[index] < lsa->turnover_num)
-                num_max[index] = lsa->turnover_num;
-              num_total[index] += lsa->turnover_num;
+                num_min[index] = node->lsa->turnover_num;
+              else if (num_min[index] > node->lsa->turnover_num)
+                num_min[index] = node->lsa->turnover_num;
+              if (num_max[index] < node->lsa->turnover_num)
+                num_max[index] = node->lsa->turnover_num;
+              num_total[index] += node->lsa->turnover_num;
               num_size[index]++;
 
               if (min[index] == 0)
-                min[index] = lsa->turnover_min;
-              else if (min[index] > lsa->turnover_min)
-                min[index] = lsa->turnover_min;
-              if (max[index] < lsa->turnover_max)
-                max[index] = lsa->turnover_max;
-              total[index] += lsa->turnover_total;
+                min[index] = node->lsa->turnover_min;
+              else if (min[index] > node->lsa->turnover_min)
+                min[index] = node->lsa->turnover_min;
+              if (max[index] < node->lsa->turnover_max)
+                max[index] = node->lsa->turnover_max;
+              total[index] += node->lsa->turnover_total;
               size[index]++;
             }
         }
@@ -1203,55 +610,53 @@ DEFUN (show_ipv6_ospf6_database_turnover_summary,
   for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
       o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->lsdb); j; nextnode (j))
+      for (node = ospf6_lsdb_head (o6a->lsdb); node;
+           node = ospf6_lsdb_next (node))
         {
-          lsa = (struct ospf6_lsa *) getdata (j);
-
-          index = OSPF6_LSA_TYPESW (lsa->lsa_hdr->lsh_type);
+          index = OSPF6_LSA_TYPESW (node->lsa->header->type);
 
           if (num_min[index] == 0)
-            num_min[index] = lsa->turnover_num;
-          else if (num_min[index] > lsa->turnover_num)
-            num_min[index] = lsa->turnover_num;
-          if (num_max[index] < lsa->turnover_num)
-            num_max[index] = lsa->turnover_num;
-          num_total[index] += lsa->turnover_num;
+            num_min[index] = node->lsa->turnover_num;
+          else if (num_min[index] > node->lsa->turnover_num)
+            num_min[index] = node->lsa->turnover_num;
+          if (num_max[index] < node->lsa->turnover_num)
+            num_max[index] = node->lsa->turnover_num;
+          num_total[index] += node->lsa->turnover_num;
           num_size[index]++;
 
           if (min[index] == 0)
-            min[index] = lsa->turnover_min;
-          else if (min[index] > lsa->turnover_min)
-            min[index] = lsa->turnover_min;
-          if (max[index] < lsa->turnover_max)
-            max[index] = lsa->turnover_max;
-          total[index] += lsa->turnover_total;
+            min[index] = node->lsa->turnover_min;
+          else if (min[index] > node->lsa->turnover_min)
+            min[index] = node->lsa->turnover_min;
+          if (max[index] < node->lsa->turnover_max)
+            max[index] = node->lsa->turnover_max;
+          total[index] += node->lsa->turnover_total;
           size[index]++;
         }
     }
 
   /* AS scope */
-  for (i = listhead (ospf6->lsdb); i; nextnode (i))
+  for (node = ospf6_lsdb_head (ospf6->lsdb); node;
+       node = ospf6_lsdb_next (node))
     {
-      lsa = (struct ospf6_lsa *) getdata (i);
-
-      index = OSPF6_LSA_TYPESW (lsa->lsa_hdr->lsh_type);
+      index = OSPF6_LSA_TYPESW (node->lsa->header->type);
 
       if (num_min[index] == 0)
-        num_min[index] = lsa->turnover_num;
-      else if (num_min[index] > lsa->turnover_num)
-        num_min[index] = lsa->turnover_num;
-      if (num_max[index] < lsa->turnover_num)
-        num_max[index] = lsa->turnover_num;
-      num_total[index] += lsa->turnover_num;
+        num_min[index] = node->lsa->turnover_num;
+      else if (num_min[index] > node->lsa->turnover_num)
+        num_min[index] = node->lsa->turnover_num;
+      if (num_max[index] < node->lsa->turnover_num)
+        num_max[index] = node->lsa->turnover_num;
+      num_total[index] += node->lsa->turnover_num;
       num_size[index]++;
 
       if (min[index] == 0)
-        min[index] = lsa->turnover_min;
-      else if (min[index] > lsa->turnover_min)
-        min[index] = lsa->turnover_min;
-      if (max[index] < lsa->turnover_max)
-        max[index] = lsa->turnover_max;
-      total[index] += lsa->turnover_total;
+        min[index] = node->lsa->turnover_min;
+      else if (min[index] > node->lsa->turnover_min)
+        min[index] = node->lsa->turnover_min;
+      if (max[index] < node->lsa->turnover_max)
+        max[index] = node->lsa->turnover_max;
+      total[index] += node->lsa->turnover_total;
       size[index]++;
     }
 
@@ -1261,7 +666,7 @@ DEFUN (show_ipv6_ospf6_database_turnover_summary,
 
   for (index = 1; index < OSPF6_LSA_TYPE_MAX; index++)
     {
-      vty_out (vty, "%-16s %6d %6d %6d %6ds %6ds %6ds%s",
+      vty_out (vty, "%-16s %6ld %6ld %6ld %6lds %6lds %6lds%s",
                ospf6_lsa_type_strings[index],
                num_min[index], num_max[index],
                (num_size[index] ? (num_total[index] / num_size[index]) : 0),
@@ -1273,30 +678,384 @@ DEFUN (show_ipv6_ospf6_database_turnover_summary,
   return CMD_SUCCESS;
 }
 
+#define OSPF6_LSDB_MATCH_TYPE        0x01
+#define OSPF6_LSDB_MATCH_ID          0x02
+#define OSPF6_LSDB_MATCH_ADV_ROUTER  0x04
+
+static int
+ospf6_lsdb_match (int flag, u_int16_t type, u_int32_t id,
+                  u_int32_t adv_router, struct ospf6_lsa *lsa)
+{
+  if (CHECK_FLAG (flag, OSPF6_LSDB_MATCH_TYPE) &&
+      lsa->header->type != type)
+    return 0;
+
+  if (CHECK_FLAG (flag, OSPF6_LSDB_MATCH_ID) &&
+      lsa->header->id != id)
+    return 0;
+
+  if (CHECK_FLAG (flag, OSPF6_LSDB_MATCH_ADV_ROUTER) &&
+      lsa->header->adv_router != adv_router)
+    return 0;
+
+  return 1;
+}
+
+DEFUN (show_ipv6_ospf6_database,
+       show_ipv6_ospf6_database_cmd,
+       "show ipv6 ospf6 database",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "LSA Database\n"
+       )
+{
+  u_int flag;
+  u_int16_t type = 0;
+  u_int32_t id, adv_router;
+  int ret;
+  listnode i, j;
+  struct ospf6_area *o6a;
+  struct ospf6_interface *o6i;
+  struct ospf6_lsdb_node *node;
+  char invalid[32], *invalidp;
+
+  flag = 0;
+  memset (invalid, 0, sizeof (invalid));
+  invalidp = invalid;
+
+  if (argc > 0)
+    {
+      SET_FLAG (flag, OSPF6_LSDB_MATCH_TYPE);
+      if (! strncmp (argv[0], "r", 1))
+        type = htons (OSPF6_LSA_TYPE_ROUTER);
+      if (! strncmp (argv[0], "n", 1))
+        type = htons (OSPF6_LSA_TYPE_NETWORK);
+      if (! strncmp (argv[0], "a", 1))
+        type = htons (OSPF6_LSA_TYPE_AS_EXTERNAL);
+      if (! strncmp (argv[0], "i", 1))
+        type = htons (OSPF6_LSA_TYPE_INTRA_PREFIX);
+      if (! strncmp (argv[0], "l", 1))
+        type = htons (OSPF6_LSA_TYPE_LINK);
+      if (! strncmp (argv[0], "*", 1))
+        UNSET_FLAG (flag, OSPF6_LSDB_MATCH_TYPE);
+    }
+
+  if (argc > 1)
+    {
+      SET_FLAG (flag, OSPF6_LSDB_MATCH_ID);
+      if (! strncmp (argv[1], "*", 1))
+        UNSET_FLAG (flag, OSPF6_LSDB_MATCH_ID);
+      else
+        {
+          ret = inet_pton (AF_INET, argv[1], &id);
+          if (ret != 1)
+            {
+              id = htonl (strtoul (argv[1], &invalidp, 10));
+              if (invalid[0] != '\0')
+                {
+                  vty_out (vty, "Link State ID is not parsable: %s%s",
+                           argv[1], VTY_NEWLINE);
+                  return CMD_SUCCESS;
+                }
+            }
+        }
+    }
+
+  if (argc > 2)
+    {
+      SET_FLAG (flag, OSPF6_LSDB_MATCH_ADV_ROUTER);
+      if (! strncmp (argv[2], "*", 1))
+        UNSET_FLAG (flag, OSPF6_LSDB_MATCH_ADV_ROUTER);
+      else
+        {
+          ret = inet_pton (AF_INET, argv[2], &adv_router);
+          if (ret != 1)
+            {
+              adv_router = htonl (strtoul (argv[2], &invalidp, 10));
+              if (invalid[0] != '\0')
+                {
+                  vty_out (vty, "Advertising Router is not parsable: %s%s",
+                           argv[2], VTY_NEWLINE);
+                  return CMD_SUCCESS;
+                }
+            }
+        }
+    }
+
+  for (i = listhead (ospf6->area_list); i; nextnode (i))
+    {
+      o6a = (struct ospf6_area *) getdata (i);
+
+      for (node = ospf6_lsdb_head (o6a->lsdb); node;
+           node = ospf6_lsdb_next (node))
+        {
+          if (! ospf6_lsdb_match (flag, type, id, adv_router, node->lsa))
+            continue;
+          ospf6_lsa_show (vty, node->lsa);
+        }
+    }
+
+  for (i = listhead (ospf6->area_list); i; nextnode (i))
+    {
+      o6a = (struct ospf6_area *) getdata (i);
+      for (j = listhead (o6a->if_list); j; nextnode (j))
+        {
+          o6i = (struct ospf6_interface *) getdata (j);
+
+          for (node = ospf6_lsdb_head (o6i->lsdb); node;
+               node = ospf6_lsdb_next (node))
+            {
+              if (! ospf6_lsdb_match (flag, type, id, adv_router, node->lsa))
+                continue;
+              ospf6_lsa_show (vty, node->lsa);
+            }
+        }
+    }
+
+  for (node = ospf6_lsdb_head (ospf6->lsdb); node;
+       node = ospf6_lsdb_next (node))
+    {
+      if (! ospf6_lsdb_match (flag, type, id, adv_router, node->lsa))
+        continue;
+      ospf6_lsa_show (vty, node->lsa);
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (show_ipv6_ospf6_database,
+       show_ipv6_ospf6_database_type_cmd,
+       "show ipv6 ospf6 database (router|network|as-external|intra-prefix|link|*)",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "LSA Database\n"
+       "Router-LSA\n"
+       "Network-LSA\n"
+       "AS-External-LSA\n"
+       "Intra-Area-Prefix-LSA\n"
+       "Link-LSA\n"
+       "All LS Type\n"
+       )
+
+ALIAS (show_ipv6_ospf6_database,
+       show_ipv6_ospf6_database_type_id_cmd,
+       "show ipv6 ospf6 database (router|network|as-external|intra-prefix|link|*) (A.B.C.D|*)",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "LSA Database\n"
+       "Router-LSA\n"
+       "Network-LSA\n"
+       "AS-External-LSA\n"
+       "Intra-Area-Prefix-LSA\n"
+       "Link-LSA\n"
+       "All LS Type\n"
+       "Link State ID\n"
+       "All Link State ID\n"
+       )
+
+ALIAS (show_ipv6_ospf6_database,
+       show_ipv6_ospf6_database_type_id_adv_router_cmd,
+       "show ipv6 ospf6 database (router|network|as-external|intra-prefix|link|*) (A.B.C.D|*) (A.B.C.D|*)",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "LSA Database\n"
+       "Router-LSA\n"
+       "Network-LSA\n"
+       "AS-External-LSA\n"
+       "Intra-Area-Prefix-LSA\n"
+       "Link-LSA\n"
+       "All LS Type\n"
+       "Link State ID\n"
+       "All Link State ID\n"
+       "Advertising Router\n"
+       "All Advertising Router\n"
+       )
 
 void
 ospf6_lsdb_init ()
 {
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_scope_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_lsid_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_advrtr_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_advrtr_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_advrtr_lsid_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_id_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_id_adv_router_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_database_summary_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_turnover_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_turnover_summary_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_scope_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_lsid_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_advrtr_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_advrtr_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_advrtr_lsid_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_id_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_id_adv_router_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_database_summary_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_turnover_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_turnover_summary_cmd);
 }
+
+/***/
+
+static struct ospf6_lsdb_node *
+ospf6_lsdb_node_create ()
+{
+  struct ospf6_lsdb_node *node;
+
+  node = XMALLOC (MTYPE_OSPF6_LSDB, sizeof (struct ospf6_lsdb_node));
+  memset (node, 0, sizeof (struct ospf6_lsdb_node));
+
+  return node;
+}
+
+static void
+ospf6_lsdb_node_delete (struct ospf6_lsdb_node *node)
+{
+  XFREE (MTYPE_OSPF6_LSDB, node);
+}
+
+static void
+ospf6_lsdb_node_lock (struct ospf6_lsdb_node *node)
+{
+  node->lock ++;
+}
+
+static void
+ospf6_lsdb_node_unlock (struct ospf6_lsdb_node *node)
+{
+  node->lock --;
+  if (node->lock == 0)
+    {
+      if (node->prev)
+        node->prev->next = node->next;
+      else
+        node->lsdb->head = node->next;
+
+      if (node->next)
+        node->next->prev = node->prev;
+      else
+        node->lsdb->tail = node->prev;
+
+      node->lsdb->count --;
+      ospf6_lsa_unlock (node->lsa);
+      ospf6_lsdb_node_delete (node);
+    }
+}
+
+struct ospf6_lsdb_node *
+ospf6_lsdb_head (struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+
+  node = lsdb->head;
+  if (node)
+    ospf6_lsdb_node_lock (node);
+
+  return node;
+}
+
+struct ospf6_lsdb_node *
+ospf6_lsdb_next (struct ospf6_lsdb_node *node)
+{
+  struct ospf6_lsdb_node *next;
+
+  next = node->next;
+  if (next)
+    ospf6_lsdb_node_lock (next);
+
+  ospf6_lsdb_node_unlock (node);
+  return next;
+}
+
+/* call this function when 'break'ing 'for' loop */
+void
+ospf6_lsdb_end (struct ospf6_lsdb_node *node)
+{
+  ospf6_lsdb_node_unlock (node);
+}
+
+static struct ospf6_lsdb_node *
+ospf6_lsdb_node_lookup (u_int16_t type, u_int32_t id, u_int32_t adv_router,
+                        struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+
+  for (node = ospf6_lsdb_head (lsdb); node; node = ospf6_lsdb_next (node))
+    {
+      if (node->lsa->header->type != type)
+        continue;
+      if (node->lsa->header->id != id)
+        continue;
+      if (node->lsa->header->adv_router != adv_router)
+        continue;
+
+      ospf6_lsdb_end (node);
+      return node;
+    }
+  return NULL;
+}
+
+void
+ospf6_lsdb_add (struct ospf6_lsa *lsa, struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+
+  if (ospf6_lsdb_node_lookup (lsa->header->type, lsa->header->id,
+                              lsa->header->adv_router, lsdb))
+    {
+      zlog_err ("Can't add lsdb: already exists: %s", lsa->str);
+      return;
+    }
+
+  node = ospf6_lsdb_node_create ();
+  node->lsdb = lsdb;
+  node->lsa = lsa;
+  ospf6_lsa_lock (node->lsa);
+
+  node->prev = lsdb->tail;
+  if (lsdb->head == NULL)
+    lsdb->head = node;
+  else
+    lsdb->tail->next = node;
+  lsdb->tail = node;
+
+  lsdb->count ++;
+  ospf6_lsdb_node_lock (node);
+}
+
+void
+ospf6_lsdb_remove (struct ospf6_lsa *lsa, struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+
+  node = ospf6_lsdb_node_lookup (lsa->header->type, lsa->header->id,
+                                 lsa->header->adv_router, lsdb);
+  if (! node || node->lsa != lsa)
+    {
+      zlog_info ("Can't remove lsdb: no such instance: %s", lsa->str);
+      return;
+    }
+
+  ospf6_lsdb_node_unlock (node);
+}
+
+void
+ospf6_lsdb_remove_all (struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+  for (node = ospf6_lsdb_head (lsdb); node; node = ospf6_lsdb_next (node))
+    ospf6_lsdb_remove (node->lsa, lsdb);
+}
+
+struct ospf6_lsa *
+ospf6_lsdb_lookup_lsdb (u_int16_t type, u_int32_t id, u_int32_t adv_router,
+                        struct ospf6_lsdb *lsdb)
+{
+  struct ospf6_lsdb_node *node;
+  node = ospf6_lsdb_node_lookup (type, id, adv_router, lsdb);
+  if (node)
+    return node->lsa;
+  return NULL;
+}
+
 

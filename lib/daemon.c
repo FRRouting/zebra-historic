@@ -72,7 +72,7 @@ daemon (int nochdir, int noclose)
 	}
     }
 
-  umask (0);
+  umask (0027);
 
   return 0;
 }

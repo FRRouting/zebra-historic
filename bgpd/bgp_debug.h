@@ -80,7 +80,8 @@ extern unsigned long term_bgp_debug_normal;
 #define BGP_DEBUG_PACKET              0x01
 #define BGP_DEBUG_FILTER              0x01
 #define BGP_DEBUG_KEEPALIVE           0x01
-#define BGP_DEBUG_UPDATE              0x01
+#define BGP_DEBUG_UPDATE_IN           0x01
+#define BGP_DEBUG_UPDATE_OUT          0x02
 #define BGP_DEBUG_NORMAL              0x01
 
 #define BGP_DEBUG_PACKET_SEND         0x01

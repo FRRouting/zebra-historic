@@ -40,7 +40,7 @@ struct ospf_path
 {
   struct in_addr nexthop;
   struct in_addr adv_router;
-  struct interface *ifp;
+  struct ospf_interface *oi;
 };
 
 struct ospf_router_route
@@ -143,7 +143,7 @@ struct ospf_nexthop
   union
   {
     struct in_addr address;
-    struct interface *ifp;
+    struct ospf_interface *oi;
   } nh;
 
   /* Advertising Router. */

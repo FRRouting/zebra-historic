@@ -322,6 +322,9 @@ installdirs mostlyclean-generic distclean-generic clean-generic \
 maintainer-clean-generic clean mostlyclean distclean maintainer-clean
 
 
+rebuild4:
+	./extract.pl ../zebra/*.c ../ripd/*.c ../ospfd/*.c ../bgpd/*.c ../lib/keychain.c ../lib/routemap.c ../lib/filter.c ../lib/plist.c >vtysh_cmd.c
+
 rebuild:
 	./extract.pl ../zebra/*.c ../ripd/*.c ../ripngd/*.c ../ospfd/*.c ../ospf6d/*.c ../bgpd/*.c ../lib/keychain.c ../lib/routemap.c ../lib/filter.c ../lib/plist.c >vtysh_cmd.c
 

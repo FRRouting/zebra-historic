@@ -82,6 +82,7 @@ enum node_type
   RIPNG_NODE,			/* RIPng protocol mode node. */
   BGP_NODE,			/* BGP protocol mode which includes BGP4+ */
   BGP_VPNV4_NODE,		/* BGP MPLS-VPN PE exchange. */
+  BGP_IPV4M_NODE,		/* BGP IPv4 multicast address family.  */
   BGP_IPV6_NODE,		/* BGP IPv6 address family */
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
@@ -156,6 +157,9 @@ struct desc
 /* Argc max counts. */
 #define CMD_ARGC_MAX   25
 
+/* Turn off these macros when uisng cpp with extract.pl */
+#ifndef VTYSH_EXTRACT_PL  
+
 /* DEFUN for vty command interafce. Little bit hacky ;-). */
 #define DEFUN(funcname, cmdname, cmdstr, helpstr) \
   int funcname (struct cmd_element *, struct vty *, int, char **); \
@@ -203,6 +207,8 @@ struct desc
     funcname, \
     helpstr \
   };
+
+#endif /* VTYSH_EXTRACT_PL */
 
 /* Some macroes */
 #define CMD_OPTION(S)   ((S[0]) == '[')

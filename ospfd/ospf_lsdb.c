@@ -22,55 +22,29 @@
 
 #include <zebra.h>
 
-#include "thread.h"
-#include "memory.h"
-#include "hash.h"
-#include "linklist.h"
 #include "prefix.h"
-#include "if.h"
 #include "table.h"
-#include "command.h"
-#include "vty.h"
-#include "stream.h"
-#include "log.h"
+#include "memory.h"
 
 #include "ospfd/ospfd.h"
-#include "ospfd/ospf_interface.h"
-#include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
-#include "ospfd/ospf_neighbor.h"
-#include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_flood.h"
-#include "ospfd/ospf_packet.h"
-#include "ospfd/ospf_spf.h"
-#include "ospfd/ospf_dump.h"
-#include "ospfd/ospf_route.h"
-
 
-void
-tmp_log ( char *str, struct ospf_lsa *lsa)
+struct ospf_lsdb *
+ospf_lsdb_new ()
 {
-  return;
-  printf ("%s %s ", str, inet_ntoa (lsa->data->id));
-  printf ("%s\n", inet_ntoa (lsa->data->adv_router));
-}
+  struct ospf_lsdb *new;
 
-struct new_lsdb *
-new_lsdb_new ()
-{
-  struct new_lsdb *new;
-
-  new = XMALLOC (MTYPE_OSPF_LSDB, sizeof (struct new_lsdb));
-  bzero (new, sizeof (struct new_lsdb));
-  new_lsdb_init (new);
+  new = XMALLOC (MTYPE_OSPF_LSDB, sizeof (struct ospf_lsdb));
+  bzero (new, sizeof (struct ospf_lsdb));
+  ospf_lsdb_init (new);
 
   return new;
 }
 
 void
-new_lsdb_init (struct new_lsdb *lsdb)
+ospf_lsdb_init (struct ospf_lsdb *lsdb)
 {
   int i;
   
@@ -79,20 +53,20 @@ new_lsdb_init (struct new_lsdb *lsdb)
 }
 
 void
-new_lsdb_free (struct new_lsdb *lsdb)
+ospf_lsdb_free (struct ospf_lsdb *lsdb)
 {
-  new_lsdb_cleanup (lsdb);
+  ospf_lsdb_cleanup (lsdb);
   XFREE (MTYPE_OSPF_LSDB, lsdb);
 }
 
 void
-new_lsdb_cleanup (struct new_lsdb *lsdb)
+ospf_lsdb_cleanup (struct ospf_lsdb *lsdb)
 {
   int i;
   assert (lsdb);
   assert (lsdb->total == 0);
 
-  new_lsdb_delete_all (lsdb);
+  ospf_lsdb_delete_all (lsdb);
   
   for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
     route_table_finish (lsdb->type[i].db);
@@ -110,7 +84,7 @@ lsdb_prefix_set (struct prefix_ls *lp, struct ospf_lsa *lsa)
 
 /* Add new LSA to lsdb. */
 void
-new_lsdb_add (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
+ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *lsa)
 {
   struct route_table *table;
   struct prefix_ls lp;
@@ -136,11 +110,10 @@ new_lsdb_add (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
     }
 
   rn->info = ospf_lsa_lock (lsa);
-  tmp_log ("add", lsa);
 }
 
 void
-new_lsdb_delete (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
+ospf_lsdb_delete (struct ospf_lsdb *lsdb, struct ospf_lsa *lsa)
 {
   struct route_table *table;
   struct prefix_ls lp;
@@ -160,14 +133,12 @@ new_lsdb_delete (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
 	route_unlock_node (rn);
 	route_unlock_node (rn);
 	ospf_lsa_unlock (lsa);
-	tmp_log ("delete", lsa);
 	return;
       }
-  tmp_log ("can't delete", lsa);
 }
 
 void
-new_lsdb_delete_all (struct new_lsdb *lsdb)
+ospf_lsdb_delete_all (struct ospf_lsdb *lsdb)
 {
   struct route_table *table;
   struct route_node *rn;
@@ -192,7 +163,7 @@ new_lsdb_delete_all (struct new_lsdb *lsdb)
 }
 
 struct ospf_lsa *
-new_lsdb_lookup (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
+ospf_lsdb_lookup (struct ospf_lsdb *lsdb, struct ospf_lsa *lsa)
 {
   struct route_table *table;
   struct prefix_ls lp;
@@ -206,15 +177,13 @@ new_lsdb_lookup (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
     {
       find = rn->info;
       route_unlock_node (rn);
-      tmp_log ("lookup", lsa);
       return find;
     }
-  tmp_log ("can't lookup", lsa);
   return NULL;
 }
 
 struct ospf_lsa *
-new_lsdb_lookup_by_id (struct new_lsdb *lsdb, u_char type,
+ospf_lsdb_lookup_by_id (struct ospf_lsdb *lsdb, u_char type,
 		       struct in_addr id, struct in_addr adv_router)
 {
   struct route_table *table;
@@ -241,7 +210,7 @@ new_lsdb_lookup_by_id (struct new_lsdb *lsdb, u_char type,
 }
 
 struct ospf_lsa *
-new_lsdb_lookup_by_id_next (struct new_lsdb *lsdb, u_char type,
+ospf_lsdb_lookup_by_id_next (struct ospf_lsdb *lsdb, u_char type,
 			    struct in_addr id, struct in_addr adv_router,
 			    int first)
 {
@@ -280,25 +249,25 @@ new_lsdb_lookup_by_id_next (struct new_lsdb *lsdb, u_char type,
 }
 
 unsigned long
-new_lsdb_count_all (struct new_lsdb *lsdb)
+ospf_lsdb_count_all (struct ospf_lsdb *lsdb)
 {
   return lsdb->total;
 }
 
 unsigned long
-new_lsdb_count (struct new_lsdb *lsdb, int type)
+ospf_lsdb_count (struct ospf_lsdb *lsdb, int type)
 {
   return lsdb->type[type].count;
 }
 
 unsigned long
-new_lsdb_count_self (struct new_lsdb *lsdb, int type)
+ospf_lsdb_count_self (struct ospf_lsdb *lsdb, int type)
 {
   return lsdb->type[type].count_self;
 }
 
 unsigned long
-new_lsdb_isempty (struct new_lsdb *lsdb)
+ospf_lsdb_isempty (struct ospf_lsdb *lsdb)
 {
   return (lsdb->total == 0);
 }
@@ -312,9 +281,8 @@ foreach_lsa (struct route_table *table, void *p_arg, int int_arg,
 
   for (rn = route_top (table); rn; rn = route_next (rn))
     if ((lsa = rn->info) != NULL)
-      /*      if (!CHECK_FLAG (lsa->flags, OSPF_LSA_DISCARD)) */
-	if (callback (lsa, p_arg, int_arg))
-	  return lsa;
+      if (callback (lsa, p_arg, int_arg))
+	return lsa;
 
   return NULL;
 }

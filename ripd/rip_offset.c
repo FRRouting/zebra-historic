@@ -214,7 +214,7 @@ rip_offset_list_apply_in (struct prefix_ipv4 *p, struct interface *ifp,
   offset = rip_offset_list_lookup (ifp->name);
   if (offset && OFFSET_LIST_IN_NAME (offset))
     {
-      alist = access_list_lookup (AF_INET, OFFSET_LIST_IN_NAME (offset));
+      alist = access_list_lookup (AFI_IP, OFFSET_LIST_IN_NAME (offset));
 
       if (alist 
 	  && access_list_apply (alist, (struct prefix *)p) == FILTER_PERMIT)
@@ -228,7 +228,7 @@ rip_offset_list_apply_in (struct prefix_ipv4 *p, struct interface *ifp,
   offset = rip_offset_list_lookup (NULL);
   if (offset && OFFSET_LIST_IN_NAME (offset))
     {
-      alist = access_list_lookup (AF_INET, OFFSET_LIST_IN_NAME (offset));
+      alist = access_list_lookup (AFI_IP, OFFSET_LIST_IN_NAME (offset));
 
       if (alist 
 	  && access_list_apply (alist, (struct prefix *)p) == FILTER_PERMIT)
@@ -253,7 +253,7 @@ rip_offset_list_apply_out (struct prefix_ipv4 *p, struct interface *ifp,
   offset = rip_offset_list_lookup (ifp->name);
   if (offset && OFFSET_LIST_OUT_NAME (offset))
     {
-      alist = access_list_lookup (AF_INET, OFFSET_LIST_OUT_NAME (offset));
+      alist = access_list_lookup (AFI_IP, OFFSET_LIST_OUT_NAME (offset));
 
       if (alist 
 	  && access_list_apply (alist, (struct prefix *)p) == FILTER_PERMIT)
@@ -268,7 +268,7 @@ rip_offset_list_apply_out (struct prefix_ipv4 *p, struct interface *ifp,
   offset = rip_offset_list_lookup (NULL);
   if (offset && OFFSET_LIST_OUT_NAME (offset))
     {
-      alist = access_list_lookup (AF_INET, OFFSET_LIST_OUT_NAME (offset));
+      alist = access_list_lookup (AFI_IP, OFFSET_LIST_OUT_NAME (offset));
 
       if (alist 
 	  && access_list_apply (alist, (struct prefix *)p) == FILTER_PERMIT)

@@ -50,7 +50,9 @@ char config_default[] = SYSCONFDIR VTYSH_DEFAULT_CONFIG;
 /* Integrated configuration file. */
 char *integrate_file = NULL;
 char *integrate_current = NULL;
+#if 0
 char integrate_default[] = SYSCONFDIR INTEGRATE_DEFAULT_CONFIG;
+#endif
 
 /* Flag for indicate executing child command. */
 int execute_flag = 0;
@@ -252,7 +254,7 @@ main (int argc, char **argv, char **env)
   /* If eval mode */
   if (eval_flag)
     {
-      vtysh_execute (eval_line);
+      vtysh_execute_no_pager (eval_line);
       exit (0);
     }
   
@@ -262,6 +264,8 @@ main (int argc, char **argv, char **env)
       vtysh_read_config (integrate_file, integrate_current, integrate_default);
       exit (0);
     }
+
+  vtysh_pager_init ();
 
   vtysh_readline_init ();
 

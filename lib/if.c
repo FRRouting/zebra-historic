@@ -187,15 +187,20 @@ struct interface *
 if_lookup_address (struct in_addr src)
 {
   listnode node;
-  struct prefix_ipv4 addr;
+  struct prefix addr;
+  struct prefix best;
   listnode cnode;
   struct interface *ifp;
   struct prefix *p;
   struct connected *c;
   struct interface *match;
 
+  /* Zero structures - get rid of rubbish from stack */
+  memset(&addr, 0, sizeof(addr));
+  memset(&best, 0, sizeof(best));
+
   addr.family = AF_INET;
-  addr.prefix = src;
+  addr.u.prefix4 = src;
   addr.prefixlen = IPV4_MAX_BITLEN;
 
   match = NULL;
@@ -214,9 +219,11 @@ if_lookup_address (struct in_addr src)
 
 	      if (p && p->family == AF_INET)
 		{
+#ifdef OLD_RIB	 /* PTP  links are conventionally identified 
+		     by the address of the far end - MAG */
 		  if (IPV4_ADDR_SAME (&p->u.prefix4, &src))
 		    return ifp;
-
+#endif
 		  p = c->destination;
 		  if (p && IPV4_ADDR_SAME (&p->u.prefix4, &src))
 		    return ifp;
@@ -228,8 +235,11 @@ if_lookup_address (struct in_addr src)
 
 	      if (p->family == AF_INET)
 		{
-		  if (prefix_match (p, (struct prefix *) &addr))
-		    match = ifp;
+		  if (prefix_match (p, &addr) && p->prefixlen > best.prefixlen)
+		    {
+		      best = *p;
+		      match = ifp;
+		    }
 		}
 	    }
 	}

@@ -33,6 +33,7 @@
 #include "thread.h"
 #include "zclient.h"
 #include "filter.h"
+#include "sockopt.h"
 
 #include "zebra/connected.h"
 
@@ -62,16 +63,18 @@ vector Vrip_passive_interface;
 
 /* Join to the RIP version 2 multicast group. */
 int
-ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
+ipv4_multicast_join (int sock, 
+		     struct in_addr group, 
+		     struct in_addr ifa,
+		     unsigned int ifindex)
 {
   int ret;
-  struct ip_mreq mreq;
 
-  mreq.imr_multiaddr.s_addr = group.s_addr;
-  mreq.imr_interface.s_addr = ifa.s_addr;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
-		    (char *)&mreq, sizeof (mreq));
+  ret = setsockopt_multicast_ipv4 (sock, 
+				   IP_ADD_MEMBERSHIP, 
+				   ifa, 
+				   group.s_addr, 
+				   ifindex); 
 
   if (ret < 0) 
     zlog (NULL, LOG_INFO, "can't setsockopt IP_ADD_MEMBERSHIP %s",
@@ -82,16 +85,18 @@ ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
 
 /* Leave from the RIP version 2 multicast group. */
 int
-ipv4_multicast_leave (int sock, struct in_addr group, struct in_addr ifa)
+ipv4_multicast_leave (int sock, 
+		      struct in_addr group, 
+		      struct in_addr ifa,
+		      unsigned int ifindex)
 {
   int ret;
-  struct ip_mreq mreq;
 
-  mreq.imr_multiaddr.s_addr = group.s_addr;
-  mreq.imr_interface.s_addr = ifa.s_addr;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, 
-		    (char *)&mreq, sizeof (mreq));
+  ret = setsockopt_multicast_ipv4 (sock, 
+				   IP_DROP_MEMBERSHIP, 
+				   ifa, 
+				   group.s_addr, 
+				   ifindex);
 
   if (ret < 0) 
     zlog (NULL, LOG_INFO, "can't setsockopt IP_DROP_MEMBERSHIP");
@@ -144,8 +149,8 @@ rip_interface_multicast_set (int sock, struct interface *ifp)
 	{
 	  addr = p->prefix;
 
-	  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF,
-			  (void *) &addr, sizeof (struct in_addr)) < 0) 
+	  if (setsockopt_multicast_ipv4 (sock, IP_MULTICAST_IF,
+					 addr, 0, ifp->ifindex) < 0) 
 	    {
 	      zlog_warn ("Can't setsockopt IP_MULTICAST_IF to fd %d", sock);
 	      return;
@@ -324,7 +329,7 @@ rip_multicast_join (struct interface *ifp, int sock)
 	    continue;
       
 	  group.s_addr = htonl (INADDR_RIP_GROUP);
-	  if (ipv4_multicast_join (sock, group, p->prefix) < 0)
+	  if (ipv4_multicast_join (sock, group, p->prefix, ifp->ifindex) < 0)
 	    return -1;
 	}
     }
@@ -355,10 +360,37 @@ rip_multicast_leave (struct interface *ifp, int sock)
 	    continue;
       
 	  group.s_addr = htonl (INADDR_RIP_GROUP);
-	  ipv4_multicast_leave (sock, group, p->prefix);
-	}
+          ipv4_multicast_leave (sock, group, p->prefix, ifp->ifindex);
+        }
     }
 }
+
+/* Is there and address on interface that I could use ? */
+int
+rip_if_ipv4_address_check (struct interface *ifp)
+{
+  struct listnode *nn;
+  struct connected *connected;
+  int count = 0;
+
+  for (nn = listhead (ifp->connected); nn; nextnode (nn))
+    if ((connected = getdata (nn)) != NULL)
+      {
+	struct prefix *p;
+
+	p = connected->address;
+
+	if (p->family == AF_INET)
+          {
+	    count++;
+	  }
+      }
+						
+  return count;
+}
+						
+						
+						
 
 /* Does this address belongs to me ? */
 int
@@ -475,6 +507,10 @@ rip_interface_down (int command, struct zclient *zclient, zebra_size_t length)
 
   rip_if_down(ifp);
  
+  if (IS_RIP_DEBUG_ZEBRA)
+    zlog_info ("interface %s index %d flags %ld metric %d mtu %d is down",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+
   return 0;
 }
 
@@ -492,7 +528,7 @@ rip_interface_up (int command, struct zclient *zclient, zebra_size_t length)
     return 0;
 
   if (IS_RIP_DEBUG_ZEBRA)
-    zlog_info ("interface %s index %d flags %d metric %d mtu %d is up",
+    zlog_info ("interface %s index %d flags %ld metric %d mtu %d is up",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
   /* Check if this interface is RIP enabled or not.*/
@@ -516,7 +552,7 @@ rip_interface_add (int command, struct zclient *zclient, zebra_size_t length)
   ifp = zebra_interface_add_read (zclient->ibuf);
 
   if (IS_RIP_DEBUG_ZEBRA)
-    zlog_info ("interface add %s index %d flags %d metric %d mtu %d",
+    zlog_info ("interface add %s index %d flags %ld metric %d mtu %d",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
   /* Check if this interface is RIP enabled or not.*/
@@ -545,14 +581,15 @@ rip_interface_delete (int command, struct zclient *zclient,
   if (ifp == NULL)
     return 0;
 
-  if (if_is_up (ifp)){
+  if (if_is_up (ifp)) {
     rip_if_down(ifp);
   } 
   
-  zlog_info("interface delete %s index %d flags %d metric %d mtu %d",
+  zlog_info("interface delete %s index %d flags %ld metric %d mtu %d",
 	    ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);  
   
-  if_delete(ifp);
+  /* To support pseudo interface do not free interface structure.  */
+  /* if_delete(ifp); */
 
   return 0;
 }
@@ -691,10 +728,6 @@ rip_if_down(struct interface *ifp)
      ri->running = 0;
    }
 
-  if (IS_RIP_DEBUG_ZEBRA)
-    zlog_info ("interface %s index %d flags %d metric %d mtu %d is down",
-	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
-
   return 0;
 }
 
@@ -761,6 +794,7 @@ rip_interface_address_delete (int command, struct zclient *zclient,
 
 	    zlog_info ("connected address %s/%d is deleted",
 		       inet_ntoa (p->u.prefix4), p->prefixlen);
+
 #ifdef HAVE_SNMP
 	  rip_ifaddr_delete (ifc->ifp, ifc);
 #endif /* HAVE_SNMP */
@@ -768,7 +802,9 @@ rip_interface_address_delete (int command, struct zclient *zclient,
 	  /* Check if this interface is RIP enabled or not.*/
 	  rip_enable_apply (ifc->ifp);
 	}
+
       connected_free (ifc);
+
     }
 
   return 0;
@@ -925,6 +961,7 @@ rip_interface_wakeup (struct thread *t)
   return 0;
 }
 
+
 /* Update interface status. */
 void
 rip_enable_apply (struct interface *ifp)
@@ -957,6 +994,13 @@ rip_enable_apply (struct interface *ifp)
   else
     ri->enable_interface = 0;
 
+  /* any interface MUST have an IPv4 address */
+  if ( ! rip_if_ipv4_address_check (ifp) )
+    {
+      ri->enable_network = 0;
+      ri->enable_interface = 0;
+    }
+
   /* Update running status of the interface. */
   if (ri->enable_network || ri->enable_interface)
     {
@@ -978,8 +1022,8 @@ rip_enable_apply (struct interface *ifp)
 	  if (IS_RIP_DEBUG_EVENT)
 	    zlog_info ("turn off %s", ifp->name);
 
-	  /* Leave from multicast group. */
-	  rip_multicast_leave (ifp, rip->sock);
+	  /* Might as well clean up the route table as well */ 
+	  rip_if_down(ifp);
 
 	  ri->running = 0;
 	}
@@ -1173,6 +1217,7 @@ rip_passive_interface_clean ()
 	free (str);
 	vector_slot (Vrip_passive_interface, i) = NULL;
       }
+  rip_passive_interface_apply_all ();
 }
 
 /* RIP enable network or interface configuration. */

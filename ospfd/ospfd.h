@@ -45,7 +45,7 @@
 
 /* Architectual Constants */
 #ifdef DEBUG
-#define OSPF_LS_REFRESH_TIME                   300
+#define OSPF_LS_REFRESH_TIME                    60
 #else
 #define OSPF_LS_REFRESH_TIME                  1800
 #endif
@@ -64,12 +64,26 @@
 #define OSPF_ALLSPFROUTERS              0xe0000005      /* 224.0.0.5 */
 #define OSPF_ALLDROUTERS                0xe0000006      /* 224.0.0.6 */
 
+#ifdef HAVE_NSSA
+#define OSPF_LOOPer                     0x7f000000      /* 127.0.0.0 */
+#define OSPF_LOOPROUTER                 0x0a0a0015      /* Set Router Source */
+#define OSPF_LOOP_PRAVEEN               0x0a0a0015      /* 10.10.0.21 */
+#define OSPF_LOOP_DICK                  0x0a0a0014      /* 10.10.0.21 */
+#define OSPF_LOOP_TARGET                0x0a0a0014      /* Set Router Target */
+#endif /* HAVE_NSSA */
+
 #define OSPF_AREA_BACKBONE              0x00000000      /* 0.0.0.0 */
 
 /* OSPF Authentication Type. */
 #define OSPF_AUTH_NULL                      0
 #define OSPF_AUTH_SIMPLE                    1
 #define OSPF_AUTH_CRYPTOGRAPHIC             2
+/* For Interface authentication setting default */
+#define OSPF_AUTH_NOTSET                   -1
+/* For the consumption and sanity of the command handler */ 
+/* DO NIOT REMOVE!!! Need to detect whether a value has
+   been given or not in VLink command handlers */
+#define OSPF_AUTH_CMD_NOTSEEN              -2
 
 /* OSPF SPF timer values. */
 #define OSPF_SPF_DELAY_DEFAULT              5
@@ -157,9 +171,10 @@ struct ospf
   struct ospf_area *backbone;           /* Pointer to the Backbone Area. */
 
   list iflist;                          /* Zebra derived interfaces. */
+  list oiflist;                          /* ospf interfaces */
 
   /* LSDB of AS-external-LSAs. */
-  struct new_lsdb *lsdb;
+  struct ospf_lsdb *lsdb;
   
   /* Redistributed external information. */
   struct route_table *external_info[ZEBRA_ROUTE_MAX + 1];
@@ -200,6 +215,11 @@ struct ospf
   struct thread *t_maxage;              /* MaxAge LSA remover timer. */
   struct thread *t_maxage_walker;       /* MaxAge LSA checking timer. */
 
+  struct thread *t_write;
+  struct thread *t_read;
+  int fd;
+  list oi_write_q;
+  
   /* Distribute lists out of other route sources. */
   struct 
   {
@@ -267,7 +287,7 @@ struct ospf_area
   /* int count; */
 
   /* Zebra interface list belonging to the area. */
-  list iflist;
+  list oiflist;
 
   /* Area ID. */
   struct in_addr area_id;
@@ -309,8 +329,7 @@ struct ospf_area
   struct route_table *ranges;		/* Configured Area Ranges. */
 
   /* Area related LSDBs[Type1-4]. */
-  /* struct ospf_lsdb *lsa[4]; */	/* To be obsoleted. */ 
-  struct new_lsdb *lsdb;		/* New structure. */
+  struct ospf_lsdb *lsdb;		/* New structure. */
 
   /* Self-originated LSAs. */
   struct ospf_lsa *router_lsa_self;
@@ -358,9 +377,6 @@ struct ospf_network
   /* Area ID. */
   struct in_addr area_id;
   int format;
-  
-  /* Interface associated with network. */
-  struct interface *ifp;
 };
 
 /* OSPF static neighbor structure. */
@@ -466,9 +482,8 @@ struct ospf_area *ospf_area_new (struct in_addr);
 struct ospf_area *ospf_area_get (struct in_addr, int format);
 void ospf_area_check_free (struct in_addr);
 struct ospf_area *ospf_area_lookup_by_area_id (struct in_addr);
-void ospf_area_add_if (struct ospf_area *, struct interface *);
-void ospf_area_del_if (struct ospf_area *, struct interface *);
-void ospf_interface_down (struct ospf *, struct prefix *, struct ospf_area *);
+void ospf_area_add_if (struct ospf_area *, struct ospf_interface *);
+void ospf_area_del_if (struct ospf_area *, struct ospf_interface *);
 
 void ospf_route_map_init ();
 

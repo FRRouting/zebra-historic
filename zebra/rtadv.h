@@ -29,14 +29,16 @@ struct rtadv_prefix
   struct prefix prefix;
   
   /* The value to be placed in the Valid Lifetime in the Prefix */
-  int AdvValidLifetime;
+  u_int32_t AdvValidLifetime;
+#define RTADV_VALID_LIFETIME 2592000
 
   /* The value to be placed in the on-link flag */
   int AdvOnLinkFlag;
 
   /* The value to be placed in the Preferred Lifetime in the Prefix
      Information option, in seconds.*/
-  int AdvPreferredLifetime;
+  u_int32_t AdvPreferredLifetime;
+#define RTADV_PREFERRED_LIFETIME 604800
 
   /* The value to be placed in the Autonomous Flag. */
   int AdvAutonomousFlag;

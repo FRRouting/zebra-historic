@@ -262,7 +262,9 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
 
       /* If there is no selected route or matched route is EGP, go up
          tree. */
-      if (! match || match->type == ZEBRA_ROUTE_BGP)
+      if (! match 
+	  || match->type == ZEBRA_ROUTE_BGP 
+	  || match->type == ZEBRA_ROUTE_KERNEL)
 	{
 	  do {
 	    rn = rn->parent;
@@ -352,7 +354,9 @@ nexthop_active_ipv6 (struct rib *rib, struct nexthop *nexthop, int set,
 
       /* If there is no selected route or matched route is EGP, go up
          tree. */
-      if (! match || match->type == ZEBRA_ROUTE_BGP)
+      if (! match
+	  || match->type == ZEBRA_ROUTE_BGP
+	  || match->type == ZEBRA_ROUTE_KERNEL)
 	{
 	  do {
 	    rn = rn->parent;
@@ -432,7 +436,9 @@ rib_match_ipv4 (struct in_addr addr)
 
       /* If there is no selected route or matched route is EGP, go up
          tree. */
-      if (! match || match->type == ZEBRA_ROUTE_BGP)
+      if (! match 
+	  || match->type == ZEBRA_ROUTE_BGP 
+	  || match->type == ZEBRA_ROUTE_KERNEL)
 	{
 	  do {
 	    rn = rn->parent;
@@ -518,7 +524,9 @@ rib_match_ipv6 (struct in6_addr *addr)
 
       /* If there is no selected route or matched route is EGP, go up
          tree. */
-      if (! match || match->type == ZEBRA_ROUTE_BGP)
+      if (! match 
+	  || match->type == ZEBRA_ROUTE_BGP
+	  || match->type == ZEBRA_ROUTE_KERNEL)
 	{
 	  do {
 	    rn = rn->parent;
@@ -1579,7 +1587,7 @@ vty_show_ip_route_detail (struct vty *vty, struct route_node *rn)
       if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELECTED))
 	vty_out (vty, ", best");
       if (rib->refcnt)
-	vty_out (vty, ", refcnt %d", rib->refcnt);
+	vty_out (vty, ", refcnt %ld", rib->refcnt);
       vty_out (vty, "%s", VTY_NEWLINE);
 
 #define ONE_DAY_SECOND 60*60*24
@@ -1767,6 +1775,8 @@ vty_show_ip_route (struct vty *vty, struct route_node *rn, struct rib *rib)
     }
 }
 
+#define SHOW_ROUTE_V4_HEADER "Codes: K - kernel route, C - connected, S - static, R - RIP, O - OSPF,%s       B - BGP, > - selected route, * - FIB route%s%s"
+
 DEFUN (show_ip_route,
        show_ip_route_cmd,
        "show ip route",
@@ -1784,13 +1794,86 @@ DEFUN (show_ip_route,
       {
 	if (first)
 	  {
-	    vty_out (vty, "Codes: K - kernel route, C - connected, S - static, R - RIP, O - OSPF,%s       B - BGP, > - selected route, * - FIB route%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	    vty_out (vty, SHOW_ROUTE_V4_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	    first = 0;
 	  }
 	vty_show_ip_route (vty, rn, rib);
       }
   return CMD_SUCCESS;
 }
+
+DEFUN (show_ip_route_prefix_longer,
+       show_ip_route_prefix_longer_cmd,
+       "show ip route A.B.C.D/M longer-prefixes",
+       SHOW_STR
+       IP_STR
+       "IP routing table\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Show route matching the specified Network/Mask pair only\n")
+{
+  struct route_node *rn;
+  struct rib *rib;
+  struct prefix p;
+  int ret;
+  int first = 1;
+
+  ret = str2prefix (argv[0], &p);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Prefix%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  
+  /* Show matched type IPv4 routes. */
+  for (rn = route_top (rib_table_ipv4); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      if (prefix_match (&p, &rn->p))
+	{
+	  if (first)
+	    {
+	      vty_out (vty, SHOW_ROUTE_V4_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	      first = 0;
+	    }
+	  vty_show_ip_route (vty, rn, rib);
+	}
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ip_route_supernets,
+       show_ip_route_supernets_cmd,
+       "show ip route supernets-only",
+       SHOW_STR
+       IP_STR
+       "IP routing table\n"
+       "Show supernet entries only\n")
+{
+  struct route_node *rn;
+  struct rib *rib;
+  u_int32_t addr; 
+  int first = 1;
+
+
+  /* Show matched type IPv4 routes. */
+  for (rn = route_top (rib_table_ipv4); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      {
+	addr = ntohl (rn->p.u.prefix4.s_addr);
+
+	if ((IN_CLASSC (addr) && rn->p.prefixlen < 24)
+	   || (IN_CLASSB (addr) && rn->p.prefixlen < 16)
+	   || (IN_CLASSA (addr) && rn->p.prefixlen < 8)) 
+	  {
+	    if (first)
+	      {
+		vty_out (vty, SHOW_ROUTE_V4_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+		first = 0;
+	      }
+	    vty_show_ip_route (vty, rn, rib);
+	  }
+      }
+  return CMD_SUCCESS;
+}
+
 
 DEFUN (show_ip_route_protocol,
        show_ip_route_protocol_cmd,
@@ -1835,7 +1918,7 @@ DEFUN (show_ip_route_protocol,
 	{
 	  if (first)
 	    {
-	      vty_out (vty, "Codes: K - kernel route, C - connected, S - static, R - RIP, O - OSPF,%s       B - BGP, > - selected route, * - FIB route%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	      vty_out (vty, SHOW_ROUTE_V4_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	      first = 0;
 	    }
 	  vty_show_ip_route (vty, rn, rib);
@@ -2650,7 +2733,7 @@ vty_show_ipv6_route_detail (struct vty *vty, struct route_node *rn)
       if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELECTED))
 	vty_out (vty, ", best");
       if (rib->refcnt)
-	vty_out (vty, ", refcnt %d", rib->refcnt);
+	vty_out (vty, ", refcnt %ld", rib->refcnt);
       vty_out (vty, "%s", VTY_NEWLINE);
 
 #define ONE_DAY_SECOND 60*60*24
@@ -2857,6 +2940,8 @@ vty_show_ipv6_route (struct vty *vty, struct route_node *rn,
     }
 }
 
+#define SHOW_ROUTE_V6_HEADER "Codes: K - kernel route, C - connected, S - static, R - RIPng, O - OSPFv3,%s       B - BGP, * - FIB route.%s%s"
+
 DEFUN (show_ipv6_route,
        show_ipv6_route_cmd,
        "show ipv6 route",
@@ -2874,11 +2959,48 @@ DEFUN (show_ipv6_route,
       {
 	if (first)
 	  {
-	    vty_out (vty, "Codes: K - kernel route, C - connected, S - static, R - RIPng, O - OSPFv3,%s       B - BGP, * - FIB route.%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	    vty_out (vty, SHOW_ROUTE_V6_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	    first = 0;
 	  }
 	vty_show_ipv6_route (vty, rn, rib);
       }
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ipv6_route_prefix_longer,
+       show_ipv6_route_prefix_longer_cmd,
+       "show ipv6 route X:X::X:X/M longer-prefixes",
+       SHOW_STR
+       IP_STR
+       "IPv6 routing table\n"
+       "IPv6 prefix\n"
+       "Show route matching the specified Network/Mask pair only\n")
+{
+  struct route_node *rn;
+  struct rib *rib;
+  struct prefix p;
+  int ret;
+  int first = 1;
+
+  ret = str2prefix (argv[0], &p);
+  if (! ret)
+    {
+      vty_out (vty, "%% Malformed Prefix%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Show matched type IPv6 routes. */
+  for (rn = route_top (rib_table_ipv6); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      if (prefix_match (&p, &rn->p))
+	{
+	  if (first)
+	    {
+	      vty_out (vty, SHOW_ROUTE_V6_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	      first = 0;
+	    }
+	  vty_show_ipv6_route (vty, rn, rib);
+	}
   return CMD_SUCCESS;
 }
 
@@ -2925,7 +3047,7 @@ DEFUN (show_ipv6_route_protocol,
 	{
 	  if (first)
 	    {
-	    vty_out (vty, "Codes: K - kernel route, C - connected, S - static, R - RIPng, O - OSPFv3,%s       B - BGP, * - FIB route.%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	      vty_out (vty, SHOW_ROUTE_V6_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	      first = 0;
 	    }
 	  vty_show_ipv6_route (vty, rn, rib);
@@ -3164,11 +3286,15 @@ rib_init ()
   install_element (VIEW_NODE, &show_ip_route_cmd);
   install_element (VIEW_NODE, &show_ip_route_addr_cmd);
   install_element (VIEW_NODE, &show_ip_route_prefix_cmd);
+  install_element (VIEW_NODE, &show_ip_route_prefix_longer_cmd);
   install_element (VIEW_NODE, &show_ip_route_protocol_cmd);
+  install_element (VIEW_NODE, &show_ip_route_supernets_cmd);
   install_element (ENABLE_NODE, &show_ip_route_cmd);
   install_element (ENABLE_NODE, &show_ip_route_addr_cmd);
   install_element (ENABLE_NODE, &show_ip_route_prefix_cmd);
+  install_element (ENABLE_NODE, &show_ip_route_prefix_longer_cmd);
   install_element (ENABLE_NODE, &show_ip_route_protocol_cmd);
+  install_element (ENABLE_NODE, &show_ip_route_supernets_cmd);
   install_element (CONFIG_NODE, &ip_route_cmd);
   install_element (CONFIG_NODE, &ip_route_mask_cmd);
   install_element (CONFIG_NODE, &no_ip_route_cmd);
@@ -3194,57 +3320,11 @@ rib_init ()
   install_element (VIEW_NODE, &show_ipv6_route_protocol_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_addr_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_prefix_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_prefix_longer_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_protocol_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_addr_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_prefix_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_prefix_longer_cmd);
 #endif /* HAVE_IPV6 */
 }
-
-#if 0
-/* Loggin of rib function. */
-void
-rib_log (char *message, struct prefix *p, struct rib *rib)
-{
-  char buf[BUFSIZ];
-  char logbuf[BUFSIZ];
-  void *addrp;
-  struct interface *ifp;
-
-  switch (p->family)
-    {
-    case AF_INET:
-      addrp = &rib->u.gate4;
-      break;
-#ifdef HAVE_IPV6
-    case AF_INET6:
-      addrp = &rib->u.gate6;
-      break;
-#endif /* HAVE_IPV6 */
-    default:
-      addrp = NULL;
-      break;
-    }
-
-  /* If the route is connected route print interface name. */
-  if (rib->type == ZEBRA_ROUTE_CONNECT)
-    {
-      ifp = if_lookup_by_index (rib->u.ifindex);
-      snprintf (logbuf, BUFSIZ, "directly connected to %s", ifp->name);
-    }
-  else
-    {
-      if (IS_RIB_LINK (rib))
-	snprintf (logbuf, BUFSIZ, "via %s", ifindex2ifname (rib->u.ifindex));
-      else
-	snprintf (logbuf, BUFSIZ, "via %s ifindex %d",
-		  inet_ntop (p->family, addrp, buf, BUFSIZ),
-		  rib->u.ifindex);
-    }
-
-  zlog_info ("%s route %s %s/%d %s",
-	route_info[rib->type].str, message,
-	inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ), p->prefixlen,
-	logbuf);
-}
-#endif

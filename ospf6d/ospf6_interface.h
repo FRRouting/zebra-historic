@@ -80,43 +80,55 @@ struct ospf6_interface
   struct thread *thread_send_lsack_delayed;
 
   /* LSAs to Delayed Acknowledge */
-  list lsa_delayed_ack;
+  struct ospf6_lsdb *ack_list;
 
   /* Linklocal LSA Database: includes Link-LSA */
-  list lsdb;
+  struct ospf6_lsdb *lsdb;
 
   /* statistics */
   u_int ospf6_stat_dr_election;
   u_int ospf6_stat_delayed_lsack;
 
   struct ospf6_message_stat message_stat[OSPF6_MESSAGE_TYPE_MAX];
+
+  void (*foreach_nei) (struct ospf6_interface *, void *, int,
+                       void (*func) (void *, int, void *));
+
+  struct thread *maxage_remover;
 };
 
 extern char *ospf6_interface_state_string[];
 
 
 /* Function Prototypes */
-struct ospf6_interface *
-ospf6_interface_create (struct interface *, struct ospf6 *);
-void ospf6_interface_delete (struct ospf6_interface *);
+
+void
+ospf6_interface_schedule_maxage_remover (void *arg, int val, void *obj);
 
 struct ospf6_interface *
-ospf6_interface_lookup_by_index (int, struct ospf6 *);
-struct ospf6_interface *
-ospf6_interface_lookup_by_name (char *, struct ospf6 *);
+ospf6_interface_create (struct interface *);
+void
+ospf6_interface_delete (struct ospf6_interface *);
 
-void ospf6_interface_if_add (struct interface *, struct ospf6 *);
-void ospf6_interface_if_del (struct interface *, struct ospf6 *);
+struct ospf6_interface *
+ospf6_interface_lookup_by_index (int);
+struct ospf6_interface *
+ospf6_interface_lookup_by_name (char *);
+
+void ospf6_interface_if_add (struct interface *);
+void ospf6_interface_if_del (struct interface *);
 void ospf6_interface_state_update (struct interface *);
 void ospf6_interface_address_update (struct interface *);
 
 void ospf6_interface_init ();
 
+#if 0
 int
 ospf6_interface_count_neighbor_in_state (u_char state,
                                          struct ospf6_interface *o6i);
 int
 ospf6_interface_count_full_neighbor (struct ospf6_interface *);
+#endif
 
 int ospf6_interface_is_enabled (u_int32_t ifindex);
 

@@ -77,7 +77,7 @@ ospf6_zebra_if_add (int command, struct zclient *zclient, zebra_size_t length)
                ifp->name, ifp->ifindex, ifp->mtu);
 #endif
 
-  ospf6_interface_if_add (ifp, ospf6);
+  ospf6_interface_if_add (ifp);
 
   return 0;
 }
@@ -100,7 +100,7 @@ ospf6_zebra_if_del (int command, struct zclient *zclient, zebra_size_t length)
                ifp->name, ifp->ifindex, ifp->mtu);
 #endif
 
-  ospf6_interface_if_del (ifp, ospf6);
+  ospf6_interface_if_del (ifp);
 #endif
 
   return 0;
@@ -116,7 +116,7 @@ ospf6_zebra_if_state_update (int command, struct zclient *zclient,
 
   /* log */
   if (IS_OSPF6_DUMP_ZEBRA)
-    zlog_info ("Zebra I/F %s state change: index %d flags %d metric %d mtu %d",
+    zlog_info ("Zebra I/F %s state change: index %d flags %ld metric %d mtu %d",
                ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
   ospf6_interface_state_update (ifp);
@@ -124,14 +124,38 @@ ospf6_zebra_if_state_update (int command, struct zclient *zclient,
 }
 
 int
-ospf6_zebra_if_address_update (int command, struct zclient *zclient,
+ospf6_zebra_if_address_update_add (int command, struct zclient *zclient,
                                zebra_size_t length)
 {
   struct connected *c;
   char buf[128];
 
   c = zebra_interface_address_add_read (zclient->ibuf);
+  if (c == NULL)
+    return 0;
 
+  if (IS_OSPF6_DUMP_ZEBRA)
+    {
+      zlog_info ("Zebra I/F %s address change: %s %s/%d",
+                 c->ifp->name, prefix_family_str (c->address),
+                 inet_ntop (c->address->family, &c->address->u.prefix,
+                            buf, sizeof (buf)), c->address->prefixlen);
+    }
+
+  if (c->address->family == AF_INET6)
+    ospf6_interface_address_update (c->ifp);
+
+  return 0;
+}
+
+int
+ospf6_zebra_if_address_update_delete (int command, struct zclient *zclient,
+                               zebra_size_t length)
+{
+  struct connected *c;
+  char buf[128];
+
+  c = zebra_interface_address_delete_read (zclient->ibuf);
   if (c == NULL)
     return 0;
 
@@ -218,11 +242,11 @@ ospf6_zebra_read_ipv6 (int command, struct zclient *zclient,
       inet_ntop (AF_INET6, &nexthop, nexthopstr, sizeof (nexthopstr));
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
-	zlog_info ("Zebra Receive add %s route: %s nexthop:%s ifindex:%d",
+	zlog_info ("Zebra Receive add %s route: %s nexthop:%s ifindex:%ld",
 		   ospf6_external_route_type [api.type], prefixstr,
 		   nexthopstr, ifindex);
       else
-	zlog_info ("Zebra Receive remove %s route: %s nexthop:%s ifindex:%d",
+	zlog_info ("Zebra Receive remove %s route: %s nexthop:%s ifindex:%ld",
 		   ospf6_external_route_type [api.type], prefixstr,
 		   nexthopstr, ifindex);
     }
@@ -598,8 +622,8 @@ ospf6_zebra_init ()
   zclient->interface_delete = ospf6_zebra_if_del;
   zclient->interface_up = ospf6_zebra_if_state_update;
   zclient->interface_down = ospf6_zebra_if_state_update;
-  zclient->interface_address_add = ospf6_zebra_if_address_update;
-  zclient->interface_address_delete = ospf6_zebra_if_address_update;
+  zclient->interface_address_add = ospf6_zebra_if_address_update_add;
+  zclient->interface_address_delete = ospf6_zebra_if_address_update_delete;
   zclient->ipv4_route_add = NULL;
   zclient->ipv4_route_delete = NULL;
   zclient->ipv6_route_add = ospf6_zebra_read_ipv6;

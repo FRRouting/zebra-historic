@@ -24,46 +24,46 @@
 
 #include "ospf6_lsa.h"
 
-#define MAXLISTEDLSA 512
 #define MAXLSASIZE   1024
 
-#define AREALSTYPESIZE              0x0009
+struct ospf6_lsdb_node
+{
+  struct ospf6_lsdb *lsdb;
+  unsigned int lock;
 
-#define HASHVAL   64
-#define hash(x)  ((x) % HASHVAL)
-
-#define MY_ROUTER_LSA_ID    0
+  struct ospf6_lsdb_node *next;
+  struct ospf6_lsdb_node *prev;
+  struct ospf6_lsa *lsa;
+};
 
 struct ospf6_lsdb
 {
-  u_int stat_router;
-  u_int stat_network;
-  u_int stat_inter_router;
-  u_int stat_inter_prefix;
-  u_int stat_intra_prefix;
-  u_int stat_as_external;
-  u_int stat_link;
-
-  list lsdb;
+  struct ospf6_lsdb_node *head;
+  struct ospf6_lsdb_node *tail;
+  unsigned int count;
 };
 
 /* Function Prototypes */
+void ospf6_lsdb_init ();
+struct ospf6_lsdb *ospf6_lsdb_create ();
+void ospf6_lsdb_delete (struct ospf6_lsdb *lsdb);
+void ospf6_lsdb_remove_maxage (struct ospf6_lsdb *lsdb);
 
 struct ospf6_lsa *
-ospf6_lsdb_lookup_from_lsdb (u_int16_t type, u_int32_t ls_id,
-                             u_int32_t advrtr, list lsdb);
+  ospf6_lsdb_lookup (u_int16_t type, u_int32_t id, u_int32_t adv_router);
 
-struct ospf6_lsa*
-ospf6_lsdb_lookup (u_int16_t, u_int32_t, u_int32_t);
+void ospf6_lsdb_install (struct ospf6_lsa *new);
 
-void ospf6_lsdb_install (struct ospf6_lsa *);
-void ospf6_lsdb_remove_all (list);
+struct ospf6_lsdb_node *ospf6_lsdb_head (struct ospf6_lsdb *lsdb);
+struct ospf6_lsdb_node *ospf6_lsdb_next (struct ospf6_lsdb_node *node);
+void ospf6_lsdb_end (struct ospf6_lsdb_node *node);
+void ospf6_lsdb_add (struct ospf6_lsa *lsa, struct ospf6_lsdb *lsdb);
+void ospf6_lsdb_remove (struct ospf6_lsa *lsa, struct ospf6_lsdb *lsdb);
+void ospf6_lsdb_remove_all (struct ospf6_lsdb *lsdb);
 
-void ospf6_lsdb_check_maxage_linklocal (char *ifname);
-void ospf6_lsdb_check_maxage_area (u_int32_t area_id);
-void ospf6_lsdb_check_maxage_as ();
-
-void ospf6_lsdb_init ();
+struct ospf6_lsa *
+ospf6_lsdb_lookup_lsdb (u_int16_t type, u_int32_t id, u_int32_t adv_router,
+                        struct ospf6_lsdb *lsdb);
 
 #endif /* OSPF6_LSDB_H */
 

@@ -16,9 +16,9 @@
 @set INSTALL_PREFIX_SBIN /usr/local/sbin
 
 @c Info entry
-@dircategory Routing Software
+@dircategory Routing Software:
 @direntry
-* Zebra: (zebra).		The @sc{gnu} Zebra routing software.
+* Zebra: (zebra).		The @sc{gnu} Zebra routing software
 @end direntry
 
 @c @smallbook
@@ -87,15 +87,15 @@ by Kunihiro Ishiguro.
 @top Zebra
 		     
 Zebra is a routing software package that manages TCP/IP based routing
-protocols.  Adding to routing protocol support, Zebra provides
+protocols.  In addition to routing protocol support, Zebra provides
 interface address configuration and advanced filtering.
 
 This is the @sc{gnu} Zebra Manual for zebra-@value{VERSION}.
 @end ifnottex
 
 @menu
-* Overview::                    Overview of the Zebra.
-* Installation::                How to install the Zebra.
+* Overview::                    Overview of the Zebra
+* Installation::                How to install the Zebra
 
 The Zebra Suite
 * Basic commands::              Basic Zebra commands
@@ -108,17 +108,17 @@ The Zebra Suite
 * vtysh::                       An integrated shell
 
 Additional Features
-* Filtering::                   How to filter routes.
-* Route Map::                   Route map description.
-* IPv6 Supports::               IP version 6 supports.
-* Kernel Interface::            Zebra between kernel interface.
+* Filtering::                   How to filter routes
+* Route Map::                   Route map description
+* IPv6 Support::                IP version 6 support
+* Kernel Interface::            Zebra between kernel interface
 * SNMP Support::                Support for SNMP
 
 Appendix
 * Zebra Protocol::              
 * Packet Binary Dump Format::   
-* Command Index::               An item for each command name.
-* VTY Key Index::               An item for each VTY key.
+* Command Index::               An item for each command name
+* VTY Key Index::               An item for each VTY key
 @end menu
 
 @include overview.texi

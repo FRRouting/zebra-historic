@@ -35,6 +35,10 @@ $hash{'router_ospf6_cmd'} = "ignore";
 $hash{'router_bgp_cmd'} = "ignore";
 $hash{'address_family_vpnv4_cmd'} = "ignore";
 $hash{'address_family_vpnv4_unicast_cmd'} = "ignore";
+$hash{'address_family_ipv4_multicast_cmd'} = "ignore";
+$hash{'address_family_ipv6_unicast_cmd'} = "ignore";
+$hash{'address_family_ipv6_cmd'} = "ignore";
+$hash{'exit_address_family_cmd'} = "ignore";
 $hash{'key_chain_cmd'} = "ignore";
 $hash{'key_cmd'} = "ignore";
 $hash{'route_map_cmd'} = "ignore";
@@ -44,13 +48,13 @@ $hash{'set_ip_nexthop_cmd'} = "ignore";
 foreach (@ARGV) {
     $file = $_;
 
-    open (FH, "$file");
+    open (FH, "cpp -DHAVE_CONFIG_H -DVTYSH_EXTRACT_PL -I. -I.. -I../lib $file |");
     local $/; undef $/;
     $line = <FH>;
     close (FH);
 
     @defun = ($line =~ /(?:DEFUN|ALIAS)\s*\((.+?)\)\n/sg);
-    @install = ($line =~ /install_element \([A-Z_]+, &[^;]*;\n/sg);
+    @install = ($line =~ /install_element \([A-Z_46]+, &[^;]*;\n/sg);
 
     if ($file =~ /lib/) {
 	if ($file =~ /keychain.c/) {

@@ -22,6 +22,9 @@
 
 #include <zebra.h>
 
+#if 1
+#include "ospf6d.h"
+#else
 #include "log.h"
 #include "memory.h"
 #include "linklist.h"
@@ -33,6 +36,7 @@
 
 #include "ospf6_top.h"
 #include "ospf6_redistribute.h"
+#endif
 
 route_map_result_t
 ospf6_routemap_rule_match_address_prefixlist (void *rule,
@@ -45,7 +49,7 @@ ospf6_routemap_rule_match_address_prefixlist (void *rule,
   if (type != RMAP_OSPF6)
     return RMAP_NOMATCH;
 
-  plist = prefix_list_lookup (AF_INET6, (char *) rule);
+  plist = prefix_list_lookup (AFI_IP6, (char *) rule);
 
   if (plist == NULL)
     return RMAP_NOMATCH;

@@ -28,6 +28,7 @@
 #include "log.h"
 #include "if.h"
 #include "prefix.h"
+#include "command.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
@@ -173,6 +174,12 @@ bgp_accept (struct thread *thread)
 
   /* Regiser accept thread. */
   accept_sock = THREAD_FD (thread);
+
+  if (accept_sock < 0)
+    {
+      zlog_err ("accept_sock is nevative value %d", accept_sock);
+      return -1;
+    }
   thread_add_read (master, bgp_accept, NULL, accept_sock);
 
   /* Accept client connection. */
@@ -215,6 +222,7 @@ bgp_accept (struct thread *thread)
     peer->su = su;
     peer->fd = bgp_sock;
     peer->status = Active;
+    peer->local_id = peer1->local_id;
 
     /* Make peer's address string. */
     sockunion2str (&su, buf, SU_ADDRSTRLEN);
@@ -278,6 +286,11 @@ bgp_serv_sock_addrinfo (unsigned short port)
       if (ret < 0) 
 	continue;
 
+      if (sock < 0)
+	{
+	  zlog_err ("bgp_sock_addr_info sock is nevative value %d", sock);
+	  continue;
+	}
       thread_add_read (master, bgp_accept, NULL, sock);
     }
   while ((ainfo = ainfo->ai_next) != NULL);
@@ -312,7 +325,13 @@ bgp_serv_sock_family (unsigned short port, int family)
 	    strerror (errno));
       return;
     }
-
+  
+  if (bgp_sock < 0)
+    {
+      zlog_err ("bgp_serv_sock_family bgp_sock is nevative value %d",
+		bgp_sock);
+      return;
+    }
   thread_add_read (master, bgp_accept, NULL, bgp_sock);
 }
 

@@ -212,17 +212,27 @@ aspath_make_str_count (struct aspath *as)
       space = 0;
 
       /* Increment count - ignoring CONFED SETS/SEQUENCES */
-      if(assegment->type != AS_CONFED_SEQUENCE && assegment->type != AS_CONFED_SET)
-        {
-          count += assegment->length;
-        }
+      if (assegment->type != AS_CONFED_SEQUENCE
+	  && assegment->type != AS_CONFED_SET)
+	{
+	  if (assegment->type == AS_SEQUENCE)
+	    count += assegment->length;
+	  else if (assegment->type == AS_SET)
+	    count++;
+	}
 
       for (i = 0; i < assegment->length; i++)
 	{
 	  int len;
 
 	  if (space)
-	    str_buf[str_pnt++] = ' ';
+	    {
+	      if (assegment->type == AS_SET
+		  || assegment->type == AS_CONFED_SET)
+		str_buf[str_pnt++] = ',';
+	      else
+		str_buf[str_pnt++] = ' ';
+	    }
 	  else
 	    space = 1;
 
@@ -355,61 +365,176 @@ aspath_parse (caddr_t pnt, int length)
   return aspath;
 }
 
-/* Merge two AS for aggregation. */
+#define min(A,B) ((A) < (B) ? (A) : (B))
+
+#define ASSEGMENT_SIZE(N)  (AS_HEADER_SIZE + ((N) * AS_VALUE_SIZE))
+
+struct aspath *
+aspath_aggregate_segment_copy (struct aspath *aspath, struct assegment *seg,
+			       int i)
+{
+  struct assegment *newseg;
+
+  if (! aspath->data)
+    {
+      aspath->data = XMALLOC (MTYPE_AS_SEG, ASSEGMENT_SIZE (i));
+      newseg = (struct assegment *) aspath->data;
+      aspath->length = ASSEGMENT_SIZE (i);
+    }
+  else
+    {
+      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data,
+			       aspath->length + ASSEGMENT_SIZE (i));
+      newseg = (struct assegment *) (aspath->data + aspath->length);
+      aspath->length += ASSEGMENT_SIZE (i);
+    }
+
+  newseg->type = seg->type;
+  newseg->length = i;
+  memcpy (newseg->asval, seg->asval, (i * AS_VALUE_SIZE));
+
+  return aspath;
+}
+
+struct assegment *
+aspath_aggregate_as_set_add (struct aspath *aspath, struct assegment *asset,
+			     as_t as)
+{
+  int i;
+
+  /* If this is first AS set member, create new as-set segment. */
+  if (asset == NULL)
+    {
+      if (! aspath->data)
+	{
+	  aspath->data = XMALLOC (MTYPE_AS_SEG, ASSEGMENT_SIZE (1));
+	  asset = (struct assegment *) aspath->data;
+	  aspath->length = ASSEGMENT_SIZE (1);
+	}
+      else
+	{
+	  aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data,
+				   aspath->length + ASSEGMENT_SIZE (1));
+	  asset = (struct assegment *) (aspath->data + aspath->length);
+	  aspath->length += ASSEGMENT_SIZE (1);
+	}
+      asset->type = AS_SET;
+      asset->length = 1;
+      asset->asval[0] = as;
+    }
+  else
+    {
+      size_t offset;
+
+      /* Check this AS value already exists or not. */
+      for (i = 0; i < asset->length; i++)
+	if (asset->asval[i] == as)
+	  return asset;
+
+      offset = (caddr_t) asset - (caddr_t) aspath->data;
+      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data,
+			       aspath->length + AS_VALUE_SIZE);
+
+      asset = (struct assegment *) (aspath->data + offset);
+      aspath->length += AS_VALUE_SIZE;
+      asset->asval[asset->length] = as;
+      asset->length++;
+    }
+
+  return asset;
+}
+
+/* Modify as1 using as2 for aggregation. */
 struct aspath *
 aspath_aggregate (struct aspath *as1, struct aspath *as2)
 {
+  int i;
+  int minlen;
+  int match;
+  int match1;
+  int match2;
   caddr_t cp1;
   caddr_t cp2;
   caddr_t end1;
   caddr_t end2;
-  int match;
+  struct assegment *seg1;
+  struct assegment *seg2;
+  struct aspath *aspath;
+  struct assegment *asset;
 
   match = 0;
+  minlen = 0;
+  aspath = NULL;
+  asset = NULL;
   cp1 = as1->data;
   end1 = as1->data + as1->length;
   cp2 = as2->data;
   end2 = as2->data + as2->length;
 
-  /* First of all common element search. */
+  seg1 = (struct assegment *) cp1;
+  seg2 = (struct assegment *) cp2;
+
+  /* First of all check common leading sequence. */
   while ((cp1 < end1) && (cp2 < end2))
     {
-      int i;
-      int min_len;
-      struct assegment *seg1 = (struct assegment *) cp1;
-      struct assegment *seg2 = (struct assegment *) cp2;
-
+      /* Check segment type. */
       if (seg1->type != seg2->type)
 	break;
 
       /* Minimum segment length. */
-      min_len = seg1->length;
-      if (min_len > seg2->length)
-	min_len = seg2->length;
+      minlen = min (seg1->length, seg2->length);
 
-      for (i = 0; i < min_len; i++)
+      for (match = 0; match < minlen; match++)
+	if (seg1->asval[match] != seg2->asval[match])
+	  break;
+
+      if (match)
 	{
-	  if (seg1->asval[i] != seg2->asval[i])
-	    {
-	      match = i;
-	      break;
-	    }
+	  if (! aspath)
+	    aspath = aspath_new();
+	  aspath = aspath_aggregate_segment_copy (aspath, seg1, match);
 	}
+
+      if (match != minlen || match != seg1->length 
+	  || seg1->length != seg2->length)
+	break;
+
       cp1 += ((seg1->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
+      cp2 += ((seg2->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
+
+      seg1 = (struct assegment *) cp1;
+      seg2 = (struct assegment *) cp2;
+    }
+
+  if (! aspath)
+    aspath = aspath_new();
+
+  /* Make as-set using rest of all information. */
+  match1 = match;
+  while (cp1 < end1)
+    {
+      seg1 = (struct assegment *) cp1;
+
+      for (i = match1; i < seg1->length; i++)
+	asset = aspath_aggregate_as_set_add (aspath, asset, seg1->asval[i]);
+
+      match1 = 0;
+      cp1 += ((seg1->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
+    }
+
+  match2 = match;
+  while (cp2 < end2)
+    {
+      seg2 = (struct assegment *) cp2;
+
+      for (i = match2; i < seg2->length; i++)
+	asset = aspath_aggregate_as_set_add (aspath, asset, seg2->asval[i]);
+
+      match2 = 0;
       cp2 += ((seg2->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
     }
 
-  while (cp1 < end1)
-    {
-      ;
-    }
-
-  while (cp2 < end2)
-    {
-      ;
-    }
-
-  return NULL;
+  return aspath;
 }
 
 /* AS path loop check.  If aspath contains asno then return 1. */
@@ -552,8 +677,8 @@ aspath_prepend (struct aspath *as1, struct aspath *as2)
 }
 
 /* Add specified AS to the leftmost of aspath. */
-struct aspath *
-aspath_add_left (struct aspath *aspath, as_t asno)
+static struct aspath *
+aspath_add_one_as (struct aspath *aspath, as_t asno, u_char type)
 {
   struct assegment *assegment;
 
@@ -570,15 +695,14 @@ aspath_add_left (struct aspath *aspath, as_t asno)
 	aspath->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
 
       assegment = (struct assegment *) aspath->data;
-      assegment->type = AS_SEQUENCE;
+      assegment->type = type;
       assegment->length = 1;
       assegment->asval[0] = htons (asno);
 
       return aspath;
     }
 
-  /* First segment is AS_SEQUENCE*/
-  if (assegment->type == AS_SEQUENCE)
+  if (assegment->type == type)
     {
       caddr_t newdata;
       struct assegment *newsegment;
@@ -586,7 +710,7 @@ aspath_add_left (struct aspath *aspath, as_t asno)
       newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE);
       newsegment = (struct assegment *) newdata;
 
-      newsegment->type = AS_SEQUENCE;
+      newsegment->type = type;
       newsegment->length = assegment->length + 1;
       newsegment->asval[0] = htons (asno);
 
@@ -599,15 +723,13 @@ aspath_add_left (struct aspath *aspath, as_t asno)
       aspath->data = newdata;
       aspath->length += AS_VALUE_SIZE;
     } else {
-
-      /* We need to add an AS_SEQUENCE here */
       caddr_t newdata;
       struct assegment *newsegment;
 
       newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE + AS_HEADER_SIZE);
       newsegment = (struct assegment *) newdata;
 
-      newsegment->type = AS_SEQUENCE;
+      newsegment->type = type;
       newsegment->length = 1;
       newsegment->asval[0] = htons (asno);
 
@@ -622,6 +744,13 @@ aspath_add_left (struct aspath *aspath, as_t asno)
     }
 
   return aspath;
+}
+
+/* Add specified AS to the leftmost of aspath. */
+struct aspath *
+aspath_add_seq (struct aspath *aspath, as_t asno)
+{
+  return aspath_add_one_as (aspath, asno, AS_SEQUENCE);
 }
 
 /* Compare leftmost AS value for MED check.  If as1's leftmost AS and
@@ -660,7 +789,8 @@ aspath_cmp_left (struct aspath *aspath1, struct aspath *aspath2)
 }
 
 /* Compare leftmost AS value for MED check.  If as1's leftmost AS and
-   as2's leftmost AS is same return 1. (confederation as-path only)*/
+   as2's leftmost AS is same return 1. (confederation as-path
+   only).  */
 int
 aspath_cmp_left_confed (struct aspath *aspath1, struct aspath *aspath2)
 {
@@ -692,135 +822,51 @@ aspath_cmp_left_confed (struct aspath *aspath1, struct aspath *aspath2)
   return 0;
 }
 
-/* Strip the CONFED stuff from the front of an AS Path */
+/* Delete first sequential AS_CONFED_SEQUENCE from aspath.  */
 struct aspath *
-aspath_strip_confed (struct aspath *aspath)
+aspath_delete_confed_seq (struct aspath *aspath)
 {
-  int bytes;
+  int seglen;
   struct assegment *assegment;
+
+  if (! aspath)
+    return aspath;
 
   assegment = (struct assegment *) aspath->data;
 
-  /* In case of empty aspath, just return. */
-  if (assegment == NULL)
-    return aspath;
-
-  if (assegment->type != AS_CONFED_SEQUENCE)
-    return aspath;
-
-  /* Strip the first element from the path */
-  bytes = AS_HEADER_SIZE + (assegment->length * AS_VALUE_SIZE);
-  memcpy(aspath->data,
-	 aspath->data + bytes,
-	 aspath->length - bytes);
-  if(aspath->length - bytes == 0)
+  while (assegment)
     {
-      XFREE(MTYPE_AS_SEG, aspath->data);
-      aspath->data = NULL;
-    }
-  else
-    {
-      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
-    }
-  aspath->length -= bytes;
-  assegment = (struct assegment *)aspath->data;
+      if (assegment->type != AS_CONFED_SEQUENCE)
+	return aspath;
 
-  while(assegment && assegment->type == AS_CONFED_SET)
-    {
-      /* Strip the first element from the path */
-      bytes = AS_HEADER_SIZE + (assegment->length * AS_VALUE_SIZE);
-      memcpy(aspath->data,
-	     aspath->data + bytes,
-	     aspath->length - bytes);
+      seglen = ASSEGMENT_LEN (assegment);
 
-      if(aspath->length - bytes == 0)
+      if (seglen == aspath->length)
 	{
-	  XFREE(MTYPE_AS_SEG, aspath->data);
+	  XFREE (MTYPE_AS_SEG, aspath->data);
 	  aspath->data = NULL;
+	  aspath->length = 0;
 	}
       else
-	{ 
-	  aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+	{
+	  memcpy (aspath->data, aspath->data + seglen,
+		  aspath->length - seglen);
+	  aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data,
+				   aspath->length - seglen);
+	  aspath->length -= seglen;
 	}
-      aspath->length -= bytes;
-      assegment = (struct assegment *)aspath->data;
-    }
 
+      assegment = (struct assegment *) aspath->data;
+    }
   return aspath;
 }
 
-/* Add specified AS to the leftmost AS_CONFED_SEQUENCE. */
-struct aspath *
-aspath_add_left_confed (struct aspath *aspath, as_t asno)
+/* Add new AS number to the leftmost part of the aspath as
+   AS_CONFED_SEQUENCE.  */
+struct aspath*
+aspath_add_confed_seq (struct aspath *aspath, as_t asno)
 {
-  struct assegment *assegment;
-
-  assegment = (struct assegment *) aspath->data;
-
-  /* In case of empty aspath. */
-  if (assegment == NULL || assegment->length == 0)
-    {
-      aspath->length = AS_HEADER_SIZE + AS_VALUE_SIZE;
-
-      if (assegment)
-	aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length);
-      else
-	aspath->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
-
-      assegment = (struct assegment *) aspath->data;
-      assegment->type = AS_CONFED_SEQUENCE;
-      assegment->length = 1;
-      assegment->asval[0] = htons (asno);
-
-      return aspath;
-    }
-
-  /* First segment is AS_SEQUENCE*/
-  if (assegment->type == AS_CONFED_SEQUENCE)
-    {
-      caddr_t newdata;
-      struct assegment *newsegment;
-
-      newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE);
-      newsegment = (struct assegment *) newdata;
-
-      newsegment->type = AS_CONFED_SEQUENCE;
-      newsegment->length = assegment->length + 1;
-      newsegment->asval[0] = htons (asno);
-
-      memcpy (newdata + AS_HEADER_SIZE + AS_VALUE_SIZE,
-	      aspath->data + AS_HEADER_SIZE, 
-	      aspath->length - AS_HEADER_SIZE);
-
-      XFREE (MTYPE_AS_SEG, aspath->data);
-
-      aspath->data = newdata;
-      aspath->length += AS_VALUE_SIZE;
-    }
-  else
-    {
-      /* We need to add an AS_CONFED_SEQUENCE here */
-      caddr_t newdata;
-      struct assegment *newsegment;
-
-      newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE + AS_HEADER_SIZE);
-      newsegment = (struct assegment *) newdata;
-
-      newsegment->type = AS_CONFED_SEQUENCE;
-      newsegment->length = 1;
-      newsegment->asval[0] = htons (asno);
-
-      memcpy (newdata + AS_HEADER_SIZE + AS_VALUE_SIZE,
-	      aspath->data,
-	      aspath->length);
-
-      XFREE (MTYPE_AS_SEG, aspath->data);
-
-      aspath->data = newdata;
-      aspath->length += AS_HEADER_SIZE + AS_VALUE_SIZE;
-    }
-
-  return aspath;
+  return aspath_add_one_as (aspath, asno, AS_CONFED_SEQUENCE);
 }
 
 /* Add new as value to as path structure. */
@@ -1091,10 +1137,27 @@ aspath_print_all_vty (struct vty *vty)
     if ((mp = hash_head (ashash, i)) != NULL)
       while (mp) 
 	{
-	  vty_out (vty, "[%x:%d] (%d) ", 
+	  vty_out (vty, "[%p:%d] (%ld) ", 
 		   mp, i, ((struct aspath *)mp->data)->refcnt);
 	  as = mp->data;
 	  vty_out (vty, "%s%s", as->str, VTY_NEWLINE);
 	  mp = mp->next;
 	}
+}
+
+void
+aspath_aggr_test()
+{
+  struct aspath *new;
+  struct aspath *as1 = aspath_str2aspath ("(3 4) 123");
+#if 0
+  struct aspath *as2 = aspath_str2aspath ("3");
+  struct aspath *as3 = aspath_str2aspath ("4");
+  struct aspath *as2 = aspath_empty();
+  struct aspath *as1 = aspath_empty();
+#endif
+
+  new = aspath_add_seq (as1, 123);
+  new->str = aspath_make_str_count (new);
+  printf ("new %s\n", new->str);
 }

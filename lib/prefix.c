@@ -97,7 +97,6 @@ void
 prefix_copy (struct prefix *dest, struct prefix *src)
 {
   dest->family = src->family;
-  dest->safi = src->safi;
   dest->prefixlen = src->prefixlen;
 
   if (src->family == AF_INET)
@@ -652,3 +651,51 @@ void apply_classful_mask_ipv4 (struct prefix_ipv4 *p)
       apply_mask_ipv4(p);
     }
 }
+
+/* Utility function to convert ipv4 netmask to prefixes 
+   ex.) "1.1.0.0" "255.255.0.0" => "1.1.0.0/16"
+   ex.) "1.0.0.0" NULL => "1.0.0.0/8"                   */
+int
+netmask_str2prefix_str (char *net_str, char *mask_str, char *prefix_str)
+{
+  struct in_addr network;
+  struct in_addr mask;
+  char masklen_str[3];
+  u_int32_t destination;
+  int ret;
+
+  ret = inet_aton (net_str, &network);
+  if (! ret)
+    return 0;
+
+  if (mask_str)
+    {
+      ret = inet_aton (mask_str, &mask);
+      if (! ret)
+        return 0;
+
+      sprintf (masklen_str, "%d", ip_masklen (mask));
+    }
+  else 
+    {
+      destination = ntohl (network.s_addr);
+
+      if (network.s_addr == 0)
+	strcpy (masklen_str, "0");
+      else if (IN_CLASSC (destination))
+	strcpy (masklen_str, "24");
+      else if (IN_CLASSB (destination))
+	strcpy (masklen_str, "16");
+      else if (IN_CLASSA (destination))
+	strcpy (masklen_str, "8");
+      else
+	return 0;
+    }
+
+  strcpy (prefix_str, net_str);
+  strcat (prefix_str, "/");
+  strcat (prefix_str, masklen_str);
+
+  return 1;
+}
+

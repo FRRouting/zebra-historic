@@ -28,6 +28,7 @@
 #include "if.h"
 #include "sockunion.h"
 #include "log.h"
+#include "sockopt.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_network.h"
@@ -38,43 +39,129 @@
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_packet.h"
 
-
-/* Make ospfd's server socket. */
+/* Join to the OSPF ALL SPF ROUTERS multicast group. */
 int
-ospf_serv_sock (struct interface *ifp, int family)
+ospf_if_add_allspfrouters (struct ospf *top, struct prefix *p,
+			   unsigned int ifindex)
+{
+  int ret;
+  
+  ret = setsockopt_multicast_ipv4 (top->fd,
+                                   IP_ADD_MEMBERSHIP,
+                                   p->u.prefix4,
+                                   htonl (OSPF_ALLSPFROUTERS),
+                                   ifindex);
+  
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));
+  
+  zlog_info ("interface %s join AllSPFRouters Multicast group.",
+	     inet_ntoa (p->u.prefix4));
+  
+  return ret;
+}
+
+int
+ospf_if_drop_allspfrouters (struct ospf *top, struct prefix *p,
+			    unsigned int ifindex)
+{
+  int ret;
+
+  ret = setsockopt_multicast_ipv4 (top->fd,
+                                   IP_DROP_MEMBERSHIP,
+                                   p->u.prefix4,
+                                   htonl (OSPF_ALLSPFROUTERS),
+                                   ifindex);
+
+  if (ret < 0)
+    zlog_warn("can't setsockopt IP_DROP_MEMBERSHIP: %s", strerror (errno));
+
+  zlog_info ("interface %s leave AllSPFRouters Multicast group.",
+	     inet_ntoa (p->u.prefix4));
+
+  return ret;
+}
+
+/* Join to the OSPF ALL Designated ROUTERS multicast group. */
+int
+ospf_if_add_alldrouters (struct ospf *top, struct prefix *p, unsigned int
+			 ifindex)
+{
+  int ret;
+
+  ret = setsockopt_multicast_ipv4 (top->fd,
+                                   IP_ADD_MEMBERSHIP,
+                                   p->u.prefix4,
+                                   htonl (OSPF_ALLDROUTERS),
+                                   ifindex);
+
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));
+
+  zlog_info ("interface %s join AllDRouters Multicast group.",
+	     inet_ntoa (p->u.prefix4));
+
+  return ret;
+}
+
+int
+ospf_if_drop_alldrouters (struct ospf *top, struct prefix *p, unsigned int
+			  ifindex)
+{
+    int ret;
+
+  ret = setsockopt_multicast_ipv4 (top->fd,
+                                   IP_DROP_MEMBERSHIP,
+                                   p->u.prefix4,
+                                   htonl (OSPF_ALLDROUTERS),
+                                   ifindex);
+
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IP_DROP_MEMBERSHIP: %s", strerror (errno));
+
+  zlog_info ("interface %s leave AllDRouters Multicast group.",
+	     inet_ntoa (p->u.prefix4));
+
+  return ret;
+}
+
+int
+ospf_if_ipmulticast (struct ospf *top, struct prefix *p, unsigned int ifindex)
+{
+  u_char val;
+  int ret, len;
+  
+  val = 0;
+  len = sizeof (val);
+  
+  /* Prevent receiving self-origined multicast packets. */
+  ret = setsockopt (top->fd, IPPROTO_IP, IP_MULTICAST_LOOP, (void *)&val, len);
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IP_MULTICAST_LOOP(0): %s", strerror (errno));
+  
+  ret = setsockopt_multicast_ipv4 (top->fd,
+                                   IP_MULTICAST_IF,
+                                   p->u.prefix4,
+                                   0,
+                                   ifindex);
+  
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IP_MULTICAST_IF: %s", strerror (errno));
+
+  return ret;
+}
+
+int
+ospf_sock_init (void)
 {
   int ospf_sock;
-  int ret, tos;
-  struct ospf_interface *oi;
+  int ret, tos, hincl = 1;
 
-  ospf_sock = socket (family, SOCK_RAW, IPPROTO_OSPFIGP);
+  ospf_sock = socket (AF_INET, SOCK_RAW, IPPROTO_OSPFIGP);
   if (ospf_sock < 0)
     {
-      zlog_warn ("ospf_serv_sock: socket: %s", strerror (errno));
-    return ospf_sock;
-    }
-
-  /*
-  sockopt_reuseaddr (ospf_sock);
-  sockopt_reuseport (ospf_sock);
-  */
-  /* Set TTL to 1. */
-
-  oi = ifp->info;
-  if (oi == NULL)
-    {
-      close (ospf_sock);	/* Prevent sd leak. */
+      zlog_warn ("ospf_read_sock_init: socket: %s", strerror (errno));
       return -1;
-    }
-
-  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-     ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_VL_IP_TTL);
-  else 
-     ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_IP_TTL);
-  if (ret < 0)
-    {
-      close (ospf_sock);	/* Prevent sd leak. */
-    return ret;
     }
 
   /* Set precedence field. */
@@ -90,164 +177,22 @@ ospf_serv_sock (struct interface *ifp, int family)
     }
 #endif /* IPTOS_PREC_INTERNETCONTROL */
 
+  /* we will include IP header with packet */
+  ret = setsockopt (ospf_sock, IPPROTO_IP, IP_HDRINCL, &hincl, sizeof (hincl));
+  if (ret < 0)
+    zlog_warn ("Can't set IP_HDRINCL option");
+
+#if defined (IP_PKTINFO)
+  ret = setsockopt (ospf_sock, IPPROTO_IP, IP_PKTINFO, &hincl, sizeof (hincl));
+   if (ret < 0)
+    zlog_warn ("Can't set IP_PKTINFO option");
+#elif defined (IP_RECVIF)
+  ret = setsockopt (ospf_sock, IPPROTO_IP, IP_RECVIF, &hincl, sizeof (hincl));
+   if (ret < 0)
+    zlog_warn ("Can't set IP_RECVIF option");
+#else
+#warning "cannot be able to receive link information on this OS"
+#endif
+ 
   return ospf_sock;
 }
-
-/* Join to the OSPF ALL SPF ROUTERS multicast group. */
-int
-ospf_if_add_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
-{
-  struct ip_mreq m;
-  int ret;
-
-  bzero (&m, sizeof (m));
-
-  m.imr_multiaddr.s_addr = htonl (OSPF_ALLSPFROUTERS);
-  m.imr_interface = p->u.prefix4;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-		    (char *) &m, sizeof (struct ip_mreq));
-
-  if (ret < 0)
-    zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));
-
-  zlog_info ("interface %s join AllSPFRouters Multicast group.", ifp->name);
-
-  return ret;
-}
-
-int
-ospf_if_drop_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
-{
-  struct ip_mreq m;
-  int ret;
-
-  bzero (&m, sizeof (m));
-
-  m.imr_multiaddr.s_addr = htonl (OSPF_ALLSPFROUTERS);
-  m.imr_interface = p->u.prefix4;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-		    (char *) &m, sizeof (struct ip_mreq));
-
-  if (ret < 0)
-    zlog_warn("can't setsockopt IP_DROP_MEMBERSHIP: %s", strerror (errno));
-
-  zlog_info ("interface %s leave AllSPFRouters Multicast group.", ifp->name);
-
-  return ret;
-}
-
-/* Join to the OSPF ALL Designated ROUTERS multicast group. */
-int
-ospf_if_add_alldrouters (struct interface *ifp, int sock, struct prefix *p)
-{
-  struct ip_mreq m;
-  int ret;
-
-  bzero (&m, sizeof (m));
-
-  m.imr_multiaddr.s_addr = htonl (OSPF_ALLDROUTERS);
-  m.imr_interface = p->u.prefix4;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-		    (char *) &m, sizeof (struct ip_mreq));
-  if (ret < 0)
-    zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));
-
-  zlog_info ("interface %s join AllDRouters Multicast group.", ifp->name);
-
-  return ret;
-}
-
-int
-ospf_if_drop_alldrouters (struct interface *ifp, int sock, struct prefix *p)
-{
-  struct ip_mreq m;
-  int ret;
-
-  bzero (&m, sizeof (m));
-
-  m.imr_multiaddr.s_addr = htonl (OSPF_ALLDROUTERS);
-  m.imr_interface = p->u.prefix4;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-		    (char *) &m, sizeof (struct ip_mreq));
-  if (ret < 0)
-    zlog_warn ("can't setsockopt IP_DROP_MEMBERSHIP: %s", strerror (errno));
-
-  zlog_info ("interface %s leave AllDRouters Multicast group.", ifp->name);
-
-  return ret;
-}
-
-int
-ospf_if_ipmulticast (int sock, struct prefix *p)
-{
-  int ret;
-  struct in_addr addr;
-
-  addr = p->u.prefix4;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void *)&addr,
-		    sizeof (addr));
-  if (ret < 0)
-    zlog_warn ("can't setsockopt IP_MULTICAST_IF: %s", strerror (errno));
-
-  return ret;
-}
-
-/* Setup all sockets for receiving interface. */
-int
-ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
-{
-  struct ospf_interface *oi;
-  int ret, sock;
-
-  oi = ifp->info;
-
-  /* Create raw socket. */
-  sock = ospf_serv_sock (ifp, AF_INET);
-  if (sock < 0)
-    {
-      zlog_warn ("interface %s can't create raw socket", ifp->name);
-      return -1;
-    }
-
-#ifdef SO_BINDTODEVICE
-  if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
-    {
-      ret = setsockopt (sock, SOL_SOCKET, SO_BINDTODEVICE,
-			ifp->name, strlen(ifp->name)+1);
-  
-      if (ret < 0) {
-	zlog_warn ("can't bind socket to device %s", ifp->name);
-        close (sock);	/* Prevent sd leak. */
-	return ret;
-      }
-    }
-#endif /* SO_BINDTODEVICE */
-
-  oi->fd = sock;
-
-  /* Point-to-Point and Broadcast Network should be joined to
-     ALLSPFROUTERS multicast group. */
-  if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
-      oi->type == OSPF_IFTYPE_BROADCAST)
-    {
-      /* Join mcast group. */
-      ret = ospf_if_add_allspfrouters (ifp, sock, p);
-      if (ret < 0)
-	{
-          close (sock);	/* Prevent sd leak. */
-	  oi->fd = -1;
-	return ret;
-	}
-
-      /* Create input/output buffer stream. */
-      ospf_if_stream_set (oi);
-    }
-
-  return 0;
-}
-

@@ -352,6 +352,13 @@ community_match_regexp (struct community_entry *entry,
   char c[12];
   u_int32_t comval;
 
+  /* This is an evil special case, sorry */
+  if(strcmp(entry->regexp, "^$") == 0
+     && (com == NULL || com->size == 0))
+    {
+      return 1;
+    }
+
   for (i = 0; i < com->size; i++)
     {
       memcpy (&comval, com_nthval (com, i), sizeof (u_int32_t));
@@ -427,12 +434,12 @@ community_list_match (struct community *com, struct community_list *list)
       if (entry->style == COMMUNITY_LIST)
 	{
 	  if (community_match (com, entry->com))
-	    return 1;
+	    return (entry->type == COMMUNITY_PERMIT ? 1 : 0);
 	}
       else if (entry->style == COMMUNITY_REGEXP)
 	{
 	  if (community_match_regexp (entry, com))
-	    return 1;
+	    return (entry->type == COMMUNITY_PERMIT ? 1 : 0);
 	}
     }
   return 0;
@@ -446,7 +453,7 @@ community_list_match_exact (struct community *com, struct community_list *list)
   for (entry = list->head; entry; entry = entry->next)
     if (entry->style == COMMUNITY_LIST)
       if (community_cmp (com, entry->com))
-	return 1;
+	return (entry->type == COMMUNITY_PERMIT ? 1 : 0);
   return 0;
 }
 
@@ -485,6 +492,8 @@ community_list_dup_check (struct community_list *list,
   
   for (entry = list->head; entry; entry = entry->next)
     {
+      if (entry->style != new->style)
+        continue;
       if (entry->style == COMMUNITY_LIST)
 	{
 	  if (entry->type == new->type

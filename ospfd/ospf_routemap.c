@@ -100,11 +100,11 @@ ospf_route_match_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
         {
         case RMAP_RULE_MISSING:
-          vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         case RMAP_COMPILE_ERROR:
-          vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         }
@@ -125,11 +125,11 @@ ospf_route_match_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
         {
         case RMAP_RULE_MISSING:
-          vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         case RMAP_COMPILE_ERROR:
-          vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         }
@@ -150,11 +150,11 @@ ospf_route_set_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
         {
         case RMAP_RULE_MISSING:
-          vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         case RMAP_COMPILE_ERROR:
-          vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         }
@@ -176,11 +176,11 @@ ospf_route_set_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
         {
         case RMAP_RULE_MISSING:
-          vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Can't find rule.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         case RMAP_COMPILE_ERROR:
-          vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
+          vty_out (vty, "%% Argument is malformed.%s", VTY_NEWLINE);
           return CMD_WARNING;
           break;
         }
@@ -205,7 +205,7 @@ route_match_ip_nexthop (void *rule, struct prefix *prefix,
       p.prefix = ei->nexthop;
       p.prefixlen = IPV4_MAX_BITLEN;
 
-      alist = access_list_lookup (AF_INET, (char *) rule);
+      alist = access_list_lookup (AFI_IP, (char *) rule);
       if (alist == NULL)
         return RMAP_NOMATCH;
 
@@ -251,7 +251,7 @@ route_match_ip_address (void *rule, struct prefix *prefix,
 
   if (type == RMAP_OSPF)
     {
-      alist = access_list_lookup (AF_INET, (char *) rule);
+      alist = access_list_lookup (AFI_IP, (char *) rule);
       if (alist == NULL)
         return RMAP_NOMATCH;
 
@@ -413,7 +413,10 @@ route_set_metric_type_compile (char *arg)
   u_int32_t *metric_type;
 
   metric_type = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
-  *metric_type = atoi (arg) - 1;
+  if (strcmp (arg, "type-1") == 0)
+    *metric_type = EXTERNAL_METRIC_TYPE_1;
+  else if (strcmp (arg, "type-2") == 0)
+    *metric_type = EXTERNAL_METRIC_TYPE_2;
 
   if (*metric_type == EXTERNAL_METRIC_TYPE_1 ||
       *metric_type == EXTERNAL_METRIC_TYPE_2)
@@ -444,7 +447,7 @@ DEFUN (match_ip_nexthop,
        "match ip next-hop WORD",
        MATCH_STR
        IP_STR
-       "Next hop address\n"
+       "Match next-hop address of route\n"
        "IP access-list name\n")
 {
   return ospf_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
@@ -452,15 +455,26 @@ DEFUN (match_ip_nexthop,
 
 DEFUN (no_match_ip_nexthop,
        no_match_ip_nexthop_cmd,
+       "no match ip next-hop",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match next-hop address of route\n")
+{
+  if (argc == 0)
+    return ospf_route_match_delete (vty, vty->index, "ip next-hop", NULL);
+
+  return ospf_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+ALIAS (no_match_ip_nexthop,
+       no_match_ip_nexthop_val_cmd,
        "no match ip next-hop WORD",
        NO_STR
        MATCH_STR
        IP_STR
-       "Next hop address\n"
+       "Match next-hop address of route\n"
        "IP access-list name\n")
-{
-  return ospf_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
-}
 
 DEFUN (match_ip_address,
        match_ip_address_cmd,
@@ -475,15 +489,26 @@ DEFUN (match_ip_address,
 
 DEFUN (no_match_ip_address,
        no_match_ip_address_cmd,
+       "no match ip address",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match address of route\n")
+{
+  if (argc == 0)
+    return ospf_route_match_delete (vty, vty->index, "ip address", NULL);
+
+  return ospf_route_match_delete (vty, vty->index, "ip address", argv[0]);
+}
+
+ALIAS (no_match_ip_address,
+       no_match_ip_address_val_cmd,
        "no match ip address WORD",
        NO_STR
        MATCH_STR
        IP_STR
        "Match address of route\n"
        "IP access-list name\n")
-{
-  return ospf_route_match_delete (vty, vty->index, "ip address", argv[0]);
-}
 
 DEFUN (match_interface,
        match_interface_cmd,
@@ -497,14 +522,24 @@ DEFUN (match_interface,
 
 DEFUN (no_match_interface,
        no_match_interface_cmd,
+       "no match interface",
+       NO_STR
+       MATCH_STR
+       "Match first hop interface of route\n")
+{
+  if (argc == 0)
+    return ospf_route_match_delete (vty, vty->index, "interface", NULL);
+
+  return ospf_route_match_delete (vty, vty->index, "interface", argv[0]);
+}
+
+ALIAS (no_match_interface,
+       no_match_interface_val_cmd,
        "no match interface WORD",
        NO_STR
        MATCH_STR
        "Match first hop interface of route\n"
        "Interface name\n")
-{
-  return ospf_route_match_delete (vty, vty->index, "interface", argv[0]);
-}
 
 DEFUN (set_metric,
        set_metric_cmd,
@@ -518,36 +553,70 @@ DEFUN (set_metric,
 
 DEFUN (no_set_metric,
        no_set_metric_cmd,
+       "no set metric",
+       NO_STR
+       SET_STR
+       "Metric value for destination routing protocol\n")
+{
+  if (argc == 0)
+    return ospf_route_set_delete (vty, vty->index, "metric", NULL);
+
+  return ospf_route_set_delete (vty, vty->index, "metric", argv[0]);
+}
+
+ALIAS (no_set_metric,
+       no_set_metric_val_cmd,
        "no set metric <0-4294967295>",
        NO_STR
        SET_STR
        "Metric value for destination routing protocol\n"
        "Metric value\n")
-{
-  return ospf_route_set_delete (vty, vty->index, "metric", argv[0]);
-}
 
 DEFUN (set_metric_type,
        set_metric_type_cmd,
-       "set metric-type (1|2)",
+       "set metric-type (type-1|type-2)",
        SET_STR
-       "OSPF exterior metric type for redistributed routes\n"
-       "Set OSPF External Type 1 metrics\n"
-       "Set OSPF External Type 2 metrics\n")
+       "Type of metric for destination routing protocol\n"
+       "OSPF external type 1 metric\n"
+       "OSPF external type 2 metric\n")
 {
+  if (strcmp (argv[0], "1") == 0)
+    return ospf_route_set_add (vty, vty->index, "metric-type", "type-1");
+  if (strcmp (argv[0], "2") == 0)
+    return ospf_route_set_add (vty, vty->index, "metric-type", "type-2");
+
   return ospf_route_set_add (vty, vty->index, "metric-type", argv[0]);
 }
 
+ALIAS (set_metric_type,
+       set_metric_type_old_cmd,
+       "set metric-type (1|2)",
+       SET_STR
+       "Type of metric for destination routing protocol\n"
+       "OSPF external type 1 metric\n"
+       "OSPF external type 2 metric\n")
+
 DEFUN (no_set_metric_type,
        no_set_metric_type_cmd,
-       "no set metric-type (1|2)",
+       "no set metric-type",
+       NO_STR
        SET_STR
-       "OSPF exterior metric type for redistributed routes\n"
-       "Set OSPF External Type 1 metrics\n"
-       "Set OSPF External Type 2 metrics\n")
+       "Type of metric for destination routing protocol\n")
 {
+  if (argc == 0)
+    return ospf_route_set_delete (vty, vty->index, "metric-type", NULL);
+
   return ospf_route_set_delete (vty, vty->index, "metric-type", argv[0]);
 }
+
+ALIAS (no_set_metric_type,
+       no_set_metric_type_val_cmd,
+       "no set metric-type (type-1|type-2)",
+       NO_STR
+       SET_STR
+       "Type of metric for destination routing protocol\n"
+       "OSPF external type 1 metric\n"
+       "OSPF external type 2 metric\n")
 
 /* Route-map init */
 void
@@ -569,13 +638,19 @@ ospf_route_map_init (void)
 
   install_element (RMAP_NODE, &match_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_match_ip_nexthop_cmd);
+  install_element (RMAP_NODE, &no_match_ip_nexthop_val_cmd);
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
+  install_element (RMAP_NODE, &no_match_ip_address_val_cmd);
   install_element (RMAP_NODE, &match_interface_cmd);
   install_element (RMAP_NODE, &no_match_interface_cmd);
+  install_element (RMAP_NODE, &no_match_interface_val_cmd);
 
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);
+  install_element (RMAP_NODE, &no_set_metric_val_cmd);
   install_element (RMAP_NODE, &set_metric_type_cmd);
+  install_element (RMAP_NODE, &set_metric_type_old_cmd);
   install_element (RMAP_NODE, &no_set_metric_type_cmd);
+  install_element (RMAP_NODE, &no_set_metric_type_val_cmd);
 }

@@ -2,11 +2,11 @@
 @comment  node-name,  next,  previous,  up
 @appendix Zebra Protocol
 
-Zebra Protocol is a protocol which used between protocol daemon and
-zebra.  Each protocol daemon send selected routes to zebra dameon.  Then
-zebra manages which route is intalled into forwarding table.
+Zebra Protocol is a protocol which is used between protocol daemon and
+zebra.  Each protocol daemon sends selected routes to zebra daemon.  Then
+zebra manages which route is installed into the forwarding table.
 
-Zebra Protocol is a TCP based protocol.  Below is common header of Zebra
+Zebra Protocol is a TCP-based protocol.  Below is common header of Zebra
 Protocol.
 
 @example

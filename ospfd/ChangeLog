@@ -1,3 +1,118 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-08-12  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospfd.c (ospf_config_write): auto-cost reference-bandwidth
+	configuration display.
+
+2001-07-24  David Watson <dwatson@eecs.umich.edu>
+
+	* ospf_spf.c (ospf_spf_next): Modify ospf_vertex_add_parent to
+	check for an existing link before connecting the parent and child.
+	ospf_nexthop_calculation is also modified to check for duplicate
+	entries when copying from the parent.  Finally, ospf_spf_next
+	removes duplicates when it merges two equal cost candidates.
+
+2001-07-23  itojun@iijlab.net
+
+	* ospfd.c (show_ip_ospf_neighbor): Check ospf_top before use it
+	[zebra 8549].
+
+2001-07-23  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospf_packet.c (ospf_write): Remove defined(__OpenBSD__) to make
+	it work on OpenBSD.
+
+2001-06-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c (config_write_ospf_default_metric): Display
+	default-metric configuration.
+
+2001-06-18  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospf_ia.h (OSPF_EXAMINE_SUMMARIES_ALL): Remove old macros.
+
+2001-05-28  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospf_snmp.c (ospfIfEntry): Fix interface lookup bug to avoid
+	crush.
+	(ospfIfMetricEntry): Likewise.
+
+2001-03-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_read): Fix typo.  Reported by: "Jen B
+	Lin'Kova" <jen@stack.net>.
+
+2001-03-15  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospf_interface.c (ip_ospf_network): Set interface parameter.
+	(interface_config_write): Add check for OSPF_IFTYPE_LOOPBACK.
+
+	* ospf_zebra.c (ospf_interface_add): Set interface parameter.
+
+2001-02-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_recv_packet): Solaris also need to add
+	(iph.ip_hl << 2) to iph.ip_len.
+
+2001-02-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.h (OSPF_LS_REFRESH_TIME): Fix OSPF_LS_REFRESH_TIME value.
+	Suggested by: David Watson <dwatson@eecs.umich.edu>.
+
+	* ospf_zebra.c (zebra_init): Remove zebra node.
+
+	* ospfd.c (ospf_area_range_set): Function name is changed from
+	ospf_ara_range_cmd.
+	(ospf_area_range_unset): New function which separated from DEFUN.
+	New commands are added:
+	"no area A.B.C.D range A.B.C.D/M advertise"
+	"no area <0-4294967295> range A.B.C.D/M advertise"
+	"no area A.B.C.D range A.B.C.D/M not-advertise"
+	"no area <0-4294967295> range A.B.C.D/M not-advertise"
+	
+	* ospf_lsa.c (ospf_lsa_more_recent): Fix previous change.
+
+2001-02-08  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* ospf_network.c (ospf_if_add_allspfrouters): Use
+	setsockopt_multicast_ipv4.
+	(ospf_if_drop_allspfrouters): Likewise.
+
+	* ospf_lsa.c (ospf_router_lsa_install): Add rt_recalc flag.
+	(ospf_network_lsa_install): Likewise.
+	(ospf_summary_lsa_install): Likewise.
+	(ospf_summary_asbr_lsa_install): Likewise.
+	(ospf_external_lsa_install): Likewise.
+	(ospf_lsa_install): Call ospf_lsa_different to check this LSA is
+	new one or not.
+
+2001-02-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c (ospf_interface_delete): Do not free interface
+	structure when ospfd receive interface delete message to support
+	pseudo interface.
+
+2001-02-01  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospfd.c (area_range_notadvertise): Change area range "suppress"
+	command to "not-advertise".
+
+	* ospfd.h (OSPF_LS_REFRESH_TIME): Change OSPF_LS_REFRESH_TIME from
+	1800 to 60.
+
+	* ospf_abr.c (ospf_abr_update_aggregate): When update_aggregate is
+	updating the area-range, the lowest cost is now saved.
+
+	* ospf_lsa.c (ospf_lsa_more_recent): Routing to compare sequence
+	numbers rather than creating overflow during calculation.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.91 is released.

@@ -34,14 +34,13 @@ access-list filter permit 10.0.0.0/8
 @subsection IP Prefix List
 
 @command{ip prefix-list} provides the most powerful prefix based
-filtering mechanism.  Adding to @command{access-list} functionality,
+filtering mechanism.  In addition to @command{access-list} functionality,
 @command{ip prefix-list} has prefix length range specification and
 sequential number specification.  You can add or delete prefix based
-filter to arbitrary point of prefix-list using sequential number.
+filters to arbitrary points of prefix-list using sequential number specification.
 
-If no ip prefix-list is specified, it acts as permit.  Once ip
-prefix-list is defined, then no match is performed, default deny is
-applied.
+If no ip prefix-list is specified, it acts as permit.  If @command{ip prefix-list} 
+is defined, and no match is found, default deny is applied.
 
 @c @deffn {Command} {ip prefix-list @var{name} [seq @var{number}] permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
 @deffn {Command} {ip prefix-list @var{name} (permit|deny) @var{prefix} [le @var{len}] [ge @var{len}]} {}
@@ -65,23 +64,18 @@ lists 2 and 7 already exist and a new list with no specified number is
 created, the new list will be numbered 10.
 
 @item @asis{le}
-@command{le} command specify prefix length.  If the given prefix length
-is lesser than or equal to le prefix length.  Prefix Lists can be
-applied on the basis of prefix length.  The le command specifies prefix
-length.  The prefix list will be applied if the prefix length is lesser
-than or equal to the le prefix length.
+@command{le} command specifies prefix length.  The prefix list will be 
+applied if the prefix length is less than or equal to the le prefix length.
 
 @item @asis{ge}
-@command{ge} command specify prefix length.  If the given prefix length
-is lesser than or equal to ge prefix length.  The ge command specifies
-prefix length.  The prefix list will be applied if the prefix length is
-greater than or equal to the ge prefix length.
+@command{ge} command specifies prefix length.  The prefix list will be 
+applied if the prefix length is greater than or equal to the ge prefix length.
 
 @end table
 
 @end deffn
 
-Lesser than or equal to prefix numbers and greater than or equal to
+Less than or equal to prefix numbers and greater than or equal to
 prefix numbers can be used together.  The order of the le and ge
 commands does not matter.
 

@@ -1,3 +1,39 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-19  "Peter Galbavy" <peter.galbavy@knowtion.net>
+
+	* configure.in: SNMP library check problem fix when the library is
+	installed under /usr/local/lib.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-04-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (LIBPAM): Use ZEBRA_AC_C_BIGENDIAN to avoid a
+	warning.
+	(IF_METHOD): Use test -r instead of AC_CHECK_FILE to avoid
+	warnings.
+
+	* config.guess: Update to 2000-11-10 version.
+
+2001-04-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Use AC_TRY_COMPILE instead of AC_EGREP_HEADER to
+	detect in_pktinfo structure.  Suggested by: Vlad Lungu
+	<vlad@rls.roknet.ro>.
+
+2001-03-07  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* configure.in: Add check for structure in_pktinfo.
+
+2001-02-07  "Bjoern A. Zeeb" <bzeeb+zebra@zabbadoz.net>
+
+	* configure.in (USE_PAM): Fix PAM library detection code.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.91 is released.

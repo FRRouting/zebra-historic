@@ -25,16 +25,20 @@
 #include <setjmp.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 
 #include <readline/readline.h>
 #include <readline/history.h>
 
 #include "command.h"
-
+#include "memory.h"
 #include "vtysh/vtysh.h"
 
 /* Struct VTY. */
 struct vty *vty;
+
+/* VTY shell pager name. */
+char *vtysh_pager_name = NULL;
 
 /* VTY shell client structure. */
 struct vtysh_client
@@ -183,13 +187,23 @@ vclient_close (struct vtysh_client *vclient)
   vclient->fd = -1;
 }
 
+
+/* Following filled with debug code to trace a problematic condition
+   under load - it SHOULD handle it.
+*/
+#define ERR_WHERE_STRING "vtysh(): vtysh_client_config(): "
 int
 vtysh_client_config (struct vtysh_client *vclient, char *line)
 {
   int ret;
-  char buf[1001];
+  char *buf;
+  size_t bufsz;
+  char *pbuf;
+  size_t left;
+  char *eoln;
   int nbytes;
   int i;
+  int readln;
 
   if (vclient->fd < 0)
     return CMD_SUCCESS;
@@ -201,38 +215,83 @@ vtysh_client_config (struct vtysh_client *vclient, char *line)
       return CMD_SUCCESS;
     }
 	
+  /* Allow enough room for buffer to read more than a few pages from socket
+   */
+  bufsz = 5 * sysconf(_SC_PAGESIZE) + 1;
+  buf = XMALLOC(MTYPE_TMP, bufsz);
+  memset(buf, 0, bufsz);
+  pbuf = buf;
+
   while (1)
     {
-      nbytes = read (vclient->fd, buf, 1000);
+      if (pbuf >= ((buf + bufsz) -1))
+	{
+	  fprintf (stderr, ERR_WHERE_STRING \
+		   "warning - pbuf beyond buffer end.\n");
+	  return CMD_WARNING;
+	}
+
+      readln = (buf + bufsz) - pbuf - 1;
+      nbytes = read (vclient->fd, pbuf, readln);
 
       if (nbytes <= 0)
 	{
+
+	  if (errno == EINTR)
+	    continue;
+
+	  fprintf(stderr, ERR_WHERE_STRING "(%u)", errno);
+	  perror("");
+
+	  if (errno == EAGAIN || errno == EIO)
+	    continue;
+
 	  vclient_close (vclient);
+	  XFREE(MTYPE_TMP, buf);
 	  return CMD_SUCCESS;
 	}
 
-      if (nbytes > 0)
+      pbuf[nbytes] = '\0';
+
+      if (nbytes >= 4)
 	{
-	  buf[nbytes] = '\0';
-
-	  vtysh_config_parse (buf);
-
-	  if (nbytes >= 4)
+	  i = nbytes - 4;
+	  if (pbuf[i] == '\0' && pbuf[i + 1] == '\0' && pbuf[i + 2] == '\0')
 	    {
-	      i = nbytes - 4;
-	      if (buf[i] == '\0' && buf[i + 1] == '\0' && buf[i + 2] == '\0')
-		{
-		  ret = buf[i + 3];
-		  break;
-		}
+	      ret = pbuf[i + 3];
+	      break;
 	    }
 	}
+      pbuf += nbytes;
+
+      /* See if a line exists in buffer, if so parse and consume it, and
+	 reset read position */
+      if ((eoln = strrchr(buf, '\n')) == NULL)
+	continue;
+
+      if (eoln >= ((buf + bufsz) - 1))
+	{
+	  fprintf (stderr, ERR_WHERE_STRING \
+		   "warning - eoln beyond buffer end.\n");
+	}
+      vtysh_config_parse(buf);
+
+      eoln++;
+      left = (size_t)(buf + bufsz - eoln);
+      memmove(buf, eoln, left);
+      buf[bufsz-1] = '\0';
+      pbuf = buf + strlen(buf);
     }
+
+  /* parse anything left in the buffer */
+  vtysh_config_parse (buf);
+
+  XFREE(MTYPE_TMP, buf);
   return ret;
 }
 
 int
-vtysh_client_execute (struct vtysh_client *vclient, char *line)
+vtysh_client_execute (struct vtysh_client *vclient, char *line, FILE *fp)
 {
   int ret;
   char buf[1001];
@@ -251,9 +310,9 @@ vtysh_client_execute (struct vtysh_client *vclient, char *line)
 	
   while (1)
     {
-      nbytes = read (vclient->fd, buf, 1000);
+      nbytes = read (vclient->fd, buf, sizeof(buf)-1);
 
-      if (nbytes <= 0)
+      if (nbytes <= 0 && errno != EINTR)
 	{
 	  vclient_close (vclient);
 	  return CMD_SUCCESS;
@@ -262,7 +321,8 @@ vtysh_client_execute (struct vtysh_client *vclient, char *line)
       if (nbytes > 0)
 	{
 	  buf[nbytes] = '\0';
-	  printf ("%s", buf);
+	  fprintf (fp, "%s", buf);
+	  fflush (fp);
 
 	  if (nbytes >= 4)
 	    {
@@ -276,68 +336,29 @@ vtysh_client_execute (struct vtysh_client *vclient, char *line)
 	}
     }
   return ret;
-#if 0
-  FD_ZERO (&readfd);
-	
-  timer_wait.tv_sec = 0;
-  timer_wait.tv_usec = 10;
-
-  while (1)
-    {
-      FD_SET (vclient->fd, &readfd);
-      ret = select (FD_SETSIZE, &readfd, NULL, NULL, &timer_wait);
-		
-      if (FD_ISSET (vclient->fd, &readfd))
-	{
-	  nbytes = read (vclient->fd, buf, 100);
-	  if (nbytes <= 0)
-	    {
-	      vclient_close (vclient);
-	      return CMD_SUCCESS;
-	    }
-
-	  if (nbytes > 0)
-	    {
-	      printf ("nbytes %d\n", nbytes);
-
-	      for (i = 0; i < nbytes; i++)
-		printf ("debug i[%d]: %d\n", i, buf[i]);
-
-
-	      buf[nbytes] = '\0';
-	      printf ("%s", buf);
-
-	      if (nbytes >= 4)
-		{
-		  index = nbytes - 4;
-		  if (buf[index] == '\0' 
-		      && buf[index + 1] == '\0' 
-		      && buf[index + 2] == '\0')
-		    {
-		      printf ("ret %d\n", buf[index + 3]);
-		    }
-		}
-	    }
-	}
-      else
-	break;
-    }
-#endif /* 0 */
 }
 
 void
 vtysh_exit_ripd_only ()
 {
-  vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP], "exit");
+  vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP], "exit", stdout);
+}
+
+
+void
+vtysh_pager_init ()
+{
+  vtysh_pager_name = getenv ("VTYSH_PAGER");
 }
 
 /* Command execution over the vty interface. */
 void
-vtysh_execute (char *line)
+vtysh_execute_func (char *line, int pager)
 {
   int ret, cmd_stat;
   vector vline;
   struct cmd_element *cmd;
+  FILE *fp = NULL;
 
   /* Split readline string up into the vector */
   vline = cmd_make_strvec (line);
@@ -366,32 +387,53 @@ vtysh_execute (char *line)
       break;
     case CMD_SUCCESS_DAEMON:
       {
-	if (!strcmp(cmd->string,"configure terminal"))
+	if (pager && vtysh_pager_name)
+	  {
+	    fp = popen ("more", "w");
+	    if (fp == NULL)
+	      {
+		perror ("popen");
+		exit (1);
+	      }
+	  }
+	else
+	  fp = stdout;
+
+	if (! strcmp(cmd->string,"configure terminal"))
 	  {
 	    cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA],
-					     line);
+					     line, fp);
 	    if (cmd_stat != CMD_WARNING)
 	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP],
-					       line);
+					       line, fp);
 	    if (cmd_stat != CMD_WARNING)
-	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG],
-					       line);
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG], line, fp);
 	    if (cmd_stat != CMD_WARNING)
 	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF],
-					       line);
+					       line, fp);
 	    if (cmd_stat != CMD_WARNING)
-	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6],
-					       line);
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6], line, fp);
 	    if (cmd_stat != CMD_WARNING)
 	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP],
-					       line);
+					       line, fp);
 	    if (cmd_stat)
 	      {
                 line = "end";
                 vline = cmd_make_strvec (line);
 
                 if (vline == NULL)
-                  return;
+		  {
+		    if (pager && vtysh_pager_name && fp)
+		      {
+			if (pclose (fp) == -1)
+			  {
+			    perror ("pclose");
+			    exit (1);
+			  }
+			fp = NULL;
+		      }
+		    return;
+		  }
 
                 ret = cmd_execute_command (vline, vty, &cmd);
                 cmd_free_strvec (vline);
@@ -407,33 +449,54 @@ vtysh_execute (char *line)
 	  }
 
 	if (cmd->daemon & VTYSH_ZEBRA)
-	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA], line)
+	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA], line, fp)
 	      != CMD_SUCCESS)
 	    break;
 	if (cmd->daemon & VTYSH_RIPD)
-	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP], line)
+	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP], line, fp)
 	      != CMD_SUCCESS)
 	    break;
 	if (cmd->daemon & VTYSH_RIPNGD)
-	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG], line)
+	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG], line, fp)
 	      != CMD_SUCCESS)
 	    break;
 	if (cmd->daemon & VTYSH_OSPFD)
-	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF], line)
+	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF], line, fp)
 	      != CMD_SUCCESS)
 	    break;
 	if (cmd->daemon & VTYSH_OSPF6D)
-	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6], line)
+	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6], line, fp)
 	      != CMD_SUCCESS)
 	    break;
 	if (cmd->daemon & VTYSH_BGPD)
-	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP], line)
+	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP], line, fp)
 	      != CMD_SUCCESS)
 	    break;
 	if (cmd->func)
 	  (*cmd->func) (cmd, vty, 0, NULL);
       }
     }
+  if (pager && vtysh_pager_name && fp)
+    {
+      if (pclose (fp) == -1)
+	{
+	  perror ("pclose");
+	  exit (1);
+	}
+      fp = NULL;
+    }
+}
+
+void
+vtysh_execute_no_pager (char *line)
+{
+  vtysh_execute_func (line, 0);
+}
+
+void
+vtysh_execute (char *line)
+{
+  vtysh_execute_func (line, 1);
 }
 
 /* Configration make from file. */
@@ -508,27 +571,27 @@ vtysh_config_from_file (struct vty *vty, FILE *fp)
 	  {
 	    if (cmd->daemon & VTYSH_ZEBRA)
 	      if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA],
-					vty->buf) != CMD_SUCCESS)
+					vty->buf, stdout) != CMD_SUCCESS)
 		break;
 	    if (cmd->daemon & VTYSH_RIPD)
 	      if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP],
-					vty->buf) != CMD_SUCCESS)
+					vty->buf, stdout) != CMD_SUCCESS)
 		break;
 	    if (cmd->daemon & VTYSH_RIPNGD)
 	      if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG],
-					vty->buf) != CMD_SUCCESS)
+					vty->buf, stdout) != CMD_SUCCESS)
 		break;
 	    if (cmd->daemon & VTYSH_OSPFD)
 	      if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF],
-					vty->buf) != CMD_SUCCESS)
+					vty->buf, stdout) != CMD_SUCCESS)
 		break;
 	    if (cmd->daemon & VTYSH_OSPF6D)
 	      if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6],
-					vty->buf) != CMD_SUCCESS)
+					vty->buf, stdout) != CMD_SUCCESS)
 		break;
 	    if (cmd->daemon & VTYSH_BGPD)
 	      if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP],
-					vty->buf) != CMD_SUCCESS)
+					vty->buf, stdout) != CMD_SUCCESS)
 		break;
 	    if (cmd->func)
 	      (*cmd->func) (cmd, vty, 0, NULL);
@@ -757,6 +820,41 @@ DEFUNSH (VTYSH_BGPD,
   return CMD_SUCCESS;
 }
 
+DEFUNSH (VTYSH_BGPD,
+	 address_family_ipv4_multicast,
+	 address_family_ipv4_multicast_cmd,
+	 "address-family ipv4 multicast",
+	 "Enter Address Family command mode\n"
+	 "Address family\n"
+	 "Address Family Modifier\n")
+{
+  vty->node = BGP_IPV4M_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
+	 address_family_ipv6,
+	 address_family_ipv6_cmd,
+	 "address-family ipv6",
+	 "Enter Address Family command mode\n"
+	 "Address family\n")
+{
+  vty->node = BGP_IPV6_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
+	 address_family_ipv6_unicast,
+	 address_family_ipv6_unicast_cmd,
+	 "address-family ipv6 unicast",
+	 "Enter Address Family command mode\n"
+	 "Address family\n"
+	 "Address Family Modifier\n")
+{
+  vty->node = BGP_IPV6_NODE;
+  return CMD_SUCCESS;
+}
+
 DEFUNSH (VTYSH_RIPD,
 	 key_chain,
 	 key_chain_cmd,
@@ -899,6 +997,8 @@ vtysh_exit (struct vty *vty)
       vty->node = CONFIG_NODE;
       break;
     case BGP_VPNV4_NODE:
+    case BGP_IPV4M_NODE:
+    case BGP_IPV6_NODE:
       vty->node = BGP_NODE;
       break;
     case KEYCHAIN_KEY_NODE:
@@ -919,6 +1019,24 @@ DEFUNSH (VTYSH_ALL,
   return vtysh_exit (vty);
 }
 
+ALIAS (vtysh_exit_all,
+       vtysh_quit_all_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+
+DEFUNSH (VTYSH_BGPD,
+	 exit_address_family,
+	 exit_address_family_cmd,
+	 "exit-address-family",
+	 "Exit from Address Family configuration mode\n")
+{
+  if (vty->node == BGP_IPV4M_NODE
+      || vty->node == BGP_VPNV4_NODE
+      || vty->node == BGP_IPV6_NODE)
+    vty->node = BGP_NODE;
+  return CMD_SUCCESS;
+}
+
 DEFUNSH (VTYSH_ZEBRA,
 	 vtysh_exit_zebra,
 	 vtysh_exit_zebra_cmd,
@@ -927,6 +1045,11 @@ DEFUNSH (VTYSH_ZEBRA,
 {
   return vtysh_exit (vty);
 }
+
+ALIAS (vtysh_exit_zebra,
+       vtysh_quit_zebra_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
 
 DEFUNSH (VTYSH_RIPD,
 	 vtysh_exit_ripd,
@@ -937,6 +1060,11 @@ DEFUNSH (VTYSH_RIPD,
   return vtysh_exit (vty);
 }
 
+ALIAS (vtysh_exit_ripd,
+       vtysh_quit_ripd_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+
 DEFUNSH (VTYSH_RMAP,
 	 vtysh_exit_rmap,
 	 vtysh_exit_rmap_cmd,
@@ -945,6 +1073,11 @@ DEFUNSH (VTYSH_RMAP,
 {
   return vtysh_exit (vty);
 }
+
+ALIAS (vtysh_exit_rmap,
+       vtysh_quit_rmap_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
 
 DEFUNSH (VTYSH_BGPD,
 	 vtysh_exit_bgpd,
@@ -955,6 +1088,11 @@ DEFUNSH (VTYSH_BGPD,
   return vtysh_exit (vty);
 }
 
+ALIAS (vtysh_exit_bgpd,
+       vtysh_quit_bgpd_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+
 DEFUNSH (VTYSH_OSPFD,
 	 vtysh_exit_ospfd,
 	 vtysh_exit_ospfd_cmd,
@@ -963,6 +1101,11 @@ DEFUNSH (VTYSH_OSPFD,
 {
   return vtysh_exit (vty);
 }
+
+ALIAS (vtysh_exit_ospfd,
+       vtysh_quit_ospfd_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
 
 DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_OSPFD,
 	 vtysh_interface,
@@ -999,6 +1142,11 @@ DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_OSPFD,
   return vtysh_exit (vty);
 }
 
+ALIAS (vtysh_exit_interface,
+       vtysh_quit_interface_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+
 DEFUN (vtysh_write_terminal,
        vtysh_write_terminal_cmd,
        "write terminal",
@@ -1007,12 +1155,25 @@ DEFUN (vtysh_write_terminal,
 {
   int ret;
   char line[] = "write terminal\n";
+  FILE *fp = NULL;
+
+  if (vtysh_pager_name)
+    {
+      fp = popen ("more", "w");
+      if (fp == NULL)
+	{
+	  perror ("popen");
+	  exit (1);
+	}
+    }
+  else
+    fp = stdout;
 
   vty_out (vty, "Building configuration...%s", VTY_NEWLINE);
   vty_out (vty, "%sCurrent configuration:%s", VTY_NEWLINE,
 	   VTY_NEWLINE);
 
-  vtysh_config_write (stdout);
+  vtysh_config_write (fp);
 
   ret = vtysh_client_config (&vtysh_client[VTYSH_INDEX_ZEBRA], line);
   ret = vtysh_client_config (&vtysh_client[VTYSH_INDEX_RIP], line);
@@ -1021,7 +1182,18 @@ DEFUN (vtysh_write_terminal,
   ret = vtysh_client_config (&vtysh_client[VTYSH_INDEX_OSPF6], line);
   ret = vtysh_client_config (&vtysh_client[VTYSH_INDEX_BGP], line);
 
-  vtysh_config_dump (stdout);
+  vtysh_config_dump (fp);
+
+  if (vtysh_pager_name && fp)
+    {
+      fflush (fp);
+      if (pclose (fp) == -1)
+	{
+	  perror ("pclose");
+	  exit (1);
+	}
+      fp = NULL;
+    }
 
   return CMD_SUCCESS;
 }
@@ -1033,16 +1205,31 @@ DEFUN (vtysh_write_memory,
        "Write configuration to the file (same as write file)\n")
 {
   int ret;
+  mode_t old_umask;
   char line[] = "write terminal\n";
   FILE *fp;
-  extern char integrate_default[];
+  char *integrate_sav = NULL;
 
-  printf ("Building configuration...\n");
+  /* config files have 0600 perms... */ 
+  old_umask = umask (0077);
+
+  integrate_sav = malloc (strlen (integrate_default) 
+			    + strlen (CONF_BACKUP_EXT) + 1);
+  strcpy (integrate_sav, integrate_default);
+  strcat (integrate_sav, CONF_BACKUP_EXT);
+
+
+  printf ("Building Configuration...\n");
+
+  /* Move current configuration file to backup config file */
+  unlink (integrate_sav);
+  rename (integrate_default, integrate_sav);
 
   fp = fopen (integrate_default, "w");
   if (fp == NULL)
     {
       printf ("%% Can't open configuration file %s.\n", integrate_default);
+      umask (old_umask);
       return CMD_SUCCESS;
     }
   else
@@ -1062,6 +1249,7 @@ DEFUN (vtysh_write_memory,
 
   fclose (fp);
 
+  umask (old_umask);
   return CMD_SUCCESS;
 }
 
@@ -1071,6 +1259,12 @@ ALIAS (vtysh_write_memory,
        "Copy from one file to another\n"
        "Copy from current system configuration\n"
        "Copy to startup configuration\n")
+
+ALIAS (vtysh_write_memory,
+       vtysh_write_file_cmd,
+       "write file",
+       "Write running configuration to memory, network, or terminal\n"
+       "Write configuration to the file (same as write memory)\n")
 
 ALIAS (vtysh_write_terminal,
        vtysh_show_running_config_cmd,
@@ -1215,6 +1409,18 @@ struct cmd_node bgp_vpnv4_node =
   "%s(config-router-af)# "
 };
 
+struct cmd_node bgp_ipv4m_node =
+{
+  BGP_IPV4M_NODE,
+  "%s(config-router-af)# "
+};
+
+struct cmd_node bgp_ipv6_node =
+{
+  BGP_IPV6_NODE,
+  "%s(config-router-af)# "
+};
+
 struct cmd_node ospf_node =
 {
   OSPF_NODE,
@@ -1260,9 +1466,42 @@ vtysh_connect (struct vtysh_client *vclient, char *path)
   int ret;
   int sock, len;
   struct sockaddr_un addr;
+  struct stat s_stat;
+  uid_t euid;
+  gid_t egid;
 
   memset (vclient, 0, sizeof (struct vtysh_client));
   vclient->fd = -1;
+
+  /* Stat socket to see if we have permission to access it. */
+  euid = geteuid();
+  egid = getegid();
+  ret = stat (path, &s_stat);
+  if (ret < 0 && errno != ENOENT)
+    {
+      fprintf  (stderr, "vtysh_connect(%s): stat = %s\n", 
+		path, strerror(errno)); 
+      exit(1);
+    }
+  
+  if (ret >= 0)
+    {
+      if (! S_ISSOCK(s_stat.st_mode))
+	{
+	  fprintf (stderr, "vtysh_connect(%s): Not a socket\n",
+		   path);
+	  exit (1);
+	}
+      
+      if (euid != s_stat.st_uid 
+	  || !(s_stat.st_mode & S_IWUSR)
+	  || !(s_stat.st_mode & S_IRUSR))
+	{
+	  fprintf (stderr, "vtysh_connect(%s): No permission to access socket\n",
+		   path);
+	  exit (1);
+	}
+    }
 
   sock = socket (AF_UNIX, SOCK_STREAM, 0);
   if (sock < 0)
@@ -1367,15 +1606,34 @@ vtysh_init_vty ()
   install_node (&rmap_node, NULL);
   install_node (&zebra_node, NULL);
   install_node (&bgp_vpnv4_node, NULL);
+  install_node (&bgp_ipv4m_node, NULL);
+/* #ifdef HAVE_IPV6 */
+  install_node (&bgp_ipv6_node, NULL);
+/* #endif */
   install_node (&ospf_node, NULL);
+/* #ifdef HAVE_IPV6 */
   install_node (&ripng_node, NULL);
   install_node (&ospf6_node, NULL);
+/* #endif */
   install_node (&keychain_node, NULL);
   install_node (&keychain_key_node, NULL);
 
   vtysh_install_default (VIEW_NODE);
   vtysh_install_default (ENABLE_NODE);
   vtysh_install_default (CONFIG_NODE);
+  vtysh_install_default (BGP_NODE);
+  vtysh_install_default (RIP_NODE);
+  vtysh_install_default (INTERFACE_NODE);
+  vtysh_install_default (RMAP_NODE);
+  vtysh_install_default (ZEBRA_NODE);
+  vtysh_install_default (BGP_VPNV4_NODE);
+  vtysh_install_default (BGP_IPV4M_NODE);
+  vtysh_install_default (BGP_IPV6_NODE);
+  vtysh_install_default (OSPF_NODE);
+  vtysh_install_default (RIPNG_NODE);
+  vtysh_install_default (OSPF6_NODE);
+  vtysh_install_default (KEYCHAIN_NODE);
+  vtysh_install_default (KEYCHAIN_KEY_NODE);
 
   install_element (VIEW_NODE, &vtysh_enable_cmd);
   install_element (ENABLE_NODE, &vtysh_config_terminal_cmd);
@@ -1383,15 +1641,29 @@ vtysh_init_vty ()
 
   /* "exit" command. */
   install_element (VIEW_NODE, &vtysh_exit_all_cmd);
+  install_element (VIEW_NODE, &vtysh_quit_all_cmd);
   install_element (CONFIG_NODE, &vtysh_exit_all_cmd);
+  /* install_element (CONFIG_NODE, &vtysh_quit_all_cmd); */
   install_element (ENABLE_NODE, &vtysh_exit_all_cmd);
+  install_element (ENABLE_NODE, &vtysh_quit_all_cmd);
   install_element (RIP_NODE, &vtysh_exit_ripd_cmd);
+  install_element (RIP_NODE, &vtysh_quit_ripd_cmd);
   install_element (OSPF_NODE, &vtysh_exit_ospfd_cmd);
+  install_element (OSPF_NODE, &vtysh_quit_ospfd_cmd);
   install_element (BGP_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_NODE, &vtysh_quit_bgpd_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_VPNV4_NODE, &vtysh_quit_bgpd_cmd);
+  install_element (BGP_IPV4M_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_IPV4M_NODE, &vtysh_quit_bgpd_cmd);
+  install_element (BGP_IPV6_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_IPV6_NODE, &vtysh_quit_bgpd_cmd);
   install_element (KEYCHAIN_NODE, &vtysh_exit_ripd_cmd);
+  install_element (KEYCHAIN_NODE, &vtysh_quit_ripd_cmd);
   install_element (KEYCHAIN_KEY_NODE, &vtysh_exit_ripd_cmd);
+  install_element (KEYCHAIN_KEY_NODE, &vtysh_quit_ripd_cmd);
   install_element (RMAP_NODE, &vtysh_exit_rmap_cmd);
+  install_element (RMAP_NODE, &vtysh_quit_rmap_cmd);
 
   /* "end" command. */
   install_element (CONFIG_NODE, &vtysh_end_all_cmd);
@@ -1401,19 +1673,35 @@ vtysh_init_vty ()
   install_element (OSPF_NODE, &vtysh_end_all_cmd);
   install_element (OSPF6_NODE, &vtysh_end_all_cmd);
   install_element (BGP_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_IPV4M_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_VPNV4_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_IPV6_NODE, &vtysh_end_all_cmd);
   install_element (KEYCHAIN_NODE, &vtysh_end_all_cmd);
   install_element (KEYCHAIN_KEY_NODE, &vtysh_end_all_cmd);
   install_element (RMAP_NODE, &vtysh_end_all_cmd);
 
   install_element (INTERFACE_NODE, &vtysh_end_all_cmd);
   install_element (INTERFACE_NODE, &vtysh_exit_interface_cmd);
+  install_element (INTERFACE_NODE, &vtysh_quit_interface_cmd);
   install_element (CONFIG_NODE, &router_rip_cmd);
+#ifdef HAVE_IPV6
   install_element (CONFIG_NODE, &router_ripng_cmd);
+#endif
   install_element (CONFIG_NODE, &router_ospf_cmd);
+#ifdef HAVE_IPV6
   install_element (CONFIG_NODE, &router_ospf6_cmd);
+#endif
   install_element (CONFIG_NODE, &router_bgp_cmd);
   install_element (BGP_NODE, &address_family_vpnv4_cmd);
   install_element (BGP_NODE, &address_family_vpnv4_unicast_cmd);
+  install_element (BGP_NODE, &address_family_ipv4_multicast_cmd);
+#ifdef HAVE_IPV6
+  install_element (BGP_NODE, &address_family_ipv6_cmd);
+  install_element (BGP_NODE, &address_family_ipv6_unicast_cmd);
+#endif
+  install_element (BGP_VPNV4_NODE, &exit_address_family_cmd);
+  install_element (BGP_IPV4M_NODE, &exit_address_family_cmd);
+  install_element (BGP_IPV6_NODE, &exit_address_family_cmd);
   install_element (CONFIG_NODE, &key_chain_cmd);
   install_element (CONFIG_NODE, &route_map_cmd);
   install_element (KEYCHAIN_NODE, &key_cmd);
@@ -1422,12 +1710,15 @@ vtysh_init_vty ()
   install_element (CONFIG_NODE, &vtysh_interface_cmd);
   install_element (ENABLE_NODE, &vtysh_show_running_config_cmd);
   install_element (ENABLE_NODE, &vtysh_copy_runningconfig_startupconfig_cmd);
+  install_element (ENABLE_NODE, &vtysh_write_file_cmd);
 
   /* write terminal command */
   install_element (ENABLE_NODE, &vtysh_write_terminal_cmd);
   install_element (CONFIG_NODE, &vtysh_write_terminal_cmd);
   install_element (BGP_NODE, &vtysh_write_terminal_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_write_terminal_cmd);
+  install_element (BGP_IPV4M_NODE, &vtysh_write_terminal_cmd);
+  install_element (BGP_IPV6_NODE, &vtysh_write_terminal_cmd);
   install_element (RIP_NODE, &vtysh_write_terminal_cmd);
   install_element (RIPNG_NODE, &vtysh_write_terminal_cmd);
   install_element (OSPF_NODE, &vtysh_write_terminal_cmd);
@@ -1442,6 +1733,8 @@ vtysh_init_vty ()
   install_element (CONFIG_NODE, &vtysh_write_memory_cmd);
   install_element (BGP_NODE, &vtysh_write_memory_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_write_memory_cmd);
+  install_element (BGP_IPV4M_NODE, &vtysh_write_memory_cmd);
+  install_element (BGP_IPV6_NODE, &vtysh_write_memory_cmd);
   install_element (RIP_NODE, &vtysh_write_memory_cmd);
   install_element (RIPNG_NODE, &vtysh_write_memory_cmd);
   install_element (OSPF_NODE, &vtysh_write_memory_cmd);

@@ -50,9 +50,6 @@
 /* vtysh local configuration file. */
 #define VTYSH_DEFAULT_CONFIG "vtysh.conf"
 
-/* Integrated configuration file. */
-#define INTEGRATE_DEFAULT_CONFIG "Zebra.conf"
-
 void vtysh_init_vty ();
 void vtysh_init_cmd ();
 void vtysh_connect_all ();
@@ -60,6 +57,7 @@ void vtysh_readline_init ();
 void vtysh_user_init ();
 
 void vtysh_execute (char *);
+void vtysh_execute_no_pager (char *);
 
 char *vtysh_prompt ();
 
@@ -74,6 +72,8 @@ void vtysh_config_parse (char *);
 void vtysh_config_dump (FILE *);
 
 void vtysh_config_init ();
+
+void vtysh_pager_init ();
 
 /* Child process execution flag. */
 extern int execute_flag;

@@ -25,7 +25,7 @@ Set router's Router-ID.
 @end deffn
 
 @deffn {OSPF6 Command} {interface @var{ifname} area @var{area}} {}
-Bind interface to specified area, and start OSPF packet.  @var{area} can
+Bind interface to specified area, and start sending OSPF packets.  @var{area} can
 be specified as 0.
 @end deffn
 
@@ -40,27 +40,27 @@ Area support for OSPFv3 is not yet implemented.
 @section OSPF6 interface
 
 @deffn {Interface Command} {ipv6 ospf6 cost COST} {}
-Setting interface's output cost.  Default value is 1.
+Sets interface's output cost.  Default value is 1.
 @end deffn
 
 @deffn {Interface Command} {ipv6 ospf6 hello-interval HELLOINTERVAL} {}
-Setting interface's Hello Interval.  Default 40
+Sets interface's Hello Interval.  Default 40
 @end deffn
 
 @deffn {Interface Command} {ipv6 ospf6 dead-interval DEADINTERVAL} {}
-Setting interface's Router Dead Interval.  Default value is 40.
+Sets interface's Router Dead Interval.  Default value is 40.
 @end deffn
 
 @deffn {Interface Command} {ipv6 ospf6 retransmit-interval RETRANSMITINTERVAL} {}
-Setting interface's Rxmt Interval.  Default value is 5.
+Sets interface's Rxmt Interval.  Default value is 5.
 @end deffn
 
 @deffn {Interface Command} {ipv6 ospf6 priority PRIORITY} {}
-Setting interface's Router Priority.  Default value is 1.
+Sets interface's Router Priority.  Default value is 1.
 @end deffn
 
 @deffn {Interface Command} {ipv6 ospf6 transmit-delay TRANSMITDELAY} {}
-Setting interface's Inf-Trans-Delay.  Default value is 1.
+Sets interface's Inf-Trans-Delay.  Default value is 1.
 @end deffn
 
 @node Redistribute routes to OSPF6, Showing OSPF6 information, OSPF6 interface, ospf6d
@@ -77,12 +77,12 @@ Setting interface's Inf-Trans-Delay.  Default value is 1.
 @section Showing OSPF6 information
 
 @deffn {Command} {show ipv6 ospf6 [INSTANCE_ID]} {}
-INSTANCE_ID is a optional OSPF instance ID. To see router ID and OSPF
+INSTANCE_ID is an optional OSPF instance ID. To see router ID and OSPF
 instance ID, simply type "show ipv6 ospf6 <cr>".
 @end deffn
 
 @deffn {Command} {show ipv6 ospf6 database} {}
-This command shows LSA database summary.  You can specify type of LSA.
+This command shows LSA database summary.  You can specify the type of LSA.
 @end deffn
 
 @deffn {Command} {show ipv6 ospf6 interface} {}
@@ -90,7 +90,7 @@ To see OSPF interface configuration like costs.
 @end deffn
 
 @deffn {Command} {show ipv6 ospf6 neighbor} {}
-Shows state and choosed (Backup) DR of neighbor.
+Shows state and chosen (Backup) DR of neighbor.
 @end deffn
 
 @deffn {Command} {show ipv6 ospf6 request-list A.B.C.D} {}

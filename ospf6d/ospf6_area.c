@@ -22,20 +22,62 @@
 
 #include "ospf6d.h"
 
-int
-ospf6_area_count_neighbor_in_state (u_char state, struct ospf6_area *o6a)
+static void
+ospf6_area_foreach_interface (struct ospf6_area *o6a, void *arg, int val,
+                              void (*func) (void *, int, void *))
 {
   listnode node;
   struct ospf6_interface *o6i;
-  int count = 0;
 
   for (node = listhead (o6a->if_list); node; nextnode (node))
     {
       o6i = (struct ospf6_interface *) getdata (node);
-      count += ospf6_interface_count_neighbor_in_state (state, o6i);
+      (*func) (arg, val, o6i);
     }
+}
 
-  return count;
+static void
+ospf6_area_foreach_neighbor (struct ospf6_area *o6a, void *arg, int val,
+                             void (*func) (void *, int, void *))
+{
+  listnode node;
+  struct ospf6_interface *o6i;
+
+  for (node = listhead (o6a->if_list); node; nextnode (node))
+    {
+      o6i = (struct ospf6_interface *) getdata (node);
+      (*o6i->foreach_nei) (o6i, arg, val, func);
+    }
+}
+
+static int
+ospf6_area_maxage_remover (struct thread *t)
+{
+  int count;
+  struct ospf6_area *o6a = (struct ospf6_area *) THREAD_ARG (t);
+
+  o6a->maxage_remover = (struct thread *) NULL;
+
+  count = 0;
+  o6a->foreach_nei (o6a, &count, NBS_EXCHANGE, ospf6_count_state);
+  o6a->foreach_nei (o6a, &count, NBS_LOADING, ospf6_count_state);
+  if (count != 0)
+    return 0;
+
+  ospf6_lsdb_remove_maxage (o6a->lsdb);
+  return 0;
+}
+
+void
+ospf6_area_schedule_maxage_remover (void *arg, int val, void *obj)
+{
+  struct ospf6_area *o6a = (struct ospf6_area *) obj;
+
+  if (o6a->maxage_remover != NULL)
+    return;
+
+  o6a->maxage_remover =
+    thread_add_event (master, ospf6_area_maxage_remover, o6a, 0);
 }
 
 int
@@ -76,10 +118,10 @@ ospf6_area_create (u_int32_t area_id)
   o6a->if_list = list_new ();
 
 #if 0
-  o6a->table = ospf6_route_table_init ();
-#endif
-
   o6a->lsdb = list_new ();
+#endif
+  o6a->lsdb = ospf6_lsdb_create ();
+
   o6a->spf_tree = ospf6_spftree_create ();
   o6a->table_topology = route_table_init ();
 
@@ -87,6 +129,9 @@ ospf6_area_create (u_int32_t area_id)
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_V6);
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_E);
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_R);
+
+  o6a->foreach_if = ospf6_area_foreach_interface;
+  o6a->foreach_nei = ospf6_area_foreach_neighbor;
 
   return o6a;
 }
@@ -119,11 +164,6 @@ ospf6_area_delete (struct ospf6_area *o6a)
     thread_cancel (o6a->route_calc);
   o6a->route_calc = (struct thread *) NULL;
 
-#if 0
-  /* route table terminate */
-  ospf6_route_table_finish (o6a->table);
-#endif
-
   /* new */
   ospf6_spftree_delete (o6a->spf_tree);
   ospf6_route_delete_all (o6a->table_topology);
@@ -155,8 +195,13 @@ ospf6_area_show (struct vty *vty, struct ospf6_area *o6a)
   listnode i;
   struct ospf6_interface *o6i;
 
-  vty_out (vty, "    Area %s%s", o6a->str, VTY_NEWLINE);
-  vty_out (vty, "        Interface attached to this area:");
+  vty_out (vty, " Area %s%s", o6a->str, VTY_NEWLINE);
+  vty_out (vty, "     Number of Area scoped LSAs is %u%s",
+           o6a->lsdb->count, VTY_NEWLINE);
+
+  ospf6_spf_statistics_show (vty, o6a->spf_tree);
+
+  vty_out (vty, "     Interface attached to this area:");
   for (i = listhead (o6a->if_list); i; nextnode (i))
     {
       o6i = (struct ospf6_interface *) getdata (i);
@@ -164,24 +209,22 @@ ospf6_area_show (struct vty *vty, struct ospf6_area *o6a)
     }
   vty_out (vty, "%s", VTY_NEWLINE);
 
-  vty_out (vty, "        Number of Area scoped LSAs is %u%s",
-           listcount (o6a->lsdb), VTY_NEWLINE);
+  for (i = listhead (o6a->if_list); i; nextnode (i))
+    {
+      o6i = (struct ospf6_interface *) getdata (i);
+      if (listcount (o6i->neighbor_list) != 0)
+        ospf6_interface_statistics_show (vty, o6i);
+    }
 }
 
 void
 ospf6_area_statistics_show (struct vty *vty, struct ospf6_area *o6a)
 {
+#if 0
   listnode node;
   struct ospf6_interface *o6i;
 
   vty_out (vty, "  Statistics of Area %s%s", o6a->str, VTY_NEWLINE);
-  ospf6_spf_statistics_show (vty, o6a->spf_tree);
-
-  for (node = listhead (o6a->if_list); node; nextnode (node))
-    {
-      o6i = (struct ospf6_interface *) getdata (node);
-      if (listcount (o6i->neighbor_list) != 0)
-        ospf6_interface_statistics_show (vty, o6i);
-    }
+#endif
 }
 

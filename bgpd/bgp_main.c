@@ -185,6 +185,9 @@ main (int argc, char **argv)
 
   struct thread thread;
 
+  /* Set umask before anything for security */
+  umask (0027);
+
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 

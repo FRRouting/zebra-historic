@@ -36,7 +36,7 @@ commands:
 @cindex Distribution configuration
 @cindex Options to @code{./configure}
  
-  Zebra has an excellent configure script, the configure script
+  Zebra has an excellent configure script which
 automatically detects most host configurations.  There are several
 additional configure options you can use to turn off IPv6 support, to
 disable the compilation of specific daemons, and to enable SNMP support.
@@ -45,10 +45,10 @@ disable the compilation of specific daemons, and to enable SNMP support.
 @item --enable-guile
 Turn on compilation of the zebra-guile interpreter.  You will need the
 guile library to make this.  zebra-guile implementation is not yet
-finished.  So this option is only useful for zebra-guile developer.
+finished.  So this option is only useful for zebra-guile developers.
 @item --disable-ipv6
 Turn off IPv6 related features and daemons.  Zebra configure script
-automatically detect IPv6 stack.  But sometimes you might want to
+automatically detects IPv6 stack.  But sometimes you might want to
 disable IPv6 support of Zebra.
 @item --disable-zebra
 Do not build zebra daemon.
@@ -64,24 +64,21 @@ Do not build ospf6d.
 Do not build bgpd.
 @item --disable-bgp-announce
 Make @command{bgpd} which does not make bgp announcements at all.  This
-feature is good for using @command{bgpd} as BGP announcement listener.
+feature is good for using @command{bgpd} as a BGP announcement listener.
 @item --enable-netlink
 Force to enable @sc{gnu}/Linux netlink interface.  Zebra configure
-script detects netlink interface by checking header file.  When header
-file does not match to the current running kernel configure script will
+script detects netlink interface by checking a header file.  When the header
+file does not match to the current running kernel, configure script will
 not turn on netlink support.
 @item --enable-snmp
-Enable SNMP support.  In default, SNMP support is disabled.
+Enable SNMP support.  By default, SNMP support is disabled.
 @end table
 
 You may specify any combination of the above options to the configure
-script.  As well, you may find it useful to change the installation
-directory; specify the following options to the configure script.
-
-By default, the executables are placed in @file{/usr/local/sbin} and the
-configuration files in @file{/usr/local/etc}. The @file{/usr/local/}
-installation prefix may be changed using options to the configuration
-script.
+script.  By default, the executables are placed in @file{/usr/local/sbin} 
+and the configuration files in @file{/usr/local/etc}. The @file{/usr/local/}
+installation prefix and other directories may be changed using the following 
+options to the configuration script.
 
 @table @option
 @item --prefix=@var{prefix}
@@ -127,7 +124,7 @@ This option should be specified when you use @command{ripd} or
 
 @end table
 
-IPv6 support is added from @sc{gnu}/Linux kernel version 2.2.  If you
+IPv6 support has been added in @sc{gnu}/Linux kernel version 2.2.  If you
 try to use the Zebra IPv6 feature on a @sc{gnu}/Linux kernel, please
 make sure the following libraries have been installed.  Please note that
 these libraries will not be needed when you uses @sc{gnu} C library 2.1
@@ -181,10 +178,10 @@ at this stage, be certain to send a bug report @xref{Bug Reports}.
 
 Installing the software to your system consists of copying the compiled
 programs and supporting files to a standard location. After the
-installation process has completed, these files will have been copied
+installation process has completed, these files have been copied
 from your work directory to @file{/usr/local/bin}, and @file{/usr/local/etc}.
 
-To install the Zebra suite issue the following command at your shell
+To install the Zebra suite, issue the following command at your shell
 prompt: @command{make install}.
 
 @example
@@ -198,7 +195,7 @@ prompt: @command{make install}.
 @comment  node-name,  next,  previous,  up
 @c @section Additional Notes
 
-Zebra daemon's have their own terminal interface or VTY.  After
+Zebra daemons have their own terminal interface or VTY.  After
 installation, you have to setup each beast's port number to connect to
 them.  Please add the following entries to @file{/etc/services}.
 

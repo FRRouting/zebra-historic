@@ -31,26 +31,6 @@
 #include "ospf6_spf.h"
 #include "ospf6_top.h"
 
-struct area
-{
-  char            str[16];
-
-  struct ospf6   *ospf6;      /* back pointer */
-  u_int32_t       area_id;
-  u_char          options[3]; /* OSPF Option including ExternalCapability */
-
-  list            if_list; /* OSPF interface to this area */
-  list            lsdb;
-
-  struct thread  *spf_calc;
-  struct thread  *route_calc;
-  int             stat_spf_execed;
-  int             stat_route_execed;
-
-  struct route_table *table; /* new route table */
-  struct ospf6_spftree *spf_tree;
-  struct route_table *table_topology;
-};
 struct ospf6_area
 {
   char            str[16];
@@ -60,7 +40,8 @@ struct ospf6_area
   u_char          options[3]; /* OSPF Option including ExternalCapability */
 
   list            if_list; /* OSPF interface to this area */
-  list            lsdb;
+
+  struct ospf6_lsdb *lsdb;
 
   struct thread  *spf_calc;
   struct thread  *route_calc;
@@ -72,12 +53,24 @@ struct ospf6_area
   struct prefix_ipv6 area_range;
   struct ospf6_spftree *spf_tree;
   struct route_table *table_topology;
+
+  void (*foreach_if)  (struct ospf6_area *, void *, int,
+                       void (*func) (void *, int, void *));
+  void (*foreach_nei) (struct ospf6_area *, void *, int,
+                       void (*func) (void *, int, void *));
+
+  struct thread *maxage_remover;
 };
 
 
 /* prototypes */
+
 int
 ospf6_area_count_neighbor_in_state (u_char state, struct ospf6_area *o6a);
+
+void
+ospf6_area_schedule_maxage_remover (void *arg, int val, void *obj);
+
 int ospf6_area_is_stub (struct ospf6_area *o6a);
 int ospf6_area_is_transit (struct ospf6_area *o6a);
 struct ospf6_area *ospf6_area_lookup (u_int32_t, struct ospf6 *);

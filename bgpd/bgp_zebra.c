@@ -271,9 +271,11 @@ zebra_read_ipv4 (int command, struct zclient *zclient, zebra_size_t length)
     api.distance = stream_getc (s);
   if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
     api.metric = stream_getl (s);
+  else
+    api.metric = 0;
 
   if (command == ZEBRA_IPV4_ROUTE_ADD)
-    bgp_redistribute_add ((struct prefix *)&p, &nexthop, api.type);
+    bgp_redistribute_add ((struct prefix *)&p, &nexthop, api.metric, api.type);
   else
     bgp_redistribute_delete ((struct prefix *)&p, api.type);
 
@@ -331,7 +333,7 @@ zebra_read_ipv6 (int command, struct zclient *zclient, zebra_size_t length)
     return 0;
 
   if (command == ZEBRA_IPV6_ROUTE_ADD)
-    bgp_redistribute_add ((struct prefix *)&p, NULL, api.type);
+    bgp_redistribute_add ((struct prefix *)&p, NULL, api.metric, api.type);
   else
     bgp_redistribute_delete ((struct prefix *) &p, api.type);
   
@@ -635,9 +637,7 @@ DEFUN (no_bgp_redistribute_ospf_routemap,
 #ifdef HAVE_IPV6
 DEFUN (ipv6_bgp_redistribute_kernel,
        ipv6_bgp_redistribute_kernel_cmd,
-       "ipv6 bgp redistribute kernel",
-       IPV6_STR
-       BGP_STR
+       "redistribute kernel",
        "Redistribute information from another routing protocol\n"
        "Kernel routes\n")
 {
@@ -647,9 +647,7 @@ DEFUN (ipv6_bgp_redistribute_kernel,
 
 DEFUN (ipv6_bgp_redistribute_kernel_routemap,
        ipv6_bgp_redistribute_kernel_routemap_cmd,
-       "ipv6 bgp redistribute kernel route-map WORD",
-       IPV6_STR
-       BGP_STR
+       "redistribute kernel route-map WORD",
        "Redistribute information from another routing protocol\n"
        "Kernel routes\n"
        "Route map reference\n"
@@ -661,10 +659,8 @@ DEFUN (ipv6_bgp_redistribute_kernel_routemap,
 
 DEFUN (no_ipv6_bgp_redistribute_kernel,
        no_ipv6_bgp_redistribute_kernel_cmd,
-       "no ipv6 bgp redistribute kernel",
+       "no redistribute kernel",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "Kernel routes\n")
 {
@@ -674,10 +670,8 @@ DEFUN (no_ipv6_bgp_redistribute_kernel,
 
 DEFUN (no_ipv6_bgp_redistribute_kernel_routemap,
        no_ipv6_bgp_redistribute_kernel_routemap_cmd,
-       "no ipv6 bgp redistribute kernel route-map WORD",
+       "no redistribute kernel route-map WORD",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "Kernel routes\n"
        "Route map reference\n"
@@ -689,9 +683,7 @@ DEFUN (no_ipv6_bgp_redistribute_kernel_routemap,
 
 DEFUN (ipv6_bgp_redistribute_static,
        ipv6_bgp_redistribute_static_cmd,
-       "ipv6 bgp redistribute static",
-       IPV6_STR
-       BGP_STR
+       "redistribute static",
        "Redistribute information from another routing protocol\n"
        "Static routes\n")
 {
@@ -701,9 +693,7 @@ DEFUN (ipv6_bgp_redistribute_static,
 
 DEFUN (ipv6_bgp_redistribute_static_routemap,
        ipv6_bgp_redistribute_static_routemap_cmd,
-       "ipv6 bgp redistribute static route-map WORD",
-       IPV6_STR
-       BGP_STR
+       "redistribute static route-map WORD",
        "Redistribute information from another routing protocol\n"
        "Static routes\n"
        "Route map reference\n"
@@ -715,10 +705,8 @@ DEFUN (ipv6_bgp_redistribute_static_routemap,
 
 DEFUN (no_ipv6_bgp_redistribute_static,
        no_ipv6_bgp_redistribute_static_cmd,
-       "no ipv6 bgp redistribute static",
+       "no redistribute static",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "Static routes\n")
 {
@@ -728,10 +716,8 @@ DEFUN (no_ipv6_bgp_redistribute_static,
 
 DEFUN (no_ipv6_bgp_redistribute_static_routemap,
        no_ipv6_bgp_redistribute_static_routemap_cmd,
-       "no ipv6 bgp redistribute static route-map WORD",
+       "no redistribute static route-map WORD",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "Static routes\n"
        "Route map reference\n"
@@ -743,9 +729,7 @@ DEFUN (no_ipv6_bgp_redistribute_static_routemap,
 
 DEFUN (ipv6_bgp_redistribute_connected,
        ipv6_bgp_redistribute_connected_cmd,
-       "ipv6 bgp redistribute connected",
-       IPV6_STR
-       BGP_STR
+       "redistribute connected",
        "Redistribute information from another routing protocol\n"
        "Connected\n")
 {
@@ -755,9 +739,7 @@ DEFUN (ipv6_bgp_redistribute_connected,
 
 DEFUN (ipv6_bgp_redistribute_connected_routemap,
        ipv6_bgp_redistribute_connected_routemap_cmd,
-       "ipv6 bgp redistribute connected route-map WORD",
-       IPV6_STR
-       BGP_STR
+       "redistribute connected route-map WORD",
        "Redistribute information from another routing protocol\n"
        "Connected\n"
        "Route map reference\n"
@@ -769,10 +751,8 @@ DEFUN (ipv6_bgp_redistribute_connected_routemap,
 
 DEFUN (no_ipv6_bgp_redistribute_connected,
        no_ipv6_bgp_redistribute_connected_cmd,
-       "no ipv6 bgp redistribute connected",
+       "no redistribute connected",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "Connected\n")
 {
@@ -782,10 +762,8 @@ DEFUN (no_ipv6_bgp_redistribute_connected,
 
 DEFUN (no_ipv6_bgp_redistribute_connected_routemap,
        no_ipv6_bgp_redistribute_connected_routemap_cmd,
-       "no ipv6 bgp redistribute connected route-map WORD",
+       "no redistribute connected route-map WORD",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "Connected\n"
        "Route map reference\n"
@@ -797,9 +775,7 @@ DEFUN (no_ipv6_bgp_redistribute_connected_routemap,
 
 DEFUN (ipv6_bgp_redistribute_ripng,
        ipv6_bgp_redistribute_ripng_cmd,
-       "ipv6 bgp redistribute ripng",
-       IPV6_STR
-       BGP_STR
+       "redistribute ripng",
        "Redistribute information from another routing protocol\n"
        "IPv6 Routing Information Protocol (RIPng)\n")
 {
@@ -809,9 +785,7 @@ DEFUN (ipv6_bgp_redistribute_ripng,
 
 DEFUN (ipv6_bgp_redistribute_ripng_routemap,
        ipv6_bgp_redistribute_ripng_routemap_cmd,
-       "ipv6 bgp redistribute ripng route-map WORD",
-       IPV6_STR
-       BGP_STR
+       "redistribute ripng route-map WORD",
        "Redistribute information from another routing protocol\n"
        "IPv6 Routing Information Protocol (RIPng)\n"
        "Route map reference\n"
@@ -823,10 +797,8 @@ DEFUN (ipv6_bgp_redistribute_ripng_routemap,
 
 DEFUN (no_ipv6_bgp_redistribute_ripng,
        no_ipv6_bgp_redistribute_ripng_cmd,
-       "no ipv6 bgp redistribute ripng",
+       "no redistribute ripng",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "IPv6 Routing Information Protocol (RIPng)\n")
 {
@@ -836,10 +808,8 @@ DEFUN (no_ipv6_bgp_redistribute_ripng,
 
 DEFUN (no_ipv6_bgp_redistribute_ripng_routemap,
        no_ipv6_bgp_redistribute_ripng_routemap_cmd,
-       "no ipv6 bgp redistribute ripng route-map WORD",
+       "no redistribute ripng route-map WORD",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "IPv6 Routing Information Protocol (RIPng)\n"
        "Route map reference\n"
@@ -851,9 +821,7 @@ DEFUN (no_ipv6_bgp_redistribute_ripng_routemap,
 
 DEFUN (ipv6_bgp_redistribute_ospf6,
        ipv6_bgp_redistribute_ospf6_cmd,
-       "ipv6 bgp redistribute ospf6",
-       IPV6_STR
-       BGP_STR
+       "redistribute ospf6",
        "Redistribute information from another routing protocol\n"
        "IPv6 Open Shortest Path First (OSPFv3)\n")
 {
@@ -863,9 +831,7 @@ DEFUN (ipv6_bgp_redistribute_ospf6,
 
 DEFUN (ipv6_bgp_redistribute_ospf6_routemap,
        ipv6_bgp_redistribute_ospf6_routemap_cmd,
-       "ipv6 bgp redistribute ospf6 route-map WORD",
-       IPV6_STR
-       BGP_STR
+       "redistribute ospf6 route-map WORD",
        "Redistribute information from another routing protocol\n"
        "IPv6 Open Shortest Path First (OSPFv3)\n"
        "Route map reference\n"
@@ -877,10 +843,8 @@ DEFUN (ipv6_bgp_redistribute_ospf6_routemap,
 
 DEFUN (no_ipv6_bgp_redistribute_ospf6,
        no_ipv6_bgp_redistribute_ospf6_cmd,
-       "no ipv6 bgp redistribute ospf6",
+       "no redistribute ospf6",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "IPv6 Open Shortest Path First (OSPFv3)\n")
 {
@@ -890,10 +854,8 @@ DEFUN (no_ipv6_bgp_redistribute_ospf6,
 
 DEFUN (no_ipv6_bgp_redistribute_ospf6_routemap,
        no_ipv6_bgp_redistribute_ospf6_routemap_cmd,
-       "no ipv6 bgp redistribute ospf6 route-map WORD",
+       "no redistribute ospf6 route-map WORD",
        NO_STR
-       IPV6_STR
-       BGP_STR
        "Redistribute information from another routing protocol\n"
        "IPv6 Open Shortest Path First (OSPFv3)\n"
        "Route map reference\n"
@@ -902,6 +864,197 @@ DEFUN (no_ipv6_bgp_redistribute_ospf6_routemap,
   bgp_redistribute_unset (vty->index, AFI_IP6, ZEBRA_ROUTE_OSPF6);
   return CMD_SUCCESS;
 }
+
+/* Old config.  */
+ALIAS (ipv6_bgp_redistribute_kernel,
+       old_ipv6_bgp_redistribute_kernel_cmd,
+       "ipv6 bgp redistribute kernel",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n")
+
+ALIAS (ipv6_bgp_redistribute_kernel_routemap,
+       old_ipv6_bgp_redistribute_kernel_routemap_cmd,
+       "ipv6 bgp redistribute kernel route-map WORD",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (no_ipv6_bgp_redistribute_kernel,
+       old_no_ipv6_bgp_redistribute_kernel_cmd,
+       "no ipv6 bgp redistribute kernel",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n")
+
+ALIAS (no_ipv6_bgp_redistribute_kernel_routemap,
+       old_no_ipv6_bgp_redistribute_kernel_routemap_cmd,
+       "no ipv6 bgp redistribute kernel route-map WORD",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (ipv6_bgp_redistribute_static,
+       old_ipv6_bgp_redistribute_static_cmd,
+       "ipv6 bgp redistribute static",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Static routes\n")
+
+ALIAS (ipv6_bgp_redistribute_static_routemap,
+       old_ipv6_bgp_redistribute_static_routemap_cmd,
+       "ipv6 bgp redistribute static route-map WORD",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Static routes\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (no_ipv6_bgp_redistribute_static,
+       old_no_ipv6_bgp_redistribute_static_cmd,
+       "no ipv6 bgp redistribute static",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Static routes\n")
+
+ALIAS (no_ipv6_bgp_redistribute_static_routemap,
+       old_no_ipv6_bgp_redistribute_static_routemap_cmd,
+       "no ipv6 bgp redistribute static route-map WORD",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Static routes\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (ipv6_bgp_redistribute_connected,
+       old_ipv6_bgp_redistribute_connected_cmd,
+       "ipv6 bgp redistribute connected",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Connected\n")
+
+ALIAS (ipv6_bgp_redistribute_connected_routemap,
+       old_ipv6_bgp_redistribute_connected_routemap_cmd,
+       "ipv6 bgp redistribute connected route-map WORD",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Connected\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (no_ipv6_bgp_redistribute_connected,
+       old_no_ipv6_bgp_redistribute_connected_cmd,
+       "no ipv6 bgp redistribute connected",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Connected\n")
+
+ALIAS (no_ipv6_bgp_redistribute_connected_routemap,
+       old_no_ipv6_bgp_redistribute_connected_routemap_cmd,
+       "no ipv6 bgp redistribute connected route-map WORD",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "Connected\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (ipv6_bgp_redistribute_ripng,
+       old_ipv6_bgp_redistribute_ripng_cmd,
+       "ipv6 bgp redistribute ripng",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Routing Information Protocol (RIPng)\n")
+
+ALIAS (ipv6_bgp_redistribute_ripng_routemap,
+       old_ipv6_bgp_redistribute_ripng_routemap_cmd,
+       "ipv6 bgp redistribute ripng route-map WORD",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Routing Information Protocol (RIPng)\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (no_ipv6_bgp_redistribute_ripng,
+       old_no_ipv6_bgp_redistribute_ripng_cmd,
+       "no ipv6 bgp redistribute ripng",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Routing Information Protocol (RIPng)\n")
+
+ALIAS (no_ipv6_bgp_redistribute_ripng_routemap,
+       old_no_ipv6_bgp_redistribute_ripng_routemap_cmd,
+       "no ipv6 bgp redistribute ripng route-map WORD",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Routing Information Protocol (RIPng)\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (ipv6_bgp_redistribute_ospf6,
+       old_ipv6_bgp_redistribute_ospf6_cmd,
+       "ipv6 bgp redistribute ospf6",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Open Shortest Path First (OSPFv3)\n")
+
+ALIAS (ipv6_bgp_redistribute_ospf6_routemap,
+       old_ipv6_bgp_redistribute_ospf6_routemap_cmd,
+       "ipv6 bgp redistribute ospf6 route-map WORD",
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Open Shortest Path First (OSPFv3)\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+
+ALIAS (no_ipv6_bgp_redistribute_ospf6,
+       old_no_ipv6_bgp_redistribute_ospf6_cmd,
+       "no ipv6 bgp redistribute ospf6",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Open Shortest Path First (OSPFv3)\n")
+
+ALIAS (no_ipv6_bgp_redistribute_ospf6_routemap,
+       old_no_ipv6_bgp_redistribute_ospf6_routemap_cmd,
+       "no ipv6 bgp redistribute ospf6 route-map WORD",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Redistribute information from another routing protocol\n"
+       "IPv6 Open Shortest Path First (OSPFv3)\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
 #endif /* HAVE_IPV6 */
 
 struct interface *
@@ -1231,7 +1384,13 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info, struct bgp *bgp)
       /* If both global and link-local address present. */
       if (info->attr->mp_nexthop_len == 32)
 	{
-	  nexthop = &info->attr->mp_nexthop_local;
+	  /* Workaround for Cisco's nexthop bug.  */
+	  if (IN6_IS_ADDR_UNSPECIFIED (&info->attr->mp_nexthop_global)
+	      && peer->su_remote->sa.sa_family == AF_INET6)
+	    nexthop = &peer->su_remote->sin6.sin6_addr;
+	  else
+	    nexthop = &info->attr->mp_nexthop_local;
+
 	  if (info->peer->nexthop.ifp)
 	    ifindex = info->peer->nexthop.ifp->ifindex;
 	}
@@ -1400,7 +1559,7 @@ DEFUN (no_redistribute_bgp,
   return CMD_SUCCESS;
 }
 
-/* RIP configuration write function. */
+/* Zebra configuration write function. */
 int
 zebra_config_write (struct vty *vty)
 {
@@ -1420,30 +1579,34 @@ zebra_config_write (struct vty *vty)
 
 /* Redistribute configuration. */
 int
-bgp_config_write_redistribute (struct vty *vty, struct bgp *bgp, afi_t afi)
+bgp_config_write_redistribute (struct vty *vty, struct bgp *bgp, afi_t afi,
+			       safi_t safi, int *write)
 {
   int i;
-  int write = 0;
-
   char *str[] = { "system", "kernel", "connected", "static", "rip",
 		  "ripng", "ospf", "ospf6", "bgp"};
+
+  if (safi != SAFI_UNICAST)
+    return 0;
 
   for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
     {
       if (i != ZEBRA_ROUTE_BGP && bgp->redist[afi][i])
 	{
+	  /* "address-family" display.  */
+	  bgp_config_write_family_header (vty, afi, safi, write);
+
 	  if (bgp->rmap[afi][i].name)
 	    vty_out (vty, "%sredistribute %s route-map %s%s",
-		     afi == AFI_IP ? " " : " ipv6 bgp ",
+		     afi == AFI_IP ? " " : "  ",
 		     str[i], bgp->rmap[afi][i].name, VTY_NEWLINE);
 	  else
 	    vty_out (vty, "%sredistribute %s%s",
-		     afi == AFI_IP ? " " : " ipv6 bgp ",
+		     afi == AFI_IP ? " " : "  ",
 		     str[i], VTY_NEWLINE);
-	  write++;
 	}
     }
-  return write;
+  return *write;
 }
 
 /* Zebra node structure. */
@@ -1509,26 +1672,47 @@ zebra_init (int enable)
   install_element (BGP_NODE, &no_bgp_redistribute_ospf_routemap_cmd);
 
 #ifdef HAVE_IPV6
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_kernel_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_kernel_routemap_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_kernel_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_kernel_routemap_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_static_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_static_routemap_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_static_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_static_routemap_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_connected_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_connected_routemap_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_connected_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_connected_routemap_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_ripng_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_ripng_routemap_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_ripng_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_ripng_routemap_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_ospf6_cmd);
-  install_element (BGP_NODE, &ipv6_bgp_redistribute_ospf6_routemap_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_ospf6_cmd);
-  install_element (BGP_NODE, &no_ipv6_bgp_redistribute_ospf6_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_kernel_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_kernel_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_kernel_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_kernel_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_static_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_static_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_static_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_static_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_connected_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_connected_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_connected_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_connected_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_ripng_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_ripng_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_ripng_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_ripng_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_ospf6_cmd);
+  install_element (BGP_IPV6_NODE, &ipv6_bgp_redistribute_ospf6_routemap_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_ospf6_cmd);
+  install_element (BGP_IPV6_NODE, &no_ipv6_bgp_redistribute_ospf6_routemap_cmd);
+
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_kernel_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_kernel_routemap_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_kernel_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_kernel_routemap_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_static_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_static_routemap_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_static_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_static_routemap_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_connected_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_connected_routemap_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_connected_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_connected_routemap_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_ripng_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_ripng_routemap_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_ripng_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_ripng_routemap_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_ospf6_cmd);
+  install_element (BGP_NODE, &old_ipv6_bgp_redistribute_ospf6_routemap_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_ospf6_cmd);
+  install_element (BGP_NODE, &old_no_ipv6_bgp_redistribute_ospf6_routemap_cmd);
 #endif /* HAVE_IPV6 */
 
   /* Interface related init. */

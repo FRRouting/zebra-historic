@@ -121,7 +121,7 @@ config_get (int index, char *line)
       config->line->cmp = (int (*)(void *, void *)) line_cmp;
       config->name = strdup (line);
       config->index = index;
-      listnode_add_sort (master, config);
+      listnode_add (master, config);
     }
   return config;
 }
@@ -171,7 +171,13 @@ vtysh_config_parse_line (char *line)
       /* Store line to current configuration. */
       if (config)
 	{
-	  if (config->index == RMAP_NODE)
+	  if (strncmp (line, " address-family vpnv4", strlen (" address-family vpnv4")) == 0)
+	    config = config_get (BGP_VPNV4_NODE, line);
+	  else if (strncmp (line, " address-family ipv4 multicast", strlen (" address-family ipv4 multicast")) == 0)
+	    config = config_get (BGP_IPV4M_NODE, line);
+	  else if (strncmp (line, " address-family ipv6", strlen (" address-family ipv6")) == 0)
+	    config = config_get (BGP_IPV6_NODE, line);
+	  else if (config->index == RMAP_NODE)
 	    config_add_line_uniq (config->line, line);
 	  else
 	    config_add_line (config->line, line);
@@ -196,6 +202,12 @@ vtysh_config_parse_line (char *line)
 	config = config_get (ACCESS_NODE, line);
       else if (strncmp (line, "ip prefix-list", strlen ("ip prefix-list")) == 0)
 	config = config_get (PREFIX_NODE, line);
+      else if (strncmp (line, "ip as-path access-list", strlen ("ip as-path access-list")) == 0)
+	config = config_get (AS_LIST_NODE, line);
+      else if (strncmp (line, "ip community-list", strlen ("ip community-list")) == 0)
+	config = config_get (COMMUNITY_LIST_NODE, line);
+      else if (strncmp (line, "ip route", strlen ("ip route")) == 0)
+	config = config_get (IP_NODE, line);
       else if (strncmp (line, "key", strlen ("key")) == 0)
 	config = config_get (KEYCHAIN_NODE, line);
       else
@@ -248,8 +260,10 @@ vtysh_config_dump (FILE *fp)
   LIST_LOOP (config_top, line, nn)
     {
       fprintf (fp, "%s\n", line);
+      fflush (fp);
     }
   fprintf (fp, "!\n");
+  fflush (fp);
 
   for (i = 0; i < vector_max (configvec); i++)
     if ((master = vector_slot (configvec, i)) != NULL)
@@ -257,16 +271,26 @@ vtysh_config_dump (FILE *fp)
 	LIST_LOOP (master, config, nn)
 	  {
 	    fprintf (fp, "%s\n", config->name);
+            fflush (fp);
 
 	    LIST_LOOP (config->line, line, nm)
 	      {
 		fprintf  (fp, "%s\n", line);
+		fflush (fp);
 	      }
-	    if (i != ACCESS_NODE)
-	      fprintf (fp, "!\n");
+	    if (i != ACCESS_NODE && i != PREFIX_NODE && i != IP_NODE
+	        && i != AS_LIST_NODE && i != COMMUNITY_LIST_NODE)
+	      {
+		fprintf (fp, "!\n");
+		fflush (fp);
+	      }
 	  }
-	if (i == ACCESS_NODE)
-	  fprintf (fp, "!\n");
+	if (i == ACCESS_NODE || i == PREFIX_NODE || i == IP_NODE
+	    || i == AS_LIST_NODE || i == COMMUNITY_LIST_NODE)
+	  {
+	    fprintf (fp, "!\n");
+	    fflush (fp);
+	  }
       }
 
   for (i = 0; i < vector_max (configvec); i++)
@@ -290,14 +314,14 @@ vtysh_read_file (FILE *confp)
   vty->type = VTY_TERM;
   vty->node = CONFIG_NODE;
   
-  vtysh_execute ("enable");
-  vtysh_execute ("configure terminal");
+  vtysh_execute_no_pager ("enable");
+  vtysh_execute_no_pager ("configure terminal");
 
   /* Execute configuration file */
   ret = vtysh_config_from_file (vty, confp);
 
-  vtysh_execute ("end");
-  vtysh_execute ("disable");
+  vtysh_execute_no_pager ("end");
+  vtysh_execute_no_pager ("disable");
 
   vty_close (vty);
 

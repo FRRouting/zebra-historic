@@ -52,7 +52,7 @@ ospf6_spf_lsd_num (struct ospf6_vertex *V, struct ospf6_area *o6a)
   id = V->vertex_id.id.s_addr;
   adv_router = V->vertex_id.adv_router.s_addr;
 
-  lsa = ospf6_lsdb_lookup_from_lsdb (type, id, adv_router, o6a->lsdb);
+  lsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, o6a->lsdb);
   if (! lsa)
     {
       zlog_err ("SPF: Can't find associated LSA for V for lsd num");
@@ -99,7 +99,7 @@ ospf6_spf_get_ipaddr (u_int32_t ifindex, u_int32_t adv_router)
   struct ospf6_interface *o6i;
   struct ospf6_neighbor *o6n;
 
-  o6i = ospf6_interface_lookup_by_index (ifindex, ospf6);
+  o6i = ospf6_interface_lookup_by_index (ifindex);
   if (! o6i)
     {
       zlog_err ("SPF: Can't find interface: index %d", ifindex);
@@ -118,7 +118,7 @@ ospf6_spf_get_ipaddr (u_int32_t ifindex, u_int32_t adv_router)
   return &o6n->hisaddr;
 }
 
-static void
+static int
 ospf6_spf_nexthop_calculation (struct ospf6_vertex *W,
                                u_int32_t ifindex,
                                struct ospf6_vertex *V,
@@ -147,7 +147,7 @@ ospf6_spf_nexthop_calculation (struct ospf6_vertex *W,
           nexthop->lock++;
         }
 
-      return;
+      return 0;
     }
 
   adv_router = W->vertex_id.adv_router.s_addr;
@@ -166,8 +166,11 @@ ospf6_spf_nexthop_calculation (struct ospf6_vertex *W,
         {
           ipaddr = ospf6_spf_get_ipaddr (ifindex, adv_router);
           if (! ipaddr)
-            /* xxx, should trigger error and quit SPF calculation... */
-            memset (&nexthop_ipaddr, 0xff, sizeof (struct in6_addr));
+            {
+              /* xxx, should trigger error and quit SPF calculation... */
+              memset (&nexthop_ipaddr, 0xff, sizeof (struct in6_addr));
+              return -1;
+            }
           else
             memcpy (&nexthop_ipaddr, ipaddr, sizeof (struct in6_addr));
         }
@@ -184,8 +187,11 @@ ospf6_spf_nexthop_calculation (struct ospf6_vertex *W,
       nexthop_ifindex = n->ifindex;
       ipaddr = ospf6_spf_get_ipaddr (n->ifindex, adv_router);
       if (! ipaddr)
-        /* xxx, should trigger error and quit SPF calculation... */
-        memset (&nexthop_ipaddr, 0xff, sizeof (struct in6_addr));
+        {
+          /* xxx, should trigger error and quit SPF calculation... */
+          memset (&nexthop_ipaddr, 0xff, sizeof (struct in6_addr));
+          return -1;
+        }
       else
         memcpy (&nexthop_ipaddr, ipaddr, sizeof (struct in6_addr));
     }
@@ -198,6 +204,8 @@ ospf6_spf_nexthop_calculation (struct ospf6_vertex *W,
     }
   nexthop = ospf6_nexthop_create (nexthop_ifindex, &nexthop_ipaddr, 0);
   listnode_add (W->nexthop_list, nexthop);
+
+  return 0;
 }
 
 static struct ospf6_vertex *
@@ -226,12 +234,50 @@ ospf6_spf_vertex_create (int index, struct ospf6_vertex *V,
     type = htons (OSPF6_LSA_TYPE_ROUTER);
   else
     type = htons (OSPF6_LSA_TYPE_NETWORK);
-  vlsa = ospf6_lsdb_lookup_from_lsdb (type, id, adv_router, o6a->lsdb);
+
+  vlsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, o6a->lsdb);
+
   if (! vlsa)
     {
-      zlog_err ("SPF: Can't find associated LSA for V: %s", V->string);
-      return (struct ospf6_vertex *) NULL;
+      /* save the case that Router-LSA's ls id != 0 */
+      if (type == htons (OSPF6_LSA_TYPE_ROUTER))
+        {
+          struct ospf6_lsa *lsa;
+          struct ospf6_lsdb_node *node;
+
+          for (node = ospf6_lsdb_head (o6a->lsdb); node;
+               node = ospf6_lsdb_next (node))
+            {
+              lsa = node->lsa;
+              if (lsa->header->type != htons (OSPF6_LSA_TYPE_ROUTER))
+                continue;
+              if (lsa->header->adv_router != adv_router)
+                continue;
+              vlsa = lsa;
+
+              ospf6_lsdb_end (node);
+              break;
+            }
+        }
+      else
+        {
+          zlog_err ("SPF: LSA for W: not found");
+          zlog_err ("SPF:   type: %#x, id: %d, adv_router: %s",
+                    ntohs (type), ntohl (id),
+                    inet_ntop (AF_INET, &adv_router, buf, sizeof (buf)));
+          return (struct ospf6_vertex *) NULL;
+        }
+
+      /* still not found */
+      if (vlsa == NULL)
+        {
+          char tbuf[256];
+          inet_ntop (AF_INET6, &adv_router, tbuf, sizeof (tbuf));
+          zlog_err ("SPF: Router-LSA of V(%s): not found", tbuf);
+          return (struct ospf6_vertex *) NULL;
+        }
     }
+
   if (ospf6_lsa_is_maxage (vlsa))
     {
       zlog_err ("SPF: Associated LSA for V is MaxAge: %s", V->string);
@@ -276,7 +322,8 @@ ospf6_spf_vertex_create (int index, struct ospf6_vertex *V,
     }
 
   /* Avoid creating candidate of myself */
-  if (adv_router == o6a->ospf6->router_id && id == htonl (0))
+  if (adv_router == o6a->ospf6->router_id &&
+      type == htons (OSPF6_LSA_TYPE_ROUTER))
     {
       if (IS_OSPF6_DUMP_SPF)
         zlog_info ("SPF: Ignore link description to myself");
@@ -284,14 +331,46 @@ ospf6_spf_vertex_create (int index, struct ospf6_vertex *V,
     }
 
   /* Find Associated LSA for W */
-  wlsa = ospf6_lsdb_lookup_from_lsdb (type, id, adv_router, o6a->lsdb);
+  wlsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, o6a->lsdb);
+
   if (! wlsa)
     {
-      zlog_err ("SPF: Can't find associated LSA for W:"
-                " type: %#x, id: %d, adv_router: %s",
-                ntohs (type), ntohl (id),
-                inet_ntop (AF_INET, &adv_router, buf, sizeof (buf)));
-      return (struct ospf6_vertex *) NULL;
+      /* save the case that Router-LSA's ls id != 0 */
+      if (type == htons (OSPF6_LSA_TYPE_ROUTER))
+        {
+          struct ospf6_lsa *lsa = NULL;
+          struct ospf6_lsdb_node *node;
+          for (node = ospf6_lsdb_head (o6a->lsdb); node;
+               node = ospf6_lsdb_next (node))
+            {
+              lsa = node->lsa;
+              if (lsa->header->type != htons (OSPF6_LSA_TYPE_ROUTER))
+                continue;
+              if (lsa->header->adv_router != adv_router)
+                continue;
+              wlsa = lsa;
+
+              ospf6_lsdb_end (node);
+              break;
+            }
+        }
+      else
+        {
+          zlog_err ("SPF: LSA for W: not found");
+          zlog_err ("SPF:   type: %#x, id: %d, adv_router: %s",
+                    ntohs (type), ntohl (id),
+                    inet_ntop (AF_INET, &adv_router, buf, sizeof (buf)));
+          return (struct ospf6_vertex *) NULL;
+        }
+
+      /* still not found */
+      if (wlsa == NULL)
+        {
+          char tbuf[256];
+          inet_ntop (AF_INET6, &adv_router, tbuf, sizeof (tbuf));
+          zlog_err ("SPF: Router-LSA of W(%s): not found", tbuf);
+          return (struct ospf6_vertex *) NULL;
+        }
     }
   if (ospf6_lsa_is_maxage (wlsa))
     {
@@ -328,7 +407,10 @@ ospf6_spf_vertex_create (int index, struct ospf6_vertex *V,
   /* Initialize */
   W->vertex_id.family = AF_INET6;
   W->vertex_id.prefixlen = 64;
-  W->vertex_id.id.s_addr = wlsa_header->ls_id;
+  if (type == htons (OSPF6_LSA_TYPE_ROUTER))
+    W->vertex_id.id.s_addr = htonl (0); /* XXX */
+  else
+    W->vertex_id.id.s_addr = wlsa_header->ls_id;
   W->vertex_id.adv_router.s_addr = wlsa_header->advrtr;
   W->nexthop_list = list_new ();
   W->path_list = list_new ();
@@ -337,8 +419,8 @@ ospf6_spf_vertex_create (int index, struct ospf6_vertex *V,
   W->depth = V->depth + 1;
   inet_ntop (AF_INET, &W->vertex_id.adv_router.s_addr, buf, sizeof (buf));
   if (W->vertex_id.id.s_addr)
-    snprintf (W->string, sizeof (W->string), "%s[%d]",
-              buf, ntohl (W->vertex_id.id.s_addr));
+    snprintf (W->string, sizeof (W->string), "%s[%lu]",
+              buf, (unsigned long) ntohl (W->vertex_id.id.s_addr));
   else
     snprintf (W->string, sizeof (W->string), "%s", buf);
 
@@ -362,7 +444,8 @@ ospf6_spf_vertex_create (int index, struct ospf6_vertex *V,
   listnode_add (W->parent_list, V);
 
   /* Nexthop Calculation */
-  ospf6_spf_nexthop_calculation (W, ifindex, V, o6a->spf_tree);
+  if (ospf6_spf_nexthop_calculation (W, ifindex, V, o6a->spf_tree) < 0)
+    return NULL;
 
   return W;
 }
@@ -442,7 +525,9 @@ ospf6_spf_initialize (list candidate_list, struct ospf6_area *o6a)
   type = htons (OSPF6_LSA_TYPE_ROUTER);
   id = htonl (0);
   adv_router = ospf6->router_id;
-  lsa = ospf6_lsdb_lookup_from_lsdb (type, id, adv_router, o6a->lsdb);
+
+  lsa = ospf6_lsdb_lookup_lsdb (type, id, adv_router, o6a->lsdb);
+
   if (! lsa)
     {
       if (IS_OSPF6_DUMP_SPF)
@@ -823,7 +908,7 @@ ospf6_nexthop_show (struct vty *vty, struct ospf6_nexthop *nexthop)
 
   ifname = NULL;
 
-  o6i = ospf6_interface_lookup_by_index (nexthop->ifindex, ospf6);
+  o6i = ospf6_interface_lookup_by_index (nexthop->ifindex);
   if (! o6i)
     {
       zlog_err ("Spf: invalid ifindex %d in nexthop", nexthop->ifindex);
@@ -919,21 +1004,21 @@ ospf6_spf_statistics_show (struct vty *vty, struct ospf6_spftree *spf_tree)
   ospf6_timeval_string (&last_updated, last_updated_string,
                         sizeof (last_updated_string));
 
-  vty_out (vty, "    SPF algorithm executed %d times%s", 
+  vty_out (vty, "     SPF algorithm executed %d times%s", 
            spf_tree->timerun, VTY_NEWLINE);
-  vty_out (vty, "    Average time to run SPF: %s%s",
+  vty_out (vty, "     Average time to run SPF: %s%s",
            ravg, VTY_NEWLINE);
-  vty_out (vty, "    Maximum time to run SPF: %s%s",
+  vty_out (vty, "     Maximum time to run SPF: %s%s",
            rmax, VTY_NEWLINE);
-  vty_out (vty, "    Average interval of SPF: %s%s",
+  vty_out (vty, "     Average interval of SPF: %s%s",
            iavg, VTY_NEWLINE);
-  vty_out (vty, "    SPF last updated: %s ago%s",
+  vty_out (vty, "     SPF last updated: %s ago%s",
            last_updated_string, VTY_NEWLINE);
-  vty_out (vty, "    Current SPF node count: %d%s",
+  vty_out (vty, "     Current SPF node count: %d%s",
            listcount (spf_tree->list), VTY_NEWLINE);
-  vty_out (vty, "      Router: %d Network: %d%s",
+  vty_out (vty, "       Router: %d Network: %d%s",
            router_count, network_count, VTY_NEWLINE);
-  vty_out (vty, "      Maximum of Hop count to nodes: %d%s",
+  vty_out (vty, "       Maximum of Hop count to nodes: %d%s",
            maxdepth, VTY_NEWLINE);
 }
 
@@ -950,6 +1035,8 @@ DEFUN (show_ipv6_ospf6_spf_node,
   listnode i, j;
   struct ospf6_area *o6a;
   struct ospf6_vertex *vertex;
+
+  OSPF6_CMD_CHECK_RUNNING ();
 
   for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
@@ -1005,6 +1092,8 @@ DEFUN (show_ipv6_ospf6_spf_tree,
 {
   struct ospf6_area *o6a;
   listnode node;
+
+  OSPF6_CMD_CHECK_RUNNING ();
 
   for (node = listhead (ospf6->area_list); node; nextnode (node))
     {
@@ -1066,7 +1155,8 @@ ospf6_spf_table_show (struct vty *vty, struct ospf6_area *o6a)
       if (id != 0)
         {
           type = 'N';
-          snprintf (dstring, sizeof (dstring), "%s[%d]", buf, htonl (id));
+          snprintf (dstring, sizeof (dstring), "%s[%lu]",
+                    buf, (unsigned long) htonl (id));
         }
       else
         {
@@ -1090,7 +1180,7 @@ ospf6_spf_table_show (struct vty *vty, struct ospf6_area *o6a)
           inet_ntop (AF_INET6, &nexthop->ipaddr, nstring, sizeof (nstring));
 
           /* I/F */
-          o6i = ospf6_interface_lookup_by_index (nexthop->ifindex, ospf6);
+          o6i = ospf6_interface_lookup_by_index (nexthop->ifindex);
           if (! o6i)
             ifname = "??";
           else
@@ -1114,6 +1204,8 @@ DEFUN (show_ipv6_ospf6_spf_table,
 {
   struct ospf6_area *o6a;
   listnode node;
+
+  OSPF6_CMD_CHECK_RUNNING ();
 
   for (node = listhead (ospf6->area_list); node; nextnode (node))
     {

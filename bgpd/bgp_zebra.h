@@ -20,4 +20,5 @@
  */
 
 int bgp_if_update_all ();
-int bgp_config_write_redistribute (struct vty *, struct bgp *, afi_t);
+int bgp_config_write_redistribute (struct vty *, struct bgp *, afi_t, safi_t,
+				   int *);

@@ -81,15 +81,16 @@ if_zebra_new_hook (struct interface *ifp)
     rtadv = &zebra_if->rtadv;
 
     rtadv->AdvSendAdvertisements = 0;
-    rtadv->MaxRtrAdvInterval = 600;
-    rtadv->MinRtrAdvInterval = 0.33 * rtadv->MaxRtrAdvInterval;
+    rtadv->MaxRtrAdvInterval = RTADV_MAX_RTR_ADV_INTERVAL;
+    rtadv->MinRtrAdvInterval = RTADV_MIN_RTR_ADV_INTERVAL;
+    rtadv->AdvIntervalTimer = 0;
     rtadv->AdvManagedFlag = 0;
     rtadv->AdvOtherConfigFlag = 0;
     rtadv->AdvLinkMTU = 0;
     rtadv->AdvReachableTime = 0;
     rtadv->AdvRetransTimer = 0;
     rtadv->AdvCurHopLimit = 0;
-    rtadv->AdvDefaultLifetime = 3 * rtadv->MaxRtrAdvInterval;
+    rtadv->AdvDefaultLifetime = RTADV_ADV_DEFAULT_LIFETIME;
 
     rtadv->AdvPrefixList = list_new ();
   }    
@@ -429,10 +430,44 @@ connected_dump_vty (struct vty *vty, struct connected *connected)
   vty_out (vty, "%s", VTY_NEWLINE);
 }
 
+#ifdef RTADV
+/* Dump interface ND information to vty. */
+void
+nd_dump_vty (struct vty *vty, struct interface *ifp)
+{
+  struct zebra_if *zif;
+  struct rtadvconf *rtadv;
+
+  zif = (struct zebra_if *) ifp->info;
+  rtadv = &zif->rtadv;
+
+  if (rtadv->AdvSendAdvertisements)
+    {
+      vty_out (vty, "  ND advertised reachable time is %d milliseconds%s",
+	       rtadv->AdvReachableTime, VTY_NEWLINE);
+      vty_out (vty, "  ND advertised retransmit interval is %d milliseconds%s",
+	       rtadv->AdvRetransTimer, VTY_NEWLINE);
+      vty_out (vty, "  ND router advertisements are sent every %d seconds%s",
+	       rtadv->MaxRtrAdvInterval, VTY_NEWLINE);
+      vty_out (vty, "  ND router advertisements live for %d seconds%s",
+	       rtadv->AdvDefaultLifetime, VTY_NEWLINE);
+      if (rtadv->AdvManagedFlag)
+	vty_out (vty, "  Hosts use DHCP to obtain routable addresses.%s",
+		 VTY_NEWLINE);
+      else
+	vty_out (vty, "  Hosts use stateless autoconfig for addresses.%s",
+		 VTY_NEWLINE);
+    }
+}
+#endif /* RTADV */
+
 /* Interface's information print out to vty interface. */
 void
 if_dump_vty (struct vty *vty, struct interface *ifp)
 {
+#ifdef HAVE_SOCKADDR_DL
+  struct sockaddr_dl *sdl;
+#endif /* HAVE_SOCKADDR_DL */
   struct connected *connected;
   listnode node;
 
@@ -461,6 +496,17 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 
   /* Hardware address. */
 #ifdef HAVE_SOCKADDR_DL
+  sdl = &ifp->sdl;
+  if (sdl != NULL && sdl->sdl_alen != 0)
+    {
+      int i;
+      u_char *ptr;
+
+      vty_out (vty, "  HWaddr: ");
+      for (i = 0, ptr = LLADDR (sdl); i < sdl->sdl_alen; i++, ptr++)
+	vty_out (vty, "%s%02x", i == 0 ? "" : ":", *ptr);
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
 #else
   if (ifp->hw_addr_len != 0)
     {
@@ -486,6 +532,10 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
       if (CHECK_FLAG (connected->conf, ZEBRA_IFC_REAL))
 	connected_dump_vty (vty, connected);
     }
+
+#ifdef RTADV
+  nd_dump_vty (vty, ifp);
+#endif /* RTADV */
 
 #ifdef HAVE_PROC_NET_DEV
   /* Statistics print out using proc file system. */
@@ -620,7 +670,7 @@ DEFUN (no_zebra_interface,
       return CMD_WARNING;
     }
 
-  if (! CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
+  if (CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
     {
       vty_out(vty, "Only inactive interfaces can be deleted%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -695,7 +745,7 @@ DEFUN (multicast,
       vty_out (vty, "Can't set multicast flag%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if_get_flags (ifp);
+  if_refresh (ifp);
   if_data = ifp->info;
   if_data->multicast = IF_ZEBRA_MULTICAST_ON;
   
@@ -719,7 +769,7 @@ DEFUN (no_multicast,
       vty_out (vty, "Can't unset multicast flag%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if_get_flags (ifp);
+  if_refresh (ifp);
   if_data = ifp->info;
   if_data->multicast = IF_ZEBRA_MULTICAST_OFF;
 
@@ -742,10 +792,9 @@ DEFUN (shutdown_if,
       vty_out (vty, "Can't shutdown interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if_get_flags (ifp);
+  if_refresh (ifp);
   if_data = ifp->info;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_ON;
-  if_down (ifp);
 
   return CMD_SUCCESS;
 }
@@ -767,11 +816,9 @@ DEFUN (no_shutdown_if,
       vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  if_get_flags (ifp);
+  if_refresh (ifp);
   if_data = ifp->info;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_OFF;
-  if (if_is_up (ifp))
-    if_up (ifp);
 
   return CMD_SUCCESS;
 }

@@ -637,11 +637,11 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 	{
 	  if (IS_DEBUG_OSPF_EVENT)
 	    zlog_info ("ospf_intra_add_stub(): the interface is %s",
-		       oi->ifp->name);
+		       IF_NAME (oi));
 
 	  path = ospf_path_new ();
 	  path->nexthop.s_addr = 0;
-	  path->ifp = oi->ifp;
+	  path->oi = oi;
 	  listnode_add (or->path, path);
 	}
       else
@@ -770,14 +770,14 @@ show_ip_ospf_route_network (struct vty *vty, struct route_table *rt)
  	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
 	    {
 	      path = getdata (pnode);
-	      if (path->ifp != NULL)
+	      if (path->oi != NULL)
 		{
 		  if (path->nexthop.s_addr == 0)
 		    vty_out (vty, "%24s   directly attached to %s%s",
-			     "", path->ifp->name, VTY_NEWLINE);
+			     "", path->oi->ifp->name, VTY_NEWLINE);
 		  else 
 		    vty_out (vty, "%24s   via %s, %s%s", "",
-			     inet_ntoa (path->nexthop), path->ifp->name,
+			     inet_ntoa (path->nexthop), path->oi->ifp->name,
 			     VTY_NEWLINE);
 		}
 	    }
@@ -828,10 +828,10 @@ show_ip_ospf_route_router (struct vty *vty, struct route_table *rtrs)
 		  path = getdata (pn);
 		  if (path->nexthop.s_addr == 0)
 		    vty_out (vty, "%24s   directly attached to %s%s",
-			     "", path->ifp->name, VTY_NEWLINE);
+			     "", path->oi->ifp->name, VTY_NEWLINE);
 		  else 
 		    vty_out (vty, "%24s   via %s, %s%s", "",
-			     inet_ntoa (path->nexthop), path->ifp->name,
+			     inet_ntoa (path->nexthop), path->oi->ifp->name,
 			     VTY_NEWLINE);
 		}
 	    }
@@ -871,14 +871,14 @@ show_ip_ospf_route_external (struct vty *vty, struct route_table *rt)
         for (pnode = listhead (er->path); pnode; nextnode (pnode))
           {
             path = getdata (pnode);
-            if (path->ifp != NULL)
+            if (path->oi != NULL)
               {
                 if (path->nexthop.s_addr == 0)
 	          vty_out (vty, "%24s   directly attached to %s%s",
-		           "", path->ifp->name, VTY_NEWLINE);
+		           "", path->oi->ifp->name, VTY_NEWLINE);
                 else 
 	          vty_out (vty, "%24s   via %s, %s%s", "",
-			   inet_ntoa (path->nexthop), path->ifp->name,
+			   inet_ntoa (path->nexthop), path->oi->ifp->name,
      		           VTY_NEWLINE);
               }
            }
@@ -1022,7 +1022,7 @@ ospf_route_cmp (struct ospf_route *r1, struct ospf_route *r2)
 
 int
 ospf_path_exist (struct list *plist, struct in_addr nexthop,
-		 struct interface *ifp)
+		 struct ospf_interface *oi)
 {
   listnode node;
   struct ospf_path *path;
@@ -1031,7 +1031,7 @@ ospf_path_exist (struct list *plist, struct in_addr nexthop,
     {
       path = node->data;
 
-      if (IPV4_ADDR_SAME (&path->nexthop, &nexthop) && path->ifp == ifp)
+      if (IPV4_ADDR_SAME (&path->nexthop, &nexthop) && path->oi == oi)
 	return 1;
     }
   return 0;
@@ -1052,13 +1052,13 @@ ospf_route_copy_nexthops_from_vertex (struct ospf_route *to,
     {
       nexthop = getdata (nnode);
 
-      if (nexthop->ifp != NULL) 
+      if (nexthop->oi != NULL) 
 	{
-	  if (! ospf_path_exist (to->path, nexthop->router, nexthop->ifp))
+	  if (! ospf_path_exist (to->path, nexthop->router, nexthop->oi))
 	    {
 	      path = ospf_path_new ();
 	      path->nexthop = nexthop->router;
-	      path->ifp = nexthop->ifp;
+	      path->oi = nexthop->oi;
 	      listnode_add (to->path, path);
 	    }
 	}

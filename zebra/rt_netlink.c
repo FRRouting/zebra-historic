@@ -511,6 +511,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
     return 0;
   if (rtm->rtm_protocol == RTPROT_KERNEL)
     return 0;
+
   if (rtm->rtm_src_len != 0)
     return 0;
 
@@ -533,8 +534,6 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   /* Multipath treatment is needed. */
   if (tb[RTA_GATEWAY])
     gate = RTA_DATA (tb[RTA_GATEWAY]);
-  else
-    return 0;
 
   if (rtm->rtm_family == AF_INET)
     {
@@ -627,21 +626,14 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
 
   if (rtm->rtm_flags & RTM_F_CLONED)
-    {
-      return 0;
-    }
+    return 0;
   if (rtm->rtm_protocol == RTPROT_REDIRECT)
-    {
-      return 0;
-    }
+    return 0;
   if (rtm->rtm_protocol == RTPROT_KERNEL)
-    {
-      return 0;
-    }
+    return 0;
+
   if (rtm->rtm_protocol == RTPROT_ZEBRA && h->nlmsg_type == RTM_NEWROUTE)
-    {
-      return 0;
-    }
+    return 0;
 
   if (rtm->rtm_src_len != 0)
     {

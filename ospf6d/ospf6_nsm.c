@@ -55,16 +55,10 @@ nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
     nbs_full_change (o6n->ospf6_interface);
 
   /* check for LSAs that already reached MaxAge */
-  if (nbs_previous == NBS_EXCHANGE || nbs_previous == NBS_LOADING)
+  if ((nbs_previous == NBS_EXCHANGE || nbs_previous == NBS_LOADING) &&
+      (nbs_next != NBS_EXCHANGE && nbs_next != NBS_LOADING))
     {
-      /* for Linklocal scope LSA */
-      ospf6_lsdb_check_maxage_linklocal (o6n->ospf6_interface->interface->name);
-
-      /* for Area scope LSA */
-      ospf6_lsdb_check_maxage_area (o6n->ospf6_interface->area->area_id);
-
-      /* for AS scope LSA */
-      ospf6_lsdb_check_maxage_as ();
+      ospf6_maxage_remover ();
     }
 
   return 0;
@@ -152,9 +146,13 @@ twoway_received (struct thread *thread)
   DD_MBIT_SET (o6n->dbdesc_bits);
   DD_IBIT_SET (o6n->dbdesc_bits);
 
-  if (o6n->thread_dbdesc)
-    thread_cancel (o6n->thread_dbdesc);
-  o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_send_dbdesc)
+    thread_cancel (o6n->thread_send_dbdesc);
+  o6n->thread_send_dbdesc =
+    thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_rxmt_dbdesc)
+    thread_cancel (o6n->thread_rxmt_dbdesc);
+  o6n->thread_rxmt_dbdesc = (struct thread *) NULL;
 
   return 0;
 }
@@ -190,19 +188,19 @@ exchange_done (struct thread *thread)
   if (o6n->state != NBS_EXCHANGE)
     return 0;
 
-  if (o6n->thread_dbdesc)
-    thread_cancel (o6n->thread_dbdesc);
-  o6n->thread_dbdesc = (struct thread *) NULL;
+  if (o6n->thread_rxmt_dbdesc)
+    thread_cancel (o6n->thread_rxmt_dbdesc);
+  o6n->thread_rxmt_dbdesc = (struct thread *) NULL;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
     zlog_info ("Neighbor Event %s: *ExchangeDone*", o6n->str);
 
-  list_delete_all_node (o6n->dbdesc_lsa);
+  ospf6_lsdb_remove_all (o6n->dbdesc_list);
 
   thread_add_timer (master, ospf6_neighbor_last_dbdesc_release, o6n,
                     o6n->ospf6_interface->dead_interval);
 
-  if (list_isempty (o6n->requestlist))
+  if (o6n->request_list->count == 0)
     nbs_change (NBS_FULL, "Requestlist Empty", o6n);
   else
     {
@@ -226,7 +224,7 @@ loading_done (struct thread *thread)
   if (IS_OSPF6_DUMP_NEIGHBOR)
     zlog_info ("Neighbor Event %s: *LoadingDone*", o6n->str);
 
-  assert (list_isempty (o6n->requestlist));
+  assert (o6n->request_list->count == 0);
 
   nbs_change (NBS_FULL, "LoadingDone", o6n);
 
@@ -258,9 +256,10 @@ adj_ok (struct thread *thread)
       DD_MBIT_SET (o6n->dbdesc_bits);
       DD_IBIT_SET (o6n->dbdesc_bits);
 
-      if (o6n->thread_dbdesc)
-        thread_cancel (o6n->thread_dbdesc);
-      o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+      if (o6n->thread_send_dbdesc)
+        thread_cancel (o6n->thread_send_dbdesc);
+      o6n->thread_send_dbdesc =
+        thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
       return 0;
     }
@@ -272,7 +271,7 @@ adj_ok (struct thread *thread)
       else
         {
           nbs_change (NBS_TWOWAY, "No Need Adjacency", o6n);
-          ospf6_neighbor_list_remove_all (o6n);
+          ospf6_neighbor_lslist_clear (o6n);
         }
     }
   return 0;
@@ -300,11 +299,12 @@ seqnumber_mismatch (struct thread *thread)
   DD_MSBIT_SET (o6n->dbdesc_bits);
   DD_MBIT_SET (o6n->dbdesc_bits);
   DD_IBIT_SET (o6n->dbdesc_bits);
-  ospf6_neighbor_list_remove_all (o6n);
+  ospf6_neighbor_lslist_clear (o6n);
 
-  if (o6n->thread_dbdesc)
-    thread_cancel (o6n->thread_dbdesc);
-  o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_send_dbdesc)
+    thread_cancel (o6n->thread_send_dbdesc);
+  o6n->thread_send_dbdesc =
+    thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -331,11 +331,12 @@ bad_lsreq (struct thread *thread)
   DD_MSBIT_SET (o6n->dbdesc_bits);
   DD_MBIT_SET (o6n->dbdesc_bits);
   DD_IBIT_SET (o6n->dbdesc_bits);
-  ospf6_neighbor_list_remove_all (o6n);
+  ospf6_neighbor_lslist_clear (o6n);
 
-  if (o6n->thread_dbdesc)
-    thread_cancel (o6n->thread_dbdesc);
-  o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_send_dbdesc)
+    thread_cancel (o6n->thread_send_dbdesc);
+  o6n->thread_send_dbdesc =
+    thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -362,7 +363,7 @@ oneway_received (struct thread *thread)
   thread_add_event (master, neighbor_change, o6n->ospf6_interface, 0);
 
   ospf6_neighbor_thread_cancel_all (o6n);
-  ospf6_neighbor_list_remove_all (o6n);
+  ospf6_neighbor_lslist_clear (o6n);
   return 0;
 }
 

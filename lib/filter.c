@@ -1,5 +1,4 @@
-/*
- * Route filtering function.
+/* Route filtering function.
  * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -93,18 +92,15 @@ static struct access_master access_master_ipv6 =
 #endif /* HAVE_IPV6 */
 
 struct access_master *
-access_master_get (int family)
+access_master_get (afi_t afi)
 {
-  struct access_master *master = NULL;
-
-  if (family == AF_INET)
-    master = &access_master_ipv4;
+  if (afi == AFI_IP)
+    return &access_master_ipv4;
 #ifdef HAVE_IPV6
-  else if (family == AF_INET6)
-    master = &access_master_ipv6;
+  else if (afi == AFI_IP6)
+    return &access_master_ipv6;
 #endif /* HAVE_IPV6 */
-
-  return master;
+  return NULL;
 }
 
 /* Allocate new filter structure. */
@@ -269,7 +265,7 @@ access_list_delete (struct access_list *access)
 /* Insert new access list to list of access_list.  Each acceess_list
    is sorted by the name. */
 struct access_list *
-access_list_insert (int family, char *name)
+access_list_insert (afi_t afi, char *name)
 {
   int i;
   long number;
@@ -278,7 +274,7 @@ access_list_insert (int family, char *name)
   struct access_list_list *alist;
   struct access_master *master;
 
-  master = access_master_get (family);
+  master = access_master_get (afi);
   if (master == NULL)
     return NULL;
 
@@ -360,7 +356,7 @@ access_list_insert (int family, char *name)
 
 /* Lookup access_list from list of access_list by name. */
 struct access_list *
-access_list_lookup (int family, char *name)
+access_list_lookup (afi_t afi, char *name)
 {
   struct access_list *access;
   struct access_master *master;
@@ -368,7 +364,7 @@ access_list_lookup (int family, char *name)
   if (name == NULL)
     return NULL;
 
-  master = access_master_get (family);
+  master = access_master_get (afi);
   if (master == NULL)
     return NULL;
 
@@ -386,13 +382,13 @@ access_list_lookup (int family, char *name)
 /* Get access list from list of access_list.  If there isn't matched
    access_list create new one and return it. */
 struct access_list *
-access_list_get (int family, char *name)
+access_list_get (afi_t afi, char *name)
 {
   struct access_list *access;
 
-  access = access_list_lookup (family, name);
+  access = access_list_lookup (afi, name);
   if (access == NULL)
-    access = access_list_insert (family, name);
+    access = access_list_insert (afi, name);
   return access;
 }
 
@@ -548,11 +544,11 @@ access_list_dup_check (struct access_list *access, struct filter *new)
 }
 
 int
-vty_access_list_remark_unset (struct vty *vty, int family, char *name)
+vty_access_list_remark_unset (struct vty *vty, afi_t afi, char *name)
 {
   struct access_list *access;
 
-  access = access_list_lookup (family, name);
+  access = access_list_lookup (afi, name);
   if (! access)
     {
       vty_out (vty, "%% access-list %s doesn't exist%s", name,
@@ -619,7 +615,7 @@ DEFUN (access_list, access_list_cmd,
     filter->exact = 1;
 
   /* Install new filter to the access_list. */
-  access = access_list_get (AF_INET, argv[0]);
+  access = access_list_get (AFI_IP, argv[0]);
 
   /* Duplicate insertion check. */
   if (access_list_dup_check (access, filter))
@@ -669,7 +665,7 @@ DEFUN (no_access_list,
     }
 
   /* Looking up access_list. */
-  access = access_list_lookup (AF_INET, argv[0]);
+  access = access_list_lookup (AFI_IP, argv[0]);
   if (access == NULL)
     {
       vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
@@ -732,7 +728,7 @@ DEFUN (no_access_list_all,
   struct access_list *access;
 
   /* Looking up access_list. */
-  access = access_list_lookup (AF_INET, argv[0]);
+  access = access_list_lookup (AFI_IP, argv[0]);
   if (access == NULL)
     {
       vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
@@ -758,7 +754,7 @@ DEFUN (access_list_remark,
   struct buffer *b;
   int i;
 
-  access = access_list_get (AF_INET, argv[0]);
+  access = access_list_get (AFI_IP, argv[0]);
 
   if (access->remark)
     {
@@ -790,7 +786,7 @@ DEFUN (no_access_list_remark,
        "Access-list name\n"
        "Access list entry comment\n")
 {
-  return vty_access_list_remark_unset (vty, AF_INET, argv[0]);
+  return vty_access_list_remark_unset (vty, AFI_IP, argv[0]);
 }
 	
 ALIAS (no_access_list_remark,
@@ -851,7 +847,7 @@ DEFUN (ipv6_access_list, ipv6_access_list_cmd,
     filter->exact = 1;
 
   /* Install new filter to the access_list. */
-  access = access_list_get (AF_INET6, argv[0]);
+  access = access_list_get (AFI_IP6, argv[0]);
   access_list_filter_add (access, filter);
 
   return CMD_SUCCESS;
@@ -898,7 +894,7 @@ DEFUN (no_ipv6_access_list,
     }
 
   /* Looking up access_list. */
-  access = access_list_lookup (AF_INET6, argv[0]);
+  access = access_list_lookup (AFI_IP6, argv[0]);
   if (access == NULL)
     {
       vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
@@ -964,7 +960,7 @@ DEFUN (no_ipv6_access_list_all,
   struct access_list *access;
 
   /* Looking up access_list. */
-  access = access_list_lookup (AF_INET6, argv[0]);
+  access = access_list_lookup (AFI_IP6, argv[0]);
   if (access == NULL)
     {
       vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
@@ -991,7 +987,7 @@ DEFUN (ipv6_access_list_remark,
   struct buffer *b;
   int i;
 
-  access = access_list_get (AF_INET6, argv[0]);
+  access = access_list_get (AFI_IP6, argv[0]);
 
   if (access->remark)
     {
@@ -1024,7 +1020,7 @@ DEFUN (no_ipv6_access_list_remark,
        "Access-list name\n"
        "Access list entry comment\n")
 {
-  return vty_access_list_remark_unset (vty, AF_INET6, argv[0]);
+  return vty_access_list_remark_unset (vty, AFI_IP6, argv[0]);
 }
 	
 ALIAS (no_ipv6_access_list_remark,
@@ -1040,7 +1036,7 @@ ALIAS (no_ipv6_access_list_remark,
 
 /* Configuration write function. */
 int
-config_write_access_family (int family, struct vty *vty)
+config_write_access_afi (afi_t afi, struct vty *vty)
 {
   struct access_list *access;
   struct access_master *master;
@@ -1049,7 +1045,7 @@ config_write_access_family (int family, struct vty *vty)
   struct prefix *p;
   int write = 0;
 
-  master = access_master_get (family);
+  master = access_master_get (afi);
   if (master == NULL)
     return 0;
 
@@ -1058,7 +1054,7 @@ config_write_access_family (int family, struct vty *vty)
       if (access->remark)
 	{
 	  vty_out (vty, "%saccess-list %s remark %s%s",
-		   family == AF_INET ? "" : "ipv6 ",
+		   afi == AFI_IP ? "" : "ipv6 ",
 		   access->name, access->remark,
 		   VTY_NEWLINE);
 	  write++;
@@ -1071,14 +1067,14 @@ config_write_access_family (int family, struct vty *vty)
 	  if (filter->any)
 	    vty_out (vty,
 	  	     "%saccess-list %s %s any%s", 
-		     family == AF_INET ? "" : "ipv6 ",
+		     afi == AFI_IP ? "" : "ipv6 ",
 		     access->name,
 		     filter_type_str (filter),
 		     VTY_NEWLINE);
 	  else
 	    vty_out (vty,
 		     "%saccess-list %s %s %s/%d%s%s", 
-		     family == AF_INET ? "" : "ipv6 ",
+		     afi == AFI_IP ? "" : "ipv6 ",
 		     access->name,
 		     filter_type_str (filter),
 		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
@@ -1094,7 +1090,7 @@ config_write_access_family (int family, struct vty *vty)
       if (access->remark)
 	{
 	  vty_out (vty, "%saccess-list %s remark %s%s",
-	  	   family == AF_INET ? "" : "ipv6 ",
+	  	   afi == AFI_IP ? "" : "ipv6 ",
 		   access->name, access->remark,
 		   VTY_NEWLINE);
 	  write++;
@@ -1107,14 +1103,14 @@ config_write_access_family (int family, struct vty *vty)
 	  if (filter->any)
 	    vty_out (vty,
 	  	     "%saccess-list %s %s any%s", 
-		     family == AF_INET ? "" : "ipv6 ",
+		     afi == AFI_IP ? "" : "ipv6 ",
 		     access->name,
 		     filter_type_str (filter),
 		     VTY_NEWLINE);
 	  else
 	    vty_out (vty, 
 	  	     "%saccess-list %s %s %s/%d%s%s", 
-		     family == AF_INET ? "" : "ipv6 ",
+		     afi == AFI_IP ? "" : "ipv6 ",
 		     access->name,
 		     filter_type_str (filter),
 		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
@@ -1138,7 +1134,7 @@ struct cmd_node access_node =
 int
 config_write_access_ipv4 (struct vty *vty)
 {
-  return config_write_access_family (AF_INET, vty);
+  return config_write_access_afi (AFI_IP, vty);
 }
 
 void
@@ -1148,7 +1144,7 @@ access_list_reset_ipv4 ()
   struct access_list *next;
   struct access_master *master;
 
-  master = access_master_get (AF_INET);
+  master = access_master_get (AFI_IP);
   if (master == NULL)
     return;
 
@@ -1197,7 +1193,7 @@ struct cmd_node access_ipv6_node =
 int
 config_write_access_ipv6 (struct vty *vty)
 {
-  return config_write_access_family (AF_INET6, vty);
+  return config_write_access_afi (AFI_IP6, vty);
 }
 
 void
@@ -1207,7 +1203,7 @@ access_list_reset_ipv6 ()
   struct access_list *next;
   struct access_master *master;
 
-  master = access_master_get (AF_INET6);
+  master = access_master_get (AFI_IP6);
   if (master == NULL)
     return;
 

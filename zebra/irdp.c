@@ -29,6 +29,7 @@
 #include "command.h"
 #include "log.h"
 #include "sockunion.h"
+#include "sockopt.h"
 
 #include "zebra/irdp.h"
 
@@ -161,8 +162,8 @@ send_multicast (struct interface *ifp, int sock, struct stream *s, int size)
       connected = getdata (node);
     }
 
-  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF,
-		  (void *)&addr, sizeof(addr)) < 0) 
+  if (setsockopt_multicast_ipv4 (sock, IP_MULTICAST_IF,
+		  addr, 0, ifp->ifindex) < 0) 
     {
       perror ("setsockopt");
       exit (1);
@@ -211,16 +212,15 @@ irdp_send_solicit (int sock, struct stream *s, int size)
 }
 
 int
-ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
+ipv4_multicast_join (int sock, 
+		     struct in_addr group, 
+		     struct in_addr ifa,
+		     unsigned int ifindex)
 {
   int ret;
-  struct ip_mreq mreq;
 
-  mreq.imr_multiaddr.s_addr = group.s_addr;
-  mreq.imr_interface.s_addr = ifa.s_addr;
-
-  ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
-		    (char *)&mreq, sizeof (mreq));
+  ret = setsockopt_multicast_ipv4 (sock, IP_ADD_MEMBERSHIP, 
+		    ifa, group.saddr, ifindex);
 
   if (ret < 0) 
     zlog (NULL, LOG_INFO, "can't setsockopt IP_ADD_MEMBERSHIP");
@@ -242,7 +242,7 @@ irdp_multicast_socket (int sock, struct in_addr group)
 
       if ((ifp->flags & IFF_UP) && (ifp->flags & IFF_MULTICAST)) 
 	{
-	  ipv4_multicast_join (sock, group, addr);
+	  ipv4_multicast_join (sock, group, addr, ifp->ifindex);
 	}
     }
   return 0;

@@ -1,3 +1,103 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-17  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* rib.c: Kernel route is treated as EGP routes in nexthop active
+	check.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-08-08  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* rib.c (show_ip_route_prefix_longer): Add longer-prefix option to
+	show route commands.
+
+2001-07-29  Yon Uriarte <havanna_moon@gmx.net>
+
+	* zserv.c (zsend_ipv4_add_multipath): Add
+	NEXTHOP_TYPE_IPV4_IFINDEX check.
+
+2001-07-29  NOGUCHI Kay <kay@v6.access.co.jp>
+
+	* rtadv.c: Apply valid lifetime, preferred lifetime, onilnk flag,
+	autonomous address-configuration flag patch.
+	(no_ipv6_nd_suppress_ra): Change "ipv6 nd send-ra" to "no ipv6 nd
+	suppress-ra".
+
+2001-07-24  NOGUCHI Kay <kay@v6.access.co.jp>
+
+	* rtadv.c (ipv6_nd_ra_interval): Add "ipv6 nd ra-interval SECONDS"
+	command.
+
+2001-07-24  Jun-ichiro itojun Hagino <itojun@iijlab.net>
+
+	* rt_socket.c (kernel_rtm_ipv4): Add KAME/NetBSD151 equal cost
+	multicast FIB support both IPv4 and IPv6.
+
+2001-07-24  Hal Snyder <hal@vailsys.com>
+
+	* if_ioctl.c (interface_list_ioctl): Fix bug of failing to get the
+	full list of interfaces on some configurations of OpenBSD.
+
+2001-07-23  NOGUCHI Kay <kay@v6.access.co.jp>
+
+	* rtadv.c (ipv6_nd_send_ra): Apply [zebra 9320] to fix "ipv6 nd
+	send-ra" bug.
+	(ipv6_nd_ra_lifetime): "ipv6 nd ra-lifetime 0" for default router
+	availability.
+	(ipv6_nd_managed_config_flag): "ipv6 nd managed-config-flag" is
+	added.
+	(ipv6_nd_other_config_flag): "ipv6 nd other-config-flag" is added.
+	
+2001-07-23  Jun-ichiro itojun Hagino <itojun@iijlab.net>
+
+	* ioctl.c (if_ioctl): Change ioctl argument from int to u_long.
+
+	* rt_ioctl.c: Likewise.
+
+2001-07-23  Jun-ichiro itojun Hagino <itojun@iijlab.net>
+
+	* kernel_socket.c (rtm_write): Only set RTF_CLONING when the
+	interface is not p2p.
+
+2001-04-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ioctl.c (if_prefix_add_ipv6): Fix argument type.
+
+2001-04-06  Toshiaki Takada  <takada@zebra.org>
+
+	* zserv.c (zsend_interface_delete): Use client->obuf instead of
+	allocating new stream.
+
+2001-03-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c: Revert RTPROT_BOOT change.
+
+2001-03-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_route_change): Skip RTPROT_BOOT route.
+	(netlink_routing_table): Likewise.
+
+2001-03-07  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* zserv.c (zsend_ipv4_add_multipath): Send metric value to
+	protocol daemons.
+
+2001-02-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_routing_table): Do not return
+	tb[RTA_GATEWAY] is NULL.  Reported by: "Michael O'Keefe"
+	<mokeefe@qualcomm.com>.
+
+2001-02-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (interface_list_ioctl): Call if_add_update().
+	Suggested by: Chris Dunlop <chris@onthe.net.au>.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rib.c (nexthop_active_ipv4): When nexthop type is

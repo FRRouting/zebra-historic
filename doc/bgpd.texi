@@ -28,7 +28,7 @@ inter-domain routing.
 * Route Reflector::             
 * Route Server::                
 * How to set up a 6-Bone connection::  
-* Dump BGP packet and table::   
+* Dump BGP packets and table::   
 @end menu
 
 @node Configuring bgpd, BGP router, bgpd, bgpd
@@ -36,7 +36,7 @@ inter-domain routing.
 @section Configuring bgpd
 
 Default configuration file of @command{bgpd} is @file{bgpd.conf}.
-@command{bgpd} search current directory first then search
+@command{bgpd} searches the current directory first then
 @value{INSTALL_PREFIX_ETC}/bgpd.conf.  All of bgpd's command must be
 configured in @file{bgpd.conf}.
 
@@ -60,18 +60,18 @@ When program terminates, retain BGP routes added by zebra.
   First of all you must configure BGP router with @command{router bgp}
 command.  To configure BGP router, you need AS number.  AS number is an
 identification of autonomous system.  BGP protocol uses the AS number
-for detecting the BGP connection is internal one or external one.
+for detecting whether the BGP connection is internal one or external one.
 
-  AS number is a digit between 1 and 65535.  How to use AS number is
-described in RFC1930.  AS number 64512 through 65535 are defined as
-private AS number.  Private AS number must not to be advertised on the
+  AS number is a digit between 1 and 65535.  The use of AS numbers is
+described in RFC1930.  AS numbers 64512 through 65535 are defined as
+private AS numbers.  Private AS numbers must not to be advertised in the
 global Internet.
 
 @deffn Command {router bgp @var{as-number}} {}
 Enable a BGP protocol process with the specified @var{as-number}.  After
 this statement you can input any @code{BGP Commands}.  You can not
 create different BGP process under different @var{as-number} without
-specifying @xref{Multiple instance}.
+specifying @code{multiple-instance} (@pxref{Multiple instance}).
 @end deffn
 
 @deffn Command {no router bgp @var{as-number}} {}
@@ -79,10 +79,10 @@ Destroy a BGP protocol process with the specified @var{as-number}.
 @end deffn
 
 @deffn {BGP Command} {bgp router-id @var{router-id}} {}
-This command specifies the router-ID.  If bgpd connects to zebra it gets
+This command specifies the router-ID.  If @command{bgpd} connects to @command{zebra} it gets
 interface and address information.  In that case default router ID value
 is selected as the largest IP Address of the interfaces.  When
-@code{router zebra} is not enabled bgpd can't get interface information
+@code{router zebra} is not enabled @command{bgpd} can't get interface information
 so @code{router-id} is set to 0.0.0.0.  So please set router-id by hand.
 @end deffn
 
@@ -105,7 +105,7 @@ In this case my router, in AS-1, is trying to peer with AS-2 at
 10.0.0.1.
 
 This command must be the first command used when configuring a neighbor.
-If the remote-as is not specified, bgpd will complain like this:
+If the remote-as is not specified, @command{bgpd} will complain like this:
 @example
 can't find neighbor 10.0.0.1
 @end example
@@ -124,8 +124,8 @@ router bgp 1
 @end group
 @end example
 This configuration example says that network 10.0.0.0/8 will be
-announced to all neighbors.  Some vendor's routers don't advertise
-routes if they aren't present in its IGP routing tables; @code{bgp}
+announced to all neighbors.  Some vendors' routers don't advertise
+routes if they aren't present in their IGP routing tables; @code{bgp}
 doesn't care about IGP routes when announcing its routes.
 @end deffn
 
@@ -201,13 +201,13 @@ version.
 @deffn {BGP Command} {neighbor @var{peer} interface @var{ifname}} {}
 @deffnx {BGP Command} {no neighbor @var{peer} interface @var{ifname}} {}
 When you connect to a BGP peer over an IPv6 link-local address, you have
-to specify the ifname of the interface used for the connection.
+to specify the @var{ifname} of the interface used for the connection.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} next-hop-self} {}
 @deffnx {BGP Command} {no neighbor @var{peer} next-hop-self} {}
 This command specifies an announced route's nexthop as being equivalent
-to the address of the bgp beast.
+to the address of the bgp router.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} update-source} {}
@@ -216,7 +216,7 @@ to the address of the bgp beast.
 
 @deffn {BGP Command} {neighbor @var{peer} default-originate} {}
 @deffnx {BGP Command} {no neighbor @var{peer} default-originate} {}
-bgpd's default is to not announce the default route (0.0.0.0/0) even it
+@command{bgpd}'s default is to not announce the default route (0.0.0.0/0) even it
 is in routing table.  When you want to announce default routes to the
 peer, use this command.
 @end deffn
@@ -323,40 +323,40 @@ routing information.
 @section Multiprotocol Extension for BGP
 
   When adding IPv6 routing information exchange feature to BGP.  There
-was some proposals.  @acronym{IETF} @acronym{IDR} working group finally
+were some proposals.  @acronym{IETF} @acronym{IDR} working group finally
 take a proposal called Multiprotocol Extension for BGP.  The
 specification is described in RFC2283.  The protocol does not define new
-protocol.  It defines new attribute to existing BGP.  When it is used
+protocols.  It defines new attributes to existing BGP.  When it is used
 exchanging IPv6 routing information it is called BGP-4+.  When it is
-used exchanging multicast routing information it is called MBGP.
+used for exchanging multicast routing information it is called MBGP.
 
-  bgpd supports Multiprotocol Extension for BGP.  So if remote peer
-support the protocol, bgpd can exchange IPv6 and/or multicast routing
+  @command{bgpd} supports Multiprotocol Extension for BGP.  So if remote peer
+supports the protocol, @command{bgpd} can exchange IPv6 and/or multicast routing
 information.
 
-  Traditional BGP does not have a feature to detect remote peer's
+  Traditional BGP does not have the feature to detect remote peer's
 capability whether it can handle other than IPv4 unicast routes.  This
 is a big problem using Multiprotocol Extension for BGP to operational
 network.  @cite{draft-ietf-idr-bgp4-cap-neg-04.txt} is proposing a
-feature called Capability Negotiation.  bgpd use this Capability
-Negotiation to detect remote peer's capability.  If the peer is only
-configured as IPv4 unicast neighbor.  bgpd does not send this Capability
-Negotiation packet.
+feature called Capability Negotiation.  @command{bgpd} use this Capability
+Negotiation to detect remote peer's capabilities.  If the peer is only
+configured as IPv4 unicast neighbor, @command{bgpd} does not send these Capability
+Negotiation packets.
 
   By default, Zebra will bring up peering with minimal common capability
-of both sides.  For example, local router have capability of unicast and
-multicast and remote router have capability of unicast.  In this case,
-local router will establish the connection with unicast only capability.
-When there is no common capability Zebra send Unsupported Capability
-error then reset connection.
+for the both sides.  For example, local router has unicast and multicast 
+capabilitie and remote router has unicast capability.  In this case,
+the local router will establish the connection with unicast only capability.
+When there are no common capabilities, Zebra sends Unsupported Capability
+error and then resets the connection.
 
-  If you want to completely match capability with remote peer.  Please
+  If you want to completely match capabilities with remote peer.  Please
 use @command{strict-capability-match} command.
   
 @deffn {BGP Command} {neighbor @var{peer} strict-capability-match} {}
 @deffnx {BGP Command} {no neighbor @var{peer} strict-capability-match} {}
-Strictly compare remote capability and local capability.  If capability
-is different, send Unsupported Capability error then reset connection.
+Strictly compares remote capabilities and local capabilities.  If capabilities
+are different, send Unsupported Capability error then reset connection.
 @end deffn
 
   You may want to disable sending Capability Negotiation OPEN message
@@ -372,13 +372,13 @@ other than IPv4 unicast configuration.
 @end deffn
 
   When remote peer does not have capability negotiation feature, remote
-peer will not send any capability at all.  In that case, bgp configure
-the peer with configured capability.
+peer will not send any capabilities at all.  In that case, bgp configures
+the peer with configured capabilities.
 
-  You may prefer locally configured capability more than negotiated
-capability even though remote peer send capability.  If the peer is
-congiured by @command{override-capability}, bgpd ignore received
-capability then override negotiated capability with configured value.
+  You may prefer locally configured capabilities more than the negotiated
+capabilities even though remote peer sends capabilities.  If the peer is
+configured by @command{override-capability}, @command{bgpd} ignores received
+capabilities then override negotiated capabilities with configured values.
 
 @deffn {BGP Command} {neighbor @var{peer} override-capability} {}
 @deffnx {BGP Command} {no neighbor @var{peer} override-capability} {}
@@ -401,20 +401,20 @@ Ignore remote peer's capability value.
 @comment  node-name,  next,  previous,  up
 @section Route Server
 
-At the Internet Exchange point many ISPs are connected each other by
-external BGP peering.  Normally these external BGP connection is done by
-@code{full mesh} method.  As same as internal BGP full mesh formation,
+At an Internet Exchange point, many ISPs are connected to each other by
+external BGP peering.  Normally these external BGP connection are done by
+@code{full mesh} method.  As with internal BGP full mesh formation,
 this method has a scaling problem.
 
 This scaling problem is well known.  Route Server is a method to resolve
-the problem.  Each ISP's BGP router only peer to Route Server.  Route
-Server serves BGP information exchange to other BGP routers.  By
+the problem.  Each ISP's BGP router only peers to Route Server.  Route
+Server serves as BGP information exchange to other BGP routers.  By
 applying this method, numbers of BGP connections is reduced from
 O(n*(n-1)/2) to O(n).
 
-Unlike normal BGP router, Route Server must have several routing table
-for managing different routing policy of each BGP speaker.  We call the
-routing tables as different @code{view}.  @command{bgpd} can work as
+Unlike normal BGP router, Route Server must have several routing tables
+for managing different routing policies for each BGP speaker.  We call the
+routing tables as different @code{view}s.  @command{bgpd} can work as
 normal BGP router or Route Server or both at the same time.
 
 @menu
@@ -433,12 +433,12 @@ multiple instance feature beforehand.
 
 @deffn {Command} {bgp multiple-instance} {}
 Enable BGP multiple instance feature.  After this feature is enabled,
-you can make multiple BGP instance or multiple BGP view.
+you can make multiple BGP instances or multiple BGP views.
 @end deffn
 
 @deffn {Command} {no bgp multiple-instance} {}
 Disable BGP multiple instance feature.  You can not disable this feature
-when BGP multiple instance or view exists.
+when BGP multiple instances or views exist.
 @end deffn
 
 @node BGP instance and view, Routing policy, Multiple instance, Route Server
@@ -467,7 +467,7 @@ router bgp 2
 @end group
 @end example
 
-BGP view is almost same as normal BGP process without the result of
+BGP view is almost same as normal BGP process. The result of
 route selection does not go to the kernel routing table.  BGP view is
 only for exchanging BGP routing information.
 
@@ -513,9 +513,9 @@ router bgp 1 view 2
 @end group
 @end example
 
-This means BGP update from a peer 10.0.0.1 goes both BGP view 1 and view
-2.  When the update is inserted into view 1 distribute-list 1 is
-applied.  The other hand, the update is inserted into view 2
+This means BGP update from a peer 10.0.0.1 goes to both BGP view 1 and view
+2.  When the update is inserted into view 1, distribute-list 1 is
+applied.  On the other hand, when the update is inserted into view 2,
 distribute-list 2 is applied.
 
 @node Viewing the view,  , Routing policy, Route Server
@@ -528,7 +528,7 @@ To display routing table of BGP view, you must specify view name.
 Display routing table of BGP view @var{name}.
 @end deffn
 
-@node How to set up a 6-Bone connection, Dump BGP packet and table, Route Server, bgpd
+@node How to set up a 6-Bone connection, Dump BGP packets and table, Route Server, bgpd
 @comment  node-name,  next,  previous,  up
 @section How to set up a 6-Bone connection
 
@@ -574,9 +574,9 @@ log file bgpd.log
 @end group
 @end example
 
-@node Dump BGP packet and table,  , How to set up a 6-Bone connection, bgpd
+@node Dump BGP packets and table,  , How to set up a 6-Bone connection, bgpd
 @comment  node-name,  next,  previous,  up
-@section Dump BGP packet and table
+@section Dump BGP packets and table
 
 @deffn Command {dump bgp all @var{path}} {}
 @deffnx Command {dump bgp all @var{path} @var{interval}} {}

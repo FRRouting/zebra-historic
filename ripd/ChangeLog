@@ -1,4 +1,45 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-06-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_routemap.c (route_match_ip_address_prefix_list): Add match
+	ip next-hop prefix-list WORD.
+
+2001-02-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (rip_passive_interface_clean): Call
+	rip_passive_interface_apply_all.
+
+2001-02-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_response_process): Multicast address nexthop check
+	is moved from rip_nexthop_check.
+
+2001-02-08  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* rip_interface.c (ipv4_multicast_join): Use
+	setsockopt_multicast_ipv4.
+	(ipv4_multicast_leave): Likewise.
+	(rip_if_ipv4_address_check): Interface which has IPv4 address can
+	be enabled.
+
+2001-02-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (rip_interface_delete): To support pseudo
+	interface do not free interface structure.
+	* ripd.c (rip_output_process): If output interface is in simple
+	password authentication mode, we need space for authentication
+	data.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_nexthop_check): Fix multicast address nexthop check.
 
 	* zebra-0.91 is released.
 

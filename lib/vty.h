@@ -129,6 +129,9 @@ struct vty
   void *output_arg;
 };
 
+/* Integrated configuration file. */
+#define INTEGRATE_DEFAULT_CONFIG "Zebra.conf"
+
 /* Small macro to determine newline is newline only or linefeed needed. */
 #define VTY_NEWLINE  ((vty->type == VTY_TERM) ? "\r\n" : "\n")
 
@@ -147,13 +150,23 @@ struct vty
 #define IS_DIRECTORY_SEP(c) ((c) == DIRECTORY_SEP)
 #endif
 
+/* Exported variables */
+extern char integrate_default[];
+
+/* GCC have printf type attribute check.  */
+#ifdef __GNUC__
+#define PRINTF_ATTRIBUTE(a,b) __attribute__ ((__format__ (__printf__, a, b)))
+#else
+#define PRINTF_ATTRIBUTE(a,b)
+#endif /* __GNUC__ */
+
 /* Prototypes. */
 void vty_init (void);
 void vty_init_vtysh (void);
 void vty_reset (void);
 void vty_finish (void);
 struct vty *vty_new (void);
-int vty_out (struct vty *, const char *, ...);
+int vty_out (struct vty *, const char *, ...) PRINTF_ATTRIBUTE(2, 3);
 void vty_read_config (char *, char *, char *);
 void vty_time_print (struct vty *, int);
 void vty_serv_sock (unsigned short, char *);

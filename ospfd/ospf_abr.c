@@ -174,7 +174,7 @@ ospf_check_abr_status ()
     {
       area = getdata (node);
 
-      if (listcount (area->iflist)) 
+      if (listcount (area->oiflist)) 
 	{
 	  areas_configured++;
 	  
@@ -248,12 +248,15 @@ ospf_abr_update_aggregate (struct ospf_area_range *range,
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_update_aggregate(): Start");
 
+  if (range->specifics == 0)
+      range->cost = or->cost; /* 1st time get 1st cost */
+
   range->specifics++;
 
-  if (or->cost > range->cost)
+  if (or->cost < range->cost)
     {
       if (IS_DEBUG_OSPF_EVENT)
-	zlog_info ("ospf_abr_update_aggregate(): worse cost, update");
+	zlog_info ("ospf_abr_update_aggregate(): lowest cost, update");
 
       range->cost = or->cost;
     }
@@ -416,7 +419,7 @@ ospf_abr_nexthops_belong_to_area (struct ospf_route *or,
   for (node = listhead (or->path); node; nextnode (node))
     {
       struct ospf_path *path = node->data;
-      struct ospf_interface *oi = path->ifp->info;
+      struct ospf_interface *oi = path->oi;
 
       if (oi != NULL)
 	if (oi->area == area)
@@ -432,7 +435,7 @@ ospf_abr_should_accept (struct prefix *p, struct ospf_area *area)
   if (IMPORT_NAME (area))
     {
       if (IMPORT_LIST (area) == NULL)
-	IMPORT_LIST (area) = access_list_lookup (AF_INET, IMPORT_NAME (area));
+	IMPORT_LIST (area) = access_list_lookup (AFI_IP, IMPORT_NAME (area));
 
       if (IMPORT_LIST (area))
         if (access_list_apply (IMPORT_LIST (area), p) == FILTER_DENY)
@@ -525,7 +528,7 @@ ospf_abr_should_announce (struct prefix *p, struct ospf_route *or)
   if (EXPORT_NAME (area))
     {
       if (EXPORT_LIST (area) == NULL)
-	EXPORT_LIST (area) = access_list_lookup (AF_INET, EXPORT_NAME (area));
+	EXPORT_LIST (area) = access_list_lookup (AFI_IP, EXPORT_NAME (area));
 
       if (EXPORT_LIST (area))
         if (access_list_apply (EXPORT_LIST (area), p) == FILTER_DENY)

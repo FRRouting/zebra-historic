@@ -62,7 +62,7 @@ ospf_inactivity_timer (struct thread *thread)
 
   if (IS_DEBUG_OSPF (nsm, NSM_TIMERS))
     zlog (NULL, LOG_DEBUG, "NSM[%s:%s]: Timer (Inactivity timer expire)",
-	  nbr->oi->ifp->name, inet_ntoa (nbr->router_id));
+	  IF_NAME (nbr->oi), inet_ntoa (nbr->router_id));
 
   OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_InactivityTimer);
 
@@ -82,7 +82,7 @@ ospf_db_desc_timer (struct thread *thread)
 
   if (IS_DEBUG_OSPF (nsm, NSM_TIMERS))
     zlog (NULL, LOG_INFO, "NSM[%s:%s]: Timer (DD Retransmit timer expire)",
-	  nbr->oi->ifp->name, inet_ntoa (nbr->src));
+	  IF_NAME (nbr->oi), inet_ntoa (nbr->src));
 
   /* resent last send DD packet. */
   assert (nbr->last_send);
@@ -145,7 +145,7 @@ nsm_ignore (struct ospf_neighbor *nbr)
 {
   if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
     zlog (NULL, LOG_INFO, "NSM[%s:%s]: nsm_ignore called",
-	  nbr->oi->ifp->name, inet_ntoa (nbr->router_id));
+	  IF_NAME (nbr->oi), inet_ntoa (nbr->router_id));
 
   return 0;
 }
@@ -212,13 +212,13 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
 int
 ospf_db_summary_count (struct ospf_neighbor *nbr)
 {
-  return new_lsdb_count_all (&nbr->db_sum);
+  return ospf_lsdb_count_all (&nbr->db_sum);
 }
 
 int
 ospf_db_summary_isempty (struct ospf_neighbor *nbr)
 {
-  return new_lsdb_isempty (&nbr->db_sum);
+  return ospf_lsdb_isempty (&nbr->db_sum);
 }
 
 int
@@ -236,13 +236,9 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 #endif /* HAVE_NSSA */
 
   if (IS_LSA_MAXAGE (lsa))
-    {
-      zlog_info ("LSA[Type%d:%s]: LSA is MaxAge, add retransmit list",
-		 lsa->data->id, inet_ntoa (lsa->data->id));
-      ospf_ls_retransmit_add (nbr, lsa);                      
-    }
+    ospf_ls_retransmit_add (nbr, lsa);                      
   else 
-    new_lsdb_add (&nbr->db_sum, lsa);
+    ospf_lsdb_add (&nbr->db_sum, lsa);
 
   return 0;
 }
@@ -250,7 +246,7 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 void
 ospf_db_summary_clear (struct ospf_neighbor *nbr)
 {
-  struct new_lsdb *lsdb;
+  struct ospf_lsdb *lsdb;
   int i;
 
   lsdb = &nbr->db_sum;
@@ -261,7 +257,7 @@ ospf_db_summary_clear (struct ospf_neighbor *nbr)
 
       for (rn = route_top (table); rn; rn = route_next (rn))
 	if (rn->info)
-	  new_lsdb_delete (&nbr->db_sum, rn->info);
+	  ospf_lsdb_delete (&nbr->db_sum, rn->info);
     }
 }
 
@@ -399,10 +395,7 @@ nsm_reset_nbr (struct ospf_neighbor *nbr)
 int
 nsm_kill_nbr (struct ospf_neighbor *nbr)
 {
-  /* Schedule network-LSA origination, if DR. */
-  /*  if (nbr->oi->status == ISM_DR)
-      ospf_schedule_network_lsa_originate (nbr->oi);*/
-
+  /* call it here because we cannot call it from ospf_nsm_event */
   nsm_change_status (nbr, NSM_Down);
   
   /* Reset neighbor. */
@@ -422,7 +415,7 @@ nsm_kill_nbr (struct ospf_neighbor *nbr)
 
       if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
 	zlog_info ("NSM[%s:%s]: Down (PollIntervalTimer scheduled)",
-		   nbr->oi->ifp->name,
+		   IF_NAME (nbr->oi),
 		   inet_ntoa (nbr->address.u.prefix4));  
     }
 
@@ -641,7 +634,7 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
   /* Logging change of status. */
   if (IS_DEBUG_OSPF (nsm, NSM_STATUS))
     zlog_info ("NSM[%s:%s]: Status change %s -> %s",
-	       nbr->oi->ifp->name, inet_ntoa (nbr->router_id),
+	       IF_NAME (nbr->oi), inet_ntoa (nbr->router_id),
 	       LOOKUP (ospf_nsm_status_msg, nbr->status),
 	       LOOKUP (ospf_nsm_status_msg, status));
 
@@ -739,7 +732,15 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
   /* Generete NeighborChange ISM event. */
   if ((old_status < NSM_TwoWay && status >= NSM_TwoWay) ||
       (old_status >= NSM_TwoWay && status < NSM_TwoWay))
-    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+    OSPF_ISM_EVENT_EXECUTE (oi, ISM_NeighborChange);
+
+  /* Performance hack. Send hello immideately when some neighbor enter
+     Init state.  This whay we decrease neighbor discovery time. Gleb.*/
+  if (status == NSM_Init)
+    {
+      OSPF_ISM_TIMER_OFF (oi->t_hello);
+      OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, 1);
+    }
 
   /* Preserve old status? */
 }
@@ -771,7 +772,7 @@ ospf_nsm_event (struct thread *thread)
     {
       if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
 	zlog_info ("NSM[%s:%s]: neighbor deleted",
-		   oi->ifp->name, inet_ntoa (router_id));
+		   IF_NAME (oi), inet_ntoa (router_id));
 
       /* Timers are canceled in ospf_nbr_free, moreover we cannot call
          nsm_timer_set here because nbr is freed already!!!*/
@@ -784,7 +785,7 @@ ospf_nsm_event (struct thread *thread)
     next_state = NSM [nbr->status][event].next_state;
 
   if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
-    zlog_info ("NSM[%s:%s]: %s (%s)", oi->ifp->name,
+    zlog_info ("NSM[%s:%s]: %s (%s)", IF_NAME (oi),
 	       inet_ntoa (nbr->router_id),
 	       LOOKUP (ospf_nsm_status_msg, nbr->status),
 	       ospf_nsm_event_str [event]);

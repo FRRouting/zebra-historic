@@ -172,6 +172,18 @@ ospf6_timeval_string (struct timeval *tv, char *buf, int size)
             (msec ? msecs : ""), (usec ? usecs : ""));
 }
 
+/* foreach function */
+void
+ospf6_count_state (void *arg, int val, void *obj)
+{
+  int *count = (int *) arg;
+  u_char state = val;
+  struct ospf6_neighbor *nei = (struct ospf6_neighbor *) obj;
+
+  if (nei->state == state)
+    (*count)++;
+}
+
 
 /* vty commands */
 /* for reload */
@@ -182,6 +194,19 @@ DEFUN (reload,
        "Reloads\n")
 {
   _reload ();
+  return CMD_SUCCESS;
+}
+
+DEFUN (garbage_collection,
+       garbage_collection_cmd,
+       "ipv6 ospf6 garbage collect",
+       IPV6_STR
+       OSPF6_STR
+       "garbage collection by hand\n"
+       "Remove Maxages if possible and recalculate routes\n")
+{
+  ospf6_maxage_remover ();
+  ospf6_route_calculation_schedule ();
   return CMD_SUCCESS;
 }
 
@@ -206,11 +231,7 @@ DEFUN (router_ospf6,
        OSPF6_STR
        )
 {
-  if (ospf6)
-    {
-      vty_out (vty, "ospf6 already started.%s", VTY_NEWLINE);
-    }
-  else
+  if (ospf6 == NULL)
     ospf6_start ();
 
   /* set current ospf point. */
@@ -229,9 +250,7 @@ DEFUN (no_router_ospf6,
        )
 {
   if (!ospf6)
-    {
-      vty_out (vty, "ospf6 already stopped.%s", VTY_NEWLINE);
-    }
+    vty_out (vty, "OSPFv3 is not running%s", VTY_NEWLINE);
   else
     ospf6_stop ();
 
@@ -251,10 +270,9 @@ DEFUN (show_ipv6_ospf6,
        OSPF6_STR
        )
 {
-  if (!ospf6)
-    vty_out (vty, "ospfv6 not started%s", VTY_NEWLINE);
-  else
-    ospf6_show (vty);
+  OSPF6_CMD_CHECK_RUNNING ();
+
+  ospf6_show (vty);
   return CMD_SUCCESS;
 }
 
@@ -289,6 +307,8 @@ DEFUN (show_ipv6_ospf6_statistics,
        OSPF6_STR
        "Statistics\n")
 {
+  OSPF6_CMD_CHECK_RUNNING ();
+
   ospf6_statistics_show (vty, ospf6);
   return CMD_SUCCESS;
 }
@@ -338,10 +358,16 @@ DEFUN (interface_area,
   /* find/create ospf6 interface */
   o6i = (struct ospf6_interface *) ifp->info;
   if (!o6i)
-    o6i = ospf6_interface_create (ifp, ospf6);
+    o6i = ospf6_interface_create (ifp);
+
+  /* parse Area-ID */
+  if (inet_pton (AF_INET, argv[1], &area_id) != 1)
+    {
+      vty_out (vty, "Invalid Area-ID: %s%s", argv[1], VTY_NEWLINE);
+      return CMD_ERR_AMBIGUOUS;
+    }
 
   /* find/create ospf6 area */
-  inet_pton (AF_INET, argv[1], &area_id);
   o6a = ospf6_area_lookup (area_id, o6);
   if (!o6a)
     {
@@ -376,11 +402,8 @@ DEFUN (no_interface,
        IFNAME_STR
        )
 {
-  listnode n;
   struct interface *ifp;
-  struct ospf6_neighbor *o6n;
   struct ospf6_interface *o6i;
-  struct ospf6_lsa *lsa;
   struct ospf6 *o6;
 
   o6 = (struct ospf6 *) vty->index;
@@ -399,32 +422,8 @@ DEFUN (no_interface,
   listnode_delete (o6i->area->if_list, o6i);
   o6i->area = (struct ospf6_area *) NULL;
 
-  for (n = listhead (o6i->neighbor_list); n; nextnode (n))
-    {
-      o6n = (struct ospf6_neighbor *) getdata (n);
-      ospf6_neighbor_delete (o6n);
-    }
-  list_delete_all_node (o6i->neighbor_list);
+  ospf6_interface_delete (o6i);
 
-  if (o6i->thread_send_hello)
-    {
-      thread_cancel (o6i->thread_send_hello);
-      o6i->thread_send_hello = NULL;  
-    }
-  if (o6i->thread_send_lsack_delayed);
-    {
-      thread_cancel (o6i->thread_send_lsack_delayed);
-      o6i->thread_send_lsack_delayed = NULL;
-    }
-
-  while (listcount (o6i->lsa_delayed_ack))
-    {
-      n = listhead (o6i->lsa_delayed_ack);
-      lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_remove_delayed_ack (lsa, o6i);
-    }
-
-  ospf6_lsdb_remove_all (o6i->lsdb);
   return CMD_SUCCESS;
 }
 
@@ -474,7 +473,7 @@ DEFUN (passive_interface,
   if (ifp->info)
     o6i = (struct ospf6_interface *) ifp->info;
   else
-    o6i = ospf6_interface_create (ifp, ospf6);
+    o6i = ospf6_interface_create (ifp);
 
   o6i->is_passive = 1;
   if (o6i->thread_send_hello)
@@ -565,15 +564,14 @@ ospf6_config_write (struct vty *vty)
   struct ospf6_interface *ospf6_interface;
 
   if (proctitle_mode == 1)
-    vty_out (vty, "set proctitle version%s!%s", VTY_NEWLINE);
+    vty_out (vty, "set proctitle version%s", VTY_NEWLINE);
   else if (proctitle_mode == -1)
-    vty_out (vty, "set proctitle none%s!%s", VTY_NEWLINE);
+    vty_out (vty, "set proctitle none%s", VTY_NEWLINE);
 
-  if (!ospf6)
-    {
-      vty_out (vty, "!%s", VTY_NEWLINE);
-      return 0;
-    }
+  vty_out (vty, "!%s", VTY_NEWLINE);
+
+  if (! ospf6)
+    return 0;
 
   /* OSPFv6 configuration. */
   if (!ospf6)
@@ -620,19 +618,24 @@ ospf6_init ()
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_cmd);
   install_element (VIEW_NODE, &show_version_ospf6_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
 
+#if 0
   install_element (VIEW_NODE, &show_ipv6_ospf6_statistics_cmd);
+#endif
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
   install_element (ENABLE_NODE, &show_version_ospf6_cmd);
 
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
 
+#if 0
   install_element (ENABLE_NODE, &show_ipv6_ospf6_statistics_cmd);
-
+#endif
 
   install_element (ENABLE_NODE, &reload_cmd);
+
+#if 0
+  install_element (ENABLE_NODE, &garbage_collection_cmd);
+#endif
 
   install_element (CONFIG_NODE, &router_ospf6_cmd);
   install_element (CONFIG_NODE, &interface_cmd);
@@ -686,5 +689,18 @@ ospf6_terminate ()
 
   /* log */
   zlog (NULL, LOG_INFO, "OSPF6d terminated");
+}
+
+void
+ospf6_maxage_remover ()
+{
+  if (IS_OSPF6_DUMP_LSDB)
+    zlog_info ("MaxAge Remover");
+
+  ospf6_top_schedule_maxage_remover (NULL, 0, ospf6);
+  (*ospf6->foreach_area) (ospf6, NULL, 0,
+                          ospf6_area_schedule_maxage_remover);
+  (*ospf6->foreach_if) (ospf6, NULL, 0,
+                        ospf6_interface_schedule_maxage_remover);
 }
 

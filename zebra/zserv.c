@@ -100,7 +100,9 @@ zsend_interface_add (struct zserv *client, struct interface *ifp)
   stream_putl (s, ifp->metric);
   stream_putl (s, ifp->mtu);
   stream_putl (s, ifp->bandwidth);
-#ifndef HAVE_SOCKADDR_DL
+#ifdef HAVE_SOCKADDR_DL
+  stream_put (s, &ifp->sdl, sizeof (ifp->sdl));
+#else
   stream_putl (s, ifp->hw_addr_len);
   if (ifp->hw_addr_len)
     stream_put (s, ifp->hw_addr, ifp->hw_addr_len);
@@ -122,7 +124,7 @@ zsend_interface_delete (struct zserv *client, struct interface *ifp)
   if (! client->ifinfo)
     return -1;
 
-  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+  s = client->obuf;
   stream_reset (s);
 
   /* Packet length placeholder. */
@@ -317,7 +319,7 @@ zsend_ipv4_add_multipath (struct zserv *client, struct prefix *p,
   stream_putc (s, ZEBRA_IPV4_ROUTE_ADD);
   stream_putc (s, rib->type);
   stream_putc (s, rib->flags);
-  stream_putc (s, ZAPI_MESSAGE_NEXTHOP | ZAPI_MESSAGE_IFINDEX);
+  stream_putc (s, ZAPI_MESSAGE_NEXTHOP | ZAPI_MESSAGE_IFINDEX | ZAPI_MESSAGE_METRIC);
 
   /* Prefix. */
   psize = PSIZE (p->prefixlen);
@@ -331,7 +333,8 @@ zsend_ipv4_add_multipath (struct zserv *client, struct prefix *p,
 	{
 	  stream_putc (s, 1);
 
-	  if (nexthop->type == NEXTHOP_TYPE_IPV4)
+	  if (nexthop->type == NEXTHOP_TYPE_IPV4
+	      || nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX)
 	    stream_put_in_addr (s, &nexthop->gate.ipv4);
 	  else
 	    stream_put_in_addr (s, &empty);
@@ -343,6 +346,9 @@ zsend_ipv4_add_multipath (struct zserv *client, struct prefix *p,
 	  break;
 	}
     }
+
+  /* Metric */
+  stream_putl (s, rib->metric);
 
   /* Write packet size. */
   stream_putw_at (s, 0, stream_get_endp (s));
@@ -542,7 +548,7 @@ zsend_ipv6_add_multipath (struct zserv *client, struct prefix *p,
   stream_putc (s, ZEBRA_IPV6_ROUTE_ADD);
   stream_putc (s, rib->type);
   stream_putc (s, rib->flags);
-  stream_putc (s, ZAPI_MESSAGE_NEXTHOP|ZAPI_MESSAGE_IFINDEX);
+  stream_putc (s, ZAPI_MESSAGE_NEXTHOP | ZAPI_MESSAGE_IFINDEX | ZAPI_MESSAGE_METRIC);
 
   /* Prefix. */
   psize = PSIZE (p->prefixlen);
@@ -568,6 +574,9 @@ zsend_ipv6_add_multipath (struct zserv *client, struct prefix *p,
 	  break;
 	}
     }
+
+  /* Metric */
+  stream_putl (s, rib->metric);
 
   /* Write packet size. */
   stream_putw_at (s, 0, stream_get_endp (s));
@@ -1045,7 +1054,6 @@ zread_ipv4_import_lookup (struct zserv *client, u_short length)
   struct prefix_ipv4 p;
 
   p.family = AF_INET;
-  p.safi = 0;
   p.prefixlen = stream_getc (client->ibuf);
   p.prefix.s_addr = stream_get_ipv4 (client->ibuf);
 
@@ -1511,7 +1519,7 @@ zebra_serv_un (char *path)
   unlink (path);
 
   /* Set umask */
-  old_mask = umask (0);
+  old_mask = umask (0077);
 
   /* Make UNIX domain socket. */
   sock = socket (AF_UNIX, SOCK_STREAM, 0);

@@ -21,126 +21,6 @@
 
 #include "ospf6d.h"
 
-/* lookup delayed acknowledge list of ospf6_interface */
-struct ospf6_lsa *
-ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
-{
-  if (listnode_lookup (o6i->lsa_delayed_ack, lsa))
-    {
-#ifndef NDEBUG
-      if (! listnode_lookup (lsa->delayed_ack_if, o6i))
-        assert (0);
-#endif /* NDEBUG */
-      return lsa;
-    }
-  return NULL;
-}
-
-/* add to delayed acknowledge list of ospf6_interface */
-void
-ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
-{
-  if (ospf6_lookup_delayed_ack (lsa, o6i))
-    return;
-
-  listnode_add (o6i->lsa_delayed_ack, lsa);
-  listnode_add (lsa->delayed_ack_if, o6i);
-  ospf6_lsa_lock (lsa);
-
-#if 0
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("lsa: locked to be send in delayed acknowledgement to interface %s: %s (%#x lock:%d)",
-               o6i->interface->name, lsa->str, lsa, lsa->lock);
-#endif
-}
-
-/* remove from delayed acknowledge list of ospf6_interface */
-void
-ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
-{
-  if (!ospf6_lookup_delayed_ack (lsa, o6i))
-    return;
-
-  listnode_delete (o6i->lsa_delayed_ack, lsa);
-  listnode_delete (lsa->delayed_ack_if, o6i);
-  ospf6_lsa_unlock (lsa);
-
-#if 0
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("lsa: unlocked from being send in delayed acknowledgement to interface %s: %s (%#x lock:%d)",
-               o6i->interface->name, lsa->str, lsa, lsa->lock);
-#endif
-}
-
-void
-ospf6_lsa_delayed_ack_remove_all (struct ospf6_lsa *lsa)
-{
-  listnode i;
-  struct ospf6_interface *o6i;
-
-  while (listcount (lsa->delayed_ack_if))
-    {
-      i = listhead (lsa->delayed_ack_if);
-      o6i = (struct ospf6_interface *) getdata (i);
-      ospf6_remove_delayed_ack (lsa, o6i);
-    }
-}
-
-
-
-
-/* prepare for dd exchange */
-void
-ospf6_dbex_prepare_summary (struct ospf6_neighbor *o6n)
-{
-  listnode n;
-  struct ospf6_lsa *lsa;
-
-  assert (o6n);
-
-  /* clear summary list of neighbor */
-  ospf6_neighbor_summary_remove_all (o6n);
-
-  /* add AS-scoped LSAs */
-  for (n = listhead (o6n->ospf6_interface->area->ospf6->lsdb);
-       n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      /* MaxAge LSA are added to retrans list, instead of summary list.
-         (RFC2328, section 14) */
-      if (ospf6_lsa_is_maxage (lsa))
-        ospf6_neighbor_retrans_add (lsa, o6n);
-      else
-        ospf6_neighbor_summary_add (lsa, o6n);
-    }
-
-  /* add Area-scoped LSAs */
-  for (n = listhead (o6n->ospf6_interface->area->lsdb);
-       n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      /* MaxAge LSA are added to retrans list, instead of summary list.
-         (RFC2328, section 14) */
-      if (ospf6_lsa_is_maxage (lsa))
-        ospf6_neighbor_retrans_add (lsa, o6n);
-      else
-        ospf6_neighbor_summary_add (lsa, o6n);
-    }
-
-  /* add Linklocal-scoped LSAs */
-  for (n = listhead (o6n->ospf6_interface->lsdb);
-       n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      /* MaxAge LSA are added to retrans list, instead of summary list.
-         (RFC2328, section 14) */
-      if (ospf6_lsa_is_maxage (lsa))
-        ospf6_neighbor_retrans_add (lsa, o6n);
-      else
-        ospf6_neighbor_summary_add (lsa, o6n);
-    }
-}
-
 /* check validity and put lsa in reqestlist if needed. */
 /* returns -1 if SeqNumMismatch required. */
 int
@@ -150,12 +30,11 @@ ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
   struct ospf6_lsa *received = NULL;
   struct ospf6_lsa *have = NULL;
 
-  received = ospf6_lsa_summary_create (lsa_header);
-  ospf6_lsa_lock (received);
+  received = ospf6_lsa_summary_create ((struct ospf6_lsa_header__ *) lsa_header);
 
   /* warn if unknown */
   if (! ospf6_lsa_is_known_type (lsa_header))
-    zlog_warn ("DBEX: [%s%%%s] receive DbDesc unknown: %#x",
+    zlog_warn ("DBEX: [%s:%s] receive DbDesc unknown: %d",
                from->str, from->ospf6_interface->interface->name,
                ntohs (lsa_header->type));
 
@@ -163,10 +42,10 @@ ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
   if (lsa_header->type == htons (OSPF6_LSA_TYPE_AS_EXTERNAL) &&
       ospf6_area_is_stub (from->ospf6_interface->area))
     {
-      zlog_err ("DBEX: [%s%%%s] receive DbDesc E-bit mismatch: %s",
+      zlog_err ("DBEX: [%s:%s] receive DbDesc E-bit mismatch: %s",
                  from->str, from->ospf6_interface->interface->name,
                  received->str);
-      ospf6_lsa_unlock (received);
+      ospf6_lsa_delete (received);
       return -1;
     }
 
@@ -177,7 +56,7 @@ ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
     {
 
       if (IS_OSPF6_DUMP_DBEX)
-        zlog_info ("DBEX: [%s%%%s] request %s",
+        zlog_info ("DBEX: [%s:%s] request %s",
                    from->str, from->ospf6_interface->interface->name,
                    received->str);
       /* if we don't have database copy, add request */
@@ -189,18 +68,14 @@ ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
       if (ospf6_lsa_check_recent (received, have) < 0)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("DBEX: [%s%%%s] request %s (newer)",
+            zlog_info ("DBEX: [%s:%s] request %s (newer)",
                        from->str, from->ospf6_interface->interface->name,
                        received->str);
           ospf6_neighbor_request_add (received, from);
         }
     }
 
-  /* decrement reference counter of lsa.
-     if above ospf6_add_request() really add to request list,
-     there should be another reference, so bellow unlock
-     don't really free this lsa. otherwise, do free */
-  ospf6_lsa_unlock (received);
+  ospf6_lsa_delete (received);
 
   return 0;
 }
@@ -214,7 +89,7 @@ ospf6_dbex_acknowledge_direct (struct ospf6_lsa *lsa,
   assert (lsa);
 
   if (IS_OSPF6_DUMP_DBEX)
-    zlog_info ("DBEX: [%s%%%s] direct ack %s ",
+    zlog_info ("DBEX: [%s:%s] direct ack %s ",
                o6n->str, o6n->ospf6_interface->interface->name,
                lsa->str);
 
@@ -222,7 +97,8 @@ ospf6_dbex_acknowledge_direct (struct ospf6_lsa *lsa,
   iov_clear (directack, MAXIOVLIST);
 
   /* set pointer of LSA to send */
-  attach_lsa_hdr_to_iov (lsa, directack);
+  OSPF6_MESSAGE_ATTACH (directack, lsa->header,
+                        sizeof (struct ospf6_lsa_header));
 
   /* age update and add InfTransDelay */
   ospf6_lsa_age_update_to_send (lsa, o6n->ospf6_interface->transdelay);
@@ -237,6 +113,7 @@ void
 ospf6_dbex_acknowledge_delayed (struct ospf6_lsa *lsa,
                                 struct ospf6_interface *o6i)
 {
+  struct ospf6_lsa *sum;
   assert (o6i);
 
   if (IS_OSPF6_DUMP_DBEX)
@@ -245,7 +122,9 @@ ospf6_dbex_acknowledge_delayed (struct ospf6_lsa *lsa,
                lsa->str);
 
   /* attach delayed acknowledge list */
-  ospf6_add_delayed_ack (lsa, o6i);
+  ospf6_lsa_age_current (lsa);
+  sum = ospf6_lsa_summary_create (lsa->header);
+  ospf6_lsdb_add (sum, o6i->ack_list);
 
   /* if not yet, schedule delayed acknowledge RxmtInterval later */
     /* timers should be *less than* RxmtInterval
@@ -266,46 +145,91 @@ static int
 ospf6_dbex_is_maxage_to_be_dropped (struct ospf6_lsa *received,
                                     struct ospf6_neighbor *from)
 {
-  struct ospf6_lsa_header *lsa_header;
-
-  lsa_header = (struct ospf6_lsa_header *) received->lsa_hdr;
+  int count;
 
   if (! ospf6_lsa_is_maxage (received))
     return 0;
 
-  if (ospf6_lsdb_lookup (lsa_header->type, lsa_header->ls_id,
-                         lsa_header->advrtr) != NULL)
+  if (ospf6_lsdb_lookup (received->header->type, received->header->id,
+                         received->header->adv_router))
     return 0;
 
-  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (lsa_header->type)))
+  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (received->header->type)))
     {
-      if (ospf6_interface_count_neighbor_in_state (NBS_EXCHANGE,
-            from->ospf6_interface))
-        return 0;
-      if (ospf6_interface_count_neighbor_in_state (NBS_LOADING,
-            from->ospf6_interface))
+      count = 0;
+      (*from->ospf6_interface->foreach_nei)
+        (from->ospf6_interface, &count, NBS_EXCHANGE, ospf6_count_state);
+      (*from->ospf6_interface->foreach_nei)
+        (from->ospf6_interface, &count, NBS_LOADING, ospf6_count_state);
+      if (count)
         return 0;
     }
-  else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
+  else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (received->header->type)))
     {
-      if (ospf6_area_count_neighbor_in_state (NBS_EXCHANGE,
-            from->ospf6_interface->area))
-        return 0;
-      if (ospf6_area_count_neighbor_in_state (NBS_LOADING,
-            from->ospf6_interface->area))
+      count = 0;
+      (*from->ospf6_interface->area->foreach_nei)
+         (from->ospf6_interface->area, &count, NBS_EXCHANGE, ospf6_count_state);
+      (*from->ospf6_interface->area->foreach_nei)
+         (from->ospf6_interface->area, &count, NBS_LOADING, ospf6_count_state);
+      if (count)
         return 0;
     }
-  else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (lsa_header->type)))
+  else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (received->header->type)))
     {
-      if (ospf6_top_count_neighbor_in_state (NBS_EXCHANGE,
-            from->ospf6_interface->area->ospf6))
-        return 0;
-      if (ospf6_top_count_neighbor_in_state (NBS_LOADING,
-            from->ospf6_interface->area->ospf6))
+      count = 0;
+      (*from->ospf6_interface->area->ospf6->foreach_nei)
+         (from->ospf6_interface->area->ospf6, &count, NBS_EXCHANGE,
+          ospf6_count_state);
+      (*from->ospf6_interface->area->ospf6->foreach_nei)
+         (from->ospf6_interface->area->ospf6, &count, NBS_LOADING,
+          ospf6_count_state);
+      if (count)
         return 0;
     }
 
   return 1;
+}
+
+static void
+ospf6_dbex_remove_retrans (void *arg, int val, void *obj)
+{
+  struct ospf6_neighbor *nei = (struct ospf6_neighbor *) obj;
+  struct ospf6_lsa *lsa = (struct ospf6_lsa *) arg;
+  struct ospf6_lsa *rem;
+
+  rem = ospf6_lsdb_lookup_lsdb (lsa->header->type, lsa->header->id,
+                                lsa->header->adv_router, nei->retrans_list);
+  if (! rem)
+    return;
+
+  if (IS_OSPF6_DUMP_DBEX)
+    zlog_info ("Remove retrans: %s from %s->retrans_list",
+               rem->str, nei->str);
+  ospf6_neighbor_retrans_remove (rem, nei);
+
+  ospf6_maxage_remover ();
+}
+
+void
+ospf6_dbex_remove_from_all_retrans_list (struct ospf6_lsa *lsa)
+{
+  struct ospf6_interface *o6i;
+  struct ospf6_area *o6a;
+
+  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (htons (lsa->header->type)))
+    {
+      o6i = lsa->scope;
+      (*o6i->foreach_nei) (o6i, lsa, 0, ospf6_dbex_remove_retrans);
+    }
+  else if (OSPF6_LSA_IS_SCOPE_AREA (htons (lsa->header->type)))
+    {
+      o6a = lsa->scope;
+      (*o6a->foreach_nei) (o6a, lsa, 0, ospf6_dbex_remove_retrans);
+    }
+  else if (OSPF6_LSA_IS_SCOPE_AS (htons (lsa->header->type)))
+    {
+      (*ospf6->foreach_nei) (ospf6, lsa, 0, ospf6_dbex_remove_retrans);
+    }
 }
 
 /* RFC2328 section 13 */
@@ -313,10 +237,8 @@ void
 ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
                         struct ospf6_neighbor *from)
 {
-  struct ospf6_lsa *received, *have;
-  struct ospf6_neighbor *nbr;
+  struct ospf6_lsa *received, *have, *rem;
   struct timeval now;
-  listnode n;
   int ismore_recent, acktype;
   unsigned short cksum;
 
@@ -326,7 +248,11 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
 
   /* make lsa structure for received lsa */
   received = ospf6_lsa_create (lsa_header);
-  ospf6_lsa_lock (received);
+
+  if (IS_OSPF6_DUMP_DBEX)
+    {
+      zlog_info ("DBEX: Receive %s from %s", received->str, from->str);
+    }
 
   /* set LSA scope */
   if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (htons (lsa_header->type)))
@@ -340,15 +266,15 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
   cksum = ntohs (lsa_header->checksum);
   if (ntohs (ospf6_lsa_checksum (lsa_header)) != cksum)
     {
-      zlog_warn ("DBEX: [%s%%%s] receive LSA cksum wrong: %s"
-                 " checksum %#hx should be %#hx",
-                 from->str, from->ospf6_interface->interface->name,
+      zlog_warn ("DBEX: LSA cksum wrong: %s checksum %#hx should be %#hx",
                  received->str, cksum, ntohs (ospf6_lsa_checksum (lsa_header)));
+      ospf6_lsa_delete (received);
+      return;
     }
 
   /* (2) warn if unknown */
   if (! ospf6_lsa_is_known_type (lsa_header))
-    zlog_warn ("DBEX: [%s%%%s] receive DbDesc unknown: %#x",
+    zlog_warn ("DBEX: [%s:%s] receive DbDesc unknown: %#x",
                from->str, from->ospf6_interface->interface->name,
                ntohs (lsa_header->type));
 
@@ -356,10 +282,10 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
   if (lsa_header->type == htons (OSPF6_LSA_TYPE_AS_EXTERNAL) &&
       ospf6_area_is_stub (from->ospf6_interface->area))
     {
-      zlog_err ("DBEX: [%s%%%s] receive LSA E-bit mismatch: %s",
+      zlog_err ("DBEX: [%s:%s] receive LSA E-bit mismatch: %s",
                  from->str, from->ospf6_interface->interface->name,
                  received->str);
-      ospf6_lsa_unlock (received);
+      ospf6_lsa_delete (received);
       return;
     }
 
@@ -369,16 +295,15 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
     {
       /* log */
       if (IS_OSPF6_DUMP_DBEX)
-        zlog_info ("DBEX: [%s%%%s] received MaxAge LSA to be dropped: %s",
-                   from->str, from->ospf6_interface->interface->name,
-                   received->str);
+        zlog_info ("Drop MaxAge LSA: no instance, no neighbor "
+                   "exchanging DB: %s", received->str);
 
       /* a) Acknowledge back to neighbor (13.5) */
         /* Direct Acknowledgement */
       ospf6_dbex_acknowledge_direct (received, from);
 
       /* b) Discard */
-      ospf6_lsa_unlock (received);
+      ospf6_lsa_delete (received);
       return;
     }
 
@@ -398,29 +323,22 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
       if (have && now.tv_sec - have->installed <= OSPF6_MIN_LS_ARRIVAL)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("DBEX: [%s%%%s] received LSA too soon: %s",
+            zlog_info ("DBEX: [%s:%s] received LSA too soon: %s",
                        from->str, from->ospf6_interface->interface->name,
                        received->str);
 
           /* this will do free this lsa */
-          ospf6_lsa_unlock (received);
+          ospf6_lsa_delete (received);
           return;   /* examin next lsa */
         }
 
-      /* (b) immediately flood */
-      ospf6_dbex_flood (received, from);
-
+      /* XXX (c) comes before (b) */
       /* (c) remove database copy from all neighbor's retranslist */
       if (have)
-        {
-          while (listcount (have->retrans_nbr))
-            {
-              n = listhead (have->retrans_nbr);
-              nbr = (struct ospf6_neighbor *) getdata (n);
-              ospf6_neighbor_retrans_remove (have, nbr);
-            }
-          assert (list_isempty (have->retrans_nbr));
-        }
+        ospf6_dbex_remove_from_all_retrans_list (have);
+
+      /* (b) immediately flood */
+      ospf6_dbex_flood (received, from);
 
       /* (d), installing lsdb, which may cause routing
               table calculation (replacing database copy) */
@@ -439,7 +357,7 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
       else
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("DBEX: [%s%%%s] don't ack %s",
+            zlog_info ("DBEX: [%s:%s] don't ack %s",
                        from->str, from->ospf6_interface->interface->name,
                        received->str);
         }
@@ -450,29 +368,26 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
           && have && ismore_recent < 0)
         {
           /* we're going to make new lsa or to flush this LSA. */
-          /* "received" lsa is already installed in LSDB by now.
-             So there's two lock in "received" LSA; LSDB's lock and
-             this function(ospf6_dbex_receive_lsa)'s lock.
-             The latter is not needed already.
-             ospf6_lsa_reoriginate() will try to remove "received" LSA,
-             and asserts that the "received" LSA's lock is 1
-             to make sure the LSA is not referenced by any other than LSDB.
-             This will be happen when ospf6_lsdb_remove() really removes
-             this "received" LSA; then, the lock this function have done
-             will become a problem. That's why ospf6_lsa_unlock() appears
-             first bellow. */
-          ospf6_lsa_unlock (received);
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("DBEX: Self-originated LSA %s from %s:%s",
+                       received->str,
+                       from->str, from->ospf6_interface->interface->name);
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("DBEX: %s: Make new one/Flush", received->str);
           ospf6_lsa_reoriginate (received);
           return;
         }
     }
-  else if (ospf6_neighbor_request_lookup (received, from))
+  else if (ospf6_lsdb_lookup_lsdb (received->header->type,
+                                   received->header->id,
+                                   received->header->adv_router,
+                                   from->request_list))
     /* (6) if there is instance on sending neighbor's request list */
     {
       /* if no database copy, should go above state (5) */
       assert (have);
 
-      zlog_warn ("DBEX: [%s%%%s] received LSA %s is not newer,"
+      zlog_warn ("DBEX: [%s:%s] received LSA %s is not newer,"
                  " and is on his requestlist: Generate BadLSReq",
                  from->str, from->ospf6_interface->interface->name,
                  received->str);
@@ -480,21 +395,19 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
       /* BadLSReq */
       thread_add_event (master, bad_lsreq, from, 0);
 
-      ospf6_lsa_unlock (received);
-      return;
+      ospf6_lsa_delete (received);
     }
   else if (ismore_recent == 0) /* (7) if neither is more recent */
     {
       received->flags |= OSPF6_LSA_DUPLICATE;
 
       /* (a) if on retranslist, Treat this LSA as an Ack: Implied Ack */
-      if (ospf6_neighbor_retrans_lookup (received, from))
-        {
-          ospf6_neighbor_retrans_remove (have, from);
-
-          /* note occurrence of implied ack */
-          received->flags |= OSPF6_LSA_IMPLIEDACK;
-        }
+      rem = ospf6_lsdb_lookup_lsdb (received->header->type,
+                                    received->header->id,
+                                    received->header->adv_router,
+                                    from->retrans_list);
+      if (rem)
+        ospf6_neighbor_retrans_remove (rem, from);
 
       /* (b) possibly acknowledge */
       acktype = ack_type (received, ismore_recent, from);
@@ -509,48 +422,23 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
       else
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("DBEX: [%s%%%s] will no ack %s",
+            zlog_info ("DBEX: [%s:%s] will no ack %s",
                        from->str, from->ospf6_interface->interface->name,
                        received->str);
         }
+      ospf6_lsa_delete (received);
     }
   else /* (8) previous database copy is more recent */
     {
-      /* XXX, Seqnumber Wrapping */
-
-      /* XXX, Send database copy of this LSA to this neighbor */
-      {
-        struct iovec iov[8];
-        struct ospf6_lsupdate *update;
-        struct sockaddr_in6 dst;
-
-        assert (have);
-        dst.sin6_family = AF_INET6;
-        memcpy (&dst.sin6_addr, &from->hisaddr, sizeof (struct in6_addr));
-        iov_clear (iov, 8);
-        update = (struct ospf6_lsupdate *) iov_append
-             (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_lsupdate));
-        if (!update)
-          {
-            zlog_err ("DBEX: iov_append() failed in send back");
-            ospf6_lsa_unlock (received);
-            return;
-          }
-        update->lsupdate_num = ntohl (1);
-        ospf6_lsa_age_update_to_send (have, from->ospf6_interface->transdelay);
-        attach_lsa_to_iov (have, iov);
-        ospf6_message_send (OSPF6_MESSAGE_TYPE_LSUPDATE, iov, &dst.sin6_addr,
-                            from->ospf6_interface->if_id);
-        iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
-
-        if (IS_OSPF6_DUMP_DBEX)
-          zlog_info ("DBEX: [%s%%%s] send DB copy back %s",
-                     from->str, from->ospf6_interface->interface->name,
-                     received->str);
-      }
+      /* If Seqnumber Wrapping, simply discard
+         Otherwise, Send database copy of this LSA to this neighbor */
+      if (! ospf6_lsa_is_maxage (received) ||
+          received->lsa_hdr->lsh_seqnum != MAX_SEQUENCE_NUMBER)
+        {
+          ospf6_send_lsupdate_direct (have, from);
+        }
+      ospf6_lsa_delete (received);
     }
-  ospf6_lsa_unlock (received);
-  return;
 }
 
 /* RFC2328: Table 19: Sending link state acknowledgements. */
@@ -614,9 +502,8 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent,
     }
   else if (ospf6_lsa_is_maxage (newp))
     {
-      if (!ospf6_lsdb_lookup (newp->lsa_hdr->lsh_type,
-                              newp->lsa_hdr->lsh_id,
-                              newp->lsa_hdr->lsh_advrtr))
+      if (!ospf6_lsdb_lookup (newp->header->type, newp->header->id,
+                              newp->header->adv_router))
         {
           for (n = listhead (from->ospf6_interface->area->if_list);
                n; nextnode (n))
@@ -646,9 +533,6 @@ ospf6_dbex_flood_linklocal (struct ospf6_lsa *lsa, struct ospf6_interface *o6i,
   struct ospf6_neighbor *o6n = (struct ospf6_neighbor *) NULL;
   int ismore_recent, addretrans = 0;
   listnode n;
-  struct sockaddr_in6 dst;
-  struct ospf6_lsupdate *lsupdate;
-  struct iovec iov[MAXIOVLIST];
   struct ospf6_lsa *req;
 
   /* (1) for each neighbor */
@@ -664,7 +548,10 @@ ospf6_dbex_flood_linklocal (struct ospf6_lsa *lsa, struct ospf6_interface *o6i,
       if (o6n->state == NBS_EXCHANGE
           || o6n->state == NBS_LOADING)
         {
-          req = ospf6_neighbor_request_lookup (lsa, o6n);
+          req = ospf6_lsdb_lookup_lsdb (lsa->header->type,
+                                        lsa->header->id,
+                                        lsa->header->adv_router,
+                                        o6n->request_list);
           if (req)
             {
               ismore_recent = ospf6_lsa_check_recent (lsa, req);
@@ -690,14 +577,14 @@ ospf6_dbex_flood_linklocal (struct ospf6_lsa *lsa, struct ospf6_interface *o6i,
 
       /* (d) add retranslist */
       if (IS_OSPF6_DUMP_DBEX)
-        zlog_info ("DBEX: schedule flooding [%s%%%s]: %s",
+        zlog_info ("DBEX: schedule flooding [%s:%s]: %s",
                    o6n->str, o6n->ospf6_interface->interface->name,
                    lsa->str);
       ospf6_neighbor_retrans_add (lsa, o6n);
       addretrans++;
       if (o6n->send_update == (struct thread *) NULL)
         o6n->send_update =
-          thread_add_timer (master, ospf6_send_lsupdate_retrans, o6n,
+          thread_add_timer (master, ospf6_send_lsupdate_rxmt, o6n,
                             o6n->ospf6_interface->rxmt_interval);
     }
 
@@ -727,50 +614,7 @@ ospf6_dbex_flood_linklocal (struct ospf6_lsa *lsa, struct ospf6_interface *o6i,
     return; /* examin next interface */
 
   /* (5) send LinkState Update */
-  iov_clear (iov, MAXIOVLIST);
-
-    /* set age */
-  ospf6_lsa_age_update_to_send (lsa, o6i->transdelay);
-
-    /* attach whole lsa */
-  attach_lsa_to_iov (lsa, iov);
-
-    /* prepare destination infomation */
-  dst.sin6_family = AF_INET6;
-#ifdef SIN6_LEN
-  dst.sin6_len = sizeof (struct sockaddr_in6);
-#endif /* SIN6_LEN */
-#ifdef HAVE_SIN6_SCOPE_ID
-  dst.sin6_scope_id = if_nametoindex (o6n->ospf6_interface->interface->name);
-#endif /* HAVE_SIN6_SCOPE_ID */
-  if (if_is_broadcast (o6i->interface))
-    {
-      switch (o6i->state)
-        {
-        case IFS_DR:
-        case IFS_BDR:
-          inet_pton (AF_INET6, ALLSPFROUTERS6, &dst.sin6_addr);
-          break;
-        default:
-          inet_pton (AF_INET6, ALLDROUTERS6, &dst.sin6_addr);
-          break;
-        }
-    }
-  else
-    {
-      /* XXX NBMA not yet */
-      inet_pton (AF_INET6, ALLSPFROUTERS6, &dst.sin6_addr);
-    }
-
-    /* make LinkState Update header */
-  lsupdate = (struct ospf6_lsupdate *)
-    iov_prepend (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_lsupdate));
-  assert (lsupdate);
-  lsupdate->lsupdate_num = htonl (1);
-
-  ospf6_message_send (OSPF6_MESSAGE_TYPE_LSUPDATE, iov, &dst.sin6_addr,
-                      o6i->interface->ifindex);
-  iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
+  ospf6_send_lsupdate_flood (lsa, o6i);
 
   return;
 }

@@ -1,3 +1,106 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-08-12  Akihiro Mizutani <mizutani@dml.com>
+
+	* prefix.c (netmask_str2prefix_str): Convert "1.1.0.0 255.255.0.0"
+	string to "1.1.0.0/16".
+
+2001-08-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c (access_list_lookup): access_list_lookup's first
+	argument is changed from address family to AFI.
+
+	* plist.c: (prefix_list_lookup): Likewise.
+
+2001-07-27  Akihiro Mizutani <mizutani@dml.com>
+
+	* plist.c: ge and le display order is changed.  Old compatible
+	rule (len <= ge-value <= le-value) is removed.
+
+2001-07-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* prefix.h: Temporary fix for alignment of prefix problem.
+
+2001-06-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* prefix.h (struct prefix): Remove safi and padding field.
+	(struct prefix_ipv4): Likewise.
+	(struct prefix_ipv6): Likewise.
+	(struct prefix_ls): Likewise.
+	(struct prefix_rd): Likewise.
+
+	* command.h (enum node_type): Preparation for BGP new config.
+
+	* vty.c (vty_end_config): Likewise.
+
+2001-06-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.c (route_map_rule_delete): Call func_free when
+	route-map rule is deleted.
+
+2001-06-14  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* routemap.c (route_map_index_lookup): Prevent to use deny and
+	permit for same route-map sequence.
+
+2001-04-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_read_config): Fix warning.
+
+2001-03-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (IPV6_PREFIX_STR): Add '.' and '%' for IPv6 address
+	strings.
+
+2001-03-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (_XPG4_2): Define _XPG4_2 and __EXTENSIONS__ for
+	CMSG_FIRSTHDR.
+
+2001-03-07  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* zebra.h (struct in_pktinfo): structure in_pktinfo declaration.
+
+2001-02-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.c (memory_list_lib): Add MTYPE_NEXTHOP for "show memory
+	lib" member.
+
+2001-02-13  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* vty.c (vty_read_config): Revert check of integrate_default when
+	VTYSH is defined.
+
+2001-02-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_read_config): Do not check integrate_default.  That
+	should be used only by vtysh.
+
+2001-02-08  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* vty.c (vty_serv_un): Set umask 0077.
+	(vty_read_config): Stat for vtysh Zebra.conf, if found startup and
+	wait for boot configuration.
+
+	* if.c (if_lookup_address): Make it smart implementation.
+
+	* sockopt.c (setsockopt_multicast_ipv4): Set up a multicast socket
+	options for IPv4 This is here so that people only have to do their
+	OS multicast mess in one place rather than all through zebra,
+	ospfd, and ripd .
+
+2001-02-04  Akihiro Mizutani <mizutani@dml.com>
+
+	* plist.c (vty_prefix_list_install): Even when argument is
+	invalid, new memory is allocated.  Now memory allocation is done
+	after argument check.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.91 is released.

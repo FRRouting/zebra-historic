@@ -164,6 +164,9 @@ main (int argc, char **argv)
   int daemon_mode = 0;
   struct thread thread;
 
+  /* Set umask before anything for security */
+  umask (0027);
+
   /* Get program name. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 

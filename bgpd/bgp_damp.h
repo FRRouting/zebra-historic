@@ -62,7 +62,7 @@ struct bgp_damp_config
 	int decay_rate_per_tick; /* Calculated from half-life */
 	int decay_array_size;	/* Calculated using config parameters */
 	double *decay_array;	/* Storage for decay values */
-	double reuse_max_ratio;	/* Max ratio between ceiling and reuse-limit */
+	int	scale_factor;
 	int reuse_scale_factor;	/* To scale reuse array indices */
 	int *reuse_index_array;
 	struct bgp_damp_info **reuse_list_array;

@@ -611,11 +611,55 @@ DEFUN (debug_bgp_update,
        "BGP updates\n")
 {
   if (vty->node == CONFIG_NODE)
-    DEBUG_ON (update, UPDATE);
+    {
+      DEBUG_ON (update, UPDATE_IN);
+      DEBUG_ON (update, UPDATE_OUT);
+    }
   else
     {
-      TERM_DEBUG_ON (update, UPDATE);
+      TERM_DEBUG_ON (update, UPDATE_IN);
+      TERM_DEBUG_ON (update, UPDATE_OUT);
       vty_out (vty, "BGP updates debugging is on%s", VTY_NEWLINE);
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (debug_bgp_update_direct,
+       debug_bgp_update_direct_cmd,
+       "debug bgp updates (in|out)",
+       DEBUG_STR
+       BGP_STR
+       "BGP updates\n"
+       "Inbound updates\n"
+       "Outbound updates\n")
+{
+  if (vty->node == CONFIG_NODE)
+    {
+      if (strncmp ("i", argv[0], 1) == 0)
+	{
+	  DEBUG_OFF (update, UPDATE_OUT);
+	  DEBUG_ON (update, UPDATE_IN);
+	}
+      else
+	{	
+	  DEBUG_OFF (update, UPDATE_IN);
+	  DEBUG_ON (update, UPDATE_OUT);
+	}
+    }
+  else
+    {
+      if (strncmp ("i", argv[0], 1) == 0)
+	{
+	  TERM_DEBUG_OFF (update, UPDATE_OUT);
+	  TERM_DEBUG_ON (update, UPDATE_IN);
+	  vty_out (vty, "BGP updates debugging is on (inbound)%s", VTY_NEWLINE);
+	}
+      else
+	{
+	  TERM_DEBUG_OFF (update, UPDATE_IN);
+	  TERM_DEBUG_ON (update, UPDATE_OUT);
+	  vty_out (vty, "BGP updates debugging is on (outbound)%s", VTY_NEWLINE);
+	}
     }
   return CMD_SUCCESS;
 }
@@ -629,10 +673,14 @@ DEFUN (no_debug_bgp_update,
        "BGP updates\n")
 {
   if (vty->node == CONFIG_NODE)
-    DEBUG_OFF (update, UPDATE);
+    {
+      DEBUG_OFF (update, UPDATE_IN);
+      DEBUG_OFF (update, UPDATE_OUT);
+    }
   else
     {
-      TERM_DEBUG_OFF (update, UPDATE);
+      TERM_DEBUG_OFF (update, UPDATE_IN);
+      TERM_DEBUG_OFF (update, UPDATE_OUT);
       vty_out (vty, "BGP updates debugging is off%s", VTY_NEWLINE);
     }
   return CMD_SUCCESS;
@@ -695,7 +743,8 @@ DEFUN (no_debug_bgp_all,
   TERM_DEBUG_OFF (normal, NORMAL);
   TERM_DEBUG_OFF (events, EVENTS);
   TERM_DEBUG_OFF (keepalive, KEEPALIVE);
-  TERM_DEBUG_OFF (update, UPDATE);
+  TERM_DEBUG_OFF (update, UPDATE_IN);
+  TERM_DEBUG_OFF (update, UPDATE_OUT);
   TERM_DEBUG_OFF (fsm, FSM);
   TERM_DEBUG_OFF (filter, FILTER);
   vty_out (vty, "All possible debugging has been turned off%s", VTY_NEWLINE);
@@ -725,8 +774,12 @@ DEFUN (show_debugging_bgp,
     vty_out (vty, "  BGP events debugging is on%s", VTY_NEWLINE);
   if (BGP_DEBUG (keepalive, KEEPALIVE))
     vty_out (vty, "  BGP keepalives debugging is on%s", VTY_NEWLINE);
-  if (BGP_DEBUG (update, UPDATE))
+  if (BGP_DEBUG (update, UPDATE_IN) && BGP_DEBUG (update, UPDATE_OUT))
     vty_out (vty, "  BGP updates debugging is on%s", VTY_NEWLINE);
+  else if (BGP_DEBUG (update, UPDATE_IN))
+    vty_out (vty, "  BGP updates debugging is on (inbound)%s", VTY_NEWLINE);
+  else if (BGP_DEBUG (update, UPDATE_OUT))
+    vty_out (vty, "  BGP updates debugging is on (outbound)%s", VTY_NEWLINE);
   if (BGP_DEBUG (fsm, FSM))
     vty_out (vty, "  BGP fsm debugging is on%s", VTY_NEWLINE);
   if (BGP_DEBUG (filter, FILTER))
@@ -758,9 +811,19 @@ config_write_debug (struct vty *vty)
       write++;
     }
 
-  if (CONF_BGP_DEBUG (update, UPDATE))
+  if (CONF_BGP_DEBUG (update, UPDATE_IN) && CONF_BGP_DEBUG (update, UPDATE_OUT))
     {
       vty_out (vty, "debug bgp updates%s", VTY_NEWLINE);
+      write++;
+    }
+  else if (CONF_BGP_DEBUG (update, UPDATE_IN))
+    {
+      vty_out (vty, "debug bgp updates in%s", VTY_NEWLINE);
+      write++;
+    }
+  else if (CONF_BGP_DEBUG (update, UPDATE_OUT))
+    {
+      vty_out (vty, "debug bgp updates out%s", VTY_NEWLINE);
       write++;
     }
 
@@ -803,6 +866,8 @@ bgp_debug_init ()
   install_element (CONFIG_NODE, &debug_bgp_keepalive_cmd);
   install_element (ENABLE_NODE, &debug_bgp_update_cmd);
   install_element (CONFIG_NODE, &debug_bgp_update_cmd);
+  install_element (ENABLE_NODE, &debug_bgp_update_direct_cmd);
+  install_element (CONFIG_NODE, &debug_bgp_update_direct_cmd);
   install_element (ENABLE_NODE, &debug_bgp_normal_cmd);
   install_element (CONFIG_NODE, &debug_bgp_normal_cmd);
 

@@ -79,7 +79,9 @@ bgp_timer_set (struct peer *peer)
       /* First entry point of peer's finite state machine.  In Idle
 	 status start timer is on unless peer is shutdown or peer is
 	 inactive.  All other timer must be turned off */
-      if (CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN) || ! peer_active (peer))
+      if (CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN)
+	  || CHECK_FLAG (peer->sflags, PEER_STATUS_PREFIX_OVERFLOW)
+	  || ! peer_active (peer))
 	{
 	  BGP_TIMER_OFF (peer->t_start);
 	}
@@ -331,6 +333,9 @@ bgp_stop (struct peer *peer)
       peer->su_remote = NULL;
     }
 
+  /* Clear remote router-id. */
+  peer->remote_id.s_addr = 0;
+
   /* Reset all negotiated variables */
   peer->afc_nego[AFI_IP][SAFI_UNICAST] = 0;
   peer->afc_nego[AFI_IP][SAFI_MULTICAST] = 0;
@@ -361,8 +366,8 @@ bgp_stop (struct peer *peer)
     }
   else
     {
-      peer->v_keepalive = BGP_DEFAULT_KEEPALIVE;
-      peer->v_holdtime = BGP_DEFAULT_HOLDTIME;
+      peer->v_keepalive = peer->global_keepalive;
+      peer->v_holdtime = peer->global_holdtime;
     }
 
   /* Increment Dropped count. */
@@ -401,6 +406,12 @@ bgp_stop_with_error (struct peer *peer)
 int
 bgp_connect_success (struct peer *peer)
 {
+  if (peer->fd < 0)
+    {
+      zlog_err ("bgp_connect_success peer's fd is negative value %d",
+		peer->fd);
+      return -1;
+    }
   BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
 
   /* bgp_getsockname (peer); */
@@ -454,6 +465,12 @@ bgp_start (struct peer *peer)
       if (BGP_DEBUG (fsm, FSM))
 	plog_info (peer->log, "%s [FSM] Non blocking connect waiting result",
 		   peer->host);
+      if (peer->fd < 0)
+	{
+	  zlog_err ("bgp_start peer's fd is negative value %d",
+		    peer->fd);
+	  return -1;
+	}
       BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
       BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
       break;
@@ -473,7 +490,7 @@ bgp_reconnect (struct peer *peer)
 int
 fsm_open (struct peer *peer)
 {
-  /* send keepalive and make keepalive timer */
+  /* Send keepalive and make keepalive timer */
   bgp_keepalive_send (peer);
 
   /* Reset holdtimer value. */
@@ -553,7 +570,10 @@ bgp_establish (struct peer *peer)
 
   /* Reset uptime, send keepalive, send current table. */
   bgp_uptime_reset (peer);
-  bgp_keepalive_send (peer);
+
+  if (peer->v_keepalive)
+    bgp_keepalive_send (peer);
+
   bgp_announce_table (peer);
 
   return 0;
@@ -729,6 +749,12 @@ bgp_event (struct thread *thread)
   if (BGP_DEBUG (fsm, FSM))
     plog_info (peer->log, "%s [FSM] %s (%s->%s)", peer->host, 
 	       bgp_event_str[event],
+	       LOOKUP (bgp_status_msg, peer->status),
+	       LOOKUP (bgp_status_msg, next));
+  if (BGP_DEBUG (normal, NORMAL)
+      && strcmp (LOOKUP (bgp_status_msg, peer->status), LOOKUP (bgp_status_msg, next)))
+    zlog_info ("%s went from %s to %s",
+	       peer->host,
 	       LOOKUP (bgp_status_msg, peer->status),
 	       LOOKUP (bgp_status_msg, next));
 

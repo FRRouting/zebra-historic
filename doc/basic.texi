@@ -96,7 +96,7 @@ log file /usr/local/etc/bgpd.log
 
 @deffn Command {log syslog} {}
 @deffnx Command {no log syslog} {}
-Set loggin output to syslog.
+Set logging output to syslog.
 @end deffn
 
 @deffn Command {write terminal} {}
@@ -138,7 +138,7 @@ to all VTY interfaces.
 @end deffn
 
 @deffn Command {show version} {}
-Show the current version of the Zebra and it's build host information.
+Show the current version of the Zebra and its build host information.
 @end deffn
 
 @deffn Command {line vty} {}
@@ -214,7 +214,7 @@ comment and the password is set to 'zebra!password'.
 @c COMMON_OPTIONS
 @c OPTIONS section of the man page
 
-These options apply to all Zebra beasts.
+These options apply to all Zebra daemons.
 
 @table @samp
 
@@ -360,7 +360,7 @@ Commands that you may use at the command-line are described in the following thr
 @menu
 * CLI Movement Commands::       Commands for moving the cursor about
 * CLI Editing Commands::        Commands for changing text
-* CLI Advanced Commands::       Other commands, session management and so
+* CLI Advanced Commands::       Other commands, session management and so on
 @end menu
 
 

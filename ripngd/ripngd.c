@@ -2001,7 +2001,7 @@ DEFUN (no_ripng_garbage_timer,
 
 DEFUN (ripng_timers,
        ripng_timers_cmd,
-       "timers basic <update> <timeout> <garbage>",
+       "timers basic <0-65535> <0-65535> <0-65535>",
        "RIPng timers setup\n"
        "Basic timer\n"
        "Routing table update timer value in second. Default is 30.\n"
@@ -2075,11 +2075,11 @@ DEFUN (show_ipv6_protocols, show_ipv6_protocols_cmd,
 
   vty_out (vty, "Routing Protocol is \"ripng\"%s", VTY_NEWLINE);
   
-  vty_out (vty, "Sending updates every %d seconds, next due in %d seconds%s",
+  vty_out (vty, "Sending updates every %ld seconds, next due in %d seconds%s",
 	   ripng->update_time, 0,
 	   VTY_NEWLINE);
 
-  vty_out (vty, "Timerout after %d seconds, garbage correct %d%s",
+  vty_out (vty, "Timerout after %ld seconds, garbage correct %ld%s",
 	   ripng->timeout_time,
 	   ripng->garbage_time,
 	   VTY_NEWLINE);
@@ -2167,7 +2167,7 @@ ripng_config_write (struct vty *vty)
 	  ripng->timeout_time != RIPNG_TIMEOUT_TIMER_DEFAULT ||
 	  ripng->garbage_time != RIPNG_GARBAGE_TIMER_DEFAULT)
 	{
-	  vty_out (vty, " timers basic %d %d %d%s",
+	  vty_out (vty, " timers basic %ld %ld %ld%s",
 		   ripng->update_time,
 		   ripng->timeout_time,
 		   ripng->garbage_time,
@@ -2218,7 +2218,7 @@ ripng_distribute_update (struct distribute *dist)
 
   if (dist->list[DISTRIBUTE_IN])
     {
-      alist = access_list_lookup (AF_INET6, dist->list[DISTRIBUTE_IN]);
+      alist = access_list_lookup (AFI_IP6, dist->list[DISTRIBUTE_IN]);
       if (alist)
 	ri->list[RIPNG_FILTER_IN] = alist;
       else
@@ -2229,7 +2229,7 @@ ripng_distribute_update (struct distribute *dist)
 
   if (dist->list[DISTRIBUTE_OUT])
     {
-      alist = access_list_lookup (AF_INET6, dist->list[DISTRIBUTE_OUT]);
+      alist = access_list_lookup (AFI_IP6, dist->list[DISTRIBUTE_OUT]);
       if (alist)
 	ri->list[RIPNG_FILTER_OUT] = alist;
       else
@@ -2240,7 +2240,7 @@ ripng_distribute_update (struct distribute *dist)
 
   if (dist->prefix[DISTRIBUTE_IN])
     {
-      plist = prefix_list_lookup (AF_INET6, dist->prefix[DISTRIBUTE_IN]);
+      plist = prefix_list_lookup (AFI_IP6, dist->prefix[DISTRIBUTE_IN]);
       if (plist)
 	ri->prefix[RIPNG_FILTER_IN] = plist;
       else
@@ -2251,7 +2251,7 @@ ripng_distribute_update (struct distribute *dist)
 
   if (dist->prefix[DISTRIBUTE_OUT])
     {
-      plist = prefix_list_lookup (AF_INET6, dist->prefix[DISTRIBUTE_OUT]);
+      plist = prefix_list_lookup (AFI_IP6, dist->prefix[DISTRIBUTE_OUT]);
       if (plist)
 	ri->prefix[RIPNG_FILTER_OUT] = plist;
       else

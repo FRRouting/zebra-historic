@@ -556,9 +556,12 @@ zebra_interface_add_read (struct stream *s)
   ifp->metric = stream_getl (s);
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
-#ifndef HAVE_SOCKADDR_DL
+#ifdef HAVE_SOCKADDR_DL
+  stream_get (&ifp->sdl, s, sizeof (ifp->sdl));
+#else
   ifp->hw_addr_len = stream_getl (s);
-  stream_get (ifp->hw_addr, s, ifp->hw_addr_len);
+  if (ifp->hw_addr_len)
+    stream_get (ifp->hw_addr, s, ifp->hw_addr_len);
 #endif /* HAVE_SOCKADDR_DL */
   
   return ifp;

@@ -70,14 +70,14 @@ Enable or disables multicast flag for the interface.
 @deffn {Interface Command} {bandwidth <1-10000000>} {}
 @deffnx {Interface Command} {no bandwidth <1-10000000>} {}
 Set bandwidth value to the interface.  This is for calculating OSPF
-cost.  This command does not set actual device configuration.
+cost.  This command does not affect the actual device configuration.
 @end deffn
 
 @node Static Route Commands, zebra Terminal Mode Commands, Interface Commands, zebra
 @comment  node-name,  next,  previous,  up
 @section Static Route Commands
 
-Static routing is very fundamental feature of routing technology.  It
+Static routing is a very fundamental feature of routing technology.  It
 defines static prefix and gateway.
 
 @deffn Command {ip route @var{network} @var{gateway}} {}
@@ -91,8 +91,8 @@ ip route 10.0.0.0/8 10.0.0.2
 ip route 10.0.0.0/8 ppp0
 @end example
 
-First example define 10.0.0.0/8 static route with gateway 10.0.0.2.
-Second one define same preifx but with gateway to interface ppp0.
+First example defines 10.0.0.0/8 static route with gateway 10.0.0.2.
+Second one defines the same prefix but with gateway to interface ppp0.
 @end deffn
 
 @deffn Command {ip route @var{network} @var{netmask} @var{gateway}} {}
@@ -118,10 +118,12 @@ Multiple nexthop static route
 ip route 10.0.0.1/32 10.0.0.2
 ip route 10.0.0.1/32 10.0.0.3
 ip route 10.0.0.1/32 eth0
+@end example
 
-If there is no route to 10.0.0.2 and 10.0.0.3.  And interface eth0
+If there is no route to 10.0.0.2 and 10.0.0.3, and interface eth0
 is reachable, then the last route is installed into the kernel.
 
+@example
 zebra> show ip route
 S>  10.0.0.1/32 [1/0] via 10.0.0.2 inactive
                       via 10.0.0.3 inactive
@@ -142,8 +144,8 @@ Floating static route
 @deffn Command {table @var{tableno}} {}
 Select the primary kernel routing table to be used.  This only works
 for kernels supporting multiple routing tables (like GNU/Linux 2.2.x
-and later).  After setting @var{tableno} with this command, further
-static route goes to specified table.
+and later).  After setting @var{tableno} with this command, 
+static routes defined after this are added to the specified table.
 @end deffn
 
 @node zebra Terminal Mode Commands,  , Static Route Commands, zebra

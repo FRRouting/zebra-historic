@@ -668,14 +668,16 @@ cmd_ipv4_prefix_match (char *str)
 
   return exact_match;
 }
-#define IPV6_ADDR_STR		"0123456789abcdefABCDEF:"
-#define IPV6_PREFIX_STR		"0123456789abcdefABCDEF:/"
+
+#define IPV6_ADDR_STR		"0123456789abcdefABCDEF:.%"
+#define IPV6_PREFIX_STR		"0123456789abcdefABCDEF:.%/"
 #define STATE_START		1
 #define STATE_COLON		2
 #define STATE_DOUBLE		3
 #define STATE_ADDR		4
-#define STATE_SLASH		5
-#define STATE_MASK		6
+#define STATE_DOT               5
+#define STATE_SLASH		6
+#define STATE_MASK		7
 
 enum match_type
 cmd_ipv6_match (char *str)
@@ -745,6 +747,11 @@ cmd_ipv6_match (char *str)
 	      nums++;
 	      state = STATE_COLON;
 	    }
+	  if (*(str + 1) == '.')
+	    state = STATE_DOT;
+	  break;
+	case STATE_DOT:
+	  state = STATE_ADDR;
 	  break;
 	default:
 	  break;
@@ -760,7 +767,7 @@ cmd_ipv6_match (char *str)
     }
 
 #if 0
-  if (nums < 8)
+  if (nums < 11)
     return partly_match;
 #endif /* 0 */
 
@@ -835,7 +842,8 @@ cmd_ipv6_prefix_match (char *str)
 	  nums += 1;
 	  break;
 	case STATE_ADDR:
-	  if (*(str + 1) == ':' || *(str + 1) == '\0' || *(str + 1) == '/')
+	  if (*(str + 1) == ':' || *(str + 1) == '.'
+	      || *(str + 1) == '\0' || *(str + 1) == '/')
 	    {
 	      if (str - sp > 3)
 		return no_match;
@@ -845,11 +853,17 @@ cmd_ipv6_prefix_match (char *str)
 		  return no_match;
 
 	      nums++;
+
 	      if (*(str + 1) == ':')
 		state = STATE_COLON;
+	      else if (*(str + 1) == '.')
+		state = STATE_DOT;
 	      else if (*(str + 1) == '/')
 		state = STATE_SLASH;
 	    }
+	  break;
+	case STATE_DOT:
+	  state = STATE_ADDR;
 	  break;
 	case STATE_SLASH:
 	  if (*(str + 1) == '\0')
@@ -861,7 +875,7 @@ cmd_ipv6_prefix_match (char *str)
 	  break;
 	}
 
-      if (nums > 8)
+      if (nums > 11)
 	return no_match;
 
       if (colons > 7)
@@ -2039,6 +2053,8 @@ DEFUN (config_exit,
       vty->node = CONFIG_NODE;
       break;
     case BGP_VPNV4_NODE:
+    case BGP_IPV4M_NODE:
+    case BGP_IPV6_NODE:
       vty->node = BGP_NODE;
       break;
     case KEYCHAIN_KEY_NODE:
@@ -2075,6 +2091,8 @@ DEFUN (config_end,
     case RIPNG_NODE:
     case BGP_NODE:
     case BGP_VPNV4_NODE:
+    case BGP_IPV4M_NODE:
+    case BGP_IPV6_NODE:
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
@@ -2161,6 +2179,14 @@ DEFUN (config_write_file,
   char *config_file_tmp = NULL;
   char *config_file_sav = NULL;
   struct vty *file_vty;
+
+  /* Check and see if we are operating under vtysh configuration */
+  if (host.config == NULL)
+    {
+      vty_out (vty, "Can't save to configuration file, using vtysh.%s",
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
 
   /* Get filename. */
   config_file = host.config;

@@ -161,7 +161,7 @@ kernel_add_route (struct prefix_ipv4 *dest, struct in_addr *gate,
 
 /* Interface to ioctl route message. */
 int
-kernel_ioctl_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
+kernel_ioctl_ipv4 (u_long cmd, struct prefix *p, struct rib *rib, int family)
 {
   int ret;
   int sock;
@@ -348,7 +348,7 @@ kernel_delete_ipv4 (struct prefix *p, struct rib *rib)
 #endif
 
 int
-kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
+kernel_ioctl_ipv6 (u_long type, struct prefix_ipv6 *dest, struct in6_addr *gate,
 		   int index, int flags)
 {
   int ret;
@@ -409,7 +409,7 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
 }
 
 int
-kernel_ioctl_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
+kernel_ioctl_ipv6_multipath (u_long cmd, struct prefix *p, struct rib *rib,
 			     int family)
 {
   int ret;

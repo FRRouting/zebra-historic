@@ -1,3 +1,47 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-02-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (vtysh_client_config): Do not set bufsz to 120.
+	Suggested by: Matthew Grant <grantma@anathoth.gen.nz>.
+
+2001-02-15  Hideto Yamakawa <yamakawa@dml.com>
+
+	* vtysh.c (vtysh_client_execute): Call fflush after fprintf.
+
+	* vtysh_config.c (vtysh_config_dump): Use VTYSH_PAGER if defined.
+
+2001-02-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (vtysh_execute_func): Add fflush before pclose.
+
+2001-02-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c: VTY shell pager name.  When environment variable
+	VTYSH_PAGER is defined, use it as VTY shell pager.
+
+2001-02-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (vtysh_execute_func): Add pager argument for test of
+	pager invocation.
+
+2001-02-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* extract.pl: Add -DHAVE_CONFIG_H option to cpp.
+
+2001-02-08  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* vtysh.c (vtysh_client_config): Use sysconf to determine output
+	buffer size.
+	(vtysh_write_memory): Set umask 0077.
+	(vtysh_connect): Check permission to the socket.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.91 is released.

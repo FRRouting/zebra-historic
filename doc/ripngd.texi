@@ -34,11 +34,11 @@ Set flush timer.
 @end deffn
 
 @deffn {RIPng Command} {network @var{network}} {}
-Set RIPng enable interface by @var{network}
+Set RIPng enabled interface by @var{network}
 @end deffn
 
 @deffn {RIPng Command} {network @var{ifname}} {}
-Set RIPng enable interface by @var{ifname}
+Set RIPng enabled interface by @var{ifname}
 @end deffn
 
 @deffn {RIPng Command} {route @var{network}} {}

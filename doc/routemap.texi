@@ -1,4 +1,4 @@
-@node Route Map, IPv6 Supports, Filtering, Top
+@node Route Map, IPv6 Support, Filtering, Top
 @comment  node-name,  next,  previous,  up
 @chapter Route Map
 

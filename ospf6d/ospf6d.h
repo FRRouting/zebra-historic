@@ -70,7 +70,7 @@
 #define HASHVAL 64
 #define MAXIOVLIST 1024
 
-#define OSPF6_DAEMON_VERSION    "0.8.l"
+#define OSPF6_DAEMON_VERSION    "0.9.2"
 
 /* global variables */
 extern char *progname;
@@ -114,6 +114,20 @@ extern char *recent_reason;
 #endif
 #endif
 
+#define OSPF6_CMD_CHECK_RUNNING() \
+  if (ospf6 == NULL) \
+    { \
+      vty_out (vty, "OSPFv3 is not running%s", VTY_NEWLINE); \
+      return CMD_SUCCESS; \
+    }
+
+#define OSPF6_LEVEL_NONE      0
+#define OSPF6_LEVEL_NEIGHBOR  1
+#define OSPF6_LEVEL_INTERFACE 2
+#define OSPF6_LEVEL_AREA      3
+#define OSPF6_LEVEL_TOP       4
+#define OSPF6_LEVEL_MAX       5
+
 
 /* Function Prototypes */
 void
@@ -137,8 +151,13 @@ ospf6_timeval_decode (const struct timeval *t, long *dayp, long *hourp,
 void
 ospf6_timeval_string (struct timeval *tv, char *buf, int size);
 
+void
+ospf6_count_state (void *arg, int val, void *obj);
+
 void ospf6_init ();
 void ospf6_terminate ();
+
+void ospf6_maxage_remover ();
 
 #endif /* OSPF6D_H */
 

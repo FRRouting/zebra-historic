@@ -25,6 +25,11 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#ifdef SUNOS_5
+#define _XPG4_2
+#define __EXTENSIONS__
+#endif /* SUNOS_5 */
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -174,6 +179,20 @@
 
 #endif /* BSDI_NRL */
 
+/*
+  The definition of struct in_pktinfo is missing in old version of GLIBC 2.1
+  (Redhat 6.1)
+*/
+#if defined (GNU_LINUX) && ! defined (HAVE_INPKTINFO)
+struct in_pktinfo
+{
+  int ipi_ifindex;
+  struct in_addr ipi_spec_dst;
+  struct in_addr ipi_addr;
+};
+#endif
+
+
 /* For old definition. */
 #ifndef IN6_ARE_ADDR_EQUAL
 #define IN6_ARE_ADDR_EQUAL IN6_IS_ADDR_EQUAL
@@ -257,6 +276,11 @@
 #define SAFI_UNICAST_MULTICAST    3
 #define SAFI_MPLS_VPN             4
 #define SAFI_MAX                  5
+
+/* Filter direction.  */
+#define FILTER_IN                 0
+#define FILTER_OUT                1
+#define FILTER_MAX                2
 
 /* Default Administrative Distance of each protocol. */
 #define ZEBRA_KERNEL_DISTANCE_DEFAULT      0

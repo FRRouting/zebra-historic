@@ -164,7 +164,7 @@ interface_up (struct thread *thread)
 
   /* Schedule Hello */
   if (! ospf6_interface->is_passive)
-    thread_add_event (master, ospf6_send_hello_new, ospf6_interface, 0);
+    thread_add_event (master, ospf6_send_hello, ospf6_interface, 0);
 
   /* decide next interface state */
   if (if_is_pointopoint (ospf6_interface->interface))
@@ -269,6 +269,9 @@ interface_down (struct thread *thread)
   if (ospf6_interface->state == IFS_NONE)
     return 1;
 
+  /* Leave AllSPFRouters */
+  ospf6_leave_allspfrouters (ospf6_interface->interface->ifindex);
+
   ifs_change (IFS_DOWN, "Configured", ospf6_interface);
 
   return 0;
@@ -372,12 +375,12 @@ step_two:
         }
       else /* equal, case of tie */
         {
-          if (nbpi->router_id > nbpj->router_id)
+          if (ntohl (nbpi->router_id) > ntohl (nbpj->router_id))
             {
               listnode_delete (candidate_list, nbpj);
               continue;
             }
-          else if (nbpi->router_id < nbpj->router_id)
+          else if (ntohl (nbpi->router_id) < ntohl (nbpj->router_id))
             {
               listnode_delete (candidate_list, nbpi);
               continue;
@@ -543,6 +546,8 @@ step_five:
           thread_add_event (master, adj_ok, nbpi, 0);
         }
     }
+
+  list_delete (candidate_list);
 
   if (dr == myself.router_id)
     {

@@ -289,13 +289,11 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
 
 void
 ospf_examine_summaries (struct ospf_area * area,
-                        /* struct ospf_lsdb *lsdb, */
 			struct route_table *lsdb_rt,
                         struct route_table *rt,
                         struct route_table *rtrs)
 {
   struct ia_args args = {rt, rtrs, area};
-  /* ospf_lsdb_iterator (lsdb, &args, 0, process_summary_lsa); */
   foreach_lsa (lsdb_rt, &args, 0, process_summary_lsa);
 }
 

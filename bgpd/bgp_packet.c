@@ -30,6 +30,7 @@
 #include "memory.h"
 #include "sockunion.h"		/* for inet_ntop () */
 #include "linklist.h"
+#include "table.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_dump.h"
@@ -45,6 +46,118 @@
 #include "bgpd/bgp_mplsvpn.h"
 
 int stream_put_prefix (struct stream *, struct prefix *);
+
+#ifdef NEW_ANNOUNCE
+struct bgp_rt_queue
+{
+  struct bgp_rt_queue *next;
+  struct route_node *rn;
+};
+
+struct bgp_attr_queue
+{
+  struct attr *attr;
+  struct bgp_rt_queue *brq;
+};
+
+struct bgp_announce
+{
+  struct attr *oldattr;
+  struct bgp_attr_queue *baq;
+};
+
+void
+bgp_rt_queue_add (struct bgp_rt_queue **brqp, struct route_node *rn)
+{
+  struct bgp_rt_queue *brq;
+
+  brq = XMALLOC (MTYPE_BGP_ROUTE_QUEUE, sizeof (struct bgp_rt_queue));
+  brq->rn = rn;
+
+  if (*brqp)
+    brq->next = *brqp;
+  *brqp = brq;
+}
+
+void
+bgp_rt_queue_delete (struct bgp_rt_queue **brqp, struct route_node *rn)
+{
+  struct bgp_rt_queue *brq;
+  struct bgp_rt_queue *pp;
+
+  for (brq = pp = *brqp; brq; brq = brq->next)
+    {
+      if (brq->rn == rn)
+	{
+	  /* Remove process. */
+	  if (brq == pp)
+	    *brqp = brq->next;
+	  else
+	    pp->next = brq->next;
+
+	  XFREE (MTYPE_BGP_ROUTE_QUEUE, brq);
+	  return;
+	}
+      pp = brq;
+    }
+}
+
+/* New function which take over bgp_update_send(). */
+void
+bgp_update_announce (struct peer_conf *conf, struct peer *peer,
+		     struct prefix *p, struct attr *attr, afi_t afi,
+		     safi_t safi, struct peer *from, struct prefix_rd *prd,
+		     u_char *tag)
+{
+  struct route_table *out;
+  struct route_node *rn;
+  struct bgp_announce *ba;
+  struct bgp_attr_queue *baq;
+
+  /* Output table. */
+  out = peer->adj_out[afi][safi];
+
+  rn = route_node_get (out, p);
+  ba = rn->info;
+
+  /* Allocate new one. */
+  if (! ba)
+    {
+      ba = XMALLOC (MTYPE_BGP_ANNOUNCE, sizeof (struct bgp_announce));
+      memset (ba, 0, sizeof (struct bgp_announce));
+      rn->info = ba;
+    }
+
+  baq = ba->baq;
+
+  /* If this announcement replace previous announcement. */
+  if (baq)
+    {
+      /* Already synchronized. */
+      if (baq->attr == attr)
+	{
+	  route_unlock_node (rn);
+	  return;
+	}
+
+      bgp_attr_unintern (baq->attr);
+      bgp_rt_queue_delete (&baq->brq, rn);
+    }
+  else
+    {
+      ;
+    }
+
+  baq->attr = bgp_attr_intern (attr);
+  bgp_rt_queue_add (&baq->brq, rn);
+}
+
+void
+bgp_withdraw_announce ()
+{
+  ;
+}
+#endif /* NEW_ANNOUNCE */
 
 /* Set up BGP packet marker and packet type. */
 static int
@@ -337,6 +450,12 @@ bgp_open_send (struct peer *peer)
 {
   struct stream *s;
   int length;
+  u_int16_t send_holdtime;
+
+  if (peer->config & PEER_CONFIG_TIMER)
+    send_holdtime = peer->holdtime;
+  else
+    send_holdtime = peer->global_holdtime;
 
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
@@ -346,7 +465,7 @@ bgp_open_send (struct peer *peer)
   /* Set open packet values. */
   stream_putc (s, BGP_VERSION_4);        /* BGP version */
   stream_putw (s, peer->local_as);	 /* My Autonomous System*/
-  stream_putw (s, peer->v_holdtime);	 /* Hold Time */
+  stream_putw (s, send_holdtime);     	 /* Hold Time */
   stream_put_in_addr (s, &peer->local_id); /* BGP Identifier */
 
   /* Set capability code. */
@@ -358,7 +477,7 @@ bgp_open_send (struct peer *peer)
   if (BGP_DEBUG (normal, NORMAL))
     zlog_info ("%s sending OPEN, version %d, my as %d, holdtime %d, id %s", 
 	       peer->host, BGP_VERSION_4, peer->local_as,
-	       peer->v_holdtime, inet_ntoa (peer->local_id));
+	       send_holdtime, inet_ntoa (peer->local_id));
 
   if (BGP_DEBUG (normal, NORMAL))
     zlog_info ("%s send message type %d, length (incl. header) %d",
@@ -472,7 +591,7 @@ bgp_update_send (struct peer_conf *conf, struct peer *peer,
   /* Make attribute dump string. */
   bgp_dump_attr (peer, attr, attrstr, BUFSIZ);
 
-  if (BGP_DEBUG (update, UPDATE))
+  if (BGP_DEBUG (update, UPDATE_OUT))
     zlog (peer->log, LOG_INFO, "%s send UPDATE %s/%d %s",
 	  peer->host, inet_ntop(p->family, &(p->u.prefix), buf, BUFSIZ),
 	  p->prefixlen, attrstr);
@@ -534,7 +653,7 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi,
   total_attr_len = 0;
   pos = 0;
 
-  if (BGP_DEBUG (update, UPDATE))
+  if (BGP_DEBUG (update, UPDATE_OUT))
     zlog (peer->log, LOG_INFO, "%s send UPDATE %s/%d -- unreachable",
 	  peer->host, inet_ntop(p->family, &(p->u.prefix), buf, BUFSIZ),
 	  p->prefixlen);
@@ -554,27 +673,22 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi,
       stream_put_prefix (s, p);
 
       unfeasible_len = stream_get_putp (s) - cp - 2;
-      stream_putw_at (s, cp, unfeasible_len);
-    }
 
-  /* Make attribute. */
-#ifdef HAVE_IPV6
-  if((p->family == AF_INET6)
-     || (p->family == AF_INET && safi == SAFI_MULTICAST)
-     || (p->family == AF_INET && safi == SAFI_MPLS_VPN))
+      /* Set unfeasible len.  */
+      stream_putw_at (s, cp, unfeasible_len);
+
+      /* Set total path attribute length. */
+      stream_putw (s, 0);
+    }
+  else
     {
       pos = stream_get_putp (s);
       stream_putw (s, 0);
       total_attr_len = bgp_packet_withdraw (peer, s, p, afi, safi, prd, tag);
-
-      /* Set Total Path Attribute Length. */
+      
+      /* Set total path attribute length. */
       stream_putw_at (s, pos, total_attr_len);
     }
-  else
-    stream_putw (s, 0);
-#else
-  stream_putw (s, 0);
-#endif /* HAVE_IPV6 */
 
   bgp_packet_set_size (s, 0);
 
@@ -664,7 +778,7 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi)
 
 /* RFC1771 6.8 Connection collision detection. */
 int
-bgp_collision_detect (struct peer *new)
+bgp_collision_detect (struct peer *new, struct in_addr remote_id)
 {
   struct peer *peer;
   struct listnode *nn;
@@ -684,14 +798,14 @@ bgp_collision_detect (struct peer *new)
          remote router ID. */
 
       if (peer != new
-	  && (peer->status == OpenConfirm)
-	  && peer->remote_id.s_addr == new->remote_id.s_addr)
+	  && (peer->status == OpenConfirm || peer->status == OpenSent)
+	  && sockunion_same (&peer->su, &new->su))
 	{
 	  /* 1. The BGP Identifier of the local system is compared to
 	     the BGP Identifier of the remote system (as specified in
 	     the OPEN message). */
 
-	  if (ntohl (peer->local_id.s_addr < peer->remote_id.s_addr))
+	  if (ntohl (peer->local_id.s_addr) < ntohl (remote_id.s_addr))
 	    {
 	      /* 2. If the value of the local BGP Identifier is less
 		 than the remote one, the local system closes BGP
@@ -699,8 +813,9 @@ bgp_collision_detect (struct peer *new)
 		 already in the OpenConfirm state), and accepts BGP
 		 connection initiated by the remote system. */
 
-	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
-	      return 0;
+	      if (peer->fd >= 0)
+		bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+	      return 1;
 	    }
 	  else
 	    {
@@ -710,8 +825,9 @@ bgp_collision_detect (struct peer *new)
 		 existing one (the one that is already in the
 		 OpenConfirm state). */
 
-	      bgp_notify_send (new, BGP_NOTIFY_CEASE, 0);
-	      return 1;
+	      if (new->fd >= 0)
+		bgp_notify_send (new, BGP_NOTIFY_CEASE, 0);
+	      return -1;
 	    }
 	}
     }
@@ -725,6 +841,7 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
   u_char version;
   u_char optlen;
   u_int16_t holdtime;
+  u_int16_t send_holdtime;
   as_t remote_as;
   struct peer *realpeer;
   struct in_addr remote_id;
@@ -763,18 +880,22 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
 	  if (as)
 	    {
 	      if (BGP_DEBUG (normal, NORMAL))
-		zlog_info ("%s bad OPEN, remote AS is %d, expected %d",
-			   peer->host, remote_as, peer->as);
-	      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR,
-			       BGP_NOTIFY_OPEN_BAD_BGP_IDENT);
+		zlog_info ("%s bad OPEN, wrong router identifier %s",
+			   peer->host, inet_ntoa (remote_id));
+	      bgp_notify_send_with_data (peer, 
+					 BGP_NOTIFY_OPEN_ERR, 
+					 BGP_NOTIFY_OPEN_BAD_BGP_IDENT,
+					 notify_data_remote_id, 4);
 	    }
 	  else
 	    {
 	      if (BGP_DEBUG (normal, NORMAL))
-		zlog_info ("%s bad OPEN, wrong router identifier %s",
-			   peer->host, inet_ntoa (remote_id));
-	      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR,
-			       BGP_NOTIFY_OPEN_BAD_PEER_AS);
+		zlog_info ("%s bad OPEN, remote AS is %d, expected %d",
+			   peer->host, remote_as, peer->as);
+	      bgp_notify_send_with_data (peer, 
+					 BGP_NOTIFY_OPEN_ERR, 
+					 BGP_NOTIFY_OPEN_BAD_PEER_AS,
+					 notify_data_remote_as, 2);
 	    }
 	  return -1;
 	}
@@ -782,18 +903,22 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
 
   /* When collision is detected and this peer is closed.  Retrun
      immidiately. */
-  if (bgp_collision_detect (peer))
-    return -1;
+  ret = bgp_collision_detect (peer, remote_id);
+  if (ret < 0)
+    return ret;
 
   /* Hack part. */
   if (CHECK_FLAG (peer->sflags, PEER_STATUS_ACCEPT_PEER))
     {
-      if (realpeer->status != Active)
-	{
-	  if (BGP_DEBUG (events, EVENTS))
-	    zlog_info ("%s [Event] peer's status is not Active", realpeer->host);
-	  return -1;
-	}
+      if (ret == 0 && realpeer->status != Active
+	  && realpeer->status != OpenSent
+	  && realpeer->status != OpenConfirm)
+ 	{
+ 	  if (BGP_DEBUG (events, EVENTS))
+ 	    zlog_info ("%s [Event] peer's status is %s close connection",
+		       realpeer->host, LOOKUP (bgp_status_msg, peer->status));
+ 	  return -1;
+ 	}
 
       if (BGP_DEBUG (events, EVENTS))
 	zlog_info ("%s [Event] Transfer temporary BGP peer to existing one",
@@ -818,11 +943,19 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       /* peer pointer change. Open packet send to neighbor. */
       peer = realpeer;
       bgp_open_send (peer);
+      if (peer->fd < 0)
+	{
+	  zlog_err ("bgp_open_receive peer's fd is negative value %d",
+		    peer->fd);
+	  return -1;
+	}
       BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
     }
 
   /* remote router-id check. */
-  if (remote_id.s_addr == 0 || ntohl (remote_id.s_addr) >= 0xe0000000)
+  if (remote_id.s_addr == 0
+      || ntohl (remote_id.s_addr) >= 0xe0000000
+      || ntohl (peer->local_id.s_addr) == ntohl (remote_id.s_addr))
     {
       if (BGP_DEBUG (normal, NORMAL))
 	zlog_info ("%s bad OPEN, wrong router identifier %s",
@@ -883,12 +1016,25 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
      implementation MAY adjust the rate at which it sends KEEPALIVE
      messages as a function of the Hold Time interval. */
 
-  if (holdtime < peer->v_holdtime)
+  if (peer->config & PEER_CONFIG_TIMER)
+    send_holdtime = peer->holdtime;
+  else
+    send_holdtime = peer->global_holdtime;
+
+  if (holdtime < send_holdtime)
     {
       peer->v_holdtime = holdtime;
       peer->v_keepalive = peer->v_holdtime / 3;
     }
+  else
+    {
+      peer->v_holdtime = send_holdtime;
 
+      if (peer->config & PEER_CONFIG_TIMER)
+	peer->v_keepalive = peer->keepalive;
+      else
+	peer->v_keepalive = peer->global_keepalive;
+    }
 
   /* Open option part parse. */
   capability = 0;
@@ -1047,7 +1193,7 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
   /* Logging the attribute. */
   bgp_dump_attr (peer, &attr, attrstr, BUFSIZ);
 
-  if (BGP_DEBUG (update, UPDATE))
+  if (BGP_DEBUG (update, UPDATE_IN))
     {
       zlog (peer->log, LOG_INFO, "%s rcvd UPDATE w/ attr: %s",
 	    peer->host, attrstr);
@@ -1395,7 +1541,14 @@ bgp_read (struct thread *thread)
       goto done;
     }
   else
-    BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
+    {
+      if (peer->fd < 0)
+	{
+	  zlog_err ("bgp_read peer's fd is negative value %d", peer->fd);
+	  return -1;
+	}
+      BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
+    }
 
   /* Read packet header to determine type of the packet */
   if (peer->packet_size == 0)

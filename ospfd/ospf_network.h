@@ -24,12 +24,11 @@
 #define _ZEBRA_OSPF_NETWORK_H
 
 /* Prototypes. */
-int ospf_serv_sock (struct interface *, int);
-int ospf_serv_sock_init (struct interface *, struct prefix *);
-int ospf_if_add_allspfrouters (struct interface *, int, struct prefix *);
-int ospf_if_drop_allspfrouters (struct interface *, int, struct prefix *);
-int ospf_if_add_alldrouters (struct interface *, int, struct prefix *);
-int ospf_if_drop_alldrouters (struct interface *, int, struct prefix *);
-int ospf_if_ipmulticast (int, struct prefix *);
+int ospf_if_add_allspfrouters (struct ospf *, struct prefix *, unsigned int);
+int ospf_if_drop_allspfrouters (struct ospf *, struct prefix *, unsigned int);
+int ospf_if_add_alldrouters (struct ospf *, struct prefix *, unsigned int);
+int ospf_if_drop_alldrouters (struct ospf *, struct prefix *, unsigned int);
+int ospf_if_ipmulticast (struct ospf *, struct prefix *, unsigned int);
+int ospf_sock_init (void);
 
 #endif /* _ZEBRA_OSPF_NETWORK_H */

@@ -28,32 +28,97 @@
 #include "linklist.h"
 #include "prefix.h"
 #include "table.h"
+#include "thread.h"
 
 #include "ospf6_proto.h"
-#define HEADER_DEPENDENCY
-#include "ospf6d.h"
-#undef HEADER_DEPENDENCY
 #include "ospf6_prefix.h"
 #include "ospf6_lsa.h"
+#include "ospf6_lsdb.h"
+
+#include "ospf6_message.h"
+#include "ospf6_neighbor.h"
+#include "ospf6_interface.h"
 #include "ospf6_area.h"
 #include "ospf6_top.h"
+
 #include "ospf6_redistribute.h"
 #include "ospf6_route.h"
 #include "ospf6_zebra.h"
 
-int
-ospf6_top_count_neighbor_in_state (u_char state, struct ospf6 *o6)
+#include "ospf6_nsm.h"
+
+#define HEADER_DEPENDENCY
+#include "ospf6d.h"
+#undef HEADER_DEPENDENCY
+
+static void
+ospf6_top_foreach_area (struct ospf6 *o6, void *arg, int val,
+                        void (*func) (void *, int, void *))
 {
   listnode node;
   struct ospf6_area *o6a;
-  int count = 0;
 
   for (node = listhead (o6->area_list); node; nextnode (node))
     {
       o6a = (struct ospf6_area *) getdata (node);
-      count += ospf6_area_count_neighbor_in_state (state, o6a);
+      (*func) (arg, val, o6a);
     }
-  return count;
+}
+
+static void
+ospf6_top_foreach_interface (struct ospf6 *o6, void *arg, int val,
+                             void (*func) (void *, int, void *))
+{
+  listnode node;
+  struct ospf6_area *o6a;
+
+  for (node = listhead (o6->area_list); node; nextnode (node))
+    {
+      o6a = (struct ospf6_area *) getdata (node);
+      (*o6a->foreach_if) (o6a, arg, val, func);
+    }
+}
+
+static void
+ospf6_top_foreach_neighbor (struct ospf6 *o6, void *arg, int val,
+                            void (*func) (void *, int, void *))
+{
+  listnode node;
+  struct ospf6_area *o6a;
+
+  for (node = listhead (o6->area_list); node; nextnode (node))
+    {
+      o6a = (struct ospf6_area *) getdata (node);
+      (*o6a->foreach_nei) (o6a, arg, val, func);
+    }
+}
+
+static int
+ospf6_top_maxage_remover (struct thread *t)
+{
+  int count;
+  struct ospf6 *o6 = (struct ospf6 *) THREAD_ARG (t);
+
+  o6->maxage_remover = (struct thread *) NULL;
+
+  count = 0;
+  o6->foreach_nei (o6, &count, NBS_EXCHANGE, ospf6_count_state);
+  o6->foreach_nei (o6, &count, NBS_LOADING, ospf6_count_state);
+  if (count != 0)
+    return 0;
+
+  ospf6_lsdb_remove_maxage (o6->lsdb);
+  return 0;
+}
+
+void
+ospf6_top_schedule_maxage_remover (void *arg, int val, struct ospf6 *o6)
+{
+  if (o6->maxage_remover != NULL)
+    return;
+
+  o6->maxage_remover =
+    thread_add_event (master, ospf6_top_maxage_remover, o6, 0);
 }
 
 void
@@ -74,7 +139,7 @@ ospf6_show (struct vty *vty)
   gettimeofday (&now, (struct timezone *)NULL);
   ospf6_timeval_sub (&now, &ospf6->starttime, &running);
   ospf6_timeval_decode (&running, &day, &hour, &min, &sec, NULL, NULL);
-  vty_out (vty, " Running %d days %d hours %d minutes %d seconds%s",
+  vty_out (vty, " Running %ld days %ld hours %ld minutes %ld seconds%s",
            day, hour, min, sec, VTY_NEWLINE);
 
   vty_out (vty, " Supports only single TOS(TOS0) routes%s", VTY_NEWLINE);
@@ -84,9 +149,12 @@ ospf6_show (struct vty *vty)
 
   /* LSAs */
   vty_out (vty, " Number of AS scoped LSAs is %u%s",
-           listcount (ospf6->lsdb), VTY_NEWLINE);
+           ospf6->lsdb->count, VTY_NEWLINE);
   vty_out (vty, " Route calculation executed %d times%s",
            ospf6->stat_route_calculation_execed, VTY_NEWLINE);
+
+  /* Route Statistics */
+  ospf6_route_statistics_show (vty, ospf6->route_table);
 
   /* Areas */
   vty_out (vty, " Number of areas in this router is %u%s",
@@ -110,7 +178,7 @@ ospf6_statistics_show (struct vty *vty, struct ospf6 *o6)
   ospf6_timeval_sub (&now, &o6->starttime, &running);
   ospf6_timeval_string (&running, running_time, sizeof (running_time));
 
-  vty_out (vty, "Statistics of OSPF process %d%s",
+  vty_out (vty, "Statistics of OSPF process %ld%s",
            o6->process_id, VTY_NEWLINE);
   vty_out (vty, "  Running: %s%s", running_time, VTY_NEWLINE);
 
@@ -152,15 +220,19 @@ ospf6_create (unsigned long process_id)
   ospf6->process_id = process_id;
   ospf6->version = OSPF6_VERSION;
   ospf6->area_list = list_new ();
-  ospf6->lsdb = list_new ();
+
+  ospf6->lsdb = ospf6_lsdb_create ();
 
   /* route table init */
-
   ospf6_redistribute_init (ospf6);
 
   ospf6->route_table = route_table_init ();
   ospf6->external_table = route_table_init ();
   ospf6->nexthop_list = list_new ();
+
+  ospf6->foreach_area = ospf6_top_foreach_area;
+  ospf6->foreach_if = ospf6_top_foreach_interface;
+  ospf6->foreach_nei = ospf6_top_foreach_neighbor;
 
   return ospf6;
 }
@@ -189,7 +261,8 @@ ospf6_delete (struct ospf6 *ospf6)
   list_delete_all (ospf6->ospf6_neighbor_list);
 
   /* finish AS scope link state database */
-  ospf6_lsdb_finish_as (ospf6);
+  ospf6_lsdb_remove_all (ospf6->lsdb);
+  ospf6_lsdb_delete (ospf6->lsdb);
 
 
   ospf6_redistribute_finish (ospf6);

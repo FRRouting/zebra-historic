@@ -49,6 +49,7 @@ struct rtadvconf
 
      Default: 600 seconds */
   int MaxRtrAdvInterval;
+#define RTADV_MAX_RTR_ADV_INTERVAL 600
 
   /* The minimum time allowed between sending unsolicited multicast
      Router Advertisements from the interface, in seconds.  MUST be no
@@ -56,6 +57,10 @@ struct rtadvconf
 
      Default: 0.33 * MaxRtrAdvInterval */
   int MinRtrAdvInterval;
+#define RTADV_MIN_RTR_ADV_INTERVAL (0.33 * RTADV_MAX_RTR_ADV_INTERVAL)
+
+  /* Unsolicited Router Advertisements' interval timer. */
+  int AdvIntervalTimer;
 
   /* The TRUE/FALSE value to be placed in the "Managed address
      configuration" flag field in the Router Advertisement.  See
@@ -85,7 +90,8 @@ struct rtadvconf
      milliseconds (1 hour).
 
      Default: 0 */
-  int AdvReachableTime;
+  u_int32_t AdvReachableTime;
+#define RTADV_MAX_REACHABLE_TIME 3600000
 
 
   /* The value to be placed in the Retrans Timer field in the Router
@@ -112,6 +118,7 @@ struct rtadvconf
 
      Default: 3 * MaxRtrAdvInterval */
   int AdvDefaultLifetime;
+#define RTADV_ADV_DEFAULT_LIFETIME (3 * RTADV_MAX_RTR_ADV_INTERVAL)
 
 
   /* A list of prefixes to be placed in Prefix Information options in

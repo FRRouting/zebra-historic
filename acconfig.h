@@ -64,6 +64,9 @@
 /* Define if there is rt_addrinfo structure. */
 #undef HAVE_RT_ADDRINFO
 
+/* Define if there is in_pktinfo structure. */
+#undef HAVE_INPKTINFO
+
 /* Define if /proc/net/dev exists. */
 #undef HAVE_PROC_NET_DEV
 

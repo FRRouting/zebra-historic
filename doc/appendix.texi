@@ -2,16 +2,16 @@
 @comment  node-name,  next,  previous,  up
 @appendix Packet Binary Dump Format
 
-  Zebra can dump routing protocol packet into file with binary format
-(@pxref{Dump BGP packet and table}).
+  Zebra can dump routing protocol packet into file with a binary format
+(@pxref{Dump BGP packets and table}).
 
   It seems to be better that we share the MRT's header format for
-backward compatibility of the MRT's dump logs. We should also define the
-binary format excluding the header, because we must support both of IP
-v4/v6 addresses as socket addresses and / or routing entries.
+backward compatibility with MRT's dump logs. We should also define the
+binary format excluding the header, because we must support both IP
+v4 and v6 addresses as socket addresses and / or routing entries.
 
   In the last meeting, we discussed to have a version field in the
-header. But, Masaki told us that we can define new `type' value rather
+header. But Masaki told us that we can define new `type' value rather
 than having a `version' field, and it seems to be better because we
 don't need to change header format.
 
@@ -204,7 +204,7 @@ and Address Family == IP version 6
 @end group
 @end example
 
-	BGP4 Attribute must not contains MP_UNREACH_NLRI.
+	BGP4 Attribute must not contain MP_UNREACH_NLRI.
 	If BGP Attribute has MP_REACH_NLRI field, it must has
 	zero length NLRI, e.g., MP_REACH_NLRI has only Address
 	Family, SAFI and next-hop values.

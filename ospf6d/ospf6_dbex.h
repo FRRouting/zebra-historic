@@ -52,5 +52,8 @@ int ack_type (struct ospf6_lsa *, int, struct ospf6_neighbor *);
 
 void ospf6_dbex_flood (struct ospf6_lsa *, struct ospf6_neighbor *);
 
+void
+ospf6_dbex_remove_from_all_retrans_list (struct ospf6_lsa *lsa);
+
 #endif /* OSPF6_DBEX_H */
 

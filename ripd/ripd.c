@@ -240,7 +240,7 @@ rip_incoming_filter (struct prefix_ipv4 *p, struct rip_interface *ri)
     {
       if (dist->list[DISTRIBUTE_IN])
 	{
-	  alist = access_list_lookup (AF_INET, dist->list[DISTRIBUTE_IN]);
+	  alist = access_list_lookup (AFI_IP, dist->list[DISTRIBUTE_IN]);
 	    
 	  if (alist)
 	    {
@@ -256,7 +256,7 @@ rip_incoming_filter (struct prefix_ipv4 *p, struct rip_interface *ri)
 	}
       if (dist->prefix[DISTRIBUTE_IN])
 	{
-	  plist = prefix_list_lookup (AF_INET, dist->prefix[DISTRIBUTE_IN]);
+	  plist = prefix_list_lookup (AFI_IP, dist->prefix[DISTRIBUTE_IN]);
 	  
 	  if (plist)
 	    {
@@ -310,7 +310,7 @@ rip_outgoing_filter (struct prefix_ipv4 *p, struct rip_interface *ri)
     {
       if (dist->list[DISTRIBUTE_OUT])
 	{
-	  alist = access_list_lookup (AF_INET, dist->list[DISTRIBUTE_OUT]);
+	  alist = access_list_lookup (AFI_IP, dist->list[DISTRIBUTE_OUT]);
 	    
 	  if (alist)
 	    {
@@ -326,7 +326,7 @@ rip_outgoing_filter (struct prefix_ipv4 *p, struct rip_interface *ri)
 	}
       if (dist->prefix[DISTRIBUTE_OUT])
 	{
-	  plist = prefix_list_lookup (AF_INET, dist->prefix[DISTRIBUTE_OUT]);
+	  plist = prefix_list_lookup (AFI_IP, dist->prefix[DISTRIBUTE_OUT]);
 	  
 	  if (plist)
 	    {
@@ -345,7 +345,7 @@ rip_outgoing_filter (struct prefix_ipv4 *p, struct rip_interface *ri)
 }
 
 /* Check nexthop address validity. */
-int
+static int
 rip_nexthop_check (struct in_addr *addr)
 {
   listnode node;
@@ -353,12 +353,6 @@ rip_nexthop_check (struct in_addr *addr)
   struct interface *ifp;
   struct connected *ifc;
   struct prefix *p;
-  u_int32_t addrval;
-
-  /* Multicast address can't be taken as nexthop. */
-  addrval = ntohl (addr->s_addr);
-  if (IN_CLASSD (addrval))
-    return 0;
 
   /* If nexthop address matches local configured address then it is
      invalid nexthop. */
@@ -373,10 +367,10 @@ rip_nexthop_check (struct in_addr *addr)
 
 	  if (p->family == AF_INET
 	      && IPV4_ADDR_SAME (&p->u.prefix4, addr))
-	    return 0;
+	    return -1;
 	}
     }
-  return 1;
+  return 0;
 }
 
 /* RIP add route to routing table. */
@@ -432,7 +426,7 @@ rip_rte_process (struct rte *rte, struct sockaddr_in *from,
     nexthop = &rte->nexthop;
 
   /* Check nexthop address. */
-  if (! rip_nexthop_check (nexthop))
+  if (rip_nexthop_check (nexthop) < 0)
     {
       if (IS_RIP_DEBUG_PACKET)
 	zlog_info ("Nexthop address %s is invalid", inet_ntoa (*nexthop));
@@ -895,7 +889,7 @@ rip_auth_md5_set (struct stream *s, struct interface *ifp)
   /* Check packet length. */
   if (len < (RIP_HEADER_SIZE + RIP_RTE_SIZE))
     {
-      zlog_err ("rip_auth_md5_set(): packet length %d is less than minimum length.", len);
+      zlog_err ("rip_auth_md5_set(): packet length %ld is less than minimum length.", len);
       return;
     }
 
@@ -1051,6 +1045,17 @@ rip_response_process (struct rip_packet *packet, int size,
 	 treated as 0.0.0.0. */
       if (packet->version == RIPv2 && rte->nexthop.s_addr != 0)
 	{
+	  u_int32_t addrval;
+
+	  /* Multicast address check. */
+	  addrval = ntohl (rte->nexthop.s_addr);
+	  if (IN_CLASSD (addrval))
+	    {
+	      zlog_info ("Nexthop %s is multicast address, skip this rte",
+			 inet_ntoa (rte->nexthop));
+	      continue;
+	    }
+
 	  if (! if_lookup_address (rte->nexthop))
 	    {
 	      struct route_node *rn;
@@ -1712,7 +1717,7 @@ rip_read (struct thread *t)
   switch (packet->command)
     {
     case RIP_RESPONSE:
-      rip_response_process (packet, len, &from, ifp);;
+      rip_response_process (packet, len, &from, ifp);
       break;
     case RIP_REQUEST:
     case RIP_POLL:
@@ -1908,10 +1913,33 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
   /* Get RIP interface. */
   ri = ifp->info;
     
+  /* If output interface is in simple password authentication mode, we
+     need space for authentication data.  */
+  if (ri->auth_type == RIP_AUTH_SIMPLE_PASSWORD)
+    rtemax -= 1;
+
   /* If output interface is in MD5 authentication mode, we need space
      for authentication header and data. */
   if (ri->auth_type == RIP_AUTH_MD5)
     rtemax -= 2;
+
+  /* If output interface is in simple password authentication mode
+     and string or keychain is specified we need space for auth. data */
+  if (ri->auth_type == RIP_AUTH_SIMPLE_PASSWORD)
+    {
+      if (ri->key_chain)
+       {
+         struct keychain *keychain;
+
+         keychain = keychain_lookup (ri->key_chain);
+         if (keychain)
+           if (key_lookup_for_send (keychain))
+             rtemax -=1;
+       }
+      else
+       if (ri->auth_str)
+         rtemax -=1;
+    }
 
   for (rp = route_top (rip->table); rp; rp = route_next (rp))
     if ((rinfo = rp->info) != NULL)
@@ -2811,7 +2839,7 @@ rip_distance_apply (struct rip_info *rinfo)
 
       if (rdistance->access_list)
 	{
-	  alist = access_list_lookup (AF_INET, rdistance->access_list);
+	  alist = access_list_lookup (AFI_IP, rdistance->access_list);
 	  if (alist == NULL)
 	    return 0;
 	  if (access_list_apply (alist, &rinfo->rp->p) == FILTER_DENY)
@@ -3044,13 +3072,13 @@ DEFUN (show_ip_protocols_rip,
     return CMD_SUCCESS;
 
   vty_out (vty, "Routing Protocol is \"rip\"%s", VTY_NEWLINE);
-  vty_out (vty, "  Sending updates every %d seconds with +/-50%%,",
+  vty_out (vty, "  Sending updates every %ld seconds with +/-50%%,",
 	   rip->update_time);
   vty_out (vty, " next due in %d seconds%s", 
 	   rip_next_thread_timer (rip->t_update),
 	   VTY_NEWLINE);
-  vty_out (vty, "  Timeout after %d seconds,", rip->timeout_time);
-  vty_out (vty, " garbage collect after %d seconds%s", rip->garbage_time,
+  vty_out (vty, "  Timeout after %ld seconds,", rip->timeout_time);
+  vty_out (vty, " garbage collect after %ld seconds%s", rip->garbage_time,
 	   VTY_NEWLINE);
 
   /* Filtering status show. */
@@ -3217,7 +3245,7 @@ rip_distribute_update (struct distribute *dist)
 
   if (dist->list[DISTRIBUTE_IN])
     {
-      alist = access_list_lookup (AF_INET, dist->list[DISTRIBUTE_IN]);
+      alist = access_list_lookup (AFI_IP, dist->list[DISTRIBUTE_IN]);
       if (alist)
 	ri->list[RIP_FILTER_IN] = alist;
       else
@@ -3228,7 +3256,7 @@ rip_distribute_update (struct distribute *dist)
 
   if (dist->list[DISTRIBUTE_OUT])
     {
-      alist = access_list_lookup (AF_INET, dist->list[DISTRIBUTE_OUT]);
+      alist = access_list_lookup (AFI_IP, dist->list[DISTRIBUTE_OUT]);
       if (alist)
 	ri->list[RIP_FILTER_OUT] = alist;
       else
@@ -3239,7 +3267,7 @@ rip_distribute_update (struct distribute *dist)
 
   if (dist->prefix[DISTRIBUTE_IN])
     {
-      plist = prefix_list_lookup (AF_INET, dist->prefix[DISTRIBUTE_IN]);
+      plist = prefix_list_lookup (AFI_IP, dist->prefix[DISTRIBUTE_IN]);
       if (plist)
 	ri->prefix[RIP_FILTER_IN] = plist;
       else
@@ -3250,7 +3278,7 @@ rip_distribute_update (struct distribute *dist)
 
   if (dist->prefix[DISTRIBUTE_OUT])
     {
-      plist = prefix_list_lookup (AF_INET, dist->prefix[DISTRIBUTE_OUT]);
+      plist = prefix_list_lookup (AFI_IP, dist->prefix[DISTRIBUTE_OUT]);
       if (plist)
 	ri->prefix[RIP_FILTER_OUT] = plist;
       else

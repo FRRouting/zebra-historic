@@ -26,7 +26,8 @@
 enum route_map_type
 {
   RMAP_PERMIT,
-  RMAP_DENY
+  RMAP_DENY,
+  RMAP_ANY
 };
 
 typedef enum 
@@ -61,6 +62,7 @@ typedef enum
   RMAP_EVENT_SET_REPLACED,
   RMAP_EVENT_MATCH_ADDED,
   RMAP_EVENT_MATCH_DELETED,
+  RMAP_EVENT_MATCH_REPLACED,
   RMAP_EVENT_INDEX_ADDED,
   RMAP_EVENT_INDEX_DELETED
 } route_map_event_t;

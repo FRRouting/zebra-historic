@@ -97,7 +97,7 @@ struct ospf_lsa
   struct ospf_area *area;
 
   /* Parent LSDB. */
-  struct new_lsdb *lsdb;
+  struct ospf_lsdb *lsdb;
 
   /* Related Route. */
   void *route;
@@ -210,7 +210,7 @@ struct as_external_lsa
         (T) = thread_add_timer (master, (F), 0, 2)
 
 struct ospf_route;
-struct new_lsdb;
+struct ospf_lsdb;
 
 /* Prototypes. */
 struct timeval tv_adjust (struct timeval);
@@ -257,7 +257,7 @@ struct ospf_lsa *ospf_lsa_install (struct ospf_interface *, struct ospf_lsa *);
 void ospf_external_lsa_flush (u_char, struct prefix_ipv4 *,
 			      unsigned int, struct in_addr);
 
-struct in_addr ospf_get_ip_from_ifp (struct interface *ifp);
+struct in_addr ospf_get_ip_from_ifp (struct ospf_interface *oi);
 
 #ifdef HAVE_NSSA
 struct ospf_lsa *ospf_external_lsa_test ();
@@ -292,7 +292,7 @@ void ospf_external_lsa_refresh_default (void);
 void ospf_external_lsa_refresh_type (u_char, int);
 void ospf_external_lsa_refresh (struct ospf_lsa *, struct external_info *ei,
 				int force);
-struct in_addr ospf_lsa_unique_id (struct new_lsdb *, u_char,
+struct in_addr ospf_lsa_unique_id (struct ospf_lsdb *, u_char,
 				   struct prefix_ipv4 *);
 void ospf_schedule_lsa_flood_area (struct ospf_area *, struct ospf_lsa *);
 void ospf_schedule_lsa_flush_area (struct ospf_area *, struct ospf_lsa *);
@@ -305,7 +305,7 @@ void ospf_lsa_init ();
 
 void ospf_lsa_maxage_delete (struct ospf_lsa *);
 
-void ospf_discard_from_db (struct new_lsdb *, struct ospf_lsa*);
+void ospf_discard_from_db (struct ospf_lsdb *, struct ospf_lsa*);
 int ospf_lsa_discard_callback (struct ospf_lsa *, void *, int);
 int is_prefix_default (struct prefix_ipv4 *);
 

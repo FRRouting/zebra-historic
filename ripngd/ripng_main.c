@@ -153,6 +153,9 @@ main (int argc, char **argv)
   char *config_file = NULL;
   struct thread thread;
 
+  /* Set umask before anything for security */
+  umask (0027);
+
   /* get program name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 

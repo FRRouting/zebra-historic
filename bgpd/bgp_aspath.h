@@ -26,11 +26,8 @@
 /* AS path segment type. */
 #define AS_SET             1
 #define AS_SEQUENCE        2
-/*
- * Unfortunately, Cisco have reversed the following
- * #define AS_CONFED_SET      3
- * #define AS_CONFED_SEQUENCE 4
- */
+
+/* Use draft-ietf-idr-bgp-confed-rfc1965bis-01.txt value.  */
 #define AS_CONFED_SEQUENCE 3
 #define AS_CONFED_SET      4
 
@@ -62,11 +59,11 @@ struct aspath *aspath_parse ();
 struct aspath *aspath_dup (struct aspath *);
 struct aspath *aspath_aggregate (struct aspath *, struct aspath *);
 struct aspath *aspath_prepend (struct aspath *, struct aspath *);
-struct aspath *aspath_add_left (struct aspath *, as_t);
-struct aspath *aspath_add_left_confed (struct aspath *, as_t);
+struct aspath *aspath_add_seq (struct aspath *, as_t);
+struct aspath *aspath_add_confed_seq (struct aspath *, as_t);
 int aspath_cmp_left (struct aspath *, struct aspath *);
 int aspath_cmp_left_confed (struct aspath *, struct aspath *);
-struct aspath *aspath_strip_confed (struct aspath *);
+struct aspath *aspath_delete_confed_seq (struct aspath *);
 struct aspath *aspath_empty ();
 struct aspath *aspath_str2aspath (char *);
 void aspath_free (struct aspath *);

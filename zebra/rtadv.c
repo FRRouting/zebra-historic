@@ -143,6 +143,9 @@ rtadv_send_packet (int sock, struct interface *ifp)
   struct cmsghdr  *cmsgptr;
   struct in6_pktinfo *pkt;
   struct sockaddr_in6 addr;
+#if HAVE_SOCKADDR_DL
+  struct sockaddr_dl *sdl;
+#endif /* HAVE_SOCKADDR_DL */
   char adata [sizeof (struct cmsghdr) + sizeof (struct in6_pktinfo)];
   unsigned char buf[RTADV_MSG_SIZE];
   struct nd_router_advert *rtadv;
@@ -177,8 +180,12 @@ rtadv_send_packet (int sock, struct interface *ifp)
 
   rtadv->nd_ra_curhoplimit = 64;
   rtadv->nd_ra_flags_reserved = 0;
-  rtadv->nd_ra_router_lifetime = htons (600 * 3);
-  rtadv->nd_ra_reachable = htonl (0);
+  if (zif->rtadv.AdvManagedFlag)
+    rtadv->nd_ra_flags_reserved |= ND_RA_FLAG_MANAGED;
+  if (zif->rtadv.AdvOtherConfigFlag)
+    rtadv->nd_ra_flags_reserved |= ND_RA_FLAG_OTHER;
+  rtadv->nd_ra_router_lifetime = htons (zif->rtadv.AdvDefaultLifetime);
+  rtadv->nd_ra_reachable = htonl (zif->rtadv.AdvReachableTime);
   rtadv->nd_ra_retransmit = htonl (0);
 
   len = sizeof (struct nd_router_advert);
@@ -195,16 +202,17 @@ rtadv_send_packet (int sock, struct interface *ifp)
 
       pinfo->nd_opt_pi_type = ND_OPT_PREFIX_INFORMATION;
       pinfo->nd_opt_pi_len = 4;
-      pinfo->nd_opt_pi_prefix_len = 64;
+      pinfo->nd_opt_pi_prefix_len = rprefix->prefix.prefixlen;
 
-      pinfo->nd_opt_pi_flags_reserved = ND_OPT_PI_FLAG_ONLINK;
-      /* (prefix->AdvOnLinkFlag) ? ND_OPT_PI_FLAG_ONLINK : 0; */
-      pinfo->nd_opt_pi_flags_reserved |= ND_OPT_PI_FLAG_AUTO;
-      /* (prefix->AdvAutonomousFlag) ? ND_OPT_PI_FLAG_AUTO : 0;*/
+      pinfo->nd_opt_pi_flags_reserved = 0;
+      if (rprefix->AdvOnLinkFlag)
+	pinfo->nd_opt_pi_flags_reserved |= ND_OPT_PI_FLAG_ONLINK;
+      if (rprefix->AdvAutonomousFlag)
+	pinfo->nd_opt_pi_flags_reserved |= ND_OPT_PI_FLAG_AUTO;
 
-      pinfo->nd_opt_pi_valid_time	= htonl ((~(u_int32_t)0));
-      pinfo->nd_opt_pi_preferred_time = htonl (604800);
-      pinfo->nd_opt_pi_reserved2= 0;
+      pinfo->nd_opt_pi_valid_time = htonl (rprefix->AdvValidLifetime);
+      pinfo->nd_opt_pi_preferred_time = htonl (rprefix->AdvPreferredLifetime);
+      pinfo->nd_opt_pi_reserved2 = 0;
 
       memcpy (&pinfo->nd_opt_pi_prefix, &rprefix->prefix.u.prefix6,
 	      sizeof (struct in6_addr));
@@ -223,17 +231,23 @@ rtadv_send_packet (int sock, struct interface *ifp)
 
   /* Hardware address. */
 #ifdef HAVE_SOCKADDR_DL
+  sdl = &ifp->sdl;
+  if (sdl != NULL && sdl->sdl_alen != 0)
+    {
+      buf[len++] = ND_OPT_SOURCE_LINKADDR;
+      buf[len++] = (sdl->sdl_alen + 2) >> 3;
+
+      memcpy (buf + len, LLADDR (sdl), sdl->sdl_alen);
+      len += sdl->sdl_alen;
+    }
 #else
   if (ifp->hw_addr_len != 0)
     {
-      int i;
-
       buf[len++] = ND_OPT_SOURCE_LINKADDR;
-      buf[len++] = (((ifp->hw_addr_len * 8) + 16 ) >> 6);
+      buf[len++] = (ifp->hw_addr_len + 2) >> 3;
 
-      i = (ifp->hw_addr_len * 8 ) >> 3;
-      memcpy (buf + len, ifp->hw_addr, i);
-      len += i;
+      memcpy (buf + len, ifp->hw_addr, ifp->hw_addr_len);
+      len += ifp->hw_addr_len;
     }
 #endif /* HAVE_SOCKADDR_DL */
 
@@ -267,7 +281,7 @@ rtadv_timer (struct thread *thread)
   struct zebra_if *zif;
 
   rtadv->ra_timer = NULL;
-  rtadv_event (RTADV_TIMER, 30);
+  rtadv_event (RTADV_TIMER, 1);
 
   for (node = listhead (iflist); node; nextnode (node))
     {
@@ -279,7 +293,11 @@ rtadv_timer (struct thread *thread)
       zif = ifp->info;
 
       if (zif->rtadv.AdvSendAdvertisements)
-	rtadv_send_packet (rtadv->sock, ifp);
+	if (--zif->rtadv.AdvIntervalTimer <= 0)
+	  {
+	    zif->rtadv.AdvIntervalTimer = zif->rtadv.MaxRtrAdvInterval;
+	    rtadv_send_packet (rtadv->sock, ifp);
+	  }
     }
   return 0;
 }
@@ -289,7 +307,7 @@ rtadv_process_solicit (struct interface *ifp)
 {
   zlog_info ("Router solicitation received on %s", ifp->name);
 
-  ;
+  rtadv_send_packet (rtadv->sock, ifp);
 }
 
 void
@@ -388,9 +406,6 @@ rtadv_make_socket ()
   int ret;
   struct icmp6_filter filter;
 
-  if (!rtadv)
-    return -1;
-
   sock = socket (AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
   if (sock < 0)
     {
@@ -474,55 +489,46 @@ rtadv_prefix_get (list rplist, struct prefix *p)
   rprefix = rtadv_prefix_new ();
   memcpy (&rprefix->prefix, p, sizeof (struct prefix));
   listnode_add (rplist, rprefix);
-  
+
   return rprefix;
 }
 
 void
-rtadv_prefix_set (struct zebra_if *zif, struct prefix *p)
+rtadv_prefix_set (struct zebra_if *zif, struct rtadv_prefix *rp)
 {
   struct rtadv_prefix *rprefix;
   
-  rprefix = rtadv_prefix_get (zif->rtadv.AdvPrefixList, p);
+  rprefix = rtadv_prefix_get (zif->rtadv.AdvPrefixList, &rp->prefix);
 
   /* Set parameters. */
-  ;
+  rprefix->AdvValidLifetime = rp->AdvValidLifetime;
+  rprefix->AdvPreferredLifetime = rp->AdvPreferredLifetime;
+  rprefix->AdvOnLinkFlag = rp->AdvOnLinkFlag;
+  rprefix->AdvAutonomousFlag = rp->AdvAutonomousFlag;
 }
 
-DEFUN (ipv6_nd_send_ra,
-       ipv6_nd_send_ra_cmd,
-       "ipv6 nd send-ra",
-       IP_STR
-       "Neighbor discovery\n"
-       "Send router advertisement\n")
+int
+rtadv_prefix_reset (struct zebra_if *zif, struct rtadv_prefix *rp)
 {
-  struct interface *ifp;
-  struct zebra_if *zif;
-
-  ifp = vty->index;
-  zif = ifp->info;
-
-  if (! zif->rtadv.AdvSendAdvertisements)
+  struct rtadv_prefix *rprefix;
+  
+  rprefix = rtadv_prefix_lookup (zif->rtadv.AdvPrefixList, &rp->prefix);
+  if (rprefix != NULL)
     {
-      zif->rtadv.AdvSendAdvertisements = 1;
-      rtadv->adv_if_count++;
-
-      if_join_all_router (rtadv->sock, ifp);
-
-      if (rtadv->adv_if_count)
-	rtadv_event (RTADV_START, 0);
+      listnode_delete (zif->rtadv.AdvPrefixList, (void *) rprefix);
+      rtadv_prefix_free (rprefix);
+      return 1;
     }
-
-  return CMD_SUCCESS;
+  else
+    return 0;
 }
 
-DEFUN (no_ipv6_nd_send_ra,
-       no_ipv6_nd_send_ra_cmd,
-       "no ipv6 nd send-ra",
-       NO_STR
+DEFUN (ipv6_nd_suppress_ra,
+       ipv6_nd_suppress_ra_cmd,
+       "ipv6 nd suppress-ra",
        IP_STR
        "Neighbor discovery\n"
-       "Send router advertisement\n")
+       "Suppress Router Advertisement\n")
 {
   struct interface *ifp;
   struct zebra_if *zif;
@@ -533,6 +539,7 @@ DEFUN (no_ipv6_nd_send_ra,
   if (zif->rtadv.AdvSendAdvertisements)
     {
       zif->rtadv.AdvSendAdvertisements = 0;
+      zif->rtadv.AdvIntervalTimer = 0;
       rtadv->adv_if_count--;
 
       if_leave_all_router (rtadv->sock, ifp);
@@ -544,30 +551,368 @@ DEFUN (no_ipv6_nd_send_ra,
   return CMD_SUCCESS;
 }
 
-DEFUN (ipv6_nd_prefix_advertisement,
-       ipv6_nd_prefix_advertisement_cmd,
-       "ipv6 nd prefix-advertisement IPV6PREFIX",
+ALIAS (ipv6_nd_suppress_ra,
+       no_ipv6_nd_send_ra_cmd,
+       "no ipv6 nd send-ra",
+       NO_STR
        IP_STR
        "Neighbor discovery\n"
-       "Router advertisement\n"
-       "IPv6 prefix\n")
+       "Send Router Advertisement\n")
+
+DEFUN (no_ipv6_nd_suppress_ra,
+       no_ipv6_nd_suppress_ra_cmd,
+       "no ipv6 nd suppress-ra",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Suppress Router Advertisement\n")
 {
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = vty->index;
+  zif = ifp->info;
+
+  if (! zif->rtadv.AdvSendAdvertisements)
+    {
+      zif->rtadv.AdvSendAdvertisements = 1;
+      zif->rtadv.AdvIntervalTimer = 0;
+      rtadv->adv_if_count++;
+
+      if_join_all_router (rtadv->sock, ifp);
+
+      if (rtadv->adv_if_count == 1)
+	rtadv_event (RTADV_START, rtadv->sock);
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_ipv6_nd_suppress_ra,
+       ipv6_nd_send_ra_cmd,
+       "ipv6 nd send-ra",
+       IP_STR
+       "Neighbor discovery\n"
+       "Send Router Advertisement\n")
+
+DEFUN (ipv6_nd_ra_interval,
+       ipv6_nd_ra_interval_cmd,
+       "ipv6 nd ra-interval SECONDS",
+       IP_STR
+       "Neighbor discovery\n"
+       "Router Advertisement interval\n"
+       "Router Advertisement interval in seconds\n")
+{
+  int interval;
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  interval = atoi (argv[0]);
+
+  if (interval < 0)
+    {
+      vty_out (vty, "Invalid Router Advertisement Interval%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  zif->rtadv.MaxRtrAdvInterval = interval;
+  zif->rtadv.MinRtrAdvInterval = 0.33 * interval;
+  zif->rtadv.AdvIntervalTimer = 0;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_nd_ra_interval,
+       no_ipv6_nd_ra_interval_cmd,
+       "no ipv6 nd ra-interval",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Router Advertisement interval\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.MaxRtrAdvInterval = RTADV_MAX_RTR_ADV_INTERVAL;
+  zif->rtadv.MinRtrAdvInterval = RTADV_MIN_RTR_ADV_INTERVAL;
+  zif->rtadv.AdvIntervalTimer = zif->rtadv.MaxRtrAdvInterval;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_nd_ra_lifetime,
+       ipv6_nd_ra_lifetime_cmd,
+       "ipv6 nd ra-lifetime SECONDS",
+       IP_STR
+       "Neighbor discovery\n"
+       "Router lifetime\n"
+       "Router lifetime in seconds\n")
+{
+  int lifetime;
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  lifetime = atoi (argv[0]);
+
+  if (lifetime < 0 || lifetime > 0xffff)
+    {
+      vty_out (vty, "Invalid Router Lifetime%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  zif->rtadv.AdvDefaultLifetime = lifetime;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_nd_ra_lifetime,
+       no_ipv6_nd_ra_lifetime_cmd,
+       "no ipv6 nd ra-lifetime",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Router lifetime\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.AdvDefaultLifetime = RTADV_ADV_DEFAULT_LIFETIME;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_nd_reachable_time,
+       ipv6_nd_reachable_time_cmd,
+       "ipv6 nd reachable-time MILLISECONDS",
+       IP_STR
+       "Neighbor discovery\n"
+       "Reachable time\n"
+       "Reachable time in milliseconds\n")
+{
+  u_int32_t rtime;
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  rtime = (u_int32_t) atol (argv[0]);
+
+  if (rtime > RTADV_MAX_REACHABLE_TIME)
+    {
+      vty_out (vty, "Invalid Reachable time%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  zif->rtadv.AdvReachableTime = rtime;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_nd_reachable_time,
+       no_ipv6_nd_reachable_time_cmd,
+       "no ipv6 nd reachable-time",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Reachable time\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.AdvReachableTime = 0;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_nd_managed_config_flag,
+       ipv6_nd_managed_config_flag_cmd,
+       "ipv6 nd managed-config-flag",
+       IP_STR
+       "Neighbor discovery\n"
+       "Managed address configuration flag\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.AdvManagedFlag = 1;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_nd_managed_config_flag,
+       no_ipv6_nd_managed_config_flag_cmd,
+       "no ipv6 nd managed-config-flag",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Managed address configuration flag\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.AdvManagedFlag = 0;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_nd_other_config_flag,
+       ipv6_nd_other_config_flag_cmd,
+       "ipv6 nd other-config-flag",
+       IP_STR
+       "Neighbor discovery\n"
+       "Other statefull configuration flag\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.AdvOtherConfigFlag = 1;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_nd_other_config_flag,
+       no_ipv6_nd_other_config_flag_cmd,
+       "no ipv6 nd other-config-flag",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Other statefull configuration flag\n")
+{
+  struct interface *ifp;
+  struct zebra_if *zif;
+
+  ifp = (struct interface *) vty->index;
+  zif = ifp->info;
+
+  zif->rtadv.AdvOtherConfigFlag = 0;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_nd_prefix_advertisement,
+       ipv6_nd_prefix_advertisement_cmd,
+       "ipv6 nd prefix-advertisement IPV6PREFIX VALID PREFERRED [onlink] [autoconfig]",
+       IP_STR
+       "Neighbor discovery\n"
+       "Prefix information\n"
+       "IPv6 prefix\n"
+       "Valid lifetime in seconds\n"
+       "Preferred lifetime in seconds\n"
+       "On link flag\n"
+       "Autonomous address-configuration flag\n")
+{
+  int i;
   int ret;
   struct interface *ifp;
   struct zebra_if *zebra_if;
-  struct prefix p;
+  struct rtadv_prefix rp;
 
   ifp = (struct interface *) vty->index;
   zebra_if = ifp->info;
 
-  ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *) &p);
+  ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *) &rp.prefix);
   if (!ret)
     {
       vty_out (vty, "Malformed IPv6 prefix%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
-  rtadv_prefix_set (zebra_if, &p);
+  if (argc == 1)
+    {
+      rp.AdvValidLifetime = RTADV_VALID_LIFETIME;
+      rp.AdvPreferredLifetime = RTADV_PREFERRED_LIFETIME;
+      rp.AdvOnLinkFlag = 1;
+      rp.AdvAutonomousFlag = 1;
+    }
+  else
+    {
+      rp.AdvValidLifetime = (u_int32_t) atol (argv[1]);
+      rp.AdvPreferredLifetime = (u_int32_t) atol (argv[2]);
+      if (rp.AdvPreferredLifetime > rp.AdvValidLifetime)
+	{
+	  vty_out (vty, "Invalid preferred lifetime%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+
+      rp.AdvOnLinkFlag = 0;
+      rp.AdvAutonomousFlag = 0;
+      for (i = 3; i < argc; i++)
+	{
+	  if (! strcmp (argv[i], "onlink"))
+	    rp.AdvOnLinkFlag = 1;
+	  else if (! strcmp (argv[i], "autoconfig"))
+	    rp.AdvAutonomousFlag = 1;
+	}
+    }
+
+  rtadv_prefix_set (zebra_if, &rp);
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (ipv6_nd_prefix_advertisement,
+       ipv6_nd_prefix_advertisement_no_val_cmd,
+       "ipv6 nd prefix-advertisement IPV6PREFIX",
+       IP_STR
+       "Neighbor discovery\n"
+       "Prefix information\n"
+       "IPv6 prefix\n")
+
+DEFUN (no_ipv6_nd_prefix_advertisement,
+       no_ipv6_nd_prefix_advertisement_cmd,
+       "no ipv6 nd prefix-advertisement IPV6PREFIX",
+       NO_STR
+       IP_STR
+       "Neighbor discovery\n"
+       "Prefix information\n"
+       "IPv6 prefix\n")
+{
+  int ret;
+  struct interface *ifp;
+  struct zebra_if *zebra_if;
+  struct rtadv_prefix rp;
+
+  ifp = (struct interface *) vty->index;
+  zebra_if = ifp->info;
+
+  ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *) &rp.prefix);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed IPv6 prefix%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = rtadv_prefix_reset (zebra_if, &rp);
+  if (!ret)
+    {
+      vty_out (vty, "Non-exist IPv6 prefix%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
 
   return CMD_SUCCESS;
 }
@@ -584,16 +929,42 @@ rtadv_config_write (struct vty *vty, struct interface *ifp)
   zif = ifp->info;
 
   if (zif->rtadv.AdvSendAdvertisements)
-    vty_out (vty, " ipv6 nd send-ra%s", VTY_NEWLINE);
+    vty_out (vty, " no ipv6 nd suppress-ra%s", VTY_NEWLINE);
+  else
+    vty_out (vty, " ipv6 nd suppress-ra%s", VTY_NEWLINE);
+
+  if (zif->rtadv.MaxRtrAdvInterval != RTADV_MAX_RTR_ADV_INTERVAL)
+    vty_out (vty, " ipv6 nd ra-interval %d%s", zif->rtadv.MaxRtrAdvInterval,
+	     VTY_NEWLINE);
+
+  if (zif->rtadv.AdvDefaultLifetime != RTADV_ADV_DEFAULT_LIFETIME)
+    vty_out (vty, " ipv6 nd ra-lifetime %d%s", zif->rtadv.AdvDefaultLifetime,
+	     VTY_NEWLINE);
+
+  if (zif->rtadv.AdvReachableTime)
+    vty_out (vty, " ipv6 nd reachable-time %d%s", zif->rtadv.AdvReachableTime,
+	     VTY_NEWLINE);
+
+  if (zif->rtadv.AdvManagedFlag)
+    vty_out (vty, " ipv6 nd managed-config-flag%s", VTY_NEWLINE);
+
+  if (zif->rtadv.AdvOtherConfigFlag)
+    vty_out (vty, " ipv6 nd other-config-flag%s", VTY_NEWLINE);
 
   for (node = listhead(zif->rtadv.AdvPrefixList); node; node = nextnode (node))
     {
       rprefix = getdata (node);
-      vty_out (vty, " ipv6 nd prefix-advertisement %s/%d%s",
+      vty_out (vty, " ipv6 nd prefix-advertisement %s/%d %d %d",
 	       inet_ntop (AF_INET6, &rprefix->prefix.u.prefix6, 
 			  buf, INET6_ADDRSTRLEN),
 	       rprefix->prefix.prefixlen,
-	       VTY_NEWLINE);
+	       rprefix->AdvValidLifetime,
+	       rprefix->AdvPreferredLifetime);
+      if (rprefix->AdvOnLinkFlag)
+	vty_out (vty, " onlink");
+      if (rprefix->AdvAutonomousFlag)
+	vty_out (vty, " autoconfig");
+      vty_out (vty, "%s", VTY_NEWLINE);
     }
 }
 
@@ -605,7 +976,10 @@ rtadv_event (enum rtadv_event event, int val)
   switch (event)
     {
     case RTADV_START:
-      thread_add_event (master, rtadv_timer, NULL, 0);
+      if (! rtadv->ra_read)
+	rtadv->ra_read = thread_add_read (master, rtadv_read, NULL, val);
+      if (! rtadv->ra_timer)
+	rtadv->ra_timer = thread_add_event (master, rtadv_timer, NULL, 0);
       break;
     case RTADV_STOP:
       if (rtadv->ra_timer)
@@ -613,13 +987,19 @@ rtadv_event (enum rtadv_event event, int val)
 	  thread_cancel (rtadv->ra_timer);
 	  rtadv->ra_timer = NULL;
 	}
+      if (rtadv->ra_read)
+	{
+	  thread_cancel (rtadv->ra_read);
+	  rtadv->ra_read = NULL;
+	}
       break;
     case RTADV_TIMER:
       if (! rtadv->ra_timer)
 	rtadv->ra_timer = thread_add_timer (master, rtadv_timer, NULL, val);
       break;
     case RTADV_READ:
-      rtadv->ra_read = thread_add_read (master, rtadv_read, NULL, val);
+      if (! rtadv->ra_read)
+	rtadv->ra_read = thread_add_read (master, rtadv_read, NULL, val);
       break;
     default:
       break;
@@ -630,17 +1010,32 @@ rtadv_event (enum rtadv_event event, int val)
 void
 rtadv_init ()
 {
-  install_element (INTERFACE_NODE, &ipv6_nd_send_ra_cmd);
-  install_element (INTERFACE_NODE, &no_ipv6_nd_send_ra_cmd);
-  install_element (INTERFACE_NODE, &ipv6_nd_prefix_advertisement_cmd);
+  int sock;
 
-  rtadv = rtadv_new ();
-  rtadv->sock = rtadv_make_socket ();
-  if (rtadv->sock < 0)
+  sock = rtadv_make_socket ();
+  if (sock < 0)
     return;
 
-  /* This should be rtadv_start (). */
-  rtadv_event (RTADV_READ, rtadv->sock);
+  rtadv = rtadv_new ();
+  rtadv->sock = sock;
+
+  install_element (INTERFACE_NODE, &ipv6_nd_suppress_ra_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_suppress_ra_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_send_ra_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_send_ra_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_ra_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_ra_interval_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_ra_lifetime_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_ra_lifetime_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_reachable_time_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_reachable_time_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_managed_config_flag_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_managed_config_flag_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_other_config_flag_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_other_config_flag_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_prefix_advertisement_cmd);
+  install_element (INTERFACE_NODE, &ipv6_nd_prefix_advertisement_no_val_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_nd_prefix_advertisement_cmd);
 }
 
 int

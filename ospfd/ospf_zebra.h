@@ -46,6 +46,7 @@ int ospf_distribute_check_connected (struct external_info *);
 void ospf_distribute_list_update (int);
 
 int config_write_ospf_redistribute (struct vty *);
+int config_write_ospf_default_metric (struct vty *);
 int config_write_ospf_distribute (struct vty *);
 int ospf_is_type_redistributed (int);
 int ospf_redistribute_unset (int);

@@ -75,6 +75,10 @@ static int vty_config;
 
 /* Login password check. */
 static int no_password_check = 0;
+
+/* Integrated configuration file path */
+char integrate_default[] = SYSCONFDIR INTEGRATE_DEFAULT_CONFIG;
+
 
 /* VTY standard output function. */
 int
@@ -586,6 +590,8 @@ vty_end_config (struct vty *vty)
     case RIPNG_NODE:
     case BGP_NODE:
     case BGP_VPNV4_NODE:
+    case BGP_IPV4M_NODE:
+    case BGP_IPV6_NODE:
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
@@ -1610,7 +1616,7 @@ vty_accept (struct thread *thread)
   /* VTY's accesslist apply. */
   if (p->family == AF_INET && vty_accesslist_name)
     {
-      if ((acl = access_list_lookup (AF_INET, vty_accesslist_name)) &&
+      if ((acl = access_list_lookup (AFI_IP, vty_accesslist_name)) &&
 	  (access_list_apply (acl, p) == FILTER_DENY))
 	{
 	  char *buf;
@@ -1632,7 +1638,7 @@ vty_accept (struct thread *thread)
   /* VTY's ipv6 accesslist apply. */
   if (p->family == AF_INET6 && vty_ipv6_accesslist_name)
     {
-      if ((acl = access_list_lookup (AF_INET6, vty_ipv6_accesslist_name)) &&
+      if ((acl = access_list_lookup (AFI_IP6, vty_ipv6_accesslist_name)) &&
 	  (access_list_apply (acl, p) == FILTER_DENY))
 	{
 	  char *buf;
@@ -1789,7 +1795,7 @@ vty_serv_un (char *path)
   unlink (path);
 
   /* Set umask */
-  old_mask = umask (0);
+  old_mask = umask (0077);
 
   /* Make UNIX domain socket. */
   sock = socket (AF_UNIX, SOCK_STREAM, 0);
@@ -1925,16 +1931,22 @@ vtysh_read (struct thread *thread)
 void
 vty_serv_sock (unsigned short port, char *path)
 {
+  /* If port is set to 0, do not listen on TCP/IP at all! */
+  if (port)
+    {
+
 #ifdef HAVE_IPV6
 #ifdef NRL
-  vty_serv_sock_family (port, AF_INET);
-  vty_serv_sock_family (port, AF_INET6);
+      vty_serv_sock_family (port, AF_INET);
+      vty_serv_sock_family (port, AF_INET6);
 #else /* ! NRL */
-  vty_serv_sock_addrinfo (port);
+      vty_serv_sock_addrinfo (port);
 #endif /* NRL*/
 #else /* ! HAVE_IPV6 */
-  vty_serv_sock_family (port, AF_INET);
+      vty_serv_sock_family (port, AF_INET);
 #endif /* HAVE_IPV6 */
+    }
+
 #ifdef VTYSH
   vty_serv_un (path);
 #endif /* VTYSH */
@@ -2158,6 +2170,32 @@ vty_read_config (char *config_file,
       /* If there is no relative path exists, open system default file. */
       if (confp == NULL)
 	{
+#ifdef VTYSH
+	  int ret;
+	  struct stat conf_stat;
+
+	  /* !!!!PLEASE LEAVE!!!!
+	     This is NEEDED for use with vtysh -b, or else you can get
+	     a real configuration food fight with a lot garbage in the
+	     merged configuration file it creates coming from the per
+	     daemon configuration files.  This also allows the daemons
+	     to start if there default configuration file is not
+	     present or ignore them, as needed when using vtysh -b to
+	     configure the daemons at boot - MAG */
+
+	  /* Stat for vtysh Zebra.conf, if found startup and wait for
+	     boot configuration */
+
+	  if ( strstr(config_default_dir, "vtysh") == NULL)
+	    {
+	      ret = stat (integrate_default, &conf_stat);
+	      if (ret >= 0)
+		{
+		  return;
+		}
+	    }
+#endif /* VTYSH */
+
 	  confp = fopen (config_default_dir, "r");
 	  if (confp == NULL)
 	    {
@@ -2549,7 +2587,7 @@ vty_config_write (struct vty *vty)
 
   /* exec-timeout */
   if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
-    vty_out (vty, " exec-timeout %d %d%s", 
+    vty_out (vty, " exec-timeout %ld %ld%s", 
 	     vty_timeout_val / 60,
 	     vty_timeout_val % 60, VTY_NEWLINE);
 

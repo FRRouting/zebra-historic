@@ -585,17 +585,19 @@ rtm_write (int message,
       msg.rtm.rtm_inits |= RTV_HOPCOUNT;
     }
 
+  ifp = if_lookup_by_index (index);
+
   if (gate && message == RTM_ADD)
     msg.rtm.rtm_flags |= RTF_GATEWAY;
 
-  if (! gate && message == RTM_ADD)
+  if (! gate && message == RTM_ADD && ifp &&
+      (ifp->flags & IFF_POINTOPOINT) == 0)
     msg.rtm.rtm_flags |= RTF_CLONING;
 
   /* If no protocol specific gateway is specified, use link
      address for gateway. */
   if (! gate)
     {
-      ifp = if_lookup_by_index (index);
       if (!ifp)
         {
           zlog_warn ("no gateway found for interface index %d", index);

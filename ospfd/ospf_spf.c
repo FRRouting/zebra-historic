@@ -75,7 +75,7 @@ vertex_nexthop_dup (struct vertex_nexthop *nh)
 
   new = vertex_nexthop_new (nh->parent);
 
-  new->ifp = nh->ifp;
+  new->oi = nh->oi;
   new->router = nh->router;
 
   return new;
@@ -126,7 +126,10 @@ ospf_vertex_add_parent (struct vertex *v)
   for (node = listhead (v->nexthop); node; nextnode (node))
     {
       nh = (struct vertex_nexthop *) getdata (node);
-      listnode_add (nh->parent->child, v);
+
+      /* No need to add two links from the same parent. */
+      if (listnode_lookup (nh->parent->child, v) == NULL)
+	listnode_add (nh->parent->child, v);
     }
 }
 
@@ -247,9 +250,193 @@ ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v)
   return 0;
 }
 
+/* Add the nexthop to the list, only if it is unique.
+ * If it's not unique, free the nexthop entry.
+ */
+void
+ospf_nexthop_add_unique (struct vertex_nexthop *new, list nexthop)
+{
+  struct vertex_nexthop *nh;
+  listnode node;
+  int match;
+
+  match = 0;
+  for (node = listhead (nexthop); node; nextnode (node))
+    {
+      nh = node->data;
+
+      /* Compare the two entries. */
+      /* XXX
+       * Comparing the parent preserves the shortest path tree
+       * structure even when the nexthops are identical.
+       */
+      if (nh->oi == new->oi &&
+	  IPV4_ADDR_SAME (&nh->router, &new->router) &&
+	  nh->parent == new->parent)
+	{
+	  match = 1;
+	  break;
+	}
+    }
+
+  if (!match)
+    listnode_add (nexthop, new);
+  else
+    vertex_nexthop_free (new);
+}
+
+/* Merge entries in list b into list a. */
+void
+ospf_nexthop_merge (list a, list b)
+{
+  struct listnode *n;
+
+  for (n = listhead (b); n; nextnode (n))
+    {
+      ospf_nexthop_add_unique (n->data, a);
+    }
+}
+
 #define ROUTER_LSA_MIN_SIZE 12
 #define ROUTER_LSA_TOS_SIZE 4
 
+#if 1
+struct router_lsa_link *
+ospf_get_next_link (struct vertex *v, struct vertex *w,
+		    struct router_lsa_link *prev_link)
+{
+  u_char *p;
+  u_char *lim;
+  struct router_lsa_link *l;
+
+  if (prev_link == NULL)
+    p = ((u_char *) v->lsa) + 24;
+  else
+    {
+      p = (u_char *)prev_link;
+      p += (ROUTER_LSA_MIN_SIZE +
+            (prev_link->m[0].tos_count * ROUTER_LSA_TOS_SIZE));
+    }
+  
+  lim = ((u_char *) v->lsa) + ntohs (v->lsa->length);
+
+  while (p < lim)
+    {
+      l = (struct router_lsa_link *) p;
+
+      p += (ROUTER_LSA_MIN_SIZE +
+            (l->m[0].tos_count * ROUTER_LSA_TOS_SIZE));
+
+      if (l->m[0].type == LSA_LINK_TYPE_STUB)
+        continue;
+
+      /* Defer NH calculation via VLs until summaries from
+         transit areas area confidered             */
+
+      if (l->m[0].type == LSA_LINK_TYPE_VIRTUALLINK)
+        continue; 
+
+      if (IPV4_ADDR_SAME (&l->link_id, &w->id))
+          return l;
+    }
+
+  return NULL;
+}
+
+/* Calculate nexthop from root to vertex W. */
+void
+ospf_nexthop_calculation (struct ospf_area *area,
+                          struct vertex *v, struct vertex *w)
+{
+  listnode node;
+  struct vertex_nexthop *nh, *x;
+  struct ospf_interface *oi = NULL;
+  struct router_lsa_link *l = NULL;
+	  
+    
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("ospf_nexthop_calculation(): Start");
+
+  /* W's parent is root. */
+  if (v == area->spf)
+    {
+      if (w->type == OSPF_VERTEX_ROUTER)
+	{
+	  while ((l = ospf_get_next_link (v, w, l)))
+	    {
+	      struct router_lsa_link *l2 = NULL;
+	      
+	      if (l->m[0].type == LSA_LINK_TYPE_POINTOPOINT)
+		{
+		  while ((l2 = ospf_get_next_link (w, v, l2)))
+		    {
+		      oi = ospf_if_is_configured (&(l2->link_data));
+		      
+		      if (oi == NULL)
+			continue;
+		      
+		      if (!IPV4_ADDR_SAME (&oi->address->u.prefix4, &l->link_data))
+			continue;
+		      
+		      break;
+		    }
+		  
+		  if (oi)
+		    {
+		      nh = vertex_nexthop_new (v);
+		      nh->oi = oi;
+		      nh->router = l2->link_data;
+		      listnode_add (w->nexthop, nh);
+		    }
+		}
+	    }
+	}
+      else
+	{
+	  while ((l = ospf_get_next_link (v, w, l)))
+	    {
+	      oi = ospf_if_is_configured (&(l->link_data));
+	      if (oi)
+		{
+		  nh = vertex_nexthop_new (v);
+		  nh->oi = oi;
+		  nh->router.s_addr = 0;
+		  listnode_add (w->nexthop, nh);
+		}
+	    }
+	}
+      return;
+    }
+  /* In case of W's parent is network connected to root. */
+  else if (v->type == OSPF_VERTEX_NETWORK)
+    {
+      for (node = listhead (v->nexthop); node; nextnode (node))
+        {
+          x = (struct vertex_nexthop *) getdata (node);
+          if (x->parent == area->spf)
+            {
+	      while ((l = ospf_get_next_link (w, v, l)))
+		{
+		  nh = vertex_nexthop_new (v);
+		  nh->oi = x->oi;
+		  nh->router = l->link_data;
+		  listnode_add (w->nexthop, nh);
+		}
+	      return;
+	    }
+        }
+    }
+
+  /* Inherit V's nexthop. */
+  for (node = listhead (v->nexthop); node; nextnode (node))
+    {
+      nh = vertex_nexthop_dup (node->data);
+      nh->parent = v;
+      ospf_nexthop_add_unique (nh, w->nexthop);
+    }
+}
+
+#else
 void
 ospf_nexthop_out_if_addr (struct vertex *v, struct vertex *w,
                           struct in_addr *addr)
@@ -284,7 +471,7 @@ ospf_nexthop_out_if_addr (struct vertex *v, struct vertex *w,
 
       if (IPV4_ADDR_SAME (&l->link_id, &w->id))
         {
-          *addr = l->link_data;
+	  *addr = l->link_data;
           return;
         }
     }
@@ -319,24 +506,24 @@ ospf_nexthop_calculation (struct ospf_area *area,
       zlog_info ("ospf_nexthop_calculation(): 2");
 
       if (addr.s_addr)
-        oi = ospf_if_lookup_by_addr (&addr);
+        oi = ospf_if_lookup_by_local_addr (NULL, addr);
       if (IS_DEBUG_OSPF_EVENT)
       zlog_info ("ospf_nexthop_calculation(): 3");
 
       if (oi != NULL)
         {
-          nh->ifp = oi->ifp;
+          nh->oi = oi;
 
-      if (IS_DEBUG_OSPF_EVENT)
-          zlog_info ("ospf_nexthop_calculation(): 4");
-
+	  if (IS_DEBUG_OSPF_EVENT)
+	    zlog_info ("ospf_nexthop_calculation(): 4");
+	  
           if (w->type == OSPF_VERTEX_ROUTER)
             {
               nbr = ospf_nbr_lookup_by_routerid (oi->nbrs, &w->id);
-
-      if (IS_DEBUG_OSPF_EVENT)
-              zlog_info("ospf_nexthop_calculation(): 5");
-
+	      
+	      if (IS_DEBUG_OSPF_EVENT)
+		zlog_info("ospf_nexthop_calculation(): 5");
+	      
               if (nbr)
                 nh->router.s_addr = nbr->address.u.prefix4.s_addr;
               else
@@ -353,7 +540,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
 
       if (IS_DEBUG_OSPF_EVENT)
       zlog_info ("resolved next hop: int: %s, next hop: %s",
-		 nh->ifp->name, inet_ntoa (nh->router));
+		 IF_NAME (nh->oi), inet_ntoa (nh->router));
 
       listnode_add (w->nexthop, nh);
 
@@ -371,7 +558,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
 
               ospf_nexthop_out_if_addr (w, v, &addr);
 
-              nh->ifp = x->ifp;
+              nh->oi = x->oi;
               nh->router = addr;
 
               listnode_add (w->nexthop, nh);
@@ -388,6 +575,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
       listnode_add (w->nexthop, nh);
     }
 }
+#endif
 
 void
 ospf_install_candidate (list candidate, struct vertex *w)
@@ -573,7 +761,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
             {
               /* Calculate nexthop to W. */
               ospf_nexthop_calculation (area, v, w);
-              list_add_list (cw->nexthop, w->nexthop);
+              ospf_nexthop_merge (cw->nexthop, w->nexthop);
               list_delete_all_node (w->nexthop);
               ospf_vertex_free (w);
             }
@@ -807,13 +995,13 @@ ospf_rtrs_print (struct route_table *rtrs)
 		{
 		  if (IS_DEBUG_OSPF_EVENT)
 		    zlog_info ("   directly attached to %s\r\n",
-			       path->ifp->name);
+			       IF_NAME (path->oi));
 		}
               else 
 		{
 		  if (IS_DEBUG_OSPF_EVENT)
 		    zlog_info ("   via %s, %s\r\n",
-			       inet_ntoa (path->nexthop), path->ifp->name);
+			       inet_ntoa (path->nexthop), IF_NAME (path->oi));
 		}
             }
         }
@@ -1017,7 +1205,7 @@ ospf_spf_calculate_schedule ()
   if (ospf_top->t_spf_calc)
     {
       if (IS_DEBUG_OSPF_EVENT)
-	zlog_info ("SPF: calculation timer is already scheduled: %x",
+	zlog_info ("SPF: calculation timer is already scheduled: %p",
 		   ospf_top->t_spf_calc);
       return;
     }
@@ -1036,7 +1224,7 @@ ospf_spf_calculate_schedule ()
     delay = ospf_top->spf_delay;
 
   if (IS_DEBUG_OSPF_EVENT)
-    zlog_info ("SPF: calculation timer delay = %d", delay);
+    zlog_info ("SPF: calculation timer delay = %ld", delay);
   ospf_top->t_spf_calc =
     thread_add_timer (master, ospf_spf_calculate_timer, ospf_top, delay);
 }

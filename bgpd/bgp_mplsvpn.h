@@ -22,8 +22,10 @@
 #ifndef _ZEBRA_BGP_MPLSVPN_H
 #define _ZEBRA_BGP_MPLSVPN_H
 
-#define RD_TYPE_AS  0
-#define RD_TYPE_IP  1
+#define RD_TYPE_AS      0
+#define RD_TYPE_IP      1
+
+#define RD_ADDRSTRLEN  28
 
 struct rd_as
 {
@@ -40,9 +42,10 @@ struct rd_ip
 };
 
 void bgp_mplsvpn_init ();
-int nlri_parse_vpnv4 (struct peer *, struct attr *, struct bgp_nlri *);
 u_int32_t decode_label (u_char *);
 int str2prefix_rd (u_char *, struct prefix_rd *);
 int str2tag (u_char *, u_char *);
+int nlri_parse_vpnv4 (struct peer *, struct attr *, struct bgp_nlri *);
+char *prefix_rd2str (struct prefix_rd *, char *, size_t);
 
 #endif /* _ZEBRA_BGP_MPLSVPN_H */

@@ -74,6 +74,7 @@ kernel_rtm_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
   int nexthop_num = 0;
   unsigned int ifindex = 0;
   int gate = 0;
+  int error;
 
   memset (&sin_dest, 0, sizeof (struct sockaddr_in));
   sin_dest.sin_family = AF_INET;
@@ -93,10 +94,15 @@ kernel_rtm_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
   /* Make gateway. */
   for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
     {
+      gate = 0;
+
       if ((cmd == RTM_ADD
 	   && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
 	  || (cmd == RTM_DELETE
-	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+#if 0
+	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
+#endif
+	      ))
 	{
 	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 	    {
@@ -128,38 +134,47 @@ kernel_rtm_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
 	  if (cmd == RTM_ADD)
 	    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
 
-	  nexthop_num++;
-	  break;
+	  if (gate && p->prefixlen == 32)
+	    mask = NULL;
+	  else
+	    {
+	      masklen2ip (p->prefixlen, &sin_mask.sin_addr);
+	      sin_mask.sin_family = AF_UNSPEC;
+#ifdef HAVE_SIN_LEN
+	      sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
+#endif /* HAVE_SIN_LEN */
+	      mask = &sin_mask;
+	    }
 	}
+
+      error = rtm_write (cmd,
+			(union sockunion *)&sin_dest, 
+			(union sockunion *)mask, 
+			gate ? (union sockunion *)&sin_gate : NULL,
+			ifindex,
+			rib->flags,
+			rib->metric);
+
+#if 0
+      if (error)
+	{
+	  zlog_info ("kernel_rtm_ipv4(): nexthop %d add error=%d.",
+	    nexthop_num, error);
+	}
+#endif
+
+      nexthop_num++;
     }
 
   /* If there is no useful nexthop then return. */
   if (nexthop_num == 0)
     {
       if (IS_ZEBRA_DEBUG_KERNEL)
-	zlog_info ("netlink_route_multipath(): No useful nexthop.");
+	zlog_info ("kernel_rtm_ipv4(): No useful nexthop.");
       return 0;
     }
 
-  if (gate && p->prefixlen == 32)
-    mask = NULL;
-  else
-    {
-      masklen2ip (p->prefixlen, &sin_mask.sin_addr);
-      sin_mask.sin_family = AF_UNSPEC;
-#ifdef HAVE_SIN_LEN
-      sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
-#endif /* HAVE_SIN_LEN */
-      mask = &sin_mask;
-    }
-
-  return rtm_write (cmd,
-		    (union sockunion *)&sin_dest, 
-		    (union sockunion *)mask, 
-		    gate ? (union sockunion *)&sin_gate : NULL,
-		    ifindex,
-		    rib->flags,
-		    rib->metric);
+  return 0; /*XXX*/
 }
 
 int
@@ -276,6 +291,7 @@ kernel_rtm_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
   int nexthop_num = 0;
   unsigned int ifindex = 0;
   int gate = 0;
+  int error;
 
   memset (&sin_dest, 0, sizeof (struct sockaddr_in6));
   sin_dest.sin6_family = AF_INET6;
@@ -295,10 +311,15 @@ kernel_rtm_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
   /* Make gateway. */
   for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
     {
+      gate = 0;
+
       if ((cmd == RTM_ADD
 	   && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
 	  || (cmd == RTM_DELETE
-	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+#if 0
+	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
+#endif
+	      ))
 	{
 	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 	    {
@@ -333,52 +354,61 @@ kernel_rtm_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
 
 	  if (cmd == RTM_ADD)
 	    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
-
-	  nexthop_num++;
-	  break;
 	}
+
+      /* Under kame set interface index to link local address. */
+#ifdef KAME
+
+#define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
+      do { \
+	(a).s6_addr[2] = ((i) >> 8) & 0xff; \
+	(a).s6_addr[3] = (i) & 0xff; \
+      } while (0)
+
+      if (gate && IN6_IS_ADDR_LINKLOCAL(&sin_gate.sin6_addr))
+	SET_IN6_LINKLOCAL_IFINDEX (sin_gate.sin6_addr, ifindex);
+#endif /* KAME */
+
+      if (gate && p->prefixlen == 128)
+	mask = NULL;
+      else
+	{
+	  masklen2ip6 (p->prefixlen, &sin_mask.sin6_addr);
+	  sin_mask.sin6_family = AF_UNSPEC;
+#ifdef SIN6_LEN
+	  sin_mask.sin6_len = sin6_masklen (sin_mask.sin6_addr);
+#endif /* SIN6_LEN */
+	  mask = &sin_mask;
+	}
+
+      error = rtm_write (cmd,
+			(union sockunion *) &sin_dest,
+			(union sockunion *) mask,
+			gate ? (union sockunion *)&sin_gate : NULL,
+			ifindex,
+			rib->flags,
+			rib->metric);
+
+#if 0
+      if (error)
+	{
+	  zlog_info ("kernel_rtm_ipv6_multipath(): nexthop %d add error=%d.",
+	    nexthop_num, error);
+	}
+#endif
+
+      nexthop_num++;
     }
 
   /* If there is no useful nexthop then return. */
   if (nexthop_num == 0)
     {
       if (IS_ZEBRA_DEBUG_KERNEL)
-	zlog_info ("netlink_route_multipath(): No useful nexthop.");
+	zlog_info ("kernel_rtm_ipv6_multipath(): No useful nexthop.");
       return 0;
     }
 
-  /* Under kame set interface index to link local address. */
-#ifdef KAME
-
-#define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
-  do { \
-    (a).s6_addr[2] = ((i) >> 8) & 0xff; \
-    (a).s6_addr[3] = (i) & 0xff; \
-  } while (0)
-
-  if (gate && IN6_IS_ADDR_LINKLOCAL(&sin_gate.sin6_addr))
-    SET_IN6_LINKLOCAL_IFINDEX (sin_gate.sin6_addr, ifindex);
-#endif /* KAME */
-
-  if (gate && p->prefixlen == 128)
-    mask = NULL;
-  else
-    {
-      masklen2ip6 (p->prefixlen, &sin_mask.sin6_addr);
-      sin_mask.sin6_family = AF_UNSPEC;
-#ifdef SIN6_LEN
-      sin_mask.sin6_len = sin6_masklen (sin_mask.sin6_addr);
-#endif /* SIN6_LEN */
-      mask = &sin_mask;
-    }
-
-  return rtm_write (cmd,
-		    (union sockunion *) &sin_dest,
-		    (union sockunion *) mask,
-		    gate ? (union sockunion *)&sin_gate : NULL,
-		    ifindex,
-		    rib->flags,
-		    rib->metric);
+  return 0; /*XXX*/
 }
 
 int

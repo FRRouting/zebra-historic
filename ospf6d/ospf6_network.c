@@ -421,8 +421,15 @@ ospf6_recvmsg (struct in6_addr *src, struct in6_addr *dst,
   rmsghdr.msg_controllen = sizeof (cmsgbuf);
 
   retval = recvmsg (ospf6_sock, &rmsghdr, 0);
-  if (retval != iov_totallen (message))
-    zlog_warn ("Network: recvmsg failed: %s", strerror (errno));
+  if (retval < 0)
+    {
+      zlog_warn ("Network: recvmsg failed: %s", strerror (errno));
+    }
+  else if (retval == iov_totallen (message))
+    {
+      zlog_warn ("Network: possibly buffer shortage: %d received, buffer size: %d",
+                  retval, iov_totallen (message));
+    }
 
   /* source address */
   assert (src);

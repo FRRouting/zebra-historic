@@ -1,3 +1,15 @@
+2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92a released.
+
+2001-08-15  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.92 released.
+
+2001-08-07  Akira Kato <kato@wide.ad.jp>
+
+	* ripngd.c (ripng_timers): "timers basic" argument is fixed.
+
 2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.91 is released.

@@ -39,7 +39,7 @@ struct vertex
 
 struct vertex_nexthop
 {
-  struct interface *ifp;
+  struct ospf_interface *oi;
   struct in_addr router;
   struct vertex *parent;
 };

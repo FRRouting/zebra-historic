@@ -26,6 +26,14 @@
 #include "log.h"
 #include "command.h"
 
+#include "linklist.h"
+#include "prefix.h"
+
+#include "ospf6_prefix.h"
+#include "ospf6_lsa.h"
+#include "ospf6_message.h"
+#include "ospf6_interface.h"
+
 #define HEADER_DEPENDENCY
 #include "ospf6d.h"
 #undef HEADER_DEPENDENCY

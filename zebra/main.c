@@ -176,6 +176,9 @@ main (int argc, char **argv)
   struct thread thread;
   void rib_weed_tables ();
 
+  /* Set umask before anything for security */
+  umask (0027);
+
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 

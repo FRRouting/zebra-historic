@@ -40,7 +40,7 @@ ifreq_set_name (struct ifreq *ifreq, struct interface *ifp)
 
 /* call ioctl system call */
 int
-if_ioctl (int request, caddr_t buffer)
+if_ioctl (u_long request, caddr_t buffer)
 {
   int sock;
   int ret = 0;
@@ -70,7 +70,7 @@ if_ioctl (int request, caddr_t buffer)
 
 #ifdef HAVE_IPV6
 int
-if_ioctl_ipv6 (int request, caddr_t buffer)
+if_ioctl_ipv6 (u_long request, caddr_t buffer)
 {
   int sock;
   int ret = 0;
@@ -352,17 +352,15 @@ if_get_flags (struct interface *ifp)
 
 /* Set interface flags */
 int
-if_set_flags (struct interface *ifp, unsigned long flag)
+if_set_flags (struct interface *ifp, unsigned long flags)
 {
   int ret;
   struct ifreq ifreq;
 
-  if_get_flags (ifp);
-
   ifreq_set_name (&ifreq, ifp);
 
-  ifp->flags |= flag;
   ifreq.ifr_flags = ifp->flags;
+  ifreq.ifr_flags |= flags;
 
   ret = if_ioctl (SIOCSIFFLAGS, (caddr_t) &ifreq);
 
@@ -376,17 +374,15 @@ if_set_flags (struct interface *ifp, unsigned long flag)
 
 /* Unset interface's flag. */
 int
-if_unset_flags (struct interface *ifp, unsigned long flag)
+if_unset_flags (struct interface *ifp, unsigned long flags)
 {
   int ret;
   struct ifreq ifreq;
 
-  if_get_flags (ifp);
-
   ifreq_set_name (&ifreq, ifp);
 
-  ifp->flags &= ~flag;
   ifreq.ifr_flags = ifp->flags;
+  ifreq.ifr_flags &= ~flags;
 
   ret = if_ioctl (SIOCSIFFLAGS, (caddr_t) &ifreq);
 
@@ -526,13 +522,13 @@ if_prefix_delete_ipv6 (struct interface *ifp, struct connected *ifc)
 }
 #else
 int
-if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+if_prefix_add_ipv6 (struct interface *ifp, struct connected *ifc)
 {
   return 0;
 }
 
 int
-if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+if_prefix_delete_ipv6 (struct interface *ifp, struct connected *ifc)
 {
   return 0;
 }

@@ -13,7 +13,6 @@ bgpd:
 
 o Peer-group functionality.
 o Route server support
-o Aggregate-address support complete (as-set etc.).
 o BGP TCP MD5 authentication (on OpenBSD) by password command.
 o HUP signal support (reload configuration file).
 o BGP multi-path extension ("load balancing")

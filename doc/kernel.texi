@@ -1,4 +1,4 @@
-@node Kernel Interface, SNMP Support, IPv6 Supports, Top
+@node Kernel Interface, SNMP Support, IPv6 Support, Top
 @comment  node-name,  next,  previous,  up
 @chapter Kernel Interface
 
@@ -15,7 +15,7 @@ and for modifying interface addresses, flags, mtu settings and other
 types of information.  Also, @samp{ioctl} can insert and delete kernel
 routing table entries.  It will soon be available on almost any platform
 which zebra supports, but it is a little bit ugly thus far, so if a
-better method is supported by the kernel zebra will use that.
+better method is supported by the kernel, zebra will use that.
 
 @item sysctl
 @samp{sysctl} can lookup kernel information using MIB (Management
@@ -35,8 +35,9 @@ communication support called @code{netlink}.  It makes asynchronous
 communication between kernel and Zebra possible, similar to a routing
 socket on BSD systems.
 
-Before you use this feature, be sure to select the kernel/netlink
-support option 'Kernel/User network link driver' and 'Routing messages'.
+Before you use this feature, be sure to select (in kernel configuration) 
+the kernel/netlink support option 'Kernel/User network link driver' and 
+'Routing messages'.
 
 Today, the /dev/route special device file is obsolete.  Netlink
 communication is done by reading/writing over netlink socket.

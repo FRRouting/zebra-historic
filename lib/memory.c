@@ -30,8 +30,6 @@ void alloc_dec (int);
 
 struct message mstr [] =
 {
-  { MTYPE_COMMAND, "command" },
-  { MTYPE_COMMAND_CONST, "command_const" },
   { MTYPE_THREAD, "thread" },
   { MTYPE_THREAD_MASTER, "thread_master" },
   { MTYPE_VECTOR, "vector" },
@@ -241,10 +239,9 @@ struct memory_list memory_list_lib[] =
   { MTYPE_ROUTE_TABLE,        "Route table     : %ld\r\n" },
   { MTYPE_ROUTE_NODE,         "Route node      : %ld\r\n" },
   { MTYPE_RIB,                "RIB             : %ld\r\n" },
+  { MTYPE_NEXTHOP,            "Nexthop         : %ld\r\n" },
   { MTYPE_LINK_LIST,          "Link List       : %ld\r\n" },
   { MTYPE_LINK_NODE,          "Link Node       : %ld\r\n" },
-  { MTYPE_NEWLIST,            "New  List       : %ld\r\n" },
-  { MTYPE_NEWNODE,            "New  Node       : %ld\r\n" },
   { MTYPE_HASH,               "Hash            : %ld\r\n" },
   { MTYPE_HASH_BACKET,        "Hash Bucket     : %ld\r\n" },
   { MTYPE_ACCESS_LIST,        "Access List     : %ld\r\n" },
@@ -316,8 +313,6 @@ struct memory_list memory_list_ospf[] =
   { MTYPE_OSPF_IF,            "OSPF interface  : %ld\r\n" },
   { MTYPE_OSPF_NEIGHBOR,      "OSPF neighbor   : %ld\r\n" },
   { MTYPE_OSPF_ROUTE,         "OSPF route      : %ld\r\n" },
-  { MTYPE_OSPF_ADDR,          "OSPF address    : %ld\r\n" },
-  { MTYPE_OSPF_MESSAGE,       "OSPF message    : %ld\r\n" },
   { MTYPE_OSPF_TMP,           "OSPF tmp mem    : %ld\r\n" },
   { MTYPE_OSPF_LSA,           "OSPF LSA        : %ld\r\n" },
   { MTYPE_OSPF_LSA_DATA,      "OSPF LSA data   : %ld\r\n" },
@@ -331,24 +326,28 @@ struct memory_list memory_list_ospf[] =
   { MTYPE_OSPF_CRYPT_KEY,     "OSPF crypt key  : %ld\r\n" },
   { MTYPE_OSPF_EXTERNAL_INFO, "OSPF ext. info  : %ld\r\n" },
   { MTYPE_OSPF_DISTANCE,      "OSPF distance   : %ld\r\n" },
+  { MTYPE_OSPF_IF_INFO,       "OSPF if info    : %ld\r\n" },
+  { MTYPE_OSPF_IF_PARAMS,     "OSPF if params  : %ld\r\n" },
   { -1, NULL },
 };
 
 struct memory_list memory_list_ospf6[] =
 {
-  { MTYPE_OSPF6_TOP,          "OSPF6 top       : %ld\r\n" },
-  { MTYPE_OSPF6_AREA,         "OSPF6 area      : %ld\r\n" },
-  { MTYPE_OSPF6_IF,           "OSPF6 interface : %ld\r\n" },
-  { MTYPE_OSPF6_NEIGHBOR,     "OSPF6 neighbor  : %ld\r\n" },
-  { MTYPE_OSPF6_ROUTE,        "OSPF6 route     : %ld\r\n" },
-  { MTYPE_OSPF6_PREFIX,       "OSPF6 prefix    : %ld\r\n" },
-  { MTYPE_OSPF6_MESSAGE,      "OSPF6 message   : %ld\r\n" },
-  { MTYPE_OSPF6_LSA,          "OSPF6 LSA       : %ld\r\n" },
-  { MTYPE_OSPF6_VERTEX,       "OSPF6 vertex    : %ld\r\n" },
-  { MTYPE_OSPF6_SPFTREE,      "OSPF6 SPF tree  : %ld\r\n" },
-  { MTYPE_OSPF6_NEXTHOP,      "OSPF6 nexthop   : %ld\r\n" },
-  { MTYPE_OSPF6_EXTERNAL_INFO,"OSPF6 ext. info : %ld\r\n" },
-  { MTYPE_OSPF6_OTHER,        "OSPF6 other     : %ld\r\n" },
+  { MTYPE_OSPF6_TOP,          "OSPF6 top         : %ld\r\n" },
+  { MTYPE_OSPF6_AREA,         "OSPF6 area        : %ld\r\n" },
+  { MTYPE_OSPF6_IF,           "OSPF6 interface   : %ld\r\n" },
+  { MTYPE_OSPF6_NEIGHBOR,     "OSPF6 neighbor    : %ld\r\n" },
+  { MTYPE_OSPF6_ROUTE,        "OSPF6 route       : %ld\r\n" },
+  { MTYPE_OSPF6_PREFIX,       "OSPF6 prefix      : %ld\r\n" },
+  { MTYPE_OSPF6_MESSAGE,      "OSPF6 message     : %ld\r\n" },
+  { MTYPE_OSPF6_LSA,          "OSPF6 LSA         : %ld\r\n" },
+  { MTYPE_OSPF6_LSA_SUMMARY,  "OSPF6 LSA summary : %ld\r\n" },
+  { MTYPE_OSPF6_LSDB,         "OSPF6 LSA database: %ld\r\n" },
+  { MTYPE_OSPF6_VERTEX,       "OSPF6 vertex      : %ld\r\n" },
+  { MTYPE_OSPF6_SPFTREE,      "OSPF6 SPF tree    : %ld\r\n" },
+  { MTYPE_OSPF6_NEXTHOP,      "OSPF6 nexthop     : %ld\r\n" },
+  { MTYPE_OSPF6_EXTERNAL_INFO,"OSPF6 ext. info   : %ld\r\n" },
+  { MTYPE_OSPF6_OTHER,        "OSPF6 other       : %ld\r\n" },
   { -1, NULL },
 };
 

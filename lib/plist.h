@@ -57,5 +57,5 @@ void prefix_list_reset (void);
 void prefix_list_add_hook (void (*func) (void));
 void prefix_list_delete_hook (void (*func) (void));
 
-struct prefix_list *prefix_list_lookup (int family, char *);
+struct prefix_list *prefix_list_lookup (afi_t, char *);
 enum prefix_list_type prefix_list_apply (struct prefix_list *, void *);

@@ -209,7 +209,7 @@ ospf_external_info_find_lsa (struct prefix_ipv4 *p)
   struct as_external_lsa *al;
   struct in_addr mask, id;
 
-  lsa = new_lsdb_lookup_by_id (ospf_top->lsdb, OSPF_AS_EXTERNAL_LSA,
+  lsa = ospf_lsdb_lookup_by_id (ospf_top->lsdb, OSPF_AS_EXTERNAL_LSA,
 			       p->prefix, ospf_top->router_id);
 
   if (!lsa)
@@ -222,7 +222,7 @@ ospf_external_info_find_lsa (struct prefix_ipv4 *p)
   if (mask.s_addr != al->mask.s_addr)
     {
       id.s_addr = p->prefix.s_addr | (~mask.s_addr);
-      lsa = new_lsdb_lookup_by_id (ospf_top->lsdb, OSPF_AS_EXTERNAL_LSA,
+      lsa = ospf_lsdb_lookup_by_id (ospf_top->lsdb, OSPF_AS_EXTERNAL_LSA,
 				   id, ospf_top->router_id);
       if (!lsa)
 	return NULL;

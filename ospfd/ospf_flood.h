@@ -63,6 +63,6 @@ struct external_info *ospf_external_info_check (struct ospf_lsa *);
 
 void debug_ospf_ls_retransmit (struct ospf_neighbor *);
 
-void new_lsdb_init (struct new_lsdb *);
+void ospf_lsdb_init (struct ospf_lsdb *);
 
 #endif /* _ZEBRA_OSPF_FLOODING_H */

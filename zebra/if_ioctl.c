@@ -44,6 +44,7 @@ interface_list_ioctl ()
   struct ifconf ifconf;
   struct interface *ifp;
   int n;
+  int lastlen;
 
   /* Normally SIOCGIFCONF works with AF_INET socket. */
   sock = socket (AF_INET, SOCK_DGRAM, 0);
@@ -67,6 +68,7 @@ interface_list_ioctl ()
 
   ifconf.ifc_buf = NULL;
 
+  lastlen = 0;
   /* Loop until SIOCGIFCONF success. */
   for (;;) 
     {
@@ -74,15 +76,16 @@ interface_list_ioctl ()
       ifconf.ifc_buf = XREALLOC(MTYPE_TMP, ifconf.ifc_buf, ifconf.ifc_len);
 
       ret = ioctl(sock, SIOCGIFCONF, &ifconf);
+
       if (ret < 0) 
 	{
 	  zlog_warn ("SIOCGIFCONF: %s", strerror(errno));
 	  goto end;
 	}
-      /* When length is same as we prepared, assume it overflowed and
-         try again */
-      if (ifconf.ifc_len == sizeof (struct ifreq) * ifnum) 
+      /* Repeatedly get info til buffer fails to grow. */
+      if (ifconf.ifc_len > lastlen)
 	{
+          lastlen = ifconf.ifc_len;
 	  ifnum += 10;
 	  continue;
 	}
@@ -100,6 +103,7 @@ interface_list_ioctl ()
 
       ifreq = (struct ifreq *)((caddr_t) ifconf.ifc_req + n);
       ifp = if_get_by_name (ifreq->ifr_name);
+      if_add_update (ifp);
       size = ifreq->ifr_addr.sa_len;
       if (size < sizeof (ifreq->ifr_addr))
 	size = sizeof (ifreq->ifr_addr);
@@ -110,6 +114,7 @@ interface_list_ioctl ()
   for (n = 0; n < ifconf.ifc_len; n += sizeof(struct ifreq))
     {
       ifp = if_get_by_name (ifreq->ifr_name);
+      if_add_update (ifp);
       ifreq++;
     }
 #endif /* OPEN_BSD */

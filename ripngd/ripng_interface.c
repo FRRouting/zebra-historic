@@ -121,7 +121,7 @@ ripng_interface_add (int command, struct zclient *zclient, zebra_size_t length)
   ifp = zebra_interface_add_read (zclient->ibuf);
 
   if (IS_RIPNG_DEBUG_ZEBRA)
-    zlog_info ("RIPng interface add %s index %d flags %d metric %d mtu %d",
+    zlog_info ("RIPng interface add %s index %d flags %ld metric %d mtu %d",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
   /* Check is this interface is RIP enabled or not.*/

@@ -46,32 +46,19 @@
 #define ISM_InterfaceDown                 7
 #define OSPF_ISM_EVENT_MAX                8
 
-/* Macro for OSPF ISM read on. */
-#define OSPF_ISM_READ_ON(T,F,V) \
-      if (!(T)) \
-        (T) = thread_add_read (master, (F), oi, (V));
-
-/* Macro for OSPF ISM read off. */
-#define OSPF_ISM_READ_OFF(X) \
-      if (X) \
-        { \
-          thread_cancel (X); \
-          (X) = NULL; \
-        }
-
-/* Macro for OSPF ISM write add. */
-#define OSPF_ISM_WRITE_ON(T,F,V) \
-      if (!(T)) \
-        (T) = thread_add_write (master, (F), oi, (V))
-
-/* Macro for OSPF ISM write turn off. */
-#define OSPF_ISM_WRITE_OFF(X) \
-      if (X) \
-        { \
-          thread_cancel (X); \
-          (X) = NULL; \
-        }
-
+#define OSPF_ISM_WRITE_ON()                                                   \
+      do                                                                      \
+        {                                                                     \
+          if (oi->on_write_q == 0)                                            \
+	    {                                                                 \
+              listnode_add (ospf_top->oi_write_q, oi);                        \
+	      oi->on_write_q = 1;                                             \
+	    }                                                                 \
+	  if (ospf_top->t_write == NULL)                                      \
+	    ospf_top->t_write =                                               \
+	      thread_add_write (master, ospf_write, ospf_top, ospf_top->fd);  \
+        } while (0)
+     
 /* Macro for OSPF ISM timer turn on. */
 #define OSPF_ISM_TIMER_ON(T,F,V) \
       if (!(T)) \
@@ -96,5 +83,6 @@
 /* Prototypes. */
 int ospf_ism_event (struct thread *);
 void ism_change_status (struct ospf_interface *, int);
+int ospf_hello_timer (struct thread *thread);
 
 #endif /* _ZEBRA_OSPF_ISM_H */

@@ -202,6 +202,9 @@ main (int argc, char *argv[], char *envp[])
   char *config_file = NULL;
   struct thread thread;
 
+  /* Set umask before anything for security */
+  umask (0027);
+
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
@@ -282,7 +285,8 @@ main (int argc, char *argv[], char *envp[])
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, OSPF6_VTYSH_PATH);
 
   /* Print start message */
-  zlog_info ("OSPF6d (%s %s) starts", ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
+  zlog_info ("OSPF6d (Zebra-%s ospf6d-%s) starts",
+             ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))
