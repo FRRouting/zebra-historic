@@ -26,7 +26,7 @@ struct ospf6_prefix
 {
   unsigned char  o6p_prefix_len;
   unsigned char  o6p_prefix_opt;
-  unsigned short o6p_prefix_reserved;
+  unsigned short o6p_prefix_metric;
   /* followed by one address_prefix */
 };
 

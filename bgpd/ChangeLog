@@ -1,5 +1,10 @@
 1999-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
+	* bgpd.c (no_neighbor_timers_holdtime): `no neighbor PEER timers
+	holdtime' command is added.
+
+	* bgpd.h (BGP_DEFAULT_HOLDTIME_BIG): Delete define.
+
 	* bgpd.c (bgp_prefix_list_set): New function added.
 	(bgp_prefix_list_unset): Likewise.
 	(bgp_prefix_list_update): Likewise.

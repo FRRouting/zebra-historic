@@ -148,7 +148,11 @@ spf_init (struct area *area)
   spf_install (v, area);
 
   if (area->rt_table_prev)
-    XFREE (MTYPE_OSPF6_ROUTE, area->rt_table_prev);
+    {
+      XFREE (MTYPE_OSPF6_ROUTE, area->rt_table_prev);
+      area->rt_table_prev = NULL;
+      area->tablesize_prev = 0;
+    }
   if (area->ospf6->isinstall && area->rt_table)
     {
       area->rt_table_prev = area->rt_table;
@@ -171,6 +175,11 @@ spf_init (struct area *area)
   return 0;
 }
 
+void free_nexthop (struct nexthop_info *nh)
+{
+  XFREE (MTYPE_OSPF6_ROUTE, nh);
+}
+
 struct nexthop_info *
 make_nexthop (unsigned long ifindex, unsigned long id_one,
               unsigned long id_two)
@@ -190,6 +199,7 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
 
   if_indextoname (ifindex, ifname);
   ospf6_if = ospf6_if_lookup (ifname);
+  zvlog_err ("can't find ospf6_if for ifid %lu, name %s", ifindex, ifname);
 
   if (id_one && !id_two)        /* Router */
     {
@@ -199,6 +209,7 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
           if (lsi->lsh->lsh_advrtr == id_one)
             break;
         }
+      assert (lsi && lsi->lsh);
       linklsa = (struct link_lsa *)(lsi->lsh + 1);
       memcpy (&nexthopinfo->nexthop_addr, &linklsa->llsa_linklocal,
               sizeof (struct in6_addr));
@@ -280,7 +291,8 @@ router_link (struct vertex *V)
       if (W->vtx_depth == 1)
         {
           list_add_node (W->vtx_nexthops,
-          make_nexthop (currentlink->rlsd_interface_id, 0, 0));
+                         make_nexthop (ntohl (currentlink->rlsd_interface_id),
+                                       0, 0));
         }
       else
         {
@@ -332,8 +344,8 @@ router_link (struct vertex *V)
       if (W->vtx_depth == 1)
         {
           list_add_node (W->vtx_nexthops,
-                         make_nexthop (currentlink->rlsd_interface_id, 0, 0));
-          /* No Nexthop Required */
+                         make_nexthop (ntohl (currentlink->rlsd_interface_id),
+                                       W->vtx_id[0], W->vtx_id[1]));
         }
       else
         {
@@ -418,14 +430,8 @@ network_link (struct vertex *V)
   W->vtx_distance = V->vtx_distance + 0;
   W->vtx_parent = V;
   W->vtx_depth = V->vtx_depth + 1;
-  if (W->vtx_depth == 1) /* Not Happen!? */
-    {
-      list_add_node (W->vtx_nexthops, make_nexthop
-                     (((struct nexthop_info *) getdata
-                     (listhead (V->vtx_nexthops)))->ifindex,
-                     W->vtx_id[0], W->vtx_id[1]));
-    }
-  else if (W->vtx_depth == 2)
+  if (W->vtx_depth == 1 /* Not Happen!? */
+      || W->vtx_depth == 2)
     {
       list_add_node (W->vtx_nexthops, make_nexthop
                      (((struct nexthop_info *) getdata
@@ -561,16 +567,182 @@ spf_calculation (struct thread *thread)
   return 0;
 }
 
+/* is this prefix already installed to internal routing table? */
+int
+route_isinstalled (struct ospf6_prefix *prefix, struct area *area)
+{
+  int k, already;
+
+  already = 0;
+  for (k = 0; k < area->tablesize; k++)
+    {
+      if (!memcmp (&area->rt_table[k].destination,
+          (prefix + 1), OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len)))
+        {
+          already++;
+          break;
+        }
+    }
+
+  return already;
+}
+
+void
+route_install_internal (struct ospf6_prefix *dst, cost_t cost,
+                        struct in6_addr *nexthop, unsigned long ifindex,
+                        struct area *area)
+{
+  char str[64];
+
+  /* Install Internal Routing Table */
+  memcpy (&area->rt_table[area->tablesize].destination,
+          (dst + 1),
+          OSPF6_PREFIX_SPACE (dst->o6p_prefix_len));
+  inet_ntop (AF_INET6, &area->rt_table[area->tablesize].destination,
+             str, sizeof (str));
+  zvlog_debug ("Installed %s in internal table", str);
+  area->rt_table[area->tablesize].cost = cost;
+  area->rt_table[area->tablesize].prefixlength
+    = dst->o6p_prefix_len;
+
+  zvlog_debug ("ifindex: %lu", ifindex);
+  area->rt_table[area->tablesize].ifindex
+    = ifindex;
+  memcpy (&area->rt_table[area->tablesize].next_hop,
+          nexthop, sizeof (struct in6_addr));
+  area->tablesize++;
+  return;
+}
+
+list
+get_prefix_lsa_of_vertex (struct vertex *v, struct area *area)
+{
+  list retlist = NULL;
+  struct lsa_internal *lsi;
+
+  switch (ntohs (v->vtx_lsa->lsh->lsh_type))
+    {
+    case LST_ROUTER_LSA:
+      retlist = lsa_lookup_by_advrtr (ntohs (LST_INTRA_AREA_PREFIX_LSA),
+                                      v->vtx_lsa->lsh->lsh_advrtr, area);
+      break;
+    case LST_NETWORK_LSA:
+      retlist = list_init ();
+      lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
+                        v->vtx_lsa->lsh->lsh_id,
+                        v->vtx_lsa->lsh->lsh_advrtr,
+                        area, (struct ospf6_if *)NULL);
+      list_add_node (retlist, lsi);
+      break;
+    default:
+      assert (0);
+    }
+
+  return retlist;
+}
+
+void
+add_route_internal_table (struct vertex *v, struct area *area)
+{
+  list lsalist = NULL;
+  listnode n;
+  struct intra_area_prefix_lsa *intra_prefix_lsa;
+  struct lsa_internal *lsi;
+  struct ospf6_prefix *prefix;
+  struct nexthop_info *nhinfo;
+  int j;
+  cost_t cost;
+
+  zvlog_debug ("ROUTECALC:    V->lsa = [%s]",
+               print_lsahdr (v->vtx_lsa->lsh));
+
+  lsalist = get_prefix_lsa_of_vertex (v, area);
+  assert (lsalist);
+  if (list_isempty (lsalist))
+    {
+      zvlog_debug ("ROUTECALC: Intra-Area-Prefix-LSA Not"
+                   " Found for %s",
+                   print_lsahdr (v->vtx_lsa->lsh));
+    }
+
+  for (n = listhead (lsalist); n; nextnode (n))
+    {
+      lsi = (struct lsa_internal *) getdata (n);
+      intra_prefix_lsa = (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
+      zvlog_debug ("ROUTECALC:    Prefix-LSA: %s",
+                   print_lsahdr (lsi->lsh));
+
+      /* Back pointer check */
+      if (intra_prefix_lsa->intra_prefix_refer_lstype !=
+          v->vtx_lsa->lsh->lsh_type
+          || intra_prefix_lsa->intra_prefix_refer_lsid !=
+          v->vtx_lsa->lsh->lsh_id
+          || intra_prefix_lsa->intra_prefix_refer_advrtr !=
+          v->vtx_lsa->lsh->lsh_advrtr)
+        {
+          struct lsa_hdr tmplsh;
+          tmplsh.lsh_type = intra_prefix_lsa->intra_prefix_refer_lstype;
+          tmplsh.lsh_id = intra_prefix_lsa->intra_prefix_refer_lsid;
+          tmplsh.lsh_advrtr = intra_prefix_lsa->intra_prefix_refer_advrtr;
+          zvlog_debug ("ROUTECALC:    no back pointer(%s)",
+                       print_lsahdr (&tmplsh));
+          return;
+        }
+
+      prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
+
+      /* nexthop */
+      if (v->vtx_depth != 0)
+        {
+          assert (!list_isempty (v->vtx_nexthops));
+          /* XXX ECMP not yet */
+          nhinfo =
+            (struct nexthop_info *) getdata (listhead (v->vtx_nexthops));
+        }
+      else
+        {
+          /* This vertex is root. I can't find any other way to
+             calculate route which is in Intra-Area-Prefix-LSA
+             of myself */
+          nhinfo = make_nexthop (ntohl (lsi->lsh->lsh_id), 0, 0);
+        }
+
+      for (j = 0; j < ntohs (intra_prefix_lsa->intra_prefix_num); j++)
+        {
+          if (area->tablesize >= MAX_ENTRY)
+            {
+              zvlog_warn ("Routing Table MAX Limit!!");
+              return;
+            }
+
+          if (route_isinstalled (prefix, area))
+            {
+              zvlog_debug ("ROUTECALC: already installed");
+              continue;
+            }
+
+          if (v->vtx_id[1] == 0) /* Indicating router. */
+            cost = v->vtx_distance + ntohs (prefix->o6p_prefix_metric);
+          else                   /* network */
+            cost = v->vtx_distance;
+          route_install_internal (prefix, cost,
+                                  &nhinfo->nexthop_addr, nhinfo->ifindex,
+                                  area);
+          prefix = OSPF6_NEXT_PREFIX (prefix);
+        }
+
+      if (v->vtx_depth == 0)
+        free_nexthop (nhinfo);
+    }
+  return;
+}
+
 int
 routing_table_calculation (struct thread *thread)
 {
-  int i, j, k, already;
+  int i;
   listnode n;
   struct vertex *v;
-  struct lsa_internal *lsi = NULL;
-  struct intra_area_prefix_lsa *intra_prefix_lsa;
-  struct ospf6_prefix *prefix;
-  struct nexthop_info *nh;
   struct area *area;
 
   area = (struct area *)THREAD_ARG (thread);
@@ -586,107 +758,10 @@ routing_table_calculation (struct thread *thread)
       for (n = listhead (area->spftree.depthlist[i]); n; nextnode (n))
         {
           v = (struct vertex *) getdata (n);
-          zvlog_debug ("ROUTECALC:    V->lsa = [%s]",
-                       print_lsahdr (v->vtx_lsa->lsh));
-          switch (ntohs (v->vtx_lsa->lsh->lsh_type))
-            {
-            case LST_ROUTER_LSA:
-              lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
-                                htons (MY_ROUTER_LSA_ID),
-                                v->vtx_lsa->lsh->lsh_advrtr,
-                                area, (struct ospf6_if *)NULL);
-              break;
-            case LST_NETWORK_LSA:
-              lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
-                                v->vtx_lsa->lsh->lsh_id,
-                                v->vtx_lsa->lsh->lsh_advrtr,
-                                area, (struct ospf6_if *)NULL);
-              break;
-            default:
-              zvlog_err ("BUG: spf_calculation ()");
-              assert (0);
-            }
-          if (!lsi && ntohs (v->vtx_lsa->lsh->lsh_type) == LST_NETWORK_LSA)
-            {
-              zvlog_debug ("ROUTECALC: Intra-Area-Prefix-LSA Not"
-                           " Found for %s",
-                           print_lsahdr (v->vtx_lsa->lsh));
-              continue;
-            }
-          else if (!lsi)
-            continue;
-
-          intra_prefix_lsa =
-              (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
-          zvlog_debug ("ROUTECALC:    Prefix-LSA: %s",
-                       print_lsahdr (lsi->lsh));
-
-          /* XXX Back pointer check */
-          if (intra_prefix_lsa->intra_prefix_refer_lstype !=
-              v->vtx_lsa->lsh->lsh_type
-              || intra_prefix_lsa->intra_prefix_refer_lsid !=
-              v->vtx_lsa->lsh->lsh_id
-              || intra_prefix_lsa->intra_prefix_refer_advrtr !=
-              v->vtx_lsa->lsh->lsh_advrtr)
-            {
-              zvlog_debug ("ROUTECALC:    no back pointer");
-              continue;
-            }
-
-          prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
-          /* XXX */
-          if (listcount (v->vtx_nexthops))
-            nh = (struct nexthop_info *)
-                (getdata (listhead (v->vtx_nexthops)));
-          else
-            nh = (struct nexthop_info *)NULL;
-          for (j = 0; j < ntohs (intra_prefix_lsa->intra_prefix_num); j++)
-            {
-              if (area->tablesize >= MAX_ENTRY)
-                {
-                  zvlog_warn ("Routing Table MAX Limit!!");
-                  return 0;
-                }
-
-              already = 0;
-              for (k = 0; k < area->tablesize; k++)
-                {
-                  if (!memcmp (&area->rt_table[k].destination,
-                      (prefix + 1),
-                      OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len)))
-                    {
-                      already++;
-                      break;
-                    }
-                }
-              if (already)
-                {
-                  zvlog_debug ("ROUTECALC: already installed");
-                  continue;
-                }
-
-              /* Install Internal Routing Table */
-              zvlog_debug ("    Installing %d from Prefix-LSA", j);
-              memcpy (&area->rt_table[area->tablesize].destination,
-                      (prefix + 1),
-                      OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len));
-              area->rt_table[area->tablesize].cost = v->vtx_distance;
-              area->rt_table[area->tablesize].prefixlength
-                  = prefix->o6p_prefix_len;
-              if (nh)
-                {
-                  zvlog_debug ("      Nexthop not found!");
-                  area->rt_table[area->tablesize].ifindex
-                      = ntohl (nh->ifindex);
-                  memcpy (&area->rt_table[area->tablesize].next_hop,
-                          &nh->nexthop_addr,
-                          sizeof (struct in6_addr));
-                }
-              area->tablesize++;
-              prefix = OSPF6_NEXT_PREFIX (prefix);
-            }
+          add_route_internal_table (v, area);
         }
     }
+
   install_route (area);
   return 0;
 }

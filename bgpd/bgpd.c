@@ -142,7 +142,7 @@ peer_new ()
   peer->fd = -1;
   peer->v_start = BGP_INIT_START_TIMER;
   peer->v_connect = BGP_DEFAULT_CONNECT_RETRY;
-  peer->v_holdtime = BGP_DEFAULT_HOLDTIME_BIG;
+  peer->v_holdtime = BGP_DEFAULT_HOLDTIME;
   peer->v_keepalive = BGP_DEFAULT_KEEPALIVE;
   peer->status = Idle;
   peer->ostatus = Idle;
@@ -1642,7 +1642,7 @@ all_digit_check (char *str)
 
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
-       "neighbor IP_ADDR timers holdtime TIMER ",
+       "neighbor IP_ADDR timers holdtime TIMER",
        NEIGHBOR_STR
        "IP address\n"
        "BGP timers\n"
@@ -1669,6 +1669,49 @@ DEFUN (neighbor_timers_holdtime,
     }
 
   peer->v_holdtime = strtol (argv[1], NULL, 10);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_timers_holdtime,
+       no_neighbor_timers_holdtime_cmd,
+       "no neighbor IP_ADDR timers holdtime [TIMER]",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "BGP timers\n"
+       "BGP hold timer\n"
+       "BGP hold timer value\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (argc == 2)
+    {
+      if (! all_digit_check (argv[1]))
+	{
+	  vty_out (vty, "timer value must be digit %s\r\n", argv[1]);
+	  return CMD_WARNING;
+	}
+
+      if (peer->v_holdtime != strtol (argv[1], NULL, 10))
+	{
+	  vty_out (vty, "timer value does not match %s\r\n", argv[1]);
+	  return CMD_WARNING;
+	}
+    }
+
+  peer->v_holdtime = BGP_DEFAULT_HOLDTIME;
 
   return CMD_SUCCESS;
 }
@@ -2005,7 +2048,7 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 		   peer->route_map[BGP_FILTER_OUT].name, VTY_NEWLINE);
 	}
 
-      if (peer->v_holdtime != BGP_DEFAULT_HOLDTIME_BIG)
+      if (peer->v_holdtime != BGP_DEFAULT_HOLDTIME)
 	{
 	  vty_out (vty, " neighbor ");
 	  sockunion_vty_out (vty, peer->su);
@@ -2122,6 +2165,7 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_route_reflector_client_cmd);
   install_element (BGP_NODE, &neighbor_interface_cmd);
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
+  install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
 
   /* Make empty list of bgp and peer list. */
   bgp_list = list_init ();

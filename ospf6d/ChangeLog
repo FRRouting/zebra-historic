@@ -1,4 +1,17 @@
-1999-05-07    <kunihiro@zebra.org>
+1999-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6_network.c (send_linkstate_ack): Check HAVE_SIN6_SCOPE_ID
+	is defined.
+	* ospf6_mesg.c (make_hello): Likewise.
+	* ospf6_lsa.c (lsa_flood): Likewise.
+
+1999-05-07  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* ospf6_spf.c, etc: Many bug fix.
+        intra-area-prefix-LSA treatment changed.
+        network byte order of neighbor ifid changed.
+
+1999-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf6_zebra.h (struct zebra): Add hitory entry to structure.
 

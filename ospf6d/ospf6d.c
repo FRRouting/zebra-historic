@@ -524,22 +524,20 @@ show_area (struct vty *vty, struct area *area)
 int
 show_nbr (struct vty *vty, struct neighbor *nbr)
 {
-  char rtrid[16], ifid[16], dr[16], bdr[16];
+  char rtrid[16], dr[16], bdr[16];
 
 #if 0
-  vty_out (vty, "%-15s %-15s %-8s %-15s %-15s %s[%s]\r\n",
-     "RouterID", "InterfaceID", "State", "DR", "BDR", "I/F", "State");
+  vty_out (vty, "%-15s %-6s %-8s %-15s %-15s %s[%s]\r\n",
+     "RouterID", "I/F-ID", "State", "DR", "BDR", "I/F", "State");
 #endif
 
   inet_ntop (AF_INET, &nbr->rtr_id, rtrid, sizeof (rtrid));
-  inet_ntop (AF_INET, &nbr->ifid, ifid, sizeof (ifid));
   inet_ntop (AF_INET, &nbr->dr, dr, sizeof (dr));
   inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
-  vty_out (vty, "%-15s %-15s %-8s %-15s %-15s %s[%s]\r\n",
-           rtrid, ifid, nbs_name[nbr->state], dr, bdr,
+  vty_out (vty, "%-15s %6lu %-8s %-15s %-15s %s[%s]\r\n",
+           rtrid, nbr->ifid, nbs_name[nbr->state], dr, bdr,
            nbr->ospf6_if->interface->name,
            ifs_name[nbr->ospf6_if->state]);
-  vty_out (vty, "%s", VTY_NEWLINE);
   return 0;
 }
 
@@ -565,8 +563,8 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid,
   struct ospf6 *ospf6;
   listnode i, j, k, l;
 
-  vty_out (vty, "%-15s %-15s %-8s %-15s %-15s %s[%s]\r\n",
-     "RouterID", "InterfaceID", "State", "DR", "BDR", "I/F", "State");
+  vty_out (vty, "%-15s %-6s %-8s %-15s %-15s %s[%s]\r\n",
+     "RouterID", "I/F-ID", "State", "DR", "BDR", "I/F", "State");
 
   if (argc)
     {
@@ -1328,7 +1326,7 @@ DEFUN (show_ipv6_route_ospf6,
                  sizeof (ntop_buf[0]));
       inet_ntop (AF_INET6, &area->rt_table[i].next_hop, ntop_buf[1],
                  sizeof (ntop_buf[1]));
-      if_indextoname (ntohl (area->rt_table[i].ifindex), ifname);
+      if_indextoname (area->rt_table[i].ifindex, ifname);
       vty_out (vty, "%-22s/%3d %-39s %-3s %5d\r\n",
                ntop_buf[0], area->rt_table[i].prefixlength, 
                ntop_buf[1], ifname, area->rt_table[i].cost);
@@ -1566,6 +1564,7 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_link_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_interface_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
@@ -1580,6 +1579,7 @@ ospf6_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_link_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);

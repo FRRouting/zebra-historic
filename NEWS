@@ -1,5 +1,43 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.64.1.
+
+This is bug fix release.
+
+* Changes in lib
+
+** Add check of sin6_scope_id in struct sockaddr_in6.  For compilation
+on implementation which doesn't have sin6_scope_id.  Reported by Wim
+Biemolt <Wim.Biemolt@ipv6.surfnet.nl>.
+
+* Changes in zebra
+
+** Fix bug of display BGP routes as "O" instead of "B".  Reported by
+"William F. Maton" <wmaton@enterprise.ic.gc.ca> and Dave Hartzell
+<hartzell@greatplains.net>.
+
+* Changes in bgpd
+
+** `no network IPV6_NETWORK' statement and `no neighbor IP_ADDR timers
+holdtime [TIMER]' statement doesn't work. Reported by Georg Hitsch
+<georg@atnet.at>.  Now both statement work.
+
+* Changes in ospfd
+
+** Last interface is not updated by ospf_if_update().  Reported by
+Dave Hartzell <hartzell@greatplains.net>.
+
+* Changes in ospf6d
+
+** Byte order of ifid is changed.  Due to this change, this code will
+not work with previous version, sorry.
+
+** Fix `show ip route' route type mismatch.
+
+** Fix bug of no network IPV6_NETWORK.
+
+** Important bug fix about intra-area-prefix-lsa.
+
 * Changes in zebra-0.64.
 
 * Changes in lib

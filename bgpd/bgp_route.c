@@ -610,6 +610,7 @@ nlri_delete (struct peer *peer, struct prefix *p)
 {
   struct route_node *node;
   struct bgp_info *del;
+  char buf[BUFSIZ];
 
   /* First look up routing table node. */
   node = nlri_node_lookup (p);
@@ -624,13 +625,15 @@ nlri_delete (struct peer *peer, struct prefix *p)
   if (del == NULL)
     {
       zlog (peer->log, LOG_INFO, "Withdraw:[%s] %s/%d (does not exist)",
-	    peer->host, inet_ntoa(p->u.prefix4), (int) p->prefixlen);
+	    peer->host, inet_ntop(p->family, &p->u.prefix, buf, BUFSIZ),
+	    (int) p->prefixlen);
       route_unlock_node (node);
       return 0;
     }
 
   zlog (peer->log, LOG_INFO, "Withdraw:[%s] %s/%d (exist)",
-	peer->host, inet_ntoa(p->u.prefix4), (int) p->prefixlen);
+	peer->host, inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+	(int) p->prefixlen);
 
   bgp_info_delete ((struct bgp_info **) &node->info, del);
 
@@ -1072,6 +1075,40 @@ bgp_network_config_ipv6 (struct vty *vty, char *address_str)
 
   return CMD_SUCCESS;
 }
+
+int
+bgp_no_network_config_ipv6 (struct vty *vty, char *address_str)
+{
+  int ret;
+  struct prefix p;
+  struct route_node *node;
+
+  ret = str2prefix_ipv6 (address_str, (struct prefix_ipv6 *) &p);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid address\r\n");
+      return CMD_WARNING;
+    }
+
+  apply_mask_ipv6 ((struct prefix_ipv6 *) &p);
+  
+  node = route_node_get (bgp_static_ipv6, &p);
+  if (! node->info)
+    {
+      vty_out (vty, "Can't find specified static route configuration.\r\n");
+      route_unlock_node (node);
+      return CMD_WARNING;
+    }
+
+  nlri_delete (peer_self, (struct prefix *) &p);
+
+  node->info = NULL;
+
+  route_unlock_node (node);
+  route_unlock_node (node);
+
+  return CMD_SUCCESS;
+}
 #endif
 
 /* Configure static BGP network. */
@@ -1139,6 +1176,10 @@ DEFUN (no_bgp_network,
   ret = str2prefix_ipv4 (argv[0], &p);
   if (!ret)
     {
+#ifdef HAVE_IPV6
+      return bgp_no_network_config_ipv6 (vty, argv[0]);
+#endif /* HAVE_IPV6 */
+
       vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
       return CMD_WARNING;
     }

@@ -280,7 +280,6 @@ struct bgp_notify
 /* Time in second to start bgp connection. */
 #define BGP_INIT_START_TIMER        5
 #define BGP_ERROR_START_TIMER      30
-#define BGP_DEFAULT_HOLDTIME_BIG  240
 #define BGP_DEFAULT_HOLDTIME      180
 #define BGP_DEFAULT_KEEPALIVE      30
 #define BGP_CLEAR_CONNECT_RETRY    20

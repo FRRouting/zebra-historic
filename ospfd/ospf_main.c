@@ -95,7 +95,7 @@ sigint (int sig)
   exit (0);
 }
 
-/* Signale wrapper. */
+/* Signal wrapper. */
 RETSIGTYPE *
 signal_set (int signo, void (*func)(int))
 {

@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.64
+@subtitle for zebra-0.64.1
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,13 +25,12 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.64.
+This is the Zebra Manual for zebra-0.64.1.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
 
 @menu
-Introduction
 * Overview::                    Overview of the Zebra world.
 * Installation::                How to install Zebra.
 * Configuration File::          Configuration file description.
@@ -42,6 +41,7 @@ Zebra beasts
 * ripd::                        @code{ripd} daemon.
 * ripngd::                      @code{ripngd} daemon.
 * ospfd::                       @code{ospfd} daemon.
+* ospf6d::                      @code{ospf6d} daemon.
 * bgpd::                        @code{bgpd} daemon.
 
 Advanced Features
@@ -353,6 +353,7 @@ ripd          2602/tcp		  # RIPd vty
 ripngd        2603/tcp		  # RIPngd vty
 ospfd         2604/tcp		  # OSPFd vty
 bgpd          2605/tcp		  # BGPd vty
+ospf6d        2606/tcp		  # OSPF6d vty
 @end example
 
 If you use FreeBSD newer than 2.2.8, above entry is already added to
@@ -870,7 +871,7 @@ distribute-list local-only out sit1
 @end deffn
 
 
-@node ospfd, bgpd, ripngd, Top
+@node ospfd, ospf6d, ripngd, Top
 @comment  node-name,  next,  previous,  up
 @chapter ospfd
 
@@ -906,8 +907,19 @@ Enable OSPF process under @var{process-id}.
 @comment  node-name,  next,  previous,  up
 @section ospfd terminal mode commands
 
+@node ospf6d, bgpd, ospfd, Top
+@comment  node-name,  next,  previous,  up
+@chapter ospf6d
 
-@node bgpd, Filtering, ospfd, Top
+@menu
+* Invoking ospf6d::             
+@end menu
+
+@node Invoking ospf6d,  , ospf6d, ospf6d
+@comment  node-name,  next,  previous,  up
+@section Invoking ospf6d
+
+@node bgpd, Filtering, ospf6d, Top
 @comment  node-name,  next,  previous,  up
 @chapter bgpd
 
@@ -1156,16 +1168,26 @@ ip access-list permit 10.0.0.0/8
 @end example
 
 @menu
-* IP access-list::              
+* IP access list::              
+* IP prefix list::              
+* AS path access list::         
 @end menu
 
-@node IP access-list,  , Filtering, Filtering
+@node IP access list, IP prefix list, Filtering, Filtering
 @comment  node-name,  next,  previous,  up
 @section IP access-list
 
 @deffn {Command} {ip access-list permit @var{ipv4-network}} {}
 @deffnx {Command} {ip access-list deny @var{ipv4-network}} {}
 @end deffn
+
+@node IP prefix list, AS path access list, IP access list, Filtering
+@comment  node-name,  next,  previous,  up
+@section IP prefix list
+
+@node AS path access list,  , IP prefix list, Filtering
+@comment  node-name,  next,  previous,  up
+@section AS path access list
 
 @node Route map, IPv6 supports, Filtering, Top
 @comment  node-name,  next,  previous,  up

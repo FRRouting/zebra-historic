@@ -92,7 +92,7 @@ proc_hello (struct sockaddr_in6 *src, struct iovec *iov,
   if (nbr == NULL)
     {
       nbr = make_neighbor (ospf6_hdr->router_id, ospf6_if);
-      nbr->ifid = hello->interface_id;
+      nbr->ifid = ntohl (hello->interface_id);
       nbr->prevdr = nbr->dr = hello->dr;
       nbr->prevbdr = nbr->bdr = hello->bdr;
       nbr->rtr_pri = hello->rtr_pri;
@@ -657,8 +657,10 @@ make_hello (struct iovec *iov, struct sockaddr_in6 *dst,
   inet_pton (AF_INET6, ALLSPFROUTERS6, &dst->sin6_addr);
 #ifdef SIN6_LEN
   dst->sin6_len = sizeof (struct sockaddr_in6);
-  dst->sin6_scope_id = if_nametoindex (ospf6_if->interface->name);
 #endif /* SIN6_LEN */
+#ifdef HAVE_SIN6_SCOPE_ID
+  dst->sin6_scope_id = if_nametoindex (ospf6_if->interface->name);
+#endif /* HAVE_SIN6_SCOPE_ID */
 
   hello = (struct hello *)iov_append (MTYPE_OSPF_MESSAGE,
                                       iov, sizeof (struct hello));
@@ -668,7 +670,7 @@ make_hello (struct iovec *iov, struct sockaddr_in6 *dst,
       return -1;
     }
 
-  hello->interface_id = ospf6_if->ifid;
+  hello->interface_id = htonl (ospf6_if->ifid);
   hello->rtr_pri = ospf6_if->rtr_pri;
   memcpy (hello->options, ospf6_if->area->options, sizeof (hello->options));
   hello->hello_interval = htons (ospf6_if->hello_interval);

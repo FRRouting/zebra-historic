@@ -118,6 +118,12 @@ extern char   *progname;
 #define MAXOSPFMESSAGELEN         4096
 #define MAXIOVLIST 1024
 
+#ifdef INRIA_IPV6
+#ifndef IPV6_PKTINFO
+#define IPV6_PKTINFO IPV6_RECVPKTINFO
+#endif /* IPV6_PKTINFO */
+#endif /* INRIA_IPV6 */
+
 /* historycal for KAME */
 #ifndef IPV6_ADD_MEMBERSHIP
 #ifdef HYDRANGEA

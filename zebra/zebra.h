@@ -47,9 +47,9 @@
 #define ZEBRA_ROUTE_STATIC         3
 #define ZEBRA_ROUTE_RIP            4
 #define ZEBRA_ROUTE_RIPNG          5
-#define ZEBRA_ROUTE_BGP            6
-#define ZEBRA_ROUTE_OSPF           7
-#define ZEBRA_ROUTE_OSPF6          8
+#define ZEBRA_ROUTE_OSPF           6
+#define ZEBRA_ROUTE_OSPF6          7
+#define ZEBRA_ROUTE_BGP            8
 
 /* Default port information. */
 #define ZEBRA_PORT           2600

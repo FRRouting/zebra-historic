@@ -432,7 +432,7 @@ bgp_open (struct peer *peer, bgp_size_t size)
   /* Parse open packet. */
   version = stream_getc (peer->ibuf);
   asno  = stream_getw (peer->ibuf);
-  if (peer->v_holdtime == BGP_DEFAULT_HOLDTIME_BIG)
+  if (peer->v_holdtime == BGP_DEFAULT_HOLDTIME)
     peer->v_holdtime = stream_getw (peer->ibuf);
   peer->ident = stream_get_ipv4 (peer->ibuf);
 

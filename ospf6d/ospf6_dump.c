@@ -31,7 +31,7 @@ char *ifs_name[] =
   "DOWN",
   "LOOPBACK",
   "WAITING",
-  "POINTTOPOINT",
+  "PtoP",
   "DROTHER",
   "BDR",
   "DR",
@@ -93,9 +93,8 @@ char *print_lsahdr (struct lsa_hdr *lsh)
   inet_ntop (AF_INET, &lsh->lsh_advrtr, tmp, sizeof (tmp));
   inet_ntop (AF_INET, &lsh->lsh_id, tmp2, sizeof (tmp2));
 
-  sprintf (buf, "[%s: id %s, AdvRtr %s, len %#x]",
-           lstype_name[typeindex(lsh->lsh_type)],
-           tmp2, tmp, ntohs (lsh->lsh_len));
+  sprintf (buf, "[%s: id %s, AdvRtr %s]",
+           lstype_name[typeindex(lsh->lsh_type)], tmp2, tmp);
   return buf;
 }
 

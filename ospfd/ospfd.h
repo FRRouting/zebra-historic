@@ -78,7 +78,7 @@ struct ospf
 {
   struct in_addr router_id;		/* OSPF Router ID. */
 
-  list if_list;				/* Zebra interface list. */
+  list iflist;				/* Zebra interface list. */
 
   list areas;				/* OSPF area. */
   struct route_table *networks;		/* OSPF config networks. */

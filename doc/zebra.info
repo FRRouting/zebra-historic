@@ -16,13 +16,12 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for zebra-0.64.
+   This is the Zebra Manual for zebra-0.64.1.
 
    This manual describes `zebra' and some other beasts.
 
 * Menu:
 
-Introduction
 * Overview::                    Overview of the Zebra world.
 * Installation::                How to install Zebra.
 * Configuration File::          Configuration file description.
@@ -33,6 +32,7 @@ Zebra beasts
 * ripd::                        `ripd' daemon.
 * ripngd::                      `ripngd' daemon.
 * ospfd::                       `ospfd' daemon.
+* ospf6d::                      `ospf6d' daemon.
 * bgpd::                        `bgpd' daemon.
 
 Advanced Features
@@ -346,6 +346,7 @@ number for connecting to daemons.  Please add below entry to
      ripngd        2603/tcp		  # RIPngd vty
      ospfd         2604/tcp		  # OSPFd vty
      bgpd          2605/tcp		  # BGPd vty
+     ospf6d        2606/tcp		  # OSPF6d vty
 
    If you use FreeBSD newer than 2.2.8, above entry is already added to
 `/etc/services'.  So there is no need of adding.
@@ -844,7 +845,7 @@ ripngd filtering commands
           distribute-list local-only out sit1
 
 
-File: zebra.info,  Node: ospfd,  Next: bgpd,  Prev: ripngd,  Up: Top
+File: zebra.info,  Node: ospfd,  Next: ospf6d,  Prev: ripngd,  Up: Top
 
 ospfd
 *****
@@ -886,7 +887,23 @@ ospfd terminal mode commands
 ============================
 
 
-File: zebra.info,  Node: bgpd,  Next: Filtering,  Prev: ospfd,  Up: Top
+File: zebra.info,  Node: ospf6d,  Next: bgpd,  Prev: ospfd,  Up: Top
+
+ospf6d
+******
+
+* Menu:
+
+* Invoking ospf6d::
+
+
+File: zebra.info,  Node: Invoking ospf6d,  Prev: ospf6d,  Up: ospf6d
+
+Invoking ospf6d
+===============
+
+
+File: zebra.info,  Node: bgpd,  Next: Filtering,  Prev: ospf6d,  Up: Top
 
 bgpd
 ****
@@ -1109,16 +1126,30 @@ Filtering
 
 * Menu:
 
-* IP access-list::
+* IP access list::
+* IP prefix list::
+* AS path access list::
 
 
-File: zebra.info,  Node: IP access-list,  Prev: Filtering,  Up: Filtering
+File: zebra.info,  Node: IP access list,  Next: IP prefix list,  Prev: Filtering,  Up: Filtering
 
 IP access-list
 ==============
 
  - Command: ip access-list permit IPV4-NETWORK
  - Command: ip access-list deny IPV4-NETWORK
+
+
+File: zebra.info,  Node: IP prefix list,  Next: AS path access list,  Prev: IP access list,  Up: Filtering
+
+IP prefix list
+==============
+
+
+File: zebra.info,  Node: AS path access list,  Prev: IP prefix list,  Up: Filtering
+
+AS path access list
+===================
 
 
 File: zebra.info,  Node: Route map,  Next: IPv6 supports,  Prev: Filtering,  Up: Top
@@ -1642,8 +1673,8 @@ Command Index
 * flush_timer TIME:                      ripngd configuration.
 * hostname HOSTNAME:                     Basic configuration.
 * interface IFNAME:                      Interface.
-* ip access-list deny IPV4-NETWORK:      IP access-list.
-* ip access-list permit IPV4-NETWORK:    IP access-list.
+* ip access-list deny IPV4-NETWORK:      IP access list.
+* ip access-list permit IPV4-NETWORK:    IP access list.
 * ip address ADDRESS:                    Interface.
 * ip route NETWORK GATEWAY:              Static route.
 * ipv6 route NETWORK GATEWAY:            Static route.
@@ -1738,66 +1769,70 @@ VTY Key Index
 
 Tag Table:
 Node: Top231
-Node: Overview1685
-Node: What is Zebra2292
-Node: System architecture3996
-Node: Mailing list5844
-Node: Bug report6462
-Node: Installation7329
-Node: GNU/Linux configuration7879
-Node: Configure options9435
-Node: VTY port setup11043
-Node: Configuration File11767
-Node: Basic configuration12342
-Node: Sample Configuration13511
-Node: VTY14210
-Node: What is VTY14696
-Node: How to use VTY14914
-Node: View mode and Enable mode15464
-Node: Other modes15681
-Node: Command line editing15819
-Node: Advanced command line editing16414
-Node: Command line history16931
-Node: Command line completion17193
-Node: Command line help17416
-Node: zebra17696
-Node: Common invoking options18079
-Node: Invoking zebra18591
-Node: Interface19026
-Node: Static route19570
-Node: zebra terminal mode commands19783
-Node: ripd20684
-Node: Invoking ripd20945
-Node: ripd configuration21245
-Node: ripd terminal mode commands21400
-Node: ripngd21551
-Node: Invoking ripngd21872
-Node: ripngd configuration22127
-Node: ripngd terminal mode commands22791
-Node: ripngd filtering commands23013
-Node: ospfd23478
-Node: Invoking ospfd23769
-Node: ospfd configuration24019
-Node: ospfd terminal mode commands24349
-Node: bgpd24505
-Node: Invoking bgpd25061
-Node: bgpd configuration25437
-Node: bgpd terminal mode commands28334
-Node: bgpd sample session28973
-Node: bgpd log format29173
-Node: How to set up 6bone connection29663
-Node: Filtering30894
-Node: IP access-list31161
-Node: Route map31362
-Node: Route map command31845
-Node: IP address match command32049
-Node: BGP set command32271
-Node: IPv6 supports32636
-Node: Kernel interface32847
-Node: Linux netlink33977
-Node: Zebra protocol34760
-Node: Copying35427
-Node: Command Index54628
-Node: VTY Key Index59330
+Node: Overview1723
+Node: What is Zebra2330
+Node: System architecture4034
+Node: Mailing list5882
+Node: Bug report6500
+Node: Installation7367
+Node: GNU/Linux configuration7917
+Node: Configure options9473
+Node: VTY port setup11081
+Node: Configuration File11849
+Node: Basic configuration12424
+Node: Sample Configuration13593
+Node: VTY14292
+Node: What is VTY14778
+Node: How to use VTY14996
+Node: View mode and Enable mode15546
+Node: Other modes15763
+Node: Command line editing15901
+Node: Advanced command line editing16496
+Node: Command line history17013
+Node: Command line completion17275
+Node: Command line help17498
+Node: zebra17778
+Node: Common invoking options18161
+Node: Invoking zebra18673
+Node: Interface19108
+Node: Static route19652
+Node: zebra terminal mode commands19865
+Node: ripd20766
+Node: Invoking ripd21027
+Node: ripd configuration21327
+Node: ripd terminal mode commands21482
+Node: ripngd21633
+Node: Invoking ripngd21954
+Node: ripngd configuration22209
+Node: ripngd terminal mode commands22873
+Node: ripngd filtering commands23095
+Node: ospfd23560
+Node: Invoking ospfd23853
+Node: ospfd configuration24103
+Node: ospfd terminal mode commands24433
+Node: ospf6d24589
+Node: Invoking ospf6d24706
+Node: bgpd24811
+Node: Invoking bgpd25368
+Node: bgpd configuration25744
+Node: bgpd terminal mode commands28641
+Node: bgpd sample session29280
+Node: bgpd log format29480
+Node: How to set up 6bone connection29970
+Node: Filtering31201
+Node: IP access list31511
+Node: IP prefix list31735
+Node: AS path access list31876
+Node: Route map32004
+Node: Route map command32487
+Node: IP address match command32691
+Node: BGP set command32913
+Node: IPv6 supports33278
+Node: Kernel interface33489
+Node: Linux netlink34619
+Node: Zebra protocol35402
+Node: Copying36069
+Node: Command Index55270
+Node: VTY Key Index59972
 
 End Tag Table

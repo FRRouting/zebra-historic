@@ -76,9 +76,6 @@ ospf_if_new (struct interface *ifp)
   /* Initialize neighbor list. */
   oi->nbrs = route_table_init ();
 
-  /* Kick ospf process if it is needed. */
-  ospf_if_update ();
-
   return oi;
 }
 

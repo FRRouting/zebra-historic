@@ -277,6 +277,7 @@ dnl ----------
 dnl INRIA IPv6
 dnl ----------
 if grep IPV6_INRIA_VERSION /usr/include/netinet/in.h >/dev/null 2>&1; then
+   zebra_cv_ipv6=yes
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(INRIA_IPV6)
    RIPNGD="ripngd"
@@ -288,6 +289,7 @@ dnl ---------
 dnl KAME IPv6
 dnl ---------
 if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
+   zebra_cv_ipv6=yes
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(KAME)
    RIPNGD="ripngd"
@@ -299,6 +301,7 @@ fi
 # dnl OpenBSD 2.4+
 # dnl ------------
 # if grep NRL /usr/include/netinet6/in6.h >/dec/null 2>&1; then
+#    zebra_cv_ipv6=yes
 #    AC_DEFINE(HAVE_IPV6)
 #    RIPNGD="ripngd"
 #    OSPF6D="ospf6d"
@@ -310,6 +313,7 @@ dnl Linux 2.2.x IPv6
 dnl ----------------
 if test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route"
 then
+   zebra_cv_ipv6=yes
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(LINUX_IPV6)   
    RIPNGD="ripngd"
@@ -399,6 +403,19 @@ AC_TRY_COMPILE([#include <sys/types.h>
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_SIN_LEN)],
  AC_MSG_RESULT(no))
+
+dnl -----------------------------------
+dnl check sin6_scope_id of sockaddr_in6
+dnl -----------------------------------
+if test "$zebra_cv_ipv6" = yes; then
+  AC_MSG_CHECKING(whether struct sockaddr_in6 has a sin6_scope_id field)
+  AC_TRY_COMPILE([#include <sys/types.h>
+#include <netinet/in.h>
+],[static struct sockaddr_in6 ac_i;int ac_j = sizeof (ac_i.sin6_scope_id);],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SIN6_SCOPE_ID)],
+ AC_MSG_RESULT(no))
+fi
 
 dnl --------------------------
 dnl check structure ifaliasreq

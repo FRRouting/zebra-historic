@@ -1,9 +1,10 @@
 !
 ! Zebra configuration saved from vty
-!   1999/05/06 01:29:31
+!   1999/05/07 01:42:09
 !
 hostname ospf6d
 password zebra
+log file /var/log/ospf6d.log
 !
 interface ep0
  ip6 ospf6 cost 1
@@ -35,6 +36,7 @@ router ospf6 instance 1
  interface ep0 area 0.0.0.0
  interface gif0 area 0.0.0.0
  interface gif1 area 0.0.0.0
+ zebra install
 !
 !
 !

@@ -162,6 +162,8 @@ zebra_read (struct thread *t)
       break;
     case ZEBRA_GET_ALL_INTERFACE:
       ospf_zebra_get_interface (zebra.ibuf, nbytes);
+      /* Kick ospf process if it is needed. */
+      ospf_if_update ();
       break;
     default:
       return -1;
@@ -205,7 +207,7 @@ DEFUN (router_zebra,
 {
   int ret;
 
-  /* Set router zebrfa is enabled. */
+  /* Set router zebra is enabled. */
   zebra.enable = 1;
 
   /* If already has socket then return. */

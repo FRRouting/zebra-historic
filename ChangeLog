@@ -1,3 +1,7 @@
+1999-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add sin6_scope_id in struct sockaddr_in6 check.
+
 1999-04-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Set version to 0.63 for first beta package.

@@ -74,7 +74,6 @@ ospf_make_header (struct ospf_interface *oi, struct ospf_header *ospfh)
   ospfh->checksum = 0;
   ospfh->area_id = oi->area->area_id;
   ospfh->auth_type = htons (oi->area->auth_type);
-
 }
 
 /* OSPF Hello message read. */

@@ -839,8 +839,8 @@ construct_router_lsa (struct area *area)
 
           rlsdp->rlsd_type = LSDT_POINTTOPOINT;
           rlsdp->rlsd_metric = htons (ospf6_if->cost);
-          rlsdp->rlsd_interface_id = ospf6_if->ifid;
-          rlsdp->rlsd_neighbor_interface_id = nbr->ifid;
+          rlsdp->rlsd_interface_id = htonl (ospf6_if->ifid);
+          rlsdp->rlsd_neighbor_interface_id = htonl (nbr->ifid);
           rlsdp->rlsd_neighbor_router_id = nbr->rtr_id;
 
           rlsdp++;
@@ -851,8 +851,8 @@ construct_router_lsa (struct area *area)
             {
               rlsdp->rlsd_type = LSDT_TRANSIT_NETWORK;
               rlsdp->rlsd_metric = htons (ospf6_if->cost);
-              rlsdp->rlsd_interface_id = ospf6_if->ifid;
-              rlsdp->rlsd_neighbor_interface_id = ospf6_if->ifid;
+              rlsdp->rlsd_interface_id = htonl (ospf6_if->ifid);
+              rlsdp->rlsd_neighbor_interface_id = htonl (ospf6_if->ifid);
               rlsdp->rlsd_neighbor_router_id = area->ospf6->router_id;
               rlsdp++;
             }
@@ -860,10 +860,10 @@ construct_router_lsa (struct area *area)
             {
               rlsdp->rlsd_type = LSDT_TRANSIT_NETWORK;
               rlsdp->rlsd_metric = htons (ospf6_if->cost);
-              rlsdp->rlsd_interface_id = ospf6_if->ifid;
+              rlsdp->rlsd_interface_id = htonl (ospf6_if->ifid);
               nbr = nbr_lookup (ospf6_if->dr, ospf6_if->area->ospf6);
               assert (nbr);
-              rlsdp->rlsd_neighbor_interface_id = nbr->ifid;
+              rlsdp->rlsd_neighbor_interface_id = htonl (nbr->ifid);
               rlsdp->rlsd_neighbor_router_id = ospf6_if->dr;
               rlsdp++;
             }
@@ -934,7 +934,7 @@ construct_network_lsa (struct ospf6_if *ospf6_if)
   /* age later (after checksum) */
   lsh->lsh_age = 0;
   lsh->lsh_type = htons (LST_NETWORK_LSA);
-  lsh->lsh_id = ospf6_if->ifid;
+  lsh->lsh_id = htonl (ospf6_if->ifid);
   lsh->lsh_advrtr = ospf6_if->area->ospf6->router_id;
   lsh->lsh_seqnum = htonl(ospf6_if->area->network_lsa_seqnum++);
   /* checksum later */
@@ -1021,7 +1021,7 @@ construct_link_lsa (struct ospf6_if *ospf6_if)
   /* age later (after checksum) */
   lsh->lsh_age = 0;
   lsh->lsh_type = htons (LST_LINK_LSA);
-  lsh->lsh_id = ospf6_if->ifid;
+  lsh->lsh_id = htonl (ospf6_if->ifid);
   lsh->lsh_advrtr = ospf6_if->area->ospf6->router_id;
   lsh->lsh_seqnum = htonl(ospf6_if->area->link_lsa_seqnum++);
   /* checksum later */
@@ -1099,6 +1099,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
     {
       /* Not Stub Network and Not DR. The LSA of this network will be
          advertised by DR of this network. */
+      zvlog_debug ("don't construct intra_prefix_lsa, no DR no stub");
       return 0;
     }
 
@@ -1110,7 +1111,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
           if (nbr->state != NBS_FULL)
             continue;
 
-          lsi = lsa_lookup (htons (LST_LINK_LSA), nbr->ifid,
+          lsi = lsa_lookup (htons (LST_LINK_LSA), htonl (nbr->ifid),
                             nbr->rtr_id, ospf6_if->area, ospf6_if);
           if (!lsi)
             {
@@ -1145,7 +1146,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
         }
       
       /* Link-LSA of myself */
-      lsi = lsa_lookup (htons (LST_LINK_LSA), ospf6_if->ifid,
+      lsi = lsa_lookup (htons (LST_LINK_LSA), htonl (ospf6_if->ifid),
                         ospf6_if->area->ospf6->router_id,
                         ospf6_if->area, ospf6_if);
       if (!lsi)
@@ -1176,7 +1177,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
   else if (list_isempty (ospf6_if->nbr_list)) /* XXX */
     {
       /* Link-LSA of myself */
-      lsi = lsa_lookup (htons (LST_LINK_LSA), ospf6_if->ifid,
+      lsi = lsa_lookup (htons (LST_LINK_LSA), htonl (ospf6_if->ifid),
                         ospf6_if->area->ospf6->router_id,
                         ospf6_if->area, ospf6_if);
       if (!lsi)
@@ -1237,11 +1238,11 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
 /* XXX */
 #if 0
   if (fullnbnum)   /* For Transit Network */
-    lsh->lsh_id = ospf6_if->ifid;
+    lsh->lsh_id = htonl (ospf6_if->ifid);
   else             /* For Stub Network */
     lsh->lsh_id = htonl (MY_ROUTER_LSA_ID);
 #else
-  lsh->lsh_id = ospf6_if->ifid;
+  lsh->lsh_id = htonl (ospf6_if->ifid);
 #endif
 
   lsh->lsh_advrtr = ospf6_if->area->ospf6->router_id;
@@ -1256,12 +1257,12 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
   if (fullnbnum)
     {
       intra_prefix_lsa->intra_prefix_refer_lstype = htons (LST_NETWORK_LSA);
-      intra_prefix_lsa->intra_prefix_refer_lsid = ospf6_if->ifid;
+      intra_prefix_lsa->intra_prefix_refer_lsid = htonl (ospf6_if->ifid);
     }
   else
     {
       intra_prefix_lsa->intra_prefix_refer_lstype = htons (LST_ROUTER_LSA);
-      intra_prefix_lsa->intra_prefix_refer_lsid = htonl (MY_ROUTER_LSA_ID);
+      intra_prefix_lsa->intra_prefix_refer_lsid = htonl (0);
     }
 
   intra_prefix_lsa->intra_prefix_refer_advrtr =
@@ -1272,6 +1273,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
     {
       p = (struct ospf6_prefix *) getdata (n);
       memcpy (q, p, OSPF6_PREFIX_SIZE (p));
+      q->o6p_prefix_metric = htons (ospf6_if->cost);
       q = OSPF6_NEXT_PREFIX (q);
     }
 
@@ -1713,8 +1715,10 @@ lsa_flood (struct lsa_internal *newp)
       dst.sin6_family = AF_INET6;
 #ifdef SIN6_LEN
       dst.sin6_len = sizeof (struct sockaddr_in6);
-      dst.sin6_scope_id = if_nametoindex (nbr->ospf6_if->interface->name);
 #endif /* SIN6_LEN */
+#ifdef HAVE_SIN6_SCOPE_ID
+      dst.sin6_scope_id = if_nametoindex (nbr->ospf6_if->interface->name);
+#endif /* HAVE_SIN6_SCOPE_ID */
 
       if (if_is_broadcast (ospf6_if->interface))
         {

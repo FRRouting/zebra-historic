@@ -60,6 +60,7 @@ struct
   { ZEBRA_ROUTE_RIP,     "R", "rip",        20},
   { ZEBRA_ROUTE_RIPNG,   "R", "ripng",      30},
   { ZEBRA_ROUTE_OSPF,    "O", "ospf",       40},
+  { ZEBRA_ROUTE_OSPF6,   "O", "ospf6",      40},
   { ZEBRA_ROUTE_BGP,     "B", "bgp",        50},
 };
 
@@ -375,11 +376,6 @@ DEFUN (show_ip, show_ip_cmd,
     for (rib = np->info; rib; rib = rib->next)
       {
 	int len;
-
-	/* For DEBUG purpose. 
-	len = vty_out (vty, "[%d]%s%c %s/%d", 
-		       np->lock, 
-	*/
 
 	len = vty_out (vty, "%s%c %s/%d", 
 		       route_info[rib->type].str,

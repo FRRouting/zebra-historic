@@ -46,6 +46,9 @@
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
 
+/* whether sockaddr_in6 has a sin6_scope_id field */
+#undef HAVE_SIN6_SCOPE_ID
+
 /* Define if there is ifaliasreq structure. */
 #undef HAVE_IFALIASREQ
 
