@@ -84,7 +84,9 @@ int stream_put_in_addr (struct stream *, struct in_addr *);
 
 void stream_get (void *, struct stream *, size_t);
 u_char stream_getc (struct stream *);
+u_char stream_getc_from (struct stream *, unsigned long);
 u_int16_t stream_getw (struct stream *);
+u_int16_t stream_getw_from (struct stream *, unsigned long);
 u_int32_t stream_getl (struct stream *);
 u_int32_t stream_get_ipv4 (struct stream *);
 

@@ -1,3 +1,16 @@
+2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90a is released.
+
+	* bgp_packet.c (bgp_open_receive): Translated peer's packet_size
+	clear bug is fixed.
+
+2001-01-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_read_packet): Fix bug of unblocking BGP socket
+	read.  When BGP packet read is partial, we must get size and type
+	from packet again.
+
 2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.90 is released.

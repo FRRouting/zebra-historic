@@ -884,6 +884,10 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
 
   BGP_EVENT_ADD (peer, Receive_OPEN_message);
 
+  peer->packet_size = 0;
+  if (peer->ibuf)
+    stream_reset (peer->ibuf);
+
   return 0;
 }
 
@@ -1396,6 +1400,10 @@ bgp_read (struct thread *thread)
   ret = bgp_read_packet (peer);
   if (ret < 0) 
     goto done;
+
+  /* Get size and type again. */
+  size = stream_getw_from (peer->ibuf, BGP_MARKER_SIZE);
+  type = stream_getc_from (peer->ibuf, BGP_MARKER_SIZE + 2);
 
   /* BGP packet dump function. */
   bgp_dump_packet (peer, type, peer->ibuf);

@@ -125,6 +125,16 @@ stream_getc (struct stream *s)
   return c;
 }
 
+/* Get next character from the stream. */
+u_char
+stream_getc_from (struct stream *s, unsigned long from)
+{
+  u_char c;
+
+  c = s->data[from];
+  return c;
+}
+
 /* Get next word from the stream. */
 u_int16_t
 stream_getw (struct stream *s)
@@ -133,6 +143,17 @@ stream_getw (struct stream *s)
 
   w = s->data[s->getp++] << 8;
   w |= s->data[s->getp++];
+  return w;
+}
+
+/* Get next word from the stream. */
+u_int16_t
+stream_getw_from (struct stream *s, unsigned long from)
+{
+  u_int16_t w;
+
+  w = s->data[from++] << 8;
+  w |= s->data[from];
   return w;
 }
 
