@@ -1,0 +1,154 @@
+1998-05-19  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* bgp_aspath.c: HAVE_CONFIG_H typo :-)
+	* bgpd.h: Modify for compile on Solaris.
+	* bgp_aspath.h: likewize
+	* bgp_community.h: likewize
+	* bgp_routemap.c: likewize
+
+1998-05-18  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* bgpd.h: Modify for compile on Solaris.
+	* bgp_aspath.h: likewize
+
+1998-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.[ch]: move to ../lib directory.
+
+1998-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.c (route_map_apply): add function.
+
+1998-05-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.h: add file.
+
+	* bgp_peer.h (enum ): change PEER_{IBGP,EBGP} to BGP_PEER_{IBGP,EBGP}
+
+1998-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: sysconfdir_DATA added.
+
+1998-05-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_dump.c: add `debug bgp fsm'
+		      add `no debug bgp fsm'
+		      add `show debug bgp'
+	* bgp_open.c: File added.
+
+1998-05-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* .cvsignore: File added.
+
+1998-04-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_community.[ch]: File added.
+
+1998-03-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd now use lib/thread.[ch].
+
+1998-01-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (show_ip_bgp_neighbors): add 'show ip bgp neighbors' command.
+
+	* bgpd.h (BGP_DEFAULT_START_TIMER): change from 1 to 30.
+
+1997-12-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_vty.c: bgp_vty.c deleted.
+
+	* bgpd.c (config_write_neighbor): add ebgp-multihop command.
+
+1997-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c: [-p bgp_port] and [-P vty_port] works
+
+1997-12-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_vty.c: new file.
+
+	* bgp_attr.c: add new logging system.
+
+1997-11-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Change all inet_addr call into inet_aton.
+
+1997-11-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_radix.c: change radix_peer_delete
+
+1997-10-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c: move AS_TOKEN_??? definition from header to c source.
+
+1997-09-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_dump.c (bgp_log_route): add dump_attr function
+
+1997-09-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_test): change AS_SET brace from '[' to '{'
+	* bgp_dump.c (bgp_log_route): change logfile format.
+
+1997-08-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_open.c (bgp_open): move bgp_open function from bgpd.c
+	* bgp_attr.c (community_str2com): add community value generation
+	* bgp_attr.h: add SAFI definition for BGP-4+
+
+1997-08-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h: add BGP_OPEN_OPT_CAP for Capabilities Optional Parameter
+	* Makefile.in: add bgp_open.o, delete bgp_loop.o
+	* bgp_open.c: newfile which manages BGP Open message
+	* bgp_loop.c: this file is merged with bgp_fsm.c
+	* bgp_radix.c (radix_add): radix_add() now return route_t instead
+	of int
+	(bgp_sim): now we can read update & withdraw from file
+	* bgp_route.c: add route_free() call into route_parse etc.
+
+1997-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_radix.c: Radix code is completely rewritten. It has better
+	memory treatment than old one.
+
+1997-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c: route_alloc for route struct allocation statistics.
+	* bgpd.c (bgp_make_update): now we cann announce MED attribute.
+	* bgp_aspath.c (aspath_print_all): change aspath_print_all output
+	format.
+
+1997-08-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_term.c (term_parse): add command : show asstat, show ashash
+	* bgp_aspath.c: aspath_cmp bug fix
+	(aspath_print_all): add aspath_print_all ();
+	* bgp_peer.h: delete rlist element from struct peer.
+
+1997-08-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c: completely rewritten.
+	* bgp_aspath.h: completely rewritten.
+	add AsPath, AsSegment structure
+	add AS_SET treatment
+	change Hash codes
+
+1997-08-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.h: add Attribute flags defines
+	* bgp_route.c: delete rlist related functions
+	* bgp_aspath.c (as_origin): add as_origin function
+	(aspath_print): move from bgp_dump.c and add support of AS_SET
+	change Hash related function names.
+
+1997-08-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.h: add next entry, delete rlist entry from struct aspath
+
+1997-08-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (as_sort): add function as_sort
+	* bgp_aspath.h: add IBGP, EBGP
+

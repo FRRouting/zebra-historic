@@ -1,0 +1,465 @@
+/* Socket union related function.
+   Copyright (c) 1997, 98 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
+
+#include "config.h"
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#ifdef HAVE_NET_IF_DL_H
+#include <net/if_dl.h>
+#endif /* HAVE_NET_IF_DL_H */
+#ifdef LINUX_IPV6
+#include <linux/in6.h>
+#endif /* LINUX_IPV6 */
+#include <arpa/inet.h>
+#include <errno.h>
+#include <sys/time.h>
+
+#include "sockunion.h"
+#include "vty.h"
+#include "memory.h"
+#include "log.h"
+
+#ifndef HAVE_INET_ATON
+inet_aton (const char *cp, struct in_addr *inaddr)
+{
+  int dots = 0;
+  register u_long addr = 0;
+
+  do
+    {
+      register char c = *cp;
+      register u_long val = 0, base = 10;
+
+      switch (c)
+	{
+	case '0': case '1': case '2': case '3': case '4': case '5':
+	case '6': case '7': case '8': case '9':
+	  val = val + (c - '0');
+	  break;
+	case '.':
+	  if (++dots > 3)
+	    return 0;
+	case '\0':
+	  if (val > 255)
+	    return 0;
+	  addr = addr << 8 | val;
+	  val = 0;
+	  break;
+	default:
+	  return 0;
+	}
+    } while (*cp++) ;
+
+  if (dots < 3)
+    addr <<= 8 * (3 - dots);
+  if (inaddr)
+    inaddr->s_addr = htonl (addr);
+  return 1;
+}
+#endif /* ! HAVE_INET_ATON */
+
+
+#ifndef HAVE_INET_PTON
+inet_pton (int family, const char *strptr, void *addrptr)
+{
+  if (family == AF_INET)
+    {
+      struct in_addr in_val;
+
+      if (inet_aton (strptr, &in_val))
+	{
+	  memcpy (addrptr, &in_val, sizeof (struct in_addr));
+	  return 1;
+	}
+      return 0;
+    }
+  errno = EAFNOSUPPORT;
+  return -1;
+}
+#endif /* ! HAVE_INET_PTON */
+
+#ifndef HAVE_INET_NTOP
+const char *
+inet_ntop (int family, const void *addrptr, char *strptr, size_t len)
+{
+  unsigned char *p = (unsigned char *) addrptr;
+
+  if (family == AF_INET) 
+    {
+      char temp[INET_ADDRSTRLEN];
+
+#ifdef SUNOS_5
+      sprintf(temp, "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
+#else
+      snprintf(temp, sizeof(temp), "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
+#endif /* SUNOS_5 */
+      if (strlen(temp) >= len) 
+	{
+	  errno = ENOSPC;
+	  return NULL;
+	}
+      strcpy(strptr, temp);
+      return strptr;
+    }
+
+  errno = EAFNOSUPPORT;
+  return NULL;
+}
+#endif /* ! HAVE_INET_NTOP */
+
+const char *
+inet_sutop (union sockunion *su, char *str)
+{
+  switch (su->sa.sa_family)
+    {
+    case AF_INET:
+      inet_ntop (AF_INET, &su->sin.sin_addr, str, SU_ADDRSTRLEN);
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      inet_ntop (AF_INET6, &su->sin6.sin6_addr, str, SU_ADDRSTRLEN);
+      break;
+#endif /* HAVE_IPV6 */
+    }
+  return str;
+}
+
+/* Sockunion union output to vty interface. Return printed strings
+   length. */
+int
+sockunion_vty_out (struct vty *vty, union sockunion *su)
+{
+  char str[INET6_ADDRSTRLEN];
+
+  switch (su->sa.sa_family)
+    {
+    case AF_INET:
+      inet_ntop (AF_INET, &su->sin.sin_addr, str, sizeof (str));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      inet_ntop (AF_INET6, &su->sin6.sin6_addr, str, sizeof (str));
+      break;
+#endif /* HAVE_IPV6 */
+    }
+
+  vty_out (vty, "%s", str);
+
+  return strlen (str);
+}
+
+union sockunion *
+sockunion_str2su (char *str)
+{
+  int ret;
+  union sockunion *su;
+
+  su = XMALLOC (0, sizeof (union sockunion));
+  bzero (su, sizeof (union sockunion));
+
+  ret = inet_pton (AF_INET, str, &su->sin.sin_addr);
+  if (ret > 0)			/* Valid IPv4 address format. */
+    {
+      su->sin.sin_family = AF_INET;
+      return su;
+    }
+#ifdef HAVE_IPV6
+  ret = inet_pton (AF_INET6, str, &su->sin6.sin6_addr);
+  if (ret > 0)			/* Valid IPv6 address format. */
+    {
+      su->sin6.sin6_family = AF_INET6;
+      return su;
+    }
+#endif /* HAVE_IPV6 */
+
+  XFREE (0, su);
+  return NULL;
+}
+
+char *
+sockunion_su2str (union sockunion *su)
+{
+  char str[INET6_ADDRSTRLEN];
+
+  switch (su->sa.sa_family)
+    {
+    case AF_INET:
+      inet_ntop (AF_INET, &su->sin.sin_addr, str, sizeof (str));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      inet_ntop (AF_INET6, &su->sin6.sin6_addr, str, sizeof (str));
+      break;
+#endif /* HAVE_IPV6 */
+    }
+  return strdup (str);
+}
+
+/* Return accepted new socket file descriptor. */
+int
+sockunion_accept (int sock, union sockunion *su)
+{
+  int len;
+  int newsock;
+
+  len = sizeof (union sockunion);
+  newsock = accept (sock, (struct sockaddr *) su, &len);
+  
+  return newsock;
+
+#if 0
+#ifdef THREAD
+  int family = su->sa.sa_family;
+#else
+  int family = FD_SLOT[sock].family;
+#endif
+
+  if (family == AF_INET)
+    {
+      len = sizeof (struct sockaddr_in);
+      newsock = accept (sock, (struct sockaddr *) &su->sin, &len);
+      return newsock;
+    }
+#ifdef HAVE_IPV6
+  if (family == AF_INET6)
+    {
+      len = sizeof (struct sockaddr_in6);
+      newsock = accept (sock, (struct sockaddr *) &su->sin6, &len);
+      return newsock;
+    }
+#endif /* HAVE_IPV6 */
+#endif /* 0 */
+}
+
+/**/
+int
+sockunion_stream_socket (union sockunion *su)
+{
+  int sock;
+
+  if (su->sa.sa_family == 0)
+    su->sa.sa_family = AF_INET_UNION;
+
+  sock = socket (su->sa.sa_family, SOCK_STREAM, 0);
+
+  if (sock < 0)
+    log_warn ("can't make socket sockunion_stream_socket\n");
+
+  return sock;
+}
+
+/**/
+int
+sockunion_bind (int sock, 
+		union sockunion *su, 
+		unsigned short port, 
+		union sockunion *su_addr)
+{
+  int size = 0;
+  int ret;
+
+  switch (su->sa.sa_family)
+    {
+    case AF_INET:
+      size = sizeof (struct sockaddr_in);
+      su->sin.sin_port = htons (port);
+      /* su->sin.sin_len = size; */
+      if (su_addr == NULL)
+	su->sin.sin_addr.s_addr = htonl (INADDR_ANY);
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      size = sizeof (struct sockaddr_in6);
+      su->sin6.sin6_port = htons (port);
+      /* su->sin6.sin6_len = size; */
+      if (su_addr == NULL)
+#ifdef LINUX_IPV6
+	bzero (&su->sin6.sin6_addr, sizeof (struct in6_addr));
+#else
+      	su->sin6.sin6_addr = in6addr_any;
+#endif /* LINUX_IPV6 */
+      break;
+#endif /* HAVE_IPV6 */
+    }
+
+  ret = bind (sock, (struct sockaddr *)su, size);
+  if (ret < 0)
+    log_warn ("can't bind socket : %s\n", strerror (errno));
+
+  return ret;
+}
+
+int
+sockopt_reuseaddr (int sock)
+{
+  int ret;
+  int on = 1;
+
+  ret = setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, 
+		    (void *) &on, sizeof (on));
+  if (ret < 0)
+    {
+      log_warn ("can't set sockopt SO_REUSEADDR to socket %d\n", sock);
+      return -1;
+    }
+  return 0;
+}
+
+int
+sockopt_ttl (int family, int sock, int ttl)
+{
+  int ret;
+
+  if (family == AF_INET)
+    {
+      ret = setsockopt (sock, IPPROTO_IP, IP_TTL, 
+			(void *) &ttl, sizeof (int));
+      if (ret < 0)
+	{
+	  log_warn ("can't set sockopt IP_TTL %d to socket %d\n", ttl, sock);
+	  return -1;
+	}
+      return 0;
+    }
+#ifdef HAVE_IPV6
+  if (family == AF_INET6)
+    {
+      ret = setsockopt (sock, IPPROTO_IPV6, IPV6_UNICAST_HOPS, 
+			(void *) &ttl, sizeof (int));
+      if (ret < 0)
+	{
+	  log_warn ("can't set sockopt IPV6_UNICAST_HOPS %d to socket %d\n",
+		    ttl, sock);
+	  return -1;
+	}
+      return 0;
+    }
+#endif /* HAVE_IPV6 */
+  return 0;
+}
+
+/* If same family and same prefix return 1. */
+int
+sockunion_sameprefix (union sockunion *su1, union sockunion *su2)
+{
+  int ret = 0;
+
+  if (su1->sa.sa_family != su2->sa.sa_family)
+    return 0;
+
+  switch (su1->sa.sa_family)
+    {
+    case AF_INET:
+      ret = memcmp (&su1->sin.sin_addr, &su2->sin.sin_addr,
+		    sizeof (struct in_addr));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      ret = memcmp (&su1->sin6.sin6_addr, &su2->sin6.sin6_addr,
+		    sizeof (struct in6_addr));
+      break;
+#endif /* HAVE_IPV6 */
+    }
+  if (ret == 0)
+    return 1;
+  else
+    return 0;
+}
+
+/* Print sockunion structure : this function should be revised. */
+void
+sockunion_log (union sockunion *su)
+{
+  char buf [64];
+
+  switch (su->sa.sa_family) 
+    {
+    case AF_INET:
+      log2 ("%s", inet_ntoa (su->sin.sin_addr));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      log2 ("%s", inet_ntop (AF_INET6, &(su->sin6.sin6_addr),
+			      buf, sizeof (buf)));
+      break;
+#endif /* HAVE_IPV6 */
+
+#ifdef AF_LINK
+    case AF_LINK:
+      {
+	struct sockaddr_dl *sdl;
+
+	sdl = (struct sockaddr_dl *)&(su->sa);
+	log2 ("link#%d ", sdl->sdl_index);
+      }
+      break;
+#endif /* AF_LINK */
+
+    default:
+      log2 ("af_unknown %d ", su->sa.sa_family);
+      break;
+    }
+}
+
+/* Print sockunion structure */
+void
+sockunion_print (union sockunion *su)
+{
+  char buf [64];
+
+  switch (su->sa.sa_family) 
+    {
+    case AF_INET:
+      printf ("%s", inet_ntoa (su->sin.sin_addr));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      printf ("%s", inet_ntop (AF_INET6, &(su->sin6.sin6_addr),
+			       buf, sizeof (buf)));
+      break;
+#endif /* HAVE_IPV6 */
+
+#ifdef AF_LINK
+    case AF_LINK:
+      {
+	struct sockaddr_dl *sdl;
+
+	sdl = (struct sockaddr_dl *)&(su->sa);
+	printf ("link#%d", sdl->sdl_index);
+      }
+      break;
+#endif /* AF_LINK */
+    default:
+      printf ("af_unknown %d\n", su->sa.sa_family);
+      break;
+    }
+}
+
+struct in_addr
+sockunion_get_in_addr (union sockunion *su)
+{
+  struct sockaddr_in *sin;
+
+  sin = (struct sockaddr_in *)su;
+
+  return sin->sin_addr;
+}

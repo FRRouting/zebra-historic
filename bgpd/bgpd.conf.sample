@@ -1,0 +1,21 @@
+! -*- bgp -*-
+!
+! BGPd sample configuratin file
+!
+hostname bgpd
+password zebra
+!enable password please-set-here
+!
+!bgp mulitple-instance
+!
+router bgp 65502
+!  bgp router-id 10.0.0.1
+!  default-attr local-pref 100
+!  default-attr med 1000
+!  default-attr next-hop 203.181.89.18
+!  network 10.0.0.0/8
+  neighbor 203.181.89.6 remote-as 65502
+  neighbor 203.181.89.6 ebgp-multihop
+!  neighbor 203.181.89.6 next-hop 203.181.89.18
+!
+!logfile bgpd.log

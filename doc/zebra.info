@@ -1,0 +1,629 @@
+This is Info file zebra.info, produced by Makeinfo version 1.68 from
+the input file zebra.texi.
+
+INFO-DIR-SECTION Routing Software
+START-INFO-DIR-ENTRY
+* Zebra: (zebra).		The GNU Zebra routing software.
+END-INFO-DIR-ENTRY
+
+
+File: zebra.info,  Node: Top,  Next: Overview,  Prev: (dir),  Up: (dir)
+
+GNU Zebra
+*********
+
+   `GNU Zebra' is a Routing Software which provides TCP/IP based
+routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns your
+machine into a full powered router.  Zebra is multi-server routing
+software.  Each daemon has it's own terminal interface which called VTY,
+so you can dynamically change configuration and view routing information
+while daemon is running.
+
+   This is beta-edition version 0.2 of `GNU Zebra Manual' for alpha-01
+version of `GNU Zebra'.
+
+   This manual describes `zebra' and some other beasts.
+
+* Menu:
+
+* Overview::                    GNU Zebra's purpose
+* Installation::                How to install Zebra
+* Introduction::                Introduction to Zebra world
+* Distributed Routing System::  Detailed information of Zebra
+* Configuration File::          Configuration file description
+* VTY::                         Virtual teletype interface
+* zebra::                       `zebra' daemon
+* RIPd::                        `RIPd' daemon
+* RIPngd::                      `RIPnggd' daemon
+* OSPFd::                       `OSPFd' daemon
+* BGPd::                        `BGPd' daemon
+* Filtering::                   How to filter routes
+* Route map::                   Route map description
+* IPv6 supports::               IP version 6 supports
+* Linux netlink::               Netlink mechanism on Linux box
+* zebra protocol::              Zebra protocol
+
+
+File: zebra.info,  Node: Overview,  Next: Installation,  Prev: Top,  Up: Top
+
+Overview of `Zebra'
+*******************
+
+   Today TCP/IP network is covering all over the world.  The Internet
+has deployed many countries and companies.  If you are connecting to the
+Internet or using TCP/IP LAN network, you will need IP Routing.
+
+   `GNU Zebra' is a free software which provides Distributed Routing
+System.  It includes many protocol specific daemons.  `RIPd' handles
+RIP protocol. `OSPFd' is off course a daemon which supports OSPF
+version 2 described in RFC2178.  `BGPd' daemon supports BGP-4 protocol
+described in RFC1771 (A Border Gateway Protocal 4).  `zebra' is routing
+manager and it dose kernel routing table management.
+
+* Menu:
+
+* How to get zebra::
+* Mailing list::
+* Bug report::
+
+
+File: zebra.info,  Node: How to get zebra,  Next: Mailing list,  Prev: Overview,  Up: Overview
+
+How to get zebra
+================
+
+   There is alpha testing source file archive at
+
+   * ftp://ftp.zebra.org/pub/zebra/
+
+   There is zebra home page at
+
+   * http://www.zebra.org/
+
+
+File: zebra.info,  Node: Mailing list,  Next: Bug report,  Prev: How to get zebra,  Up: Overview
+
+Mailing list
+============
+
+   There is mailing list to discuss about zebra.
+
+   For English language discussion.
+
+   * zebra@zebra.org
+
+   For Japanese language discussion.
+
+   * zebra-jp@zebra.org
+
+   To subscribe mailing list, please send a mail to
+<majordomo@zebra.org> with body include only
+
+   subscribe zebra
+
+   or
+
+   subscribe zebra-jp
+
+
+File: zebra.info,  Node: Bug report,  Prev: Mailing list,  Up: Overview
+
+Bug report
+==========
+
+   If you think you find a bug.  Please send bug report to
+
+   bug-zebra@zebra.org.
+
+   It will forward to Kunihiro Ishiguro <kunihiro@zebra.org>.
+
+
+File: zebra.info,  Node: Installation,  Next: Introduction,  Prev: Overview,  Up: Top
+
+Installation
+************
+
+   You will need GNU C Compiler to compile zebra.
+
+     % ./configure
+     % make
+
+   will create zebra and other beasts.
+
+     % make install
+
+   will install all of zebra software.
+
+
+File: zebra.info,  Node: Introduction,  Next: Distributed Routing System,  Prev: Installation,  Up: Top
+
+Introduction
+************
+
+   The `Zebra' supports BGP-4, RIP-1,2 and will support OSPFv2, RIPng
+and so on.  Zebra has one daemon for each protocols.  For changing
+kernel routing table and for redistribution between different routing
+protocols, it has a zebra daemon.  So zebra is name of a routing daemon
+as well as the name of the routing software package name.  There is no
+need for these daemon to be running over the same machine.  This allows
+for the possibility of a new formation of the routing software.
+
+     SYSTEM ARCHITECTURE:
+     
+       +----+  +----+  +-----+  +-----+
+       |BGPd|  |RIPd|  |OSPFd|  |zebra|
+       +----+  +----+  +-----+  +-----+
+                                  |
+       +--------------------------|---+
+       |                          v   |
+       |    UNIX Kernel  routing table|
+       +------------------------------+
+
+   Zebra use a multi-thread mechanism when it runs under a multi-thread
+supported kernel.  It will also run under traditional UNIX kernels such
+as FreeBSD, Solaris, Linux.  When zebra runs under GNU Hurd kernel it
+will act as a kernel routing table because there is no traditional
+kernel routing table present.  Under GNU hurd all TCP/IP services are
+provided by user processes such as `pflocal' or `pfinet' server.  Zebra
+will provide all the routing selection mechanisms for those processes.
+
+   BGPd will also act as Route Server and Route Reflector.  BGPd can
+dump both BGP-4 updates and withdraw message.  BGPd acts as Route
+Server which exchang routing information. When you only need Route
+Server or Route Reflector, there is no need of running RIPd, OSPFd, and
+zebra daemon.
+
+   This will allow there will be new potential of routing software by
+dividing protocol module to different daemon.
+
+
+File: zebra.info,  Node: Distributed Routing System,  Next: Configuration File,  Prev: Introduction,  Up: Top
+
+Distributed Routing System
+**************************
+
+   Zebra attempt works as the Distribute Routing System.
+
+
+File: zebra.info,  Node: Configuration File,  Next: VTY,  Prev: Distributed Routing System,  Up: Top
+
+Configration File
+*****************
+
+   Each daemon has a configuration file.  For example zebra's default
+configuration file name is 'zebra.conf'.  Program name plus '.conf' is
+default configuration file name. You can specify configration file by -f
+or -config-file option to the daemon.
+
+   In configuration file, you can write debug option, vty's password,
+routing daemon configuration, logfile name and so on.
+
+* Menu:
+
+* Sample Configuration::
+* Host configuration::
+
+
+File: zebra.info,  Node: Sample Configuration,  Next: Host configuration,  Prev: Configuration File,  Up: Configuration File
+
+Sample Configuration
+====================
+
+   Below is sample configuration of zebra daemon.
+
+     !
+     ! Zebra configration file
+     !
+     password zebra
+     enable password zebra
+     !
+     logfile zebra.log # logfile name
+
+   '!' and '#' are comment character.  If the first character of the
+word is one of comment character, from the character to the end of line
+is ignored as commecnt.
+
+     password zebra!password
+
+   If comment character is not the first character of the word, it's a
+normal character. So above '!' doesn't regard as comment and password is
+set to 'zebra!password'.
+
+
+File: zebra.info,  Node: Host configuration,  Prev: Sample Configuration,  Up: Configuration File
+
+Host configuration
+==================
+
+   hostname Router
+
+
+File: zebra.info,  Node: VTY,  Next: zebra,  Prev: Configuration File,  Up: Top
+
+VTY
+***
+
+   VTY - Virtual Terminal [aka TeletYpe] Interface is command line
+interface to change and/or view current configuration.
+
+* Menu:
+
+* What is VTY::
+* How to use VTY::
+* View mode and Enable mode::
+* Other modes::
+* Command line editing::
+* Command line history::
+* Command line completion::
+* Command line help::
+
+
+File: zebra.info,  Node: What is VTY,  Next: How to use VTY,  Prev: VTY,  Up: VTY
+
+What is VTY
+===========
+
+   VTY stands for virtual teletype interface.  It means you can connect
+to the daemon via telnet protocol.
+
+
+File: zebra.info,  Node: How to use VTY,  Next: View mode and Enable mode,  Prev: What is VTY,  Up: VTY
+
+How to use VTY
+==============
+
+   To enable VTY inteface, you have to setup vty password.  If there is
+no vty password one can not connect VTY inteface at all.
+
+     % telnet localhost 2601
+     Trying 127.0.0.1...
+     Connected to localhost.
+     Escape character is '^]'.
+     
+     Hello, this is zebra (version alpha-01)
+     Copyright 1997 Kunihiro Ishiguro
+     
+     Vty password is not set.
+     Connection closed by foreign host.
+
+
+File: zebra.info,  Node: View mode and Enable mode,  Next: Other modes,  Prev: How to use VTY,  Up: VTY
+
+View mode and Enable mode
+=========================
+
+   There is two big mode which has each characteritic.
+
+
+File: zebra.info,  Node: Other modes,  Next: Command line editing,  Prev: View mode and Enable mode,  Up: VTY
+
+Other modes
+===========
+
+
+File: zebra.info,  Node: Command line editing,  Next: Command line history,  Prev: Other modes,  Up: VTY
+
+Command line editing
+====================
+
+`C-a'
+     Move to the beginning of the line.
+
+`C-e'
+     Move to the end of the line.
+
+`C-f'
+`<RIGHT>'
+     Move forward one character.
+
+`C-b'
+`<LEFT>'
+     Move backward one character.
+
+`C-h'
+`<DEL>'
+     Delete the character before point.
+
+`C-d'
+     Delete the character after point.
+
+`C-k'
+     Kill to the end of the line.
+
+`C-t'
+     Transpose character.
+
+`C-u'
+     Kill line from the beginning.  This erase the inputed line.
+
+
+File: zebra.info,  Node: Command line history,  Next: Command line completion,  Prev: Command line editing,  Up: VTY
+
+Command line history
+====================
+
+`C-n'
+`<DOWN>'
+     Move down to next line (`next-line').
+
+`C-p'
+`<UP>'
+     Move up to previous line (`previous-line').
+
+
+File: zebra.info,  Node: Command line completion,  Next: Command line help,  Prev: Command line history,  Up: VTY
+
+Command line completion
+=======================
+
+   You can use command line completion by typing '<TAB>'.
+
+
+File: zebra.info,  Node: Command line help,  Prev: Command line completion,  Up: VTY
+
+   You can use command line help by typing 'help' at the beginning of
+the line. Typing `?` at the end of line is not yet implemented.
+
+
+File: zebra.info,  Node: zebra,  Next: RIPd,  Prev: VTY,  Up: Top
+
+zebra
+*****
+
+   `zebra' is routing manager.  It provides interface lookup and
+redistribute between deferent protocol.
+
+* Menu:
+
+* Interface::
+* Static route::
+* Kernel routing table::
+
+
+File: zebra.info,  Node: Interface,  Next: Static route,  Prev: zebra,  Up: zebra
+
+Interface
+=========
+
+
+File: zebra.info,  Node: Static route,  Next: Kernel routing table,  Prev: Interface,  Up: zebra
+
+Static route
+============
+
+
+File: zebra.info,  Node: Kernel routing table,  Prev: Static route,  Up: zebra
+
+Kernel routing table
+====================
+
+
+File: zebra.info,  Node: RIPd,  Next: RIPngd,  Prev: zebra,  Up: Top
+
+RIPd
+****
+
+   Command line options:
+`--daemon'
+`-d'
+   rip version 1 - set RIP version 1 rip version 2 - set RIP version 2
+
+
+File: zebra.info,  Node: RIPngd,  Next: OSPFd,  Prev: RIPd,  Up: Top
+
+RIPngd
+******
+
+   RIPngd supports RIPng protocol which described in RFC2080.  It's IPv6
+reincarnation version of RIP protocol.
+
+   Currently RIPngd supports following commands.
+
+     interface IFNAME
+      describe DESCRIPTION
+      ripng receive
+      no ripng receive
+      ripng send
+      no ripng send
+     
+     router ripng
+      flush_timer TIME
+      aggregate IPV6ADDR/PREFLEN
+      network IPV6ADDR/PREFLEN
+
+
+File: zebra.info,  Node: OSPFd,  Next: BGPd,  Prev: RIPngd,  Up: Top
+
+OSPFd
+*****
+
+   OSPFd will provide OSPF version 2 routing protocol which described at
+RFC2178.  Currently OSPFd is under development.  Next version of
+`zebra' will contain OSPFd.
+
+   If you are interested in developing OSPFd please contact to
+<takada@zebra.org>.
+
+
+File: zebra.info,  Node: BGPd,  Next: Filtering,  Prev: OSPFd,  Up: Top
+
+BGPd
+****
+
+   BGPd is a BGP-4 protocol daemon.  BGP version 4 protocol is
+described in RFC1771.  BGPd also supports BGP-4+ BGP version 4 Multi
+Protocol Extention which described in RFC2283.
+
+* Menu:
+
+* BGPd configuration::
+* BGPd terminal mode commands::
+* BGPd sample session::
+* BGPd logfile format::
+
+
+File: zebra.info,  Node: BGPd configuration,  Next: BGPd terminal mode commands,  Prev: BGPd,  Up: BGPd
+
+BGPd configuration
+==================
+
+   There is some commands for configure bgpd.  Default configuration
+file is ./bgpd.conf
+
+     router bgp ASN
+     neighbor X.X.X.X remote-as ASN
+     neighbor X.X.X.X next-hop Y.Y.Y.Y
+     
+     logfile FILENAME
+
+
+File: zebra.info,  Node: BGPd terminal mode commands,  Next: BGPd sample session,  Prev: BGPd configuration,  Up: BGPd
+
+BGPd terminal mode commands
+===========================
+
+   show ip bgp X.X.X.X show ip bgp summary show ip bgp peer
+
+   show ip bgp  lists all routes which BGPd hold
+
+   clear ip bgp X.X.X.X  clear peer which have address of X.X.X.X
+
+   show debug debug event debug update debug keepalive
+
+   no debug event no debug update no debug keepalive
+
+   quit
+
+
+File: zebra.info,  Node: BGPd sample session,  Next: BGPd logfile format,  Prev: BGPd terminal mode commands,  Up: BGPd
+
+BGPd sample session
+===================
+
+   This section is under construction.
+
+
+File: zebra.info,  Node: BGPd logfile format,  Prev: BGPd sample session,  Up: BGPd
+
+BGPd longfile format
+====================
+
+   BGPd outputs logs into terminal or a specified file.  It includes
+routing updates and peer status change information.  It includes date,
+time, packet sort:[peer IP address] routing information.
+
+     97/08/25 17:42:18 Update:[202.216.226.1] 130.58.0.0/16 med: 0 lpref: 0 nexthop: 202.216.226.1 aspath: 4691 3561 5119 3576 3782 i
+
+
+File: zebra.info,  Node: Filtering,  Next: Route map,  Prev: BGPd,  Up: Top
+
+Filtering
+*********
+
+   Basic filtering is done by access-list.
+
+     ip access-list deny 10.0.0.0/9
+     ip access-list permit 10.0.0.0/8
+
+
+File: zebra.info,  Node: Route map,  Next: IPv6 supports,  Prev: Filtering,  Up: Top
+
+Route map
+*********
+
+   Route map is very usefull functionality of zebra.  There is match and
+set statement in route map.
+
+     route-map test permit 10
+      match ip address 10
+      set local-preference 200
+
+   This means if a route match ip access-list number 10 then set it's
+local-preference value to 200.
+
+
+File: zebra.info,  Node: IPv6 supports,  Next: Linux netlink,  Prev: Route map,  Up: Top
+
+IPv6 supports
+*************
+
+   Currently zebra supports both RIPng and BGP multiprotocol extention
+(aka BGP-4+).
+
+
+File: zebra.info,  Node: Linux netlink,  Next: zebra protocol,  Prev: IPv6 supports,  Up: Top
+
+Linux netlink
+*************
+
+   On recent Linux kernels, there is a kernel/user communication support
+which called netlink.  It can possible asyncronous communication between
+kernel and zebra such as routing socket over BSD systems.
+
+   Before you use this feature, you will need add Networking options of
+'Kernel/User network link driver' and 'Routing messages'.
+
+   And also you will need to create /dev/route spectial device file by
+calling:
+
+   # cd /dev # ./MAKEDEV route
+
+   To confirm this file, please ls it.
+
+   # ls -l route crw-rw---   1 root     sys       36,   0 Nov 25 02:36
+route
+
+   After doing this, please reconfigure and make install zebra.  You can
+use it as dynamic routing update channel between zebra and kernel.
+
+
+File: zebra.info,  Node: zebra protocol,  Prev: Linux netlink,  Up: Top
+
+zebra protocol
+**************
+
+   `zebra' provides standard interface for updating kernel routing
+table.  If you want to write your oun routing protocol daemon.
+
+
+
+Tag Table:
+Node: Top223
+Node: Overview1711
+Node: How to get zebra2503
+Node: Mailing list2783
+Node: Bug report3230
+Node: Installation3476
+Node: Introduction3776
+Node: Distributed Routing System5647
+Node: Configuration File5873
+Node: Sample Configuration6450
+Node: Host configuration7176
+Node: VTY7336
+Node: What is VTY7742
+Node: How to use VTY7960
+Node: View mode and Enable mode8508
+Node: Other modes8724
+Node: Command line editing8862
+Node: Command line history9448
+Node: Command line completion9733
+Node: Command line help9958
+Node: zebra10181
+Node: Interface10435
+Node: Static route10541
+Node: Kernel routing table10668
+Node: RIPd10793
+Node: RIPngd10989
+Node: OSPFd11480
+Node: BGPd11816
+Node: BGPd configuration12195
+Node: BGPd terminal mode commands12555
+Node: BGPd sample session13031
+Node: BGPd logfile format13235
+Node: Filtering13698
+Node: Route map13917
+Node: IPv6 supports14318
+Node: Linux netlink14525
+Node: zebra protocol15359
+
+End Tag Table

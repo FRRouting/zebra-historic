@@ -1,0 +1,81 @@
+1998-05-18  Yamashita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* config.h.in: define PTHREAD if work on Solaris 2.6
+		why delete the definition? I miss?
+
+1998-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: add net/if.h header check.
+
+1998-05-02  SeonMeyong HEO <seirios@Matrix.iri.co.jp>
+
+        * zebra.tex,archfig.tex,zebra.sty: Manual file is added.
+	* zebra.texi: Modify Introduction text.
+	* RIPngd.c: Patch Hydrangea code.
+
+1998-05-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* .cvsignore: added.
+
+	* Makerule.in: is gone.
+	* Makefile.am: Now we use automake to generate Makefile.in
+
+1998-03-19  Yamashita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* lib/vty.c: modified the definition of *master
+	* lib/sockunion.c (inet_aton): add, but don't work. uum...
+
+
+1998-03-15  Yamashita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* configure.in: define PTHREAD if work on Solaris 2.6
+	* config.h.in: likewise
+	* lib/thread.c: likewise
+	* lib/vty.c: likewise
+	
+1998-03-15  SeonMeyong HEO  <seirios@Matrix.iri.co.jp>
+
+	* config.h.in: define INET6 if defined HAVE_IPV6 & HYDRANGEA
+	* bgpd/: remove include <netinet6/in6.h> line.
+	* lib/: remove include <netinet6/in6.h> line.
+	* ripbgd/: remove include <netinet6/in6.h> line.
+	* zebra/: remove include <netinet6/in6.h> line.
+	* ripd/*.c: remove include <netinet6/in6.h> line.
+	undefine IPV6 difinitions because RIPd is not worked for
+	IPv6 protocol.
+
+	
+1998-01-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Change routing socket check method from
+	AC_TRY_COMPILE to AC_TRY_RUN because GNU libc version 2 has
+	AF_ROUTE but over linux it's meenigless.
+
+1998-01-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* config.h.in: remove err_t define.
+
+1997-11-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (canonical): add check of IF_METHOD
+
+1997-09-27  Kunihiro Ishiguro  <kunihiro@note.digital-magic.co.jp>
+
+	* configure.in: add INRIA check
+
+1997-09-25  Kunihiro Ishiguro  <kunihiro@note.digital-magic.co.jp>
+
+	* configure.in (canonical): change ipforward_snmp.o to ipforward_proc.o
+
+1997-09-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: change IRDPD to NDPD
+
+1997-08-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* INSTALL: new file
+
+1997-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* config.h: add XCALLOC()
+

@@ -1,0 +1,116 @@
+1998-05-19  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* rt_socket.c: Modify for compile on Solaris, but dont't work it.
+	  rt_socket.c have some undefined function, so add directive "IMPLEMENT"
+
+1998-05-18  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* zebra.c: Modify for compile on Solaris.
+
+1998-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* main.c: change CONFDIR to SYSCONFDIR.
+
+1998-05-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* .cvsignore: added.
+
+1998-04-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* client.c: moves to ../lib.
+
+1998-03-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (if_get_addr): Change address copy from memcopy() to
+	structure assignment.
+
+1998-03-30  URA Hiroshi <ura@yamato.ibm.co.jp>
+
+	* if_sysctl.c (ifm_interface_add): sdl->sdl_data copy bug fixed.
+
+1998-02-23  "Hannes R. Boehm" <hannes@boehm.org>
+
+	* if.c (if_init): add config_exit_cmd and config_help_cmd.
+
+1998-01-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_ioctl.c (route_ioctl): EPERM treatment added.
+
+1998-01-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_socket.c (kernel_read): communication port zebra between
+	kernel is now handled by kernel_read.
+
+1998-01-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* main.c (main): zebra [-P port] can specify vty port number.
+
+1997-12-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.c: change select will be block.
+
+1997-12-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* add static route treatment.
+
+1997-11-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c: add netlink support over GNU/Linux system.
+
+1997-11-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* all inet_addr is changed to inet_aton.
+
+	* zebra.c (ip_route): add ip route command for static routes.
+
+1997-11-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c (if_flag_dump): Linux port of if_flag_dump and _vty.
+
+1997-11-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c: add interface command.
+
+1997-11-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ipforward_proc.c : Now works on Linux.
+
+1997-10-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c : add completion feature.
+
+1997-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_command): add vty interface.
+
+1997-10-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.c: add verbose mode.
+
+1997-10-12 SonMyong Ho <s-ho@Matrix.IRI.Co.Jp>
+
+	* Hydrangea for FreeBSD supported
+	* in.h: add some prototype.
+
+1997-10-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_socket.c and rtread.c completely rewritten.
+
+1997-10-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_socket.c: rename kernel_sock to routing_socket
+
+1997-10-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c (if_new): interface structure change from linklist to vector.
+
+1997-10-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vector.c (vector_init): create vector related function
+
+1997-09-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.in: add tags target
+
+	* start IPv6 support for INRIA FreeBSD.
+

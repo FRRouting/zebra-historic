@@ -1,0 +1,137 @@
+1998-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (libzebra_a_SOURCES): add route.c to libzebra_a_SOURCES.
+
+1998-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* route.c (str2prefix): str2prefix () is gone.
+
+1998-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_read_config): change CONDIR to SYSCONFDIR.
+
+	* .cvsignore: add file.
+
+	* memory.c (xerror): add arguent `type' and `size'.
+
+	* socket.c: deleted.
+
+1998-05-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vector.c: malloc,free,realloc -> XMALLOC,XFREE,XREALLOC.
+	* linklist.c: same as above.
+
+1998-04-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.[ch]: added.
+
+1998-04-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (config_who): return CMD_SUCCESS
+
+1998-04-01  Jochen Friedrich <jochen@scram.de>
+
+	* table.c (route_dump_node): route_dump_node is IPv6 specific
+	function so move #ifdef to the end of route_dump_node ().
+
+1998-03-05  "Hannes R. Boehm" <hannes@boehm.org>
+
+	* if.c: DEFUN(interface_desc) added.
+
+1998-03-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c: separated from ripd/rip_interface.c
+
+1998-03-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* thread.[ch] : added.
+
+1998-02-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_delete_char): fix size bug.
+	(vty_backward_pure_word): function added.
+	(vty_read): ESC + 'f' perform vty_forward_word.
+	(vty_read): ESC + 'b' perform vty_backward_word.
+
+1998-02-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* radix.c (radix_lookup_rt): add mask check.
+	(radix_delete_duproute): add mask check.
+
+1998-02-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (config_write_file): fix vty -> file_vty.
+
+1998-02-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_filter_ambiguous): add complex type treatment.
+
+1998-02-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_time_print): function added.
+	(vty_complete_command): now [...] element isn't shown by completion.
+
+1998-01-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c : change from cmd_install_node() to install_node().
+
+1998-01-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* route.[ch]: struct rt{} is replaced by struct prefix{}.
+
+1998-01-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_execute_command): check command length.
+
+	* timer.c (zebra_timer_set): add zebra_timer_set.
+
+1998-01-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): add ZEBRA_NODE.
+
+	* command.c (config_exit): add RIP_NODE.
+	(config_write_file): add RIP_NODE.
+
+1998-01-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* print_version.c (print_version): Now Copyright is 1996-1998.
+
+	* sockunion.c (sockunion_log): moved from ../zebra/route.c
+
+1997-12-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* host.c (config_logfile): change 'log PATH' to 'logfile PATH'.
+
+	* sockunion.c (sockunion_sameprefix): add sameprefix for sockunion.
+
+1997-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* radix.[ch] : are moved from ../zebra directroy.
+	
+	* command.c (config_from_file): if command execution failed down
+	level to CONFIG_NODE.
+
+	* host.c: config_log function which enable 'log FILENAME' command.
+
+1997-12-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c: add vty_transpose_chars ().  Now you can use '^T' to
+	transpose character.
+
+	* command.c: cmd_cmdsize add, this is useful to check incomplete
+	command.
+
+1997-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* fd.h: add family for address family
+
+1997-12-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.o
+	* vty.o
+	* host.o    is moved from ../zebra
+
+1997-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* make library directory.
+

@@ -1,0 +1,6 @@
+Makefile
+*.o
+ripngd
+ripngd.conf
+tags
+TAGS

@@ -1,0 +1,15 @@
+! -*- rip -*-
+!
+! RIPd sample configuration file
+!
+hostname ripd
+password zebra
+!
+interface eth0
+ accept default
+!
+router zebra
+!
+router rip
+!
+!logfile ripd.log

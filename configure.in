@@ -1,0 +1,292 @@
+##
+## Configure template file for zebra.
+## autoconf will generate configure script.
+##
+##  Copyright (c) 1996, 97, 98 Kunihiro Ishiguro <kunihiro@zebra.org>
+##
+AC_PREREQ(2.12)
+
+AC_INIT(zebra/zebra.c)
+AM_INIT_AUTOMAKE(zebra, 0.1)
+
+AM_CONFIG_HEADER(config.h)
+
+dnl -----------------------------------
+dnl Get hostname and other information.
+dnl -----------------------------------
+AC_CANONICAL_HOST
+
+dnl --------------
+dnl Check programs
+dnl --------------
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_MAKE_SET
+AC_CHECK_TOOL(AR, ar)
+AC_CHECK_TOOL(RANLIB, ranlib, :)
+
+dnl ---------
+dnl AIX check
+dnl ---------
+AC_AIX
+
+dnl -------------------
+dnl Check header files.
+dnl -------------------
+AC_CHECK_HEADERS(string.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h net/if_dl.h kvm.h)
+
+dnl check some types
+AC_C_CONST
+dnl AC_TYPE_PID_T
+AC_TYPE_SIGNAL
+
+dnl Some systems (Solaris 2.x) require libnsl (Network Services Library)
+case "$host" in
+  *-sunos5.6* | *-solaris2.6*)
+      AC_DEFINE(SUNOS_5)
+      AC_CHECK_LIB(xnet, main)
+      AC_CHECK_LIB(resolv, res_init)
+  ;;
+  *-sunos5* | *-solaris2*)
+      AC_DEFINE(SUNOS_5)
+      AC_CHECK_LIB(socket, main)
+      AC_CHECK_LIB(nsl, main)
+      AC_CHECK_LIB(resolv, res_init)
+  ;;
+  *-linux-*)
+      opsys=gnu-linux
+  ;;
+esac
+
+dnl MIT pthread library check
+AC_CHECK_LIB(c_r, main,
+[AC_DEFINE(HAVE_LIBC_R)
+ PTHREAD_LIB="-lc_r"])
+
+AC_CHECK_LIB(pthread, main,
+[AC_DEFINE(HAVE_LIBPTHREAD)
+ PTHREAD_LIB="-lpthread"])
+
+AC_CHECK_HEADER(pthread.h,
+[if test x"$PTHREAD_LIB" != "x"; then
+  AC_DEFINE(HAVE_PTHREAD)
+  AC_DEFINE(HAVE_PTHREAD_H)
+  LIBS="$PTHREAD_LIB $LIBS"
+  case "$host" in
+      *-sunos5.6* | *-solaris2.6*)
+      AC_DEFINE(PTHREAD);;
+  esac
+fi])
+
+dnl -------------------------------
+dnl check the size in byte of the C
+dnl -------------------------------
+dnl AC_CHECK_SIZEOF(char)
+dnl AC_CHECK_SIZEOF(int)
+dnl AC_CHECK_SIZEOF(short)
+dnl AC_CHECK_SIZEOF(long)
+
+dnl ----------------------------
+dnl check existance of functions
+dnl ----------------------------
+AC_CHECK_FUNCS(bcopy bzero strerror inet_aton)
+dnl AC_REPLACE_FUNCS(vsnprintf)
+
+dnl ------------------------------------
+dnl Determine routing get and set method
+dnl ------------------------------------
+
+dnl for zebra_kernel_method in /dev/route /dev/null; do
+dnl test x`ls $zebra_kernel_method 2>/dev/null` = x"$zebra_kernel_method" && break;
+dnl done
+dnl AC_MSG_CHECKING(zebra between kernel interface method)
+dnl if test x"$zebra_kernel_method" = x"/dev/route"; then
+dnl  RT_METHOD=rt_ioctl.o
+dnl  KERNEL_METHOD=krt_netlink.o
+dnl AC_MSG_RESULT(netlink)
+
+AC_MSG_CHECKING(zebra between kernel interface method)
+
+if test x"$opsys" = x"gnu-linux"; then
+  RT_METHOD=rt_ioctl.o
+  KERNEL_METHOD=krt_netlink.o
+ AC_MSG_RESULT(netlink)
+else
+ AC_TRY_RUN([#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+main ()
+{
+  int ac_sock;
+
+  ac_sock = socket (AF_ROUTE, SOCK_RAW, 0);
+  if (ac_sock < 0 && errno == EINVAL)
+    exit (1);
+  exit (0);
+}],
+ [AC_DEFINE(HAVE_AF_ROUTE)
+  RT_METHOD=rt_socket.o
+  AC_MSG_RESULT(socket)],
+ [RT_METHOD=rt_ioctl.o
+  AC_MSG_RESULT(ioctl)],
+ [RT_METHOD=rt_socket.o
+  AC_MSG_RESULT(socket)])
+fi
+
+AC_SUBST(RT_METHOD)
+AC_SUBST(KERNEL_METHOD)
+
+dnl ------------------------------
+dnl check kernel route read method
+dnl ------------------------------
+AC_CACHE_CHECK(route read method check, zebra_rtread,
+[for zebra_rtread in /proc/net/route /dev/ip /dev/null;
+do
+  test x`ls $zebra_rtread 2>/dev/null` = x"$zebra_rtread" && break
+done
+case $zebra_rtread in
+  "/proc/net/route") RTREAD_METHOD=rtread_proc.o
+                     zebra_rtread="proc";;
+  "/dev/ip")         RTREAD_METHOD="rtread_getmsg.o"
+                     zebra_rtread="getmsg";;
+  *)                 RTREAD_METHOD="rtread_sysctl.o"
+                     zebra_rtread="sysctl";;
+esac])
+AC_SUBST(RTREAD_METHOD)
+
+dnl -----------------------------
+dnl check interface lookup method
+dnl -----------------------------
+AC_MSG_CHECKING(interface looking up method)
+if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
+  AC_MSG_RESULT(sysctl)
+  IF_METHOD=if_sysctl.o
+else
+  AC_MSG_RESULT(ioctl)
+  IF_METHOD=if_ioctl.o
+fi
+AC_SUBST(IF_METHOD)
+
+dnl --------------------
+dnl check MTU get method
+dnl --------------------
+MTU_METHOD=mtu_ioctl.o
+AC_SUBST(MTU_METHOD)
+
+dnl -----------------------------
+dnl check ipforward detect method
+dnl -----------------------------
+AC_CACHE_CHECK(ipforward method check, zebra_ipforward_path,
+[for zebra_ipforward_path in /proc/net/snmp /dev/ip /dev/null;
+do
+  test x`ls $zebra_ipforward_path 2>/dev/null` = x"$zebra_ipforward_path" && break
+done
+case $zebra_ipforward_path in
+  "/proc/net/snmp")  IPFORWARD=ipforward_proc.o
+                     zebra_ipforward_path="proc";;
+  "/dev/ip")         IPFORWARD=ipforward_solaris.o
+                     zebra_ipforward_path="solaris";;
+  *)                 IPFORWARD=ipforward_sysctl.o
+                     zebra_ipforward_path="sysctl";;
+esac])
+AC_SUBST(IPFORWARD)
+
+dnl --------------------------------------------------------
+dnl IPv6 check (currently only supports INRIA and HYDRANGEA)
+dnl --------------------------------------------------------
+AC_MSG_CHECKING(whether does this OS have IPv6 stack)
+dnl
+dnl INRIA IPv6
+dnl
+if grep IPV6_INRIA_VERSION /usr/include/netinet/in.h >/dev/null 2>&1; then
+   AC_DEFINE(HAVE_IPV6)
+   AC_DEFINE(INRIA_IPV6)
+   RIPNGD=ripngd
+   LIB_IPV6=""
+   AC_MSG_RESULT(INRIA IPv6)
+fi
+dnl
+dnl HYDRANGEA IPv6
+dnl
+if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1;then
+   AC_DEFINE(HAVE_IPV6)
+   AC_DEFINE(HYDRANGEA)
+   RIPNGD=ripngd
+   LIB_IPV6="-L/usr/local/v6/lib -linet6"
+   AC_MSG_RESULT(Hydrangea)
+fi
+dnl
+dnl Linux 2.1.x IPv6
+dnl
+if [ test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route" ]
+then
+   AC_DEFINE(HAVE_IPV6)
+   AC_DEFINE(LINUX_IPV6)   
+   RIPNGD=ripngd
+   INCLUDES="-I/usr/inet6/include"
+   LIB_IPV6="-L/usr/inet6/lib -linet6"
+   AC_MSG_RESULT(Linux 2.1.x IPv6)
+fi
+LIBS="$LIB_IPV6 $LIBS"
+AC_SUBST(LIB_IPV6)
+if test x"$RIPNGD" = x""; then
+  AC_MSG_RESULT(IPv4 only)  
+fi
+AC_SUBST(RIPNGD)
+AC_SUBST(INCLUDES)
+AC_CHECK_LIB(c, inet_ntop, [AC_DEFINE(HAVE_INET_NTOP)])
+AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
+
+dnl ----------------------------
+dnl check sin_len of sockaddr_in
+dnl ----------------------------
+AC_MSG_CHECKING(whether struct sockaddr_in has a sin_len field)
+AC_TRY_COMPILE([#include <sys/types.h>
+#include <netinet/in.h>
+],[static struct sockaddr_in ac_i;int ac_j = sizeof (ac_i.sin_len);],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SIN_LEN)],
+ AC_MSG_RESULT(no))
+
+dnl -------------
+dnl check version
+dnl -------------
+file="${srcdir}/lib/version.h"
+VERSION=`sed -ne 's/^#.*\"\(.*\)\"$/\1/p' $file`
+AC_SUBST(VERSION)
+
+dnl ------------------------------
+dnl set paths for process id files
+dnl ------------------------------
+AC_CACHE_CHECK(pid file directory,ac_piddir,
+[for ZEBRA_PID_DIR in /var/run	dnl
+                   /var/adm	dnl
+                   /etc		dnl
+                   /dev/null;
+do
+  test -d $ZEBRA_PID_DIR && break
+done
+ac_piddir=$ZEBRA_PID_DIR
+if test $ZEBRA_PID_DIR = "/dev/null"; then
+  echo "PID DIRECTORY NOT FOUND!"
+fi])
+AC_DEFINE_UNQUOTED(PATH_ZEBRA_PID, "$ac_piddir/zebra.pid")
+AC_DEFINE_UNQUOTED(PATH_RIPD_PID, "$ac_piddir/ripd.pid")
+AC_DEFINE_UNQUOTED(PATH_RIPNGD_PID, "$ac_piddir/ripngd.pid")
+AC_DEFINE_UNQUOTED(PATH_BGPD_PID, "$ac_piddir/bgpd.pid")
+AC_DEFINE_UNQUOTED(PATH_OSPFD_PID, "$ac_piddir/ospfd.pid")
+
+AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile doc/Makefile)
+
+echo "
+zebra configuration
+-------------------
+zebra version           : ${VERSION}
+host operationg system  : ${host_os}
+source code location    : ${srcdir}
+compiler                : ${CC}
+compiler flags          : ${CFLAGS}
+directory for pid files : ${ac_piddir}
+"

@@ -1,0 +1,19 @@
+! -*- rip -*-
+!
+! RIPngd sample configuration file
+!
+hostname ripngd
+password zebra
+!
+!debug ripng event
+!debug ripng dev
+!
+!interface eth0
+! accept default
+!
+router zebra
+!
+router ripng
+! flush-timer 10
+!
+!logfile ripngd.log

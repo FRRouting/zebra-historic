@@ -1,0 +1,28 @@
+/.cvsignore/1.2/Sun May  3 20:59:24 1998//
+/AUTHORS/1.1/Thu Apr 30 16:14:45 1998//
+/COPYING/1.1.1.1/Tue Nov 18 17:34:45 1997//
+/ChangeLog/1.15/Mon May 18 08:34:38 1998//
+/INSTALL/1.1.1.1/Tue Nov 18 17:34:46 1997//
+/Makefile.am/1.1/Thu Apr 30 16:30:59 1998//
+/Makefile.in/1.15/Sun May  3 20:59:24 1998//
+/NEWS/1.2/Mon Mar 30 10:23:49 1998//
+/README/1.17/Sat May  2 20:18:11 1998//
+/acconfig.h/1.2/Thu Apr 30 19:26:54 1998//
+/aclocal.m4/1.2/Thu Apr 30 16:31:00 1998//
+/config.guess/1.1.1.1/Tue Nov 18 17:34:45 1997//
+/config.h.in/1.24/Wed Jun  3 16:50:09 1998//
+/config.sub/1.1.1.1/Tue Nov 18 17:34:45 1997//
+/configure/1.48/Wed Jun  3 16:50:10 1998//
+/configure.in/1.49/Wed Jun  3 16:50:11 1998//
+/install-sh/1.1.1.1/Tue Nov 18 17:34:45 1997//
+/missing/1.1/Thu Apr 30 16:14:46 1998//
+/mkinstalldirs/1.1.1.1/Tue Nov 18 17:34:45 1997//
+D/bgpd////
+D/doc////
+D/lib////
+D/ospfd////
+D/ports////
+D/ripd////
+D/ripngd////
+D/tools////
+D/zebra////

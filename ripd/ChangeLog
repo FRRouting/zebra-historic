@@ -1,0 +1,33 @@
+1998-05-18  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
+
+	* ripd.h: Modify for compile on Solaris.
+
+1998-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c: DEFUN function return CMD_SUCCESS.
+		  change xmalloc to XMALLOC macro.
+	
+1998-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_main.c: change CONFDIR to SYSCONFDIR.
+
+1998-05-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* .cvsignore: added.
+
+1998-02-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (config_write_interface): correct ADVERTISE spell.
+
+	* rip_main.c (main): add usage() and make cleanup.
+
+1998-01-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_version): add rip version command.
+
+1998-01-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (zebra_get_interface): added to get
+	interface's information.
+
+	* ChangeLog: create.
