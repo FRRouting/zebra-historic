@@ -246,7 +246,7 @@ bgp_open_send (struct peer *peer)
   bgp_packet_set_marker (s, BGP_MSG_OPEN);
 
   /* Set open packet values. */
-  stream_putc (s, peer->version);        /* BGP version */
+  stream_putc (s, BGP_VERSION_4);        /* BGP version */
   stream_putw (s, peer->bgp->as);	 /* My Autonomous System*/
   stream_putw (s, peer->v_holdtime);	 /* Hold Time */
   stream_put_ipv4 (s, peer->bgp->ident); /* BGP Identifier */
@@ -432,7 +432,8 @@ bgp_open (struct peer *peer, bgp_size_t size)
   /* Parse open packet. */
   version = stream_getc (peer->ibuf);
   asno  = stream_getw (peer->ibuf);
-  peer->v_holdtime = stream_getw (peer->ibuf);
+  if (peer->v_holdtime == BGP_DEFAULT_HOLDTIME_BIG)
+    peer->v_holdtime = stream_getw (peer->ibuf);
   peer->ident = stream_get_ipv4 (peer->ibuf);
 
   optlen = stream_getc (peer->ibuf);

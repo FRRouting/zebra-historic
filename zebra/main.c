@@ -232,7 +232,7 @@ main (int argc, char **argv)
     daemon (0, 0);
 
   /* Make vty server socket. */
-  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT, AF_INET);
 
   /* Output pid of zebra. */
   pid_output (PATH_ZEBRA_PID);

@@ -205,7 +205,7 @@ main (int argc, char **argv)
     daemon (0, 0);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT, AF_INET);
 
   /* Pid file create. */
   pid_output (PATH_RIPD_PID);

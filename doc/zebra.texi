@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for snapshot zebra-19990403
+@subtitle for snapshot zebra-19990408
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for snapshot zebra-19990403.
+This is the Zebra Manual for snapshot zebra-19990408.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -973,6 +973,12 @@ router bgp 1
  neighbor 10.0.0.1 remote-as 2
 @end example
 In this case my router try to peer with AS2.
+
+This command must be the first command to configure neighbor.  If
+remote-as is not specified, bgpd will complain like this
+@example
+can't find neighbor 10.0.0.1
+@end example
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} shutdown} {}
@@ -995,6 +1001,8 @@ This command specify distribute-list to the peer.  @var{direct} is
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} route-map @var{direct}} {}
+Apply route-map to the neighbor.  @var{direct} must be @code{in} or
+@code{out}.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} version @var{version}} {}

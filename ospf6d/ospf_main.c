@@ -229,7 +229,7 @@ main (int argc, char **argv)
   pid_output (PATH_OSPFD_PID);
 
   /* Make ospf vty socket. */
-  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT, AF_INET);
 
   /* print bannar */
   ospf_start_msg ();

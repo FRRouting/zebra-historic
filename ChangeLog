@@ -1,3 +1,7 @@
+1999-04-07    <kunihiro@zebra.org>
+
+	* configure.in: AC_STDC_HEADERS added.
+
 1999-03-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Add dependencies to each directory's Makefile.am.

@@ -422,6 +422,7 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
   u_int16_t afi;
   u_char safi;
   u_char snpa_num;
+  u_char snpa_len;
   u_char *lim;
   bgp_size_t nlri_len;
   
@@ -455,7 +456,12 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
     }
 
   snpa_num = stream_getc (peer->ibuf);
-  stream_forward (peer->ibuf, snpa_num);
+
+  while (snpa_num--)
+    {
+      snpa_len = stream_getc (peer->ibuf);
+      stream_forward (peer->ibuf, (snpa_len + 1) >> 1);
+    }
   
   /* If peer is based on old draft-00. I read NLRI length from the
      packet. */
@@ -756,6 +762,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
   if (p->family == AF_INET6)
     {
       unsigned long sizep;
+      unsigned long draftp = 0;
 
       stream_putc (s, ATTR_FLAG_OPTIONAL);
       stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
@@ -774,13 +781,25 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
 	  stream_memcpy (s, &attr->mp_nexthop_local, 16);
 	}
       
+      /* SNPA */
       stream_putc (s, 0);
+
+      /* In case of old draft BGP-4+. */
+      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
+	{
+	  draftp = stream_get_putp (s);
+	  stream_putw (s, 0);
+	}
       
       /* Prefix write. */
       stream_put_prefix (s, p);
 
       /* Set MP attribute length. */
-      stream_putc_at (s, sizep, stream_get_putp (s) - sizep - 1);
+      stream_putc_at (s, sizep, (stream_get_putp (s) - sizep) - 1);
+
+      /* In case of old draft BGP-4+. */
+      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
+	stream_putw_at (s, draftp, (stream_get_putp (s) - draftp) - 2);
     }
 #endif /* HAVE_IPV6 */
 

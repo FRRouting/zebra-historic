@@ -214,7 +214,7 @@ main (int argc, char **argv)
   pid_output (PATH_OSPFD_PID);
 
   /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT, AF_INET);
 
   /* Print banner. */
   zlog (NULL, LOG_INFO, "OSPFd (%s) starts", ZEBRA_VERSION);

@@ -492,10 +492,10 @@ DEFUN (show_ip_bgp_neighbors,
 	vty_out (vty, "4  ");
 	break;
       case BGP_VERSION_MP_4:
-	vty_out (vty, "4- ");
+	vty_out (vty, "4+ ");
 	break;
       case BGP_VERSION_MP_4_DRAFT_00:
-	vty_out (vty, "4+ ");
+	vty_out (vty, "4- ");
 	break;
       }
       vty_out(vty, "%5d %7d %7d %8d %4d %4d ", p->as,
@@ -535,6 +535,15 @@ DEFUN (show_ip_bgp_neighbors,
 	vty_out (vty, "  distribute-list out: %s%s\r\n",
 		 p->distribute[BGP_FILTER_OUT].list ? "*" : "",
 		 p->distribute[BGP_FILTER_OUT].name);
+
+      if (p->filter[BGP_FILTER_IN].name)
+	vty_out (vty, "  filter-list in: %s%s\r\n",
+		 p->filter[BGP_FILTER_IN].filter ? "*" : "",
+		 p->filter[BGP_FILTER_IN].name);
+      if (p->filter[BGP_FILTER_OUT].name)
+	vty_out (vty, "  filter-list out: %s%s\r\n",
+		 p->filter[BGP_FILTER_OUT].filter ? "*" : "",
+		 p->filter[BGP_FILTER_OUT].name);
 
       if (p->route_map[BGP_FILTER_IN].name)
 	vty_out (vty, "  route-map in: %s%s\r\n",
@@ -587,10 +596,10 @@ DEFUN (show_ip_bgp_summary,
 	  vty_out (vty, " %d ", peer->version);
 	  break;
 	case BGP_VERSION_MP_4:
-	  vty_out (vty, " 4-");
+	  vty_out (vty, " 4+");
 	  break;
 	case BGP_VERSION_MP_4_DRAFT_00:
-	  vty_out (vty, " 4+");
+	  vty_out (vty, " 4-");
 	  break;
 	}
       vty_out (vty, " %5d %7d %7d %8d %4d %4d ",
@@ -792,6 +801,62 @@ bgp_route_map_unset (struct peer *peer, int direct, char *route_map)
   return 0;
 }
 
+static void
+bgp_filter_set (struct peer *peer, int direct, char *flist)
+{
+  struct as_list *as_list_lookup (char *name);
+
+  if (peer->filter[direct].name)
+    free (peer->filter[direct].name);
+
+  peer->filter[direct].name = strdup (flist);
+  peer->filter[direct].filter = as_list_lookup (flist);
+}
+
+static int
+bgp_filter_unset (struct peer *peer, int direct, char *flist)
+{
+  if (! peer->filter[direct].name)
+    return 1;
+
+  if (strcmp (peer->filter[direct].name, flist) != 0)
+    return 2;
+
+  free (peer->filter[direct].name);
+  peer->filter[direct].name = NULL;
+  peer->filter[direct].filter = NULL;
+
+  return 0;
+}
+
+void
+bgp_filter_update ()
+{
+  struct as_list *as_list_lookup (char *name);
+  listnode node;
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      struct peer *peer;
+
+      peer = getdata (node);
+
+      /* Input filter update. */
+      if (peer->filter[BGP_FILTER_IN].name)
+	peer->filter[BGP_FILTER_IN].filter = 
+	  as_list_lookup (peer->filter[BGP_FILTER_IN].name);
+      else
+	peer->filter[BGP_FILTER_IN].filter = NULL;
+
+      /* Output filter update. */
+      if (peer->filter[BGP_FILTER_OUT].name)
+	peer->filter[BGP_FILTER_OUT].filter = 
+	  as_list_lookup (peer->filter[BGP_FILTER_OUT].name);
+      else
+	peer->filter[BGP_FILTER_OUT].filter = NULL;
+    }
+}
+
 /* Set distribute list to the peer. */
 static void
 bgp_distribute_set (struct peer *peer, int direct, char *alist)
@@ -846,6 +911,87 @@ bgp_distribute_update ()
       else
 	peer->distribute[BGP_FILTER_OUT].list = NULL;
     }
+}
+
+DEFUN (neighbor_filter_list,
+       neighbor_filter_list_cmd,
+       "neighbor IP_ADDR filter-list FLIST_NAME TYPE",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Filter list\n"
+       "as-path filter name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* Check argument. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "filter direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  bgp_filter_set (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_filter_list,
+       no_neighbor_filter_list_cmd,
+       "no neighbor IP_ADDR filter-list FLIST_NAME TYPE",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Filter list\n"
+       "as-path filter name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* Check argument. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "filter direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  bgp_filter_unset (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
 }
 
 DEFUN (neighbor_distribute_list,
@@ -1169,6 +1315,50 @@ DEFUN (neighbor_interface,
   return CMD_SUCCESS;
 }
 
+/* Check the string only contains digit character. */
+static int
+all_digit_check (char *str)
+{
+  int i;
+  for (i = 0; i < strlen (str); i++)
+    if (!isdigit (str[i]))
+      return 0;
+  return 1;
+}
+
+DEFUN (neighbor_timers_holdtime,
+       neighbor_timers_holdtime_cmd,
+       "neighbor IP_ADDR timers holdtime TIMER ",
+       NEIGHBOR_STR
+       "IP address\n"
+       "BGP timers\n"
+       "BGP hold timer\n"
+       "BGP hold timer value\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (! all_digit_check (argv[1]))
+    {
+      vty_out (vty, "timer value must be digit %s\r\n", argv[1]);
+      return CMD_WARNING;
+    }
+
+  peer->v_holdtime = strtol (argv[1], NULL, 10);
+
+  return CMD_SUCCESS;
+}
+
 /* Make peer and enable further neighbor configuration. */
 DEFUN (neighbor, 
        neighbor_cmd, 
@@ -1445,6 +1635,22 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 		   peer->distribute[BGP_FILTER_OUT].name, VTY_NEWLINE);
 	}
 
+      /* filter-list print. */
+      if (peer->filter[BGP_FILTER_IN].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " filter-list %s in%s", 
+		   peer->filter[BGP_FILTER_IN].name, VTY_NEWLINE);
+	}
+      if (peer->filter[BGP_FILTER_OUT].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " filter-list %s out%s", 
+		   peer->filter[BGP_FILTER_OUT].name, VTY_NEWLINE);
+	}
+
       /* route-map print. */
       if (peer->route_map[BGP_FILTER_IN].name)
 	{
@@ -1459,6 +1665,14 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	  sockunion_vty_out (vty, peer->su);
 	  vty_out (vty, " route-map %s out%s", 
 		   peer->route_map[BGP_FILTER_OUT].name, VTY_NEWLINE);
+	}
+
+      if (peer->v_holdtime != BGP_DEFAULT_HOLDTIME_BIG)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " timers holdtimer %ld%s", peer->v_holdtime,
+		   VTY_NEWLINE);
 	}
     }
 }
@@ -1512,6 +1726,9 @@ struct cmd_node bgp_node =
 void
 bgp_init ()
 {
+  void as_list_add_hook (void (*func) ());
+  void as_list_delete_hook (void (*func) ());
+
   /* Install bgp top node. */
   install_node (&bgp_node, bgp_config_write);
 
@@ -1542,6 +1759,8 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_version_cmd);
   install_element (BGP_NODE, &neighbor_distribute_list_cmd);
   install_element (BGP_NODE, &no_neighbor_distribute_list_cmd);
+  install_element (BGP_NODE, &neighbor_filter_list_cmd);
+  install_element (BGP_NODE, &no_neighbor_filter_list_cmd);
   install_element (BGP_NODE, &neighbor_route_map_cmd);
   install_element (BGP_NODE, &no_neighbor_route_map_cmd);
   install_element (BGP_NODE, &neighbor_desc_cmd);
@@ -1549,6 +1768,7 @@ bgp_init ()
   install_element (BGP_NODE, &neighbor_shutdown_cmd);
   install_element (BGP_NODE, &no_neighbor_shutdown_cmd);
   install_element (BGP_NODE, &neighbor_interface_cmd);
+  install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
 
   /* Make empty list of bgp and peer list. */
   bgp_list = list_init ();
@@ -1570,4 +1790,9 @@ bgp_init ()
   access_list_init ();
   access_list_add_hook (bgp_distribute_update);
   access_list_delete_hook (bgp_distribute_update);
+
+  /* Filter list initialize. */
+  bgp_filter_init ();
+  as_list_add_hook (bgp_filter_update);
+  as_list_delete_hook (bgp_filter_update);
 }

@@ -16,7 +16,7 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for snapshot zebra-19990403.
+   This is the Zebra Manual for snapshot zebra-19990408.
 
    This manual describes `zebra' and some other beasts.
 
@@ -949,6 +949,10 @@ is `bgpd.conf'.
            neighbor 10.0.0.1 remote-as 2
      In this case my router try to peer with AS2.
 
+     This command must be the first command to configure neighbor.  If
+     remote-as is not specified, bgpd will complain like this
+          can't find neighbor 10.0.0.1
+
  - BGP Command: neighbor PEER shutdown
  - BGP Command: no neighbor PEER shutdown
      Shutdown the peer.  We can delete the neighbor's configuration by
@@ -965,6 +969,7 @@ is `bgpd.conf'.
      or `out'.
 
  - BGP Command: neighbor PEER route-map DIRECT
+     Apply route-map to the neighbor.  DIRECT must be `in' or `out'.
 
  - BGP Command: neighbor PEER version VERSION
 
@@ -1745,22 +1750,22 @@ Node: ospfd terminal mode commands23800
 Node: bgpd23956
 Node: Invoking bgpd24512
 Node: bgpd configuration24888
-Node: bgpd terminal mode commands27455
-Node: bgpd sample session28094
-Node: bgpd log format28294
-Node: How to set up 6bone connection28784
-Node: Filtering30015
-Node: IP access-list30282
-Node: Route map30483
-Node: Route map command30966
-Node: IP address match command31170
-Node: BGP set command31392
-Node: IPv6 supports31688
-Node: Kernel interface31899
-Node: Linux netlink33029
-Node: Zebra protocol33812
-Node: Copying34479
-Node: Command Index53680
-Node: VTY Key Index58015
+Node: bgpd terminal mode commands27697
+Node: bgpd sample session28336
+Node: bgpd log format28536
+Node: How to set up 6bone connection29026
+Node: Filtering30257
+Node: IP access-list30524
+Node: Route map30725
+Node: Route map command31208
+Node: IP address match command31412
+Node: BGP set command31634
+Node: IPv6 supports31930
+Node: Kernel interface32141
+Node: Linux netlink33271
+Node: Zebra protocol34054
+Node: Copying34721
+Node: Command Index53922
+Node: VTY Key Index58257
 
 End Tag Table

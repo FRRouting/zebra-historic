@@ -172,6 +172,10 @@ struct ospf_ls_ack
   struct ospf_lsa_header lsa_header[1];
 };
 
+/* Macros. */
+#define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
+#define OSPF_OUTPUT_LENGTH(S)	((S)->putp)
+
 /* Prototypes. */
 int ospf_read (struct thread *);
 void ospf_hello_send (struct ospf_interface *);

@@ -84,10 +84,10 @@ INSTALL_SDATA = @INSTALL@ -m 600
 
 sbin_PROGRAMS = ospf6d
 
-ospfd_SOURCES =  	ospf_main.c ospf_dump.c ospfd.c ospf_interface.c 	ospf_network.c ospf_neighbor.c ospf_mesg.c ospf_lsa.c 	ospf_spf.c
+ospf6d_SOURCES =  	ospf_main.c ospf_dump.c ospfd.c ospf_interface.c 	ospf_network.c ospf_neighbor.c ospf_mesg.c ospf_lsa.c 	ospf_spf.c
 
 
-ospfd_LDADD = ../lib/libzebra.a
+ospf6d_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = 
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
@@ -98,10 +98,9 @@ PROGRAMS =  $(sbin_PROGRAMS)
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-ospf6d_SOURCES = ospf6d.c
-ospf6d_OBJECTS =  ospf6d.o
-ospf6d_LDADD = $(LDADD)
-ospf6d_DEPENDENCIES = 
+ospf6d_OBJECTS =  ospf_main.o ospf_dump.o ospfd.o ospf_interface.o \
+ospf_network.o ospf_neighbor.o ospf_mesg.o ospf_lsa.o ospf_spf.o
+ospf6d_DEPENDENCIES =  ../lib/libzebra.a
 ospf6d_LDFLAGS = 
 CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -116,8 +115,8 @@ DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
 
 TAR = tar
 GZIP_ENV = --best
-SOURCES = ospf6d.c
-OBJECTS = ospf6d.o
+SOURCES = $(ospf6d_SOURCES)
+OBJECTS = $(ospf6d_OBJECTS)
 
 all: all-redirect
 .SUFFIXES:

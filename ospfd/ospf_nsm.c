@@ -46,6 +46,8 @@ nsm_ignore (struct ospf_neighbor *nbr)
 int
 nsm_hello_received (struct ospf_neighbor *nbr)
 {
+  /* Start Inactivity Timer. */
+
   return 0;
 }
 

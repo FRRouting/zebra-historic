@@ -1,3 +1,7 @@
+1999-04-07    <kunihiro@zebra.org>
+
+	* regex.c, regex-gnu.h: Imported from GNU sed-3.02 distribution.
+
 1999-03-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* stream.c: stream_fifo_free bug is fixed.

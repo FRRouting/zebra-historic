@@ -10,7 +10,7 @@ libzebra_a_SOURCES = \
 	print_version.c checksum.c vector.c linklist.c dropline.c \
 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c \
 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c \
-	distribute.c stream.c str.c log.c
+	distribute.c stream.c str.c log.c regex.c
 
 version.c: Makefile
 	echo '' >version.c

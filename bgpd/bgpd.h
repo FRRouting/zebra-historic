@@ -132,7 +132,7 @@ struct peer
   struct
   {
     char *name;
-    struct filter *filter;
+    struct as_list *filter;
   } filter[BGP_FILTER_MAX];
 
   /* Route map based filer. */
@@ -331,6 +331,7 @@ void zebra_init ();
 void bgp_terminate ();
 void bgp_route_map_init ();
 int bgp_peer_sort (struct peer *peer);
+void bgp_filter_init ();
 
 struct peer *peer_lookup_by_su (union sockunion *);
 struct peer *peer_lookup_from_bgp (struct bgp *bgp, char *addr);

@@ -188,7 +188,9 @@ bgp_output_filter (struct peer *peer, struct prefix *p, struct bgp_info *info)
 
   /* Filter list apply. */
   if (FILTER_LIST_OUT (peer))
-    ;
+    if (as_list_apply (FILTER_LIST_OUT(peer), 
+		       info->attr->aspath) == FILTER_DENY)
+      return FILTER_DENY;
 
   return FILTER_PERMIT;
 }
@@ -425,15 +427,22 @@ nlri_process (struct prefix *p, struct bgp_info *info)
 /* Input BGP packet filter.  This function apply distribute-list and
    filter-list to the route. */
 enum filter_type
-bgp_input_filter (struct prefix *p, struct peer *peer)
+bgp_input_filter (struct prefix *p, struct peer *peer, struct attr *attr)
 {
+  int ret;
+
   /* Distribute list apply. */
   if (DISTRIBUTE_IN (peer))
-    return access_list_apply (DISTRIBUTE_IN (peer), p);
+    if (access_list_apply (DISTRIBUTE_IN (peer), p) == FILTER_DENY)
+      return FILTER_DENY;
 
   /* Filter list apply. */
   if (FILTER_LIST_IN (peer))
-    ;
+    {
+      ret = as_list_apply (FILTER_LIST_IN (peer), attr->aspath);
+      if (ret == FILTER_DENY)
+	return FILTER_DENY;
+    }
 
   return FILTER_PERMIT;
 }
@@ -522,7 +531,7 @@ nlri_parse (struct peer *peer, struct attr *attr,
       memcpy (&p.u.prefix, pnt, psize);
 
       /* Incoming packet filter. */
-      if (bgp_input_filter (&p, peer) == FILTER_DENY)
+      if (bgp_input_filter (&p, peer, attr) == FILTER_DENY)
 	{
 	  zlog (peer->log, LOG_INFO, "Update:[%s] %s/%d is filtered",
 		peer->host, inet_ntop(family, &p.u.prefix, buf, BUFSIZ),
@@ -891,6 +900,7 @@ DEFUN (show_ip_bgp_regexp,
   buffer_free (b);
 
   rp = aspath_regex_comp (regstr);
+  free (regstr);
   if (!rp)
     {
       vty_out (vty, "can't compile regexp %s\r\n", argv[0]);

@@ -75,8 +75,8 @@ struct ospf_interface
   struct route_table *nbrs;                   /* OSPF Neighbor List */
 
   /* Timer values. */
-  u_int32_t v_hello;			/* Hello Timer */
-  u_int32_t v_wait;			/* Wait Timer */
+  u_int32_t v_hello;			/* Hello Interval */
+  u_int32_t v_wait;			/* Router Dead Interval */
 
   /* Threads. */
   struct thread *t_read;

@@ -1,14 +1,14 @@
 /.cvsignore/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
-/ChangeLog/1.11/Wed Mar 24 08:12:32 1999/-ko/
-/Makefile.am/1.4/Mon Mar 29 09:08:27 1999/-ko/
-/Makefile.in/1.5/Mon Mar 29 09:08:27 1999/-ko/
+/ChangeLog/1.12/Wed Apr  7 15:22:29 1999/-ko/
+/Makefile.am/1.5/Wed Apr  7 15:22:29 1999/-ko/
+/Makefile.in/1.6/Wed Apr  7 15:22:29 1999/-ko/
 /buffer.c/1.3/Sun Mar 14 23:17:37 1999/-ko/
 /buffer.h/1.2/Sun Mar 14 23:17:37 1999/-ko/
 /checksum.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /client.c/1.3/Sat Mar 20 14:43:02 1999/-ko/
 /client.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /command.c/1.9/Mon Mar 22 06:05:06 1999/-ko/
-/command.h/1.6/Mon Mar 22 06:03:52 1999/-ko/
+/command.h/1.7/Tue Apr  6 14:10:18 1999/-ko/
 /daemon.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /distribute.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /dropline.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
@@ -26,14 +26,16 @@
 /linklist.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /log.c/1.7/Wed Mar 17 03:15:53 1999/-ko/
 /log.h/1.4/Mon Mar 15 21:15:26 1999/-ko/
-/memory.c/1.3/Tue Mar  2 12:13:42 1999/-ko/
-/memory.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
+/memory.c/1.4/Tue Apr  6 15:16:16 1999/-ko/
+/memory.h/1.2/Tue Apr  6 14:10:18 1999/-ko/
 /network.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /network.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /pid_output.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /prefix.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /prefix.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /print_version.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
+/regex-gnu.h/1.1/Wed Apr  7 15:22:29 1999//
+/regex.c/1.1/Wed Apr  7 15:22:29 1999//
 /roken.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /routemap.c/1.3/Tue Mar  2 12:13:43 1999/-ko/
 /routemap.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
@@ -50,7 +52,7 @@
 /vector.c/1.2/Tue Mar  2 12:13:43 1999/-ko/
 /vector.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /version.h/1.3/Mon Mar 15 23:47:28 1999/-ko/
-/vty.c/1.7/Thu Mar 18 19:40:42 1999/-ko/
-/vty.h/1.2/Sun Mar 14 23:17:37 1999/-ko/
+/vty.c/1.9/Wed Apr  7 06:13:57 1999/-ko/
+/vty.h/1.3/Wed Apr  7 06:13:57 1999/-ko/
 /zebra.h/1.4/Mon Mar 15 03:28:16 1999//
 D

@@ -5,7 +5,7 @@
 /ripng_debug.c/1.2/Tue Mar  2 12:13:43 1999/-ko/
 /ripng_debug.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /ripng_interface.c/1.2/Tue Mar  2 12:13:43 1999/-ko/
-/ripng_main.c/1.5/Thu Mar 25 10:29:41 1999/-ko/
+/ripng_main.c/1.6/Wed Apr  7 06:14:02 1999/-ko/
 /ripng_route.c/1.2/Tue Mar  2 12:13:43 1999/-ko/
 /ripng_route.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /ripng_zebra.c/1.7/Sat Mar 20 14:43:02 1999/-ko/

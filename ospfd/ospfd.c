@@ -412,6 +412,10 @@ ospf_config_write (struct vty *vty)
 
   ospf = vty->index;
 
+  /* no ospf instance. */
+  if (! ospf)
+    return 0;
+
   /* router ospf print. */
   vty_out (vty, "router ospf %u%s", ospf->process_id, VTY_NEWLINE);
 

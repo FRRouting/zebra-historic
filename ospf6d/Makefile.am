@@ -6,12 +6,12 @@ INSTALL_SDATA=@INSTALL@ -m 600
 
 sbin_PROGRAMS = ospf6d
 
-ospfd_SOURCES = \
+ospf6d_SOURCES = \
 	ospf_main.c ospf_dump.c ospfd.c ospf_interface.c \
 	ospf_network.c ospf_neighbor.c ospf_mesg.c ospf_lsa.c \
 	ospf_spf.c
 
-ospfd_LDADD = ../lib/libzebra.a
+ospf6d_LDADD = ../lib/libzebra.a
 
 sysconf_DATA =
 

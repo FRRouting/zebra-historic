@@ -1184,13 +1184,14 @@ vty_accept (struct thread *thread)
 
 /* Make vty server socket. */
 void
-vty_serv_sock (unsigned short port)
+vty_serv_sock (unsigned short port, int family)
 {
   int ret;
   union sockunion su;
   int accept_sock;
 
   bzero (&su, sizeof (union sockunion));
+  su.sa.sa_family = family;
 
   /* Make new socket. */
   accept_sock = sockunion_stream_socket (&su);
@@ -1410,7 +1411,7 @@ DEFUN (line_vty,
 }
 
 /* Check the string only contains digit character. */
-int
+static int
 all_digit_check (char *str)
 {
   int i;

@@ -32,8 +32,24 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
+#include "ospfd/ospf_nsm.h"
+#include "ospfd/ospf_network.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
+
+/* forward output pointer. */
+void
+ospf_output_forward (struct stream *s, int size)
+{
+  s->putp += size;
+}
+
+/* elect DR or BDR. Refer to RFC2319 section 9.4 */
+void
+ospf_elect_dr (struct ospf_interface *oi)
+{
+
+}
 
 /* Write packet. */
 int
@@ -64,20 +80,22 @@ ospf_make_header (struct ospf_interface *oi, struct ospf_header *ospfh)
   ospfh->checksum = 0;
   ospfh->area_id.s_addr = 0;
   ospfh->auth_type = oi->auth_type;
+
   bzero (ospfh->auth_data, sizeof (ospfh->auth_data));
 }
 
 /* OSPF Hello message read. */
 void
 ospf_hello (struct ip *iph, struct ospf_header *ospfh,
-	    struct ospf_interface *oi)
+	    struct ospf_interface *oi, int size)
 {
   struct ospf_hello *hello;
   struct ospf_neighbor *nbr;
   struct route_node *route_node;
   struct prefix p;
 
-  zlog (NULL, LOG_INFO, "OSPF hello received");
+  zlog (NULL, LOG_INFO, "OSPF Hello received from [%s]",
+	inet_ntoa (iph->ip_src));
 
   hello = (struct ospf_hello *) STREAM_PNT (oi->ibuf);
 
@@ -85,6 +103,33 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   p.family = AF_INET;
   p.prefixlen = ip_masklen (hello->network_mask);
   p.u.prefix4 = iph->ip_src;
+
+  /* compare network mask. */
+  /* checking is ignored for Point-to-Point and Virtual link. */
+  if (oi->type != OSPF_IFTYPE_POINTOPOINT &&
+      oi->type != OSPF_IFTYPE_VIRTUALLINK)
+    if (oi->address->prefixlen != p.prefixlen)
+      {
+	zlog (NULL, LOG_WARNING, "neighbor [%S] NetworkMask mismatch.",
+	      inet_ntoa (ospfh->router_id));
+	return;
+      }
+
+  /* compare Hello Interval. */
+  if (oi->v_hello != ntohs (hello->hello_interval))
+    {
+      zlog (NULL, LOG_WARNING, "neighbor [%s] HelloInterval mismatch.",
+	    inet_ntoa (ospfh->router_id));
+      return;
+    }
+
+  /* compare Router Dead Interval. */
+  if (oi->v_wait != ntohl (hello->dead_interval))
+    {
+      zlog (NULL, LOG_WARNING, "neighbor [%s] RouterDeadInterval mismatch.",
+	    inet_ntoa (ospfh->router_id));
+      return;
+    }
 
   /* get neighbor information from table. */
   route_node = route_node_get (oi->nbrs, &p);
@@ -96,6 +141,7 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
 
   /* create OSPF Neighbor structure. */
   nbr = ospf_nbr_new ();
+  nbr->status = NSM_Down;
   nbr->host = strdup (inet_ntoa (iph->ip_src));
   nbr->router_id = ospfh->router_id;
   nbr->priority = hello->priority;
@@ -105,6 +151,20 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   nbr->bd_router = hello->bd_router;
 
   route_node->info = nbr;
+
+  zlog (NULL, LOG_INFO, "OSPF NSM[%s] start.",
+	inet_ntoa (nbr->router_id));
+
+  /* Add event to thread. */
+  OSPF_NSM_EVENT_ADD (nbr, NSM_HelloReceived);
+
+  /* if neighbor itself is DR or no BDR exists,
+     cause event BackupSeen */
+  if (ospf_nbr_bidirectional (nbr, hello->neighbor, size - 20))
+      if (ADDRESS_SAME (&nbr->router_id, &nbr->d_router) ||
+	  nbr->bd_router.s_addr == 0)
+	OSPF_ISM_EVENT_ADD (oi, ISM_BackupSeen);
+
 }
 
 void
@@ -118,17 +178,20 @@ ospf_hello_send (struct ospf_interface *oi)
   int in_cksum (void *ptr, int nbytes);
 
   oi->obuf = stream_new (oi->ifp->mtu);
-  ospfh = (struct ospf_header *) (oi->obuf->data + oi->obuf->putp);
+  ospfh = (struct ospf_header *) OSPF_OUTPUT_PNT (oi->obuf);
 
   /* prepare OSPF header. */
   ospf_make_header (oi, ospfh);
-  /*  stream_forward (oi->obuf, OSPF_HEADER_SIZE); */
-  oi->obuf->putp += OSPF_HEADER_SIZE;
+  ospf_output_forward (oi->obuf, OSPF_HEADER_SIZE);
 
   /* prepare Hello body. */
-  hello = (struct ospf_hello *) (oi->obuf->data + oi->obuf->putp);
+  hello = (struct ospf_hello *) OSPF_OUTPUT_PNT (oi->obuf);
   
-  hello->network_mask.s_addr = htonl (0xffffff80);
+  /* set netmask of interface. */
+  if (oi->type != OSPF_IFTYPE_POINTOPOINT &&
+      oi->type != OSPF_IFTYPE_VIRTUALLINK)
+    masklen2ip (oi->address->prefixlen, &hello->network_mask);
+
   hello->hello_interval = htons (oi->v_hello);
   hello->options = 2;
   hello->priority = oi->router_priority;
@@ -136,10 +199,8 @@ ospf_hello_send (struct ospf_interface *oi)
   hello->d_router = oi->d_router;
   hello->bd_router = oi->bd_router;
 
-  /*  stream_forward (oi->obuf, 20); */
-  oi->obuf->putp += 20;
+  ospf_output_forward (oi->obuf, 20);
 
-  length = OSPF_HEADER_SIZE + 20;
   for (node = route_top (oi->nbrs); node; node = route_next (node))
     {
       if (node->info == NULL)
@@ -148,14 +209,15 @@ ospf_hello_send (struct ospf_interface *oi)
       nbr = node->info;
 
       stream_put_ipv4 (oi->obuf, nbr->address.u.prefix4.s_addr);
-      length += 4; /* sizeof (nbr->address.u.prefix4.s_addr); */
     }
+
+  length = OSPF_OUTPUT_LENGTH (oi->obuf);
 
   ospfh->length = htons (length);
   ospfh->checksum = in_cksum (ospfh, length);
   ospf_write (oi, length);
 
-  zlog (NULL, LOG_INFO, "OSPF hello send");
+  zlog (NULL, LOG_INFO, "OSPF Hello sent");
   /* OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd); */
 }
 
@@ -254,7 +316,10 @@ ospf_read (struct thread *thread)
   if (ret < 0)
     return ret;
 
-#define DEBUG
+  /* prepare for next packet. */
+  OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
+
+  /* #define DEBUG */
 #ifdef DEBUG
   /* IP Packet dump */
   ospf_packet_dump (oi->ibuf);
@@ -267,18 +332,18 @@ ospf_read (struct thread *thread)
   if (iph->ip_len > oi->ifp->mtu)
     {
       zlog (NULL, LOG_WARNING,
-	    "interface %s: ospf_read packet buffer over flow",
-	    oi->ifp->name);
+	    "interface %s: ospf_read packet buffer over flow", oi->ifp->name);
       return 0;
     }
 
   /* my packet should be discarded silently. */
   if (iph->ip_src.s_addr == oi->address->u.prefix4.s_addr)
     {
-      /*      zlog (NULL, LOG_WARNING, "It's me."); */
+#ifdef DEBUG
+      zlog (NULL, LOG_WARNING, "It's me.");
+#endif /* DEBUG */
       return 0;
     }
-
 
   /* Adjust size to message length. */
   stream_forward (oi->ibuf, iph->ip_hl * 4);
@@ -311,7 +376,7 @@ ospf_read (struct thread *thread)
   switch (ospfh->type)
     {
     case OSPF_MSG_HELLO:
-      ospf_hello (iph, ospfh, oi);
+      ospf_hello (iph, ospfh, oi, length);
       break;
     case OSPF_MSG_DB_DESC:
       ospf_db_desc (oi, length);
@@ -332,7 +397,6 @@ ospf_read (struct thread *thread)
       break;
     }
 
-  OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
   return 0;
 }
 

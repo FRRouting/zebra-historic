@@ -69,5 +69,6 @@ struct ospf_neighbor
 
 /* Prototypes. */
 struct ospf_neighbor *ospf_nbr_new ();
+int ospf_nbr_bidirectional (struct ospf_neighbor *, struct in_addr *, int);
 
 #endif /* _ZEBRA_OSPF_NEIGHBOR_H */

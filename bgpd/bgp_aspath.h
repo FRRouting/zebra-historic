@@ -73,6 +73,7 @@ typedef struct aspath_regex_t ASPATH_regex;
 void aspath_regex_free(ASPATH_regex *regex);
 int aspath_regex_exec(const ASPATH_regex *rp, const ASPATH *info);
 ASPATH_regex *aspath_regex_comp(const char *pat);
+const char *aspath_regex_string(const ASPATH_regex *regex);
 #endif /* RADIX_REGEXP */
 
 #endif /* _ZEBRA_BGP_ASPATH_H */

@@ -34,6 +34,8 @@
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_packet.h"
+#include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_network.h"
 
 struct ospf_neighbor *
 ospf_nbr_new ()
@@ -58,4 +60,20 @@ ospf_nbr_new ()
   nbr->link_state_request = list_init ();
 
   return nbr;
+}
+
+/* check myself is in the neighbor list. */
+int
+ospf_nbr_bidirectional (struct ospf_neighbor *nbr,
+			struct in_addr *neighbors, int size)
+{
+  int i;
+
+  for (i = size; i > 0; i -= sizeof (struct in_addr))
+    {
+      if (ADDRESS_SAME (&nbr->router_id, &neighbors[i]))
+	return 1;
+    }
+
+  return 0;
 }

@@ -1,3 +1,20 @@
+1999-04-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_packet_attribute): Old draft-00 packet treatment
+	bug fixed.
+
+1999-04-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_add_left): Fix empty aspath bug.  Reported
+	by kad@gibson.skif.net.
+
+	* bgp_regex.[ch]: New file added.
+
+	
+1999-04-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_filter.c: New file added.
+
 1999-04-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_aspath.c (aspath_empty_aspath): Change for peering with

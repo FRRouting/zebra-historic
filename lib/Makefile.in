@@ -83,7 +83,7 @@ DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
 noinst_LIBRARIES = libzebra.a
 
-libzebra_a_SOURCES =  	version.c network.c pid_output.c getopt.c getopt1.c daemon.c 	print_version.c checksum.c vector.c linklist.c dropline.c 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c 	distribute.c stream.c str.c log.c
+libzebra_a_SOURCES =  	version.c network.c pid_output.c getopt.c getopt1.c daemon.c 	print_version.c checksum.c vector.c linklist.c dropline.c 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c 	distribute.c stream.c str.c log.c regex.c
 
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
@@ -98,7 +98,7 @@ libzebra_a_OBJECTS =  version.o network.o pid_output.o getopt.o \
 getopt1.o daemon.o print_version.o checksum.o vector.o linklist.o \
 dropline.o vty.o command.o sockunion.o prefix.o thread.o if.o memory.o \
 buffer.o buffer.o table.o client.o hash.o filter.o routemap.o \
-distribute.o stream.o str.o log.o
+distribute.o stream.o str.o log.o regex.o
 CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)

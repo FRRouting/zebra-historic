@@ -317,10 +317,14 @@ aspath_add_left (struct aspath *aspath, as_t asno)
   assegment = (struct assegment *) aspath->data;
 
   /* In case of empty aspath. */
-  if (assegment->length == 0)
+  if (assegment == NULL || assegment->length == 0)
     {
       aspath->length = AS_HEADER_SIZE + AS_VALUE_SIZE;
-      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length);
+
+      if (assegment)
+	aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length);
+      else
+	aspath->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
 
       assegment = (struct assegment *) aspath->data;
       assegment->type = AS_SEQUENCE;
@@ -413,8 +417,6 @@ aspath_segment_add (struct aspath *as, int type)
 struct aspath *
 aspath_empty_aspath ()
 {
-  struct assegment segment;
-
   return aspath_parse (NULL, 0);
 
 #if 0

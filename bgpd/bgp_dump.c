@@ -484,6 +484,8 @@ DEFUN (debug_ip_bgp, debug_ip_bgp_cmd,
     vty_out (vty, "option2 %s\r\n", argv[1]);
   else
     vty_out (vty, "no option\r\n");
+
+  return CMD_SUCCESS;
 }
 
 /* Some define for BGP packet dump. */

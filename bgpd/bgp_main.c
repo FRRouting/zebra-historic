@@ -222,7 +222,10 @@ main (int argc, char **argv)
   pid_output (PATH_BGPD_PID);
 
   /* Make bgp vty socket. */
-  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
+  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT, AF_INET);
+#ifdef KAME
+  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT, AF_INET6);
+#endif
 
   /* make BGP server fd */
   bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET);
