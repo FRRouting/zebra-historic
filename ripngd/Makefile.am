@@ -6,7 +6,8 @@ DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 sbin_PROGRAMS = ripngd
 
 ripngd_SOURCES = \
-	ripng_main.c ripng_interface.c ripngd.c ripng_zebra.c ripng_route.c
+	ripng_main.c ripng_interface.c ripngd.c ripng_zebra.c ripng_route.c \
+	ripng_debug.c
 
 ripngd_LDADD = ../lib/libzebra.a
 

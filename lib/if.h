@@ -18,20 +18,52 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-/* Is this enough ? */
+/* Interface name length.
+
+ Linux 2.0.36 and Linux 2.1.131 define this value in
+ /usr/include/linux/if.h and it's like this:
+
+ #define    IFNAMSIZ        16
+
+ FreeBSD 2.2.7 and 3.0 define this value in
+ /usr/include/net/if.h and it's like this:
+
+*/
 #define INTERFACE_NAMSIZ 20  
 
 /* Interface structure */
 struct interface 
 {
+  /* Common interface data. */
   unsigned int index;
   char name [INTERFACE_NAMSIZ + 1];
   unsigned long flags;
   int metric;
   int mtu;
-  list addr;
-  char *desc;			/* description of the interface. */
+
+  /* description of the interface. */
+  char *desc;			
+
+  /* Distribute list. */
+  void *distribute_in;
+  void *distribute_out;
+
+  /* Connected address list. */
+  list connected;
+
+  /* Daemon specific interface data pointer. */
   void *if_data;
+};
+
+/* Connected address structure. */
+struct connected
+{
+  /* Attached interface. */
+  struct interface *ifp;
+
+  /* Address of connected network. */
+  struct prefix *address;
+  struct prefix *destination;
 };
 
 /* Interface hook sort. */
@@ -64,10 +96,20 @@ struct interface
 struct interface *if_new (void);
 struct interface *if_lookup_by_index (int);
 struct interface *if_lookup_by_name (char *);
+struct interface *if_get_by_name (char *);
 int if_is_up (struct interface *);
 int if_is_loopback (struct interface *);
 int if_is_broadcast (struct interface *);
+int if_is_pointopoint (struct interface *);
 int if_is_multicast (struct interface *);
+void if_add_hook (int, int (*)(struct interface *));
+void if_init ();
+void if_dump_all ();
+
+/* Connected address functions. */
+struct connected *connected_new ();
+void connected_add (struct interface *, struct connected *);
+void connected_log (struct connected *);
 
 /* Exported variables. */
 extern list iflist;

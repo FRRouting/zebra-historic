@@ -23,22 +23,21 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <netdb.h>
 
 #include "zebra.h"
-#include "route.h"
+#include "prefix.h"
+#include "client.h"
 #include "buffer.h"
+#include "network.h"
+#include "roken.h"
 
 /* Make a IPv4 route add/delete packet and send it to zebra. */
-void
-zebra_ipv4_route_nexthop (u_char command, 
-			  int sock, 
-			  struct prefix_in *pin,
-			  struct in_addr nexthop)
+static int
+zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p, 
+		  struct in_addr *nexthop, unsigned int ifindex)
 {
+  int ret;
   struct stream *s;
   u_short size;
 
@@ -49,68 +48,92 @@ zebra_ipv4_route_nexthop (u_char command,
 
   /* Put command, type and nexthop. */
   stream_putc (s, command);
-  stream_putc (s, pin->type);
-  stream_write (s, (u_char *)&nexthop, 4);
+  stream_putc (s, type);
+  stream_write (s, (u_char *)nexthop, 4);
 
   /* Put prefix information. */
-  size = PSIZE (pin->mask);
-  stream_putc (s, pin->mask);
-  stream_write (s, (u_char *)&pin->prefix, size);
+  size = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, (u_char *)&p->prefix, size);
 
   /* Put length at the first point of the stream. */
   size = htons (s->ep);
   stream_set_cursor (s, 0);
   stream_write (s, (u_char *)&size, 2);
 
-  writen (sock, s->data, s->ep);
+  ret = writen (sock, s->data, s->ep);
 
   stream_free (s);
+
+  return ret;
 }
 
-/* In case of pin has nexthop. */
-void
-zebra_ipv4_route (u_char command, int sock, struct prefix_in *pin)
+int
+zebra_ipv4_add (int sock, int type, struct prefix_ipv4 *p,
+		struct in_addr *nexthop, unsigned int ifindex)
 {
-  zebra_ipv4_route_nexthop (command, sock, pin, pin->gate.addr);
+  return zebra_ipv4_route (ZEBRA_IPV4_ROUTE_ADD, sock, type, p, 
+			   nexthop, ifindex);
+}
+
+int
+zebra_ipv4_delete (int sock, int type, struct prefix_ipv4 *p,
+		struct in_addr *nexthop, unsigned int ifindex)
+{
+  return zebra_ipv4_route (ZEBRA_IPV4_ROUTE_DELETE, sock, type, p,
+			   nexthop, ifindex);
 }
 
 #ifdef HAVE_IPV6
 /* Make a IPv6 route add/delete packet and send it to zebra. */
-void
-zebra_ipv6_route_nexthop (u_char command, 
-			  int sock, 
-			  struct prefix_in6 *pin6,
-			  struct in6_addr *nexthop)
+static int
+zebra_ipv6_route (int command, int sock, int type, struct prefix_ipv6 *p,
+		  struct in6_addr *nexthop, unsigned int ifindex)
 {
+  int ret;
   struct stream *s;
   u_short size;
 
   s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Reserve size area then set command, type and nexthop.  */
   stream_putw (s, 0);
   stream_putc (s, command);
-  stream_putc (s, pin6->type);
+  stream_putc (s, type);
   stream_write (s, (u_char *)nexthop, 16);
 
-  /* Dummy index */
-  stream_putc (s, 0);
-  size = PSIZE (pin6->mask);
-  stream_putc (s, pin6->mask);
-  stream_write (s, (u_char *)&pin6->prefix, size);
+  /* Put prefix information. */
+  stream_putl (s, ifindex);
+  size = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, (u_char *)&p->prefix, size);
 
+  /* Write packet size. */
   size = htons (s->ep);
   stream_set_cursor (s, 0);
   stream_write (s, (u_char *)&size, 2);
 
-  writen (sock, s->data, s->ep);
+  ret = writen (sock, s->data, s->ep);
 
   stream_free (s);
+
+  return ret;
 }
 
-/* In case of pin6 has nexthop. */
-void
-zebra_ipv6_route (u_char command, int sock, struct prefix_in6 *pin6)
+int
+zebra_ipv6_add (int sock, int type, struct prefix_ipv6 *p,
+		struct in6_addr *nexthop, unsigned int ifindex)
 {
-  zebra_ipv6_route_nexthop (command, sock, pin6, &pin6->gate.addr);
+  return zebra_ipv6_route (ZEBRA_IPV6_ROUTE_ADD, sock, type, p, 
+			   nexthop, ifindex);
+}
+
+int
+zebra_ipv6_delete (int sock, int type, struct prefix_ipv6 *p,
+		struct in6_addr *nexthop, unsigned int ifindex)
+{
+  return zebra_ipv6_route (ZEBRA_IPV6_ROUTE_DELETE, sock, type, p, 
+			   nexthop, ifindex);
 }
 #endif /* HAVE_IPV6 */
 

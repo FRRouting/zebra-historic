@@ -1,0 +1,43 @@
+1998-12-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Now I assume KAME support Advanced API and use sendmsg/recvmsg.
+
+1998-12-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_interface.c: Delete old ifa (interface address) related
+	functions.
+
+1998-12-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_debug.[ch]: New file.
+
+	* ripngd.c (ripng_supply): Do not send header only RIPng packet.
+	Change `network' statement to `route' statement.
+	(ripng_request_process): Reply to RIPng REQUEST packet.
+
+1998-12-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_config_write): Delete vector v argument.
+	* ripng_zebra.c (zebra_config_write): Likewise.
+	* ripng_interface.c (interface_config_write): Likewise.
+
+1998-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_route.h: New file.
+
+	* ripng_interface.c:  Delete #include <linux/in6.h>.
+	ripng_main.c: likewise.
+	ripng_radix.c: likewise.
+	ripng_route.c: likewise.
+	ripng_zebra.c: likewise.
+	ripngd.c: likewise.
+
+1998-12-06  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* ripngd.h (IPV6_ADD_MEMBERSHIP): If IPV6_ADD_MEMBERSHIP is not
+	defined. Define IPV6_ADD_MEMBERSHIP as IPV6_JOIN_GROUP.
+
+1998-09-15  HEO SeonMeyong  <seirios@matrix.iri.co.jp>
+
+	* all Hydrangea define is changed to KAME.
+

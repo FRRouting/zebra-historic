@@ -70,22 +70,65 @@ struct buffer_data
   unsigned long ep;
 };
 
+/* Buffer type index. */
 #define BUFFER_STRING      0
 #define BUFFER_STREAM      1
 #define BUFFER_VTY         2
 
+/* Utility macros. */
 #define STREAM_SIZE(S)  ((S)->size)
+
+#define GETC(val, pnt) \
+  (val) = (u_char)(*(pnt)++)
+
+#define GETW(val, pnt) \
+do { \
+  (val) = (u_int16_t)(*(pnt)++) << 8; \
+  (val) |= (u_int16_t)(*(pnt)++); \
+} while (0)
+
+#define GETL(val, pnt) \
+do { \
+  (val) = (u_int32_t)(*(pnt)++) << 24; \
+  (val) |= (u_int32_t)(*(pnt)++) << 16; \
+  (val) |= (u_int32_t)(*(pnt)++) << 8; \
+  (val) |= (u_int32_t)(*(pnt)++); \
+} while (0)
+
+#define PUTC(val, pnt) \
+  (*(u_char *)(pnt)++) = (u_char)(val)
+
+#define PUTW(val, pnt) \
+do {\
+   u_int16_t t = htons((u_int16_t)(val)); \
+   memcpy ((pnt), &t, 2); \
+   (pnt) += 2;\
+} while (0)
+
+#define PUTL(val, pnt) \
+do {\
+   u_int32_t t = htonl((u_int32_t)(val)); \
+   memcpy ((pnt), &t, 4); \
+   (pnt) += 4;\
+} while (0)
 
 /* Stream prototypes. */
 struct stream *stream_new (size_t);
 int stream_read (struct stream *, int, size_t);
 int stream_putc (struct stream *, u_char);
-int stream_putw (struct stream *, u_short);
+int stream_putw (struct stream *, u_int16_t);
+int stream_putl (struct stream *, u_int32_t);
 int stream_write (struct stream *, u_char *, size_t);
 u_char *stream_pnt (struct stream *);
 u_char *stream_data (struct stream *);
 void stream_set_cursor (struct stream *, unsigned long);
 void stream_free (struct stream *);
+u_char stream_getc (struct stream *);
+u_short stream_getw (struct stream *);
+void stream_reset (struct stream *);
+int stream_flush (struct stream *, int);
+unsigned long stream_size (struct stream *);
+int stream_empty (struct stream *);
 
 /* Buffer prototypes. */
 struct buffer *buffer_new (int, size_t);

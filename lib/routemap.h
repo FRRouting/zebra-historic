@@ -34,21 +34,21 @@ struct route_map_rule_cmd
   void (*func_free)(void *);
 };
 
-/**/
+/* Route map apply error. */
 enum
 {
   /* Route map rule is missing. */
   ROUTE_MAP_RULE_MISSING = 1,
 
   /* Route map rule can't compile */
-  ROUTE_MAP_COMPILE_ERROR,
+  ROUTE_MAP_COMPILE_ERROR
 };
 
 /* Route map's type. */
 enum route_map_type
 {
   ROUTE_MAP_PERMIT,
-  ROUTE_MAP_DENY,
+  ROUTE_MAP_DENY
 };
 
 /* Route map rule list. */
@@ -75,3 +75,23 @@ struct route_map_index
   struct route_map_index *next;
   struct route_map_index *prev;
 };
+
+/* Prototypes. */
+void route_map_init ();
+void route_map_init_vty ();
+
+/* Add match statement to route map. */
+int
+route_map_add_match (struct route_map_index *index,
+		     char *match_name,
+		     char *match_arg);
+
+/* Delete specified route match rule. */
+int
+route_map_delete_match (struct route_map_index *index,
+			char *match_name,
+			char *match_arg);
+
+/* Install rule command to the match list. */
+void
+route_map_install_match (struct route_map_rule_cmd *cmd);

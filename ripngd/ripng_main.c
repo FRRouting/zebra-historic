@@ -20,21 +20,23 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <sys/time.h>
 
-#include "ripngd.h"
 #include "version.h"
 #include "getopt.h"
 #include "vector.h"
 #include "vty.h"
+#include "command.h"
 #include "thread.h"
+#include "log.h"
+
+#include "ripngd.h"
+#include "zebra.h"
 
 /* Configuration filename and directory. */
 char config_current[] = RIPNG_DEFAULT_CONFIG;
@@ -45,6 +47,7 @@ struct option longopts[] =
 {
   { "daemon",      no_argument,       NULL, 'd'},
   { "config_file", required_argument, NULL, 'f'},
+  { "log_mode",    no_argument,       NULL, 'l'},
   { "help",        no_argument,       NULL, 'h'},
   { "vty_port",    required_argument, NULL, 'P'},
   { "version",     no_argument,       NULL, 'v'},
@@ -69,6 +72,7 @@ usage (int status)
 Daemon which manages RIPng.\n\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
+-l. --log_mode     Set verbose log mode flag\n\
 -P, --vty_port     Set vty's port number\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
@@ -95,7 +99,7 @@ main (int argc, char **argv)
     {
       int opt;
 
-      opt = getopt_long (argc, argv, "df:hP:v", longopts, 0);
+      opt = getopt_long (argc, argv, "dlf:hP:v", longopts, 0);
     
       if (opt == EOF)
 	break;
@@ -106,6 +110,9 @@ main (int argc, char **argv)
 	  break;
 	case 'd':
 	  daemon_mode = 1;
+	  break;
+	case 'l':
+	  log_mode = 1;
 	  break;
 	case 'f':
 	  config_file = optarg;
@@ -128,15 +135,15 @@ main (int argc, char **argv)
 
   master = thread_make_master ();
 
-  /* RIPngd inits. */
+  /* Library inits. */
   log_init ();
   cmd_init ();
   vty_init ();
-  host_init ();
 
-  ripng_if_init ();
+  /* RIPngd inits. */
   ripng_init ();
   zebra_init ();
+  sort_node ();
 
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);
@@ -154,4 +161,7 @@ main (int argc, char **argv)
   /* Fetch next active thread. */
   while (thread_fetch (master, &thread))
     thread_call (&thread);
+
+  /* Not reached. */
+  exit (0);
 }

@@ -18,8 +18,20 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
+#if 0
+union sockunion {
+  struct sockinet {
+    u_char si_len;
+    u_char si_family;
+    u_short si_port;
+  } su_si;
+  struct sockaddr_in  su_sin;
+  struct sockaddr_in6 su_sin6;
+};
+#define su_len                su_si.si_len
+#define su_family     su_si.si_family
+#define su_port               su_si.si_port
+#endif /* 0 */
 
 union sockunion 
 {
@@ -30,6 +42,13 @@ union sockunion
 #endif /* HAVE_IPV6 */
 };
 
+enum connect_result
+{
+  connect_error,
+  connect_success,
+  connect_in_progress
+};
+
 /* Default address family. */
 #ifdef HAVE_IPV6
 #define AF_INET_UNION AF_INET6
@@ -37,21 +56,13 @@ union sockunion
 #define AF_INET_UNION AF_INET
 #endif
 
-#ifndef INET_ADDRSTRLEN
-#define INET_ADDRSTRLEN 16
-#endif /* INET_ADDRSTRLEN */
-
-#ifndef INET6_ADDRSTRLEN
-#define INET6_ADDRSTRLEN 46
-#endif /* INET6_ADDRSTRLEN */
-
-#define SU_ADDRSTRLEN INET6_ADDRSTRLEN
-
 /* shortcut macro to specify address field of struct sockaddr */
 #define sock2ip(X)   (((struct sockaddr_in *)(X))->sin_addr.s_addr)
 #ifdef HAVE_IPV6
 #define sock2ip6(X)  (((struct sockaddr_in6 *)(X))->sin6_addr.s6_addr)
 #endif /* HAVE_IPV6 */
+
+#define sockunion_family(X)  (X)->sa.sa_family
 
 /* Prototypes. */
 char *sockunion_su2str (union sockunion *su);
@@ -62,3 +73,25 @@ int sockunion_accept (int sock, union sockunion *);
 int sockunion_stream_socket (union sockunion *);
 int sockopt_reuseaddr (int);
 int sockunion_bind (int sock, union sockunion *, unsigned short, union sockunion *);
+int sockopt_ttl (int family, int sock, int ttl);
+int sockunion_socket (union sockunion *su);
+const char *inet_sutop (union sockunion *su, char *str);
+void sockunion_log (union sockunion *su);
+enum connect_result
+sockunion_connect (int fd, union sockunion *su, unsigned short port);
+
+#ifndef HAVE_INET_NTOP
+const char *
+inet_ntop (int family, const void *addrptr, char *strptr, size_t len);
+#endif /* HAVE_INET_NTOP */
+
+#ifndef HAVE_INET_PTON
+int
+inet_pton (int family, const char *strptr, void *addrptr);
+#endif /* HAVE_INET_PTON */
+
+#ifndef HAVE_INET_ATON
+int
+inet_aton (const char *cp, struct in_addr *inaddr);
+#endif
+

@@ -231,26 +231,45 @@ alloc_dec (int type)
 #include "vty.h"
 #include "command.h"
 
-DEFUN (show_memory, show_memory_cmd,
-       "show memory", "Display memory allocation status.")
+/* For pretty printng of memory allocate information. */
+struct memory_list
 {
-  vty_out (vty, "Filter Entry alloced : %ld\r\n", 
-	   mstat[MTYPE_FILTER].alloc);
-  vty_out (vty, "Access List  alloced : %ld\r\n", 
-	   mstat[MTYPE_ACCESS_LIST].alloc);
-  vty_out (vty, "Route map(name)alloced : %ld (%ld)\r\n", 
-	   mstat[MTYPE_ROUTE_MAP].alloc, 
-	   mstat[MTYPE_ROUTE_MAP_NAME].alloc);
-  vty_out (vty, "Route map index      : %ld\r\n", 
-	   mstat[MTYPE_ROUTE_MAP_INDEX].alloc);
-  vty_out (vty, "Route map rule       : %ld\r\n", 
-	   mstat[MTYPE_ROUTE_MAP_RULE].alloc);
+  int index;
+  char *format;
+} memory_list[] =
+{
+  { MTYPE_ROUTE_TABLE,     "Route table     : %ld\r\n", },
+  { MTYPE_ROUTE_NODE,      "Route node      : %ld\r\n", },
+  { MTYPE_RIB,             "RIB             : %ld\r\n", },
+  { MTYPE_FILTER,          "Filter Entry    : %ld\r\n", },
+  { MTYPE_ACCESS_LIST,     "Access List     : %ld\r\n", },
+  { MTYPE_ROUTE_MAP,       "Route map       : %ld\r\n", },
+  { MTYPE_ROUTE_MAP_INDEX, "Route map index : %ld\r\n", },
+  { MTYPE_ROUTE_MAP_RULE,  "Route map rule  : %ld\r\n", },
+  { 0,                     "---------------------\r\n" },
+  { MTYPE_DESC,            "Command desc    : %ld\r\n", },
+  { -1, NULL },
+};
+
+DEFUN (show_memory,
+       show_memory_cmd,
+       "show memory",
+       "Show running system information\n"
+       "Memory statistics\n")
+{
+  struct memory_list *m;
+
+  for (m = memory_list; m->index >= 0; m++)
+    if (m->index == 0)
+      vty_out (vty, m->format);
+    else
+      vty_out (vty, m->format, mstat[m->index].alloc);
 
   return CMD_SUCCESS;
 }
 
 void
-memory_init_vty ()
+memory_init ()
 {
   install_element (VIEW_NODE, &show_memory_cmd);
   install_element (ENABLE_NODE, &show_memory_cmd);

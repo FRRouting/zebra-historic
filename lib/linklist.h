@@ -26,7 +26,7 @@ struct _list
   listnode head;
   listnode tail;
   void *up;
-  int count;
+  unsigned int count;
 };
 
 struct _listnode 

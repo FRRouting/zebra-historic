@@ -18,10 +18,12 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <netinet/in.h>
 #include <sys/uio.h>
 #include <string.h>
 #include <errno.h>
@@ -29,6 +31,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "memory.h"
 #include "buffer.h"
+#include "roken.h"
 
 /* Stream is fixed length buffer for network output/input. */
 
@@ -125,14 +128,30 @@ stream_putc (struct stream *s, u_char c)
 }
 
 int
-stream_putw (struct stream *s, u_short w)
+stream_putw (struct stream *s, u_int16_t w)
 {
-  memcpy (s->data + s->cp, &w, 2);
+  u_int16_t t;
+
+  t = htons(w);
+  memcpy (s->data + s->cp, &t, 2);
 
   s->cp += 2;
   if (s->cp > s->ep)
     s->ep = s->cp;
   return 2;
+}
+
+int
+stream_putl (struct stream *s, u_int32_t l)
+{
+  s->data[s->cp++] = (u_char)(l >> 24);
+  s->data[s->cp++] = (u_char)(l >> 16);
+  s->data[s->cp++] = (u_char)(l >>  8);
+  s->data[s->cp++] = (u_char)l;
+
+  if (s->cp > s->ep)
+    s->ep = s->cp;
+  return 4;
 }
 
 /* Write data to buffer. */
@@ -242,14 +261,14 @@ buffer_free (struct buffer *b)
 char *
 buffer_getstr (struct buffer *b)
 {
-  return strdup (b->head->data);
+  return strdup ((char *)b->head->data);
 }
 
 /* Return 1 if buffer is empty. */
 int
 buffer_empty (struct buffer *b)
 {
-  if (b->rhead == NULL || (b->rhead == b->head && b->rhead->sp == 0))
+  if (b->rhead == NULL || (b->rhead == b->head && b->rhead->cp == 0))
     return 1;
   else
     return 0;
@@ -379,7 +398,7 @@ buffer_putstr (struct buffer *b, u_char *c)
 {
   size_t size;
 
-  size = strlen (c);
+  size = strlen ((char *)c);
   buffer_write (b, c, size);
   return 1;
 }
@@ -399,7 +418,7 @@ buffer_flush (struct buffer *b, int fd, size_t size)
 
   for (d = b->head; d; d = d->next)
     {
-      iovec[iov_index].iov_base = d->data + d->sp;
+      iovec[iov_index].iov_base = (char *)d->data + d->sp;
       if (size <= DATA_SIZE (d))
 	{
 	  iovec[iov_index].iov_len = size;
@@ -428,12 +447,15 @@ buffer_flush_all (struct buffer *b, int fd)
   int iov_index;
   struct iovec *iovec;
 
+  if (buffer_empty (b))
+    return;
+
   iovec = malloc (sizeof (struct iovec) * b->alloc);
   iov_index = 0;
 
   for (d = b->head; d; d = d->next)
     {
-      iovec[iov_index].iov_base = d->data + d->sp;
+      iovec[iov_index].iov_base = (char *)d->data + d->sp;
       iovec[iov_index].iov_len = d->ep - d->sp;
       iov_index++;
     }
@@ -482,7 +504,7 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
     {
       if (length <= d->ep - d->sp)
 	{
-	  iov[iov_index].iov_base = d->data + d->sp;
+	  iov[iov_index].iov_base = (char *)d->data + d->sp;
 	  iov[iov_index].iov_len = length;
 	  iov_index++;
 
@@ -491,7 +513,7 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
 	}
       else
 	{
-	  iov[iov_index].iov_base = d->data + d->sp;
+	  iov[iov_index].iov_base = (char *)d->data + d->sp;
 	  iov[iov_index].iov_len = d->ep - d->sp;
 	  iov_index++;
 

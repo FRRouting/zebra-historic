@@ -34,14 +34,20 @@
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
 
+/* Define if there is ifaliasreq structure. */
+#undef HAVE_IFALIASREQ
+
 /* Define if you have INRIA ipv6 stack.  */
 #undef INRIA_IPV6
 
-/* Define if you have WIDE HYDRANGEA ipv6 stack.  */
-#undef HYDRANGEA
+/* Define if you have KAME project ipv6 stack.  */
+#undef KAME
 
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
+
+/* Define this if htnol is broken, but can be fixed with define magic */
+#undef HAVE_REPAIRABLE_HTONL
 
 /* PATHS */
 #undef PATH_ZEBRA_PID
@@ -62,9 +68,15 @@
 #endif /* HAVE_BZERO */
 
 #ifdef HAVE_IPV6
-#ifdef HYDRANGEA
+#ifdef KAME
 #ifndef INET6
 #define INET6
 #endif /* INET6 */
-#endif /* HYDRANGEA */
+#endif /* KAME */
 #endif /* HAVE_IPV6 */
+
+#ifdef SUNOS_5
+typedef unsigned int u_int32_t; 
+typedef unsigned short u_int16_t; 
+typedef unsigned short u_int8_t; 
+#endif /* SUNOS_5 */

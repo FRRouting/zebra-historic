@@ -46,5 +46,11 @@ struct access_list
   struct filter *tail;
 };
 
-/* Prototypes. */
+/* Prototypes for access-list. */
+void access_list_init ();
 struct access_list *access_list_lookup (char *);
+enum filter_type access_list_apply (struct access_list *, void *);
+
+/* Prototypes for distribute-list. */
+void distribute_init ();
+void distribute_apply_all ();

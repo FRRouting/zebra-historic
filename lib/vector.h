@@ -1,5 +1,5 @@
-/* generic vector interface header
-   Copyright (C) 1997 Kunihiro Ishiguro
+/* Generic vector interface header.
+   Copyright (C) 1997, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -34,12 +34,13 @@ typedef struct _vector *vector;
 #define vector_slot(V,I)  ((V)->index[(I)])
 #define vector_max(V) ((V)->max)
 
-/* prototypes */
+/* Prototypes. */
 vector vector_init (unsigned int size);
 void vector_ensure (vector v, unsigned int num);
 int vector_empty_slot (vector v);
 int vector_set (vector v, void *val);
 int vector_set_index (vector v, unsigned int i, void *val);
+void *vector_lookup_index (vector v, unsigned int i);
 void vector_unset (vector v, unsigned int i);
 unsigned int vector_count (vector v);
 void vector_only_wrapper_free (vector v);

@@ -1,5 +1,5 @@
-/* Host[Router] information header
-   Copyright (C) 1997 Kunihiro Ishiguro
+/* RIPng daemon
+   Copyright (C) 1998 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -18,29 +18,18 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-/* Host configuration variable */
-struct host
-{
-  /* Host name of this router. */
-  char *name;
+void
+ripng_slot_add (struct route_node *node);
 
-  /* Password for vty interface. */
-  char *password;
+int
+ripng_static_add (struct route_node *node, u_char metric);
 
-  /* Enable password */
-  char *enable;
+int
+ripng_static_delete (struct route_node *node);
 
-#ifdef HAVE_PTHREAD
-  /*   pthread_mutex_t mutex_lock; */
-#endif /* HAVE_PTHREAD */  
+int
+ripng_aggregate_add (struct route_node *node, u_char metric);
 
-  /* Log filename. */
-  char *logfile;
+int
+ripng_aggregate_delete (struct route_node *node);
 
-  /* config file name of this host */
-  char *config;
-};
-
-extern struct host host;
-char *host_config_file ();
-void host_config_set (char *);

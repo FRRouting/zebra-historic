@@ -1,5 +1,5 @@
-/* Kernel routing table read by getmsg function.
-   Copyright (C) 1997 Kunihiro Ishiguro
+/* kernel routing table update prototype.
+   Copyright (C) 1998 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -18,10 +18,20 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-/* Under construction. */
-#include <config.h>
+int
+kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
+		 unsigned int index, int metric);
 
-rt_read ()
-{
-  ;
-}
+int
+kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
+		    unsigned int index, int metric);
+
+#ifdef HAVE_IPV6
+int
+kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
+		 unsigned int index, int metric);
+
+int
+kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
+		    unsigned int index, int metric);
+#endif /* HAVE_IPV6 */

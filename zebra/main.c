@@ -20,10 +20,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <signal.h>
 
 #include "zebra.h"
 #include "version.h"
@@ -33,27 +35,35 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "vty.h"
 #include "command.h"
 #include "thread.h"
-
-/* command line options */
-struct option longopts[] = 
-{
-  { "daemon",      no_argument,       NULL, 'd'},
-  { "log_mode",    no_argument,       NULL, 'l'},
-  { "config_file", required_argument, NULL, 'f'},
-  { "help",        no_argument,       NULL, 'h'},
-  { "vty_port",    required_argument, NULL, 'P'},
-  { "version",     no_argument,       NULL, 'v'},
-  { 0 }
-};
-
-char config_current[] = DEFAULT_CONFIG_FILE;
-char config_default[] = SYSCONFDIR DEFAULT_CONFIG_FILE;
+#include "filter.h"
+#include "memory.h"
 
 /* Master of threads. */
 struct thread_master *master;
 
 /* zebra program name */
 char *progname;
+
+/* Route retain mode flag. */
+int retain_mode = 0;
+
+/* Command line options. */
+struct option longopts[] = 
+{
+  { "batch",       no_argument,       NULL, 'b'},
+  { "daemon",      no_argument,       NULL, 'd'},
+  { "log_mode",    no_argument,       NULL, 'l'},
+  { "config_file", required_argument, NULL, 'f'},
+  { "help",        no_argument,       NULL, 'h'},
+  { "vty_port",    required_argument, NULL, 'P'},
+  { "retain",      no_argument,       NULL, 'r'},
+  { "version",     no_argument,       NULL, 'v'},
+  { 0 }
+};
+
+/* Default configuration file path. */
+char config_current[] = DEFAULT_CONFIG_FILE;
+char config_default[] = SYSCONFDIR DEFAULT_CONFIG_FILE;
 
 /* Help information display. */
 static void
@@ -66,9 +76,12 @@ usage (int status)
       printf ("Usage : %s [OPTION...]\n\n\
 Daemon which manages kernel routing table management and \
 redistribution between different routing protocols.\n\n\
+-b, --batch        Runs in batch mode\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
+-l. --log_mode     Set verbose log mode flag\n\
 -P, --vty_port     Set vty's port number\n\
+-r, --retain       When program terminates, retain added route by zebra.\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
@@ -78,11 +91,60 @@ Report bugs to zebra@zebra.org\n", progname);
   exit (status);
 }
 
+/* SIGINT handler. */
+void
+sigint (int sig)
+{
+  /* Decrared in rib.c */
+  void rib_close ();
+
+  log ("SIGINT received\n");
+
+  if (!retain_mode)
+    rib_close ();
+
+  exit (0);
+}
+
+/* Signale wrapper. */
+RETSIGTYPE *
+signal_set (int signo, void (*func)(int))
+{
+  int ret;
+  struct sigaction sig;
+  struct sigaction osig;
+
+  sig.sa_handler = func;
+  sigemptyset (&sig.sa_mask);
+  sig.sa_flags = 0;
+#ifdef SA_RESTART
+  sig.sa_flags |= SA_RESTART;
+#endif /* SA_RESTART */
+
+  ret = sigaction (signo, &sig, &osig);
+
+  if (ret < 0) 
+    return (SIG_ERR);
+  else
+    return (osig.sa_handler);
+}
+
+/* Initialization of signal handles. */
+void
+signal_init ()
+{
+  signal_set (SIGINT, sigint);
+  signal_set (SIGTERM, SIG_IGN);
+  signal_set (SIGPIPE, SIG_IGN);
+}
+
 /* Main startup routine. */
+int
 main (int argc, char **argv)
 {
   char *p;
   int vty_port = 0;
+  int batch_mode = 0;
   int daemon_mode = 0;
   char *config_file = NULL;
   struct thread thread;
@@ -94,7 +156,7 @@ main (int argc, char **argv)
     {
       int opt;
   
-      opt = getopt_long (argc, argv, "dlf:hP:v", longopts, 0);
+      opt = getopt_long (argc, argv, "bdlf:hP:rv", longopts, 0);
 
       if (opt == EOF)
 	break;
@@ -103,16 +165,22 @@ main (int argc, char **argv)
 	{
 	case 0:
 	  break;
+	case 'b':
+	  batch_mode = 1;
 	case 'd':
 	  daemon_mode = 1;
 	  break;
 	case 'l':
 	  log_mode = 1;
+	  break;
 	case 'f':
 	  config_file = optarg;
 	  break;
 	case 'P':
 	  vty_port = atoi (optarg);
+	  break;
+	case 'r':
+	  retain_mode = 1;
 	  break;
 	case 'v':
 	  print_version ();
@@ -127,42 +195,51 @@ main (int argc, char **argv)
 	}
     }
 
+  /* First of all we need logging init. */
   log_init ();
 
+  /* Make master thread emulator. */
   master = thread_make_master ();
 
   /* Vty related initialize. */
+  signal_init ();
   cmd_init ();
   vty_init ();
-  host_init ();
-  access_list_init ();
+  memory_init ();
 
-  /* zebra related initialize. */
-  radix_init ();
+  /* Zebra related initialize. */
   zebra_init ();
   rib_init ();
   zebra_if_init ();
+  access_list_init ();
+
+  /* Make kernel routing socket. */
+  kernel_init ();
+  interface_list ();
+  route_read ();
+  hostinfo_get ();
+  sort_node ();
 
   /* Configuration file read*/
   vty_read_config (config_file, config_current, config_default);
 
+  /* Exit when zebra is working in batch mode. */
+  if (batch_mode)
+    exit (0);
+
   /* Make vty server socket. */
   vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
 
-  /* daemonize */
+  /* Daemonize. */
   if (daemon_mode)
     daemon_me ();
 
-  /* output pid of zebra */
+  /* Output pid of zebra. */
   pid_output (PATH_ZEBRA_PID);
-
-  /* get kernel routing table and insert it into rib */
-  hostinfo_get ();
-  rt_read ();
-  interface_list ();
-
-  /* ripng_test (); */
 
   while (thread_fetch (master, &thread))
     thread_call (&thread);
+
+  /* Not reached... */
+  exit (0);
 }

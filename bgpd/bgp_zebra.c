@@ -20,21 +20,27 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
+
+#include "log.h"
+#include "buffer.h"
+#include "network.h"
+#include "prefix.h"
+#include "client.h"
+#include "roken.h"
 
 #include "bgpd.h"
 #include "zebra.h"
 
 /* Socket to communicate with zebra daemon */
-static zebra_socket;
+static int zebra_socket;
 
+void
 zebra_init (int enable)
 {
   if (!enable)
@@ -43,71 +49,17 @@ zebra_init (int enable)
   zebra_socket = zebra_connect ();
 }
 
-zebra_connect ()
-{
-  int sock;
-  static int connected = 0;
-  struct sockaddr_in serv;
-  struct hostent *hp;
-
-  if (connected)
-    return;
-
-  sock = socket (AF_INET, SOCK_STREAM, 0);
-  if (sock < 0) 
-    {
-      perror ("sock");
-      exit (1);
-    }
-  
-  serv.sin_family = AF_INET;
-  serv.sin_port = htons (ZEBRA_PORT);
-
-  if ((hp = gethostbyname ("localhost")) == NULL)
-    log_warn ("can't lookup localhost\n");
-  else
-    bcopy(hp->h_addr, (char *)&serv.sin_addr, hp->h_length);
-
-  if (connect (sock, (struct sockaddr *) & serv, sizeof (serv)) < 0) 
-    perror ("connect");
-
-  return sock;
-}
-
 #ifdef HAVE_IPV6
-zebra_route_ip6 (command, dest, netmask, gateway)
-     int command;
-     struct in6_addr dest;
-     struct in6_addr gateway;
-     struct in6_addr netmask;
+int
+zebra_make_request_ip6 (char *buf, int command, 
+			struct in6_addr dest, struct in6_addr netmask, 
+			struct in6_addr gateway)
 {
-  int size;
-  char buf[512];
-
-  switch (command) {
-  case ZEBRA_IPV6_ROUTE_ADD:
-  case ZEBRA_IPV6_ROUTE_DELETE:
-    size = zebra_make_request_ip6 (buf, command, dest, netmask, gateway);
-    break;
-  }
-  writen (zebra_socket, buf, size);
-}
-#endif /* HAVE_IPV6 */
-
-#ifdef HAVE_IPV6
-zebra_make_request_ip6 (buf, command, dest, netmask, gateway)
-     char *buf;
-     int command;
-     struct in6_addr dest;
-     struct in6_addr netmask;
-     struct in6_addr gateway;
-{
-  char bb[64];
   char *pnt = buf;
   size_t size = sizeof (struct in6_addr);
 
-  st_4byte (size, pnt);
-  st_4byte (command, pnt);
+  PUTL (size, pnt);
+  PUTL (command, pnt);
 
   bcopy (&dest, pnt, size);
   pnt += size;
@@ -119,8 +71,29 @@ zebra_make_request_ip6 (buf, command, dest, netmask, gateway)
   size = pnt - buf;
   pnt = buf;
 
-  st_4byte (size, pnt);
+  PUTL (size, pnt);
 
   return size;
+}
+
+void
+zebra_route_ip6 (command, dest, netmask, gateway)
+     int command;
+     struct in6_addr dest;
+     struct in6_addr gateway;
+     struct in6_addr netmask;
+{
+  int size;
+  char buf[512];
+  
+  size = 0;
+
+  switch (command) {
+  case ZEBRA_IPV6_ROUTE_ADD:
+  case ZEBRA_IPV6_ROUTE_DELETE:
+    size = zebra_make_request_ip6 (buf, command, dest, netmask, gateway);
+    break;
+  }
+  writen (zebra_socket, buf, size);
 }
 #endif /* HAVE_IPV6 */

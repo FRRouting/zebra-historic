@@ -20,6 +20,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -28,16 +29,20 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <sys/sysctl.h>
 #include <errno.h>
 
-#include "zebra.h"
-#include "route.h"
+#include "prefix.h"
 #include "sockunion.h"
 #include "memory.h"
+#include "log.h"
+
+#include "zebra.h"
+#include "rib.h"
 
 /* Socket length roundup function. */
 #define ROUNDUP(a) \
   ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
 /* Dump routing table flag for debug purpose. */
+void
 rtm_flag_dump (int flag)
 {
   if (flag & RTF_PROTO1)
@@ -85,15 +90,6 @@ rtm_flag_dump (int flag)
   /* log2 ("\n"); */
 }
 
-/* Routing messages version check routine. */
-rtm_ver_check (rtm)
-     struct rt_msghdr *rtm;
-{
-  if (rtm->rtm_version != RTM_VERSION) 
-      log_warn ("Routing message version different %d should be %d."
-		"This may cause problem\n", rtm->rtm_version, RTM_VERSION);
-}
-
 /* Interface function for reading kernel routing table information. */
 int
 rtm_read (struct rt_msghdr *rtm,
@@ -101,7 +97,6 @@ rtm_read (struct rt_msghdr *rtm,
 	  union sockunion *mask,
 	  union sockunion *gate)
 {
-  int len;
   caddr_t pnt, end;
 
   /* Pnt points out socket data start point. */
@@ -109,7 +104,9 @@ rtm_read (struct rt_msghdr *rtm,
   end = ((caddr_t)rtm) + rtm->rtm_msglen;
 
   /* rt_msghdr version check. */
-  rtm_ver_check (rtm);
+  if (rtm->rtm_version != RTM_VERSION) 
+      log_warn ("Routing message version different %d should be %d."
+		"This may cause problem\n", rtm->rtm_version, RTM_VERSION);
 
 #define SOCKADDRGET(X,R) \
     if (rtm->rtm_addrs & (R)) \
@@ -148,7 +145,8 @@ rtm_read (struct rt_msghdr *rtm,
 }
 
 /* Kernel routing table read up by sysctl function. */
-rt_read ()
+void
+route_read ()
 {
   caddr_t buf, end, ref;
   size_t bufsiz;
@@ -195,24 +193,28 @@ rt_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
-      switch (dest.sa.sa_family)
+      if (dest.sa.sa_family == AF_INET)
 	{
-	case AF_INET:
-	  rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 
-			(struct sockaddr_in *) &dest,
-			(struct sockaddr_in *) &mask,
-			(struct sockaddr_in *) &gate);
-	  break;
-#ifdef HAVE_IPV6
-	case AF_INET6:
-	  rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, 
-			(struct sockaddr_in6 *) &dest,
-			(struct sockaddr_in6 *) &mask,
-			(struct sockaddr_in6 *) &gate);
-	  break;
-#endif /* HAVE_IPV6 */
-	}
+	  struct prefix_ipv4 p;
 
+	  p.family = AF_INET;
+	  p.prefix = dest.sin.sin_addr;
+	  p.prefixlen = ip_masklen (mask.sin.sin_addr);
+
+	  rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, &gate.sin.sin_addr, 0);
+	}
+#ifdef HAVE_IPV6
+      if (dest.sa.sa_family == AF_INET6)
+	{
+	  struct prefix_ipv6 p;
+
+	  p.family = AF_INET6;
+	  p.prefix = dest.sin6.sin6_addr;
+	  p.prefixlen = ip6_masklen (mask.sin6.sin6_addr);
+
+	  rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, &gate.sin6.sin6_addr, 0);
+	}
+#endif /* HAVE_IPV6 */
     }
   XFREE (MTYPE_TMP, ref);
 }

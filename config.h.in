@@ -31,9 +31,6 @@
 /* Define if you have ipv6 stack.  */
 #undef HAVE_IPV6
 
-/* define if libc_r exists */
-#undef HAVE_LIBC_R
-
 /* Define if you have pthread.h and pthread library */
 #undef HAVE_LIBPTHREAD
 
@@ -46,14 +43,20 @@
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
 
+/* Define if there is ifaliasreq structure. */
+#undef HAVE_IFALIASREQ
+
 /* Define if you have INRIA ipv6 stack.  */
 #undef INRIA_IPV6
 
-/* Define if you have WIDE HYDRANGEA ipv6 stack.  */
-#undef HYDRANGEA
+/* Define if you have KAME project ipv6 stack.  */
+#undef KAME
 
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
+
+/* Define this if htnol is broken, but can be fixed with define magic */
+#undef HAVE_REPAIRABLE_HTONL
 
 /* PATHS */
 #undef PATH_ZEBRA_PID
@@ -66,12 +69,18 @@
 #undef SUNOS_5
 
 #ifdef HAVE_IPV6
-#ifdef HYDRANGEA
+#ifdef KAME
 #ifndef INET6
 #define INET6
 #endif /* INET6 */
-#endif /* HYDRANGEA */
+#endif /* KAME */
 #endif /* HAVE_IPV6 */
+
+#ifdef SUNOS_5
+typedef unsigned int u_int32_t; 
+typedef unsigned short u_int16_t; 
+typedef unsigned short u_int8_t; 
+#endif /* SUNOS_5 */
 
 /* Define if you have the bcopy function.  */
 #undef HAVE_BCOPY
@@ -88,8 +97,17 @@
 /* Define if you have the <kvm.h> header file.  */
 #undef HAVE_KVM_H
 
+/* Define if you have the <linux/version.h> header file.  */
+#undef HAVE_LINUX_VERSION_H
+
 /* Define if you have the <net/if_dl.h> header file.  */
 #undef HAVE_NET_IF_DL_H
+
+/* Define if you have the <netdb.h> header file.  */
+#undef HAVE_NETDB_H
+
+/* Define if you have the <netinet/in.h> header file.  */
+#undef HAVE_NETINET_IN_H
 
 /* Define if you have the <string.h> header file.  */
 #undef HAVE_STRING_H
@@ -108,6 +126,9 @@
 
 /* Define if you have the <sys/times.h> header file.  */
 #undef HAVE_SYS_TIMES_H
+
+/* Define if you have the <sys/types.h> header file.  */
+#undef HAVE_SYS_TYPES_H
 
 /* Define if you have the nsl library (-lnsl).  */
 #undef HAVE_LIBNSL

@@ -20,8 +20,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 struct bgp_route
 {
-  /* For radix tree. */
-  struct prefix_in  *next;
+  /* For linked list. */
+  struct bgp_route *next;
+  struct bgp_route *prev;
 
   /* Type of this prefix */
   u_char type;
@@ -42,11 +43,10 @@ struct bgp_route
   struct attr *attr;
 };
 
-struct bgp_info
-{
-  /* Pointer to peer structure. */
-  struct peer *peer;
-
-  /* Pointer to attributes structure. */
-  struct attr *attr;
-};
+/* Prototypes. */
+struct bgp_route *bgp_route_new ();
+void bgp_route_init ();
+void bgp_peer_delete (struct peer *peer);
+void route_parse (u_char *pnt, int rsize, struct attr *attr, struct peer *peer);
+void withdraw_route(unsigned char *pnt, int unfeasible_len, struct peer *peer);
+void route_vty_out_route (struct prefix *p, struct vty *vty);

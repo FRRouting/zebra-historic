@@ -23,7 +23,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 /* For tagging memory, below is the type of the memory. */
 enum
 {
-  MTYPE_COMMAND = 1,
+  MTYPE_TMP = 1,
+  MTYPE_COMMAND,
   MTYPE_COMMAND_CONST,
   MTYPE_STRVEC,
   MTYPE_VECTOR,
@@ -35,7 +36,7 @@ enum
   MTYPE_VTY,
   MTYPE_VTY_HIST,
   MTYPE_IF,
-  MTYPE_IF_ADDR,
+  MTYPE_CONNECTED,
   MTYPE_AS_SEG,
   MTYPE_AS_PASN,
   MTYPE_AS_PATH,
@@ -48,8 +49,9 @@ enum
   MTYPE_BGP_PEER,
   MTYPE_RADIX_NODE,
   MTYPE_RADIX_MASK,
-  MTYPE_PREFIX_IN,
-  MTYPE_PREFIX_IN6,
+  MTYPE_PREFIX,
+  MTYPE_PREFIX_IPV4,
+  MTYPE_PREFIX_IPV6,
   MTYPE_HASH,
   MTYPE_HASH_BACKET,
   MTYPE_RIPNG_ROUTE,
@@ -64,8 +66,18 @@ enum
   MTYPE_ROUTE_MAP_RULE,
   MTYPE_ROUTE_MAP_RULE_STR,
   MTYPE_RIP_INFO,
-  MTYPE_TMP,
-  MTYPE_MAX,
+  MTYPE_RIB,
+  MTYPE_DESC,
+  MTYPE_OSPF_TOP,
+  MTYPE_OSPF_AREA,
+  MTYPE_OSPF_IF,
+  MTYPE_OSPF_NEIGHBOR,
+  MTYPE_OSPF_ROUTE,
+  MTYPE_OSPF_ADDR,
+  MTYPE_OSPF_MESSAGE,
+  MTYPE_OSPF_TMP,
+  MTYPE_DISTRIBUTE,
+  MTYPE_MAX
 };
 
 #ifdef MEMORY_LOG
@@ -120,3 +132,4 @@ char *mtype_xstrdup (const char *file,
 		     int line,
 		     int type,
 		     char *str);
+void memory_init ();

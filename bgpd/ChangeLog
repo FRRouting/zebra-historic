@@ -1,3 +1,41 @@
+1998-12-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_zebra.c (zebra_client): Use zebra_connect() in lib/client.c. 
+
+	* `show ip bgp' bug fixed.
+	* aspath_log (): Remove argument logfp.
+
+1998-12-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.h: New file.
+
+1998-12-15  Magnus Ahltorp <map@stacken.kth.se>
+
+	* bgp_attr.c, bgp_community.h, bgp_dump.c, bgp_fsm.c, bgp_open.c
+	bgp_peer.c, bgp_peer.h, bgp_route.c, bgp_route.h, bgp_view.c
+	bgpd.c, bgpd.h, bgp_attr.c, bgp_community.h, bgp_dump.c,
+	bgp_fsm.c, bgp_open.c, bgp_peer.c, bgp_peer.h: Prototype fixes.
+
+1998-12-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_config_write): Delete vector v argument.
+
+1998-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h: Delete annoying ld_[124]byte and st_[124]byte macros.
+
+1998-11-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_radix.[ch]: removed.
+
+1998-09-15  HEO SeonMeyong  <seirios@matrix.iri.co.jp>
+
+	* bgp_main.c: ifdef HYDRANGEA -> ifdef KAME
+
+1998-08-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_dump.c: delete nroute().
+
 1998-05-19  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
 
 	* bgp_aspath.c: HAVE_CONFIG_H typo :-)

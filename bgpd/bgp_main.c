@@ -27,10 +27,17 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <config.h>
 #include <sys/time.h>
 
-#include "bgpd.h"
+#include "log.h"
+#include "vector.h"
+#include "vty.h"
+#include "command.h"
 #include "getopt.h"
-#include "bgp_aspath.h"
 #include "thread.h"
+#include "version.h"
+#include "filter.h"
+#include "memory.h"
+
+#include "bgpd.h"
 
 /* bgpd options, we use GNU getopt library. */
 struct option longopts[] = 
@@ -76,6 +83,62 @@ Report bugs to zebra@zebra.org\n", progname);
     }
 
   exit (status);
+}
+
+/* SIGHUP handler. */
+void 
+sighup (int sig)
+{
+  log ("SIGHUP received\n");
+  log_rotate ();
+}
+
+/* SIGINT handler. */
+void
+sigint (int sig)
+{
+  log ("SIGINT received\n");
+  exit (0);
+}
+
+/* Signale wrapper. */
+RETSIGTYPE *
+signal_set (int signo, void (*func)(int))
+{
+  int ret;
+  struct sigaction sig;
+  struct sigaction osig;
+
+  sig.sa_handler = func;
+  sigemptyset (&sig.sa_mask);
+  sig.sa_flags = 0;
+#ifdef SA_RESTART
+  sig.sa_flags |= SA_RESTART;
+#endif /* SA_RESTART */
+
+  ret = sigaction (signo, &sig, &osig);
+
+  if (ret < 0) 
+    return (SIG_ERR);
+  else
+    return (osig.sa_handler);
+}
+
+/* Initialization of signal handles. */
+void
+signal_init ()
+{
+  signal_set (SIGHUP, sighup);
+  signal_set (SIGINT, sigint);
+  signal_set (SIGTERM, SIG_IGN);
+  signal_set (SIGPIPE, SIG_IGN);
+}
+
+/* Print BGPd start messages. */
+void
+bgp_start_msg ()
+{
+  log ("BGPd (%s) starts\n", ZEBRA_VERSION);
 }
 
 /* Main routine of bgpd. Treatment of argument and start bgp finite
@@ -131,33 +194,25 @@ main (int argc, char **argv)
 	  break;
 	}
     }
-  log_init ();
 
   /* Initializations. */
   master = thread_make_master ();
 
+  log_init ();
   signal_init ();
   cmd_init ();
   vty_init ();
-  host_init ();
+  memory_init ();
 
   bgp_init ();
-  bgp_radix_init ();
-  aspath_init ();
-  community_init ();
-
-  route_map_init ();
-  route_map_init_vty ();
-  bgp_route_map_init ();
 
   access_list_init ();
-  view_init ();
-  bgp_dump_init ();
-  memory_init_vty ();
+  sort_node ();
 
-  /* parse config file */
+  /* Parse config file. */
   vty_read_config (config_file, config_current, config_default);
 
+  /* Turn into daemon if daemon_mode is set. */
   if (daemon_mode)
     daemon_me ();
 
@@ -169,14 +224,14 @@ main (int argc, char **argv)
 
   /* make BGP server fd */
   bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET);
-#ifdef HYDRANGEA
+#ifdef KAME
   bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET6);
-#endif /* HYDRANGEA */
+#endif /* KAME */
 
-  /* print bannar */
+  /* Print banner. */
   bgp_start_msg ();
 
-  /* start finite state machine, here we go! */
+  /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))
     {
       thread_call (&thread);
@@ -184,57 +239,7 @@ main (int argc, char **argv)
       thread_master_debug (master);
 #endif /* DEBUG */
     }
-}
-
-/* SIGHUP handler. */
-void 
-sighup (int sig)
-{
-  log ("SIGHUP received\n");
-  rotate_log ();
-}
 
-/* SIGINT handler. */
-void
-sigint (int sig)
-{
-  log ("SIGINT received\n");
-
-  /* Close all bgp peer and free all of resources. */
-  bgp_terminate ();
-
-  /* Rest in peace. */
+  /* Not reached. */
   exit (0);
-}
-
-/* Signale wrapper. */
-RETSIGTYPE *
-signal_set (int signo, void (*func)(int))
-{
-  int ret;
-  struct sigaction sig;
-  struct sigaction osig;
-
-  sig.sa_handler = func;
-  sigemptyset (&sig.sa_mask);
-  sig.sa_flags = 0;
-#ifdef SA_RESTART
-  sig.sa_flags |= SA_RESTART;
-#endif /* SA_RESTART */
-
-  ret = sigaction (signo, &sig, &osig);
-
-  if (ret < 0) 
-    return (SIG_ERR);
-  else
-    return (osig.sa_handler);
-}
-
-/* Initialization of signal handles. */
-signal_init ()
-{
-  signal_set (SIGHUP, sighup);
-  signal_set (SIGINT, sigint);
-  signal_set (SIGTERM, SIG_IGN);
-  signal_set (SIGPIPE, SIG_IGN);
 }

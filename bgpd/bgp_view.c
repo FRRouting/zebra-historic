@@ -20,13 +20,19 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <string.h>
+
+#include "linklist.h"
+#include "vector.h"
+#include "vty.h"
+#include "command.h"
+#include "prefix.h"
+#include "zebra.h"
+#include "table.h"
 
 #include "bgpd.h"
 #include "bgp_route.h"
@@ -35,24 +41,21 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgp_dump.h"
 #include "bgp_aspath.h"
 
-#include "vector.h"
-#include "vty.h"
-#include "command.h"
-#include "route.h"
-#include "radix.h"
-#include "zebra.h"
+/**/
+struct route_table *bgp_static_ipv4;
 
-struct radix_top *bgp_static_radix;
+/**/
 #ifdef HAVE_IPV6
-struct radix_top *bgp_static_radix_ipv6;
+struct route_table *bgp_static_ipv6;
 #endif /* HAVE_IPV6 */
 
 /**/
+void
 filter_default (struct attr *attr, struct peer *peer)
 {
   attr->med = 0;
   attr->origin = BGP_ORIGIN_IGP;
-  attr->next_hop.s_addr = peer->next_hop;
+  attr->next_hop = peer->next_hop;
 
 
   if (peer->as == peer->bgp->as)
@@ -75,7 +78,8 @@ filter_default (struct attr *attr, struct peer *peer)
     }
 }
 
-bgp_announce_static (struct prefix_in *pin, struct peer *peer)
+#if 0
+bgp_announce_static (struct prefix_ipv4 *pin, struct peer *peer)
 {
   struct attr *attr;
   int nbytes;
@@ -97,13 +101,16 @@ bgp_announce_static (struct prefix_in *pin, struct peer *peer)
 
 bgp_announce (struct peer *peer)
 {
-  radix_apply_func (bgp_static_radix, bgp_announce_static, peer);
+  radix_apply_func (bgp_static_ipv4, bgp_announce_static, peer);
 }
+#endif /* 0 */
 
 DEFUN (default_attr_localpref,
        default_attr_localpref_cmd,
        "default-attr local-pref NUMBER",
-       "Set default local preference value.")
+       "Set default local preference value\n"
+       "Set default local preference value\n"
+       "Value\n")
 {
   struct bgp *bgp;
   long lpref;
@@ -114,119 +121,117 @@ DEFUN (default_attr_localpref,
 
   bgp->def |= VAL_LOCAL_PREF;
   bgp->localpref = lpref;
+
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_default_attr_localpref,
        no_default_attr_localpref_cmd,
        "no default-attr local-pref NUMBER",
-       "Unset default local preference value.")
+       NO_STR
+       "Unset default local preference value\n"
+       "Unset default local preference value\n"
+       "Value\n")
 {
   struct bgp *bgp;
-  long lpref;
 
   bgp = (struct bgp *) vty->index;
 
   bgp->def &= ~DEFAULT_LOCAL_PREF;
   bgp->localpref = 0;
+
+  return CMD_SUCCESS;
 }
 
 
 DEFUN (bgp_network,
        bgp_network_cmd,
        "network PREFIX",
-       "Static network for bgp announcement.")
+       "Announce network setup\n"
+       "Static network for bgp announcement\n")
 {
   int ret;
   struct bgp *bgp;
-  struct prefix_in *pin;
+  struct prefix_ipv4 p;
+  struct route_node *np;
 
   bgp = (struct bgp *) vty->index;
-  pin = prefix_in_new ();
 
-  ret = str2prefix_in (argv[0], pin);
+  ret = str2prefix_ipv4 (argv[0], &p);
   if (!ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
-      prefix_in_free (pin);
-      return;
+      return CMD_WARNING;
     }
 
   /* Make sure mask is applied. */
-  masked_route_in (pin);
-  pin->type = ZEBRA_ROUTE_BGP;
-  pin->gate.info = attr_new ();
+  apply_mask (&p);
 
-  ret = radix_lookup_rt (bgp_static_radix, (struct prefix *) pin);
-  if (ret)
+  np = route_node_get (bgp_static_ipv4, (struct prefix *) &p);
+  if (np->info)
     {
       vty_out (vty, "There is already same static announcement.\r\n");
-      prefix_in_free (pin);
-      return;
+      return CMD_WARNING;
     }
-  radix_add (bgp_static_radix, (struct prefix *) pin);
+  np->info = bgp_attr_new ();
+
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_bgp_network,
        no_bgp_network_cmd,
        "no network PREFIX",
-       "Delete static network for bgp announcement.")
+       NO_STR
+       "Announce network setup\n"
+       "Delete static network for bgp announcement\n")
 {
   int ret;
   struct bgp *bgp;
-  struct prefix_in *pin;
-  struct prefix_in *pr;
+  struct route_node *np;
+  struct prefix_ipv4 p;
 
   bgp = (struct bgp *) vty->index;
-  pin = prefix_in_new ();
 
-  ret = str2prefix_in (argv[0], pin);
+  ret = str2prefix_ipv4 (argv[0], &p);
   if (!ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
-      prefix_in_free (pin);
-      return;
+      return CMD_WARNING;
     }
-  masked_route_in (pin);
-  pin->type = ZEBRA_ROUTE_BGP;
 
-  ret = radix_lookup_rt (bgp_static_radix, (struct prefix *) pin);
-  if (!ret)
+  apply_mask (&p);
+
+  np = route_node_get (bgp_static_ipv4, (struct prefix *) &p);
+  if (!np->info)
     {
       vty_out (vty, "Can't find specified static route configuration.\r\n");
-      prefix_in_free (pin);
-      return;
+      route_unlock_node (np);
+      return CMD_WARNING;
     }
-  masked_route_in (pin);
-  pin->type = ZEBRA_ROUTE_BGP;
 
-  pr = (struct prefix_in *) radix_delete (bgp_static_radix, (struct prefix *) pin);
-  prefix_in_free (pin);
-  attr_free (pr->gate.info);
-  prefix_in_free (pr);
+  bgp_attr_free (np->info);
+  np->info = NULL;
+
+  route_unlock_node (np);
+
+  return CMD_SUCCESS;
 }
 
-vty_static_dump (struct prefix *pr, struct vty *vty)
-{
-  struct prefix_in *pin = (struct prefix_in *) pr;
-
-  vty_out (vty, " network %s/%d%s", inet_ntoa (pin->prefix), pin->mask,
-	   VTY_NEWLINE);
-}
-
+int
 config_write_network (struct vty *vty, struct bgp *bgp)
 {
-  radix_apply_func (bgp_static_radix, vty_static_dump, vty);
+  /* radix_apply_func (bgp_static_ipv4, vty_static_dump, vty); */
+
+  return 0;
 }
 
 void
 view_init ()
 {
-  bgp_static_radix = radix_make_rib (AF_INET);
-  bgp_static_radix->sameprefix = rt_ip_sameprefix;
+  bgp_static_ipv4 = route_table_init ();
 
 #ifdef HAVE_IPV6
-  bgp_static_radix_ipv6 = radix_make_rib (AF_INET6);
-  bgp_static_radix_ipv6->sameprefix = rt_ipv6_sameprefix;
+  bgp_static_ipv6 = route_table_init ();
 #endif /* HAVE_IPV6 */
 
   install_element (BGP_NODE, &bgp_network_cmd);

@@ -1,3 +1,41 @@
+1998-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Check /usr/inet6/lib/libinet6.a exists or not.
+
+1998-10-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Comment out FreeBSD's libc_r detect section. At
+	this moment it doesn't work correctly with zebra.
+
+	Netlink interface is only enabled when Linux kernel version is
+	upper than 2.1.0.
+
+1998-09-15  HEO SeonMeyong <seirios@matrix.iri.co.jp>
+
+	* Hydrangea is now called KAME, so change all defines.
+
+1998-08-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: ifaliasreq check added.
+
+1998-08-12  Katsuhiro Kondou <kondou@nec.co.jp>
+
+	* Patch is applied for compile under EWS4800
+
+1998-06-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: delete old mtu_method check.
+
+	* doc/zebra.texi (Kernel interface): chapter `Kernel interface' added
+
+1998-06-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: add new netlink check for GNU/Linux
+
+1998-06-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* doc/zebra.texi: Update Linux netlink chapter.
+
 1998-05-18  Yamashita TAKAO  <jargon@lares.dti.ne.jp>
 
 	* config.h.in: define PTHREAD if work on Solaris 2.6

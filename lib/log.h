@@ -1,5 +1,5 @@
-/* log.h
-   Copyright (C) 1997 Kunihiro Ishiguro
+/* Zebra logging funcions.
+   Copyright (C) 1997, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -18,17 +18,17 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#define LOG_RECV 0
-#define LOG_SEND 1
-#define LOG_RIP  2
-#define LOG_BGP  3
-#define LOG_ZEBRA 4
-#define LOG_IRDP 5
+/* Prototypes. */
+void log_init ();
+void log_flush ();
 
-extern int log_mode;
-
-/* Prototypes */
-char *log_open (char *);
 void log (char *format, ...);
 void log2 (char *format, ...);
 void log_warn (char *format, ...);
+
+char *log_open (char *);
+void log_close ();
+void log_rotate ();
+
+/* Logging flag. */
+extern int log_mode;

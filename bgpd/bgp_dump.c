@@ -26,12 +26,15 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <arpa/inet.h>
 #include <time.h>
-#include <config.h>
+
+#include "version.h"
+#include "log.h"
+#include "vector.h"
+#include "vty.h"
+#include "prefix.h"
+#include "linklist.h"
 
 #include "bgpd.h"
 #include "bgp_aspath.h"
@@ -39,16 +42,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgp_attr.h"
 #include "bgp_dump.h"
 #include "bgp_peer.h"
-
-#include "version.h"
-#include "log.h"
-#include "vector.h"
-#include "vty.h"
-#include "route.h"
-
-#ifndef INET6_ADDRSTRLEN
-#define INET6_ADDRSTRLEN 46
-#endif /* INET6_ADDRSTRLEN */
+#include "bgp_community.h"
 
 extern FILE *logfp;
 
@@ -133,23 +127,6 @@ message bgp_notify_update_msg[] =
 };
 int bgp_notify_update_msg_max = BGP_NOTIFY_UPDATE_MAX;
 
-/* message of route origin */
-char *bgp_update_origin[] = 
-{
-  "i",
-  "e",
-  "?",
-};
-
-/* for update */
-message bgp_update_origin_long[] = 
-{
-  { BGP_ORIGIN_IGP, "IGP" },
-  { BGP_ORIGIN_EGP, "EGP" },
-  { BGP_ORIGIN_INCOMPLETE, "Incomplete" }
-};
-int bgp_update_origin_long_max = BGP_ORIGIN_INCOMPLETE + 1;
-
 char *
 lookupmes (message *array, int key)
 {
@@ -160,6 +137,7 @@ lookupmes (message *array, int key)
       return pnt->str;
     }
   }  
+  return NULL;
 }
 
 /* message lookup function */
@@ -173,23 +151,9 @@ mes_lookup (message *meslist, int max, int index)
   return meslist[index].str;
 }
 
-/* message check routine */
-mes_check (meslist, max)
-     message *meslist;
-     int max;
-{
-  int i;
-
-  for (i = 0; i < max; i++) {
-    if (meslist[i].key != i) {
-      fprintf (stderr, "messages list error!\n");
-      exit (1);
-    }
-  }
-}
-
-bgp_dump_header (bgp_header)
-     struct bgp_header *bgp_header;
+/* Dump bgp header information. */
+void
+bgp_dump_header (struct bgp_header *bgp_header)
 {
   int flag = 0;
 
@@ -212,115 +176,19 @@ bgp_dump_header (bgp_header)
     log ( "Head: %s(%d) length(%d)\n",
 	     LOOKUP (bgp_packet_msg, bgp_header->type), bgp_header->type, 
 	     bgp_header->length);
-    fflush (logfp);
+    log_flush ();
   }
 }
 
-#define PACKET_SEND 1
-#define PACKET_RECV 2
-
-/*
- * open packet dump
- */
-bgp_open_dump (bgp_open, peer, direct)
-     struct bgp_open *bgp_open;
-     struct peer * peer;
-     int direct;
+/* Dump attribute. */
+void
+bgp_dump_attr (struct peer *peer, struct attr *attr)
 {
-  /* decide whether dump or not */
-  if (direct == PACKET_RECV &&
-      IS_SET(dump_open, DUMP_SEND)) {
+  char *bgp_update_str[] = {"i","e","?"};
 
-    if (IS_SET(dump_open, DUMP_DETAIL)) {
-      /* detail */
-      log ( "Open: peer(%s) version(%d) AS(%d) holdtime(%d)\n"
-	       "      ident(%lu) optlen(%d)\n",
-	       peer->host,
-	       bgp_open->version, bgp_open->asno, bgp_open->holdtime,
-	       bgp_open->ident, bgp_open->optlen);
-    } else {
-      /* normal */
-      log ( "Open: peer(%s)\n",
-	       peer->host);
-    }
-    fflush (logfp);
-  }
-}
-
-nprint (fd, str)
-     int fd;
-     char *str;
-{
-  writen (fd, str, strlen(str));
-}
-
-/* called from BGP Update packet */
-bgp_log_route(struct peer *peer, struct bgp_route *br, int dup)
-{
-  struct in_addr hop;
-  struct attr *attr;
-
-  attr = br->attr;
-
-  if (dup)
-    log ( "Update[r]:");
-  else
-    log ( "Update:");
-
-  log2 ("[%s] ", peer->host);
-  fprintf (logfp, "%s/%d", inet_ntoa(br->prefix), br->mask);
-
-  if (attr)
-    dump_attr (peer, attr);
-
-  log2 ("\r\n");
-  log_flash ();
-}
-
-/*
- * called from show ip bgp x.x.x.x
- * need detailed information
- */
-bgp_print_route (struct vty *vty, struct prefix_in *r)
-{
-  struct bgp_route *br;
-  struct attr *attr;
-
-  br = (struct bgp_route *) r;
-  if (br == NULL)
-    return;
-    
-  attr = br->attr;
   if (attr == NULL)
     return;
 
-  if (attr->aspath) 
-    {
-      aspath_print_vty (vty, attr->aspath);
-      vty_out (vty, "\r\n");
-    }
-
-  /* show route. */
-  vty_out (vty, "   ");
-  route_vty_out_route (r, vty);
-
-  /* show nex hop */
-  if (attr) {
-    vty_out (vty, "Nexthop %s\r\n      Origin %s, Metric %lu, Localpref %lu",
-	     inet_ntoa(attr->next_hop),
-	     LOOKUP (bgp_update_origin_long, attr->origin),
-	     attr->med, attr->local_pref);
-    if (attr->community) {
-      vty_out (vty, ", Commuity");
-      community_print_vty (vty, attr->community);
-    }
-    vty_out (vty, "\r\n");
-  }
-}
-
-/**/
-dump_attr (struct peer *peer, struct attr *attr)
-{
   if (peer_sort (peer) == BGP_PEER_IBGP)
     log2 (" lpref: %ld", attr->local_pref);
 
@@ -339,46 +207,34 @@ dump_attr (struct peer *peer, struct attr *attr)
   if (attr->aspath) 
     {
       log2 (" aspath:");
-      aspath_log (logfp, attr->aspath);
+      aspath_log (attr->aspath);
     }
 
-  log2 (" %s", bgp_update_origin[attr->origin]);
+  log2 (" %s", bgp_update_str[attr->origin]);
 }
 
-route_vty_out_route (struct prefix_in *pin, struct vty *vty)
+void
+route_vty_out_route (struct prefix *p, struct vty *vty)
 {
   int len;
-
-  len = vty_out (vty, "%s/%d", inet_ntoa (pin->prefix), pin->mask);
-
-  len = 25 - len;
-  if (len > 0)
-    vty_out (vty, "%*s", len, " ");
-}
-
-
-#ifdef HAVE_IPV6
-route_vty_out_route_in6 (struct prefix_in6 *pin6, struct vty *vty)
-{
-  int len;
-  char buf[INET6_ADDRSTRLEN];
+  char buf[BUFSIZ];
 
   len = vty_out (vty, "%s/%d", 
-		 inet_ntop(AF_INET6, &pin6->prefix, buf, INET6_ADDRSTRLEN),
-		 pin6->mask);
-
-  len = 25 - len;
-  if (len > 0)
-    vty_out (vty, "%*s", len, " ");
+		 inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+		 p->prefixlen);
+  len = 20 - len;
+  if (len < 0)
+    len = 0;
+  vty_out (vty, "%*s", len, " ");
 }
-#endif /* HAVE_IPV6 */
 
 /* dump notify packet */
-bgp_notify_print(peer, bgp_notify)
-     struct peer * peer;
-     struct bgp_notify *bgp_notify;
+void
+bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify)
 {
   char *subcode_str;
+
+  subcode_str = "";
 
   switch (bgp_notify->err_code) {
   case BGP_NOTIFY_HEADER_ERR:
@@ -406,68 +262,6 @@ bgp_notify_print(peer, bgp_notify)
        subcode_str);
 }
 
-char *logfile_name;
-
-dump_update_size (length, size)
-{
-  if (IS_SET (dump_update, DUMP_DETAIL))
-    printf ("Update headerlength(%d) reachstart(%d)\n", length, size);
-}
-
-
-/* Print BGPd start messages. */
-bgp_start_msg ()
-{
-  log ("BGPd (%s) starts\n", ZEBRA_VERSION);
-}
-
-int Debug_Event = 1;
-int Debug_Keepalive = 0;
-int Debug_Update = 0;
-int Debug_Radix = 0;
-
-#if 0
-/* debug on */
-debug_on (flag)
-     int *flag;
-{
-  *flag = 1;
-}
-
-/* debug off */
-debug_off (flag)
-     int *flag;
-{
-  *flag = 0;
-}
-
-/* show debug */
-debug_show (fp)
-     FILE *fp;
-{
-  fprintf (fp, "Debug flag value list\r\n");
-  fprintf (fp, "  event     : %s\r\n", Debug_Event ? "on" : "off");
-  fprintf (fp, "  update    : %s\r\n", Debug_Update ? "on" : "off");
-  fprintf (fp, "  keepalive : %s\r\n", Debug_Keepalive ? "on" : "off");
-  fflush (fp);
-}
-#endif
-
-/* Reopen log file by HUP signal. */
-void
-rotate_log ()
-{
-  if (logfp == stdout)
-    return;
-
-  fflush (logfp);
-  fclose (logfp);
-  
-  logfp = fopen (logfile_name, "a");
-
-  if (logfp == NULL)
-    fprintf (stderr, "%s: can't open logfile %s\n", progname, logfile_name);
-}
 
 /* For debug statement. */
 unsigned long bgp_debug_option = 0;
@@ -495,7 +289,9 @@ debug (unsigned int option)
 
 DEFUN (debug_bgp, debug_bgp_cmd,
        "debug bgp DEBUG_OPT",
-       "Debug option set for bgpd.")
+       DEBUG_STR
+       BGP_STR
+       "Debug option set for bgpd\n")
 {
   if (strcmp (argv[0], "fsm") == 0)
     debug_on (DEBUG_BGP_FSM);
@@ -509,7 +305,10 @@ DEFUN (debug_bgp, debug_bgp_cmd,
 
 DEFUN (no_debug_bgp, no_debug_bgp_cmd,
        "no debug bgp DEBUG_OPT",
-       "Debug option unset for bgpd.")
+       NO_STR
+       DEBUG_STR
+       BGP_STR
+       "Debug option unset for bgpd\n")
 {
   if (strcmp (argv[0], "fsm") == 0)
     debug_off (DEBUG_BGP_FSM);
@@ -523,7 +322,9 @@ DEFUN (no_debug_bgp, no_debug_bgp_cmd,
 
 DEFUN (show_debug_bgp, show_debug_bgp_cmd,
        "show debug bgp",
-       "Show debug information of bgpd.")
+       SHOW_STR
+       DEBUG_STR
+       BGP_STR)
 {
   vty_out (vty, "Debug option\r\n");
   vty_out (vty, "============\r\n");
@@ -537,6 +338,7 @@ DEFUN (show_debug_bgp, show_debug_bgp_cmd,
   return CMD_SUCCESS;
 }
 
+void
 bgp_dump_init ()
 {
   install_element (ENABLE_NODE, &show_debug_bgp_cmd);

@@ -1,5 +1,5 @@
 /* Interface related function for RIP.
-   Copyright (C) 1997 Kunihiro Ishiguro
+   Copyright (C) 1997, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -18,37 +18,33 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef HAVE_IPV6
-#ifdef HYDRANGEA
-#ifdef INET6
-#undef INET6
-#undef HYDRANGEA
-#undef HAVE_IPV6
-#endif /* INET6 */
-#endif /* HYDRANGEA */
-#endif /* HAVE_IPV6 */
-
 #include <config.h>
 #include <stdio.h>
+#include <string.h>		/* bzero () */
+#include <stdlib.h>		/* atio () */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
+#include <arpa/inet.h>
 
-#include "ripd.h"
 #include "linklist.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "sockunion.h"
 #include "if.h"
-#include "ifa.h"
-#include "zebra.h"
-#include "route.h"
+#include "prefix.h"
+#include "connected.h"
 #include "memory.h"
+#include "buffer.h"
+#include "network.h"
+#include "table.h"
+#include "roken.h"
+#include "log.h"
+
+#include "ripd.h"
+#include "zebra.h"
 
 /* Global rip structure. */
 extern struct rip *rip;
@@ -86,17 +82,9 @@ ri_new ()
   return ri;
 }
 
-/* Request routes at all interfaces. */
-rip_request_all ()
-{
-  listnode node;
-
-  for (node = listhead (iflist); node; nextnode (node))
-    rip_request (getdata (node), rip->sock);
-}
-
 /* Ask routes at specific interface.  This will be executed when
  interface goes up. */
+void
 rip_request (struct interface *ifp, int sock)
 {
   int size;
@@ -107,34 +95,36 @@ rip_request (struct interface *ifp, int sock)
   size = rip_make_request (buf, rip->version);
   if (size > REQUEST_BUF)
     {
-      log_warn ("rip request packet size overflow\n");
+      log_warn ("RIP request packet size overflow.\n");
       exit (1);
     }
 
-  if (! if_is_up (ifp))
+  if (!if_is_up (ifp))
     return;
 
-  /* In default ripd doesn't send RIP_REQUEST into LOOPBACK interface. */
+  /* In default ripd doesn't send RIP_REQUEST to the loopback interface. */
   if (if_is_loopback (ifp))
     return;
 
-  if (rip->multicast && if_is_multicast (ifp)) 
+  if ((rip->multicast == RIP_MULTICAST) && if_is_multicast (ifp)) 
     {
       listnode node;
       
       log ("multicast RIP request at %s\n", ifp->name);
 
-      for (node = listhead (ifp->addr); node; nextnode (node))
+      for (node = listhead (ifp->connected); node; nextnode (node))
 	{
-	  struct if_addr *ifa;
+	  struct prefix_ipv4 *p;
+	  struct connected *connected;
 	  struct in_addr addr;
 
-	  ifa = getdata (node);
+	  connected = getdata (node);
+	  p = (struct prefix_ipv4 *) &connected->address;
 
-	  if (ifa->ifa_addr.sa.sa_family != AF_INET)
+	  if (p->family != AF_INET)
 	    continue;
 
-	  addr = sockunion_get_in_addr (&ifa->ifa_addr);
+	  addr = p->prefix;
 
 	  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF,
 			  &addr, sizeof(addr)) < 0) 
@@ -145,46 +135,69 @@ rip_request (struct interface *ifp, int sock)
 	}
     
       bzero (&sin, sizeof (struct sockaddr_in));
+      sin.sin_port = htons (RIP_PORT_DEFAULT);
       sin.sin_addr.s_addr = htonl (INADDR_RIP_GROUP);
+
       rip_udp_send (sock, buf, size, &sin);
     }
-  else if (ifp->flags & IFF_BROADCAST || ifp->flags & IFF_POINTOPOINT) 
+  else if (if_is_broadcast (ifp) || if_is_pointopoint (ifp)) 
     {
-      log ("broadcast or pointopoing RIP request at %s\n", ifp->name);
+      listnode cnode;
 
-      /* sin.sin_addr = sockunion_get_in_addr (&ifa->ifa_addr); */
-      rip_udp_send (sock, buf, size, &sin);
+      log ("broadcast RIP request at %s\n", ifp->name);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct prefix_ipv4 *p;
+	  struct connected *connected;
+
+	  connected = getdata (cnode);
+	  p = (struct prefix_ipv4 *) &connected->destination;
+
+	  bzero (&sin, sizeof (struct sockaddr_in));
+	  sin.sin_port = htons (RIP_PORT_DEFAULT);
+	  sin.sin_addr = p->prefix;
+
+	  rip_udp_send (sock, buf, size, &sin);
+	}
     }
 }
 
-/* Join the interface to multicast group. */
-rip_multicast_if (int sock, struct interface *ifp)
+/* Request routes at all interfaces. */
+void
+rip_request_all ()
 {
   listnode node;
 
-  for (node = ifp->addr->head; node; nextnode (node))
-    {
-      struct if_addr *ifa;
-      struct in_addr addr;
-
-      ifa = getdata (node);
-
-      if (ifa->ifa_addr.sa.sa_family != AF_INET)
-	continue;
-      
-      addr = sockunion_get_in_addr (&ifa->ifa_addr);
-
-      ipv4_multicast_join (sock, htonl (INADDR_RIP_GROUP), addr);
-    }
+  for (node = listhead (iflist); node; nextnode (node))
+    rip_request (getdata (node), rip->sock);
 }
 
-/* multicast packet recieve socket */
+/* Join to the rip version 2 multicast group. */
 int
-rip_multicast_socket (int sock)
+ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
+{
+  int ret;
+  struct ip_mreq mreq;
+
+  mreq.imr_multiaddr.s_addr = group.s_addr;
+  mreq.imr_interface.s_addr = ifa.s_addr;
+
+  ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
+		    (char *)&mreq, sizeof (mreq));
+
+  if (ret < 0) 
+    log_warn ("can't setsockopt IP_ADD_MEMBERSHIP\n");
+
+  return ret;
+}
+
+/* Multicast packet recieve socket. */
+void
+rip_multicast_enable (int sock)
 {
   listnode node;
   struct interface *ifp;
-
 
   for (node = listhead (iflist); node; nextnode (node))
     {
@@ -192,295 +205,196 @@ rip_multicast_socket (int sock)
       
       if (if_is_up (ifp) && if_is_multicast (ifp))
 	{
+	  listnode cnode;
+
 	  log ("Multicast enabled at %s\n", ifp->name);
-	  rip_multicast_if (sock, ifp);
+
+	  for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	    {
+	      struct prefix_ipv4 *p;
+	      struct connected *connected;
+	      struct in_addr any;
+	      
+	      connected = getdata (cnode);
+	      p = (struct prefix_ipv4 *) &connected->address;
+      
+	      if (p->family != AF_INET)
+		continue;
+      
+	      any.s_addr = htonl (INADDR_RIP_GROUP);
+	      ipv4_multicast_join (sock, any, p->prefix);
+	    }
 	}
     }
 }
 
-/* Is this address belong to me ? */
+/* Does this address belong to me ? */
+int
 if_check_address (struct in_addr addr)
 {
   listnode node;
-  struct interface *ifp;
-  struct if_addr *ifa;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
-      int ret;
+      listnode cnode;
+      struct interface *ifp;
 
       ifp = getdata (node);
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct connected *connected;
+	  struct prefix_ipv4 *p;
 
-      ret = ifa_same_address (ifp, addr);
-      if (ret)
-	return ret;
+	  connected = getdata (cnode);
+	  p = (struct prefix_ipv4 *) &connected->address;
+
+	  if (p->family != AF_INET)
+	    continue;
+	  if (IPV4_ADDR_CMP (&p->prefix, &addr) == 0)
+	    return 1;
+	}
     }
   return 0;
 }
 
+/* Lookup interface by IPv4 address. */
 struct interface *
 if_lookup_address (struct in_addr addr)
 {
   listnode node;
-  struct interface *ifp;
+  struct prefix_ipv4 p;
+  
+  p.family = AF_INET;
+  p.prefix = addr;
+  p.prefixlen = IPV4_MAX_BITLEN;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
-      int ret;
+      listnode cnode;
+      struct interface *ifp;
 
       ifp = getdata (node);
 
-      ret = ifa_lookup_address (ifp, addr);
-      if (ret)
-	return ifp;
+      for (cnode = listhead(ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct prefix *n;
+	  struct connected *connected;
+
+	  connected = getdata (cnode);
+	  n = connected->address;
+
+	  if (n->family != AF_INET)
+	    continue;
+
+	  if (prefix_match (n, (struct prefix *) &p))
+	    return ifp;
+	}
     }
   return NULL;
 }
 
-check_hit (struct in_addr net, struct in_addr mask, struct in_addr addr)
-{
-  return  (ntohl (addr.s_addr) & ntohl (mask.s_addr)) == 
-    (ntohl (net.s_addr) & ntohl (mask.s_addr));
-}
-
-ifa_lookup_address (struct interface *ifp, struct in_addr addr)
-{
-  int ret;
-  listnode node;
-  struct if_addr *ifa;
-  struct sockaddr_in *sin;
-
-  for (node = ifp->addr->head; node; nextnode (node))
-    {
-      ifa = getdata (node);
-
-      sin = &ifa->ifa_addr.sin;
-
-      if (sin->sin_family != AF_INET)
-	continue;
-
-      ret = check_hit (sin->sin_addr, ifa->ifa_mask.sin.sin_addr, addr);
-      if (ret)
-	return 1;
-    }
-
-  return 0;
-}
-
-ifa_same_address (struct interface *ifp, struct in_addr addr)
-{
-  int ret;
-  listnode node;
-  struct if_addr *ifa;
-  struct sockaddr_in *sin;
-
-  for (node = ifp->addr->head; node; nextnode (node))
-    {
-      ifa = getdata (node);
-
-      sin = &ifa->ifa_addr.sin;
-
-      if (sin->sin_family != AF_INET)
-	continue;
-
-      ret = memcmp (&sin->sin_addr, &addr, sizeof (struct in_addr));
-      if (ret == 0)
-	return 1;
-    }
-
-  return 0;
-}
-
-/* Allocate new address structure. */
-struct if_addr *
-ifa_new ()
-{
-  struct if_addr *new = XMALLOC (MTYPE_IF_ADDR, sizeof (struct if_addr));
-  bzero (new, sizeof (struct if_addr));
-  return new;
-}
-
-/* Print if_addr structure. */
+/* Add prefix into rib. */
 void
-ifa_print (unsigned long flags, struct if_addr *ifa)
+rip_connected_add (struct interface *ifp, 
+		   struct connected *connected)
 {
-  switch (ifa->ifa_addr.sa.sa_family) {
-  case AF_INET:
-    log ("  inet ");
-    sockunion_log (&ifa->ifa_addr);
-    log2 (" ");
-    sockunion_log (&ifa->ifa_mask);
-    log2 (" ");
-    if (flags & IFF_BROADCAST)
-      sockunion_log (&ifa->ifa_dest);
-    log2 ("\n");
-    break;
-#ifdef HAVE_IPV6
-  case AF_INET6:
-    log ("  inet6 ");
-    sockunion_log (&ifa->ifa_addr);
-    log2 ("/%d\n", ip6_masklen (ifa->ifa_mask.sin6.sin6_addr));
-    break;
-#endif /* HAVE_IPV6 */
-  default:
-    break;
-  }
-}
+  struct prefix_ipv4 *p;
+  struct rip_info *rinfo;
 
-ifa_lookup_by_prefix (struct interface *ifp, struct prefix_in *pin)
-{
-  struct if_addr *ifa;
-  listnode node;
+  p = (struct prefix_ipv4 *) connected->address;
 
-  for (node = ifp->addr->head; node; nextnode (node))
-    {
-      struct prefix_in dummy;
-      ifa = getdata (node);
+  log ("connected route %s/%d directly connect to %s\n",
+       inet_ntoa (p->prefix), p->prefixlen, ifp->name);
 
-      if (ifa->ifa_addr.sa.sa_family != AF_INET)
-	continue;
-
-      dummy.prefix = ifa->ifa_addr.sin.sin_addr;
-      dummy.mask = ip_masklen (ifa->ifa_mask.sin.sin_addr);
-      masked_route_in (&dummy);
-      if (dummy.prefix.s_addr == pin->prefix.s_addr &&
-	  dummy.mask == pin->mask)
-	return 1;
-    }
-  return 0;
-}
-
-struct interface *
-if_lookup_by_prefix (struct prefix_in *pin)
-{
-  listnode node;
-  struct interface *ifp;
-
-  for (node = listhead (iflist); node; nextnode (node))
-    {
-      ifp = getdata (node);
-      if (ifa_lookup_by_prefix (ifp, pin))
-	return ifp;
-    }
-  return NULL;
+  rinfo = (struct rip_info *) rip_info_new ();
+  rinfo->pref = -10;
+  rinfo->fib = 1;
+  rinfo->type = ZEBRA_ROUTE_CONNECT;
+  rinfo->ifp = ifp;
+  
+  /* Register route to rip table. */
+  rip_add_route (p, rinfo, NULL, ifp);
 }
 
 /* Get interface information from zebra daemon. */
-zebra_get_interface (int sock, u_int32_t length)
+int
+zebra_get_interface (int sock, u_int16_t length)
 {
   u_char *pnt;
   u_char *start;
   u_char *lim;
-  int nbyte;
+  int nbytes;
   struct interface *ifp;
-  struct if_addr *ifa;
-  u_int32_t ifa_count;
+  struct connected *connected;
+  u_int32_t connected_count;
 
   /* Allocate read buffer. */
-  pnt = start = (u_char *) malloc (length + 1);
-  nbyte = readn (sock, pnt, length - 8);
+  pnt = start = XMALLOC (0, length + 1);
+  nbytes = readn (sock, pnt, length - 3);
 
-  if (nbyte == 0) 
-    {
-      fprintf (stderr, "connection closed\n");
-      return;
-    }
+  if (nbytes <= 0) 
+    return nbytes;
 
-  lim = (caddr_t)pnt + length - 8;
+  lim = (caddr_t)pnt + length - 3;
   while (pnt < lim) 
     {
-      char tmpnam [INTERFACE_NAMSIZ];
+      char tmpnam[INTERFACE_NAMSIZ];
 
       /* Get interface's name. */
       strncpy (tmpnam, pnt, INTERFACE_NAMSIZ);
       pnt += INTERFACE_NAMSIZ;
 
-      ifp = if_lookup_by_name (tmpnam);
-      if (ifp == NULL)
-	{
-	  ifp = (struct interface *) if_new ();
-	  strncpy (ifp->name, tmpnam, INTERFACE_NAMSIZ);
-	}
+      ifp = if_get_by_name (tmpnam);
 
       /* Get interface's index. */
-      ld_1byte (ifp->index, pnt);
-      ld_4byte (ifp->flags, pnt);
-      ld_4byte (ifp->metric, pnt);
-      ld_4byte (ifp->mtu, pnt);
+      GETC (ifp->index, pnt);
+      GETL (ifp->flags, pnt);
+      GETL (ifp->metric, pnt);
+      GETL (ifp->mtu, pnt);
 
       /* Get interface's address count. */
-      ld_4byte (ifa_count, pnt);
-      while (ifa_count--) 
+      GETL (connected_count, pnt);
+      while (connected_count--) 
 	{
-	  ifa = (struct if_addr *) ifa_new (ifp);
+	  struct prefix *p;
+	  int plen;
 
-	  list_add_node (ifp->addr, ifa);
+	  connected = connected_new ();
 
-	  memcpy (&ifa->ifa_addr, pnt, sizeof (union sockunion));
-	  pnt += sizeof (union sockunion);
-	  memcpy (&ifa->ifa_mask, pnt, sizeof (union sockunion));
-	  pnt += sizeof (union sockunion);
-	  memcpy (&ifa->ifa_dest, pnt, sizeof (union sockunion));
-	  pnt += sizeof (union sockunion);
+	  p = prefix_new ();
+	  GETC (p->family, pnt);
+	  plen = prefix_blen (p);
+	  memcpy (&p->u.prefix, pnt, plen);
+	  pnt += plen;
+	  p->prefixlen = *pnt++;
+	  connected->address = p;
+
+	  p = prefix_new ();
+	  memcpy (&p->u.prefix, pnt, plen);
+	  pnt += plen;
+	  connected->destination = p;
+
+	  p = connected->address;
+	  connected_add (ifp, connected);
 	  
-	  ifa_rip_insert (ifa, ifp);
+	  if (p->family == AF_INET)
+	    rip_connected_add (ifp, connected);
 	}
     }
-  free (start);
-  if_dump_all ();
+  XFREE (0, start);
+
+  /* Return read packet size. */
+  return pnt - start;
 }
-
-/* Insert interface address route into rip's routing table. */
-ifa_rip_insert (struct if_addr *ifa, struct interface *ifp)
-{
-  if (ifa->ifa_addr.sa.sa_family == AF_INET)
-    {
-      struct prefix_in *pin;
-
-      pin = prefix_in_new ();
-      pin->type = ZEBRA_ROUTE_CONNECT;
-      pin->prefix = ifa->ifa_addr.sin.sin_addr;
-      pin->mask = ip_masklen (ifa->ifa_mask.sin.sin_addr);
-      pin->gate.info = ifp;
-      pin->fib = 1;
-
-      /* We need which interface is this route belongs to. */
-      rip_add_ifa (pin);
-    }
-}
-
-/* Add prefix into rib. */
-rip_add_ifa (struct prefix_in *pin)
-{
-  extern struct radix_top *rip_radix;
-
-  /* Make sure route masked. */
-  masked_route_in (pin);
-
-  /* Make gateway structure. */
-  if (pin->type == ZEBRA_ROUTE_CONNECT)
-    {
-      struct interface *ifp;
-
-      ifp = (struct interface *) pin->gate.info;
-      log ("connected route %s/%d", inet_ntoa (pin->prefix), pin->mask);
-      log2 (" directly conncted to %s\n", ifp->name);
-    }
-
-  radix_add (rip_radix, (struct prefix *) pin);
-}
-
-/* Called when interface structure allocated. */
-rip_if_new_hook (struct interface *ifp)
-{
-  ifp->if_data = ri_new ();
-}
-
 
 DEFUN (ip_rip_receive,
        ip_rip_receive_cmd,
        "ip rip receive version NUMBER",
-       "Set interface's specific RIP version control.")
+       "IP Information\n"
+       "Set interface's specific RIP version control\n"
+       "\n"
+       "\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -505,7 +419,10 @@ DEFUN (ip_rip_receive,
 DEFUN (ip_rip_receive_none,
        ip_rip_receive_none_cmd,
        "ip rip receive none",
-       "Don't recieve RIP packet from this interface.")
+       "IP Information\n"
+       "Don't recieve RIP packet from this interface\n"
+       "\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -520,7 +437,10 @@ DEFUN (ip_rip_receive_none,
 DEFUN (no_ip_rip_receive,
        no_ip_rip_receive_cmd,
        "no ip rip receive",
-       "Set default to RIP packet receive method.")
+       NO_STR
+       "IP Information\n"
+       "Set default to RIP packet receive method\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -535,7 +455,8 @@ DEFUN (no_ip_rip_receive,
 DEFUN (advertize_default,
        advertize_default_cmd,
        "advertize default",
-       "Don't advertize default route.")
+       "Don't advertize default route\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -550,7 +471,9 @@ DEFUN (advertize_default,
 DEFUN (no_advertize_default,
        no_advertize_default_cmd,
        "no advertize default",
-       "Don't advertize default route.")
+       NO_STR
+       "Don't advertize default route\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -565,7 +488,8 @@ DEFUN (no_advertize_default,
 DEFUN (accept_default,
        accept_default_cmd,
        "accept default",
-       "Accept default route.")
+       "Accept default route\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -580,7 +504,9 @@ DEFUN (accept_default,
 DEFUN (no_accept_default,
        no_accept_default_cmd,
        "no accept default",
-       "Don't accept default route.")
+       NO_STR
+       "Don't accept default route\n"
+       "\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -593,7 +519,8 @@ DEFUN (no_accept_default,
 }
 
 /* Write rip configuration of each interface. */
-interface_config_write (struct vty *vty, vector v)
+int
+interface_config_write (struct vty *vty)
 {
   listnode node;
   struct interface *ifp;
@@ -631,6 +558,7 @@ interface_config_write (struct vty *vty, vector v)
 
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
+  return 0;
 }
 
 struct cmd_node interface_node =
@@ -638,6 +566,14 @@ struct cmd_node interface_node =
   INTERFACE_NODE,
   "%s(config-if)# ",
 };
+
+/* Called when interface structure allocated. */
+int
+rip_if_new_hook (struct interface *ifp)
+{
+  ifp->if_data = ri_new ();
+  return 0;
+}
 
 /* Allocate and initialize interface vector. */
 void

@@ -23,11 +23,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <net/if.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
+#include <net/if.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 #include "linklist.h"
 #include "vector.h"
@@ -35,7 +34,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "command.h"
 #include "if.h"
 #include "sockunion.h"
-#include "ifa.h"
+#include "prefix.h"
+#include "connected.h"
 #include "memory.h"
 #include "buffer.h"
 #include "log.h"
@@ -58,7 +58,7 @@ if_new ()
 
   ifp = XMALLOC (MTYPE_IF, sizeof (struct interface));
   bzero (ifp, sizeof (struct interface));
-  ifp->addr = list_init ();
+  ifp->connected = list_init ();
   list_add_node (iflist, ifp);
 
   if (if_master.if_new_hook)
@@ -79,7 +79,7 @@ if_delete (struct interface *ifp)
 
 /* Add hook to interface master. */
 void
-if_add_hook (int type, int (*func)())
+if_add_hook (int type, int (*func)(struct interface *ifp))
 {
   switch (type) {
   case IF_NEW_HOOK:
@@ -125,6 +125,22 @@ if_lookup_by_name (char *name)
   return NULL;
 }
 
+/* Get interface by name if given name interface doesn't exist create
+   one. */
+struct interface *
+if_get_by_name (char *name)
+{
+  struct interface *ifp;
+
+  ifp = if_lookup_by_name (name);
+  if (ifp == NULL)
+    {
+      ifp = if_new ();
+      strncpy (ifp->name, name, IFNAMSIZ);
+    }
+  return ifp;
+}
+
 void
 if_up (struct interface *ifp)
 {
@@ -156,6 +172,13 @@ int
 if_is_broadcast (struct interface *ifp)
 {
   return ifp->flags & IFF_BROADCAST;
+}
+
+/* Does this interface support broadcast ? */
+int
+if_is_pointopoint (struct interface *ifp)
+{
+  return ifp->flags & IFF_POINTOPOINT;
 }
 
 /* Does this interface support multicast ? */
@@ -210,10 +233,10 @@ if_dump (struct interface *ifp)
   log ("Interface %s index %d metric %d mtu %d\n",
        ifp->name, ifp->index, ifp->metric, ifp->mtu);
 
-  /* if_flag_dump (ifp->flags); */
+  if_flag_dump (ifp->flags);
   
-  for (node = listhead (ifp->addr); node; nextnode (node))
-    ifa_print (ifp->flags, getdata (node));
+  for (node = listhead (ifp->connected); node; nextnode (node))
+    ;
 }
 
 /* Interface printing for all interface. */
@@ -238,7 +261,8 @@ if_index_address (struct in6_addr *addr)
 DEFUN (interface_desc, 
        interface_desc_cmd,
        "description ...",
-       "Set interface description.")
+       "Set interface description\n"
+       "Description\n")
 {
   int i;
   struct interface *ifp;
@@ -254,7 +278,7 @@ DEFUN (interface_desc,
   b = buffer_new (BUFFER_STRING, 1024);
   for (i = 0; i < argc; i++)
     {
-      buffer_putstr (b, argv[i]);
+      buffer_putstr (b, (u_char *)argv[i]);
       buffer_putc (b, ' ');
     }
   buffer_putc (b, '\0');
@@ -267,8 +291,10 @@ DEFUN (interface_desc,
 
 DEFUN (no_interface_desc, 
        no_interface_desc_cmd,
-       "no description [Interface description]",
-       "Delete interface description.")
+       "no description [description]",
+       NO_STR
+       "Delete interface description\n"
+       "Description\n")
 {
   struct interface *ifp;
 
@@ -283,7 +309,8 @@ DEFUN (no_interface_desc,
 DEFUN (interface,
        interface_cmd,
        "interface IFNAME",
-       "Enter interface configurataion mode.")
+       "Select an interface to configure\n"
+       "Interface's name\n")
 {
   struct interface *ifp;
 
@@ -302,15 +329,73 @@ DEFUN (interface,
 }
 
 /* Initialize interface list. */
-int
+void
 if_init ()
 {
   iflist = list_init ();
 
   if (iflist)
-    return 1;
+    return;
 
   bzero (&if_master, sizeof if_master);
+}
 
-  return 0;
+/* Allocate connected structure. */
+struct connected *
+connected_new ()
+{
+  struct connected *new = XMALLOC (MTYPE_CONNECTED, sizeof (struct connected));
+  bzero (new, sizeof (struct connected));
+  return new;
+}
+
+/* Free connected structure. */
+void
+connected_free (struct connected *connected)
+{
+  if (connected->address)
+    prefix_free (connected->address);
+
+  if (connected->destination)
+    prefix_free (connected->destination);
+
+  XFREE (MTYPE_CONNECTED, connected);
+}
+
+/* Print if_addr structure. */
+void
+connected_log (struct connected *connected)
+{
+  struct prefix *p;
+  struct interface *ifp;
+  char buf[BUFSIZ];
+  
+  ifp = connected->ifp;
+  p = connected->address;
+
+  log ("interface %s %s %s/%d", 
+       ifp->name, 
+       prefix_family_str (p),
+       inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+       p->prefixlen);
+  
+  p = connected->destination;
+  if (p)
+    {
+      if (p->family == AF_INET)
+	log2 (" %s", inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ));
+    }
+  log2 ("\n");
+}
+
+void
+connected_add (struct interface *ifp, struct connected *connected)
+{
+  /* Link connected address to interface. */
+  list_add_node (ifp->connected, connected);
+  connected->ifp = ifp;
+
+  /* If log mode logging it. */
+  if (log_mode)
+    connected_log (connected);
 }

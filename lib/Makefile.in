@@ -64,10 +64,8 @@ CC = @CC@
 CPP = @CPP@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
-KERNEL_METHOD = @KERNEL_METHOD@
 LIB_IPV6 = @LIB_IPV6@
 MAKEINFO = @MAKEINFO@
-MTU_METHOD = @MTU_METHOD@
 PACKAGE = @PACKAGE@
 RANLIB = @RANLIB@
 RIPNGD = @RIPNGD@
@@ -75,16 +73,16 @@ RTREAD_METHOD = @RTREAD_METHOD@
 RT_METHOD = @RT_METHOD@
 VERSION = @VERSION@
 
-INCLUDES = -I$(top_srcdir)/zebra @INCLUDES@
+INCLUDES = @INCLUDES@ -I$(top_srcdir)/zebra
 
 noinst_LIBRARIES = libzebra.a
 
 libzebra_a_SOURCES = \
 	version.c network.c pid_output.c getopt.c getopt1.c daemon.c \
-	print_version.c log.c checksum.c multicast.c vector.c linklist.c \
-	dropline.c vty.c command.c host.c sockunion.c radix.c route.c \
-	route.c thread.c if.c memory.c buffer.c buffer.c table.c client.c \
-	hash.c filter.c routemap.c
+	print_version.c log.c checksum.c vector.c linklist.c dropline.c \
+	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c \
+	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c \
+	distribute.c
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
@@ -97,10 +95,10 @@ LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
 libzebra_a_LIBADD = 
 libzebra_a_OBJECTS =  version.o network.o pid_output.o getopt.o \
-getopt1.o daemon.o print_version.o log.o checksum.o multicast.o \
-vector.o linklist.o dropline.o vty.o command.o host.o sockunion.o \
-radix.o route.o route.o thread.o if.o memory.o buffer.o buffer.o \
-table.o client.o hash.o filter.o routemap.o
+getopt1.o daemon.o print_version.o log.o checksum.o vector.o linklist.o \
+dropline.o vty.o command.o sockunion.o prefix.o thread.o if.o memory.o \
+buffer.o buffer.o table.o client.o hash.o filter.o routemap.o \
+distribute.o
 CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS)
 LINK = $(CC) $(CFLAGS) $(LDFLAGS) -o $@

@@ -635,7 +635,9 @@ thread_fetch (struct thread_master *m,
   /* There is no events. */
   if (!thread)
     {
+#ifdef DEBUG
       log ("thread.c : there is no event found, try again\n");
+#endif /* DEBUG */
       goto retry;
     }
 

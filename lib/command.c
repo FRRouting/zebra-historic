@@ -1,5 +1,5 @@
 /* Command interpret routine for virtual terminal [aka TeletYpe] interface 
-   Copyright (C) 1997 Kunihiro Ishiguro
+   Copyright (C) 1997, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -20,6 +20,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <stdarg.h>
@@ -28,14 +29,17 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
-#include "host.h"
 #include "memory.h"
-
-/* Command vector which include some level of command lists. Normally
+#include "log.h"
+
+/* Command vector which includes some level of command lists. Normally
    each daemon maintains each own cmdvec. */
 vector cmdvec;
 
-/* Command node structures. */
+/* Host information structure. */
+struct host host;
+
+/* Standard command node structures. */
 struct cmd_node auth_node =
 {
   AUTH_NODE,
@@ -66,15 +70,49 @@ struct cmd_node config_node =
   CONFIG_NODE,
   "%s(config)# ",
 };
-
+
 /* Install top node of command vector. */
 void
 install_node (struct cmd_node *node, 
-	      int (*func) (struct vty *, vector))
+	      int (*func) (struct vty *))
 {
   vector_set_index (cmdvec, node->node, node);
-  node->cmd_vector = vector_init (VECTOR_MIN_SIZE);
   node->func = func;
+  node->cmd_vector = vector_init (VECTOR_MIN_SIZE);
+  node->desc_vector = vector_init (VECTOR_MIN_SIZE);
+}
+
+/* Compare two command's string. Sort sort_node (). */
+int
+cmp_node (const void *p, const void *q)
+{
+  struct cmd_element *a = *(struct cmd_element **)p;
+  struct cmd_element *b = *(struct cmd_element **)q;
+
+  return strcmp (a->string, b->string);
+}
+
+/* Sort each node's command element according to command string. */
+void
+sort_node ()
+{
+  int i;
+  
+  for (i = 0; i < vector_max (cmdvec); i++) 
+    {
+      struct cmd_node *cnode;
+
+      cnode = vector_slot (cmdvec, i);
+
+      if (cnode)
+	{	
+	  vector cmd_vector;
+
+	  cmd_vector = cnode->cmd_vector;
+	  qsort (cmd_vector->index, cmd_vector->max, 
+		 sizeof (void *), cmp_node);
+	}
+    }
 }
 
 /* Breaking up string into each command piece. I assume given
@@ -126,12 +164,62 @@ cmd_make_strvec (char *string)
     }
 }
 
+/* Breaking up string into each description */
+vector
+cmd_make_descvec (char *string)
+{
+  char *cp, *start, *token;
+  int strlen;
+  vector descvec;
+  
+  if (string == NULL)
+    return NULL;
+  
+  cp = string;
+
+  /* Skip white spaces. */
+  while (isspace (*cp) && *cp != '\0')
+    cp++;
+
+  /* Return if there is only white spaces */
+  if (*cp == '\0')
+    return NULL;
+
+  if (*cp == '!' || *cp == '#')
+    return NULL;
+
+  /* Prepare return vector. */
+  descvec = vector_init (VECTOR_MIN_SIZE);
+
+  /* Copy each command piece and set into vector. */
+  while (1) 
+    {
+      start = cp;
+      while (!(*cp == '\r' || *cp == '\n') && *cp != '\0')
+	cp++;
+      strlen = cp - start;
+      token = XMALLOC (MTYPE_STRVEC, strlen + 1);
+      bcopy (start, token, strlen);
+      *(token + strlen) = '\0';
+      vector_set (descvec, token);
+
+      if ((*cp == '\n' || *cp == '\r') && *cp != '\0')
+	cp++;
+
+      if (*cp == '\0' || *cp == '!' || *cp == '#') 
+	return descvec;
+    }
+}
+
 /* Free allocated string vector. */
 void
 cmd_free_strvec (vector v)
 {
   int i;
   char *cp;
+
+  if (!v)
+    return;
 
   for (i = 0; i < vector_max (v); i++)
     if ((cp = vector_slot (v, i)) != NULL)
@@ -169,87 +257,110 @@ cmd_prompt (enum node_type node)
   return cnode->prompt;
 }
 
+/* Lookup description structure. */
+struct desc *
+desc_make (struct cmd_element *cmd, char *str, int index)
+{
+  struct desc *desc;
+
+  desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
+
+  desc->cmd = str;
+
+  if (index >= vector_max (cmd->descvec)) 
+    desc->str = NULL;
+  else
+    desc->str = vector_slot (cmd->descvec, index);
+
+  return desc;
+}
+
+/* Free description vector. */
+void
+desc_vector_free (vector descvec)
+{
+  int i;
+  struct desc *desc;
+
+  for (i = 0; i < vector_max (descvec); i++)
+    if ((desc = vector_slot (descvec, i)) != NULL)
+      XFREE (MTYPE_DESC, desc);
+
+  vector_free (descvec);
+}
+
+/* Return next string pointer. */
+char *
+desc_next (char *str, char *pnt)
+{
+  int i;
+  int len; 
+  int term;
+
+  len = strlen (str);
+  term = 0;
+  
+  for (i = (pnt - str); i < len; i++)
+    {
+      if (term)
+	return str + i;
+      if (str[i] == '\0')
+	term = 1;
+    }
+  return pnt;
+}
+
 /* Install a command into a node. */
 void
 install_element (enum node_type ntype, struct cmd_element *cmd)
 {
-  struct cmd_node *cnode = vector_slot (cmdvec, ntype);
+  struct cmd_node *cnode;
+
+  cnode = vector_slot (cmdvec, ntype);
+
   if (cnode == NULL) 
     {
       fprintf (stderr, "Command node doesn't exist, please check it\n");
       exit (1);
     }
+
   vector_set (cnode->cmd_vector, cmd);
   cmd->strvec = cmd_make_strvec (cmd->string);
   cmd->cmdsize = cmd_cmdsize (cmd->strvec);
+  cmd->descvec = cmd_make_descvec (cmd->doc);
+
+  /* Make check. */
+  if (vector_max (cmd->descvec) < vector_max (cmd->strvec))
+    {
+      log ("Warning : No description exists. %s\n", cmd->string);
+      log ("%d %d\n", vector_max (cmd->descvec),vector_max (cmd->strvec));
+    }
 }
 
-/* This function is for writing configuration string of
-   CONFIG_NODE. */
+/* This function write configuration of this host. */
 int
-config_write_element (struct vty *vty, vector v)
+config_write_host (struct vty *vty)
 {
-  int i;
-  struct cmd_element *elem;
-  
-  for (i = 0; i < vector_max (v); i++)
-    if ((elem = vector_slot (v, i)) && elem->config)
-      vty_out (vty, "%s%s", elem->config, VTY_NEWLINE);
+  if (host.name)
+    vty_out (vty, "hostname %s%s", host.name, VTY_NEWLINE);
+
+  /* For security reason, only output password configuration to
+     file. */
+  if (vty->type == VTY_FILE)
+    {
+      if (host.password)
+	vty_out (vty, "password %s%s", host.password, VTY_NEWLINE);
+      if (host.enable)
+	vty_out (vty, "enable password %s%s", host.enable, VTY_NEWLINE);
+    }      
+
+  if (host.logfile)
+    vty_out (vty, "logfile %s%s", host.logfile, VTY_NEWLINE);
 
   return 0;
 }
 
-/* Low letter character means text commnad, upper letter character
-   means argument. Inside of [] means it is optional argument. */
-void
-config_replace_string (struct cmd_element *elem, char *format, ...)
-{
-  va_list args;
-  char buf[512];
-
-  if (elem == NULL)
-    return;
-
-  /* First of all free old string */
-  if (elem->config)
-    XFREE (0, elem->config);
-
-  /* vararg print */
-  va_start (args, format);
-
-  /* XXX we need buffer overflow check. */
-#ifdef SUNOS_5
-  vsprintf (buf, format, args);
-#else
-  vsnprintf (buf, sizeof (buf), format, args);
-#endif /* SUNOS_5 */
-  
-  va_end (args);
-
-  elem->config = strdup (buf);
-  return;
-}
-
-/* If src matches dst return dst string, otherwise return NULL */
-char *
-cmd_entry_function (char *src, char *dst)
-{
-  /* In case of 'command \t', given src is NULL string. */
-  if (src == '\0')
-    {
-      if (dst[0] == '[' || (dst[0] >= 'A' && dst[0] <= 'Z'))
-	return NULL;
-      else
-	return dst;
-    }
-
-  if (strncmp (src, dst, strlen (src)) == 0)
-    return dst;
-  else
-    return NULL;
-}
-
-/**/
+/* Utility function for getting command vector. */
 vector
 cmd_node_vector (vector v, enum node_type ntype)
 {
@@ -335,7 +446,7 @@ cmd_filter_by_completion (char *command, vector v, int index)
 	    str = vector_slot (cmd_element->strvec, index);
 
 	    /* Check is this point's argument optional ? */
-	    if (str[0] == '[' || (str[0] >= 'A' && str[0] <= 'Z'))
+	    if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
 	      {
 		if (match < extend_match)
 		  match = extend_match;
@@ -383,7 +494,7 @@ cmd_filter_ambiguous (char *command, vector v, int index, enum match_type type)
 	/* If there is exact mach filter not exact match. */
 	if (type == exact_match)
 	  {
-	    if (str[0] == '[' || (str[0] >= 'A' && str[0] <= 'Z') 
+	    if (CMD_OPT (str[0]) || CMD_EXT (str[0])
 		|| strcmp (command, str) != 0)
 	      vector_slot (v, i) = NULL;
 	  }
@@ -391,7 +502,7 @@ cmd_filter_ambiguous (char *command, vector v, int index, enum match_type type)
 	/* If there is patly matched string filter option and extend match. */
 	if (type == partly_match)
 	  {
-	    if (str[0] == '[' || (str[0] >= 'A' && str[0] <= 'Z'))
+	    if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
 	      {
 		vector_slot (v, i) = NULL;
 		continue;
@@ -409,13 +520,58 @@ cmd_filter_ambiguous (char *command, vector v, int index, enum match_type type)
 	/* If there is only extend match. */
 	if (type == extend_match)
 	  {
-	    if (str[0] == '[' || (str[0] >= 'A' && str[0] <= 'Z'))
+	    if (CMD_OPT(str[0]) || CMD_EXT (str[0]))
 	      ;
 	    else
 	      vector_slot (v, i) = NULL;
 	  }
       }
   return 0;
+}
+
+/* Yet another filter function for describe command. */
+void
+cmd_filter_describe (char *command, vector v, int index)
+{
+  int i;
+  struct cmd_element *cmd;
+  char *str;
+
+  if (command == NULL)
+    return;
+
+  for (i = 0; i < vector_max (v); i++)
+    if ((cmd = vector_slot (v, i)) != NULL)
+      {
+	if (index >= vector_max (cmd->strvec))
+	  vector_slot (v, i) = NULL;
+	else
+	  {
+	    str = vector_slot (cmd->strvec, index);
+
+	    if (strncmp (command, str, strlen (command)) != 0)
+	      vector_slot (v, i) = NULL;
+	  }
+      }
+}
+
+/* If src matches dst return dst string, otherwise return NULL */
+char *
+cmd_entry_function (char *src, char *dst)
+{
+  /* In case of 'command \t', given src is NULL string. */
+  if (src == NULL)
+    {
+      if (CMD_OPT (dst[0]) || CMD_EXT (dst[0]))
+	return NULL;
+      else
+	return dst;
+    }
+
+  if (strncmp (src, dst, strlen (src)) == 0)
+    return dst;
+  else
+    return NULL;
 }
 
 /* Check same string element existence.  If it isn't there return
@@ -433,14 +589,113 @@ cmd_unique_string (vector v, char *str)
   return 1;
 }
 
-/**/
+/* Compare string to description vector.  If there is same string
+   return 1 else return 0. */
+int
+desc_unique_string (vector v, char *str)
+{
+  int i;
+  struct desc *desc;
+
+  for (i = 0; i < vector_max (v); i++)
+    if ((desc = vector_slot (v, i)) != NULL)
+      if (strcmp (desc->cmd, str) == 0)
+	return 1;
+  return 0;
+}
+
+/* '?' describe command support. */
+vector
+cmd_describe_command (vector vline, struct vty *vty, int *status)
+{
+  int i;
+  vector cmd_vector;
+#define INIT_MATCHVEC_SIZE 10
+  vector matchvec;
+  struct cmd_element *cmd_element;
+  int index;
+
+  /* Set index. */
+  index = vector_max (vline) - 1;
+
+  /* Make copy vector of current node's command vector. */
+  cmd_vector = vector_copy (cmd_node_vector (cmdvec, vty->node));
+
+  /* Filter commands. */
+  for (i = 0; i < index; i++)
+    {
+      enum match_type match;
+      int ambiguous;
+      char *command;
+
+      command = vector_slot (vline, i);
+
+      match = cmd_filter_by_completion (command, cmd_vector, i);
+
+      ambiguous = cmd_filter_ambiguous (command, cmd_vector, i, match);
+      if (ambiguous) 
+	{
+	  vector_free (cmd_vector);
+	  *status = CMD_ERR_AMBIGUOUS;
+	  return NULL;
+	}
+    }
+
+  /* Prepare match vector */
+  matchvec = vector_init (INIT_MATCHVEC_SIZE);
+
+  /* Make description vector. */
+  for (i = 0; i < vector_max (cmd_vector); i++)
+    if ((cmd_element = vector_slot (cmd_vector, i)) != NULL)
+      {
+	char *string;
+	vector strvec = cmd_element->strvec;
+
+	if (index > vector_max (strvec))
+	  vector_slot (cmd_vector, i) = NULL;
+	else
+	  {
+	    /* Check is command is completed. */
+	    if (index == vector_max (strvec))
+	      string = "<cr>";
+	    else
+	      string = cmd_entry_function (vector_slot (vline, index),
+					   vector_slot (strvec, index));
+
+	    if (string)
+	      {
+		/* Uniqueness check */
+		if (! desc_unique_string (matchvec, string))
+		  {
+		    struct desc *desc;
+
+		    desc = desc_make (cmd_element, string, index);
+		    vector_set (matchvec, desc);
+		  }
+	      }
+	  }
+      }
+  vector_free (cmd_vector);
+
+#if 0
+  if (vector_slot (matchvec, 0) == NULL)
+    {
+      desc_vector_free (matchvec);
+      *status= CMD_ERR_NO_MATCH;
+    }
+#endif /* 0 */
+
+  return matchvec;
+}
+
+/* Command line completion support. */
 char **
 cmd_complete_command (vector vline, struct vty *vty, int *status)
 {
   int i;
   vector cmd_vector = vector_copy (cmd_node_vector (cmdvec, vty->node));
 #define INIT_MATCHVEC_SIZE 10
-  vector matchvec = vector_init (INIT_MATCHVEC_SIZE);
+  vector matchvec;
   struct cmd_element *cmd_element;
   int index = vector_max (vline) - 1;
   char **match_str;
@@ -466,6 +721,9 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 	}
     }
 
+  /* Prepare match vector. */
+  matchvec = vector_init (INIT_MATCHVEC_SIZE);
+
   /* Now we got into completion */
   for (i = 0; i < vector_max (cmd_vector); i++)
     if ((cmd_element = vector_slot (cmd_vector, i)) != NULL)
@@ -479,14 +737,14 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 	else 
 	  {
 	    if ((string = cmd_entry_function (vector_slot (vline, index),
-					     vector_slot (strvec, index))))
+					      vector_slot (strvec, index))))
 	      /* Uniqueness check */
 	      if (cmd_unique_string (matchvec, string))
 		vector_set (matchvec, string);
 	  }
       }
 
-  /* We don't need cmd_vector. */
+  /* We don't need cmd_vector any more. */
   vector_free (cmd_vector);
 
   /* No matched command */
@@ -514,7 +772,7 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
     }
 
   /* Check complete match or partly match and make lcd of these
-     matches : not yet finished */
+     matches.  Sorry for complication. */
   {
     int i;
     int j;
@@ -781,7 +1039,8 @@ config_from_file (struct vty *vty, FILE *fp)
 DEFUN (config_terminal,
        config_terminal_cmd,
        "config terminal",
-       "Configuration from vty interface.")
+       "Configuration from vty interface\n"
+       "Configuration terminal\n")
 {
   vty->node = CONFIG_NODE;
   return CMD_SUCCESS;
@@ -791,16 +1050,14 @@ DEFUN (config_terminal,
 DEFUN (enable, 
        config_enable_cmd,
        "enable",
-       "Enable configuration.")
+       "Turn on privileged commands\n")
 {
   /* If enable password is NULL, change to ENABLE_NODE */
   if (host.enable == NULL)
     vty->node = ENABLE_NODE;
   else
-    {
-      vty_off_echo (vty);
-      vty->node = AUTH_ENABLE_NODE;
-    }
+    vty->node = AUTH_ENABLE_NODE;
+
   return CMD_SUCCESS;
 }
 
@@ -808,7 +1065,7 @@ DEFUN (enable,
 DEFUN (config_exit,
        config_exit_cmd,
        "exit",
-       "Exit current mode and down to previous mode.")
+       "Exit current mode and down to previous mode\n")
 {
   switch (vty->node)
     {
@@ -864,7 +1121,28 @@ DEFUN (config_end,
 DEFUN (config_help,
        config_help_cmd,
        "help",
-       "Print command help information.")
+       "Description of the interactive help system\n")
+{
+  vty_out (vty, 
+	   "Help may be requested at any point in a command by entering\r\n"
+	   "a question mark '?'.  If nothing matches, the help list will\r\n"
+	   "be empty and you must backup until entering a '?' shows the\r\n"
+	   "available options.\r\n"
+	   "Two styles of help are provided:\r\n"
+	   "1. Full help is available when you are ready to enter a\r\n"
+	   "command argument (e.g. 'show ?') and describes each possible\r\n"
+	   "argument.\r\n"
+	   "2. Partial help is provided when an abbreviated argument is entered\r\n"
+	   "   and you want to know what arguments match the input\r\n"
+	   "   (e.g. 'show me?'.)\r\n\r\n");
+  return CMD_SUCCESS;
+}
+
+/* Help display function for all node. */
+DEFUN (config_list,
+       config_list_cmd,
+       "list",
+       "Print command list\n")
 {
   int i;
   struct cmd_node *cnode = vector_slot (cmdvec, vty->node);
@@ -872,7 +1150,7 @@ DEFUN (config_help,
 
   for (i = 0; i < vector_max (cnode->cmd_vector); i++)
     if ((cmd = vector_slot (cnode->cmd_vector, i)) != NULL)
-      vty_out (vty, "%-25s %s\r\n", cmd->string, cmd->doc);
+      vty_out (vty, "  %s\r\n", cmd->string);
   return CMD_SUCCESS;
 }
 
@@ -880,7 +1158,8 @@ DEFUN (config_help,
 DEFUN (config_write_file, 
        config_write_file_cmd,
        "write file",  
-       "Print current configuration to configuration file.")
+       "Write running configuration to memory, network, or terminal\n"
+       "Write to configuration file\n")
 {
   int i;
   int fd;
@@ -889,7 +1168,7 @@ DEFUN (config_write_file,
   struct vty *file_vty;
 
   /* Get filename. */
-  config_file = host_config_file ();
+  config_file = host.config;
 
   /* Open file to configuration write. */
   fd = open (config_file, O_CREAT | O_WRONLY | O_TRUNC);
@@ -912,9 +1191,9 @@ DEFUN (config_write_file,
     if ((node = vector_slot (cmdvec, i)) && node->func)
       {
 	vty_out (file_vty, "!\n");
-	(*node->func) (file_vty, node->cmd_vector);
+	(*node->func) (file_vty);
       }
-  vty_out (vty, "Configuration save to %s\r\n", config_file);
+  vty_out (vty, "Configuration saved to %s\r\n", config_file);
 
   vty_flush_all (file_vty);
   vty_close (file_vty);
@@ -925,7 +1204,8 @@ DEFUN (config_write_file,
 DEFUN (config_write_terminal,
        config_write_terminal_cmd,
        "write terminal",
-       "Print current configuration into the terminal.")
+       "Write running configuration to memory, network, or terminal\n"
+       "Write to terminal\n")
 {
   int i;
   struct cmd_node *node;
@@ -936,7 +1216,7 @@ DEFUN (config_write_terminal,
     if ((node = vector_slot (cmdvec, i)) && node->func)
       {
 	vty_out (vty, "!\r\n");
-	(*node->func) (vty, node->cmd_vector);
+	(*node->func) (vty);
       }
   return CMD_SUCCESS;
 }
@@ -945,7 +1225,100 @@ DEFUN (config_write_terminal,
 ALIAS (config_write_terminal,
        show_running_config_cmd,
        "show running-config",
-       "Print ruuning configuration into the terminal.")
+       SHOW_STR
+       "running configuration\n")
+
+/* Hostname configuration */
+DEFUN (config_hostname, 
+       hostname_cmd,
+       "hostname WORD",
+       "Set system's network name\n"
+       "This system's network name\n")
+{
+  if (!isalpha(*argv[0]))
+    {
+      vty_out (vty, "Please specify string starting with alphabet\r\n");
+      return CMD_WARNING;
+    }
+
+  if (host.name)
+    XFREE (0, host.name);
+    
+  host.name = strdup (argv[0]);
+  return CMD_SUCCESS;
+}
+
+/* VTY interface password set. */
+DEFUN (config_password, password_cmd,
+       "password PASSWORD",
+       "Assign the terminal connection password\n"
+       "Password string\n")
+{
+  if (host.password)
+    XFREE (0, host.password);
+
+  host.password = strdup (argv[0]);
+  return CMD_SUCCESS;
+}
+
+/* VTY enable password set. */
+DEFUN (config_enable_password, enable_password_cmd,
+       "enable password PASSWORD",
+       "Modify enable password parameters\n"
+       "Assign the privileged level password\n"
+       "Password string\n")
+{
+  if (!isalnum (*argv[0]))
+    {
+      vty_out (vty, "Please specify string starting with alphanumeric\r\n");
+      return CMD_WARNING;
+    }
+
+  if (host.enable)
+    XFREE (0, host.enable);
+
+  host.enable = strdup (argv[0]);
+  return CMD_SUCCESS;
+}
+
+DEFUN (config_logfile,
+       config_logfile_cmd,
+       "logfile PATH",
+       "Log filename specify command\n"
+       "Pathname of logfile\n")
+{
+  char *str;
+
+  str = log_open (argv[0]);
+  if (str == NULL)
+    {
+      vty_out (vty, "can't open logfile %s\n", argv[0]);
+      return CMD_WARNING;
+    }
+  if (host.logfile)
+    XFREE (0, host.logfile);
+
+  host.logfile = strdup (argv[0]);
+  return CMD_SUCCESS;
+}
+
+#if 0
+DEFUN2 (test,
+	test_cmd,
+	"test command",
+	({DESC_STR, "Log filename specify command\n"},
+	 {DESC_FUNC, func_name}))
+{
+  return 0;
+}
+#endif
+
+/* Set config filename.  Called from vty.c */
+void
+host_config_set (char *filename)
+{
+  host.config = strdup (filename);
+}
 
 /* Initialize command interface. Install basic nodes and commands. */
 void
@@ -954,24 +1327,38 @@ cmd_init ()
   /* Allocate initial top vector of commands. */
   cmdvec = vector_init (VECTOR_MIN_SIZE);
 
+  /* Default host value settings. */
+  host.name = NULL;
+  host.password = NULL;
+  host.enable = NULL;
+  host.logfile = NULL;
+  host.config = NULL;
+
   /* Install top nodes. */
   install_node (&view_node, NULL);
   install_node (&enable_node, NULL);
   install_node (&auth_node, NULL);
   install_node (&auth_enable_node, NULL);
-  install_node (&config_node, config_write_element);
+  install_node (&config_node, config_write_host);
 
   /* Each node's basic commands. */
   install_element (VIEW_NODE, &config_enable_cmd);
   install_element (VIEW_NODE, &config_exit_cmd);
   install_element (VIEW_NODE, &config_help_cmd);
+  install_element (VIEW_NODE, &config_list_cmd);
   install_element (ENABLE_NODE, &config_terminal_cmd);
   install_element (ENABLE_NODE, &config_exit_cmd);
   install_element (ENABLE_NODE, &config_help_cmd);
+  install_element (ENABLE_NODE, &config_list_cmd);
   install_element (ENABLE_NODE, &config_write_terminal_cmd);
   install_element (ENABLE_NODE, &show_running_config_cmd);
   install_element (ENABLE_NODE, &config_write_file_cmd);
   install_element (CONFIG_NODE, &config_end_cmd);
   install_element (CONFIG_NODE, &config_exit_cmd);
   install_element (CONFIG_NODE, &config_help_cmd);
+  install_element (CONFIG_NODE, &config_list_cmd);
+  install_element (CONFIG_NODE, &hostname_cmd);
+  install_element (CONFIG_NODE, &password_cmd);
+  install_element (CONFIG_NODE, &enable_password_cmd);
+  install_element (CONFIG_NODE, &config_logfile_cmd);
 }

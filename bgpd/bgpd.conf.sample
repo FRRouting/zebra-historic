@@ -18,4 +18,5 @@ router bgp 65502
   neighbor 203.181.89.6 ebgp-multihop
 !  neighbor 203.181.89.6 next-hop 203.181.89.18
 !
+! access-list 10 permit 10.0.0.0/9
 !logfile bgpd.log

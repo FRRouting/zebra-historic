@@ -18,18 +18,21 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#include <config.h>
 #include <stdio.h>
 #include <sys/types.h>
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif /* HAVE_CONFIG_H */
-
-#include "bgp_aspath.h"
+#include <sys/types.h>
+#include <netinet/in.h>
 
 #include "memory.h"
+#include "prefix.h"
 #include "filter.h"
 #include "routemap.h"
+#include "vector.h"
+#include "vty.h"
+#include "command.h"
+
+#include "bgp_aspath.h"
 
 /* Memo of cisco's route-map
 
@@ -63,14 +66,13 @@ route-map dml permit 20
 int
 route_match_ip_address (void *rule, void *object)
 {
-  int ret;
   struct access_list *alist;
 
   alist = access_list_lookup ((char *) rule);
   if (alist == NULL)
     return 0;
 
-  return access_list_apply (alist, (struct prefix_in *) object);
+  return access_list_apply (alist, object);
 }
 
 /* Route map `ip address' match statement. */
@@ -102,6 +104,8 @@ route_match_aspath (void *rule, void *object)
 {
   /* perform match. */
   ;
+
+  return 0;
 }
 
 /* Compile function for as-path match. */
@@ -134,11 +138,13 @@ struct route_map_rule_cmd route_match_aspath_cmd =
   route_match_aspath_free
 };
 
-/**/
+/* Set metric to attribute. */
 int
 route_set_metric (void *rule, void *object)
 {
-  printf (" set metric value %s\n", rule);
+  /* printf (" set metric value %s\n", rule); */
+
+  return 0;
 }
 
 /* Route map `ip address' match statement. */
@@ -165,9 +171,6 @@ struct route_map_rule_cmd route_set_metric_cmd =
 };
 
 
-#include "vector.h"
-#include "vty.h"
-#include "command.h"
 
 int
 bgp_route_rule_add (struct vty *vty,
@@ -195,10 +198,15 @@ bgp_route_rule_add (struct vty *vty,
   return CMD_SUCCESS;
 }
 
+#define MATCH_STR "Match values from routing table\n"
+
 DEFUN (match_ip_address, 
        match_ip_address_cmd,
        "match ip address ACCESS_LIST",
-       "IP Address access-list match command.")
+       MATCH_STR
+       IP_STR
+       "Address\n"
+       "IP Address access-list match command\n")
 {
   return bgp_route_rule_add (vty, vty->index, "ip address", argv[0]);
 }
@@ -206,7 +214,9 @@ DEFUN (match_ip_address,
 DEFUN (match_aspath,
        match_aspath_cmd,
        "match as-path AS_PATH",
-       "AS path match.")
+       MATCH_STR
+       "AS Path\n"
+       "AS Path\n")
 {
   return bgp_route_rule_add (vty, vty->index, "as-path", argv[0]);
 }
@@ -214,7 +224,11 @@ DEFUN (match_aspath,
 DEFUN (no_match_ip_address, 
        no_match_ip_address_cmd,
        "no match ip address ACCESS_LIST",
-       "Delete IP Address access-list match command.")
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "IP address\n"
+       "Delete IP Address access-list match command\n")
 {
   int ret;
   struct route_map_index *index;
@@ -231,8 +245,13 @@ DEFUN (no_match_ip_address,
   return CMD_SUCCESS;
 }
 
+/* Initialization of route map. */
+void
 bgp_route_map_init ()
 {
+  route_map_init ();
+  route_map_init_vty ();
+
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_aspath_cmd);
 

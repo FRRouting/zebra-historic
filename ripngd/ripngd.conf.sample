@@ -5,15 +5,16 @@
 hostname ripngd
 password zebra
 !
-!debug ripng event
-!debug ripng dev
-!
-!interface eth0
-! accept default
+debug ripng event
+debug ripng packet
 !
 router zebra
 !
 router ripng
-! flush-timer 10
+! network sit1
+! network 3ffe:506::0/32
 !
-!logfile ripngd.log
+! access-list local-only permit 3ffe:506::0/32
+! access-list local-only deny any
+!
+! distribute-list local-only out sit1

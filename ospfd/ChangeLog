@@ -1,0 +1,10 @@
+1998-12-22  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.h: New file.
+	* ospf_lsa.h: New file.
+
+1998-12-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: New file.
+	* ospf_main.c: New file.
+

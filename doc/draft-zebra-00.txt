@@ -95,7 +95,7 @@
    7 - ZEBRA_ROUTE_RADIX
 
    +----------------------+
-   |  ifindex?   (1 octet)|
+   |  ifindex   (4 octet) |
    +----------------------+
    |  prefixlen  (1 octet)|
    +----------------------+

@@ -1,0 +1,7 @@
+! -*- ospf -*-
+!
+! OSPFd sample configuration file
+!
+hostname ospfd
+password zebra
+!

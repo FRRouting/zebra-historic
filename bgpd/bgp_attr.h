@@ -62,6 +62,8 @@ struct attr
   u_int32_t dpa;
   u_char dpa_flag;
 
+  u_int32_t weight;
+
   unsigned char mp_nexthop_len;
   unsigned char mp_nexthop[32];
 
@@ -80,4 +82,8 @@ struct bgp_attr
 };
 
 /* Prototypes. */
-struct attr *attr_new();
+void attr_init ();
+struct attr *bgp_attr_new();
+struct attr *bgp_attr_parse (u_char *pnt, u_int16_t size, struct peer *peer);
+struct attr *bgp_attr_check ();
+void bgp_attr_free (struct attr *);

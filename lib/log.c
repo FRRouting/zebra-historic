@@ -21,136 +21,150 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
-#include <config.h>
+
 #include "log.h"
 
-FILE *logfp;
-int log_mode = 1;
+/* If this mode is on then, log is output. */
+int log_mode = 0;
 
-#define TIME_BUF 25
-void
+/* Log filename. */
+char *log_filename;
+
+/* File pointer of logfile. */
+FILE *logfp;
+
+/* For time string format. */
+#define TIME_BUF 27
+
+/* Utility routine for current time printing. */
+static void
 time_print (FILE *fp)
 {
+  int ret;
+  char buf [TIME_BUF];
   time_t clock;
   struct tm *tm;
-  char buf [TIME_BUF];
-  int ret;
   
   time (&clock);
   tm = localtime (&clock);
 
-  ret = strftime (buf, TIME_BUF, "%y/%m/%d %H:%M:%S", tm);
+  ret = strftime (buf, TIME_BUF, "%Y/%m/%d %H:%M:%S", tm);
   if (ret == 0) {
-    log_warn ("strftime error");
+    log_warn ("strftime error\n");
   }
-  fprintf (fp, "%s: ", buf);
-}
 
+  fprintf (fp, "%s ", buf);
+}
+
+/* Initialization of logfp. */
 void
 log_init ()
 {
   logfp = stdout;
 }
 
+/* Flush output buffer of log file pointer. */
 void
-warning (char *format, ...)
+log_flush ()
 {
-  va_list args;
-
-  if (!log_mode)
-    return;
-
-  /* log time print */
-  time_print (logfp);
-
-  /* vararg print */
-  va_start (args, format);
-  vfprintf (logfp, format, args);
-  va_end (args);
-
   fflush (logfp);
 }
 
+/* Logging main routine. */
 void
 log (char *format, ...)
 {
   va_list args;
 
-  if (!log_mode)
-    return;
-
-  /* log time print */
+  /* Current time print. */
   time_print (logfp);
 
-  /* vararg print */
+  /* Print varargs. */
   va_start (args, format);
   vfprintf (logfp, format, args);
   va_end (args);
 
-  fflush (logfp);
+  /* Flush output. */
+  log_flush (logfp);
 }
 
+/* This function is same with log function without not printing time
+   string. */
 void
 log2 (char *format, ...)
 {
   va_list args;
 
-  if (!log_mode)
-    return;
-
-  /* vararg print */
+  /* Print varargs. */
   va_start (args, format);
   vfprintf (logfp, format, args);
   va_end (args);
 
-  fflush (logfp);
+  /* Flush output. */
+  log_flush (logfp);
 }
 
+/* Print warning. */
 void
 log_warn (char *format, ...)
 {
   va_list args;
 
-  /* log time print */
+  /* Current time print. */
   time_print (logfp);
 
-  /* vararg print */
+  /* Print varargs. */
   va_start (args, format);
   vfprintf (logfp, format, args);
   va_end (args);
 
-  fflush (logfp);
+  /* Flush output. */
+  log_flush (logfp);
 }
 
-void
-/* Close logfile. */
-log_close ()
-{
-  if (logfp != stdout)
-    {
-      fflush (logfp);
-      fclose (logfp);
-    }
-}
-
+/* Open logfile and return logfilename. */
 char *
 log_open (char *filename)
 {
   FILE *fp;
 
+  /* Open new file. */
   fp = fopen (filename, "a");
   if (fp == NULL)
     return NULL;
 
+  /* Close old opened file. */
   if (logfp != stdout)
     log_close ();
     
+  /* Set new file point to logfp. */
   logfp = fp;
+
   return filename;
 }
 
+/* Close logfile. */
 void
-log_flash ()
+log_close ()
 {
+  if (logfp == stdout)
+    return;
+
   fflush (logfp);
+  fclose (logfp);
+}
+
+/* Reopen log file. */
+void
+log_rotate ()
+{
+  if (logfp == stdout)
+    return;
+
+  log_close ();
+  
+  logfp = fopen (log_filename, "a");
+
+  if (logfp == NULL)
+    fprintf (stderr, "Can't open logfile %s\n", log_filename);
 }

@@ -29,11 +29,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <netinet/in.h>
 #ifdef HAVE_IPV6
 #include <net/if.h>
-#ifdef HYDRANGEA
+#ifdef KAME
 #include <netinet/in_var.h>
-#else /* HYDRANGEA */
+#else /* KAME */
 #include <netinet/in6_var.h>
-#endif /* HYDRANGEA */
+#endif /* KAME */
 #endif /* HAVE_IPV6 */
 
 #include "log.h"
@@ -71,17 +71,18 @@ ipforward_ipv6 ()
 
   mib [0] = CTL_NET;
   mib [1] = PF_INET6;
+#ifdef KAME
+  mib [2] = IPPROTO_IPV6;
+  mib [3] = IPV6CTL_FORWARDING;
+#else /* NOT KAME */
   mib [2] = IPPROTO_IP;
-#ifdef HYDRANGEA
-  mib [3] = IPCTL_FORWARDING;
-#else /* NOT HYDRANGEA */
   mib [3] = IP6CTL_FORWARDING;
-#endif /* HYDRANGEA */
+#endif /* KAME */
 
   len = sizeof ip6forwarding;
   if (sysctl (mib, MIB_SIZ, &ip6forwarding, &len, 0, 0) < 0) 
     {
-      log_warn ("can't get ipforwarding value\n");
+      log_warn ("can't get ip6forwarding value\n");
       return -1;
     }
   return ip6forwarding;

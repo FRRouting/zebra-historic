@@ -1,5 +1,5 @@
 /* Route object related function for route server.
-   Copyright (C) 1996, 97 Kunihiro Ishiguro
+   Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -24,46 +24,31 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <arpa/inet.h>
-#include <config.h>
-
-#include "bgpd.h"
-#include "bgp_route.h"
-#include "bgp_peer.h"
-#include "bgp_dump.h"
-#include "bgp_attr.h"
-#include "bgp_aspath.h"
 
 #include "log.h"
-#include "route.h"
-#include "radix.h"
+#include "prefix.h"
+#include "table.h"
 #include "zebra.h"
 #include "linklist.h"
 #include "memory.h"
+#include "vector.h"
+#include "vty.h"
+#include "command.h"
 
-struct radix_top *bgp_radix;
+#include "bgpd.h"
+#include "bgp_route.h"
+#include "bgp_attr.h"
+#include "bgp_peer.h"
+#include "bgp_dump.h"
+#include "bgp_aspath.h"
+#include "bgp_community.h"
+
+/* BGP Routing Information Base. */
+struct route_table *bgp_table_ipv4;
 #ifdef HAVE_IPV6
-struct radix_top *bgp_radix_ipv6;
+struct route_table *bgp_table_ipv6;
 #endif /* HAVE_IPV6 */
-
-/* Allocate radix_top structure. */
-bgp_radix_init ()
-{
-  /* Make table first. */
-  radix_init();
-
-  /* Radix for BGP-4 */
-  bgp_radix = radix_make_rib (AF_INET);
-  bgp_radix->sameprefix = rt_ip_sameprefix;
-
-#ifdef HAVE_IPV6
-  bgp_radix_ipv6 = radix_make_rib (AF_INET6);
-  bgp_radix_ipv6->sameprefix = rt_ipv6_sameprefix;
-#endif /* HAVE_IPV6 */
-}
 
 /* NLRI info to route value (u_long) */
 u_long
@@ -86,182 +71,173 @@ nlri2route (char *str, int size)
   return (ret);
 }
 
-/* route allocation statistics */
-unsigned long route_alloc = 0;
-
-/**/
-unsigned long bgp_info_alloc = 0;
-
-/**/
-struct bgp_info *
-bgp_info_new ()
+/* Allocate new bgp route information. */
+struct bgp_route *
+bgp_route_new ()
 {
-  struct bgp_info *new;
+  struct bgp_route *new;
 
-  new = (struct bgp_info *) malloc (sizeof (struct bgp_info));
-  bzero (new, sizeof (struct bgp_info));
-  bgp_info_alloc++;
+  new = XMALLOC (MTYPE_BGP_ROUTE, sizeof (struct bgp_route));
+  bzero (new, sizeof (struct bgp_route));
 
   return new;
 }
 
-/* Allocate new prefix_in and bgp_info. */
-static struct bgp_route *
-bgp_route_new ()
-{
-  struct bgp_route *br;
-
-  br = XMALLOC (MTYPE_BGP_ROUTE, sizeof (struct bgp_route));
-  bzero (br, sizeof (struct bgp_route));
-
-  return br;
-}
-
-/**/
-static void
-bgp_info_free (struct bgp_info *binfo)
-{
-  if (binfo->attr)
-    attr_free (binfo->attr);
-  free (binfo);
-  bgp_info_alloc--;
-}
-
-/**/
+/* Free bgp route information. */
 void
 bgp_route_free (struct bgp_route *br)
 {
   if (br->attr)
-    attr_free (br->attr);
+    bgp_attr_free (br->attr);
 
   XFREE (MTYPE_BGP_ROUTE, br);
 }
 
-/**/
-int
-bgp_same_peer (struct prefix_in *pin1, struct prefix_in *pin2)
+/* Add bgp route infomation to routing table node. */
+void
+bgp_route_add (struct bgp_route **rp, struct bgp_route *rib)
 {
-  struct bgp_route *br1, *br2;
+  struct bgp_route *cp;
+  struct bgp_route *pp;
 
-  br1 = (struct bgp_route *) pin1;
-  br2 = (struct bgp_route *) pin2;
-      
-  if (br1->prefix.s_addr == br2->prefix.s_addr &&
-      br1->mask == br2->mask &&
-      br1->peer == br2->peer)
-    return 1;
-  return 0;
+  cp = pp = *rp;
+
+  /* Only this match until I code preference match function. */
+  if (cp == pp)
+    {
+      *rp = rib;
+
+      if (cp)
+	cp->prev = rib;
+      rib->next = cp;
+    }
+  else
+    {
+      if (pp)
+	pp->next = rib;
+      rib->prev = pp;
+
+      if (cp)
+	cp->prev = rib;
+      rib->next = cp;
+    }
 }
 
-/**/
-dump_bad_nlri (unsigned char *pnt, int rsize, struct peer *peer)
+/* Delete rib from rib list. */
+void
+bgp_route_delete (struct bgp_route **rp, struct bgp_route *rib)
 {
-  int i;
+  if (rib->next)
+    rib->next->prev = rib->prev;
+  if (rib->prev)
+    rib->prev->next = rib->next;
+  else
+    *rp = rib->next;
+}
 
-  log ("Bad nlri dump start\n");
-  for (i = 0; i < rsize; i++)
-    log ("[%d] %d\n", i, *(pnt+i));
-  log ("Bad nlri dump end\n");
+/* called from BGP Update packet */
+void
+bgp_log_route(struct prefix_ipv4 *p, struct peer *peer,
+	      struct bgp_route *br, int dup)
+{
+  struct attr *attr;
+
+  attr = br->attr;
+
+  log ( "Update%s:", dup ? "[r]" : "");
+  log2 ("[%s] %s/%d", peer->host,inet_ntoa(p->prefix), p->prefixlen);
+
+  bgp_dump_attr (peer, attr);
+
+  log2 ("\r\n");
+}
+
+/* Update prefix which comes from peer. */
+void
+nlri_update (struct prefix_ipv4 *p, struct peer *peer, struct attr *attr)
+{
+  ;
 }
 
 /* Parse route and add route into radix tree. */
-route_parse (u_char *pnt,
-	     int rsize,
-	     struct attr *attr,
-	     struct peer *peer)
+void
+nlri_parse (u_char *pnt, int len, struct attr *attr, struct peer *peer)
 {
   u_char *start;
   u_char *lim;
-  int psize;
-  struct bgp_route *br;
 
-  /* In case of BGP-4+ there will be no NLRI. */
-  if (rsize == 0) 
+  /* When protocol is BGP-4+ NLRI length may be zero. */
+  if (len == 0) 
     return;
 
-  /* Set end of the packet. */
+  /* OK Start to parse NLRI. */
   start = pnt;
-  lim = pnt + rsize;
+  lim = pnt + len;
 
-  while (pnt < lim ) 
+  while (pnt < lim) 
     {
+      struct bgp_route *br;
+      struct prefix_ipv4 p;
       int dupflag;
-      struct bgp_route *find;
+      struct bgp_route *same;
+      struct route_node *np;
+      int psize;
 
       /* Add bgp info to prefix. */
       br = bgp_route_new ();
-      br->mask = *pnt++;
-      psize = PSIZE (br->mask);
-      br->prefix.s_addr = nlri2route (pnt, psize);
+
+      /* Fetch one prefix from NLRI. */
+      p.family = AF_INET;
+      p.prefixlen = *pnt++;
+      psize = PSIZE (p.prefixlen);
+      p.prefix.s_addr = nlri2route (pnt, psize);
+
+      /* Check masklen of incoming route. */
+      if (p.prefixlen > IPV4_MAX_BITLEN)
+	{
+	  log ("wrong mask length %s/%d len %d\n", 
+	       inet_ntoa (br->prefix), br->mask, len);
+	  return;
+	}
       br->peer = peer;
       br->attr = attr;
       br->type = ZEBRA_ROUTE_BGP;
       attr->refcnt++;
-
-      /* Check masklen of incoming route. */
-      if (br->mask > 32)
-	{
-	  log ("wrong mask length %s/%d rsize %d\n", 
-	       inet_ntoa (br->prefix), br->mask, rsize);
-	  bgp_route_free (br);
-	  dump_bad_nlri (start, rsize, peer);
-	  return -1;
-	}
-
       dupflag = 0;
 
-      /* Have this route come from same peer ? */
-      find = (struct bgp_route *) radix_lookup_fn (bgp_radix,
-						   (struct prefix_in *) br, 
-						   bgp_same_peer);
-      if (find)
+
+      /* Check is this prefix is already announced from same peer. */
+      np = route_node_get (bgp_table_ipv4, (struct prefix *) &p);
+
+      for (same = np->info; same; same = same->next)
+	if (same->peer == peer)
+	  break;
+
+      /* There is a same prefix which comes from the same peer.  This
+         means implicit withdraw. */
+      if (same)
 	{
-	  struct bgp_route *del;
-
-	  del = (struct bgp_route *) radix_delete_peer (bgp_radix, find);
-	  if (del != find)
-	    {
-	      log ("duplicate delete error\n");
-	      return -1;
-	    }
-
-	  bgp_route_free (del);
+	  bgp_route_delete ((struct bgp_route **) &np->info, same);
+	  bgp_route_free (same);
 	  dupflag = 1;
 	}
 
-      bgp_log_route(peer, br, dupflag);
+      bgp_log_route (&p, peer, br, dupflag);
 
       if (!dupflag)
 	peer->prefix_count++;
 
-      radix_add (bgp_radix, (struct prefix *) br);
+      bgp_route_add ((struct bgp_route **)&np->info, br);
 
       pnt += psize;
     }
-}
-
-bgp_delete_peer (struct prefix_in *pin1,
-		 struct prefix_in *pin2,
-		 struct peer *peer)
-{
-  if (pin1->mask == pin2->mask)
-    {
-      struct bgp_route *br;
-
-      br = (struct bgp_route *)pin1;
-
-      if (br->peer == peer)
-	return 1;
-      else
-	return 0;
-    }
-  return 0;
+  return;
 }
 
 /* withdraw handling routine */
-withdraw_route(unsigned char *pnt, int unfeasible_len, struct peer *peer)
+void
+nlri_withdraw (unsigned char *pnt, int unfeasible_len, struct peer *peer)
 {
-  struct bgp_route new;
   struct bgp_route *del;
   int psize;
   unsigned char *cur = pnt;
@@ -269,54 +245,57 @@ withdraw_route(unsigned char *pnt, int unfeasible_len, struct peer *peer)
   
   while (cur - pnt < unfeasible_len) 
     {
-      new.mask = *cur++;
-      psize = PSIZE (new.mask);
-      new.prefix.s_addr = nlri2route (cur, psize);
+      struct prefix_ipv4 p;
+      struct route_node *np;
 
-      del = (struct bgp_route *) radix_delete_func (bgp_radix,
-						    (struct prefix_in *)&new,
-						    bgp_delete_peer,
-						    peer);
+      p.prefixlen = *cur++;
+      psize = PSIZE (p.prefixlen);
+      p.prefix.s_addr = nlri2route (cur, psize);
 
       log ("Withdraw:[%s] %s/%d ", 
-	   peer->host, inet_ntoa(new.prefix), new.mask);
-	 
+	   peer->host, inet_ntoa(p.prefix), p.prefixlen);
+
+      /* First look up routing table node. */
+      np = route_node_get (bgp_table_ipv4, (struct prefix *) &p);
+      for (del = np->info; del; del = del->next)
+	if (del->peer == peer)
+	  break;
+
+      /* Withdraw route from route list. */
       if (del == NULL)
 	log2 ("(not exist)\r\n");
       else 
 	{
 	  log2 ("(exist)\r\n");
+	  bgp_route_delete ((struct bgp_route **) &np->info, del);
 	  bgp_route_free (del);
 	  peer->prefix_count--;
 	}
+
       cur += psize;
     }
   fflush (logfp);
 }
   
-bgp_peer_route_delete (struct prefix *rt, struct peer *peer)
-{
-  struct bgp_route *br;
-
-  br = (struct bgp_route *)rt;
-
-  if (br->peer == peer)
-    {
-      struct bgp_route *del;
-
-      del = (struct bgp_route *) radix_delete (bgp_radix, rt);
-      if (del != (struct bgp_route *) rt)
-	{
-	  log ("radix_delete bug\n");
-	}
-      bgp_route_free (del);
-    }
-}
-
-/**/
+/* Delete peer's all route. */
+void
 bgp_peer_delete (struct peer *peer)
 {
-  radix_apply_func (bgp_radix, bgp_peer_route_delete, peer);
+  struct route_node *np;
+  struct bgp_route *br;
+  struct bgp_route *next;
+
+  for (np = route_top (bgp_table_ipv4); np; np = route_next (np))
+    for (br = np->info; br; br = next)
+      {
+	/* Preserve next pointer. */
+	next = br->next;
+	if (br->peer == peer)
+	  {
+	    bgp_route_delete ((struct bgp_route **) &np->info, br);
+	    bgp_route_free (br);
+	  }
+      }
   peer->prefix_count = 0;
 }
 
@@ -396,12 +375,12 @@ bgp_sim (char *sim_file)
 	  binfo->peer = peer;
 	  binfo->attr = NULL;
 
-	  find = radix_lookup_fn (bgp_radix, pin, bgp_same_peer);
+	  /* find = radix_lookup_fn (bgp_table, pin, bgp_same_peer); */
 	  if (find)
 	    {
 	      struct prefix_in *tmp;
 
-	      tmp = (struct prefix_in *) radix_delete_peer (bgp_radix, find);
+	      tmp = (struct prefix_in *) radix_delete_peer (bgp_table, find);
 	      if (tmp != find)
 		fprintf (stderr, "duplicate delete error\n");
 
@@ -409,7 +388,7 @@ bgp_sim (char *sim_file)
 	      dupflag = 1;
 	    }
 	  bgp_log_route (peer, pin, dupflag);
-	  radix_add (bgp_radix, (struct prefix *) pin);
+	  radix_add (bgp_table_ipv4, (struct prefix *) pin);
 	}
       /* Withdraw. */
       else if (strncmp (command, "Withdraw", 7) == 0)
@@ -424,7 +403,7 @@ bgp_sim (char *sim_file)
 	  binfo->peer = peer;
 	  binfo->attr = NULL;
 
-	  del = (struct prefix_in *) radix_delete_func (bgp_radix, pin, bgp_delete_peer, peer);
+	  del = (struct prefix_in *) radix_delete_func (bgp_table_ipv4, pin, bgp_delete_peer, peer);
 
 	  log ("Withdraw:[%s] %s/%d ", 
 	       peer->host, inet_ntoa(pin->prefix), pin->mask);
@@ -441,9 +420,191 @@ bgp_sim (char *sim_file)
 }
 #endif
 
-#ifdef HAVE_IPV6
-bgp_in6_add_radix (struct prefix_in6 *pin6)
+char *bgp_update_origin[] = {"i","e","?"};
+char *bgp_update_origin_long[] = {"IGP","EGP","Incomplete"};
+
+/* called from terminal list command */
+void
+route_vty_out (struct vty *vty, struct prefix *p, struct bgp_route *binfo)
 {
-  radix_add (bgp_radix_ipv6, (struct prefix *) pin6);
+  struct attr *attr;
+
+  vty_out (vty, "   ");
+
+  /* print prefix and mask */
+  route_vty_out_route (p, vty);
+
+  /* Print attribute */
+  attr = binfo->attr;
+  if (attr) 
+    {
+      vty_out (vty, "%-16s%10lu%10lu%10lu ", 
+	       inet_ntoa(attr->next_hop), attr->med, attr->local_pref, attr->weight);
+    
+    /* Print aspath */
+    if (attr->aspath)
+      aspath_print_vty (vty, attr->aspath);
+
+    /* Print origin */
+    vty_out (vty, " %s", bgp_update_origin[attr->origin]);
+  }
+
+  vty_out (vty, "\r\n");
+}  
+
+void
+route_vty_out_detail (struct vty *vty, struct prefix *p, 
+		      struct bgp_route *binfo)
+{
+  char buf[BUFSIZ];
+  struct attr *attr;
+
+  /* Header of detailed BGP route information. */
+  vty_out (vty, "BGP routing table entry for %s/%d.\r\n",
+	   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+	   p->prefixlen);
+
+  /* Print attribute */
+  attr = binfo->attr;
+  if (attr) 
+    {
+      /* Print aspath */
+      if (attr->aspath)
+	aspath_print_vty (vty, attr->aspath);
+
+      /* show nex hop */
+      if (attr) {
+	vty_out (vty, "Nexthop %s\r\n", inet_ntoa(attr->next_hop));
+	vty_out (vty, "Origin %s, ", bgp_update_origin_long[attr->origin]);
+	vty_out (vty, "metric %lu, ", attr->med);
+	vty_out (vty, "weight %lu, ", attr->weight);
+	vty_out (vty, "Localpref %lu", attr->local_pref);
+
+	if (attr->community) {
+	  vty_out (vty, ", Commuity");
+	  community_print_vty (vty, attr->community);
+	}
+	vty_out (vty, "\r\n");
+      }
+    }
+
+  vty_out (vty, "\r\n");
+}  
+
+/* BGP route print out function. */
+DEFUN (show_ip_bgp, show_ip_bgp_cmd,
+       "show ip bgp [IPV4_ADDR]",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "IP address\n")
+{
+  int ret;
+  struct route_node *node;
+  struct bgp_route *route;
+  struct prefix_ipv4 match;
+
+  route = NULL;
+
+  /* `show ip bgp' command shows all of bgp routes. */
+  if (argc == 0)
+    {
+      int count;
+
+      /* Header print out. */
+      vty_out (vty, "Network             Next Hop            Metric    LocPrf Weight Path\r\n");
+
+      /* We try to set counter to ten. */
+      count = 10;
+
+      /* Start processing of routes. */
+      for (node = route_top (bgp_table_ipv4); node; node = route_next (node)) 
+	for (route = node->info; route; route = route->next)
+	  {
+	    route_vty_out (vty, &node->p, route);
+
+	    /* Decrement counter. */
+	    count--;
+	    if (count == 0)
+	      {
+		/* We need to preserve function pointer and process
+                   pointer. */
+		/* vty->; */
+	      }
+	  }
+
+      return CMD_SUCCESS;
+    }
+
+  /* `show ip bgp IPV4_ADDR command shows specified route's
+     information. */
+  ret = inet_aton (argv[0], &match.prefix);
+  if (! ret)
+    {
+      vty_out (vty, "address is malformed\r\n");
+      return CMD_WARNING;
+    }
+  match.family = AF_INET;
+  match.prefixlen = IPV4_MAX_BITLEN;
+  
+  /* Lookup route node. */
+  node = route_node_match (bgp_table_ipv4, (struct prefix *) &match);
+
+  if (node == NULL) 
+    {
+      vty_out (vty, "can't find route\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Node is locked by route_node_lookup. */
+  for (route = node->info; route; route = route->next)
+    route_vty_out_detail (vty, &node->p, route);
+
+  /* Work is done, so unlock the node. */
+  route_unlock_node (node);
+
+  return CMD_SUCCESS;
+}
+
+#ifdef HAVE_IPV6
+DEFUN (show_ipv6_bgp,
+       show_ipv6_bgp_cmd,
+       "show ipv6 bgp",
+       SHOW_STR
+       IP_STR
+       "Show bgpd's own routing information of IPv6\n")
+{
+  struct route_node *node;
+  struct bgp_route *route;
+  
+  vty_out (vty, "\r\nNetwork                  Next Hop       Metric    LocPrf Path\r\n");
+
+  /* Start processing of routes. */
+  for (node = route_top (bgp_table_ipv6); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      route_vty_out (vty, &node->p, route);
+
+  return CMD_SUCCESS;
 }
 #endif /* HAVE_IPV6 */
+
+/* Allocate routing table structure and install commands. */
+void
+bgp_route_init ()
+{
+  bgp_table_ipv4 = route_table_init ();
+#ifdef HAVE_IPV6
+  bgp_table_ipv6 = route_table_init ();
+#endif /* HAVE_IPV6 */
+
+  /* Install commands. */
+  install_element (VIEW_NODE, &show_ip_bgp_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_cmd);
+
+#ifdef HAVE_IPV6
+  /* IPV6 specific commands. */
+  install_element (VIEW_NODE, &show_ipv6_bgp_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_bgp_cmd);
+#endif /* HAVE_IPV6 */
+
+}

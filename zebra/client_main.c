@@ -21,33 +21,38 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <config.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <netdb.h>
 #include <arpa/inet.h>
 #include "zebra.h"
-#include "route.h"
+#include "prefix.h"
+#include "client.h"
 
-/* Zebra test client program name. */
-char *progname;
+/* Zebra socket. */
+int sock;
 
 /* IPv4 route add and delete test. */
 void
-zebra_test_v4 (int sock)
+zebra_test_ipv4 (int command, int type, char *prefix, char *gateway)
 {
-  struct prefix_in pin;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
 
-  str2prefix_in ("10.0.0.0/8", &pin);
-  inet_aton ("203.181.89.241", &pin.gate.addr);
-  pin.type = ZEBRA_ROUTE_STATIC;
+  str2prefix_ipv4 (prefix, &p);
+  inet_aton (gateway, &gate);
   
-  zebra_ipv4_route (ZEBRA_IPV4_ROUTE_ADD, sock, &pin);
-  sleep (5);
-  zebra_ipv4_route (ZEBRA_IPV4_ROUTE_DELETE, sock, &pin);
+  switch (command)
+    {
+    case ZEBRA_IPV4_ROUTE_ADD:
+      zebra_ipv4_add (sock, type, &p, &gate, 0);
+      break;
+    case ZEBRA_IPV4_ROUTE_DELETE:
+      zebra_ipv4_delete (sock, type, &p, &gate, 0);
+      break;
+    }
 }
 
 #ifdef HAVE_IPV6
@@ -55,26 +60,103 @@ zebra_test_v4 (int sock)
 void
 zebra_test_v6 (int sock)
 {
-  struct prefix_in6 *pin6;
+  struct prefix_ipv6 p;
+  struct in6_addr nexthop;
 
-  pin6 = (struct prefix_in6 *) str2routev6 ("fe80:800::/64");
-  inet_pton (AF_INET6, "::1", &(pin6->gate.addr));
-  pin6->type = ZEBRA_ROUTE_STATIC;
+  str2prefix_ipv6 ("3ffe:506::2/128", &p);
+  inet_pton (AF_INET6, "::1", &nexthop);
 
-  zebra_ipv6_route (ZEBRA_IPV6_ROUTE_ADD, sock, pin6);
+  zebra_ipv6_add (sock, ZEBRA_ROUTE_STATIC, &p, &nexthop, 1);
+
   sleep (5);
-  zebra_ipv6_route (ZEBRA_IPV6_ROUTE_DELETE, sock, pin6);
+  zebra_ipv6_delete (sock, ZEBRA_ROUTE_STATIC, &p, &nexthop, 1);
 }
 #endif /* HAVE_IPV6 */
 
+/* Print out usage and exit. */
+void
+usage_exit ()
+{
+  fprintf (stderr, "Usage: client filename\n");
+  exit (1);
+}
+
+struct zebra_info {
+  char *str;
+  int type;
+} zebra_type[] = 
+{
+  { "static", ZEBRA_ROUTE_STATIC },
+  { "rip",    ZEBRA_ROUTE_RIP },
+  { "ripng",  ZEBRA_ROUTE_RIPNG },
+  { "bgp",    ZEBRA_ROUTE_BGP },
+  { NULL,     0 }
+};
+
+/* Zebra route simulator. */
+void
+zebra_sim (FILE *fp)
+{
+  char buf[1024];
+
+  while (fgets (buf, sizeof buf, fp))
+    {
+      int i;
+      int ret;
+      int type;
+      char str[BUFSIZ], command[BUFSIZ], prefix[BUFSIZ], gateway[BUFSIZ];
+
+      if (*buf == '#')
+	continue;
+
+      type = ZEBRA_ROUTE_STATIC;
+
+      ret = sscanf (buf, "%s %s %s %s\n", command, str, prefix, gateway);
+      if (ret != 4)
+	{
+	  ret = sscanf (buf, "%s %s %s\n", command, prefix, gateway);
+	  printf ("matched %d : %s %s %s\n", ret, command, prefix, gateway);
+	  if (ret != 3)
+	    continue;
+	}
+      else
+	{
+	  for (i = 0; i < 10; i++)
+	    {
+	      if (!zebra_type[i].str)
+		break;
+	      if (strcmp (zebra_type[i].str, str) == 0)
+		{
+		  type = zebra_type[i].type;
+		  break;
+		}
+	    }
+	}
+  
+      if (strcmp (command, "add") == 0)
+	{
+	  zebra_test_ipv4 (ZEBRA_IPV4_ROUTE_ADD, type, prefix, gateway);
+	  continue;
+	}
+
+      if (strcmp (command, "del") == 0)
+	{
+	  zebra_test_ipv4 (ZEBRA_IPV4_ROUTE_DELETE, type, prefix, gateway);
+	  continue;
+	}
+    }
+}
+
+/* Test zebra client main routine. */
 int
 main (int argc, char **argv)
 {
-  char *p;
-  int sock;
+  FILE *fp;
 
-  /* Preserve my name. */
-  progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
+  /*
+  if (argc == 1)
+      usage_exit ();
+  */
 
   /* Establish connection to zebra. */
   sock = zebra_connect ();
@@ -84,15 +166,23 @@ main (int argc, char **argv)
       exit (1);
     }
 
-  /* OK, test now */
-  zebra_test_v4 (sock);
-
 #ifdef HAVE_IPV6
   zebra_test_v6 (sock);
+  exit (0);
 #endif /* HAVE_IPV6 */
 
-  /* Finish connection. */
-  close (sock);
+  /* Open simulation file. */
+  fp = fopen (argv[1], "r");
+  if (fp == NULL)
+    {
+      fprintf (stderr, "can't open %s\n", argv[1]);
+      exit (1);
+    }
 
-  return 0;
+  /* Do main work. */
+  zebra_sim (fp);
+
+  fclose (fp);
+  close (sock);
+  exit (0);
 }

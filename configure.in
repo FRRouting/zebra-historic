@@ -16,10 +16,27 @@ dnl Get hostname and other information.
 dnl -----------------------------------
 AC_CANONICAL_HOST
 
+dnl ------------
+dnl Check CFLAGS
+dnl ------------
+test -n "$CFLAGS" && cflags_specified=yes
+
+dnl --------
+dnl Check CC
+dnl --------
+AC_PROG_CC
+
+dnl -----------------------------------------
+dnl If CLFAGS doesn't exist set default value
+dnl -----------------------------------------
+if test "x$cflags_specified" = "x"
+then
+  CFLAGS="$CFLAGS -Wall"
+fi
+
 dnl --------------
 dnl Check programs
 dnl --------------
-AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
@@ -34,7 +51,7 @@ AC_AIX
 dnl -------------------
 dnl Check header files.
 dnl -------------------
-AC_CHECK_HEADERS(string.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h net/if_dl.h kvm.h)
+AC_CHECK_HEADERS(string.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h sys/types.h net/if_dl.h linux/version.h kvm.h netdb.h netinet/in.h)
 
 dnl check some types
 AC_C_CONST
@@ -57,12 +74,20 @@ case "$host" in
   *-linux-*)
       opsys=gnu-linux
   ;;
+  *-nec-sysv4*)
+      AC_CHECK_LIB(nsl, gethostbyname)
+      AC_CHECK_LIB(socket, socket)
+  ;;
 esac
 
-dnl MIT pthread library check
-AC_CHECK_LIB(c_r, main,
-[AC_DEFINE(HAVE_LIBC_R)
- PTHREAD_LIB="-lc_r"])
+dnl -----------------------------
+dnl FreeBSD pthread library check
+dnl At this moment (even with FreeBSD 2.2.7) this doesn't work correctly.
+dnl So I commented out below section.
+dnl -----------------------------
+dnl AC_CHECK_LIB(c_r, main,
+dnl [AC_DEFINE(HAVE_LIBC_R)
+dnl  PTHREAD_LIB="-lc_r"])
 
 AC_CHECK_LIB(pthread, main,
 [AC_DEFINE(HAVE_LIBPTHREAD)
@@ -96,22 +121,22 @@ dnl AC_REPLACE_FUNCS(vsnprintf)
 dnl ------------------------------------
 dnl Determine routing get and set method
 dnl ------------------------------------
-
-dnl for zebra_kernel_method in /dev/route /dev/null; do
-dnl test x`ls $zebra_kernel_method 2>/dev/null` = x"$zebra_kernel_method" && break;
-dnl done
-dnl AC_MSG_CHECKING(zebra between kernel interface method)
-dnl if test x"$zebra_kernel_method" = x"/dev/route"; then
-dnl  RT_METHOD=rt_ioctl.o
-dnl  KERNEL_METHOD=krt_netlink.o
-dnl AC_MSG_RESULT(netlink)
-
 AC_MSG_CHECKING(zebra between kernel interface method)
-
 if test x"$opsys" = x"gnu-linux"; then
-  RT_METHOD=rt_ioctl.o
-  KERNEL_METHOD=krt_netlink.o
- AC_MSG_RESULT(netlink)
+  AC_EGREP_CPP(yes,
+  [#include <linux/autoconf.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE > 131328  /* 2.1.0 or later */
+#ifdef CONFIG_RTNETLINK
+  yes
+#endif
+#endif
+  ],
+ [AC_MSG_RESULT(netlink)
+  RT_METHOD=rt_netlink.o
+  netlink=yes],
+ [AC_MSG_RESULT(ioctl)
+  RT_METHOD=rt_ioctl.o])
 else
  AC_TRY_RUN([#include <errno.h>
 #include <sys/types.h>
@@ -136,30 +161,38 @@ main ()
 fi
 
 AC_SUBST(RT_METHOD)
-AC_SUBST(KERNEL_METHOD)
 
 dnl ------------------------------
 dnl check kernel route read method
 dnl ------------------------------
 AC_CACHE_CHECK(route read method check, zebra_rtread,
-[for zebra_rtread in /proc/net/route /dev/ip /dev/null;
+[if test "$netlink" = yes; then
+  RTREAD_METHOD="rtread_netlink.o"
+  zebra_rtread="netlink"
+else
+for zebra_rtread in /proc/net/route /dev/ip /dev/null;
 do
   test x`ls $zebra_rtread 2>/dev/null` = x"$zebra_rtread" && break
 done
 case $zebra_rtread in
-  "/proc/net/route") RTREAD_METHOD=rtread_proc.o
+  "/proc/net/route") RTREAD_METHOD="rtread_proc.o"
                      zebra_rtread="proc";;
   "/dev/ip")         RTREAD_METHOD="rtread_getmsg.o"
                      zebra_rtread="getmsg";;
   *)                 RTREAD_METHOD="rtread_sysctl.o"
                      zebra_rtread="sysctl";;
-esac])
+esac
+fi])
 AC_SUBST(RTREAD_METHOD)
 
 dnl -----------------------------
 dnl check interface lookup method
 dnl -----------------------------
 AC_MSG_CHECKING(interface looking up method)
+if test "$netlink" = yes; then
+  AC_MSG_RESULT(netlink)
+  IF_METHOD=if_netlink.o
+else
 if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
   AC_MSG_RESULT(sysctl)
   IF_METHOD=if_sysctl.o
@@ -167,13 +200,8 @@ else
   AC_MSG_RESULT(ioctl)
   IF_METHOD=if_ioctl.o
 fi
+fi
 AC_SUBST(IF_METHOD)
-
-dnl --------------------
-dnl check MTU get method
-dnl --------------------
-MTU_METHOD=mtu_ioctl.o
-AC_SUBST(MTU_METHOD)
 
 dnl -----------------------------
 dnl check ipforward detect method
@@ -186,20 +214,25 @@ done
 case $zebra_ipforward_path in
   "/proc/net/snmp")  IPFORWARD=ipforward_proc.o
                      zebra_ipforward_path="proc";;
-  "/dev/ip")         IPFORWARD=ipforward_solaris.o
-                     zebra_ipforward_path="solaris";;
+  "/dev/ip")         
+                     case "$host" in
+                       *-nec-sysv4*)  IPFORWARD=ipforward_ews.o
+                                      zebra_ipforward_path="ews";;
+                       *)             IPFORWARD=ipforward_solaris.o
+                                      zebra_ipforward_path="solaris";;
+                     esac;;
   *)                 IPFORWARD=ipforward_sysctl.o
                      zebra_ipforward_path="sysctl";;
 esac])
 AC_SUBST(IPFORWARD)
 
 dnl --------------------------------------------------------
-dnl IPv6 check (currently only supports INRIA and HYDRANGEA)
+dnl IPv6 check (currently only supports INRIA and KAME)
 dnl --------------------------------------------------------
 AC_MSG_CHECKING(whether does this OS have IPv6 stack)
-dnl
+dnl ----------
 dnl INRIA IPv6
-dnl
+dnl ----------
 if grep IPV6_INRIA_VERSION /usr/include/netinet/in.h >/dev/null 2>&1; then
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(INRIA_IPV6)
@@ -207,28 +240,34 @@ if grep IPV6_INRIA_VERSION /usr/include/netinet/in.h >/dev/null 2>&1; then
    LIB_IPV6=""
    AC_MSG_RESULT(INRIA IPv6)
 fi
-dnl
-dnl HYDRANGEA IPv6
-dnl
-if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1;then
+dnl ---------
+dnl KAME IPv6
+dnl ---------
+if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    AC_DEFINE(HAVE_IPV6)
-   AC_DEFINE(HYDRANGEA)
+   AC_DEFINE(KAME)
    RIPNGD=ripngd
    LIB_IPV6="-L/usr/local/v6/lib -linet6"
-   AC_MSG_RESULT(Hydrangea)
+   AC_MSG_RESULT(Kame)
 fi
-dnl
+dnl ----------------
 dnl Linux 2.1.x IPv6
-dnl
-if [ test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route" ]
+dnl ----------------
+if test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route"
 then
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(LINUX_IPV6)   
    RIPNGD=ripngd
    INCLUDES="-I/usr/inet6/include"
-   LIB_IPV6="-L/usr/inet6/lib -linet6"
+   if test x`ls /usr/inet6/lib/libinet6.a 2>/dev/null` != x;then
+     LIB_IPV6="-L/usr/inet6/lib -linet6"
+   fi
    AC_MSG_RESULT(Linux 2.1.x IPv6)
 fi
+
+dnl -----------------------
+dnl Set IPv6 related values
+dnl -----------------------
 LIBS="$LIB_IPV6 $LIBS"
 AC_SUBST(LIB_IPV6)
 if test x"$RIPNGD" = x""; then
@@ -248,6 +287,16 @@ AC_TRY_COMPILE([#include <sys/types.h>
 ],[static struct sockaddr_in ac_i;int ac_j = sizeof (ac_i.sin_len);],
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_SIN_LEN)],
+ AC_MSG_RESULT(no))
+
+dnl --------------------------
+dnl check structure ifaliasreq
+dnl --------------------------
+AC_MSG_CHECKING(whether struct ifaliasreq exist)
+AC_EGREP_HEADER(ifaliasreq,
+net/if.h,
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_IFALIASREQ)],
  AC_MSG_RESULT(no))
 
 dnl -------------
@@ -278,7 +327,55 @@ AC_DEFINE_UNQUOTED(PATH_RIPNGD_PID, "$ac_piddir/ripngd.pid")
 AC_DEFINE_UNQUOTED(PATH_BGPD_PID, "$ac_piddir/bgpd.pid")
 AC_DEFINE_UNQUOTED(PATH_OSPFD_PID, "$ac_piddir/ospfd.pid")
 
-AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile doc/Makefile)
+
+dnl ---------------------------
+dnl Check htonl works correctly
+dnl ---------------------------
+AC_MSG_CHECKING(for working htonl)
+AC_CACHE_VAL(ac_cv_htonl_works, [
+AC_TRY_LINK([#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_NETDB_H
+#include <netdb.h>
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif],
+[htonl (0);],
+ac_cv_htonl_works=yes,
+ac_cv_htonl_works=no)])
+AC_MSG_RESULT($ac_cv_htonl_works)
+
+dnl -----------------
+dnl htnl repaire hack
+dnl -----------------
+if test "$ac_cv_htonl_works" = "no"; then
+  AC_MSG_CHECKING(if htonl is repairable)
+  AC_CACHE_VAL(ac_cv_htonl_hack_works, [
+  AC_TRY_LINK([#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_NETDB_H
+#include <netdb.h>
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#define htonl(x) __cpu_to_be32(x)],
+  [htonl(0);],
+  ac_cv_htonl_hack_works=yes,
+  ac_cv_htonl_hack_works=no)])
+  AC_MSG_RESULT($ac_cv_htonl_hack_works)
+
+  if test "$ac_cv_htonl_hack_works" = "no"; then
+    AC_MSG_ERROR([Cannot repair htonl])
+  else
+    AC_DEFINE(HAVE_REPAIRABLE_HTONL)
+  fi
+fi
+
+AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile doc/Makefile)
 
 echo "
 zebra configuration

@@ -18,11 +18,9 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef HAVE_CONFIG_H
 #include <config.h>
-#endif /* HAVE_CONFIG_H */
-
 #include <stdio.h>
+#include <stdlib.h>		/* for atoi */
 #include <string.h>
 #include <sys/types.h>
 
@@ -109,6 +107,7 @@ route_map_add (char *name)
   else
     list->head = map;
   list->tail = map;
+
   return map;
 }
 
@@ -196,7 +195,7 @@ route_map_index_lookup (struct route_map *map,
 {
   struct route_map_index *index;
 
-  for (index = map->head; index; index->next)
+  for (index = map->head; index; index = index->next)
     if (index->type == type &&
 	index->pref == pref)
       return index;
@@ -352,6 +351,7 @@ int
 route_map_add_match (struct route_map_index *index,
 		     char *match_name,
 		     char *match_arg)
+
 {
   struct route_map_rule *rule;
   struct route_map_rule_cmd *cmd;
@@ -525,7 +525,10 @@ route_map_init ()
 
 DEFUN (route_map, route_map_cmd,
        "route-map NAME PERMIT PREF",
-       "route map emulator")
+       "Create route-map or enter route-map command mode\n"
+       "Route map tag\n"
+       "Route map set operations\n"
+       "Route map preference\n")
 {
   int permit;
   int pref;
@@ -540,7 +543,7 @@ DEFUN (route_map, route_map_cmd,
   else
     {
       vty_out (vty, "the third field must be [permit|demy]\r\n");
-      return;
+      return CMD_WARNING;
     }
 
   /* Preference check. */
@@ -548,7 +551,7 @@ DEFUN (route_map, route_map_cmd,
   if (pref == 0)
     {
       vty_out (vty, "the fourth field must be positive integer");
-      return;
+      return CMD_WARNING;
     }
 
   map = route_map_get (argv[0]);
@@ -561,7 +564,11 @@ DEFUN (route_map, route_map_cmd,
 
 DEFUN (no_route_map, no_route_map_cmd,
        "no route-map NAME PERMIT PREF",
-       "route map delete.")
+       NO_STR
+       "Create route-map or enter route-map command mode\n"
+       "Route map tag\n"
+       "Route map set operations\n"
+       "Route map preference\n")
 {
   int permit;
 
@@ -573,7 +580,7 @@ DEFUN (no_route_map, no_route_map_cmd,
   else
     {
       vty_out (vty, "the third field must be [permit|demy]\r\n");
-      return;
+      return CMD_WARNING;
     }
 
   return CMD_SUCCESS;
@@ -581,7 +588,7 @@ DEFUN (no_route_map, no_route_map_cmd,
 
 /* Configuration write function. */
 int
-route_map_config_write (struct vty *vty, vector v)
+route_map_config_write (struct vty *vty)
 {
   struct route_map *map;
   struct route_map_index *index;
@@ -599,6 +606,7 @@ route_map_config_write (struct vty *vty, vector v)
 	for (rule = index->set_list.head; rule; rule = rule->next)
 	  vty_out (vty, " set %s %s\r\n", rule->cmd->str, rule->rule_str);
       }
+  return 0;
 }
 
 /* Route map node structure. */
@@ -609,6 +617,7 @@ struct cmd_node rmap_node =
 };
 
 /* Initialization of route map vector. */
+void
 route_map_init_vty ()
 {
   /* Install route map top node. */

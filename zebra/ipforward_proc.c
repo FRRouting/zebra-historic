@@ -21,6 +21,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <config.h>
 #include <stdio.h>
 
+#include "dropline.h"
+
 char proc_net_snmp[] = "/proc/net/snmp";
 
 int
@@ -50,6 +52,7 @@ ipforward ()
 }
 
 #ifdef HAVE_IPV6
+int
 ipforward_ipv6 ()
 {
   return 0;

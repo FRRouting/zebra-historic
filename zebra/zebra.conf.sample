@@ -5,15 +5,19 @@
 hostname Router
 password zebra
 enable password zebra
-!!
-!! Interface's description. 
-!!
-!interface lo0
+!
+! Interface's description. 
+!
+!interface lo
 ! description test of desc.
-!!
-!! Static default route sample.
-!!
+!
+!interface sit0
+! multicast
+
+!
+! Static default route sample.
+!
 !ip route 0.0.0.0/0 203.181.89.241
 !
+
 !logfile zebra.log
-!

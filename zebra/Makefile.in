@@ -64,9 +64,7 @@ CC = @CC@
 CPP = @CPP@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
-KERNEL_METHOD = @KERNEL_METHOD@
 MAKEINFO = @MAKEINFO@
-MTU_METHOD = @MTU_METHOD@
 PACKAGE = @PACKAGE@
 RANLIB = @RANLIB@
 RIPNGD = @RIPNGD@
@@ -74,7 +72,7 @@ RTREAD_METHOD = @RTREAD_METHOD@
 RT_METHOD = @RT_METHOD@
 VERSION = @VERSION@
 
-INCLUDES = -I.. -I$(srcdir) -I$(top_srcdir)/lib
+INCLUDES = @INCLUDES@ -I.. -I$(srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
 LIB_IPV6 = @LIB_IPV6@
@@ -83,15 +81,13 @@ ipforward = @IPFORWARD@
 if_method = @IF_METHOD@
 rt_method = @RT_METHOD@
 rtread_method = @RTREAD_METHOD@
-krt_method = @KERNEL_METHOD@
 
-otherobj = $(ipforward) $(if_method) $(rt_method) $(krt_method) \
-	$(rtread_method)
+otherobj = $(ipforward) $(if_method) $(rt_method) $(rtread_method)
 
 sbin_PROGRAMS = zebra client
 
 zebra_SOURCES = \
-	zebra.c main.c if.c ifa.c ioctl.c rib.c redistribute.c rtable.c
+	zebra.c main.c interface.c connected.c ioctl.c rib.c redistribute.c
 
 zebra_LDADD = ../lib/libzebra.a $(otherobj)
 
@@ -107,8 +103,8 @@ PROGRAMS =  $(sbin_PROGRAMS)
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-zebra_OBJECTS =  zebra.o main.o if.o ifa.o ioctl.o rib.o redistribute.o \
-rtable.o
+zebra_OBJECTS =  zebra.o main.o interface.o connected.o ioctl.o rib.o \
+redistribute.o
 zebra_DEPENDENCIES =  ../lib/libzebra.a
 zebra_LDFLAGS = 
 client_OBJECTS =  client_main.o

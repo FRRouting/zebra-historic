@@ -1,4 +1,4 @@
-/* Radix tree for bgpd.
+/* Kernel routing table readup by netlink
    Copyright (C) 1998 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
@@ -18,3 +18,10 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+/* Extern from rt_netlink.c */
+void netlink_route_read ();
+
+void route_read ()
+{
+  netlink_route_read ();
+}

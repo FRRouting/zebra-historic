@@ -1,0 +1,108 @@
+/* Prefix structure.
+   Copyright (C) 1998 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
+
+/* IPv4 and IPv6 unified prefix structure. */
+struct prefix
+{
+  u_char family;
+  u_char prefixlen;
+  union 
+  {
+    u_char prefix;
+    struct in_addr prefix4;
+#ifdef HAVE_IPV6
+    struct in6_addr prefix6;
+#endif /* HAVE_IPV6 */
+  } u;
+};
+
+/* IPv4 prefix structure. */
+struct prefix_ipv4
+{
+  u_char family;
+  u_char prefixlen;
+  struct in_addr prefix;
+};
+
+/* IPv6 prefix structure. */
+#ifdef HAVE_IPV6
+struct prefix_ipv6
+{
+  u_char family;
+  u_char prefixlen;
+  struct in6_addr prefix;
+};
+#else
+#ifndef AF_INET6
+#define AF_INET6 0
+#endif /**/
+#endif /* HAVE_IPV6 */
+
+#ifndef INET_ADDRSTRLEN
+#define INET_ADDRSTRLEN 16
+#endif /* INET_ADDRSTRLEN */
+
+#ifndef INET6_ADDRSTRLEN
+#define INET6_ADDRSTRLEN 46
+#endif /* INET6_ADDRSTRLEN */
+
+/* Max bit/byte length of IPv4 address. */
+#define IPV4_MAX_BYTELEN   4
+#define IPV4_MAX_BITLEN   32
+#define IPV4_ADDR_CMP(D,S)   memcmp ((D), (S), IPV4_MAX_BYTELEN)
+#define IPV4_ADDR_COPY(D,S)  memcpy ((D), (S), IPV4_MAX_BYTELEN)
+
+/* Max bit/byte length of IPv6 address. */
+#define IPV6_MAX_BYTELEN  16
+#define IPV6_MAX_BITLEN  128
+#define IPV6_ADDR_CMP(D,S)   memcmp ((D), (S), IPV6_MAX_BYTELEN)
+#define IPV6_ADDR_COPY(D,S)  memcpy ((D), (S), IPV6_MAX_BYTELEN)
+
+/* Prototypes. */
+int str2prefix (char *, struct prefix *);
+struct prefix *prefix_new ();
+void prefix_free (struct prefix *p);
+int prefix_match (struct prefix *n, struct prefix *p);
+
+struct prefix_ipv4 *prefix_ipv4_new ();
+void prefix_ipv4_free ();
+int str2prefix_ipv4 (char *, struct prefix_ipv4 *);
+void apply_mask (struct prefix_ipv4 *);
+int prefix_blen (struct prefix *);
+u_char ip_masklen (struct in_addr);
+int prefix_ipv4_any (struct prefix_ipv4 *);
+void masklen2ip (int, struct in_addr *);
+
+char *prefix_family_str (struct prefix *p);
+struct prefix *sockunion2prefix ();
+
+#ifdef HAVE_IPV6
+struct prefix_ipv6 *prefix_ipv6_new ();
+void prefix_ipv6_free ();
+struct prefix *str2routev6 (char *);
+int str2prefix_ipv6 (char *str, struct prefix_ipv6 *p);
+void apply_mask_ipv6 (struct prefix_ipv6 *p);
+void str2in6_addr (char *str, struct in6_addr *addr);
+void masklen2ip6 (int masklen, struct in6_addr *netmask);
+int ip6_masklen (struct in6_addr netmask);
+#endif /* HAVE_IPV6 */
+
+int prefix_same (struct prefix *, struct prefix *);
+void prefix_copy (struct prefix *, struct prefix *);

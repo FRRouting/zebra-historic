@@ -64,10 +64,8 @@ CC = @CC@
 CPP = @CPP@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
-KERNEL_METHOD = @KERNEL_METHOD@
 LIB_IPV6 = @LIB_IPV6@
 MAKEINFO = @MAKEINFO@
-MTU_METHOD = @MTU_METHOD@
 PACKAGE = @PACKAGE@
 RANLIB = @RANLIB@
 RIPNGD = @RIPNGD@
@@ -75,13 +73,13 @@ RTREAD_METHOD = @RTREAD_METHOD@
 RT_METHOD = @RT_METHOD@
 VERSION = @VERSION@
 
-INCLUDES = -I.. -I$(top_srcdir)/lib -I$(top_srcdir)/zebra
+INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir)/lib -I$(top_srcdir)/zebra
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
 sbin_PROGRAMS = ripd
 
 ripd_SOURCES = \
-	rip_main.c ripd.c rip_zebra.c rip_interface.c rip_announce.c
+	rip_main.c ripd.c rip_zebra.c rip_interface.c
 
 ripd_LDADD = ../lib/libzebra.a
 
@@ -94,8 +92,7 @@ PROGRAMS =  $(sbin_PROGRAMS)
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-ripd_OBJECTS =  rip_main.o ripd.o rip_zebra.o rip_interface.o \
-rip_announce.o
+ripd_OBJECTS =  rip_main.o ripd.o rip_zebra.o rip_interface.o
 ripd_DEPENDENCIES =  ../lib/libzebra.a
 ripd_LDFLAGS = 
 CFLAGS = @CFLAGS@

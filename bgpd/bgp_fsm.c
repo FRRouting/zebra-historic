@@ -19,124 +19,109 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef HAVE_CONFIG_H
 #include <config.h>
-#endif /* HAVE_CONFIG_H */
-
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <assert.h>
 
-#include "bgpd.h"
-#include "bgp_peer.h"
-#include "bgp_dump.h"
-#include "sockunion.h"
+#include "linklist.h"
+#include "prefix.h"
+#include "vty.h"
 #include "log.h"
+#include "sockunion.h"
 #include "thread.h"
 
-/* Export from bgpd.c */
-extern struct thread_master *master;
+#include "bgpd.h"
+#include "bgp_attr.h"
+#include "bgp_peer.h"
+#include "bgp_dump.h"
+#include "bgp_fsm.h"
+
+/* BGP FSM (finite state machine) has three types of functions.  Type
+   one is thread functions.  Type two is event functions.  Type three
+   is FSM functions.  Timer functions are set by bgp_timer_set
+   function. */
 
-/* Prototypes for fsm timer. */
-int timer_start (struct thread *);
-int timer_connect (struct thread *);
-int timer_holdtime (struct thread *);
-int timer_keepalive (struct thread *);
-void fsm_connect (struct peer *);
+/* BGP event function. */
+int bgp_event (struct thread *);
 
-/* Macro for BGP read add */
-#define BGP_READ_ON(F,V) \
-      thread_add_read (master, (F), peer, (V))
+/* BGP thread functions. */
+static int bgp_start_timer (struct thread *);
+static int bgp_connect_timer (struct thread *);
+static int bgp_holdtime_timer (struct thread *);
+static int bgp_keepalive_timer (struct thread *);
 
-/* Macro for BGP read off. */
-#define BGP_READ_OFF(X) \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	}
+static int fsm_read (struct thread *);
+static int fsm_write (struct thread *);
 
-/* Macro for BGP write add */
-#define BGP_WRITE_ON(F,V) \
-      thread_add_write (master, (F), peer, (V))
+/* BGP FSM functions. */
+static void fsm_connect (struct peer *);
+static void fsm_stop (struct peer *);
 
-/* Macro for BGP write turn off. */
-#define BGP_WRITE_OFF(X) \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	}
-
-/* Macro for timer turn on. */
-#define BGP_TIMER_ON(F,V) \
-      thread_add_timer (master, (F), peer, (V))
-
-/* Macro for timer turn off. */
-#define BGP_TIMER_OFF(X) \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	}
-
-/* Hook function called after bgp event is occered. And vty's neighbor
-   command invoke this function after making neighbor structure. */
-fsm_timer_set (struct peer *peer)
+/* Hook function called after bgp event is occered.  And vty's
+   neighbor command invoke this function after making neighbor
+   structure. */
+void
+bgp_timer_set (struct peer *peer)
 {
   switch (peer->status)
     {
-    /* First entry point of peer's finite state machine.  From this
-       timer timer_start function is called.  All other timer must be
-       turned off. */
     case Idle:
-      if (!peer->t_start)
-	peer->t_start = BGP_TIMER_ON (timer_start, peer->v_start);
+      /* First entry point of peer's finite state machine.  In Idle
+	 status timer_start is on.  All other timer must be turned
+	 off. */
+      BGP_TIMER_ON (peer->t_start, bgp_start_timer, peer->v_start);
       BGP_TIMER_OFF (peer->t_connect);
       BGP_TIMER_OFF (peer->t_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);
       BGP_TIMER_OFF (peer->t_asorig);
       BGP_TIMER_OFF (peer->t_routeadv);
       break;
+
     case Connect:
+      /* After start timer is expired, the peer moves to Connnect
+         status.  Make sure start timer is off and connect timer is
+         on. */
       BGP_TIMER_OFF (peer->t_start);
-      if (!peer->t_connect)
-	peer->t_connect = BGP_TIMER_ON (timer_connect, peer->v_connect);
+      BGP_TIMER_ON (peer->t_connect, bgp_connect_timer, peer->v_connect);
       BGP_TIMER_OFF (peer->t_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);
       BGP_TIMER_OFF (peer->t_asorig);
       BGP_TIMER_OFF (peer->t_routeadv);
       break;
+
     case Active:
+      /* Active is waiting connection from remote peer.  And if
+         connect timer is expired, change status to Connect. */
       BGP_TIMER_OFF (peer->t_start);
-      if (!peer->t_connect)
-	peer->t_connect = BGP_TIMER_ON (timer_connect, peer->v_connect);
+      BGP_TIMER_ON (peer->t_connect, bgp_connect_timer, peer->v_connect);
       BGP_TIMER_OFF (peer->t_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);
       BGP_TIMER_OFF (peer->t_asorig);
       BGP_TIMER_OFF (peer->t_routeadv);
       break;
+
     case OpenSent:
+      /* OpenSent status. */
       BGP_TIMER_OFF (peer->t_start);
       BGP_TIMER_OFF (peer->t_connect);
-      if (!peer->t_holdtime)
-	peer->t_holdtime = BGP_TIMER_ON (timer_holdtime, peer->v_holdtime);
+      BGP_TIMER_ON (peer->t_holdtime, bgp_holdtime_timer, peer->v_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);
       BGP_TIMER_OFF (peer->t_asorig);
       BGP_TIMER_OFF (peer->t_routeadv);
       break;
+
     case OpenConfirm:
+      /* OpenConfirm status. */
       BGP_TIMER_OFF (peer->t_start);
       BGP_TIMER_OFF (peer->t_connect);
 
@@ -145,129 +130,121 @@ fsm_timer_set (struct peer *peer)
       if (peer->v_holdtime == 0)
 	{
 	  BGP_TIMER_OFF (peer->t_holdtime);
-	}
-      else if (!peer->t_holdtime)
-	peer->t_holdtime = BGP_TIMER_ON (timer_holdtime, peer->v_holdtime);
-      if (peer->v_holdtime == 0)
-	{
 	  BGP_TIMER_OFF (peer->t_keepalive);
 	}
-      else if (!peer->t_keepalive)
-	peer->t_keepalive = BGP_TIMER_ON (timer_keepalive, peer->v_keepalive);
+      else
+	{
+	  BGP_TIMER_ON (peer->t_holdtime, bgp_holdtime_timer,
+			peer->v_holdtime);
+	  BGP_TIMER_ON (peer->t_keepalive, bgp_keepalive_timer, 
+			peer->v_keepalive);
+	}
       BGP_TIMER_OFF (peer->t_asorig);
       BGP_TIMER_OFF (peer->t_routeadv);
       break;
+
     case Established:
+      /* In Established status start and connect timer is turned
+         off. */
       BGP_TIMER_OFF (peer->t_start);
       BGP_TIMER_OFF (peer->t_connect);
+
+      /* Same as OpenConfirm, if holdtime is zero then both holdtime
+         and keepalive must be turned off. */
       if (peer->v_holdtime == 0)
 	{
 	  BGP_TIMER_OFF (peer->t_holdtime);
-	}
-      else if (!peer->t_holdtime)
-	peer->t_holdtime = BGP_TIMER_ON (timer_holdtime, peer->v_holdtime);
-      if (peer->v_holdtime == 0)
-	{
 	  BGP_TIMER_OFF (peer->t_keepalive);
 	}
-      else if (!peer->t_keepalive)
-	peer->t_keepalive = BGP_TIMER_ON (timer_keepalive, peer->v_keepalive);
+      else
+	{
+	  BGP_TIMER_ON (peer->t_holdtime, bgp_holdtime_timer,
+			peer->v_holdtime);
+	  BGP_TIMER_ON (peer->t_keepalive, bgp_keepalive_timer,
+			peer->v_keepalive);
+	}
       BGP_TIMER_OFF (peer->t_asorig);
       BGP_TIMER_OFF (peer->t_routeadv);
       break;
     }
 }
 
-/* Start timer fire! To proceed event I set BGP_Start to thread value
-   and after that call event process. */
-timer_start (struct thread *thread)
+/* BGP start timer.  This function set BGP_Start event to thread value
+   and process event. */
+static int
+bgp_start_timer (struct thread *thread)
 {
   struct peer *peer;
 
   peer = thread_arg (thread);
   peer->t_start = NULL;
+
   if (debug (DEBUG_BGP_FSM))
     log ("FSM[%s]: Timer (start timer expire).\n", peer->host);
-  thread_val(thread) = BGP_Start;
-  event_process (thread);
+
+  thread_val (thread) = BGP_Start;
+  bgp_event (thread);
+
+  return 0;
 }
 
-/* Connect retry fire ! */
-timer_connect (struct thread *thread)
+/* BGP connect retry timer. */
+static int
+bgp_connect_timer (struct thread *thread)
 {
   struct peer *peer;
 
   peer = thread_arg (thread);
   peer->t_connect = NULL;
+
   if (debug (DEBUG_BGP_FSM))
     log ("FSM[%s]: Timer (connect timer expire).\n", peer->host);
+
   thread_val (thread) = ConnectRetry_timer_expired;
-  event_process (thread);
+  bgp_event (thread);
+
+  return 0;
 }
 
-/* Holdtime fire ! */
-timer_holdtime (struct thread *thread)
+/* BGP holdtime timer. */
+static int
+bgp_holdtime_timer (struct thread *thread)
 {
   struct peer *peer;
 
   peer = thread_arg (thread);
   peer->t_holdtime = NULL;
+
   if (debug (DEBUG_BGP_FSM))
     log ("FSM[%s]: Timer (holdtime timer expire).\n", peer->host);
+
   thread_val (thread) = Hold_Timer_expired;
-  event_process (thread);
+  bgp_event (thread);
+
+  return 0;
 }
 
-/* Keepalive fire ! */
-timer_keepalive (struct thread *thread)
+/* BGP keepalive fire ! */
+static int
+bgp_keepalive_timer (struct thread *thread)
 {
   struct peer *peer;
 
   peer = thread_arg (thread);
   peer->t_keepalive = NULL;
+
   if (debug (DEBUG_BGP_FSM))
     log ("FSM[%s]: Timer (keepalive timer expire).\n", peer->host);
+
   thread_val (thread) = KeepAlive_timer_expired;
-  event_process (thread);
+  bgp_event (thread);
+
+  return 0;
 }
-
-#if 0
-/* AS origination interval fire ! */
-timer_asorig (struct thread *thread)
-{
-  struct peer *peer;
-
-  peer = thread_arg (thread);
-  peer->t_asorig = NULL;
-  thread_val (thread) = 0;
-  event_process (thread);
-}
-
-/* Route advetise fire ! */
-timer_routeadv (struct thread *thread)
-{
-  struct peer *peer;
-
-  peer = thread_arg (thread);
-  peer->t_routeadv = NULL;
-  thread_val (thread) = 0;
-  event_process (thread);
-}
-#endif
 
-/* First point of BGP finite state machine. */
-FSM_start (struct peer *peer)
-{
-  assert (peer->fd == -1);
-  assert (peer->status == Idle);
-
-  fsm_connect (peer);
-
-  /* Next status is Connect. */
-}
-
 /* Administrative BGP peer stop event. */
-FSM_stop (struct peer *peer)
+void
+fsm_stop (struct peer *peer)
 {
   /* Clear read and write thread if exist. */
   BGP_READ_OFF (peer->t_read);
@@ -295,111 +272,8 @@ FSM_stop (struct peer *peer)
   /* Next status is Idle.*/
 }
 
-/* Conect timer expired. This function is called from connect retry
-   timer. So connect retry timer does not exist at this time. */
-FSM_connect_retry (struct peer *peer)
-{
-  assert (peer->fd == -1);
-  assert (peer->status == Active);
-  
-  fsm_connect (peer);
-
-  /* Next status is Connect. */
-}
-
-/* File descriptor can be read. */
-fsm_read (struct thread *thread)
-{
-  struct peer *peer;
-
-  /* Fetch peer structure and reset read thread. */
-  peer = thread_arg (thread);
-  peer->t_read = BGP_READ_ON (fsm_read, peer->fd);
-
-  if (debug (DEBUG_BGP_FSM))
-    log ("FSM[%s]: FSM_read.\n", peer->host);
-
-  switch (peer->status)
-    {
-    case Connect:
-      /* If peer's status is Connect. This function is called for
-	 non-blocking result checking. */
-      fsm_connect_check (peer);
-      break;
-    case OpenSent:
-    case OpenConfirm:
-    case Established:
-      bgp_read_packet (peer);
-      break;
-    case Idle:
-    case Active:
-    default:
-      break;
-    }
-}
-
-FSM_open (struct peer *peer)
-{
-  /* send keepalive and make keepalive timer */
-  bgp_keepalive_send (peer);
-
-  /* Reset holdtimer value. */
-  BGP_TIMER_OFF (peer->t_holdtime);
-
-  /* Keepalive timer is set at fsm_timer_set(). */
-}
-
-/* File descriptor can be read.  Called from thead. */
-fsm_write (struct thread *thread)
-{
-  struct peer *peer;
-
-  peer = thread_arg (thread);
-  peer->t_write = NULL;
-
-  if (debug (DEBUG_BGP_FSM))
-    log ("FSM[%s]: FSM_write.\n", peer->host);
-
-  switch (peer->status)
-    {
-    case Connect:
-      fsm_connect_check (peer);
-      break;
-    }
-}
-
-/* Perform BGP connect. Called from FSM_start() and
-   FSM_connect_retry(). */
-void
-fsm_connect (struct peer *peer)
-{
-  int status;
-
-  status = bgp_connect (peer);
-  switch (status)
-    {
-    case -1:
-      event_add (peer, TCP_connection_open_failed);
-      break;
-    case 0:
-      if (debug (DEBUG_BGP_FSM))
-	log ("FSM[%s] connect immediately success\n", peer->host);
-      event_add (peer, TCP_connection_open);
-      break;
-    case 1:
-      /* To check nonblocking connect, we wait until socket is
-         readable or writable. */
-      if (debug (DEBUG_BGP_FSM))
-	log ("FSM[%s] fsm_connect non-block connect\n", peer->host);
-      peer->t_read  = BGP_READ_ON (fsm_read, peer->fd);
-      peer->t_write  = BGP_WRITE_ON (fsm_write, peer->fd);
-      break;
-    default:
-      break;
-    }
-}
-
 /* To check connect is established. */
+void
 fsm_connect_check (struct peer *peer)
 {
   int ret;
@@ -419,25 +293,113 @@ fsm_connect_check (struct peer *peer)
     }      
 
   if (status == 0)
-      event_add (peer, TCP_connection_open);
+      BGP_EVENT_ADD (peer, TCP_connection_open);
   else
     {
       log ("Connect to [%s] failed : %s.\n", peer->host, strerror (status));
-      event_add (peer, TCP_connection_open_failed);
+      BGP_EVENT_ADD (peer, TCP_connection_open_failed);
+    }
+}
+
+/* File descriptor can be read. */
+int
+fsm_read (struct thread *thread)
+{
+  struct peer *peer;
+
+  /* Fetch peer structure and reset read thread. */
+  peer = thread_arg (thread);
+  peer->t_read = NULL;
+
+  if (debug (DEBUG_BGP_FSM))
+    log ("FSM[%s]: FSM_read.\n", peer->host);
+
+  switch (peer->status)
+    {
+    case Connect:
+      /* If peer's status is Connect. This function is called for
+	 non-blocking result checking. */
+      fsm_connect_check (peer);
+      break;
+    case OpenSent:
+    case OpenConfirm:
+    case Established:
+      /* We need check of read error at here. */
+      BGP_READ_ON (peer->t_read, fsm_read, peer->fd);
+      bgp_read_packet (peer);
+      break;
+    case Idle:
+    case Active:
+    default:
+      break;
+    }
+  return 0;
+}
+
+/* File descriptor can be read.  Called from thead. */
+int
+fsm_write (struct thread *thread)
+{
+  struct peer *peer;
+
+  peer = thread_arg (thread);
+  peer->t_write = NULL;
+
+  if (debug (DEBUG_BGP_FSM))
+    log ("FSM[%s]: FSM_write.\n", peer->host);
+
+  switch (peer->status)
+    {
+    case Connect:
+      fsm_connect_check (peer);
+      break;
+    }
+  return 0;
+}
+
+/* This function is the first starting point of all BGP connection. It
+   try to connect to remote peer with non-blocking IO. */
+void
+fsm_connect (struct peer *peer)
+{
+  int status;
+
+  status = bgp_connect (peer);
+
+  switch (status)
+    {
+    case connect_error:
+      if (debug (DEBUG_BGP_FSM))
+	log ("FSM[%s] connect error\n", peer->host);
+      BGP_EVENT_ADD (peer, TCP_connection_open_failed);
+      break;
+    case connect_success:
+      if (debug (DEBUG_BGP_FSM))
+	log ("FSM[%s] connect immediately success\n", peer->host);
+      BGP_EVENT_ADD (peer, TCP_connection_open);
+      break;
+    case connect_in_progress:
+      /* To check nonblocking connect, we wait until socket is
+         readable or writable. */
+      if (debug (DEBUG_BGP_FSM))
+	log ("FSM[%s] fsm_connect non-block connect\n", peer->host);
+      BGP_READ_ON (peer->t_read, fsm_read, peer->fd);
+      BGP_WRITE_ON (peer->t_write, fsm_write, peer->fd);
+      break;
     }
 }
 
 /* TCP connection open.  Next we send open message to remote peer. And
    add read thread for reading open message. */
+void
 fsm_connect_success (struct peer *peer)
 {
-  if (peer->t_read)
-    printf ("Already active read thread\n");
-  peer->t_read = BGP_READ_ON (fsm_read, peer->fd);
+  BGP_READ_ON (peer->t_read, fsm_read, peer->fd);
   bgp_open_send (peer);
 }
 
 /* TCP connect fail */
+void
 fsm_connect_fail (struct peer *peer)
 {
   /* Failed file descriptor is meaning less so close it. */
@@ -448,11 +410,22 @@ fsm_connect_fail (struct peer *peer)
     }
 
   /* To restart connect retry timer, once off it. If next status is
-     Active fsm_timer_set start connect retry timer. */
+     Active bgp_timer_set start connect retry timer. */
   BGP_TIMER_OFF (peer->t_connect);
 }
 
+void
+fsm_open (struct peer *peer)
+{
+  /* send keepalive and make keepalive timer */
+  bgp_keepalive_send (peer);
+
+  /* Reset holdtimer value. */
+  BGP_TIMER_OFF (peer->t_holdtime);
+}
+
 /* HoldTimer is expired. Moves to Idle state. */
+void
 fsm_holdtime (struct peer *peer)
 {
   /* Send notify to remote peer. */
@@ -467,6 +440,7 @@ fsm_holdtime (struct peer *peer)
 
 /* Called after event occured, this function change status and reset
    read/write and timer thread. */
+void
 fsm_change_status (struct peer *peer, int status)
 {
   /* Logging change of status. */
@@ -481,149 +455,147 @@ fsm_change_status (struct peer *peer, int status)
 }
 
 /* Keepalive send to peer. */
+void
 fsm_keepalive_expire (struct peer *peer)
 {
-  /* Send keepalive */
   bgp_keepalive_send(peer);
-
-  /* At this time keepalive timer is expired.  So fsm_set_timer
-     restart new keepalive timer. */
-}
-
-fsm_nothing (struct peer *peer)
-{
-  if (debug (DEBUG_BGP_FSM))
-    log ("FSM[%s]: fsm_nothing called\n", peer->host);
 }
 
 /* Keepalive message is comming. */
+void
 fsm_establish (struct peer *peer)
 {
   assert (peer->status == OpenConfirm);
 
   bgp_uptime_reset (peer);
-  bgp_keepalive_send(peer);
-  
-  bgp_announce (peer);
-  /* bgp_announce_v6 (peer); */
+  bgp_keepalive_send (peer);
 }
 
-
 /* Keepalive packet is received. */
+void
 fsm_keepalive (struct peer *peer)
 {
-  /* Reset holdtimer value. */
   BGP_TIMER_OFF (peer->t_holdtime);
 }
 
 /* Update packet is received. */
+void
 fsm_update (struct peer *peer)
 {
-  /* Reset holdtimer value. */
   BGP_TIMER_OFF (peer->t_holdtime);
+}
+
+/* This is empty event. */
+void
+fsm_ignore (struct peer *peer)
+{
+  if (debug (DEBUG_BGP_FSM))
+    log ("FSM[%s]: fsm_ignore called\n", peer->host);
 }
 
 /* Finite State Machine structure */
 struct {
-  int (*func) ();
+  void (*func) ();
   int next_state;
 } FSM [BGP_STATUS_MAX - 1][BGP_EVENTS_MAX - 1] = 
 {
   {
-    /* Idle */
-    FSM_start,   Connect,	/* BGP_Start                    */
-    FSM_stop,    Idle,		/* BGP_Stop                     */
-    fsm_nothing, Idle,		/* TCP_connection_open          */
-    fsm_nothing, Idle,		/* TCP_connection_closed        */
-    fsm_nothing, Idle,		/* TCP_connection_open_failed   */
-    fsm_nothing, Idle,		/* TCP_fatal_error              */
-    fsm_nothing, Idle,		/* ConnectRetry_timer_expired   */
-    fsm_nothing, Idle,		/* Hold_Timer_expired           */
-    fsm_nothing, Idle,		/* KeepAlive_timer_expired      */
-    fsm_nothing, Idle,		/* Receive_OPEN_message         */
-    fsm_nothing, Idle,		/* Receive_KEEPALIVE_message    */
-    fsm_nothing, Idle,		/* Receive_UPDATE_message       */
-    fsm_nothing, Idle,		/* Receive_NOTIFICATION_message */
+    /* Idle state: In Idle state, all events other than BGP_Start is
+       ignored.  With BGP_Start event, finite state machine calls
+       fsm_connect(). */
+    {fsm_connect, Connect},	/* BGP_Start                    */
+    {fsm_ignore, Idle},		/* BGP_Stop                     */
+    {fsm_ignore, Idle},		/* TCP_connection_open          */
+    {fsm_ignore, Idle},		/* TCP_connection_closed        */
+    {fsm_ignore, Idle},		/* TCP_connection_open_failed   */
+    {fsm_ignore, Idle},		/* TCP_fatal_error              */
+    {fsm_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {fsm_ignore, Idle},		/* Hold_Timer_expired           */
+    {fsm_ignore, Idle},		/* KeepAlive_timer_expired      */
+    {fsm_ignore, Idle},		/* Receive_OPEN_message         */
+    {fsm_ignore, Idle},		/* Receive_KEEPALIVE_message    */
+    {fsm_ignore, Idle},		/* Receive_UPDATE_message       */
+    {fsm_ignore, Idle},		/* Receive_NOTIFICATION_message */
   },
   {
     /* Connect */
-    fsm_nothing, Connect,	/* BGP_Start                    */
-    FSM_stop,    Idle,		/* BGP_Stop                     */
-    fsm_connect_success, OpenSent, /* TCP_connection_open          */
-    fsm_nothing, Idle,		/* TCP_connection_closed        */
-    fsm_connect_fail, Active,	/* TCP_connection_open_failed   */
-    fsm_connect_fail, Idle,	/* TCP_fatal_error              */
-    fsm_nothing, Connect,	/* ConnectRetry_timer_expired   */
-    fsm_nothing, Idle,		/* Hold_Timer_expired           */
-    fsm_nothing, Idle,		/* KeepAlive_timer_expired      */
-    fsm_nothing, Idle,		/* Receive_OPEN_message         */
-    fsm_nothing, Idle,		/* Receive_KEEPALIVE_message    */
-    fsm_nothing, Idle,		/* Receive_UPDATE_message       */
-    fsm_nothing, Idle,		/* Receive_NOTIFICATION_message */
+    {fsm_ignore, Connect},	/* BGP_Start                    */
+    {fsm_stop,   Idle},		/* BGP_Stop                     */
+    {fsm_connect_success, OpenSent}, /* TCP_connection_open          */
+    {fsm_ignore, Idle},		/* TCP_connection_closed        */
+    {fsm_connect_fail, Active}, /* TCP_connection_open_failed   */
+    {fsm_connect_fail, Idle},	/* TCP_fatal_error              */
+    {fsm_ignore, Connect},	/* ConnectRetry_timer_expired   */
+    {fsm_ignore, Idle},		/* Hold_Timer_expired           */
+    {fsm_ignore, Idle},		/* KeepAlive_timer_expired      */
+    {fsm_ignore, Idle},		/* Receive_OPEN_message         */
+    {fsm_ignore, Idle},		/* Receive_KEEPALIVE_message    */
+    {fsm_ignore, Idle},		/* Receive_UPDATE_message       */
+    {fsm_ignore, Idle},		/* Receive_NOTIFICATION_message */
   },
   {
     /* Active, */
-    fsm_nothing, Active,          /* BGP_Start                    */
-    FSM_stop,    Idle,		  /* BGP_Stop                     */
-    fsm_connect_success, OpenSent, /* TCP_connection_open          */
-    fsm_nothing, Idle,		/* TCP_connection_closed        */
-    fsm_nothing, Active,	/* TCP_connection_open_failed   */
-    fsm_nothing, Idle,		/* TCP_fatal_error              */
-    FSM_connect_retry, Connect,	/* ConnectRetry_timer_expired   */
-    fsm_nothing, Idle,		/* Hold_Timer_expired           */
-    fsm_nothing, Idle,		/* KeepAlive_timer_expired      */
-    fsm_nothing, Idle,		/* Receive_OPEN_message         */
-    fsm_nothing, Idle,		/* Receive_KEEPALIVE_message    */
-    fsm_nothing, Idle,		/* Receive_UPDATE_message       */
-    fsm_nothing, Idle,		/* Receive_NOTIFICATION_message */
+    {fsm_ignore, Active},	/* BGP_Start                    */
+    {fsm_stop,   Idle},		/* BGP_Stop                     */
+    {fsm_connect_success, OpenSent}, /* TCP_connection_open          */
+    {fsm_ignore, Idle},		/* TCP_connection_closed        */
+    {fsm_ignore, Active},	/* TCP_connection_open_failed   */
+    {fsm_ignore, Idle},		/* TCP_fatal_error              */
+    {fsm_connect, Connect},	/* ConnectRetry_timer_expired   */
+    {fsm_ignore, Idle},		/* Hold_Timer_expired           */
+    {fsm_ignore, Idle},		/* KeepAlive_timer_expired      */
+    {fsm_ignore, Idle},		/* Receive_OPEN_message         */
+    {fsm_ignore, Idle},		/* Receive_KEEPALIVE_message    */
+    {fsm_ignore, Idle},		/* Receive_UPDATE_message       */
+    {fsm_ignore, Idle},		/* Receive_NOTIFICATION_message */
   },
   {
     /* OpenSent, */
-    fsm_nothing, OpenSent,	/* BGP_Start                    */
-    FSM_stop,    Idle,		/* BGP_Stop                     */
-    fsm_nothing, Idle,		/* TCP_connection_open          */
-    fsm_nothing, Active,	/* TCP_connection_closed        */
-    fsm_nothing, Idle,		/* TCP_connection_open_failed   */
-    fsm_nothing, Idle,		/* TCP_fatal_error              */
-    fsm_nothing, Idle,		/* ConnectRetry_timer_expired   */
-    fsm_holdtime, Idle,		/* Hold_Timer_expired           */
-    fsm_nothing, Idle,		/* KeepAlive_timer_expired      */
-    FSM_open, OpenConfirm,	/* Receive_OPEN_message         */
-    fsm_nothing, Idle,		/* Receive_KEEPALIVE_message    */
-    fsm_nothing, Idle,		/* Receive_UPDATE_message       */
-    fsm_nothing, Idle,		/* Receive_NOTIFICATION_message */
+    {fsm_ignore, OpenSent},	/* BGP_Start                    */
+    {fsm_stop,   Idle},		/* BGP_Stop                     */
+    {fsm_ignore, Idle},		/* TCP_connection_open          */
+    {fsm_ignore, Active},	/* TCP_connection_closed        */
+    {fsm_ignore, Idle},		/* TCP_connection_open_failed   */
+    {fsm_ignore, Idle},		/* TCP_fatal_error              */
+    {fsm_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {fsm_holdtime, Idle},	/* Hold_Timer_expired           */
+    {fsm_ignore, Idle},		/* KeepAlive_timer_expired      */
+    {fsm_open, OpenConfirm},	/* Receive_OPEN_message         */
+    {fsm_ignore, Idle},		/* Receive_KEEPALIVE_message    */
+    {fsm_ignore, Idle},		/* Receive_UPDATE_message       */
+    {fsm_ignore, Idle},		/* Receive_NOTIFICATION_message */
   },
   {
     /* OpenConfirm, */
-    fsm_nothing, OpenConfirm,	/* BGP_Start                    */
-    FSM_stop,    Idle,		/* BGP_Stop                     */
-    fsm_nothing, Idle,		/* TCP_connection_open          */
-    fsm_nothing, Idle,		/* TCP_connection_closed        */
-    fsm_nothing, Idle,		/* TCP_connection_open_failed   */
-    fsm_nothing, Idle,		/* TCP_fatal_error              */
-    fsm_nothing, Idle,		/* ConnectRetry_timer_expired   */
-    fsm_holdtime, Idle,		/* Hold_Timer_expired           */
-    fsm_nothing, OpenConfirm,	/* KeepAlive_timer_expired      */
-    fsm_nothing, Idle,		/* Receive_OPEN_message         */
-    fsm_establish, Established,	/* Receive_KEEPALIVE_message    */
-    fsm_nothing, Idle,		/* Receive_UPDATE_message       */
-    fsm_nothing, Idle,		/* Receive_NOTIFICATION_message */
+    {fsm_ignore, OpenConfirm},	/* BGP_Start                    */
+    {fsm_stop,   Idle},		/* BGP_Stop                     */
+    {fsm_ignore, Idle},		/* TCP_connection_open          */
+    {fsm_ignore, Idle},		/* TCP_connection_closed        */
+    {fsm_ignore, Idle},		/* TCP_connection_open_failed   */
+    {fsm_ignore, Idle},		/* TCP_fatal_error              */
+    {fsm_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {fsm_holdtime, Idle},	/* Hold_Timer_expired           */
+    {fsm_ignore, OpenConfirm},	/* KeepAlive_timer_expired      */
+    {fsm_ignore, Idle},		/* Receive_OPEN_message         */
+    {fsm_establish, Established}, /* Receive_KEEPALIVE_message    */
+    {fsm_ignore, Idle},		/* Receive_UPDATE_message       */
+    {fsm_ignore, Idle},		/* Receive_NOTIFICATION_message */
   },
   {
     /* Established, */
-    fsm_nothing, Established,	/* BGP_Start                    */
-    FSM_stop,    Idle,		/* BGP_Stop                     */
-    fsm_nothing, Idle,		/* TCP_connection_open          */
-    fsm_nothing, Idle,		/* TCP_connection_closed        */
-    fsm_nothing, Idle,		/* TCP_connection_open_failed   */
-    fsm_nothing, Idle,		/* TCP_fatal_error              */
-    fsm_nothing, Idle,		/* ConnectRetry_timer_expired   */
-    fsm_nothing, Idle,		/* Hold_Timer_expired           */
-    fsm_keepalive_expire, Established, /* KeepAlive_timer_expired      */
-    fsm_nothing, Idle,		/* Receive_OPEN_message         */
-    fsm_keepalive, Established,	/* Receive_KEEPALIVE_message    */
-    fsm_update, Established,	/* Receive_UPDATE_message       */
-    fsm_nothing, Idle,		/* Receive_NOTIFICATION_message */
+    {fsm_ignore, Established},	/* BGP_Start                    */
+    {fsm_stop,   Idle},		/* BGP_Stop                     */
+    {fsm_ignore, Idle},		/* TCP_connection_open          */
+    {fsm_ignore, Idle},		/* TCP_connection_closed        */
+    {fsm_ignore, Idle},		/* TCP_connection_open_failed   */
+    {fsm_ignore, Idle},		/* TCP_fatal_error              */
+    {fsm_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {fsm_ignore, Idle},		/* Hold_Timer_expired           */
+    {fsm_keepalive_expire, Established}, /* KeepAlive_timer_expired      */
+    {fsm_ignore, Idle},		/* Receive_OPEN_message         */
+    {fsm_keepalive, Established}, /* Receive_KEEPALIVE_message    */
+    {fsm_update, Established},	/* Receive_UPDATE_message       */
+    {fsm_ignore, Idle},		/* Receive_NOTIFICATION_message */
   },
 };
 
@@ -646,9 +618,9 @@ static char *bgp_event_str[] =
 };
 
 /* Execute event process. */
-event_process (struct thread *thread)
+int
+bgp_event (struct thread *thread)
 {
-  int ret;
   int event;
   struct peer *peer;
 
@@ -661,18 +633,14 @@ event_process (struct thread *thread)
 	 bgp_event_str[event]);
 
   /* Call function. */
-  ret = (*(FSM [peer->status - 1][event - 1].func))(peer);
+  (*(FSM [peer->status - 1][event - 1].func))(peer);
 
   /* If status is changed. */
   if (FSM [peer->status - 1][event - 1].next_state != peer->status)
     fsm_change_status (peer, FSM [peer->status -1][event - 1].next_state);
 
   /* Make sure timer is set. */
-  fsm_timer_set (peer);
-}
+  bgp_timer_set (peer);
 
-/* Add event to the peer. */
-event_add (struct peer *peer, int event) 
-{
-  thread_add_event (master, event_process, peer, event);
+  return 0;
 }

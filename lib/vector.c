@@ -156,6 +156,14 @@ vector_set_index (vector v, unsigned int i, void *val)
   return i;
 }
 
+/* Lookup vector, ensure it. */
+void *
+vector_lookup_index (vector v, unsigned int i)
+{
+  vector_ensure (v, i);
+  return v->index[i];
+}
+
 /* Unset value at specified index slot. */
 void
 vector_unset (vector v, unsigned int i)

@@ -45,9 +45,17 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #endif
 
 /* RIP timers */
+#define RIP_TEST
+
+#ifdef RIP_TEST
+#define RIP_FLASH_TIMER     10
+#define RIP_DELETE          30
+#define RIP_TIMEOUT         60
+#else
 #define RIP_FLASH_TIMER     30
 #define RIP_DELETE          60
 #define RIP_TIMEOUT        180
+#endif /* RIP_TEST */
 
 /* RIP port number. */
 #define RIP_PORT_DEFAULT   520
@@ -60,18 +68,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 struct rip 
 {
   int sock;			/* RIP socket. */
-  unsigned char   version;	/* Default version of rip instance. */
-  unsigned char multicast;	/* Do multicast treatment. */
+  u_char version;		/* Default version of rip instance. */
+  u_char multicast;		/* Do multicast treatment. */
+  struct thread *read;		/* Update timer. */
   struct thread *timer;		/* Update timer. */
 };
-
-#ifdef SUNOS_5
-#ifndef _RIPD_SUNOS_H
-#define _RIPD_SUNOS_H
-typedef unsigned int u_int32_t; 
-typedef unsigned short u_int16_t; 
-#endif /* _RIPD_SUNOS_H */
-#endif /* SUNOS_5 */
 
 /* RIP routing table entry which belong to rip_packet. */
 struct rte
@@ -101,12 +102,21 @@ union rip_buf
   char buf[RIP_PACKET_MAXSIZ];
 };
 
+/* RIP route information. */
 struct rip_info
 {
+  /* For doubly linked list. */
+  struct rip_info *next;
+  struct rip_info *prev;
+
+  int fib;			/* Forwarding information base. */
+  int type;			/* RIP|Static|Connected route type. */
+  int pref;			/* Preference of this route. */
+  u_int32_t tag;		/* Tag information of this route. */
   u_int32_t metric;		/* Metric of this route. */
   struct in_addr nexthop;	/* Nexthop of this route. */
-  u_int32_t tag;		/* Tag information of this route. */
-  struct in_addr gateway;	/* From which gateway this route is listen. */
+  struct in_addr from;		/* From which gateway this route is listen. */
+  struct interface *ifp;
   time_t timer;			/* Update timer of this route. */
 };
 
@@ -118,6 +128,7 @@ struct rip_interface
   int ri_split_horizon;
   int ri_default_send;
   int ri_default_receive;
+  int ri_multicast;
 };
 
 /* RIP accepet/announce methods. */
@@ -142,6 +153,10 @@ struct rip_interface
 #define RIP_DEFAULT_ACCEPT_NONE      1
 #define RIP_DEFAULT_ACCEPT           2
 
+/* RIP multicast configuration. */
+#define RIP_MULTICAST 0
+#define RIP_BROADCAST 1
+
 /* For easy string print out. */
 struct message
 {
@@ -154,35 +169,23 @@ struct message
 /* There is only one rip strucutre. */
 extern struct rip *rip;
 
-/**/
-#define st_1byte(val, pnt) \
-{ \
-    (*(u_char *)(pnt)++) = (u_char)(val); \
-}
+/* Prototypes. */
+void rip_start ();
+void rip_init ();
+void rip_rib_close ();
+void rip_if_init ();
+void rip_delete_rinfo (struct rip_info **rp, struct rip_info *rinfo);
+int rip_make_request (u_char *pnt, int version);
+int rip_udp_send (int sock, u_char *pnt, int size, struct sockaddr_in *dest);
+struct rip_info *rip_info_new ();
 
-#define st_2byte(val, pnt) \
-{\
-   u_int16_t t = htons((u_int16_t)(val)); \
-   bcopy (&t, (pnt), 2); \
-   (pnt) += 2;\
-}
+/* rip_interface.c */
+int if_check_address (struct in_addr addr);
+struct interface *if_lookup_address (struct in_addr addr);
+void rip_multicast_enable (int sock);
+void rip_request_all ();
+int zebra_get_interface (int sock, u_int16_t length);
 
-#define st_4byte(val, pnt) \
-{\
-   u_int32_t t = htonl((u_int32_t)(val)); \
-   bcopy (&t, (pnt), 4); \
-   (pnt) += 4;\
-}
-
-#define ld_1byte(val, pnt) \
-{ \
-  (val) = (u_char)(*(pnt)++); \
-}
-
-#define ld_4byte(val, pnt) \
-{ \
-  (val) = (u_int32_t)(*(pnt)++) << 24; \
-  (val) |= (u_int32_t)(*(pnt)++) << 16; \
-  (val) |= (u_int32_t)(*(pnt)++) << 8; \
-  (val) |= (u_int32_t)(*(pnt)++); \
-}
+int
+rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo, 
+	       struct sockaddr_in *from, struct interface *ifp);

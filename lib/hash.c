@@ -20,8 +20,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
-
-#include <string.h>		/* bzero */
+#include <string.h>
 
 #include "hash.h"
 #include "memory.h"

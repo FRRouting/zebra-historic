@@ -29,9 +29,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <netinet/tcp.h>
 #include <sys/uio.h>
 #include <arpa/inet.h>
@@ -44,10 +41,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "version.h"
 #include "vty.h"
 #include "command.h"
-#include "host.h"
 #include "sockunion.h"
 #include "thread.h"
 #include "memory.h"
+
+/* Extern host structure from command.c */
+extern struct host host;
 
 /* Vector which store each vty structure. */
 static vector vtyvec;
@@ -64,7 +63,7 @@ vty_out (struct vty *vty, char *format, ...)
   va_list args;
   int len;
   /* XXX need overflow check */
-  char buf[512];		
+  char buf[1024];
 
   /* vararg print */
   va_start (args, format);
@@ -72,7 +71,7 @@ vty_out (struct vty *vty, char *format, ...)
 #ifdef SUNOS_5
   vsprintf (buf, format, args);
 #else
-  vsnprintf (buf, sizeof (buf), format, args);
+  vsnprintf (buf, sizeof buf, format, args);
 #endif /* SUNOS_5 */
 
   len = strlen(buf);
@@ -80,7 +79,7 @@ vty_out (struct vty *vty, char *format, ...)
   if (len == sizeof (buf) - 1)
     log ("vty output buffer shortage, hope no problem!\n");
 
-  buffer_write (vty->obuf, buf, len);
+  buffer_write (vty->obuf, (u_char *)buf, len);
 
   va_end (args);
   return len;
@@ -122,30 +121,30 @@ vty_hello (struct vty *vty)
 static void
 vty_prompt (struct vty *vty)
 {
-  vty_out (vty, cmd_prompt (vty->node), host.name);
+  vty_out (vty, cmd_prompt (vty->node), host.name ? host.name : "Router");
 }
 
-/* Make echo off the vty interface. */
+/* Send WILL TELOPT_ECHO to remote server. */
 void
-vty_off_echo (struct vty *vty)
+vty_will_echo (struct vty *vty)
 {
   char cmd[] = { IAC, WILL, TELOPT_ECHO, '\0' };
   vty_out (vty, "%s", cmd);
 }
 
-/* Make suppress go ahead vty interface. */
+/* Make suppress Go-Ahead telnet option. */
 static void
-vty_off_go_ahead (struct vty *vty)
+vty_will_suppress_go_ahead (struct vty *vty)
 {
   char cmd[] = { IAC, WILL, TELOPT_SGA, '\0' };
   vty_out (vty, "%s", cmd);
 }
 
-/* Make don't go ahead vty interface. */
+/* Make don't use linemode over telnet. */
 static void
-vty_dont_go_ahead (struct vty *vty)
+vty_dont_linemode (struct vty *vty)
 {
-  char cmd[] = { IAC, DONT, TELOPT_SGA, '\0' };
+  char cmd[] = { IAC, DONT, TELOPT_LINEMODE, '\0' };
   vty_out (vty, "%s", cmd);
 }
 
@@ -158,27 +157,11 @@ vty_do_window_size (struct vty *vty)
 }
 
 #if 0 /* Currently not used. */
-/* Make echo on the vty interface. */
-static void
-vty_on_echo (struct vty *vty)
-{
-  char cmd[] = { IAC, WONT, TELOPT_ECHO, '\0' };
-  vty_out (vty, "%s", cmd);
-}
-
 /* Make don't use lflow vty interface. */
 static void
 vty_dont_lflow_ahead (struct vty *vty)
 {
   char cmd[] = { IAC, DONT, TELOPT_LFLOW, '\0' };
-  vty_out (vty, "%s", cmd);
-}
-
-/* Make don't use linemode vty interface. */
-static void
-vty_dont_linemode (struct vty *vty)
-{
-  char cmd[] = { IAC, DONT, TELOPT_LINEMODE, '\0' };
   vty_out (vty, "%s", cmd);
 }
 #endif /* 0 */
@@ -223,18 +206,20 @@ vty_auth (struct vty *vty, char *buf)
     {
       vty->fail++;
       if (vty->fail >= 3)
-	if (vty->node == AUTH_NODE)
-	  {
-	    vty_out (vty, "%% Bad passwords, too many failer!\r\n");
-	    vty->status = VTY_CLOSE;
-	  }
-	else			
-	  {
-	    /* AUTH_ENABLE_NODE */
-	    vty->fail = 0;
-	    vty_out (vty, "%% Bad passwords, too many failer!\r\n");
-	    vty->node = VIEW_NODE;
-	  }
+	{
+	  if (vty->node == AUTH_NODE)
+	    {
+	      vty_out (vty, "%% Bad passwords, too many failer!\r\n");
+	      vty->status = VTY_CLOSE;
+	    }
+	  else			
+	    {
+	      /* AUTH_ENABLE_NODE */
+	      vty->fail = 0;
+	      vty_out (vty, "%% Bad passwords, too many failer!\r\n");
+	      vty->node = VIEW_NODE;
+	    }
+	}
     }
 }
 
@@ -285,7 +270,7 @@ vty_write (struct vty *vty, char *buf, size_t nbytes)
     return;
 
   /* Should we do buffering here ?  And make vty_flush (vty) ? */
-  buffer_write (vty->obuf, buf, nbytes);
+  buffer_write (vty->obuf, (u_char *)buf, nbytes);
 }
 
 /* Basic function to insert character into vty. */
@@ -507,7 +492,7 @@ vty_end_config (struct vty *vty)
       vty->node = ENABLE_NODE;
       break;
     default:
-      /* Unknown node, we have to do nothing about it. */
+      /* Unknown node, we have to ignore it. */
       break;
     }
 
@@ -648,9 +633,7 @@ vty_complete_command (struct vty *vty)
 
   /* In case of 'help \t'. */
   if (isspace (vty->buf[vty->length - 1]))
-    {
-      vector_set (vline, '\0');
-    }
+    vector_set (vline, '\0');
 
   matched = cmd_complete_command (vline, vty, &ret);
   
@@ -703,8 +686,55 @@ vty_complete_command (struct vty *vty)
 static void
 vty_describe_command (struct vty *vty)
 {
+  int ret;
+  vector vline;
+  vector describe;
+  int i;
+  struct desc *desc;
+
+  vline = cmd_make_strvec (vty->buf);
+
+  /* In case of '> ?'. */
+  if (vline == NULL)
+    {
+      vline = vector_init (1);
+      vector_set (vline, '\0');
+    }
+  else 
+    if (isspace (vty->buf[vty->length - 1]))
+      vector_set (vline, '\0');
+
+  describe = cmd_describe_command (vline, vty, &ret);
+
   vty_out (vty, "\r\n");
-  config_help (NULL, vty, 0, NULL);
+
+  /* Ambiguous error. */
+  switch (ret)
+    {
+    case CMD_ERR_AMBIGUOUS:
+      cmd_free_strvec (vline);
+      vty_out (vty, "%% Ambiguous command.\r\n");
+      vty_prompt (vty);
+      vty_redraw_line (vty);
+      return;
+      break;
+    case CMD_ERR_NO_MATCH:
+      cmd_free_strvec (vline);
+      vty_out (vty, "%% There is no matched command.\r\n");
+      vty_prompt (vty);
+      vty_redraw_line (vty);
+      return;
+      break;
+    }  
+
+  /* Print out description. */
+  for (i = 0; i < vector_max (describe); i++)
+    if ((desc = vector_slot (describe, i)) != NULL)
+      vty_out (vty, "  %-17s %s\r\n", desc->cmd, desc->str ? desc->str : "");
+
+  cmd_free_strvec (vline);
+  desc_vector_free (describe);
+
   vty_prompt (vty);
   vty_redraw_line (vty);
 }
@@ -739,16 +769,57 @@ vty_hist_add (struct vty *vty)
   vty->hp = vty->hindex;
 }
 
+/* #define TELNET_OPTION_DEBUG */
+
 /* Get telnet window size. */
 static int
 vty_telnet_option (struct vty *vty, unsigned char *buf, int nbytes)
 {
-#if 0
+#ifdef TELNET_OPTION_DEBUG
   int i;
 
   for (i = 0; i < nbytes; i++)
-    vty_out (vty, "[%d] %x\r\n", i, buf[i]);
-#endif
+    {
+      switch (buf[i])
+	{
+	case IAC:
+	  vty_out (vty, "IAC ");
+	  break;
+	case WILL:
+	  vty_out (vty, "WILL ");
+	  break;
+	case WONT:
+	  vty_out (vty, "WONT ");
+	  break;
+	case DO:
+	  vty_out (vty, "DO ");
+	  break;
+	case DONT:
+	  vty_out (vty, "DONT ");
+	  break;
+	case SB:
+	  vty_out (vty, "SB ");
+	  break;
+	case SE:
+	  vty_out (vty, "SE ");
+	  break;
+	case TELOPT_ECHO:
+	  vty_out (vty, "TELOPT_ECHO \r\n");
+	  break;
+	case TELOPT_SGA:
+	  vty_out (vty, "TELOPT_SGA \r\n");
+	  break;
+	case TELOPT_NAWS:
+	  vty_out (vty, "TELOPT_NAWS \r\n");
+	  break;
+	default:
+	  vty_out (vty, "%x ", buf[i]);
+	  break;
+	}
+    }
+  vty_out (vty, "\r\n");
+
+#endif /* TELNET_OPTION_DEBUG */
 
   switch (buf[1])
     {
@@ -922,6 +993,7 @@ vty_read (struct thread *thread)
 	  vty_forward_char (vty);
 	  break;
 	case CTRL('H'):
+	case 0x7f:
 	  vty_delete_backward_char (vty);
 	  break;
 	case CTRL('K'):
@@ -954,7 +1026,10 @@ vty_read (struct thread *thread)
 	  vty_complete_command (vty);
 	  break;
 	case '?':
-	  vty_describe_command (vty);
+	  if (vty->node == AUTH_NODE || vty->node == AUTH_ENABLE_NODE)
+	    vty_self_insert (vty, buf[i]);
+	  else
+	    vty_describe_command (vty);
 	  break;
 	case '\033':
 	  if (i + 1 < nbytes && buf[i + 1] == '[')
@@ -1052,14 +1127,13 @@ vty_create (int vty_sock, union sockunion *su)
   else
     vty_out (vty, "\r\nUser Access Verification\r\n\r\n");
 
-  /* Setting up terminal */
-  vty_off_echo (vty);
-  vty_off_go_ahead (vty);
-  vty_dont_go_ahead (vty);
-  vty_do_window_size (vty);
+  /* Setting up terminal. */
+  vty_will_echo (vty);
+  vty_will_suppress_go_ahead (vty);
 
+  vty_dont_linemode (vty);
+  vty_do_window_size (vty);
   /* vty_dont_lflow_ahead (vty); */
-  /* vty_dont_linemode (vty); */
 
   vty_prompt (vty);
 
@@ -1221,7 +1295,6 @@ vty_read_config (char *config_file,
     {
       confp = fopen (config_current_dir, "r");
 
-#ifdef SYSCONFDIR
       if (confp == NULL)
 	{
 	  confp = fopen (config_default_dir, "r");
@@ -1236,16 +1309,6 @@ vty_read_config (char *config_file,
 	}
       else
 	config_file = config_current_dir;
-#else
-      if (confp == NULL)
-	{
-	  fprintf (stderr, "can't open configuration file [%s]\n",
-		   config_current_dir);
-	  exit (1);
-	}
-      else
-	config_file = config_current_dir;
-#endif /* SYSCONFDIR*/
     }  
   vty_read_file (confp);
 
@@ -1255,7 +1318,7 @@ vty_read_config (char *config_file,
 }
 
 /* Master of the threads. */
-/*extern struct thread_master *master;*/
+/* extern struct thread_master *master; */
 struct thread_master *master;
 
 static void
@@ -1280,7 +1343,7 @@ vty_event (enum event event, int sock, struct vty *vty)
 DEFUN (config_who,
        config_who_cmd,
        "who",
-       "Display who is on vty.")
+       "Display who is on vty\n")
 {
   int i;
   struct vty *v;

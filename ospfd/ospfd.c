@@ -1,4 +1,4 @@
-/* Forwarding information base (Normally this is kernel routing table). 
+/* OSPFd
    Copyright (C) 1998 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
@@ -18,14 +18,8 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-/* FIB add route messaeg received. */
-fib_add ()
-{
-  ;
-}
-
-/* FIB delete route messaeg received. */
-fib_delete ()
+void
+ospf_terminate ()
 {
   ;
 }

@@ -18,14 +18,6 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef SUNOS_5
-#ifndef _BGPD_SUNOS_H
-#define _BGPD_SUNOS_H
-typedef unsigned int u_int32_t; 
-typedef unsigned short u_int16_t; 
-#endif /* _BGPD_SUNOS_H */
-#endif /* SUNOS_5 */
-
 /* Community attribute. */
 struct community 
 {
@@ -45,6 +37,9 @@ struct community
 #define com_nthval(X,n)  (*((X)->val + (n)))
 
 /* Prototypes of community attribute functions. */
+void community_init ();
 struct community *community_parse (char *, u_short);
 void community_free (struct community *);
 void community_print (FILE *, struct community *);
+void community_print_vty (struct vty *, struct community *);
+void community_print_all_vty (struct vty *);

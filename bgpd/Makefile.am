@@ -1,6 +1,6 @@
 ## Process this file with automake to produce Makefile.in.
 
-INCLUDES = -I.. -I$(top_srcdir)/lib -I$(top_srcdir)/zebra
+INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir)/lib -I$(top_srcdir)/zebra
 DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
 sbin_PROGRAMS = bgpd

@@ -1,3 +1,79 @@
+1998-12-15  Magnus Ahltorp <map@stacken.kth.se>
+
+	* interface.c: Header include added.
+
+1998-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt.h (kernel_delete_ipv6): change int index to unsigned int index.
+
+1998-12-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (interface_list_ioctl): interface flag must be
+	checked before check addresses of the interface.
+
+1998-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (INCLUDES): add @INCLUDES@ for Linux IPv6.
+
+1998-10-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ioctl.c: Linux version before 2.1.0 need interface route setup.
+
+1998-09-15  HEO SeonMeyong  <seirios@matrix.iri.co.jp>
+
+	* change HYDRANGEA to KAME
+
+1998-09-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (if_addr_ioctl): set address family for getting
+	interface's address.
+	(if_get_index): silently return when can't get interface's index.
+
+1998-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* main.c (main): batch mode option '-b' added.
+
+1998-08-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ioctl.c (if_set_prefix): add `ip address IPV4ADDR' command.
+	* interface.c (shutdown_if): add interface shutdown and no
+	shutdown command.
+
+1998-08-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_add_ipv6): delete rib_add_in6.
+
+1998-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* main.c: retain flag is added.
+
+1998-07-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rtable.[ch]: merged with rib.[ch]
+
+1998-07-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* connected.h: renamed from ifa.h.
+
+1998-06-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rename if.c to interface.c
+	* rename ifa.c to connected.c
+
+	* Porting to Debian GNU/Linux 2.0 (hamm).
+
+1998-06-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c: renamed from krt_netlink.c
+	
+	* fib.c: deleted.
+	* rt_kvm.c: deleted.
+	* rtread_getmsg.c: deleted.
+
+1998-06-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c (multicast): add multicast flag [un]set fucntion.
+
 1998-05-19  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
 
 	* rt_socket.c: Modify for compile on Solaris, but dont't work it.

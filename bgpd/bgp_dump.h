@@ -57,3 +57,11 @@ extern int Debug_Radix;
 #define	SEND	 4
 #define	RECV	 5
 #define	DETAIL	 6
+
+/* Prototypes. */
+void bgp_dump_init ();
+void bgp_dump_header (struct bgp_header *bgp_header);
+
+char *mes_lookup (message *meslist, int max, int index);
+
+int debug (unsigned int option);

@@ -20,22 +20,24 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 
 #include "thread.h"
-#include "ripngd.h"
-#include "zebra.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
-#include "route.h"
+#include "prefix.h"
 #include "buffer.h"
+#include "log.h"
+#include "network.h"
+#include "client.h"
+
+#include "zebra.h"
+#include "ripngd.h"
 
 extern struct thread_master *master;
 
@@ -54,17 +56,19 @@ struct zebra
 struct zebra *zebra = &_zebra;
 
 /* Here, zebra may send interface information or redistributed route. */
+int
 zebra_read (struct thread *thread)
 {
   u_char buf [512];
-  u_int32_t length;
-  u_int32_t command;
+  u_int16_t length;
+  u_int8_t command;
   int nbyte;
   int sock;
   u_char *pnt = buf;
+  void zebra_get_interface (int, u_int16_t);
 
   sock = thread->u.fd;
-  nbyte = readn (sock, buf, 8);
+  nbyte = readn (sock, buf, 3);
 
   /* zebra socket is closed. */
   if (nbyte == 0) 
@@ -72,67 +76,70 @@ zebra_read (struct thread *thread)
       log ("connection closed socket [%d]\n", sock);
       close (sock);
       zebra->sock = -1;
-      return;
+      return -1;
     }
 
-  ld_4byte (length, pnt);
-  ld_4byte (command, pnt);
+  GETW (length, pnt);
+  GETC (command, pnt);
 
-  switch (command)
-    {
-    case ZEBRA_IPV4_ROUTE_ADD:
-      break;
-    case ZEBRA_IPV4_ROUTE_DELETE:
-      break;
-    case ZEBRA_GET_ALL_INTERFACE:
-      zebra_get_interface (sock, length);
-    defautl:
-      break;
-    }
+  if (command != ZEBRA_GET_ALL_INTERFACE)
+    return -1;
 
+  zebra_get_interface (sock, length);
   zebra->t_read = thread_add_read (master, zebra_read, NULL, 
 				   zebra->sock);
+  return 0;
 }
 
 /* Write buffer to zebra socket. */
+int
 zebra_write (struct stream *s)
 {
   int nbytes;
+
+  nbytes = 0;
 
   if (zebra->sock >= 0)
     {
       nbytes = writen (zebra->sock, s->data, s->ep);
       if (nbytes != s->ep)
-	log ("can't write enough packet\n");
+	{
+	  log ("can't write enough packet\n");
+	  return nbytes;
+	}
 
       if (nbytes < 0)
 	{
 	  close (zebra->sock);
 	  zebra->sock = -1;
+	  return nbytes;
 	}
     }
+  return nbytes;
 }
 
 /* RIP configuration write function. */
-zebra_config_write (struct vty *vty, vector v)
+int
+zebra_config_write (struct vty *vty)
 {
   if (zebra->enable)
     vty_out (vty, "router zebra%s", VTY_NEWLINE);
   if (zebra->r_ripng)
     vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
+  return 0;
 }
 
 DEFUN (redistribute_ripng,
        redistribute_ripng_cmd,
        "redistribute ripng",
-       "Redistribute ripng route to zebra daemon\n")
+       "Redistribute ripng route to zebra daemon\n"
+       "RIPng configuration\n")
 {
-  /* Set ripng redistribute flag. */
-  zebra->r_ripng;
   return CMD_SUCCESS;
 }
 
 /* Make zebra connection. */
+int
 zebra_create ()
 {
   zebra->sock = zebra_connect ();
@@ -144,13 +151,14 @@ zebra_create ()
 				   zebra->sock);
   zebra_get_all_interface (zebra->sock);
 
-  return 1;
+  return 0;
 }
 
 DEFUN (router_zebra,
        router_zebra_cmd,
        "router zebra",
-       "Make connection to zebra daemon.")
+       "Enable a routing process\n"
+       "Make connection to zebra daemon\n")
 {
   int ret;
 
@@ -161,7 +169,7 @@ DEFUN (router_zebra,
   if (zebra->sock >= 0)
     {
       vty_out (vty, "already connected to zebra\r\n");
-      return;
+      return CMD_WARNING;
     }
 
   ret = zebra_create ();
@@ -180,6 +188,7 @@ struct cmd_node zebra_node =
   "%s(config-router)# ",
 };
 
+void
 zebra_init ()
 {
   /* Set default value to zebra structure. */

@@ -1,4 +1,4 @@
-/* interface looking up by ioctl ().
+/* Interface looking up by ioctl ().
    Copyright (C) 1997, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
@@ -21,6 +21,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <config.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>		/* for close () */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -29,20 +30,230 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #endif /* HAVE_SYS_SOCKIO_H */
 #include <net/if.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <errno.h>
 
 #include "linklist.h"
 #include "if.h"
 #include "sockunion.h"
-#include "ifa.h"
+#include "prefix.h"
 #include "memory.h"
 #include "log.h"
+#include "ioctl.h"
+#include "dropline.h"
+#include "connected.h"
+
+/* Path to device proc file system. */
+#ifndef _PATH_PROCNET_DEV
+#define _PATH_PROCNET_DEV             "/proc/net/dev"
+#endif /* _PATH_PROCNET_DEV */
+
+#define IF_BUFSIZ 1024
+#define IF_NAMELEN 10
+
+/* For interface_list_ioctl ().  SIOCGIFCONF needs pre allocated
+   interface information buffer. */
+#define MAX_INTERFACE 32
+
+/* Get interface's index by ioctl. */
+void
+if_get_index (struct interface *ifp)
+{
+  int ret;
+  static int fake_index = 1;
+
+  struct ifreq ifreq;
+
+  ifreq_set_name (&ifreq, ifp);
+  
+#ifdef SIOCGIFINDEX
+  ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
+
+  /* Make fake index for the interface */
+  if (ret < 0)
+    {
+      ifp->index= fake_index++;
+      return;
+    }
+  ifp->index = ifreq.ifr_ifindex;
+  /* If there is method to get interface's index. Make fake index for
+     the interface. */
+  ifp->index= fake_index++;
+#endif /* SIOCGIFINDEX */
+}
+
+/* Interface address lookup by ioctl.  This function only looks up
+   IPv4 address. */
+int
+if_addr_ioctl (struct interface *ifp, char *alias)
+{
+  int ret;
+  struct ifreq ifreq;
+  struct sockaddr_in addr;
+  struct sockaddr_in mask;
+  struct sockaddr_in sin_broad;
+  struct in_addr *broad;
+  u_char prefixlen;
+
+  /* Set interface's name and address family. */
+  if (alias)
+    strncpy (ifreq.ifr_name, alias, IFNAMSIZ);
+  else
+    ifreq_set_name (&ifreq, ifp);
+  ifreq.ifr_addr.sa_family = AF_INET;
+
+#ifdef SUNOS_5
+  ret = if_ioctl (SIOCGIFFLAGS, (caddr_t) &ifreq);
+  if (ret < 0)
+    {
+      log ("ioctl SIOCGIFLAGS fail: %s\n", strerror (errno));
+      return 0;
+    }
+  
+  ret = if_ioctl (SIOCGIFMTU, (caddr_t) & ifreq);
+  if (ret < 0)
+    {
+      log ("ioctl SIOCGIFMTU fail: %s\n", strerror (errno));
+      return 0;
+    }
+  memcpy (&mask, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
+#else  /* ! SUNOS_5 */
+  /* Get interface's address. */
+  ret = if_ioctl (SIOCGIFADDR, (caddr_t) &ifreq);
+  if (ret < 0) 
+    {
+      if (errno == EADDRNOTAVAIL)
+	return 0;
+      log ("ioctl SIOCGIFADDR fail: %s\n", strerror (errno));
+      return ret;
+    }
+  memcpy (&addr, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
+
+  /* Get interface's mask. */
+  ret = if_ioctl (SIOCGIFNETMASK, (caddr_t) &ifreq);
+  if (ret < 0) 
+    {
+      if (errno == EADDRNOTAVAIL) 
+	return 0;
+      log ("ioctl SIOCGIFNETMASK fail: %s\n", strerror (errno));
+      return ret;
+    }
+  memcpy (&mask, &ifreq.ifr_netmask, sizeof (struct sockaddr_in));
+  prefixlen = ip_masklen (mask.sin_addr);
+#endif /* SUNOS_5 */
+
+  /* Point to point or borad cast address pointer init. */
+  broad = NULL;
+
+  /* Point to point destination address check. */
+  if (ifp->flags & IFF_POINTOPOINT) 
+    {
+      ret = if_ioctl (SIOCGIFDSTADDR, (caddr_t) &ifreq);
+      if (ret < 0) 
+	{
+	  if (errno == EADDRNOTAVAIL) 
+	    return 0;
+	  log ("ioctl SIOCGIFDSTADDR fail: %s\n", strerror (errno));
+	  return ret;
+	}
+      memcpy (&sin_broad, &ifreq.ifr_dstaddr, sizeof (struct sockaddr_in));
+      broad = &sin_broad.sin_addr;
+    }
+
+  /* Broadcast address check. */
+  if (ifp->flags & IFF_BROADCAST)
+    {
+      ret = if_ioctl (SIOCGIFBRDADDR, (caddr_t) &ifreq);
+      if (ret < 0) 
+	{
+	  if (errno == EADDRNOTAVAIL) 
+	    return 0;
+	  log ("ioctl SIOCGIFBRDADDR fail: %s\n", strerror (errno));
+	  return ret;
+	}
+      memcpy (&sin_broad, &ifreq.ifr_broadaddr, sizeof (struct sockaddr_in));
+      broad = &sin_broad.sin_addr;
+    }
+
+  connected_add_ipv4 (ifp, &addr.sin_addr, prefixlen, broad);
+
+  return 0;
+}
+
+/* Interface lookup by /proc/net/dev. */
+void
+interface_list_proc ()
+{ 
+  FILE *fp;
+  char buf[IF_BUFSIZ];
+
+  fp = fopen (_PATH_PROCNET_DEV, "r");
+  if (fp == NULL) 
+    {
+      log ("Can't open device %s\n", _PATH_PROCNET_DEV);
+      exit (1);
+    }
+
+  /* Drop two header line. */
+  dropline (fp);
+  dropline (fp);
+
+  /* Look up all inteface from /proc/net/dev. */
+  while (fgets (buf, IF_BUFSIZ, fp) != NULL)
+    {
+      int i, j;
+      int alias;
+      char *index;
+      char name[IF_NAMELEN];
+      char ifname[IF_NAMELEN];
+      struct interface *ifp;
+
+      i = 0;
+      j = 0;
+
+      index = strrchr (buf, ':');
+      *index = '\0';
+
+      /* Skip white space. */
+      while (buf[i] == ' ')
+	i++;
+
+      /* Get interface name which may includes aliase interface. */
+      while (j < IF_NAMELEN && buf[i] != '\0')
+	name[j++] = buf[i++];
+      name[j] = '\0';
+
+
+      /* Get pure interface name. */
+      for (i = 0; i < IF_NAMELEN && name[i] != ':' && name[i] != '\0'; i++)
+	ifname[i] = name[i];
+      ifname[i] = '\0';
+
+      alias = (i == j) ? 0 : 1;
+
+      ifp = if_get_by_name (ifname);
+
+      if (!alias)
+	{
+	  if (log_mode)
+	    log ("interface %s is added.\n", name);
+	  if_get_index (ifp);
+	  if_get_flags (ifp);
+	  if_addr_ioctl (ifp, NULL);
+	  if_get_mtu (ifp);
+	  if_get_metric (ifp);
+	}
+      else
+	{
+	  if (log_mode)
+	    log ("interface alias %s is added.\n", name);
+	  if_addr_ioctl (ifp, name);
+	}
+    }
+}
 
 /* Interface looking up using SIOCGIFCONF and ioctl. */
-interface_list ()
+void
+interface_list_ioctl ()
 {
   int sock;
   struct ifconf ifconf;
@@ -50,7 +261,6 @@ interface_list ()
   caddr_t ifpnt, iflim;
 
   /* We must setup buffer and it's size for ioctl really ugly... */
-#define MAX_INTERFACE 32
   ifconf.ifc_len = MAX_INTERFACE * sizeof (struct ifreq);
   ifconf.ifc_buf = (caddr_t) XMALLOC (0, ifconf.ifc_len);
 
@@ -73,9 +283,17 @@ interface_list ()
 
   while (ifpnt < iflim) 
     {
+      struct interface *ifp;
+
       ifreq = (struct ifreq *) ifpnt;
-    
-      if_add_ioctl (ifreq, ifreq->ifr_addr);
+
+      ifp = if_get_by_name (ifreq->ifr_name);
+
+      if_get_index (ifp);
+      if_get_flags (ifp);
+      if_addr_ioctl (ifp, NULL);
+      if_get_mtu (ifp);
+      if_get_metric (ifp);
 
 #ifdef HAVE_SIN_LEN
       ifpnt += sizeof ifreq->ifr_name + ifreq->ifr_addr.sa_len;
@@ -83,159 +301,21 @@ interface_list ()
       ifpnt += sizeof (struct ifreq);
 #endif /* HAVE_SIN_LEN */
     }
-#ifdef HAVE_IPV6
-  interface_list_ipv6 ();
-#endif /* HAVE_IPV6 */
 }
-
-/* interface adding function called from interface_list(ioctl) */
-if_add_ioctl (struct ifreq *ifreq, struct sockaddr addr)
-{
-  int sock;
-  struct interface *ifp;
-
-  /* Is this new interface ? */
-  ifp = if_lookup_by_name (ifreq->ifr_name);
-
-  /* If this is new interface then make one. */
-  if (ifp == NULL) {
-    {
-      ifp = if_new ();
-      /* Copy inteface name. XXX We will need ifname:0 treatment here. */
-      strncpy (ifp->name, ifreq->ifr_name, IFNAMSIZ);
-    }
-  }
-  ifp->index = 0;
-
-  /* get interface values */
-  if_get_addr (ifp);
-  if_get_flags (ifp);
-  if_get_mtu (ifp);
-  if_get_metric (ifp);
-}
-
-/* get interface flags */
-if_get_flags (struct interface *ifp)
-{
-  int ret;
-  struct ifreq ifreq;
-
-  ifreq_set_name (&ifreq, ifp);
-
-  ret = if_ioctl (SIOCGIFFLAGS, (caddr_t) &ifreq);
-  if (ret < 0) 
-    {
-      /* XXX */
-      perror ("ioctl");
-      exit (1);
-    }
-
-  ifp->flags = ifreq.ifr_flags & 0x0000ffff;
-}
-
-if_get_addr (struct interface *ifp)
-{
-  int ret;
-  struct if_addr *ifa;
-  struct ifreq ifreq;
-  
-  ifa = (struct if_addr *) ifa_new ();
-
-  ifreq_set_name (&ifreq, ifp);
-
-  /* Get interface's address. */
-  ret = if_ioctl (SIOCGIFADDR, (caddr_t) &ifreq);
-  if (ret < 0) 
-    {
-      if (errno == EADDRNOTAVAIL) 
-	return;
-      perror ("ioctl");
-      exit (1);
-    }
-  ifa->ifa_addr.sa = ifreq.ifr_addr;
-
-  /* Do we need tunnel interface treatment here? */
-
-#ifndef SUNOS_5
-  /* Get interface's mask */
-  ret = if_ioctl (SIOCGIFNETMASK, (caddr_t) &ifreq);
-  if (ret < 0) 
-    {
-      if (errno == EADDRNOTAVAIL) 
-	return;
-      perror ("ioctl");
-      exit (1);
-    }
-  ifa->ifa_mask.sa = ifreq.ifr_netmask;
-  ifa->ifa_mask.sa.sa_family = ifa->ifa_addr.sa.sa_family;
-#endif /* SUNOS_5 */
-
-  /* Get interface's destination address. */
-  if (ifp->flags, IFF_POINTOPOINT) 
-    {
-      ret = if_ioctl (SIOCGIFDSTADDR, (caddr_t) &ifreq);
-      if (ret < 0) 
-	{
-	  if (errno == EADDRNOTAVAIL) 
-	    return;
-	  perror ("ioctl");
-	  exit (1);
-	}
-      ifa->ifa_dest.sa = ifreq.ifr_dstaddr;
-    }
-
-  if (ifp->flags, IFF_BROADCAST)
-    {
-      ret = if_ioctl (SIOCGIFBRDADDR, (caddr_t) &ifreq);
-      if (ret < 0) 
-	{
-	  if (errno == EADDRNOTAVAIL) 
-	    return;
-	  perror ("ioctl");
-	  exit (1);
-	}
-      ifa->ifa_dest.sa = ifreq.ifr_dstaddr;
-    }
-
-  list_add_node (ifp->addr, ifa);
-
-  /* Add connected route to rib. */
-  ifa_rib_insert (ifa, ifp);
-}
-
 
 #ifdef HAVE_IPV6
-/* This code will be only for Linux. */
+/* This code will be only for Linux.  Proc file system for IPv6
+   interface information. */
 
-/* Proc file system for IPv6 interface information. */
 #ifndef _PATH_PROCNET_IFINET6
 #define _PATH_PROCNET_IFINET6          "/proc/net/if_inet6"
 #endif /* _PATH_PROCNET_IFINET6 */
 
-#define IF_BUFSIZ 1024
-
-#include "route.h"
-
-str2in6_addr (char *str, struct in6_addr *addr)
-{
-  int i;
-  unsigned int x;
-
-  /* %x must point to unsinged int */
-  for (i = 0; i < 16; i++)
-    {
-      sscanf (str + (i * 2), "%02x", &x);
-      addr->s6_addr[i] = x & 0xff;
-    }
-}
-
-int
+void
 interface_list_ipv6 ()
 {
   FILE *fp;
   char buf[IF_BUFSIZ];
-
-  struct if_addr *ifa;
 
   /* Open /proc filesyste. */
   fp = fopen (_PATH_PROCNET_IFINET6, "r");
@@ -243,7 +323,7 @@ interface_list_ipv6 ()
     {
       log_warn ("Can't open %s : %s\n", _PATH_PROCNET_IFINET6, 
 		strerror (errno));
-      return -1;
+      return;
     }
   
   while (fgets (buf, IF_BUFSIZ, fp) != NULL)
@@ -253,8 +333,7 @@ interface_list_ipv6 ()
       int ifindex, plen, scope, status;
       char ifstr[100];
       struct interface *ifp;
-
-      struct prefix_in6 *p;
+      struct prefix_ipv6 p;
 
       n = sscanf (buf, "%32s %02x %02x %02x %02x %s", 
 		  addr, &ifindex, &plen, &scope, &status, ifstr);
@@ -272,21 +351,39 @@ interface_list_ipv6 ()
 	}
       ifp->index = ifindex;
       
-#if 0 /* I will use this code when ifa strucutre moved to prefix union. */
-      p = prefix_in6_new ();
-      str2in6_addr (addr, &p->prefix);
-      p->mask = plen;
-      dump_route_in6 (p);
-#endif /* 0 */
+      str2in6_addr (addr, &p.prefix);
+      p.prefixlen = plen;
 
-      ifa = ifa_new ();
-      ifa->ifa_addr.sa.sa_family = AF_INET6;
-      ifa->ifa_mask.sa.sa_family = AF_INET6;
-      str2in6_addr (addr, &ifa->ifa_addr.sin6.sin6_addr);
-      masklen2ip6 (plen, &ifa->ifa_mask.sin6.sin6_addr);
-      
-      list_add_node (ifp->addr, ifa);
-      ifa_rib_insert (ifa, ifp);
+      connected_add_ipv6 (ifp, &p.prefix, p.prefixlen, NULL);
     }
 }
 #endif /* HAVE_IPV6 */
+
+void
+interface_status ()
+{
+  /* dummy */
+}
+
+void
+interface_status_ipv6 ()
+{
+  /* dummy */
+}
+
+/* Lookup all interface and get detailed information of it. */
+void
+interface_list ()
+{
+#ifndef SUNOS_5
+  interface_list_proc ();
+#ifdef HAVE_IPV6
+  interface_list_ipv6 ();
+#endif /* HAVE_IPV6 */
+#else /* XXX: SUNOS_5 */
+  interface_status ();
+#ifdef HAVE_IPV6
+  interface_status_ipv6 ();
+#endif /* HAVE_IPV6 */
+#endif /* !SUNOS_5 */
+}

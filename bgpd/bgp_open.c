@@ -18,140 +18,24 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef HAVE_CONFIG_H
 #include <config.h>
-#endif /* HAVE_CONFIG_H */
-
 #include <sys/types.h>
+#include <netinet/in.h>
+#include <sys/time.h>
+
+#include "vty.h"
+#include "linklist.h"
+#include "prefix.h"
+#include "log.h"
+#include "roken.h"
+#include "buffer.h"
+#include "thread.h"
 
 #include "bgpd.h"
+#include "bgp_attr.h"
 #include "bgp_peer.h"
-
-void capability_parse (caddr_t *pnt, u_char length);
-
-/* Parse open option */
-bgp_open_option_parse (caddr_t *pnt, u_char length)
-{
-  caddr_t *lim;
-  u_char opt_type;
-  u_char opt_length;
-
-  lim = pnt + length;
-  while (pnt < lim) {
-    ld_1byte (opt_type, pnt);
-    ld_1byte (opt_length, pnt);
-
-    switch (opt_type)
-      {
-      case BGP_OPEN_OPT_AUTH:
-	/* auth_parse (pnt, opt_length); */
-	break;
-      case BGP_OPEN_OPT_CAP:
-	capability_parse (pnt, opt_length);
-	break;
-      default:
-	/* Unknown open option parameter */
-	break;
-      }
-    pnt += opt_length;
-  }
-}
-
-/* BGP open message read. Should be called from finite state machine. */
-bgp_open_recv (struct peer *peer)
-{
-  struct bgp_open open;
-  u_char *pnt = peer->read_buf;
-  
-  peer->open_in++;
-
-  ld_1byte (open.version, pnt);
-  ld_2byte (open.asno, pnt);
-  ld_2byte (open.holdtime, pnt);
-  ld_4octet (open.ident, pnt);
-  ld_1byte (open.optlen, pnt);
-
-  peer->ident = open.ident;
-  peer->v_holdtime = open.holdtime;
-
-  if (open.optlen != 0) 
-    bgp_open_option_parse (pnt, open.optlen);
-
-  if (dump_open)
-    bgp_open_dump(&open, peer, 2);
-
-  /* Peer BGP version check. */
-  if (open.version != BGP_VERSION_4 && open.version != BGP_VERSION_5)
-    {
-      /* If BGP version doesn't match... */
-      bgp_notify_send (peer, 
-		       BGP_NOTIFY_OPEN_ERR, 
-		       BGP_NOTIFY_OPEN_UNSUP_VERSION);
-      return;
-    }
-  
-  if (open.asno != peer->as)
-    {
-      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR, BGP_NOTIFY_OPEN_BAD_PEER_AS);
-      bgp_clear (peer, 1);
-      return ;
-    }
-
-  event_add (peer, Receive_OPEN_message);
-}
-
-
-/* draft-ietf-idr-bgp4-cap-neg-01.txt
-
-4. Capabilities Optional Parameter (Parameter Type 2):
-
-   This is an Optional Parameter that is used by a BGP speaker to convey
-   to its BGP peer the list of capabilities supported by the speaker.
-
-   The parameter contains one or more triples <Capability Code,
-   Capability Length, Capability Value>, where each triple is encoded as
-   shown below:
-
-
-      +------------------------------+
-      | Capability Code (1 octet)    |
-      +------------------------------+
-      | Capability Length (1 octet)  |
-      +------------------------------+
-      | Capability Value (variable)  |
-      +------------------------------+
-*/
-
-/* BGP open message capability. */
-struct capability 
-{
-  u_char code;
-  u_char length;
-  u_char *val;
-};
-
-/* Parse given capability. */
-void
-capability_parse (caddr_t *pnt, u_char length) 
-{
-  struct capability *cap;
-
-  /* Fetch structure to the byte stream. */
-  cap = (struct capability *) pnt;
-
-  /* At this point only code that we know is MP Capability Code. */
-  switch (cap->code)
-    {
-    case 0x01:
-      /* MP Capability Code. */
-      mp_capability_negotiation (pnt, length);
-      break;
-    default:
-      /* Unknown capability. */
-      log_warn ("");
-      break;
-    }
-}
+#include "bgp_dump.h"
+#include "bgp_fsm.h"
 
 /* draft-marques-bgp4-cap-mp-01.txt
 
@@ -201,7 +85,44 @@ struct mp_capability
   u_char safi;
 };
 
+/* For debug purpose. */
+void
+mp_capability_print ()
+{
+  ;
+}
+
+/* draft-ietf-idr-bgp4-cap-neg-01.txt
+
+4. Capabilities Optional Parameter (Parameter Type 2):
+
+   This is an Optional Parameter that is used by a BGP speaker to convey
+   to its BGP peer the list of capabilities supported by the speaker.
+
+   The parameter contains one or more triples <Capability Code,
+   Capability Length, Capability Value>, where each triple is encoded as
+   shown below:
+
+
+      +------------------------------+
+      | Capability Code (1 octet)    |
+      +------------------------------+
+      | Capability Length (1 octet)  |
+      +------------------------------+
+      | Capability Value (variable)  |
+      +------------------------------+
+*/
+
+/* BGP open message capability. */
+struct capability 
+{
+  u_char code;
+  u_char length;
+  u_char *val;
+};
+
 /* Check my capability */
+void
 mp_capability_negotiation (caddr_t start, u_char length)
 {
   caddr_t pnt;
@@ -215,8 +136,127 @@ mp_capability_negotiation (caddr_t start, u_char length)
     }
 }
 
-/* For debug purpose. */
-mp_capability_print ()
+/* Parse given capability. */
+void
+capability_parse (u_char *pnt, u_char length) 
 {
-  ;
+  struct capability *cap;
+
+  /* Fetch structure to the byte stream. */
+  cap = (struct capability *) pnt;
+
+  /* At this point only code that we know is MP Capability Code. */
+  switch (cap->code)
+    {
+    case 0x01:
+      /* MP Capability Code. */
+      mp_capability_negotiation (pnt, length);
+      break;
+    default:
+      /* Unknown capability. */
+      log_warn ("");
+      break;
+    }
+}
+
+/* Parse open option */
+void
+bgp_open_option_parse (u_char *pnt, u_char length)
+{
+  u_char *lim;
+  u_char opt_type;
+  u_char opt_length;
+
+  lim = pnt + length;
+  while (pnt < lim) {
+    opt_type = *pnt++;
+    opt_length = *pnt++;
+
+    switch (opt_type)
+      {
+      case BGP_OPEN_OPT_AUTH:
+	/* auth_parse (pnt, opt_length); */
+	break;
+      case BGP_OPEN_OPT_CAP:
+	capability_parse (pnt, opt_length);
+	break;
+      default:
+	/* Unknown open option parameter */
+	break;
+      }
+    pnt += opt_length;
+  }
+}
+
+#define PACKET_SEND 1
+#define PACKET_RECV 2
+
+/* Open packet dump */
+void
+bgp_open_dump (struct bgp_open *bgp_open, struct peer *peer, int direct)
+{
+  /* decide whether dump or not */
+  if (direct == PACKET_RECV &&
+      IS_SET(dump_open, DUMP_SEND)) {
+
+    if (IS_SET(dump_open, DUMP_DETAIL)) {
+      /* detail */
+      log ( "Open: peer(%s) version(%d) AS(%d) holdtime(%d)\n"
+	       "      ident(%lu) optlen(%d)\n",
+	       peer->host,
+	       bgp_open->version, bgp_open->asno, bgp_open->holdtime,
+	       bgp_open->ident, bgp_open->optlen);
+    } else {
+      /* normal */
+      log ( "Open: peer(%s)\n",
+	       peer->host);
+    }
+    log_flush ();
+  }
+}
+
+/* BGP open message read. Should be called from finite state machine. */
+void
+bgp_open_recv (struct peer *peer)
+{
+  struct bgp_open open;
+  u_char *pnt = peer->read_buf;
+  
+  peer->open_in++;
+
+  /* Parse open packet. */
+  GETC (open.version, pnt);
+  GETW (open.asno, pnt);
+  GETW (open.holdtime, pnt);
+  GETL (open.ident, pnt);
+  GETC (open.optlen, pnt);
+
+  peer->ident = open.ident;
+  peer->v_holdtime = open.holdtime;
+
+  if (open.optlen != 0) 
+    bgp_open_option_parse (pnt, open.optlen);
+
+  if (dump_open)
+    bgp_open_dump(&open, peer, PACKET_RECV);
+
+  /* Peer BGP version check. */
+  if (open.version != BGP_VERSION_4 && open.version != BGP_VERSION_5)
+    {
+      /* If BGP version doesn't match... */
+      bgp_notify_send (peer, 
+		       BGP_NOTIFY_OPEN_ERR, 
+		       BGP_NOTIFY_OPEN_UNSUP_VERSION);
+      return;
+    }
+  
+  /* Check neighbor as number. */
+  if (open.asno != peer->as)
+    {
+      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR, BGP_NOTIFY_OPEN_BAD_PEER_AS);
+      bgp_clear (peer, 1);
+      return ;
+    }
+
+  BGP_EVENT_ADD (peer, Receive_OPEN_message);
 }

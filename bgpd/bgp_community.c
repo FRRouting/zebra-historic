@@ -18,20 +18,20 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef HAVE_CONFIG_H
 #include <config.h>
-#endif /* HAVE_CONFIG_H */
-
 #include <stdio.h>
 #include <ctype.h>
 #include <sys/types.h>
 #include <assert.h>
-/* For ntohl function. */
 #include <netinet/in.h>
 
-#include "bgp_community.h"
 #include "hash.h"
 #include "memory.h"
+#include "vector.h"
+#include "vty.h"
+#include "roken.h"
+
+#include "bgp_community.h"
 
 /* Hash of community attribute. */
 struct Hash *comhash;
@@ -265,8 +265,6 @@ community_contain (struct community *com, u_int32_t val)
 #endif /* 0 */
 
 /* Below is vty related function which needs some header include. */
-#include "vector.h"
-#include "vty.h"
 
 /* Pretty printing of community attribute. */
 void

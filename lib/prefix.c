@@ -1,0 +1,469 @@
+/* Prefix related functions.
+   Copyright (C) 1997, 98 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
+
+#include <config.h>
+#include <stdio.h>
+#include <stdlib.h>		/* For atoi */
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <assert.h>
+
+#include "prefix.h"
+#include "vty.h"
+#include "sockunion.h"
+#include "memory.h"
+
+/* Maskbit. */
+static u_char maskbit[] = {0x00, 0x80, 0xc0, 0xe0, 0xf0,
+			         0xf8, 0xfc, 0xfe, 0xff};
+
+/* If n includes p prefix then return 1 else return 0. */
+int
+prefix_match (struct prefix *n, struct prefix *p)
+{
+  int offset;
+  int shift;
+
+  /* Set both prefix's head pointer. */
+  u_char *np = (u_char *)&n->u.prefix;
+  u_char *pp = (u_char *)&p->u.prefix;
+
+  /* assert (n->prefixlen <= p->prefixlen); */
+
+  offset = n->prefixlen / 8;
+  shift =  n->prefixlen % 8;
+
+  if (shift)
+    if (maskbit[shift] & (np[offset] ^ pp[offset]))
+      return 0;
+  
+  while (offset--)
+    if (np[offset] != pp[offset])
+      return 0;
+  return 1;
+}
+
+/* Copy prefix from src to dest. */
+void
+prefix_copy (struct prefix *dest, struct prefix *src)
+{
+  dest->family = src->family;
+  dest->prefixlen = src->prefixlen;
+
+  if (src->family == AF_INET)
+    dest->u.prefix4 = src->u.prefix4;
+#ifdef HAVE_IPV6
+  else if (src->family == AF_INET6)
+    dest->u.prefix6 = src->u.prefix6;
+#endif /* HAVE_IPV6 */
+  else
+    assert (0);
+}
+
+/* If both prefix structure is same then return 1 else return 0. */
+int
+prefix_same (struct prefix *p1, struct prefix *p2)
+{
+  if (p1->family == p2->family && p1->prefixlen == p2->prefixlen)
+    {
+      if (p1->family == AF_INET)
+	if (IPV4_ADDR_CMP (&p1->u.prefix, &p2->u.prefix) == 0)
+	  return 1;
+#ifdef HAVE_IPV6
+      if (p1->family == AF_INET6 )
+	if (IPV6_ADDR_CMP (&p1->u.prefix, &p2->u.prefix) == 0)
+	  return 1;
+#endif /* HAVE_IPV6 */
+    }
+  return 0;
+}
+
+/* Return prefix family type string. */
+char *
+prefix_family_str (struct prefix *p)
+{
+  if (p->family == AF_INET)
+    return "inet";
+  if (p->family == AF_INET6)
+    return "inet6";
+
+  return "unspec";
+}
+
+/* Allocate new prefix_ipv4 structure. */
+struct prefix_ipv4 *
+prefix_ipv4_new ()
+{
+  struct prefix_ipv4 *p;
+
+  p = XMALLOC (MTYPE_PREFIX_IPV4, sizeof *p);
+  bzero (p, sizeof (struct prefix_ipv4));
+  return p;
+}
+
+/* Free prefix_ipv4 structure. */
+void
+prefix_ipv4_free (struct prefix_ipv4 *p)
+{
+  XFREE (MTYPE_PREFIX_IPV4, p);
+}
+
+/* If string format if invalid return 0. */
+int
+str2prefix_ipv4 (char *str, struct prefix_ipv4 *p)
+{
+  int ret;
+  char *pnt;
+  char *cp;
+
+  /* Find slash inside string. */
+  pnt = strchr (str, '/');
+
+  /* String doesn't contail slash. */
+  if (pnt == NULL)
+    return 0;
+
+  cp = XMALLOC (MTYPE_TMP, (pnt - str) + 1);
+  strncpy (cp, str, pnt - str);
+  *(cp + (pnt - str)) = '\0';
+  ret = inet_aton (cp, &p->prefix);
+  XFREE (MTYPE_TMP, cp);
+
+  /* Get prefix length. */
+  p->prefixlen = (u_char) atoi (++pnt);
+  p->family = AF_INET;
+
+  return ret;
+}
+
+/* Convert masklen into IP address's netmask. */
+void
+masklen2ip (int masklen, struct in_addr *netmask)
+{
+  u_char *pnt;
+  int bit;
+  int offset;
+
+  bzero (netmask, sizeof (struct in_addr));
+  pnt = (unsigned char *) netmask;
+
+  offset = masklen / 8;
+  bit = masklen % 8;
+  
+  while (offset--)
+    *pnt++ = 0xff;
+
+  if (bit)
+    *pnt = maskbit[bit];
+}
+
+/* Convert IP address's netmask into integer. We assume netmask is
+   sequential one. Argument netmask should be network byte order. */
+u_char
+ip_masklen (struct in_addr netmask)
+{
+  u_char len;
+  u_char *pnt;
+  u_char *end;
+  u_char val;
+
+  len = 0;
+  pnt = (u_char *) &netmask;
+  end = pnt + 4;
+
+  while ((*pnt == 0xff) && pnt < end)
+    {
+      len+= 8;
+      pnt++;
+    } 
+
+  if (pnt < end)
+    {
+      val = *pnt;
+      while (val)
+	{
+	  len++;
+	  val <<= 1;
+	}
+    }
+  return len;
+}
+
+/* Apply mask to IPv4 prefix. */
+void
+apply_mask (struct prefix_ipv4 *p)
+{
+  u_char *pnt;
+  int index;
+  int offset;
+
+  index = p->prefixlen / 8;
+
+  if (index < 4)
+    {
+      pnt = (u_char *) &p->prefix;
+      offset = p->prefixlen % 8;
+
+      pnt[index] &= maskbit[offset];
+      index++;
+
+      while (index < 4)
+	pnt[index++] = 0;
+    }
+}
+
+/* If prefix is 0.0.0.0/0 then return 1 else return 0. */
+int
+prefix_ipv4_any (struct prefix_ipv4 *p)
+{
+  return (p->prefix.s_addr == 0 && p->prefixlen == 0);
+}
+
+#ifdef HAVE_IPV6
+
+/* Allocate a new ip version 6 route */
+struct prefix_ipv6 *
+prefix_ipv6_new ()
+{
+  struct prefix_ipv6 *p;
+
+  p = XMALLOC (MTYPE_PREFIX_IPV6, sizeof (struct prefix_ipv6));
+  bzero (p, sizeof (struct prefix_ipv6));
+  return p;
+}
+
+/* Free prefix for IPv6. */
+void
+prefix_ipv6_free (struct prefix_ipv6 *p)
+{
+  XFREE (MTYPE_PREFIX_IPV6, p);
+}
+
+/* If given string is valid return pin6 else return NULL */
+int
+str2prefix_ipv6 (char *str, struct prefix_ipv6 *p)
+{
+  char *pnt;
+  char *cp;
+  int ret;
+
+  pnt = strchr (str, '/');
+
+  /* If string doesn't contain `/' treat it as host route. */
+  if (pnt == NULL) 
+    {
+      ret = inet_pton (AF_INET6, str, &p->prefix);
+      if (ret < 0)
+	return 0;
+      p->prefixlen = IPV6_MAX_BITLEN;
+    }
+  else 
+    {
+      cp = XMALLOC (0, (pnt - str) + 1);
+      strncpy (cp, str, pnt - str);
+      *(cp + (pnt - str)) = '\0';
+      ret = inet_pton (AF_INET6, cp, &p->prefix);
+      free (cp);
+      if (ret < 0)
+	return 0;
+      p->prefixlen = (u_char) atoi (++pnt);
+    }
+  p->family = AF_INET6;
+
+  return ret;
+}
+
+/* Convert struct in6_addr netmask into integer. */
+int
+ip6_masklen (struct in6_addr netmask)
+{
+  int len = 0;
+  unsigned char val;
+  unsigned char *pnt;
+  
+  pnt = (unsigned char *) & netmask;
+
+  while ((*pnt == 0xff) && len < 128) 
+    {
+      len += 8;
+      pnt++;
+    } 
+  
+  if (len < 128) 
+    {
+      val = *pnt;
+      while (val) 
+	{
+	  len++;
+	  val <<= 1;
+	}
+    }
+  return len;
+}
+
+void
+masklen2ip6 (int masklen, struct in6_addr *netmask)
+{
+  unsigned char *pnt;
+  int bit;
+  int offset;
+
+  bzero (netmask, sizeof (struct in6_addr));
+  pnt = (unsigned char *) netmask;
+
+  offset = masklen / 8;
+  bit = masklen % 8;
+
+  while (offset--)
+    *pnt++ = 0xff;
+
+  if (bit)
+    *pnt = maskbit[bit];
+}
+
+void
+apply_mask_ipv6 (struct prefix_ipv6 *p)
+{
+  u_char *pnt;
+  int index;
+  int offset;
+
+  index = p->prefixlen / 8;
+
+  if (index < 16)
+    {
+      pnt = (u_char *) &p->prefix;
+      offset = p->prefixlen % 8;
+
+      pnt[index] &= maskbit[offset];
+      index++;
+
+      while (index < 16)
+	pnt[index++] = 0;
+    }
+}
+
+void
+str2in6_addr (char *str, struct in6_addr *addr)
+{
+  int i;
+  unsigned int x;
+
+  /* %x must point to unsinged int */
+  for (i = 0; i < 16; i++)
+    {
+      sscanf (str + (i * 2), "%02x", &x);
+      addr->s6_addr[i] = x & 0xff;
+    }
+}
+#endif /* HAVE_IPV6 */
+
+/* Utility function of convert between struct prefix <=> union sockunion */
+struct prefix *
+sockunion2prefix (union sockunion *dest,
+		  union sockunion *mask)
+{
+  if (dest->sa.sa_family == AF_INET)
+    {
+      struct prefix_ipv4 *p;
+
+      p = prefix_ipv4_new ();
+      p->prefix = dest->sin.sin_addr;
+      p->prefixlen = ip_masklen (mask->sin.sin_addr);
+      return (struct prefix *) p;
+    }
+#ifdef HAVE_IPV6
+  if (dest->sa.sa_family == AF_INET6)
+    {
+      struct prefix_ipv6 *p;
+
+      p = prefix_ipv6_new ();
+      p->prefixlen = ip6_masklen (mask->sin6.sin6_addr);
+      memcpy (&p->prefix, &dest->sin6.sin6_addr, sizeof (struct in6_addr));
+      return (struct prefix *) p;
+    }
+#endif /* HAVE_IPV6 */
+  return NULL;
+}
+
+int
+prefix_blen (struct prefix *p)
+{
+  switch (p->family) 
+    {
+    case AF_INET:
+      return IPV4_MAX_BYTELEN;
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      return IPV6_MAX_BYTELEN;
+      break;
+#endif /* HAVE_IPV6 */
+    }
+  return 0;
+}
+
+/* Generic function for conversion string to struct prefix. */
+int
+str2prefix (char *str, struct prefix *p)
+{
+  int ret;
+
+  /* First we try to convert string to struct prefix_ipv4. */
+  ret = str2prefix_ipv4 (str, (struct prefix_ipv4 *) p);
+  if (ret)
+    return ret;
+
+#ifdef HAVE_IPV6
+  /* Next we try to convert string to struct prefix_ipv6. */
+  ret = str2prefix_ipv6 (str, (struct prefix_ipv6 *) p);
+  if (ret)
+    return ret;
+#endif /* HAVE_IPV6 */
+
+  return 0;
+}
+
+struct prefix *
+prefix_new ()
+{
+  struct prefix *p;
+
+  p = XMALLOC (MTYPE_PREFIX, sizeof *p);
+  bzero (p, sizeof (struct prefix));
+  return p;
+}
+
+/* Free prefix structure. */
+void
+prefix_free (struct prefix *p)
+{
+  if (p->family == AF_INET)
+    prefix_ipv4_free ((struct prefix_ipv4 *) p);
+#ifdef HAVE_IPV6
+  else if (p->family == AF_INET6)
+    prefix_ipv6_free ((struct prefix_ipv6 *) p);
+#endif HAVE_IPV6  
+  else
+    assert (0);
+}

@@ -28,11 +28,10 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * $Id: aspath_regex.c,v 1.6 1998/03/06 10:07:06 kunihiro Exp $
+ * $Id: aspath_regex.c,v 1.8 1998/12/13 16:04:35 kunihiro Exp $
  */
 #define ZEBRA
 #define RADIX_REGEXP
-#define DEBUG
 
 #ifndef ZEBRA
 #include "defines.h"
@@ -51,10 +50,13 @@
 
 #define ASPATH_PRIVATE
 #include "aspath.h"
-#else
+#else  /* if defined ZEBRA */
 #include <config.h>
 #include <sys/types.h>
+#include "vector.h"
+#include "vty.h"
 #include "bgp_aspath.h"
+
 
 FILE *dp = NULL;
 int loglevel = 7;
@@ -65,7 +67,7 @@ int loglevel = 7;
                         extern int errno; \
                         register int tmperrno = errno; \
 			/* proclog(dp); */ \
-			/* fprintf log; */ \
+			fprintf log; \
                         errno = tmperrno; \
                 } \
         }

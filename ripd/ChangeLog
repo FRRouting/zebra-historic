@@ -1,3 +1,22 @@
+1998-12-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_announce_func): Apply new lib functions.
+
+1998-12-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (config_write_rip): Delete vector v argument.
+	* rip_zebra.c (config_write_zebra): Likewise.
+	* rip_interface.c (interface_config_write): Likewise.
+
+1998-09-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_announce.c (rip_rib_close): When ripd terminates delete all
+	added route.
+
+1998-09-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c: return read packet size.
+
 1998-05-18  Yamshita TAKAO  <jargon@lares.dti.ne.jp>
 
 	* ripd.h: Modify for compile on Solaris.

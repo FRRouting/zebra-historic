@@ -1,5 +1,5 @@
 /* Get interface's address and mask information by sysctl() function.
-   Copyright (C) 1997 Kunihiro Ishiguro
+   Copyright (C) 1997, 98 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -20,6 +20,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/param.h>
@@ -33,10 +34,123 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "linklist.h"
 #include "sockunion.h"
 #include "if.h"
-#include "ifa.h"
+#include "prefix.h"
+#include "connected.h"
 #include "memory.h"
+#include "log.h"
+#include "ioctl.h"
+
+/* Interface adding function called from interface_list. */
+void
+ifm_interface_add (struct if_msghdr *ifm)
+{
+  struct interface *ifp;
+  struct sockaddr_dl *sdl;
+
+  sdl = (struct sockaddr_dl *)(ifm + 1);
+
+  /* Check does this interface index exist? */
+  ifp = if_lookup_by_name (sdl->sdl_data);
+  if (ifp == NULL)
+    {
+      ifp = if_new ();
+      strncpy (ifp->name, sdl->sdl_data, sdl->sdl_nlen);
+    }
+
+  /* Set ifm value into struct interface. */
+  ifp->index = ifm->ifm_index;
+  ifp->flags = ifm->ifm_flags;
+
+  if_get_mtu (ifp);
+  if_get_metric (ifp);
+
+  if (log_mode)
+    log ("interface %s index %d.\n", ifp->name, ifp->index);
+}
+
+
+/* Address read from struct ifa_msghdr. */
+void
+ifm_read (struct ifa_msghdr *ifm,
+	  union sockunion *addr,
+	  union sockunion *mask,
+	  union sockunion *dest)
+{
+  caddr_t pnt, end;
+
+  pnt = (caddr_t)(ifm + 1);
+  end = ((caddr_t)ifm) + ifm->ifam_msglen;
+
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+
+#define SOCKADDRGET(X,R) \
+    if (ifm->ifam_addrs & (R)) { \
+      int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
+      if ((X) != NULL) \
+	bcopy (pnt, (caddr_t)(X), len); \
+      pnt += len; \
+    }
+
+  /* We fetch each socket variable into sockunion. */
+  SOCKADDRGET (NULL, RTA_DST);
+  SOCKADDRGET (NULL, RTA_GATEWAY);
+  SOCKADDRGET (mask, RTA_NETMASK);
+  SOCKADDRGET (NULL, RTA_GENMASK);
+  SOCKADDRGET (NULL, RTA_IFP);
+  SOCKADDRGET (addr, RTA_IFA);
+  SOCKADDRGET (NULL, RTA_AUTHOR);
+  SOCKADDRGET (dest, RTA_BRD);
+
+  /* Assert read up end point matches to end point */
+  if (pnt != end)
+    log_warn ("ifm_read() does't read all socket data.");
+}
+
+/* Interface's address information get. */
+int
+ifm_address_add (struct ifa_msghdr *ifm)
+{
+  struct interface *ifp;
+  union sockunion addr, mask, gate;
+
+  /* Check does this interface exist or not. */
+  ifp = if_lookup_by_index (ifm->ifam_index);
+  if (ifp == NULL) 
+    {
+      log_warn ("no interface for index %d\n", ifm->ifam_index); 
+      return -1;
+    }
+
+  /* Allocate and read address information. */
+  ifm_read (ifm, &addr, &mask, &gate);
+
+  /* Add connected address. */
+  switch (sockunion_family (&addr))
+    {
+    case AF_INET:
+      connected_add_ipv4 (ifp, 
+			  &addr.sin.sin_addr, 
+			  ip_masklen (mask.sin.sin_addr),
+			  &gate.sin.sin_addr);
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      connected_add_ipv6 (ifp,
+			  &addr.sin6.sin6_addr, 
+			  ip6_masklen (mask.sin6.sin6_addr),
+			  &gate.sin6.sin6_addr);
+      break;
+#endif /* HAVE_IPV6 */
+    default:
+      /* Unsupported family silently ignore... */
+      break;
+    }
+  return 0;
+}
 
 /* Interface listing up function using sysctl(). */
+void
 interface_list ()
 {
   caddr_t ref, buf, end;
@@ -49,7 +163,7 @@ interface_list ()
     CTL_NET,
     PF_ROUTE,
     0,
-    0, /*  AF_INET */
+    0, /*  AF_INET & AF_INET6 */
     NET_RT_IFLIST,
     0 
   };
@@ -93,69 +207,8 @@ interface_list ()
   XFREE (MTYPE_TMP, ref);
 }
 
-/* Interface adding function called from interface_list. */
-ifm_interface_add (ifm)
-     struct if_msghdr *ifm;
-{
-  struct interface *ifp;
-  struct sockaddr_dl *sdl;
-
-  sdl = (struct sockaddr_dl *)(ifm + 1);
-
-  /* Check does this interface index exist? */
-  ifp = if_lookup_by_name (sdl->sdl_data);
-  if (ifp == NULL)
-    {
-      ifp = if_new ();
-      strncpy (ifp->name, sdl->sdl_data, sdl->sdl_nlen);
-    }
-
-  /* Set ifm value into struct interface. */
-  ifp->index = ifm->ifm_index;
-  ifp->flags = ifm->ifm_flags;
-
-  if_get_mtu (ifp);
-  if_get_metric (ifp);
-}
-
-#define ROUNDUP(a) \
-	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
-
-/* Interface's address information get. */
-ifm_address_add (struct ifa_msghdr *ifm)
-{
-  struct interface *ifp;
-  struct if_addr *ifa;
-
-  /* Check does this interface exist or not. */
-  ifp = if_lookup_by_index (ifm->ifam_index);
-  if (ifp == NULL) 
-    {
-      log_warn ("no interface for %d\n", ifm->ifam_index); 
-      return;
-    }
-
-  /* Allocate and read address information. */
-  ifa = ifa_new ();
-  ifm_read (ifm, &ifa->ifa_addr, &ifa->ifa_mask, &ifa->ifa_dest);
-
-  /* Check address family.  We only support IP family. */
-  if (! if_supported_family (ifa->ifa_addr.sa.sa_family))
-    {
-      free (ifa);
-      return;
-    }
-
-  list_add_node (ifp->addr, ifa);
-
-  /* Copy address's family to mask's family. */
-  ifa->ifa_mask.sa.sa_family = ifa->ifa_addr.sa.sa_family;
-
-  /* Add connected route to rib. */
-  ifa_rib_insert (ifa, ifp);
-}
-
 /* Called from rt_sysctl.c. */
+void
 ifm_read_ifinfo (struct if_msghdr *ifm)
 {
   struct interface *ifp;
@@ -177,41 +230,8 @@ ifm_read_ifinfo (struct if_msghdr *ifm)
 }
 
 /* Called from rt_sysctl.c */
+void
 ifm_read_newaddr (struct ifa_msghdr *ifam)
 {
   ;
-}
-
-/* Address read from struct ifa_msghdr. */
-ifm_read (struct ifa_msghdr *ifm,
-	  union sockunion *addr,
-	  union sockunion *mask,
-	  union sockunion *dest)
-{
-  caddr_t pnt, end;
-
-  pnt = (caddr_t)(ifm + 1);
-  end = ((caddr_t)ifm) + ifm->ifam_msglen;
-
-#define SOCKADDRGET(X,R) \
-    if (ifm->ifam_addrs & (R)) { \
-      int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
-      if ((X) != NULL) \
-	bcopy (pnt, (caddr_t)(X), len); \
-      pnt += len; \
-    }
-
-  /* We fetch each socket variable into sockunion. */
-  SOCKADDRGET (NULL, RTA_DST);
-  SOCKADDRGET (NULL, RTA_GATEWAY);
-  SOCKADDRGET (mask, RTA_NETMASK);
-  SOCKADDRGET (NULL, RTA_GENMASK);
-  SOCKADDRGET (NULL, RTA_IFP);
-  SOCKADDRGET (addr, RTA_IFA);
-  SOCKADDRGET (NULL, RTA_AUTHOR);
-  SOCKADDRGET (dest, RTA_BRD);
-
-  /* Assert read up end point matches to end point */
-  if (pnt != end)
-    log_warn ("ifm_read() does't read all socket data.");
 }

@@ -20,27 +20,28 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  
 #include <config.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 #include <sys/time.h>
+#include <arpa/inet.h>
 
-#include "bgpd.h"
-#include "bgp_peer.h"
-#include "linklist.h"
-#include "sockunion.h"
-#include "vector.h"
 #include "vty.h"
+#include "sockunion.h"
+#include "linklist.h"
+#include "vector.h"
 #include "thread.h"
 #include "memory.h"
 
+#include "bgpd.h"
+#include "bgp_attr.h"
+#include "bgp_peer.h"
+
 /* BGPd's all peer list. */
 list peer_list;
-
+
 /* Check peer's AS number and determin is this peer IBPG or EBGP */
 int
 peer_sort (struct peer *peer)
@@ -162,7 +163,7 @@ peer_delete (struct peer *peer)
 {
   /* Free allocated host character. */
   if (peer->host)
-    free (peer->host);
+    XFREE (0, peer->host);
 
   /* Free software timers. */
 #define timer_off(X) \
@@ -261,4 +262,29 @@ peer_uptime_vty (struct vty *vty, struct peer *peer)
 
   /* Out puts to vty. */
   vty_out (vty, "%8s", timebuf);
+}
+
+
+/* Sockunion union output to vty interface. Return printed strings
+   length. */
+int
+sockunion_vty_out (struct vty *vty, union sockunion *su)
+{
+  char str[BUFSIZ];
+
+  switch (su->sa.sa_family)
+    {
+    case AF_INET:
+      inet_ntop (AF_INET, &su->sin.sin_addr, str, sizeof (str));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      inet_ntop (AF_INET6, &su->sin6.sin6_addr, str, sizeof (str));
+      break;
+#endif /* HAVE_IPV6 */
+    }
+
+  vty_out (vty, "%s", str);
+
+  return strlen (str);
 }

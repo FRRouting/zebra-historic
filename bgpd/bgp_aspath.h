@@ -27,14 +27,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define AS_CONFED_SET      3
 #define AS_CONFED_SEQUENCE 4
 
-#ifdef SUNOS_5
-#ifndef _BGPD_SUNOS_H
-#define _BGPD_SUNOS_H
-typedef unsigned int u_int32_t; 
-typedef unsigned short u_int16_t; 
-#endif /* _BGPD_SUNOS_H */
-#endif /* SUNOS_5 */
-
 /* AS path may be include some AsSegments. */
 struct aspath 
 {
@@ -55,14 +47,19 @@ struct aspath
 };
 
 /* Prototypes. */
+void aspath_init ();
 struct aspath *aspath_parse ();
 struct aspath *aspath_val2as (u_short);
 void aspath_free (struct aspath *);
-void aspath_log (FILE *, struct aspath *);
+void aspath_log (struct aspath *);
+void aspath_print_vty (struct vty *, struct aspath *);
+void aspath_print_all_vty (struct vty *);
 
 #ifdef RADIX_REGEXP
 typedef struct aspath ASPATH;
 typedef struct aspath_regex_t ASPATH_regex;
 
+void aspath_regex_free(ASPATH_regex *regex);
+int aspath_regex_exec(const ASPATH_regex *rp, const ASPATH *info);
 ASPATH_regex *aspath_regex_comp(const char *pat);
 #endif /* RADIX_REGEXP */

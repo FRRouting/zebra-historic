@@ -20,36 +20,43 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 
-#include "ripngd.h"
+#include "prefix.h"
 #include "table.h"
 #include "memory.h"
 
+#include "ripngd.h"
+#include "ripng_route.h"
+
+void
 ripng_slot_add (struct route_node *node)
 {
-  node->route = XMALLOC (MTYPE_RIPNG_SLOT, sizeof (struct ripng_slot));
-  bzero (node->route, sizeof (struct ripng_slot));
+  node->info = XMALLOC (MTYPE_RIPNG_SLOT, sizeof (struct ripng_slot));
+  bzero (node->info, sizeof (struct ripng_slot));
 }
 
+void
 ripng_slot_delete (struct route_node *node)
 {
-  XFREE (MTYPE_RIPNG_SLOT, node->route);
-  node->route = NULL;
+  XFREE (MTYPE_RIPNG_SLOT, node->info);
+  node->info = NULL;
 }
 
 /* RIPng routes treatment. */
+int
 ripng_static_add (struct route_node *node, u_char metric)
 {
   struct ripng_slot *slot;
   struct ripng_info *rinfo;
 
   /* If there is no slot. */
-  if (!node->route)
+  if (!node->info)
     ripng_slot_add (node);
 
-  slot = node->route;
+  slot = node->info;
 
   /* There is already same static route. */
   if (RIPNG_SLOT_STATIC(slot))
@@ -67,16 +74,16 @@ ripng_static_add (struct route_node *node, u_char metric)
 }
 
 /* Delete RIPng static route. */
+int
 ripng_static_delete (struct route_node *node)
 {
   struct ripng_slot *slot;
-  struct ripng_info *rinfo;
 
   /* If there is no slot. */
-  if (!node->route)
+  if (!node->info)
     return -1;
   
-  slot = node->route;
+  slot = node->info;
   if (!slot || !RIPNG_SLOT_STATIC(slot))
     return -1;
 
@@ -87,16 +94,17 @@ ripng_static_delete (struct route_node *node)
 }
 
 /* RIPng routes treatment. */
+int
 ripng_aggregate_add (struct route_node *node, u_char metric)
 {
   struct ripng_slot *slot;
   struct ripng_info *rinfo;
 
   /* If there is no slot. */
-  if (!node->route)
+  if (!node->info)
     ripng_slot_add (node);
 
-  slot = node->route;
+  slot = node->info;
 
   /* There is already same static route. */
   if (RIPNG_SLOT_AGGREGATE(slot))
@@ -114,16 +122,16 @@ ripng_aggregate_add (struct route_node *node, u_char metric)
 }
 
 /* Delete RIPng static route. */
+int
 ripng_aggregate_delete (struct route_node *node)
 {
   struct ripng_slot *slot;
-  struct ripng_info *rinfo;
 
   /* If there is no slot. */
-  if (!node->route)
+  if (!node->info)
     return -1;
   
-  slot = node->route;
+  slot = node->info;
   if (!slot || !RIPNG_SLOT_AGGREGATE(slot))
     return -1;
 

@@ -20,17 +20,15 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <config.h>
 #include <stdio.h>
+#include <string.h>		/* for strerror() */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/route.h>
 #include <netinet/in.h>
 #include <errno.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 
 #include "zebra.h"
-#include "route.h"
+#include "prefix.h"
 #include "log.h"
 #include "rib.h"
 
@@ -64,7 +62,7 @@ proc_route_read ()
   fp = fopen (_PATH_PROCNET_ROUTE, "r");
   if (fp == NULL)
     {
-      log_warn ("Can't open %s : %s\n", _PATH_PROCNET_ROUTE, strerror (errno));
+      log ("Can't open %s : %s\n", _PATH_PROCNET_ROUTE, strerror (errno));
       return -1;
     }
   
@@ -74,8 +72,9 @@ proc_route_read ()
   while (fgets (buf, RT_BUFSIZ, fp) != NULL)
     {
       int n;
-      struct prefix_in *p;
+      struct prefix_ipv4 p;
       struct in_addr tmpmask;
+      struct in_addr gateway;
 
       n = sscanf (buf, "%s %s %s %x %d %d %d %s %d %d %d",
 		  iface, dest, gate, &flags, &refcnt, &use, &metric, 
@@ -90,15 +89,12 @@ proc_route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
-      p = prefix_in_new ();
-      sscanf (dest, "%lX", (unsigned long *)&p->prefix);
+      sscanf (dest, "%lX", (unsigned long *)&p.prefix);
       sscanf (mask, "%lX", (unsigned long *)&tmpmask);
-      p->mask = ip_masklen (tmpmask);
-      sscanf (gate, "%lX", (unsigned long *)&p->gate.addr);
-      p->type = ZEBRA_ROUTE_KERNEL;
-      p->fib = 1;
-      
-      rib_add_in (p);
+      p.prefixlen = ip_masklen (tmpmask);
+      sscanf (gate, "%lX", (unsigned long *)&gateway);
+
+      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0);
     }
 
   return 0;
@@ -129,8 +125,8 @@ proc_ipv6_route_read ()
       char iface[INTERFACE_NAMSIZ];
       int dest_plen, src_plen;
       int metric, use, refcnt, flags;
-
-      struct prefix_in6 *p;
+      struct prefix_ipv6 p;
+      struct in6_addr gateway;
 
       /* Linux 2.1.x write this information at net/ipv6/route.c
          rt6_info_node () */
@@ -149,15 +145,11 @@ proc_ipv6_route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
-      p = prefix_in6_new ();
+      str2in6_addr (dest, &p.prefix);
+      str2in6_addr (gate, &gateway);
+      p.prefixlen = dest_plen;
 
-      str2in6_addr (dest, &p->prefix);
-      str2in6_addr (gate, &p->gate.addr);
-      p->mask = dest_plen;
-      p->type = ZEBRA_ROUTE_KERNEL;
-      p->fib = 1;
-
-      rib_add_in6 (p);
+      rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0);
     }
 
   return 0;
@@ -165,7 +157,7 @@ proc_ipv6_route_read ()
 #endif /* HAVE_IPV6 */
 
 void
-rt_read ()
+route_read ()
 {
   proc_route_read ();
 #ifdef HAVE_IPV6

@@ -23,14 +23,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define BGP_HEADER_SIZE		19
 #define BGP_MAX_PACKET_SIZE   4096
 
-#ifdef SUNOS_5
-#ifndef _BGPD_SUNOS_H
-#define _BGPD_SUNOS_H
-typedef unsigned int u_int32_t; 
-typedef unsigned short u_int16_t; 
-#endif /* _BGPD_SUNOS_H */
-#endif /* SUNOS_5 */
-
 /* BGP message header structure. */
 struct bgp_header 
 {
@@ -231,63 +223,16 @@ extern int bgp_status_msg_max;
 
 extern char *progname;
 
-/**/
-#define st_1byte(val, pnt) \
-{ \
-    (*(u_char *)(pnt)++) = (u_char)(val); \
-}
-
-#define st_2byte(val, pnt) \
-{\
-   u_int16_t t = htons((u_int16_t)(val)); \
-   bcopy (&t, (pnt), 2); \
-   (pnt) += 2;\
-}
-
-#define st_4byte(val, pnt) \
-{\
-   u_int32_t t = htonl((u_int32_t)(val)); \
-   bcopy (&t, (pnt), 4); \
-   (pnt) += 4;\
-}
-
-#define ld_1byte(val, pnt) \
-{ \
-  (val) = (u_char)(*(pnt)++); \
-}
-
-#define ld_2byte(val, pnt) \
-do { \
-  (val) = (u_int16_t)(*(pnt)++) << 8; \
-  (val) |= (u_int16_t)(*(pnt)++); \
-} while (0)
-
-#define ld_4byte(val, pnt) \
-{ \
-  (val) = (u_int32_t)(*(pnt)++) << 24; \
-  (val) |= (u_int32_t)(*(pnt)++) << 16; \
-  (val) |= (u_int32_t)(*(pnt)++) << 8; \
-  (val) |= (u_int32_t)(*(pnt)++); \
-}
-
-#define st_4octet(val, pnt) \
-{\
-   bcopy (&val, (pnt), 4); \
-   (pnt) += 4;\
-}
-
-#define ld_4octet(val, pnt) \
-{ \
-  (val) = (*(pnt)++) << 24; \
-  (val) |= (*(pnt)++) << 16; \
-  (val) |= (*(pnt)++) << 8; \
-  (val) |= (*(pnt)++); \
-  (val) = ntohl (val); \
-}
-
 enum
 {
   /* Debug option. */
   DEBUG_BGP_FSM = 0x01,
 };
 
+/* Prototypes. */
+void bgp_init ();
+int bgp_serv_sock (unsigned short port, int family);
+void view_init ();
+void bgp_route_map_init ();
+
+extern struct thread_master *master;

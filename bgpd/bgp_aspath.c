@@ -18,25 +18,24 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif /* HAVE_CONFIG_H */
-
+#include <config.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <sys/types.h>
 #include <errno.h>
 #include <assert.h>
-/* For nthos and htons functions. */
 #include <netinet/in.h>
+
+#include "hash.h"
+#include "log.h"
+#include "memory.h"
+#include "roken.h"
+#include "vector.h"
+#include "vty.h"
 
 #include "bgpd.h"
 #include "bgp_aspath.h"
-
-#include "hash.h"
-#include "memory.h"
-#include "log.h"
-
+
 /* To fetch and store as segment value. */
 struct assegment
 {
@@ -68,9 +67,9 @@ struct
 #define AS_TOKEN_CONFED_END   5
 #define AS_TOKEN_UNKNOWN      6
 
-/* Hash for aspath. */
+/* Hash for aspath.  This is top level structure of AS path. */
 struct Hash *ashash;
-
+
 struct aspath *
 aspath_new ()
 {
@@ -201,12 +200,8 @@ aspath_parse (caddr_t pnt, int length)
     aspath->hop_count = i;
 
     /* for simply as-path array */
-    if (!(pasn = (u_int16_t *) malloc (sizeof(*pasn) * (i + 1)))) 
-      {
-	log ("MALLOC - %s\n", strerror(errno));
-	return NULL;
-      }
-    
+    pasn = XMALLOC (0, sizeof(*pasn) * (i + 1));
+
     len = length;
     p = pnt;
     i = 0;
@@ -245,7 +240,7 @@ aspath_parse (caddr_t pnt, int length)
 
 /* Print out as path value to stdout. */
 void
-aspath_log (FILE *logfp, struct aspath *as)
+aspath_log (struct aspath *as)
 {
   int space;
   u_char type;
@@ -257,6 +252,7 @@ aspath_log (FILE *logfp, struct aspath *as)
   type = AS_SEQUENCE;
   pnt = as->data;
   end = as->data + as->length;
+  assegment = (struct assegment *) pnt;
 
   if (as->length == 0)
     return;
@@ -264,35 +260,36 @@ aspath_log (FILE *logfp, struct aspath *as)
   while (pnt < end)
     {
       int i;
+
       assegment = (struct assegment *) pnt;
 
       /* If assegment type is changed, print previous type's end
          character. */
       if (assegment->type != type)
 	{
-	  fprintf (logfp, "%s", aspath_delimiter[type].end);
+	  log2 ("%s", aspath_delimiter[type].end);
 	  type = assegment->type;
 	}
 
       if (space)
-	fprintf (logfp, " ");
+	log2 (" ");
 
-      fprintf (logfp, "%s", aspath_delimiter[assegment->type].start);
+      log2 ("%s", aspath_delimiter[assegment->type].start);
       space = 0;
 
       for (i = 0; i < assegment->length; i++)
 	{
 	  if (space)
-	    fprintf (logfp, " ");
+	    log2 (" ");
 	  else
 	    space = 1;
-	  fprintf (logfp, "%d", ntohs (assegment->asval[i]));
+	  log2 ("%d", ntohs (assegment->asval[i]));
 	}
 
       pnt += (assegment->length * 2) + 2;
     }
 
-  fprintf (logfp, "%s", aspath_delimiter[assegment->type].end);
+  log2 ("%s", aspath_delimiter[assegment->type].end);
 }
 
 /* Print out as path value to stdout. */
@@ -309,6 +306,7 @@ aspath_print (struct aspath *as)
   type = AS_SEQUENCE;
   pnt = as->data;
   end = as->data + as->length;
+  assegment = (struct assegment *) pnt;
 
   if (as->length == 0)
     return;
@@ -361,6 +359,7 @@ aspath_as_add (struct aspath *as, u_short asno)
 
   pnt = as->data;
   end = as->data + as->length;
+  assegment = (struct assegment *) pnt;
 
   /* Last segment search procedure. */
   while (pnt + 2 < end)
@@ -563,10 +562,6 @@ aspath_init ()
   ashash->hash_cmp = aspath_cmp;
 }
 
-/* Below is vty related function which needs some header include. */
-#include "vector.h"
-#include "vty.h"
-
 /* Printing functions */
 void
 aspath_print_vty (struct vty *vty, struct aspath *as)
@@ -581,6 +576,7 @@ aspath_print_vty (struct vty *vty, struct aspath *as)
   type = AS_SEQUENCE;
   pnt = as->data;
   end = as->data + as->length;
+  assegment = (struct assegment *) pnt;
 
   if (as->length == 0)
     return;

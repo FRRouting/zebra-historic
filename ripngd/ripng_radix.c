@@ -2,11 +2,8 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#ifdef LINUX_IPV6
-#include <linux/in6.h>
-#endif /* LINUX_IPV6 */
 
-#include "route.h"
+#include "prefix.h"
 #include "radix.h"
 
 /* Go down radix tree by actual prefix pointer. */

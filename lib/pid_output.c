@@ -4,8 +4,7 @@
 #include <unistd.h>
 
 pid_t
-pid_output (path)
-     char *path;
+pid_output (char *path)
 {
   FILE *fp;
   pid_t pid;

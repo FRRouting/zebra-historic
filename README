@@ -3,7 +3,7 @@
 				   
 			  Kunihiro Ishiguro
 
-			       May 1998
+			    December 1998
 
 1. Introduction
 
@@ -28,22 +28,23 @@ And alpha version source file can be found at:
 Currently GNU Zebra is under rapidly development, so I recommend you
 to get the latest version of zebra.
 
-
-3. Supported plat-home
+3. Supported platform
 
 Now GNU Zebra is testing on 
 
-  o FreeBSD 2.2.5
+  o GNU/Linux 2.0.36
+    GNU/Linux 2.1.131
+      -- with Linux IPv6
+
+  o FreeBSD 2.2.7
       -- without IPv6 ;-)
       -- with INRIA IPv6
-      -- with Hydrangea
-  o GNU/Linux 2.0.33
+      -- with Kame
 
 I'm planning to support
 
   o GNU/Hurd 0.2
   o Solaris 2.6
-
 
 4. Install
 
@@ -58,7 +59,6 @@ will make all daemons.
   # make install
 
 will install 'zebra' and 'bgpd' and 'ripd' under $prefix/sbin/.
-
 
 5. Configuration
 
@@ -89,18 +89,24 @@ Next run daemon, and connect from each daemon's vty port will show like below.
   User Access Verification
 
   Password: XXXXX
-  Router> help 
-          ~~~~
-will show you the command list of zebra.
+  Router> ?
+    enable            Turn on privileged commands
+    exit              Exit current mode and down to previous mode
+    help              Description of the interactive help system
+    list              Print command list
+    show              Show running system information
+    who               Display who is on vty
 
+`?' is very usefull for user.
 
-6. Daemons
+6. Daemons and it's options.
 
 6.1 zebra
 
   zebra [OPTIONS...]
     -d, --daemon       Runs in daemon mode.
     -f, --config_file  Set configuration file name. Default is 'zebra.conf'
+    -l, --log_mode     Set verbose log mode flag
     -P, --vty_port     Set vty's port number (default is 2602).
     -v, --version      Print program version.
     -h, --help         Display help and exit.
@@ -114,7 +120,18 @@ will show you the command list of zebra.
     -v, --version      Print program version.
     -h, --help         Display help and exit.
 
-6.3 bgpd
+
+6.3 ripngd
+
+  ripngd [OPTION...]
+    -d, --daemon       Runs in daemon mode.
+    -f, --config_file  Set configuration file name.
+    -l. --log_mode     Set verbose log mode flag.
+    -P, --vty_port     Set vty's port number.
+    -v, --version      Print program version.
+    -h, --help         Display this help and exit.
+
+6.4 bgpd
 
   bgpd [-d] [-p port] [-P port] [-f filename] [-v]
     -d            run bgpd as daemon program.
@@ -137,7 +154,6 @@ ospfd	      2604/tcp		  # OSPFd vty
 bgpd	      2605/tcp		  # BGPd vty
 
 I recommend you to add upper list to /etc/services.
-
 
 8. automake
 

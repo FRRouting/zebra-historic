@@ -31,6 +31,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ZEBRA_ERR_RTEXIST       1
 #define ZEBRA_ERR_RTUNREACH     2
 #define ZEBRA_ERR_EPERM         3
+#define ZEBRA_ERR_RTNOEXIST     4
 
 /* Zebra route's type. */
 #define ZEBRA_ROUTE_SYSTEM      0
@@ -40,7 +41,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ZEBRA_ROUTE_RIP         4
 #define ZEBRA_ROUTE_RIPNG       5
 #define ZEBRA_ROUTE_BGP         6
-#define ZEBRA_ROUTE_RADIX       7
 
 /* Default port information. */
 #define ZEBRA_PORT           2600
@@ -54,3 +54,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
+
+/* Prototypes. */
+void zebra_init ();
+void zebra_if_init ();
+void hostinfo_get ();
+void rib_init ();
+void interface_list ();
+void kernel_init ();
+void route_read ();

@@ -1,5 +1,5 @@
-/* Interface's address and mask.
-   Copyright (C) 1997 Kunihiro Ishiguro
+/* Interface looking up by netlink.
+   Copyright (C) 1998 Kunihiro Ishiguro
 
 This file is part of GNU Zebra.
 
@@ -18,14 +18,12 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-/* Interface address list */
-struct if_addr 
-{
-  union sockunion ifa_addr;
-  union sockunion ifa_mask;
-  union sockunion ifa_dest;
-};
+/* Extern from rt_netlink.c */  
+void interface_lookup_netlink ();  
 
-struct if_addr * addr_new_addr (struct interface *);
-struct if_addr *ifa_new();
-void ifa_print (unsigned long, struct if_addr *);
+/* Interface information read by netlink. */
+void
+interface_list ()
+{
+  interface_lookup_netlink ();  
+}

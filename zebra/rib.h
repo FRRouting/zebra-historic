@@ -18,22 +18,44 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#include <sys/types.h>
-#include <config.h>
+/* Structure for routing information base. */
+struct rib
+{
+  int type;			/* Type of this route */
+  int fib;			/* Have this route goes to fib. */
+  int pref;			/* Preference of this route. */
+  int ifindex;			/* Interface index. */
+  union
+  {
+    struct in_addr gate4;
+#ifdef HAVE_IPV6
+    struct in6_addr gate6;
+#endif
+  } u;
 
-/* This structure used when a route is added to rib */
-struct rib_message {
-  int message;			
-  u_char family;		
-  char * gateway;
-  char * destination;
-  char * mask;
+  struct rib *next;
+  struct rib *prev;
 };
-#define RIB_ADD    1
-#define RIB_DELETE 2
 
+/* Prototypes. */
+void rib_close ();
+void rib_init ();
 struct rt *rib_search_rt (int, struct rt *);
-struct prefix_in *rib_search_prefix (int, struct prefix_in *);
-struct prefix_in6 *rib_search_prefix_in6 (int, struct prefix_in6 *);
-int rib_add_in (struct prefix_in *);
-/* int rib_add_in6 (struct prefix_in6 *); */
+
+int
+rib_add_ipv4 (int type, struct prefix_ipv4 *p, 
+	      struct in_addr *gate, unsigned int ifindex);
+int
+rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
+		 struct in_addr *gate, unsigned int ifindex);
+
+#ifdef HAVE_IPV6
+int
+rib_add_ipv6 (int type, struct prefix_ipv6 *p,
+	      struct in6_addr *gate, unsigned int ifindex);
+
+int
+rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
+		 struct in6_addr *gate, unsigned int ifindex);
+#endif /* HAVE_IPV6 */
+

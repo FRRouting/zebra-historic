@@ -23,17 +23,26 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #endif /* HAVE_CONFIG_H */
 
 #include <stdio.h>
+#include <stdlib.h>		/* for atoi () */
 #include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/time.h>
+#include <signal.h>
 
-#include "ripd.h"
+#include "zebra.h"
+#include "version.h"
 #include "getopt.h"
+#include "log.h"
+#include "thread.h"
 #include "vector.h"
 #include "vty.h"
-#include "thread.h"
+#include "command.h"
+#include "memory.h"
+#include "prefix.h"
+
+#include "ripd.h"
 
 /* ripd options. */
 static struct option longopts[] = 
@@ -42,6 +51,7 @@ static struct option longopts[] =
   { "config_file", required_argument, NULL, 'f'},
   { "help",        no_argument,       NULL, 'h'},
   { "vty_port",    required_argument, NULL, 'P'},
+  { "retain",      no_argument,       NULL, 'r'},
   { "version",     no_argument,       NULL, 'v'},
   { 0 }
 };
@@ -52,6 +62,9 @@ char config_default[] = SYSCONFDIR RIPD_DEFAULT_CONFIG;
 
 /* ripd program name */
 char *progname;
+
+/* Route retain mode flag. */
+int retain_mode = 0;
 
 /* Master of threads. */
 struct thread_master *master;
@@ -69,6 +82,7 @@ Daemon which manages RIP version 1 and 2.\n\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
 -P, --vty_port     Set vty's port number\n\
+-r, --retain       When program terminates, retain added route by ripd.\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
@@ -76,6 +90,49 @@ Report bugs to zebra@zebra.org\n", progname);
     }
 
   exit (status);
+}
+
+/* SIGINT handler. */
+void
+sigint (int sig)
+{
+  log ("SIGINT received\n");
+  if (!retain_mode)
+    rip_rib_close ();
+
+  exit (0);
+}
+
+/* Signale wrapper. */
+RETSIGTYPE *
+signal_set (int signo, void (*func)(int))
+{
+  int ret;
+  struct sigaction sig;
+  struct sigaction osig;
+
+  sig.sa_handler = func;
+  sigemptyset (&sig.sa_mask);
+  sig.sa_flags = 0;
+#ifdef SA_RESTART
+  sig.sa_flags |= SA_RESTART;
+#endif /* SA_RESTART */
+
+  ret = sigaction (signo, &sig, &osig);
+
+  if (ret < 0) 
+    return (SIG_ERR);
+  else
+    return (osig.sa_handler);
+}
+
+/* Initialization of signal handles. */
+void
+signal_init ()
+{
+  signal_set (SIGINT, sigint);
+  signal_set (SIGTERM, SIG_IGN);
+  signal_set (SIGPIPE, SIG_IGN);
 }
 
 /* Main routine of ripd. */
@@ -95,7 +152,7 @@ main (int argc, char **argv)
     {
       int opt;
 
-      opt = getopt_long (argc, argv, "df:hP:v", longopts, 0);
+      opt = getopt_long (argc, argv, "df:hP:rv", longopts, 0);
     
       if (opt == EOF)
 	break;
@@ -113,6 +170,9 @@ main (int argc, char **argv)
 	case 'P':
 	  vty_port = atoi (optarg);
 	  break;
+	case 'r':
+	  retain_mode = 1;
+	  break;
 	case 'v':
 	  print_version ();
 	  exit (0);
@@ -126,18 +186,22 @@ main (int argc, char **argv)
 	}
     }
 
+  /* First of all we need logging init. */
+  log_init ();
+
   /* Initializations. */
   master = thread_make_master ();
 
-  log_init ();
+  signal_init ();
   cmd_init ();
   vty_init ();
-  host_init ();
-  zebra_init ();
-  if_init ();
+  memory_init ();
 
+  /* RIP related initialization. */
   rip_init ();
   rip_if_init ();
+  zebra_init ();
+  sort_node ();
 
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);
@@ -152,10 +216,13 @@ main (int argc, char **argv)
   /* Pid file create. */
   pid_output (PATH_RIPD_PID);
 
-  /* Make ripd's soket after that send request to all interfaces. */
-  rip_make_socket ();
-  rip_request_all ();
+  /* Start rip. */
+  rip_start ();
 
+  /* Execute each thread. */
   while (thread_fetch (master, &thread))
     thread_call (&thread);
+
+  /* Not reached. */
+  exit (0);
 }

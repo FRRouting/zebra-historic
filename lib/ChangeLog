@@ -1,3 +1,94 @@
+1998-12-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* buffer.c (buffer_empty): check cp instead of sp.
+
+1998-12-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* radix.[ch]: Deleted.
+
+1998-12-15  Magnus Ahltorp <map@stacken.kth.se>
+
+	* buffer.c: Prototype fixes.
+	* prefix.c: Likewise.
+	* sockunion.c: Likewise.
+	* sockunion.h: Likewise.
+
+1998-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_read): DELETE key works as vty_delete_char.
+
+1998-12-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* log.c (time_print): chane %y to %Y.
+
+1998-12-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* distribute.c: new file.
+
+1998-12-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c: Remove all of struct prefix_{ipv4,ipv6} and add
+	complete support of IPv6 access list.
+
+	* command.c (config_write_element): function delete.
+	(config_write_host): function add.  password and enable password
+	isn't printed to vty interface.
+
+1998-12-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c: Change prefix_ipv4 to prefix and add support of
+	prefix_ipv6 filtering.
+
+1998-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (INCLUDES): add @INCLUDES@ for Linux IPv6 inet6-apps
+	header includes.
+
+1998-12-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* log.c (log_flush): fix function name typo.
+
+1998-12-04  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* memory.h: OSPF memory type is added.
+
+1998-11-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (sort_node): add sort_node() for pretty printing of
+	command on vty interface.
+	(config_password): delete the restriction of charaster of password
+	string.
+
+1998-09-05  Kunihiro Ishiguro  <kunihiro@debian.zebra.org>
+
+	* prefix.c (prefix_ipv4_any): add prefix_ipv4_any().
+
+1998-08-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* network.h: New file.
+
+1998-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_will_echo): function name change from vty_off_echo.
+
+1998-08-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* buffer.h: add PUTC,PUTW,PUTL macros.
+
+1998-07-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* route.[ch]: renamed to prefix.[ch]
+
+1998-06-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* prefix_in, prefix_in6 is replaced by prefix_ipv4, prefix_ipv6.
+
+	* Makefile.am: @INCLUDES@ is deleted from INCLUDES.
+
+1998-06-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* host.[ch]: merged with command.[ch]
+
 1998-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am (libzebra_a_SOURCES): add route.c to libzebra_a_SOURCES.

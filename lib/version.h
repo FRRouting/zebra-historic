@@ -21,3 +21,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ZEBRA_VERSION "alpha-01"
 
 extern char *host_name;
+
+void print_version();
+pid_t pid_output (char *);
+void daemon_me();
