@@ -22,108 +22,75 @@
 
 #include "ospf6d.h"
 
-static struct area *
-area_new ()
-{
-  struct area *new;
-  new = (struct area *) XMALLOC (MTYPE_OSPF6_AREA,
-                                 sizeof (struct area));
-  if (new)
-    memset (new, 0, sizeof (struct area));
-
-  return new;
-}
-
-static void
-area_free (struct area *area)
-{
-  XFREE (MTYPE_OSPF6_AREA, area);
-}
-
 /* Make new area structure */
-static struct area *
-make_area (unsigned long area_id)
+struct area *
+ospf6_area_init (unsigned long area_id)
 {
-  struct area *area;
-  char area_id_str[16];
+  struct area *o6a;
 
-  /* make area id strings for log */
-  inet_ntop (AF_INET, &area_id, area_id_str, sizeof (area_id_str));
-
-  area = area_new ();
-  if (!area)
+  /* allocate memory */
+  o6a = (struct area *) XMALLOC (MTYPE_OSPF6_AREA, sizeof (struct area));
+  if (!o6a)
     {
-      zlog (NULL, LOG_WARNING, "can't malloc area %s", area_id_str);
-      return area;
+      char str[16];
+      inet_ntop (AF_INET, &area_id, str, sizeof (str));
+      zlog_warn ("can't malloc area %s", str);
+      return NULL;
     }
 
-  /* set area id */
-  area->area_id = area_id;
-
-  /* set area id string for log */
-  inet_ntop (AF_INET, &area_id, area->str, sizeof (area->str));
-
-  /* ospf6 interface list */
-  area->ospf6_if_list = list_init ();
-
-  /* RouterLSA initial seqnum */
-  area->router_lsa_seqnum = INITIAL_SEQUENCE_NUMBER;
-
-  /* Initialize LSDB */
-  ospf6_lsdb_init_area (area);
-
-  /* new route table init */
-  area->table = ospf6_route_table_init ();
-
-  assert (ospf6->version == OSPF_V3);
+  /* initialize */
+  memset (o6a, 0, sizeof (struct area));
+  inet_ntop (AF_INET, &area_id, o6a->str, sizeof (o6a->str));
+  o6a->ospf6 = ospf6;
+  o6a->area_id = area_id;
+  o6a->if_list = list_init ();
+  o6a->table = ospf6_route_table_init ();
+  ospf6_lsdb_init_area (o6a);
 
   /* xxx, set options */
-  V3OPT_SET (area->options, V3OPT_V6);
-  V3OPT_SET (area->options, V3OPT_E);
-  V3OPT_SET (area->options, V3OPT_R);
+  V3OPT_SET (o6a->options, V3OPT_V6);
+  V3OPT_SET (o6a->options, V3OPT_E);
+  V3OPT_SET (o6a->options, V3OPT_R);
 
   /* add area list */
-  list_add_node (ospf6->area_list, area);
+  list_add_node (ospf6->area_list, o6a);
 
-  /* set back pointer */
-  area->ospf6 = ospf6;
-
-  return area;
+  return o6a;
 }
 
-static void
-delete_area (struct area *area)
+void
+ospf6_area_terminate (struct area *o6a)
 {
   listnode n;
   struct ospf6_if *o6if;
 
   /* ospf6 interface list */
-  for (n = listhead (area->ospf6_if_list); n; nextnode (n))
+  for (n = listhead (o6a->if_list); n; nextnode (n))
     {
       o6if = (struct ospf6_if *) getdata (n);
-      /* xxx */
+      /* ospf6_interface_terminate (o6if); */
     }
-  list_delete_all (area->ospf6_if_list);
+  list_delete_all (o6a->if_list);
 
   /* terminate LSDB */
-  ospf6_lsdb_finish_area (area);
+  ospf6_lsdb_finish_area (o6a);
 
   /* spf tree terminate */
   /* xxx */
 
   /* threads */
-  if (area->spf_calc)
-    thread_cancel (area->spf_calc);
-  area->spf_calc = (struct thread *) NULL;
-  if (area->route_calc)
-    thread_cancel (area->route_calc);
-  area->route_calc = (struct thread *) NULL;
+  if (o6a->spf_calc)
+    thread_cancel (o6a->spf_calc);
+  o6a->spf_calc = (struct thread *) NULL;
+  if (o6a->route_calc)
+    thread_cancel (o6a->route_calc);
+  o6a->route_calc = (struct thread *) NULL;
 
   /* route table terminate */
-  ospf6_route_table_finish (area->table);
+  ospf6_route_table_finish (o6a->table);
 
   /* free area */
-  area_free (area);
+  XFREE (MTYPE_OSPF6_AREA, o6a);
 }
 
 struct area *
@@ -141,20 +108,19 @@ ospf6_area_lookup (unsigned long area_id)
   return (struct area *)NULL;
 }
 
-struct area *
-ospf6_area_init (unsigned long area_id)
-{
-  struct area *area;
-
-  area = ospf6_area_lookup (area_id);
-  if (!area)
-    area = make_area (area_id);
-  return area;
-}
-
 void
-ospf6_area_terminate (struct area *area)
+ospf6_area_vty (struct vty *vty, struct area *o6a)
 {
-  delete_area (area);
+  listnode i;
+  struct ospf6_if *o6i;
+
+  vty_out (vty, "   Area %s%s", o6a->str, VTY_NEWLINE);
+  vty_out (vty, "      Interface attached to this area:");
+  for (i = listhead (o6a->if_list); i; nextnode (i))
+    {
+      o6i = (struct ospf6_if *) getdata (i);
+      vty_out (vty, " %s", o6i->interface->name);
+    }
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 

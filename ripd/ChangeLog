@@ -1,3 +1,18 @@
+1999-10-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_debug.c (rip_debug_reset): Reset function added.
+
+	* ripd.c (rip_update_process): Logging bug is fixed. 
+
+1999-10-10  Marc Boucher <marc@mbsi.ca>
+
+	* ripd.c (config_write_rip): Add config_write_distribute() call.
+
+1999-09-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_distribute_update): Fix bug of access-list
+	prefix-list updates.
+
 1999-09-10  VOP <vop@unity.net>
 
 	* rip_zebra.c: Add redistribute route-map feature.

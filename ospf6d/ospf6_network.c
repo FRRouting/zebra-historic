@@ -302,65 +302,130 @@ ospf6_serv_sock ()
 
   /* setup global sockaddr_in6, allspf6 & alldr6 for later use */
   allspfrouters6.sin6_family = AF_INET6;
-#ifdef SIN6_LEN
-  allspfrouters6.sin6_len = sizeof (struct sockaddr_in6);
-#endif /* SIN6_LEN */
-  inet_pton (AF_INET6, ALLSPFROUTERS6, &allspfrouters6.sin6_addr);
   alldrouters6.sin6_family = AF_INET6;
 #ifdef SIN6_LEN
+  allspfrouters6.sin6_len = sizeof (struct sockaddr_in6);
   alldrouters6.sin6_len = sizeof (struct sockaddr_in6);
 #endif /* SIN6_LEN */
-  inet_pton (AF_INET6, ALLSPFROUTERS6, &alldrouters6.sin6_addr);
+  inet_pton (AF_INET6, ALLSPFROUTERS6, &allspfrouters6.sin6_addr);
+  inet_pton (AF_INET6, ALLDROUTERS6, &alldrouters6.sin6_addr);
 
   return 0;
 }
 
 void
-ospf6_join_alldr (u_int ifindex)
+ospf6_join_allspfrouters (u_int ifindex)
 {
   struct ipv6_mreq mreq6;
 
   assert (ifindex);
-
-  memcpy (&mreq6.ipv6mr_multiaddr, &alldrouters6.sin6_addr,
-          sizeof (struct in6_addr));
   mreq6.ipv6mr_interface = ifindex;
+  memcpy (&mreq6.ipv6mr_multiaddr, &allspfrouters6.sin6_addr,
+          sizeof (struct in6_addr));
 
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP,
                   &mreq6, sizeof (mreq6)) < 0)
-    zlog_warn ("*** can't join AllDRouters6 on ifindex %d", ifindex);
+    zlog_warn ("*** Join AllSPFRouters on ifindex %d Failed", ifindex);
+  else
+    zlog_info ("Join AllSPFRouters on ifindex %d", ifindex);
 }
 
 void
-ospf6_leave_alldr (u_int ifindex)
+ospf6_leave_allspfrouters (u_int ifindex)
 {
   struct ipv6_mreq mreq6;
 
   assert (ifindex);
-
-  memcpy (&mreq6.ipv6mr_multiaddr, &alldrouters6.sin6_addr,
-          sizeof (struct in6_addr));
   mreq6.ipv6mr_interface = ifindex;
+  memcpy (&mreq6.ipv6mr_multiaddr, &allspfrouters6.sin6_addr,
+          sizeof (struct in6_addr));
 
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP,
                   &mreq6, sizeof (mreq6)) < 0)
-    zlog_warn ("*** can't leave AllDRouters6 on ifindex %d", ifindex);
+    zlog_warn ("*** Leave AllSPFRouters on ifindex %d Failed: %s",
+               ifindex, strerror (errno));
+  else
+    zlog_info ("Leave AllSPFRouters on ifindex %d", ifindex);
 }
 
-#ifndef s6_addr32
-#define s6_addr32 u6_addr.u6_addr32
-#define s6_addr16 u6_addr.u6_addr16
-#define s6_addr8  u6_addr.u6_addr8
-#define s6_addr   u6_addr.u6_addr8
-#endif
+void
+ospf6_join_alldrouters (u_int ifindex)
+{
+  struct ipv6_mreq mreq6;
+
+  assert (ifindex);
+  mreq6.ipv6mr_interface = ifindex;
+  memcpy (&mreq6.ipv6mr_multiaddr, &alldrouters6.sin6_addr,
+          sizeof (struct in6_addr));
+
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP,
+                  &mreq6, sizeof (mreq6)) < 0)
+    zlog_warn ("*** Join AllDRouters on ifindex %d Failed: %s",
+               ifindex, strerror (errno));
+  else
+    zlog_info ("Join AllDRouters on ifindex %d", ifindex);
+}
+
+void
+ospf6_leave_alldrouters (u_int ifindex)
+{
+  struct ipv6_mreq mreq6;
+
+  assert (ifindex);
+  mreq6.ipv6mr_interface = ifindex;
+  memcpy (&mreq6.ipv6mr_multiaddr, &alldrouters6.sin6_addr,
+          sizeof (struct in6_addr));
+
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP,
+                  &mreq6, sizeof (mreq6)) < 0)
+    zlog_warn ("*** Leave AllDRouters on ifindex %d Failed", ifindex);
+  else
+    zlog_info ("Leave AllDRouters on ifindex %d", ifindex);
+}
+
+/* setsockopt MulticastLoop to off */
+void
+ospf6_set_mcastloop ()
+{
+  u_int off = 0;
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
+                  &off, sizeof (u_int)) < 0)
+    zlog_warn ("*** Set IPV6_MULTICAST_LOOP to off Failed: %s",
+               strerror (errno));
+}
+
+void
+ospf6_set_pktinfo ()
+{
+  u_int on = 1;
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_PKTINFO,
+                  &on, sizeof (u_int)) < 0)
+    zlog_warn ("*** Set IPV6_PKTINFO Failed: %s",
+               strerror (errno));
+}
+
+void
+ospf6_set_checksum ()
+{
+  int offset = 12;
+#ifndef DISABLE_IPV6_CHECKSUM
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_CHECKSUM,
+                  &offset, sizeof (offset)) < 0)
+    zlog_warn ("*** Set IPV6_CHECKSUM Failed: %s",
+               strerror (errno));
+#else
+  zlog_warn ("*** Don't set IPV6_CHECKSUM.");
+#endif /* DISABLE_IPV6_CHECKSUM */
+}
 
 void
 ospf6_ipv4_encode_ipv6 (struct in_addr *in4, struct in6_addr *in6)
 {
   /* IPv4 address to IPv4 Mapped Address */
   memset (in6, 0, sizeof (struct in6_addr));
-  in6->s6_addr16[5] = 0xffff;
-  in6->s6_addr32[3] = in4->s_addr;
+  in6->s6_addr[10] = 0xff;
+  in6->s6_addr[11] = 0xff;
+  memcpy(&in6->s6_addr[12], in4, sizeof(*in4));
 }
 
 void
@@ -370,8 +435,8 @@ ospf6_ipv6_decode_ipv4 (struct in6_addr *in6, struct in_addr *in4)
     zlog_warn (" *** converting address not IPv4MappedAddress!!");
 
   /* IPv4 Mapped Address to IPv4 address*/
-  memset (in4, 0, sizeof (struct in_addr));
-  in4->s_addr = in6->s6_addr32[3];
+  memset (in6, 0, sizeof (struct in6_addr));
+  memcpy(&in6->s6_addr[12], in4, sizeof(*in4));
 }
 
 int

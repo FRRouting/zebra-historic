@@ -38,7 +38,7 @@ hash_new (int size)
   new = XMALLOC (MTYPE_HASH, sizeof (struct Hash));
   bzero (new, sizeof (struct Hash));
 
-  new->index = XMALLOC (MTYPE_HASH_BACKET, sizeof (HashBacket *) * size);
+  new->index = XMALLOC (MTYPE_HASH, sizeof (HashBacket *) * size);
   bzero (new->index, sizeof (HashBacket *) * size);
 
   new->size = size;
@@ -103,14 +103,14 @@ hash_push (struct Hash *hash, void *data)
       for (mp = hash->index[key]; mp->next != NULL; mp = mp->next) 
 	if ((*hash->hash_cmp) (data, mp->data) == 1) 
 	  {
-	    zlog (NULL, LOG_INFO, "hash data [%p] was duplicated!", data);
+	    zlog_info ("hash data [%p] was duplicated!", data);
 	    XFREE (MTYPE_HASH_BACKET, backet);
 	    return NULL;
 	  }
       
       if ((*hash->hash_cmp) (data, mp->data) == 1) 
 	{
-	  zlog (NULL, LOG_INFO, "hash account name [%p] was duplicated!", data);
+	  zlog_info ("hash account name [%p] was duplicated!", data);
 	  XFREE (MTYPE_HASH_BACKET, backet);
 	  return NULL;
 	}
@@ -153,4 +153,24 @@ hash_pull (struct Hash *hash, void *data)
       mp = mp->next;
     }
   return NULL;
+}
+
+void
+hash_clean (struct Hash *hash, void (* func) (void *))
+{
+  int i;
+  HashBacket *mp;
+  HashBacket *next;
+
+  for (i = 0; i < HASHTABSIZE; i++)
+    {
+      for (mp = hash_head (hash, i); mp; mp = next)
+	{
+	  next = mp->next;
+	      
+	  (*func) (mp->data);
+	  XFREE (MTYPE_HASH_BACKET, mp);
+	}
+      hash->index[i] = NULL;
+    }
 }

@@ -22,43 +22,37 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
-#include "thread.h"
 #include "command.h"
 #include "prefix.h"
 #include "stream.h"
-#include "buffer.h"
-#include "log.h"
-#include "network.h"
-#include "client.h"
 #include "zclient.h"
-#include "if.h"
+#include "log.h"
 
 #include "ripngd/ripngd.h"
-
-/* All information about zebra. */
-struct zebra *zebra = NULL;
-
+
 /* int ripng_zebra_get_interface (int, struct zebra *, zebra_size_t); */
 int ripng_interface_add (int, struct zebra *, zebra_size_t);
 int ripng_interface_delete (int, struct zebra *, zebra_size_t);
 int ripng_interface_address_add (int, struct zebra *, zebra_size_t);
 int ripng_interface_address_delete (int, struct zebra *, zebra_size_t);
+
+/* All information about zebra. */
+struct zebra *zclient = NULL;
 
 void
 ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 		      unsigned int ifindex)
 {
-  if (zebra->redist[ZEBRA_ROUTE_RIPNG])
-    zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
+  if (zclient->redist[ZEBRA_ROUTE_RIPNG])
+    zebra_ipv6_add (zclient->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
 }
 
 void
 ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 			 unsigned int ifindex)
 {
-  if (zebra->redist[ZEBRA_ROUTE_RIPNG])
-    zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
+  if (zclient->redist[ZEBRA_ROUTE_RIPNG])
+    zebra_ipv6_delete (zclient->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
 }
 
 /* Zebra route add and delete treatment. */
@@ -71,7 +65,7 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
   u_char *lim;
   struct stream *s;
 
-  s = zebra->ibuf;
+  s = zclient->ibuf;
 
   lim = stream_pnt (s) + length;
 
@@ -104,29 +98,15 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 }
 
 int
-ripng_redistribute_set (int type)
-{
-  if (zebra->redist[type])
-    return CMD_SUCCESS;
-
-  zebra->redist[type] = 1;
-
-  if (zebra->sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, type);
-
-  return CMD_SUCCESS;
-}
-
-int
 ripng_redistribute_unset (int type)
 {
-  if (! zebra->redist[type])
+  if (! zclient->redist[type])
     return CMD_SUCCESS;
 
-  zebra->redist[type] = 0;
+  zclient->redist[type] = 0;
 
-  if (zebra->sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+  if (zclient->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zclient->sock, type);
 
   ripng_redistribute_withdraw (type);
   
@@ -140,18 +120,20 @@ DEFUN (router_zebra,
        "Make connection to zebra daemon\n")
 {
   vty->node = ZEBRA_NODE;
-  zebra->enable = 1;
+  zclient->enable = 1;
+  zclient_start (zclient);
+  return CMD_SUCCESS;
+}
 
-  /* If already has socket then return. */
-  if (zebra->sock >= 0)
-    return CMD_SUCCESS;
-
-  /* Try to create zebra connection. */
-  if (zebra_create (zebra) < 0)
-    {
-      vty_out (vty, "Can't connect to zebra.\r\n");
-      return CMD_WARNING;
-    }
+DEFUN (no_router_zebra,
+       no_router_zebra_cmd,
+       "no router zebra",
+       NO_STR
+       "Disable a routing process\n"
+       "Stop connection to zebra daemon\n")
+{
+  zclient->enable = 0;
+  zclient_stop (zclient);
   return CMD_SUCCESS;
 }
 
@@ -161,7 +143,7 @@ DEFUN (ripng_redistribute_ripng,
        "Redistribute control\n"
        "RIPng route\n")
 {
-  zebra->redist[ZEBRA_ROUTE_RIPNG] = 1;
+  zclient->redist[ZEBRA_ROUTE_RIPNG] = 1;
   return CMD_SUCCESS;
 }
 
@@ -172,7 +154,7 @@ DEFUN (no_ripng_redistribute_ripng,
        "Redistribute control\n"
        "RIPng route\n")
 {
-  zebra->redist[ZEBRA_ROUTE_RIPNG] = 0;
+  zclient->redist[ZEBRA_ROUTE_RIPNG] = 0;
   return CMD_SUCCESS;
 }
 
@@ -182,7 +164,8 @@ DEFUN (ripng_redistribute_static,
        "Redistribute control\n"
        "Static route\n")
 {
-  return ripng_redistribute_set (ZEBRA_ROUTE_STATIC);
+  zclient_redistribute_set (zclient, ZEBRA_ROUTE_STATIC);
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_ripng_redistribute_static,
@@ -195,13 +178,34 @@ DEFUN (no_ripng_redistribute_static,
   return ripng_redistribute_unset (ZEBRA_ROUTE_STATIC);
 }
 
+DEFUN (ripng_redistribute_kernel,
+       ripng_redistribute_kernel_cmd,
+       "redistribute kernel",
+       "Redistribute control\n"
+       "Kernel route\n")
+{
+  zclient_redistribute_set (zclient, ZEBRA_ROUTE_KERNEL);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ripng_redistribute_kernel,
+       no_ripng_redistribute_kernel_cmd,
+       "no redistribute kernel",
+       NO_STR
+       "Redistribute control\n"
+       "Kernel route\n")
+{
+  return ripng_redistribute_unset (ZEBRA_ROUTE_KERNEL);
+}
+
 DEFUN (ripng_redistribute_connected,
        ripng_redistribute_connected_cmd,
        "redistribute connected",
        "Redistribute control\n"
        "Connected route\n")
 {
-  return ripng_redistribute_set (ZEBRA_ROUTE_CONNECT);
+  zclient_redistribute_set (zclient, ZEBRA_ROUTE_CONNECT);
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_ripng_redistribute_connected,
@@ -220,7 +224,8 @@ DEFUN (ripng_redistribute_bgp,
        "Redistribute control\n"
        "BGP route\n")
 {
-  return ripng_redistribute_set (ZEBRA_ROUTE_BGP);
+  zclient_redistribute_set (zclient, ZEBRA_ROUTE_BGP);
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_ripng_redistribute_bgp,
@@ -239,7 +244,8 @@ DEFUN (ripng_redistribute_ospf6,
        "Redistribute control\n"
        "OSPF6 route\n")
 {
-  return ripng_redistribute_set (ZEBRA_ROUTE_OSPF6);
+  zclient_redistribute_set (zclient, ZEBRA_ROUTE_OSPF6);
+  return CMD_SUCCESS;
 }
 
 DEFUN (no_ripng_redistribute_ospf6,
@@ -260,20 +266,21 @@ ripng_redistribute_write (struct vty *vty)
 		  "ripng", "ospf", "ospf6", "bgp"};
 
   for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
-    if (i != zebra->redist_default && zebra->redist[i])
-      vty_out (vty, " redistribute %s%s", str[i], VTY_NEWLINE);
+    if (i != zclient->redist_default && zclient->redist[i])
+      vty_out (vty, " redistribute %s%s", str[i],
+	       VTY_NEWLINE);
 }
 
 /* RIPng configuration write function. */
 int
 zebra_config_write (struct vty *vty)
 {
-  if (! zebra->enable)
+  if (! zclient->enable)
     {
       vty_out (vty, "no router zebra%s", VTY_NEWLINE);
       return 1;
     }
-  else if (! zebra->redist[ZEBRA_ROUTE_RIPNG])
+  else if (! zclient->redist[ZEBRA_ROUTE_RIPNG])
     {
       vty_out (vty, "router zebra%s", VTY_NEWLINE);
       vty_out (vty, " no redistribute ripng%s", VTY_NEWLINE);
@@ -289,45 +296,33 @@ struct cmd_node zebra_node =
   "%s(config-router)# ",
 };
 
-/* Start related zebra thread. */
-void
-zebra_start ()
-{
-  zebra_create (zebra);
-}
-
 /* Initialize zebra structure and it's commands. */
 void
 zebra_init ()
 {
   /* Allocate zebra structure. */
-  zebra = zebra_new ();
-
-  /* Set default value to the zebra structure. */
-  zebra->enable = 1;
-  zebra->sock = -1;
-  zebra->redist_default = ZEBRA_ROUTE_RIPNG;
-  zebra->redist[ZEBRA_ROUTE_RIPNG] = 1;
-
-  /* Set call back functions. */
-  /* zebra->get_all_interface = ripng_zebra_get_interface; */
-  zebra->interface_add = ripng_interface_add;
-  zebra->interface_delete = ripng_interface_delete;
-  zebra->interface_address_add = ripng_interface_address_add;
-  zebra->interface_address_delete = ripng_interface_address_delete;
-  zebra->ipv6_route_add = ripng_zebra_read_ipv6;
-  zebra->ipv6_route_delete = ripng_zebra_read_ipv6;
+  zclient = zclient_new ();
+  zclient_init (zclient, ZEBRA_ROUTE_RIPNG);
+  zclient->interface_add = ripng_interface_add;
+  zclient->interface_delete = ripng_interface_delete;
+  zclient->interface_address_add = ripng_interface_address_add;
+  zclient->interface_address_delete = ripng_interface_address_delete;
+  zclient->ipv6_route_add = ripng_zebra_read_ipv6;
+  zclient->ipv6_route_delete = ripng_zebra_read_ipv6;
   
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
 
   /* Install command element for zebra node. */ 
   install_element (CONFIG_NODE, &router_zebra_cmd);
+  install_element (CONFIG_NODE, &no_router_zebra_cmd);
   install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &ripng_redistribute_ripng_cmd);
   install_element (ZEBRA_NODE, &no_ripng_redistribute_ripng_cmd);
   install_element (RIPNG_NODE, &ripng_redistribute_static_cmd);
   install_element (RIPNG_NODE, &no_ripng_redistribute_static_cmd);
+  install_element (RIPNG_NODE, &ripng_redistribute_kernel_cmd);
+  install_element (RIPNG_NODE, &no_ripng_redistribute_kernel_cmd);
   install_element (RIPNG_NODE, &ripng_redistribute_connected_cmd);
   install_element (RIPNG_NODE, &no_ripng_redistribute_connected_cmd);
   install_element (RIPNG_NODE, &ripng_redistribute_bgp_cmd);

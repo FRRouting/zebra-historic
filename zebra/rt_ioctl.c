@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "prefix.h"
 #include "log.h"
 
@@ -122,7 +121,7 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
   sock = socket (AF_INET, SOCK_DGRAM, 0);
   if (sock < 0)
     {
-      log ("can't make socket\n");
+      zlog_warn ("can't make socket\n");
       return -1;
     }
 
@@ -228,7 +227,7 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
   sock = socket (AF_INET6, SOCK_DGRAM, 0);
   if (sock < 0)
     {
-      log ("can't make socket\n");
+      zlog_warn ("can't make socket\n");
       return -1;
     }
 
@@ -236,7 +235,7 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
   ret = ioctl (sock, type, &rtm);
   if (ret < 0)
     {
-      log ("can't %s ipv6 route: %s\n", type == SIOCADDRT ? "add" : "delete", 
+      zlog_warn ("can't %s ipv6 route: %s\n", type == SIOCADDRT ? "add" : "delete", 
 	   strerror(errno));
       ret = errno;
       close (sock);

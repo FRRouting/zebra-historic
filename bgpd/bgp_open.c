@@ -30,8 +30,6 @@
 #include "thread.h"
 #include "log.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_dump.h"

@@ -466,13 +466,22 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 	    case LSA_LINK_TYPE_POINTOPOINT:
 	    case LSA_LINK_TYPE_VIRTUALLINK:
               if (l->m[0].type == LSA_LINK_TYPE_VIRTUALLINK)
-                 zlog_info("Z: looking up LSA through VL: %s", inet_ntoa(l->link_id));
+                 zlog_info ("Z: looking up LSA through VL: %s",
+			    inet_ntoa(l->link_id));
+
 	      w_lsa = ospf_lsa_lookup (area, OSPF_ROUTER_LSA, l->link_id,
 				       l->link_id);
-              if (w_lsa) zlog_info("Z: found the LSA");
+              if (w_lsa)
+		zlog_info("Z: found the LSA");
 	      break;
 	    case LSA_LINK_TYPE_TRANSIT:
-	      w_lsa = ospf_lsa_lookup_by_id (area, OSPF_NETWORK_LSA, l->link_id);
+	      zlog_info ("Z: Looking up Network LSA, ID: %s",
+			 inet_ntoa(l->link_id));
+	      w_lsa = ospf_lsa_lookup_by_id (area, OSPF_NETWORK_LSA,
+					     l->link_id);
+
+              if (w_lsa)
+		zlog_info("Z: found the LSA");
 	      break;
 	    default:
 	      zlog_warn ("Invalid LSA link type %d", l->m[0].type);
@@ -494,19 +503,23 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 	 examine the next link in V's LSA.[23] */
       if (w_lsa == NULL)
 	continue;
+
       if (LS_AGE (w_lsa) == OSPF_LSA_MAX_AGE)
 	continue;
-      if (! ospf_lsa_has_link (w_lsa->data, v->lsa, NULL)){
-        zlog_info("Z: The LSA doesn't have a link back");
-	continue;
-      }
+
+      if (! ospf_lsa_has_link (w_lsa->data, v->lsa, NULL))
+	{
+	  zlog_info ("Z: The LSA doesn't have a link back");
+	  continue;
+	}
 
       /* (c) If vertex W is already on the shortest-path tree, examine
 	 the next link in the LSA. */
-      if (ospf_spf_has_vertex (rv, nv, w_lsa->data)){
-        zlog_info("Z: The LSA is already in SPF");
-	continue;
-      }
+      if (ospf_spf_has_vertex (rv, nv, w_lsa->data))
+	{
+	  zlog_info ("Z: The LSA is already in SPF");
+	  continue;
+	}
 
       /* (d) Calculate the link state cost D of the resulting path
 	 from the root to vertex W.  D is equal to the sum of the link
@@ -648,7 +661,6 @@ ospf_process_stubs (struct ospf_area *area, struct vertex * v,
   zlog_info ("Z: ospf_process_stub():processing stubs for area %s",
 		 inet_ntoa (area->area_id));
 
-
   if (v->type == OSPF_VERTEX_ROUTER)
     {
       u_char *p;
@@ -662,7 +674,7 @@ ospf_process_stubs (struct ospf_area *area, struct vertex * v,
       rlsa = (struct router_lsa *) v->lsa;
 
       zlog_info ("Z: ospf_process_stub(): we have %d links to process",
-		 ntohs(rlsa->links));
+		 ntohs (rlsa->links));
 
       p = ((u_char *) v->lsa) + 24;
       lim = ((u_char *) v->lsa) + ntohs (v->lsa->length);
@@ -679,11 +691,11 @@ ospf_process_stubs (struct ospf_area *area, struct vertex * v,
 	}
     }
 
-  zlog_info("Z: childred of V:");
+  zlog_info ("Z: childred of V:");
   for (cnode = listhead (v->child); cnode; nextnode (cnode))
     {
       child = getdata (cnode);
-      zlog_info("Z:  child : %s", inet_ntoa(child->id));
+      zlog_info ("Z:  child : %s", inet_ntoa (child->id));
     }
 
   for (cnode = listhead (v->child); cnode; nextnode (cnode))
@@ -755,13 +767,15 @@ ospf_rtrs_print (struct route_table *rtrs)
 		  zlog_info ("%s   [%d] area: %s", 
 			     inet_ntop (AF_INET, &or->id, buf1, BUFSIZ),
 			     or->cost,
-			     inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ));
+			     inet_ntop (AF_INET, &or->area->area_id,
+					buf2, BUFSIZ));
 		  break;
 		case OSPF_PATH_INTER_AREA:
 		  zlog_info ("%s IA [%d] area: %s", 
 			     inet_ntop (AF_INET, &or->id, buf1, BUFSIZ),
 			     or->cost,
-			     inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ));
+			     inet_ntop (AF_INET, &or->area->area_id,
+					buf2, BUFSIZ));
 		  break;
 		default:
 		  break;
@@ -794,15 +808,17 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
   struct route_table *rv;
   struct route_table *nv;
 
-  zlog_info("ospf_spf_calculate: Start");
-  zlog_info("ospf_spf_calculate: running Dijkstra for area %s", 
-	    inet_ntoa (area->area_id));
+  zlog_info ("ospf_spf_calculate: Start");
+  zlog_info ("ospf_spf_calculate: running Dijkstra for area %s", 
+	     inet_ntoa (area->area_id));
 
   /* Check router-lsa-self.  If self-router-lsa is not yet allocated,
      return this area's calculation. */
   if (! area->router_lsa_self)
     {
-      zlog_info ("ospf_spf_calculate: Skip area %s's calculation due to empty router_lsa_self", inet_ntoa (area->area_id));
+      zlog_info ("ospf_spf_calculate: "
+		 "Skip area %s's calculation due to empty router_lsa_self",
+		 inet_ntoa (area->area_id));
       return;
     }
 
@@ -858,9 +874,9 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
 
       /* RFC2328 16.1. (4). */
       if (v->type == OSPF_VERTEX_ROUTER)
-         ospf_intra_add_router (new_rtrs, v, area);
+	ospf_intra_add_router (new_rtrs, v, area);
       else 
-         ospf_intra_add_transit (new_table, v, area);
+	ospf_intra_add_transit (new_table, v, area);
 
       /* RFC2328 16.1. (5). */
       /* Iterate the algorithm by returning to Step 2. */
@@ -878,7 +894,7 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
   ospf_spf_route_free (rv);
   ospf_spf_route_free (nv);
 
-  zlog_info("ospf_spf_calculate: Stop");
+  zlog_info ("ospf_spf_calculate: Stop");
 }
 
 #define OSPF_SPF_CALC_INTERVAL 10
@@ -905,7 +921,7 @@ ospf_spf_calculate_timer (struct thread *t)
   struct ospf_area *area;
   listnode node;
 
-  zlog_info("Z: ospf_spf_calculate_timer: Start");
+  zlog_info ("Z: ospf_spf_calculate_timer: Start");
   
   ospf = THREAD_ARG (t);
 
@@ -919,7 +935,7 @@ ospf_spf_calculate_timer (struct thread *t)
       new_table = route_table_init ();
       new_rtrs  = route_table_init ();
 
-      ospf_vl_unapprove();
+      ospf_vl_unapprove ();
 
       /* Calculate SPF for each area. */
       for (node = listhead (ospf->areas); node; node = nextnode (node))
@@ -953,10 +969,10 @@ ospf_spf_calculate_timer (struct thread *t)
       ospf_top->new_rtrs = new_rtrs;
 
       if (OSPF_IS_ABR) 
-	ospf_abr_task(new_table, new_rtrs);
+	ospf_abr_task (new_table, new_rtrs);
 
       if (OSPF_IS_ASBR) 
-	ospf_asbr_check();
+	ospf_asbr_check ();
     }
 
   /* Register myself. */

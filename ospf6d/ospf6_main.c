@@ -213,9 +213,6 @@ main (int argc, char **argv)
   sort_node ();
   nexthop_init ();
 
-  /* Connect to zebra. */
-  ospf6_zebra_start ();
-
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
 

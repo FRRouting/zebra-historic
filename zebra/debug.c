@@ -33,28 +33,31 @@ DEFUN (show_debugging_zebra,
        "show debugging zebra",
        SHOW_STR
        "Zebra configuration\n"
-       "Debuggin information\n")
+       "Debugging information\n")
 {
-  vty_out (vty, "Zebra debugging status:\r\n");
+  vty_out (vty, "Zebra debugging status:%s", VTY_NEWLINE);
 
   if (IS_ZEBRA_DEBUG_EVENT)
-    vty_out (vty, "  Zebra event debugging is on\r\n");
+    vty_out (vty, "  Zebra event debugging is on%s", VTY_NEWLINE);
 
   if (IS_ZEBRA_DEBUG_PACKET)
     {
       if (IS_ZEBRA_DEBUG_SEND && IS_ZEBRA_DEBUG_RECV)
 	{
-	  vty_out (vty, "  Zebra packet%s debugging is on\r\n",
-		   IS_ZEBRA_DEBUG_DETAIL ? " detail" : "");
+	  vty_out (vty, "  Zebra packet%s debugging is on%s",
+		   IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
+		   VTY_NEWLINE);
 	}
       else
 	{
 	  if (IS_ZEBRA_DEBUG_SEND)
-	    vty_out (vty, "  Zebra packet send%s debugging is on\r\n",
-		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "");
+	    vty_out (vty, "  Zebra packet send%s debugging is on%s",
+		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "  Zebra packet recieve%s debugging is on\r\n",
-		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "");
+	    vty_out (vty, "  Zebra packet recieve%s debugging is on%s",
+		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	}
     }
 
@@ -185,17 +188,20 @@ config_write_debug (struct vty *vty)
       if (IS_ZEBRA_DEBUG_SEND && IS_ZEBRA_DEBUG_RECV)
 	{
 	  vty_out (vty, "debug zebra packet%s%s",
-		   IS_ZEBRA_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		   IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
+		   VTY_NEWLINE);
 	  write++;
 	}
       else
 	{
 	  if (IS_ZEBRA_DEBUG_SEND)
 	    vty_out (vty, "debug zebra packet send%s%s",
-		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  else
 	    vty_out (vty, "debug zebra packet recieve%s%s",
-		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		     IS_ZEBRA_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  write++;
 	}
     }

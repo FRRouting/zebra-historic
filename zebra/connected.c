@@ -22,13 +22,14 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "prefix.h"
 #include "linklist.h"
 #include "if.h"
 #include "rib.h"
 #include "table.h"
-#include "redistribute.h"
+
+#include "zebra/zserv.h"
+#include "zebra/redistribute.h"
 
 /* If same interface address is already exist... */
 int

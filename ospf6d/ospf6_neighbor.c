@@ -27,83 +27,6 @@ delete_ospf6_nbr (struct neighbor *nbr)
 }
 
 int
-nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
-{
-  state_t nbs_previous;
-
-  nbs_previous = nbr->state;
-  nbr->state = nbs_next;
-
-  if (nbs_previous == nbs_next)
-    return 0;
-
-  /* log */
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    {
-      if (reason)
-        zlog_info ("Neighbor status change %s: [%s]->[%s](%s)",
-                   nbr->str,
-                   nbs_name[nbs_previous], nbs_name[nbs_next],
-                   reason);
-      else
-        zlog_info ("Neighbor status change %s: [%s]->[%s]",
-                   nbr->str,
-                   nbs_name[nbs_previous], nbs_name[nbs_next]);
-    }
-
-  if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
-    nbs_full_change (nbr->ospf6_if);
-
-  /* check for LSAs that already reached MaxAge */
-  /* for Interface scope LSA */
-  ospf6_lsdb_maxage_remove_interface (nbr->ospf6_if);
-
-  /* for Area scope LSA */
-  ospf6_lsdb_maxage_remove_area (nbr->ospf6_if->area);
-
-  /* for AS scope LSA */
-  ospf6_lsdb_maxage_remove_as (nbr->ospf6_if->area->ospf6);
-
-  return 0;
-}
-
-int
-nbs_full_change (struct ospf6_if *ospf6_if)
-{
-  struct ospf6_lsa *lsa;
-
-  /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_if->area);
-  if (lsa)
-    {
-      ospf6_lsa_flood (lsa);
-      ospf6_lsdb_install (lsa);
-      ospf6_lsa_unlock (lsa);
-    }
-
-  if (ospf6_if->state == IFS_DR)
-    {
-      /* construct Network-LSA */
-      lsa = ospf6_make_network_lsa (ospf6_if);
-      if (lsa)
-        {
-          ospf6_lsa_flood (lsa);
-          ospf6_lsdb_install (lsa);
-          ospf6_lsa_unlock (lsa);
-        }
-      /* construct Intra-Area-Prefix-LSA */
-      lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
-      if (lsa)
-        {
-          ospf6_lsa_flood (lsa);
-          ospf6_lsdb_install (lsa);
-          ospf6_lsa_unlock (lsa);
-        }
-    }
-  return 0;
-}
-
-int
 neighbor_thread_cancel (struct neighbor *nbr)
 {
   if (nbr->inactivity_timer)
@@ -142,582 +65,8 @@ free_last_dd (struct thread *thread)
 
   nbr = (struct neighbor *)THREAD_ARG (thread);
   assert (nbr);
-  memset (&nbr->last_dd, 0, sizeof (struct database_description));
+  memset (&nbr->last_dd, 0, sizeof (struct ospf6_dbdesc));
   return 0;
-}
-
-/* RFC2328 section 10.4 */
-int
-need_adjacency (struct neighbor *nbr)
-{
-
-  if (nbr->ospf6_if->state == IFS_PTOP)
-    return 1;
-  if (nbr->ospf6_if->state == IFS_DR)
-    return 1;
-  if (nbr->ospf6_if->state == IFS_BDR)
-    return 1;
-  if (nbr->rtr_id == nbr->ospf6_if->dr)
-    return 1;
-  if (nbr->rtr_id == nbr->ospf6_if->bdr)
-    return 1;
-
-  return 0;
-}
-
-int
-hello_received (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *HelloReceived*", nbr->str);
-
-  if (nbr->inactivity_timer)
-    thread_cancel (nbr->inactivity_timer);
-
-  nbr->inactivity_timer = thread_add_timer (master, inactivity_timer, nbr,
-                                            nbr->ospf6_if->rtr_dead_interval);
-  if (nbr->state <= NBS_DOWN)
-    nbs_change (NBS_INIT, "HelloReceived", nbr);
-  return 0;
-}
-
-int
-twoway_received (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state > NBS_INIT)
-    return 0;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *2Way-Received*", nbr->str);
-
-  thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
-
-  if (!need_adjacency (nbr))
-    {
-      nbs_change (NBS_TWOWAY, "No Need Adjacency", nbr);
-      return 0;
-    }
-  else
-    nbs_change (NBS_EXSTART, "Need Adjacency", nbr);
-
-  DD_MSBIT_SET (nbr->dd_bits);
-  DD_MBIT_SET (nbr->dd_bits);
-  DD_IBIT_SET (nbr->dd_bits);
-
-  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
-
-  return 0;
-}
-
-int
-negotiation_done (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state != NBS_EXSTART)
-    return 0;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *NegotiationDone*", nbr->str);
-
-  nbs_change (NBS_EXCHANGE, "NegotiationDone", nbr);
-  DD_IBIT_CLEAR (nbr->dd_bits);
-
-  return 0;
-}
-
-int
-exchange_done (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state != NBS_EXCHANGE)
-    return 0;
-
-  if (nbr->send_dd != (struct thread *)NULL)
-    {
-      thread_cancel (nbr->send_dd);
-      nbr->send_dd = (struct thread *)NULL;
-    }
-
-  if (nbr->thread_dbdesc_retrans)
-    thread_cancel (nbr->thread_dbdesc_retrans);
-  nbr->thread_dbdesc_retrans = (struct thread *) NULL;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *ExchangeDone*", nbr->str);
-
-  list_delete_all_node (nbr->dd_retrans);
-
-  thread_add_timer (master, free_last_dd, nbr,
-                    nbr->ospf6_if->rtr_dead_interval);
-
-  if (list_isempty (nbr->requestlist))
-    nbs_change (NBS_FULL, "Requestlist Empty", nbr);
-  else
-    {
-      if (nbr->send_lsreq == (struct thread *)NULL)
-        thread_add_event (master, send_linkstate_request,
-                          nbr, nbr->ospf6_if->rxmt_interval);
-      nbs_change (NBS_LOADING, "Requestlist Not Empty", nbr);
-    }
-  return 0;
-}
-
-int
-loading_done (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state != NBS_LOADING)
-    return 0;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *LoadingDone*", nbr->str);
-
-  assert (list_isempty (nbr->requestlist));
-
-  nbs_change (NBS_FULL, "LoadingDone", nbr);
-
-  return 0;
-}
-
-int
-adj_ok (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *AdjOK?*", nbr->str);
-
-  if (nbr->state == NBS_TWOWAY)
-    {
-      if (!need_adjacency (nbr))
-        {
-          nbs_change (NBS_TWOWAY, "No Need Adjacency", nbr);
-          return 0;
-        }
-      else
-        nbs_change (NBS_EXSTART, "Need Adjacency", nbr);
-
-      DD_MSBIT_SET (nbr->dd_bits);
-      DD_MBIT_SET (nbr->dd_bits);
-      DD_IBIT_SET (nbr->dd_bits);
-
-      thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
-
-      return 0;
-    }
-
-  if (nbr->state >= NBS_EXSTART)
-    {
-      if (need_adjacency (nbr))
-        return 0;
-      else
-        {
-          nbs_change (NBS_TWOWAY, "No Need Adjacency", nbr);
-          list_cleared_of_lsa (nbr);
-        }
-    }
-  return 0;
-}
-
-int
-seqnumber_mismatch (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state < NBS_EXCHANGE)
-    return 0;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *SeqNumberMismatch*", nbr->str);
-
-  nbs_change (NBS_EXSTART, "SeqNumberMismatch", nbr);
-
-  DD_MSBIT_SET (nbr->dd_bits);
-  DD_MBIT_SET (nbr->dd_bits);
-  DD_IBIT_SET (nbr->dd_bits);
-  list_cleared_of_lsa (nbr);
-
-  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
-
-  return 0;
-}
-
-int
-bad_lsreq (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state < NBS_EXCHANGE)
-    return 0;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *BadLSReq*", nbr->str);
-
-  nbs_change (NBS_EXSTART, "BadLSReq", nbr);
-
-  DD_MSBIT_SET (nbr->dd_bits);
-  DD_MBIT_SET (nbr->dd_bits);
-  DD_IBIT_SET (nbr->dd_bits);
-  list_cleared_of_lsa (nbr);
-
-  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
-
-  return 0;
-}
-
-int
-oneway_received (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (nbr->state < NBS_TWOWAY)
-    return 0;
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *1Way-Received*", nbr->str);
-
-  nbs_change (NBS_INIT, "1Way-Received", nbr);
-
-  thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
-  neighbor_thread_cancel (nbr);
-  list_cleared_of_lsa (nbr);
-  return 0;
-}
-
-int
-inactivity_timer (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
-
-  if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *InactivityTimer*", nbr->str);
-
-  nbr->inactivity_timer = NULL;
-  nbr->dr = nbr->bdr = nbr->prevdr = nbr->prevbdr = 0;
-  nbs_change (NBS_DOWN, "InactivityTimer", nbr);
-  neighbor_thread_cancel (nbr);
-  list_cleared_of_lsa (nbr);
-  thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
-
-  return 0;
-}
-
-
-/* 9.4 of RFC2328 */
-int
-dr_election (struct ospf6_if *ospf6_if)
-{
-  list candidate_list = list_init ();
-  listnode i, j, n;
-  ifid_t prevdr, prevbdr, dr = 0, bdr;
-  struct neighbor *nbpi, *nbpj, myself, *nbr;
-  int declare = 0;
-  int gofive = 0;
-
-  /* pseudo neighbor "myself" */
-  memset (&myself, 0, sizeof (myself));
-  myself.state = NBS_TWOWAY;
-  myself.dr = ospf6_if->dr;
-  myself.bdr = ospf6_if->bdr;
-  myself.rtr_pri = ospf6_if->rtr_pri;
-  myself.ifid = ospf6_if->ifid;
-  myself.rtr_id = ospf6_if->area->ospf6->router_id;
-
-/* step_one: */
-
-  ospf6_if->prevdr = prevdr = ospf6_if->dr;
-  ospf6_if->prevbdr = prevbdr = ospf6_if->bdr;
-
-step_two:
-
-  /* Calculate Backup Designated Router. */
-  /* Make Candidate list */
-  if (!list_isempty (candidate_list))
-    list_delete_all_node (candidate_list);
-  declare = 0;
-  for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
-    {
-      nbpi = (struct neighbor *)getdata (i);
-      if (nbpi->rtr_pri == 0)
-        continue;
-      if (nbpi->state < NBS_TWOWAY)
-        continue;
-      if (nbpi->dr == nbpi->rtr_id)
-        continue;
-      if (nbpi->bdr == nbpi->rtr_id)
-        declare++;
-      list_add_node (candidate_list, nbpi);
-    }
-
-  if (myself.rtr_pri)
-    {
-      if (myself.dr != myself.rtr_id)
-        {
-          if (myself.bdr == myself.rtr_id)
-            declare++;
-          list_add_node (candidate_list, &myself);
-        }
-    }
-
-  /* Elect BDR */
-  for (i = listhead (candidate_list);
-       candidate_list->count > 1;
-       i = listhead (candidate_list))
-    {
-      j = i;
-      nextnode(j);
-      assert (j);
-      nbpi = (struct neighbor *)getdata (i);
-      nbpj = (struct neighbor *)getdata (j);
-      if (declare)
-        {
-          int deleted = 0;
-          if (nbpi->bdr != nbpi->rtr_id)
-            {
-              list_delete_by_val (candidate_list, nbpi);
-              deleted++;
-            }
-          if (nbpj->bdr != nbpj->rtr_id)
-            {
-              list_delete_by_val (candidate_list, nbpj);
-              deleted++;
-            }
-          if (deleted)
-            continue;
-        }
-      if (nbpi->rtr_pri > nbpj->rtr_pri)
-        {
-          list_delete_by_val (candidate_list, nbpj);
-          continue;
-        }
-      else if (nbpi->rtr_pri < nbpj->rtr_pri)
-        {
-          list_delete_by_val (candidate_list, nbpi);
-          continue;
-        }
-      else /* equal, case of tie */
-        {
-          if (nbpi->rtr_id > nbpj->rtr_id)
-            {
-              list_delete_by_val (candidate_list, nbpj);
-              continue;
-            }
-          else if (nbpi->rtr_id < nbpj->rtr_id)
-            {
-              list_delete_by_val (candidate_list, nbpi);
-              continue;
-            }
-          else
-            assert (0);
-        }
-    }
-
-  if (!list_isempty (candidate_list))
-    {
-      assert (candidate_list->count == 1);
-      n = listhead (candidate_list);
-      nbr = (struct neighbor *)getdata (n);
-      bdr = nbr->rtr_id;
-    }
-  else
-    bdr = 0;
-
-/* step_three: */
-
-  /* Calculate Designated Router. */
-  /* Make Candidate list */
-  if (!list_isempty (candidate_list))
-    list_delete_all_node (candidate_list);
-  declare = 0;
-  for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
-    {
-      nbpi = (struct neighbor *)getdata (i);
-      if (nbpi->rtr_pri == 0)
-        continue;
-      if (nbpi->state < NBS_TWOWAY)
-        continue;
-      if (nbpi->dr == nbpi->rtr_id)
-        {
-          declare++;
-          list_add_node (candidate_list, nbpi);
-        }
-    }
-  if (myself.rtr_pri)
-    {
-      if (myself.dr == myself.rtr_id)
-        {
-          declare++;
-          list_add_node (candidate_list, &myself);
-        }
-    }
-
-  /* Elect DR */
-  if (declare == 0)
-    {
-      assert (list_isempty (candidate_list));
-      /* No one declare but candidate_list not empty */
-      dr = bdr;
-    }
-  else
-    {
-      assert (!list_isempty (candidate_list));
-      for (i = listhead (candidate_list);
-           candidate_list->count > 1;
-           i = listhead (candidate_list))
-        {
-          j = i;
-          nextnode (j);
-          assert (j);
-          nbpi = (struct neighbor *)getdata (i);
-          nbpj = (struct neighbor *)getdata (j);
-
-          if (nbpi->dr != nbpi->rtr_id)
-            {
-              list_delete_node (candidate_list, i);
-              continue;
-            }
-          if (nbpj->dr != nbpj->rtr_id)
-            {
-              list_delete_node (candidate_list, j);
-              continue;
-            }
-
-          if (nbpi->rtr_pri > nbpj->rtr_pri)
-            {
-              list_delete_node (candidate_list, j);
-              continue;
-            }
-          else if (nbpi->rtr_pri < nbpj->rtr_pri)
-            {
-              list_delete_node (candidate_list, i);
-              continue;
-            }
-          else /* equal, case of tie */
-            {
-              if (nbpi->rtr_id > nbpj->rtr_id)
-                {
-                  list_delete_node (candidate_list, j);
-                  continue;
-                }
-              else if (nbpi->rtr_id < nbpj->rtr_id)
-                {
-                  list_delete_node (candidate_list, i);
-                  continue;
-                }
-              else
-                {
-                  zlog_warn ("!!!THE SAME ROUTER ID FOR DIFFERENT NEIGHBOR");
-                  zlog_warn ("!!!MISCONFIGURATION?");
-                  list_delete_node (candidate_list, i);
-                  continue;
-                }
-            }
-        }
-      if (!list_isempty (candidate_list))
-        {
-          assert (candidate_list->count == 1);
-          n = listhead (candidate_list);
-          nbr = (struct neighbor *)getdata (n);
-          dr = nbr->rtr_id;
-        }
-      else
-        assert (0);
-    }
-
-/* step_four: */
-
-  if (gofive)
-    goto step_five;
-
-  if (dr != prevdr)
-    {
-      if ((dr == myself.rtr_id || prevdr == myself.rtr_id)
-          && !(dr == myself.rtr_id && prevdr == myself.rtr_id))
-        {
-          myself.dr = dr;
-          myself.bdr = bdr;
-          gofive++;
-          goto step_two;
-        }
-    }
-  if (bdr != prevbdr)
-    {
-      if ((bdr == myself.rtr_id || prevbdr == myself.rtr_id)
-          && !(bdr == myself.rtr_id && prevbdr == myself.rtr_id))
-        {
-          myself.dr = dr;
-          myself.bdr = bdr;
-          gofive++;
-          goto step_two;
-        }
-    }
-
-step_five:
-
-  ospf6_if->dr = dr;
-  ospf6_if->bdr = bdr;
-
-  if (prevdr != dr || prevbdr != bdr)
-    {
-      for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
-        {
-          nbpi = getdata (i);
-          if (nbpi->state < NBS_TWOWAY)
-            continue;
-          /* Schedule or Execute AdjOK. which does "invoke" mean? */
-          thread_add_event (master, adj_ok, nbpi, 0);
-        }
-    }
-
-  if (dr == myself.rtr_id)
-    {
-      assert (bdr != myself.rtr_id);
-      return IFS_DR;
-    }
-  else if (bdr == myself.rtr_id)
-    {
-      assert (dr != myself.rtr_id);
-      return IFS_BDR;
-    }
-  else
-    return IFS_DROTHER;
 }
 
 /* count neighbor which is in "state" in this area*/
@@ -729,7 +78,7 @@ count_nbr_in_state (state_t state, struct area *area)
   struct neighbor *nbr;
   unsigned int count = 0;
 
-  for (n = listhead (area->ospf6_if_list); n; nextnode (n))
+  for (n = listhead (area->if_list); n; nextnode (n))
     {
       o6if = (struct ospf6_if *) getdata (n);
       for (o = listhead (o6if->nbr_list); o; nextnode (o))
@@ -804,5 +153,138 @@ ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *in6, struct in_addr *in4,
           }
         }
     }
+}
+
+/* Neighbor section */
+/* Allocate new Neighbor data structure */
+static struct neighbor *
+neighbor_new ()
+{
+  struct neighbor *new = (struct neighbor *)
+      XMALLOC (MTYPE_OSPF6_NEIGHBOR, sizeof (struct neighbor));
+  if (new)
+    memset (new, 0, sizeof (struct neighbor));
+  else
+    zvlog_warn ("Can't malloc neighbor");
+  return new;
+}
+
+
+
+/* Make new neighbor structure */
+struct neighbor *
+make_neighbor (rtr_id_t rtr_id, struct ospf6_if *ospf6_if)
+{
+  struct neighbor *nbr = neighbor_new ();
+
+  if (!nbr)
+    return (struct neighbor *)NULL;
+  nbr->state = NBS_DOWN;
+  nbr->ospf6_if = ospf6_if;
+  nbr->rtr_id = rtr_id;
+  inet_ntop (AF_INET, &rtr_id, nbr->str, sizeof (nbr->str));
+  nbr->inactivity_timer = (struct thread *)NULL;
+  nbr->dd_retrans = list_init ();
+  nbr->summarylist = list_init ();
+  nbr->retranslist = list_init ();
+  nbr->requestlist = list_init ();
+  nbr->direct_ack = list_init ();
+  list_add_node (ospf6_if->nbr_list, nbr);
+
+  return nbr;
+}
+
+/* delete neighbor from ospf6_if nbr_list */
+void
+delete_neighbor (struct neighbor *nbr, struct ospf6_if *ospf6_if)
+{
+  /* xxx not yet */
+  return;
+}
+
+/* delete all neighbor on ospf6_if nbr_list */
+void
+delete_all_neighbors (struct ospf6_if *ospf6_if)
+{
+  /* xxx not yet */
+  return;
+}
+
+
+/* Lookup functions. */
+/* lookup neighbor from OSPF6 interface.
+   because neighbor may appear on two different OSPF interface */
+struct neighbor *
+nbr_lookup (rtr_id_t rtr_id, struct ospf6_if *o6if)
+{
+  struct neighbor *nbr;
+  listnode k;
+
+  for (k = listhead (o6if->nbr_list); k; nextnode (k))
+    {
+      nbr = (struct neighbor *)getdata (k);
+      if (nbr->rtr_id == rtr_id)
+        return nbr;
+    }
+
+  return (struct neighbor *)NULL;
+}
+
+
+/* show specified area structure */
+
+/* show neighbor structure */
+int
+show_nbr (struct vty *vty, struct neighbor *nbr)
+{
+  char rtrid[16], dr[16], bdr[16];
+
+#if 0
+  vty_out (vty, "%-15s %-6s %-8s %-15s %-15s %s[%s]%s",
+     "RouterID", "I/F-ID", "State", "DR", "BDR", "I/F", "State", VTY_NEWLINE);
+#endif
+
+  inet_ntop (AF_INET, &nbr->rtr_id, rtrid, sizeof (rtrid));
+  inet_ntop (AF_INET, &nbr->dr, dr, sizeof (dr));
+  inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
+  vty_out (vty, "%-15s %6lu %-8s %-15s %-15s %s[%s]%s",
+           rtrid, nbr->ifid, nbs_name[nbr->state], dr, bdr,
+           nbr->ospf6_if->interface->name,
+           ifs_name[nbr->ospf6_if->state],
+	   VTY_NEWLINE);
+  return 0;
+}
+
+void
+ospf6_neighbor_vty_summary (struct vty *vty, struct neighbor *nbr)
+{
+  char rtrid[16], dr[16], bdr[16];
+
+/*
+   vty_out (vty, "%-15s %-6s %-8s %-15s %-15s %s[%s]%s",
+            "RouterID", "I/F-ID", "State", "DR",
+            "BDR", "I/F", "State", VTY_NEWLINE);
+*/
+
+  inet_ntop (AF_INET, &nbr->rtr_id, rtrid, sizeof (rtrid));
+  inet_ntop (AF_INET, &nbr->dr, dr, sizeof (dr));
+  inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
+  vty_out (vty, "%-15s %6lu %-8s %-15s %-15s %s[%s]%s",
+           rtrid, nbr->ifid, nbs_name[nbr->state], dr, bdr,
+           nbr->ospf6_if->interface->name,
+           ifs_name[nbr->ospf6_if->state],
+	   VTY_NEWLINE);
+}
+
+void
+ospf6_neighbor_vty (struct vty *vty, struct neighbor *o6n)
+{
+  vty_out (vty, " Neighbor %s, interface address%s",
+           o6n->str, VTY_NEWLINE);
+  vty_out (vty, "    In the area %s via interface %s%s",
+           o6n->ospf6_if->area->str, o6n->ospf6_if->interface->name,
+           VTY_NEWLINE);
+  vty_out (vty, "    Neighbor priority is %d, State is %s, %d state changes%s",
+           o6n->rtr_pri, nbs_name[o6n->state], 0, VTY_NEWLINE);
 }
 

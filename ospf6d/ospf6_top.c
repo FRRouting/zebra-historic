@@ -27,12 +27,14 @@ ospf6_vty (struct vty *vty)
 {
   listnode n;
   struct area *area;
-  vty_out (vty, "\tVersion: %d\tRouter-ID: %s\r\n",
-                 ospf6->version, inet4str (ospf6->router_id));
+  vty_out (vty, "\tVersion: %d\tRouter-ID: %s%s",
+	   ospf6->version, 
+	   inet4str (ospf6->router_id),
+	   VTY_NEWLINE);
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
       area = (struct area *) getdata (n);
-      show_area (vty, area); /* xxx */
+      ospf6_area_vty (vty, area);
     }
 }
 
@@ -62,7 +64,7 @@ ospf6_make (void)
 
   /* initialize */
   ospf6->version = OSPF_V3;
-  ospf6->ase_ls_id = 1;
+  ospf6->ase_ls_id = 0;
   ospf6->area_list = list_init ();
   ospf6_lsdb_init_as (ospf6);
 

@@ -73,7 +73,7 @@ log_flush ()
 
 /* Logging main routine. */
 void
-log (char *format, ...)
+old_log (char *format, ...)
 {
   va_list args;
 
@@ -92,7 +92,7 @@ log (char *format, ...)
 /* This function is same with log function without not printing time
    string. */
 void
-log2 (char *format, ...)
+old_log2 (char *format, ...)
 {
   va_list args;
 

@@ -175,7 +175,8 @@ struct ospf_lsa *ospf_summary_lsa (struct prefix_ipv4 *, u_int32_t,
 struct ospf_lsa *ospf_summary_asbr_lsa (struct prefix_ipv4 *, u_int32_t, 
 		                        struct ospf_area *, struct ospf_lsa *);
 struct ospf_lsa *ospf_external_lsa (struct prefix_ipv4 *, u_char ,
-				    u_int32_t, u_int32_t, struct ospf_lsa *);
+				    u_int32_t, u_int32_t, struct in_addr,
+                                    struct ospf_lsa *);
 u_int16_t ospf_lsa_checksum (struct lsa_header *);
 struct ospf_lsa *ospf_lsa_new ();
 struct ospf_lsa *ospf_lsa_dup ();

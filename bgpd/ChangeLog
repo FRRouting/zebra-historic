@@ -1,3 +1,77 @@
+1999-10-25  Bill Sommerfeld <sommerfeld@orchard.arlington.ma.us>
+
+	* bgp_route.c (bgp_announce): If we're not on a shared network
+	with the peer and we don't have a link-local next hop, but the
+	inbound next-hop has a link-local address, don't readvertise it to
+	our peer.
+
+1999-10-25  Marc Boucher <marc@mbsi.ca>
+
+	* bgp_zebra.c: Add redistribute kernel command.
+
+1999-10-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_reset): New function added.
+
+	* bgpd.conf.sample2: Add IPv6 configuration sample.
+
+1999-10-24  Bill Sommerfeld <sommerfeld@orchard.arlington.ma.us>
+
+	* bgp_route.c (ipv6_aggregate_address): Function added.
+
+1999-10-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_update): Unintern aspath, community, cluster
+	list after parsing BGP update packet.
+
+	* bgp_attr.c (bgp_attr_aspath): Intern parsed aspath.
+	(bgp_attr_community): Intern parsed community.
+	(bgp_attr_cluster_list): Intern parsed cluster list.
+
+	* bgp_routemap.c: Add `set community-additive' command.
+
+1999-10-21  Alexandr D. Kanevskiy <kad@blackcatlinux.com>
+
+	* bgp_routemap.c (route_set_local_pref): Fix bug of setting
+	attribute flag.
+
+1999-10-21  Bill Sommerfeld <sommerfeld@orchard.arlington.ma.us>
+
+	* bgp_route.c (bgp_announce): Add check of IPv6 default route
+	announcement.
+
+	* bgp_packet.c (bgp_update_send): Add BGP announcement logging.
+
+1999-10-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* `show ip[v6] bgp PREFIX' show uptime of the route.
+
+1999-10-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_filter_set): Delete PEER_FAMILY_{IPV4,IPV6}. instead
+	of that use AF_INET and AF_INET6 directly.
+	(vty_clear_bgp): Add new function to support various clear ip bgp
+	method.
+
+1999-10-04  Lars Fenneberg <lf@elemental.net>
+
+	* bgpd.c (clear_ip_bgp): Add `clear ip bgp ASN'.
+
+1999-10-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c: Add `match ip prefix-list' and `match ipv6
+	prefix-list'.
+
+1999-09-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_collision_detect): Add BGP collision detection
+	function.
+
+1999-09-26  Blake Meike <bmeike@adero.com>
+
+	* bgpd.c (neighbor_port): New command `neighbor PEER port PORT' is
+	added.
+
 1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgpd.c (no_neighbor_timers_keepalive): Change MIN to min.  Add

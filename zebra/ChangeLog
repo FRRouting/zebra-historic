@@ -1,3 +1,24 @@
+1999-10-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* client_main.c: Disable making obsolete zebra test `client'
+	command.
+
+1999-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.c: Renamed to zserv.c.
+
+	* zebra.h: Global definitions are moved to lib/zebra.h.  Then
+	renamed to zserv.h.
+
+1999-10-15  Jordan Mendelson <jordy@wserv.com>
+
+	* if_ioctl.c: Add Linux 2.2.X's alias support and dynamic
+	interface.  Remove ugly MAX_INTERFACE handling codes.
+
+1999-09-17  Satosi KOBAYASI <kobayasi@north.ad.jp>
+
+	* Fix serious bug of IPv6 route deletion.
+
 1999-09-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ioctl.c (if_set_prefix): Properly set broadcast address.

@@ -44,7 +44,7 @@ struct vty
   /* Privilege level of this vty. */
   int privilege;
 
-  /* Fail count */
+  /* Failure count */
   int fail;
 
   /* Output buffer. */
@@ -120,12 +120,13 @@ struct vty
 #endif
 
 /* Prototypes. */
-struct vty *vty_new ();
+void vty_init (void);
+void vty_reset (void);
+struct vty *vty_new (void);
 int vty_out (struct vty *, char *, ...);
 void vty_read_config (char *, char *, char *);
 void vty_time_print (struct vty *);
 void vty_serv_sock (unsigned short);
 void vty_close (struct vty *);
-void vty_init ();
 
 #endif /* _ZEBRA_VTY_H */

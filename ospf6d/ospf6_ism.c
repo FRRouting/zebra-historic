@@ -46,7 +46,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         case IFS_BDR:
           break;
         default:
-          ospf6_leave_alldr (ospf6_if->interface->ifindex);
+          ospf6_leave_alldrouters (ospf6_if->interface->ifindex);
           break;
         }
       break;
@@ -55,7 +55,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         {
         case IFS_DR:
         case IFS_BDR:
-          ospf6_join_alldr (ospf6_if->interface->ifindex);
+          ospf6_join_alldrouters (ospf6_if->interface->ifindex);
           break;
         default:
           break;
@@ -137,86 +137,65 @@ dr_change (struct ospf6_if *ospf6_if)
 int
 interface_up (struct thread *thread)
 {
-  u_int on, off;
   struct ospf6_if *ospf6_if;
-  struct ospf6_lsa *lsa;
-
-  on = 1; off = 0;
 
   ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
+
   assert (ospf6_if);
-
-  o6log.ism ("I/F [%s] InterfaceUp", ospf6_if->interface->name);
-
   assert (ospf6_if->interface);
+
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("Interface Event %s: InterfaceUp", ospf6_if->interface->name);
+
+  /* check physical interface is up */
   if (!if_is_up (ospf6_if->interface))
     {
-      zvlog_err ("Interface %s is down, can't execute InterfaceUp event",
-                 ospf6_if->interface->name);
+      zlog_warn ("*** Interface %s is down, can't execute InterfaceUp event",
+                ospf6_if->interface->name);
       return -1;
     }
 
+  /* if already enabled, do nothing */
   if (ospf6_if->state > IFS_DOWN)
     {
-      zvlog_notice ("Interface %s is already up",
-                    ospf6_if->interface->name);
+      zlog_warn ("*** Interface %s is already up", ospf6_if->interface->name);
       return 0;
     }
 
   /* ifid of this interface */
   ospf6_if->ifid = ospf6_if->interface->ifindex;
-  zvlog_debug ("interface %s: ifid %lu", ospf6_if->interface->name,
-               ospf6_if->ifid);
 
 #ifdef FREEBSD_32
   /* FreeBSD3.2's ep driver ignores multicast ethernet frame.
-     saving this (very roughly) */
+     saving this (very roughly) by make I/F promiscous mode */
   {
     struct ifreq ifr;
 
     strncpy (ifr.ifr_name, ospf6_if->interface->name, sizeof (ifr.ifr_name));
     if (ioctl (ospf6_sock, SIOCGIFFLAGS, &ifr) < 0)
-      zvlog_warn ("fbsd3.2: get if flags failed: %s", strerror (errno));
+      zlog_warn ("fbsd3.2: get I/F flags failed: %s", strerror (errno));
     ifr.ifr_flags |= IFF_PROMISC;
     if (ioctl (ospf6_sock, SIOCSIFFLAGS, &ifr) < 0)
-      zvlog_warn ("fbsd3.2: set if flags failed: %s", strerror (errno));
+      zlog_warn ("fbsd3.2: set I/F flags failed: %s", strerror (errno));
   }
 #endif /*FREEBSD_32*/
 
-  if (mcast_join (ospf6_sock, (struct sockaddr *)&allspfrouters6,
-                  ospf6_if->interface->name,
-                  ospf6_if->interface->ifindex) < 0)
-    zvlog_warn ("mcast_join(allspfrouters6) failed for %s: %s\n",
-                ospf6_if->interface->name, strerror (errno));
+  /* Join AllSPFRouters */
+  ospf6_join_allspfrouters (ospf6_if->interface->ifindex);
 
-  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
-                  &off, sizeof (u_int)) < 0)
-    {
-      zvlog_warn ("setsockopt() failed: IPV6_MULTICAST_LOOP: %s",
-                  strerror (errno));
-    }
+  /* set socket options */
+  ospf6_set_mcastloop ();
+  ospf6_set_pktinfo ();
+  ospf6_set_checksum ();
 
-  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_PKTINFO,
-                  &on, sizeof (int)) < 0)
-    {
-      zvlog_warn ("IPV6_PKTINFO setsockopt failed");
-      return -1;
-    }
-
-#if 0
-  thread_add_event (master, send_hello, ospf6_if, 0);
-#else
+  /* Schedule Hello */
   thread_add_event (master, ospf6_send_hello, ospf6_if, 0);
-#endif
 
+  /* decide next interface state */
   if (if_is_pointopoint (ospf6_if->interface))
-    {
-      ifs_change (IFS_PTOP, "IF Type PointToPoint", ospf6_if);
-    }
+    ifs_change (IFS_PTOP, "IF Type PointToPoint", ospf6_if);
   else if (ospf6_if->rtr_pri == 0)
-    {
-      ifs_change (IFS_DROTHER, "Router Priority = 0", ospf6_if);
-    }
+    ifs_change (IFS_DROTHER, "Router Priority = 0", ospf6_if);
   else
     {
       ifs_change (IFS_WAITING, "Priority > 0", ospf6_if);
@@ -224,22 +203,10 @@ interface_up (struct thread *thread)
                         ospf6_if->rtr_dead_interval);
     }
 
-  /* construct Link-LSA */
-  lsa = ospf6_make_link_lsa (ospf6_if);
-  if (lsa)
-    {
-      ospf6_lsa_flood (lsa);
-      ospf6_lsdb_install (lsa);
-      ospf6_lsa_unlock (lsa);
-    }
-  /* construct Intra-Area-Prefix-LSA */
-  lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
-  if (lsa)
-    {
-      ospf6_lsa_flood (lsa);
-      ospf6_lsdb_install (lsa);
-      ospf6_lsa_unlock (lsa);
-    }
+  /* construct LSAs */
+  ospf6_lsa_originate_link (ospf6_if);
+  ospf6_lsa_originate_intraprefix (ospf6_if);
+
   return 0;
 }
 

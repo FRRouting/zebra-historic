@@ -94,16 +94,15 @@ int
 make_database_description (struct iovec *iov, struct sockaddr_in6 *dst,
                            struct neighbor *nbr)
 {
-  struct database_description *dd;
+  struct ospf6_dbdesc *dd;
   struct timeval tv;
   listnode n;
   struct ospf6_lsa *p;
 
   memcpy (dst, &nbr->hisaddr, sizeof (struct sockaddr_in6));
 
-  dd = (struct database_description *)
-       iov_append (MTYPE_OSPF6_MESSAGE, iov,
-                   sizeof (struct database_description));
+  dd = (struct ospf6_dbdesc *) iov_append (MTYPE_OSPF6_MESSAGE, iov,
+					   sizeof (struct ospf6_dbdesc));
   if (!dd)
     {
       zvlog_err ("iov_append() failed in make_database_description ()");
@@ -111,7 +110,7 @@ make_database_description (struct iovec *iov, struct sockaddr_in6 *dst,
     }
 
   memcpy (dd->options, nbr->ospf6_if->area->options, sizeof (dd->options));
-  dd->interface_mtu = htons (DEFAULT_INTERFACE_MTU);
+  dd->ifmtu = htons (DEFAULT_INTERFACE_MTU);
   dd->bits = nbr->dd_bits;
 
   if (DD_IS_IBIT_SET (dd->bits))
@@ -128,7 +127,7 @@ make_database_description (struct iovec *iov, struct sockaddr_in6 *dst,
                     nbr->str, nbr->dd_seqnum);
     }
 
-  dd->sequence_number = htonl (nbr->dd_seqnum);
+  dd->seqnum = htonl (nbr->dd_seqnum);
 
   if (!DD_IS_IBIT_SET (nbr->dd_bits))
     {
@@ -360,11 +359,11 @@ ospf6_message_set_buffer (unsigned char msgtype, unsigned short msglen,
         break;
 
       case MSGT_DATABASE_DESCRIPTION:
-        left -= sizeof (struct database_description);
+        left -= sizeof (struct ospf6_dbdesc);
         if (ospf6_message_lsa_hdr_set_buffer (iov, left) < 0)
           return -1;
         if (!iov_prepend (MTYPE_OSPF6_MESSAGE, iov,
-                          sizeof (struct database_description)))
+                          sizeof (struct ospf6_dbdesc)))
           {
             ospf6_message_lsa_hdr_clear_buffer (iov);
             return -1;
@@ -584,13 +583,28 @@ ospf6_dbdesc_is_master (struct neighbor *nbr)
   return 1;
 }
 
+int
+ospf6_dbdesc_is_duplicate (struct ospf6_dbdesc *received,
+                           struct ospf6_dbdesc *last_received)
+{
+  if (memcmp (received->options, last_received->options, 3) != 0)
+    return 0;
+  if (received->ifmtu != last_received->ifmtu)
+    return 0;
+  if (received->bits != last_received->bits)
+    return 0;
+  if (received->seqnum != last_received->seqnum)
+    return 0;
+  return 1;
+}
+
 static void
 ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
 {
-  struct database_description *dbdesc;
+  struct ospf6_dbdesc *dbdesc;
 
   /* set database description pointer */
-  dbdesc = (struct database_description *) iov[0].iov_base;
+  dbdesc = (struct ospf6_dbdesc *) iov[0].iov_base;
 
   switch (nbr->state)
     {
@@ -617,7 +631,7 @@ ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
       case NBS_EXSTART:
         if (!DD_IS_MSBIT_SET (dbdesc->bits) &&
             !DD_IS_IBIT_SET (dbdesc->bits) &&
-            ntohl (dbdesc->sequence_number) == nbr->dd_seqnum)
+            ntohl (dbdesc->seqnum) == nbr->dd_seqnum)
           {
             prepare_neighbor_lsdb (nbr);
 
@@ -639,7 +653,7 @@ ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
       case NBS_EXCHANGE:
         /* duplicate dbdesc dropped by master */
         if (!memcmp (dbdesc, &nbr->last_dd,
-                     sizeof (struct database_description)))
+                     sizeof (struct ospf6_dbdesc)))
           {
             if (IS_OSPF6_DUMP_DBDESC)
               zlog_info ("  duplicate dbdesc, drop");
@@ -677,7 +691,7 @@ ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
           }
 
         /* dbdesc sequence number check */
-        if (ntohl (dbdesc->sequence_number) != nbr->dd_seqnum)
+        if (ntohl (dbdesc->seqnum) != nbr->dd_seqnum)
           {
             if (IS_OSPF6_DUMP_DBDESC)
               zlog_info ("dbdesc seqnumber mismatch");
@@ -690,8 +704,7 @@ ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
       case NBS_LOADING:
       case NBS_FULL:
         /* duplicate dbdesc dropped by master */
-        if (!memcmp (dbdesc, &nbr->last_dd,
-                     sizeof (struct database_description)))
+        if (ospf6_dbdesc_is_duplicate (dbdesc, &nbr->last_dd))
           {
             if (IS_OSPF6_DUMP_DBDESC)
               zlog_info ("  duplicate dbdesc, drop");
@@ -743,7 +756,7 @@ ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
     thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
 
   /* save last received dbdesc , and free */
-  memcpy (&nbr->last_dd, dbdesc, sizeof (struct database_description));
+  memcpy (&nbr->last_dd, dbdesc, sizeof (struct ospf6_dbdesc));
   XFREE (MTYPE_OSPF6_MESSAGE, dbdesc);
 
   return;
@@ -752,10 +765,10 @@ ospf6_process_dbdesc_master (struct iovec *iov, struct neighbor *nbr)
 static void
 ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
 {
-  struct database_description *dbdesc;
+  struct ospf6_dbdesc *dbdesc;
 
   /* set database description pointer */
-  dbdesc = (struct database_description *) iov[0].iov_base;
+  dbdesc = (struct ospf6_dbdesc *) iov[0].iov_base;
 
   switch (nbr->state)
     {
@@ -783,7 +796,7 @@ ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
             /* Initialize bit clear */
             DD_IBIT_CLEAR (nbr->dd_bits);
             /* sequence number set to master's */
-            nbr->dd_seqnum = ntohl (dbdesc->sequence_number);
+            nbr->dd_seqnum = ntohl (dbdesc->seqnum);
             prepare_neighbor_lsdb (nbr);
 
             if (nbr->thread_dbdesc_retrans)
@@ -804,7 +817,7 @@ ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
       case NBS_EXCHANGE:
         /* duplicate dbdesc dropped by master */
         if (!memcmp (dbdesc, &nbr->last_dd,
-                     sizeof (struct database_description)))
+                     sizeof (struct ospf6_dbdesc)))
           {
             if (IS_OSPF6_DUMP_DBDESC)
               zlog_info ("  duplicate dbdesc, retransmit dbdesc");
@@ -845,7 +858,7 @@ ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
           }
 
         /* dbdesc sequence number check */
-        if (ntohl (dbdesc->sequence_number) != nbr->dd_seqnum + 1)
+        if (ntohl (dbdesc->seqnum) != nbr->dd_seqnum + 1)
           {
             if (IS_OSPF6_DUMP_DBDESC)
               zlog_info ("dbdesc seqnumber mismatch");
@@ -858,8 +871,7 @@ ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
       case NBS_LOADING:
       case NBS_FULL:
         /* duplicate dbdesc cause slave to retransmit */
-        if (!memcmp (dbdesc, &nbr->last_dd,
-                     sizeof (struct database_description)))
+        if (ospf6_dbdesc_is_duplicate (dbdesc, &nbr->last_dd))
           {
             if (IS_OSPF6_DUMP_DBDESC)
               zlog_info ("  duplicate dbdesc, retransmit");
@@ -899,18 +911,12 @@ ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
     }
 
   /* set dbdesc seqnum to master's */
-  nbr->dd_seqnum = ntohl (dbdesc->sequence_number);
-
-  /* more bit check */
-  if (!DD_IS_MBIT_SET (dbdesc->bits) && !DD_IS_MBIT_SET (nbr->dd_bits))
-    {
-      thread_add_event (master, exchange_done, nbr, 0);
-    }
+  nbr->dd_seqnum = ntohl (dbdesc->seqnum);
 
   thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
 
   /* save last received dbdesc , and free */
-  memcpy (&nbr->last_dd, dbdesc, sizeof (struct database_description));
+  memcpy (&nbr->last_dd, dbdesc, sizeof (struct ospf6_dbdesc));
   XFREE (MTYPE_OSPF6_MESSAGE, dbdesc);
 
   ospf6_message_clear_buffer (MSGT_DATABASE_DESCRIPTION, iov);
@@ -922,14 +928,14 @@ ospf6_process_dbdesc (struct iovec *iov, struct ospf6_if *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct neighbor *nbr;
-  struct database_description *dbdesc;
+  struct ospf6_dbdesc *dbdesc;
   int Im_master = 0;
 
   /* assert interface */
   assert (o6if);
 
   /* set database description pointer */
-  dbdesc = (struct database_description *) iov[0].iov_base;
+  dbdesc = (struct ospf6_dbdesc *) iov[0].iov_base;
 
   /* find neighbor. if cannot be found, reject this message */
   nbr = nbr_lookup (router_id, o6if);
@@ -1539,7 +1545,7 @@ ospf6_send_new (struct iovec *message, struct sockaddr *dst, u_int ifindex)
     zlog_warn ("*** send error (%d): %s", retval, strerror (errno));
 }
 
-/*static */void
+void
 ospf6_message_send (unsigned char type, struct iovec *message, 
                     struct in6_addr *dst, u_int ifindex)
 {
@@ -1761,6 +1767,14 @@ ospf6_send_dbdesc (struct thread *thread)
           DD_MBIT_CLEAR (nbr->dd_bits);
           if (IS_OSPF6_DUMP_DBDESC)
             zlog_info ("  More bit cleared");
+
+          /* slave must schedule ExchangeDone on sending, here */
+          if (!DD_IS_MSBIT_SET (nbr->dd_bits))
+            {
+              if (!DD_IS_MBIT_SET (nbr->dd_bits) &&
+                  !DD_IS_MBIT_SET (nbr->last_dd.bits))
+                thread_add_event (master, exchange_done, nbr, 0);
+            }
           break;
         }
 

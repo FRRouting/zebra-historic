@@ -30,21 +30,22 @@
 #define OSPF_IFTYPE_POINTOMULTIPOINT	4
 #define OSPF_IFTYPE_VIRTUALLINK		5
 
-#define OSPF_AUTH_SIZE			8
-
 /* OSPF interface flag. */
 #define OSPF_IF_DISABLE                 0
 #define OSPF_IF_ENABLE                  1
+
+#define OSPF_AUTH_SIMPLE_SIZE           8
+#define OSPF_AUTH_MD5_SIZE             16
 
 struct ospf_interface;
 
 struct ospf_vl_data
 {
-  struct in_addr    vl_peer;		/* RID of the peer for VLs */
-  struct ospf_area *vl_area;		/* Transit area for this VL*/	
-  struct ospf_interface *vl_oi;		/* Int data structure for the VL*/
-  struct ospf_interface *out_oi;        /* The int to go out */
-  struct in_addr    peer_addr;		/* Address used to reach the peer */
+  struct in_addr    vl_peer;	   /* Router-ID of the peer for VLs. */
+  struct ospf_area *vl_area;	   /* Transit area for this VL. */	
+  struct ospf_interface *vl_oi;	   /* Interface data structure for the VL. */
+  struct ospf_interface *out_oi;   /* The interface to go out. */
+  struct in_addr    peer_addr;	   /* Address used to reach the peer. */
   u_char flags;
 };
 
@@ -89,7 +90,10 @@ struct ospf_interface
 
   struct ospf_area *area;		/* OSPF Area */
 
-  u_char auth_data[OSPF_AUTH_SIZE + 1]; /* Authentication Key */
+  u_char auth_data[OSPF_AUTH_MD5_SIZE + 1]; /* Authentication Key */
+  u_int8_t auth_key_id;			/* MD5 Key ID */
+  u_int8_t auth_md5;			/* 1 or 0 */
+  u_int32_t auth_seq;			/* cryptographic sequence # */ 
 
   u_int32_t transmit_delay;		/* Interface Transmisson Delay */
   u_int32_t output_cost;		/* Interface Output Cost */
@@ -149,16 +153,16 @@ void ospf_if_stream_set (struct ospf_interface *);
 void ospf_if_stream_unset (struct ospf_interface *);
 int ospf_if_is_enable (struct interface *);
 
-struct ospf_vl_data * ospf_new_vl_data(struct ospf_area *, struct in_addr);
-void ospf_free_vl_data(struct ospf_vl_data *);
-struct ospf_interface * ospf_new_vl(struct ospf_vl_data *);
-void ospf_remove_vl(struct ospf_vl_data *);
-struct ospf_vl_data * ospf_lookup_vl(struct ospf_area *, struct in_addr);
-void ospf_add_vl(struct ospf_vl_data *);
-void ospf_remove_vl(struct ospf_vl_data *);
-void ospf_check_vl_up(struct ospf_area *, struct in_addr, struct vertex *);
-void ospf_vl_unapprove();
-void ospf_vl_shut_unapproved();
-int  ospf_full_virtual_nbrs(struct ospf_area *);
+struct ospf_interface *ospf_vl_new (struct ospf_vl_data *);
+struct ospf_vl_data *ospf_vl_data_new (struct ospf_area *, struct in_addr);
+struct ospf_vl_data *ospf_vl_lookup (struct ospf_area *, struct in_addr);
+void ospf_vl_data_free (struct ospf_vl_data *);
+void ospf_vl_add (struct ospf_vl_data *);
+void ospf_vl_delete (struct ospf_vl_data *);
+void ospf_check_vl_up (struct ospf_area *, struct in_addr, struct vertex *);
+void ospf_vl_unapprove ();
+void ospf_vl_shut_unapproved ();
+int ospf_full_virtual_nbrs (struct ospf_area *);
+int ospf_vls_in_area (struct ospf_area *);
 
 #endif /* _ZEBRA_OSPF_INTERFACE_H */

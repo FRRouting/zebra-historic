@@ -9,14 +9,10 @@
 @c  look at every @c in the text
 @c  correct all ` and ' characters
 @c emacs-outline-regexp "@chap\\|@\\(sub\\)*section"
-@c @macro command{a}
-@c @code{\a\}
-@c @end macro
 
 @set EDITION 0
-@set VERSION 0.78
-@set UPDATED August 1999
-
+@set VERSION 0.80
+@set UPDATED October 1999
 
 @c A - Some variables for later
 @set INSTALL_PREFIX_ETC /usr/local/etc/
@@ -68,8 +64,6 @@ approved by the Free Software Foundation.
 @subtitle @value{UPDATED}
 @author Kunihiro Ishiguro
 
-
-
 @page
 @vskip 0pt plus 1filll
 @copyright{
@@ -91,9 +85,6 @@ by the Free Software Foundation.
 }
 @end titlepage
 
-
-
-
 @node Top, Overview, (dir), (dir)
 @ifinfo
 @top GNU Zebra
@@ -112,13 +103,10 @@ This is the Zebra Manual for zebra-@value{VERSION}.
 
 @end ifinfo
 
-
-
 @menu
 * Overview::                    Overview of the Zebra suite.
 * Installation::                How to install the Zebra suite.
 * Additional Features::         Software contributions for Zebra.
-
 
 The Zebra Suite
 
@@ -131,7 +119,6 @@ The Zebra Suite
 * ospf6d::                      An OSPFv6 protocol daemon
 * bgpd::                        A BGP protocol daemon
 
-
 Additional Features
 
 * Filtering::                   How to filter routes.
@@ -140,14 +127,12 @@ Additional Features
 * Kernel Interface::            Zebra between kernel interface.
 * Linux Netlink::               Netlink mechanism on a Linux box.
 
-
 Indices
 
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
 
 @end menu
-
 
 @node Overview, Installation, Top, Top
 @comment  node-name,  next,  previous,  up
@@ -218,7 +203,7 @@ Below is the list of currently supported routing protocol RFCs:
 @cite{OSPF Version 2. J. Moy. April 1998.}
 
 @item @asis{ RFC2453 }
-@cite{IP Version 2. G. Malkin. November 1998.}
+@cite{RIP Version 2. G. Malkin. November 1998.}
 
 @item @asis{ RFC2545 }
 @cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
@@ -239,16 +224,16 @@ different approach; it is made from a collection of several daemons that
 work together to build a routing table.  There may be several
 protocol-specific routing daemons and Zebra, the kernel routing manager.
 
-The @code{ripd} daemon handles the RIP protocol, while @code{ospfd} is a
-daemon which supports OSPF version 2.  @code{bgpd} supports the BGP-4
-protocol.  For changing the kernel routing table and for redistribution
-of routes between different routing protocols, there is the @code{zebra}
-daemon.  There is no need for these daemons to be running on the same
-machine.  This architecture creates new possibilities for the routing
-system.  It is easy to add new routing protocol daemons to a network,
-and servers in stubs need run only the protocol daemon in use. Thus,
-remote networks may run a specific daemon and send routing reports to a
-central routing console.
+The @command{ripd} daemon handles the RIP protocol, while
+@command{ospfd} is a daemon which supports OSPF version 2.
+@command{bgpd} supports the BGP-4 protocol.  For changing the kernel
+routing table and for redistribution of routes between different routing
+protocols, there is the @command{zebra} daemon.  There is no need for
+these daemons to be running on the same machine.  This architecture
+creates new possibilities for the routing system.  It is easy to add new
+routing protocol daemons to a network, and servers in stubs need run
+only the protocol daemon in use. Thus, remote networks may run a
+specific daemon and send routing reports to a central routing console.
 
 @example
 @group
@@ -274,7 +259,7 @@ call for multiplexing.
 
 When zebra runs under a GNU Hurd kernel it will act as a kernel routing
 table itself.  Under GNU Hurd, all TCP/IP services are provided by user
-processes called @code{pfinet}.  Zebra will provide all the routing
+processes called @command{pfinet}.  Zebra will provide all the routing
 selection mechanisms for the process.  This feature will be implemented
 in the near future.
 
@@ -427,7 +412,7 @@ additional configure options you can use to turn off IPv6 support, to
 disable the compilation of specific daemons, and to modify the use of
 threads.
 
-@table @code
+@table @option
 @item --enable-guile
 Turn on compilation of the zebra-guile interpreter.  You will need the
 guile library to make this.
@@ -463,7 +448,7 @@ configuration files in @file{/usr/local/etc}. The @file{/usr/local/}
 installation prefix may be changed using options to the configuration
 script.
 
-@table @code
+@table @option
 @item --prefix=@var{prefix}
 Install architecture-independent files in @var{prefix} [/usr/local].
 @item --sysconfdir=@var{dir}
@@ -475,7 +460,6 @@ Read-only sample configuration file in @var{dir} [@var{prefix}/etc].
 @end example
 
 This command will configure zebra and the routing daemons.
-
 
 @comment Changed this to a footnote, Linux is not yet a de facto standard
 @comment GNU/Linux Configuration, Additional Notes, Configure Options, Installation
@@ -501,49 +485,48 @@ an advanced interface between the Linux kernel and Zebra (@pxref{Linux
 Netlink}).
 
 @item CONFIG_RTNETLINK
-Routing messages.  
+Routing messages.
 This makes it possible to receive netlink routing messages.  If you
-specify this option, @code{zebra} can detect routing information updates
-directly from the kernel (@pxref{Kernel Interface}).
+specify this option, @command{zebra} can detect routing information
+updates directly from the kernel (@pxref{Kernel Interface}).
 
 @item CONFIG_IP_MULTICAST
 IP: multicasting.  
-This option should be specified when you use
-@code{ripd} or @code{ospfd} because these protocols use multicast.
+This option should be specified when you use @command{ripd} or
+@command{ospfd} because these protocols use multicast.
 
 @end table
 
 IPv6 support is added from GNU/Linux kernel version 2.2.  If you try to
 use the Zebra IPv6 feature on a GNU/Linux kernel, please make sure the
-following libraries have been installed.
+following libraries have been installed.  Please note that these
+libraries will not be needed when you uses GNU C library 2.1 or upper.
 
 @table @code
 
 @item inet6-apps
-The @code{inet6-apps} package includes basic IPv6 related libraries such as
-@code{inet_ntop} and @code{inet_pton}.  Some basic IPv6 programs such as
-@code{ping}, @code{ftp}, and @code{inetd} are also
+The @code{inet6-apps} package includes basic IPv6 related libraries such
+as @code{inet_ntop} and @code{inet_pton}.  Some basic IPv6 programs such
+as @command{ping}, @command{ftp}, and @command{inetd} are also
 included. The @code{inet-apps} can be found at
 @url{ftp://ftp.inner.net/pub/ipv6/}.
 
 @item net-tools
 The @code{net-tools} package provides an IPv6 enabled interface and
-routing utility.  It contains @code{ifconfig}, @code{route},
-@code{netstat}, and other tools.  @code{net-tools} may be found at
-@url{ftp://somewhere.try.your.cd.first/}.
+routing utility.  It contains @command{ifconfig}, @command{route},
+@command{netstat}, and other tools.  @code{net-tools} may be found at
+@url{http://www.tazenda.demon.co.uk/phil/net-tools/}.
 
 @end table
 @c A - end of footnote 
 }.
-
-
 
 @node Build the Software, Install the Software, Configure the Software, Installation
 @comment  node-name,  next,  previous,  up
 @section Build the Software
 
 After configuring the software, you will need to compile it for your
-system. Simply issue the command @code{make} in the root of the source
+system. Simply issue the command @command{make} in the root of the source
 directory and the software will be compiled. If you have *any* problems
 at this stage, be certain to send a bug report @xref{Bug Reports}.
 
@@ -565,14 +548,13 @@ at this stage, be certain to send a bug report @xref{Bug Reports}.
 @comment  node-name,  next,  previous,  up
 @section Install the Software
 
-
 Installing the software to your system consists of copying the compiled
 programs and supporting files to a standard location. After the
 installation process has completed, these files will have been copied
 from your work directory to @file{/usr/local/bin}, and @file{/usr/local/etc}.
 
 To install the Zebra suite issue the following command at your shell
-prompt: @code{make install}.
+prompt: @command{make install}.
 
 @example
 %
@@ -635,8 +617,8 @@ daemon.  Each of these daemons will listen on a particular port for
 incoming VTY connections.  The routing daemons are:
 
 @itemize @bullet
-@item @code{ripd}, @code{ripngd}, @code{ospfd}, @code{ospf6d}, @code{bgpd}
-@item @code{zebra}
+@item @command{ripd}, @command{ripngd}, @command{ospfd}, @command{ospf6d}, @command{bgpd}
+@item @command{zebra}
 @end itemize
 
 The following sections discuss commands common to all the routing
@@ -1122,7 +1104,7 @@ completions.
 @chapter zebra
 
 @c SYNOPSIS
-@code{zebra} is an IP routing manager.  It provides kernel routing table
+@command{zebra} is an IP routing manager.  It provides kernel routing table
 updates, interface lookups, and redistribution of routes between
 different routing protocols.
 
@@ -1139,12 +1121,12 @@ different routing protocols.
 @section Invoking zebra
 
 Besides the common invocation options (@pxref{Common Invocation Options}), the
-@code{zebra} specific invocation options are listed below.
+@command{zebra} specific invocation options are listed below.
 
 @table @samp
 @item -b
 @itemx --batch
-Runs in batch mode.  @code{zebra} parses configuration file and terminates
+Runs in batch mode.  @command{zebra} parses configuration file and terminates
 immediately.
 
 @item -k
@@ -1251,8 +1233,8 @@ Display whether the host's IP v6 forwarding is enabled or not.
 @chapter ripd
 
 The Routing Information Protocol (RIP) is a legendary protocol.  It is a
-very simple distance-vector routing protocol. @code{ripd} supports RIP
-version 2 as described in RFC2453 and RIP version 1 as described in
+very simple distance-vector routing protocol. @command{ripd} supports
+RIP version 2 as described in RFC2453 and RIP version 1 as described in
 RFC1058.  RIP is a "distance-vector" protocol and is based on the
 "Bellman-Ford" algorithms.  The RIP protocol was developed in the 1970s
 at Xerox Labs as part of the XNS routing protocol.  As a distance-vector
@@ -1275,7 +1257,7 @@ distance of any given router will be broadcast to its neighbor.
 @comment  node-name,  next,  previous,  up
 @section Invoking ripd
 
-@code{ripd} invocation options.  Common options that can be specified
+@command{ripd} invocation options.  Common options that can be specified
 (@pxref{Common Invocation Options}).
 
 @table @samp
@@ -1497,7 +1479,7 @@ after routes listed in the route table and before routes will announced
 to interface (something like output filter). I think it is not so clear,
 but it is draft and it may be changed at future.
 
-Route-map statement @xref{Route Map} is neede to use route-map
+Route-map statement (@pxref{Route Map}) is neede to use route-map
 functionality.
 
 Route-map's match statement
@@ -1594,7 +1576,7 @@ debug.
 @comment  node-name,  next,  previous,  up
 @chapter ripngd
 
-@code{ripngd} supports the RIPng protocol as described in RFC2080.  It's an
+@command{ripngd} supports the RIPng protocol as described in RFC2080.  It's an
 IPv6 reincarnation of the RIP protocol.
 
 @menu
@@ -1639,7 +1621,7 @@ Set RIPng static routing announcement of @var{network}.
 
 @deffn Command {router zebra} {}
 This command is the default and does not appear in the configuration.
-With this statement, RIPng routes go to the @code{zebra} daemon.
+With this statement, RIPng routes go to the @command{zebra} daemon.
 @end deffn
 
 @node ripngd Terminal Mode Commands, ripngd Filtering Commands, ripngd Configuration, ripngd
@@ -1681,7 +1663,7 @@ distribute-list local-only out sit1
 @comment  node-name,  next,  previous,  up
 @chapter ospfd
 
-@code{ospfd} provides an OSPF version 2 routing protocol as described in
+@command{ospfd} provides an OSPF version 2 routing protocol as described in
 RFC2178.  Currently OSPFd is under development.
 
 @menu
@@ -1694,8 +1676,8 @@ RFC2178.  Currently OSPFd is under development.
 @comment  node-name,  next,  previous,  up
 @section Invoking ospfd
 
-There are no @code{ospfd} specific options.  Common options can be
-specified (@pxref{Common Invocation Options}) to @code{ospfd}.
+There are no @command{ospfd} specific options.  Common options can be
+specified (@pxref{Common Invocation Options}) to @command{ospfd}.
 
 @node ospfd Configuration, ospfd Terminal Mode Commands, Invoking ospfd, ospfd
 @comment  node-name,  next,  previous,  up
@@ -1704,7 +1686,7 @@ specified (@pxref{Common Invocation Options}) to @code{ospfd}.
 @deffn Command {router ospf} {}
 @deffnx Command {no router ospf} {}
 Enable/disable the OSPF process.  Please do not specify an OSPF process number.
-@code{ospfd} does not yet support multiple OSPF processes.
+@command{ospfd} does not yet support multiple OSPF processes.
 @end deffn
 
 @deffn {OSPF Command} {network @var{ipv4-network} area @var{area-id}} {}
@@ -1785,7 +1767,7 @@ inter-domain routing messages.
 @comment  node-name,  next,  previous,  up
 @section Invoking bgpd
 
-@code{bgpd} specific invocation options.  Common options may also be
+@command{bgpd} specific invocation options.  Common options may also be
 specified (@pxref{Common Invocation Options}).
 
 @table @samp
@@ -1808,7 +1790,7 @@ There are several commands used to configure bgpd.  The default
 configuration file is @file{bgpd.conf}.
 
 @deffn Command {router zebra} {}
-With this statement, BGP routes go to the @code{zebra} daemon.  If you
+With this statement, BGP routes go to the @command{zebra} daemon.  If you
 want to install BGP routes into the kernel you will have to use this
 command.
 @end deffn
@@ -2008,20 +1990,20 @@ router zebra
 ! BGP-4+ configuraion
 !
 router bgp 7675
-  bgp router-id 10.0.0.1
-  network 3ffe:506::/32
-  neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 remote-as @var{as-number}
-  neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 route-map set-nexthop out
-  neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 remote-as @var{as-number}
-  neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 route-map set-nexthop out
+ bgp router-id 10.0.0.1
 !
-access-list all permit any
+ipv6 bgp network 3ffe:506::/32
+ipv6 bgp neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 remote-as @var{as-number}
+ipv6 bgp neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 route-map set-nexthop out
+ipv6 bgp neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 remote-as @var{as-number}
+ipv6 bgp neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 route-map set-nexthop out
+!
+ipv6 access-list all permit any
 !
 ! Set output nexthop address.
 !
 route-map set-nexthop permit 10
- match ip address all
- set ip nexthop 10.0.0.1
+ match ipv6 address all
  set ipv6 nexthop global 3ffe:1cfa:0:2:2c0:4fff:fe68:a225
  set ipv6 nexthop local fe80::2c0:4fff:fe68:a225
 !
@@ -2067,7 +2049,107 @@ access-list filter permit 10.0.0.0/8
 @comment  node-name,  next,  previous,  up
 @subsection IP Prefix List
 
-@deffn {Command} {ip prefix-list @var{name} seq @var{seq} permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
+@command{ip prefix-list} provides the most powerful prefix based
+filtering mechanism.  Adding to @command{access-list} functionality,
+@command{ip prefix-list} has prefix length range specification and
+sequential number specification.  You can add or delete prefix based
+filter to arbitrary point of prefix-list using sequential number.
+
+If there is no ip prefix-list is specified, it acts as permit.  Once ip
+prefix-list is defined, then there is no match is performed, default
+deny is applied.
+
+
+@c @deffn {Command} {ip prefix-list @var{name} [seq @var{number}] permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
+@deffn {Command} {ip prefix-list @var{name} (permit|deny) @var{prefix} [le @var{len}] [ge @var{len}]} {}
+@deffnx {Command} {ip prefix-list @var{name} seq @var{number} (permit|deny) @var{prefix} [le @var{len}] [ge @var{len}]} {}
+
+You can create @command{ip prefix-list} using above commands.
+
+@table @asis
+
+@item @asis{seq}
+seq @var{number}
+
+@item @asis{le}
+@command{le} command specify prefix length.  If given prefix length is
+lesser then or equal to le prefix length.
+
+@item @asis{ge}
+@command{ge} command specify prefix length.  If given prefix length is
+lesser then or equal to le prefix length.
+
+@end table
+
+
+@end deffn
+
+@deffn {Command} {no ip prefix-list @var{name}} {}
+@end deffn
+
+@menu
+* ip prefix-list description::  
+* ip prefix-list sequential number control::  
+* Showing ip prefix-list::      
+* Clear counter of ip prefix-list::  
+@end menu
+
+@node ip prefix-list description, ip prefix-list sequential number control, IP Prefix List, IP Prefix List
+@comment  node-name,  next,  previous,  up
+@subsubsection ip prefix-list description
+
+@deffn {Command} {ip prefix-list @var{name} description @var{desc}} {}
+@end deffn
+
+@deffn {Command} {no ip prefix-list @var{name} description [@var{desc}]} {}
+@end deffn
+
+@node  ip prefix-list sequential number control, Showing ip prefix-list, ip prefix-list description, IP Prefix List
+@comment  node-name,  next,  previous,  up
+@subsubsection ip prefix-list sequential number control
+
+@deffn {Command} {ip prefix-list sequence-number} {}
+@end deffn
+
+@deffn {Command} {no ip prefix-list sequence-number} {}
+@end deffn
+
+@node  Showing ip prefix-list, Clear counter of ip prefix-list, ip prefix-list sequential number control, IP Prefix List
+@comment  node-name,  next,  previous,  up
+@subsubsection Showing ip prefix-list
+
+@deffn {Command} {show ip prefix-list} {}
+@end deffn
+@deffn {Command} {show ip prefix-list @var{name}} {}
+@end deffn
+@deffn {Command} {show ip prefix-list @var{name} seq @var{num}} {}
+@end deffn
+@deffn {Command} {show ip prefix-list @var{name} @var{a.b.c.d/m}} {}
+@end deffn
+@deffn {Command} {show ip prefix-list @var{name} @var{a.b.c.d/m} longer} {}
+@end deffn
+@deffn {Command} {show ip prefix-list @var{name} @var{a.b.c.d/m} first-match} {}
+@end deffn
+
+@deffn {Command} {show ip prefix-list summary} {}
+@end deffn
+@deffn {Command} {show ip prefix-list summary @var{name}} {}
+@end deffn
+
+@deffn {Command} {show ip prefix-list detail} {}
+@end deffn
+@deffn {Command} {show ip prefix-list detail @var{name}} {}
+@end deffn
+
+@node  Clear counter of ip prefix-list,  , Showing ip prefix-list, IP Prefix List
+@comment  node-name,  next,  previous,  up
+@subsubsection Clear counter of ip prefix-list
+
+@deffn {Command} {clear ip prefix-list} {}
+@end deffn
+@deffn {Command} {clear ip prefix-list @var{name}} {}
+@end deffn
+@deffn {Command} {clear ip prefix-list @var{name} @var{a.b.c.d/m}} {}
 @end deffn
 
 @node IP Community List, AS Path Access List, IP Prefix List, Filtering

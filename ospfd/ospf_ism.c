@@ -670,6 +670,9 @@ ism_change_status (struct ospf_interface *oi, int status)
     }
   else if (old_status == ISM_DR && status != ISM_DR)
     {
+
+      /* This should be changed !!! Zinin*/
+
       if (oi->network_lsa_self != NULL)
 	ospf_lsa_free (oi->network_lsa_self);
       oi->network_lsa_self = NULL;

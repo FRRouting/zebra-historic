@@ -22,8 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
-
 #include "memory.h"
 #include "prefix.h"
 #include "routemap.h"
@@ -46,11 +44,11 @@ rip_route_match_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -71,11 +69,11 @@ rip_route_match_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -96,11 +94,11 @@ rip_route_set_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -121,11 +119,11 @@ rip_route_set_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -324,7 +322,7 @@ route_match_ip_address (void *rule, struct prefix *prefix,
 
   if (type == ROUTE_MAP_RIP)
     {
-      alist = access_list_lookup ((char *) rule);
+      alist = access_list_lookup (AF_INET, (char *) rule);
       if (alist == NULL)
 	return RM_NOMATCH;
     
@@ -606,6 +604,12 @@ DEFUN (no_set_ip_nexthop,
        "IP Address of the next hop\n")
 {
   return rip_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+void
+rip_route_map_reset ()
+{
+  ;
 }
 
 /* Route-map init */

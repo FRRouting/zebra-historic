@@ -1,16 +1,143 @@
+1999-10-25  Yoshinobu Inoue  <shin@nd.net.fujitsu.co.jp>
+
+	* ospfd.c (ospf_interface_run): Enable to detect P2P network
+	on an OSPF interface.
+
+1999-10-19  Jordan Mendelson  <jordy@wserv.com>
+
+	* ospf_lsdb.c (ospf_lsdb_add): Fix bug of crash
+	in ospf_ls_retransmit_lookup ().
+
+1999-10-19  Vladimir B. Grebenschikov <vova@express.ru>
+
+	* ospf_route.c: Workaround about installation of OSPF routes into
+	the zebra daemon.  Add checking of existance routes.  Free
+	ospf_top->old_table if it exists.
+
+1999-10-15  Jordan Mendelson <jordy@wserv.com>
+
+	* Add support for MD5 authentication.
+
+1999-10-12  Alex Zinin  <zinin@amt.ru>
+	* ospfd.c, ospfd.h, ospf_abr.c:
+	  a new command "area export-list" was added, it allows
+	  the admin. to control which intra-area routes are
+	  announced to other areas by the ABR
+
+1999-10-12  Alex Zinin  <zinin@amt.ru>
+	* ospf_asbr.c (ospf_asbr_check_lsas): Fix bug of coredump
+    	  when "no redistribute" is used after a distribute list
+	  denying some networks was used
+
+1999-10-05  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_route.c (ospf_path_dup): New function added.
+
+1999-10-05  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_interface.[ch]: Some of VL related funciton name changed.
+
+1999-09-27  Alex Zinin  <zinin@amt.ru>
+
+	* ospf_zebra.c:	Distribute-list functionality added
+
+1999-09-27  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (show_ip_ospf): Fix bug of segmentation fault when no ospf
+	instance exists.
+
+1999-09-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (ospf_interface_down): Fix bug of misusing nextnode()
+	instead of node->next.  Reported by Hiroki Ishibashi
+	<ishibasi@dcd.abk.nec.co.jp>.
+
+	* ospf_route.c (show_ip_ospf_route): Add check for ospf is enabled
+	or not.
+
+1999-09-23  Alex Zinin  <zinin@amt.ru>
+
+        * stub area support added
+
+1999-09-23  Alex Zinin  <zinin@amt.ru>
+
+        * fwd_addr in ASE-LSAs is now set correctly
+	* ASE routing changed to check the fwd_addr
+	and skip the route if the addr points to one
+	of our interfaces to avoid loops.
+
+1999-09-22  Alex Zinin  <zinin@amt.ru>
+
+	* ospf_interface:
+	ospf_vls_in_area() added, it returns 
+	the number of VLs configured through the area
+
+	* ospf_interface.c ospf_lsa.c ospf_lsdb.c ospfd.c 
+	honor correct mem alloc
+
+1999-09-22  Alex Zinin  <zinin@amt.ru>
+
+	* memory.[ch]:
+	Some OSPF mem types added,
+	plus more info in "show mem"
+
+1999-09-21  Alex Zinin  <zinin@amt.ru>
+
+	* ospfd.c:
+	"area range substitute" added.
+	It can be used on NAT-enabled (IP-masquarade)
+	routers to announce private networks
+	from an area as public ones into the outside
+	world (not in the RFC, btw :)
+
+1999-09-21  Alex Zinin  <zinin@amt.ru>
+
+	* ospfd.c:
+	"area range suppress" added.
+	This command allows to instruct the router
+	to be silent about specific ranges, i.e.,
+	it is a method of route filtering on area
+	borders
+
+1999-09-21  Alex Zinin  <zinin@amt.ru>
+
+	* ospfd.c VLs removed when "no network area" executed
+
+1999-09-20  Alex Zinin  <zinin@amt.ru>
+
+	* ospf_ase.c bug fix for not-zero fwd_addr 
+	and directly connected routes.
+
+1999-09-20  Yon Uriarte <yon@plannet.de>
+
+	* ospf_packet.c (ospf_make_ls_req): Introduce delta value for
+	checking the length of OSPF packet exceeds MTU or not.
+
+	* ospf_lsa.c (ospf_lsa_different): Apply ntohs for checking
+	l1->data->length.
+
+1999-09-18  Alex Zinin  <zinin@amt.ru>
+
+	* ospf_lsa.c bug fix for ospf_network_lsa() to
+	include itself into the RID list
+
 1999-09-10  Alex Zinin  <zinin@amt.ru>
+
 	* Alternative ABR behaviors IBM/Cisco/Shortcut
 	implemented
 
 1999-09-10  Alex Zinin  <zinin@amt.ru>
+
 	* router and network-LSA origination
 	changed to honor MinLSInterval
 
 1999-09-08  Alex Zinin  <zinin@amt.ru>
+
 	* modified ABR behavior to honor VLs and transit
 	  areas
 
 1999-09-07  Alex Zinin  <zinin@amt.ru>
+
 	* completed VL functionality
 
 1999-09-06  Kunihiro Ishiguro  <kunihiro@zebra.org>

@@ -68,15 +68,41 @@ struct access_master
   void (*delete_hook) ();
 };
 
-/* Static structure of all access_list's master. */
-static struct access_master access_master = 
+/* Static structure for IPv4 access_list's master. */
+static struct access_master access_master_ipv4 = 
 { 
   {NULL, NULL},
   {NULL, NULL},
   NULL,
   NULL,
 };
+
+#ifdef HAVE_IPV6
+/* Static structure for IPv6 access_list's master. */
+static struct access_master access_master_ipv6 = 
+{ 
+  {NULL, NULL},
+  {NULL, NULL},
+  NULL,
+  NULL,
+};
+#endif /* HAVE_IPV6 */
 
+struct access_master *
+access_master_get (int family)
+{
+  struct access_master *master = NULL;
+
+  if (family == AF_INET)
+    master = &access_master_ipv4;
+#ifdef HAVE_IPV6
+  else if (family == AF_INET6)
+    master = &access_master_ipv6;
+#endif /* HAVE_IPV6 */
+
+  return master;
+}
+
 /* Allocate new filter structure. */
 struct filter *
 filter_new ()
@@ -188,12 +214,23 @@ access_list_free (struct access_list *access)
 void
 access_list_delete (struct access_list *access)
 {
+  struct filter *filter;
+  struct filter *next;
   struct access_list_list *list;
+  struct access_master *master;
+
+  for (filter = access->head; filter; filter = next)
+    {
+      next = filter->next;
+      filter_free (filter);
+    }
+
+  master = access->master;
 
   if (access->type == ACCESS_TYPE_NUMBER)
-    list = &access_master.num;
+    list = &master->num;
   else
-    list = &access_master.str;
+    list = &master->str;
 
   if (access->next)
     access->next->prev = access->prev;
@@ -211,17 +248,23 @@ access_list_delete (struct access_list *access)
 /* Insert new access list to list of access_list.  Each acceess_list
    is sorted by the name. */
 struct access_list *
-access_list_insert (char *name)
+access_list_insert (int family, char *name)
 {
   int i;
   long number;
   struct access_list *access;
   struct access_list *point;
   struct access_list_list *list;
+  struct access_master *master;
+
+  master = access_master_get (family);
+  if (master == NULL)
+    return NULL;
 
   /* Allocate new access_list and copy given name. */
   access = access_list_new ();
   access->name = strdup (name);
+  access->master = master;
 
   /* If name is made by all digit character.  We treat it as
      number. */
@@ -239,7 +282,7 @@ access_list_insert (char *name)
       access->type = ACCESS_TYPE_NUMBER;
 
       /* Set access_list to number list. */
-      list = &access_master.num;
+      list = &master->num;
 
       for (point = list->head; point; point = point->next)
 	if (atol (point->name) >= number)
@@ -250,7 +293,7 @@ access_list_insert (char *name)
       access->type = ACCESS_TYPE_STRING;
 
       /* Set access_list to string list. */
-      list = &access_master.str;
+      list = &master->str;
   
       /* Set point to insertion point. */
       for (point = list->head; point; point = point->next)
@@ -296,18 +339,23 @@ access_list_insert (char *name)
 
 /* Lookup access_list from list of access_list by name. */
 struct access_list *
-access_list_lookup (char *name)
+access_list_lookup (int family, char *name)
 {
   struct access_list *access;
+  struct access_master *master;
 
   if (name == NULL)
     return NULL;
 
-  for (access = access_master.num.head; access; access = access->next)
+  master = access_master_get (family);
+  if (master == NULL)
+    return NULL;
+
+  for (access = master->num.head; access; access = access->next)
     if (strcmp (access->name, name) == 0)
       return access;
 
-  for (access = access_master.str.head; access; access = access->next)
+  for (access = master->str.head; access; access = access->next)
     if (strcmp (access->name, name) == 0)
       return access;
 
@@ -317,13 +365,13 @@ access_list_lookup (char *name)
 /* Get access list from list of access_list.  If there isn't matched
    access_list create new one and return it. */
 struct access_list *
-access_list_get (char *name)
+access_list_get (int family, char *name)
 {
   struct access_list *access;
 
-  access = access_list_lookup (name);
+  access = access_list_lookup (family, name);
   if (access == NULL)
-    access = access_list_insert (name);
+    access = access_list_insert (family, name);
   return access;
 }
 
@@ -353,19 +401,6 @@ access_list_print (struct access_list *access)
     }
 }
 
-/* Apply access_list_print to the all of access_list.  For debug
-   purpose. */
-void
-access_list_print_all ()
-{
-  struct access_list *access;
-
-  for (access = access_master.num.head; access; access = access->next)
-    access_list_print (access);
-  for (access = access_master.str.head; access; access = access->next)
-    access_list_print (access);
-}
-
 /* Apply access list to object (which should be struct prefix *). */
 enum filter_type
 access_list_apply (struct access_list *access, void *object)
@@ -386,14 +421,20 @@ access_list_apply (struct access_list *access, void *object)
 void
 access_list_add_hook (void (*func) ())
 {
-  access_master.add_hook = func;
+  access_master_ipv4.add_hook = func;
+#ifdef HAVE_IPV6
+  access_master_ipv6.add_hook = func;
+#endif /* HAVE_IPV6 */
 }
 
 /* Delete hook function. */
 void
 access_list_delete_hook (void (*func) ())
 {
-  access_master.delete_hook = func;
+  access_master_ipv4.delete_hook = func;
+#ifdef HAVE_IPV6
+  access_master_ipv6.delete_hook = func;
+#endif /* HAVE_IPV6 */
 }
 
 /* Add new filter to the end of specified access_list. */
@@ -410,8 +451,8 @@ access_list_filter_add (struct access_list *access, struct filter *filter)
   access->tail = filter;
 
   /* Run hook function. */
-  if (access_master.add_hook)
-    (*access_master.add_hook) ();
+  if (access->master->add_hook)
+    (*access->master->add_hook) ();
 }
 
 /* If access_list has no filter then return 1. */
@@ -446,47 +487,9 @@ access_list_filter_delete (struct access_list *access, struct filter *filter)
     access_list_delete (access);
 
   /* Run hook function. */
-  if (access_master.delete_hook)
-    (*access_master.delete_hook) ();
+  if (access->master->delete_hook)
+    (*access->master->delete_hook) ();
 }
-
-#ifdef TEST
-/**/
-int
-main ()
-{
-  int ret;
-  struct prefix p;
-  struct filter *filter;
-  struct access_list *alist;
-  
-  /*
-    access-list 1 deny 3ffe:1c00::0/24 refine
-    access-list 1 permit any
-  */
-  alist = access_list_get ("1");
-
-  access_list_print_all ();
-
-  str2prefix ("3ffe:1c00::0/24" ,&p);
-  filter = filter_make (&p, FILTER_DENY);
-  access_list_filter_add (alist, filter);
-
-  filter = filter_make (NULL, FILTER_PERMIT);
-  access_list_filter_add (alist, filter);
-
-  access_list_print (alist);
-
-  str2prefix ("3ffe:1d00::1/128", &p);
-  
-  ret = access_list_apply (alist, &p);
-
-  printf ("result %d\n", ret);
-
-  exit (0);
-}
-#endif /* TEST */
-
 
 /*
   deny    Specify packets to reject
@@ -501,7 +504,7 @@ main ()
 */
 
 DEFUN (access_list, access_list_cmd,
-       "access-list NAME (deny|permit) A.B.C.D/M",
+       "access-list NAME (deny|permit) (A.B.C.D/M|any)",
        "Set access list definition\n"
        "Access list name\n"
        "Access list for denies\n"
@@ -521,7 +524,7 @@ DEFUN (access_list, access_list_cmd,
     type = FILTER_DENY;
   else
     {
-      vty_out (vty, "filter type must be [permit|deny]\r\n");
+      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -531,24 +534,24 @@ DEFUN (access_list, access_list_cmd,
   else
     {
       /* Check string format of prefix and prefixlen. */
-      ret = str2prefix (argv[2], &p);
+      ret = str2prefix_ipv4 (argv[2], (struct prefix_ipv4 *)&p);
       if (ret <= 0)
 	{
-	  vty_out (vty, "IP address prefix/prefixlen is malformed\r\n");
+	  vty_out (vty, "IP address prefix/prefixlen is malformed%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       filter = filter_make (&p, type);
     }
 
   /* Install new filter to the access_list. */
-  access = access_list_get (argv[0]);
+  access = access_list_get (AF_INET, argv[0]);
   access_list_filter_add (access, filter);
 
   return CMD_SUCCESS;
 }
 
 DEFUN (no_access_list, no_access_list_cmd,
-       "no access-list NAME (deny|permit) A.B.C.D/M",
+       "no access-list NAME (deny|permit) (A.B.C.D/M|any)",
        "Unset access list\n"
        "Set access list definition\n"
        "Access list name\n"
@@ -569,15 +572,16 @@ DEFUN (no_access_list, no_access_list_cmd,
     type = FILTER_DENY;
   else
     {
-      vty_out (vty, "filter type must be [permit|deny]\r\n");
+      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   /* Looking up access_list. */
-  access = access_list_lookup (argv[0]);
+  access = access_list_lookup (AF_INET, argv[0]);
   if (access == NULL)
     {
-      vty_out (vty, "access-list %s doesn't exist\r\n", argv[0]);
+      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -586,10 +590,10 @@ DEFUN (no_access_list, no_access_list_cmd,
       filter = filter_lookup (access, NULL, type);
   else
     {
-      ret = str2prefix (argv[2], &p);
+      ret = str2prefix_ipv4 (argv[2], (struct prefix_ipv4 *) &p);
       if (ret <= 0)
 	{
-	  vty_out (vty, "IP address prefix/prefixlen is malformed\r\n");
+	  vty_out (vty, "IP address prefix/prefixlen is malformed%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       filter = filter_lookup (access, &p, type);
@@ -600,11 +604,12 @@ DEFUN (no_access_list, no_access_list_cmd,
     {
       char buf[BUFSIZ];
 
-      vty_out (vty, "access-list %s %s %s/%d doesn't exist\r\n", 
+      vty_out (vty, "access-list %s %s %s/%d doesn't exist%s", 
 	       argv[0],
 	       argv[1],
 	       inet_ntop (p.family, &p.u.prefix, buf, BUFSIZ),
-	       p.prefixlen);
+	       p.prefixlen,
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -614,37 +619,159 @@ DEFUN (no_access_list, no_access_list_cmd,
   return CMD_SUCCESS;
 }
 
-/* Access-list node. */
-struct cmd_node access_node =
+#ifdef HAVE_IPV6
+DEFUN (ipv6_access_list, ipv6_access_list_cmd,
+       "ipv6 access-list NAME (deny|permit) IPV6_PREFIX",
+       IPV6_STR
+       "Set access list definition\n"
+       "Access list name\n"
+       "Access list for denies\n"
+       "Access list for permits\n"
+       "Access list address. e.g. 10.0.0.0/8.\n")
 {
-  ACCESS_NODE,
-  ""				/* Access list has no interface. */
-};
+  int ret;
+  enum filter_type type;
+  struct filter *filter;
+  struct access_list *access;
+  struct prefix p;
+
+  /* Check of filter type. */
+  if (strcmp (argv[1], "permit") == 0)
+    type = FILTER_PERMIT;
+  else if (strcmp (argv[1], "deny") == 0)
+    type = FILTER_DENY;
+  else
+    {
+      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* "any" is special token of matching IP addresses.  */
+  if (strcmp (argv[2], "any") == 0)
+      filter = filter_make (NULL, type);
+  else
+    {
+      /* Check string format of prefix and prefixlen. */
+      ret = str2prefix_ipv6 (argv[2], (struct prefix_ipv6 *) &p);
+      if (ret <= 0)
+	{
+	  vty_out (vty, "IPv6 address prefix/prefixlen is malformed%s",
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      filter = filter_make (&p, type);
+    }
+
+  /* Install new filter to the access_list. */
+  access = access_list_get (AF_INET6, argv[0]);
+  access_list_filter_add (access, filter);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_access_list, no_ipv6_access_list_cmd,
+       "no ipv6 access-list NAME (deny|permit) IPV6_PREFIX",
+       "Unset access list\n"
+       IPV6_STR
+       "Set access list definition\n"
+       "Access list name\n"
+       "Access list for denies\n"
+       "Access list for permits\n"
+       "Access list address\n")
+{
+  int ret;
+  enum filter_type type;
+  struct filter *filter;
+  struct access_list *access;
+  struct prefix p;
+
+  /* Check of filter type. */
+  if (strcmp (argv[1], "permit") == 0)
+    type = FILTER_PERMIT;
+  else if (strcmp (argv[1], "deny") == 0)
+    type = FILTER_DENY;
+  else
+    {
+      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Looking up access_list. */
+  access = access_list_lookup (AF_INET6, argv[0]);
+  if (access == NULL)
+    {
+      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Check string format of prefix and prefixlen. */
+  if (strcmp (argv[2], "any") == 0)
+      filter = filter_lookup (access, NULL, type);
+  else
+    {
+      ret = str2prefix_ipv6 (argv[2], (struct prefix_ipv6 *) &p);
+      if (ret <= 0)
+	{
+	  vty_out (vty, "IPv6 address prefix/prefixlen is malformed%s",
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      filter = filter_lookup (access, &p, type);
+    }
+
+  /* Looking up filter from access_list. */
+  if (filter == NULL)
+    {
+      char buf[BUFSIZ];
+
+      vty_out (vty, "access-list %s %s %s/%d doesn't exist%s", 
+	       argv[0],
+	       argv[1],
+	       inet_ntop (p.family, &p.u.prefix, buf, BUFSIZ),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Delete filter from access_list. */
+  access_list_filter_delete (access, filter);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_IPV6 */
 
 /* Configuration write function. */
 int
-config_write_access (struct vty *vty)
+config_write_access_family (int family, struct vty *vty)
 {
   struct access_list *access;
+  struct access_master *master;
   struct filter *filter;
   char buf[BUFSIZ];
   struct prefix *p;
   int write = 0;
 
-  for (access = access_master.num.head; access; access = access->next)
+  master = access_master_get (family);
+  if (master == NULL)
+    return 0;
+
+  for (access = master->num.head; access; access = access->next)
     for (filter = access->head; filter; filter = filter->next)
       {
 	p = &filter->prefix;
 
 	if (filter->any)
 	  vty_out (vty,
-		   "access-list %s %s any%s", 
+		   "%saccess-list %s %s any%s", 
+		   family == AF_INET ? "" : "ipv6 ",
 		   access->name,
 		   filter_type_str (filter),
 		   VTY_NEWLINE);
 	else
 	  vty_out (vty,
-		   "access-list %s %s %s/%d%s", 
+		   "%saccess-list %s %s %s/%d%s", 
+		   family == AF_INET ? "" : "ipv6 ",
 		   access->name,
 		   filter_type_str (filter),
 		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
@@ -653,20 +780,22 @@ config_write_access (struct vty *vty)
 	write++;
       }
 
-  for (access = access_master.str.head; access; access = access->next)
+  for (access = master->str.head; access; access = access->next)
     for (filter = access->head; filter; filter = filter->next)
       {
 	p = &filter->prefix;
 
 	if (filter->any)
 	  vty_out (vty,
-		   "access-list %s %s any%s", 
+		   "%saccess-list %s %s any%s", 
+		   family == AF_INET ? "" : "ipv6 ",
 		   access->name,
 		   filter_type_str (filter),
 		   VTY_NEWLINE);
 	else
 	  vty_out (vty, 
-		   "access-list %s %s %s/%d%s", 
+		   "%saccess-list %s %s %s/%d%s", 
+		   family == AF_INET ? "" : "ipv6 ",
 		   access->name,
 		   filter_type_str (filter),
 		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
@@ -677,12 +806,124 @@ config_write_access (struct vty *vty)
   return write;
 }
 
+/* Access-list node. */
+struct cmd_node access_node =
+{
+  ACCESS_NODE,
+  ""				/* Access list has no interface. */
+};
+
+int
+config_write_access_ipv4 (struct vty *vty)
+{
+  return config_write_access_family (AF_INET, vty);
+}
+
+void
+access_list_reset_ipv4 ()
+{
+  struct access_list *access;
+  struct access_list *next;
+  struct access_master *master;
+
+  master = access_master_get (AF_INET);
+  if (master == NULL)
+    return;
+
+  for (access = master->num.head; access; access = next)
+    {
+      next = access->next;
+      access_list_delete (access);
+    }
+  for (access = master->str.head; access; access = next)
+    {
+      next = access->next;
+      access_list_delete (access);
+    }
+
+  assert (master->num.head == NULL);
+  assert (master->num.tail == NULL);
+
+  assert (master->str.head == NULL);
+  assert (master->str.tail == NULL);
+}
+
 /* Install vty related command. */
 void
-access_list_init ()
+access_list_init_ipv4 ()
 {
-  install_node (&access_node, config_write_access);
+  install_node (&access_node, config_write_access_ipv4);
 
   install_element (CONFIG_NODE, &access_list_cmd);
   install_element (CONFIG_NODE, &no_access_list_cmd);
+}
+
+#ifdef HAVE_IPV6
+struct cmd_node access_ipv6_node =
+{
+  ACCESS_IPV6_NODE,
+  ""
+};
+
+int
+config_write_access_ipv6 (struct vty *vty)
+{
+  return config_write_access_family (AF_INET6, vty);
+}
+
+void
+access_list_reset_ipv6 ()
+{
+  struct access_list *access;
+  struct access_list *next;
+  struct access_master *master;
+
+  master = access_master_get (AF_INET6);
+  if (master == NULL)
+    return;
+
+  for (access = master->num.head; access; access = next)
+    {
+      next = access->next;
+      access_list_delete (access);
+    }
+  for (access = master->str.head; access; access = next)
+    {
+      next = access->next;
+      access_list_delete (access);
+    }
+
+  assert (master->num.head == NULL);
+  assert (master->num.tail == NULL);
+
+  assert (master->str.head == NULL);
+  assert (master->str.tail == NULL);
+}
+
+void
+access_list_init_ipv6 ()
+{
+  install_node (&access_ipv6_node, config_write_access_ipv6);
+
+  install_element (CONFIG_NODE, &ipv6_access_list_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_access_list_cmd);
+}
+#endif /* HAVE_IPV6 */
+
+void
+access_list_init ()
+{
+  access_list_init_ipv4 ();
+#ifdef HAVE_IPV6
+  access_list_init_ipv6();
+#endif /* HAVE_IPV6 */
+}
+
+void
+access_list_reset ()
+{
+  access_list_reset_ipv4 ();
+#ifdef HAVE_IPV6
+  access_list_reset_ipv6();
+#endif /* HAVE_IPV6 */
 }

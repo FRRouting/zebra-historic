@@ -31,8 +31,6 @@
 #include "log.h"
 #include "sockunion.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"
@@ -446,7 +444,8 @@ DEFUN (debug_bgp, debug_bgp_cmd,
     debug_on (DEBUG_BGP_FSM);
   else
     {
-      vty_out (vty, "debug option %s doesn't supported\r\n", argv[0]);
+      vty_out (vty, "debug option %s doesn't supported%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
   return CMD_SUCCESS;
@@ -463,7 +462,8 @@ DEFUN (no_debug_bgp, no_debug_bgp_cmd,
     debug_off (DEBUG_BGP_FSM);
   else
     {
-      vty_out (vty, "debug option %s doesn't supported\r\n", argv[0]);
+      vty_out (vty, "debug option %s doesn't supported%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
   return CMD_SUCCESS;
@@ -475,14 +475,14 @@ DEFUN (show_debug_bgp, show_debug_bgp_cmd,
        DEBUG_STR
        BGP_STR)
 {
-  vty_out (vty, "Debug option\r\n");
-  vty_out (vty, "============\r\n");
+  vty_out (vty, "Debug option%s", VTY_NEWLINE);
+  vty_out (vty, "============%s", VTY_NEWLINE);
 
   vty_out (vty, "debug bgp fsm : ");
   if (debug (DEBUG_BGP_FSM))
-    vty_out (vty, "on\r\n");
+    vty_out (vty, "on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "off\r\n");
+    vty_out (vty, "off%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -502,11 +502,14 @@ DEFUN (debug_ip_bgp, debug_ip_bgp_cmd,
       ;
     }
   if (argc == 1)
-    vty_out (vty, "option1 %s\r\n", argv[0]);
+    vty_out (vty, "option1 %s%s", argv[0],
+	     VTY_NEWLINE);
   else if (argc == 2)
-    vty_out (vty, "option2 %s\r\n", argv[1]);
+    vty_out (vty, "option2 %s%s", argv[1],
+	     VTY_NEWLINE);
   else
-    vty_out (vty, "no option\r\n");
+    vty_out (vty, "no option%s",
+	     VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -631,7 +634,7 @@ bgp_dump_init ()
 {
   bgp_dump_fp = NULL;
 
-  install_element (ENABLE_NODE, &show_debug_bgp_cmd);
+  install_element (VIEW_NODE, &show_debug_bgp_cmd);
   install_element (ENABLE_NODE, &show_debug_bgp_cmd);
   install_element (ENABLE_NODE, &debug_bgp_cmd);
   install_element (CONFIG_NODE, &debug_bgp_cmd);

@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "version.h"
 #include "getopt.h"
 #include "command.h"
@@ -32,6 +31,7 @@
 #include "prefix.h"
 #include "log.h"
 
+#include "zebra/zserv.h"
 #include "zebra/debug.h"
 #include "zebra/rib.h"
 
@@ -248,10 +248,6 @@ main (int argc, char **argv)
 
   /* Sort VTY commands. */
   sort_node ();
-
-#ifdef SMUX_TEST
-  smux_init ();
-#endif /* SMUX_TEST */
 
 #ifdef RTADV_TEST
   rtadv_init ();

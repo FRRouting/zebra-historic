@@ -55,5 +55,6 @@ HashBacket *hash_head (struct Hash *, int);
 HashBacket *hash_push (struct Hash *, void *);
 void *hash_pull (struct Hash *, void *);
 void *hash_search (struct Hash *, void *);
+void hash_clean (struct Hash *hash, void (* func) (void *));
 
 #endif /* _ZEBRA_HASH_H */

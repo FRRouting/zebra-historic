@@ -22,9 +22,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_PACKET_H
 
 #define OSPF_HEADER_SIZE         24
-#define OSPF_AUTH_SIZE	          8
+#define OSPF_AUTH_MD5_SIZE       16
+#define OSPF_AUTH_SIMPLE_SIZE     8
+
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
-#define OSPF_HELLO_MIN_SIZE	 20
+#define OSPF_HELLO_MIN_SIZE	 20   /* not including neighbors */
 #define OSPF_DB_DESC_MIN_SIZE     8
 #define OSPF_LS_REQ_MIN_SIZE      0
 #define OSPF_LS_UPD_MIN_SIZE      4
@@ -73,7 +75,15 @@ struct ospf_header
   struct in_addr area_id;		/* Area ID. */
   u_int16_t checksum;			/* Check Sum. */
   u_int16_t auth_type;			/* Authentication Type. */
-  u_char auth_data [OSPF_AUTH_SIZE];	/* Authentication Data. */
+  union {
+    u_char auth_data [OSPF_AUTH_SIMPLE_SIZE];	/* Authentication Data. */
+    struct {
+      u_int16_t md5_null;		/* 0 */
+      u_int8_t md5_key_id;		/* key id */
+      u_int8_t md5_key_len;		/* key length */
+      u_int32_t md5_seq;		/* sequence */    
+    } auth_md5;
+  } auth;
 };
 
 /* OSPF Hello body format. */
@@ -100,6 +110,8 @@ struct ospf_db_desc
 
 
 /* Macros. */
+#define OSPF_PACKET_MAX(oi)	((oi)->ifp->mtu - ((oi)->auth_md5 ? OSPF_AUTH_MD5_SIZE : 0))
+
 #define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
 #define OSPF_OUTPUT_LENGTH(S)	((S)->endp)
 
@@ -136,5 +148,10 @@ void ospf_ls_retransmit (struct ospf_interface *, struct ospf_lsa *);
 
 int ospf_ls_upd_timer (struct thread *);
 int ospf_ls_ack_timer (struct thread *);
+
+int ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
+                       u_int16_t length);
+
+int ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *p);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

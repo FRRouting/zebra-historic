@@ -31,6 +31,5 @@ router ospf6
  router-id 203.178.139.179
  redistribute connected
  redistribute ripng
- redistribute bgp
  interface ep0 area 0.0.0.0
 !

@@ -107,6 +107,12 @@ community_dup (struct community *com)
   return new;
 }
 
+void
+community_intern (struct community *com)
+{
+  com->refcnt++;
+}
+
 /* Free community attribute. */
 void
 community_unintern (struct community *com)
@@ -294,7 +300,7 @@ community_print_all_vty (struct vty *vty)
 
 	  vty_out (vty, "[%x:%d] (%d)", mp, i, com->refcnt);
 	  community_print_vty (vty, com);
-	  vty_out (vty, "\r\n");
+	  vty_out (vty, "%s", VTY_NEWLINE);
 	  mp = mp->next;
 	}
 }

@@ -22,9 +22,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <guile/gh.h>
 
 #include "log.h"
-
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 
 static SCM scm_mark_bgp (SCM obj);

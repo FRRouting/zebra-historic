@@ -138,8 +138,12 @@ void connected_delete_by_prefix (struct interface *, struct prefix *);
 void connected_log (struct connected *);
 
 #ifdef NRL
+#ifndef HAVE_IF_NAMETOINDEX
 unsigned int if_nametoindex (char *);
+#endif
+#ifndef HAVE_IF_INDEXTONAME
 char *if_indextoname (unsigned int, char *);
+#endif
 #endif /* NRL */
 
 /* Exported variables. */

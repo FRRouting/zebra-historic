@@ -97,6 +97,9 @@ ospf6_zebra_redistribute_ospf6_delete ()
   struct ospf6_nexthop *nh;
   listnode n;
 
+  if (!ospf6)
+    return;
+
   for (rn = route_top (ospf6->table_zebra); rn; rn = route_next (rn))
     {
       info = (struct ospf6_route_node_info *) rn->info;
@@ -249,6 +252,7 @@ ospf6_zebra_route_add (struct prefix_ipv6 *dst,
       if (!IN6_IS_ADDR_V4MAPPED (&dst->prefix))
         zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, dst,
                         &nh->ipaddr, nh->ifindex);
+#ifdef OSPF6_IPV4
       else
         {
           struct prefix_ipv4 dst4;
@@ -273,6 +277,8 @@ ospf6_zebra_route_add (struct prefix_ipv6 *dst,
             zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, &dst4,
                             &nh4, nh->ifindex);
         }
+#endif /* OSPF6_IPV4 */
+
     }
 
   ospf6_route_add (dst, info, ospf6->table_zebra);
@@ -411,7 +417,10 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
         {
           o6if = ospf6_if_lookup_by_index (ifindex);
           assert (o6if);
-          new = ospf6_make_link_lsa (o6if);
+          if (ospf6_if_is_enabled (o6if))
+            new = ospf6_make_link_lsa (o6if);
+          else
+            new = (struct ospf6_lsa *) NULL;
         }
       else
         new = (struct ospf6_lsa *) NULL;
@@ -624,33 +633,12 @@ DEFUN (router_zebra,
        "Enable a routing process\n"
        "Make connection to zebra daemon\n")
 {
-  int ret;
-
   if (IS_OSPF6_DUMP_CONFIG)
     zlog_info ("Config: router zebra");
 
   vty->node = ZEBRA_NODE;
-
-  /* Set router zebra is enabled. */
   zebra->enable = 1;
-
-  /* If already has socket then return. */
-  if (zebra->sock >= 0)
-    {
-      vty_out (vty, "Already connected to zebra\r\n");
-      return CMD_WARNING;
-    }
-
-  vty_out (vty, "Connecting zebra...\r\n");
-
-  /* Connect to zebra. */
-  ret = zebra_create (zebra);
-  if (ret < 0)
-    {
-      vty_out (vty, "Can't connect to zebra\r\n");
-      return CMD_WARNING;
-    }
-
+  zclient_start (zebra);
   return CMD_SUCCESS;
 }
 
@@ -698,12 +686,11 @@ DEFUN (no_router_zebra,
        "Configure routing process\n"
        "Disable connection to zebra daemon\n")
 {
-  /* log */
   if (IS_OSPF6_DUMP_CONFIG)
     zlog_info ("no router zebra");
 
-  /* xxx */
   zebra->enable = 0;
+  zclient_stop (zebra);
   return CMD_SUCCESS;
 }
 
@@ -733,40 +720,27 @@ struct cmd_node zebra_node =
 };
 
 void
-ospf6_zebra_start ()
-{
-  zlog_info ("Connecting Zebra...");
-
-  zebra_create (zebra);
-
-  /* redistribute connected route by default */
-  ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
-}
-
-void
 ospf6_zebra_init ()
 {
   /* Allocate zebra structure. */
-  zebra = zebra_new ();
-
-  /* Set default values. */
-  zebra->enable = 1;
-  zebra->sock = -1;
-  zebra->redist_default = ZEBRA_ROUTE_OSPF6;
-  zebra->redist[ZEBRA_ROUTE_OSPF6] = 1;
-
-  /* Set call back functions. */
+  zebra = zclient_new ();
+  zclient_init (zebra, ZEBRA_ROUTE_OSPF6);
   zebra->interface_add = ospf6_interface_add;
   zebra->interface_delete = ospf6_interface_delete;
   zebra->interface_address_add = ospf6_interface_address_add;
   zebra->interface_address_delete = ospf6_interface_address_delete;
-
+#ifdef OSPF6_IPV4
   zebra->ipv4_route_add = ospf6_zebra_read_ipv4;
   zebra->ipv4_route_delete = ospf6_zebra_read_ipv4;
+#else
+  zebra->ipv4_route_add = NULL;
+  zebra->ipv4_route_delete = NULL;
+#endif /* OSPF6_IPV4 */
   zebra->ipv6_route_add = ospf6_zebra_read_ipv6;
   zebra->ipv6_route_delete = ospf6_zebra_read_ipv6;
 
-  /* zebra->get_all_interface = ospf6_zebra_get_interface; */
+  /* redistribute connected route by default */
+  ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
 
   /* Install zebra node. */
   install_node (&zebra_node, ospf6_zebra_config_write);
@@ -774,11 +748,9 @@ ospf6_zebra_init ()
   /* Install command element for zebra node. */
   install_element (CONFIG_NODE, &router_zebra_cmd);
   install_element (CONFIG_NODE, &no_router_zebra_cmd);
-
   install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &redistribute_ospf6_cmd);
   install_element (ZEBRA_NODE, &no_redistribute_ospf6_cmd);
 
   return;
 }
-

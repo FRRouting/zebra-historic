@@ -30,14 +30,14 @@
 #include "stream.h"
 #include "table.h"
 #include "roken.h"
-#include "client.h"
 #include "command.h"
 #include "sockopt.h"
+#include "distribute.h"
+#include "plist.h"
 
 #include "ripngd/ripngd.h"
 #include "ripngd/ripng_route.h"
 #include "ripngd/ripng_debug.h"
-#include "zebra/zebra.h"
 
 /* RIPng structure which includes many parameters related to RIPng
    protocol. If ripng couldn't active or ripng doesn't configured,
@@ -278,6 +278,9 @@ ripng_recv_packet (int sock, u_char *buf, int bufsize,
 	  ptr = (struct in6_pktinfo *) CMSG_DATA (cmsgptr);
 	  *ifindex = ptr->ipi6_ifindex;
 	  dst = ptr->ipi6_addr;
+
+	  if (*ifindex == 0)
+	    zlog_warn ("Interface index returned by IPV6_PKTINFO is zero");
         }
 
       /* Incoming packet's multicast hop limit. */
@@ -492,6 +495,7 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
   struct prefix_ipv6 p;
   struct route_node *rp;
   struct ripng_info *rinfo;
+  struct ripng_interface *ri;
   struct in6_addr *nexthop;
   u_char oldmetric;
   int same = 0;
@@ -502,15 +506,32 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
   p.prefixlen = rte->prefixlen;
 
   /* Make sure mask is applied. */
+  /* XXX We have to check the prefix is valid or not before call
+     apply_mask_ipv6. */
   apply_mask_ipv6 (&p);
 
-  /* Apply input distribute-list filter. */
-  if (distribute_apply_in (ifp, (struct prefix *) &p) == FILTER_DENY)
+  /* Apply input filters. */
+  ri = ifp->info;
+
+  if (ri->list[RIPNG_FILTER_IN])
     {
-      if (IS_RIPNG_DEBUG_PACKET)
-	zlog_info ("RIPng %s/%d is filtered by distribute in",
-		   inet6_ntop (&p.prefix), p.prefixlen);
-      return;
+      if (access_list_apply (ri->list[RIPNG_FILTER_IN], &p) == FILTER_DENY)
+	{
+	  if (IS_RIPNG_DEBUG_PACKET)
+	    zlog_info ("RIPng %s/%d is filtered by distribute in",
+		       inet6_ntop (&p.prefix), p.prefixlen);
+	  return;
+	}
+    }
+  if (ri->prefix[RIPNG_FILTER_IN])
+    {
+      if (prefix_list_apply (ri->prefix[RIPNG_FILTER_IN], &p) == PREFIX_DENY)
+	{
+	  if (IS_RIPNG_DEBUG_PACKET)
+	    zlog_info ("RIPng %s/%d is filtered by prefix-list in",
+		       inet6_ntop (&p.prefix), p.prefixlen);
+	  return;
+	}
     }
 
   /* Set nexthop pointer. */
@@ -1006,7 +1027,7 @@ ripng_read (struct thread *thread)
   /* Packet comes from unknown interface. */
   if (ifp == NULL)
     {
-      zlog_warn ("RIPng packet comes from unknown interface %s", ifindex);
+      zlog_warn ("RIPng packet comes from unknown interface %d", ifindex);
       return 0;
     }
 
@@ -1206,6 +1227,7 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
   struct stream *s;
   struct route_node *rp;
   struct ripng_info *rinfo;
+  struct ripng_interface *ri;
   struct ripng_aggregate *aggregate;
   struct prefix_ipv6 *p;
   int num;
@@ -1223,21 +1245,39 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
   num = 0;
   rtemax = (STREAM_SIZE(s) - 4) / 20;
 
+  /* Get RIPng interface. */
+  ri = ifp->info;
+  
   for (rp = route_top (ripng_table); rp; rp = route_next (rp))
     {
       if ((rinfo = rp->info) != NULL && rinfo->suppress == 0)
 	{
 	  p = (struct prefix_ipv6 *) &rp->p;
 
-	  /* Output distribute-list filter.*/
-	  if (distribute_apply_out (ifp, (struct prefix *) p) == FILTER_DENY)
+	  /* Apply output filters.*/
+	  if (ri->list[RIPNG_FILTER_OUT])
 	    {
-	      if (IS_RIPNG_DEBUG_PACKET)
-		zlog_info ("RIPng %s/%d is filtered by distribute out",
-			   inet6_ntop (&p->prefix), p->prefixlen);
-	      continue;
+	      if (access_list_apply (ri->list[RIPNG_FILTER_OUT], 
+				     (struct prefix *) p) == FILTER_DENY)
+		{
+		  if (IS_RIPNG_DEBUG_PACKET)
+		    zlog_info ("RIPng %s/%d is filtered by distribute out",
+			       inet6_ntop (&p->prefix), p->prefixlen);
+		  continue;
+		}
 	    }
-
+	  if (ri->prefix[RIPNG_FILTER_OUT])
+	    {
+	      if (prefix_list_apply (ri->prefix[RIPNG_FILTER_OUT], 
+				     (struct prefix *) p) == PREFIX_DENY)
+		{
+		  if (IS_RIPNG_DEBUG_PACKET)
+		    zlog_info ("RIPng %s/%d is filtered by prefix-list out",
+			       inet6_ntop (&p->prefix), p->prefixlen);
+		  continue;
+		}
+	    }
+	  
 	  /* Changed route only output. */
 	  if (route_type == ripng_changed_route &&
 	      (! (rinfo->flags & RIPNG_RTF_CHANGED)))
@@ -1268,13 +1308,28 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 	{
 	  p = (struct prefix_ipv6 *) &rp->p;
 
-	  /* Output distribute-list filter.*/
-	  if (distribute_apply_out (ifp, (struct prefix *) p) == FILTER_DENY)
+	  /* Apply output filters.*/
+	  if (ri->list[RIPNG_FILTER_OUT])
 	    {
-	      if (IS_RIPNG_DEBUG_PACKET)
-		zlog_info ("RIPng %s/%d is filtered by distribute out",
-			   inet6_ntop (&p->prefix), p->prefixlen);
-	      continue;
+	      if (access_list_apply (ri->list[RIPNG_FILTER_OUT], 
+				     (struct prefix *) p) == FILTER_DENY)
+		{
+		  if (IS_RIPNG_DEBUG_PACKET)
+		    zlog_info ("RIPng %s/%d is filtered by distribute out",
+			       inet6_ntop (&p->prefix), p->prefixlen);
+		  continue;
+		}
+	    }
+	  if (ri->prefix[RIPNG_FILTER_OUT])
+	    {
+	      if (prefix_list_apply (ri->prefix[RIPNG_FILTER_OUT], 
+				     (struct prefix *) p) == PREFIX_DENY)
+		{
+		  if (IS_RIPNG_DEBUG_PACKET)
+		    zlog_info ("RIPng %s/%d is filtered by prefix-list out",
+			       inet6_ntop (&p->prefix), p->prefixlen);
+		  continue;
+		}
 	    }
 
 	  /* Changed route only output. */
@@ -1500,9 +1555,12 @@ DEFUN (show_ipv6_ripng,
   int len;
 
   /* Header of display. */ 
-  vty_out (vty, "\r\nCodes: R - RIPng\r\n\r\n"
+  vty_out (vty, "%sCodes: R - RIPng%s%s"
 	   "   Network                            "
-	   "Next Hop                Metric Tag Time\r\n");
+	   "Next Hop                Metric Tag Time%s", VTY_NEWLINE,
+	   VTY_NEWLINE,
+	   VTY_NEWLINE,
+	   VTY_NEWLINE);
   
   for (rp = route_top (ripng_table); rp; rp = route_next (rp))
     {
@@ -1524,7 +1582,9 @@ DEFUN (show_ipv6_ripng,
 	    vty_out (vty, "%*s", len, " ");
 
 	  vty_out (vty, "%*s", 26, " ");
-	  vty_out (vty, "%4d %3d\r\n", aggregate->metric, aggregate->tag);
+	  vty_out (vty, "%4d %3d%s", aggregate->metric,
+		   aggregate->tag,
+		   VTY_NEWLINE);
 	}
 
       if ((rinfo = rp->info) != NULL)
@@ -1558,7 +1618,7 @@ DEFUN (show_ipv6_ripng,
 	  if (rinfo->sub_type == RIPNG_ROUTE_RTE)
 	    ripng_vty_out_uptime (vty, rinfo);
 
-	  vty_out (vty, "\r\n");
+	  vty_out (vty, "%s", VTY_NEWLINE);
 	}
     }
 
@@ -1603,7 +1663,7 @@ DEFUN (ripng_route,
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
   if (ret < 0)
     {
-      vty_out (vty, "Malformed address\r\n");
+      vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   apply_mask_ipv6 (&p);
@@ -1611,7 +1671,7 @@ DEFUN (ripng_route,
   rp = route_node_get (ripng_static, (struct prefix *) &p);
   if (rp->info)
     {
-      vty_out (vty, "There is already same static route.\r\n");
+      vty_out (vty, "There is already same static route.%s", VTY_NEWLINE);
       route_unlock_node (rp);
       return CMD_WARNING;
     }
@@ -1636,7 +1696,7 @@ DEFUN (no_ripng_route,
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
   if (ret < 0)
     {
-      vty_out (vty, "Malformed address\r\n");
+      vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   apply_mask_ipv6 (&p);
@@ -1644,7 +1704,7 @@ DEFUN (no_ripng_route,
   rp = route_node_lookup (ripng_static, (struct prefix *) &p);
   if (rp->info == NULL)
     {
-      vty_out (vty, "Can't find static route.\r\n");
+      vty_out (vty, "Can't find static route.%s", VTY_NEWLINE);
       route_unlock_node (rp);
       return CMD_WARNING;
     }
@@ -1671,7 +1731,7 @@ DEFUN (ripng_aggregate_address,
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
   if (ret < 0)
     {
-      vty_out (vty, "Malformed address\r\n");
+      vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1679,7 +1739,7 @@ DEFUN (ripng_aggregate_address,
   node = route_node_get (ripng_aggregate, &p);
   if (node->info)
     {
-      vty_out (vty, "There is already same aggregate route.\r\n");
+      vty_out (vty, "There is already same aggregate route.%s", VTY_NEWLINE);
       route_unlock_node (node);
       return CMD_WARNING;
     }
@@ -1704,14 +1764,14 @@ DEFUN (no_ripng_aggregate_address,
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *) &p);
   if (ret < 0)
     {
-      vty_out (vty, "Malformed address\r\n");
+      vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   node = route_node_lookup (ripng_aggregate, &p);
   if (! node)
     {
-      vty_out (vty, "Can't find aggregate route.\r\n");
+      vty_out (vty, "Can't find aggregate route.%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   route_unlock_node (node);
@@ -1737,7 +1797,7 @@ DEFUN (ripng_update_timer,
   update = strtoul (argv[0], &endptr, 10);
   if (update == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "update timer value error\r\n");
+      vty_out (vty, "update timer value error%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1772,7 +1832,7 @@ DEFUN (ripng_timeout_timer,
   timeout = strtoul (argv[0], &endptr, 10);
   if (timeout == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "timeout timer value error\r\n");
+      vty_out (vty, "timeout timer value error%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1805,7 +1865,7 @@ DEFUN (ripng_garbage_timer,
   garbage = strtoul (argv[0], &endptr, 10);
   if (garbage == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "garbage timer value error\r\n");
+      vty_out (vty, "garbage timer value error%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1843,21 +1903,21 @@ DEFUN (ripng_timers,
   update = strtoul (argv[0], &endptr, 10);
   if (update == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "update timer value error\r\n");
+      vty_out (vty, "update timer value error%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   
   timeout = strtoul (argv[1], &endptr, 10);
   if (timeout == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "timeout timer value error\r\n");
+      vty_out (vty, "timeout timer value error%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   
   garbage = strtoul (argv[2], &endptr, 10);
   if (garbage == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "garbage timer value error\r\n");
+      vty_out (vty, "garbage timer value error%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1900,13 +1960,16 @@ DEFUN (show_ipv6_protocols, show_ipv6_protocols_cmd,
   if (! ripng)
     return CMD_SUCCESS;
 
-  vty_out (vty, "Routing Protocol is \"ripng\"\r\n");
+  vty_out (vty, "Routing Protocol is \"ripng\"%s", VTY_NEWLINE);
   
-  vty_out (vty, "Sending updates every %d seconds, next due in %d seconds\r\n",
-	   ripng->update_time, 0);
+  vty_out (vty, "Sending updates every %d seconds, next due in %d seconds%s",
+	   ripng->update_time, 0,
+	   VTY_NEWLINE);
 
-  vty_out (vty, "Timerout after %d seconds, garbage correct %d\r\n",
-	   ripng->timeout_time, ripng->garbage_time);
+  vty_out (vty, "Timerout after %d seconds, garbage correct %d%s",
+	   ripng->timeout_time,
+	   ripng->garbage_time,
+	   VTY_NEWLINE);
 
   vty_out (vty, "Outgoing update filter list for all interfaces is not set");
   vty_out (vty, "Incoming update filter list for all interfaces is not set");
@@ -1974,14 +2037,17 @@ ripng_config_write (struct vty *vty)
       for (rp = route_top (ripng_aggregate); rp; rp = route_next (rp))
 	if (rp->info != NULL)
 	  vty_out (vty, " aggregate-address %s/%d%s", 
-		   inet6_ntop (&rp->p.u.prefix6), rp->p.prefixlen, 
+		   inet6_ntop (&rp->p.u.prefix6),
+		   rp->p.prefixlen, 
+
 		   VTY_NEWLINE);
 
       /* RIPng static routes. */
       for (rp = route_top (ripng_static); rp; rp = route_next (rp))
 	if (rp->info != NULL)
 	  vty_out (vty, " route %s/%d%s", inet6_ntop (&rp->p.u.prefix6),
-		   rp->p.prefixlen, VTY_NEWLINE);
+		   rp->p.prefixlen,
+		   VTY_NEWLINE);
 
       /* RIPng timers configuration. */
       if (ripng->update_time != RIPNG_UPDATE_TIMER_DEFAULT ||
@@ -1996,12 +2062,17 @@ ripng_config_write (struct vty *vty)
 	}
 #if 0
       if (ripng->update_time != RIPNG_UPDATE_TIMER_DEFAULT)
-	vty_out (vty, " update-timer %d%s", ripng->update_time, VTY_NEWLINE);
+	vty_out (vty, " update-timer %d%s", ripng->update_time,
+		 VTY_NEWLINE);
       if (ripng->timeout_time != RIPNG_TIMEOUT_TIMER_DEFAULT)
-	vty_out (vty, " timeout-timer %d%s", ripng->timeout_time, VTY_NEWLINE);
+	vty_out (vty, " timeout-timer %d%s", ripng->timeout_time,
+		 VTY_NEWLINE);
       if (ripng->garbage_time != RIPNG_GARBAGE_TIMER_DEFAULT)
-	vty_out (vty, " garbage-timer %d%s", ripng->garbage_time, VTY_NEWLINE);
+	vty_out (vty, " garbage-timer %d%s", ripng->garbage_time,
+		 VTY_NEWLINE);
 #endif /* 0 */
+
+      write += config_write_distribute (vty);
 
       write++;
     }
@@ -2014,6 +2085,89 @@ struct cmd_node cmd_ripng_node =
   RIPNG_NODE,
   "%s(config-router)# ",
 };
+
+void
+ripng_distribute_update (struct distribute *dist)
+{
+  struct interface *ifp;
+  struct ripng_interface *ri;
+  struct access_list *alist;
+  struct prefix_list *plist;
+
+  ifp = if_lookup_by_name (dist->ifname);
+  if (ifp == NULL)
+    return;
+
+  ri = ifp->info;
+
+  if (dist->list[DISTRIBUTE_IN])
+    {
+      alist = access_list_lookup (AF_INET6, dist->list[DISTRIBUTE_IN]);
+      if (alist)
+	ri->list[RIPNG_FILTER_IN] = alist;
+      else
+	ri->list[RIPNG_FILTER_IN] = NULL;
+    }
+  else
+    ri->list[RIPNG_FILTER_IN] = NULL;
+
+  if (dist->list[DISTRIBUTE_OUT])
+    {
+      alist = access_list_lookup (AF_INET6, dist->list[DISTRIBUTE_OUT]);
+      if (alist)
+	ri->list[RIPNG_FILTER_OUT] = alist;
+      else
+	ri->list[RIPNG_FILTER_OUT] = NULL;
+    }
+  else
+    ri->list[RIPNG_FILTER_OUT] = NULL;
+
+  if (dist->prefix[DISTRIBUTE_IN])
+    {
+      plist = prefix_list_lookup (AF_INET6, dist->prefix[DISTRIBUTE_IN]);
+      if (plist)
+	ri->prefix[RIPNG_FILTER_IN] = plist;
+      else
+	ri->prefix[RIPNG_FILTER_IN] = NULL;
+    }
+  else
+    ri->prefix[RIPNG_FILTER_IN] = NULL;
+
+  if (dist->prefix[DISTRIBUTE_OUT])
+    {
+      plist = prefix_list_lookup (AF_INET6, dist->prefix[DISTRIBUTE_OUT]);
+      if (plist)
+	ri->prefix[RIPNG_FILTER_OUT] = plist;
+      else
+	ri->prefix[RIPNG_FILTER_OUT] = NULL;
+    }
+  else
+    ri->prefix[RIPNG_FILTER_OUT] = NULL;
+}
+
+void
+ripng_distribute_update_interface (struct interface *ifp)
+{
+  struct distribute *dist;
+
+  dist = distribute_lookup (ifp->name);
+  if (dist)
+    ripng_distribute_update (dist);
+}
+
+/* Update all interface's distribute list. */
+void
+ripng_distribute_update_all ()
+{
+  struct interface *ifp;
+  listnode node;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      ripng_distribute_update_interface (ifp);
+    }
+}
 
 /* Initialize ripng structure and set commands. */
 void
@@ -2063,7 +2217,16 @@ ripng_init ()
 
   /* Access list install. */
   access_list_init ();
+  access_list_add_hook (ripng_distribute_update_all);
+  access_list_delete_hook (ripng_distribute_update_all);
+
+  /* Prefix list initialize.*/
+  prefix_list_init ();
+  prefix_list_add_hook (ripng_distribute_update_all);
+  prefix_list_delete_hook (ripng_distribute_update_all);
 
   /* Distribute list install. */
-  distribute_init ();
+  distribute_list_init (RIPNG_NODE);
+  distribute_list_add_hook (ripng_distribute_update);
+  distribute_list_delete_hook (ripng_distribute_update);
 }

@@ -42,7 +42,8 @@ ospf_route_new ()
   struct ospf_route *new;
 
   new = XMALLOC (MTYPE_OSPF_ROUTE, sizeof (struct ospf_route));
-  memset (new, 0, sizeof (struct ospf_route));
+  bzero (new, sizeof (struct ospf_route));
+
   return new;
 }
 
@@ -51,6 +52,7 @@ ospf_route_free (struct ospf_route *or)
 {
   if (or->path)
     list_delete_all (or->path);
+
   XFREE (MTYPE_OSPF_ROUTE, or);
 }
 
@@ -60,7 +62,19 @@ ospf_path_new ()
   struct ospf_path *new;
 
   new = XMALLOC (MTYPE_OSPF_PATH, sizeof (struct ospf_path));
-  memset (new, 0, sizeof (struct ospf_path));
+  bzero (new, sizeof (struct ospf_path));
+
+  return new;
+}
+
+struct ospf_path *
+ospf_path_dup (struct ospf_path *path)
+{
+  struct ospf_path *new;
+
+  new = ospf_path_new ();
+  memcpy (new, path, sizeof (struct ospf_path));
+
   return new;
 }
 
@@ -80,19 +94,19 @@ ospf_delete_route (struct route_table *rt)
 
   for (rn = route_top (rt); rn; rn = route_next (rn))
     if ((or = rn->info) != NULL)
-    {
-      if (or->type == OSPF_DESTINATION_NETWORK)
-	for (pnode = listhead (or->path); pnode; nextnode (pnode))
-	  {
-	    path = getdata (pnode);
-	      
-	    if (path->nexthop.s_addr != INADDR_ANY)
-	      ospf_zebra_delete ((struct prefix_ipv4 *)&rn->p,
-				 &path->nexthop);
-	  }
-      else if (or->type == OSPF_DESTINATION_DISCARD)
-	      ospf_zebra_delete_discard((struct prefix_ipv4 *)&rn->p);
-    }
+      {
+	if (or->type == OSPF_DESTINATION_NETWORK)
+	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
+	    {
+	      path = getdata (pnode);
+
+	      if (path->nexthop.s_addr != INADDR_ANY)
+		ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p,
+				   &path->nexthop);
+	    }
+	else if (or->type == OSPF_DESTINATION_DISCARD)
+	  ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
+      }
 }
 
 void
@@ -116,6 +130,84 @@ ospf_route_table_free (struct route_table *rt)
       }
 }
 
+int ospf_match_same_route(struct route_table *rtable, int type,
+			  struct prefix_ipv4 * prefix,
+			  struct in_addr * nexthop )
+{
+  struct route_node  *rn;
+  struct ospf_route  *or;
+  struct ospf_path   *path;
+  listnode pnode;
+
+  if (! rtable || ! prefix) 
+    return 0;
+
+  for (rn = route_top (rtable); rn; rn = route_next (rn))
+    if ((or = rn->info) != NULL && (or->type == type))
+      {
+	if (or->type == OSPF_DESTINATION_NETWORK)
+	  {
+	    for (pnode = listhead (or->path); pnode; nextnode (pnode)) 
+	      {
+		path = getdata (pnode);
+
+		if (path->nexthop.s_addr != INADDR_ANY && nexthop &&
+		    !memcmp(&rn->p, prefix, sizeof(struct prefix_ipv4)) &&
+		    !memcmp(&path->nexthop, nexthop, sizeof(struct in_addr))) 
+		  {
+		    route_unlock_node(rn);
+		    return(1);
+		  }
+	      }
+	  }
+	else if (or->type == OSPF_DESTINATION_DISCARD)
+	  {
+	    if ( !memcmp(&rn->p, prefix, sizeof(struct prefix_ipv4)) ) 
+	      {
+		route_unlock_node(rn);
+		return(1);
+	      }
+	  }
+      }
+  return(0);
+}
+
+void
+ospf_delete_uniq_route (struct route_table *rt, struct route_table *cmprt)
+{
+  struct route_node *rn;
+  struct ospf_route *or;
+  struct ospf_path *path;
+  listnode pnode;
+
+  for (rn = route_top (rt); rn; rn = route_next (rn))
+    if ((or = rn->info) != NULL) 
+      {
+	if (or->type == OSPF_DESTINATION_NETWORK)
+	  {
+	    for (pnode = listhead (or->path); pnode; nextnode (pnode)) 
+	      {
+		path = getdata (pnode);
+
+		if (path->nexthop.s_addr != INADDR_ANY &&
+		    ! ospf_match_same_route(cmprt, or->type,
+					    (struct prefix_ipv4 *) &rn->p, 
+					    &path->nexthop))
+		  {
+		    ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, 
+				       &path->nexthop);
+		  }
+	      }
+	  }
+	else if (or->type == OSPF_DESTINATION_DISCARD &&
+		 ! ospf_match_same_route(cmprt, or->type,
+					 (struct prefix_ipv4 *) &rn->p, 0))
+	  {
+	    ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
+	  }
+      }
+}
+
 void
 ospf_install_route (struct route_table *rt)
 {
@@ -125,10 +217,7 @@ ospf_install_route (struct route_table *rt)
   listnode pnode;
 
   if (ospf_top->old_table)
-    {
-      ospf_delete_route (ospf_top->old_table);
-      ospf_route_table_free (ospf_top->old_table);
-    }
+    ospf_delete_uniq_route (ospf_top->old_table, rt);
 
   for (rn = route_top (rt); rn; rn = route_next (rn))
     if ((or = rn->info) != NULL)
@@ -138,12 +227,24 @@ ospf_install_route (struct route_table *rt)
 	  {
 	    path = getdata (pnode);
 
-	    if (path->nexthop.s_addr != INADDR_ANY)
-	      ospf_zebra_add ((struct prefix_ipv4 *)&rn->p, &path->nexthop);
+	    if (path->nexthop.s_addr != INADDR_ANY &&
+		! ospf_match_same_route(ospf_top->old_table, or->type,
+					(struct prefix_ipv4 *) &rn->p, 
+					&path->nexthop))
+	      {
+		ospf_zebra_add ((struct prefix_ipv4 *) &rn->p, &path->nexthop);
+	      }
 	  }
-      else if (or->type == OSPF_DESTINATION_DISCARD)
-              ospf_zebra_add_discard((struct prefix_ipv4 *)&rn->p);
+      else if (or->type == OSPF_DESTINATION_DISCARD &&
+	       !ospf_match_same_route(ospf_top->old_table, or->type,
+				      (struct prefix_ipv4 *) &rn->p, 0))
+	{
+	  ospf_zebra_add_discard ((struct prefix_ipv4 *) &rn->p);
+	}
     }
+
+  if (ospf_top->old_table)
+    ospf_route_table_free (ospf_top->old_table);
 
   ospf_top->old_table = ospf_top->new_table;
   ospf_top->new_table = rt;
@@ -189,7 +290,7 @@ ospf_intra_route_add (struct route_table *rt, struct vertex *v,
       for (nnode = listhead (v->nexthop); nnode; nextnode (nnode))
 	{
 	  nexthop = getdata (nnode);
-	  path = ospf_path_new();
+	  path = ospf_path_new ();
 	  path->nexthop = nexthop->router;
 	  list_add_node (or->path, path);
 	}
@@ -215,25 +316,25 @@ ospf_intra_add_router (struct route_table *rt, struct vertex *v,
   struct prefix_ipv4 p;
   struct router_lsa *lsa;
 
-  zlog_info("Z: ospf_intra_add_router: Start");
+  zlog_info ("Z: ospf_intra_add_router: Start");
 
   lsa = (struct router_lsa *) v->lsa;
 
-  zlog_info("Z: ospf_intra_add_router: LS ID: %s",
-	    inet_ntoa (lsa->header.id));
+  zlog_info ("Z: ospf_intra_add_router: LS ID: %s",
+	     inet_ntoa (lsa->header.id));
 
-  ospf_check_vl_up(area, lsa->header.id, v);
+  ospf_check_vl_up (area, lsa->header.id, v);
 
-  if (!CHECK_FLAG(lsa->flags, ROUTER_LSA_SHORTCUT))
-     area->shortcut_capability = 0;
+  if (!CHECK_FLAG (lsa->flags, ROUTER_LSA_SHORTCUT))
+    area->shortcut_capability = 0;
 
   /* If the newly added vertex is an area border router or AS boundary
      router, a routing table entry is added whose destination type is
      "router". */
-  if ( (! IS_ROUTER_LSA_BORDER (lsa)) &&
-       (! IS_ROUTER_LSA_EXTERNAL (lsa)))
+  if (! IS_ROUTER_LSA_BORDER (lsa) && ! IS_ROUTER_LSA_EXTERNAL (lsa))
     {
-      zlog_info("Z: ospf_intra_add_router: this router is neither ASBR nor ABR, skipping it");
+      zlog_info ("Z: ospf_intra_add_router: "
+		 "this router is neither ASBR nor ABR, skipping it");
       return;
     }
 
@@ -261,7 +362,7 @@ ospf_intra_add_router (struct route_table *rt, struct vertex *v,
      shortest- path tree; equivalently, this is the interface that
      points back to Router X's parent vertex on the shortest-path tree
      (similar to the calculation in Section 16.1.1). */
-  /* Ohh..  We don't support vertual link yet.  This should be added
+  /* Ohh..  We don't support virtual link yet.  This should be added
      later on -- kunihiro. */
 
   p.family = AF_INET;
@@ -283,7 +384,7 @@ ospf_intra_add_router (struct route_table *rt, struct vertex *v,
 
   list_add_node (rn->info, or);
 
-  zlog_info("Z: ospf_intra_add_router: Start");
+  zlog_info ("Z: ospf_intra_add_router: Start");
 }
 
 /* RFC2328 16.1. (4).  For transit network. */
@@ -325,9 +426,9 @@ ospf_intra_add_transit (struct route_table *rt, struct vertex *v,
       route_unlock_node (rn);
       cur_or = rn->info;
 
-      if ((v->distance > cur_or->cost) ||
-          (IPV4_ADDR_CMP(&cur_or->origin->id, &lsa->header.id)>0))
-         return;
+      if (v->distance > cur_or->cost ||
+          IPV4_ADDR_CMP (&cur_or->origin->id, &lsa->header.id) > 0)
+	return;
       
       ospf_route_free (rn->info);
     }
@@ -347,14 +448,14 @@ ospf_intra_add_transit (struct route_table *rt, struct vertex *v,
 }
 
 struct ospf_interface *
-ospf_lookup_int_by_prefix( struct prefix_ipv4 *p)
+ospf_lookup_int_by_prefix (struct prefix_ipv4 *p)
 {
   listnode node;
   struct ospf_interface *oi;
   struct interface *ifp;
   struct prefix_ipv4 ip;
 
-  zlog_info("Z: ospf_lookup_int_by_prefix(): Start");
+  zlog_info ("Z: ospf_lookup_int_by_prefix(): Start");
 
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
     {
@@ -363,25 +464,27 @@ ospf_lookup_int_by_prefix( struct prefix_ipv4 *p)
       if (ifp== NULL)
 	continue;
 
-      zlog_info("Z: ospf_lookup_int_by_prefix(): looking at %s", ifp->name);
+      zlog_info ("Z: ospf_lookup_int_by_prefix(): looking at %s", ifp->name);
 
       oi = ifp->info;
-      if (oi==NULL)
+      if (oi == NULL)
 	continue;
+
       if (oi->address == NULL)
 	continue;
 
-      prefix_copy((struct prefix *) &ip, oi->address);
+      prefix_copy ((struct prefix *) &ip, oi->address);
 
-      zlog_info("Z: ospf_lookup_int_by_prefix(): its prefix is %s/%d", 
-		inet_ntoa (ip.prefix), ip.prefixlen);
+      zlog_info ("Z: ospf_lookup_int_by_prefix(): its prefix is %s/%d", 
+		 inet_ntoa (ip.prefix), ip.prefixlen);
 
-      apply_mask_ipv4(&ip);
+      apply_mask_ipv4 (&ip);
 
-      if (prefix_same((struct prefix*)&ip, (struct prefix*)p)) return oi;
+      if (prefix_same ((struct prefix *) &ip, (struct prefix *) p))
+	return oi;
     }
 
-  zlog_info("Z: ospf_lookup_int_by_prefix(): I didn't find it");
+  zlog_info ("Z: ospf_lookup_int_by_prefix(): I didn't find it");
   return NULL;
 }
 
@@ -398,17 +501,17 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
   struct ospf_interface *oi;
   struct ospf_path *path;
 
-  zlog_info("Z: ospf_intra_add_stub(): Start");
+  zlog_info ("Z: ospf_intra_add_stub(): Start");
 
-  lsa = (struct router_lsa*)v->lsa;
+  lsa = (struct router_lsa *) v->lsa;
 
   p.family = AF_INET;
   p.prefix = link->link_id;
   p.prefixlen = ip_masklen (link->link_data);
   apply_mask_ipv4 (&p);
 
-  zlog_info("Z: ospf_intra_add_stub(): processing route to %s/%d", 
-	    inet_ntoa (p.prefix), p.prefixlen);
+  zlog_info ("Z: ospf_intra_add_stub(): processing route to %s/%d", 
+	     inet_ntoa (p.prefix), p.prefixlen);
 
   /* (1) Calculate the distance D of stub network from the root.  D is
      equal to the distance from the root to the router vertex
@@ -416,8 +519,8 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
      cost. */
   cost = v->distance + ntohs (link->m[0].metric);
 
-  zlog_info("Z: ospf_intra_add_stub(): calculated cost is %d + %d = %d", 
-	    v->distance, ntohs(link->m[0].metric), cost);
+  zlog_info ("Z: ospf_intra_add_stub(): calculated cost is %d + %d = %d", 
+	     v->distance, ntohs(link->m[0].metric), cost);
 
   rn = route_node_get (rt, (struct prefix *) &p);
 
@@ -430,17 +533,17 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 
       cur_or = rn->info;
 
-      zlog_info("Z: ospf_intra_add_stub(): another route to the same prefix found");
+      zlog_info ("Z: ospf_intra_add_stub(): "
+		 "another route to the same prefix found");
 
       /* Compare this distance to the current best cost to the stub
 	 network.  This is done by looking up the stub network's
 	 current routing table entry.  If the calculated distance D is
 	 larger, go on to examine the next stub network link in the
 	 LSA. */
-
       if (cost > cur_or->cost)
 	{
-	  zlog_info("Z: ospf_intra_add_stub(): old route is better, exit");
+	  zlog_info ("Z: ospf_intra_add_stub(): old route is better, exit");
 	  return;
 	}
 
@@ -459,11 +562,11 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 
       if (cost == cur_or->cost)
 	{
-	  zlog_info("Z: ospf_intra_add_stub(): routes are equal, merge");
+	  zlog_info ("Z: ospf_intra_add_stub(): routes are equal, merge");
 
 	  ospf_route_copy_nexthops_from_vertex (cur_or, v);
 
-	  if (IPV4_ADDR_CMP(&cur_or->origin->id, &lsa->header.id) < 0)
+	  if (IPV4_ADDR_CMP (&cur_or->origin->id, &lsa->header.id) < 0)
 	    cur_or->origin = (struct lsa_header*) lsa;
 	  return;
 	}
@@ -477,7 +580,7 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 
       if (cost < cur_or->cost)
 	{
-	  zlog_info("Z: ospf_intra_add_stub(): new route is better, set it");
+	  zlog_info ("Z: ospf_intra_add_stub(): new route is better, set it");
 
 	  cur_or->cost = cost;
 
@@ -491,7 +594,7 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 	}
     }
 
-  zlog_info("Z: ospf_intra_add_stub(): installing new route");
+  zlog_info ("Z: ospf_intra_add_stub(): installing new route");
 
   or = ospf_route_new ();
 
@@ -506,21 +609,21 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
   /* Nexthop is depend on connection type. */
   if (v != area->spf)
     {
-      zlog_info("Z: ospf_intra_add_stub(): this network is on remote router");
+      zlog_info ("Z: ospf_intra_add_stub(): this network is on remote router");
       ospf_route_copy_nexthops_from_vertex (or, v);
     }
   else
     {
-      zlog_info("Z: ospf_intra_add_stub(): this network is on this router");
+      zlog_info ("Z: ospf_intra_add_stub(): this network is on this router");
 
       oi = ospf_lookup_int_by_prefix (&p);
  
       if (oi) 
 	{
-	  zlog_info("Z: ospf_intra_add_stub(): the interface is %s",
-		    oi->ifp->name);
+	  zlog_info ("Z: ospf_intra_add_stub(): the interface is %s",
+		     oi->ifp->name);
 
-	  path = ospf_path_new();
+	  path = ospf_path_new ();
 	  path->nexthop.s_addr = 0;
 	  path->ifp = oi->ifp;
 	  list_add_node (or->path, path);
@@ -600,6 +703,7 @@ ospf_terminate ()
     }
 }
 
+
 DEFUN (show_ip_ospf_route,
        show_ip_ospf_route_cmd,
        "show ip ospf route",
@@ -616,59 +720,69 @@ DEFUN (show_ip_ospf_route,
   listnode pnode, nnode;
   struct ospf_path *path;
 
+  if (ospf_top == NULL)
+    {
+      vty_out (vty, "OSPF is not enabled%s", VTY_NEWLINE);
+      return CMD_SUCCESS;
+    }
+
   rt = ospf_top->new_table;
   rtrs = ospf_top->new_rtrs;
 
   if (rt == NULL)
     {
-      vty_out (vty, "No OSPF routing information exist\r\n");
+      vty_out (vty, "No OSPF routing information exist%s", VTY_NEWLINE);
       return CMD_SUCCESS;
     }
 
-  zlog_info("Z: show_ip_ospf_route(): showing networks");
+  zlog_info ("Z: show_ip_ospf_route(): showing networks");
 
-  vty_out (vty, "========== OSPF network routing table ==========\r\n");
+  vty_out (vty, "========== OSPF network routing table ==========%s",
+	   VTY_NEWLINE);
   for (rn = route_top (rt); rn; rn = route_next (rn))
     if ((or = rn->info) != NULL)
       {
 	switch (or->path_type)
 	  {
 	  case OSPF_PATH_TYPE1_EXTERNAL:
-	    vty_out (vty, "N E1 %s/%d \t[%d] area: %s, tag: %d\r\n", 
+	    vty_out (vty, "N E1 %s/%d \t[%d] area: %s, tag: %u%s", 
 		     inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
 		     rn->p.prefixlen,
 		     or->cost,
 		     inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ),
-		     or->tag);
+		     or->tag,
+		     VTY_NEWLINE);
 	    break;
 	  case OSPF_PATH_TYPE2_EXTERNAL:
-	    vty_out (vty, "N E2 %s/%d \t[%d/%d] area %s, tag: %d\r\n", 
+	    vty_out (vty, "N E2 %s/%d \t[%d/%d] area %s, tag: %u%s", 
 		     inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
 		     rn->p.prefixlen,
 		     or->cost, or->type2_cost,
 		     inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ),
-		     or->tag);
+		     or->tag,
+		     VTY_NEWLINE);
 	    break;
 	  case OSPF_PATH_INTER_AREA:
 	    if (or->type == OSPF_DESTINATION_NETWORK)
-               vty_out (vty, "N IA %s/%d \t[%d] area: %s\r\n", 
+               vty_out (vty, "N IA %s/%d \t[%d] area: %s%s", 
 		        inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		        rn->p.prefixlen,
-		        or->cost,
-		        inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ));
+		        rn->p.prefixlen, or->cost,
+		        inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ),
+			VTY_NEWLINE);
 
 	    if (or->type == OSPF_DESTINATION_DISCARD)
-               vty_out (vty, "D IA %s/%d \tDiscard entry\r\n", 
+               vty_out (vty, "D IA %s/%d \tDiscard entry%s", 
 		        inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		        rn->p.prefixlen);
-
+		        rn->p.prefixlen,
+			VTY_NEWLINE);
 	    break;
 	  case OSPF_PATH_INTRA_AREA:
-	    vty_out (vty, "N    %s/%d \t[%d] area: %s\r\n", 
+	    vty_out (vty, "N    %s/%d \t[%d] area: %s%s", 
 		     inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
 		     rn->p.prefixlen,
 		     or->cost,
-		     inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ));
+		     inet_ntop (AF_INET, &or->area->area_id, buf2, BUFSIZ),
+		     VTY_NEWLINE);
 	    break;
 	  default:
 	    break;
@@ -676,23 +790,26 @@ DEFUN (show_ip_ospf_route,
 
         if (or->type == OSPF_DESTINATION_NETWORK)
  	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
-	  {
-	    path = getdata (pnode);
+	    {
+	      path = getdata (pnode);
 
-	    if (path->ifp == NULL) continue;
+	      if (path->ifp == NULL)
+		continue;
 
-            if (path->nexthop.s_addr == 0)
-	      vty_out (vty, "\t\t\tdirectly attached to %s\r\n",
-		       path->ifp->name);
-	    else 
-	      vty_out (vty, "\t\t\tvia %s, %s\r\n",
-		       inet_ntoa (path->nexthop), path->ifp->name);
-	  }
+	      if (path->nexthop.s_addr == 0)
+		vty_out (vty, "\t\t\tdirectly attached to %s%s",
+			 path->ifp->name, VTY_NEWLINE);
+	      else 
+		vty_out (vty, "\t\t\tvia %s, %s%s",
+			 inet_ntoa (path->nexthop), path->ifp->name,
+			 VTY_NEWLINE);
+	    }
       }
 
   zlog_info("Z: show_ip_ospf_route(): showing routers");
 
-  vty_out (vty, "========== OSPF router routing table ==========\r\n");
+  vty_out (vty, "========== OSPF router routing table ==========%s",
+	   VTY_NEWLINE);
   for (rn = route_top (rtrs); rn; rn = route_next (rn))
     {
       int flag;
@@ -704,13 +821,14 @@ DEFUN (show_ip_ospf_route,
       vty_out (vty, "R    %s \t", 
 	       inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ));
 
-      for (nnode = listhead ((list)rn->info); nnode; nextnode (nnode)) 
+      for (nnode = listhead ((list) rn->info); nnode; nextnode (nnode)) 
 	{
 	  or = getdata (nnode);
 	  if (or == NULL)
 	    continue;
 
-          if (flag) vty_out(vty,"      \t\t\t" );
+          if (flag)
+	    vty_out(vty,"      \t\t\t" );
 
           flag = 1;
 
@@ -735,17 +853,18 @@ DEFUN (show_ip_ospf_route,
 
 	  if (or->flags & ROUTER_LSA_EXTERNAL)
 	    vty_out (vty, ", ASBR");
-	  vty_out (vty, "\r\n");
+	  vty_out (vty, "%s", VTY_NEWLINE);
 
 	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
 	    {
 	      path = getdata (pnode);
 	      if (path->nexthop.s_addr == 0)
-		vty_out (vty, "\t\t\t   directly attached to %s\r\n",
-			 path->ifp->name);
+		vty_out (vty, "\t\t\t   directly attached to %s%s",
+			 path->ifp->name, VTY_NEWLINE);
 	      else 
-		vty_out (vty, "\t\t\t   via %s, %s\r\n",
-			 inet_ntoa (path->nexthop), path->ifp->name);
+		vty_out (vty, "\t\t\t   via %s, %s%s",
+			 inet_ntoa (path->nexthop), path->ifp->name,
+			 VTY_NEWLINE);
 	    }
 	}
     }
@@ -754,35 +873,36 @@ DEFUN (show_ip_ospf_route,
 }
 
 
-/* This is 16.4.1 implementation */
-
-int ospf_cmp_asbr_routes(struct ospf_route *r1, struct ospf_route *r2)
+/* This is 16.4.1 implementation. */
+int
+ospf_cmp_asbr_routes (struct ospf_route *r1, struct ospf_route *r2)
 {
- if (r1->path_type == r2->path_type == OSPF_PATH_INTRA_AREA){
-    
-    if (r1->area->area_id.s_addr != OSPF_AREA_BACKBONE)
-       return 1;
+  if (r1->path_type == OSPF_PATH_INTRA_AREA &&
+      r2->path_type == OSPF_PATH_INTRA_AREA)
+    {
+      if (r1->area->area_id.s_addr != OSPF_AREA_BACKBONE)
+	return 1;
 
-    if (r2->area->area_id.s_addr != OSPF_AREA_BACKBONE)
-       return -1;
- }
- else 
- if ( (r1->path_type == OSPF_PATH_INTRA_AREA) &&
-      (r1->area->area_id.s_addr == OSPF_AREA_BACKBONE) &&
-      (r2->path_type == OSPF_PATH_INTER_AREA) )
+      if (r2->area->area_id.s_addr != OSPF_AREA_BACKBONE)
+	return -1;
+    }
+  else if (r1->path_type == OSPF_PATH_INTRA_AREA &&
+	   r1->area->area_id.s_addr == OSPF_AREA_BACKBONE &&
+	   r2->path_type == OSPF_PATH_INTER_AREA)
     return 0;
- else
- if ( (r2->path_type == OSPF_PATH_INTRA_AREA) &&
-      (r2->area->area_id.s_addr == OSPF_AREA_BACKBONE) &&
-      (r1->path_type == OSPF_PATH_INTER_AREA) )
+
+  else if (r2->path_type == OSPF_PATH_INTRA_AREA &&
+	   r2->area->area_id.s_addr == OSPF_AREA_BACKBONE &&
+	   r1->path_type == OSPF_PATH_INTER_AREA)
     return 0;
- else
- if (r1->path_type < r2->path_type)
+
+  else if (r1->path_type < r2->path_type)
     return 1;
- else
- if (r1->path_type > r2->path_type)
+
+  else if (r1->path_type > r2->path_type)
     return -1;
- return 0;
+
+  return 0;
 }
 
 
@@ -792,7 +912,7 @@ int ospf_cmp_asbr_routes(struct ospf_route *r1, struct ospf_route *r2)
  -1 -- r2 is better
 */
 int
-ospf_cmp_routes(struct ospf_route *r1, struct ospf_route *r2)
+ospf_cmp_routes (struct ospf_route *r1, struct ospf_route *r2)
 {
   if (r1->path_type < r2->path_type)
     return 1;
@@ -800,9 +920,16 @@ ospf_cmp_routes(struct ospf_route *r1, struct ospf_route *r2)
   if (r1->path_type > r2->path_type)
     return -1;
 
-  if ((r1->path_type == OSPF_PATH_INTRA_AREA) ||
-      (r1->path_type == OSPF_PATH_INTER_AREA))
-    return 0;
+  if (r1->path_type == OSPF_PATH_INTRA_AREA ||
+      r1->path_type == OSPF_PATH_INTER_AREA)
+    {
+      if (r1->cost < r2->cost)
+	return 1;
+      if (r1->cost > r2->cost)
+	return -1;
+
+      return 0;
+    }
 
   /* Compare Type-2 ext routes*/
   if (r1->path_type == OSPF_PATH_TYPE2_EXTERNAL)
@@ -815,7 +942,7 @@ ospf_cmp_routes(struct ospf_route *r1, struct ospf_route *r2)
       if (r1->type2_cost > r2->type2_cost)
 	return -1;
 
-      res = ospf_cmp_asbr_routes(r1->asbr, r2->asbr);
+      res = ospf_cmp_asbr_routes (r1->asbr, r2->asbr);
       if (res != 0)
 	return res;
 
@@ -832,7 +959,7 @@ ospf_cmp_routes(struct ospf_route *r1, struct ospf_route *r2)
       /* Compare Type-1 ext routes*/
       int res;
 
-      res = ospf_cmp_asbr_routes(r1->asbr, r2->asbr);
+      res = ospf_cmp_asbr_routes (r1->asbr, r2->asbr);
       if (res != 0)
 	return res;
 	
@@ -851,17 +978,19 @@ ospf_route_copy_nexthops_from_vertex (struct ospf_route *to,
 				      struct vertex *v)
 {
   listnode nnode;
-  struct ospf_path * path;
-  struct ospf_nexthop * nexthop;
+  struct ospf_path *path;
+  struct ospf_nexthop *nexthop;
 
   if (to->path == NULL)
-    to->path = list_init();
+    to->path = list_init ();
 
   for (nnode = listhead (v->nexthop); nnode; nextnode (nnode))
     {
       nexthop = getdata (nnode);
-      if (nexthop->ifp == NULL) continue;
-      path = ospf_path_new();
+      if (nexthop->ifp == NULL) 
+	continue;
+
+      path = ospf_path_new ();
       path->nexthop = nexthop->router;
       path->ifp = nexthop->ifp;
       list_add_node (to->path, path);
@@ -872,70 +1001,66 @@ void
 ospf_route_copy_nexthops (struct ospf_route *to, list from)
 {
   listnode pnode;
-  struct ospf_path * new_path, * path;
+  struct ospf_path *path;
 
   if (to->path == NULL)
-    to->path = list_init();
+    to->path = list_init ();
 
   for (pnode = listhead (from); pnode; nextnode (pnode))
     {
       path = getdata (pnode);
-      new_path = ospf_path_new();
-      memcpy(new_path, path, sizeof(struct ospf_path));
-      list_add_node(to->path, new_path);
+      list_add_node (to->path, ospf_path_dup (path));
     }
 }
 
 void
 ospf_route_subst_nexthops (struct ospf_route *to, list from)
 {
- listnode node;
- struct ospf_path *op;
+  listnode node;
+  struct ospf_path *op;
 
- LIST_ITERATOR(to->path, node)
- {
-   op = getdata (node);
-   if (op == NULL) continue;
-   ospf_path_free(op);
-   node->data = NULL;
- }
+  LIST_ITERATOR (to->path, node)
+    {
+      op = getdata (node);
+      if (op == NULL)
+	continue;
 
- list_delete_all_node(to->path);
- ospf_route_copy_nexthops(to, from);
+      ospf_path_free (op);
+      node->data = NULL;
+    }
 
+  list_delete_all_node (to->path);
+  ospf_route_copy_nexthops (to, from);
 }
 
-
-
-
 void
-ospf_subst_route (struct route_node *rn, struct ospf_route * new_or,
-		  struct ospf_route * over)
+ospf_subst_route (struct route_node *rn, struct ospf_route *new_or,
+		  struct ospf_route *over)
 {
-  route_lock_node(rn);
-  ospf_route_free(rn->info);
+  route_lock_node (rn);
+  ospf_route_free (rn->info);
 
-  ospf_route_copy_nexthops(new_or, over->path);
+  ospf_route_copy_nexthops (new_or, over->path);
   rn->info = new_or;
-  route_unlock_node(rn);
+  route_unlock_node (rn);
 }
 
 void
-ospf_add_route (struct route_table *rt, struct prefix_ipv4 * p,
-		struct ospf_route * new_or, struct ospf_route * over)
+ospf_add_route (struct route_table *rt, struct prefix_ipv4 *p,
+		struct ospf_route *new_or, struct ospf_route *over)
 {
   struct route_node *rn;
 
-  rn = route_node_get(rt, (struct prefix *) p);
+  rn = route_node_get (rt, (struct prefix *) p);
 
-  zlog_info("Z: ospf_add_route(): rn->info != NULL: %d", (rn->info!=NULL));
+  zlog_info ("Z: ospf_add_route(): rn->info != NULL: %d", (rn->info != NULL));
 
   ospf_route_copy_nexthops (new_or, over->path);
 
   if (rn->info)
     {
-      zlog_info("ospf_add_route():something's wrong !");
-      route_unlock_node(rn);
+      zlog_info ("ospf_add_route():something's wrong !");
+      route_unlock_node (rn);
       return;
     }
 
@@ -944,117 +1069,125 @@ ospf_add_route (struct route_table *rt, struct prefix_ipv4 * p,
 
 
 void
-ospf_prune_unreachable_networks(struct route_table *rt)
+ospf_prune_unreachable_networks (struct route_table *rt)
 {
   struct route_node *rn, *next;
   struct ospf_route *or;
 
-  zlog_info("Z: Pruning unreachable networks");
+  zlog_info ("Z: Pruning unreachable networks");
 
   for (rn = route_top (rt); rn; rn = next)
-  {
-    next = route_next (rn);
-    if (rn->info == NULL) continue;
+    {
+      next = route_next (rn);
+      if (rn->info == NULL)
+	continue;
 
-    or = rn->info;
-    if (listcount(or->path) == 0) {
+      or = rn->info;
+      if (listcount (or->path) == 0)
+	{
+	  zlog_info ("Z: Pruning route to %s/%d",
+		     inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen);
 
-       zlog_info("Z: Pruning route to %s/%d", inet_ntoa(rn->p.u.prefix4), rn->p.prefixlen);
-
-       ospf_route_free(or);
-       rn->info = NULL;
-       route_unlock_node(rn);
+	  ospf_route_free (or);
+	  rn->info = NULL;
+	  route_unlock_node (rn);
+	}
     }
-  }
 }
 
 void
-ospf_prune_unreachable_routers(struct route_table *rtrs)
+ospf_prune_unreachable_routers (struct route_table *rtrs)
 {
   struct route_node *rn, *next;
   struct ospf_route *or;
   listnode node, nnext;
   list paths;
 
-  zlog_info("Z: Pruning unreachable routers");
+  zlog_info ("Z: Pruning unreachable routers");
 
   for (rn = route_top (rtrs); rn; rn = next)
-  {
-    next = route_next (rn);
-    if (rn->info == NULL) continue;
-
-    paths = rn->info;
-
-    for (node = listhead (paths); node; node = nnext) 
     {
-      nnext = node->next;
+      next = route_next (rn);
+      if (rn->info == NULL)
+	continue;
 
-      or = getdata(node);
+      paths = rn->info;
 
-      if (listcount(or->path) == 0) {
+      for (node = listhead (paths); node; node = nnext) 
+	{
+	  nnext = node->next;
 
-          zlog_info("Z: Pruning route to rtr %s", inet_ntoa(rn->p.u.prefix4));
-          zlog_info("Z:               via area %s", inet_ntoa(or->area->area_id));
+	  or = getdata(node);
 
-          list_delete_by_val(paths, or);
-          ospf_route_free(or);
-      }
+	  if (listcount (or->path) == 0)
+	    {
+	      zlog_info ("Z: Pruning route to rtr %s",
+			 inet_ntoa (rn->p.u.prefix4));
+	      zlog_info ("Z:               via area %s",
+			 inet_ntoa (or->area->area_id));
 
+	      list_delete_by_val (paths, or);
+	      ospf_route_free (or);
+	    }
+	}
+
+      if (listcount (paths) == 0)
+	{
+	  zlog_info ("Z: Pruning router node %s", inet_ntoa (rn->p.u.prefix4));
+
+	  list_delete_all (paths);
+	  rn->info = NULL;
+	  route_unlock_node (rn);
+	}
     }
-
-    if (listcount(paths) == 0) {
-
-       zlog_info("Z: Pruning router node %s", inet_ntoa(rn->p.u.prefix4));
-
-       list_delete_all(paths);
-       rn->info = NULL;
-       route_unlock_node(rn);
-    }
-  }
-
 }
 
-
 int
-ospf_add_discard_route( struct route_table *rt, struct ospf_area * area, 
+ospf_add_discard_route (struct route_table *rt, struct ospf_area *area,
 			struct prefix_ipv4 *p)
 {
   struct route_node *rn;
   struct ospf_route *or, *new_or;
 
-  rn = route_node_get(rt, (struct prefix *) p);
+  rn = route_node_get (rt, (struct prefix *) p);
 
-  if (rn == NULL) {
-     zlog_info("Z: ospf_add_discard_route(): router installation error");
-     return 0;
-  }
+  if (rn == NULL)
+    {
+      zlog_info ("Z: ospf_add_discard_route(): router installation error");
+      return 0;
+    }
 
   if (rn->info) /* If the route to the same destination is found */
-  {
-    route_unlock_node(rn);
+    {
+      route_unlock_node (rn);
 
-    or = rn->info;
+      or = rn->info;
 
-    if (or->path_type == OSPF_PATH_INTRA_AREA){
-       zlog_info("Z: ospf_add_discard_route(): an intra-area route exists");
-       return 0;
-    }
+      if (or->path_type == OSPF_PATH_INTRA_AREA)
+	{
+	  zlog_info ("Z: ospf_add_discard_route(): "
+		     "an intra-area route exists");
+	  return 0;
+	}
 
-    if (or->type == OSPF_DESTINATION_DISCARD){
-       zlog_info("Z: ospf_add_discard_route(): discard entry already installed");
-       return 0;
-    }
+      if (or->type == OSPF_DESTINATION_DISCARD)
+	{
+	  zlog_info ("Z: ospf_add_discard_route(): "
+		     "discard entry already installed");
+	  return 0;
+	}
 
-    ospf_route_free(rn->info);
+      ospf_route_free (rn->info);
   }
 
-  new_or = ospf_route_new();
+  new_or = ospf_route_new ();
   new_or->type = OSPF_DESTINATION_DISCARD;
   new_or->id.s_addr = 0;
   new_or->cost = 0;
   new_or->area = area;
   new_or->path_type = OSPF_PATH_INTER_AREA;
   rn->info = new_or;
+
   return 1;
 }
 

@@ -106,14 +106,16 @@ int show_router_lsa (struct vty *vty, void *data)
 
   for (; lsdnum; lsdnum --)
     {
-      vty_out (vty, "     type[%s] cost[%hu] interface_id[%s]\r\n",
+      vty_out (vty, "     type[%s] cost[%hu] interface_id[%s]%s",
                rlsatype_name[rlsdp->rlsd_type - 1],
                ntohs(rlsdp->rlsd_metric),
-               inet4str (rlsdp->rlsd_interface_id));
+               inet4str (rlsdp->rlsd_interface_id),
+	       VTY_NEWLINE);
       vty_out (vty, "     NeighborIFID[%s]",
                inet4str (rlsdp->rlsd_neighbor_interface_id));
-      vty_out (vty, "     NeighborRouter-ID[%s]\r\n",
-               inet4str (rlsdp->rlsd_neighbor_router_id));
+      vty_out (vty, "     NeighborRouter-ID[%s]%s",
+               inet4str (rlsdp->rlsd_neighbor_router_id),
+	       VTY_NEWLINE);
       rlsdp++;
     }
   return 0;
@@ -137,7 +139,8 @@ int show_network_lsa (struct vty *vty, void *data)
 
   for (; lsdnum; lsdnum --)
     {
-      vty_out (vty, "     Attached Router[%s]\r\n", inet4str (*attached++));
+      vty_out (vty, "     Attached Router[%s]%s", inet4str (*attached++),
+	       VTY_NEWLINE);
     }
   return 0;
 }
@@ -158,13 +161,16 @@ show_link_lsa (struct vty *vty, void *data)
 
   inet_ntop (AF_INET6, (void *)&llsap->llsa_linklocal, linklocal_str,
              sizeof (linklocal_str));
-  vty_out (vty, "     linklocal[%s] #prefix[%d]\r\n",
-           linklocal_str, prefixnum);
+  vty_out (vty, "     linklocal[%s] #prefix[%d]%s",
+           linklocal_str,
+	   prefixnum,
+	   VTY_NEWLINE);
   prefix = (struct ospf6_prefix *)(llsap + 1);
   for (; prefixnum; prefixnum--)
     {
       ospf6_prefix_str (prefix, o6p_str, sizeof (o6p_str));
-      vty_out (vty, "     Prefix [%s]\r\n", o6p_str);
+      vty_out (vty, "     Prefix [%s]%s", o6p_str,
+	       VTY_NEWLINE);
       prefix = OSPF6_NEXT_PREFIX (prefix);
     }
   return 0;
@@ -183,15 +189,18 @@ int show_intra_prefix_lsa (struct vty *vty, void *data)
   iap_lsa = (struct intra_area_prefix_lsa *)(lshp + 1);
   prefixnum = ntohs (iap_lsa->intra_prefix_num);
 
-  vty_out (vty, "     # prefix [%d]\r\n", prefixnum);
-  vty_out (vty, "     Referenced[%s]\r\n",
-           print_ls_reference ((struct ospf6_lsa_hdr *)iap_lsa));
+  vty_out (vty, "     # prefix [%d]%s", prefixnum,
+	   VTY_NEWLINE);
+  vty_out (vty, "     Referenced[%s]%s",
+           print_ls_reference ((struct ospf6_lsa_hdr *)iap_lsa),
+	   VTY_NEWLINE);
 
   prefix = (struct ospf6_prefix *)(iap_lsa + 1);
   for (; prefixnum; prefixnum--)
     {
       ospf6_prefix_str (prefix, o6p_str, sizeof (o6p_str));
-      vty_out (vty, "     Prefix [%s]\r\n", o6p_str);
+      vty_out (vty, "     Prefix [%s]%s", o6p_str,
+	       VTY_NEWLINE);
       prefix = OSPF6_NEXT_PREFIX (prefix);
     }
   return 0;
@@ -219,15 +228,17 @@ int show_as_external_lsa (struct vty *vty, void *data)
     *bitsp++ = 'T';
   *bitsp = '\0';
 
-  vty_out (vty, "     bits:%s, metric:%hu\r\n",
-           ase_bits_str, ntohs (aselsa->ase_metric));
+  vty_out (vty, "     bits:%s, metric:%hu%s",
+           ase_bits_str, ntohs (aselsa->ase_metric),
+	   VTY_NEWLINE);
 
   memset (&in6, 0, sizeof (in6));
   memcpy (&in6, (void *)(aselsa + 1),
           OSPF6_PREFIX_SPACE (aselsa->ase_prefix_len));
   inet_ntop (AF_INET6, &in6, o6p_str, sizeof (o6p_str));
 
-  vty_out (vty, "     opt:xxx, %s/%d\r\n", o6p_str, aselsa->ase_prefix_len);
+  vty_out (vty, "     opt:xxx, %s/%d%s", o6p_str, aselsa->ase_prefix_len,
+	   VTY_NEWLINE);
   return 0;
 }
 
@@ -240,10 +251,12 @@ vty_lsa (struct vty *vty, struct ospf6_lsa *lsa)
   lsh = lsa->lsa_hdr;
   assert (lsh);
 
-  vty_out (vty, "%s\r\n", print_lsahdr (lsh));
-  vty_out (vty, "    LS age[%d] LS SeqNum[%#x]\r\n",
+  vty_out (vty, "%s%s", print_lsahdr (lsh), VTY_NEWLINE);
+  vty_out (vty, "    LS age[%d] LS SeqNum[%#x] Checksum[%#hx]%s",
            ospf6_age_current (lsa),
-           ntohl(lsh->lsh_seqnum));
+           ntohl(lsh->lsh_seqnum),
+           lsh->lsh_cksum,
+	   VTY_NEWLINE);
   switch (ntohs (lsh->lsh_type))
     {
       case LST_ROUTER_LSA:
@@ -895,7 +908,7 @@ ospf6_make_router_lsa (struct area *area)
   size_t space;
 
   /* get links to describe */
-  for (i = listhead (area->ospf6_if_list); i; nextnode (i))
+  for (i = listhead (area->if_list); i; nextnode (i))
     {
       o6if = (struct ospf6_if *) getdata (i);
       assert (o6if);
@@ -956,6 +969,7 @@ ospf6_make_router_lsa (struct area *area)
     }
 
   /* age calculation, scope, etc */
+  ospf6_lsa_checksum (lsa_hdr);
   lsa = make_ospf6_lsa (lsa_hdr);
   lsa->scope = (void *) area;
   lsa->from = (struct neighbor *) NULL;
@@ -1037,6 +1051,7 @@ ospf6_make_network_lsa (struct ospf6_if *o6if)
   *nlsd = o6if->area->ospf6->router_id;
 
   /* age calculation, scope, etc */
+  ospf6_lsa_checksum (lsa_hdr);
   lsa = make_ospf6_lsa (lsa_hdr);
   lsa->scope = (void *) o6if->area;
   lsa->from = (struct neighbor *) NULL;
@@ -1141,6 +1156,7 @@ ospf6_make_link_lsa (struct ospf6_if *o6if)
   list_delete_all (prefix_connected);
 
   /* age calculation, scope, etc */
+  ospf6_lsa_checksum (lsa_hdr);
   lsa = make_ospf6_lsa (lsa_hdr);
   lsa->scope = (void *) o6if;
   lsa->from = (struct neighbor *) NULL;
@@ -1308,6 +1324,7 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
     }
 
   /* age calculation, scope, etc */
+  ospf6_lsa_checksum (lsa_hdr);
   lsa = make_ospf6_lsa (lsa_hdr);
   lsa->scope = (void *) o6if->area;
   lsa->from = (struct neighbor *) NULL;
@@ -1321,7 +1338,6 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
 struct ospf6_lsa *
 ospf6_make_as_external_lsa (struct route_node *rn)
 {
-  unsigned long lsid;
   struct ospf6_route_node_info *info;
   struct ospf6_lsa *lsa;
   struct ospf6_lsa_hdr *lsa_hdr;
@@ -1341,15 +1357,19 @@ ospf6_make_as_external_lsa (struct route_node *rn)
   /* malloc buffer */
   lsa_hdr = malloc_ospf6_lsa_data (space);
 
-  /* get LS ID */
+  /* if this if first time, set LS ID */
   if (!info->ase_lsid)
-    info->ase_lsid = ospf6->ase_ls_id++;
-  lsid = ntohl (info->ase_lsid);
+    {
+      ospf6->ase_ls_id++;
+      info->ase_lsid = htonl (ospf6->ase_ls_id);
+      zlog_info ("ASEx-LSA LSA ID set to %lu(%lu)",
+                 ntohl (info->ase_lsid), ospf6->ase_ls_id);
+    }
 
   /* set lsa header */
   lsa_hdr->lsh_age = 0;
   lsa_hdr->lsh_type = htons (LST_AS_EXTERNAL_LSA);
-  lsa_hdr->lsh_id = htonl (lsid);
+  lsa_hdr->lsh_id = info->ase_lsid;
   lsa_hdr->lsh_advrtr = ospf6->router_id;
   lsa_hdr->lsh_seqnum = ospf6_seqnum_new (lsa_hdr->lsh_type,
                                           lsa_hdr->lsh_id,
@@ -1389,6 +1409,7 @@ ospf6_make_as_external_lsa (struct route_node *rn)
           OSPF6_PREFIX_SPACE (rn->p.prefixlen));
 
   /* age calculation, scope, etc */
+  ospf6_lsa_checksum (lsa_hdr);
   lsa = make_ospf6_lsa (lsa_hdr);
   lsa->scope = (void *) ospf6;
   lsa->from = (struct neighbor *) NULL;
@@ -1399,6 +1420,55 @@ ospf6_make_as_external_lsa (struct route_node *rn)
   info->ls_origin = lsa;
 
   return lsa;
+}
+
+void
+ospf6_lsa_originate_link (struct ospf6_if *o6if)
+{
+  struct ospf6_lsa *lsa;
+  lsa = ospf6_make_link_lsa (o6if);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+
+      /* log */
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("Originate Link-LSA on %s", o6if->interface->name);
+    }
+}
+
+void
+ospf6_lsa_originate_intraprefix (struct ospf6_if *o6if)
+{
+  struct ospf6_lsa *lsa;
+  lsa = ospf6_make_link_lsa (o6if);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+
+      /* log */
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("Originate Intra-Area-Prefix-LSA");
+    }
+}
+
+void
+ospf6_lsa_originate_network (struct ospf6_if *o6if)
+{
+}
+
+void
+ospf6_lsa_originate_router (struct area *o6a)
+{
+}
+
+void
+ospf6_lsa_originate_asexternal ()
+{
 }
 
 void
@@ -1436,7 +1506,7 @@ ospf6_lsa_hdr_id_str (struct ospf6_lsa_hdr *lsa_hdr, char *buf, size_t bufsize)
   /* LS advrtr */
   inet_ntop (AF_INET, &lsa_hdr->lsh_advrtr, advrtr, sizeof (advrtr));
 
-  snprintf (buf, bufsize, "%s: id:%lu advrtr:%s",
+  snprintf (buf, bufsize, "%s: id:%ul advrtr:%s",
             type, ntohl (lsa_hdr->lsh_id), advrtr);
 }
 
@@ -1457,8 +1527,9 @@ ospf6_lsa_hdr_str (struct ospf6_lsa_hdr *lsa_hdr, char *buf, size_t bufsize)
   /* current pointer */
   cp = buf + strlen (buf);
 
-  snprintf (cp, leftsize, " seqnum:%#lx cksum:%#x len:%hu",
-            ntohl (lsa_hdr->lsh_seqnum), ntohs (lsa_hdr->lsh_cksum),
+  snprintf (cp, leftsize, " seqnum:%#lx cksum:%#x len:%hd",
+            (unsigned long) ntohl (lsa_hdr->lsh_seqnum),
+	    ntohs (lsa_hdr->lsh_cksum),
             ntohs (lsa_hdr->lsh_len));
 }
 
@@ -1482,5 +1553,68 @@ ospf6_lsa_str (struct ospf6_lsa *lsa, char *buf, size_t bufsize)
 
   snprintf (cp, leftsize, " lock:%lu age:%hu",
             lsa->lock, ospf6_age_current (lsa));
+}
+
+/* enhanced Fletcher checksum algorithm, RFC1008 7.2 */
+#define MODX                4102
+#define LSA_CHECKSUM_OFFSET   15
+
+/* XXX, this function assumes that the machine is little endian */
+unsigned short
+ospf6_lsa_checksum (struct ospf6_lsa_hdr *lsh)
+{
+  u_char *sp, *ep, *p, *q;
+  int c0 = 0, c1 = 0;
+  int x, y;
+  u_int16_t length;
+
+  lsh->lsh_cksum = 0;
+  length = ntohs (lsh->lsh_len) - 2;
+  sp = (char *) &lsh->lsh_type;
+
+  for (ep = sp + length; sp < ep; sp = q)
+    {
+      q = sp + MODX;
+      if (q > ep)
+        q = ep;
+      for (p = sp; p < q; p++)
+        {
+          c0 += *p;
+          c1 += c0;
+        }
+      c0 %= 255;
+      c1 %= 255;
+    }
+
+  /* r = (c1 << 8) + c0; */
+  x = ((length - LSA_CHECKSUM_OFFSET) * c0 - c1) % 255;
+  if (x <= 0)
+    x += 255;
+  y = 510 - c0 - x;
+  if (y > 255)
+    y -= 255;
+
+  lsh->lsh_cksum = x + (y << 8);
+
+  return (lsh->lsh_cksum);
+}
+
+/* RFC905 ANNEX B */
+unsigned short
+ospf6_lsa_checksum_set (struct ospf6_lsa_hdr *lsh)
+{
+#if 0
+  int    i, L, c0, c1;
+  u_char X, Y;
+
+  L = ntohs (lsh->lsh_len) - 2;
+#endif
+  return 0;
+}
+
+int
+ospf6_lsa_checksum_ok (struct ospf6_lsa_hdr *lsh)
+{
+  return 0;
 }
 

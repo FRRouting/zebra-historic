@@ -29,8 +29,6 @@
 #include "if.h"
 #include "prefix.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
 
@@ -127,8 +125,6 @@ bgp_update_source (struct peer *peer)
 int
 bgp_connect (struct peer *peer)
 {
-  struct servent *sp;
-  unsigned short port;
   unsigned int ifindex = 0;
 
   /* Make socket for the peer. */
@@ -149,20 +145,16 @@ bgp_connect (struct peer *peer)
   /* Update source bind. */
   bgp_update_source (peer);
 
-  /* Get service port number. */
-  sp = getservbyname ("bgp", "tcp");
-  if (sp != NULL) 
-    port = sp->s_port;
-  else
-    port = htons (BGP_PORT_DEFAULT);
-
 #ifdef HAVE_IPV6
   if (peer->ifname)
     ifindex = if_nametoindex (peer->ifname);
 #endif /* HAVE_IPV6 */
 
+  zlog (peer->log, LOG_INFO, "neighbor %s:%d: Attempting connect",
+	peer->host, peer->port);
+
   /* Connect to the remote peer. */
-  return sockunion_connect (peer->fd, peer->su, port, ifindex);
+  return sockunion_connect (peer->fd, peer->su, htons (peer->port), ifindex);
 }
 
 /* Accept bgp connection. */
@@ -196,8 +188,7 @@ bgp_accept (struct thread *thread)
     }
 #endif /* HAVE_IPV6 */
 
-  zlog (NULL, LOG_INFO, "OK I got BGP connection from host %s",
-	inet_sutop (&su, buf));
+  zlog_info ("Got BGP connection from host %s", inet_sutop (&su, buf));
   
   /* This router is not neighbor router. */
   peer = peer_lookup_by_su (&su);
@@ -209,16 +200,15 @@ bgp_accept (struct thread *thread)
       return -1;
     }
 
-  /* Check status of the peer. */
-  if (peer->status != Active) 
+  if (peer->fd)
     {
-      zlog (peer->log, LOG_INFO, "But I'm not Active status so connection is closed : %s",
-	      inet_sutop (&su, buf));
-      close (bgp_sock);
-      return -1;
+      close (peer->fd);
+      BGP_READ_OFF (peer->t_read);
+      BGP_WRITE_OFF (peer->t_write);
     }
 
   peer->fd = bgp_sock;
+
   BGP_EVENT_ADD (peer, TCP_connection_open);
 
   return 0;

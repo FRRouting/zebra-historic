@@ -99,7 +99,6 @@ struct rip
 
   /* Update and garbage timer. */
   struct thread *t_update;
-  struct thread *t_garbage;
 
   /* Triggered update hack. */
   int trigger;
@@ -203,6 +202,17 @@ struct rip_interface
   /* RIPv2 authentication string. */
   char *auth_str;
 
+  /* For filter type slot. */
+#define RIP_FILTER_IN  0
+#define RIP_FILTER_OUT 1
+#define RIP_FILTER_MAX 2
+
+  /* Access-list. */
+  struct access_list *list[RIP_FILTER_MAX];
+
+  /* Prefix-list. */
+  struct prefix_list *prefix[RIP_FILTER_MAX];
+
   /* Wake up thread. */
   struct thread *t_wakeup;
 };
@@ -256,52 +266,36 @@ extern struct rip *rip;
 
 /* Prototypes. */
 void rip_init ();
-
-void rip_terminate ();
-
-void zebra_start ();
-
+void rip_reset ();
+void rip_clean ();
+void rip_clean_network ();
 void rip_if_init ();
-
 void rip_route_map_init ();
+void rip_route_map_reset ();
+void rip_snmp_init ();
+void rip_zclient_init ();
+void rip_zclient_start ();
+void rip_zclient_reset ();
 
-int 
-if_check_address (struct in_addr addr);
+int if_check_address (struct in_addr addr);
+int if_valid_neighbor (struct in_addr addr);
 
-int 
-if_valid_neighbor (struct in_addr addr);
-
-int 
-rip_request_send (struct sockaddr_in *, struct interface *, u_char);
-
-int
-rip_neighbor_lookup (struct sockaddr_in *);
-
-void
-rip_redistribute_add (int, int, struct prefix_ipv4 *, unsigned int, 
-		      struct in_addr *);
-
-void
-rip_redistribute_delete (int, int, struct prefix_ipv4 *, unsigned int);
-
-void
-rip_redistribute_withdraw (int);
-
-void
-rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *, unsigned int);
-
-void
-rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, unsigned int);
-
-void
-rip_interface_multicast_set (int, struct interface *);
-
-int
-config_write_rip_network (struct vty *, int);
-
-int
-config_write_rip_redistribute (struct vty *, int);
+int rip_request_send (struct sockaddr_in *, struct interface *, u_char);
+int rip_neighbor_lookup (struct sockaddr_in *);
+void rip_redistribute_add (int, int, struct prefix_ipv4 *, unsigned int, 
+			   struct in_addr *);
+void rip_redistribute_delete (int, int, struct prefix_ipv4 *, unsigned int);
+void rip_redistribute_withdraw (int);
+void rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *, unsigned int);
+void rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, unsigned int);
+void rip_interface_multicast_set (int, struct interface *);
+int config_write_rip_network (struct vty *, int);
+int config_write_rip_redistribute (struct vty *, int);
+void rip_distribute_update_interface (struct interface *);
 
 extern struct thread_master *master;
+
+extern long rip_global_route_changes;
+extern long rip_global_queries;
 
 #endif /* _ZEBRA_RIP_H */

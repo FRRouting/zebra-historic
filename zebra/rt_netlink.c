@@ -29,11 +29,12 @@
 #include "linklist.h"
 #include "if.h"
 #include "log.h"
-#include "zebra/zebra.h"
 #include "prefix.h"
 #include "connected.h"
 #include "rib.h"
-#include "redistribute.h"
+
+#include "zebra/zserv.h"
+#include "zebra/redistribute.h"
 
 /* #define DEBUG */
 
@@ -180,9 +181,11 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
 	  /* Message sequence. */
 	  seq = h->nlmsg_seq;
 	  
+#if 0
 	  /* pid and seq check. */
 	  if (seq && seq != netlink.seq)
 	    continue;
+#endif
 
 	  /* Finish of reading. */
 	  if (h->nlmsg_type == NLMSG_DONE)

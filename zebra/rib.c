@@ -35,7 +35,7 @@
 #include "log.h"
 #include "sockunion.h"
 
-#include "zebra/zebra.h"
+#include "zebra/zserv.h"
 #include "zebra/redistribute.h"
 
 /* Routing information base. */
@@ -644,27 +644,33 @@ show_ip_route_vty (struct vty *vty, struct route_node *np)
 
       if (rib->type == ZEBRA_ROUTE_CONNECT)
 	{
- 	  vty_out (vty, "direct\r\n");
+ 	  vty_out (vty, "direct%s", VTY_NEWLINE);
 #if 0
 	  struct interface *ifp;
 	  ifp = if_lookup_by_index (rib->u.ifindex);
-	  vty_out (vty, "%*s %s\r\n", len, " ", ifp->name);
+	  vty_out (vty, "%*s %s%s", len, " ",
+		   ifp->name,
+		   VTY_NEWLINE);
 #endif /* 0 */
 	}
       else
 	{
 	  if (IS_RIB_LINK (rib)) 
-	    vty_out (vty, "link\r\n");
+	    vty_out (vty, "link%s", VTY_NEWLINE);
 	  else
-	    vty_out (vty, "%s\r\n",
-		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ));
+	    vty_out (vty, "%s%s",
+		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ),
+		     VTY_NEWLINE);
 
 #if 0
 	  if (IS_RIB_LINK (rib))
-	    vty_out (vty, "%*s %s\r\n", len, " ", rib->u.ifname);
+	    vty_out (vty, "%*s %s%s", len, " ",
+		     rib->u.ifname,
+		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "%*s %s\r\n", len, " ",
-		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ));
+	    vty_out (vty, "%*s %s%s", len, " ",
+		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ),
+		     VTY_NEWLINE);
 #endif /* 0 */
 	}
     }
@@ -678,27 +684,32 @@ show_ip_route_vty_detail (struct vty *vty, struct route_node *np)
 
   for (rib = np->info; rib; rib = rib->next)
     {
-      vty_out (vty, "%c %s/%d\r\n", 
+      vty_out (vty, "%c %s/%d%s", 
 	       IS_RIB_FIB (rib) ? '*' : ' ',
 	       inet_ntop (AF_INET, &np->p.u.prefix, buf, BUFSIZ),
-	       np->p.prefixlen);
-      vty_out (vty, "  Route type: %s\r\n", route_info[rib->type].str_long);
+	       np->p.prefixlen,
+	       VTY_NEWLINE);
+      vty_out (vty, "  Route type: %s%s", route_info[rib->type].str_long,
+	       VTY_NEWLINE);
 
       if (rib->type == ZEBRA_ROUTE_CONNECT)
 	{
 	  struct interface *ifp;
 	  ifp = if_lookup_by_index (rib->u.ifindex);
-	  vty_out (vty, "  Nexthop: %s\r\n", ifp->name);
+	  vty_out (vty, "  Nexthop: %s%s", ifp->name,
+		   VTY_NEWLINE);
 	}
       else
 	{
 	  if (IS_RIB_LINK (rib))
-	    vty_out (vty, "  Nexthop: %s\r\n", rib->u.ifname);
+	    vty_out (vty, "  Nexthop: %s%s", rib->u.ifname,
+		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "  Nexthop: %s\r\n",
-		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ));
+	    vty_out (vty, "  Nexthop: %s%s",
+		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ),
+		     VTY_NEWLINE);
 	}
-      vty_out (vty, "\r\n");
+      vty_out (vty, "%s", VTY_NEWLINE);
     }
 }
 
@@ -721,7 +732,7 @@ DEFUN (show_ip, show_ip_cmd,
       ret = str2prefix_ipv4 (argv[0], &p);
       if (!ret)
 	{
-	  vty_out (vty, "Malformed IPv4 address\r\n");
+	  vty_out (vty, "Malformed IPv4 address%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
 
@@ -735,8 +746,11 @@ DEFUN (show_ip, show_ip_cmd,
     }
 
   /* Print header. */
-  vty_out (vty, "\r\nCodes: K - kernel route, C - connected, S - static,"
-	   " R - RIP, O - OSPF,\r\n        B - BGP, * - FIB route.\r\n\r\n");
+  vty_out (vty, "%sCodes: K - kernel route, C - connected, S - static,"
+	   " R - RIP, O - OSPF,%s        B - BGP, * - FIB route.%s%s", VTY_NEWLINE,
+	   VTY_NEWLINE,
+	   VTY_NEWLINE,
+	   VTY_NEWLINE);
 
   /* Show all IPv4 routes. */
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
@@ -1193,7 +1207,7 @@ DEFUN (ipv6_route, ipv6_route_cmd,
   ret = str2prefix_ipv6 (argv[0], &p);
   if (!ret)
     {
-      vty_out (vty, "Malformed IPv6 address\r\n");
+      vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1201,7 +1215,7 @@ DEFUN (ipv6_route, ipv6_route_cmd,
   ret = inet_pton (AF_INET6, argv[1], &gate);
   if (!ret)
     {
-      vty_out (vty, "Gateway address is invalid\r\n");
+      vty_out (vty, "Gateway address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1216,13 +1230,13 @@ DEFUN (ipv6_route, ipv6_route_cmd,
       switch (ret)
 	{
 	case ZEBRA_ERR_RTEXIST:
-	  vty_out (vty, "route already exist\r\n");
+	  vty_out (vty, "route already exist%s", VTY_NEWLINE);
 	  break;
 	case ZEBRA_ERR_RTUNREACH:
-	  vty_out (vty, "network is unreachable\r\n");
+	  vty_out (vty, "network is unreachable%s", VTY_NEWLINE);
 	  break;
 	case ZEBRA_ERR_EPERM:
-	  vty_out (vty, "permission denied\r\n");
+	  vty_out (vty, "permission denied%s", VTY_NEWLINE);
 	  break;
 	default:
 	  break;
@@ -1252,7 +1266,7 @@ DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
   ret = str2prefix_ipv6 (argv[0], &p);
   if (!ret)
     {
-      vty_out (vty, "Malformed IPv6 address\r\n");
+      vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1260,7 +1274,7 @@ DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
   ret = inet_pton (AF_INET6, argv[1], &gate);
   if (!ret)
     {
-      vty_out (vty, "Gateway address is invalid\r\n");
+      vty_out (vty, "Gateway address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1268,7 +1282,7 @@ DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
   ifp = if_lookup_by_name (argv[2]);
   if (!ifp)
     {
-      vty_out (vty, "Can't find interface\r\n");
+      vty_out (vty, "Can't find interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1283,13 +1297,13 @@ DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
       switch (ret)
 	{
 	case ZEBRA_ERR_RTEXIST:
-	  vty_out (vty, "route already exist\r\n");
+	  vty_out (vty, "route already exist%s", VTY_NEWLINE);
 	  break;
 	case ZEBRA_ERR_RTUNREACH:
-	  vty_out (vty, "network is unreachable\r\n");
+	  vty_out (vty, "network is unreachable%s", VTY_NEWLINE);
 	  break;
 	case ZEBRA_ERR_EPERM:
-	  vty_out (vty, "permission denied\r\n");
+	  vty_out (vty, "permission denied%s", VTY_NEWLINE);
 	  break;
 	default:
 	  break;
@@ -1319,7 +1333,7 @@ DEFUN (no_ipv6_route,
   ret = str2prefix_ipv6 (argv[0], &p);
   if (!ret)
     {
-      vty_out (vty, "Malformed IPv6 address\r\n");
+      vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1327,7 +1341,7 @@ DEFUN (no_ipv6_route,
   ret = inet_pton (AF_INET6, argv[1], &gate);
   if (!ret)
     {
-      vty_out (vty, "Gateway address is invalid\r\n");
+      vty_out (vty, "Gateway address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1367,7 +1381,7 @@ DEFUN (no_ipv6_route_ifname,
   ret = str2prefix_ipv6 (argv[0], &p);
   if (!ret)
     {
-      vty_out (vty, "Malformed IPv6 address\r\n");
+      vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1375,7 +1389,7 @@ DEFUN (no_ipv6_route_ifname,
   ret = inet_pton (AF_INET6, argv[1], &gate);
   if (!ret)
     {
-      vty_out (vty, "Gateway address is invalid\r\n");
+      vty_out (vty, "Gateway address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1383,7 +1397,7 @@ DEFUN (no_ipv6_route_ifname,
   ifp = if_lookup_by_name (argv[2]);
   if (!ifp)
     {
-      vty_out (vty, "Can't find interface\r\n");
+      vty_out (vty, "Can't find interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1422,8 +1436,11 @@ DEFUN (show_ipv6,
   /* Show matched command. */
 
   /* Print out header. */
-  vty_out (vty, "\r\nCodes: K - kernel route, C - connected, S - static,"
-	   " R - RIPng, B - BGP\r\n       * - FIB route.\r\n\r\n");
+  vty_out (vty, "%sCodes: K - kernel route, C - connected, S - static,"
+	   " R - RIPng, B - BGP%s       * - FIB route.%s%s", VTY_NEWLINE,
+	   VTY_NEWLINE,
+	   VTY_NEWLINE,
+	   VTY_NEWLINE);
 
   for (np = route_top (ipv6_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
@@ -1443,11 +1460,16 @@ DEFUN (show_ipv6,
 	  {
 	    struct interface *ifp;
 	    ifp = if_lookup_by_index (rib->u.ifindex);
-	    vty_out (vty, "%*s %s\r\n", len, " ", ifp->name);
+	    vty_out (vty, "%*s %s%s", len,
+		     " ",
+		     ifp->name,
+		     VTY_NEWLINE);
 	  }
 	else
-	  vty_out (vty, "%*s %s\r\n", len, " ",
-		   inet_ntop (np->p.family, &rib->u.gate6, buf, BUFSIZ));
+	  vty_out (vty, "%*s %s%s", len,
+		   " ",
+		   inet_ntop (np->p.family, &rib->u.gate6, buf, BUFSIZ),
+		   VTY_NEWLINE);
       }
 
   return CMD_SUCCESS;

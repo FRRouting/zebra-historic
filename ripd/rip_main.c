@@ -33,7 +33,6 @@
 #include "log.h"
 #include "filter.h"
 
-#include "zebra/zebra.h"
 #include "ripd/ripd.h"
 
 /* ripd options. */
@@ -51,6 +50,7 @@ static struct option longopts[] =
 /* Configuration file and directory. */
 char config_current[] = RIPD_DEFAULT_CONFIG;
 char config_default[] = SYSCONFDIR RIPD_DEFAULT_CONFIG;
+char *config_file = NULL;
 
 /* ripd program name */
 char *progname;
@@ -58,8 +58,11 @@ char *progname;
 /* Route retain mode flag. */
 int retain_mode = 0;
 
+int vty_port = 0;
+
 /* Master of threads. */
 struct thread_master *master;
+struct thread thread;
 
 /* Help information display. */
 static void
@@ -84,35 +87,6 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
   exit (status);
 }
 
-/* SIGHUP handler. */
-void 
-sighup (int sig)
-{
-  zlog (NULL, LOG_INFO, "SIGHUP received");
-
-  /* Reload of config file. */
-  ;
-}
-
-/* SIGINT handler. */
-void
-sigint (int sig)
-{
-  zlog (NULL, LOG_INFO, "Terminating on signal");
-
-  if (! retain_mode)
-    rip_terminate ();
-
-  exit (0);
-}
-
-/* SIGUSR1 handler. */
-void
-sigusr1 (int sig)
-{
-  zlog_rotate (NULL);
-}
-
 /* Signale wrapper. */
 RETSIGTYPE *
 signal_set (int signo, void (*func)(int))
@@ -136,6 +110,43 @@ signal_set (int signo, void (*func)(int))
     return (osig.sa_handler);
 }
 
+/* SIGHUP handler. */
+void 
+sighup (int sig)
+{
+  zlog_info ("SIGHUP received");
+  rip_clean ();
+  rip_reset ();
+  zlog_info ("ripd restarting!");
+
+  /* Reload config file. */
+  vty_read_config (config_file, config_current, config_default);
+
+  /* Create VTY's socket */
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
+
+  /* Try to return to normal operation. */
+}
+
+/* SIGINT handler. */
+void
+sigint (int sig)
+{
+  zlog (NULL, LOG_INFO, "Terminating on signal");
+
+  if (! retain_mode)
+    rip_clean ();
+
+  exit (0);
+}
+
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
+}
+
 /* Initialization of signal handles. */
 void
 signal_init ()
@@ -152,10 +163,7 @@ int
 main (int argc, char **argv)
 {
   char *p;
-  int vty_port = 0;
   int daemon_mode = 0;
-  struct thread thread;
-  char *config_file = NULL;
 
   /* Get program name. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
@@ -213,7 +221,7 @@ main (int argc, char **argv)
   /* RIP related initialization. */
   rip_init ();
   rip_if_init ();
-  zebra_init ();
+  rip_zclient_init ();
   sort_node ();
 
   /* Get configuration file. */
@@ -223,14 +231,11 @@ main (int argc, char **argv)
   if (daemon_mode)
     daemon (0, 0);
 
-  /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
-
   /* Pid file create. */
   pid_output (PATH_RIPD_PID);
 
-  /* Connect to zebra. */
-  zebra_start ();
+  /* Create VTY's socket */
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
 
   /* Execute each thread. */
   while (thread_fetch (master, &thread))

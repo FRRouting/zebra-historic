@@ -21,6 +21,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPFD_H
 #define _ZEBRA_OSPFD_H
 
+#include "filter.h"
+
 #define OSPF_VERSION		2
 
 /* Default protocol, port number. */
@@ -165,6 +167,17 @@ struct ospf
   struct thread *t_asbr_check;		/* Thread to check ASE-LSAs */
 
   int	 redistribute;			/* Number of redistributed protocols */
+
+  struct 
+  {
+    char *name;
+    struct access_list *list;
+  } dist_lists_proto [ZEBRA_ROUTE_MAX];	/* Distribute lists out of other
+					   route sources 		    */
+
+#define LIST_NAME(T) ospf_top->dist_lists_proto[T].name
+#define LIST_PTR(T)  ospf_top->dist_lists_proto[T].list
+
 };
 
 
@@ -190,9 +203,10 @@ struct ospf_area
 
   /* Configuration variables. */
   int external_routing;			/* ExternalRoutingCapability. */
+  int no_summary;			/* Don't inject summaries into stub area*/
   int shortcut_configured;		/* Area configured as shortcut */
   int shortcut_capability;		/* Area will be used as shortcut */
-  int default_cost;			/* StubDefaultCost. */
+  u_int32_t default_cost;		/* StubDefaultCost. */
   int auth_type;			/* Authentication type. */
 
   /* Area related LSAs. */
@@ -202,6 +216,16 @@ struct ospf_area
   struct ospf_lsa *router_lsa_self;
   /* struct route_table *summary_lsa_self; */
   /* struct route_table *summary_lsa_asbr_self; */
+
+  struct 
+  {
+    char *name;
+    struct access_list *list;
+  } export_list;			/* area announce list */
+
+#define EXP_LIST_NAME(A) (A)->export_list.name
+#define EXP_LIST_PTR(A)  (A)->export_list.list
+
 
   /* self originated LSAs reflesh thread test. */
   struct thread *t_router_lsa_self;
@@ -287,6 +311,7 @@ void ospf_init (void);
 void ospf_if_update (void);
 void ospf_terminate (void);
 void ospf_route_init (void);
+void ospf_init_end (void);
 
 extern struct thread_master *master;
 extern struct ospf *ospf_top;

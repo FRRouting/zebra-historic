@@ -9,20 +9,18 @@ libzebra_a_SOURCES = \
 	version.c network.c pid_output.c getopt.c getopt1.c daemon.c \
 	print_version.c checksum.c vector.c linklist.c dropline.c \
 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c \
-	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c \
-	distribute.c stream.c str.c log.c plist.c zclient.c sockopt.c \
-	snmp.c
+	buffer.c buffer.c table.c hash.c filter.c routemap.c distribute.c \
+	stream.c str.c log.c plist.c zclient.c sockopt.c smux.c md5.c
 
 libzebra_a_DEPENDENCIES = @LIB_REGEX@
 
 libzebra_a_LIBADD = @LIB_REGEX@
 
 noinst_HEADERS = \
-	buffer.h client.h command.h dropline.h filter.h getopt.h hash.h \
-	if.h linklist.h log.h memory.h network.h prefix.h roken.h \
-	routemap.h sockunion.h str.h stream.h table.h thread.h vector.h \
-	version.h vty.h zebra.h plist.h zclient.h sockopt.h
-
+	buffer.h command.h dropline.h filter.h getopt.h hash.h if.h \
+	linklist.h log.h memory.h network.h prefix.h roken.h routemap.h \
+	distribute.h sockunion.h str.h stream.h table.h thread.h vector.h \
+	version.h vty.h zebra.h plist.h zclient.h sockopt.h smux.h md5-gnu.h
 
 EXTRA_DIST = regex.c regex-gnu.h
 
@@ -36,12 +34,10 @@ depend:
 ## File dependency.
 buffer.o: buffer.c memory.h buffer.h roken.h
 checksum.o: checksum.c
-client.o: client.c ../zebra/zebra.h prefix.h stream.h network.h \
- roken.h if.h linklist.h client.h log.h
 command.o: command.c command.h vector.h vty.h memory.h log.h version.h
 daemon.o: daemon.c
-distribute.o: distribute.c hash.h linklist.h if.h filter.h memory.h \
- vector.h vty.h command.h
+distribute.o: distribute.c hash.h if.h linklist.h filter.h command.h \
+ vector.h vty.h distribute.h memory.h
 dropline.o: dropline.c
 filter.o: filter.c prefix.h filter.h if.h linklist.h memory.h \
  command.h vector.h vty.h sockunion.h
@@ -52,17 +48,18 @@ if.o: if.c linklist.h vector.h vty.h command.h if.h sockunion.h \
  prefix.h ../zebra/connected.h memory.h buffer.h str.h log.h
 linklist.o: linklist.c linklist.h memory.h
 log.o: log.c log.h memory.h
+md5.o: md5.c md5-gnu.h
 memory.o: memory.c log.h memory.h vector.h vty.h command.h
 network.o: network.c
 pid_output.o: pid_output.c
 plist.o: plist.c prefix.h command.h vector.h vty.h memory.h plist.h \
- sockunion.h
+ sockunion.h buffer.h
 prefix.o: prefix.c prefix.h vty.h sockunion.h memory.h log.h
 print_version.o: print_version.c version.h
 regex.o: regex.c
 routemap.o: routemap.c linklist.h memory.h vector.h prefix.h \
  routemap.h command.h vty.h
-snmp.o: snmp.c
+smux.o: smux.c
 sockopt.o: sockopt.c log.h
 sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h roken.h \
  str.h log.h
@@ -74,5 +71,5 @@ vector.o: vector.c vector.h memory.h
 version.o: version.c
 vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
  sockunion.h thread.h memory.h str.h log.h prefix.h filter.h if.h
-zclient.o: zclient.c ../zebra/zebra.h stream.h network.h thread.h \
- memory.h prefix.h if.h linklist.h client.h zclient.h log.h
+zclient.o: zclient.c prefix.h stream.h network.h roken.h if.h \
+ linklist.h log.h thread.h zclient.h memory.h ../zebra/zserv.h

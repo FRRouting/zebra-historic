@@ -53,11 +53,11 @@ daemon (int nochdir, int noclose)
     }
 
   /* Change directory to root. */
-  if (nochdir)
+  if (! nochdir)
     chdir ("/");
 
   /* File descriptor close. */
-  if (noclose)
+  if (! noclose)
     {
       int fd;
 

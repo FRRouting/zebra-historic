@@ -30,6 +30,10 @@
 #include "memory.h"
 #include "log.h"
 
+#ifdef DEBUG
+void thread_master_debug (struct thread_master *);
+#endif /* DEBUG */
+
 /* Thread types. */
 #define THREAD_READ  0
 #define THREAD_WRITE 1
@@ -465,6 +469,8 @@ thread_fetch (struct thread_master *m,
 
   assert (m != NULL);
 
+ retry:  /* When thread can't fetch try to find next thread again. */
+
   /* If there is event process it first. */
   while ((thread = thread_trim_head (&m->event)))
     {
@@ -473,8 +479,6 @@ thread_fetch (struct thread_master *m,
       thread_add_unuse (m, thread);
       return fetch;
     }
-
- retry:  /* When thread can't fetch try to find next thread again. */
 
   /* Calculate select wait timer. */
   if (m->timer.head)
@@ -532,9 +536,8 @@ thread_fetch (struct thread_master *m,
 	{
 	  /* Real error. */
 	  zlog_warn ("select error: %s", strerror (errno));
-	  goto retry;
+	  return NULL;
 	}
-
       /* Signal is coming. */
       goto retry;
     }

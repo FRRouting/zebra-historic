@@ -44,6 +44,8 @@ struct access_list
 {
   char *name;
 
+  struct access_master *master;
+
   enum access_type type;
 
   struct access_list *next;
@@ -54,16 +56,11 @@ struct access_list
 };
 
 /* Prototypes for access-list. */
-void access_list_init ();
-void access_list_add_hook (void (*func)());
-void access_list_delete_hook (void (*func)());
-struct access_list *access_list_lookup (char *);
+void access_list_init (void);
+void access_list_reset (void);
+void access_list_add_hook (void (*func)(void));
+void access_list_delete_hook (void (*func)(void));
+struct access_list *access_list_lookup (int, char *);
 enum filter_type access_list_apply (struct access_list *, void *);
-
-/* Prototypes for distribute-list. */
-void distribute_init ();
-void distribute_apply_all ();
-enum filter_type distribute_apply_in (struct interface *, struct prefix *);
-enum filter_type distribute_apply_out (struct interface *, struct prefix *);
 
 #endif /* _ZEBRA_FILTER_H */

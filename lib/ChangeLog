@@ -1,3 +1,80 @@
+1999-10-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* hash.c (hash_clean): Add clean function.
+
+	* plist.c (prefix_list_reset): Add reset function.
+
+	* filter.c (access_list_reset): Add reset function.
+
+1999-10-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* client.c: Merged with zclient.c.
+	* client.h: Merged with zclient.h.
+
+1999-10-15  Jordan Mendelson <jordy@wserv.com>
+
+	* md5.c: Imported from GNU C Library.
+	* md5-gnu.h: Likewise.
+
+1999-10-15  Jochen Friedrich <jochen@scram.de>
+
+	* smux.c (smux_getresp_send): SMUX_GETRSP codes improvement.
+
+1999-10-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* smux.h: New file added.
+
+	* snmp.c: Rename to smux.c.
+
+1999-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_execute_command_strict): Filter ambious commands.
+	(cmd_filter_by_string): Change to return enum match_type.
+
+1999-10-01  Toshiaki Takada  <takada@zebra.org>
+
+	* vty.c (vty_describe_fold): New function which does VTY
+	description line fold.
+	* vty.c (vty_describe_command): Set description column.
+
+1999-09-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* plist.c (prefix_list_init_ipv4): VTY user interface is improved.
+
+1999-09-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_filter_by_string): Fix bug of CMD_IPV4 and
+	CMD_IPV4_PREFIX check.  Both return type must be exact_match.
+
+1999-09-24  Toshiaki Takada  <takada@zebra.org>
+
+	* command.c (cmd_filter_by_completion),
+	(is_cmd_ambiguous): Check IPv4 address, IPv4 prefix and range 
+	parameter matches range.
+
+1999-09-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.c (route_map_apply): Returm RM_DENYMATCH when no match
+	is performed.
+
+1999-09-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_read): Control-C stop VTY_MORE mode.
+
+1999-09-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add ACCESS_IPV6_NODE and
+	PREFIX_IPV6_NODE.
+
+	* distribute.h: New file added.
+
+	* command.h (node_type ): Delete DISTRIBUTE_NODE.
+
+1999-09-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_terminate_all): New function added for reload
+	support.
+
 1999-09-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* memory.h (enum): Add new type MTYPE_OSPF_EXTERNAL_ROUTE.

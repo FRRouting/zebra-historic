@@ -1,3 +1,33 @@
+1999-10-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Update version to zebra-0.80.
+
+1999-10-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Update version to zebra-0.80-pre3
+
+1999-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (LIBS): SNMP check is done by ucd-snmp/asn1.h.
+
+1999-10-10  Peter Galbavy <Peter.Galbavy@knowledge.com>
+
+	* configure.in: Add support of OpenBSD.
+
+1999-10-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Update version to zebra-0.80-pre2.
+
+1999-09-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Update version to zebra-0.80-pre.  From this version,
+	access-list and prefix-list's name space is divided into IPv4 and
+	IPv6.
+
+1999-09-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: For test recent fixes Set version to zebra-0.79a.
+
 1999-09-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* version.h: zebra-0.79 is out.

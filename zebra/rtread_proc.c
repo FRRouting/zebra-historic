@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "prefix.h"
 #include "log.h"
 #include "rib.h"
@@ -57,7 +56,7 @@ proc_route_read ()
   fp = fopen (_PATH_PROCNET_ROUTE, "r");
   if (fp == NULL)
     {
-      log ("Can't open %s : %s\n", _PATH_PROCNET_ROUTE, strerror (errno));
+      zlog_warn ("Can't open %s : %s\n", _PATH_PROCNET_ROUTE, strerror (errno));
       return -1;
     }
   
@@ -77,7 +76,7 @@ proc_route_read ()
 		  mask, &mtu, &window, &rtt);
       if (n != 11)
 	{	
-	  log ("can't read all of routing information\n");
+	  zlog_warn ("can't read all of routing information\n");
 	  continue;
 	}
       if (! (flags & RTF_UP))
@@ -137,7 +136,7 @@ proc_ipv6_route_read ()
 
       if (n != 10)
 	{	
-	  /* log ("can't read all of routing information %d\n%s\n", n, buf); */
+	  /* zlog_warn ("can't read all of routing information %d\n%s\n", n, buf); */
 	  continue;
 	}
 

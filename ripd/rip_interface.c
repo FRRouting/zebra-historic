@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "command.h"
 #include "if.h"
 #include "sockunion.h"
@@ -35,7 +34,6 @@
 #include "stream.h"
 #include "thread.h"
 #include "zclient.h"
-#include "client.h"
 #include "filter.h"
 
 #include "zebra/connected.h"
@@ -451,7 +449,7 @@ rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
   rip_enable_apply (ifp);
 
   /* Apply distribute list to the all interface. */
-  distribute_apply_all ();
+  rip_distribute_update_interface (ifp);
 
   /* rip_request_neighbor_all (); */
 
@@ -784,6 +782,21 @@ rip_neighbor_delete (struct prefix_ipv4 *p)
 
   return 0;
 }
+
+/* Clear all network and neighbor configuration. */
+void
+rip_clean_network ()
+{
+  int i;
+  char *str;
+
+  for (i = 0; i < vector_max (rip_enable_if); i++)
+    if ((str = vector_slot (rip_enable_if, i)) != NULL)
+      {
+	free (str);
+	vector_slot (rip_enable_if, i) = NULL;
+      }
+}
 
 /* RIP enable network or interface configuration. */
 DEFUN (rip_network,
@@ -804,7 +817,8 @@ DEFUN (rip_network,
 
   if (ret < 0)
     {
-      vty_out (vty, "There is a same network configuration %s\r\n", argv[0]);
+      vty_out (vty, "There is a same network configuration %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -833,7 +847,8 @@ DEFUN (no_rip_network,
 
   if (ret < 0)
     {
-      vty_out (vty, "Can't find network configuration %s\r\n", argv[0]);
+      vty_out (vty, "Can't find network configuration %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -856,7 +871,7 @@ DEFUN (rip_neighbor,
 
   if (! ret)
     {
-      vty_out (vty, "Please specify address by A.B.C.D\r\n");
+      vty_out (vty, "Please specify address by A.B.C.D%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -880,7 +895,7 @@ DEFUN (no_rip_neighbor,
 
   if (! ret)
     {
-      vty_out (vty, "Please specify address by A.B.C.D\r\n");
+      vty_out (vty, "Please specify address by A.B.C.D%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1088,7 +1103,8 @@ DEFUN (ip_rip_authentication_string,
 
   if (strlen (argv[0]) > 16)
     {
-      vty_out (vty, "RIPv2 authentication string must be shorter than 16\r\n");
+      vty_out (vty, "RIPv2 authentication string must be shorter than 16%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1138,22 +1154,27 @@ interface_config_write (struct vty *vty)
       ifp = getdata (node);
       ri = ifp->info;
 
-      vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
+      vty_out (vty, "interface %s%s", ifp->name,
+	       VTY_NEWLINE);
 
       if (ifp->desc)
-	vty_out (vty, " description %s%s", ifp->desc, VTY_NEWLINE);
+	vty_out (vty, " description %s%s", ifp->desc,
+		 VTY_NEWLINE);
 
       if (ri->ri_send != RI_RIP_UNSPEC)
 	vty_out (vty, " ip rip send version %s%s",
-		 LOOKUP (ri_version_msg, ri->ri_send), VTY_NEWLINE);
+		 LOOKUP (ri_version_msg, ri->ri_send),
+		 VTY_NEWLINE);
 
       if (ri->ri_receive != RI_RIP_UNSPEC)
 	vty_out (vty, " ip rip receive version %s%s",
-		 LOOKUP (ri_version_msg, ri->ri_receive), VTY_NEWLINE);
+		 LOOKUP (ri_version_msg, ri->ri_receive),
+		 VTY_NEWLINE);
 
       if (ri->auth_str)
 	vty_out (vty, " ip rip authentication string %s%s",
-		 ri->auth_str, VTY_NEWLINE);
+		 ri->auth_str,
+		 VTY_NEWLINE);
 
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
@@ -1173,21 +1194,24 @@ config_write_rip_network (struct vty *vty, int config_mode)
       vty_out (vty, "%s%s/%d%s", 
 	       config_mode ? " network " : "    ",
 	       inet_ntoa (node->p.u.prefix4),
-	       node->p.prefixlen, VTY_NEWLINE);
+	       node->p.prefixlen,
+	       VTY_NEWLINE);
 
   /* Interface name RIP enable statement. */
   for (i = 0; i < vector_max (rip_enable_if); i++)
     if ((ifname = vector_slot (rip_enable_if, i)) != NULL)
       vty_out (vty, "%s%s%s",
 	       config_mode ? " network " : "    ",
-	       ifname, VTY_NEWLINE);
+	       ifname,
+	       VTY_NEWLINE);
 
   /* RIP neighbors listing. */
   for (node = route_top (rip->neighbor); node; node = route_next (node))
     if (node->info)
       vty_out (vty, "%s%s%s", 
 	       config_mode ? " neighbor " : "    ",
-	       inet_ntoa (node->p.u.prefix4), VTY_NEWLINE);
+	       inet_ntoa (node->p.u.prefix4),
+	       VTY_NEWLINE);
 
   return 0;
 }

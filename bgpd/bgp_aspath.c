@@ -30,8 +30,6 @@
 #include "str.h"
 #include "log.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 
@@ -75,6 +73,12 @@ aspath_free (struct aspath *aspath)
   if (aspath->str)
     XFREE (MTYPE_AS_STR, aspath->str);
   XFREE (MTYPE_AS_PATH, aspath);
+}
+
+void
+aspath_intern (struct aspath *aspath)
+{
+  aspath->refcnt++;
 }
 
 /* Unintern aspath from AS path bucket. */
@@ -819,7 +823,7 @@ aspath_print_all_vty (struct vty *vty)
 	  vty_out (vty, "[%x:%d] (%d) ", 
 		   mp, i, ((struct aspath *)mp->data)->refcnt);
 	  aspath_print_vty (vty, mp->data);
-	  vty_out (vty, "\r\n");
+	  vty_out (vty, "%s", VTY_NEWLINE);
 	  mp = mp->next;
 	}
 }

@@ -25,7 +25,7 @@
 
 /* Prototypes */
 void zebra_init ();
-void zebra_start ();
+void ospf_zclient_start ();
 
 void ospf_zebra_add (struct prefix_ipv4 *, struct in_addr *);
 void ospf_zebra_delete (struct prefix_ipv4 *, struct in_addr *);

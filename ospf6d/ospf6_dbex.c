@@ -220,7 +220,7 @@ proceed_summarylist (struct neighbor *nbr)
 
   /* DD packet size must be less than InterfaceMTU.
      prepare size of packet before attaching LSA header. */
-  size = sizeof (struct ospf6_hdr) + sizeof (struct database_description);
+  size = sizeof (struct ospf6_hdr) + sizeof (struct ospf6_dbdesc);
 
   /* XXX, invalid method to access summarylist */
   for (n = listhead (nbr->summarylist); n; nextnode (n))
@@ -300,6 +300,7 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   int ismore_recent, acktype;
   void *scope;
   char lsh_str[128];
+  unsigned short cksum;
 
   received = have = (struct ospf6_lsa *)NULL;
   ismore_recent = -1;
@@ -307,7 +308,8 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
 
   ospf6_lsa_hdr_str (lsh, lsh_str, sizeof (lsh_str));
   if (IS_OSPF6_DUMP_DBEX)
-    zlog_info ("LSA: Receive %s age:%hu", lsh_str, ntohs (lsh->lsh_age));
+    zlog_info ("LSA: Receive %s age:%hu cksum:%#hx",
+                lsh_str, ntohs (lsh->lsh_age), lsh->lsh_cksum);
 
   /* make lsa structure for received lsa */
   received = make_ospf6_lsa (lsh);
@@ -336,6 +338,12 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   received->from = from;
 
   /* (1) XXX, LSA Checksum */
+  cksum = ntohs (lsh->lsh_cksum);
+  if (ntohs (ospf6_lsa_checksum (lsh)) != cksum)
+    {
+      zlog_warn ("*** Wrong LSA cksum: recv:%#hx calc:%#hx", cksum,
+                 ntohs (ospf6_lsa_checksum (lsh)));
+    }
 
   /* (2) XXX, should be relaxed */
   switch (ntohs (lsh->lsh_type))
@@ -608,7 +616,7 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent)
         {
           /* no current instance in lsdb */
 
-          for (n = listhead (newp->from->ospf6_if->area->ospf6_if_list);
+          for (n = listhead (newp->from->ospf6_if->area->if_list);
                n; nextnode (n))
             {
               ospf6_if = (struct ospf6_if *) getdata (n);
@@ -782,7 +790,7 @@ ospf6_lsa_flood_area (struct ospf6_lsa *lsa, struct area *area)
               area->str);
 
   /* for each eligible ospf_ifs */
-  for (n = listhead (area->ospf6_if_list); n; nextnode (n))
+  for (n = listhead (area->if_list); n; nextnode (n))
     {
       ospf6_if = (struct ospf6_if *)getdata (n);
       ospf6_lsa_flood_interface (lsa, ospf6_if);

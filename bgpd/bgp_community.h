@@ -46,6 +46,7 @@ struct community
 void community_init ();
 void community_free (struct community *);
 struct community *community_parse (char *, u_short);
+void community_intern (struct community *);
 void community_unintern (struct community *);
 const char *community_print (struct community *);
 void community_print_vty (struct vty *, struct community *);

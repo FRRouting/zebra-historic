@@ -1,5 +1,4 @@
-/*
- * Zebra common header.
+/* Zebra common header.
  *
  * This file is part of GNU Zebra.
  *
@@ -148,6 +147,7 @@
 #endif /* HAVE_NETINET_ICMP6_H */
 
 #ifdef BSDI_NRL
+
 #ifdef HAVE_NETINET6_IN6_H
 #include <netinet6/in6.h>
 #else
@@ -169,5 +169,59 @@
 #define CMSG_LEN(l)     (CMSG_ALIGN(sizeof(struct cmsghdr)) + (l))
 
 #endif /* BSDI_NRL */
+
+/* For old definition. */
+#ifndef IN6_ARE_ADDR_EQUAL
+#define IN6_ARE_ADDR_EQUAL IN6_IS_ADDR_EQUAL
+#endif /* IN6_ARE_ADDR_EQUAL */
+
+/* Zebra message types. */
+#define ZEBRA_INTERFACE_ADD              1
+#define ZEBRA_INTERFACE_DELETE           2
+#define ZEBRA_INTERFACE_ADDRESS_ADD      3
+#define ZEBRA_INTERFACE_ADDRESS_DELETE   4
+#define ZEBRA_IPV4_ROUTE_ADD             5
+#define ZEBRA_IPV4_ROUTE_DELETE          6
+#define ZEBRA_IPV6_ROUTE_ADD             7
+#define ZEBRA_IPV6_ROUTE_DELETE          8
+#define ZEBRA_REDISTRIBUTE_ADD           9
+#define ZEBRA_REDISTRIBUTE_DELETE       10
+#define ZEBRA_MESSAGE_MAX               11
+
+/* Zebra route's types. */
+#define ZEBRA_ROUTE_SYSTEM               0
+#define ZEBRA_ROUTE_KERNEL               1
+#define ZEBRA_ROUTE_CONNECT              2
+#define ZEBRA_ROUTE_STATIC               3
+#define ZEBRA_ROUTE_RIP                  4
+#define ZEBRA_ROUTE_RIPNG                5
+#define ZEBRA_ROUTE_OSPF                 6
+#define ZEBRA_ROUTE_OSPF6                7
+#define ZEBRA_ROUTE_BGP                  8
+#define ZEBRA_ROUTE_MAX                  9
+
+/* Zebra's family types. */
+#define ZEBRA_FAMILY_IPV4                1
+#define ZEBRA_FAMILY_IPV6                2
+#define ZEBRA_FAMILY_MAX                 3
+
+/* Error codes of zebra. */
+#define ZEBRA_ERR_RTEXIST                1
+#define ZEBRA_ERR_RTUNREACH              2
+#define ZEBRA_ERR_EPERM                  3
+#define ZEBRA_ERR_RTNOEXIST              4
+
+/* Zebra message flags */
+#define ZEBRA_FLAG_INTERNAL           0x01
+#define ZEBRA_FLAG_SELFROUTE          0x02
+#define ZEBRA_FLAG_BLACKHOLE          0x04
+
+#ifndef INADDR_LOOPBACK
+#define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */
+#endif
+
+/* Zebra types. */
+typedef u_int16_t zebra_size_t;
+typedef u_int8_t zebra_command_t;
 
 #endif /* _ZEBRA_H */

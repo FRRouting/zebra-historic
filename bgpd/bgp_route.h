@@ -52,6 +52,9 @@ struct bgp_info
   /* Aggregate related information. */
   int aggregate_count;
   int suppress_count;
+  
+  /* Time */
+  time_t uptime;
 };
 
 /* Prototypes. */
@@ -68,6 +71,6 @@ int nlri_delete (struct peer *, struct prefix *);
 
 void bgp_dump_attr (struct peer *, struct attr *, char *, size_t);
 void bgp_peer_delete (struct peer *peer);
-void bgp_redistribute_withdraw (struct bgp *, int);
+void bgp_redistribute_withdraw (struct bgp *, int, int);
 
 #endif /* _ZEBRA_BGP_ROUTE_H */

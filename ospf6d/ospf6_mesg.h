@@ -49,6 +49,17 @@ struct ospf6_hdr
   u_char         instance_id;
   u_char         reserved;
 };
+struct ospf6_header
+{
+  unsigned char  version;
+  unsigned char  type;
+  unsigned short len;
+  unsigned long  router_id;
+  unsigned long  area_id;
+  unsigned short cksum;
+  unsigned char  instance_id;
+  unsigned char  reserved;
+};
 
 /* HELLO */
 #define MAXLISTEDNBR     64
@@ -74,6 +85,7 @@ struct ospf6_hello
   unsigned long  bdr;
 };
 
+#if 0
 /* Databese Description */
 struct database_description
 {
@@ -85,6 +97,8 @@ struct database_description
   unsigned long  sequence_number;
   /* Followed by LSAs */
 };
+#endif /* 0 */
+
 /* new Database Description (name changed) */
 struct ospf6_dbdesc
 {
@@ -93,7 +107,7 @@ struct ospf6_dbdesc
   unsigned short ifmtu;
   unsigned char  mbz2;
   unsigned char  bits;
-  unsigned long  seqnum;;
+  unsigned long  seqnum;
   /* Followed by LSAs */
 };
 #define DEFAULT_INTERFACE_MTU 1500
@@ -146,6 +160,9 @@ int ospf6_receive (struct thread *);
 int ospf6_send_hello (struct thread *);
 int ospf6_send_dbdesc_retrans (struct thread *);
 int ospf6_send_dbdesc (struct thread *);
+
+void ospf6_message_send (unsigned char, struct iovec *, struct in6_addr *,
+			 u_int);
 
 #endif /* OSPF6_MESG_H */
 

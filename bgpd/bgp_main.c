@@ -31,8 +31,6 @@
 #include "memory.h"
 #include "log.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_network.h"
 
@@ -61,6 +59,10 @@ int retain_mode = 0;
 
 /* Master of threads. */
 struct thread_master *master;
+
+char *config_file = NULL;
+
+int vty_port = BGP_VTY_PORT;
 
 /* Help information display. */
 static void
@@ -93,8 +95,18 @@ sighup (int sig)
 {
   zlog (NULL, LOG_INFO, "SIGHUP received");
 
-  /* Reload of config file. */
-  ;
+  /* Terminate all thread. */
+  bgp_terminate ();
+  bgp_reset ();
+  zlog_info ("bgpd restarting!");
+
+  /* Reload config file. */
+  vty_read_config (config_file, config_current, config_default);
+
+  /* Create VTY's socket */
+  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
+
+  /* Try to return to normal operation. */
 }
 
 /* SIGINT handler. */
@@ -159,10 +171,8 @@ main (int argc, char **argv)
   char *p;
   int opt;
   int daemon_mode = 0;
-  int bgp_port = 0;
-  int vty_port = 0;
+  int bgp_port = BGP_PORT_DEFAULT;
 
-  char *config_file = NULL;
   struct thread thread;
 
   /* Preserve name of myself. */
@@ -222,11 +232,6 @@ main (int argc, char **argv)
   bgp_init ();
   sort_node ();
 
-#if 0
-  community_test ();
-  exit (0);
-#endif /* 0 */
-
   /* Parse config file. */
   vty_read_config (config_file, config_current, config_default);
 
@@ -238,16 +243,14 @@ main (int argc, char **argv)
   pid_output (PATH_BGPD_PID);
 
   /* Make bgp vty socket. */
-  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
+  vty_serv_sock (vty_port);
 
   /* Make BGP server socket. */
-  bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT);
+  bgp_serv_sock (bgp_port);
 
   /* Print banner. */
-  zlog (NULL, LOG_INFO, "BGPd (%s) starts", ZEBRA_VERSION);
-
-  /* Make connection with zebra daemon. */
-  zebra_start ();
+  zlog (NULL, LOG_INFO, "BGPd (%s) starting: vty@%d, bgp@%d",
+	ZEBRA_VERSION, vty_port, bgp_port);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

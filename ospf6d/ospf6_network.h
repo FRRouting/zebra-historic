@@ -53,8 +53,15 @@ int send_linkstate_request (struct thread *);
 int send_linkstate_update (struct thread *);
 int send_linkstate_ack (struct thread *);
 
-void ospf6_join_alldr (u_int);
-void ospf6_leave_alldr (u_int);
+void ospf6_join_allspfrouters (u_int);
+void ospf6_leave_allspfrouters (u_int);
+void ospf6_join_alldrouters (u_int);
+void ospf6_leave_alldrouters (u_int);
+
+void ospf6_set_mcastloop ();
+void ospf6_set_pktinfo ();
+void ospf6_set_checksum ();
+
 void ospf6_ipv4_encode_ipv6 (struct in_addr *, struct in6_addr *);
 void ospf6_ipv6_decode_ipv4 (struct in6_addr *, struct in_addr *);
 

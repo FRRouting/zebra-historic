@@ -94,14 +94,11 @@ int bgp_attr_parse (struct peer *, struct attr *, bgp_size_t);
 int bgp_attr_check (struct peer *, struct attr *);
 struct attr *bgp_attr_make_default (u_char);
 void bgp_attr_free (struct attr *);
-bgp_size_t bgp_packet_attribute (struct peer *, struct stream *, 
-				 struct attr *, struct prefix *);
-bgp_size_t
-bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p);
-
+bgp_size_t bgp_packet_attribute (struct peer *, struct stream *, struct attr *, struct prefix *);
+bgp_size_t bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p);
 struct attr *bgp_attr_intern (struct attr *attr);
-
-int 
-cluster_loop_check (struct cluster_list *cluster, struct in_addr originator);
+int  cluster_loop_check (struct cluster_list *cluster, struct in_addr originator);
+void cluster_intern (struct cluster_list *);
+void cluster_unintern (struct cluster_list *);
 
 #endif /* _ZEBRA_BGP_ATTR_H */

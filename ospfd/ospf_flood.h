@@ -24,7 +24,7 @@
 #define _ZEBRA_OSPF_FLOODING_H
 
 int ospf_flood (struct ospf_neighbor *, struct ospf_lsa *, struct ospf_lsa *);
-void ospf_flood_if_select (struct ospf_neighbor *, struct ospf_lsa *);
+void ospf_flood_through (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_flood_through_area (struct ospf_area *, struct ospf_neighbor *,
 			      struct ospf_lsa *);
 void ospf_flood_through_as (struct ospf_neighbor *, struct ospf_lsa *);

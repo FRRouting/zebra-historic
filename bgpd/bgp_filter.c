@@ -27,8 +27,6 @@
 #include "memory.h"
 #include "buffer.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_regex.h"
@@ -459,7 +457,7 @@ DEFUN (ip_as_path, ip_as_path_cmd,
     type = AS_FILTER_DENY;
   else
     {
-      vty_out (vty, "filter type must be [permit|deny]\r\n");
+      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -483,7 +481,8 @@ DEFUN (ip_as_path, ip_as_path_cmd,
   if (!regex)
     {
       free (regstr);
-      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      vty_out (vty, "can't compile regexp %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -523,7 +522,8 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
   aslist = as_list_lookup (argv[0]);
   if (aslist == NULL)
     {
-      vty_out (vty, "ip as-path access-list %s doesn't exist\r\n", argv[0]);
+      vty_out (vty, "ip as-path access-list %s doesn't exist%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -534,7 +534,7 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
     type = AS_FILTER_DENY;
   else
     {
-      vty_out (vty, "filter type must be [permit|deny]\r\n");
+      vty_out (vty, "filter type must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   
@@ -558,7 +558,8 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
   if (!regex)
     {
       free (regstr);
-      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      vty_out (vty, "can't compile regexp %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -570,7 +571,7 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
 
   if (asfilter == NULL)
     {
-      vty_out (vty, "\r\n");
+      vty_out (vty, "%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -591,7 +592,8 @@ config_write_as_list (struct vty *vty)
       {
 	vty_out (vty, "ip as-path access-list %s %s %s%s",
 		 aslist->name, filter_type_str (asfilter->type), 
-		 asfilter->reg_str, VTY_NEWLINE);
+		 asfilter->reg_str,
+		 VTY_NEWLINE);
 	write++;
       }
 
@@ -600,7 +602,8 @@ config_write_as_list (struct vty *vty)
       {
 	vty_out (vty, "ip as-path access-list %s %s %s%s",
 		 aslist->name, filter_type_str (asfilter->type), 
-		 asfilter->reg_str, VTY_NEWLINE);
+		 asfilter->reg_str,
+		 VTY_NEWLINE);
 	write++;
       }
   return write;

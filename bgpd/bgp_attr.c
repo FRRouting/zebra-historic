@@ -32,8 +32,6 @@
 #include "log.h"
 #include "hash.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_route.h"
@@ -163,6 +161,12 @@ cluster_dup (struct cluster_list *cluster)
 }
 
 void
+cluster_intern (struct cluster_list *cluster)
+{
+  cluster->refcnt++;
+}
+
+void
 cluster_unintern (struct cluster_list *cluster)
 {
   struct cluster_list *ret;
@@ -268,12 +272,13 @@ bgp_attr_intern (struct attr *attr)
   if (find)
     {
       find->refcnt++;
+
       if (find->aspath)
-	find->aspath->refcnt++;
+	aspath_intern (find->aspath);
       if (find->community)
-	find->community->refcnt++;
+	community_intern (find->community);
       if (find->cluster)
-	find->cluster->refcnt++;
+	cluster_intern (find->cluster);
 
       return find;
     }
@@ -284,11 +289,11 @@ bgp_attr_intern (struct attr *attr)
   new->refcnt = 1;
 
   if (new->aspath)
-    new->aspath->refcnt++;
+    aspath_intern (new->aspath);
   if (new->community)
-    new->community->refcnt++;
+    community_intern (new->community);
   if (new->cluster)
-    new->cluster->refcnt++;
+    cluster_intern (new->cluster);
 
   hash_push (attrhash, new);
 
@@ -428,6 +433,12 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
 		       NULL);
       return -1;
     }
+
+  /* Intern new AS path. */
+  if (attr->aspath)
+    aspath_intern (attr->aspath);
+
+  /* Forward pointer. */
   stream_forward (peer->ibuf, length);
 
   /* Set aspath attribute flag. */
@@ -560,6 +571,9 @@ bgp_attr_community (struct peer *peer, bgp_size_t length,
       stream_forward (peer->ibuf, length);
     }
 
+  if (attr->community)
+    community_intern (attr->community);
+
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
 
   return 0;
@@ -606,6 +620,10 @@ bgp_attr_cluster_list (struct peer *peer, bgp_size_t length,
     }
 
   attr->cluster = cluster_list_parse (stream_pnt (peer->ibuf), length);
+
+  if (attr->cluster)
+    cluster_intern (attr->cluster);
+
   stream_forward (peer->ibuf, length);;
 
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_CLUSTER_LIST);
@@ -699,7 +717,8 @@ bgp_mp_unreach_parse (struct peer *peer, int length)
 	  psize = PSIZE (p.prefixlen);
 	  stream_get (&p.u.prefix6, peer->ibuf, psize);
 
-	  nlri_delete (peer, &p);
+	  if (peer->family == AF_INET6)
+	    nlri_delete (peer, &p);
 	}
     }
   else

@@ -32,8 +32,6 @@
 #include "stream.h"
 #include "memory.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_dump.h"
@@ -190,7 +188,9 @@ bgp_start_timer (struct thread *thread)
   peer = THREAD_ARG (thread);
   peer->t_start = NULL;
 
-  zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (start timer expire).", peer->host);
+  if (debug (DEBUG_BGP_FSM))
+    zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (start timer expire).",
+	  peer->host);
 
   THREAD_VAL (thread) = BGP_Start;
   bgp_event (thread);
@@ -207,7 +207,9 @@ bgp_connect_timer (struct thread *thread)
   peer = THREAD_ARG (thread);
   peer->t_connect = NULL;
 
-  zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (connect timer expire)", peer->host);
+  if (debug (DEBUG_BGP_FSM))
+    zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (connect timer expire)",
+	  peer->host);
 
   THREAD_VAL (thread) = ConnectRetry_timer_expired;
   bgp_event (thread);
@@ -224,7 +226,9 @@ bgp_holdtime_timer (struct thread *thread)
   peer = THREAD_ARG (thread);
   peer->t_holdtime = NULL;
 
-  zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (holdtime timer expire)", peer->host);
+  if (debug (DEBUG_BGP_FSM))
+    zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (holdtime timer expire)",
+	  peer->host);
 
   THREAD_VAL (thread) = Hold_Timer_expired;
   bgp_event (thread);
@@ -241,7 +245,9 @@ bgp_keepalive_timer (struct thread *thread)
   peer = THREAD_ARG (thread);
   peer->t_keepalive = NULL;
 
-  /* zlog_info ("FSM[%s]: Timer (keepalive timer expire)", peer->host); */
+  if (debug (DEBUG_BGP_FSM))
+    zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (keepalive timer expire)",
+	  peer->host);
 
   THREAD_VAL (thread) = KeepAlive_timer_expired;
   bgp_event (thread);
@@ -253,7 +259,7 @@ bgp_keepalive_timer (struct thread *thread)
 static void
 bgp_uptime_reset (struct peer *peer)
 {
-  time (&peer->uptime);
+  peer->uptime = time (NULL);
 }
 
 /* Administrative BGP peer stop event. */
@@ -342,18 +348,22 @@ bgp_start (struct peer *peer)
   switch (status)
     {
     case connect_error:
-      zlog (peer->log, LOG_DEBUG, "FSM[%s] connect error", peer->host);
+      if (debug (DEBUG_BGP_FSM))
+	zlog (peer->log, LOG_DEBUG, "FSM[%s] connect error", peer->host);
       BGP_EVENT_ADD (peer, TCP_connection_open_failed);
       break;
     case connect_success:
-      zlog (peer->log, LOG_DEBUG, 
-	    "FSM[%s] connect immediately success", peer->host);
+      if (debug (DEBUG_BGP_FSM))
+	zlog (peer->log, LOG_DEBUG, "FSM[%s] connect immediately success",
+	      peer->host);
       BGP_EVENT_ADD (peer, TCP_connection_open);
       break;
     case connect_in_progress:
       /* To check nonblocking connect, we wait until socket is
          readable or writable. */
-      zlog (peer->log, LOG_DEBUG, "FSM[%s] bgp_start non-block connect", peer->host);
+      if (debug (DEBUG_BGP_FSM))
+	zlog (peer->log, LOG_DEBUG, "FSM[%s] bgp_start non-block connect",
+	      peer->host);
       BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
       BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
       break;
@@ -384,7 +394,9 @@ void
 fsm_change_status (struct peer *peer, int status)
 {
   /* Logging change of status. */
-  zlog (peer->log, LOG_INFO, "Status change [%s] %s -> %s", peer->host,
+  if (debug (DEBUG_BGP_FSM))
+    zlog (peer->log, LOG_DEBUG, "FSM[%s] Status change %s -> %s",
+	  peer->host,
 	  LOOKUP (bgp_status_msg, peer->status),
 	  LOOKUP (bgp_status_msg, status));
 
@@ -405,7 +417,8 @@ fsm_keepalive_expire (struct peer *peer)
 void
 fsm_holdtime_expire (struct peer *peer)
 {
-  zlog (peer->log, LOG_INFO, "%s: hold timer expire", peer->host);
+  if (debug (DEBUG_BGP_FSM))
+    zlog (peer->log, LOG_DEBUG, "FSM[%s] Hold timer expire", peer->host);
 }
 
 /* Status goes to Established.  Send keepalive packet then make first
@@ -440,7 +453,7 @@ void
 bgp_ignore (struct peer *peer)
 {
   if (debug (DEBUG_BGP_FSM))
-    zlog (peer->log, LOG_INFO, "FSM[%s]: bgp_ignore called", peer->host);
+    zlog (peer->log, LOG_DEBUG, "FSM[%s]: bgp_ignore called", peer->host);
 }
 
 /* Finite State Machine structure */
@@ -578,7 +591,7 @@ bgp_event (struct thread *thread)
   event = THREAD_VAL (thread);
 
   if (debug (DEBUG_BGP_FSM))
-    zlog (NULL, LOG_INFO, "FSM[%s]: %s (%s)", peer->host, 
+    zlog (NULL, LOG_DEBUG, "FSM[%s]: %s (%s)", peer->host, 
 	    LOOKUP (bgp_status_msg, peer->status),
 	    bgp_event_str[event]);
 

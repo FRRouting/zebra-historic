@@ -42,7 +42,7 @@ struct neighbor
   unsigned long        bdr;
   struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link */
                                        /* Probably LinkLocal address     */
-  struct database_description last_dd; /* last received DD , including     */
+  struct ospf6_dbdesc last_dd; /* last received DD , including     */
                                        /* OSPF capability of this neighbor */
 
   /* LSAs to retransmit to this neighbor */
@@ -59,49 +59,24 @@ struct neighbor
   struct iovec dbdesc_last_send[MAXIOVLIST];
 };
 
-/* Neighbor state */
-#define NBS_DOWN     1
-#define NBS_ATTEMPT  2
-#define NBS_INIT     3
-#define NBS_TWOWAY   4
-#define NBS_EXSTART  5
-#define NBS_EXCHANGE 6
-#define NBS_LOADING  7
-#define NBS_FULL     8
-
 
 
 /* Function Prototypes */
-
-int nbs_change (state_t, char *, struct neighbor *);
-int nbs_full_change (struct ospf6_if *);
+void delete_ospf6_nbr (struct neighbor *);
 int neighbor_thread_cancel (struct neighbor *);
 int list_cleared_of_lsa (struct neighbor *);
 int free_last_dd (struct thread *);
-int need_adjacency (struct neighbor *);
-
-void delete_ospf6_nbr (struct neighbor *);
-
-/* Neighbor event */
-int hello_received (struct thread *);
-int twoway_received (struct thread *);
-int negotiation_done (struct thread *);
-int exchange_done (struct thread *);
-int loading_done (struct thread *);
-int adj_ok (struct thread *);
-int seqnumber_mismatch (struct thread *);
-int bad_lsreq (struct thread *);
-int oneway_received (struct thread *);
-int inactivity_timer (struct thread *);
-
-int dr_election (struct ospf6_if *);
-
 unsigned int count_nbr_in_state (state_t, struct area *);
-
-void
-ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *,
+void ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *,
                                         struct in_addr *,
                                         u_int);
+
+struct neighbor *make_neighbor (rtr_id_t, struct ospf6_if *);
+struct neighbor *nbr_lookup (rtr_id_t, struct ospf6_if *);
+int show_nbr (struct vty *, struct neighbor *);
+
+void ospf6_neighbor_vty_summary (struct vty *, struct neighbor *);
+void ospf6_neighbor_vty (struct vty *, struct neighbor *);
 
 #endif /* OSPF6_NEIGHBOR_H */
 

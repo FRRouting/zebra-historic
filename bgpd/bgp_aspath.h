@@ -62,6 +62,7 @@ struct aspath *aspath_empty_aspath (int);
 struct aspath *aspath_val2as (u_short);
 struct aspath *aspath_str2aspath (char *);
 void aspath_free (struct aspath *);
+void aspath_intern (struct aspath *);
 void aspath_unintern (struct aspath *);
 const char *aspath_print (struct aspath *);
 void aspath_print_vty (struct vty *, struct aspath *);

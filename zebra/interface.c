@@ -277,7 +277,7 @@ connected_dump_vty (struct vty *vty, struct connected *connected)
 	  prefix_vty_out (vty, p);
 	}
     }
-  vty_out (vty, "\r\n");
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 
 
@@ -288,13 +288,15 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
   struct connected *connected;
   listnode node;
 
-  vty_out (vty, "Interface %s\r\n", ifp->name);
+  vty_out (vty, "Interface %s%s", ifp->name,
+	   VTY_NEWLINE);
   if (ifp->desc)
-    vty_out (vty, "  Description: %s\r\n", ifp->desc);
+    vty_out (vty, "  Description: %s%s", ifp->desc,
+	     VTY_NEWLINE);
   vty_out (vty, "  index %d metric %d mtu %d ",
 	   ifp->ifindex, ifp->metric, ifp->mtu);
   if_flag_dump_vty (vty, ifp->flags);
-  vty_out (vty, "\r\n");
+  vty_out (vty, "%s", VTY_NEWLINE);
 
   /* Hardware address. */
   if (ifp->hw_addr_len != 0)
@@ -304,7 +306,7 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
       vty_out (vty, "  HWaddr: ");
       for (i = 0; i < ifp->hw_addr_len; i++)
 	vty_out (vty, "%s%02x", i == 0 ? "" : ":", ifp->hw_addr[i]);
-      vty_out (vty, "\r\n");
+      vty_out (vty, "%s", VTY_NEWLINE);
     }
   
   for (node = listhead (ifp->connected); node; nextnode (node))
@@ -349,7 +351,8 @@ DEFUN (show_interface, show_interface_cmd,
       ifp = if_lookup_by_name (argv[0]);
       if (ifp == NULL) 
 	{
-	  vty_out (vty, "Can't find interface [%s]\r\n", argv[0]);
+	  vty_out (vty, "Can't find interface [%s]%s", argv[0],
+		   VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       if_dump_vty (vty, ifp);
@@ -376,7 +379,7 @@ DEFUN (multicast,
   ret = if_set_flags (ifp, IFF_MULTICAST);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set multicast flag\r\n");
+      vty_out (vty, "Can't set multicast flag%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -400,7 +403,7 @@ DEFUN (no_multicast,
   ret = if_unset_flags (ifp, IFF_MULTICAST);
   if (ret < 0)
     {
-      vty_out (vty, "Can't unset multicast flag\r\n");
+      vty_out (vty, "Can't unset multicast flag%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -423,7 +426,7 @@ DEFUN (shutdown_if,
   ret = if_unset_flags (ifp, IFF_UP);
   if (ret < 0)
     {
-      vty_out (vty, "Can't shutdown interface\r\n");
+      vty_out (vty, "Can't shutdown interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -447,7 +450,7 @@ DEFUN (no_shutdown_if,
   ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
   if (ret < 0)
     {
-      vty_out (vty, "Can't up interface\r\n");
+      vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -472,7 +475,7 @@ DEFUN (ip_address, ip_address_cmd,
   ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
   if (!ret)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -480,7 +483,7 @@ DEFUN (ip_address, ip_address_cmd,
   ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
   if (ret < 0)
     {
-      vty_out (vty, "Can't up interface\r\n");
+      vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -488,7 +491,8 @@ DEFUN (ip_address, ip_address_cmd,
   ret = if_set_prefix (ifp, (struct prefix_ipv4 *) &p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set interface's address: %s.\r\n", strerror(errno));
+      vty_out (vty, "Can't set interface's address: %s.%s", strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -496,7 +500,8 @@ DEFUN (ip_address, ip_address_cmd,
   ret = if_addr_add (ifp, &p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set interface's address: %s.\r\n", strerror(errno));
+      vty_out (vty, "Can't set interface's address: %s.%s", strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -519,23 +524,25 @@ DEFUN (no_ip_address, no_ip_address_cmd,
   ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
   if (!ret)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = if_unset_prefix (ifp, (struct prefix_ipv4 *) &p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't delete interface's address: %s.\r\n", 
-	       strerror(errno));
+      vty_out (vty, "Can't delete interface's address: %s.%s", 
+	       strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = if_addr_delete (ifp, &p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't delete interface's address: %s.\r\n", 
-	       strerror(errno));
+      vty_out (vty, "Can't delete interface's address: %s.%s", 
+	       strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -558,7 +565,7 @@ DEFUN (ipv6_address, ipv6_address_cmd,
   ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
   if (!ret)
     {
-      vty_out (vty, "Please specify IPv6 prefix with prefixlen\r\n");
+      vty_out (vty, "Please specify IPv6 prefix with prefixlen%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -566,7 +573,7 @@ DEFUN (ipv6_address, ipv6_address_cmd,
   ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
   if (ret < 0)
     {
-      vty_out (vty, "Can't up interface\r\n");
+      vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -575,7 +582,8 @@ DEFUN (ipv6_address, ipv6_address_cmd,
   ret = if_prefix_add_ipv6 (ifp, (struct prefix_ipv6 *)&p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set interface's address: %s.\r\n", strerror(errno));
+      vty_out (vty, "Can't set interface's address: %s.%s", strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -600,15 +608,16 @@ DEFUN (no_ipv6_address, no_ipv6_address_cmd,
   ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
   if (!ret)
     {
-      vty_out (vty, "Please specify IPv6 prefix with prefixlen\r\n");
+      vty_out (vty, "Please specify IPv6 prefix with prefixlen%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = if_prefix_delete_ipv6 (ifp, (struct prefix_ipv6 *)&p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't delete interface's address: %s.\r\n",
-	       strerror(errno));
+      vty_out (vty, "Can't delete interface's address: %s.%s",
+	       strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -634,22 +643,23 @@ DEFUN (ip_tunnel, ip_tunnel_cmd,
   ret = str2prefix (argv[0], &sp);
   if (!ret)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = str2prefix (argv[1], &dp);
   if (!ret)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = if_tun_add (ifsp, ifdp, &sp, &dp);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set tunnel address: %s.\r\n", 
-	       strerror(errno));
+      vty_out (vty, "Can't set tunnel address: %s.%s", 
+	       strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -671,22 +681,23 @@ DEFUN (no_ip_tunnel, no_ip_tunnel_cmd,
   ret = str2prefix (argv[0], &sp);
   if (!ret)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = str2prefix (argv[1], &dp);
   if (!ret)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = if_tun_delete (ifsp, ifp, &sp, &dp);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set tunnel address: %s.\r\n", 
-	       strerror(errno));
+      vty_out (vty, "Can't set tunnel address: %s.%s", 
+	       strerror(errno),
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
     
@@ -710,10 +721,12 @@ if_config_write (struct vty *vty)
       ifp = getdata (node);
       if_data = ifp->info;
       
-      vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
+      vty_out (vty, "interface %s%s", ifp->name,
+	       VTY_NEWLINE);
 
       if (ifp->desc)
-	vty_out (vty, " description %s%s", ifp->desc, VTY_NEWLINE);
+	vty_out (vty, " description %s%s", ifp->desc,
+		 VTY_NEWLINE);
 
       if (if_data && if_data->address)
 	for (addrnode = listhead (if_data->address); addrnode; 
@@ -723,7 +736,8 @@ if_config_write (struct vty *vty)
 	    vty_out (vty, " ip%s address %s/%d%s",
 		     p->family == AF_INET ? "" : "v6",
 		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-		     p->prefixlen, VTY_NEWLINE);
+		     p->prefixlen,
+		     VTY_NEWLINE);
 	  }
 
       if (if_data)

@@ -30,18 +30,15 @@
 
 struct area
 {
+  char            str[16];
+
   struct ospf6   *ospf6;      /* back pointer */
   unsigned long   area_id;
-  char            str[16];    /* Area ID string */
-  unsigned char   options[3]; /* OSPF Option
-                                 including external capability */
+  unsigned char   options[3]; /* OSPF Option including ExternalCapability */
   unsigned long   stub_default_cost;
 
-  list            ospf6_if_list; /* OSPF interface to this area */
+  list            if_list; /* OSPF interface to this area */
   list            lsdb;
-
-  signed long     router_lsa_seqnum;    /* Signed 32bit integer */
-
   struct spftree  spftree;
 
   struct thread  *spf_calc;
@@ -54,6 +51,7 @@ struct area
 struct area *ospf6_area_lookup (unsigned long);
 struct area *ospf6_area_init (unsigned long);
 void ospf6_area_terminate (struct area *);
+void ospf6_area_vty (struct vty *, struct area *);
 
 #endif /* OSPF_AREA_H */
 

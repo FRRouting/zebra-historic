@@ -29,14 +29,15 @@
 #include "command.h"
 #include "linklist.h"
 #include "log.h"
+#include "plist.h"
 #ifdef HAVE_GNU_REGEX
 #include <regex.h>
 #else
 #include "regex-gnu.h"
 #endif /* HAVE_GNU_REGEX */
 #include "buffer.h"
-
-#include "zebra/zebra.h"
+#include "table.h"
+#include "sockunion.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -46,9 +47,6 @@
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_filter.h"
-
-#include "table.h"
-#include "sockunion.h"
 
 /* Memo of route-map commands.
 
@@ -60,6 +58,11 @@ o Cisco route-map
        ip address       :  Done
        ip next-hop      :  Done
        ip route-source  :  (This will not be implemented by bgpd)
+       ip prefix-list   :  Done
+       ipv6 address     :  Done
+       ipv6 next-hop    :  Done
+       ipv6 route-source:  (This will not be implemented by bgpd)
+       ipv6 prefix-list :  Done
        length           :  (This will not be implemented by bgpd)
        metric           :  Done
        route-type       :  (This will not be implemented by bgpd)
@@ -111,7 +114,7 @@ route_match_ip_address (void *rule, struct prefix *prefix,
 
   if (type == ROUTE_MAP_BGP)
     {
-      alist = access_list_lookup ((char *) rule);
+      alist = access_list_lookup (AF_INET, (char *) rule);
       if (alist == NULL)
 	return RM_NOMATCH;
     
@@ -202,6 +205,46 @@ struct route_map_rule_cmd route_match_ip_next_hop_cmd =
   route_match_ip_next_hop,
   route_match_ip_next_hop_compile,
   route_match_ip_next_hop_free
+};
+
+/* `match ip prefix-list PREFIX_LIST' */
+
+route_map_result_t
+route_match_ip_prefix_list (void *rule, struct prefix *prefix, 
+			    route_map_object_t type, void *object)
+{
+  struct prefix_list *plist;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      plist = prefix_list_lookup (AF_INET, (char *) rule);
+      if (plist == NULL)
+	return RM_NOMATCH;
+    
+      return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
+	      RM_NOMATCH : RM_MATCH);
+    }
+  return RM_NOMATCH;
+}
+
+void *
+route_match_ip_prefix_list_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ip_prefix_list_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ip_prefix_list_cmd =
+{
+  "ip prefix-list",
+  route_match_ip_prefix_list,
+  route_match_ip_prefix_list_compile,
+  route_match_ip_prefix_list_free
 };
 
 /* `match metric METRIC' */
@@ -457,132 +500,6 @@ struct route_map_rule_cmd route_set_ip_nexthop_cmd =
   route_set_ip_nexthop_free
 };
 
-#ifdef HAVE_IPV6
-/* `set ipv6 nexthop global IP_ADDRESS' */
-
-/* Set nexthop to object.  ojbect must be pointer to struct attr. */
-route_map_result_t
-route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
-{
-  struct in6_addr *address;
-  struct bgp_info *bgp_info;
-
-  if(type == ROUTE_MAP_BGP){
-    /* Fetch routemap's rule information. */
-    address = rule;
-    bgp_info = object;
-    
-    /* Set next hop value. */ 
-    bgp_info->attr->mp_nexthop_global = *address;
-    
-    /* Set nexthop length. */
-    if (bgp_info->attr->mp_nexthop_len == 0)
-      bgp_info->attr->mp_nexthop_len = 16;
-  }
-
-  return RM_OKAY;
-}
-
-/* Route map `ip next-hop' compile function.  Given string is converted
-   to struct in_addr structure. */
-void *
-route_set_ipv6_nexthop_global_compile (char *arg)
-{
-  int ret;
-  struct in6_addr *address;
-
-  address = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in6_addr));
-
-  ret = inet_pton (AF_INET6, arg, address);
-
-  if (ret == 0)
-    {
-      XFREE (MTYPE_ROUTE_MAP_COMPILED, address);
-      return NULL;
-    }
-
-  return address;
-}
-
-/* Free route map's compiled `ip next-hop' value. */
-void
-route_set_ipv6_nexthop_global_free (void *rule)
-{
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
-}
-
-/* Route map commands for ip nexthop set. */
-struct route_map_rule_cmd route_set_ipv6_nexthop_global_cmd =
-{
-  "ipv6 next-hop global",
-  route_set_ipv6_nexthop_global,
-  route_set_ipv6_nexthop_global_compile,
-  route_set_ipv6_nexthop_global_free
-};
-
-/* `set ipv6 nexthop local IP_ADDRESS' */
-
-/* Set nexthop to object.  ojbect must be pointer to struct attr. */
-route_map_result_t
-route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
-{
-  struct in6_addr *address;
-  struct bgp_info *bgp_info;
-
-  if(type == ROUTE_MAP_BGP){
-    /* Fetch routemap's rule information. */
-    address = rule;
-    bgp_info = object;
-    
-    /* Set next hop value. */ 
-    bgp_info->attr->mp_nexthop_local = *address;
-    
-    /* Set nexthop length. */
-    if (bgp_info->attr->mp_nexthop_len != 32)
-      bgp_info->attr->mp_nexthop_len = 32;
-  }
-
-  return RM_OKAY;
-}
-
-/* Route map `ip nexthop' compile function.  Given string is converted
-   to struct in_addr structure. */
-void *
-route_set_ipv6_nexthop_local_compile (char *arg)
-{
-  int ret;
-  struct in6_addr *address;
-
-  address = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in6_addr));
-
-  ret = inet_pton (AF_INET6, arg, address);
-
-  if (ret == 0)
-    {
-      XFREE (MTYPE_ROUTE_MAP_COMPILED, address);
-      return NULL;
-    }
-
-  return address;
-}
-
-/* Free route map's compiled `ip nexthop' value. */
-void
-route_set_ipv6_nexthop_local_free (void *rule)
-{
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
-}
-
-/* Route map commands for ip nexthop set. */
-struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
-{
-  "ipv6 next-hop local",
-  route_set_ipv6_nexthop_local,
-  route_set_ipv6_nexthop_local_compile,
-  route_set_ipv6_nexthop_local_free
-};
-#endif /* HAVE_IPV6 */
-
 /* `set local-preference LOCAL_PREF' */
 
 /* Set local preference. */
@@ -598,6 +515,7 @@ route_set_local_pref (void *rule, struct prefix *prefix, route_map_object_t type
     bgp_info = object;
     
     /* Set local preference value. */ 
+    bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF);
     bgp_info->attr->local_pref = *local_pref;
   }
 
@@ -803,19 +721,20 @@ route_set_community (void *rule, struct prefix *prefix, route_map_object_t type,
   struct community *com;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
-    com = rule;
-    bgp_info = object;
+  if(type == ROUTE_MAP_BGP)
+    {
+      com = rule;
+      bgp_info = object;
     
-    if (!com)
-      return RM_OKAY;
+      if (!com)
+	return RM_OKAY;
     
-    if (bgp_info->attr->community)
-      community_free (bgp_info->attr->community);
+      if (bgp_info->attr->community)
+	community_free (bgp_info->attr->community);
     
-    bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
-    bgp_info->attr->community = community_dup (com);
-  }
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
+      bgp_info->attr->community = community_dup (com);
+    }
 
   return RM_OKAY;
 }
@@ -847,6 +766,63 @@ struct route_map_rule_cmd route_set_community_cmd =
   route_set_community,
   route_set_community_compile,
   route_set_community_free,
+};
+
+/* `set community-additive COMMUNITY' */
+
+/* For community set mechanism. */
+route_map_result_t
+route_set_community_additive (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
+{
+  struct community *com;
+  struct bgp_info *bgp_info;
+
+  if(type == ROUTE_MAP_BGP)
+    {
+      com = rule;
+      bgp_info = object;
+    
+      if (!com)
+	return RM_OKAY;
+    
+      if (bgp_info->attr->community)
+	bgp_info->attr->community = community_merge (bgp_info->attr->community, com);
+      else
+	bgp_info->attr->community = community_dup (com);
+
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
+    }
+
+  return RM_OKAY;
+}
+
+/* Compile function for set community. */
+void *
+route_set_community_additive_compile (char *arg)
+{
+  struct community *com;
+
+  com = community_str2com (arg);
+  if (! com)
+    return NULL;
+  return com;
+}
+
+/* Free function for set community. */
+void
+route_set_community_additive_free (void *rule)
+{
+  struct community *com = rule;
+  community_free (com);
+}
+
+/* Set community rule structure. */
+struct route_map_rule_cmd route_set_community_additive_cmd = 
+{
+  "community-additive",
+  route_set_community_additive,
+  route_set_community_additive_compile,
+  route_set_community_additive_free,
 };
 /* `set origin ORIGIN' */
 
@@ -1007,6 +983,276 @@ struct route_map_rule_cmd route_set_aggregator_as_cmd =
   route_set_aggregator_as_free,
 };
 
+#ifdef HAVE_IPV6
+/* `match ipv6 address IP_ACCESS_LIST' */
+
+route_map_result_t
+route_match_ipv6_address (void *rule, struct prefix *prefix, 
+			  route_map_object_t type, void *object)
+{
+  struct access_list *alist;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      alist = access_list_lookup (AF_INET6, (char *) rule);
+      if (alist == NULL)
+	return RM_NOMATCH;
+    
+      return (access_list_apply (alist, prefix) == FILTER_DENY ?
+	      RM_NOMATCH : RM_MATCH);
+    }
+  return RM_NOMATCH;
+}
+
+void *
+route_match_ipv6_address_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ipv6_address_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for ip address matching. */
+struct route_map_rule_cmd route_match_ipv6_address_cmd =
+{
+  "ipv6 address",
+  route_match_ipv6_address,
+  route_match_ipv6_address_compile,
+  route_match_ipv6_address_free
+};
+
+/* `match ipv6 next-hop IP_ADDRESS' */
+
+route_map_result_t
+route_match_ipv6_next_hop (void *rule, struct prefix *prefix, 
+			   route_map_object_t type, void *object)
+{
+  struct in6_addr *addr;
+  struct bgp_info *bgp_info;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      addr = rule;
+      bgp_info = object;
+    
+      if (IPV6_ADDR_SAME (&bgp_info->attr->mp_nexthop_global, rule))
+	return RM_MATCH;
+
+      if (bgp_info->attr->mp_nexthop_len == 32 &&
+	  IPV6_ADDR_SAME (&bgp_info->attr->mp_nexthop_local, rule))
+	return RM_MATCH;
+
+      return RM_NOMATCH;
+    }
+
+  return RM_NOMATCH;
+}
+
+void *
+route_match_ipv6_next_hop_compile (char *arg)
+{
+  struct in6_addr *addr;
+  int ret;
+
+  addr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in6_addr));
+
+  ret = inet_pton (AF_INET6, arg, &addr);
+  if (!ret)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, addr);
+      return NULL;
+    }
+
+  return addr;
+}
+
+void
+route_match_ipv6_next_hop_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ipv6_next_hop_cmd =
+{
+  "ipv6 next-hop",
+  route_match_ipv6_next_hop,
+  route_match_ipv6_next_hop_compile,
+  route_match_ipv6_next_hop_free
+};
+
+/* `match ipv6 prefix-list PREFIX_LIST' */
+
+route_map_result_t
+route_match_ipv6_prefix_list (void *rule, struct prefix *prefix, 
+			      route_map_object_t type, void *object)
+{
+  struct prefix_list *plist;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      plist = prefix_list_lookup (AF_INET6, (char *) rule);
+      if (plist == NULL)
+	return RM_NOMATCH;
+    
+      return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
+	      RM_NOMATCH : RM_MATCH);
+    }
+  return RM_NOMATCH;
+}
+
+void *
+route_match_ipv6_prefix_list_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ipv6_prefix_list_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ipv6_prefix_list_cmd =
+{
+  "ipv6 prefix-list",
+  route_match_ipv6_prefix_list,
+  route_match_ipv6_prefix_list_compile,
+  route_match_ipv6_prefix_list_free
+};
+
+/* `set ipv6 nexthop global IP_ADDRESS' */
+
+/* Set nexthop to object.  ojbect must be pointer to struct attr. */
+route_map_result_t
+route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, 
+			       route_map_object_t type, void *object)
+{
+  struct in6_addr *address;
+  struct bgp_info *bgp_info;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      /* Fetch routemap's rule information. */
+      address = rule;
+      bgp_info = object;
+    
+      /* Set next hop value. */ 
+      bgp_info->attr->mp_nexthop_global = *address;
+    
+      /* Set nexthop length. */
+      if (bgp_info->attr->mp_nexthop_len == 0)
+	bgp_info->attr->mp_nexthop_len = 16;
+    }
+
+  return RM_OKAY;
+}
+
+/* Route map `ip next-hop' compile function.  Given string is converted
+   to struct in_addr structure. */
+void *
+route_set_ipv6_nexthop_global_compile (char *arg)
+{
+  int ret;
+  struct in6_addr *address;
+
+  address = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in6_addr));
+
+  ret = inet_pton (AF_INET6, arg, address);
+
+  if (ret == 0)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, address);
+      return NULL;
+    }
+
+  return address;
+}
+
+/* Free route map's compiled `ip next-hop' value. */
+void
+route_set_ipv6_nexthop_global_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for ip nexthop set. */
+struct route_map_rule_cmd route_set_ipv6_nexthop_global_cmd =
+{
+  "ipv6 next-hop global",
+  route_set_ipv6_nexthop_global,
+  route_set_ipv6_nexthop_global_compile,
+  route_set_ipv6_nexthop_global_free
+};
+
+/* `set ipv6 nexthop local IP_ADDRESS' */
+
+/* Set nexthop to object.  ojbect must be pointer to struct attr. */
+route_map_result_t
+route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix, 
+			      route_map_object_t type, void *object)
+{
+  struct in6_addr *address;
+  struct bgp_info *bgp_info;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      /* Fetch routemap's rule information. */
+      address = rule;
+      bgp_info = object;
+    
+      /* Set next hop value. */ 
+      bgp_info->attr->mp_nexthop_local = *address;
+    
+      /* Set nexthop length. */
+      if (bgp_info->attr->mp_nexthop_len != 32)
+	bgp_info->attr->mp_nexthop_len = 32;
+    }
+
+  return RM_OKAY;
+}
+
+/* Route map `ip nexthop' compile function.  Given string is converted
+   to struct in_addr structure. */
+void *
+route_set_ipv6_nexthop_local_compile (char *arg)
+{
+  int ret;
+  struct in6_addr *address;
+
+  address = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in6_addr));
+
+  ret = inet_pton (AF_INET6, arg, address);
+
+  if (ret == 0)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, address);
+      return NULL;
+    }
+
+  return address;
+}
+
+/* Free route map's compiled `ip nexthop' value. */
+void
+route_set_ipv6_nexthop_local_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for ip nexthop set. */
+struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
+{
+  "ipv6 next-hop local",
+  route_set_ipv6_nexthop_local,
+  route_set_ipv6_nexthop_local_compile,
+  route_set_ipv6_nexthop_local_free
+};
+#endif /* HAVE_IPV6 */
+
 /* Add bgp route map rule. */
 int
 bgp_route_match_add (struct vty *vty, struct route_map_index *index,
@@ -1020,11 +1266,11 @@ bgp_route_match_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -1045,11 +1291,11 @@ bgp_route_match_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -1070,11 +1316,11 @@ bgp_route_set_add (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -1095,11 +1341,11 @@ bgp_route_set_delete (struct vty *vty, struct route_map_index *index,
       switch (ret)
 	{
 	case ROUTE_MAP_RULE_MISSING:
-	  vty_out (vty, "Can't find rule.\r\n");
+	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Argument is malformed.\r\n");
+	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
 	}
@@ -1175,6 +1421,29 @@ DEFUN (no_match_ip_next_hop,
        "IP Address of the next hop\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+DEFUN (match_ip_prefix_list, 
+       match_ip_prefix_list_cmd,
+       "match ip prefix-list PREFIX_LIST",
+       MATCH_STR
+       IP_STR
+       "prefix-list\n"
+       "prefix-list name\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ip prefix-list", argv[0]);
+}
+
+DEFUN (no_match_ip_prefix_list,
+       no_match_ip_prefix_list_cmd,
+       "no match ip prefix-list PREFIX_LIST",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "prefix-list\n"
+       "prefix-list name\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "ip prefix-list", argv[0]);
 }
 
 DEFUN (match_metric, 
@@ -1555,14 +1824,14 @@ DEFUN (set_aggregator_as,
   as = strtoul (argv[0], &endptr, 10);
   if (as == 0 || as == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "AS path value malformed\r\n");
+      vty_out (vty, "AS path value malformed%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = inet_aton (argv[1], &address);
   if (ret == 0)
     {
-      vty_out (vty, "Aggregator IP Address is invalid\r\n");
+      vty_out (vty, "Aggregator IP Address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1597,14 +1866,14 @@ DEFUN (no_set_aggregator_as,
   as = strtoul (argv[0], &endptr, 10);
   if (as == 0 || as == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "AS path value malformed\r\n");
+      vty_out (vty, "AS path value malformed%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   ret = inet_aton (argv[1], &address);
   if (ret == 0)
     {
-      vty_out (vty, "Aggregator IP Address is invalid\r\n");
+      vty_out (vty, "Aggregator IP Address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1618,6 +1887,140 @@ DEFUN (no_set_aggregator_as,
   XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
 
   return ret;
+}
+
+DEFUN (set_community_additive,
+       set_community_additive_cmd,
+       "set community-additive .COMMUNITY",
+       "Set value\n"
+       "Add community value to existing one\n"
+       "Community value")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_add (vty, vty->index, "community-additive", str);
+}
+
+DEFUN (no_set_community_additive,
+       no_set_community_additive_cmd,
+       "no set community-additive .COMMUNITY",
+       NO_STR
+       "Set value\n"
+       "Community\n"
+       "Community value to existing one\n"
+       "Community value")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_delete (vty, vty->index, "community-additive", str);
+}
+
+#ifdef HAVE_IPV6
+DEFUN (match_ipv6_address, 
+       match_ipv6_address_cmd,
+       "match ipv6 address ACCESS_LIST",
+       MATCH_STR
+       IPV6_STR
+       "Address\n"
+       "IPv6 Address access-list match command\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ipv6 address", argv[0]);
+}
+
+DEFUN (no_match_ipv6_address, 
+       no_match_ipv6_address_cmd,
+       "no match ipv6 address ACCESS_LIST",
+       NO_STR
+       MATCH_STR
+       IPV6_STR
+       "IPv6 address\n"
+       "Delete IPv6 Address access-list match command\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "ipv6 address", argv[0]);
+}
+
+DEFUN (match_ipv6_next_hop, 
+       match_ipv6_next_hop_cmd,
+       "match ipv6 next-hop IP_ADDR",
+       MATCH_STR
+       IPV6_STR
+       "Next hop of the route\n"
+       "IPv6 Address of the next hop\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ipv6 next-hop", argv[0]);
+}
+
+DEFUN (no_match_ipv6_next_hop,
+       no_match_ipv6_next_hop_cmd,
+       "no match ipv6 next-hop IP_ADDR",
+       NO_STR
+       MATCH_STR
+       IPV6_STR
+       "Next hop of the route\n"
+       "IPv6 Address of the next hop\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "ipv6 next-hop", argv[0]);
+}
+
+DEFUN (match_ipv6_prefix_list, 
+       match_ipv6_prefix_list_cmd,
+       "match ipv6 prefix-list PREFIX_LIST",
+       MATCH_STR
+       IPV6_STR
+       "prefix-list\n"
+       "prefix-list name\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ipv6 prefix-list", argv[0]);
+}
+
+DEFUN (no_match_ipv6_prefix_list,
+       no_match_ipv6_prefix_list_cmd,
+       "no match ipv6 prefix-list PREFIX_LIST",
+       NO_STR
+       MATCH_STR
+       IPV6_STR
+       "prefix-list\n"
+       "prefix-list name\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "ipv6 prefix-list", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_global,
@@ -1669,7 +2072,8 @@ DEFUN (no_set_ipv6_nexthop_local,
 {
   return bgp_route_set_delete (vty, vty->index, "ipv6 next-hop local", argv[0]);
 }
-
+#endif /* HAVE_IPV6 */
+
 /* Initialization of route map. */
 void
 bgp_route_map_init ()
@@ -1680,6 +2084,7 @@ bgp_route_map_init ()
 
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_ip_next_hop_cmd);
+  route_map_install_match (&route_match_ip_prefix_list_cmd);
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_metric_cmd);
   route_map_install_match (&route_match_community_cmd);
@@ -1693,11 +2098,14 @@ bgp_route_map_init ()
   route_map_install_set (&route_set_origin_cmd);
   route_map_install_set (&route_set_atomic_aggregate_cmd);
   route_map_install_set (&route_set_aggregator_as_cmd);
+  route_map_install_set (&route_set_community_additive_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
   install_element (RMAP_NODE, &match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
+  install_element (RMAP_NODE, &match_ip_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_prefix_list_cmd);
   install_element (RMAP_NODE, &match_aspath_cmd);
   install_element (RMAP_NODE, &no_match_aspath_cmd);
   install_element (RMAP_NODE, &match_metric_cmd);
@@ -1724,13 +2132,26 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &set_aggregator_as_cmd);
   install_element (RMAP_NODE, &no_set_aggregator_as_cmd);
 
+  /* set community-additive. */
+  install_element (RMAP_NODE, &set_community_additive_cmd);
+  install_element (RMAP_NODE, &no_set_community_additive_cmd);
+
 #ifdef HAVE_IPV6
+  route_map_install_match (&route_match_ipv6_address_cmd);
+  route_map_install_match (&route_match_ipv6_next_hop_cmd);
+  route_map_install_match (&route_match_ipv6_prefix_list_cmd);
   route_map_install_set (&route_set_ipv6_nexthop_global_cmd);
   route_map_install_set (&route_set_ipv6_nexthop_local_cmd);
 
+  install_element (RMAP_NODE, &match_ipv6_address_cmd);
+  install_element (RMAP_NODE, &no_match_ipv6_address_cmd);
+  install_element (RMAP_NODE, &match_ipv6_next_hop_cmd);
+  install_element (RMAP_NODE, &no_match_ipv6_next_hop_cmd);
+  install_element (RMAP_NODE, &match_ipv6_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ipv6_prefix_list_cmd);
   install_element (RMAP_NODE, &set_ipv6_nexthop_global_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_cmd);
   install_element (RMAP_NODE, &set_ipv6_nexthop_local_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_local_cmd);
-#endif
+#endif /* HAVE_IPV6 */
 }

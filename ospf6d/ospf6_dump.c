@@ -308,10 +308,10 @@ ospf6_dump_hello (struct iovec *message)
 static void
 ospf6_dump_dbdesc (struct iovec *message)
 {
-  struct database_description *dbdesc;
+  struct ospf6_dbdesc *dbdesc;
   char dbdesc_bit[4], *p;
 
-  dbdesc = (struct database_description *) (*message).iov_base;
+  dbdesc = (struct ospf6_dbdesc *) (*message).iov_base;
   p = dbdesc_bit;
 
   /* Initialize bit */
@@ -328,8 +328,8 @@ ospf6_dump_dbdesc (struct iovec *message)
   *p = '\0';
 
   zlog_info ("  DbDesc: opt:xxx ifmtu:%hu bit:%s seqnum:%lu",
-             ntohs (dbdesc->interface_mtu), dbdesc_bit,
-             ntohl (dbdesc->sequence_number));
+             ntohs (dbdesc->ifmtu), dbdesc_bit,
+             ntohl (dbdesc->seqnum));
 }
 
 static void
@@ -366,9 +366,10 @@ ospf6_dump_message (struct iovec *message)
   inet_ntop (AF_INET, &o6hdr->area_id, areaid_str, sizeof (areaid_str));
 
   zlog_info ("  OSPFv%d type:%d len:%hu"
-             " rtrid:%s areaid:%s instance:%d",
+             " rtrid:%s areaid:%s cksum:%hx instance:%d",
               o6hdr->version, o6hdr->type, ntohs (o6hdr->len),
-              rtrid_str, areaid_str, o6hdr->instance_id);
+              rtrid_str, areaid_str, ntohs (o6hdr->cksum),
+              o6hdr->instance_id);
 
   switch (o6hdr->type)
     {
@@ -671,82 +672,82 @@ DEFUN (show_debugging_ospf6,
        "Debugging infomation\n"
        OSPF6_STR)
 {
-  vty_out (vty, "OSPF6 debugging status:\r\n");
+  vty_out (vty, "OSPF6 debugging status:%s", VTY_NEWLINE);
 
   /* messages */
   /* hello */
   if (IS_OSPF6_DUMP_HELLO)
-    vty_out (vty, "  OSPF6 Hello Message: on\r\n");
+    vty_out (vty, "  OSPF6 Hello Message: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Hello Message: off\r\n");
+    vty_out (vty, "  OSPF6 Hello Message: off%s", VTY_NEWLINE);
   /* dbdesc */
   if (IS_OSPF6_DUMP_DBDESC)
-    vty_out (vty, "  OSPF6 Database Description Message: on\r\n");
+    vty_out (vty, "  OSPF6 Database Description Message: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Database Description Message: off\r\n");
+    vty_out (vty, "  OSPF6 Database Description Message: off%s", VTY_NEWLINE);
   /* lsreq */
   if (IS_OSPF6_DUMP_LSREQ)
-    vty_out (vty, "  OSPF6 Link State Request Message: on\r\n");
+    vty_out (vty, "  OSPF6 Link State Request Message: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Link State Request Message: off\r\n");
+    vty_out (vty, "  OSPF6 Link State Request Message: off%s", VTY_NEWLINE);
   /* lsupdate */
   if (IS_OSPF6_DUMP_LSUPDATE)
-    vty_out (vty, "  OSPF6 Link State Update Message: on\r\n");
+    vty_out (vty, "  OSPF6 Link State Update Message: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Link State Update Message: off\r\n");
+    vty_out (vty, "  OSPF6 Link State Update Message: off%s", VTY_NEWLINE);
   /* lsack */
   if (IS_OSPF6_DUMP_LSACK)
-    vty_out (vty, "  OSPF6 Link State Acknowledgement Message: on\r\n");
+    vty_out (vty, "  OSPF6 Link State Acknowledgement Message: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Link State Acknowledgement Message: off\r\n");
+    vty_out (vty, "  OSPF6 Link State Acknowledgement Message: off%s", VTY_NEWLINE);
 
   /* neighbor */
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    vty_out (vty, "  OSPF6 Neighbor: on\r\n");
+    vty_out (vty, "  OSPF6 Neighbor: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Neighbor: off\r\n");
+    vty_out (vty, "  OSPF6 Neighbor: off%s", VTY_NEWLINE);
 
   /* interface */
   if (IS_OSPF6_DUMP_INTERFACE)
-    vty_out (vty, "  OSPF6 Interface: on\r\n");
+    vty_out (vty, "  OSPF6 Interface: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Interface: off\r\n");
+    vty_out (vty, "  OSPF6 Interface: off%s", VTY_NEWLINE);
 
   /* area */
   if (IS_OSPF6_DUMP_AREA)
-    vty_out (vty, "  OSPF6 Area: on\r\n");
+    vty_out (vty, "  OSPF6 Area: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Area: off\r\n");
+    vty_out (vty, "  OSPF6 Area: off%s", VTY_NEWLINE);
 
   /* lsa */
   if (IS_OSPF6_DUMP_LSA)
-    vty_out (vty, "  OSPF6 LSA: on\r\n");
+    vty_out (vty, "  OSPF6 LSA: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 LSA: off\r\n");
+    vty_out (vty, "  OSPF6 LSA: off%s", VTY_NEWLINE);
 
   /* zebra */
   if (IS_OSPF6_DUMP_ZEBRA)
-    vty_out (vty, "  OSPF6 Zebra: on\r\n");
+    vty_out (vty, "  OSPF6 Zebra: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Zebra: off\r\n");
+    vty_out (vty, "  OSPF6 Zebra: off%s", VTY_NEWLINE);
 
   /* config */
   if (IS_OSPF6_DUMP_CONFIG)
-    vty_out (vty, "  OSPF6 Config: on\r\n");
+    vty_out (vty, "  OSPF6 Config: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Config: off\r\n");
+    vty_out (vty, "  OSPF6 Config: off%s", VTY_NEWLINE);
 
   /* lsa database exchange */
   if (IS_OSPF6_DUMP_DBEX)
-    vty_out (vty, "  OSPF6 DbEx: on\r\n");
+    vty_out (vty, "  OSPF6 DbEx: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 DbEx: off\r\n");
+    vty_out (vty, "  OSPF6 DbEx: off%s", VTY_NEWLINE);
 
   /* route */
   if (IS_OSPF6_DUMP_ROUTE)
-    vty_out (vty, "  OSPF6 Route: on\r\n");
+    vty_out (vty, "  OSPF6 Route: on%s", VTY_NEWLINE);
   else
-    vty_out (vty, "  OSPF6 Route: off\r\n");
+    vty_out (vty, "  OSPF6 Route: off%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }

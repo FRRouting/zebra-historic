@@ -1,5 +1,271 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.80
+
+* access-list
+
+  New access-list name space `ipv6 access-list' is added.  At the same
+  time, `access-list' statemant only accepts IPv4 prefix.  Please be
+  careful if you use IPv6 filtering.  You will need to change your
+  configuration.  For IPv6 filtering please use `ipv6 access-list'.
+  
+  As of zebra-0.7x, user can use `access-list' for both IPv4 and IPv6
+  filtering.
+  
+  ! zebra-0.7x
+  access-list DML-net permit 203.181.89.0/24
+  access-list DML-net permit 3ffe:506::0/32
+  access-list DML-net deny any
+  !
+  
+  Above configuration is not valid for zebra-08x.  Please add `ipv6'
+  before 'access-list' when you configure IPv6 filtering.
+  
+  ! zebra-0.8x
+  access-list DML-net permit 203.181.89.0/24
+  access-list DML-net deny any
+  !
+  ipv6 access-list DML-net permit 3ffe:506::0/32
+  ipv6 access-list DML-net deny any
+  !
+
+* prefix-list
+
+  And also new prefix-list name space `ipv6 prefix-list' is added.  It
+  is the same as the change of `access-list'. `ip prefix-list' now only
+  accept IPv4 prefix.  It was source of confusion that `ip prefix-list'
+  can be used both IPv4 and IPv6 filtering.  Now name space is separated
+  to clear the meaning of the filter.
+  
+  If you use `ip prefix-list' for IPv6 filtering, please change the
+  stetement.
+  
+  ! zebra-0.7x
+  ip prefix-list 6bone-filter seq 5 permit 3ffe::/17 le 24 ge 24
+  ip prefix-list 6bone-filter seq 10 permit 3ffe:8000::/17 le 28 ge 28
+  ip prefix-list 6bone-filter seq 12 deny 3ffe::/16
+  ip prefix-list 6bone-filter seq 15 permit 2000::/3 le 16 ge 16
+  ip prefix-list 6bone-filter seq 20 permit 2001::/16 le 35 ge 35
+  ip prefix-list 6bone-filter seq 30 deny any
+  !
+  
+  Now user can explicitly configure it as IPv6 prefix-list.
+  
+  ! zebra-0.8x
+  ipv6 prefix-list 6bone-filter seq 5 permit 3ffe::/17 le 24 ge 24
+  ipv6 prefix-list 6bone-filter seq 10 permit 3ffe:8000::/17 le 28 ge 28
+  ipv6 prefix-list 6bone-filter seq 12 deny 3ffe::/16
+  ipv6 prefix-list 6bone-filter seq 15 permit 2000::/3 le 16 ge 16
+  ipv6 prefix-list 6bone-filter seq 20 permit 2001::/16 le 35 ge 35
+  ipv6 prefix-list 6bone-filter seq 30 deny any
+  !
+
+* RIP configuration
+
+  If you want to filter only default route (0.0.0.0/0) and permit other
+  routes, it was hard to do that.  Now `ip prefix-list' can be used for
+  RIP route filtering.
+  
+  New statement:
+  
+  `distribute-list prefix PLIST_NAME (in|out) IFNAME'
+  
+  is added to ripd.  So you can configure on eth0 interface accept all
+  routes other than default routes.
+  
+  !
+  router rip
+   distribute-list prefix filter-default in eth0
+  !
+  ip prefix-list filter-default deny 0.0.0.0/0 le 0
+  ip prefix-list filter-default permit any
+  !
+
+* RIPng configuration
+
+  Same change is done for ripngd.  You can use `ipv6 prefix-list' for
+  filtering.
+  
+  !
+  router ripng
+   distribute-list prefix filter-default in eth0
+  !
+  ipv6 prefix-list filter-default deny ::/0 le 0
+  ipv6 prefix-list filter-default permit any
+  !
+
+* BGP configuration
+
+  So far, Multiprotocol Extensions for BGP-4 (RFC2283) configuration is
+  done with traditional IPv4 peering statement like blow.
+  
+  !
+  router bgp 7675
+   neighbor 3ffe:506::1 remote-as 2500
+   neighbor 3ffe:506::1 prefix-list 6bone-filter out
+  !
+  
+  For separating configuration IPv4 and IPv6, and for retaining Cisco
+  configuration compatibility, now IPv6 configuration is done by IPv6
+  specific statement.  IPv6 BGP configuration is done by statement which
+  start from `ipv6 bgp'.
+  
+  !
+  router bgp 7675
+  !
+  ipv6 bgp neighbor 3ffe:506::1 remote-as 2500
+  ipv6 bgp neighbor 3ffe:506::1 prefix-list 6bone-filter out
+  !
+  
+  It is hard to support the multiple BGP instance under current
+  configuration structure.  So `bgp multiple-instance' is disabled.
+  
+  At the same time some IPv6 specific commands are deleted from IPv4
+  configuration.
+  
+  o redistribute ripng
+  o redistribute ospf6
+  o neighbor PEER version BGP_VERSION
+  o neighbor PEER interface IFNAME
+  
+  Those commands are only accepted as like below.
+  
+  o ipv6 bgp redistribute ripng
+  o ipv6 bgp redistribute ospf6
+  o ipv6 bgp neighbor PEER version BGP_VERSION
+  o ipv6 bgp neighbor PEER interface IFNAME
+  
+  And below new commands are added.
+  
+  o ipv6 bgp network IPV6_PREFIX
+  o ipv6 bgp redistribute static
+  o ipv6 bgp redistribute connected
+  o ipv6 bgp neighbor PEER remote-as <1-65535> [passive]
+  o ipv6 bgp neighbor PEER ebgp-multihop [TTL]
+  o ipv6 bgp neighbor PEER description DESCRIPTION
+  o ipv6 bgp neighbor PEER shutdown
+  o ipv6 bgp neighbor PEER route-reflector-client
+  o ipv6 bgp neighbor PEER update-source IFNAME
+  o ipv6 bgp neighbor PEER next-hop-self
+  o ipv6 bgp neighbor PEER timers holdtime <0-65535>
+  o ipv6 bgp neighbor PEER timers keepalive <0-65535>
+  o ipv6 bgp neighbor PEER send-community
+  o ipv6 bgp neighbor PEER weight <0-65535>
+  o ipv6 bgp neighbor PEER default-originate
+  o ipv6 bgp neighbor PEER filter-list FILTER_LIST_NAME (in|out)
+  o ipv6 bgp neighbor PEER prefix-list PREFIX_LIST_NAME (in|out)
+  o ipv6 bgp neighbor PEER distribute-list AS_LIST_NAME (in|out)
+  o ipv6 bgp neighbor PEER route-map ROUTE_MAP_NAME (in|out)
+  
+  And some utility commands are introduced.
+  
+  o clear ipv6 bgp [PEER]
+  o show ipv6 bgp neighbors [PEER]
+  o show ipv6 bgp summary
+  
+  I hope these changes are easy to understand for current Zebra users...
+
+* To restrict connection to VTY interface.
+
+  It used to be both IPv4 and IPv6 filter can be specified with one
+  access-list.  Then the access-list can be appried to VTY interface
+  with `access-class' stetement in `line vty' node.  Below is example in
+  zebra-0.7x.
+  
+  !
+  access-list local-only permit 127.0.0.1/32
+  access-list local-only permit ::1/128
+  access-list local-only deny any
+  !
+  line vty
+   access-class local-only
+  !
+  
+  Now IPv4 and IPv6 filter have each name space.  It is not possible to
+  specify IPv4 and IPv6 filter with one access-list.  For setting IPv6
+  access-list in `line vty', `ipv6 access-class' statement is
+  introduced.  Let me show the configuration in zebra-0.8x.
+  
+  !
+  access-list local-only permit 127.0.0.1/32
+  access-list local-only deny any
+  !
+  ipv6 access-list local-only permit ::1/128
+  ipv6 access-list local-only dny any
+  !
+  line vty
+   access-class local-only
+   ipv6 access-class local-only
+  !
+
+* route-map
+
+  New IPv6 related route-map match commands are added.
+  
+  o match ipv6 address
+  o match ipv6 next-hop
+  
+  Please change your configuration if you use IP match statement for
+  IPv6 route.
+  
+  zebra-0.7x config
+  =================
+  !
+  access-list all permit any
+  !
+  route-map set-nexthop permit 10
+   match ip address all
+   set ipv6 next-hop global 3ffe:506::1
+   set ipv6 next-hop local fe80::cbb5:591a
+  !
+  
+  zebra-0.8x config
+  =================
+  !
+  ipv6 access-list all permit any
+  !
+  route-map set-nexthop permit 10
+   match ipv6 address all
+   set ipv6 next-hop global 3ffe:506::1
+   set ipv6 next-hop local fe80::cbb5:591a
+  !
+
+* zebra connection
+
+  Protocol daemon such as ripd, bgpd, ospfd will reconnect zebra daemon
+  when the connection fail.  Those daemons try to connect zebra every 10
+  seconds first three trial, then the interval changed to 60 seconds.
+  After all, if ten connections are fail, protocol daemon give up the
+  connection to the zebra daemon.
+
+* SNMP support (is not yet finished)
+
+  Zebra uses SMUX protocol (RFC1227) for making communication with SNMP
+  agent.  Currently lib/smux.c can be compiled only with ucd-snmp-4.0.1
+  and http://ucd-snmp.ucdavis.edu/patches/012.patch.  It can not be
+  compiled with ucd-snmp-3.6.2.
+  
+  After applying the patch to ucd-snmp-4.0.1, please configure it with
+  SMUX module.
+  
+  % configure --with-mib-modules=smux
+  
+  After compile & install ucd-snmp-4.0.1, you will need to configure
+  smuxpeer.  I'm now using below configuration.
+  
+  /usr/local/share/snmp/snmpd.conf
+  ================================
+  smuxpeer 1.3.6.1.6.3.1 test
+  
+  Above 1.3.6.1.6.3.1 and test is temporary configuration which is hard
+  coded in lib/smux.c. Yes, I know it is bad, I'll change it ASAP.
+
+* HUP signal treatment
+
+  From zebra-0.80, ripd will reload it's configuration file when ripd
+  receives HUP signal.  Other daemon such as bgpd, ospfd will support
+  HUP signal treatment soon.
+
 * Changes in zebra-0.79
 
 * Changes in zebra

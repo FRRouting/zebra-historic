@@ -1,3 +1,8 @@
+1999-09-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_distribute_update): Fix bug of updating
+	access-list and prefix-list.
+
 1999-09-07  URA Hiroshi <ura@hiru.aoba.yokohama.jp>
 
 	* ripngd.c (ripng_recv_packet): Change CMSG_DATA cast from (u_char

@@ -1,6 +1,5 @@
-/*
- * Distribute list functions
- * Copyright (C) 1998 Kunihiro Ishiguro
+/* Distribute list functions
+ * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -23,32 +22,18 @@
 #include <zebra.h>
 
 #include "hash.h"
-#include "linklist.h"
 #include "if.h"
 #include "filter.h"
+#include "command.h"
+#include "distribute.h"
 #include "memory.h"
-
-/* distribute-list sit1-filter out sit1 */
-
-/* Disctirubte list types. */
-enum distribute_type
-{
-  DISTRIBUTE_IN,
-  DISTRIBUTE_OUT,
-  DISTRIBUTE_MAX
-};
-
-struct distribute
-{
-  /* Name of the interface. */
-  char *ifname;
-
-  /* Filter name of `in' and `out' */
-  char *slot[DISTRIBUTE_MAX];
-};
 
 /* Hash of distribute list. */
 struct Hash *disthash;
+
+/* Hook functions. */
+void (*distribute_add_hook) (struct distribute *);
+void (*distribute_delete_hook) (struct distribute *);
 
 struct distribute *
 distribute_new ()
@@ -67,10 +52,16 @@ distribute_free (struct distribute *dist)
 {
   if (dist->ifname)
     free (dist->ifname);
-  if (dist->slot[DISTRIBUTE_IN])
-    free (dist->slot[DISTRIBUTE_IN]);
-  if (dist->slot[DISTRIBUTE_OUT])
-    free (dist->slot[DISTRIBUTE_OUT]);
+
+  if (dist->list[DISTRIBUTE_IN])
+    free (dist->list[DISTRIBUTE_IN]);
+  if (dist->list[DISTRIBUTE_OUT])
+    free (dist->list[DISTRIBUTE_OUT]);
+
+  if (dist->prefix[DISTRIBUTE_IN])
+    free (dist->prefix[DISTRIBUTE_IN]);
+  if (dist->prefix[DISTRIBUTE_OUT])
+    free (dist->prefix[DISTRIBUTE_OUT]);
 
   XFREE (MTYPE_DISTRIBUTE, dist);
 }
@@ -89,6 +80,19 @@ distribute_lookup (char *ifname)
   return dist;
 }
 
+void
+distribute_list_add_hook (void (*func) (struct distribute *))
+{
+  distribute_add_hook = func;
+}
+
+void
+distribute_list_delete_hook (void (*func) (struct distribute *))
+{
+  distribute_delete_hook = func;
+}
+
+#if 0
 /* Set distribute list to the interface */
 void
 distribute_apply (struct distribute *dist)
@@ -101,9 +105,9 @@ distribute_apply (struct distribute *dist)
     return;
 
   /* Set input distribute_list */
-  if (dist->slot[DISTRIBUTE_IN])
+  if (dist->list[DISTRIBUTE_IN])
     {
-      alist = access_list_lookup (dist->slot[DISTRIBUTE_IN]);
+      alist = access_list_lookup (dist->list[DISTRIBUTE_IN]);
       if (alist)
 	ifp->distribute_in = alist;
     }
@@ -111,9 +115,9 @@ distribute_apply (struct distribute *dist)
     ifp->distribute_in = NULL;
 
   /* Set output distribute_list */
-  if (dist->slot[DISTRIBUTE_OUT])
+  if (dist->list[DISTRIBUTE_OUT])
     {
-      alist = access_list_lookup (dist->slot[DISTRIBUTE_OUT]);
+      alist = access_list_lookup (dist->list[DISTRIBUTE_OUT]);
       if (alist)
 	ifp->distribute_out = alist;
     }
@@ -158,6 +162,7 @@ distribute_apply_out (struct interface *ifp, struct prefix *p)
 
   return FILTER_PERMIT;
 }
+#endif /* 0 */
 
 /* Make new distribute list and push into hash. */
 struct distribute *
@@ -203,17 +208,12 @@ void
 distribute_print (struct distribute *dist)
 {
   printf ("distribute-list %s in %s out %s\n", dist->ifname, 
-	  dist->slot[DISTRIBUTE_IN], dist->slot[DISTRIBUTE_OUT]);
+	  dist->list[DISTRIBUTE_IN], dist->list[DISTRIBUTE_OUT]);
 }
 
-/* Below is vty related part. */
-#include "vector.h"
-#include "vty.h"
-#include "command.h"
-
 /* Set access-list name to the distribute list. */
 struct distribute *
-distribute_set (char *ifname, enum distribute_type type, char *alist_name)
+distribute_list_set (char *ifname, enum distribute_type type, char *alist_name)
 {
   struct distribute *dist;
 
@@ -221,19 +221,19 @@ distribute_set (char *ifname, enum distribute_type type, char *alist_name)
 
   if (type == DISTRIBUTE_IN)
     {
-      if (dist->slot[DISTRIBUTE_IN])
-	free (dist->slot[DISTRIBUTE_IN]);
-      dist->slot[DISTRIBUTE_IN] = strdup (alist_name);
+      if (dist->list[DISTRIBUTE_IN])
+	free (dist->list[DISTRIBUTE_IN]);
+      dist->list[DISTRIBUTE_IN] = strdup (alist_name);
     }
   if (type == DISTRIBUTE_OUT)
     {
-      if (dist->slot[DISTRIBUTE_OUT])
-	free (dist->slot[DISTRIBUTE_OUT]);
-      dist->slot[DISTRIBUTE_OUT] = strdup (alist_name);
+      if (dist->list[DISTRIBUTE_OUT])
+	free (dist->list[DISTRIBUTE_OUT]);
+      dist->list[DISTRIBUTE_OUT] = strdup (alist_name);
     }
 
   /* Apply this distribute-list to the interface. */
-  distribute_apply (dist);
+  (*distribute_add_hook) (dist);
   
   return dist;
 }
@@ -241,7 +241,8 @@ distribute_set (char *ifname, enum distribute_type type, char *alist_name)
 /* Unset distribute-list.  If matched distribute-list exist then
    return 1. */
 int
-distribute_unset (char *ifname, enum distribute_type type, char *alist_name)
+distribute_list_unset (char *ifname, enum distribute_type type, 
+		       char *alist_name)
 {
   struct distribute *dist;
 
@@ -251,32 +252,34 @@ distribute_unset (char *ifname, enum distribute_type type, char *alist_name)
 
   if (type == DISTRIBUTE_IN)
     {
-      if (!dist->slot[DISTRIBUTE_IN])
+      if (!dist->list[DISTRIBUTE_IN])
 	return 0;
-      if (strcmp (dist->slot[DISTRIBUTE_IN], alist_name) != 0)
+      if (strcmp (dist->list[DISTRIBUTE_IN], alist_name) != 0)
 	return 0;
 
-      free (dist->slot[DISTRIBUTE_IN]);
-      dist->slot[DISTRIBUTE_IN] = NULL;      
+      free (dist->list[DISTRIBUTE_IN]);
+      dist->list[DISTRIBUTE_IN] = NULL;      
     }
 
   if (type == DISTRIBUTE_OUT)
     {
-      if (!dist->slot[DISTRIBUTE_OUT])
+      if (!dist->list[DISTRIBUTE_OUT])
 	return 0;
-      if (strcmp (dist->slot[DISTRIBUTE_OUT], alist_name) != 0)
+      if (strcmp (dist->list[DISTRIBUTE_OUT], alist_name) != 0)
 	return 0;
 
-      free (dist->slot[DISTRIBUTE_OUT]);
-      dist->slot[DISTRIBUTE_OUT] = NULL;      
+      free (dist->list[DISTRIBUTE_OUT]);
+      dist->list[DISTRIBUTE_OUT] = NULL;      
     }
 
   /* Apply this distribute-list to the interface. */
-  distribute_apply (dist);
+  (*distribute_delete_hook) (dist);
 
   /* If both out and in is NULL then free distribute list. */
-  if (dist->slot[DISTRIBUTE_IN] == NULL &&
-      dist->slot[DISTRIBUTE_OUT] == NULL)
+  if (dist->list[DISTRIBUTE_IN] == NULL &&
+      dist->list[DISTRIBUTE_OUT] == NULL &&
+      dist->prefix[DISTRIBUTE_IN] == NULL &&
+      dist->prefix[DISTRIBUTE_OUT] == NULL)
     {
       hash_pull (disthash, dist);
       distribute_free (dist);
@@ -285,30 +288,108 @@ distribute_unset (char *ifname, enum distribute_type type, char *alist_name)
   return 1;
 }
 
-DEFUN (districute_list, distribute_list_cmd,
+/* Set access-list name to the distribute list. */
+struct distribute *
+distribute_list_prefix_set (char *ifname, enum distribute_type type,
+			    char *plist_name)
+{
+  struct distribute *dist;
+
+  dist = distribute_get (ifname);
+
+  if (type == DISTRIBUTE_IN)
+    {
+      if (dist->prefix[DISTRIBUTE_IN])
+	free (dist->prefix[DISTRIBUTE_IN]);
+      dist->prefix[DISTRIBUTE_IN] = strdup (plist_name);
+    }
+  if (type == DISTRIBUTE_OUT)
+    {
+      if (dist->prefix[DISTRIBUTE_OUT])
+	free (dist->prefix[DISTRIBUTE_OUT]);
+      dist->prefix[DISTRIBUTE_OUT] = strdup (plist_name);
+    }
+
+  /* Apply this distribute-list to the interface. */
+  (*distribute_add_hook) (dist);
+  
+  return dist;
+}
+
+/* Unset distribute-list.  If matched distribute-list exist then
+   return 1. */
+int
+distribute_list_prefix_unset (char *ifname, enum distribute_type type,
+			      char *plist_name)
+{
+  struct distribute *dist;
+
+  dist = distribute_lookup (ifname);
+  if (!dist)
+    return 0;
+
+  if (type == DISTRIBUTE_IN)
+    {
+      if (!dist->prefix[DISTRIBUTE_IN])
+	return 0;
+      if (strcmp (dist->prefix[DISTRIBUTE_IN], plist_name) != 0)
+	return 0;
+
+      free (dist->prefix[DISTRIBUTE_IN]);
+      dist->prefix[DISTRIBUTE_IN] = NULL;      
+    }
+
+  if (type == DISTRIBUTE_OUT)
+    {
+      if (!dist->prefix[DISTRIBUTE_OUT])
+	return 0;
+      if (strcmp (dist->prefix[DISTRIBUTE_OUT], plist_name) != 0)
+	return 0;
+
+      free (dist->prefix[DISTRIBUTE_OUT]);
+      dist->prefix[DISTRIBUTE_OUT] = NULL;      
+    }
+
+  /* Apply this distribute-list to the interface. */
+  (*distribute_delete_hook) (dist);
+
+  /* If both out and in is NULL then free distribute list. */
+  if (dist->list[DISTRIBUTE_IN] == NULL &&
+      dist->list[DISTRIBUTE_OUT] == NULL &&
+      dist->prefix[DISTRIBUTE_IN] == NULL &&
+      dist->prefix[DISTRIBUTE_OUT] == NULL)
+    {
+      hash_pull (disthash, dist);
+      distribute_free (dist);
+    }
+
+  return 1;
+}
+
+DEFUN (distribute_list, distribute_list_cmd,
        "distribute-list ALIST_NAME (in|out) IFNAME",
-       "Distirbute list set\n"
-       "Distirbute list access-list name\n"
-       "Distribute list set to in\n"
-       "Distribute list set to out\n"
+       "Distribute list set\n"
+       "Distribute list access-list name\n"
+       "Distribute list set for input filtering\n"
+       "Distribute list set for output filtering\n"
        "Distribute list interface name\n")
 {
   enum distribute_type type;
   struct distribute *dist;
 
   /* Check of distribute list type. */
-  if (strcmp (argv[1], "in") == 0)
+  if (strncmp (argv[1], "i", 1) == 0)
     type = DISTRIBUTE_IN;
-  else if (strcmp (argv[1], "out") == 0)
+  else if (strncmp (argv[1], "o", 1) == 0)
     type = DISTRIBUTE_OUT;
   else
     {
-      vty_out (vty, "distribute list direction must be [in|out]\r\n");
+      vty_out (vty, "distribute list direction must be [in|out]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   /* Get interface name corresponding distribute list. */
-  dist = distribute_set (argv[2], type, argv[0]);
+  dist = distribute_list_set (argv[2], type, argv[0]);
 
   return CMD_SUCCESS;
 }       
@@ -316,41 +397,98 @@ DEFUN (districute_list, distribute_list_cmd,
 DEFUN (no_districute_list, no_distribute_list_cmd,
        "no distribute-list ALIST_NAME (in|out) IFNAME",
        NO_STR
-       "Distirbute list unset\n"
-       "Distirbute list access-list name\n"
-       "Distribute list to in\n"
-       "Distribute list to out\n"
+       "Distribute list unset\n"
+       "Distribute list access-list name\n"
+       "Distribute list for input filtering\n"
+       "Distribute list for output filtering\n"
        "Distribute list interface name\n")
 {
   int ret;
   enum distribute_type type;
 
   /* Check of distribute list type. */
-  if (strcmp (argv[1], "in") == 0)
+  if (strncmp (argv[1], "i", 1) == 0)
     type = DISTRIBUTE_IN;
-  else if (strcmp (argv[1], "out") == 0)
+  else if (strncmp (argv[1], "o", 1) == 0)
     type = DISTRIBUTE_OUT;
   else
     {
-      vty_out (vty, "distribute list direction must be [in|out]\r\n");
+      vty_out (vty, "distribute list direction must be [in|out]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
-  ret = distribute_unset (argv[2], type, argv[0]);
+  ret = distribute_list_unset (argv[2], type, argv[0]);
   if (! ret)
     {
-      vty_out (vty, "distribute list doesn't exist\r\n");
+      vty_out (vty, "distribute list doesn't exist%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   return CMD_SUCCESS;
 }       
 
-/* distribute-list node. */
-struct cmd_node distribute_node =
+DEFUN (districute_list_prefix, distribute_list_prefix_cmd,
+       "distribute-list prefix PLIST_NAME (in|out) IFNAME",
+       "Distribute list set\n"
+       "Distribute list for prefix-list\n"
+       "Distribute list prefix-list name\n"
+       "Distribute list set for input filtering\n"
+       "Distribute list set for output filtering\n"
+       "Distribute list interface name\n")
 {
-  DISTRIBUTE_NODE,
-  ""				/* Distirubte list has no interface. */
-};
+  enum distribute_type type;
+  struct distribute *dist;
+
+  /* Check of distribute list type. */
+  if (strncmp (argv[1], "i", 1) == 0)
+    type = DISTRIBUTE_IN;
+  else if (strncmp (argv[1], "o", 1) == 0)
+    type = DISTRIBUTE_OUT;
+  else
+    {
+      vty_out (vty, "distribute list direction must be [in|out]%s", 
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Get interface name corresponding distribute list. */
+  dist = distribute_list_prefix_set (argv[2], type, argv[0]);
+
+  return CMD_SUCCESS;
+}       
+
+DEFUN (no_districute_list_prefix, no_distribute_list_prefix_cmd,
+       "no distribute-list prefix ALIST_NAME (in|out) IFNAME",
+       NO_STR
+       "Distribute list unset\n"
+       "Distribute list for prefix-list\n"
+       "Distribute list prefix-list name\n"
+       "Distribute list for input filtering\n"
+       "Distribute list for output filtering\n"
+       "Distribute list interface name\n")
+{
+  int ret;
+  enum distribute_type type;
+
+  /* Check of distribute list type. */
+  if (strncmp (argv[1], "i", 1) == 0)
+    type = DISTRIBUTE_IN;
+  else if (strncmp (argv[1], "o", 1) == 0)
+    type = DISTRIBUTE_OUT;
+  else
+    {
+      vty_out (vty, "distribute list direction must be [in|out]%s", 
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = distribute_list_prefix_unset (argv[2], type, argv[0]);
+  if (! ret)
+    {
+      vty_out (vty, "distribute list doesn't exist%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}       
 
 /* Configuration write function. */
 int
@@ -367,35 +505,63 @@ config_write_distribute (struct vty *vty)
 
 	dist = mp->data;
 
-	if (dist->slot[DISTRIBUTE_IN])
+	if (dist->list[DISTRIBUTE_IN])
 	  {
-	    vty_out (vty, "distribute-list %s in %s%s", 
-		     dist->slot[DISTRIBUTE_IN],
-		     dist->ifname, VTY_NEWLINE);
+	    vty_out (vty, " distribute-list %s in %s%s", 
+		     dist->list[DISTRIBUTE_IN],
+		     dist->ifname,
+		     VTY_NEWLINE);
 	    write++;
 	  }
 
-	if (dist->slot[DISTRIBUTE_OUT])
+	if (dist->list[DISTRIBUTE_OUT])
 	  {
-	    vty_out (vty, "distribute-list %s out %s%s", 
-		     dist->slot[DISTRIBUTE_OUT],
-		     dist->ifname, VTY_NEWLINE);
+	    vty_out (vty, " distribute-list %s out %s%s", 
+		     dist->list[DISTRIBUTE_OUT],
+		     dist->ifname,
+		     VTY_NEWLINE);
+	    write++;
+	  }
+
+	if (dist->prefix[DISTRIBUTE_IN])
+	  {
+	    vty_out (vty, " distribute-list prefix %s in %s%s",
+		     dist->prefix[DISTRIBUTE_IN],
+		     dist->ifname,
+		     VTY_NEWLINE);
+	    write++;
+	  }
+
+	if (dist->prefix[DISTRIBUTE_OUT])
+	  {
+	    vty_out (vty, " distribute-list prefix %s out %s%s",
+		     dist->prefix[DISTRIBUTE_OUT],
+		     dist->ifname,
+		     VTY_NEWLINE);
 	    write++;
 	  }
       }
   return write;
 }
 
+/* Clear all distribute list. */
+void
+distribute_list_reset ()
+{
+  hash_clean (disthash, (void (*) (void *)) distribute_free);
+}
+
 /* Initialize distribute list related hash. */
 void
-distribute_init ()
+distribute_list_init (int node)
 {
   disthash = hash_new (HASHTABSIZE);
   disthash->hash_key = distribute_hash_make;
   disthash->hash_cmp = distribute_cmp;
 
-  install_node (&distribute_node, config_write_distribute);
+  install_element (node, &distribute_list_cmd);
+  install_element (node, &no_distribute_list_cmd);
 
-  install_element (CONFIG_NODE, &distribute_list_cmd);
-  install_element (CONFIG_NODE, &no_distribute_list_cmd);
+  install_element (node, &distribute_list_prefix_cmd);
+  install_element (node, &no_distribute_list_prefix_cmd);
 }

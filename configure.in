@@ -1,4 +1,4 @@
-##
+n##
 ## Configure template file for zebra.
 ## autoconf will generate configure script.
 ##
@@ -6,7 +6,7 @@
 ##
 AC_PREREQ(2.13)
 
-AC_INIT(zebra/zebra.c)
+AC_INIT(lib/zebra.h)
 AM_INIT_AUTOMAKE(zebra, 0.1)
 
 AM_CONFIG_HEADER(config.h)
@@ -112,6 +112,9 @@ case "$host" in
   *-openbsd*)
       opsys=openbsd
   ;;
+  *-bsdi*)
+      opsys=bsdi
+  ;;
 esac
 
 if test "${enable_pthread}" = "yes"; then
@@ -165,7 +168,7 @@ dnl AC_CHECK_SIZEOF(long)
 dnl ----------------------------
 dnl check existance of functions
 dnl ----------------------------
-AC_CHECK_FUNCS(bcopy bzero strerror inet_aton daemon snprintf vsnprintf strlcat strlcpy)
+AC_CHECK_FUNCS(bcopy bzero strerror inet_aton daemon snprintf vsnprintf strlcat strlcpy if_nametoindex if_indextoname)
 dnl AC_REPLACE_FUNCS(vsnprintf)
 
 dnl ------------------------------------
@@ -249,17 +252,12 @@ if test "$netlink" = yes; then
   AC_MSG_RESULT(netlink)
   IF_METHOD=if_netlink.o
 else
-  if test "$opsys" = "openbsd";then
+  if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
+    AC_MSG_RESULT(sysctl)
+    IF_METHOD=if_sysctl.o
+  else
     AC_MSG_RESULT(ioctl)
     IF_METHOD=if_ioctl.o
-  else
-    if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
-      AC_MSG_RESULT(sysctl)
-      IF_METHOD=if_sysctl.o
-    else
-      AC_MSG_RESULT(ioctl)
-      IF_METHOD=if_ioctl.o
-    fi
   fi
 fi
 AC_SUBST(IF_METHOD)
@@ -322,16 +320,21 @@ if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    fi
    AC_MSG_RESULT(KAME)
 fi
-dnl -------------------
-dnl OpenBSD 2.5 has NRL
-dnl -------------------
+dnl ---------
+dnl NRL check
+dnl ---------
 if grep NRL /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    zebra_cv_ipv6=yes
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(NRL)
    RIPNGD="ripngd"
    OSPF6D="ospf6d"
-   AC_MSG_RESULT(NRL)
+   if test x"$opsys" = x"bsdi";then
+      AC_DEFINE(BSDI_NRL)
+      AC_MSG_RESULT(BSDI_NRL)
+   else
+      AC_MSG_RESULT(NRL)
+   fi
 fi
 
 dnl ----------
@@ -478,15 +481,15 @@ dnl AC_SUBST(LIB_REGEX)
 dnl ------------------
 dnl check SNMP library
 dnl ------------------
-AC_CHECK_LIB(snmp, acl_scanInit, HAVE_SNMP=yes)
+AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
 if test "${HAVE_SNMP}" = ""; then
 	old_libs="${LIBS}"
 	LIBS="-L/usr/local/lib"
-	AC_CHECK_LIB(snmp, acl_scanInit, HAVE_SNMP=yes)
+	AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
 	LIBS="${old_libs}"
 fi
 if test "${HAVE_SNMP}" = "yes"; then
-  for ac_snmp in /usr/include/ucd-snmp/acl.h /usr/local/include/ucd-snmp/acl.h /dev/null
+  for ac_snmp in /usr/include/ucd-snmp/asn1.h /usr/local/include/ucd-snmp/asn1.h /dev/null
   do
     test x`ls ${ac_snmp} 2>/dev/null` = x"${ac_snmp}" && break
   done

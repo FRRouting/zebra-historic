@@ -25,42 +25,45 @@
 #include "ripd/rip_debug.h"
 
 /* For debug statement. */
-unsigned long rip_debug_event;
-unsigned long rip_debug_packet;
-unsigned long rip_debug_zebra;
+unsigned long rip_debug_event = 0;
+unsigned long rip_debug_packet = 0;
+unsigned long rip_debug_zebra = 0;
 
 DEFUN (show_debugging_rip,
        show_debugging_rip_cmd,
        "show debugging rip",
        SHOW_STR
        "RIP configuration\n"
-       "Debuggin information\n")
+       "Debugging information\n")
 {
-  vty_out (vty, "Zebra debugging status:\r\n");
+  vty_out (vty, "Zebra debugging status:%s", VTY_NEWLINE);
 
   if (IS_RIP_DEBUG_EVENT)
-    vty_out (vty, "  RIP event debugging is on\r\n");
+    vty_out (vty, "  RIP event debugging is on%s", VTY_NEWLINE);
 
   if (IS_RIP_DEBUG_PACKET)
     {
       if (IS_RIP_DEBUG_SEND && IS_RIP_DEBUG_RECV)
 	{
-	  vty_out (vty, "  RIP packet%s debugging is on\r\n",
-		   IS_RIP_DEBUG_DETAIL ? " detail" : "");
+	  vty_out (vty, "  RIP packet%s debugging is on%s",
+		   IS_RIP_DEBUG_DETAIL ? " detail" : "",
+		   VTY_NEWLINE);
 	}
       else
 	{
 	  if (IS_RIP_DEBUG_SEND)
-	    vty_out (vty, "  RIP packet send%s debugging is on\r\n",
-		     IS_RIP_DEBUG_DETAIL ? " detail" : "");
+	    vty_out (vty, "  RIP packet send%s debugging is on%s",
+		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "  RIP packet receive%s debugging is on\r\n",
-		     IS_RIP_DEBUG_DETAIL ? " detail" : "");
+	    vty_out (vty, "  RIP packet receive%s debugging is on%s",
+		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	}
     }
 
   if (IS_RIP_DEBUG_ZEBRA)
-    vty_out (vty, "  RIP zebra debugging is on\r\n");
+    vty_out (vty, "  RIP zebra debugging is on%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -212,17 +215,20 @@ config_write_debug (struct vty *vty)
       if (IS_RIP_DEBUG_SEND && IS_RIP_DEBUG_RECV)
 	{
 	  vty_out (vty, "debug rip packet%s%s",
-		   IS_RIP_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		   IS_RIP_DEBUG_DETAIL ? " detail" : "",
+		   VTY_NEWLINE);
 	  write++;
 	}
       else
 	{
 	  if (IS_RIP_DEBUG_SEND)
 	    vty_out (vty, "debug rip packet send%s%s",
-		     IS_RIP_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  else
 	    vty_out (vty, "debug rip packet recieve%s%s",
-		     IS_RIP_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  write++;
 	}
     }
@@ -235,12 +241,16 @@ config_write_debug (struct vty *vty)
 }
 
 void
-rip_debug_init ()
+rip_debug_reset ()
 {
   rip_debug_event = 0;
   rip_debug_packet = 0;
   rip_debug_zebra = 0;
+}
 
+void
+rip_debug_init ()
+{
   install_node (&debug_node, config_write_debug);
 
   install_element (VIEW_NODE, &show_debugging_rip_cmd);

@@ -216,6 +216,9 @@ struct ospf6_lsa *ospf6_make_network_lsa (struct ospf6_if *);
 struct ospf6_lsa *ospf6_make_link_lsa (struct ospf6_if *);
 struct ospf6_lsa *ospf6_make_intra_prefix_lsa (struct ospf6_if *);
 
+void ospf6_lsa_originate_link (struct ospf6_if *);
+void ospf6_lsa_originate_intraprefix (struct ospf6_if *);
+
 unsigned long ospf6_as_external_lsid (struct prefix_ipv6 *, struct ospf6 *);
 struct ospf6_lsa *ospf6_make_as_external_lsa (struct route_node *);
 
@@ -224,6 +227,8 @@ void ospf6_lsa_maxage_remove (struct ospf6_lsa *);
 void ospf6_lsa_hdr_id_str (struct ospf6_lsa_hdr *, char *, size_t);
 void ospf6_lsa_hdr_str (struct ospf6_lsa_hdr *, char *, size_t);
 void ospf6_lsa_str (struct ospf6_lsa *, char *, size_t);
+
+unsigned short ospf6_lsa_checksum (struct ospf6_lsa_hdr *);
 
 #endif /* OSPF6_LSA_H */
 

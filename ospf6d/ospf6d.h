@@ -25,15 +25,11 @@
 #include <zebra.h>
 
 /* Include other stuffs */
-#include "zebra/zebra.h"
-
 #include "version.h"
 #include "log.h"
 #include "getopt.h"
-#include "vty.h"
 #include "linklist.h"
 #include "thread.h"
-#include "vector.h"
 #include "command.h"
 #include "memory.h"
 #include "sockunion.h"
@@ -42,9 +38,11 @@
 #include "stream.h"
 #include "thread.h"
 #include "filter.h"
-#include "client.h"
 #include "zclient.h"
 #include "table.h"
+
+/* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
+/* #define DISABLE_IPV6_CHECKSUM */
 
 #define HASHVAL 64
 #define MAXIOVLIST 1024
@@ -61,6 +59,7 @@
 #include "ospf6_interface.h"
 #include "ospf6_neighbor.h"
 #include "ospf6_ism.h"
+#include "ospf6_nsm.h"
 #include "ospf6_lsa.h"
 #include "ospf6_lsdb.h"
 #include "ospf6_dbex.h"
@@ -116,13 +115,6 @@ extern char *recent_reason;
 #endif
 
 
-#ifndef s6_addr32
-#define s6_addr32 u6_addr.u6_addr32
-#define s6_addr16 u6_addr.u6_addr16
-#define s6_addr8  u6_addr.u6_addr8
-#define s6_addr   u6_addr.u6_addr8
-#endif
-
 /* Command Description */
 #define V4NOTATION_STR     "specify by IPv4 address notation(e.g. 0.0.0.0)\n"
 #define OSPF6_NUMBER_STR    "Specify by number\n"
@@ -138,12 +130,7 @@ extern char *recent_reason;
 
 
 /* Function Prototypes */
-struct neighbor *make_neighbor (rtr_id_t, struct ospf6_if *);
-struct neighbor *nbr_lookup (rtr_id_t, struct ospf6_if *);
-int show_area (struct vty *, struct area *);
-int show_nbr (struct vty *, struct neighbor *);
 void ospf6_init ();
 void ospf6_terminate ();
 
 #endif /* OSPF6D_H */
-

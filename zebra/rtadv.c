@@ -502,7 +502,7 @@ DEFUN (ipv6_nd_prefix_advertisement,
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *) &p);
   if (!ret)
     {
-      vty_out (vty, "Malformed IPv6 prefix\r\n");
+      vty_out (vty, "Malformed IPv6 prefix%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -529,9 +529,10 @@ rtadv_config_write (struct vty *vty, struct interface *ifp)
     {
       rprefix = getdata (node);
       vty_out (vty, " ipv6 nd prefix-advertisement %s/%d%s",
-	       inet_ntop (AF_INET6, &rprefix->prefix.u.prefix6,
+	       inet_ntop (AF_INET6, &rprefix->prefix.u.prefix6, 
 			  buf, INET6_ADDRSTRLEN),
-	       rprefix->prefix.prefixlen, VTY_NEWLINE);
+	       rprefix->prefix.prefixlen,
+	       VTY_NEWLINE);
     }
 }
 

@@ -22,17 +22,11 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
-#include "thread.h"
-#include "linklist.h"
-#include "vector.h"
-#include "buffer.h"
+#include "command.h"
 #include "network.h"
 #include "prefix.h"
-#include "if.h"
 #include "stream.h"
-#include "client.h"
-#include "command.h"
+#include "filter.h"
 #include "memory.h"
 #include "zclient.h"
 #include "log.h"
@@ -44,7 +38,7 @@
 #include "ospfd/ospf_asbr.h"
 
 /* Zebra structure to hold current status. */
-struct zebra *zebra = NULL;
+struct zebra *zclient = NULL;
 
 /* For registering threads. */
 extern struct thread_master *master;
@@ -55,7 +49,7 @@ ospf_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 {
   struct interface *ifp;
 
-  ifp = zebra_interface_add_read (zebra->ibuf);
+  ifp = zebra_interface_add_read (zclient->ibuf);
 
 #if 0
   if (IS_OSPF_DEBUG_ZEBRA)
@@ -80,7 +74,7 @@ ospf_interface_address_add (int command, struct zebra *zebra,
 {
   struct connected *c;
 
-  c = zebra_interface_address_add_read (zebra->ibuf);
+  c = zebra_interface_address_add_read (zclient->ibuf);
 
   if (c == NULL)
     return 0;
@@ -112,15 +106,15 @@ ospf_interface_address_delete (int command, struct zebra *zebra,
 void
 ospf_zebra_add (struct prefix_ipv4 *p, struct in_addr *nexthop)
 {
-  if (zebra->redist[ZEBRA_ROUTE_OSPF])
-    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_OSPF, 0, p, nexthop, 0);
+  if (zclient->redist[ZEBRA_ROUTE_OSPF])
+    zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_OSPF, 0, p, nexthop, 0);
 }
 
 void
 ospf_zebra_delete (struct prefix_ipv4 *p, struct in_addr *nexthop)
 {
-  if (zebra->redist[ZEBRA_ROUTE_OSPF])
-    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_OSPF, 0, p, nexthop, 0);
+  if (zclient->redist[ZEBRA_ROUTE_OSPF])
+    zebra_ipv4_delete (zclient->sock, ZEBRA_ROUTE_OSPF, 0, p, nexthop, 0);
 }
 
 void
@@ -130,8 +124,8 @@ ospf_zebra_add_discard (struct prefix_ipv4 *p)
 
   lo_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-  if (zebra->redist[ZEBRA_ROUTE_OSPF])
-    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
+  if (zclient->redist[ZEBRA_ROUTE_OSPF])
+    zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
 		    p, &lo_addr, 0);
 
 }
@@ -143,8 +137,8 @@ ospf_zebra_delete_discard (struct prefix_ipv4 *p)
 
   lo_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-  if (zebra->redist[ZEBRA_ROUTE_OSPF])
-    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
+  if (zclient->redist[ZEBRA_ROUTE_OSPF])
+    zebra_ipv4_delete (zclient->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
 		       p, &lo_addr, 0);
 }
 
@@ -153,13 +147,13 @@ ospf_zebra_delete_discard (struct prefix_ipv4 *p)
 int
 ospf_redistribute_set (int type)
 {
-  if (zebra->redist[type])
+  if (zclient->redist[type])
     return CMD_SUCCESS;
 
-  zebra->redist[type] = 1;
+  zclient->redist[type] = 1;
 
-  if (zebra->sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, type);
+  if (zclient->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zclient->sock, type);
 
   ospf_asbr_status_update (++ospf_top->redistribute);
 
@@ -169,13 +163,13 @@ ospf_redistribute_set (int type)
 int
 ospf_redistribute_unset (int type)
 {
-  if (! zebra->redist[type])
+  if (! zclient->redist[type])
     return CMD_SUCCESS;
 
-  zebra->redist[type] = 0;
+  zclient->redist[type] = 0;
 
-  if (zebra->sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+  if (zclient->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zclient->sock, type);
 
   /* Remove the routes from OSPF table. */
   ospf_redistribute_withdraw (type);
@@ -196,7 +190,7 @@ ospf_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
   struct stream *s;
   unsigned int ifindex;
 
-  s = zebra->ibuf;
+  s = zclient->ibuf;
   lim = stream_pnt (s) + length;
 
   /* Fetch type and nexthop first. */
@@ -219,7 +213,7 @@ ospf_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       stream_get (&p.prefix, s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	ospf_asbr_route_add (type, &p, ifindex);
+	ospf_asbr_route_add (type, &p, ifindex, nexthop);
       else 
 	ospf_asbr_route_delete (type, &p, ifindex);
     }
@@ -232,29 +226,21 @@ DEFUN (router_zebra,
        "Enable a routing process\n"
        "Make connection to zebra daemon\n")
 {
-  int ret;
-
   vty->node = ZEBRA_NODE;
+  zclient->enable = 1;
+  zclient_start (zclient);
+  return CMD_SUCCESS;
+}
 
-  /* Set router zebra is enabled. */
-  zebra->enable = 1;
-
-  /* If already has socket then return. */
-  if (zebra->sock >= 0)
-    {
-      vty_out (vty, "Already connected to zebra\r\n");
-      return CMD_WARNING;
-    }
-
-  /* Connect to zebra. */
-  ret = zebra_create (zebra);
-
-  if (ret < 0)
-    {
-      vty_out (vty, "Can't connect to zebra\r\n");
-      return CMD_WARNING;
-    }
-
+DEFUN (no_router_zebra,
+       no_router_zebra_cmd,
+       "no router zebra",
+       NO_STR
+       "Disable a routing process\n"
+       "Stop connection to zebra daemon\n")
+{
+  zclient->enable = 0;
+  zclient_stop (zclient);
   return CMD_SUCCESS;
 }
 
@@ -264,7 +250,7 @@ DEFUN (ospf_redistribute_ospf,
        "Redistribute control\n"
        "OSPF route\n")
 {
-  zebra->redist[ZEBRA_ROUTE_OSPF] = 1;
+  zclient->redist[ZEBRA_ROUTE_OSPF] = 1;
   return CMD_SUCCESS;
 }
 
@@ -275,8 +261,27 @@ DEFUN (no_ospf_redistribute_ospf,
        "Redistribute control\n"
        "OSPF route\n")
 {
-  zebra->redist[ZEBRA_ROUTE_OSPF] = 0;
+  zclient->redist[ZEBRA_ROUTE_OSPF] = 0;
   return CMD_SUCCESS;
+}
+
+DEFUN (ospf_redistribute_kernel,
+       ospf_redistribute_kernel_cmd,
+       "redistribute kernel",
+       "Redistribute control\n"
+       "Kernel route\n")
+{
+  return ospf_redistribute_set (ZEBRA_ROUTE_KERNEL);
+}
+
+DEFUN (no_ospf_redistribute_kernel,
+       no_ospf_redistribute_kernel_cmd,
+       "no redistribute kernel",
+       NO_STR
+       "Redistribute control\n"
+       "Kernel route\n")
+{
+  return ospf_redistribute_unset (ZEBRA_ROUTE_KERNEL);
 }
 
 DEFUN (ospf_redistribute_static,
@@ -355,16 +360,188 @@ DEFUN (no_ospf_redistribute_bgp,
   return ospf_redistribute_unset (ZEBRA_ROUTE_BGP);
 }
 
+
+int
+ospf_set_distribute_list_out (struct vty *vty, int type, char * list_name)
+{
+  struct access_list *list;
+  list = access_list_lookup(AF_INET, list_name);
+
+  ospf_top->dist_lists_proto[type].list = list;
+
+  if (ospf_top->dist_lists_proto[type].name)
+    free (ospf_top->dist_lists_proto[type].name);
+
+  ospf_top->dist_lists_proto[type].name = strdup (list_name);
+  ospf_schedule_asbr_check ();
+
+  return CMD_SUCCESS;
+}
+
+int
+ospf_unset_distribute_list_out (struct vty *vty, int type, char * list_name)
+{
+  ospf_top->dist_lists_proto[type].list = 0;
+
+  if (ospf_top->dist_lists_proto[type].name)
+    free (ospf_top->dist_lists_proto[type].name);
+
+  ospf_top->dist_lists_proto[type].name = NULL;
+  ospf_schedule_asbr_check ();
+
+  return CMD_SUCCESS;
+}
+
+
+
+#define OUT_STR "Filter outgoing routing updates\n"
+#define IN_STR  "Filter incoming routing updates\n"
+
+DEFUN (ospf_distribute_list_out_kernel,
+       ospf_distribute_list_out_kernel_cmd,
+       "distribute-list NAME out kernel",
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "Kernel routes\n")
+{
+  return ospf_set_distribute_list_out (vty, ZEBRA_ROUTE_KERNEL, argv[0]);
+}
+
+DEFUN (no_ospf_distribute_list_out_kernel,
+       no_ospf_distribute_list_out_kernel_cmd,
+       "no distribute-list NAME out kernel",
+       NO_STR
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "Kernel routes\n")
+{
+  return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_KERNEL, argv[0]);
+}
+
+
+DEFUN (ospf_distribute_list_out_connected,
+       ospf_distribute_list_out_connected_cmd,
+       "distribute-list NAME out connected",
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "Static routes\n")
+{
+  return ospf_set_distribute_list_out (vty, ZEBRA_ROUTE_CONNECT, argv[0]);
+}
+
+DEFUN (no_ospf_distribute_list_out_connected,
+       no_ospf_distribute_list_out_connected_cmd,
+       "no distribute-list NAME out connected",
+       NO_STR
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "Connected routes\n")
+{
+  return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_CONNECT, argv[0]);
+}
+
+
+DEFUN (ospf_distribute_list_out_static,
+       ospf_distribute_list_out_static_cmd,
+       "distribute-list NAME out static",
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "Static routes\n")
+{
+  return ospf_set_distribute_list_out (vty, ZEBRA_ROUTE_STATIC, argv[0]);
+}
+
+DEFUN (no_ospf_distribute_list_out_static,
+       no_ospf_distribute_list_out_static_cmd,
+       "no distribute-list NAME out static",
+       NO_STR
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "Static routes\n")
+{
+  return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_STATIC, argv[0]);
+}
+
+
+DEFUN (ospf_distribute_list_out_rip,
+       ospf_distribute_list_out_rip_cmd,
+       "distribute-list NAME out rip",
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "RIP routes\n")
+{
+  return ospf_set_distribute_list_out (vty, ZEBRA_ROUTE_RIP, argv[0]);
+}
+
+DEFUN (no_ospf_distribute_list_out_rip,
+       no_ospf_distribute_list_out_rip_cmd,
+       "no distribute-list NAME out rip",
+       NO_STR
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "RIP routes\n")
+{
+  return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_RIP, argv[0]);
+}
+
+DEFUN (ospf_distribute_list_out_bgp,
+       ospf_distribute_list_out_bgp_cmd,
+       "distribute-list NAME out bgp",
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "BGP routes\n")
+{
+  return ospf_set_distribute_list_out (vty, ZEBRA_ROUTE_BGP, argv[0]);
+}
+
+DEFUN (no_ospf_distribute_list_out_bgp,
+       no_ospf_distribute_list_out_bgp_cmd,
+       "no distribute-list NAME out bgp",
+       NO_STR
+       "Specify distribute list\n"
+       "Name of the access-list\n"
+       OUT_STR
+       "BGP routes\n")
+{
+  return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_BGP, argv[0]);
+}
+
+void
+ospf_acl_hook ()
+{
+  int i, inv = 0;
+
+  if (ospf_top)
+    for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+      if (ospf_top->dist_lists_proto[i].name)
+	{
+	  ospf_top->dist_lists_proto[i].list = NULL; /* Invalidate */
+	  inv++;
+	}
+
+  if (OSPF_IS_ASBR && inv)
+    ospf_schedule_asbr_check ();
+}
+
 /* Zebra configuration write function. */
 int
 zebra_config_write (struct vty *vty)
 {
-  if (! zebra->enable)
+  if (! zclient->enable)
     {
       vty_out (vty, "no router zebra%s", VTY_NEWLINE);
       return 1;
     }
-  else if (! zebra->redist[ZEBRA_ROUTE_OSPF])
+  else if (! zclient->redist[ZEBRA_ROUTE_OSPF])
     {
       vty_out (vty, "router zebra%s", VTY_NEWLINE);
       vty_out (vty, " no redistribute ospf%s", VTY_NEWLINE);
@@ -381,8 +558,18 @@ config_write_ospf_redistribute (struct vty *vty)
 		  "ripng", "ospf", "ospf6", "bgp"};
 
   for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
-    if (i != zebra->redist_default && zebra->redist[i])
-      vty_out (vty, " redistribute %s%s", str[i], VTY_NEWLINE);
+    if (i != zclient->redist_default && zclient->redist[i])
+      vty_out (vty, " redistribute %s%s", str[i],
+	       VTY_NEWLINE);
+
+
+  if (ospf_top)
+     for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+         if (ospf_top->dist_lists_proto[i].name)
+            vty_out (vty, " distribute-list %s out %s%s", 
+                     ospf_top->dist_lists_proto[i].name,
+		     str[i], VTY_NEWLINE);
+
   return 0;
 }
 
@@ -394,46 +581,48 @@ struct cmd_node zebra_node =
 };
 
 void
-zebra_start ()
-{
-  zebra_create (zebra);
-}
-
-void
 zebra_init ()
 {
   /* Allocate zebra structure. */
-  zebra = zebra_new ();
-
-  /* Set default values. */
-  zebra->enable = 1;
-  zebra->sock = -1;
-  zebra->redist_default = ZEBRA_ROUTE_OSPF;
-  zebra->redist[ZEBRA_ROUTE_OSPF] = 1;
-
-  zebra->interface_add = ospf_interface_add;
-  zebra->interface_delete = ospf_interface_delete;
-  zebra->interface_address_add = ospf_interface_address_add;
-  zebra->interface_address_delete = ospf_interface_address_delete;
-  zebra->ipv4_route_add = ospf_zebra_read_ipv4;
-  zebra->ipv4_route_delete = ospf_zebra_read_ipv4;
+  zclient = zclient_new ();
+  zclient_init (zclient, ZEBRA_ROUTE_OSPF);
+  zclient->interface_add = ospf_interface_add;
+  zclient->interface_delete = ospf_interface_delete;
+  zclient->interface_address_add = ospf_interface_address_add;
+  zclient->interface_address_delete = ospf_interface_address_delete;
+  zclient->ipv4_route_add = ospf_zebra_read_ipv4;
+  zclient->ipv4_route_delete = ospf_zebra_read_ipv4;
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
 
   /* Install command element for zebra node. */
   install_element (CONFIG_NODE, &router_zebra_cmd);
-
+  install_element (CONFIG_NODE, &no_router_zebra_cmd);
   install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &ospf_redistribute_rip_cmd);
   install_element (ZEBRA_NODE, &no_ospf_redistribute_rip_cmd);
-
-  install_element (OSPF_NODE, &ospf_redistribute_static_cmd);
-  install_element (OSPF_NODE, &no_ospf_redistribute_static_cmd);
   install_element (OSPF_NODE, &ospf_redistribute_connected_cmd);
   install_element (OSPF_NODE, &no_ospf_redistribute_connected_cmd);
+  install_element (OSPF_NODE, &ospf_redistribute_static_cmd);
+  install_element (OSPF_NODE, &no_ospf_redistribute_static_cmd);
+  install_element (OSPF_NODE, &ospf_redistribute_kernel_cmd);
+  install_element (OSPF_NODE, &no_ospf_redistribute_kernel_cmd);
   install_element (OSPF_NODE, &ospf_redistribute_rip_cmd);
   install_element (OSPF_NODE, &no_ospf_redistribute_rip_cmd);
   install_element (OSPF_NODE, &ospf_redistribute_bgp_cmd);
   install_element (OSPF_NODE, &no_ospf_redistribute_bgp_cmd);
+  install_element (OSPF_NODE, &ospf_distribute_list_out_kernel_cmd);
+  install_element (OSPF_NODE, &no_ospf_distribute_list_out_kernel_cmd);
+  install_element (OSPF_NODE, &ospf_distribute_list_out_connected_cmd);
+  install_element (OSPF_NODE, &no_ospf_distribute_list_out_connected_cmd);
+  install_element (OSPF_NODE, &ospf_distribute_list_out_static_cmd);
+  install_element (OSPF_NODE, &no_ospf_distribute_list_out_static_cmd);
+  install_element (OSPF_NODE, &ospf_distribute_list_out_rip_cmd);
+  install_element (OSPF_NODE, &no_ospf_distribute_list_out_rip_cmd);
+  install_element (OSPF_NODE, &ospf_distribute_list_out_bgp_cmd);
+  install_element (OSPF_NODE, &no_ospf_distribute_list_out_bgp_cmd);
+
+  access_list_add_hook (ospf_acl_hook);
+  access_list_delete_hook (ospf_acl_hook);
 }

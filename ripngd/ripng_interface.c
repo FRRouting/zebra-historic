@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "linklist.h"
 #include "if.h"
 #include "prefix.h"
@@ -35,7 +34,6 @@
 #include "command.h"
 #include "table.h"
 #include "thread.h"
-#include "client.h"
 
 #include "ripngd/ripngd.h"
 #include "ripngd/ripng_debug.h"
@@ -129,8 +127,8 @@ ripng_interface_add (int command, struct zebra *zebra, zebra_size_t length)
   /* Check is this interface is RIP enabled or not.*/
   ripng_enable_apply (ifp);
 
-  /* Apply distribute list to the all interface. */
-  distribute_apply_all ();
+  /* Apply distribute list to the interface. */
+  ripng_distribute_update_interface (ifp);
 
   return 0;
 }
@@ -420,14 +418,16 @@ ripng_network_write (struct vty *vty)
 	struct prefix *p = &node->p;
 	vty_out (vty, " network %s/%d%s", 
 		 inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-		 p->prefixlen, VTY_NEWLINE);
+		 p->prefixlen,
+		 VTY_NEWLINE);
 
       }
   
   /* Write enable interface. */
   for (i = 0; i < vector_max (ripng_enable_if); i++)
     if ((str = vector_slot (ripng_enable_if, i)) != NULL)
-      vty_out (vty, " network %s%s", str, VTY_NEWLINE);
+      vty_out (vty, " network %s%s", str,
+	       VTY_NEWLINE);
 
   return 0;
 }
@@ -452,7 +452,8 @@ DEFUN (ripng_network,
 
   if (ret < 0)
     {
-      vty_out (vty, "There is same network configuration %s\r\n", argv[0]);
+      vty_out (vty, "There is same network configuration %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -482,7 +483,8 @@ DEFUN (no_ripng_network,
 
   if (ret < 0)
     {
-      vty_out (vty, "can't find network %s\r\n", argv[0]);
+      vty_out (vty, "can't find network %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
   
@@ -523,9 +525,11 @@ interface_config_write (struct vty *vty)
       ifp = getdata (node);
       ri = ifp->info;
 
-      vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
+      vty_out (vty, "interface %s%s", ifp->name,
+	       VTY_NEWLINE);
       if (ifp->desc)
-	vty_out (vty, " description %s%s", ifp->desc, VTY_NEWLINE);
+	vty_out (vty, " description %s%s", ifp->desc,
+		 VTY_NEWLINE);
 
       vty_out (vty, "!%s", VTY_NEWLINE);
 

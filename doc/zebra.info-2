@@ -1,0 +1,604 @@
+This is zebra.info, produced by makeinfo version 4.0 from zebra.texi.
+
+INFO-DIR-SECTION Routing Software
+START-INFO-DIR-ENTRY
+* Zebra: (zebra).		The GNU Zebra routing software package.
+END-INFO-DIR-ENTRY
+
+   (C) Copyright 1999 Free Software Foundation, Inc.
+
+   Permission is granted to make and distribute verbatim copies of this
+manual provided the copyright notice and this permission notice are
+preserved on all copies.
+
+   Permission is granted to copy and distribute modified versions of
+this manual under the conditions for verbatim copying, provided that the
+entire resulting derived work is distributed under the terms of a
+permission notice identical to this one.
+
+   Permission is granted to copy and distribute translations of this
+manual into another language, under the above conditions for modified
+versions, except that this permission notice may be stated in a
+translation approved by the Free Software Foundation.
+
+
+File: zebra.info,  Node: bgpd Sample Session,  Next: bgpd Log Format,  Prev: bgpd Terminal Mode Commands,  Up: bgpd
+
+bgpd Sample Session
+===================
+
+
+File: zebra.info,  Node: bgpd Log Format,  Next: How to Set Up A 6-Bone Connection,  Prev: bgpd Sample Session,  Up: bgpd
+
+bgpd Log Format
+===============
+
+   BGPd outputs logging information to a terminal or to the specified
+file.  It includes routing updates and peer status change information.
+It also includes date, time, packet type, the peer's IP address, and
+other routing information.
+
+     1999/03/29 17:42:18 Update:[202.216.226.1] 130.58.0.0/16 med: 0 lpref: 0 nexthop: 202.216.226.1 aspath: 4691 3561 5119 3576 3782 i
+
+
+File: zebra.info,  Node: How to Set Up A 6-Bone Connection,  Prev: bgpd Log Format,  Up: bgpd
+
+How to Set Up A 6-Bone Connection
+=================================
+
+     zebra configuration
+     ===================
+     !
+     ! Actually there is no need to configure zebra
+     !
+     
+     bgpd configuration
+     ==================
+     !
+     ! This means that routes go through zebra and into the kernel.
+     !
+     router zebra
+     !
+     ! BGP-4+ configuraion
+     !
+     router bgp 7675
+      bgp router-id 10.0.0.1
+     !
+     ipv6 bgp network 3ffe:506::/32
+     ipv6 bgp neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 remote-as AS-NUMBER
+     ipv6 bgp neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 route-map set-nexthop out
+     ipv6 bgp neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 remote-as AS-NUMBER
+     ipv6 bgp neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 route-map set-nexthop out
+     !
+     ipv6 access-list all permit any
+     !
+     ! Set output nexthop address.
+     !
+     route-map set-nexthop permit 10
+      match ipv6 address all
+      set ipv6 nexthop global 3ffe:1cfa:0:2:2c0:4fff:fe68:a225
+      set ipv6 nexthop local fe80::2c0:4fff:fe68:a225
+     !
+     ! logfile FILENAME is obsolete.  Please use log file FILENAME
+     !
+     log file bgpd.log
+     !
+
+
+File: zebra.info,  Node: Filtering,  Next: Route Map,  Prev: bgpd,  Up: Top
+
+Filtering
+*********
+
+   Zebra provides many very flexible filtering features.  Filtering is
+used for both input and output of the routing information.  Once
+filtering is defined, it can be applied in any direction.
+
+* Menu:
+
+* IP Access List::
+* IP Prefix List::
+* IP Community List::
+* AS Path Access List::
+
+
+File: zebra.info,  Node: IP Access List,  Next: IP Prefix List,  Prev: Filtering,  Up: Filtering
+
+IP Access List
+--------------
+
+ - Command: access-list NAME permit IPV4-NETWORK
+ - Command: access-list NAME deny IPV4-NETWORK
+
+   Basic filtering is done by `access-list' as shown in the following
+example.
+
+     access-list filter deny 10.0.0.0/9
+     access-list filter permit 10.0.0.0/8
+
+
+File: zebra.info,  Node: IP Prefix List,  Next: IP Community List,  Prev: IP Access List,  Up: Filtering
+
+IP Prefix List
+--------------
+
+   `ip prefix-list' provides the most powerful prefix based filtering
+mechanism.  Adding to `access-list' functionality, `ip prefix-list' has
+prefix length range specification and sequential number specification.
+You can add or delete prefix based filter to arbitrary point of
+prefix-list using sequential number.
+
+   If there is no ip prefix-list is specified, it acts as permit.  Once
+ip prefix-list is defined, then there is no match is performed, default
+deny is applied.
+
+ - Command: ip prefix-list NAME (permit|deny) PREFIX [le LEN] [ge LEN]
+ - Command: ip prefix-list NAME seq NUMBER (permit|deny) PREFIX [le
+LEN] [ge LEN]
+     You can create `ip prefix-list' using above commands.
+
+    seq
+          seq NUMBER
+
+    le
+          `le' command specify prefix length.  If given prefix length is
+          lesser then or equal to le prefix length.
+
+    ge
+          `ge' command specify prefix length.  If given prefix length is
+          lesser then or equal to le prefix length.
+
+
+ - Command: no ip prefix-list NAME
+
+* Menu:
+
+* ip prefix-list description::
+* ip prefix-list sequential number control::
+* Showing ip prefix-list::
+* Clear counter of ip prefix-list::
+
+
+File: zebra.info,  Node: ip prefix-list description,  Next: ip prefix-list sequential number control,  Prev: IP Prefix List,  Up: IP Prefix List
+
+ip prefix-list description
+..........................
+
+ - Command: ip prefix-list NAME description DESC
+
+ - Command: no ip prefix-list NAME description [DESC]
+
+
+File: zebra.info,  Node: ip prefix-list sequential number control,  Next: Showing ip prefix-list,  Prev: ip prefix-list description,  Up: IP Prefix List
+
+ip prefix-list sequential number control
+........................................
+
+ - Command: ip prefix-list sequence-number
+
+ - Command: no ip prefix-list sequence-number
+
+
+File: zebra.info,  Node: Showing ip prefix-list,  Next: Clear counter of ip prefix-list,  Prev: ip prefix-list sequential number control,  Up: IP Prefix List
+
+Showing ip prefix-list
+......................
+
+ - Command: show ip prefix-list
+
+ - Command: show ip prefix-list NAME
+
+ - Command: show ip prefix-list NAME seq NUM
+
+ - Command: show ip prefix-list NAME A.B.C.D/M
+
+ - Command: show ip prefix-list NAME A.B.C.D/M longer
+
+ - Command: show ip prefix-list NAME A.B.C.D/M first-match
+
+ - Command: show ip prefix-list summary
+
+ - Command: show ip prefix-list summary NAME
+
+ - Command: show ip prefix-list detail
+
+ - Command: show ip prefix-list detail NAME
+
+
+File: zebra.info,  Node: Clear counter of ip prefix-list,  Prev: Showing ip prefix-list,  Up: IP Prefix List
+
+Clear counter of ip prefix-list
+...............................
+
+ - Command: clear ip prefix-list
+
+ - Command: clear ip prefix-list NAME
+
+ - Command: clear ip prefix-list NAME A.B.C.D/M
+
+
+File: zebra.info,  Node: IP Community List,  Next: AS Path Access List,  Prev: IP Prefix List,  Up: Filtering
+
+IP Community List
+-----------------
+
+ - Command: ip community-list NAME TYPE COMMUNITY
+
+
+File: zebra.info,  Node: AS Path Access List,  Prev: IP Community List,  Up: Filtering
+
+AS Path Access List
+-------------------
+
+ - Command: ip as-path access-list NAME TYPE AS_PATH
+
+
+File: zebra.info,  Node: Route Map,  Next: IPv6 Supports,  Prev: Filtering,  Up: Top
+
+Route Map
+*********
+
+   Route map is a very useful function in zebra.  There is a match and
+set statement permitted in a route map.
+
+     route-map test permit 10
+      match ip address 10
+      set local-preference 200
+
+   This means that if a route matches ip access-list number 10 it's
+local-preference value is set to 200.
+
+* Menu:
+
+* Route Map Command::
+* Route Map Match Command::
+* Route Map Set Command::
+
+
+File: zebra.info,  Node: Route Map Command,  Next: Route Map Match Command,  Prev: Route Map,  Up: Route Map
+
+Route Map Command
+-----------------
+
+ - Command: route-map ROUTE-MAP-NAME permit PRIORITY
+
+
+File: zebra.info,  Node: Route Map Match Command,  Next: Route Map Set Command,  Prev: Route Map Command,  Up: Route Map
+
+Route Map Match Command
+-----------------------
+
+ - Route-map Command: match ip address ACCESS_LIST
+     Matches the specified ACCESS_LIST
+
+ - Route-map Command: match ip next-hop IPV4_ADDR
+     Matches the specified IPV4_ADDR.
+
+ - Route-map Command: match aspath AS_PATH
+     Matches the specified AS_PATH.
+
+ - Route-map Command: match metric METRIC
+     Matches the specified METRIC.
+
+ - Route-map Command: match community COMMUNITY_LIST
+     Matches the specified  COMMUNITY_LIST
+
+
+File: zebra.info,  Node: Route Map Set Command,  Prev: Route Map Match Command,  Up: Route Map
+
+Route Map Set Command
+---------------------
+
+ - Route-map Command: set ip next-hop IPV4_ADDRESS
+     Set the BGP nexthop address.
+
+ - Route-map Command: set local-preference LOCAL_PREF
+     Set the BGP local preference.
+
+ - Route-map Command: set weight WEIGHT
+     Set the route's weight.
+
+ - Route-map Command: set metric METRIC
+     Set the BGP attribute MED.
+
+ - Route-map Command: set as-path prepend AS_PATH
+     Set the BGP AS path to prepend.
+
+ - Route-map Command: set community COMMUNITY
+     Set the BGP community attribute.
+
+ - Route-map Command: set ipv6 next-hop global IPV6_ADDRESS
+     Set the BGP-4+ global IPv6 nexthop address.
+
+ - Route-map Command: set ipv6 next-hop local IPV6_ADDRESS
+     Set the BGP-4+ link local IPv6 nexthop address.
+
+
+File: zebra.info,  Node: IPv6 Supports,  Next: Kernel Interface,  Prev: Route Map,  Up: Top
+
+IPv6 Supports
+*************
+
+   Zebra fully supports IPv6 routing.  As described so far, Zebra
+supports RIPng, OSPFv3 and BGP-4+.  You can give IPv6 addresses to an
+interface and configure static IPv6 routing information.  Zebra-IPv6
+also provides automatic address configuration via a feature called
+`address autoconfiguration'.  To do it, the router must send router
+advertisement messages to the all nodes that exist on the network.
+
+* Menu:
+
+* Router Advertisement::
+
+
+File: zebra.info,  Node: Router Advertisement,  Prev: IPv6 Supports,  Up: IPv6 Supports
+
+Router Advertisement
+====================
+
+ - Interface Command: ipv6 nd send-ra
+
+ - Interface Command: ipv6 nd prefix-advertisement IPV6PREFIX
+
+     interface eth0
+      ipv6 nd send-ra
+      ipv6 nd prefix-advertisement 3ffe:506:5009::/64
+
+
+File: zebra.info,  Node: Kernel Interface,  Next: Linux Netlink,  Prev: IPv6 Supports,  Up: Top
+
+Kernel Interface
+****************
+
+   There are several different methods for reading kernel routing table
+information, updating kernel routing tables, and for looking up
+interfaces.
+
+`ioctl'
+     The `ioctl' method is a very traditional way for reading or writing
+     kernel information.  `ioctl' can be used for looking up interfaces
+     and for modifying interface addresses, flags, mtu swettings and
+     other types of information.  Also, `ioctl' can insert and delete
+     kernel routing table entries.  It will soon be available on almost
+     any platform which zebra supports, but it is a little bit ugly
+     thus far, so if a better method is supported by the kernel zebra
+     will use that.
+
+`sysctl'
+     `sysctl' can lookup kernel information using MIB (Management
+     Information Base) syntax.  Normally, it only provides a way of
+     getting information from the kernel.  So one would usually want to
+     change kernel information using another method such as `ioctl'.
+
+`proc filesystem'
+     `proc filesystem' provides an easy way of getting kernel
+     information.
+
+`routing socket'
+
+`netlink'
+
+File: zebra.info,  Node: Linux Netlink,  Next: Command Index,  Prev: Kernel Interface,  Up: Top
+
+Linux Netlink
+*************
+
+   On recent Linux kernels (2.0.x and 2.2.x), there is a kernel/user
+communication support called `netlink'.  It makes asynchronous
+communication between kernel and Zebra possible, similar to a routing
+socket on BSD systems.
+
+   Before you use this feature, be sure to select the kernel/netlink
+support option 'Kernel/User network link driver' and 'Routing messages'.
+
+   Today, the /dev/route special device file is obsolete.  Netlink
+communication is done by reading/writing over netlink socket.
+
+   After the kernel configuration, please reconfigure and rebuild Zebra.
+You can use netlink as a dynamic routing update channel between Zebra
+and the kernel.
+
+
+File: zebra.info,  Node: Command Index,  Next: VTY Key Index,  Prev: Linux Netlink,  Up: Top
+
+Command Index
+*************
+
+* Menu:
+
+* access-class ACCESS-LIST:              Basic Config Commands.
+* access-list NAME deny IPV4-NETWORK:    IP Access List.
+* access-list NAME permit IPV4-NETWORK:  IP Access List.
+* aggregate-address NETWORK:             bgpd Configuration.
+* banner motd default:                   Basic Config Commands.
+* bgp router-id ROUTER-ID:               bgpd Configuration.
+* clear ip bgp PEER:                     bgpd Terminal Mode Commands.
+* clear ip prefix-list:                  Clear counter of ip prefix-list.
+* clear ip prefix-list NAME:             Clear counter of ip prefix-list.
+* clear ip prefix-list NAME A.B.C.D/M:   Clear counter of ip prefix-list.
+* configure terminal:                    Basic Config Commands.
+* debug event:                           bgpd Terminal Mode Commands.
+* debug keepalive:                       bgpd Terminal Mode Commands.
+* debug ospf ism:                        ospfd Terminal Mode Commands.
+* debug ospf nsm:                        ospfd Terminal Mode Commands.
+* debug ospf packet:                     ospfd Terminal Mode Commands.
+* debug rip events:                      ripd Debug Commands.
+* debug rip packet:                      ripd Debug Commands.
+* debug rip zebra:                       ripd Debug Commands.
+* debug ripng events:                    ripngd Terminal Mode Commands.
+* debug ripng packet:                    ripngd Terminal Mode Commands.
+* debug ripng zebra:                     ripngd Terminal Mode Commands.
+* debug update:                          bgpd Terminal Mode Commands.
+* description DESCRIPTION ...:           Interface Commands.
+* distribute-list ACCESS_LIST DIRECT IFNAME <1>: ripngd Filtering Commands.
+* distribute-list ACCESS_LIST DIRECT IFNAME: Filtering RIP Routes.
+* enable password PASSWORD:              Basic Config Commands.
+* exec-timeout SECOND:                   Basic Config Commands.
+* flush_timer TIME:                      ripngd Configuration.
+* hostname HOSTNAME:                     Basic Config Commands.
+* interface IFNAME:                      Interface Commands.
+* ip address ADDRESS:                    Interface Commands.
+* ip as-path access-list NAME TYPE AS_PATH: AS Path Access List.
+* ip community-list NAME TYPE COMMUNITY: IP Community List.
+* ip prefix-list NAME (permit|deny) PREFIX [le LEN] [ge LEN]: IP Prefix List.
+* ip prefix-list NAME description DESC:  ip prefix-list description.
+* ip prefix-list NAME seq NUMBER (permit|deny) PREFIX [le LEN] [ge LEN]: IP Prefix List.
+* ip prefix-list sequence-number:        ip prefix-list sequential number control.
+* ip rip authentication string STRING:   ripd Configuration.
+* ip rip receive version VARSION:        ripd Configuration.
+* ip rip send version VARSION:           ripd Configuration.
+* ip route NETWORK GATEWAY:              Static Route Commands.
+* ipv6 nd prefix-advertisement IPV6PREFIX: Router Advertisement.
+* ipv6 nd send-ra:                       Router Advertisement.
+* ipv6 route NETWORK GATEWAY:            Static Route Commands.
+* line vty:                              Basic Config Commands.
+* list:                                  Basic Config Commands.
+* log file FILENAME:                     Basic Config Commands.
+* log stdout:                            Basic Config Commands.
+* log syslog:                            Basic Config Commands.
+* match aspath AS_PATH:                  Route Map Match Command.
+* match community COMMUNITY_LIST:        Route Map Match Command.
+* match interface NAME:                  ripd route-map.
+* match ip address <access-list>:        ripd route-map.
+* match ip address ACCESS_LIST:          Route Map Match Command.
+* match ip next-hop IPV4_ADDR:           Route Map Match Command.
+* match ip next-hot A.B.C.D:             ripd route-map.
+* match metric METRIC:                   Route Map Match Command.
+* match metric N:                        ripd route-map.
+* multicast:                             Interface Commands.
+* neighbor A.B.C.D:                      ripd Configuration.
+* neighbor PEER default-originate:       bgpd Configuration.
+* neighbor PEER description ...:         bgpd Configuration.
+* neighbor PEER distribute-list DIRECT:  bgpd Configuration.
+* neighbor PEER ebgp-multihop:           bgpd Configuration.
+* neighbor PEER interface IFNAME:        bgpd Configuration.
+* neighbor PEER next-hop-self:           bgpd Configuration.
+* neighbor PEER remote-as AS-NUMBER:     bgpd Configuration.
+* neighbor PEER route-map DIRECT:        bgpd Configuration.
+* neighbor PEER shutdown:                bgpd Configuration.
+* neighbor PEER version VERSION:         bgpd Configuration.
+* neighbor PEER weight WEIGHT:           bgpd Configuration.
+* network IFNAME <1>:                    ripngd Configuration.
+* network IFNAME:                        ripd Configuration.
+* network IPV4-NETWORK area AREA-ID:     ospfd Configuration.
+* network NETWORK <1>:                   bgpd Configuration.
+* network NETWORK <2>:                   ripngd Configuration.
+* network NETWORK:                       ripd Configuration.
+* no banner motd:                        Basic Config Commands.
+* no debug event:                        bgpd Terminal Mode Commands.
+* no debug keepalive:                    bgpd Terminal Mode Commands.
+* no debug update:                       bgpd Terminal Mode Commands.
+* no ip prefix-list NAME:                IP Prefix List.
+* no ip prefix-list NAME description [DESC]: ip prefix-list description.
+* no ip prefix-list sequence-number:     ip prefix-list sequential number control.
+* no log stdout:                         Basic Config Commands.
+* no log syslog:                         Basic Config Commands.
+* no multicast:                          Interface Commands.
+* no neigbour A.B.C.D:                   ripd Configuration.
+* no neighbor PEER description ...:      bgpd Configuration.
+* no neighbor PEER shutdown:             bgpd Configuration.
+* no network IFNAME:                     ripd Configuration.
+* no network NETWORK:                    ripd Configuration.
+* no redistribute connected:             ripd Configuration.
+* no redistribute static:                ripd Configuration.
+* no route A.B.C.D/M:                    ripd Configuration.
+* no router ospf:                        ospfd Configuration.
+* no shutdown:                           Interface Commands.
+* no timers basic:                       ripd Configuration.
+* password PASSWORD:                     Basic Config Commands.
+* redistribute connected:                ripd Configuration.
+* redistribute static:                   ripd Configuration.
+* route A.B.C.D/M:                       ripd Configuration.
+* route NETWORK:                         ripngd Configuration.
+* route-map ROUTE-MAP-NAME permit PRIORITY: Route Map Command.
+* router bgp AS-NUMBER:                  bgpd Configuration.
+* router ospf:                           ospfd Configuration.
+* router rip:                            ripd Configuration.
+* router ripng:                          ripngd Configuration.
+* router zebra <1>:                      bgpd Configuration.
+* router zebra:                          ripngd Configuration.
+* service advanced-vty:                  Basic Config Commands.
+* service password-encryption:           Basic Config Commands.
+* service terminal-length <0-512>:       Basic Config Commands.
+* set as-path prepend AS_PATH:           Route Map Set Command.
+* set community COMMUNITY:               Route Map Set Command.
+* set ip next-hop IPV4_ADDRESS:          Route Map Set Command.
+* set ipv6 next-hop global IPV6_ADDRESS: Route Map Set Command.
+* set ipv6 next-hop local IPV6_ADDRESS:  Route Map Set Command.
+* set local-preference LOCAL_PREF:       Route Map Set Command.
+* set metric METRIC:                     Route Map Set Command.
+* set metric N:                          ripd route-map.
+* set next-hop A.B.C.D:                  ripd route-map.
+* set weight WEIGHT:                     Route Map Set Command.
+* show debug:                            bgpd Terminal Mode Commands.
+* show debugging rip:                    ripd Debug Commands.
+* show debugging ripng:                  ripngd Terminal Mode Commands.
+* show interface:                        zebra Terminal Mode Commands.
+* show ip bgp [NETWORK]:                 bgpd Terminal Mode Commands.
+* show ip bgp neighbor [PEER]:           bgpd Terminal Mode Commands.
+* show ip bgp regexp AS-REGEXP:          bgpd Terminal Mode Commands.
+* show ip bgp summary:                   bgpd Terminal Mode Commands.
+* show ip ospf database:                 ospfd Terminal Mode Commands.
+* show ip ospf interface:                ospfd Terminal Mode Commands.
+* show ip ospf neighbor:                 ospfd Terminal Mode Commands.
+* show ip ospf route:                    ospfd Terminal Mode Commands.
+* show ip prefix-list:                   Showing ip prefix-list.
+* show ip prefix-list detail:            Showing ip prefix-list.
+* show ip prefix-list detail NAME:       Showing ip prefix-list.
+* show ip prefix-list NAME:              Showing ip prefix-list.
+* show ip prefix-list NAME A.B.C.D/M:    Showing ip prefix-list.
+* show ip prefix-list NAME A.B.C.D/M first-match: Showing ip prefix-list.
+* show ip prefix-list NAME A.B.C.D/M longer: Showing ip prefix-list.
+* show ip prefix-list NAME seq NUM:      Showing ip prefix-list.
+* show ip prefix-list summary:           Showing ip prefix-list.
+* show ip prefix-list summary NAME:      Showing ip prefix-list.
+* show ip rip:                           ripd Terminal Mode Commands.
+* show ip ripng:                         ripngd Terminal Mode Commands.
+* show ip route:                         zebra Terminal Mode Commands.
+* show ipforward:                        zebra Terminal Mode Commands.
+* show ipv6 route:                       zebra Terminal Mode Commands.
+* show ipv6forward:                      zebra Terminal Mode Commands.
+* show version:                          Basic Config Commands.
+* shutdown:                              Interface Commands.
+* table TABLENO:                         Static Route Commands.
+* terminal length <0-512>:               Basic Config Commands.
+* timers basic UPDATE TIMEOUT GARBAGE:   ripd Configuration.
+* version VERSION:                       ripd Configuration.
+* who:                                   Basic Config Commands.
+* write file:                            Basic Config Commands.
+* write terminal:                        Basic Config Commands.
+
+
+File: zebra.info,  Node: VTY Key Index,  Prev: Command Index,  Up: Top
+
+VTY Key Index
+*************
+
+* Menu:
+
+* <DEL>:                                 CLI Editing Commands.
+* <DOWN>:                                CLI Advanced Commands.
+* <LEFT>:                                CLI Movement Commands.
+* <RIGHT>:                               CLI Movement Commands.
+* <TAB>:                                 CLI Advanced Commands.
+* <UP>:                                  CLI Advanced Commands.
+* ?:                                     CLI Advanced Commands.
+* C-a:                                   CLI Movement Commands.
+* C-b:                                   CLI Movement Commands.
+* C-c:                                   CLI Advanced Commands.
+* C-d:                                   CLI Editing Commands.
+* C-e:                                   CLI Movement Commands.
+* C-f:                                   CLI Movement Commands.
+* C-h:                                   CLI Editing Commands.
+* C-k:                                   CLI Editing Commands.
+* C-n:                                   CLI Advanced Commands.
+* C-p:                                   CLI Advanced Commands.
+* C-t:                                   CLI Editing Commands.
+* C-u:                                   CLI Editing Commands.
+* C-w:                                   CLI Editing Commands.
+* C-z:                                   CLI Advanced Commands.
+* M-b:                                   CLI Movement Commands.
+* M-d:                                   CLI Editing Commands.
+* M-f:                                   CLI Movement Commands.
+
+

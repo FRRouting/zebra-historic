@@ -54,7 +54,7 @@ struct bgp
   u_int16_t config;
 
   /* BGP redistribute configuration. */
-  u_char redist[ZEBRA_ROUTE_MAX];
+  u_char redist[ZEBRA_FAMILY_MAX][ZEBRA_ROUTE_MAX];
 
   /* BGP neighbor list. */
   struct _list *peer;
@@ -82,6 +82,7 @@ struct peer
   struct stream_fifo *obuf;
 
   /* Peer information */
+  unsigned short port;          /* Destination port for peer */
   char *host;			/* Printable address of the peer. */
   union sockunion *su;		/* Sockunion address of the peer. */
   union sockunion *su_local;	/* Sockunion of local address.  */
@@ -116,13 +117,15 @@ struct peer
 #define PEER_CONFIG_HOLDTIME     0x4
 #define PEER_CONFIG_KEEPALIVE    0x8
   u_int32_t config;		/* Option set flag. */
-  long localpref;		/* Default local preference. */
   u_int32_t weight;		/* Default weight.  */
   u_int32_t holdtime;		/* Holdtime configuration. */
   u_int32_t keepalive;          /* Keepalive config */
   int send_community;		/* Community attribute send flag. */
   int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */
+
+  /* IPv4/IPv6 peer configuration. */
+  u_char family;
 
   /* Timer values. */
   u_int32_t v_start;
@@ -372,14 +375,17 @@ enum
 /* Prototypes. */
 void bgp_init ();
 void zebra_init ();
-void bgp_terminate ();
+void bgp_terminate (void);
+void bgp_reset (void);
 void bgp_route_map_init ();
 int bgp_peer_sort (struct peer *peer);
 void bgp_filter_init ();
-void zebra_start ();
+void bgp_zclient_start ();
+void bgp_zclient_reset ();
 
 struct bgp *bgp_new (as_t);
 struct bgp *bgp_lookup_by_as (as_t);
+int bgp_collision_detect (struct peer *);
 
 struct peer *peer_lookup_by_su (union sockunion *);
 struct peer *peer_lookup_from_bgp (struct bgp *bgp, char *addr);
@@ -392,8 +398,7 @@ void peer_delete (struct peer *peer);
 void bgp_open_recv (struct peer *peer, u_int16_t size);
 void bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify);
 
-int
-bgp_nexthop_set (union sockunion *, union sockunion *, 
+int bgp_nexthop_set (union sockunion *, union sockunion *, 
 		 struct bgp_nexthop *, struct peer *);
 
 extern struct thread_master *master;

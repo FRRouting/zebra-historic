@@ -90,6 +90,7 @@ ospf6_prefix_add (list l, struct ospf6_prefix *add)
   list_add_node (l, add);
 }
 
+#if 0
 static void
 ospf6_prefix_delete (list l, struct ospf6_prefix *del)
 {
@@ -112,6 +113,7 @@ ospf6_prefix_delete (list l, struct ospf6_prefix *del)
   ospf6_prefix_free (getdata (n));
   list_delete_node (l, n);
 }
+#endif /* 0 */
 
 void
 ospf6_prefix_in6_addr (struct ospf6_prefix *o6p, struct in6_addr *in6)

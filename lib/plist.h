@@ -42,6 +42,8 @@ struct prefix_list
   enum prefix_name_type type;
 
   int count;
+  int rangecount;
+
   struct prefix_list_entry *head;
   struct prefix_list_entry *tail;
 
@@ -49,13 +51,11 @@ struct prefix_list
   struct prefix_list *prev;
 };
 
-void prefix_list_init ();
+/* Prototypes. */
+void prefix_list_init (void);
+void prefix_list_reset (void);
+void prefix_list_add_hook (void (*func) (void));
+void prefix_list_delete_hook (void (*func) (void));
 
 struct prefix_list *prefix_list_lookup (int family, char *);
-
 enum prefix_list_type prefix_list_apply (struct prefix_list *, void *);
-
-void
-prefix_list_add_hook (void (*func) ());
-void
-prefix_list_delete_hook (void (*func) ());

@@ -24,7 +24,6 @@
 
 #include "prefix.h"
 #include "table.h"
-#include "zebra/zebra.h"
 #include "linklist.h"
 #include "memory.h"
 #include "command.h"
@@ -333,6 +332,17 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
       return;
     }
 
+  if (p->family == AF_INET6 &&
+      (p->prefixlen == 0) &&
+      ! (peer->config & PEER_DEFAULT_ORIGINATE))
+    {
+      zlog(peer->log, LOG_INFO,
+          "suppress ipv6 default route announcement to %d",
+          peer->as);
+      return;
+    }
+
+
   /* AS path loop check */
   if (aspath_loop_check (info->attr->aspath, peer->as))
     {
@@ -366,7 +376,7 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
   attr = *info->attr;
 
   /* Remove MED if its an EBGP peer - will get overwritten by route-maps */
-  if (bgp_peer_sort(peer) == BGP_PEER_EBGP && 
+  if (bgp_peer_sort (peer) == BGP_PEER_EBGP && 
       attr.flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
     attr.flag &= ~(ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC));
 
@@ -395,6 +405,10 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 		      IPV6_MAX_BYTELEN);
 	      if (attr.mp_nexthop_len < 32)
 		attr.mp_nexthop_len = 32;
+	    }
+	  else
+	    {
+	      attr.mp_nexthop_len = 16;
 	    }
 	}
 #endif /* HAVE_IPV6 */
@@ -470,16 +484,18 @@ bgp_announce_table (struct peer *peer)
   struct route_node *node;
   struct bgp_info *info;
 
-  for (node = route_top (bgp_table_ipv4); node; node = route_next (node))
-    if ((info = node->info) != NULL)
-      if (info->selected && info->peer != peer)
-	bgp_announce (peer, &node->p, info);
+  if (peer->family == AF_INET)
+    for (node = route_top (bgp_table_ipv4); node; node = route_next (node))
+      if ((info = node->info) != NULL)
+	if (info->selected && info->peer != peer)
+	  bgp_announce (peer, &node->p, info);
 
 #ifdef HAVE_IPV6
-  for (node = route_top (bgp_table_ipv6); node; node = route_next (node))
-    if ((info = node->info) != NULL)
-      if (info->selected && info->peer != peer)
-	bgp_announce (peer, &node->p, info);
+  if (peer->family == AF_INET6)
+    for (node = route_top (bgp_table_ipv6); node; node = route_next (node))
+      if ((info = node->info) != NULL)
+	if (info->selected && info->peer != peer)
+	  bgp_announce (peer, &node->p, info);
 #endif /* HAVE_IPV6 */
 }
 
@@ -506,6 +522,15 @@ bgp_terminate ()
 	bgp_zebra_withdraw (&node->p, info);
 #endif /* HAVE_IPV6 */
 }
+
+void
+bgp_reset ()
+{
+  vty_reset ();
+  bgp_zclient_reset ();
+  access_list_reset ();
+  prefix_list_reset ();
+}
 
 /* Update routing information of each peer.  Yes we need attribute
    information here. */
@@ -517,8 +542,12 @@ nlri_update (struct prefix *p, struct bgp_info *info)
 
   for (node = listhead (peer_list); node; nextnode (node))
     if ((peer = getdata (node)) != NULL)
-      if (peer != info->peer && peer->status == Established)
-	bgp_announce (peer, p, info);
+      {
+	if (peer != info->peer &&
+	    peer->family == p->family &&
+	    peer->status == Established)
+	  bgp_announce (peer, p, info);
+      }
 
   /* Kernel routing update. */
   if (info->type == ZEBRA_ROUTE_BGP && info->sub_type == BGP_ROUTE_NORMAL)
@@ -533,7 +562,9 @@ nlri_withdraw (struct prefix *p, struct bgp_info *info)
 
   for (node = listhead (peer_list); node; nextnode (node))
     if ((peer = getdata (node)) != NULL)
-      if (peer != info->peer && peer->status == Established)
+      if (peer != info->peer &&
+	  peer->family == p->family &&
+	  peer->status == Established)
 	bgp_withdraw_send (peer, p);
 
   /* Kernel routing update. */
@@ -703,7 +734,8 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
 
       /* Apply route map to duplicated attribute. */
       ret = route_map_apply (ROUTE_MAP_IN (peer), p, ROUTE_MAP_BGP, &bgp_info);
-      if(ret == RM_DENYMATCH)
+
+      if (ret == RM_DENYMATCH)
 	{
 	  aspath_free(newattr.aspath);
 
@@ -755,6 +787,10 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
   if (!len) 
     return;
 
+  /* Check peer's family type. */
+  if (family != peer->family)
+    return;
+
   for (end = pnt + len; pnt < end; pnt += psize)
     {
       /* Fetch one prefix from NLRI. */
@@ -778,7 +814,8 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
       if (pnt + psize > end)
 	{
 	  zlog (peer->log, LOG_ERR, 
-		"Wrong prefix length exeeds end of packet %d", p.prefixlen);
+		"Wrong prefix length. It exceeds end of packet %d",
+		p.prefixlen);
 	  return;
 	}
 
@@ -812,6 +849,7 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
       br->sub_type = BGP_ROUTE_NORMAL;
       br->peer = peer;
       br->attr = attrnew;
+      br->uptime = time (NULL);
 
       /* Process this information. */
       nlri_process (&p, br);
@@ -886,7 +924,8 @@ nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
       psize = PSIZE (p.prefixlen);
       memcpy (&p.u.prefix4, pnt, psize);
 
-      nlri_delete (peer, &p);
+      if (peer->family == AF_INET)
+	nlri_delete (peer, &p);
 
       pnt += psize;
     }
@@ -975,14 +1014,32 @@ bgp_peer_delete (struct peer *peer)
 
 /* Withdraw specified route type's route. */
 void
-bgp_redistribute_withdraw (struct bgp *bgp, int route_type)
+bgp_redistribute_withdraw (struct bgp *bgp, int family, int route_type)
 {
   struct route_node *rp;
   struct bgp_info *binfo;
   struct bgp_info *next;
 
-  for (rp = route_top (bgp_table_ipv4); rp; rp = route_next (rp))
-    {
+  if (family == ZEBRA_FAMILY_IPV4)
+    for (rp = route_top (bgp_table_ipv4); rp; rp = route_next (rp))
+      {
+	for (binfo = rp->info; binfo; binfo = next)
+	  {
+	    next = binfo->next;
+
+	    if (binfo->type == route_type)
+	      {
+		bgp_info_delete ((struct bgp_info **) &rp->info, binfo);
+		nlri_reselect (&rp->p, (struct bgp_info *)rp->info, binfo);
+		bgp_info_free (binfo);
+		route_unlock_node (rp);
+	      }
+	  }
+      }
+
+#ifdef HAVE_IPV6
+  if (family == ZEBRA_FAMILY_IPV6)
+    for (rp = route_top (bgp_table_ipv6); rp; rp = route_next (rp))
       for (binfo = rp->info; binfo; binfo = next)
 	{
 	  next = binfo->next;
@@ -995,22 +1052,6 @@ bgp_redistribute_withdraw (struct bgp *bgp, int route_type)
 	      route_unlock_node (rp);
 	    }
 	}
-    }
-
-#ifdef HAVE_IPV6
-  for (rp = route_top (bgp_table_ipv6); rp; rp = route_next (rp))
-    for (binfo = rp->info; binfo; binfo = next)
-      {
-	next = binfo->next;
-
-	if (binfo->type == route_type)
-	  {
-	    bgp_info_delete ((struct bgp_info **) &rp->info, binfo);
-	    nlri_reselect (&rp->p, (struct bgp_info *)rp->info, binfo);
-	    bgp_info_free (binfo);
-	    route_unlock_node (rp);
-	  }
-      }
 #endif /* HAVE_IPV6 */
 }
 
@@ -1083,7 +1124,7 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
     vty_out (vty, " %s", bgp_origin_str[attr->origin]);
   }
 
-  vty_out (vty, "\r\n");
+  vty_out (vty, "%s", VTY_NEWLINE);
 }  
 
 #ifdef HAVE_IPV6      
@@ -1135,7 +1176,7 @@ route_vty_out_ipv6 (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
   /* Print origin */
   vty_out (vty, " %s", bgp_origin_str[attr->origin]);
 
-  vty_out (vty, "\r\n");
+  vty_out (vty, "%s", VTY_NEWLINE);
 
   if (attr) 
     {
@@ -1143,12 +1184,14 @@ route_vty_out_ipv6 (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
       char buf1[BUFSIZ];
 
       if (attr->mp_nexthop_len == 16)
-	vty_out (vty, "     %s\r\n", 
-		 inet_ntop (AF_INET6, &attr->mp_nexthop_global, buf, BUFSIZ));
-      else if (attr->mp_nexthop_len == 32)
-	vty_out (vty, "     %s(%s)\r\n",
+	vty_out (vty, "     %s%s", 
 		 inet_ntop (AF_INET6, &attr->mp_nexthop_global, buf, BUFSIZ),
-		 inet_ntop (AF_INET6, &attr->mp_nexthop_local, buf1, BUFSIZ));
+		 VTY_NEWLINE);
+      else if (attr->mp_nexthop_len == 32)
+	vty_out (vty, "     %s(%s)%s",
+		 inet_ntop (AF_INET6, &attr->mp_nexthop_global, buf, BUFSIZ),
+		 inet_ntop (AF_INET6, &attr->mp_nexthop_local, buf1, BUFSIZ),
+		 VTY_NEWLINE);
     }
 }  
 #endif /* HAVE_IPV6 */
@@ -1161,10 +1204,11 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
   struct attr *attr;
 
   /* Header of detailed BGP route information. */
-  vty_out (vty, "%s%s/%d\r\n",
+  vty_out (vty, "%s%s/%d%s",
 	   binfo->selected ? "*" : " ",
 	   inet_ntop (p->family, &p->u.prefix, buf, INET6_ADDRSTRLEN),
-	   p->prefixlen);
+	   p->prefixlen,
+	   VTY_NEWLINE);
 
   /* Print attribute */
   attr = binfo->attr;
@@ -1180,33 +1224,40 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
       /* show nex hop */
       if (attr)
 	{
-	  vty_out (vty, "(%s)\r\n", bgp_origin_long_str[attr->origin]);
-	  vty_out (vty, "\tNexthop: %s\r\n", inet_ntoa(attr->nexthop));
+	  vty_out (vty, "(%s)%s", bgp_origin_long_str[attr->origin],
+		   VTY_NEWLINE);
+	  vty_out (vty, "\tNexthop: %s%s", inet_ntoa(attr->nexthop),
+		   VTY_NEWLINE);
 
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_MULTI_EXIT_DISC))
-	    vty_out (vty, "\tMED: %lu\r\n", attr->med);
+	    vty_out (vty, "\tMED: %lu%s", attr->med,
+		     VTY_NEWLINE);
 
-	  vty_out (vty, "\tWeight: %lu\r\n", attr->weight);
+	  vty_out (vty, "\tWeight: %lu%s", attr->weight,
+		   VTY_NEWLINE);
 
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF))
-	    vty_out (vty, "\tLocalpref: %lu\r\n", attr->local_pref);
+	    vty_out (vty, "\tLocalpref: %lu%s", attr->local_pref,
+		     VTY_NEWLINE);
 	  
 	  if (attr->community)
 	    {
 	      vty_out (vty, "\tCommunity:");
 	      community_print_vty (vty, attr->community);
-	      vty_out (vty, "\r\n");
+	      vty_out (vty, "%s", VTY_NEWLINE);
 	    }
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ATOMIC_AGGREGATE))
-	    vty_out (vty, "\tAtomic Aggregate\r\n");
+	    vty_out (vty, "\tAtomic Aggregate%s", VTY_NEWLINE);
 
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_AGGREGATOR))
-	    vty_out (vty, "\tAggregator AS %d [%s]\r\n", attr->aggregator_as,
-		     inet_ntoa(attr->aggregator_addr));
+	    vty_out (vty, "\tAggregator AS %d [%s]%s", attr->aggregator_as,
+		     inet_ntoa(attr->aggregator_addr),
+		     VTY_NEWLINE);
 
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
-	    vty_out (vty, "\tOriginator ID: %s\r\n",
-		     inet_ntoa (attr->originator_id));
+	    vty_out (vty, "\tOriginator ID: %s%s",
+		     inet_ntoa (attr->originator_id),
+		     VTY_NEWLINE);
 
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_CLUSTER_LIST))
 	    {
@@ -1214,31 +1265,37 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 	      vty_out (vty, "\tCluster List: ");
 	      for (i = 0; i < attr->cluster->length / 4; i++)
 		vty_out (vty, "%s ", inet_ntoa (attr->cluster->list[i]));
-	      vty_out (vty, "\r\n");
+	      vty_out (vty, "%s", VTY_NEWLINE);
 	    }
 #ifdef HAVE_IPV6
 	  if (attr->mp_nexthop_len == 16)
 	    {
 	      vty_out (vty, "\tIPv6 nexthop global: ");
-	      vty_out (vty, "%s\r\n",
+	      vty_out (vty, "%s%s",
 		       inet_ntop (AF_INET6, &attr->mp_nexthop_global,
-				  buf, INET6_ADDRSTRLEN));
+				  buf, INET6_ADDRSTRLEN),
+		                  VTY_NEWLINE);
 	    }
 	  else if (attr->mp_nexthop_len == 32)
 	    {
 	      vty_out (vty, "\tIPv6 nexthop global: ");
-	      vty_out (vty, "%s\r\n",
+	      vty_out (vty, "%s%s",
 		       inet_ntop (AF_INET6, &attr->mp_nexthop_global,
-				  buf, INET6_ADDRSTRLEN));
+				  buf, INET6_ADDRSTRLEN),
+		                  VTY_NEWLINE);
 	      vty_out (vty, "\tIPv6 nexthop local: ");
-	      vty_out (vty, "%s\r\n",
+	      vty_out (vty, "%s%s",
 		       inet_ntop (AF_INET6, &attr->mp_nexthop_local,
-				  buf, INET6_ADDRSTRLEN));
+				  buf, INET6_ADDRSTRLEN),
+		                  VTY_NEWLINE);
 	    }
 #endif /* HAVE_IPV6 */
+
+	  /* Uptime display. */
+	  vty_out (vty, "\tLast update: %s", ctime (&binfo->uptime));
 	}
     }
-  vty_out (vty, "\r\n");
+  vty_out (vty, "%s", VTY_NEWLINE);
 }  
 
 /* BGP route print out function. */
@@ -1262,7 +1319,7 @@ DEFUN (show_ip_bgp, show_ip_bgp_cmd,
       int count;
 
       /* Header print out. */
-      vty_out (vty, "   Network             Next Hop            Metric    LocPrf    Weight Path\r\n");
+      vty_out (vty, "   Network             Next Hop            Metric    LocPrf    Weight Path%s", VTY_NEWLINE);
 
       /* We try to set counter to ten. */
       count = 10;
@@ -1291,7 +1348,7 @@ DEFUN (show_ip_bgp, show_ip_bgp_cmd,
   ret = inet_aton (argv[0], &match.prefix);
   if (! ret)
     {
-      vty_out (vty, "address is malformed\r\n");
+      vty_out (vty, "address is malformed%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   match.family = AF_INET;
@@ -1302,7 +1359,7 @@ DEFUN (show_ip_bgp, show_ip_bgp_cmd,
 
   if (node == NULL) 
     {
-      vty_out (vty, "can't find route\r\n");
+      vty_out (vty, "can't find route%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1353,7 +1410,8 @@ DEFUN (show_ip_bgp_regexp,
   regex = bgp_regcomp (regstr);
   if (! regex)
     {
-      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      vty_out (vty, "can't compile regexp %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1386,7 +1444,7 @@ DEFUN (show_ip_bgp_prefix_list,
   plist = prefix_list_lookup (AF_INET, argv[0]);
   if (plist == NULL)
     {
-      vty_out (vty, "Can't find prefix-list\r\n");
+      vty_out (vty, "Can't find prefix-list%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1416,7 +1474,8 @@ DEFUN (show_ipv6_bgp,
 
   if (argc == 0)
     {
-      vty_out (vty, "\r\n   Network                                LocPrf Weight Path\r\n");
+      vty_out (vty, "%s   Network                                LocPrf Weight Path%s", VTY_NEWLINE,
+	       VTY_NEWLINE);
 
       /* Start processing of routes. */
       for (node = route_top (bgp_table_ipv6); node; node = route_next (node)) 
@@ -1428,7 +1487,7 @@ DEFUN (show_ipv6_bgp,
   ret = str2prefix_ipv6 (argv[0], &match);
   if (! ret)
     {
-      vty_out (vty, "address is malformed\r\n");
+      vty_out (vty, "address is malformed%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   match.prefixlen = IPV6_MAX_BITLEN;
@@ -1438,7 +1497,7 @@ DEFUN (show_ipv6_bgp,
 
   if (node == NULL) 
     {
-      vty_out (vty, "can't find route\r\n");
+      vty_out (vty, "can't find route%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1489,7 +1548,8 @@ DEFUN (show_ipv6_bgp_regexp,
   regex = bgp_regcomp (regstr);
   if (! regex)
     {
-      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      vty_out (vty, "can't compile regexp %s%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1501,78 +1561,6 @@ DEFUN (show_ipv6_bgp_regexp,
 	  route_vty_out (vty, &node->p, route);
       }
   bgp_regex_free (regex);
-
-  return CMD_SUCCESS;
-}
-
-/* Network configuration for IPv6. */
-int
-bgp_network_config_ipv6 (struct vty *vty, char *address_str)
-{
-  int ret;
-  struct prefix p;
-  struct route_node *node;
-  struct bgp_info *bgp_info;
-
-  ret = str2prefix_ipv6 (address_str, (struct prefix_ipv6 *) &p);
-  if (!ret)
-    {
-      vty_out (vty, "Please specify valid address\r\n");
-      return CMD_WARNING;
-    }
-
-  apply_mask_ipv6 ((struct prefix_ipv6 *) &p);
-  
-  node = route_node_get (bgp_static_ipv6, &p);
-  if (node->info)
-    {
-      vty_out (vty, "There is already same static announcement.\r\n");
-      route_unlock_node (node);
-      return CMD_WARNING;
-    }
-
-  bgp_info = bgp_info_new ();
-  bgp_info->type = ZEBRA_ROUTE_BGP;
-  bgp_info->sub_type = BGP_ROUTE_STATIC;
-  bgp_info->peer = peer_self;
-  bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_IGP);
-  node->info = bgp_info;
-
-  nlri_process (&p, bgp_info);
-
-  return CMD_SUCCESS;
-}
-
-int
-bgp_no_network_config_ipv6 (struct vty *vty, char *address_str)
-{
-  int ret;
-  struct prefix p;
-  struct route_node *node;
-
-  ret = str2prefix_ipv6 (address_str, (struct prefix_ipv6 *) &p);
-  if (! ret)
-    {
-      vty_out (vty, "Please specify valid address\r\n");
-      return CMD_WARNING;
-    }
-
-  apply_mask_ipv6 ((struct prefix_ipv6 *) &p);
-  
-  node = route_node_get (bgp_static_ipv6, &p);
-  if (! node->info)
-    {
-      vty_out (vty, "Can't find specified static route configuration.\r\n");
-      route_unlock_node (node);
-      return CMD_WARNING;
-    }
-
-  nlri_delete (peer_self, (struct prefix *) &p);
-
-  node->info = NULL;
-
-  route_unlock_node (node);
-  route_unlock_node (node);
 
   return CMD_SUCCESS;
 }
@@ -1596,11 +1584,7 @@ DEFUN (bgp_network,
   ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
   if (!ret)
     {
-#ifdef HAVE_IPV6
-      return bgp_network_config_ipv6 (vty, argv[0]);
-#endif /* HAVE_IPV6 */
-
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1610,7 +1594,7 @@ DEFUN (bgp_network,
   node = route_node_get (bgp_static_ipv4, &p);
   if (node->info)
     {
-      vty_out (vty, "There is already same static announcement.\r\n");
+      vty_out (vty, "There is already same static announcement.%s", VTY_NEWLINE);
       route_unlock_node (node);
       return CMD_WARNING;
     }
@@ -1620,6 +1604,7 @@ DEFUN (bgp_network,
   bgp_info->sub_type = BGP_ROUTE_STATIC;
   bgp_info->peer = peer_self;
   bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_IGP);
+  bgp_info->uptime = time (NULL);
   node->info = bgp_info;
 
   nlri_process (&p, bgp_info);
@@ -1644,11 +1629,7 @@ DEFUN (no_bgp_network,
   ret = str2prefix_ipv4 (argv[0], &p);
   if (!ret)
     {
-#ifdef HAVE_IPV6
-      return bgp_no_network_config_ipv6 (vty, argv[0]);
-#endif /* HAVE_IPV6 */
-
-      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1657,7 +1638,7 @@ DEFUN (no_bgp_network,
   np = route_node_get (bgp_static_ipv4, (struct prefix *) &p);
   if (!np->info)
     {
-      vty_out (vty, "Can't find specified static route configuration.\r\n");
+      vty_out (vty, "Can't find specified static route configuration.%s", VTY_NEWLINE);
       route_unlock_node (np);
       return CMD_WARNING;
     }
@@ -1688,7 +1669,7 @@ DEFUN (aggregate_address,
   ret = str2prefix (argv[0], &p);
   if (!ret)
     {
-      vty_out (vty, "Prefix is invalid\r\n");
+      vty_out (vty, "Prefix is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   
@@ -1700,7 +1681,7 @@ DEFUN (aggregate_address,
       node = route_node_get (bgp_aggregate_ipv4, &p);
       if (node->info)
 	{
-	  vty_out (vty, "There is already same aggregate network.\r\n");
+	  vty_out (vty, "There is already same aggregate network.%s", VTY_NEWLINE);
 	  route_unlock_node (node);
 	  return CMD_WARNING;
 	}
@@ -1709,6 +1690,7 @@ DEFUN (aggregate_address,
       bgp_info->sub_type = BGP_ROUTE_AGGREGATE;
       bgp_info->peer = peer_self;
       bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_INCOMPLETE);
+      bgp_info->uptime = time (NULL);
 
       node->info = bgp_info;
 
@@ -1719,46 +1701,198 @@ DEFUN (aggregate_address,
     }
 
   /* IPv6 aggregate addess support. */
-  vty_out (vty, "Sorry not yet supported.\r\n");
+  vty_out (vty, "Sorry not yet supported.%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_IPV6
+/* Configure static BGP network. */
+DEFUN (ipv6_bgp_network,
+       ipv6_bgp_network_cmd,
+       "ipv6 bgp network PREFIX",
+       IPV6_STR
+       BGP_STR
+       "Announce network setup\n"
+       "Static network for bgp announcement\n")
+{
+  int ret;
+  struct bgp *bgp;
+  struct prefix_ipv6 p;
+  struct route_node *node;
+  struct bgp_info *bgp_info;
+
+  bgp = (struct bgp *) vty->index;
+
+  ret = str2prefix_ipv6 (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify valid address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  apply_mask_ipv6 (&p);
+  
+  node = route_node_get (bgp_static_ipv6, (struct prefix *)&p);
+  if (node->info)
+    {
+      vty_out (vty, "There is already same static announcement.%s", VTY_NEWLINE);
+      route_unlock_node (node);
+      return CMD_WARNING;
+    }
+
+  bgp_info = bgp_info_new ();
+  bgp_info->type = ZEBRA_ROUTE_BGP;
+  bgp_info->sub_type = BGP_ROUTE_STATIC;
+  bgp_info->peer = peer_self;
+  bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_IGP);
+  bgp_info->uptime = time (NULL);
+  node->info = bgp_info;
+
+  nlri_process ((struct prefix *) &p, bgp_info);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_bgp_network,
+       no_ipv6_bgp_network_cmd,
+       "no ipv6 bgp network PREFIX",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Announce network setup\n"
+       "Delete static network for bgp announcement\n")
+{
+  int ret;
+  struct bgp *bgp;
+  struct route_node *node;
+  struct prefix_ipv6 p;
+
+  bgp = (struct bgp *) vty->index;
+
+  ret = str2prefix_ipv6 (argv[0], &p);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  apply_mask_ipv6 (&p);
+  
+  node = route_node_get (bgp_static_ipv6, (struct prefix *)&p);
+  if (! node->info)
+    {
+      vty_out (vty, "Can't find specified static route configuration.%s",
+	       VTY_NEWLINE);
+      route_unlock_node (node);
+      return CMD_WARNING;
+    }
+
+  nlri_delete (peer_self, (struct prefix *) &p);
+
+  node->info = NULL;
+
+  route_unlock_node (node);
+  route_unlock_node (node);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_aggregate_address,
+       ipv6_aggregate_address_cmd,
+       "ipv6 bgp aggregate-address PREFIX summary-only",
+       "Aggregate network\n"
+       "Network\n"
+       "Mask\n")
+{
+  int ret;
+  struct prefix p;
+  struct route_node *node;
+  struct bgp_info *bgp_info;
+
+  ret = str2prefix (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Prefix is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  
+  /* IPv4 aggregate address support. */
+  if (p.family == AF_INET6)
+    {
+      apply_mask (&p);
+
+      node = route_node_get (bgp_aggregate_ipv6, &p);
+      if (node->info)
+	{
+	  vty_out (vty, "There is already same aggregate network.%s", VTY_NEWLINE);
+	  route_unlock_node (node);
+	  return CMD_WARNING;
+	}
+      bgp_info = bgp_info_new ();
+      bgp_info->type = ZEBRA_ROUTE_BGP;
+      bgp_info->sub_type = BGP_ROUTE_AGGREGATE;
+      bgp_info->peer = peer_self;
+      bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_INCOMPLETE);
+      bgp_info->uptime = time (NULL);
+
+      node->info = bgp_info;
+
+      /* Aggregate address insert into BGP routing table. */
+      bgp_aggregate_update (&p, bgp_info);
+
+      return CMD_SUCCESS;
+    }
+
+  vty_out (vty, "Sorry, wrong address family.%s", VTY_NEWLINE);
+
+  return CMD_SUCCESS;
+}
+
+#endif /* HAVE_IPV6 */
+
 /* Configuration of static route announcement and aggregate
    information. */
 int
-config_write_network (struct vty *vty, struct bgp *bgp)
+config_write_network (struct vty *vty, struct bgp *bgp, int family)
 {
-  struct route_node *node;
+  struct route_node *rn;
   struct bgp_route *route;
   char buf[BUFSIZ];
   
-  for (node = route_top (bgp_static_ipv4); node; node = route_next (node)) 
-    if ((route = node->info) != NULL)
-      vty_out (vty, " network %s/%d%s", 
-	       inet_ntop (AF_INET, &node->p.u.prefix4, buf, BUFSIZ), 
-	       node->p.prefixlen, VTY_NEWLINE);
-#ifdef HAVE_IPV6
-  for (node = route_top (bgp_static_ipv6); node; node = route_next (node)) 
-    if ((route = node->info) != NULL)
-      vty_out (vty, " network %s/%d%s", 
-	       inet_ntop (AF_INET6, &node->p.u.prefix6, buf, BUFSIZ),
-	       node->p.prefixlen, VTY_NEWLINE);
-#endif /* HAVE_IPV6 */
+  if (family == AF_INET)
+    {
+      for (rn = route_top (bgp_static_ipv4); rn; rn = route_next (rn)) 
+	if ((route = rn->info) != NULL)
+	  vty_out (vty, " network %s/%d%s", 
+		   inet_ntop (AF_INET, &rn->p.u.prefix4, buf, BUFSIZ), 
+		   rn->p.prefixlen,
+		   VTY_NEWLINE);
+      for (rn = route_top (bgp_aggregate_ipv4); rn; rn = route_next (rn))
+	if ((route = rn->info) != NULL)
+	  vty_out (vty, " aggregate-address %s/%d summary-only%s",
+		   inet_ntop (AF_INET, &rn->p.u.prefix4, buf, BUFSIZ),
+		   rn->p.prefixlen,
+		   VTY_NEWLINE);
+    }
 
-  for (node = route_top (bgp_aggregate_ipv4); node; node = route_next (node))
-    if ((route = node->info) != NULL)
-      vty_out (vty, " aggregate-address %s/%d summary-only%s",
-	       inet_ntop (AF_INET, &node->p.u.prefix4, buf, BUFSIZ),
-	       node->p.prefixlen, VTY_NEWLINE);
 #ifdef HAVE_IPV6
-  for (node = route_top (bgp_aggregate_ipv6); node; node = route_next (node))
-    if ((route = node->info) != NULL)
-      vty_out (vty, " aggregate-address %s/%d summary-only%s",
-	       inet_ntop (AF_INET6, &node->p.u.prefix6, buf, BUFSIZ),
-	       node->p.prefixlen, VTY_NEWLINE);
+  if (family == AF_INET6)
+    {
+      for (rn = route_top (bgp_static_ipv6); rn; rn = route_next (rn)) 
+	if ((route = rn->info) != NULL)
+	  vty_out (vty, "ipv6 bgp network %s/%d%s", 
+		   inet_ntop (AF_INET6, &rn->p.u.prefix6, buf, BUFSIZ),
+		   rn->p.prefixlen,
+		   VTY_NEWLINE);
+      for (rn = route_top (bgp_aggregate_ipv6); rn; rn = route_next (rn))
+	if ((route = rn->info) != NULL)
+	  vty_out (vty, "ipv6 bgp aggregate-address %s/%d summary-only%s",
+		   inet_ntop (AF_INET6, &rn->p.u.prefix6, buf, BUFSIZ),
+		   rn->p.prefixlen,
+		   VTY_NEWLINE);
+    }
 #endif /* HAVE_IPV6 */  
-
   return 0;
 }
 
@@ -1792,6 +1926,10 @@ bgp_route_init ()
   bgp_table_ipv6 = route_table_init ();
   bgp_static_ipv6 = route_table_init ();
   bgp_aggregate_ipv6 = route_table_init ();
+
+  install_element (BGP_NODE, &ipv6_bgp_network_cmd);
+  install_element (BGP_NODE, &no_ipv6_bgp_network_cmd);
+  install_element (BGP_NODE, &ipv6_aggregate_address_cmd);
 
   install_element (VIEW_NODE, &show_ipv6_bgp_cmd);
   install_element (VIEW_NODE, &show_ipv6_bgp_regexp_cmd);

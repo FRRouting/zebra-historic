@@ -613,7 +613,8 @@ ospf6_route_str (struct route_node *node, char *buf, size_t bufsize)
         rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
         inet_ntop (AF_INET, &rtrid, tmp, sizeof (tmp));
         ifid = ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&node->p),
-        snprintf (dstr, sizeof (dstr), "%s[%ld]", tmp, ntohl (ifid));
+        snprintf (dstr, sizeof (dstr), "%s[%ld]", tmp, 
+		  (unsigned long) ntohl (ifid));
         break;
 
       case DTYPE_STATIC_REDISTRIBUTE:
@@ -665,13 +666,16 @@ ospf6_route_vty (struct vty *vty, struct route_node *node)
 
   /* xxx, save entry of no nexthop */
   if (list_isempty (info->nhlist))
-    vty_out (vty, "%s\r\n", rnbuf);
+    vty_out (vty, "%s%s", rnbuf,
+	     VTY_NEWLINE);
 
   for (n = listhead (info->nhlist); n; nextnode (n))
     {
       nh = (struct ospf6_nexthop *) getdata (n);
       nexthop_str (nh, nhbuf, sizeof (nhbuf));
-      vty_out (vty, "%s %s\r\n", rnbuf, nhbuf);
+      vty_out (vty, "%s %s%s", rnbuf,
+	       nhbuf,
+	       VTY_NEWLINE);
     }
 }
 

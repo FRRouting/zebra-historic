@@ -29,8 +29,6 @@
 #include "command.h"
 #include "log.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_dump.h"
 #include "bgpd/bgp_fsm.h"
@@ -147,8 +145,8 @@ bgp_connect_check (struct peer *peer)
       BGP_EVENT_ADD (peer, TCP_connection_open);
   else
     {
-      zlog (peer->log, LOG_INFO, "neighbor %s: Connect failed : %s",
-	    peer->host, strerror (errno));
+      zlog (peer->log, LOG_INFO, "neighbor %s:%d: Connect failed : %s",
+	    peer->host, peer->port, strerror (errno));
       BGP_EVENT_ADD (peer, TCP_connection_open_failed);
     }
 }
@@ -321,10 +319,19 @@ bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr)
   struct stream *packet;
   unsigned long pos;
   bgp_size_t total_attr_len;
+  char attrstr[BUFSIZ];
+  char buf[BUFSIZ];
 
 #ifdef DISABLE_BGP_ANNOUNCE
   return;
 #endif /* DISABLE_BGP_ANNOUNCE */
+
+  /* Make attribute dump string. */
+  bgp_dump_attr (peer, attr, attrstr, BUFSIZ);
+
+  zlog(peer->log, LOG_INFO, "Announce-to:[%s] %s/%d %s",
+       peer->host, inet_ntop(peer->family, &(p->u.prefix), buf, BUFSIZ),
+       p->prefixlen, attrstr);
 
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
@@ -451,6 +458,12 @@ bgp_open (struct peer *peer, bgp_size_t size)
   holdtime = stream_getw (peer->ibuf);
   peer->ident = stream_get_ipv4 (peer->ibuf);
 
+  /* When newpeer is closed by collision detect. */
+#if 0  /* Tempolary comment out until the implemetation is finished. */
+  if (bgp_collision_detect (peer))
+    return;
+#endif /* 0 */
+
   /* From the rfc: Upon receipt of an OPEN message, a BGP speaker MUST
      calculate the value of the Hold Timer by using the smaller of its
      configured Hold Time and the Hold Time received in the OPEN message.
@@ -479,8 +492,8 @@ bgp_open (struct peer *peer, bgp_size_t size)
     {
       if (peer->v_keepalive > (peer->v_holdtime / 3))
 	{
-	  zlog(peer->log, LOG_WARNING, "neighbor %s: warning: holdtime %d, but keepalive configured as %d not %d",
-	       peer->host, peer->v_holdtime, peer->v_keepalive, (peer->v_holdtime / 3));
+	  zlog (peer->log, LOG_WARNING, "neighbor %s: warning: holdtime %d, but keepalive configured as %d not %d",
+		peer->host, peer->v_holdtime, peer->v_keepalive, (peer->v_holdtime / 3));
 	}
     }
   else
@@ -629,10 +642,12 @@ bgp_update (struct peer *peer, bgp_size_t size)
 
   /* All things should be done at here.  So if unused aspath or
      community must be freed. */
-  if (attr.aspath && attr.aspath->refcnt == 0)
+  if (attr.aspath)
     aspath_unintern (attr.aspath);
-  if (attr.community && attr.community->refcnt == 0)
+  if (attr.community)
     community_unintern (attr.community);
+  if (attr.cluster)
+    cluster_unintern (attr.cluster);
 
   BGP_EVENT_ADD (peer, Receive_UPDATE_message);
 }

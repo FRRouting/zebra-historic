@@ -27,6 +27,17 @@
 #include "network.h"
 #include "prefix.h"
 
+
+/*A macro to check pointers in order to not
+  go behind the allocated mem block 
+  S -- stream reference
+  Z -- size of data to be written 
+*/
+
+#define CHECK_SIZE(S, Z) \
+	if (((S)->putp + (Z)) > (S)->size) \
+           (Z) = (S)->size - (S)->putp;
+
 /* Stream is fixed length buffer for network output/input. */
 
 /* Make stream buffer. */
@@ -154,6 +165,9 @@ stream_get_ipv4 (struct stream *s)
 void
 stream_put (struct stream *s, void *src, size_t size)
 {
+
+  CHECK_SIZE(s, size);
+
   if (src)
     memcpy (s->data + s->putp, src, size);
   else
@@ -168,6 +182,8 @@ stream_put (struct stream *s, void *src, size_t size)
 int
 stream_putc (struct stream *s, u_char c)
 {
+  if (s->putp >= s->size) return 0;
+
   s->data[s->putp] = c;
   s->putp++;
   if (s->putp > s->endp)
@@ -179,6 +195,8 @@ stream_putc (struct stream *s, u_char c)
 int
 stream_putw (struct stream *s, u_int16_t w)
 {
+  if ((s->size - s->putp) < 2) return 0;
+
   s->data[s->putp++] = (u_char)(w >>  8);
   s->data[s->putp++] = (u_char) w;
 
@@ -191,6 +209,8 @@ stream_putw (struct stream *s, u_int16_t w)
 int
 stream_putl (struct stream *s, u_int32_t l)
 {
+  if ((s->size - s->putp) < 4) return 0;
+
   s->data[s->putp++] = (u_char)(l >> 24);
   s->data[s->putp++] = (u_char)(l >> 16);
   s->data[s->putp++] = (u_char)(l >>  8);
@@ -230,6 +250,8 @@ stream_putl_at (struct stream *s, unsigned long putp, u_int32_t l)
 int
 stream_put_ipv4 (struct stream *s, u_int32_t l)
 {
+  if ((s->size - s->putp) < 4) return 0;
+
   memcpy (s->data + s->putp, &l, 4);
   s->putp += 4;
 
@@ -245,6 +267,8 @@ stream_put_prefix (struct stream *s, struct prefix *p)
   u_char psize;
 
   psize = PSIZE (p->prefixlen);
+
+  if ((s->size - s->putp) < psize) return 0;
 
   stream_putc (s, p->prefixlen);
   memcpy (s->data + s->putp, &p->u.prefix, psize);
@@ -276,6 +300,9 @@ stream_read (struct stream *s, int fd, size_t size)
 int
 stream_write (struct stream *s, u_char *ptr, size_t size)
 {
+
+  CHECK_SIZE(s, size);
+
   memcpy (s->data + s->putp, ptr, size);
   s->putp += size;
   if (s->putp > s->endp)

@@ -29,8 +29,6 @@
 #include "rib.h"
 #include "log.h"
 
-#include "zebra/zebra.h"
-
 /* Socket length roundup function. */
 #define ROUNDUP(a) \
   ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))

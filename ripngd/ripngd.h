@@ -194,6 +194,17 @@ struct ripng_interface
   /* RIPng is running on this interface. */
   int running;
 
+  /* For filter type slot. */
+#define RIPNG_FILTER_IN  0
+#define RIPNG_FILTER_OUT 1
+#define RIPNG_FILTER_MAX 2
+
+  /* Access-list. */
+  struct access_list *list[RIPNG_FILTER_MAX];
+
+  /* Prefix-list. */
+  struct prefix_list *prefix[RIPNG_FILTER_MAX];
+
   /* RIPng tag configuration. */
   struct ripng_tag *rtag;
 
@@ -238,45 +249,20 @@ extern struct ripng *ripng;
 extern struct thread_master *master;
 
 /* Prototypes. */
-void
-ripng_init ();
-
-void
-ripng_if_init ();
-
-void
-ripng_terminate ();
-
-void
-zebra_start ();
-
-struct ripng_info *
-ripng_info_new ();
-
-void
-ripng_info_free (struct ripng_info *rinfo);
-
-void
-ripng_event (enum ripng_event, int);
-
-int
-ripng_request (struct interface *ifp);
-
-void
-ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
-		      unsigned int ifindex);
-
-void
-ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
-			 unsigned int ifindex);
-
-void
-ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
-
-void
-ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
-
-void
-ripng_redistribute_withdraw (int type);
+void ripng_init ();
+void ripng_if_init ();
+void ripng_terminate ();
+void ripng_zclient_start ();
+void zebra_init ();
+struct ripng_info * ripng_info_new ();
+void ripng_info_free (struct ripng_info *rinfo);
+void ripng_event (enum ripng_event, int);
+int ripng_request (struct interface *ifp);
+void ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
+void ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
+void ripng_redistribute_withdraw (int type);
+void ripng_distribute_update_interface (struct interface *);
+void ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop, unsigned int ifindex);
+void ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop, unsigned int ifindex);
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

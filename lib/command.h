@@ -88,9 +88,10 @@ enum node_type
   IP_NODE,			/* Static ip route node. */
   ACCESS_NODE,			/* Access list node. */
   PREFIX_NODE,			/* Prefix list node. */
+  ACCESS_IPV6_NODE,		/* Access list node. */
+  PREFIX_IPV6_NODE,		/* Prefix list node. */
   AS_LIST_NODE,			/* AS list node. */
   COMMUNITY_LIST_NODE,		/* Community list node. */
-  DISTRIBUTE_NODE,		/* Distribute list node. */
   RMAP_NODE,			/* Route map node. */
   VTY_NODE			/* Vty node. */
 };
@@ -141,7 +142,7 @@ struct desc
 #define CMD_ERR_NOTHING_TODO     6
 #define CMD_COMPLETE_FULL_MATCH  7
 #define CMD_COMPLETE_MATCH       8
-#define CMD_VARARG_MATCH         9
+/* #define CMD_VARARG_MATCH         9 */
 
 /* Argc max counts. */
 #define CMD_ARGC_MAX   25
@@ -168,20 +169,20 @@ struct desc
   };
 
 /* Some macroes */
-#define CMD_OPT(X)      ((X) == '[')
-#define CMD_EXT(X)      (((X) >= 'A' && (X) <= 'Z') || ((X) == '<'))
-#define CMD_IPV4(X)	((strcmp ((X), "A.B.C.D") == 0))
-
 #define CMD_OPTION(S)   ((S[0]) == '[')
 #define CMD_VARIABLE(S) (((S[0]) >= 'A' && (S[0]) <= 'Z') || ((S[0]) == '<'))
 #define CMD_VARARG(S)   ((S[0]) == '.')
+#define CMD_RANGE(S)	((S[0] == '<'))
 
-/* #define CMD_VARARG(S) (strcmp ((S), "...") == 0) */
+#define CMD_IPV4(S)	((strcmp ((S), "A.B.C.D") == 0))
+#define CMD_IPV4_PREFIX(S) ((strcmp ((S), "A.B.C.D/M") == 0))
 
 /* Description. */
 #define SHOW_STR "Show running system information\n"
 #define IP_STR "IP information\n"
+#define IPV6_STR "IPv6 information\n"
 #define NO_STR "Negate a command or set its defaults\n"
+#define CLEAR_STR "Reset functions\n"
 #define BGP_STR "BGP information\n"
 #define NEIGHBOR_STR "Specify neighbor router\n"
 #define DEBUG_STR "Debugging functions\n"

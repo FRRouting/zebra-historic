@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "thread.h"
 #include "prefix.h"
 #include "sockunion.h"
@@ -385,16 +384,17 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
   sin_dest = sin_mask = sin_gate = sin6_proto;
   sin_dest.sin6_addr = dest->prefix;
 
+  if (gate)
+    memcpy (&sin_gate.sin6_addr, gate, sizeof (struct in6_addr));
+
   /* Under kame set interface index to link local address. */
 #ifdef KAME
   if (gate && IN6_IS_ADDR_LINKLOCAL(gate))
     {
-      SET_IN6_LINKLOCAL_IFINDEX (*gate, index);
+      SET_IN6_LINKLOCAL_IFINDEX (sin_gate.sin6_addr, index);
     }
 #endif /* KAME */
 
-  if (gate)
-    memcpy (&sin_gate.sin6_addr, gate, sizeof (struct in6_addr));
 
   if (dest->prefixlen != 128)
     {

@@ -28,11 +28,11 @@
 #include "prefix.h"
 #include "table.h"
 #include "stream.h"
-#include "client.h"
+#include "zclient.h"
 #include "linklist.h"
 
-#include "zebra/zebra.h"
 #include "zebra/rib.h"
+#include "zebra/zserv.h"
 #include "zebra/redistribute.h"
 
 int
@@ -139,6 +139,7 @@ zebra_redistribute_add (int command, struct zebra_client *client, int length)
 
   switch (type)
     {
+    case ZEBRA_ROUTE_KERNEL:
     case ZEBRA_ROUTE_CONNECT:
     case ZEBRA_ROUTE_STATIC:
     case ZEBRA_ROUTE_RIP:
@@ -167,6 +168,7 @@ zebra_redistribute_delete (int command, struct zebra_client *client,
 
   switch (type)
     {
+    case ZEBRA_ROUTE_KERNEL:
     case ZEBRA_ROUTE_CONNECT:
     case ZEBRA_ROUTE_STATIC:
     case ZEBRA_ROUTE_RIP:

@@ -29,8 +29,8 @@
 void log_init ();
 void log_flush ();
 
-void log (char *format, ...);
-void log2 (char *format, ...);
+void old_log (char *format, ...);
+void old_log2 (char *format, ...);
 void log_warn (char *format, ...);
 
 char *log_open (char *);
@@ -104,4 +104,8 @@ void zvlog_info (const char *format, ...);
 void zvlog_debug (const char *format, ...);
 int zlog_rotate ();
 
+/* Small macro to determine newline is newline only or linefeed needed. */
+#define LOG_NEWLINE  vty->type == VTY_FILE ? "\n" : "\r\n"
+
 #endif /* _ZEBRA_LOG_H */
+

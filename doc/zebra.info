@@ -1,5 +1,4 @@
-This is Info file zebra.info, produced by Makeinfo version 1.68 from
-the input file zebra.texi.
+This is zebra.info, produced by makeinfo version 4.0 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software
 START-INFO-DIR-ENTRY
@@ -24,82 +23,87 @@ translation approved by the Free Software Foundation.
 
 
 Indirect:
-zebra.info-1: 959
-zebra.info-2: 50946
+zebra.info-1: 933
+zebra.info-2: 50861
 
 Tag Table:
 (Indirect)
-Node: Top959
-Node: Overview2642
-Node: About Zebra3332
-Node: System Architecture5342
-Node: Supported Platforms7479
-Node: Mailing List7898
-Node: Bug Reports8566
-Node: Installation9412
-Node: Configure the Software9854
-Node: Build the Software13339
-Node: Install the Software13881
-Node: Additional Features15258
-Node: Overview of the Herd15506
-Node: Config Commands16244
-Node: Basic Config Commands17137
-Node: Sample Config File19109
-Node: Common Invocation Options19869
-Node: Virtual Terminal Interfaces20370
-Node: VTY Overview20881
-Node: VTY Modes22164
-Node: VTY View Mode22604
-Node: VTY Enable Mode22858
-Node: VTY Other Modes23122
-Node: VTY CLI Commands23284
-Node: CLI Movement Commands23731
-Node: CLI Editing Commands24264
-Node: CLI Advanced Commands24837
-Node: zebra25588
-Node: Invoking zebra26102
-Node: Interface Commands26689
-Node: Static Route Commands27273
-Node: zebra Terminal Mode Commands27700
-Node: ripd28661
-Node: Invoking ripd29519
-Node: ripd Configuration31014
-Node: Filtering RIP Routes36305
-Node: ripd route-map37423
-Node: ripd Terminal Mode Commands39442
-Node: ripd Debug Commands39942
-Node: ripngd40926
-Node: Invoking ripngd41247
-Node: ripngd Configuration41507
-Node: ripngd Terminal Mode Commands42245
-Node: ripngd Filtering Commands42596
-Node: ospfd43094
-Node: Invoking ospfd43387
-Node: ospfd Configuration43640
-Node: ospfd Terminal Mode Commands44420
-Node: ospf6d44867
-Node: Invoking ospf6d44984
-Node: bgpd45089
-Node: Invoking bgpd45665
-Node: bgpd Configuration46054
-Node: bgpd Terminal Mode Commands50154
-Node: bgpd Sample Session50786
-Node: bgpd Log Format50946
-Node: How to Set Up A 6-Bone Connection51479
-Node: Filtering52733
-Node: IP Access List53122
-Node: IP Prefix List53513
-Node: IP Community List53735
-Node: AS Path Access List53936
-Node: Route Map54121
-Node: Route Map Command54623
-Node: Route Map Match Command54826
-Node: Route Map Set Command55434
-Node: IPv6 Supports56292
-Node: Router Advertisement56859
-Node: Kernel Interface57192
-Node: Linux Netlink58410
-Node: Command Index59197
-Node: VTY Key Index68460
+Node: Top933
+Node: Overview2613
+Node: About Zebra3303
+Node: System Architecture5314
+Node: Supported Platforms7451
+Node: Mailing List7870
+Node: Bug Reports8538
+Node: Installation9384
+Node: Configure the Software9826
+Ref: Configure the Software-Footnote-111781
+Node: Build the Software13416
+Node: Install the Software13958
+Node: Additional Features15335
+Node: Overview of the Herd15583
+Node: Config Commands16321
+Node: Basic Config Commands17214
+Node: Sample Config File19186
+Node: Common Invocation Options19946
+Node: Virtual Terminal Interfaces20447
+Node: VTY Overview20958
+Node: VTY Modes22241
+Node: VTY View Mode22681
+Node: VTY Enable Mode22935
+Node: VTY Other Modes23199
+Node: VTY CLI Commands23361
+Node: CLI Movement Commands23808
+Node: CLI Editing Commands24341
+Node: CLI Advanced Commands24914
+Node: zebra25665
+Node: Invoking zebra26179
+Node: Interface Commands26765
+Node: Static Route Commands27349
+Node: zebra Terminal Mode Commands27776
+Node: ripd28737
+Node: Invoking ripd29595
+Node: ripd Configuration31089
+Node: Filtering RIP Routes36381
+Node: ripd route-map37499
+Node: ripd Terminal Mode Commands39520
+Node: ripd Debug Commands40020
+Node: ripngd41004
+Node: Invoking ripngd41325
+Node: ripngd Configuration41584
+Node: ripngd Terminal Mode Commands42322
+Node: ripngd Filtering Commands42673
+Node: ospfd43171
+Node: Invoking ospfd43464
+Node: ospfd Configuration43716
+Node: ospfd Terminal Mode Commands44496
+Node: ospf6d44943
+Node: Invoking ospf6d45060
+Node: bgpd45165
+Node: Invoking bgpd45741
+Node: bgpd Configuration46129
+Node: bgpd Terminal Mode Commands50229
+Node: bgpd Sample Session50861
+Node: bgpd Log Format51021
+Node: How to Set Up A 6-Bone Connection51554
+Node: Filtering52826
+Node: IP Access List53215
+Node: IP Prefix List53606
+Node: ip prefix-list description54917
+Node: ip prefix-list sequential number control55225
+Node: Showing ip prefix-list55555
+Node: Clear counter of ip prefix-list56215
+Node: IP Community List56514
+Node: AS Path Access List56715
+Node: Route Map56900
+Node: Route Map Command57402
+Node: Route Map Match Command57605
+Node: Route Map Set Command58213
+Node: IPv6 Supports59071
+Node: Router Advertisement59638
+Node: Kernel Interface59971
+Node: Linux Netlink61189
+Node: Command Index61976
+Node: VTY Key Index72567
 
 End Tag Table

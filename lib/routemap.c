@@ -644,7 +644,8 @@ route_map_apply (struct route_map *map, struct prefix *prefix,
       if (ret != RM_NOMATCH)
 	return ret;
     }
-  return ret;
+  /* Finally route-map does not match at all. */
+  return RM_DENYMATCH;
 }
 
 void
@@ -689,7 +690,7 @@ DEFUN (route_map, route_map_cmd,
     permit = ROUTE_MAP_DENY;
   else
     {
-      vty_out (vty, "the third field must be [permit|deny]\r\n");
+      vty_out (vty, "the third field must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -697,12 +698,12 @@ DEFUN (route_map, route_map_cmd,
   pref = strtoul (argv[2], &endptr, 10);
   if (pref == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "the fourth field must be positive integer\r\n");
+      vty_out (vty, "the fourth field must be positive integer%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if (pref == 0 || pref > 65535)
     {
-      vty_out (vty, "the fourth field must be <1-65535>\r\n");
+      vty_out (vty, "the fourth field must be <1-65535>%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -736,7 +737,7 @@ DEFUN (no_route_map, no_route_map_cmd,
     permit = ROUTE_MAP_DENY;
   else
     {
-      vty_out (vty, "the third field must be [permit|deny]\r\n");
+      vty_out (vty, "the third field must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -744,12 +745,12 @@ DEFUN (no_route_map, no_route_map_cmd,
   pref = strtoul (argv[2], &endptr, 10);
   if (pref == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "the fourth field must be positive integer\r\n");
+      vty_out (vty, "the fourth field must be positive integer%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   if (pref == 0 || pref > 65535)
     {
-      vty_out (vty, "the fourth field must be <1-65535>\r\n");
+      vty_out (vty, "the fourth field must be <1-65535>%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -757,7 +758,7 @@ DEFUN (no_route_map, no_route_map_cmd,
   map = route_map_lookup_by_name (argv[0]);
   if (map == NULL)
     {
-      vty_out (vty, "can't find route-map with name %s\r\n", argv[0]);
+      vty_out (vty, "can't find route-map with name %s", argv[0], VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -765,8 +766,8 @@ DEFUN (no_route_map, no_route_map_cmd,
   index = route_map_index_lookup (map, permit, pref);
   if (index == NULL)
     {
-      vty_out (vty, "can't find route-map %s %s %s\r\n", 
-	       argv[0], argv[1], argv[2]);
+      vty_out (vty, "can't find route-map %s %s %s", 
+	       argv[0], argv[1], argv[2], VTY_NEWLINE);
       return CMD_WARNING;
     }
 

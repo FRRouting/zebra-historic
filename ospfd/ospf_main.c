@@ -40,7 +40,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
-#include "zebra/zebra.h"
 
 /* Configuration filename and directory. */
 char config_current[] = OSPF_DEFAULT_CONFIG;
@@ -226,6 +225,8 @@ main (int argc, char **argv)
   ospf_lsa_init ();
   ospf_route_init ();
 
+  ospf_init_end ();
+
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);
 
@@ -241,9 +242,6 @@ main (int argc, char **argv)
 
   /* Print banner. */
   zlog (NULL, LOG_INFO, "OSPFd (%s) starts", ZEBRA_VERSION);
-
-  /* Connect to zebra. */
-  zebra_start ();
 
   /* Fetch next active thread. */
   while (thread_fetch (master, &thread))

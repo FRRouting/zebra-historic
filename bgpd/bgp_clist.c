@@ -27,8 +27,6 @@
 #include "log.h"
 #include "buffer.h"
 
-#include "zebra/zebra.h"
-
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
@@ -370,7 +368,7 @@ DEFUN (ip_community_list, ip_community_list_cmd,
     type = COMMUNITY_DENY;
   else
     {
-      vty_out (vty, "community-list type must be [permit|deny]\r\n");
+      vty_out (vty, "community-list type must be [permit|deny]%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -392,7 +390,8 @@ DEFUN (ip_community_list, ip_community_list_cmd,
   com = community_str2com (str);
   if (! com)
     {
-      vty_out (vty, "Community-list malformed: %s\r\n", str);
+      vty_out (vty, "Community-list malformed: %s%s", str,
+	       VTY_NEWLINE);
       free (str);
       return CMD_WARNING;
     }
@@ -430,7 +429,8 @@ DEFUN (no_ip_community_list, no_ip_community_list_cmd,
   list = community_list_lookup (argv[0]);
   if (list == NULL)
     {
-      vty_out (vty, "ip community-list %s doesn't exist.\r\n", argv[0]);
+      vty_out (vty, "ip community-list %s doesn't exist.%s", argv[0],
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -441,7 +441,8 @@ DEFUN (no_ip_community_list, no_ip_community_list_cmd,
     type = COMMUNITY_DENY;
   else
     {
-      vty_out (vty, "community-list type must be [permit|deny]\r\n");
+      vty_out (vty, "community-list type must be [permit|deny]%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -465,7 +466,8 @@ DEFUN (no_ip_community_list, no_ip_community_list_cmd,
 
   if (! com)
     {
-      vty_out (vty, "Community-list malformed: %s\r\n", str);
+      vty_out (vty, "Community-list malformed: %s%s", str,
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -473,7 +475,8 @@ DEFUN (no_ip_community_list, no_ip_community_list_cmd,
 
   if (entry == NULL)
     {
-      vty_out (vty, "Can't find specified community list.\r\n");
+      vty_out (vty, "Can't find specified community list.%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -494,7 +497,8 @@ config_write_community (struct vty *vty)
       {
 	vty_out (vty, "ip community-list %s %s%s%s",
 		 list->name, community_type_str (entry->type), 
-		 community_print (entry->com), VTY_NEWLINE);
+		 community_print (entry->com),
+		 VTY_NEWLINE);
 	write++;
       }
 
@@ -503,7 +507,8 @@ config_write_community (struct vty *vty)
       {
 	vty_out (vty, "ip community-list %s %s%s%s",
 		 list->name, community_type_str (entry->type), 
-		 community_print (entry->com), VTY_NEWLINE);
+		 community_print (entry->com),
+		 VTY_NEWLINE);
 	write++;
       }
   return write;

@@ -514,6 +514,7 @@ connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
 }
 
 #ifdef NRL
+#ifndef HAVE_IF_NAMETOINDEX
 unsigned int
 if_nametoindex (char *name)
 {
@@ -528,7 +529,9 @@ if_nametoindex (char *name)
     }
   return 0;
 }
+#endif
 
+#ifndef HAVE_IF_INDEXTONAME
 char *
 if_indextoname (unsigned int ifindex, char *name)
 {
@@ -546,4 +549,5 @@ if_indextoname (unsigned int ifindex, char *name)
     }
   return NULL;
 }
+#endif
 #endif /* NRL */

@@ -34,33 +34,36 @@ DEFUN (show_debugging_ripng,
        "show debugging ripng",
        SHOW_STR
        "RIPng configuration\n"
-       "Debuggin information\n")
+       "Debugging information\n")
 {
-  vty_out (vty, "Zebra debugging status:\r\n");
+  vty_out (vty, "Zebra debugging status:%s", VTY_NEWLINE);
 
   if (IS_RIPNG_DEBUG_EVENT)
-    vty_out (vty, "  RIPng event debugging is on\r\n");
+    vty_out (vty, "  RIPng event debugging is on%s", VTY_NEWLINE);
 
   if (IS_RIPNG_DEBUG_PACKET)
     {
       if (IS_RIPNG_DEBUG_SEND && IS_RIPNG_DEBUG_RECV)
 	{
-	  vty_out (vty, "  RIPng packet%s debugging is on\r\n",
-		   IS_RIPNG_DEBUG_DETAIL ? " detail" : "");
+	  vty_out (vty, "  RIPng packet%s debugging is on%s",
+		   IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
+		   VTY_NEWLINE);
 	}
       else
 	{
 	  if (IS_RIPNG_DEBUG_SEND)
-	    vty_out (vty, "  RIPng packet send%s debugging is on\r\n",
-		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "");
+	    vty_out (vty, "  RIPng packet send%s debugging is on%s",
+		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "  RIPng packet receive%s debugging is on\r\n",
-		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "");
+	    vty_out (vty, "  RIPng packet receive%s debugging is on%s",
+		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	}
     }
 
   if (IS_RIPNG_DEBUG_ZEBRA)
-    vty_out (vty, "  RIPng zebra debugging is on\r\n");
+    vty_out (vty, "  RIPng zebra debugging is on%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -212,17 +215,20 @@ config_write_debug (struct vty *vty)
       if (IS_RIPNG_DEBUG_SEND && IS_RIPNG_DEBUG_RECV)
 	{
 	  vty_out (vty, "debug ripng packet%s%s",
-		   IS_RIPNG_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		   IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
+		   VTY_NEWLINE);
 	  write++;
 	}
       else
 	{
 	  if (IS_RIPNG_DEBUG_SEND)
 	    vty_out (vty, "debug ripng packet send%s%s",
-		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  else
 	    vty_out (vty, "debug ripng packet recieve%s%s",
-		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "", VTY_NEWLINE);
+		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
+		     VTY_NEWLINE);
 	  write++;
 	}
     }

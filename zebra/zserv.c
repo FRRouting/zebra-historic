@@ -1,4 +1,4 @@
-/* Zebra daemon core routine.
+/* Zebra daemon server routine.
  * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -33,9 +33,9 @@
 #include "sockunion.h"
 #include "log.h"
 #include "table.h"
-#include "client.h"
+#include "zclient.h"
 
-#include "zebra/zebra.h"
+#include "zebra/zserv.h"
 #include "zebra/redistribute.h"
 #include "zebra/debug.h"
 #include "zebra/ipforward.h"
@@ -163,7 +163,7 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
 
 /* Close zebra client. */
 void
-zebra_close (struct zebra_client *client)
+zebra_client_close (struct zebra_client *client)
 {
   /* Close file descriptor. */
   if (client->fd)
@@ -330,7 +330,7 @@ zebra_client_create (int sock)
 
 /* Handler of zebra service request. */
 int
-zebra_read (struct thread *thread)
+zebra_client_read (struct thread *thread)
 {
   int sock;
   struct zebra_client *client;
@@ -349,7 +349,7 @@ zebra_read (struct thread *thread)
     {
       if (IS_ZEBRA_DEBUG_EVENT)
 	zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
-      zebra_close (client);
+      zebra_client_close (client);
       return -1;
     }
   length = stream_getw (client->ibuf);
@@ -366,7 +366,7 @@ zebra_read (struct thread *thread)
 	{
 	  if (IS_ZEBRA_DEBUG_EVENT)
 	    zlog (NULL, LOG_INFO, "connection closed [%d] when reading zebra data", sock);
-	  zebra_close (client);
+	  zebra_client_close (client);
 	  return -1;
 	}
     }
@@ -504,14 +504,14 @@ zebra_serv ()
 	       sizeof (struct sockaddr_in));
   if (ret < 0)
     {
-      zlog_warn ("can't bind socket");
+      zlog_warn ("can't bind to socket");
       exit (1);
     }
 
   ret = listen (accept_sock, 1);
   if (ret < 0)
     {
-      zlog_warn ("can't listen socket");
+      zlog_warn ("can't listen to socket");
       exit (1);
     }
 
@@ -530,7 +530,7 @@ zebra_event (enum event event, int sock, struct zebra_client *client)
       thread_add_read (master, zebra_accept, client, sock);
       break;
     case ZEBRA_READ:
-      client->t_read = thread_add_read (master, zebra_read, client, sock);
+      client->t_read = thread_add_read (master, zebra_client_read, client, sock);
       break;
     case ZEBRA_WRITE:
       /**/
@@ -545,7 +545,8 @@ DEFUN (show_table,
        SHOW_STR
        "default routing table to use for all clients\n")
 {
-  vty_out (vty, "table %d\r\n", rtm_table_default);
+  vty_out (vty, "table %d%s", rtm_table_default,
+	   VTY_NEWLINE);
   return CMD_SUCCESS;
 }
 
@@ -564,14 +565,22 @@ DEFUN (no_ip_forwarding,
        "no ip forwarding",
        NO_STR
        IP_STR
-       "Doesn't forward IP protocol packet")
+       "Turn off IP forwarding")
 {
   int ret;
+
+  ret = ipforward ();
+
+  if (ret == 0)
+    {
+      vty_out (vty, "IP forwarding is already off%s", VTY_NEWLINE); 
+      return CMD_ERR_NOTHING_TODO;
+    }
 
   ret = ipforward_off ();
   if (ret != 0)
     {
-      vty_out (vty, "Can't turn off IP forwarding\r\n");
+      vty_out (vty, "Can't turn off IP forwarding%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -584,7 +593,7 @@ config_write_table (struct vty *vty)
 {
   if (rtm_table_default)
     vty_out (vty, "table %d%s", rtm_table_default,
-      VTY_NEWLINE);
+	     VTY_NEWLINE);
   return 0;
 }
 
@@ -614,9 +623,9 @@ DEFUN (show_ip_forwarding,
   ret = ipforward ();
 
   if (ret == 0)
-    vty_out (vty, "ip forward is off\r\n");
+    vty_out (vty, "IP forwarding is off%s", VTY_NEWLINE);
   else
-    vty_out (vty, "ip forward is on\r\n");
+    vty_out (vty, "IP forwarding is on%s", VTY_NEWLINE);
   return CMD_SUCCESS;
 }
 
@@ -641,7 +650,7 @@ DEFUN (ip_route,
   if (!ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask "
-	       "or a.b.c.d x.x.x.x\r\n");
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   /* Gateway. */
@@ -651,7 +660,8 @@ DEFUN (ip_route,
       ifp = if_lookup_by_name (argv[1]);
       if (! ifp)
 	{
-	  vty_out (vty, "Gateway address or device name is invalid\r\n");
+	  vty_out (vty, "Gateway address or device name is invalid%s", 
+		   VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       ifindex = ifp->ifindex;
@@ -672,7 +682,7 @@ DEFUN (ip_route,
       switch (ret)
 	{
 	case ZEBRA_ERR_RTEXIST:
-	  vty_out (vty, "Same static route already exists ");
+	  vty_out (vty, "same static route already exists ");
 	  break;
 	case ZEBRA_ERR_RTUNREACH:
 	  vty_out (vty, "network is unreachable ");
@@ -684,7 +694,8 @@ DEFUN (ip_route,
 	  vty_out (vty, "route doesn't match ");
 	  break;
 	}
-      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix), p.prefixlen,
+	       VTY_NEWLINE);
 
       return CMD_WARNING;
     }
@@ -698,6 +709,7 @@ DEFUN (ip_route_mask,
        "IP routing set\n"
        "IP desitination prefix\n"
        "IP desitination netmask\n"
+       "IP gateway\n"
        "IP gateway interface name\n")
 {
   int ret;
@@ -712,7 +724,7 @@ DEFUN (ip_route_mask,
   ret = inet_aton (argv[0], &p.prefix);
   if (!ret)	
     {
-      vty_out (vty, "destination address is invalid\r\n");
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -720,7 +732,7 @@ DEFUN (ip_route_mask,
   ret = inet_aton (argv[1], &tmpmask);
   if (!ret)	
     {
-      vty_out (vty, "netmask address is invalid\r\n");
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   p.prefixlen = ip_masklen (tmpmask);
@@ -732,7 +744,7 @@ DEFUN (ip_route_mask,
       ifp = if_lookup_by_name (argv[2]);
       if (! ifp)
 	{
-	  vty_out (vty, "Gateway address or device name is invalid\r\n");
+	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       ifindex = ifp->ifindex;
@@ -765,7 +777,9 @@ DEFUN (ip_route_mask,
 	  vty_out (vty, "route doesn't match ");
 	  break;
 	}
-      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
 
       return CMD_WARNING;
     }
@@ -794,7 +808,7 @@ DEFUN (no_ip_route,
   if (! ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask "
-	       "or a.b.c.d x.x.x.x\r\n");
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
   /* Gateway. */
@@ -804,7 +818,7 @@ DEFUN (no_ip_route,
       ifp = if_lookup_by_name (argv[1]);
       if (! ifp)
 	{
-	  vty_out (vty, "Gateway address or device name is invalid\r\n");
+	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       ifindex = ifp->ifindex;
@@ -838,7 +852,9 @@ DEFUN (no_ip_route,
 	  vty_out (vty, "route delete error ");
 	  break;
 	}
-      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
 
       return CMD_WARNING;
     }
@@ -853,6 +869,7 @@ DEFUN (no_ip_route_mask,
        "IP routing set\n"
        "IP desitination prefix\n"
        "IP desitination netmask\n"
+       "IP gateway\n"
        "IP gateway interface name\n")
 {
   int ret;
@@ -866,13 +883,13 @@ DEFUN (no_ip_route_mask,
   ret = inet_aton (argv[0], &p.prefix);
   if (!ret)	
     {
-      vty_out (vty, "destination address is invalid\r\n");
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING; 
     }
   inet_aton (argv[1], &tmpmask);
   if (!ret)	
     {
-      vty_out (vty, "netmask address is invalid\r\n");
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
       return CMD_WARNING; 
     }
   p.prefixlen = ip_masklen (tmpmask);
@@ -883,7 +900,7 @@ DEFUN (no_ip_route_mask,
       ifp = if_lookup_by_name (argv[1]);
       if (! ifp)
 	{
-	  vty_out (vty, "Gateway address or device name is invalid\r\n");
+	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       ifindex = ifp->ifindex;
@@ -917,7 +934,9 @@ DEFUN (no_ip_route_mask,
 	  vty_out (vty, "route delete error ");
 	  break;
 	}
-      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
 
       return CMD_WARNING;
     }
@@ -940,16 +959,16 @@ DEFUN (show_ipv6_forwarding,
   switch (ret)
     {
     case -1:
-      vty_out (vty, "ipv6 forwarding is unknown\r\n");
+      vty_out (vty, "ipv6 forwarding is unknown%s", VTY_NEWLINE);
       break;
     case 0:
-      vty_out (vty, "ipv6 forwarding is %s\r\n", "off");
+      vty_out (vty, "ipv6 forwarding is %s%s", "off", VTY_NEWLINE);
       break;
     case 1:
-      vty_out (vty, "ipv6 forwarding is %s\r\n", "on");
+      vty_out (vty, "ipv6 forwarding is %s%s", "on", VTY_NEWLINE);
       break;
     default:
-      vty_out (vty, "ipv6 forwarding is %s\r\n", "off");
+      vty_out (vty, "ipv6 forwarding is %s%s", "off", VTY_NEWLINE);
       break;
     }
   return CMD_SUCCESS;
@@ -967,7 +986,7 @@ DEFUN (no_ipv6_forwarding,
   ret = ipforward_ipv6_off ();
   if (ret != 0)
     {
-      vty_out (vty, "Can't turn off IPv6 forwarding\r\n");
+      vty_out (vty, "Can't turn off IPv6 forwarding%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
