@@ -33,7 +33,7 @@
 #define ISM_DROther                       5
 #define ISM_Backup                        6
 #define ISM_DR                            7
-#define OSPF_ISM_STATUS_MAX   	          8
+#define OSPF_ISM_STATE_MAX   	          8
 
 /* OSPF Interface State Machine Event. */
 #define ISM_NoEvent                       0

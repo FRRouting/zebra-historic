@@ -139,9 +139,9 @@ rip_zebra_read_ipv4 (int command, struct zclient *zclient, zebra_size_t length)
 
   /* Then fetch IPv4 prefixes. */
   if (command == ZEBRA_IPV4_ROUTE_ADD)
-    rip_redistribute_add (api.type, 0, &p, ifindex, &nexthop);
+    rip_redistribute_add (api.type, RIP_ROUTE_REDISTRIBUTE, &p, ifindex, &nexthop);
   else 
-    rip_redistribute_delete (api.type, 0, &p, ifindex);
+    rip_redistribute_delete (api.type, RIP_ROUTE_REDISTRIBUTE, &p, ifindex);
 
   return 0;
 }
@@ -264,6 +264,12 @@ rip_redistribute_unset (int type)
   rip_redistribute_withdraw (type);
 
   return CMD_SUCCESS;
+}
+
+int
+rip_redistribute_check (int type)
+{
+  return (zclient->redist[type]);
 }
 
 void

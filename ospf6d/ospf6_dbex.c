@@ -30,36 +30,29 @@ ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
   struct ospf6_lsa *received = NULL;
   struct ospf6_lsa *have = NULL;
 
-  received = ospf6_lsa_summary_create ((struct ospf6_lsa_header__ *) lsa_header);
-
-  /* warn if unknown */
-  if (! ospf6_lsa_is_known_type (lsa_header))
-    zlog_warn ("DBEX: [%s:%s] receive DbDesc unknown: %d",
-               from->str, from->ospf6_interface->interface->name,
-               ntohs (lsa_header->type));
+  received = ospf6_lsa_summary_create
+    ((struct ospf6_lsa_header__ *) lsa_header);
 
   /* case when received is AS-External though neighbor belongs stub area */
   if (lsa_header->type == htons (OSPF6_LSA_TYPE_AS_EXTERNAL) &&
       ospf6_area_is_stub (from->ospf6_interface->area))
     {
-      zlog_err ("DBEX: [%s:%s] receive DbDesc E-bit mismatch: %s",
-                 from->str, from->ospf6_interface->interface->name,
-                 received->str);
+      zlog_err ("DbDesc %s receive from %s", from->str, received->str);
+      zlog_err ("    E-bit mismatch: %s", received->str);
       ospf6_lsa_delete (received);
       return -1;
     }
 
   /* if already have newer database copy, check next LSA */
   have = ospf6_lsdb_lookup (lsa_header->type, lsa_header->ls_id,
-                            lsa_header->advrtr);
+                            lsa_header->advrtr,
+                            ospf6_lsa_get_scope (lsa_header->type,
+                                                 from->ospf6_interface));
   if (! have)
     {
-
-      if (IS_OSPF6_DUMP_DBEX)
-        zlog_info ("DBEX: [%s:%s] request %s",
-                   from->str, from->ospf6_interface->interface->name,
-                   received->str);
       /* if we don't have database copy, add request */
+      if (IS_OSPF6_DUMP_DBEX)
+        zlog_info ("Have no database copy, Request");
       ospf6_neighbor_request_add (received, from);
     }
   else if (have)
@@ -68,14 +61,10 @@ ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
       if (ospf6_lsa_check_recent (received, have) < 0)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("DBEX: [%s:%s] request %s (newer)",
-                       from->str, from->ospf6_interface->interface->name,
-                       received->str);
+            zlog_info ("Database copy less recent, Request");
           ospf6_neighbor_request_add (received, from);
         }
     }
-
-  ospf6_lsa_delete (received);
 
   return 0;
 }
@@ -113,23 +102,19 @@ void
 ospf6_dbex_acknowledge_delayed (struct ospf6_lsa *lsa,
                                 struct ospf6_interface *o6i)
 {
-  struct ospf6_lsa *sum;
   assert (o6i);
 
   if (IS_OSPF6_DUMP_DBEX)
-    zlog_info ("DBEX: [%s] delayed ack %s",
-               o6i->interface->name,
-               lsa->str);
+    zlog_info ("DBEX: [%s] delayed ack %s", o6i->interface->name, lsa->str);
 
   /* attach delayed acknowledge list */
   ospf6_lsa_age_current (lsa);
-  sum = ospf6_lsa_summary_create (lsa->header);
-  ospf6_lsdb_add (sum, o6i->ack_list);
+  ospf6_interface_delayed_ack_add (lsa, o6i);
 
-  /* if not yet, schedule delayed acknowledge RxmtInterval later */
-    /* timers should be *less than* RxmtInterval
-       or needless retrans will ensue */
-  if (o6i->thread_send_lsack_delayed == (struct thread *) NULL)
+  /* if not yet, schedule delayed acknowledge RxmtInterval later.
+     timers should be *less than* RxmtInterval
+     or needless retrans will ensue */
+  if (o6i->thread_send_lsack_delayed == NULL)
     o6i->thread_send_lsack_delayed
       = thread_add_timer (master, ospf6_send_lsack_delayed,
                           o6i, o6i->rxmt_interval - 1);
@@ -147,11 +132,13 @@ ospf6_dbex_is_maxage_to_be_dropped (struct ospf6_lsa *received,
 {
   int count;
 
-  if (! ospf6_lsa_is_maxage (received))
+  if (! IS_LSA_MAXAGE (received))
     return 0;
 
   if (ospf6_lsdb_lookup (received->header->type, received->header->id,
-                         received->header->adv_router))
+                         received->header->adv_router,
+                         ospf6_lsa_get_scope (received->header->type,
+                                              from->ospf6_interface)))
     return 0;
 
   if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (received->header->type)))
@@ -193,21 +180,17 @@ ospf6_dbex_is_maxage_to_be_dropped (struct ospf6_lsa *received,
 static void
 ospf6_dbex_remove_retrans (void *arg, int val, void *obj)
 {
+  struct ospf6_lsa *rem;
   struct ospf6_neighbor *nei = (struct ospf6_neighbor *) obj;
   struct ospf6_lsa *lsa = (struct ospf6_lsa *) arg;
-  struct ospf6_lsa *rem;
 
   rem = ospf6_lsdb_lookup_lsdb (lsa->header->type, lsa->header->id,
                                 lsa->header->adv_router, nei->retrans_list);
-  if (! rem)
-    return;
-
-  if (IS_OSPF6_DUMP_DBEX)
-    zlog_info ("Remove retrans: %s from %s->retrans_list",
-               rem->str, nei->str);
-  ospf6_neighbor_retrans_remove (rem, nei);
-
-  ospf6_maxage_remover ();
+  if (rem)
+    {
+      ospf6_neighbor_retrans_remove (rem, nei);
+      ospf6_maxage_remover ();
+    }
 }
 
 void
@@ -241,6 +224,7 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
   struct timeval now;
   int ismore_recent, acktype;
   unsigned short cksum;
+  struct ospf6_lsa_slot *slot;
 
   received = have = (struct ospf6_lsa *)NULL;
   ismore_recent = -1;
@@ -250,9 +234,7 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
   received = ospf6_lsa_create (lsa_header);
 
   if (IS_OSPF6_DUMP_DBEX)
-    {
-      zlog_info ("DBEX: Receive %s from %s", received->str, from->str);
-    }
+    zlog_info ("Receive %s from %s", received->str, from->str);
 
   /* set LSA scope */
   if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (htons (lsa_header->type)))
@@ -272,11 +254,13 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
       return;
     }
 
+#if 0
   /* (2) warn if unknown */
   if (! ospf6_lsa_is_known_type (lsa_header))
-    zlog_warn ("DBEX: [%s:%s] receive DbDesc unknown: %#x",
+    zlog_warn ("[%s:%s] receive LSA unknown: %#x",
                from->str, from->ospf6_interface->interface->name,
                ntohs (lsa_header->type));
+#endif /*0*/
 
   /* (3) Ebit Missmatch: AS-External-LSA */
   if (lsa_header->type == htons (OSPF6_LSA_TYPE_AS_EXTERNAL) &&
@@ -310,17 +294,25 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
   /* (5) */
   /* lookup the same database copy in lsdb */
   have = ospf6_lsdb_lookup (lsa_header->type, lsa_header->ls_id,
-                            lsa_header->advrtr);
+                            lsa_header->advrtr,
+                            ospf6_lsa_get_scope (lsa_header->type,
+                                                 from->ospf6_interface));
+  if (have)
+    {
+      ismore_recent = ospf6_lsa_check_recent (received, have);
+      if (ntohl (received->header->seqnum) == ntohl (have->header->seqnum))
+        SET_FLAG (received->flag, OSPF6_LSA_FLAG_DUPLICATE);
+    }
 
   /* if no database copy or received is more recent */
-  if (!have || (ismore_recent = ospf6_lsa_check_recent (received, have)) < 0) 
+  if (!have || ismore_recent < 0)
     {
       /* in case we have no database copy */
       ismore_recent = -1;
 
       /* (a) MinLSArrival check */
       gettimeofday (&now, (struct timezone *)NULL);
-      if (have && now.tv_sec - have->installed <= OSPF6_MIN_LS_ARRIVAL)
+      if (have && now.tv_sec - have->installed.tv_sec <= OSPF6_MIN_LS_ARRIVAL)
         {
           if (IS_OSPF6_DUMP_DBEX)
             zlog_info ("DBEX: [%s:%s] received LSA too soon: %s",
@@ -332,13 +324,17 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
           return;   /* examin next lsa */
         }
 
-      /* XXX (c) comes before (b) */
+      /* (b) immediately flood */
+      ospf6_dbex_flood (received, from);
+
+#if 0
+      /* Because New LSDB do not permit two LSA having the same identifier
+         exist in a LSDB list, above ospf6_dbex_flood() will remove
+         the old instance automatically. thus bellow is not needed. */
       /* (c) remove database copy from all neighbor's retranslist */
       if (have)
         ospf6_dbex_remove_from_all_retrans_list (have);
-
-      /* (b) immediately flood */
-      ospf6_dbex_flood (received, from);
+#endif
 
       /* (d), installing lsdb, which may cause routing
               table calculation (replacing database copy) */
@@ -370,11 +366,22 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
           /* we're going to make new lsa or to flush this LSA. */
           if (IS_OSPF6_DUMP_DBEX)
             zlog_info ("DBEX: Self-originated LSA %s from %s:%s",
-                       received->str,
-                       from->str, from->ospf6_interface->interface->name);
+                       received->str, from->str,
+                       from->ospf6_interface->interface->name);
           if (IS_OSPF6_DUMP_DBEX)
             zlog_info ("DBEX: %s: Make new one/Flush", received->str);
-          ospf6_lsa_reoriginate (received);
+
+          SET_FLAG (received->flag, OSPF6_LSA_FLAG_REFRESH);
+          slot = ospf6_lsa_slot_get (received->header->type);
+          if (slot && slot->func_refresh)
+            {
+              (*slot->func_refresh) (received);
+              return;
+            }
+
+          zlog_warn ("Can't Refresh LSA: Unknown type: %#x, Flush",
+                     ntohs (received->header->type));
+          ospf6_lsa_premature_aging (received);
           return;
         }
     }
@@ -399,15 +406,16 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
     }
   else if (ismore_recent == 0) /* (7) if neither is more recent */
     {
-      received->flags |= OSPF6_LSA_DUPLICATE;
-
       /* (a) if on retranslist, Treat this LSA as an Ack: Implied Ack */
       rem = ospf6_lsdb_lookup_lsdb (received->header->type,
                                     received->header->id,
                                     received->header->adv_router,
                                     from->retrans_list);
       if (rem)
-        ospf6_neighbor_retrans_remove (rem, from);
+        {
+          SET_FLAG (received->flag, OSPF6_LSA_FLAG_IMPLIEDACK);
+          ospf6_neighbor_retrans_remove (rem, from);
+        }
 
       /* (b) possibly acknowledge */
       acktype = ack_type (received, ismore_recent, from);
@@ -432,7 +440,7 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
     {
       /* If Seqnumber Wrapping, simply discard
          Otherwise, Send database copy of this LSA to this neighbor */
-      if (! ospf6_lsa_is_maxage (received) ||
+      if (! IS_LSA_MAXAGE (received) ||
           received->lsa_hdr->lsh_seqnum != MAX_SEQUENCE_NUMBER)
         {
           ospf6_send_lsupdate_direct (have, from);
@@ -453,12 +461,12 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent,
   assert (from && from->ospf6_interface);
   ospf6_interface = from->ospf6_interface;
 
-  if (newp->flags & OSPF6_LSA_FLOODBACK)
+  if (CHECK_FLAG (newp->flag, OSPF6_LSA_FLAG_FLOODBACK))
     {
       return NO_ACK;
     }
-  else if (ismore_recent < 0
-           && !(newp->flags & OSPF6_LSA_FLOODBACK))
+  else if (ismore_recent < 0 &&
+           ! CHECK_FLAG (newp->flag, OSPF6_LSA_FLAG_FLOODBACK))
     {
       if (ospf6_interface->state == IFS_BDR)
         {
@@ -476,8 +484,8 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent,
           return DELAYED_ACK;
         }
     }
-  else if ((newp->flags & OSPF6_LSA_DUPLICATE)
-           && (newp->flags & OSPF6_LSA_IMPLIEDACK))
+  else if (CHECK_FLAG (newp->flag, OSPF6_LSA_FLAG_DUPLICATE) &&
+           CHECK_FLAG (newp->flag, OSPF6_LSA_FLAG_IMPLIEDACK))
     {
       if (ospf6_interface->state == IFS_BDR)
         {
@@ -495,15 +503,17 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent,
           return NO_ACK;
         }
     }
-  else if ((newp->flags & OSPF6_LSA_DUPLICATE) &&
-           !(newp->flags & OSPF6_LSA_IMPLIEDACK))
+  else if (CHECK_FLAG (newp->flag, OSPF6_LSA_FLAG_DUPLICATE) &&
+           ! CHECK_FLAG (newp->flag, OSPF6_LSA_FLAG_IMPLIEDACK))
     {
       return DIRECT_ACK;
     }
-  else if (ospf6_lsa_is_maxage (newp))
+  else if (IS_LSA_MAXAGE (newp))
     {
-      if (!ospf6_lsdb_lookup (newp->header->type, newp->header->id,
-                              newp->header->adv_router))
+      if (! ospf6_lsdb_lookup (newp->header->type, newp->header->id,
+                               newp->header->adv_router,
+                               ospf6_lsa_get_scope (newp->header->type,
+                                                    from->ospf6_interface)))
         {
           for (n = listhead (from->ospf6_interface->area->if_list);
                n; nextnode (n))
@@ -596,7 +606,7 @@ ospf6_dbex_flood_linklocal (struct ospf6_lsa *lsa, struct ospf6_interface *o6i,
   else if (from && from->ospf6_interface == o6i)
     {
       /* note occurence of floodback */
-      lsa->flags |= OSPF6_LSA_FLOODBACK;
+      SET_FLAG (lsa->flag, OSPF6_LSA_FLAG_FLOODBACK);
     }
 
   /* (3) */
@@ -612,6 +622,9 @@ ospf6_dbex_flood_linklocal (struct ospf6_lsa *lsa, struct ospf6_interface *o6i,
   if (from && from->ospf6_interface == o6i
       && o6i->state == IFS_BDR)
     return; /* examin next interface */
+
+  if (IS_OSPF6_DUMP_DBEX)
+    zlog_info ("  Flood to interface %s", o6i->interface->name);
 
   /* (5) send LinkState Update */
   ospf6_send_lsupdate_flood (lsa, o6i);
@@ -665,6 +678,9 @@ ospf6_dbex_flood (struct ospf6_lsa *lsa, struct ospf6_neighbor *from)
 
   lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
 
+  if (IS_OSPF6_DUMP_DBEX)
+    zlog_info ("Flood: %s", lsa->str);
+
   if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (lsa_header->type)))
     {
       o6i = (struct ospf6_interface *) lsa->scope;
@@ -688,7 +704,7 @@ ospf6_dbex_flood (struct ospf6_lsa *lsa, struct ospf6_neighbor *from)
     }
   else
     {
-      zlog_warn ("DBEX: Can't Flood %s: scope unknown", lsa->str);
+      zlog_warn ("Can't Flood %s: scope unknown", lsa->str);
     }
 }
 

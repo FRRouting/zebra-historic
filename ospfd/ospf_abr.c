@@ -31,6 +31,7 @@
 #include "table.h"
 #include "vty.h"
 #include "filter.h"
+#include "plist.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
@@ -52,22 +53,71 @@
 
 
 struct ospf_area_range *
-ospf_area_range_lookup (struct ospf_area *area, struct in_addr *range_net)
+ospf_area_range_new (struct prefix_ipv4 *p)
 {
-  struct route_node *node;
-  struct prefix_ipv4 p;
   struct ospf_area_range *range;
 
-  p.family = AF_INET;
-  p.prefixlen = IPV4_MAX_BITLEN;
-  p.prefix = *range_net;
+  range = XCALLOC (MTYPE_OSPF_AREA_RANGE, sizeof (struct ospf_area_range));
+  range->addr = p->prefix;
+  range->masklen = p->prefixlen;
+  range->cost_config = OSPF_AREA_RANGE_COST_UNSPEC;
 
-  node = route_node_match (area->ranges, (struct prefix *) &p);
-  if (node)
+  return range;
+}
+
+void
+ospf_area_range_free (struct ospf_area_range *range)
+{
+  XFREE (MTYPE_OSPF_AREA_RANGE, range);
+}
+
+void
+ospf_area_range_add (struct ospf_area *area, struct ospf_area_range *range)
+{
+  struct route_node *rn;
+  struct prefix_ipv4 p;
+
+  p.family = AF_INET;
+  p.prefixlen = range->masklen;
+  p.prefix = range->addr;
+
+  rn = route_node_get (area->ranges, (struct prefix *)&p);
+  if (rn->info)
+    route_unlock_node (rn);
+  else
+    rn->info = range;
+}
+
+void
+ospf_area_range_delete (struct ospf_area *area, struct ospf_area_range *range)
+{
+  struct route_node *rn;
+  struct prefix_ipv4 p;
+
+  p.family = AF_INET;
+  p.prefixlen = range->masklen;
+  p.prefix = range->addr;
+
+  rn = route_node_lookup (area->ranges, (struct prefix *)&p);
+  if (rn)
     {
-      range = node->info;
-      route_unlock_node (node);
-      return range;
+      ospf_area_range_free (rn->info);
+      rn->info = NULL;
+      route_unlock_node (rn);
+      route_unlock_node (rn);
+    }
+}
+
+struct ospf_area_range *
+ospf_area_range_lookup (struct ospf_area *area, struct prefix_ipv4 *p)
+{
+  struct route_node *rn;
+
+  rn = route_node_lookup (area->ranges, (struct prefix *)p);
+  if (rn)
+    {
+      route_unlock_node (rn);
+      return rn->info;
     }
   return NULL;
 }
@@ -121,12 +171,12 @@ ospf_area_range_match (struct ospf_area *area, struct prefix_ipv4 *p)
 }
 
 struct ospf_area_range *
-ospf_some_area_range_match (struct prefix_ipv4 *p)
+ospf_area_range_match_any (struct ospf *ospf, struct prefix_ipv4 *p)
 {
+  struct ospf_area_range *range;
   listnode node;
-  struct ospf_area_range * range;
 
-  for (node = listhead (ospf_top->areas); node; nextnode (node))
+  for (node = listhead (ospf->areas); node; nextnode (node))
     if ((range = ospf_area_range_match (node->data, p)))
       return range;
 
@@ -134,7 +184,7 @@ ospf_some_area_range_match (struct prefix_ipv4 *p)
 }
 
 int
-ospf_range_active (struct ospf_area_range *range)
+ospf_area_range_active (struct ospf_area_range *range)
 {
   return range->specifics;
 }
@@ -143,6 +193,149 @@ int
 ospf_area_actively_attached (struct ospf_area *area)
 {
   return area->act_ints;
+}
+
+int
+ospf_area_range_set (struct ospf *ospf, struct in_addr area_id,
+		     struct prefix_ipv4 *p, int advertise)
+{
+  struct ospf_area *area;
+  struct ospf_area_range *range;
+  int ret = OSPF_AREA_ID_FORMAT_DECIMAL;
+
+  area = ospf_area_get (area_id, ret);
+  if (area == NULL)
+    return 0;
+
+  range = ospf_area_range_lookup (area, p);
+  if (range != NULL)
+    {
+      if ((CHECK_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE)
+	   && !CHECK_FLAG (advertise, OSPF_AREA_RANGE_ADVERTISE))
+	  || (!CHECK_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE)
+	      && CHECK_FLAG (advertise, OSPF_AREA_RANGE_ADVERTISE)))
+	ospf_schedule_abr_task ();
+    }
+  else
+    {
+      range = ospf_area_range_new (p);
+      ospf_area_range_add (area, range);
+      ospf_schedule_abr_task ();
+    }
+
+  if (CHECK_FLAG (advertise, OSPF_AREA_RANGE_ADVERTISE))
+    SET_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE);
+  else
+    UNSET_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE);
+
+  return 1;
+}
+
+int
+ospf_area_range_cost_set (struct ospf *ospf, struct in_addr area_id,
+			  struct prefix_ipv4 *p, u_int32_t cost)
+{
+  struct ospf_area *area;
+  struct ospf_area_range *range;
+  int ret = OSPF_AREA_ID_FORMAT_DECIMAL;
+
+  area = ospf_area_get (area_id, ret);
+  if (area == NULL)
+    return 0;
+
+  range = ospf_area_range_new (p);
+  if (range == NULL)
+    return 0;
+
+  if (range->cost_config != cost)
+    {
+      range->cost_config = cost;
+      if (ospf_area_range_active (range))
+	ospf_schedule_abr_task ();
+    }
+
+  return 1;
+}
+
+int
+ospf_area_range_unset (struct ospf *ospf, struct in_addr area_id,
+		       struct prefix_ipv4 *p)
+{
+  struct ospf_area *area;
+  struct ospf_area_range *range;
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (area == NULL)
+    return 0;
+
+  range = ospf_area_range_lookup (area, p);
+  if (range == NULL)
+    return 0;
+
+  if (ospf_area_range_active (range))
+    ospf_schedule_abr_task ();
+
+  ospf_area_range_delete (area, range);
+
+  return 1;
+}
+
+int
+ospf_area_range_substitute_set (struct ospf *ospf, struct in_addr area_id,
+				struct prefix_ipv4 *p, struct prefix_ipv4 *s)
+{
+  struct ospf_area *area;
+  struct ospf_area_range *range;
+  int ret = OSPF_AREA_ID_FORMAT_DECIMAL;
+
+  area = ospf_area_get (area_id, ret);
+  range = ospf_area_range_lookup (area, p);
+
+  if (range != NULL)
+    {
+      if (!CHECK_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE) ||
+	  !CHECK_FLAG (range->flags, OSPF_AREA_RANGE_SUBSTITUTE))
+	ospf_schedule_abr_task ();
+    }
+  else
+    {
+      range = ospf_area_range_new (p);
+      ospf_area_range_add (area, range);
+      ospf_schedule_abr_task ();
+    }
+
+  SET_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE);
+  SET_FLAG (range->flags, OSPF_AREA_RANGE_SUBSTITUTE);
+  range->subst_addr = s->prefix;
+  range->subst_masklen = s->prefixlen;
+
+  return 1;
+}
+
+int
+ospf_area_range_substitute_unset (struct ospf *ospf, struct in_addr area_id,
+				  struct prefix_ipv4 *p)
+{
+  struct ospf_area *area;
+  struct ospf_area_range *range;
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (area == NULL)
+    return 0;
+
+  range = ospf_area_range_lookup (area, p);
+  if (range == NULL)
+    return 0;
+
+  if (CHECK_FLAG (range->flags, OSPF_AREA_RANGE_SUBSTITUTE))
+    if (ospf_area_range_active (range))
+      ospf_schedule_abr_task ();
+
+  UNSET_FLAG (range->flags, OSPF_AREA_RANGE_SUBSTITUTE);
+  range->subst_addr.s_addr = 0;
+  range->subst_masklen = 0;
+
+  return 1;
 }
 
 int
@@ -248,18 +441,29 @@ ospf_abr_update_aggregate (struct ospf_area_range *range,
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_update_aggregate(): Start");
 
-  if (range->specifics == 0)
-      range->cost = or->cost; /* 1st time get 1st cost */
-
-  range->specifics++;
-
-  if (or->cost < range->cost)
+  if (range->cost_config != -1)
     {
       if (IS_DEBUG_OSPF_EVENT)
-	zlog_info ("ospf_abr_update_aggregate(): lowest cost, update");
+	zlog_info ("ospf_abr_update_aggregate(): use configured cost %d",
+		   range->cost_config);
 
-      range->cost = or->cost;
+      range->cost = range->cost_config;
     }
+  else
+    {
+      if (range->specifics == 0)
+	range->cost = or->cost; /* 1st time get 1st cost */
+
+      if (or->cost < range->cost)
+	{
+	  if (IS_DEBUG_OSPF_EVENT)
+	    zlog_info ("ospf_abr_update_aggregate(): lowest cost, update");
+
+	  range->cost = or->cost;
+	}
+    }
+
+  range->specifics++;
 }
 
 static void
@@ -445,6 +649,38 @@ ospf_abr_should_accept (struct prefix *p, struct ospf_area *area)
  return 1;
 }
 
+int
+ospf_abr_plist_in_check (struct ospf_area *area, struct ospf_route *or,
+			 struct prefix *p)
+{
+  if (PREFIX_NAME_IN (area))
+    {
+      if (PREFIX_LIST_IN (area) == NULL)
+	PREFIX_LIST_IN (area) = prefix_list_lookup (AFI_IP,
+						    PREFIX_NAME_IN (area));
+      if (PREFIX_LIST_IN (area))
+	if (prefix_list_apply (PREFIX_LIST_IN (area), p) != PREFIX_PERMIT)
+	  return 0;
+    }
+  return 1;
+}
+
+int
+ospf_abr_plist_out_check (struct ospf_area *area, struct ospf_route *or,
+			  struct prefix *p)
+{
+  if (PREFIX_NAME_OUT (area))
+    {
+      if (PREFIX_LIST_OUT (area) == NULL)
+	PREFIX_LIST_OUT (area) = prefix_list_lookup (AFI_IP,
+						     PREFIX_NAME_OUT (area));
+      if (PREFIX_LIST_OUT (area))
+	if (prefix_list_apply (PREFIX_LIST_OUT (area), p) != PREFIX_PERMIT)
+	  return 0;
+    }
+  return 1;
+}
+
 void
 ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 {
@@ -479,6 +715,15 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 	  if (IS_DEBUG_OSPF_EVENT)
 	    zlog_info ("ospf_abr_announce_network(): "
 		       "prefix %s/%d was denied by import-list",
+		       inet_ntoa (p->prefix), p->prefixlen);
+	  continue; 
+	}
+
+      if (!ospf_abr_plist_in_check (area, or, &n->p))
+	{
+	  if (IS_DEBUG_OSPF_EVENT)
+	    zlog_info ("ospf_abr_announce_network(): "
+		       "prefix %s/%d was denied by prefix-list",
 		       inet_ntoa (p->prefix), p->prefixlen);
 	  continue; 
 	}
@@ -582,15 +827,17 @@ ospf_abr_process_network_rt (struct route_table *rt)
 {
   struct route_node *rn;
   struct ospf_route *or;
+  struct ospf_area *area;
 
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_process_network_rt(): Start");
-  RT_ITERATOR (rt, rn)
+
+  for (rn = route_top (rt); rn; rn = route_next (rn))
     {
       if ((or = rn->info) == NULL)
 	continue;
 
-      if (!ospf_area_lookup_by_area_id (or->u.std.area_id))
+      if (!(area = ospf_area_lookup_by_area_id (or->u.std.area_id)))
 	{
 	  if (IS_DEBUG_OSPF_EVENT)
 	    zlog_info ("ospf_abr_process_network_rt(): area %s no longer exists",
@@ -625,14 +872,21 @@ ospf_abr_process_network_rt (struct route_table *rt)
 	  continue;
 	}
 
-      if ((or->path_type == OSPF_PATH_INTRA_AREA) &&
-          (! ospf_abr_should_announce(&rn->p, or)) )
+      if (or->path_type == OSPF_PATH_INTRA_AREA &&
+	  !ospf_abr_should_announce (&rn->p, or))
 	{
 	  if (IS_DEBUG_OSPF_EVENT)
 	    zlog_info("ospf_abr_process_network_rt(): denied by export-list");
 	  continue;
 	}
 
+      if (or->path_type == OSPF_PATH_INTRA_AREA &&
+	  !ospf_abr_plist_out_check (area, or, &rn->p))
+	{
+	  if (IS_DEBUG_OSPF_EVENT)
+	    zlog_info("ospf_abr_process_network_rt(): denied by prefix-list");
+	  continue;
+	}
 
       if ((or->path_type == OSPF_PATH_INTER_AREA) &&
           !OSPF_IS_AREA_ID_BACKBONE (or->u.std.area_id))
@@ -789,7 +1043,7 @@ ospf_abr_process_router_rt (struct route_table *rt)
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_process_router_rt(): Start");
 
-  RT_ITERATOR (rt, rn)
+  for (rn = route_top (rt); rn; rn = route_next (rn))
     {
       listnode node;
       char flag = 0;
@@ -804,7 +1058,7 @@ ospf_abr_process_router_rt (struct route_table *rt)
 	zlog_info ("ospf_abr_process_router_rt(): this is a route to %s",
 		   inet_ntoa (rn->p.u.prefix4));
 
-      LIST_ITERATOR (l, node)
+      for (node = listhead (l); node; nextnode (node))
 	{
 	  or = getdata (node);
 	  if (or == NULL)
@@ -874,9 +1128,9 @@ ospf_abr_process_router_rt (struct route_table *rt)
 
         ospf_abr_announce_rtr ((struct prefix_ipv4 *) &rn->p, or);
 
-	} /* LIST_ITERATOR */
+	}
 
-    } /* RT_ITERATOR */
+    }
 
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_process_router_rt(): Stop");
@@ -937,7 +1191,7 @@ ospf_abr_unapprove_summaries ()
       area = getdata (node);
       foreach_lsa (SUMMARY_LSDB (area), NULL, 0,
 		   ospf_abr_unapprove_summaries_apply);
-      foreach_lsa (SUMMARY_ASBR_LSDB (area), NULL, 0,
+      foreach_lsa (ASBR_SUMMARY_LSDB (area), NULL, 0,
 		   ospf_abr_unapprove_summaries_apply);
     }
 
@@ -974,11 +1228,11 @@ ospf_abr_prepare_aggregates ()
 void
 ospf_abr_announce_aggregates ()
 {
-  listnode node, n;
   struct ospf_area *area, *ar;
-  struct route_node *rn;
   struct ospf_area_range *range;
+  struct route_node *rn;
   struct prefix_ipv4 p;
+  listnode node, n;
 
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_announce_aggregates(): Start");
@@ -992,67 +1246,64 @@ ospf_abr_announce_aggregates ()
 		   inet_ntoa (area->area_id));
 
       for (rn = route_top (area->ranges); rn; rn = route_next (rn))
-	{
-          if (rn->info == NULL)
-	    continue;
+	if ((range =  rn->info))
+	  {
+	    if (!CHECK_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE))
+	      {
+		if (IS_DEBUG_OSPF_EVENT)
+		  zlog_info ("ospf_abr_announce_aggregates():"
+			     " discarding suppress-ranges");
+		continue;
+	      }
 
-	  range = rn->info;
+	    p.family = AF_INET;
+	    p.prefix = range->addr;
+	    p.prefixlen = range->masklen;
 
-          if (CHECK_FLAG (range->flags, OSPF_RANGE_SUPPRESS))
-	    {
-	      if (IS_DEBUG_OSPF_EVENT)
-		zlog_info ("ospf_abr_announce_aggregates():"
-			   " discarding suppress-ranges");
-	      continue;
-	    }
+	    if (IS_DEBUG_OSPF_EVENT)
+	      zlog_info ("ospf_abr_announce_aggregates():"
+			 " this is range: %s/%d",
+			 inet_ntoa (p.prefix), p.prefixlen);
 
-          p.family = AF_INET;
-          p.prefix = range->node->p.u.prefix4;
-          p.prefixlen = range->node->p.prefixlen;
+	    if (CHECK_FLAG (range->flags, OSPF_AREA_RANGE_SUBSTITUTE))
+	      {
+		p.family = AF_INET;
+		p.prefix = range->subst_addr;
+		p.prefixlen = range->subst_masklen;
+	      }
 
-	  if (IS_DEBUG_OSPF_EVENT)
-	    zlog_info ("ospf_abr_announce_aggregates():"
-		       " this is range: %s/%d",
-		       inet_ntoa (p.prefix), p.prefixlen);
+	    if (range->specifics)
+	      {
+		if (IS_DEBUG_OSPF_EVENT)
+		  zlog_info ("ospf_abr_announce_aggregates(): active range");
 
-          if (CHECK_FLAG (range->flags, OSPF_RANGE_SUBST))
-	    p = range->substitute;
+		for (n = listhead (ospf_top->areas); n; nextnode (n))
+		  {
+		    ar = getdata (n);
+		    if (ar == area)
+		      continue;
 
-          if (range->specifics)
-	    {
-	      if (IS_DEBUG_OSPF_EVENT)
-		zlog_info ("ospf_abr_announce_aggregates(): active range");
+		    /* We do not check nexthops here, because
+		       intra-area routes can be associated with
+		       one area only */
 
-	      for (n = listhead (ospf_top->areas); n; nextnode (n))
-    		{
-      		  ar = getdata (n);
-                  if (ar == area)
-		    continue;
+		    /* backbone routes are not summarized
+		       when announced into transit areas */
 
-                  /* We do not check nexthops here, because
-                     intra-area routes can be associated with
-		     one area only */
-
-		  /* backbone routes are not summarized
-		     when announced into transit areas */
-
-                  if (ospf_area_is_transit (ar) &&
-		      OSPF_IS_AREA_BACKBONE (area))
-		    {
-		      if (IS_DEBUG_OSPF_EVENT)
-			zlog_info ("ospf_abr_announce_aggregates(): Skipping "
-				   "announcement of BB aggregate into"
-				   " a transit area");
-		      continue; 
-		    }
-		  ospf_abr_announce_network_to_area (&p, range->cost, ar);
-		}
-
-	    } /* if (range->specifics)*/
-
-	} /* all area ranges*/
-
-    } /* all areas */
+		    if (ospf_area_is_transit (ar) &&
+			OSPF_IS_AREA_BACKBONE (area))
+		      {
+			if (IS_DEBUG_OSPF_EVENT)
+			  zlog_info ("ospf_abr_announce_aggregates(): Skipping "
+				     "announcement of BB aggregate into"
+				     " a transit area");
+			continue; 
+		      }
+		    ospf_abr_announce_network_to_area (&p, range->cost, ar);
+		  }
+	      }
+	  }
+    }
 
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_abr_announce_aggregates(): Stop");
@@ -1089,7 +1340,7 @@ ospf_abr_send_nssa_aggregates () /* temporarily turned off */
 
 	  range = rn->info;
 
-          if (CHECK_FLAG (range->flags, OSPF_RANGE_SUPPRESS))
+          if (!CHECK_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE))
 	    {
 	      if (IS_DEBUG_OSPF_NSSA)
 		zlog_info ("ospf_abr_send_nssa_aggregates():"
@@ -1098,16 +1349,20 @@ ospf_abr_send_nssa_aggregates () /* temporarily turned off */
 	    }
 
           p.family = AF_INET;
-          p.prefix = range->node->p.u.prefix4;
-          p.prefixlen = range->node->p.prefixlen;
+          p.prefix = range->addr;
+          p.prefixlen = range->masklen;
 
 	  if (IS_DEBUG_OSPF_NSSA)
 	    zlog_info ("ospf_abr_send_nssa_aggregates():"
 		       " this is range: %s/%d",
 		       inet_ntoa (p.prefix), p.prefixlen);
 
-          if (CHECK_FLAG (range->flags, OSPF_RANGE_SUBST))
-	    p = range->substitute;
+          if (CHECK_FLAG (range->flags, OSPF_AREA_RANGE_SUBSTITUTE))
+	    {
+	      p.family = AF_INET;
+	      p.prefix = range->subst_addr;
+	      p.prefixlen = range->subst_masklen;
+	    }
 
           if (range->specifics)
 	    {
@@ -1286,7 +1541,7 @@ ospf_abr_remove_unapproved_summaries ()
 
       foreach_lsa (SUMMARY_LSDB (area), area, 0,
 		   ospf_abr_remove_unapproved_summaries_apply);
-      foreach_lsa (SUMMARY_ASBR_LSDB (area), area, 0,
+      foreach_lsa (ASBR_SUMMARY_LSDB (area), area, 0,
 		   ospf_abr_remove_unapproved_summaries_apply);
     }
  
@@ -1306,7 +1561,7 @@ ospf_abr_manage_discard_routes ()
     if ((area = node->data) != NULL)
       for (rn = route_top (area->ranges); rn; rn = route_next (rn))
 	if ((range = rn->info) != NULL)
-	  if (!CHECK_FLAG (range->flags, OSPF_RANGE_SUPPRESS))
+	  if (CHECK_FLAG (range->flags, OSPF_AREA_RANGE_ADVERTISE))
 	    {
 	      if (range->specifics)
 		ospf_add_discard_route (ospf_top->new_table, area,

@@ -36,9 +36,11 @@ void ospf6_zebra_start ();
 
 int ospf6_zebra_read_ipv6 (int, struct zclient *, zebra_size_t);
 
-void
-ospf6_zebra_route_update (struct prefix_ipv6 *p,
-                          struct ospf6_route_info *ri);
+extern const char *zebra_route_name[ZEBRA_ROUTE_MAX];
+extern const char *zebra_route_abname[ZEBRA_ROUTE_MAX];
+
+void ospf6_zebra_route_update_add (struct ospf6_route_req *request);
+void ospf6_zebra_route_update_remove (struct ospf6_route_req *request);
 
 #endif /*OSPF6_ZEBRA_H*/
 

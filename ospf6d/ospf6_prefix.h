@@ -22,6 +22,8 @@
 #ifndef OSPF6_PREFIX_H
 #define OSPF6_PREFIX_H
 
+#include "linklist.h"
+
 #define OSPF6_PREFIX_OPTION_NU (1 << 0)  /* No Unicast */
 #define OSPF6_PREFIX_OPTION_LA (1 << 1)  /* Local Address */
 #define OSPF6_PREFIX_OPTION_MC (1 << 2)  /* MultiCast */
@@ -57,15 +59,25 @@ struct ospf6_prefix
 struct ospf6_prefix *
   ospf6_prefix_make (u_int8_t, u_int16_t, struct prefix_ipv6 *);
 void ospf6_prefix_free (struct ospf6_prefix *);
-void ospf6_prefix_add (list, struct ospf6_prefix *);
 void ospf6_prefix_in6_addr (struct ospf6_prefix *, struct in6_addr *);
-void ospf6_prefix_str (struct ospf6_prefix *, char *, size_t);
 void ospf6_prefix_copy (struct ospf6_prefix *, struct ospf6_prefix *,
                         size_t);
 
 void ospf6_prefix_apply_mask (struct ospf6_prefix *);
-void ospf6_prefix_options_str (struct ospf6_prefix *, char *, size_t);
 int ospf6_prefix_issame (struct ospf6_prefix *, struct ospf6_prefix *);
+
+char *ospf6_prefix_options_str (u_int8_t, char *, size_t);
+char *ospf6_prefix_string (struct ospf6_prefix *, char *, size_t);
+
+struct ospf6_prefix *
+ospf6_prefix_lookup (list l, struct ospf6_prefix *prefix);
+void ospf6_prefix_add (list, struct ospf6_prefix *);
+
+struct ospf6_prefix *
+ospf6_prefix_create (u_int8_t, u_int16_t, struct prefix_ipv6 *);
+void ospf6_prefix_delete (struct ospf6_prefix *);
+
+void ospf6_prefix_init ();
 
 #endif /* OSPF6_PREFIX_H */
 

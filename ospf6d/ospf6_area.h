@@ -52,7 +52,9 @@ struct ospf6_area
 
   struct prefix_ipv6 area_range;
   struct ospf6_spftree *spf_tree;
-  struct route_table *table_topology;
+
+  struct ospf6_route_table *route_table;
+  struct ospf6_route_table *table_topology;
 
   void (*foreach_if)  (struct ospf6_area *, void *, int,
                        void (*func) (void *, int, void *));
@@ -79,6 +81,8 @@ void ospf6_area_delete (struct ospf6_area *);
 void ospf6_area_show (struct vty *, struct ospf6_area *);
 void
 ospf6_area_statistics_show (struct vty *vty, struct ospf6_area *o6a);
+
+void ospf6_area_init ();
 
 #endif /* OSPF_AREA_H */
 

@@ -21,7 +21,14 @@
 
 #include "ospf6d.h"
 
-int
+static int
+nbs_full_change (struct ospf6_interface *ospf6_interface)
+{
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, ospf6_interface);
+  return 0;
+}
+
+static int
 nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
 {
   state_t nbs_previous;
@@ -34,6 +41,7 @@ nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
 
   /* statistics */
   o6n->ospf6_stat_state_changed++;
+  gettimeofday (&o6n->last_changed, NULL);
 
   /* log */
   if (IS_OSPF6_DUMP_NEIGHBOR)
@@ -61,20 +69,8 @@ nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
       ospf6_maxage_remover ();
     }
 
-  return 0;
-}
+  CALL_CHANGE_HOOK (&neighbor_hook, o6n);
 
-int
-nbs_full_change (struct ospf6_interface *ospf6_interface)
-{
-  /* construct LSAs */
-  ospf6_lsa_update_router (ospf6_interface->area->area_id);
-  if (ospf6_interface->state == IFS_DR)
-    {
-      ospf6_lsa_update_network (ospf6_interface->interface->name);
-      ospf6_lsa_update_intra_prefix_transit (ospf6_interface->interface->name);
-    }
-  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area->area_id);
   return 0;
 }
 

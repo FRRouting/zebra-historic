@@ -231,10 +231,12 @@ ospf6_join_allspfrouters (u_int ifindex)
                        &mreq6, sizeof (mreq6));
 
   if (retval < 0)
-    zlog_warn ("Network: Join AllSPFRouters on ifindex %d failed: %s",
+    zlog_err ("Network: Join AllSPFRouters on ifindex %d failed: %s",
                ifindex, strerror (errno));
+#if 0
   else
     zlog_info ("Network: Join AllSPFRouters on ifindex %d", ifindex);
+#endif
 
   return retval;
 }
@@ -272,7 +274,7 @@ ospf6_join_alldrouters (u_int ifindex)
     zlog_warn ("Network: Join AllDRouters on ifindex %d Failed: %s",
                ifindex, strerror (errno));
   else
-    zlog_info ("Network: AllDRouters on ifindex %d", ifindex);
+    zlog_info ("Network: Join AllDRouters on ifindex %d", ifindex);
 }
 
 void
@@ -352,12 +354,14 @@ ospf6_sendmsg (struct in6_addr *src, struct in6_addr *dst,
   struct in6_pktinfo *pktinfo;
   struct sockaddr_in6 dst_sin6;
 
+  assert (dst);
+  assert (*ifindex);
+
   scmsgp = (struct cmsghdr *)cmsgbuf;
   pktinfo = (struct in6_pktinfo *)(CMSG_DATA(scmsgp));
   memset (&dst_sin6, 0, sizeof (struct sockaddr_in6));
 
   /* source address */
-  assert (*ifindex);
   pktinfo->ipi6_ifindex = *ifindex;
   if (src)
     memcpy (&pktinfo->ipi6_addr, src, sizeof (struct in6_addr));
@@ -366,7 +370,9 @@ ospf6_sendmsg (struct in6_addr *src, struct in6_addr *dst,
 
   /* destination address */
   dst_sin6.sin6_family = AF_INET6;
-  assert (dst);
+#ifdef SIN6_LEN
+  dst_sin6.sin6_len = sizeof (struct sockaddr_in6);
+#endif /*SIN6_LEN*/
   memcpy (&dst_sin6.sin6_addr, dst, sizeof (struct in6_addr));
 #ifdef HAVE_SIN6_SCOPE_ID
   dst_sin6.sin6_scope_id = *ifindex;
@@ -388,7 +394,8 @@ ospf6_sendmsg (struct in6_addr *src, struct in6_addr *dst,
 
   retval = sendmsg (ospf6_sock, &smsghdr, 0);
   if (retval != iov_totallen (message))
-    zlog_warn ("Network: sendmsg failed: %s", strerror (errno));
+    zlog_warn ("Network: sendmsg (ifindex: %d) failed: %s(%d)",
+               *ifindex, strerror (errno), errno);
 }
 
 void

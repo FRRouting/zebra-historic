@@ -74,7 +74,7 @@
 #define IPCIDRROUTESTATUS                    16
 
 #define INTEGER32 ASN_INTEGER
-#define GAUGE32 ASN_INTEGER
+#define GAUGE32 ASN_GAUGE
 #define ENUMERATION ASN_INTEGER
 #define ROWSTATUS ASN_INTEGER
 #define IPADDRESS ASN_IPADDRESS
@@ -133,6 +133,7 @@ ipFwNumber (struct variable *v, oid objid[], size_t *objid_len,
 {
   static int result;
   struct route_node *np;
+  struct rib *rib;
 
   if (smux_header_generic(v, objid, objid_len, exact, val_len, write_method) == MATCH_FAILED)
     return NULL;
@@ -140,7 +141,8 @@ ipFwNumber (struct variable *v, oid objid[], size_t *objid_len,
   /* Return number of routing entries. */
   result = 0;
   for (np = route_top (rib_table_ipv4); np; np = route_next (np))
-    result++;
+    for (rib = np->info; rib; rib = rib->next)
+      result++;
 
   return (u_char *)&result;
 }
@@ -151,6 +153,7 @@ ipCidrNumber (struct variable *v, oid objid[], size_t *objid_len,
 {
   static int result;
   struct route_node *np;
+  struct rib *rib;
 
   if (smux_header_generic(v, objid, objid_len, exact, val_len, write_method) == MATCH_FAILED)
     return NULL;
@@ -158,7 +161,8 @@ ipCidrNumber (struct variable *v, oid objid[], size_t *objid_len,
   /* Return number of routing entries. */
   result = 0;
   for (np = route_top (rib_table_ipv4); np; np = route_next (np))
-    result++;
+    for (rib = np->info; rib; rib = rib->next)
+      result++;
 
   return (u_char *)&result;
 }
@@ -177,6 +181,31 @@ in_addr_cmp(u_char *p1, u_char *p2)
       p1++; p2++;
     }
   return 0;
+}
+
+int 
+in_addr_add(u_char *p, int num)
+{
+  int i, ip0;
+
+  ip0 = *p;
+  p += 4;
+  for (i = 3; 0 <= i; i--) {
+    p--;
+    if (*p + num > 255) {
+    	*p += num;
+    	num = 1;
+    } else {
+    	*p += num;
+    	return 1;
+    }
+  }
+  if (ip0 > *p) {
+  	/* ip + num > 0xffffffff */
+  	return 0;
+  }
+  
+  return 1;
 }
 
 int proto_trans(int type)
@@ -240,10 +269,9 @@ check_replace(struct route_node *np2, struct rib *rib2,
       return;
     }
 
-#if 0
-  if (in_addr_cmp((u_char *)&(*rib)->u.gate4, (u_char *)&rib2->u.gate4) <= 0)
+  if (in_addr_cmp((u_char *)&(*rib)->nexthop->gate.ipv4, 
+                  (u_char *)&rib2->nexthop->gate.ipv4) <= 0)
     return;
-#endif /* 0 */
 
   *np = np2;
   *rib = rib2;
@@ -307,8 +335,8 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 
   if (!exact && (*objid_len >= v->namelen + 10))
     {
-      pnt = ((u_char *) &nexthop)+3;
-      (*pnt)++;
+      if (! in_addr_add((u_char *) &nexthop, 1)) 
+        return;
     }
 
   /* For exact: search matching entry in rib table. */
@@ -323,10 +351,8 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 	    {
 	      for (*rib = (*np)->info; *rib; *rib = (*rib)->next)
 	        {
-#if 0
-		  if (!in_addr_cmp((u_char *)&(*rib)->u.gate4,
+		  if (!in_addr_cmp((u_char *)&(*rib)->nexthop->gate.ipv4,
 		    (u_char *)&nexthop))
-#endif
 		    if (proto == proto_trans((*rib)->type))
 		      return;
 		}
@@ -357,10 +383,8 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 	      if ((policy < policy2)
 		  || ((policy == policy2) && (proto < proto2))
 		  || ((policy == policy2) && (proto == proto2)
-#if 0
-		      && (in_addr_cmp((u_char *)&rib2->u.gate4,
+		      && (in_addr_cmp((u_char *)&rib2->nexthop->gate.ipv4,
 				      (u_char *) &nexthop) >= 0)
-#endif		     
 		      ))
 		check_replace(np2, rib2, np, rib);
 	    }

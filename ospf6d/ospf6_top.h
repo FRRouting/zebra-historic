@@ -38,7 +38,7 @@ struct ospf6
   unsigned char version;
 
   /* my router id */
-  unsigned long router_id;
+  u_int32_t router_id;
 
   /* list of areas */
   list area_list;
@@ -56,9 +56,9 @@ struct ospf6
   struct thread *t_route_calculation;
   u_int stat_route_calculation_execed;
 
-  struct route_table *route_table;
-  struct route_table *route_table_previous;
-  struct route_table *external_table;
+  struct ospf6_route_table *route_table;
+  struct ospf6_route_table *topology_table;
+  struct ospf6_route_table *external_table;
 
   void (*foreach_area) (struct ospf6 *, void *arg, int val,
                         void (*func) (void *, int, void *));
@@ -71,6 +71,8 @@ struct ospf6
 
   list nexthop_list;
 };
+ 
+extern struct ospf6 *ospf6;
 
 /* prototypes */
 int
@@ -87,6 +89,8 @@ void ospf6_stop ();
 
 void ospf6_delete (struct ospf6 *);
 int ospf6_is_asbr (struct ospf6 *);
+
+void ospf6_top_init ();
 
 #endif /* OSPF6_TOP_H */
 

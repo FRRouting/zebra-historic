@@ -1,23 +1,22 @@
 /* BGP-4, BGP-4+ packet debug routine
- * Copyright (C) 1996, 97, 99 Kunihiro Ishiguro
- *
- * This file is part of GNU Zebra.
- *
- * GNU Zebra is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2, or (at your option) any
- * later version.
- *
- * GNU Zebra is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the Free
- * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.  
- */
+   Copyright (C) 1996, 97, 99 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
 
 #include <zebra.h>
 
@@ -74,19 +73,21 @@ char *bgp_type_str[] =
   "UPDATE",
   "NOTIFICATION",
   "KEEPALIVE",
-  "ROUTE-REFRESH"
+  "ROUTE-REFRESH",
+  "CAPABILITY"
 };
 
 /* message for BGP-4 Notify */
 struct message bgp_notify_msg[] = 
 {
-  { 0, "null" },
+  { 0, "" },
   { BGP_NOTIFY_HEADER_ERR, "Message Header Error"},
   { BGP_NOTIFY_OPEN_ERR, "OPEN Message Error"},
   { BGP_NOTIFY_UPDATE_ERR, "UPDATE Message Error"},
   { BGP_NOTIFY_HOLD_ERR, "Hold Timer Expired"},
   { BGP_NOTIFY_FSM_ERR, "Finite State Machine Error"},
   { BGP_NOTIFY_CEASE, "Cease"},
+  { BGP_NOTIFY_CAPABILITY_ERR, "CAPABILITY Message Error"},
 };
 int bgp_notify_msg_max = BGP_NOTIFY_MAX;
 
@@ -129,47 +130,37 @@ struct message bgp_notify_update_msg[] =
 };
 int bgp_notify_update_msg_max = BGP_NOTIFY_UPDATE_MAX;
 
+struct message bgp_notify_cease_msg[] =
+{
+  { 0, ""},
+  { BGP_NOTIFY_CEASE_MAX_PREFIX, "/Maximum Number of Prefixes Reached."},
+  { BGP_NOTIFY_CEASE_ADMIN_SHUTDOWN, "/Administratively Shutdown."},
+  { BGP_NOTIFY_CEASE_PEER_UNCONFIG, "/Peer Unconfigured."},
+  { BGP_NOTIFY_CEASE_ADMIN_RESET, "/Administratively Reset."},
+  { BGP_NOTIFY_CEASE_CONNECT_REJECT, "/Connection Rejected."},
+  { BGP_NOTIFY_CEASE_CONFIG_CHANGE, "/Other Configuration Change."},
+};
+int bgp_notify_cease_msg_max = BGP_NOTIFY_CEASE_MAX;
+
+struct message bgp_notify_capability_msg[] = 
+{
+  { 0, "null" },
+  { BGP_NOTIFY_CAPABILITY_INVALID_ACTION, "/Invalid Action Value." },
+  { BGP_NOTIFY_CAPABILITY_INVALID_LENGTH, "/Invalid Capability Length."},
+  { BGP_NOTIFY_CAPABILITY_MALFORMED_CODE, "/Malformed Capability Value."},
+};
+int bgp_notify_capability_msg_max = BGP_NOTIFY_CAPABILITY_MAX;
+
 /* Origin strings. */
 char *bgp_origin_str[] = {"i","e","?"};
 char *bgp_origin_long_str[] = {"IGP","EGP","incomplete"};
-
-#if 0
-/* Dump bgp header information. */
-void
-bgp_dump_header (struct bgp_header *bgp_header)
-{
-  int flag = 0;
-
-  switch (bgp_header->type) 
-    {
-    case BGP_MSG_OPEN:
-      if (IS_SET(dump_open, DUMP_DETAIL))
-	flag = 1;
-      break;
-    case BGP_MSG_UPDATE:
-      if (IS_SET(dump_open, DUMP_DETAIL))
-	flag = 1;
-      break;
-    case BGP_MSG_KEEPALIVE:
-      if (IS_SET(dump_keepalive, DUMP_DETAIL))
-	flag = 1;
-      break;
-    default:
-      break;
-    }
-
-  if (flag) 
-    zlog (NULL, LOG_INFO, "Head: %s(%d) length(%d)",
-	    bgp_type_str[bgp_header->type], 
-	    bgp_header->type, bgp_header->length);
-}
-#endif
 
 /* Dump attribute. */
 void
 bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
 {
-  if (attr == NULL)
+
+  if (! attr)
     return;
 
   snprintf (buf, size, "nexthop %s", inet_ntoa (attr->nexthop));
@@ -194,37 +185,27 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
 #endif /* HAVE_IPV6 */
 
   if (peer_sort (peer) == BGP_PEER_IBGP)
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), ", localpref %d",
-		attr->local_pref);
-    }
+    snprintf (buf + strlen (buf), size - strlen (buf), ", localpref %d",
+	      attr->local_pref);
 
   if (attr->med)
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), ", metric %d",
-		attr->med);
-    }
+    snprintf (buf + strlen (buf), size - strlen (buf), ", metric %d",
+	      attr->med);
 
   if (attr->community) 
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), ", community%s",
-		community_print (attr->community));
-    }
+    snprintf (buf + strlen (buf), size - strlen (buf), ", community %s",
+	      community_str (attr->community));
 
   if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ATOMIC_AGGREGATE))
     snprintf (buf + strlen (buf), size - strlen (buf), ", atomic-aggregate");
 
   if (attr->aggregator_as)
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), ", aggregated by %d %s",
-		attr->aggregator_as, inet_ntoa (attr->aggregator_addr));
-    }
+    snprintf (buf + strlen (buf), size - strlen (buf), ", aggregated by %d %s",
+	      attr->aggregator_as, inet_ntoa (attr->aggregator_addr));
 
   if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), ", originator %s",
-		inet_ntoa (attr->originator_id));
-    }
+    snprintf (buf + strlen (buf), size - strlen (buf), ", originator %s",
+	      inet_ntoa (attr->originator_id));
 
   if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_CLUSTER_LIST))
     {
@@ -237,10 +218,8 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
     }
 
   if (attr->aspath) 
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), ", path %s",
-		aspath_print (attr->aspath));
-    }
+    snprintf (buf + strlen (buf), size - strlen (buf), ", path %s",
+	      aspath_print (attr->aspath));
 }
 
 /* dump notify packet */
@@ -269,7 +248,10 @@ bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify, char *direct)
       subcode_str = "";
       break;
     case BGP_NOTIFY_CEASE:
-      subcode_str = "";
+      subcode_str = LOOKUP (bgp_notify_cease_msg, bgp_notify->subcode);
+      break;
+    case BGP_NOTIFY_CAPABILITY_ERR:
+      subcode_str = LOOKUP (bgp_notify_capability_msg, bgp_notify->subcode);
       break;
     }
   if (BGP_DEBUG (normal, NORMAL))
@@ -279,150 +261,6 @@ bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify, char *direct)
 	       LOOKUP (bgp_notify_msg, bgp_notify->code),
 	       subcode_str, bgp_notify->length,
 	       bgp_notify->data ? bgp_notify->data : "");
-}
-
-#if 0
-/* Open packet dump */
-void
-bgp_open_dump (struct bgp_open *bgp_open, struct peer *peer, int direct)
-{
-  /* decide whether dump or not */
-  if (direct == PACKET_RECV &&
-      IS_SET(dump_open, DUMP_SEND)) {
-
-    if (IS_SET(dump_open, DUMP_DETAIL)) {
-      /* detail */
-      zlog (peer->log, LOG_INFO, "Open: peer(%s) version(%d) AS(%d) holdtime(%d)"
-	      "      ident(%lu) optlen(%d)",
-	      peer->host,
-	      bgp_open->version, bgp_open->asno, bgp_open->holdtime,
-	      bgp_open->ident, bgp_open->optlen);
-    } else {
-      /* normal */
-      zlog (peer->log, LOG_INFO, "Open: peer(%s)", peer->host);
-    }
-  }
-}
-#endif
-
-/* Dump BGP open packet. */
-void
-bgp_packet_open_dump (struct stream *s)
-{
-  printf ("BGP open ");
-  printf ("version: %d ", stream_getc (s));
-  printf ("as: %d ", stream_getw (s));
-  printf ("holdtime: %d ", stream_getw (s));
-  printf ("ident: %d\n", stream_getl (s));
-
-  /* Open message option. */
-  printf ("opt parm len: %d\n", stream_getc (s));
-}
-
-void
-bgp_packet_notify_dump (struct stream *s)
-{
-  struct bgp_notify bgp_notify;
-
-  bgp_notify.code = stream_getc (s);
-  bgp_notify.subcode = stream_getc (s);
-  bgp_notify_print (NULL, &bgp_notify, "received");
-}
-
-/* Dump bgp update packet. */
-void
-bgp_update_dump (struct stream *s)
-{
-  u_char *endp;
-  bgp_size_t unfeasible_len;
-  bgp_size_t attr_total_len;
-
-  unfeasible_len = stream_getw (s);
-  printf ("Unfeasible length: %d\n", unfeasible_len);
-
-  stream_forward (s, unfeasible_len);
-
-  attr_total_len = stream_getw (s);
-  printf ("Attribute length: %d\n", attr_total_len);
-
-  endp = STREAM_PNT (s) + attr_total_len;
-
-  while (STREAM_PNT (s) < endp)
-    {
-      u_char flag;
-      u_char type;
-      bgp_size_t length;
-
-      flag = stream_getc (s);
-      type = stream_getc (s);
-
-      printf ("flag: %d\n", flag);
-      printf ("type: %d\n", type);
-  
-      if (flag & BGP_ATTR_FLAG_EXTLEN)
-	length = stream_getw (s);
-      else
-	length = stream_getc (s);
-#if 0
-      printf ("length %d\n", length);
-
-      stream_forward (s, length);
-#else 
-      {
-	int p1;
-	printf ("length %d // ", length);
-	for(p1=length; p1 ; p1--) {
-	  printf("0x%02x ",(unsigned char)  stream_getc (s) );
-	}
-	printf("\n");
-      }
-#endif
-    }
-}
-/* Debug dump of bgp packet. */
-void
-bgp_packet_dump (struct stream *s)
-{
-  int i;
-  u_char type;
-  u_int16_t size;
-  unsigned long sp;
-
-  /* Preserve pointer. */
-  sp = stream_get_getp (s);
-  stream_set_getp (s, 0);
-
-  /* Marker dump. */
-  printf ("BGP packet marker : ");
-  for (i = 0; i < BGP_MARKER_SIZE; i++)
-    printf ("%x ", stream_getc (s));
-  printf ("\n");
-
-  /* BGP packet size. */
-  size = stream_getw (s);
-  printf ("BGP packet size : %d\n", size);
-
-  /* BGP packet type. */
-  type = stream_getc (s);
-  printf ("BGP packet type : %s (%d)\n", bgp_type_str[type], type);
-
-  switch (type)
-    {
-    case BGP_MSG_OPEN:
-      bgp_packet_open_dump (s);
-      break;
-    case BGP_MSG_KEEPALIVE:
-      assert (size == BGP_HEADER_SIZE);
-      return;
-      break;
-    case BGP_MSG_UPDATE:
-      bgp_update_dump (s);
-      break;
-    case BGP_MSG_NOTIFY:
-      bgp_packet_notify_dump (s);
-      break;
-    }
-  stream_set_getp (s, sp);
 }
 
 /* Debug option setting interface. */
@@ -789,7 +627,7 @@ DEFUN (show_debugging_bgp,
 }
 
 int
-config_write_debug (struct vty *vty)
+bgp_config_write_debug (struct vty *vty)
 {
   int write = 0;
 
@@ -835,7 +673,7 @@ config_write_debug (struct vty *vty)
 
   if (CONF_BGP_DEBUG (filter, FILTER))
     {
-      vty_out (vty, "debug bgp filter%s", VTY_NEWLINE);
+      vty_out (vty, "debug bgp filters%s", VTY_NEWLINE);
       write++;
     }
 
@@ -852,7 +690,7 @@ struct cmd_node debug_node =
 void
 bgp_debug_init ()
 {
-  install_node (&debug_node, config_write_debug);
+  install_node (&debug_node, bgp_config_write_debug);
 
   install_element (ENABLE_NODE, &show_debugging_bgp_cmd);
 

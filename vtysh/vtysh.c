@@ -349,6 +349,8 @@ void
 vtysh_pager_init ()
 {
   vtysh_pager_name = getenv ("VTYSH_PAGER");
+  if (! vtysh_pager_name)
+    vtysh_pager_name = "more";
 }
 
 /* Command execution over the vty interface. */
@@ -821,6 +823,18 @@ DEFUNSH (VTYSH_BGPD,
 }
 
 DEFUNSH (VTYSH_BGPD,
+	 address_family_ipv4_unicast,
+	 address_family_ipv4_unicast_cmd,
+	 "address-family ipv4 unicast",
+	 "Enter Address Family command mode\n"
+	 "Address family\n"
+	 "Address Family Modifier\n")
+{
+  vty->node = BGP_IPV4_NODE;
+  return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_BGPD,
 	 address_family_ipv4_multicast,
 	 address_family_ipv4_multicast_cmd,
 	 "address-family ipv4 multicast",
@@ -997,6 +1011,7 @@ vtysh_exit (struct vty *vty)
       vty->node = CONFIG_NODE;
       break;
     case BGP_VPNV4_NODE:
+    case BGP_IPV4_NODE:
     case BGP_IPV4M_NODE:
     case BGP_IPV6_NODE:
       vty->node = BGP_NODE;
@@ -1030,7 +1045,8 @@ DEFUNSH (VTYSH_BGPD,
 	 "exit-address-family",
 	 "Exit from Address Family configuration mode\n")
 {
-  if (vty->node == BGP_IPV4M_NODE
+  if (vty->node == BGP_IPV4_NODE
+      || vty->node == BGP_IPV4M_NODE
       || vty->node == BGP_VPNV4_NODE
       || vty->node == BGP_IPV6_NODE)
     vty->node = BGP_NODE;
@@ -1409,6 +1425,12 @@ struct cmd_node bgp_vpnv4_node =
   "%s(config-router-af)# "
 };
 
+struct cmd_node bgp_ipv4_node =
+{
+  BGP_IPV4_NODE,
+  "%s(config-router-af)# "
+};
+
 struct cmd_node bgp_ipv4m_node =
 {
   BGP_IPV4M_NODE,
@@ -1606,6 +1628,7 @@ vtysh_init_vty ()
   install_node (&rmap_node, NULL);
   install_node (&zebra_node, NULL);
   install_node (&bgp_vpnv4_node, NULL);
+  install_node (&bgp_ipv4_node, NULL);
   install_node (&bgp_ipv4m_node, NULL);
 /* #ifdef HAVE_IPV6 */
   install_node (&bgp_ipv6_node, NULL);
@@ -1627,6 +1650,7 @@ vtysh_init_vty ()
   vtysh_install_default (RMAP_NODE);
   vtysh_install_default (ZEBRA_NODE);
   vtysh_install_default (BGP_VPNV4_NODE);
+  vtysh_install_default (BGP_IPV4_NODE);
   vtysh_install_default (BGP_IPV4M_NODE);
   vtysh_install_default (BGP_IPV6_NODE);
   vtysh_install_default (OSPF_NODE);
@@ -1654,6 +1678,8 @@ vtysh_init_vty ()
   install_element (BGP_NODE, &vtysh_quit_bgpd_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_exit_bgpd_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_quit_bgpd_cmd);
+  install_element (BGP_IPV4_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (BGP_IPV4_NODE, &vtysh_quit_bgpd_cmd);
   install_element (BGP_IPV4M_NODE, &vtysh_exit_bgpd_cmd);
   install_element (BGP_IPV4M_NODE, &vtysh_quit_bgpd_cmd);
   install_element (BGP_IPV6_NODE, &vtysh_exit_bgpd_cmd);
@@ -1673,6 +1699,7 @@ vtysh_init_vty ()
   install_element (OSPF_NODE, &vtysh_end_all_cmd);
   install_element (OSPF6_NODE, &vtysh_end_all_cmd);
   install_element (BGP_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_IPV4_NODE, &vtysh_end_all_cmd);
   install_element (BGP_IPV4M_NODE, &vtysh_end_all_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_end_all_cmd);
   install_element (BGP_IPV6_NODE, &vtysh_end_all_cmd);
@@ -1694,12 +1721,14 @@ vtysh_init_vty ()
   install_element (CONFIG_NODE, &router_bgp_cmd);
   install_element (BGP_NODE, &address_family_vpnv4_cmd);
   install_element (BGP_NODE, &address_family_vpnv4_unicast_cmd);
+  install_element (BGP_NODE, &address_family_ipv4_unicast_cmd);
   install_element (BGP_NODE, &address_family_ipv4_multicast_cmd);
 #ifdef HAVE_IPV6
   install_element (BGP_NODE, &address_family_ipv6_cmd);
   install_element (BGP_NODE, &address_family_ipv6_unicast_cmd);
 #endif
   install_element (BGP_VPNV4_NODE, &exit_address_family_cmd);
+  install_element (BGP_IPV4_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV4M_NODE, &exit_address_family_cmd);
   install_element (BGP_IPV6_NODE, &exit_address_family_cmd);
   install_element (CONFIG_NODE, &key_chain_cmd);
@@ -1717,6 +1746,7 @@ vtysh_init_vty ()
   install_element (CONFIG_NODE, &vtysh_write_terminal_cmd);
   install_element (BGP_NODE, &vtysh_write_terminal_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_write_terminal_cmd);
+  install_element (BGP_IPV4_NODE, &vtysh_write_terminal_cmd);
   install_element (BGP_IPV4M_NODE, &vtysh_write_terminal_cmd);
   install_element (BGP_IPV6_NODE, &vtysh_write_terminal_cmd);
   install_element (RIP_NODE, &vtysh_write_terminal_cmd);
@@ -1733,6 +1763,7 @@ vtysh_init_vty ()
   install_element (CONFIG_NODE, &vtysh_write_memory_cmd);
   install_element (BGP_NODE, &vtysh_write_memory_cmd);
   install_element (BGP_VPNV4_NODE, &vtysh_write_memory_cmd);
+  install_element (BGP_IPV4_NODE, &vtysh_write_memory_cmd);
   install_element (BGP_IPV4M_NODE, &vtysh_write_memory_cmd);
   install_element (BGP_IPV6_NODE, &vtysh_write_memory_cmd);
   install_element (RIP_NODE, &vtysh_write_memory_cmd);

@@ -27,13 +27,13 @@
 #define OSPF_EXAMINE_SUMMARIES_ALL(A,N,R) \
 	{ \
 	  ospf_examine_summaries ((A), SUMMARY_LSDB ((A)), (N), (R)); \
-	  ospf_examine_summaries ((A), SUMMARY_ASBR_LSDB ((A)), (N), (R)); \
+	  ospf_examine_summaries ((A), ASBR_SUMMARY_LSDB ((A)), (N), (R)); \
 	}
 
 #define OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL(A,N,R) \
 	{ \
 	  ospf_examine_transit_summaries ((A), SUMMARY_LSDB ((A)), (N), (R)); \
-	  ospf_examine_transit_summaries ((A), SUMMARY_ASBR_LSDB ((A)), (N), (R)); \
+	  ospf_examine_transit_summaries ((A), ASBR_SUMMARY_LSDB ((A)), (N), (R)); \
 	}
 
 void ospf_ia_routing (struct route_table *, struct route_table *);

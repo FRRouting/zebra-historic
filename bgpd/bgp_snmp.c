@@ -1,23 +1,22 @@
 /* BGP4 SNMP support
- * Copyright (C) 1999, 2000 Kunihiro Ishiguro
- *
- * This file is part of GNU Zebra.
- *
- * GNU Zebra is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2, or (at your option) any
- * later version.
- *
- * GNU Zebra is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the Free
- * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.  
- */
+   Copyright (C) 1999, 2000 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
 
 #include <zebra.h>
 
@@ -30,11 +29,11 @@
 #include "log.h"
 #include "prefix.h"
 #include "command.h"
-#include "table.h"
 #include "thread.h"
 #include "smux.h"
 
 #include "bgpd/bgpd.h"
+#include "bgpd/bgp_table.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_route.h"
@@ -278,7 +277,6 @@ peer_lookup_addr_ipv4 (struct in_addr *src)
 {
   struct bgp *bgp;
   struct peer *peer;
-  struct peer_conf *conf;
   struct listnode *nn;
   struct in_addr addr;
   int ret;
@@ -287,9 +285,8 @@ peer_lookup_addr_ipv4 (struct in_addr *src)
   if (! bgp)
     return NULL;
 
-  LIST_LOOP (bgp->peer_conf, conf, nn)
+  LIST_LOOP (bgp->peer, peer, nn)
     {
-      peer = conf->peer;
       ret = inet_pton (AF_INET, peer->host, &addr);
       if (ret > 0)
 	{
@@ -305,7 +302,6 @@ bgp_peer_lookup_next (struct in_addr *src)
 {
   struct bgp *bgp;
   struct peer *peer;
-  struct peer_conf *conf;
   struct listnode *nn;
   struct in_addr *p;
   union sockunion su;
@@ -317,9 +313,8 @@ bgp_peer_lookup_next (struct in_addr *src)
   if (! bgp)
     return NULL;
 
-  LIST_LOOP (bgp->peer_conf, conf, nn)
+  LIST_LOOP (bgp->peer, peer, nn)
     {
-      peer = conf->peer;
       ret = inet_pton (AF_INET, peer->host, &su.sin.sin_addr);
       if (ret > 0)
 	{
@@ -598,7 +593,7 @@ bgpIdentifier (struct variable *v, oid name[], size_t *length,
   if (!bgp)
     return NULL;
 
-  return SNMP_IPADDRESS (bgp->id);
+  return SNMP_IPADDRESS (bgp->router_id);
 }
 
 u_char *
@@ -620,7 +615,7 @@ bgp4PathAttrLookup (struct variable *v, oid name[], size_t *length,
   int offsetlen;
   struct bgp_info *binfo;
   struct bgp_info *min;
-  struct route_node *rn;
+  struct bgp_node *rn;
   union sockunion su;
   int len;
   struct in_addr paddr;
@@ -647,11 +642,11 @@ bgp4PathAttrLookup (struct variable *v, oid name[], size_t *length,
       oid2in_addr (offset, IN_ADDR_SIZE, &su.sin.sin_addr);
 
       /* Lookup node. */
-      rn = route_node_lookup (bgp->rib[AFI_IP][SAFI_UNICAST], 
+      rn = bgp_node_lookup (bgp->rib[AFI_IP][SAFI_UNICAST], 
 			      (struct prefix *) addr);
       if (rn)
 	{
-	  route_unlock_node (rn);
+	  bgp_unlock_node (rn);
 
 	  for (binfo = rn->info; binfo; binfo = binfo->next)
 	    if (sockunion_same (&binfo->peer->su, &su))
@@ -665,7 +660,7 @@ bgp4PathAttrLookup (struct variable *v, oid name[], size_t *length,
       len = offsetlen;
 
       if (offsetlen == 0)
-	rn = route_top (bgp->rib[AFI_IP][SAFI_UNICAST]);
+	rn = bgp_table_top (bgp->rib[AFI_IP][SAFI_UNICAST]);
       else
 	{
 	  if (len > IN_ADDR_SIZE)
@@ -681,7 +676,7 @@ bgp4PathAttrLookup (struct variable *v, oid name[], size_t *length,
 	  else
 	    addr->prefixlen = len * 8;
 
-	  rn = route_node_get (bgp->rib[AFI_IP][SAFI_UNICAST],
+	  rn = bgp_node_get (bgp->rib[AFI_IP][SAFI_UNICAST],
 			       (struct prefix *) addr);
 
 	  offset++;
@@ -737,14 +732,14 @@ bgp4PathAttrLookup (struct variable *v, oid name[], size_t *length,
 	      addr->prefix = rn->p.u.prefix4;
 	      addr->prefixlen = rn->p.prefixlen;
 
-	      route_unlock_node (rn);
+	      bgp_unlock_node (rn);
 
 	      return min;
 	    }
 
 	  paddr.s_addr = 0;
 	}
-      while ((rn = route_next (rn)) != NULL);
+      while ((rn = bgp_route_next (rn)) != NULL);
     }
   return NULL;
 }
@@ -846,7 +841,7 @@ bgpTrapEstablished (struct peer *peer)
   smux_trap (bgp_oid, sizeof bgp_oid / sizeof (oid),
 	     index, IN_ADDR_SIZE,
 	     bgpTrapList, sizeof bgpTrapList / sizeof (struct trap_object),
-	     bgp_start_time - time (NULL));
+	     bm->start_time - time (NULL));
 }
 
 void
@@ -865,7 +860,7 @@ bgpTrapBackwardTransition (struct peer *peer)
   smux_trap (bgp_oid, sizeof bgp_oid / sizeof (oid),
 	     index, IN_ADDR_SIZE,
 	     bgpTrapList, sizeof bgpTrapList / sizeof (struct trap_object),
-	     bgp_start_time - time (NULL));
+	     bm->start_time - time (NULL));
 }
 
 void

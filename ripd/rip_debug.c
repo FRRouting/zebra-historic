@@ -174,9 +174,19 @@ DEFUN (no_debug_rip_packet_direct,
        "RIP option set for send packet\n")
 {
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
-    rip_debug_packet &= ~RIP_DEBUG_SEND;
-  if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
-    rip_debug_packet &= ~RIP_DEBUG_RECV;
+    {
+      if (IS_RIP_DEBUG_RECV)
+       rip_debug_packet &= ~RIP_DEBUG_SEND;
+      else
+       rip_debug_packet = 0;
+    }
+  else if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
+    {
+      if (IS_RIP_DEBUG_SEND)
+       rip_debug_packet &= ~RIP_DEBUG_RECV;
+      else
+       rip_debug_packet = 0;
+    }
   return CMD_SUCCESS;
 }
 
@@ -265,6 +275,7 @@ rip_debug_init ()
   install_element (ENABLE_NODE, &debug_rip_zebra_cmd);
   install_element (ENABLE_NODE, &no_debug_rip_events_cmd);
   install_element (ENABLE_NODE, &no_debug_rip_packet_cmd);
+  install_element (ENABLE_NODE, &no_debug_rip_packet_direct_cmd);
   install_element (ENABLE_NODE, &no_debug_rip_zebra_cmd);
 
   install_element (CONFIG_NODE, &debug_rip_events_cmd);
@@ -274,5 +285,6 @@ rip_debug_init ()
   install_element (CONFIG_NODE, &debug_rip_zebra_cmd);
   install_element (CONFIG_NODE, &no_debug_rip_events_cmd);
   install_element (CONFIG_NODE, &no_debug_rip_packet_cmd);
+  install_element (CONFIG_NODE, &no_debug_rip_packet_direct_cmd);
   install_element (CONFIG_NODE, &no_debug_rip_zebra_cmd);
 }

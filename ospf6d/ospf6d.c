@@ -23,7 +23,6 @@
 
 /* global ospf6d variable */
 int  ospf6_sock;
-struct ospf6 *ospf6;
 list iflist;
 list nexthoplist = NULL;
 struct sockaddr_in6 allspfrouters6;
@@ -34,22 +33,7 @@ int proctitle_mode = 0;
 char ospf6_daemon_version[] = OSPF6_DAEMON_VERSION;
 
 
-/* timeval calculation */
-void
-ospf6_timeval_add (const struct timeval *t1, const struct timeval *t2,
-                   struct timeval *result)
-{
-  long moveup = 0;
-
-  result->tv_usec = t1->tv_usec + t2->tv_usec;
-  while (result->tv_usec > 1000000)
-    {
-      result->tv_usec -= 1000000;
-      moveup ++;
-    }
-
-  result->tv_sec = t1->tv_sec + t2->tv_sec + moveup;
-}
+#define TIMER_SEC_MICRO 1000000
 
 void
 ospf6_timeval_sub (const struct timeval *t1, const struct timeval *t2,
@@ -67,7 +51,7 @@ ospf6_timeval_sub (const struct timeval *t1, const struct timeval *t2,
 
   if (t1->tv_usec < t2->tv_usec)
     {
-      usec = t1->tv_usec + 1000000;
+      usec = t1->tv_usec + TIMER_SEC_MICRO;
       movedown++;
     }
   else
@@ -92,41 +76,7 @@ ospf6_timeval_div (const struct timeval *t1, u_int by,
 
   movedown = t1->tv_sec % by;
   result->tv_sec = t1->tv_sec / by;
-  result->tv_usec = (t1->tv_usec + movedown * 1000000) / by;
-}
-
-/* return -1 if t1 greater, return 1 if t2 greater.
-   return 0 if t1 == t2 */
-int
-ospf6_timeval_cmp (const struct timeval *t1, const struct timeval *t2)
-{
-  if (t1->tv_sec > t2->tv_sec)
-    return -1;
-  if (t1->tv_sec < t2->tv_sec)
-    return 1;
-  if (t1->tv_usec > t2->tv_usec)
-    return -1;
-  if (t1->tv_usec < t2->tv_usec)
-    return 1;
-  return 0;
-}
-
-void
-ospf6_timeval_add_equal (const struct timeval *t, struct timeval *result)
-{
-  struct timeval tmp;
-  ospf6_timeval_add (t, result, &tmp);
-  result->tv_sec = tmp.tv_sec;
-  result->tv_usec = tmp.tv_usec;
-}
-
-void
-ospf6_timeval_sub_equal (const struct timeval *t, struct timeval *result)
-{
-  struct timeval tmp;
-  ospf6_timeval_sub (result, t, &tmp);
-  result->tv_sec = tmp.tv_sec;
-  result->tv_usec = tmp.tv_usec;
+  result->tv_usec = (t1->tv_usec + movedown * TIMER_SEC_MICRO) / by;
 }
 
 void
@@ -172,6 +122,24 @@ ospf6_timeval_string (struct timeval *tv, char *buf, int size)
             (msec ? msecs : ""), (usec ? usecs : ""));
 }
 
+void
+ospf6_timeval_string_summary (struct timeval *tv, char *buf, int size)
+{
+  char days[16], hours[16], mins[16], secs[16], msecs[16], usecs[16];
+  long day, hour, min, sec, msec, usec;
+
+  ospf6_timeval_decode (tv, &day, &hour, &min, &sec, &msec, &usec);
+  snprintf (days, sizeof (days), "%02ldd", day);
+  snprintf (hours, sizeof (hours), "%ldh", hour);
+  snprintf (mins, sizeof (mins), "%ldm", min);
+  snprintf (secs, sizeof (secs), "%lds", sec);
+  snprintf (msecs, sizeof (msecs), "%ldms", msec);
+  snprintf (usecs, sizeof (usecs), "%ldus", usec);
+
+  snprintf (buf, size, "%s%02ld:%02ld:%02ld",
+            (day ? days : ""), hour, min, sec);
+}
+
 /* foreach function */
 void
 ospf6_count_state (void *arg, int val, void *obj)
@@ -183,16 +151,14 @@ ospf6_count_state (void *arg, int val, void *obj)
   if (nei->state == state)
     (*count)++;
 }
-
 
-/* vty commands */
-/* for reload */
-extern void _reload ();
+/* VTY commands.  */
 DEFUN (reload,
        reload_cmd,
        "reload",
        "Reloads\n")
 {
+  extern void _reload ();
   _reload ();
   return CMD_SUCCESS;
 }
@@ -206,7 +172,9 @@ DEFUN (garbage_collection,
        "Remove Maxages if possible and recalculate routes\n")
 {
   ospf6_maxage_remover ();
+#if 0
   ospf6_route_calculation_schedule ();
+#endif
   return CMD_SUCCESS;
 }
 
@@ -228,8 +196,7 @@ DEFUN (router_ospf6,
        router_ospf6_cmd,
        "router ospf6",
        OSPF6_ROUTER_STR
-       OSPF6_STR
-       )
+       OSPF6_STR)
 {
   if (ospf6 == NULL)
     ospf6_start ();
@@ -246,8 +213,7 @@ DEFUN (no_router_ospf6,
        no_router_ospf6_cmd,
        "no router ospf6",
        NO_STR
-       OSPF6_ROUTER_STR
-       )
+       OSPF6_ROUTER_STR)
 {
   if (!ospf6)
     vty_out (vty, "OSPFv3 is not running%s", VTY_NEWLINE);
@@ -267,8 +233,7 @@ DEFUN (show_ipv6_ospf6,
        "show ipv6 ospf6",
        SHOW_STR
        IP6_STR
-       OSPF6_STR
-       )
+       OSPF6_STR)
 {
   OSPF6_CMD_CHECK_RUNNING ();
 
@@ -331,9 +296,147 @@ DEFUN (router_id,
       return CMD_WARNING;
     }
 
+  if (IS_OSPF6_DUMP_CONFIG)
+    zlog_info ("CONFIG: router-id %s", argv[0]);
   ospf6->router_id = router_id;
 
   return CMD_SUCCESS;
+}
+
+int
+ospf6_interface_bind_area (struct vty *vty,
+                           char *if_name, char *area_name,
+                           char *plist_name, int passive)
+{
+  struct interface *ifp;
+  struct ospf6_interface *o6i;
+  struct ospf6_area *o6a;
+  u_int32_t area_id;
+
+  /* find/create ospf6 interface */
+  ifp = if_get_by_name (if_name);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+
+  /* parse Area-ID */
+  if (inet_pton (AF_INET, area_name, &area_id) != 1)
+    {
+      vty_out (vty, "Invalid Area-ID: %s%s", area_name, VTY_NEWLINE);
+      return CMD_ERR_AMBIGUOUS;
+    }
+
+  /* find/create ospf6 area */
+  o6a = ospf6_area_lookup (area_id, ospf6);
+  if (!o6a)
+    {
+      o6a = ospf6_area_create (area_id);
+      o6a->ospf6 = ospf6;
+      listnode_add (ospf6->area_list, o6a);
+    }
+
+  if (o6i->area)
+    {
+      if (o6i->area != o6a)
+        {
+          vty_out (vty, "Aready attached to area %s%s",
+                   o6i->area->str, VTY_NEWLINE);
+          return CMD_ERR_NOTHING_TODO;
+        }
+    }
+  else
+    {
+      listnode_add (o6a->if_list, o6i);
+      o6i->area = o6a;
+    }
+
+  /* prefix-list name */
+  if (plist_name)
+    {
+      if (o6i->plist_name)
+        XFREE (MTYPE_PREFIX_LIST_STR, o6i->plist_name);
+      o6i->plist_name = XSTRDUP (MTYPE_PREFIX_LIST_STR, plist_name);
+    }
+  else
+    {
+      if (o6i->plist_name)
+        XFREE (MTYPE_PREFIX_LIST_STR, o6i->plist_name);
+      o6i->plist_name = NULL;
+    }
+
+  if (passive)
+    {
+      listnode node;
+      struct ospf6_neighbor *o6n;
+
+      SET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
+      if (o6i->thread_send_hello)
+        {
+          thread_cancel (o6i->thread_send_hello);
+          o6i->thread_send_hello = (struct thread *) NULL;
+        }
+
+      for (node = listhead (o6i->neighbor_list); node; nextnode (node))
+        {
+          o6n = getdata (node);
+          if (o6n->inactivity_timer)
+            thread_cancel (o6n->inactivity_timer);
+          thread_execute (master, inactivity_timer, o6n, 0);
+        }
+    }
+  else
+    {
+      UNSET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
+      if (o6i->thread_send_hello == NULL)
+        thread_add_event (master, ospf6_send_hello, o6i, 0);
+    }
+
+  /* enable I/F if it's not enabled still */
+  if (! ospf6_interface_is_enabled (o6i->interface->ifindex))
+    thread_add_event (master, interface_up, o6i, 0);
+  else
+    CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
+  return CMD_SUCCESS;
+}
+
+DEFUN (interface_area_plist,
+       interface_area_plist_cmd,
+       "interface IFNAME area A.B.C.D prefix-list WORD",
+       "Enable routing on an IPv6 interface\n"
+       IFNAME_STR
+       "Set the OSPF6 area ID\n"
+       "OSPF6 area ID in IPv4 address notation\n"
+       OSPF6_PREFIX_LIST_STR
+       "IPv6 prefix-list name\n"
+      )
+{
+  if (IS_OSPF6_DUMP_CONFIG)
+    zlog_info ("CONFIG: interface %s area %s prefix-list %s",
+               argv[0], argv[1], argv[2]);
+
+  return ospf6_interface_bind_area (vty, argv[0], argv[1], argv[2], 0);
+}
+
+DEFUN (interface_area_plist_passive,
+       interface_area_plist_passive_cmd,
+       "interface IFNAME area A.B.C.D prefix-list WORD passive",
+       "Enable routing on an IPv6 interface\n"
+       IFNAME_STR
+       "Set the OSPF6 area ID\n"
+       "OSPF6 area ID in IPv4 address notation\n"
+       OSPF6_PREFIX_LIST_STR
+       "IPv6 prefix-list name\n"
+       "IPv6 prefix-list name\n"
+       OSPF6_PASSIVE_STR
+      )
+{
+  if (IS_OSPF6_DUMP_CONFIG)
+    zlog_info ("CONFIG: interface %s area %s prefix-list %s passive",
+               argv[0], argv[1], argv[2]);
+
+  return ospf6_interface_bind_area (vty, argv[0], argv[1], argv[2], 1);
 }
 
 DEFUN (interface_area,
@@ -343,68 +446,62 @@ DEFUN (interface_area,
        IFNAME_STR
        "Set the OSPF6 area ID\n"
        "OSPF6 area ID in IPv4 address notation\n"
-       )
+      )
 {
-  struct ospf6 *o6;
   struct interface *ifp;
   struct ospf6_interface *o6i;
-  struct ospf6_area *o6a;
-  u_int32_t area_id;
+  int passive;
+  char *plist_name;
 
-  o6 = (struct ospf6 *) vty->index;
+  if (IS_OSPF6_DUMP_CONFIG)
+    zlog_info ("CONFIG: interface %s area %s",
+               argv[0], argv[1]);
 
   ifp = if_get_by_name (argv[0]);
-
-  /* find/create ospf6 interface */
   o6i = (struct ospf6_interface *) ifp->info;
-  if (!o6i)
-    o6i = ospf6_interface_create (ifp);
-
-  /* parse Area-ID */
-  if (inet_pton (AF_INET, argv[1], &area_id) != 1)
+  if (o6i)
     {
-      vty_out (vty, "Invalid Area-ID: %s%s", argv[1], VTY_NEWLINE);
-      return CMD_ERR_AMBIGUOUS;
+      passive = CHECK_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
+      plist_name = o6i->plist_name;
+    }
+  else
+    {
+      passive = 0;
+      plist_name = NULL;
     }
 
-  /* find/create ospf6 area */
-  o6a = ospf6_area_lookup (area_id, o6);
-  if (!o6a)
-    {
-      o6a = ospf6_area_create (area_id);
-      o6a->ospf6 = o6;
-      listnode_add (o6->area_list, o6a);
-    }
-
-  if (o6i && o6i->area)
-    {
-      if (o6i->area != o6a)
-        vty_out (vty, "Aready attached to area %s%s",
-                 o6i->area->str, VTY_NEWLINE);
-      return CMD_ERR_NOTHING_TODO;
-    }
-
-  listnode_add (o6a->if_list, o6i);
-  o6i->area = o6a;
-
-  /* must check if got already interface info from zebra */
-  if (if_is_up (ifp))
-    thread_add_event (master, interface_up, o6i, 0);
-
-  return CMD_SUCCESS;
+  return ospf6_interface_bind_area (vty, argv[0], argv[1],
+                                    plist_name, passive);
 }
 
-DEFUN (no_interface,
-       no_interface_cmd,
-       "no interface IFNAME",
+DEFUN (interface_area_passive,
+       interface_area_passive_cmd,
+       "interface IFNAME area A.B.C.D passive",
+       "Enable routing on an IPv6 interface\n"
+       IFNAME_STR
+       "Set the OSPF6 area ID\n"
+       "OSPF6 area ID in IPv4 address notation\n"
+       OSPF6_PASSIVE_STR
+      )
+{
+  if (IS_OSPF6_DUMP_CONFIG)
+    zlog_info ("CONFIG: interface %s area %s passive",
+               argv[0], argv[1]);
+
+  return ospf6_interface_bind_area (vty, argv[0], argv[1], NULL, 1);
+}
+
+DEFUN (no_interface_area,
+       no_interface_area_cmd,
+       "no interface IFNAME area A.B.C.D",
        NO_STR
        "Disable routing on an IPv6 interface\n"
-       IFNAME_STR
-       )
+       IFNAME_STR)
 {
   struct interface *ifp;
   struct ospf6_interface *o6i;
   struct ospf6 *o6;
+  u_int32_t area_id;
 
   o6 = (struct ospf6 *) vty->index;
 
@@ -416,13 +513,25 @@ DEFUN (no_interface,
   if (!o6i)
     return CMD_SUCCESS;
 
+  /* parse Area-ID */
+  if (inet_pton (AF_INET, argv[1], &area_id) != 1)
+    {
+      vty_out (vty, "Invalid Area-ID: %s%s", argv[1], VTY_NEWLINE);
+      return CMD_ERR_AMBIGUOUS;
+    }
+
+  if (o6i->area->area_id != area_id)
+    {
+      vty_out (vty, "Wrong Area-ID: %s aready attached to area %s%s",
+               o6i->interface->name, o6i->area->str, VTY_NEWLINE);
+      return CMD_ERR_NOTHING_TODO;
+    }
+
   if (o6i->area)
     thread_execute (master, interface_down, o6i, 0);
 
   listnode_delete (o6i->area->if_list, o6i);
   o6i->area = (struct ospf6_area *) NULL;
-
-  ospf6_interface_delete (o6i);
 
   return CMD_SUCCESS;
 }
@@ -462,9 +571,8 @@ DEFUN (area_range,
 DEFUN (passive_interface,
        passive_interface_cmd,
        "passive-interface IFNAME",
-       "Suppress routing updates on an interface\n"
-       IFNAME_STR
-       )
+       OSPF6_PASSIVE_STR
+       IFNAME_STR)
 {
   struct interface *ifp;
   struct ospf6_interface *o6i;
@@ -475,7 +583,8 @@ DEFUN (passive_interface,
   else
     o6i = ospf6_interface_create (ifp);
 
-  o6i->is_passive = 1;
+  SET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
+
   if (o6i->thread_send_hello)
     {
       thread_cancel (o6i->thread_send_hello);
@@ -489,9 +598,8 @@ DEFUN (no_passive_interface,
        no_passive_interface_cmd,
        "no passive-interface IFNAME",
        NO_STR
-       "Suppress routing updates on an interface\n"
-       IFNAME_STR
-       )
+       OSPF6_PASSIVE_STR
+       IFNAME_STR)
 {
   struct interface *ifp;
   struct ospf6_interface *o6i;
@@ -501,7 +609,7 @@ DEFUN (no_passive_interface,
     return CMD_ERR_NO_MATCH;
 
   o6i = (struct ospf6_interface *) ifp->info;
-  o6i->is_passive = 0;
+  UNSET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
   if (o6i->thread_send_hello == NULL)
     thread_add_event (master, ospf6_send_hello, o6i, 0);
 
@@ -519,8 +627,7 @@ DEFUN (set_proctitle,
        "Process title\n"
        "Version information\n"
        "Normal command-line options\n"
-       "Just program name\n"
-       )
+       "Just program name\n")
 {
   int i;
   char buf[64], tmp[64];
@@ -561,7 +668,7 @@ ospf6_config_write (struct vty *vty)
   listnode j, k;
   char buf[64];
   struct ospf6_area *area;
-  struct ospf6_interface *ospf6_interface;
+  struct ospf6_interface *o6i;
 
   if (proctitle_mode == 1)
     vty_out (vty, "set proctitle version%s", VTY_NEWLINE);
@@ -588,14 +695,9 @@ ospf6_config_write (struct vty *vty)
       area = (struct ospf6_area *)getdata (j);
       for (k = listhead (area->if_list); k; nextnode (k))
         {
-          ospf6_interface = (struct ospf6_interface *)getdata (k);
+          o6i = (struct ospf6_interface *) getdata (k);
           vty_out (vty, " interface %s area %s%s",
-                   ospf6_interface->interface->name, area->str,
-                   VTY_NEWLINE);
-          if (ospf6_interface->is_passive)
-            vty_out (vty, " passive-interface %s%s",
-                     ospf6_interface->interface->name,
-                     VTY_NEWLINE);
+                   o6i->interface->name, area->str, VTY_NEWLINE);
         }
     }
   vty_out (vty, "!%s", VTY_NEWLINE);
@@ -618,28 +720,18 @@ ospf6_init ()
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_cmd);
   install_element (VIEW_NODE, &show_version_ospf6_cmd);
-
-#if 0
-  install_element (VIEW_NODE, &show_ipv6_ospf6_statistics_cmd);
-#endif
-
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
   install_element (ENABLE_NODE, &show_version_ospf6_cmd);
-
-
-#if 0
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_statistics_cmd);
-#endif
-
   install_element (ENABLE_NODE, &reload_cmd);
-
-#if 0
-  install_element (ENABLE_NODE, &garbage_collection_cmd);
-#endif
-
   install_element (CONFIG_NODE, &router_ospf6_cmd);
   install_element (CONFIG_NODE, &interface_cmd);
-
+#ifdef OSPF6_STATISTICS
+  install_element (VIEW_NODE, &show_ipv6_ospf6_statistics_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_statistics_cmd);
+#endif /* OSPF6_STATISTICS */
+#ifdef OSPF6_GARBAGE_COLLECT
+  install_element (ENABLE_NODE, &garbage_collection_cmd);
+#endif /* OSPF6_GARBAGE_COLLECT */
 #ifdef HAVE_SETPROCTITLE
   install_element (CONFIG_NODE, &set_proctitle_cmd);
 #endif /* HAVE_SETPROCTITLE */
@@ -647,7 +739,10 @@ ospf6_init ()
   install_default (OSPF6_NODE);
   install_element (OSPF6_NODE, &router_id_cmd);
   install_element (OSPF6_NODE, &interface_area_cmd);
-  install_element (OSPF6_NODE, &no_interface_cmd);
+  install_element (OSPF6_NODE, &interface_area_passive_cmd);
+  install_element (OSPF6_NODE, &interface_area_plist_cmd);
+  install_element (OSPF6_NODE, &interface_area_plist_passive_cmd);
+  install_element (OSPF6_NODE, &no_interface_area_cmd);
   install_element (OSPF6_NODE, &passive_interface_cmd);
   install_element (OSPF6_NODE, &no_passive_interface_cmd);
   install_element (OSPF6_NODE, &area_range_cmd);
@@ -655,30 +750,31 @@ ospf6_init ()
   /* Make empty list of top list. */
   if_init ();
 
-  ospf6_interface_init ();
-  ospf6_neighbor_init ();
-  ospf6_zebra_init ();
-  ospf6_debug_init ();
-
   /* Install access list */
   access_list_init ();
-#if 0
-  access_list_add_hook (xxx);
-  access_list_delete_hook (xxx);
-#endif
 
   /* Install prefix list */
   prefix_list_init ();
-#if 0
-  prefix_list_add_hook (xxx);
-  prefix_list_delete_hook (xxx);
-#endif
+
+  ospf6_dump_init ();
+
+  ospf6_hook_init ();
+  ospf6_lsa_init ();
+
+  ospf6_top_init ();
+  ospf6_area_init ();
+  ospf6_interface_init ();
+  ospf6_neighbor_init ();
+  ospf6_zebra_init ();
 
   ospf6_routemap_init ();
   ospf6_lsdb_init ();
 
   ospf6_spf_init ();
-  ospf6_route_init ();
+
+  ospf6_intra_init ();
+  ospf6_abr_init ();
+  ospf6_asbr_init ();
 }
 
 void
@@ -694,13 +790,30 @@ ospf6_terminate ()
 void
 ospf6_maxage_remover ()
 {
+#if 0
   if (IS_OSPF6_DUMP_LSDB)
     zlog_info ("MaxAge Remover");
+#endif
 
   ospf6_top_schedule_maxage_remover (NULL, 0, ospf6);
   (*ospf6->foreach_area) (ospf6, NULL, 0,
                           ospf6_area_schedule_maxage_remover);
   (*ospf6->foreach_if) (ospf6, NULL, 0,
                         ospf6_interface_schedule_maxage_remover);
+}
+
+
+
+void *
+ospf6_lsa_get_scope (u_int16_t type, struct ospf6_interface *o6i)
+{
+  if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (type)))
+    return o6i;
+  else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (type)))
+    return o6i->area;
+  else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (type)))
+    return o6i->area->ospf6;
+  else
+    return NULL;
 }
 

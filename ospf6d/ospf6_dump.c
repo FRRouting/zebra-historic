@@ -1,6 +1,6 @@
 /*
  * Logging function
- * Copyright (C) 1999 Yasuhiro Ohara
+ * Copyright (C) 1999-2002 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
  *
@@ -25,126 +25,199 @@
 /* Include other stuffs */
 #include "log.h"
 #include "command.h"
-
-#include "linklist.h"
-#include "prefix.h"
-
-#include "ospf6_prefix.h"
-#include "ospf6_lsa.h"
-#include "ospf6_message.h"
-#include "ospf6_interface.h"
-
-#define HEADER_DEPENDENCY
-#include "ospf6d.h"
-#undef HEADER_DEPENDENCY
 #include "ospf6_dump.h"
 
-void
-ospf6_log_init ()
+#define CMD_SHOW    0
+#define CMD_ENABLE  1
+#define CMD_DISABLE 2
+#define CMD_MAX     3
+
+struct ospf6_dump
 {
-  int flag = 0;
-
-  if (!daemon_mode)
-    flag |= ZLOG_STDOUT;
-
-  zlog_default = openzlog (progname, flag, ZLOG_OSPF6,
-                 LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
-                 LOG_DAEMON);
-}
-
-struct _ospf6_dump ospf6_dump[] =
-{
-  {0, "hello"},
-  {0, "dbdesc"},
-  {0, "lsreq"},
-  {0, "lsupdate"},
-  {0, "lsack"},
-  {0, "neighbor"},
-  {0, "interface"},
-  {0, "area"},
-  {0, "lsa"},
-  {0, "zebra"},
-  {0, "config"},
-  {0, "dbex"},
-  {0, "spf"},
-  {0, "route"},
-  {0, "lsdb"},
-  {0, "redistribute"}
+  struct cmd_element cmd[CMD_MAX];
+  char *name;
+  int config;
 };
 
-/* this is included in "../lib/command.h"
-#define OSPF6_DUMP_TYPE_LIST \
-  "(hello|dbdesc|lsreq|lsupdate|lsack|neighbor|interface|area" \
-  "|lsa|zebra|config|dbex|spf|route|lsdb|redistribute)"
- */
+#define DUMP_MAX 512
+struct ospf6_dump *ospf6_dump[DUMP_MAX];
+unsigned int dump_size = 0;
 
-DEFUN (debug_ospf6,
-       debug_ospf6_cmd,
-       "debug ospf6 " OSPF6_DUMP_TYPE_LIST,
-       "Debugging information\n"
-       OSPF6_STR
-       )
+static int
+ospf6_dump_index (struct cmd_element *cmd, int command)
 {
   int i;
 
-  if (! strcmp (argv[0], "all"))
+  for (i = 0; i < DUMP_MAX; i++)
     {
-      for (i = 0; i < OSPF6_DUMP_MAX; i++)
-        ospf6_dump[i].dump = 1;
-      return CMD_SUCCESS;
+      if (cmd != &ospf6_dump[i]->cmd[command])
+        continue;
+      break;
     }
 
-  for (i = 0; i < OSPF6_DUMP_MAX; i++)
-    {
-      if (strcmp (argv[0], ospf6_dump[i].string))
-        continue;
-      ospf6_dump[i].dump = 1;
-      return CMD_SUCCESS;
-    }
-  return CMD_ERR_NO_MATCH;
+  if (i == DUMP_MAX)
+    return -1;
+  return i;
 }
 
-DEFUN (no_debug_ospf6,
-       no_debug_ospf6_cmd,
-       "no debug ospf6 " OSPF6_DUMP_TYPE_LIST,
-       NO_STR
-       "Debugging information\n"
-       OSPF6_STR
-       )
+int
+ospf6_dump_is_on (int index)
 {
-  int i;
+  if (ospf6_dump[index] == NULL)
+    return 0;
 
-  if (! strcmp (argv[0], "all"))
-    {
-      for (i = 0; i < OSPF6_DUMP_MAX; i++)
-        ospf6_dump[i].dump = 0;
-      return CMD_SUCCESS;
-    }
-
-  for (i = 0; i < OSPF6_DUMP_MAX; i++)
-    {
-      if (strcmp (argv[0], ospf6_dump[i].string))
-        continue;
-      ospf6_dump[i].dump = 0;
-      return CMD_SUCCESS;
-    }
-  return CMD_ERR_NO_MATCH;
+  return ospf6_dump[index]->config;
 }
 
-DEFUN (show_debugging_ospf6,
-       show_debugging_ospf6_cmd,
-       "show debugging ospf6",
-       SHOW_STR
-       "Debugging infomation\n"
-       OSPF6_STR)
+int
+ospf6_dump_show (struct cmd_element *cmd,
+                 struct vty *vty, int argc, char **argv)
+{
+  int index;
+
+  index = ospf6_dump_index (cmd, CMD_SHOW);
+  assert (index != -1);
+
+  vty_out (vty, "  %-16s: %s%s", ospf6_dump[index]->name,
+           (ospf6_dump[index]->config ? "on" : "off"),
+           VTY_NEWLINE);
+  return CMD_SUCCESS;
+}
+
+int
+ospf6_dump_enable (struct cmd_element *cmd,
+                   struct vty *vty, int argc, char **argv)
+{
+  int index;
+
+  index = ospf6_dump_index (cmd, CMD_ENABLE);
+  assert (index != -1);
+
+  ospf6_dump[index]->config = 1;
+  return CMD_SUCCESS;
+}
+
+int
+ospf6_dump_disable (struct cmd_element *cmd,
+                    struct vty *vty, int argc, char **argv)
+{
+  int index;
+
+  index = ospf6_dump_index (cmd, CMD_DISABLE);
+  assert (index != -1);
+
+  ospf6_dump[index]->config = 0;
+  return CMD_SUCCESS;
+}
+
+int
+ospf6_dump_install (char *name, char *help)
+{
+  struct cmd_element *cmd;
+  char string[256];
+  char helpstring[256];
+
+  if (dump_size + 1 >= DUMP_MAX)
+    return -1;
+
+  ospf6_dump[dump_size] = malloc (sizeof (struct ospf6_dump));
+  if (ospf6_dump[dump_size] == NULL)
+    return -1;
+  memset (ospf6_dump[dump_size], 0, sizeof (struct ospf6_dump));
+
+  ospf6_dump[dump_size]->name = strdup (name);
+
+  cmd = &ospf6_dump[dump_size]->cmd[CMD_SHOW];
+  snprintf (string, sizeof (string), "show debugging ospf6 %s", name);
+  snprintf (helpstring, sizeof (helpstring), "%s%s%s%s",
+            SHOW_STR, DEBUG_STR, OSPF6_STR, help);
+  memset (cmd, 0, sizeof (struct cmd_element));
+  cmd->string = strdup (string);
+  cmd->func = ospf6_dump_show;
+  cmd->doc = strdup (helpstring);
+  install_element (VIEW_NODE, cmd);
+  install_element (ENABLE_NODE, cmd);
+
+  cmd = &ospf6_dump[dump_size]->cmd[CMD_ENABLE];
+  snprintf (string, sizeof (string), "debug ospf6 %s", name);
+  snprintf (helpstring, sizeof (helpstring), "%s%s%s",
+            DEBUG_STR, OSPF6_STR, help);
+  memset (cmd, 0, sizeof (struct cmd_element));
+  cmd->string = strdup (string);
+  cmd->func = ospf6_dump_enable;
+  cmd->doc = strdup (helpstring);
+  install_element (CONFIG_NODE, cmd);
+
+  cmd = &ospf6_dump[dump_size]->cmd[CMD_DISABLE];
+  snprintf (string, sizeof (string), "no debug ospf6 %s", name);
+  snprintf (helpstring, sizeof (helpstring), "%s%s%s%s",
+            NO_STR, DEBUG_STR, OSPF6_STR, help);
+  memset (cmd, 0, sizeof (struct cmd_element));
+  cmd->string = strdup (string);
+  cmd->func = ospf6_dump_disable;
+  cmd->doc = strdup (helpstring);
+  install_element (CONFIG_NODE, cmd);
+
+  return dump_size++;
+}
+
+DEFUN(show_debug_ospf6,
+      show_debug_ospf6_cmd,
+      "show debugging ospf6",
+      SHOW_STR
+      DEBUG_STR
+      OSPF6_STR)
 {
   int i;
+
   vty_out (vty, "OSPF6 debugging status:%s", VTY_NEWLINE);
-  for (i = 0; i < OSPF6_DUMP_MAX; i++)
+
+  for (i = 0; i < DUMP_MAX; i++)
     {
-      vty_out (vty, "  OSPF6 Dump %s: %s%s", ospf6_dump[i].string,
-               (ospf6_dump[i].dump ? "on " : "off"), VTY_NEWLINE);
+      if (ospf6_dump[i] == NULL)
+        continue;
+      ospf6_dump_show (&ospf6_dump[i]->cmd[CMD_SHOW], vty, 0, NULL);
     }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (debug_ospf6_all,
+       debug_ospf6_all_cmd,
+       "debug ospf6 all",
+       DEBUG_STR
+       OSPF6_STR
+       "Turn on ALL OSPFv3 debugging\n")
+{
+  int i;
+
+  for (i = 0; i < DUMP_MAX; i++)
+    {
+      if (ospf6_dump[i] == NULL)
+        continue;
+      ospf6_dump_enable (&ospf6_dump[i]->cmd[CMD_ENABLE], vty, 0, NULL);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_ospf6_all,
+       no_debug_ospf6_all_cmd,
+       "no debug ospf6 all",
+       NO_STR
+       DEBUG_STR
+       OSPF6_STR
+       "Turn off ALL OSPFv3 debugging\n")
+{
+  int i;
+
+  for (i = 0; i < DUMP_MAX; i++)
+    {
+      if (ospf6_dump[i] == NULL)
+        continue;
+      ospf6_dump_disable (&ospf6_dump[i]->cmd[CMD_DISABLE], vty, 0, NULL);
+    }
+
   return CMD_SUCCESS;
 }
 
@@ -155,102 +228,87 @@ struct cmd_node debug_node =
 };
 
 int
-ospf6_config_write_debug (struct vty *vty)
+ospf6_dump_config_write (struct vty *vty)
 {
   int i;
-  for (i = 0; i < OSPF6_DUMP_MAX; i++)
+
+  for (i = 0; i < dump_size; i++)
     {
-      if (! ospf6_dump[i].dump)
+      if (ospf6_dump[i] == NULL)
         continue;
-      vty_out (vty, "debug ospf6 %s%s", ospf6_dump[i].string, VTY_NEWLINE);
+
+      if (ospf6_dump[i]->config == 0)
+        continue;
+
+      vty_out (vty, "debug ospf6 %s%s", ospf6_dump[i]->name, VTY_NEWLINE);
     }
+
   vty_out (vty, "!%s", VTY_NEWLINE);
   return 0;
 }
 
-/* Backward campatibility 2000/12/29 */
-DEFUN (debug_ospf6_message,
-       debug_ospf6_message_cmd,
-       "debug ospf6 message (hello|dbdesc|lsreq|lsupdate|lsack|all)",
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 messages\n"
-       "OSPF6 Hello\n"
-       "OSPF6 Database Description\n"
-       "OSPF6 Link State Request\n"
-       "OSPF6 Link State Update\n"
-       "OSPF6 Link State Acknowledgement\n"
-       "OSPF6 all messages\n"
-       )
-{
-  assert (argc);
-  if (!strcmp (argv[0], "hello"))
-    ospf6_dump[OSPF6_DUMP_HELLO].dump = 1;
-  else if (!strcmp (argv[0], "dbdesc"))
-    ospf6_dump[OSPF6_DUMP_DBDESC].dump = 1;
-  else if (!strcmp (argv[0], "lsreq"))
-    ospf6_dump[OSPF6_DUMP_LSREQ].dump = 1;
-  else if (!strcmp (argv[0], "lsupdate"))
-    ospf6_dump[OSPF6_DUMP_LSUPDATE].dump = 1;
-  else if (!strcmp (argv[0], "lsack"))
-    ospf6_dump[OSPF6_DUMP_LSACK].dump = 1;
-  else if (!strcmp (argv[0], "all"))
-    ospf6_dump[OSPF6_DUMP_HELLO].dump = ospf6_dump[OSPF6_DUMP_DBDESC].dump =
-    ospf6_dump[OSPF6_DUMP_LSREQ].dump = ospf6_dump[OSPF6_DUMP_LSUPDATE].dump =
-    ospf6_dump[OSPF6_DUMP_LSACK].dump = 1;
-  else
-    return CMD_ERR_NO_MATCH;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_message,
-       no_debug_ospf6_message_cmd,
-       "no debug ospf6 message (hello|dbdesc|lsreq|lsupdate|lsack|all)",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 messages\n"
-       "OSPF6 Hello\n"
-       "OSPF6 Database Description\n"
-       "OSPF6 Link State Request\n"
-       "OSPF6 Link State Update\n"
-       "OSPF6 Link State Acknowledgement\n"
-       "OSPF6 all messages\n"
-       )
-{
-  assert (argc);
-  if (!strcmp (argv[0], "hello"))
-    ospf6_dump[OSPF6_DUMP_HELLO].dump = 0;
-  else if (!strcmp (argv[0], "dbdesc"))
-    ospf6_dump[OSPF6_DUMP_DBDESC].dump = 0;
-  else if (!strcmp (argv[0], "lsreq"))
-    ospf6_dump[OSPF6_DUMP_LSREQ].dump = 0;
-  else if (!strcmp (argv[0], "lsupdate"))
-    ospf6_dump[OSPF6_DUMP_LSUPDATE].dump = 0;
-  else if (!strcmp (argv[0], "lsack"))
-    ospf6_dump[OSPF6_DUMP_LSACK].dump = 0;
-  else if (!strcmp (argv[0], "all"))
-    ospf6_dump[OSPF6_DUMP_HELLO].dump = ospf6_dump[OSPF6_DUMP_DBDESC].dump =
-    ospf6_dump[OSPF6_DUMP_LSREQ].dump = ospf6_dump[OSPF6_DUMP_LSUPDATE].dump =
-    ospf6_dump[OSPF6_DUMP_LSACK].dump = 0;
-  else
-    return CMD_ERR_NO_MATCH;
-
-  return CMD_SUCCESS;
-}
+char dump_index[OSPF6_DUMP_MAX];
 
 void
-ospf6_debug_init ()
+ospf6_dump_init ()
 {
-  install_node (&debug_node, ospf6_config_write_debug);
+  memset (ospf6_dump, 0, sizeof (ospf6_dump));
 
-  install_element (VIEW_NODE, &show_debugging_ospf6_cmd);
-  install_element (ENABLE_NODE, &show_debugging_ospf6_cmd);
+  install_node (&debug_node, ospf6_dump_config_write);
 
-  install_element (CONFIG_NODE, &debug_ospf6_message_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_message_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_cmd);
+  install_element (VIEW_NODE,   &show_debug_ospf6_cmd);
+  install_element (ENABLE_NODE, &show_debug_ospf6_cmd);
+
+  install_element (CONFIG_NODE, &debug_ospf6_all_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf6_all_cmd);
+
+  /* bellow is for backward compatibility
+     should be moved to each modules */
+
+#define MESSAGE_STR "OSPFv3 Messages\n"
+
+  dump_index[OSPF6_DUMP_HELLO] =
+    ospf6_dump_install ("message hello",
+                        MESSAGE_STR "Hello\n");
+  dump_index[OSPF6_DUMP_DBDESC] =
+    ospf6_dump_install ("message dbdesc",
+                        MESSAGE_STR "Database Description\n");
+  dump_index[OSPF6_DUMP_LSREQ] =
+    ospf6_dump_install ("message lsreq",
+                        MESSAGE_STR "Link State Request\n");
+  dump_index[OSPF6_DUMP_LSUPDATE] =
+    ospf6_dump_install ("message lsupdate",
+                        MESSAGE_STR "Link State Update\n");
+  dump_index[OSPF6_DUMP_LSACK] =
+    ospf6_dump_install ("message lsack",
+                        MESSAGE_STR "Link State Acknowledge\n");
+  dump_index[OSPF6_DUMP_NEIGHBOR] =
+    ospf6_dump_install ("neighbor", "Neighbors\n");
+  dump_index[OSPF6_DUMP_INTERFACE] =
+    ospf6_dump_install ("interface", "Interfaces\n");
+  dump_index[OSPF6_DUMP_LSA] =
+    ospf6_dump_install ("lsa", "Link State Advertisement\n");
+  dump_index[OSPF6_DUMP_ZEBRA] =
+    ospf6_dump_install ("zebra", "Communication with zebra\n");
+  dump_index[OSPF6_DUMP_CONFIG] =
+    ospf6_dump_install ("config", "Configuration Changes\n");
+  dump_index[OSPF6_DUMP_DBEX] =
+    ospf6_dump_install ("dbex", "Database Exchange/Flooding\n");
+  dump_index[OSPF6_DUMP_SPF] =
+    ospf6_dump_install ("spf", "SPF Calculation\n");
+  dump_index[OSPF6_DUMP_ROUTE] =
+    ospf6_dump_install ("route", "Route Calculation\n");
+  dump_index[OSPF6_DUMP_LSDB] =
+    ospf6_dump_install ("lsdb", "Link State Database\n");
+  dump_index[OSPF6_DUMP_REDISTRIBUTE] =
+    ospf6_dump_install ("redistribute",
+                        "Route Exchange with other protocols\n");
+  dump_index[OSPF6_DUMP_HOOK] =
+    ospf6_dump_install ("hook", "Hooks\n");
+  dump_index[OSPF6_DUMP_ASBR] =
+    ospf6_dump_install ("asbr", "AS Boundary Router function\n");
+  dump_index[OSPF6_DUMP_PREFIX] =
+    ospf6_dump_install ("prefix", "Prefix\n");
 }
+
 

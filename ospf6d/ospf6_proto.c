@@ -23,15 +23,18 @@
 
 #include "ospf6_proto.h"
 
-void
-ospf6_opt_capability_string (u_char opt_capability[3], char *buffer, int size)
+char *
+ospf6_options_string (u_char opt_capability[3], char *buffer, int size)
 {
-  snprintf (buffer, size, "%s%s%s%s%s%s",
-            (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_V6) ? "V6" : "--"),
-            (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_E) ? "E" : "-"),
-            (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_MC) ? "MC" : "--"),
-            (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_N) ? "N" : "-"),
-            (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_R) ? "R" : "-"),
-            (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_DC) ? "DC" : "--"));
+  char *dc, *r, *n, *mc, *e, *v6;
+
+  dc = (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_DC) ? "DC" : "--");
+  r  = (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_R) ? "R" : "-");
+  n  = (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_N) ? "N" : "-");
+  mc = (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_MC) ? "MC" : "--");
+  e  = (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_E) ? "E" : "-");
+  v6 = (OSPF6_OPT_ISSET (opt_capability, OSPF6_OPT_V6) ? "V6" : "--");
+  snprintf (buffer, size, "%s|%s|%s|%s|%s|%s", dc, r, n, mc, e, v6);
+  return buffer;
 }
 

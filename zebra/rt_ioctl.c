@@ -83,7 +83,7 @@ kernel_add_route (struct prefix_ipv4 *dest, struct in_addr *gate,
   /* Make gateway. */
   if (gate)
     {
-      bzero (&sin_gate, sizeof (struct sockaddr_in));
+      memset (&sin_gate, 0, sizeof (struct sockaddr_in));
       sin_gate.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
       sin_gate.sin_len = sizeof (struct sockaddr_in);
@@ -91,7 +91,7 @@ kernel_add_route (struct prefix_ipv4 *dest, struct in_addr *gate,
       sin_gate.sin_addr = *gate;
     }
 
-  bzero (&sin_mask, sizeof (struct sockaddr_in));
+  memset (&sin_mask, 0, sizeof (struct sockaddr_in));
   sin_mask.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
       sin_gate.sin_len = sizeof (struct sockaddr_in);
@@ -355,7 +355,7 @@ kernel_ioctl_ipv6 (u_long type, struct prefix_ipv6 *dest, struct in6_addr *gate,
   int sock;
   struct in6_rtmsg rtm;
     
-  bzero (&rtm, sizeof (struct in6_rtmsg));
+  memset (&rtm, 0, sizeof (struct in6_rtmsg));
 
   rtm.rtmsg_flags |= RTF_UP;
   rtm.rtmsg_metric = 1;

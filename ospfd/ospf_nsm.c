@@ -99,7 +99,7 @@ ospf_db_desc_timer (struct thread *thread)
 void
 nsm_timer_set (struct ospf_neighbor *nbr)
 {
-  switch (nbr->status)
+  switch (nbr->state)
     {
     case NSM_Down:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
@@ -159,8 +159,8 @@ nsm_hello_received (struct ospf_neighbor *nbr)
   OSPF_NSM_TIMER_ON (nbr->t_inactivity, ospf_inactivity_timer,
 		     nbr->v_inactivity);
 
-  if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_static)
-    OSPF_POLL_TIMER_OFF (nbr->nbr_static->t_poll);
+  if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_nbma)
+    OSPF_POLL_TIMER_OFF (nbr->nbr_nbma->t_poll);
 
   return 0;
 }
@@ -171,8 +171,8 @@ nsm_start (struct ospf_neighbor *nbr)
 
   nsm_reset_nbr (nbr);
 
-  if (nbr->nbr_static)
-      OSPF_POLL_TIMER_OFF (nbr->nbr_static->t_poll);
+  if (nbr->nbr_nbma)
+      OSPF_POLL_TIMER_OFF (nbr->nbr_nbma->t_poll);
 
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
   
@@ -263,12 +263,28 @@ ospf_db_summary_clear (struct ospf_neighbor *nbr)
 
 
 
+#ifdef HAVE_OPAQUE_LSA
+/* The area link state database consists of the router-LSAs,
+   network-LSAs, summary-LSAs, and type-9/10 opaque-LSAs contained
+			     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   in the area structure, along with the AS-external and type-11
+						     ^^^^^^^^^^^
+   opaque LSAs contained in the global structure.
+   ^^^^^^
+   AS-external and type-11 opaque LSAs are omitted from a virtual
+	       ^^^^^^^^^^^^^^^^^^
+   neighbor's Database summary list. AS-external and type-11 opaque
+						 ^^^^^^^^^^^^^^^^^^
+   LSAs are omitted from the Database summary list if the area has
+   been configured as a stub. */
+#else /* HAVE_OPAQUE_LSA */
 /* The area link state database consists of the router-LSAs,
    network-LSAs and summary-LSAs contained in the area structure,
    along with the AS-external- LSAs contained in the global structure.
    AS- external-LSAs are omitted from a virtual neighbor's Database
    summary list.  AS-external-LSAs are omitted from the Database
    summary list if the area has been configured as a stub. */
+#endif /* HAVE_OPAQUE_LSA */
 int
 nsm_negotiation_done (struct ospf_neighbor *nbr)
 {
@@ -279,11 +295,28 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
   foreach_lsa (ROUTER_LSDB (area), nbr, 0, ospf_db_summary_add);
   foreach_lsa (NETWORK_LSDB (area), nbr, 0, ospf_db_summary_add);
   foreach_lsa (SUMMARY_LSDB (area), nbr, 0, ospf_db_summary_add);
-  foreach_lsa (SUMMARY_ASBR_LSDB (area), nbr, 0, ospf_db_summary_add);
+  foreach_lsa (ASBR_SUMMARY_LSDB (area), nbr, 0, ospf_db_summary_add);
   
+#ifdef HAVE_OPAQUE_LSA
+  /* Process only if the neighbor is opaque capable. */
+  if (CHECK_FLAG (nbr->options, OSPF_OPTION_O))
+    {
+      foreach_lsa (OPAQUE_LINK_LSDB (area), nbr, 0, ospf_db_summary_add);
+      foreach_lsa (OPAQUE_AREA_LSDB (area), nbr, 0, ospf_db_summary_add);
+    }
+#endif /* HAVE_OPAQUE_LSA */
+
   if (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK &&
       area->external_routing == OSPF_AREA_DEFAULT)
     foreach_lsa (EXTERNAL_LSDB (ospf_top), nbr, 0, ospf_db_summary_add);
+
+#ifdef HAVE_OPAQUE_LSA
+  if (CHECK_FLAG (nbr->options, OSPF_OPTION_O) &&
+      (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK &&
+       area->external_routing == OSPF_AREA_DEFAULT))
+    foreach_lsa (OPAQUE_AS_LSDB (ospf_top),
+		 nbr, 0, ospf_db_summary_add);
+#endif /* HAVE_OPAQUE_LSA */
 
   /* OSPF_NSM_TIMER_OFF (nbr->t_db_desc); */
 
@@ -326,7 +359,7 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
   int flag = 0;
 
   oi = nbr->oi;
-  next_state = nbr->status;
+  next_state = nbr->state;
 
   /* These netowork types must be adjacency. */
   if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
@@ -343,11 +376,10 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &BDR (oi)))
     flag = 1;
 
-  if (nbr->status == NSM_TwoWay && flag == 1)
+  if (nbr->state == NSM_TwoWay && flag == 1)
     next_state = NSM_ExStart;
-  else if (nbr->status >= NSM_ExStart && flag == 0)
+  else if (nbr->state >= NSM_ExStart && flag == 0)
     next_state = NSM_TwoWay;
-
 
   return next_state;
 }
@@ -390,33 +422,37 @@ nsm_reset_nbr (struct ospf_neighbor *nbr)
   OSPF_NSM_TIMER_OFF (nbr->t_ls_req);
   OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
   OSPF_NSM_TIMER_OFF (nbr->t_hello_reply);
+
+#ifdef HAVE_OPAQUE_LSA
+  if (CHECK_FLAG (nbr->options, OSPF_OPTION_O))
+    UNSET_FLAG (nbr->options, OSPF_OPTION_O);
+#endif /* HAVE_OPAQUE_LSA */
 }
 
 int
 nsm_kill_nbr (struct ospf_neighbor *nbr)
 {
   /* call it here because we cannot call it from ospf_nsm_event */
-  nsm_change_status (nbr, NSM_Down);
+  nsm_change_state (nbr, NSM_Down);
   
   /* Reset neighbor. */
   nsm_reset_nbr (nbr);
 
-  if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_static != NULL)
+  if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_nbma != NULL)
     {
-      struct ospf_nbr_static *nbr_static = nbr->nbr_static;
+      struct ospf_nbr_nbma *nbr_nbma = nbr->nbr_nbma;
 
-      nbr_static->neighbor = NULL;
-      nbr_static->state_change = nbr->state_change;
+      nbr_nbma->nbr = NULL;
+      nbr_nbma->state_change = nbr->state_change;
 
-      nbr->nbr_static = NULL;
+      nbr->nbr_nbma = NULL;
 
-      OSPF_POLL_TIMER_ON (nbr_static->t_poll, ospf_poll_timer,
-			  nbr_static->v_poll);
+      OSPF_POLL_TIMER_ON (nbr_nbma->t_poll, ospf_poll_timer,
+			  nbr_nbma->v_poll);
 
       if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
 	zlog_info ("NSM[%s:%s]: Down (PollIntervalTimer scheduled)",
-		   IF_NAME (nbr->oi),
-		   inet_ntoa (nbr->address.u.prefix4));  
+		   IF_NAME (nbr->oi), inet_ntoa (nbr->address.u.prefix4));  
     }
 
   /* Delete neighbor from interface. */
@@ -450,7 +486,7 @@ nsm_ll_down (struct ospf_neighbor *nbr)
 struct {
   int (*func) ();
   int next_state;
-} NSM [OSPF_NSM_STATUS_MAX][OSPF_NSM_EVENT_MAX] =
+} NSM [OSPF_NSM_STATE_MAX][OSPF_NSM_EVENT_MAX] =
 {
   {
     /* DependUpon: dummy state. */
@@ -625,24 +661,24 @@ static char *ospf_nsm_event_str[] =
 };
 
 void
-nsm_change_status (struct ospf_neighbor *nbr, int status)
+nsm_change_state (struct ospf_neighbor *nbr, int state)
 {
-  int old_status;
   struct ospf_interface *oi;
   struct ospf_area *vl_area = NULL;
+  u_char old_state;
   
   /* Logging change of status. */
   if (IS_DEBUG_OSPF (nsm, NSM_STATUS))
-    zlog_info ("NSM[%s:%s]: Status change %s -> %s",
+    zlog_info ("NSM[%s:%s]: State change %s -> %s",
 	       IF_NAME (nbr->oi), inet_ntoa (nbr->router_id),
-	       LOOKUP (ospf_nsm_status_msg, nbr->status),
-	       LOOKUP (ospf_nsm_status_msg, status));
+	       LOOKUP (ospf_nsm_state_msg, nbr->state),
+	       LOOKUP (ospf_nsm_state_msg, state));
 
   /* Preserve old status. */
-  old_status = nbr->status;
+  old_state = nbr->state;
 
   /* Change to new status. */
-  nbr->status = status;
+  nbr->state = state;
 
   /* Statistics. */
   nbr->state_change++;
@@ -653,10 +689,10 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
     vl_area = ospf_area_lookup_by_area_id (oi->vl_data->vl_area_id);
   
   /* One of the neighboring routers changes to/from the FULL state. */
-  if ((old_status != NSM_Full && status == NSM_Full) ||
-      (old_status == NSM_Full && status != NSM_Full))
+  if ((old_state != NSM_Full && state == NSM_Full) ||
+      (old_state == NSM_Full && state != NSM_Full))
     { 
-      if (status == NSM_Full)
+      if (state == NSM_Full)
 	{
 	  oi->full_nbrs++;
 	  oi->area->full_nbrs++;
@@ -684,7 +720,7 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
             ospf_ls_retransmit_clear (nbr);
 	}
 
-      zlog_info ("nsm_change_status(): "
+      zlog_info ("nsm_change_state(): "
 		 "scheduling new router-LSA origination");
 
       ospf_router_lsa_timer_add (oi->area);
@@ -699,7 +735,7 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 	}
 
       /* Originate network-LSA. */
-      if (oi->status == ISM_DR)
+      if (oi->state == ISM_DR)
 	{
 	  if (oi->network_lsa_self && oi->full_nbrs == 0)
 	    {
@@ -713,8 +749,12 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 	}
     }
 
+#ifdef HAVE_OPAQUE_LSA
+  ospf_opaque_nsm_change (nbr, old_state);
+#endif /* HAVE_OPAQUE_LSA */
+
   /* Start DD exchange protocol */
-  if (status == NSM_ExStart)
+  if (state == NSM_ExStart)
     {
       if (nbr->dd_seqnum == 0)
 	nbr->dd_seqnum = time (NULL);
@@ -726,17 +766,17 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
     }
 
   /* clear cryptographic sequence number */
-  if (status == NSM_Down)
+  if (state == NSM_Down)
     nbr->crypt_seqnum = 0;
   
   /* Generete NeighborChange ISM event. */
-  if ((old_status < NSM_TwoWay && status >= NSM_TwoWay) ||
-      (old_status >= NSM_TwoWay && status < NSM_TwoWay))
+  if ((old_state < NSM_TwoWay && state >= NSM_TwoWay) ||
+      (old_state >= NSM_TwoWay && state < NSM_TwoWay))
     OSPF_ISM_EVENT_EXECUTE (oi, ISM_NeighborChange);
 
   /* Performance hack. Send hello immideately when some neighbor enter
      Init state.  This whay we decrease neighbor discovery time. Gleb.*/
-  if (status == NSM_Init)
+  if (state == NSM_Init)
     {
       OSPF_ISM_TIMER_OFF (oi->t_hello);
       OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, 1);
@@ -753,18 +793,18 @@ ospf_nsm_event (struct thread *thread)
   int next_state;
   struct ospf_neighbor *nbr;
   struct in_addr router_id;
-  int old_status;
+  int old_state;
   struct ospf_interface *oi;
 
   nbr = THREAD_ARG (thread);
   event = THREAD_VAL (thread);
   router_id = nbr->router_id;
 
-  old_status = nbr->status ;
+  old_state = nbr->state;
   oi = nbr->oi ;
   
   /* Call function. */
-  next_state = (*(NSM [nbr->status][event].func))(nbr);
+  next_state = (*(NSM [nbr->state][event].func))(nbr);
 
   /* When event is NSM_KillNbr or InactivityTimer, the neighbor is
      deleted. */
@@ -782,17 +822,17 @@ ospf_nsm_event (struct thread *thread)
     }
 
   if (! next_state)
-    next_state = NSM [nbr->status][event].next_state;
+    next_state = NSM [nbr->state][event].next_state;
 
   if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
     zlog_info ("NSM[%s:%s]: %s (%s)", IF_NAME (oi),
 	       inet_ntoa (nbr->router_id),
-	       LOOKUP (ospf_nsm_status_msg, nbr->status),
+	       LOOKUP (ospf_nsm_state_msg, nbr->state),
 	       ospf_nsm_event_str [event]);
   
-  /* If status is changed. */
-  if (next_state != nbr->status)
-    nsm_change_status (nbr, next_state);
+  /* If state is changed. */
+  if (next_state != nbr->state)
+    nsm_change_state (nbr, next_state);
 
   /* Make sure timer is set. */
   nsm_timer_set (nbr);
@@ -800,11 +840,11 @@ ospf_nsm_event (struct thread *thread)
   return 0;
 }
 
-/* Check loading status. */
+/* Check loading state. */
 void
 ospf_check_nbr_loading (struct ospf_neighbor *nbr)
 {
-  if (nbr->status == NSM_Loading)
+  if (nbr->state == NSM_Loading)
     {
       if (ospf_ls_request_isempty (nbr))
 	OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);

@@ -27,11 +27,17 @@
 /* Transit Vertex */
 struct ospf6_vertex
 {
+  /* type of this vertex */
+  u_int8_t type;
+
   /* Vertex Identifier */
   struct prefix_ls vertex_id;
 
   /* Identifier String */
   char string[128];
+
+  /* Associated LSA */
+  struct ospf6_lsa *lsa;
 
   /* Distance from Root (Cost) */
   u_int16_t distance;
@@ -40,7 +46,7 @@ struct ospf6_vertex
   u_char depth;
 
   /* nexthops to this node */
-  list nexthop_list;
+  struct linklist *nexthop_list;
 
   /* upper nodes in spf tree */
   list parent_list;
@@ -54,6 +60,9 @@ struct ospf6_vertex
   /* Optional capabilities */
   u_char opt_capability[3];
 };
+
+#define OSPF6_VERTEX_TYPE_ROUTER  0x01
+#define OSPF6_VERTEX_TYPE_NETWORK 0x02
 
 struct ospf6_spftree
 {
@@ -79,12 +88,17 @@ struct ospf6_spftree
   struct timeval interval_max;
 };
 
+int ospf6_spf_calculate_route (void *);
+
 void
 ospf6_spf_calculation_schedule (u_int32_t area_id);
 struct ospf6_spftree *ospf6_spftree_create ();
 void
 ospf6_spf_statistics_show (struct vty *vty, struct ospf6_spftree *spf_tree);
 void ospf6_spftree_delete (struct ospf6_spftree *spf_tree);
+
+void ospf6_spf_database_hook (struct ospf6_lsa *old, struct ospf6_lsa *new);
+
 void ospf6_spf_init ();
 
 #endif /* OSPF6_SPF_H */

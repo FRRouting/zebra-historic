@@ -95,13 +95,17 @@ struct ospf6_dbdesc
 #define DDBIT_SET_INITIAL(x) ((x) |=  (1 << 2))
 #define DDBIT_CLR_INITIAL(x) ((x) |= ~(1 << 2))
 
+#define OSPF6_DBDESC_BIT_MASTER  0x01
+#define OSPF6_DBDESC_BIT_MORE    0x02
+#define OSPF6_DBDESC_BIT_INITIAL 0x04
+
 /* Link State Request */
 struct ospf6_lsreq
 {
-  u_int16_t lsreq_age_zero;     /* MBZ */
-  u_int16_t lsreq_type;         /* LS type */
-  u_int32_t lsreq_id;           /* Link State ID */
-  u_int32_t lsreq_advrtr;       /* Advertising Router */
+  u_int16_t mbz;          /* Must Be Zero */
+  u_int16_t type;         /* LS type */
+  u_int32_t id;           /* Link State ID */
+  u_int32_t adv_router;   /* Advertising Router */
 };
 
 /* Link State Update */

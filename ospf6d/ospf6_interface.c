@@ -104,7 +104,7 @@ ospf6_interface_create (struct interface *ifp)
   o6i->lladdr = (struct in6_addr *) NULL;
   o6i->area = (struct ospf6_area *) NULL;
   o6i->state = IFS_DOWN;
-  o6i->is_passive = 0;
+  o6i->flag = 0;
   o6i->neighbor_list = list_new ();
 
   o6i->ack_list = ospf6_lsdb_create ();
@@ -124,6 +124,8 @@ ospf6_interface_create (struct interface *ifp)
   o6i->interface = ifp;
   ifp->info = o6i;
 
+  CALL_ADD_HOOK (&interface_hook, o6i);
+
   return o6i;
 }
 
@@ -132,6 +134,8 @@ ospf6_interface_delete (struct ospf6_interface *o6i)
 {
   listnode n;
   struct ospf6_neighbor *o6n;
+
+  CALL_REMOVE_HOOK (&interface_hook, o6i);
 
   for (n = listhead (o6i->neighbor_list); n; nextnode (n))
     {
@@ -157,6 +161,10 @@ ospf6_interface_delete (struct ospf6_interface *o6i)
 
   /* cut link */
   o6i->interface->info = NULL;
+
+  /* plist_name */
+  if (o6i->plist_name)
+    XFREE (MTYPE_PREFIX_LIST_STR, o6i->plist_name);
 
   XFREE (MTYPE_OSPF6_IF, o6i);
 }
@@ -261,7 +269,9 @@ ospf6_interface_address_update (struct interface *ifp)
     return;
 
   /* create new Link-LSA */
-  ospf6_lsa_update_link (o6i->interface->name);
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
 }
 
 struct ospf6_interface *
@@ -343,6 +353,25 @@ ospf6_interface_is_enabled (unsigned int ifindex)
     return 0;
 
   return 1;
+}
+
+void
+ospf6_interface_delayed_ack_add (struct ospf6_lsa *lsa,
+                                 struct ospf6_interface *o6i)
+{
+  struct ospf6_lsa *summary;
+  summary = ospf6_lsa_summary_create (lsa->header);
+  ospf6_lsdb_add (summary, o6i->ack_list);
+}
+
+void
+ospf6_interface_delayed_ack_remove (struct ospf6_lsa *lsa,
+                                    struct ospf6_interface *o6i)
+{
+  struct ospf6_lsa *summary;
+  summary = ospf6_lsdb_lookup_lsdb (lsa->header->type, lsa->header->id,
+                                    lsa->header->adv_router, o6i->ack_list);
+  ospf6_lsdb_remove (summary, o6i->ack_list);
 }
 
 /* show specified interface structure */
@@ -545,7 +574,6 @@ DEFUN (ipv6_ospf6_cost,
 {
   struct ospf6_interface *o6i;
   struct interface *ifp;
-  int count;
 
   ifp = (struct interface *)vty->index;
   assert (ifp);
@@ -560,16 +588,10 @@ DEFUN (ipv6_ospf6_cost,
 
   o6i->cost = strtol (argv[0], NULL, 10);
 
-  /* update appropriate self-originated LSA */
-  if (o6i->area)
-    {
-      count = 0;
-      o6i->foreach_nei (o6i, &count, NBS_FULL, ospf6_count_state);
-      if (count == 0)
-        ospf6_lsa_update_intra_prefix_stub (o6i->area->area_id);
-      else
-        ospf6_lsa_update_router (o6i->area->area_id);
-    }
+  /* execute LSA hooks */
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
 
   return CMD_SUCCESS;
 }
@@ -723,6 +745,203 @@ DEFUN (ipv6_ospf6_instance,
   return CMD_SUCCESS;
 }
 
+DEFUN (ipv6_ospf6_passive,
+       ipv6_ospf6_passive_cmd,
+       "ipv6 ospf6 passive",
+       IP6_STR
+       OSPF6_STR
+       "passive interface: No Adjacency will be formed on this I/F\n"
+       )
+{
+  struct ospf6_interface *o6i;
+  struct interface *ifp;
+  listnode node;
+  struct ospf6_neighbor *o6n;
+
+  ifp = (struct interface *) vty->index;
+  assert (ifp);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+  assert (o6i);
+
+  SET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
+  if (o6i->thread_send_hello)
+    {
+      thread_cancel (o6i->thread_send_hello);
+      o6i->thread_send_hello = (struct thread *) NULL;
+    }
+
+  for (node = listhead (o6i->neighbor_list); node; nextnode (node))
+    {
+      o6n = getdata (node);
+      if (o6n->inactivity_timer)
+        thread_cancel (o6n->inactivity_timer);
+      thread_execute (master, inactivity_timer, o6n, 0);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_ospf6_passive,
+       no_ipv6_ospf6_passive_cmd,
+       "no ipv6 ospf6 passive",
+       NO_STR
+       IP6_STR
+       OSPF6_STR
+       "passive interface: No Adjacency will be formed on this I/F\n"
+       )
+{
+  struct ospf6_interface *o6i;
+  struct interface *ifp;
+
+  ifp = (struct interface *) vty->index;
+  assert (ifp);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+  assert (o6i);
+
+  UNSET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE);
+  if (o6i->thread_send_hello == NULL)
+    thread_add_event (master, ospf6_send_hello, o6i, 0);
+
+  return CMD_SUCCESS;
+}
+
+
+DEFUN (ipv6_ospf6_advertise_force_prefix,
+       ipv6_ospf6_advertise_force_prefix_cmd,
+       "ipv6 ospf6 advertise force-prefix",
+       IP6_STR
+       OSPF6_STR
+       "Advertising options\n"
+       "Force advertising prefix, applicable if Loopback or P-to-P\n"
+       )
+{
+  struct ospf6_interface *o6i;
+  struct interface *ifp;
+
+  ifp = (struct interface *) vty->index;
+  assert (ifp);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+  assert (o6i);
+
+  if (! if_is_loopback (ifp) && ! if_is_pointopoint (ifp))
+    {
+      vty_out (vty, "Interface not Loopback nor PointToPoint%s",
+               VTY_NEWLINE);
+      return CMD_ERR_NOTHING_TODO;
+    }
+
+  SET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_FORCE_PREFIX);
+
+  /* execute LSA hooks */
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_ospf6_advertise_force_prefix,
+       no_ipv6_ospf6_advertise_force_prefix_cmd,
+       "no ipv6 ospf6 advertise force-prefix",
+       NO_STR
+       IP6_STR
+       OSPF6_STR
+       "Advertising options\n"
+       "Force to advertise prefix, applicable if Loopback or P-to-P\n"
+       )
+{
+  struct ospf6_interface *o6i;
+  struct interface *ifp;
+
+  ifp = (struct interface *) vty->index;
+  assert (ifp);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+  assert (o6i);
+
+  UNSET_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_FORCE_PREFIX);
+
+  /* execute LSA hooks */
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_ospf6_advertise_prefix_list,
+       ipv6_ospf6_advertise_prefix_list_cmd,
+       "ipv6 ospf6 advertise prefix-list WORD",
+       IP6_STR
+       OSPF6_STR
+       "Advertising options\n"
+       "Filter prefix using prefix-list\n"
+       "Prefix list name\n"
+       )
+{
+  struct ospf6_interface *o6i;
+  struct interface *ifp;
+
+  ifp = (struct interface *) vty->index;
+  assert (ifp);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+  assert (o6i);
+
+  if (o6i->plist_name)
+    XFREE (MTYPE_PREFIX_LIST_STR, o6i->plist_name);
+  o6i->plist_name = XSTRDUP (MTYPE_PREFIX_LIST_STR, argv[0]);
+
+  /* execute LSA hooks */
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_ospf6_advertise_prefix_list,
+       no_ipv6_ospf6_advertise_prefix_list_cmd,
+       "no ipv6 ospf6 advertise prefix-list",
+       NO_STR
+       IP6_STR
+       OSPF6_STR
+       "Advertising options\n"
+       "Filter prefix using prefix-list\n"
+       )
+{
+  struct ospf6_interface *o6i;
+  struct interface *ifp;
+
+  ifp = (struct interface *) vty->index;
+  assert (ifp);
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    o6i = ospf6_interface_create (ifp);
+  assert (o6i);
+
+  if (o6i->plist_name)
+    {
+      XFREE (MTYPE_PREFIX_LIST_STR, o6i->plist_name);
+      o6i->plist_name = NULL;
+    }
+
+  /* execute LSA hooks */
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, o6i);
+
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
+
+  return CMD_SUCCESS;
+}
+
 int
 ospf6_interface_config_write (struct vty *vty)
 {
@@ -753,6 +972,16 @@ ospf6_interface_config_write (struct vty *vty)
                o6i->transdelay, VTY_NEWLINE);
       vty_out (vty, " ipv6 ospf6 instance-id %d%s",
                o6i->instance_id, VTY_NEWLINE);
+
+      if (CHECK_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_FORCE_PREFIX))
+        vty_out (vty, " ipv6 ospf6 advertise force-prefix%s", VTY_NEWLINE);
+      if (o6i->plist_name)
+        vty_out (vty, " ipv6 ospf6 advertise prefix-list %s%s",
+                 o6i->plist_name, VTY_NEWLINE);
+
+      if (CHECK_FLAG (o6i->flag, OSPF6_INTERFACE_FLAG_PASSIVE))
+        vty_out (vty, " ipv6 ospf6 passive%s", VTY_NEWLINE);
+
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
   return 0;
@@ -785,5 +1014,12 @@ ospf6_interface_init ()
   install_element (INTERFACE_NODE, &ipv6_ospf6_retransmitinterval_cmd);
   install_element (INTERFACE_NODE, &ipv6_ospf6_transmitdelay_cmd);
   install_element (INTERFACE_NODE, &ipv6_ospf6_instance_cmd);
+  install_element (INTERFACE_NODE, &ipv6_ospf6_advertise_force_prefix_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_ospf6_advertise_force_prefix_cmd);
+  install_element (INTERFACE_NODE, &ipv6_ospf6_advertise_prefix_list_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_ospf6_advertise_prefix_list_cmd);
+  install_element (INTERFACE_NODE, &ipv6_ospf6_passive_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_ospf6_passive_cmd);
 }
+
 

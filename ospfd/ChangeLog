@@ -1,3 +1,34 @@
+2002-07-07  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.93 released.
+
+2002-06-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospf_spf.c (ospf_nexthop_calculation): Add NULL set to oi and
+	check of l2.  Reported by: Daniel Drown <dan-zebra@drown.org>
+	(ospf_lsa_has_link): LSA Length calculation fix.  Reported by:
+	Paul Jakma <paulj@alphyra.ie>.
+
+	* ospfd.c (ospf_if_update): Fix nextnode reference bug.  Reported
+	by: juris@mt.lv.
+
+2002-01-21  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospfd.c: Merge [zebra 11445] Masahiko ENDO's Opaque-LSA support.
+
+2001-08-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_interface.c (ospf_add_to_if): Use /32 address to register
+	OSPF interface information.
+	(ospf_delete_from_if): Likewise.
+
+	* ospf_zebra.c (ospf_interface_address_delete): Likewise.
+
+2001-08-23  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* ospf_zebra.c (ospf_redistribute_unset): When redistribute type
+	is OSPF, do not unset redistribute flag.
+
 2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* zebra-0.92a released.

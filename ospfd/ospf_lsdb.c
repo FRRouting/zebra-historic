@@ -36,8 +36,7 @@ ospf_lsdb_new ()
 {
   struct ospf_lsdb *new;
 
-  new = XMALLOC (MTYPE_OSPF_LSDB, sizeof (struct ospf_lsdb));
-  bzero (new, sizeof (struct ospf_lsdb));
+  new = XCALLOC (MTYPE_OSPF_LSDB, sizeof (struct ospf_lsdb));
   ospf_lsdb_init (new);
 
   return new;
@@ -109,6 +108,10 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *lsa)
       route_unlock_node (rn);
     }
 
+#ifdef MONITOR_LSDB_CHANGE
+  if (lsdb->new_lsa_hook != NULL)
+    (* lsdb->new_lsa_hook)(lsa);
+#endif /* MONITOR_LSDB_CHANGE */
   rn->info = ospf_lsa_lock (lsa);
 }
 
@@ -132,6 +135,10 @@ ospf_lsdb_delete (struct ospf_lsdb *lsdb, struct ospf_lsa *lsa)
 	rn->info = NULL;
 	route_unlock_node (rn);
 	route_unlock_node (rn);
+#ifdef MONITOR_LSDB_CHANGE
+        if (lsdb->del_lsa_hook != NULL)
+          (* lsdb->del_lsa_hook)(lsa);
+#endif /* MONITOR_LSDB_CHANGE */
 	ospf_lsa_unlock (lsa);
 	return;
       }
@@ -157,6 +164,10 @@ ospf_lsdb_delete_all (struct ospf_lsdb *lsdb)
 	    lsdb->total--;
 	    rn->info = NULL;
 	    route_unlock_node (rn);
+#ifdef MONITOR_LSDB_CHANGE
+            if (lsdb->del_lsa_hook != NULL)
+              (* lsdb->del_lsa_hook)(lsa);
+#endif /* MONITOR_LSDB_CHANGE */
 	    ospf_lsa_unlock (lsa);
 	  }
     }

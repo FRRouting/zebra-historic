@@ -202,7 +202,9 @@ rip_ifaddr_delete (struct interface *ifp, struct connected *ifc)
     return;
 
   rn = route_node_lookup (rip_ifaddr_table, p);
-  i=rn->info;
+  if (! rn)
+    return;
+  i = rn->info;
   if (rn && !strncmp(i->name,ifp->name,INTERFACE_NAMSIZ))
     {
       rn->info = NULL;

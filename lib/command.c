@@ -1,24 +1,22 @@
-/*
- * Command interpreter routine for virtual terminal [aka TeletYpe]
- * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
- *
- * This file is part of GNU Zebra.
- *  
- * GNU Zebra is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published
- * by the Free Software Foundation; either version 2, or (at your
- * option) any later version.
- * 
- * GNU Zebra is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- * Boston, MA 02111-1307, USA.
- */
+/* Command interpreter routine for virtual terminal [aka TeletYpe]
+   Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+ 
+GNU Zebra is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published
+by the Free Software Foundation; either version 2, or (at your
+option) any later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the
+Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+Boston, MA 02111-1307, USA.  */
 
 #include <zebra.h>
 
@@ -38,7 +36,7 @@ struct host host;
 char *default_motd = 
 "\r\n\
 Hello, this is zebra (version " ZEBRA_VERSION ").\r\n\
-Copyright 1996-2001 Kunihiro Ishiguro.\r\n\
+Copyright 1996-2002 Kunihiro Ishiguro.\r\n\
 \r\n";
 
 /* Standard command node structures. */
@@ -73,6 +71,40 @@ struct cmd_node config_node =
   1
 };
 
+/* Utility function to concatenate argv argument into a single string
+   with inserting ' ' character between each argument.  */
+char *
+argv_concat (char **argv, int argc, int shift)
+{
+  int i;
+  int len;
+  int index;
+  char *str;
+
+  str = NULL;
+  index = 0;
+
+  for (i = shift; i < argc; i++)
+    {
+      len = strlen (argv[i]);
+
+      if (i == shift)
+	{
+	  str = XSTRDUP (MTYPE_TMP, argv[i]);
+	  index = len;
+	}
+      else
+	{
+	  str = XREALLOC (MTYPE_TMP, str, (index + len + 2));
+	  str[index++] = ' ';
+	  memcpy (str + index, argv[i], len);
+	  index += len;
+	  str[index] = '\0';
+	}
+    }
+  return str;
+}
+
 /* Install top node of command vector. */
 void
 install_node (struct cmd_node *node, 
@@ -165,7 +197,7 @@ cmd_make_strvec (char *string)
 	cp++;
       strlen = cp - start;
       token = XMALLOC (MTYPE_STRVEC, strlen + 1);
-      bcopy (start, token, strlen);
+      memcpy (token, start, strlen);
       *(token + strlen) = '\0';
       vector_set (strvec, token);
 
@@ -173,7 +205,7 @@ cmd_make_strvec (char *string)
 	     *cp != '\0')
 	cp++;
 
-      if (*cp == '\0' || *cp == '!' || *cp == '#') 
+      if (*cp == '\0')
 	return strvec;
     }
 }
@@ -222,7 +254,7 @@ cmd_desc_str (char **string)
 
   strlen = cp - start;
   token = XMALLOC (MTYPE_STRVEC, strlen + 1);
-  bcopy (start, token, strlen);
+  memcpy (token, start, strlen);
   *(token + strlen) = '\0';
 
   *string = cp;
@@ -300,7 +332,7 @@ cmd_make_descvec (char *string, char *descstr)
       memcpy (token, sp, len);
       *(token + len) = '\0';
 
-      desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
+      desc = XCALLOC (MTYPE_DESC, sizeof (struct desc));
       desc->cmd = token;
       desc->str = cmd_desc_str (&dp);
 
@@ -545,7 +577,7 @@ cmd_ipv4_match (char *str)
 
   for (;;)
     {
-      bzero (buf, sizeof (buf));
+      memset (buf, 0, sizeof (buf));
       sp = str;
       while (*str != '\0')
 	{
@@ -602,7 +634,7 @@ cmd_ipv4_prefix_match (char *str)
 
   for (;;)
     {
-      bzero (buf, sizeof (buf));
+      memset (buf, 0, sizeof (buf));
       sp = str;
       while (*str != '\0' && *str != '/')
 	{
@@ -1498,6 +1530,8 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
       vector_free (matchvec);
       *status= CMD_ERR_NO_MATCH;
     }
+  else
+    *status = CMD_SUCCESS;
 
   return matchvec;
 }
@@ -2053,6 +2087,7 @@ DEFUN (config_exit,
       vty->node = CONFIG_NODE;
       break;
     case BGP_VPNV4_NODE:
+    case BGP_IPV4_NODE:
     case BGP_IPV4M_NODE:
     case BGP_IPV6_NODE:
       vty->node = BGP_NODE;
@@ -2091,6 +2126,7 @@ DEFUN (config_end,
     case RIPNG_NODE:
     case BGP_NODE:
     case BGP_VPNV4_NODE:
+    case BGP_IPV4_NODE:
     case BGP_IPV4M_NODE:
     case BGP_IPV6_NODE:
     case RMAP_NODE:
@@ -2119,7 +2155,7 @@ DEFUN (show_version,
   vty_out (vty, "Zebra %s (%s).%s", ZEBRA_VERSION,
 	   host_name,
 	   VTY_NEWLINE);
-  vty_out (vty, "Copyright 1996-2001, Kunihiro Ishiguro.%s", VTY_NEWLINE);
+  vty_out (vty, "Copyright 1996-2002, Kunihiro Ishiguro.%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -2277,6 +2313,11 @@ DEFUN (config_write_file,
 }
 
 ALIAS (config_write_file, 
+       config_write_cmd,
+       "write",  
+       "Write running configuration to memory, network, or terminal\n")
+
+ALIAS (config_write_file, 
        config_write_memory_cmd,
        "write memory",  
        "Write running configuration to memory, network, or terminal\n"
@@ -2420,6 +2461,7 @@ DEFUN (config_password, password_cmd,
 	{
 	  if (host.password)
 	    XFREE (0, host.password);
+	  host.password = NULL;
 	  if (host.password_encrypt)
 	    XFREE (0, host.password_encrypt);
 	  host.password_encrypt = XSTRDUP (0, strdup (argv[1]));
@@ -2854,6 +2896,7 @@ install_default (enum node_type node)
   install_element (node, &config_write_terminal_cmd);
   install_element (node, &config_write_file_cmd);
   install_element (node, &config_write_memory_cmd);
+  install_element (node, &config_write_cmd);
 }
 
 /* Initialize command interface. Install basic nodes and commands. */

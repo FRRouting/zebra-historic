@@ -25,24 +25,27 @@
 
 /* OSPF LSA Range definition. */
 #define OSPF_MIN_LSA		1  /* begin range here */
-#ifdef HAVE_NSSA
-#define OSPF_MAX_LSA		8  /* range ends below here */
-#else /* ! HAVE_NSSA */
-#define OSPF_MAX_LSA		6  /* range ends below here */
-#endif /* HAVE_NSSA */
+#if defined (HAVE_OPAQUE_LSA)
+#define OSPF_MAX_LSA           12
+#elif defined (HAVE_NSSA)
+#define OSPF_MAX_LSA		8
+#else
+#define OSPF_MAX_LSA		6
+#endif
 
 /* OSPF LSA Type definition. */
-#define OSPF_UNKNOWN_LSA	0
-#define OSPF_ROUTER_LSA         1
-#define OSPF_NETWORK_LSA        2
-#define OSPF_SUMMARY_LSA        3
-#define OSPF_SUMMARY_LSA_ASBR   4
-#define OSPF_AS_EXTERNAL_LSA    5
-
-#ifdef HAVE_NSSA
-#define OSPF_GROUP_MEMBER_LSA	6
-#define OSPF_AS_NSSA_LSA	7
-#endif /* HAVE_NSSA */
+#define OSPF_UNKNOWN_LSA	      0
+#define OSPF_ROUTER_LSA               1
+#define OSPF_NETWORK_LSA              2
+#define OSPF_SUMMARY_LSA              3
+#define OSPF_ASBR_SUMMARY_LSA         4
+#define OSPF_AS_EXTERNAL_LSA          5
+#define OSPF_GROUP_MEMBER_LSA	      6  /* Not supported. */
+#define OSPF_AS_NSSA_LSA	              7
+#define OSPF_EXTERNAL_ATTRIBUTES_LSA  8  /* Not supported. */
+#define OSPF_OPAQUE_LINK_LSA	      9
+#define OSPF_OPAQUE_AREA_LSA	     10
+#define OSPF_OPAQUE_AS_LSA	     11
 
 #define OSPF_LSA_HEADER_SIZE	20
 #define OSPF_MAX_LSA_SIZE	1500
@@ -104,6 +107,11 @@ struct ospf_lsa
 
   /* Refreshement List or Queue */
   int refresh_list;
+
+#ifdef HAVE_OPAQUE_LSA
+  /* For Type-9 Opaque-LSAs, reference to ospf-interface is required. */
+  struct ospf_interface *oi;
+#endif /* HAVE_OPAQUE_LSA */
 };
 
 /* OSPF LSA Link Type. */
@@ -185,6 +193,10 @@ struct as_external_lsa
   } e[1];
 };
 
+#ifdef HAVE_OPAQUE_LSA
+#include "ospfd/ospf_opaque.h"
+#endif /* HAVE_OPAQUE_LSA */
+
 /* Macros. */
 #define GET_METRIC(x) get_metric(x)
 #define IS_EXTERNAL_METRIC(x)   ((x) & 0x80)
@@ -200,7 +212,7 @@ struct as_external_lsa
                      (struct prefix_ipv4 *) (P), 0, find_summary)
 
 #define OSPF_SUMMARY_ASBR_LSA_SELF_FIND_BY_PREFIX(A,P) \
-        foreach_lsa (SUMMARY_ASBR_LSDB ((A)), \
+        foreach_lsa (ASBR_SUMMARY_LSDB ((A)), \
                      (struct prefix_ipv4 *) (P), 0, find_asbr_summary)
 
 #define OSPF_LSA_UPDATE_DELAY		2
@@ -223,6 +235,12 @@ int tv_cmp (struct timeval, struct timeval);
 
 int get_age (struct ospf_lsa *);
 u_int16_t ospf_lsa_checksum (struct lsa_header *);
+
+struct stream;
+const char *dump_lsa_key (struct ospf_lsa *lsa);
+u_int32_t lsa_seqnum_increment (struct ospf_lsa *lsa);
+void lsa_header_set (struct stream *s, u_char options, u_char type, struct in_addr id);
+struct ospf_neighbor *ospf_nbr_lookup_ptop (struct route_table *nbrs, struct in_addr router_id);
 
 /* Prototype for LSA primitive. */
 struct ospf_lsa *ospf_lsa_new ();
@@ -259,12 +277,6 @@ void ospf_external_lsa_flush (u_char, struct prefix_ipv4 *,
 
 struct in_addr ospf_get_ip_from_ifp (struct ospf_interface *oi);
 
-#ifdef HAVE_NSSA
-struct ospf_lsa *ospf_external_lsa_test ();
-
-/* int show_as_external_lsa_detail (struct vty *, struct ospf_lsa *); */
-#endif /* HAVE_NSSA */
-
 struct ospf_lsa *ospf_external_lsa_originate (struct external_info *);
 int ospf_external_lsa_originate_timer (struct thread *);
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
@@ -274,8 +286,7 @@ struct ospf_lsa *ospf_lsa_lookup_by_header (struct ospf_area *,
 					    struct lsa_header *);
 int ospf_lsa_more_recent (struct ospf_lsa *, struct ospf_lsa *);
 int ospf_lsa_different (struct ospf_lsa *, struct ospf_lsa *);
-void ospf_lsa_flush_self_originated (struct ospf_neighbor *,
-				     struct ospf_lsa *, struct ospf_lsa *);
+void ospf_flush_self_originated_lsas_now (struct ospf *top);
 
 int ospf_lsa_is_self_originated (struct ospf_lsa *);
 

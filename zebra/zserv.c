@@ -1212,7 +1212,7 @@ zebra_read_ipv6 (int command, struct zserv *client, u_short length)
       
       ifindex = stream_getl (client->ibuf);
 
-      bzero (&p, sizeof (struct prefix_ipv6));
+      memset (&p, 0, sizeof (struct prefix_ipv6));
       p.family = AF_INET6;
       p.prefixlen = stream_getc (client->ibuf);
       size = PSIZE(p.prefixlen);
@@ -1277,8 +1277,7 @@ zebra_client_create (int sock)
 {
   struct zserv *client;
 
-  client = XMALLOC (0, sizeof (struct zserv));
-  bzero (client, sizeof (struct zserv));
+  client = XCALLOC (0, sizeof (struct zserv));
 
   /* Make client input/output buffer. */
   client->sock = sock;
@@ -1737,7 +1736,29 @@ DEFUN (no_ipv6_forwarding,
 }
 
 #endif /* HAVE_IPV6 */
-       
+
+/* IPForwarding configuration write function. */
+int
+config_write_forwarding (struct vty *vty)
+{
+  if (! ipforward ())
+    vty_out (vty, "no ip forwarding%s", VTY_NEWLINE);
+#ifdef HAVE_IPV6
+  if (! ipforward_ipv6 ())
+    vty_out (vty, "no ipv6 forwarding%s", VTY_NEWLINE);
+#endif /* HAVE_IPV6 */
+  vty_out (vty, "!%s", VTY_NEWLINE);
+  return 0;
+}
+
+/* table node for routing tables. */
+struct cmd_node forwarding_node =
+{
+  FORWARDING_NODE,
+  "",				/* This node has no interface. */
+  1
+};
+
 
 /* Initialisation of zebra and installation of commands. */
 void
@@ -1746,7 +1767,7 @@ zebra_init ()
   /* Client list init. */
   client_list = list_new ();
 
-  /* Forwarding on. */
+  /* Forwarding is on by default. */
   ipforward_on ();
 #ifdef HAVE_IPV6
   ipforward_ipv6_on ();
@@ -1761,17 +1782,18 @@ zebra_init ()
 
   /* Install configuration write function. */
   install_node (&table_node, config_write_table);
+  install_node (&forwarding_node, config_write_forwarding);
 
   install_element (VIEW_NODE, &show_ip_forwarding_cmd);
   install_element (ENABLE_NODE, &show_ip_forwarding_cmd);
   install_element (CONFIG_NODE, &no_ip_forwarding_cmd);
   install_element (ENABLE_NODE, &show_zebra_client_cmd);
 
-#ifdef HAVE_LINUX_RTNETLINK_H
+#ifdef HAVE_NETLINK
   install_element (VIEW_NODE, &show_table_cmd);
   install_element (ENABLE_NODE, &show_table_cmd);
   install_element (CONFIG_NODE, &config_table_cmd);
-#endif
+#endif /* HAVE_NETLINK */
 
 #ifdef HAVE_IPV6
   install_element (VIEW_NODE, &show_ipv6_forwarding_cmd);

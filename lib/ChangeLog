@@ -1,3 +1,33 @@
+2002-07-07  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.93 released.
+
+2002-06-21  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* if.c (ifc_pointopoint): Add ifc_pointopoint() accoding to Frank
+	van Maarseveen's suggestion.
+
+2002-06-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c: Change bcopy() to memcpy().
+
+2001-12-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (config_password): Fix host.password clear bug.
+	Reported by Wang Jian <lark@linux.net.cn>.
+
+2001-08-29  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* thread.c (thread_should_yield): New function to check thread
+	should yeild it's execution to other thread.  Suggested by: Rick
+	Payne <rickp@ayrnetworks.com>
+
+2001-08-20  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* thread.c (thread_timer_cmp): Rewrite function.
+
+	* hash.c: Add hash_get().  Change hash_pull() to hash_release().
+
 2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* zebra-0.92a released.

@@ -1,3 +1,77 @@
+2002-07-07  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* zebra-0.93 released.
+
+2001-10-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_vty_init): Translate update commands are removed.
+
+2001-10-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_static_set): Add workaround for BGP static
+	route announcement when there is no zebra running.
+
+2001-10-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (neighbor_remote_as_unicast): Remove "remote-as nlri
+	unicast multicast" commands.
+
+2001-09-14  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_open.c: When we receive capability route-refresh, we should
+	check we send the capability not we receive the capability.
+
+	* bgp_route.c (bgp_network_mask_natural_route_map): network
+	statement route-map is added.
+
+2001-08-31  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* bgp_advertise.c (bgp_advertise_intern): attr must be interned
+	before looking up hash table.
+
+2001-08-30  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* bgpd.h (struct peer): BGP filter is moved from peer_conf to
+	peer.
+
+2001-08-28  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* bgp_nexthop.c (bnc_nexthop_free): Fix next pointer bug.
+	Suggested by: "Hong-Sung Kim" <hoskim@lanbird.co.kr>.
+
+2001-08-26  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* bgp_table.c (bgp_node_create): Clearn memory before use it.
+
+2001-08-24  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* Change to use bgp_table.[ch].
+
+2001-08-23  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* bgpd.c (bgp_init): Add "transparent-as" and
+	"transparent-nexthop" for old version compatibility.
+
+2001-08-23  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.h (struct peer): default-originate route-map is added.
+
+	* bgp_route.c: When self originated route is advertised with
+	attrubute-unchanged, nexthop was not properly set.  This bug is
+	fixed.
+
+2001-08-22  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.c (neighbor_attr_unchanged): transparent-as and
+	transparent-next-hop commands are restructured.  Instead of
+	current transparent-* commands, attribute-unchanged command is
+	introduced.
+
+	neighbor A.B.C.D attribute-unchanged [as-path|next-hop|med]
+
+	(neighbor_default_originate): "default-originate" configuration
+	announce default route even 0.0.0.0/0 does not exists in BGP RIB.
+
 2001-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* zebra-0.92a released.

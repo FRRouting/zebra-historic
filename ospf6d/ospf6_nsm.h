@@ -46,8 +46,6 @@
 
 #include "ospf6_types.h"
 
-int nbs_change (state_t, char *, struct ospf6_neighbor *);
-int nbs_full_change (struct ospf6_interface *);
 int need_adjacency (struct ospf6_neighbor *);
 
 

@@ -41,8 +41,8 @@ const char *zlog_proto_names[] =
   NULL,
 };
 
-const char *zlog_priority [] =
-  {
+const char *zlog_priority[] =
+{
   "emergencies",
   "alerts",
   "critical",
@@ -51,8 +51,8 @@ const char *zlog_priority [] =
   "notifications",
   "informational",
   "debugging",
-  NULL
-  } ;
+  NULL,
+};
   
 
 

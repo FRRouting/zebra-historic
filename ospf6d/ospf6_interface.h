@@ -67,7 +67,7 @@ struct ospf6_interface
   u_char state;
 
   /* OSPF6 Interface flag */
-  int is_passive;
+  char flag;
 
   /* Decision of DR Election */
   u_int32_t dr;
@@ -95,9 +95,15 @@ struct ospf6_interface
                        void (*func) (void *, int, void *));
 
   struct thread *maxage_remover;
+
+  /* route-map to filter connected prefix */
+  char *plist_name;
 };
 
 extern char *ospf6_interface_state_string[];
+
+#define OSPF6_INTERFACE_FLAG_PASSIVE      0x01
+#define OSPF6_INTERFACE_FLAG_FORCE_PREFIX 0x02
 
 
 /* Function Prototypes */
@@ -131,6 +137,13 @@ ospf6_interface_count_full_neighbor (struct ospf6_interface *);
 #endif
 
 int ospf6_interface_is_enabled (u_int32_t ifindex);
+
+void
+ospf6_interface_delayed_ack_add (struct ospf6_lsa *lsa,
+                                 struct ospf6_interface *o6i);
+void
+ospf6_interface_delayed_ack_remove (struct ospf6_lsa *lsa,
+                                    struct ospf6_interface *o6i);
 
 void
 ospf6_interface_statistics_show (struct vty *vty,

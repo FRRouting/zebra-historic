@@ -60,38 +60,17 @@
 #include "ospf6d.h"
 #undef HEADER_DEPENDENCY
 
-char *ospf6_lsa_type_strings[] =
-{
-  "None", "Router", "Network", "InterPrefix", "InterRouter",
-  "ASExternal", "GroupMembership", "Type7", "Link", "IntraPrefix",
-  NULL
-};
-
-char *ospf6_router_lsd_type_strings[] =
-{ "None", "PointToPoint", "Transit", "Stub", "Virtual", NULL };
-
-char *
-ospf6_lsa_print_id (struct ospf6_lsa_header *lsa_header, char *buf, int size)
-{
-  char adv_router[64];
-  inet_ntop (AF_INET, &lsa_header->advrtr, adv_router, sizeof (adv_router));
-  snprintf (buf, size, "%s[id:%lu %s]",
-            ospf6_lsa_type_string (lsa_header->type),
-            (unsigned long) ntohl (lsa_header->ls_id), adv_router);
-  return buf;
-}
-
 /* test LSAs identity */
-int
-ospf6_lsa_issame (struct ospf6_lsa_header *lsh1,
-                  struct ospf6_lsa_header *lsh2)
+static int
+ospf6_lsa_issame (struct ospf6_lsa_header__ *lsh1,
+                  struct ospf6_lsa_header__ *lsh2)
 {
   assert (lsh1 && lsh2);
 
-  if (lsh1->advrtr != lsh2->advrtr)
+  if (lsh1->adv_router != lsh2->adv_router)
     return 0;
 
-  if (lsh1->ls_id != lsh2->ls_id)
+  if (lsh1->id != lsh2->id)
     return 0;
 
   if (lsh1->type != lsh2->type)
@@ -105,43 +84,41 @@ int
 ospf6_lsa_differ (struct ospf6_lsa *lsa1,
                   struct ospf6_lsa *lsa2)
 {
-  int diff;
-  struct ospf6_lsa_header *lsh1, *lsh2;
+  int diff, cmplen;
 
-  ospf6_lsa_age_current (lsa1);
-  ospf6_lsa_age_current (lsa2);
-  lsh1 = (struct ospf6_lsa_header *) lsa1->lsa_hdr;
-  lsh2 = (struct ospf6_lsa_header *) lsa2->lsa_hdr;
-
-  if (! ospf6_lsa_issame (lsh1, lsh2))
+  if (! ospf6_lsa_issame (lsa1->header, lsa2->header))
     return 1;
 
   /* check Options field */
   /* xxx */
 
-  if (ntohs (lsh1->age) == MAXAGE && ntohs (lsh2->age) != MAXAGE)
+  ospf6_lsa_age_current (lsa1);
+  ospf6_lsa_age_current (lsa2);
+  if (ntohs (lsa1->header->age) == MAXAGE &&
+      ntohs (lsa2->header->age) != MAXAGE)
     return 1;
-  if (ntohs (lsh1->age) != MAXAGE && ntohs (lsh2->age) == MAXAGE)
+  if (ntohs (lsa1->header->age) != MAXAGE &&
+      ntohs (lsa2->header->age) == MAXAGE)
     return 1;
 
   /* compare body */
-  if (ntohs (lsh1->length) != ntohs (lsh2->length))
+  if (ntohs (lsa1->header->length) != ntohs (lsa2->header->length))
     return 1;
 
-  diff = memcmp (lsh1 + 1, lsh2 + 1,
-                 ntohs (lsh1->length) - sizeof (struct ospf6_lsa_header));
+  cmplen = ntohs (lsa1->header->length) - sizeof (struct ospf6_lsa_header);
+  diff = memcmp (lsa1->header + 1, lsa2->header + 1, cmplen);
 
   return diff;
 }
 
 int
-ospf6_lsa_match (u_int16_t type, u_int32_t ls_id, u_int32_t advrtr,
+ospf6_lsa_match (u_int16_t type, u_int32_t id, u_int32_t adv_router,
                  struct ospf6_lsa_header *lsh)
 {
-  if (lsh->advrtr != advrtr)
+  if (lsh->advrtr != adv_router)
     return 0;
 
-  if (lsh->ls_id != ls_id)
+  if (lsh->ls_id != id)
     return 0;
 
   if (lsh->type != type)
@@ -157,15 +134,16 @@ ospf6_lsa_age_set (struct ospf6_lsa *lsa)
 {
   struct timeval now;
 
-  assert (lsa && lsa->lsa_hdr);
+  assert (lsa && lsa->header);
 
   if (gettimeofday (&now, (struct timezone *)NULL) < 0)
-    zlog_warn ("Lsa: gettimeofday failed, may fail LSA AGEs: %s",
+    zlog_warn ("LSA: gettimeofday failed, may fail LSA AGEs: %s",
                strerror (errno));
 
-  lsa->birth = now.tv_sec - ntohs (lsa->lsa_hdr->lsh_age);
+  lsa->birth.tv_sec = now.tv_sec - ntohs (lsa->header->age);
+  lsa->birth.tv_usec = now.tv_usec;
   lsa->expire = thread_add_timer (master, ospf6_lsa_expire, lsa,
-                                  lsa->birth + MAXAGE - now.tv_sec);
+                                  lsa->birth.tv_sec + MAXAGE - now.tv_sec);
   return;
 }
 
@@ -177,19 +155,17 @@ ospf6_lsa_age_current (struct ospf6_lsa *lsa)
   struct timeval now;
   u_int32_t ulage;
   u_int16_t age;
-  struct ospf6_lsa_header *lsa_header;
 
   assert (lsa);
-  lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-  assert (lsa_header);
+  assert (lsa->header);
 
   /* current time */
   if (gettimeofday (&now, (struct timezone *)NULL) < 0)
-    zlog_warn ("Lsa: gettimeofday failed, may fail ages: %s",
+    zlog_warn ("LSA: gettimeofday failed, may fail ages: %s",
                strerror (errno));
 
   /* calculate age */
-  ulage = now.tv_sec - lsa->birth;
+  ulage = now.tv_sec - lsa->birth.tv_sec;
 
   /* if over MAXAGE, set to it */
   if (ulage > MAXAGE)
@@ -197,17 +173,8 @@ ospf6_lsa_age_current (struct ospf6_lsa *lsa)
   else
     age = ulage;
 
-  lsa_header->age = htons (age);
+  lsa->header->age = htons (age);
   return age;
-}
-
-/* returns 1 if LSA's age is MAXAGE. else returns 0 */
-int
-ospf6_lsa_is_maxage (struct ospf6_lsa *lsa)
-{
-  if (ospf6_lsa_age_current (lsa) == MAXAGE)
-    return 1;
-  return 0;
 }
 
 /* update age field of LSA header with adding InfTransDelay */
@@ -215,13 +182,11 @@ void
 ospf6_lsa_age_update_to_send (struct ospf6_lsa *lsa, u_int32_t transdelay)
 {
   unsigned short age;
-  struct ospf6_lsa_header *lsa_header;
 
-  lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
   age = ospf6_lsa_age_current (lsa) + transdelay;
   if (age > MAXAGE)
     age = MAXAGE;
-  lsa_header->age = htons (age);
+  lsa->header->age = htons (age);
   return;
 }
 
@@ -230,7 +195,7 @@ ospf6_lsa_premature_aging (struct ospf6_lsa *lsa)
 {
   /* log */
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("Lsa: Premature aging: %s", lsa->str);
+    zlog_info ("LSA: Premature aging: %s", lsa->str);
 
   if (lsa->expire)
     thread_cancel (lsa->expire);
@@ -239,7 +204,7 @@ ospf6_lsa_premature_aging (struct ospf6_lsa *lsa)
     thread_cancel (lsa->refresh);
   lsa->refresh = (struct thread *) NULL;
 
-  lsa->birth = 0;
+  memset (&lsa->birth, 0, sizeof (struct timeval));
   thread_execute (master, ospf6_lsa_expire, lsa, 0);
 }
 
@@ -252,23 +217,18 @@ ospf6_lsa_check_recent (struct ospf6_lsa *a, struct ospf6_lsa *b)
   u_int16_t cksuma, cksumb;
   u_int16_t agea, ageb;
 
-  assert (a && a->lsa_hdr);
-  assert (b && b->lsa_hdr);
-  assert (ospf6_lsa_issame ((struct ospf6_lsa_header *) a->lsa_hdr,
-                            (struct ospf6_lsa_header *) b->lsa_hdr));
+  assert (a && a->header);
+  assert (b && b->header);
+  assert (ospf6_lsa_issame (a->header, b->header));
 
-  seqnuma = ((signed long) ntohl (a->lsa_hdr->lsh_seqnum))
-             - (signed long)INITIAL_SEQUENCE_NUMBER;
-  seqnumb = ((signed long) ntohl (b->lsa_hdr->lsh_seqnum))
-             - (signed long)INITIAL_SEQUENCE_NUMBER;
+  seqnuma = ((signed long) ntohl (a->header->seqnum))
+             - (signed long) INITIAL_SEQUENCE_NUMBER;
+  seqnumb = ((signed long) ntohl (b->header->seqnum))
+             - (signed long) INITIAL_SEQUENCE_NUMBER;
 
   /* compare by sequence number */
     /* xxx, care about LS sequence number wrapping */
   recent_reason = "seqnum";
-  if (IS_OSPF6_DUMP_LSA && seqnuma != seqnumb)
-    zlog_info ("LSA: recent: %s:[seqnum %d] %s:[seqnum %d]",
-               a->str, ntohl(a->header->seqnum),
-               b->str, ntohl(b->header->seqnum));
   if (seqnuma > seqnumb)
     return -1;
   else if (seqnuma < seqnumb)
@@ -288,20 +248,12 @@ ospf6_lsa_check_recent (struct ospf6_lsa *a, struct ospf6_lsa *b)
 
     /* MaxAge check */
   recent_reason = "max age";
-  if (IS_OSPF6_DUMP_LSA &&
-      ((agea == OSPF6_LSA_MAXAGE && ageb != OSPF6_LSA_MAXAGE) ||
-       (agea != OSPF6_LSA_MAXAGE && ageb == OSPF6_LSA_MAXAGE)))
-    zlog_info ("LSA: recent: %s:[age %hu] %s:[age %hu]", a->str, agea, b->str, ageb);
   if (agea == OSPF6_LSA_MAXAGE && ageb != OSPF6_LSA_MAXAGE)
     return -1;
   else if (agea != OSPF6_LSA_MAXAGE && ageb == OSPF6_LSA_MAXAGE)
     return 1;
 
   recent_reason = "age differ";
-  if (IS_OSPF6_DUMP_LSA &&
-      ((agea > ageb && agea - ageb >= OSPF6_LSA_MAXAGEDIFF) ||
-       (agea < ageb && ageb - agea >= OSPF6_LSA_MAXAGEDIFF)))
-    zlog_info ("LSA: recent: %s:[age %hu] %s:[age %hu]", a->str, agea, b->str, ageb);
   if (agea > ageb && agea - ageb >= OSPF6_LSA_MAXAGEDIFF)
     return 1;
   else if (agea < ageb && ageb - agea >= OSPF6_LSA_MAXAGEDIFF)
@@ -309,8 +261,6 @@ ospf6_lsa_check_recent (struct ospf6_lsa *a, struct ospf6_lsa *b)
 
   /* neither recent */
   recent_reason = "the same instance";
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA: recent: %s == %s", a->str, b->str);
   return 0;
 }
 
@@ -439,297 +389,102 @@ ospf6_lsa_lsd_is_refer_ok (int index1, struct ospf6_lsa_header *lsa_header1,
   return 0;
 }
 
-/* vty function for LSAs */
-void
-ospf6_lsa_show_body_unknown (struct vty *vty,
-                            struct ospf6_lsa_header *lsa_header)
-{
-  vty_out (vty, "    Unknown Type%s", VTY_NEWLINE);
-}
-
-void
-ospf6_lsa_show_body_router (struct vty *vty,
-                           struct ospf6_lsa_header *lsa_header)
-{
-  int lsdnum;
-  char buf[32];
-  struct ospf6_router_lsa *router_lsa;
-  struct ospf6_router_lsd *router_lsd;
-
-  assert (lsa_header);
-  router_lsa = (struct ospf6_router_lsa *)(lsa_header + 1);
-  router_lsd = (struct ospf6_router_lsd *)(router_lsa + 1);
-
-  lsdnum = ospf6_lsa_lsd_num (lsa_header);
-  assert (lsdnum >= 0);
-
-  while (lsdnum --)
-    {
-      vty_out (vty, "    Type: %s Metric: %d%s",
-               ospf6_router_lsd_type_strings[router_lsd->type],
-               ntohs(router_lsd->metric), VTY_NEWLINE);
-      vty_out (vty, "    Interface ID: %d%s",
-               ntohl (router_lsd->interface_id), VTY_NEWLINE);
-      vty_out (vty, "    Neighbor Interface ID: %d%s",
-               ntohl (router_lsd->neighbor_interface_id), VTY_NEWLINE);
-      vty_out (vty, "    Neighbor Router ID: %s%s",
-               inet_ntop (AF_INET, &router_lsd->neighbor_router_id,
-                          buf, sizeof (buf)), VTY_NEWLINE);
-      router_lsd++;
-    }
-}
-
-void
-ospf6_lsa_show_body_network (struct vty *vty,
-                            struct ospf6_lsa_header *lsa_header)
-{
-  int lsdnum;
-  struct ospf6_network_lsa *lsa;
-  u_int32_t *router_id;
-  char buf[128];
-
-  assert (lsa_header);
-  lsa = (struct ospf6_network_lsa *) (lsa_header + 1);
-  router_id = (u_int32_t *)(lsa + 1);
-
-  ospf6_opt_capability_string (lsa->options, buf, sizeof (buf));
-  vty_out (vty, "     Options: %s%s", buf, VTY_NEWLINE);
-
-  lsdnum = ospf6_lsa_lsd_num (lsa_header);
-  assert (lsdnum >= 0);
-
-  while (lsdnum--)
-    {
-      inet_ntop (AF_INET, router_id, buf, sizeof (buf));
-      vty_out (vty, "     Attached Router: %s%s", buf, VTY_NEWLINE);
-      router_id ++;
-    }
-}
-
-void
-ospf6_lsa_show_body_inter_prefix (struct vty *vty,
-                                 struct ospf6_lsa_header *lsa_header)
-{
-  struct ospf6_lsa_inter_area_prefix_lsa *inter_prefix_lsa;
-  struct ospf6_prefix *prefix;
-  struct in6_addr in6;
-  char buf[128];
-
-  assert (lsa_header);
-  inter_prefix_lsa = (struct ospf6_lsa_inter_area_prefix_lsa *) (lsa_header + 1);
-
-  /* Metric */
-  vty_out (vty, "     Metric: %d%s", ntohl (inter_prefix_lsa->metric),
-           VTY_NEWLINE);
-
-  prefix = (struct ospf6_prefix *)(inter_prefix_lsa + 1);
-
-  /* Prefix Options */
-  ospf6_prefix_options_str (prefix, buf, sizeof (buf));
-  vty_out (vty, "     Prefix Options: %s%s", buf, VTY_NEWLINE);
-
-  /* Address Prefix */
-  ospf6_prefix_in6_addr (prefix, &in6);
-  inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
-  vty_out (vty, "     Prefix: %s/%d%s",
-           buf, prefix->prefix_length, VTY_NEWLINE);
-}
-
-void
-ospf6_lsa_show_body_inter_router (struct vty *vty,
-                                 struct ospf6_lsa_header *lsa_header)
-{
-  struct ospf6_lsa_inter_area_router_lsa *inter_router_lsa;
-  char buf[128];
-
-  assert (lsa_header);
-  inter_router_lsa = (struct ospf6_lsa_inter_area_router_lsa *) (lsa_header + 1);
-
-  /* Options */
-  ospf6_opt_capability_string (inter_router_lsa->options, buf, sizeof (buf));
-  vty_out (vty, "     Options: %s%s", buf, VTY_NEWLINE);
-
-  /* Metric */
-  vty_out (vty, "     Metric: %d%s", ntohl (inter_router_lsa->metric),
-           VTY_NEWLINE);
-
-  /* Destination Router ID */
-  inet_ntop (AF_INET, &inter_router_lsa->router_id, buf, sizeof (buf));
-  vty_out (vty, "     Destination Router ID: %s", buf);
-}
-
-void
-ospf6_lsa_show_body_as_external (struct vty *vty,
-                                struct ospf6_lsa_header *lsa_header)
-{
-  struct ospf6_as_external_lsa *elsa;
-  char buf[128], *ptr;
-  struct in6_addr in6;
-
-  assert (lsa_header);
-  elsa = (struct ospf6_as_external_lsa *)(lsa_header + 1);
-
-  /* bits */
-  snprintf (buf, sizeof (buf), "%s%s%s",
-            (ASE_LSA_ISSET (elsa, ASE_LSA_BIT_E) ? "E" : "-"),
-            (ASE_LSA_ISSET (elsa, ASE_LSA_BIT_F) ? "F" : "-"),
-            (ASE_LSA_ISSET (elsa, ASE_LSA_BIT_T) ? "T" : "-"));
-
-  vty_out (vty, "     Bits: %s%s", buf, VTY_NEWLINE);
-  vty_out (vty, "     Metric: %5hu%s", ntohs (elsa->ase_metric), VTY_NEWLINE);
-
-  ospf6_prefix_options_str (&elsa->ospf6_prefix, buf, sizeof (buf));
-  vty_out (vty, "     Prefix Options: %s%s", buf, VTY_NEWLINE);
-
-  vty_out (vty, "     Referenced LSType: %d%s",
-           ntohs (elsa->ospf6_prefix.prefix_refer_lstype), VTY_NEWLINE);
-
-  ospf6_prefix_in6_addr (&elsa->ospf6_prefix, &in6);
-  inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
-  vty_out (vty, "     Prefix: %s/%d%s",
-           buf, elsa->ospf6_prefix.prefix_length, VTY_NEWLINE);
-
-  /* Forwarding-Address */
-  if (ASE_LSA_ISSET (elsa, ASE_LSA_BIT_F))
-    {
-      ptr = ((char *)(elsa + 1))
-            + OSPF6_PREFIX_SPACE (elsa->ospf6_prefix.prefix_length);
-      inet_ntop (AF_INET6, (struct in6_addr *) ptr, buf, sizeof (buf));
-      vty_out (vty, "     Forwarding-Address: %s%s", buf, VTY_NEWLINE);
-    }
-}
-
-void
-ospf6_lsa_show_body_group_membership (struct vty *vty,
-                                     struct ospf6_lsa_header *lsa_header)
-{
-}
-
-void
-ospf6_lsa_show_body_type_7 (struct vty *vty,
-                           struct ospf6_lsa_header *lsa_header)
-{
-}
-
-void
-ospf6_lsa_show_body_link (struct vty *vty,
-                         struct ospf6_lsa_header *lsa_header)
-{
-  struct ospf6_link_lsa *llsap;
-  int prefixnum;
-  struct ospf6_prefix *prefix;
-  char buf[128];
-  struct in6_addr in6;
-
-  assert (lsa_header);
-
-  llsap = (struct ospf6_link_lsa *) (lsa_header + 1);
-  prefixnum = ntohl (llsap->llsa_prefix_num);
-
-  inet_ntop (AF_INET6, (void *)&llsap->llsa_linklocal, buf, sizeof (buf));
-  vty_out (vty, "     LinkLocal Address: %s%s", buf, VTY_NEWLINE);
-  vty_out (vty, "     Number of Prefix: %d%s", prefixnum, VTY_NEWLINE);
-
-  prefix = (struct ospf6_prefix *)(llsap + 1);
-
-  while (prefixnum--)
-    {
-      ospf6_prefix_options_str (prefix, buf, sizeof (buf));
-      vty_out (vty, "     Prefix Options: %s%s", buf, VTY_NEWLINE);
-
-      ospf6_prefix_in6_addr (prefix, &in6);
-      inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
-      vty_out (vty, "     Prefix: %s/%d%s",
-               buf, prefix->prefix_length, VTY_NEWLINE);
-
-      prefix = OSPF6_NEXT_PREFIX (prefix);
-    }
-}
-
-void
-ospf6_lsa_show_body_intra_prefix (struct vty *vty,
-                                 struct ospf6_lsa_header *lsa_header)
-{
-  struct ospf6_intra_area_prefix_lsa *iap_lsa;
-  struct ospf6_prefix *prefix;
-  unsigned short prefixnum;
-  char buf[128];
-  struct in6_addr in6;
-
-  assert (lsa_header);
-  iap_lsa = (struct ospf6_intra_area_prefix_lsa *) (lsa_header + 1);
-  prefixnum = ntohs (iap_lsa->prefix_number);
-
-  vty_out (vty, "     Number of Prefix: %d%s", prefixnum, VTY_NEWLINE);
-  vty_out (vty, "     Referenced LS Type: %s%s",
-           ospf6_lsa_type_string (iap_lsa->refer_lstype),
-           VTY_NEWLINE);
-  vty_out (vty, "     Referenced LS ID: %d%s",
-           ntohl (iap_lsa->refer_lsid), VTY_NEWLINE);
-  inet_ntop (AF_INET, &iap_lsa->refer_advrtr, buf, sizeof (buf));
-  vty_out (vty, "     Referenced Advertising Router: %s%s",
-           buf, VTY_NEWLINE);
-
-  prefix = (struct ospf6_prefix *)(iap_lsa + 1);
-  while (prefixnum--)
-    {
-      ospf6_prefix_options_str (prefix, buf, sizeof (buf));
-      vty_out (vty, "     Prefix Options: %s%s", buf, VTY_NEWLINE);
-
-      ospf6_prefix_in6_addr (prefix, &in6);
-      inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
-      vty_out (vty, "     Prefix: %s/%d%s",
-               buf, prefix->prefix_length, VTY_NEWLINE);
-
-      prefix = OSPF6_NEXT_PREFIX (prefix);
-    }
-}
-
-void
-(*ospf6_lsa_show_body[OSPF6_LSA_TYPE_MAX]) (struct vty *,
-                                           struct ospf6_lsa_header *) =
-{
-  ospf6_lsa_show_body_unknown,
-  ospf6_lsa_show_body_router,
-  ospf6_lsa_show_body_network,
-  ospf6_lsa_show_body_inter_prefix,
-  ospf6_lsa_show_body_inter_router,
-  ospf6_lsa_show_body_as_external,
-  ospf6_lsa_show_body_group_membership,
-  ospf6_lsa_show_body_type_7,
-  ospf6_lsa_show_body_link,
-  ospf6_lsa_show_body_intra_prefix,
-};
-
 void
 ospf6_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
 {
-  struct ospf6_lsa_header *lsa_header;
-  char advrtr[64];
+  char adv_router[64], id[64], type[32];
 
   assert (lsa);
-  lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-  assert (lsa_header);
+  assert (lsa->header);
 
-  inet_ntop (AF_INET, &lsa_header->advrtr, advrtr, sizeof (advrtr));
-
-  vty_out (vty, "Age: %4hu Type: %s%s", ospf6_lsa_age_current (lsa),
-           ospf6_lsa_type_string (lsa_header->type), VTY_NEWLINE);
-  vty_out (vty, "Link State ID: %d%s", ntohl (lsa_header->ls_id),
-           VTY_NEWLINE);
-  vty_out (vty, "Advertising Router: %s%s", advrtr, VTY_NEWLINE);
-  vty_out (vty, "LS Sequence Number: %#x%s", ntohl (lsa_header->seqnum),
-           VTY_NEWLINE);
-  vty_out (vty, "CheckSum: %#hx Length: %hu%s", ntohs (lsa_header->checksum),
-           ntohs (lsa_header->length), VTY_NEWLINE);
-
-  if (OSPF6_LSA_TYPESW_ISKNOWN (lsa_header->type))
-    (*ospf6_lsa_show_body [OSPF6_LSA_TYPESW (lsa_header->type)])
-       (vty, lsa_header);
-  else
-    ospf6_lsa_show_body_unknown (vty, lsa_header);
+  ospf6_lsa_type_string (lsa->header->type, type, sizeof (type));
+  inet_ntop (AF_INET, &lsa->header->id, id, sizeof (id));
+  inet_ntop (AF_INET, &lsa->header->adv_router,
+             adv_router, sizeof (adv_router));
 
   vty_out (vty, "%s", VTY_NEWLINE);
+  vty_out (vty, "Age: %4hu Type: %s%s", ospf6_lsa_age_current (lsa),
+           type, VTY_NEWLINE);
+  vty_out (vty, "Link State ID: %s%s", id, VTY_NEWLINE);
+  vty_out (vty, "Advertising Router: %s%s", adv_router, VTY_NEWLINE);
+  vty_out (vty, "LS Sequence Number: %#lx%s", (u_long)ntohl (lsa->header->seqnum),
+           VTY_NEWLINE);
+  vty_out (vty, "CheckSum: %#hx Length: %hu%s", ntohs (lsa->header->checksum),
+           ntohs (lsa->header->length), VTY_NEWLINE);
+
+  {
+    struct ospf6_lsa_slot *slot;
+    slot = ospf6_lsa_slot_get (lsa->header->type);
+    if (slot)
+      {
+        (*slot->func_show) (vty, lsa);
+        vty_out (vty, "%s", VTY_NEWLINE);
+        return;
+      }
+  }
+
+  vty_out (vty, "%sUnknown LSA type ...%s", VTY_NEWLINE, VTY_NEWLINE);
+}
+
+void
+ospf6_lsa_show_summary_header (struct vty *vty)
+{
+  vty_out (vty, "%-12s %-15s %-15s %4s %8s %4s %4s %-8s%s",
+           "Type", "LSId", "AdvRouter", "Age", "SeqNum",
+           "Cksm", "Len", "Duration", VTY_NEWLINE);
+}
+
+void
+ospf6_lsa_show_summary (struct vty *vty, struct ospf6_lsa *lsa)
+{
+  char adv_router[16], id[16], type[16];
+  struct timeval now, res;
+  char duration[16];
+
+  assert (lsa);
+  assert (lsa->header);
+
+  memset (type, 0, sizeof (type));
+  ospf6_lsa_type_string (lsa->header->type, type, 13);
+  inet_ntop (AF_INET, &lsa->header->id, id, sizeof (id));
+  inet_ntop (AF_INET, &lsa->header->adv_router, adv_router,
+             sizeof (adv_router));
+
+  gettimeofday (&now, NULL);
+  ospf6_timeval_sub (&now, &lsa->installed, &res);
+  ospf6_timeval_string_summary (&res, duration, sizeof (duration));
+
+  vty_out (vty, "%-12s %-15s %-15s %4hu %8lx %04hx %4hu %8s%s",
+           type, id, adv_router, ospf6_lsa_age_current (lsa),
+           (u_long) ntohl (lsa->header->seqnum),
+           ntohs (lsa->header->checksum), ntohs (lsa->header->length),
+           duration, VTY_NEWLINE);
+}
+
+void
+ospf6_lsa_show_dump (struct vty *vty, struct ospf6_lsa *lsa)
+{
+  u_char *start, *end, *current;
+  char byte[4];
+
+  start = (char *) lsa->header;
+  end = (char *) lsa->header + ntohs (lsa->header->length);
+
+  vty_out (vty, "%s", VTY_NEWLINE);
+  vty_out (vty, "%s:%s", lsa->str, VTY_NEWLINE);
+
+  for (current = start; current < end; current ++)
+    {
+      if ((current - start) % 16 == 0)
+        vty_out (vty, "%s        ", VTY_NEWLINE);
+      else if ((current - start) % 4 == 0)
+        vty_out (vty, " ");
+
+      snprintf (byte, sizeof (byte), "%02x", *current);
+      vty_out (vty, "%s", byte);
+    }
+
+  vty_out (vty, "%s%s", VTY_NEWLINE, VTY_NEWLINE);
 }
 
 /* OSPFv3 LSA creation/deletion function */
@@ -737,13 +492,14 @@ ospf6_lsa_show (struct vty *vty, struct ospf6_lsa *lsa)
 /* calculate LS sequence number for my new LSA.
    return value is network byte order */
 static signed long
-ospf6_seqnum_new (u_int16_t type, u_int32_t id, u_int32_t adv_router)
+ospf6_lsa_seqnum_new (u_int16_t type, u_int32_t id, u_int32_t adv_router,
+                      void *scope)
 {
   struct ospf6_lsa *lsa;
   signed long seqnum;
 
   /* get current database copy */
-  lsa = ospf6_lsdb_lookup (type, id, adv_router);
+  lsa = ospf6_lsdb_lookup (type, id, adv_router, scope);
 
   /* if current database copy not found, return InitialSequenceNumber */
   if (!lsa)
@@ -754,6 +510,7 @@ ospf6_seqnum_new (u_int16_t type, u_int32_t id, u_int32_t adv_router)
   return (htonl (seqnum));
 }
 
+#if 0
 static void
 ospf6_lsa_header_set (u_int16_t type, u_int32_t ls_id, u_int32_t advrtr,
                       struct ospf6_lsa_header *lsa_header, int bodysize)
@@ -764,13 +521,14 @@ ospf6_lsa_header_set (u_int16_t type, u_int32_t ls_id, u_int32_t advrtr,
   lsa_header->ls_id = ls_id;
   lsa_header->advrtr = advrtr;
   lsa_header->seqnum =
-    ospf6_seqnum_new (lsa_header->type, lsa_header->ls_id,
-                      lsa_header->advrtr);
+    ospf6_lsa_seqnum_new (lsa_header->type, lsa_header->ls_id,
+                          lsa_header->advrtr);
   lsa_header->length = htons (sizeof (struct ospf6_lsa_header) + bodysize);
 
   /* LSA checksum */
   ospf6_lsa_checksum (lsa_header);
 }
+#endif /*0*/
 
 struct ospf6_lsa *
 ospf6_lsa_create (struct ospf6_lsa_header *source)
@@ -778,7 +536,7 @@ ospf6_lsa_create (struct ospf6_lsa_header *source)
   struct ospf6_lsa *lsa = NULL;
   struct ospf6_lsa_header *lsa_header = NULL;
   u_int16_t lsa_size = 0;
-  char buf[128];
+  char buf_router[16], buf_id[16], typebuf[32];
 
   /* whole length of this LSA */
   lsa_size = ntohs (source->length);
@@ -788,7 +546,7 @@ ospf6_lsa_create (struct ospf6_lsa_header *source)
     XMALLOC (MTYPE_OSPF6_LSA, lsa_size);
   if (! lsa_header)
     {
-      zlog_err ("Lsa: Can't allocate memory for LSA Header");
+      zlog_err ("Can't allocate memory for LSA Header");
       return (struct ospf6_lsa *) NULL;
     }
   memset (lsa_header, 0, lsa_size);
@@ -802,24 +560,27 @@ ospf6_lsa_create (struct ospf6_lsa_header *source)
           XMALLOC (MTYPE_OSPF6_LSA, sizeof (struct ospf6_lsa));
   memset (lsa, 0, sizeof (struct ospf6_lsa));
 
-  /* dump string */
-  snprintf (lsa->str, sizeof (lsa->str), "%s(%s[%lu])",
-            ospf6_lsa_type_string (lsa_header->type),
-            inet_ntop (AF_INET, &lsa_header->advrtr, buf, sizeof (buf)),
-            (unsigned long) ntohl (lsa_header->ls_id));
-
   lsa->lsa_hdr = (struct ospf6_lsa_hdr *) lsa_header;
   lsa->header = (struct ospf6_lsa_header__ *) lsa_header;
 
   lsa->summary = 0; /* this is not LSA summary */
+
+  /* dump string */
+  inet_ntop (AF_INET, &lsa->header->id, buf_id, sizeof (buf_id));
+  inet_ntop (AF_INET, &lsa->header->adv_router, buf_router,
+             sizeof (buf_router));
+  snprintf (lsa->str, sizeof (lsa->str), "[%s ID=%s Adv=%s]",
+            ospf6_lsa_type_string (lsa_header->type, typebuf,
+                                   sizeof (typebuf)),
+            buf_id, buf_router);
 
   /* calculate birth, expire and refresh of this lsa */
   ospf6_lsa_age_set (lsa);
 
 #ifdef DEBUG
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("Lsa: created %s(%#x)", lsa->str, lsa);
-#endif /* DEBUG */
+    zlog_info ("Create: %s (%p/%p)", lsa->str, lsa, lsa->header);
+#endif /*DEBUG*/
 
   return lsa;
 }
@@ -830,7 +591,7 @@ ospf6_lsa_summary_create (struct ospf6_lsa_header__ *source)
   struct ospf6_lsa *lsa = NULL;
   struct ospf6_lsa_header *lsa_header = NULL;
   u_int16_t lsa_size = 0;
-  char buf[128];
+  char buf_router[16], buf_id[16], typebuf[16];
 
   /* LSA summary contains LSA Header only */
   lsa_size = sizeof (struct ospf6_lsa_header);
@@ -849,24 +610,26 @@ ospf6_lsa_summary_create (struct ospf6_lsa_header__ *source)
           XMALLOC (MTYPE_OSPF6_LSA_SUMMARY, sizeof (struct ospf6_lsa));
   memset (lsa, 0, sizeof (struct ospf6_lsa));
 
-  /* dump string */
-  snprintf (lsa->str, sizeof (lsa->str), "%s(%s[%lu])[S]",
-            ospf6_lsa_type_string (lsa_header->type),
-            inet_ntop (AF_INET, &lsa_header->advrtr, buf, sizeof (buf)),
-            (unsigned long) ntohl (lsa_header->ls_id));
-
   lsa->lsa_hdr = (struct ospf6_lsa_hdr *) lsa_header;
   lsa->header = (struct ospf6_lsa_header__ *) lsa_header;
-
   lsa->summary = 1; /* this is LSA summary */
+
+  /* dump string */
+  inet_ntop (AF_INET, &lsa->header->id, buf_id, sizeof (buf_id));
+  inet_ntop (AF_INET, &lsa->header->adv_router, buf_router,
+             sizeof (buf_router));
+  snprintf (lsa->str, sizeof (lsa->str), "[%s Summary ID=%s Adv=%s]",
+            ospf6_lsa_type_string (lsa->header->type, typebuf,
+                                   sizeof (typebuf)),
+            buf_id, buf_router);
 
   /* calculate birth, expire and refresh of this lsa */
   ospf6_lsa_age_set (lsa);
 
 #ifdef DEBUG
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("Lsa: created summary %s(%#x)", lsa->str, lsa);
-#endif /* DEBUG */
+    zlog_info ("Create: %s (%p/%p)", lsa->str, lsa, lsa->header);
+#endif /*DEBUG*/
 
   return lsa;
 }
@@ -889,13 +652,10 @@ ospf6_lsa_delete (struct ospf6_lsa *lsa)
     thread_cancel (lsa->refresh);
   lsa->refresh = (struct thread *) NULL;
 
+#ifdef DEBUG
   if (IS_OSPF6_DUMP_LSA)
-    {
-      if (lsa->summary)
-        zlog_info ("LSA: delete summary %s(%p)", lsa->str, lsa);
-      else
-        zlog_info ("LSA: delete %s(%p)", lsa->str, lsa);
-    }
+      zlog_info ("Delete %s (%p/%p)", lsa->str, lsa, lsa->header);
+#endif /*DEBUG*/
 
   /* do free */
   if (lsa->summary)
@@ -927,6 +687,9 @@ ospf6_lsa_unlock (struct ospf6_lsa *lsa)
     lsa->lock--;
   else
     zlog_warn ("Can't unlock %s: already no lock", lsa->str);
+
+  if (lsa->lock == 0)
+    ospf6_lsa_delete (lsa);
 }
 
 /* check necessity to update LSA:
@@ -939,14 +702,14 @@ ospf6_lsa_is_really_reoriginate (struct ospf6_lsa *new)
 
   /* find previous LSA */
   old = ospf6_lsdb_lookup (new->header->type, new->header->id,
-                           new->header->adv_router);
+                           new->header->adv_router, new->scope);
   if (! old)
     return 1;
 
   /* Check if this is refresh */
-  if (old->refresh == (struct thread *) NULL)
+  if (CHECK_FLAG (old->flag, OSPF6_LSA_FLAG_REFRESH))
     {
-      zlog_warn ("LSA: reoriginate: %s: cause it's refresh", new->str);
+      zlog_warn ("LSA: reoriginate: %s: Refresh", new->str);
       return 1;
     }
 
@@ -961,13 +724,418 @@ ospf6_lsa_is_really_reoriginate (struct ospf6_lsa *new)
   return 0;
 }
 
-/* RFC2740 3.4.3.1 Router-LSA */
 void
-ospf6_lsa_update_router (u_int32_t area_id)
+ospf6_lsa_originate (u_int16_t type, u_int32_t id, u_int32_t adv_router,
+                     char *data, int data_len, void *scope)
+{
+  char buffer[MAXLSASIZE];
+  struct ospf6_lsa_header *lsa_header;
+  struct ospf6_lsa *lsa;
+
+  assert (data_len <= sizeof (buffer) - sizeof (struct ospf6_lsa_header));
+
+  lsa_header = (struct ospf6_lsa_header *) buffer;
+
+  /* Copy LSA Body */
+  memcpy (buffer + sizeof (struct ospf6_lsa_header), data, data_len);
+
+  /* Fill LSA Header */
+  lsa_header->age = 0;
+  lsa_header->type = type;
+  lsa_header->ls_id = id;
+  lsa_header->advrtr = adv_router;
+  lsa_header->seqnum =
+    ospf6_lsa_seqnum_new (lsa_header->type, lsa_header->ls_id,
+                          lsa_header->advrtr, scope);
+  lsa_header->length = htons (sizeof (struct ospf6_lsa_header) + data_len);
+
+  /* LSA checksum */
+  ospf6_lsa_checksum (lsa_header);
+
+  /* create LSA */
+  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
+  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
+                                   OSPF6_LS_REFRESH_TIME);
+  lsa->scope = scope;
+
+  if (ospf6_lsa_is_really_reoriginate (lsa))
+    {
+      ospf6_dbex_remove_from_all_retrans_list (lsa);
+      ospf6_dbex_flood (lsa, NULL);
+      ospf6_lsdb_install (lsa);
+    }
+  else
+    ospf6_lsa_delete (lsa);
+}
+
+
+/* ospf6_lsa expired */
+int
+ospf6_lsa_expire (struct thread *thread)
+{
+  struct ospf6_lsa *lsa;
+  struct ospf6_lsdb *lsdb = NULL;
+
+  lsa = (struct ospf6_lsa *) THREAD_ARG (thread);
+  assert (lsa && lsa->lsa_hdr);
+
+  /* assertion */
+  assert (IS_LSA_MAXAGE (lsa));
+  assert (!lsa->refresh);
+
+  lsa->expire = (struct thread *) NULL;
+
+  /* log */
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA: Expire: %s", lsa->str);
+
+  if (!lsa->summary)
+    {
+      /* reflood lsa */
+      ospf6_dbex_flood (lsa, NULL);
+
+      /* get scoped lsdb, call remove hook */
+      if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (lsa->header->type)))
+        lsdb = ((struct ospf6_interface *) lsa->scope)->lsdb;
+      else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa->header->type)))
+        lsdb = ((struct ospf6_area *) lsa->scope)->lsdb;
+      else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (lsa->header->type)))
+        lsdb = ((struct ospf6 *) lsa->scope)->lsdb;
+      else
+        assert (0);
+
+#if 0
+      if (lsdb->hook)
+        (*lsdb->hook) (lsa, NULL);
+#else /*0*/
+      CALL_REMOVE_HOOK (&database_hook, lsa);
+#endif /*0*/
+
+      /* do not free LSA, and do nothing about lslists.
+         wait event (ospf6_lsdb_check_maxage) */
+    }
+
+  return 0;
+}
+
+int
+ospf6_lsa_refresh (struct thread *thread)
+{
+  struct ospf6_lsa *lsa;
+  struct ospf6_lsa_slot *slot;
+
+  assert (thread);
+  lsa = (struct ospf6_lsa *) THREAD_ARG  (thread);
+  assert (lsa && lsa->lsa_hdr);
+
+  /* this will be used later as flag to decide really originate */
+  lsa->refresh = (struct thread *) NULL;
+  SET_FLAG (lsa->flag, OSPF6_LSA_FLAG_REFRESH);
+
+  /* log */
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA Refresh: %s", lsa->str);
+
+  slot = ospf6_lsa_slot_get (lsa->header->type);
+  if (slot)
+    {
+      zlog_info ("LSA Refresh: %s", slot->name);
+      (*slot->func_refresh) (lsa);
+      return 0;
+    }
+
+  zlog_warn ("Can't Refresh LSA: Unknown type: %#x",
+             ntohs (lsa->header->type));
+  return 1;
+}
+
+
+
+/* enhanced Fletcher checksum algorithm, RFC1008 7.2 */
+#define MODX                4102
+#define LSA_CHECKSUM_OFFSET   15
+
+unsigned short
+ospf6_lsa_checksum (struct ospf6_lsa_header *lsa_header)
+{
+  u_char *sp, *ep, *p, *q;
+  int c0 = 0, c1 = 0;
+  int x, y;
+  u_int16_t length;
+
+  lsa_header->checksum = 0;
+  length = ntohs (lsa_header->length) - 2;
+  sp = (char *) &lsa_header->type;
+
+  for (ep = sp + length; sp < ep; sp = q)
+    {
+      q = sp + MODX;
+      if (q > ep)
+        q = ep;
+      for (p = sp; p < q; p++)
+        {
+          c0 += *p;
+          c1 += c0;
+        }
+      c0 %= 255;
+      c1 %= 255;
+    }
+
+  /* r = (c1 << 8) + c0; */
+  x = ((length - LSA_CHECKSUM_OFFSET) * c0 - c1) % 255;
+  if (x <= 0)
+    x += 255;
+  y = 510 - c0 - x;
+  if (y > 255)
+    y -= 255;
+
+  lsa_header->checksum = htons ((x << 8) + y);
+
+  return (lsa_header->checksum);
+}
+
+int
+ospf6_lsa_is_known_type (struct ospf6_lsa_header *lsa_header)
+{
+  struct ospf6_lsa_slot *slot;
+
+  slot = ospf6_lsa_slot_get (lsa_header->type);
+  if (slot)
+    return 1;
+  return 0;
+}
+
+struct ospf6_lsa_slot *slot_head = NULL;
+
+struct ospf6_lsa_slot *
+ospf6_lsa_slot_get (u_int16_t type)
+{
+  struct ospf6_lsa_slot *slot;
+
+  for (slot = slot_head; slot; slot = slot->next)
+    {
+      if (slot->type == type)
+        return slot;
+    }
+
+  return NULL;
+}
+
+int
+ospf6_lsa_slot_register (struct ospf6_lsa_slot *src)
+{
+  struct ospf6_lsa_slot *new, *slot;
+
+  slot = ospf6_lsa_slot_get (src->type);
+  if (slot)
+    {
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("LSA: Slot register: already exists: %#x %s",
+                   slot->type, slot->name);
+      return -1;
+    }
+
+  new = (struct ospf6_lsa_slot *)
+    XMALLOC (MTYPE_OSPF6_LSA, sizeof (struct ospf6_lsa_slot));
+  if (! new)
+    {
+      zlog_err ("Can't allocate memory for LSA slot: %s", strerror (errno));
+      return -1;
+    }
+  memset (new, 0, sizeof (struct ospf6_lsa_slot));
+  memcpy (new, src, sizeof (struct ospf6_lsa_slot));
+
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA: Slot register: %#x %s", slot->type, slot->name);
+
+  if (slot_head == NULL)
+    {
+      new->prev = NULL;
+      new->next = NULL;
+      slot_head = new;
+      return 0;
+    }
+
+  slot = slot_head;
+  while (slot->next)
+    slot = slot->next;
+
+  slot->next = new;
+  new->prev = slot;
+
+  return 0;
+}
+
+int
+ospf6_lsa_slot_unregister (u_int16_t type)
+{
+  struct ospf6_lsa_slot *slot;
+
+  slot = ospf6_lsa_slot_get (type);
+  if (slot == NULL)
+    {
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("Registering LSA slot: no such slot: %#x", type);
+      return -1;
+    }
+
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("Unregistering LSA Slot: %#x %s", slot->type, slot->name);
+
+  if (slot->prev)
+    slot->prev->next = slot->next;
+  if (slot->next)
+    slot->next->prev = slot->prev;
+
+  if (slot_head == slot)
+    slot_head = slot->next;
+
+  XFREE (MTYPE_OSPF6_LSA, slot);
+  return 0;
+}
+
+char *
+ospf6_lsa_type_string (u_int16_t type, char *buf, int bufsize)
+{
+  struct ospf6_lsa_slot *slot;
+
+  slot = ospf6_lsa_slot_get (type);
+  if (slot)
+    snprintf (buf, bufsize, "%s", slot->name);
+  else
+    snprintf (buf, bufsize, "Type=0x%04x", ntohs (type));
+
+  return buf;
+}
+
+
+/*******************/
+/* LSA Origination */
+/*******************/
+
+#define CONTINUE_IF_ADDRESS_LINKLOCAL(addr)\
+  if (IN6_IS_ADDR_LINKLOCAL (&(addr)->u.prefix6))\
+    {\
+      char buf[64];\
+      prefix2str (addr, buf, sizeof (buf));\
+      if (IS_OSPF6_DUMP_LSA)\
+        zlog_info ("  Filter out Linklocal: %s", buf);\
+      continue;\
+    }
+
+#define CONTINUE_IF_ADDRESS_UNSPECIFIED(addr)\
+  if (IN6_IS_ADDR_UNSPECIFIED (&(addr)->u.prefix6))\
+    {\
+      char buf[64];\
+      prefix2str (addr, buf, sizeof (buf));\
+      if (IS_OSPF6_DUMP_LSA)\
+        zlog_info ("  Filter out Unspecified: %s", buf);\
+      continue;\
+    }
+
+#define CONTINUE_IF_ADDRESS_LOOPBACK(addr)\
+  if (IN6_IS_ADDR_LOOPBACK (&(addr)->u.prefix6))\
+    {\
+      char buf[64];\
+      prefix2str (addr, buf, sizeof (buf));\
+      if (IS_OSPF6_DUMP_LSA)\
+        zlog_info ("  Filter out Loopback: %s", buf);\
+      continue;\
+    }
+
+#define CONTINUE_IF_ADDRESS_V4COMPAT(addr)\
+  if (IN6_IS_ADDR_V4COMPAT (&(addr)->u.prefix6))\
+    {\
+      char buf[64];\
+      prefix2str (addr, buf, sizeof (buf));\
+      if (IS_OSPF6_DUMP_LSA)\
+        zlog_info ("  Filter out V4Compat: %s", buf);\
+      continue;\
+    }
+
+#define CONTINUE_IF_ADDRESS_V4MAPPED(addr)\
+  if (IN6_IS_ADDR_V4MAPPED (&(addr)->u.prefix6))\
+    {\
+      char buf[64];\
+      prefix2str (addr, buf, sizeof (buf));\
+      if (IS_OSPF6_DUMP_LSA)\
+        zlog_info ("  Filter out V4Mapped: %s", buf);\
+      continue;\
+    }
+
+/******************************/
+/* RFC2740 3.4.3.1 Router-LSA */
+/******************************/
+
+char *
+ospf6_lsa_router_bits_string (u_char router_bits, char *buf, int size)
+{
+  char w, v, e, b;
+
+  w = (router_bits & OSPF6_ROUTER_LSA_BIT_W ? 'W' : '-');
+  v = (router_bits & OSPF6_ROUTER_LSA_BIT_V ? 'V' : '-');
+  e = (router_bits & OSPF6_ROUTER_LSA_BIT_E ? 'E' : '-');
+  b = (router_bits & OSPF6_ROUTER_LSA_BIT_B ? 'B' : '-');
+  snprintf (buf, size, "----%c%c%c%c", w, v, e, b);
+  return buf;
+}
+
+int
+ospf6_lsa_router_show (struct vty *vty, struct ospf6_lsa *lsa)
+{
+  char *start, *end, *current;
+  char buf[32], name[32], bits[32], options[32];
+  struct ospf6_router_lsa *router_lsa;
+  struct ospf6_router_lsd *lsdesc;
+
+  assert (lsa->header);
+
+  router_lsa = (struct ospf6_router_lsa *)
+    ((char *) lsa->header + sizeof (struct ospf6_lsa_header));
+
+  ospf6_lsa_router_bits_string (router_lsa->bits, bits, sizeof (bits));
+  ospf6_options_string (router_lsa->options, options, sizeof (options));
+  vty_out (vty, "    Bits: %s Options: %s%s", bits, options, VTY_NEWLINE);
+
+  start = (char *) router_lsa + sizeof (struct ospf6_router_lsa);
+  end = (char *) lsa->header + ntohs (lsa->header->length);
+  for (current = start; current + sizeof (struct ospf6_router_lsd) <= end;
+       current += sizeof (struct ospf6_router_lsd))
+    {
+      lsdesc = (struct ospf6_router_lsd *) current;
+
+      if (lsdesc->type == OSPF6_ROUTER_LSD_TYPE_POINTTOPOINT)
+        snprintf (name, sizeof (name), "Point-To-Point");
+      else if (lsdesc->type == OSPF6_ROUTER_LSD_TYPE_TRANSIT_NETWORK)
+        snprintf (name, sizeof (name), "Transit-Network");
+      else if (lsdesc->type == OSPF6_ROUTER_LSD_TYPE_STUB_NETWORK)
+        snprintf (name, sizeof (name), "Stub-Network");
+      else if (lsdesc->type == OSPF6_ROUTER_LSD_TYPE_VIRTUAL_LINK)
+        snprintf (name, sizeof (name), "Virtual-Link");
+      else
+        snprintf (name, sizeof (name), "Unknown (%#x)", lsdesc->type);
+
+      vty_out (vty, "    Type: %s Metric: %d%s",
+               name, ntohs (lsdesc->metric), VTY_NEWLINE);
+      vty_out (vty, "    Interface ID: %s%s",
+               inet_ntop (AF_INET, &lsdesc->interface_id,
+                          buf, sizeof (buf)), VTY_NEWLINE);
+      vty_out (vty, "    Neighbor Interface ID: %s%s",
+               inet_ntop (AF_INET, &lsdesc->neighbor_interface_id,
+                          buf, sizeof (buf)), VTY_NEWLINE);
+      vty_out (vty, "    Neighbor Router ID: %s%s",
+               inet_ntop (AF_INET, &lsdesc->neighbor_router_id,
+                          buf, sizeof (buf)), VTY_NEWLINE);
+    }
+  return 0;
+}
+
+void
+ospf6_lsa_router_update (u_int32_t area_id)
 {
   char buffer [MAXLSASIZE];
   u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
+  struct ospf6_lsa *old;
   struct ospf6_area *o6a;
   int count;
 
@@ -981,21 +1149,22 @@ ospf6_lsa_update_router (u_int32_t area_id)
   if (! o6a)
     {
       inet_ntop (AF_INET, &area_id, buffer, sizeof (buffer));
-      zlog_warn ("LSA: Update Router-LSA: No such area: %s", buffer);
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_warn ("Update Router-LSA: No such area: %s", buffer);
       return;
     }
 
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("Lsa: Update Router-LSA for %s", o6a->str);
+    zlog_info ("Update Router-LSA: for Area %s", o6a->str);
 
   /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
-                                htonl (0), o6a->ospf6->router_id);
+  /* xxx, there may be multiple Router-LSAs */
+  old = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
+                           htonl (0), o6a->ospf6->router_id, o6a);
 
   size = sizeof (struct ospf6_router_lsa);
   memset (buffer, 0, sizeof (buffer));
-  router_lsa = (struct ospf6_router_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
+  router_lsa = (struct ospf6_router_lsa *) buffer;
 
   OSPF6_OPT_CLEAR_ALL (router_lsa->options);
   OSPF6_OPT_SET (router_lsa->options, OSPF6_OPT_V6);
@@ -1068,8 +1237,7 @@ ospf6_lsa_update_router (u_int32_t area_id)
           if (o6i->state != IFS_DR)
             {
               o6n = ospf6_neighbor_lookup (o6i->dr, o6i); /* find DR */
-              assert (o6n);
-              if (o6n->state != NBS_FULL)
+              if (o6n == NULL || o6n->state != NBS_FULL)
                 continue;
             }
           else
@@ -1106,69 +1274,175 @@ ospf6_lsa_update_router (u_int32_t area_id)
         /* xxx */
     }
 
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_ROUTER), htonl (0),
-                        o6a->ospf6->router_id,
-                        (struct ospf6_lsa_header *)buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) o6a;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
-  else
-    ospf6_lsa_delete (lsa);
+  ospf6_lsa_originate (htons (OSPF6_LSA_TYPE_ROUTER),
+                       htonl (0), o6a->ospf6->router_id,
+                       (char *) router_lsa, size, o6a);
 }
 
-/* RFC2740 3.4.3.2 Network-LSA */
+int
+ospf6_lsa_router_hook_neighbor (void *neighbor)
+{
+  struct ospf6_neighbor *o6n = neighbor;
+  if (o6n->ospf6_interface->area)
+    ospf6_lsa_router_update (o6n->ospf6_interface->area->area_id);
+  return 0;
+}
+
+int
+ospf6_lsa_router_hook_interface (void *interface)
+{
+  struct ospf6_interface *o6i = interface;
+  if (o6i->area)
+    ospf6_lsa_router_update (o6i->area->area_id);
+  return 0;
+}
+
+int
+ospf6_lsa_router_hook_area (void *area)
+{
+  struct ospf6_area *o6a = area;
+  ospf6_lsa_router_update (o6a->area_id);
+  return 0;
+}
+
+int
+ospf6_lsa_router_hook_top (void *ospf6)
+{
+  struct ospf6 *o6 = ospf6;
+  struct ospf6_area *o6a;
+  listnode node;
+
+  for (node = listhead (o6->area_list); node; nextnode (node))
+    {
+      o6a = getdata (node);
+      ospf6_lsa_router_update (o6a->area_id);
+    }
+  return 0;
+}
+
+int
+ospf6_lsa_router_refresh (void *old)
+{
+  struct ospf6_lsa *lsa = old;
+  struct ospf6_area *o6a;
+
+  o6a = lsa->scope;
+  ospf6_lsa_router_update (o6a->area_id);
+  return 0;
+}
+
 void
-ospf6_lsa_update_network (char *ifname)
+ospf6_lsa_slot_register_router ()
+{
+  struct ospf6_lsa_slot slot;
+  struct ospf6_hook hook;
+
+  memset (&slot, 0, sizeof (struct ospf6_lsa_slot));
+  slot.type              = htons (OSPF6_LSA_TYPE_ROUTER);
+  slot.name              = "Router";
+  slot.func_show         = ospf6_lsa_router_show;
+  slot.func_refresh      = ospf6_lsa_router_refresh;
+  ospf6_lsa_slot_register (&slot);
+
+  ospf6_lsdb_hook[OSPF6_LSA_TYPE_ROUTER & OSPF6_LSTYPE_CODE_MASK].hook = 
+    ospf6_spf_database_hook;
+
+  memset (&hook, 0, sizeof (hook));
+  hook.name = "OriginateRouter";
+  hook.hook_change  = ospf6_lsa_router_hook_neighbor;
+  ospf6_hook_register (&hook, &neighbor_hook);
+
+  memset (&hook, 0, sizeof (hook));
+  hook.name = "OriginateRouter";
+  hook.hook_change = ospf6_lsa_router_hook_interface;
+  ospf6_hook_register (&hook, &interface_hook);
+
+  memset (&hook, 0, sizeof (hook));
+  hook.name = "OriginateRouter";
+  hook.hook_change      = ospf6_lsa_router_hook_area;
+  ospf6_hook_register (&hook, &area_hook);
+
+  memset (&hook, 0, sizeof (hook));
+  hook.name = "OriginateRouter";
+  hook.hook_change       = ospf6_lsa_router_hook_top;
+  ospf6_hook_register (&hook, &top_hook);
+}
+
+/*******************************/
+/* RFC2740 3.4.3.2 Network-LSA */
+/*******************************/
+
+int
+ospf6_lsa_network_show (struct vty *vty, struct ospf6_lsa *lsa)
+{
+  char *start, *end, *current;
+  struct ospf6_network_lsa *network_lsa;
+  u_int32_t *router_id;
+  char buf[128], options[32];
+
+  assert (lsa->header);
+  network_lsa = (struct ospf6_network_lsa *) (lsa->header + 1);
+  router_id = (u_int32_t *)(network_lsa + 1);
+
+  ospf6_options_string (network_lsa->options, options, sizeof (options));
+  vty_out (vty, "     Options: %s%s", options, VTY_NEWLINE);
+
+  start = (char *) network_lsa + sizeof (struct ospf6_network_lsa);
+  end = (char *) lsa->header + ntohs (lsa->header->length);
+  for (current = start; current + sizeof (u_int32_t) <= end;
+       current += sizeof (u_int32_t))
+    {
+      router_id = (u_int32_t *) current;
+      inet_ntop (AF_INET, router_id, buf, sizeof (buf));
+      vty_out (vty, "     Attached Router: %s%s", buf, VTY_NEWLINE);
+    }
+  return 0;
+}
+
+void
+ospf6_lsa_network_update (char *ifname)
 {
   char buffer [MAXLSASIZE];
   u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
+  struct ospf6_lsa *old;
   struct interface *ifp;
   struct ospf6_interface *o6i;
   int count;
 
-  struct ospf6_network_lsa *nlsa;
-  listnode i;
+  struct ospf6_network_lsa *network_lsa;
   struct ospf6_neighbor *o6n;
   u_int32_t *router_id;
+  listnode node;
 
   ifp = if_lookup_by_name (ifname);
   if (! ifp)
     {
-      zlog_warn ("LSA: Update Network: No such Interface: %s", ifname);
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_warn ("Update Network: No such Interface: %s", ifname);
       return;
     }
+
   o6i = (struct ospf6_interface *) ifp->info;
-  if (! o6i)
+  if (! o6i || ! o6i->area)
     {
-      zlog_warn ("LSA: Update Network: Interface not enabled: %s", ifname);
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_warn ("Update Network: Interface not enabled: %s", ifname);
       return;
     }
 
   /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_NETWORK),
-                                htonl (o6i->if_id),
-                                o6i->area->ospf6->router_id);
+  old = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_NETWORK),
+                           htonl (o6i->if_id),
+                           o6i->area->ospf6->router_id, o6i->area);
 
   /* Don't originate Network-LSA if not DR */
   if (o6i->state != IFS_DR)
     {
       if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Network: Interface %s is not DR",
+        zlog_info ("Update Network: Interface %s is not DR",
                    o6i->interface->name);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
+      if (old)
+        ospf6_lsa_premature_aging (old);
       return;
     }
 
@@ -1178,34 +1452,33 @@ ospf6_lsa_update_network (char *ifname)
   if (count == 0)
     {
       if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Network: Interface %s is Stub",
+        zlog_info ("Update Network: Interface %s is Stub",
                    o6i->interface->name);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
+      if (old)
+        ospf6_lsa_premature_aging (old);
       return;
     }
 
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Update Network: Interface %s", o6i->interface->name);
+    zlog_info ("Update Network: Interface %s", o6i->interface->name);
 
   /* prepare buffer */
-  size = sizeof (struct ospf6_network_lsa);
   memset (buffer, 0, sizeof (buffer));
-  nlsa = (struct ospf6_network_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
-  router_id = (u_int32_t *)(nlsa + 1);
+  size = sizeof (struct ospf6_network_lsa);
+  network_lsa = (struct ospf6_network_lsa *) buffer;
+  router_id = (u_int32_t *)(network_lsa + 1);
 
   /* set fields of myself */
   *router_id++ = o6i->area->ospf6->router_id;
   size += sizeof (u_int32_t);
-  nlsa->options[0] |= o6i->area->options[0];
-  nlsa->options[1] |= o6i->area->options[1];
-  nlsa->options[2] |= o6i->area->options[2];
+  network_lsa->options[0] |= o6i->area->options[0];
+  network_lsa->options[1] |= o6i->area->options[1];
+  network_lsa->options[2] |= o6i->area->options[2];
 
   /* Walk through neighbors */
-  for (i = listhead (o6i->neighbor_list); i; nextnode (i))
+  for (node = listhead (o6i->neighbor_list); node; nextnode (node))
     {
-      o6n = (struct ospf6_neighbor *) getdata (i);
+      o6n = (struct ospf6_neighbor *) getdata (node);
 
       if (o6n->state != NBS_FULL)
         continue;
@@ -1215,1009 +1488,395 @@ ospf6_lsa_update_network (char *ifname)
       size += sizeof (u_int32_t);
 
       /* options field is logical OR */
-      nlsa->options[0] |= o6n->options[0];
-      nlsa->options[1] |= o6n->options[1];
-      nlsa->options[2] |= o6n->options[2];
+      network_lsa->options[0] |= o6n->options[0];
+      network_lsa->options[1] |= o6n->options[1];
+      network_lsa->options[2] |= o6n->options[2];
     }
 
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_NETWORK), htonl (o6i->if_id),
-                        o6i->area->ospf6->router_id,
-                        (struct ospf6_lsa_header *) buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) o6i->area;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
-  else
-    ospf6_lsa_delete (lsa);
+  ospf6_lsa_originate (htons (OSPF6_LSA_TYPE_NETWORK),
+                       htonl (o6i->if_id), o6i->area->ospf6->router_id,
+                       (char *) network_lsa, size, o6i->area);
 }
 
-/* RFC2740 3.4.3.5 AS-External-LSA */
-void
-ospf6_lsa_update_as_external (u_int32_t lsid)
+int
+ospf6_lsa_network_hook_neighbor (void *neighbor)
 {
-  char buffer [MAXLSASIZE];
-  u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
-
-  struct ospf6_as_external_lsa *elsa;
-  struct route_node *rn, *target;
-  struct ospf6_redistribute_info *info = NULL;
-  char *p;
-
-  /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
-                                ntohl (lsid), ospf6->router_id);
-
-  /* find corresponding route node */
-  target = NULL;
-  for (rn = route_top (ospf6->external_table); rn; rn = route_next (rn))
-    {
-      info = (struct ospf6_redistribute_info *) rn->info;
-      if (info && info->id == lsid)
-        target = rn;
-    }
-
-  if (! target)
-    {
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA: Don't create AS-External-LSA for ID %d: No entry",
-                   lsid);
-
-      if (prev_lsa)
-        {
-          zlog_info ("LSA: Delete old Self-originated AS-External-LSA");
-          ospf6_lsa_premature_aging (prev_lsa);
-        }
-      return;
-    }
-
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Update AS-External: ID:%d", lsid);
-
-  /* prepare buffer */
-  size = sizeof (struct ospf6_as_external_lsa);
-  memset (buffer, 0, sizeof (buffer));
-  elsa = (struct ospf6_as_external_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
-  p = (char *) (elsa + 1);
-
-  info = (struct ospf6_redistribute_info *) target->info;
-  if (info->metric_type == 2)
-    ASE_LSA_SET (elsa, ASE_LSA_BIT_E);   /* type2 */
-  else
-    ASE_LSA_CLEAR (elsa, ASE_LSA_BIT_E); /* type1 */
-
-  if (! IN6_IS_ADDR_UNSPECIFIED (&info->forward))
-    ASE_LSA_SET (elsa, ASE_LSA_BIT_F);   /* forwarding address */
-  else
-    ASE_LSA_CLEAR (elsa, ASE_LSA_BIT_F); /* forwarding address */
-
-  ASE_LSA_CLEAR (elsa, ASE_LSA_BIT_T);   /* external route tag */
-
-  /* don't know how to use */
-  elsa->ase_pre_metric = 0;
-
-  /* set metric. note: related to E bit */
-  elsa->ase_metric = htons (info->metric);
-
-  /* prefixlen */
-  elsa->ospf6_prefix.prefix_length = target->p.prefixlen;
-
-  /* PrefixOptions */
-  elsa->ospf6_prefix.prefix_options = info->prefix_options;
-
-  /* don't use refer LS-type */
-  elsa->ospf6_prefix.prefix_refer_lstype = htons (0);
-
-  /* set Prefix */
-  memcpy (p, &target->p.u.prefix6, OSPF6_PREFIX_SPACE (target->p.prefixlen));
-  ospf6_prefix_apply_mask (&elsa->ospf6_prefix);
-  size += OSPF6_PREFIX_SPACE (target->p.prefixlen);
-  p += OSPF6_PREFIX_SPACE (target->p.prefixlen);
-
-  /* Forwarding address */
-  if (ASE_LSA_ISSET (elsa, ASE_LSA_BIT_F))
-    {
-      memcpy (p, &info->forward, sizeof (struct in6_addr));
-      size += sizeof (struct in6_addr);
-      p += sizeof (struct in6_addr);
-    }
-
-  /* External Route Tag */
-  if (ASE_LSA_ISSET (elsa, ASE_LSA_BIT_T))
-    {
-      /* xxx */
-    }
-
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_AS_EXTERNAL), htonl (lsid),
-                        ospf6->router_id,
-                        (struct ospf6_lsa_header *) buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) ospf6;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
-  else
-    ospf6_lsa_delete (lsa);
+  struct ospf6_neighbor *o6n = neighbor;
+  ospf6_lsa_network_update (o6n->ospf6_interface->interface->name);
+  return 0;
 }
 
-/* RFC2740 3.4.3.7 Intra-Area-Prefix-LSA */
-void
-ospf6_lsa_update_intra_prefix_transit (char *ifname)
+int
+ospf6_lsa_network_hook_interface (void *interface)
 {
-  char buffer [MAXLSASIZE];
-  u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
+  struct ospf6_interface *o6i = interface;
+  if (o6i->area)
+    ospf6_lsa_network_update (o6i->interface->name);
+  return 0;
+}
+
+int
+ospf6_lsa_network_refresh (void *old)
+{
+  struct ospf6_lsa *lsa = old;
   struct interface *ifp;
-  struct ospf6_interface *o6i;
-  int count;
 
-  struct ospf6_intra_area_prefix_lsa *intra_prefix_lsa;
-  struct ospf6_lsdb_node *node;
-  struct ospf6_neighbor *o6n;
-  struct ospf6_prefix *o6_pstart, *o6_pcurrent, *o6_p1, *o6_p2;
-  struct ospf6_link_lsa *link_body;
-  u_int16_t prefix_number, link_prefix_number;
-  struct in6_addr in6;
-  char buf[128];
-  int duplicate;
-
-  ifp = if_lookup_by_name (ifname);
+  ifp = if_lookup_by_index (ntohl (lsa->header->id));
   if (! ifp)
-    {
-      zlog_warn ("LSA: Update Intra-Area-Prefix-LSA(Transit): "
-                 "No such Interface: %s", ifname);
-      return;
-    }
-  o6i = (struct ospf6_interface *) ifp->info;
-  if (! o6i)
-    {
-      zlog_warn ("LSA: Update Intra-Area-Prefix-LSA(Transit): "
-                 "Interface not enabled: %s", ifname);
-      return;
-    }
-
-  /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_INTRA_PREFIX),
-                                htonl (o6i->if_id),
-                                o6i->area->ospf6->router_id);
-
-  /* Don't originate Network-LSA if not DR */
-  if (o6i->state != IFS_DR)
-    {
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                   "Interface %s is not DR", o6i->interface->name);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
-      return;
-    }
-
-  /* If none of neighbor is adjacent to us */
-  count = 0;
-  o6i->foreach_nei (o6i, &count, NBS_FULL, ospf6_count_state);
-  if (count == 0)
-    {
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                   "Interface %s is Stub", o6i->interface->name);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
-      return;
-    }
-
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Update Intra-Area-Prefix(Transit): Interface %s",
-               o6i->interface->name);
-
-  /* prepare buffer */
-  size = sizeof (struct ospf6_intra_area_prefix_lsa);
-  memset (buffer, 0, sizeof (buffer));
-  intra_prefix_lsa = (struct ospf6_intra_area_prefix_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
-  o6_pstart = (struct ospf6_prefix *)(intra_prefix_lsa + 1);
-  o6_pcurrent = o6_pstart;
-  prefix_number = 0;
-
-  /* Set Referenced LSA field */
-  intra_prefix_lsa->refer_lstype = htons (OSPF6_LSA_TYPE_NETWORK);
-  intra_prefix_lsa->refer_lsid = htonl (o6i->if_id);
-  intra_prefix_lsa->refer_advrtr = o6i->area->ospf6->router_id;
-
-  /* foreach Link-LSA associated with this Link */
-  for (node = ospf6_lsdb_head (o6i->lsdb); node; node = ospf6_lsdb_next (node))
-    {
-      if (node->lsa->header->type != htons (OSPF6_LSA_TYPE_LINK))
-        continue;
-
-      if (ospf6_lsa_is_maxage (node->lsa))
-        continue;
-
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                   "Checking %s", node->lsa->str);
-
-      if (node->lsa->header->adv_router != o6i->area->ospf6->router_id)
-        {
-          o6n = ospf6_neighbor_lookup (node->lsa->header->adv_router, o6i);
-          if (! o6n || o6n->state != NBS_FULL)
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "neighbor not found or not FULL");
-              continue;
-            }
-        }
-
-      /* For each Prefix in this Link-LSA */
-      link_body = (struct ospf6_link_lsa *) (node->lsa->header + 1);
-      link_prefix_number = ntohl (link_body->llsa_prefix_num);
-
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                   "Prefix #%d", link_prefix_number);
-
-      for (o6_p1 = (struct ospf6_prefix *) (link_body + 1);
-           link_prefix_number; link_prefix_number --)
-        {
-          ospf6_prefix_in6_addr (o6_p1, &in6);
-          inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
-
-          if (IS_OSPF6_DUMP_LSA)
-            zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                       "Prefix %s", buf);
-
-          /* filter linklocal prefix */
-          if (IN6_IS_ADDR_LINKLOCAL (&in6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "%s is Linklocal", buf);
-              o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-              continue;
-            }
-
-          /* filter unspecified(default) prefix */
-          if (IN6_IS_ADDR_UNSPECIFIED (&in6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "%s is Unspecified", buf);
-              o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-              continue;
-            }
-
-          /* filter loopback prefix */
-          if (IN6_IS_ADDR_LOOPBACK (&in6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "%s is Loopback", buf);
-              o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-              continue;
-            }
-
-          /* filter IPv4 compatible prefix */
-          if (IN6_IS_ADDR_V4COMPAT (&in6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "%s is v4-Compatible", buf);
-              o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-              continue;
-            }
-
-          /* filter IPv4 Mapped prefix */
-          if (IN6_IS_ADDR_V4MAPPED (&in6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "%s is v4-Mapped", buf);
-              o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-              continue;
-            }
-
-          /* Check duplicate prefix */
-          duplicate = 0;
-          for (o6_p2 = o6_pstart; o6_p2 < o6_pcurrent;
-               o6_p2 = OSPF6_NEXT_PREFIX (o6_p2))
-            {
-              if (! ospf6_prefix_issame (o6_p1, o6_p2))
-                continue;
-
-              duplicate = 1;
-              o6_p2->prefix_options |= o6_p1->prefix_options;
-            }
-          if (duplicate)
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                           "Duplicate %s", buf);
-              o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-              continue;
-            }
-
-          /* copy prefix to new LSA */
-          if (IS_OSPF6_DUMP_LSA)
-            zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                       "including %s", buf);
-          o6_pcurrent->prefix_length = o6_p1->prefix_length;
-          o6_pcurrent->prefix_options = o6_p1->prefix_options;
-          memcpy (o6_pcurrent + 1, o6_p1 + 1,
-                  OSPF6_PREFIX_SPACE (o6_p1->prefix_length));
-
-          size += OSPF6_PREFIX_SIZE (o6_pcurrent);
-          o6_pcurrent = OSPF6_NEXT_PREFIX (o6_pcurrent);
-          o6_p1 = OSPF6_NEXT_PREFIX (o6_p1);
-          prefix_number ++;
-        }
-    }
-
-  /* if no prefix to advertise, return */
-  if (prefix_number == 0)
-    {
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Transit): "
-                   "No Prefix to advertise");
-      return;
-    }
-
-  intra_prefix_lsa->prefix_number = htons (prefix_number);
-
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_INTRA_PREFIX),
-                        htonl (o6i->if_id),
-                        o6i->area->ospf6->router_id,
-                        (struct ospf6_lsa_header *) buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) o6i->area;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
+    ospf6_lsa_premature_aging (old);
   else
-    ospf6_lsa_delete (lsa);
+    ospf6_lsa_network_update (ifp->name);
+
+  return 0;
 }
 
-/* RFC2740 3.4.3.7 Intra-Area-Prefix-LSA */
 void
-ospf6_lsa_update_intra_prefix_stub (u_int32_t area_id)
+ospf6_lsa_slot_register_network ()
 {
-  char buffer [MAXLSASIZE];
-  u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
-  struct ospf6_area *o6a;
-  int count;
+  struct ospf6_lsa_slot slot;
+  struct ospf6_hook hook;
 
-  struct ospf6_intra_area_prefix_lsa *intra_prefix_lsa;
-  listnode i,j;
-  struct ospf6_interface *o6i = NULL;
-  struct ospf6_prefix *prefix_dst;
-  struct connected *c;
-  struct prefix_ipv6 prefix_ipv6;
+  memset (&slot, 0, sizeof (struct ospf6_lsa_slot));
+  slot.type              = htons (OSPF6_LSA_TYPE_NETWORK);
+  slot.name              = "Network";
+  slot.func_show         = ospf6_lsa_network_show;
+  slot.func_refresh      = ospf6_lsa_network_refresh;
+  ospf6_lsa_slot_register (&slot);
+
+  ospf6_lsdb_hook[OSPF6_LSA_TYPE_NETWORK & OSPF6_LSTYPE_CODE_MASK].hook = 
+    ospf6_spf_database_hook;
+
+  memset (&hook, 0, sizeof (hook));
+  hook.name  = "OriginateNetwork";
+  hook.hook_change  = ospf6_lsa_network_hook_neighbor;
+  ospf6_hook_register (&hook, &neighbor_hook);
+
+  memset (&hook, 0, sizeof (hook));
+  hook.name  = "OriginateNetwork";
+  hook.hook_change = ospf6_lsa_network_hook_interface;
+  ospf6_hook_register (&hook, &interface_hook);
+}
+
+/****************************/
+/* RFC2740 3.4.3.6 Link-LSA */
+/****************************/
+
+int
+ospf6_lsa_link_show (struct vty *vty, struct ospf6_lsa *lsa)
+{
+  char *start, *end, *current;
+  struct ospf6_link_lsa *link_lsa;
+  int prefixnum;
+  struct ospf6_prefix *prefix;
   char buf[128];
-  u_int16_t prefix_number;
+  struct in6_addr in6;
 
-  o6a = ospf6_area_lookup (area_id, ospf6);
-  if (! o6a)
+  assert (lsa->header);
+
+  link_lsa = (struct ospf6_link_lsa *) (lsa->header + 1);
+  prefixnum = ntohl (link_lsa->llsa_prefix_num);
+
+  inet_ntop (AF_INET6, (void *)&link_lsa->llsa_linklocal, buf, sizeof (buf));
+  vty_out (vty, "     LinkLocal Address: %s%s", buf, VTY_NEWLINE);
+  vty_out (vty, "     Number of Prefix: %d%s", prefixnum, VTY_NEWLINE);
+
+  start = (char *) link_lsa + sizeof (struct ospf6_link_lsa);
+  end = (char *) lsa->header + ntohs (lsa->header->length); 
+  for (current = start; current < end; current += OSPF6_PREFIX_SIZE (prefix))
     {
-      inet_ntop (AF_INET, &area_id, buffer, sizeof (buffer));
-      zlog_warn ("LSA: Update Intra-Area-Prefix-LSA(Stub): "
-                 "No such area: %s", buffer);
-      return;
-    }
-
-  /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_INTRA_PREFIX),
-                                htonl (0),     /* xxx */
-                                o6a->ospf6->router_id);
-
-  /* prepare buffer */
-  size = sizeof (struct ospf6_intra_area_prefix_lsa);
-  memset (buffer, 0, sizeof (buffer));
-  intra_prefix_lsa = (struct ospf6_intra_area_prefix_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
-  prefix_dst = (struct ospf6_prefix *)(intra_prefix_lsa + 1);
-  prefix_number = 0;
-
-  /* Examin for each interface */
-  for (i = listhead (o6a->if_list); i; nextnode (i))
-    {
-      o6i = (struct ospf6_interface *) getdata (i);
-
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                   "Checking Interface %s", o6i->interface->name);
-
-      if (o6i->state == IFS_DOWN)
+      prefix = (struct ospf6_prefix *) current;
+      if (current + OSPF6_PREFIX_SIZE (prefix) > end)
         {
-          if (IS_OSPF6_DUMP_LSA)
-            zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                       "Interface %s down", o6i->interface->name);
-          continue;
+          vty_out (vty, "    Trailing %d byte garbage ... Malformed%s",
+                   end - current, VTY_NEWLINE);
+          return -1;
         }
 
-      count = 0;
-      o6i->foreach_nei (o6i, &count, NBS_FULL, ospf6_count_state);
-      if (o6i->state != IFS_LOOPBACK && o6i->state != IFS_PTOP &&
-          count != 0)
-        {
-          /* This interface's prefix will be included in DR's */
-          if (IS_OSPF6_DUMP_LSA)
-            zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                       "Interface %s is not stub", o6i->interface->name);
-          continue;
-        }
-
-      /* copy foreach site-local or global prefix */
-      for (j = listhead (o6i->interface->connected); j; nextnode (j))
-        {
-          c = (struct connected *) getdata (j);
-
-          /* filter prefix not IPv6 */
-          if (c->address->family != AF_INET6)
-            continue;
-
-          inet_ntop (AF_INET6, &c->address->u.prefix6, buf, sizeof (buf));
-
-          if (IS_OSPF6_DUMP_LSA)
-            zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                       "Checking %s", buf);
-
-          /* filter linklocal prefix */
-          if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                           "%s is Linklocal", buf);
-              continue;
-            }
-
-          /* filter unspecified(default) prefix */
-          if (IN6_IS_ADDR_UNSPECIFIED (&c->address->u.prefix6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                           "%s is Unspecified", buf);
-              continue;
-            }
-
-          /* filter loopback prefix */
-          if (IN6_IS_ADDR_LOOPBACK (&c->address->u.prefix6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                           "%s is Loopback", buf);
-              continue;
-            }
-
-          /* filter IPv4 compatible prefix */
-          if (IN6_IS_ADDR_V4COMPAT (&c->address->u.prefix6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                           "%s is v4-Compatible", buf);
-              continue;
-            }
-
-          /* filter IPv4 Mapped prefix */
-          if (IN6_IS_ADDR_V4MAPPED (&c->address->u.prefix6))
-            {
-              if (IS_OSPF6_DUMP_LSA)
-                zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                           "%s is v4-Mapped", buf);
-              continue;
-            }
-
-          /* set ospf6 prefix according to its state */
-          /* xxx, virtual links */
-          prefix_copy ((struct prefix *) &prefix_ipv6, c->address);
-          if (o6i->state == IFS_LOOPBACK || o6i->state == IFS_PTOP
-              /* xxx, PoinToMultiPoint I/F type */ )
-            {
-              prefix_dst->prefix_length = 128;
-              prefix_dst->prefix_options = OSPF6_PREFIX_OPTION_LA;
-              prefix_dst->prefix_metric = htons (0);
-              memcpy (prefix_dst + 1, &prefix_ipv6.prefix,
-                      OSPF6_PREFIX_SPACE (prefix_dst->prefix_length));
-            }
-          else
-            {
-              /* apply mask */
-              apply_mask_ipv6 (&prefix_ipv6);
-              inet_ntop (AF_INET6, &c->address->u.prefix6, buf, sizeof (buf));
-
-              prefix_dst->prefix_length = prefix_ipv6.prefixlen;
-              prefix_dst->prefix_options = 0;  /* xxx, no options yet */
-              prefix_dst->prefix_metric = htons (o6i->cost);
-              memcpy (prefix_dst + 1, &prefix_ipv6.prefix,
-                      OSPF6_PREFIX_SPACE (prefix_dst->prefix_length));
-            }
-
-          if (IS_OSPF6_DUMP_LSA)
-            zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                       "include %s", buf);
-
-          /* forward current buffer pointer */
-          prefix_number ++;
-          size += OSPF6_PREFIX_SIZE (prefix_dst);
-          prefix_dst = OSPF6_NEXT_PREFIX (prefix_dst);
-        }
+      ospf6_prefix_options_str (prefix->prefix_options, buf, sizeof (buf));
+      vty_out (vty, "     Prefix Options: %s%s", buf, VTY_NEWLINE);
+      ospf6_prefix_in6_addr (prefix, &in6);
+      inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
+      vty_out (vty, "     Prefix: %s/%d%s",
+               buf, prefix->prefix_length, VTY_NEWLINE);
     }
 
-  /* If no prefix to advertise */
-  if (prefix_number == 0)
-    {
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA Update Intra-Area-Prefix(Stub): "
-                   "No prefix to advertise for area %s", o6a->str);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
-      return;
-    }
-
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Update Intra-Area-Prefix(Stub): Area %s", o6a->str);
-
-  /* Set Referenced LSA field */
-  intra_prefix_lsa->refer_lstype = htons (OSPF6_LSA_TYPE_ROUTER);
-  intra_prefix_lsa->refer_lsid = htonl (0);
-  intra_prefix_lsa->refer_advrtr = o6a->ospf6->router_id;
-
-  intra_prefix_lsa->prefix_number = htons (prefix_number);
-
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_INTRA_PREFIX),
-                        htonl (0), /* xxx */
-                        o6i->area->ospf6->router_id,
-                        (struct ospf6_lsa_header *) buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) o6a;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
-  else
-    ospf6_lsa_delete (lsa);
+  return 0;
 }
 
+
 void
-ospf6_lsa_update_link (char *ifname)
+ospf6_lsa_link_update (char *ifname)
 {
-  char *cp, buffer [MAXLSASIZE];
+  char *cp, buffer [MAXLSASIZE], buf[32];
   u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
+  struct ospf6_lsa *old;
   struct interface *ifp;
   struct ospf6_interface *o6i;
 
-  struct ospf6_link_lsa *llsa;
+  struct ospf6_link_lsa *link_lsa;
   struct ospf6_prefix *p;
   list prefix_connected;
-  listnode n;
+  listnode node;
   struct connected *c;
 
   ifp = if_lookup_by_name (ifname);
   if (! ifp)
     {
       if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA: Update Link-LSA: No such Interface: %s", ifname);
-      return;
-    }
-  o6i = (struct ospf6_interface *) ifp->info;
-  if (! o6i)
-    {
-      if (IS_OSPF6_DUMP_LSA)
-        zlog_info ("LSA: Update Link-LSA: Interface not enabled: %s", ifname);
+        zlog_info ("Update Link: No such Interface: %s", ifname);
       return;
     }
 
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i || ! o6i->area)
+    {
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("Update Link: Interface not enabled: %s", ifname);
+      return;
+    }
+
+#if 0
+  /* Link-LSA is on Broadcast or NBMA */
+  if (! if_is_broadcast (o6i->interface) /* && ! NBMA xxx */)
+    {
+      return;
+    }
+#endif /*0*/
+
   /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_LINK),
-                                htonl (o6i->if_id),
-                                ospf6->router_id);
+  old = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_LINK), htonl (o6i->if_id),
+                           ospf6->router_id, o6i->area);
 
   /* can't make Link-LSA if linklocal address not set */
   if (! o6i->lladdr)
     {
-      zlog_err ("LSA Update Link: No Linklocal Address: %s",
-                o6i->interface->name);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_warn ("Update Link: No Linklocal Address: %s",
+                   o6i->interface->name);
+      if (old)
+        ospf6_lsa_premature_aging (old);
       return;
     }
 
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Update Link: Interface %s", o6i->interface->name);
+    zlog_info ("Update Link: Interface %s", o6i->interface->name);
+
+  if (! ospf6_interface_is_enabled (o6i->interface->ifindex))
+    {
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("  Interface %s not enabled", o6i->interface->name);
+      if (old)
+        ospf6_lsa_premature_aging (old);
+      return;
+    }
 
   /* check connected prefix */
   prefix_connected = list_new ();
-  for (n = listhead (o6i->interface->connected); n; nextnode (n))
+  for (node = listhead (o6i->interface->connected); node; nextnode (node))
     {
-      c = (struct connected *) getdata (n);
+      c = (struct connected *) getdata (node);
 
       /* filter prefix not IPv6 */
       if (c->address->family != AF_INET6)
         continue;
 
-      /* filter linklocal prefix */
-      if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
-        continue;
+      /* for log */
+      prefix2str (c->address, buf, sizeof (buf));
 
-      /* filter unspecified(default) prefix */
-      if (IN6_IS_ADDR_UNSPECIFIED (&c->address->u.prefix6))
-        continue;
+      CONTINUE_IF_ADDRESS_LINKLOCAL (c->address);
+      CONTINUE_IF_ADDRESS_UNSPECIFIED (c->address);
+      CONTINUE_IF_ADDRESS_LOOPBACK (c->address);
+      CONTINUE_IF_ADDRESS_V4COMPAT (c->address);
+      CONTINUE_IF_ADDRESS_V4MAPPED (c->address);
 
-      /* filter loopback prefix */
-      if (IN6_IS_ADDR_LOOPBACK (&c->address->u.prefix6))
-        continue;
+      /* filter prefix specified by configuration */
+      if (o6i->plist_name)
+        {
+          struct prefix_list *plist;
+          enum prefix_list_type result = PREFIX_PERMIT;
 
-      /* filter IPv4 compatible prefix */
-      if (IN6_IS_ADDR_V4COMPAT (&c->address->u.prefix6))
-        continue;
+          plist = prefix_list_lookup (AFI_IP6, o6i->plist_name);
+          if (plist)
+            result = prefix_list_apply (plist, c->address);
+          else if (IS_OSPF6_DUMP_LSA)
+            zlog_warn ("Update Intra-Prefix (Stub): "
+                       "Prefix list \"%s\" not found", o6i->plist_name);
 
-      /* filter IPv4 Mapped prefix */
-      if (IN6_IS_ADDR_V4MAPPED (&c->address->u.prefix6))
-        continue;
+          if (result == PREFIX_DENY)
+            {
+              if (IS_OSPF6_DUMP_LSA)
+                zlog_info ("  Filter out Prefix-list %s: %s",
+                           o6i->plist_name, buf);
+              continue;
+            }
+        }
+
+      if (IS_OSPF6_DUMP_LSA)
+        zlog_info ("    Advertise %s", buf);
 
       /* hold prefix in list. duplicate is filtered in ospf6_prefix_add() */
-      p = ospf6_prefix_make (0, 0, (struct prefix_ipv6 *) c->address);
+      p = ospf6_prefix_create (0, 0, (struct prefix_ipv6 *) c->address);
       ospf6_prefix_add (prefix_connected, p);
     }
 
-  /* Note: if no prefix configured, still we have to create Link-LSA
+  /* Note: even if no prefix configured, still we have to create Link-LSA
      for next-hop resolution */
 
-  /* fill Link LSA and calculate size */
-  size = sizeof (struct ospf6_link_lsa);
   memset (buffer, 0, sizeof (buffer));
-  llsa = (struct ospf6_link_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
-  llsa->llsa_rtr_pri = o6i->priority;
-  llsa->llsa_options[0] = o6i->area->options[0];
-  llsa->llsa_options[1] = o6i->area->options[1];
-  llsa->llsa_options[2] = o6i->area->options[2];
+  size = sizeof (struct ospf6_link_lsa);
+  link_lsa = (struct ospf6_link_lsa *) buffer;
+
+  /* fill Link LSA and calculate size */
+  link_lsa->llsa_rtr_pri = o6i->priority;
+  link_lsa->llsa_options[0] = o6i->area->options[0];
+  link_lsa->llsa_options[1] = o6i->area->options[1];
+  link_lsa->llsa_options[2] = o6i->area->options[2];
 
   /* linklocal address */
-  memcpy (&llsa->llsa_linklocal, o6i->lladdr, sizeof (struct in6_addr));
+  memcpy (&link_lsa->llsa_linklocal, o6i->lladdr, sizeof (struct in6_addr));
+
 #ifdef KAME /* clear ifindex */
-  if (llsa->llsa_linklocal.s6_addr[3] & 0x0f)
-    llsa->llsa_linklocal.s6_addr[3] &= ~((char)0x0f);
+  if (link_lsa->llsa_linklocal.s6_addr[3] & 0x0f)
+    link_lsa->llsa_linklocal.s6_addr[3] &= ~((char)0x0f);
 #endif /* KAME */
 
-  llsa->llsa_prefix_num = htonl (listcount (prefix_connected));
-  cp = (char *)(llsa + 1);
-  for (n = listhead (prefix_connected); n; nextnode (n))
+  link_lsa->llsa_prefix_num = htonl (listcount (prefix_connected));
+  cp = (char *)(link_lsa + 1);
+  for (node = listhead (prefix_connected); node; nextnode (node))
     {
-      p = (struct ospf6_prefix *) getdata (n);
+      p = (struct ospf6_prefix *) getdata (node);
       size += OSPF6_PREFIX_SIZE (p);
       memcpy (cp, p, OSPF6_PREFIX_SIZE (p));
       cp += OSPF6_PREFIX_SIZE (p);
     }
 
-  for (n = listhead (prefix_connected); n; nextnode (n))
+  for (node = listhead (prefix_connected); node; nextnode (node))
     {
-      p = (struct ospf6_prefix *) getdata (n);
-      ospf6_prefix_free (p);
+      p = (struct ospf6_prefix *) getdata (node);
+      ospf6_prefix_delete (p);
     }
   list_delete (prefix_connected);
 
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_LINK), htonl (o6i->if_id),
-                        o6i->area->ospf6->router_id,
-                        (struct ospf6_lsa_header *) buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) o6i;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
-  else
-    ospf6_lsa_delete (lsa);
+  ospf6_lsa_originate (htons (OSPF6_LSA_TYPE_LINK),
+                       htonl (o6i->if_id), o6i->area->ospf6->router_id,
+                       (char *) link_lsa, size, o6i);
 }
 
-#if 0
-void
-ospf6_lsa_update_inter_prefix (struct ospf6_area *o6a)
+int
+ospf6_lsa_link_hook_interface (void *interface)
 {
-  char *cp, buffer [MAXLSASIZE];
-  u_int16_t size;
-  struct ospf6_lsa *lsa, *prev_lsa;
-
-  struct ospf6_lsa_inter_prefix *inter_prefix;
-  struct ospf6_prefix *o6p;
-
-  /* find previous LSA */
-  prev_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_INTER_PREFIX),
-                                htonl (0), /* xxx */
-                                ospf6->router_id);
-
-  if (o6a->area_range.prefixlen == 0)
-    {
-      zlog_err ("LSA Update Inter-Area-Prefix: No Area range Configured for %s",
-                o6a->str);
-      if (prev_lsa)
-        ospf6_lsa_premature_aging (prev_lsa);
-      return;
-    }
-
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Update Inter-Area-Prefix: Area %s", o6a->str);
-
-  size = sizeof (struct ospf6_lsa_inter_prefix_lsa);
-  memset (buffer, 0, sizeof (buffer));
-  inter_prefix = (struct ospf6_lsa_inter_prefix_lsa *)
-    (buffer + sizeof (struct ospf6_lsa_header));
-
-  /* linklocal address */
-  memcpy (&llsa->llsa_linklocal, o6i->lladdr, sizeof (struct in6_addr));
-#ifdef KAME /* clear ifindex */
-  if (llsa->llsa_linklocal.s6_addr[3] & 0x0f)
-    llsa->llsa_linklocal.s6_addr[3] &= ~((char)0x0f);
-#endif /* KAME */
-
-  llsa->llsa_prefix_num = htonl (listcount (prefix_connected));
-  cp = (char *)(llsa + 1);
-  for (n = listhead (prefix_connected); n; nextnode (n))
-    {
-      p = (struct ospf6_prefix *) getdata (n);
-      size += OSPF6_PREFIX_SIZE (p);
-      memcpy (cp, p, OSPF6_PREFIX_SIZE (p));
-      cp += OSPF6_PREFIX_SIZE (p);
-    }
-
-  /* Fill LSA Header */
-  ospf6_lsa_header_set (htons (OSPF6_LSA_TYPE_LINK), htonl (o6i->if_id),
-                        o6i->area->ospf6->router_id,
-                        (struct ospf6_lsa_header *) buffer, size);
-
-  /* create LSA */
-  lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) buffer);
-  lsa->refresh = thread_add_timer (master, ospf6_lsa_refresh, lsa,
-                                   OSPF6_LS_REFRESH_TIME);
-  lsa->scope = (void *) o6i;
-
-  if (ospf6_lsa_is_really_reoriginate (lsa))
-    {
-      ospf6_dbex_remove_from_all_retrans_list (lsa);
-      ospf6_dbex_flood (lsa, NULL);
-      ospf6_lsdb_install (lsa);
-    }
-  else
-    ospf6_lsa_delete (lsa);
+  struct ospf6_interface *o6i = interface;
+  if (o6i->area)
+    ospf6_lsa_link_update (o6i->interface->name);
+  return 0;
 }
 
-#endif
+int
+ospf6_lsa_link_refresh (void *old)
+{
+  struct ospf6_lsa *lsa = old;
+  struct interface *ifp;
+
+  ifp = if_lookup_by_index (ntohl (lsa->header->id));
+  if (! ifp)
+    ospf6_lsa_premature_aging (old);
+  else
+    ospf6_lsa_link_update (ifp->name);
+
+  return 0;
+}
 
 void
-ospf6_lsa_reoriginate (struct ospf6_lsa *lsa)
+ospf6_lsa_slot_register_link ()
 {
-  struct ospf6_lsa_header *lsa_header;
+  struct ospf6_lsa_slot slot;
 
-  struct ospf6 *o6;
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
+  memset (&slot, 0, sizeof (struct ospf6_lsa_slot));
+  slot.type              = htons (OSPF6_LSA_TYPE_LINK);
+  slot.name              = "Link";
+  slot.func_show         = ospf6_lsa_link_show;
+  slot.func_refresh      = ospf6_lsa_link_refresh;
+  slot.hook_interface.name = "OriginateLink";
+  slot.hook_interface.hook_change = ospf6_lsa_link_hook_interface;
+  ospf6_lsa_slot_register (&slot);
 
-  lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
-
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("Re-originate %s", lsa->str);
-
-  switch (ntohs (lsa_header->type))
-    {
-      case OSPF6_LSA_TYPE_ROUTER:
-        o6a = (struct ospf6_area *) lsa->scope;
-        assert (o6a);
-        ospf6_lsa_update_router (o6a->area_id);
-        break;
-
-      case OSPF6_LSA_TYPE_NETWORK:
-        o6a = (struct ospf6_area *) lsa->scope;
-        assert (o6a);
-        o6i = ospf6_interface_lookup_by_index (ntohl (lsa_header->ls_id));
-        if (o6i)
-          ospf6_lsa_update_network (o6i->interface->name);
-        else
-          ospf6_lsa_premature_aging (lsa);
-        break;
-
-      case OSPF6_LSA_TYPE_INTRA_PREFIX:
-        /* xxx, assume LS-ID has addressing semantics */
-        o6a = (struct ospf6_area *) lsa->scope;
-        o6i = NULL;
-        assert (o6a);
-        if (ntohl (lsa_header->ls_id) != 0)
-          o6i = ospf6_interface_lookup_by_index (ntohl (lsa_header->ls_id));
-
-        if (o6i)
-          ospf6_lsa_update_intra_prefix_transit (o6i->interface->name);
-        else if (ntohl (lsa_header->ls_id) == 0)
-          ospf6_lsa_update_intra_prefix_stub (o6a->area_id);
-        else
-          ospf6_lsa_premature_aging (lsa);
-        break;
-
-      case OSPF6_LSA_TYPE_LINK:
-        o6i = (struct ospf6_interface *) lsa->scope;
-        assert (o6i);
-        ospf6_lsa_update_link (o6i->interface->name);
-        break;
-
-      case OSPF6_LSA_TYPE_AS_EXTERNAL:
-        o6 = (struct ospf6 *) lsa->scope;
-        assert (o6);
-        ospf6_lsa_update_as_external (ntohl (lsa_header->ls_id));
-        break;
-
-      default:
-        break;
-    }
-}
-
-
-/* ospf6_lsa expired */
-int
-ospf6_lsa_expire (struct thread *thread)
-{
-  struct ospf6_lsa *lsa;
-
-  lsa = (struct ospf6_lsa *) THREAD_ARG (thread);
-  assert (lsa && lsa->lsa_hdr);
-
-  /* assertion */
-  assert (ospf6_lsa_is_maxage (lsa));
-  assert (!lsa->refresh);
-
-  lsa->expire = (struct thread *) NULL;
-
-  /* log */
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA: Expire: %s", lsa->str);
-
-  if (!lsa->summary)
-    {
-      /* reflood lsa */
-      ospf6_dbex_flood (lsa, NULL);
-
-      /* do not free LSA, and do nothing about lslists.
-         wait event (ospf6_lsdb_check_maxage) */
-    }
-
-  return 0;
-}
-
-int
-ospf6_lsa_refresh (struct thread *thread)
-{
-  struct ospf6_lsa *lsa;
-
-  assert (thread);
-  lsa = (struct ospf6_lsa *) THREAD_ARG  (thread);
-  assert (lsa && lsa->lsa_hdr);
-
-  /* this will be used later as flag to decide really originate */
-  lsa->refresh = (struct thread *)NULL;
-
-  /* log */
-  if (IS_OSPF6_DUMP_LSA)
-    {
-      zlog_info ("LSA Refresh: %s", lsa->str);
-    }
-
-  ospf6_lsa_reoriginate (lsa);
-
-  return 0;
-}
-
-
-
-/* enhanced Fletcher checksum algorithm, RFC1008 7.2 */
-#define MODX                4102
-#define LSA_CHECKSUM_OFFSET   15
-
-unsigned short
-ospf6_lsa_checksum (struct ospf6_lsa_header *lsa_header)
-{
-  u_char *sp, *ep, *p, *q;
-  int c0 = 0, c1 = 0;
-  int x, y;
-  u_int16_t length;
-
-  lsa_header->checksum = 0;
-  length = ntohs (lsa_header->length) - 2;
-  sp = (char *) &lsa_header->type;
-
-  for (ep = sp + length; sp < ep; sp = q)
-    {
-      q = sp + MODX;
-      if (q > ep)
-        q = ep;
-      for (p = sp; p < q; p++)
-        {
-          c0 += *p;
-          c1 += c0;
-        }
-      c0 %= 255;
-      c1 %= 255;
-    }
-
-  /* r = (c1 << 8) + c0; */
-  x = ((length - LSA_CHECKSUM_OFFSET) * c0 - c1) % 255;
-  if (x <= 0)
-    x += 255;
-  y = 510 - c0 - x;
-  if (y > 255)
-    y -= 255;
-
-  lsa_header->checksum = htons ((x << 8) + y);
-
-  return (lsa_header->checksum);
-}
-
-u_int16_t
-ospf6_lsa_get_scope_type (u_int16_t type)
-{
-  return (ntohs (type) & OSPF6_LSA_SCOPE_MASK);
-}
-
-int
-ospf6_lsa_is_known_type (struct ospf6_lsa_header *lsa_header)
-{
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_ROUTER))
-    return 1;
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_NETWORK))
-    return 1;
+  /*
+   * Link LSA handling will be shift in ospf6_intra.c
+   * Currently, only database hook only moved to ospf6_intra.c
+   */
 #if 0
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_INTER_PREFIX))
-    return 1;
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_INTER_ROUTER))
-    return 1;
-#endif
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_AS_EXTERNAL))
-    return 1;
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_LINK))
-    return 1;
-  if (lsa_header->type == htons (OSPF6_LSA_TYPE_INTRA_PREFIX))
-    return 1;
+  ospf6_lsdb_hook[OSPF6_LSA_TYPE_LINK & OSPF6_LSTYPE_CODE_MASK].hook = 
+    ospf6_spf_database_hook;
+#endif /*0*/
+}
+
+int
+ospf6_lsa_add_hook (void *data)
+{
+  struct ospf6_lsa *lsa = data;
+  struct ospf6_lsa_slot *sp;
+
+  sp = ospf6_lsa_slot_get (lsa->header->type);
+  if (sp)
+    {
+      CALL_CHANGE_HOOK (&sp->database_hook, lsa);
+    }
+  else
+    zlog_warn ("Unknown LSA added to database: %s", lsa->str);
   return 0;
+}
+
+int
+ospf6_lsa_change_hook (void *data)
+{
+  struct ospf6_lsa *lsa = data;
+  struct ospf6_lsa_slot *sp;
+
+  sp = ospf6_lsa_slot_get (lsa->header->type);
+  if (sp)
+    {
+      CALL_CHANGE_HOOK (&sp->database_hook, lsa);
+    }
+  else
+    zlog_warn ("Unknown LSA changed in database: %s", lsa->str);
+  return 0;
+}
+
+int
+ospf6_lsa_remove_hook (void *data)
+{
+  struct ospf6_lsa *lsa = data;
+  struct ospf6_lsa_slot *sp;
+
+  sp = ospf6_lsa_slot_get (lsa->header->type);
+  if (sp)
+    {
+      CALL_REMOVE_HOOK (&sp->database_hook, lsa);
+    }
+  else
+    zlog_warn ("Unknown LSA removed from database: %s", lsa->str);
+  return 0;
+}
+
+/* Initialize LSA slots */
+void
+ospf6_lsa_init ()
+{
+  struct ospf6_hook hook;
+
+  slot_head = NULL;
+  ospf6_lsa_slot_register_router ();
+  ospf6_lsa_slot_register_network ();
+  ospf6_lsa_slot_register_link ();
+#if 0
+  ospf6_lsa_slot_register_intra_prefix ();
+  ospf6_lsa_slot_register_as_external ();
+#endif /*0*/
+
+  hook.name = "LSADatabaseHook";
+  hook.hook_add = ospf6_lsa_add_hook;
+  hook.hook_change = ospf6_lsa_change_hook;
+  hook.hook_remove = ospf6_lsa_remove_hook;
+  ospf6_hook_register (&hook, &database_hook);
 }
 

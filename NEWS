@@ -1,5 +1,22 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.93
+
+* Changes in bgpd
+
+** Configuration is changed to new format.
+
+* Changes in ospfd
+
+** Crush bugs which reported on Zebra ML is fixed.
+
+** Opaque LSA and TE LSA support is added by KDD R&D Laboratories,
+   Inc.
+
+* Chages in ospf6d
+
+** Many bugs are fixed.
+
 * Changes in zebra-0.92a
 
 * Changes in bgpd

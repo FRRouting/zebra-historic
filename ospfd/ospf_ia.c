@@ -242,8 +242,8 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
   apply_mask_ipv4 (&p);
 
   if (sl->header.type == OSPF_SUMMARY_LSA &&
-      (range = ospf_some_area_range_match (&p)) &&
-      ospf_range_active (range))
+      (range = ospf_area_range_match_any (ospf_top, &p)) &&
+      ospf_area_range_active (range))
     return 0;
 
   if (ospf_top->abr_type != OSPF_ABR_STAND &&
@@ -334,7 +334,7 @@ ospf_update_network_route (struct route_table *rt,
 
   rn = route_node_lookup (rt, (struct prefix *) p);
 
-  if (rn == NULL)
+  if (! rn)
     {
       if (ospf_top->abr_type != OSPF_ABR_SHORTCUT)
         return; /* Standard ABR can update only already installed
@@ -677,7 +677,7 @@ ospf_ia_routing (struct route_table *rt,
 	      if (IS_DEBUG_OSPF_EVENT)
 		zlog_info ("ospf_ia_routing(): "
 			   "Active BB connection not found");
-              LIST_ITERATOR (ospf_top->areas, node)
+	      for (node = listhead (ospf_top->areas); node; nextnode (node))
                 if ((area = getdata (node)) != NULL)
                   OSPF_EXAMINE_SUMMARIES_ALL (area, rt, rtrs);
             }

@@ -61,8 +61,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
     return NULL;
 
   rn = route_node_lookup (rtrs, (struct prefix *) asbr);
- 
-  if (rn == NULL)
+  if (! rn)
     return NULL;
 
   route_unlock_node (rn);
@@ -70,7 +69,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
   chosen = list_new ();
 
   /* First try to find intra-area non-bb paths. */
-  if (ospf_top->RFC1583Compat == 0)
+  if (!CHECK_FLAG (ospf_top->config, OSPF_RFC1583_COMPATIBLE))
     for (node = listhead ((list) rn->info); node; nextnode (node))
       if ((or = getdata (node)) != NULL)
 	if (or->cost < OSPF_LS_INFINITY)
@@ -119,7 +118,7 @@ ospf_find_asbr_route_through_area (struct route_table *rtrs,
 
   rn = route_node_lookup (rtrs, (struct prefix *) asbr);
  
-  if (rn != NULL)
+  if (rn)
     {
       listnode node;
       struct ospf_route *or;
@@ -439,8 +438,8 @@ ospf_ase_calculate_route (struct ospf_lsa * lsa, void * p_arg, int n_arg)
   /* if there is a Intra/Inter area route to the N
      do not install external route */
   if ((rn = route_node_lookup (ospf_top->new_table,
-			       (struct prefix *) &p)) != NULL &&
-      (rn->info != NULL))
+			       (struct prefix *) &p)) != NULL
+      && (rn->info != NULL))
     {
       if (new)
 	ospf_route_free (new);
@@ -450,8 +449,8 @@ ospf_ase_calculate_route (struct ospf_lsa * lsa, void * p_arg, int n_arg)
   /* Find a route to the same dest */
   /* If there is no route, create new one. */
   if ((rn = route_node_lookup (ospf_top->new_external_route,
-			       (struct prefix *) &p)) == NULL ||
-      (or = rn->info) == NULL)
+			       (struct prefix *) &p)) == NULL 
+      || (or = rn->info) == NULL)
     {
       zlog_info ("Route[External]: Adding a new route %s/%d",
 		 inet_ntoa (p.prefix), p.prefixlen);
@@ -539,7 +538,7 @@ ospf_ase_route_match_same (struct route_table *rt, struct prefix *prefix,
     return 0;
 
    rn = route_node_lookup (rt, prefix);
-   if (! rn || ! rn->info)
+   if (! rn)
      return 0;
  
    route_unlock_node (rn);
@@ -718,10 +717,18 @@ ospf_ase_unregister_external_lsa (struct ospf_lsa *lsa, struct ospf *top)
 
   rn = route_node_get (top->external_lsas, (struct prefix *) &p);
   lst = rn->info;
+#ifdef ORIGINAL_CODING
   assert (lst);
 
   listnode_delete (lst, lsa);
   ospf_lsa_unlock (lsa);
+#else /* ORIGINAL_CODING */
+  /* XXX lst can be NULL */
+  if (lst) {
+    listnode_delete (lst, lsa);
+    ospf_lsa_unlock (lsa);
+  }
+#endif /* ORIGINAL_CODING */
 }
 
 void

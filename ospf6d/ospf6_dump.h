@@ -1,6 +1,6 @@
 /*
  * Logging function
- * Copyright (C) 1999 Yasuhiro Ohara
+ * Copyright (C) 1999-2002 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
  *
@@ -23,17 +23,6 @@
 #ifndef OSPF6_DUMP_H
 #define OSPF6_DUMP_H
 
-/* Strings for logging */
-extern char   *ifs_name[];
-extern char   *nbs_name[];
-
-/* Function Prototypes */
-void ospf6_log_init ();
-
-/* new */
-
-void ospf6_debug_init ();
-
 enum ospf6_dump_type
 {
   OSPF6_DUMP_HELLO,
@@ -52,33 +41,55 @@ enum ospf6_dump_type
   OSPF6_DUMP_ROUTE,
   OSPF6_DUMP_LSDB,
   OSPF6_DUMP_REDISTRIBUTE,
+  OSPF6_DUMP_HOOK,
+  OSPF6_DUMP_ASBR,
+  OSPF6_DUMP_PREFIX,
+  OSPF6_DUMP_ABR,
   OSPF6_DUMP_MAX
 };
 
-struct _ospf6_dump
-{
-  int dump;
-  char *string;
-};
+#define IS_OSPF6_DUMP_HELLO \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_HELLO]))
+#define IS_OSPF6_DUMP_DBDESC \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_DBDESC]))
+#define IS_OSPF6_DUMP_LSREQ \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_LSREQ]))
+#define IS_OSPF6_DUMP_LSUPDATE \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_LSUPDATE]))
+#define IS_OSPF6_DUMP_LSACK \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_LSACK]))
+#define IS_OSPF6_DUMP_NEIGHBOR \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_NEIGHBOR]))
+#define IS_OSPF6_DUMP_INTERFACE \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_INTERFACE]))
+#define IS_OSPF6_DUMP_LSA \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_LSA]))
+#define IS_OSPF6_DUMP_ZEBRA \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_ZEBRA]))
+#define IS_OSPF6_DUMP_CONFIG \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_CONFIG]))
+#define IS_OSPF6_DUMP_DBEX \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_DBEX]))
+#define IS_OSPF6_DUMP_SPF \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_SPF]))
+#define IS_OSPF6_DUMP_ROUTE \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_ROUTE]))
+#define IS_OSPF6_DUMP_LSDB \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_LSDB]))
+#define IS_OSPF6_DUMP_REDISTRIBUTE \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_REDISTRIBUTE]))
+#define IS_OSPF6_DUMP_HOOK \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_HOOK]))
+#define IS_OSPF6_DUMP_ASBR \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_ASBR]))
+#define IS_OSPF6_DUMP_PREFIX \
+  (ospf6_dump_is_on (dump_index[OSPF6_DUMP_PREFIX]))
 
-extern struct _ospf6_dump ospf6_dump[];
+extern char dump_index[OSPF6_DUMP_MAX];
 
-#define IS_OSPF6_DUMP_HELLO        (ospf6_dump[OSPF6_DUMP_HELLO].dump)
-#define IS_OSPF6_DUMP_DBDESC       (ospf6_dump[OSPF6_DUMP_DBDESC].dump)
-#define IS_OSPF6_DUMP_LSREQ        (ospf6_dump[OSPF6_DUMP_LSREQ].dump)
-#define IS_OSPF6_DUMP_LSUPDATE     (ospf6_dump[OSPF6_DUMP_LSUPDATE].dump)
-#define IS_OSPF6_DUMP_LSACK        (ospf6_dump[OSPF6_DUMP_LSACK].dump)
-#define IS_OSPF6_DUMP_NEIGHBOR     (ospf6_dump[OSPF6_DUMP_NEIGHBOR].dump)
-#define IS_OSPF6_DUMP_INTERFACE    (ospf6_dump[OSPF6_DUMP_INTERFACE].dump)
-#define IS_OSPF6_DUMP_AREA         (ospf6_dump[OSPF6_DUMP_AREA].dump)
-#define IS_OSPF6_DUMP_LSA          (ospf6_dump[OSPF6_DUMP_LSA].dump)
-#define IS_OSPF6_DUMP_ZEBRA        (ospf6_dump[OSPF6_DUMP_ZEBRA].dump)
-#define IS_OSPF6_DUMP_CONFIG       (ospf6_dump[OSPF6_DUMP_CONFIG].dump)
-#define IS_OSPF6_DUMP_DBEX         (ospf6_dump[OSPF6_DUMP_DBEX].dump)
-#define IS_OSPF6_DUMP_SPF          (ospf6_dump[OSPF6_DUMP_SPF].dump)
-#define IS_OSPF6_DUMP_ROUTE        (ospf6_dump[OSPF6_DUMP_ROUTE].dump)
-#define IS_OSPF6_DUMP_LSDB         (ospf6_dump[OSPF6_DUMP_LSDB].dump)
-#define IS_OSPF6_DUMP_REDISTRIBUTE (ospf6_dump[OSPF6_DUMP_REDISTRIBUTE].dump)
+void ospf6_dump_init ();
+int ospf6_dump_is_on (int index);
+int ospf6_dump_install (char *name, char *help);
 
 #endif /* OSPF6_DUMP_H */
 

@@ -31,6 +31,9 @@
 /* Define if you have ipv6 stack.  */
 #undef HAVE_IPV6
 
+/* Define if you wish to support ipv6 router advertisment.  */
+/* #undef HAVE_RTADV */
+
 /* whether system has GNU regex */
 #undef HAVE_GNU_REGEX
 
@@ -66,6 +69,9 @@
 
 /* Define if there is in_pktinfo structure. */
 #undef HAVE_INPKTINFO
+
+/* Define if you have the getrusage function. */
+#undef HAVE_RUSAGE
 
 /* Define if /proc/net/dev exists. */
 #undef HAVE_PROC_NET_DEV
@@ -106,8 +112,15 @@
 /* TCP/IP communication between zebra and protocol daemon. */
 #undef HAVE_TCP_ZEBRA
 
-/* OSPF NSSA option */
+/* The OSPF NSSA option (RFC1587). */
 #undef HAVE_NSSA
+
+/* The OSPF Opaque LSA option (RFC2370). */
+#undef HAVE_OPAQUE_LSA
+
+/* Traffic Engineering Extension to OSPF
+   (draft-katz-yeung-ospf-traffic-06.txt). */
+#undef HAVE_OSPF_TE
 
 /* Linux netlink. */
 #undef HAVE_NETLINK
@@ -128,14 +141,6 @@
 
 /* Define if OpenBSD */
 #undef OPEN_BSD
-
-#ifndef HAVE_BCOPY
-# define bcopy(s,d,n) memcpy((d),(s),(n))
-#endif /* HAVE_BCOPY */
-
-#ifndef HAVE_BZERO
-# define bzero(s,n) memset((s),0,(n))
-#endif /* HAVE_BZERO */
 
 #ifdef HAVE_IPV6
 #ifdef KAME

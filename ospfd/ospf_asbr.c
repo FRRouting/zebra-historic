@@ -178,7 +178,7 @@ ospf_external_info_delete (u_char type, struct prefix_ipv4 p)
   struct route_node *rn;
 
   rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) &p);
-  if (rn != NULL)
+  if (rn)
     {
       ospf_external_info_free (rn->info);
       rn->info = NULL;

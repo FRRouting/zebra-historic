@@ -24,82 +24,47 @@
 #include "ospf6d.h"
 
 int
-ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interface)
+ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *o6i)
 {
   state_t ifs_prev;
 
-  ifs_prev = ospf6_interface->state;
+  ifs_prev = o6i->state;
+
+  if (ifs_prev == ifs_next)
+    return 0;
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("I/F [%s] %s -> %s (%s)",
-               ospf6_interface->interface->name,
+    zlog_info ("I/F: %s: %s -> %s (%s)",
+               o6i->interface->name,
                ospf6_interface_state_string[ifs_prev],
                ospf6_interface_state_string[ifs_next], reason);
 
-  switch (ifs_prev)
+  if ((ifs_prev == IFS_DR || ifs_prev == IFS_BDR) &&
+      (ifs_next != IFS_DR && ifs_next != IFS_BDR))
+    ospf6_leave_alldrouters (o6i->interface->ifindex);
+  else if ((ifs_prev != IFS_DR && ifs_prev != IFS_BDR) &&
+           (ifs_next == IFS_DR || ifs_next == IFS_BDR))
+    ospf6_join_alldrouters (o6i->interface->ifindex);
+
+  o6i->state = ifs_next;
+
+  if (o6i->prevdr != o6i->dr || o6i->prevbdr != o6i->bdr)
     {
-    case IFS_DR:
-    case IFS_BDR:
-      switch (ifs_next)
+      if (IS_OSPF6_DUMP_INTERFACE)
         {
-        case IFS_DR:
-        case IFS_BDR:
-          break;
-        default:
-          ospf6_leave_alldrouters (ospf6_interface->interface->ifindex);
-          break;
+          char dr[16], bdr[16], prevdr[16], prevbdr[16];
+          inet_ntop (AF_INET, &o6i->prevdr, prevdr, sizeof (prevdr));
+          inet_ntop (AF_INET, &o6i->prevbdr, prevbdr, sizeof (prevbdr));
+          inet_ntop (AF_INET, &o6i->dr, dr, sizeof (dr));
+          inet_ntop (AF_INET, &o6i->bdr, bdr, sizeof (bdr));
+          zlog_info ("I/F: %s: DR: %s -> %s", o6i->interface->name,
+                     prevdr, dr);
+          zlog_info ("I/F: %s: BDR: %s -> %s", o6i->interface->name,
+                     prevbdr, bdr);
         }
-      break;
-    default:
-      switch (ifs_next)
-        {
-        case IFS_DR:
-        case IFS_BDR:
-          ospf6_join_alldrouters (ospf6_interface->interface->ifindex);
-          break;
-        default:
-          break;
-        }
-      break;
     }
 
-  ospf6_interface->state = ifs_next;
-
-  /* construct Router-LSA */
-  ospf6_lsa_update_router (ospf6_interface->area->area_id);
-
-  dr_change (ospf6_interface);
-
-  return 0;
-}
-
-int
-dr_change (struct ospf6_interface *ospf6_interface)
-{
-  if (ospf6_interface->prevdr == ospf6_interface->dr
-      && ospf6_interface->prevbdr == ospf6_interface->bdr)
-    return 0; /* Nothing has been changed */
-
-  if (IS_OSPF6_DUMP_INTERFACE)
-    {
-      char dr[16], bdr[16], prevdr[16], prevbdr[16];
-      inet_ntop (AF_INET, &ospf6_interface->prevdr, prevdr, sizeof (prevdr));
-      inet_ntop (AF_INET, &ospf6_interface->prevbdr, prevbdr, sizeof (prevbdr));
-      inet_ntop (AF_INET, &ospf6_interface->dr, dr, sizeof (dr));
-      inet_ntop (AF_INET, &ospf6_interface->bdr, bdr, sizeof (bdr));
-      zlog_info ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
-                 ospf6_interface->interface->name, prevdr, prevbdr, dr, bdr);
-    }
-
-  /* construct LSAs */
-  ospf6_lsa_update_router (ospf6_interface->area->area_id);
-  if (ospf6_interface->state == IFS_DR)
-    {
-      ospf6_lsa_update_network (ospf6_interface->interface->name);
-      ospf6_lsa_update_intra_prefix_transit (ospf6_interface->interface->name);
-    }
-  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area->area_id);
-
+  CALL_CHANGE_HOOK (&interface_hook, o6i);
   return 0;
 }
 
@@ -116,42 +81,28 @@ interface_up (struct thread *thread)
   assert (ospf6_interface->interface);
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("Interface Event %s: InterfaceUp",
+    zlog_info ("I/F: %s: InterfaceUp",
                ospf6_interface->interface->name);
 
   /* check physical interface is up */
   if (!if_is_up (ospf6_interface->interface))
     {
-      zlog_warn ("*** Interface %s is down, can't execute InterfaceUp event",
-                ospf6_interface->interface->name);
+      if (IS_OSPF6_DUMP_INTERFACE)
+        zlog_warn ("  interface %s down, can't execute InterfaceUp",
+                   ospf6_interface->interface->name);
       return -1;
     }
 
   /* if already enabled, do nothing */
   if (ospf6_interface->state > IFS_DOWN)
     {
-      zlog_warn ("*** Interface %s is already up",
+      zlog_warn ("Interface %s already up",
                  ospf6_interface->interface->name);
       return 0;
     }
 
   /* ifid of this interface */
   ospf6_interface->if_id = ospf6_interface->interface->ifindex;
-
-#ifdef FREEBSD_32
-  /* FreeBSD3.2's ep driver ignores multicast ethernet frame.
-     saving this (very roughly) by make I/F promiscous mode */
-  {
-    struct ifreq ifr;
-
-    strncpy (ifr.ifr_name, ospf6_interface->interface->name, sizeof (ifr.ifr_name));
-    if (ioctl (ospf6_sock, SIOCGIFFLAGS, &ifr) < 0)
-      zlog_warn ("fbsd3.2: get I/F flags failed: %s", strerror (errno));
-    ifr.ifr_flags |= IFF_PROMISC;
-    if (ioctl (ospf6_sock, SIOCSIFFLAGS, &ifr) < 0)
-      zlog_warn ("fbsd3.2: set I/F flags failed: %s", strerror (errno));
-  }
-#endif /*FREEBSD_32*/
 
   /* Join AllSPFRouters */
   ospf6_join_allspfrouters (ospf6_interface->interface->ifindex);
@@ -163,7 +114,7 @@ interface_up (struct thread *thread)
   ospf6_set_checksum ();
 
   /* Schedule Hello */
-  if (! ospf6_interface->is_passive)
+  if (! CHECK_FLAG (ospf6_interface->flag, OSPF6_INTERFACE_FLAG_PASSIVE))
     thread_add_event (master, ospf6_send_hello, ospf6_interface, 0);
 
   /* decide next interface state */
@@ -178,11 +129,7 @@ interface_up (struct thread *thread)
                         ospf6_interface->dead_interval);
     }
 
-  /* construct LSAs */
-  ospf6_lsa_update_link (ospf6_interface->interface->name);
-  if (ospf6_interface->state == IFS_DR)
-    ospf6_lsa_update_intra_prefix_transit (ospf6_interface->interface->name);
-  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area->area_id);
+  CALL_FOREACH_LSA_HOOK (hook_interface, hook_change, ospf6_interface);
 
   return 0;
 }
@@ -199,9 +146,10 @@ wait_timer (struct thread *thread)
     return 0;
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("I/F [%s] WaitTimer", ospf6_interface->interface->name);
+    zlog_info ("I/F: %s: WaitTimer", ospf6_interface->interface->name);
 
-  ifs_change (dr_election (ospf6_interface), "WaitTimer:DR Election", ospf6_interface);
+  ifs_change (dr_election (ospf6_interface),
+              "WaitTimer:DR Election", ospf6_interface);
   return 0;
 }
 
@@ -213,10 +161,11 @@ int backup_seen (struct thread *thread)
   assert (ospf6_interface);
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("I/F [%s] BackupSeen", ospf6_interface->interface->name);
+    zlog_info ("I/F: %s: BackupSeen", ospf6_interface->interface->name);
 
   if (ospf6_interface->state == IFS_WAITING)
-    ifs_change (dr_election (ospf6_interface), "BackupSeen:DR Election", ospf6_interface);
+    ifs_change (dr_election (ospf6_interface),
+                "BackupSeen:DR Election", ospf6_interface);
 
   return 0;
 }
@@ -234,9 +183,10 @@ int neighbor_change (struct thread *thread)
     return 0;
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("I/F [%s] NeighborChange", ospf6_interface->interface->name);
+    zlog_info ("I/F: %s: NeighborChange", ospf6_interface->interface->name);
 
-  ifs_change (dr_election (ospf6_interface), "NeighborChange:DR Election", ospf6_interface);
+  ifs_change (dr_election (ospf6_interface),
+              "NeighborChange:DR Election", ospf6_interface);
 
   return 0;
 }
@@ -250,7 +200,9 @@ loopind (struct thread *thread)
   assert (ospf6_interface);
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("I/F [%s] LoopInd", ospf6_interface->interface->name);
+    zlog_info ("I/F: %s: LoopInd", ospf6_interface->interface->name);
+
+  /* XXX not yet */
 
   return 0;
 }
@@ -260,17 +212,18 @@ interface_down (struct thread *thread)
 {
   struct ospf6_interface *ospf6_interface;
 
-  ospf6_interface = (struct ospf6_interface *)THREAD_ARG (thread);
+  ospf6_interface = (struct ospf6_interface *) THREAD_ARG (thread);
   assert (ospf6_interface);
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("I/F [%s] InterfaceDown", ospf6_interface->interface->name);
+    zlog_info ("I/F: %s: InterfaceDown", ospf6_interface->interface->name);
 
   if (ospf6_interface->state == IFS_NONE)
     return 1;
 
   /* Leave AllSPFRouters */
-  ospf6_leave_allspfrouters (ospf6_interface->interface->ifindex);
+  if (ospf6_interface_is_enabled (ospf6_interface->interface->ifindex))
+    ospf6_leave_allspfrouters (ospf6_interface->interface->ifindex);
 
   ifs_change (IFS_DOWN, "Configured", ospf6_interface);
 
@@ -562,4 +515,5 @@ step_five:
   else
     return IFS_DROTHER;
 }
+
 

@@ -1246,12 +1246,12 @@ ospfAreaRangeEntry (struct variable *v, oid *name, size_t *length, int exact,
   return NULL;
 }
 
-struct ospf_nbr_static *
+struct ospf_nbr_nbma *
 ospfHostLookup (struct variable *v, oid *name, size_t *length,
 		struct in_addr *addr, int exact)
 {
   int len;
-  struct ospf_nbr_static *nbr_static;
+  struct ospf_nbr_nbma *nbr_nbma;
 
   if (! ospf_top)
     return NULL;
@@ -1268,9 +1268,9 @@ ospfHostLookup (struct variable *v, oid *name, size_t *length,
 
       oid2in_addr (name + v->namelen, IN_ADDR_SIZE, addr);
 
-      nbr_static = ospf_nbr_static_lookup_by_addr (*addr);
+      nbr_nbma = ospf_nbr_nbma_lookup_by_addr (*addr);
 
-      return nbr_static;
+      return nbr_nbma;
     }
   else
     {
@@ -1280,9 +1280,9 @@ ospfHostLookup (struct variable *v, oid *name, size_t *length,
       
       oid2in_addr (name + v->namelen, len, addr);
 
-      nbr_static = ospf_nbr_static_lookup_next (addr, len == 0 ? 1 : 0);
+      nbr_nbma = ospf_nbr_nbma_lookup_next (addr, len == 0 ? 1 : 0);
 
-      if (nbr_static == NULL)
+      if (nbr_nbma == NULL)
 	return NULL;
 
       oid_copy_addr (name + v->namelen, addr, IN_ADDR_SIZE);
@@ -1292,7 +1292,7 @@ ospfHostLookup (struct variable *v, oid *name, size_t *length,
 
       *length = v->namelen + IN_ADDR_SIZE + 1;
 
-      return nbr_static;
+      return nbr_nbma;
     }
   return NULL;
 }
@@ -1301,7 +1301,7 @@ static u_char *
 ospfHostEntry (struct variable *v, oid *name, size_t *length, int exact,
 	       size_t *var_len, WriteMethod **write_method)
 {
-  struct ospf_nbr_static *nbr_static;
+  struct ospf_nbr_nbma *nbr_nbma;
   struct ospf_interface *oi;
   struct in_addr addr;
 
@@ -1311,17 +1311,17 @@ ospfHostEntry (struct variable *v, oid *name, size_t *length, int exact,
 
   memset (&addr, 0, sizeof (struct in_addr));
 
-  nbr_static = ospfHostLookup (v, name, length, &addr, exact);
-  if (nbr_static == NULL)
+  nbr_nbma = ospfHostLookup (v, name, length, &addr, exact);
+  if (nbr_nbma == NULL)
     return NULL;
 
-  oi = nbr_static->oi;
+  oi = nbr_nbma->oi;
 
   /* Return the current value of the variable */
   switch (v->magic) 
     {
     case OSPFHOSTIPADDRESS:	/* 1 */
-      return SNMP_IPADDRESS (nbr_static->addr);
+      return SNMP_IPADDRESS (nbr_nbma->addr);
       break;
     case OSPFHOSTTOS:		/* 2 */
       return SNMP_INTEGER (0);
@@ -1837,7 +1837,7 @@ ospf_snmp_vl_delete (struct ospf_vl_data *vl_data)
   lp.adv_router = vl_data->vl_peer;
 
   rn = route_node_lookup (ospf_snmp_vl_table, (struct prefix *) &lp);
-  if (!rn)
+  if (! rn)
     return;
   rn->info = NULL;
   route_unlock_node (rn);

@@ -86,30 +86,57 @@ vty_out (struct vty *vty, const char *format, ...)
 {
   va_list args;
   int len = 0;
-  /* XXX need overflow check */
+  int size = 1024;
   char buf[1024];
-
-  /* vararg print */
+  char *p = NULL;
+  
   va_start (args, format);
 
   if (vty_shell (vty))
     vprintf (format, args);
   else
     {
+      /* Try to write to initial buffer.  */
       len = vsnprintf (buf, sizeof buf, format, args);
 
-      if (len < 0)
-	{    
-	  zlog_info ("Vty closed due to vty output buffer shortage.");
-	  return -1;
+      /* Initial buffer is not enough.  */
+      if (len < 0 || len >= size)
+	{
+	  while (1)
+	    {
+	      if (len > -1)
+		size = len + 1;
+	      else
+		size = size * 2;
+
+	      p = XREALLOC (MTYPE_VTY_OUT_BUF, p, size);
+	      if (! p)
+		return -1;
+
+	      len = vsnprintf (p, size, format, args);
+
+	      if (len > -1 && len < size)
+		break;
+	    }
 	}
+
+      /* When initial buffer is enough to store all output.  */
+      if (! p)
+	p = buf;
+
+      /* Pointer p must point out buffer. */
       if (vty_shell_serv (vty))
-	write (vty->fd, (u_char *)buf, len);
+	write (vty->fd, (u_char *) p, len);
       else
-	buffer_write (vty->obuf, (u_char *)buf, len);
+	buffer_write (vty->obuf, (u_char *) p, len);
+
+      /* If p is not different with buf, it is allocated buffer.  */
+      if (p != buf)
+	XFREE (MTYPE_VTY_OUT_BUF, p);
     }
 
   va_end (args);
+
   return len;
 }
 
@@ -232,11 +259,10 @@ vty_dont_lflow_ahead (struct vty *vty)
 struct vty *
 vty_new ()
 {
-  struct vty *new = XMALLOC (MTYPE_VTY, sizeof (struct vty));
-  bzero (new, sizeof (struct vty));
+  struct vty *new = XCALLOC (MTYPE_VTY, sizeof (struct vty));
 
   new->obuf = (struct buffer *) buffer_new (100);
-  new->buf = XMALLOC (MTYPE_VTY, VTY_BUFSIZ);
+  new->buf = XCALLOC (MTYPE_VTY, VTY_BUFSIZ);
   new->max = VTY_BUFSIZ;
   new->sb_buffer = NULL;
 
@@ -470,7 +496,7 @@ vty_history_print (struct vty *vty)
 
   /* Get previous line from history buffer */
   length = strlen (vty->hist[vty->hp]);
-  bcopy (vty->hist[vty->hp], vty->buf, length);
+  memcpy (vty->buf, vty->hist[vty->hp], length);
   vty->cp = vty->length = length;
 
   /* Redraw current line */
@@ -590,6 +616,7 @@ vty_end_config (struct vty *vty)
     case RIPNG_NODE:
     case BGP_NODE:
     case BGP_VPNV4_NODE:
+    case BGP_IPV4_NODE:
     case BGP_IPV4M_NODE:
     case BGP_IPV6_NODE:
     case RMAP_NODE:
@@ -671,7 +698,7 @@ vty_kill_line (struct vty *vty)
   for (i = 0; i < size; i++)
     vty_write (vty, &telnet_backward_char, 1);
 
-  bzero (&vty->buf[vty->cp], size);
+  memset (&vty->buf[vty->cp], 0, size);
   vty->length = vty->cp;
 }
 
@@ -829,7 +856,7 @@ vty_describe_fold (struct vty *vty, int cmd_width,
       return;
     }
 
-  buf = XMALLOC (MTYPE_TMP, strlen (desc->str) + 1);
+  buf = XCALLOC (MTYPE_TMP, strlen (desc->str) + 1);
 
   for (p = desc->str; strlen (p) > desc_width; p += pos + 1)
     {
@@ -973,7 +1000,7 @@ vty_describe_command (struct vty *vty)
 void
 vty_clear_buf (struct vty *vty)
 {
-  bzero (vty->buf, vty->max);
+  memset (vty->buf, 0, vty->max);
 }
 
 /* ^C stop current input and do not add command line to the history. */
@@ -1535,7 +1562,7 @@ vty_create (int vty_sock, union sockunion *su)
   vty->cp = 0;
   vty_clear_buf (vty);
   vty->length = 0;
-  bzero (vty->hist, sizeof (vty->hist));
+  memset (vty->hist, 0, sizeof (vty->hist));
   vty->hp = 0;
   vty->hindex = 0;
   vector_set_index (vtyvec, vty_sock, vty);
@@ -1673,7 +1700,7 @@ vty_accept (struct thread *thread)
 
 #if defined(HAVE_IPV6) && !defined(NRL)
 void
-vty_serv_sock_addrinfo (unsigned short port)
+vty_serv_sock_addrinfo (const char *hostname, unsigned short port)
 {
   int ret;
   struct addrinfo req;
@@ -1689,7 +1716,7 @@ vty_serv_sock_addrinfo (unsigned short port)
   sprintf (port_str, "%d", port);
   port_str[sizeof (port_str) - 1] = '\0';
 
-  ret = getaddrinfo (NULL, port_str, &req, &ainfo);
+  ret = getaddrinfo (hostname, port_str, &req, &ainfo);
 
   if (ret != 0)
     {
@@ -1929,7 +1956,7 @@ vtysh_read (struct thread *thread)
 
 /* Determine address family to bind. */
 void
-vty_serv_sock (unsigned short port, char *path)
+vty_serv_sock (const char *hostname, unsigned short port, char *path)
 {
   /* If port is set to 0, do not listen on TCP/IP at all! */
   if (port)
@@ -1940,7 +1967,7 @@ vty_serv_sock (unsigned short port, char *path)
       vty_serv_sock_family (port, AF_INET);
       vty_serv_sock_family (port, AF_INET6);
 #else /* ! NRL */
-      vty_serv_sock_addrinfo (port);
+      vty_serv_sock_addrinfo (hostname, port);
 #endif /* NRL*/
 #else /* ! HAVE_IPV6 */
       vty_serv_sock_family (port, AF_INET);
@@ -2246,7 +2273,6 @@ vty_log (const char *proto_str, const char *format, va_list va)
 	  vty_out (vty, "%s: ", proto_str);
 	  vvty_out (vty, format, va);
 	  vty_out (vty, "\r\n");
-	  vty_event (VTY_WRITE, vty->fd, vty);
 	}
 }
 

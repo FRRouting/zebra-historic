@@ -46,7 +46,7 @@ zebra_check_addr (struct prefix *p)
       addr = p->u.prefix4.s_addr;
       addr = ntohl (addr);
 
-      if (IPV4_NET127 (addr))
+      if (IPV4_NET127 (addr) || IN_CLASSD (addr))
 	return 0;
     }
 #ifdef HAVE_IPV6
@@ -96,7 +96,8 @@ zebra_redistribute_default (struct zserv *client)
   if (rn)
     {
       for (newrib = rn->info; newrib; newrib = newrib->next)
-	if (CHECK_FLAG (newrib->flags, ZEBRA_FLAG_SELECTED))
+	if (CHECK_FLAG (newrib->flags, ZEBRA_FLAG_SELECTED)
+	    && newrib->distance != DISTANCE_INFINITY)
 	  zsend_ipv4_add_multipath (client, &rn->p, newrib);
       route_unlock_node (rn);
     }
@@ -110,7 +111,8 @@ zebra_redistribute_default (struct zserv *client)
   if (rn)
     {
       for (newrib = rn->info; newrib; newrib = newrib->next)
-	if (CHECK_FLAG (newrib->flags, ZEBRA_FLAG_SELECTED))
+	if (CHECK_FLAG (newrib->flags, ZEBRA_FLAG_SELECTED)
+	    && newrib->distance != DISTANCE_INFINITY)
 	  zsend_ipv6_add_multipath (client, &rn->p, newrib);
       route_unlock_node (rn);
     }
@@ -128,6 +130,7 @@ zebra_redistribute (struct zserv *client, int type)
     for (newrib = rn->info; newrib; newrib = newrib->next)
       if (CHECK_FLAG (newrib->flags, ZEBRA_FLAG_SELECTED) 
 	  && newrib->type == type 
+          && newrib->distance != DISTANCE_INFINITY
 	  && zebra_check_addr (&rn->p))
 	zsend_ipv4_add_multipath (client, &rn->p, newrib);
   
@@ -136,6 +139,7 @@ zebra_redistribute (struct zserv *client, int type)
     for (newrib = rn->info; newrib; newrib = newrib->next)
       if (CHECK_FLAG (newrib->flags, ZEBRA_FLAG_SELECTED)
 	  && newrib->type == type 
+          && newrib->distance != DISTANCE_INFINITY
 	  && zebra_check_addr (&rn->p))
 	zsend_ipv6_add_multipath (client, &rn->p, newrib);
 #endif /* HAVE_IPV6 */
@@ -181,6 +185,10 @@ redistribute_delete (struct prefix *p, struct rib *rib)
 {
   listnode node;
   struct zserv *client;
+
+  /* Add DISTANCE_INFINITY check. */
+  if (rib->distance == DISTANCE_INFINITY)
+    return;
 
   for (node = listhead (client_list); node; nextnode (node))
     if ((client = getdata (node)) != NULL)

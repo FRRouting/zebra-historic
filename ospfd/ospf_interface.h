@@ -94,20 +94,24 @@ struct crypt_key
   u_char auth_key[OSPF_AUTH_MD5_SIZE + 1];
 };
 
-/* OSPF interface structure */
+/* OSPF interface structure. */
 struct ospf_interface
 {
   /* This interface's parent ospf instance. */
   struct ospf *ospf;
 
-  /* Packet send buffer. */
-  struct ospf_fifo *obuf;		/* Output queue */
+  /* OSPF Area. */
+  struct ospf_area *area;
 
   /* Interface data from zebra. */
   struct interface *ifp;
+  struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
   
-  /* OSPF Specific interface data. */
-  u_char type;				/* OSPF Network Type */
+  /* Packet send buffer. */
+  struct ospf_fifo *obuf;		/* Output queue */
+
+  /* OSPF Network Type. */
+  u_char type;
 #define OSPF_IFTYPE_NONE		0
 #define OSPF_IFTYPE_POINTOPOINT		1
 #define OSPF_IFTYPE_BROADCAST		2
@@ -116,13 +120,12 @@ struct ospf_interface
 #define OSPF_IFTYPE_VIRTUALLINK		5
 #define OSPF_IFTYPE_LOOPBACK            6
 #define OSPF_IFTYPE_MAX			7
-  int status;				/* OSPF Interface State */
-  u_int32_t status_change;	        /* Number of status change. */
+
+  /* State of Interface State Machine. */
+  u_char state;
 
   struct prefix *address;		/* Interface prefix */
   struct connected *connected;          /* Pointer to connected */ 
-  struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
-  struct ospf_area *area;		/* OSPF Area */
 
   /* Configured varables. */
   struct ospf_if_params *params;
@@ -137,10 +140,14 @@ struct ospf_interface
 #define OPTIONS(I)		((I)->nbr_self->options)
 #define PRIORITY(I)		((I)->nbr_self->priority)
 
-  list nbr_static;
+  /* List of configured NBMA neighbor. */
+  list nbr_nbma;
 
   /* self-originated LSAs. */
   struct ospf_lsa *network_lsa_self;	/* network-LSA. */
+#ifdef HAVE_OPAQUE_LSA
+  list opaque_lsa_self;			/* Type-9 Opaque-LSAs */
+#endif /* HAVE_OPAQUE_LSA */
 
   struct route_table *ls_upd_queue;
 
@@ -163,6 +170,9 @@ struct ospf_interface
   struct thread *t_ls_upd_event;        /* event */
   struct thread *t_network_lsa_self;    /* self-originated network-LSA
                                            reflesh thread. timer */
+#ifdef HAVE_OPAQUE_LSA
+  struct thread *t_opaque_lsa_self;     /* Type-9 Opaque-LSAs */
+#endif /* HAVE_OPAQUE_LSA */
 
   int on_write_q;
   
@@ -178,11 +188,10 @@ struct ospf_interface
   u_int32_t ls_ack_in;          /* LS Ack message input count. */
   u_int32_t ls_ack_out;         /* LS Ack message output count. */
   u_int32_t discarded;		/* discarded input count by error. */
+  u_int32_t state_change;	/* Number of status change. */
 
   u_int full_nbrs;
 };
-
-#define IF_NAME(O) ospf_if_name (O)
 
 /* Prototypes. */
 char *ospf_if_name (struct ospf_interface *);

@@ -263,8 +263,7 @@ nexthop_active_ipv4 (struct rib *rib, struct nexthop *nexthop, int set,
       /* If there is no selected route or matched route is EGP, go up
          tree. */
       if (! match 
-	  || match->type == ZEBRA_ROUTE_BGP 
-	  || match->type == ZEBRA_ROUTE_KERNEL)
+	  || match->type == ZEBRA_ROUTE_BGP)
 	{
 	  do {
 	    rn = rn->parent;
@@ -355,8 +354,7 @@ nexthop_active_ipv6 (struct rib *rib, struct nexthop *nexthop, int set,
       /* If there is no selected route or matched route is EGP, go up
          tree. */
       if (! match
-	  || match->type == ZEBRA_ROUTE_BGP
-	  || match->type == ZEBRA_ROUTE_KERNEL)
+	  || match->type == ZEBRA_ROUTE_BGP)
 	{
 	  do {
 	    rn = rn->parent;
@@ -437,8 +435,7 @@ rib_match_ipv4 (struct in_addr addr)
       /* If there is no selected route or matched route is EGP, go up
          tree. */
       if (! match 
-	  || match->type == ZEBRA_ROUTE_BGP 
-	  || match->type == ZEBRA_ROUTE_KERNEL)
+	  || match->type == ZEBRA_ROUTE_BGP)
 	{
 	  do {
 	    rn = rn->parent;
@@ -525,8 +522,7 @@ rib_match_ipv6 (struct in6_addr *addr)
       /* If there is no selected route or matched route is EGP, go up
          tree. */
       if (! match 
-	  || match->type == ZEBRA_ROUTE_BGP
-	  || match->type == ZEBRA_ROUTE_KERNEL)
+	  || match->type == ZEBRA_ROUTE_BGP)
 	{
 	  do {
 	    rn = rn->parent;
@@ -746,7 +742,8 @@ rib_process (struct route_node *rn, struct rib *del)
 	continue;
 
       /* Newly selected rib. */
-      if (! select || rib->distance < select->distance)
+      if (! select || rib->distance < select->distance 
+	  || rib->type == ZEBRA_ROUTE_CONNECT)
 	select = rib;
     }
 
@@ -3127,30 +3124,10 @@ void
 rib_update ()
 {
   struct route_node *rn;
-  struct rib *rib;
-  struct rib *next;
 
   for (rn = route_top (rib_table_ipv4); rn; rn = route_next (rn))
-    {
-      /* Update reachability. */
-      rib_process (rn, NULL);
-
-      /* Remove dead kernel route. */
-      for (rib = rn->info; rib; rib = next)
-	{
-	  next = rib->next;
-
-	  if (rib->type == ZEBRA_ROUTE_KERNEL
-	      && ! CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELECTED)
-	      && ! CHECK_FLAG (rib->flags, ZEBRA_FLAG_STATIC))
-	    {
-	      rib_uninstall_kernel (rn, rib);
-	      rib_delnode (rn, rib);
-	      newrib_free (rib);
-	      route_unlock_node (rn);
-	    }
-	}
-    }
+    /* Update reachability. */
+    rib_process (rn, NULL);
 
 #ifdef HAVE_IPV6
   for (rn = route_top (rib_table_ipv6); rn; rn = route_next (rn))

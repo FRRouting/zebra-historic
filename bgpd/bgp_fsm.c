@@ -1,25 +1,23 @@
-/*
- * BGP-4 Finite State Machine   
- * From RFC1771 [A Border Gateway Protocol 4 (BGP-4)]
- * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
- *
- * This file is part of GNU Zebra.
- *
- * GNU Zebra is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2, or (at your option) any
- * later version.
- *
- * GNU Zebra is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the Free
- * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.  
- */
+/* BGP-4 Finite State Machine   
+   From RFC1771 [A Border Gateway Protocol 4 (BGP-4)]
+   Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
 
 #include <zebra.h>
 
@@ -31,6 +29,7 @@
 #include "log.h"
 #include "stream.h"
 #include "memory.h"
+#include "plist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -40,6 +39,10 @@
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_open.h"
+#ifdef HAVE_SNMP
+#include "bgpd/bgp_snmp.h"
+#endif /* HAVE_SNMP */
 
 /* BGP FSM (finite state machine) has three types of functions.  Type
    one is thread functions.  Type two is event functions.  Type three
@@ -191,7 +194,6 @@ bgp_timer_set (struct peer *peer)
 			peer->v_keepalive);
 	}
       BGP_TIMER_OFF (peer->t_asorig);
-      BGP_TIMER_OFF (peer->t_routeadv);
       break;
     }
 }
@@ -275,6 +277,29 @@ bgp_keepalive_timer (struct thread *thread)
   return 0;
 }
 
+int
+bgp_routeadv_timer (struct thread *thread)
+{
+  struct peer *peer;
+
+  peer = THREAD_ARG (thread);
+  peer->t_routeadv = NULL;
+
+  if (BGP_DEBUG (fsm, FSM))
+    zlog (peer->log, LOG_DEBUG,
+	  "%s [FSM] Timer (routeadv timer expire)",
+	  peer->host);
+
+  peer->synctime = time (NULL);
+
+  BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
+
+  BGP_TIMER_ON (peer->t_routeadv, bgp_routeadv_timer,
+		peer->v_routeadv);
+
+  return 0;
+}
+
 /* Reset bgp update timer */
 static void
 bgp_uptime_reset (struct peer *peer)
@@ -286,18 +311,32 @@ bgp_uptime_reset (struct peer *peer)
 int
 bgp_stop (struct peer *peer)
 {
-  /* Need of clear of peer. */
-  bgp_route_clear (peer);
+  int established = 0;
+  afi_t afi;
+  safi_t safi;
+  char orf_name[BUFSIZ];
+
+  /* Increment Dropped count. */
+  if (peer->status == Established)
+    {
+      established = 1;
+      peer->dropped++;
+      bgp_fsm_change_status (peer, Idle);
+#ifdef HAVE_SNMP
+      bgpTrapBackwardTransition (peer);
+#endif /* HAVE_SNMP */
+    }
+
+  /* Reset uptime. */
   bgp_uptime_reset (peer);
+
+  /* Need of clear of peer. */
+  if (established)
+    bgp_clear_route_all (peer);
 
   /* Stop read and write threads when exists. */
   BGP_READ_OFF (peer->t_read);
   BGP_WRITE_OFF (peer->t_write);
-
-  /* Stream reset. */
-  peer->packet_size = 0;
-  if (peer->ibuf)
-    stream_reset (peer->ibuf);
 
   /* Stop all timers. */
   BGP_TIMER_OFF (peer->t_start);
@@ -310,8 +349,15 @@ bgp_stop (struct peer *peer)
   /* Delete all existing events of the peer. */
   BGP_EVENT_DELETE (peer);
 
-  /* Clear output buffer. */
-  stream_fifo_free (peer->obuf);
+  /* Stream reset. */
+  peer->packet_size = 0;
+
+  /* Clear input and output buffer.  */
+  if (peer->ibuf)
+    stream_reset (peer->ibuf);
+  if (peer->work)
+    stream_reset (peer->work);
+  stream_fifo_clean (peer->obuf);
 
   /* Close of file descriptor. */
   if (peer->fd >= 0)
@@ -323,13 +369,13 @@ bgp_stop (struct peer *peer)
   /* Connection information. */
   if (peer->su_local)
     {
-      XFREE (MTYPE_TMP, peer->su_local);
+      XFREE (MTYPE_SOCKUNION, peer->su_local);
       peer->su_local = NULL;
     }
 
   if (peer->su_remote)
     {
-      XFREE (MTYPE_TMP, peer->su_remote);
+      XFREE (MTYPE_SOCKUNION, peer->su_remote);
       peer->su_remote = NULL;
     }
 
@@ -354,33 +400,59 @@ bgp_stop (struct peer *peer)
   peer->afc_recv[AFI_IP6][SAFI_MULTICAST] = 0;
 
   /* Reset route refresh flag. */
-  peer->refresh_adv = 0;
-  peer->refresh_nego_old = 0;
-  peer->refresh_nego_new = 0;
+  UNSET_FLAG (peer->cap, PEER_CAP_REFRESH_ADV);
+  UNSET_FLAG (peer->cap, PEER_CAP_REFRESH_OLD_RCV);
+  UNSET_FLAG (peer->cap, PEER_CAP_REFRESH_NEW_RCV);
+  UNSET_FLAG (peer->cap, PEER_CAP_DYNAMIC_ADV);
+  UNSET_FLAG (peer->cap, PEER_CAP_DYNAMIC_RCV);
+
+  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
+    for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
+      {
+	/* peer address family capability flags*/
+	peer->af_cap[afi][safi] = 0;
+	/* peer address family status flags*/
+	peer->af_sflags[afi][safi] = 0;
+	/* Received ORF prefix-filter */
+	peer->orf_plist[afi][safi] = NULL;
+        /* ORF received prefix-filter pnt */
+        sprintf (orf_name, "%s.%d.%d", peer->host, afi, safi);
+        prefix_bgp_orf_remove_all (orf_name);
+      }
+
+  UNSET_FLAG (peer->af_flags[AFI_IP][SAFI_UNICAST],
+	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
+  UNSET_FLAG (peer->af_flags[AFI_IP][SAFI_MULTICAST],
+	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
+  UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_UNICAST],
+	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
+  UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_MULTICAST],
+	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
 
   /* Reset keepalive and holdtime */
-  if (peer->config & PEER_CONFIG_TIMER)
+  if (CHECK_FLAG (peer->config, PEER_CONFIG_TIMER))
     {
       peer->v_keepalive = peer->keepalive;
       peer->v_holdtime = peer->holdtime;
     }
   else
     {
-      peer->v_keepalive = peer->global_keepalive;
-      peer->v_holdtime = peer->global_holdtime;
-    }
-
-  /* Increment Dropped count. */
-  if (peer->status == Established)
-    {
-      peer->dropped++;
-      fsm_change_status (peer, Idle);
-#ifdef HAVE_SNMP
-      bgpTrapBackwardTransition (peer);
-#endif /* HAVE_SNMP */
+      peer->v_keepalive = peer->bgp->default_keepalive;
+      peer->v_holdtime = peer->bgp->default_holdtime;
     }
 
   peer->update_time = 0;
+
+  /* Until we are sure that there is no problem about prefix count
+     this should be commented out.*/
+#if 0
+  /* Reset prefix count */
+  peer->pcount[AFI_IP][SAFI_UNICAST] = 0;
+  peer->pcount[AFI_IP][SAFI_MULTICAST] = 0;
+  peer->pcount[AFI_IP][SAFI_MPLS_VPN] = 0;
+  peer->pcount[AFI_IP6][SAFI_UNICAST] = 0;
+  peer->pcount[AFI_IP6][SAFI_MULTICAST] = 0;
+#endif /* 0 */
 
   return 0;
 }
@@ -488,7 +560,7 @@ bgp_reconnect (struct peer *peer)
 }
 
 int
-fsm_open (struct peer *peer)
+bgp_fsm_open (struct peer *peer)
 {
   /* Send keepalive and make keepalive timer */
   bgp_keepalive_send (peer);
@@ -502,7 +574,7 @@ fsm_open (struct peer *peer)
 /* Called after event occured, this function change status and reset
    read/write and timer thread. */
 void
-fsm_change_status (struct peer *peer, int status)
+bgp_fsm_change_status (struct peer *peer, int status)
 {
   bgp_dump_state (peer, peer->status, status);
 
@@ -513,7 +585,7 @@ fsm_change_status (struct peer *peer, int status)
 
 /* Keepalive send to peer. */
 int
-fsm_keepalive_expire (struct peer *peer)
+bgp_fsm_keepalive_expire (struct peer *peer)
 {
   bgp_keepalive_send (peer);
   return 0;
@@ -522,7 +594,7 @@ fsm_keepalive_expire (struct peer *peer)
 /* Hold timer expire.  This is error of BGP connection. So cut the
    peer and change to Idle status. */
 int
-fsm_holdtime_expire (struct peer *peer)
+bgp_fsm_holdtime_expire (struct peer *peer)
 {
   if (BGP_DEBUG (fsm, FSM))
     zlog (peer->log, LOG_DEBUG, "%s [FSM] Hold timer expire", peer->host);
@@ -547,6 +619,8 @@ int
 bgp_establish (struct peer *peer)
 {
   struct bgp_notify *notify;
+  afi_t afi;
+  safi_t safi;
 
   /* Reset capability open status flag. */
   if (! CHECK_FLAG (peer->sflags, PEER_STATUS_CAPABILITY_OPEN))
@@ -563,7 +637,7 @@ bgp_establish (struct peer *peer)
 
   /* Increment established count. */
   peer->established++;
-  fsm_change_status (peer, Established);
+  bgp_fsm_change_status (peer, Established);
 #ifdef HAVE_SNMP
   bgpTrapEstablished (peer);
 #endif /* HAVE_SNMP */
@@ -571,17 +645,40 @@ bgp_establish (struct peer *peer)
   /* Reset uptime, send keepalive, send current table. */
   bgp_uptime_reset (peer);
 
+  /* Send route-refresh when ORF is enabled */
+  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
+    for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
+      if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_ADV))
+	{
+	  if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_RCV))
+	    bgp_route_refresh_send (peer, afi, safi, ORF_TYPE_PREFIX,
+				    REFRESH_IMMEDIATE, 0);
+	  else if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_OLD_RCV))
+	    bgp_route_refresh_send (peer, afi, safi, ORF_TYPE_PREFIX_OLD,
+				    REFRESH_IMMEDIATE, 0);
+	}
+
   if (peer->v_keepalive)
     bgp_keepalive_send (peer);
 
-  bgp_announce_table (peer);
+  /* First update is deferred until ORF or ROUTE-REFRESH is received */
+  for (afi = AFI_IP ; afi < AFI_MAX ; afi++)
+    for (safi = SAFI_UNICAST ; safi < SAFI_MAX ; safi++)
+      if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_RM_ADV))
+	if (CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_RCV)
+	    || CHECK_FLAG (peer->af_cap[afi][safi], PEER_CAP_ORF_PREFIX_SM_OLD_RCV))
+	  SET_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_ORF_WAIT_REFRESH);
+
+  bgp_announce_route_all (peer);
+
+  BGP_TIMER_ON (peer->t_routeadv, bgp_routeadv_timer, 1);
 
   return 0;
 }
 
 /* Keepalive packet is received. */
 int
-fsm_keepalive (struct peer *peer)
+bgp_fsm_keepalive (struct peer *peer)
 {
   /* peer count update */
   peer->keepalive_in++;
@@ -592,7 +689,7 @@ fsm_keepalive (struct peer *peer)
 
 /* Update packet is received. */
 int
-fsm_update (struct peer *peer)
+bgp_fsm_update (struct peer *peer)
 {
   BGP_TIMER_OFF (peer->t_holdtime);
   return 0;
@@ -672,9 +769,9 @@ struct {
     {bgp_ignore,  Idle},	/* TCP_connection_open_failed   */
     {bgp_stop,    Idle},	/* TCP_fatal_error              */
     {bgp_ignore,  Idle},	/* ConnectRetry_timer_expired   */
-    {fsm_holdtime_expire, Idle},	/* Hold_Timer_expired           */
+    {bgp_fsm_holdtime_expire, Idle},	/* Hold_Timer_expired           */
     {bgp_ignore,  Idle},	/* KeepAlive_timer_expired      */
-    {fsm_open,    OpenConfirm},	/* Receive_OPEN_message         */
+    {bgp_fsm_open,    OpenConfirm},	/* Receive_OPEN_message         */
     {bgp_ignore,  Idle},	/* Receive_KEEPALIVE_message    */
     {bgp_ignore,  Idle},	/* Receive_UPDATE_message       */
     {bgp_stop_with_error, Idle}, /* Receive_NOTIFICATION_message */
@@ -688,7 +785,7 @@ struct {
     {bgp_stop,    Idle},	/* TCP_connection_open_failed   */
     {bgp_stop,    Idle},	/* TCP_fatal_error              */
     {bgp_ignore,  Idle},	/* ConnectRetry_timer_expired   */
-    {fsm_holdtime_expire, Idle},	/* Hold_Timer_expired           */
+    {bgp_fsm_holdtime_expire, Idle},	/* Hold_Timer_expired           */
     {bgp_ignore,  OpenConfirm},	/* KeepAlive_timer_expired      */
     {bgp_ignore,  Idle},	/* Receive_OPEN_message         */
     {bgp_establish, Established}, /* Receive_KEEPALIVE_message    */
@@ -704,11 +801,11 @@ struct {
     {bgp_ignore,  Idle},	/* TCP_connection_open_failed   */
     {bgp_stop,    Idle},	/* TCP_fatal_error              */
     {bgp_ignore,  Idle},	/* ConnectRetry_timer_expired   */
-    {fsm_holdtime_expire, Idle}, /* Hold_Timer_expired           */
-    {fsm_keepalive_expire, Established}, /* KeepAlive_timer_expired      */
+    {bgp_fsm_holdtime_expire, Idle}, /* Hold_Timer_expired           */
+    {bgp_fsm_keepalive_expire, Established}, /* KeepAlive_timer_expired      */
     {bgp_stop, Idle},		/* Receive_OPEN_message         */
-    {fsm_keepalive, Established}, /* Receive_KEEPALIVE_message    */
-    {fsm_update,   Established}, /* Receive_UPDATE_message       */
+    {bgp_fsm_keepalive, Established}, /* Receive_KEEPALIVE_message    */
+    {bgp_fsm_update,   Established}, /* Receive_UPDATE_message       */
     {bgp_stop_with_error, Idle}, /* Receive_NOTIFICATION_message */
   },
 };
@@ -767,7 +864,7 @@ bgp_event (struct thread *thread)
     
   /* If status is changed. */
   if (next != peer->status)
-    fsm_change_status (peer, next);
+    bgp_fsm_change_status (peer, next);
 
   /* Make sure timer is set. */
   bgp_timer_set (peer);

@@ -113,6 +113,8 @@ route_set_metric (void *rule, struct prefix *prefix,
 	rinfo->metric = 1;
       if (rinfo->metric > RIPNG_METRIC_INFINITY)
 	rinfo->metric = RIPNG_METRIC_INFINITY;
+
+      rinfo->metric_set = 1;
     }
   return RMAP_OKAY;
 }

@@ -29,7 +29,6 @@
 #include "vty.h"
 #include "command.h"
 
-#include "ospf6_list.h"
 #include "ospf6_lsa.h"
 #include "ospf6_message.h"
 #include "ospf6_neighbor.h"
@@ -95,7 +94,10 @@ ospf6_neighbor_summary_add (struct ospf6_lsa *lsa,
   struct ospf6_lsa *summary;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor %s summary-list: add %s", nei->str, lsa->str);
+    {
+      zlog_info ("Neighbor %s summary-list:", nei->str);
+      zlog_info ("    Add %s", lsa->str);
+    }
 
   ospf6_lsa_age_current (lsa);
   summary = ospf6_lsa_summary_create (lsa->header);
@@ -109,19 +111,13 @@ ospf6_neighbor_summary_remove (struct ospf6_lsa *lsa,
   struct ospf6_lsa *summary;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor %s summary-list: remove %s",
-               nei->str, lsa->str);
+    {
+      zlog_info ("Neighbor %s summary-list:", nei->str);
+      zlog_info ("    Remove %s", lsa->str);
+    }
 
   summary = ospf6_lsdb_lookup_lsdb (lsa->header->type, lsa->header->id,
                                     lsa->header->adv_router, nei->summary_list);
-  if (! summary)
-    {
-      if (IS_OSPF6_DUMP_NEIGHBOR)
-        zlog_info ("Can't remove %s's summary-list: no such instance: %s",
-                   nei->str, lsa->str);
-      return;
-    }
-
   ospf6_lsdb_remove (summary, nei->summary_list);
 }
 
@@ -132,7 +128,10 @@ ospf6_neighbor_request_add (struct ospf6_lsa *lsa,
   struct ospf6_lsa *summary;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor %s request-list: add %s", nei->str, lsa->str);
+    {
+      zlog_info ("Neighbor %s request-list:", nei->str);
+      zlog_info ("    Add %s", lsa->str);
+    }
 
   ospf6_lsa_age_current (lsa);
   summary = ospf6_lsa_summary_create (lsa->header);
@@ -146,19 +145,13 @@ ospf6_neighbor_request_remove (struct ospf6_lsa *lsa,
   struct ospf6_lsa *summary;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor %s request-list: remove %s",
-               nei->str, lsa->str);
+    {
+      zlog_info ("Neighbor %s request-list:", nei->str);
+      zlog_info ("    Remove %s", lsa->str);
+    }
 
   summary = ospf6_lsdb_lookup_lsdb (lsa->header->type, lsa->header->id,
                                     lsa->header->adv_router, nei->request_list);
-  if (! summary)
-    {
-      if (IS_OSPF6_DUMP_NEIGHBOR)
-        zlog_info ("Can't remove %s's request-list: no such instance: %s",
-                   nei->str, lsa->str);
-      return;
-    }
-
   ospf6_lsdb_remove (summary, nei->request_list);
 }
 
@@ -167,7 +160,10 @@ ospf6_neighbor_retrans_add (struct ospf6_lsa *lsa,
                             struct ospf6_neighbor *nei)
 {
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor retrans-list: add %s", lsa->str);
+    {
+      zlog_info ("Neighbor %s retrans-list:", nei->str);
+      zlog_info ("    Add %s", lsa->str);
+    }
 
   ospf6_lsdb_add (lsa, nei->retrans_list);
 }
@@ -177,7 +173,10 @@ ospf6_neighbor_retrans_remove (struct ospf6_lsa *lsa,
                                struct ospf6_neighbor *nei)
 {
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor retrans-list: remove %s", lsa->str);
+    {
+      zlog_info ("Neighbor %s retrans-list:", nei->str);
+      zlog_info ("    Remove %s", lsa->str);
+    }
 
   ospf6_lsdb_remove (lsa, nei->retrans_list);
 }
@@ -186,37 +185,26 @@ void
 ospf6_neighbor_dbdesc_add (struct ospf6_lsa *lsa,
                            struct ospf6_neighbor *nei)
 {
-  struct ospf6_lsa *summary;
-
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor %s dbdesc-list: add %s", nei->str, lsa->str);
+    {
+      zlog_info ("Neighbor %s dbdesc-list:", nei->str);
+      zlog_info ("    Add %s", lsa->str);
+    }
 
-  ospf6_lsa_age_current (lsa);
-  summary = ospf6_lsa_summary_create (lsa->header);
-  ospf6_lsdb_add (summary, nei->dbdesc_list);
+  ospf6_lsdb_add (lsa, nei->dbdesc_list);
 }
 
 void
 ospf6_neighbor_dbdesc_remove (struct ospf6_lsa *lsa,
                               struct ospf6_neighbor *nei)
 {
-  struct ospf6_lsa *summary;
-
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor %s dbdesc-list: remove %s",
-               nei->str, lsa->str);
-
-  summary = ospf6_lsdb_lookup_lsdb (lsa->header->type, lsa->header->id,
-                                    lsa->header->adv_router, nei->dbdesc_list);
-  if (! summary)
     {
-      if (IS_OSPF6_DUMP_NEIGHBOR)
-        zlog_info ("Can't remove %s's dbdesc-list: no such instance: %s",
-                   nei->str, lsa->str);
-      return;
+      zlog_info ("Neighbor %s dbdesc-list:", nei->str);
+      zlog_info ("    Remove %s", lsa->str);
     }
 
-  ospf6_lsdb_remove (summary, nei->dbdesc_list);
+  ospf6_lsdb_remove (lsa, nei->dbdesc_list);
 }
 
 
@@ -224,39 +212,39 @@ ospf6_neighbor_dbdesc_remove (struct ospf6_lsa *lsa,
 void
 ospf6_neighbor_dbex_init (struct ospf6_neighbor *nei)
 {
-  struct ospf6_lsdb_node *node;
+  struct ospf6_lsdb_node node;
 
-  /* clear summary-list */
-  ospf6_lsdb_remove_all (nei->summary_list);
+  /* clear ls-list */
+  ospf6_neighbor_lslist_clear (nei);
 
   /* AS scope LSAs */
-  for (node = ospf6_lsdb_head (nei->ospf6_interface->area->ospf6->lsdb);
-       node; node = ospf6_lsdb_next (node))
+  for (ospf6_lsdb_head (&node, nei->ospf6_interface->area->ospf6->lsdb);
+       ! ospf6_lsdb_is_end (&node); ospf6_lsdb_next (&node))
     {
-      if (ospf6_lsa_is_maxage (node->lsa))
-        ospf6_neighbor_retrans_add (node->lsa, nei);
+      if (IS_LSA_MAXAGE (node.lsa))
+        ospf6_neighbor_retrans_add (node.lsa, nei);
       else
-        ospf6_neighbor_summary_add (node->lsa, nei);
+        ospf6_neighbor_summary_add (node.lsa, nei);
     }
 
   /* AREA scope LSAs */
-  for (node = ospf6_lsdb_head (nei->ospf6_interface->area->lsdb);
-       node; node = ospf6_lsdb_next (node))
+  for (ospf6_lsdb_head (&node, nei->ospf6_interface->area->lsdb);
+       ! ospf6_lsdb_is_end (&node); ospf6_lsdb_next (&node))
     {
-      if (ospf6_lsa_is_maxage (node->lsa))
-        ospf6_neighbor_retrans_add (node->lsa, nei);
+      if (IS_LSA_MAXAGE (node.lsa))
+        ospf6_neighbor_retrans_add (node.lsa, nei);
       else
-        ospf6_neighbor_summary_add (node->lsa, nei);
+        ospf6_neighbor_summary_add (node.lsa, nei);
     }
 
   /* INTERFACE scope LSAs */
-  for (node = ospf6_lsdb_head (nei->ospf6_interface->lsdb);
-       node; node = ospf6_lsdb_next (node))
+  for (ospf6_lsdb_head (&node, nei->ospf6_interface->lsdb);
+       ! ospf6_lsdb_is_end (&node); ospf6_lsdb_next (&node))
     {
-      if (ospf6_lsa_is_maxage (node->lsa))
-        ospf6_neighbor_retrans_add (node->lsa, nei);
+      if (IS_LSA_MAXAGE (node.lsa))
+        ospf6_neighbor_retrans_add (node.lsa, nei);
       else
-        ospf6_neighbor_summary_add (node->lsa, nei);
+        ospf6_neighbor_summary_add (node.lsa, nei);
     }
 }
 
@@ -292,12 +280,16 @@ ospf6_neighbor_create (u_int32_t router_id, struct ospf6_interface *o6i)
   listnode_add (o6i->neighbor_list, new);
   new->ospf6_interface = o6i;
 
+  CALL_ADD_HOOK (&neighbor_hook, new);
+
   return new;
 }
 
 void
 ospf6_neighbor_delete (struct ospf6_neighbor *o6n)
 {
+  CALL_REMOVE_HOOK (&neighbor_hook, o6n);
+
   ospf6_neighbor_thread_cancel_all (o6n);
   ospf6_neighbor_lslist_clear (o6n);
 
@@ -333,22 +325,28 @@ ospf6_neighbor_lookup (u_int32_t router_id,
 void
 ospf6_neighbor_show_summary (struct vty *vty, struct ospf6_neighbor *o6n)
 {
-  char router_id[16], dr[16], bdr[16];
+  char router_id[16];
+  char dr[16], bdr[16];
+  char duration[16];
+  struct timeval now, res;
 
 /*
-   vty_out (vty, "%-15s %-3s %-8s %-15s %-15s %s[%s]%s",
-            "RouterID", "Pri", "State", "DR",
-            "BDR", "I/F", "State", VTY_NEWLINE);
+    vty_out (vty, "%-15s %6s/%-11s %-15s %-15s %s[%s]%s",
+             "RouterID", "State", "Duration", "DR", "BDR", "I/F",
+             "State", VTY_NEWLINE);
 */
 
   inet_ntop (AF_INET, &o6n->router_id, router_id, sizeof (router_id));
   inet_ntop (AF_INET, &o6n->dr, dr, sizeof (dr));
   inet_ntop (AF_INET, &o6n->bdr, bdr, sizeof (bdr));
 
-  vty_out (vty, "%-15s %3d %-8s %-15s %-15s %s[%s]%s",
-           router_id, o6n->priority,
-           ospf6_neighbor_state_string[o6n->state], dr, bdr,
-           o6n->ospf6_interface->interface->name,
+  gettimeofday (&now, NULL);
+  ospf6_timeval_sub (&now, &o6n->last_changed, &res);
+  ospf6_timeval_string_summary (&res, duration, sizeof (duration));
+
+  vty_out (vty, "%-15s %6s/%-11s %-15s %-15s %s[%s]%s",
+           router_id, ospf6_neighbor_state_string[o6n->state],
+           duration, dr, bdr, o6n->ospf6_interface->interface->name,
            ospf6_interface_state_string[o6n->ospf6_interface->state],
            VTY_NEWLINE);
 }
@@ -356,55 +354,55 @@ ospf6_neighbor_show_summary (struct vty *vty, struct ospf6_neighbor *o6n)
 void
 ospf6_neighbor_show (struct vty *vty, struct ospf6_neighbor *o6n)
 {
-  char hisaddr[64];
+  char hisaddr[64], timestring[32];
+  struct timeval now, res;
+
   inet_ntop (AF_INET6, &o6n->hisaddr, hisaddr, sizeof (hisaddr));
   vty_out (vty, " Neighbor %s, interface address %s%s",
-                o6n->str, hisaddr, VTY_NEWLINE);
-  vty_out (vty, "    In the area %s via interface %s(ifindex %d)%s",
-                o6n->ospf6_interface->area->str,
-                o6n->ospf6_interface->interface->name,
-                o6n->ospf6_interface->interface->ifindex,
-                VTY_NEWLINE);
-  vty_out (vty, "    Neighbor priority is %d, State is %s, %d state changes%s",
-                o6n->priority, ospf6_neighbor_state_string[o6n->state],
-                o6n->ospf6_stat_state_changed, VTY_NEWLINE);
+           o6n->str, hisaddr, VTY_NEWLINE);
+  vty_out (vty, "    Area %s via interface %s (ifindex %d)%s",
+           o6n->ospf6_interface->area->str,
+           o6n->ospf6_interface->interface->name,
+           o6n->ospf6_interface->interface->ifindex,
+           VTY_NEWLINE);
+  vty_out (vty, "    Priority: %d, State: %s, %d state changes%s",
+           o6n->priority, ospf6_neighbor_state_string[o6n->state],
+           o6n->ospf6_stat_state_changed, VTY_NEWLINE);
+
+  gettimeofday (&now, NULL);
+  ospf6_timeval_sub (&now, &o6n->last_changed, &res);
+  ospf6_timeval_string_summary (&res, timestring, sizeof (timestring));
+  vty_out (vty, "    Last state changed: %s ago%s", timestring, VTY_NEWLINE);
 }
 
 void
 ospf6_neighbor_show_detail (struct vty *vty, struct ospf6_neighbor *o6n)
 {
   char hisdr[16], hisbdr[16];
+
   ospf6_neighbor_show (vty, o6n);
 
   inet_ntop (AF_INET, &o6n->dr, hisdr, sizeof (hisdr));
   inet_ntop (AF_INET, &o6n->bdr, hisbdr, sizeof (hisbdr));
 
+  vty_out (vty, "    His Ifindex of myside: %d%s",
+                o6n->ifid, VTY_NEWLINE);
+  vty_out (vty, "    His DR Election: DR %s, BDR %s%s",
+                hisdr, hisbdr, VTY_NEWLINE);
+
+  vty_out (vty, "    Last received DbDesc: opt:%s"
+                " ifmtu:%hu bit:%s%s%s seqnum:%ld%s",
+                "xxx", ntohs (o6n->last_dd.ifmtu),
+                (DD_IS_IBIT_SET (o6n->last_dd.bits) ? "I" : "-"),
+                (DD_IS_MBIT_SET (o6n->last_dd.bits) ? "M" : "-"),
+                (DD_IS_MSBIT_SET (o6n->last_dd.bits) ? "m" : "s"),
+                (u_long)ntohl (o6n->last_dd.seqnum), VTY_NEWLINE);
   vty_out (vty, "    My DbDesc bit for this neighbor: %s%s%s%s",
            (DD_IS_IBIT_SET (o6n->dbdesc_bits) ? "I" : "-"),
            (DD_IS_MBIT_SET (o6n->dbdesc_bits) ? "M" : "-"),
            (DD_IS_MSBIT_SET (o6n->dbdesc_bits) ? "m" : "s"),
            VTY_NEWLINE);
-  vty_out (vty, "    His Ifindex of myside: %d%s",
-                o6n->ifid, VTY_NEWLINE);
-  vty_out (vty, "    His DRDecision: DR %s, BDR %s%s",
-                hisdr, hisbdr, VTY_NEWLINE);
-  vty_out (vty, "    Last received DbDesc: opt:%s"
-                " ifmtu:%hu bit:%s%s%s seqnum:%d%s",
-                "xxx", ntohs (o6n->last_dd.ifmtu),
-                (DD_IS_IBIT_SET (o6n->last_dd.bits) ? "I" : "-"),
-                (DD_IS_MBIT_SET (o6n->last_dd.bits) ? "M" : "-"),
-                (DD_IS_MSBIT_SET (o6n->last_dd.bits) ? "m" : "s"),
-                ntohl (o6n->last_dd.seqnum), VTY_NEWLINE);
-  vty_out (vty, "    Number of LSAs in DbDesc retransmitting: %d%s",
-                listcount (o6n->dbdesc_lsa), VTY_NEWLINE);
-#if 0
-  vty_out (vty, "    Number of LSAs in SummaryList: %d%s",
-                listcount (o6n->summarylist), VTY_NEWLINE);
-  vty_out (vty, "    Number of LSAs in RequestList: %d%s",
-                listcount (o6n->requestlist), VTY_NEWLINE);
-  vty_out (vty, "    Number of LSAs in RetransList: %d%s",
-                listcount (o6n->retranslist), VTY_NEWLINE);
-#endif
+
   vty_out (vty, "    %-16s %5d times, %-16s %5d times%s",
                 "SeqnumMismatch", o6n->ospf6_stat_seqnum_mismatch,
                 "BadLSReq", o6n->ospf6_stat_bad_lsreq, VTY_NEWLINE);
@@ -423,6 +421,16 @@ ospf6_neighbor_show_detail (struct vty *vty, struct ospf6_neighbor *o6n)
                 "LSAReceived", o6n->ospf6_stat_received_lsa,
                 "LSUpdateReceived", o6n->ospf6_stat_received_lsupdate,
                 VTY_NEWLINE);
+
+  vty_out (vty, "    %-12s %-12s %-12s%s",
+           "Message", "DbDesc", "LSReq", VTY_NEWLINE);
+  vty_out (vty, "    %-12s %12d %12d%s", "LSA Send",
+           o6n->lsa_send[OSPF6_MESSAGE_TYPE_DBDESC],
+           o6n->lsa_send[OSPF6_MESSAGE_TYPE_LSREQ], VTY_NEWLINE);
+  vty_out (vty, "    %-12s %12d %12d%s", "LSA Receive",
+           o6n->lsa_receive[OSPF6_MESSAGE_TYPE_DBDESC],
+           o6n->lsa_receive[OSPF6_MESSAGE_TYPE_LSREQ], VTY_NEWLINE);
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 
 void
@@ -440,90 +448,54 @@ ospf6_neighbor_timestamp_hello (struct ospf6_neighbor *o6n)
   o6n->tv_last_hello_received.tv_usec = now.tv_usec;
 }
 
-DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd,
-       "show ipv6 ospf6 neighbor IFNAME A.B.C.D detail",
+DEFUN (show_ipv6_ospf6_neighbor_routerid,
+       show_ipv6_ospf6_neighbor_routerid_cmd,
+       "show ipv6 ospf6 neighbor A.B.C.D",
        SHOW_STR
        IP6_STR
        OSPF6_STR
        "Neighbor list\n"
-       IFNAME_STR
        "OSPF6 neighbor Router ID in IP address format\n"
-       "detailed infomation\n"
        )
 {
   u_int32_t router_id;
-  struct interface *ifp;
-  struct ospf6_neighbor *nbr;
-  struct ospf6_interface *ospf6_interface;
-  struct ospf6_area *area;
-  listnode i, j, k;
+  struct ospf6_neighbor *o6n;
+  struct ospf6_interface *o6i;
+  struct ospf6_area *o6a;
+  listnode nodei, nodej, nodek;
 
   OSPF6_CMD_CHECK_RUNNING ();
 
-  i = j = k = NULL;
-  vty_out (vty, "%-15s %-3s %-8s %-15s %-15s %s[%s]%s",
-     "RouterID", "Pri", "State", "DR", "BDR", "I/F", "State", VTY_NEWLINE);
-
-  if (argc)
+  if (argc == 0)
+    vty_out (vty, "%-15s %6s/%-11s %-15s %-15s %s[%s]%s",
+             "RouterID", "State", "Duration", "DR", "BDR", "I/F",
+             "State", VTY_NEWLINE);
+  else if (inet_pton (AF_INET, argv[0], &router_id) != 1)
     {
-      ifp = if_lookup_by_name (argv[0]);
-      if (!ifp)
-        {
-          vty_out (vty, "no such interface: %s", argv[0]);
-          return CMD_SUCCESS;
-        }
-
-      ospf6_interface = (struct ospf6_interface *) ifp->info;
-      if (!ospf6_interface)
-        {
-          vty_out (vty, "ospf not enabled on interface: %s", argv[0]);
-          return CMD_SUCCESS;
-        }
-
-      if (argc > 1)
-        {
-          inet_pton (AF_INET, argv[1], &router_id);
-          nbr = ospf6_neighbor_lookup (router_id, ospf6_interface);
-          if (!nbr)
-            {
-              vty_out (vty, "neighbor %s not found on %s", argv[1],
-                       ospf6_interface->interface->name);
-              return CMD_SUCCESS;
-            }
-
-          if (argc == 3)
-            ospf6_neighbor_show_detail (vty, nbr);
-          else
-            ospf6_neighbor_show (vty, nbr);
-          return CMD_SUCCESS;
-        }
-
-      for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
-        {
-          nbr = (struct ospf6_neighbor *) getdata (i);
-          ospf6_neighbor_show_summary (vty, nbr);
-        }
+      vty_out (vty, "Malformed Router-ID: %s%s", argv[0], VTY_NEWLINE);
       return CMD_SUCCESS;
     }
 
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
+  for (nodei = listhead (ospf6->area_list); nodei; nextnode (nodei))
     {
-      area = (struct ospf6_area *)getdata (i);
-      for (j = listhead (area->if_list); j; nextnode (j))
+      o6a = getdata (nodei);
+      for (nodej = listhead (o6a->if_list); nodej; nextnode (nodej))
         {
-          ospf6_interface = (struct ospf6_interface *)getdata (j);
-          for (k = listhead (ospf6_interface->neighbor_list); k; nextnode (k))
+          o6i = getdata (nodej);
+          for (nodek = listhead (o6i->neighbor_list); nodek; nextnode (nodek))
             {
-              nbr = (struct ospf6_neighbor *)getdata (k);
-              ospf6_neighbor_show_summary (vty, nbr);
+              o6n = getdata (nodek);
+              if (argc == 0)
+                ospf6_neighbor_show_summary (vty, o6n);
+              else if (o6n->router_id == router_id)
+                ospf6_neighbor_show_detail (vty, o6n);
             }
         }
     }
   return CMD_SUCCESS;
 }
 
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
+ALIAS (show_ipv6_ospf6_neighbor_routerid,
        show_ipv6_ospf6_neighbor_cmd,
        "show ipv6 ospf6 neighbor",
        SHOW_STR
@@ -532,36 +504,16 @@ ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
        "Neighbor list\n"
        )
 
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_ifname_cmd,
-       "show ipv6 ospf6 neighbor IFNAME",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Neighbor list\n"
-       IFNAME_STR
-       )
-
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_ifname_nbrid_cmd,
-       "show ipv6 ospf6 neighbor IFNAME NBR_ID",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Neighbor list\n"
-       IFNAME_STR
-       "A.B.C.D OSPF6 neighbor Router ID in IP address format\n"
-       )
-
 DEFUN (show_ipv6_ospf6_neighborlist,
        show_ipv6_ospf6_neighborlist_cmd,
-       "show ipv6 ospf6 (summary-list|request-list|retrans-list)",
+       "show ipv6 ospf6 (summary-list|request-list|retrans-list|dbdesc-list)",
        SHOW_STR
        IP6_STR
        OSPF6_STR
        "Link State summary list\n"
        "Link State request list\n"
        "Link State retransmission list\n"
+       "Link State Description list (Used to retrans DbDesc)\n"
        )
 {
   struct ospf6_area *o6a;
@@ -570,11 +522,12 @@ DEFUN (show_ipv6_ospf6_neighborlist,
   listnode i, j, k, l;
   struct ospf6_lsa *lsa;
   struct ospf6_lsdb *lsdb = NULL;
-  char adv_router[128];
-  struct ospf6_lsdb_node *node;
+  char type[16], id[16], adv_router[16];
+  struct ospf6_lsdb_node node;
+  u_int16_t age, cksum, len;
+  u_int32_t seqnum;
 
   OSPF6_CMD_CHECK_RUNNING ();
-
   i = j = k = l = NULL;
 
   for (i = listhead (ospf6->area_list); i; nextnode (i))
@@ -593,24 +546,32 @@ DEFUN (show_ipv6_ospf6_neighborlist,
                 lsdb = o6n->request_list;
               else if (strncmp (argv[0], "ret", 3) == 0)
                 lsdb = o6n->retrans_list;
+              else if (strncmp (argv[0], "dbd", 3) == 0)
+                lsdb = o6n->dbdesc_list;
 
               vty_out (vty, "neighbor %s on interface %s: %d%s", o6n->str,
                        o6i->interface->name, lsdb->count,
                        VTY_NEWLINE);
-              for (node = ospf6_lsdb_head (lsdb); node;
-                   node = ospf6_lsdb_next (node))
+              for (ospf6_lsdb_head (&node, lsdb); ! ospf6_lsdb_is_end (&node);
+                   ospf6_lsdb_next (&node))
                 {
-                  lsa = node->lsa;
+                  lsa = node.lsa;
+                  ospf6_lsa_age_current (lsa);
 
+                  ospf6_lsa_type_string (lsa->header->type, type,
+                                         sizeof (type));
+                  inet_ntop (AF_INET, &lsa->header->id, id, sizeof (id));
                   inet_ntop (AF_INET, &lsa->header->adv_router, adv_router,
                              sizeof (adv_router));
-                  vty_out (vty, "  %s-LSA ID: %d Adv_router: %s%s",
-                           ospf6_lsa_type_string (lsa->header->type),
-                           ntohl (lsa->header->id), adv_router, VTY_NEWLINE);
-                  vty_out (vty, "    Age: %hu SeqNum: %d Cksum: %hx Len: %hu%s",
-                           ntohs (lsa->header->age), ntohl (lsa->header->seqnum),
-                           ntohs (lsa->header->checksum), ntohs (lsa->header->length),
-                           VTY_NEWLINE);
+                  age = ntohs (lsa->header->age);
+                  seqnum = ntohl (lsa->header->seqnum);
+                  cksum = ntohs (lsa->header->checksum);
+                  len = ntohs (lsa->header->length);
+
+                  vty_out (vty, "  %s-LSA ID=%s Adv=%s%s",
+                           type, id, adv_router, VTY_NEWLINE);
+                  vty_out (vty, "  Age: %hu SeqNum: %#x Cksum: %hx Len: %hu%s",
+                           age, seqnum, cksum, len, VTY_NEWLINE);
                 }
             }
         }
@@ -622,17 +583,13 @@ DEFUN (show_ipv6_ospf6_neighborlist,
 void
 ospf6_neighbor_init ()
 {
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_routerid_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd);
 
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_routerid_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd);
 }
 
 

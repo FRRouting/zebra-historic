@@ -44,6 +44,7 @@
 #include "plist.h"
 
 /* OSPF stuffs */
+#include "ospf6_hook.h"
 #include "ospf6_types.h"
 #include "ospf6_prefix.h"
 #include "ospf6_lsa.h"
@@ -65,12 +66,17 @@
 #include "ospf6_zebra.h"
 #include "ospf6_dump.h"
 #include "ospf6_routemap.h"
+#include "ospf6_asbr.h"
+#include "ospf6_abr.h"
+#include "ospf6_intra.h"
 #endif /*HEADER_DEPENDENCY*/
 
 #define HASHVAL 64
 #define MAXIOVLIST 1024
 
-#define OSPF6_DAEMON_VERSION    "0.9.2"
+#define OSPF6_DAEMON_VERSION    "0.9.6i"
+
+#define AF_LINKSTATE  0xff
 
 /* global variables */
 extern char *progname;
@@ -82,7 +88,6 @@ extern list nexthoplist;
 extern struct sockaddr_in6 allspfrouters6;
 extern struct sockaddr_in6 alldrouters6;
 extern int ospf6_sock;
-extern struct ospf6 *ospf6;
 extern char *recent_reason;
 
 /* Default configuration file name for ospfd. */
@@ -98,21 +103,21 @@ extern char *recent_reason;
 #endif /* IPV6_PKTINFO */
 #endif /* INRIA_IPV6 */
 
-/* historycal for KAME */
+/* Historycal for KAME.  */
 #ifndef IPV6_JOIN_GROUP
 #ifdef IPV6_ADD_MEMBERSHIP
 #define IPV6_JOIN_GROUP IPV6_ADD_MEMBERSHIP
 #endif /* IPV6_ADD_MEMBERSHIP. */
-#ifdef IPV6_JOIN_MEMBERSHIP  /* I'm not sure this really exist. -- kunihiro. */
+#ifdef IPV6_JOIN_MEMBERSHIP
 #define IPV6_JOIN_GROUP  IPV6_JOIN_MEMBERSHIP
 #endif /* IPV6_JOIN_MEMBERSHIP. */
-#endif
+#endif /* ! IPV6_JOIN_GROUP*/
 
 #ifndef IPV6_LEAVE_GROUP
-#ifdef  IPV6_DROP_MEMBERSHIP
+#ifdef IPV6_DROP_MEMBERSHIP
 #define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP
-#endif
-#endif
+#endif /* IPV6_DROP_MEMBERSHIP */
+#endif /* ! IPV6_LEAVE_GROUP */
 
 #define OSPF6_CMD_CHECK_RUNNING() \
   if (ospf6 == NULL) \
@@ -128,21 +133,25 @@ extern char *recent_reason;
 #define OSPF6_LEVEL_TOP       4
 #define OSPF6_LEVEL_MAX       5
 
+#define OSPF6_PASSIVE_STR \
+  "Suppress routing updates on an interface\n"
+#define OSPF6_PREFIX_LIST_STR \
+  "Advertise I/F Address only match entries of prefix-list\n"
+
+#define OSPF6_AREA_STR      "Area information\n"
+#define OSPF6_AREA_ID_STR   "Area ID (as an IPv4 notation)\n"
+#define OSPF6_SPF_STR       "Shortest Path First tree information\n"
+#define OSPF6_ROUTER_ID_STR "Specify Router-ID\n"
+#define OSPF6_LS_ID_STR     "Specify Link State ID\n"
+
 
 /* Function Prototypes */
-void
-ospf6_timeval_add (const struct timeval *t1, const struct timeval *t2,
-                   struct timeval *result);
 void
 ospf6_timeval_sub (const struct timeval *t1, const struct timeval *t2,
                    struct timeval *result);
 void
 ospf6_timeval_div (const struct timeval *t1, u_int by,
                    struct timeval *result);
-int
-ospf6_timeval_cmp (const struct timeval *t1, const struct timeval *t2);
-void
-ospf6_timeval_add_equal (const struct timeval *t, struct timeval *result);
 void
 ospf6_timeval_sub_equal (const struct timeval *t, struct timeval *result);
 void
@@ -150,6 +159,8 @@ ospf6_timeval_decode (const struct timeval *t, long *dayp, long *hourp,
                       long *minp, long *secp, long *msecp, long *usecp);
 void
 ospf6_timeval_string (struct timeval *tv, char *buf, int size);
+void
+ospf6_timeval_string_summary (struct timeval *tv, char *buf, int size);
 
 void
 ospf6_count_state (void *arg, int val, void *obj);
@@ -158,6 +169,8 @@ void ospf6_init ();
 void ospf6_terminate ();
 
 void ospf6_maxage_remover ();
+
+void *ospf6_lsa_get_scope (u_int16_t type, struct ospf6_interface *o6i);
 
 #endif /* OSPF6D_H */
 

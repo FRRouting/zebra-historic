@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999 Yasuhiro Ohara
+ * Copyright (C) 2002 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
  *
@@ -22,41 +22,58 @@
 #ifndef OSPF6_LSDB_H
 #define OSPF6_LSDB_H
 
-#include "ospf6_lsa.h"
+#include "prefix.h"
+#include "table.h"
 
-#define MAXLSASIZE   1024
+#include "ospf6_prefix.h"
+#include "ospf6_lsa.h"
 
 struct ospf6_lsdb_node
 {
-  struct ospf6_lsdb *lsdb;
-  unsigned int lock;
+  struct prefix_ipv6 key;
 
-  struct ospf6_lsdb_node *next;
-  struct ospf6_lsdb_node *prev;
+  struct route_node *node;
+  struct route_node *next;
+
   struct ospf6_lsa *lsa;
 };
 
 struct ospf6_lsdb
 {
-  struct ospf6_lsdb_node *head;
-  struct ospf6_lsdb_node *tail;
-  unsigned int count;
+  struct route_table *table;
+  u_int32_t count;
+  void (*hook) (struct ospf6_lsa *);
 };
 
+/* int  ospf6_lsdb_is_end (struct ospf6_lsdb_node *lsdb_node); */
+#define ospf6_lsdb_is_end(lsdb_node) ((lsdb_node)->node == NULL ? 1 : 0)
+
+/* global holding hooks for each LS type */
+struct ospf6_lsdb_hook_t
+{
+  void (*hook) (struct ospf6_lsa *old, struct ospf6_lsa *new);
+};
+extern struct ospf6_lsdb_hook_t *ospf6_lsdb_hook;
+
 /* Function Prototypes */
-void ospf6_lsdb_init ();
-struct ospf6_lsdb *ospf6_lsdb_create ();
+struct ospf6_lsdb * ospf6_lsdb_create ();
 void ospf6_lsdb_delete (struct ospf6_lsdb *lsdb);
+
 void ospf6_lsdb_remove_maxage (struct ospf6_lsdb *lsdb);
 
 struct ospf6_lsa *
-  ospf6_lsdb_lookup (u_int16_t type, u_int32_t id, u_int32_t adv_router);
+ospf6_lsdb_lookup (u_int16_t type, u_int32_t id, u_int32_t adv_router,
+                   void *scope);
 
 void ospf6_lsdb_install (struct ospf6_lsa *new);
 
-struct ospf6_lsdb_node *ospf6_lsdb_head (struct ospf6_lsdb *lsdb);
-struct ospf6_lsdb_node *ospf6_lsdb_next (struct ospf6_lsdb_node *node);
-void ospf6_lsdb_end (struct ospf6_lsdb_node *node);
+void ospf6_lsdb_head (struct ospf6_lsdb_node *node, struct ospf6_lsdb *lsdb);
+void ospf6_lsdb_type (struct ospf6_lsdb_node *node, u_int16_t type,
+                      struct ospf6_lsdb *lsdb);
+void ospf6_lsdb_type_router (struct ospf6_lsdb_node *node, u_int16_t type,
+                             u_int32_t adv_router, struct ospf6_lsdb *lsdb);
+void ospf6_lsdb_next (struct ospf6_lsdb_node *node);
+
 void ospf6_lsdb_add (struct ospf6_lsa *lsa, struct ospf6_lsdb *lsdb);
 void ospf6_lsdb_remove (struct ospf6_lsa *lsa, struct ospf6_lsdb *lsdb);
 void ospf6_lsdb_remove_all (struct ospf6_lsdb *lsdb);
@@ -64,6 +81,8 @@ void ospf6_lsdb_remove_all (struct ospf6_lsdb *lsdb);
 struct ospf6_lsa *
 ospf6_lsdb_lookup_lsdb (u_int16_t type, u_int32_t id, u_int32_t adv_router,
                         struct ospf6_lsdb *lsdb);
+
+void ospf6_lsdb_init ();
 
 #endif /* OSPF6_LSDB_H */
 

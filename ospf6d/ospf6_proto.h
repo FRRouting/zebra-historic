@@ -68,8 +68,8 @@
 #define OSPF6_OPT_R  (1 << 4)   /* Forwarding Capability (Any Protocol) */
 #define OSPF6_OPT_DC (1 << 5)   /* Demand Circuit handling Capability */
 
-void
-ospf6_opt_capability_string (u_char opt_capability[3], char *buffer, int size);
+char *
+ospf6_options_string (u_char opt_capability[3], char *buffer, int size);
 
 #endif /* OSPF6_PROTO_H */
 

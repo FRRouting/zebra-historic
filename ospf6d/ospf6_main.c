@@ -33,7 +33,6 @@
 
 void ospf6_init ();
 void ospf6_terminate ();
-void ospf6_log_init ();
 void nexthop_init ();
 int ospf6_receive (struct thread *);
 
@@ -49,6 +48,8 @@ struct option longopts[] =
 {
   { "daemon",      no_argument,       NULL, 'd'},
   { "config_file", required_argument, NULL, 'f'},
+  { "pid_file",    required_argument, NULL, 'i'},
+  { "vty_addr",    required_argument, NULL, 'A'},
   { "vty_port",    required_argument, NULL, 'P'},
   { "version",     no_argument,       NULL, 'v'},
   { "help",        no_argument,       NULL, 'h'},
@@ -60,13 +61,15 @@ char config_current[] = OSPF6_DEFAULT_CONFIG;
 char config_default[] = SYSCONFDIR OSPF6_DEFAULT_CONFIG;
 
 /* ospf6d program name. */
-char *progname;
 
 /* is daemon? */
 int daemon_mode = 0;
 
 /* Master of threads. */
 struct thread_master *master;
+
+/* Process ID saved for use by init system */
+char *pid_file = PATH_OSPF6D_PID;
 
 /* for reload */
 char _cwd[64];
@@ -77,7 +80,7 @@ char **_envp;
 
 /* Help information display. */
 static void
-usage (int status)
+usage (char *progname, int status)
 {
   if (status != 0)
     fprintf (stderr, "Try `%s --help' for more information.\n", progname);
@@ -87,6 +90,8 @@ usage (int status)
 Daemon which manages OSPF version 3.\n\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
+-i, --pid_file     Set process identifier file name\n\
+-A, --vty_addr     Set vty's bind address\n\
 -P, --vty_port     Set vty's port number\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
@@ -101,7 +106,8 @@ Report bugs to yasu@sfc.wide.ad.jp\n", progname);
 void
 _reload ()
 {
-  zlog_info ("Reload");
+  zlog_notice ("OSPF6d (Zebra-%s ospf6d-%s) reloaded",
+               ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
   ospf6_zebra_finish ();
   vty_finish ();
   execve (_progpath, _argv, _envp);
@@ -112,6 +118,8 @@ terminate (int i)
 {
   ospf6_delete (ospf6);
   unlink (PATH_OSPF6D_PID);
+  zlog_notice ("OSPF6d (Zebra-%s ospf6d-%s) terminated",
+               ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
   exit (i);
 }
 
@@ -197,10 +205,12 @@ main (int argc, char *argv[], char *envp[])
 {
   char *p;
   int opt;
+  char *vty_addr = NULL;
   int vty_port = 0;
-
   char *config_file = NULL;
+  char *progname;
   struct thread thread;
+  int flag;
 
   /* Set umask before anything for security */
   umask (0027);
@@ -221,7 +231,7 @@ main (int argc, char *argv[], char *envp[])
   /* Command line argument treatment. */
   while (1) 
     {
-      opt = getopt_long (argc, argv, "df:hp:P:v", longopts, 0);
+      opt = getopt_long (argc, argv, "df:hp:A:P:v", longopts, 0);
     
       if (opt == EOF)
         break;
@@ -236,27 +246,40 @@ main (int argc, char *argv[], char *envp[])
         case 'f':
           config_file = optarg;
           break;
+        case 'A':
+          vty_addr = optarg;
+          break;
+        case 'i':
+          pid_file = optarg;
+          break;
         case 'P':
           vty_port = atoi (optarg);
           break;
         case 'v':
-          print_version ();
+          print_version (progname);
           exit (0);
           break;
         case 'h':
-          usage (0);
+          usage (progname, 0);
           break;
         default:
-          usage (1);
+          usage (progname, 1);
           break;
         }
     }
 
   /* thread master */
-  master = thread_make_master ();
+  master = thread_master_create ();
 
   /* Initializations. */
-  ospf6_log_init ();
+  if (! daemon_mode)
+    flag = ZLOG_STDOUT;
+  else
+    flag = 0;
+
+  zlog_default = openzlog (progname, flag, ZLOG_OSPF6,
+			   LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
+			   LOG_DAEMON);
   signal_init ();
   cmd_init (1);
   vty_init ();
@@ -272,9 +295,9 @@ main (int argc, char *argv[], char *envp[])
 
   /* pid file create */
 #if 0
-  pid_output_lock (PATH_OSPF6D_PID);
+  pid_output_lock (pid_file);
 #else
-  pid_output (PATH_OSPF6D_PID);
+  pid_output (pid_file);
 #endif
 
   /* Make ospf protocol socket. */
@@ -282,11 +305,12 @@ main (int argc, char *argv[], char *envp[])
   thread_add_read (master, ospf6_receive, NULL, ospf6_sock);
 
   /* Make ospf vty socket. */
-  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, OSPF6_VTYSH_PATH);
+  vty_serv_sock (vty_addr,
+		 vty_port ? vty_port : OSPF6_VTY_PORT, OSPF6_VTYSH_PATH);
 
   /* Print start message */
-  zlog_info ("OSPF6d (Zebra-%s ospf6d-%s) starts",
-             ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
+  zlog_notice ("OSPF6d (Zebra-%s ospf6d-%s) starts",
+               ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

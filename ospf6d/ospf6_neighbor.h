@@ -33,6 +33,7 @@ struct ospf6_neighbor
 
   /* Neighbor state */
   u_char state;
+  struct timeval last_changed;
 
   /* Neighbor Router ID */
   u_int32_t router_id;
@@ -89,6 +90,11 @@ struct ospf6_neighbor
   struct thread *thread_rxmt_update;
 
   /* statistics */
+  u_int message_send[OSPF6_MESSAGE_TYPE_MAX];
+  u_int message_receive[OSPF6_MESSAGE_TYPE_MAX];
+  u_int lsa_send[OSPF6_MESSAGE_TYPE_MAX];
+  u_int lsa_receive[OSPF6_MESSAGE_TYPE_MAX];
+
   u_int ospf6_stat_state_changed;
   u_int ospf6_stat_seqnum_mismatch;
   u_int ospf6_stat_bad_lsreq;

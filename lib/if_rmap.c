@@ -27,7 +27,7 @@
 #include "if.h"
 #include "if_rmap.h"
 
-struct Hash *ifrmaphash;
+struct hash *ifrmaphash;
 
 /* Hook functions. */
 void (*if_rmap_add_hook) (struct if_rmap *) = NULL;
@@ -38,8 +38,7 @@ if_rmap_new ()
 {
   struct if_rmap *new;
 
-  new = XMALLOC (MTYPE_IF_RMAP, sizeof (struct if_rmap));
-  bzero (new, sizeof (struct if_rmap));
+  new = XCALLOC (MTYPE_IF_RMAP, sizeof (struct if_rmap));
 
   return new;
 }
@@ -66,7 +65,7 @@ if_rmap_lookup (char *ifname)
 
   key.ifname = ifname;
 
-  if_rmap = hash_search (ifrmaphash, &key);
+  if_rmap = hash_lookup (ifrmaphash, &key);
   
   return if_rmap;
 }
@@ -83,19 +82,25 @@ if_rmap_hook_delete (void (*func) (struct if_rmap *))
   if_rmap_delete_hook = func;
 }
 
-struct if_rmap *
-if_rmap_get (char *ifname)
+void *
+if_rmap_hash_alloc (struct if_rmap *arg)
 {
   struct if_rmap *if_rmap;
 
-  if_rmap = if_rmap_lookup (ifname);
-  if (if_rmap == NULL)
-    {
-      if_rmap = if_rmap_new ();
-      if_rmap->ifname = strdup (ifname);
-      hash_push (ifrmaphash, if_rmap);
-    }
+  if_rmap = if_rmap_new ();
+  if_rmap->ifname = strdup (arg->ifname);
+
   return if_rmap;
+}
+
+struct if_rmap *
+if_rmap_get (char *ifname)
+{
+  struct if_rmap key;
+
+  key.ifname = ifname;
+
+  return (struct if_rmap *) hash_get (ifrmaphash, &key, if_rmap_hash_alloc);
 }
 
 unsigned int
@@ -108,7 +113,7 @@ if_rmap_hash_make (struct if_rmap *if_rmap)
   for (i = 0; i < strlen (if_rmap->ifname); i++)
     key += if_rmap->ifname[i];
 
-  return key %= HASHTABSIZE;
+  return key;
 }
 
 int
@@ -182,7 +187,7 @@ if_rmap_unset (char *ifname, enum if_rmap_type type, char *routemap_name)
   if (if_rmap->routemap[IF_RMAP_IN] == NULL &&
       if_rmap->routemap[IF_RMAP_OUT] == NULL)
     {
-      hash_pull (ifrmaphash, if_rmap);
+      hash_release (ifrmaphash, if_rmap);
       if_rmap_free (if_rmap);
     }
 
@@ -253,11 +258,11 @@ int
 config_write_if_rmap (struct vty *vty)
 {
   int i;
-  HashBacket *mp;
+  struct hash_backet *mp;
   int write = 0;
 
-  for (i = 0; i < HASHTABSIZE; i++)
-    for (mp = hash_head (ifrmaphash, i); mp; mp = mp->next)
+  for (i = 0; i < ifrmaphash->size; i++)
+    for (mp = ifrmaphash->index[i]; mp; mp = mp->next)
       {
 	struct if_rmap *if_rmap;
 
@@ -293,9 +298,7 @@ if_rmap_reset ()
 void
 if_rmap_init (int node)
 {
-  ifrmaphash = hash_new (HASHTABSIZE);
-  ifrmaphash->hash_key = if_rmap_hash_make;
-  ifrmaphash->hash_cmp = if_rmap_hash_cmp;
+  ifrmaphash = hash_create (if_rmap_hash_make, if_rmap_hash_cmp);
 
   install_element (node, &if_rmap_cmd);
   install_element (node, &no_if_rmap_cmd);

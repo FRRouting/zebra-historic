@@ -82,19 +82,16 @@ route_map_result_t
 ospf6_routemap_rule_set_metric_type (void *rule, struct prefix *prefix,
                                      route_map_object_t type, void *object)
 {
-  char *metric_type;
-  struct ospf6_redistribute_info *info;
+  char *metric_type = rule;
+  struct ospf6_route_req *route = object;
 
   if (type != RMAP_OSPF6)
     return RMAP_OKAY;
 
-  metric_type = rule;
-  info = object;
-
   if (strcmp (metric_type, "type-2") == 0)
-    info->metric_type = 2;
+    route->path.metric_type = 2;
   else
-    info->metric_type = 1;
+    route->path.metric_type = 1;
 
   return RMAP_OKAY;
 }
@@ -123,16 +120,14 @@ route_map_result_t
 ospf6_routemap_rule_set_metric (void *rule, struct prefix *prefix,
                                 route_map_object_t type, void *object)
 {
-  char *metric;
-  struct ospf6_redistribute_info *info;
+  char *metric = rule;
+  struct ospf6_route_req *route = object;
 
   if (type != RMAP_OSPF6)
     return RMAP_OKAY;
 
-  metric = rule;
-  info = object;
-
-  info->metric = atoi (metric);
+  route->path.cost = atoi (metric);
+  route->path.cost_e2 = atoi (metric);
 
   return RMAP_OKAY;
 }
@@ -161,18 +156,15 @@ route_map_result_t
 ospf6_routemap_rule_set_forwarding (void *rule, struct prefix *prefix,
                                     route_map_object_t type, void *object)
 {
-  char *forwarding;
-  struct ospf6_redistribute_info *info;
+  char *forwarding = rule;
+  struct ospf6_route_req *route = object;
 
   if (type != RMAP_OSPF6)
     return RMAP_OKAY;
 
-  forwarding = rule;
-  info = object;
-
-  if (inet_pton (AF_INET6, forwarding, &info->forward) != 1)
+  if (inet_pton (AF_INET6, forwarding, &route->nexthop.address) != 1)
     {
-      memset (&info->forward, 0, sizeof (struct in6_addr));
+      memset (&route->nexthop.address, 0, sizeof (struct in6_addr));
       return RMAP_ERROR;
     }
 

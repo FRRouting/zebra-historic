@@ -29,7 +29,7 @@
 #include "memory.h"
 
 /* Hash of distribute list. */
-struct Hash *disthash;
+struct hash *disthash;
 
 /* Hook functions. */
 void (*distribute_add_hook) (struct distribute *);
@@ -41,7 +41,7 @@ distribute_new ()
   struct distribute *new;
 
   new = XMALLOC (MTYPE_DISTRIBUTE, sizeof (struct distribute));
-  bzero (new, sizeof (struct distribute));
+  memset (new, 0, sizeof (struct distribute));
 
   return new;
 }
@@ -75,7 +75,7 @@ distribute_lookup (char *ifname)
 
   key.ifname = ifname;
 
-  dist = hash_search (disthash, &key);
+  dist = hash_lookup (disthash, &key);
   
   return dist;
 }
@@ -92,23 +92,28 @@ distribute_list_delete_hook (void (*func) (struct distribute *))
   distribute_delete_hook = func;
 }
 
+void *
+distribute_hash_alloc (struct distribute *arg)
+{
+  struct distribute *dist;
+
+  dist = distribute_new ();
+  if (arg->ifname)
+    dist->ifname = strdup (arg->ifname);
+  else
+    dist->ifname = NULL;
+  return dist;
+}
+
 /* Make new distribute list and push into hash. */
 struct distribute *
 distribute_get (char *ifname)
 {
-  struct distribute *dist;
+  struct distribute key;
 
-  dist = distribute_lookup (ifname);
-  if (dist == NULL)
-    {
-      dist = distribute_new ();
-      if (ifname)
-	dist->ifname = strdup (ifname);
-      else
-	dist->ifname = NULL;
-      hash_push (disthash, dist);
-    }
-  return dist;
+  key.ifname = ifname;
+
+  return hash_get (disthash, &key, distribute_hash_alloc);
 }
 
 unsigned int
@@ -122,7 +127,7 @@ distribute_hash_make (struct distribute *dist)
     for (i = 0; i < strlen (dist->ifname); i++)
       key += dist->ifname[i];
 
-  return key %= HASHTABSIZE;
+  return key;
 }
 
 /* If two distribute-list have same value then return 1 else return
@@ -136,14 +141,6 @@ distribute_cmp (struct distribute *dist1, struct distribute *dist2)
   if (! dist1->ifname && ! dist2->ifname)
     return 1;
   return 0;
-}
-
-/* Utility function. */
-void
-distribute_print (struct distribute *dist)
-{
-  printf ("distribute-list %s in %s out %s\n", dist->ifname, 
-	  dist->list[DISTRIBUTE_IN], dist->list[DISTRIBUTE_OUT]);
 }
 
 /* Set access-list name to the distribute list. */
@@ -216,7 +213,7 @@ distribute_list_unset (char *ifname, enum distribute_type type,
       dist->prefix[DISTRIBUTE_IN] == NULL &&
       dist->prefix[DISTRIBUTE_OUT] == NULL)
     {
-      hash_pull (disthash, dist);
+      hash_release (disthash, dist);
       distribute_free (dist);
     }
 
@@ -294,7 +291,7 @@ distribute_list_prefix_unset (char *ifname, enum distribute_type type,
       dist->prefix[DISTRIBUTE_IN] == NULL &&
       dist->prefix[DISTRIBUTE_OUT] == NULL)
     {
-      hash_pull (disthash, dist);
+      hash_release (disthash, dist);
       distribute_free (dist);
     }
 
@@ -556,7 +553,7 @@ int
 config_show_distribute (struct vty *vty)
 {
   int i;
-  HashBacket *mp;
+  struct hash_backet *mp;
   struct distribute *dist;
 
   /* Output filter configuration. */
@@ -575,8 +572,8 @@ config_show_distribute (struct vty *vty)
   else
     vty_out (vty, "  Outgoing update filter list for all interface is not set%s", VTY_NEWLINE);
 
-  for (i = 0; i < HASHTABSIZE; i++)
-    for (mp = hash_head (disthash, i); mp; mp = mp->next)
+  for (i = 0; i < disthash->size; i++)
+    for (mp = disthash->index[i]; mp; mp = mp->next)
       {
 	dist = mp->data;
 	if (dist->ifname)
@@ -610,8 +607,8 @@ config_show_distribute (struct vty *vty)
   else
     vty_out (vty, "  Incoming update filter list for all interface is not set%s", VTY_NEWLINE);
 
-  for (i = 0; i < HASHTABSIZE; i++)
-    for (mp = hash_head (disthash, i); mp; mp = mp->next)
+  for (i = 0; i < disthash->size; i++)
+    for (mp = disthash->index[i]; mp; mp = mp->next)
       {
 	dist = mp->data;
 	if (dist->ifname)
@@ -635,11 +632,11 @@ int
 config_write_distribute (struct vty *vty)
 {
   int i;
-  HashBacket *mp;
+  struct hash_backet *mp;
   int write = 0;
 
-  for (i = 0; i < HASHTABSIZE; i++)
-    for (mp = hash_head (disthash, i); mp; mp = mp->next)
+  for (i = 0; i < disthash->size; i++)
+    for (mp = disthash->index[i]; mp; mp = mp->next)
       {
 	struct distribute *dist;
 
@@ -696,9 +693,7 @@ distribute_list_reset ()
 void
 distribute_list_init (int node)
 {
-  disthash = hash_new (HASHTABSIZE);
-  disthash->hash_key = distribute_hash_make;
-  disthash->hash_cmp = distribute_cmp;
+  disthash = hash_create (distribute_hash_make, distribute_cmp);
 
   install_element (node, &distribute_list_all_cmd);
   install_element (node, &no_distribute_list_all_cmd);

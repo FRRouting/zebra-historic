@@ -40,16 +40,13 @@ struct ospf_lsa *ospf_ls_request_lookup (struct ospf_neighbor *,
 					 struct ospf_lsa *);
 
 unsigned long ospf_ls_retransmit_count (struct ospf_neighbor *);
+unsigned long ospf_ls_retransmit_count_self (struct ospf_neighbor *, int);
 int ospf_ls_retransmit_isempty (struct ospf_neighbor *);
 void ospf_ls_retransmit_add (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_ls_retransmit_delete (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_ls_retransmit_clear (struct ospf_neighbor *);
 struct ospf_lsa *ospf_ls_retransmit_lookup (struct ospf_neighbor *,
 					    struct ospf_lsa *);
-#if 0
-struct ospf_lsa *ospf_ls_retransmit_lookup (struct ospf_neighbor *,
-					    struct lsa_header *);
-#endif
 void ospf_ls_retransmit_delete_nbr_all (struct ospf_area *, struct ospf_lsa *);
 void ospf_ls_retransmit_add_nbr_all (struct ospf_interface *,
 				     struct ospf_lsa *);

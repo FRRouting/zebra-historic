@@ -66,10 +66,6 @@
 
 #ifdef HAVE_NSSA
 #define OSPF_LOOPer                     0x7f000000      /* 127.0.0.0 */
-#define OSPF_LOOPROUTER                 0x0a0a0015      /* Set Router Source */
-#define OSPF_LOOP_PRAVEEN               0x0a0a0015      /* 10.10.0.21 */
-#define OSPF_LOOP_DICK                  0x0a0a0014      /* 10.10.0.21 */
-#define OSPF_LOOP_TARGET                0x0a0a0014      /* Set Router Target */
 #endif /* HAVE_NSSA */
 
 #define OSPF_AREA_BACKBONE              0x00000000      /* 0.0.0.0 */
@@ -121,14 +117,8 @@
 /* Timer value. */
 #define OSPF_ROUTER_ID_UPDATE_DELAY             1
 
-
-#ifdef DEBUG
-#define OSPF_LS_REFRESH_SHIFT       30
-#define OSPF_LS_REFRESH_JITTER      10
-#else
 #define OSPF_LS_REFRESH_SHIFT       (60 * 15)
 #define OSPF_LS_REFRESH_JITTER      60
-#endif
 
 /* OSPF instance structure. */
 struct ospf
@@ -154,9 +144,19 @@ struct ospf
   u_char anyNSSA;		/* Bump for every NSSA attached. */
 
   /* Configured variables. */
-  u_char RFC1583Compat;			/* RFC1583Compatibility flag. */
-#define RFC1583_COMPATIBLE_NO		0
-#define RFC1583_COMPATIBLE_YES		1
+  u_char config;
+#define OSPF_RFC1583_COMPATIBLE         (1 << 0)
+#define OSPF_OPAQUE_CAPABLE		(1 << 2)
+
+#ifdef HAVE_OPAQUE_LSA
+  /* Opaque-LSA administrative flags. */
+  u_char opaque;
+#define OPAQUE_OPERATION_READY_BIT	(1 << 0)
+#define OPAQUE_BLOCK_TYPE_09_LSA_BIT	(1 << 1)
+#define OPAQUE_BLOCK_TYPE_10_LSA_BIT	(1 << 2)
+#define OPAQUE_BLOCK_TYPE_11_LSA_BIT	(1 << 3)
+#endif /* HAVE_OPAQUE_LSA */
+
   int spf_delay;			/* SPF delay time. */
   int spf_holdtime;			/* SPF hold time. */
   int default_originate;		/* Default information originate. */
@@ -167,11 +167,11 @@ struct ospf
   struct route_table *networks;         /* OSPF config networks. */
   list vlinks;                          /* Configured Virtual-Links. */
   list areas;                           /* OSPF areas. */
-  list nbr_static;
+  struct route_table *nbr_nbma;
   struct ospf_area *backbone;           /* Pointer to the Backbone Area. */
 
   list iflist;                          /* Zebra derived interfaces. */
-  list oiflist;                          /* ospf interfaces */
+  list oiflist;                         /* ospf interfaces */
 
   /* LSDB of AS-external-LSAs. */
   struct ospf_lsdb *lsdb;
@@ -183,6 +183,10 @@ struct ospf
   /* Flags. */
   int external_origin;			/* AS-external-LSA origin flag. */
   int ase_calc;				/* ASE calculation flag. */
+
+#ifdef HAVE_OPAQUE_LSA
+  list opaque_lsa_self;			/* Type-11 Opaque-LSAs */
+#endif /* HAVE_OPAQUE_LSA */
 
   /* Routing tables. */
   struct route_table *old_table;        /* Old routing table. */
@@ -212,6 +216,9 @@ struct ospf
   struct thread *t_spf_calc;	        /* SPF calculation timer. */
   struct thread *t_ase_calc;		/* ASE calculation timer. */
   struct thread *t_external_lsa;	/* AS-external-LSA origin timer. */
+#ifdef HAVE_OPAQUE_LSA
+  struct thread *t_opaque_lsa_self;	/* Type-11 Opaque-LSAs origin event. */
+#endif /* HAVE_OPAQUE_LSA */
   struct thread *t_maxage;              /* MaxAge LSA remover timer. */
   struct thread *t_maxage_walker;       /* MaxAge LSA checking timer. */
 
@@ -283,9 +290,6 @@ struct ospf_area
   /* OSPF instance. */
   struct ospf *top;
 
-  /* Reference count by ospf_network. */
-  /* int count; */
-
   /* Zebra interface list belonging to the area. */
   list oiflist;
 
@@ -315,13 +319,11 @@ struct ospf_area
   u_int32_t default_cost;               /* StubDefaultCost. */
   int auth_type;                        /* Authentication type. */
 
-#ifdef HAVE_NSSA
   u_char NSSATranslatorRole;          /* NSSA Role during configuration */
 #define OSPF_NSSA_ROLE_NEVER     0
 #define OSPF_NSSA_ROLE_ALWAYS    1
 #define OSPF_NSSA_ROLE_CANDIDATE 2
   u_char NSSATranslator;              /* NSSA Role after election process */
-#endif /* HAVE_NSSA */
 
   u_char transit;			/* TransitCapability. */
 #define OSPF_TRANSIT_FALSE      0
@@ -329,10 +331,13 @@ struct ospf_area
   struct route_table *ranges;		/* Configured Area Ranges. */
 
   /* Area related LSDBs[Type1-4]. */
-  struct ospf_lsdb *lsdb;		/* New structure. */
+  struct ospf_lsdb *lsdb;
 
   /* Self-originated LSAs. */
   struct ospf_lsa *router_lsa_self;
+#ifdef HAVE_OPAQUE_LSA
+  list opaque_lsa_self;			/* Type-10 Opaque-LSAs */
+#endif /* HAVE_OPAQUE_LSA */
 
   /* Area announce list. */
   struct 
@@ -352,11 +357,31 @@ struct ospf_area
 #define IMPORT_NAME(A)  (A)->import.name
 #define IMPORT_LIST(A)  (A)->import.list
 
+  /* Type 3 LSA Area prefix-list. */
+  struct 
+  {
+    char *name;
+    struct prefix_list *list;
+  } plist_in;
+#define PREFIX_LIST_IN(A)   (A)->plist_in.list
+#define PREFIX_NAME_IN(A)   (A)->plist_in.name
+
+  struct
+  {
+    char *name;
+    struct prefix_list *list;
+  } plist_out;
+#define PREFIX_LIST_OUT(A)  (A)->plist_out.list
+#define PREFIX_NAME_OUT(A)  (A)->plist_out.name
+
   /* Shortest Path Tree. */
   struct vertex *spf;
 
   /* Threads. */
   struct thread *t_router_lsa_self;/* Self-originated router-LSA timer. */
+#ifdef HAVE_OPAQUE_LSA
+  struct thread *t_opaque_lsa_self;	/* Type-10 Opaque-LSAs origin. */
+#endif /* HAVE_OPAQUE_LSA */
 
   /* Statistics field. */
   u_int32_t spf_calculation;	/* SPF Calculation Count. */
@@ -379,19 +404,28 @@ struct ospf_network
   int format;
 };
 
-/* OSPF static neighbor structure. */
-struct ospf_nbr_static
+/* OSPF NBMA neighbor structure. */
+struct ospf_nbr_nbma
 {
-  struct ospf_interface *oi;
-  struct ospf_neighbor *neighbor;
-
+  /* Neighbor IP address. */
   struct in_addr addr;
-  int priority;
 
+  /* OSPF interface. */
+  struct ospf_interface *oi;
+
+  /* OSPF neighbor structure. */
+  struct ospf_neighbor *nbr;
+
+  /* Neighbor priority. */
+  u_char priority;
+
+  /* Poll timer value. */
   u_int32_t v_poll;
 
+  /* Poll timer thread. */
   struct thread *t_poll;
 
+  /* State change. */
   u_int32_t state_change;
 };
 
@@ -405,92 +439,121 @@ struct ospf_nbr_static
 #define OSPF_IS_AREA_ID_BACKBONE(I) ((I).s_addr == OSPF_AREA_BACKBONE)
 #define OSPF_IS_AREA_BACKBONE(A) OSPF_IS_AREA_ID_BACKBONE ((A)->area_id)
 
-#define CHECK_FLAG(V,F)        ((V) & (F))
-#define SET_FLAG(V,F)          (V) = (V) | (F)
-#define UNSET_FLAG(V,F)        (V) = (V) & ~(F)
+#ifdef roundup
+#  define ROUNDUP(val, gran)	roundup(val, gran)
+#else /* roundup */
+#  define ROUNDUP(val, gran)	(((val) - 1 | (gran) - 1) + 1)
+#endif /* roundup */
 
-#define LIST_ITERATOR(L, N) \
-      for ((N) = listhead ((L)); (N); nextnode(N))
+#define LSA_OPTIONS_GET(area) \
+        (((area)->external_routing == OSPF_AREA_DEFAULT) ? OSPF_OPTION_E : 0)
+#ifdef HAVE_NSSA
+#define LSA_NSSA_GET(area) \
+        (((area)->external_routing == OSPF_AREA_NSSA) ? \
+          (area)->NSSATranslator : 0)
+#endif /* HAVE_NSSA */
 
-#define RT_ITERATOR(R, N) \
-      for ((N) = route_top ((R)); (N); (N) = route_next ((N)))
+#define OSPF_TIMER_ON(T,F,V)                                                  \
+    do {                                                                      \
+      if (!(T))                                                               \
+	(T) = thread_add_timer (master, (F), NULL, (V));                      \
+    } while (0)
 
-#define OSPF_TIMER_ON(T,F,V) \
-      if (!(T)) \
-	(T) = thread_add_timer (master, (F), NULL, (V))
+#define OSPF_AREA_TIMER_ON(T,F,V)                                             \
+    do {                                                                      \
+      if (!(T))                                                               \
+        (T) = thread_add_timer (master, (F), area, (V));                      \
+    } while (0)
 
-#define OSPF_AREA_TIMER_ON(T,F,V) \
-      if (!(T)) \
-        (T) = thread_add_timer (master, (F), area, (V))
+#define OSPF_POLL_TIMER_ON(T,F,V)                                             \
+    do {                                                                      \
+      if (!(T))                                                               \
+        (T) = thread_add_timer (master, (F), nbr_nbma, (V));                  \
+    } while (0)
 
-#define OSPF_POLL_TIMER_ON(T,F,V) \
-      if (!(T)) \
-        (T) = thread_add_timer (master, (F), nbr_static, (V))
+#define OSPF_POLL_TIMER_OFF(X)		OSPF_TIMER_OFF((X))
 
-#define OSPF_POLL_TIMER_OFF(X) \
-      do { \
-        if (X) \
-          { \
-            thread_cancel (X); \
-            (X) = NULL; \
-          } \
-      } while (0)
+#define OSPF_TIMER_OFF(X)                                                     \
+    do {                                                                      \
+      if (X)                                                                  \
+        {                                                                     \
+          thread_cancel (X);                                                  \
+          (X) = NULL;                                                         \
+        }                                                                     \
+    } while (0)
 
-#define OSPF_TIMER_OFF(X) \
-      do { \
-       if (X) \
-         { \
-           thread_cancel (X); \
-           (X) = NULL; \
-         } \
-      } while (0)
-
-#define OSPF_SCHEDULE_MAXAGE(T, F) \
-      if (!(T)) \
-        (T) = thread_add_timer (master, (F), 0, 2)
+#define OSPF_SCHEDULE_MAXAGE(T, F)                                            \
+    do {                                                                      \
+      if (!(T))                                                               \
+        (T) = thread_add_timer (master, (F), 0, 2);                           \
+    } while (0)
 
 /* Messages */
-extern struct message ospf_ism_status_msg[];
-extern struct message ospf_nsm_status_msg[];
+extern struct message ospf_ism_state_msg[];
+extern struct message ospf_nsm_state_msg[];
 extern struct message ospf_lsa_type_msg[];
 extern struct message ospf_link_state_id_type_msg[];
 extern struct message ospf_redistributed_proto[];
 extern struct message ospf_network_type_msg[];
-extern int ospf_ism_status_msg_max;
-extern int ospf_nsm_status_msg_max;
+extern int ospf_ism_state_msg_max;
+extern int ospf_nsm_state_msg_max;
 extern int ospf_lsa_type_msg_max;
 extern int ospf_link_state_id_type_msg_max;
 extern int ospf_redistributed_proto_max;
 extern int ospf_network_type_msg_max;
-
-extern char *progname;
-
-/* Prototypes. */
-void ospf_init (void);
-void ospf_if_update (void);
-void ospf_ls_upd_queue_empty (struct ospf_interface *oi);
-void ospf_terminate (void);
-void ospf_route_init (void);
-void ospf_nbr_static_if_update (struct ospf_interface *);
-struct ospf_nbr_static *ospf_nbr_static_lookup_by_addr (struct in_addr);
-struct ospf_nbr_static *ospf_nbr_static_lookup_next (struct in_addr *, int);
-
+extern struct zclient *zclient;
 extern struct thread_master *master;
 extern struct ospf *ospf_top;
+extern int ospf_zlog;
+
+/* Prototypes. */
+struct ospf *ospf_get ();
+void ospf_finish (struct ospf *);
+int ospf_router_id_update_timer (struct thread *);
+void ospf_router_id_update ();
+int ospf_network_set (struct ospf *, struct prefix_ipv4 *, struct in_addr);
+int ospf_network_unset (struct ospf *, struct prefix_ipv4 *, struct in_addr);
+int ospf_area_stub_set (struct ospf *, struct in_addr);
+int ospf_area_stub_unset (struct ospf *, struct in_addr);
+int ospf_area_no_summary_set (struct ospf *, struct in_addr);
+int ospf_area_no_summary_unset (struct ospf *, struct in_addr);
+int ospf_area_nssa_set (struct ospf *, struct in_addr);
+int ospf_area_nssa_unset (struct ospf *, struct in_addr);
+int ospf_area_nssa_translator_role_set (struct ospf *, struct in_addr, int);
+int ospf_area_export_list_set (struct ospf_area *, char *);
+int ospf_area_export_list_unset (struct ospf_area *);
+int ospf_area_import_list_set (struct ospf_area *, char *);
+int ospf_area_import_list_unset (struct ospf_area *);
+int ospf_area_shortcut_set (struct ospf_area *, int);
+int ospf_area_shortcut_unset (struct ospf_area *);
+int ospf_timers_spf_set (struct ospf *, u_int32_t, u_int32_t);
+int ospf_timers_spf_unset (struct ospf *);
+int ospf_timers_refresh_set (struct ospf *, int);
+int ospf_timers_refresh_unset (struct ospf *);
+int ospf_nbr_nbma_set (struct ospf *, struct in_addr);
+int ospf_nbr_nbma_unset (struct ospf *, struct in_addr);
+int ospf_nbr_nbma_priority_set (struct ospf *, struct in_addr, u_char);
+int ospf_nbr_nbma_priority_unset (struct ospf *, struct in_addr);
+int ospf_nbr_nbma_poll_interval_set (struct ospf *, struct in_addr, int);
+int ospf_nbr_nbma_poll_interval_unset (struct ospf *, struct in_addr);
+void ospf_prefix_list_update (struct prefix_list *);
+void ospf_init ();
+void ospf_if_update ();
+void ospf_ls_upd_queue_empty (struct ospf_interface *);
+void ospf_terminate ();
+void ospf_nbr_nbma_if_update (struct ospf_interface *);
+struct ospf_nbr_nbma *ospf_nbr_nbma_lookup (struct ospf *, struct in_addr);
+struct ospf_nbr_nbma *ospf_nbr_nbma_lookup_next (struct in_addr *, int);
+int ospf_oi_count (struct interface *);
 
 struct ospf_area *ospf_area_new (struct in_addr);
-struct ospf_area *ospf_area_get (struct in_addr, int format);
+struct ospf_area *ospf_area_get (struct in_addr, int);
 void ospf_area_check_free (struct in_addr);
 struct ospf_area *ospf_area_lookup_by_area_id (struct in_addr);
 void ospf_area_add_if (struct ospf_area *, struct ospf_interface *);
 void ospf_area_del_if (struct ospf_area *, struct ospf_interface *);
 
 void ospf_route_map_init ();
-
 void ospf_snmp_init ();
-
-extern int ospf_zlog;
-
-char *ait_ntoa (struct in_addr, int);
 
 #endif /* _ZEBRA_OSPFD_H */

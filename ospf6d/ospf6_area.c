@@ -1,6 +1,6 @@
 /*
  * OSPF6 Area Data Structure
- * Copyright (C) 1999 Yasuhiro Ohara
+ * Copyright (C) 1999-2002 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
  *
@@ -21,6 +21,9 @@
  */
 
 #include "ospf6d.h"
+
+static int area_index;
+#define IS_OSPF6_DUMP_AREA (ospf6_dump_is_on (area_index))
 
 static void
 ospf6_area_foreach_interface (struct ospf6_area *o6a, void *arg, int val,
@@ -94,36 +97,93 @@ ospf6_area_is_transit (struct ospf6_area *o6a)
   return 0;
 }
 
+
+
+void
+ospf6_area_intra_topo_add (struct ospf6_route_req *topo_entry)
+{
+  if (topo_entry->route.type == OSPF6_DEST_TYPE_ROUTER)
+    {
+      if (CHECK_FLAG (topo_entry->path.router_bits, OSPF6_ROUTER_LSA_BIT_B))
+        ospf6_abr_abr_entry_add (topo_entry);
+    }
+  CALL_ADD_HOOK (&intra_topology_hook, topo_entry);
+}
+
+void
+ospf6_area_intra_topo_remove (struct ospf6_route_req *topo_entry)
+{
+  if (topo_entry->route.type == OSPF6_DEST_TYPE_ROUTER)
+    {
+      if (CHECK_FLAG (topo_entry->path.router_bits, OSPF6_ROUTER_LSA_BIT_E))
+        ospf6_abr_abr_entry_add (topo_entry);
+    }
+  CALL_REMOVE_HOOK (&intra_topology_hook, topo_entry);
+}
+
+void
+ospf6_area_route_add (void *data)
+{
+  struct ospf6_route_req *route = data;
+  struct in6_addr local;
+
+  inet_pton (AF_INET6, "::1", &local);
+  if (! memcmp (&route->nexthop.address, &local, sizeof (struct in6_addr)))
+    {
+      if (IS_OSPF6_DUMP_AREA)
+        zlog_info ("AREA: Self-originated route add, ignore");
+      return;
+    }
+
+  ospf6_route_add (route, ospf6->route_table);
+}
+
+void
+ospf6_area_route_remove (void *data)
+{
+  struct ospf6_route_req *route = data;
+  struct in6_addr local;
+
+  inet_pton (AF_INET6, "::1", &local);
+  if (! memcmp (&route->nexthop.address, &local, sizeof (struct in6_addr)))
+    {
+      if (IS_OSPF6_DUMP_AREA)
+        zlog_info ("AREA: Self-originated route remove, ignore");
+      return;
+    }
+
+  ospf6_route_remove (route, ospf6->route_table);
+}
+
 /* Make new area structure */
 struct ospf6_area *
 ospf6_area_create (u_int32_t area_id)
 {
   struct ospf6_area *o6a;
+  char namebuf[64];
 
   /* allocate memory */
-  o6a = (struct ospf6_area *) XMALLOC (MTYPE_OSPF6_AREA,
-                                       sizeof (struct ospf6_area));
-  if (!o6a)
-    {
-      char str[16];
-      inet_ntop (AF_INET, &area_id, str, sizeof (str));
-      zlog_err ("can't allocate memory for Area %s", str);
-      return NULL;
-    }
+  o6a = XCALLOC (MTYPE_OSPF6_AREA, sizeof (struct ospf6_area));
 
   /* initialize */
-  memset (o6a, 0, sizeof (struct ospf6_area));
   inet_ntop (AF_INET, &area_id, o6a->str, sizeof (o6a->str));
   o6a->area_id = area_id;
   o6a->if_list = list_new ();
 
-#if 0
-  o6a->lsdb = list_new ();
-#endif
   o6a->lsdb = ospf6_lsdb_create ();
-
   o6a->spf_tree = ospf6_spftree_create ();
-  o6a->table_topology = route_table_init ();
+
+  snprintf (namebuf, sizeof (namebuf), "Area %s's route table", o6a->str);
+  o6a->route_table = ospf6_route_table_create (namebuf);
+  o6a->route_table->hook_add = ospf6_area_route_add;
+  o6a->route_table->hook_change = ospf6_area_route_add;
+  o6a->route_table->hook_remove = ospf6_area_route_remove;
+
+  snprintf (namebuf, sizeof (namebuf), "Area %s's topology table", o6a->str);
+  o6a->table_topology = ospf6_route_table_create (namebuf);
+  o6a->table_topology->hook_add = ospf6_intra_topology_add;
+  o6a->table_topology->hook_change = ospf6_intra_topology_add;
+  o6a->table_topology->hook_remove = ospf6_intra_topology_remove;
 
   /* xxx, set options */
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_V6);
@@ -137,10 +197,20 @@ ospf6_area_create (u_int32_t area_id)
 }
 
 void
+ospf6_area_bind_top (struct ospf6_area *o6a, struct ospf6 *o6)
+{
+  o6a->ospf6 = o6;
+  CALL_CHANGE_HOOK (&area_hook, o6a);
+  return;
+}
+
+void
 ospf6_area_delete (struct ospf6_area *o6a)
 {
   listnode n;
   struct ospf6_interface *o6i;
+
+  CALL_REMOVE_HOOK (&area_hook, o6a);
 
   /* ospf6 interface list */
   for (n = listhead (o6a->if_list); n; nextnode (n))
@@ -165,9 +235,10 @@ ospf6_area_delete (struct ospf6_area *o6a)
   o6a->route_calc = (struct thread *) NULL;
 
   /* new */
+  ospf6_route_table_delete (o6a->route_table);
+
   ospf6_spftree_delete (o6a->spf_tree);
-  ospf6_route_delete_all (o6a->table_topology);
-  route_table_finish (o6a->table_topology);
+  ospf6_route_table_delete (o6a->table_topology);
 
   /* free area */
   XFREE (MTYPE_OSPF6_AREA, o6a);
@@ -227,4 +298,57 @@ ospf6_area_statistics_show (struct vty *vty, struct ospf6_area *o6a)
   vty_out (vty, "  Statistics of Area %s%s", o6a->str, VTY_NEWLINE);
 #endif
 }
+
+DEFUN (show_ipv6_ospf6_area_route,
+       show_ipv6_ospf6_area_route_cmd,
+       "show ipv6 ospf6 area A.B.C.D route",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       OSPF6_AREA_STR
+       OSPF6_AREA_ID_STR
+       ROUTE_STR
+       )
+{
+  struct ospf6_area *o6a;
+  u_int32_t area_id;
+
+  OSPF6_CMD_CHECK_RUNNING ();
+
+  inet_pton (AF_INET, argv[0], &area_id);
+  o6a = ospf6_area_lookup (area_id, ospf6);
+
+  if (! o6a)
+    return CMD_SUCCESS;
+
+  argc -= 1;
+  argv += 1;
+
+  return ospf6_route_table_show (vty, argc, argv, o6a->route_table);
+}
+
+ALIAS (show_ipv6_ospf6_area_route,
+       show_ipv6_ospf6_area_route_prefix_cmd,
+       "show ipv6 ospf6 area A.B.C.D route (X::X|detail)",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       OSPF6_AREA_STR
+       OSPF6_AREA_ID_STR
+       ROUTE_STR
+       "Specify IPv6 address\n"
+       "Detailed information\n"
+       )
+
+void
+ospf6_area_init ()
+{
+  area_index = ospf6_dump_install ("area", "Area information\n");
+
+  install_element (VIEW_NODE, &show_ipv6_ospf6_area_route_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_area_route_prefix_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_area_route_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_area_route_prefix_cmd);
+}
+
 

@@ -23,13 +23,18 @@
 #ifndef OSPF6_LSA_H
 #define OSPF6_LSA_H
 
+#include "ospf6_hook.h"
+
 /* LSA definition */
+
+#define MAXLSASIZE   1024
 
 #define OSPF6_LSA_MAXAGE           3600    /* 1 hour */
 #define OSPF6_LSA_CHECKAGE         300     /* 5 min */
 #define OSPF6_LSA_MAXAGEDIFF       900     /* 15 min */
 
 /* Type */
+#define OSPF6_LSA_TYPE_NONE             0x0000
 #define OSPF6_LSA_TYPE_ROUTER           0x2001
 #define OSPF6_LSA_TYPE_NETWORK          0x2002
 #define OSPF6_LSA_TYPE_INTER_PREFIX     0x2003
@@ -40,24 +45,28 @@
 #define OSPF6_LSA_TYPE_LINK             0x0008
 #define OSPF6_LSA_TYPE_INTRA_PREFIX     0x2009
 #define OSPF6_LSA_TYPE_MAX              0x000a
+#define OSPF6_LSA_TYPE_SIZE             0x000b
 
-#define OSPF6_LSA_TYPESW_MASK           0x000f
+/* Masks for LS Type : RFC 2740 A.4.2.1 "LS type" */
+#define OSPF6_LSTYPE_UBIT_MASK        0x8000
+#define OSPF6_LSTYPE_SCOPE_MASK       0x6000
+#define OSPF6_LSTYPE_CODE_MASK        0x1fff
+
+#define OSPF6_LSA_TYPESW_MASK         OSPF6_LSTYPE_CODE_MASK
 #define OSPF6_LSA_TYPESW(x) (ntohs((x)) & OSPF6_LSA_TYPESW_MASK)
 #define OSPF6_LSA_TYPESW_ISKNOWN(x) (OSPF6_LSA_TYPESW(x) < OSPF6_LSA_TYPE_MAX)
-extern char *ospf6_lsa_type_string[];
 
 /* lsa scope */
-#define OSPF6_LSA_SCOPE_MASK       0x6000
 #define OSPF6_LSA_SCOPE_LINKLOCAL  0x0000
 #define OSPF6_LSA_SCOPE_AREA       0x2000
 #define OSPF6_LSA_SCOPE_AS         0x4000
 #define OSPF6_LSA_SCOPE_RESERVED   0x6000
 #define OSPF6_LSA_IS_SCOPE_LINKLOCAL(x) \
-  (((x) & OSPF6_LSA_SCOPE_MASK) == OSPF6_LSA_SCOPE_LINKLOCAL)
+  (((x) & OSPF6_LSTYPE_SCOPE_MASK) == OSPF6_LSA_SCOPE_LINKLOCAL)
 #define OSPF6_LSA_IS_SCOPE_AREA(x) \
-  (((x) & OSPF6_LSA_SCOPE_MASK) == OSPF6_LSA_SCOPE_AREA)
+  (((x) & OSPF6_LSTYPE_SCOPE_MASK) == OSPF6_LSA_SCOPE_AREA)
 #define OSPF6_LSA_IS_SCOPE_AS(x) \
-  (((x) & OSPF6_LSA_SCOPE_MASK) == OSPF6_LSA_SCOPE_AS)
+  (((x) & OSPF6_LSTYPE_SCOPE_MASK) == OSPF6_LSA_SCOPE_AS)
 
 /* NOTE that all LSAs are kept NETWORK BYTE ORDER */
 
@@ -154,22 +163,6 @@ struct ospf6_as_external_lsa
 #define ASE_LSA_ISSET(x,y)  ((x)->ase_bits &   (y))
 #define ASE_LSA_CLEAR(x,y)  ((x)->ase_bits &= ~(y))
 
-/* Inter-Area-Prefix-LSA */
-struct ospf6_lsa_inter_area_prefix_lsa
-{
-  u_int32_t metric;       /* 12bits reserved, 20bits metric */
-  /* followed by one address prefix */
-};
-
-/* Inter-Area-Router-LSA */
-struct ospf6_lsa_inter_area_router_lsa
-{
-  u_char reserved;
-  u_char options[3];      /* 20bits of options */
-  u_int32_t metric;       /* 12bits reserved, 20bits metric */
-  u_int32_t router_id;    /* Destination Router ID */
-};
-
 /* LSA Header */
 struct ospf6_lsa_hdr
 {
@@ -205,6 +198,9 @@ struct ospf6_lsa_header__
 #define OSPF6_LSA_NEXT(x) ((struct ospf6_lsa_header *) \
                              ((char *)(x) + ntohs ((x)->length)))
 
+#define OSPF6_LSA_HEADER_END(header) \
+  ((void *)((char *)(header) + sizeof (struct ospf6_lsa_header)))
+
 struct ospf6_lsa
 {
   char                   str[256];  /* dump string */
@@ -212,9 +208,9 @@ struct ospf6_lsa
   u_long                 lock;      /* reference counter */
   int                    summary;   /* indicate this is LS header only */
   void                  *scope;     /* pointer of scoped data structure */
-  unsigned char          flags;     /* use this to decide ack type */
-  unsigned long          birth;     /* tv_sec when LS age 0 */
-  unsigned long          installed; /* tv_sec when installed */
+  unsigned char          flag;      /* to decide ack type and refresh */
+  struct timeval         birth;     /* tv_sec when LS age 0 */
+  struct timeval         installed; /* installed time */
   struct thread         *expire;
   struct thread         *refresh;   /* For self-originated LSA */
   u_int32_t              from;      /* from which neighbor */
@@ -229,14 +225,38 @@ struct ospf6_lsa
   u_long turnover_min;
   u_long turnover_max;
 };
-#define OSPF6_LSA_FLOODBACK   (1 << 0)
-#define OSPF6_LSA_DUPLICATE   (1 << 1)
-#define OSPF6_LSA_IMPLIEDACK  (1 << 2)
 
-extern char *ospf6_lsa_type_strings[];
-#define ospf6_lsa_type_string(x) (ospf6_lsa_type_strings[OSPF6_LSA_TYPESW(x)])
+struct ospf6_lsa_slot
+{
+  struct ospf6_lsa_slot *prev;
+  struct ospf6_lsa_slot *next;
 
-/* Back pointer check, Is X's reference field bound to Y? */
+  u_int16_t  type;
+  char      *name;
+
+  int (*func_print)        (struct ospf6_lsa *lsa);
+  int (*func_show)         (struct vty *vty, struct ospf6_lsa *lsa);
+  int (*func_refresh)      (void *lsa);
+
+  int (*database_add)      (void *lsa);
+  int (*database_remove)   (void *lsa);
+
+  struct ospf6_hook_master database_hook;
+
+  struct ospf6_hook hook_neighbor;
+  struct ospf6_hook hook_interface;
+  struct ospf6_hook hook_area;
+  struct ospf6_hook hook_top;
+  struct ospf6_hook hook_database;
+  struct ospf6_hook hook_route;
+};
+
+#define OSPF6_LSA_FLAG_FLOODBACK  0x01
+#define OSPF6_LSA_FLAG_DUPLICATE  0x02
+#define OSPF6_LSA_FLAG_IMPLIEDACK 0x04
+#define OSPF6_LSA_FLAG_REFRESH    0x08
+
+/* Back pointer check, Is X's reference field bound to Y ? */
 #define x_ipl(x) ((struct intra_area_prefix_lsa *)LSH_NEXT((x)->lsa_hdr))
 #define is_reference_network_ok(x,y) \
           ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsa_hdr->lsh_type &&\
@@ -249,27 +269,103 @@ extern char *ospf6_lsa_type_strings[];
            (x_ipl(x))->intra_prefix_refer_lsid == htonl (0) &&\
            (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
 
+/* MaxAge check.  */
+/* ospf6_lsa_is_maxage (struct ospf6_lsa *lsa) */
+#define IS_LSA_MAXAGE(L)      (ospf6_lsa_age_current (L) == OSPF6_LSA_MAXAGE)
+
+struct ospf6_lsa_slot *ospf6_lsa_slot_get (u_int16_t type);
+int ospf6_lsa_slot_register (struct ospf6_lsa_slot *src);
+int ospf6_lsa_slot_unregister (u_int16_t type);
+
+extern struct ospf6_lsa_slot *slot_head;
+#define CALL_FOREACH_LSA_HOOK(hook,func,data) \
+  if (ospf6)\
+    {\
+      struct ospf6_lsa_slot *slot;\
+      for (slot = slot_head; slot; slot = slot->next)\
+        {\
+          if (slot->hook.func)\
+            (*slot->hook.func) (data);\
+        }\
+    }
+#define CALL_LSA_FUNC(type,func,data) \
+  if (ospf6)\
+    {\
+      struct ospf6_lsa_slot *slot;\
+      slot = ospf6_lsa_slot_get (type);\
+      if (slot && slot->func)\
+        {\
+          (*slot->func) (data);\
+        }\
+      else\
+        {\
+          zlog_warn ("LSA: No slot for type %#x: %s line:%d",\
+                     ntohs (type), __FILE__, __LINE__);\
+        }\
+    }
+
+#define CALL_LSA_DATABASE_ADD(type,data) \
+  if (ospf6)\
+    {\
+      struct ospf6_lsa_slot *slot;\
+      slot = ospf6_lsa_slot_get (type);\
+      if (slot)\
+        {\
+          CALL_ADD_HOOK (&slot->database_hook, data);\
+        }\
+      else\
+        {\
+          zlog_warn ("LSA: No slot for type %#x: %s line:%d",\
+                     ntohs (type), __FILE__, __LINE__);\
+        }\
+    }
+#define CALL_LSA_DATABASE_CHANGE(type,data) \
+  if (ospf6)\
+    {\
+      struct ospf6_lsa_slot *slot;\
+      slot = ospf6_lsa_slot_get (type);\
+      if (slot)\
+        {\
+          CALL_CHANGE_HOOK (&slot->database_hook, data);\
+        }\
+      else\
+        {\
+          zlog_warn ("LSA: No slot for type %#x: %s line:%d",\
+                     ntohs (type), __FILE__, __LINE__);\
+        }\
+    }
+#define CALL_LSA_DATABASE_REMOVE(type,data) \
+  if (ospf6)\
+    {\
+      struct ospf6_lsa_slot *slot;\
+      slot = ospf6_lsa_slot_get (type);\
+      if (slot)\
+        {\
+          CALL_REMOVE_HOOK (&slot->database_hook, data);\
+        }\
+      else\
+        {\
+          zlog_warn ("LSA: No slot for type %#x: %s line:%d",\
+                     ntohs (type), __FILE__, __LINE__);\
+        }\
+    }
+
+void ospf6_lsa_init ();
+
 /* Function Prototypes */
-char *
-ospf6_lsa_print_id (struct ospf6_lsa_header *lsa_header, char *buf, int size);
 
 struct router_lsd *
 get_router_lsd (u_int32_t, struct ospf6_lsa *);
 unsigned long get_ifindex_to_router (u_int32_t, struct ospf6_lsa *);
 
-/* new */
-#if 0
-void
-ospf6_lsa_remove_all_reference (struct ospf6_lsa *);
-#endif
-
-int ospf6_lsa_issame (struct ospf6_lsa_header *, struct ospf6_lsa_header *);
 int ospf6_lsa_differ (struct ospf6_lsa *lsa1, struct ospf6_lsa *lsa2);
 int ospf6_lsa_match (u_int16_t, u_int32_t, u_int32_t,
                      struct ospf6_lsa_header *);
 
-void
-ospf6_lsa_show (struct vty *, struct ospf6_lsa *);
+void ospf6_lsa_show (struct vty *, struct ospf6_lsa *);
+void ospf6_lsa_show_dump (struct vty *, struct ospf6_lsa *);
+void ospf6_lsa_show_summary (struct vty *, struct ospf6_lsa *);
+void ospf6_lsa_show_summary_header (struct vty *);
 
 struct ospf6_lsa *
 ospf6_lsa_create (struct ospf6_lsa_header *);
@@ -296,8 +392,6 @@ int
 ospf6_lsa_lsd_is_refer_ok (int index1, struct ospf6_lsa_header *lsa_header1,
                            int index2, struct ospf6_lsa_header *lsa_header2);
 
-void ospf6_lsa_maxage_remove (struct ospf6_lsa *);
-
 int ospf6_lsa_expire (struct thread *);
 int ospf6_lsa_refresh (struct thread *);
 
@@ -311,9 +405,14 @@ void ospf6_lsa_update_intra_prefix_transit (char *ifname);
 void ospf6_lsa_update_intra_prefix_stub (u_int32_t area_id);
 
 void ospf6_lsa_reoriginate (struct ospf6_lsa *);
+void
+ospf6_lsa_originate (u_int16_t, u_int32_t, u_int32_t, char *, int, void *);
 
 u_int16_t ospf6_lsa_get_scope_type (u_int16_t);
 int ospf6_lsa_is_known_type (struct ospf6_lsa_header *lsa_header);
+
+char *ospf6_lsa_type_string (u_int16_t type, char *buf, int bufsize);
+char *ospf6_lsa_router_bits_string (u_char router_bits, char *buf, int size);
 
 #endif /* OSPF6_LSA_H */
 

@@ -293,9 +293,9 @@ ifam_read_mesg (struct ifa_msghdr *ifm,
       }
 
   /* Be sure structure is cleared */
-  bzero (mask, sizeof (union sockunion));
-  bzero (addr, sizeof (union sockunion));
-  bzero (dest, sizeof (union sockunion));
+  memset (mask, 0, sizeof (union sockunion));
+  memset (addr, 0, sizeof (union sockunion));
+  memset (dest, 0, sizeof (union sockunion));
 
   /* We fetch each socket variable into sockunion. */
   IFAMADDRGET (NULL, RTA_DST);
@@ -409,9 +409,9 @@ rtm_read_mesg (struct rt_msghdr *rtm,
       }
 
   /* Be sure structure is cleared */
-  bzero (dest, sizeof (union sockunion));
-  bzero (gate, sizeof (union sockunion));
-  bzero (mask, sizeof (union sockunion));
+  memset (dest, 0, sizeof (union sockunion));
+  memset (gate, 0, sizeof (union sockunion));
+  memset (mask, 0, sizeof (union sockunion));
 
   /* We fetch each socket variable into sockunion. */
   RTMADDRGET (dest, RTA_DST);
@@ -570,7 +570,7 @@ rtm_write (int message,
     return ZEBRA_ERR_EPERM;
 
   /* Clear and set rt_msghdr values */
-  bzero (&msg, sizeof (struct rt_msghdr));
+  memset (&msg, 0, sizeof (struct rt_msghdr));
   msg.rtm.rtm_version = RTM_VERSION;
   msg.rtm.rtm_type = message;
   msg.rtm.rtm_seq = msg_seq++;
@@ -623,7 +623,7 @@ rtm_write (int message,
   if (msg.rtm.rtm_addrs & (R)) \
     { \
       int len = ROUNDUP ((X)->sa.sa_len); \
-      bcopy ((caddr_t)(X), pnt, len); \
+      memcpy (pnt, (caddr_t)(X), len); \
       pnt += len; \
     }
 #else 
@@ -631,7 +631,7 @@ rtm_write (int message,
   if (msg.rtm.rtm_addrs & (R)) \
     { \
       int len = ROUNDUP (sizeof((X)->sa)); \
-      bcopy ((caddr_t)(X), pnt, len); \
+      memcpy (pnt, (caddr_t)(X), len); \
       pnt += len; \
     }
 #endif /* HAVE_SIN_LEN */

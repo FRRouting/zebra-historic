@@ -101,7 +101,7 @@ DEFUN (debug_ripng_packet_direct,
        "Debug option set for receive packet\n"
        "Debug option set for send packet\n")
 {
-  ripng_debug_packet = RIPNG_DEBUG_PACKET;
+  ripng_debug_packet |= RIPNG_DEBUG_PACKET;
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
     ripng_debug_packet |= RIPNG_DEBUG_SEND;
   if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
@@ -120,7 +120,7 @@ DEFUN (debug_ripng_packet_detail,
        "Debug option set for send packet\n"
        "Debug option set detaied information\n")
 {
-  ripng_debug_packet = RIPNG_DEBUG_PACKET;
+  ripng_debug_packet |= RIPNG_DEBUG_PACKET;
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
     ripng_debug_packet |= RIPNG_DEBUG_SEND;
   if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
@@ -175,9 +175,19 @@ DEFUN (no_debug_ripng_packet_direct,
        "Debug option set for send packet\n")
 {
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
-    ripng_debug_packet &= ~RIPNG_DEBUG_SEND;
-  if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
-    ripng_debug_packet &= ~RIPNG_DEBUG_RECV;
+    {
+      if (IS_RIPNG_DEBUG_RECV)
+       ripng_debug_packet &= ~RIPNG_DEBUG_SEND;
+      else
+       ripng_debug_packet = 0;
+    }
+  else if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
+    {
+      if (IS_RIPNG_DEBUG_SEND)
+       ripng_debug_packet &= ~RIPNG_DEBUG_RECV;
+      else
+       ripng_debug_packet = 0;
+    }
   return CMD_SUCCESS;
 }
 
@@ -267,6 +277,7 @@ ripng_debug_init ()
   install_element (ENABLE_NODE, &debug_ripng_zebra_cmd);
   install_element (ENABLE_NODE, &no_debug_ripng_events_cmd);
   install_element (ENABLE_NODE, &no_debug_ripng_packet_cmd);
+  install_element (ENABLE_NODE, &no_debug_ripng_packet_direct_cmd);
   install_element (ENABLE_NODE, &no_debug_ripng_zebra_cmd);
 
   install_element (CONFIG_NODE, &debug_ripng_events_cmd);
@@ -276,5 +287,6 @@ ripng_debug_init ()
   install_element (CONFIG_NODE, &debug_ripng_zebra_cmd);
   install_element (CONFIG_NODE, &no_debug_ripng_events_cmd);
   install_element (CONFIG_NODE, &no_debug_ripng_packet_cmd);
+  install_element (CONFIG_NODE, &no_debug_ripng_packet_direct_cmd);
   install_element (CONFIG_NODE, &no_debug_ripng_zebra_cmd);
 }
