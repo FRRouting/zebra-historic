@@ -71,6 +71,7 @@ enum node_type
   RDISC_NODE,			/* ICMP Router Discovery Protocol mode. */ 
   IP_NODE,			/* Static ip route node. */
   ACCESS_NODE,			/* Access list node. */
+  PREFIX_NODE,			/* Prefix list node. */
   AS_LIST_NODE,			/* AS list node. */
   DISTRIBUTE_NODE,		/* Distribute list node. */
   RMAP_NODE,			/* Route map node. */

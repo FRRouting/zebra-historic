@@ -41,33 +41,34 @@ enum
 };
 
 /* Architectual Constants */
-#define OSPF_LS_REFRESH_TIME		   1800
-#define OSPF_MIN_LS_INTERVAL		      5
-#define OSPF_MIN_LS_ARRIVAL		      1
-#define OSPF_MAX_AGE			   3600
-#define OSPF_CHECK_AGE			    300
-#define OSPF_MAX_AGE_DIFF		    900
+#define OSPF_LS_REFRESH_TIME		      1800
+#define OSPF_MIN_LS_INTERVAL		         5
+#define OSPF_MIN_LS_ARRIVAL		         1
+#define OSPF_MAX_AGE			      3600
+#define OSPF_CHECK_AGE			       300
+#define OSPF_MAX_AGE_DIFF		       900
 #define OSPF_LS_INFINITY		  0xffffff
-#define OSPF_DEFAULT_DESTINATION	 "0.0.0.0"
+#define OSPF_DEFAULT_DESTINATION	0x00000000	/* 0.0.0.0 */
 #define OSPF_INITIAL_SEQUENCE_NUMBER	0x80000001
 #define OSPF_MAX_SEQUENCE_NUMBER	0x7fffffff
 
-#define OSPF_ALLSPFROUTERS		"224.0.0.5"
-#define OSPF_ALLDROUTERS		"224.0.0.6"
+#define OSPF_ALLSPFROUTERS		0xe0000005	/* 224.0.0.5 */
+#define OSPF_ALLDROUTERS		0xe0000006	/* 224.0.0.6 */
+
+#define OSPF_AREA_BACKBONE		0x00000000	/* 0.0.0.0 */
 
 /* OSPF Authentication Type. */
-#define OSPF_AUTH_NULL			0
-#define OSPF_AUTH_SIMPLE		1
-#define OSPF_AUTH_CRYPTOGRAPHIC		2
+#define OSPF_AUTH_NULL			    0
+#define OSPF_AUTH_SIMPLE		    1
+#define OSPF_AUTH_CRYPTOGRAPHIC		    2
 
 /* OSPF interface default values. */
-#define OSPF_HELLO_INTERVAL_DEFAULT	   10
-#define OSPF_ROUTER_DEAD_INTERVAL_DEFAULT  40
-
-#define OSPF_ROUTER_PRIORITY_DEFAULT	    1
-#define OSPF_TRANSMIT_DELAY_DEFAULT         1
 #define OSPF_OUTPUT_COST_DEFAULT           10
+#define OSPF_ROUTER_DEAD_INTERVAL_DEFAULT  40
+#define OSPF_HELLO_INTERVAL_DEFAULT	   10
+#define OSPF_ROUTER_PRIORITY_DEFAULT	    1
 #define OSPF_RETRANSMIT_INTERVAL_DEFAULT   30
+#define OSPF_TRANSMIT_DELAY_DEFAULT         1
 
 #define OSPF_AREA_ID_FORMAT_ADDRESS         1
 #define OSPF_AREA_ID_FORMAT_DECIMAL         2
@@ -75,20 +76,38 @@ enum
 /* OSPF instance structure. */
 struct ospf
 {
-  u_int32_t process_id;			/* OSPF Process ID. */
   struct in_addr router_id;		/* OSPF Router ID. */
 
-  struct _list *if_list;		/* Zebra interface list. */
+  list if_list;				/* Zebra interface list. */
 
-  /* configuration data. */
-  struct route_table *network_area;	/* OSPF config network_area. */
+  list areas;				/* OSPF area. */
+  struct route_table *networks;		/* OSPF config networks. */
 };
 
-/* OSPF config area structure. */
-struct area
+/* OSPF area structure. */
+struct ospf_area
 {
-  int area_id_format;
   struct in_addr area_id;
+  list address_range;
+
+  /* LSAs. */
+  list router_lsa;
+  list network_lsa;
+  list summary_lsa;
+
+  /* shortest path tree. */
+  /* TransitCapability. */
+  /* ExternalRoutingCapability. */
+  int default_cost;	/* StubDefaultCost. */
+
+  int auth_type;	/* Authentication type. */
+};
+
+/* OSPF config network structure. */
+struct ospf_network
+{
+  struct ospf_area *area;
+  int area_id_format;
 };
 
 /* To convert index into message structure. */

@@ -1,5 +1,24 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.63 first beta package.
+
+* Changes in lib
+
+** `copy running-config stgartup-config' command is added.
+
+** prefix length check bug is fixed.  Thanks Marlos Barcenilla
+<barce@frip.utn.edu.ar>.
+
+* Changes in ospfd
+
+** DR and BDR election works.
+
+** OSPF Hello simple authentication works.
+
+* Changes in ospf6d
+
+** Now ospf6d can be compiled on both Linux and *BSD system.
+
 * Changes in zebra-19990420 snapshot
 
 ** `make dist' at top directory works now.

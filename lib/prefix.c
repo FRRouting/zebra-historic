@@ -163,7 +163,7 @@ str2prefix_ipv4 (char *str, struct prefix_ipv4 *p)
 
   /* Get prefix length. */
   plen = (u_char) atoi (++pnt);
-  if (plen >= 32)
+  if (plen > 32)
     return 0;
   p->prefixlen = plen;
   p->family = AF_INET;
@@ -305,7 +305,7 @@ str2prefix_ipv6 (char *str, struct prefix_ipv6 *p)
       if (ret < 0)
 	return 0;
       plen = (u_char) atoi (++pnt);
-      if (plen >= 128)
+      if (plen > 128)
 	return 0;
       p->prefixlen = plen;
     }

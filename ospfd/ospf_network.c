@@ -29,6 +29,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_network.h"
 
@@ -54,7 +55,7 @@ ospf_if_add_allspfrouters (int sock, struct prefix *p)
 
   bzero (&m, sizeof (m));
 
-  inet_aton (OSPF_ALLSPFROUTERS, &m.imr_multiaddr);
+  m.imr_multiaddr.s_addr = htonl (OSPF_ALLSPFROUTERS);
   m.imr_interface = p->u.prefix4;
 
   ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
@@ -76,7 +77,7 @@ ospf_if_add_alldrouters (int sock, struct prefix *p)
 
   bzero (&m, sizeof (m));
 
-  inet_aton (OSPF_ALLDROUTERS, &m.imr_multiaddr);
+  m.imr_multiaddr.s_addr = htonl (OSPF_ALLDROUTERS);
   m.imr_interface = p->u.prefix4;
 
   ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,

@@ -1,3 +1,19 @@
+1999-04-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Trim training newline from zlog format arguemnt.
+	
+	* ospf6_dump.c (ospf6_err): Commented out ospf6_err and
+	ospf6_warn.  Same kind of function should be implemented as
+	zlog_err or zlog_warn or someting.
+
+	* ospf6d.c: Change OSPF_NODE to OSPF6_NODE.
+	Change OSPF_DEFAULT_CONFIG to OSPF6_DEFAULT_CONFIG.
+	
+
+1999-04-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6_mesg.c (make_hello): Add check of SIN6_LEN
+
 1999-04-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf6_neighbor.c: Change list_clear_all to list_delete_all_node.

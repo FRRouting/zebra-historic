@@ -44,6 +44,7 @@
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_packet.h"
 #include "bgpd/bgp_regex.h"
+#include "bgpd/bgp_filter.h"
 
 /* For bgp_zebra.c */
 void bgp_zebra_announce (struct prefix *p, struct bgp_info *info);
@@ -192,7 +193,7 @@ bgp_output_filter (struct peer *peer, struct prefix *p, struct bgp_info *info)
   /* Filter list apply. */
   if (FILTER_LIST_OUT (peer))
     if (as_list_apply (FILTER_LIST_OUT(peer), 
-		       info->attr->aspath) == FILTER_DENY)
+		       info->attr->aspath) == AS_FILTER_DENY)
       return FILTER_DENY;
 
   return FILTER_PERMIT;
@@ -268,7 +269,7 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 
       /* Free tempolary aspath. */
       if (attr.aspath)
-	aspath_undup (attr.aspath);
+	aspath_free (attr.aspath);
     }
   else
     bgp_update_send (peer, p, &attr);
@@ -476,7 +477,7 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
          real interned aspath structure. */
       aspath = aspath_parse (newattr.aspath->data, 
 			     newattr.aspath->length);
-      aspath_undup (newattr.aspath);
+      aspath_free (newattr.aspath);
       newattr.aspath = aspath;
 
       return bgp_attr_intern (&newattr);

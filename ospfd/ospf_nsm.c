@@ -93,13 +93,13 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
       return NSM_ExStart;
 
   /* Router itself is the DRouter or the BDRouter. */
-  if (ADDRESS_SAME (&ospf_top->router_id, &oi->d_router) ||
-      ADDRESS_SAME (&ospf_top->router_id, &oi->bd_router))
+  if (!IPV4_ADDR_CMP (&ospf_top->router_id, &oi->d_router) ||
+      !IPV4_ADDR_CMP (&ospf_top->router_id, &oi->bd_router))
     return NSM_ExStart;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
-  if (ADDRESS_SAME (&nbr->router_id, &nbr->d_router) ||
-      ADDRESS_SAME (&nbr->router_id, &nbr->bd_router))
+  if (!IPV4_ADDR_CMP (&nbr->router_id, &nbr->d_router) ||
+      !IPV4_ADDR_CMP (&nbr->router_id, &nbr->bd_router))
     return NSM_ExStart;
 
   return NSM_TwoWay;

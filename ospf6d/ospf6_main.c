@@ -21,9 +21,6 @@
 
 #include "ospf6d.h"
 
-extern void start_msg (void);
-extern void rotate_log (void);
-
 /* ospfd options, we use GNU getopt library. */
 struct option longopts[] = 
 {
@@ -36,8 +33,8 @@ struct option longopts[] =
 };
 
 /* Configuration file and directory. */
-char config_current[] = OSPF_DEFAULT_CONFIG;
-char config_default[] = SYSCONFDIR OSPF_DEFAULT_CONFIG;
+char config_current[] = OSPF6_DEFAULT_CONFIG;
+char config_default[] = SYSCONFDIR OSPF6_DEFAULT_CONFIG;
 
 /* ospfd program name. */
 char *progname;
@@ -71,7 +68,7 @@ Report bugs to yasu@sfc.wide.ad.jp\n", progname);
 void
 terminate (int i)
 {
-  ospf_terminate();
+  ospf6_terminate();
   exit (i);
 }
 
@@ -79,15 +76,15 @@ terminate (int i)
 void 
 sighup (int sig)
 {
-  log ("SIGHUP received\n");
-  rotate_log ();
+  zlog (NULL, LOG_INFO, "SIGHUP received");
+  log_rotate ();
 }
 
 /* SIGINT handler. */
 void
 sigint (int sig)
 {
-  log ("SIGINT received\n");
+  zlog (NULL, LOG_INFO, "SIGINT received");
 
   /* Close all ospf peer and free all of resources. */
   terminate (0);
@@ -158,37 +155,36 @@ main (int argc, char **argv)
       opt = getopt_long (argc, argv, "df:hp:P:v", longopts, 0);
     
       if (opt == EOF)
-	break;
+        break;
 
       switch (opt) 
-	{
-	case 0:
-	  break;
-	case 'd':
-	  daemon_mode = 1;
-	  break;
-	case 'f':
-	  config_file = optarg;
-	  break;
-	case 'P':
-	  vty_port = atoi (optarg);
-	  break;
-	case 'v':
-	  print_version ();
-	  exit (0);
-	  break;
-	case 'h':
-	  usage (0);
-	  break;
-	default:
-	  usage (1);
-	  break;
-	}
+        {
+        case 0:
+          break;
+        case 'd':
+          daemon_mode = 1;
+          break;
+        case 'f':
+          config_file = optarg;
+          break;
+        case 'P':
+          vty_port = atoi (optarg);
+          break;
+        case 'v':
+          print_version ();
+          exit (0);
+          break;
+        case 'h':
+          usage (0);
+          break;
+        default:
+          usage (1);
+          break;
+        }
     }
 
-  log_init ();
-  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_OSPF,
-			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
+  /* print bannar */
+  ospf6_log_init ();
 
   /* Initializations. */
   master = thread_make_master ();
@@ -198,11 +194,10 @@ main (int argc, char **argv)
   vty_init ();
 
   /* Make ospf protocol socket. */
-  ospf_serv_sock ();
-  mcast_prepare ();
+  ospf6_serv_sock ();
 
-  ospf_init ();
-  ospf_zebra_init ();
+  ospf6_init ();
+  ospf6_zebra_init ();
 
 #ifdef OLD
   get_interface_all();
@@ -226,9 +221,6 @@ main (int argc, char **argv)
 
   /* Make ospf vty socket. */
   vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT, AF_INET);
-
-  /* print bannar */
-  ospf_start_msg ();
 
   /* start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

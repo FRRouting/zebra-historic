@@ -23,6 +23,7 @@
 #include <zebra.h>
 
 #include "stream.h"
+#include "linklist.h"
 #include "thread.h"
 #include "prefix.h"
 #include "log.h"
@@ -33,7 +34,9 @@
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_dump.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
+#include "ospfd/ospf_network.h"
 
 /* messages for OSPFv2 status */
 message ospf_ism_status_msg[] =
@@ -55,7 +58,7 @@ message ospf_nsm_status_msg[] =
   { NSM_Down,       "Down" },
   { NSM_Attempt,    "Attempt" },
   { NSM_Init,       "Init" },
-  { NSM_TwoWay,     "TwoWay" },
+  { NSM_TwoWay,     "2-Way" },
   { NSM_ExStart,    "ExStart" },
   { NSM_Exchange,   "Exchange" },
   { NSM_Loading,    "Loading" },
@@ -79,6 +82,57 @@ mes_lookup (message *meslist, int max, int index)
     return NULL;
   }
   return meslist[index].str;
+}
+
+void
+ospf_nbr_state_message (struct ospf_neighbor *nbr, char *buf, size_t size)
+{
+  int status;
+
+  if (!IPV4_ADDR_CMP (&nbr->d_router, &nbr->router_id))
+    status = ISM_DR;
+  else if (!IPV4_ADDR_CMP (&nbr->bd_router, &nbr->router_id))
+    status = ISM_Backup;
+  else
+    status = ISM_DROther;
+
+  bzero (buf, size);
+
+  snprintf (buf, size, "%s/%s",
+	    LOOKUP (ospf_nsm_status_msg, nbr->status),
+	    LOOKUP (ospf_ism_status_msg, status));
+}
+
+char *
+ospf_timer_dump (struct thread *t, char *buf, size_t size)
+{
+  struct timeval now;
+  time_t h, m, s;
+
+  if (!t)
+    return "inactive";
+
+  h = m = s = 0;
+  bzero (buf, size);
+
+  gettimeofday (&now, NULL);
+
+  s = t->u.sands.tv_sec - now.tv_sec;
+  if (s >= 3600)
+    {
+      h = s / 3600;
+      s -= h * 3600;
+    }
+
+  if (s >= 60)
+    {
+      m = s / 60;
+      s -= m * 60;
+    }
+
+  snprintf (buf, size, "%02d:%02d:%02d", h, m, s);
+
+  return buf;
 }
 
 void

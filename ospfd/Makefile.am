@@ -13,7 +13,8 @@ libospf_a_SOURCES = \
 
 noinst_HEADERS = \
 	ospf_dump.h ospf_interface.h ospf_ism.h ospf_neighbor.h \
-	ospf_network.h ospf_nsm.h ospf_packet.h ospf_zebra.h ospfd.h
+	ospf_network.h ospf_nsm.h ospf_packet.h ospf_zebra.h ospfd.h \
+	ospf_lsa.h
 
 ospfd_SOURCES = \
 	ospf_main.c $(libospf_a_SOURCES)

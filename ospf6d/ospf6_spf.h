@@ -20,26 +20,24 @@
  */
 
 
-#ifndef OSPF_SPF_H
-#define OSPF_SPF_H
+#ifndef OSPF6_SPF_H
+#define OSPF6_SPF_H
 
 #define MAX_ENTRY          ( 256 )
 #define ROUTING_TABLE_SIZE (sizeof (struct routing_table_entry) * MAX_ENTRY)
 
-typedef u_int32_t *vertex_id;
-
 struct vertex                /* Transit Vertex */
 {
-  u_int32_t            vtx_id[2];    /* [0:Router-ID][1:Interface-ID (which can be 0)] */
+  unsigned long        vtx_id[2];    /* [Router-ID][Interface-ID] */
+                                     /* Network vertex when Interface-ID 0 */
   struct lsa_internal *vtx_lsa;      /* Associated LSA */
   list                 vtx_nexthops; /* For ECMP */
-  u_int32_t            vtx_distance; /* Distance from Root (Cost) */
-  list                 vtx_path;     /* List of Path described by (struct vertex *) */
+  cost_t               vtx_distance; /* Distance from Root (Cost) */
+  list                 vtx_path;     /* Lower node */
   struct vertex       *vtx_parent;   /* for vertex on candidate list */
-  u_int8_t             vtx_depth;    /* for vertex on spf tree */
+  unsigned char        vtx_depth;    /* for vertex on spf tree */
 };
-
-#define MAXDEPTH 256
+#define MAXDEPTH       256
 
 struct spftree
 {
@@ -50,28 +48,29 @@ struct spftree
 
 struct routing_table_entry
 {
-  u_int32_t dst[2];
-  u_int32_t ifindex;
-  u_int32_t nexthop[2];
-  u_int32_t cost;
+  unsigned long   dst[2];
+  unsigned long   ifindex;
+  unsigned long   nexthop[2];
+  unsigned long   cost;
 
   struct in6_addr destination;
-  u_int32_t prefixlength;
+  unsigned long   prefixlength;
   struct in6_addr next_hop;
 };
 
 struct nexthop_info
 {
-  u_int32_t ifindex;
-  u_int32_t nexthop[2];
-
+  unsigned long   ifindex;
+  unsigned long   nexthop[2];
   struct in6_addr nexthop_addr;
 };
 
-#define IS_DST_ROUTER_TYPE(x) (!(x)->vtx_id[1])
+#define IS_DST_ROUTER_TYPE(x)  (!(x)->vtx_id[1])
 #define IS_DST_NETWORK_TYPE(x) ((x)->vtx_id[1])
 
+/* Function Prototypes */
 int spf_calculation (struct thread *);
 int routing_table_calculation (struct thread *);
 
-#endif /* OSPF_SPF_H */
+#endif /* OSPF6_SPF_H */
+

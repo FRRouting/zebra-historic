@@ -50,8 +50,6 @@
 #endif
 
 /* RIP timers */
-#define RIP_TEST
-
 #ifdef RIP_TEST
 #define RIP_FLASH_TIMER     10
 #define RIP_DELETE          30

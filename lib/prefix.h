@@ -57,7 +57,7 @@ struct prefix_ipv6
 #else
 #ifndef AF_INET6
 #define AF_INET6 0
-#endif /**/
+#endif /* ! AF_INET6 */
 #endif /* HAVE_IPV6 */
 
 #ifndef INET_ADDRSTRLEN

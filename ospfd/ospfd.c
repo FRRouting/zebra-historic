@@ -33,10 +33,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_network.h"
-#include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
+#include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
 
 /* OSPF instance top. */
@@ -61,32 +61,85 @@ ospf_new ()
   bzero (new, sizeof (struct ospf));
 
   new->if_list = iflist;
-  new->network_area = (struct route_table *) route_table_init ();
+  new->areas = list_init ();
+  new->networks = (struct route_table *) route_table_init ();
 
   return new;
 }
 
 
 /* allocate new OSPF Area object */
-struct area *
-ospf_area_new (int format, struct in_addr area_id)
+struct ospf_area *
+ospf_area_new (struct in_addr area_id)
 {
-  struct area *new;
+  struct ospf_area *new;
 
   /* Allocate new config_network. */
-  new = XMALLOC (MTYPE_OSPF_AREA, sizeof (struct area));
-  bzero (new, sizeof (struct area));
+  new = XMALLOC (MTYPE_OSPF_AREA, sizeof (struct ospf_area));
+  bzero (new, sizeof (struct ospf_area));
 
-  new->area_id_format = format;
   new->area_id = area_id;
+  new->router_lsa = list_init ();
+  new->network_lsa = list_init ();
+  new->summary_lsa = list_init ();
+
+  new->auth_type = OSPF_AUTH_NULL;
 
   return new;
 }
 
 void
-ospf_area_free (struct area *area)
+ospf_area_free (struct ospf_area *area)
 {
+  list_delete_all (area->router_lsa);
+  list_delete_all (area->network_lsa);
+  list_delete_all (area->summary_lsa);
+
   XFREE (MTYPE_OSPF_AREA, area);
+}
+
+struct ospf_area *
+ospf_area_lookup_by_area_id (struct in_addr area_id)
+{
+  struct ospf_area *area;
+  listnode node;
+
+  for (node = listhead (ospf_top->areas); node; nextnode (node))
+    {
+      area = getdata (node);
+      if (!IPV4_ADDR_CMP (&area->area_id, &area_id))
+	return area;
+    }
+
+  return NULL;
+}
+
+struct ospf_network *
+ospf_network_new (struct in_addr area_id, int format)
+{
+  struct ospf_network *new;
+  struct ospf_area *area;
+
+  new = XMALLOC (MTYPE_OSPF_NETWORK, sizeof (struct ospf_network));
+  bzero (new, sizeof (struct ospf_network));
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      area = ospf_area_new (area_id);
+      list_add_node (ospf_top->areas, area);
+    }
+
+  new->area = area;
+  new->area_id_format = format;
+
+  return new;
+}
+
+void
+ospf_network_free (struct ospf_network *network)
+{
+  XFREE (MTYPE_OSPF_NETWORK, network);
 }
 
 void
@@ -115,7 +168,8 @@ ospf_loopback_run (struct ospf *ospf)
 }
 
 void
-ospf_interface_run (struct ospf *ospf, struct prefix *p, struct area *a)
+ospf_interface_run (struct ospf *ospf, struct prefix *p,
+		    struct ospf_area *area)
 {
   struct interface *ifp;
   listnode node;
@@ -147,12 +201,12 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p, struct area *a)
 
 	  co = getdata (cn);
 
-	  /* get pointer of interface prefix. */
-	  oi->address = co->address;
-	  oi->area_id = a->area_id;
-
 	  if (prefix_match (co->address, p))
 	    {
+	  /* get pointer of interface prefix. */
+	  oi->address = co->address;
+	  oi->area = ospf_area_lookup_by_area_id (area->area_id);
+
 	      addr = co->address->u.prefix4;
 
 	      /* create raw socket. */
@@ -171,12 +225,17 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p, struct area *a)
 	      ospf_if_ipmulticast (sock, co->address);
 
 	      /* create input/output buffer stream. */
-	      ospf_if_stream_set (sock, ifp->if_data);
+	      ospf_if_stream_set (sock, oi);
 
 	      /* Remember this interface is running. */
 	      flag = OSPF_IF_ENABLE;
 
-	      OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_InterfaceUp);
+	      /* entry point of ISM. */
+	      OSPF_ISM_EVENT_ADD (oi, ISM_InterfaceUp);
+	      zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
+
+	      /* Add Pseudo Neighbor. */
+	      ospf_nbr_add_myself (oi);
 	    }
 	}
       oi->flag = flag;
@@ -184,7 +243,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p, struct area *a)
 }
 
 struct in_addr
-ospf_get_router_id (struct _list *if_list)
+ospf_get_router_id (list if_list)
 {
   listnode node;
   struct in_addr router_id;
@@ -207,6 +266,10 @@ ospf_get_router_id (struct _list *if_list)
 	  if (co->address->family != AF_INET)
 	    continue;
 
+	  /* ignore loopback network. */
+	  if (if_is_loopback (ifp))
+	    continue;
+
 	  if (ntohl (router_id.s_addr) < ntohl (co->address->u.prefix4.s_addr))
 	    router_id = co->address->u.prefix4;
 	}
@@ -220,16 +283,50 @@ void
 ospf_if_update ()
 {
   struct route_node *rn;
+  struct ospf_network *network;
 
   if (ospf_top != NULL)
     {
       ospf_loopback_run (ospf_top);
 
-      for (rn = route_top (ospf_top->network_area); rn; rn = route_next (rn))
-	ospf_interface_run (ospf_top, &rn->p, rn->info);
-
+      for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
+	{
+	  network = (struct ospf_network *) rn->info;
+	  ospf_interface_run (ospf_top, &rn->p, network->area);
+	}
     }
+
+  /* Update router_id. */
+  if (ospf_top)
+    ospf_top->router_id = ospf_get_router_id (iflist);
 }
+
+int
+ospf_str2area_id (char *str, struct in_addr *area_id)
+{
+  int ret;
+  int area_id_dec;
+  int format;
+
+  if (strchr (str, '.') != NULL)
+    {
+      ret = inet_aton (str, area_id);
+      if (!ret)
+	return 0;
+      format = OSPF_AREA_ID_FORMAT_ADDRESS;
+    }
+  else
+    {
+      area_id_dec = strtol (str, NULL, 10);
+      if (area_id_dec < 0)
+	return 0;
+      area_id->s_addr = htonl (area_id_dec);
+      format = OSPF_AREA_ID_FORMAT_DECIMAL;
+    }
+
+  return format;
+}
+
 
 /* router ospf command */
 DEFUN (router_ospf,
@@ -287,11 +384,9 @@ DEFUN (network_area,
   int ret;
   struct prefix p;
   struct in_addr area_id;
-  u_int32_t area_id_dec;
-  int format;
   struct ospf *ospf;
-  struct area *area;
-  struct route_node *route_node;
+  struct ospf_network *network;
+  struct route_node *rn;
 
   ospf = vty->index;
 
@@ -306,36 +401,27 @@ DEFUN (network_area,
   /* Make sure mask is applied. */
   apply_mask ((struct prefix_ipv4 *) &p);
 
-  /* get Area ID as specified format */
-  if (strchr (argv[1], '.') != NULL)
+  /* get Area ID. */
+  ret = ospf_str2area_id (argv[1], &area_id);
+  if (!ret)
     {
-      ret = inet_aton (argv[1], &area_id);
-      if (!ret)
-	{
-	  vty_out (vty, "OSPF Area ID is invalid\r\n");
-	  return CMD_WARNING;
-	}
-      format = OSPF_AREA_ID_FORMAT_ADDRESS;
-    }
-  else
-    {
-      area_id_dec = strtol (argv[1], NULL, 10);
-      area_id.s_addr = htonl (area_id_dec);
-      format = OSPF_AREA_ID_FORMAT_DECIMAL;
-    }
-  area = ospf_area_new (format, area_id);
-
-  route_node = route_node_get (ospf->network_area, &p);
-  if (route_node->info)
-    {
-      vty_out (vty, "There is already same network statement.\r\n");
-      route_unlock_node (route_node);
+      vty_out (vty, "OSPF Area ID is invalid\r\n");
       return CMD_WARNING;
     }
-  route_node->info = area;
+
+  network = ospf_network_new (area_id, ret);
+
+  rn = route_node_get (ospf->networks, &p);
+  if (rn->info)
+    {
+      vty_out (vty, "There is already same network statement.\r\n");
+      route_unlock_node (rn);
+      return CMD_WARNING;
+    }
+  rn->info = network;
 
   /* Run Interface config now. */
-  ospf_interface_run (ospf, &p, area);
+  ospf_interface_run (ospf, &p, network->area);
 
   return CMD_SUCCESS;
 }
@@ -353,8 +439,7 @@ DEFUN (no_network_area,
   struct ospf *ospf;
   struct prefix_ipv4 p;
   struct in_addr area_id;
-  u_int32_t area_id_dec;
-  struct route_node *np;
+  struct route_node *rn;
 
   ospf = (struct ospf *) vty->index;
 
@@ -365,34 +450,111 @@ DEFUN (no_network_area,
       return CMD_WARNING;
     }
 
-  if (strchr (argv[1], '.') != NULL)
+  if (ospf_str2area_id (argv[1], &area_id))
     {
-      ret = inet_aton (argv[1], &area_id);
-      if (!ret)
-	{
-	  vty_out (vty, "OSPF Area ID is invalid\r\n");
-	  return CMD_WARNING;
-	}
-    }
-  else
-    {
-      area_id_dec = strtol (argv[1], NULL, 10);
-      area_id.s_addr = htonl (area_id_dec);
+      vty_out (vty, "OSPF Area ID is invalid\r\n");
+      return CMD_WARNING;
     }
 
   apply_mask (&p);
 
-  np = route_node_get (ospf->network_area, (struct prefix *) &p);
-  if (!np->info)
+  rn = route_node_get (ospf->networks, (struct prefix *) &p);
+  if (!rn->info)
     {
       vty_out (vty, "Can't find specified network area configuration.\r\n");
-      route_unlock_node (np);
+      route_unlock_node (rn);
       return CMD_WARNING;
     }
 
-  ospf_area_free (np->info);
-  np->info = NULL;
-  route_unlock_node (np);
+  ospf_area_free (rn->info);
+  rn->info = NULL;
+  route_unlock_node (rn);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (area_authentication,
+       area_authentication_cmd,
+       "area AREA_ID authentication",
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Enable authentication\n")
+{
+  struct ospf_area *area;
+  struct in_addr area_id;
+
+  if (!ospf_str2area_id (argv[0], &area_id))
+    {
+      vty_out (vty, "OSPF Area ID is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      vty_out (vty, "Area ID %s is not declared", inet_ntoa (area_id));
+      return CMD_WARNING;
+    }
+
+  area->auth_type = OSPF_AUTH_SIMPLE;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (area_authentication_message_digest,
+       area_authentication_message_digest_cmd,
+       "area AREA_ID authentication message-digest",
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Enable authentication\n"
+       "Use message-digest authentication")
+{
+  struct ospf_area *area;
+  struct in_addr area_id;
+
+  if (!ospf_str2area_id (argv[0], &area_id))
+    {
+      vty_out (vty, "OSPF Area ID is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      vty_out (vty, "Area ID %s is not declared\r\n", inet_ntoa (area_id));
+      return CMD_WARNING;
+    }
+
+  area->auth_type = OSPF_AUTH_CRYPTOGRAPHIC;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_area_authentication,
+       no_area_authentication_cmd,
+       "no area AREA_ID authentication",
+       NO_STR
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Enable authentication\n")
+{
+  struct ospf_area *area;
+  struct in_addr area_id;
+
+  if (ospf_str2area_id (argv[0], &area_id))
+    {
+      vty_out (vty, "OSPF Area ID is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      vty_out (vty, "Area ID %s is not declared\r\n", inet_ntoa (area_id));
+      return CMD_WARNING;
+    }
+
+  area->auth_type = OSPF_AUTH_NULL;
 
   return CMD_SUCCESS;
 }
@@ -404,6 +566,7 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   struct route_node *rn;
   struct prefix key;
   struct ospf_neighbor *nbr;
+  char buf[9];
 
   /* is interface up? */
   if (if_is_up (ifp))
@@ -429,7 +592,7 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   vty_out (vty, "  Internet Address %s/%d,",
 	   inet_ntoa (oi->address->u.prefix4), oi->address->prefixlen);
 
-  vty_out (vty, " Area %s\r\n", inet_ntoa (oi->area_id));
+  vty_out (vty, " Area %s\r\n", inet_ntoa (oi->area->area_id));
 
   vty_out (vty, "  Router ID %s, Network Type %s, Cost: %d\r\n",
 	   inet_ntoa (ospf_top->router_id),
@@ -497,7 +660,8 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   vty_out (vty, " Hello %d, Dead %d, Wait %d, Retransmit %d\r\n",
 	   oi->v_hello, oi->v_wait, oi->v_wait, 0);
 
-  vty_out (vty, "    Hello due in \r\n");
+  vty_out (vty, "    Hello due in %s\r\n",
+	   ospf_timer_dump (oi->t_hello, buf, 9));
 
   vty_out (vty, "  Neighbor Count is %d, Adjacent neighbor count is %d\r\n",
 	   ospf_nbr_count (oi->nbrs), ospf_adjacent_count (oi->nbrs));
@@ -535,6 +699,73 @@ DEFUN (show_ip_ospf_interface,
   return CMD_SUCCESS;
 }
 
+void
+show_ip_ospf_neighbor_sub (struct vty *vty, struct interface *ifp)
+{
+  struct route_node *rn;
+  struct ospf_interface *oi;
+  struct ospf_neighbor *nbr;
+  char msgbuf[16];
+  char timebuf[9];
+
+  oi = ifp->if_data;
+
+  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+    {
+      if (!rn->info)
+	continue;
+
+      nbr = rn->info;
+
+      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+	continue;
+
+      ospf_nbr_state_message (nbr, msgbuf, 16);
+
+      vty_out (vty, "%-15s %3d   %-15s %6s     %-15s %s\r\n",
+	       inet_ntoa (nbr->router_id), nbr->priority,
+	       msgbuf, ospf_timer_dump (nbr->t_inactivity, timebuf, 9),
+	       nbr->host, ifp->name);
+    }
+}
+
+DEFUN (show_ip_ospf_neighbor,
+       show_ip_ospf_neighbor_cmd,
+       "show ip ospf neighbor [INTERFACE]",
+       SHOW_STR
+       IP_STR
+       "OSPF information\n"
+       "Neighbor list\n"
+       "Interface name")
+{
+  listnode node;
+  struct interface *ifp;
+
+  /* show All neighbors. */
+  if (argc == 0)
+    {
+      vty_out (vty, "\r\nNeighbor ID     Pri   State           Dead Time   Address         Interface\r\n");
+      for (node = listhead (iflist); node; nextnode (node))
+	{
+	  ifp = getdata (node);
+	  show_ip_ospf_neighbor_sub (vty, ifp);
+	}
+    }
+  else
+    {
+      ifp = if_lookup_by_name (argv[0]);
+      if (ifp == NULL)
+	vty_out (vty, "No such interface name\r\n");
+      else
+	{
+	  vty_out (vty, "\r\nNeighbor ID     Pri   State           Dead Time   Address         Interface\r\n");
+	  show_ip_ospf_neighbor_sub (vty, ifp);
+	}
+    }
+
+  return CMD_SUCCESS;
+}
+
 /* OSPF configuration write function. */
 int
 ospf_config_write (struct vty *vty)
@@ -546,34 +777,34 @@ ospf_config_write (struct vty *vty)
       /* router ospf print. */
       vty_out (vty, "router ospf%s", VTY_NEWLINE);
 
-      if (! ospf_top->network_area)
+      if (! ospf_top->networks)
 	return 0;
 
       /* network area print. */
-      for (rn = route_top (ospf_top->network_area); rn; rn = route_next (rn))
+      for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
 	{
-	  struct area *area;
-	  u_char area_id_buf[16];
+	  struct ospf_network *n;
+	  u_char buf[INET_ADDRSTRLEN];
 
 	  if (rn->info == NULL)
 	    continue;
 
-	  area = rn->info;
+	  n = rn->info;
 
 	  /* print nework statement as specified Area ID format. */
-	  if (area->area_id_format == OSPF_AREA_ID_FORMAT_ADDRESS)
+	  if (n->area_id_format == OSPF_AREA_ID_FORMAT_ADDRESS)
 	    {
-	      bzero (&area_id_buf, 16);
-	      strncpy (area_id_buf, inet_ntoa (area->area_id), 16);
+	      bzero (&buf, INET_ADDRSTRLEN);
+	      strncpy (buf, inet_ntoa (n->area->area_id), INET_ADDRSTRLEN);
 	      vty_out (vty, " network %s/%d area %s%s",
 		       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
-		       area_id_buf, VTY_NEWLINE);
+		       buf, VTY_NEWLINE);
 	    }
 	  else
 	    {
 	      vty_out (vty, " network %s/%d area %u%s",
 		       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
-		       area->area_id.s_addr, VTY_NEWLINE);
+		       n->area->area_id.s_addr, VTY_NEWLINE);
 	    }
 	}
     }
@@ -595,8 +826,8 @@ ospf_init ()
   install_node (&ospf_node, ospf_config_write);
 
   /* Install ospf commands. */
-  install_element (VIEW_NODE, &show_ip_ospf_interface_cmd);
   install_element (ENABLE_NODE, &show_ip_ospf_interface_cmd);
+  install_element (ENABLE_NODE, &show_ip_ospf_neighbor_cmd);
   install_element (CONFIG_NODE, &router_ospf_cmd);
   install_element (CONFIG_NODE, &no_router_ospf_cmd);
 
@@ -605,6 +836,9 @@ ospf_init ()
   install_element (OSPF_NODE, &config_help_cmd);
   install_element (OSPF_NODE, &network_area_cmd);
   install_element (OSPF_NODE, &no_network_area_cmd);
+  install_element (OSPF_NODE, &area_authentication_message_digest_cmd);
+  install_element (OSPF_NODE, &area_authentication_cmd);
+  install_element (OSPF_NODE, &no_area_authentication_cmd);
   /*
   install_element (OSPF_NODE, &neighbor_cmd);
   install_element (OSPF_NODE, &no_neighbor_cmd);

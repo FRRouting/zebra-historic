@@ -99,25 +99,25 @@ struct linkstate_update
 
 /* Link State Acknowledgement will include only LSA header.*/
 
-/* Prototype Definition */
+/* Function Prototypes */
 int proc_hello (struct sockaddr_in6 *, struct iovec *, struct ospf6_if *);
-int make_hello (struct iovec *, struct sockaddr_in6 *, struct ospf6_if *);
 int proc_database_description (struct sockaddr_in6 *, struct iovec *,
                                struct ospf6_if *);
-int make_database_description (struct iovec *, struct sockaddr_in6 *,
-                               struct neighbor *);
 int proc_linkstate_request (struct sockaddr_in6 *, struct iovec *,
                             struct ospf6_if *);
-int make_linkstate_request (struct iovec *, struct sockaddr_in6 *,
-                            struct neighbor *);
 int proc_linkstate_update (struct sockaddr_in6 *, struct iovec *,
                            struct ospf6_if *);
-int make_linkstate_update (struct iovec *, struct sockaddr_in6 *,
-                           struct neighbor *);
 int proc_linkstate_ack (struct sockaddr_in6 *, struct iovec *,
                         struct ospf6_if *);
 int proc_ospf6_hdr (struct iovec *, struct ospf6_if *);
-int make_ospf6_hdr (u_char, struct iovec *, struct ospf6_if *);
+int make_ospf6_hdr (msgtype_t, struct iovec *, struct ospf6_if *);
+int make_hello (struct iovec *, struct sockaddr_in6 *, struct ospf6_if *);
+int make_database_description (struct iovec *, struct sockaddr_in6 *,
+                               struct neighbor *);
+int make_linkstate_request (struct iovec *, struct sockaddr_in6 *,
+                            struct neighbor *);
+int make_linkstate_update (struct iovec *, struct sockaddr_in6 *,
+                           struct neighbor *);
 
 #endif /* OSPF6_MESG_H */
 

@@ -54,7 +54,7 @@ iov_index (struct iovec *iov, void *base)
       if (iov[i].iov_base == base)
       return i;
     }
-  ospf6_warn ("illegal iov_index() use!\n");
+  zlog (NULL, LOG_WARNING,"illegal iov_index() use!");
   return -1;
 }
 
@@ -83,7 +83,7 @@ iov_prepend (int mtype, struct iovec *iov, size_t len)
   base = (void *)XMALLOC (mtype, len);
   if (!base)
     {
-      ospf6_warn ("Can't malloc buffer for iovec\n");
+      zlog (NULL, LOG_WARNING,"Can't malloc buffer for iovec");
       return NULL;
     }
   memset (base, 0, len);
@@ -112,7 +112,7 @@ iov_append (int mtype, struct iovec *iov, size_t len)
   base = (void *)XMALLOC (mtype, len);
   if (!base)
     {
-      ospf6_warn ("Can't malloc buffer for iovec\n");
+      zlog (NULL, LOG_WARNING,"Can't malloc buffer for iovec");
       return NULL;
     }
   memset (base, 0, len);
@@ -139,7 +139,7 @@ iov_realloc (int mtype, struct iovec *iov, u_int index, size_t len)
   base = XREALLOC (mtype, iov[index].iov_base, len);
   if (!base)
     {
-      ospf6_warn ("Can't realloc buffer for iovec\n");
+      zlog (NULL, LOG_WARNING,"Can't realloc buffer for iovec");
       return NULL;
     }
 
@@ -217,7 +217,7 @@ sockunion_ospf_socket (union sockunion *su)
 
   sock = socket (su->sa.sa_family, SOCK_RAW, IPPROTO_OSPFIGP);
   if (sock < 0)
-    ospf6_warn ("can't make socket for ospf6: %s\n", strerror(errno));
+    zlog (NULL, LOG_WARNING,"Can't make socket for ospf6: %s", strerror(errno));
 
   return sock;
 }
@@ -291,7 +291,7 @@ ospf6_recv (struct thread *thread)
   num = recvmsg (sockfd, &rmsghdr, MSG_PEEK);
   if (num < 0)
     {
-      ospf6_warn ("recvmsg() failed in ospf6_recv(): %s\n", strerror (errno));
+      zlog (NULL, LOG_WARNING,"recvmsg() failed in ospf6_recv(): %s", strerror (errno));
       recvmsg (sockfd, &rmsghdr, 0);
       iov_free (MTYPE_OSPF_MESSAGE, iov, 0, msgend);
       return -1;
@@ -304,7 +304,7 @@ ospf6_recv (struct thread *thread)
         if_indextoname (pktinfo->ipi6_ifindex, ifnamebuf);
       else 
         {
-          ospf6_warn ("Received Interface not found in ospf6_recv()\n");
+          zlog (NULL, LOG_WARNING,"Received Interface not found in ospf6_recv()");
           num = recvmsg (sockfd, &rmsghdr, 0);
           thread_add_read (master, ospf6_recv, NULL, sockfd);
           iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
@@ -318,7 +318,7 @@ ospf6_recv (struct thread *thread)
 
   if (!ospf6_if)
     {
-      ospf6_err ("BUG! Received Interface Structure not found\n");
+      zlog (NULL, LOG_ERR, "BUG! Received Interface Structure not found");
       num = recvmsg (sockfd, &rmsghdr, 0);
       thread_add_read (master, ospf6_recv, NULL, sockfd);
       iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
@@ -326,7 +326,7 @@ ospf6_recv (struct thread *thread)
     }
   if (!ospf6_if->area)
     {
-      ospf6_warn ("Interface %s not atached to AREA\n",
+      zlog (NULL, LOG_WARNING,"Interface %s not atached to AREA",
                    ospf6_if->interface->name);
       thread_add_read (master, ospf6_recv, NULL, sockfd);
       num = recvmsg (sockfd, &rmsghdr, 0);
@@ -342,7 +342,7 @@ ospf6_recv (struct thread *thread)
       if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
                        msglen - sizeof (struct ospf6_hdr)))
         {
-          ospf6_err ("iov_append() failed in ospf6_recv()\n");
+          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
           goto rvmsg_bad;
         }
       msgend++;
@@ -352,7 +352,7 @@ ospf6_recv (struct thread *thread)
       if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
                        sizeof (struct database_description)))
         {
-          ospf6_err ("iov_append() failed in ospf6_recv()\n");
+          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
           goto rvmsg_bad;
         }
       msgend++;
@@ -363,7 +363,7 @@ ospf6_recv (struct thread *thread)
         {
           if (!iov_append (MTYPE_OSPF6_LSA, iov, sizeof (struct lsa_hdr )))
             {
-              ospf6_err ("iov_append() failed in ospf6_recv()\n");
+              zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
               goto rvmsg_bad;
             }
         }
@@ -377,7 +377,7 @@ ospf6_recv (struct thread *thread)
           if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
                sizeof (struct linkstate_request)))
             {
-               ospf6_err ("iov_append() failed in ospf6_recv()\n");
+               zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
                goto rvmsg_bad;
             }
           msgend++;
@@ -388,7 +388,7 @@ ospf6_recv (struct thread *thread)
       if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
            sizeof (struct linkstate_update)))
         {
-          ospf6_err ("iov_append() failed in ospf6_recv()\n");
+          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
           goto rvmsg_bad;
         }
       msgend++;
@@ -396,11 +396,11 @@ ospf6_recv (struct thread *thread)
           - sizeof (struct linkstate_update);
       if (!j)
         {
-          ospf6_warn ("received lsupdate contains no data.\n");
+          zlog (NULL, LOG_WARNING,"received lsupdate contains no data.");
         }
       else if (!iov_append (MTYPE_OSPF6_LSA, iov, j))
         {
-          ospf6_err ("iov_append() failed in ospf6_recv()\n");
+          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
           goto rvmsg_bad;
         }
       goto rvmsg_ok;
@@ -423,9 +423,9 @@ ospf6_recv (struct thread *thread)
     }
 
 rvmsg_nosupport:
-  ospf6_warn ("not supported "); /* fall through */
+  zlog (NULL, LOG_WARNING,"not supported "); /* fall through */
 rvmsg_bad:
-  ospf6_warn ("OSPFv%d %s: Can't recv\n", ospf6_hdr->version,
+  zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't recv", ospf6_hdr->version,
               mesg_name[ospf6_hdr->type]);
 
   num = recvmsg (sockfd, &rmsghdr, 0);
@@ -438,7 +438,7 @@ rvmsg_ok:
   num = recvmsg (sockfd, &rmsghdr, 0);
   if (num < 0)
     {
-      ospf6_warn ("recvmsg() failed: %s\n", strerror (errno));
+      zlog (NULL, LOG_WARNING,"recvmsg() failed: %s", strerror (errno));
       thread_add_read (master, ospf6_recv, NULL, sockfd);
       iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
       return -1;
@@ -499,9 +499,9 @@ rvmsg_ok:
     }
 
 prmsg_nosupport:
-  ospf6_warn ("not support\n"); /* Fall through */
+  zlog (NULL, LOG_WARNING,"not support"); /* Fall through */
 prmsg_bad:
-  ospf6_warn ("OSPFv%d %s: Can't proc\n",
+  zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
                ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
   thread_add_read (master, ospf6_recv, NULL, sockfd);
   iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
@@ -531,7 +531,7 @@ ospf6_serv_sock ()
     }
   else
     {
-      ospf6_warn ("Can't Create OSPF6 Socket.\n");
+      zlog (NULL, LOG_WARNING,"Can't Create OSPF6 Socket.");
     }
 
   ospf6_sock = socket;
@@ -725,7 +725,7 @@ ospf6_send (u_char msgtype, struct iovec *iov,
 
   if (make_ospf6_hdr (msgtype, iov, ospf6_if) < 0)
     {
-      ospf6_warn ("Can't make ospf6_hdr\n");
+      zlog (NULL, LOG_WARNING,"Can't make ospf6_hdr");
       return -1;
     }
 
@@ -779,7 +779,7 @@ ospf6_send (u_char msgtype, struct iovec *iov,
 
   if (num != iov_totallen (iov))
     {
-      ospf6_warn ("Can't send whole packet %d/%d: %s\n",
+      zlog (NULL, LOG_WARNING,"Can't send whole packet %d/%d: %s",
                    num, iov_totallen (iov), strerror(errno));
     }
 

@@ -24,19 +24,21 @@
 
 struct ospf6_prefix
 {
-  u_char         prefix_len;
-  u_char         prefix_opt;
-  unsigned short prefix_reserved;
-  /* followed by address_prefix */
+  unsigned char  o6p_prefix_len;
+  unsigned char  o6p_prefix_opt;
+  unsigned short o6p_prefix_reserved;
+  /* followed by one address_prefix */
 };
 
 /* size_t OSPF6_PREFIX_SPACE (int prefixlength); */
 #define OSPF6_PREFIX_SPACE(x) ((((x) + 31) / 32) * 4)
+
 /* size_t OSPF6_PREFIX_SIZE (struct ospf6_prefix *); */
-#define OSPF6_PREFIX_SIZE(x) \\
-   ((OSPF6_PREFIX_SPACE ((x)->prefix_len)) + sizeof (struct ospf6_prefix))
-/* struct prefix *OSPF6_NEXT_PREFIX (struct ospf6_prefix *); */
-#define OSPF6_NEXT_PREFIX(x) \\
+#define OSPF6_PREFIX_SIZE(x) \
+   (OSPF6_PREFIX_SPACE ((x)->o6p_prefix_len) + sizeof (struct ospf6_prefix))
+
+/* struct ospf6_prefix *OSPF6_NEXT_PREFIX (struct ospf6_prefix *); */
+#define OSPF6_NEXT_PREFIX(x) \
    ((struct ospf6_prefix *)((char *)(x) + OSPF6_PREFIX_SIZE (x)))
 
 

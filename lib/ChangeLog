@@ -1,3 +1,32 @@
+1999-04-27  Carlos Barcenilla <barce@frlp.utn.edu.ar>
+
+	* prefix.c (str2prefix_ipv4): Fix prefix length check.
+	(str2prefix_ipv6): Likewise.
+
+1999-04-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTPYE_PREFIX_LIST and
+	MTYPE_PREFIX_LIST_ENTRY.
+
+	* command.h (node_type ): Add PREFIX_NODE.
+
+1999-04-25  Carlos Barcenilla <barce@frlp.utn.edu.ar>
+
+	* command.c: ALIAS (config_write_memory_cmd) and ALIAS
+	(copy_runningconfig_startupconfig_cmd) is added.
+
+	* table.c (route_node_lookup): Unused match variable deletion.
+
+1999-04-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (libzebra_a_SOURCES): plist.c added.
+	(noinst_HEADERS): plist.h added.
+
+	* plist.c, plist.h: New file added.
+
+	* memory.h (enum): Rename MTYPE_AS_PASN to MTYPE_AS_STR.
+	* memory.c: Likewise.
+
 1999-04-19  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
 
 	* command.c (show_version): `show version' command added.

@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 1999 Yasuhiro Ohara
+ * AS path filter list.
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -14,11 +15,16 @@
  * General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the 
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330, 
- * Boston, MA 02111-1307, USA.  
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
  */
 
-void zebra_get_interface (int, u_int16_t);
-int ospf6_zebra_read (struct thread *); 
-int ospf6_zebra_init ();
+enum as_filter_type
+{
+  AS_FILTER_DENY,
+  AS_FILTER_PERMIT,
+};
+
+enum as_filter_type
+as_list_apply (struct as_list *aslist, void *object);

@@ -26,6 +26,8 @@
 /* Prototypes. */
 int debug (unsigned int option);
 char *mes_lookup (message *, int, int);
+void ospf_nbr_state_message (struct ospf_neighbor *, char *, size_t);
+char *ospf_timer_dump (struct thread *, char *, size_t);
 void ospf_packet_dump (struct stream *s);
 
 #endif /* _ZEBRA_OSPF_DUMP_H */

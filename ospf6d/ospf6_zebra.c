@@ -27,6 +27,7 @@ list iflist;
 struct zebra
 {
   int sockfd;
+  struct stream *s;
 
   struct thread *t_read;
   struct thread *t_write;
@@ -45,7 +46,6 @@ zebra_get_interface (int sock, u_int16_t length)
   /* Allocate read buffer */
   s = stream_new (length + 1);
   nbyte = stream_read (s, sock, length - 3);
-
   if (nbyte == 0)
     {
       zlog (NULL, LOG_INFO, "connection closed\n");
@@ -87,14 +87,14 @@ zebra_get_interface (int sock, u_int16_t length)
           p->family = stream_getc (s);
           plen = prefix_blen (p);
 
-	  memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
-	  stream_forward (s, plen);
+          memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
+          stream_forward (s, plen);
           p->prefixlen = stream_getc (s);
           connected->address = p;
 
           p = prefix_new ();
-	  memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
-	  stream_forward (s, plen);
+          memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
+          stream_forward (s, plen);
           connected->destination = p;
 
           connected_add (ifp, connected);
@@ -108,28 +108,76 @@ zebra_get_interface (int sock, u_int16_t length)
 #endif
 }
 
+/* Get all interface information. */
+void
+ospf6_zebra_get_interface (struct stream *s)
+{
+  struct interface *ifp;
+  struct connected *connected;
+  u_int32_t connected_count;
+  unsigned long endp;
+
+  endp = stream_get_endp (s);
+
+  while (stream_get_getp(s) < endp)
+    {
+      u_char tmpnam[INTERFACE_NAMSIZ + 1];
+
+      bzero (tmpnam, sizeof (tmpnam));
+
+      /* Get interface's name */
+      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
+
+      /* create interface structure */
+      ifp = if_get_by_name (tmpnam);
+
+      /* Get interface's index and values. */
+      ifp->index = stream_getc (s);
+      ifp->flags = stream_getl (s);
+      ifp->metric = stream_getl (s);
+      ifp->mtu = stream_getl (s);
+
+      /* Get interface's address. */
+      connected_count = stream_getl (s);
+
+      while (connected_count--)
+        {
+          struct prefix *p;
+          int plen;
+
+          connected = connected_new ();
+
+          p = prefix_new ();
+          p->family = stream_getc (s);
+
+          plen = prefix_blen (p);
+          memcpy (&p->u.prefix, stream_pnt (s), plen);
+          stream_forward (s, plen);
+          p->prefixlen = stream_getc (s);
+          connected->address = p;
+
+          p = prefix_new ();
+          memcpy (&p->u.prefix, stream_pnt (s), plen);
+          stream_forward (s, plen);
+
+          connected->destination = p;
+
+          connected_add (ifp, connected);
+        }
+    }
+}
+
 int
-ospf_zebra_read (struct thread *thread)
+ospf6_zebra_read (struct thread *thread)
 {
   u_int16_t length;
   u_int8_t command;
   int nbyte;
-  int sock;
-  struct stream *s;
+  struct stream *s = zebra.s;
 
   zebra.t_read = (struct thread *)NULL;
-  sock = THREAD_FD (thread);
 
-  s = stream_new (3);
-  nbyte = stream_read (s, sock, 3);
-
-  /* zebra socket is closed. */
-  if (nbyte == 0)
-    {
-      zlog (NULL, LOG_INFO, "connection closed socket [%d]\n", sock);
-      close (sock);
-      return -1;
-    }
+  nbyte = stream_read (s, zebra.sockfd, 3);
 
   length = stream_getw (s);
   command = stream_getc (s);
@@ -137,24 +185,38 @@ ospf_zebra_read (struct thread *thread)
   switch (command)
     {
     case ZEBRA_GET_ALL_INTERFACE:
-      zebra_get_interface (sock, length);
+      nbyte = stream_read (zebra.s, zebra.sockfd, length - 3);
+      if (nbyte == 0)
+        {
+          ospf6_info ("connection closed\n");
+          return -1;
+        }
+      if (nbyte < 0)
+        {
+          ospf6_err ("stream_read() failed\n");
+          return -1;
+        }
+
+      ospf6_zebra_get_interface (zebra.s);
       break;
     default:
+      ospf6_err ("Unknown command from zebra\n");
       return -1;
     }
 
-  zebra.t_read = thread_add_read (master, ospf_zebra_read,
-				  NULL, zebra.sockfd);
+  zebra.t_read = thread_add_read (master, ospf6_zebra_read,
+                                  NULL, zebra.sockfd);
   stream_free (s);
   return 0;
 }
 
 int
-ospf_zebra_init ()
+ospf6_zebra_init ()
 {
   int sockfd = -1;
 
   iflist = list_init ();
+  zebra.s = stream_new(ZEBRA_MAX_PACKET_SIZ);
   zebra.sockfd = zebra_connect ();
   if (zebra.sockfd < 0)
     {
@@ -163,7 +225,7 @@ ospf_zebra_init ()
     }
 
   zebra_get_all_interface (zebra.sockfd);
-  zebra.t_read = thread_add_read (master, ospf_zebra_read, NULL, zebra.sockfd);
+  zebra.t_read = thread_add_read (master, ospf6_zebra_read, NULL, zebra.sockfd);
 
   return sockfd;
 }

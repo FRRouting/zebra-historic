@@ -252,7 +252,7 @@ struct memory_list
   { MTYPE_ATTR,            "BGP attribute   : %ld\r\n", },
   { MTYPE_AS_PATH,         "BGP aspath      : %ld\r\n", },
   { MTYPE_AS_SEG,          "BGP aspath seg  : %ld\r\n", },
-  { MTYPE_AS_PASN,         "BGP aspath pasn : %ld\r\n", },
+  { MTYPE_AS_STR,          "BGP aspath str  : %ld\r\n", },
   { 0,                     "---------------------\r\n" },
   { MTYPE_AS_LIST,         "BGP as list     : %ld\r\n", },
   { MTYPE_AS_FILTER,       "BGP as filter   : %ld\r\n", },

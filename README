@@ -84,8 +84,8 @@ Next run daemon, and connect from each daemon's vty port will show like below.
   Connected to localhost.
   Escape character is '^]'.
 
-  Hello, this is zebra (version alpha-01)
-  Copyright 1997 Kunihiro Ishiguro
+  Hello, this is zebra (version 0.62)
+  Copyright 1997-1999 Kunihiro Ishiguro
 
 
   User Access Verification

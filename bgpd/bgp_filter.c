@@ -30,12 +30,7 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_regex.h"
-
-enum as_filter_type
-{
-  FILTER_DENY,
-  FILTER_PERMIT,
-};
+#include "bgpd/bgp_filter.h"
 
 /* List of AS filter list. */
 struct as_list_list
@@ -308,10 +303,10 @@ filter_type_str (enum as_filter_type type)
 {
   switch (type)
     {
-    case FILTER_PERMIT:
+    case AS_FILTER_PERMIT:
       return "permit";
       break;
-    case FILTER_DENY:
+    case AS_FILTER_DENY:
       return "deny";
       break;
     default:
@@ -419,7 +414,7 @@ as_list_apply (struct as_list *aslist, void *object)
       if (as_filter_match (asfilter, aspath))
 	return asfilter->type;
     }
-  return FILTER_DENY;
+  return AS_FILTER_DENY;
 }
 
 /* Add hook function. */
@@ -457,9 +452,9 @@ DEFUN (ip_as_path, ip_as_path_cmd,
 
   /* Check the filter type. */
   if (strcmp (argv[1], "permit") == 0)
-    type = FILTER_PERMIT;
+    type = AS_FILTER_PERMIT;
   else if (strcmp (argv[1], "deny") == 0)
-    type = FILTER_DENY;
+    type = AS_FILTER_DENY;
   else
     {
       vty_out (vty, "filter type must be [permit|deny]\r\n");
@@ -531,9 +526,9 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
 
   /* Check the filter type. */
   if (strcmp (argv[1], "permit") == 0)
-    type = FILTER_PERMIT;
+    type = AS_FILTER_PERMIT;
   else if (strcmp (argv[1], "deny") == 0)
-    type = FILTER_DENY;
+    type = AS_FILTER_DENY;
   else
     {
       vty_out (vty, "filter type must be [permit|deny]\r\n");
@@ -637,7 +632,7 @@ bgp_filter_test ()
 
   /* ip as-path access-list 1 permit AS1. */
   aslist = as_list_get ("1");
-  asfilter = as_filter_make (regex, buf, FILTER_PERMIT);
+  asfilter = as_filter_make (regex, buf, AS_FILTER_PERMIT);
   as_list_filter_add (aslist, asfilter);
 
   as_list_print_all ();

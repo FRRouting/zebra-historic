@@ -13,15 +13,16 @@ password zebra
 router bgp 7675
 !  bgp router-id 10.0.0.1
 !  network 10.0.0.0/8
-  neighbor 203.181.89.242 remote-as 7675
-  neighbor 203.181.89.242 route-map set-nexthop out
-!  neighbor 203.181.89.242 ebgp-multihop
+!  neighbor 10.0.0.2 remote-as 7675
+!  neighbor 10.0.0.2 route-map set-nexthop out
+!  neighbor 10.0.0.2 ebgp-multihop
 !
 ! access-list all permit any
 !
 ! route-map set-nexthop permit 10
 !  match ip address all
-!  set ip nexthop 203.181.89.243
+!  set ip nexthop 10.0.0.2
 !
 !log file bgpd.log
 !
+log stdout

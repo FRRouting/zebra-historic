@@ -58,10 +58,10 @@
 #define RIPNG_RECEIVE_OFF            1
 
 /* Split horizon definitions. */
-#define RIPNG_SPLIT_HORIZON_UNSPEC   0
-#define RIPNG_SPLIT_HORIZON_NONE     1
-#define RIPNG_SPLIT_HORIZON          2
-#define RIPNG_SPLIT_HORIZON_POISONED 3
+#define RIPNG_SPLIT_HORIZON_UNSPEC     0
+#define RIPNG_SPLIT_HORIZON_NONE       1
+#define RIPNG_SPLIT_HORIZON            2
+#define RIPNG_SPLIT_HORIZON_POISONED   3
 
 /* RIP default route's accept/announce methods. */
 #define RIPNG_DEFAULT_ADVERTISE_UNSPEC 0

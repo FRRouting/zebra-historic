@@ -91,7 +91,7 @@ sbin_PROGRAMS = bgpd
 libbgp_a_SOURCES =  	bgpd.c bgp_fsm.c bgp_aspath.c bgp_community.c bgp_attr.c 	bgp_dump.c bgp_route.c bgp_zebra.c bgp_open.c bgp_routemap.c 	bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c
 
 
-noinst_HEADERS =  	bgp_aspath.h bgp_attr.h bgp_community.h bgp_dump.h bgp_fsm.h 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h 	bgpd.h
+noinst_HEADERS =  	bgp_aspath.h bgp_attr.h bgp_community.h bgp_dump.h bgp_fsm.h 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h 	bgpd.h bgp_filter.h
 
 
 bgpd_SOURCES =  	bgp_main.c $(libbgp_a_SOURCES)

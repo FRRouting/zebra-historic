@@ -47,9 +47,9 @@
 
 /* OSPF stuffs */
 #include "ospf6_types.h"
-#include "ospf6_dump.h"
 #include "ospf6_interface.h"
 #include "ospf6_lsa.h"
+#include "ospf6_dump.h"
 #include "ospf6_spf.h"
 #include "ospf6_area.h"
 #include "ospf6_mesg.h"
@@ -106,7 +106,7 @@ extern struct  sockaddr_in6 alldrouters6;
 extern char   *progname;
 
 /* Default configuration file name for ospfd. */
-#define OSPF_DEFAULT_CONFIG       "ospfd.conf"
+#define OSPF6_DEFAULT_CONFIG       "ospf6d.conf"
 
 /* Default port values. */
 #define OSPF_VTY_PORT             2604
@@ -147,6 +147,8 @@ extern char   *progname;
 #define OSPF6_IFNAME_STR    "Interface name(e.g. ep0)\n"
 #define OSPF6_NUMBER_STR    "Specify by number\n"
 
+#define HASHVAL   64
+#define hash(x)  ((x) % HASHVAL)
 
 /* Function Prototypes */
 struct ospf6 *make_ospf6 (rtr_id_t);
@@ -164,6 +166,7 @@ int show_ospf6_top (struct vty *, struct ospf6 *);
 int show_area (struct vty *, struct area *);
 int show_if (struct vty *, struct interface *);
 int show_nbr (struct vty *, struct neighbor *);
+void ospf6_init ();
 
 #endif /* OSPFD_H */
 

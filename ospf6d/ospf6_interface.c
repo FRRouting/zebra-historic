@@ -47,7 +47,8 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
           if (mcast_leave (ospf6_sock, (struct sockaddr *)&alldrouters6,
                            ospf6_if->interface->name,
                            ospf6_if->interface->index) < 0)
-            ospf6_warn ("mcast_leave() failed: %s\n", strerror (errno));
+            zlog (NULL, LOG_WARNING, "mcast_leave() failed: %s",
+		  strerror (errno));
           break;
         }
       break;
@@ -59,7 +60,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
           if (mcast_join (ospf6_sock, (struct sockaddr *)&alldrouters6,
                           ospf6_if->interface->name,
                           ospf6_if->interface->index) < 0)
-            ospf6_warn ("mcast_join() failed: %s\n", strerror (errno));
+            zlog (NULL, LOG_WARNING,"mcast_join() failed: %s", strerror (errno));
           break;
         default:
           break;
@@ -85,10 +86,10 @@ dr_change (struct ospf6_if *ospf6_if)
 #ifdef DEBUG_OSPF6
   {
     char dr[16], bdr[16], prevdr[16], prevbdr[16];
-    inet4str (ospf6_if->prevdr, prevdr, sizeof (prevdr));
-    inet4str (ospf6_if->prevbdr, prevbdr, sizeof (prevbdr));
-    inet4str (ospf6_if->dr, dr, sizeof (dr));
-    inet4str (ospf6_if->bdr, bdr, sizeof (bdr));
+    inet_ntop (AF_INET, &ospf6_if->prevdr, prevdr, sizeof (prevdr));
+    inet_ntop (AF_INET, &ospf6_if->prevbdr, prevbdr, sizeof (prevbdr));
+    inet_ntop (AF_INET, &ospf6_if->dr, dr, sizeof (dr));
+    inet_ntop (AF_INET, &ospf6_if->bdr, bdr, sizeof (bdr));
     ospf6_info ("DRCHANGE: {DR[%s], BDR[%s]}->{DR[%s], BDR[%s]}\n",
                 prevdr, prevbdr, dr, bdr);
   }
@@ -175,39 +176,40 @@ interface_up (struct thread *thread)
 
   if (!if_is_up (ospf6_if->interface))
     {
-      ospf6_err ("Interface %s is down, can't execute InterfaceUp event\n",
-                  ospf6_if->interface->name);
+      zlog (NULL, LOG_ERR,
+	    "Interface %s is down, can't execute InterfaceUp event",
+	    ospf6_if->interface->name);
       return -1;
     }
 
   if (ospf6_if->state > IFS_DOWN)
     {
-      ospf6_notice ("Interface %s is already up\n",
+      ospf6_notice ("Interface %s is already up",
                     ospf6_if->interface->name);
       return 0;
     }
 
   /* ifid of this interface */
   ospf6_if->ifid = ospf6_if->interface->index;
-  ospf6_debug ("interface %s: ifid %lu\n", ospf6_if->ifid);
+  ospf6_debug ("interface %s: ifid %lu", ospf6_if->ifid);
 
   if (mcast_join (ospf6_sock, (struct sockaddr *)&allspfrouters6,
                   ospf6_if->interface->name,
                   ospf6_if->interface->index) < 0)
-    ospf6_warn ("mcast_join() failed: %s\n", strerror (errno));
+    zlog (NULL, LOG_WARNING,"mcast_join() failed: %s", strerror (errno));
 
 #ifdef DEBUG_MY_PACKET
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
                   &on, sizeof (u_int)) < 0)
     {
-      ospf6_warn ("setsockopt() failed: IPV6_MULTICAST_LOOP: %s\n",
+      zlog (NULL, LOG_WARNING,"setsockopt() failed: IPV6_MULTICAST_LOOP: %s",
                   strerror (errno));
     }
 #else
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
                   &off, sizeof (u_int)) < 0)
     {
-      ospf6_warn ("setsockopt() failed: IPV6_MULTICAST_LOOP: %s\n",
+      zlog (NULL, LOG_WARNING,"setsockopt() failed: IPV6_MULTICAST_LOOP: %s",
                   strerror (errno));
     }
 #endif
@@ -215,7 +217,7 @@ interface_up (struct thread *thread)
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_PKTINFO,
                   &on, sizeof (int)) < 0)
     {
-      ospf6_warn ("IPV6_PKTINFO setsockopt failed\n");
+      zlog (NULL, LOG_WARNING,"IPV6_PKTINFO setsockopt failed");
       return -1;
     }
 

@@ -19,8 +19,8 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF_LSA_H
-#define OSPF_LSA_H
+#ifndef OSPF6_LSA_H
+#define OSPF6_LSA_H
 
 #define MAXLISTEDLSA 512
 #define MAXLSASIZE   1024
@@ -30,10 +30,10 @@
 /* LSA definition */
 
 /* Type */
-#define	LST_V2ROUTER_LSA               1
-#define	LST_V2NETWORK_LSA              2
-#define LST_V2TYPE3_SUMMARY_LSA        3	/* routes to network */
-#define LST_V2TYPE4_SUMMARY_LSA        4	/* routes to ASBR */
+#define LST_V2ROUTER_LSA               1
+#define LST_V2NETWORK_LSA              2
+#define LST_V2TYPE3_SUMMARY_LSA        3 /* routes to network */
+#define LST_V2TYPE4_SUMMARY_LSA        4 /* routes to ASBR */
 #define LST_V2AS_EXTERNAL_LSA          5
 
 #define LST_ROUTER_LSA              0x2001
@@ -58,13 +58,13 @@
 /* NOTE that all lsa is left NETWORK BYTE ORDER */
 struct lsa_hdr
 {
-  u_int16_t lsh_age;      /* LS age */
-  u_int16_t lsh_type;     /* LS type */
-  u_int32_t lsh_id;       /* Link State ID */
-  u_int32_t lsh_advrtr;   /* Advertising Router */
-  u_int32_t lsh_seqnum;   /* LS sequence number */
-  u_int16_t lsh_cksum;    /* LS checksum */
-  u_int16_t lsh_len;      /* length */
+  unsigned short lsh_age;      /* LS age */
+  unsigned short lsh_type;     /* LS type */
+  unsigned long  lsh_id;       /* Link State ID */
+  unsigned long  lsh_advrtr;   /* Advertising Router */
+  unsigned long  lsh_seqnum;   /* LS sequence number */
+  unsigned short lsh_cksum;    /* LS checksum */
+  unsigned short lsh_len;      /* length */
 };
 
 #define LSA_NEXT(x) ((struct lsa_hdr *)((char *)(x) + ntohs ((x)->lsh_len)))
@@ -75,13 +75,13 @@ struct lsa_hdr
 struct lsa_internal
 {
   struct lsa_hdr   *lsh;
-  u_int32_t         birth;     /* tv_sec when LS age 0 */
-  u_int32_t         installed; /* tv_sec when installed */
+  unsigned long     birth;     /* tv_sec when LS age 0 */
+  unsigned long     installed; /* tv_sec when installed */
   struct thread    *expire;
   struct thread    *refresh;   /* For self-originated LSA */
   struct neighbor  *from;
   struct area      *area;
-  struct ospf_if   *iface;
+  struct ospf6_if  *ospf6_if;
 };
 
 /* for LSA list in Neighbor Data Structure */
@@ -91,8 +91,8 @@ struct lsa_internal
 
 struct router_lsa
 {
-  u_int8_t rlsa_bits;
-  u_char   rlsa_options[3];
+  unsigned char rlsa_bits;
+  unsigned char rlsa_options[3];
   /* followed by router_lsd(s) */
 };
 #define ROUTER_LSA_BIT_B     (1 << 0)
@@ -106,12 +106,12 @@ struct router_lsa
 
 struct router_lsd
 {
-  u_int8_t  rlsd_type;
-  u_int8_t  rlsd_reserved;
-  u_int16_t rlsd_metric;                /* output cost */
-  u_int32_t rlsd_interface_id;
-  u_int32_t rlsd_neighbor_interface_id;
-  u_int32_t rlsd_neighbor_router_id;
+  unsigned char  rlsd_type;
+  unsigned char  rlsd_reserved;
+  unsigned short rlsd_metric;                /* output cost */
+  unsigned long  rlsd_interface_id;
+  unsigned long  rlsd_neighbor_interface_id;
+  unsigned long  rlsd_neighbor_router_id;
 };
 
 #define LSDT_POINTTOPOINT       1
@@ -121,8 +121,8 @@ struct router_lsd
 
 struct network_lsa
 {
-  u_int8_t nlsa_reserved;
-  u_char   nlsa_options[3];
+  unsigned char nlsa_reserved;
+  unsigned char nlsa_options[3];
   /* followed by router_id(s) */
 };
 
@@ -138,45 +138,62 @@ struct network_lsa
 
 struct link_lsa
 {
-  u_int8_t llsa_rtr_pri;
-  u_char   llsa_options[3];
+  unsigned char   llsa_rtr_pri;
+  unsigned char   llsa_options[3];
   struct in6_addr llsa_linklocal;
-  u_int32_t llsa_prefix_num;
+  unsigned long   llsa_prefix_num;
   /* followed by prefix(es) */
 };
 
 struct intra_area_prefix_lsa
 {
-  u_int16_t intra_prefix_num;
-  u_int16_t intra_prefix_refer_lstype;
-  u_int32_t intra_prefix_refer_lsid;
-  u_int32_t intra_prefix_refer_advrtr;
+  unsigned short intra_prefix_num;
+  unsigned short intra_prefix_refer_lstype;
+  unsigned long  intra_prefix_refer_lsid;
+  unsigned long  intra_prefix_refer_advrtr;
 };
 
+/* Function Prototypes */
+void free_lsa (struct lsa_hdr *);
+void free_lsa_internal_hdr (struct lsa_internal *);
+int lsa_list_delete_all (list);
+int lsi_delete_from_list (struct lsa_internal *, list);
+int lsi_delete (struct lsa_internal *);
 int prepare_neighbor_lsdb (struct neighbor *);
+int expire_lsa_age (struct thread *);
+int calc_lsa_age_internal (struct lsa_internal *);
+int past_min_ls_interval (struct lsa_internal *);
+unsigned short calc_lsa_age_external (struct lsa_internal *);
+struct lsa_internal *make_lsa_hdr_internal (struct lsa_hdr *,
+                                            struct neighbor *);
+struct lsa_internal *make_lsa_internal (struct lsa_hdr *, struct neighbor *);
+int lsa_change (struct lsa_internal *);
+int lsa_install (struct lsa_internal **);
 int which_is_more_recent (struct lsa_internal *, struct lsa_internal *);
-struct lsa_hdr *search_lsa_instance (struct lsa_hdr *, struct area *);
+list lsa_lookup_by_advrtr (unsigned short, unsigned long, struct area *);
+struct lsa_internal *lsa_lookup (unsigned short, unsigned long,
+                                 unsigned long, struct area *,
+                                 struct ospf6_if *);
+int lsatype_ok (struct lsa_hdr *);
 int check_neighbor_lsdb (struct iovec *, struct neighbor *);
-int proceed_retrans_lsdb (struct neighbor *);
-int vty_lsdb (struct vty *vty, struct area *area);
-u_short calc_lsa_age_external (struct lsa_internal *);
-struct lsa_internal *lsa_lookup (u_int16_t, u_int32_t, u_int32_t,
-				 struct area *, struct ospf_if *);
+int proceed_summarylist (struct neighbor *);
 struct lsa_hdr *attach_lsa_to_iov (struct lsa_internal *, struct iovec *);
 struct lsa_hdr *attach_lsa_hdr_to_iov (struct lsa_internal *, struct iovec *);
-int lsa_receive (struct lsa_hdr *, struct neighbor *);
 int lsa_refresh (struct thread *);
-struct lsa_internal *make_lsa_hdr_internal (struct lsa_hdr *,
-					    struct neighbor *);
-char *print_lsahdr (struct lsa_hdr *lsh);
-
+int originating_lsa (struct lsa_internal **);
 int construct_router_lsa (struct area *);
 int construct_network_lsa (struct ospf6_if *);
-int construct_intra_prefix_lsa (struct ospf6_if *);
 int construct_link_lsa (struct ospf6_if *);
+int construct_intra_prefix_lsa (struct ospf6_if *);
+int lsa_receive (struct lsa_hdr *, struct neighbor *);
+int ack_type (struct lsa_internal *, int, int);
+int delayed_ack (struct lsa_internal *);
+int lsa_flood (struct lsa_internal *);
+int show_router_lsa (struct vty *, void *);
+int show_network_lsa (struct vty *, void *);
+int show_link_lsa (struct vty *, void *);
+int show_intra_prefix_lsa (struct vty *, void *);
+int vty_lsdb (struct vty *, struct area *);
 
-/* Function Prototypes */
-int list_clear_all (list);
-int lsa_list_clear_all (list);
+#endif /* OSPF6_LSA_H */
 
-#endif /* OSPF_LSA_H */

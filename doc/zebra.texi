@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for snapshot zebra-19990420
+@subtitle for snapshot zebra-199904XX 
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for snapshot zebra-19990420.
+This is the Zebra Manual for snapshot zebra-199904XX.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -288,6 +288,9 @@ turn off IPv6 support or disable of making some daemons by configure
 options.
 
 @table @code
+@item --enable-guile
+Turn on making zebra-guile interpreter.  You will need guile library to
+make this.
 @item --disable-ipv6
 Turn off IPv6 related features and daemons.
 @item --disable-zebra
@@ -399,9 +402,11 @@ log file /usr/local/etc/bgpd.log
 @end deffn
 
 @deffn Command {write terminal} {}
+Display current configuration to the vty interface.
 @end deffn
 
 @deffn Command {write file} {}
+Write current configuration to configuration file.
 @end deffn
 
 @deffn Command {config terminal} {}
@@ -411,6 +416,23 @@ log file /usr/local/etc/bgpd.log
 @end deffn
 
 @deffn Command {list} {}
+List commands.
+@end deffn
+
+@deffn Command {show version} {}
+Show the current version of the Zebra and it's build host information.
+@end deffn
+
+@deffn Command {line vty} {}
+Enter vty configuration mode
+@end deffn
+
+@deffn {Line Command} {exec-timeout @var{second}} {}
+Set time out seconds.
+@end deffn
+
+@deffn {Line Command} {access-class @var{access-list}} {}
+Restrict vty connection with access list.
 @end deffn
 
 @node   Sample Configuration,  , Basic configuration, Configuration File
@@ -965,6 +987,10 @@ exist in IGP routing table but bgp doesn't care about IGP routing table
 when announce the route.
 @end deffn
 
+@deffn {BGP Command} {aggregate-address @var{network}} {}
+This command specify aggregate address.
+@end deffn
+
 @deffn {BGP Command} {neighbor @var{peer} remote-as @var{as-number}} {}
 Create new neighbor as remote-as is @var{as-number}.  @var{peer} can be
 IPv4 address or IPv6 address.
@@ -1182,6 +1208,10 @@ local-preference value to 200.
 @section BGP set command
 
 @deffn {Route-map Command} {set ip nexthop @var{ipv4_address}} {}
+@end deffn
+
+@deffn {Route-map Command} {set metric @var{metric}} {}
+Set BGP attribute MED.
 @end deffn
 
 @deffn {Route-map Command} {set ipv6 nexthop global @var{ipv6_address}} {}

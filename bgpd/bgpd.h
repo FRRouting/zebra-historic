@@ -183,7 +183,7 @@ struct bgp_notify
 #define BGP_ATTR_AGGREGATOR         7
 #define BGP_ATTR_COMMUNITIES        8
 #define BGP_ATTR_ORIGINATOR         9
-#define BGP_ATTR_CLUSTERLIST       10
+#define BGP_ATTR_CLUSTER_LIST      10
 #define BGP_ATTR_DPA               11
 #define BGP_ATTR_ADVERTISER        12
 #define BGP_ATTR_RCID_PATH         13

@@ -55,11 +55,12 @@ struct aspath
 void aspath_init ();
 struct aspath *aspath_parse ();
 struct aspath *aspath_dup (struct aspath *);
-void aspath_undup (struct aspath *);
+struct aspath *aspath_aggregate (struct aspath *, struct aspath *);
 struct aspath *aspath_add_left (struct aspath *, as_t);
-struct aspath *aspath_empty_aspath ();
+struct aspath *aspath_empty_aspath (int);
 struct aspath *aspath_val2as (u_short);
 void aspath_free (struct aspath *);
+void aspath_unintern (struct aspath *);
 const char *aspath_print (struct aspath *);
 void aspath_print_vty (struct vty *, struct aspath *);
 void aspath_print_all_vty (struct vty *);

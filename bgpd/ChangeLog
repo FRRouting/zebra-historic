@@ -1,3 +1,25 @@
+1999-04-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (noinst_HEADERS): Add bgp_filter.h
+
+	* bgp_aspath.c (aspath_undup): Function deleted.  aspath_free ()
+	has same functionality.
+
+	* bgp_filter.h: New file.
+
+	* bgp_aspath.c (aspath_unintern): Rename aspath_free () to
+	aspath_unintern ()
+	(aspath_free): New function.
+
+1999-04-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_aggregate): Function added.
+
+	* bgp_aspath.h (aspath_aggregate): Prototype added.
+
+	* bgp_aspath.c (aspath_empty_aspath): New argument
+	gated_dont_eat_flag is added.
+
 1999-04-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_route.c: Add bgp_aggregate_ipv4 and bgp_aggregate_ipv6.

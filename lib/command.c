@@ -1239,6 +1239,19 @@ DEFUN (config_write_file,
   return CMD_SUCCESS;
 }
 
+ALIAS (config_write_file, 
+       config_write_memory_cmd,
+       "write memory",  
+       "Write running configuration to memory, network, or terminal\n"
+       "Write to configuration file (write file)\n")
+
+ALIAS (config_write_file, 
+       copy_runningconfig_startupconfig_cmd,
+       "copy running-config startup-config",  
+       "Copy configuration\n"
+       "Copy running config to... \n"
+       "Copy running config to startup config (write file)\n")
+
 /* Write current configuration into the terminal. */
 DEFUN (config_write_terminal,
        config_write_terminal_cmd,
@@ -1414,6 +1427,8 @@ cmd_init ()
   install_element (ENABLE_NODE, &config_write_terminal_cmd);
   install_element (ENABLE_NODE, &show_running_config_cmd);
   install_element (ENABLE_NODE, &config_write_file_cmd);
+  install_element (ENABLE_NODE, &config_write_memory_cmd);
+  install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
   install_element (CONFIG_NODE, &config_end_cmd);
   install_element (CONFIG_NODE, &config_exit_cmd);

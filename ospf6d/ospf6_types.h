@@ -22,6 +22,7 @@
 #ifndef OSPF6_TYPES_H
 #define OSPF6_TYPES_H
 
+typedef unsigned char  msgtype_t;
 typedef unsigned char  instance_id_t;
 typedef unsigned char  state_t;
 typedef unsigned char  vers_t;

@@ -217,9 +217,7 @@ struct route_node *
 route_node_lookup (struct route_table *table, struct prefix *p)
 {
   struct route_node *node;
-  struct route_node *match;
 
-  match = NULL;
   node = table->top;
 
   while (node && node->p.prefixlen <= p->prefixlen && 
@@ -228,7 +226,6 @@ route_node_lookup (struct route_table *table, struct prefix *p)
       if (node->p.prefixlen == p->prefixlen && node->info)
 	return route_lock_node (node);
 
-      match = node;
       node = node->link[check_bit(&p->u.prefix, node->p.prefixlen)];
     }
 

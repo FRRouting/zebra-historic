@@ -320,6 +320,48 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
 #endif /* HAVE_IPV6 */
 
 
+/* Set local preference. */
+/* Set metric to attribute. */
+int
+route_set_local_pref (void *rule, struct prefix *prefix, void *object)
+{
+  char *metric;
+  struct bgp_info *bgp_info;
+
+  /* Fetch routemap's rule information. */
+  metric = rule;
+  bgp_info = object;
+
+  /* Set next hop value. */ 
+  bgp_info->attr->local_pref = atoi (metric);
+
+  return 0;
+}
+
+/* set local preference compilation. */
+void *
+route_set_local_pref_compile (char *arg)
+{
+  /* Local preference value shoud be integer.  Check needed at here XXX. */
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+/* Free route map's local preference value. */
+void
+route_set_local_pref_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Set metric rule structure. */
+struct route_map_rule_cmd route_set_local_pref_cmd = 
+{
+  "metric",
+  route_set_local_pref,
+  route_set_local_pref_compile,
+  route_set_local_pref_free,
+};
+
 /* Set metric to attribute. */
 int
 route_set_metric (void *rule, struct prefix *prefix, void *object)

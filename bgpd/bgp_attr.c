@@ -54,7 +54,7 @@ message attr_str [] =
   { BGP_ATTR_AGGREGATOR,       "AGGREGATOR" }, 
   { BGP_ATTR_COMMUNITIES,      "COMMUNITY" }, 
   { BGP_ATTR_ORIGINATOR,       "ORIGINATOR" }, 
-  { BGP_ATTR_CLUSTERLIST,      "CLUSTERLIST" }, 
+  { BGP_ATTR_CLUSTER_LIST,     "CLUSTERLIST" }, 
   { BGP_ATTR_DPA,              "DPA" },
   { BGP_ATTR_ADVERTISER,       "ADVERTISER"} ,
   { BGP_ATTR_RCID_PATH,        "RCID_PATH" },
@@ -173,7 +173,7 @@ bgp_attr_make_default ()
   bzero (&attr, sizeof attr);
   attr.origin = BGP_ORIGIN_IGP;
   attr.local_pref = 100;
-  attr.aspath = aspath_empty_aspath ();
+  attr.aspath = aspath_empty_aspath (0);
 #ifdef HAVE_IPV6
   attr.mp_nexthop_len = 16;
 #endif
@@ -205,7 +205,7 @@ bgp_attr_free (struct attr *attr)
 
   /* aspath refcount shoud be decrement. */
   if (aspath)
-    aspath_free (aspath);
+    aspath_unintern (aspath);
 
   if (community)
     community_free (community);
@@ -423,6 +423,26 @@ bgp_attr_community (struct peer *peer, bgp_size_t length,
   return 0;
 }
 
+/* Originator ID attribute. */
+int
+bgp_attr_originator (struct peer *peer, bgp_size_t length, 
+		    struct attr *attr, u_char flag)
+{
+  attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR);
+
+  return 0;
+}
+
+/* Cluster list attribute. */
+int
+bgp_attr_cluster_list (struct peer *peer, bgp_size_t length, 
+		    struct attr *attr, u_char flag)
+{
+  attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_CLUSTER_LIST);
+
+  return 0;
+}
+
 #ifdef HAVE_IPV6
 /* Multiprotocol reachability information parse. */
 int
@@ -598,7 +618,11 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	  ret = bgp_attr_community (peer, length, attr, flag);
 	  break;
 	case BGP_ATTR_ORIGINATOR:
-	case BGP_ATTR_CLUSTERLIST:
+	  ret = bgp_attr_originator (peer, length, attr, flag);
+	  break;
+	case BGP_ATTR_CLUSTER_LIST:
+	  ret = bgp_attr_cluster_list (peer, length, attr, flag);
+	  break;
 	case BGP_ATTR_DPA:
 	  ret = 0;
 	  stream_forward (peer->ibuf, length);
@@ -736,7 +760,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putc (s, aspath->length);
       stream_memcpy (s, aspath->data, aspath->length);
 
-      aspath_undup (aspath);
+      aspath_free (aspath);
     }
   else
     {

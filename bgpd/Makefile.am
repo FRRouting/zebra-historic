@@ -15,7 +15,7 @@ libbgp_a_SOURCES = \
 noinst_HEADERS = \
 	bgp_aspath.h bgp_attr.h bgp_community.h bgp_dump.h bgp_fsm.h \
 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h \
-	bgpd.h
+	bgpd.h bgp_filter.h
 
 bgpd_SOURCES = \
 	bgp_main.c $(libbgp_a_SOURCES)

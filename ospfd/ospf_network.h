@@ -21,9 +21,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPF_NETWORK_H
 #define _ZEBRA_OSPF_NETWORK_H
 
-/* Macros. */
-#define ADDRESS_SAME(x, y)	((x)->s_addr == (y)->s_addr)
-
 /* Prototypes. */
 int ospf_serv_sock (struct interface *, int);
 int ospf_if_add_allspfrouters (int, struct prefix *);

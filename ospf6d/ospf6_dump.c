@@ -23,6 +23,7 @@
 
 /* Global logging stream variable */
 ZLOG *zl;
+char strbuf[16];
 
 /* Strings for logging */
 char *ifs_name[] =
@@ -63,6 +64,40 @@ char *mesg_name[] =
   NULL
 };
 
+char *lstype_name[] =
+{
+  "Router-LSA",
+  "Network-LSA",
+  "Inter-Area-Prefix-LSA",
+  "Inter-Area-Router-LSA",
+  "AS-External-LSA",
+  "Group-Membership-LSA",
+  "Type-7-LSA",
+  "Link-LSA",
+  "Intra-Area-Prefix-LSA",
+  NULL
+};
+
+char *rlsatype_name[] =
+{
+  "PtoP",
+  "Transit",
+  "Stub",
+  "virtual",
+  NULL
+};
+
+char *print_lsahdr (struct lsa_hdr *lsh)
+{
+  static char buf[256], tmp[64];
+
+  inet_ntop (AF_INET, &lsh->lsh_advrtr, tmp, sizeof (tmp));
+  sprintf (buf, "LS type[(%s)] LS id[%lu] AdvRtr[%s] Len[%#x]",
+           lstype_name[typeindex(lsh->lsh_type)],
+           ntohl (lsh->lsh_id),
+           tmp, ntohs (lsh->lsh_len));
+  return buf;
+}
 
 void
 ospf6_err (const char *format, ...)
@@ -71,6 +106,7 @@ ospf6_err (const char *format, ...)
 
   va_start (args, format);
   zlog (zl, LOG_ERR, format, args);
+  va_end (args);
   return;
 }
 
@@ -81,6 +117,7 @@ ospf6_warn (const char *format, ...)
 
   va_start (args, format);
   zlog (zl, LOG_WARNING, format, args);
+  va_end (args);
   return;
 }
 
@@ -91,6 +128,7 @@ ospf6_notice (const char *format, ...)
 
   va_start (args, format);
   zlog (zl, LOG_NOTICE, format, args);
+  va_end (args);
   return;
 }
 
@@ -101,6 +139,7 @@ ospf6_info (const char *format, ...)
 
   va_start (args, format);
   zlog (zl, LOG_INFO, format, args);
+  va_end (args);
   return;
 }
 
@@ -112,6 +151,7 @@ ospf6_debug (const char *format, ...)
 #ifdef DEBUG_OSPF6
   va_start (args, format);
   zlog (zl, LOG_DEBUG, format, args);
+  va_end (args);
 #endif
   return;
 }
@@ -123,15 +163,17 @@ ospf6_log_init ()
                  LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
                  LOG_DAEMON);
 
+  zlog_default = zl;
+
   /* Print OSPF6d start messages. */
-  ospf6_info ("OSPF6d (%s) starts\n", ZEBRA_VERSION);
+  zlog (zl, LOG_INFO, "OSPF6d (%s) starts", ZEBRA_VERSION);
   return;
 }
 
 char *
-inet4str (unsigned long id, char *buf, int size)
+inet4str (unsigned long id)
 {
-  inet_ntop (AF_INET, &id, buf, size);
-  return(buf);
+  inet_ntop (AF_INET, &id, strbuf, sizeof (strbuf));
+  return(strbuf);
 }
 

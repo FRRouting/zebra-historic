@@ -36,16 +36,6 @@
 #define OSPF_IF_DISABLE                 0
 #define OSPF_IF_ENABLE                  1
 
-/* OSPF common structure for interface and neighbor. */
-struct ospf_common
-{
-  struct in_addr router_id;
-  u_char options;
-  u_char priority;
-  struct in_addr d_router;
-  struct in_addr bd_router;
-};
-
 /* OSPF interface structure */
 struct ospf_interface
 {
@@ -74,9 +64,9 @@ struct ospf_interface
   struct in_addr d_router;		/* Designated Router */
   struct in_addr bd_router;		/* Backup Designated Router */
 
-  struct in_addr area_id;		/* Area ID */
-  u_int16_t auth_type;			/* Authentication Type */
-  u_char auth_data [OSPF_AUTH_SIZE];    /* Authentication Key */
+  struct ospf_area *area;		/* OSPF Area */
+
+  u_char auth_data [OSPF_AUTH_SIZE + 1]; /* Authentication Key */
 
   u_int32_t transmit_delay;		/* Interface Transmisson Delay */
   u_int32_t output_cost;		/* Interface Output Cost */
@@ -105,7 +95,7 @@ struct ospf_interface
   u_int32_t ls_upd_out;         /* LS update message output count. */
   u_int32_t ls_ack_in;          /* LS Ack message input count. */
   u_int32_t ls_ack_out;         /* LS Ack message output count. */
-  u_int32_t discarded;		/* discarded input count by checksum error. */
+  u_int32_t discarded;		/* discarded input count by error. */
 };
 
 

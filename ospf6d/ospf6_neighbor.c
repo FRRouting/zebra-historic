@@ -29,14 +29,9 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
   nbs_previous = nbr->state;
   nbr->state = nbs_next;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBSCHANGE: [%s]->[%s](%s) on %s \n",
-                nbs_name[nbs_previous], nbs_name[nbs_next], reason,
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBSCHANGE: [%s]->[%s](%s) on %s \n",
+              nbs_name[nbs_previous], nbs_name[nbs_next], reason,
+              inet4str (nbr->rtr_id));
 
   if (nbs_previous == NBS_FULL && nbs_next == NBS_FULL)
     return 0;
@@ -82,7 +77,7 @@ list_cleared_of_lsa (struct neighbor *nbr)
   list_delete_all_node (nbr->dd_retrans);
   list_delete_all_node (nbr->summarylist);
   list_delete_all_node (nbr->retranslist);
-  lsa_list_clear_all (nbr->requestlist);
+  lsa_list_delete_all (nbr->requestlist);
   return 0;
 }
 
@@ -124,13 +119,7 @@ hello_received (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: HelloReceived on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: HelloReceived on %s\n", inet4str (nbr->rtr_id));
 
   if (nbr->inactivity_timer)
     thread_cancel (nbr->inactivity_timer);
@@ -153,13 +142,7 @@ twoway_received (struct thread *thread)
   if (nbr->state > NBS_INIT)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: 2Way-Received on %s\n",
-                 inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: 2Way-Received on %s\n", inet4str (nbr->rtr_id));
 
   thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
 
@@ -197,13 +180,7 @@ negotiation_done (struct thread *thread)
   if (nbr->state != NBS_EXSTART)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: NegotiationDone on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof(strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: NegotiationDone on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_EXCHANGE, "NegotiationDone", nbr);
   DD_IBIT_CLEAR (nbr->dd_bits);
@@ -222,13 +199,7 @@ exchange_done (struct thread *thread)
   if (nbr->state != NBS_EXCHANGE)
     return 0;
 
-#ifdef DEBUG_OSPF
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: ExchangeDone on %s\n",
-                inet4str (nbp->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: ExchangeDone on %s\n", inet4str (nbr->rtr_id));
 
   list_delete_all_node (nbr->dd_retrans);
 
@@ -258,20 +229,14 @@ loading_done (struct thread *thread)
   if (nbr->state != NBS_LOADING)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: LoadingDone on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: LoadingDone on %s\n", inet4str (nbr->rtr_id));
 
   if (listcount (nbr->requestlist) == 0)
     nbs_change (NBS_FULL, "LoadingDone", nbr);
   else
     {
 #ifdef DEBUG_OSPF6
-      ospf6_err ("BUG: LoadingDone but Requestlist Not Empty\n");
+      zlog (NULL, LOG_ERR, "BUG: LoadingDone but Requestlist Not Empty");
       assert (0);
 #endif
     }
@@ -287,13 +252,7 @@ adj_ok (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: AdjOK? on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: AdjOK? on %s\n", inet4str (nbr->rtr_id));
 
   if (nbr->state == NBS_TWOWAY)
     {
@@ -341,13 +300,7 @@ seqnumber_mismatch (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: SeqNumberMismatch on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: SeqNumberMismatch on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_EXSTART, "SeqNumberMismatch", nbr);
 
@@ -376,13 +329,7 @@ bad_lsreq (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: BadLSReq on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: BadLSReq on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_EXSTART, "BadLSReq", nbr);
 
@@ -411,13 +358,7 @@ oneway_received (struct thread *thread)
   if (nbr->state < NBS_TWOWAY)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: 1Way-Received on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: 1Way-Received on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_INIT, "1Way-Received", nbr);
 
@@ -435,13 +376,7 @@ inactivity_timer (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-#ifdef DEBUG_OSPF6
-  {
-    char strbuf[60];
-    ospf6_info ("NBEVENT: InactivityTimer on %s\n",
-                inet4str (nbr->rtr_id, strbuf, sizeof (strbuf)));
-  }
-#endif
+  ospf6_info ("NBEVENT: InactivityTimer on %s\n", inet4str (nbr->rtr_id));
 
   nbr->inactivity_timer = NULL;
   nbr->dr = nbr->bdr = nbr->prevdr = nbr->prevbdr = 0;

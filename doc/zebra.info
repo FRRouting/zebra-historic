@@ -16,7 +16,7 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for snapshot zebra-19990420.
+   This is the Zebra Manual for snapshot zebra-199904XX.
 
    This manual describes `zebra' and some other beasts.
 
@@ -279,6 +279,10 @@ For manual configuration there are several configure options.  You can
 turn off IPv6 support or disable of making some daemons by configure
 options.
 
+`--enable-guile'
+     Turn on making zebra-guile interpreter.  You will need guile
+     library to make this.
+
 `--disable-ipv6'
      Turn off IPv6 related features and daemons.
 
@@ -388,14 +392,30 @@ Basic configuration
           log file /usr/local/etc/bgpd.log
 
  - Command: write terminal
+     Display current configuration to the vty interface.
 
  - Command: write file
+     Write current configuration to configuration file.
 
  - Command: config terminal
 
  - Command: who
 
  - Command: list
+     List commands.
+
+ - Command: show version
+     Show the current version of the Zebra and it's build host
+     information.
+
+ - Command: line vty
+     Enter vty configuration mode
+
+ - Line Command: exec-timeout SECOND
+     Set time out seconds.
+
+ - Line Command: access-class ACCESS-LIST
+     Restrict vty connection with access list.
 
 
 File: zebra.info,  Node: Sample Configuration,  Prev: Basic configuration,  Up: Configuration File
@@ -942,6 +962,9 @@ is `bgpd.conf'.
      which doesn't exist in IGP routing table but bgp doesn't care
      about IGP routing table when announce the route.
 
+ - BGP Command: aggregate-address NETWORK
+     This command specify aggregate address.
+
  - BGP Command: neighbor PEER remote-as AS-NUMBER
      Create new neighbor as remote-as is AS-NUMBER.  PEER can be IPv4
      address or IPv6 address.
@@ -1142,6 +1165,9 @@ BGP set command
 ===============
 
  - Route-map Command: set ip nexthop IPV4_ADDRESS
+
+ - Route-map Command: set metric METRIC
+     Set BGP attribute MED.
 
  - Route-map Command: set ipv6 nexthop global IPV6_ADDRESS
 
@@ -1601,6 +1627,8 @@ Command Index
 
 * Menu:
 
+* access-class ACCESS-LIST:              Basic configuration.
+* aggregate-address NETWORK:             bgpd configuration.
 * bgp router-id ROUTER-ID:               bgpd configuration.
 * clear ip bgp PEER:                     bgpd terminal mode commands.
 * config terminal:                       Basic configuration.
@@ -1610,6 +1638,7 @@ Command Index
 * description DESCRIPTION ...:           Interface.
 * distribute-list ACCESS_LIST DIRECT IFNAME: ripngd filtering commands.
 * enable password PASSWORD:              Basic configuration.
+* exec-timeout SECOND:                   Basic configuration.
 * flush_timer TIME:                      ripngd configuration.
 * hostname HOSTNAME:                     Basic configuration.
 * interface IFNAME:                      Interface.
@@ -1618,6 +1647,7 @@ Command Index
 * ip address ADDRESS:                    Interface.
 * ip route NETWORK GATEWAY:              Static route.
 * ipv6 route NETWORK GATEWAY:            Static route.
+* line vty:                              Basic configuration.
 * list:                                  Basic configuration.
 * log file FILENAME:                     Basic configuration.
 * log stdout:                            Basic configuration.
@@ -1653,6 +1683,7 @@ Command Index
 * set ip nexthop IPV4_ADDRESS:           BGP set command.
 * set ipv6 nexthop global IPV6_ADDRESS:  BGP set command.
 * set ipv6 nexthop local IPV6_ADDRESS:   BGP set command.
+* set metric METRIC:                     BGP set command.
 * show debug:                            bgpd terminal mode commands.
 * show interface:                        zebra terminal mode commands.
 * show ip bgp [NETWORK]:                 bgpd terminal mode commands.
@@ -1664,6 +1695,7 @@ Command Index
 * show ipforward:                        zebra terminal mode commands.
 * show ipv6 route:                       zebra terminal mode commands.
 * show ipv6forward:                      zebra terminal mode commands.
+* show version:                          Basic configuration.
 * shutdown:                              Interface.
 * who:                                   Basic configuration.
 * write file:                            Basic configuration.
@@ -1714,58 +1746,58 @@ Node: Bug report6475
 Node: Installation7342
 Node: GNU/Linux configuration7892
 Node: Configure options9448
-Node: VTY port setup10945
-Node: Configuration File11669
-Node: Basic configuration12244
-Node: Sample Configuration12962
-Node: VTY13661
-Node: What is VTY14147
-Node: How to use VTY14365
-Node: View mode and Enable mode14915
-Node: Other modes15132
-Node: Command line editing15270
-Node: Advanced command line editing15865
-Node: Command line history16382
-Node: Command line completion16644
-Node: Command line help16867
-Node: zebra17147
-Node: Common invoking options17530
-Node: Invoking zebra18042
-Node: Interface18477
-Node: Static route19021
-Node: zebra terminal mode commands19234
-Node: ripd20135
-Node: Invoking ripd20396
-Node: ripd configuration20696
-Node: ripd terminal mode commands20851
-Node: ripngd21002
-Node: Invoking ripngd21323
-Node: ripngd configuration21578
-Node: ripngd terminal mode commands22242
-Node: ripngd filtering commands22464
-Node: ospfd22929
-Node: Invoking ospfd23220
-Node: ospfd configuration23470
-Node: ospfd terminal mode commands23800
-Node: bgpd23956
-Node: Invoking bgpd24512
-Node: bgpd configuration24888
-Node: bgpd terminal mode commands27697
-Node: bgpd sample session28336
-Node: bgpd log format28536
-Node: How to set up 6bone connection29026
-Node: Filtering30257
-Node: IP access-list30524
-Node: Route map30725
-Node: Route map command31208
-Node: IP address match command31412
-Node: BGP set command31634
-Node: IPv6 supports31930
-Node: Kernel interface32141
-Node: Linux netlink33271
-Node: Zebra protocol34054
-Node: Copying34721
-Node: Command Index53922
-Node: VTY Key Index58257
+Node: VTY port setup11056
+Node: Configuration File11780
+Node: Basic configuration12355
+Node: Sample Configuration13524
+Node: VTY14223
+Node: What is VTY14709
+Node: How to use VTY14927
+Node: View mode and Enable mode15477
+Node: Other modes15694
+Node: Command line editing15832
+Node: Advanced command line editing16427
+Node: Command line history16944
+Node: Command line completion17206
+Node: Command line help17429
+Node: zebra17709
+Node: Common invoking options18092
+Node: Invoking zebra18604
+Node: Interface19039
+Node: Static route19583
+Node: zebra terminal mode commands19796
+Node: ripd20697
+Node: Invoking ripd20958
+Node: ripd configuration21258
+Node: ripd terminal mode commands21413
+Node: ripngd21564
+Node: Invoking ripngd21885
+Node: ripngd configuration22140
+Node: ripngd terminal mode commands22804
+Node: ripngd filtering commands23026
+Node: ospfd23491
+Node: Invoking ospfd23782
+Node: ospfd configuration24032
+Node: ospfd terminal mode commands24362
+Node: bgpd24518
+Node: Invoking bgpd25074
+Node: bgpd configuration25450
+Node: bgpd terminal mode commands28347
+Node: bgpd sample session28986
+Node: bgpd log format29186
+Node: How to set up 6bone connection29676
+Node: Filtering30907
+Node: IP access-list31174
+Node: Route map31375
+Node: Route map command31858
+Node: IP address match command32062
+Node: BGP set command32284
+Node: IPv6 supports32649
+Node: Kernel interface32860
+Node: Linux netlink33990
+Node: Zebra protocol34773
+Node: Copying35440
+Node: Command Index54641
+Node: VTY Key Index59343
 
 End Tag Table

@@ -39,7 +39,7 @@ ospf6_new ()
   if (new)
     memset (new, 0, sizeof (struct ospf6));
   else
-    ospf6_warn ("Can't malloc instance\n");
+    zlog (NULL, LOG_WARNING, "Can't malloc instance");
 
   return new;
 }
@@ -52,7 +52,7 @@ make_ospf6 (rtr_id_t rtr_id)
 
   if (!ospf6)
     {
-      ospf6_warn ("Can't allocate ospf6 instance\n");
+      zlog (NULL, LOG_WARNING, "Can't allocate ospf6 instance");
       return (struct ospf6 *)NULL;
     }
 
@@ -76,7 +76,7 @@ area_new ()
   if (new)
     memset (new, 0, sizeof (struct area));
   else
-    ospf6_warn ("Can't malloc area\n");
+    zlog (NULL, LOG_WARNING,"Can't malloc area");
 
   return new;
 }
@@ -91,7 +91,7 @@ make_area (area_id_t area_id, struct ospf6 *ospf6)
   if (!area)
     {
       /* xxx */
-      ospf6_warn ("Can't alloc area for %lu.\n", area_id);
+      zlog (NULL, LOG_WARNING,"Can't alloc area for %lu.", area_id);
       return (struct area *)NULL;
     }
 
@@ -135,7 +135,7 @@ ospf6_if_new ()
   if (new)
     memset (new, 0, sizeof (struct ospf6_if));
   else
-    ospf6_warn ("Can't malloc ospf6_if\n");
+    zlog (NULL, LOG_WARNING,"Can't malloc ospf6_if");
 
   return new;
 }
@@ -172,14 +172,14 @@ make_ospf6_if (char *ifname)
   interface = if_lookup_by_name (ifname);
   if (!interface)
     {
-      ospf6_warn ("Can't find Interface: %s\n", ifname);
+      zlog (NULL, LOG_WARNING, "Can't find Interface: %s", ifname);
       return (struct ospf6_if *)NULL;
     }
 
   ospf6_if = ospf6_if_new ();
   if (!ospf6_if)
     {
-      ospf6_warn ("Can't allocate ospf6_if for %s\n", ifname);
+      zlog (NULL, LOG_WARNING, "Can't allocate ospf6_if for %s", ifname);
       return (struct ospf6_if *)NULL;
     }
 
@@ -207,7 +207,7 @@ neighbor_new ()
   if (new)
     memset (new, 0, sizeof (struct neighbor));
   else
-    ospf6_warn ("Can't malloc neighbor\n");
+    zlog (NULL, LOG_WARNING, "Can't malloc neighbor");
 
   return new;
 }
@@ -225,7 +225,7 @@ make_neighbor (rtr_id_t rtr_id, struct ospf6_if *ospf6_if)
   nbr->state = NBS_DOWN;
   nbr->ospf6_if = ospf6_if;
   nbr->rtr_id = rtr_id;
-  inet_ntop (AF_INET, &rtr_id, &nbr->str, sizeof (nbr->str));
+  inet_ntop (AF_INET, &rtr_id, nbr->str, sizeof (nbr->str));
   nbr->inactivity_timer = (struct thread *)NULL;
   nbr->dd_retrans = list_init ();
   nbr->summarylist = list_init ();
@@ -294,13 +294,13 @@ ospf6_if_lookup (char *ifname)
   ifp = if_lookup_by_name (ifname);
   if (!ifp)
     {
-      ospf6_warn ("no such interface: %s\n", ifname);
+      zlog (NULL, LOG_WARNING, "no such interface: %s", ifname);
       return (struct ospf6_if *)NULL;
     }
   ospf6_if = (struct ospf6_if *)ifp->if_data;
   if (!ospf6_if)
     {
-      ospf6_warn ("no such ospf6 interface: %s\n", ifname);
+      zlog (NULL, LOG_WARNING, "no such ospf6 interface: %s", ifname);
       return (struct ospf6_if *)NULL;
     }
 
@@ -398,11 +398,10 @@ show_ospf6_top (struct vty *vty, struct ospf6 *ospf6)
 {
   listnode n;
   struct area *area;
-  char tbuf[60];
 
   vty_out (vty, "Instance-ID: %d\tVersion: %d\tRouter-ID: %s\r\n",
                  ospf6->instance_id, ospf6->version,
-                 inet4str (ospf6->router_id, tbuf, sizeof (tbuf)));
+                 inet4str (ospf6->router_id));
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
       area = (struct area *)getdata (n);
@@ -467,10 +466,9 @@ show_if (struct vty *vty, struct interface *iface)
 
   vty_out (vty, "  Instance ID %lu, Router ID %s\r\n",
            ospf6_if->area->ospf6->instance_id,
-           inet4str (ospf6_if->area->ospf6->router_id,
-                     strbuf, sizeof (strbuf)));
+           inet4str (ospf6_if->area->ospf6->router_id));
   vty_out (vty, "  Area ID %s, Cost %hu\r\n",
-           inet4str (ospf6_if->area->area_id, strbuf, sizeof (strbuf)),
+           inet4str (ospf6_if->area->area_id), 
            ospf6_if->cost);
   vty_out (vty, "  State %s, Transmit Delay %lu sec\r\n",
            ifs_name[ospf6_if->state],
@@ -481,9 +479,9 @@ show_if (struct vty *vty, struct interface *iface)
            ospf6_if->rtr_dead_interval,
            ospf6_if->rxmt_interval);
   vty_out (vty, "  DR %s\r\n",
-           inet4str (ospf6_if->dr, strbuf, sizeof (strbuf)));
+           inet4str (ospf6_if->dr));
   vty_out (vty, "  BDR %s\r\n",
-           inet4str (ospf6_if->bdr, strbuf, sizeof (strbuf)));
+           inet4str (ospf6_if->bdr));
 
   return 0;
 }
@@ -494,10 +492,9 @@ show_area (struct vty *vty, struct area *area)
 {
   listnode i;
   struct ospf6_if *ospf6_if;
-  char strbuf[60];
 
   vty_out (vty, "  Area %s\r\n",
-           inet4str (area->area_id, strbuf, sizeof (strbuf)));
+           inet4str (area->area_id));
   vty_out (vty, "    Interface attached to this area:\r\n     ");
   for (i = listhead (area->ospf6_if_list); i; nextnode (i))
     {
@@ -521,10 +518,10 @@ show_nbr (struct vty *vty, struct neighbor *nbr)
      "RouterID", "InterfaceID", "State", "DR", "BDR", "I/F", "State");
 #endif
 
-  inet4str (nbr->rtr_id, rtrid, sizeof (rtrid));
-  inet4str (nbr->ifid, ifid, sizeof (ifid));
-  inet4str (nbr->dr, dr, sizeof (dr));
-  inet4str (nbr->bdr, bdr, sizeof (bdr));
+  inet_ntop (AF_INET, &nbr->rtr_id, rtrid, sizeof (rtrid));
+  inet_ntop (AF_INET, &nbr->ifid, ifid, sizeof (ifid));
+  inet_ntop (AF_INET, &nbr->dr, dr, sizeof (dr));
+  inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
   vty_out (vty, "%-15s %-15s %-8s %-15s %-15s %s[%s]\r\n",
            rtrid, ifid, nbs_name[nbr->state], dr, bdr,
            ospf6_if->interface->name, ifs_name[ospf6_if->state]);
@@ -609,7 +606,7 @@ DEFUN (router_ospf6_instance,
     }
 
   /* Set current ospf point. */
-  vty->node = OSPF_NODE;
+  vty->node = OSPF6_NODE;
   vty->index = ospf6;
   return CMD_SUCCESS;
 }
@@ -648,9 +645,10 @@ DEFUN (no_router_ospf6_instance,
 }
 
 /* make ospf ospf_if */
-DEFUN (interface,
-       interface_cmd,
-       "interface IFNAME area AREA_ID [IFSTATE]",
+DEFUN (ospf6_interface,
+       ospf6_interface_cmd,
+       "ospf6 interface IFNAME area AREA_ID [IFSTATE]",
+       "ospf6\n"
        OSPF6_INTERFACE_STR
        OSPF6_IFNAME_STR
        "Specify AREA\n"
@@ -696,9 +694,9 @@ DEFUN (interface,
   if (argc == 3)
     {
       if (strcmp (argv[2], "up") == 0)
-        thread_add_event (master, interface_up, interface, 0);
+        thread_add_event (master, interface_up, ospf6_if, 0);
       else if (strcmp (argv[2], "down") == 0)
-        thread_add_event (master, interface_down, interface, 0);
+        thread_add_event (master, interface_down, ospf6_if, 0);
       else
         vty_out (vty, "Invalid argument: %s\r\n", argv[2]);
       vty_out (vty, "\r\n");
@@ -719,7 +717,6 @@ DEFUN (no_interface,
   struct ospf6_if *ospf6_if;
   struct interface *ifp;
   struct ospf6 *ospf6 = (struct ospf6 *)vty->index;
-  char strbuf[60];
 
   ifname = argv[0];
   inet_pton (AF_INET, argv[1], &area_id);
@@ -741,7 +738,7 @@ DEFUN (no_interface,
   if (!area)
     {
       vty_out (vty, "No such area: %s\r\n",
-               inet4str (area_id, strbuf, sizeof (strbuf)));
+               inet4str (area_id));
       return CMD_WARNING;
     }
 
@@ -1002,7 +999,11 @@ DEFUN (show_lsa,
        show_lsa_cmd,
        "show lsa [ospf INSTANCE area AREA_ID]",
        SHOW_STR
-       "show LSA list all\n")
+       "show LSA list all\n"
+       "Optional argument\n"
+       "Optional argument\n"
+       "Optional argument\n"
+       "Optional argument\n")
 {
   struct ospf6 *ospf6;
   struct area *area;
@@ -1147,7 +1148,6 @@ ospf6_config_write (struct vty *vty)
   struct ospf6 *ospf6;
   struct area *area;
   struct ospf6_if *ospf6_if;
-  char strbuf[60];
 
   /* OSPF instance configuration. */
   for (i = listhead (ospf6_list); i; nextnode (i))
@@ -1156,7 +1156,7 @@ ospf6_config_write (struct vty *vty)
 
       vty_out (vty, "router ospf6%s", VTY_NEWLINE);
       vty_out (vty, " ospf6 router id %s%s",
-                     inet4str(ospf6->router_id, strbuf, sizeof (strbuf)),
+                     inet4str(ospf6->router_id),
                      VTY_NEWLINE);
       for (j = listhead (ospf6->area_list); j; nextnode (j))
         {
@@ -1166,8 +1166,7 @@ ospf6_config_write (struct vty *vty)
               ospf6_if = (struct ospf6_if *)getdata (k);
               vty_out (vty, "  interface %s area %s",
                              ospf6_if->interface->name,
-                             inet4str (area->area_id, strbuf,
-                                       sizeof (strbuf)));
+                             inet4str (area->area_id));
               if (ospf6_if->state != IFS_DOWN)
                 vty_out (vty, " up");
               vty_out (vty, "%s", VTY_NEWLINE);
@@ -1231,22 +1230,22 @@ ospf6_init ()
   install_element (CONFIG_NODE, &show_ospf6_cmd);
   install_element (CONFIG_NODE, &show_interface_cmd);
   install_element (CONFIG_NODE, &show_neighbor_cmd);
-  install_element (OSPF_NODE, &ospf6_end_cmd);
-  install_element (OSPF_NODE, &ospf6_exit_cmd);
-  install_element (OSPF_NODE, &config_help_cmd);
-  install_element (OSPF_NODE, &show_ospf6_cmd);
-  install_element (OSPF_NODE, &show_interface_cmd);
-  install_element (OSPF_NODE, &ospf6_router_id_cmd);
-  install_element (OSPF_NODE, &interface_cmd);
-  install_element (OSPF_NODE, &interface_cost_cmd);
-  install_element (OSPF_NODE, &interface_hello_interval_cmd);
-  install_element (OSPF_NODE, &interface_router_dead_interval_cmd);
-  install_element (OSPF_NODE, &interface_rxmt_interval_cmd);
-  install_element (OSPF_NODE, &interface_router_priority_cmd);
-  install_element (OSPF_NODE, &interface_inf_trans_delay_cmd);
-  install_element (OSPF_NODE, &show_neighbor_cmd);
-  install_element (OSPF_NODE, &config_help_cmd);
-  /*  install_element (OSPF_NODE, &no_interface_cmd); */
+  install_element (OSPF6_NODE, &ospf6_end_cmd);
+  install_element (OSPF6_NODE, &ospf6_exit_cmd);
+  install_element (OSPF6_NODE, &config_help_cmd);
+  install_element (OSPF6_NODE, &show_ospf6_cmd);
+  install_element (OSPF6_NODE, &show_interface_cmd);
+  install_element (OSPF6_NODE, &ospf6_router_id_cmd);
+  install_element (OSPF6_NODE, &interface_cmd);
+  install_element (OSPF6_NODE, &interface_cost_cmd);
+  install_element (OSPF6_NODE, &interface_hello_interval_cmd);
+  install_element (OSPF6_NODE, &interface_router_dead_interval_cmd);
+  install_element (OSPF6_NODE, &interface_rxmt_interval_cmd);
+  install_element (OSPF6_NODE, &interface_router_priority_cmd);
+  install_element (OSPF6_NODE, &interface_inf_trans_delay_cmd);
+  install_element (OSPF6_NODE, &show_neighbor_cmd);
+  install_element (OSPF6_NODE, &config_help_cmd);
+  /*  install_element (OSPF6_NODE, &no_interface_cmd); */
 
 #if 0
   install_element (ENABLE_NODE, &show_ip_ospf6_neighbor_cmd);
