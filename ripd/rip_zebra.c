@@ -103,6 +103,7 @@ rip_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       rinfo->pref = -10;
       rinfo->fib = 1;
       rinfo->type = type;
+      rinfo->metric = 1;
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
 	rip_add_route (&p, rinfo, NULL, NULL);

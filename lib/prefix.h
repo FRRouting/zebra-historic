@@ -93,12 +93,11 @@ int prefix2str (struct prefix *, char *, int);
 int str2prefix (char *, struct prefix *);
 struct prefix *prefix_new ();
 void prefix_free (struct prefix *p);
-int prefix_match (struct prefix *n, struct prefix *p);
 
 struct prefix_ipv4 *prefix_ipv4_new ();
 void prefix_ipv4_free ();
 int str2prefix_ipv4 (char *, struct prefix_ipv4 *);
-void apply_mask (struct prefix_ipv4 *);
+void apply_mask_ipv4 (struct prefix_ipv4 *);
 int prefix_blen (struct prefix *);
 u_char ip_masklen (struct in_addr);
 int prefix_ipv4_any (struct prefix_ipv4 *);
@@ -119,7 +118,10 @@ void masklen2ip6 (int masklen, struct in6_addr *netmask);
 int ip6_masklen (struct in6_addr netmask);
 #endif /* HAVE_IPV6 */
 
+void apply_mask (struct prefix *);
+int prefix_match (struct prefix *n, struct prefix *p);
 int prefix_same (struct prefix *, struct prefix *);
+int prefix_cmp (struct prefix *, struct prefix *);
 void prefix_copy (struct prefix *, struct prefix *);
 
 int all_digit (char *);

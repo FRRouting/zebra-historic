@@ -19,7 +19,6 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-
 #ifndef OSPF6_SPF_H
 #define OSPF6_SPF_H
 
@@ -48,37 +47,11 @@ struct spftree
   list depthlist[MAXDEPTH];            /* having (struct vertex *) as data */
 };
 
-struct routing_table_entry
-{
-  unsigned long   dst[2];
-  unsigned long   ifindex;
-  unsigned long   nexthop[2];
-  unsigned long   cost;
-
-  struct in6_addr destination;
-  unsigned long   prefixlength;
-  struct in6_addr next_hop;
-
-  int             flag;
-};
-
-struct nexthop_info
-{
-  unsigned long   ifindex;
-  unsigned long   nexthop[2];
-  struct in6_addr nexthop_addr;
-};
-
 #define IS_VTX_ROUTER_TYPE(x)  (!(x)->vtx_id[1])
 #define IS_VTX_NETWORK_TYPE(x) ((x)->vtx_id[1])
 
 /* Function Prototypes */
 int spf_calculation (struct thread *);
-int routing_table_calculation (struct thread *);
-#if 0
-int install_route (struct area *);
-int noinstall_route (struct area *);
-#endif
 
 #endif /* OSPF6_SPF_H */
 

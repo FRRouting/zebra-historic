@@ -26,5 +26,5 @@ enum as_filter_type
   AS_FILTER_PERMIT
 };
 
-enum as_filter_type
-as_list_apply (struct as_list *aslist, void *object);
+enum as_filter_type as_list_apply (struct as_list *, void *);
+struct as_list *as_list_lookup (char *);

@@ -102,6 +102,7 @@ struct ospf_db_desc
 #define IS_SET_DD_MS(X)		((X) & OSPF_DD_FLAG_MS)
 #define IS_SET_DD_M(X)		((X) & OSPF_DD_FLAG_M)
 #define IS_SET_DD_I(X)		((X) & OSPF_DD_FLAG_I)
+#define IS_SET_DD_ALL(X)	((X) & OSPF_DD_FLAG_ALL)
 
 /* Prototypes. */
 void ospf_output_forward (struct stream *, int);

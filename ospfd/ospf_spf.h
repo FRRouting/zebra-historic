@@ -24,10 +24,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 struct vertex
 {
   u_char type;
-  u_int16_t id;
+  struct in_addr id;
   struct ospf_lsa *lsa;
   list nexthop;
   u_int16_t distance;
-  list path;
   struct vertex *parent;
 };

@@ -1,5 +1,67 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.73
+
+* Changes in lib
+
+** `config terminal' is changed to `configure terminal'.
+
+** `terminal length <0-512>' command is added.
+
+** Variable length argument was specified by `...'.  Now all strings
+started with character `.' is variable length argument.
+
+* Changes in zebra
+
+** Internal route (such as iBGP, internal OSPF route) handling works
+correctly.
+
+** In interface node, `ipv6 address' and `no ipv6 address' works.
+
+** Interface's address remain after `no ip address' bug is fixed.
+
+** Host route such as IPv4 with /32 mask and IPv6 with /128 mask
+didn't set RTF_GATEWAY even it has gateway.  This bug if fixed now.
+
+* Changes in bgpd
+
+** `match as-path' argument is used to be specify AS PATH value itself
+directly (e.g. ^$).  But it is changed to specify `ip as-apth
+access-list' name.
+
+** iBGP route handle works without getting error from the kernel.
+
+** `set aggregator as AS A.B.C.D' command is added to route-map.
+
+** `set atomic-aggregate' command is added to bgpd's routemap.
+
+** Announcement of atomic aggregate attribute and aggregator attribute
+works.
+
+** `update-source' bug is fixed.
+
+** When a route learned from eBGP is announced to iBGP, local
+preference was set to zero.  But now it set to
+DEFAULT_LOCAL_PREF(100).
+
+* Changes in ripd
+
+** RIPv1 route filter bug is fixed.
+
+** Some memory leak is fixed.
+
+* Changes in ospfd
+
+** Fix bug of DR Election.
+
+** Fix bug of adjacency forming.
+
+* Changes in ospf6d
+
+** Clean up logging message.
+
+** Reflect routing information to zebra daemon.
+
 * Changes in zebra-0.72
 
 * Changes in lib
@@ -7,7 +69,7 @@ GNU Zebra is not yet released, so this NEWS is about beta version.
 ** When getsockname return IPv4 mapped IPv6 address.  Convert it to
 IPv4 address.
 
-* Changes in bgp
+* Changes in bgpd
 
 ** Change route-map's next-hop related settings.
 

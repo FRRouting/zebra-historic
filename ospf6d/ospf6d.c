@@ -784,16 +784,14 @@ DEFUN (show_ipv6_ospf6_database,
 }
 
 DEFUN (show_ipv6_route_ospf6,
-       show_ipv6_route_ospf6_cmd,
-       "show ipv6 route ospf6",
-/*       "show ipv6 route ospf6 [INSTANCE AREA]", */
+       show_ipv6_route_ospf6_area_cmd,
+       "show ipv6 route ospf6 area AREA",
        SHOW_STR
        IP6_STR
        ROUTE_STR
        OSPF6_STR
-/*       OSPF6_INSTANCE_STR
+       "show routing table in area structure\n"
        "A.B.C.D OSPF6 area ID in IP address format\n"
-*/
        )
 {
   struct ospf6 *ospf6;
@@ -802,14 +800,13 @@ DEFUN (show_ipv6_route_ospf6,
   area_id_t area_id;
   struct ospf6_rtentry *p;
 
+  instance_id = 1;
   if (argc)
     {
-      instance_id = strtol (argv[0], NULL, 10);
-      inet_pton (AF_INET, argv[1], &area_id);
+      inet_pton (AF_INET, argv[0], &area_id);
     }
   else
     {
-      instance_id = 1;
       area_id = 0;
     }
 
@@ -827,16 +824,32 @@ DEFUN (show_ipv6_route_ospf6,
     }
 
   vty_out (vty, "Routing Table\r\n");
-  vty_out (vty, "%-26s %-39s %-3s %5s\r\n",
-     "Destination", "Gateway", "Netif", "Cost");
+  vty_out (vty, "%-26s %-26s %-3s %5s %-5s\r\n",
+     "Destination", "Gateway", "Netif", "Cost", "PathType");
   vty_out (vty, "----------\r\n");
-  for (p = area->rtable.current_top; p; p = p->next)
-    {
-      rtable_vty_entry (vty, p);
-    }
+
+  if (argc)
+    for (p = area->rtable.current_top; p; p = p->next)
+      {
+        rtable_vty_entry (vty, p);
+      }
+  else
+    for (p = ospf6->rtable.current_top; p; p = p->next)
+      {
+        rtable_vty_entry (vty, p);
+      }
 
   return CMD_SUCCESS;
 }
+
+ALIAS (show_ipv6_route_ospf6,
+       show_ipv6_route_ospf6_cmd,
+       "show ipv6 route ospf6",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       )
 
 /* change Router_ID commands. */
 DEFUN (router_id,
@@ -987,6 +1000,7 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_instance_cmd);
@@ -1002,6 +1016,7 @@ ospf6_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_ospf6_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_cmd);
 
   install_element (CONFIG_NODE, &router_ospf6_cmd);
   install_element (CONFIG_NODE, &router_ospf6_instance_cmd);

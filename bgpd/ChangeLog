@@ -1,3 +1,12 @@
+1999-07-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c (fsm_holdtime): Don't close file descriptor in
+	fsm_holdtime ().
+
+1999-07-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c: Add `set atomic-aggregate' command.
+
 1999-07-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_routemap.c (route_set_ip_nexthop_cmd): Change "ip nexthop"

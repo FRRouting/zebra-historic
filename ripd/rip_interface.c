@@ -90,6 +90,15 @@ rip_interface_new ()
   return ri;
 }
 
+int
+rip_interface_enable (struct interface *ifp)
+{
+  struct rip_interface *ri;
+
+  ri = ifp->if_data;
+  return ri->enable;
+}
+
 /* Make RIP request packet. */
 int
 rip_make_request (struct stream *s, int version)
@@ -100,8 +109,9 @@ rip_make_request (struct stream *s, int version)
    *  family  = AF_UNSPEC
    *  metric  = 16 (RIP_METRIC_INFINITY)
    */
+  stream_reset (s);
   stream_putc (s, RIP_REQUEST);	/* command */
-  stream_putc (s, version);		/* version */
+  stream_putc (s, version);	/* version */
   stream_putw (s, 0);		/* domain */
   stream_putw (s, AF_UNSPEC);	/* family */
   stream_putw (s, 0);		/* tag */
@@ -124,7 +134,8 @@ rip_request_interface (struct interface *ifp, int sock)
   struct sockaddr_in sin;
   struct stream *s;
 
-  if (!if_is_up (ifp))
+  /* If interface is down, don't send RIP packet. */
+  if (! if_is_up (ifp))
     return;
 
   /* In default ripd doesn't send RIP_REQUEST to the loopback interface. */
@@ -141,7 +152,7 @@ rip_request_interface (struct interface *ifp, int sock)
       exit (1);
     }
 
-  if ((rip.multicast == RIP_MULTICAST) && if_is_multicast (ifp)) 
+  if (if_is_multicast (ifp)) 
     {
       listnode node;
       
@@ -380,7 +391,7 @@ if_valid_neighbor (struct in_addr addr)
 	      
 	      pxc = prefix_new();
 	      prefix_copy(pxc, (struct prefix *) p);
-	      apply_mask( (struct prefix_ipv4 *) pxc);
+	      apply_mask(pxc);
 	  
 	      if (prefix_match (pxc, pxn)) 
 		{
@@ -448,31 +459,6 @@ if_lookup_address (struct in_addr src)
 	}
     }
   return NULL;
-}
-
-/* Add prefix into rib. */
-void
-rip_connected_add (struct interface *ifp, 
-		   struct connected *connected)
-{
-  struct prefix_ipv4 p;
-  struct rip_info *rinfo;
-
-  memcpy (&p, connected->address, sizeof (struct prefix_ipv4));
-  apply_mask (&p);
-
-  if (IS_RIP_DEBUG_ZEBRA)
-    zlog_info ("connected route %s/%d directly connect to %s",
-	       inet_ntoa (p.prefix), p.prefixlen, ifp->name);
-
-  rinfo = rip_info_new ();
-  rinfo->pref = -10;
-  rinfo->fib = 1;
-  rinfo->type = ZEBRA_ROUTE_CONNECT;
-  rinfo->ifp = ifp;
-  
-  /* Register route to rip table. */
-  rip_add_route (&p, rinfo, NULL, ifp);
 }
 
 /* Called when new interface is added. */
@@ -554,13 +540,10 @@ rip_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
 
 	  connected->destination = p;
 
-	  connected_add (ifp, connected);
-
 	  p = connected->address;
-#if 0
+
 	  if (p->family == AF_INET)
-	    rip_connected_add (ifp, connected);
-#endif /* 0 */
+	      connected_add (ifp, connected);
 	}
       rip_enable_interface (ifp);
     }
@@ -1015,7 +998,7 @@ interface_config_write (struct vty *vty)
 	vty_out (vty, " ip rip receive %s%s",
 		 LOOKUP (ri_version_msg, ri->ri_receive), VTY_NEWLINE);
 
-#ifdef RIP_ADVANCD
+#ifdef RIP_ADVANCED
       if (ri->ri_default_send != RIP_DEFAULT_ADVERTISE_UNSPEC)
 	vty_out (vty, " advertize default%s", VTY_NEWLINE);
 

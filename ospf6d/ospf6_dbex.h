@@ -19,17 +19,28 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF6_ZEBRA_H
-#define OSPF6_ZEBRA_H
+#ifndef OSPF6_DBEX_H
+#define OSPF6_DBEX_H
 
-extern struct zebra *zebra;
+/* for ack_type() */
+#define NO_ACK       0
+#define DELAYED_ACK  1
+#define DIRECT_ACK   2
 
-int ospf6_zebra_get_interface (int, struct zebra *, zebra_size_t);
-int ospf6_zebra_read (struct thread *); 
-void ospf6_zebra_init ();
-void zebra_start ();
-void ospf6_zebra_add (struct ospf6_rtentry *);
-void ospf6_zebra_delete (struct ospf6_rtentry *);
+#define NONE       0
+#define FLOODBACK  1
+#define IMPLIEDACK 2
+#define DUPLICATE  4
 
-#endif /*OSPF6_ZEBRA_H*/
+/* Function Prototypes */
+int prepare_neighbor_lsdb (struct neighbor *);
+int check_neighbor_lsdb (struct iovec *, struct neighbor *);
+int proceed_summarylist (struct neighbor *);
+void direct_acknowledge (struct lsa_internal *);
+void delayed_acknowledge (struct lsa_internal *);
+int lsa_receive (struct lsa_hdr *, struct neighbor *);
+int ack_type (struct lsa_internal *, int, int);
+int lsa_flood (struct lsa_internal *);
+
+#endif /* OSPF6_DBEX_H */
 

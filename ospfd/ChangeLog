@@ -1,3 +1,17 @@
+1999-07-15  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_spf.c (ospf_spf_init), (ospf_spf_free),
+	(ospf_spf_has_vertex), (ospf_vertex_lookup),
+	(ospf_spf_next_router), (ospf_spf_next_network),
+	(ospf_spf_closest_vertex), (ospf_spf_calculate):
+	function added.
+
+1999-07-13  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_ism.c: fix bug of DR Election.
+
+	* ospf_nsm.c: fix bug of adjacency forming.
+
 1999-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospfd.c (ospf_init): Change to use install_default.

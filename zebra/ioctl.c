@@ -66,6 +66,37 @@ if_ioctl (int request, caddr_t buffer)
   return 0;
 }
 
+#ifdef HAVE_IPV6
+int
+if_ioctl_ipv6 (int request, caddr_t buffer)
+{
+  int sock;
+  int ret = 0;
+  int err = 0;
+
+  sock = socket (AF_INET6, SOCK_DGRAM, 0);
+  if (sock < 0)
+    {
+      perror ("socket");
+      exit (1);
+    }
+
+  ret = ioctl (sock, request, buffer);
+  if (ret < 0)
+    {
+      err = errno;
+    }
+  close (sock);
+  
+  if (ret < 0) 
+    {
+      errno = err;
+      return ret;
+    }
+  return 0;
+}
+#endif /* HAVE_IPV6 */
+
 /*
  * get interface metric
  *   -- if value is not avaliable set -1
@@ -236,7 +267,7 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
     struct prefix_ipv4 ifroute;
 
     ifroute = *p;
-    apply_mask (&ifroute);
+    apply_mask_ipv4 (&ifroute);
     kernel_add_ipv4 (&ifroute, NULL, ifp->index, 0, 0);
   }
 #endif /* LINUX_VERSION_CODE */
@@ -333,3 +364,135 @@ if_unset_flags (struct interface *ifp, unsigned long flag)
     }
   return 0;
 }
+
+#ifdef HAVE_IPV6
+
+#ifdef LINUX_IPV6
+#ifndef _LINUX_IN6_H
+/* linux/include/net/ipv6.h */
+struct in6_ifreq 
+{
+  struct in6_addr ifr6_addr;
+  u_int32_t ifr6_prefixlen;
+  int ifr6_ifindex;
+};
+#endif /* _LINUX_IN6_H */
+
+/* Interface's address add/delete functions. */
+int
+if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+{
+  int ret;
+  struct in6_ifreq ifreq;
+
+  memset (&ifreq, 0, sizeof (struct in6_ifreq));
+
+  memcpy (&ifreq.ifr6_addr, &p->prefix, sizeof (struct in6_addr));
+  ifreq.ifr6_ifindex = ifp->index;
+  ifreq.ifr6_prefixlen = p->prefixlen;
+
+  ret = if_ioctl_ipv6 (SIOCSIFADDR, (caddr_t) &ifreq);
+
+  return ret;
+}
+
+int
+if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+{
+  int ret;
+  struct in6_ifreq ifreq;
+
+  memset (&ifreq, 0, sizeof (struct in6_ifreq));
+
+  memcpy (&ifreq.ifr6_addr, &p->prefix, sizeof (struct in6_addr));
+  ifreq.ifr6_ifindex = ifp->index;
+  ifreq.ifr6_prefixlen = p->prefixlen;
+
+  ret = if_ioctl_ipv6 (SIOCDIFADDR, (caddr_t) &ifreq);
+
+  return ret;
+}
+#else /* LINUX_IPV6 */
+#ifdef HAVE_IN6_ALIASREQ
+int
+if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+{
+  int ret;
+  struct in6_aliasreq addreq;
+  struct sockaddr_in6 addr;
+  struct sockaddr_in6 mask;
+
+  bzero (&addreq, sizeof addreq);
+  strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
+
+  bzero (&addr, sizeof (struct sockaddr_in6));
+  addr.sin6_addr = p->prefix;
+  addr.sin6_family = p->family;
+#ifdef HAVE_SIN_LEN
+  addr.sin6_len = sizeof (struct sockaddr_in6);
+#endif
+  memcpy (&addreq.ifra_addr, &addr, sizeof (struct sockaddr_in6));
+
+  bzero (&mask, sizeof (struct sockaddr_in6));
+  masklen2ip6 (p->prefixlen, &mask.sin6_addr);
+  mask.sin6_family = p->family;
+#ifdef HAVE_SIN_LEN
+  mask.sin6_len = sizeof (struct sockaddr_in6);
+#endif
+  memcpy (&addreq.ifra_prefixmask, &mask, sizeof (struct sockaddr_in6));
+  
+  ret = if_ioctl_ipv6 (SIOCAIFADDR_IN6, (caddr_t) &addreq);
+  if (ret < 0)
+    return ret;
+  return 0;
+}
+
+int
+if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+{
+  int ret;
+  struct in6_aliasreq addreq;
+  struct sockaddr_in6 addr;
+  struct sockaddr_in6 mask;
+
+  bzero (&addreq, sizeof addreq);
+  strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
+
+  bzero (&addr, sizeof (struct sockaddr_in6));
+  addr.sin6_addr = p->prefix;
+  addr.sin6_family = p->family;
+#ifdef HAVE_SIN_LEN
+  addr.sin6_len = sizeof (struct sockaddr_in6);
+#endif
+  memcpy (&addreq.ifra_addr, &addr, sizeof (struct sockaddr_in6));
+
+  bzero (&mask, sizeof (struct sockaddr_in6));
+  masklen2ip6 (p->prefixlen, &mask.sin6_addr);
+  mask.sin6_family = p->family;
+#ifdef HAVE_SIN_LEN
+  mask.sin6_len = sizeof (struct sockaddr_in6);
+#endif
+  memcpy (&addreq.ifra_prefixmask, &mask, sizeof (struct sockaddr_in6));
+  
+  ret = if_ioctl_ipv6 (SIOCDIFADDR_IN6, (caddr_t) &addreq);
+  if (ret < 0)
+    return ret;
+  return 0;
+}
+#else
+int
+if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+{
+  return 0;
+}
+
+int
+if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+{
+  return 0;
+}
+#endif /* HAVE_IN6_ALIASREQ */
+
+#endif /* LINUX_IPV6 */
+
+#endif /* HAVE_IPV6 */

@@ -96,7 +96,7 @@ ospf6_zebra_get_interface (int command, struct zebra *zebra,
           connected_add (ifp, connected);
         }
 
-      /* Daemon specific process. should be replaced by hook. */
+      /* XXX Daemon specific process. should be replaced by hook. */
       {
         struct ospf6_if *o6if = (struct ospf6_if *)ifp->if_data;
         if (o6if && o6if->area)
@@ -109,6 +109,60 @@ ospf6_zebra_get_interface (int command, struct zebra *zebra,
     }
   return 0;
 }
+
+
+void
+ospf6_zebra_add (struct ospf6_rtentry *p)
+{
+  listnode n;
+  struct ospf6_nexthop *q;
+  char buf[128];
+
+  if (zebra->sock < 0)
+    return;
+
+  if (! zebra->redist[ZEBRA_ROUTE_OSPF6])
+    return;
+
+  if (p->dest_type != DTYPE_PREFIX)
+    return;
+
+  for (n = listhead (p->nexthops); n; nextnode (n))
+    {
+      q = getdata (n);
+      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, &p->dest_id.prefix,
+                      &q->ipaddr, q->ifindex);
+      prefix2str ((struct prefix *)&p->dest_id.prefix, buf, sizeof (buf));
+      o6log.zebra ("zebra add %s", buf);
+    }
+}
+
+void
+ospf6_zebra_delete (struct ospf6_rtentry *p)
+{
+  listnode n;
+  struct ospf6_nexthop *q;
+  char buf[128];
+
+  if (zebra->sock < 0)
+    return;
+
+  if (! zebra->redist[ZEBRA_ROUTE_OSPF6])
+    return;
+
+  if (p->dest_type != DTYPE_PREFIX)
+    return;
+
+  for (n = listhead (p->nexthops); n; nextnode (n))
+    {
+      q = getdata (n);
+      zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_OSPF6, &p->dest_id.prefix,
+                         &q->ipaddr, q->ifindex);
+      prefix2str ((struct prefix *)&p->dest_id.prefix, buf, sizeof (buf));
+      o6log.zebra ("zebra delete %s", buf);
+    }
+}
+
 
 DEFUN (router_zebra,
        router_zebra_cmd,

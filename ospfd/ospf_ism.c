@@ -127,7 +127,7 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
       if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
 	list_add_node (bdr_list, nbr);
 
-      list_add_node (no_dr_list , nbr);
+      list_add_node (no_dr_list, nbr);
     }
 
   /* Elect Backup Designated Router. */
@@ -232,12 +232,39 @@ ospf_dr_election (struct ospf_interface *oi)
 
   list_delete_all (el_list);
 
+  /* if DR or BDR changes, cause AdjOK? neighbor event. */
+  if (!IPV4_ADDR_SAME (&old_dr, &oi->d_router) ||
+      !IPV4_ADDR_SAME (&old_bdr, &oi->bd_router))
+    {
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  nbr = rn->info;
+
+	  /* ignore 0.0.0.0 node*/
+	  if (nbr->router_id.s_addr == 0)
+	    continue;
+
+	  /* Is neighbor upper 2-Way? */
+	  if (nbr->status < NSM_TwoWay)
+	    continue;
+
+	  /* ignore myself. */
+	  if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	    continue;
+
+	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_AdjOK);
+	}
+    }
+
   /* Multicast group change. */
-  if ((old_status != ISM_DR || old_status != ISM_Backup) &&
+  if ((old_status != ISM_DR && old_status != ISM_Backup) &&
       (new_status == ISM_DR || new_status == ISM_Backup))
     ospf_if_add_alldrouters (oi->ifp, oi->fd, oi->address);
   else if ((old_status == ISM_DR || old_status == ISM_Backup) &&
-	   (new_status != ISM_DR || new_status == ISM_Backup))
+	   (new_status != ISM_DR && new_status != ISM_Backup))
     ospf_if_drop_alldrouters (oi->ifp, oi->fd, oi->address);
 
   return new_status;
@@ -571,6 +598,7 @@ void
 ism_change_status (struct ospf_interface *oi, int status)
 {
   struct ospf_lsa *lsa;
+  int o_status;
 
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (ism, ISM_STATUS))
@@ -578,20 +606,33 @@ ism_change_status (struct ospf_interface *oi, int status)
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  LOOKUP (ospf_ism_status_msg, status));
 
+  o_status = oi->status;
   oi->status = status;
 
   /* Originate router-LSA. */
   if (oi->area)
     {
+      if (ROUTER_LSA_SELF (oi->area) != NULL)
+	ospf_lsa_free (ROUTER_LSA_SELF (oi->area));
+
       lsa = ospf_router_lsa (oi);
       ospf_add_router_lsa (oi->area, lsa);
+      ROUTER_LSA_SELF (oi->area) = lsa;
     }
 
   /* Originate network-LSA. */
-  if (status == ISM_DR)
+  if (o_status != ISM_DR && status == ISM_DR)
     {
       lsa = ospf_network_lsa (oi);
       ospf_add_network_lsa (oi->area, lsa);
+      NETWORK_LSA_SELF (oi->area) = lsa;
+    }
+
+  if (o_status == ISM_DR && status != ISM_DR)
+    {
+      if (NETWORK_LSA_SELF (oi->area) != NULL)
+	ospf_lsa_free (NETWORK_LSA_SELF (oi->area));
+      NETWORK_LSA_SELF (oi->area) = NULL;
     }
 
   /* Preserve old status? */

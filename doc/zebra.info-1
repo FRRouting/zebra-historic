@@ -17,7 +17,7 @@ TCP/IP based routing protocols such as RIPv1, RIPv2, OSPFv2, OSPFv3,
 BGP-4, BGP-4+ and so on.  Zebra turns your machine into a full powered
 router.
 
-   This is the Zebra Manual for zebra-0.72.
+   This is the Zebra Manual for zebra-0.73.
 
    This manual describes `zebra' and some other beasts.
 
@@ -775,9 +775,39 @@ File: zebra.info,  Node: ripd,  Next: ripngd,  Prev: zebra,  Up: Top
 ripd
 ****
 
-   The Routing Information Protocol RIP is legendary protoocl.  It is
+   The Routing Information Protocol RIP is legendary protocol.  It is a
 very simple distance vector routing protocol. `ripd' supports RIP
 version 2 described in RFC2453 and RIP version 1 described in RFC1058.
+RIP is a "distance-vector" protocol, based on the "Bellman-Ford"
+algorithms.  The RIP protocol was developed in the 1970s at Xerox labs
+as part of the XNS routing protocol.  As a distance-vector protocol,
+routers running RIP will send updates to its neighbors thus allowing the
+convergence to a known topology.  In each update, the distance of any
+given router will be broadcast to its neighbor.
+
+   The following points are important to consider in the implementation
+of ripd:
+
+   One of the characteristics of ripd used in Zebra is that the user
+must have a root privilege.  `ripd' uses port 521, but in order to bind
+this port, a privilege is needed.
+
+   Netmask of ripd supports both version 1 and version 2 of RIP.
+Version 1 of RIP originally contained no netmask information.  In RIP
+version 1, classes were originally used to determine the size of the
+network mask.  Class A networks use 8 bits of mask, Class B networks
+use 16 bits of masks, while Class C networks use 24 bits of mask.
+Today, the most widely used method of a network mask is assigned to the
+packet in the basis of the interface that received the packet.  Version
+2 of RIP supports a variable length subnet mask (VLSM).  By extending
+the subnet mask, the mask can be divided and reused.  Each subnet can
+be used for different purposes such as large to middle size LANs and
+WAN links.  Zebra ripd does not support the non-sequential net masks
+that are included in RIP Version 2.
+
+   In a case of the same information with the same prefix and metric,
+the old information will be suppressed.  Ripd does not currently support
+equal cost multipath routing.
 
 * Menu:
 
@@ -806,65 +836,104 @@ File: zebra.info,  Node: ripd configuration,  Next: Filtering RIP route,  Prev: 
 ripd configuration
 ==================
 
-   What is RIP.  16 hop limitation. First used in Xerox.
-
  - Command: router rip
-     Enable RIP process.
+     The "router rip" command is necessary to enable RIP.  To disable
+     RIP, use the "no router" command.  RIP must be enabled before
+     carrying out any of the commands listed below in section 6.2.
 
-   Difference between version 1 and 2.
+   RIP can be configured to process either Version 1 or Version 2, but
+the default mode is Version 2.  If no version is specified, the RIP will
+default to Version 2.  In the case that RIP is set to Version 1, the
+setting "Version 1" will be displayed, but the setting "Version 2" will
+not be displayed whether or not Version 2 is set explicitly as the
+version of RIP being used.
 
  - RIP Command: version VERSION
      Set RIP process's version.  VERSION can be `1' or `2'.
-
-   How to specify enable network.
 
  - RIP Command: network NETWORK
  - RIP Command: no network NETWORK
      Set RIP enable interface by NETWORK.  The interfaces which has
      address matched to NETWORK is enabled.
 
+     This group of commands either enables or disables RIP interfaces
+     between certain numbers of a specified network address.  For
+     example, if network for 10.0.0.0/24 is enabled for RIP, this would
+     result in all the addresses from 10.0.0.0 to 10.0.0.255 being
+     enabled for RIP.  The no network command will disable RIP for the
+     specified network.
+
  - RIP Command: network IFNAME
  - RIP Command: no network IFNAME
-     Set RIP enable interface by IFNAME.
-
-   When neighbor doesn't understand multicast then specivy neighbor.
+     Set RIP enable interface by IFNAME.  Both the sending and
+     receiving of RIP will be enabled only on the on the port specified
+     in the network ifname command.  The "no network ifname" command
+     will disable RIP on the specified inferface name
 
  - RIP Command: neighbor A.B.C.D
  - RIP Command: no neighobr A.B.C.D
-     Specify RIP neighbor.
+     Specify RIP neighbor.  This command is used when a neighbor doesn't
+     understand multicast to specify a neighbor.  In some cases, not all
+     routers will be able to understand multicasting, where packets are
+     sent to network or group addresses.  In a situation where a
+     neighbor can not process multicast routing, it is necessary to
+     establish a direct link between router and router.  The neighbor
+     command allows the network administrator to specify a router as a
+     RIP neighbor though its address.  The no neighbor a.b.c.d. command
+     will disable the RIP neighbor.
 
    How to announce RIP route.
 
  - RIP commnad: redistribute static
  - RIP command: no redistribute static
-     Redistribute static route.
+     Redistribute static redistributes routing information from a
+     static route into RIP. No redistribute static disables the route.
 
  - RIP commnad: redistribute connected
  - RIP commnad: no redistribute connected
-     Redistribute connected route.
+     Redistribute a connected route into the RIP domain.  No
+     redistribute connected disables the connected route in the RIP
+     domain.
 
    If you want to specify RIP only static route.
 
  - RIP command: route A.B.C.D/M
  - RIP command: no route A.B.C.D/M
-     RIP only static route configuration.  In normal case, please set
-     static route in zebra and redistribute it by `redistribute static'.
+     This command is specific to Zebra.  The route command makes a
+     static route only inside RIP. This command should be used only be
+     advanced users who are particularly knowledgeable about the RIP
+     protocol.  In most cases, we reccomend creating a static route in
+     Zebra and redistributing it in RIP using 'redistribute static.'
 
    There is four timers in RIP.  One is
 
  - RIP command: timers basic UPDATE INVALID HOLDDOWN FLUSH
+     The default settings for the timers are as follows Update timer is
+     30 seconds.  The invalid timer is 180 seconds after which a route
+     will be marked as invalid.  The holddown timer is 180 seconds.
+     During holddown, new routes will not be instituted after a route
+     is considered invalid.  The flush command is 240 seconds, after
+     which a route will be removed from the routing table after being
+     declared invalid.
 
-   Make it back to default configuation.
+     The 'timers basic commnad' allows the the default values of the
+     timers listed above to be changed.
 
  - RIP command: no timers basic
-     Set RIP's timer.
+     The 'no timers basic' command will reset the timers to default
+     settings listed above.
 
  - Interface command: ip rip send version VARSION
      VARSION can be `1', `2', `1 2'.  This configuration override
-     router rip's version setting.
+     router rip's version setting.  This command will enable the
+     selected interface to send packets with RIP Version 1, RIP Version
+     2, or both.  In the case of '1 2', packets will be both broadcast
+     and multicast.
 
  - Interface command: ip rip receive version VARSION
-     Version setting for incoming RIP packet.
+     Version setting for incoming RIP packet.  This command will enable
+     the selected interface to receive packets in RIP Version 1, RIP
+     Version 2, or both.
 
 
 File: zebra.info,  Node: Filtering RIP route,  Next: ripd terminal mode commands,  Prev: ripd configuration,  Up: ripd
@@ -879,8 +948,22 @@ Filtering RIP route
      command.  ACCESS_LIST is access list name.  DIRECT is `in' or
      `out'.  If DIRECT is `in' access list is applied to input packet.
 
-          distribute-list local-only out eth0
-          distribute-list remote-route in ppp0
+     The distribute-list command can be used to filter the RIP path.
+     Distribute-list can apply access-list to a chosen interface.
+     First, one should specify the access-list.  Next, the name of the
+     access list is used in the distribute-list command.  For example,
+     in the following configuration eth0 will permit only the paths
+     that match the route 10.0.0.0/8
+
+          !
+          access-list private permit 10 10.0.0.0/8
+          access-list private deny any
+          !
+          distribute-list private in eth0
+          !
+
+   Distribute list can be applied both to incoming and outgoing
+directions.
 
 
 File: zebra.info,  Node: ripd terminal mode commands,  Next: ripd debug commands,  Prev: Filtering RIP route,  Up: ripd
@@ -893,7 +976,10 @@ ripd terminal mode commands
  - Command: show ip rip
      Show RIP routes.
 
-   Exmaple here.
+   The command will display all RIP routes. For routes that receive
+through RIP, this command will display the time the packet was sent and
+the tag information.  This command will also display this information
+for routes redistributed into RIP.
 
 
 File: zebra.info,  Node: ripd debug commands,  Prev: ripd terminal mode commands,  Up: ripd
@@ -906,14 +992,28 @@ ripd debug commands
  - Command: debug rip events
      Debug rip events.
 
+   Debug RIP will show RIP events.  Sending and receiving packets,
+timers, and changes in interface are currently events in ripd.
+
  - Command: debug rip packet
      Debug rip packet.
+
+   Debug rip packet will display detailed information about the RIP
+packets.  The origin and port number of the packet as well as the packet
+dump will be displayed.
 
  - Command: debug rip zebra
      Debug rip between zebra communication.
 
+   This command will show the communication between ripd and zebra.  The
+main information will include addition and deletion of paths to the
+kernel and the sending and receiving of interface information.
+
  - Command: show debugging rip
      Display ripd's debugging option.
+
+   Show debugging rip will show all information currently set for ripd
+debug.
 
 
 File: zebra.info,  Node: ripngd,  Next: ospfd,  Prev: ripd,  Up: Top

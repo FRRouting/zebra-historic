@@ -24,8 +24,7 @@
 static void
 print_vertex (struct vertex *W)
 {
-  log_spf ("    VertexID-1 = %s", inet4str (W->vtx_id[0]));
-  log_spf ("    VertexID-2 = %s", inet4str (W->vtx_id[1]));
+  o6log.spf (" vtx %s[%lu]", inet4str (W->vtx_id[0]), W->vtx_id[1]);
 }
 
 static struct vertex *
@@ -71,18 +70,47 @@ vertex_free (struct vertex *v)
   return 0;
 }
 
+/* hold the intermediate results on area routing table */
+static void
+transit_vertex_rtable_install (struct vertex *v, struct area *area)
+{
+  unsigned char dtype;
+  union dest_id did;
+
+  if (IS_VTX_ROUTER_TYPE (v))
+    {
+      dtype = DTYPE_INTRA_ROUTER;
+      did.router_id = v->vtx_id[0];
+    }
+  else if (IS_VTX_NETWORK_TYPE (v))
+    {
+      dtype = DTYPE_INTRA_LINK;
+      did.network_id[0] = v->vtx_id[0];
+      did.network_id[1] = ntohl (v->vtx_id[1]);
+    }
+  else
+    {
+      o6log.spf ("!Unkown vertex type");
+      assert (0);
+    }
+
+  rtable_install (dtype, &did, v->vtx_distance, PTYPE_INTRA,
+                  v->vtx_nexthops, v->vtx_lsa, &area->rtable);
+  return;
+}
+
 static int
 spf_install (struct vertex *v, struct area *area)
 {
   listnode n;
   struct vertex *parent;
 
+  o6log.spf ("SPF install, depth:%lu, distance:%lu",
+             v->vtx_depth, v->vtx_distance);
+  print_vertex (v);
+
   if (v->vtx_depth == 0)
-    {
-      log_spf ("Installing Root...");
-      print_vertex (v);
-      area->spftree.root = v;
-    }
+    area->spftree.root = v;
 
   for (n = listhead (v->vtx_parent); n; nextnode (n))
     {
@@ -95,6 +123,7 @@ spf_install (struct vertex *v, struct area *area)
                                          [hash (v->vtx_id[1])], v);
   list_add_node (area->spftree.depthlist [v->vtx_depth], v);
 
+  transit_vertex_rtable_install (v, area);
   return 0;
 }
 
@@ -104,6 +133,8 @@ spf_init (struct area *area)
   int i, j;
   listnode n;
   struct vertex *v;
+
+  rtable_init (&area->rtable);
 
   /* Clear search list */
   for (i = 0; i < HASHVAL; i++)
@@ -143,9 +174,9 @@ spf_init (struct area *area)
                                (struct ospf6_if *)NULL));
   v->vtx_distance = 0;
   v->vtx_depth = 0;
+
   spf_install (v, area);
 
-  rtable_init (&area->rtable);
   return 0;
 }
 
@@ -189,6 +220,9 @@ router_link (struct vertex *V)
                           lsa->area, lsa->ospf6_if);
       if (!w_lsa || !w_lsa->lsh || calc_lsa_age_external (w_lsa) == MAXAGE)
         {
+          o6log.spf ("can't find NetworkLSA of %s[%d]",
+                     inet4str (currentlink->rlsd_neighbor_router_id),
+                     ntohl (currentlink->rlsd_neighbor_interface_id));
           currentlink++;
           goto nextlink;
         }
@@ -205,6 +239,8 @@ router_link (struct vertex *V)
         }
       if (linkback == 0)
         {
+          o6log.spf ("no link back to %s",
+                     inet4str (w_lsa->lsh->lsh_advrtr));
           currentlink++;
           goto nextlink;
         }
@@ -219,11 +255,14 @@ router_link (struct vertex *V)
       return W;
 
     case LSDT_POINTTOPOINT:
+      /* XXX multiple RouterLSA not yet */
       w_lsa = lsa_lookup (htons (LST_ROUTER_LSA), htonl (MY_ROUTER_LSA_ID),
                           currentlink->rlsd_neighbor_router_id,
                           lsa->area, lsa->ospf6_if);
       if (!w_lsa || !w_lsa->lsh || calc_lsa_age_external (w_lsa) == MAXAGE)
         {
+          o6log.spf ("can't find RouterLSA of %s",
+                     inet4str (currentlink->rlsd_neighbor_router_id));
           currentlink++;
           goto nextlink;
         }
@@ -233,7 +272,7 @@ router_link (struct vertex *V)
            (char *)rlsd < (char *)w_lsa->lsh + ntohs (w_lsa->lsh->lsh_len);
            rlsd++)
         {
-          /* XXX Should We check rlsd_neighbor_interface_id, too? */
+          /* XXX Should we check rlsd_neighbor_interface_id, too? */
           if (rlsd->rlsd_type == LSDT_POINTTOPOINT &&
               rlsd->rlsd_neighbor_router_id == lsa->lsh->lsh_advrtr)
             {
@@ -243,6 +282,8 @@ router_link (struct vertex *V)
         }
       if (linkback == 0)
         {
+          o6log.spf ("no link back to %s",
+                     inet4str (lsa->lsh->lsh_advrtr));
           currentlink++;
           goto nextlink;
         }
@@ -257,9 +298,8 @@ router_link (struct vertex *V)
       return W;
 
     default:
-      zvlog_warn ("Some thing has gone wrong in SPF calculation"
-                  " for Area[%s], reset",
-                  inet4str (V->vtx_lsa->area->area_id));
+      o6log.spf ("!unknown link type, stop calculation for area %s",
+                 inet4str (V->vtx_lsa->area->area_id));
       lsa = (struct lsa_internal *)NULL;
       return (struct vertex *)NULL;
     }
@@ -298,6 +338,8 @@ network_link (struct vertex *V)
                       *currentlink, lsa->area, lsa->ospf6_if);
   if (!w_lsa || !w_lsa->lsh || calc_lsa_age_external (w_lsa) == MAXAGE)
     {
+      o6log.spf ("can't find RouterLSA of %s",
+                 inet4str (*currentlink));
       currentlink++;
       goto nextlink_of_this_network;
     }
@@ -317,6 +359,9 @@ network_link (struct vertex *V)
     }
   if (linkback == 0)
     {
+      o6log.spf ("no link back to %s[%lu]",
+                 inet4str (lsa->lsh->lsh_advrtr),
+                 ntohl (lsa->lsh->lsh_id));
       currentlink++;
       goto nextlink_of_this_network;
     }
@@ -375,8 +420,7 @@ spf_calculation (struct thread *thread)
 
   area->spf_calc = (struct thread *)NULL;
 
-  /* Commented out due to compilation error. */
-  zvlog_info ("Doing SPF Calculation for area %s", area->str);
+  o6log.spf ("Doing SPF Calculation for area %s", area->str);
 
   /* (1) */
   spf_init (area);
@@ -388,7 +432,7 @@ spf_calculation (struct thread *thread)
     {
       for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
         {
-          log_spf ("Current Candidate:");
+          o6log.spf ("checking link to...");
           print_vertex (W);
 
           already = 0;
@@ -405,7 +449,7 @@ spf_calculation (struct thread *thread)
             }
           if (already)
             {
-              log_spf ("Already on the SPF Tree");
+              o6log.spf ("already on SPF tree");
               vertex_free (W);
               continue;
             }
@@ -460,8 +504,6 @@ spf_calculation (struct thread *thread)
             closest = p;
         }
       list_delete_by_val (candidatelist, closest);
-      log_spf ("Installing ...");
-      print_vertex (closest);
       spf_install (closest, area);
       V = closest;
     }
@@ -469,47 +511,8 @@ spf_calculation (struct thread *thread)
   assert (listcount (candidatelist) == 0);
   list_free (candidatelist);
 
-  zvlog_info ("SPF Calculation Done for area %s", area->str);
+  o6log.spf ("SPF Calculation for area %s done", area->str);
   return 0;
-}
-
-void
-route_install_internal (struct ospf6_prefix *dst, cost_t cost,
-                        struct in6_addr *nexthop, unsigned long ifindex,
-                        struct area *area)
-{
-#if 0
-  char str[64];
-
-  /* Install Internal Routing Table */
-  memcpy (&area->rt_table[area->tablesize].destination,
-          (dst + 1),
-          OSPF6_PREFIX_SPACE (dst->o6p_prefix_len));
-  inet_ntop (AF_INET6, &area->rt_table[area->tablesize].destination,
-             str, sizeof (str));
-  zvlog_debug ("Installed %s in internal table", str);
-  area->rt_table[area->tablesize].cost = cost;
-  area->rt_table[area->tablesize].prefixlength
-    = dst->o6p_prefix_len;
-
-  zvlog_debug ("ifindex: %lu", ifindex);
-  area->rt_table[area->tablesize].ifindex
-    = ifindex;
-  if (nexthop)
-    memcpy (&area->rt_table[area->tablesize].next_hop,
-            nexthop, sizeof (struct in6_addr));
-  else
-    {
-      char str[64];
-      inet_ntop (AF_INET6, &area->rt_table[area->tablesize].destination,
-                 str, sizeof (str));
-      zvlog_err ("nexthop not found for destination %s", str);
-      memset (&area->rt_table[area->tablesize].next_hop, 0,
-              sizeof (struct in6_addr));
-    }
-  area->tablesize++;
-#endif
-  return;
 }
 
 list
@@ -521,11 +524,11 @@ get_prefix_lsa_of_vertex (struct vertex *v, struct area *area)
   switch (ntohs (v->vtx_lsa->lsh->lsh_type))
     {
     case LST_ROUTER_LSA:
-      retlist = lsa_lookup_by_advrtr (ntohs (LST_INTRA_AREA_PREFIX_LSA),
+      retlist = lsa_lookup_by_advrtr (htons (LST_INTRA_AREA_PREFIX_LSA),
                                       v->vtx_lsa->lsh->lsh_advrtr, area);
       break;
     case LST_NETWORK_LSA:
-      lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
+      lsi = lsa_lookup (htons (LST_INTRA_AREA_PREFIX_LSA),
                         v->vtx_lsa->lsh->lsh_id,
                         v->vtx_lsa->lsh->lsh_advrtr,
                         area, (struct ospf6_if *)NULL);
@@ -540,101 +543,5 @@ get_prefix_lsa_of_vertex (struct vertex *v, struct area *area)
     }
 
   return retlist;
-}
-
-void
-vertex_check_route (struct vertex *v, struct area *area)
-{
-  list lsalist = NULL;
-  listnode n;
-  struct intra_area_prefix_lsa *intra_prefix_lsa;
-  struct lsa_internal *lsi;
-  struct ospf6_prefix *prefix;
-  int j;
-  union dest_id dest_id;
-  cost_t cost;
-
-  zvlog_debug ("ROUTECALC:    V->lsa = [%s]",
-               print_lsahdr (v->vtx_lsa->lsh));
-
-  lsalist = get_prefix_lsa_of_vertex (v, area);
-  if (!lsalist)
-    {
-      zvlog_debug ("ROUTECALC: Intra-Area-Prefix-LSA Not"
-                   " Found for %s",
-                   print_lsahdr (v->vtx_lsa->lsh));
-      return;
-    }
-
-  for (n = listhead (lsalist); n; nextnode (n))
-    {
-      lsi = (struct lsa_internal *) getdata (n);
-      intra_prefix_lsa = (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
-      zvlog_debug ("ROUTECALC:    Prefix-LSA: %s",
-                   print_lsahdr (lsi->lsh));
-
-      /* Back pointer check */
-      if (intra_prefix_lsa->intra_prefix_refer_lstype !=
-          v->vtx_lsa->lsh->lsh_type
-          || intra_prefix_lsa->intra_prefix_refer_lsid !=
-          v->vtx_lsa->lsh->lsh_id
-          || intra_prefix_lsa->intra_prefix_refer_advrtr !=
-          v->vtx_lsa->lsh->lsh_advrtr)
-        {
-          struct lsa_hdr tmplsh;
-          tmplsh.lsh_type = intra_prefix_lsa->intra_prefix_refer_lstype;
-          tmplsh.lsh_id = intra_prefix_lsa->intra_prefix_refer_lsid;
-          tmplsh.lsh_advrtr = intra_prefix_lsa->intra_prefix_refer_advrtr;
-          zvlog_debug ("ROUTECALC:    no back pointer(%s)",
-                       print_lsahdr (&tmplsh));
-          continue;
-        }
-
-      prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
-
-      for (j = 0; j < ntohs (intra_prefix_lsa->intra_prefix_num); j++)
-        {
-          /* Should I check if this route already on the table? */
-
-          if (IS_VTX_ROUTER_TYPE (v)) /* Indicating router. */
-            cost = v->vtx_distance + ntohs (prefix->o6p_prefix_metric);
-          else                   /* network */
-            cost = v->vtx_distance;
-
-          ospf6_prefix_in6_addr (prefix + 1, &dest_id.prefix);
-          rtable_install (DTYPE_PREFIX, &dest_id, cost, PTYPE_INTRA,
-                          v->vtx_nexthops, &area->rtable);
-          prefix = OSPF6_NEXT_PREFIX (prefix);
-        }
-    }
-
-  list_delete_all (lsalist);
-  return;
-}
-
-int
-routing_table_calculation (struct thread *thread)
-{
-  int i;
-  listnode n;
-  struct vertex *v;
-  struct area *area;
-
-  area = (struct area *)THREAD_ARG (thread);
-  assert (area);
-
-  area->route_calc = (struct thread *)NULL;
-
-  for (i = 0; i < MAXDEPTH; i++)
-    {
-      zvlog_debug ("ROUTECALC: depth[%d]", i);
-      for (n = listhead (area->spftree.depthlist[i]); n; nextnode (n))
-        {
-          v = (struct vertex *) getdata (n);
-          vertex_check_route (v, area);
-        }
-    }
-
-  return 0;
 }
 

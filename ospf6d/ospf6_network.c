@@ -196,11 +196,8 @@ iov_free (int mtype, struct iovec *iov, u_int begin, u_int end)
 
   for (i = begin; i < end; i++)
     {
-#ifdef DEBUG_LSAPTR
       if (mtype == MTYPE_OSPF6_LSA)
-        zvlog_debug ("LSAPTR: Freeing (%#x) in iov_free()",
-                     iov[i].iov_base);
-#endif
+        o6log.pointer ("free %#x in iov_free()", iov[i].iov_base);
       XFREE (mtype, iov[i].iov_base);
       iov[i].iov_base = NULL;
       iov[i].iov_len = 0;
@@ -456,7 +453,7 @@ rvmsg_ok:
 
   {
     char ntopbuf[32];
-    zvlog_debug ("Recv %s from %s on %s",
+    zvlog_debug ("receive %s from %s on %s",
                   mesg_name[ospf6_hdr->type],
                   inet_ntop (src->sin6_family, (char *)&src->sin6_addr,
                              ntopbuf, sizeof (ntopbuf)),
@@ -753,17 +750,17 @@ ospf6_send (u_char msgtype, struct iovec *iov,
     char *dstname, ntopbuf[32], ifnamebuf[16];
     struct ospf6_hdr *ospf6_hdr = (struct ospf6_hdr *)iov[0].iov_base;
     dstname = (char *)&((struct sockaddr_in6 *)dst)->sin6_addr;
-    zvlog_debug ("Send %s to %s on %s",
-                 mesg_name[ospf6_hdr->type],
-                 inet_ntop (dst->sa_family, dstname,
-                            ntopbuf, sizeof (ntopbuf)),
-                 if_indextoname (pktinfo->ipi6_ifindex, ifnamebuf));
+    o6log.network ("send %s to %s on %s",
+                   mesg_name[ospf6_hdr->type],
+                   inet_ntop (dst->sa_family, dstname,
+                              ntopbuf, sizeof (ntopbuf)),
+                   if_indextoname (pktinfo->ipi6_ifindex, ifnamebuf));
   }
 
   if (num != iov_totallen (iov))
     {
-      zlog (NULL, LOG_WARNING,"Can't send whole packet %d/%d: %s",
-                   num, iov_totallen (iov), strerror(errno));
+      zvlog_warn ("Can't send whole packet %d/%d: %s",
+                  num, iov_totallen (iov), strerror(errno));
     }
 
   iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
@@ -902,9 +899,7 @@ send_linkstate_update (struct thread *thread)
   if (make_linkstate_update (iov, &dst, nbr) < 0)
     return -1;
 
-#ifdef DEBUG_LINKSTATE_UPDATE
-  zvlog_debug ("Retransmitting LSAs");
-#endif
+  o6log.network ("retransmitting LSAs");
 
   ospf6_send (MSGT_LINKSTATE_UPDATE, iov, (struct sockaddr *)&dst,
               nbr->ospf6_if);

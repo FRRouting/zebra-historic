@@ -368,7 +368,7 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   /* get neighbor information from table. */
   key.family = AF_INET;
   key.prefixlen = 32;
-  key.u.prefix4 = ospfh->router_id;
+  key.u.prefix4 = iph->ip_src;
 
   rn = route_node_get (oi->nbrs, &key);
   if (rn->info)
@@ -480,6 +480,9 @@ ospf_db_desc_proc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
       stream_forward (oi->ibuf, OSPF_LSA_HEADER_SIZE);
     }
 
+  /* cancel DD retransmission timer before send new DD. */
+  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+
   /* Master */
   if (IS_SET_DD_MS (nbr->dd_flags))
     {
@@ -533,7 +536,7 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
 
   dd = (struct ospf_db_desc *) STREAM_PNT (oi->ibuf);
 
-  nbr = ospf_nbr_lookup_by_router_id (oi->nbrs, &ospfh->router_id);
+  nbr = ospf_nbr_lookup_by_addr (oi->nbrs, &iph->ip_src);
   if (nbr == NULL)
     {
       zlog_warn ("OSPF DD: Unknown Neighbor %s", inet_ntoa (ospfh->router_id));
@@ -560,13 +563,13 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
 	goto ExStart;
       break;
     case NSM_TwoWay:
-      zlog (NULL, LOG_WARNING, "OSPF DD packet discarded.");
+      zlog_warn ("OSPF DD packet discarded.");
       break;
     case NSM_ExStart:
     ExStart:
       /* Slave. */
-      if (IS_SET_DD_MS (dd->flags) && IS_SET_DD_M (dd->flags) &&
-	  IS_SET_DD_I  (dd->flags) && size == OSPF_DB_DESC_MIN_SIZE &&
+      if ((IS_SET_DD_ALL (dd->flags) == dd->flags) &&
+	  size == OSPF_DB_DESC_MIN_SIZE &&
 	  IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id) > 0)
 	{
 	  nbr->dd_seqnum = ntohl (dd->dd_seqnum);
@@ -678,7 +681,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
   /* increment statistics. */
   oi->ls_req_in++;
 
-  nbr = ospf_nbr_lookup_by_router_id (oi->nbrs, &ospfh->router_id);
+  nbr = ospf_nbr_lookup_by_addr (oi->nbrs, &iph->ip_src);
   if (nbr == NULL)
     {
       zlog_warn ("OSPF LS Request: Unknown Neighbor %s.",
@@ -703,7 +706,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
       ls_id.s_addr = stream_get_ipv4 (oi->ibuf);
       adv_router.s_addr = stream_get_ipv4 (oi->ibuf);
 
-      find = ospf_lsa_lookup (oi->area, ls_type, ls_id, adv_router);
+      find = ospf_lsa_lookup (oi->area, ls_type, ls_id);
       if (find == NULL)
 	OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_BadLSReq);
 
@@ -728,7 +731,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
   count = stream_getl (oi->ibuf);
 
   /* Check neighbor. */
-  nbr = ospf_nbr_lookup_by_router_id (oi->nbrs, &ospfh->router_id);
+  nbr = ospf_nbr_lookup_by_addr (oi->nbrs, &iph->ip_src);
   if (nbr == NULL)
     {
       zlog_warn ("OSPF LS Update: Unknown Neighbor %s",
@@ -844,7 +847,7 @@ ospf_ls_ack (struct ip *iph, struct ospf_header *ospfh,
   /* increment statistics. */
   oi->ls_ack_in++;
 
-  nbr = ospf_nbr_lookup_by_router_id (oi->nbrs, &ospfh->router_id);
+  nbr = ospf_nbr_lookup_by_addr (oi->nbrs, &iph->ip_src);
   if (nbr == NULL)
     {
       zlog (NULL, LOG_WARNING, "OSPF LS Request: Unknown Neighbor %s.",
@@ -892,6 +895,10 @@ ospf_check_area_id (struct ospf_interface *oi, struct in_addr ip_src,
       me.s_addr = oi->address->u.prefix4.s_addr & mask.s_addr;
       him.s_addr = ip_src.s_addr & mask.s_addr;
 
+#ifdef DEBUG
+zlog (NULL, LOG_INFO, "me = %s", inet_ntoa (me));
+zlog (NULL, LOG_INFO, "him= %s", inet_ntoa (him));
+#endif
       if (IPV4_ADDR_SAME (&me, &him))
 	return 1;
       else
@@ -972,7 +979,11 @@ ospf_verify_header (struct ospf_interface *oi,
   if (! ospf_check_area_id (oi, iph->ip_src, ospfh->area_id))
     {
       zlog (NULL, LOG_WARNING,
-	    "interface %s: ospf_read invalid Area ID.", oi->ifp->name);
+	    "interface %s: ospf_read invalid Area ID %s.",
+	    oi->ifp->name, inet_ntoa (ospfh->area_id));
+#ifdef DEBUG
+zlog_warn ("oi->area->area_id=%s", inet_ntoa(oi->area->area_id));
+#endif
       return -1;
     }
 

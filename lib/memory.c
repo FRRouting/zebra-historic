@@ -265,6 +265,7 @@ struct memory_list
   { MTYPE_BUFFER,          "Buffer          : %ld\r\n" },
   { MTYPE_BUFFER_DATA,     "Buffer data     : %ld\r\n" },
   { MTYPE_STREAM,          "Stream          : %ld\r\n" },
+  { MTYPE_RIP_INFO,        "RIP info        : %ld\r\n" },
   { -1, NULL },
 };
 

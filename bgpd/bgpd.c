@@ -714,7 +714,7 @@ DEFUN (show_ip_bgp_summary,
       peer = getdata (node);
 	  
       length = sockunion_vty_out (vty, peer->su);
-      length = 15 - length;
+      length = 16 - length;
       if (length < 0)
 	length = 0;
 
@@ -722,13 +722,13 @@ DEFUN (show_ip_bgp_summary,
       switch (peer->version) 
 	{
 	case BGP_VERSION_4:
-	  vty_out (vty, " %d ", peer->version);
+	  vty_out (vty, "%d ", peer->version);
 	  break;
 	case BGP_VERSION_MP_4:
-	  vty_out (vty, " 4+");
+	  vty_out (vty, "4+");
 	  break;
 	case BGP_VERSION_MP_4_DRAFT_00:
-	  vty_out (vty, " 4-");
+	  vty_out (vty, "4-");
 	  break;
 	}
       vty_out (vty, " %5d %7d %7d %8d %4d %4d ",
@@ -1539,11 +1539,11 @@ DEFUN (no_neighbor_route_map,
 
 DEFUN (neighbor_desc,
        neighbor_desc_cmd,
-       "neighbor A.B.C.D description ...",
+       "neighbor A.B.C.D description .DESCRIPTION",
        NEIGHBOR_STR
        "IP address\n"
        "Description\n"
-       "Description")
+       "Description strings\n")
 {
   int i;
   struct bgp *bgp;
@@ -1582,12 +1582,12 @@ DEFUN (neighbor_desc,
 
 DEFUN (no_neighbor_desc,
        no_neighbor_desc_cmd,
-       "no neighbor A.B.C.D description ...",
+       "no neighbor A.B.C.D description .DESCRIPTION",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
        "Description\n"
-       "Description")
+       "Description strings\n")
 {
   struct bgp *bgp;
   struct peer *peer;
@@ -1735,6 +1735,41 @@ DEFUN (neighbor_update_source,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_neighbor_update_source,
+       no_neighbor_update_source_cmd,
+       "no neighbor A.B.C.D update-source",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Update source\n"
+       "Interface name\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (peer->update_source)
+    {
+      free (peer->update_source);
+      peer->update_source = NULL;
+    }
+  if (peer->update_if)
+    {
+      free (peer->update_if);
+      peer->update_if = NULL;
+    }
+  return CMD_SUCCESS;
+}
+
 DEFUN (neighbor_nexthop_self,
        neighbor_nexthop_self_cmd,
        "neighbor A.B.C.D next-hop-self",
@@ -1876,6 +1911,7 @@ DEFUN (neighbor,
   struct peer *peer;
   u_int16_t as;
   union sockunion *su;
+  char *endptr = NULL;
 
   /* Check argument. */
   bgp = (struct bgp *) vty->index;
@@ -1901,8 +1937,8 @@ DEFUN (neighbor,
       return CMD_WARNING;
     }
 
-  as = strtol (argv[1], NULL, 10);
-  if (as == 0)
+  as = strtoul (argv[1], &endptr, 10);
+  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
     {
       vty_out (vty, "AS path value malformed.\r\n");
       return CMD_WARNING;
@@ -2257,11 +2293,28 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
       else
 	vty_out (vty, " remote-as %d%s", peer->as, VTY_NEWLINE);
 
+      /* Local interface name. */
       if (peer->ifname)
 	{
 	  vty_out (vty, " neighbor ");
 	  sockunion_vty_out (vty, peer->su);
 	  vty_out (vty, " interface %s%s", peer->ifname, VTY_NEWLINE);
+	}
+
+      /* Update-source. */
+      if (peer->update_if)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " update-source %s%s", peer->update_if, VTY_NEWLINE);
+	}
+
+      if (peer->update_source)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " update-source %s%s", 
+		   sockunion_su2str (peer->update_source), VTY_NEWLINE);
 	}
 
       /* Shutdown or not. */
@@ -2534,10 +2587,9 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_route_reflector_client_cmd);
   install_element (BGP_NODE, &neighbor_interface_cmd);
   install_element (BGP_NODE, &neighbor_update_source_cmd);
-
+  install_element (BGP_NODE, &no_neighbor_update_source_cmd);
   install_element (BGP_NODE, &neighbor_nexthop_self_cmd);
   install_element (BGP_NODE, &no_neighbor_nexthop_self_cmd);
-
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &neighbor_send_community_cmd);

@@ -56,6 +56,10 @@ struct ospf_lsa
 #define ROUTER_LSA_EXTERNAL	       0x02
 #define ROUTER_LSA_BORDER	       0x01
 
+#define IS_ROUTER_LSA_VIRTUAL(x)       ((x)->flags & ROUTER_LSA_VIRTUAL)
+#define IS_ROUTER_LSA_EXTERNAL(x)      ((x)->flags & ROUTER_LSA_EXTERNAL)
+#define IS_ROUTER_LSA_BORDER(x)	       ((x)->flags & ROUTER_LSA_BORDER)
+
 /* OSPF Router-LSAs structure. */
 struct router_lsa
 {
@@ -63,11 +67,13 @@ struct router_lsa
   u_char flags;
   u_char zero;
   u_int16_t links;
-  struct in_addr link_id;
-  struct in_addr link_data;
-  u_char type;
-  u_char tos;
-  u_int16_t metric;
+  struct {
+    struct in_addr link_id;
+    struct in_addr link_data;
+    u_char type;
+    u_char tos;
+    u_int16_t metric;
+  } link[1];
 };
 
 /* OSPF Network-LSAs structure. */
@@ -111,7 +117,7 @@ void ospf_add_router_lsa (struct ospf_area *, struct ospf_lsa *);
 void ospf_add_network_lsa (struct ospf_area *, struct ospf_lsa *);
 void ospf_add_summary_lsa (struct ospf_area *, struct ospf_lsa *);
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
-				  struct in_addr, struct in_addr);
+				  struct in_addr);
 struct ospf_lsa *ospf_lsa_lookup_by_header (struct ospf_area *,
 					    struct ospf_lsa *);
 listnode ospf_lsa_lookup_from_list (list, u_char, struct in_addr,

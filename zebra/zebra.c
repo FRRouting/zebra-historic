@@ -128,7 +128,7 @@ void
 zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
 {
   u_char type;
-  struct in6_addr nexthop;
+  struct in6_addr nexthop, *gate;
   u_char *lim;
   u_char *pnt;
   unsigned int ifindex;
@@ -154,10 +154,15 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
       memcpy (&p.prefix, stream_pnt (client->ibuf), size);
       stream_forward (client->ibuf, size);
 
-      if (command == ZEBRA_IPV6_ROUTE_ADD)
-	rib_add_ipv6 (type, &p, &nexthop, ifindex, 0);
+      if (IN6_IS_ADDR_UNSPECIFIED (&nexthop))
+        gate = NULL;
       else
-	rib_delete_ipv6 (type, &p, &nexthop, ifindex, 0);
+        gate = &nexthop;
+
+      if (command == ZEBRA_IPV6_ROUTE_ADD)
+	rib_add_ipv6 (type, &p, gate, ifindex, 0);
+      else
+	rib_delete_ipv6 (type, &p, gate, ifindex, 0);
     }
 }
 #endif /* HAVE_IPV6 */
@@ -641,7 +646,7 @@ DEFUN (ip_route,
     }
 
   /* Make sure mask is applied and set type to static route*/
-  apply_mask (&p);
+  apply_mask_ipv4 (&p);
 
   /* We need rib error treatment here. */
   if (ifindex)
@@ -722,7 +727,7 @@ DEFUN (ip_route_mask,
     }
 
   /* Make sure mask is applied and set type to static route*/
-  apply_mask (&p);
+  apply_mask_ipv4 (&p);
 
   /* We need rib error treatment here. */
   if (ifindex)
@@ -794,7 +799,7 @@ DEFUN (no_ip_route,
     }
 
   /* Make sure mask is applied. */
-  apply_mask (&p);
+  apply_mask_ipv4 (&p);
 
   if (ifindex)
     ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
@@ -873,7 +878,7 @@ DEFUN (no_ip_route_mask,
     }
 
   /* Make sure mask is applied. */
-  apply_mask (&p);
+  apply_mask_ipv4 (&p);
 
   if (ifindex)
     ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);

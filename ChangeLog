@@ -1,3 +1,8 @@
+1999-07-12  itojun@iijlab.net
+
+	* configure.in: Add check for getaddrinfo.  Improve Kame related
+	library check.
+
 1999-07-07  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
 
 	* configure.in, acconfig.h: Add check for FreeBSD 3.2.

@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.72
+@subtitle for zebra-0.73
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIPv1, RIPv2, OSPFv2, OSPFv3, BGP-4,
 BGP-4+ and so on.  Zebra turns your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.72.
+This is the Zebra Manual for zebra-0.73.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -808,9 +808,39 @@ Display host's IP version 6 forward is enabled or not.
 @comment  node-name,  next,  previous,  up
 @chapter ripd
 
-The Routing Information Protocol RIP is legendary protoocl.  It is very
-simple distance vector routing protocol. @code{ripd} supports RIP
+  The Routing Information Protocol RIP is legendary protocol.  It is a
+very simple distance vector routing protocol. @code{ripd} supports RIP
 version 2 described in RFC2453 and RIP version 1 described in RFC1058.
+RIP is a "distance-vector" protocol, based on the "Bellman-Ford"
+algorithms.  The RIP protocol was developed in the 1970s at Xerox labs
+as part of the XNS routing protocol.  As a distance-vector protocol,
+routers running RIP will send updates to its neighbors thus allowing the
+convergence to a known topology.  In each update, the distance of any
+given router will be broadcast to its neighbor.
+
+  The following points are important to consider in the implementation
+of ripd:
+
+  One of the characteristics of ripd used in Zebra is that the user must
+have a root privilege.  `ripd' uses port 521, but in order to bind this
+port, a privilege is needed.
+
+  Netmask of ripd supports both version 1 and version 2 of RIP.  Version
+1 of RIP originally contained no netmask information.  In RIP version 1,
+classes were originally used to determine the size of the network mask.
+Class A networks use 8 bits of mask, Class B networks use 16 bits of
+masks, while Class C networks use 24 bits of mask.  Today, the most
+widely used method of a network mask is assigned to the packet in the
+basis of the interface that received the packet.  Version 2 of RIP
+supports a variable length subnet mask (VLSM).  By extending the subnet
+mask, the mask can be divided and reused.  Each subnet can be used for
+different purposes such as large to middle size LANs and WAN links.
+Zebra ripd does not support the non-sequential net masks that are
+included in RIP Version 2.
+
+ In a case of the same information with the same prefix and metric, the
+old information will be suppressed.  Ripd does not currently support
+equal cost multipath routing.
 
 @menu
 * Invoking ripd::               
@@ -837,78 +867,112 @@ When program terminates, retain added route by ripd.
 @comment  node-name,  next,  previous,  up
 @section ripd configuration
 
-What is RIP.  16 hop limitation. First used in Xerox.
-
 @deffn Command {router rip} {}
-Enable RIP process.
+The "router rip" command is necessary to enable RIP.  To disable RIP,
+use the "no router" command.  RIP must be enabled before carrying out
+any of the commands listed below in section 6.2.
 @end deffn
 
-Difference between version 1 and 2.
+RIP can be configured to process either Version 1 or Version 2, but the
+default mode is Version 2.  If no version is specified, the RIP will
+default to Version 2.  In the case that RIP is set to Version 1, the
+setting "Version 1" will be displayed, but the setting "Version 2" will
+not be displayed whether or not Version 2 is set explicitly as the
+version of RIP being used.
 
 @deffn {RIP Command} {version @var{version}} {}
 Set RIP process's version.  @var{version} can be `1' or `2'.
 @end deffn
 
-How to specify enable network.
+
 
 @deffn {RIP Command} {network @var{network}} {}
 @deffnx {RIP Command} {no network @var{network}} {}
 Set RIP enable interface by @var{network}.  The interfaces which has
 address matched to @var{network} is enabled.
+
+This group of commands either enables or disables RIP interfaces between
+certain numbers of a specified network address.  For example, if network
+for 10.0.0.0/24 is enabled for RIP, this would result in all the
+addresses from 10.0.0.0 to 10.0.0.255 being enabled for RIP.  The no
+network command will disable RIP for the specified network.
 @end deffn
 
 @deffn {RIP Command} {network @var{ifname}} {}
 @deffnx {RIP Command} {no network @var{ifname}} {}
-Set RIP enable interface by @var{ifname}.
+Set RIP enable interface by @var{ifname}.  Both the sending and
+receiving of RIP will be enabled only on the on the port specified in
+the network ifname command.  The "no network ifname" command will
+disable RIP on the specified inferface name
 @end deffn
-
-When neighbor doesn't understand multicast then specivy neighbor.
 
 @deffn {RIP Command} {neighbor @var{a.b.c.d}} {}
 @deffnx {RIP Command} {no neighobr @var{a.b.c.d}} {}
-Specify RIP neighbor.
+Specify RIP neighbor.  This command is used when a neighbor doesn't
+understand multicast to specify a neighbor.  In some cases, not all
+routers will be able to understand multicasting, where packets are sent
+to network or group addresses.  In a situation where a neighbor can not
+process multicast routing, it is necessary to establish a direct link
+between router and router.  The neighbor command allows the network
+administrator to specify a router as a RIP neighbor though its address.
+The no neighbor a.b.c.d. command will disable the RIP neighbor.
 @end deffn
 
 How to announce RIP route.
 
 @deffn {RIP commnad} {redistribute static} {}
 @deffnx {RIP command} {no redistribute static} {}
-Redistribute static route.
+Redistribute static redistributes routing information from a static route into RIP. No redistribute static disables the route.
 @end deffn
 
 @deffn {RIP commnad} {redistribute connected} {}
 @deffnx {RIP commnad} {no redistribute connected} {}
-Redistribute connected route.
+Redistribute a connected route into the RIP domain.  No redistribute
+connected disables the connected route in the RIP domain.
 @end deffn
 
 If you want to specify RIP only static route.
 
 @deffn {RIP command} {route @var{a.b.c.d/m}} {}
 @deffnx {RIP command} {no route @var{a.b.c.d/m}} {}
-RIP only static route configuration.  In normal case, please set static
-route in zebra and redistribute it by `redistribute static'.
+This command is specific to Zebra.  The route command makes a static
+route only inside RIP. This command should be used only be advanced
+users who are particularly knowledgeable about the RIP protocol.  In
+most cases, we reccomend creating a static route in Zebra and
+redistributing it in RIP using 'redistribute static.'
 @end deffn
 
 There is four timers in RIP.  One is
 
 @deffn {RIP command} {timers basic @var{update} @var{invalid} @var{holddown} @var{flush}} {}
-@end deffn
 
-Make it back to default configuation.
+The default settings for the timers are as follows Update timer is 30
+seconds.  The invalid timer is 180 seconds after which a route will be
+marked as invalid.  The holddown timer is 180 seconds.  During holddown,
+new routes will not be instituted after a route is considered invalid.
+The flush command is 240 seconds, after which a route will be removed
+from the routing table after being declared invalid.
+
+The 'timers basic commnad' allows the the default values of the timers
+listed above to be changed.
+@end deffn
 
 @deffn {RIP command} {no timers basic} {}
-Set RIP's timer.
+The 'no timers basic' command will reset the timers to default settings
+listed above.
 @end deffn
-
-
 
 @deffn {Interface command} {ip rip send version @var{varsion}} {}
 @var{varsion} can be `1', `2', `1 2'.  This configuration override
-router rip's version setting.
+router rip's version setting.  This command will enable the selected
+interface to send packets with RIP Version 1, RIP Version 2, or both.
+In the case of '1 2', packets will be both broadcast and multicast.
 @end deffn
 
 @deffn {Interface command} {ip rip receive version @var{varsion}} {}
-Version setting for incoming RIP packet.
+Version setting for incoming RIP packet.  This command will enable the
+selected interface to receive packets in RIP Version 1, RIP Version 2,
+or both.
 @end deffn
 
 @node  Filtering RIP route, ripd terminal mode commands, ripd configuration, ripd
@@ -923,11 +987,24 @@ You can apply access list to the interface by distribute-list command.
 @samp{out}.  If @var{direct} is @samp{in} access list is applied to
 input packet.
 
+The distribute-list command can be used to filter the RIP path.
+Distribute-list can apply access-list to a chosen interface.  First, one
+should specify the access-list.  Next, the name of the access list is
+used in the distribute-list command.  For example, in the following
+configuration eth0 will permit only the paths that match the route
+10.0.0.0/8
+
 @example
-distribute-list local-only out eth0
-distribute-list remote-route in ppp0
+!
+access-list private permit 10 10.0.0.0/8
+access-list private deny any
+!
+distribute-list private in eth0
+!
 @end example
 @end deffn
+
+Distribute list can be applied both to incoming and outgoing directions.
 
 @node ripd terminal mode commands, ripd debug commands, Filtering RIP route, ripd
 @comment  node-name,  next,  previous,  up
@@ -939,7 +1016,10 @@ To display RIP routes.
 Show RIP routes.
 @end deffn
 
-Exmaple here.
+The command will display all RIP routes. For routes that receive through
+RIP, this command will display the time the packet was sent and the tag
+information.  This command will also display this information for routes
+redistributed into RIP.
 
 @node  ripd debug commands,  , ripd terminal mode commands, ripd
 @comment  node-name,  next,  previous,  up
@@ -951,17 +1031,31 @@ Debug for RIP protocol.
 Debug rip events.
 @end deffn
 
+Debug RIP will show RIP events.  Sending and receiving packets, timers,
+and changes in interface are currently events in ripd.
+
 @deffn Command {debug rip packet} {}
 Debug rip packet.
 @end deffn
+
+Debug rip packet will display detailed information about the RIP
+packets.  The origin and port number of the packet as well as the packet
+dump will be displayed.
 
 @deffn Command {debug rip zebra} {}
 Debug rip between zebra communication.
 @end deffn
 
+This command will show the communication between ripd and zebra.  The
+main information will include addition and deletion of paths to the
+kernel and the sending and receiving of interface information.
+
 @deffn Command {show debugging rip} {}
 Display ripd's debugging option.
 @end deffn
+
+Show debugging rip will show all information currently set for ripd
+debug.
 
 @node ripngd, ospfd, ripd, Top
 @comment  node-name,  next,  previous,  up

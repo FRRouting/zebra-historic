@@ -30,10 +30,20 @@ void
 connected_add_ipv4 (struct interface *ifp, struct in_addr *addr, 
 		    int prefixlen, struct in_addr *broad);
 
+void
+connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr, 
+		       int prefixlen, struct in_addr *broad);
+
 #ifdef HAVE_IPV6
+int
+connected_check_ipv6 (struct interface *ifp, struct prefix *p);
+
 void
 connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 		    int prefixlen, struct in6_addr *broad);
+void
+connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
+		       int prefixlen, struct in6_addr *broad);
 #endif /* HAVE_IPV6 */
 
 #endif /*_ZEBRA_CONNECTED_H */

@@ -27,6 +27,7 @@
 #include "memory.h"
 #include "log.h"
 #include "if.h"
+#include "prefix.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
@@ -56,9 +57,45 @@ bgp_bind (struct peer *peer)
 }
 
 int
+bgp_bind_address (int sock, struct in_addr *addr)
+{
+  int ret;
+  struct sockaddr_in local;
+
+  memset (&local, 0, sizeof (struct sockaddr_in));
+  local.sin_family = AF_INET;
+  memcpy (&local.sin_addr, addr, sizeof (struct in_addr));
+
+  ret = bind (sock, &local, sizeof (struct sockaddr_in));
+  if (ret < 0)
+    ;
+  return 0;
+}
+
+struct in_addr *
+bgp_update_address (struct interface *ifp)
+{
+  struct prefix_ipv4 *p;
+  struct connected *connected;
+  listnode node;
+
+  for (node = listhead (ifp->connected); node; nextnode (node))
+    {
+      connected = getdata (node);
+
+      p = (struct prefix_ipv4 *) connected->address;
+
+      if (p->family == AF_INET)
+	return &p->prefix;
+    }
+  return NULL;
+}
+
+int
 bgp_update_source (struct peer *peer)
 {
   struct interface *ifp;
+  struct in_addr *addr;
 
   /* Ifname is exist. */
   if (peer->update_if)
@@ -66,12 +103,17 @@ bgp_update_source (struct peer *peer)
       ifp = if_lookup_by_name (peer->update_if);
       if (!ifp)
 	return -1;
-      return 0;
+
+      addr = bgp_update_address (ifp);
+      if (!addr)
+	return -1;
+
+      return bgp_bind_address (peer->fd, addr);
     }
 
   if (peer->update_source)
     return sockunion_bind (peer->fd, peer->update_source, 
-			   BGP_PORT_DEFAULT, peer->update_source);
+			   0, peer->update_source);
 
   return 0;
 }
@@ -91,6 +133,9 @@ bgp_connect (struct peer *peer)
   /* If we can get socket for the peer, adjest TTL and make connection. */
   if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
     sockopt_ttl (peer->su->sa.sa_family, peer->fd, peer->ttl);
+
+  sockopt_reuseaddr (peer->fd);
+  sockopt_reuseport (peer->fd);
 
   /* Bind socket. */
   bgp_bind (peer);

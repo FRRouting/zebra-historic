@@ -52,6 +52,8 @@
 #include "ospf6_interface.h"
 #include "ospf6_ism.h"
 #include "ospf6_lsa.h"
+#include "ospf6_lsdb.h"
+#include "ospf6_dbex.h"
 #include "ospf6_spf.h"
 #include "ospf6_rtable.h"
 #include "ospf6_area.h"
@@ -110,10 +112,6 @@ extern char   *progname;
 /* Default port values. */
 #define OSPF6_VTY_PORT             2606
 
-#define DEFAULT_HELLO_INTERVAL    10
-#define DEFAULT_ROUTER_DEAD_TIMER 40
-
-#define MAXOSPFMESSAGELEN         4096
 #define MAXIOVLIST 1024
 
 #ifdef INRIA_IPV6
@@ -143,9 +141,6 @@ extern char   *progname;
 #endif
 #endif
 
-#define INSTALL   1
-#define NOINSTALL 0
-
 /* Command Description */
 #define V4NOTATION_STR     "specify by IPv4 address notation(e.g. 0.0.0.0)\n"
 #define OSPF6_NUMBER_STR    "Specify by number\n"
@@ -159,8 +154,6 @@ extern char   *progname;
 #define SECONDS_STR         "<1-65535> Seconds\n"
 #define ROUTE_STR           "Routing Table\n"
 
-#define HASHVAL   64
-#define hash(x)  ((x) % HASHVAL)
 
 /* Function Prototypes */
 struct ospf6 *make_ospf6 (rtr_id_t);

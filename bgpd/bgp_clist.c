@@ -344,13 +344,13 @@ community_list_print (struct community_list *list)
 }
 
 DEFUN (ip_community_list, ip_community_list_cmd,
-       "ip community-list NAME (deny|permit) ...",
+       "ip community-list NAME (deny|permit) .COMMUNITY",
        IP_STR
-       "Community attribute list.\n"
+       "Community attribute list\n"
        "Community list name\n"
        "Community list for denies\n"
        "Community list for permits\n"
-       "Community list\n")
+       "Community list. e.g. no-export 7675:70\n")
 {
   enum community_entry_type type;
   struct community_entry *entry;
@@ -407,14 +407,14 @@ DEFUN (ip_community_list, ip_community_list_cmd,
 }
 
 DEFUN (no_ip_community_list, no_ip_community_list_cmd,
-       "no ip community-list NAME (deny|permit) ...",
+       "no ip community-list NAME (deny|permit) .COMMUNITY",
        NO_STR
        IP_STR
-       "Community attribute list.\n"
+       "Community attribute list\n"
        "Community list name\n"
        "Community list for denies\n"
        "Community list for permits\n"
-       "Community list\n")
+       "Community list. e.g no-export 7675:70\n")
 {
   enum community_entry_type type;
   struct community_entry *entry;

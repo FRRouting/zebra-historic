@@ -50,8 +50,6 @@
 #define INADDR_RIP_GROUP        0xe0000009    /* 224.0.0.9 */
 #endif
 
-#define RIP_TIMEOUT                   180
-
 /* RIP timers */
 #define RIP_DEFAULT_UPDATE_TIMER       30
 #define RIP_DEFAULT_INVALID_TIMER     180
@@ -75,7 +73,6 @@ struct rip
   int sock;			/* RIP socket. */
   int enable;			/* RIP is enabled or not. */
   u_char version;		/* Default version of rip instance. */
-  u_char multicast;		/* Do multicast treatment. */
 
   struct thread *t_read;
 
@@ -135,7 +132,7 @@ struct rip_info
   u_int32_t metric;		/* Metric of this route. */
   struct in_addr nexthop;	/* Nexthop of this route. */
   struct in_addr from;		/* From which gateway this route is listen. */
-  struct interface *ifp;
+  struct interface *ifp;	/* Interface. */
   time_t timer;			/* Update timer of this route. */
 };
 
@@ -219,10 +216,11 @@ int if_valid_neighbor (struct in_addr addr);
 struct interface *if_lookup_address (struct in_addr addr);
 void rip_multicast_enable (int sock);
 int zebra_get_interface (int sock, u_int16_t length);
-
 int
 rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo, 
 	       struct sockaddr_in *from, struct interface *ifp);
+int
+rip_interface_enable (struct interface *ifp);
 
 extern struct thread_master *master;
 

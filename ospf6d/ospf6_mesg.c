@@ -514,7 +514,7 @@ proc_linkstate_ack (struct sockaddr_in6 *src, struct iovec *iov,
       lsh = (struct lsa_hdr *)iov[i].iov_base;
       lsi = make_lsa_hdr_internal (lsh, nbr);
 
-      zvlog_debug ("LSACK[%s] from %s", print_lsahdr (lsh), nbr->str);
+      o6log.dbex ("acknowledge %s from %s", print_lsahdr (lsh), nbr->str);
 
       p = lsa_lookup (lsh->lsh_type, lsh->lsh_id, lsh->lsh_advrtr,
                       nbr->ospf6_if->area, nbr->ospf6_if);
@@ -525,17 +525,16 @@ proc_linkstate_ack (struct sockaddr_in6 *src, struct iovec *iov,
         continue;
       if (which_is_more_recent (p, lsi) == 0)
         {
-          zvlog_debug ("Delete[%s] from %s's retranslist",
-                        print_lsahdr (lsi->lsh), nbr->str);
-          list_delete_by_val (nbr->retranslist, p);
+          detach_lsa_from_retranslist (p, nbr);
         }
       else
         {
-          zvlog_warn ("RFC said to log!!");
-          /* XXX continue; */
-          zvlog_debug ("Delete[%s] from %s's retranslist",
-                        print_lsahdr (lsi->lsh), nbr->str);
-          list_delete_by_val (nbr->retranslist, p);
+          o6log.dbex ("RFC said to log!!");
+#if 1
+          continue;
+#else
+          detach_lsa_from_retranslist (p, nbr);
+#endif
         }
       free_lsa (lsi->lsh);
       free_lsa_internal_hdr (lsi);

@@ -271,6 +271,8 @@ case $zebra_ipforward_path in
 esac])
 AC_SUBST(IPFORWARD)
 
+AC_CHECK_FUNCS(getaddrinfo, [have_getaddrinfo=yes], [have_getaddrinfo=no])
+
 dnl --------------------------------------------------------
 dnl IPv6 check (currently only supports INRIA and KAME)
 dnl --------------------------------------------------------
@@ -299,7 +301,9 @@ if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    AC_DEFINE(KAME)
    RIPNGD="ripngd"
    OSPF6D="ospf6d"
-   LIB_IPV6="-L/usr/local/v6/lib -linet6"
+   if test "$have_getaddrinfo" = "no" -a -d /usr/local/v6/lib -a -f /usr/local/v6/lib/libinet6.a; then
+      LIB_IPV6="-L/usr/local/v6/lib -linet6"
+   fi
    AC_MSG_RESULT(Kame)
 fi
 dnl ------------
@@ -475,6 +479,16 @@ AC_EGREP_HEADER(ifaliasreq,
 net/if.h,
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_IFALIASREQ)],
+ AC_MSG_RESULT(no))
+
+dnl ----------------------------
+dnl check structure in6_aliasreq
+dnl ----------------------------
+AC_MSG_CHECKING(whether struct if6_aliasreq exist)
+AC_EGREP_HEADER(in6_aliasreq,
+netinet6/in6_var.h,
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_IN6_ALIASREQ)],
  AC_MSG_RESULT(no))
 
 dnl ---------------------------

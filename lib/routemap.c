@@ -417,6 +417,27 @@ route_map_rule_delete (struct route_map_rule_list *list,
   XFREE (MTYPE_ROUTE_MAP_RULE, rule);
 }
 
+/* strcmp wrapper function which don't crush even argument is NULL. */
+int
+rulecmp (char *dst, char *src)
+{
+  if (dst == NULL)
+    {
+      if (src ==  NULL)
+	return 0;
+      else
+	return 1;
+    }
+  else
+    {
+      if (src == NULL)
+	return 1;
+      else
+	return strcmp (dst, src);
+    }
+  return 1;
+}
+
 /* Add match statement to route map. */
 int
 route_map_add_match (struct route_map_index *index, char *match_name,
@@ -445,7 +466,10 @@ route_map_add_match (struct route_map_index *index, char *match_name,
   rule = route_map_rule_new ();
   rule->cmd = cmd;
   rule->value = compile;
-  rule->rule_str = XSTRDUP (MTYPE_ROUTE_MAP_RULE_STR, match_arg);
+  if (match_arg)
+    rule->rule_str = XSTRDUP (MTYPE_ROUTE_MAP_RULE_STR, match_arg);
+  else
+    rule->rule_str = NULL;
 
   /* Add new route match rule to linked list. */
   route_map_rule_add (&index->match_list, rule);
@@ -466,10 +490,9 @@ route_map_delete_match (struct route_map_index *index, char *match_name,
     return 1;
   
   for (rule = index->match_list.head; rule; rule = rule->next)
-    if (rule->cmd == cmd && strcmp (rule->rule_str, match_arg) == 0)
+    if (rule->cmd == cmd && rulecmp (rule->rule_str, match_arg) == 0)
       {
 	route_map_rule_delete (&index->match_list, rule);
-	/* return Success. */
 	return 0;
       }
   /* Can't find matched rule. */
@@ -503,7 +526,10 @@ route_map_add_set (struct route_map_index *index, char *set_name,
   rule = route_map_rule_new ();
   rule->cmd = cmd;
   rule->value = compile;
-  rule->rule_str = XSTRDUP (MTYPE_ROUTE_MAP_RULE_STR, set_arg);
+  if (set_arg)
+    rule->rule_str = XSTRDUP (MTYPE_ROUTE_MAP_RULE_STR, set_arg);
+  else
+    rule->rule_str = NULL;
 
   /* Add new route match rule to linked list. */
   route_map_rule_add (&index->set_list, rule);
@@ -524,10 +550,9 @@ route_map_delete_set (struct route_map_index *index, char *set_name,
     return 1;
   
   for (rule = index->set_list.head; rule; rule = rule->next)
-    if (rule->cmd == cmd && strcmp (rule->rule_str, set_arg) == 0)
+    if (rule->cmd == cmd && rulecmp (rule->rule_str, set_arg) == 0)
       {
 	route_map_rule_delete (&index->set_list, rule);
-	/* Return Success. */
 	return 0;
       }
   /* Can't find matched rule. */
@@ -720,11 +745,15 @@ route_map_config_write (struct vty *vty)
 		 map->name,
 		 route_map_type_str (index->type),
 		 index->pref, VTY_NEWLINE);
+
 	for (rule = index->match_list.head; rule; rule = rule->next)
-	  vty_out (vty, " match %s %s%s", rule->cmd->str, rule->rule_str,
+	  vty_out (vty, " match %s %s%s", rule->cmd->str, 
+		   rule->rule_str ? rule->rule_str : "",
 		   VTY_NEWLINE);
+
 	for (rule = index->set_list.head; rule; rule = rule->next)
-	  vty_out (vty, " set %s %s%s", rule->cmd->str, rule->rule_str,
+	  vty_out (vty, " set %s %s%s", rule->cmd->str,
+		   rule->rule_str ? rule->rule_str : "",
 		   VTY_NEWLINE);
 	write++;
       }

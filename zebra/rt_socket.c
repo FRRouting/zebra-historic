@@ -96,19 +96,13 @@ rtm_write (int message,
   msg.rtm.rtm_flags = RTF_UP;
   msg.rtm.rtm_index = index;
 
-  /* Sould we add default route treatment to this function? (in that
-     case RTF_GATEWAY doesn't need ?)*/
+  if (gate && (message == RTM_ADD))
+    msg.rtm.rtm_flags |= RTF_GATEWAY;
+
   if (mask)
-    {
-      if (gate && (message == RTM_ADD))
-	msg.rtm.rtm_flags |= RTF_GATEWAY;
-      msg.rtm.rtm_addrs |= RTA_NETMASK;
-    }
-  else 
-    {
-      if (message == RTM_ADD) 
-	msg.rtm.rtm_flags |= RTF_HOST;
-    }
+    msg.rtm.rtm_addrs |= RTA_NETMASK;
+  else if (message == RTM_ADD) 
+    msg.rtm.rtm_flags |= RTF_HOST;
 
   /* Route to the interface test. */
   if (! gate)
@@ -129,7 +123,7 @@ rtm_write (int message,
 	    if (p->family == dest->sa.sa_family)
 	      {
 		tmp_gate.sin_addr = p->u.prefix4;
-		gate = &tmp_gate;
+		gate = (struct sockaddr *)&tmp_gate;
 	      }
 	  }
     }
@@ -216,7 +210,6 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
   if (gate)
     sin_gate.sin_addr = *gate;
 
-  /* Convert prefixlen to struct sockaddr_in. */
   if (dest->prefixlen != 32)
     {
       masklen2ip (dest->prefixlen, &sin_mask.sin_addr);
@@ -226,6 +219,14 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
     }
   else 
     mask = NULL;
+
+#if 0
+  /* Convert prefixlen to struct sockaddr_in. */
+  masklen2ip (dest->prefixlen, &sin_mask.sin_addr);
+  sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
+  sin_mask.sin_family = AF_UNSPEC;
+  mask = &sin_mask;
+#endif /* 0 */
 
   return rtm_write (message,
 		    (union sockunion *)&sin_dest, 
@@ -306,13 +307,16 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
 
   /* Under kame set interface index to link local address. */
 #ifdef KAME
-  if (IN6_IS_ADDR_LINKLOCAL(gate)) 
-    SET_IN6_LINKLOCAL_IFINDEX (*gate, index);
+  if (gate && IN6_IS_ADDR_LINKLOCAL(gate))
+    {
+      SET_IN6_LINKLOCAL_IFINDEX (*gate, index);
+    }
 #endif /* KAME */
 
-  sin_gate.sin6_addr = *gate;
+  if (gate)
+    memcpy (&sin_gate.sin6_addr, gate, sizeof (struct in6_addr));
 
-  /* Check and convert prefixlen. */
+  /* Now we install /128 route as network route. */
   if (dest->prefixlen != 128)
     {
       masklen2ip6 (dest->prefixlen, &sin_mask.sin6_addr);
@@ -325,10 +329,20 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
   else
     mask = NULL;
 
+#if 0
+  /* Check and convert prefixlen. */
+  masklen2ip6 (dest->prefixlen, &sin_mask.sin6_addr);
+  sin_mask.sin6_family = AF_UNSPEC;
+#ifdef SIN6_LEN
+  sin_mask.sin6_len = sin6_masklen (sin_mask.sin6_addr);
+#endif /* SIN6_LEN */
+  mask = &sin_mask;
+#endif /* 0 */
+
   return rtm_write (message, 
 		   (union sockunion *) &sin_dest,
 		   (union sockunion *) mask,
-		   (union sockunion *) &sin_gate,
+		   gate ? (union sockunion *)&sin_gate : NULL,
 		    index);
 }
 

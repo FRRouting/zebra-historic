@@ -49,6 +49,9 @@
 /* Define if there is ifaliasreq structure. */
 #undef HAVE_IFALIASREQ
 
+/* Define if there is in6_aliasreq structure. */
+#undef HAVE_IN6_ALIASREQ
+
 /* Define if there is rt_addrinfo structure. */
 #undef HAVE_RT_ADDRINFO
 

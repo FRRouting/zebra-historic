@@ -1,3 +1,20 @@
+1999-07-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* zebra.c (zebra_read_ipv6): read link prefix from ospf6 support
+
+1999-07-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* rt_socket.c (kernel_rtm_ipv6): gate treatment bug fixed.
+
+1999-07-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_sysctl.c (ifm_read): Clear sockunion argument before fetching
+	data.  Suggested by "Chris P. Ross" <cross@eng.us.uu.net>
+
+1999-07-08  HEO SeonMeyong <seirios@Matrix.IRI.Co.Jp>
+
+	* interface.c (if_tun_add): Add KAME's gif tunnel setting codes.
+
 1999-06-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra.c (zebra_serv): Only accept loopback address connection.

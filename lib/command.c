@@ -634,7 +634,7 @@ cmd_entry_function (char *src, char *dst)
   /* In case of 'command \t', given src is NULL string. */
   if (src == NULL)
     {
-      if (CMD_OPT (dst[0]) || CMD_EXT (dst[0]))
+      if (CMD_OPT (dst[0]) || CMD_EXT (dst[0]) || CMD_VARARG (dst))
 	return NULL;
       else
 	return dst;
@@ -1204,7 +1204,7 @@ config_from_file (struct vty *vty, FILE *fp)
 /* Configration from terminal */
 DEFUN (config_terminal,
        config_terminal_cmd,
-       "config terminal",
+       "configure terminal",
        "Configuration from vty interface\n"
        "Configuration terminal\n")
 {
@@ -1456,9 +1456,10 @@ DEFUN (config_hostname,
 
 DEFUN (config_no_hostname, 
        no_hostname_cmd,
-       "no hostname",
+       "no hostname [HOSTNAME]",
        NO_STR
-       "Reset system's network name\n")
+       "Reset system's network name\n"
+       "Host name of this router\n")
 {
   if (host.name)
     XFREE (0, host.name);
@@ -1632,6 +1633,27 @@ DEFUN (no_service_password_encrypt,
   return CMD_SUCCESS;
 }
 
+DEFUN (config_terminal_length, config_terminal_length_cmd,
+       "terminal length <0-512>",
+       "Terminal configuration setup\n"
+       "Terminal length setup\n"
+       "Number of lines of VTY (0 means no line control)\n")
+{
+  int lines;
+  char *endptr = NULL;
+
+  lines = strtol (argv[0], &endptr, 10);
+  if (lines > 512 || *endptr != '\0')
+    {
+      vty_out (vty, "length is malformed\r\n");
+      return CMD_WARNING;
+    }
+  host.lines = lines;
+  vty->height = lines;
+
+  return CMD_SUCCESS;
+}
+
 /* VTY interface override no. of terminal lines. */
 DEFUN (config_lines, config_lines_cmd,
        "lines LINES",
@@ -1692,10 +1714,11 @@ DEFUN (config_log_file,
 
 DEFUN (no_config_log_file,
        no_config_log_file_cmd,
-       "no log file",
+       "no log file [FILENAME]",
        NO_STR
        "Logging control\n"
-       "Cancel logging to file\n")
+       "Cancel logging to file\n"
+       "Logging file name\n")
 {
   zlog_reset_file (NULL);
 
@@ -1799,6 +1822,7 @@ cmd_init ()
   install_element (VIEW_NODE, &config_list_cmd);
   install_element (VIEW_NODE, &config_enable_cmd);
   install_element (VIEW_NODE, &show_version_cmd);
+  install_element (VIEW_NODE, &config_terminal_length_cmd);
 
   install_default (ENABLE_NODE);
   install_element (ENABLE_NODE, &config_terminal_cmd);
@@ -1808,6 +1832,7 @@ cmd_init ()
   install_element (ENABLE_NODE, &config_write_memory_cmd);
   install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
+  install_element (ENABLE_NODE, &config_terminal_length_cmd);
 
   install_default (CONFIG_NODE);
   install_element (CONFIG_NODE, &hostname_cmd);

@@ -351,12 +351,6 @@ fsm_holdtime (struct peer *peer)
 {
   /* Send notify to remote peer. */
   bgp_notify_send (peer, BGP_NOTIFY_HOLD_ERR, 0, NULL);
-
-  if (peer->fd >= 0)
-    {
-      close (peer->fd);
-      peer->fd = -1;
-    }
 }
 
 /* Called after event occured, this function change status and reset

@@ -48,7 +48,7 @@ union dest_id
 {
   rtr_id_t        router_id;
   unsigned long   network_id[2];
-  struct in6_addr prefix;
+  struct prefix_ipv6 prefix;
 };
 
 struct ospf6_rtentry
@@ -81,13 +81,17 @@ void rtable_init (struct ospf6_rtable *);
 struct ospf6_rtentry *rtable_lookup (unsigned char, union dest_id *,
                                      struct ospf6_rtentry *);
 void rtable_install (unsigned char, union dest_id *, cost_t,
-                     unsigned char, list,
+                     unsigned char, list, struct lsa_internal *,
                      struct ospf6_rtable *);
 void rtable_uninstall (unsigned char, union dest_id *,
                        struct ospf6_rtable *);
 
 void rtable_update_zebra (struct ospf6_rtable *);
+
+int routing_table_calculation (struct thread *);
+
 void rtable_vty_entry (struct vty *, struct ospf6_rtentry *);
+char *print_rtentry (struct ospf6_rtentry *, char *, int);
 
 #endif /* OSPF6_RTABLE_H */
 

@@ -44,7 +44,8 @@ ospf6_if_free (struct ospf6_if *o6if)
 }
 
 #if 0
-static set_ospf6_if_default_val (struct ospf6_if *ospf6_if)
+static void
+set_ospf6_if_default_val (struct ospf6_if *ospf6_if)
 {
   ospf6_if->inf_trans_delay = 1;
   ospf6_if->rtr_pri = 1;
@@ -52,6 +53,7 @@ static set_ospf6_if_default_val (struct ospf6_if *ospf6_if)
   ospf6_if->rtr_dead_interval = 40;
   ospf6_if->rxmt_interval = 5;
   ospf6_if->cost = 1;
+  return;
 }
 #else
 #define set_ospf6_if_default_val(X) \
@@ -75,12 +77,11 @@ make_ospf6_if (char *ifname)
   interface = if_lookup_by_name (ifname);
   if (!interface)
     {
-      zvlog_err ("Can't find Interface: %s", ifname);
-      return (struct ospf6_if *)NULL;
+      o6log.interface ("can't find interface: %s", ifname);
     }
-  if (interface->if_data)
+  if (interface && interface->if_data)
     {
-      zvlog_err ("Already have ospf6_if");
+      o6log.interface ("already have ospf6_if");
       return (struct ospf6_if *)NULL;
     }
 
@@ -105,6 +106,29 @@ make_ospf6_if (char *ifname)
   return ospf6_if;
 }
 
+void
+delete_ospf6_if (struct ospf6_if *o6if)
+{
+  listnode n;
+
+  for (n = listhead (o6if->nbr_list); n; nextnode (n))
+    delete_ospf6_nbr (getdata (n));
+  list_delete_all (o6if->nbr_list);
+
+  thread_cancel (o6if->send_hello);
+  thread_cancel (o6if->send_ack);
+
+  list_delete_all (o6if->delayed_ack);
+
+  lsa_delete_all_list (o6if->linklocal_lsa);
+  list_delete_all (o6if->delayed_ack);
+
+  list_delete_by_val (o6if->area->ospf6_if_list, o6if);
+  ospf6_if_free (o6if);
+
+  return;
+}
+
 struct ospf6_if *
 ospf6_if_lookup (char *ifname)
 {
@@ -125,50 +149,6 @@ ospf6_if_lookup (char *ifname)
     }
 
   return ospf6_if;
-}
-
-struct ospf6_if *
-ospf6_if_lookup_by_addr (struct prefix *addr)
-{
-  struct interface *iface;
-  listnode i, j;
-  struct prefix *p;
-  struct connected *c;
-
-  for (i = listhead (iflist); i; nextnode (i))
-    {
-      iface = (struct interface *)getdata (i);
-      for (j = listhead (iface->connected); j; nextnode (j))
-        {
-          c = getdata (j);
-          p = c->address;
-          if (prefix_same (addr, p) && iface->if_data != NULL)
-            return (struct ospf6_if *)iface->if_data;
-        }
-    }
-  return (struct ospf6_if *)NULL;
-}
-
-struct ospf6_if *
-ospf6_if_lookup_by_addr_in_net (struct prefix *addr)
-{
-  struct interface *iface;
-  listnode i, j;
-  struct prefix *p;
-  struct connected *c;
-
-  for (i = listhead (iflist); i; nextnode (i))
-    {
-      iface = (struct interface *)getdata (i);
-      for (j = listhead (iface->connected); j; nextnode (j))
-        {
-          c = getdata (j);
-          p = c->address;
-          if (prefix_match (addr, p) && iface->if_data != NULL)
-            return (struct ospf6_if *)iface->if_data;
-        }
-    }
-  return (struct ospf6_if *)NULL;
 }
 
 /* show specified interface structure */
@@ -270,7 +250,8 @@ DEFUN (no_interface,
 
   if (area_id != 0)
     {
-      vty_out (vty, "Area ID other than Backbone(0.0.0.0), not yet implimented\r\n");
+      vty_out (vty, "Area ID other than Backbone(0.0.0.0),
+               not yet implimented\r\n");
       return CMD_WARNING;
     }
 

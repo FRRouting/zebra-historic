@@ -222,17 +222,29 @@ ospf_router_lsa_dump (struct stream *s, u_int16_t length)
 {
   char buf[BUFSIZ];
   struct router_lsa *rl;
+  int i, len;
 
   rl = (struct router_lsa *) STREAM_PNT (s);
 
   zlog (NULL, LOG_INFO, "Router-LSA flags %s", 
 	ospf_router_lsa_flags_dump (rl->flags, buf, BUFSIZ));
   zlog (NULL, LOG_INFO, "Router-LSA # links %d", ntohs (rl->links));
-  zlog (NULL, LOG_INFO, "Router-LSA Link ID %s", inet_ntoa (rl->link_id));
-  zlog (NULL, LOG_INFO, "Router-LSA Link Data %s", inet_ntoa (rl->link_data));
-  zlog (NULL, LOG_INFO, "Router-LSA Type %d", (u_char) rl->type);
-  zlog (NULL, LOG_INFO, "Router-LSA TOS %d", (u_char) rl->tos);
-  zlog (NULL, LOG_INFO, "Router-LSA metric %d", ntohs (rl->metric));
+
+  len = ntohs (rl->header.length) - OSPF_LSA_HEADER_SIZE - 4;
+  for (i = 0; len > 0; i++)
+    {
+      zlog (NULL, LOG_INFO, "Router-LSA Link ID %s",
+	    inet_ntoa (rl->link[i].link_id));
+      zlog (NULL, LOG_INFO, "Router-LSA Link Data %s",
+	    inet_ntoa (rl->link[i].link_data));
+      zlog (NULL, LOG_INFO, "Router-LSA Type %d",
+	    (u_char) rl->link[i].type);
+      zlog (NULL, LOG_INFO, "Router-LSA TOS %d",
+	    (u_char) rl->link[i].tos);
+      zlog (NULL, LOG_INFO, "Router-LSA metric %d",
+	    ntohs (rl->link[i].metric));
+      len -= 12;
+    }
 }
 
 void

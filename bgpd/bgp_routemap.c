@@ -43,6 +43,7 @@
 #include "bgpd/bgp_regex.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
+#include "bgpd/bgp_filter.h"
 
 /* Memo of route-map commands.
 
@@ -82,8 +83,8 @@ o Cisco route-map
 o mrt extension
 
   set dpa as %d %d      :  Not yet
-      atomic-aggregate  :  Not yet
-      aggregator as %d %M :  Not yet
+      atomic-aggregate  :  Done
+      aggregator as %d %M :  Done
 
 o Local extention
 
@@ -238,6 +239,50 @@ struct route_map_rule_cmd route_match_metric_cmd =
 int
 route_match_aspath (void *rule, struct prefix *prefix, void *object)
 {
+  
+  struct as_list *as_list;
+  struct bgp_info *bgp_info;
+
+  as_list = as_list_lookup ((char *) rule);
+  if (as_list == NULL)
+    return 0;
+
+  bgp_info = object;
+  
+  /* Perform match. */
+  return as_list_apply (as_list, bgp_info->attr->aspath);
+}
+
+/* Compile function for as-path match. */
+void *
+route_match_aspath_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+/* Compile function for as-path match. */
+void
+route_match_aspath_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for aspath matching. */
+struct route_map_rule_cmd route_match_aspath_cmd = 
+{
+  "as-path",
+  route_match_aspath,
+  route_match_aspath_compile,
+  route_match_aspath_free
+};
+
+#if ROUTE_MATCH_ASPATH_OLD
+/* `match as-path ASPATH' */
+
+/* Match function for as-path match.  I assume given object is */
+int
+route_match_aspath (void *rule, struct prefix *prefix, void *object)
+{
   regex_t *regex;
   struct bgp_info *bgp_info;
 
@@ -278,6 +323,7 @@ struct route_map_rule_cmd route_match_aspath_cmd =
   route_match_aspath_compile,
   route_match_aspath_free
 };
+#endif /* ROUTE_MATCH_ASPATH_OLD */
 
 /* `match community COMMUNIY' */
 
@@ -753,8 +799,7 @@ struct route_map_rule_cmd route_set_community_cmd =
   route_set_community_compile,
   route_set_community_free,
 };
-
-/* `set origin ORIGIN' */
+/* `set origin ORIGIN' */
 
 /* For origin set. */
 int
@@ -812,6 +857,97 @@ struct route_map_rule_cmd route_set_origin_cmd =
   route_set_origin,
   route_set_origin_compile,
   route_set_origin_free,
+};
+
+/* `set atomic-aggregate' */
+
+/* For atomic aggregate set. */
+int
+route_set_atomic_aggregate (void *rule, struct prefix *prefix, void *object)
+{
+  struct bgp_info *bgp_info;
+
+  bgp_info = object;
+  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE);
+  return 0;
+}
+
+/* Compile function for atomic aggregate. */
+void *
+route_set_atomic_aggregate_compile (char *arg)
+{
+  return (void *)1;
+}
+
+/* Compile function for atomic aggregate. */
+void
+route_set_atomic_aggregate_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Set atomic aggregate rule structure. */
+struct route_map_rule_cmd route_set_atomic_aggregate_cmd = 
+{
+  "atomic-aggregate",
+  route_set_atomic_aggregate,
+  route_set_atomic_aggregate_compile,
+  route_set_atomic_aggregate_free,
+};
+
+/* `set aggregator as AS A.B.C.D' */
+struct aggregator
+{
+  as_t as;
+  struct in_addr address;
+};
+
+int
+route_set_aggregator_as (void *rule, struct prefix *prefix, void *object)
+{
+  struct bgp_info *bgp_info;
+  struct aggregator *aggregator;
+
+  bgp_info = object;
+  aggregator = rule;
+
+  bgp_info->attr->aggregator_as = aggregator->as;
+  bgp_info->attr->aggregator_addr = aggregator->address;
+  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR);
+
+  return 0;
+}
+
+void *
+route_set_aggregator_as_compile (char *arg)
+{
+  struct aggregator *aggregator;
+  char as[10];
+  char address[20];
+
+  aggregator = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct aggregator));
+  memset (aggregator, 0, sizeof (struct aggregator));
+
+  sscanf (arg, "%s %s", as, address);
+
+  aggregator->as = strtoul (as, NULL, 10);
+  inet_aton (address, &aggregator->address);
+
+  return aggregator;
+}
+
+void
+route_set_aggregator_as_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_set_aggregator_as_cmd = 
+{
+  "aggregator as",
+  route_set_aggregator_as,
+  route_set_aggregator_as_compile,
+  route_set_aggregator_as_free,
 };
 
 /* Add bgp route map rule. */
@@ -1028,10 +1164,10 @@ DEFUN (no_match_community,
 
 DEFUN (match_aspath,
        match_aspath_cmd,
-       "match as-path ...",
+       "match as-path AS-PATH-NAME",
        MATCH_STR
        "AS Path\n"
-       "AS Path\n")
+       "as-path access-list NAME\n")
 {
   int i;
   struct buffer *b;
@@ -1059,11 +1195,11 @@ DEFUN (match_aspath,
 
 DEFUN (no_match_aspath,
        no_match_aspath_cmd,
-       "no match as-path ...",
+       "no match as-path AS-PATH-NAME",
        NO_STR
        MATCH_STR
        "AS Path\n"
-       "AS Path\n")
+       "as-path access-list NAME\n")
 {
   int i;
   struct buffer *b;
@@ -1178,11 +1314,11 @@ DEFUN (no_set_weight,
 
 DEFUN (set_aspath_prepend,
        set_aspath_prepend_cmd,
-       "set as-path prepend ...",
+       "set as-path prepend .PREPEND-AS",
        "Set value\n"
        "AS path\n"
        "AS path prepend\n"
-       "ASes to prepend")
+       "ASes to prepend\n")
 {
   int i;
   struct buffer *b;
@@ -1210,12 +1346,12 @@ DEFUN (set_aspath_prepend,
 
 DEFUN (no_set_aspath_prepend,
        no_set_aspath_prepend_cmd,
-       "no set as-path prepend ...",
+       "no set as-path prepend .PREPEND-AS",
        NO_STR
        "Set value\n"
        "AS path\n"
        "AS path prepend\n"
-       "ASes to prepend")
+       "ASes to prepend\n")
 {
   int i;
   struct buffer *b;
@@ -1243,7 +1379,7 @@ DEFUN (no_set_aspath_prepend,
 
 DEFUN (set_community,
        set_community_cmd,
-       "set community ...",
+       "set community .COMMUNITY",
        "Set value\n"
        "Community\n"
        "Community value")
@@ -1274,7 +1410,7 @@ DEFUN (set_community,
 
 DEFUN (no_set_community,
        no_set_community_cmd,
-       "no set community ...",
+       "no set community .COMMUNITY",
        NO_STR
        "Set value\n"
        "Community\n"
@@ -1323,6 +1459,108 @@ DEFUN (no_set_origin,
        "Origin attribute value\n")
 {
   return bgp_route_set_delete (vty, vty->index, "origin", argv[0]);
+}
+
+DEFUN (set_atomic_aggregate,
+       set_atomic_aggregate_cmd,
+       "set atomic-aggregate",
+       "Set value\n"
+       "Atomic aggregate\n" )
+{
+  return bgp_route_set_add (vty, vty->index, "atomic-aggregate", NULL);
+}
+
+DEFUN (no_set_atomic_aggregate,
+       no_set_atomic_aggregate_cmd,
+       "no set atomic-aggregate",
+       NO_STR
+       "Set value\n"
+       "Atomic aggregate\n" )
+{
+  return bgp_route_set_delete (vty, vty->index, "atomic-aggregate", NULL);
+}
+
+DEFUN (set_aggregator_as,
+       set_aggregator_as_cmd,
+       "set aggregator as AS A.B.C.D",
+       "Set value\n"
+       "Aggregator attribute\n"
+       "Aggregator as attribute\n"
+       "AS value\n"
+       "Aggregator's IP Address\n")
+{
+  int ret;
+  as_t as;
+  struct in_addr address;
+  char *endptr = NULL;
+  char *argstr;
+
+  as = strtoul (argv[0], &endptr, 10);
+  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
+    {
+      vty_out (vty, "AS path value malformed\r\n");
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &address);
+  if (ret == 0)
+    {
+      vty_out (vty, "Aggregator IP Address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  argstr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED,
+		    strlen (argv[0]) + strlen (argv[1]) + 2);
+
+  sprintf (argstr, "%s %s", argv[0], argv[1]);
+
+  ret = bgp_route_set_add (vty, vty->index, "aggregator as", argstr);
+
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
+
+  return ret;
+}
+
+DEFUN (no_set_aggregator_as,
+       no_set_aggregator_as_cmd,
+       "no set aggregator as AS A.B.C.D",
+       NO_STR
+       "Set value\n"
+       "Aggregator attribute\n"
+       "Aggregator as attribute\n"
+       "AS value\n"
+       "Aggregator's IP Address\n")
+{
+  int ret;
+  as_t as;
+  struct in_addr address;
+  char *endptr = NULL;
+  char *argstr;
+
+  as = strtoul (argv[0], &endptr, 10);
+  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
+    {
+      vty_out (vty, "AS path value malformed\r\n");
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &address);
+  if (ret == 0)
+    {
+      vty_out (vty, "Aggregator IP Address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  argstr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED,
+		    strlen (argv[0]) + strlen (argv[1]) + 2);
+
+  sprintf (argstr, "%s %s", argv[0], argv[1]);
+
+  ret = bgp_route_set_delete (vty, vty->index, "aggregator as", argstr);
+
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
+
+  return ret;
 }
 
 DEFUN (set_ipv6_nexthop_global,
@@ -1396,42 +1634,38 @@ bgp_route_map_init ()
   route_map_install_set (&route_set_aspath_prepend_cmd);
   route_map_install_set (&route_set_community_cmd);
   route_map_install_set (&route_set_origin_cmd);
+  route_map_install_set (&route_set_atomic_aggregate_cmd);
+  route_map_install_set (&route_set_aggregator_as_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
-
   install_element (RMAP_NODE, &match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
-
   install_element (RMAP_NODE, &match_aspath_cmd);
   install_element (RMAP_NODE, &no_match_aspath_cmd);
-
   install_element (RMAP_NODE, &match_metric_cmd);
   install_element (RMAP_NODE, &no_match_metric_cmd);
-
   install_element (RMAP_NODE, &match_community_cmd);
   install_element (RMAP_NODE, &no_match_community_cmd);
 
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
-
   install_element (RMAP_NODE, &set_local_pref_cmd);
   install_element (RMAP_NODE, &no_set_local_pref_cmd);
-
   install_element (RMAP_NODE, &set_weight_cmd);
   install_element (RMAP_NODE, &no_set_weight_cmd);
-
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);
-
   install_element (RMAP_NODE, &set_aspath_prepend_cmd);
   install_element (RMAP_NODE, &no_set_aspath_prepend_cmd);
-
   install_element (RMAP_NODE, &set_community_cmd);
   install_element (RMAP_NODE, &no_set_community_cmd);
-
   install_element (RMAP_NODE, &set_origin_cmd);
   install_element (RMAP_NODE, &no_set_origin_cmd);
+  install_element (RMAP_NODE, &set_atomic_aggregate_cmd);
+  install_element (RMAP_NODE, &no_set_atomic_aggregate_cmd);
+  install_element (RMAP_NODE, &set_aggregator_as_cmd);
+  install_element (RMAP_NODE, &no_set_aggregator_as_cmd);
 
 #ifdef HAVE_IPV6
   route_map_install_set (&route_set_ipv6_nexthop_global_cmd);
@@ -1439,7 +1673,6 @@ bgp_route_map_init ()
 
   install_element (RMAP_NODE, &set_ipv6_nexthop_global_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_cmd);
-
   install_element (RMAP_NODE, &set_ipv6_nexthop_local_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_local_cmd);
 #endif

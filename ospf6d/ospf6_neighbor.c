@@ -21,6 +21,11 @@
 
 #include "ospf6d.h"
 
+void
+delete_ospf6_nbr (struct neighbor *nbr)
+{
+}
+
 int
 nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
 {

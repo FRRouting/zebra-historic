@@ -781,11 +781,12 @@ vty_describe_command (struct vty *vty)
   for (i = 0; i < vector_max (describe); i++)
     if ((desc = vector_slot (describe, i)) != NULL)
       {
-	if (*desc->cmd == '\0')
+	if (desc->cmd[0] == '\0')
 	  continue;
-	else
-	  vty_out (vty, "  %-17s %s\r\n", desc->cmd, 
-		   desc->str ? desc->str : "");
+	
+	vty_out (vty, "  %-17s %s\r\n", 
+		 desc->cmd[0] == '.' ? desc->cmd + 1 : desc->cmd,
+		 desc->str ? desc->str : "");
       }
 
   cmd_free_strvec (vline);
@@ -912,7 +913,7 @@ vty_telnet_option (struct vty *vty, unsigned char *buf, int nbytes)
       if (buf[2] == TELOPT_NAWS)
 	{
 	  vty->width = buf[4];
-	  vty->height = host.lines >=0 ? host.lines : buf[6];
+	  vty->height = host.lines >= 0 ? host.lines : buf[6];
 	  return 8;
 	}
       break;
@@ -1241,6 +1242,7 @@ vty_accept (struct thread *thread)
   int accept_sock;
 
   accept_sock = THREAD_FD (thread);
+  memset (&su, 0, sizeof (union sockunion));
 
   /* We can handle IPv4 or IPv6 socket. */
   vty_sock = sockunion_accept (accept_sock, &su);

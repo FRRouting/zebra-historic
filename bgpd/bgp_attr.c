@@ -302,9 +302,15 @@ bgp_attr_make_default ()
   struct attr attr;
 
   bzero (&attr, sizeof attr);
+
   attr.origin = BGP_ORIGIN_IGP;
-  attr.local_pref = 100;
+  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGIN);
+
   attr.aspath = aspath_empty_aspath (0);
+  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_AS_PATH);
+
+  attr.weight = 32768;
+
 #ifdef HAVE_IPV6
   attr.mp_nexthop_len = 16;
 #endif
@@ -963,6 +969,24 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putc (s, BGP_ATTR_LOCAL_PREF);
       stream_putc (s, 4);
       stream_putl (s, attr->local_pref);
+    }
+
+  /* Atomic aggregate. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE))
+    {
+      stream_putc (s, ATTR_FLAG_TRANS);
+      stream_putc (s, BGP_ATTR_ATOMIC_AGGREGATE);
+      stream_putc (s, 0);
+    }
+
+  /* Aggregator. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR))
+    {
+      stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS);
+      stream_putc (s, BGP_ATTR_AGGREGATOR);
+      stream_putc (s, 6);
+      stream_putw (s, attr->aggregator_as);
+      stream_put_ipv4 (s, attr->aggregator_addr.s_addr);
     }
 
   /* Community attribute. */

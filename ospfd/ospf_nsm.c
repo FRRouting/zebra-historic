@@ -166,8 +166,8 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
     next_state = NSM_ExStart;
 
   /* Router itself is the DRouter or the BDRouter. */
-  if (IPV4_ADDR_SAME (&ospf_top->router_id, &oi->d_router) ||
-      IPV4_ADDR_SAME (&ospf_top->router_id, &oi->bd_router))
+  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->d_router) ||
+      IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->bd_router))
     next_state = NSM_ExStart;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
@@ -202,24 +202,21 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
   area = nbr->oi->area;
 
   /* List router-LSAs. */
-  for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-
+  for (rn = route_top (ROUTER_LSA (area)); rn; rn = route_next (rn))
+    if (rn->info == NULL)
+      continue;
+    else
       list_add_node (nbr->db_summary, rn->info);
-    }
 
   /* List network-LSAs. */
-  for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-
+  for (rn = route_top (NETWORK_LSA (area)); rn; rn = route_next (rn))
+    if (rn->info == NULL)
+      continue;
+    else
       list_add_node (nbr->db_summary, rn->info);
-    }
 
   /* List summary-LSAs. */
+  /*
   for (rn = route_top (area->summary_lsa); rn; rn = route_next (rn))
     {
       if (rn->info == NULL)
@@ -227,6 +224,9 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
 
       list_add_node (nbr->db_summary, rn->info);
     }
+  */
+
+  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
 
   return 0;
 }
@@ -240,6 +240,9 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
 
   if (list_isempty (nbr->ls_request))
     return NSM_Full;
+
+  /* cancel dd retransmit timer. */
+  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
 
   /* Send Link State Request. */
   ospf_ls_req_send (nbr);
@@ -259,7 +262,50 @@ nsm_bad_ls_req (struct ospf_neighbor *nbr)
 int
 nsm_adj_ok (struct ospf_neighbor *nbr)
 {
-  return 0;
+  struct ospf_interface *oi;
+  int next_state;
+  int flag = 0;
+
+  oi = nbr->oi;
+  next_state = nbr->status;
+
+  /* These netowork types must be adjacency. */
+  if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
+      oi->type == OSPF_IFTYPE_POINTOMULTIPOINT ||
+      oi->type == OSPF_IFTYPE_VIRTUALLINK)
+    flag = 1;
+
+  /* Router itself is the DRouter or the BDRouter. */
+  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->d_router) ||
+      IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->bd_router))
+    flag = 1;
+
+  /* Neighboring Router is the DRouter or the BDRouter. */
+  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router) ||
+      IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
+    flag = 1;
+
+  if (nbr->status == NSM_TwoWay && flag == 1)
+    {
+      next_state = NSM_ExStart;
+
+      /* Get initial sequence number from time (). */
+      if (nbr->dd_seqnum == 0)
+	nbr->dd_seqnum = time (NULL);
+      else
+	nbr->dd_seqnum++;
+
+      /* Send Initial DD packet. */
+      ospf_db_desc_send (nbr);
+    }
+  else if (nbr->status >= NSM_ExStart && flag == 0)
+    next_state = NSM_TwoWay;
+
+  /* Schedule DR Election. */
+  if (nbr->status != next_state)
+    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+
+  return next_state;
 }
 
 int

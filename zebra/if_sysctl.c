@@ -58,6 +58,18 @@ ifm_interface_add (struct if_msghdr *ifm)
   zlog (NULL, LOG_DEBUG, "interface %s index %d", ifp->name, ifp->index);
 }
 
+/* Supported address family check. */
+static int
+af_check (int family)
+{
+  if (family == AF_INET)
+    return 1;
+#ifdef HAVE_IPV6
+  if (family == AF_INET6)
+    return 1;
+#endif /* HAVE_IPV6 */
+  return 0;
+}
 
 /* Address read from struct ifa_msghdr. */
 void
@@ -75,17 +87,32 @@ ifm_read (struct ifa_msghdr *ifm,
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
 #define SOCKADDRGET(X,R) \
-    if (ifm->ifam_addrs & (R)) { \
-      int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
-      if ((X) != NULL) \
-	bcopy (pnt, (caddr_t)(X), len); \
-      pnt += len; \
-    }
+    if (ifm->ifam_addrs & (R)) \
+      { \
+        int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
+        if (((X) != NULL) && af_check (((struct sockaddr *)pnt)->sa_family)) \
+          memcpy ((caddr_t)(X), pnt, len); \
+        pnt += len; \
+      }
+
+#define SOCKMASKGET(X,R) \
+    if (ifm->ifam_addrs & (R)) \
+      { \
+	int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
+        if ((X) != NULL) \
+	  memcpy ((caddr_t)(X), pnt, len); \
+	pnt += len; \
+      }
+
+  /* Be sure structure is cleared */
+  bzero (mask, sizeof (union sockunion));
+  bzero (addr, sizeof (union sockunion));
+  bzero (dest, sizeof (union sockunion));
 
   /* We fetch each socket variable into sockunion. */
   SOCKADDRGET (NULL, RTA_DST);
   SOCKADDRGET (NULL, RTA_GATEWAY);
-  SOCKADDRGET (mask, RTA_NETMASK);
+  SOCKMASKGET (mask, RTA_NETMASK);
   SOCKADDRGET (NULL, RTA_GENMASK);
   SOCKADDRGET (NULL, RTA_IFP);
   SOCKADDRGET (addr, RTA_IFA);
@@ -189,7 +216,7 @@ interface_list ()
 	  ifm_address_add ((struct ifa_msghdr *) ifm);
 	  break;
 	default:
-	  zlog (NULL, LOG_INFO, "interfaces_list(): unexpected message type");
+	  zlog_info ("interfaces_list(): unexpected message type");
 	  XFREE (MTYPE_TMP, ref);
 	  return;
 	  break;

@@ -1,4 +1,4 @@
-This is Info file zebra.info, produced by Makeinfo version 1.68 from
+This is Info file zebra.info, produced by Makeinfo version 1.67 from
 the input file zebra.texi.
 
 INFO-DIR-SECTION Routing Software
@@ -9,7 +9,7 @@ END-INFO-DIR-ENTRY
 
 Indirect:
 zebra.info-1: 231
-zebra.info-2: 42165
+zebra.info-2: 47968
 
 Tag Table:
 (Indirect)
@@ -18,69 +18,69 @@ Node: Overview1808
 Node: What is Zebra2415
 Node: System architecture4236
 Node: Mailing list6087
-Node: Bug report6705
-Node: Installation7572
-Node: GNU/Linux configuration8168
-Node: Configure options9733
-Node: VTY port setup11341
-Node: Configuration File12109
-Node: Basic configuration12684
-Node: Sample Configuration14381
-Node: VTY15080
-Node: What is VTY15566
-Node: How to use VTY15784
-Node: View mode and Enable mode16334
-Node: Other modes16551
-Node: Command line editing16689
-Node: Advanced command line editing17284
-Node: Command line history17801
-Node: Command line completion18063
-Node: Command line help18286
-Node: zebra18566
-Node: Common invoking options18949
-Node: Invoking zebra19461
-Node: Interface19896
-Node: Static route20440
-Node: zebra terminal mode commands20831
-Node: ripd21732
-Node: Invoking ripd22154
-Node: ripd configuration22454
-Node: Filtering RIP route24297
-Node: ripd terminal mode commands24865
-Node: ripd debug commands25137
-Node: ripngd25550
-Node: Invoking ripngd25871
-Node: ripngd configuration26126
-Node: ripngd terminal mode commands26890
-Node: ripngd filtering commands27241
-Node: ospfd27706
-Node: Invoking ospfd27999
-Node: ospfd configuration28249
-Node: ospfd terminal mode commands28548
-Node: ospf6d28704
-Node: Invoking ospf6d28821
-Node: bgpd28926
-Node: Invoking bgpd29483
-Node: bgpd configuration29859
-Node: bgpd terminal mode commands33267
-Node: bgpd sample session33906
-Node: bgpd log format34106
-Node: How to set up 6bone connection34596
-Node: Filtering35827
-Node: IP access list36205
-Node: IP prefix list36579
-Node: IP community list36801
-Node: AS path access list37002
-Node: Route map37187
-Node: Route map command37675
-Node: Route map match command37878
-Node: Route map set command38489
-Node: IPv6 supports39315
-Node: Kernel interface39526
-Node: Linux netlink40656
-Node: Zebra protocol41439
-Node: Copying42165
-Node: Command Index61366
-Node: VTY Key Index69279
+Node: Bug report6706
+Node: Installation7573
+Node: GNU/Linux configuration8169
+Node: Configure options9734
+Node: VTY port setup11342
+Node: Configuration File12110
+Node: Basic configuration12685
+Node: Sample Configuration14382
+Node: VTY15081
+Node: What is VTY15567
+Node: How to use VTY15785
+Node: View mode and Enable mode16335
+Node: Other modes16552
+Node: Command line editing16690
+Node: Advanced command line editing17285
+Node: Command line history17802
+Node: Command line completion18064
+Node: Command line help18287
+Node: zebra18567
+Node: Common invoking options18950
+Node: Invoking zebra19462
+Node: Interface19897
+Node: Static route20441
+Node: zebra terminal mode commands20832
+Node: ripd21733
+Node: Invoking ripd23783
+Node: ripd configuration24083
+Node: Filtering RIP route28757
+Node: ripd terminal mode commands29860
+Node: ripd debug commands30360
+Node: ripngd31354
+Node: Invoking ripngd31675
+Node: ripngd configuration31930
+Node: ripngd terminal mode commands32694
+Node: ripngd filtering commands33045
+Node: ospfd33510
+Node: Invoking ospfd33803
+Node: ospfd configuration34053
+Node: ospfd terminal mode commands34352
+Node: ospf6d34508
+Node: Invoking ospf6d34625
+Node: bgpd34730
+Node: Invoking bgpd35287
+Node: bgpd configuration35663
+Node: bgpd terminal mode commands39071
+Node: bgpd sample session39710
+Node: bgpd log format39910
+Node: How to set up 6bone connection40400
+Node: Filtering41631
+Node: IP access list42009
+Node: IP prefix list42383
+Node: IP community list42605
+Node: AS path access list42806
+Node: Route map42991
+Node: Route map command43479
+Node: Route map match command43682
+Node: Route map set command44293
+Node: IPv6 supports45119
+Node: Kernel interface45330
+Node: Linux netlink46459
+Node: Zebra protocol47242
+Node: Copying47968
+Node: Command Index67169
+Node: VTY Key Index75082
 
 End Tag Table

@@ -45,7 +45,12 @@
 #define INITIAL_SEQUENCE_NUMBER 0x80000001 /* signed 32-bit integer */
 #define MAX_SEQUENCE_NUMBER     0x7fffffff /* signed 32-bit integer */
 
+#define MAXOSPFMESSAGELEN         4096
+
 /* Configurable Constants */
+
+#define DEFAULT_HELLO_INTERVAL    10
+#define DEFAULT_ROUTER_DEAD_TIMER 40
 
 
 /* TopLevel Structure */
@@ -55,7 +60,7 @@ struct ospf6
   vers_t        version;
   rtr_id_t      router_id;
   list          area_list;
-  int           isinstall;
+  struct ospf6_rtable rtable;
 };
 
 /* OSPF options */

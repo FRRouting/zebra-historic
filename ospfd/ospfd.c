@@ -78,6 +78,7 @@ struct ospf_area *
 ospf_area_new (struct in_addr area_id)
 {
   struct ospf_area *new;
+  int i;
 
   /* Allocate new config_network. */
   new = XMALLOC (MTYPE_OSPF_AREA, sizeof (struct ospf_area));
@@ -91,9 +92,16 @@ ospf_area_new (struct in_addr area_id)
   new->default_cost = 1;
   new->auth_type = OSPF_AUTH_NULL;
 
-  new->router_lsa = route_table_init ();
-  new->network_lsa = route_table_init ();
-  new->summary_lsa = route_table_init ();
+  /* LSAs tables initialize. */
+  for (i = 0; i < 4; i++)
+    new->lsa[i] = route_table_init ();
+
+  /* Self-originated LSAs initialize. */
+  for (i = 0; i < 2; i++)
+    new->lsa_self[i] = NULL;
+
+  for (i = 2; i < 4; i++)
+    new->lsa_self[i] = list_init ();
 
   return new;
 }
@@ -510,7 +518,7 @@ DEFUN (network_area,
     }
 
   /* Make sure mask is applied. */
-  apply_mask ((struct prefix_ipv4 *) &p);
+  apply_mask (&p);
 
   /* get Area ID. */
   ret = ospf_str2area_id (argv[1], &area_id);
@@ -577,7 +585,7 @@ DEFUN (no_network_area,
       return CMD_WARNING;
     }
 
-  apply_mask (&p);
+  apply_mask_ipv4 (&p);
 
   rn = route_node_get (ospf->networks, (struct prefix *) &p);
   if (!rn->info)

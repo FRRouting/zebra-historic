@@ -22,9 +22,6 @@
 
 void zebra_redistribute_add (int, struct zebra_client *, int);
 void zebra_redistribute_delete (int, struct zebra_client *, int);
-void redistribute_add_ipv4 (struct route_node *np, struct rib *rib);
-void redistribute_delete_ipv4 (struct route_node *np, struct rib *rib);
-#ifdef HAVE_IPV6
-void redistribute_add_ipv6 (struct route_node *np, struct rib *rib);
-void redistribute_delete_ipv6 (struct route_node *np, struct rib *rib);
-#endif /* HAVE_IPV6 */
+
+void redistribute_add (struct route_node *np, struct rib *rib);
+void redistribute_delete (struct route_node *np, struct rib *rib);

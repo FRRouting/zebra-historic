@@ -386,12 +386,62 @@ connected_log (struct connected *connected)
   zlog (NULL, LOG_INFO, logbuf);
 }
 
+/* If two connected address has same prefix return 1. */
+int
+connected_same_prefix (struct prefix *p1, struct prefix *p2)
+{
+  if (p1->family == p2->family)
+    {
+      if (p1->family == AF_INET &&
+	  IPV4_ADDR_SAME (&p1->u.prefix4, &p2->u.prefix4))
+	return 1;
+#ifdef HAVE_IPV6
+      if (p1->family == AF_INET6 &&
+	  IPV6_ADDR_SAME (&p1->u.prefix6, &p2->u.prefix6))
+	return 1;
+#endif /* HAVE_IPV6 */
+    }
+  return 0;
+}
+
 void
 connected_add (struct interface *ifp, struct connected *connected)
 {
+  listnode node;
+  struct connected *ifc;
+
+  /* In case of same prefix come, replace it with new one. */
+  for (node = listhead (ifp->connected); node; node = node->next)
+    {
+      ifc = getdata (node);
+      if (connected_same_prefix (ifc->address, connected->address))
+	{
+	  list_delete_by_val (ifp->connected, ifc);
+	  break;
+	}
+    }
+
   /* Link connected address to interface. */
-  list_add_node (ifp->connected, connected);
   connected->ifp = ifp;
+  list_add_node (ifp->connected, connected);
 
   /* connected_log (connected); */
+}
+
+void
+connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
+{
+  listnode node;
+  struct connected *ifc;
+
+  /* In case of same prefix come, replace it with new one. */
+  for (node = listhead (ifp->connected); node; node = node->next)
+    {
+      ifc = getdata (node);
+      if (connected_same_prefix (ifc->address, p))
+	{
+	  list_delete_by_val (ifp->connected, ifc);
+	  break;
+	}
+    }
 }

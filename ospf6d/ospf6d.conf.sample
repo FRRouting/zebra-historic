@@ -4,7 +4,9 @@
 !
 hostname ospf6d
 password zebra
+enable password zebra
 log file /var/log/ospf6d.log
+log stdout
 !
 interface ep0
  ip6 ospf6 cost 1
@@ -36,7 +38,6 @@ router ospf6 instance 1
  interface ep0 area 0.0.0.0
  interface gif0 area 0.0.0.0
  interface gif1 area 0.0.0.0
- zebra install
 !
 !
 !

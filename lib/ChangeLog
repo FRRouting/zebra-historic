@@ -1,3 +1,33 @@
+1999-07-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp> 
+
+	* prefix.c : prefix_cmp() added. change apply_mask() to
+	apply_mask_ipv4(), and new apply_mask() added.
+
+1999-07-14  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* prefix.c (prefix2str): append prefixlen.
+
+1999-07-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (config_terminal): Change "config terminal" to
+	"configure terminal".  Reported by Georg Hitsch
+	<georg@atnet.at>.
+	(config_terminal_length): `terminal length <0-512>' is added.  At
+	this moment this command is only usef for vty interface.
+	Suggested by Georg Hitsch <georg@atnet.at>.
+
+1999-07-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.c (rulecmp): Add wrapper function of strcmp.
+
+1999-07-08  Rick Payne <rickp@rossfell.co.uk>
+
+	* sockunion.c (inet_aton): Fix bug of inet_aton.
+
+1999-07-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h (ZEBRA_VERSION): Start zebra-0.73
+
 1999-07-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* version.h: Bump up to 0.72.

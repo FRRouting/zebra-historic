@@ -142,14 +142,7 @@ interface_up (struct thread *thread)
   /* FreeBSD3.2's ep driver ignores multicast ethernet frame.
      saving this (very roughly) */
   {
-    struct sockaddr sa;
     struct ifreq ifr;
-    memset (&sa, 0, sizeof (struct sockaddr));
-    sa.sa_family = AF_LINK;
-    if (mcast_join (ospf6_sock, &sa, ospf6_if->interface->name,
-                    ospf6_if->interface->index) < 0)
-      zvlog_warn ("mcast_join(af_link) failed for %s: %s",
-                  ospf6_if->interface->name, strerror (errno));
 
     strncpy (ifr.ifr_name, ospf6_if->interface->name, sizeof (ifr.ifr_name));
     if (ioctl (ospf6_sock, SIOCGIFFLAGS, &ifr) < 0)

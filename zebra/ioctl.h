@@ -37,4 +37,10 @@ int if_unset_prefix (struct interface *, struct prefix_ipv4 *);
 void if_get_metric (struct interface *);
 void if_get_mtu (struct interface *);
 
+#ifdef HAVE_IPV6
+int if_prefix_add_ipv6 (struct interface *, struct prefix_ipv6 *);
+int if_prefix_delete_ipv6 (struct interface *, struct prefix_ipv6 *);
+
+#endif /* HAVE_IPV6 */
+
 #endif /* _ZEBRA_IOCTL_H */

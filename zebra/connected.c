@@ -80,7 +80,7 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   connected_add (ifp, connected);
 
   /* Apply mask to the network. */
-  apply_mask (&rib);
+  apply_mask_ipv4 (&rib);
 
   /* In case of connected address is 0.0.0.0/0 we treat it tunnel
      address. */
@@ -90,7 +90,50 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->index, 0);
 }
 
+/* Delete connected IPv4 route to the interface. */
+void
+connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr, 
+		    int prefixlen, struct in_addr *broad)
+{
+  struct prefix_ipv4 p;
+  struct prefix_ipv4 mp;
+
+  p.family = AF_INET;
+  p.prefix = *addr;
+  p.prefixlen = prefixlen;
+  mp = p;
+
+  connected_delete_by_prefix (ifp, (struct prefix *) &p);
+
+  /* Apply mask to the network. */
+  apply_mask_ipv4 (&mp);
+
+  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
+     address. */
+  if (prefix_ipv4_any (&mp))
+    return;
+
+  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->index, 0);
+}
+
 #ifdef HAVE_IPV6
+/* If same interface address is already exist... */
+int
+connected_check_ipv6 (struct interface *ifp, struct prefix *p)
+{
+  struct connected *connected;
+  listnode node;
+
+  for (node = listhead (ifp->connected); node; node = nextnode (node))
+    {
+      connected = getdata (node);
+
+      if (prefix_same (connected->address, p))
+	return 1;
+    }
+  return 0;
+}
+
 /* Add connected IPv6 route to the interface. */
 void
 connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
@@ -121,5 +164,24 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
   connected_add (ifp, connected);
 
   rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, &rib, NULL, ifp->index, 0);
+}
+
+void
+connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
+		    int prefixlen, struct in6_addr *broad)
+{
+  struct prefix_ipv6 p;
+  struct prefix_ipv6 mp;
+
+  p.family = AF_INET6;
+  p.prefix = *address;
+  p.prefixlen = prefixlen;
+  mp = p;
+
+  connected_delete_by_prefix (ifp, (struct prefix *) &p);
+
+  apply_mask_ipv6 (&mp);
+
+  rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, &mp, NULL, ifp->index, 0);
 }
 #endif /* HAVE_IPV6 */

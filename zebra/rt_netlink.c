@@ -301,7 +301,7 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
       )
     return 0;
 
-  if (h->nlmsg_type != RTM_NEWADDR)
+  if (h->nlmsg_type != RTM_NEWADDR && h->nlmsg_type != RTM_DELADDR)
     return 0;
 
   len = h->nlmsg_len - NLMSG_LENGTH(sizeof (struct ifaddrmsg));
@@ -356,15 +356,28 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
 
   /* Register interface address to the interface. */
   if (ifa->ifa_family == AF_INET)
-    connected_add_ipv4 (ifp, 
-			(struct in_addr *) addr, ifa->ifa_prefixlen, 
-			(struct in_addr *) broad);
-
+    {
+      if (h->nlmsg_type == RTM_NEWADDR)
+	connected_add_ipv4 (ifp, 
+			    (struct in_addr *) addr, ifa->ifa_prefixlen, 
+			    (struct in_addr *) broad);
+      else
+	connected_delete_ipv4 (ifp, 
+			       (struct in_addr *) addr, ifa->ifa_prefixlen, 
+			       (struct in_addr *) broad);
+    }
 #ifdef HAVE_IPV6
   if (ifa->ifa_family == AF_INET6)
-    connected_add_ipv6 (ifp, 
-			(struct in6_addr *) addr, ifa->ifa_prefixlen, 
-			(struct in6_addr *) broad);
+    {
+      if (h->nlmsg_type == RTM_NEWADDR)
+	connected_add_ipv6 (ifp, 
+			    (struct in6_addr *) addr, ifa->ifa_prefixlen, 
+			    (struct in6_addr *) broad);
+      else
+	connected_delete_ipv6 (ifp, 
+			       (struct in6_addr *) addr, ifa->ifa_prefixlen, 
+			       (struct in6_addr *) broad);
+    }
 #endif /* HAVE_IPV6*/
 
   return 0;
@@ -621,6 +634,8 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   return 0;
 }
 
+/* #define DEBUG */
+
 int
 netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
@@ -652,6 +667,7 @@ netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h)
 #ifdef DEBUG
       printf ("RTM_DELADDR %d\n", h->nlmsg_type);
 #endif /* DEBUG */
+      return netlink_interface_addr (snl, h);
       break;
     default:
 #ifdef DEBUG

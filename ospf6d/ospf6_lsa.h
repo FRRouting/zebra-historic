@@ -22,9 +22,6 @@
 #ifndef OSPF6_LSA_H
 #define OSPF6_LSA_H
 
-#define MAXLISTEDLSA 512
-#define MAXLSASIZE   1024
-
 #define THIS_IS_REFRESH  ((struct thread *)0xffffffff)
 
 /* LSA definition */
@@ -46,9 +43,6 @@
 #define LST_LINK_LSA                0x0008
 #define LST_INTRA_AREA_PREFIX_LSA   0x2009
 
-#define AREALSTYPESIZE              0x0009
-#define typeindex(x)     (((ntohs (x)) & 0x000f) - 1)
-
 #define GET_LSASCOPE(x)  ((ntohs (x)) & 0x6000)
 #define SCOPE_LINKLOCAL  0x0000
 #define SCOPE_AREA       0x2000
@@ -67,6 +61,7 @@ struct lsa_hdr
   unsigned short lsh_len;      /* length */
 };
 
+#define LSH_NEXT(x) ((x) + 1)
 #define LSA_NEXT(x) ((struct lsa_hdr *)((char *)(x) + ntohs ((x)->lsh_len)))
 #define lsa_issame(x,y) ((x)->lsh_type == (y)->lsh_type && \
                          (x)->lsh_id == (y)->lsh_id && \
@@ -84,11 +79,6 @@ struct lsa_internal
   struct ospf6_if  *ospf6_if;
   list              retransing_nbr;
 };
-
-/* for LSA list in Neighbor Data Structure */
-#define lsdb_size(x)     (sizeof (x) / sizeof (struct lsa_internal *))
-
-#define MY_ROUTER_LSA_ID    0
 
 struct router_lsa
 {
@@ -127,16 +117,6 @@ struct network_lsa
   /* followed by router_id(s) */
 };
 
-/* for ack_type() */
-#define NO_ACK       0
-#define DELAYED_ACK  1
-#define DIRECT_ACK   2
-
-#define NONE       0
-#define FLOODBACK  1
-#define IMPLIEDACK 2
-#define DUPLICATE  4
-
 struct link_lsa
 {
   unsigned char   llsa_rtr_pri;
@@ -155,43 +135,25 @@ struct intra_area_prefix_lsa
 };
 
 /* Function Prototypes */
+void lsa_expire_cancel (struct lsa_internal *);
+void lsa_refresh_cancel (struct lsa_internal *);
 void free_lsa (struct lsa_hdr *);
 void free_lsa_internal_hdr (struct lsa_internal *);
-int lsa_delete_all_list (list);
-int lsi_delete_from_list (struct lsa_internal *, list);
-int lsi_delete (struct lsa_internal *);
-int prepare_neighbor_lsdb (struct neighbor *);
 int expire_lsa_age (struct thread *);
 int calc_lsa_age_internal (struct lsa_internal *);
-int past_min_ls_interval (struct lsa_internal *);
 unsigned short calc_lsa_age_external (struct lsa_internal *);
+int past_min_ls_interval (struct lsa_internal *);
 struct lsa_internal *make_lsa_hdr_internal (struct lsa_hdr *,
                                             struct neighbor *);
 struct lsa_internal *make_lsa_internal (struct lsa_hdr *, struct neighbor *);
-int lsa_change (struct lsa_internal *);
-int lsa_install (struct lsa_internal *);
 int which_is_more_recent (struct lsa_internal *, struct lsa_internal *);
-list lsa_lookup_by_advrtr (unsigned short, unsigned long, struct area *);
-struct lsa_internal *lsa_lookup (unsigned short, unsigned long,
-                                 unsigned long, struct area *,
-                                 struct ospf6_if *);
 int lsatype_ok (struct lsa_hdr *);
-int check_neighbor_lsdb (struct iovec *, struct neighbor *);
-int proceed_summarylist (struct neighbor *);
-struct lsa_hdr *attach_lsa_to_iov (struct lsa_internal *, struct iovec *);
-struct lsa_hdr *attach_lsa_hdr_to_iov (struct lsa_internal *, struct iovec *);
-void attach_lsa_to_retranslist (struct lsa_internal *, struct neighbor *);
-void detach_lsa_from_retranslist (struct lsa_internal *, struct neighbor *);
 int lsa_refresh (struct thread *);
 int originating_lsa (struct lsa_internal *);
 int construct_router_lsa (struct area *);
 int construct_network_lsa (struct ospf6_if *);
 int construct_link_lsa (struct ospf6_if *);
 int construct_intra_prefix_lsa (struct ospf6_if *);
-int lsa_receive (struct lsa_hdr *, struct neighbor *);
-int ack_type (struct lsa_internal *, int, int);
-int delayed_ack (struct lsa_internal *);
-int lsa_flood (struct lsa_internal *);
 int show_router_lsa (struct vty *, void *);
 int show_network_lsa (struct vty *, void *);
 int show_link_lsa (struct vty *, void *);
@@ -200,7 +162,11 @@ int vty_lsa (struct vty *, struct lsa_internal *);
 
 struct router_lsd *get_router_lsd (rtr_id_t, struct lsa_internal *);
 unsigned long get_ifindex_to_router (rtr_id_t, struct lsa_internal *);
-struct lsa_internal *get_linklocal_lsa (rtr_id_t, struct ospf6_if *);
+list get_referencing_lsa (struct lsa_internal *);
+
+int is_self_originated (struct lsa_internal *);
+void update_ls_seqnum (struct lsa_internal *);
+void construct_lsa (struct lsa_internal *);
 
 #endif /* OSPF6_LSA_H */
 

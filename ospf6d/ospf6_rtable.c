@@ -230,11 +230,13 @@ rtable_delete_all (struct ospf6_rtentry *rtable)
       for (n = listhead (p->nexthops); n; nextnode (n))
         {
           q = getdata (n);
-          nexthop_unlock (q);
+          nexthop_delete (q);
         }
       list_delete_all (p->nexthops);
       if (p->next)
         next = p->next;
+      else
+        next = NULL;
       rtentry_free (p);
       p = next;
     }
@@ -252,7 +254,8 @@ rtable_lookup (unsigned char dest_type, union dest_id *dest_id,
       switch (dest_type)
         {
           case DTYPE_PREFIX:
-            if (IN6_ARE_ADDR_EQUAL (&dest_id->prefix, &p->dest_id.prefix))
+            if (IN6_ARE_ADDR_EQUAL (&dest_id->prefix.prefix,
+                                    &p->dest_id.prefix.prefix))
               return p;
 
           case DTYPE_ASBR:
@@ -321,16 +324,19 @@ rtable_delete (struct ospf6_rtentry *p, struct ospf6_rtable *rtable)
 
 void rtable_install (unsigned char dest_type, union dest_id *dest_id,
                      cost_t cost, unsigned char path_type, list nexthops,
+                     struct lsa_internal *origin,
                      struct ospf6_rtable *rtable)
 {
   struct ospf6_rtentry *r = rtentry_new();
   struct ospf6_nexthop *p;
   listnode n;
+  char buf[256];
 
   r->dest_type = dest_type;
   memcpy (&r->dest_id, dest_id, sizeof (union dest_id));
   r->path_type = path_type;
   r->cost = cost;
+  r->ls_origin = origin;
 
   r->nexthops = list_init ();
   for (n = listhead (nexthops); n; nextnode (n))
@@ -341,6 +347,8 @@ void rtable_install (unsigned char dest_type, union dest_id *dest_id,
     }
 
   rtable_add (r, rtable);
+  o6log.rtable ("installed %s in rtable",
+                print_rtentry (r, buf, sizeof (buf)));
   return;
 }
 
@@ -350,6 +358,7 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
   struct ospf6_rtentry *r;
   listnode n;
   struct ospf6_nexthop *p;
+  char buf[256];
 
   r = rtable_lookup (dest_type, dest_id, rtable->current_top);
   if (!r)
@@ -358,6 +367,8 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
       return;
     }
 
+  o6log.rtable ("uninstall %s from rtable",
+                print_rtentry (r, buf, sizeof (buf)));
   rtable_delete (r, rtable);
   for (n = listhead (r->nexthops); n; nextnode (n))
     {
@@ -370,51 +381,259 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
   return;
 }
 
-void
-rtable_vty_entry (struct vty *vty, struct ospf6_rtentry *p)
+static void
+area_entry_install (struct ospf6_rtentry *r, struct ospf6 *ospf6)
 {
-  char destination[64], ifid[32], gateway[32], netif[32], cost[32];
+  list lsalist = NULL;
   listnode n;
-  struct ospf6_nexthop *q;
+  struct intra_area_prefix_lsa *intra_prefix_lsa;
+  struct lsa_internal *lsi;
+  struct ospf6_prefix *prefix;
+  int j;
+  union dest_id dest_id;
+  cost_t cost;
+
+  lsalist = get_referencing_lsa (r->ls_origin);
+  if (!lsalist)
+    {
+      o6log.rtable ("No reference to %s",
+                    print_lsahdr (r->ls_origin->lsh));
+      return;
+    }
+
+  for (n = listhead (lsalist); n; nextnode (n))
+    {
+      lsi = (struct lsa_internal *) getdata (n);
+      intra_prefix_lsa = (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
+      o6log.rtable ("checking: %s", print_lsahdr (lsi->lsh));
+
+      prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
+
+      for (j = 0; j < ntohs (intra_prefix_lsa->intra_prefix_num); j++)
+        {
+          /* Should I check if this route already on the table? */
+
+          if (r->dest_type == DTYPE_INTRA_ROUTER) /* Indicating router. */
+            cost = r->cost + ntohs (prefix->o6p_prefix_metric);
+          else if (r->dest_type == DTYPE_INTRA_LINK) /* network */
+            cost = r->cost;
+          else
+            assert (0);
+
+          dest_id.prefix.family = AF_INET6;
+          dest_id.prefix.prefixlen = prefix->o6p_prefix_len;
+          ospf6_prefix_in6_addr (prefix, &dest_id.prefix.prefix);
+          rtable_install (DTYPE_PREFIX, &dest_id, cost, PTYPE_INTRA,
+                          r->nexthops, lsi, &ospf6->rtable);
+          prefix = OSPF6_NEXT_PREFIX (prefix);
+        }
+    }
+  list_delete_all (lsalist);
+  return;
+}
+
+/* check prefixes of each entry in area, and install
+   table in ospf top data structure */
+static void
+rtable_area_to_top (struct area *area)
+{
+  struct ospf6_rtentry *r;
+
+  rtable_init (&area->ospf6->rtable); /* multi-area not yet */
+  for (r = area->rtable.current_top; r; r = r->next)
+    area_entry_install (r, area->ospf6);
+
+  return;
+}
+
+/* XXX very stupid way */
+static void
+rtable_zebra_update (struct ospf6 *ospf6)
+{
+  struct ospf6_rtentry *r;
+
+  for (r = ospf6->rtable.previous_top; r; r = r->next)
+    {
+      assert (r->dest_type == DTYPE_PREFIX);
+      ospf6_zebra_delete (r);
+    }
+
+  for (r = ospf6->rtable.current_top; r; r = r->next)
+    {
+      assert (r->dest_type = DTYPE_PREFIX);
+      ospf6_zebra_add (r);
+    }
+
+  return;
+}
+
+int
+routing_table_calculation (struct thread *thread)
+{
+  struct area *area;
+
+  area = (struct area *)THREAD_ARG (thread);
+  assert (area);
+
+  o6log.rtable ("routing table calculation for %s", area->str);
+
+  area->route_calc = (struct thread *)NULL;
+  rtable_area_to_top (area);
+  rtable_zebra_update (area->ospf6);
+
+  o6log.rtable ("routing table calculation for %s done", area->str);
+
+  return 0;
+}
+
+
+
+char *
+dtype_str (struct ospf6_rtentry *p, char *buf, int bufsize)
+{
+  char *ptr;
 
   switch (p->dest_type)
     {
       case DTYPE_PREFIX:
-        inet_ntop (AF_INET6, &p->dest_id.prefix,
-                   destination, sizeof (destination));
+        inet_ntop (AF_INET6, &p->dest_id.prefix.prefix, buf, bufsize);
+        ptr = index (buf, '\0');
+        snprintf (ptr, bufsize - strlen (buf), "/%d",
+                 p->dest_id.prefix.prefixlen);
         break;
 
       case DTYPE_ASBR:
-        assert (0);
-        return;        /* not yet */
+        assert (0); /* not yet */
 
       case DTYPE_INTRA_ROUTER:
-        inet_ntop (AF_INET, &p->dest_id.router_id,
-                   destination, sizeof (destination));
-        strcat (destination, "(intra-router)");
+        inet_ntop (AF_INET, &p->dest_id.router_id, buf, bufsize);
+        ptr = index (buf, '\0');
+        snprintf (ptr, bufsize - strlen (buf), "(intra-router)");
         break;
 
       case DTYPE_INTRA_LINK:
-        inet_ntop (AF_INET, &p->dest_id.network_id[0],
-                   destination, sizeof (destination));
-        sprintf (ifid, "[ifid %lu](intra-link)", p->dest_id.network_id[1]);
-        strcat (destination, ifid);
+        inet_ntop (AF_INET, &p->dest_id.network_id[0], buf, bufsize);
+        ptr = index (buf, '\0');
+        snprintf (ptr, bufsize - strlen (buf),
+                  "[ifid %lu](intra-link)", p->dest_id.network_id[1]);
         break;
 
       default:
         assert (0);
     }
+  return buf;
+}
 
+char *
+ptype_str (struct ospf6_rtentry *p, char *buf, int bufsize)
+{
+  switch (p->path_type)
+    {
+      case PTYPE_INTRA:
+        snprintf (buf, bufsize, "%s", "Intra");
+        break;
+
+      case PTYPE_INTER:
+        snprintf (buf, bufsize, "%s", "Inter");
+        break;
+
+      case PTYPE_TYPE1_EXTERNAL:
+        snprintf (buf, bufsize, "%s", "T1Ext");
+        break;
+
+      case PTYPE_TYPE2_EXTERNAL:
+        snprintf (buf, bufsize, "%s", "T2Ext");
+        break;
+
+      default:
+        snprintf (buf, bufsize, "%s", "Unknown");
+        break;
+    }
+  return buf;
+}
+
+void
+rtable_vty_entry (struct vty *vty, struct ospf6_rtentry *p)
+{
+  char destination[64], gateway[32];
+  char path_type[16], netif[32], cost[32];
+  listnode n;
+  struct ospf6_nexthop *q;
+
+  /* DestType */
+  memset (destination, 0, sizeof (destination));
+  dtype_str (p, destination, sizeof (destination));
+
+  /* PathType */
+  memset (path_type, 0, sizeof (path_type));
+  ptype_str (p, path_type, sizeof (path_type));
+
+  /* Cost */
   sprintf (cost, "%lu", p->cost);
+
+  /* save root (myself) in area rtable */
+  if (list_isempty (p->nexthops))
+    vty_out (vty, "%-26s %-26s %-3s %5s %-5s\r\n",
+             destination, "--", "--", "0", path_type);
 
   for (n = listhead (p->nexthops); n; nextnode (n))
     {
        q = getdata (n);
        if_indextoname (q->ifindex, netif);
        inet_ntop (AF_INET6, &q->ipaddr, gateway, sizeof (gateway));
-       vty_out (vty, "%-26s %-39s %-3s %5s\r\n",
-                destination, gateway, netif, cost);
+       vty_out (vty, "%-26s %-26s %-3s %5s %-5s\r\n",
+                destination, gateway, netif, cost, path_type);
     }
+
   return;
+}
+
+char *
+print_rtentry (struct ospf6_rtentry *p, char *buf, int bufsize)
+{
+  int ptrsize;
+  char *ptr, destination[64], gateway[32];
+  char path_type[16], netif[32], cost[32];
+  listnode n;
+  struct ospf6_nexthop *q;
+
+  /* DestType */
+  memset (destination, 0, sizeof (destination));
+  dtype_str (p, destination, sizeof (destination));
+
+  /* PathType */
+  memset (path_type, 0, sizeof (path_type));
+  ptype_str (p, path_type, sizeof (path_type));
+
+  /* Cost */
+  sprintf (cost, "%lu", p->cost);
+
+  snprintf (buf, bufsize, "[d:%s c:%s p:%s ",
+            destination, cost, path_type);
+  ptr = index (buf, '\0');
+  ptrsize = bufsize - strlen (buf);
+
+  /* save about root (myself) in area rtable */
+  if (list_isempty (p->nexthops))
+    {
+      snprintf (ptr, ptrsize, "{g:-- i:--}]");
+      return buf;
+    }
+
+  for (n = listhead (p->nexthops); n; nextnode (n))
+    {
+       if (ptrsize <= 2)
+         break;
+       q = getdata (n);
+       if_indextoname (q->ifindex, netif);
+       inet_ntop (AF_INET6, &q->ipaddr, gateway, sizeof (gateway));
+       snprintf(ptr, ptrsize, "{g:%s i:%s}", gateway, netif);
+       ptr = index (buf, '\0');
+       ptrsize = bufsize - strlen (buf);
+    }
+  if (ptrsize >= 2)
+    snprintf (ptr, ptrsize, "]");
+
+  return buf;
 }
 

@@ -165,16 +165,18 @@ list_delete_by_val (list list, void *val)
 	  n->prev->next = n->next;
 	else
 	  list->head = n->next;
+
 	if (n->next)
 	  n->next->prev = n->prev;
 	else
 	  list->tail = n->prev;
+
 	list->count--;
 	listnode_free (n);
+
 	return;
       }
 }
-
 
 /* Lookup the node which has given data. */
 listnode

@@ -53,6 +53,7 @@ struct if_zebra
   list address;
 };
 
+/* Called when new interface is added. */
 int
 if_zebra_new_hook (struct interface *ifp)
 {
@@ -69,6 +70,7 @@ if_zebra_new_hook (struct interface *ifp)
   return 0;
 }
 
+/* Called when interface is deleted. */
 int
 if_zebra_delete_hook (struct interface *ifp)
 {
@@ -80,13 +82,8 @@ if_zebra_delete_hook (struct interface *ifp)
 int
 if_addr_add (struct interface *ifp, struct prefix *p)
 {
-  int ret;
   struct prefix *addr;
   struct if_zebra *if_data;
-
-  ret = if_set_prefix (ifp, (struct prefix_ipv4 *) p);
-  if (ret < 0)
-    return ret;
 
   addr = prefix_new ();
   *addr = *p;
@@ -95,14 +92,19 @@ if_addr_add (struct interface *ifp, struct prefix *p)
   list_add_node (if_data->address, addr);
 
   /* Address check. */
-  if (connected_check_ipv4 (ifp, p))
-    return 0;
-
   if (addr->family == AF_INET)
-    connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
+    {
+      if (connected_check_ipv4 (ifp, p))
+	return 0;
+      connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
+    }
 #ifdef HAVE_IPV6
   if (addr->family == AF_INET6)
-    connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
+    {
+      if (connected_check_ipv6 (ifp, p))
+	return 0;
+      connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
+    }
 #endif /* HAVE_IPV6 */
 
   return 0;
@@ -111,14 +113,9 @@ if_addr_add (struct interface *ifp, struct prefix *p)
 int
 if_addr_delete (struct interface *ifp, struct prefix *p)
 {
-  int ret;
   struct if_zebra *if_data;
   listnode node;
   struct prefix *addr = NULL;
-
-  ret = if_unset_prefix (ifp, (struct prefix_ipv4 *) p);
-  if (ret < 0)
-    return ret;
 
   if_data = (struct if_zebra *) ifp->if_data;
 
@@ -126,14 +123,75 @@ if_addr_delete (struct interface *ifp, struct prefix *p)
     {
       addr = getdata (node);
 
-      if (IPV4_ADDR_CMP (&addr->u.prefix, &p->u.prefix))
-	addr = NULL;
+      if (addr->family == AF_INET)
+	if (IPV4_ADDR_SAME (&addr->u.prefix, &p->u.prefix))
+	  {
+	    connected_delete_ipv4 (ifp, &addr->u.prefix4, 
+				   addr->prefixlen, NULL);
+	    list_delete_by_val (if_data->address, addr);
+	    return 0;
+	  }
+	
+#ifdef HAVE_IPV6
+      if (addr->family == AF_INET6)
+	if (IPV6_ADDR_SAME (&addr->u.prefix, &p->u.prefix))
+	  {
+	    connected_delete_ipv6 (ifp, &addr->u.prefix6, 
+				   addr->prefixlen, NULL);
+	    list_delete_by_val (if_data->address, addr);
+	    return 0;
+	  }
+#endif /* HAVE_IPV6 */
     }	 
-  if (addr)
-    list_delete_by_val (if_data->address, addr);
+  return -1;
+}
 
+#ifdef KAME
+int
+if_tun_add (struct interface *ifsp, struct interface *ifdp, 
+	    struct prefix *sp, struct prefix *dp)
+{
+#if 0				/* Commented out by Kunihiro. */
+  int ret;
+  struct prefix *saddr, daddr;
+  struct if_zebra *if_sdata, *if_ddata;
+    
+  ret = if_set_prefix (ifsp, (struct prefix_ipv4 *) sp);
+  if (ret < 0)
+    return ret;
+  ret = if_set_prefix (ifdp, (struct prefix_ipv4 *) dp);
+  if (ret < 0)
+    return ret;
+    
+  saddr = prefix_new ();
+  daddr = prefix_new ();
+  *saddr = *sp;
+  *daddr = *dp;
+    
+  if_sdata = (struct if_zebra *) ifsp->if_data;
+  list_add_node (if_sdata->address, saddr);
+  if_ddata = (struct if_zebra *) ifdp->if_data;
+  list_add_node (if_ddata->address, daddr);
+    
+  /* Address check. */
+  if (addr->family == AF_INET)
+    connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
+#ifdef HAVE_IPV6
+  if (addr->family == AF_INET6)
+    connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
+#endif /* HAVE_IPV6 */
+    
+#endif /* 0 */
   return 0;
 }
+
+int
+if_tun_delete (struct interface *ifsp, struct interface *ifdp,
+	       struct prefix *sp, struct prefix *dp)
+{
+  return 0;
+}
+#endif KAME
 
 /* Printout flag information into vty */
 void
@@ -181,7 +239,6 @@ prefix_vty_out (struct vty *vty, struct prefix *p)
   vty_out (vty, "%s", str);
   return strlen (str);
 }
-
 /* Dump if address information to vty. */
 void
 connected_dump_vty (struct vty *vty, struct connected *connected)
@@ -385,10 +442,10 @@ DEFUN (no_shutdown_if,
 }
 
 DEFUN (ip_address, ip_address_cmd,
-       "ip address IPV4_ADDRESS",
+       "ip address A.B.C.D/M",
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
-       "IP address\n")
+       "IP address (e.g. 10.0.0.1/8)\n")
 {
   int ret;
   struct interface *ifp;
@@ -396,7 +453,7 @@ DEFUN (ip_address, ip_address_cmd,
 
   ifp = (struct interface *) vty->index;
 
-  ret = str2prefix (argv[0], &p);
+  ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
   if (!ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
@@ -412,7 +469,14 @@ DEFUN (ip_address, ip_address_cmd,
     }
   if_get_flags (ifp);
 
-  /* Make sure mask is applied and set type to static route*/
+  ret = if_set_prefix (ifp, (struct prefix_ipv4 *) &p);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't set interface's address: %s.\r\n", strerror(errno));
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route. */
   ret = if_addr_add (ifp, &p);
   if (ret < 0)
     {
@@ -424,11 +488,11 @@ DEFUN (ip_address, ip_address_cmd,
 }
 
 DEFUN (no_ip_address, no_ip_address_cmd,
-       "no ip address IPV4_ADDRESS",
+       "no ip address A.B.C.D/M",
        "Negate a command or set its defaults\n"
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
-       "IP Address")
+       "IP Address (e.g. 10.0.0.1/8)")
 {
   int ret;
   struct interface *ifp;
@@ -436,10 +500,18 @@ DEFUN (no_ip_address, no_ip_address_cmd,
 
   ifp = (struct interface *) vty->index;
 
-  ret = str2prefix (argv[0], &p);
+  ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
   if (!ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
+
+  ret = if_unset_prefix (ifp, (struct prefix_ipv4 *) &p);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't delete interface's address: %s.\r\n", 
+	       strerror(errno));
       return CMD_WARNING;
     }
 
@@ -453,6 +525,158 @@ DEFUN (no_ip_address, no_ip_address_cmd,
 
   return CMD_SUCCESS;
 }
+
+#ifdef HAVE_IPV6
+DEFUN (ipv6_address, ipv6_address_cmd,
+       "ipv6 address IPV6PREFIX/M",
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IPv6 address (e.g. 3ffe:506::1/48)\n")
+{
+  int ret;
+  struct interface *ifp;
+  struct prefix p;
+
+  ifp = (struct interface *) vty->index;
+
+  ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify IPv6 prefix with prefixlen\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set interface's flag. */
+  ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't up interface\r\n");
+      return CMD_WARNING;
+    }
+  if_get_flags (ifp);
+
+  /* Make sure mask is applied and set type to static route*/
+  ret = if_prefix_add_ipv6 (ifp, (struct prefix_ipv6 *)&p);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't set interface's address: %s.\r\n", strerror(errno));
+      return CMD_WARNING;
+    }
+
+  if_addr_add (ifp, &p);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_address, no_ipv6_address_cmd,
+       "no ipv6 address IPV6PREFIX/M",
+       NO_STR
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IPv6 address (e.g. 3ffe:506::1/48)\n")
+{
+  int ret;
+  struct interface *ifp;
+  struct prefix p;
+
+  ifp = (struct interface *) vty->index;
+
+  ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify IPv6 prefix with prefixlen\r\n");
+      return CMD_WARNING;
+    }
+
+  ret = if_prefix_delete_ipv6 (ifp, (struct prefix_ipv6 *)&p);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't delete interface's address: %s.\r\n",
+	       strerror(errno));
+      return CMD_WARNING;
+    }
+
+  if_addr_delete (ifp, &p);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_IPV6 */
+
+#ifdef KAME
+DEFUN (ip_tunnel, ip_tunnel_cmd,
+       "ip tunnel IP_address IP_address",
+       "KAME ip tunneling configuration commands\n"
+       "Set FROM IP address and TO IP address\n")
+{
+    /* variable define */
+    int ret;
+    struct interface *ifsp, *ifdp;
+    struct prefix sp, dp;
+
+    ifsp = (struct interface *) vty->index;
+    ifdp = (struct interface *) vty->index; /* 大うそ臭い */
+    ret = str2prefix (argv[0], &sp);
+    if (!ret)
+	{
+	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+	    return CMD_WARNING;
+	}
+
+    ret = str2prefix (argv[1], &dp);
+    if (!ret)
+	{
+	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+	    return CMD_WARNING;
+	}
+
+  ret = if_tun_add (ifsp, ifdp, &sp, &dp);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't set tunnel address: %s.\r\n", 
+	       strerror(errno));
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_tunnel, no_ip_tunnel_cmd,
+       "no ip tunnel",
+       "Negate KAME ip tunneling configuration commands\n"
+       "Set FROM IP address and TO IP address\n")
+{
+    /* variable define */
+    int ret;
+    struct interface *ifp;
+    struct interface *ifsp = NULL;
+    struct prefix sp, dp;
+
+    ifp = (struct interface *) vty->index;
+    ret = str2prefix (argv[0], &sp);
+    if (!ret)
+	{
+	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+	    return CMD_WARNING;
+	}
+
+    ret = str2prefix (argv[1], &dp);
+    if (!ret)
+	{
+	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+	    return CMD_WARNING;
+	}
+
+    ret = if_tun_delete (ifsp, ifp, &sp, &dp);
+    if (ret < 0)
+	{
+	    vty_out (vty, "Can't set tunnel address: %s.\r\n", 
+		     strerror(errno));
+	    return CMD_WARNING;
+	}
+    
+    return CMD_SUCCESS;
+}
+#endif /* KAME */
 
 int
 if_config_write (struct vty *vty)
@@ -480,7 +704,8 @@ if_config_write (struct vty *vty)
 	     nextnode (addrnode))
 	  {
 	    p = getdata (addrnode);
-	    vty_out (vty, " ip address %s/%d%s",
+	    vty_out (vty, " ip%s address %s/%d%s",
+		     p->family == AF_INET ? "" : "v6",
 		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		     p->prefixlen, VTY_NEWLINE);
 	  }
@@ -527,4 +752,14 @@ zebra_if_init ()
   install_element (INTERFACE_NODE, &no_shutdown_if_cmd);
   install_element (INTERFACE_NODE, &ip_address_cmd);
   install_element (INTERFACE_NODE, &no_ip_address_cmd);
+
+#ifdef HAVE_IPV6
+  install_element (INTERFACE_NODE, &ipv6_address_cmd);
+  install_element (INTERFACE_NODE, &no_ipv6_address_cmd);
+#endif /* HAVE_IPV6 */
+  
+#ifdef KAME
+  install_element (INTERFACE_NODE, &ip_tunnel_cmd);
+  install_element (INTERFACE_NODE, &no_ip_tunnel_cmd);
+#endif /* KAME */
 }

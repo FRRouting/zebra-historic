@@ -213,7 +213,7 @@ ospf_router_lsa (struct ospf_interface *oi)
       stream_put_ipv4 (s, link_data.s_addr);	/* Link Data. */
       stream_putc (s, link_type);		/* Type. */
       stream_putc (s, (u_char) 0);		/* # TOS. */
-      stream_putw (s, link_cost);	/* metric. */
+      stream_putw (s, link_cost);		/* metric. */
       /* TOS based routing is not supported. */
 
       links++;
@@ -243,16 +243,13 @@ ospf_network_lsa (struct ospf_interface *oi)
 {
   struct ospf *ospf;
   struct ospf_lsa *lsa, *new;
-  struct ospf_neighbor *nbr;
   struct in_addr mask;
   struct route_node *rn;
   struct stream *s;
+  struct ospf_neighbor *nbr;
   int length;
 
   ospf = oi->ospf;
-
-  /* Get Router ID of Desginated Router. */
-  nbr = ospf_nbr_lookup_by_router_id (oi->nbrs, &oi->d_router);
 
   s = stream_new (oi->ifp->mtu);
   lsa = (struct ospf_lsa *) s->data;
@@ -260,17 +257,16 @@ ospf_network_lsa (struct ospf_interface *oi)
   /* LS age should be 0. */
   lsa->options = oi->options;
   lsa->type = (u_char) OSPF_NETWORK_LSA;
-  if (nbr)
-    lsa->id = nbr->address.u.prefix4;
-  else
-    lsa->id.s_addr = 0;
+
+  lsa->id = oi->d_router;
+
   lsa->adv_router = ospf->router_id;
   lsa->ls_seqnum = htonl (ospf->ls_seqnum++);
 
   ospf_output_forward (s, OSPF_LSA_HEADER_SIZE);
   length = OSPF_LSA_HEADER_SIZE;
 
-  masklen2ip (nbr->address.prefixlen, &mask);
+  masklen2ip (oi->address->prefixlen, &mask);
 
   /* Put Network Mask. */
   stream_put_ipv4 (s, mask.s_addr);
@@ -315,15 +311,15 @@ ospf_add_router_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
   p.prefixlen = IPV4_MAX_BITLEN;
   p.u.prefix4 = lsa->id;
 
-  rn = route_node_get (area->router_lsa, &p);
-  if (rn->info)
+  rn = route_node_get (ROUTER_LSA (area), &p);
+  if (rn->info != NULL)
     {
 #ifdef DEBUG
       zlog (NULL, LOG_INFO, "There is already router-LSA for %s",
 	    inet_ntoa (lsa->id));
 #endif
       route_unlock_node (rn);
-      ospf_lsa_free (rn->info);
+    /*  ospf_lsa_free (rn->info); */
     }
   rn->info = lsa;
 
@@ -341,7 +337,7 @@ ospf_add_network_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
   p.prefixlen = IPV4_MAX_BITLEN;
   p.u.prefix4 = lsa->id;
 
-  rn = route_node_get (area->network_lsa, &p);
+  rn = route_node_get (NETWORK_LSA (area), &p);
   if (rn->info)
     {
 #ifdef DEBUG
@@ -363,32 +359,21 @@ ospf_add_summary_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
 }
 
 struct ospf_lsa *
-ospf_lsa_lookup (struct ospf_area *area, u_int32_t ls_type,
-		 struct in_addr ls_id, struct in_addr adv_router)
+ospf_lsa_lookup (struct ospf_area *area, u_int32_t type, struct in_addr id)
 {
   struct route_node *rn;
   struct ospf_lsa *match;
   struct prefix p;
 
   match = NULL;
-  switch (ls_type)
+  switch (type)
     {
     case OSPF_ROUTER_LSA:
-      p.family = AF_INET;
-      p.prefixlen = IPV4_MAX_BITLEN;
-      p.u.prefix4 = ls_id;
-      rn = route_node_get (area->router_lsa, &p);
-      if (rn->info != NULL)
-	{
-	  route_unlock_node (rn);
-	  match = (struct ospf_lsa *) rn->info;
-	}
-      break;
     case OSPF_NETWORK_LSA:
       p.family = AF_INET;
       p.prefixlen = IPV4_MAX_BITLEN;
-      p.u.prefix4 = ls_id;
-      rn = route_node_get (area->network_lsa, &p);
+      p.u.prefix4 = id;
+      rn = route_node_get (area->lsa[type - 1], &p);
       if (rn->info != NULL)
 	{
 	  route_unlock_node (rn);
@@ -412,7 +397,7 @@ ospf_lsa_lookup_by_header (struct ospf_area *area, struct ospf_lsa *lsa)
 {
   struct ospf_lsa *match;
 
-  match = ospf_lsa_lookup (area, lsa->type, lsa->id, lsa->adv_router);
+  match = ospf_lsa_lookup (area, lsa->type, lsa->id);
 
   return match;
 }
@@ -486,32 +471,27 @@ ospf_lsa_count (struct ospf_area *area)
   struct route_node *rn;
 
   /* Count router-LSAs. */
-  for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-
+  for (rn = route_top (ROUTER_LSA (area)); rn; rn = route_next (rn))
+    if (rn->info == NULL)
+      continue;
+    else
       count++;
-    }
 
   /* Count network-LSAs. */
-  for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-
+  for (rn = route_top (NETWORK_LSA (area)); rn; rn = route_next (rn))
+    if (rn->info == NULL)
+      continue;
+    else
       count++;
-    }
 
   /* Count summary-LSAs. */
-  for (rn = route_top (area->summary_lsa); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-
+  /*
+  for (rn = route_top (area->lsa[3]); rn; rn = route_next (rn))
+    if (rn->info == NULL)
+      continue;
+    else
       count++;
-    }
-
+  */
   return count;
 }
 
@@ -534,7 +514,7 @@ show_ip_ospf_database_all (struct vty *vty)
 	       inet_ntoa (area->area_id));
       vty_out (vty, "Link ID         ADV Router      Age         Seq#       Checksum Link count\r\n");
 
-      for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
+      for (rn = route_top (ROUTER_LSA (area)); rn; rn = route_next (rn))
 	{
 	  if (rn->info == NULL)
 	    continue;
@@ -553,7 +533,7 @@ show_ip_ospf_database_all (struct vty *vty)
       vty_out (vty, "                Router Link States (Area %s)\r\n\r\n",
 	       inet_ntoa (area->area_id));
       vty_out (vty, "Link ID         ADV Router      Age         Seq#       Checksum\r\n");
-      for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
+      for (rn = route_top (NETWORK_LSA (area)); rn; rn = route_next (rn))
 	{
 	  if (rn->info == NULL)
 	    continue;
@@ -587,7 +567,7 @@ show_ip_ospf_database_network (struct vty *vty)
       vty_out (vty, "                Net Link States (Area %s)\r\n\r\n",
 	       inet_ntoa (area->area_id));
 
-      for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
+      for (rn = route_top (NETWORK_LSA (area)); rn; rn = route_next (rn))
 	{
 	  if (rn->info == NULL)
 	    continue;
@@ -635,7 +615,7 @@ show_ip_ospf_database_router (struct vty *vty)
       vty_out (vty, "\r\n                Router Link States (Area %s)\r\n\r\n",
 	       inet_ntoa (area->area_id));
 
-      for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
+      for (rn = route_top (ROUTER_LSA (area)); rn; rn = route_next (rn))
 	{
 	  if (rn->info == NULL)
 	    continue;

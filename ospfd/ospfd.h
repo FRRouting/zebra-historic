@@ -95,11 +95,11 @@ enum
 #define OSPF_DD_FLAG_MS			 0x01
 #define OSPF_DD_FLAG_M			 0x02
 #define OSPF_DD_FLAG_I			 0x04
+#define OSPF_DD_FLAG_ALL		 0x07
 
-/* OSPF Database Description Initial flags. */
-#define OSPF_DD_INITIALIZE	 	 0
-#define OSPF_DD_EXCHANGING	 	 1
-#define OSPF_DD_FINISHED		 2
+/* OSPF Transit Capability. */
+#define OSPF_TRANSIT_FALSE		 0
+#define OSPF_TRANSIT_TRUE		 1
 
 /* OSPF instance structure. */
 struct ospf
@@ -130,14 +130,34 @@ struct ospf_area
   int default_cost;			/* StubDefaultCost. */
   int auth_type;			/* Authentication type. */
 
-  /* LSAs. */
+#if (0)
   struct route_table *router_lsa;	/* Router-LSAs. */
   struct route_table *network_lsa;	/* Network-LSAs. */
   struct route_table *summary_lsa;	/* Summary-LSAs. */
+#endif
+
+  /* Area related LSAs. */
+  struct route_table *lsa[4];
+
+  /* self originated LSAs. */
+  void *lsa_self[4];
 
   /* Shortest Path Tree. */
+  struct vertex *spf;
+
   /* TransitCapability. */
+  u_char transit;
 };
+
+#define ROUTER_LSA(a)                   (a)->lsa[0]
+#define NETWORK_LSA(a)			(a)->lsa[1]
+#define SUMMARY_LSA(a)			(a)->lsa[2]
+#define SUMMARY_LSA_ASBR(a)		(a)->lsa[3]
+
+#define ROUTER_LSA_SELF(a)		(a)->lsa_self[0]
+#define NETWORK_LSA_SELF(a)		(a)->lsa_self[1]
+#define SUMMARY_LSA_SELF(a)		(a)->lsa_self[2]
+#define SUMMARY_LSA_ASBR_SELF(a)	(a)->lsa_self[3]
 
 /* OSPF config network structure. */
 struct ospf_network

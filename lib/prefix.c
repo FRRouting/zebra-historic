@@ -39,8 +39,6 @@ static u_char maskbit[] = {0x00, 0x80, 0xc0, 0xe0, 0xf0,
 
 #define MASKBIT(offset)  ((0xff << (PNBBY - (offset))) & 0xff)
 
-/* Is this code really return 1 when n>p?
-   I think "If p includes n" is correct. commented by yasu */
 /* If n includes p prefix then return 1 else return 0. */
 int
 prefix_match (struct prefix *n, struct prefix *p)
@@ -97,14 +95,43 @@ prefix_same (struct prefix *p1, struct prefix *p2)
   if (p1->family == p2->family && p1->prefixlen == p2->prefixlen)
     {
       if (p1->family == AF_INET)
-	if (IPV4_ADDR_CMP (&p1->u.prefix, &p2->u.prefix) == 0)
+	if (IPV4_ADDR_SAME (&p1->u.prefix, &p2->u.prefix))
 	  return 1;
 #ifdef HAVE_IPV6
       if (p1->family == AF_INET6 )
-	if (IPV6_ADDR_CMP (&p1->u.prefix, &p2->u.prefix) == 0)
+	if (IPV6_ADDR_SAME (&p1->u.prefix, &p2->u.prefix))
 	  return 1;
 #endif /* HAVE_IPV6 */
     }
+  return 0;
+}
+
+/* When both prefix structure is not same, but will be same after
+   applying mask, return 0. otherwise, return 1 */
+int
+prefix_cmp (struct prefix *p1, struct prefix *p2)
+{
+  int offset;
+  int shift;
+
+  /* Set both prefix's head pointer. */
+  u_char *pp1 = (u_char *)&p1->u.prefix;
+  u_char *pp2 = (u_char *)&p2->u.prefix;
+
+  if (p1->family != p2->family || p1->prefixlen != p2->prefixlen)
+    return 1;
+
+  offset = p1->prefixlen / 8;
+  shift = p1->prefixlen % 8;
+
+  if (shift)
+    if (maskbit[shift] & (pp1[offset] ^ pp2[offset]))
+      return 1;
+
+  while (offset--)
+    if (pp1[offset] != pp2[offset])
+      return 1;
+
   return 0;
 }
 
@@ -240,7 +267,7 @@ ip_masklen (struct in_addr netmask)
 
 /* Apply mask to IPv4 prefix. */
 void
-apply_mask (struct prefix_ipv4 *p)
+apply_mask_ipv4 (struct prefix_ipv4 *p)
 {
   u_char *pnt;
   int index;
@@ -413,6 +440,25 @@ str2in6_addr (char *str, struct in6_addr *addr)
 }
 #endif /* HAVE_IPV6 */
 
+void
+apply_mask (struct prefix *p)
+{
+  switch (p->family)
+    {
+      case AF_INET:
+        apply_mask_ipv4 ((struct prefix_ipv4 *)p);
+        break;
+#ifdef HAVE_IPV6
+      case AF_INET6:
+        apply_mask_ipv6 ((struct prefix_ipv6 *)p);
+        break;
+#endif /* HAVE_IPV6 */
+      default:
+        break;
+    }
+  return;
+}
+
 /* Utility function of convert between struct prefix <=> union sockunion */
 struct prefix *
 sockunion2prefix (union sockunion *dest,
@@ -513,7 +559,10 @@ str2prefix (char *str, struct prefix *p)
 int
 prefix2str (struct prefix *p, char *str, int size)
 {
-  inet_ntop (p->family, &p->u.prefix, str, size);
+  char buf[BUFSIZ];
+
+  inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ);
+  snprintf (str, size, "%s/%d", buf, p->prefixlen);
   return 0;
 }
 

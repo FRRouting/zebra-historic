@@ -87,7 +87,7 @@ rtm_flag_dump (int flag)
 }
 
 /* Supported address family check. */
-int
+static int
 af_check (int family)
 {
   if (family == AF_INET)
@@ -127,6 +127,15 @@ rtm_read (struct rt_msghdr *rtm,
 	pnt += len; \
       }
 
+#define SOCKMASKGET(X,R) \
+    if (rtm->rtm_addrs & (R)) \
+      { \
+	int len = ROUNDUP (((struct sockaddr *)pnt)->sa_len); \
+        if ((X) != NULL) \
+	  memcpy ((caddr_t)(X), pnt, len); \
+	pnt += len; \
+      }
+
   /* Be sure structure is cleared */
   bzero (dest, sizeof (union sockunion));
   bzero (gate, sizeof (union sockunion));
@@ -135,7 +144,7 @@ rtm_read (struct rt_msghdr *rtm,
   /* We fetch each socket variable into sockunion. */
   SOCKADDRGET (dest, RTA_DST);
   SOCKADDRGET (gate, RTA_GATEWAY);
-  SOCKADDRGET (mask, RTA_NETMASK);
+  SOCKMASKGET (mask, RTA_NETMASK);
   SOCKADDRGET (NULL, RTA_GENMASK);
   SOCKADDRGET (NULL, RTA_IFP);
   SOCKADDRGET (NULL, RTA_IFA);

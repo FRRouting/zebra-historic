@@ -58,6 +58,9 @@
 /* Define if there is ifaliasreq structure. */
 #undef HAVE_IFALIASREQ
 
+/* Define if there is in6_aliasreq structure. */
+#undef HAVE_IN6_ALIASREQ
+
 /* Define if there is rt_addrinfo structure. */
 #undef HAVE_RT_ADDRINFO
 
@@ -115,6 +118,9 @@ typedef unsigned short u_int8_t;
 
 /* Define if you have the daemon function.  */
 #undef HAVE_DAEMON
+
+/* Define if you have the getaddrinfo function.  */
+#undef HAVE_GETADDRINFO
 
 /* Define if you have the inet_aton function.  */
 #undef HAVE_INET_ATON

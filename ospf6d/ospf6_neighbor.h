@@ -76,6 +76,8 @@ int list_cleared_of_lsa (struct neighbor *);
 int free_last_dd (struct thread *);
 int need_adjacency (struct neighbor *);
 
+void delete_ospf6_nbr (struct neighbor *);
+
 /* Neighbor event */
 int hello_received (struct thread *);
 int twoway_received (struct thread *);

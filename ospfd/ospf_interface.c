@@ -132,7 +132,7 @@ interface_config_write (struct vty *vty)
       ifp = getdata (node);
       oi = ifp->if_data;
 
-      if (oi->flag == OSPF_IF_DISABLE)
+      if (!if_is_up (ifp))
 	continue;
 
       vty_out (vty, "!%s", VTY_NEWLINE);

@@ -432,7 +432,7 @@ as_list_delete_hook (void (*func) ())
 }
 
 DEFUN (ip_as_path, ip_as_path_cmd,
-       "ip as-path access-list NAME (deny|permit) ...",
+       "ip as-path access-list NAME (deny|permit) .REGEXP",
        IP_STR
        "Set AS path access list definition\n"
        "AS path access list\n"
@@ -497,7 +497,7 @@ DEFUN (ip_as_path, ip_as_path_cmd,
 }
 
 DEFUN (no_ip_as_path, no_ip_as_path_cmd,
-       "no ip as-path access-list NAME (deny|permit) ...",
+       "no ip as-path access-list NAME (deny|permit) .REGEXP",
        "Set AS path access list definition\n"
        NO_STR
        IP_STR

@@ -35,6 +35,7 @@ lsa_expire_cancel (struct lsa_internal *lsa)
 void
 lsa_refresh_cancel (struct lsa_internal *lsa)
 {
+  o6log.debug ("%s: refresh timer canceled", print_lsahdr (lsa->lsh));
   if (lsa->refresh)
     {
       thread_cancel (lsa->refresh);
@@ -97,100 +98,6 @@ free_lsa_internal_hdr (struct lsa_internal *lsi)
 }
 
 int
-lsa_delete_from_list (struct lsa_internal *lsi, list l)
-{
-  assert (lsi->lsh);
-  free_lsa (lsi->lsh);
-  free_lsa_internal_hdr (lsi);
-  list_delete_by_val (l, lsi);
-  return 0;
-}
-
-int
-lsa_delete_all_list (list l)
-{
-  listnode n;
-  struct lsa_internal *lsi;
-
-  for (n = listhead (l); n; n = listhead (l))
-    {
-      lsi = (struct lsa_internal *) getdata (n);
-      lsa_delete_from_list (lsi, l);
-    }
-  assert (list_isempty (l));
-  return 0;
-}
-
-int
-lsa_delete (struct lsa_internal *lsi)
-{
-  assert (lsi && lsi->lsh);
-  switch (GET_LSASCOPE (lsi->lsh->lsh_type))
-    {
-    case SCOPE_LINKLOCAL:
-      assert (lsi->ospf6_if);
-      lsa_delete_from_list (lsi, lsi->ospf6_if->linklocal_lsa);
-      break;
-
-    case SCOPE_AREA:
-      assert (lsi->area);
-      lsa_delete_from_list (lsi, lsi->area->lsdb
-               [typeindex(lsi->lsh->lsh_type)][hash(lsi->lsh->lsh_id)]);
-      break;
-
-    case SCOPE_AS:
-      break;
-
-    case SCOPE_RESERVED:
-    default:
-      zvlog_debug ("Not Reached!?");
-      break;
-    }
-  return 0;
-}
-
-int
-prepare_neighbor_lsdb (struct neighbor *nbr)
-{
-  int i, type;
-  struct area *area;
-  struct lsa_internal *lsi;
-  listnode n;
-
-  assert (nbr);
-
-  zvlog_debug ("PREPARE for %s", nbr->str);
-
-  list_cleared_of_lsa (nbr);
-
-  area = nbr->ospf6_if->area;
-  assert (area);
-
-  for (type = 0; type < AREALSTYPESIZE; type++)
-    {
-      for (i = 0; i < HASHVAL; i++)
-        {
-          for (n = listhead (area->lsdb[type][i]); n; nextnode (n))
-            {
-              lsi = (struct lsa_internal *) getdata (n);
-              zvlog_debug ("Attache %s to Summary of %s",
-                           print_lsahdr (lsi->lsh), nbr->str);
-              list_add_node (nbr->summarylist, lsi);
-            }
-        }
-    }
-
-  for (n = listhead (nbr->ospf6_if->linklocal_lsa); n; nextnode (n))
-    {
-      lsi = (struct lsa_internal *) getdata (n);
-      zvlog_debug ("Attache %s to Summary of %s",
-                   print_lsahdr (lsi->lsh), nbr->str);
-      list_add_node (nbr->summarylist, lsi);
-    }
-  return 0;
-}
-
-int
 expire_lsa_age (struct thread *thread)
 {
   struct lsa_internal *lsi;
@@ -200,7 +107,7 @@ expire_lsa_age (struct thread *thread)
 
   assert (lsi->refresh == NULL);
   lsi->expire = (struct thread *)NULL;
-  zvlog_debug ("LSAEVENT: Expire: %s", print_lsahdr (lsi->lsh));
+  o6log.lsa ("expire! %s", print_lsahdr (lsi->lsh));
   lsa_delete (lsi);
 
   return 0;
@@ -291,97 +198,6 @@ make_lsa_internal (struct lsa_hdr *lsa, struct neighbor *from)
   return lsi;
 }
 
-int
-lsa_change (struct lsa_internal *newp)
-{
-  switch (ntohs (newp->lsh->lsh_type))
-    {
-    case LST_ROUTER_LSA:
-    case LST_NETWORK_LSA:
-    case LST_LINK_LSA:
-      if (newp->area->spf_calc == (struct thread *)NULL)
-        newp->area->spf_calc = thread_add_event (master,
-                                                 spf_calculation,
-                                                 newp->area, 0);
-      /* Fall through, not break */
-    case LST_INTRA_AREA_PREFIX_LSA:
-      if (newp->area->route_calc == (struct thread *)NULL)
-        newp->area->route_calc = thread_add_event (master,
-                                                   routing_table_calculation,
-                                                   newp->area, 0);
-      break;
-    default:
-      break;
-    }
-
-  return 0;
-}
-
-int
-lsa_install (struct lsa_internal *newp)
-{
-  struct lsa_internal *oldp;
-  struct lsa_hdr *newlsh;
-  struct timeval now;
-  listnode n;
-  struct neighbor *nbr;
-
-  assert (newp);
-
-  newlsh = newp->lsh;
-
-  gettimeofday (&now, (struct timezone *)NULL);
-
-  oldp = lsa_lookup (newlsh->lsh_type, newlsh->lsh_id, newlsh->lsh_advrtr,
-                     newp->area, newp->ospf6_if);
-  if (oldp)
-    {
-      assert (oldp->lsh);
-      log_pointer ("Find Old One[%#x] in lsa_install()", oldp);
-
-      /* XXX Do I have to put on the neighbor's retranslist ?
-         I think so */
-      for (n = listhead (oldp->retransing_nbr);
-           !list_isempty (oldp->retransing_nbr);
-           n = listhead (oldp->retransing_nbr))
-        {
-          nbr = (struct neighbor *) getdata (n);
-          attach_lsa_to_retranslist (newp, nbr);
-          detach_lsa_from_retranslist (oldp, nbr);
-        }
-
-      lsa_delete (oldp);
-    }
-
-  switch (GET_LSASCOPE (newp->lsh->lsh_type))
-    {
-      case SCOPE_LINKLOCAL:
-        assert (newp->ospf6_if);
-        list_add_node (newp->ospf6_if->linklocal_lsa, newp);
-        break;
-      case SCOPE_AREA:
-        assert (newp->area);
-        list_add_node (newp->area->lsdb[typeindex (newp->lsh->lsh_type)]
-                                       [hash (newp->lsh->lsh_id)], newp);
-        break;
-      case SCOPE_AS:
-        zvlog_warn ("Not yet");
-        break;
-      case SCOPE_RESERVED:
-      default:
-        zvlog_warn ("Not Reached!?");
-        break;
-    }
-
-  log_pointer ("new LSA[ihdr:%#x][body:%#x] Installed!",
-               newp, newp->lsh);
-
-  newp->installed = now.tv_sec;
-
-  lsa_change (newp);
-  return 0;
-}
-
 /* check which is more recent. if a is more recent, return -1
    if the same, return 0; otherwise(b is more recent), return 1 */
 int
@@ -446,82 +262,6 @@ which_is_more_recent (struct lsa_internal *a, struct lsa_internal *b)
     }
 }
 
-list
-lsa_lookup_by_advrtr (unsigned short lsa_type, unsigned long advrtr,
-                      struct area *area)
-{
-  int i;
-  struct lsa_internal *lsi;
-  listnode n;
-  list returnlist = NULL;
-
-  returnlist = list_init ();
-  for (i = 0; i < HASHVAL; i++)
-    {
-      for (n = listhead (area->lsdb[typeindex (lsa_type)][i]); n; nextnode (n))
-        {
-          lsi = (struct lsa_internal *)getdata (n);
-          if (lsi->lsh->lsh_advrtr == advrtr)
-            {
-              list_add_node (returnlist, lsi);
-              zvlog_debug ("%s found in lookup by advrtr",
-                           print_lsahdr (lsi->lsh));
-            }
-        }
-    }
-
-  if (list_isempty (returnlist))
-    {
-      list_delete_all (returnlist);
-      returnlist = NULL;
-    }
-
-  return returnlist;
-}
-
-/* LSA lookup (Argument's byte order is Network Byte order) */
-struct lsa_internal *
-lsa_lookup (unsigned short lsa_type, unsigned long lsid,
-            unsigned long advrtr, struct area *area,
-            struct ospf6_if *ospf6_if)
-{
-  listnode n;
-  struct lsa_internal *lsi;
-
-  switch (GET_LSASCOPE (lsa_type))
-    {
-    case SCOPE_LINKLOCAL:
-      assert (ospf6_if);
-      for (n = listhead (ospf6_if->linklocal_lsa); n; nextnode (n))
-        {
-          lsi = getdata (n);
-          if (lsi->lsh->lsh_type == lsa_type &&
-              lsi->lsh->lsh_id == lsid &&
-              lsi->lsh->lsh_advrtr == advrtr)
-            return lsi;
-        }
-      return (struct lsa_internal *)NULL;
-    case SCOPE_AREA:
-      for (n = listhead (area->lsdb[typeindex(lsa_type)][hash(lsid)]);
-           n; nextnode (n))
-        {
-          lsi = getdata (n);
-          if (lsi->lsh->lsh_type == lsa_type &&
-              lsi->lsh->lsh_id == lsid &&
-              lsi->lsh->lsh_advrtr == advrtr)
-            return lsi;
-        }
-      return (struct lsa_internal *)NULL;
-    case SCOPE_AS:
-      break;
-    case SCOPE_RESERVED:
-    default:
-      zvlog_warn ("Not Reached!?");
-      break;
-    }
-  return (struct lsa_internal *)NULL;
-}
-
 int
 lsatype_ok (struct lsa_hdr *lsh)
 {
@@ -537,151 +277,6 @@ lsatype_ok (struct lsa_hdr *lsh)
     }
 }
 
-/* check validity and put lsa in reqestlist if needed.
-   this function should return -1 if stub area and 
-   if as-external-lsa contained. this is not yet */
-int
-check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
-{
-  int i, already;
-  struct lsa_internal *have, *received, *lsi;
-  listnode n;
-  struct lsa_hdr *lsh;
-
-  have = received = (struct lsa_internal *)NULL;
-
-  if (!iov->iov_base)
-    return 0;
-
-  for (i = 0; iov[i].iov_base; i++)
-    {
-      lsh = (struct lsa_hdr *)iov[i].iov_base;
-      zvlog_debug ("recvDD: %s", print_lsahdr (lsh));
-
-      if (!lsatype_ok (lsh))
-        assert (0);
-
-      if (received)
-        {
-          lsa_expire_cancel (received);
-          lsa_refresh_cancel (received);
-          free_lsa (received->lsh);
-          free_lsa_internal_hdr (received);
-        }
-      received = make_lsa_hdr_internal (lsh, nbr);
-      have = lsa_lookup (lsh->lsh_type, lsh->lsh_id,
-                         lsh->lsh_advrtr, nbr->ospf6_if->area,
-                         nbr->ospf6_if);
-      if (have)
-        {
-          if (which_is_more_recent (received, have) >= 0)
-            continue;
-        }
-
-      /* Search this in case already in Requestlist */
-      already = 0;
-      for (n = listhead (nbr->requestlist); n; nextnode (n))
-        {
-          lsi = getdata (n);
-          if (lsa_issame (received->lsh, lsi->lsh))
-            {
-              already++;
-              break;
-            }
-        }
-
-      if (already)
-        {
-          zvlog_debug ("Already Attached requestlist of %s:[%s]",
-                        nbr->str, print_lsahdr (received->lsh));
-          continue;
-        }
-
-        /* the LSA we have just received is newer.
-           attach requestlist. */
-        list_add_node (nbr->requestlist, received);
-        zvlog_debug ("Attache requestlist of %s:[%s]",
-                     nbr->str, print_lsahdr (received->lsh));
-        received = (struct lsa_internal *)NULL;
-    }
-  return 0;
-}
-
-int
-proceed_summarylist (struct neighbor *nbr)
-{
-  int size;
-  struct lsa_internal *p;
-  listnode n;
-
-  list_delete_all_node (nbr->dd_retrans);
-
-  size = sizeof (struct ospf6_hdr) + sizeof (struct database_description);
-  for (n = listhead(nbr->summarylist); n; nextnode (n))
-    {
-      p = (struct lsa_internal *)getdata (n);
-      if (DEFAULT_INTERFACE_MTU - size <= sizeof (struct lsa_hdr))
-        break;
-      list_add_node (nbr->dd_retrans, p);
-      list_delete_by_val (nbr->summarylist, p);
-      size += sizeof (struct lsa_hdr);
-    }
-
-  if (list_isempty (nbr->summarylist))
-    {
-      DD_MBIT_CLEAR (nbr->dd_bits);
-    }
-
-  return 0;
-}
-
-struct lsa_hdr *
-attach_lsa_to_iov (struct lsa_internal *lsi, struct iovec *iov)
-{
-  assert (lsi && lsi->lsh);
-
-  return ((struct lsa_hdr *)
-          iov_attach_last (iov, lsi->lsh, ntohs (lsi->lsh->lsh_len)));
-}
-
-struct lsa_hdr *
-attach_lsa_hdr_to_iov (struct lsa_internal *lsi, struct iovec *iov)
-{
-  assert (lsi && lsi->lsh);
-
-  return ((struct lsa_hdr *)
-          iov_attach_last (iov, lsi->lsh, sizeof (struct lsa_hdr)));
-}
-
-void
-attach_lsa_to_retranslist (struct lsa_internal *lsi, struct neighbor *nbr)
-{
-  list_add_node (lsi->retransing_nbr, nbr);
-  list_add_node (nbr->retranslist, lsi);
-  zvlog_debug ("Attach %s to %s's retranslist", print_lsahdr (lsi->lsh),
-               nbr->str);
-}
-
-void
-detach_lsa_from_retranslist (struct lsa_internal *lsi, struct neighbor *nbr)
-{
-  list_delete_by_val (lsi->retransing_nbr, nbr);
-  list_delete_by_val (nbr->retranslist, lsi);
-  zvlog_debug ("Detach %s from %s's retranslist", print_lsahdr (lsi->lsh),
-               nbr->str);
-}
-
-int
-lsa_is_on_list (struct lsa_internal *lsi, list l)
-{
-  listnode n;
-
-  n = list_lookup_node (l, lsi);
-  if (n)
-    return 1;
-  return 0;
-}
-
 int
 lsa_refresh (struct thread *thread)
 {
@@ -694,29 +289,9 @@ lsa_refresh (struct thread *thread)
   lsi->refresh = (struct thread *)NULL;
   lsa_expire_cancel (lsi);
 
-  zvlog_debug ("LSAEVENT: Refresh: %s", print_lsahdr (lsi->lsh));
+  o6log.lsa ("refresh %s", print_lsahdr (lsi->lsh));
+  construct_lsa (lsi);
 
-  switch (ntohs (lsi->lsh->lsh_type))
-    {
-    case LST_ROUTER_LSA:
-      assert (lsi->area);
-      construct_router_lsa (lsi->area);
-      break;
-    case LST_NETWORK_LSA:
-      assert (lsi->ospf6_if);
-      construct_network_lsa (lsi->ospf6_if);
-      break;
-    case LST_LINK_LSA:
-      assert (lsi->ospf6_if);
-      construct_link_lsa (lsi->ospf6_if);
-      break;
-    case LST_INTRA_AREA_PREFIX_LSA:
-      assert (lsi->ospf6_if);
-      construct_intra_prefix_lsa (lsi->ospf6_if);
-      break;
-    default:
-      break;
-    }
   return 0;
 }
 
@@ -726,7 +301,7 @@ originating_lsa (struct lsa_internal *newp)
   struct lsa_internal *oldp;
 
   assert (newp->lsh->lsh_advrtr == newp->area->ospf6->router_id);
-  zvlog_debug ("Originating LSA %s", print_lsahdr (newp->lsh));
+  o6log.lsa ("originating %s", print_lsahdr (newp->lsh));
 
   oldp = lsa_lookup (newp->lsh->lsh_type, newp->lsh->lsh_id,
                      newp->lsh->lsh_advrtr, newp->area, newp->ospf6_if);
@@ -736,8 +311,8 @@ originating_lsa (struct lsa_internal *newp)
           !memcmp (newp->lsh + 1, oldp->lsh + 1,
                    ntohs (newp->lsh->lsh_len) - sizeof (struct lsa_hdr)))
         {
-          zvlog_debug ("LSAEVENT: LSA %s body No change, Not Installed",
-                        print_lsahdr (newp->lsh));
+          o6log.lsa ("don't install %s: body not changed",
+                     print_lsahdr (newp->lsh));
           free_lsa (newp->lsh);
           free_lsa_internal_hdr (newp);
           return 0;
@@ -764,6 +339,8 @@ construct_router_lsa (struct area *area)
   struct lsa_internal *lsi;
   struct router_lsa *rlsap;
   struct router_lsd *rlsdp;
+
+  o6log.lsa ("construct RouterLSA");
 
   /* check needed space for LSA by looking up ospf_ifs.
      ospf_if to be described are collected. */
@@ -797,9 +374,7 @@ construct_router_lsa (struct area *area)
     + (sizeof (struct router_lsd) * listcount (described_link));
 
   lsa = XMALLOC (MTYPE_OSPF_LSA, space);
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Alloc LSA body[%#x] for our Router-LSA", lsa);
-#endif /*DEBUG_LSAPTR*/
+  o6log.pointer ("pointer %#x for my RouterLSA", lsa);
   memset (lsa, 0, space);
 
   lsh = (struct lsa_hdr *) lsa;
@@ -879,8 +454,6 @@ construct_router_lsa (struct area *area)
 
   /* XXX Checksum */
 
-  zvlog_info ("LSAEVENT: Construct Router-LSA");
-
   /* Router-LSA is now constructed.
      store this in appropriate place (Area Data Structure) */
   lsi = malloc_lsa_internal_hdr (lsh);
@@ -912,6 +485,8 @@ construct_network_lsa (struct ospf6_if *ospf6_if)
 
   assert (ospf6_if->state == IFS_DR);
 
+  o6log.lsa ("construct NetworkLSA");
+
   /* Is this link Transit ? */
   attached_rtr = 0;
   for (n = listhead (ospf6_if->nbr_list); n; nextnode (n))
@@ -922,12 +497,15 @@ construct_network_lsa (struct ospf6_if *ospf6_if)
     }
 
   if (!attached_rtr)
-    return 0;
+    {
+      o6log.lsa ("%s connected to stublink", ospf6_if->interface->name);
+      return 0;
+    }
 
   space = sizeof (struct lsa_hdr) + sizeof (struct network_lsa)
-    + sizeof (rtr_id_t) * (attached_rtr + 1);
+          + sizeof (rtr_id_t) * (attached_rtr + 1);
   lsa = XMALLOC (MTYPE_OSPF_LSA, space);
-  log_pointer ("LSAPTR: Alloc LSA body[%#x] for our Network-LSA", lsa);
+  o6log.pointer ("pointer %#x for my NetworkLSA", lsa);
   memset (lsa, 0, space);
 
   lsh = (struct lsa_hdr *) lsa;
@@ -959,8 +537,6 @@ construct_network_lsa (struct ospf6_if *ospf6_if)
 
   /* XXX! Calculate Checksum! */
 
-  zvlog_debug ("LSAEVENT: Construct Network-LSA");
-
   /* Network-LSA is now constructed.
      store this in appropriate place (Area Data Structure) */
   lsi = malloc_lsa_internal_hdr (lsh);
@@ -981,31 +557,64 @@ construct_network_lsa (struct ospf6_if *ospf6_if)
 int
 construct_link_lsa (struct ospf6_if *ospf6_if)
 {
-  int space;
-  listnode i;
+  int space, already;
+  listnode i, j;
   char *lsa;
   struct lsa_hdr *lsh;
+  struct connected *c;
   struct link_lsa *llsap;
   struct ospf6_prefix *p;
-  struct connected *c;
   struct in6_addr *linklocal, *network_prefix;
   struct lsa_internal *lsi;
   int prefixnum;
+  list adv_list;
+  struct prefix *prefix, prefixbuf;
 
+  o6log.lsa ("construct LinkLSA");
+
+  adv_list = list_init ();
+
+  /* see through connected list to make advertise prefix list
+     and linklocal address */
   space = prefixnum = 0;
   linklocal = (struct in6_addr *)NULL;
   for (i = listhead (ospf6_if->interface->connected); i; nextnode (i))
     {
       c = (struct connected *) getdata (i);
+
       if (c->address->family != AF_INET6)
+        continue;
+      if (IN6_IS_ADDR_LOOPBACK (&c->address->u.prefix6))
         continue;
       if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
         {
           linklocal = &c->address->u.prefix6;
           continue;
         }
-      if (IN6_IS_ADDR_LOOPBACK (&c->address->u.prefix6))
-        continue;
+
+      prefix_copy (&prefixbuf, c->address);
+      apply_mask_ipv6 ((struct prefix_ipv6 *)&prefixbuf);
+      prefix2str (&prefixbuf, strbuf, sizeof (strbuf));
+
+      /* check for duplicate prefixes */
+      already = 0;
+      for (j = listhead (adv_list); j; nextnode (j))
+        {
+          prefix = getdata (j);
+          if (prefix_cmp (prefix, c->address) == 0)
+            {
+              already++;
+              break;
+            }
+        }
+      if (already)
+        {
+          o6log.lsa ("duplicate prefix %s not inserted", strbuf);
+          continue;
+        }
+
+      o6log.lsa ("advertise %s in LinkLSA", strbuf);
+      list_add_node (adv_list, c->address);
       space += OSPF6_PREFIX_SPACE (c->address->prefixlen)
                + sizeof (struct ospf6_prefix);
       prefixnum++;
@@ -1014,9 +623,7 @@ construct_link_lsa (struct ospf6_if *ospf6_if)
   assert (linklocal); /* xxx */
 
   lsa = XMALLOC (MTYPE_OSPF_LSA, space);
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Alloc LSA body[%#x] for our Link-LSA", lsa);
-#endif /*DEBUG_LSAPTR*/
+  o6log.pointer ("pointer %#x for my LinkLSA", lsa);
   memset (lsa, 0, space);
   lsh = (struct lsa_hdr *)lsa;
   /* age later (after checksum) */
@@ -1036,28 +643,22 @@ construct_link_lsa (struct ospf6_if *ospf6_if)
   llsap->llsa_prefix_num = htonl (prefixnum);
 
   p = (struct ospf6_prefix *)(llsap + 1);
-  for (i = listhead (ospf6_if->interface->connected); i; nextnode (i))
+  for (i = listhead (adv_list); i; nextnode (i))
     {
-      c = (struct connected *) getdata (i);
-      if (c->address->family != AF_INET6)
-        continue;
-      if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
-        continue;
-      if (IN6_IS_ADDR_LOOPBACK (&c->address->u.prefix6))
-        continue;
+      prefix = (struct prefix *) getdata (i);
+      prefix_copy (&prefixbuf, prefix);
+      apply_mask_ipv6 ((struct prefix_ipv6 *)&prefixbuf);
 
-      p->o6p_prefix_len = c->address->prefixlen;
+      p->o6p_prefix_len = prefix->prefixlen;
       /* XXX p->o6p_prefix_options */
 
       network_prefix = (struct in6_addr *)(p + 1);
-      memcpy (network_prefix, &c->address->u.prefix6,
-              OSPF6_PREFIX_SPACE (c->address->prefixlen));
+      memcpy (network_prefix, &prefixbuf.u.prefix6,
+              OSPF6_PREFIX_SPACE (prefixbuf.prefixlen));
       p = OSPF6_NEXT_PREFIX (p);
     }
 
   /* XXX! Calculate Checksum! */
-
-  zvlog_debug ("LSAEVENT: Construct Link-LSA");
 
   /* Link-LSA is now constructed.
      store this in appropriate place (Ospf6_If Data Structure) */
@@ -1088,6 +689,8 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
   listnode n, m;
   list prefix_collection = list_init ();
 
+  o6log.lsa ("construct IntraAreaPrefixLSA");
+
   /* Count Full Neighbor */
   fullnbnum = 0;
   for (n = listhead (ospf6_if->nbr_list); n; nextnode (n))
@@ -1101,7 +704,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
     {
       /* Not Stub Network and Not DR. The LSA of this network will be
          advertised by DR of this network. */
-      zvlog_debug ("don't construct intra_prefix_lsa, no DR no stub");
+      o6log.lsa ("not DR on transit link %s", ospf6_if->interface->name);
       return 0;
     }
 
@@ -1117,8 +720,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
                             nbr->rtr_id, ospf6_if->area, ospf6_if);
           if (!lsi)
             {
-              zvlog_warn ("Full but Link-LSA not found: %s",
-                          nbr->str);
+              o6log.lsa ("full but LinkLSA not found for %s", nbr->str);
               continue;
             }
 
@@ -1129,8 +731,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
             {
               if (IN6_IS_ADDR_V4MAPPED ((struct in6_addr *)(p + 1)))
                 {
-                  zvlog_notice ("v4mapped address, don't include"
-                                " Intra-Area-Prefix-LSA");
+                  o6log.lsa ("v4mapped address ignored");
                   continue;
                 }
 
@@ -1153,11 +754,10 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
                         ospf6_if->area, ospf6_if);
       if (!lsi)
         {
-          zvlog_warn ("Link-LSA of Myself not found");
+          o6log.lsa ("can't find my LinkLSA");
         }
       else
         {
-          zvlog_debug ("My Link-LSA: %s", print_lsahdr (lsi->lsh));
           linklsa = (struct link_lsa *)(lsi->lsh + 1);
           p = (struct ospf6_prefix *)(linklsa + 1);
           for (i = 0; i < ntohl (linklsa->llsa_prefix_num);
@@ -1178,17 +778,19 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
     }
   else if (list_isempty (ospf6_if->nbr_list)) /* XXX */
     {
+      /* this is for not DR on stub link. if I don't advertise
+         prefixes of this link, nobody will. */
+
       /* Link-LSA of myself */
       lsi = lsa_lookup (htons (LST_LINK_LSA), htonl (ospf6_if->ifid),
                         ospf6_if->area->ospf6->router_id,
                         ospf6_if->area, ospf6_if);
       if (!lsi)
         {
-          zvlog_warn ("Link-LSA of Myself not found");
+          o6log.lsa ("can't find my LinkLSA");
         }
       else
         {
-          zvlog_debug ("My Link-LSA: %s", print_lsahdr (lsi->lsh));
           linklsa = (struct link_lsa *)(lsi->lsh + 1);
           p = (struct ospf6_prefix *)(linklsa + 1);
           for (i = 0; i < ntohl (linklsa->llsa_prefix_num);
@@ -1208,13 +810,13 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
     }
   else
     {
+      o6log.lsa ("no need to construct IntraAreaPrefixLSA");
       return 0;
     }
 
   if (!listcount (prefix_collection))
     {
-      zvlog_debug ("LSAEVENT: No Network Address,"
-                   " Don't Construct Intra-Area-Prefix-LSA");
+      o6log.lsa ("no prefix to advertise");
       return 0;
     }
 
@@ -1229,15 +831,14 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
 
   /* construct instance of LSA */
   lsa = XMALLOC (MTYPE_OSPF_LSA, space);
-  zvlog_debug ("LSAPTR: Alloc LSA body[%#x]"
-               " for our Intra-Area-Prefix-LSA", lsa);
+  o6log.pointer ("pointer %#x for my IntraAreaPrefixLSA", lsa);
   memset (lsa, 0, space);
   lsh = (struct lsa_hdr *)lsa;
   /* age later (after checksum) */
   lsh->lsh_age = 0;
   lsh->lsh_type = htons (LST_INTRA_AREA_PREFIX_LSA);
 
-/* XXX */
+/* XXX I don't know appropreate value for LS-ID */
 #if 0
   if (fullnbnum)   /* For Transit Network */
     lsh->lsh_id = htonl (ospf6_if->ifid);
@@ -1267,8 +868,8 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
       intra_prefix_lsa->intra_prefix_refer_lsid = htonl (0);
     }
 
-  intra_prefix_lsa->intra_prefix_refer_advrtr =
-       ospf6_if->area->ospf6->router_id;
+  intra_prefix_lsa->intra_prefix_refer_advrtr
+    = ospf6_if->area->ospf6->router_id;
 
   q = (struct ospf6_prefix *)(intra_prefix_lsa + 1);
   for (n = listhead (prefix_collection); n; nextnode (n))
@@ -1281,13 +882,10 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
 
   /* XXX! Calculate Checksum! */
 
-  zvlog_debug ("LSAEVENT: Construct Intra-Area-Prefix-LSA");
-
   /* Intra-Area-Prefix-LSA is now constructed.
      store this in appropriate place (Area Data Structure) */
   lsi = malloc_lsa_internal_hdr (lsh);
   lsi->lsh = lsh;
-  
   lsi->from = (struct neighbor *)NULL;
   lsi->ospf6_if = ospf6_if;
   lsi->area = ospf6_if->area;
@@ -1298,457 +896,6 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
   originating_lsa (lsi);
   return 0;
 }
-
-void
-direct_acknowledge (struct lsa_internal *lsi)
-{
-  struct iovec directack[MAXIOVLIST];
-
-  /* Direct acknowledgement */
-  iov_clear (directack, MAXIOVLIST);
-
-  zvlog_debug ("LSACK(direct): %s", print_lsahdr (lsi->lsh));
-  attach_lsa_hdr_to_iov (lsi, directack);
-  lsi->lsh->lsh_age = htons (calc_lsa_age_external (lsi)
-                             + lsi->from->ospf6_if->inf_trans_delay);
-  ospf6_send (MSGT_LINKSTATE_ACK, directack,
-              (struct sockaddr *)&lsi->from->hisaddr, lsi->from->ospf6_if);
-  return;
-}
-
-void
-delayed_acknowledge (struct lsa_internal *lsi)
-{
-  struct ospf6_if *ospf6_if;
-
-  ospf6_if = lsi->from->ospf6_if;
-  assert (ospf6_if);
-
-  list_add_node (ospf6_if->delayed_ack, lsi);
-
-  if (ospf6_if->send_ack == (struct thread *)NULL)
-    ospf6_if->send_ack = thread_add_timer (master, send_linkstate_ack,
-                                           ospf6_if,
-                                           ospf6_if->rxmt_interval);
-  return;
-}
-
-/* RFC2328 section 13 */
-int
-lsa_receive (struct lsa_hdr *lsh, struct neighbor *from)
-{
-  struct lsa_internal *newp, *oldp, *lsi;
-  struct neighbor *nbr;
-  struct timeval now;
-  listnode n;
-  int onrequest, ismore_recent, onretrans, acknowledge, acktype;
-
-  newp = oldp = (struct lsa_internal *)NULL;
-  ismore_recent = 1;
-  acknowledge = 0;
-
-  /* (1) */
-  /* XXX LSA Checksum */
-
-  /* (2) */
-  switch (ntohs (lsh->lsh_type))
-    {
-    case LST_ROUTER_LSA:
-    case LST_NETWORK_LSA:
-    case LST_LINK_LSA:
-    case LST_INTRA_AREA_PREFIX_LSA:
-      break;
-    case LST_INTER_AREA_PREFIX_LSA:
-    case LST_INTER_AREA_ROUTER_LSA:
-    case LST_AS_EXTERNAL_LSA:
-    default:
-      zvlog_err ("Unsupported LSA Type: %#x, Ignore",
-      ntohs (lsh->lsh_type));
-      return -1;
-    }
-
-  /* (3) */
-  /* XXX, Ebit Missmatch: AS-External-LSA */
-
-  /* (4) */
-  /* XXX, if MaxAge LSA and if we have no instance */
-
-  gettimeofday (&now, (struct timezone *)NULL);
-  newp = make_lsa_internal (lsh, from);
-  oldp = lsa_lookup (lsh->lsh_type, lsh->lsh_id, lsh->lsh_advrtr,
-                     from->ospf6_if->area, from->ospf6_if);
-
-  /* for later use by (6) and (7) */
-  /* check sending neighbor's LS request list */
-  onrequest = 0;
-  for (n = listhead (from->requestlist); n; nextnode (n))
-    {
-      lsi = (struct lsa_internal *)getdata (n);
-      assert (lsi->lsh);
-      if (lsa_issame (newp->lsh, lsi->lsh))
-        onrequest++;
-    }
-  /* check sending neighbor's LS retrans list */
-  if (oldp)
-    {
-      n = list_lookup_node (oldp->retransing_nbr, from);
-      if (n)
-        onretrans = 1;
-      else
-        onretrans = 0;
-
-      if (newp->lsh->lsh_seqnum == oldp->lsh->lsh_seqnum)
-        acknowledge |= DUPLICATE;
-    }
-
-  /* (5) */
-#ifdef DEBUG_LSAPTR
-  if (oldp)
-    {
-      zvlog_debug ("LSAPTR: AGE new[%d], old[%d]",
-                  calc_lsa_age_external (newp),
-                  calc_lsa_age_external (oldp));
-    }
-#endif /*DEBUG_LSAPTR*/
-  if (!oldp || (ismore_recent = which_is_more_recent (newp, oldp)) < 0) 
-    {
-      /* (a) */
-      if (oldp && now.tv_sec - oldp->installed <= MIN_LS_ARRIVAL)
-        {
-          zvlog_notice ("LSAPTR: LSA arrived less than MinLSArrival.");
-          lsa_delete (newp);
-          return -1;
-        }
-
-      /* (b) */
-      acknowledge |= lsa_flood (newp);
-
-      /* (c) */
-      if (oldp)
-        {
-          for (n = listhead (oldp->retransing_nbr); n; nextnode (n))
-            {
-              nbr = (struct neighbor *)getdata (n);
-              detach_lsa_from_retranslist (oldp, nbr);
-            }
-          assert (list_isempty (oldp->retransing_nbr));
-        }
-
-      /* (d), which may cause routing table calculation */
-      lsa_install (newp);
-
-      /* (e) */
-      acktype = ack_type (newp, acknowledge, ismore_recent);
-      if (acktype == DIRECT_ACK)
-        {
-          zvlog_debug ("To ACK Direct");
-          list_add_node (from->direct_ack, newp);
-        }
-      else if (acktype == DELAYED_ACK)
-        {
-          zvlog_debug ("To ACK Delayed");
-          delayed_acknowledge (newp);
-        }
-      else
-        zvlog_debug ("No ACK");
-
-      /* (f) */
-      /* XXX, Self Originated LSA */
-
-    }
-  else if (onrequest) /* (6) */
-    {
-      /* BadLSReq */
-      zvlog_debug ("%s is on requestlist: BadLSReq",
-                   print_lsahdr (newp->lsh));
-      lsa_delete (newp);
-      thread_add_event (master, bad_lsreq, from, 0);
-      return 0;
-    }
-  else if (ismore_recent == 0) /* (7) */
-    {
-      /* (a) Treat this LSA as an Ack: Implied Ack */
-      if (lsa_is_on_list (newp, from->retranslist))
-        {
-          zvlog_debug ("IMPLIED ACK!!");
-          detach_lsa_from_retranslist (newp, from);
-          acknowledge |= IMPLIEDACK;
-        }
-
-      /* (b) */
-      acktype = ack_type (newp, acknowledge, ismore_recent);
-      if (acktype == DIRECT_ACK)
-        {
-          direct_acknowledge (newp);
-        }
-      else if (acktype == DELAYED_ACK)
-        {
-          zvlog_debug ("To ACK Delayed");
-          delayed_acknowledge (newp);
-        }
-      else
-        zvlog_debug ("No ACK");
-    }
-  else /* (8) */
-    {
-      /* XXX, Seqnumber Wrapping */
-
-      /* XXX, Send database copy of this LSA to this neighbor */
-      assert (oldp);
-/*XXXXXXXXXXXXXXXXXXXXXXXX*/
-      list_add_node (from->direct_ack, oldp);
-      lsa_delete (newp);
-    }
-  return 0;
-}
-
-/* if we should resoponse to this LSA as direct acknowledgement,
-   return 1, otherwise (delayed acknowledgement) return 0 */
-/* RFC2328: Table 19: Sending link state acknowledgements. */
-int 
-ack_type (struct lsa_internal *newp, int acknowledge, int ismore_recent)
-{
-  struct ospf6_if *ospf6_if;
-  struct neighbor *nbr;
-  listnode n, m;
-
-  assert (newp->from && newp->from->ospf6_if);
-  ospf6_if = newp->from->ospf6_if;
-
-  if (acknowledge & FLOODBACK)
-    return NO_ACK;
-  else if (ismore_recent < 0 && !(acknowledge & FLOODBACK))
-    {
-      if (ospf6_if->state == IFS_BDR)
-        {
-          if (ospf6_if->dr == newp->from->rtr_id)
-            return DELAYED_ACK;
-          else
-            return NO_ACK;
-        }
-      else
-        return DELAYED_ACK;
-    }
-  else if (acknowledge & DUPLICATE && acknowledge & IMPLIEDACK)
-    {
-      if (ospf6_if->state == IFS_BDR)
-        {
-          if (ospf6_if->dr == newp->from->rtr_id)
-            return DELAYED_ACK;
-          else
-            return NO_ACK;
-        }
-      else
-        return NO_ACK;
-    }
-  else if (acknowledge & DUPLICATE && !(acknowledge & IMPLIEDACK))
-    {
-      return DIRECT_ACK;
-    }
-  else if (calc_lsa_age_external (newp) == MAXAGE)
-    {
-      if (lsa_lookup (newp->lsh->lsh_type, newp->lsh->lsh_id,
-                      newp->lsh->lsh_advrtr, newp->area, newp->ospf6_if)
-          == (struct lsa_internal *)NULL)
-        {
-          for (n = listhead (newp->area->ospf6_if_list);
-               n;
-               nextnode (n))
-            {
-              ospf6_if = (struct ospf6_if *) getdata (n);
-              for (m = listhead (ospf6_if->nbr_list);
-                   m;
-                   nextnode (m))
-                {
-                  nbr = (struct neighbor *) getdata (m);
-                  if (nbr->state == NBS_EXCHANGE || nbr->state == NBS_LOADING)
-                    return NO_ACK;
-                }
-            }
-          return DIRECT_ACK;
-        }
-    }
-  
-  return NO_ACK;
-}
-
-/* RFC2328 section 13.3 */
-int
-lsa_flood (struct lsa_internal *newp)
-{
-  struct neighbor *nbr = (struct neighbor *)NULL;
-  listnode n, m, l;
-  struct ospf6_if *ospf6_if;
-  int onrequest, ismore_recent, addretrans;
-  struct iovec iov[MAXIOVLIST];
-  struct sockaddr_in6 dst;
-  struct linkstate_update *lsupdate;
-  int retval = 0;
-  struct lsa_internal *lsi = (struct lsa_internal *)NULL;
-  list eligible_ifacelist;
-
-  assert (newp && newp->lsh && newp->area);
-
-  zvlog_info ("FLOODING %s", print_lsahdr (newp->lsh));
-
-  eligible_ifacelist = list_init ();
-  switch (GET_LSASCOPE (newp->lsh->lsh_type))
-    {
-    case SCOPE_LINKLOCAL:
-      list_add_node (eligible_ifacelist, newp->ospf6_if);
-      break;
-    case SCOPE_AREA:
-      for (n = listhead (newp->area->ospf6_if_list); n; nextnode (n))
-        list_add_node (eligible_ifacelist, getdata (n));
-      break;
-    case SCOPE_AS:
-      break;
-    case SCOPE_RESERVED:
-    default:
-      zvlog_debug ("Not Reached!?");
-      break;
-    }
-
-  /* for each eligible ospf_ifs */
-  for (n = listhead (eligible_ifacelist);
-       n;
-       nextnode (n))
-    {
-      ospf6_if = (struct ospf6_if *)getdata (n);
-      addretrans = 0;
-
-      /* (1) for each neighbor */
-      for (m = listhead (ospf6_if->nbr_list); m; nextnode (m))
-        {
-          nbr = (struct neighbor *) getdata (m);
-
-          /* (a) */
-          if (nbr->state < NBS_EXCHANGE)
-            continue;  /* examin next neighbor */
-
-          /* (b) */
-          if (nbr->state == NBS_EXCHANGE
-              || nbr->state == NBS_LOADING)
-            {
-              onrequest = 0;
-              for (l = listhead (nbr->requestlist); l; nextnode (l))
-                {
-                  lsi = (struct lsa_internal *) getdata (l);
-                  if (lsa_issame (lsi->lsh, newp->lsh))
-                    {
-                      onrequest++;
-                      break;
-                    }
-                }
-              if (onrequest)
-                {
-                  ismore_recent = which_is_more_recent (newp, lsi);
-                  if (ismore_recent > 0)
-                    {
-                      zvlog_debug ("Requesting LSA is newer on %s",
-                                   nbr->str);
-                      continue; /* examin next neighbor */
-                    }
-                  else if (ismore_recent == 0)
-                    {
-                      zvlog_debug ("The same instance,Delete from"
-                                   " requestlist %s", nbr->str);
-                      lsa_delete (lsi);
-                      list_delete_by_val (nbr->requestlist, lsi);
-                      continue; /* examin next neighbor */
-                    }
-                  else /* ismore_recent < 0(the new LSA is more recent) */
-                    {
-                      zvlog_debug ("Delete from requestlist: %s",
-                                   nbr->str);
-                      lsa_delete (lsi);
-                      list_delete_by_val (nbr->requestlist, lsi);
-                    }
-                }
-            }
-
-          /* (c) */
-          if (newp->from == nbr)
-            continue; /* examin next neighbor */
-
-          /* (d) add retranslist */
-          attach_lsa_to_retranslist (newp, nbr);
-          zvlog_debug ("FLOODING: Added to retranslist of %s",
-                       nbr->str);
-
-          addretrans++;
-          if (nbr->send_update == (struct thread *) NULL)
-            {
-              nbr->send_update = thread_add_timer
-                (master, send_linkstate_update, nbr,
-                nbr->ospf6_if->rxmt_interval);
-            }
-        }
-
-      /* (2) */
-      if (addretrans == 0)
-        continue; /* examin next interface */
-      else if (newp->from && newp->from->ospf6_if == ospf6_if)
-        retval = FLOODBACK;
-
-      /* (3) */
-      if (newp->from && newp->from->ospf6_if == ospf6_if)
-        {
-          if (newp->from->rtr_id == newp->from->ospf6_if->dr ||
-              newp->from->rtr_id == newp->from->ospf6_if->bdr)
-            continue; /* examin next interface */
-        }
-
-      /* (4) */
-      if (newp->from && newp->from->ospf6_if == ospf6_if
-          && ospf6_if->state == IFS_BDR)
-        continue; /* examin next interface */
-
-      /* (5) send LinkState Update */
-      iov_clear (iov, MAXIOVLIST);
-      newp->lsh->lsh_age =
-        htons (calc_lsa_age_external (newp) + ospf6_if->inf_trans_delay);
-      attach_lsa_to_iov (newp, iov);
-      dst.sin6_family = AF_INET6;
-#ifdef SIN6_LEN
-      dst.sin6_len = sizeof (struct sockaddr_in6);
-#endif /* SIN6_LEN */
-#ifdef HAVE_SIN6_SCOPE_ID
-      dst.sin6_scope_id = if_nametoindex (nbr->ospf6_if->interface->name);
-#endif /* HAVE_SIN6_SCOPE_ID */
-
-      if (if_is_broadcast (ospf6_if->interface))
-        {
-          switch (ospf6_if->state)
-            {
-            case IFS_DR:
-            case IFS_BDR:
-              inet_pton (AF_INET6, ALLSPFROUTERS6, &dst.sin6_addr);
-              break;
-            default:
-              inet_pton (AF_INET6, ALLDROUTERS6, &dst.sin6_addr);
-              break;
-            }
-        }
-      else
-        {
-          /* XXX NBMA not yet */
-          inet_pton (AF_INET6, ALLSPFROUTERS6, &dst.sin6_addr);
-        }
-
-      lsupdate = (struct linkstate_update *)
-        iov_prepend (MTYPE_OSPF_MESSAGE, iov, sizeof (struct linkstate_update));
-      assert (lsupdate);
-      lsupdate->lsupdate_num = htonl (1);
-
-      ospf6_send (MSGT_LINKSTATE_UPDATE, iov,
-                 (struct sockaddr *)&dst, ospf6_if);
-      iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
-    }
-
-  return retval;
-}
-
 
 int show_router_lsa (struct vty *vty, void *data)
 {
@@ -1950,19 +1097,147 @@ get_ifindex_to_router (rtr_id_t rtrid, struct lsa_internal *lsa)
   return 0;
 }
 
-struct lsa_internal *
-get_linklocal_lsa (rtr_id_t rtrid, struct ospf6_if *o6if)
-{
-  listnode n;
-  struct lsa_internal *lsa;
+
 
-  assert (rtrid && o6if);
-  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+/* Back pointer check, Is X's reference field bound to y? */
+#define x_ipl(x) ((struct intra_area_prefix_lsa *)LSH_NEXT((x)->lsh))
+#define is_reference_network_ok(x,y) \
+          ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsh->lsh_type &&\
+           (x_ipl(x))->intra_prefix_refer_lsid == (y)->lsh->lsh_id &&\
+           (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsh->lsh_advrtr)
+  /* referencing router's ifid must be 0,
+     see draft-ietf-ospf-ospfv6-06.txt */
+#define is_reference_router_ok(x,y) \
+          ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsh->lsh_type &&\
+           (x_ipl(x))->intra_prefix_refer_lsid == htonl (0) &&\
+           (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsh->lsh_advrtr)
+
+/* return list of LSAs that referencing this LSA(internal to area) */
+list
+get_referencing_lsa (struct lsa_internal *lsa)
+{
+  char tmpbuf[64];
+  list tmplist, retlist = list_init ();
+  listnode n;
+  struct lsa_internal *x;
+
+  assert (lsa->area);
+  switch (ntohs (lsa->lsh->lsh_type))
     {
-      lsa = getdata (n);
-      if (lsa->lsh->lsh_advrtr == rtrid)
-        return lsa;
+      case LST_ROUTER_LSA:
+        tmplist = lsa_lookup_by_advrtr (htons (LST_INTRA_AREA_PREFIX_LSA),
+                                        lsa->lsh->lsh_advrtr, lsa->area);
+        if (tmplist)
+          {
+            for (n = listhead (tmplist); n; nextnode (n))
+              {
+                x = getdata (n);
+                if (is_reference_router_ok (x, lsa))
+                  {
+                    memcpy (tmpbuf, print_lsahdr (x->lsh), sizeof (tmpbuf));
+                    o6log.lsa ("%s references %s",
+                               tmpbuf,
+                               print_lsahdr (lsa->lsh));
+                    list_add_node (retlist, x);
+                  }
+              }
+            list_delete_all (tmplist);
+          }
+        break;
+
+      case LST_NETWORK_LSA:
+        x = lsa_lookup (htons (LST_INTRA_AREA_PREFIX_LSA),
+                        lsa->lsh->lsh_id, lsa->lsh->lsh_advrtr,
+                        lsa->area, NULL);
+        if (x && is_reference_network_ok (x, lsa))
+          {
+            o6log.lsa ("%s references %s",
+                       print_lsahdr (x->lsh),
+                       print_lsahdr (lsa->lsh));
+            list_add_node (retlist, x);
+          }
+        break;
+
+      default:
+        break;
     }
-  return NULL;
+
+  if (list_isempty (retlist))
+    {
+      o6log.lsa ("no lsa references %s", print_lsahdr (lsa->lsh));
+      list_delete_all (retlist);
+      retlist = NULL;
+    }
+
+  /* don't forget to list_delete_all () later */
+  return retlist;
+}
+
+int
+is_self_originated (struct lsa_internal *p)
+{
+  if (p->lsh->lsh_advrtr == p->area->ospf6->router_id)
+    return 1;
+  return 0;
+}
+
+void
+update_ls_seqnum (struct lsa_internal *p)
+{
+  signed long seqnum;
+
+  seqnum = ntohl (p->lsh->lsh_seqnum) + 1;
+  switch (ntohs (p->lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+        p->area->router_lsa_seqnum = seqnum;
+        break;
+      case LST_NETWORK_LSA:
+        p->area->network_lsa_seqnum = seqnum;
+        break;
+      case LST_INTRA_AREA_PREFIX_LSA:
+        p->area->intra_prefix_seqnum = seqnum;
+        break;
+      case LST_LINK_LSA:
+        p->area->link_lsa_seqnum = seqnum;
+        break;
+      default:
+        break;
+    }
+  o6log.lsa ("seqnum for %s updated to %d(%#x)",
+             lstype_name [typeindex (p->lsh->lsh_type)],
+             seqnum, seqnum);
+  return;
+}
+
+void
+construct_lsa (struct lsa_internal *lsa)
+{
+  switch (ntohs (lsa->lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+        assert (lsa->area);
+        construct_router_lsa (lsa->area);
+        break;
+
+      case LST_NETWORK_LSA:
+        assert (lsa->ospf6_if);
+        construct_network_lsa (lsa->ospf6_if);
+        break;
+
+      case LST_INTRA_AREA_PREFIX_LSA:
+        assert (lsa->ospf6_if);
+        construct_intra_prefix_lsa (lsa->ospf6_if);
+        break;
+
+      case LST_LINK_LSA:
+        assert (lsa->ospf6_if);
+        construct_link_lsa (lsa->ospf6_if);
+        break;
+
+      default:
+        break;
+    }
+  return;
 }
 

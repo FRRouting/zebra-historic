@@ -107,6 +107,11 @@ bgp_info_free (struct bgp_info *br)
 int
 bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
 {
+  if (new->type == ZEBRA_ROUTE_CONNECT)
+    return 1;
+  if (exist->type == ZEBRA_ROUTE_CONNECT)
+    return 0;
+
   if (new->type == ZEBRA_ROUTE_STATIC)
     return 1;
   if (exist->type == ZEBRA_ROUTE_STATIC)
@@ -353,6 +358,14 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 	      }
 	}
 #endif /* HAVE_IPV6 */
+    }
+
+  /* If local-preference is not set. */
+  if ((bgp_peer_sort (peer) == BGP_PEER_IBGP) && 
+      (! (attr.flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))))
+    {
+      attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF);
+      attr.local_pref = DEFAULT_LOCAL_PREF;
     }
 
   /* Route map apply. */
@@ -924,8 +937,17 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 	}
 #endif /* HAVE_IPV6 */
 
-      vty_out (vty, "%10lu%10lu%10lu ",
-	       attr->med, attr->local_pref, attr->weight);
+      if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
+	vty_out (vty, "%10lu", attr->med);
+      else
+	vty_out (vty, "          ");
+
+      if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
+	vty_out (vty, "%10lu", attr->local_pref);
+      else
+	vty_out (vty, "          ");
+
+      vty_out (vty, "%10lu ",attr->weight);
     
     /* Print aspath */
     if (attr->aspath)
@@ -1082,12 +1104,12 @@ DEFUN (show_ip_bgp, show_ip_bgp_cmd,
 
 DEFUN (show_ip_bgp_regexp, 
        show_ip_bgp_regexp_cmd,
-       "show ip bgp regexp ...",
+       "show ip bgp regexp .REGEXP",
        SHOW_STR
        IP_STR
        BGP_STR
        "Show regular expression matched bgp routes\n"
-       "\n")
+       "AS path regular expression\n")
 {
   int i;
   int ret;
@@ -1188,12 +1210,12 @@ DEFUN (show_ipv6_bgp,
 
 DEFUN (show_ipv6_bgp_regexp, 
        show_ipv6_bgp_regexp_cmd,
-       "show ipv6 bgp regexp ...",
+       "show ipv6 bgp regexp .REGEXP",
        SHOW_STR
        IP_STR
        BGP_STR
        "Show regular expression matched bgp routes\n"
-       "\n")
+       "AS path regular expression\n")
 {
   int i;
   int ret;
@@ -1339,7 +1361,7 @@ DEFUN (bgp_network,
     }
 
   /* Make sure mask is applied. */
-  apply_mask ((struct prefix_ipv4 *) &p);
+  apply_mask (&p);
 
   node = route_node_get (bgp_static_ipv4, &p);
   if (node->info)
@@ -1386,7 +1408,7 @@ DEFUN (no_bgp_network,
       return CMD_WARNING;
     }
 
-  apply_mask (&p);
+  apply_mask_ipv4 (&p);
 
   np = route_node_get (bgp_static_ipv4, (struct prefix *) &p);
   if (!np->info)
@@ -1429,7 +1451,7 @@ DEFUN (aggregate_address,
   /* IPv4 aggregate address support. */
   if (p.family == AF_INET)
     {
-      apply_mask ((struct prefix_ipv4 *) &p);
+      apply_mask (&p);
 
       node = route_node_get (bgp_aggregate_ipv4, &p);
       if (node->info)
@@ -1530,5 +1552,6 @@ bgp_route_init ()
   install_element (VIEW_NODE, &show_ipv6_bgp_cmd);
   install_element (VIEW_NODE, &show_ipv6_bgp_regexp_cmd);
   install_element (ENABLE_NODE, &show_ipv6_bgp_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_bgp_regexp_cmd);
 #endif /* HAVE_IPV6 */
 }

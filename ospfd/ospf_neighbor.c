@@ -113,7 +113,7 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
 
   p.family = AF_INET;
   p.prefixlen = 32;
-  p.u.prefix4 = ospf_top->router_id;
+  p.u.prefix4 = oi->address->u.prefix4;
 
   rn = route_node_get (oi->nbrs, &p);
   if (rn->info)
@@ -162,6 +162,30 @@ ospf_nbr_count (struct route_table *nbrs, int status)
     }
 
   return count;
+}
+
+struct ospf_neighbor *
+ospf_nbr_lookup_by_addr (struct route_table *nbrs,
+			 struct in_addr *addr)
+{
+  struct prefix p;
+  struct route_node *rn;
+  struct ospf_neighbor *nbr;
+
+  p.family = AF_INET;
+  p.prefixlen = 32;
+  p.u.prefix4 = *addr;
+
+  rn = route_node_get (nbrs, &p);
+  if (rn == NULL)
+    return NULL;
+  if (rn->info == NULL)
+    return NULL;
+
+  nbr = (struct ospf_neighbor *) rn->info;
+  route_unlock_node (rn);
+
+  return nbr;
 }
 
 struct ospf_neighbor *

@@ -22,7 +22,7 @@
 #include "ospf6d.h"
 
 /* Global logging buf */
-char strbuf[16];
+char strbuf[1024];
 
 /* Logging function switch */
 struct ospf6_log o6log;
@@ -30,12 +30,12 @@ struct ospf6_log o6log;
 /* Strings for logging */
 char *ifs_name[] =
 {
-  "NONE",
-  "DOWN",
-  "LOOPBACK",
-  "WAITING",
+  "None",
+  "Down",
+  "Loopback",
+  "Waiting",
   "PtoP",
-  "DROTHER",
+  "DROther",
   "BDR",
   "DR",
   NULL
@@ -43,40 +43,40 @@ char *ifs_name[] =
 
 char *nbs_name[] =
 {
-  "NONE",
-  "DOWN",
-  "ATTEMPT",
-  "INIT",
-  "TWOWAY",
-  "EXSTART",
-  "EXCHANGE",
-  "LOADING",
-  "FULL",
+  "None",
+  "Down",
+  "Attempt",
+  "Init",
+  "Twoway",
+  "ExStart",
+  "ExChange",
+  "Loading",
+  "Full",
   NULL
 };
 
 char *mesg_name[] = 
 {
-  "NONE",
-  "HELLO",
-  "DATABASE DESCRIPTION",
-  "LINK STATE REQUEST",
-  "LINK STATE UPDATE",
-  "LINK STATE ACK",
+  "None",
+  "Hello",
+  "DatabaseDescription",
+  "LSRequest",
+  "LSUpdate",
+  "LSAck",
   NULL
 };
 
 char *lstype_name[] =
 {
-  "Router-LSA",
-  "Network-LSA",
-  "Inter-Area-Prefix-LSA",
-  "Inter-Area-Router-LSA",
-  "AS-External-LSA",
-  "Group-Membership-LSA",
-  "Type-7-LSA",
-  "Link-LSA",
-  "Intra-Area-Prefix-LSA",
+  "RouterLSA",
+  "NetworkLSA",
+  "InterAreaPrefixLSA",
+  "InterAreaRouterLSA",
+  "ASExternalLSA",
+  "GroupMembershipLSA",
+  "Type7LSA",
+  "LinkLSA",
+  "IntraAreaPrefixLSA",
   NULL
 };
 
@@ -94,7 +94,11 @@ char *print_lsahdr (struct lsa_hdr *lsh)
   static char buf[256], tmp[64], tmp2[64];
 
   inet_ntop (AF_INET, &lsh->lsh_advrtr, tmp, sizeof (tmp));
+#if 0
   inet_ntop (AF_INET, &lsh->lsh_id, tmp2, sizeof (tmp2));
+#else
+  sprintf (tmp2, "%lu", ntohl (lsh->lsh_id));
+#endif
 
   sprintf (buf, "[%s,id:%s,Adv:%s]",
            lstype_name[typeindex(lsh->lsh_type)], tmp2, tmp);
@@ -121,11 +125,14 @@ ospf6_log_init ()
   o6log.lsa = o6log_on;
   o6log.lsdb = o6log_on;
   o6log.dbex = o6log_on;
+  o6log.network = o6log_on;
   o6log.packet = o6log_on;
   o6log.spf = o6log_on;
   o6log.rtable = o6log_on;
   o6log.zebra = o6log_on;
-  o6log.pointer = o6log_off; /* for debug */
+  /* for debug */
+  o6log.debug = o6log_on;
+  o6log.pointer = o6log_on;
   return;
 }
 

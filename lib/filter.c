@@ -497,12 +497,12 @@ main ()
 */
 
 DEFUN (access_list, access_list_cmd,
-       "access-list NAME (deny|permit) IP_ADDR",
+       "access-list NAME (deny|permit) A.B.C.D/M",
        "Set access list definition\n"
        "Access list name\n"
        "Access list for denies\n"
        "Access list for permits\n"
-       "Access list address\n")
+       "Access list address. e.g. 10.0.0.0/8.\n")
 {
   int ret;
   enum filter_type type;
@@ -544,7 +544,7 @@ DEFUN (access_list, access_list_cmd,
 }
 
 DEFUN (no_access_list, no_access_list_cmd,
-       "no access-list NAME (deny|permit) IP_ADDR",
+       "no access-list NAME (deny|permit) A.B.C.D/M",
        "Unset access list\n"
        "Set access list definition\n"
        "Access list name\n"

@@ -32,14 +32,16 @@ struct ospf6_log
   void (*lsdb)      (const char *format, ...);
   void (*dbex)      (const char *format, ...);
   void (*packet)    (const char *format, ...);
+  void (*network)   (const char *format, ...);
   void (*spf)       (const char *format, ...);
   void (*rtable)    (const char *format, ...);
   void (*zebra)     (const char *format, ...);
+  void (*debug)     (const char *format, ...);
   void (*pointer)   (const char *format, ...);
 };
 
 /* Global logging buffer */
-extern char strbuf[16];
+extern char strbuf[1024];
 
 /* Logging function switch */
 extern struct ospf6_log o6log;

@@ -117,6 +117,7 @@ void if_dump_all ();
 /* Connected address functions. */
 struct connected *connected_new ();
 void connected_add (struct interface *, struct connected *);
+void connected_delete_by_prefix (struct interface *, struct prefix *);
 void connected_log (struct connected *);
 
 /* Exported variables. */
