@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.66
+@subtitle for zebra-0.67
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.66.
+This is the Zebra Manual for zebra-0.67.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -162,7 +162,8 @@ easy adding new routing protocol daemon to the system.
   Zebra use a multi-thread mechanism when it runs over a multi-thread
 supported kernel.  But at this moment thread library which comes with
 GNU/Linux or FreeBSD has some problem for running Zebra, so we don't use
-thread those OSes, instead we use select system call for multiplexing.
+thread on those OSes, instead we use select system call for
+multiplexing.
 
   When zebra runs under GNU Hurd kernel it will act as a kernel routing
 table itself.  Under GNU Hurd all TCP/IP services are provided by user
@@ -223,13 +224,14 @@ send a bug report to @email{bug-zebra@@gnu.org}.
 @comment  node-name,  next,  previous,  up
 @chapter Installation
 
-  Zebra is in development stage, so there is no release in the past.
-Zebra's development snapshot can be found at
+  Zebra is in development stage, so there is no official release in the
+past.  Zebra's beta package can be found at
 @url{ftp://ftp.zebra.org/pub/zebra/}.  Once it is released it will be
-found at GNU FTP archives.
+found at GNU FTP archive sites.
 
-  Zebra installation is very easy by configure script.  But before you
-install Zebra please confirm kernel configuration of your machine.
+  Zebra installation is very easy by configure script.  It automatically
+detects current status of the machine so please check kernel
+configuration before run configure script.
 
 @menu
 * GNU/Linux configuration::     
@@ -242,8 +244,9 @@ install Zebra please confirm kernel configuration of your machine.
 @section GNU/Linux configuration
 
   GNU/Linux has very flexible kernel configuration feature.  If you use
-GNU/Linux, make it sure kernel configuration is what you want.  Zebra
-will run almost kernel configuration but some recommendation exists.
+GNU/Linux, make it sure current kernel configuration is what you want.
+Zebra will run with any kernel configuration but some recommendation
+exists.
 
 @table @var
 
@@ -426,6 +429,14 @@ Write current configuration to configuration file.
 
 @deffn Command {list} {}
 List commands.
+@end deffn
+
+@deffn Command {service password-encryption} {}
+Encrypt password.
+@end deffn
+
+@deffn Command {service advanced-vty} {}
+Enable advanced mode VTY.
 @end deffn
 
 @deffn Command {show version} {}
@@ -908,9 +919,9 @@ specified (@pxref{Common invoking options}) to @code{ospfd}.
 @comment  node-name,  next,  previous,  up
 @section ospfd configuration
 
-@deffn Command {router ospf @var{process-id}} {}
-@deffnx Command {no router ospf @var{process-id}} {}
-Enable OSPF process under @var{process-id}.
+@deffn Command {router ospf} {}
+@deffnx Command {no router ospf} {}
+Enable/disable OSPF process.
 @end deffn
 
 @deffn {OSPF Command} {network @var{ipv4-network} area @var{area-id}} {}
@@ -1057,6 +1068,12 @@ Apply route-map to the neighbor.  @var{direct} must be @code{in} or
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} version @var{version}} {}
+Set up neighbor's BGP version.  @var{version} can be @var{4}, @var{4+}
+or @var{4-}.  BGP version @var{4} is default value of the BGP peering.
+BGP version @var{4+} means that the neighbor supports Multiprotocol
+Extensions for BGP-4.  BGP version @var{4-} is similar but the neighbor
+speaks old Internet-Draft revision 00's Multiprotocol Extensions for
+BGP-4.  Some routing software is still using this version.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} ebgp-multihop} {}
@@ -1173,12 +1190,9 @@ log file bgpd.log
 @comment  node-name,  next,  previous,  up
 @chapter Filtering
 
-Basic filtering is done by access-list like below example.
-
-@example
-ip access-list deny 10.0.0.0/9
-ip access-list permit 10.0.0.0/8
-@end example
+  Zebra provides flexible filtering feature.  Filtering is used for both
+output and input of the routing information.  Once filtering is defined,
+it can be applied to any direction.
 
 @menu
 * IP access list::              
@@ -1194,13 +1208,26 @@ ip access-list permit 10.0.0.0/8
 @deffnx {Command} {ip access-list deny @var{ipv4-network}} {}
 @end deffn
 
+Basic filtering is done by access-list like below example.
+
+@example
+ip access-list deny 10.0.0.0/9
+ip access-list permit 10.0.0.0/8
+@end example
+
 @node IP prefix list, AS path access list, IP access list, Filtering
 @comment  node-name,  next,  previous,  up
 @section IP prefix list
 
+@deffn {Command} {ip prefix-list @var{name} seq @var{seq} permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
+@end deffn
+
 @node AS path access list,  , IP prefix list, Filtering
 @comment  node-name,  next,  previous,  up
 @section AS path access list
+
+@deffn {Command} {ip as-path access-list @var{name} @var{type} @var{as_path}} {}
+@end deffn
 
 @node Route map, IPv6 supports, Filtering, Top
 @comment  node-name,  next,  previous,  up
@@ -1220,39 +1247,67 @@ local-preference value to 200.
 
 @menu
 * Route map command::           
-* IP address match command::    
-* BGP set command::             
+* Route map match command::     
+* Route map set command::       
 @end menu
 
-@node Route map command, IP address match command, Route map, Route map
+@node Route map command, Route map match command, Route map, Route map
 @comment  node-name,  next,  previous,  up
 @section Route map command
 
 @deffn {Command} {route-map @var{route-map-name} permit @var{priority}} {}
 @end deffn
 
-@node IP address match command, BGP set command, Route map command, Route map
+@node Route map match command, Route map set command, Route map command, Route map
 @comment  node-name,  next,  previous,  up
-@section IP address match command
+@section Route map match command
 
 @deffn {Route-map Command} {match ip address @var{access_list}} {}
+Match specified @var{access_list}
 @end deffn
 
-@node BGP set command,  , IP address match command, Route map
+@deffn {Route-map Command} {match ip next-hop @var{ipv4_addr}} {}
+If nexthop is same as specified @var{ipv4_addr}.
+@end deffn
+
+@deffn {Route-map Command} {match aspath @var{as_path}} {}
+Match specified @var{as_path} regular expression.
+@end deffn
+
+@deffn {Route-map Command} {match metric @var{metric}} {}
+Match specified @var{metric}
+@end deffn
+
+@node Route map set command,  , Route map match command, Route map
 @comment  node-name,  next,  previous,  up
-@section BGP set command
+@section Route map set command
 
 @deffn {Route-map Command} {set ip nexthop @var{ipv4_address}} {}
+Set BGP nexthop address.
+@end deffn
+
+@deffn {Route-map Command} {set local-preference @var{local_pref}} {}
+Set BGP local preference.
+@end deffn
+
+@deffn {Route-map Command} {set weight @var{weight}} {}
+Set route's weight.
 @end deffn
 
 @deffn {Route-map Command} {set metric @var{metric}} {}
 Set BGP attribute MED.
 @end deffn
 
+@deffn {Route-map Command} {set as-path prepend @var{as_path}} {}
+Set BGP AS path to prepend.
+@end deffn
+
 @deffn {Route-map Command} {set ipv6 nexthop global @var{ipv6_address}} {}
+Set BGP-4+ global IPv6 nexthop address.
 @end deffn
 
 @deffn {Route-map Command} {set ipv6 nexthop local @var{ipv6_address}} {}
+Set BGP-4+ link local IPv6 nexthop address.
 @end deffn
 
 @node IPv6 supports, Kernel interface, Route map, Top
@@ -1334,6 +1389,8 @@ ZEBRA_IPV6_ROUTE_DELETE
 ZEBRA_GET_ALL_INTERFACE
 ZEBRA_GET_ONE_INTERFACE
 ZEBRA_GET_HOSTINFO
+ZEBRA_REDISTRIBUTE_ADD
+ZEBRA_REDISTRIBUTE_DELETE
 @end example
 
 @page

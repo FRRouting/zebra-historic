@@ -175,7 +175,8 @@ struct message
 extern struct rip rip;
 
 /* Prototypes. */
-void rip_start ();
+void zebra_start ();
+int rip_start ();
 void rip_init ();
 void rip_rib_close ();
 void rip_if_init ();

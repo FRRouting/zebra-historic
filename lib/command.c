@@ -492,6 +492,34 @@ install_element (enum node_type ntype, struct cmd_element *cmd)
     }
 }
 
+static unsigned char itoa64[] =	
+"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+void
+to64(char *s, long v, int n)
+{
+  while (--n >= 0) 
+    {
+      *s++ = itoa64[v&0x3f];
+      v >>= 6;
+    }
+}
+
+char *zencrypt (char *passwd)
+{
+  char salt[6];
+  struct timeval tv;
+  char *crypt (const char *, const char *);
+
+  gettimeofday(&tv,0);
+  
+  to64(&salt[0], random(), 3);
+  to64(&salt[3], tv.tv_usec, 3);
+  salt[5] = '\0';
+
+  return crypt (passwd, salt);
+}
+
 /* This function write configuration of this host. */
 int
 config_write_host (struct vty *vty)
@@ -503,10 +531,22 @@ config_write_host (struct vty *vty)
      file. */
   if (vty->type == VTY_FILE)
     {
-      if (host.password)
-	vty_out (vty, "password %s%s", host.password, VTY_NEWLINE);
-      if (host.enable)
-	vty_out (vty, "enable password %s%s", host.enable, VTY_NEWLINE);
+      if (host.encrypt)
+	{
+	  if (host.password_encrypt)
+	    vty_out (vty, "password 8 %s%s", 
+		     host.password_encrypt, VTY_NEWLINE);
+	  if (host.enable_encrypt)
+	    vty_out (vty, "enable password 8 %s%s", 
+		     host.enable_encrypt, VTY_NEWLINE);
+	}
+      else
+	{
+	  if (host.password)
+	    vty_out (vty, "password %s%s", host.password, VTY_NEWLINE);
+	  if (host.enable)
+	    vty_out (vty, "enable password %s%s", host.enable, VTY_NEWLINE);
+	}
     }      
 
   if (host.lines >= 0)
@@ -520,6 +560,9 @@ config_write_host (struct vty *vty)
 
   if (host.advanced)
     vty_out (vty, "service advanced-vty%s", VTY_NEWLINE);
+
+  if (host.encrypt)
+    vty_out (vty, "service password-encryption%s", VTY_NEWLINE);
 
   return 0;
 }
@@ -1251,7 +1294,7 @@ DEFUN (enable,
        "Turn on privileged commands\n")
 {
   /* If enable password is NULL, change to ENABLE_NODE */
-  if (host.enable == NULL)
+  if (host.enable == NULL && host.enable_encrypt == NULL)
     vty->node = ENABLE_NODE;
   else
     vty->node = AUTH_ENABLE_NODE;
@@ -1329,7 +1372,7 @@ DEFUN (show_version,
        "Displays zebra version\n")
 {
   vty_out (vty, "Zebra %s (%s).\r\n", ZEBRA_VERSION, host_name);
-  vty_out (vty, "Copyright 1996-1998, Kunihiro Ishiguro.\r\n");
+  vty_out (vty, "Copyright 1996-1999, Kunihiro Ishiguro.\r\n");
 
   return CMD_SUCCESS;
 }
@@ -1477,37 +1520,142 @@ DEFUN (config_hostname,
   return CMD_SUCCESS;
 }
 
+DEFUN (config_no_hostname, 
+       no_hostname_cmd,
+       "no hostname",
+       NO_STR
+       "Reset system's network name\n")
+{
+  if (host.name)
+    XFREE (0, host.name);
+  host.name = NULL;
+  return CMD_SUCCESS;
+}
 
 /* VTY interface password set. */
 DEFUN (config_password, password_cmd,
-       "password PASSWORD",
+       "password [CRYPT] PASSWORD",
        "Assign the terminal connection password\n"
+       "Crypt: 8 for crypt, password string for cleartext\n"
        "Password string\n")
 {
+  if (argc == 2)
+    {
+      if (*argv[0] == '8')
+	{
+	  if (host.password)
+	    XFREE (0, host.password);
+	  if (host.password_encrypt)
+	    XFREE (0, host.password_encrypt);
+	  host.password_encrypt = XSTRDUP (0, strdup (argv[1]));
+	  return CMD_SUCCESS;
+	}
+      else
+	{
+	  vty_out (vty, "Unknown encryption type.\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  if (!isalnum (*argv[0]))
+    {
+      vty_out (vty, 
+	       "Please specify string starting with alphanumeric\r\n");
+      return CMD_WARNING;
+    }
   if (host.password)
     XFREE (0, host.password);
+  if (host.password_encrypt)
+    XFREE (0, host.password_encrypt);
 
-  host.password = strdup (argv[0]);
+  if (host.encrypt)
+    host.password_encrypt = XSTRDUP (0, zencrypt (argv[0]));
+  else
+    host.password = XSTRDUP (0, argv[0]);
   return CMD_SUCCESS;
 }
 
 /* VTY enable password set. */
 DEFUN (config_enable_password, enable_password_cmd,
-       "enable password PASSWORD",
+       "enable password [CRYPT] PASSWORD",
        "Modify enable password parameters\n"
        "Assign the privileged level password\n"
+       "Crypt: 8 for crypt, password string for cleartext\n"
        "Password string\n")
 {
-  if (!isalnum (*argv[0]))
+  if (argc == 2)
     {
-      vty_out (vty, "Please specify string starting with alphanumeric\r\n");
-      return CMD_WARNING;
+      if (*argv[0] == '8')
+	{
+	  if (host.enable)
+	    XFREE (0, host.enable);
+	  if (host.enable_encrypt)
+	    XFREE (0, host.enable_encrypt);
+	  host.enable_encrypt = XSTRDUP (0, argv[1]);
+	  return CMD_SUCCESS;
+	}
+      else
+	{
+	  vty_out (vty, "Unknown encryption type.\r\n");
+	  return CMD_WARNING;
+	}
     }
 
+  if (!isalnum (*argv[0]))
+    {
+      vty_out (vty, 
+	       "Please specify string starting with alphanumeric\r\n");
+      return CMD_WARNING;
+    }
   if (host.enable)
     XFREE (0, host.enable);
 
-  host.enable = strdup (argv[0]);
+  if (host.encrypt)
+    host.enable_encrypt = XSTRDUP (0, zencrypt (argv[0]));
+  else
+    host.enable = XSTRDUP (0, argv[0]);
+  return CMD_SUCCESS;
+}
+
+DEFUN (service_password_encrypt,
+       service_password_encrypt_cmd,
+       "service password-encryption",
+       "Set up miscellaneous service\n"
+       "Enable encrypted passwords\n")
+{
+  if (host.encrypt)
+    return CMD_SUCCESS;
+
+  host.encrypt = 1;
+
+  if (host.password)
+    {
+      if (host.password_encrypt)
+	XFREE (0, host.password_encrypt);
+      host.password_encrypt = XSTRDUP (0, zencrypt (host.password));
+    }
+  if (host.enable)
+    {
+      if (host.enable_encrypt)
+	XFREE (0, host.enable_encrypt);
+      host.enable_encrypt = XSTRDUP (0, zencrypt (host.enable));
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_service_password_encrypt,
+       no_service_password_encrypt_cmd,
+       "no service password-encryption",
+       NO_STR
+       "Set up miscellaneous service\n"
+       "Enable encrypted passwords\n")
+{
+  if (! host.encrypt)
+    return CMD_SUCCESS;
+
+  host.encrypt = 0;
+
   return CMD_SUCCESS;
 }
 
@@ -1624,14 +1772,19 @@ cmd_init ()
   install_element (CONFIG_NODE, &config_help_cmd);
   install_element (CONFIG_NODE, &config_list_cmd);
   install_element (CONFIG_NODE, &hostname_cmd);
+  install_element (CONFIG_NODE, &no_hostname_cmd);
   install_element (CONFIG_NODE, &password_cmd);
   install_element (CONFIG_NODE, &enable_password_cmd);
   install_element (CONFIG_NODE, &config_lines_cmd);
   install_element (CONFIG_NODE, &config_log_cmd);
   install_element (CONFIG_NODE, &config_log_file_cmd);
+  install_element (CONFIG_NODE, &service_password_encrypt_cmd);
+  install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
 
   /* Only for testing. */
 #ifdef TEST
   install_element (VIEW_NODE, &test_cmd);
 #endif /* TEST */
+
+  srand(time(NULL));
 }

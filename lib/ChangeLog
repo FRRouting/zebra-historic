@@ -1,3 +1,26 @@
+1999-05-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Bump up to 0.67.
+
+1999-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (zencrypt): New function for encrypt password.
+
+	* command.h (struct host): Add password_encrypt and
+	enable_encrypt.
+
+1999-05-30  Jochen Friedrich <jochen@scram.de>
+
+	* command.h (struct host): New member encrypt is added for
+	encrypted password.
+
+1999-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c: Remove all_digit_check function.  Instead use all_digit.
+
+	* prefix.c (all_digit): New function for checking string is made
+	from digit character.
+
 1999-05-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am (libzebra_a_SOURCES): Add zclient.c.

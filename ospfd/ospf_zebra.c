@@ -22,6 +22,7 @@
 
 #include <zebra.h>
 
+#include "zebra/zebra.h"
 #include "vector.h"
 #include "memory.h"
 #include "thread.h"
@@ -34,24 +35,29 @@
 #include "command.h"
 #include "if.h"
 #include "log.h"
+#include "zclient.h"
 
-#include "zebra/zebra.h"
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_zebra.h"
 
 /* Zebra structure to hold current status. */
+struct zebra *zebra = NULL;
+
+/* For registering threads. */
 extern struct thread_master *master;
 
-void
-ospf_zebra_get_interface (struct stream *s, u_int16_t length)
+int
+ospf_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
 {
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
   unsigned long endp;
+  struct stream *s;
 
+  s = zebra->ibuf;
   endp = stream_get_endp (s);
 
   while (stream_get_getp(s) < endp)
@@ -100,104 +106,9 @@ ospf_zebra_get_interface (struct stream *s, u_int16_t length)
 	  connected_add (ifp, connected);
 	}
     }
-}
-
-void
-zebra_close ()
-{
-  if (zebra.sock > 0)
-    {
-      close (zebra.sock);
-      zebra.sock = -1;
-    }
-
-  stream_free (zebra.ibuf);
-
-  zebra.t_read = NULL;
-  zebra.t_write = NULL;
-}
-
-int
-zebra_read (struct thread *t)
-{
-  int nbytes;
-  int sock;
-  u_int16_t length;
-  u_int8_t command;
-
-  sock = THREAD_FD (t);
-
-  /* Read zebra header. */
-  nbytes = stream_read (zebra.ibuf, sock, ZEBRA_HEADER_SIZE);
-
-  /* zebra socket is closed. */
-  if (nbytes == 0)
-    {
-      zlog (NULL, LOG_INFO, "connection closed socket [%d]\n", sock);
-      close (sock);
-      return -1;
-    }
-
-  /* zebra read error. */
-  if (nbytes < 0)
-    {
-      zlog (NULL, LOG_INFO, "can't read all packet\n");
-      zebra_close ();
-      return -1;
-    }
-
-  length = stream_getw (zebra.ibuf);
-  command = stream_getc (zebra.ibuf);
-
-  /* Read rest of zebra packet. */
-  nbytes = stream_read (zebra.ibuf, sock, length - ZEBRA_HEADER_SIZE);
-
-  switch (command)
-    {
-    case ZEBRA_IPV4_ROUTE_ADD:
-    case ZEBRA_IPV4_ROUTE_DELETE:
-    case ZEBRA_IPV6_ROUTE_ADD:
-    case ZEBRA_IPV6_ROUTE_DELETE:
-      return -1;
-      break;
-    case ZEBRA_GET_ALL_INTERFACE:
-      ospf_zebra_get_interface (zebra.ibuf, nbytes);
-      /* Kick ospf process if it is needed. */
-      ospf_if_update ();
-      break;
-    default:
-      return -1;
-      break;
-    }
-
-  /* Re-register myself. */
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
-
+  ospf_if_update ();
   return 0;
 }
-
-/* Make zebra connection. */
-int
-zebra_create ()
-{
-  /* Make socket. */
-  zebra.sock = zebra_connect ();
-  if (zebra.sock < 0)
-    return -1;
-
-  /* Input buffer. */
-  zebra.ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
-
-  /* Create read thread. */
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
-
-  /* Get all interface. */
-  zebra_get_all_interface (zebra.sock);
-
-  return 0;
-}
-
-
 
 DEFUN (router_zebra,
        router_zebra_cmd,
@@ -207,22 +118,24 @@ DEFUN (router_zebra,
 {
   int ret;
 
+  vty->node = ZEBRA_NODE;
+
   /* Set router zebra is enabled. */
-  zebra.enable = 1;
+  zebra->enable = 1;
 
   /* If already has socket then return. */
-  if (zebra.sock >= 0)
+  if (zebra->sock >= 0)
     {
-      vty_out (vty, "already connected to zebra\r\n");
+      vty_out (vty, "Already connected to zebra\r\n");
       return CMD_WARNING;
     }
 
   /* Connect to zebra. */
-  ret = zebra_create ();
+  ret = zebra_create (zebra);
 
   if (ret < 0)
     {
-      vty_out (vty, "can't connect to zebra\r\n");
+      vty_out (vty, "Can't connect to zebra\r\n");
       return CMD_WARNING;
     }
 
@@ -233,8 +146,13 @@ DEFUN (router_zebra,
 int
 zebra_config_write (struct vty *vty)
 {
-  if (zebra.enable)
-    vty_out (vty, "router zebra%s", VTY_NEWLINE);
+  if (! zebra->enable)
+    vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+  else if (! zebra->redist[ZEBRA_ROUTE_OSPF])
+    {
+      vty_out (vty, "router zebra%s", VTY_NEWLINE);
+      vty_out (vty, " no redistribute ospf%s", VTY_NEWLINE);
+    }
   return 0;
 }
 
@@ -246,12 +164,24 @@ struct cmd_node zebra_node =
 };
 
 void
-zebra_init (int enable)
+zebra_start ()
 {
-  zebra.enable = 0;
-  zebra.sock = -1;
-  zebra.t_read = NULL;
-  zebra.t_write = NULL;
+  zebra_create (zebra);
+}
+
+void
+zebra_init ()
+{
+  /* Allocate zebra structure. */
+  zebra = zebra_new ();
+
+  /* Set default values. */
+  zebra->enable = 1;
+  zebra->sock = -1;
+  zebra->redist_default = ZEBRA_ROUTE_OSPF;
+  zebra->redist[ZEBRA_ROUTE_OSPF] = 1;
+
+  zebra->get_all_interface = ospf_zebra_get_interface;
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
@@ -259,4 +189,3 @@ zebra_init (int enable)
   /* Install command element for zebra node. */
   install_element (CONFIG_NODE, &router_zebra_cmd);
 }
-

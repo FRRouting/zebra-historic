@@ -1,3 +1,7 @@
+1999-05-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_zebra.c: Change to use lib/zclient.[ch].
+
 1999-05-20  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
 
 	* ripd.c (rip_add_route): Change the existance route's metric check

@@ -143,6 +143,7 @@ main (int argc, char **argv)
   int daemon_mode = 0;
   char *config_file = NULL;
   struct thread thread;
+  void rib_weed_tables ();
 
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);

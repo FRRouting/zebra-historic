@@ -1,3 +1,12 @@
+1999-05-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Change message from Linux 2.2.X IPv6 to Linux IPv6.
+	OpenBSD (NRL) check is enabled.
+
+1999-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (LIBS): Add crypt library check.
+
 1999-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: Add sin6_scope_id in struct sockaddr_in6 check.

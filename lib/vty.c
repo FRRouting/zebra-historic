@@ -106,7 +106,7 @@ static void
 vty_hello (struct vty *vty)
 {
   vty_out (vty, "\r\nHello, this is zebra (version %s)\r\n", ZEBRA_VERSION);
-  vty_out (vty, "Copyright 1996, 97, 98, 99 Kunihiro Ishiguro\r\n\r\n");
+  vty_out (vty, "Copyright 1996-1999 Kunihiro Ishiguro\r\n\r\n");
 }
 
 /* Put out prompt and wait input from user. */
@@ -184,23 +184,36 @@ vty_auth (struct vty *vty, char *buf)
 {
   char *passwd = NULL;
   enum node_type next_node = 0;
+  int fail;
+  char *crypt (const char *, const char *);
 
   switch (vty->node)
     {
     case AUTH_NODE:
-      passwd = host.password;
+      if (host.encrypt)
+	passwd = host.password_encrypt;
+      else
+	passwd = host.password;
       if (host.advanced)
 	next_node = host.enable ? VIEW_NODE : ENABLE_NODE;
       else
 	next_node = VIEW_NODE;
       break;
     case AUTH_ENABLE_NODE:
-      passwd = host.enable;
+      if (host.encrypt)
+	passwd = host.enable_encrypt;
+      else
+	passwd = host.enable;
       next_node = ENABLE_NODE;
       break;
     }
 
-  if (strcmp (buf, passwd) == 0)
+  if (host.encrypt)
+    fail = strcmp (crypt(buf, passwd), passwd);
+  else
+    fail = strcmp (buf, passwd);
+
+  if (! fail)
     {
       vty->fail = 0;
       vty->node = next_node;	/* Success ! */
@@ -1156,7 +1169,7 @@ vty_create (int vty_sock, union sockunion *su)
   vty->v_timeout = vty_timeout_val;
 
   /* Vty is not available if password isn't set. */
-  if (host.password == NULL)
+  if (host.password == NULL && host.password_encrypt == NULL)
     {
       vty_out (vty, "Vty password is not set.\r\n");
       vty->status = VTY_CLOSE;
@@ -1475,17 +1488,6 @@ DEFUN (line_vty,
   return CMD_SUCCESS;
 }
 
-/* Check the string only contains digit character. */
-static int
-all_digit_check (char *str)
-{
-  int i;
-  for (i = 0; i < strlen (str); i++)
-    if (!isdigit (str[i]))
-      return 0;
-  return 1;
-}
-
 /* Set time out value. */
 DEFUN (exec_timeout,
        exec_timeout_cmd,
@@ -1493,7 +1495,7 @@ DEFUN (exec_timeout,
        "Set timeout value\n"
        "Timeout value\n")
 {
-  if (all_digit_check (argv[0]))
+  if (all_digit (argv[0]))
     vty_timeout_val = strtol (argv[0], NULL, 10);
   else
     {

@@ -727,7 +727,7 @@ ospf6_send (u_char msgtype, struct iovec *iov,
 
   if (make_ospf6_hdr (msgtype, iov, ospf6_if) < 0)
     {
-      zlog (NULL, LOG_WARNING,"Can't make ospf6_hdr");
+      zvlog_warn ("Can't make ospf6_hdr");
       return -1;
     }
 

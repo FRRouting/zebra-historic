@@ -1,3 +1,7 @@
+1999-05-29    <kunihiro@zebra.org>
+
+	* rt_ioctl.c: Comment out #include <linux/ipv6_route.h>.
+
 1999-05-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra.h (ZEBRA_ROUTE_MAX): Add new define for the max value of

@@ -23,22 +23,8 @@
 #ifndef _ZEBRA_OSPF_ZEBRA_H
 #define _ZEBRA_OSPF_ZEBRA_H
 
-/* Zebra configuration structure. */
-struct zebra
-{
-  int enable;
-  int sock;
-  int r_ospf;
-
-  struct thread *t_read;
-  struct thread *t_write;
-
-  struct stream *ibuf;
-} zebra;
-
 /* Prototypes */
-void ospf_zebra_get_interface (struct stream *, u_int16_t);
-int zebra_read (struct thread *thread);
 void zebra_init ();
+void zebra_start ();
 
 #endif /* _ZEBRA_OSPF_ZEBRA_H */

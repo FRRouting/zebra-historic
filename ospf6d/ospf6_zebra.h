@@ -19,20 +19,9 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-struct zebra
-{
-  int sockfd;
-  struct stream *s;
-
-  struct thread *t_read;
-  struct thread *t_write;
-
-  list history;
-};
-
-extern struct zebra zebra; 
+extern struct zebra *zebra;
 
 void zebra_get_interface (int, u_int16_t);
 int ospf6_zebra_read (struct thread *); 
-int ospf6_zebra_init ();
-
+void zebra_init ();
+void zebra_start ();

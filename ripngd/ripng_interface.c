@@ -124,7 +124,6 @@ ripng_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
   struct stream *s;
 
   s = zebra->ibuf;
-
   endp = stream_get_endp (s);
 
   while (stream_get_getp(s) < endp)

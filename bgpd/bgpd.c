@@ -464,7 +464,6 @@ DEFUN (no_router_bgp,
   return CMD_SUCCESS;
 }
 
-
 DEFUN (bgp_router_id, bgp_router_id_cmd,
        "bgp router-id IPV4_ADDRESS",
        BGP_STR
@@ -803,13 +802,14 @@ DEFUN (neighbor_ebgp_multihop,
   return CMD_SUCCESS;
 }
 
+/* Set specified peer's BGP version.  This is */
 DEFUN (neighbor_version,
        neighbor_version_cmd,
        "neighbor IP_ADDR version BGP_VERSION",
        NEIGHBOR_STR
        "IP address\n"
-       "neighbor's bgp version\n"
-       "Version\n")
+       "Neighbor's BGP version\n"
+       "Neighbor's BGP version <4,4+,4->\n")
 {
   struct bgp *bgp;
   struct peer *peer;
@@ -823,14 +823,15 @@ DEFUN (neighbor_version,
       return CMD_WARNING;
     }
 
-  if (strcmp (argv[1], "bgp4") == 0)
+  /* BGP version string check. */
+  if (strcmp (argv[1], "4") == 0)
     peer->version = BGP_VERSION_4;
-  else if (strcmp (argv[1], "bgp4+") == 0)
+  else if (strcmp (argv[1], "4+") == 0)
     peer->version = BGP_VERSION_MP_4;
-  else if (strcmp (argv[1], "bgp4+-draft-00") == 0)
+  else if (strcmp (argv[1], "4-") == 0)
     peer->version = BGP_VERSION_MP_4_DRAFT_00;
   else
-    vty_out (vty, "bgp version malformed!\r\n");
+    vty_out (vty, "BGP version malformed!\r\n");
 
   return CMD_SUCCESS;
 }
@@ -841,7 +842,7 @@ DEFUN (no_neighbor_version,
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
-       "Set neighbor's bgp version to default [bgp4]\n"
+       "Set neighbor's BGP version to default [4]\n"
        "Version\n")
 {
   struct bgp *bgp;
@@ -1629,16 +1630,6 @@ DEFUN (neighbor_interface,
   return CMD_SUCCESS;
 }
 
-/* Check the string only contains digit character. */
-static int
-all_digit_check (char *str)
-{
-  int i;
-  for (i = 0; i < strlen (str); i++)
-    if (!isdigit (str[i]))
-      return 0;
-  return 1;
-}
 
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
@@ -1656,13 +1647,13 @@ DEFUN (neighbor_timers_holdtime,
   bgp = (struct bgp *) vty->index;
   peer = peer_lookup_from_bgp (bgp, argv[0]);
 
-  if (!peer)
+  if (! peer)
     {
       vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
       return CMD_WARNING;
     }
 
-  if (! all_digit_check (argv[1]))
+  if (! all_digit (argv[1]))
     {
       vty_out (vty, "timer value must be digit %s\r\n", argv[1]);
       return CMD_WARNING;
@@ -1690,7 +1681,7 @@ DEFUN (no_neighbor_timers_holdtime,
   bgp = (struct bgp *) vty->index;
   peer = peer_lookup_from_bgp (bgp, argv[0]);
 
-  if (!peer)
+  if (! peer)
     {
       vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
       return CMD_WARNING;
@@ -1698,7 +1689,7 @@ DEFUN (no_neighbor_timers_holdtime,
 
   if (argc == 2)
     {
-      if (! all_digit_check (argv[1]))
+      if (! all_digit (argv[1]))
 	{
 	  vty_out (vty, "timer value must be digit %s\r\n", argv[1]);
 	  return CMD_WARNING;
@@ -2123,12 +2114,11 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	{
 	  vty_out (vty, " neighbor ");
 	  sockunion_vty_out (vty, peer->su);
+
 	  if (peer->version == BGP_VERSION_MP_4)
-	    vty_out (vty, " version %s%s", "bgp4+", VTY_NEWLINE);
+	    vty_out (vty, " version %s%s", "4+", VTY_NEWLINE);
 	  else if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	    vty_out (vty, " version %s%s", "bgp4+-draft-00", VTY_NEWLINE);
-	  else
-	    vty_out (vty, " unknown version%s", VTY_NEWLINE);
+	    vty_out (vty, " version %s%s", "4-", VTY_NEWLINE);
 	}
 
       /* Route reflector client. */

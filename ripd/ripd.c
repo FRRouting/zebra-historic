@@ -215,10 +215,8 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
       /* If the datagram is from the same router as the existing route, and
          the new metric is different than the old one; or, if the new metric
          is lower than the old one; do the following actions... RFC2453     */
-      if (!(   (same_as_exist && (rinfo->metric != rip->metric ))
-	    || (rinfo->metric < rip->metric)
-	   )
-	  )
+      if (!((same_as_exist && (rinfo->metric != rip->metric ))||
+	    (rinfo->metric < rip->metric)))
 	{
 	  route_unlock_node (np);
 	  return 0;
@@ -390,7 +388,7 @@ rip_process_route (struct rip_packet *packet, int size,
   /* "The datagram's IPv4 source address should be checked to see whether
      the datagram is from a valid neighbor; the source of the datagram must
      be on a directly connected network" (RFC2453 - Sec. 3.9.2)          */
-  if ( if_valid_neighbor(from->sin_addr)  ) 
+  if ( ! if_valid_neighbor(from->sin_addr)  ) 
     {
       zlog (NULL, LOG_INFO, "This datagram doesn't came from a valid neighbor: %s",
 	    inet_ntoa(from->sin_addr));
@@ -916,7 +914,7 @@ rip_timer (struct thread *thread)
 }
 
 /* Interface initialize and send request to each interface. */
-void
+int
 rip_start ()
 {
   /* Make rip socket. */
@@ -924,7 +922,7 @@ rip_start ()
   if (rip.sock < 0)
     {
       zlog (NULL, LOG_INFO, "Can't make RIP socket");
-      return;
+      return 0;
     }
 
   /* Set multicast if it needs. */
@@ -936,6 +934,8 @@ rip_start ()
   rip.t_timer = thread_add_timer (master, rip_timer, NULL, RIP_FLASH_TIMER);
 
   rip_request_all ();
+
+  return 0;
 }
 
 /* Delete all added rip route. */

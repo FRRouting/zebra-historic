@@ -1,5 +1,47 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.67
+
+* Changes in lib
+
+** `service password-encryption' is added for encrypted password.
+
+* Changes in bgpd
+
+** `set as-path prepend ASPATH' is added to route-map command.
+
+** `set weight WEIGHT' is added to route-map command.
+
+** `no set ipv6 nexthop global' and `no set ipv6 nexthop local'
+command is added to route-map.
+
+** `neighbor IP_ADDR version BGP_VERSION' command's BGP_VERSION
+argument changed.
+
+Old               New
+=====================
+bgp4              4
+bgp4+             4+
+bgp4+-draft-00    4-
+=====================
+
+If you want to peer with old draft version of BGP-4+, please configure
+like below:
+
+router bgp ASN
+ neighbor PEER version 4-
+
+** Some AS path isn't correctly compared during route selection.  Now
+it is fixed.
+
+* Changes in ospfd
+
+** `router zebra' is default behavior.
+
+* Changes in ospf6d
+
+** `router zebra' is default behavior.
+
 * Changes in zebra-0.66
 
 * Changes in zebra

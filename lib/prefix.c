@@ -530,3 +530,14 @@ prefix_free (struct prefix *p)
       assert (0);
     }
 }
+
+/* Utility function.  Check the string only contains digit
+   character. */
+int
+all_digit (char *str)
+{
+  for (; *str != '\0'; str++)
+    if (!isdigit (*str))
+      return 0;
+  return 1;
+}

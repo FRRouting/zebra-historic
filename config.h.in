@@ -194,6 +194,9 @@ typedef unsigned short u_int8_t;
 /* Define if you have the <sys/types.h> header file.  */
 #undef HAVE_SYS_TYPES_H
 
+/* Define if you have the crypt library (-lcrypt).  */
+#undef HAVE_LIBCRYPT
+
 /* Define if you have the nsl library (-lnsl).  */
 #undef HAVE_LIBNSL
 

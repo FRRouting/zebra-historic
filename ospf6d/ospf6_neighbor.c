@@ -29,12 +29,18 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
   nbs_previous = nbr->state;
   nbr->state = nbs_next;
 
-  zvlog_info ("NBSCHANGE: [%s]->[%s](%s) on %s",
-              nbs_name[nbs_previous], nbs_name[nbs_next], reason,
-              inet4str (nbr->rtr_id));
-
-  if (nbs_previous == NBS_FULL && nbs_next == NBS_FULL)
+  if (nbs_previous == nbs_next)
     return 0;
+
+  if (reason)
+    zvlog_info ("nbr %s: [%s]->[%s](%s)",
+                 nbr->str,
+                 nbs_name[nbs_previous], nbs_name[nbs_next],
+                 reason);
+  else
+    zvlog_info ("nbr %s: [%s]->[%s]",
+                 nbr->str,
+                 nbs_name[nbs_previous], nbs_name[nbs_next]);
 
   if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
     nbs_full_change (nbr->ospf6_if);
@@ -77,7 +83,7 @@ list_cleared_of_lsa (struct neighbor *nbr)
   list_delete_all_node (nbr->dd_retrans);
   list_delete_all_node (nbr->summarylist);
   list_delete_all_node (nbr->retranslist);
-  lsa_list_delete_all (nbr->requestlist);
+  lsa_delete_all_list (nbr->requestlist);
   return 0;
 }
 
@@ -119,7 +125,7 @@ hello_received (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  zvlog_info ("NBEVENT: HelloReceived on %s", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *HelloReceived*", nbr->str);
 
   if (nbr->inactivity_timer)
     thread_cancel (nbr->inactivity_timer);
@@ -142,7 +148,7 @@ twoway_received (struct thread *thread)
   if (nbr->state > NBS_INIT)
     return 0;
 
-  zvlog_info ("NBEVENT: 2Way-Received on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *2Way-Received*", nbr->str);
 
   thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
 
@@ -180,7 +186,7 @@ negotiation_done (struct thread *thread)
   if (nbr->state != NBS_EXSTART)
     return 0;
 
-  zvlog_info ("NBEVENT: NegotiationDone on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *NegotiationDone*", nbr->str);
 
   nbs_change (NBS_EXCHANGE, "NegotiationDone", nbr);
   DD_IBIT_CLEAR (nbr->dd_bits);
@@ -204,7 +210,7 @@ exchange_done (struct thread *thread)
       thread_cancel (nbr->send_dd);
       nbr->send_dd = (struct thread *)NULL;
     }
-  zvlog_info ("NBEVENT: ExchangeDone on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *ExchangeDone*", nbr->str);
 
   list_delete_all_node (nbr->dd_retrans);
 
@@ -234,7 +240,7 @@ loading_done (struct thread *thread)
   if (nbr->state != NBS_LOADING)
     return 0;
 
-  zvlog_info ("NBEVENT: LoadingDone on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *LoadingDone*", nbr->str);
 
   if (list_isempty (nbr->requestlist))
     nbs_change (NBS_FULL, "LoadingDone", nbr);
@@ -242,8 +248,8 @@ loading_done (struct thread *thread)
     {
 #ifdef DEBUG_OSPF6
       zvlog_debug ("BUG: LoadingDone but Requestlist Not Empty");
-      assert (0);
 #endif
+      assert (0);
     }
 
   return 0;
@@ -257,7 +263,7 @@ adj_ok (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  zvlog_info ("NBEVENT: AdjOK? on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *AdjOK?*", nbr->str);
 
   if (nbr->state == NBS_TWOWAY)
     {
@@ -305,8 +311,7 @@ seqnumber_mismatch (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-  zvlog_info ("NBEVENT: SeqNumberMismatch on %s\n", inet4str (nbr->rtr_id));
-
+  zvlog_info ("nbr %s: *SeqNumberMismatch*", nbr->str);
   nbs_change (NBS_EXSTART, "SeqNumberMismatch", nbr);
 
   DD_MSBIT_SET (nbr->dd_bits);
@@ -334,7 +339,7 @@ bad_lsreq (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-  zvlog_info ("NBEVENT: BadLSReq on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *BadLSReq*", nbr->str);
 
   nbs_change (NBS_EXSTART, "BadLSReq", nbr);
 
@@ -363,8 +368,7 @@ oneway_received (struct thread *thread)
   if (nbr->state < NBS_TWOWAY)
     return 0;
 
-  zvlog_info ("NBEVENT: 1Way-Received on %s\n", inet4str (nbr->rtr_id));
-
+  zvlog_info ("nbr %s: *1Way-Received*", nbr->str);
   nbs_change (NBS_INIT, "1Way-Received", nbr);
 
   thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
@@ -381,7 +385,7 @@ inactivity_timer (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  zvlog_info ("NBEVENT: InactivityTimer on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("nbr %s: *InactivityTimer*", nbr->str);
 
   nbr->inactivity_timer = NULL;
   nbr->dr = nbr->bdr = nbr->prevdr = nbr->prevbdr = 0;

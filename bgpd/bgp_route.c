@@ -100,7 +100,6 @@ bgp_info_free (struct bgp_info *br)
 {
   if (br->attr)
     bgp_attr_free (br->attr);
-
   XFREE (MTYPE_BGP_ROUTE, br);
 }
 
@@ -113,10 +112,10 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (exist->type == ZEBRA_ROUTE_STATIC)
     return 0;
 
-  /* AS path length check. */
-  if (new->attr->aspath->count < exist->attr->aspath->count)
+  /* Weight check. */
+  if (new->attr->weight > exist->attr->weight)
     return 1;
-  if (new->attr->aspath->count > exist->attr->aspath->count)
+  if (new->attr->weight < exist->attr->weight)
     return 0;
 
   /* Local preference check. */
@@ -124,6 +123,16 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
     return 1;
   if (new->attr->local_pref < exist->attr->local_pref)
     return 0;
+
+  /* AS path length check. */
+  if (new->attr->aspath->count < exist->attr->aspath->count)
+    return 1;
+  if (new->attr->aspath->count > exist->attr->aspath->count)
+    return 0;
+
+  /* Origin check. */
+
+  /* MED check. */
 
   return 1;
 }
@@ -261,14 +270,18 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 	  peer->su_local->sa.sa_family == AF_INET)
 	attr.nexthop = peer->su_local->sin.sin_addr;
 #ifdef HAVE_IPV6
-      if (p->family == AF_INET6 && peer->su_local &&
-	  peer->su_local->sa.sa_family == AF_INET6)
-	if (! IN6_IS_ADDR_LINKLOCAL(&peer->su_local->sin6.sin6_addr))
-	  {
-	    attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
-	    if (attr.mp_nexthop_len < 16)
-	      attr.mp_nexthop_len = 16;
-	  }
+      if (p->family == AF_INET6 && peer->su_local)
+	{
+	  if (peer->su_local->sa.sa_family == AF_INET)
+	    attr.nexthop = peer->su_local->sin.sin_addr;
+	  if (peer->su_local->sa.sa_family == AF_INET6)
+	    if (! IN6_IS_ADDR_LINKLOCAL(&peer->su_local->sin6.sin6_addr))
+	      {
+		attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
+		if (attr.mp_nexthop_len < 16)
+		  attr.mp_nexthop_len = 16;
+	      }
+	}
 #endif /* HAVE_IPV6 */
     }
 

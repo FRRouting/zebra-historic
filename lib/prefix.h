@@ -120,4 +120,6 @@ int ip6_masklen (struct in6_addr netmask);
 int prefix_same (struct prefix *, struct prefix *);
 void prefix_copy (struct prefix *, struct prefix *);
 
+int all_digit (char *);
+
 #endif /* _ZEBRA_PREFIX_H */

@@ -210,6 +210,11 @@ main (int argc, char **argv)
   bgp_init ();
   sort_node ();
 
+#if 0
+  aspath_test ();
+  exit (0);
+#endif
+
   /* Parse config file. */
   vty_read_config (config_file, config_current, config_default);
 

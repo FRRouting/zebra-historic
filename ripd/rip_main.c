@@ -211,7 +211,7 @@ main (int argc, char **argv)
   pid_output (PATH_RIPD_PID);
 
   /* Connect to zebra. */
-  zebra_create ();
+  zebra_start ();
 
   /* Execute each thread. */
   while (thread_fetch (master, &thread))

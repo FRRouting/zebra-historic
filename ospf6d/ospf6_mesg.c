@@ -455,10 +455,7 @@ proc_linkstate_update (struct sockaddr_in6 *src, struct iovec *iov,
   struct neighbor *nbr;
   int    lsanum;
   struct linkstate_update *lsupdate;
-  struct lsa_internal *lsi;
   struct lsa_hdr *lsh;
-  struct iovec directack[MAXIOVLIST];
-  listnode n;
 
   ospf6_hdr = (struct ospf6_hdr *)iov[0].iov_base;
 
@@ -466,8 +463,6 @@ proc_linkstate_update (struct sockaddr_in6 *src, struct iovec *iov,
   nbr = nbr_lookup (ospf6_hdr->router_id, ospf6_if->area->ospf6);
   if (!nbr)
     return 0;
-
-  list_delete_all_node (nbr->direct_ack);
 
   if (nbr->state < NBS_EXCHANGE)
     {
@@ -486,28 +481,6 @@ proc_linkstate_update (struct sockaddr_in6 *src, struct iovec *iov,
       lsa_receive (lsh, nbr);
       lsh = LSA_NEXT (lsh);
     }
-
-  /* Direct acknowledgement */
-  iov_clear (directack, MAXIOVLIST);
-
-  for (n = listhead (nbr->direct_ack); n; nextnode (n))
-    {
-      lsi = (struct lsa_internal *) getdata (n);
-      zvlog_debug ("LSACK(direct): %s", print_lsahdr (lsi->lsh));
-      attach_lsa_hdr_to_iov (lsi, directack);
-      lsi->lsh->lsh_age = htons (calc_lsa_age_external (lsi)
-                                 + nbr->ospf6_if->inf_trans_delay);
-    }
-
-  if (iov_count (directack))
-    {
-      ospf6_send (MSGT_LINKSTATE_ACK, directack,
-                  (struct sockaddr *)&nbr->hisaddr, ospf6_if);
-    }
-  else
-    zvlog_debug ("Nothing to Direct ACK");
-
-  list_delete_all_node (nbr->direct_ack);
 
   return 0;
 }

@@ -26,7 +26,6 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-/* standard include group */
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>

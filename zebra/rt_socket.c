@@ -228,7 +228,7 @@ static struct sockaddr_in6 sin6_proto =
 #ifdef SIN6_LEN
   sizeof (struct sockaddr_in6),
 #endif /* SIN6_LEN */
-  AF_INET6, 0, 0, { 0 }
+  AF_INET6, 0, 0, {{{ 0 }}}
 };
 
 /* Calculate sin6_len value for netmask socket value. */
@@ -345,6 +345,8 @@ char *rtm_str [] =
 void
 rtmsg_log (struct rt_msghdr *rtm)
 {
+  char *rtm_flag_dump (int);
+
   zlog (NULL, LOG_INFO, "Kernel: Len: %d Type: %s", rtm->rtm_msglen,
 	  rtm_str[rtm->rtm_type]);
   rtm_flag_dump (rtm->rtm_flags);
@@ -357,8 +359,8 @@ rtm_read (struct rt_msghdr *rtm,
 	  union sockunion *mask,
 	  union sockunion *gate);
 
-/* void ifm_read_ifinfo (struct if_msghdr *); */
-/* void ifm_read_newaddr (struct ifa_msghdr *); */
+void ifm_read_ifinfo (struct if_msghdr *);
+void ifm_read_newaddr (struct ifa_msghdr *);
 
 /* Get and set kernel routing table update socket.  Read kernel
    between zebra interface socket. */
@@ -416,10 +418,10 @@ kernel_read (struct thread *thread)
     }
 
   if (rtmbuf.rtm.rtm_type == RTM_IFINFO)
-    ifm_read_ifinfo (&rtmbuf.rtm);
+    ifm_read_ifinfo ((struct if_msghdr *) &rtmbuf.rtm);
 
   if (rtmbuf.rtm.rtm_type == RTM_NEWADDR)
-    ifm_read_newaddr (&rtmbuf.rtm);
+    ifm_read_newaddr ((struct ifa_msghdr *) &rtmbuf.rtm);
 
   thread_add_read (master, kernel_read, NULL, sock);
 

@@ -21,19 +21,19 @@
 
 #include "ospf6d.h"
 
-/* Global Interface List, list of (struct interface *) */
-list iflist;
+/* Information about zebra. */
+struct zebra *zebra; 
 
-struct zebra zebra; /* information about zebra. */
-
-void
-ospf6_zebra_get_interface (struct stream *s)
+int
+ospf6_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
 {
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
   unsigned long endp;
+  struct stream *s;
 
+  s = zebra->ibuf;
   endp = stream_get_endp (s);
 
   while (stream_get_getp(s) < endp)
@@ -95,105 +95,85 @@ ospf6_zebra_get_interface (struct stream *s)
           connected_add (ifp, connected);
         }
     }
+  return 0;
+}
+
+DEFUN (router_zebra,
+       router_zebra_cmd,
+       "router zebra",
+       "Enable a routing process\n"
+       "Make connection to zebra daemon\n")
+{
+  int ret;
+
+  vty->node = ZEBRA_NODE;
+
+  /* Set router zebra is enabled. */
+  zebra->enable = 1;
+
+  /* If already has socket then return. */
+  if (zebra->sock >= 0)
+    {
+      vty_out (vty, "Already connected to zebra\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Connect to zebra. */
+  ret = zebra_create (zebra);
+
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't connect to zebra\r\n");
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
 }
 
+/* Zebra configuration write function. */
 int
-ospf6_zebra_read (struct thread *thread)
+zebra_config_write (struct vty *vty)
 {
-  unsigned long  tmpl;
-  unsigned short length;
-  unsigned char  command;
-  int nbyte;
-  struct stream *s = zebra.s;
-
-  zebra.t_read = (struct thread *)NULL;
-
-  nbyte = stream_read (s, zebra.sockfd, 3);
-
-  length = stream_getw (s);
-  command = stream_getc (s);
-
-  switch (command)
+  if (! zebra->enable)
+    vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+  else if (! zebra->redist[ZEBRA_ROUTE_OSPF6])
     {
-    case ZEBRA_GET_ALL_INTERFACE:
-      nbyte = stream_read (zebra.s, zebra.sockfd, length - 3);
-      if (nbyte == 0)
-        {
-          zvlog_info ("connection closed");
-          return -1;
-        }
-      if (nbyte < 0)
-        {
-          zvlog_err ("stream_read() failed");
-          return -1;
-        }
-
-      ospf6_zebra_get_interface (zebra.s);
-      break;
-    default:
-      zvlog_err ("Unknown command from zebra");
-      return -1;
+      vty_out (vty, "router zebra%s", VTY_NEWLINE);
+      vty_out (vty, " no redistribute ospf6%s", VTY_NEWLINE);
     }
-  tmpl = command;
-  list_add_node (zebra.history, (void *)tmpl);
-
-  zebra.t_read = thread_add_read (master, ospf6_zebra_read,
-                                  NULL, zebra.sockfd);
-  stream_free (s);
   return 0;
 }
 
-int
-ospf6_zebra_init ()
+/* Zebra node structure. */
+struct cmd_node zebra_node =
 {
-  int sockfd = -1;
-  struct thread thread;
+  ZEBRA_NODE,
+  "%s(config-router)#",
+};
 
-  iflist = list_init ();
-  zebra.s = stream_new(ZEBRA_MAX_PACKET_SIZ);
-  zebra.history = list_init ();
-  zebra.sockfd = zebra_connect ();
-  if (zebra.sockfd < 0)
-    {
-      zlog (NULL, LOG_WARNING, "Can't connect zebra.");
-      return zebra.sockfd;
-    }
-
-  zebra_get_all_interface (zebra.sockfd);
-  zebra.t_read = thread_add_read (master, ospf6_zebra_read,
-                                  NULL, zebra.sockfd);
-
-  zvlog_notice ("Waiting for reply from zebra...");
-  while (!list_lookup_node (zebra.history, (void *)ZEBRA_GET_ALL_INTERFACE))
-    {
-      thread_fetch (master, &thread);
-      thread_call (&thread);
-    }
-
-  return sockfd;
+void
+zebra_start ()
+{
+  zebra_create (zebra);
 }
 
-#ifdef TEST
-struct thread_master *master;
-
-int main()
+void
+zebra_init ()
 {
-  struct thread thread;
+  /* Allocate zebra structure. */
+  zebra = zebra_new ();
 
-  iflist = list_init ();
-  zlog_default = openzlog ("hoge", ZLOG_STDOUT, ZLOG_OSPF,
-                          LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
-  master = thread_make_master ();
-  ospf_zebra_init ();
+  /* Set default values. */
+  zebra->enable = 1;
+  zebra->sock = -1;
+  zebra->redist_default = ZEBRA_ROUTE_OSPF6;
+  zebra->redist[ZEBRA_ROUTE_OSPF6] = 1;
 
-  while (thread_fetch (master, &thread))
-    {
-      thread_call (&thread);
-#ifdef DEBUG
-      thread_master_debug (master);
-#endif /* DEBUG */
-    }
+  zebra->get_all_interface = ospf6_zebra_get_interface;
 
-  return;
+  /* Install zebra node. */
+  install_node (&zebra_node, zebra_config_write);
+
+  /* Install command element for zebra node. */
+  install_element (CONFIG_NODE, &router_zebra_cmd);
 }
-#endif

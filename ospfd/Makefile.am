@@ -88,9 +88,9 @@ ospf_packet.o: ospf_packet.c ../lib/linklist.h ../lib/prefix.h \
  ../ospfd/ospf_ism.h ../ospfd/ospf_neighbor.h ../ospfd/ospf_nsm.h \
  ../ospfd/ospf_network.h ../ospfd/ospf_lsa.h ../ospfd/ospf_packet.h \
  ../ospfd/ospf_dump.h
-ospf_zebra.o: ospf_zebra.c ../lib/vector.h ../lib/memory.h \
- ../lib/thread.h ../lib/buffer.h ../lib/network.h ../lib/prefix.h \
- ../lib/linklist.h ../lib/client.h ../lib/stream.h ../lib/command.h \
- ../lib/vty.h ../lib/if.h ../lib/log.h ../zebra/zebra.h \
- ../ospfd/ospfd.h ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
- ../ospfd/ospf_zebra.h
+ospf_zebra.o: ospf_zebra.c ../zebra/zebra.h ../lib/vector.h \
+ ../lib/memory.h ../lib/thread.h ../lib/buffer.h ../lib/network.h \
+ ../lib/prefix.h ../lib/linklist.h ../lib/client.h ../lib/stream.h \
+ ../lib/command.h ../lib/vty.h ../lib/if.h ../lib/log.h \
+ ../lib/zclient.h ../ospfd/ospfd.h ../ospfd/ospf_interface.h \
+ ../ospfd/ospf_ism.h ../ospfd/ospf_zebra.h

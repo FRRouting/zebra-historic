@@ -24,6 +24,9 @@
 #define _ZEBRA_RIPNG_ROUTE_H
 
 void
+ripng_slot_check (struct route_node *node);
+
+void
 ripng_slot_add (struct route_node *node);
 
 int

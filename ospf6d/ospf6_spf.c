@@ -833,7 +833,7 @@ int install_route (struct area *area)
       switch (current->flag)
         {
         case INSTALL:
-          zebra_ipv6_add (zebra.sockfd, ZEBRA_ROUTE_OSPF, &p,
+          zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, &p,
                           &current->next_hop, current->ifindex);
           zvlog_debug ("ROUTECALC: %s installed",
                        inet_ntop (AF_INET6, &p.prefix, strbuf,
@@ -842,7 +842,7 @@ int install_route (struct area *area)
         case NOT_INSTALL:
           break;
         case DELETE:
-          zebra_ipv6_delete (zebra.sockfd, ZEBRA_ROUTE_OSPF, &p,
+          zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_OSPF6, &p,
                              &current->next_hop, current->ifindex);
           zvlog_debug ("ROUTECALC: %s deleted",
                        inet_ntop (AF_INET6, &p.prefix, strbuf,
@@ -868,7 +868,7 @@ int noinstall_route (struct area *area)
       current = &area->rt_table[i];
       p.prefixlen = current->prefixlength;
       memcpy (&p.prefix, &current->destination, sizeof (struct in6_addr));
-      zebra_ipv6_delete (zebra.sockfd, ZEBRA_ROUTE_OSPF, &p,
+      zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_OSPF6, &p,
                          &current->next_hop, current->ifindex);
       zvlog_debug ("ROUTECALC: %s deleted",
                    inet_ntop (AF_INET6, &p.prefix, strbuf,

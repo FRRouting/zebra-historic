@@ -75,7 +75,6 @@ char *zebra_command_str [] =
 };
 
 void zebra_event (enum event event, int sock, struct zebra_client *client);
-
 
 /* Debug related variables and functions. */
 unsigned int debug_zebra_opt = 0;

@@ -24,7 +24,9 @@
 
 #include <zebra.h>
 
-/* include other stuffs */
+/* Include other stuffs */
+#include "zebra/zebra.h"
+
 #include "version.h"
 #include "log.h"
 #include "getopt.h"
@@ -41,7 +43,7 @@
 #include "stream.h"
 #include "thread.h"
 #include "filter.h"
-#include "zebra/zebra.h"
+#include "zclient.h"
 
 #define HASHVAL 64
 

@@ -22,6 +22,7 @@
 
 #include <zebra.h>
 
+#include "zebra/zebra.h"
 #include "linklist.h"
 #include "vector.h"
 #include "vty.h"
@@ -37,8 +38,8 @@
 #include "log.h"
 #include "stream.h"
 #include "thread.h"
+#include "zclient.h"
 
-#include "zebra/zebra.h"
 #include "zebra/connected.h"
 #include "ripd/ripd.h"
 
@@ -271,8 +272,8 @@ if_valid_neighbor (struct in_addr addr)
 	{
 	  struct connected *connected;
 	  struct prefix_ipv4 *p;
-	  struct prefix *pxn; /* Prefix of the neighbor */
-	  struct prefix *pxc; /* Prefix of the connected network */
+	  struct prefix *pxn = NULL; /* Prefix of the neighbor */
+	  struct prefix *pxc = NULL; /* Prefix of the connected network */
 
 	  connected = getdata (cnode);
 	  p = (struct prefix_ipv4 *) connected->address;
@@ -281,12 +282,12 @@ if_valid_neighbor (struct in_addr addr)
 	    continue;
 
 
-          prefix_new(pxn);
+          pxn = prefix_new();
           pxn->family = AF_INET;
           pxn->prefixlen = 32;
           pxn->u.prefix4 = addr;
           
-          prefix_new(pxc);
+          pxc = prefix_new();
           prefix_copy(pxc, (struct prefix *) p);
           apply_mask( (struct prefix_ipv4 *) pxc);
 	  
@@ -364,13 +365,15 @@ rip_connected_add (struct interface *ifp,
 
 /* Get all interface information. */
 void
-rip_zebra_get_interface (struct stream *s)
+rip_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
 {
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
   unsigned long endp;
+  struct stream *s;
 
+  s = zebra->ibuf;
   endp = stream_get_endp (s);
 
   while (stream_get_getp(s) < endp)

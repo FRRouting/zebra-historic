@@ -32,6 +32,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "filter.h"
 
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_zebra.h"
 #include "ospfd/ospfd.h"
 #include "zebra/zebra.h"
 
@@ -222,14 +223,13 @@ main (int argc, char **argv)
   /* Print banner. */
   zlog (NULL, LOG_INFO, "OSPFd (%s) starts", ZEBRA_VERSION);
 
+  /* Connect to zebra. */
+  zebra_start ();
+
   /* Fetch next active thread. */
   while (thread_fetch (master, &thread))
-    {
-      thread_call (&thread);
-#ifdef DEBUG
-      thread_master_debug (master);
-#endif /* DEBUG */
-    }
+    thread_call (&thread);
+
   /* Not reached. */
   exit (0);
 }

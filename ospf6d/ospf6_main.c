@@ -196,7 +196,7 @@ main (int argc, char **argv)
   ospf6_serv_sock ();
 
   ospf6_init ();
-  ospf6_zebra_init ();
+  zebra_init ();
 
   access_list_init ();
   memory_init ();
@@ -204,6 +204,9 @@ main (int argc, char **argv)
 
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
+
+  /* Print start message */
+  zvlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);
 
   if (daemon_mode)
     daemon (0, 0);
@@ -217,14 +220,12 @@ main (int argc, char **argv)
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET6);
 #endif /* KAME */
 
-  /* start finite state machine, here we go! */
+  /* Connect to zebra. */
+  zebra_start ();
+
+  /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))
-    {
-      thread_call (&thread);
-#ifdef DEBUG
-      thread_master_debug (master);
-#endif /* DEBUG */
-    }
+    thread_call (&thread);
 
   /* Not reached. */
   exit (0);

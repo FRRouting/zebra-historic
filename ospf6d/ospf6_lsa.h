@@ -82,6 +82,7 @@ struct lsa_internal
   struct neighbor  *from;
   struct area      *area;
   struct ospf6_if  *ospf6_if;
+  list              retransing_nbr;
 };
 
 /* for LSA list in Neighbor Data Structure */
@@ -156,7 +157,7 @@ struct intra_area_prefix_lsa
 /* Function Prototypes */
 void free_lsa (struct lsa_hdr *);
 void free_lsa_internal_hdr (struct lsa_internal *);
-int lsa_list_delete_all (list);
+int lsa_delete_all_list (list);
 int lsi_delete_from_list (struct lsa_internal *, list);
 int lsi_delete (struct lsa_internal *);
 int prepare_neighbor_lsdb (struct neighbor *);
@@ -168,7 +169,7 @@ struct lsa_internal *make_lsa_hdr_internal (struct lsa_hdr *,
                                             struct neighbor *);
 struct lsa_internal *make_lsa_internal (struct lsa_hdr *, struct neighbor *);
 int lsa_change (struct lsa_internal *);
-int lsa_install (struct lsa_internal **);
+int lsa_install (struct lsa_internal *);
 int which_is_more_recent (struct lsa_internal *, struct lsa_internal *);
 list lsa_lookup_by_advrtr (unsigned short, unsigned long, struct area *);
 struct lsa_internal *lsa_lookup (unsigned short, unsigned long,
@@ -179,8 +180,10 @@ int check_neighbor_lsdb (struct iovec *, struct neighbor *);
 int proceed_summarylist (struct neighbor *);
 struct lsa_hdr *attach_lsa_to_iov (struct lsa_internal *, struct iovec *);
 struct lsa_hdr *attach_lsa_hdr_to_iov (struct lsa_internal *, struct iovec *);
+void attach_lsa_to_retranslist (struct lsa_internal *, struct neighbor *);
+void detach_lsa_from_retranslist (struct lsa_internal *, struct neighbor *);
 int lsa_refresh (struct thread *);
-int originating_lsa (struct lsa_internal **);
+int originating_lsa (struct lsa_internal *);
 int construct_router_lsa (struct area *);
 int construct_network_lsa (struct ospf6_if *);
 int construct_link_lsa (struct ospf6_if *);

@@ -34,9 +34,11 @@ struct host
 
   /* Password for vty interface. */
   char *password;
+  char *password_encrypt;
 
   /* Enable password */
   char *enable;
+  char *enable_encrypt;
 
   /* Override for no. of terminal lines */
   int lines;
@@ -54,7 +56,9 @@ struct host
   /* config file name of this host */
   char *config;
 
+  /* Flags for services */
   int advanced;
+  int encrypt;
 };
 
 /* There are some command levels which called from command node. */

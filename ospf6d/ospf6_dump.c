@@ -109,8 +109,6 @@ ospf6_log_init ()
                  LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
                  LOG_DAEMON);
 
-  /* Print OSPF6d start messages. */
-  zlog (NULL, LOG_INFO, "OSPF6d (%s) starts", ZEBRA_VERSION);
   return;
 }
 

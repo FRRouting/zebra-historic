@@ -148,7 +148,7 @@ bgp_serv_sock (unsigned short port, int family)
   ret = listen (bgp_sock, 3);
   if (ret < 0) 
     {
-      zlog (NULL, LOG_INFO, "can't listen bgp server socket : %s",
+      zlog (NULL, LOG_INFO, "Can't listen bgp server socket : %s",
 	    strerror (errno));
       return ret;
     }

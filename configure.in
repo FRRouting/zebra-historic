@@ -299,20 +299,20 @@ if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    LIB_IPV6="-L/usr/local/v6/lib -linet6"
    AC_MSG_RESULT(Kame)
 fi
-# dnl ------------
-# dnl OpenBSD 2.4+
-# dnl ------------
-# if grep NRL /usr/include/netinet6/in6.h >/dec/null 2>&1; then
-#    zebra_cv_ipv6=yes
-#    AC_DEFINE(HAVE_IPV6)
-#    RIPNGD="ripngd"
-#    OSPF6D="ospf6d"
-#    AC_MSG_RESULT(OpenBSD/NRL)
-# fi
+dnl ------------
+dnl OpenBSD 2.4+
+dnl ------------
+if grep NRL /usr/include/netinet6/in6.h >/dev/null 2>&1; then
+   zebra_cv_ipv6=yes
+   AC_DEFINE(HAVE_IPV6)
+   RIPNGD="ripngd"
+   OSPF6D="ospf6d"
+   AC_MSG_RESULT(OpenBSD/NRL)
+fi
 
-dnl ----------------
-dnl Linux 2.2.x IPv6
-dnl ----------------
+dnl ----------
+dnl Linux IPv6
+dnl ----------
 if test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route"
 then
    zebra_cv_ipv6=yes
@@ -324,7 +324,7 @@ then
    if test x`ls /usr/inet6/lib/libinet6.a 2>/dev/null` != x;then
      LIB_IPV6="-L/usr/inet6/lib -linet6"
    fi
-   AC_MSG_RESULT(Linux 2.2.x IPv6)
+   AC_MSG_RESULT(Linux IPv6)
 fi
 
 dnl -----------------------
@@ -398,6 +398,7 @@ AC_SUBST(GUILE)
 AC_SUBST(INCLUDES)
 AC_CHECK_LIB(c, inet_ntop, [AC_DEFINE(HAVE_INET_NTOP)])
 AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
+AC_CHECK_LIB(crypt, crypt)
 
 dnl ----------------------------
 dnl check sin_len of sockaddr_in

@@ -1,3 +1,23 @@
+1999-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c: Add `set weight WEIGHT' command.
+
+	* bgpd.c: Remove all_digit_check function.  Instead of that use
+	all_digit function in lib/prefix.c.
+
+	* bgp_routemap.c (bgp_route_map_init): Install
+	no_set_ipv6_nexthop_global_cmd and no_set_ipv6_nexthop_local_cmd
+	element to the RMAP_NODE.
+
+1999-05-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_make_str): Declare aspath_delimiter_char
+	inside aspath_make_str function.
+	(aspath_prepend): New function is added for AS path prepend.
+	(aspath_make_str_count): Renamed from aspath_make_str.  AS path
+	count is set to the structure.
+	(aspath_merge): New function.
+
 1999-05-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_zebra.c (redistribute_bgp): Add new DEFUN.

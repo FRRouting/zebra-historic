@@ -150,7 +150,12 @@ kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 #undef RTF_ADDRCONF
 
 #include <asm/types.h>
+
+#if defined(__GLIBC__) && __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 1
+/* struct in6_rtmsg will be declared in net/route.h. */
+#else
 #include <linux/ipv6_route.h>
+#endif
 
 int
 kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,

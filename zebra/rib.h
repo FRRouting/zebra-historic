@@ -52,7 +52,6 @@ extern struct route_table *ipv6_rib_table;
 /* Prototypes. */
 void rib_close ();
 void rib_init ();
-void rib_weed_tables ();
 struct rt *rib_search_rt (int, struct rt *);
 
 int

@@ -1,3 +1,14 @@
+1999-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c: Changed to use lib/zclient.c routines.
+
+	* ospf_zebra.h (zebra_start): Remove struct zebra.
+
+1999-05-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (ospf_config_write): Add cast (unsigned long int) to
+	ntohl for sprintf warning.
+
 1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
 
 	* ospf_main.c (signal_init): SIGTERM call sigint.

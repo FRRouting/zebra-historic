@@ -938,7 +938,8 @@ ospf_config_write (struct vty *vty)
 	  else if (a->format == OSPF_AREA_ID_FORMAT_ADDRESS)
 	    strncpy (buf, inet_ntoa (n->area_id), INET_ADDRSTRLEN);
 	  else
-	    sprintf (buf, "%lu", ntohl (n->area_id.s_addr));
+	    sprintf (buf, "%lu", 
+		     (unsigned long int) ntohl (n->area_id.s_addr));
 
 	  /* print network. */
 	  vty_out (vty, " network %s/%d area %s%s",
@@ -959,7 +960,8 @@ ospf_config_write (struct vty *vty)
 	      if (a->format == OSPF_AREA_ID_FORMAT_ADDRESS)
 		strncpy (buf, inet_ntoa (a->area_id), INET_ADDRSTRLEN);
 	      else
-		sprintf (buf, "%lu", ntohl (a->area_id.s_addr));
+		sprintf (buf, "%lu", 
+			 (unsigned long int) ntohl (a->area_id.s_addr));
 
 	      if (a->auth_type == OSPF_AUTH_SIMPLE)
 		vty_out (vty, " area %s authentication%s",

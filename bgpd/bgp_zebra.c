@@ -87,7 +87,6 @@ bgp_get_all_interface (int command, struct zebra *zebra, zebra_size_t length)
   struct stream *s;
 
   s = zebra->ibuf;
-
   endp = stream_get_endp (s);
 
   while (stream_get_getp(s) < endp)
@@ -362,7 +361,7 @@ DEFUN (router_zebra,
 
   if (ret < 0)
     {
-      vty_out (vty, "can't connect to zebra\r\n");
+      vty_out (vty, "Can't connect to zebra\r\n");
       return CMD_WARNING;
     }
   return CMD_SUCCESS;

@@ -45,35 +45,35 @@
        interface        :  Not yet
        ip address       :  Done
        ip next-hop      :  Done
-       ip route-source  :  (This will be not implemented by bgpd)
-       length           :  (This will be not implemented by bgpd)
+       ip route-source  :  (This will not be implemented by bgpd)
+       length           :  (This will not be implemented by bgpd)
        metric           :  Done
-       route-type       :  (This will be not implemented by bgpd)
-       tag              :  (This will be not implemented by bgpd)
+       route-type       :  (This will not be implemented by bgpd)
+       tag              :  (This will not be implemented by bgpd)
 
- set  as-path           :  Not yet
-      automatic-tag     :  (This will be not implemented by bgpd)
+ set  as-path prepend   :  Done
+      as-path tag       :  Not yet
+      automatic-tag     :  (This will not be implemented by bgpd)
       community         :  Not yet
       dampning          :  Not yet
-      default           :  (This will be not implemented by bgpd)
-      interface         :  (This will be not implemented by bgpd)
-      ip default        :  (This will be not implemented by bgpd)
+      default           :  (This will not be implemented by bgpd)
+      interface         :  (This will not be implemented by bgpd)
+      ip default        :  (This will not be implemented by bgpd)
       ip next-hop       :  Done
-      ip precedence     :  (This will be not implemented by bgpd)
-      ip tos            :  (This will be not implemented by bgpd)
-      level             :  (This will be not implemented by bgpd)
+      ip precedence     :  (This will not be implemented by bgpd)
+      ip tos            :  (This will not be implemented by bgpd)
+      level             :  (This will not be implemented by bgpd)
       local-preference  :  Done
       metric            :  Done
-      metric-type       :  (This will be not implemented by bgpd)
+      metric-type       :  (This will not be implemented by bgpd)
       origin            :  Not yet
-      tag               :  (This will be not implemented by bgpd)
-      weight            :  Not yet
+      tag               :  (This will not be implemented by bgpd)
+      weight            :  Done
 
   Local extention
 
   set ipv6 nexthop global: Done
   set ipv6 nexthop local : Done
-
 
 */ 
 
@@ -217,6 +217,8 @@ struct route_map_rule_cmd route_match_metric_cmd =
   route_match_metric_free
 };
 
+/* `match as-path ASPATH' */
+
 /* Match function for as-path match.  I assume given object is */
 int
 route_match_aspath (void *rule, struct prefix *prefix, void *object)
@@ -318,9 +320,8 @@ struct route_map_rule_cmd route_set_ip_nexthop_cmd =
   route_set_ip_nexthop_free
 };
 
-
 #ifdef HAVE_IPV6
-/* `set ipv6 nexthop-global IP_ADDRESS' */
+/* `set ipv6 nexthop global IP_ADDRESS' */
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
 int
@@ -379,6 +380,8 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_global_cmd =
   route_set_ipv6_nexthop_global_compile,
   route_set_ipv6_nexthop_global_free
 };
+
+/* `set ipv6 nexthop local IP_ADDRESS' */
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
 int
@@ -439,19 +442,21 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
 };
 #endif /* HAVE_IPV6 */
 
+/* `set local-preference LOCAL_PREF' */
+
 /* Set local preference. */
 int
 route_set_local_pref (void *rule, struct prefix *prefix, void *object)
 {
-  char *pref;
+  u_int32_t *local_pref;
   struct bgp_info *bgp_info;
 
   /* Fetch routemap's rule information. */
-  pref = rule;
+  local_pref = rule;
   bgp_info = object;
 
-  /* Set next hop value. */ 
-  bgp_info->attr->local_pref = atoi (pref);
+  /* Set local preference value. */ 
+  bgp_info->attr->local_pref = *local_pref;
 
   return 0;
 }
@@ -460,8 +465,21 @@ route_set_local_pref (void *rule, struct prefix *prefix, void *object)
 void *
 route_set_local_pref_compile (char *arg)
 {
-  /* Local preference value shoud be integer.  Check needed at here XXX. */
-  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+  u_int32_t *local_pref;
+  char *endptr = NULL;
+
+  /* Local preference value shoud be integer. */
+  if (! all_digit (arg))
+    return NULL;
+
+  local_pref = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
+  *local_pref = strtoul (arg, &endptr, 10);
+  if (*endptr != '\0' || *local_pref == ULONG_MAX)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, local_pref);
+      return NULL;
+    }
+  return local_pref;
 }
 
 /* Free route map's local preference value. */
@@ -480,6 +498,64 @@ struct route_map_rule_cmd route_set_local_pref_cmd =
   route_set_local_pref_free,
 };
 
+/* `set weight WEIGHT' */
+
+/* Set weight. */
+int
+route_set_weight (void *rule, struct prefix *prefix, void *object)
+{
+  u_int32_t *weight;
+  struct bgp_info *bgp_info;
+
+  /* Fetch routemap's rule information. */
+  weight = rule;
+  bgp_info = object;
+
+  /* Set weight value. */ 
+  bgp_info->attr->weight = *weight;
+
+  return 0;
+}
+
+/* set local preference compilation. */
+void *
+route_set_weight_compile (char *arg)
+{
+  u_int32_t *weight;
+  char *endptr = NULL;
+
+  /* Local preference value shoud be integer. */
+  if (! all_digit (arg))
+    return NULL;
+
+  weight = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
+  *weight = strtoul (arg, &endptr, 10);
+  if (*endptr != '\0' || *weight == ULONG_MAX)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, weight);
+      return NULL;
+    }
+  return weight;
+}
+
+/* Free route map's local preference value. */
+void
+route_set_weight_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Set local preference rule structure. */
+struct route_map_rule_cmd route_set_weight_cmd = 
+{
+  "weight",
+  route_set_weight,
+  route_set_weight_compile,
+  route_set_weight_free,
+};
+
+/* `set metric METRIC' */
+
 /* Set metric to attribute. */
 int
 route_set_metric (void *rule, struct prefix *prefix, void *object)
@@ -522,6 +598,52 @@ struct route_map_rule_cmd route_set_metric_cmd =
   route_set_metric_free,
 };
 
+/* `set as-path prepend ASPATH' */
+
+/* For AS path prepend mechanism. */
+int
+route_set_aspath_prepend (void *rule, struct prefix *prefix, void *object)
+{
+  struct aspath *aspath;
+  struct bgp_info *bgp_info;
+
+  aspath = rule;
+  bgp_info = object;
+  
+  aspath_prepend (aspath, bgp_info->attr->aspath);
+
+  return 0;
+}
+
+/* Compile function for as-path prepend. */
+void *
+route_set_aspath_prepend_compile (char *arg)
+{
+  struct aspath *aspath;
+
+  aspath = aspath_str2aspath (arg);
+  if (! aspath)
+    return NULL;
+  return aspath;
+}
+
+/* Compile function for as-path prepend. */
+void
+route_set_aspath_prepend_free (void *rule)
+{
+  struct aspath *aspath = rule;
+  aspath_free (aspath);
+}
+
+/* Set metric rule structure. */
+struct route_map_rule_cmd route_set_aspath_prepend_cmd = 
+{
+  "as-path prepend",
+  route_set_aspath_prepend,
+  route_set_aspath_prepend_compile,
+  route_set_aspath_prepend_free,
+};
+
 /* Add bgp route map rule. */
 int
 bgp_route_match_add (struct vty *vty, struct route_map_index *index,
@@ -539,7 +661,7 @@ bgp_route_match_add (struct vty *vty, struct route_map_index *index,
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Can't compile argument.\r\n");
+	  vty_out (vty, "Argument is malformed.\r\n");
 	  return CMD_WARNING;
 	  break;
 	}
@@ -564,7 +686,7 @@ bgp_route_match_delete (struct vty *vty, struct route_map_index *index,
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Can't compile argument.\r\n");
+	  vty_out (vty, "Argument is malformed.\r\n");
 	  return CMD_WARNING;
 	  break;
 	}
@@ -589,7 +711,7 @@ bgp_route_set_add (struct vty *vty, struct route_map_index *index,
 	  return CMD_WARNING;
 	  break;
 	case ROUTE_MAP_COMPILE_ERROR:
-	  vty_out (vty, "Can't compile argument.\r\n");
+	  vty_out (vty, "Argument is malformed.\r\n");
 	  return CMD_WARNING;
 	  break;
 	}
@@ -607,8 +729,17 @@ bgp_route_set_delete (struct vty *vty, struct route_map_index *index,
   ret = route_map_delete_set (index, command, arg);
   if (ret)
     {
-      vty_out (vty, "Can't find rule %s %s.\r\n", command, arg);
-      return CMD_WARNING;
+      switch (ret)
+	{
+	case ROUTE_MAP_RULE_MISSING:
+	  vty_out (vty, "Can't find rule.\r\n");
+	  return CMD_WARNING;
+	  break;
+	case ROUTE_MAP_COMPILE_ERROR:
+	  vty_out (vty, "Argument is malformed.\r\n");
+	  return CMD_WARNING;
+	  break;
+	}
     }
   return CMD_SUCCESS;
 }
@@ -833,6 +964,93 @@ DEFUN (no_set_local_pref,
   return bgp_route_set_delete (vty, vty->index, "local-preference", argv[0]);
 }
 
+DEFUN (set_weight,
+       set_weight_cmd,
+       "set weight WEIGHT",
+       "Set value\n"
+       "Weight\n"
+       "Weight value\n")
+{
+  return bgp_route_set_add (vty, vty->index, "weight", argv[0]);
+}
+
+DEFUN (no_set_weight,
+       no_set_weight_cmd,
+       "no set weight WEIGHT",
+       NO_STR
+       "Set value\n"
+       "Weight\n"
+       "Weight value\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "weight", argv[0]);
+}
+
+
+DEFUN (set_aspath_prepend,
+       set_aspath_prepend_cmd,
+       "set as-path prepend ...",
+       "Set value\n"
+       "AS path\n"
+       "AS path prepend\n"
+       "ASes to prepend")
+{
+  int i;
+  struct buffer *b;
+  char *asstr;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  asstr = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_add (vty, vty->index, "as-path prepend", asstr);
+}
+
+DEFUN (no_set_aspath_prepend,
+       no_set_aspath_prepend_cmd,
+       "no set as-path prepend ...",
+       NO_STR
+       "Set value\n"
+       "AS path\n"
+       "AS path prepend\n"
+       "ASes to prepend")
+{
+  int i;
+  struct buffer *b;
+  char *asstr;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  asstr = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_delete (vty, vty->index, "as-path prepend", asstr);
+}
+
 DEFUN (set_ipv6_nexthop_global,
        set_ipv6_nexthop_global_cmd,
        "set ipv6 nexthop global IP_ADDR",
@@ -897,8 +1115,10 @@ bgp_route_map_init ()
   route_map_install_match (&route_match_metric_cmd);
 
   route_map_install_set (&route_set_ip_nexthop_cmd);
-  route_map_install_set (&route_set_metric_cmd);
   route_map_install_set (&route_set_local_pref_cmd);
+  route_map_install_set (&route_set_weight_cmd);
+  route_map_install_set (&route_set_metric_cmd);
+  route_map_install_set (&route_set_aspath_prepend_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -915,18 +1135,26 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
 
+  install_element (RMAP_NODE, &set_local_pref_cmd);
+  install_element (RMAP_NODE, &no_set_local_pref_cmd);
+
+  install_element (RMAP_NODE, &set_weight_cmd);
+  install_element (RMAP_NODE, &no_set_weight_cmd);
+
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);
 
-  install_element (RMAP_NODE, &set_local_pref_cmd);
-  install_element (RMAP_NODE, &no_set_local_pref_cmd);
-  
+  install_element (RMAP_NODE, &set_aspath_prepend_cmd);
+  install_element (RMAP_NODE, &no_set_aspath_prepend_cmd);
 
 #ifdef HAVE_IPV6
   route_map_install_set (&route_set_ipv6_nexthop_global_cmd);
   route_map_install_set (&route_set_ipv6_nexthop_local_cmd);
 
   install_element (RMAP_NODE, &set_ipv6_nexthop_global_cmd);
+  install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_cmd);
+
   install_element (RMAP_NODE, &set_ipv6_nexthop_local_cmd);
+  install_element (RMAP_NODE, &no_set_ipv6_nexthop_local_cmd);
 #endif
 }

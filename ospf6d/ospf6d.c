@@ -24,6 +24,7 @@
 /* global ospfd variable */
 int  ospf6_sock;
 list ospf6_list;
+list iflist;
 struct sockaddr_in6 allspfrouters6;
 struct sockaddr_in6 alldrouters6;
 
@@ -1609,5 +1610,6 @@ ospf6_init ()
 
   /* Make empty list of top list. */
   ospf6_list = list_init ();
+  iflist = list_init ();
 
 }

@@ -34,7 +34,11 @@
 #include "bgpd/bgp_aspath.h"
 
 /* Minimum size of aspath header and AS value. */
-#define AS_HEADER_SIZE        2	 /* Attr. Flags and Attr. Type Code. */
+
+/* Attr. Flags and Attr. Type Code. */
+#define AS_HEADER_SIZE        2	 
+
+/* Two octet is used for AS value. */
 #define AS_VALUE_SIZE         sizeof (as_t)
 
 /* To fetch and store as segment value. */
@@ -43,21 +47,6 @@ struct assegment
   u_char type;
   u_char length;
   as_t asval[1];
-};
-
-/* Delimiter character of each AS type. */
-struct
-{
-  int type;
-  char start;
-  char end;
-} aspath_delimiter_char [] =
-{
-  { 0 },
-  { AS_SET,             '{', '}' },
-  { AS_SEQUENCE,        ' ', ' ' },
-  { AS_CONFED_SET,      '[', ']' },
-  { AS_CONFED_SEQUENCE, '(', ')' }
 };
 
 /* Hash for aspath.  This is the top level structure of AS path. */
@@ -70,7 +59,6 @@ aspath_new ()
 
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
   bzero (aspath, sizeof (struct aspath));
-  
   return aspath;
 }
 
@@ -80,13 +68,10 @@ aspath_free (struct aspath *aspath)
 {
   if (!aspath)
     return;
-
   if (aspath->data)
     XFREE (MTYPE_AS_SEG, aspath->data);
-
   if (aspath->str)
     XFREE (MTYPE_AS_STR, aspath->str);
-
   XFREE (MTYPE_AS_PATH, aspath);
 }
 
@@ -132,7 +117,7 @@ aspath_dup (struct aspath *aspath)
 
 /* Convert aspath structure to string expression. */
 static char *
-aspath_make_str (struct aspath *as)
+aspath_make_str_count (struct aspath *as)
 {
   int space;
   u_char type;
@@ -144,11 +129,27 @@ aspath_make_str (struct aspath *as)
   u_char *str_buf;
   int count = 0;
 
+  /* Delimiter character of each AS type. */
+  struct
+  {
+    int type;
+    char start;
+    char end;
+  } aspath_delimiter_char [] =
+    {
+      { 0 },
+      { AS_SET,             '{', '}' },
+      { AS_SEQUENCE,        ' ', ' ' },
+      { AS_CONFED_SET,      '[', ']' },
+      { AS_CONFED_SEQUENCE, '(', ')' }
+    };
+
   /* Empty aspath. */
   if (as->length == 0)
     {
       str_buf = XMALLOC (MTYPE_AS_STR, 1);
       str_buf[0] = '\0';
+      as->count = count;
       return str_buf;
     }
 
@@ -185,16 +186,10 @@ aspath_make_str (struct aspath *as)
 
       /* If assegment type is changed, print previous type's end
          character. */
-      if (assegment->type != type)
-	{
-	  if (type != AS_SEQUENCE)
-	    str_buf[str_pnt++] = aspath_delimiter_char[type].end;
-	  type = assegment->type;
-	}
-
+      if (type != AS_SEQUENCE)
+	str_buf[str_pnt++] = aspath_delimiter_char[type].end;
       if (space)
 	str_buf[str_pnt++] = ' ';
-
       if (assegment->type != AS_SEQUENCE)
 	str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].start;
 
@@ -216,13 +211,16 @@ aspath_make_str (struct aspath *as)
 	  str_pnt += len;
 	}
 
-      pnt += (assegment->length * 2) + 2;
+      type = assegment->type;
+      pnt += (assegment->length * AS_VALUE_SIZE) + AS_HEADER_SIZE;
     }
 
   if (assegment->type != AS_SEQUENCE)
     str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].end;
 
   str_buf[str_pnt] = '\0';
+
+  as->count = count;
 
   return str_buf;
 }
@@ -267,7 +265,7 @@ aspath_parse (caddr_t pnt, int length)
   hash_push (ashash, aspath);
 
   /* Make AS path string. */
-  aspath->str = aspath_make_str (aspath);
+  aspath->str = aspath_make_str_count (aspath);
 
   return aspath;
 }
@@ -315,7 +313,16 @@ aspath_aggregate (struct aspath *as1, struct aspath *as2)
       cp1 += ((seg1->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
       cp2 += ((seg2->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
     }
-  
+
+  while (cp1 < end1)
+    {
+      ;
+    }
+
+  while (cp2 < end2)
+    {
+      ;
+    }
 
   return NULL;
 }
@@ -340,16 +347,105 @@ aspath_loop_check (struct aspath *aspath, as_t asno)
       assegment = (struct assegment *) pnt;
       
       for (i = 0; i < assegment->length; i++)
-	{
-	  if (assegment->asval[i] == htons(asno))
-	    return 1;
-	}
-      pnt += (assegment->length * 2) + 2;
+	if (assegment->asval[i] == htons(asno))
+	  return 1;
+
+      pnt += (assegment->length * AS_VALUE_SIZE) + AS_HEADER_SIZE;
     }
   return 0;
 }
 
-/* Add specified as to the leftmost of aspath. */
+/* Merge as1 to as2.  as2 should be uninterned aspath. */
+struct aspath *
+aspath_merge (struct aspath *as1, struct aspath *as2)
+{
+  caddr_t data;
+
+  if (! as1 || ! as2)
+    return NULL;
+
+  data = XMALLOC (MTYPE_AS_SEG, as1->length + as2->length);
+  memcpy (data, as1->data, as1->length);
+  memcpy (data + as1->length, as2->data, as2->length);
+
+  XFREE (MTYPE_AS_SEG, as2->data);
+  as2->data = data;
+  as2->length += as1->length;
+  as2->count += as1->count;
+  return as2;
+}
+
+/* Prepend as1 to as2.  as2 should be uninterned aspath. */
+struct aspath *
+aspath_prepend (struct aspath *as1, struct aspath *as2)
+{
+  caddr_t pnt;
+  caddr_t end;
+  struct assegment *seg1 = NULL;
+  struct assegment *seg2 = NULL;
+
+  if (! as1 || ! as2)
+    return NULL;
+
+  seg2 = (struct assegment *) as2->data;
+
+  /* In case of as2 is empty AS. */
+  if (seg2 == NULL)
+    {
+      as2->length = as1->length;
+      as2->data = XMALLOC (MTYPE_AS_SEG, as1->length);
+      as2->count = as1->count;
+      memcpy (as2->data, as1->data, as1->length);
+      return as2;
+    }
+
+  /* assegment points last segment of as1. */
+  pnt = as1->data;
+  end = as1->data + as1->length;
+  while (pnt < end)
+    {
+      seg1 = (struct assegment *) pnt;
+      pnt += (seg1->length * AS_VALUE_SIZE) + AS_HEADER_SIZE;
+    }
+
+  /* In case of as1 is empty AS. */
+  if (seg1 == NULL)
+    return as2;
+
+  /* Compare last segment type of as1 and first segment type of as2. */
+  if (seg1->type != seg2->type)
+    return aspath_merge (as1, as2);
+
+  if (seg1->type == AS_SEQUENCE)
+    {
+      caddr_t newdata;
+      struct assegment *seg = NULL;
+      
+      newdata = XMALLOC (MTYPE_AS_SEG, 
+			 as1->length + as2->length - AS_HEADER_SIZE);
+      memcpy (newdata, as1->data, as1->length);
+      seg = (struct assegment *) (newdata + ((caddr_t)seg1 - as1->data));
+      seg->length += seg2->length;
+      memcpy (newdata + as1->length, as2->data + AS_HEADER_SIZE,
+	      as2->length - AS_HEADER_SIZE);
+
+      XFREE (MTYPE_AS_SEG, as2->data);
+      as2->data = newdata;
+      as2->length += (as1->length - AS_HEADER_SIZE);
+      as2->count += as1->count;
+
+      return as2;
+    }
+  else
+    {
+      /* AS_SET merge code is needed at here. */
+      return aspath_merge (as1, as2);
+    }
+
+  /* Not reached */
+}
+
+/* Add specified AS to the leftmost of aspath. */
 struct aspath *
 aspath_add_left (struct aspath *aspath, as_t asno)
 {
@@ -510,9 +606,7 @@ enum as_token
 char *
 aspath_gettoken (char *buf, enum as_token *token, u_short *asno)
 {
-  char *p;
-
-  p = buf;
+  char *p = buf;
 
   /* Skip space. */
   while (isspace (*p))
@@ -622,7 +716,7 @@ aspath_str2aspath (char *str)
 	}
     }
 
-  aspath->str = aspath_make_str (aspath);
+  aspath->str = aspath_make_str_count (aspath);
 
   return aspath;
 }
@@ -710,11 +804,19 @@ aspath_test ()
   struct aspath *as1;
   struct aspath *as2;
 
-  as1 = aspath_str2aspath ("7675 1");
+  /* as1 = aspath_val2as (100); */
+  /* as1 = aspath_empty_aspath (0); */
+  as1 = aspath_str2aspath ("{1 3 5 3} 12");
   as2 = aspath_str2aspath ("7675 1 2 3");
-  printf("%s\n", aspath_print (as1));
-  printf("%s\n", aspath_print (as2));
+  printf("%s (%d)\n", aspath_print (as1), as1->count);
+  printf("%s (%d)\n", aspath_print (as2), as2->count);
 
-  printf("%s\n", aspath_print (aspath_aggregate (as1, as2)));
+  /* aspath_prepend (as1, as2); */
+  aspath_merge (as1, as2);
+  printf ("prepend result: %s (%d)\n", aspath_make_str_count (as2),
+	  as2->count);
+  printf ("length: %d\n", as2->length);
+
+  /* printf("%s\n", aspath_print (aspath_aggregate (as1, as2))); */
 }
 #endif /* ASPATH_TEST */
