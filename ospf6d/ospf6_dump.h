@@ -23,6 +23,9 @@
 #ifndef OSPF6_DUMP_H
 #define OSPF6_DUMP_H
 
+#include "ospf6_lsa.h"
+#include "ospf6_mesg.h"
+
 struct ospf6_log
 {
   void (*err)       (const char *format, ...);

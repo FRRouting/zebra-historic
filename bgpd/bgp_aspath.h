@@ -26,8 +26,13 @@
 /* AS path segment type. */
 #define AS_SET             1
 #define AS_SEQUENCE        2
-#define AS_CONFED_SET      3
-#define AS_CONFED_SEQUENCE 4
+/*
+ * Unfortunately, Cisco have reversed the following
+ * #define AS_CONFED_SET      3
+ * #define AS_CONFED_SEQUENCE 4
+ */
+#define AS_CONFED_SEQUENCE 3
+#define AS_CONFED_SET      4
 
 /* AS path may be include some AsSegments. */
 struct aspath 
@@ -58,6 +63,8 @@ struct aspath *aspath_dup (struct aspath *);
 struct aspath *aspath_aggregate (struct aspath *, struct aspath *);
 struct aspath *aspath_prepend (struct aspath *, struct aspath *);
 struct aspath *aspath_add_left (struct aspath *, as_t);
+struct aspath *aspath_add_left_confed (struct aspath *, as_t);
+struct aspath *aspath_strip_confed (struct aspath *);
 struct aspath *aspath_empty ();
 struct aspath *aspath_str2aspath (char *);
 void aspath_free (struct aspath *);

@@ -24,16 +24,16 @@
 #include "ospf6d.h"
 
 int
-ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
+ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interface)
 {
   struct ospf6_lsa *lsa;
   state_t ifs_prev;
 
-  ifs_prev = ospf6_if->state;
+  ifs_prev = ospf6_interface->state;
 
   if (IS_OSPF6_DUMP_INTERFACE)
     zlog_info ("I/F [%s] %s -> %s (%s)",
-               ospf6_if->interface->name,
+               ospf6_interface->interface->name,
                ifs_name[ifs_prev], ifs_name[ifs_next], reason);
 
   switch (ifs_prev)
@@ -46,7 +46,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         case IFS_BDR:
           break;
         default:
-          ospf6_leave_alldrouters (ospf6_if->interface->ifindex);
+          ospf6_leave_alldrouters (ospf6_interface->interface->ifindex);
           break;
         }
       break;
@@ -55,7 +55,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         {
         case IFS_DR:
         case IFS_BDR:
-          ospf6_join_alldrouters (ospf6_if->interface->ifindex);
+          ospf6_join_alldrouters (ospf6_interface->interface->ifindex);
           break;
         default:
           break;
@@ -63,10 +63,10 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
       break;
     }
 
-  ospf6_if->state = ifs_next;
+  ospf6_interface->state = ifs_next;
 
   /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_if->area);
+  lsa = ospf6_make_router_lsa (ospf6_interface->area);
   if (lsa)
     {
       ospf6_lsa_flood (lsa);
@@ -74,33 +74,33 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
       ospf6_lsa_unlock (lsa);
     }
 
-  dr_change (ospf6_if);
+  dr_change (ospf6_interface);
 
   return 0;
 }
 
 int
-dr_change (struct ospf6_if *ospf6_if)
+dr_change (struct ospf6_interface *ospf6_interface)
 {
   struct ospf6_lsa *lsa;
 
-  if (ospf6_if->prevdr == ospf6_if->dr
-      && ospf6_if->prevbdr == ospf6_if->bdr)
+  if (ospf6_interface->prevdr == ospf6_interface->dr
+      && ospf6_interface->prevbdr == ospf6_interface->bdr)
     return 0; /* Nothing has been changed */
 
   if (IS_OSPF6_DUMP_INTERFACE)
     {
       char dr[16], bdr[16], prevdr[16], prevbdr[16];
-      inet_ntop (AF_INET, &ospf6_if->prevdr, prevdr, sizeof (prevdr));
-      inet_ntop (AF_INET, &ospf6_if->prevbdr, prevbdr, sizeof (prevbdr));
-      inet_ntop (AF_INET, &ospf6_if->dr, dr, sizeof (dr));
-      inet_ntop (AF_INET, &ospf6_if->bdr, bdr, sizeof (bdr));
+      inet_ntop (AF_INET, &ospf6_interface->prevdr, prevdr, sizeof (prevdr));
+      inet_ntop (AF_INET, &ospf6_interface->prevbdr, prevbdr, sizeof (prevbdr));
+      inet_ntop (AF_INET, &ospf6_interface->dr, dr, sizeof (dr));
+      inet_ntop (AF_INET, &ospf6_interface->bdr, bdr, sizeof (bdr));
       o6log.ism ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
-                 ospf6_if->interface->name, prevdr, prevbdr, dr, bdr);
+                 ospf6_interface->interface->name, prevdr, prevbdr, dr, bdr);
     }
 
   /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_if->area);
+  lsa = ospf6_make_router_lsa (ospf6_interface->area);
   if (lsa)
     {
       ospf6_lsa_flood (lsa);
@@ -108,10 +108,10 @@ dr_change (struct ospf6_if *ospf6_if)
       ospf6_lsa_unlock (lsa);
     }
 
-  if (ospf6_if->state == IFS_DR)
+  if (ospf6_interface->state == IFS_DR)
     {
       /* construct Network-LSA */
-      lsa = ospf6_make_network_lsa (ospf6_if);
+      lsa = ospf6_make_network_lsa (ospf6_interface);
       if (lsa)
         {
           ospf6_lsa_flood (lsa);
@@ -120,7 +120,7 @@ dr_change (struct ospf6_if *ospf6_if)
         }
 
       /* construct Intra-Area-Prefix-LSA */
-      lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
+      lsa = ospf6_make_intra_prefix_lsa (ospf6_interface);
       if (lsa)
         {
           ospf6_lsa_flood (lsa);
@@ -137,33 +137,33 @@ dr_change (struct ospf6_if *ospf6_if)
 int
 interface_up (struct thread *thread)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
-  ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
+  ospf6_interface = (struct ospf6_interface *)THREAD_ARG (thread);
 
-  assert (ospf6_if);
-  assert (ospf6_if->interface);
+  assert (ospf6_interface);
+  assert (ospf6_interface->interface);
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("Interface Event %s: InterfaceUp", ospf6_if->interface->name);
+    zlog_info ("Interface Event %s: InterfaceUp", ospf6_interface->interface->name);
 
   /* check physical interface is up */
-  if (!if_is_up (ospf6_if->interface))
+  if (!if_is_up (ospf6_interface->interface))
     {
       zlog_warn ("*** Interface %s is down, can't execute InterfaceUp event",
-                ospf6_if->interface->name);
+                ospf6_interface->interface->name);
       return -1;
     }
 
   /* if already enabled, do nothing */
-  if (ospf6_if->state > IFS_DOWN)
+  if (ospf6_interface->state > IFS_DOWN)
     {
-      zlog_warn ("*** Interface %s is already up", ospf6_if->interface->name);
+      zlog_warn ("*** Interface %s is already up", ospf6_interface->interface->name);
       return 0;
     }
 
   /* ifid of this interface */
-  ospf6_if->ifid = ospf6_if->interface->ifindex;
+  ospf6_interface->if_id = ospf6_interface->interface->ifindex;
 
 #ifdef FREEBSD_32
   /* FreeBSD3.2's ep driver ignores multicast ethernet frame.
@@ -171,7 +171,7 @@ interface_up (struct thread *thread)
   {
     struct ifreq ifr;
 
-    strncpy (ifr.ifr_name, ospf6_if->interface->name, sizeof (ifr.ifr_name));
+    strncpy (ifr.ifr_name, ospf6_interface->interface->name, sizeof (ifr.ifr_name));
     if (ioctl (ospf6_sock, SIOCGIFFLAGS, &ifr) < 0)
       zlog_warn ("fbsd3.2: get I/F flags failed: %s", strerror (errno));
     ifr.ifr_flags |= IFF_PROMISC;
@@ -181,7 +181,7 @@ interface_up (struct thread *thread)
 #endif /*FREEBSD_32*/
 
   /* Join AllSPFRouters */
-  ospf6_join_allspfrouters (ospf6_if->interface->ifindex);
+  ospf6_join_allspfrouters (ospf6_interface->interface->ifindex);
 
   /* set socket options */
   ospf6_reset_mcastloop ();
@@ -189,23 +189,23 @@ interface_up (struct thread *thread)
   ospf6_set_checksum ();
 
   /* Schedule Hello */
-  thread_add_event (master, ospf6_send_hello, ospf6_if, 0);
+  thread_add_event (master, ospf6_send_hello, ospf6_interface, 0);
 
   /* decide next interface state */
-  if (if_is_pointopoint (ospf6_if->interface))
-    ifs_change (IFS_PTOP, "IF Type PointToPoint", ospf6_if);
-  else if (ospf6_if->rtr_pri == 0)
-    ifs_change (IFS_DROTHER, "Router Priority = 0", ospf6_if);
+  if (if_is_pointopoint (ospf6_interface->interface))
+    ifs_change (IFS_PTOP, "IF Type PointToPoint", ospf6_interface);
+  else if (ospf6_interface->priority == 0)
+    ifs_change (IFS_DROTHER, "Router Priority = 0", ospf6_interface);
   else
     {
-      ifs_change (IFS_WAITING, "Priority > 0", ospf6_if);
-      thread_add_timer (master, wait_timer, ospf6_if,
-                        ospf6_if->rtr_dead_interval);
+      ifs_change (IFS_WAITING, "Priority > 0", ospf6_interface);
+      thread_add_timer (master, wait_timer, ospf6_interface,
+                        ospf6_interface->dead_interval);
     }
 
   /* construct LSAs */
-  ospf6_lsa_originate_link (ospf6_if);
-  ospf6_lsa_originate_intraprefix (ospf6_if);
+  ospf6_lsa_originate_link (ospf6_interface);
+  ospf6_lsa_originate_intraprefix (ospf6_interface);
 
   return 0;
 }
@@ -213,50 +213,50 @@ interface_up (struct thread *thread)
 int
 wait_timer (struct thread *thread)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
-  ospf6_if = (struct ospf6_if *)THREAD_ARG  (thread);
-  assert (ospf6_if);
+  ospf6_interface = (struct ospf6_interface *)THREAD_ARG  (thread);
+  assert (ospf6_interface);
 
-  if (ospf6_if->state != IFS_WAITING)
+  if (ospf6_interface->state != IFS_WAITING)
     return 0;
 
-  o6log.ism ("I/F [%s] WaitTimer", ospf6_if->interface->name);
+  o6log.ism ("I/F [%s] WaitTimer", ospf6_interface->interface->name);
 
-  ifs_change (dr_election (ospf6_if), "WaitTimer:DR Election", ospf6_if);
+  ifs_change (dr_election (ospf6_interface), "WaitTimer:DR Election", ospf6_interface);
   return 0;
 }
 
 int backup_seen (struct thread *thread)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
-  ospf6_if = (struct ospf6_if *)THREAD_ARG  (thread);
-  assert (ospf6_if);
+  ospf6_interface = (struct ospf6_interface *)THREAD_ARG  (thread);
+  assert (ospf6_interface);
 
-  o6log.ism ("I/F [%s] BackupSeen", ospf6_if->interface->name);
+  o6log.ism ("I/F [%s] BackupSeen", ospf6_interface->interface->name);
 
-  if (ospf6_if->state == IFS_WAITING)
-    ifs_change (dr_election (ospf6_if), "BackupSeen:DR Election", ospf6_if);
+  if (ospf6_interface->state == IFS_WAITING)
+    ifs_change (dr_election (ospf6_interface), "BackupSeen:DR Election", ospf6_interface);
 
   return 0;
 }
 
 int neighbor_change (struct thread *thread)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
-  ospf6_if = (struct ospf6_if *)THREAD_ARG  (thread);
-  assert (ospf6_if);
+  ospf6_interface = (struct ospf6_interface *)THREAD_ARG  (thread);
+  assert (ospf6_interface);
 
-  if (ospf6_if->state != IFS_DROTHER &&
-      ospf6_if->state != IFS_BDR &&
-      ospf6_if->state != IFS_DR)
+  if (ospf6_interface->state != IFS_DROTHER &&
+      ospf6_interface->state != IFS_BDR &&
+      ospf6_interface->state != IFS_DR)
     return 0;
 
-  o6log.ism ("I/F [%s] NeighborChange", ospf6_if->interface->name);
+  o6log.ism ("I/F [%s] NeighborChange", ospf6_interface->interface->name);
 
-  ifs_change (dr_election (ospf6_if), "NeighborChange:DR Election", ospf6_if);
+  ifs_change (dr_election (ospf6_interface), "NeighborChange:DR Election", ospf6_interface);
 
   return 0;
 }
@@ -264,12 +264,12 @@ int neighbor_change (struct thread *thread)
 int
 loopind (struct thread *thread)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
-  ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
-  assert (ospf6_if);
+  ospf6_interface = (struct ospf6_interface *)THREAD_ARG (thread);
+  assert (ospf6_interface);
 
-  o6log.ism ("I/F [%s] LoopInd", ospf6_if->interface->name);
+  o6log.ism ("I/F [%s] LoopInd", ospf6_interface->interface->name);
 
   return 0;
 }
@@ -277,17 +277,17 @@ loopind (struct thread *thread)
 int
 interface_down (struct thread *thread)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
-  ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
-  assert (ospf6_if);
+  ospf6_interface = (struct ospf6_interface *)THREAD_ARG (thread);
+  assert (ospf6_interface);
 
-  o6log.ism ("I/F [%s] InterfaceDown", ospf6_if->interface->name);
+  o6log.ism ("I/F [%s] InterfaceDown", ospf6_interface->interface->name);
 
-  if (ospf6_if->state == IFS_NONE)
+  if (ospf6_interface->state == IFS_NONE)
     return 1;
 
-  ifs_change (IFS_DOWN, "Configured", ospf6_if);
+  ifs_change (IFS_DOWN, "Configured", ospf6_interface);
 
   return 0;
 }
@@ -295,7 +295,7 @@ interface_down (struct thread *thread)
 
 /* 9.4 of RFC2328 */
 int
-dr_election (struct ospf6_if *ospf6_if)
+dr_election (struct ospf6_interface *ospf6_interface)
 {
   list candidate_list = list_init ();
   listnode i, j, n;
@@ -305,21 +305,21 @@ dr_election (struct ospf6_if *ospf6_if)
   int gofive = 0;
 
   /* statistics */
-  ospf6_if->ospf6_stat_dr_election++;
+  ospf6_interface->ospf6_stat_dr_election++;
 
   /* pseudo neighbor "myself" */
   memset (&myself, 0, sizeof (myself));
   myself.state = NBS_TWOWAY;
-  myself.dr = ospf6_if->dr;
-  myself.bdr = ospf6_if->bdr;
-  myself.rtr_pri = ospf6_if->rtr_pri;
-  myself.ifid = ospf6_if->ifid;
-  myself.rtr_id = ospf6_if->area->ospf6->router_id;
+  myself.dr = ospf6_interface->dr;
+  myself.bdr = ospf6_interface->bdr;
+  myself.rtr_pri = ospf6_interface->priority;
+  myself.ifid = ospf6_interface->if_id;
+  myself.rtr_id = ospf6_interface->area->ospf6->router_id;
 
 /* step_one: */
 
-  ospf6_if->prevdr = prevdr = ospf6_if->dr;
-  ospf6_if->prevbdr = prevbdr = ospf6_if->bdr;
+  ospf6_interface->prevdr = prevdr = ospf6_interface->dr;
+  ospf6_interface->prevbdr = prevbdr = ospf6_interface->bdr;
 
 step_two:
 
@@ -328,7 +328,7 @@ step_two:
   if (!list_isempty (candidate_list))
     list_delete_all_node (candidate_list);
   declare = 0;
-  for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
+  for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
     {
       nbpi = (struct neighbor *)getdata (i);
       if (nbpi->rtr_pri == 0)
@@ -422,7 +422,7 @@ step_two:
   if (!list_isempty (candidate_list))
     list_delete_all_node (candidate_list);
   declare = 0;
-  for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
+  for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
     {
       nbpi = (struct neighbor *)getdata (i);
       if (nbpi->rtr_pri == 0)
@@ -547,12 +547,12 @@ step_two:
 
 step_five:
 
-  ospf6_if->dr = dr;
-  ospf6_if->bdr = bdr;
+  ospf6_interface->dr = dr;
+  ospf6_interface->bdr = bdr;
 
   if (prevdr != dr || prevbdr != bdr)
     {
-      for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
+      for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
         {
           nbpi = getdata (i);
           if (nbpi->state < NBS_TWOWAY)

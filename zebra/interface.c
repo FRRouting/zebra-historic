@@ -159,9 +159,8 @@ if_down (struct interface *ifp)
 
   zlog_info ("Interface %s is down", ifp->name);
 
-  /* Notify the protocol daemons. */
+  /* Notify to the protocol daemons. */
   zebra_interface_down_update (ifp);
-
 
   /* Delete connected routes from the kernel. */
   if (ifp->connected)
@@ -181,7 +180,7 @@ if_down (struct interface *ifp)
 	}
     }
 
-  /* Examine all routes which direct to the interface. */
+  /* Examine all static routes which direct to the interface. */
   ;
 }
 

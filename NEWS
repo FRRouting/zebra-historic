@@ -1,5 +1,28 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.85
+
+* Changes in bgpd
+
+** "transparent-nexthop" and "transparenet-as" commands are added.
+
+** Route reflector's originator-id bug is fixed.
+
+* Changes in ospfd
+
+** Fix bug of OSPF LSA memory leak.
+
+** Fix bug of OSPF external route memory leak.
+
+** AS-external-LSA origination bug was fixed.
+
+** LS request treatment is completely rewritten.  Now performance is
+drastically improved.
+
+* Changes in ripd
+
+** RIPv1 update is done by class-full manner.
+
 * Changes in zebra-0.84b
 
 * Changes in lib

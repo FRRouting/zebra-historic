@@ -92,6 +92,40 @@ aspath_unintern (struct aspath *aspath)
     }
 }
 
+/* Return the start or end delimiters for a particular Segment type */
+#define AS_SEG_START 0
+#define AS_SEG_END 1
+static char
+aspath_delimiter_char (u_char type, u_char which)
+{
+  int i;
+  struct
+  {
+    int type;
+    char start;
+    char end;
+  } aspath_delim_char [] =
+    {
+      { AS_SET,             '{', '}' },
+      { AS_SEQUENCE,        ' ', ' ' },
+      { AS_CONFED_SET,      '[', ']' },
+      { AS_CONFED_SEQUENCE, '(', ')' },
+      { 0 }
+    };
+
+  for (i = 0; aspath_delim_char[i].type != 0; i++)
+    {
+      if (aspath_delim_char[i].type == type)
+	{
+	  if (which == AS_SEG_START)
+	    return aspath_delim_char[i].start;
+	  else if (which == AS_SEG_END)
+	    return aspath_delim_char[i].end;
+	}
+    }
+  return ' ';
+}
+
 /* Convert aspath structure to string expression. */
 static char *
 aspath_make_str_count (struct aspath *as)
@@ -105,21 +139,6 @@ aspath_make_str_count (struct aspath *as)
   int str_pnt;
   u_char *str_buf;
   int count = 0;
-
-  /* Delimiter character of each AS type. */
-  struct
-  {
-    int type;
-    char start;
-    char end;
-  } aspath_delimiter_char [] =
-    {
-      { 0 },
-      { AS_SET,             '{', '}' },
-      { AS_SEQUENCE,        ' ', ' ' },
-      { AS_CONFED_SET,      '[', ']' },
-      { AS_CONFED_SEQUENCE, '(', ')' }
-    };
 
   /* Empty aspath. */
   if (as->length == 0)
@@ -181,12 +200,12 @@ aspath_make_str_count (struct aspath *as)
       /* If assegment type is changed, print previous type's end
          character. */
       if (type != AS_SEQUENCE)
-	str_buf[str_pnt++] = aspath_delimiter_char[type].end;
+	str_buf[str_pnt++] = aspath_delimiter_char (type, AS_SEG_END);
       if (space)
 	str_buf[str_pnt++] = ' ';
 
       if (assegment->type != AS_SEQUENCE)
-	str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].start;
+	str_buf[str_pnt++] = aspath_delimiter_char (assegment->type, AS_SEG_START);
 
       space = 0;
 
@@ -211,7 +230,7 @@ aspath_make_str_count (struct aspath *as)
     }
 
   if (assegment->type != AS_SEQUENCE)
-    str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].end;
+    str_buf[str_pnt++] = aspath_delimiter_char (assegment->type, AS_SEG_END);
 
   str_buf[str_pnt] = '\0';
 
@@ -553,6 +572,141 @@ aspath_add_left (struct aspath *aspath, as_t asno)
 
       aspath->data = newdata;
       aspath->length += AS_VALUE_SIZE;
+    } else {
+
+      /* We need to add an AS_SEQUENCE here */
+      caddr_t newdata;
+      struct assegment *newsegment;
+
+      newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE + AS_HEADER_SIZE);
+      newsegment = (struct assegment *) newdata;
+
+      newsegment->type = AS_SEQUENCE;
+      newsegment->length = 1;
+      newsegment->asval[0] = htons (asno);
+
+      memcpy (newdata + AS_HEADER_SIZE + AS_VALUE_SIZE,
+	      aspath->data,
+	      aspath->length);
+
+      XFREE (MTYPE_AS_SEG, aspath->data);
+
+      aspath->data = newdata;
+      aspath->length += AS_HEADER_SIZE + AS_VALUE_SIZE;
+    }
+
+  return aspath;
+}
+
+/* Strip the CONFED stuff from the front of an AS Path */
+struct aspath *
+aspath_strip_confed (struct aspath *aspath)
+{
+  int bytes;
+  struct assegment *assegment;
+
+  assegment = (struct assegment *) aspath->data;
+
+  /* In case of empty aspath, just return. */
+  if (assegment == NULL)
+    return aspath;
+
+  if (assegment->type != AS_CONFED_SEQUENCE)
+    return aspath;
+
+  /* Strip the first element from the path */
+  bytes = AS_HEADER_SIZE + (assegment->length * AS_VALUE_SIZE);
+  memcpy(aspath->data,
+	 aspath->data + bytes,
+	 aspath->length - bytes);
+  aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+  aspath->length -= bytes;
+  assegment = (struct assegment *)aspath->data;
+
+  while(assegment && assegment->type == AS_CONFED_SET)
+    {
+      /* Strip the first element from the path */
+      bytes = AS_HEADER_SIZE + (assegment->length * AS_VALUE_SIZE);
+      memcpy(aspath->data,
+	     aspath->data + bytes,
+	     aspath->length - bytes);
+      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length - bytes);
+      aspath->length -= bytes;
+      assegment = (struct assegment *)aspath->data;
+    }
+
+  return aspath;
+}
+
+/* Add specified AS to the leftmost AS_CONFED_SEQUENCE. */
+struct aspath *
+aspath_add_left_confed (struct aspath *aspath, as_t asno)
+{
+  struct assegment *assegment;
+
+  assegment = (struct assegment *) aspath->data;
+
+  /* In case of empty aspath. */
+  if (assegment == NULL || assegment->length == 0)
+    {
+      aspath->length = AS_HEADER_SIZE + AS_VALUE_SIZE;
+
+      if (assegment)
+	aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length);
+      else
+	aspath->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
+
+      assegment = (struct assegment *) aspath->data;
+      assegment->type = AS_CONFED_SEQUENCE;
+      assegment->length = 1;
+      assegment->asval[0] = htons (asno);
+
+      return aspath;
+    }
+
+  /* First segment is AS_SEQUENCE*/
+  if (assegment->type == AS_CONFED_SEQUENCE)
+    {
+      caddr_t newdata;
+      struct assegment *newsegment;
+
+      newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE);
+      newsegment = (struct assegment *) newdata;
+
+      newsegment->type = AS_CONFED_SEQUENCE;
+      newsegment->length = assegment->length + 1;
+      newsegment->asval[0] = htons (asno);
+
+      memcpy (newdata + AS_HEADER_SIZE + AS_VALUE_SIZE,
+	      aspath->data + AS_HEADER_SIZE, 
+	      aspath->length - AS_HEADER_SIZE);
+
+      XFREE (MTYPE_AS_SEG, aspath->data);
+
+      aspath->data = newdata;
+      aspath->length += AS_VALUE_SIZE;
+    }
+  else
+    {
+      /* We need to add an AS_CONFED_SEQUENCE here */
+      caddr_t newdata;
+      struct assegment *newsegment;
+
+      newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE + AS_HEADER_SIZE);
+      newsegment = (struct assegment *) newdata;
+
+      newsegment->type = AS_CONFED_SEQUENCE;
+      newsegment->length = 1;
+      newsegment->asval[0] = htons (asno);
+
+      memcpy (newdata + AS_HEADER_SIZE + AS_VALUE_SIZE,
+	      aspath->data,
+	      aspath->length);
+
+      XFREE (MTYPE_AS_SEG, aspath->data);
+
+      aspath->data = newdata;
+      aspath->length += AS_HEADER_SIZE + AS_VALUE_SIZE;
     }
 
   return aspath;

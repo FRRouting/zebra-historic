@@ -1,3 +1,8 @@
+2000-02-15  Hidetoshi Shimokawa <simokawa@sat.t.u-tokyo.ac.jp>
+
+	* ripd.c (rip_write_rte): "set metic" in route-map has no effect
+	for RIPv1 in ripd.  It worked fine for RIPv2.
+
 2000-01-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (show_ip_protocols_rip): Fix bug of "show ip protocls"

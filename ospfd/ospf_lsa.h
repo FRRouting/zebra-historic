@@ -1,22 +1,24 @@
-/* OSPF Link State Advertisement
-   Copyright (C) 1999 Toshiaki Takada
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+/*
+ * OSPF Link State Advertisement
+ * Copyright (C) 1999, 2000 Toshiaki Takada
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
 
 #ifndef _ZEBRA_OSPF_LSA_H
 #define _ZEBRA_OSPF_LSA_H
@@ -72,15 +74,19 @@ struct ospf_lsa
   struct thread *t_age;
 
   /* References to this LSA in neighbor retrans. lists*/
-  u_int  ref;
+  u_int ref;
 
+  /* Parent LSDB. */
   struct ospf_lsdb *lsdb;
+
+  /* Related Route. */
+  void *route;
 
   /* Last time it was originated */
   time_t originated; 
 
   /* Refreshement List or Queue */
-  list   refresh_list;
+  list refresh_list;
 };
 
 /* OSPF LSA Link Type. */
@@ -155,7 +161,8 @@ struct as_external_lsa
     u_char tos;
     u_char metric[3];
     struct in_addr fwd_addr;
-    struct in_addr route_tag;
+    u_int32_t route_tag;
+    /*    struct in_addr route_tag; */
   } e[1];
 };
 
@@ -209,6 +216,13 @@ struct ospf_lsa *ospf_summary_lsa_install (struct ospf_area *, struct ospf_lsa *
 struct ospf_lsa *ospf_summary_asbr_lsa_install (struct ospf_area *, struct ospf_lsa *);
 struct ospf_lsa *ospf_external_lsa_install (struct ospf_lsa *);
 
+void ospf_external_lsa_originate_from_queue ();
+void ospf_external_lsa_queue (u_char, struct prefix_ipv4,
+			      unsigned int, struct in_addr);
+struct ospf_lsa *ospf_external_lsa_originate (u_char, struct prefix_ipv4 *,
+					      unsigned int, struct in_addr);
+
+
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
 				  struct in_addr, struct in_addr);
 struct ospf_lsa *ospf_lsa_lookup_by_id (struct ospf_area *,u_int32_t, struct in_addr);
@@ -219,17 +233,10 @@ int ospf_lsa_different (struct ospf_lsa *, struct ospf_lsa *);
 void ospf_lsa_flush_self_originated (struct ospf_neighbor *,
 				     struct ospf_lsa *, struct ospf_lsa *);
 int ospf_lsa_count (struct ospf_area *);
+int ospf_lsa_count_table (struct ospf_lsdb *);
 void ospf_lsa_init ();
 
 int ospf_lsa_is_self_originated (struct ospf_lsa *);
-/*
-struct ospf_lsa *ospf_find_self_summary_lsa_by_prefix(struct ospf_area *, 
-						      struct prefix_ipv4 *);
-
-struct ospf_lsa *ospf_find_self_summary_asbr_lsa_by_prefix (struct ospf_area *, 
-							    struct prefix_ipv4 *);
-struct ospf_lsa *ospf_find_self_external_lsa_by_prefix (struct prefix_ipv4 *);
-*/
 
 int find_summary (struct ospf_lsa *, void *, int);
 int find_asbr_summary (struct ospf_lsa *, void *, int);
@@ -246,12 +253,14 @@ int ospf_network_lsa_refresh (struct thread *);
 struct in_addr ospf_get_free_id_for_prefix (struct ospf_lsdb *,
 					    struct prefix_ipv4 *,
 					    struct in_addr);
-void ospf_schedule_lsa_flood_area(struct ospf_area *, struct ospf_lsa *);
-void ospf_schedule_lsa_flush_area(struct ospf_area *, struct ospf_lsa *);
-void ospf_schedule_router_lsa_originate(struct ospf_area *);
-void ospf_schedule_network_lsa_originate(struct ospf_interface *);
+void ospf_schedule_lsa_flood_area (struct ospf_area *, struct ospf_lsa *);
+void ospf_schedule_lsa_flush_area (struct ospf_area *, struct ospf_lsa *);
+void ospf_schedule_router_lsa_originate (struct ospf_area *);
+void ospf_schedule_network_lsa_originate (struct ospf_interface *);
 
 void ospf_refresher_register_lsa (struct ospf *, struct ospf_lsa *);
 void ospf_refresher_unregister_lsa (struct ospf_lsa *);
+
+int ospf_forward_address_get (struct in_addr, struct in_addr *);
 
 #endif /* _ZEBRA_OSPF_LSA_H */

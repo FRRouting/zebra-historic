@@ -20,7 +20,7 @@
  * 02111-1307, USA.  
  */
 
-static const char rcsid[] = "$Id: bgp_attr.c,v 1.94 1999/12/06 18:25:16 kunihiro Exp $";
+static const char rcsid[] = "$Id: bgp_attr.c,v 1.102 2000/03/07 09:25:43 kunihiro Exp $";
 
 #include <zebra.h>
 
@@ -33,6 +33,7 @@ static const char rcsid[] = "$Id: bgp_attr.c,v 1.94 1999/12/06 18:25:16 kunihiro
 #include "stream.h"
 #include "log.h"
 #include "hash.h"
+#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -471,6 +472,10 @@ int
 bgp_attr_aspath (struct peer *peer, bgp_size_t length, 
 		 struct attr *attr, u_char flag)
 {
+  struct bgp *bgp;
+  struct peer_conf *conf;
+  struct newnode *nn;
+
   /* Attribute already has as path then send notify to the peer. */
   if (attr->aspath)
     {
@@ -492,6 +497,32 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
   /* Validness check. */
   if (aspath_loop_check (attr->aspath, peer->local_as))
     attr->invalid = 1;
+
+  bgp = NULL;
+  if (peer->conf)
+    {
+      NEWLIST_LOOP (peer->conf, conf, nn)
+	{
+	  bgp = conf->bgp;
+	}
+    }
+    
+  /* If we're a confederation, we need to check the confed id too */
+  if (bgp != NULL && CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
+    {
+      if(aspath_loop_check(attr->aspath,
+			   bgp->confederation_id))
+	{
+	  zlog (peer->log, LOG_ERR, 
+		"%s: Has our own AS (%d) in the update",
+		peer->host,
+		bgp->confederation_id);
+
+	  bgp_notify_send (peer, 
+			   BGP_NOTIFY_UPDATE_ERR, 
+			   BGP_NOTIFY_UPDATE_AS_ROUTE_LOOP);	  
+	}      
+    }
 
   /* Forward pointer. */
   stream_forward (peer->ibuf, length);
@@ -687,6 +718,7 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr,
   bgp_size_t nlri_len;
   int ret;
   struct stream *s;
+  char buf[INET6_ADDRSTRLEN];
   
   /* Set end of packet. */
   s = peer->ibuf;
@@ -712,6 +744,13 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr,
     case 32:
       stream_get (&attr->mp_nexthop_global, s, 16);
       stream_get (&attr->mp_nexthop_local, s, 16);
+      if (! IN6_IS_ADDR_LINKLOCAL (&attr->mp_nexthop_local))
+	{
+	  zlog_warn ("%s %s/%d is not link-local nexthop",
+		     peer->host, inet_ntop (AF_INET6, &attr->mp_nexthop_local,
+					    buf, INET6_ADDRSTRLEN));
+	  attr->mp_nexthop_len = 16;
+	}
       break;
 #endif /* HAVE_IPV6 */
     default:
@@ -959,6 +998,7 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
 	  return 1;
 	}
     }
+  /* If its not IBGP, then it must either be CONFED or EBGP */
   else
     {
       if ((attr->flag & EBGP_ATTR_BIT) != EBGP_ATTR_BIT)
@@ -982,14 +1022,18 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
 
 int stream_put_prefix (struct stream *, struct prefix *);
 
+/* Static annoucement peer. */
+extern struct peer *peer_self;
+
 /* Make attribute packet. */
 bgp_size_t
 bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
 		      struct stream *s, struct attr *attr, struct prefix *p,
-		      afi_t afi, safi_t safi)
+		      afi_t afi, safi_t safi, struct peer *from)
 {
   unsigned long cp;
   struct aspath *aspath;
+  struct bgp *bgp = conf->bgp;
 
   /* Remember current pointer. */
   cp = stream_get_putp (s);
@@ -1004,10 +1048,27 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
 
   /* If remote-peer is EBGP */
   if (peer_sort (peer) == BGP_PEER_EBGP 
-      && ! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT))
+      && ! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT)
+      && ! CHECK_FLAG (peer->flags, PEER_FLAG_TRANSPARENT_AS))
     {    
       aspath = aspath_dup (attr->aspath);
-      aspath_add_left (aspath, peer->local_as);
+      if (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
+	{
+	  /* Strip the confed info, and then stuff our path CONFED_ID
+	     on the front */
+	  aspath = aspath_strip_confed(aspath);
+	  aspath = aspath_add_left (aspath, bgp->confederation_id);
+	}
+      else
+	{
+	  aspath = aspath_add_left (aspath, peer->local_as);
+	}
+    }
+  else if (peer_sort (peer) == BGP_PEER_CONFED)
+    {
+      /* A confed member, so we need to do the AS_CONFED_SEQUENCE thing */
+      aspath = aspath_dup (attr->aspath);
+      aspath = aspath_add_left_confed (aspath, peer->local_as);
     }
   else
     aspath = attr->aspath;
@@ -1038,7 +1099,8 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
   stream_put_ipv4 (s, attr->nexthop.s_addr);
 
   /* MED attribute. */
-  if (peer_sort (peer) == BGP_PEER_EBGP)
+  if (peer_sort (peer) == BGP_PEER_EBGP ||
+      peer_sort (peer) == BGP_PEER_CONFED)
     {
       if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
 	{
@@ -1050,7 +1112,8 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
     }
 
   /* Local preference. */
-  if (peer_sort (peer) == BGP_PEER_IBGP)
+  if (peer_sort (peer) == BGP_PEER_IBGP ||
+      peer_sort (peer) == BGP_PEER_CONFED)
     {
       stream_putc (s, ATTR_FLAG_TRANS);
       stream_putc (s, BGP_ATTR_LOCAL_PREF);
@@ -1104,7 +1167,18 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
       stream_putc (s, BGP_ATTR_ORIGINATOR_ID);
       stream_putc (s, 4);
 
-      stream_put_in_addr (s, &conf->bgp->id);
+      /* If this route is other peer's route. */
+      if (from != peer_self)
+	{
+	  stream_put_in_addr (s, &from->remote_id);
+	}
+      else
+	{
+	  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
+	    stream_put_in_addr (s, &attr->originator_id);
+	  else
+	    stream_put_in_addr (s, &conf->bgp->id);
+	}
 
       /* Cluster list. */
       stream_putc (s, ATTR_FLAG_OPTIONAL);

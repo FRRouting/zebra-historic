@@ -1,3 +1,28 @@
+2000-03-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Fix bug of rewritten originator-id.
+
+2000-01-27  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_aspath.c (aspath_delimiter_char): New function.  Instead of
+	directly referencing array, search proper AS path delimiter.
+	(aspath_strip_confed): Strip the confederation stuff from the
+	front of an AS path.
+	(aspath_add_left_confed): New function for adding specified AS to
+	the leftmost AS_CONFED_SEQUENCE.
+
+	* bgp_aspath.h: Change AS_CONFED_SEQUENCE and AS_CONFED_SET value
+	to Cisco compatible.
+
+	* bgpd.c (bgp_confederation_id_set): Confederation configuration.
+	(bgp_confederation_id_unset): Likewise.
+	(bgp_confederation_peers_check): Likewise.
+	(bgp_confederation_peers_add): Likewise.
+	(bgp_confederation_peers_remove): Likewise.
+	(bgp_confederation_peers_set): Likewise.
+	(bgp_confederation_peers_unset): Likewise.
+	(bgp_confederation_peers_print): Likewise.
+	
 2000-01-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgpd.c: Introduce peer_change_flag_with_reset() fucntion.

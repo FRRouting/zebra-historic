@@ -40,7 +40,6 @@
 #include "zebra/debug.h"
 #include "zebra/ipforward.h"
 
-
 /* Event list of zebra. */
 enum event { ZEBRA_SERV, ZEBRA_READ, ZEBRA_WRITE };
 
@@ -637,7 +636,7 @@ DEFUN (ip_route,
        "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
        "IP information\n"
        "IP routing set\n"
-       "IP desitination prefix (e.g. 10.0.0.0/8)\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "IP gateway\n"
        "IP gateway interface name\n")
 {
@@ -710,8 +709,8 @@ DEFUN (ip_route_mask,
        "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
        "IP information\n"
        "IP routing set\n"
-       "IP desitination prefix\n"
-       "IP desitination netmask\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
        "IP gateway\n"
        "IP gateway interface name\n")
 {
@@ -795,7 +794,7 @@ DEFUN (no_ip_route,
        NO_STR
        "IP information\n"
        "IP routing set\n"
-       "IP desitination prefix (e.g. 10.0.0.0/8)\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "IP gateway\n"
        "IP gateway interface name\n")
 {
@@ -870,8 +869,8 @@ DEFUN (no_ip_route_mask,
        NO_STR
        "IP information\n"
        "IP routing set\n"
-       "IP desitination prefix\n"
-       "IP desitination netmask\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
        "IP gateway\n"
        "IP gateway interface name\n")
 {

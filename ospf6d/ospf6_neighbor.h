@@ -24,7 +24,7 @@
 
 struct neighbor
 {
-  struct ospf6_if     *ospf6_if;
+  struct ospf6_interface     *ospf6_interface;
   unsigned char        state;
   struct thread       *inactivity_timer;
   struct thread       *send_lsreq;       /* Retransmit LSReq */
@@ -85,8 +85,8 @@ void ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *,
                                         struct in_addr *,
                                         u_int);
 
-struct neighbor *make_neighbor (rtr_id_t, struct ospf6_if *);
-struct neighbor *nbr_lookup (rtr_id_t, struct ospf6_if *);
+struct neighbor *make_neighbor (rtr_id_t, struct ospf6_interface *);
+struct neighbor *nbr_lookup (rtr_id_t, struct ospf6_interface *);
 int show_nbr (struct vty *, struct neighbor *);
 
 void ospf6_neighbor_vty_summary (struct vty *, struct neighbor *);

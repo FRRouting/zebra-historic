@@ -195,7 +195,7 @@ ospf6_opt_is_mismatch (unsigned char opt, char *options1, char *options2)
 
 
 static void
-ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
+ospf6_process_hello (struct iovec *iov, struct ospf6_interface *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct ospf6_hello *hello;
@@ -230,7 +230,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
 
   /* RouterDeadInterval check */
   if (ntohs (hello->router_dead_interval)
-      != o6if->rtr_dead_interval)
+      != o6if->dead_interval)
     {
       zlog_warn ("RouterDeadInterval mismatch with %s", rtrid_str);
       ospf6_message_clear_buffer (MSGT_HELLO, iov);
@@ -294,7 +294,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
   router_id_space = iov[0].iov_len - sizeof (struct ospf6_hello);
   assert (router_id_space % sizeof (unsigned long) == 0);
   seenrtrnum = router_id_space / sizeof (unsigned long);
-  my_router_id = nbr->ospf6_if->area->ospf6->router_id;
+  my_router_id = nbr->ospf6_interface->area->ospf6->router_id;
   router_id_ptr = (unsigned long *) (hello + 1);
   for (i = 0; i < seenrtrnum; i++)
     {
@@ -311,7 +311,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
     thread_execute (master, oneway_received, nbr, 0);
 
   /* BackupSeen check */
-  if (nbr->ospf6_if->state == IFS_WAITING)
+  if (nbr->ospf6_interface->state == IFS_WAITING)
     {
       if (hello->dr == hello->bdr == nbr->rtr_id)
         assert (0);
@@ -333,9 +333,9 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
 
   /* schedule interface events */
   if (backupseen)
-    thread_add_event (master, backup_seen, nbr->ospf6_if, 0);
+    thread_add_event (master, backup_seen, nbr->ospf6_interface, 0);
   if (nbchange)
-    thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
+    thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
 
   /* free hello space */
   iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
@@ -699,7 +699,7 @@ ospf6_process_dbdesc_slave (struct iovec *iov, struct neighbor *nbr)
 }
 
 static void
-ospf6_process_dbdesc (struct iovec *iov, struct ospf6_if *o6if,
+ospf6_process_dbdesc (struct iovec *iov, struct ospf6_interface *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct neighbor *nbr;
@@ -742,7 +742,7 @@ ospf6_process_dbdesc (struct iovec *iov, struct ospf6_if *o6if,
 }
 
 static void
-ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
+ospf6_process_lsreq (struct iovec *iov, struct ospf6_interface *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct neighbor *nbr;
@@ -786,13 +786,13 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
       switch (ospf6_lsa_get_scope_type (lsreq->lsreq_type))
         {
           case SCOPE_LINKLOCAL:
-            scope = (void *) nbr->ospf6_if;
+            scope = (void *) nbr->ospf6_interface;
             break;
           case SCOPE_AREA:
-            scope = (void *) nbr->ospf6_if->area;
+            scope = (void *) nbr->ospf6_interface->area;
             break;
           case SCOPE_AS:
-            scope = (void *) nbr->ospf6_if->area->ospf6;
+            scope = (void *) nbr->ospf6_interface->area->ospf6;
             break;
           case SCOPE_RESERVED:
           default:
@@ -835,7 +835,7 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
       lsupdate->lsupdate_num = htonl (lsanum);
 
       ospf6_message_send (MSGT_LSUPDATE, response,
-                          &nbr->hisaddr.sin6_addr, nbr->ospf6_if->ifid);
+                          &nbr->hisaddr.sin6_addr, nbr->ospf6_interface->if_id);
       iov_trim_head (MTYPE_OSPF6_MESSAGE, response);
       iov_clear (iov, MAXIOVLIST);
     }
@@ -844,7 +844,7 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
 }
 
 static void
-ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
+ospf6_process_lsupdate (struct iovec *iov, struct ospf6_interface *o6if,
                         struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct ospf6_lsupdate *lsupdate;
@@ -903,7 +903,7 @@ ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
 }
 
 static void
-ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
+ospf6_process_lsack (struct iovec *iov, struct ospf6_interface *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct neighbor *nbr;
@@ -948,13 +948,13 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
       switch (ospf6_lsa_get_scope_type (lsa_hdr->lsh_type))
         {
           case SCOPE_LINKLOCAL:
-            scope = (void *) nbr->ospf6_if;
+            scope = (void *) nbr->ospf6_interface;
             break;
           case SCOPE_AREA:
-            scope = (void *) nbr->ospf6_if->area;
+            scope = (void *) nbr->ospf6_interface->area;
             break;
           case SCOPE_AS:
-            scope = (void *) nbr->ospf6_if->area->ospf6;
+            scope = (void *) nbr->ospf6_interface->area->ospf6;
             break;
           case SCOPE_RESERVED:
           default:
@@ -1012,7 +1012,7 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
 /* process ospf6 protocol header. then, call next process function
    for each message type */
 static void 
-ospf6_message_process (struct iovec *iov, struct ospf6_if *o6if,
+ospf6_message_process (struct iovec *iov, struct ospf6_interface *o6if,
                        struct sockaddr_in6 *src)
 {
   struct ospf6_header *ospf6_hdr = NULL;
@@ -1102,7 +1102,7 @@ ospf6_message_process (struct iovec *iov, struct ospf6_if *o6if,
 static void
 ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
                 unsigned char *msgtype, unsigned short *msglen,
-                struct ospf6_if **o6if)
+                struct ospf6_interface **o6if)
 {
   struct ospf6_header *ospf6_hdr = NULL;
   struct sockaddr_in6 *src = NULL;
@@ -1150,7 +1150,7 @@ ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
   ifp = if_lookup_by_index (pktinfo->ipi6_ifindex);
   if (!ifp || !ifp->info)
     return;
-  *o6if = (struct ospf6_if *)ifp->info;
+  *o6if = (struct ospf6_interface *)ifp->info;
   if (!(*o6if)->area)
     {
       zlog_info ("received interface %s not attached to area",
@@ -1202,7 +1202,7 @@ ospf6_receive (struct thread *thread)
   struct sockaddr_in6 *src;
   unsigned char msgtype = MSGT_NONE;
   unsigned short msglen = 0;
-  struct ospf6_if *o6if = NULL;
+  struct ospf6_interface *o6if = NULL;
 
   /* get socket */
   sockfd = THREAD_FD (thread);
@@ -1284,7 +1284,7 @@ ospf6_receive_new (struct thread *thread)
   unsigned int ifindex;
   struct iovec message[MAXIOVLIST];
   struct ospf6_header *o6h;
-  struct ospf6_if *o6i;
+  struct ospf6_interface *o6i;
   char srcname[64], dstname[64];
   unsigned char type;
   unsigned short len;
@@ -1311,7 +1311,7 @@ ospf6_receive_new (struct thread *thread)
   src_sin6.sin6_family = AF_INET6;
   memcpy (&src_sin6.sin6_addr, &src, sizeof (struct in6_addr));
 
-  o6i = ospf6_if_lookup_by_index (ifindex);
+  o6i = ospf6_interface_lookup_by_index (ifindex, ospf6);
   if (!o6i || !o6i->area)
     {
       zlog_warn ("*** received interface ospf6 disabled");
@@ -1323,9 +1323,10 @@ ospf6_receive_new (struct thread *thread)
     {
       inet_ntop (AF_INET6, &dst, dstname, sizeof (dstname));
       inet_ntop (AF_INET6, &src, srcname, sizeof (srcname));
-      zlog_info ("Receive %s from %s to %s on %s",
-                 mesg_name[type], srcname, dstname,
-                 o6i->interface->name);
+      zlog_info ("");
+      zlog_info ("Receive %s on %s", mesg_name[type], o6i->interface->name);
+      zlog_info ("  From:%s", srcname);
+      zlog_info ("  To  :%s", dstname);
       ospf6_dump_message (message);
     }
 
@@ -1345,11 +1346,11 @@ ospf6_message_send (unsigned char type, struct iovec *message,
                     struct in6_addr *dst, u_int ifindex)
 {
   struct ospf6_header *ospf6_hdr;
-  struct ospf6_if *o6i;
+  struct ospf6_interface *o6i;
   char dstname[64], srcname[64];
 
   /* ospf6 interface lookup */
-  o6i = ospf6_if_lookup_by_index (ifindex);
+  o6i = ospf6_interface_lookup_by_index (ifindex, ospf6);
   assert (o6i);
 
   /* memory allocate for protocol header */
@@ -1375,18 +1376,19 @@ ospf6_message_send (unsigned char type, struct iovec *message,
   if (IS_OSPF6_DUMP_MESSAGE (type))
     {
       inet_ntop (AF_INET6, dst, dstname, sizeof (dstname));
-      if (o6i->myaddr)
-        inet_ntop (AF_INET6, o6i->myaddr, srcname, sizeof (srcname));
+      if (o6i->lladdr)
+        inet_ntop (AF_INET6, o6i->lladdr, srcname, sizeof (srcname));
       else
         memcpy (srcname, "\"auto choose\"", sizeof (srcname));
-      zlog_info ("Send %s from %s to %s on %s",
-                 mesg_name[type], srcname, dstname,
-                 o6i->interface->name);
+      zlog_info ("");
+      zlog_info ("Send %s on %s", mesg_name[type], o6i->interface->name);
+      zlog_info ("  From:%s", srcname);
+      zlog_info ("  To  :%s", dstname);
       ospf6_dump_message (message);
     }
 
   /* send message */
-  ospf6_sendmsg (o6i->myaddr, dst, &ifindex, message);
+  ospf6_sendmsg (o6i->lladdr, dst, &ifindex, message);
 
   /* free protocol header */
   iov_trim_head (MTYPE_OSPF6_MESSAGE, message);
@@ -1395,7 +1397,7 @@ ospf6_message_send (unsigned char type, struct iovec *message,
 int
 ospf6_send_hello (struct thread *thread)
 {
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct iovec message[MAXIOVLIST];
   struct in6_addr dst;
   listnode n;
@@ -1403,7 +1405,7 @@ ospf6_send_hello (struct thread *thread)
   struct ospf6_hello *hello;
 
   /* which ospf6 interface to send */
-  o6if = (struct ospf6_if *) THREAD_ARG (thread);
+  o6if = (struct ospf6_interface *) THREAD_ARG (thread);
   assert (o6if);
 
   /* check interface is up */
@@ -1411,7 +1413,7 @@ ospf6_send_hello (struct thread *thread)
     {
       zlog_warn ("*** %s not enabled, stop send hello",
                  o6if->interface->name); 
-      o6if->send_hello = (struct thread *) NULL;
+      o6if->thread_send_hello = (struct thread *) NULL;
       return 0;
     }
 
@@ -1422,7 +1424,7 @@ ospf6_send_hello (struct thread *thread)
   inet_pton (AF_INET6, ALLSPFROUTERS6, &dst);
 
   /* set neighbor router id */
-  for (n = listhead (o6if->nbr_list); n; nextnode (n))
+  for (n = listhead (o6if->neighbor_list); n; nextnode (n))
     {
       nbr = (struct neighbor *) getdata (n);
       if (nbr->state < NBS_INIT)
@@ -1442,11 +1444,11 @@ ospf6_send_hello (struct thread *thread)
     }
 
   /* set fields */
-  hello->interface_id = htonl (o6if->ifid);
-  hello->rtr_pri = o6if->rtr_pri;
+  hello->interface_id = htonl (o6if->if_id);
+  hello->rtr_pri = o6if->priority;
   memcpy (hello->options, o6if->area->options, sizeof (hello->options));
   hello->hello_interval = htons (o6if->hello_interval);
-  hello->router_dead_interval = htons (o6if->rtr_dead_interval);
+  hello->router_dead_interval = htons (o6if->dead_interval);
   hello->dr = o6if->dr;
   hello->bdr = o6if->bdr;
 
@@ -1457,8 +1459,8 @@ ospf6_send_hello (struct thread *thread)
   iov_trim_head (MTYPE_OSPF6_MESSAGE, message);
 
   /* set next timer thread */
-  o6if->send_hello = thread_add_timer (master, ospf6_send_hello,
-                                       o6if, o6if->hello_interval);
+  o6if->thread_send_hello = thread_add_timer (master, ospf6_send_hello,
+                                              o6if, o6if->hello_interval);
 
   return 0;
 }
@@ -1497,13 +1499,13 @@ ospf6_send_dbdesc_retrans (struct thread *thread)
   /* send dbdesc */
   ospf6_message_send (MSGT_DBDESC, nbr->dbdesc_last_send,
                       &nbr->hisaddr.sin6_addr,
-                      nbr->ospf6_if->interface->ifindex);
+                      nbr->ospf6_interface->interface->ifindex);
 
   /* if master, set futher retransmission */
   if (DD_IS_MSBIT_SET (nbr->dd_bits))
     nbr->thread_dbdesc_retrans =
       thread_add_timer (master, ospf6_send_dbdesc_retrans,
-                          nbr, nbr->ospf6_if->rxmt_interval);
+                          nbr, nbr->ospf6_interface->rxmt_interval);
   else
     nbr->thread_dbdesc_retrans = (struct thread *) NULL;
 
@@ -1578,7 +1580,7 @@ ospf6_send_dbdesc (struct thread *thread)
       ospf6_remove_summary (lsa, nbr);
 
       /* set age and add InfTransDelay */
-      ospf6_age_update_to_send (lsa, nbr->ospf6_if);
+      ospf6_age_update_to_send (lsa, nbr->ospf6_interface);
 
       /* copy LSA header */
       memcpy (lsa_hdr, lsa->lsa_hdr, sizeof (struct ospf6_lsa_hdr));
@@ -1602,7 +1604,7 @@ ospf6_send_dbdesc (struct thread *thread)
     ospf6_dbdesc_seqnum_init (nbr);
 
   /* set dbdesc */
-  memcpy (dbdesc->options, nbr->ospf6_if->area->options,
+  memcpy (dbdesc->options, nbr->ospf6_interface->area->options,
           sizeof (dbdesc->options));
   dbdesc->ifmtu = htons (DEFAULT_INTERFACE_MTU);
   dbdesc->bits = nbr->dd_bits;
@@ -1618,7 +1620,7 @@ ospf6_send_dbdesc (struct thread *thread)
 
   /* send dbdesc */
   ospf6_message_send (MSGT_DBDESC, message, &nbr->hisaddr.sin6_addr,
-                      nbr->ospf6_if->interface->ifindex);
+                      nbr->ospf6_interface->interface->ifindex);
 
   /* set new dbdesc packet to send */
   iov_copy_all (nbr->dbdesc_last_send, message, MAXIOVLIST);
@@ -1627,7 +1629,7 @@ ospf6_send_dbdesc (struct thread *thread)
   if (DD_IS_MSBIT_SET (nbr->dd_bits))
     nbr->thread_dbdesc_retrans =
       thread_add_timer (master, ospf6_send_dbdesc_retrans,
-                          nbr, nbr->ospf6_if->rxmt_interval);
+                          nbr, nbr->ospf6_interface->rxmt_interval);
   else
     nbr->thread_dbdesc_retrans = (struct thread *) NULL;
 
@@ -1677,17 +1679,17 @@ ospf6_send_lsreq_retrans (struct thread *thread)
       lsreq->lsreq_type = lsa->lsa_hdr->lsh_type;
       lsreq->lsreq_id = lsa->lsa_hdr->lsh_id;
       lsreq->lsreq_advrtr = lsa->lsa_hdr->lsh_advrtr;
-      if (IS_OVER_MTU (message, nbr->ospf6_if->ifmtu,
+      if (IS_OVER_MTU (message, nbr->ospf6_interface->ifmtu,
                        sizeof (struct ospf6_lsreq)))
         break;
     }
 
   ospf6_message_send (MSGT_LSREQ, message, &nbr->hisaddr.sin6_addr,
-                      nbr->ospf6_if->interface->ifindex);
+                      nbr->ospf6_interface->interface->ifindex);
       
   nbr->thread_lsreq_retrans =
     thread_add_timer (master, ospf6_send_lsreq_retrans,
-                      nbr, nbr->ospf6_if->rxmt_interval);
+                      nbr, nbr->ospf6_interface->rxmt_interval);
   return 0;
 }
 
@@ -1723,19 +1725,19 @@ ospf6_send_lsreq (struct thread *thread)
       lsreq->lsreq_type = lsa->lsa_hdr->lsh_type;
       lsreq->lsreq_id = lsa->lsa_hdr->lsh_id;
       lsreq->lsreq_advrtr = lsa->lsa_hdr->lsh_advrtr;
-      if (IS_OVER_MTU (message, nbr->ospf6_if->ifmtu,
+      if (IS_OVER_MTU (message, nbr->ospf6_interface->ifmtu,
                        sizeof (struct ospf6_lsreq)))
         break;
     }
 
   ospf6_message_send (MSGT_LSREQ, message, &nbr->hisaddr.sin6_addr,
-                      nbr->ospf6_if->interface->ifindex);
+                      nbr->ospf6_interface->interface->ifindex);
       
   if (nbr->thread_lsreq_retrans != NULL)
     thread_cancel (nbr->thread_lsreq_retrans);
   nbr->thread_lsreq_retrans =
     thread_add_timer (master, ospf6_send_lsreq_retrans,
-                      nbr, nbr->ospf6_if->rxmt_interval);
+                      nbr, nbr->ospf6_interface->rxmt_interval);
   return 0;
 }
 
@@ -1755,13 +1757,13 @@ ospf6_send_lsupdate_retrans (struct thread *thread)
   o6n->send_update = (struct thread *) NULL;
   iov_clear (message, MAXIOVLIST);
 
-  if (o6n->ospf6_if->state <= IFS_WAITING)
+  if (o6n->ospf6_interface->state <= IFS_WAITING)
     return -1;
 
   for (n = listhead (o6n->retranslist); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
-      if (IS_OVER_MTU (message, o6n->ospf6_if->ifmtu,
+      if (IS_OVER_MTU (message, o6n->ospf6_interface->ifmtu,
                        ntohs (lsa->lsa_hdr->lsh_len)))
         break;
       attach_lsa_to_iov (lsa, message);
@@ -1785,20 +1787,20 @@ ospf6_send_lsupdate_retrans (struct thread *thread)
   o6n->ospf6_stat_retrans_lsupdate++;
 
   ospf6_message_send (MSGT_LSUPDATE, message,
-                      &o6n->hisaddr.sin6_addr, o6n->ospf6_if->ifid);
+                      &o6n->hisaddr.sin6_addr, o6n->ospf6_interface->if_id);
 
   iov_trim_head (MTYPE_OSPF6_MESSAGE, message);
   iov_clear (message, MAXIOVLIST);
 
   o6n->send_update = thread_add_timer (master, ospf6_send_lsupdate_retrans,
-                                       o6n, o6n->ospf6_if->rxmt_interval);
+                                       o6n, o6n->ospf6_interface->rxmt_interval);
   return 0;
 }
 
 int
 ospf6_send_lsack_delayed (struct thread *thread)
 {
-  struct ospf6_if *o6i;
+  struct ospf6_interface *o6i;
   struct iovec message[MAXIOVLIST];
   listnode node, next;
   struct ospf6_lsa *lsa;
@@ -1806,14 +1808,14 @@ ospf6_send_lsack_delayed (struct thread *thread)
   o6i = THREAD_ARG (thread);
   assert (o6i);
 
-  o6i->send_ack = (struct thread *) NULL;
+  o6i->thread_send_lsack_delayed = (struct thread *) NULL;
 
   if (o6i->state <= IFS_WAITING)
     return 0;
 
   iov_clear (message, MAXIOVLIST);
 
-  for (node = listhead (o6i->delayed_ack); node; node = next)
+  for (node = listhead (o6i->lsa_delayed_ack); node; node = next)
     {
       next = node->next;
       lsa = (struct ospf6_lsa *) getdata (node);
@@ -1834,11 +1836,11 @@ ospf6_send_lsack_delayed (struct thread *thread)
     case IFS_DR:
     case IFS_BDR:
       ospf6_message_send (MSGT_LSACK, message,
-                          &allspfrouters6.sin6_addr, o6i->ifid);
+                          &allspfrouters6.sin6_addr, o6i->if_id);
       break;
     default:
       ospf6_message_send (MSGT_LSACK, message,
-                          &alldrouters6.sin6_addr, o6i->ifid);
+                          &alldrouters6.sin6_addr, o6i->if_id);
       break;
     }
 
@@ -1849,7 +1851,7 @@ ospf6_send_lsack_delayed (struct thread *thread)
 int
 ospf6_send_lsack (struct thread *thread)
 {
-  struct ospf6_if *o6i;
+  struct ospf6_interface *o6i;
   struct iovec message[MAXIOVLIST];
   listnode node, next;
   struct ospf6_lsa *lsa;
@@ -1857,14 +1859,14 @@ ospf6_send_lsack (struct thread *thread)
   o6i = THREAD_ARG (thread);
   assert (o6i);
 
-  o6i->send_ack = (struct thread *) NULL;
+  o6i->thread_send_lsack_delayed = (struct thread *) NULL;
 
   if (o6i->state <= IFS_WAITING)
     return 0;
 
   iov_clear (message, MAXIOVLIST);
 
-  for (node = listhead (o6i->delayed_ack); node; node = next)
+  for (node = listhead (o6i->lsa_delayed_ack); node; node = next)
     {
       next = node->next;
       lsa = (struct ospf6_lsa *) getdata (node);
@@ -1885,11 +1887,11 @@ ospf6_send_lsack (struct thread *thread)
     case IFS_DR:
     case IFS_BDR:
       ospf6_message_send (MSGT_LSACK, message,
-                          &allspfrouters6.sin6_addr, o6i->ifid);
+                          &allspfrouters6.sin6_addr, o6i->if_id);
       break;
     default:
       ospf6_message_send (MSGT_LSACK, message,
-                          &alldrouters6.sin6_addr, o6i->ifid);
+                          &alldrouters6.sin6_addr, o6i->if_id);
       break;
     }
 

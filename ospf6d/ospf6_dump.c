@@ -298,12 +298,12 @@ ospf6_dump_hello (struct iovec *message)
   inet_ntop (AF_INET, &hello->dr, dr_str, sizeof (dr_str));
   inet_ntop (AF_INET, &hello->bdr, bdr_str, sizeof (bdr_str));
 
-  zlog_info ("  Hello: ifid:%lu rtrpri:%d opt:xxx helloint: %hu"
-             " rtrdeadint: %hu dr:%s bdr:%s seen:%s",
-             ntohl (hello->interface_id), hello->rtr_pri,
+  zlog_info ("  Hello: IFID:%lu Priority:%d Option:%s",
+             ntohl (hello->interface_id), hello->rtr_pri, "xxx");
+  zlog_info ("         HelloInterval:%hu Deadinterval:%hu",
              ntohs (hello->hello_interval),
-             ntohs (hello->router_dead_interval), dr_str, bdr_str,
-             "xxx,...");
+             ntohs (hello->router_dead_interval));
+  zlog_info ("         DR:%s BDR:%s", dr_str, bdr_str);
 }
 
 static void
@@ -328,15 +328,19 @@ ospf6_dump_dbdesc (struct iovec *message)
     *p++ = 's';
   *p = '\0';
 
-  zlog_info ("  DbDesc: opt:xxx ifmtu:%hu bit:%s seqnum:%lu",
-             ntohs (dbdesc->ifmtu), dbdesc_bit,
-             ntohl (dbdesc->seqnum));
+  zlog_info ("  DbDesc: Option:%s IFMTU:%hu Bit:%s",
+             "xxx", ntohs (dbdesc->ifmtu), dbdesc_bit);
+  zlog_info ("          SequeceNum:%lu", ntohl (dbdesc->seqnum));
 }
 
 static void
 ospf6_dump_lsreq (struct iovec *message)
 {
+  int i;
   zlog_info ("  LSReq:");
+  for (i = 1; message[i].iov_base; i++)
+    zlog_info ("        %s",
+               print_lsreq ((struct ospf6_lsreq *) message[i].iov_base));
 }
 
 static void
@@ -348,7 +352,7 @@ ospf6_dump_lsupdate (struct iovec *message)
   lsupdate = (struct ospf6_lsupdate *) (*message).iov_base;
   zlog_info ("  LSUpdate: #%lu", ntohl (lsupdate->lsupdate_num));
   for (i = 1; message[i].iov_base; i++)
-    ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *)message[i].iov_base);
+    ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *) message[i].iov_base);
 }
 
 static void
@@ -357,7 +361,7 @@ ospf6_dump_lsack (struct iovec *message)
   int i;
   zlog_info ("  LSAck:");
   for (i = 0; message[i].iov_base; i++)
-    ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *)message[i].iov_base);
+    ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *) message[i].iov_base);
 }
 
 void
@@ -372,9 +376,9 @@ ospf6_dump_message (struct iovec *message)
   inet_ntop (AF_INET, &o6hdr->router_id, rtrid_str, sizeof (rtrid_str));
   inet_ntop (AF_INET, &o6hdr->area_id, areaid_str, sizeof (areaid_str));
 
-  zlog_info ("  OSPFv%d type:%d len:%hu rtrid:%s",
+  zlog_info ("  OSPFv%d Type:%d Len:%hu RouterID:%s",
              o6hdr->version, o6hdr->type, ntohs (o6hdr->len), rtrid_str);
-  zlog_info ("      areaid:%s cksum:%hx instance:%d",
+  zlog_info ("  AreaID:%s Cksum:%hx InstanceID:%d",
              areaid_str, ntohs (o6hdr->cksum), o6hdr->instance_id);
 
   switch (o6hdr->type)
@@ -405,10 +409,10 @@ ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *lsa_hdr)
   char advrtr[64];
 
   inet_ntop (AF_INET, &lsa_hdr->lsh_advrtr, advrtr, sizeof (advrtr));
-  zlog_info ("    %s %s[%lu] age:%hu",
+  zlog_info ("  %s AdvRtr:%s LS-ID:%lu Age:%hu",
              lstype_name[typeindex (lsa_hdr->lsh_type)],
              advrtr, ntohl (lsa_hdr->lsh_id), ntohs (lsa_hdr->lsh_age));
-  zlog_info ("      seqnum:%#x cksum:%#hx len:%hu",
+  zlog_info ("    SeqNum:%#x Cksum:%#hx Len:%hu",
              ntohl (lsa_hdr->lsh_seqnum), ntohs (lsa_hdr->lsh_cksum),
              ntohs (lsa_hdr->lsh_len));
 }

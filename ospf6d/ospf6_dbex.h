@@ -36,7 +36,7 @@ void delayed_acknowledge (struct ospf6_lsa *);
 void lsa_receive (struct ospf6_lsa_hdr *, struct neighbor *);
 int ack_type (struct ospf6_lsa *, int);
 void ospf6_lsa_flood_area (struct ospf6_lsa *, struct area *);
-void ospf6_lsa_flood_interface (struct ospf6_lsa *, struct ospf6_if *);
+void ospf6_lsa_flood_interface (struct ospf6_lsa *, struct ospf6_interface *);
 void ospf6_lsa_flood (struct ospf6_lsa *);
 
 #endif /* OSPF6_DBEX_H */

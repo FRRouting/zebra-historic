@@ -165,7 +165,7 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
   struct ospf6_nexthop *p;
   unsigned long ifindex;
   struct in6_addr ipaddr;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct ospf6_lsa *lsa;
   struct ospf6_lsa_hdr *lsa_hdr;
   struct link_lsa *linklsa;
@@ -200,8 +200,8 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
       assert (ifindex);
       memset (&ipaddr, 0, sizeof (struct in6_addr));
 
-      /* get ospf6_if data structure */
-      o6if = ospf6_if_lookup_by_index (ifindex);
+      /* get ospf6_interface data structure */
+      o6if = ospf6_interface_lookup_by_index (ifindex, ospf6);
       assert (o6if);
 
       /* set nexthop to ip address of neighbor router */
@@ -228,8 +228,8 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
       ifindex = p->ifindex;
       assert (ifindex);
 
-      /* get ospf6_if data structure */
-      o6if = ospf6_if_lookup_by_index (ifindex);
+      /* get ospf6_interface data structure */
+      o6if = ospf6_interface_lookup_by_index (ifindex, ospf6);
       assert (o6if);
 
       /* get LinkLSA of destination router */
@@ -843,8 +843,10 @@ ospf6_route_calc (struct thread *thread)
 
       /* log */
       ospf6_route_str (rn, rn_str, sizeof (rn_str));
+#if 0
       if (IS_OSPF6_DUMP_ROUTE)
         zlog_info ("  Check %s's route", rn_str);
+#endif /*0*/
 
       /* get prefix LSA */
       lstype = htons (LST_INTRA_AREA_PREFIX_LSA);
@@ -853,15 +855,19 @@ ospf6_route_calc (struct thread *thread)
       lsa = ospf6_lsdb_lookup (lstype, lsid, lsadvrtr, area);
       if (!lsa)
         {
+#if 0
           zlog_warn ("  *** can't find prefix LSA for %s", rn_str);
+#endif /*0*/
           continue;
         }
 
       /* check LS reference */
       if (!is_reference_network_ok (lsa, info->ls_origin))
         {
+#if 0
           if (IS_OSPF6_DUMP_ROUTE)
-            zlog_info ("  reference to %s failed", rn_str);
+            zlog_info ("  !!!Reference to %s failed", rn_str);
+#endif
           continue;
         }
 
@@ -887,6 +893,7 @@ ospf6_route_calc (struct thread *thread)
           newinfo.nhlist = info->nhlist;
 
           /* log */
+#if 0
           if (IS_OSPF6_DUMP_ROUTE)
             {
               listnode n;
@@ -900,6 +907,7 @@ ospf6_route_calc (struct thread *thread)
                   zlog_info ("    %s %s", dst_str, nh_str);
                 }
             }
+#endif /*0*/
 
           /* add ospf6 route table */
           ospf6_route_add (&prefix, &newinfo, ospf6->table);
@@ -920,8 +928,10 @@ ospf6_route_calc (struct thread *thread)
 
       /* log */
       ospf6_route_str (rn, rn_str, sizeof (rn_str));
+#if 0
       if (IS_OSPF6_DUMP_ROUTE)
         zlog_info ("  Check %s's route", rn_str);
+#endif /*0*/
 
       /* get prefix LSA */
       pll = list_init ();
@@ -930,7 +940,9 @@ ospf6_route_calc (struct thread *thread)
       ospf6_lsdb_collect_type_advrtr (pll, lstype, lsadvrtr, area);
       if (list_isempty (pll))
         {
+#if 0
           zlog_warn ("  *** can't find prefix LSA for %s", rn_str);
+#endif /*0*/
           continue;
         }
 
@@ -944,8 +956,10 @@ ospf6_route_calc (struct thread *thread)
           /* check LS reference */
           if (!is_reference_router_ok (lsa, info->ls_origin))
             {
+#if 0
               if (IS_OSPF6_DUMP_ROUTE)
-                zlog_info ("  reference to %s failed", rn_str);
+                zlog_info ("  !!!Reference to %s failed", rn_str);
+#endif
               continue;
             }
 
@@ -968,6 +982,7 @@ ospf6_route_calc (struct thread *thread)
               newinfo.nhlist = info->nhlist;
 
               /* log */
+#if 0
               if (IS_OSPF6_DUMP_ROUTE)
                 {
                   listnode n;
@@ -982,6 +997,7 @@ ospf6_route_calc (struct thread *thread)
                       zlog_info ("    %s %s", dst_str, nh_str);
                     }
                 }
+#endif /*0*/
 
               /* add ospf6 route table */
               ospf6_route_add (&prefix, &newinfo, ospf6->table);
@@ -1004,8 +1020,10 @@ ospf6_route_calc (struct thread *thread)
 
       /* log */
       ospf6_route_str (rn, rn_str, sizeof (rn_str));
+#if 0
       if (IS_OSPF6_DUMP_ROUTE)
         zlog_info ("  Check %s's route", rn_str);
+#endif /*0*/
 
       /* get external LSAs */
       pll = list_init ();
@@ -1014,7 +1032,9 @@ ospf6_route_calc (struct thread *thread)
       ospf6_lsdb_collect_type_advrtr (pll, lstype, lsadvrtr, ospf6);
       if (list_isempty (pll))
         {
+#if 0
           zlog_warn ("  *** can't find external LSA for %s", rn_str);
+#endif /*0*/
           list_delete_all (pll);
           continue;
         }
@@ -1051,6 +1071,7 @@ ospf6_route_calc (struct thread *thread)
           newinfo.nhlist = info->nhlist;
 
           /* log */
+#if 0
           if (IS_OSPF6_DUMP_ROUTE)
             {
               listnode n;
@@ -1065,6 +1086,7 @@ ospf6_route_calc (struct thread *thread)
                   zlog_info ("    %s %s", dst_str, nh_str);
                 }
             }
+#endif /*0*/
 
           /* add ospf6 route table */
           ospf6_route_add (&prefix, &newinfo, ospf6->table);

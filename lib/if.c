@@ -114,6 +114,21 @@ if_lookup_by_index (int index)
   return NULL;
 }
 
+char *
+ifindex2ifname (unsigned int index)
+{
+  listnode node;
+  struct interface *ifp;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      if (ifp->ifindex == index)
+	return ifp->name;
+    }
+  return "unknown";
+}
+
 /* Interface existance check by interface name. */
 struct interface *
 if_lookup_by_name (char *name)

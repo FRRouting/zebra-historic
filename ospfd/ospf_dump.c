@@ -1,6 +1,6 @@
 /*
  * OSPFd dump routine.
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  *
@@ -32,9 +32,9 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_network.h"
@@ -171,18 +171,20 @@ ospf_packet_hello_dump (struct stream *s, u_int16_t length)
 
   hello = (struct ospf_hello *) STREAM_PNT (s);
 
-  zlog_info ("Hello NetworkMask %s", inet_ntoa (hello->network_mask));
-  zlog_info ("Hello HelloInterval %d", ntohs (hello->hello_interval));
-  zlog_info ("Hello Options %d (%s)", hello->options,
+  zlog_info ("Hello");
+  zlog_info ("  NetworkMask %s", inet_ntoa (hello->network_mask));
+  zlog_info ("  HelloInterval %d", ntohs (hello->hello_interval));
+  zlog_info ("  Options %d (%s)", hello->options,
 	     ospf_option_dump (hello->options, options, 24));
-  zlog_info ("Hello RtrPriority %d", hello->priority);
-  zlog_info ("Hello RtrDeadInterval %d", ntohl (hello->dead_interval));
-  zlog_info ("Hello DRouter %s", inet_ntoa (hello->d_router));
-  zlog_info ("Hello BDRouter %s", inet_ntoa (hello->bd_router));
+  zlog_info ("  RtrPriority %d", hello->priority);
+  zlog_info ("  RtrDeadInterval %d", ntohl (hello->dead_interval));
+  zlog_info ("  DRouter %s", inet_ntoa (hello->d_router));
+  zlog_info ("  BDRouter %s", inet_ntoa (hello->bd_router));
 
   length -= OSPF_HEADER_SIZE + OSPF_HELLO_MIN_SIZE;
+  zlog_info ("  # Neighbors %d", length / 4);
   for (i = 0; length > 0; i++, length -= sizeof (struct in_addr))
-    zlog_info ("Hello Neighbor %s", inet_ntoa (hello->neighbors[i]));
+    zlog_info ("    Neighbor %s", inet_ntoa (hello->neighbors[i]));
 }
 
 char *
@@ -201,15 +203,17 @@ ospf_dd_flags_dump (u_char flags, char *buf, size_t size)
 void
 ospf_lsa_header_dump (struct lsa_header *lsa)
 {
-  zlog_info ("LS age %d", ntohs (lsa->ls_age));
-  zlog_info ("Options %d", lsa->options);
-  zlog_info ("LS type %d (%s)", lsa->type,
+  zlog_info ("  LSA Header");
+
+  zlog_info ("    LS age %d", ntohs (lsa->ls_age));
+  zlog_info ("    Options %d", lsa->options);
+  zlog_info ("    LS type %d (%s)", lsa->type,
 	     LOOKUP (ospf_lsa_type_msg, lsa->type));
-  zlog_info ("Link State ID %s", inet_ntoa (lsa->id));
-  zlog_info ("Advertising Router %s", inet_ntoa (lsa->adv_router));
-  zlog_info ("LS sequence number 0x%x", ntohl (lsa->ls_seqnum));
-  zlog_info ("LS checksum 0x%x", ntohs (lsa->checksum));
-  zlog_info ("length %d", ntohs (lsa->length));
+  zlog_info ("    Link State ID %s", inet_ntoa (lsa->id));
+  zlog_info ("    Advertising Router %s", inet_ntoa (lsa->adv_router));
+  zlog_info ("    LS sequence number 0x%x", ntohl (lsa->ls_seqnum));
+  zlog_info ("    LS checksum 0x%x", ntohs (lsa->checksum));
+  zlog_info ("    length %d", ntohs (lsa->length));
 }
 
 char *
@@ -234,18 +238,19 @@ ospf_router_lsa_dump (struct stream *s, u_int16_t length)
 
   rl = (struct router_lsa *) STREAM_PNT (s);
 
-  zlog_info ("Router-LSA flags %s", 
+  zlog_info ("  Router-LSA");
+  zlog_info ("    flags %s", 
 	     ospf_router_lsa_flags_dump (rl->flags, buf, BUFSIZ));
-  zlog_info ("Router-LSA # links %d", ntohs (rl->links));
+  zlog_info ("    # links %d", ntohs (rl->links));
 
   len = ntohs (rl->header.length) - OSPF_LSA_HEADER_SIZE - 4;
   for (i = 0; len > 0; i++)
     {
-      zlog_info ("Router-LSA Link ID %s", inet_ntoa (rl->link[i].link_id));
-      zlog_info ("Router-LSA Link Data %s", inet_ntoa (rl->link[i].link_data));
-      zlog_info ("Router-LSA Type %d", (u_char) rl->link[i].type);
-      zlog_info ("Router-LSA TOS %d", (u_char) rl->link[i].tos);
-      zlog_info ("Router-LSA metric %d", ntohs (rl->link[i].metric));
+      zlog_info ("    Link ID %s", inet_ntoa (rl->link[i].link_id));
+      zlog_info ("    Link Data %s", inet_ntoa (rl->link[i].link_data));
+      zlog_info ("    Type %d", (u_char) rl->link[i].type);
+      zlog_info ("    TOS %d", (u_char) rl->link[i].tos);
+      zlog_info ("    metric %d", ntohs (rl->link[i].metric));
 
       len -= 12;
     }
@@ -255,13 +260,21 @@ void
 ospf_network_lsa_dump (struct stream *s, u_int16_t length)
 {
   struct network_lsa *nl;
+  int i, cnt;
 
   nl = (struct network_lsa *) STREAM_PNT (s);
+  cnt = (ntohs (nl->header.length) - (OSPF_LSA_HEADER_SIZE + 4)) / 4;
   
+  zlog_info ("  Network-LSA");
+  /*
   zlog_info ("LSA total size %d", ntohs (nl->header.length));
   zlog_info ("Network-LSA size %d", 
-	     ntohs (nl->header.length) - OSPF_LSA_HEADER_SIZE);
-  zlog_info ("Network-LSA %s", inet_ntoa (nl->mask));
+  ntohs (nl->header.length) - OSPF_LSA_HEADER_SIZE);
+  */
+  zlog_info ("    Network Mask %s", inet_ntoa (nl->mask));
+  zlog_info ("    # Attached Routers %d", cnt);
+  for (i = 0; i < cnt; i++)
+    zlog_info ("      Attached Router %s", inet_ntoa (nl->routers[i]));
 }
 
 void
@@ -273,11 +286,12 @@ ospf_summary_lsa_dump (struct stream *s, u_int16_t length)
 
   sl = (struct summary_lsa *) STREAM_PNT (s);
 
-  zlog_info ("Summary-LSA Network Mask %s", inet_ntoa (sl->mask));
+  zlog_info ("  Summary-LSA");
+  zlog_info ("    Network Mask %s", inet_ntoa (sl->mask));
 
   size = ntohs (sl->header.length) - OSPF_LSA_HEADER_SIZE - 4;
   for (i = 0; size > 0; size -= 4, i++)
-    zlog_info ("Summary-LSA TOS=%d metric %d", sl->tos,
+    zlog_info ("    TOS=%d metric %d", sl->tos,
 	       GET_METRIC (sl->metric));
 }
 
@@ -290,17 +304,17 @@ ospf_as_external_lsa_dump (struct stream *s, u_int16_t length)
 
   al = (struct as_external_lsa *) STREAM_PNT (s);
 
-  zlog_info ("AS-external-LSA Network Mask %s", inet_ntoa (al->mask));
+  zlog_info ("  AS-external-LSA");
+  zlog_info ("    Network Mask %s", inet_ntoa (al->mask));
+
   size = ntohs (al->header.length) - OSPF_LSA_HEADER_SIZE -4;
   for (i = 0; size > 0; size -= 12, i++)
     {
-      zlog_info ("AS-external-LSA bit %s TOS=%d metric %d",
+      zlog_info ("    bit %s TOS=%d metric %d",
 		 IS_EXTERNAL_METRIC (al->e[i].tos) ? "E" : "-",
 		 al->e[i].tos & 0x7f, GET_METRIC (al->e[i].metric));
-      zlog_info ("AS-external-LSA Forwarding address %s",
-		 inet_ntoa (al->e[i].fwd_addr));
-      zlog_info ("AS-external-LSA External Route Tag %s",
-		 inet_ntoa (al->e[i].route_tag));
+      zlog_info ("    Forwarding address %s", inet_ntoa (al->e[i].fwd_addr));
+      zlog_info ("    External Route Tag %d", al->e[i].route_tag);
     }
 }
 
@@ -308,6 +322,8 @@ void
 ospf_lsa_header_list_dump (struct stream *s, u_int16_t length)
 {
   struct lsa_header *lsa;
+
+  zlog_info ("  # LSA Headers %d", length / OSPF_LSA_HEADER_SIZE);
 
   /* LSA Headers. */
   while (length > 0)
@@ -332,12 +348,13 @@ ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
   gp = stream_get_getp (s);
   dd = (struct ospf_db_desc *) STREAM_PNT (s);
 
-  zlog_info ("DD Interface MTU %d", ntohs (dd->mtu));
-  zlog_info ("DD Options %d (%s)", dd->options,
+  zlog_info ("Database Description");
+  zlog_info ("  Interface MTU %d", ntohs (dd->mtu));
+  zlog_info ("  Options %d (%s)", dd->options,
 	     ospf_option_dump (dd->options, options, 24));
-  zlog_info ("DD Flags %d (%s)", dd->flags,
+  zlog_info ("  Flags %d (%s)", dd->flags,
 	     ospf_dd_flags_dump (dd->flags, dd_flags, 8));
-  zlog_info ("DD Sequence Number 0x%08x", ntohl (dd->dd_seqnum));
+  zlog_info ("  Sequence Number 0x%08x", ntohl (dd->dd_seqnum));
 
   length -= OSPF_HEADER_SIZE + OSPF_DB_DESC_MIN_SIZE;
 
@@ -358,15 +375,20 @@ ospf_packet_ls_req_dump (struct stream *s, u_int16_t length)
 
   sp = stream_get_getp (s);
 
-  for (length -= OSPF_HEADER_SIZE; length > 0; length -= 12)
+  length -= OSPF_HEADER_SIZE;
+
+  zlog_info ("Link State Request");
+  zlog_info ("  # Requests %d", length / 12);
+
+  for (; length > 0; length -= 12)
     {
       ls_type = stream_getl (s);
       ls_id.s_addr = stream_get_ipv4 (s);
       adv_router.s_addr = stream_get_ipv4 (s);
 
-      zlog_info ("Link State Request LS type %d", ls_type);
-      zlog_info ("Link State Request Link State ID %s", inet_ntoa (ls_id));
-      zlog_info ("Link State Request Advertising Router %s",
+      zlog_info ("  LS type %d", ls_type);
+      zlog_info ("  Link State ID %s", inet_ntoa (ls_id));
+      zlog_info ("  Advertising Router %s",
 		 inet_ntoa (adv_router));
     }
 
@@ -388,7 +410,8 @@ ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
   count = stream_getl (s);
   length -= 4;
 
-  zlog_info ("# LSAs %d", count);
+  zlog_info ("Link State Update");
+  zlog_info ("  # LSAs %d", count);
 
   while (length > 0 && count > 0)
     {
@@ -431,6 +454,7 @@ ospf_packet_ls_ack_dump (struct stream *s, u_int16_t length)
   length -= OSPF_HEADER_SIZE;
   sp = stream_get_getp (s);
 
+  zlog_info ("Link State Acknowledgment");
   ospf_lsa_header_list_dump (s, length);
 
   stream_set_getp (s, sp);
@@ -469,31 +493,36 @@ ospf_ip_header_dump (struct stream *s)
 void
 ospf_header_dump (struct ospf_header *ospfh)
 {
-  zlog_info ("OSPF Version %d", ospfh->version);
-  zlog_info ("OSPF Type %d (%s)", ospfh->type,
+  char buf[9];
+
+  zlog_info ("Header");
+  zlog_info ("  Version %d", ospfh->version);
+  zlog_info ("  Type %d (%s)", ospfh->type,
 	     ospf_packet_type_str[ospfh->type]);
-  zlog_info ("OSPF Packet Len %d", ntohs (ospfh->length));
-  zlog_info ("OSPF Router ID %s", inet_ntoa (ospfh->router_id));
-  zlog_info ("OSPF Area ID %s", inet_ntoa (ospfh->area_id));
-  zlog_info ("OSPF Checksum 0x%x", ntohs (ospfh->checksum));
-  zlog_info ("OSPF AuType %d", ntohs (ospfh->auth_type));
+  zlog_info ("  Packet Len %d", ntohs (ospfh->length));
+  zlog_info ("  Router ID %s", inet_ntoa (ospfh->router_id));
+  zlog_info ("  Area ID %s", inet_ntoa (ospfh->area_id));
+  zlog_info ("  Checksum 0x%x", ntohs (ospfh->checksum));
+  zlog_info ("  AuType %d", ntohs (ospfh->auth_type));
 
   switch (ntohs (ospfh->auth_type))
     {
-    case 0:
+    case OSPF_AUTH_NULL:
       break;
-    case 1:
-      zlog_info ("OSPF Simple Password %s", ospfh->u.auth_data);
+    case OSPF_AUTH_SIMPLE:
+      bzero (buf, 9);
+      strncpy (buf, ospfh->u.auth_data, 8);
+      zlog_info ("  Simple Password %s", buf);
       break;
-    case 2:
-      zlog_info ("OSPF Cryptographic Authentication");
-      zlog_info ("OSPF Key ID %d", ospfh->u.crypt.key_id);
-      zlog_info ("OSPF Auth Data Len %d", ospfh->u.crypt.auth_data_len);
-      zlog_info ("OSPF Sequence number %d",
+    case OSPF_AUTH_CRYPTOGRAPHIC:
+      zlog_info ("  Cryptographic Authentication");
+      zlog_info ("  Key ID %d", ospfh->u.crypt.key_id);
+      zlog_info ("  Auth Data Len %d", ospfh->u.crypt.auth_data_len);
+      zlog_info ("  Sequence number %d",
 		 ntohl (ospfh->u.crypt.crypt_seqnum));
       break;
     default:
-      zlog_info ("OSPF This is not supported authentication type");
+      zlog_info ("* This is not supported authentication type");
       break;
     }
     

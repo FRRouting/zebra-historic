@@ -83,8 +83,9 @@ struct bgp
   char *name;
 
   /* BGP configuration. */
-#define BGP_CONFIG_ROUTER_ID   0x01
-#define BGP_CONFIG_CLUSTER_ID  0x02
+#define BGP_CONFIG_ROUTER_ID     0x01
+#define BGP_CONFIG_CLUSTER_ID    0x02
+#define BGP_CONFIG_CONFEDERATION 0x04
   u_int16_t config;
 
   /* BGP identifier. */
@@ -95,6 +96,11 @@ struct bgp
 
   /* BGP route reflector neighbor count. */
   int reflector_cnt;
+
+  /* BGP Confederation Information */
+  as_t confederation_id;
+  int confederation_peers_cnt;
+  as_t *confederation_peers;
 
   /* BGP peer */
   struct newlist *peer_group;
@@ -281,6 +287,8 @@ struct peer
 #define PEER_FLAG_OVERRIDE_CAPABILITY 0x0200 /* override-capability */
 #define PEER_FLAG_STRICT_CAP_MATCH    0x0400 /* strict-capability-match */
 #define PEER_FLAG_ROUTE_REFRESH       0x0800 /* route-refresh */
+#define PEER_FLAG_TRANSPARENT_AS      0x1000 /* transparent-as */
+#define PEER_FLAG_TRANSPARENT_NEXTHOP 0x2000 /* transparent-next-hop */
 
   /* Peer status flags. */
   u_int16_t sflags;
@@ -487,11 +495,14 @@ struct bgp_nlri
 #define UNSET_FLAG(V,F)      (V) = (V) & ~(F)
 
 /* IBGP/EBGP identifier */
+/* We also have a CONFED peer, which is to say, a peer who's
+   AS is part of our Confederation */
 enum
 {
   BGP_PEER_IBGP,
   BGP_PEER_EBGP,
-  BGP_PEER_INTERNAL
+  BGP_PEER_INTERNAL,
+  BGP_PEER_CONFED
 };
 
 /* IPv4 only machine should not accept IPv6 address for peer's IP
@@ -543,7 +554,7 @@ void bgp_notify_print (struct peer *, struct bgp_notify *, char *);
 
 int bgp_nexthop_set (union sockunion *, union sockunion *, 
 		     struct bgp_nexthop *, struct peer *);
-
+int bgp_confederation_peers_check(struct bgp *, as_t);
 struct bgp *bgp_get_default ();
 struct bgp *bgp_lookup_by_name (char *);
 struct peer *peer_lookup_with_open (union sockunion *, as_t, struct in_addr *);

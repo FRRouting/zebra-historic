@@ -1,22 +1,24 @@
-/* OSPF Sending and Receiving OSPF Packets
-   Copyright (C) 1999 Toshiaki Takada
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+/*
+ * OSPF Sending and Receiving OSPF Packets.
+ * Copyright (C) 1999 Toshiaki Takada
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
 
 #ifndef _ZEBRA_OSPF_PACKET_H
 #define _ZEBRA_OSPF_PACKET_H
@@ -26,20 +28,20 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_AUTH_MD5_SIZE       16
 
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
-#define OSPF_HELLO_MIN_SIZE	 20   /* not including neighbors */
+#define OSPF_HELLO_MIN_SIZE      20   /* not including neighbors */
 #define OSPF_DB_DESC_MIN_SIZE     8
 #define OSPF_LS_REQ_MIN_SIZE      0
 #define OSPF_LS_UPD_MIN_SIZE      4
 #define OSPF_LS_ACK_MIN_SIZE      0
 
-#define OSPF_MSG_HELLO	       1  /* OSPF Hello Message. */
+#define OSPF_MSG_HELLO         1  /* OSPF Hello Message. */
 #define OSPF_MSG_DB_DESC       2  /* OSPF Database Descriptoin Message. */
-#define OSPF_MSG_LS_REQ	       3  /* OSPF Link State Request Message. */
-#define OSPF_MSG_LS_UPD	       4  /* OSPF Link State Update Message. */
-#define OSPF_MSG_LS_ACK	       5  /* OSPF Link State Acknoledgement Message. */
+#define OSPF_MSG_LS_REQ        3  /* OSPF Link State Request Message. */
+#define OSPF_MSG_LS_UPD        4  /* OSPF Link State Update Message. */
+#define OSPF_MSG_LS_ACK        5  /* OSPF Link State Acknoledgement Message. */
 
-#define OSPF_SEND_PACKET_DIRECT		1
-#define OSPF_SEND_PACKET_INDIRECT	2
+#define OSPF_SEND_PACKET_DIRECT         1
+#define OSPF_SEND_PACKET_INDIRECT       2
 
 
 struct ospf_packet
@@ -68,23 +70,25 @@ struct ospf_fifo
 /* OSPF packet header structure. */
 struct ospf_header
 {
-  u_char version;			/* OSPF Version. */
-  u_char type;				/* Packet Type. */
-  u_int16_t length;			/* Packet Length. */
-  struct in_addr router_id;		/* Router ID. */
-  struct in_addr area_id;		/* Area ID. */
-  u_int16_t checksum;			/* Check Sum. */
-  u_int16_t auth_type;			/* Authentication Type. */
+  u_char version;                       /* OSPF Version. */
+  u_char type;                          /* Packet Type. */
+  u_int16_t length;                     /* Packet Length. */
+  struct in_addr router_id;             /* Router ID. */
+  struct in_addr area_id;               /* Area ID. */
+  u_int16_t checksum;                   /* Check Sum. */
+  u_int16_t auth_type;                  /* Authentication Type. */
   /* Authentication Data. */
-  union {
+  union
+  {
     /* Simple Authentication. */
     u_char auth_data [OSPF_AUTH_SIMPLE_SIZE];
     /* Cryptographic Authentication. */
-    struct {				
-      u_int16_t zero;			/* Should be 0. */
-      u_int8_t key_id;			/* Key ID. */
-      u_int8_t auth_data_len;		/* Auth Data Length. */
-      u_int32_t crypt_seqnum;		/* Cryptographic Sequence Number. */
+    struct
+    {
+      u_int16_t zero;                   /* Should be 0. */
+      u_int8_t key_id;                  /* Key ID. */
+      u_int8_t auth_data_len;           /* Auth Data Length. */
+      u_int32_t crypt_seqnum;           /* Cryptographic Sequence Number. */
     } crypt;
   } u;
 };
@@ -113,18 +117,18 @@ struct ospf_db_desc
 
 
 /* Macros. */
-#define OSPF_PACKET_MAX(oi)	ospf_packet_max (oi)
+#define OSPF_PACKET_MAX(oi)     ospf_packet_max (oi)
 /*
-#define OSPF_PACKET_MAX(oi)	(((oi)->ifp->mtu - ((oi)->auth_md5 ? OSPF_AUTH_MD5_SIZE : 0)) - 88)
+#define OSPF_PACKET_MAX(oi)     (((oi)->ifp->mtu - ((oi)->auth_md5 ? OSPF_AUTH_MD5_SIZE : 0)) - 88)
 */
 
-#define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
-#define OSPF_OUTPUT_LENGTH(S)	((S)->endp)
+#define OSPF_OUTPUT_PNT(S)      ((S)->data + (S)->putp)
+#define OSPF_OUTPUT_LENGTH(S)   ((S)->endp)
 
-#define IS_SET_DD_MS(X)		((X) & OSPF_DD_FLAG_MS)
-#define IS_SET_DD_M(X)		((X) & OSPF_DD_FLAG_M)
-#define IS_SET_DD_I(X)		((X) & OSPF_DD_FLAG_I)
-#define IS_SET_DD_ALL(X)	((X) & OSPF_DD_FLAG_ALL)
+#define IS_SET_DD_MS(X)         ((X) & OSPF_DD_FLAG_MS)
+#define IS_SET_DD_M(X)          ((X) & OSPF_DD_FLAG_M)
+#define IS_SET_DD_I(X)          ((X) & OSPF_DD_FLAG_I)
+#define IS_SET_DD_ALL(X)        ((X) & OSPF_DD_FLAG_ALL)
 
 /* Prototypes. */
 void ospf_output_forward (struct stream *, int);
@@ -151,13 +155,9 @@ void ospf_ls_upd_send (struct ospf_neighbor *, list, int);
 void ospf_ls_ack_send (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_ls_ack_send_delayed (struct ospf_interface *);
 void ospf_ls_retransmit (struct ospf_interface *, struct ospf_lsa *);
+void ospf_ls_req_event (struct ospf_neighbor *);
 
 int ospf_ls_upd_timer (struct thread *);
 int ospf_ls_ack_timer (struct thread *);
-
-int ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
-                       u_int16_t length);
-
-int ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *p);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

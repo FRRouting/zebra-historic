@@ -76,7 +76,7 @@ vzlog (struct zlog *zl, int priority, const char *format, va_list args)
   if (zl == NULL)
     {
       time_print (stderr);
-      fprintf (stderr, "%s: ", zlog_proto_names[zl->protocol]);
+      fprintf (stderr, "%s: ", "unknown");
       vfprintf (stderr, format, args);
       fprintf (stderr, "\n");
       fflush (stderr);

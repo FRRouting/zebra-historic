@@ -1,4 +1,5 @@
 /*
+ * OSPFv3 Redistribute
  * Copyright (C) 1999 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
@@ -19,31 +20,30 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF6_ISM_H
-#define OSPF6_ISM_H
+#ifndef OSPF6_REDISTRIBUTE_H
+#define OSPF6_REDISTRIBUTE_H
 
-/* interface state */
-#define IFS_NONE     0
-#define IFS_DOWN     1
-#define IFS_LOOPBACK 2
-#define IFS_WAITING  3
-#define IFS_PTOP     4
-#define IFS_DROTHER  5
-#define IFS_BDR      6
-#define IFS_DR       7
-#define IFS_MAX      8
+#include "prefix.h"
 
-
+#include "ospf6_top.h"
 
-/* Function Prototypes */
-/* interface event */
-int interface_up (struct thread *);
-int interface_down (struct thread *);
-int wait_timer (struct thread *);
-int backup_seen (struct thread *);
-int neighbor_change (struct thread *);
+struct ospf6_redistribute_info
+{
+  /* protocol type */
+  int type;
 
-int dr_change (struct ospf6_interface *);
+  /* if index */
+  int ifindex;
 
-#endif /* OSPF6_ISM_H */
+  /* LS ID */
+  u_int32_t ls_id;
+};
+
+/* prototypes */
+void ospf6_redistribute_route_add (int, int, struct prefix_ipv6 *);
+void ospf6_redistribute_route_remove (int, int, struct prefix_ipv6 *);
+void ospf6_redistribute_init (struct ospf6 *);
+void ospf6_redistribute_finish (struct ospf6 *);
+
+#endif /* OSPF6_REDISTRIBUTE_H */
 

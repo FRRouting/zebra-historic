@@ -1,6 +1,6 @@
 /*
  * OSPF Flooding -- RFC2328 Section 13.
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  * 
@@ -34,6 +34,8 @@ void ospf_ls_request_free (struct ospf_lsa *);
 void ospf_ls_request_add (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_ls_request_delete (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_ls_request_delete_all (struct ospf_neighbor *);
+unsigned long ospf_ls_request_count (struct ospf_neighbor *);
+int ospf_ls_request_isempty (struct ospf_neighbor *);
 struct ospf_lsa *ospf_ls_request_lookup (struct ospf_neighbor *,
 					 struct ospf_lsa *);
 
@@ -52,5 +54,7 @@ void ospf_lsa_flush_area (struct ospf_lsa *, struct ospf_area *);
 void ospf_lsa_flush_as (struct ospf_lsa *);
 
 void debug_ospf_ls_retransmit (struct ospf_neighbor *);
+
+void new_lsdb_init (struct new_lsdb *);
 
 #endif /* _ZEBRA_OSPF_FLOODING_H */

@@ -77,25 +77,25 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 {
   u_char *pnt;
   u_char *end;
-  struct capability *cap;
+  struct capability cap;
 
   pnt = peer->notify.data;
   end = pnt + peer->notify.length;
 
   while (pnt < end)
     {
-      cap = (struct capability *) pnt;
+      memcpy(&cap, pnt, sizeof(struct capability));
 
       if (pnt + 2 > end)
 	return;
-      if (pnt + (cap->length + 2) > end)
+      if (pnt + (cap.length + 2) > end)
 	return;
 
-      if (cap->code == CAPABILITY_CODE_MP)
+      if (cap.code == CAPABILITY_CODE_MP)
 	{
 	  vty_out (vty, "  Capability error for: Multi protocol ");
 
-	  switch (ntohs (cap->mpc.afi))
+	  switch (ntohs (cap.mpc.afi))
 	    {
 	    case AFI_IP:
 	      vty_out (vty, "AFI IPv4, ");
@@ -104,10 +104,10 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 	      vty_out (vty, "AFI IPv6, ");
 	      break;
 	    default:
-	      vty_out (vty, "AFI Unknown %d, ", ntohs (cap->mpc.afi));
+	      vty_out (vty, "AFI Unknown %d, ", ntohs (cap.mpc.afi));
 	      break;
 	    }
-	  switch (cap->mpc.safi)
+	  switch (cap.mpc.safi)
 	    {
 	    case SAFI_UNICAST:
 	      vty_out (vty, "SAFI Unicast");
@@ -119,19 +119,19 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 	      vty_out (vty, "SAFI Unicast Multicast");
 	      break;
 	    default:
-	      vty_out (vty, "SAFI Unknown %d ", cap->mpc.safi);
+	      vty_out (vty, "SAFI Unknown %d ", cap.mpc.safi);
 	      break;
 	    }
 	  vty_out (vty, "%s", VTY_NEWLINE);
 	}
-      else if (cap->code >= 128)
+      else if (cap.code >= 128)
 	vty_out (vty, "  Capability error: vendor specific capability code %d",
-		 cap->code);
+		 cap.code);
       else
 	vty_out (vty, "  Capability error: unknown capability code %d", 
-		 cap->code);
+		 cap.code);
 
-      pnt += cap->length + 2;
+      pnt += cap.length + 2;
     }
 }
 
@@ -195,14 +195,14 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 {
   int ret;
   u_char *end;
-  struct capability *cap;
+  struct capability cap;
 
   end = pnt + length;
 
   while (pnt < end)
     {
       /* Fetch structure to the byte stream. */
-      cap = (struct capability *) pnt;
+      memcpy(&cap, pnt, sizeof(struct capability));
 
       /* We need at least capability code and capability length. */
       if (pnt + 2 > end)
@@ -213,7 +213,7 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 	}
 
       /* Capability length check. */
-      if (pnt + (cap->length + 2) > end)
+      if (pnt + (cap.length + 2) > end)
 	{
 	  zlog_info ("Capability length error");
 	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
@@ -221,32 +221,32 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 	}
 
       /* We know MP Capability Code. */
-      if (cap->code == CAPABILITY_CODE_MP)
+      if (cap.code == CAPABILITY_CODE_MP)
 	{
 	  /* For debug purpose. */
-	  bgp_capability_mp_log (peer, cap, "RECV");
+	  bgp_capability_mp_log (peer, &cap, "RECV");
 
 	  /* Ignore capability when override-capability is set. */
 	  if (! CHECK_FLAG (peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
 	    {
 	      /* Set negotiated value. */
-	      ret = bgp_capability_mp (peer, cap);
+	      ret = bgp_capability_mp (peer, &cap);
 
 	      /* Unsupported Capability. */
 	      if (ret < 0)
 		{
 		  /* Store return data. */
-		  memcpy (*error, cap, cap->length + 2);
-		  *error += cap->length + 2;
+		  memcpy (*error, &cap, cap.length + 2);
+		  *error += cap.length + 2;
 		}
 	    }
 	}
-      else if (cap->code == CAPABILITY_CODE_REFRESH)
+      else if (cap.code == CAPABILITY_CODE_REFRESH)
 	{
 	  zlog_info ("%s [Open:RECV] Route Refresh Capability", peer->host);
 
 	  /* Check length. */
-	  if (cap->length != 0)
+	  if (cap.length != 0)
 	    {
 	      zlog_info ("Capability route refresh length error");
 	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
@@ -259,20 +259,20 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 	  else
 	    zlog_warn ("Ignore route refresh capability");
 	}
-      else if (cap->code > 128)
+      else if (cap.code > 128)
 	{
 	  /* We ignore sending Nofify's for vendor specific
 	     capabilities. Seems reasonable for now...  */
-	  zlog_warn ("Vendor specific capability %d", cap->code);
+	  zlog_warn ("Vendor specific capability %d", cap.code);
 	}
       else
 	{
-	  zlog_warn ("Unknown capability %d", cap->code);
-	  memcpy (*error, cap, cap->length + 2);
-	  *error += cap->length + 2;
+	  zlog_warn ("Unknown capability %d", cap.code);
+	  memcpy (*error, &cap, cap.length + 2);
+	  *error += cap.length + 2;
 	}
 
-      pnt += cap->length + 2;
+      pnt += cap.length + 2;
     }
   return 0;
 }

@@ -24,77 +24,65 @@
 
 /* This file defines interface data structure. */
 
-struct ospf6_if
-{
-  struct interface *interface;       /* IF info from zebra */
-  struct area      *area;            /* back pointer to area */
-  list              nbr_list;        /* list of neighbor found in this IF */
-
-  struct in6_addr  *myaddr;
-  list prefix_connected;
-
-  unsigned long     ifid;
-  unsigned char     instance_id;
-  unsigned long     inf_trans_delay; /* I/F transmission delay, default 1sec */
-  rtr_pri_t         rtr_pri;
-  hello_int_t       hello_interval;
-  rtr_dead_int_t    rtr_dead_interval; /* 4 times by hello_interval */
-  cost_t            cost;            /* output cost */
-  rxmt_int_t        rxmt_interval;   /* default 5 sec */
-  unsigned long     ifmtu;
-
-  state_t           state;
-  rtr_id_t          dr;
-  rtr_id_t          bdr;
-  rtr_id_t          prevdr;
-  rtr_id_t          prevbdr;
-
-  struct thread    *send_hello;
-  struct thread    *send_ack;        /* Timer for delayed Ack */
-
-  list              delayed_ack;
-  list              linklocal_lsa;   /* include Link-LSA */
-
-
-  signed long     link_lsa_seqnum;      /* Signed 32bit integer */
-  signed long     network_lsa_seqnum;   /* Signed 32bit integer */
-  signed long     intra_prefix_seqnum;  /* Signed 32bit integer */
-
-  /* statistics */
-  unsigned int ospf6_stat_dr_election;
-  unsigned int ospf6_stat_delayed_lsack;
-};
-
 struct ospf6_interface
 {
-  struct interface *interface;       /* IF info from zebra */
-  struct area      *area;            /* back pointer to area */
-  list              neighbor_list;   /* list of struct neighbor */
+  /* IF info from zebra */
+  struct interface *interface;
 
-  struct in6_addr  *lladdr;          /* linklocal address of this I/F */
-  list              prefix_list;     /* list of struct in6_addr */
+  /* back pointer */
+  struct ospf6 *ospf6;
+  struct area *area;
 
-  u_int32_t     if_id;
-  u_char     instance_id;
-  u_int32_t     transdelay;      /* I/F transmission delay */
-  u_char     priority;
-  u_int16_t    hello_interval;
-  u_int16_t    dead_interval;
-  u_int32_t     cost;
-  u_int32_t     rxmt_interval;
-  u_int32_t     ifmtu;
+  /* list of ospf6 neighbor */
+  list neighbor_list;
 
-  unsigned char     state;
-  u_int32_t     dr;
-  u_int32_t     bdr;
-  u_int32_t     prevdr;
-  u_int32_t     prevbdr;
+  /* linklocal address of this I/F */
+  struct in6_addr *lladdr;
 
-  struct thread    *thread_send_hello;
-  struct thread    *thread_send_lsack_delayed; /* Timer for delayed Ack */
+  /* list of prefixes: struct in6_addr */
+  list prefix_list;
 
-  list              lsa_delayed_ack;
-  list              lsdb;                      /* includes Link-LSA */
+  /* Interface ID; same as ifindex */
+  u_int32_t if_id;
+
+  /* ospf6 instance id */
+  u_char instance_id;
+
+  /* I/F transmission delay */
+  u_int32_t transdelay;
+
+  /* Router Priority */
+  u_char priority;
+
+  /* Timers */
+  u_int16_t hello_interval;
+  u_int16_t dead_interval;
+  u_int32_t rxmt_interval;
+
+  /* Cost */
+  u_int32_t cost;
+
+  /* I/F MTU */
+  u_int32_t ifmtu;
+
+  /* Interface State */
+  u_char state;
+
+  /* Decision of DR Election */
+  u_int32_t dr;
+  u_int32_t bdr;
+  u_int32_t prevdr;
+  u_int32_t prevbdr;
+
+  /* Ongoing Tasks */
+  struct thread *thread_send_hello;
+  struct thread *thread_send_lsack_delayed;
+
+  /* LSAs to Delayed Acknowledge */
+  list lsa_delayed_ack;
+
+  /* Linklocal LSA Database: includes Link-LSA */
+  list lsdb;
 
   /* Sequence number place holder */
   int32_t       lsa_seqnum_link;
@@ -109,18 +97,27 @@ struct ospf6_interface
 
 
 /* Function Prototypes */
-void ospf6_if_init ();
-struct in6_addr *ospf6_if_linklocal_addr (struct interface *);
-struct ospf6_if *make_ospf6_if (struct interface *);
-void delete_ospf6_if (struct ospf6_if *);
-struct ospf6_if *ospf6_if_lookup (char *);
-struct ospf6_if *ospf6_if_lookup_by_index (int);
-int ospf6_if_count_full_nbr (struct ospf6_if *);
-int ospf6_if_get_linklocal (struct in6_addr *, struct ospf6_if *);
-int ospf6_if_is_enabled (struct ospf6_if *);
+struct ospf6_interface *
+  ospf6_interface_create (struct interface *, struct ospf6 *);
+
+void
+  ospf6_interface_delete (struct ospf6_interface *);
+
+struct in6_addr *
+  ospf6_interface_linklocal_addr (struct interface *);
+
+void ospf6_interface_if_add (struct interface *, struct ospf6 *);
+void ospf6_interface_if_del (struct interface *, struct ospf6 *);
+void ospf6_interface_address_update (struct interface *);
+
+void ospf6_interface_init ();
+void delete_ospf6_interface (struct ospf6_interface *);
+struct ospf6_interface *ospf6_interface_lookup_by_index (int, struct ospf6 *);
+int ospf6_interface_count_full_nbr (struct ospf6_interface *);
+int ospf6_interface_is_enabled (struct ospf6_interface *);
 int show_if (struct vty *, struct interface *);
-int ospf6_if_config_write (struct vty *);
-void ospf6_if_init ();
+int ospf6_interface_config_write (struct vty *);
+void ospf6_interface_init ();
 
 #endif /* OSPF6_INTERFACE_H */
 

@@ -393,7 +393,8 @@ bgp_notify_send (struct peer *peer, u_char code, u_char sub_code)
 /* Send BGP update packet. */
 void
 bgp_update_send (struct peer_conf *conf, struct peer *peer,
-		 struct prefix *p, struct attr *attr, afi_t afi, safi_t safi)
+		 struct prefix *p, struct attr *attr, afi_t afi, safi_t safi,
+		 struct peer *from)
 {
   struct stream *s;
   struct stream *packet;
@@ -424,7 +425,7 @@ bgp_update_send (struct peer_conf *conf, struct peer *peer,
   /* Make place for total attribute length.  */
   pos = stream_get_putp (s);
   stream_putw (s, 0);
-  total_attr_len = bgp_packet_attribute (conf, peer, s, attr, p, afi, safi);
+  total_attr_len = bgp_packet_attribute (conf, peer, s, attr, p, afi, safi, from);
 
   /* Set Total Path Attribute Length. */
   stream_putw_at (s, pos, total_attr_len);
@@ -489,6 +490,7 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
     }
 
   /* Make attribute. */
+#ifdef HAVE_IPV6
   if((p->family == AF_INET6)
      || (p->family == AF_INET && safi == SAFI_MULTICAST))
     {
@@ -501,6 +503,9 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
     }
   else
     stream_putw (s, 0);
+#else
+  stream_putw (s, 0);
+#endif /* HAVE_IPV6 */
 
   bgp_packet_set_size (s, 0);
 

@@ -116,8 +116,10 @@ rib_create (int type, u_char flags, int distance, int ifindex, int table)
 void
 rib_free (struct rib *rib)
 {
+#if 0
   if (IS_RIB_LINK (rib))
     XFREE (0, rib->u.ifname);
+#endif /* 0 */
   XFREE (MTYPE_RIB, rib);
 }
 
@@ -154,7 +156,7 @@ rib_log (char *message, struct prefix *p, struct rib *rib)
   else
     {
       if (IS_RIB_LINK (rib))
-	snprintf (logbuf, BUFSIZ, "via %s", rib->u.ifname);
+	snprintf (logbuf, BUFSIZ, "via %s", ifindex2ifname (rib->u.ifindex));
       else
 	snprintf (logbuf, BUFSIZ, "via %s ifindex %d",
 		  inet_ntop (p->family, addrp, buf, BUFSIZ),
@@ -229,10 +231,8 @@ rib_if_set (struct rib *rib, unsigned int ifindex)
   if (ifp)
     {
       RIB_LINK_SET (rib);
-      rib->u.ifname = XSTRDUP (0, ifp->name);
+      rib->u.ifindex = ifindex;
     }
-  else
-    rib->u.ifname = "unknown";
 }
 
 void
@@ -246,13 +246,9 @@ rib_if_check (struct rib *rib, unsigned int ifindex, struct in_addr *gate)
     ifp = if_lookup_address(*gate);
 
   if (ifp)
-    {
-      rib->u.ifname = XSTRDUP (0, ifp->name);
-      if (!rib->u.ifindex)
-	rib->u.ifindex=ifp->ifindex;
-    }
+    rib->u.ifindex = ifp->ifindex;
   else
-    rib->u.ifname = "unknown";
+    rib->u.ifindex = 0;
 }
 
 void
@@ -565,7 +561,7 @@ rib_static_list (struct vty *vty, struct route_table *top)
 		     np->p.family == AF_INET ? "" : "v6",
 		     inet_ntop (np->p.family, &np->p.u.prefix, buf1, BUFSIZ),
 		     np->p.prefixlen,
-		     rib->u.ifname,
+		     ifindex2ifname (rib->u.ifindex),
 		     VTY_NEWLINE);
 	  else
 	    vty_out (vty, "ip%s route %s/%d %s%s",
@@ -612,9 +608,6 @@ show_ip_route_vty (struct vty *vty, struct route_node *np)
       len = vty_out (vty, "%s%c %s/%d", 
 		     route_info[rib->type].str,
 		     IS_RIB_FIB (rib) ? '*' : ' ',
-#if 0
-		     rib->table,
-#endif /* 0 */
 		     inet_ntop (AF_INET, &np->p.u.prefix, buf, BUFSIZ),
 		     np->p.prefixlen);
 
@@ -625,33 +618,12 @@ show_ip_route_vty (struct vty *vty, struct route_node *np)
       if (len)
 	vty_out(vty, "%*s", len, " ");
 
-      if (rib->u.ifindex && (!rib->u.ifname)) 
-	{
-          struct interface *ifp;
-          ifp = if_lookup_by_index (rib->u.ifindex);
-          rib->u.ifname =  XSTRDUP (0, ifp->name);
-	}
-      
-      if (rib->u.ifname) 
-	{
-          vty_out(vty, "%*s %s (%d) ", 8-strlen(rib->u.ifname), " ",
-                  rib->u.ifname, rib->u.ifindex);
-	}
-      else 
-	{
-          vty_out(vty, "        ? (0) ");
-	}
+      vty_out(vty, "%8s (%d) ", 
+	      ifindex2ifname (rib->u.ifindex), rib->u.ifindex);
 
       if (rib->type == ZEBRA_ROUTE_CONNECT)
 	{
  	  vty_out (vty, "direct%s", VTY_NEWLINE);
-#if 0
-	  struct interface *ifp;
-	  ifp = if_lookup_by_index (rib->u.ifindex);
-	  vty_out (vty, "%*s %s%s", len, " ",
-		   ifp->name,
-		   VTY_NEWLINE);
-#endif /* 0 */
 	}
       else
 	{
@@ -661,17 +633,6 @@ show_ip_route_vty (struct vty *vty, struct route_node *np)
 	    vty_out (vty, "%s%s",
 		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ),
 		     VTY_NEWLINE);
-
-#if 0
-	  if (IS_RIB_LINK (rib))
-	    vty_out (vty, "%*s %s%s", len, " ",
-		     rib->u.ifname,
-		     VTY_NEWLINE);
-	  else
-	    vty_out (vty, "%*s %s%s", len, " ",
-		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ),
-		     VTY_NEWLINE);
-#endif /* 0 */
 	}
     }
 }
@@ -702,7 +663,7 @@ show_ip_route_vty_detail (struct vty *vty, struct route_node *np)
       else
 	{
 	  if (IS_RIB_LINK (rib))
-	    vty_out (vty, "  Nexthop: %s%s", rib->u.ifname,
+	    vty_out (vty, "  Nexthop: %s%s", ifindex2ifname (rib->u.ifindex),
 		     VTY_NEWLINE);
 	  else
 	    vty_out (vty, "  Nexthop: %s%s",

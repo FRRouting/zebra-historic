@@ -1,23 +1,25 @@
-/* OSPF version 2  Neighbor State Machine
-   From RFC2328 [OSPF Version 2]
-   Copyright (C) 1999 Toshiaki Takada
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+/*
+ * OSPF version 2  Neighbor State Machine
+ * From RFC2328 [OSPF Version 2]
+ * Copyright (C) 1999 Toshiaki Takada
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
 
 #include <zebra.h>
 
@@ -33,10 +35,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_network.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_flood.h"
@@ -47,7 +49,6 @@ extern unsigned long ospf_debug_nsm;
 
 
 /* OSPF NSM Timer functions. */
-
 int
 ospf_inactivity_timer (struct thread *thread)
 {
@@ -78,7 +79,7 @@ ospf_db_desc_timer (struct thread *thread)
 
   if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
     zlog (NULL, LOG_INFO, "NSM [%s]: Timer (DD Retransmit timer expire)",
-	  nbr->host);
+	  inet_ntoa (nbr->src));
 
   /* Sending DD packet. */
   ospf_db_desc_resend (nbr);
@@ -199,6 +200,7 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
   return next_state;
 }
 
+/* Add LSA to neighbor's summary list. */
 int
 ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 {
@@ -212,7 +214,7 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 
   nbr = (struct ospf_neighbor *) v;
 
-  if (LS_AGE(lsa) == OSPF_LSA_MAX_AGE)
+  if (LS_AGE (lsa) == OSPF_LSA_MAX_AGE)
     {
       zlog_info ("Z: ospf_db_summary_add() : MaxAge LSA ID: %s", 
 		 inet_ntoa (lsa->data->id));
@@ -224,6 +226,12 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
   return 0;
 }
 
+/* The area link state database consists of the router-LSAs,
+   network-LSAs and summary-LSAs contained in the area structure,
+   along with the AS-external- LSAs contained in the global structure.
+   AS- external-LSAs are omitted from a virtual neighbor's Database
+   summary list.  AS-external-LSAs are omitted from the Database
+   summary list if the area has been configured as a stub. */
 int
 nsm_negotiation_done (struct ospf_neighbor *nbr)
 {
@@ -235,7 +243,7 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
   ospf_lsdb_iterator (NETWORK_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (SUMMARY_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (SUMMARY_LSA_ASBR (area), nbr, 0, ospf_db_summary_add);
-
+  
   if (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK &&
       area->external_routing == OSPF_AREA_DEFAULT)
     ospf_lsdb_iterator (ospf_top->external_lsa, nbr, 0, ospf_db_summary_add);
@@ -252,10 +260,10 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
 
   oi = nbr->oi;
 
-  if (list_isempty (nbr->ls_request))
+  if (ospf_ls_request_isempty (nbr))
     return NSM_Full;
 
-  /* cancel dd retransmit timer. */
+  /* Cancel dd retransmit timer. */
   OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
 
   /* Send Link State Request. */
@@ -353,22 +361,15 @@ nsm_reset_nbr (struct ospf_neighbor *nbr)
     {
       ospf_ls_retransmit_clear (nbr);
       list_delete_all_node (nbr->ls_retransmit);
-      /*      nbr->ls_retransmit = NULL; */
     }
 
   /* Clear Database Summary list. */
   if (!list_isempty (nbr->db_summary))
-    {
-      list_delete_all_node (nbr->db_summary);
-      /*      nbr->db_summary = NULL; */
-    }
+    list_delete_all_node (nbr->db_summary);
 
   /* Clear Link State Request list. */
-  if (!list_isempty (nbr->ls_request))
-    {
-      ospf_ls_request_delete_all (nbr);
-      /*      nbr->ls_request = NULL; */
-    }
+  if (! ospf_ls_request_isempty (nbr))
+    ospf_ls_request_delete_all (nbr);
 
   /* Cancel thread. */
   OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
@@ -387,7 +388,9 @@ nsm_kill_nbr (struct ospf_neighbor *nbr)
   /* Reset neighbor. */
   nsm_reset_nbr (nbr);
 
-  OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
+  /* This is meaning less because t_inactivity is removed in
+     ospf_nbr_delete (). -- kunihiro */
+  /* OSPF_NSM_TIMER_OFF (nbr->t_inactivity); */
 
   /* Delete neighbor from interface. */
   ospf_nbr_delete (nbr);
@@ -679,21 +682,31 @@ ospf_nsm_event (struct thread *thread)
   int event;
   int next_state;
   struct ospf_neighbor *nbr;
+  struct in_addr router_id;
 
   nbr = THREAD_ARG (thread);
   event = THREAD_VAL (thread);
+  router_id = nbr->router_id;
 
   /* Call function. */
   next_state = (*(NSM [nbr->status][event].func))(nbr);
+
+  /* When event is NSM_KillNbr, the neighbor is deleted. */
+  if (event == NSM_KillNbr)
+    {
+      if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
+	zlog_info ("NSM[%s]: KillNbr", inet_ntoa (router_id));
+      return 0;
+    }
 
   if (! next_state)
     next_state = NSM [nbr->status][event].next_state;
 
   if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
-    zlog_info ("OSPF NSM[%s]: %s (%s)", inet_ntoa (nbr->router_id),
+    zlog_info ("NSM[%s]: %s (%s)", inet_ntoa (nbr->router_id),
 	       LOOKUP (ospf_nsm_status_msg, nbr->status),
 	       ospf_nsm_event_str [event]);
-
+  
   /* If status is changed. */
   if (next_state != nbr->status)
     nsm_change_status (nbr, next_state);
@@ -704,11 +717,16 @@ ospf_nsm_event (struct thread *thread)
   return 0;
 }
 
+/* Check loading status. */
 void
 ospf_check_nbr_loading (struct ospf_neighbor *nbr)
 {
   if (nbr->status == NSM_Loading)
-    if (list_isempty (nbr->ls_request))
-      OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
+    {
+      if (ospf_ls_request_isempty (nbr))
+	OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
+      else if (nbr->ls_req_last == NULL)
+	ospf_ls_req_event (nbr);
+    }
 }
 

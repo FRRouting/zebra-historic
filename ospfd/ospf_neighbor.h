@@ -23,6 +23,17 @@
 #ifndef _ZEBRA_OSPF_NEIGHBOR_H
 #define _ZEBRA_OSPF_NEIGHBOR_H
 
+/* For new ls_request. */
+struct new_lsdb
+{
+  struct
+  {
+    unsigned long count;
+    struct route_table *db;
+  } type[OSPF_MAX_LSA];
+  unsigned long total;
+};
+
 /* Neighbor Data Structure */
 struct ospf_neighbor
 {
@@ -30,7 +41,6 @@ struct ospf_neighbor
   struct ospf_interface *oi;
 
   /* OSPF neighbor Information */
-  char *host;				/* Printable address of the neighbor.*/
   u_char status;			/* NSM status. */
   u_char dd_flags;			/* DD bit flags. */
   u_int32_t dd_seqnum;			/* DD Sequence Number. */
@@ -38,6 +48,7 @@ struct ospf_neighbor
   /* Neighbor Information from Hello. */
   struct prefix address;		/* Neighbor Interface Address. */
 
+  struct in_addr src;			/* Src address. */
   struct in_addr router_id;		/* Router ID. */
   u_char options;			/* Options. */
   int priority;				/* Router Priority. */
@@ -58,7 +69,9 @@ struct ospf_neighbor
   /* LSA data. */
   list ls_retransmit;
   list db_summary;
-  list ls_request;
+  /* list ls_request; */
+  struct new_lsdb ls_req;
+  struct ospf_lsa *ls_req_last;
 
   /* Timer values. */
   u_int32_t v_inactivity;

@@ -166,6 +166,11 @@ if test "${enable_pthread}" = "yes"; then
 fi
 
 dnl -------------------------------
+dnl Endian-ness check
+dnl -------------------------------
+AC_C_BIGENDIAN
+
+dnl -------------------------------
 dnl check the size in byte of the C
 dnl -------------------------------
 dnl AC_CHECK_SIZEOF(char)

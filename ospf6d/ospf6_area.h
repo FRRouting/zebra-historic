@@ -51,7 +51,7 @@ struct area
 /* prototypes */
 struct area *ospf6_area_lookup (unsigned long);
 struct area *ospf6_area_init (unsigned long);
-void ospf6_area_terminate (struct area *);
+void ospf6_area_delete (struct area *);
 void ospf6_area_vty (struct vty *, struct area *);
 
 #endif /* OSPF_AREA_H */

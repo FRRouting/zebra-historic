@@ -22,6 +22,8 @@
 
 #include "ospf6d.h"
 
+#include "ospf6_redistribute.h"
+
 void
 ospf6_vty_redistribute_config (struct vty *vty, struct ospf6 *ospf6)
 {
@@ -87,6 +89,18 @@ ospf6_vty (struct vty *vty)
       area = (struct area *) getdata (n);
       ospf6_area_vty (vty, area);
     }
+
+#if 0
+  /* Interface */
+  vty_out (vty, " Number of interfaces in this OSPF is %u%s",
+           listcount (ospf6->ospf6_interface_list), VTY_NEWLINE);
+  for (n = listhead (ospf6->ospf6_interface_list); n; nextnode (n))
+    {
+      o6i = (struct ospf6_interface *) getdata (n);
+      ospf6_interface_vty (vty, o6i);
+    }
+#endif /*0*/
+
 }
 
 static struct ospf6 *
@@ -105,8 +119,8 @@ ospf6_free (struct ospf6 *ospf6)
   XFREE (MTYPE_OSPF6_TOP, ospf6);
 }
 
-static struct ospf6 *
-ospf6_make (void)
+struct ospf6 *
+ospf6_create (unsigned long process_id)
 {
   struct ospf6 *ospf6;
 
@@ -115,10 +129,12 @@ ospf6_make (void)
 
   /* initialize */
   gettimeofday (&ospf6->starttime, (struct timezone *)NULL);
+  ospf6->process_id = process_id;
   ospf6->version = OSPF_V3;
-  ospf6->ase_ls_id = 0;
   ospf6->area_list = list_init ();
   ospf6_lsdb_init_as (ospf6);
+  ospf6->ospf6_interface_list = list_init ();
+  ospf6->ase_ls_id = 0;
 
   /* route table init */
   ospf6->table = ospf6_route_table_init ();
@@ -127,13 +143,15 @@ ospf6_make (void)
   ospf6->table_connected = ospf6_route_table_init ();
   ospf6->table_external = ospf6_route_table_init ();
 
+  ospf6_redistribute_init (ospf6);
+
   /* default redistribute */
   ospf6->redist_connected = 1;
 
   return ospf6;
 }
 
-static void
+void
 ospf6_delete (struct ospf6 *ospf6)
 {
   listnode n;
@@ -143,7 +161,7 @@ ospf6_delete (struct ospf6 *ospf6)
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
       area = (struct area *) getdata (n);
-      ospf6_area_terminate (area);
+      ospf6_area_delete (area);
     }
   list_delete_all (ospf6->area_list);
 
@@ -156,33 +174,28 @@ ospf6_delete (struct ospf6 *ospf6)
   ospf6_route_table_finish (ospf6->table_connected);
   ospf6_route_table_finish (ospf6->table_external);
 
+  ospf6_redistribute_finish (ospf6);
+
   ospf6_free (ospf6);
 }
 
-void
+struct ospf6 *
 ospf6_start ()
 {
   if (ospf6)
-    {
-      zlog (NULL, LOG_INFO, "ospf6 already started");
-      return;
-    }
+    return ospf6;
 
-  /* make ospf6 top data structure */
-  ospf6 = ospf6_make ();
+  ospf6 = ospf6_create (0);
+  return ospf6;
 }
 
 void
 ospf6_stop ()
 {
   if (!ospf6)
-    {
-      zlog (NULL, LOG_INFO, "ospf6 already stopped");
-      return;
-    }
+    return;
 
-  /* delete ospf6 top data structure */
   ospf6_delete (ospf6);
-  ospf6 = (struct ospf6 *) NULL;
+  ospf6 = NULL;
 }
 

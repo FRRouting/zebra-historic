@@ -26,7 +26,8 @@
 /* ospfv3 top level data structure */
 struct ospf6
 {
-  /* process id */
+  /* process id & instance id*/
+  /* unsinged long instance_id; */
   unsigned long process_id;
 
   /* start time */
@@ -40,9 +41,6 @@ struct ospf6
 
   /* list of areas */
   list area_list;
-
-  /* next LS-ID of AS-external-LSA */
-  unsigned long ase_ls_id;
 
   /* AS scope link state database */
   list lsdb;
@@ -62,20 +60,32 @@ struct ospf6
   int redist_ripng;
   int redist_bgp;
 
-  /* redistribute cost */
+  /* XXX, redistribute cost */
   unsigned short cost_static;
   unsigned short cost_ripng;
   unsigned short cost_bgp;
 
-  /* redistribute table */
+  /* XXX, redistribute table */
   struct route_table *table_external;
   struct route_table *table_connected;
+
+  /* map of redistributed route and external LSA */
+  struct route_table *redistribute_map;
+  /* XXX, next LS-ID of AS-external-LSA */
+  unsigned long ase_ls_id;
+
+  /* Interfaces */
+  list ospf6_interface_list;
 };
 
 /* prototypes */
-void ospf6_start ();
-void ospf6_stop ();
+struct ospf6 *ospf6_create (unsigned long);
+void ospf6_delete (struct ospf6 *);
 void ospf6_vty (struct vty *);
+
+/* xxx temporary */
+struct ospf6 *ospf6_start ();
+void ospf6_stop ();
 
 #endif /* OSPF6_TOP_H */
 

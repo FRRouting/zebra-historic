@@ -196,9 +196,9 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   p = prefix_ipv6_new ();
   p->family = AF_INET6;
-  p->prefix = *address;
+  memcpy(&p->prefix, address, sizeof(*address));
   p->prefixlen = prefixlen;
-  rib = *p;
+  memcpy(&rib, p, sizeof(*p));
 
   connected->address = (struct prefix *) p;
   connected->ifp = ifp;
@@ -207,7 +207,7 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
     {
       p = prefix_ipv6_new ();
       p->family = AF_INET6;
-      p->prefix = *broad;
+      memcpy(&p->prefix, broad, sizeof(*broad));
       connected->destination = (struct prefix *) p;
     }
 
@@ -224,7 +224,7 @@ connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
   struct prefix_ipv6 mp;
 
   p.family = AF_INET6;
-  p.prefix = *address;
+  memcpy(&p.prefix, address, sizeof(*address));
   p.prefixlen = prefixlen;
   mp = p;
 

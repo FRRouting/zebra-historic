@@ -200,7 +200,7 @@ void ospf6_maxage_remove (struct ospf6_lsa *);
 int ospf6_lsa_expire (struct thread *);
 int ospf6_lsa_refresh (struct thread *);
 unsigned short ospf6_age_current (struct ospf6_lsa *);
-void ospf6_age_update_to_send (struct ospf6_lsa *, struct ospf6_if *);
+void ospf6_age_update_to_send (struct ospf6_lsa *, struct ospf6_interface *);
 void ospf6_premature_aging (struct ospf6_lsa *);
 struct ospf6_lsa_hdr *make_ospf6_lsa_data (struct ospf6_lsa_hdr *, int);
 struct ospf6_lsa *make_ospf6_lsa (struct ospf6_lsa_hdr *);
@@ -212,12 +212,16 @@ int ospf6_lsa_test_flag (struct ospf6_lsa *, unsigned char);
 int ospf6_lsa_issame (struct ospf6_lsa_hdr *, struct ospf6_lsa_hdr *);
 
 struct ospf6_lsa *ospf6_make_router_lsa (struct area *);
-struct ospf6_lsa *ospf6_make_network_lsa (struct ospf6_if *);
-struct ospf6_lsa *ospf6_make_link_lsa (struct ospf6_if *);
-struct ospf6_lsa *ospf6_make_intra_prefix_lsa (struct ospf6_if *);
+struct ospf6_lsa *ospf6_make_network_lsa (struct ospf6_interface *);
+struct ospf6_lsa *ospf6_make_link_lsa (struct ospf6_interface *);
+struct ospf6_lsa *ospf6_make_intra_prefix_lsa (struct ospf6_interface *);
 
-void ospf6_lsa_originate_link (struct ospf6_if *);
-void ospf6_lsa_originate_intraprefix (struct ospf6_if *);
+struct
+ospf6_lsa *ospf6_lsa_create_as_external (u_int32_t, int, int,
+                                         struct prefix_ipv6 *);
+
+void ospf6_lsa_originate_link (struct ospf6_interface *);
+void ospf6_lsa_originate_intraprefix (struct ospf6_interface *);
 
 unsigned long ospf6_as_external_lsid (struct prefix_ipv6 *, struct ospf6 *);
 struct ospf6_lsa *ospf6_make_as_external_lsa (struct route_node *);

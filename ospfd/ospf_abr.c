@@ -17,7 +17,8 @@
  * You should have received a copy of the GNU General Public License
  * along with GNU Zebra; see the file COPYING.  If not, write to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.  */
+ * 02111-1307, USA.
+ */
 
 
 #include <zebra.h>
@@ -35,9 +36,9 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_spf.h"
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_ase.h"
@@ -117,7 +118,8 @@ ospf_check_abr_status ()
 
   u_char new_flags = ospf_top->flags;
 
-  zlog_info ("Z: ospf_check_abr_status(): Start");
+  if (ospf_zlog)
+    zlog_info ("Z: ospf_check_abr_status(): Start");
 
   for (node = listhead (ospf_top->areas); node; nextnode (node))
     {
@@ -127,7 +129,7 @@ ospf_check_abr_status ()
 	{
 	  areas_configured++;
 	  
-	  if (area->area_id.s_addr == OSPF_AREA_BACKBONE)
+	  if (OSPF_IS_AREA_BACKBONE (area))
  	    bb_configured = 1;
 	}
 
@@ -135,19 +137,22 @@ ospf_check_abr_status ()
 	{
 	  areas_act_attached++;
 	  
-	  if (area->area_id.s_addr == OSPF_AREA_BACKBONE)
+	  if (OSPF_IS_AREA_BACKBONE (area))
             bb_act_attached = 1;
 	}
     }
 
-  zlog_info ("Z: ospf_check_abr_status(): looked through areas");
-  zlog_info ("Z: ospf_check_abr_status(): bb_configured: %d", bb_configured);
-  zlog_info ("Z: ospf_check_abr_status(): bb_act_attached: %d",
-	     bb_act_attached);
-  zlog_info ("Z: ospf_check_abr_status(): areas_configured: %d",
-	     areas_configured);
-  zlog_info ("Z: ospf_check_abr_status(): areas_act_attached: %d",
-	     areas_act_attached);
+  if (ospf_zlog)
+    {
+      zlog_info ("Z: ospf_check_abr_status(): looked through areas");
+      zlog_info ("Z: ospf_check_abr_status(): bb_configured: %d", bb_configured);
+      zlog_info ("Z: ospf_check_abr_status(): bb_act_attached: %d",
+		 bb_act_attached);
+      zlog_info ("Z: ospf_check_abr_status(): areas_configured: %d",
+		 areas_configured);
+      zlog_info ("Z: ospf_check_abr_status(): areas_act_attached: %d",
+		 areas_act_attached);
+    }
 
   switch (ospf_top->abr_type)
     {
@@ -332,7 +337,7 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
       zlog_info ("Z: ospf_abr_announce_network(): looking at area %s",
 		 inet_ntoa (area->area_id));
 
-      if (or->area == area)
+      if (or->u.std.area == area)
 	continue;
 
       if (ospf_abr_nexthops_belong_to_area (or, area))
@@ -360,7 +365,7 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 		     "inter-area route to %s/%d",
 		     inet_ntoa (p->prefix), p->prefixlen);
 
-          if (area->area_id.s_addr != OSPF_AREA_BACKBONE)
+          if (!OSPF_IS_AREA_BACKBONE (area))
 	    ospf_abr_announce_network_to_area (p, or->cost, area);
 	}
 
@@ -369,7 +374,7 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 	  zlog_info ("Z: ospf_abr_announce_network(): "
 		     "this is intra-area route to %s/%d",
 		     inet_ntoa (p->prefix), p->prefixlen);
-	  if ((range = ospf_area_range_match (or->area, p)) &&
+	  if ((range = ospf_area_range_match (or->u.std.area, p)) &&
               !ospf_area_is_transit (area))
 	    ospf_abr_update_aggregate (range, or);
 	  else
@@ -382,7 +387,7 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 int
 ospf_abr_should_announce (struct prefix *p, struct ospf_route *or)
 {
-  struct ospf_area *a = or->area;
+  struct ospf_area *a = or->u.std.area;
 
   if (EXP_LIST_NAME (a))
     {
@@ -445,7 +450,7 @@ ospf_abr_process_network_rt (struct route_table *rt)
 
 
       if ((or->path_type == OSPF_PATH_INTER_AREA) &&
-          (or->area != ospf_top->backbone))
+          (or->u.std.area != ospf_top->backbone))
 	{
 	  zlog_info ("Z: ospf_abr_process_network_rt():"
 		     " this is route is not backbone one, skipping");
@@ -556,7 +561,7 @@ ospf_abr_announce_rtr (struct prefix_ipv4 *p, struct ospf_route *or)
       zlog_info ("Z: ospf_abr_announce_rtr(): looking at area %s",
 		 inet_ntoa (area->area_id));
 
-      if (or->area == area)
+      if (or->u.std.area == area)
 	continue;
 
       if (ospf_abr_nexthops_belong_to_area (or, area))
@@ -575,7 +580,7 @@ ospf_abr_announce_rtr (struct prefix_ipv4 *p, struct ospf_route *or)
 	  zlog_info ("Z: ospf_abr_announce_rtr(): "
 		     "this is inter-area route to %s", inet_ntoa (p->prefix));
 
-          if (area->area_id.s_addr != OSPF_AREA_BACKBONE)
+          if (!OSPF_IS_AREA_BACKBONE (area))
 	    ospf_abr_announce_rtr_to_area (p, or->cost, area);
 	}
 
@@ -619,7 +624,7 @@ ospf_abr_process_router_rt (struct route_table *rt)
 	  if (or == NULL)
 	    continue;
 
-	  if (!CHECK_FLAG (or->flags, ROUTER_LSA_EXTERNAL))
+	  if (!CHECK_FLAG (or->u.std.flags, ROUTER_LSA_EXTERNAL))
 	    {
 	      zlog_info ("Z: ospf_abr_process_router_rt(): "
 			 "This is not an ASBR, skipping");
@@ -643,7 +648,7 @@ ospf_abr_process_router_rt (struct route_table *rt)
 	  }
 
         if (or->path_type == OSPF_PATH_INTER_AREA &&
-            or->area != ospf_top->backbone)
+            or->u.std.area != ospf_top->backbone)
 	  {
 	    zlog_info ("Z: ospf_abr_process_router_rt(): "
 		       "This route is not a backbone one, skipping");
@@ -801,7 +806,7 @@ ospf_abr_announce_aggregates ()
                    */                  
 
                   if (ospf_area_is_transit (ar) &&
-                      (area->area_id.s_addr == OSPF_AREA_BACKBONE))
+		      OSPF_IS_AREA_BACKBONE (area))
 		    {
 		      zlog_info ("Z: ospf_abr_announce_aggregates(): Skipping "
 				 "announcement of BB aggregate into"
@@ -846,7 +851,7 @@ ospf_abr_announce_stub_defaults ()
       if (area->external_routing == OSPF_AREA_DEFAULT)
 	continue;
 
-      if (area->area_id.s_addr == OSPF_AREA_BACKBONE)
+      if (OSPF_IS_AREA_BACKBONE (area))
 	continue; /* Sanity Check */
 
       zlog_info ("Z: ospf_abr_announce_stub_defaults(): "

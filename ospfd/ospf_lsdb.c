@@ -17,7 +17,8 @@
  * You should have received a copy of the GNU General Public License
  * along with GNU Zebra; see the file COPYING.  If not, write to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.  */
+ * 02111-1307, USA.
+ */
 
 #include <zebra.h>
 
@@ -36,9 +37,9 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_spf.h"
@@ -246,8 +247,6 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
   int changed = 0;
   struct HashBacket *b;
 
-  zlog_info ("Z: ospf_lsdb_add():Start");
-
   if (lsdb == NULL)
     {
       zlog_info ("Z: ospf_lsdb_add():Hey, your LSDB is none!");
@@ -272,17 +271,15 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
 	  /* Set new LSA data. */
 	  lsa->ts = new->ts;
 	  lsa->originated = new->originated;
-/*	  lsa->data = ospf_lsa_data_dup (new->data);
-*/
           lsa->data = new->data;
-          ospf_ls_retransmit_delete_nbr_all(new);
+          ospf_ls_retransmit_delete_nbr_all (new);
 	  new->data = NULL;
           ospf_lsa_free(new);
 
           if (lsa->refresh_list)
              ospf_refresher_unregister_lsa (lsa);
 
-          zlog_info("Z: ospf_lsa_free() in ospf_lsdb_add().1: %x", new);
+          zlog_info("K: ospf_lsdb_add() use %x for %x", lsa, new);
 
 	  changed = 1;
 	}
@@ -402,8 +399,6 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
 	lsdb->count_self++;
     }
 
-  zlog_info ("Z: ospf_lsdb_add():Stop");
-
 /*  return new; */
 
   return lsa;
@@ -483,6 +478,7 @@ ospf_lsdb_lookup (struct ospf_lsdb *lsdb, struct in_addr rid,
   if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_HASH) ||
       CHECK_FLAG (lsdb->flags, OSPF_LSDB_LIST))
     {
+zlog_info ("T: ospf_lsa_new() in ospf_lsdb_lookup");
       lsa = ospf_lsa_new ();
       lsa->data = ospf_lsa_data_new (sizeof (struct lsa_header));
 

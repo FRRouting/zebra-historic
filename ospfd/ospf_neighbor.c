@@ -33,9 +33,9 @@
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_network.h"
 #include "ospfd/ospf_flood.h"
@@ -47,14 +47,15 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   /* Allcate new neighbor. */
   nbr = XMALLOC (MTYPE_OSPF_NEIGHBOR, sizeof (struct ospf_neighbor));
-  bzero (nbr, sizeof (struct ospf_neighbor));
+  memset (nbr, 0, sizeof (struct ospf_neighbor));
 
-  /* Relate neighbor to interface. */
+  /* Relate neighbor to the interface. */
   nbr->oi = oi;
 
   /* Set default values. */
   nbr->status = NSM_Down;
 
+  /* Set inheritance values. */
   nbr->v_inactivity = oi->v_wait;
   nbr->v_db_desc = oi->retransmit_interval;
   nbr->v_ls_req = oi->retransmit_interval;
@@ -70,9 +71,10 @@ ospf_nbr_new (struct ospf_interface *oi)
   /* Initialize lists. */
   nbr->ls_retransmit = list_init ();
   nbr->db_summary = list_init ();
-  nbr->ls_request = list_init ();
+  /* nbr->ls_request = list_init (); */
+  new_lsdb_init (&nbr->ls_req);
 
-  /* */
+  /* Start periodic timer thread ospf_ls_upd_timer (). */
   OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
 
   return nbr;
@@ -81,27 +83,34 @@ ospf_nbr_new (struct ospf_interface *oi)
 void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
+  /* Free retransmit list. */
   if (nbr->ls_retransmit != NULL && listcount (nbr->ls_retransmit))
     {
       ospf_ls_retransmit_clear (nbr);
       list_delete_all (nbr->ls_retransmit);
     }
-
+  /* Free DB summary list. */
   if (nbr->db_summary != NULL && listcount (nbr->db_summary))
     list_delete_all (nbr->db_summary);
 
-  if (nbr->ls_request != NULL && listcount (nbr->ls_request))
+  /* Free ls request list. */
+  if (ospf_ls_request_count (nbr))
     ospf_ls_request_delete_all (nbr);
 
-/*  if (nbr->host)
-    free (nbr->host); */
+  /* Clear last send packet. */
+  if (nbr->last_send)
+    ospf_packet_free (nbr->last_send);
 
-  /* Cancel threads. */
+  /* Cancel all timers. */
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
+  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+  OSPF_NSM_TIMER_OFF (nbr->t_ls_req);
+  OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
 
   XFREE (MTYPE_OSPF_NEIGHBOR, nbr);
 }
 
+/* Delete specified OSPF neighbor from interface. */
 void
 ospf_nbr_delete (struct ospf_neighbor *nbr)
 {
@@ -111,19 +120,29 @@ ospf_nbr_delete (struct ospf_neighbor *nbr)
 
   oi = nbr->oi;
 
+  /* Unlink ospf neighbor from the interface. */
   p.family = AF_INET;
   p.prefixlen = IPV4_MAX_BITLEN;
-  p.u.prefix4 = nbr->address.u.prefix4;
+  p.u.prefix4 = nbr->src;
 
-  ospf_nbr_free (nbr);
-
-  rn = route_node_get (oi->nbrs, &p);
-  if (rn != NULL)
+  rn = route_node_lookup (oi->nbrs, &p);
+  if (rn)
     {
-      rn->info = NULL;
-      while (rn->lock)
-	route_unlock_node (rn);
+      if (rn->info)
+	{
+	  rn->info = NULL;
+	  route_unlock_node (rn);
+	}
+      else
+	{
+	  zlog_info ("Can't find neighbor %s in the interface %s",
+		     inet_ntoa (nbr->src), oi->ifp->name);
+	}
+      route_unlock_node (rn);
     }
+
+  /* Free ospf_neighbor structure. */
+  ospf_nbr_free (nbr);
 }
 
 /* Check myself is in the neighbor list. */

@@ -1,5 +1,6 @@
-/* Zebra connect library for OSPFd
- * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro, Toshiaki Takada
+/*
+ * Zebra connect library for OSPFd
+ * Copyright (C) 1997, 98, 99, 2000 Kunihiro Ishiguro, Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  *
@@ -76,7 +77,8 @@ ospf_interface_state_up (int command, struct zebra *zebra, zebra_size_t length)
 
   ifp = zebra_interface_state_read (zclient->ibuf);
 
-  if (ifp == NULL) return 0;
+  if (ifp == NULL)
+    return 0;
 
   zlog_info ("Z: Interface state change to up: %s", ifp->name);
 
@@ -85,7 +87,6 @@ ospf_interface_state_up (int command, struct zebra *zebra, zebra_size_t length)
   return 0;
 }
 
-
 int
 ospf_interface_state_down (int command, struct zebra *zebra, zebra_size_t length)
 {
@@ -93,7 +94,8 @@ ospf_interface_state_down (int command, struct zebra *zebra, zebra_size_t length
 
   ifp = zebra_interface_state_read (zclient->ibuf);
 
-  if (ifp == NULL) return 0;
+  if (ifp == NULL)
+    return 0;
 
   zlog_info ("Z: Interface state change to down: %s", ifp->name);
 
@@ -101,8 +103,6 @@ ospf_interface_state_down (int command, struct zebra *zebra, zebra_size_t length
 
   return 0;
 }
-
-
 
 int
 ospf_interface_address_add (int command, struct zebra *zebra,
@@ -139,6 +139,7 @@ ospf_interface_address_delete (int command, struct zebra *zebra,
   return 0;
 }
 
+
 void
 ospf_zebra_add (struct prefix_ipv4 *p, struct in_addr *nexthop)
 {
@@ -163,7 +164,6 @@ ospf_zebra_add_discard (struct prefix_ipv4 *p)
   if (zclient->redist[ZEBRA_ROUTE_OSPF])
     zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
 		    p, &lo_addr, 0);
-
 }
 
 void
@@ -251,12 +251,19 @@ ospf_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       stream_get (&p.prefix, s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	ospf_asbr_route_add (type, &p, ifindex, nexthop);
+	{
+	  if (ospf_top->router_id.s_addr == 0)
+	    ospf_external_lsa_queue (type, p, ifindex, nexthop);
+	  else
+	    ospf_external_lsa_originate (type, &p, ifindex, nexthop);
+	}
+	/* ospf_asbr_route_add (type, &p, ifindex, nexthop); */
       else 
-	ospf_asbr_route_delete (type, &p, ifindex);
+	ospf_asbr_route_delete (type, &p, ifindex, nexthop);
     }
   return 0;
 }
+
 
 DEFUN (router_zebra,
        router_zebra_cmd,
@@ -348,11 +355,9 @@ DEFUN (ospf_redistribute_source,
   else
     return CMD_WARNING;
 
-
   return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
 				OSPF_EXT_METRIC_AUTO, 0);
 }
-
 
 DEFUN (ospf_redistribute_source_type,
        ospf_redistribute_source_type_cmd,
@@ -383,7 +388,6 @@ DEFUN (ospf_redistribute_source_type,
   else
     return CMD_WARNING;
 
-
   if (strncmp (argv[1], "1", 1) == 0)
     type = EXTERNAL_METRIC_TYPE_1;
   else if (strncmp (argv[1], "2", 1) == 0)
@@ -391,12 +395,9 @@ DEFUN (ospf_redistribute_source_type,
   else
     return CMD_WARNING;
 
-
   return ospf_redistribute_set (source, type,
 				OSPF_EXT_METRIC_AUTO, 0);
 }
-
-
 
 DEFUN (ospf_redistribute_source_metric,
        ospf_redistribute_source_metric_cmd,
@@ -427,18 +428,16 @@ DEFUN (ospf_redistribute_source_metric,
   else
     return CMD_WARNING;
 
-  metric = strtol(argv[1], NULL, 10);
-  if ((metric < 0) && (metric > 16777214)) {
+  metric = strtol (argv[1], NULL, 10);
+  if ((metric < 0) && (metric > 16777214))
+    {
       vty_out (vty, "OSPF metric value is invalid %s", VTY_NEWLINE);
       return CMD_WARNING;
-  }
-
+    }
 
   return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
 				OSPF_EXT_METRIC_STATIC, metric);
 }
-
-
 
 DEFUN (ospf_redistribute_source_type_metric,
        ospf_redistribute_source_type_metric_cmd,
@@ -481,10 +480,11 @@ DEFUN (ospf_redistribute_source_type_metric,
     return CMD_WARNING;
 
   metric = strtol(argv[2], NULL, 10);
-  if ((metric < 0) && (metric > 16777214)) {
+  if ((metric < 0) && (metric > 16777214))
+    {
       vty_out (vty, "OSPF metric value is invalid %s", VTY_NEWLINE);
       return CMD_WARNING;
-  }
+    }
 
   return ospf_redistribute_set (source, type,
 				OSPF_EXT_METRIC_STATIC, metric);
@@ -516,7 +516,6 @@ DEFUN (no_ospf_redistribute_source,
   else
     return CMD_WARNING;
 
-
   return ospf_redistribute_unset (source);
 }
 
@@ -532,8 +531,7 @@ DEFUN (no_ospf_redistribute_source_type,
        "BGP routes\n"
        "Set OSPF external metric type\n"
        "External type-1\n"
-       "External type-2\n"
-)
+       "External type-2\n")
 {
   int source;
 
@@ -556,8 +554,6 @@ DEFUN (no_ospf_redistribute_source_type,
 				ospf_top->dist_info[source].metric_value);
 }
 
-
-
 DEFUN (no_ospf_redistribute_source_metric,
        no_ospf_redistribute_source_metric_cmd,
        "no redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>",
@@ -569,12 +565,10 @@ DEFUN (no_ospf_redistribute_source_metric,
        "RIP routes\n"
        "BGP routes\n"
        "Set external metric"
-       "Metric value"
-)
+       "Metric value")
 {
   int source;
   u_int32_t metric = 0;
-
 
   if (strncmp (argv[0], "k", 1) == 0)
     source = ZEBRA_ROUTE_KERNEL;
@@ -590,18 +584,18 @@ DEFUN (no_ospf_redistribute_source_metric,
     return CMD_WARNING;
 
   metric = strtol(argv[1], NULL, 10);
-  if ((metric < 0) && (metric > 16777214)) {
+  if ((metric < 0) && (metric > 16777214))
+    {
       vty_out (vty, "OSPF metric value is invalid %s", VTY_NEWLINE);
       return CMD_WARNING;
-  }
+    }
 
 
   ospf_redistribute_unset (source);
-  return ospf_redistribute_set (source, ospf_top->dist_info[source].metric_type,
+  return ospf_redistribute_set (source,
+				ospf_top->dist_info[source].metric_type,
 				OSPF_EXT_METRIC_AUTO, 0);
 }
-
-
 
 DEFUN (no_ospf_redistribute_source_type_metric,
        no_ospf_redistribute_source_type_metric_cmd,
@@ -639,9 +633,6 @@ DEFUN (no_ospf_redistribute_source_type_metric,
   return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
 				OSPF_EXT_METRIC_AUTO, 0);
 }
-
-
-
 
 #if 0
 
@@ -881,7 +872,8 @@ ospf_acl_hook ()
       LIST_ITERATOR (ospf_top->areas, node)
 	{
 	  a = getdata (node);
-	  if (a == NULL) continue;
+	  if (a == NULL)
+	    continue;
 
 	  if (EXP_LIST_NAME (a))
 	    {

@@ -29,8 +29,8 @@
 /* RIP command list. */
 #define RIP_REQUEST                      1
 #define RIP_RESPONSE                     2
-#define RIP_TRACEON                      3	/* obsolete? */
-#define RIP_TRACEOFF                     4	/* obsolete? */
+#define RIP_TRACEON                      3	/* Obsolete */
+#define RIP_TRACEOFF                     4	/* Obsolete */
 #define RIP_POLL                         5
 #define RIP_POLL_ENTRY                   6
 #define RIP_COMMAND_MAX                  7

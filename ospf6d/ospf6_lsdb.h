@@ -63,9 +63,9 @@ void ospf6_remove_retrans (struct ospf6_lsa *, struct neighbor *);
 void ospf6_remove_retrans_all (struct neighbor *);
 
 void
-ospf6_add_delayed_ack (struct ospf6_lsa *, struct ospf6_if *);
+ospf6_add_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
 void
-ospf6_remove_delayed_ack (struct ospf6_lsa *, struct ospf6_if *);
+ospf6_remove_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
 
 void ospf6_lsdb_collect_type_advrtr (list, unsigned short,
                                      unsigned long, void *);
@@ -78,8 +78,8 @@ void ospf6_lsdb_remove (struct ospf6_lsa *);
 
 void ospf6_lsdb_init_neighbor (struct neighbor *);
 void ospf6_lsdb_finish_neighbor (struct neighbor *);
-void ospf6_lsdb_init_interface (struct ospf6_if *);
-void ospf6_lsdb_finish_interface (struct ospf6_if *);
+void ospf6_lsdb_init_interface (struct ospf6_interface *);
+void ospf6_lsdb_finish_interface (struct ospf6_interface *);
 void ospf6_lsdb_init_area (struct area *);
 void ospf6_lsdb_finish_area (struct area *);
 void ospf6_lsdb_init_as (struct ospf6 *);
@@ -87,9 +87,12 @@ void ospf6_lsdb_finish_as (struct ospf6 *);
 
 void ospf6_lsdb_install (struct ospf6_lsa *);
 
-void ospf6_lsdb_maxage_remove_interface (struct ospf6_if *);
+void ospf6_lsdb_maxage_remove_interface (struct ospf6_interface *);
 void ospf6_lsdb_maxage_remove_area (struct area *);
 void ospf6_lsdb_maxage_remove_as (struct ospf6 *);
+void ospf6_lsdb_check_maxage_lsa (struct ospf6 *);
+
+void ospf6_lsdb_interface_update (struct ospf6_interface *);
 
 #endif /* OSPF6_LSDB_H */
 

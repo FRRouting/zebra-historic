@@ -43,7 +43,7 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   l = list_init ();
 
   /* add as scope LSAs to summarylist */
-  scope = (void *) nbr->ospf6_if->area->ospf6;
+  scope = (void *) nbr->ospf6_interface->area->ospf6;
 
     /* add AS-external-LSAs */
   ospf6_lsdb_collect_type (l, htons (LST_AS_EXTERNAL_LSA), scope);
@@ -60,7 +60,7 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   list_delete_all_node (l);
 
   /* add area scope LSAs to summarylist */
-  scope = (void *) nbr->ospf6_if->area;
+  scope = (void *) nbr->ospf6_interface->area;
 
     /* add Router-LSAs */
   ospf6_lsdb_collect_type (l, htons (LST_ROUTER_LSA), scope);
@@ -105,7 +105,7 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   list_delete_all_node (l);
 
   /* add interface scope LSAs to summarylist */
-  scope = (void *) nbr->ospf6_if;
+  scope = (void *) nbr->ospf6_interface;
 
     /* add Link-LSAs */
   ospf6_lsdb_collect_type (l, htons (LST_LINK_LSA), scope);
@@ -158,13 +158,13 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
       switch (ospf6_lsa_get_scope_type (received->lsa_hdr->lsh_type))
         {
           case SCOPE_LINKLOCAL:
-            scope = (void *) nbr->ospf6_if;
+            scope = (void *) nbr->ospf6_interface;
             break;
           case SCOPE_AREA:
-            scope = (void *) nbr->ospf6_if->area;
+            scope = (void *) nbr->ospf6_interface->area;
             break;
           case SCOPE_AS:
-            scope = (void *) nbr->ospf6_if->area->ospf6;
+            scope = (void *) nbr->ospf6_interface->area->ospf6;
             break;
           case SCOPE_RESERVED:
           default:
@@ -258,20 +258,20 @@ direct_acknowledge (struct ospf6_lsa *lsa)
   attach_lsa_hdr_to_iov (lsa, directack);
 
   /* age update and add InfTransDelay */
-  ospf6_age_update_to_send (lsa, lsa->from->ospf6_if);
+  ospf6_age_update_to_send (lsa, lsa->from->ospf6_interface);
 
   /* send unicast packet to neighbor's ipaddress */
   ospf6_message_send (MSGT_LSACK, directack, &lsa->from->hisaddr.sin6_addr,
-                      lsa->from->ospf6_if->ifid);
+                      lsa->from->ospf6_interface->if_id);
 }
 
 /* Delayed  acknowledgement */
 void
 delayed_acknowledge (struct ospf6_lsa *lsa)
 {
-  struct ospf6_if *o6if = NULL;
+  struct ospf6_interface *o6if = NULL;
 
-  o6if = lsa->from->ospf6_if;
+  o6if = lsa->from->ospf6_interface;
   assert (o6if);
 
   /* attach delayed acknowledge list */
@@ -280,9 +280,10 @@ delayed_acknowledge (struct ospf6_lsa *lsa)
   /* if not yet, schedule delayed acknowledge RxmtInterval later */
     /* timers should be *less than* RxmtInterval
        or needless retrans will ensue */
-  if (o6if->send_ack == (struct thread *)NULL)
-    o6if->send_ack = thread_add_timer (master, ospf6_send_lsack_delayed,
-                                        o6if, o6if->rxmt_interval - 1);
+  if (o6if->thread_send_lsack_delayed == (struct thread *) NULL)
+    o6if->thread_send_lsack_delayed
+      = thread_add_timer (master, ospf6_send_lsack_delayed,
+                          o6if, o6if->rxmt_interval - 1);
 
   return;
 }
@@ -316,13 +317,13 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   switch (ospf6_lsa_get_scope_type (received->lsa_hdr->lsh_type))
     {
       case SCOPE_LINKLOCAL:
-        scope = (void *) from->ospf6_if;
+        scope = (void *) from->ospf6_interface;
         break;
       case SCOPE_AREA:
-        scope = (void *) from->ospf6_if->area;
+        scope = (void *) from->ospf6_interface->area;
         break;
       case SCOPE_AS:
-        scope = (void *) from->ospf6_if->area->ospf6;
+        scope = (void *) from->ospf6_interface->area->ospf6;
         break;
       case SCOPE_RESERVED:
       default:
@@ -380,9 +381,9 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
                               lsh->lsh_advrtr, received->scope))
         {
           if (!count_nbr_in_state (NBS_EXCHANGE,
-                                   received->from->ospf6_if->area) &&
+                                   received->from->ospf6_interface->area) &&
               !count_nbr_in_state (NBS_LOADING,
-                                  received->from->ospf6_if->area))
+                                  received->from->ospf6_interface->area))
             {
               /* log */
               if (IS_OSPF6_DUMP_DBEX)
@@ -557,10 +558,10 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
             return;
           }
         update->lsupdate_num = ntohl (1);
-        ospf6_age_update_to_send (have, received->from->ospf6_if);
+        ospf6_age_update_to_send (have, received->from->ospf6_interface);
         attach_lsa_to_iov (have, iov);
         ospf6_message_send (MSGT_LSUPDATE, iov, &dst.sin6_addr,
-                            received->from->ospf6_if->ifid);
+                            received->from->ospf6_interface->if_id);
         iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
 
         if (IS_OSPF6_DUMP_DBEX)
@@ -578,12 +579,12 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
 int 
 ack_type (struct ospf6_lsa *newp, int ismore_recent)
 {
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
   struct neighbor *nbr;
   listnode n, m;
 
-  assert (newp->from && newp->from->ospf6_if);
-  ospf6_if = newp->from->ospf6_if;
+  assert (newp->from && newp->from->ospf6_interface);
+  ospf6_interface = newp->from->ospf6_interface;
 
   if (ospf6_lsa_test_flag (newp, OSPF6_LSA_FLOODBACK))
     {
@@ -593,10 +594,10 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent)
   else if (ismore_recent < 0
            && !(ospf6_lsa_test_flag (newp, OSPF6_LSA_FLOODBACK)))
     {
-      if (ospf6_if->state == IFS_BDR)
+      if (ospf6_interface->state == IFS_BDR)
         {
           zlog_info ("    : I'm BDR");
-          if (ospf6_if->dr == newp->from->rtr_id)
+          if (ospf6_interface->dr == newp->from->rtr_id)
             {
               zlog_info ("    : this is from DR");
               return DELAYED_ACK;
@@ -616,9 +617,9 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent)
            && ospf6_lsa_test_flag (newp, OSPF6_LSA_IMPLIEDACK))
     {
       zlog_info ("    : is duplicate && implied");
-      if (ospf6_if->state == IFS_BDR)
+      if (ospf6_interface->state == IFS_BDR)
         {
-          if (ospf6_if->dr == newp->from->rtr_id)
+          if (ospf6_interface->dr == newp->from->rtr_id)
             {
               zlog_info ("    : is from DR");
               return DELAYED_ACK;
@@ -646,11 +647,11 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent)
         {
           /* no current instance in lsdb */
 
-          for (n = listhead (newp->from->ospf6_if->area->if_list);
+          for (n = listhead (newp->from->ospf6_interface->area->if_list);
                n; nextnode (n))
             {
-              ospf6_if = (struct ospf6_if *) getdata (n);
-              for (m = listhead (ospf6_if->nbr_list);
+              ospf6_interface = (struct ospf6_interface *) getdata (n);
+              for (m = listhead (ospf6_interface->neighbor_list);
                    m;
                    nextnode (m))
                 {
@@ -667,7 +668,7 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent)
 }
 
 void
-ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_interface *o6if)
 {
   struct neighbor *nbr = (struct neighbor *)NULL;
   int ismore_recent, addretrans = 0;
@@ -678,7 +679,7 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
   struct ospf6_lsa *req;
 
   /* (1) for each neighbor */
-  for (n = listhead (o6if->nbr_list); n; nextnode (n))
+  for (n = listhead (o6if->neighbor_list); n; nextnode (n))
     {
       nbr = (struct neighbor *) getdata (n);
 
@@ -726,7 +727,7 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
       if (nbr->send_update == (struct thread *) NULL)
         nbr->send_update = thread_add_timer (master,
                                              ospf6_send_lsupdate_retrans, nbr,
-                                             nbr->ospf6_if->rxmt_interval);
+                                             nbr->ospf6_interface->rxmt_interval);
     }
 
   /* (2) */
@@ -736,7 +737,7 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
                   o6if->interface->name);
       return; /* examin next interface */
     }
-  else if (lsa->from && lsa->from->ospf6_if == o6if)
+  else if (lsa->from && lsa->from->ospf6_interface == o6if)
     {
       o6log.dbex ("flooding %s is floodback",
                   o6if->interface->name);
@@ -747,16 +748,16 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
     o6log.dbex ("flood %s", o6if->interface->name);
 
   /* (3) */
-  if (lsa->from && lsa->from->ospf6_if == o6if)
+  if (lsa->from && lsa->from->ospf6_interface == o6if)
     {
       /* if from DR or BDR, don't need to flood this interface */
-      if (lsa->from->rtr_id == lsa->from->ospf6_if->dr ||
-          lsa->from->rtr_id == lsa->from->ospf6_if->bdr)
+      if (lsa->from->rtr_id == lsa->from->ospf6_interface->dr ||
+          lsa->from->rtr_id == lsa->from->ospf6_interface->bdr)
         return; /* examin next interface */
     }
 
   /* (4) if I'm BDR, DR will flood this interface */
-  if (lsa->from && lsa->from->ospf6_if == o6if
+  if (lsa->from && lsa->from->ospf6_interface == o6if
       && o6if->state == IFS_BDR)
     return; /* examin next interface */
 
@@ -775,7 +776,7 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
   dst.sin6_len = sizeof (struct sockaddr_in6);
 #endif /* SIN6_LEN */
 #ifdef HAVE_SIN6_SCOPE_ID
-  dst.sin6_scope_id = if_nametoindex (nbr->ospf6_if->interface->name);
+  dst.sin6_scope_id = if_nametoindex (nbr->ospf6_interface->interface->name);
 #endif /* HAVE_SIN6_SCOPE_ID */
   if (if_is_broadcast (o6if->interface))
     {
@@ -814,7 +815,7 @@ void
 ospf6_lsa_flood_area (struct ospf6_lsa *lsa, struct area *area)
 {
   listnode n;
-  struct ospf6_if *ospf6_if;
+  struct ospf6_interface *ospf6_interface;
 
   assert (lsa && lsa->lsa_hdr && area);
   o6log.dbex ("flooding %s in area %s", print_lsahdr (lsa->lsa_hdr),
@@ -823,8 +824,8 @@ ospf6_lsa_flood_area (struct ospf6_lsa *lsa, struct area *area)
   /* for each eligible ospf_ifs */
   for (n = listhead (area->if_list); n; nextnode (n))
     {
-      ospf6_if = (struct ospf6_if *)getdata (n);
-      ospf6_lsa_flood_interface (lsa, ospf6_if);
+      ospf6_interface = (struct ospf6_interface *)getdata (n);
+      ospf6_lsa_flood_interface (lsa, ospf6_interface);
     }
 
   return;
@@ -855,14 +856,14 @@ ospf6_lsa_flood (struct ospf6_lsa *lsa)
 {
   unsigned short scope_type;
   struct area *area;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct ospf6 *ospf6;
 
   scope_type = ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type);
   switch (scope_type)
     {
       case SCOPE_LINKLOCAL:
-        o6if = (struct ospf6_if *) lsa->scope;
+        o6if = (struct ospf6_interface *) lsa->scope;
         assert (o6if);
         ospf6_lsa_flood_interface (lsa, o6if);
         return;

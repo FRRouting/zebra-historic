@@ -106,6 +106,11 @@ prefix_copy (struct prefix *dest, struct prefix *src)
   else if (src->family == AF_INET6)
     dest->u.prefix6 = src->u.prefix6;
 #endif /* HAVE_IPV6 */
+  else if (src->family == AF_UNSPEC)
+    {
+      dest->u.lp.id = src->u.lp.id;
+      dest->u.lp.adv_router = src->u.lp.adv_router;
+    }
   else
     {
       zlog (NULL, LOG_INFO, "prefix_copy(): Unknown address family %d",
@@ -167,9 +172,10 @@ prefix_family_str (struct prefix *p)
 {
   if (p->family == AF_INET)
     return "inet";
+#ifdef HAVE_IPV6
   if (p->family == AF_INET6)
     return "inet6";
-
+#endif /* HAVE_IPV6 */
   return "unspec";
 }
 
@@ -630,3 +636,35 @@ all_digit (char *str)
       return 0;
   return 1;
 }
+
+/* Utility function to convert ipv4 prefixes to Classful prefixes */
+void apply_classful_mask_ipv4 (struct prefix_ipv4 *p)
+{
+
+  u_int32_t destination;
+  
+  destination = ntohl (p->prefix.s_addr);
+  
+  if (destination & 0x000000ff) 
+    {
+     p->prefixlen=32;
+    }
+  else if (IN_CLASSC (destination)) 
+    {
+      p->prefixlen=24;
+      apply_mask_ipv4(p);
+    }
+  else if (IN_CLASSB(destination)) 
+    {
+      p->prefixlen=16;
+      apply_mask_ipv4(p);
+    }
+  else 
+    {
+      p->prefixlen=8;
+      apply_mask_ipv4(p);
+    }
+}
+
+  
+

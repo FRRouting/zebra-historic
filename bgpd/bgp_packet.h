@@ -31,7 +31,7 @@ void bgp_keepalive_send (struct peer *);
 void bgp_open_send (struct peer *);
 void bgp_notify_send (struct peer *, u_char, u_char);
 void bgp_notify_send_with_data (struct peer *, u_char, u_char, u_char *, size_t);
-void bgp_update_send (struct peer_conf *, struct peer *, struct prefix *, struct attr *, u_int16_t, u_char);
+void bgp_update_send (struct peer_conf *, struct peer *, struct prefix *, struct attr *, u_int16_t, u_char, struct peer *);
 void bgp_withdraw_send (struct peer *, struct prefix *, afi_t, safi_t);
 void bgp_route_refresh_send (struct peer *, afi_t, safi_t);
 

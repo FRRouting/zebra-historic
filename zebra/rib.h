@@ -55,7 +55,7 @@ struct rib
     struct in6_addr gate6;
 #endif
     unsigned int ifindex;
-    char *ifname;
+    /* char *ifname; */
   } u;
   struct
   {
@@ -64,7 +64,7 @@ struct rib
     struct in6_addr gate6;
 #endif
     unsigned int ifindex;
-    char *ifname;
+    /* char *ifname; */
   } i;
 
   struct rib *next;

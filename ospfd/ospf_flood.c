@@ -1,6 +1,6 @@
 /*
  * OSPF Flooding -- RFC2328 Section 13.
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  * 
@@ -33,9 +33,9 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_spf.h"
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_packet.h"
@@ -204,7 +204,6 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
 {
   listnode node;
 
-  zlog_info ("Z: ospf_flood_through_area(): start");
   for (node = listhead (area->iflist); node; nextnode (node))
     {
       struct interface *ifp;
@@ -215,8 +214,9 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
       int flag;
 
       ifp = getdata (node);
-      zlog_info ("Z: ospf_flood_through_area(): considering int %s",
-		 ifp->name);
+      if (ospf_zlog)
+	zlog_info ("Z: ospf_flood_through_area(): considering int %s",
+		   ifp->name);
       oi = ifp->info;
 
       if (!ospf_if_is_enable (ifp))
@@ -236,8 +236,9 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
 	    continue;
 
 	  onbr = rn->info;
-          zlog_info ("Z: ospf_flood_through_area(): considering nbr %s",
-		     inet_ntoa (onbr->router_id));
+	  if (ospf_zlog)
+	    zlog_info ("Z: ospf_flood_through_area(): considering nbr %s",
+		       inet_ntoa (onbr->router_id));
 
 	  /* If the neighbor is in a lesser state than Exchange, it
 	     does not participate in flooding, and the next neighbor
@@ -253,7 +254,8 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
 	     already.  Compare the new LSA to the neighbor's copy: */
 	  if (onbr->status < NSM_Full)
 	    {
-              zlog_info ("Z: ospf_flood_through_area(): nbr adj is not Full");
+	      if (ospf_zlog)
+		zlog_info ("Z: ospf_flood_through_area(): nbr adj is not Full");
 
 	      ls_req = ospf_ls_request_lookup (onbr, lsa);
 	      if (ls_req != NULL)
@@ -275,8 +277,10 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
 		  /* The new LSA is more recent.  Delete the LSA
 		     from the Link state request list. */
 		  else
-		    ospf_ls_request_delete (onbr, ls_req);
-                    ospf_check_nbr_loading (onbr);
+		    {
+		      ospf_ls_request_delete (onbr, ls_req);
+		      ospf_check_nbr_loading (onbr);
+		    }
 		}
 	    }
 
@@ -330,8 +334,8 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
 	 value of MaxAge). */
          if (flag)
 	   {
-	     zlog_info ("Z: ospf_flood_through_area(): sending upd to int %s",
-			oi->ifp->name);
+	     if (ospf_zlog)
+	       zlog_info ("Z: ospf_flood_through_area(): sending upd to int %s", oi->ifp->name);
 	     update = list_init ();
 	     list_add_node (update, lsa);
 
@@ -340,7 +344,6 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
 	     list_free (update);
 	   }
     }
-  zlog_info ("Z: ospf_flood_through_area(): stop");
 }
 
 void
@@ -380,30 +383,183 @@ ospf_flood_through (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
 }
 
 
-/* Management functions for neighbor's ls-request list. */
-
-struct ospf_lsa *
-ospf_ls_request_new (struct lsa_header *lsah)
+#if 1
+void
+tmp_log ( char *str, struct ospf_lsa *lsa)
 {
-  struct ospf_lsa *new;
-
-  new = ospf_lsa_new ();
-  zlog_info("Z: ospf_lsa_new() in ospf_ls_request_new(): %x", new);
-  new->data = ospf_lsa_data_new (OSPF_LSA_HEADER_SIZE);
-  memcpy (new->data, lsah, OSPF_LSA_HEADER_SIZE);
-
-  return new;
+  return;
+  printf ("%s %s ", str, inet_ntoa (lsa->data->id));
+  printf ("%s\n", inet_ntoa (lsa->data->adv_router));
 }
 
 void
-ospf_ls_request_free (struct ospf_lsa *lsa)
+new_lsdb_init (struct new_lsdb *lsdb)
 {
-  assert (lsa);
-
-  ospf_lsa_free (lsa);
-  zlog_info("Z: ospf_lsa_free() in ospf_ls_request_free(): %x", lsa);
+  lsdb->type[1].db = route_table_init ();
+  lsdb->type[2].db = route_table_init ();
+  lsdb->type[3].db = route_table_init ();
+  lsdb->type[4].db = route_table_init ();
+  lsdb->type[5].db = route_table_init ();
 }
 
+void
+lsdb_prefix_set (struct prefix_ls *lp, struct ospf_lsa *lsa)
+{
+  memset (lp, 0, sizeof (struct prefix_ls));
+  lp->family = 0;
+  lp->prefixlen = 64;
+  lp->id = lsa->data->id;
+  lp->adv_router = lsa->data->adv_router;
+}
+
+/* Add new LSA to lsdb. */
+void
+new_lsdb_add (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
+{
+  struct route_table *table;
+  struct prefix_ls lp;
+  struct route_node *rn;
+
+  table = lsdb->type[lsa->data->type].db;
+  lsdb_prefix_set (&lp, lsa);
+  rn = route_node_get (table, (struct prefix *)&lp);
+  if (! rn->info)
+    {
+      lsdb->type[lsa->data->type].count++;
+      lsdb->total++;
+    }
+  /*
+  else
+    ospf_lsa_free (rn->info);
+  */
+  rn->info = lsa;
+  tmp_log ("add", lsa);
+}
+
+void
+new_lsdb_delete (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
+{
+  struct route_table *table;
+  struct prefix_ls lp;
+  struct route_node *rn;
+
+  table = lsdb->type[lsa->data->type].db;
+  lsdb_prefix_set (&lp, lsa);
+  rn = route_node_lookup (table, (struct prefix *) &lp);
+  if (rn)
+    {
+      rn->info = NULL;
+      route_unlock_node (rn);
+      route_unlock_node (rn);
+      /* ospf_lsa_free (lsa); */
+      lsdb->type[lsa->data->type].count--;
+      lsdb->total--;
+      tmp_log ("delete", lsa);
+      return;
+    }
+  tmp_log ("can't delete", lsa);
+}
+
+void
+new_lsdb_delete_all (struct new_lsdb *lsdb)
+{
+  struct route_table *table;
+  struct route_node *rn;
+  struct ospf_lsa *lsa;
+  int i;
+
+  for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
+    {
+      table = lsdb->type[i].db;
+      for (rn = route_top (table); rn; rn = route_next (rn))
+	if ((lsa = (rn->info)) != NULL)
+	  {
+	    rn->info = NULL;
+	    route_unlock_node (rn);
+	    ospf_lsa_free (lsa);
+	    lsdb->type[i].count--;
+	    lsdb->total--;
+	  }
+    }
+}
+
+struct ospf_lsa *
+new_lsdb_lookup (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
+{
+  struct route_table *table;
+  struct prefix_ls lp;
+  struct route_node *rn;
+  struct ospf_lsa *find;
+
+  table = lsdb->type[lsa->data->type].db;
+  lsdb_prefix_set (&lp, lsa);
+  rn = route_node_lookup (table, (struct prefix *) &lp);
+  if (rn)
+    {
+      find = rn->info;
+      route_unlock_node (rn);
+      tmp_log ("lookup", lsa);
+      return find;
+    }
+  tmp_log ("can't lookup", lsa);
+  return NULL;
+}
+
+unsigned long
+new_lsdb_count (struct new_lsdb *lsdb)
+{
+  return lsdb->total;
+}
+
+unsigned long
+new_lsdb_isempty (struct new_lsdb *lsdb)
+{
+  return (lsdb->total == 0);
+}
+
+void
+ospf_ls_request_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+{
+  new_lsdb_add (&nbr->ls_req, lsa);
+}
+
+unsigned long
+ospf_ls_request_count (struct ospf_neighbor *nbr)
+{
+  return new_lsdb_count (&nbr->ls_req);
+}
+
+int
+ospf_ls_request_isempty (struct ospf_neighbor *nbr)
+{
+  return new_lsdb_isempty (&nbr->ls_req);
+}
+
+/* Remove LSA from neighbor's ls-request list. */
+void
+ospf_ls_request_delete (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+{
+  if (nbr->ls_req_last == lsa)
+    nbr->ls_req_last = NULL;
+  new_lsdb_delete (&nbr->ls_req, lsa);
+  ospf_lsa_free (lsa);
+}
+
+/* Remove all LSA from neighbor's ls-requenst list. */
+void
+ospf_ls_request_delete_all (struct ospf_neighbor *nbr)
+{
+  nbr->ls_req_last = NULL;
+  new_lsdb_delete_all (&nbr->ls_req);
+}
+
+/* Lookup LSA from neighbor's ls-request list. */
+struct ospf_lsa *
+ospf_ls_request_lookup (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+{
+  return new_lsdb_lookup (&nbr->ls_req, lsa);
+}
+#else
 /* Add LSA header to be requested to neighbor's ls-request list. */
 void
 ospf_ls_request_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
@@ -411,14 +567,24 @@ ospf_ls_request_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
   list_add_node (nbr->ls_request, lsa);
 }
 
+unsigned long
+ospf_ls_request_count (struct ospf_neighbor *nbr)
+{
+  return listcount (nbr->ls_request);
+}
+
+int
+ospf_ls_request_isempty (struct ospf_neighbor *nbr)
+{
+  return list_isempty (nbr->ls_request);
+}
+
 /* Remove LSA header from neighbor's ls-request list. */
 void
 ospf_ls_request_delete (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 {
-  ospf_lsa_free (lsa);
-  zlog_info("Z: ospf_lsa_free() in ospf_ls_request_delete(): %x", lsa);
-
   list_delete_by_val (nbr->ls_request, lsa);
+  ospf_lsa_free (lsa);
 }
 
 /* Remove all LSA header from neighbor's ls-requenst list. */
@@ -427,7 +593,7 @@ ospf_ls_request_delete_all (struct ospf_neighbor *nbr)
 {
   listnode node;
 
-  for (node = listhead (nbr->ls_request); node; nextnode (node))
+  while ((node = listhead (nbr->ls_request)) != NULL)
     ospf_ls_request_delete (nbr, node->data);
 }
 
@@ -450,7 +616,29 @@ ospf_ls_request_lookup (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 
   return NULL;
 }
+#endif /* NEW_LS_REQUEST */
 
+/* Management functions for neighbor's ls-request list. */
+
+struct ospf_lsa *
+ospf_ls_request_new (struct lsa_header *lsah)
+{
+  struct ospf_lsa *new;
+
+zlog_info ("T: ospf_lsa_new() in ospf_ls_request_new");
+  new = ospf_lsa_new ();
+  new->data = ospf_lsa_data_new (OSPF_LSA_HEADER_SIZE);
+  memcpy (new->data, lsah, OSPF_LSA_HEADER_SIZE);
+
+  return new;
+}
+
+void
+ospf_ls_request_free (struct ospf_lsa *lsa)
+{
+  assert (lsa);
+  ospf_lsa_free (lsa);
+}
 
 /* Management functions for neighbor's ls-retransmit list. */
 
@@ -512,18 +700,20 @@ void
 ospf_ls_retransmit_clear (struct ospf_neighbor *nbr)
 {
   listnode node;
+  listnode next;
   struct ospf_lsa *lsa;
 
 #ifdef DEBUG
   debug_ospf_ls_retransmit (nbr);
 #endif /* DEBUG */
-  for (node = listhead (nbr->ls_retransmit); node; nextnode (node))
+  for (node = listhead (nbr->ls_retransmit); node; node = next)
     {
       lsa = getdata (node);
+      next = node->next;
 
       if (lsa->ref)
 	lsa->ref--;
-      node->data = NULL;
+      list_delete_by_val (nbr->ls_retransmit, lsa);
     }
 #ifdef DEBUG
   debug_ospf_ls_retransmit (nbr);
@@ -543,7 +733,8 @@ ospf_ls_retransmit_lookup (struct ospf_neighbor *nbr, struct lsa_header *lsah)
 
       if (lsr->data->type == lsah->type &&
 	  IPV4_ADDR_SAME (&lsr->data->id, &lsah->id) &&
-	  IPV4_ADDR_SAME (&lsr->data->adv_router, &lsah->adv_router))
+	  IPV4_ADDR_SAME (&lsr->data->adv_router, &lsah->adv_router) &&
+	  lsr->data->ls_seqnum == lsah->ls_seqnum)
 	return lsr;
     }
 
@@ -644,4 +835,3 @@ ospf_lsa_flush_as (struct ospf_lsa *lsa)
   ospf_flood_through_as (NULL, lsa);
   ospf_lsa_maxage (lsa);
 }
-

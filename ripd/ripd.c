@@ -1278,7 +1278,7 @@ rip_write_rte (int num, struct stream *s, struct prefix_ipv4 *p,
       stream_put_ipv4 (s, p->prefix.s_addr);
       stream_put_ipv4 (s, 0);
       stream_put_ipv4 (s, 0);
-      stream_putl (s, rinfo->metric);
+      stream_putl (s, rinfo->metric_out);
     }
   else
     {
@@ -1305,6 +1305,7 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
   struct route_node *rp;
   struct rip_info *rinfo;
   struct rip_interface *ri;
+  struct prefix_ipv4 *ppref_ipv4;
   struct prefix_ipv4 *p;
   int num;
   int rtemax;
@@ -1333,7 +1334,26 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
   for (rp = route_top (rip->table); rp; rp = route_next (rp))
     if ((rinfo = rp->info) != NULL)
       {
+        /* Some inheritance stuff:                                          */
+	/* Before we process with ipv4 prefix we should mask it             */
+	/* with Classful mask if we send RIPv1 packet.That's because        */
+	/* user could set non-classful mask or we could get it by RIPv2     */
+	/* or other protocol. checked with Cisco's way of life :)             */
+	
+	if (version == RIPv1){
+	  ppref_ipv4 = XMALLOC (MTYPE_PREFIX_IPV4, sizeof (struct prefix_ipv4));
+	  memcpy(ppref_ipv4,(struct prefix_ipv4 *)&rp->p,sizeof (struct prefix_ipv4));
+	  zlog_info("%s/%d before RIPv1 mask check ",
+		    inet_ntoa (ppref_ipv4->prefix), ppref_ipv4->prefixlen);
+	  apply_classful_mask_ipv4(ppref_ipv4);
+	  p = ppref_ipv4;
+	  zlog_info("%s/%d after RIPv1 mask check",
+		    inet_ntoa (p->prefix), p->prefixlen);
+	}
+	else {
+	  ppref_ipv4 = NULL;
 	  p = (struct prefix_ipv4 *) &rp->p;
+	}
 
 	  /* Apply output filters. */
 	  if (ri->list[RIP_FILTER_OUT])
@@ -1423,6 +1443,10 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 
   /* Statistics updates. */
   ri->sent_updates++;
+  /* Freeing memory */
+  if (ppref_ipv4){
+    XFREE(MTYPE_PREFIX_IPV4,ppref_ipv4);
+  }
 }
 
 /* Send RIP packet to the interface. */

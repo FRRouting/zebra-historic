@@ -74,14 +74,14 @@ unsigned int
 count_nbr_in_state (state_t state, struct area *area)
 {
   listnode n, o;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct neighbor *nbr;
   unsigned int count = 0;
 
   for (n = listhead (area->if_list); n; nextnode (n))
     {
-      o6if = (struct ospf6_if *) getdata (n);
-      for (o = listhead (o6if->nbr_list); o; nextnode (o))
+      o6if = (struct ospf6_interface *) getdata (n);
+      for (o = listhead (o6if->neighbor_list); o; nextnode (o))
         {
           nbr = (struct neighbor *) getdata (o);
           if (nbr->state == state)
@@ -109,14 +109,14 @@ neighbor_new ()
 
 /* Make new neighbor structure */
 struct neighbor *
-make_neighbor (rtr_id_t rtr_id, struct ospf6_if *ospf6_if)
+make_neighbor (rtr_id_t rtr_id, struct ospf6_interface *ospf6_interface)
 {
   struct neighbor *nbr = neighbor_new ();
 
   if (!nbr)
     return (struct neighbor *)NULL;
   nbr->state = NBS_DOWN;
-  nbr->ospf6_if = ospf6_if;
+  nbr->ospf6_interface = ospf6_interface;
   nbr->rtr_id = rtr_id;
   inet_ntop (AF_INET, &rtr_id, nbr->str, sizeof (nbr->str));
   nbr->inactivity_timer = (struct thread *)NULL;
@@ -125,22 +125,22 @@ make_neighbor (rtr_id_t rtr_id, struct ospf6_if *ospf6_if)
   nbr->retranslist = list_init ();
   nbr->requestlist = list_init ();
   nbr->direct_ack = list_init ();
-  list_add_node (ospf6_if->nbr_list, nbr);
+  list_add_node (ospf6_interface->neighbor_list, nbr);
 
   return nbr;
 }
 
-/* delete neighbor from ospf6_if nbr_list */
+/* delete neighbor from ospf6_interface nbr_list */
 void
-delete_neighbor (struct neighbor *nbr, struct ospf6_if *ospf6_if)
+delete_neighbor (struct neighbor *nbr, struct ospf6_interface *ospf6_interface)
 {
   /* xxx not yet */
   return;
 }
 
-/* delete all neighbor on ospf6_if nbr_list */
+/* delete all neighbor on ospf6_interface nbr_list */
 void
-delete_all_neighbors (struct ospf6_if *ospf6_if)
+delete_all_neighbors (struct ospf6_interface *ospf6_interface)
 {
   /* xxx not yet */
   return;
@@ -151,12 +151,12 @@ delete_all_neighbors (struct ospf6_if *ospf6_if)
 /* lookup neighbor from OSPF6 interface.
    because neighbor may appear on two different OSPF interface */
 struct neighbor *
-nbr_lookup (rtr_id_t rtr_id, struct ospf6_if *o6if)
+nbr_lookup (rtr_id_t rtr_id, struct ospf6_interface *o6if)
 {
   struct neighbor *nbr;
   listnode k;
 
-  for (k = listhead (o6if->nbr_list); k; nextnode (k))
+  for (k = listhead (o6if->neighbor_list); k; nextnode (k))
     {
       nbr = (struct neighbor *)getdata (k);
       if (nbr->rtr_id == rtr_id)
@@ -185,8 +185,8 @@ show_nbr (struct vty *vty, struct neighbor *nbr)
   inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
   vty_out (vty, "%-15s %6lu %-8s %-15s %-15s %s[%s]%s",
            rtrid, nbr->ifid, nbs_name[nbr->state], dr, bdr,
-           nbr->ospf6_if->interface->name,
-           ifs_name[nbr->ospf6_if->state],
+           nbr->ospf6_interface->interface->name,
+           ifs_name[nbr->ospf6_interface->state],
 	   VTY_NEWLINE);
   return 0;
 }
@@ -207,8 +207,8 @@ ospf6_neighbor_vty_summary (struct vty *vty, struct neighbor *nbr)
   inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
   vty_out (vty, "%-15s %6lu %-8s %-15s %-15s %s[%s]%s",
            rtrid, nbr->ifid, nbs_name[nbr->state], dr, bdr,
-           nbr->ospf6_if->interface->name,
-           ifs_name[nbr->ospf6_if->state],
+           nbr->ospf6_interface->interface->name,
+           ifs_name[nbr->ospf6_interface->state],
 	   VTY_NEWLINE);
 }
 
@@ -220,9 +220,9 @@ ospf6_neighbor_vty (struct vty *vty, struct neighbor *o6n)
   vty_out (vty, " Neighbor %s, interface address %s%s",
                 o6n->str, hisaddr, VTY_NEWLINE);
   vty_out (vty, "    In the area %s via interface %s(ifindex %d)%s",
-                o6n->ospf6_if->area->str,
-                o6n->ospf6_if->interface->name,
-                o6n->ospf6_if->interface->ifindex,
+                o6n->ospf6_interface->area->str,
+                o6n->ospf6_interface->interface->name,
+                o6n->ospf6_interface->interface->ifindex,
                 VTY_NEWLINE);
   vty_out (vty, "    Neighbor priority is %d, State is %s, %d state changes%s",
                 o6n->rtr_pri, nbs_name[o6n->state],

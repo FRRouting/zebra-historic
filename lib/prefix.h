@@ -36,6 +36,11 @@ struct prefix
 #ifdef HAVE_IPV6
     struct in6_addr prefix6;
 #endif /* HAVE_IPV6 */
+    struct 
+    {
+      struct in_addr id;
+      struct in_addr adv_router;
+    } lp;
   } u;
 };
 
@@ -57,11 +62,16 @@ struct prefix_ipv6
   u_char prefixlen;
   struct in6_addr prefix;
 };
-#else
-#ifndef AF_INET6
-#define AF_INET6 0
-#endif /* ! AF_INET6 */
 #endif /* HAVE_IPV6 */
+
+struct prefix_ls
+{
+  u_char family;
+  u_char safi;
+  u_char prefixlen;
+  struct in_addr id;
+  struct in_addr adv_router;
+};
 
 #ifndef INET_ADDRSTRLEN
 #define INET_ADDRSTRLEN 16
@@ -112,6 +122,7 @@ int prefix_blen (struct prefix *);
 u_char ip_masklen (struct in_addr);
 int prefix_ipv4_any (struct prefix_ipv4 *);
 void masklen2ip (int, struct in_addr *);
+void apply_classful_mask_ipv4 (struct prefix_ipv4 *);
 
 char *prefix_family_str (struct prefix *p);
 struct prefix *sockunion2prefix ();

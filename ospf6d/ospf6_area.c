@@ -59,15 +59,15 @@ ospf6_area_init (unsigned long area_id)
 }
 
 void
-ospf6_area_terminate (struct area *o6a)
+ospf6_area_delete (struct area *o6a)
 {
   listnode n;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
 
   /* ospf6 interface list */
   for (n = listhead (o6a->if_list); n; nextnode (n))
     {
-      o6if = (struct ospf6_if *) getdata (n);
+      o6if = (struct ospf6_interface *) getdata (n);
       /* ospf6_interface_terminate (o6if); */
     }
   list_delete_all (o6a->if_list);
@@ -112,13 +112,13 @@ void
 ospf6_area_vty (struct vty *vty, struct area *o6a)
 {
   listnode i;
-  struct ospf6_if *o6i;
+  struct ospf6_interface *o6i;
 
   vty_out (vty, "    Area %s%s", o6a->str, VTY_NEWLINE);
   vty_out (vty, "        Interface attached to this area:");
   for (i = listhead (o6a->if_list); i; nextnode (i))
     {
-      o6i = (struct ospf6_if *) getdata (i);
+      o6i = (struct ospf6_interface *) getdata (i);
       vty_out (vty, " %s", o6i->interface->name);
     }
   vty_out (vty, "%s", VTY_NEWLINE);

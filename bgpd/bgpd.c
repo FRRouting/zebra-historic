@@ -381,6 +381,335 @@ DEFUN (no_bgp_cluster_id, no_bgp_cluster_id_cmd,
   return bgp_cluster_id_unset (vty, argv[0]);
 }
 
+int
+bgp_confederation_id_set (struct vty *vty, char *id_str)
+{
+  struct bgp *bgp;
+  as_t as = 0;
+  char *endptr = NULL;
+  struct peer *peer;
+  struct newnode *nn;
+  int old_confed_flag;  /* Old Confederations status */
+
+  bgp = vty->index;
+
+  if (id_str)
+    {
+      as = strtoul (id_str, &endptr, 10);
+      if (as == ULONG_MAX || *endptr != '\0' || as < 1 || as > 65535)
+	{
+	  vty_out (vty, "AS value error%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+
+      /* Remember - were we doing CONFEDs before? */
+      old_confed_flag = CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION);
+      bgp->confederation_id = as;
+      SET_FLAG (bgp->config, BGP_CONFIG_CONFEDERATION);
+
+      /*
+       * how to handle already setup peers?
+       * Answer - If we were doing CONFEDs already - this is just an external AS change
+       *               - just Reset EBGP sessions, not CONFED sessions
+       *          If we were not doing CONFEDs before
+       *               - Reset all EBGP sessions
+       */
+      NEWLIST_LOOP (peer_list, peer, nn)
+	{
+	  /* We're looking for peers who's AS is not local or part of our CONFED*/
+	  if(old_confed_flag)
+	    {
+	      if (peer->as != bgp->as && !bgp_confederation_peers_check(bgp, peer->as))
+		{
+		  peer->local_as = as;
+		  BGP_EVENT_ADD (peer, BGP_Stop);
+		}
+	    }
+	  else
+	    {
+	      /* Not doign CONFEDs before, so reset every non-local session */
+	      if (peer->as != bgp->as)
+		{
+		  /* Reset the local_as to be our EBGP one */
+		  if(!bgp_confederation_peers_check(bgp, peer->as))
+		    peer->local_as = as;
+		  BGP_EVENT_ADD (peer, BGP_Stop);
+		}
+	    }
+	}
+
+      return CMD_SUCCESS;
+    }
+  else
+    {
+      vty_out(vty, "No AS Number provided%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return CMD_WARNING;
+}
+
+int
+bgp_confederation_id_unset (struct vty *vty, char *id_str)
+{
+  struct bgp *bgp;
+  as_t as;
+  char *endptr = NULL;
+  struct peer *peer;
+  struct newnode *nn;
+
+  bgp = vty->index;
+
+  if (id_str)
+    {
+      as = strtoul (id_str, &endptr, 10);
+      if (as == ULONG_MAX || *endptr != '\0' || as < 1 || as > 65535)
+	{
+	  vty_out (vty, "AS value error%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      
+      if(bgp->confederation_id != as)
+	{
+	  vty_out(vty, "AS value does not match%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      
+      bgp->confederation_id = 0;
+      UNSET_FLAG (bgp->config, BGP_CONFIG_CONFEDERATION);
+      
+      /*
+       * How do we handle all EBGP peers if we have no external AS?
+       * Assumption - No Confed ID == no CONFEDERATIONS, so
+       * clear all EBGP *AND* CONFED peers and bring up with no spoofing.
+       */
+      NEWLIST_LOOP (peer_list, peer, nn)
+	{
+	  /* We're looking for peers who's AS is not local */
+	  if (peer->as != bgp->as)
+	    BGP_EVENT_ADD (peer, BGP_Stop);
+	}   
+      
+      return CMD_SUCCESS;
+    }
+  else
+    {
+      vty_out(vty, "No AS Number provided%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  
+  return CMD_WARNING;     
+}
+
+/* Is an AS part of the confed or not? */
+int
+bgp_confederation_peers_check(struct bgp *bgp, as_t as)
+{
+  int i;
+
+  if(bgp == NULL)
+    return 0;
+
+  for(i = 0; i < bgp->confederation_peers_cnt; i++)
+    {
+      if(bgp->confederation_peers[i] == as)
+	return 1;
+    }
+
+  return 0;
+}
+
+/* Add an AS to the CONFED set */
+void
+bgp_confederation_peers_add (struct bgp *bgp, as_t as)
+{
+  bgp->confederation_peers = XREALLOC(MTYPE_BGP_CONFED_LIST, bgp->confederation_peers,
+				      bgp->confederation_peers_cnt + 1);
+  bgp->confederation_peers[bgp->confederation_peers_cnt] = as;
+  bgp->confederation_peers_cnt++;
+}
+
+void
+bgp_confederation_peers_remove (struct bgp *bgp, as_t as)
+{
+  int i;
+  int j;
+
+  for(i = 0; i < bgp->confederation_peers_cnt; i++)
+    {
+      if(bgp->confederation_peers[i] == as)
+	{
+	  /* Remove this entry */
+	  for(j = i+1; j < bgp->confederation_peers_cnt; j++)
+	    {
+	      bgp->confederation_peers[j-1] = bgp->confederation_peers[j];
+	    }
+	}
+    }
+
+
+  bgp->confederation_peers_cnt--;
+  if(bgp->confederation_peers_cnt == 0)
+    {
+      bgp->confederation_peers = NULL;
+    }
+  else
+    {
+      bgp->confederation_peers = XREALLOC(MTYPE_BGP_CONFED_LIST, bgp->confederation_peers,
+					  bgp->confederation_peers_cnt);
+    }
+}
+
+int
+bgp_confederation_peers_set (struct vty *vty, int argc, char *argv[])
+{
+  struct bgp *bgp;
+  as_t as;
+  int i;
+  char *endptr = NULL;
+
+  bgp = vty->index;
+
+  for(i = 0; i < argc; i++)
+    {
+      as = strtoul(argv[i], &endptr, 10);
+      if (as == ULONG_MAX || as < 1 || as > 65535)
+	{
+	  vty_out(vty, "AS Value error (%s), ignoring%s", argv[i], VTY_NEWLINE);
+	}
+      else
+	{
+	  if(!bgp_confederation_peers_check(bgp, as))
+	    {
+	      struct peer *peer;
+	      struct newnode *nn;
+
+	      /* Its not there already, so add it */
+	      bgp_confederation_peers_add(bgp, as);
+
+	      /* Now reset any peer who's remote AS has just joined the CONFED */
+	      NEWLIST_LOOP (peer_list, peer, nn)
+		{
+		  if (peer->as == as)
+		    {
+		      if (! CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN))
+			{
+			  BGP_EVENT_ADD (peer, BGP_Stop);
+			}
+		    }
+		}
+	    }
+	  else
+	    {
+	      /* Silently ignore repeated ASs */
+	    }
+	}
+    }
+  return CMD_SUCCESS;
+}
+
+int
+bgp_confederation_peers_unset (struct vty *vty, int argc, char *argv[])
+{
+  struct bgp *bgp;
+  as_t as;
+  int i;
+  char *endptr = NULL;
+
+  bgp = vty->index;
+
+  for(i = 0; i < argc; i++)
+    {
+      as = strtoul(argv[i], &endptr, 10);
+      if (as == ULONG_MAX || as < 1 || as > 65535)
+	{
+	  vty_out(vty, "AS Value error (%), ignoring%s", argv[i], VTY_NEWLINE);
+	}
+      else
+	{
+	  if(!bgp_confederation_peers_check(bgp, as))
+	    {
+	      /* Its not there already, so silently ignore this*/
+	    }
+	  else
+	    {
+	      struct peer *peer;
+	      struct newnode *nn;
+
+	      /* Its there - we need to remove it */
+	      bgp_confederation_peers_remove(bgp, as);
+
+	      /* Now reset any peer who's remote AS has just been removed from the CONFED */
+	      NEWLIST_LOOP (peer_list, peer, nn)
+		{
+		  if (peer->as == as)
+		    {
+		      if (! CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN))
+			{
+			  BGP_EVENT_ADD (peer, BGP_Stop);
+			}
+		    }
+		}
+	    }
+	}
+    }
+  return CMD_SUCCESS;
+}
+
+void
+bgp_confederation_peers_print (struct vty *vty, struct bgp *bgp)
+{
+  int i;
+
+  for(i = 0; i < bgp->confederation_peers_cnt; i++)
+    {
+      vty_out(vty, " ");
+
+      vty_out(vty, "%d", bgp->confederation_peers[i]);
+    }
+}
+
+DEFUN (bgp_confederation_peers, bgp_confederation_peers_cmd,
+       "bgp confederation peers ...",
+       BGP_STR
+       "AS confederation parameters\n"
+       "Peer ASs in BGP confederation\n"
+       "Peer ASs in BGP confederation\n")
+{
+  return bgp_confederation_peers_set(vty, argc, argv);
+}
+
+DEFUN (bgp_confederation_identifier, bgp_confederation_identifier_cmd,
+       "bgp confederation identifier <1-65535>",
+       BGP_STR
+       "AS confederation parameters\n"
+       "as number\n")
+{
+  return bgp_confederation_id_set(vty, argv[0]);
+}
+
+DEFUN (no_bgp_confederation_peers, no_bgp_confederation_peers_cmd,
+       "no bgp confederation peers ...",
+       NO_STR
+       BGP_STR
+       "AS confederation parameters\n"
+       "Peer ASs in BGP confederation\n"
+       "Peer ASs in BGP confederation\n")
+{
+  return bgp_confederation_peers_unset(vty, argc, argv);
+}
+
+DEFUN (no_bgp_confederation_identifier, no_bgp_confederation_identifier_cmd,
+       "no bgp confederation identifier <1-65535>",
+       NO_STR
+       BGP_STR
+       "AS confederation parameters\n"
+       "as number\n")
+{
+  return bgp_confederation_id_unset(vty, argv[0]);
+}
+
+
 /* allocate new peer object */
 struct peer *
 peer_new ()
@@ -430,9 +759,43 @@ peer_new ()
 int
 peer_sort (struct peer *peer)
 {
-  return (peer->local_as == 0
-	  ? BGP_PEER_INTERNAL : peer->local_as == peer->as
-	  ? BGP_PEER_IBGP : BGP_PEER_EBGP);
+  /* Find the relevant BGP structure */
+  struct bgp *bgp;
+  struct peer_conf *conf;
+  struct newnode *nn;
+
+  /* This becomes slightly more complicated as we have to find the CONFEDERATION
+     list, so we can see if this is a BGP_PEER_CONFED */
+  bgp = NULL;
+  NEWLIST_LOOP (peer->conf, conf, nn)
+    {
+      bgp = conf->bgp;
+    }
+
+  if(bgp && CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
+    {
+      if(peer->local_as == 0)
+	return BGP_PEER_INTERNAL;
+
+      if(peer->local_as == peer->as)
+	{
+	  if(peer->local_as == bgp->confederation_id)
+	    return BGP_PEER_EBGP;
+	  else
+	    return BGP_PEER_IBGP;
+	}
+
+      if(bgp_confederation_peers_check(bgp, peer->as))
+	return BGP_PEER_CONFED;
+
+      return BGP_PEER_EBGP;
+    }
+  else
+    {
+      return (peer->local_as == 0
+	      ? BGP_PEER_INTERNAL : peer->local_as == peer->as
+	      ? BGP_PEER_IBGP : BGP_PEER_EBGP);
+    }
 }
 
 int
@@ -1061,8 +1424,17 @@ peer_remote_as (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
   else
     {
       /* Real peer creation. */
-      peer = peer_create (&su, bgp->as, bgp->id, as);
-
+      /* If the peer is not part of our CONFED, then
+	 spoof the source AS */
+      if(CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION) &&
+	 !bgp_confederation_peers_check(bgp, as))
+	{
+	  peer = peer_create (&su, bgp->confederation_id, bgp->id, as); 
+	}
+      else
+	{
+	  peer = peer_create (&su, bgp->as, bgp->id, as);
+	}
       conf = peer_conf_create (afi, safi, peer);
       conf->bgp = bgp;
       newnode_add (bgp->peer_conf, conf);
@@ -2547,6 +2919,112 @@ DEFUN (no_ipv6_bgp_neighbor_route_refresh,
 				      PEER_FLAG_ROUTE_REFRESH, 0);
 }
 
+/* neighbor transparent-as */
+DEFUN (neighbor_transparent_as,
+       neighbor_transparent_as_cmd,
+       NEIGHBOR_CMD "transparent-as",
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Do not append my AS number even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP, 
+				      PEER_FLAG_TRANSPARENT_AS, 1);
+}
+
+DEFUN (no_neighbor_transparent_as,
+       no_neighbor_transparent_as_cmd,
+       NO_NEIGHBOR_CMD "transparent-as",
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Do not append my AS number even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_TRANSPARENT_AS, 0);
+}
+
+DEFUN (ipv6_bgp_neighbor_transparent_as,
+       ipv6_bgp_neighbor_transparent_as_cmd,
+       "ipv6 bgp neighbor (A.B.C.D|X:X::X:X) transparent-as",
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Do not append my AS number even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_TRANSPARENT_AS, 1);
+}
+
+DEFUN (no_ipv6_bgp_neighbor_transparent_as,
+       no_ipv6_bgp_neighbor_transparent_as_cmd,
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) transparent-as",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Do not append my AS number even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_TRANSPARENT_AS, 0);
+}
+
+/* neighbor transparent-nexthop */
+DEFUN (neighbor_transparent_nexthop,
+       neighbor_transparent_nexthop_cmd,
+       NEIGHBOR_CMD "transparent-nexthop",
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Do not change nexthop even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP, 
+				      PEER_FLAG_TRANSPARENT_NEXTHOP, 1);
+}
+
+DEFUN (no_neighbor_transparent_nexthop,
+       no_neighbor_transparent_nexthop_cmd,
+       NO_NEIGHBOR_CMD "transparent-nexthop",
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Do not change nexthop even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_TRANSPARENT_NEXTHOP, 0);
+}
+
+DEFUN (ipv6_bgp_neighbor_transparent_nexthop,
+       ipv6_bgp_neighbor_transparent_nexthop_cmd,
+       "ipv6 bgp neighbor (A.B.C.D|X:X::X:X) transparent-nexthop",
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Do not change nexthop even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_TRANSPARENT_NEXTHOP, 1);
+}
+
+DEFUN (no_ipv6_bgp_neighbor_transparent_nexthop,
+       no_ipv6_bgp_neighbor_transparent_nexthop_cmd,
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) transparent-nexthop",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Do not change nexthop even peer is EBGP peer.\n")
+{
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_TRANSPARENT_NEXTHOP, 0);
+}
+
 /* neighbor translate-update. */
 int
 peer_translate_update (struct vty *vty, char *ip_str, int afi, int safi)
@@ -3375,7 +3853,9 @@ bgp_distribute_set (struct vty *vty, char *ip_str, int afi, char *name_str,
     free (filter->dlist[direct].name);
   filter->dlist[direct].name = strdup (name_str);
   filter->dlist[direct].v4 = access_list_lookup (AF_INET, name_str);
+#ifdef HAVE_IPV6
   filter->dlist[direct].v6 = access_list_lookup (AF_INET6, name_str);
+#endif /* HAVE_IPV6 */
 
   return CMD_SUCCESS;
 }
@@ -3446,26 +3926,34 @@ bgp_distribute_update ()
 	    {
 	      filter->dlist[BGP_FILTER_IN].v4 = 
 		access_list_lookup (AF_INET, filter->dlist[BGP_FILTER_IN].name);
+#ifdef HAVE_IPV6
 	      filter->dlist[BGP_FILTER_IN].v6 = 
 		access_list_lookup (AF_INET6, filter->dlist[BGP_FILTER_IN].name);
+#endif /* HAVE_IPV6 */
 	    }
 	  else
 	    {
 	      filter->dlist[BGP_FILTER_IN].v4 = NULL;
+#ifdef HAVE_IPV6
 	      filter->dlist[BGP_FILTER_IN].v6 = NULL;
+#endif /* HAVE_IPV6 */
 	    }
 	  /* Output filter update. */
 	  if (filter->dlist[BGP_FILTER_OUT].name)
 	    {
 	      filter->dlist[BGP_FILTER_OUT].v4 = 
 		access_list_lookup (AF_INET, filter->dlist[BGP_FILTER_OUT].name);
+#ifdef HAVE_IPV6
 	      filter->dlist[BGP_FILTER_OUT].v6 = 
 		access_list_lookup (AF_INET6, filter->dlist[BGP_FILTER_OUT].name);
+#endif /* HAVE_IPV6 */
 	    }
 	  else
 	    {
 	      filter->dlist[BGP_FILTER_OUT].v4 = NULL;
+#ifdef HAVE_IPV6
 	      filter->dlist[BGP_FILTER_OUT].v6 = NULL;
+#endif /* HAVE_IPV6 */
 	    }
 	}
     }
@@ -3564,7 +4052,9 @@ bgp_prefix_list_set (struct vty *vty, char *ip_str, int afi, char *name_str,
     free (filter->plist[direct].name);
   filter->plist[direct].name = strdup (name_str);
   filter->plist[direct].v4 = prefix_list_lookup (AF_INET, name_str);
+#ifdef HAVE_IPV6
   filter->plist[direct].v6 = prefix_list_lookup (AF_INET6, name_str);
+#endif /* HAVE_IPV6 */
 
   return CMD_SUCCESS;
 }
@@ -3635,26 +4125,34 @@ bgp_prefix_list_update ()
 	    {
 	      filter->plist[BGP_FILTER_IN].v4 = 
 		prefix_list_lookup (AF_INET, filter->plist[BGP_FILTER_IN].name);
+#ifdef HAVE_IPV6
 	      filter->plist[BGP_FILTER_IN].v6 = 
 		prefix_list_lookup (AF_INET6, filter->plist[BGP_FILTER_IN].name);
+#endif /* HAVE_IPV6 */
 	    }
 	  else
 	    {
 	      filter->plist[BGP_FILTER_IN].v4 = NULL;
+#ifdef HAVE_IPV6
 	      filter->plist[BGP_FILTER_IN].v6 = NULL;
+#endif /* HAVE_IPV6 */
 	    }
 	  /* Output filter update. */
 	  if (filter->plist[BGP_FILTER_OUT].name)
 	    {
 	      filter->plist[BGP_FILTER_OUT].v4 = 
 		prefix_list_lookup (AF_INET, filter->plist[BGP_FILTER_OUT].name);
+#ifdef HAVE_IPV6
 	      filter->plist[BGP_FILTER_OUT].v6 = 
 		prefix_list_lookup (AF_INET6, filter->plist[BGP_FILTER_OUT].name);
+#endif /* HAVE_IPV6 */
 	    }
 	  else
 	    {
 	      filter->plist[BGP_FILTER_OUT].v4 = NULL;
+#ifdef HAVE_IPV6
 	      filter->plist[BGP_FILTER_OUT].v6 = NULL;
+#endif /* HAVE_IPV6 */
 	    }
 	}
     }
@@ -4623,7 +5121,8 @@ bgp_show_peer (struct vty *vty, struct peer_conf *conf, afi_t afi, safi_t safi)
   /* AS information. */
   vty_out (vty, "  Remote AS: %d, Local AS: %d, Link type: %s%s",
 	   p->as, p->local_as, 
-	   p->as == p->local_as ? "IBGP" : "EBGP",
+	   p->as == p->local_as ? "IBGP" :
+	   (bgp_confederation_peers_check(conf->bgp, p->as) ? "CONFEDERATION" : "EBGP"),
 	   VTY_NEWLINE);
 
   /* Router IDs. */
@@ -5260,6 +5759,16 @@ bgp_config_write_peer (struct vty *vty, struct bgp *bgp,
   if (conf->pmax[afi][SAFI_UNICAST])
     vty_out (vty, "%s neighbor %s maximum-prefix %d%s", v6str, addr,
 	     conf->pmax[afi][SAFI_UNICAST], VTY_NEWLINE);
+
+  /* transparent-as. */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_TRANSPARENT_AS))
+    vty_out (vty, "%s neighbor %s transparent-as%s", v6str, addr,
+	     VTY_NEWLINE);
+
+  /* transparent-nexthop. */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_TRANSPARENT_NEXTHOP))
+    vty_out (vty, "%s neighbor %s transparent-nexthop%s", v6str, addr,
+	     VTY_NEWLINE);
 }
 
 int
@@ -5311,6 +5820,19 @@ bgp_config_write (struct vty *vty)
       if (bgp->config & BGP_CONFIG_CLUSTER_ID)
 	vty_out (vty, " bgp cluster-id %s%s", inet_ntoa (bgp->cluster), 
 		 VTY_NEWLINE);
+
+      /* Confederation Information */
+      if(CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
+	{
+	  vty_out(vty, " bgp confederation identifier %i%s", bgp->confederation_id,
+		  VTY_NEWLINE);
+	  if(bgp->confederation_peers_cnt > 0)
+	    {
+	      vty_out(vty, " bgp confederation peers");
+	      bgp_confederation_peers_print(vty, bgp);
+	      vty_out(vty, "%s", VTY_NEWLINE);
+	    }
+	}
 
       /* BGP redistribute configuration. */
       bgp_config_write_redistribute (vty, bgp, AFI_IP);
@@ -5516,6 +6038,20 @@ bgp_init ()
   install_element (BGP_NODE, &neighbor_maximum_prefix_cmd);
   install_element (BGP_NODE, &no_neighbor_maximum_prefix_cmd);
 
+  /* "bgp confederation" commands. */
+  install_element (BGP_NODE, &bgp_confederation_identifier_cmd);
+  install_element (BGP_NODE, &bgp_confederation_peers_cmd);
+  install_element (BGP_NODE, &no_bgp_confederation_identifier_cmd);
+  install_element (BGP_NODE, &no_bgp_confederation_peers_cmd);
+
+  /* "transparent-as" commands. */
+  install_element (BGP_NODE, &neighbor_transparent_as_cmd);
+  install_element (BGP_NODE, &no_neighbor_transparent_as_cmd);
+
+  /* "transparent-nexthop" commands. */
+  install_element (BGP_NODE, &neighbor_transparent_nexthop_cmd);
+  install_element (BGP_NODE, &no_neighbor_transparent_nexthop_cmd);
+
   /* "show ip bgp summary" commands. */
   install_element (VIEW_NODE, &show_ip_bgp_summary_cmd);
   install_element (VIEW_NODE, &show_ip_mbgp_summary_cmd);
@@ -5640,6 +6176,12 @@ bgp_init ()
   install_element (BGP_NODE, &no_ipv6_bgp_neighbor_filter_list_cmd);
   install_element (BGP_NODE, &ipv6_bgp_neighbor_route_map_cmd);
   install_element (BGP_NODE, &no_ipv6_bgp_neighbor_route_map_cmd);
+
+  install_element (BGP_NODE, &ipv6_bgp_neighbor_transparent_as_cmd);
+  install_element (BGP_NODE, &no_ipv6_bgp_neighbor_transparent_as_cmd);
+
+  install_element (BGP_NODE, &ipv6_bgp_neighbor_transparent_nexthop_cmd);
+  install_element (BGP_NODE, &no_ipv6_bgp_neighbor_transparent_nexthop_cmd);
 
   install_element (VIEW_NODE, &show_ipv6_bgp_summary_cmd);
   install_element (VIEW_NODE, &show_ipv6_mbgp_summary_cmd);

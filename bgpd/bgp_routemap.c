@@ -940,7 +940,8 @@ struct route_map_rule_cmd route_set_community_additive_cmd =
   route_set_community_additive_compile,
   route_set_community_additive_free,
 };
-/* `set origin ORIGIN' */
+
+/* `set origin ORIGIN' */
 
 /* For origin set. */
 route_map_result_t
@@ -1368,6 +1369,63 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
   route_set_ipv6_nexthop_local_free
 };
 #endif /* HAVE_IPV6 */
+
+/* `set originator-id' */
+
+/* For origin set. */
+route_map_result_t
+route_set_originator_id (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
+{
+  struct in_addr *address;
+  struct bgp_info *bgp_info;
+
+  if (type == RMAP_BGP) 
+    {
+      address = rule;
+      bgp_info = object;
+    
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID);
+      bgp_info->attr->originator_id = *address;
+    }
+
+  return RMAP_OKAY;
+}
+
+/* Compile function for originator-id set. */
+void *
+route_set_originator_id_compile (char *arg)
+{
+  int ret;
+  struct in_addr *address;
+
+  address = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in_addr));
+
+  ret = inet_aton (arg, address);
+
+  if (ret == 0)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, address);
+      return NULL;
+    }
+
+  return address;
+}
+
+/* Compile function for originator_id set. */
+void
+route_set_originator_id_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Set metric rule structure. */
+struct route_map_rule_cmd route_set_originator_id_cmd = 
+{
+  "originator-id",
+  route_set_originator_id,
+  route_set_originator_id_compile,
+  route_set_originator_id_free,
+};
 
 /* Add bgp route map rule. */
 int
@@ -2273,6 +2331,28 @@ DEFUN (no_set_ipv6_nexthop_local,
   return bgp_route_set_delete (vty, vty->index, "ipv6 next-hop local", argv[0]);
 }
 #endif /* HAVE_IPV6 */
+
+DEFUN (set_originator_id,
+       set_originator_id_cmd,
+       "set originator-id IP_ADDR",
+       "Set value\n"
+       "Originator ID\n"
+       "IP Address\n")
+{
+  return bgp_route_set_add (vty, vty->index, "originator-id", argv[0]);
+}
+
+DEFUN (no_set_originator_id,
+       no_set_originator_id_cmd,
+       "no set originator-id IP_ADDR",
+       NO_STR
+       "Set value\n"
+       "Originator ID\n"
+       "IP Address\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "originator-id", argv[0]);
+}
+
 
 /* Initialization of route map. */
 void
@@ -2301,6 +2381,7 @@ bgp_route_map_init ()
   route_map_install_set (&route_set_aggregator_as_cmd);
   route_map_install_set (&route_set_community_additive_cmd);
   route_map_install_set (&route_set_nlri_cmd);
+  route_map_install_set (&route_set_originator_id_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -2360,4 +2441,7 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &set_ipv6_nexthop_local_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_local_cmd);
 #endif /* HAVE_IPV6 */
+
+  install_element (RMAP_NODE, &set_originator_id_cmd);
+  install_element (RMAP_NODE, &no_set_originator_id_cmd);
 }

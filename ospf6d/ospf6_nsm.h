@@ -37,7 +37,7 @@
 /* Function Prototypes */
 
 int nbs_change (state_t, char *, struct neighbor *);
-int nbs_full_change (struct ospf6_if *);
+int nbs_full_change (struct ospf6_interface *);
 int need_adjacency (struct neighbor *);
 
 
@@ -53,7 +53,7 @@ int bad_lsreq (struct thread *);
 int oneway_received (struct thread *);
 int inactivity_timer (struct thread *);
 
-int dr_election (struct ospf6_if *);
+int dr_election (struct ospf6_interface *);
 
 #endif /* OSPF6_NSM_H */
 

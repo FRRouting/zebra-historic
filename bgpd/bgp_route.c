@@ -308,20 +308,27 @@ bgp_community_filter (struct peer *peer, struct attr *attr)
 int
 bgp_cluster_filter (struct peer_conf *conf, struct attr *attr)
 {
-  struct in_addr originator;
+  struct in_addr cluster_id;
 
   /* Route reflection loop check. */
-  if (peer_sort (conf->peer) == BGP_PEER_IBGP && attr->cluster)
+#if 0
+  if (peer_sort (conf->peer) == BGP_PEER_IBGP)
     {
+#endif /* 0 */
       /* Cluster list check. */
-      if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
-	originator = conf->bgp->cluster;
-      else
-	originator = conf->bgp->id;
+      if (attr->cluster)
+	{
+	  if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	    cluster_id = conf->bgp->cluster;
+	  else
+	    cluster_id = conf->bgp->id;
 
-      if (cluster_loop_check (attr->cluster, originator))
-	return 1;
+	  if (cluster_loop_check (attr->cluster, cluster_id))
+	    return 1;
+	}
+#if 0
     }
+#endif /* 0 */
   return 0;
 }
 
@@ -494,10 +501,12 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
   struct bgp_info info;
   struct peer *peer;
   struct peer *from;
+  struct bgp *bgp;
 
   from = ri->peer;
   peer = conf->peer;
   filter = &conf->filter;
+  bgp = conf->bgp;
   
   /* Do not send back route to sender. */
   if (from == peer)
@@ -511,6 +520,21 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
   if (CHECK_FLAG (peer->flags, PEER_FLAG_SEND_COMMUNITY) 
       && bgp_community_filter (peer, ri->attr))
     return 0;
+
+  /* If the attribute has originator-id and it is same as remote
+     peer's id. */
+  if (ri->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
+    {
+      if (IPV4_ADDR_SAME (&peer->remote_id, &ri->attr->originator_id))
+	{
+	  zlog (peer->log, LOG_INFO,
+		"%s [Update:SEND] %s/%d originator-id is same as remote router-id",
+		peer->host,
+		inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
+		p->prefixlen);
+	  return 0;
+	}
+    }
   
   /* Output filter check. */
   if (bgp_output_filter (conf, p, ri->attr) == FILTER_DENY)
@@ -532,6 +556,7 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
 	    peer->host);
       return 0;
     }
+#ifdef HAVE_IPV6
   if (p->family == AF_INET6 && p->prefixlen == 0 
       && ! (CHECK_FLAG (peer->flags, PEER_FLAG_DEFAULT_ORIGINATE)))
     {
@@ -540,6 +565,7 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
 	    peer->host);
       return 0;
     }
+#endif /* HAVE_IPV6 */
 
   /* AS path loop check. */
   if (aspath_loop_check (ri->attr->aspath, peer->as))
@@ -548,6 +574,19 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
 	    "%s [Update:SEND] suppress announcement to peer AS %d is AS path.",
 	    peer->host, peer->as);
       return 0;
+    }
+
+  /* If we're a CONFED we need to loop check the CONFED ID too */
+  if (CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
+    {
+      if (aspath_loop_check(ri->attr->aspath, bgp->confederation_id))
+	{
+	  zlog (peer->log, LOG_INFO, 
+		"%s [Update:SEND] suppress announcement to peer AS %d is AS path.",
+		peer->host,
+		bgp->confederation_id);
+	  return 0;
+	}      
     }
 
   /* IBGP reflection check. */
@@ -573,7 +612,8 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
   *attr = *ri->attr;
 
   /* If local-preference is not set. */
-  if ((peer_sort (peer) == BGP_PEER_IBGP) 
+  if ((peer_sort (peer) == BGP_PEER_IBGP 
+       || peer_sort (peer) == BGP_PEER_CONFED) 
       && (! (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))))
     {
       attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF);
@@ -588,6 +628,7 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
   /* next-hop-set */
   if ((ri->peer == peer_self) 
       || (! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT)
+	  && ! CHECK_FLAG (peer->flags, PEER_FLAG_TRANSPARENT_NEXTHOP)
           && (peer_sort (peer) == BGP_PEER_EBGP 
               || CHECK_FLAG (peer->flags, PEER_FLAG_NEXTHOP_SELF))))
     {
@@ -640,6 +681,10 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
      address.*/
   if (CHECK_FLAG (peer->flags, PEER_FLAG_REFLECTOR_CLIENT))
     attr->mp_nexthop_len = 16;
+
+  /* If BGP-4+ link-local nexthop is not link-local nexthop. */
+  if (! IN6_IS_ADDR_LINKLOCAL (&peer->nexthop.v6_local))
+    attr->mp_nexthop_len = 16;
 #endif /* HAVE_IPV6 */
 
   /* Route map apply. */
@@ -672,7 +717,8 @@ bgp_announce_rib (struct peer_conf *conf, afi_t afi, safi_t safi)
 	{
 	  if (bgp_announce_check (ri, conf, &rn->p, &attr))
 	    {
-	      bgp_update_send (conf, conf->peer, &rn->p, &attr, afi, safi);
+	      bgp_update_send (conf, conf->peer, &rn->p, &attr, afi, safi,
+			       ri->peer);
 	      if (ROUTE_MAP_OUT (&conf->filter))
 		bgp_attr_flush (&attr);
 	    }
@@ -682,7 +728,8 @@ bgp_announce_rib (struct peer_conf *conf, afi_t afi, safi_t safi)
 	  if (ri->selected && ri->peer != conf->peer)
 	    if (bgp_announce_check (ri, conf, &rn->p, &attr))
 	      {	  
-		bgp_update_send (conf, conf->peer, &rn->p, &attr, afi, safi);
+		bgp_update_send (conf, conf->peer, &rn->p, &attr, afi, safi,
+				 ri->peer);
 		bgp_adj_set (conf->peer->adj_out[afi][safi], &rn->p, &attr);
 	      }
 	}
@@ -772,7 +819,8 @@ bgp_process (struct bgp *bgp, struct route_node *rn, afi_t afi, safi_t safi,
 	  && bgp_announce_check (new_select, conf_to, p, &attr))
 	{
 	  /* Send update to the peer. */
-	  bgp_update_send (conf_to, peer_to, p, &attr, afi, safi);
+	  bgp_update_send (conf_to, peer_to, p, &attr, afi, safi,
+			   new_select->peer);
 	  bgp_adj_set (peer_to->adj_out[afi][safi], p, &attr);
 	}
       else

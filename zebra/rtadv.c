@@ -120,7 +120,7 @@ rtadv_recv_packet (int sock, u_char *buf, int buflen,
 	  
 	  ptr = (struct in6_pktinfo *) CMSG_DATA (cmsgptr);
 	  *ifindex = ptr->ipi6_ifindex;
-	  dst = ptr->ipi6_addr;
+	  memcpy(&dst, &ptr->ipi6_addr, sizeof(ptr->ipi6_addr));
         }
 
       /* Incoming packet's hop limit. */

@@ -28,6 +28,7 @@
 #include "sockunion.h"
 
 void route_node_delete (struct route_node *);
+void route_table_free (struct route_table *);
 
 struct route_table *
 route_table_init (void)
@@ -42,7 +43,11 @@ route_table_init (void)
 void
 route_table_finish (struct route_table *rt)
 {
+#if 0
   XFREE (MTYPE_ROUTE_TABLE, rt);
+#else
+  route_table_free (rt);
+#endif /*0*/
 }
 
 /* Allocate new route node. */

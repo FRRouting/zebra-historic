@@ -175,6 +175,7 @@ int if_is_multicast (struct interface *);
 void if_add_hook (int, int (*)(struct interface *));
 void if_init ();
 void if_dump_all ();
+char *ifindex2ifname (unsigned int);
 
 /* Connected address functions. */
 struct connected *connected_new ();

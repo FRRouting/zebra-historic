@@ -50,28 +50,32 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
     }
 
   if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
-    nbs_full_change (nbr->ospf6_if);
+    nbs_full_change (nbr->ospf6_interface);
 
+#if 0
   /* check for LSAs that already reached MaxAge */
   /* for Interface scope LSA */
-  ospf6_lsdb_maxage_remove_interface (nbr->ospf6_if);
+  ospf6_lsdb_maxage_remove_interface (nbr->ospf6_interface);
 
   /* for Area scope LSA */
-  ospf6_lsdb_maxage_remove_area (nbr->ospf6_if->area);
+  ospf6_lsdb_maxage_remove_area (nbr->ospf6_interface->area);
 
   /* for AS scope LSA */
-  ospf6_lsdb_maxage_remove_as (nbr->ospf6_if->area->ospf6);
+  ospf6_lsdb_maxage_remove_as (nbr->ospf6_interface->area->ospf6);
+#else
+  ospf6_lsdb_check_maxage_lsa (ospf6);
+#endif
 
   return 0;
 }
 
 int
-nbs_full_change (struct ospf6_if *ospf6_if)
+nbs_full_change (struct ospf6_interface *ospf6_interface)
 {
   struct ospf6_lsa *lsa;
 
   /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_if->area);
+  lsa = ospf6_make_router_lsa (ospf6_interface->area);
   if (lsa)
     {
       ospf6_lsa_flood (lsa);
@@ -79,10 +83,10 @@ nbs_full_change (struct ospf6_if *ospf6_if)
       ospf6_lsa_unlock (lsa);
     }
 
-  if (ospf6_if->state == IFS_DR)
+  if (ospf6_interface->state == IFS_DR)
     {
       /* construct Network-LSA */
-      lsa = ospf6_make_network_lsa (ospf6_if);
+      lsa = ospf6_make_network_lsa (ospf6_interface);
       if (lsa)
         {
           ospf6_lsa_flood (lsa);
@@ -90,7 +94,7 @@ nbs_full_change (struct ospf6_if *ospf6_if)
           ospf6_lsa_unlock (lsa);
         }
       /* construct Intra-Area-Prefix-LSA */
-      lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
+      lsa = ospf6_make_intra_prefix_lsa (ospf6_interface);
       if (lsa)
         {
           ospf6_lsa_flood (lsa);
@@ -106,15 +110,15 @@ int
 need_adjacency (struct neighbor *nbr)
 {
 
-  if (nbr->ospf6_if->state == IFS_PTOP)
+  if (nbr->ospf6_interface->state == IFS_PTOP)
     return 1;
-  if (nbr->ospf6_if->state == IFS_DR)
+  if (nbr->ospf6_interface->state == IFS_DR)
     return 1;
-  if (nbr->ospf6_if->state == IFS_BDR)
+  if (nbr->ospf6_interface->state == IFS_BDR)
     return 1;
-  if (nbr->rtr_id == nbr->ospf6_if->dr)
+  if (nbr->rtr_id == nbr->ospf6_interface->dr)
     return 1;
-  if (nbr->rtr_id == nbr->ospf6_if->bdr)
+  if (nbr->rtr_id == nbr->ospf6_interface->bdr)
     return 1;
 
   return 0;
@@ -135,7 +139,7 @@ hello_received (struct thread *thread)
     thread_cancel (nbr->inactivity_timer);
 
   nbr->inactivity_timer = thread_add_timer (master, inactivity_timer, nbr,
-                                            nbr->ospf6_if->rtr_dead_interval);
+                                            nbr->ospf6_interface->dead_interval);
   if (nbr->state <= NBS_DOWN)
     nbs_change (NBS_INIT, "HelloReceived", nbr);
   return 0;
@@ -155,7 +159,7 @@ twoway_received (struct thread *thread)
   if (IS_OSPF6_DUMP_NEIGHBOR)
     zlog_info ("Neighbor Event %s: *2Way-Received*", nbr->str);
 
-  thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
+  thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
 
   if (!need_adjacency (nbr))
     {
@@ -215,7 +219,7 @@ exchange_done (struct thread *thread)
   list_delete_all_node (nbr->dd_retrans);
 
   thread_add_timer (master, free_last_dd, nbr,
-                    nbr->ospf6_if->rtr_dead_interval);
+                    nbr->ospf6_interface->dead_interval);
 
   if (list_isempty (nbr->requestlist))
     nbs_change (NBS_FULL, "Requestlist Empty", nbr);
@@ -368,7 +372,7 @@ oneway_received (struct thread *thread)
 
   nbs_change (NBS_INIT, "1Way-Received", nbr);
 
-  thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
+  thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
   neighbor_thread_cancel (nbr);
   list_cleared_of_lsa (nbr);
   return 0;
@@ -393,7 +397,7 @@ inactivity_timer (struct thread *thread)
   nbs_change (NBS_DOWN, "InactivityTimer", nbr);
   neighbor_thread_cancel (nbr);
   list_cleared_of_lsa (nbr);
-  thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
+  thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
 
   return 0;
 }

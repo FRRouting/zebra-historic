@@ -1,23 +1,25 @@
-/* OSPF version 2  Interface State Machine
-   From RFC2328 [OSPF Version 2] 
-   Copyright (C) 1999 Toshiaki Takada
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+/*
+ * OSPF version 2  Interface State Machine
+ *   From RFC2328 [OSPF Version 2] 
+ * Copyright (C) 1999 Toshiaki Takada
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
 
 #include <zebra.h>
 
@@ -31,14 +33,15 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_network.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_abr.h"
+#include "ospfd/ospf_lsdb.h"
 
 extern unsigned long ospf_debug_ism;
 
@@ -429,26 +432,26 @@ ism_loop_ind (struct ospf_interface *oi)
   return ret;
 }
 
+/* Interface down event handler. */
 int
 ism_interface_down (struct ospf_interface *oi)
 {
   struct route_node *rn;
+  struct ospf_neighbor *nbr;
 
   /* send Neighbor event KillNbr to all associated neighbors. */
   for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
-    {
-      struct ospf_neighbor *nbr;
+    if ((nbr = rn->info) != NULL)
+      {
+	/* It's bad idea comparing router_id for detecting this is
+           self neighbor or not.  -- kunihiro  */
+	/* if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id)) */
+	/* This is myself. */
+	if (nbr == oi->nbr_self)
+	  continue;
 
-      if (!rn->info)
-	continue;
-      nbr = rn->info;
-
-      /* This is myself. */
-      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
-	continue;
-
-      OSPF_NSM_EVENT_EXECUTE (nbr, NSM_KillNbr);
-    }
+	OSPF_NSM_EVENT_EXECUTE (nbr, NSM_KillNbr);
+      }
 
   /* Reset interface variables. */
   /* ospf_if_reset_variables (oi); */
@@ -613,6 +616,7 @@ void
 ism_change_status (struct ospf_interface *oi, int status)
 {
   int old_status;
+  struct ospf_lsa *lsa;
 
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (ism, ISM_STATUS))
@@ -661,12 +665,13 @@ ism_change_status (struct ospf_interface *oi, int status)
     }
   else if (old_status == ISM_DR && status != ISM_DR)
     {
-
-      /* This should be changed !!! Zinin*/
-
-      if (oi->network_lsa_self != NULL)
-	ospf_lsa_free (oi->network_lsa_self);
-
+      /* Free self originated network LSA. */
+      lsa = oi->network_lsa_self;
+      if (lsa)
+	{
+	  ospf_lsdb_delete (lsa->lsdb, lsa);
+	  ospf_lsa_free (lsa);
+	}
       oi->network_lsa_self = NULL;
     }
 
@@ -694,7 +699,7 @@ ospf_ism_event (struct thread *thread)
     next_state = ISM [oi->status][event].next_state;
 
   if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
-    zlog (NULL, LOG_INFO, "OSPF ISM[%s]: %s (%s)", oi->ifp->name,
+    zlog (NULL, LOG_INFO, "ISM[%s]: %s (%s)", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  ospf_ism_event_str[event]);
 

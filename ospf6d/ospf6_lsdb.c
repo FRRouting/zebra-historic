@@ -25,7 +25,7 @@ int
 lsa_change (struct ospf6_lsa *lsa)
 {
   struct area *area;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct ospf6 *ospf6;
 
   switch (ntohs (lsa->lsa_hdr->lsh_type))
@@ -41,7 +41,7 @@ lsa_change (struct ospf6_lsa *lsa)
                                              area, 0);
       break;
     case LST_LINK_LSA:
-      o6if = (struct ospf6_if *)lsa->scope;
+      o6if = (struct ospf6_interface *)lsa->scope;
       area = (struct area *) o6if->area;
       if (area->spf_calc == (struct thread *)NULL)
         area->spf_calc = thread_add_event (master, spf_calculation,
@@ -252,12 +252,16 @@ ospf6_remove_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
   list_delete_by_val (lsa->retrans_nbr, nbr);
   ospf6_lsa_unlock (lsa);
 
+#if 0
   /* if nbr's associated area has no neighbor in Exchange or Loading,
      delete MaxAge LSAs. */
-  if (!count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_if->area) &&
-      !count_nbr_in_state (NBS_LOADING, nbr->ospf6_if->area) &&
+  if (!count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_interface->area) &&
+      !count_nbr_in_state (NBS_LOADING, nbr->ospf6_interface->area) &&
       ospf6_age_current (lsa) == MAXAGE)
     ospf6_lsa_maxage_remove (lsa);
+#else
+  ospf6_lsdb_check_maxage_lsa (ospf6);
+#endif
 }
 
 /* remove all lsa from retrans list of neighbor */
@@ -276,11 +280,11 @@ ospf6_remove_retrans_all (struct neighbor *nbr)
 }
 
 
-/* lookup delayed acknowledge list of ospf6_if */
+/* lookup delayed acknowledge list of ospf6_interface */
 struct ospf6_lsa *
-ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6if)
 {
-  if (list_lookup_node (o6if->delayed_ack, lsa))
+  if (list_lookup_node (o6if->lsa_delayed_ack, lsa))
     {
 #ifndef NDEBUG
       if (!list_lookup_node (lsa->delayed_ack_if, o6if))
@@ -291,26 +295,26 @@ ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
   return NULL;
 }
 
-/* add to delayed acknowledge list of ospf6_if */
+/* add to delayed acknowledge list of ospf6_interface */
 void
-ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6if)
 {
   if (ospf6_lookup_delayed_ack (lsa, o6if))
     return;
 
-  list_add_node (o6if->delayed_ack, lsa);
+  list_add_node (o6if->lsa_delayed_ack, lsa);
   list_add_node (lsa->delayed_ack_if, o6if);
   ospf6_lsa_lock (lsa);
 }
 
-/* remove from delayed acknowledge list of ospf6_if */
+/* remove from delayed acknowledge list of ospf6_interface */
 void
-ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6if)
 {
   if (!ospf6_lookup_delayed_ack (lsa, o6if))
     return;
 
-  list_delete_by_val (o6if->delayed_ack, lsa);
+  list_delete_by_val (o6if->lsa_delayed_ack, lsa);
   list_delete_by_val (lsa->delayed_ack_if, o6if);
   ospf6_lsa_unlock (lsa);
 }
@@ -322,12 +326,12 @@ ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 /* lookup from interface lsdb */
 static struct ospf6_lsa *
 ospf6_lsdb_lookup_interface (unsigned short type, unsigned long id,
-                             unsigned long advrtr, struct ospf6_if *o6if)
+                             unsigned long advrtr, struct ospf6_interface *o6if)
 {
   listnode n;
   struct ospf6_lsa *lsa;
   assert (ospf6_lsa_get_scope_type (type) == SCOPE_LINKLOCAL);
-  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+  for (n = listhead (o6if->lsdb); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
       if (lsa->lsa_hdr->lsh_advrtr != advrtr)
@@ -341,21 +345,21 @@ ospf6_lsdb_lookup_interface (unsigned short type, unsigned long id,
 
 /* add to interface lsdb */
 static void
-ospf6_lsdb_add_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+ospf6_lsdb_add_interface (struct ospf6_lsa *lsa, struct ospf6_interface *o6if)
 {
   assert (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type)
           == SCOPE_LINKLOCAL);
-  list_add_node (o6if->linklocal_lsa, lsa);
+  list_add_node (o6if->lsdb, lsa);
   ospf6_lsa_lock (lsa);
 }
 
 /* remove from interface lsdb */
 static void
-ospf6_lsdb_remove_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+ospf6_lsdb_remove_interface (struct ospf6_lsa *lsa, struct ospf6_interface *o6if)
 {
   assert (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type)
           == SCOPE_LINKLOCAL);
-  list_delete_by_val (o6if->linklocal_lsa, lsa);
+  list_delete_by_val (o6if->lsdb, lsa);
   ospf6_lsa_unlock (lsa);
 }
 
@@ -454,7 +458,7 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
 {
   struct ospf6 *ospf6;
   struct area *area;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   listnode n;
   struct ospf6_lsa *lsa;
 
@@ -473,8 +477,8 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
         break;
 
       case SCOPE_LINKLOCAL:
-        o6if = (struct ospf6_if *)scope;
-        for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+        o6if = (struct ospf6_interface *)scope;
+        for (n = listhead (o6if->lsdb); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
             if (lsa->lsa_hdr->lsh_type == type &&
@@ -507,7 +511,7 @@ void
 ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
 {
   struct ospf6 *ospf6;
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct area *area;
   listnode n;
   struct ospf6_lsa *lsa;
@@ -527,8 +531,8 @@ ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
 
       case SCOPE_LINKLOCAL:
         /* used by show_ipv6_ospf6_database_link_cmd */
-        o6if = (struct ospf6_if *) scope;
-        for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+        o6if = (struct ospf6_interface *) scope;
+        for (n = listhead (o6if->lsdb); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
             if (lsa->lsa_hdr->lsh_type == type)
@@ -559,7 +563,7 @@ struct ospf6_lsa *
 ospf6_lsdb_lookup (unsigned short type, unsigned long id,
                    unsigned long advrtr, void *scope)
 {
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct area *area;
   struct ospf6 *ospf6;
   struct ospf6_lsa *found;
@@ -567,7 +571,7 @@ ospf6_lsdb_lookup (unsigned short type, unsigned long id,
   switch (ospf6_lsa_get_scope_type (type))
     {
       case SCOPE_LINKLOCAL:
-        o6if = (struct ospf6_if *) scope;
+        o6if = (struct ospf6_interface *) scope;
         found = ospf6_lsdb_lookup_interface (type, id, advrtr, o6if);
         return found;
       case SCOPE_AREA:
@@ -589,7 +593,7 @@ ospf6_lsdb_lookup (unsigned short type, unsigned long id,
 void
 ospf6_lsdb_add (struct ospf6_lsa *lsa)
 {
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct area *area;
   struct ospf6 *ospf6;
   struct timeval now;
@@ -606,7 +610,7 @@ ospf6_lsdb_add (struct ospf6_lsa *lsa)
   switch (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type))
     {
       case SCOPE_LINKLOCAL:
-        o6if = (struct ospf6_if *) lsa->scope;
+        o6if = (struct ospf6_interface *) lsa->scope;
         ospf6_lsdb_add_interface (lsa, o6if);
         break;
       case SCOPE_AREA:
@@ -619,7 +623,7 @@ ospf6_lsdb_add (struct ospf6_lsa *lsa)
         break;
       case SCOPE_RESERVED:
       default:
-        o6log.lsdb ("unsupported scope, can't add lsdb");
+        zlog_err ("!!!unsupported scope, can't add to lsdb");
         return;
     }
   lsa_change (lsa);
@@ -629,7 +633,7 @@ ospf6_lsdb_add (struct ospf6_lsa *lsa)
 void
 ospf6_lsdb_remove (struct ospf6_lsa *lsa)
 {
-  struct ospf6_if *o6if;
+  struct ospf6_interface *o6if;
   struct area *area;
   struct ospf6 *ospf6;
   listnode n;
@@ -640,14 +644,14 @@ ospf6_lsdb_remove (struct ospf6_lsa *lsa)
   for (n = listhead (lsa->delayed_ack_if); n;
        n = listhead (lsa->delayed_ack_if))
     {
-      o6if = (struct ospf6_if *) getdata (n);
+      o6if = (struct ospf6_interface *) getdata (n);
       ospf6_remove_delayed_ack (lsa, o6if);
     }
 
   switch (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type))
     {
       case SCOPE_LINKLOCAL:
-        o6if = (struct ospf6_if *) lsa->scope;
+        o6if = (struct ospf6_interface *) lsa->scope;
         ospf6_lsdb_remove_interface (lsa, o6if);
         break;
       case SCOPE_AREA:
@@ -660,7 +664,7 @@ ospf6_lsdb_remove (struct ospf6_lsa *lsa)
         break;
       case SCOPE_RESERVED:
       default:
-        o6log.lsdb ("unsupported scope, can't add lsdb");
+        zlog_err ("!!!unsupported scope, can't remove from lsdb");
         return;
     }
   return;
@@ -691,36 +695,36 @@ ospf6_lsdb_finish_neighbor (struct neighbor *nbr)
 
 /* interface lsdb */
 void
-ospf6_lsdb_init_interface (struct ospf6_if *o6if)
+ospf6_lsdb_init_interface (struct ospf6_interface *o6if)
 {
-  o6if->linklocal_lsa = list_init ();
-  o6if->delayed_ack = list_init ();
+  o6if->lsdb = list_init ();
+  o6if->lsa_delayed_ack = list_init ();
   return;
 }
 
 void
-ospf6_lsdb_finish_interface (struct ospf6_if *o6if)
+ospf6_lsdb_finish_interface (struct ospf6_interface *o6if)
 {
   listnode n;
   struct ospf6_lsa *lsa;
 
   /* delayed ack list */
-  while (listcount (o6if->delayed_ack))
+  while (listcount (o6if->lsa_delayed_ack))
     {
-      n = listhead (o6if->delayed_ack);
+      n = listhead (o6if->lsa_delayed_ack);
       lsa = (struct ospf6_lsa *) getdata (n);
       ospf6_remove_delayed_ack (lsa, o6if);
     }
-  list_delete_all (o6if->delayed_ack);
+  list_delete_all (o6if->lsa_delayed_ack);
 
   /* interface lsdb */
-  while (listcount (o6if->linklocal_lsa))
+  while (listcount (o6if->lsdb))
     {
-      n = listhead (o6if->linklocal_lsa);
+      n = listhead (o6if->lsdb);
       lsa = (struct ospf6_lsa *) getdata (n);
       ospf6_lsdb_remove_interface (lsa, o6if);
     }
-  list_delete_all (o6if->linklocal_lsa);
+  list_delete_all (o6if->lsdb);
 
   return;
 }
@@ -807,101 +811,87 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
   return;
 }
 
+
+/* maxage LSA remover */
+/* from RFC2328 14.
+    A MaxAge LSA must be removed immediately from the router's link
+    state database as soon as both a) it is no longer contained on any
+    neighbor Link state retransmission lists and b) none of the router's
+    neighbors are in states Exchange or Loading.
+ */
 void
-ospf6_lsdb_maxage_remove_interface (struct ospf6_if *o6if)
+ospf6_lsdb_check_maxage_lsa (struct ospf6 *o6)
 {
-  list l;
-  listnode n;
-  struct ospf6_lsa *lsa = NULL;
-
-  /* if this Interface's associated Area has neighbor in ExChange
-     or Loading, do nothing (return) */
-  if (count_nbr_in_state (NBS_EXCHANGE, o6if->area))
-    return;
-  if (count_nbr_in_state (NBS_LOADING, o6if->area))
-    return;
-
-  l = list_init ();
-  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      if (ospf6_age_current (lsa) == MAXAGE)
-        list_add_node (l, lsa);
-    }
-
-  for (n = listhead (l); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_lsa_maxage_remove (lsa);
-    }
-
-  list_delete_all (l);
-}
-
-void
-ospf6_lsdb_maxage_remove_area (struct area *area)
-{
-  list l;
-  listnode n;
-  struct ospf6_lsa *lsa = NULL;
-
-  /* if this Area has neighbor in ExChange or Loading,
-     do nothing (return) */
-  if (count_nbr_in_state (NBS_EXCHANGE, area))
-    return;
-  if (count_nbr_in_state (NBS_LOADING, area))
-    return;
-
-  l = list_init ();
-  for (n = listhead (area->lsdb); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      if (ospf6_age_current (lsa) == MAXAGE)
-        list_add_node (l, lsa);
-    }
-
-  for (n = listhead (l); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_lsa_maxage_remove (lsa);
-    }
-
-  list_delete_all (l);
-}
-
-void
-ospf6_lsdb_maxage_remove_as (struct ospf6 *ospf6)
-{
-  list l;
-  listnode n;
+  listnode i, j, k;
+  struct area *o6a;
+  struct ospf6_interface *o6i;
   struct ospf6_lsa *lsa;
-  struct area *area;
+  list remove_list;
 
-  /* if one of Area in AS has neighbor in ExChange or Loading,
-     do nothing (return) */
-  for (n = listhead (ospf6->area_list); n; nextnode (n))
+  /* if any neighbor is in state Exchange or Loading, quit */
+  for (i = listhead (o6->area_list); i; nextnode (i))
     {
-      area = (struct area *) getdata (n);
-      if (count_nbr_in_state (NBS_EXCHANGE, area))
+      o6a = (struct area *) getdata (i);
+      if (count_nbr_in_state (NBS_EXCHANGE, o6a))
         return;
-      if (count_nbr_in_state (NBS_LOADING, area))
+      if (count_nbr_in_state (NBS_LOADING, o6a))
         return;
     }
 
-  l = list_init ();
-  for (n = listhead (ospf6->lsdb); n; nextnode (n))
+  /* prepare remove list */
+  remove_list = list_init ();
+
+  /* for AS LSDB */
+  for (i = listhead (o6->lsdb); i; nextnode (i))
     {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      if (ospf6_age_current (lsa) == MAXAGE)
-        list_add_node (l, lsa);
+      lsa = (struct ospf6_lsa *) getdata (i);
+
+      if (ospf6_age_current (lsa) == MAXAGE
+          && listcount (lsa->retrans_nbr) == 0)
+        list_add_node (remove_list, lsa);
     }
 
-  for (n = listhead (l); n; nextnode (n))
+  /* for Area LSDB */
+  for (i = listhead (o6->area_list); i; nextnode (i))
     {
-      lsa = (struct ospf6_lsa *) getdata (n);
+      o6a = (struct area *) getdata (i);
+
+      for (j = listhead (o6a->lsdb); j; nextnode (j))
+        {
+          lsa = (struct ospf6_lsa *) getdata (j);
+
+          if (ospf6_age_current (lsa) == MAXAGE
+              && listcount (lsa->retrans_nbr) == 0)
+            list_add_node (remove_list, lsa);
+        }
+    }
+
+  /* for Interface LSDB */
+  for (i = listhead (o6->area_list); i; nextnode (i))
+    {
+      o6a = (struct area *) getdata (i);
+
+      for (j = listhead (o6a->if_list); j; nextnode (j))
+        {
+          o6i = (struct ospf6_interface *) getdata (j);
+
+          for (k = listhead (o6i->lsdb); k; nextnode (k))
+            {
+              lsa = (struct ospf6_lsa *) getdata (k);
+
+              if (ospf6_age_current (lsa) == MAXAGE
+                  && listcount (lsa->retrans_nbr) == 0)
+                list_add_node (remove_list, lsa);
+            }
+        }
+    }
+
+  for (i = listhead (remove_list); i; nextnode (i))
+    {
+      lsa = (struct ospf6_lsa *) getdata (i);
       ospf6_lsa_maxage_remove (lsa);
     }
 
-  list_delete_all (l);
+  list_delete_all (remove_list);
 }
 
