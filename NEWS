@@ -1,5 +1,38 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.95
+
+* Changes in zebra
+
+** IRDP support is added.
+
+* Changes in ripd
+
+** Set receive UDP socket buffer to large value.
+
+* Changes in ospfd
+
+** Fix problem of OpenBSD-3.4 IP header length treatment.
+
+* Changes in ospf6d
+
+** Area support is added.
+
+* Changes in bgpd
+
+** Old commands are removed
+
+"show ipv6 summary"
+"show ipv6 mbgp summary"
+
+** New ospf6d implementation is introduced.  This is rewrite of whole
+   ospf6d code to make it far much better than old code.
+
+* Changes in vtysh
+
+** Many bugs and problems are fixed.  All of user of vtysh should
+   update to zebra-0.95.
+
 * Changes in zebra-0.94
 
 * Changes in zebra

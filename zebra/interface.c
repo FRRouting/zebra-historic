@@ -1337,6 +1337,10 @@ if_config_write (struct vty *vty)
       rtadv_config_write (vty, ifp);
 #endif /* RTADV */
 
+#ifdef HAVE_IRDP
+      irdp_config_write (vty, ifp);
+#endif /* IRDP */
+
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
   return 0;

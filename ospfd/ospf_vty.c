@@ -7555,12 +7555,10 @@ ospf_vty_zebra_init ()
   install_element (OSPF_NODE, &ospf_distance_ospf_external_inter_cmd);
   install_element (OSPF_NODE, &ospf_distance_ospf_external_intra_inter_cmd);
   install_element (OSPF_NODE, &ospf_distance_ospf_external_inter_intra_cmd);
-#if 0
   install_element (OSPF_NODE, &ospf_distance_source_cmd);
   install_element (OSPF_NODE, &no_ospf_distance_source_cmd);
   install_element (OSPF_NODE, &ospf_distance_source_access_list_cmd);
   install_element (OSPF_NODE, &no_ospf_distance_source_access_list_cmd);
-#endif /* 0 */
 }
 
 struct cmd_node ospf_node =

@@ -33,6 +33,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_network.h"
+
+#ifdef HAVE_TCP_SIGNATURE
+#include "bgpd/bgp_tcpsig.h"
+#endif /* HAVE_TCP_SIGNATURE */
+
 
 /* Accept bgp connection. */
 static int
@@ -237,6 +242,11 @@ bgp_connect (struct peer *peer)
     plog_info (peer->log, "%s [Event] Connect start to %s fd %d",
 	       peer->host, peer->host, peer->fd);
 
+#ifdef HAVE_TCP_SIGNATURE
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_PASSWORD))
+    bgp_tcpsig_set (peer->fd, peer);
+#endif /* HAVE_TCP_SIGNATURE */
+
   /* Connect to the remote peer. */
   return sockunion_connect (peer->fd, &peer->su, htons (peer->port), ifindex);
 }
@@ -322,6 +332,16 @@ bgp_socket (struct bgp *bgp, unsigned short port)
 	  continue;
 	}
 
+#ifdef HAVE_TCP_SIGNATURE
+#ifdef HAVE_LINUX_TCP_SIGNATURE
+      bm->sock = sock;
+#endif /* HAVE_LINUX_TCP_SIGNATURE */
+#ifdef HAVE_OPENBSD_TCP_SIGNATURE
+      bgp_tcpsig_set (sock, 0);
+      bm->sock = -1;
+#endif /* HAVE_OPENBSD_TCP_SIGNATURE */
+#endif /* HAVE_TCP_SIGNATURE */
+
       thread_add_read (master, bgp_accept, bgp, sock);
     }
   while ((ainfo = ainfo->ai_next) != NULL);
@@ -373,6 +393,15 @@ bgp_socket (struct bgp *bgp, unsigned short port)
       close (sock);
       return ret;
     }
+#ifdef HAVE_TCP_SIGNATURE
+#ifdef HAVE_LINUX_TCP_SIGNATURE
+  bm->sock = sock;
+#endif /* HAVE_LINUX_TCP_SIGNATURE */
+#ifdef HAVE_OPENBSD_TCP_SIGNATURE
+  bgp_tcpsig_set (sock, 0);
+  bm->sock = -1;
+#endif /* HAVE_OPENBSD_TCP_SIGNATURE */
+#endif /* HAVE_TCP_SIGNATURE */
 
   thread_add_read (bm->master, bgp_accept, bgp, sock);
 

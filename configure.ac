@@ -7,7 +7,7 @@
 AC_PREREQ(2.53)
 
 AC_INIT(lib/zebra.h)
-AM_INIT_AUTOMAKE(zebra, 0.94)
+AM_INIT_AUTOMAKE(zebra, 0.95)
 AM_CONFIG_HEADER(config.h)
 
 dnl -----------------------------------
@@ -26,6 +26,15 @@ elif test -n "$CFLAGS" ; then
   cflags_specified=yes ;
 fi
 
+dnl ------------
+dnl Check LINKBASE
+dnl ------------
+AC_ARG_WITH(linkbase,
+[  --with-linkbase         Set local library base for use in compilation.])
+if test "x$with_linkbase" != "x" ; then
+  linkbase_specified=yes ;
+fi
+
 dnl --------
 dnl Check CC
 dnl --------
@@ -36,6 +45,13 @@ dnl If CLFAGS doesn\'t exist set default value
 dnl -----------------------------------------
 if test "x$cflags_specified" = "x" ; then
   CFLAGS="$CFLAGS -Wall"
+fi
+
+dnl -----------------------------------------
+dnl If linkbase specified expand it
+dnl -----------------------------------------
+if test "x$linkbase_specified" != "x" ; then
+  CFLAGS="$CFLAGS -I${with_linkbase}/include -L${with_linkbase}/lib" ;
 fi
 
 dnl --------------
@@ -71,6 +87,8 @@ AC_ARG_ENABLE(ospfd,
 [  --disable-ospfd         do not build ospfd])
 AC_ARG_ENABLE(ospf6d,
 [  --disable-ospf6d        do not build ospf6d])
+AC_ARG_ENABLE(irdp,
+[  --enable-irdp           enable IRDP server support in zebra])
 AC_ARG_ENABLE(bgp-announce,
 [  --disable-bgp-announce, turn off BGP route announcement])
 AC_ARG_ENABLE(netlink,
@@ -92,9 +110,8 @@ AC_ARG_ENABLE(ospf-te,
 [  --enable-ospf-te        enable Traffic Engineering Extension to OSPF])
 AC_ARG_ENABLE(multipath,
 [  --enable-multipath=ARG  enable multipath function, ARG must be digit])
-
-dnl AC_ARG_ENABLE(rtadv,
-dnl [  --enable-rtadv          enable IPV6 router advertisment option])
+AC_ARG_ENABLE(tcp-signature,
+[  --enable-tcp-signature  enable TCP MD5 Signature Option (RFC2385) (for Linux and OpenBSD)])
 
 if test "${enable_broken_aliases}" = "yes"; then
   if test "${enable_netlink}" = "yes"
@@ -114,6 +131,10 @@ if test "${enable_nssa}" = "yes"; then
   AC_DEFINE(HAVE_NSSA,,OSPF NSSA)
 fi
 
+if test "${enable_irdp}" = "yes"; then
+  AC_DEFINE(HAVE_IRDP,, IRDP )
+fi
+
 if test "${enable_opaque_lsa}" = "yes"; then
   AC_DEFINE(HAVE_OPAQUE_LSA,,OSPF Opaque LSA)
 fi
@@ -122,10 +143,6 @@ if test "${enable_ospf_te}" = "yes"; then
   AC_DEFINE(HAVE_OPAQUE_LSA,,OSPF Opaque LSA)
   AC_DEFINE(HAVE_OSPF_TE,,OSPF TE)
 fi
-
-dnl if test "${enable_rtadv}" = "yes"; then
-dnl   AC_DEFINE(HAVE_RTADV)
-dnl fi
 
 changequote(, )dnl
 
@@ -198,20 +215,25 @@ dnl ---------------------
 dnl Integrated VTY option
 dnl ---------------------
 case "${enable_vtysh}" in
-  "yes") VTYSH="vtysh";
-         AC_DEFINE(VTYSH,,VTY shell)
-	 AC_CHECK_LIB(tinfo, tputs, , AC_CHECK_LIB(ncurses, tputs))
-         AC_CHECK_LIB(readline, main)
-         if test $ac_cv_lib_readline_main = no; then
-           AC_MSG_ERROR([vtysh needs libreadline but was not found on your system.])
-         fi
-	 AC_CHECK_HEADER(readline/history.h)
-	 if test $ac_cv_header_readline_history_h = no;then
-           AC_MSG_ERROR([readline is too old to have readline/history.h, please update to the latest readline library.])
-	 fi
-         ;;
-  "no" ) VTYSH="";;
-  *    ) ;;
+  "yes")
+    VTYSH="vtysh";
+    AC_DEFINE(VTYSH,,VTY shell)
+    AC_CHECK_LIB(tinfo, tputs, , AC_CHECK_LIB(ncurses, tputs, ,
+                 AC_CHECK_LIB(termcap, tputs)))
+    AC_CHECK_LIB(readline, main)
+    if test $ac_cv_lib_readline_main = no; then
+      AC_MSG_ERROR([vtysh needs libreadline but was not found on your system.])
+    fi
+    AC_CHECK_HEADER(readline/history.h)
+    if test $ac_cv_header_readline_history_h = no;then
+      AC_MSG_ERROR([readline is too old to have readline/history.h, please update to the latest readline library.])
+    fi
+    ;;
+  "no")
+    VTYSH=""
+    ;;
+  *)
+    ;;
 esac
 
 dnl ----------
@@ -509,6 +531,25 @@ if test x"$RIPNGD" = x""; then
 fi
 fi
 
+dnl ----------------------------
+dnl Check TCP Signature support.
+dnl ----------------------------
+if test "${enable_tcp_signature}" = "yes"; then
+  AC_DEFINE(HAVE_TCP_SIGNATURE,,TCP Signature Option)
+  case "$host" in
+    *-linux-*)
+	AC_DEFINE(HAVE_LINUX_TCP_SIGNATURE,,Linux TCP Signature Option)
+    ;;
+    *-openbsd*)
+	AC_DEFINE(HAVE_OPENBSD_TCP_SIGNATURE,,OpenBSD TCP Signature Option)
+    ;;
+    *)
+	echo "Sorry, your OS don't support TCP signature."
+    	exit 1
+    ;;
+  esac
+fi
+
 dnl --------------------
 dnl Daemon disable check
 dnl --------------------
@@ -676,6 +717,19 @@ if test "$zebra_cv_ipv6" = yes; then
 ],[static struct sockaddr_in6 ac_i;int ac_j = sizeof (ac_i.sin6_scope_id);],
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_SIN6_SCOPE_ID,,scope id)],
+ AC_MSG_RESULT(no))
+fi
+
+dnl -----------------------------------
+dnl check in6addr_loopback global variable
+dnl -----------------------------------
+if test "$zebra_cv_ipv6" = yes; then
+  AC_MSG_CHECKING(whether in6addr_loopback is usable)
+  AC_TRY_COMPILE([#include <sys/types.h>
+#include <netinet/in.h>
+],[static struct in6_addr ac_i; ac_i = in6addr_loopback;],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_IN6ADDR_GLOBAL,,in6addr global variables e.g. in6addr_loopback)],
  AC_MSG_RESULT(no))
 fi
 

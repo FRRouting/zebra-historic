@@ -109,7 +109,7 @@ libzebra_a_SOURCES = \
 	print_version.c checksum.c vector.c linklist.c vty.c command.c \
 	sockunion.c prefix.c thread.c if.c memory.c buffer.c table.c hash.c \
 	filter.c routemap.c distribute.c stream.c str.c log.c plist.c \
-	zclient.c sockopt.c smux.c md5.c keychain.c
+	zclient.c sockopt.c smux.c md5.c keychain.c pqueue.c
 
 
 libzebra_a_DEPENDENCIES = @LIB_REGEX@
@@ -119,8 +119,9 @@ libzebra_a_LIBADD = @LIB_REGEX@
 noinst_HEADERS = \
 	buffer.h command.h filter.h getopt.h hash.h if.h linklist.h log.h \
 	memory.h network.h prefix.h routemap.h distribute.h sockunion.h \
-	str.h stream.h table.h thread.h vector.h version.h vty.h zebra.h \
-	plist.h zclient.h sockopt.h smux.h md5-gnu.h keychain.h
+	str.h stream.h table.h thread.h checksum.h vector.h version.h vty.h \
+	zebra.h plist.h zclient.h sockopt.h smux.h md5-gnu.h keychain.h \
+	pqueue.h
 
 
 EXTRA_DIST = regex.c regex-gnu.h
@@ -141,7 +142,7 @@ am_libzebra_a_OBJECTS = version.$(OBJEXT) network.$(OBJEXT) \
 	routemap.$(OBJEXT) distribute.$(OBJEXT) stream.$(OBJEXT) \
 	str.$(OBJEXT) log.$(OBJEXT) plist.$(OBJEXT) zclient.$(OBJEXT) \
 	sockopt.$(OBJEXT) smux.$(OBJEXT) md5.$(OBJEXT) \
-	keychain.$(OBJEXT)
+	keychain.$(OBJEXT) pqueue.$(OBJEXT)
 libzebra_a_OBJECTS = $(am_libzebra_a_OBJECTS)
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)
 CPPFLAGS = @CPPFLAGS@
@@ -158,7 +159,8 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@	./$(DEPDIR)/log.Po ./$(DEPDIR)/md5.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/memory.Po ./$(DEPDIR)/network.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/pid_output.Po ./$(DEPDIR)/plist.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/prefix.Po ./$(DEPDIR)/print_version.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/pqueue.Po ./$(DEPDIR)/prefix.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/print_version.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/routemap.Po ./$(DEPDIR)/smux.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/sockopt.Po ./$(DEPDIR)/sockunion.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/str.Po ./$(DEPDIR)/stream.Po \
@@ -217,6 +219,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/network.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pid_output.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/plist.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pqueue.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/prefix.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/print_version.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/routemap.Po@am__quote@

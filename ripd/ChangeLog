@@ -1,3 +1,11 @@
+2004-05-17  "Michele 'mydecay' Marchetto" <smarchetto1@tin.it>
+
+	* ripd.c (rip_rte_process): Fix nexthop and tag reflection bug.
+
+2004-02-02  Stephan Schweizer <stephan.schweizer@zurich.com>
+
+	* Set UDP receive buffer to large size.
+
 2003-05-18  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* ripd.h (RIP_PACKET_MAXSIZ): Increase size to 524 to avoid some

@@ -111,7 +111,7 @@ libbgp_a_SOURCES = \
 	bgp_debug.c bgp_route.c bgp_zebra.c bgp_open.c bgp_routemap.c \
 	bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c bgp_clist.c \
 	bgp_dump.c bgp_snmp.c bgp_ecommunity.c bgp_mplsvpn.c bgp_nexthop.c \
-	bgp_damp.c bgp_table.c bgp_advertise.c bgp_vty.c
+	bgp_damp.c bgp_table.c bgp_advertise.c bgp_vty.c bgp_tcpsig.c
 
 
 noinst_HEADERS = \
@@ -119,7 +119,7 @@ noinst_HEADERS = \
 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h \
 	bgpd.h bgp_filter.h bgp_clist.h bgp_dump.h bgp_zebra.h \
 	bgp_ecommunity.h bgp_mplsvpn.h bgp_nexthop.h bgp_damp.h bgp_table.h \
-	bgp_advertise.h bgp_snmp.h bgp_vty.h
+	bgp_advertise.h bgp_snmp.h bgp_vty.h bgp_tcpsig.h
 
 
 bgpd_SOURCES = \
@@ -147,7 +147,7 @@ am_libbgp_a_OBJECTS = bgpd.$(OBJEXT) bgp_fsm.$(OBJEXT) \
 	bgp_clist.$(OBJEXT) bgp_dump.$(OBJEXT) bgp_snmp.$(OBJEXT) \
 	bgp_ecommunity.$(OBJEXT) bgp_mplsvpn.$(OBJEXT) \
 	bgp_nexthop.$(OBJEXT) bgp_damp.$(OBJEXT) bgp_table.$(OBJEXT) \
-	bgp_advertise.$(OBJEXT) bgp_vty.$(OBJEXT)
+	bgp_advertise.$(OBJEXT) bgp_vty.$(OBJEXT) bgp_tcpsig.$(OBJEXT)
 libbgp_a_OBJECTS = $(am_libbgp_a_OBJECTS)
 sbin_PROGRAMS = bgpd$(EXEEXT)
 PROGRAMS = $(sbin_PROGRAMS)
@@ -160,7 +160,7 @@ am__objects_1 = bgpd.$(OBJEXT) bgp_fsm.$(OBJEXT) bgp_aspath.$(OBJEXT) \
 	bgp_clist.$(OBJEXT) bgp_dump.$(OBJEXT) bgp_snmp.$(OBJEXT) \
 	bgp_ecommunity.$(OBJEXT) bgp_mplsvpn.$(OBJEXT) \
 	bgp_nexthop.$(OBJEXT) bgp_damp.$(OBJEXT) bgp_table.$(OBJEXT) \
-	bgp_advertise.$(OBJEXT) bgp_vty.$(OBJEXT)
+	bgp_advertise.$(OBJEXT) bgp_vty.$(OBJEXT) bgp_tcpsig.$(OBJEXT)
 am_bgpd_OBJECTS = bgp_main.$(OBJEXT) $(am__objects_1)
 bgpd_OBJECTS = $(am_bgpd_OBJECTS)
 bgpd_DEPENDENCIES = ../lib/libzebra.a
@@ -185,8 +185,9 @@ am__depfiles_maybe = depfiles
 @AMDEP_TRUE@	./$(DEPDIR)/bgp_packet.Po ./$(DEPDIR)/bgp_regex.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/bgp_route.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/bgp_routemap.Po ./$(DEPDIR)/bgp_snmp.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/bgp_table.Po ./$(DEPDIR)/bgp_vty.Po \
-@AMDEP_TRUE@	./$(DEPDIR)/bgp_zebra.Po ./$(DEPDIR)/bgpd.Po
+@AMDEP_TRUE@	./$(DEPDIR)/bgp_table.Po ./$(DEPDIR)/bgp_tcpsig.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/bgp_vty.Po ./$(DEPDIR)/bgp_zebra.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/bgpd.Po
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
@@ -272,6 +273,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgp_routemap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgp_snmp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgp_table.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgp_tcpsig.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgp_vty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgp_zebra.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bgpd.Po@am__quote@

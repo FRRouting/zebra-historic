@@ -1822,6 +1822,9 @@ static_install_ipv6 (struct prefix *p, struct static_ipv6 *si)
 	case STATIC_IPV6_GATEWAY_IFNAME:
 	  nexthop_ipv6_ifname_add (rib, &si->ipv6, si->ifname);
 	  break;
+	case STATIC_IPV6_BLACKHOLE:
+	  nexthop_blackhole_add (rib);
+	  break;
 	}
       rib_process (rn, NULL);
     }
@@ -1846,6 +1849,9 @@ static_install_ipv6 (struct prefix *p, struct static_ipv6 *si)
 	  break;
 	case STATIC_IPV6_GATEWAY_IFNAME:
 	  nexthop_ipv6_ifname_add (rib, &si->ipv6, si->ifname);
+	  break;
+	case STATIC_IPV6_BLACKHOLE:
+	  nexthop_blackhole_add (rib);
 	  break;
 	}
 
@@ -1872,6 +1878,9 @@ static_ipv6_nexthop_same (struct nexthop *nexthop, struct static_ipv6 *si)
       && si->type == STATIC_IPV6_GATEWAY_IFNAME
       && IPV6_ADDR_SAME (&nexthop->gate.ipv6, &si->ipv6)
       && strcmp (nexthop->ifname, si->ifname) == 0)
+    return 1;
+  if (nexthop->type == NEXTHOP_TYPE_BLACKHOLE
+      && si->type == STATIC_IPV6_BLACKHOLE)
     return 1;
   return 0;;
 }

@@ -388,19 +388,6 @@ ospf_zebra_add (struct prefix_ipv4 *p, struct ospf_route *or)
       stream_putw_at (s, 0, stream_get_endp (s));
 
       writen (zclient->sock, s->data, stream_get_endp (s));
-
-#if 0
-      if (IS_DEBUG_OSPF (zebra, ZEBRA_REDISTRIBUTE))
-	{
-	  char *nexthop_str;
-
-	  nexthop_str = strdup (inet_ntoa (*nexthop));
-	  zlog_info ("Zebra: Route add %s/%d nexthop %s metric %d",
-		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str,
-		     metric);
-	  free (nexthop_str);
-	}
-#endif /* 0 */
     }
 }
 
@@ -415,18 +402,6 @@ ospf_zebra_delete (struct prefix_ipv4 *p, struct ospf_route *or)
       api.flags = 0;
       api.message = 0;
       zapi_ipv4_delete (zclient, p, &api);
-
-#if 0
-      if (IS_DEBUG_OSPF (zebra, ZEBRA_REDISTRIBUTE))
-	{
-	  char *nexthop_str;
-
-	  nexthop_str = strdup (inet_ntoa (*nexthop));
-	  zlog_info ("Zebra: Route delete %s/%d nexthop %s",
-		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str);
-	  free (nexthop_str);
-	}
-#endif /* 0 */
     }
 }
 

@@ -221,18 +221,39 @@ thread_empty (struct thread_list *list)
   return  list->head ? 0 : 1;
 }
 
-/* Return remain time in second. */
-unsigned long
+/* Return remain time. */
+char *
 thread_timer_remain_second (struct thread *thread)
 {
   struct timeval timer_now;
+  struct tm *tm;
+  time_t remain_time;
+  char buf[25];
+  int len = 25;
 
   gettimeofday (&timer_now, NULL);
 
-  if (thread->u.sands.tv_sec - timer_now.tv_sec > 0)
-    return thread->u.sands.tv_sec - timer_now.tv_sec;
+  remain_time = thread->u.sands.tv_sec - timer_now.tv_sec;
+
+  if (remain_time < 0)
+    remain_time = 0;
+
+  tm = gmtime (&remain_time);
+
+  /* Making formatted timer strings. */
+#define ONE_DAY_SECOND 60*60*24
+#define ONE_WEEK_SECOND 60*60*24*7
+
+  if (remain_time < ONE_DAY_SECOND)
+    snprintf (buf, len, "%02d:%02d:%02d",
+              tm->tm_hour, tm->tm_min, tm->tm_sec);
+  else if (remain_time < ONE_WEEK_SECOND)
+    snprintf (buf, len, "%dd%02dh%02dm",
+              tm->tm_yday, tm->tm_hour, tm->tm_min);
   else
-    return 0;
+    snprintf (buf, len, "%02dw%dd%02dh",
+              tm->tm_yday/7, tm->tm_yday - ((tm->tm_yday/7) * 7), tm->tm_hour);
+  return buf;
 }
 
 /* Get new thread.  */

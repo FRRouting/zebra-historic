@@ -52,6 +52,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_damp.h"
 #include "bgpd/bgp_advertise.h"
 #include "bgpd/bgp_zebra.h"
+#include "bgpd/bgp_vty.h"
 
 /* Extern from bgp_dump.c */
 extern char *bgp_origin_str[];
@@ -865,6 +866,22 @@ bgp_process (struct bgp *bgp, struct bgp_node *rn, afi_t afi, safi_t safi)
 }
 
 int
+bgp_maximum_prefix_restart_timer (struct thread *thread)
+{
+  struct peer *peer;
+
+  peer = THREAD_ARG (thread);
+  peer->t_pmax_restart = NULL;
+
+  if (BGP_DEBUG (events, EVENTS))
+    zlog_info ("%s Maximum-prefix restart timer expired, restore peering", peer->host);
+
+  peer_clear (peer);
+
+  return 0;
+}
+
+int
 bgp_maximum_prefix_overflow (struct peer *peer, afi_t afi, safi_t safi, int always)
 {
   if (! CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX))
@@ -877,8 +894,9 @@ bgp_maximum_prefix_overflow (struct peer *peer, afi_t afi, safi_t safi, int alwa
 	return 0;
 
       zlog (peer->log, LOG_INFO,
-	    "%%MAXPFXEXCEED: No. of prefix received from %s (afi %d): %ld exceed limit %ld",
-	    peer->host, afi, peer->pcount[afi][safi], peer->pmax[afi][safi]);
+	    "%%MAXPFXEXCEED: No. of %s prefix received from %s %ld exceed, limit %ld",
+	    afi_safi_print (afi, safi), peer->host, peer->pcount[afi][safi],
+	    peer->pmax[afi][safi]);
       SET_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_PREFIX_LIMIT);
 
       if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING))
@@ -902,6 +920,20 @@ bgp_maximum_prefix_overflow (struct peer *peer, afi_t afi, safi_t safi, int alwa
 	bgp_notify_send_with_data (peer, BGP_NOTIFY_CEASE,
 				   BGP_NOTIFY_CEASE_MAX_PREFIX, ndata, 7);
       }
+
+      /* restart timer start */
+      if (peer->pmax_restart[afi][safi])
+	{
+	  peer->v_pmax_restart = peer->pmax_restart[afi][safi] * 60;
+
+	  if (BGP_DEBUG (events, EVENTS))
+	    zlog_info ("%s Maximum-prefix restart timer started for %d secs",
+		       peer->host, peer->v_pmax_restart);
+
+	  BGP_TIMER_ON (peer->t_pmax_restart, bgp_maximum_prefix_restart_timer,
+			peer->v_pmax_restart);
+	}
+
       return 1;
     }
   else
@@ -914,8 +946,9 @@ bgp_maximum_prefix_overflow (struct peer *peer, afi_t afi, safi_t safi, int alwa
 	return 0;
 
       zlog (peer->log, LOG_INFO,
-	    "%%MAXPFX: No. of prefix received from %s (afi %d) reaches %ld, max %ld",
-	    peer->host, afi, peer->pcount[afi][safi], peer->pmax[afi][safi]);
+	    "%%MAXPFX: No. of %s prefix received from %s reaches %ld, max %ld",
+	    afi_safi_print (afi, safi), peer->host, peer->pcount[afi][safi],
+	    peer->pmax[afi][safi]);
       SET_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_PREFIX_THRESHOLD);
     }
   else
@@ -930,7 +963,8 @@ bgp_rib_remove (struct bgp_node *rn, struct bgp_info *ri, struct peer *peer,
 {
   if (! CHECK_FLAG (ri->flags, BGP_INFO_HISTORY))
     {
-      peer->pcount[afi][safi]--;
+      if (! CHECK_FLAG (ri->flags, BGP_INFO_STALE))
+	peer->pcount[afi][safi]--;
       bgp_aggregate_decrement (peer->bgp, &rn->p, ri, afi, safi);
       UNSET_FLAG (ri->flags, BGP_INFO_VALID);
       bgp_process (peer->bgp, rn, afi, safi);
@@ -1069,7 +1103,7 @@ bgp_update (struct peer *peer, struct prefix *p, struct attr *attr,
 	 discard it.  */
       if (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl == 1
 	  && ! bgp_nexthop_check_ebgp (afi, &new_attr)
-	  && ! CHECK_FLAG (peer->flags, PEER_FLAG_ENFORCE_MULTIHOP))
+	  && ! CHECK_FLAG (peer->flags, PEER_FLAG_DISABLE_CONNECTED_CHECK))
 	{
 	  reason = "non-connected next-hop;";
 	  goto filtered;
@@ -1124,6 +1158,13 @@ bgp_update (struct peer *peer, struct prefix *p, struct attr *attr,
 		peer->host,
 		inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
 		p->prefixlen);
+
+	      /* graceful restart STALE flag unset. */
+	      if (CHECK_FLAG (ri->flags, BGP_INFO_STALE))
+		{
+		  UNSET_FLAG (ri->flags, BGP_INFO_STALE);
+		  peer->pcount[afi][safi]++;
+		}
 	    }
 
 	  bgp_unlock_node (rn);
@@ -1137,6 +1178,13 @@ bgp_update (struct peer *peer, struct prefix *p, struct attr *attr,
 	      peer->host,
 	      inet_ntop(p->family, &p->u.prefix, buf, SU_ADDRSTRLEN),
 	      p->prefixlen);
+
+      /* graceful restart STALE flag unset. */
+      if (CHECK_FLAG (ri->flags, BGP_INFO_STALE))
+	{
+	  UNSET_FLAG (ri->flags, BGP_INFO_STALE);
+	  peer->pcount[afi][safi]++;
+	}
 
       /* The attribute is changed. */
       SET_FLAG (ri->flags, BGP_INFO_ATTR_CHANGED);
@@ -1181,7 +1229,7 @@ bgp_update (struct peer *peer, struct prefix *p, struct attr *attr,
 	  && safi == SAFI_UNICAST 
 	  && (peer_sort (peer) == BGP_PEER_IBGP
 	      || (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
-	      || CHECK_FLAG (peer->flags, PEER_FLAG_ENFORCE_MULTIHOP)))
+	      || CHECK_FLAG (peer->flags, PEER_FLAG_DISABLE_CONNECTED_CHECK)))
 	{
 	  if (bgp_nexthop_lookup (afi, peer, ri, NULL, NULL))
 	    SET_FLAG (ri->flags, BGP_INFO_VALID);
@@ -1228,7 +1276,7 @@ bgp_update (struct peer *peer, struct prefix *p, struct attr *attr,
       && safi == SAFI_UNICAST
       && (peer_sort (peer) == BGP_PEER_IBGP
 	  || (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
-	  || CHECK_FLAG (peer->flags, PEER_FLAG_ENFORCE_MULTIHOP)))
+	  || CHECK_FLAG (peer->flags, PEER_FLAG_DISABLE_CONNECTED_CHECK)))
     {
       if (bgp_nexthop_lookup (afi, peer, new, NULL, NULL))
 	SET_FLAG (new->flags, BGP_INFO_VALID);
@@ -1444,6 +1492,9 @@ bgp_announce_route (struct peer *peer, afi_t afi, safi_t safi)
 	 rn = bgp_route_next(rn))
       if ((table = (rn->info)) != NULL)
 	bgp_announce_table (peer, afi, safi, table);
+
+  if (! peer->t_routeadv[afi][safi])
+    bgp_routeadv_timer (peer, afi, safi);
 }
 
 void
@@ -1521,7 +1572,18 @@ bgp_clear_route_table (struct peer *peer, afi_t afi, safi_t safi,
       for (ri = rn->info; ri; ri = ri->next)
 	if (ri->peer == peer)
 	  {
-	    bgp_rib_remove (rn, ri, peer, afi, safi);
+	    /* graceful restart STALE flag set. */
+	    if (CHECK_FLAG (peer->sflags, PEER_STATUS_NSF_WAIT)
+		&& peer->nsf[afi][safi]
+		&& ! CHECK_FLAG (ri->flags, BGP_INFO_STALE)
+		&& ! CHECK_FLAG (ri->flags, BGP_INFO_HISTORY)
+		&& ! CHECK_FLAG (ri->flags, BGP_INFO_DAMPED))
+	      {
+		SET_FLAG (ri->flags, BGP_INFO_STALE);
+		peer->pcount[afi][safi]--;
+	      }
+	    else
+	      bgp_rib_remove (rn, ri, peer, afi, safi);
 	    break;
 	  }
       for (ain = rn->adj_in; ain; ain = ain->next)
@@ -1546,9 +1608,6 @@ bgp_clear_route (struct peer *peer, afi_t afi, safi_t safi)
 {
   struct bgp_node *rn;
   struct bgp_table *table;
-
-  if (! peer->afc[afi][safi])
-    return;
 
   if (safi != SAFI_MPLS_VPN)
     bgp_clear_route_table (peer, afi, safi, NULL);
@@ -1587,6 +1646,27 @@ bgp_clear_adj_in (struct peer *peer, afi_t afi, safi_t safi)
           bgp_unlock_node (rn);
           break;
 	}
+}
+
+void
+bgp_clear_stale_route (struct peer *peer, afi_t afi, safi_t safi)
+{
+  struct bgp_node *rn;
+  struct bgp_info *ri;
+  struct bgp_table *table;
+
+  table = peer->bgp->rib[afi][safi];
+
+  for (rn = bgp_table_top (table); rn; rn = bgp_route_next (rn))
+    {
+      for (ri = rn->info; ri; ri = ri->next)
+	if (ri->peer == peer)
+	  {
+	    if (CHECK_FLAG (ri->flags, BGP_INFO_STALE))
+	      bgp_rib_remove (rn, ri, peer, afi, safi);
+	    break;
+	  }
+    }
 }
 
 /* Delete all kernel routes. */
@@ -3778,7 +3858,9 @@ route_vty_out (struct vty *vty, struct prefix *p,
   length = vty->obuf->length;
 
   /* Route status display. */
-  if (binfo->suppress)
+  if (CHECK_FLAG (binfo->flags, BGP_INFO_STALE))
+    vty_out (vty, "S");
+  else if (binfo->suppress)
     vty_out (vty, "s");
   else if (! CHECK_FLAG (binfo->flags, BGP_INFO_HISTORY))
     vty_out (vty, "*");
@@ -4175,26 +4257,19 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
 	    aspath_print_vty (vty, attr->aspath);
 	}
 
-      if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_AGGREGATOR)
-	  || CHECK_FLAG (binfo->peer->af_flags[afi][safi], PEER_FLAG_REFLECTOR_CLIENT)
-	  || CHECK_FLAG (binfo->peer->af_flags[afi][safi], PEER_FLAG_RSERVER_CLIENT)
-	  || CHECK_FLAG (binfo->flags, BGP_INFO_HISTORY)
-	  || CHECK_FLAG (binfo->flags, BGP_INFO_DAMPED))
-	{
-	  vty_out (vty, ",");
-
-	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_AGGREGATOR))
-	    vty_out (vty, " (aggregated by %d %s)", attr->aggregator_as,
-		     inet_ntoa (attr->aggregator_addr));
-	  if (CHECK_FLAG (binfo->peer->af_flags[afi][safi], PEER_FLAG_REFLECTOR_CLIENT))
-	    vty_out (vty, " (Received from a RR-client)");
-	  if (CHECK_FLAG (binfo->peer->af_flags[afi][safi], PEER_FLAG_RSERVER_CLIENT))
-	    vty_out (vty, " (Received from a RS-client)");
-	  if (CHECK_FLAG (binfo->flags, BGP_INFO_HISTORY))
-	    vty_out (vty, " (history entry)");
-	  else if (CHECK_FLAG (binfo->flags, BGP_INFO_DAMPED))
-	    vty_out (vty, " (suppressed due to dampening)");
-	}
+      if (CHECK_FLAG (binfo->flags, BGP_INFO_STALE))
+	vty_out (vty, ", (stale)");
+      if (CHECK_FLAG (attr->flag, ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR)))
+	vty_out (vty, ", (aggregated by %d %s)", attr->aggregator_as,
+		 inet_ntoa (attr->aggregator_addr));
+      if (CHECK_FLAG (binfo->peer->af_flags[afi][safi], PEER_FLAG_REFLECTOR_CLIENT))
+	vty_out (vty, ", (Received from a RR-client)");
+      if (CHECK_FLAG (binfo->peer->af_flags[afi][safi], PEER_FLAG_RSERVER_CLIENT))
+	vty_out (vty, ", (Received from a RS-client)");
+      if (CHECK_FLAG (binfo->flags, BGP_INFO_HISTORY))
+	vty_out (vty, ", (history entry)");
+      else if (CHECK_FLAG (binfo->flags, BGP_INFO_DAMPED))
+	vty_out (vty, ", (suppressed due to dampening)");
       vty_out (vty, "%s", VTY_NEWLINE);
 	  
       /* Line2 display Next-hop, Neighbor, Router-id */
@@ -4320,6 +4395,8 @@ route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p,
   vty_out (vty, "%s", VTY_NEWLINE);
 }  
 
+#define BGP_SHOW_SCODE_HEADER "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal,%s              r RIB-failure, S Stale%s"
+#define BGP_SHOW_OCODE_HEADER "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s"
 #define BGP_SHOW_HEADER "   Network          Next Hop            Metric LocPrf Weight Path%s"
 #define BGP_SHOW_DAMP_HEADER "   Network          From             Reuse    Path%s"
 #define BGP_SHOW_FLAP_HEADER "   Network          From            Flaps Duration Reuse    Path%s"
@@ -4779,8 +4856,8 @@ bgp_show (struct vty *vty, char *view_name, afi_t afi, safi_t safi,
 	    if (header)
 	      {
 		vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
-		vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
-		vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s", VTY_NEWLINE, VTY_NEWLINE);
+		vty_out (vty, BGP_SHOW_SCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
+		vty_out (vty, BGP_SHOW_OCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
 		if (type == bgp_show_type_dampend_paths
 		    || type == bgp_show_type_damp_neighbor)
 		  vty_out (vty, BGP_SHOW_DAMP_HEADER, VTY_NEWLINE);
@@ -6965,7 +7042,7 @@ bgp_show_community_list (struct vty *vty, char *com, int exact,
 {
   struct community_list *list;
 
-  list = community_list_lookup (bgp_clist, com, COMMUNITY_LIST_AUTO);
+  list = community_list_lookup (bgp_clist, com, COMMUNITY_LIST_MASTER);
   if (list == NULL)
     {
       vty_out (vty, "%% %s is not a valid community-list name%s", com,
@@ -6983,11 +7060,12 @@ bgp_show_community_list (struct vty *vty, char *com, int exact,
 
 DEFUN (show_ip_bgp_community_list,
        show_ip_bgp_community_list_cmd,
-       "show ip bgp community-list WORD",
+       "show ip bgp community-list (<1-500>|WORD)",
        SHOW_STR
        IP_STR
        BGP_STR
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n")
 {
   return bgp_show_community_list (vty, argv[0], 0, AFI_IP, SAFI_UNICAST);
@@ -6995,7 +7073,7 @@ DEFUN (show_ip_bgp_community_list,
 
 DEFUN (show_ip_bgp_ipv4_community_list,
        show_ip_bgp_ipv4_community_list_cmd,
-       "show ip bgp ipv4 (unicast|multicast) community-list WORD",
+       "show ip bgp ipv4 (unicast|multicast) community-list (<1-500>|WORD)",
        SHOW_STR
        IP_STR
        BGP_STR
@@ -7003,6 +7081,7 @@ DEFUN (show_ip_bgp_ipv4_community_list,
        "Address Family modifier\n"
        "Address Family modifier\n"
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n")
 {
   if (strncmp (argv[0], "m", 1) == 0)
@@ -7013,11 +7092,12 @@ DEFUN (show_ip_bgp_ipv4_community_list,
 
 DEFUN (show_ip_bgp_community_list_exact,
        show_ip_bgp_community_list_exact_cmd,
-       "show ip bgp community-list WORD exact-match",
+       "show ip bgp community-list (<1-500>|WORD) exact-match",
        SHOW_STR
        IP_STR
        BGP_STR
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n"
        "Exact match of the communities\n")
 {
@@ -7026,7 +7106,7 @@ DEFUN (show_ip_bgp_community_list_exact,
 
 DEFUN (show_ip_bgp_ipv4_community_list_exact,
        show_ip_bgp_ipv4_community_list_exact_cmd,
-       "show ip bgp ipv4 (unicast|multicast) community-list WORD exact-match",
+       "show ip bgp ipv4 (unicast|multicast) community-list (<1-500>|WORD) exact-match",
        SHOW_STR
        IP_STR
        BGP_STR
@@ -7034,6 +7114,7 @@ DEFUN (show_ip_bgp_ipv4_community_list_exact,
        "Address Family modifier\n"
        "Address Family modifier\n"
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n"
        "Exact match of the communities\n")
 {
@@ -7046,10 +7127,11 @@ DEFUN (show_ip_bgp_ipv4_community_list_exact,
 #ifdef HAVE_IPV6
 DEFUN (show_bgp_community_list,
        show_bgp_community_list_cmd,
-       "show bgp community-list WORD",
+       "show bgp community-list (<1-500>|WORD)",
        SHOW_STR
        BGP_STR
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n")
 {
   return bgp_show_community_list (vty, argv[0], 0, AFI_IP6, SAFI_UNICAST);
@@ -7057,11 +7139,12 @@ DEFUN (show_bgp_community_list,
 
 ALIAS (show_bgp_community_list,
        show_bgp_ipv6_community_list_cmd,
-       "show bgp ipv6 community-list WORD",
+       "show bgp ipv6 community-list (<1-500>|WORD)",
        SHOW_STR
        BGP_STR
        "Address family\n"
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n");
 
 /* old command */
@@ -7092,10 +7175,11 @@ DEFUN (show_ipv6_mbgp_community_list,
 
 DEFUN (show_bgp_community_list_exact,
        show_bgp_community_list_exact_cmd,
-       "show bgp community-list WORD exact-match",
+       "show bgp community-list (<1-500>|WORD) exact-match",
        SHOW_STR
        BGP_STR
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n"
        "Exact match of the communities\n")
 {
@@ -7104,11 +7188,12 @@ DEFUN (show_bgp_community_list_exact,
 
 ALIAS (show_bgp_community_list_exact,
        show_bgp_ipv6_community_list_exact_cmd,
-       "show bgp ipv6 community-list WORD exact-match",
+       "show bgp ipv6 community-list (<1-500>|WORD) exact-match",
        SHOW_STR
        BGP_STR
        "Address family\n"
        "Display routes matching the community-list\n"
+       "community-list number\n"
        "community-list name\n"
        "Exact match of the communities\n");
 
@@ -7321,8 +7406,8 @@ show_adj_route (struct vty *vty, struct peer *peer, afi_t afi, safi_t safi,
 			  PEER_STATUS_DEFAULT_ORIGINATE))
     {
       vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
-      vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
-      vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s", VTY_NEWLINE, VTY_NEWLINE);
+      vty_out (vty, BGP_SHOW_SCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
+      vty_out (vty, BGP_SHOW_OCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
 
       vty_out (vty, "Originating default network 0.0.0.0%s%s",
 	       VTY_NEWLINE, VTY_NEWLINE);
@@ -7338,8 +7423,8 @@ show_adj_route (struct vty *vty, struct peer *peer, afi_t afi, safi_t safi,
 	      if (header1)
 		{
 		  vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
-		  vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
-		  vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s", VTY_NEWLINE, VTY_NEWLINE);
+		  vty_out (vty, BGP_SHOW_SCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
+		  vty_out (vty, BGP_SHOW_OCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
 		  header1 = 0;
 		}
 	      if (header2)
@@ -7362,8 +7447,8 @@ show_adj_route (struct vty *vty, struct peer *peer, afi_t afi, safi_t safi,
 	      if (header1)
 		{
 		  vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
-		  vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
-		  vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s", VTY_NEWLINE, VTY_NEWLINE);
+		  vty_out (vty, BGP_SHOW_SCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
+		  vty_out (vty, BGP_SHOW_OCODE_HEADER, VTY_NEWLINE, VTY_NEWLINE);
 		  header1 = 0;
 		}
 	      if (header2)

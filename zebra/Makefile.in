@@ -120,12 +120,13 @@ sbin_PROGRAMS = zebra
 
 zebra_SOURCES = \
 	zserv.c main.c interface.c connected.c ioctl.c zebra_rib.c \
-	redistribute.c debug.c rtadv.c zebra_snmp.c zebra_vty.c
+	redistribute.c debug.c rtadv.c zebra_snmp.c zebra_vty.c \
+	irdp_main.c irdp_interface.c irdp_packet.c
 
 
 noinst_HEADERS = \
 	connected.h ioctl.h rib.h rt.h zserv.h redistribute.h debug.h rtadv.h \
-	interface.h ipforward.h
+	interface.h ipforward.h irdp.h
 
 
 zebra_LDADD = ../lib/libzebra.a $(otherobj) $(LIB_IPV6)
@@ -151,7 +152,8 @@ PROGRAMS = $(sbin_PROGRAMS)
 am_zebra_OBJECTS = zserv.$(OBJEXT) main.$(OBJEXT) interface.$(OBJEXT) \
 	connected.$(OBJEXT) ioctl.$(OBJEXT) zebra_rib.$(OBJEXT) \
 	redistribute.$(OBJEXT) debug.$(OBJEXT) rtadv.$(OBJEXT) \
-	zebra_snmp.$(OBJEXT) zebra_vty.$(OBJEXT)
+	zebra_snmp.$(OBJEXT) zebra_vty.$(OBJEXT) irdp_main.$(OBJEXT) \
+	irdp_interface.$(OBJEXT) irdp_packet.$(OBJEXT)
 zebra_OBJECTS = $(am_zebra_OBJECTS)
 zebra_LDFLAGS =
 DEFAULT_INCLUDES =  -I. -I$(srcdir) -I$(top_builddir)
@@ -162,6 +164,8 @@ depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/connected.Po ./$(DEPDIR)/debug.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/interface.Po ./$(DEPDIR)/ioctl.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/irdp_interface.Po \
+@AMDEP_TRUE@	./$(DEPDIR)/irdp_main.Po ./$(DEPDIR)/irdp_packet.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/main.Po ./$(DEPDIR)/redistribute.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/rtadv.Po ./$(DEPDIR)/zebra_rib.Po \
 @AMDEP_TRUE@	./$(DEPDIR)/zebra_snmp.Po ./$(DEPDIR)/zebra_vty.Po \
@@ -226,6 +230,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/debug.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/interface.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioctl.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/irdp_interface.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/irdp_main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/irdp_packet.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/redistribute.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rtadv.Po@am__quote@

@@ -307,7 +307,7 @@ vty_auth (struct vty *vty, char *buf)
   switch (vty->node)
     {
     case AUTH_NODE:
-      if (host.encrypt)
+      if (host.password_encrypt)
 	passwd = host.password_encrypt;
       else
 	passwd = host.password;
@@ -317,7 +317,7 @@ vty_auth (struct vty *vty, char *buf)
 	next_node = VIEW_NODE;
       break;
     case AUTH_ENABLE_NODE:
-      if (host.encrypt)
+      if (host.enable_encrypt)
 	passwd = host.enable_encrypt;
       else
 	passwd = host.enable;
@@ -327,10 +327,11 @@ vty_auth (struct vty *vty, char *buf)
 
   if (passwd)
     {
-      if (host.encrypt)
-	fail = strcmp (crypt(buf, passwd), passwd);
+      if (strcmp (crypt(buf, passwd), passwd) == 0
+	  || strcmp (buf, passwd) == 0)
+	fail = 0;
       else
-	fail = strcmp (buf, passwd);
+	fail = 1;
     }
   else
     fail = 1;

@@ -502,14 +502,6 @@ ripng_enable_apply (struct interface *ifp)
 	  if (! ri->t_wakeup)
 	    ri->t_wakeup = thread_add_timer (master, ripng_interface_wakeup,
 					     ifp, 1);
-#if 0
-	  /* Join to multicast group. */
-	  ripng_multicast_join (ifp);
-
-	  /* Send RIP request to the interface. */
-	  ripng_request (ifp);
-#endif /* 0 */
-
 	  ri->running = 1;
 	}
     }

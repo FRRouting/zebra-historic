@@ -1983,109 +1983,6 @@ ALIAS (no_ripng_default_metric,
        "Set a metric of redistribute routes\n"
        "Default metric\n");
 
-#if 0
-/* RIPng update timer setup. */
-DEFUN (ripng_update_timer,
-       ripng_update_timer_cmd,
-       "update-timer SECOND",
-       "Set RIPng update timer in seconds\n"
-       "Seconds\n")
-{
-  unsigned long update;
-  char *endptr = NULL;
-
-  update = strtoul (argv[0], &endptr, 10);
-  if (update == ULONG_MAX || *endptr != '\0')
-    {
-      vty_out (vty, "update timer value error%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ripng->update_time = update;
-
-  ripng_event (RIPNG_UPDATE_EVENT, 0);
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ripng_update_timer,
-       no_ripng_update_timer_cmd,
-       "no update-timer SECOND",
-       NO_STR
-       "Unset RIPng update timer in seconds\n"
-       "Seconds\n")
-{
-  ripng->update_time = RIPNG_UPDATE_TIMER_DEFAULT;
-  ripng_event (RIPNG_UPDATE_EVENT, 0);
-  return CMD_SUCCESS;
-}
-
-/* RIPng timeout timer setup. */
-DEFUN (ripng_timeout_timer,
-       ripng_timeout_timer_cmd,
-       "timeout-timer SECOND",
-       "Set RIPng timeout timer in seconds\n"
-       "Seconds\n")
-{
-  unsigned long timeout;
-  char *endptr = NULL;
-
-  timeout = strtoul (argv[0], &endptr, 10);
-  if (timeout == ULONG_MAX || *endptr != '\0')
-    {
-      vty_out (vty, "timeout timer value error%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ripng->timeout_time = timeout;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ripng_timeout_timer,
-       no_ripng_timeout_timer_cmd,
-       "no timeout-timer SECOND",
-       NO_STR
-       "Unset RIPng timeout timer in seconds\n"
-       "Seconds\n")
-{
-  ripng->timeout_time = RIPNG_TIMEOUT_TIMER_DEFAULT;
-  return CMD_SUCCESS;
-}
-
-/* RIPng garbage timer setup. */
-DEFUN (ripng_garbage_timer,
-       ripng_garbage_timer_cmd,
-       "garbage-timer SECOND",
-       "Set RIPng garbage timer in seconds\n"
-       "Seconds\n")
-{
-  unsigned long garbage;
-  char *endptr = NULL;
-
-  garbage = strtoul (argv[0], &endptr, 10);
-  if (garbage == ULONG_MAX || *endptr != '\0')
-    {
-      vty_out (vty, "garbage timer value error%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ripng->garbage_time = garbage;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ripng_garbage_timer,
-       no_ripng_garbage_timer_cmd,
-       "no garbage-timer SECOND",
-       NO_STR
-       "Unset RIPng garbage timer in seconds\n"
-       "Seconds\n")
-{
-  ripng->garbage_time = RIPNG_GARBAGE_TIMER_DEFAULT;
-  return CMD_SUCCESS;
-}
-#endif /* 0 */
-
 DEFUN (ripng_timers,
        ripng_timers_cmd,
        "timers basic <0-65535> <0-65535> <0-65535>",
@@ -2265,17 +2162,6 @@ ripng_config_write (struct vty *vty)
 		   ripng->garbage_time,
 		   VTY_NEWLINE);
 	}
-#if 0
-      if (ripng->update_time != RIPNG_UPDATE_TIMER_DEFAULT)
-	vty_out (vty, " update-timer %d%s", ripng->update_time,
-		 VTY_NEWLINE);
-      if (ripng->timeout_time != RIPNG_TIMEOUT_TIMER_DEFAULT)
-	vty_out (vty, " timeout-timer %d%s", ripng->timeout_time,
-		 VTY_NEWLINE);
-      if (ripng->garbage_time != RIPNG_GARBAGE_TIMER_DEFAULT)
-	vty_out (vty, " garbage-timer %d%s", ripng->garbage_time,
-		 VTY_NEWLINE);
-#endif /* 0 */
 
       write += config_write_distribute (vty);
 
@@ -2485,14 +2371,6 @@ ripng_init ()
 
   install_element (RIPNG_NODE, &ripng_timers_cmd);
   install_element (RIPNG_NODE, &no_ripng_timers_cmd);
-#if 0
-  install_element (RIPNG_NODE, &ripng_update_timer_cmd);
-  install_element (RIPNG_NODE, &no_ripng_update_timer_cmd);
-  install_element (RIPNG_NODE, &ripng_timeout_timer_cmd);
-  install_element (RIPNG_NODE, &no_ripng_timeout_timer_cmd);
-  install_element (RIPNG_NODE, &ripng_garbage_timer_cmd);
-  install_element (RIPNG_NODE, &no_ripng_garbage_timer_cmd);
-#endif /* 0 */
 
   install_element (RIPNG_NODE, &ripng_default_information_originate_cmd);
   install_element (RIPNG_NODE, &no_ripng_default_information_originate_cmd);

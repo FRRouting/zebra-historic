@@ -96,7 +96,7 @@ struct
     { ZEBRA_ROUTE_BGP,     "B", "bgp"}
   };
 
-/* Utility function to set boradcast option to the socket. */
+/* Utility function to set boradcast option to the socket.  */
 int
 sockopt_broadcast (int sock)
 {
@@ -106,10 +106,24 @@ sockopt_broadcast (int sock)
   ret = setsockopt (sock, SOL_SOCKET, SO_BROADCAST, (char *) &on, sizeof on);
   if (ret < 0)
     {
-      zlog_warn ("can't set sockopt SO_BROADCAST to socket %d", sock);
-      return -1;
+      zlog_warn ("can't set sockopt SO_BROADCAST to socket %d: %s",
+		 sock, strerror (errno));
+      return ret;
     }
   return 0;
+}
+
+/* Utility function to set size of UDP SO_RCVBUF.  */
+static int
+sockopt_recvbuf (int sock, int size)
+{
+  int ret;
+  
+  ret = setsockopt (sock, SOL_SOCKET, SO_RCVBUF, (char *) &size, sizeof (int));
+  if (ret < 0)
+    zlog_warn ("can't setsockopt SO_RCVBUF to socket %d: %s",
+	       sock, strerror (errno));
+  return ret;
 }
 
 int
@@ -523,8 +537,10 @@ rip_rte_process (struct rte *rte, struct sockaddr_in *from,
 	 router as the existing route, and the new metric is different
 	 than the old one; or, if the new metric is lower than the old
 	 one; do the following actions: */
-      if ((same && rinfo->metric != rte->metric) ||
-	  rte->metric < rinfo->metric)
+      if ((same && (rinfo->metric != rte->metric
+		    || rinfo->tag != rte->tag
+		    || !IPV4_ADDR_SAME(&rte->nexthop, &rinfo->nexthop)))
+	  || rte->metric < rinfo->metric)
 	{
 	  /* - Adopt the route from the datagram.  That is, put the
 	     new metric in, and adjust the next hop address (if
@@ -1783,6 +1799,7 @@ rip_create_socket ()
   sockopt_broadcast (sock);
   sockopt_reuseaddr (sock);
   sockopt_reuseport (sock);
+  sockopt_recvbuf (sock, RIP_UDP_RCV_BUF);
 #ifdef RIP_RECVMSG
   setsockopt_pktinfo (sock);
 #endif /* RIP_RECVMSG */

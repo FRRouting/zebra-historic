@@ -134,6 +134,6 @@ struct thread *thread_fetch (struct thread_master *, struct thread *);
 struct thread *thread_execute (struct thread_master *,
 			       int (*)(struct thread *), void *, int);
 void thread_call (struct thread *);
-unsigned long thread_timer_remain_second (struct thread *);
+char *thread_timer_remain_second (struct thread *);
 
 #endif /* _ZEBRA_THREAD_H */

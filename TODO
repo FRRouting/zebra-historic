@@ -1,6 +1,6 @@
 
 			   Zebra TODO list
-                             2002/06/18
+                             2004/07/20
 
 zebra:
 
@@ -10,7 +10,6 @@ o Multiple (alias) address configuration for the interface when kernel
 
 bgpd:
 
-o BGP TCP MD5 authentication (on OpenBSD) by password command.
 o HUP signal support (reload configuration file).
 o BGP multi-path extension
 
@@ -25,5 +24,9 @@ o Demand circuits.
 o Multiple instances.
 o OSPF MIB [SNMP get is amost finished].
 o HUP signal treatment.
+
+ospf6d:
+
+o Documentation.
 --
 Kunihiro Ishiguro <kunihiro@zebra.org>

@@ -226,11 +226,6 @@ rip_request_interface_send (struct interface *ifp, u_char version)
 	      to.sin_port = htons (RIP_PORT_DEFAULT);
 	      to.sin_addr = p->prefix;
 
-#if 0
-	      if (IS_RIP_DEBUG_EVENT)
-		zlog_info ("SEND request to %s", inet_ntoa (to.sin_addr));
-#endif /* 0 */
-	      
 	      rip_request_send (&to, ifp, version);
 	    }
 	}
@@ -309,7 +304,10 @@ rip_request_neighbor_all ()
 int
 rip_multicast_join (struct interface *ifp, int sock)
 {
+  struct rip_interface *ri;
   listnode cnode;
+
+  ri = ifp->info;
 
   if (if_is_up (ifp) && if_is_multicast (ifp))
     {
@@ -332,7 +330,10 @@ rip_multicast_join (struct interface *ifp, int sock)
 	  if (ipv4_multicast_join (sock, group, p->prefix, ifp->ifindex) < 0)
 	    return -1;
 	  else
-	    return 0;
+	    {
+	      ri->joined_multicast = 1;
+	      return 0;
+	    }
 	}
     }
   return 0;
@@ -342,10 +343,14 @@ rip_multicast_join (struct interface *ifp, int sock)
 void
 rip_multicast_leave (struct interface *ifp, int sock)
 {
+  struct rip_interface *ri;
   listnode cnode;
 
-  if (if_is_up (ifp) && if_is_multicast (ifp))
+  ri = ifp->info;
+
+  if (ri->joined_multicast)
     {
+      ri->joined_multicast = 0;
       if (IS_RIP_DEBUG_EVENT)
 	zlog_info ("multicast leave from %s", ifp->name);
 
@@ -1855,11 +1860,6 @@ rip_interface_config_write (struct vty *vty)
 		 VTY_NEWLINE);
 
       /* RIP authentication. */
-#if 0 
-      /* RIP_AUTH_SIMPLE_PASSWORD becomes default mode. */
-      if (ri->auth_type == RIP_AUTH_SIMPLE_PASSWORD)
-	vty_out (vty, " ip rip authentication mode text%s", VTY_NEWLINE);
-#endif /* 0 */
       if (ri->auth_type == RIP_AUTH_MD5)
 	vty_out (vty, " ip rip authentication mode md5%s", VTY_NEWLINE);
 

@@ -852,6 +852,17 @@ static_ipv6_func (struct vty *vty, int add_cmd, char *dest_str,
   else
     distance = ZEBRA_STATIC_DISTANCE_DEFAULT;
 
+  /* Null0 static route.  */
+  if (strncasecmp (gate_str, "Null0", strlen (gate_str)) == 0)
+    {
+      type = STATIC_IPV6_BLACKHOLE;
+      if (add_cmd)
+	static_add_ipv6 (&p, type, NULL, NULL, distance, 0);
+      else
+	static_delete_ipv6 (&p, type, NULL, NULL, distance, 0);
+      return CMD_SUCCESS;
+    }
+
   /* When gateway is valid IPv6 addrees, then gate is treated as
      nexthop address other case gate is treated as interface name. */
   ret = inet_pton (AF_INET6, gate_str, &gate_addr);
@@ -892,7 +903,7 @@ static_ipv6_func (struct vty *vty, int add_cmd, char *dest_str,
 
 DEFUN (ipv6_route,
        ipv6_route_cmd,
-       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)",
+       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE|null0)",
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
@@ -916,7 +927,7 @@ DEFUN (ipv6_route_ifname,
 
 DEFUN (ipv6_route_pref,
        ipv6_route_pref_cmd,
-       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>",
+       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE|null0) <1-255>",
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
@@ -942,7 +953,7 @@ DEFUN (ipv6_route_ifname_pref,
 
 DEFUN (no_ipv6_route,
        no_ipv6_route_cmd,
-       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)",
+       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE|null0)",
        NO_STR
        IP_STR
        "Establish static routes\n"
@@ -968,7 +979,7 @@ DEFUN (no_ipv6_route_ifname,
 
 DEFUN (no_ipv6_route_pref,
        no_ipv6_route_pref_cmd,
-       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>",
+       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE|null0) <1-255>",
        NO_STR
        IP_STR
        "Establish static routes\n"
@@ -994,7 +1005,7 @@ DEFUN (no_ipv6_route_ifname_pref,
   return static_ipv6_func (vty, 0, argv[0], argv[1], argv[2], argv[3]);
 }
 
-/* New RIB.  Detailed information for IPv4 route. */
+/* New RIB.  Detailed information for IPv6 route. */
 void
 vty_show_ipv6_route_detail (struct vty *vty, struct route_node *rn)
 {
@@ -1068,6 +1079,9 @@ vty_show_ipv6_route_detail (struct vty *vty, struct route_node *rn)
 	    case NEXTHOP_TYPE_IFNAME:
 	      vty_out (vty, " directly connected, %s",
 		       nexthop->ifname);
+	      break;
+	    case NEXTHOP_TYPE_BLACKHOLE:
+	      vty_out (vty, " directly connected, via Null0");
 	      break;
 	    default:
 	      break;
@@ -1160,6 +1174,8 @@ vty_show_ipv6_route (struct vty *vty, struct route_node *rn,
 	  vty_out (vty, " is directly connected, %s",
 		   nexthop->ifname);
 	  break;
+	case NEXTHOP_TYPE_BLACKHOLE:
+	  vty_out (vty, " is directly connected, Null0");
 	default:
 	  break;
 	}
@@ -1462,6 +1478,9 @@ static_config_ipv6 (struct vty *vty)
 	  case STATIC_IPV6_GATEWAY_IFNAME:
 	    vty_out (vty, " %s %s",
 		     inet_ntop (AF_INET6, &si->ipv6, buf, BUFSIZ), si->ifname);
+	    break;
+	  case STATIC_IPV6_BLACKHOLE:
+	    vty_out (vty, " Null0");
 	    break;
 	  }
 

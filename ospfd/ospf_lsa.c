@@ -1919,12 +1919,6 @@ ospf_external_lsa_flush (struct ospf *ospf,
   /* Sweep LSA from Link State Retransmit List. */
   ospf_ls_retransmit_delete_nbr_as (ospf, lsa);
 
-  /* There must be no self-originated LSA in rtrs_external. */
-#if 0
-  /* Remove External route from Zebra. */
-  ospf_zebra_delete ((struct prefix_ipv4 *) p, &nexthop);
-#endif
-
   if (!IS_LSA_MAXAGE (lsa))
     {
       /* Unregister LSA from Refresh queue. */
@@ -2157,13 +2151,7 @@ ospf_summary_lsa_install (struct ospf *ospf, struct ospf_lsa *new,
 	 destination is an AS boundary router, it may also be
 	 necessary to re-examine all the AS-external-LSAs.
       */
-
-#if 0
-      /* This doesn't exist yet... */
-      ospf_summary_incremental_update(new); */
-#else /* #if 0 */
       ospf_spf_calculate_schedule (ospf);
-#endif /* #if 0 */
  
       if (IS_DEBUG_OSPF (lsa, LSA_INSTALL))
 	zlog_info ("ospf_summary_lsa_install(): SPF scheduled");
@@ -2188,15 +2176,7 @@ ospf_summary_asbr_lsa_install (struct ospf *ospf, struct ospf_lsa *new,
 	 destination is an AS boundary router, it may also be
 	 necessary to re-examine all the AS-external-LSAs.
       */
-#if 0
-      /* These don't exist yet... */
-      ospf_summary_incremental_update(new);
-      /* Isn't this done by the above call? 
-	 - RFC 2328 Section 16.5 implies it should be */
-      /* ospf_ase_calculate_schedule(); */
-#else  /* #if 0 */
       ospf_spf_calculate_schedule (ospf);
-#endif /* #if 0 */
     }
 
   /* register LSA to refresh-list. */

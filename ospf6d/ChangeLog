@@ -1,3 +1,103 @@
+2004-09-13  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_intra.c, ospf6_route.[ch]: try to fix assertion failure
+	in brouter's route_remove
+	* ospf6d.h: version 0.9.7o
+
+2004-09-12  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_route.c: route_count_assert bug fix
+	* ospf6d.h: version 0.9.7n
+
+2004-09-03  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_area.c, ospf6_route.c, ospf6_top.c, ospf6d.c:
+	"show intra-route" function and "show SPF result" function is
+	changed.
+	* ospf6_neighbor.c: Changed to update stub intra-prefix origination
+	when it is not DR.
+	* ospf6_route.h: resolv conflict between best flag and
+	active-summary flag.
+	* ospf6d.h: version 0.9.7m
+
+2004-09-02  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_asbr.c: E-bit check in examining AS-External-LSA
+	* ospf6_abr.c: E-bit set in receiving Inter-Area-Router-LSA
+
+2004-09-02  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* *.[ch]: Logging LSAs of particular type is added.
+	lsa_handler is now using vector in order to adjust
+	existing LSA modules.
+	* ospf6d.h: version 0.9.7l
+
+2004-08-26  Hasso Tepper  <hasso@estpak.ee>
+
+	* ospf6_interface.c, ospf6_top.c, ospf6d.c: for vtysh.
+
+2004-08-19  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_asbr.c: Bug in ASBR check fixed.
+	* ospf6d.h: version 0.9.7k
+
+2004-08-19  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_asbr.c: Bug in AS-External Origination fixed.
+	* ospf6d.h: version 0.9.7j
+
+2004-08-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* *.c: Area support almost done. (almost ! ;p)
+	* ospf6d.h: version 0.9.7i
+
+2004-08-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_message.c: Bug cause BadLSReq is fixed.
+	* ospf6_abr.c: Border Router check.
+	* ospf6d.h: version 0.9.7h
+
+2004-08-14  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_area.[ch], ospf6_abr.[ch]: area range,
+	border-routers, Inter-Area-Router-LSA origination
+	* ospf6d.h: version 0.9.7g
+
+2004-08-12  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* *.[c,h]: LSA refreshing is changed and cleaned up.
+	* ospf6d.h: version 0.9.7f
+
+2004-08-01  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_abr.[ch]: add files for abr function.
+	* *.c: VTY_NEWLINE -> VNL
+	* ospf6d.h: version 0.9.7e
+	show database functions are rewritten.
+
+2004-07-06  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_message.c, ospf6_interface.c: add a command to configure
+	ospf6 ifmtu on a interface.
+	* ospf6d.h: version 0.9.7d
+
+2004-05-17  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_flood.[ch], ospf6_lsa.[ch], ospf6_lsdb.h, ospf6_message.c
+	ospf6_neighbor.c: Fix crash bug and change the way to count
+	how many neighbors include paticular LSA on its retrans-list.
+	* ospf6d.h: version 0.9.7c
+
+2004-05-03  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_message.[ch], ospf6_interface.c: adjust send/recv buffer
+	size to interface MTUs.
+	* ospf6d.h: version 0.9.7b
+
+2003-08-18  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* *.[ch]: rewrite all source code from scratch
+	* ospf6d.h: version 0.9.7
 
 2003-08-11  Taisuke Sasaki <sasaki@soft.net.fujitsu.co.jp>
 

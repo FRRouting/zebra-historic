@@ -36,7 +36,7 @@ struct host host;
 char *default_motd = 
 "\r\n\
 Hello, this is zebra (version " ZEBRA_VERSION ").\r\n\
-Copyright 1996-2002 Kunihiro Ishiguro.\r\n\
+Copyright 1996-2004 Kunihiro Ishiguro.\r\n\
 \r\n";
 
 /* Standard command node structures. */
@@ -527,8 +527,13 @@ config_write_host (struct vty *vty)
     {
       if (host.password)
         vty_out (vty, "password %s%s", host.password, VTY_NEWLINE);
+      else if (host.password_encrypt)
+        vty_out (vty, "password 8 %s%s", host.password_encrypt, VTY_NEWLINE); 
+	
       if (host.enable)
         vty_out (vty, "enable password %s%s", host.enable, VTY_NEWLINE);
+      else if (host.enable_encrypt)
+        vty_out (vty, "enable password 8 %s%s", host.enable_encrypt, VTY_NEWLINE); 
     }
 
   if (host.logfile)
@@ -2228,7 +2233,7 @@ DEFUN (show_version,
   vty_out (vty, "Zebra %s (%s).%s", ZEBRA_VERSION,
 	   host_name,
 	   VTY_NEWLINE);
-  vty_out (vty, "Copyright 1996-2002, Kunihiro Ishiguro.%s", VTY_NEWLINE);
+  vty_out (vty, "Copyright 1996-2004, Kunihiro Ishiguro.%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -2558,12 +2563,12 @@ DEFUN (config_password, password_cmd,
     XFREE (0, host.password);
   host.password = NULL;
 
+  if (host.password_encrypt)
+    XFREE (0, host.password_encrypt);
+  host.password_encrypt = NULL;
+
   if (host.encrypt)
-    {
-      if (host.password_encrypt)
-	XFREE (0, host.password_encrypt);
-      host.password_encrypt = XSTRDUP (0, zencrypt (argv[0]));
-    }
+    host.password_encrypt = XSTRDUP (0, zencrypt (argv[0]));
   else
     host.password = XSTRDUP (0, argv[0]);
 
@@ -2624,13 +2629,13 @@ DEFUN (config_enable_password, enable_password_cmd,
     XFREE (0, host.enable);
   host.enable = NULL;
 
+  if (host.enable_encrypt)
+    XFREE (0, host.enable_encrypt);
+  host.enable_encrypt = NULL;
+
   /* Plain password input. */
   if (host.encrypt)
-    {
-      if (host.enable_encrypt)
-	XFREE (0, host.enable_encrypt);
-      host.enable_encrypt = XSTRDUP (0, zencrypt (argv[0]));
-    }
+    host.enable_encrypt = XSTRDUP (0, zencrypt (argv[0]));
   else
     host.enable = XSTRDUP (0, argv[0]);
 
@@ -2701,13 +2706,19 @@ DEFUN (no_service_password_encrypt,
 
   host.encrypt = 0;
 
-  if (host.password_encrypt)
-    XFREE (0, host.password_encrypt);
-  host.password_encrypt = NULL;
+  if (host.password)
+    {
+      if (host.password_encrypt)
+	XFREE (0, host.password_encrypt);
+      host.password_encrypt = NULL;
+    }
 
-  if (host.enable_encrypt)
-    XFREE (0, host.enable_encrypt);
-  host.enable_encrypt = NULL;
+  if (host.enable)
+    {
+      if (host.enable_encrypt)
+	XFREE (0, host.enable_encrypt);
+      host.enable_encrypt = NULL;
+    }
 
   return CMD_SUCCESS;
 }

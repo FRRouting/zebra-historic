@@ -568,24 +568,30 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 
   for (i = 0; i < ecom->size; i++)
     {
+      /* Space between each value.  */
+      if (! first)
+	str_buf[str_pnt++] = ' ';
+
       pnt = ecom->val + (i * 8);
 
       /* High-order octet of type. */
       encode = *pnt++;
       if (encode != ECOMMUNITY_ENCODE_AS && encode != ECOMMUNITY_ENCODE_IP)
 	{
-	  if (str_buf)
-	    XFREE (MTYPE_ECOMMUNITY_STR, str_buf);
-	  return "Unknown";
+	  len = sprintf (str_buf + str_pnt, "?");
+	  str_pnt += len;
+	  first = 0;
+	  continue;
 	}
       
       /* Low-order octet of type. */
       type = *pnt++;
       if (type !=  ECOMMUNITY_ROUTE_TARGET && type != ECOMMUNITY_SITE_ORIGIN)
 	{
-	  if (str_buf)
-	    XFREE (MTYPE_ECOMMUNITY_STR, str_buf);
-	  return "Unknown";
+	  len = sprintf (str_buf + str_pnt, "?");
+	  str_pnt += len;
+	  first = 0;
+	  continue;
 	}
 
       switch (format)
@@ -600,9 +606,7 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 	  prefix = "";
 	  break;
 	default:
-	  if (str_buf)
-	    XFREE (MTYPE_ECOMMUNITY_STR, str_buf);
-	  return "Unknown";
+	  prefix = "";
 	  break;
 	}
 
@@ -612,10 +616,6 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 	  str_size *= 2;
 	  str_buf = XREALLOC (MTYPE_ECOMMUNITY_STR, str_buf, str_size);
 	}
-
-      /* Space between each value.  */
-      if (! first)
-	str_buf[str_pnt++] = ' ';
 
       /* Put string into buffer.  */
       if (encode == ECOMMUNITY_ENCODE_AS)

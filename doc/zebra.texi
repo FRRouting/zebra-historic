@@ -8,10 +8,10 @@
 @c %**end of header
 
 @c Set variables
-@set EDITION 0.1
-@set VERSION 0.94
-@set UPDATED 26 January 2003
-@set UPDATED-MONTH January 2003
+@set EDITION 0.3
+@set VERSION 0.95
+@set UPDATED 1 March 2004
+@set UPDATED-MONTH March 2004
 
 @c These may vary with installation environment.
 @set INSTALL_PREFIX_ETC /usr/local/etc
@@ -32,7 +32,7 @@ TCP/IP routing protocols.
 This is Edition @value{EDITION}, last updated @value{UPDATED} of
 @cite{The GNU Zebra Manual}, for Zebra Version @value{VERSION}.
 
-Copyright (C) 1999, 2000, 2001, 2002 Kunihiro Ishiguro
+Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004 Kunihiro Ishiguro
 
 Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -65,7 +65,7 @@ approved by Kunihiro Ishiguro.
 
 @page
 @vskip 0pt plus 1filll
-Copyright @copyright{} 1999, 2000, 2001, 2002 Kunihiro Ishiguro
+Copyright @copyright{} 1999, 2000, 2001, 2002, 2003, 2004 Kunihiro Ishiguro
 
 Permission is granted to make and distribute verbatim copies of
 this manual provided the copyright notice and this permission notice
@@ -88,9 +88,9 @@ by Kunihiro Ishiguro.
 @comment  node-name,  next,  previous,  up
 @top Zebra
 		     
-Zebra is a advanced routing software package that provides TCP/IP
-based routing protocols.  This is the Zebra Manual for
-zebra-@value{VERSION}.
+Zebra is the advanced TCP/IP routing software.  This Info file
+describes how to install and use it.  This manual coressponds to GNU
+Zebra @value{VERSION}.
 @end ifnottex
 
 @menu

@@ -18,6 +18,22 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#ifdef HAVE_LINUX_TCP_SIGNATURE
+/* setsockopt Number */
+#define TCP_MD5_AUTH 13
+
+/* Commands (used in the structure passed from userland) */
+#define TCP_MD5_AUTH_ADD 1
+#define TCP_MD5_AUTH_DEL 2
+
+struct tcp_rfc2385_cmd {
+  u_int8_t     command;    /* Command - Add/Delete */
+  u_int32_t    address;    /* IPV4 address associated */
+  u_int8_t     keylen;     /* MD5 Key len (do NOT assume 0 terminated ascii) */
+  void         *key;       /* MD5 Key */
+};
+#endif /* HAVE_LINUX_TCP_SIGNATURE */
+
 int bgp_socket (struct bgp *, unsigned short);
 int bgp_connect (struct peer *);
 void bgp_getsockname (struct peer *);

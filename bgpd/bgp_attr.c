@@ -676,7 +676,7 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
   bgp = peer->bgp;
     
   /* First AS check for EBGP. */
-  if (bgp != NULL && bgp_flag_check (bgp, BGP_FLAG_ENFORCE_FIRST_AS))
+  if (! bgp_flag_check (bgp, BGP_FLAG_NO_ENFORCE_FIRST_AS))
     {
       if (peer_sort (peer) == BGP_PEER_EBGP 
 	  && ! aspath_firstas_check (attr->aspath, peer->as))
@@ -992,14 +992,6 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr,
       stream_forward (s, (snpa_len + 1) >> 1);
     }
   
-  /* If peer is based on old draft-00. I read NLRI length from the
-     packet. */
-  if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-    {
-      bgp_size_t nlri_total_len;
-      nlri_total_len = stream_getw (s);
-    }
-
   nlri_len = lim - stream_pnt (s);
  
   if (safi != BGP_SAFI_VPNV4)
@@ -1081,9 +1073,9 @@ bgp_attr_unknown (struct peer *peer, struct attr *attr, u_char flag,
   bgp_size_t total;
   struct transit *transit;
 
-  if (BGP_DEBUG (events, EVENTS))
-    zlog (peer->log, LOG_INFO, 
-	  "Unknown attribute type %d length %d is received", type, length);
+  if (BGP_DEBUG (normal, NORMAL))
+    zlog_info ("%s Unknown attribute is received (type %d, length %d)",
+	       peer->host, type, length); 
 
   /* Forward read pointer of input stream. */
   stream_forward (peer->ibuf, length);
@@ -1531,7 +1523,6 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
   if (p->family == AF_INET6)
     {
       unsigned long sizep;
-      unsigned long draftp = 0;
 
       stream_putc (s, BGP_ATTR_FLAG_OPTIONAL);
       stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
@@ -1553,29 +1544,17 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
       /* SNPA */
       stream_putc (s, 0);
 
-      /* In case of old draft BGP-4+. */
-      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	{
-	  draftp = stream_get_putp (s);
-	  stream_putw (s, 0);
-	}
-      
       /* Prefix write. */
       stream_put_prefix (s, p);
 
       /* Set MP attribute length. */
       stream_putc_at (s, sizep, (stream_get_putp (s) - sizep) - 1);
-
-      /* In case of old draft BGP-4+. */
-      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	stream_putw_at (s, draftp, (stream_get_putp (s) - draftp) - 2);
     }
 #endif /* HAVE_IPV6 */
 
   if (p->family == AF_INET && safi == SAFI_MULTICAST)
     {
       unsigned long sizep;
-      unsigned long draftp = 0;
 
       stream_putc (s, BGP_ATTR_FLAG_OPTIONAL);
       stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
@@ -1590,28 +1569,16 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
       /* SNPA */
       stream_putc (s, 0);
 
-      /* In case of old draft BGP-4+. */
-      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	{
-	  draftp = stream_get_putp (s);
-	  stream_putw (s, 0);
-	}
-      
       /* Prefix write. */
       stream_put_prefix (s, p);
 
       /* Set MP attribute length. */
       stream_putc_at (s, sizep, (stream_get_putp (s) - sizep) - 1);
-
-      /* In case of old draft BGP-4+. */
-      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	stream_putw_at (s, draftp, (stream_get_putp (s) - draftp) - 2);
     }
 
   if (p->family == AF_INET && safi == SAFI_MPLS_VPN)
     {
       unsigned long sizep;
-      unsigned long draftp = 0;
 
       stream_putc (s, BGP_ATTR_FLAG_OPTIONAL);
       stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
@@ -1628,13 +1595,6 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
       /* SNPA */
       stream_putc (s, 0);
 
-      /* In case of old draft BGP-4+. */
-      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	{
-	  draftp = stream_get_putp (s);
-	  stream_putw (s, 0);
-	}
-      
       /* Tag, RD, Prefix write. */
       stream_putc (s, p->prefixlen + 88);
       stream_put (s, tag, 3);
@@ -1643,29 +1603,73 @@ bgp_packet_attribute (struct bgp *bgp, struct peer *peer,
 
       /* Set MP attribute length. */
       stream_putc_at (s, sizep, (stream_get_putp (s) - sizep) - 1);
-
-      /* In case of old draft BGP-4+. */
-      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
-	stream_putw_at (s, draftp, (stream_get_putp (s) - draftp) - 2);
     }
 
   /* Extended Communities attribute. */
   if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY) 
       && (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES)))
     {
-      if (attr->ecommunity->size * 8 > 255)
+      if (peer_sort (peer) == BGP_PEER_IBGP || peer_sort (peer) == BGP_PEER_CONFED)
 	{
-	  stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS|BGP_ATTR_FLAG_EXTLEN);
-	  stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
-	  stream_putw (s, attr->ecommunity->size * 8);
+	  if (attr->ecommunity->size * 8 > 255)
+	    {
+	      stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS|BGP_ATTR_FLAG_EXTLEN);
+	      stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
+	      stream_putw (s, attr->ecommunity->size * 8);
+	    }
+	  else
+	    {
+	      stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS);
+	      stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
+	      stream_putc (s, attr->ecommunity->size * 8);
+	    }
+	  stream_put (s, attr->ecommunity->val, attr->ecommunity->size * 8);
 	}
       else
 	{
-	  stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS);
-	  stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
-	  stream_putc (s, attr->ecommunity->size * 8);
+	  u_char *pnt;
+	  int tbit;
+	  int ecom_tr_size = 0;
+	  int i;
+
+	  for (i = 0; i < attr->ecommunity->size; i++)
+	    {
+	      pnt = attr->ecommunity->val + (i * 8);
+	      tbit = *pnt;
+
+	      if (CHECK_FLAG (tbit, ECOMMUNITY_FLAG_NON_TRANSITIVE))
+		continue;
+
+	      ecom_tr_size++;
+	    }
+
+	  if (ecom_tr_size)
+	    {
+	      if (ecom_tr_size * 8 > 255)
+		{
+		  stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS|BGP_ATTR_FLAG_EXTLEN);
+		  stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
+		  stream_putw (s, ecom_tr_size * 8);
+		}
+	      else
+		{
+		  stream_putc (s, BGP_ATTR_FLAG_OPTIONAL|BGP_ATTR_FLAG_TRANS);
+		  stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
+		  stream_putc (s, ecom_tr_size * 8);
+		}
+
+	      for (i = 0; i < attr->ecommunity->size; i++)
+		{
+		  pnt = attr->ecommunity->val + (i * 8);
+		  tbit = *pnt;
+
+		  if (CHECK_FLAG (tbit, ECOMMUNITY_FLAG_NON_TRANSITIVE))
+		    continue;
+
+		  stream_put (s, pnt, 8);
+		}
+	    }
 	}
-      stream_put (s, attr->ecommunity->val, attr->ecommunity->size * 8);
     }
 
   /* Unknown transit attribute. */

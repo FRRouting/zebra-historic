@@ -83,6 +83,9 @@
 /* RIP MD5 authentication. */
 #define RIP_AUTH_MD5_SIZE               16
 
+/* UDP socket receive buffer size.  */
+#define RIP_UDP_RCV_BUF 41600
+
 /* RIP structure. */
 struct rip 
 {
@@ -225,6 +228,9 @@ struct rip_interface
 
   /* RIP is running on this interface. */
   int running;
+
+  /* Joined to multicast group for this interface. */
+  int joined_multicast;
 
   /* RIP version control. */
   int ri_send;

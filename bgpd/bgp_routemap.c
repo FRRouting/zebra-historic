@@ -194,6 +194,64 @@ struct route_map_rule_cmd route_match_ip_next_hop_cmd =
   route_match_ip_next_hop_free
 };
 
+/* `match ip route-source ACCESS-LIST' */
+
+/* Match function return 1 if match is success else return zero. */
+route_map_result_t
+route_match_ip_route_source (void *rule, struct prefix *prefix, 
+			     route_map_object_t type, void *object)
+{
+  struct access_list *alist;
+  struct bgp_info *bgp_info;
+  struct peer *peer;
+  struct prefix_ipv4 p;
+
+  if (type == RMAP_BGP)
+    {
+      bgp_info = object;
+      peer = bgp_info->peer;
+
+      if (! peer || sockunion_family (&peer->su) != AF_INET)
+	return RMAP_NOMATCH;
+
+      p.family = AF_INET;
+      p.prefix = peer->su.sin.sin_addr;
+      p.prefixlen = IPV4_MAX_BITLEN;
+
+      alist = access_list_lookup (AFI_IP, (char *) rule);
+      if (alist == NULL)
+	return RMAP_NOMATCH;
+
+      return (access_list_apply (alist, &p) == FILTER_DENY ?
+              RMAP_NOMATCH : RMAP_MATCH);
+    }
+  return RMAP_NOMATCH;
+}
+
+/* Route map `ip route-source' match statement. `arg' is
+   access-list name. */
+void *
+route_match_ip_route_source_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+/* Free route map's compiled `ip address' value. */
+void
+route_match_ip_route_source_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for ip route-source matching. */
+struct route_map_rule_cmd route_match_ip_route_source_cmd =
+{
+  "ip route-source",
+  route_match_ip_route_source,
+  route_match_ip_route_source_compile,
+  route_match_ip_route_source_free
+};
+
 /* `match ip address prefix-list PREFIX_LIST' */
 
 route_map_result_t
@@ -279,6 +337,59 @@ struct route_map_rule_cmd route_match_ip_next_hop_prefix_list_cmd =
   route_match_ip_next_hop_prefix_list,
   route_match_ip_next_hop_prefix_list_compile,
   route_match_ip_next_hop_prefix_list_free
+};
+
+/* `match ip route-source prefix-list PREFIX_LIST' */
+
+route_map_result_t
+route_match_ip_route_source_prefix_list (void *rule, struct prefix *prefix,
+					 route_map_object_t type, void *object)
+{
+  struct prefix_list *plist;
+  struct bgp_info *bgp_info;
+  struct peer *peer;
+  struct prefix_ipv4 p;
+
+  if (type == RMAP_BGP)
+    {
+      bgp_info = object;
+      peer = bgp_info->peer;
+
+      if (! peer || sockunion_family (&peer->su) != AF_INET)
+	return RMAP_NOMATCH;
+
+      p.family = AF_INET;
+      p.prefix = peer->su.sin.sin_addr;
+      p.prefixlen = IPV4_MAX_BITLEN;
+
+      plist = prefix_list_lookup (AFI_IP, (char *) rule);
+      if (plist == NULL)
+        return RMAP_NOMATCH;
+
+      return (prefix_list_apply (plist, &p) == PREFIX_DENY ?
+              RMAP_NOMATCH : RMAP_MATCH);
+    }
+  return RMAP_NOMATCH;
+}
+
+void *
+route_match_ip_route_source_prefix_list_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ip_route_source_prefix_list_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ip_route_source_prefix_list_cmd =
+{
+  "ip route-source prefix-list",
+  route_match_ip_route_source_prefix_list,
+  route_match_ip_route_source_prefix_list_compile,
+  route_match_ip_route_source_prefix_list_free
 };
 
 /* `match metric METRIC' */
@@ -455,7 +566,7 @@ route_match_community (void *rule, struct prefix *prefix,
       bgp_info = object;
       rcom = rule;
 
-      list = community_list_lookup (bgp_clist, rcom->name, COMMUNITY_LIST_AUTO);
+      list = community_list_lookup (bgp_clist, rcom->name, COMMUNITY_LIST_MASTER);
       if (! list)
 	return RMAP_NOMATCH;
 
@@ -531,7 +642,7 @@ route_match_ecommunity (void *rule, struct prefix *prefix,
       bgp_info = object;
 
       list = community_list_lookup (bgp_clist, (char *) rule,
-				    EXTCOMMUNITY_LIST_AUTO);
+				    EXTCOMMUNITY_LIST_MASTER);
       if (! list)
 	return RMAP_NOMATCH;
 
@@ -1112,7 +1223,7 @@ struct route_map_rule_cmd route_set_community_cmd =
   route_set_community_free,
 };
 
-/* `set comm-list (<1-99>|<100-199>|WORD) delete' */
+/* `set comm-list (<1-99>|<100-500>|WORD) delete' */
 
 /* For community set mechanism. */
 route_map_result_t
@@ -1131,7 +1242,7 @@ route_set_community_delete (void *rule, struct prefix *prefix,
 	return RMAP_OKAY;
 
       binfo = object;
-      list = community_list_lookup (bgp_clist, rule, COMMUNITY_LIST_AUTO);
+      list = community_list_lookup (bgp_clist, rule, COMMUNITY_LIST_MASTER);
       old = binfo->attr->community;
 
       if (list && old)
@@ -2141,6 +2252,44 @@ ALIAS (no_match_ip_next_hop,
        "IP access-list number (expanded range)\n"
        "IP Access-list name\n");
 
+DEFUN (match_ip_route_source, 
+       match_ip_route_source_cmd,
+       "match ip route-source (<1-199>|<1300-2699>|WORD)",
+       MATCH_STR
+       IP_STR
+       "Match advertising source address of route\n"
+       "IP access-list number\n"
+       "IP access-list number (expanded range)\n"
+       "IP standard access-list name\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ip route-source", argv[0]);
+}
+
+DEFUN (no_match_ip_route_source,
+       no_match_ip_route_source_cmd,
+       "no match ip route-source",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match advertising source address of route\n")
+{
+  if (argc == 0)
+    return bgp_route_match_delete (vty, vty->index, "ip route-source", NULL);
+
+  return bgp_route_match_delete (vty, vty->index, "ip route-source", argv[0]);
+}
+
+ALIAS (no_match_ip_route_source,
+       no_match_ip_route_source_val_cmd,
+       "no match ip route-source (<1-199>|<1300-2699>|WORD)",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match advertising source address of route\n"
+       "IP access-list number\n"
+       "IP access-list number (expanded range)\n"
+       "IP standard access-list name\n");
+
 DEFUN (match_ip_address_prefix_list, 
        match_ip_address_prefix_list_cmd,
        "match ip address prefix-list WORD",
@@ -2215,6 +2364,43 @@ ALIAS (no_match_ip_next_hop_prefix_list,
        "Match entries of prefix-lists\n"
        "IP prefix-list name\n");
 
+DEFUN (match_ip_route_source_prefix_list, 
+       match_ip_route_source_prefix_list_cmd,
+       "match ip route-source prefix-list WORD",
+       MATCH_STR
+       IP_STR
+       "Match advertising source address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ip route-source prefix-list", argv[0]);
+}
+
+DEFUN (no_match_ip_route_source_prefix_list,
+       no_match_ip_route_source_prefix_list_cmd,
+       "no match ip route-source prefix-list",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match advertising source address of route\n"
+       "Match entries of prefix-lists\n")
+{
+  if (argc == 0)
+    return bgp_route_match_delete (vty, vty->index, "ip route-source prefix-list", NULL);
+
+  return bgp_route_match_delete (vty, vty->index, "ip route-source prefix-list", argv[0]);
+}
+
+ALIAS (no_match_ip_route_source_prefix_list,
+       no_match_ip_route_source_prefix_list_val_cmd,
+       "no match ip route-source prefix-list WORD",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match advertising source address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n");
+
 DEFUN (match_metric, 
        match_metric_cmd,
        "match metric <0-4294967295>",
@@ -2248,7 +2434,7 @@ ALIAS (no_match_metric,
 
 DEFUN (match_community, 
        match_community_cmd,
-       "match community (<1-99>|<100-199>|WORD)",
+       "match community (<1-99>|<100-500>|WORD)",
        MATCH_STR
        "Match BGP community list\n"
        "Community-list number (standard)\n"
@@ -2260,7 +2446,7 @@ DEFUN (match_community,
 
 DEFUN (match_community_exact, 
        match_community_exact_cmd,
-       "match community (<1-99>|<100-199>|WORD) exact-match",
+       "match community (<1-99>|<100-500>|WORD) exact-match",
        MATCH_STR
        "Match BGP community list\n"
        "Community-list number (standard)\n"
@@ -2295,7 +2481,7 @@ DEFUN (no_match_community,
 
 ALIAS (no_match_community,
        no_match_community_val_cmd,
-       "no match community (<1-99>|<100-199>|WORD)",
+       "no match community (<1-99>|<100-500>|WORD)",
        NO_STR
        MATCH_STR
        "Match BGP community list\n"
@@ -2305,7 +2491,7 @@ ALIAS (no_match_community,
 
 ALIAS (no_match_community,
        no_match_community_exact_cmd,
-       "no match community (<1-99>|<100-199>|WORD) exact-match",
+       "no match community (<1-99>|<100-500>|WORD) exact-match",
        NO_STR
        MATCH_STR
        "Match BGP community list\n"
@@ -2316,7 +2502,7 @@ ALIAS (no_match_community,
 
 DEFUN (match_ecommunity, 
        match_ecommunity_cmd,
-       "match extcommunity (<1-99>|<100-199>|WORD)",
+       "match extcommunity (<1-99>|<100-500>|WORD)",
        MATCH_STR
        "Match BGP/VPN extended community list\n"
        "Extended community-list number (standard)\n"
@@ -2338,7 +2524,7 @@ DEFUN (no_match_ecommunity,
 
 ALIAS (no_match_ecommunity,
        no_match_ecommunity_val_cmd,
-       "no match extcommunity (<1-99>|<100-199>|WORD)",
+       "no match extcommunity (<1-99>|<100-500>|WORD)",
        NO_STR
        MATCH_STR
        "Match BGP/VPN extended community list\n"
@@ -2415,18 +2601,14 @@ ALIAS (no_match_origin,
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
-       "set ip next-hop (A.B.C.D|peer-address)",
+       "set ip next-hop A.B.C.D",
        SET_STR
        IP_STR
        "Next hop address\n"
-       "IP address of next hop\n"
-       "Use peer address (for BGP only)\n")
+       "IP address of next hop\n")
 {
   union sockunion su;
   int ret;
-
-  if (strncmp (argv[0], "peer-address", 1) == 0)
-    return bgp_route_set_add (vty, vty->index, "ip next-hop", "peer-address");
 
   ret = str2sockunion (argv[0], &su);
   if (ret < 0)
@@ -2438,6 +2620,17 @@ DEFUN (set_ip_nexthop,
   return bgp_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
+DEFUN (set_ip_nexthop_bgp,
+       set_ip_nexthop_bgp_cmd,
+       "set ip next-hop peer-address",
+       SET_STR
+       IP_STR
+       "Next hop address\n"
+       "Use peer address (for BGP only)\n")
+{
+  return bgp_route_set_add (vty, vty->index, "ip next-hop", "peer-address");
+}
+
 DEFUN (no_set_ip_nexthop,
        no_set_ip_nexthop_cmd,
        "no set ip next-hop",
@@ -2446,20 +2639,25 @@ DEFUN (no_set_ip_nexthop,
        IP_STR
        "Next hop address\n")
 {
-  if (argc == 0 || strncmp (argv[0], "peer-address", 1) == 0)
-    return bgp_route_set_delete (vty, vty->index, "ip next-hop", NULL);
-
-  return bgp_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
+  return bgp_route_set_delete (vty, vty->index, "ip next-hop", NULL);
 }
 
 ALIAS (no_set_ip_nexthop,
        no_set_ip_nexthop_val_cmd,
-       "no set ip next-hop (A.B.C.D|peer-address)",
+       "no set ip next-hop A.B.C.D",
        NO_STR
        SET_STR
        IP_STR
        "Next hop address\n"
-       "IP address of next hop\n"
+       "IP address of next hop\n");
+
+ALIAS (no_set_ip_nexthop,
+       no_set_ip_nexthop_val_bgp_cmd,
+       "no set ip next-hop peer-address",
+       NO_STR
+       SET_STR
+       IP_STR
+       "Next hop address\n"
        "Use peer address (for BGP only)\n");
 
 DEFUN (set_metric,
@@ -2731,7 +2929,7 @@ ALIAS (no_set_community,
 
 DEFUN (set_community_delete,
        set_community_delete_cmd,
-       "set comm-list (<1-99>|<100-199>|WORD) delete",
+       "set comm-list (<1-99>|<100-500>|WORD) delete",
        SET_STR
        "set BGP community list (for deletion)\n"
        "Community-list number (standard)\n"
@@ -2763,7 +2961,7 @@ DEFUN (no_set_community_delete,
 
 ALIAS (no_set_community_delete,
        no_set_community_delete_val_cmd,
-       "no set comm-list (<1-99>|<100-199>|WORD) delete",
+       "no set comm-list (<1-99>|<100-500>|WORD) delete",
        NO_STR
        SET_STR
        "set BGP community list (for deletion)\n"
@@ -3224,8 +3422,10 @@ bgp_route_map_init ()
 
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_ip_next_hop_cmd);
+  route_map_install_match (&route_match_ip_route_source_cmd);
   route_map_install_match (&route_match_ip_address_prefix_list_cmd);
   route_map_install_match (&route_match_ip_next_hop_prefix_list_cmd);
+  route_map_install_match (&route_match_ip_route_source_prefix_list_cmd);
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_community_cmd);
   route_map_install_match (&route_match_ecommunity_cmd);
@@ -3253,6 +3453,9 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_val_cmd);
+  install_element (RMAP_NODE, &match_ip_route_source_cmd);
+  install_element (RMAP_NODE, &no_match_ip_route_source_cmd);
+  install_element (RMAP_NODE, &no_match_ip_route_source_val_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_prefix_list_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_prefix_list_cmd);
@@ -3260,6 +3463,9 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &match_ip_next_hop_prefix_list_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_prefix_list_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_prefix_list_val_cmd);
+  install_element (RMAP_NODE, &match_ip_route_source_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_route_source_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ip_route_source_prefix_list_val_cmd);
 
   install_element (RMAP_NODE, &match_aspath_cmd);
   install_element (RMAP_NODE, &no_match_aspath_cmd);
@@ -3280,8 +3486,10 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_match_origin_val_cmd);
 
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
+  install_element (RMAP_NODE, &set_ip_nexthop_bgp_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_val_cmd);
+  install_element (RMAP_NODE, &no_set_ip_nexthop_val_bgp_cmd);
   install_element (RMAP_NODE, &set_local_pref_cmd);
   install_element (RMAP_NODE, &no_set_local_pref_cmd);
   install_element (RMAP_NODE, &no_set_local_pref_val_cmd);

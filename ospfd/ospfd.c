@@ -1438,37 +1438,6 @@ ospf_nbr_nbma_lookup (struct ospf *ospf, struct in_addr nbr_addr)
   return NULL;
 }
 
-struct ospf_nbr_nbma *
-ospf_nbr_nbma_lookup_next (struct ospf *ospf, struct in_addr *addr, int first)
-{
-#if 0
-  struct ospf_nbr_nbma *nbr_nbma;
-  listnode node;
-#endif
-
-  if (ospf == NULL)
-    return NULL;
-
-#if 0
-  for (node = listhead (ospf->nbr_nbma); node; nextnode (node))
-    {
-      nbr_nbma = getdata (node);
-
-      if (first)
-	{
-	  *addr = nbr_nbma->addr;
-	  return nbr_nbma;
-	}
-      else if (ntohl (nbr_nbma->addr.s_addr) > ntohl (addr->s_addr))
-	{
-	  *addr = nbr_nbma->addr;
-	  return nbr_nbma;
-	}
-    }
-#endif
-  return NULL;
-}
-
 int
 ospf_nbr_nbma_set (struct ospf *ospf, struct in_addr nbr_addr)
 {

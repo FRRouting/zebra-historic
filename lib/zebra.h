@@ -202,6 +202,13 @@ struct in_pktinfo
 };
 #endif
 
+/* OpenBSD release month check.  */
+#ifdef __OpenBSD__
+#if OpenBSD < 200311
+#define OpenBSD_IP_LEN
+#endif /* OpenBSD */
+#endif /* __OpenBSD__ */
+
 /* For old definition. */
 #ifndef IN6_ARE_ADDR_EQUAL
 #define IN6_ARE_ADDR_EQUAL IN6_IS_ADDR_EQUAL

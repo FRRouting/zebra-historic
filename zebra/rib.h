@@ -102,6 +102,7 @@ struct static_ipv6
 #define STATIC_IPV6_GATEWAY          1
 #define STATIC_IPV6_GATEWAY_IFNAME   2
 #define STATIC_IPV6_IFNAME           3
+#define STATIC_IPV6_BLACKHOLE        4
 
   /* Nexthop value. */
   struct in6_addr ipv6;

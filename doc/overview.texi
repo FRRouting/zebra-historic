@@ -3,24 +3,26 @@
 @chapter Overview
 @cindex Overview
 
-  Zebra is a routing software package that provides TCP/IP based
-routing services with routing protocols support such as RIPv1, RIPv2,
-RIPng, OSPFv2, OSPFv3, BGP-4, and BGP-4+ (@pxref{Supported RFC}).
-Zebra also supports special BGP Route Reflector and Route Server
-behavior.  In addition to traditional IPv4 routing protocols, Zebra
-also supports IPv6 routing protocols.  With SNMP daemon which supports
-SMUX protocol, Zebra provides routing protocol MIBs (@pxref{SNMP
-Support}).
+  Zebra is a routing software that provides TCP/IP based routing
+protocols support such as RIPv1, RIPv2, RIPng, OSPFv2, OSPFv3, BGP-4,
+and BGP-4+ (@pxref{Supported RFC}).  Zebra supports both IPv4 and IPv6
+routing protocols.  Zebra also supports BGP Route Reflector and BGP
+Route Server functionality.  With SNMP daemon which has SMUX protocol,
+Zebra provides routing protocol MIBs (@pxref{SNMP Support}).
 
-  Zebra uses an advanced software architecture to provide you with a
-high quality, multi server routing engine.  Zebra has an interactive
-user interface for each routing protocol and supports common client
-commands.  Due to this design, you can add new protocol daemons to Zebra
-easily.  You can use Zebra library as your program's client user
-interface.
+  Zebra has an advanced module based software architecture.  It is
+built by collection of protocol modules.  Due to this design, you can
+easily add a new protocol module to Zebra.  You can dynamically add or
+remove a protocol module even if other modules are up and runing.
+Zebra library provides basic functions to implement a routing protocol
+module.
 
-  Zebra is an official @sc{gnu} software and distributed under the
-@sc{gnu} General Public License.
+  Zebra has advanced CLI (Command Line Interface).  User can examine
+current routing protocol status, change the configuration, save the
+configuration at anytime user want.
+
+  Zebra is a @sc{gnu} software and distributed under the @sc{gnu}
+General Public License.
 
 @menu
 * About Zebra::                 Basic information about Zebra
@@ -106,17 +108,25 @@ architecture creates new possibilities for the routing system.
 
 @example
 @group
-+----+  +----+  +-----+  +-----+
-|bgpd|  |ripd|  |ospfd|  |zebra|
-+----+  +----+  +-----+  +-----+
-                            |
-+---------------------------|--+
-|                           v  |
-|  UNIX Kernel  routing table  |
-|                              |
-+------------------------------+
++----+ +------+ +-----+ +------+ +----+
+|ripd| |ripngd| |ospfd| |ospf6d| |bgpd|
++----+ +------+ +-----+ +------+ +----+
+   |       |       |        |       |
+   +-------+-------+--------+--+----+
+                               |
++------------------------------v------+
+|                           +-----+   |
+|                zebra      | RIB |   |
+|                           +-----+   |
++------------------------------|------+
+                               |
++------------------------------v------+
+|                           +-----+   |
+|              UNIX Kernel  | FIB |   |
+|                           +-----+   |
++-------------------------------------+
 
-    Zebra System Architecture
+   Zebra Software Architecture
 @end group
 @end example
 

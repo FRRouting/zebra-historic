@@ -348,7 +348,6 @@ ospf_flood_through_interface (struct ospf_interface *oi,
 			      struct ospf_neighbor *inbr,
 			      struct ospf_lsa *lsa)
 {
-  struct ospf *ospf = oi->ospf;
   struct ospf_neighbor *onbr;
   struct route_node *rn;
   int retx_flag;
@@ -434,7 +433,7 @@ ospf_flood_through_interface (struct ospf_interface *oi,
               continue;
             }
 
-          if (IS_OPAQUE_LSA_ORIGINATION_BLOCKED (ospf->opaque)
+          if (IS_OPAQUE_LSA_ORIGINATION_BLOCKED (oi->ospf->opaque)
           &&  IS_LSA_SELF (lsa)
           &&  onbr->state == NSM_Full)
             {

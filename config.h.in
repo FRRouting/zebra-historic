@@ -45,6 +45,9 @@
 /* Define to 1 if you have the `if_nametoindex' function. */
 #undef HAVE_IF_NAMETOINDEX
 
+/* in6addr global variables e.g. in6addr_loopback */
+#undef HAVE_IN6ADDR_GLOBAL
+
 /* in6_aliasreq */
 #undef HAVE_IN6_ALIASREQ
 
@@ -68,6 +71,9 @@
 
 /* IPv6 */
 #undef HAVE_IPV6
+
+/* IRDP */
+#undef HAVE_IRDP
 
 /* Define to 1 if you have the <kvm.h> header file. */
 #undef HAVE_KVM_H
@@ -96,6 +102,9 @@
 /* Define to 1 if you have the `socket' library (-lsocket). */
 #undef HAVE_LIBSOCKET
 
+/* Define to 1 if you have the `termcap' library (-ltermcap). */
+#undef HAVE_LIBTERMCAP
+
 /* Define to 1 if you have the `tinfo' library (-ltinfo). */
 #undef HAVE_LIBTINFO
 
@@ -104,6 +113,9 @@
 
 /* Define to 1 if you have the `xnet' library (-lxnet). */
 #undef HAVE_LIBXNET
+
+/* Linux TCP Signature Option */
+#undef HAVE_LINUX_TCP_SIGNATURE
 
 /* Define to 1 if you have the <linux/version.h> header file. */
 #undef HAVE_LINUX_VERSION_H
@@ -152,6 +164,9 @@
 
 /* OSPF Opaque LSA */
 #undef HAVE_OPAQUE_LSA
+
+/* OpenBSD TCP Signature Option */
+#undef HAVE_OPENBSD_TCP_SIGNATURE
 
 /* OSPF TE */
 #undef HAVE_OSPF_TE
@@ -245,6 +260,9 @@
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
+
+/* TCP Signature Option */
+#undef HAVE_TCP_SIGNATURE
 
 /* Use TCP for zebra communication */
 #undef HAVE_TCP_ZEBRA

@@ -638,11 +638,6 @@ ospf_route_table_dump (struct route_table *rt)
   listnode pnode;
   struct ospf_path *path;
 
-#if 0
-  zlog_info ("Type   Dest   Area   Path	 Type	 Cost	Next	 Adv.");
-  zlog_info ("					Hop(s)	 Router(s)");
-#endif /* 0 */
-
   zlog_info ("========== OSPF routing table ==========");
   for (rn = route_top (rt); rn; rn = route_next (rn))
     if ((or = rn->info) != NULL)

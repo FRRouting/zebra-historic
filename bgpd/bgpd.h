@@ -21,6 +21,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 /* For union sockunion.  */
 #include "sockunion.h"
 
+/* ZEBRA BGPd Version */
+#define ZEBRA_BGPD_VERSION "0.95 build 15"
+
 /* Typedef BGP specific types.  */
 typedef u_int16_t as_t;
 typedef u_int16_t bgp_size_t;
@@ -45,6 +48,11 @@ struct bgp_master
 #define BGP_OPT_NO_FIB                   (1 << 0)
 #define BGP_OPT_MULTIPLE_INSTANCE        (1 << 1)
 #define BGP_OPT_CONFIG_CISCO             (1 << 2)
+
+#ifdef HAVE_TCP_SIGNATURE
+  /* bgp receive socket */
+  int sock;
+#endif /* HAVE_TCP_SIGNATURE */
 };
 
 /* BGP instance structure.  */
@@ -70,7 +78,6 @@ struct bgp
 #define BGP_CONFIG_ROUTER_ID              (1 << 0)
 #define BGP_CONFIG_CLUSTER_ID             (1 << 1)
 #define BGP_CONFIG_CONFEDERATION          (1 << 2)
-#define BGP_CONFIG_DEFAULT_LOCAL_PREF     (1 << 3)
 
   /* BGP router identifier.  */
   struct in_addr router_id;
@@ -91,12 +98,13 @@ struct bgp
 #define BGP_FLAG_MED_CONFED               (1 << 3)
 #define BGP_FLAG_NO_DEFAULT_IPV4          (1 << 4)
 #define BGP_FLAG_NO_CLIENT_TO_CLIENT      (1 << 5)
-#define BGP_FLAG_ENFORCE_FIRST_AS         (1 << 6)
+#define BGP_FLAG_NO_ENFORCE_FIRST_AS      (1 << 6)
 #define BGP_FLAG_COMPARE_ROUTER_ID        (1 << 7)
 #define BGP_FLAG_ASPATH_IGNORE            (1 << 8)
 #define BGP_FLAG_IMPORT_CHECK             (1 << 9)
 #define BGP_FLAG_NO_FAST_EXT_FAILOVER     (1 << 10)
 #define BGP_FLAG_LOG_NEIGHBOR_CHANGES     (1 << 11)
+#define BGP_FLAG_GRACEFUL_RESTART         (1 << 12)
 
   /* BGP Per AF flags */
   u_int16_t af_flags[AFI_MAX][SAFI_MAX];
@@ -136,6 +144,10 @@ struct bgp
   /* BGP default timer.  */
   u_int32_t default_holdtime;
   u_int32_t default_keepalive;
+
+  /* BGP graceful restart */
+  u_int32_t restart_time;
+  u_int32_t stalepath_time;
 };
 
 /* BGP peer-group support. */
@@ -271,7 +283,6 @@ struct peer
   char *update_if;
   union sockunion *update_source;
   struct zlog *log;
-  u_char version;		/* Peer BGP version. */
 
   union sockunion *su_local;	/* Sockunion of local address.  */
   union sockunion *su_remote;	/* Sockunion of remote address.  */
@@ -284,15 +295,17 @@ struct peer
   u_char afc_adv[AFI_MAX][SAFI_MAX];
   u_char afc_recv[AFI_MAX][SAFI_MAX];
 
-  /* Capability Flags.*/
+  /* Capability flags (reset in bgp_stop) */
   u_char cap;
 #define PEER_CAP_REFRESH_ADV                (1 << 0) /* refresh advertised */
 #define PEER_CAP_REFRESH_OLD_RCV            (1 << 1) /* refresh old received */
 #define PEER_CAP_REFRESH_NEW_RCV            (1 << 2) /* refresh rfc received */
 #define PEER_CAP_DYNAMIC_ADV                (1 << 3) /* dynamic advertised */
 #define PEER_CAP_DYNAMIC_RCV                (1 << 4) /* dynamic received */
+#define PEER_CAP_RESTART_ADV                (1 << 5) /* restart advertised */
+#define PEER_CAP_RESTART_RCV                (1 << 6) /* restart received */
 
-  /* Capability Flags.*/
+  /* Capability flags (reset in bgp_stop) */
   u_int16_t af_cap[AFI_MAX][SAFI_MAX];
 #define PEER_CAP_ORF_PREFIX_SM_ADV          (1 << 0) /* send-mode advertised */
 #define PEER_CAP_ORF_PREFIX_RM_ADV          (1 << 1) /* receive-mode advertised */
@@ -300,18 +313,24 @@ struct peer
 #define PEER_CAP_ORF_PREFIX_RM_RCV          (1 << 3) /* receive-mode received */
 #define PEER_CAP_ORF_PREFIX_SM_OLD_RCV      (1 << 4) /* send-mode received */
 #define PEER_CAP_ORF_PREFIX_RM_OLD_RCV      (1 << 5) /* receive-mode received */
+#define PEER_CAP_RESTART_AF_RCV		    (1 << 6) /* graceful restart afi/safi received */
+#define PEER_CAP_RESTART_AF_PRESERVE_RCV    (1 << 7) /* graceful restart afi/safi F-bit received */
 
   /* Global configuration flags. */
   u_int32_t flags;
-#define PEER_FLAG_PASSIVE                   (1 << 0) /* passive mode */
-#define PEER_FLAG_SHUTDOWN                  (1 << 1) /* shutdown */
-#define PEER_FLAG_DONT_CAPABILITY           (1 << 2) /* dont-capability */
-#define PEER_FLAG_OVERRIDE_CAPABILITY       (1 << 3) /* override-capability */
-#define PEER_FLAG_STRICT_CAP_MATCH          (1 << 4) /* strict-match */
-#define PEER_FLAG_NO_ROUTE_REFRESH_CAP      (1 << 5) /* route-refresh */
+#define PEER_FLAG_CONNECT_MODE_PASSIVE      (1 << 0) /* tranport connection-mode passive */
+#define PEER_FLAG_CONNECT_MODE_ACTIVE       (1 << 1) /* tranport connection-mode active */
+#define PEER_FLAG_SHUTDOWN                  (1 << 2) /* shutdown */
+#define PEER_FLAG_DONT_CAPABILITY           (1 << 3) /* dont-capability */
+#define PEER_FLAG_OVERRIDE_CAPABILITY       (1 << 4) /* override-capability */
+#define PEER_FLAG_STRICT_CAP_MATCH          (1 << 5) /* strict-match */
 #define PEER_FLAG_DYNAMIC_CAPABILITY        (1 << 6) /* dynamic capability */
-#define PEER_FLAG_ENFORCE_MULTIHOP          (1 << 7) /* enforce-multihop */
+#define PEER_FLAG_DISABLE_CONNECTED_CHECK   (1 << 7) /* disable-connected-check */
 #define PEER_FLAG_LOCAL_AS_NO_PREPEND       (1 << 8) /* local-as no-prepend */
+#define PEER_FLAG_PASSWORD                  (1 << 9) /* password */
+
+  /* NSF mode (graceful restart) */
+  u_char nsf[AFI_MAX][SAFI_MAX];
 
   /* Per AF configuration flags. */
   u_int32_t af_flags[AFI_MAX][SAFI_MAX];
@@ -332,6 +351,9 @@ struct peer
 #define PEER_FLAG_MAX_PREFIX                (1 << 14) /* maximum prefix */
 #define PEER_FLAG_MAX_PREFIX_WARNING        (1 << 15) /* maximum prefix warning-only */
 
+  /* password for TCP signature */
+  char *password;
+
   /* default-originate route-map.  */
   struct
   {
@@ -346,14 +368,19 @@ struct peer
 #define PEER_STATUS_CAPABILITY_OPEN   (1 << 2) /* capability open send */
 #define PEER_STATUS_HAVE_ACCEPT       (1 << 3) /* accept peer's parent */
 #define PEER_STATUS_GROUP             (1 << 4) /* peer-group conf */
+#define PEER_STATUS_CREATE_INIT       (1 << 5) /* peer create init */
+#define PEER_STATUS_NSF_MODE          (1 << 6) /* NSF aware peer */
+#define PEER_STATUS_NSF_WAIT          (1 << 7) /* wait comeback peer */
 
-  /* Peer status af flags. */
+  /* Peer status af flags (reset in bgp_stop) */
   u_int16_t af_sflags[AFI_MAX][SAFI_MAX];
 #define PEER_STATUS_ORF_PREFIX_SEND   (1 << 0) /* prefix-list send peer */
 #define PEER_STATUS_ORF_WAIT_REFRESH  (1 << 1) /* wait refresh received peer */
 #define PEER_STATUS_DEFAULT_ORIGINATE (1 << 2) /* default-originate peer */
 #define PEER_STATUS_PREFIX_THRESHOLD  (1 << 3) /* exceed prefix-threshold */
 #define PEER_STATUS_PREFIX_LIMIT      (1 << 4) /* exceed prefix-limit */
+#define PEER_STATUS_EOR_SEND          (1 << 5) /* end-of-rib send to peer */
+#define PEER_STATUS_EOR_RECEIVED      (1 << 6) /* end-of-rib received from peer */
 
   /* Default attribute value for the peer. */
   u_int32_t config;
@@ -374,6 +401,9 @@ struct peer
   u_int32_t v_keepalive;
   u_int32_t v_asorig;
   u_int32_t v_routeadv;
+  u_int32_t v_pmax_restart;
+  u_int32_t v_active_delay;
+  u_int32_t v_gr_restart;
 
   /* Threads. */
   struct thread *t_read;
@@ -383,7 +413,10 @@ struct peer
   struct thread *t_holdtime;
   struct thread *t_keepalive;
   struct thread *t_asorig;
-  struct thread *t_routeadv;
+  struct thread *t_routeadv[AFI_MAX][SAFI_MAX];
+  struct thread *t_pmax_restart;
+  struct thread *t_gr_restart;
+  struct thread *t_gr_stale;
 
   /* Statistics field */
   u_int32_t open_in;		/* Open message input count */
@@ -406,7 +439,7 @@ struct peer
 
   /* Syncronization list and time.  */
   struct bgp_synchronize *sync[AFI_MAX][SAFI_MAX];
-  time_t synctime;
+  time_t synctime[AFI_MAX][SAFI_MAX];
 
   /* Send prefix count. */
   unsigned long scount[AFI_MAX][SAFI_MAX];
@@ -432,6 +465,7 @@ struct peer
   /* Max prefix count. */
   unsigned long pmax[AFI_MAX][SAFI_MAX];
   u_char pmax_threshold[AFI_MAX][SAFI_MAX];
+  u_int16_t pmax_restart[AFI_MAX][SAFI_MAX];
 #define MAXIMUM_PREFIX_THRESHOLD_DEFAULT 75
 
   /* allowas-in. */
@@ -458,8 +492,9 @@ struct peer
 #define PEER_DOWN_RMAP_BIND             17 /* neghbor peer-group command */
 #define PEER_DOWN_RMAP_UNBIND           18 /* no neighbor peer-group command */
 #define PEER_DOWN_CAPABILITY_CHANGE     19 /* neighbor capability command */
-#define PEER_DOWN_PASSIVE_CHANGE        20 /* neighbor passive command */
-#define PEER_DOWN_MULTIHOP_CHANGE       21 /* neighbor multihop command */
+#define PEER_DOWN_MULTIHOP_CHANGE       20 /* neighbor multihop command */
+#define PEER_DOWN_PASSWORD_CHANGE       21 /* neighbor password command */
+#define PEER_DOWN_NSF_CLOSE_SESSION     22 /* NSF tcp session close */
 
   /* The kind of route-map Flags.*/
   u_char rmap_type;
@@ -469,6 +504,11 @@ struct peer
 #define PEER_RMAP_TYPE_REDISTRIBUTE   (1 << 3) /* redistribute route-map */
 #define PEER_RMAP_TYPE_DEFAULT        (1 << 4) /* default-originate route-map */
 #define PEER_RMAP_TYPE_NOSET          (1 << 5) /* not allow to set commands */
+
+#ifdef HAVE_OPENBSD_TCP_SIGNATURE
+  u_int32_t spi_in;
+  u_int32_t spi_out;
+#endif /* HAVE_OPENBSD_TCP_SIGNATURE */
 };
 
 /* This structure's member directly points incoming packet data
@@ -490,7 +530,6 @@ struct bgp_nlri
 
 /* BGP versions.  */
 #define BGP_VERSION_4		                 4
-#define BGP_VERSION_MP_4_DRAFT_00               40
 
 /* Default BGP port number.  */
 #define BGP_PORT_DEFAULT                       179
@@ -538,6 +577,8 @@ struct bgp_nlri
 #define BGP_ATTR_MP_REACH_NLRI                  14
 #define BGP_ATTR_MP_UNREACH_NLRI                15
 #define BGP_ATTR_EXT_COMMUNITIES                16
+#define BGP_ATTR_NEW_ASPATH                     17
+#define BGP_ATTR_NEW_AGGREGATOR                 18
 
 /* BGP update origin.  */
 #define BGP_ORIGIN_IGP                           0
@@ -584,7 +625,7 @@ struct bgp_nlri
 #define BGP_NOTIFY_UPDATE_MAL_AS_PATH           11
 #define BGP_NOTIFY_UPDATE_MAX                   12
 
-/* BGP_NOTIFY_CEASE sub codes (draft-ietf-idr-cease-subcode-03).  */
+/* BGP_NOTIFY_CEASE sub codes (draft-ietf-idr-cease-subcode-05).  */
 #define BGP_NOTIFY_CEASE_MAX_PREFIX              1
 #define BGP_NOTIFY_CEASE_ADMIN_SHUTDOWN          2
 #define BGP_NOTIFY_CEASE_PEER_UNCONFIG           3
@@ -592,7 +633,8 @@ struct bgp_nlri
 #define BGP_NOTIFY_CEASE_CONNECT_REJECT          5
 #define BGP_NOTIFY_CEASE_CONFIG_CHANGE           6
 #define BGP_NOTIFY_CEASE_CONNECT_COLLISION       7
-#define BGP_NOTIFY_CEASE_MAX                     8
+#define BGP_NOTIFY_CEASE_OUT_OF_RESOURCE         8
+#define BGP_NOTIFY_CEASE_MAX                     9
 
 /* BGP_NOTIFY_CAPABILITY_ERR sub codes (draft-ietf-idr-dynamic-cap-02). */
 #define BGP_NOTIFY_CAPABILITY_INVALID_ACTION     1
@@ -626,7 +668,9 @@ struct bgp_nlri
 #define BGP_EVENTS_MAX                          14
 
 /* BGP timers default value.  */
-#define BGP_INIT_START_TIMER                     5
+#define BGP_PEER_FIRST_CREATE_TIMER             20
+#define BGP_INIT_START_TIMER                     0
+#define BGP_ACTIVE_DELAY_TIMER                   5
 #define BGP_ERROR_START_TIMER                   30
 #define BGP_DEFAULT_HOLDTIME                   180
 #define BGP_DEFAULT_KEEPALIVE                   60 
@@ -638,6 +682,10 @@ struct bgp_nlri
 
 /* BGP default local preference.  */
 #define BGP_DEFAULT_LOCAL_PREF                 100
+
+/* BGP graceful restart  */
+#define BGP_DEFAULT_RESTART_TIME               120
+#define BGP_DEFAULT_STALEPATH_TIME             360
 
 /* SAFI which used in open capability negotiation.  */
 #define BGP_SAFI_VPNV4                         128
@@ -732,7 +780,6 @@ void bgp_reset (void);
 void bgp_zclient_reset ();
 int bgp_nexthop_set (union sockunion *, union sockunion *, 
 		     struct bgp_nexthop *, struct peer *);
-struct bgp_master *bgp_get_master ();
 struct bgp *bgp_get_default ();
 struct bgp *bgp_lookup (as_t, char *);
 struct bgp *bgp_lookup_by_name (char *);
@@ -831,9 +878,6 @@ int peer_timers_connect_unset (struct peer *);
 int peer_advertise_interval_set (struct peer *, u_int32_t);
 int peer_advertise_interval_unset (struct peer *);
 
-int peer_version_set (struct peer *, int);
-int peer_version_unset (struct peer *);
-
 int peer_interface_set (struct peer *, char *);
 int peer_interface_unset (struct peer *);
 
@@ -858,8 +902,15 @@ int peer_route_map_unset (struct peer *, afi_t, safi_t, int);
 int peer_unsuppress_map_set (struct peer *, afi_t, safi_t, char *);
 int peer_unsuppress_map_unset (struct peer *, afi_t, safi_t);
 
-int peer_maximum_prefix_set (struct peer *, afi_t, safi_t, u_int32_t, u_char, int);
+int peer_maximum_prefix_set (struct peer *, afi_t, safi_t, u_int32_t, u_char, int, u_int16_t);
 int peer_maximum_prefix_unset (struct peer *, afi_t, safi_t);
+
+#ifdef HAVE_TCP_SIGNATURE
+int peer_password_set (struct peer *, char *);
+int peer_password_unset (struct peer *);
+#endif /* HAVE_TCP_SIGNATURE */
 
 int peer_clear (struct peer *);
 int peer_clear_soft (struct peer *, afi_t, safi_t, enum bgp_clear_type);
+
+void peer_nsf_stop (struct peer *);

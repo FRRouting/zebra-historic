@@ -1,3 +1,12 @@
+2004-05-17  Akihiro Mizutani <mizutani@net-chef.net>
+
+	* routemap.c: Add "continue" commands.
+		      Add "show route-map" commands.
+
+2004-05-06  Akihiro Mizutani <mizutani@net-chef.net>
+
+	* command.c: Fix password disappear problem.
+
 2003-10-21  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* vty.c: Change buffer handling to prevent DoS attack.  Reported
