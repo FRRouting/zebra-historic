@@ -71,6 +71,7 @@ void ospf6_if_init ();
 struct ospf6_if *make_ospf6_if (struct interface *);
 void delete_ospf6_if (struct ospf6_if *);
 struct ospf6_if *ospf6_if_lookup (char *);
+struct ospf6_if *ospf6_if_lookup_by_index (int);
 int ospf6_if_count_full_nbr (struct ospf6_if *);
 int ospf6_if_get_linklocal (struct in6_addr *, struct ospf6_if *);
 int show_if (struct vty *, struct interface *);

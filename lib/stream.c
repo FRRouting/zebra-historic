@@ -69,14 +69,6 @@ stream_get_endp (struct stream *s)
   return s->endp;
 }
 
-/* Please use STREAM_DATA(S)
-u_char *
-stream_get_data (struct stream *s)
-{
-  return s->data;
-}
-*/
-
 unsigned long
 stream_get_size (struct stream *s)
 {
@@ -103,6 +95,14 @@ stream_forward (struct stream *s, int size)
   s->getp += size;
 }
 
+/* Copy from stream to destination. */
+void
+stream_get (void *dst, struct stream *s, size_t size)
+{
+  memcpy (dst, s->data + s->getp, size);
+  s->getp += size;
+}
+
 /* Get next character from the stream. */
 u_char
 stream_getc (struct stream *s)
@@ -150,6 +150,20 @@ stream_get_ipv4 (struct stream *s)
   return l;
 }
 
+/* Copy to source to stream. */
+void
+stream_put (struct stream *s, void *src, size_t size)
+{
+  if (src)
+    memcpy (s->data + s->putp, src, size);
+  else
+    memset (s->data + s->putp, 0, size);
+
+  s->putp += size;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
+}
+
 /* Put character to the stream. */
 int
 stream_putc (struct stream *s, u_char c)
@@ -210,25 +224,6 @@ stream_putl_at (struct stream *s, unsigned long putp, u_int32_t l)
   s->data[putp + 2] = (u_char)(l >>  8);
   s->data[putp + 3] = (u_char)l;
   return 4;
-}
-
-void
-stream_memcpy (struct stream *s, void *src, size_t size)
-{
-  memcpy (s->data + s->putp, src, size);
-  s->putp += size;
-  if (s->putp > s->endp)
-    s->endp = s->putp;
-}
-
-void
-stream_strncpy (void *dst, struct stream *s, size_t size)
-{
-  strncpy (dst, s->data + s->getp, size);
-
-  s->getp += size;
-  if (s->putp > s->endp)
-    s->endp = s->putp;
 }
 
 /* Put long word to the stream. */

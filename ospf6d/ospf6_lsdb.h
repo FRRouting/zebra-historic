@@ -87,5 +87,8 @@ void ospf6_lsdb_finish_as (struct ospf6 *);
 
 void ospf6_lsdb_install (struct ospf6_lsa *);
 
+void ospf6_lsdb_maxage_remove_area (struct area *);
+void ospf6_lsdb_maxage_remove_as (struct ospf6 *);
+
 #endif /* OSPF6_LSDB_H */
 

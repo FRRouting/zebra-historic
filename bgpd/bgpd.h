@@ -114,10 +114,12 @@ struct peer
 #define PEER_CONFIG_WEIGHT       0x1
 #define PEER_DEFAULT_ORIGINATE   0x2
 #define PEER_CONFIG_HOLDTIME     0x4
+#define PEER_CONFIG_KEEPALIVE    0x8
   u_int32_t config;		/* Option set flag. */
   long localpref;		/* Default local preference. */
   u_int32_t weight;		/* Default weight.  */
   u_int32_t holdtime;		/* Holdtime configuration. */
+  u_int32_t keepalive;          /* Keepalive config */
   int send_community;		/* Community attribute send flag. */
   int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */

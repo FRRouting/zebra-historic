@@ -1,3 +1,19 @@
+1999-08-24  VOP <vop@unity.net>
+
+	* rib.c: Include "sockunion.h"
+
+1999-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ipforward.h: New file.
+
+	* zebra.h: Obsolete message ZEBRA_GET_ALL_INTERFACE,
+	ZEBRA_GET_ONE_INTERFACE, ZEBRA_GET_HOSTINFO are deleted.
+
+1999-08-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_INTERFACE_ADDRESS_ADD):
+	ZEBRA_INTERFACE_{ADD,DELETE} added.
+
 1999-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rib.c: show ip route A.B.C.D works.

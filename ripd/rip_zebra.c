@@ -23,6 +23,7 @@
 #include <zebra.h>
 
 #include "zebra/zebra.h"
+
 #include "thread.h"
 #include "command.h"
 #include "prefix.h"
@@ -34,13 +35,18 @@
 #include "log.h"
 #include "zclient.h"
 
+#include "ripd/rip_debug.h"
+
 /* All information about zebra. */
 struct zebra *zebra = NULL;
 
 extern struct thread_master *master;
 
-int rip_zebra_get_interface (int, struct zebra *, zebra_size_t);
-
+int rip_interface_add (int, struct zebra *, zebra_size_t);
+int rip_interface_delete (int, struct zebra *, zebra_size_t);
+int rip_interface_address_add (int, struct zebra *, zebra_size_t);
+int rip_interface_address_delete (int, struct zebra *, zebra_size_t);
+
 /* RIPd to zebra command interface. */
 void
 rip_zebra_ipv4_add (struct prefix_ipv4 *p, struct in_addr *nexthop, 
@@ -75,8 +81,7 @@ rip_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
   flags = stream_getc (s);
-  memcpy (&nexthop, stream_pnt (s), sizeof (struct in_addr));
-  stream_forward (s, sizeof (struct in_addr));
+  stream_get (&nexthop, s, sizeof (struct in_addr));
 
   /* Then fetch IPv4 prefixes. */
   while (stream_pnt (s) < lim)
@@ -90,8 +95,7 @@ rip_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       p.family = AF_INET;
       p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, stream_pnt (s), size);
-      stream_forward (s, size);
+      stream_get (&p.prefix, s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
 	rip_redistribute_add (type, 0, &p, ifindex);
@@ -309,9 +313,12 @@ zebra_init ()
   zebra->redist[ZEBRA_ROUTE_RIP] = 1;
 
   /* Set call back functions. */
+  zebra->interface_add = rip_interface_add;
+  zebra->interface_delete = rip_interface_delete;
+  zebra->interface_address_add = rip_interface_address_add;
+  zebra->interface_address_delete = rip_interface_address_delete;
   zebra->ipv4_route_add = rip_zebra_read_ipv4;
   zebra->ipv4_route_delete = rip_zebra_read_ipv4;
-  zebra->get_all_interface = rip_zebra_get_interface;
 
   /* Install zebra node. */
   install_node (&zebra_node, config_write_zebra);

@@ -1,3 +1,12 @@
+1999-08-26  Andrew Waddington <waddington@usa.net>
+
+	* bgpd.1: Add man page.
+	ospf6d.1: Likewise.
+	ospfd.1: Likewise.
+	ripd.1: Likewise.
+	ripngd.1: Likewise.
+	zebra.1: Likewise.
+
 1999-08-14  Andrew Waddington <waddington@usa.net>
 
 	* zebra.texi: Many typo is fixed.  Some grammatical rectifications

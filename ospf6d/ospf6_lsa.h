@@ -1,4 +1,5 @@
 /*
+ * LSA function
  * Copyright (C) 1999 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
@@ -150,6 +151,7 @@ struct ospf6_lsa_hdr
 struct ospf6_lsa
 {
   unsigned long          lock;      /* reference counter */
+  int                    summary;   /* indicate this is LSheader only */
   struct ospf6_lsa_hdr  *lsa_hdr;
   void                  *scope;     /* pointer of scoped data structure */
   unsigned char          flags;     /* use this to decide ack type */
@@ -169,12 +171,7 @@ struct ospf6_lsa
 
 /* Function Prototypes */
 int past_min_ls_interval (struct ospf6_lsa *);
-int which_is_more_recent (struct ospf6_lsa *, struct ospf6_lsa *);
 void originating_lsa (struct ospf6_lsa *);
-void construct_router_lsa (struct area *);
-void construct_network_lsa (struct ospf6_if *);
-void construct_link_lsa (struct ospf6_if *);
-void construct_intra_prefix_lsa (struct ospf6_if *);
 int show_router_lsa (struct vty *, void *);
 int show_network_lsa (struct vty *, void *);
 int show_link_lsa (struct vty *, void *);
@@ -186,9 +183,9 @@ get_router_lsd (rtr_id_t, struct ospf6_lsa *);
 unsigned long get_ifindex_to_router (rtr_id_t, struct ospf6_lsa *);
 void get_referencing_lsa (list, struct ospf6_lsa *);
 int is_self_originated (struct ospf6_lsa *);
-void update_ls_seqnum (struct ospf6_lsa *);
 struct ospf6_lsa *reconstruct_lsa (struct ospf6_lsa *);
 
+int ospf6_lsa_check_recent (struct ospf6_lsa *, struct ospf6_lsa *);
 void ospf6_lsa_lock (struct ospf6_lsa *);
 void ospf6_lsa_unlock (struct ospf6_lsa *);
 void ospf6_maxage_remove (struct ospf6_lsa *);
@@ -199,7 +196,7 @@ void ospf6_age_update_to_send (struct ospf6_lsa *, struct ospf6_if *);
 void ospf6_premature_aging (struct ospf6_lsa *);
 struct ospf6_lsa_hdr *make_ospf6_lsa_data (struct ospf6_lsa_hdr *, int);
 struct ospf6_lsa *make_ospf6_lsa (struct ospf6_lsa_hdr *);
-unsigned short ospf6_lsa_get_type (struct ospf6_lsa *);
+struct ospf6_lsa *make_ospf6_lsa_summary (struct ospf6_lsa_hdr *);
 unsigned short ospf6_lsa_get_scope_type (unsigned short);
 void ospf6_lsa_clear_flag (struct ospf6_lsa *);
 void ospf6_lsa_set_flag (struct ospf6_lsa *, unsigned char);
@@ -212,10 +209,9 @@ struct ospf6_lsa *ospf6_make_link_lsa (struct ospf6_if *);
 struct ospf6_lsa *ospf6_make_intra_prefix_lsa (struct ospf6_if *);
 
 unsigned long ospf6_as_external_lsid (struct prefix_ipv6 *, struct ospf6 *);
-struct ospf6_lsa *ospf6_make_as_external_lsa (unsigned long,
-                                              struct ospf6_prefix *,
-                                              struct ospf6 *);
-struct ospf6_lsa *ospf6_refresh_as_external_lsa (struct ospf6_lsa *);
+struct ospf6_lsa *ospf6_make_as_external_lsa (struct route_node *);
+
+void ospf6_lsa_maxage_remove (struct ospf6_lsa *);
 
 #endif /* OSPF6_LSA_H */
 

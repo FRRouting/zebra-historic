@@ -1,3 +1,72 @@
+1999-08-25  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_packet.c (ospf_ls_ack_send): The name is changed from
+	`ospf_ls_ack_send'.
+	(ospf_ls_ack_send_delayed) (ospf_ls_ack_timer): New function added.
+	Delayed Link State Acknowledgment is scheduled by timer.
+	
+1999-08-25  Alex Zinin  <zinin@amt.ru>
+
+	* ospf_lsa.c (ospf_router_lsa): Incorrectly included link to
+	a stub network instead of link to a transit network into
+	originated router-LSA, bug fixed.
+
+1999-08-24  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (ospf_update_router_id): New function added.
+
+	* ospf_network.c (ospf_write): Create new socket per transmission.
+	And select outgoing interface whether dst is unicast or multicast.
+
+	* ospf_packet.c: LSA flooding will work.	
+
+1999-08-24  VOP <vop@unity.net>
+
+	* ospf_route.c: Include "sockunion.h"
+
+1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_network.c (ospf_serv_sock_init): Enclose
+	IPTOS_PREC_INTERNETCONTROL setting with #ifdef for OS which does
+	not have the definition.
+
+1999-08-23  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_packet.c: Fix bug of DD processing.
+
+1999-08-18  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (show_ip_ospf_database): Show actual `LS age'.
+
+1999-08-17  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.h (OSPF_MAX_LSA): The value of OSPF_MAX_LSA is
+	corrected.  The bug of `mes_lookup' is fixed.  
+	This had been reported by Poul-Henning Kamp <phk@freebsd.org>.
+
+	* ospf_lsa.c (ospf_router_lsa_install): The name is changed from
+	`ospf_add_router_lsa'.
+	(ospf_network_lsa_install): The name is changed from
+	`ospf_add_network_lsa'.
+
+	* ospf_interface.h (ospf_interface): Add member `nbr_self'.
+
+	* ospf_interface.c (ospf_if_is_enable): New function added.
+
+1999-08-16  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.h (struct lsa_header): The name is changed from
+	`struct ospf_lsa'.
+	(struct ospf_lsa): New struct added to control each LSA's aging
+	and timers.	
+
+	* ospf_lsa.c (ospf_lsa_data_free): The name is change from
+	`ospf_lsa_free'.
+	(ospf_lsa_data_new), (ospf_lsa_new), (ospf_lsa_free),
+	(ospf_lsa_different), (ospf_lsa_install): New function added.
+
+	* ospf_packet.c (ospf_ls_upd_list_lsa): New function added.
+
 1999-08-12  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_nsm.c (nsm_reset_nbr): New function added.

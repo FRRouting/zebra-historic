@@ -72,7 +72,7 @@ ospf_lsa.o: ospf_lsa.c ../lib/linklist.h ../lib/prefix.h ../lib/if.h \
  ../lib/vty.h ../lib/stream.h ../lib/log.h ../ospfd/ospfd.h \
  ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
  ../ospfd/ospf_neighbor.h ../ospfd/ospf_nsm.h ../ospfd/ospf_lsa.h \
- ../ospfd/ospf_packet.h ../ospfd/ospf_dump.h
+ ../ospfd/ospf_packet.h ../ospfd/ospf_spf.h ../ospfd/ospf_dump.h
 ospf_main.o: ospf_main.c ../lib/version.h ../lib/thread.h \
  ../lib/prefix.h ../lib/linklist.h ../lib/if.h ../lib/vector.h \
  ../lib/vty.h ../lib/command.h ../lib/filter.h ../lib/stream.h \
@@ -103,7 +103,7 @@ ospf_packet.o: ospf_packet.c ../lib/thread.h ../lib/memory.h \
  ../ospfd/ospf_packet.h ../ospfd/ospf_spf.h ../ospfd/ospf_dump.h
 ospf_route.o: ospf_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/memory.h ../lib/linklist.h ../lib/log.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../ospfd/ospfd.h \
+ ../lib/vector.h ../lib/vty.h ../lib/sockunion.h ../ospfd/ospfd.h \
  ../ospfd/ospf_interface.h ../ospfd/ospf_lsa.h ../ospfd/ospf_route.h \
  ../ospfd/ospf_spf.h ../ospfd/ospf_zebra.h
 ospf_spf.o: ospf_spf.c ../lib/prefix.h ../lib/linklist.h \

@@ -44,10 +44,16 @@ struct zebra
   u_char redist[ZEBRA_ROUTE_MAX];
 
   /* Pointer to the functions. */
+  int (*interface_add) (int, struct zebra *, zebra_size_t);
+  int (*interface_delete) (int, struct zebra *, zebra_size_t);
+  int (*interface_address_add) (int, struct zebra *, zebra_size_t);
+  int (*interface_address_delete) (int, struct zebra *, zebra_size_t);
   int (*ipv4_route_add) (int, struct zebra *, zebra_size_t);
   int (*ipv4_route_delete) (int, struct zebra *, zebra_size_t);
   int (*ipv6_route_add) (int, struct zebra *, zebra_size_t);
   int (*ipv6_route_delete) (int, struct zebra *, zebra_size_t);
+
+  /* This becomes obsolete. */
   int (*get_all_interface) (int, struct zebra *, zebra_size_t);
 };
 

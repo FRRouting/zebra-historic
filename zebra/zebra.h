@@ -23,36 +23,36 @@
 #ifndef _ZEBRA_ZEBRA_H
 #define _ZEBRA_ZEBRA_H
 
-/* Zebra request command definition. */
-#define ZEBRA_IPV4_ROUTE_ADD       1
-#define ZEBRA_IPV4_ROUTE_DELETE    2
-#define ZEBRA_IPV6_ROUTE_ADD       3
-#define ZEBRA_IPV6_ROUTE_DELETE    4
-#define ZEBRA_GET_ALL_INTERFACE    5
-#define ZEBRA_GET_ONE_INTERFACE    6
-#define ZEBRA_GET_HOSTINFO         7
-#define ZEBRA_REDISTRIBUTE_ADD     8
-#define ZEBRA_REDISTRIBUTE_DELETE  9
-#define ZEBRA_INTERFACE_ADD       10
-#define ZEBRA_INTERFACE_DELETE    11
+/* Zebra message types. */
+#define ZEBRA_INTERFACE_ADD              1
+#define ZEBRA_INTERFACE_DELETE           2
+#define ZEBRA_INTERFACE_ADDRESS_ADD      3
+#define ZEBRA_INTERFACE_ADDRESS_DELETE   4
+#define ZEBRA_IPV4_ROUTE_ADD             5
+#define ZEBRA_IPV4_ROUTE_DELETE          6
+#define ZEBRA_IPV6_ROUTE_ADD             7
+#define ZEBRA_IPV6_ROUTE_DELETE          8
+#define ZEBRA_REDISTRIBUTE_ADD           9
+#define ZEBRA_REDISTRIBUTE_DELETE       10
+#define ZEBRA_MESSAGE_MAX               11
+
+/* Zebra route's type. */
+#define ZEBRA_ROUTE_SYSTEM               0
+#define ZEBRA_ROUTE_KERNEL               1
+#define ZEBRA_ROUTE_CONNECT              2
+#define ZEBRA_ROUTE_STATIC               3
+#define ZEBRA_ROUTE_RIP                  4
+#define ZEBRA_ROUTE_RIPNG                5
+#define ZEBRA_ROUTE_OSPF                 6
+#define ZEBRA_ROUTE_OSPF6                7
+#define ZEBRA_ROUTE_BGP                  8
+#define ZEBRA_ROUTE_MAX                  9
 
 /* Error code of zebra. */
 #define ZEBRA_ERR_RTEXIST          1
 #define ZEBRA_ERR_RTUNREACH        2
 #define ZEBRA_ERR_EPERM            3
 #define ZEBRA_ERR_RTNOEXIST        4
-
-/* Zebra route's type. */
-#define ZEBRA_ROUTE_SYSTEM         0
-#define ZEBRA_ROUTE_KERNEL         1
-#define ZEBRA_ROUTE_CONNECT        2
-#define ZEBRA_ROUTE_STATIC         3
-#define ZEBRA_ROUTE_RIP            4
-#define ZEBRA_ROUTE_RIPNG          5
-#define ZEBRA_ROUTE_OSPF           6
-#define ZEBRA_ROUTE_OSPF6          7
-#define ZEBRA_ROUTE_BGP            8
-#define ZEBRA_ROUTE_MAX            9
 
 /* Zebra message flags */
 /* #define ZEBRA_FLAG_EXTERNAL       0 */

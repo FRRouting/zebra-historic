@@ -72,18 +72,16 @@ void stream_set_putp (struct stream *, unsigned long);
 
 void stream_forward (struct stream *, int);
 
+void stream_put (struct stream *, void *, size_t);
 int stream_putc (struct stream *, u_char);
 int stream_putc_at (struct stream *, unsigned long, u_char);
 int stream_putw (struct stream *, u_int16_t);
 int stream_putw_at (struct stream *, unsigned long, u_int16_t);
 int stream_putl (struct stream *, u_int32_t);
 int stream_putl_at (struct stream *, unsigned long, u_int32_t);
-
 int stream_put_ipv4 (struct stream *, u_int32_t);
-void stream_memcpy (struct stream *, void *, size_t);
-void stream_strncpy (void *, struct stream *, size_t);
 
-
+void stream_get (void *, struct stream *, size_t);
 u_char stream_getc (struct stream *);
 u_int16_t stream_getw (struct stream *);
 u_int32_t stream_getl (struct stream *);

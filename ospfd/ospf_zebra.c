@@ -48,65 +48,63 @@ struct zebra *zebra = NULL;
 /* For registering threads. */
 extern struct thread_master *master;
 
+/* Inteface addition message from zebra. */
 int
-ospf_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
+ospf_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 {
   struct interface *ifp;
-  struct connected *connected;
-  u_int32_t connected_count;
-  unsigned long endp;
-  struct stream *s;
 
-  s = zebra->ibuf;
-  endp = stream_get_endp (s);
+  ifp = zebra_interface_add_read (zebra->ibuf);
 
-  while (stream_get_getp(s) < endp)
-    {
-      u_char tmpnam[INTERFACE_NAMSIZ + 1];
+#if 0
+  if (IS_OSPF_DEBUG_ZEBRA)
+    zlog_info ("OSPF interface add %s index %d flags %d metric %d mtu %d",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+#endif /* 0 */  
 
-      bzero (tmpnam, sizeof (tmpnam));
-
-      /* Get interface's name */
-      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
-
-      /* create interface structure */
-      ifp = if_get_by_name (tmpnam);
-
-      /* Get interface's index and values. */
-      ifp->ifindex = stream_getc (s);
-      ifp->flags = stream_getl (s);
-      ifp->metric = stream_getl (s);
-      ifp->mtu = stream_getl (s);
-
-      /* Get interface's address. */
-      connected_count = stream_getl (s);
-
-      while (connected_count--)
-	{
-	  struct prefix *p;
-	  int plen;
-
-	  connected = connected_new ();
-
-	  p = prefix_new ();
-	  p->family = stream_getc (s);
-
-	  plen = prefix_blen (p);
-	  memcpy (&p->u.prefix, stream_pnt (s), plen);
-	  stream_forward (s, plen);
-	  p->prefixlen = stream_getc (s);
-	  connected->address = p;
-
-	  p = prefix_new ();
-	  memcpy (&p->u.prefix, stream_pnt (s), plen);
-	  stream_forward (s, plen);
-
-	  connected->destination = p;
-
-	  connected_add (ifp, connected);
-	}
-    }
   ospf_if_update ();
+
+  return 0;
+}
+
+int
+ospf_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
+{
+  return 0;
+}
+
+int
+ospf_interface_address_add (int command, struct zebra *zebra,
+			     zebra_size_t length)
+{
+  struct connected *c;
+
+  c = zebra_interface_address_add_read (zebra->ibuf);
+
+  if (c == NULL)
+    return 0;
+
+#if 0
+  if (IS_OSPF_DEBUG_ZEBRA)
+    {
+      struct prefix *p;
+
+      p = c->address;
+      if (p->family == AF_INET)
+	zlog_info (" connected address %s/%d", 
+		   inet_atop (p->u.prefix4), p->prefixlen);
+    }
+#endif /* 0 */
+
+  ospf_if_update ();
+
+  return 0;
+}
+
+int
+ospf_interface_address_delete (int command, struct zebra *zebra,
+			       zebra_size_t length)
+{
   return 0;
 }
 
@@ -199,7 +197,12 @@ zebra_init ()
   zebra->redist_default = ZEBRA_ROUTE_OSPF;
   zebra->redist[ZEBRA_ROUTE_OSPF] = 1;
 
-  zebra->get_all_interface = ospf_zebra_get_interface;
+  zebra->interface_add = ospf_interface_add;
+  zebra->interface_delete = ospf_interface_delete;
+  zebra->interface_address_add = ospf_interface_address_add;
+  zebra->interface_address_delete = ospf_interface_address_delete;
+
+  /* zebra->get_all_interface = ospf_zebra_get_interface; */
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);

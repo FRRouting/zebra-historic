@@ -73,6 +73,8 @@ AC_ARG_ENABLE(guile,
 [  --enable-guile          build zebra-guile])
 AC_ARG_ENABLE(bgp-announce,
 [  --disable-bgp-announce, turn off BGP route announcement])
+AC_ARG_ENABLE(netlink,
+[  --enable-netlink        force to use Linux netlink interface])
 
 dnl -------------------
 dnl Check header files.
@@ -106,6 +108,9 @@ case "$host" in
   ;;
   *-freebsd3.2)
       AC_DEFINE(FREEBSD_32)
+  ;;
+  *-openbsd*)
+      opsys=openbsd
   ;;
 esac
 
@@ -168,20 +173,26 @@ dnl Determine routing get and set method
 dnl ------------------------------------
 AC_MSG_CHECKING(zebra between kernel interface method)
 if test x"$opsys" = x"gnu-linux"; then
-  AC_EGREP_CPP(yes,
-  [#include <linux/autoconf.h>
+  if test "${enable_netlink}" = "yes";then
+    AC_MSG_RESULT(netlink)
+    RT_METHOD=rt_netlink.o
+    netlink=yes
+  else
+    AC_EGREP_CPP(yes,
+    [#include <linux/autoconf.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE > 131328  /* 2.1.0 or later */
 #ifdef CONFIG_RTNETLINK
   yes
 #endif
 #endif
-  ],
- [AC_MSG_RESULT(netlink)
-  RT_METHOD=rt_netlink.o
-  netlink=yes],
- [AC_MSG_RESULT(ioctl)
-  RT_METHOD=rt_ioctl.o])
+    ],
+   [AC_MSG_RESULT(netlink)
+    RT_METHOD=rt_netlink.o
+    netlink=yes],
+   [AC_MSG_RESULT(ioctl)
+    RT_METHOD=rt_ioctl.o])
+  fi
 else
  AC_TRY_RUN([#include <errno.h>
 #include <sys/types.h>
@@ -238,13 +249,18 @@ if test "$netlink" = yes; then
   AC_MSG_RESULT(netlink)
   IF_METHOD=if_netlink.o
 else
-if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
-  AC_MSG_RESULT(sysctl)
-  IF_METHOD=if_sysctl.o
-else
-  AC_MSG_RESULT(ioctl)
-  IF_METHOD=if_ioctl.o
-fi
+  if test "$opsys" = "openbsd";then
+    AC_MSG_RESULT(ioctl)
+    IF_METHOD=if_ioctl.o
+  else
+    if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
+      AC_MSG_RESULT(sysctl)
+      IF_METHOD=if_sysctl.o
+    else
+      AC_MSG_RESULT(ioctl)
+      IF_METHOD=if_ioctl.o
+    fi
+  fi
 fi
 AC_SUBST(IF_METHOD)
 
@@ -306,16 +322,16 @@ if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    fi
    AC_MSG_RESULT(KAME)
 fi
-dnl ------------
-dnl OpenBSD 2.4+
-dnl ------------
+dnl -------------------
+dnl OpenBSD 2.5 has NRL
+dnl -------------------
 if grep NRL /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    zebra_cv_ipv6=yes
    AC_DEFINE(HAVE_IPV6)
    AC_DEFINE(NRL)
    RIPNGD="ripngd"
    OSPF6D="ospf6d"
-   AC_MSG_RESULT(OpenBSD/NRL)
+   AC_MSG_RESULT(NRL)
 fi
 
 dnl ----------
@@ -459,6 +475,20 @@ dnl   LIB_REGEX="regex.o"
 dnl fi
 dnl AC_SUBST(LIB_REGEX)
 
+dnl ------------------
+dnl check SNMP library
+dnl ------------------
+old_c_flags="${CFLAGS}"
+CFLAGS="-L/usr/local/lib"
+AC_CHECK_LIB(snmp, acl_scanInit, HAVE_SNMP=yes)
+CFLAGS="${old_c_flags}"
+
+if test "${HAVE_SNMP}" = "yes"; then
+  AC_DEFINE(HAVE_SNMP)
+  CFLAGS="$CFLAGS -I/usr/local/include/ucd-snmp"
+  LIBS="${LIBS} -lsnmp"
+fi
+
 dnl ----------------------------
 dnl check sin_len of sockaddr_in
 dnl ----------------------------
@@ -488,6 +518,7 @@ dnl check socklen_t exist or not
 dnl ----------------------------
 AC_MSG_CHECKING(whther socklen_t is defined)
 AC_TRY_COMPILE([#include <sys/types.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
 ],[socklen_t ac_x;],
 [AC_MSG_RESULT(yes)

@@ -249,6 +249,10 @@ main (int argc, char **argv)
   /* Sort VTY commands. */
   sort_node ();
 
+#ifdef SMUX_TEST
+  smux_init ();
+#endif /* SMUX_TEST */
+
 #ifdef RTADV_TEST
   rtadv_init ();
 #endif /* RTADV_TEST */

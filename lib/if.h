@@ -116,8 +116,10 @@ struct connected
 
 /* Prototypes. */
 struct interface *if_new (void);
+struct interface *if_create (void);
 struct interface *if_lookup_by_index (int);
 struct interface *if_lookup_by_name (char *);
+struct interface *if_lookup_address (struct in_addr);
 struct interface *if_get_by_name (char *);
 void if_delete (struct interface *);
 int if_is_up (struct interface *);
@@ -134,6 +136,11 @@ struct connected *connected_new ();
 void connected_add (struct interface *, struct connected *);
 void connected_delete_by_prefix (struct interface *, struct prefix *);
 void connected_log (struct connected *);
+
+#ifdef NRL
+unsigned int if_nametoindex (char *);
+char *if_indextoname (unsigned int, char *);
+#endif /* NRL */
 
 /* Exported variables. */
 extern list iflist;

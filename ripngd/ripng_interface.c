@@ -34,6 +34,8 @@
 #include "zclient.h"
 #include "command.h"
 #include "table.h"
+#include "thread.h"
+#include "client.h"
 
 #include "ripngd/ripngd.h"
 #include "ripngd/ripng_debug.h"
@@ -66,7 +68,7 @@ ripng_multicast_join (struct interface *ifp)
     zlog_warn ("can't setsockopt IPV6_JOIN_GROUP: %s", strerror (errno));
 
   if (IS_RIPNG_DEBUG_EVENT)
-    zlog_info ("%s join to all-rip-routers multicast group", ifp->name);
+    zlog_info ("RIPng %s join to all-rip-routers multicast group", ifp->name);
 
   return ret;
 }
@@ -88,7 +90,8 @@ ripng_multicast_leave (struct interface *ifp)
     zlog_warn ("can't setsockopt IPV6_LEAVE_GROUP: %s\n", strerror (errno));
 
   if (IS_RIPNG_DEBUG_EVENT)
-    zlog_info ("%s leave from all-rip-routers multicast group", ifp->name);
+    zlog_info ("RIPng %s leave from all-rip-routers multicast group",
+	       ifp->name);
 
   return ret;
 }
@@ -111,78 +114,66 @@ ripng_check_max_mtu ()
   return mtu;
 }
 
-/* Get all interface information. */
-void
-ripng_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
+/* Inteface addition message from zebra. */
+int
+ripng_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 {
   struct interface *ifp;
-  struct connected *connected;
-  u_int32_t connected_count;
-  unsigned long endp;
-  struct stream *s;
 
-  s = zebra->ibuf;
-  endp = stream_get_endp (s);
+  ifp = zebra_interface_add_read (zebra->ibuf);
 
-  while (stream_get_getp(s) < endp)
-    {
-      u_char tmpnam[INTERFACE_NAMSIZ + 1];
+  if (IS_RIPNG_DEBUG_ZEBRA)
+    zlog_info ("RIPng interface add %s index %d flags %d metric %d mtu %d",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
-      bzero (tmpnam, sizeof (tmpnam));
+  /* Check is this interface is RIP enabled or not.*/
+  ripng_enable_apply (ifp);
 
-      /* Get interface's name */
-      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
-
-      /* create interface structure */
-      ifp = if_get_by_name (tmpnam);
-
-      /* Get interface's index and values. */
-      ifp->ifindex = stream_getc (s);
-      ifp->flags = stream_getl (s);
-      ifp->metric = stream_getl (s);
-      ifp->mtu = stream_getl (s);
-
-      /* Get interface's address. */
-      connected_count = stream_getl (s);
-
-      while (connected_count--)
-	{
-	  struct prefix *p;
-	  int plen;
-
-	  connected = connected_new ();
-
-	  p = prefix_new ();
-	  p->family = stream_getc (s);
-
-	  plen = prefix_blen (p);
-	  memcpy (&p->u.prefix, stream_pnt (s), plen);
-	  stream_forward (s, plen);
-	  p->prefixlen = stream_getc (s);
-	  connected->address = p;
-
-	  p = prefix_new ();
-	  memcpy (&p->u.prefix, stream_pnt (s), plen);
-	  stream_forward (s, plen);
-
-	  connected->destination = p;
-
-	  connected_add (ifp, connected);
-	}
-
-      /* RIPng interface check. */
-      ripng_enable_apply (ifp);
-    }
-
-  /* Apply distribute-list to the all interface. */
+  /* Apply distribute list to the all interface. */
   distribute_apply_all ();
 
-  /* Add ripng getinterface hook at here. */
-  if (ripng)
+  return 0;
+}
+
+int
+ripng_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
+{
+  return 0;
+}
+
+int
+ripng_interface_address_add (int command, struct zebra *zebra,
+			     zebra_size_t length)
+{
+  struct connected *c;
+  struct prefix *p;
+  char buf[INET6_ADDRSTRLEN];
+
+  c = zebra_interface_address_add_read (zebra->ibuf);
+
+  if (c == NULL)
+    return 0;
+
+  if (IS_RIPNG_DEBUG_ZEBRA)
     {
-      ripng->max_mtu = ripng_check_max_mtu ();
-      ripng_event (RIPNG_REQUEST_EVENT, 0);
+      p = c->address;
+      if (p->family == AF_INET6)
+	zlog_info ("RIPng connected address %s/%d", 
+		   inet_ntop (AF_INET6, &p->u.prefix6, buf, INET6_ADDRSTRLEN),
+		   p->prefixlen);
     }
+
+  /* Check is this interface is RIP enabled or not.*/
+  ripng_enable_apply (c->ifp);
+
+  return 0;
+}
+
+int
+ripng_interface_address_delete (int command, struct zebra *zebra,
+				zebra_size_t length)
+{
+  return 0;
 }
 
 /* RIPng enable interface vector. */
@@ -307,6 +298,28 @@ ripng_enable_if_delete (char *ifname)
   return 1;
 }
 
+/* Wake up interface. */
+int
+ripng_interface_wakeup (struct thread *t)
+{
+  struct interface *ifp;
+  struct ripng_interface *ri;
+
+  /* Get interface. */
+  ifp = THREAD_ARG (t);
+
+  ri = ifp->info;
+  ri->t_wakeup = NULL;
+
+  /* Join to multicast group. */
+  ripng_multicast_join (ifp);
+
+  /* Send RIP request to the interface. */
+  ripng_request (ifp);
+
+  return 0;
+}
+
 /* Check RIPng is enabed on this interface. */
 void
 ripng_enable_apply (struct interface *ifp)
@@ -347,11 +360,17 @@ ripng_enable_apply (struct interface *ifp)
 	  if (IS_RIPNG_DEBUG_EVENT)
 	    zlog_info ("RIPng turn on %s", ifp->name);
 
+	  /* Add interface wake up thread. */
+	  if (! ri->t_wakeup)
+	    ri->t_wakeup = thread_add_timer (master, ripng_interface_wakeup,
+					     ifp, 1);
+#if 0
 	  /* Join to multicast group. */
 	  ripng_multicast_join (ifp);
 
 	  /* Send RIP request to the interface. */
 	  ripng_request (ifp);
+#endif /* 0 */
 
 	  ri->running = 1;
 	}

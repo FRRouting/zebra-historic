@@ -75,12 +75,16 @@ struct ospf_neighbor
   /* Statistics Field */
 };
 
+/* Macros. */
+#define NBR_IS_DR(n)	IPV4_ADDR_SAME (&n->address.u.prefix4, &n->d_router)
+#define NBR_IS_BDR(n)   IPV4_ADDR_SAME (&n->address.u.prefix4, &n->bd_router)
+
 /* Prototypes. */
 struct ospf_neighbor *ospf_nbr_new (struct ospf_interface *);
 void ospf_nbr_free (struct ospf_neighbor *);
 void ospf_nbr_delete (struct ospf_neighbor *);
 int ospf_nbr_bidirectional (struct in_addr *, struct in_addr *, int);
-void ospf_nbr_add_myself (struct ospf_interface *);
+void ospf_nbr_add_self (struct ospf_interface *);
 int ospf_nbr_count (struct route_table *, int);
 struct ospf_neighbor *ospf_nbr_lookup_by_addr (struct route_table *, struct in_addr *);
 

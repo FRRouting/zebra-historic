@@ -1,4 +1,31 @@
-1999-08-15  Arkadiusz Mi-B¶kiewicz-A <misiek@misiek.eu.org>
+1999-08-26  kay <kay@v6.access.co.jp>
+
+	* configure.in (CFLAGS): Add <sys/socket.h> to check socklen_t.
+
+1999-08-24  VOP <vop@unity.net>
+
+	* filter.c: Include "sockunion.h".
+	plist.c: Likewise.
+	table.c: Likewise.
+
+1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add netinet6/in6.h check.
+
+1999-08-21  Masaki Minami <masaki@minami.org>
+
+	* BSD/OS 4.0 porting.
+
+1999-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --enable-netlink option to force to use Linux
+	netlink interface.
+	(CFLAGS): Add ucd-snmp library check.
+
+	* acconfig.h: If socklen_t is not defined, typedef int to
+	socklen_t.
+
+1999-08-15  Arkadiusz Miskiewicz <misiek@misiek.eu.org>
 
 	* configure.in: When --enable-ipv6 specified, then only kernel
 	version is checked.
@@ -11,7 +38,7 @@
 
 	* configure.in: Fix privious Linux IPv6 check changes.
 
-1999-08-02  Arkadiusz Mi-B¶kiewicz-A <misiek@misiek.eu.org>
+1999-08-02  Arkadiusz Miskiewicz <misiek@misiek.eu.org>
 
 	* configure.in: Improve Linux IPv6 feature check.
 

@@ -8,10 +8,7 @@
 @c
 @c  look at every @c in the text
 @c  correct all ` and ' characters
-
-@c
-@c Current distribution of texinfo does not have @command.
-@c
+@c emacs-outline-regexp "@chap\\|@\\(sub\\)*section"
 @macro command{a}
 @code{\a\}
 @end macro
@@ -20,13 +17,23 @@
 @set VERSION 0.77
 @set UPDATED August 1999
 
+
+@c A - Some variables for later
+@set INSTALL_PREFIX_ETC /usr/local/etc/
+@set INSTALL_PREFIX_SBIN /usr/local/sbin/
+
+
+@c A - Enter the file into the top level info dir
 @dircategory Routing Software
 @direntry
 * Zebra: (zebra).		The GNU Zebra routing software package.
 @end direntry
 
+
+@c A - TODO inclined to include a file from the source tree for this 
 @ifinfo
-Copyright @copyright{} 1999 Free Software Foundation, Inc.
+@copyright{
+Copyright 1999 Free Software Foundation, Inc.
 
 Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -48,7 +55,11 @@ Permission is granted to copy and distribute translations of this manual
 into another language, under the above conditions for modified versions,
 except that this permission notice may be stated in a translation
 approved by the Free Software Foundation.
+}
 @end ifinfo
+
+
+
 
 @titlepage
 @title GNU Zebra
@@ -57,9 +68,12 @@ approved by the Free Software Foundation.
 @subtitle @value{UPDATED}
 @author Kunihiro Ishiguro
 
+
+
 @page
 @vskip 0pt plus 1filll
-Copyright @copyright{} 1999 Free Software Foundation, Inc.
+@copyright{
+Copyright 1999 Free Software Foundation, Inc.
 
 Permission is granted to make and distribute verbatim copies of
 this manual provided the copyright notice and this permission notice
@@ -74,66 +88,92 @@ Permission is granted to copy and distribute translations of this manual
 into another language, under the above conditions for modified versions,
 except that this permission notice may be stated in a translation approved
 by the Free Software Foundation.
+}
 @end titlepage
+
+
+
 
 @node Top, Overview, (dir), (dir)
 @ifinfo
 @top GNU Zebra
 		     
-@c sync this with README
-Zebra is a multi-server routing software package which provides TCP/IP
-based routing protocols such as RIPv1, RIPv2, OSPFv2, OSPFv3, BGP-4,
-BGP-4+ and so on.  Zebra turns your machine into a full powered router.
+Zebra uses an advanced software architecture to provide you with a
+high-quality, multi-threaded, multi-server routing engine.  Zebra has a
+Cisco-like IOS interface for each routing protocol in use, and supports
+many of the same commands that are found with IOS.
+
+Zebra is a multi-server routing software package that provides TCP/IP
+based routing protocols such as: RIPv1, RIPv2, and RIPng, OSPFv2,
+OSPFv3, BGP-4, and BGP-4+.  Zebra also supports a Route Reflector and a
+Route Server.
 
 This is the Zebra Manual for zebra-@value{VERSION}.
+
 @end ifinfo
+
+
 
 @menu
 * Overview::                    Overview of the Zebra world.
 * Installation::                How to install Zebra.
-* Configuration File::          Configuration file description.
-* VTY::                         Virtual terminal interface.
+* Other Features::              Contributed software.
 
-Zebra beasts
-* zebra::                       Routing manager daemon.
-* ripd::                        RIPv2,RIPv1 protocol daemon.
-* ripngd::                      RIPng protocol daemon.
-* ospfd::                       OSPFv2 protocol daemon.
-* ospf6d::                      OSPFv3 protocol daemon.
-* bgpd::                        BGP-4,BGP-4+ protocol daemon.
 
-Advanced Features
+The Zebra Suite
+
+* Overview of the Herd::        Common to all beasts
+
+* zebra::                       The routing manager
+* ripd::                        A RIP protocol daemon
+* ripngd::                      A RIPng protocol daemon
+* ospfd::                       An OSPF protocol daemon
+* ospf6d::                      An OSPFv6 protocol daemon
+* bgpd::                        A BGP protocol daemon
+
+
+Additional Features
+
 * Filtering::                   How to filter routes.
 * Route Map::                   Route map description.
 * IPv6 Supports::               IP version 6 supports.
 * Kernel Interface::            Zebra between kernel interface.
 * Linux Netlink::               Netlink mechanism on a Linux box.
+
+
+Indices
+
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
+
 @end menu
+
 
 @node Overview, Installation, Top, Top
 @comment  node-name,  next,  previous,  up
 @chapter Overview
+@cindex Overview
 
 Zebra is free routing software that manages TCP/IP based routing
-protocols.  IPv6 routing protocols are also supported.  Zebra is
+protocols,  IPv6 routing protocols are also supported.  Zebra is
 distributed under the GNU General Public License
 
   You can get the latest information from the Zebra web page:
 @url{http://www.zebra.org/}.
 
 @menu
-* What Zebra Is::               What is Zebra?
-* System Architecture::         Zebra system architecture
-* Supported Platforms::         Supported Platforms
-* Mailing List::                Mailing list information.
-* Bug Reports::                 
+* About Zebra::                 Basic information about Zebra
+* System Architecture::         The Zebra system architecture
+* Supported Platforms::         Supported Platforms and future plans
+* Mailing List::                Mailing list information
+* Bug Reports::                 Mail address for bug data
 @end menu
 
-@node What Zebra Is, System Architecture, Overview, Overview
+@node About Zebra, System Architecture, Overview, Overview
 @comment  node-name,  next,  previous,  up
-@section What Zebra Is
+@section About Zebra
+@cindex About Zebra
+@cindex Huh?
 
 Today, TCP/IP networks are covering all of the world. The Internet has
 been deployed in many countries, companies, and at home. If you connect
@@ -146,53 +186,63 @@ from the Zebra terminal interface.
 
 For a small network or a stub network there is no need for routing
 software. The only thing you have to do is to set up the interfaces and
-put a few commands about static routes and/or default routes. But if the
+put a few commands about static routes and/or default routes. If the
 network is rather large, or if the network structure changes frequently,
-you will need dynamic routing protocols such as RIP, OSPF or BGP. Zebra
-is for you
+you will need dynamic routing protocols such as RIP, OSPF or BGP: Zebra
+is for you.
 
 Below is the list of currently supported routing protocol RFCs.
 
-@table @samp
-@item RFC1771
-A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.
-@item RFC1966
-BGP Route Reflection An alternative to full mesh IBGP. T. Bates &
-R. Chandrasekeran. June 1996.
-@item RFC1997
-BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.
-@item RFC2080
-RIPng for IPv6. G. Malkin, R. Minnear. January 1997.
-@item RFC2283
-Multiprotocol Extensions for BGP-4. T. Bates, R. Chandra, D.  Katz,
-Y. Rekhter. February 1998.
-@item RFC2328
-OSPF Version 2. J. Moy. April 1998.
-@item RFC2453
-RIP Version 2. G. Malkin. November 1998.
-@item RFC2545
-Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. 
-P. Marques, F. Dupont. March 1999.
+@table @asis
+
+@item @asis{ RFC1771 } 
+@cite{A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.}
+
+@item @asis{ RFC1966 }
+@cite{ BGP Route Reflection An alternative to full mesh IBGP. T. Bates & R. Chandrasekeran. June 1996.}
+
+@item @asis{ RFC1997 }
+@cite{BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.}
+
+@item @asis{ RFC2080 }
+@cite{RIPng for IPv6. G. Malkin, R. Minnear. January 1997.}
+
+@item @asis{ RFC2283 }
+@cite{Multiprotocol Extensions for BGP-4. T. Bates, R. Chandra, D.  Katz, Y. Rekhter. February 1998.}
+
+@item @asis{ RFC2328 }
+@cite{OSPF Version 2. J. Moy. April 1998.}
+
+@item @asis{ RFC2453 }
+@cite{IP Version 2. G. Malkin. November 1998.}
+
+@item @asis{ RFC2545 }
+@cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
+
 @end table
 
 @page
-@node System Architecture, Supported Platforms, What Zebra Is, Overview
+@node System Architecture, Supported Platforms, About Zebra, Overview
 @comment  node-name,  next,  previous,  up
 @section System Architecture
+@cindex System architecture
+@cindex Software architecture
+@cindex Software internals
 
-Traditional routing software are made as a one process program which
-provides all of the routing protocol functionalities as a whole.  Zebra
-takes a different approach, it is made from a collection of some daemons.
-There are some protocol specific daemons and a kernel routing table
-manager.
+Traditional routing software is made as a one process program which
+provides all of the routing protocol functionalities.  Zebra takes a
+different approach; it is made from a collection of several daemons that
+work together to build a routing table.  There are some protocol
+specific daemons and a kernel routing manager.
 
 @code{ripd} handles the RIP protocol. @code{ospfd} is a daemon which
 supports OSPF version 2.  @code{bgpd} supports the BGP-4 protocol.  For
-changing the kernel routing table and for redistribution between
-different routing protocols, there is @code{zebra} daemon.  There is no
-need for these daemons to be running over the same machine.  This
-architecture creates new possibilities for the routing system.  It is pretty
-easy adding new routing protocol daemons to the system.
+changing the kernel routing table and for redistribution of routes
+between different routing protocols, there is the @code{zebra} daemon.
+There is no need for these daemons to be running on the same machine.
+This architecture creates new possibilities for the routing system.  It
+is easy to add new routing protocol daemons to a network, and servers
+in stubs need run only the protocol daemon in use.
 
 @example
 @group
@@ -210,23 +260,29 @@ easy adding new routing protocol daemons to the system.
 @end group
 @end example
 
-Zebra use a multi-threaded mechanism when it runs with a kernel that
-supports multi-threads.  But at this moment the thread library which
+Zebra uses a multi-threaded mechanism when it runs with a kernel that
+supports multi-threads.  At this moment, the thread library which
 comes with GNU/Linux or FreeBSD has some problems for running Zebra, so
 we don't use threads on those OSes, instead we use the select system
 call for multiplexing.
 
 When zebra runs under a GNU Hurd kernel it will act as a kernel routing
-table itself.  Under GNU Hurd all TCP/IP services are provided by user
+table itself.  Under GNU Hurd, all TCP/IP services are provided by user
 processes called @code{pfinet}.  Zebra will provide all the routing
 selection mechanisms for the process.  This feature will be implemented
-in the future.
+in the near future.
 
 @node Supported Platforms, Mailing List, System Architecture, Overview
 @comment  node-name,  next,  previous,  up
 @section Supported Platforms
 
-Now GNU Zebra is testing on
+@cindex Supported platforms
+@cindex Zebra on other systems
+@cindex Compatibility with other systems
+@cindex Operating systems that support Zebra
+
+
+GNU Zebra is now testing on:
 
 @itemize @bullet
 @item
@@ -255,46 +311,63 @@ Solaris 7
 @node Mailing List, Bug Reports, Supported Platforms, Overview
 @comment  node-name,  next,  previous,  up
 @section Mailing List
+@cindex How to get in touch with Zebra
+@cindex Mailing Zebra
+@cindex Contact information
+@cindex Mailing lists
 
 There is a mailing list for discussions about Zebra.  If you have any
 comments or suggestions to Zebra please send to
 @email{zebra@@zebra.org}.  New snapshot announcements, improvement
 notes, and some patches are sent to the list.
 
-To subscribe @email{zebra@@zebra.org, Zebra mailing list}, please send a
-mail to @*@email{majordomo@@zebra.org} with a message body that includes
-only
+To subscribe to the @email{zebra@@zebra.org, Zebra mailing list}, please
+send a mail to @email{majordomo@@zebra.org} with a message body that
+includes only:
 
 @quotation
 subscribe zebra
 @end quotation
 
+in the message body.
+
 To unsubscribe from the list, please send a mail to
-@email{majordomo@@zebra.org} with a message body that includes only
+@email{majordomo@@zebra.org} with a message body that includes only:
 
 @quotation
 unsubscribe zebra
 @end quotation
 
+in the message body.
+
+
+
 @node Bug Reports,  , Mailing List, Overview
 @comment  node-name,  next,  previous,  up
 @section Bug Reports
 
-If you think you find a bug, please send a bug report to
-@email{bug-zebra@@gnu.org}.  Zebra maintainers subscribe to the list.
-When you send a bug report, please be careful about the points below.
+@cindex Bug Reports
+@cindex Bug hunting
+@cindex Found a bug?
+@cindex Reporting bugs
+@cindex Reporting software errors
+@cindex Errors in the software
+
+If you think you have found a bug, please send a bug report to
+@email{bug-zebra@@gnu.org}.  When you send a bug report, please be
+careful about the points below.
 
 @itemize @bullet
 @item 
 Please note what kind of OS you are using.  If you use the IPv6 stack
-please note that.
+please note that as well.
 @item
 Please show us the results of @code{netstat -rn} and @code{ifconfig -a}.
 Information from zebra's VTY command @code{show ip route} will also be
 helpful.
 @item
-Please send your configuration file with the report.  If you specify the
-argument to the configure script please note that too.
+Please send your configuration file with the report.  If you specify
+arguments to the configure script please note that too.
 @end itemize
 
 Bug reports are very important for us to improve the quality of Zebra.
@@ -302,80 +375,59 @@ Zebra is still in the development stage, but please don't hesitate to
 send a bug report to @email{bug-zebra@@gnu.org}.
 
 
-@node  Installation, Configuration File, Overview, Top
+@node  Installation, Other Features, Overview, Top
 @comment  node-name,  next,  previous,  up
 @chapter Installation
 
-Zebra is in the development stage, so there is no earlier official
-release.  Zebra's beta package can be found at
-@url{ftp://ftp.zebra.org/pub/zebra/}.  Once it is officially released it
-will be found at GNU FTP archive sites.
-
-Zebra installation is very easy because of an excellent configure
-script.  It automatically detects current states of the machine so
-please check on kernel configurations before running configure scripts.
+@cindex How to install Zebra
+@cindex Installation
+@cindex Installing Zebra
+@cindex Building the system
+@cindex Making Zebra
 
 @menu
-* GNU/Linux Configuration::     
-* Configure Options::           
-* VTY Port Setup::              
+* Configure Options::           Modifying the Zebra build
+* GNU/Linux Configuration::     Configuring for GNU/Linux
+* Additional Notes::            
 @end menu
+@c Andrew - I'd like to move the VTY Setup somewhere else
 
-@node GNU/Linux Configuration, Configure Options, Installation, Installation
-@comment  node-name,  next,  previous,  up
-@section GNU/Linux Configuration
+Zebra has an excellent configure script, you issue the standard
+commands:
 
-GNU/Linux has very flexible kernel configuration features.  If you use
-GNU/Linux, make it sure that the current kernel configuration is what
-you want.  Zebra will run with any kernel configuration but some
-recommendations do exist.
+@example
+% ./configure
+% ./make
+% ./make install
+@end example
 
-@table @var
+By default, the executables are placed in @file{/usr/local/sbin} and the
+configuration files in @file{/usr/local/etc}. The @file{/usr/local/}
+installation prefix may be changed using options to the configuration
+script.
 
-@item CONFIG_NETLINK
-Kernel/User netlink socket.  This is a brand new feature which enables
-an advanced interface between the Linux kernel and Zebra (@pxref{Linux
-Netlink}).
+Zebra is in the development stage, so there is no earlier official
+release.  Zebra's beta package can be found at
+@url{ftp://ftp.zebra.org/pub/zebra/,, the Zebra Ranch (usually the
+Zebra wing of Digital Magic)}.  Once the distribution is officially
+released it will be found at @url{ftp://ftp.gnu.org/pub/gnu,,GNU FTP}
+archive sites. 
 
-@item CONFIG_RTNETLINK
-Routing messages.  This makes it possible to receive netlink routing
-messages.  If you specify this option, @code{zebra} can detect routing
-information updates directly from the kernel (@pxref{Kernel Interface}).
 
-@item CONFIG_IP_MULTICAST
-IP: multicasting.  This option should be specified when you use
-@code{ripd} or @code{ospfd} because these protocols use multicast.
-
-@end table
-
-IPv6 supported is added from GNU/Linux kernel version 2.2.  If you try
-to use the Zebra IPv6 feature on a GNU/Linux kernel, please make sure
-the below library has been installed.
-
-@table @code
-
-@item inet6-apps
-@code{inet6-apps} package includes basic IPv6 related libraries such as
-@code{inet_ntop} and @code{inet_pton}.  Some basic IPv6 programs such as
-@code{ping}, @code{ftp}, @code{inetd} are also
-included. @code{inet-apps} can be found at
-@url{ftp://ftp.inner.net/pub/ipv6/}.
-
-@item net-tools
-@code{net-tools} provides an IPv6 enabled interface and routing utility.
-It contains @code{ifconfig}, @code{route}, @code{netstat} and other
-tools.  @code{net-tools} can be found at @url{ftp://somewhere/}.
-
-@end table
-
-@node Configure Options, VTY Port Setup, GNU/Linux Configuration, Installation
+ 
+@node Configure Options, GNU/Linux Configuration, Installation, Installation
 @comment  node-name,  next,  previous,  up
 @section Configure Options
-
-Normally the Zebra configure scripts detect host configurations
-automatically.  For manual configuration, there are several configure
-options.  You can turn off IPv6 support or disable the making of some
-daemons using configure options.
+@cindex Configuration options
+@cindex Options for configuring
+@cindex Build options
+@cindex Distribution configuration
+@cindex Options to @command{./configure}
+ 
+The configure script automatically detects many host configurations.
+There are several additional configure options you can use to turn off
+IPv6 support, to disable the compilation of specific daemons, and so
+forth.
 
 @table @code
 @item --enable-guile
@@ -396,13 +448,13 @@ Do not build ospfd.
 @item --disable-ospf6d
 Do not build ospf6d.
 @item --disable-pthread
-Do not use pthread features.  Default is to disable this feature so you
-don't need to specify it.
+Do not use pthread features.  The default is to disable this feature so
+you don't need to specify it.
 @end table
 
 You can specify any of the above options to the configure script.
-Configuration and compilation is very simple.  You run @code{configure}
-and then @code{make} Zebra:
+Configuration and compilation is very simple.  You run @command{./configure}
+and then @command{./make}.
 
 @example
 % ./configure --disable-ipv6
@@ -427,14 +479,74 @@ Install architecture-independent files in @var{prefix} [/usr/local].
 Read-only sample configuration file in @var{dir} [@var{prefix}/etc].
 @end table
 
-@node VTY Port Setup,  , Configure Options, Installation
-@comment  node-name,  next,  previous,  up
-@section VTY Port Setup
 
-Zebra daemon's have their own terminal interfaces each is called a VTY.
-So after the Zebra beasts are installed you have to setup each program's
-port number for connecting to them.  Please add the following entries to
-@file{/etc/services}.
+
+@node GNU/Linux Configuration, Additional Notes, Configure Options, Installation
+@comment  node-name,  next,  previous,  up
+@section GNU/Linux Configuration
+
+@cindex Configuring Zebra
+@cindex Configuration the software build
+@cindex Building on Linux boxes
+@cindex Linux configurations
+
+
+GNU/Linux has very flexible kernel configuration features.  If you use
+GNU/Linux, make it sure that the current kernel configuration is what
+you want.  Zebra will run with any kernel configuration but some
+recommendations do exist.
+
+@table @var
+
+@item CONFIG_NETLINK
+Kernel/User netlink socket.  
+This is a brand new feature which enables
+an advanced interface between the Linux kernel and Zebra (@pxref{Linux
+Netlink}).
+
+@item CONFIG_RTNETLINK
+Routing messages.  
+This makes it possible to receive netlink routing messages.  If you
+specify this option, @code{zebra} can detect routing information updates
+directly from the kernel (@pxref{Kernel Interface}).
+
+@item CONFIG_IP_MULTICAST
+IP: multicasting.  
+This option should be specified when you use
+@code{ripd} or @code{ospfd} because these protocols use multicast.
+
+@end table
+
+IPv6 support is added from GNU/Linux kernel version 2.2.  If you try to
+use the Zebra IPv6 feature on a GNU/Linux kernel, please make sure the
+following libraries have been installed.
+
+@table @code
+
+@item inet6-apps
+The @code{inet6-apps} package includes basic IPv6 related libraries such as
+@code{inet_ntop} and @code{inet_pton}.  Some basic IPv6 programs such as
+@command{ping}, @command{ftp}, and @command{inetd} are also
+included. The @code{inet-apps} can be found at
+@url{ftp://ftp.inner.net/pub/ipv6/}.
+
+@item net-tools
+The @code{net-tools} package provides an IPv6 enabled interface and
+routing utility.  It contains @command{ifconfig}, @command{route},
+@command{netstat}, and other tools.  @code{net-tools} may be found at
+@url{ftp://somewhere.try.your.cd.first/}.
+
+@end table
+
+
+
+@node Additional Notes,  , GNU/Linux Configuration, Installation
+@comment  node-name,  next,  previous,  up
+@section Additional Notes
+
+Zebra daemon's have their own terminal interface or VTY.  After
+installation, you have to setup each beast's port number to connect to
+them.  Please add the following entries to @file{/etc/services}.
 
 @example
 zebrasrv      2600/tcp		  # zebra service
@@ -446,30 +558,96 @@ bgpd          2605/tcp		  # BGPd vty
 ospf6d        2606/tcp		  # OSPF6d vty
 @end example
 
-If you use a FreeBSD newer than 2.2.8, the above entry is already added
-to @file{/etc/services}.  So there is no need to add it.
+If you use a FreeBSD newer than 2.2.8, the above entries are already
+added to @file{/etc/services} so there is no need to add it. If you
+specify a port number when starting the daemon, these entries may not be
+needed.
 
-@node Configuration File, VTY, Installation, Top
+
+
+
+@node Other Features, Overview of the Herd, Installation, Top
 @comment  node-name,  next,  previous,  up
-@chapter Configuration File
+@chapter Other Features
 
-Each of the Zebra beasts has its own configuration file.  For example,
-zebra's default configuration file name is @file{zebra.conf}.  Program
-name plus @file{.conf} is the default configuration file name. You can
-specify a configuration file by -f or --config-file option to the
-daemon.
+Zebra does other neat things too. Fairly soon there will be contributed software to list here.
 
-In a configuration file, you can write the debugging options, a vty's
-password, routing daemon configurations, a logfile name, and so on.
+
+@c A - End of part one. General Zebra stuff
+
+@c A - Part two covers the daemons in detail, hopefully these sections will be converted to man pages soon...
+
+
+
+
+@node Overview of the Herd, zebra, Other Features, Top
+@comment  node-name,  next,  previous,  up
+@chapter Overview of the Herd
+
+There are five routing daemons in use, and there is one manager daemon.
+These daemons may be located on separate machines from the manager
+daemon.  Each of these daemons will listen on a particular port for
+incoming VTY connections.  The routing daemons are:
+
+@itemize @bullet
+@item @code{ripd}, @code{ripngd}, @code{ospfd}, @code{ospf6d}, @code{bgpd}
+@item @code{zebra}
+@end itemize
+
+The following sections discuss commands common to all the routing
+daemons.
 
 @menu
-* Basic Configuration::         
-* Sample Configuration::        
+* Config Commands::             
+* Virtual Terminal Interfaces::  
+* Common Invocation Options::   
 @end menu
 
-@node Basic Configuration, Sample Configuration, Configuration File, Configuration File
+
+
+@node Config Commands, Virtual Terminal Interfaces, Overview of the Herd, Overview of the Herd
 @comment  node-name,  next,  previous,  up
-@section Basic Configuration
+@section Config Commands
+
+@cindex Configuration files for running the software
+@c A -not configuration files for installing the software
+@cindex Files for running configurations
+@cindex Modifying the herd's behaviour
+@cindex Getting the herd running
+
+In a config file, you can write the debugging options, a vty's password,
+routing daemon configurations, a logfile name, and so forth. This
+information forms the initial command set for a routing beast as it is
+starting.
+
+@menu
+* Basic Config Commands::       Some of the generic config commands
+* Sample Config File::          An example config file
+@end menu
+
+
+Config files are generally found in:
+
+@itemize @asis
+@item @file{@value{INSTALL_PREFIX_ETC}*.conf}
+@end itemize
+
+Each of the daemons has its own
+config file.  For example, zebra's default config file name is:
+
+@itemize @asis
+@item @file{@value{INSTALL_PREFIX_ETC}zebra.conf}
+@end itemize
+
+The daemon name plus @file{.conf} is the default config file name. You
+can specify a config file using the @kbd{-f} or @kbd{--config-file}
+options when starting the daemon.
+
+
+
+@node Basic Config Commands, Sample Config File, Config Commands, Config Commands
+@comment  node-name,  next,  previous,  up
+@subsection Basic Config Commands
 
 @deffn Command {hostname @var{hostname}} {}
 Set hostname of the router.
@@ -564,9 +742,9 @@ Set time out in seconds.
 Restrict vty connections with an access list.
 @end deffn
 
-@node   Sample Configuration,  , Basic Configuration, Configuration File
+@node   Sample Config File,  , Basic Config Commands, Config Commands
 @comment  node-name,  next,  previous,  up
-@section Sample Configuration
+@subsection Sample Config File
 
 Below is sample configuration of the zebra daemon.
 
@@ -584,51 +762,43 @@ log stdout
 @end example
 
 '!' and '#' are comment characters.  If the first character of the word
-is one of comment characters then, from the rest of the line will be
-ignored as a comment.
+is one of the comment characters then from the rest of the line forward
+will be ignored as a comment.
 
 @example
 password zebra!password
 @end example
 
 If a comment character is not the first character of the word, it's a
-normal character. So above '!' will not be regarded as a comment and the
-password is set to 'zebra!password'.
+normal character. So in the above example '!' will not be regarded as a
+comment and the password is set to 'zebra!password'.
 
 
-@node  VTY, zebra, Configuration File, Top
+
+@node  Virtual Terminal Interfaces, Common Invocation Options, Config Commands, Overview of the Herd
 @comment  node-name,  next,  previous,  up
-@chapter Virtual terminal interface
+@section Virtual Terminal Interfaces
 
 VTY -- Virtual Terminal [aka TeletYpe] Interface is a command line
-interface (CLI) to change and/or view the current configuration.
+interface (CLI) for user interaction with the routing daemon.
 
 @menu
-* What is a VTY?::              
-* How to Use a VTY::            
-* View Mode and Enable Mode::   
-* Other Modes::                 
-* Command Line Editing::        
-* Advanced Command Line Editing::  
-* Command Line History::        
-* Command Line Completion::     
-* Command Line Help::           
+* VTY Overview::                Basics about VTYs                
+* VTY Modes::                   View, Enable, and Other VTY modes
+* VTY CLI Commands::            Commands for movement, edition, and management
 @end menu
 
-@node  What is a VTY?, How to Use a VTY, VTY, VTY
+@node  VTY Overview, VTY Modes, Virtual Terminal Interfaces, Virtual Terminal Interfaces
 @comment  node-name,  next,  previous,  up
-@section What is a VTY?
+@subsection VTY Overview
 
 VTY stands for Virtual TeletYpe interface.  It means you can connect to
 the daemon via the telnet protocol.
 
-@node  How to Use a VTY, View Mode and Enable Mode, What is a VTY?, VTY
-@comment  node-name,  next,  previous,  up
-@section How to Use a VTY
+To enable a VTY interface, you have to setup a VTY password.  If there
+is no VTY password, one cannot connect to the VTY interface at all.
 
-To enable a VTY interface, you have to setup a vty password.  If there
-is no vty password one cannot connect to the VTY interface at all.
-
+@footnote{
 @example
 @group
 % telnet localhost 2601
@@ -661,142 +831,200 @@ Router#
 @end example
 
 '?' is very useful for looking up commands.
+}
 
-@node  View Mode and Enable Mode, Other Modes, How to Use a VTY, VTY
+@node  VTY Modes, VTY CLI Commands, VTY Overview, Virtual Terminal Interfaces
 @comment  node-name,  next,  previous,  up
-@section View Mode and Enable Mode
+@subsection VTY Modes
 
+There are three basic VTY modes:
+
+@menu
+* VTY View Mode::               Mode for read-only interaction with the daemon               
+* VTY Enable Mode::             Mode for read-write interaction with the daemon
+* VTY Other Modes::             Special modes (tftp, etc)
+@end menu
+
+There are commands that may be restricted to specific VTY modes. 
+
+
+
+@node VTY View Mode, VTY Enable Mode, VTY Modes, VTY Modes
+@comment  node-name,  next,  previous,  up
+@subsubsection VTY View Mode
 @c to be written (gpoul)
+This mode is for read-only access to the CLI. One may exit the mode by
+leaving the system, or by entering @code{enable} mode.
 
-@node  Other Modes, Command Line Editing, View Mode and Enable Mode, VTY
+
+@node VTY Enable Mode, VTY Other Modes, VTY View Mode, VTY Modes
 @comment  node-name,  next,  previous,  up
-@section Other Modes
-
+@subsubsection VTY Enable Mode
 @c to be written (gpoul)
+This mode is for read-write access to the CLI. One may exit the mode by
+leaving the system, or by escaping to view mode.
 
-@node  Command Line Editing, Advanced Command Line Editing, Other Modes, VTY
+
+@node VTY Other Modes,  , VTY Enable Mode, VTY Modes
 @comment  node-name,  next,  previous,  up
-@section Command Line Editing
+@subsubsection VTY Other Modes
+@c to be written (gpoul)
+This page is for describing other modes.
+
+
+
+@node VTY CLI Commands,  , VTY Modes, Virtual Terminal Interfaces
+@comment  node-name,  next,  previous,  up
+@subsection VTY CLI Commands
+
+Commands that you may use at the command-line are described in the following three subsubsections.
+
+@menu
+* CLI Movement Commands::       Commands for moving the cursor about
+* CLI Editing Commands::        Commands for changing text
+* CLI Advanced Commands::       Other commands, session management and so
+@end menu
+
+
+
+@node CLI Movement Commands, CLI Editing Commands, VTY CLI Commands, VTY CLI Commands
+@comment  node-name,  next,  previous,  up
+@subsubsection CLI Movement Commands
+
+
+These commands are used for moving the CLI cursor. The @key{C} character
+means press the Control Key.
 
 @table @kbd
-@item C-a
-@kindex C-a
-Move to the beginning of the line.
-@item C-e
-@kindex C-e
-Move to the end of the line.
+
 @item C-f
 @itemx @key{RIGHT}
 @kindex C-f
 @kindex @key{RIGHT}
 Move forward one character.
+
 @item C-b
 @itemx @key{LEFT}
 @kindex C-b
 @kindex @key{LEFT}
 Move backward one character.
+
+@item M-f
+@kindex M-f
+Move forward one word.
+
+@item M-b
+@kindex M-b
+Move backward one word.
+
+@item C-a
+@kindex C-a
+Move to the beginning of the line.
+
+@item C-e
+@kindex C-e
+Move to the end of the line.
+
+@end table
+
+
+@node CLI Editing Commands, CLI Advanced Commands, CLI Movement Commands, VTY CLI Commands
+@comment  node-name,  next,  previous,  up
+@subsubsection CLI Editing Commands
+
+These commands are used for editing text on a line. The @key{C}
+character means press the Control Key.
+
+@table @kbd
+
 @item C-h
 @itemx @key{DEL}
 @kindex C-h
 @kindex @key{DEL}
 Delete the character before point.
+
 @item C-d
 @kindex C-d
 Delete the character after point.
-@item C-k
-@kindex C-k
-Kill to the end of the line.
-@item C-t
-@kindex C-t
-Transpose character.
-@item C-u
-@kindex C-u
-Kill line from the beginning.  This erases the inputted line.
-@end table
 
-@node Advanced Command Line Editing, Command Line History, Command Line Editing, VTY
-@comment  node-name,  next,  previous,  up
-@section Advanced Command Line Editing
-
-There are several advanced commands for line and word editing, also for
-movement and deletion.
-
-@table @kbd
-@item C-c
-@kindex C-c
-Stop current input and moves to the next line.
-@item C-w
-@kindex C-w
-Backward kill word.
-@item C-z
-@kindex C-z
-End current configuration then move to top node.
 @item M-d
 @kindex M-d
 Forward kill word.
-@item M-f
-@kindex M-f
-Move forward one word.
-@item M-b
-@kindex M-b
-Move backward one word.
+
+@item C-w
+@kindex C-w
+Backward kill word.
+
+@item C-k
+@kindex C-k
+Kill to the end of the line.
+
+@item C-u
+@kindex C-u
+Kill line from the beginning, erasing input.
+
+@item C-t
+@kindex C-t
+Transpose character.
+
 @end table
 
-@node  Command Line History, Command Line Completion, Advanced Command Line Editing, VTY
+
+
+@node CLI Advanced Commands,  , CLI Editing Commands, VTY CLI Commands
 @comment  node-name,  next,  previous,  up
-@section Command Line History
+@subsubsection CLI Advanced Commands
+
+There are several additional CLI commands for command line completions,
+insta-help, and VTY session management.
 
 @table @kbd
+
+@item C-c
+@kindex C-c
+Interrupt current input and moves to the next line.
+
+@item C-z
+@kindex C-z
+End current configuration session and move to top node.
+
+
 @item C-n
 @itemx @key{DOWN}
 @kindex C-n
 @kindex @key{DOWN}
-Move down to next line.
+Move down to next line in the history buffer.
+
 @item C-p
 @itemx @key{UP}
 @kindex C-p
 @kindex @key{UP}
-Move up to previous line.
-@end table
+Move up to previous line in the history buffer.
 
-@node Command Line Completion, Command Line Help, Command Line History, VTY
-@comment  node-name,  next,  previous,  up
-@section Command Line Completion
-
+@item TAB
 @kindex @key{TAB}
-You can use command line completion by typing @key{TAB}.
+Use command line completion by typing @key{TAB}.
 
-@node Command Line Help,  , Command Line Completion, VTY
-@comment  node-name,  next,  previous,  up
-@section Command Line Help
-
+@item
 @kindex ?
 You can use command line help by typing @code{help} at the beginning of
-the line.  Typing @kbd{?} at any point in the line will show the command
-line help.
+the line.  Typing @kbd{?} at any point in the line will show possible
+completions.
 
+@end table
 
-
-@node zebra, ripd, VTY, Top
-@comment  node-name,  next,  previous,  up
-@chapter zebra
-@code{zebra} is the routing manager.  It provides kernel routing table
-updates, interface lookups, and redistribution of routes between
-different protocols.
 
 @menu
 * Common Invocation Options::   
-* Invoking zebra::              
-* Interface::                   
-* Static Route::                
-* zebra Terminal Mode Commands::  
 @end menu
 
-@node Common Invocation Options, Invoking zebra, zebra, zebra
+@node Common Invocation Options,  , Virtual Terminal Interfaces, Overview of the Herd
 @comment  node-name,  next,  previous,  up
 @section Common Invocation Options
+@c COMMON_OPTIONS
+@c OPTIONS section of the man page
 
-These options are common to all Zebra Daemons.
+These options apply to all Zebra beasts.
 
 @table @samp
 
@@ -808,30 +1036,45 @@ Runs in daemon mode.
 @itemx --config_file=@var{file}
 Set configuration file name.
 
-@item -l
-@itemx --log_mode
-Set verbose log mode flag.
+@item -h
+@itemx --help
+Display this help and exit.
 
 @item -P @var{port}
 @itemx --vty_port=@var{port}
-Set vty's port number.
+Set the VTY port number.
 
 @item -v
 @itemx --version
 Print program version.
 
-@item -h
-@itemx --help
-Display this help and exit.
-
 @end table
 
-@node Invoking zebra, Interface, Common Invocation Options, zebra
+
+
+@node zebra, ripd, Overview of the Herd, Top
+@comment  node-name,  next,  previous,  up
+@chapter zebra
+
+@c SYNOPSIS
+@code{zebra} is an IP routing manager.  It provides kernel routing table
+updates, interface lookups, and redistribution of routes between
+different routing protocols.
+
+@menu
+* Invoking zebra::              Running the program
+* Interface Commands::          Commands for zebra interfaces
+* Static Route Commands::       Commands for adding static routes
+* zebra Terminal Mode Commands::  Commands for zebra's VTY
+@end menu
+
+
+@node Invoking zebra, Interface Commands, zebra, zebra
 @comment  node-name,  next,  previous,  up
 @section Invoking zebra
 
-Besides the common invocation options (@pxref{Common Invocation Options}) there
-are @code{zebra} specific invocation options below.
+Besides the common invocation options (@pxref{Common Invocation Options}), the
+@code{zebra} specific invocation options are listed below.
 
 @table @samp
 @item -b
@@ -843,15 +1086,21 @@ immediately.
 @itemx --keep_kernel
 When zebra starts up, don't delete old self inserted routes.
 
+@item -l
+@itemx --log_mode
+Set verbose logging on.
+
 @item -r
 @itemx --retain
 When program terminates, retain routes added by zebra.
 
 @end table
 
-@node Interface, Static Route, Invoking zebra, zebra
+
+
+@node Interface Commands, Static Route Commands, Invoking zebra, zebra
 @comment  node-name,  next,  previous,  up
-@section Interface
+@section Interface Commands
 
 @deffn Command {interface @var{ifname}} {}
 @end deffn
@@ -874,9 +1123,11 @@ Set description for the interface.
 Enable or disables multicast flag for the interface.
 @end deffn
 
-@node Static Route, zebra Terminal Mode Commands, Interface, zebra
+
+
+@node Static Route Commands, zebra Terminal Mode Commands, Interface Commands, zebra
 @comment  node-name,  next,  previous,  up
-@section Static Route
+@section Static Route Commands
 
 @deffn Command {table @var{tableno}} {}
 Select the primary kernel routing table to be used.  This only works for
@@ -889,7 +1140,9 @@ kernels supporting multiple routing tables (like Linux 2.2.x).
 @deffn Command {ipv6 route @var{network} @var{gateway}} {}
 @end deffn
 
-@node zebra Terminal Mode Commands,  , Static Route, zebra
+
+
+@node zebra Terminal Mode Commands,  , Static Route Commands, zebra
 @comment  node-name,  next,  previous,  up
 @section zebra Terminal Mode Commands
 
@@ -926,6 +1179,8 @@ If so, the box can't work as a router.
 Display whether the host's IP v6 forwarding is enabled or not.
 @end deffn
 
+
+
 @node ripd, ripngd, zebra, Top
 @comment  node-name,  next,  previous,  up
 @chapter ripd
@@ -940,8 +1195,30 @@ protocol, routers running RIP will send updates to its neighbors, thus
 allowing the convergence to a known topology.  In each update, the
 distance of any given router will be broadcast to its neighbor.
 
-The following points are important to consider in the implementation of
-ripd:
+@c Andrew - moved the caveats to "Invoking ripd"
+@c There is now a man page, it is scant.
+@menu
+* Invoking ripd::               
+* ripd Configuration::          
+* Filtering RIP Routes::        
+* ripd Terminal Mode Commands::  
+* ripd Debug Commands::         
+@end menu
+
+@node Invoking ripd, ripd Configuration, ripd, ripd
+@comment  node-name,  next,  previous,  up
+@section Invoking ripd
+
+@code{ripd} invocation options.  Common options that can be specified
+(@pxref{Common Invocation Options}).
+
+@table @samp
+@item -r
+@itemx --retain
+When the program terminates, retain routes added by ripd.
+@end table
+
+The following points are important to consider when using ripd:
 
 The user must have the capability to bind to port 521, generally this
 means that it (the user) must have superuser priviliges.
@@ -963,27 +1240,6 @@ netmasks that are included in RIP Version 2.
 In a case of similar information with the same prefix and metric, the
 old information will be suppressed.  Ripd does not currently support
 equal cost multipath routing.
-
-@menu
-* Invoking ripd::               
-* ripd Configuration::          
-* Filtering RIP Routes::        
-* ripd Terminal Mode Commands::  
-* ripd Debug Commands::         
-@end menu
-
-@node Invoking ripd, ripd Configuration, ripd, ripd
-@comment  node-name,  next,  previous,  up
-@section Invoking ripd
-
-@code{ripd} invocation options.  Common options that can be specified
-(@pxref{Common Invocation Options}).
-
-@table @samp
-@item -r
-@itemx --retain
-When the program terminates, retain routes added by ripd.
-@end table
 
 @node ripd Configuration, Filtering RIP Routes, Invoking ripd, ripd
 @comment  node-name,  next,  previous,  up
@@ -1066,17 +1322,18 @@ most cases, we recommend creating a static route in Zebra and
 redistributing it in RIP using @command{redistribute static}.
 @end deffn
 
-There are four timer commands in RIP.  One is:
-
 @deffn {RIP command} {timers basic @var{update} @var{timeout} @var{garbage}} {}
+
+RIP protocol has several timers.  User can configure those timer's value
+by @command{timers basic} command.
 
 The default settings for the timers are as follows: 
 
 @itemize @bullet 
 @item
-The update timer is 30 seconds. Every update timer, the RIP process is
-awakened to send an unsolicited Response message containing the complete
-routing table to every neighboring router.
+The update timer is 30 seconds. Every update timer seconds, the RIP
+process is awakened to send an unsolicited Response message containing
+the complete routing table to all neighboring RIP routers.
 
 @item
 The timeout timer is 180 seconds. Upon expiration of the timeout, the
@@ -1091,14 +1348,15 @@ table.
 
 @end itemize
 
-The @command{timers basic} command allows the the default values of the
-timers listed above to be changed.
+The @command{timers basic} command allows the the default values of the timers
+listed above to be changed.
 @end deffn
 
 @deffn {RIP command} {no timers basic} {}
-The @command{no timers basic} command will reset the timers to the
-default settings listed above.
+The @command{no timers basic} command will reset the timers to the default
+settings listed above.
 @end deffn
+
 
 @deffn {Interface command} {ip rip send version @var{varsion}} {}
 @var{varsion} can be `1', `2', `1 2'.  This configuration command
@@ -1112,6 +1370,11 @@ multicast.
 Version setting for incoming RIP packets.  This command will enable the
 selected interface to receive packets in RIP Version 1, RIP Version 2,
 or both.
+@end deffn
+
+@deffn {Interface command} {ip rip authentication string @var{string}} {}
+RIP version 2 has simple text authentication.  This command set
+authentication string.  The string must be shorter than 16 characters.
 @end deffn
 
 @node  Filtering RIP Routes, ripd Terminal Mode Commands, ripd Configuration, ripd
@@ -1659,7 +1922,7 @@ defined, it can be applied to any direction.
 
 @node IP Access List, IP Prefix List, Filtering, Filtering
 @comment  node-name,  next,  previous,  up
-@section IP Access List
+@subsection IP Access List
 
 @deffn {Command} {access-list @var{name} permit @var{ipv4-network}} {}
 @deffnx {Command} {access-list @var{name} deny @var{ipv4-network}} {}
@@ -1675,21 +1938,21 @@ access-list filter permit 10.0.0.0/8
 
 @node IP Prefix List, IP Community List, IP Access List, Filtering
 @comment  node-name,  next,  previous,  up
-@section IP Prefix List
+@subsection IP Prefix List
 
 @deffn {Command} {ip prefix-list @var{name} seq @var{seq} permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
 @end deffn
 
 @node IP Community List, AS Path Access List, IP Prefix List, Filtering
 @comment  node-name,  next,  previous,  up
-@section IP Community List
+@subsection IP Community List
 
 @deffn {Command} {ip community-list @var{name} @var{type} @var{community}} {}
 @end deffn
 
 @node AS Path Access List,  , IP Community List, Filtering
 @comment  node-name,  next,  previous,  up
-@section AS Path Access List
+@subsection AS Path Access List
 
 @deffn {Command} {ip as-path access-list @var{name} @var{type} @var{as_path}} {}
 @end deffn
@@ -1720,14 +1983,14 @@ local-preference value is set to 200.
 
 @node Route Map Command, Route Map Match Command, Route Map, Route Map
 @comment  node-name,  next,  previous,  up
-@section Route Map Command
+@subsection Route Map Command
 
 @deffn {Command} {route-map @var{route-map-name} permit @var{priority}} {}
 @end deffn
 
 @node Route Map Match Command, Route Map Set Command, Route Map Command, Route Map
 @comment  node-name,  next,  previous,  up
-@section Route Map Match Command
+@subsection Route Map Match Command
 
 @deffn {Route-map Command} {match ip address @var{access_list}} {}
 Matches the specified @var{access_list}
@@ -1751,7 +2014,7 @@ Matches the specified  @var{community_list}
 
 @node Route Map Set Command,  , Route Map Match Command, Route Map
 @comment  node-name,  next,  previous,  up
-@section Route Map Set Command
+@subsection Route Map Set Command
 
 @deffn {Route-map Command} {set ip next-hop @var{ipv4_address}} {}
 Set the BGP nexthop address.

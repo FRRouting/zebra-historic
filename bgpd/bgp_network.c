@@ -224,7 +224,7 @@ bgp_accept (struct thread *thread)
   return 0;
 }
 
-#ifdef HAVE_IPV6
+#if defined(HAVE_IPV6) && !defined(NRL)
 void
 bgp_serv_sock_addrinfo (unsigned short port)
 {
@@ -274,7 +274,7 @@ bgp_serv_sock_addrinfo (unsigned short port)
 
   freeaddrinfo (ainfo_save);
 }
-#endif /* HAVE_IPV6 */
+#endif /* HAVE_IPV6 && !NRL */
 
 /* Make bgpd's server socket. */
 void
@@ -309,11 +309,11 @@ bgp_serv_sock_family (unsigned short port, int family)
 void
 bgp_serv_sock (unsigned short port)
 {
-#ifdef HAVE_IPV6
+#if defined(HAVE_IPV6) && !defined(NRL)
   bgp_serv_sock_addrinfo (port);
 #else
   bgp_serv_sock_family (port, AF_INET);
-#endif /* HAVE_IPV6 */
+#endif /* HAVE_IPV6 && !defined(NRL) */
 }
 
 /* After TCP connection is established.  Get local address and port. */

@@ -26,6 +26,7 @@
 #include "command.h"
 #include "memory.h"
 #include "plist.h"
+#include "sockunion.h"
 
 struct prefix_list_entry
 {

@@ -29,7 +29,7 @@ struct vertex
   u_char flag;
   u_char type;
   struct in_addr id;
-  struct ospf_lsa *lsa;
+  struct lsa_header *lsa;
   u_int16_t distance;
   list child;
   list nexthop;

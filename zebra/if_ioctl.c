@@ -44,34 +44,40 @@
    interface information buffer. */
 #define MAX_INTERFACE 32
 
+/* Fake index for interface. */
+int if_fake_index = 1;
+
 /* Get interface's index by ioctl. */
+#ifdef SIOCGIFINDEX
 void
 if_get_index (struct interface *ifp)
 {
   struct ifreq ifreq;
+  int ret;
 
   ifreq_set_name (&ifreq, ifp);
   
-#ifdef SIOCGIFINDEX
-  {
-    int ret;
-    static int fake_index = 1;
+  ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
 
-    ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
+  if (ret < 0)
+    {
+      zlog_warn ("Can't get interface index by SIOCGIFINDEX: %s",
+		 strerror (errno));
+      ifp->ifindex = if_fake_index++;
+      return;
+    }
 
-    /* Make fake index for the interface */
-    if (ret < 0)
-      {
-	ifp->ifindex= fake_index++;
-	return;
-      }
-    ifp->ifindex = ifreq.ifr_ifindex;
-    /* If there is method to get interface's index. Make fake index for
-       the interface. */
-    ifp->ifindex= fake_index++;
-  }
-#endif /* SIOCGIFINDEX */
+  /* OK we got interface index. */
+  ifp->ifindex = ifreq.ifr_ifindex;
 }
+#else
+/* If we don't have SIOCGIFINDEX then make fake index. */
+void
+if_get_index (struct interface *ifp)
+{
+  ifp->ifindex = if_fake_index++;
+}
+#endif /* SIOCGIFINDEX */
 
 /* Interface address lookup by ioctl.  This function only looks up
    IPv4 address. */
@@ -129,7 +135,11 @@ if_addr_ioctl (struct interface *ifp, char *alias)
       log ("ioctl SIOCGIFNETMASK fail: %s\n", strerror (errno));
       return ret;
     }
+#ifdef OpenBSD
+  memcpy (&mask, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
+#else
   memcpy (&mask, &ifreq.ifr_netmask, sizeof (struct sockaddr_in));
+#endif /* OpenBSD */
   prefixlen = ip_masklen (mask.sin_addr);
 #endif /* SUNOS_5 */
 
@@ -338,7 +348,7 @@ interface_list_ipv6 ()
       ifp = if_lookup_by_name (ifstr);
       if (ifp == NULL)
 	{
-	  ifp = if_new ();
+	  ifp = if_create ();
 	  strcpy (ifp->name, ifstr);
 	}
       ifp->ifindex = ifindex;

@@ -638,15 +638,12 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
   /* Nexthop length check. */
   if (attr->mp_nexthop_len == 16)
     {
-      memcpy (&attr->mp_nexthop_global, stream_pnt (peer->ibuf), 16);
-      stream_forward (peer->ibuf, 16);
+      stream_get (&attr->mp_nexthop_global, peer->ibuf, 16);
     }
   else if (attr->mp_nexthop_len == 32) 
     {
-      memcpy (&attr->mp_nexthop_global, stream_pnt (peer->ibuf), 16);
-      stream_forward (peer->ibuf, 16);
-      memcpy (&attr->mp_nexthop_local, stream_pnt (peer->ibuf), 16);
-      stream_forward (peer->ibuf, 16);
+      stream_get (&attr->mp_nexthop_global, peer->ibuf, 16);
+      stream_get (&attr->mp_nexthop_local, peer->ibuf, 16);
     }
   else
     {
@@ -700,8 +697,7 @@ bgp_mp_unreach_parse (struct peer *peer, int length)
 	  p.family = AF_INET6;
 	  p.prefixlen = stream_getc (peer->ibuf);
 	  psize = PSIZE (p.prefixlen);
-	  memcpy (&p.u.prefix6, STREAM_PNT (peer->ibuf), psize);
-	  stream_forward (peer->ibuf, psize);
+	  stream_get (&p.u.prefix6, peer->ibuf, psize);
 
 	  nlri_delete (peer, &p);
 	}
@@ -945,7 +941,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putc(s, BGP_ATTR_AS_PATH);
       stream_putc (s, aspath->length);
     }
-  stream_memcpy (s, aspath->data, aspath->length);
+  stream_put (s, aspath->data, aspath->length);
 
   if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
     aspath_free (aspath);
@@ -1011,7 +1007,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
 	  stream_putc (s, BGP_ATTR_COMMUNITIES);
 	  stream_putc (s, attr->community->size * 4);
 	}
-      stream_memcpy (s, attr->community->val, attr->community->size * 4);
+      stream_put (s, attr->community->val, attr->community->size * 4);
     }
 
   /* Route Reflector. */
@@ -1032,7 +1028,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       if (attr->cluster)
 	{
 	  stream_putc (s, attr->cluster->length + 4);
-	  stream_memcpy (s, attr->cluster->list, attr->cluster->length);
+	  stream_put (s, attr->cluster->list, attr->cluster->length);
 	}
       else
 	stream_putc (s, 4);
@@ -1060,11 +1056,11 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putc (s, attr->mp_nexthop_len);
 
       if (attr->mp_nexthop_len == 16)
-	stream_memcpy (s, &attr->mp_nexthop_global, 16);
+	stream_put (s, &attr->mp_nexthop_global, 16);
       else if (attr->mp_nexthop_len == 32)
 	{
-	  stream_memcpy (s, &attr->mp_nexthop_global, 16);
-	  stream_memcpy (s, &attr->mp_nexthop_local, 16);
+	  stream_put (s, &attr->mp_nexthop_global, 16);
+	  stream_put (s, &attr->mp_nexthop_local, 16);
 	}
       
       /* SNPA */

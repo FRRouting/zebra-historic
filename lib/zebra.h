@@ -138,6 +138,7 @@
 #include <netinet6/in.h>
 #endif /* HAVE_NETINET6_IN_H */
 
+
 #ifdef HAVE_NETINET6_IP6_H
 #include <netinet6/ip6.h>
 #endif /* HAVE_NETINET6_IP6_H */
@@ -145,5 +146,28 @@
 #ifdef HAVE_NETINET_ICMP6_H
 #include <netinet/icmp6.h>
 #endif /* HAVE_NETINET_ICMP6_H */
+
+#ifdef BSDI_NRL
+#ifdef HAVE_NETINET6_IN6_H
+#include <netinet6/in6.h>
+#else
+#warn "Are you sure it is BSD/OS 4.0?"
+#endif /* HAVE_NETINET6_IN6_H */
+
+#ifdef NRL
+#include <netinet6/in6.h>
+#endif /* NRL */
+
+#define IN6_ARE_ADDR_EQUAL IN6_IS_ADDR_EQUAL
+
+/* XXX:
+         Stupid BSD/OS 4.0 has lost belows defines, 
+         it should appear at /usr/include/sys/socket.h  
+*/
+#define CMSG_ALIGN(n)           (((n) + 3) & ~3)
+#define CMSG_SPACE(l)   (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(l))
+#define CMSG_LEN(l)     (CMSG_ALIGN(sizeof(struct cmsghdr)) + (l))
+
+#endif /* BSDI_NRL */
 
 #endif /* _ZEBRA_H */

@@ -54,6 +54,7 @@ struct route_node
 
 /* Prototypes. */
 struct route_table *route_table_init (void);
+void route_table_finish (struct route_table *);
 struct route_node *route_top (struct route_table *);
 struct route_node *route_next (struct route_node *);
 struct route_node *route_next_until (struct route_node *, struct route_node *);

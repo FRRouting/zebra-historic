@@ -30,9 +30,8 @@ int
 nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
 {
   state_t nbs_previous;
-  list l = list_init ();
   listnode n;
-  struct ospf6_lsa *lsa;
+  struct area *area;
 
   nbs_previous = nbr->state;
   nbr->state = nbs_next;
@@ -54,18 +53,23 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
     nbs_full_change (nbr->ospf6_if);
 
   /* check for LSAs that already reached MaxAge */
-    /* copy to temporary list */
-  for (n = listhead (nbr->ospf6_if->area->ospf6->maxagelist);
-       n; nextnode (n))
-    list_add_node (l, getdata (n));
+  /* for Area scope LSA */
+  if (!count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_if->area) &&
+      !count_nbr_in_state (NBS_LOADING, nbr->ospf6_if->area))
+    ospf6_lsdb_maxage_remove_area (nbr->ospf6_if->area);
 
-  for (n = listhead (l); n; nextnode (n))
+  /* for AS scope LSA */
+  for (n = listhead (nbr->ospf6_if->area->ospf6->area_list); n;
+       nextnode (n))
     {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_maxage_remove (lsa);
+      area = (struct area *) getdata (n);
+      /* when there's one area fits, return */
+      if (count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_if->area) ||
+          count_nbr_in_state (NBS_LOADING, nbr->ospf6_if->area))
+        return 0;
     }
+  ospf6_lsdb_maxage_remove_as (nbr->ospf6_if->area->ospf6);
 
-  list_delete_all (l);
   return 0;
 }
 

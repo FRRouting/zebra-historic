@@ -84,7 +84,8 @@ VERSION = @VERSION@
 ZEBRA = @ZEBRA@
 
 info_TEXINFOS = zebra.texi
-EXTRA_DIST = BGP-TypeCode draft-zebra-00.txt
+EXTRA_DIST = BGP-TypeCode draft-zebra-00.txt bgpd.1 ospf6d.1 ospfd.1 	ripd.1 ripngd.1 zebra.1
+
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 

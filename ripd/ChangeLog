@@ -1,3 +1,28 @@
+1999-08-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* RIPv2-MIB.txt: New file added.
+
+	* rip_snmp.c: New file added.
+
+1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (ip_rip_authentication_string): RIPv2
+	authentication command is added.
+
+1999-08-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (rip_interface_multicast_set): Process of
+	setting IP_MULTICAST_IF on specific interface.
+
+	* ripd.c (rip_read): Add packet size check.
+
+1999-08-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_request_process): Fill in RIP_METRIC_INFINITY with
+	network byte order using htonl ().
+	(rip_response_process): Pass host byte order address to IN_CLASSC
+	and IN_CLASSB macro.
+
 1999-08-08  davidm@nbase.co.il (David Mozes)
 
 	* rip_zebra.c (rip_zebra_read_ipv4): Fix split horizon problem.

@@ -24,6 +24,8 @@
 #ifndef _ZEBRA_CLIENT_H
 #define _ZEBRA_CLIENT_H
 
+#include "if.h"
+
 /* Prototypes of zebra client service functions. */
 int zebra_connect ();
 void zebra_get_hostinfo (int sock);
@@ -49,5 +51,25 @@ int
 zebra_ipv6_delete (int sock, int type, int flags, struct prefix_ipv6 *p,
 		   struct in6_addr *nexthop, unsigned int ifindex);
 #endif /* HAVE_IPV6 */
+
+int
+zebra_interface_add (int sock, struct interface *ifp);
+
+int
+zebra_interface_delete (int sock, struct interface *ifp);
+
+int
+zebra_interface_address_add (int sock, struct interface *,
+			     struct connected *);
+
+struct connected *
+zebra_interface_address_add_read (struct stream *);
+
+int
+zebra_interface_address_delete (int sock, struct interface *,
+				struct connected *);
+
+struct interface *
+zebra_interface_add_read (struct stream *);
 
 #endif /* _ZEBRA_CLIENT_H */

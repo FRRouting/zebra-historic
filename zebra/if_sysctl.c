@@ -44,7 +44,7 @@ ifm_interface_add (struct if_msghdr *ifm)
   ifp = if_lookup_by_name (sdl->sdl_data);
   if (ifp == NULL)
     {
-      ifp = if_new ();
+      ifp = if_create ();
       strncpy (ifp->name, sdl->sdl_data, sdl->sdl_nlen);
     }
 
@@ -237,7 +237,7 @@ ifm_read_ifinfo (struct if_msghdr *ifm)
   ifp = if_lookup_by_index (ifm->ifm_index);
   if (ifp == NULL)
     {
-      ifp = if_new();
+      ifp = if_create ();
       ifp->ifindex = ifm->ifm_index;
       zlog (NULL, LOG_INFO, "New interface from routing socket");
     }

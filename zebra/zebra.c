@@ -1,5 +1,4 @@
-/*
- * Zebra daemon core routine.
+/* Zebra daemon core routine.
  * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -23,12 +22,10 @@
 #include <zebra.h>
 
 #include "prefix.h"
-#include "linklist.h"
 #include "command.h"
 #include "if.h"
 #include "thread.h"
 #include "stream.h"
-#include "buffer.h"
 #include "memory.h"
 #include "rib.h"
 #include "roken.h"
@@ -36,44 +33,40 @@
 #include "sockunion.h"
 #include "log.h"
 #include "table.h"
+#include "client.h"
 
 #include "zebra/zebra.h"
 #include "zebra/redistribute.h"
 #include "zebra/debug.h"
-
-int ipforward ();
-int ipforward_on ();
-int ipforward_off ();
-#ifdef HAVE_IPV6
-int ipforward_ipv6 ();
-int ipforward_ipv6_on ();
-int ipforward_ipv6_off ();
-#endif /* HAVE_IPV6 */
-
+#include "zebra/ipforward.h"
+
+
 /* Event list of zebra. */
 enum event { ZEBRA_SERV, ZEBRA_READ, ZEBRA_WRITE };
 
+/* Zebra client list. */
 list client_list;
 
 /* Default rtm_table for all clients */
 int rtm_table_default;
 
+void zebra_event (enum event event, int sock, struct zebra_client *client);
+
 /* For logging of zebra meesages. */
 char *zebra_command_str [] =
 {
   "NULL",
+  "ZEBRA_INTERFACE_ADD",
+  "ZEBRA_INTERFACE_DELETE",
+  "ZEBRA_INTERFACE_ADDRESS_ADD",
+  "ZEBRA_INTERFACE_ADDRESS_DELETE",
   "ZEBRA_IPV4_ROUTE_ADD",
   "ZEBRA_IPV4_ROUTE_DELETE",
   "ZEBRA_IPV6_ROUTE_ADD",
   "ZEBRA_IPV6_ROUTE_DELETE",
-  "ZEBRA_GET_ALL_INTERFACE",
-  "ZEBRA_GET_ONE_INTERFACE",
-  "ZEBRA_GET_HOSTINFO",
   "ZEBRA_REDISTRIBUTE_ADD",
   "ZEBRA_REDISTRIBUTE_DELETE"
 };
-
-void zebra_event (enum event event, int sock, struct zebra_client *client);
 
 void
 zebra_forward_on ()
@@ -101,8 +94,7 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
   flags = stream_getc (s);
-  memcpy (&nexthop, stream_pnt (s), sizeof (struct in_addr));
-  stream_forward (s, sizeof (struct in_addr));
+  stream_get (&nexthop, s, sizeof (struct in_addr));
 
   /* Then fetch IPv4 prefixes. */
   while (stream_pnt (s) < lim)
@@ -116,8 +108,7 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
       p.family = AF_INET;
       p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, stream_pnt (s), size);
-      stream_forward (s, size);
+      stream_get (&p.prefix, s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
 	rib_add_ipv4 (type, flags, &p, &nexthop, ifindex, client->rtm_table);
@@ -142,8 +133,7 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
 
   type = stream_getc (client->ibuf);
   flags = stream_getc (client->ibuf);
-  memcpy (&nexthop, stream_pnt (client->ibuf), sizeof (struct in6_addr));
-  stream_forward (client->ibuf, sizeof (struct in6_addr));
+  stream_get (&nexthop, client->ibuf, sizeof (struct in6_addr));
   
   while (stream_pnt (client->ibuf) < lim)
     {
@@ -156,8 +146,7 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
       p.family = AF_INET6;
       p.prefixlen = stream_getc (client->ibuf);
       size = PSIZE(p.prefixlen);
-      memcpy (&p.prefix, stream_pnt (client->ibuf), size);
-      stream_forward (client->ibuf, size);
+      stream_get (&p.prefix, client->ibuf, size);
 
       if (IN6_IS_ADDR_UNSPECIFIED (&nexthop))
         gate = NULL;
@@ -193,6 +182,7 @@ zebra_close (struct zebra_client *client)
     thread_cancel (client->t_write);
 }
 
+#if 0
 /* Interface infomation send routine. */
 void
 zebra_request_all_interface (int sock)
@@ -225,6 +215,10 @@ zebra_request_all_interface (int sock)
   for (ifnode = listhead (iflist); ifnode; nextnode (ifnode))
     {
       ifp = getdata (ifnode);
+
+      /* Skip pseudo interface. */
+      if (ifp->ifindex <= 0)
+	continue;
 
       /* Set inteface's name. */
       memcpy (pnt, ifp->name, INTERFACE_NAMSIZ);
@@ -278,30 +272,60 @@ zebra_request_all_interface (int sock)
   /* Free storage buffer. */
   XFREE (0, start);
 }
+#endif /* 0 */
 
-/* Send host information. */
+/* Send all of the interface information to the client. */
 void
-zebra_request_hostinfo (int sock)
+zebra_send_all_interface (int sock)
 {
-  u_char *pnt;
-  u_char buf[10];
+  listnode ifnode;
+  struct interface *ifp;
+  listnode cnode;
+  struct connected *c;
 
-  pnt = buf;
+  for (ifnode = listhead (iflist); ifnode; ifnode = nextnode (ifnode))
+    {
+      ifp = getdata (ifnode);
 
-  PUTL(10, pnt);
-  PUTL(ZEBRA_GET_HOSTINFO, pnt);
+      /* Skip pseudo interface. */
+      if (ifp->ifindex == 0)
+	continue;
 
-  /* Ip forwarding. 0 => OFF, 1 => ON */
-  *pnt++ = ipforward ();
+      zebra_interface_add (sock, ifp);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  c = getdata (cnode);
+	  zebra_interface_address_add (sock, ifp, c);
+	}
+    }
+}
+
+/* Make new client. */
+void
+zebra_client_create (int sock)
+{
+  struct zebra_client *client;
+
+  client = XMALLOC (0, sizeof (struct zebra_client));
+  bzero (client, sizeof (struct zebra_client));
+
+  /* Make client input/output buffer. */
+  client->fd = sock;
+  client->ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
+  client->obuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Set table number. */
+  client->rtm_table = rtm_table_default;
+
+  /* Add this client to linked list. */
+  list_add_node (client_list, client);
   
-  /* ip forwarding6 . 0 => OFF, 1 => ON */
-#ifdef HAVE_IPV6
-  *pnt = (ipforward_ipv6 () == 0 ? 0 : 1);
-#else
-  *pnt = 0;
-#endif /* HAVE_IPV6*/
+  /* Make new read thread. */
+  zebra_event (ZEBRA_READ, sock, client);
 
-  writen (sock, buf, 10);
+  /* Send interface information to the client. */
+  zebra_send_all_interface (sock);
 }
 
 /* Handler of zebra service request. */
@@ -367,15 +391,12 @@ zebra_read (struct thread *thread)
       zebra_read_ipv6 (command, client, length);
       break;
 #endif /* HAVE_IPV6 */
+#if 0
     case ZEBRA_GET_ALL_INTERFACE:
-      zebra_request_all_interface (sock);
+      /* This message is obsolete now. */
+      /* zebra_request_all_interface (sock); */
       break;
-    case ZEBRA_GET_ONE_INTERFACE:
-      /* zebra_get_one_interface (sock); */
-      break;
-    case ZEBRA_GET_HOSTINFO:
-      zebra_request_hostinfo (sock);
-      break;
+#endif /* 0 */
     case ZEBRA_REDISTRIBUTE_ADD:
       zebra_redistribute_add (command, client, length);
       break;
@@ -408,27 +429,6 @@ zebra_write (struct thread *thread)
   stream_flush (client->obuf, sock);
 }
 
-/* Add new client. */
-void
-client_new (int client_sock)
-{
-  struct zebra_client *client;
-
-  client = XMALLOC (0, sizeof (struct zebra_client));
-  bzero (client, sizeof (struct zebra_client));
-
-  /* Make client input/output buffer. */
-  client->fd = client_sock;
-  client->ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
-  client->obuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
-
-  client->rtm_table = rtm_table_default;
-
-  list_add_node (client_list, client);
-  
-  zebra_event (ZEBRA_READ, client_sock, client);
-}
-
 struct zebra_client *
 client_lookup (int sock)
 {
@@ -448,24 +448,26 @@ client_lookup (int sock)
 int
 zebra_accept (struct thread *thread)
 {
-  struct sockaddr_in client;
   int accept_sock;
   int client_sock;
-#ifdef HAVE_SOCKLEN_T
-  socklen_t size;
-#else
-  int size;
-#endif /* HAVE_SOCKLEN_T */
+  struct sockaddr_in client;
+  socklen_t len;
 
   accept_sock = THREAD_FD (thread);
 
-  size = sizeof (client);
-  client_sock = accept (accept_sock, (struct sockaddr *) &client, &size);
+  len = sizeof (struct sockaddr_in);
+  client_sock = accept (accept_sock, (struct sockaddr *) &client, &len);
+
   if (client_sock < 0)
-    perror ("accept");
+    {
+      zlog_warn ("Can't accept zebra socket: %s", strerror (errno));
+      return -1;
+    }
 
-  client_new (client_sock);
+  /* Create new zebra client. */
+  zebra_client_create (client_sock);
 
+  /* Register myself. */
   zebra_event (ZEBRA_SERV, accept_sock, NULL);
 
   return 0;

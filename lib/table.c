@@ -25,10 +25,10 @@
 #include "prefix.h"
 #include "table.h"
 #include "memory.h"
+#include "sockunion.h"
 
 void route_node_delete (struct route_node *);
 
-/* This mean only one table */
 struct route_table *
 route_table_init (void)
 {
@@ -37,6 +37,12 @@ route_table_init (void)
   rt = XMALLOC (MTYPE_ROUTE_TABLE, sizeof (struct route_table));
   bzero (rt, sizeof (struct route_table));
   return rt;
+}
+
+void
+route_table_finish (struct route_table *rt)
+{
+  XFREE (MTYPE_ROUTE_TABLE, rt);
 }
 
 /* Allocate new route node. */

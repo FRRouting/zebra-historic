@@ -20,7 +20,7 @@
  * 02111-1307, USA.  
  */
 
-#include <config.h>
+#include <zebra.h>
 
 #ifdef HAVE_GNU_REGEX
 #include <regex.h>

@@ -1,6 +1,5 @@
-/*
- * Ipforward value get by sysctl function.
- * Copyright (C) 1997 Kunihiro Ishiguro
+/* IP forward control by sysctl function.
+ * Copyright (C) 1997, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -22,26 +21,33 @@
 
 #include <zebra.h>
 
+#ifdef NRL
+#include <netinet6/in6.h>
+#endif /* NRL */
+
 #include "log.h"
 
 #define MIB_SIZ 4
 
+/* IPv4 forwarding control MIB. */
+int mib[MIB_SIZ] =
+{
+  CTL_NET,
+  PF_INET,
+  IPPROTO_IP,
+  IPCTL_FORWARDING
+};
+
 int
 ipforward ()
 {
-  int mib [MIB_SIZ];
-  int ipforwarding = 0;
   int len;
-
-  mib [0] = CTL_NET;
-  mib [1] = PF_INET;
-  mib [2] = IPPROTO_IP;
-  mib [3] = IPCTL_FORWARDING;
+  int ipforwarding = 0;
 
   len = sizeof ipforwarding;
   if (sysctl (mib, MIB_SIZ, &ipforwarding, &len, 0, 0) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "can't get ipforwarding value");
+      zlog_warn ("Can't get ipforwarding value");
       return -1;
     }
   return ipforwarding;
@@ -50,19 +56,13 @@ ipforward ()
 int
 ipforward_on ()
 {
-  int mib [MIB_SIZ];
-  int ipforwarding = 1;
   int len;
-
-  mib [0] = CTL_NET;
-  mib [1] = PF_INET;
-  mib [2] = IPPROTO_IP;
-  mib [3] = IPCTL_FORWARDING;
+  int ipforwarding = 1;
 
   len = sizeof ipforwarding;
   if (sysctl (mib, MIB_SIZ, NULL, NULL, &ipforwarding, len) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "can't set ipforwarding on");
+      zlog_warn ("Can't set ipforwarding on");
       return -1;
     }
   return ipforwarding;
@@ -71,44 +71,42 @@ ipforward_on ()
 int
 ipforward_off ()
 {
-  int mib [MIB_SIZ];
-  int ipforwarding = 0;
   int len;
-
-  mib [0] = CTL_NET;
-  mib [1] = PF_INET;
-  mib [2] = IPPROTO_IP;
-  mib [3] = IPCTL_FORWARDING;
+  int ipforwarding = 0;
 
   len = sizeof ipforwarding;
   if (sysctl (mib, MIB_SIZ, NULL, NULL, &ipforwarding, len) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "can't set ipforwarding on");
+      zlog_warn ("Can't set ipforwarding on");
       return -1;
     }
   return ipforwarding;
 }
 
 #ifdef HAVE_IPV6
+
+/* IPv6 forwarding control MIB. */
+int mib_ipv6[MIB_SIZ] = 
+{
+  CTL_NET,
+  PF_INET6,
+#if defined(KAME) || (defined(__bsdi__) && _BSDI_VERSION >= 199802 ) || defined(NRL)
+  IPPROTO_IPV6,
+  IPV6CTL_FORWARDING
+#else /* NOT KAME */
+  IPPROTO_IP,
+  IP6CTL_FORWARDING
+#endif /* KAME */
+}; 
+
 int
 ipforward_ipv6 ()
 {
-  int mib [MIB_SIZ];
-  int ip6forwarding = 0;
   int len;
-
-  mib [0] = CTL_NET;
-  mib [1] = PF_INET6;
-#ifdef KAME
-  mib [2] = IPPROTO_IPV6;
-  mib [3] = IPV6CTL_FORWARDING;
-#else /* NOT KAME */
-  mib [2] = IPPROTO_IP;
-  mib [3] = IP6CTL_FORWARDING;
-#endif /* KAME */
+  int ip6forwarding = 0;
 
   len = sizeof ip6forwarding;
-  if (sysctl (mib, MIB_SIZ, &ip6forwarding, &len, 0, 0) < 0) 
+  if (sysctl (mib_ipv6, MIB_SIZ, &ip6forwarding, &len, 0, 0) < 0) 
     {
       log_warn ("can't get ip6forwarding value\n");
       return -1;
@@ -119,22 +117,11 @@ ipforward_ipv6 ()
 int
 ipforward_ipv6_on ()
 {
-  int mib [MIB_SIZ];
-  int ip6forwarding = 1;
   int len;
-
-  mib [0] = CTL_NET;
-  mib [1] = PF_INET6;
-#ifdef KAME
-  mib [2] = IPPROTO_IPV6;
-  mib [3] = IPV6CTL_FORWARDING;
-#else /* NOT KAME */
-  mib [2] = IPPROTO_IP;
-  mib [3] = IP6CTL_FORWARDING;
-#endif /* KAME */
+  int ip6forwarding = 1;
 
   len = sizeof ip6forwarding;
-  if (sysctl (mib, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
+  if (sysctl (mib_ipv6, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
     {
       log_warn ("can't get ip6forwarding value\n");
       return -1;
@@ -145,22 +132,11 @@ ipforward_ipv6_on ()
 int
 ipforward_ipv6_off ()
 {
-  int mib [MIB_SIZ];
-  int ip6forwarding = 0;
   int len;
-
-  mib [0] = CTL_NET;
-  mib [1] = PF_INET6;
-#ifdef KAME
-  mib [2] = IPPROTO_IPV6;
-  mib [3] = IPV6CTL_FORWARDING;
-#else /* NOT KAME */
-  mib [2] = IPPROTO_IP;
-  mib [3] = IP6CTL_FORWARDING;
-#endif /* KAME */
+  int ip6forwarding = 0;
 
   len = sizeof ip6forwarding;
-  if (sysctl (mib, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
+  if (sysctl (mib_ipv6, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
     {
       log_warn ("can't get ip6forwarding value\n");
       return -1;

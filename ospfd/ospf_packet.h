@@ -129,9 +129,11 @@ void ospf_db_desc_send (struct ospf_neighbor *);
 void ospf_db_desc_resend (struct ospf_neighbor *);
 void ospf_ls_req_send (struct ospf_neighbor *);
 void ospf_ls_upd_send (struct ospf_neighbor *, list, int);
-void ospf_ls_ack_send_direct (struct ospf_neighbor *, struct ospf_lsa *);
+void ospf_ls_ack_send (struct ospf_neighbor *, struct ospf_lsa *);
+void ospf_ls_ack_send_delayed (struct ospf_interface *);
 void ospf_ls_retransmit (struct ospf_interface *, struct ospf_lsa *);
 
 int ospf_ls_upd_timer (struct thread *);
+int ospf_ls_ack_timer (struct thread *);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

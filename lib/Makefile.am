@@ -10,7 +10,8 @@ libzebra_a_SOURCES = \
 	print_version.c checksum.c vector.c linklist.c dropline.c \
 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c \
 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c \
-	distribute.c stream.c str.c log.c plist.c zclient.c sockopt.c
+	distribute.c stream.c str.c log.c plist.c zclient.c sockopt.c \
+	snmp.c
 
 libzebra_a_DEPENDENCIES = @LIB_REGEX@
 
@@ -35,15 +36,15 @@ depend:
 ## File dependency.
 buffer.o: buffer.c memory.h buffer.h roken.h
 checksum.o: checksum.c
-client.o: client.c ../zebra/zebra.h prefix.h client.h stream.h \
- network.h roken.h
-command.o: command.c vector.h vty.h command.h memory.h log.h version.h
+client.o: client.c ../zebra/zebra.h prefix.h stream.h network.h \
+ roken.h if.h linklist.h client.h log.h
+command.o: command.c command.h vector.h vty.h memory.h log.h version.h
 daemon.o: daemon.c
 distribute.o: distribute.c hash.h linklist.h if.h filter.h memory.h \
  vector.h vty.h command.h
 dropline.o: dropline.c
 filter.o: filter.c prefix.h filter.h if.h linklist.h memory.h \
- command.h vector.h vty.h
+ command.h vector.h vty.h sockunion.h
 getopt1.o: getopt1.c getopt.h
 getopt.o: getopt.c
 hash.o: hash.c hash.h memory.h log.h
@@ -54,21 +55,24 @@ log.o: log.c log.h memory.h
 memory.o: memory.c log.h memory.h vector.h vty.h command.h
 network.o: network.c
 pid_output.o: pid_output.c
-plist.o: plist.c prefix.h command.h vector.h vty.h memory.h plist.h
+plist.o: plist.c prefix.h command.h vector.h vty.h memory.h plist.h \
+ sockunion.h
 prefix.o: prefix.c prefix.h vty.h sockunion.h memory.h log.h
 print_version.o: print_version.c version.h
 regex.o: regex.c
 routemap.o: routemap.c linklist.h memory.h vector.h prefix.h \
  routemap.h command.h vty.h
+snmp.o: snmp.c
+sockopt.o: sockopt.c log.h
 sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h roken.h \
  str.h log.h
 str.o: str.c str.h
 stream.o: stream.c stream.h memory.h network.h prefix.h
-table.o: table.c prefix.h table.h memory.h
+table.o: table.c prefix.h table.h memory.h sockunion.h
 thread.o: thread.c thread.h memory.h log.h
 vector.o: vector.c vector.h memory.h
 version.o: version.c
 vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
  sockunion.h thread.h memory.h str.h log.h prefix.h filter.h if.h
 zclient.o: zclient.c ../zebra/zebra.h stream.h network.h thread.h \
- memory.h prefix.h client.h zclient.h log.h
+ memory.h prefix.h if.h linklist.h client.h zclient.h log.h

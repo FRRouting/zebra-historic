@@ -79,9 +79,9 @@ ospf_vertex_new (struct ospf_lsa *lsa)
   memset (new, 0, sizeof (struct vertex));
 
   new->flag = OSPF_SPF_FALSE;
-  new->type = lsa->type;
-  new->id = lsa->id;
-  new->lsa = lsa;
+  new->type = lsa->data->type;
+  new->id = lsa->data->id;
+  new->lsa = lsa->data;
   new->distance = 0;
   new->child = list_init ();
   new->nexthop = list_init ();
@@ -136,7 +136,7 @@ ospf_spf_init (struct ospf_area *area)
 
 int
 ospf_spf_has_vertex (struct route_table *rv, struct route_table *nv,
-		     struct ospf_lsa *lsa)
+		     struct lsa_header *lsa)
 {
   struct prefix p;
   struct route_node *rn;
@@ -175,7 +175,7 @@ ospf_vertex_lookup (list list, struct in_addr id, int type)
 }
 
 int
-ospf_lsa_has_link (struct ospf_lsa *w, struct ospf_lsa *v)
+ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v)
 {
   int i;
   int length;
@@ -429,21 +429,21 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 	continue;
 
 #ifdef DEBUG
-      if (w_lsa->type == OSPF_ROUTER_LSA)
+      if (w_lsa->data->type == OSPF_ROUTER_LSA)
 	zlog_info ("W is ROUTER LSA");
       else
 	zlog_info ("W is NETWORK LSA");
 #endif /* DEBUG */
 
-      if (w_lsa->ls_age == OSPF_LSA_MAX_AGE)
+      if (w_lsa->data->ls_age == OSPF_LSA_MAX_AGE)
 	continue;
 
       /* W has link back to V? */
-      if (! ospf_lsa_has_link (w_lsa, v->lsa))
+      if (! ospf_lsa_has_link (w_lsa->data, v->lsa))
 	continue;
 
       /* W is already in SPF tree? */
-      ret = ospf_spf_has_vertex (rv, nv, w_lsa);
+      ret = ospf_spf_has_vertex (rv, nv, w_lsa->data);
 
 #ifdef DEBUG
       if (ret)
@@ -454,7 +454,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 	continue;
 
 #ifdef DEBUG
-      zlog_info ("ID %s", inet_ntoa (w_lsa->id));
+      zlog_info ("ID %s", inet_ntoa (w_lsa->data->id));
 #endif /* DEBUG */
 
       /* prepare vertex W. */

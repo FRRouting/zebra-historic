@@ -39,6 +39,14 @@
 #include "bgp_route.h"
 #include "bgp_attr.h"
 
+int bgp_interface_add (int, struct zebra *, zebra_size_t);
+int bgp_interface_delete (int, struct zebra *, zebra_size_t);
+int bgp_interface_address_add (int, struct zebra *, zebra_size_t);
+int bgp_interface_address_delete (int, struct zebra *, zebra_size_t);
+
+/* Virtual peer for myself. */
+extern struct peer *peer_self;
+
 /* All information about zebra. */
 struct zebra *zebra = NULL;
 
@@ -76,70 +84,67 @@ bgp_if_update (struct interface *ifp)
   return 0;
 }
 
-/* Get all interface information. */
+/* Inteface addition message from zebra. */
 int
-bgp_get_all_interface (int command, struct zebra *zebra, zebra_size_t length)
+bgp_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 {
   struct interface *ifp;
-  struct connected *connected;
-  u_int32_t connected_count;
-  unsigned long endp;
-  struct stream *s;
 
-  s = zebra->ibuf;
-  endp = stream_get_endp (s);
+  ifp = zebra_interface_add_read (zebra->ibuf);
 
-  while (stream_get_getp(s) < endp)
-    {
-      u_char tmpnam[INTERFACE_NAMSIZ + 1];
+#if 0
+  if (IS_BGP_DEBUG_ZEBRA)
+    zlog_info ("BGP interface add %s index %d flags %d metric %d mtu %d",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+#endif /* 0 */  
 
-      bzero (tmpnam, sizeof (tmpnam));
+  bgp_if_update (ifp);
 
-      /* Get interface's name */
-      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
-
-      /* create interface structure */
-      ifp = if_get_by_name (tmpnam);
-
-      /* Get interface's index and values. */
-      ifp->ifindex = stream_getc (s);
-      ifp->flags = stream_getl (s);
-      ifp->metric = stream_getl (s);
-      ifp->mtu = stream_getl (s);
-
-      /* Get interface's address. */
-      connected_count = stream_getl (s);
-
-      while (connected_count--)
-	{
-	  struct prefix *p;
-	  int plen;
-
-	  connected = connected_new ();
-
-	  p = prefix_new ();
-	  p->family = stream_getc (s);
-
-	  plen = prefix_blen (p);
-	  memcpy (&p->u.prefix, stream_pnt (s), plen);
-	  stream_forward (s, plen);
-	  p->prefixlen = stream_getc (s);
-	  connected->address = p;
-
-	  p = prefix_new ();
-	  memcpy (&p->u.prefix, stream_pnt (s), plen);
-	  stream_forward (s, plen);
-
-	  connected->destination = p;
-
-	  connected_add (ifp, connected);
-	}
-      bgp_if_update (ifp);
-    }
   return 0;
 }
 
-extern struct peer *peer_self;
+int
+bgp_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
+{
+  return 0;
+}
+
+int
+bgp_interface_address_add (int command, struct zebra *zebra,
+			     zebra_size_t length)
+{
+  struct connected *c;
+
+  c = zebra_interface_address_add_read (zebra->ibuf);
+
+  if (c == NULL)
+    return 0;
+
+#if 0
+  if (IS_BGP_DEBUG_ZEBRA)
+    {
+      struct prefix *p;
+      char buf[INET6_ADDRSTRLEN];
+
+      p = c->address;
+      if (p->family == AF_INET6)
+	zlog_info ("BGP connected address %s/%d", 
+		   inet_ntop (AF_INET6, &p->u.prefix6, buf, INET6_ADDRSTRLEN),
+		   p->prefixlen);
+    }
+#endif /* 0 */
+
+  bgp_if_update (c->ifp);
+
+  return 0;
+}
+
+int
+bgp_interface_address_delete (int command, struct zebra *zebra,
+				zebra_size_t length)
+{
+  return 0;
+}
 
 /* Zebra route add and delete treatment. */
 int
@@ -158,8 +163,7 @@ zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
   flags = stream_getc (s);
-  memcpy (&nexthop, stream_pnt (s), sizeof (struct in_addr));
-  stream_forward (s, sizeof (struct in_addr));
+  stream_get (&nexthop, s, sizeof (struct in_addr));
 
   /* Then fetch IPv4 prefixes. */
   while (stream_pnt (s) < lim)
@@ -174,8 +178,7 @@ zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       p.family = AF_INET;
       p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, stream_pnt (s), size);
-      stream_forward (s, size);
+      stream_get (&p.prefix, s, size);
 
       bgp_info = bgp_info_new ();
       bgp_info->type = type;
@@ -207,8 +210,7 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
   flags = stream_getc (s);
-  memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
-  stream_forward (s, sizeof (struct in6_addr));
+  stream_get (&nexthop, s, sizeof (struct in6_addr));
 
   /* Then fetch IPv6 prefixes. */
   while (stream_pnt (s) < lim)
@@ -224,8 +226,7 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
       p.family = AF_INET6;
       p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, stream_pnt (s), size);
-      stream_forward (s, size);
+      stream_get (&p.prefix, s, size);
 
       bgp_info = bgp_info_new ();
       bgp_info->type = type;
@@ -525,9 +526,8 @@ int
 bgp_nexthop_set (union sockunion *local, union sockunion *remote, 
 		 struct bgp_nexthop *nexthop, struct peer *peer)
 {
-  int ret;
+  int ret = 0;
   struct interface *ifp = NULL;
-  struct interface *direct = NULL;
 
   memset (nexthop, 0, sizeof (struct bgp_nexthop));
 
@@ -578,6 +578,8 @@ bgp_nexthop_set (union sockunion *local, union sockunion *remote,
   /* IPv6 connection. */
   if (local->sa.sa_family == AF_INET6)
     {
+      struct interface *direct = NULL;
+
       /* IPv4 nexthop.  I don't care about it. */
       if (peer->bgp->ident)
 	nexthop->v4.s_addr = peer->bgp->ident;
@@ -614,9 +616,9 @@ bgp_nexthop_set (union sockunion *local, union sockunion *remote,
     peer->shared_network = 1;
   else
     peer->shared_network = 0;
-
-  return 0;
 #endif /* HAVE_IPV6 */
+
+  return ret;
 }
 
 #ifdef HAVE_IPV6
@@ -870,13 +872,19 @@ zebra_init (int enable)
   zebra->redist[ZEBRA_ROUTE_BGP] = 1;
 
   /* Set call back functions. */
+  zebra->interface_add = bgp_interface_add;
+  zebra->interface_delete = bgp_interface_delete;
+  zebra->interface_address_add = bgp_interface_address_add;
+  zebra->interface_address_delete = bgp_interface_address_delete;
+
   zebra->ipv4_route_add = zebra_read_ipv4;
   zebra->ipv4_route_delete = zebra_read_ipv4;
 #ifdef HAVE_IPV6
   zebra->ipv6_route_add = zebra_read_ipv6;
   zebra->ipv6_route_delete = zebra_read_ipv6;
 #endif /* HAVE_IPV6 */
-  zebra->get_all_interface = bgp_get_all_interface;
+  /* zebra->get_all_interface = bgp_get_all_interface; */
+  
 
   install_node (&zebra_node, zebra_config_write);
 

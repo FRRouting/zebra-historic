@@ -212,6 +212,32 @@ ospf_get_router_id (list if_list)
 }
 
 void
+ospf_update_router_id ()
+{
+  listnode node;
+  struct interface *ifp;
+  struct in_addr router_id;
+
+  router_id = ospf_get_router_id (ospf_top->iflist);
+  ospf_top->router_id = router_id;
+
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      struct ospf_interface *oi;
+
+      ifp = getdata (node);
+      oi = ifp->info;
+
+      /* Is interface OSPF enable? */
+      if (!ospf_if_is_enable (ifp))
+	continue;
+
+      /* Update self-neighbor's router_id. */
+      oi->nbr_self->router_id = router_id;
+    }
+}
+
+void
 ospf_loopback_run (struct ospf *ospf)
 {
   listnode node;
@@ -247,7 +273,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
   /* Update router_id. */
   if (ospf_top != NULL)
     if (ospf_top->router_id_static.s_addr == 0)
-      ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+      ospf_update_router_id ();
 
   /* get target interface. */
   for (node = listhead (ospf->iflist); node; nextnode (node))
@@ -295,8 +321,12 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 	      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceUp);
 	      zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
 
-	      /* Add Pseudo Neighbor. */
-	      ospf_nbr_add_myself (oi);
+	      /* Add pseudo neighbor. */
+	      ospf_nbr_add_self (oi);
+
+	      /* Interface configurable values. */
+	      PRIORITY (oi) = OSPF_ROUTER_PRIORITY_DEFAULT;
+	      OPTIONS (oi) = OSPF_OPTION_E;
 
 	      /* Relate ospf interface to ospf instance. */
 	      oi->ospf = ospf_top;
@@ -420,7 +450,7 @@ DEFUN (router_ospf,
   ospf_loopback_run (ospf_top);
 
   if (ospf_top->router_id_static.s_addr == 0)
-    ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+    ospf_update_router_id ();
 
   /* I'm not sure where is proper to start SPF calc timer. -- Kunihiro */
   ospf_spf_calculate_timer_add ();
@@ -529,7 +559,8 @@ DEFUN (no_ospf_router_id,
        "Set the OSPF Router ID\n")
 {
   ospf_top->router_id_static.s_addr = 0;
-  ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+
+  ospf_update_router_id ();
 
   return CMD_SUCCESS;
 }
@@ -795,16 +826,16 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   vty_out (vty, "  Transmit Delay is %d sec, State %s, Priority %d\r\n",
 	   oi->transmit_delay,
 	   LOOKUP (ospf_ism_status_msg, oi->status),
-	   oi->priority);
+	   PRIORITY (oi));
 
   /* show DR information. */
-  if (oi->d_router.s_addr == 0)
+  if (DR (oi).s_addr == 0)
     vty_out (vty, "  No designated router on this network\r\n");
   else
     {
       key.family = AF_INET;
       key.prefixlen = 32;
-      key.u.prefix4 = oi->d_router;
+      key.u.prefix4 = DR (oi);
 
       rn = route_node_get (oi->nbrs, &key);
       if (rn == NULL)
@@ -816,7 +847,7 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
 	  nbr = (struct ospf_neighbor *) rn->info;
 
 	  vty_out (vty, "  Designated Router (ID) %s,",
-		   inet_ntoa (oi->d_router));
+		   inet_ntoa (DR (oi)));
 	  vty_out (vty, " Interface Address %s\r\n",
 		   inet_ntoa (nbr->address.u.prefix4));
 	}
@@ -824,13 +855,13 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
     }
 
   /* show BDR information. */
-  if (oi->bd_router.s_addr == 0)
+  if (BDR (oi).s_addr == 0)
     vty_out (vty, "  No backup designated router on this network\r\n");
   else
     {
       key.family = AF_INET;
       key.prefixlen = 32;
-      key.u.prefix4 = oi->bd_router;
+      key.u.prefix4 = BDR (oi);
 
       rn = route_node_get (oi->nbrs, &key);
       if (rn == NULL)
@@ -842,7 +873,7 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
 	  nbr = (struct ospf_neighbor *) rn->info;
 
 	  vty_out (vty, "  Backup Designated Router (ID) %s,",
-		   inet_ntoa (oi->bd_router));
+		   inet_ntoa (BDR (oi)));
 	  vty_out (vty, " Interface Address %s\r\n",
 		   inet_ntoa (nbr->address.u.prefix4));
 	}
@@ -912,7 +943,9 @@ show_ip_ospf_neighbor_sub (struct vty *vty, struct interface *ifp)
       nbr = rn->info;
 
       /* Do not show myself. */
-      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+      /*      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	      continue; */
+      if (nbr == nbr->oi->nbr_self)
 	continue;
 
       /* Down state is not shown. */

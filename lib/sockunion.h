@@ -64,11 +64,11 @@ enum connect_result
 /* Macro to set link local index to the IPv6 address.  For KAME IPv6
    stack. */
 #ifdef KAME
-#define	IN6_LINKLOCAL_IFINDEX(a)  ((a).s6_addr8[2] << 8 | (a).s6_addr8[3])
+#define	IN6_LINKLOCAL_IFINDEX(a)  ((a).s6_addr[2] << 8 | (a).s6_addr[3])
 #define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
   do { \
-    (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
-    (a).s6_addr8[3] = (i) & 0xff; \
+    (a).s6_addr[2] = ((i) >> 8) & 0xff; \
+    (a).s6_addr[3] = (i) & 0xff; \
   } while (0)
 #else
 #define	IN6_LINKLOCAL_IFINDEX(a)

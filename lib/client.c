@@ -24,10 +24,12 @@
 
 #include "zebra/zebra.h"
 #include "prefix.h"
-#include "client.h"
 #include "stream.h"
 #include "network.h"
 #include "roken.h"
+#include "if.h"
+#include "client.h"
+#include "log.h"
 
 int
 zebra_redistribute_send (int command, int sock, int type)
@@ -49,16 +51,6 @@ zebra_redistribute_send (int command, int sock, int type)
 
   return ret;
 }
-
-struct zmsg_ipv4
-{
-  int commnad;
-  int type;
-  int flags;
-  struct prefix_ipv4 *p;
-  struct in_addr *nexthop;
-  unsigned int ifindex;
-};
 
 /* Make a IPv4 route add/delete packet and send it to zebra. */
 static int
@@ -168,20 +160,240 @@ zebra_ipv6_delete (int sock, int type, int flags, struct prefix_ipv6 *p,
 }
 #endif /* HAVE_IPV6 */
 
-void
-zebra_get_all_interface (int sock)
+/* Interface addition message. */
+int
+zebra_interface_add (int sock, struct interface *ifp)
 {
-  u_char mes[] = {0, 3, ZEBRA_GET_ALL_INTERFACE};
+  int ret;
+  struct stream *s;
 
-  writen (sock, mes, 3);
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_ADD);
+
+  /* Interface name. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+
+  /* Set inteface's index. */
+  stream_putw (s, ifp->ifindex);
+
+  /* Set interface's value. */
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+
+  /* Write packet size. */
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
+
+  ret = writen (sock, s->data, stream_get_endp (s));
+
+  stream_free (s);
+
+  return ret;
 }
 
-void
-zebra_get_hostinfo (int sock)
+/* Interface addition from zebra daemon. */
+struct interface *
+zebra_interface_add_read (struct stream *s)
 {
-  u_char mes[] = {0, 3, ZEBRA_GET_HOSTINFO};
-  
-  writen (sock, mes, 3);
+  struct interface *ifp;
+  u_char ifname_tmp[INTERFACE_NAMSIZ];
+
+  /* Read interface name. */
+  stream_get (ifname_tmp, s, INTERFACE_NAMSIZ);
+
+  /* Lookup this by interface index. */
+  ifp = if_lookup_by_name (ifname_tmp);
+
+  /* If such interface does not exist, make new one. */
+  if (! ifp)
+    {
+      ifp = if_create ();
+      strncpy (ifp->name, ifname_tmp, IFNAMSIZ);
+    }
+
+  /* Read inteface's index. */
+  ifp->ifindex = stream_getw (s);
+
+  /* Read interface's value. */
+  ifp->flags = stream_getl (s);
+  ifp->metric = stream_getl (s);
+  ifp->mtu = stream_getl (s);
+
+  return ifp;
+}
+
+/* Interface deletion from zebra daemon. */
+int
+zebra_interface_delete (int sock, struct interface *ifp)
+{
+  int ret;
+  struct stream *s;
+
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_DELETE);
+
+  /* Interface name. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+
+  /* Set inteface's index. */
+  stream_putw (s, ifp->ifindex);
+
+  /* Write packet size. */
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
+
+  ret = writen (sock, s->data, stream_get_endp (s));
+
+  stream_free (s);
+
+  return ret;
+}
+
+int
+zebra_interface_address_add (int sock, struct interface *ifp, 
+			     struct connected *c)
+{
+  int ret;
+  int blen;
+  struct stream *s;
+  struct prefix *p;
+
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_ADDRESS_ADD);
+
+  /* Interface index. */
+  stream_putw (s, ifp->ifindex);
+
+  /* Prefix information. */
+  p = c->address;
+  stream_putc (s, p->family);
+  blen = prefix_blen (p);
+  stream_put (s, &p->u.prefix, blen);
+  stream_putc (s, p->prefixlen);
+
+  /* Destination. */
+  p = c->destination;
+  if (p)
+    stream_put (s, &p->u.prefix, blen);
+  else
+    stream_put (s, NULL, blen);
+
+  /* Write packet size. */
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
+
+  ret = writen (sock, s->data, stream_get_endp (s));
+
+  stream_free (s);
+
+  return ret;
+}
+
+struct connected *
+zebra_interface_address_add_read (struct stream *s)
+{
+  unsigned int ifindex;
+  struct interface *ifp;
+  struct connected *connected;
+  struct prefix *p;
+  int family;
+  int plen;
+
+  /* Get interface index. */
+  ifindex = stream_getw (s);
+
+  /* Lookup index. */
+  ifp = if_lookup_by_index (ifindex);
+  if (ifp == NULL)
+    {
+      zlog_warn ("Can't find interface by ifindex: %d ", ifindex);
+      return NULL;
+    }
+
+  /* Allocate new connected address. */
+  connected = connected_new ();
+
+  /* Fetch interface address. */
+  p = prefix_new ();
+  family = p->family = stream_getc (s);
+
+  plen = prefix_blen (p);
+  stream_get (&p->u.prefix, s, plen);
+  p->prefixlen = stream_getc (s);
+  connected->address = p;
+
+  /* Fetch destination address. */
+  p = prefix_new ();
+  stream_get (&p->u.prefix, s, plen);
+  p->family = family;
+
+  connected->destination = p;
+
+  p = connected->address;
+
+  /* Add connected address to the interface. */
+  connected_add (ifp, connected);
+
+  return connected;
+}
+
+int
+zebra_interface_address_delete (int sock, struct interface *ifp,
+				struct connected *c)
+{
+  int ret;
+  int blen;
+  struct stream *s;
+  struct prefix *p;
+
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_ADDRESS_DELETE);
+
+  /* Interface index. */
+  stream_putw (s, ifp->ifindex);
+
+  /* Prefix information. */
+  p = c->address;
+  stream_putc (s, p->family);
+  blen = prefix_blen (p);
+  stream_put (s, &p->u.prefix, blen);
+
+  p = c->destination;
+  if (p)
+    stream_put (s, &p->u.prefix, blen);
+  else
+    stream_put (s, NULL, blen);
+
+  /* Write packet size. */
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
+
+  ret = writen (sock, s->data, stream_get_endp (s));
+
+  stream_free (s);
+
+  return ret;
 }
 
 /* Make socket to zebra daemon. Return zebra socket. */

@@ -39,9 +39,11 @@
 /* All information about zebra. */
 struct zebra *zebra = NULL;
 
-extern struct thread_master *master;
-
-int ripng_zebra_get_interface (int, struct zebra *, zebra_size_t);
+/* int ripng_zebra_get_interface (int, struct zebra *, zebra_size_t); */
+int ripng_interface_add (int, struct zebra *, zebra_size_t);
+int ripng_interface_delete (int, struct zebra *, zebra_size_t);
+int ripng_interface_address_add (int, struct zebra *, zebra_size_t);
+int ripng_interface_address_delete (int, struct zebra *, zebra_size_t);
 
 void
 ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
@@ -76,8 +78,7 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
   /* Fetch type and nexthop first. */
   type = stream_getc (s);
   flags = stream_getc (s);
-  memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
-  stream_forward (s, sizeof (struct in6_addr));
+  stream_get (&nexthop, s, sizeof (struct in6_addr));
 
   /* Then fetch IPv6 prefixes. */
   while (stream_pnt (s) < lim)
@@ -92,8 +93,7 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
       p.family = AF_INET6;
       p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, stream_pnt (s), size);
-      stream_forward (s, size);
+      stream_get (&p.prefix, s, size);
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
 	ripng_redistribute_add (type, 0, &p, ifindex);
@@ -310,10 +310,14 @@ zebra_init ()
   zebra->redist[ZEBRA_ROUTE_RIPNG] = 1;
 
   /* Set call back functions. */
-  zebra->get_all_interface = ripng_zebra_get_interface;
+  /* zebra->get_all_interface = ripng_zebra_get_interface; */
+  zebra->interface_add = ripng_interface_add;
+  zebra->interface_delete = ripng_interface_delete;
+  zebra->interface_address_add = ripng_interface_address_add;
+  zebra->interface_address_delete = ripng_interface_address_delete;
   zebra->ipv6_route_add = ripng_zebra_read_ipv6;
   zebra->ipv6_route_delete = ripng_zebra_read_ipv6;
-
+  
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
 

@@ -284,30 +284,81 @@ ospf_ls_upd_timer (struct thread *thread)
   return 0;
 }
 
+int
+ospf_ls_ack_timer (struct thread *thread)
+{
+  struct ospf_interface *oi;
+
+  oi = THREAD_ARG (thread);
+  oi->t_ls_ack = NULL;
+
+  /* Send Link State Acknowledgment. */
+  if (listcount (oi->ls_ack) > 0)
+    ospf_ls_ack_send_delayed (oi);
+
+  /* Set LS Ack timer. */
+  OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
+
+  return 0;
+}
+
 
 int
 ospf_write (struct thread *thread)
 {
   struct ospf_interface *oi;
   struct ospf_packet *op;
-  struct sockaddr_in sa;
+  struct sockaddr_in sa_src, sa_dst;
   u_char type;
+  int sock, ret;
 
   oi = THREAD_ARG (thread);
   oi->t_write = NULL;
+
+  /* Open outgoing socket. */
+  sock = ospf_serv_sock (oi->ifp, AF_INET);
+  if (sock < 0)
+    {
+      zlog_warn ("ospf_write: interface %s can't create raw socket",
+		 oi->ifp->name);
+      return -1;
+    }
 
   /* Get one packet from queue. */
   op = ospf_fifo_head (oi->obuf);
   assert (op);
   assert (op->length >= OSPF_HEADER_SIZE);
 
-  sa.sin_family = AF_INET;
-  sa.sin_port = htons (0);
-  sa.sin_addr = op->dst;
+  /* Select outgoing interface by destination address. */
+  if (op->dst.s_addr == htonl (OSPF_ALLSPFROUTERS) ||
+      op->dst.s_addr == htonl (OSPF_ALLDROUTERS))
+    ospf_if_ipmulticast (sock, oi->address);
+  else
+    {
+      bzero (&sa_src, sizeof (sa_src));
+      sa_src.sin_family = AF_INET;
+      sa_src.sin_addr = oi->address->u.prefix4;
+      sa_src.sin_port = htons (0);
+
+      ret = bind (sock, (struct sockaddr *) &sa_src, sizeof (sa_src));
+      if (ret < 0)
+	{
+	  zlog_warn ("*** bind error");
+	  return 0;
+	}
+    }
+
+  bzero (&sa_dst, sizeof (sa_dst));
+  sa_dst.sin_family = AF_INET;
+  sa_dst.sin_addr = op->dst;
+  sa_dst.sin_port = htons (0);
 
   /* Now send packet. */
-  sendto (oi->fd, STREAM_DATA (op->s), op->length, 0,
-	  (struct sockaddr *) &sa, sizeof (sa));
+  sendto (sock, STREAM_DATA (op->s), op->length, 0,
+	  (struct sockaddr *) &sa_dst, sizeof (sa_dst));
+
+  /* Immediately close socket. */
+  close (sock);
 
   /* Retrieve OSPF pakcet type. */
   stream_set_getp (op->s, 1);
@@ -336,7 +387,7 @@ ospf_write (struct thread *thread)
   return 0;
 }
 
-/* OSPF Hello message read. */
+/* OSPF Hello message read -- RFC2328 Section 10.5. */
 void
 ospf_hello (struct ip *iph, struct ospf_header *ospfh,
 	    struct ospf_interface *oi, int size)
@@ -360,8 +411,8 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   p.prefixlen = ip_masklen (hello->network_mask);
   p.u.prefix4 = iph->ip_src;
 
-  /* compare network mask. */
-  /* checking is ignored for Point-to-Point and Virtual link. */
+  /* Compare network mask. */
+  /* Checking is ignored for Point-to-Point and Virtual link. */
   if (oi->type != OSPF_IFTYPE_POINTOPOINT &&
       oi->type != OSPF_IFTYPE_VIRTUALLINK)
     if (oi->address->prefixlen != p.prefixlen)
@@ -371,7 +422,7 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
 	return;
       }
 
-  /* compare Hello Interval. */
+  /* Compare Hello Interval. */
   if (oi->v_hello != ntohs (hello->hello_interval))
     {
       zlog_warn ("neighbor [%s] HelloInterval mismatch.",
@@ -379,7 +430,7 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
       return;
     }
 
-  /* compare Router Dead Interval. */
+  /* Compare Router Dead Interval. */
   if (oi->v_wait != ntohl (hello->dead_interval))
     {
       zlog_warn ("neighbor [%s] RouterDeadInterval mismatch.",
@@ -387,15 +438,15 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
       return;
     }
 
-  /* compare options. */
-  if (oi->options != hello->options)
+  /* Compare options. */
+  if (OPTIONS (oi) != hello->options)
     {
       zlog_warn ("neighbor [%s] Options mismacth.",
 		 inet_ntoa (ospfh->router_id));
       return;
     }
 
-  /* get neighbor information from table. */
+  /* Get neighbor information from table. */
   key.family = AF_INET;
   key.prefixlen = IPV4_MAX_BITLEN;
   key.u.prefix4 = iph->ip_src;
@@ -429,19 +480,24 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   else
     {
       OSPF_NSM_EVENT_EXECUTE (nbr, NSM_OneWayReceived);
+      /* Set neighbor information. */
+      nbr->priority = hello->priority;
+      nbr->options = hello->options;
+      nbr->d_router = hello->d_router;
+      nbr->bd_router = hello->bd_router;
       return;
     }
+
+  /* If neighbor itself declares DR and no BDR exists,
+     cause event BackupSeen */
+  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->d_router))
+    if (hello->bd_router.s_addr == 0 && oi->status == ISM_Waiting)
+      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_BackupSeen);
 
   /* neighbor itself declares BDR. */
   if (oi->status == ISM_Waiting &&
       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->bd_router))
     OSPF_ISM_EVENT_SCHEDULE (oi, ISM_BackupSeen);
-
-  /* if neighbor itself is DR or no BDR exists,
-     cause event BackupSeen */
-  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->d_router))
-    if (hello->bd_router.s_addr == 0 && oi->status == ISM_Waiting)
-      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_BackupSeen);
 
   /* had not previously. */
   if ((IPV4_ADDR_SAME (&nbr->address.u.prefix4, &hello->d_router) &&
@@ -461,11 +517,20 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
   if (nbr->priority >= 0 && nbr->priority != hello->priority)
     OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
 
-  /* set neighbor information. */
+  /* Set neighbor information. */
   nbr->priority = hello->priority;
   nbr->options = hello->options;
   nbr->d_router = hello->d_router;
   nbr->bd_router = hello->bd_router;
+}
+
+void
+ospf_db_desc_save_current (struct ospf_neighbor *nbr,
+			   struct ospf_db_desc *dd)
+{
+  nbr->last_recv.flags = dd->flags;
+  nbr->last_recv.options = dd->options;
+  nbr->last_recv.dd_seqnum = ntohl (dd->dd_seqnum);
 }
 
 /* Process rest of DD packet */
@@ -473,44 +538,46 @@ void
 ospf_db_desc_proc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
 		   struct ospf_db_desc *dd, u_int16_t size)
 {
-  struct ospf_lsa *lsa, *find, *new;
+  struct lsa_header *lsah, *new;
+  struct ospf_lsa *find;
 
   stream_forward (oi->ibuf, OSPF_DB_DESC_MIN_SIZE);
   for (size -= OSPF_DB_DESC_MIN_SIZE; size > 0; size -= OSPF_LSA_HEADER_SIZE) 
     {
-      lsa = (struct ospf_lsa *) STREAM_PNT (oi->ibuf);
+      lsah = (struct lsa_header *) STREAM_PNT (oi->ibuf);
       stream_forward (oi->ibuf, OSPF_LSA_HEADER_SIZE);
 
       /* Unknown LS type. */
-      if (lsa->type < OSPF_MIN_LSA || lsa->type > OSPF_MAX_LSA)
+      if (lsah->type < OSPF_MIN_LSA || lsah->type >= OSPF_MAX_LSA)
 	{
-	  zlog_warn ("OSPF DD Unknown LS type %d.", lsa->type);
+	  zlog_warn ("OSPF DD: Unknown LS type %d.", lsah->type);
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
 	  continue;
 	}
+
       /* */
-      if (lsa->type == OSPF_AS_EXTERNAL_LSA)
+      if (lsah->type == OSPF_AS_EXTERNAL_LSA)
 	{
 	  /* Check Neighbor's External Routing Capability. */
 	}
 
       /* Lookup received LSA, then add LS request list. */
-      find = ospf_lsa_lookup_by_header (oi->area, lsa);
-      if (ospf_lsa_more_recent (find, lsa) < 0)
+      find = ospf_lsa_lookup_by_header (oi->area, lsah);
+      if (!find || ospf_lsa_more_recent (find->data, lsah) < 0)
 	{
-	  new = XMALLOC (MTYPE_OSPF_LSA, ntohs (lsa->length));
-	  bcopy (lsa, new, ntohs (lsa->length));
+	  new = ospf_lsa_data_new (OSPF_LSA_HEADER_SIZE);
+	  memcpy (new, lsah, OSPF_LSA_HEADER_SIZE);
 	  list_add_node (nbr->ls_request, new);
 	}
       else
 	{
 	  /* Received LSA is not recent. */
-	  zlog_info ("LSA received is not recent.");
+	  zlog_info ("OSPF DD: LSA received is not recent.");
 	  continue;
 	}
     }
 
-  /* cancel DD retransmission timer before send new DD. */
+  /* Cancel DD retransmission timer before send new DD. */
   OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
 
   /* Master */
@@ -519,7 +586,7 @@ ospf_db_desc_proc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
       nbr->dd_seqnum++;
       /* Entire DD packet sent. */
       if (!IS_SET_DD_M (dd->flags) && !IS_SET_DD_M (nbr->dd_flags))
-	OSPF_NSM_EVENT_EXECUTE (nbr, NSM_ExchangeDone);
+	OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_ExchangeDone);
       else
 	/* Send new DD packet. */
 	ospf_db_desc_send (nbr);
@@ -530,16 +597,14 @@ ospf_db_desc_proc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
       nbr->dd_seqnum = ntohl (dd->dd_seqnum);
 
       if (!IS_SET_DD_M (dd->flags))
-	OSPF_NSM_EVENT_EXECUTE (nbr, NSM_ExchangeDone);
+	OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_ExchangeDone);
 
       /* Send DD pakcet in reply. */
       ospf_db_desc_send (nbr);
     }
 
-  /* Save received neighbor values. */
-  nbr->last_recv.flags = dd->flags;
-  nbr->last_recv.options = dd->options;
-  nbr->last_recv.dd_seqnum = ntohl (dd->dd_seqnum);
+  /* Save received neighbor values from DD. */
+  ospf_db_desc_save_current (nbr, dd);
 }
 
 int
@@ -554,6 +619,7 @@ ospf_db_desc_is_dup (struct ospf_db_desc *dd, struct ospf_neighbor *nbr)
   return 0;
 }
 
+/* OSPF Database Description message read -- RFC2328 Section 10.6. */
 void
 ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
 	      struct ospf_interface *oi, u_int16_t size)
@@ -581,6 +647,7 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
     }
 
   /* Process DD packet by neighbor status. */
+  REDO_DD_PROCESS:
   switch (nbr->status)
     {
     case NSM_Down:
@@ -590,13 +657,12 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
     case NSM_Init:
       OSPF_NSM_EVENT_EXECUTE (nbr, NSM_TwoWayReceived);
       if (nbr->status == NSM_ExStart)
-	goto ExStart;
+	goto REDO_DD_PROCESS;
       break;
     case NSM_TwoWay:
       zlog_warn ("OSPF DD packet discarded.");
       break;
     case NSM_ExStart:
-    ExStart:
       /* Slave. */
       if ((IS_SET_DD_ALL (dd->flags) == dd->flags) &&
 	  size == OSPF_DB_DESC_MIN_SIZE &&
@@ -605,7 +671,6 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
 	  nbr->dd_seqnum = ntohl (dd->dd_seqnum);
 	  nbr->dd_flags &= ~(OSPF_DD_FLAG_MS|OSPF_DD_FLAG_I); /* Reset I/MS */
 	  OSPF_NSM_EVENT_EXECUTE (nbr, NSM_NegotiationDone);
-	  ospf_db_desc_send (nbr);
 
 	  /* continue processing rest of packet. */
 	  ospf_db_desc_proc (oi, nbr, dd, size);
@@ -629,46 +694,50 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
 	{
 	  if (IS_SET_DD_MS (nbr->dd_flags))
 	    /* Master: discard duplicated DD packet. */
-	    zlog (NULL, LOG_WARNING, "OSPF DD Master: packet duplicated.");
+	    zlog (NULL, LOG_WARNING, "OSPF DD [Master]: packet duplicated.");
 	  else
 	    /* Slave: cause to retransmit the last Database Description. */
 	    {
-	      zlog (NULL, LOG_WARNING, "OSPF DD Slave: packet duplicated.");
+	      zlog (NULL, LOG_WARNING, "OSPF DD [Slave]: packet duplicated.");
 	      ospf_db_desc_resend (nbr);
 	    }
 	  break;
 	}
-      /* Otherwise DD packet should be checked. */
 
-      /* Master/Slave mismatch */
-      if (IS_SET_DD_MS (dd->flags) == IS_SET_DD_MS (nbr->dd_flags))
+      /* Otherwise DD packet should be checked. */
+      /* Check Master/Slave bit mismatch */
+      if (IS_SET_DD_MS (dd->flags) != IS_SET_DD_MS (nbr->last_recv.flags))
 	{
-	  zlog (NULL, LOG_WARNING, "OSPF DD MS-bit mismatch.");
+	  zlog_warn ("OSPF DD: MS-bit mismatch.");
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
+	  zlog_info ("dd->flags=%d, nbr->dd_flags=%d",
+		     dd->flags, nbr->dd_flags);
 	  break;
 	}
 
-      /* Initialize bit is set. */
+      /* Check initialize bit is set. */
       if (IS_SET_DD_I (dd->flags))
 	{
-	  zlog (NULL, LOG_WARNING, "OSPF DD I-bit set.");
+	  zlog_warn ("OSPF DD: I-bit set.");
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
 	  break;
 	}
-      /* */
+
+      /* Check DD Options. */
       if (dd->options != nbr->last_recv.options)
 	{
-	  zlog (NULL, LOG_WARNING, "OSPF DD options mismatch.");
+	  zlog_warn ("OSPF DD: options mismatch.");
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
 	  break;
 	}
-      /* */
+
+      /* Check DD sequence number. */
       if ((IS_SET_DD_MS (nbr->dd_flags) &&
 	   ntohl (dd->dd_seqnum) != nbr->dd_seqnum) ||
 	  (!IS_SET_DD_MS (nbr->dd_flags) &&
 	   ntohl (dd->dd_seqnum) != nbr->dd_seqnum + 1))
 	{
-	  zlog (NULL, LOG_WARNING, "OSPF DD sequence number mismatch.");
+	  zlog_warn ("OSPF DD: sequence number mismatch.");
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
 	  break;
 	}
@@ -692,11 +761,12 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
       OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
       break;
     default:
-      zlog (NULL, LOG_WARNING, "OSPF DD illegal status.");
+      zlog_warn ("OSPF DD: NSM illegal status.");
       break;
     }
 }
 
+/* OSPF Link State Request Read -- RFC2328 Section 10.7. */
 void
 ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
 	     struct ospf_interface *oi, u_int16_t size)
@@ -750,19 +820,334 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
   list_free (update);
 }
 
+/* Get the list of LSAs from Link State Update packet.
+   And process some validation -- Section 13. (1)-(3). */
+list
+ospf_ls_upd_list_lsa (struct ospf_interface *oi, size_t size)
+{
+  u_int16_t count, sum;
+  u_int32_t length;
+  struct lsa_header *lsah;
+  struct ospf_lsa *lsa;
+  list lsas;
+
+  lsas = list_init ();
+
+  count = stream_getl (oi->ibuf);
+  size -= 4;
+
+  for (; size > 0 && count > 0;
+       size -= length, stream_forward (oi->ibuf, length), count--)
+    {
+      lsah = (struct lsa_header *) STREAM_PNT (oi->ibuf);
+      length = ntohs (lsah->length);
+
+      if (length > size)
+	{
+	  zlog_warn ("OSPF LS Update: LSA length exceeds packet size.");
+	  break;
+	}
+
+      /* Validate the LSA's LS checksum. */
+      sum = lsah->checksum;
+      if (sum != ospf_lsa_checksum (lsah))
+	{
+	  zlog_warn ("OSPF LS Update: LSA checksum error.");
+	  continue;
+	}
+
+      /* Examine the LSA's LS type. */
+      if (lsah->type < OSPF_MIN_LSA || lsah->type >= OSPF_MAX_LSA)
+	{
+	  zlog_warn ("OSPF LS Update: Unknown LS type %d", lsah->type);
+	  continue;
+	}
+
+      /* If this is an AS-external-LSA, and the area has been configured
+	 as  a stub area, discard the LSA. */
+      if (lsah->type == OSPF_AS_EXTERNAL_LSA)
+	{
+	  ; /* If the area is configured as stub are, discard this LSA. */ 
+	}
+
+      /* Create OSPF LSA instance. */
+      lsa = ospf_lsa_new ();
+      lsa->data = ospf_lsa_data_new (length);
+      memcpy (lsa->data, lsah, length);
+
+      list_add_node (lsas, lsa);
+    }
+
+  return lsas;
+}
+
+/* OSPF LSA flooding -- RFC2328 Section 13.3. */
+void
+ospf_lsa_flooding_select_if (struct ospf_neighbor *inbr,
+			     struct ospf_lsa *lsa)
+{
+  listnode n1, n2;
+
+  for (n1 = listhead (ospf_top->iflist); n1; nextnode (n1))
+    {
+      struct interface *ifp;
+      struct ospf_interface *oi;
+      struct ospf_neighbor *onbr;
+      struct route_node *rn;
+      int flag;
+
+      ifp = getdata (n1);
+      oi = ifp->info;
+
+      if (!ospf_if_is_enable (ifp))
+	continue;
+
+      /* If LS type is AS-external-LSA, ... */
+      if (!OSPF_AREA_SAME (&inbr->oi->area, &oi->area))
+	continue;
+
+      /* Remember if new LSA is flooded out back. */
+      flag = 0;
+
+      /* Each of the neighbors attached to this interface are examined,
+	 to determine whether they must receive the new LSA.  The following
+	 steps are executed for each neighbor: */
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  onbr = rn->info;
+
+	  /* If the neighbor is in a lesser state than Exchange, it
+	     does not participate in flooding, and the next neighbor
+	     should be examined. */
+	  if (onbr->status < NSM_Exchange)
+	    continue;
+
+	  /* If the adjacency is not yet full (neighbor state is
+	     Exchange or Loading), examine the Link state request
+	     list associated with this adjacency.  If there is an
+	     instance of the new LSA on the list, it indicates that
+	     the neighboring router has an instance of the LSA
+	     already.  Compare the new LSA to the neighbor's copy: */
+	  if (onbr->status < NSM_Full)
+	    {
+	      n2 = ospf_lsa_data_lookup_from_list (onbr->ls_request,
+						   lsa->data->type,
+						   lsa->data->id,
+						   lsa->data->adv_router);
+	      if (n2 != NULL)
+		{
+		  int ret;
+
+		  ret = ospf_lsa_more_recent (n2->data, lsa->data);
+		  /* The new LSA is less recent. */
+		  if (ret > 0)
+		    continue;
+		  /* The two copies are the same instance, then delete
+		     the LSA from the Link state request list. */
+		  else if (ret == 0)
+		    {
+		      ospf_lsa_data_free (n2->data);
+		      list_delete_node (onbr->ls_request, n2);
+		      continue;
+		    }
+		  /* The new LSA is more recent.  Delete the LSA
+		     from the Link state request list. */
+		  else
+		    {
+		      ospf_lsa_data_free (n2->data);
+		      list_delete_node (onbr->ls_request, n2);
+		    }
+		}
+	    }
+
+	  /* If the new LSA was received from this neighbor,
+	     examine the next neighbor. */
+	  if (IPV4_ADDR_SAME (&inbr->router_id, &onbr->router_id))
+	    continue;
+
+	  /* Add the new LSA to the Link state retransmission list
+	     for the adjacency. The LSA will be retransmitted
+	     at intervals until an acknowledgment is seen from
+	     the neighbor. */
+	  list_add_node (onbr->ls_retransmit, lsa);
+	  flag = 1;
+	}
+
+      /* LSA is more recent than database copy, but was not flooded
+         back out receiving interface. */
+      if (flag == 0)
+	if (oi->status != ISM_Backup || NBR_IS_DR (inbr))
+	  list_add_node (oi->ls_ack, lsa);
+
+      /* If in the previous step, the LSA was NOT added to any of
+	 the Link state retransmission lists, there is no need to
+	 flood the LSA out the interface. */
+
+      /* If the new LSA was received on this interface, and it was
+	 received from either the Designated Router or the Backup
+	 Designated Router, chances are that all the neighbors have
+	 received the LSA already. */
+      if (inbr->oi == oi)
+	{
+	  if (NBR_IS_DR (inbr) || NBR_IS_BDR (inbr))
+	    continue;
+	}
+
+      /* If the new LSA was received on this interface, and the
+	 interface state is Backup, examine the next interface.  The
+	 Designated Router will do the flooding on this interface.
+	 However, if the Designated Router fails the router will
+	 end up retransmitting the updates. */
+	else if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &BDR (oi)))
+	  continue;
+
+      /* The LSA must be flooded out the interface. Send a Link State
+	 Update packet (including the new LSA as contents) out the
+	 interface.  The LSA's LS age must be incremented by InfTransDelay
+	 (which	must be	> 0) when it is copied into the outgoing Link
+	 State Update packet (until the LS age field reaches the maximum
+	 value of MaxAge). */
+    }
+}
+
+/* Remove the current database copy from all neighbors'
+   Link state retransmission lists. */
+void
+ospf_lsa_remove_from_ls_retransmit (struct ospf_lsa *current)
+{
+  listnode n1, n2;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  struct ospf_neighbor *nbr;
+  struct route_node *rn;
+
+  for (n1 = listhead (ospf_top->iflist); n1; nextnode (n1))
+    {
+      ifp = getdata (n1);
+      oi = ifp->info;
+
+      if (!ospf_if_is_enable (ifp))
+	continue;
+
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	{
+	  if (!rn->info)
+	    continue;
+
+	  nbr = rn->info;
+	  n2 = ospf_lsa_lookup_from_list (nbr->ls_retransmit,
+					  current->data->type,
+					  current->data->id,
+					  current->data->adv_router);
+	  if (n2 != NULL)
+	    {
+	      struct ospf_lsa *l;
+
+	      l = getdata (n2);
+
+	      list_delete_node (nbr->ls_retransmit, n2);
+	    }
+	}
+    }
+}  
+
+void
+ospf_lsa_flush_self_originated (struct ospf_neighbor *nbr,
+				struct ospf_lsa *self,
+				struct ospf_lsa *new)
+{
+  u_int32_t seqnum;
+  list update;
+
+  /* Adjust LS Sequence Number. */
+  seqnum = ntohl (new->data->ls_seqnum) + 1;
+  self->data->ls_seqnum = htonl (seqnum);
+
+  /* Recalculate LSA checksum. */
+  ospf_lsa_checksum (self->data);
+
+  /* Reflooding LSA. */
+  update = list_init ();
+  list_add_node (update, self);
+  ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_INDIRECT);
+  list_free (update);
+
+  zlog_info ("Flush self-originated LSA");
+}
+
+/* OSPF LSA flooding -- RFC2328 Section 13.(5). */
+int
+ospf_lsa_flooding (struct ospf_neighbor *nbr, struct ospf_lsa *current,
+		   struct ospf_lsa *new)
+{
+  struct ospf_interface *oi;
+  struct ospf_lsa *self;
+  time_t ts;
+
+  oi = nbr->oi;
+
+  /* Get current time. */
+  ts = time (NULL);
+
+  /* If there is already a database copy, and if the
+     database copy was received via flooding and installed less
+     than MinLSArrival seconds ago, discard the new LSA
+     (without acknowledging it). */
+  if (current && (ts - current->ts) < OSPF_MIN_LS_INTERVAL)
+    return -1;
+
+  /* Flood the new LSA out some subset of the router's interfaces.
+     In some cases (e.g., the state of the receiving interface is
+     DR and the LSA was received from a router other than the
+     Backup DR) the LSA will be flooded back out the receiving
+     interface. */
+  ospf_lsa_flooding_select_if (nbr, new);
+
+  /* Remove the current database copy from all neighbors'
+     Link state retransmission lists. */
+  if (current)
+    ospf_lsa_remove_from_ls_retransmit (current);
+
+  /* Install the new LSA in the link state database
+     (replacing the current database copy).  This may cause the
+     routing table calculation to be scheduled.  In addition,
+     timestamp the new LSA with the current time.  The flooding
+     procedure cannot overwrite the newly installed LSA until
+     MinLSArrival seconds have elapsed. */  
+  if (!current || ospf_lsa_different (current->data, new->data))
+    ospf_spf_calculate_schedule ();
+
+  ospf_lsa_install (nbr, new);
+
+  /* Acknowledge the receipt of the LSA by sending a Link State
+     Acknowledgment packet back out the receiving interface. */
+  /* ospf_ls_ack_send (nbr, new); */
+
+  /* If this new LSA indicates that it was originated by the
+     receiving router itself, the router must take special action,
+     either updating the LSA or in some cases flushing it from
+     the routing domain. */
+  self = ospf_lsa_is_self_originated (oi, new);
+  if (self != NULL)
+    ospf_lsa_flush_self_originated (nbr, self, new);
+
+  return 0;
+}
+
+/* OSPF Link State Update message read -- RFC2328 Section 13. */
 void
 ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 	     struct ospf_interface *oi, u_int16_t size)
 {
   struct ospf_neighbor *nbr;
-  u_int16_t count;
-  u_int16_t lsa_length;
+  list lsas, update;
+  listnode n1;
 
   /* increment statistics. */
   oi->ls_upd_in++;
-
-  count = stream_getl (oi->ibuf);
-  size -= 4;
 
   /* Check neighbor. */
   nbr = ospf_nbr_lookup_by_addr (oi->nbrs, &iph->ip_src);
@@ -773,256 +1158,158 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
       return;
     }
 
-  /* Process LSAs. */
-  for (; size > 0 && count > 0;
-       size -= lsa_length, stream_forward (oi->ibuf, lsa_length), count--)
+  /* Check neighbor status. */
+  if (nbr->status < NSM_Exchange)
     {
-      struct ospf_lsa *lsa, *find, *new, *self;
+      zlog_warn ("OSPF LS Update: Neighbor[%s] state is lesser than Exchange",
+		 inet_ntoa (ospfh->router_id));
+      return;
+    }
+
+  /* Get list of LSAs from Link State Update packet. */
+  lsas = ospf_ls_upd_list_lsa (oi, size);
+
+  /* Process each LSA received. */
+  for (n1 = listhead (lsas); n1; nextnode (n1))
+    {
+      struct ospf_lsa *lsa, *current;
       listnode node;
-      u_int16_t sum;
-      u_int32_t seqnum;
-      list update;
+      int ret = 1;
 
-      lsa = (struct ospf_lsa *) STREAM_PNT (oi->ibuf);
-      lsa_length = ntohs (lsa->length);
+      lsa = getdata (n1);
 
-      if (lsa_length > size)
-	{
-	  zlog_warn ("LSA length exceeds packet size");
-	  break;
-	}
-
-      /* (1) Check LSA checksum. */
-      sum = lsa->checksum;
-      if (sum != ospf_lsa_checksum (lsa))
-	{
-	  zlog_warn ("LSA Checksum Error.");
-	  continue;
-	}
-
-      /* (2) Unknown LS type, then ignore it. */
-      if (lsa->type < OSPF_MIN_LSA || lsa->type > OSPF_MAX_LSA)
-	{
-	  zlog_warn ("OSPF LS Update Unknown LS type %d", lsa->type);
-	  continue;
-	}
-
-      /* (3) Check external routing capability. */
-      if (lsa->type == OSPF_AS_EXTERNAL_LSA)
-	{
-	  ; /* If the area is configured as stub are, discard this LSA. */ 
-	}
-
-      /* (4) */
-      if (lsa->ls_age == OSPF_LSA_MAX_AGE &&
-	  ospf_lsa_count (oi->area) == 0 &&
+      /* Find the LSA in the current database. */
+      current = ospf_lsa_lookup_by_header (oi->area, lsa->data);
+      /* If the LSA's LS age is equal to MaxAge, and there is currently
+	 no instance of the LSA in the router's link state database,
+	 and none of router's neighbors are in states Exchange or Loading,
+	 then take the following actions. */
+      if (lsa->data->ls_age == OSPF_LSA_MAX_AGE && !current &&
 	  (ospf_nbr_count (oi->nbrs, NSM_Exchange) + 
 	   ospf_nbr_count (oi->nbrs, NSM_Loading)) == 0)
 	{
-	  /* a) Response Link State Acknowledgment. */
-	  /* b) Discard LSA. */	  
-	  zlog_warn ("LSA discarded.");
+	  /* Response Link State Acknowledgment. */
+	  ospf_ls_ack_send (nbr, lsa);
+
+	  /* Discard LSA. */	  
+	  zlog_warn ("OSPF LS Update: LS age is equal to MaxAge.");
 	  continue;
 	}
 
-      /* (5) Otherwise, find the instance of this LSA that is
-	 currently contained in the router's link state database. If
-	 there is no database copy, or the received LSA is more recent
-	 than the database copy (see Section 13.1 below for the
-	 determination of which LSA is more recent) the following steps
-	 must be performed: */
-      find = ospf_lsa_lookup_by_header (oi->area, lsa);
+      /* Find the instance of this LSA that is currently contained
+	 in the router's link state database.  If there is no
+	 database copy, or the received LSA is more recent than
+	 the database copy the following steps must be performed. */
 
-      if (find)
-	zlog_info ("YYY LSA find %s", inet_ntoa (lsa->id));
-      else
-	zlog_info ("YYY LSA can not find %s", inet_ntoa (lsa->id));
-
-      if (! find || ospf_lsa_more_recent (find, lsa) < 0)
+      if (current == NULL ||
+	  (ret = ospf_lsa_more_recent (current->data, lsa->data)) < 0)
 	{
-
-	  /* (a) If there is already a database copy, and if the
-	     database copy was received via flooding and installed less
-	     than MinLSArrival seconds ago, discard the new LSA
-	     (without acknowledging it) and examine the next LSA (if
-	     any) listed in the Link State Update packet. */
-
-	  /* (b) Otherwise immediately flood the new LSA out some
-	     subset of the router's interfaces (see Section 13.3).  In
-	     some cases (e.g., the state of the receiving interface is
-	     DR and the LSA was received from a router other than the
-	     Backup DR) the LSA will be flooded back out the receiving
-	     interface.  This occurrence should be noted for later use
-	     by the acknowledgment process (Section 13.5). */
-
-	  /* (c) Remove the current database copy from all neighbors'
-	     Link state retransmission lists. */
-	  
-	  /* (d) Install the new LSA in the link state database
-	     (replacing the current database copy).  This may cause the
-	     routing table calculation to be scheduled. In addition,
-	     timestamp the new LSA with the current time (i.e., the
-	     time it was received). The flooding procedure cannot
-	     overwrite the newly installed LSA until MinLSArrival
-	     seconds have elapsed.  The LSA installation process is
-	     discussed further in Section 13.2. */
-	  ;
-	  /* Installation is done in below part.  Those should be done
-             at here. */
-
-	  /* (e) */
-	  /* (f) If this new LSA indicates that it was originated by
-	     the receiving router itself (i.e., is considered a self-
-	     originated LSA), the router must take special action,
-	     either updating the LSA or in some cases flushing it from
-	     the routing domain. For a description of how self-originated
-	     LSAs are detected and subsequently handled, see Section 13.4.
-	  */
-	  self = ospf_lsa_is_self_originated (oi, lsa);
-
-	  if (self)
-	    zlog_info ("XXX self is %s", inet_ntoa (lsa->id));
-	  else
-	    zlog_info ("XXX self is empty");
-
-	  if (self != NULL)
-	    {
-	      seqnum = ntohl (lsa->ls_seqnum) + 1;
-	      self->ls_seqnum = htonl (seqnum);
-	      /* Recalculate LSA checksum. */
-	      ospf_lsa_checksum (self);
-
-	      /* Reflooding LSA. */
-	      update = list_init ();
-	      list_add_node (update, self);
-	      ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_INDIRECT);
-	      list_free (update);
-	      zlog_info ("Resend self-originated LSA");
-	    }
+	  /* Actual flooding procedure. */
+	  ospf_lsa_flooding (nbr, current, lsa);
+	  continue;
 	}
 
-      /* (6) */
-      /* (7) */
-      {
-	/* (a) */
-	/* (b) */
-      }
-      /* (8) */
-
-      /* This is temporary hack.  Should be removed soon. */
-      self = ospf_lsa_is_self_originated (oi, lsa);
-
-      if (self)
-	zlog_info ("ZZZ self is %s", inet_ntoa (lsa->id));
-      else
-	zlog_info ("ZZZ self is empty");
-
-      switch (lsa->type)
+      /* If there is an instance of the LSA on the sending
+	 neighbor's Link state request list, an error has occurred in the
+	 Database Exchange process.  In this case, restart the Database
+	 Exchange process by generating the neighbor event BadLSReq for
+	 the sending neighbor and stop processing the Link State Update
+	 packet. */
+      if (ospf_lsa_data_lookup_from_list (nbr->ls_request, lsa->data->type,
+					  lsa->data->id, lsa->data->adv_router))
 	{
-	case OSPF_ROUTER_LSA:
-	  new = XMALLOC (MTYPE_OSPF_LSA, lsa_length);
-	  memcpy (new, lsa, lsa_length);
-	  ospf_spf_calculate_schedule ();
-	  ospf_ls_ack_send_direct (nbr, new);
-	  if (self)
-	    ospf_lsa_free (new);
+	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_BadLSReq);
+	  zlog_warn ("LSA instance exists on Link state request list");
+
+	  /* Clean list of LSAs. */
+	  list_delete_all (lsas);
+	  return;
+	}
+      /* If the received LSA is the same instance as the database copy
+	 (i.e., neither one is more recent) the following two steps
+	 should be performed: */
+      if (ret == 0)
+	{
+	  /* If the LSA is listed in the Link state retransmission list
+	     for the receiving adjacency, the router itself is expecting
+	     an acknowledgment for this LSA.  The router should treat the
+	     received LSA as an acknowledgment by removing the LSA from
+	     the Link state retransmission list.  This is termed an
+	     "implied acknowledgment". */
+	  node = ospf_lsa_lookup_from_list (nbr->ls_retransmit,
+					    lsa->data->type,
+					    lsa->data->id,
+					    lsa->data->adv_router);
+	  if (node != NULL)
+	    {
+	      list_delete_node (nbr->ls_retransmit, node);
+	      /* Delayed acknowledgment sent if advertisement received
+		 from Designated Router, otherwise do nothing. */
+	      if (oi->status == ISM_Backup)
+		if (NBR_IS_DR (nbr))
+		  list_add_node (oi->ls_ack, lsa);
+	    }
 	  else
-	    ospf_add_router_lsa (oi->area, new);
-	  break;
-	case OSPF_NETWORK_LSA:
-	  new = XMALLOC (MTYPE_OSPF_LSA, lsa_length);
-	  memcpy (new, lsa, lsa_length);
-	  ospf_ls_ack_send_direct (nbr, new);
-	  ospf_spf_calculate_schedule ();
-	  if (self)
-	    ospf_lsa_free (new);
-	  else
-	    ospf_add_network_lsa (oi->area, new);
-	  break;
-	case OSPF_SUMMARY_LSA:
-	  break;
-	case OSPF_SUMMARY_LSA_ASBR:
-	  break;
-	case OSPF_AS_EXTERNAL_LSA:
-	  /* If area is conifugured as stub, then drop the LSA. */
-	  break;
-	default:
-	  zlog (NULL, LOG_WARNING, "LSA Unknown type. ");
-	  break;
+	    /* Acknowledge the receipt of the LSA by sending a
+	       Link State Acknowledgment packet back out the receiving
+	       interface. */
+	    ospf_ls_ack_send (nbr, lsa);
+	}
+
+      /* The database copy is more recent.  If the database copy
+	 has LS age equal to MaxAge and LS sequence number equal to
+	 MaxSequenceNumber, simply discard the received LSA without
+	 acknowledging it. (In this case, the LSA's LS sequence number is
+	 wrapping, and the MaxSequenceNumber LSA must be completely
+	 flushed before any new LSA instance can be introduced). */
+      if (current->data->ls_age == OSPF_LSA_MAX_AGE &&
+	  current->data->ls_seqnum == htonl (OSPF_MAX_SEQUENCE_NUMBER))
+	{
+	  ospf_lsa_free (lsa);
+	  /*	  list_delete_node (n1); */
+	}
+      /* Otherwise, as long as the database copy has not been sent in a
+	 Link State Update within the last MinLSArrival seconds, send the
+	 database copy back to the sending neighbor, encapsulated within
+	 a Link State Update Packet. The Link State Update Packet should
+	 be sent directly to the neighbor. In so doing, do not put the
+	 database copy of the LSA on the neighbor's link state
+	 retransmission list, and do not acknowledge the received (less
+	 recent) LSA instance. */
+      else
+	{
+	  update = list_init ();
+	  list_add_node (update, current);
+	  ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
+	  list_free (update);
 	}
 
       /* Remove LSA header from Link State Request list. */
-      node = ospf_lsa_lookup_from_list (nbr->ls_request, lsa->type,
-					lsa->id, lsa->adv_router);
+      node = ospf_lsa_data_lookup_from_list (nbr->ls_request, lsa->data->type,
+					lsa->data->id, lsa->data->adv_router);
 
-      list_delete_node (nbr->ls_request, node);
-
-      /* Flooding procedure. */
-      {
-	listnode n2;
-
-	for (n2 = listhead (ospf_top->iflist); n2; nextnode (n2))
-	  {
-	    struct interface *ifp;
-	    struct ospf_interface *ospfi;
-	    /*	    struct ospf_neighbor *nbr2; */
-
-	    ifp = getdata (n2);
-	    ospfi = ifp->info;
-
-	    if (if_is_loopback (ifp))
-	      continue;
-
-	    if (!if_is_up (ifp))
-	      continue;
-
-	    if (ospfi->flag != OSPF_IF_ENABLE)
-	      continue;
-
-	    if (!IPV4_ADDR_SAME (&oi->area->area_id, &ospfi->area->area_id))
-	      continue;
-
-	    /*
-	    for (rn = route_top (ospfi->nbrs); rn; rn = route_next (rn))
-	      {
-		if (rn->info == NULL)
-		  continue;
-
-		nbr2 = rn->info;
-
-		if (nbr->status < NSM_Exchange)
-		  continue;
-
-		if (nbr->status < NSM_Full)
-		  {
-		    for (n3 = listhead (nbr2->ls_request); n3; nextnode (n3))
-		      {
-			
-		      }
-		  }
-
-		if (nbr2 == nbr)
-		  continue;
-
-		list_add_node (nbr2->ls_retransmit, lsa);
-
-		}
-	    */
-	  }
-      }
+      if (node != NULL)
+	{
+	  ospf_lsa_data_free (node->data);
+	  list_delete_node (nbr->ls_request, node);
+	}
     }
   
   /* If Link State Request List is empty, generate NSM Event LoadingDone. */
   if (list_isempty (nbr->ls_request))
     OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
+
+  list_delete_all (lsas);
 }
 
+/* OSPF Link State Acknowledgment message read -- RFC2328 Section 13.7. */
 void
 ospf_ls_ack (struct ip *iph, struct ospf_header *ospfh,
 	     struct ospf_interface *oi, u_int16_t size)
 {
   struct ospf_neighbor *nbr;
-  struct ospf_lsa *lsa;
+  struct lsa_header *lsah;
+  listnode node;
 
   /* increment statistics. */
   oi->ls_ack_in++;
@@ -1030,21 +1317,31 @@ ospf_ls_ack (struct ip *iph, struct ospf_header *ospfh,
   nbr = ospf_nbr_lookup_by_addr (oi->nbrs, &iph->ip_src);
   if (nbr == NULL)
     {
-      zlog (NULL, LOG_WARNING, "OSPF LS Request: Unknown Neighbor %s.",
-	    inet_ntoa (ospfh->router_id));
+      zlog_warn ("OSPF LS Acknowledgment: Unknown Neighbor %s.",
+		 inet_ntoa (ospfh->router_id));
       return;
     }
 
   if (nbr->status < NSM_Exchange)
     {
-      zlog (NULL, LOG_WARNING, "OSPF LS Request: discarded.");
+      zlog_warn ("OSPF LS Acknowledgment: State is lesser than Exchange.");
       return;
     }
 
   while (size > 0)
     {
-      lsa = (struct ospf_lsa *) STREAM_PNT (oi->ibuf);
-      size--;
+      lsah = (struct lsa_header *) STREAM_PNT (oi->ibuf);
+      size -= OSPF_LSA_HEADER_SIZE;
+      stream_forward (oi->ibuf, OSPF_LSA_HEADER_SIZE);
+
+      node = ospf_lsa_lookup_from_list (nbr->ls_retransmit,
+					lsah->type,
+					lsah->id,
+					lsah->adv_router);
+      if (node != NULL)
+	list_delete_node (nbr->ls_retransmit, node);
+      else
+	continue;
     }
 }
 
@@ -1060,11 +1357,11 @@ ospf_recv_packet (struct ospf_interface *oi)
 }
 
 int
-ospf_check_area_id (struct ospf_interface *oi, struct in_addr area_id)
+ospf_check_area_id (struct ospf_interface *oi, struct ospf_header *ospfh)
 {
-  if (IPV4_ADDR_SAME (&oi->area->area_id, &area_id))
+  if (OSPF_AREA_SAME (&oi->area, &ospfh))
     return 1;
-  else if (area_id.s_addr == htonl (OSPF_AREA_BACKBONE))
+  else if (ospfh->area_id.s_addr == htonl (OSPF_AREA_BACKBONE))
     {
       /* must be border router. */
     }
@@ -1158,7 +1455,7 @@ ospf_verify_header (struct ospf_interface *oi,
     }
 
   /* Check Area ID. */
-  if (! ospf_check_area_id (oi, ospfh->area_id))
+  if (!ospf_check_area_id (oi, ospfh))
     {
       zlog_warn ("interface %s: ospf_read invalid Area ID %s.",
 		 oi->ifp->name, inet_ntoa (ospfh->area_id));
@@ -1393,21 +1690,21 @@ ospf_make_hello (struct ospf_interface *oi, struct stream *s)
   stream_putw (s, oi->v_hello);
 
   /* Set Options. */
-  stream_putc (s, oi->options);
+  stream_putc (s, OPTIONS (oi));
 
   /* Set Router Priority. */
-  stream_putc (s, oi->priority);
+  stream_putc (s, PRIORITY (oi));
 
   /* Set Router Dead Interval. */
   stream_putl (s, oi->v_wait);
 
   /* Set Designated Router. */
-  stream_put_ipv4 (s, oi->d_router.s_addr);
+  stream_put_ipv4 (s, DR (oi).s_addr);
 
   p = s->putp;
 
   /* Set Backup Designated Router. */
-  stream_put_ipv4 (s, oi->bd_router.s_addr);
+  stream_put_ipv4 (s, BDR (oi).s_addr);
 
   /* Add neighbor seen. */
   for (node = route_top (oi->nbrs); node; node = route_next (node))
@@ -1466,7 +1763,7 @@ ospf_make_db_desc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
     stream_putw (s, oi->ifp->mtu);
 
   /* Set Options. */
-  stream_putc (s, oi->options);
+  stream_putc (s, OPTIONS (oi));
 
   /* Keep pointer to flags. */
   pp = stream_get_putp (s);
@@ -1489,7 +1786,7 @@ ospf_make_db_desc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
 
       /* Append LSA header to the packet. */
       lsa = (struct ospf_lsa *) getdata (node);
-      stream_memcpy (s, lsa, OSPF_LSA_HEADER_SIZE);
+      stream_put (s, lsa->data, OSPF_LSA_HEADER_SIZE);
       length += OSPF_LSA_HEADER_SIZE;
 
       /* Add remove list from DB summary list. */
@@ -1521,7 +1818,7 @@ int
 ospf_make_ls_req (struct ospf_neighbor *nbr, struct stream *s)
 {
   struct ospf_interface *oi;
-  struct ospf_lsa *lsa;
+  struct lsa_header *lsah;
   listnode node;
   u_int16_t length = OSPF_LS_REQ_MIN_SIZE;
 
@@ -1533,11 +1830,11 @@ ospf_make_ls_req (struct ospf_neighbor *nbr, struct stream *s)
       if (length + 12 > oi->ifp->mtu)
 	break;
 
-      lsa = (struct ospf_lsa *) getdata (node);
+      lsah = (struct lsa_header *) getdata (node);
 
-      stream_putl (s, lsa->type);
-      stream_put_ipv4 (s, lsa->id.s_addr);
-      stream_put_ipv4 (s, lsa->adv_router.s_addr);
+      stream_putl (s, lsah->type);
+      stream_put_ipv4 (s, lsah->id.s_addr);
+      stream_put_ipv4 (s, lsah->adv_router.s_addr);
 
       length += 12;
     }
@@ -1558,23 +1855,63 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
     {
       lsa = getdata (node);
       assert (lsa);
+      assert (lsa->data);
 
-      stream_memcpy (s, lsa, ntohs (lsa->length));
+      /* Check packet size. */
+      if (length + ntohs (lsa->data->length) > oi->ifp->mtu)
+	break;
 
-      length += ntohs (lsa->length);
+      stream_put (s, lsa->data, ntohs (lsa->data->length));
+
+      length += ntohs (lsa->data->length);
     }
 
   return length;
 }
 
 int
-ospf_make_ls_ack (struct ospf_interface *oi, struct ospf_lsa *lsa,
+ospf_make_ls_ack (struct ospf_interface *oi, struct ospf_lsa *d_lsa,
 		  struct stream *s)
 {
+  list rm_list;
+  listnode node;
   u_int16_t length = OSPF_LS_ACK_MIN_SIZE;
+  struct ospf_lsa *lsa;
 
-  stream_memcpy (s, lsa, OSPF_LSA_HEADER_SIZE);
-  length += OSPF_LSA_HEADER_SIZE;
+  /* Direct Ack. */
+  if (d_lsa)
+    {
+      stream_put (s, d_lsa->data, OSPF_LSA_HEADER_SIZE);
+      length += OSPF_LSA_HEADER_SIZE;
+    }
+  /* Delayed Ack. */
+  else
+    {
+      rm_list = list_init ();
+
+      for (node = listhead (oi->ls_ack); node; nextnode (node))
+	{
+	  lsa = getdata (node);
+	  assert (lsa);
+
+	  if (length + OSPF_LSA_HEADER_SIZE > oi->ifp->mtu)
+	    break;
+
+	  stream_put (s, lsa->data, OSPF_LSA_HEADER_SIZE);
+	  length += OSPF_LSA_HEADER_SIZE;
+
+	  list_add_node (rm_list, lsa);
+	}
+
+      /* Remove LSA header from LS-Ack list. */
+      for (node = listhead (rm_list); node; nextnode (node))
+	{
+	  lsa = (struct ospf_lsa *) getdata (node);
+	  list_delete_by_val (oi->ls_ack, lsa);
+	}
+
+      list_delete_all (rm_list);
+    }
 
   return length;
 }
@@ -1712,22 +2049,14 @@ ospf_ls_upd_send (struct ospf_neighbor *nbr, list update, int flag)
   struct ospf_interface *oi;
   struct ospf_packet *op;
   u_int16_t length = OSPF_HEADER_SIZE;
+  /*  listnode node;
+      struct ospf_lsa *lsa; */
 
   oi = nbr->oi;
   op = ospf_packet_new (oi->ifp->mtu);
 
   /* Prepare OSPF common header. */
   ospf_make_header (OSPF_MSG_LS_UPD, oi, op->s);
-
-  {
-    listnode node;
-    struct ospf_lsa *lsa;
-    for (node = listhead (update); node; nextnode (node))
-      {
-	lsa = (struct ospf_lsa *) getdata (node);
-	ospf_lsa_header_dump (lsa);
-      }
-  }
 
   /* Prepare OSPF Link State Update body. */
   length += ospf_make_ls_upd (oi, update, op->s);
@@ -1755,7 +2084,7 @@ ospf_ls_upd_send (struct ospf_neighbor *nbr, list update, int flag)
 
 /* Send Link State Acknowledgment directly. */
 void
-ospf_ls_ack_send_direct (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+ospf_ls_ack_send (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 {
   struct ospf_interface *oi;
   struct ospf_packet *op;
@@ -1786,30 +2115,58 @@ ospf_ls_ack_send_direct (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
   OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd);
 }
 
+/* Send Link State Acknowledgment delayed. */
+void
+ospf_ls_ack_send_delayed (struct ospf_interface *oi)
+{
+  struct ospf_packet *op;
+  u_int16_t length = OSPF_HEADER_SIZE;
+
+  op = ospf_packet_new (oi->ifp->mtu);
+
+  /* Prepare OSPF common header. */
+  ospf_make_header (OSPF_MSG_LS_ACK, oi, op->s);
+
+  /* Prepare OSPF Link State Acknowledgment body. */
+  length += ospf_make_ls_ack (oi, NULL, op->s);
+
+  /* Fill OSPF header. */
+  ospf_fill_header (oi, op->s, length);
+
+  /* Set packet length. */
+  op->length = length;
+
+  /* Decide destination address. */
+  if (oi->status == ISM_DR || oi->status == ISM_Backup)
+    op->dst.s_addr = htonl (OSPF_ALLSPFROUTERS);
+  else
+    op->dst.s_addr = htonl (OSPF_ALLDROUTERS);
+
+  /* Add packet to the interface output queue. */
+  ospf_packet_add (oi, op);
+
+  /* Hook thread to write packet. */
+  OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd);
+}
+
 void
 ospf_ls_retransmit (struct ospf_interface *ospfi, struct ospf_lsa *lsa)
 {
-  listnode node;
+  listnode n1, n2;
   struct route_node *rn;
   struct interface *ifp;
   struct ospf_interface *oi;
   struct ospf_neighbor *nbr;
 
-  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+  for (n1 = listhead (ospf_top->iflist); n1; nextnode (n1))
     {
-      ifp = getdata (node);
+      ifp = getdata (n1);
       oi = ifp->info;
 
-      if (if_is_loopback (ifp))
+      if (!ospf_if_is_enable (ifp))
 	continue;
 
-      if (!if_is_up (ifp))
-	continue;
-
-      if (oi->flag != OSPF_IF_ENABLE)
-	continue;
-
-      if (!IPV4_ADDR_SAME (&ospfi->area->area_id, &oi->area->area_id))
+      if (!OSPF_AREA_SAME (&ospfi->area, &oi->area))
 	continue;
 
       for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
@@ -1821,6 +2178,13 @@ ospf_ls_retransmit (struct ospf_interface *ospfi, struct ospf_lsa *lsa)
 
 	  if (nbr->status != NSM_Full)
 	    continue;
+
+	  n2 = ospf_lsa_lookup_from_list (nbr->ls_retransmit,
+					  lsa->data->type,
+					  lsa->data->id,
+					  lsa->data->adv_router);
+	  if (n2)
+	    list_delete_node (nbr->ls_retransmit, n2);
 
 	  list_add_node (nbr->ls_retransmit, lsa);
 	}

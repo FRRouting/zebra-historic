@@ -40,10 +40,32 @@ int
 ospf_serv_sock (struct interface *ifp, int family)
 {
   int ospf_sock;
+  int ret, tos;
 
   ospf_sock = socket (family, SOCK_RAW, IPPROTO_OSPFIGP);
   if (ospf_sock < 0)
     return ospf_sock;
+
+  /*
+  sockopt_reuseaddr (ospf_sock);
+  sockopt_reuseport (ospf_sock);
+  */
+  /* Set TTL to 1. */
+  ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_IP_TTL);
+  if (ret < 0)
+    return ret;
+
+  /* Set precedence field. */
+#ifdef IPTOS_PREC_INTERNETCONTROL
+  tos = IPTOS_PREC_INTERNETCONTROL;
+  ret = setsockopt (ospf_sock, IPPROTO_IP, IP_TOS,
+		    (char *) &tos, sizeof (int));
+  if (ret < 0)
+    {
+      zlog_warn ("can't set sockopt IP_TOS %d to socket %d", tos, ospf_sock);
+      return ret;
+    }
+#endif /* IPTOS_PREC_INTERNETCONTROL */
 
   return ospf_sock;
 }
@@ -156,12 +178,11 @@ int
 ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
 {
   struct ospf_interface *oi;
-  int ret, sock, tos;
+  int ret, sock;
 
   oi = ifp->info;
 
   /* Create raw socket. */
-
   sock = ospf_serv_sock (ifp, AF_INET);
   if (sock < 0)
     {
@@ -171,36 +192,17 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
 
   oi->fd = sock;
 
-  /* Set TTL to 1. */
-  ret = sockopt_ttl (AF_INET, sock, OSPF_IP_TTL);
-  if (ret < 0)
-    return ret;
-
-  /* Set precedence field. */
-  tos = IPTOS_PREC_INTERNETCONTROL;
-  ret = setsockopt (sock, IPPROTO_IP, IP_TOS, (char *) &tos, sizeof (int));
-  if (ret < 0)
-    {
-      zlog_warn ("can't set sockopt IP_TOS %d to socket %d", tos, sock);
-      return ret;
-    }
-
   /* Point-to-Point and Broadcast Network should be joined to
      ALLSPFROUTERS multicast group. */
   if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
       oi->type == OSPF_IFTYPE_BROADCAST)
     {
-      /* join mcast group. */
+      /* Join mcast group. */
       ret = ospf_if_add_allspfrouters (ifp, sock, p);
       if (ret < 0)
 	return ret;
 
-      /* select interface. */
-      ret = ospf_if_ipmulticast (sock, p);
-      if (ret < 0)
-	return ret;
-
-      /* create input/output buffer stream. */
+      /* Create input/output buffer stream. */
       ospf_if_stream_set (sock, oi);
     }
 

@@ -27,6 +27,8 @@
 #include "linklist.h"
 #include "if.h"
 #include "rib.h"
+#include "table.h"
+#include "redistribute.h"
 
 /* If same interface address is already exist... */
 int
@@ -66,6 +68,7 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   rib = *p;
 
   connected->address = (struct prefix *) p;
+  connected->ifp = ifp;
 
   /* If there is boroadcast or pointopoint address. */
   if (broad)
@@ -78,6 +81,9 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
 
   /* Ok link connected to interface. */
   connected_add (ifp, connected);
+
+  /* Update interface address information to protocol daemon. */
+  zebra_interface_address_add_update (ifp, connected);
 
   /* Apply mask to the network. */
   apply_mask_ipv4 (&rib);
@@ -152,6 +158,7 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
   rib = *p;
 
   connected->address = (struct prefix *) p;
+  connected->ifp = ifp;
 
   if (broad)
     {

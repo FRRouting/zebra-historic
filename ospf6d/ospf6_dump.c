@@ -1,4 +1,5 @@
 /*
+ * Logging function
  * Copyright (C) 1999 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
@@ -96,7 +97,7 @@ char *print_lsreq (struct linkstate_request *lsreq)
   char *type, unknown[64];
 
   inet_ntop (AF_INET, &lsreq->lsreq_advrtr, advrtr, sizeof (advrtr));
-  snprintf (id, sizeof (id), "%lu", ntohl (lsreq->lsreq_id));
+  snprintf (id, sizeof (id), "%u", (u_int32_t)ntohl (lsreq->lsreq_id));
   switch (ntohs (lsreq->lsreq_type))
     {
       case LST_ROUTER_LSA:
@@ -125,7 +126,7 @@ char *print_ls_reference (struct ospf6_lsa_hdr *lsh)
   char *type, unknown[64];
 
   inet_ntop (AF_INET, &lsh->lsh_advrtr, advrtr, sizeof (advrtr));
-  snprintf (id, sizeof (id), "%lu", ntohl (lsh->lsh_id));
+  snprintf (id, sizeof (id), "%u", (u_int32_t)ntohl (lsh->lsh_id));
   switch (ntohs (lsh->lsh_type))
     {
       case LST_ROUTER_LSA:
@@ -154,8 +155,8 @@ char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
   char *type, unknown[64];
 
   inet_ntop (AF_INET, &lsh->lsh_advrtr, advrtr, sizeof (advrtr));
-  snprintf (id, sizeof (id), "%lu", ntohl (lsh->lsh_id));
-  snprintf (seqnum, sizeof (seqnum), "%lx", ntohl (lsh->lsh_seqnum));
+  snprintf (id, sizeof (id), "%u", (u_int32_t)ntohl (lsh->lsh_id));
+  snprintf (seqnum, sizeof (seqnum), "%x", (u_int32_t)ntohl (lsh->lsh_seqnum));
   switch (ntohs (lsh->lsh_type))
     {
       case LST_ROUTER_LSA:
@@ -175,6 +176,59 @@ char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
   snprintf (buf, sizeof (buf), "%s[id:%s,adv:%s,seq:%s]",
             type, id, advrtr, seqnum);
   return buf;
+}
+
+char *
+inet4str (unsigned long id)
+{
+  inet_ntop (AF_INET, &id, strbuf, sizeof (strbuf));
+  return(strbuf);
+}
+
+void
+o6log_err (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_ERR, format, args);
+  return;
+}
+
+void
+o6log_warn (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_WARNING, format, args);
+  return;
+}
+
+void
+o6log_notice (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_NOTICE, format, args);
+  return;
+}
+
+void
+o6log_off (const char *format, ...)
+{
+  return;
+}
+
+void
+o6log_on (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_INFO, format, args);
+  return;
 }
 
 void
@@ -205,53 +259,6 @@ ospf6_log_init ()
   /* for debug */
   o6log.debug = o6log_off;
   o6log.pointer = o6log_off;
-  return;
-}
-
-char *
-inet4str (unsigned long id)
-{
-  inet_ntop (AF_INET, &id, strbuf, sizeof (strbuf));
-  return(strbuf);
-}
-
-void
-log_pointer (const char *format, ...)
-{
-#ifdef DEBUG_POINTER
-  va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_DEBUG, format, args);
-  return;
-#endif /*DEBUG_POINTER*/
-}
-
-void
-log_spf (const char *format, ...)
-{
-#ifdef DEBUG_SPF
-  va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_DEBUG, format, args);
-  return;
-#endif /*DEBUG_SPF*/
-}
-
-void
-o6log_off (const char *format, ...)
-{
-  return;
-}
-
-void
-o6log_on (const char *format, ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_INFO, format, args);
   return;
 }
 

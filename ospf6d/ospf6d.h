@@ -44,6 +44,7 @@
 #include "filter.h"
 #include "client.h"
 #include "zclient.h"
+#include "table.h"
 
 #define HASHVAL 64
 
@@ -54,6 +55,7 @@
 #include "ospf6_spf.h"
 #include "ospf6_rtable.h"
 #include "ospf6_proto.h"
+#include "ospf6_top.h"
 #include "ospf6_area.h"
 #include "ospf6_interface.h"
 #include "ospf6_neighbor.h"
@@ -65,47 +67,18 @@
 #include "ospf6_network.h"
 #include "ospf6_zebra.h"
 
-/*
-#ifndef DEBUG_HELLO
-#define DEBUG_HELLO
-#endif
-*/
-
-#ifndef DEBUG_DATABASE_DESCRITPION
-#define DEBUG_DATABASE_DESCRIPTION
-#endif
-
-#ifndef DEBUG_LINKSTATE_REQUEST
-#define DEBUG_LINKSTATE_REQUEST
-#endif
-
-#ifndef DEBUG_LINKSTATE_UPDATE
-#define DEBUG_LINKSTATE_UPDATE
-#endif
-
-#ifndef DEBUG_LINKSTATE_ACK
-#define DEBUG_LINKSTATE_ACK
-#endif
-
-/*
-#ifndef DEBUG_POINTER
-#define DEBUG_POINTER
-#endif
-*/
-
-#ifndef DEBUG_SPF
-#define DEBUG_SPF
-#endif
-
-extern int     errno;
-extern list    iflist;
-extern struct  thread_master *master;
-extern list    ospf6_list;
-extern int     ospf6_sock;
-extern int     daemon_mode;
-extern struct  sockaddr_in6 allspfrouters6;
-extern struct  sockaddr_in6 alldrouters6;
-extern char   *progname;
+/* global variables */
+extern char *progname;
+extern int errno;
+extern int daemon_mode;
+extern struct thread_master *master;
+extern list iflist;
+extern list nexthoplist;
+extern struct sockaddr_in6 allspfrouters6;
+extern struct sockaddr_in6 alldrouters6;
+extern int ospf6_sock;
+extern struct ospf6 *ospf6;
+extern char *recent_reason;
 
 /* Default configuration file name for ospfd. */
 #define OSPF6_DEFAULT_CONFIG       "ospf6d.conf"
@@ -148,7 +121,7 @@ extern char   *progname;
 
 #define INTERFACE_STR       "Interface infomation\n"
 #define IFNAME_STR          "Interface name(e.g. ep0)\n"
-#define IP6_STR             "IP6 Information\n"
+#define IP6_STR             "IPv6 Information\n"
 #define OSPF6_STR           "Open Shortest Path First (OSPF) for IPv6\n"
 #define OSPF6_ROUTER_STR    "Enable a routing process\n"
 #define OSPF6_INSTANCE_STR  "<1-65535> Instance ID\n"
@@ -157,17 +130,12 @@ extern char   *progname;
 
 
 /* Function Prototypes */
-struct ospf6 *make_ospf6 (rtr_id_t);
-struct ospf6 *ospf6_lookup (instance_id_t);
-struct area  *make_area (area_id_t, struct ospf6 *);
-struct area *area_lookup (area_id_t, struct ospf6 *);
 struct neighbor *make_neighbor (rtr_id_t, struct ospf6_if *);
 struct neighbor *nbr_lookup (rtr_id_t, struct ospf6 *);
-void ospf6_terminate ();
-int show_ospf6_top (struct vty *, struct ospf6 *);
 int show_area (struct vty *, struct area *);
 int show_nbr (struct vty *, struct neighbor *);
 void ospf6_init ();
+void ospf6_terminate ();
 
 #endif /* OSPF6D_H */
 

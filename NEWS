@@ -1,5 +1,50 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.78
+
+* Changes in lib
+
+** SNMP support is started.
+
+** Now Zebra can work on BSD/OS 4.X.
+
+** Now Zebra can compiled on vanilla OpenBSD 2.5 but not yet working correcltly.
+
+* Changes in zebra
+
+** Interface index detection using ioctl() bug is fixed.
+
+** Interface information protocol is changed.  Now interface
+addition/deletion and interface's address addition/deletion is
+separated.
+
+* Changes in bgpd
+
+** BGP hold timer bug is fixed.
+
+** BGP keepavlie timer becomes configurable.
+
+* Changes in ripd
+
+** When making reply to rip's REQUEST message, fill in
+RIP_METRIC_INFINITY with network byte order using htonl ().
+
+** Pass host byte order address to IN_CLASSC and IN_CLASSB macro.
+
+* Changes in ospfd
+
+** LSA flooding works.
+
+** Fix bug of DD processing.
+
+** Fix bug of originating router-LSA bug is fixed.
+
+** LSA structure is changed to support LSA aging.
+
+* Changes in ospf6d
+
+** `ip6' statement in configuration is changed to `ipv6'.
+
 * Changes in zebra-0.77
 
 * Changes in lib

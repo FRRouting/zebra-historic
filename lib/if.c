@@ -53,8 +53,18 @@ if_new ()
 
   ifp = XMALLOC (MTYPE_IF, sizeof (struct interface));
   bzero (ifp, sizeof (struct interface));
-  ifp->connected = list_init ();
+  return ifp;
+}
+
+struct interface *
+if_create ()
+{
+  struct interface *ifp;
+
+  ifp = if_new ();
+  
   list_add_node (iflist, ifp);
+  ifp->connected = list_init ();
 
   if (if_master.if_new_hook)
     (*if_master.if_new_hook) (ifp);
@@ -120,6 +130,58 @@ if_lookup_by_name (char *name)
   return NULL;
 }
 
+/* Lookup interface by IPv4 address. */
+struct interface *
+if_lookup_address (struct in_addr src)
+{
+  listnode node;
+  struct prefix_ipv4 addr;
+  listnode cnode;
+  struct interface *ifp;
+  struct prefix *p;
+  struct connected *c;
+
+  addr.family = AF_INET;
+  addr.prefix = src;
+  addr.prefixlen = IPV4_MAX_BITLEN;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  c = getdata (cnode);
+
+	  if (if_is_pointopoint (ifp))
+	    {
+	      p = c->address;
+
+	      if (p && p->family == AF_INET)
+		{
+		  if (IPV4_ADDR_SAME (&p->u.prefix4, &src))
+		    return ifp;
+
+		  p = c->destination;
+		  if (p && IPV4_ADDR_SAME (&p->u.prefix4, &src))
+		    return ifp;
+		}
+	    }
+	  else
+	    {
+	      p = c->address;
+
+	      if (p->family == AF_INET)
+		{
+		  if (prefix_match (p, (struct prefix *) &addr))
+		    return ifp;
+		}
+	    }
+	}
+    }
+  return NULL;
+}
+
 /* Get interface by name if given name interface doesn't exist create
    one. */
 struct interface *
@@ -130,7 +192,9 @@ if_get_by_name (char *name)
   ifp = if_lookup_by_name (name);
   if (ifp == NULL)
     {
-      ifp = if_new ();
+      ifp = if_create ();
+
+
       strncpy (ifp->name, name, IFNAMSIZ);
     }
   return ifp;
@@ -315,9 +379,11 @@ DEFUN (interface,
 
   if (ifp == NULL)
     {
-      ifp = if_new ();
+      ifp = if_create ();
       strncpy (ifp->name, argv[0], INTERFACE_NAMSIZ);
-      ifp->ifindex = -1;
+
+      /* Pseudo interface. */
+      ifp->ifindex = 0;
     }
   vty->index = ifp;
   vty->node = INTERFACE_NODE;
@@ -446,3 +512,38 @@ connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
 	}
     }
 }
+
+#ifdef NRL
+unsigned int
+if_nametoindex (char *name)
+{
+  listnode node;
+  struct interface *ifp;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      if (strcmp (ifp->name, name) == 0)
+	return ifp->ifindex;
+    }
+  return 0;
+}
+
+char *
+if_indextoname (unsigned int ifindex, char *name)
+{
+  listnode node;
+  struct interface *ifp;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      if (ifp->ifindex == ifindex)
+	{
+	  memcpy (name, ifp->name, IFNAMSIZ);
+	  return ifp->name;
+	}
+    }
+  return NULL;
+}
+#endif /* NRL */

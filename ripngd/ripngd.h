@@ -202,6 +202,9 @@ struct ripng_interface
 
   /* Default information only. */
   u_char default_only;
+
+  /* Wake up thread. */
+  struct thread *t_wakeup;
 };
 
 enum ripng_event
@@ -241,5 +244,7 @@ void ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 void ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
 void ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
 void ripng_redistribute_withdraw (int type);
+
+extern struct thread_master *master;
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

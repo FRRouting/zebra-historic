@@ -149,6 +149,29 @@ ospf6_if_lookup (char *ifname)
   return ospf6_if;
 }
 
+struct ospf6_if *
+ospf6_if_lookup_by_index (int ifindex)
+{
+  struct interface *ifp;
+  struct ospf6_if *ospf6_if;
+
+  ifp = if_lookup_by_index (ifindex);
+  if (!ifp)
+    {
+      zlog (NULL, LOG_WARNING, "no such interface: %d", ifindex);
+      return (struct ospf6_if *)NULL;
+    }
+  ospf6_if = (struct ospf6_if *)ifp->info;
+  if (!ospf6_if)
+    {
+      zlog (NULL, LOG_WARNING, "no such ospf6 interface: %s",
+            ifp->name);
+      return (struct ospf6_if *)NULL;
+    }
+
+  return ospf6_if;
+}
+
 /* count number of full neighbor */
 int
 ospf6_if_count_full_nbr (struct ospf6_if *o6if)
@@ -198,10 +221,10 @@ ospf6_if_get_linklocal (struct in6_addr *buf, struct ospf6_if *o6if)
 
 #ifdef KAME
   /* if KAME, clear ifindex included in address */
-  if (buf->s6_addr8[1] & 0x0f)
+  if (buf->s6_addr[3] & 0x0f)
     {
       char linklocal_str[64];
-      buf->s6_addr8[3] &= ~((char)0x0f);
+      buf->s6_addr[3] &= ~((char)0x0f);
       inet_ntop (AF_INET6, buf, linklocal_str, sizeof (linklocal_str));
       o6log.interface ("clear kame ifindex, %s", linklocal_str);
     }
@@ -266,7 +289,7 @@ show_if (struct vty *vty, struct interface *iface)
   if (ospf6_if->area)
     {
       vty_out (vty, "  Instance ID %lu, Router ID %s\r\n",
-           ospf6_if->area->ospf6->instance_id,
+           ospf6_if->instance_id,
            inet4str (ospf6_if->area->ospf6->router_id));
       vty_out (vty, "  Area ID %s, Cost %hu\r\n",
            inet4str (ospf6_if->area->area_id), 
@@ -302,15 +325,14 @@ DEFUN (no_interface,
   struct area *area;
   struct ospf6_if *ospf6_if;
   struct interface *ifp;
-  struct ospf6 *ospf6 = (struct ospf6 *)vty->index;
 
   ifname = argv[0];
   inet_pton (AF_INET, argv[1], &area_id);
 
   if (area_id != 0)
     {
-      vty_out (vty, "Area ID other than Backbone(0.0.0.0),
-               not yet implimented\r\n");
+      vty_out (vty, "Area ID other than Backbone(0.0.0.0), "
+               "not yet implimented\r\n");
       return CMD_WARNING;
     }
 
@@ -321,7 +343,7 @@ DEFUN (no_interface,
       return CMD_WARNING;
     }
 
-  area = area_lookup (area_id, ospf6);
+  area = ospf6_area_lookup (area_id);
   if (!area)
     {
       vty_out (vty, "No such area: %s\r\n",
@@ -343,7 +365,7 @@ DEFUN (no_interface,
 /* interface variable set command */
 DEFUN (ip6_ospf6_cost,
        ip6_ospf6_cost_cmd,
-       "ip6 ospf6 cost COST",
+       "ipv6 ospf6 cost COST",
        IP6_STR
        OSPF6_STR
        "Interface cost\n"
@@ -368,7 +390,7 @@ DEFUN (ip6_ospf6_cost,
 /* interface variable set command */
 DEFUN (ip6_ospf6_hellointerval,
        ip6_ospf6_hellointerval_cmd,
-       "ip6 ospf6 hello-interval HELLO_INTERVAL",
+       "ipv6 ospf6 hello-interval HELLO_INTERVAL",
        IP6_STR
        OSPF6_STR
        "Time between HELLO packets\n"
@@ -392,7 +414,7 @@ DEFUN (ip6_ospf6_hellointerval,
 /* interface variable set command */
 DEFUN (ip6_ospf6_deadinterval,
        ip6_ospf6_deadinterval_cmd,
-       "ip6 ospf6 dead-interval ROUTER_DEAD_INTERVAL",
+       "ipv6 ospf6 dead-interval ROUTER_DEAD_INTERVAL",
        IP6_STR
        OSPF6_STR
        "Interval after which a neighbor is declared dead\n"
@@ -416,7 +438,7 @@ DEFUN (ip6_ospf6_deadinterval,
 /* interface variable set command */
 DEFUN (ip6_ospf6_transmitdelay,
        ip6_ospf6_transmitdelay_cmd,
-       "ip6 ospf6 transmit-delay TRANSMITDELAY",
+       "ipv6 ospf6 transmit-delay TRANSMITDELAY",
        IP6_STR
        OSPF6_STR
        "Link state transmit delay\n"
@@ -440,7 +462,7 @@ DEFUN (ip6_ospf6_transmitdelay,
 /* interface variable set command */
 DEFUN (ip6_ospf6_retransmitinterval,
        ip6_ospf6_retransmitinterval_cmd,
-       "ip6 ospf6 retransmit-interval RXMTINTERVAL",
+       "ipv6 ospf6 retransmit-interval RXMTINTERVAL",
        IP6_STR
        OSPF6_STR
        "Time between retransmitting lost link state advertisements\n"
@@ -464,7 +486,7 @@ DEFUN (ip6_ospf6_retransmitinterval,
 /* interface variable set command */
 DEFUN (ip6_ospf6_priority,
        ip6_ospf6_priority_cmd,
-       "ip6 ospf6 priority PRIORITY",
+       "ipv6 ospf6 priority PRIORITY",
        IP6_STR
        OSPF6_STR
        "Router priority\n"
@@ -488,36 +510,31 @@ DEFUN (ip6_ospf6_priority,
 int
 ospf6_if_config_write (struct vty *vty)
 {
-  listnode i,j,k;
-  struct ospf6 *ospf6;
+  listnode j,k;
   struct ospf6_if *ospf6_if;
   struct area *area;
 
-  for (i = listhead (ospf6_list); i; nextnode (i))
+  for (j = listhead (ospf6->area_list); j; nextnode (j))
     {
-      ospf6 = (struct ospf6 *) getdata (i);
-      for (j = listhead (ospf6->area_list); j; nextnode (j))
+      area = (struct area *) getdata (j);
+      for (k = listhead (area->ospf6_if_list); k; nextnode (k))
         {
-          area = (struct area *) getdata (j);
-          for (k = listhead (area->ospf6_if_list); k; nextnode (k))
-            {
-              ospf6_if = (struct ospf6_if *) getdata (k);
-              vty_out (vty, "interface %s%s",
-                       ospf6_if->interface->name, VTY_NEWLINE);
-              vty_out (vty, " ip6 ospf6 cost %d%s",
-                       ospf6_if->cost, VTY_NEWLINE);
-              vty_out (vty, " ip6 ospf6 hello-interval %d%s",
-                       ospf6_if->hello_interval, VTY_NEWLINE);
-              vty_out (vty, " ip6 ospf6 dead-interval %d%s",
-                       ospf6_if->rtr_dead_interval, VTY_NEWLINE);
-              vty_out (vty, " ip6 ospf6 retransmit-interval %d%s",
-                       ospf6_if->rxmt_interval, VTY_NEWLINE);
-              vty_out (vty, " ip6 ospf6 priority %d%s",
-                       ospf6_if->rtr_pri, VTY_NEWLINE);
-              vty_out (vty, " ip6 ospf6 transmit-delay %d%s",
-                       ospf6_if->inf_trans_delay, VTY_NEWLINE);
-              vty_out (vty, "!%s", VTY_NEWLINE);
-            }
+          ospf6_if = (struct ospf6_if *) getdata (k);
+          vty_out (vty, "interface %s%s",
+                   ospf6_if->interface->name, VTY_NEWLINE);
+          vty_out (vty, " ipv6 ospf6 cost %d%s",
+                   ospf6_if->cost, VTY_NEWLINE);
+          vty_out (vty, " ipv6 ospf6 hello-interval %d%s",
+                   ospf6_if->hello_interval, VTY_NEWLINE);
+          vty_out (vty, " ipv6 ospf6 dead-interval %d%s",
+                   ospf6_if->rtr_dead_interval, VTY_NEWLINE);
+          vty_out (vty, " ipv6 ospf6 retransmit-interval %d%s",
+                   ospf6_if->rxmt_interval, VTY_NEWLINE);
+          vty_out (vty, " ipv6 ospf6 priority %d%s",
+                   ospf6_if->rtr_pri, VTY_NEWLINE);
+          vty_out (vty, " ipv6 ospf6 transmit-delay %d%s",
+                   ospf6_if->inf_trans_delay, VTY_NEWLINE);
+          vty_out (vty, "!%s", VTY_NEWLINE);
         }
     }
 

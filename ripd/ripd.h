@@ -22,6 +22,8 @@
 #ifndef _ZEBRA_RIP_H
 #define _ZEBRA_RIP_H
 
+#include "if.h"
+
 /* RIP version number. */
 #define RIPv1                1
 #define RIPv2                2
@@ -59,10 +61,6 @@
 #define RIP_HOLDDOWN_TIMER_DEFAULT    180
 #define RIP_FLUSH_TIMER_DEFALUT       240
 #endif /*0 */
-
-/* RIP route type */
-#define RIP_ROUTE_NORMAL              0
-#define RIP_ROUTE_STATIC              1
 
 /* RIP port number. */
 #define RIP_PORT_DEFAULT            520
@@ -189,6 +187,12 @@ struct rip_interface
   /* RIP version control. */
   int ri_send;
   int ri_receive;
+
+  /* RIPv2 authentication string. */
+  char *auth_str;
+
+  /* Wake up thread. */
+  struct thread *t_wakeup;
 };
 
 /* RIP accepet/announce methods. */
@@ -254,10 +258,7 @@ int
 if_valid_neighbor (struct in_addr addr);
 
 int 
-rip_request_send (struct sockaddr_in *to, u_char version);
-
-struct interface *
-if_lookup_address (struct in_addr);
+rip_request_send (struct sockaddr_in *, struct interface *, u_char);
 
 int
 rip_neighbor_lookup (struct sockaddr_in *);
@@ -276,6 +277,9 @@ rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *, unsigned int);
 
 void
 rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, unsigned int);
+
+void
+rip_interface_multicast_set (int, struct interface *);
 
 extern struct thread_master *master;
 

@@ -86,45 +86,6 @@ attach_lsa_hdr_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
 }
 
 
-/* lookup lsa on maxage list */
-struct ospf6_lsa *
-ospf6_lookup_maxage (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
-{
-  if (list_lookup_node (ospf6->maxagelist, lsa))
-    return lsa;
-  return NULL;
-}
-
-/* add lsa to maxage list */
-void
-ospf6_add_maxage (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
-{
-  if (ospf6_lookup_maxage (lsa, ospf6))
-    {
-      o6log.lsdb ("%s already on maxage", print_lsahdr (lsa->lsa_hdr));
-      return;
-    }
-  list_add_node (ospf6->maxagelist, lsa);
-  ospf6_lsa_lock (lsa);
-  o6log.lsdb ("add %s to maxage", print_lsahdr (lsa->lsa_hdr));
-  return;
-}
-
-/* remove lsa from maxage list */
-void
-ospf6_remove_maxage (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
-{
-  if (!ospf6_lookup_maxage (lsa, ospf6))
-    {
-      o6log.lsdb ("%s not on maxage", print_lsahdr (lsa->lsa_hdr));
-      return;
-    }
-  list_delete_by_val (ospf6->maxagelist, lsa);
-  o6log.lsdb ("remove %s from maxage", print_lsahdr (lsa->lsa_hdr));
-  ospf6_lsa_unlock (lsa);
-  return;
-}
-
 /* lookup lsa on summary list of neighbor */
 struct ospf6_lsa *
 ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
@@ -314,11 +275,6 @@ ospf6_remove_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
   o6log.lsdb ("remove %s from %s retrans", print_lsahdr (lsa->lsa_hdr),
               nbr->str);
   ospf6_lsa_unlock (lsa);
-
-  /* before return, check for this LSA's age.
-     if MaxAge and no neighbor is in Exchange or Loading,
-     the LSA must be removed from database.*/
-  ospf6_maxage_remove (lsa);
 
   return;
 }
@@ -882,22 +838,11 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
 
   if (old)
     {
-
-      /* changes in summary list cause linklist function failure
-         there's no need to update summarylist, because receiving
-         LSA newer than requesting is usual. */
-
-      /* xxx, request list should not be changed here, i think.
-         because self-originated LSA will not appear on request list,
-         and receiving new LSA (via flood) deletes the one
-         on request list. */
-
       while (listcount (old->retrans_nbr))
         {
           n = listhead (old->retrans_nbr);
           nbr = (struct neighbor *) getdata (n);
           ospf6_remove_retrans (old, nbr);
-          ospf6_add_retrans (new, nbr);
         }
 
       ospf6_lsdb_remove (old);
@@ -908,3 +853,65 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
 
   return;
 }
+
+void
+ospf6_lsdb_maxage_remove_area (struct area *area)
+{
+  list l;
+  listnode n;
+  struct ospf6_lsa *lsa = NULL;
+
+  assert (!count_nbr_in_state (NBS_EXCHANGE, area));
+  assert (!count_nbr_in_state (NBS_LOADING, area));
+
+  l = list_init ();
+  for (n = listhead (area->lsdb); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      if (ospf6_age_current (lsa) == MAXAGE)
+        list_add_node (l, lsa);
+    }
+
+  for (n = listhead (l); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_lsa_maxage_remove (lsa);
+    }
+
+  list_delete_all (l);
+}
+
+void
+ospf6_lsdb_maxage_remove_as (struct ospf6 *ospf6)
+{
+  list l;
+  listnode n;
+  struct ospf6_lsa *lsa;
+  struct area *area;
+
+  for (n = listhead (ospf6->area_list); n; nextnode (n))
+    {
+      area = (struct area *) getdata (n);
+      assert (!count_nbr_in_state (NBS_EXCHANGE, area));
+      assert (!count_nbr_in_state (NBS_LOADING, area));
+    }
+
+  o6log.lsdb ("AS scope MaxAge LSA to delete");
+
+  l = list_init ();
+  for (n = listhead (ospf6->lsdb); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      if (ospf6_age_current (lsa) == MAXAGE)
+        list_add_node (l, lsa);
+    }
+
+  for (n = listhead (l); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_lsa_maxage_remove (lsa);
+    }
+
+  list_delete_all (l);
+}
+

@@ -69,7 +69,7 @@ Report bugs to yasu@sfc.wide.ad.jp\n", progname);
 void
 terminate (int i)
 {
-  ospf6_terminate();
+  ospf6_terminate ();
   unlink (PATH_OSPF6D_PID);
   exit (i);
 }
@@ -209,13 +209,12 @@ main (int argc, char **argv)
   cmd_init ();
   vty_init ();
   ospf6_init ();
-  ospf6_if_init ();
   memory_init ();
   sort_node ();
   nexthop_init ();
 
   /* Connect to zebra. */
-  zebra_start ();
+  ospf6_zebra_start ();
 
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
@@ -227,7 +226,7 @@ main (int argc, char **argv)
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT);
 
   /* Print start message */
-  zvlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);
+  zlog (NULL, LOG_INFO, "OSPF6d (%s) starts", ZEBRA_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

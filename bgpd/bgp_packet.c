@@ -451,8 +451,42 @@ bgp_open (struct peer *peer, bgp_size_t size)
   holdtime = stream_getw (peer->ibuf);
   peer->ident = stream_get_ipv4 (peer->ibuf);
 
-  if (peer->v_holdtime == BGP_DEFAULT_HOLDTIME)
+  /* From the rfc: Upon receipt of an OPEN message, a BGP speaker MUST
+     calculate the value of the Hold Timer by using the smaller of its
+     configured Hold Time and the Hold Time received in the OPEN message.
+     The Hold Time MUST be either zero or at least three seconds.  An
+     implementation may reject connections on the basis of the Hold Time. */
+
+  if (holdtime < 3 && holdtime != 0)
+    {
+      bgp_notify_send (peer,
+		       BGP_NOTIFY_OPEN_ERR, 
+		       BGP_NOTIFY_OPEN_UNACEP_HOLDTIME,
+		       NULL);
+      return;
+    }
+    
+  if (holdtime < peer->v_holdtime)
     peer->v_holdtime = holdtime;
+
+  /* From the rfc: A reasonable maximum time between KEEPALIVE messages
+   would be one third of the Hold Time interval.  KEEPALIVE messages
+   MUST NOT be sent more frequently than one per second.  An
+   implementation MAY adjust the rate at which it sends KEEPALIVE
+   messages as a function of the Hold Time interval. */
+
+  if (peer->config & PEER_CONFIG_KEEPALIVE)
+    {
+      if (peer->v_keepalive > (peer->v_holdtime / 3))
+	{
+	  zlog(peer->log, LOG_WARNING, "neighbor %s: warning: holdtime %d, but keepalive configured as %d not %d",
+	       peer->host, peer->v_holdtime, peer->v_keepalive, (peer->v_holdtime / 3));
+	}
+    }
+  else
+    {
+      peer->v_keepalive = peer->v_holdtime / 3;
+    }
 
   optlen = stream_getc (peer->ibuf);
 

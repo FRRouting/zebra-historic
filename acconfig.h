@@ -37,6 +37,9 @@
 /* whether system has GNU regex */
 #undef HAVE_GNU_REGEX
 
+/* whether system has SNMP library */
+#undef HAVE_SNMP
+
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
 
@@ -66,6 +69,9 @@
 
 /* Define if you have NRL ipv6 stack.  */
 #undef NRL
+
+/* Define if you have BSDI NRL IPv6 stack. */
+#undef BSDI_NRL
 
 /* Define if one-vty option is specified. */
 #undef ONE_VTY
@@ -111,3 +117,7 @@ typedef unsigned int u_int32_t;
 typedef unsigned short u_int16_t; 
 typedef unsigned short u_int8_t; 
 #endif /* SUNOS_5 */
+
+#ifndef HAVE_SOCKLEN_T
+typedef int socklen_t;
+#endif /* HAVE_SOCKLEN_T */

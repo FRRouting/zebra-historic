@@ -1,5 +1,4 @@
-/*
- * Kernel routing table updates using netlink over GNU/Linux system.
+/* Kernel routing table updates using netlink over GNU/Linux system.
  * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -34,6 +33,7 @@
 #include "prefix.h"
 #include "connected.h"
 #include "rib.h"
+#include "redistribute.h"
 
 /* #define DEBUG */
 
@@ -600,6 +600,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   struct rtattr *tb [IFLA_MAX + 1];
   struct interface *ifp;
   char *name;
+  int new = 0;
 
   ifi = NLMSG_DATA (h);
 
@@ -631,6 +632,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	  ifp = if_get_by_name (name);
 	  zlog (NULL, LOG_INFO, "interface %s index %d is added.",
 		ifp->name, ifi->ifi_index);
+	  new = 1;
 	}      
       ifp->ifindex = ifi->ifi_index;
       ifp->flags = ifi->ifi_flags & 0x0000fffff;
@@ -638,7 +640,8 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       ifp->metric = 1;
 
       /* If new link is added. */
-      /**/
+      if (new)
+	zebra_interface_add_update (ifp);
     }
   else
     {
@@ -650,6 +653,9 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 
       zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
 	    ifp->name, ifp->ifindex);
+
+      /* If the interface is deleted. */
+      ;
 
       if_delete (ifp);
     }

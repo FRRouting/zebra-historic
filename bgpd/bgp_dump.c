@@ -590,12 +590,12 @@ bgp_dump_incoming (struct peer *peer, struct stream *packet)
   stream_putw (s, AF_INET6);
 
   /* Source IP Address and Destination IP Address. */
-  stream_memcpy (s, &peer->su->sin6.sin6_addr, 16);
-  stream_memcpy (s, &peer->su->sin6.sin6_addr, 16);
+  stream_put (s, &peer->su->sin6.sin6_addr, 16);
+  stream_put (s, &peer->su->sin6.sin6_addr, 16);
 #endif /* HAVE_IPV6 */
 
   /* Packet contents. */
-  stream_memcpy (s, STREAM_DATA (packet), stream_get_endp (packet));
+  stream_put (s, STREAM_DATA (packet), stream_get_endp (packet));
   
   /* Set length. */
   bgp_dump_set_size (s);

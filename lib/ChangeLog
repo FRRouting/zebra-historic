@@ -1,3 +1,28 @@
+1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.h: Add if_nametoindex for NRL.
+
+1999-08-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c (if_create): New function.
+
+1999-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* snmp.c: New file.
+
+1999-08-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* stream.c (stream_put): stream_memcpy () is changed to stream_put
+	().  stream_get () is added.
+
+1999-08-18  Toshiaki Takada  <takada@zebra.org>
+
+	* memory.h (enum): Add MTYPE_OSPF_LSA_DATA.
+	
+1999-08-18  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* table.c (route_table_finish): add function frees table.
+
 1999-08-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* memory.h (enum): Add MTYPE_RTADV_PREFIX.

@@ -52,30 +52,6 @@
 #define DEFAULT_HELLO_INTERVAL    10
 #define DEFAULT_ROUTER_DEAD_TIMER 40
 
-
-/* TopLevel Structure */
-struct ospf6
-{
-  instance_id_t instance_id;
-  vers_t        version;
-  rtr_id_t      router_id;
-  list          area_list;
-  struct ospf6_rtable rtable;
-  struct ospf6_rtable redist_table;
-
-  /* for LSAs not on any retrans list,
-     but can't be removed because neighbor state */
-  list            maxagelist;
-
-  int redist_connected;
-  int redist_static;
-  int redist_ripng;
-  int redist_bgp;
-
-  list lsdb;
-  unsigned long ase_ls_id;
-};
-
 /* OSPF options */
 /* present in HELLO, DD, LSA */
 #define V3OPT_SET(x,opt)       ((x)[2] |=  (opt))

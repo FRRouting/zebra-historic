@@ -70,7 +70,7 @@ void ospf_nbr_state_message (struct ospf_neighbor *, char *, size_t);
 char *ospf_timer_dump (struct thread *, char *, size_t);
 void ospf_ip_header_dump (struct stream *);
 void ospf_packet_dump (struct stream *);
-void ospf_lsa_header_dump (struct ospf_lsa *);
+void ospf_lsa_header_dump (struct lsa_header *);
 void debug_init ();
 
 #endif /* _ZEBRA_OSPF_DUMP_H */

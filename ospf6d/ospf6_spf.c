@@ -75,36 +75,56 @@ static void
 transit_vertex_rtable_install (struct vertex *v, struct area *area)
 {
   unsigned char dtype;
-  union dest_id did;
 
-  if (IS_VTX_ROUTER_TYPE (v))
-    {
-      struct router_lsa *rlsa;
+  /* new, still bit messy */
+  {
+    struct prefix_ipv6 prefix;
+    struct ospf6_route_node_info info;
 
-      /* check for E bit of router lsa */
-      rlsa = (struct router_lsa *) (v->vtx_lsa->lsa_hdr + 1);
-      if (ROUTER_LSA_ISSET (rlsa, ROUTER_LSA_BIT_E))
-        dtype = DTYPE_ASBR;
-      else
-        dtype = DTYPE_INTRA_ROUTER;
+    memset (&prefix, 0, sizeof (prefix));
+    prefix.family = AF_INET6;
 
-      did.router_id = v->vtx_id[0];
-    }
-  else if (IS_VTX_NETWORK_TYPE (v))
-    {
-      dtype = DTYPE_INTRA_LINK;
-      did.network_id[0] = v->vtx_id[0];
-      did.network_id[1] = ntohl (v->vtx_id[1]);
-    }
-  else
-    {
-      o6log.spf ("!Unkown vertex type");
-      assert (0);
-    }
+    /* set router id */
+    ospf6_route_set_dst_rtrid (v->vtx_id[0], &prefix);
 
-  rtable_install (dtype, &did, v->vtx_distance, PTYPE_INTRA,
-                  v->vtx_nexthops, v->vtx_lsa, &area->rtable);
-  return;
+    if (IS_VTX_ROUTER_TYPE (v))
+      {
+        struct router_lsa *rlsa;
+        /* check for E bit of router lsa */
+        rlsa = (struct router_lsa *) (v->vtx_lsa->lsa_hdr + 1);
+        if (ROUTER_LSA_ISSET (rlsa, ROUTER_LSA_BIT_E))
+          dtype = DTYPE_ASBR;
+        else
+          dtype = DTYPE_INTRA_ROUTER;
+
+        /* set prefixlen to 32 (exact route-id length) */
+        prefix.prefixlen = 32;
+      }
+    else if (IS_VTX_NETWORK_TYPE (v))
+      {
+        dtype = DTYPE_INTRA_LINK;
+        ospf6_route_set_dst_ifid (v->vtx_id[1], &prefix);
+        /* set prefixlen to 64 (route-id + if-id length) */
+        prefix.prefixlen = 64;
+      }
+    else
+      {
+        o6log.spf ("!Unkown vertex type");
+        assert (0);
+      }
+
+    /* set info */
+    memset (&info, 0, sizeof (info));
+    info.dest_type = dtype;
+    info.area = area;
+    info.path_type = PTYPE_INTRA;
+    info.cost = v->vtx_distance;
+    info.nhlist = v->vtx_nexthops;
+
+    /* add area table */
+    ospf6_route_add (&prefix, &info, area->table);
+  }
+
 }
 
 static int
@@ -144,7 +164,7 @@ spf_init (struct area *area)
   listnode n;
   struct vertex *v;
 
-  rtable_init (&area->rtable);
+  area->table = ospf6_route_table_clear (area->table);
 
   /* Clear search list */
   for (i = 0; i < HASHVAL; i++)

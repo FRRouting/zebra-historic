@@ -137,9 +137,9 @@ ospf_nbr_bidirectional (struct in_addr *router_id,
   return 0;
 }
 
-/* add myself to nbr list. */
+/* Add self to nbr list. */
 void
-ospf_nbr_add_myself (struct ospf_interface *oi)
+ospf_nbr_add_self (struct ospf_interface *oi)
 {
   struct ospf_neighbor *nbr;
   struct prefix p;
@@ -164,10 +164,14 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
 
   nbr->status = NSM_TwoWay;
   nbr->router_id = ospf_top->router_id;
+  /*
   nbr->d_router = oi->d_router;
   nbr->bd_router = oi->bd_router;
   nbr->priority = oi->priority;
+  */
   nbr->address = *oi->address;
+
+  oi->nbr_self = nbr;
 }
 
 /* Get neighbor count by status. */

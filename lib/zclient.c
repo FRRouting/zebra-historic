@@ -28,6 +28,7 @@
 #include "thread.h"
 #include "memory.h"
 #include "prefix.h"
+#include "if.h"
 #include "client.h"
 #include "zclient.h"
 #include "log.h"
@@ -69,8 +70,9 @@ zebra_create (struct zebra *zebra)
   /* Create read thread. */
   zebra_event (ZEBRA_READ, zebra);
 
-  /* Get all interfaces. */
-  zebra_get_all_interface (zebra->sock);
+  /* Get all interfaces.  Now interface information is automatically
+     send from zebra so this isn't needed. */
+  /* zebra_get_all_interface (zebra->sock); */
 
   /* Flush all redistribute request. */
   for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
@@ -152,6 +154,22 @@ zebra_read (struct thread *thread)
 
   switch (command)
     {
+    case ZEBRA_INTERFACE_ADD:
+      if (zebra->interface_add)
+	ret = (*zebra->interface_add) (command, zebra, length);
+      break;
+    case ZEBRA_INTERFACE_DELETE:
+      if (zebra->interface_delete)
+	ret = (*zebra->interface_delete) (command, zebra, length);
+      break;
+    case ZEBRA_INTERFACE_ADDRESS_ADD:
+      if (zebra->interface_address_add)
+	ret = (*zebra->interface_address_add) (command, zebra, length);
+      break;
+    case ZEBRA_INTERFACE_ADDRESS_DELETE:
+      if (zebra->interface_address_delete)
+	ret = (*zebra->interface_address_delete) (command, zebra, length);
+      break;
     case ZEBRA_IPV4_ROUTE_ADD:
       if (zebra->ipv4_route_add)
 	ret = (*zebra->ipv4_route_add) (command, zebra, length);
@@ -168,10 +186,12 @@ zebra_read (struct thread *thread)
       if (zebra->ipv6_route_delete)
 	ret = (*zebra->ipv6_route_delete) (command, zebra, length);
       break;
+#if 0
     case ZEBRA_GET_ALL_INTERFACE:
       if (zebra->get_all_interface)
 	ret = (*zebra->get_all_interface) (command, zebra, length);
       break;
+#endif /* 0 */
     default:
       break;
     }

@@ -20,8 +20,19 @@
  * 02111-1307, USA.  
  */
 
+#ifndef _ZEBRA_REDISTRIBUTE_H
+#define _ZEBRA_REDISTRIBUTE_H
+
+#include "table.h"
+
 void zebra_redistribute_add (int, struct zebra_client *, int);
 void zebra_redistribute_delete (int, struct zebra_client *, int);
 
 void redistribute_add (struct route_node *np, struct rib *rib);
 void redistribute_delete (struct route_node *np, struct rib *rib);
+
+void zebra_interface_add_update (struct interface *ifp);
+void zebra_interface_address_add_update (struct interface *ifp, 
+					 struct connected *c);
+
+#endif /* _ZEBRA_REDISTRIBUTE_H */

@@ -26,6 +26,7 @@
 #include "filter.h"
 #include "memory.h"
 #include "command.h"
+#include "sockunion.h"
 
 /* Filter element of access list */
 struct filter

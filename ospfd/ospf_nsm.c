@@ -127,7 +127,8 @@ int
 nsm_ignore (struct ospf_neighbor *nbr)
 {
   if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
-    zlog (NULL, LOG_INFO, "NSM [%s]: nsm_ignore called", nbr->host);
+    zlog (NULL, LOG_INFO, "NSM [%s]: nsm_ignore called",
+	  inet_ntoa (nbr->router_id));
 
   return 0;
 }
@@ -166,8 +167,8 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
     next_state = NSM_ExStart;
 
   /* Router itself is the DRouter or the BDRouter. */
-  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->d_router) ||
-      IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->bd_router))
+  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &DR (oi)) ||
+      IPV4_ADDR_SAME (&oi->address->u.prefix4, &BDR (oi)))
     next_state = NSM_ExStart;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
@@ -276,8 +277,8 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
     flag = 1;
 
   /* Router itself is the DRouter or the BDRouter. */
-  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->d_router) ||
-      IPV4_ADDR_SAME (&oi->address->u.prefix4, &oi->bd_router))
+  if (IPV4_ADDR_SAME (&oi->address->u.prefix4, &DR (oi)) ||
+      IPV4_ADDR_SAME (&oi->address->u.prefix4, &BDR (oi)))
     flag = 1;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
@@ -586,7 +587,7 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
-    zlog (NULL, LOG_INFO, "NSM Status change [%s] %s -> %s", nbr->host,
+    zlog_info ("NSM Status change [%s] %s -> %s", inet_ntoa (nbr->router_id),
 	  LOOKUP (ospf_nsm_status_msg, nbr->status),
 	  LOOKUP (ospf_nsm_status_msg, status));
 
@@ -602,8 +603,7 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
       (old_status == NSM_Full && status != NSM_Full))
     {
       lsa = ospf_router_lsa (oi);
-      ospf_add_router_lsa (oi->area, lsa);
-      oi->area->router_lsa_self = lsa;
+      ospf_router_lsa_install (nbr, lsa);
 
       /* Add LSA to related neighbor's retransmission list. */
       ospf_ls_retransmit (oi, lsa);
@@ -635,7 +635,7 @@ ospf_nsm_event (struct thread *thread)
     next_state = NSM [nbr->status][event].next_state;
 
   if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
-    zlog (NULL, LOG_INFO, "OSPF NSM[%s]: %s (%s)", nbr->host,
+    zlog_info ("OSPF NSM[%s]: %s (%s)", inet_ntoa (nbr->router_id),
 	  LOOKUP (ospf_nsm_status_msg, nbr->status),
 	  ospf_nsm_event_str [event]);
 

@@ -34,6 +34,7 @@
 #include "rib.h"
 #include "rt.h"
 #include "log.h"
+#include "sockunion.h"
 
 #include "zebra/zebra.h"
 #include "zebra/redistribute.h"
@@ -236,6 +237,26 @@ rib_if_set (struct rib *rib, unsigned int ifindex)
 }
 
 void
+rib_if_check (struct rib *rib, unsigned int ifindex, struct in_addr *gate)
+{
+  struct interface *ifp;
+
+  if (ifindex)
+    ifp = if_lookup_by_index (ifindex);
+  else
+    ifp = if_lookup_address(*gate);
+
+  if (ifp)
+    {
+      rib->u.ifname = XSTRDUP (0, ifp->name);
+      if (!rib->u.ifindex)
+	rib->u.ifindex=ifp->ifindex;
+    }
+  else
+    rib->u.ifname = "unknown";
+}
+
+void
 rib_fib_set (struct route_node *np, struct rib *rib)
 {
   RIB_FIB_SET (rib);
@@ -323,10 +344,20 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
   rib = rib_create (type, flags, distance, ifindex, table);
 
   /* Set gateway address or gateway interface name. */
+  if (gate) 
+    {
+      rib->u.gate4 = *gate;
+      rib_if_check (rib, ifindex, gate);
+    }
+  else
+    rib_if_set (rib, ifindex);
+
+#if 0
   if (gate)
     rib->u.gate4 = *gate;
   else
     rib_if_set (rib, ifindex);
+#endif /* 0 */
 
   /* Lookup route node. */
   np = route_node_get (ipv4_rib_table, (struct prefix *) p);
@@ -592,19 +623,50 @@ show_ip_route_vty (struct vty *vty, struct route_node *np)
       if (len < 0)
 	len = 0;
 
+      if (len)
+	vty_out(vty, "%*s", len, " ");
+
+      if (rib->u.ifindex && (!rib->u.ifname)) 
+	{
+          struct interface *ifp;
+          ifp = if_lookup_by_index (rib->u.ifindex);
+          rib->u.ifname =  XSTRDUP (0, ifp->name);
+	}
+      
+      if (rib->u.ifname) 
+	{
+          vty_out(vty, "%*s %s (%d) ", 8-strlen(rib->u.ifname), " ",
+                  rib->u.ifname, rib->u.ifindex);
+	}
+      else 
+	{
+          vty_out(vty, "        ? (0) ");
+	}
+
       if (rib->type == ZEBRA_ROUTE_CONNECT)
 	{
+ 	  vty_out (vty, "direct\r\n");
+#if 0
 	  struct interface *ifp;
 	  ifp = if_lookup_by_index (rib->u.ifindex);
 	  vty_out (vty, "%*s %s\r\n", len, " ", ifp->name);
+#endif /* 0 */
 	}
       else
 	{
+	  if (IS_RIB_LINK (rib)) 
+	    vty_out (vty, "link\r\n");
+	  else
+	    vty_out (vty, "%s\r\n",
+		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ));
+
+#if 0
 	  if (IS_RIB_LINK (rib))
 	    vty_out (vty, "%*s %s\r\n", len, " ", rib->u.ifname);
 	  else
 	    vty_out (vty, "%*s %s\r\n", len, " ",
 		     inet_ntop (np->p.family, &rib->u.gate4, buf, BUFSIZ));
+#endif /* 0 */
 	}
     }
 }
@@ -1420,7 +1482,7 @@ zebra_sweep_table (struct route_table *rib_table)
   struct route_node *np;
   struct rib *rib;
   struct rib *next;
-  int ret;
+  int ret = 0;
 
   for (np = route_top (rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = next)

@@ -140,97 +140,114 @@ ospf6_prefix_str (struct ospf6_prefix *p, char *buf, size_t bufsize)
 void
 ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
 {
-  struct interface *ifp;
-  struct ospf6_prefix *o6p;
-  struct ospf6_if *o6if;
   char *type_str = NULL, o6p_str[128];
-  unsigned long aselsid;
-  struct ospf6_lsa *lsa;
-  list dummy = list_init (); /* for nexthop list */
+  int redist_conf;
+  unsigned short cost;
+  struct route_table *rt;
+  struct route_node *rn;
+  struct ospf6_route_node_info info;
+  unsigned char dest_type;
+  list nhlist_dummy = list_init ();
+  struct ospf6_lsa *new;
+  struct ospf6_if *o6if;
+  struct ospf6_nexthop *nh;
+  struct in6_addr in6;
+  listnode i;
 
-  /* get ospf interface */
-  assert (ifindex);
-  ifp = if_lookup_by_index (ifindex);
-  assert (ifp);
-  o6if = (struct ospf6_if *) ifp->info;
-  assert (o6if);
+  prefix2str ((struct prefix *)p, o6p_str, sizeof (o6p_str));
+  dest_type = DTYPE_NONE;
+  cost = 0;
+  rt = NULL;
 
-  /* make ospf6_prefix for each type */
   switch (type)
     {
       case ZEBRA_ROUTE_CONNECT:
-        o6p = ospf6_prefix_make (0, p);
         type_str = "connected";
-        ospf6_prefix_add (o6if->prefix_connected, o6p);
-        ospf6_prefix_str (o6p, o6p_str, sizeof (o6p_str));
-
-        lsa = ospf6_make_link_lsa (o6if);
-        ospf6_lsa_flood (lsa);
-        ospf6_lsdb_install (lsa);
-        ospf6_lsa_unlock (lsa);
-
+        dest_type = DTYPE_PREFIX;
+        rt = ospf6->table_connected;
+        redist_conf = ospf6->redist_connected;
+        cost = 0;
+        memset (&in6, 0, sizeof (in6));
+        nh = nexthop_make (ifindex, &in6, 0);
+        list_add_node (nhlist_dummy, nh);
         break;
 
       case ZEBRA_ROUTE_STATIC:
-        o6p = ospf6_prefix_make (10000, p);
         type_str = "static";
-        aselsid = ospf6_as_external_lsid (p, o6if->area->ospf6);
-        lsa = ospf6_make_as_external_lsa (aselsid, o6p, o6if->area->ospf6);
-        rtable_install (DTYPE_PREFIX, (union dest_id *)p, 10000,
-                        PTYPE_TYPE1_EXTERNAL, dummy, lsa,
-                        &o6if->area->ospf6->redist_table);
-        ospf6_prefix_str (o6p, o6p_str, sizeof (o6p_str));
-        ospf6_prefix_free (o6p);
-
-        ospf6_lsa_flood (lsa);
-        ospf6_lsdb_install (lsa);
-        /* don't unlock because rtentry refers this */
-
+        dest_type = DTYPE_STATIC_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_static;
+        cost = ospf6->cost_static;
         break;
 
       case ZEBRA_ROUTE_RIPNG:
-        o6p = ospf6_prefix_make (20000, p);
         type_str = "ripng";
-        aselsid = ospf6_as_external_lsid (p, o6if->area->ospf6);
-        lsa = ospf6_make_as_external_lsa (aselsid, o6p, o6if->area->ospf6);
-        rtable_install (DTYPE_PREFIX, (union dest_id *)p, 20000,
-                        PTYPE_TYPE1_EXTERNAL, dummy, lsa,
-                        &o6if->area->ospf6->redist_table);
-        ospf6_prefix_str (o6p, o6p_str, sizeof (o6p_str));
-        ospf6_prefix_free (o6p);
-
-        ospf6_lsa_flood (lsa);
-        ospf6_lsdb_install (lsa);
-        /* don't unlock because rtentry refers this */
-
+        dest_type = DTYPE_RIPNG_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_ripng;
+        cost = ospf6->cost_ripng;
         break;
 
       case ZEBRA_ROUTE_BGP:
-        o6p = ospf6_prefix_make (40000, p);
         type_str = "bgp";
-        aselsid = ospf6_as_external_lsid (p, o6if->area->ospf6);
-        lsa = ospf6_make_as_external_lsa (aselsid, o6p, o6if->area->ospf6);
-        rtable_install (DTYPE_PREFIX, (union dest_id *)p, 40000,
-                        PTYPE_TYPE1_EXTERNAL, dummy, lsa,
-                        &o6if->area->ospf6->redist_table);
-        ospf6_prefix_str (o6p, o6p_str, sizeof (o6p_str));
-        ospf6_prefix_free (o6p);
-
-        ospf6_lsa_flood (lsa);
-        ospf6_lsdb_install (lsa);
-        /* don't unlock because rtentry refers this */
-
+        dest_type = DTYPE_BGP_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_bgp;
+        cost = ospf6->cost_bgp;
         break;
 
       default:
-        zvlog_err ("unsupported zebra route type");
-        assert (0);
+        dest_type = DTYPE_NONE;
+        redist_conf = 0;
+        type_str = "unknown";
+        break;
     }
+
+  /* set info */
+  memset (&info, 0, sizeof (info));
+  info.dest_type = dest_type;
+  if (redist_conf == 1)
+    info.path_type = PTYPE_TYPE1_EXTERNAL;
+  else if (redist_conf == 2)
+    info.path_type = PTYPE_TYPE2_EXTERNAL;
+  info.cost = cost;
+  /* xxx, make lsa and set info.ls_origin */
+  info.nhlist = nhlist_dummy;
+
+  /* add redistribute routing table */
+  if (redist_conf)
+    {
+      ospf6_route_add (p, &info, rt);
+      rn = route_node_get (rt, (struct prefix *)p);
+      if (rt == ospf6->table_external)
+        new = ospf6_make_as_external_lsa (rn);
+      else if (rt == ospf6->table_connected)
+        {
+          o6if = ospf6_if_lookup_by_index (ifindex);
+          assert (o6if);
+          new = ospf6_make_link_lsa (o6if);
+        }
+      else
+        new = (struct ospf6_lsa *) NULL;
+
+      /* if new lsa was constructed, flood and install db */
+      if (new)
+        {
+          ospf6_lsa_flood (new);
+          ospf6_lsdb_install (new);
+          ospf6_lsa_unlock (new);
+        }
+    }
+
+  for (i = listhead (nhlist_dummy); i; nextnode (i))
+    {
+      nh = (struct ospf6_nexthop *) getdata (i);
+      nexthop_delete (nh);
+    }
+  list_delete_all (nhlist_dummy);
 
   /* log */
   o6log.zebra ("redist_add: %d %s %s", ifindex, type_str, o6p_str);
-
-  list_delete_all (dummy);
 
   return;
 }
@@ -238,74 +255,14 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
 void
 ospf6_redist_route_delete (int type, int ifindex, struct prefix_ipv6 *p)
 {
-  list l;
-  struct interface *ifp;
-  struct ospf6_prefix *o6p; /* temporary */
-  struct ospf6_if *o6if;
-  char *type_str = NULL, o6p_str[128];
-  struct ospf6_lsa *lsa;
-  struct ospf6_rtentry *r;
-
-  /* get ospf interface */
-  assert (ifindex);
-  ifp = if_lookup_by_index (ifindex);
-  assert (ifp);
-  o6if = (struct ospf6_if *) ifp->info;
-  assert (o6if);
-
-  /* make ospf6_prefix for each type */
-  switch (type)
-    {
-      case ZEBRA_ROUTE_CONNECT:
-        o6p = ospf6_prefix_make (0, p);
-        l = o6if->prefix_connected;
-        type_str = "connected";
-        ospf6_prefix_delete (l, o6p);
-        ospf6_prefix_str (o6p, o6p_str, sizeof (o6p_str));
-        /* free temporary ospf6 prefix */
-        ospf6_prefix_free (o6p);
-        break;
-
-      case ZEBRA_ROUTE_STATIC:
-        type_str = "static";
-        prefix2str ((struct prefix *)p, o6p_str, sizeof (o6p_str));
-        r = rtable_lookup (DTYPE_PREFIX, (union dest_id *)p,
-                           o6if->area->ospf6->redist_table.current_top);
-        if (!r)
-          break;
-        lsa = r->ls_origin;
-        ospf6_premature_aging (lsa);
-        break;
-
-      case ZEBRA_ROUTE_RIPNG:
-        type_str = "ripng";
-        prefix2str ((struct prefix *)p, o6p_str, sizeof (o6p_str));
-        r = rtable_lookup (DTYPE_PREFIX, (union dest_id *)p,
-                           o6if->area->ospf6->redist_table.current_top);
-        if (!r)
-          break;
-        lsa = r->ls_origin;
-        ospf6_premature_aging (lsa);
-        break;
-
-      case ZEBRA_ROUTE_BGP:
-        type_str = "bgp";
-        prefix2str ((struct prefix *)p, o6p_str, sizeof (o6p_str));
-        r = rtable_lookup (DTYPE_PREFIX, (union dest_id *)p,
-                           o6if->area->ospf6->redist_table.current_top);
-        if (!r)
-          break;
-        lsa = r->ls_origin;
-        ospf6_premature_aging (lsa);
-        break;
-
-      default:
-        zvlog_err ("unsupported zebra route type");
-        assert (0);
-    }
+  /* xxx */
 
   /* log */
+#if 0
   o6log.zebra ("redist_delete: %d %s %s", ifindex, type_str, o6p_str);
+#else
+  o6log.zebra ("redist_delete:");
+#endif
 
   return;
 }

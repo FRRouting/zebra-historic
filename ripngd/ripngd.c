@@ -67,15 +67,12 @@ struct route_table *ripng_static;
 /* RIPng aggregate route. */
 struct route_table *ripng_aggregate;
 
-/* Master of the thread. */
-extern struct thread_master *master;
-
 enum
 {
-  output_all_route,
-  output_changed_route,
-  output_split_horizon,
-  output_no_split_horizon
+  ripng_all_route,
+  ripng_changed_route,
+  ripng_split_horizon,
+  ripng_no_split_horizon
 };
 
 /* Prototypes. */
@@ -925,7 +922,7 @@ ripng_request_process (struct ripng_packet *packet,int size,
       rte->metric == RIPNG_METRIC_INFINITY)
     {	
       /* All route with split horizon */
-      ripng_output_process (ifp, from, output_all_route, output_split_horizon);
+      ripng_output_process (ifp, from, ripng_all_route, ripng_split_horizon);
     }
   else
     {
@@ -1102,7 +1099,7 @@ ripng_update (struct thread *t)
 	}
 #endif /* RIPNG_ADVANCED */
 
-      ripng_output_process (ifp, NULL, output_all_route, output_split_horizon);
+      ripng_output_process (ifp, NULL, ripng_all_route, ripng_split_horizon);
     }
 
   /* Triggered updates may be suppressed if a regular update is due by
@@ -1170,8 +1167,8 @@ ripng_triggered_update (struct thread *t)
       if (! ri->running)
 	continue;
 
-      ripng_output_process (ifp, NULL, output_changed_route,
-			    output_split_horizon);
+      ripng_output_process (ifp, NULL, ripng_changed_route,
+			    ripng_split_horizon);
     }
 
   /* Once all of the triggered updates have been generated, the route
@@ -1255,12 +1252,12 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 	    }
 
 	  /* Changed route only output. */
-	  if (route_type == output_changed_route &&
+	  if (route_type == ripng_changed_route &&
 	      (! (rinfo->flags & RIPNG_RTF_CHANGED)))
 	    continue;
 
 	  /* Split horizon. */
-	  if (split_horizon == output_split_horizon &&
+	  if (split_horizon == ripng_split_horizon &&
 	      rinfo->ifindex == ifp->ifindex)
 	    continue;
 	
@@ -1294,7 +1291,7 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 	    }
 
 	  /* Changed route only output. */
-	  if (route_type == output_changed_route)
+	  if (route_type == ripng_changed_route)
 	    continue;
 
 	  /* Write RTE to the stream. */
@@ -1427,7 +1424,7 @@ ripng_event (enum ripng_event event, int sock)
 
       ripng->t_update = 
 	thread_add_timer (master, ripng_update, NULL, 
-			  sock ? 1 : ripng->update_time + jitter);
+			  sock ? 2 : ripng->update_time + jitter);
       break;
     case RIPNG_TRIGGERED_UPDATE:
       if (ripng->t_triggered_interval)
@@ -1906,33 +1903,6 @@ DEFUN (no_ripng_timers,
   return CMD_SUCCESS;
 }
 
-/*
-
-Routing Protocol is "rip"
-  Sending updates every 30 seconds, next due in 23 seconds
-  Invalid after 180 seconds, hold down 180, flushed after 240
-  Outgoing update filter list for all interfaces is not set
-  Incoming update filter list for all interfaces is not set
-  Redistributing: connected, rip
-  Default version control: send version 2, receive version 2
-    Interface        Send  Recv   Key-chain
-    Ethernet0        2     2                      
-    Ethernet1        2     2                      
-  Routing for Networks:
-    203.181.89.0
-    202.227.9.0
-  Routing Information Sources:
-    Gateway         Distance      Last Update
-    Gateway         Distance      Last Update
-    203.181.89.5         120      4d11h
-    203.181.89.27        120      1w3d
-    203.181.89.26        120      3d07h
-    203.181.89.99        120      1w4d
-    202.227.9.102        120      3d07h
-    203.181.89.94        120      3d08h
-  Distance: (default is 120)
-
-*/
 
 DEFUN (show_ipv6_protocols, show_ipv6_protocols_cmd,
        "show ipv6 protocols",

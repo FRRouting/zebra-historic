@@ -145,7 +145,7 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
       o6log.dbex ("checking %s", print_lsahdr (lsh));
 
       /* make lsa structure for this LSA */
-      received = make_ospf6_lsa (lsh);
+      received = make_ospf6_lsa_summary (lsh);
 
       /* set scope */
       switch (ospf6_lsa_get_scope_type (received->lsa_hdr->lsh_type))
@@ -180,7 +180,7 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
       else if (have)
         {
           /* database copy is less recent */
-          if (which_is_more_recent (received, have) < 0)
+          if (ospf6_lsa_check_recent (received, have) < 0)
             ospf6_add_request (received, nbr);
         }
 
@@ -299,6 +299,7 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
 
   received = have = (struct ospf6_lsa *)NULL;
   ismore_recent = -1;
+  recent_reason = "no instance";
 
   o6log.dbex ("receive %s", print_lsahdr (lsh));
 
@@ -381,12 +382,11 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
                             lsh->lsh_advrtr, received->scope);
 
   /* if no database copy or received is more recent */
-  if (!have || (ismore_recent = which_is_more_recent (received, have)) < 0) 
+  if (!have || (ismore_recent = ospf6_lsa_check_recent (received, have)) < 0) 
     {
-      o6log.dbex ("received is newer");
+      o6log.dbex ("received is newer(%s)", recent_reason);
 
-      /* save acknowledge type when have no database copy,
-         I'm BDR and from DR */
+      /* in case we have no database copy */
       ismore_recent = -1;
 
       /* (a) MinLSArrival check */
@@ -439,7 +439,7 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       /* (f) */
       /* Self Originated LSA, section 13.4 */
       if (is_self_originated (received) && have &&
-          which_is_more_recent (received, have) < 0)
+          ospf6_lsa_check_recent (received, have) < 0)
         {
           /* we're going to make new lsa or to flush this LSA. */
           ospf6_lsa_unlock (received);
@@ -465,7 +465,7 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       ospf6_lsa_unlock (received);
       return;
     }
-  else if (ismore_recent == 0) /* (7) if neither on is more recent */
+  else if (ismore_recent == 0) /* (7) if neither is more recent */
     {
       o6log.dbex ("received and had is the same instance");
       ospf6_lsa_set_flag (received, OSPF6_LSA_DUPLICATE);
@@ -634,11 +634,11 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
           req = ospf6_lookup_request (lsa, nbr);
           if (req)
             {
-              ismore_recent = which_is_more_recent (lsa, req);
+              ismore_recent = ospf6_lsa_check_recent (lsa, req);
               if (ismore_recent > 0)
                 {
-                  o6log.dbex ("requesting is newer on %s",
-                              nbr->str);
+                  o6log.dbex ("requesting is newer on %s (%s)",
+                              nbr->str, recent_reason);
                   continue; /* examin next neighbor */
                 }
               else if (ismore_recent == 0)
@@ -650,8 +650,8 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
                 }
               else /* ismore_recent < 0(the new LSA is more recent) */
                 {
-                  o6log.dbex ("flooding is newer, delete from"
-                              " %s requestlist", nbr->str);
+                  o6log.dbex ("flooding is newer(%s), delete from"
+                              " %s requestlist", recent_reason, nbr->str);
                   ospf6_remove_request (req, nbr);
                 }
             }

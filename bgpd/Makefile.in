@@ -358,16 +358,17 @@ depend:
 
 bgp_aspath.o: bgp_aspath.c ../lib/hash.h ../lib/memory.h \
  ../lib/roken.h ../lib/vector.h ../lib/vty.h ../lib/str.h ../lib/log.h \
- ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../lib/regex-gnu.h
+ ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
+ ../lib/regex-gnu.h
 bgp_attr.o: bgp_attr.c ../lib/linklist.h ../lib/prefix.h \
  ../lib/memory.h ../lib/roken.h ../lib/vector.h ../lib/vty.h \
- ../lib/stream.h ../lib/log.h ../lib/hash.h ../bgpd/bgpd.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_route.h ../bgpd/bgp_aspath.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_dump.h ../bgpd/bgp_packet.h \
- ../zebra/zebra.h
+ ../lib/stream.h ../lib/log.h ../lib/hash.h ../zebra/zebra.h \
+ ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_route.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h ../bgpd/bgp_dump.h \
+ ../bgpd/bgp_packet.h
 bgp_clist.o: bgp_clist.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
- ../lib/memory.h ../lib/log.h ../lib/buffer.h ../bgpd/bgpd.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_clist.h
+ ../lib/memory.h ../lib/log.h ../lib/buffer.h ../zebra/zebra.h \
+ ../bgpd/bgpd.h ../bgpd/bgp_community.h ../bgpd/bgp_clist.h
 bgp_community.o: bgp_community.c ../lib/hash.h ../lib/memory.h \
  ../lib/vector.h ../lib/vty.h ../lib/roken.h ../lib/str.h \
  ../bgpd/bgp_community.h
@@ -376,40 +377,44 @@ bgpd.o: bgpd.c ../lib/prefix.h ../lib/thread.h ../lib/buffer.h \
  ../lib/vector.h ../lib/vty.h ../lib/sockunion.h ../lib/network.h \
  ../lib/memory.h ../lib/roken.h ../lib/filter.h ../lib/if.h \
  ../lib/routemap.h ../lib/str.h ../lib/log.h ../lib/plist.h \
- ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h \
- ../bgpd/bgp_dump.h ../bgpd/bgp_attr.h ../bgpd/bgp_community.h \
- ../bgpd/bgp_clist.h ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h \
- ../zebra/zebra.h
+ ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
+ ../bgpd/bgp_route.h ../bgpd/bgp_dump.h ../bgpd/bgp_attr.h \
+ ../bgpd/bgp_community.h ../bgpd/bgp_clist.h ../bgpd/bgp_fsm.h \
+ ../bgpd/bgp_packet.h
 bgp_dump.o: bgp_dump.c ../lib/version.h ../lib/prefix.h \
  ../lib/linklist.h ../lib/stream.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/str.h ../lib/log.h ../lib/sockunion.h \
- ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h ../bgpd/bgp_community.h
+ ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
+ ../bgpd/bgp_route.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
+ ../bgpd/bgp_community.h
 bgp_filter.o: bgp_filter.c ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/log.h ../lib/memory.h ../lib/buffer.h \
- ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_regex.h \
- ../bgpd/bgp_filter.h
+ ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
+ ../bgpd/bgp_regex.h ../lib/regex-gnu.h ../bgpd/bgp_filter.h
 bgp_fsm.o: bgp_fsm.c ../lib/linklist.h ../lib/prefix.h ../lib/vty.h \
  ../lib/sockunion.h ../lib/thread.h ../lib/log.h ../lib/stream.h \
- ../lib/memory.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
- ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h ../bgpd/bgp_network.h \
- ../bgpd/bgp_route.h
+ ../lib/memory.h ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h \
+ ../bgpd/bgp_dump.h ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h \
+ ../bgpd/bgp_network.h ../bgpd/bgp_route.h
 bgp_main.o: bgp_main.c ../lib/vector.h ../lib/vty.h ../lib/command.h \
  ../lib/thread.h ../lib/version.h ../lib/memory.h ../lib/log.h \
- ../bgpd/bgpd.h ../bgpd/bgp_network.h
+ ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_network.h
 bgp_network.o: bgp_network.c ../lib/thread.h ../lib/sockunion.h \
  ../lib/memory.h ../lib/log.h ../lib/if.h ../lib/linklist.h \
- ../lib/prefix.h ../bgpd/bgpd.h ../bgpd/bgp_fsm.h
+ ../lib/prefix.h ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_fsm.h
 bgp_open.o: bgp_open.c ../lib/vty.h ../lib/linklist.h ../lib/prefix.h \
  ../lib/roken.h ../lib/stream.h ../lib/thread.h ../lib/log.h \
- ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
+ ../zebra/zebra.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
  ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h
 bgp_packet.o: bgp_packet.c ../lib/thread.h ../lib/stream.h \
- ../lib/network.h ../lib/prefix.h ../lib/log.h ../bgpd/bgpd.h \
+ ../lib/network.h ../lib/prefix.h ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/log.h ../zebra/zebra.h ../bgpd/bgpd.h \
  ../bgpd/bgp_dump.h ../bgpd/bgp_fsm.h ../bgpd/bgp_route.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_packet.h ../bgpd/bgp_open.h
+ ../bgpd/bgp_attr.h ../bgpd/bgp_packet.h ../bgpd/bgp_open.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h
 bgp_regex.o: bgp_regex.c ../lib/log.h ../lib/command.h ../lib/vector.h \
- ../lib/vty.h ../lib/memory.h bgpd.h bgp_aspath.h bgp_regex.h
+ ../lib/vty.h ../lib/memory.h ../zebra/zebra.h bgpd.h bgp_aspath.h \
+ bgp_regex.h ../lib/regex-gnu.h
 bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../zebra/zebra.h ../lib/linklist.h ../lib/memory.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/filter.h \
@@ -417,17 +422,18 @@ bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/buffer.h ../lib/sockunion.h ../lib/plist.h ../bgpd/bgpd.h \
  ../bgpd/bgp_route.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
  ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h ../bgpd/bgp_packet.h \
- ../bgpd/bgp_regex.h ../bgpd/bgp_filter.h
+ ../bgpd/bgp_regex.h ../lib/regex-gnu.h ../bgpd/bgp_filter.h
 bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/routemap.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/log.h \
- ../lib/regex-gnu.h ../lib/buffer.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h \
- ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_regex.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_clist.h ../bgpd/bgp_filter.h
+ ../lib/regex-gnu.h ../lib/buffer.h ../zebra/zebra.h ../bgpd/bgpd.h \
+ ../bgpd/bgp_attr.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h \
+ ../bgpd/bgp_regex.h ../bgpd/bgp_community.h ../bgpd/bgp_clist.h \
+ ../bgpd/bgp_filter.h ../lib/table.h ../lib/sockunion.h
 bgp_zebra.o: bgp_zebra.c ../zebra/zebra.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/network.h \
- ../lib/prefix.h ../lib/client.h ../lib/roken.h ../lib/log.h \
- ../lib/thread.h ../lib/sockunion.h ../lib/if.h ../lib/linklist.h \
+ ../lib/prefix.h ../lib/client.h ../lib/if.h ../lib/linklist.h \
+ ../lib/roken.h ../lib/log.h ../lib/thread.h ../lib/sockunion.h \
  ../lib/zclient.h bgpd.h bgp_route.h bgp_attr.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

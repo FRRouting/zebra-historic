@@ -23,16 +23,20 @@
 #define OSPF6_RTABLE_H
 
 /* Destination Types (from draft-ietf-ospf-ospfv6-06.txt 3.3) */
-#define DTYPE_PREFIX         1   /* IPv6 prefix */
-#define DTYPE_ASBR           2   /* AS boundary router */
-#define DTYPE_INTRA_ROUTER   3   /* each router in the area */
-#define DTYPE_INTRA_LINK     4   /* each transit link in the area */
+#define DTYPE_NONE                0x00
+#define DTYPE_PREFIX              0x01 /* IPv6 prefix */
+#define DTYPE_ASBR                0x02 /* AS boundary router */
+#define DTYPE_INTRA_ROUTER        0x03 /* each router in the area */
+#define DTYPE_INTRA_LINK          0x04 /* each transit link in the area */
+#define DTYPE_STATIC_REDISTRIBUTE 0xf1 /* redistributed from static */
+#define DTYPE_RIPNG_REDISTRIBUTE  0xf2 /* redistributed from ripng */
+#define DTYPE_BGP_REDISTRIBUTE    0xf3 /* redistributed from bgp */
 
 /* Path-types (from RFC2328 11), decreasing order of preference */
-#define PTYPE_INTRA          1   /* intra-area */
-#define PTYPE_INTER          2   /* inter-area */
-#define PTYPE_TYPE1_EXTERNAL 3   /* type 1 external */
-#define PTYPE_TYPE2_EXTERNAL 4   /* type 2 external */
+#define PTYPE_INTRA          1    /* intra-area */
+#define PTYPE_INTER          2    /* inter-area */
+#define PTYPE_TYPE1_EXTERNAL 3    /* type 1 external */
+#define PTYPE_TYPE2_EXTERNAL 4    /* type 2 external */
 
 /* Next Hop */
 struct ospf6_nexthop
@@ -44,54 +48,56 @@ struct ospf6_nexthop
   unsigned int    lock;      /* reference count of this nexthop(nexthop) */
 };
 
-union dest_id
+struct ospf6_route_node_info
 {
-  rtr_id_t        router_id;
-  unsigned long   network_id[2];
-  struct prefix_ipv6 prefix;
+  unsigned char     dest_type;  /* Destination Type */
+  unsigned char     opt_cap[3]; /* Optional Capability */
+  struct area      *area;            /* Associated area */
+    /* note: multiple entry for the same ABR is different
+       in routing table by index */
+  unsigned char     path_type;  /* Path-type */
+  unsigned long     cost;       /* Cost to this route */
+  struct ospf6_lsa *ls_origin;       /* Link State Origin, for MOSPF */
+  list              nhlist;          /* nexthop list */
 };
 
-struct ospf6_rtentry
-{
-  /* for doubly linked list */
-  struct ospf6_rtentry *prev;
-  struct ospf6_rtentry *next;
-
-  unsigned char dest_type;           /* Destination Type */
-  union dest_id dest_id;             /* Destination ID */
-  unsigned char opt_cap[3];          /* Optional Capability */
-  unsigned char path_type;           /* Path-type */
-  cost_t        cost;
-  cost_t        cost_type2;
-  struct ospf6_lsa *ls_origin;    /* Link State Origin, for MOSPF */
-  list          nexthops;               /* list of struct ospf6_nexthop */
-};
-
-struct ospf6_rtable
-{
-  struct ospf6_rtentry *current_top;
-  struct ospf6_rtentry *previous_top;
-};
+
+/* function definition */
 
 void nexthop_init ();
+void nexthop_finish ();
+struct ospf6_nexthop *nexthop_make (unsigned long,
+                                    struct in6_addr *,
+                                    unsigned long);
+void nexthop_delete (struct ospf6_nexthop *);
 void nexthop_add_from_vertex (struct vertex *, struct vertex *, list);
-
-void rtable_init (struct ospf6_rtable *);
-
-struct ospf6_rtentry *rtable_lookup (unsigned char, union dest_id *,
-                                     struct ospf6_rtentry *);
-void rtable_install (unsigned char, union dest_id *, cost_t,
-                     unsigned char, list, struct ospf6_lsa *,
-                     struct ospf6_rtable *);
-void rtable_uninstall (unsigned char, union dest_id *,
-                       struct ospf6_rtable *);
-
-void rtable_update_zebra (struct ospf6_rtable *);
-
 int routing_table_calculation (struct thread *);
+char *nexthop_str (struct ospf6_nexthop *, char *, size_t);
 
-void rtable_vty_entry (struct vty *, struct ospf6_rtentry *);
-char *print_rtentry (struct ospf6_rtentry *, char *, int);
+struct route_node *ospf6_route_lookup (struct prefix_ipv6 *,
+                                       struct route_table *);
+void ospf6_route_add (struct prefix_ipv6 *,
+                      struct ospf6_route_node_info *,
+                      struct route_table *);
+void ospf6_route_delete (struct prefix_ipv6 *,
+                         struct ospf6_route_node_info *,
+                         struct route_table *);
+void ospf6_route_delete_node (struct route_node *);
+
+struct route_table *ospf6_route_table_init (void);
+struct route_table *ospf6_route_table_clear (struct route_table *);
+void ospf6_route_table_finish (struct route_table *);
+
+void ospf6_route_set_dst_rtrid (unsigned long, struct prefix_ipv6 *);
+void ospf6_route_set_dst_ifid (unsigned long, struct prefix_ipv6 *);
+unsigned long ospf6_route_get_dst_rtrid (struct prefix_ipv6 *);
+unsigned long ospf6_route_get_dst_ifid (struct prefix_ipv6 *);
+
+char *ospf6_route_str (struct route_node *, char *, size_t);
+void ospf6_route_vty (struct vty *, struct route_node *);
+
+void ospf6_route_calc (struct thread *);
+void ospf6_route_update_zebra ();
 
 #endif /* OSPF6_RTABLE_H */
 

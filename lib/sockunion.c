@@ -207,13 +207,13 @@ sockunion_socket (union sockunion *su)
 int
 sockunion_accept (int sock, union sockunion *su)
 {
-  int len;
-  int newsock;
+  socklen_t len;
+  int client_sock;
 
   len = sizeof (union sockunion);
-  newsock = accept (sock, (struct sockaddr *) su, &len);
+  client_sock = accept (sock, (struct sockaddr *) su, &len);
   
-  return newsock;
+  return client_sock;
 }
 
 /**/
@@ -385,7 +385,7 @@ sockunion_bind (int sock, union sockunion *su, unsigned short port,
 #endif /* SIN6_LEN */
       if (su_addr == NULL)
 	{
-#ifdef LINUX_IPV6
+#if defined(LINUX_IPV6) || defined(NRL)
 	  bzero (&su->sin6.sin6_addr, sizeof (struct in6_addr));
 #else
 	  su->sin6.sin6_addr = in6addr_any;

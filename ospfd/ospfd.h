@@ -171,6 +171,9 @@ typedef struct message
   char *str;
 } message;
 
+/* Macro. */
+#define OSPF_AREA_SAME(X,Y)   (memcmp ((X->area_id), (Y->area_id), IPV4_MAX_BYTELEN) == 0)
+
 /* Messages */
 extern message ospf_ism_status_msg[];
 extern message ospf_nsm_status_msg[];

@@ -1,4 +1,5 @@
 /*
+ * Logging function
  * Copyright (C) 1999 Yasuhiro Ohara
  *
  * This file is part of GNU Zebra.
@@ -24,6 +25,9 @@
 
 struct ospf6_log
 {
+  void (*err)       (const char *format, ...);
+  void (*warn)      (const char *format, ...);
+  void (*notice)    (const char *format, ...);
   void (*interface) (const char *format, ...);
   void (*neighbor)  (const char *format, ...);
   void (*ism)       (const char *format, ...);
@@ -59,13 +63,8 @@ extern char   *rlsatype_name[];
 char *print_lsreq (struct linkstate_request *);
 char *print_ls_reference (struct ospf6_lsa_hdr *);
 char *print_lsahdr (struct ospf6_lsa_hdr *);
-void ospf6_log_init ();
 char *inet4str(unsigned long);
-void log_pointer (const char *, ...);
-void log_spf (const char *, ...);
-
-void o6log_off (const char *, ...);
-void o6log_on (const char *, ...);
+void ospf6_log_init ();
 
 #endif /* OSPF6_DUMP_H */
 

@@ -1,3 +1,13 @@
+1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (no_neighbor_timers_keepalive): Change MIN to min.  Add
+	min() macro.
+
+1999-08-19  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_packet.c (bgp_open): BGP holdtimer bug is fixed.  Make BGP
+	keepalive timer configurable.
+
 1999-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_zebra.c (bgp_redistribute_set): Fix redistribute bug.

@@ -101,9 +101,9 @@ ospf_nbr_state_message (struct ospf_neighbor *nbr, char *buf, size_t size)
   int status;
   struct ospf_interface *oi = nbr->oi;
 
-  if (IPV4_ADDR_SAME (&oi->d_router, &nbr->address.u.prefix4))
+  if (IPV4_ADDR_SAME (&DR (oi), &nbr->address.u.prefix4))
     status = ISM_DR;
-  else if (IPV4_ADDR_SAME (&oi->bd_router, &nbr->address.u.prefix4))
+  else if (IPV4_ADDR_SAME (&BDR (oi), &nbr->address.u.prefix4))
     status = ISM_Backup;
   else
     status = ISM_DROther;
@@ -202,7 +202,7 @@ ospf_dd_flags_dump (u_char flags, char *buf, size_t size)
 }
 
 void
-ospf_lsa_header_dump (struct ospf_lsa *lsa)
+ospf_lsa_header_dump (struct lsa_header *lsa)
 {
   zlog (NULL, LOG_INFO, "LS age %d", ntohs (lsa->ls_age));
   zlog (NULL, LOG_INFO, "Options %d", lsa->options);
@@ -211,7 +211,8 @@ ospf_lsa_header_dump (struct ospf_lsa *lsa)
   zlog (NULL, LOG_INFO, "Link State ID %s", inet_ntoa (lsa->id));
   zlog (NULL, LOG_INFO, "Advertising Router %s",
 	inet_ntoa (lsa->adv_router));
-  zlog (NULL, LOG_INFO, "LS sequence number 0x%x", ntohl (lsa->ls_seqnum));
+  zlog (NULL, LOG_INFO, "LS sequence number 0x%x",
+	ntohl (lsa->ls_seqnum));
   zlog (NULL, LOG_INFO, "LS checksum 0x%x", ntohs (lsa->checksum));
   zlog (NULL, LOG_INFO, "length %d", ntohs (lsa->length));
 }
@@ -316,12 +317,12 @@ ospf_as_external_lsa_dump (struct stream *s, u_int16_t length)
 void
 ospf_lsa_header_list_dump (struct stream *s, u_int16_t length)
 {
-  struct ospf_lsa *lsa;
+  struct lsa_header *lsa;
 
   /* LSA Headers. */
   while (length > 0)
     {
-      lsa = (struct ospf_lsa *) STREAM_PNT (s);
+      lsa = (struct lsa_header *) STREAM_PNT (s);
       ospf_lsa_header_dump (lsa);
 
       stream_forward (s, OSPF_LSA_HEADER_SIZE);
@@ -387,7 +388,7 @@ void
 ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
 {
   u_int32_t sp;
-  struct ospf_lsa *lsa;
+  struct lsa_header *lsa;
   int lsa_len;
   u_int32_t count;
 
@@ -402,7 +403,7 @@ ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
 
   while (length > 0 && count > 0)
     {
-      lsa = (struct ospf_lsa *) STREAM_PNT (s);
+      lsa = (struct lsa_header *) STREAM_PNT (s);
       lsa_len = ntohs (lsa->length);
       ospf_lsa_header_dump (lsa);
 

@@ -65,6 +65,8 @@ extern struct route_table *bgp_table_ipv4;
 #ifdef HAVE_IPV6
 extern struct route_table *bgp_table_ipv6;
 #endif /* HAVE_IPV6 */
+
+#define min(a, b) ((a) < (b) ? (a) : (b))
 
 /* Allocate new bgp structure. */
 struct bgp *
@@ -586,17 +588,18 @@ bgp_peer_display (struct vty *vty, struct peer *p)
   char buf[BUFSIZ];
 
   vty_out (vty, "%-15s ", p->host);
-  switch (p->version) {
-  case BGP_VERSION_4:
-    vty_out (vty, "4  ");
-    break;
-  case BGP_VERSION_MP_4:
-    vty_out (vty, "4+ ");
-    break;
-  case BGP_VERSION_MP_4_DRAFT_00:
-    vty_out (vty, "4- ");
-    break;
-  }
+  switch (p->version) 
+    {
+    case BGP_VERSION_4:
+      vty_out (vty, "4  ");
+      break;
+    case BGP_VERSION_MP_4:
+      vty_out (vty, "4+ ");
+      break;
+    case BGP_VERSION_MP_4_DRAFT_00:
+      vty_out (vty, "4- ");
+      break;
+    }
   vty_out(vty, "%5d %7d %7d %8d %4d %4d ", p->as,
 	  p->open_in+p->update_in+p->withdrow_in+p->keepalive_in,
 	  p->open_out+p->update_out+p->withdrow_out+p->keepalive_out,
@@ -634,7 +637,8 @@ bgp_peer_display (struct vty *vty, struct peer *p)
   /* Nexthop display. */
   if (p->su_local)
     {
-      vty_out (vty, "  Nexthop: %s\r\n", inet_ntoa (p->nexthop.v4));
+      vty_out (vty, "  Nexthop: %s\r\n", inet_ntop (AF_INET, &p->nexthop.v4,
+						    buf, BUFSIZ));
 #ifdef HAVE_IPV6
       vty_out (vty, "  Nexthop global: %s", 
 	       inet_ntop (AF_INET6, &p->nexthop.v6_global, buf, BUFSIZ));
@@ -2019,7 +2023,12 @@ DEFUN (neighbor_timers_holdtime,
     }
   if (holdtime > 65535)
     {
-      vty_out (vty, "hold time value must be <0-65535>\r\n");
+      vty_out (vty, "hold time value must be <0,3-65535>\r\n");
+      return CMD_WARNING;
+    }
+  if (holdtime < 3 && holdtime != 0)
+    {
+      vty_out (vty, "hold time value must be either 0 or greater than 3\r\n");
       return CMD_WARNING;
     }
 
@@ -2029,6 +2038,54 @@ DEFUN (neighbor_timers_holdtime,
 
   /* Set value to timer setting. */
   peer->v_holdtime = holdtime;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_timers_keepalive,
+       neighbor_timers_keepalive_cmd,
+       "neighbor PEER timers keepalive <0-65535>",
+       NEIGHBOR_STR
+       "IP address\n"
+       "BGP timers\n"
+       "BGP keepalive timer\n"
+       "BGP keepalive timer value\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  unsigned long keepalive;
+  char *endptr = NULL;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Hold time value check. */
+  keepalive = strtoul (argv[1], &endptr, 10);
+
+  if (keepalive == ULONG_MAX || *endptr != '\0')
+    {
+      vty_out (vty, "hold time value must be positive integer\r\n");
+      return CMD_WARNING;
+    }
+  if (keepalive > 65535)
+    {
+      vty_out (vty, "hold time value must be <0-65535>\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set value to the configuration. */
+  peer->config |= PEER_CONFIG_KEEPALIVE;
+  peer->keepalive = keepalive;
+
+  /* Set value to timer setting. */
+  peer->v_keepalive = keepalive;
 
   return CMD_SUCCESS;
 }
@@ -2087,6 +2144,64 @@ DEFUN (no_neighbor_timers_holdtime,
 
   /* Set timer setting to default value. */
   peer->v_holdtime = BGP_DEFAULT_HOLDTIME;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_timers_keepalive,
+       no_neighbor_timers_keepalive_cmd,
+       "no neighbor PEER timers keepalive [TIMER]",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "BGP timers\n"
+       "BGP keepalive timer\n"
+       "BGP keepalive timer value\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  unsigned long keepalive;
+  char *endptr = NULL;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (argc == 2)
+    {
+      /* Hold time value check. */
+      keepalive = strtoul (argv[1], &endptr, 10);
+
+      if (keepalive == ULONG_MAX || *endptr != '\0')
+	{
+	  vty_out (vty, "hold time value must be positive integer\r\n");
+	  return CMD_WARNING;
+	}
+      if (keepalive > 65535)
+	{
+	  vty_out (vty, "hold time value must be <0-65535>\r\n");
+	  return CMD_WARNING;
+	}
+
+      if (peer->keepalive != keepalive)
+	{
+	  vty_out (vty, "timer value does not match %s\r\n", argv[1]);
+	  return CMD_WARNING;
+	}
+    }
+
+  /* Clear configuration. */
+  peer->config &= ~PEER_CONFIG_KEEPALIVE;
+  peer->keepalive = 0;
+
+  /* Set timer setting to default value. */
+  peer->v_keepalive = min (BGP_DEFAULT_KEEPALIVE, peer->v_holdtime / 3);
 
   return CMD_SUCCESS;
 }
@@ -2466,7 +2581,13 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	  vty_out (vty, " timers holdtime %ld%s", peer->holdtime,
 		   VTY_NEWLINE);
 	}
-    }
+      if (peer->config & PEER_CONFIG_KEEPALIVE)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " timers keepalive %ld%s", peer->keepalive,
+		   VTY_NEWLINE);
+	}    }
 }
 
 /* BGP configuration write function. */
@@ -2600,6 +2721,8 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_nexthop_self_cmd);
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
+  install_element (BGP_NODE, &neighbor_timers_keepalive_cmd);
+  install_element (BGP_NODE, &no_neighbor_timers_keepalive_cmd);
   install_element (BGP_NODE, &neighbor_send_community_cmd);
   install_element (BGP_NODE, &no_neighbor_send_community_cmd);
   install_element (BGP_NODE, &neighbor_weight_cmd);

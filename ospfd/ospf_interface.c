@@ -52,10 +52,6 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   oi->type = OSPF_IFTYPE_BROADCAST;
   oi->status = ISM_Down;
 
-  /* Interface configurable values. */
-  oi->priority = OSPF_ROUTER_PRIORITY_DEFAULT;
-  oi->options = OSPF_OPTION_E;
-
   bzero (oi->auth_data, OSPF_AUTH_SIZE);
 
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
@@ -65,6 +61,7 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   /* Timer values. */
   oi->v_hello = OSPF_HELLO_INTERVAL_DEFAULT;
   oi->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
+  oi->v_ls_ack = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
 }
 
 struct ospf_interface *
@@ -87,6 +84,12 @@ ospf_if_new (struct interface *ifp)
   /* Initialize neighbor list. */
   oi->nbrs = route_table_init ();
 
+  /* Initialize Link State Acknowledgment list. */
+  oi->ls_ack = list_init ();
+
+  /* Set LS Ack timer. */
+  OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
+
   return oi;
 }
 
@@ -102,13 +105,7 @@ ospf_if_lookup_by_addr (struct in_addr *address)
       ifp = getdata (node);
       oi = ifp->info;
 
-      if (if_is_loopback (ifp))
-	continue;
-
-      if (!if_is_up (ifp))
-	continue;
-
-      if (oi->flag != OSPF_IF_ENABLE)
+      if (!ospf_if_is_enable (ifp))
 	continue;
 
       if (IPV4_ADDR_SAME (address, &oi->address->u.prefix4))
@@ -147,6 +144,23 @@ ospf_if_new_hook (struct interface *ifp)
 {
   ifp->info = ospf_if_new (ifp);
   return 0;
+}
+
+int
+ospf_if_is_enable (struct interface *ifp)
+{
+  struct ospf_interface *oi = ifp->info;
+
+  if (if_is_loopback (ifp))
+    return 0;
+
+  if (!if_is_up (ifp))
+    return 0;
+
+  if (oi->flag != OSPF_IF_ENABLE)
+    return 0;
+
+  return 1;
 }
 
 
@@ -192,9 +206,9 @@ interface_config_write (struct vty *vty)
 		 oi->v_wait, VTY_NEWLINE);
 
       /* Router Priority print. */
-      if (oi->priority != OSPF_ROUTER_PRIORITY_DEFAULT)
+      if (PRIORITY (oi) != OSPF_ROUTER_PRIORITY_DEFAULT)
 	vty_out (vty, " ospf priority %u%s",
-		 oi->priority, VTY_NEWLINE);
+		 PRIORITY (oi), VTY_NEWLINE);
 
       /* Retransmit Interval print. */
       if (oi->retransmit_interval != OSPF_RETRANSMIT_INTERVAL_DEFAULT)
@@ -465,7 +479,7 @@ DEFUN (if_ospf_priority,
       return CMD_WARNING;
     }
 
-  oi->priority = priority;
+  PRIORITY (oi) = priority;
 
   return CMD_SUCCESS;
 }
@@ -483,7 +497,7 @@ DEFUN (no_if_ospf_priority,
   ifp = vty->index;
   oi = ifp->info;
 
-  oi->priority = OSPF_ROUTER_PRIORITY_DEFAULT;
+  PRIORITY (oi) = OSPF_ROUTER_PRIORITY_DEFAULT;
 
   return CMD_SUCCESS;
 }
