@@ -310,7 +310,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
     }
 
   /* If verbose mode log interface index. */
-  zlog_info ("interface %s index %d.\n", ifp->name, ifp->ifindex);
+  /* zlog_info ("interface %s index %d.\n", ifp->name, ifp->ifindex); */
 
   return 0;
 }
@@ -519,7 +519,9 @@ struct message rtproto_str [] =
   {RTPROT_RA,       "router advertisement"},
   {RTPROT_MRT,      "MRT"},
   {RTPROT_ZEBRA,    "Zebra"},
-  {RTPROT_BIRD,     "Bird"},
+#ifdef RTPROT_BIRD
+  {RTPROT_BIRD,     "BIRD"},
+#endif /* RTPROT_BIRD */
   {0,               NULL}
 };
 

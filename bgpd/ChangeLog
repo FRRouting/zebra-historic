@@ -1,3 +1,23 @@
+1999-12-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_mp_reach_parse): Comment out previous code for a
+	while.  We don't completely detect the link is shared or not at
+	this moment.
+
+	* bgp_packet.c (bgp_notify_send): Make shortcut call of
+	bgp_write() and bgp_stop().
+
+	* bgp_attr.c (bgp_mp_reach_parse): Fix serious bug when getting
+	global and link-local address.
+
+1999-12-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_mp_reach_parse): If nlri_parse return -1, stop
+	parsing then return immediately.
+
+	* bgp_route.c (nlri_parse): When NLRI parse error occured, return
+	-1.
+
 1999-11-25  Robert Olsson <Robert.Olsson@data.slu.se>
 
 	* bgp_routemap.c (route_match_nlri): `match nlri

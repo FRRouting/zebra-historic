@@ -20,6 +20,7 @@
  * 02111-1307, USA.  
  */
 
+static char rcsid[] = "$Id$";
 #include <zebra.h>
 
 #include "prefix.h"
@@ -858,7 +859,7 @@ nlri_translate_update (struct peer *peer, struct prefix *p,
 #endif /* HAVE_MBGPV4 */ 
 
 /* Parse route and add route into radix tree. */
-void
+int
 nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len, 
 	    int family, int safi)
 {
@@ -872,11 +873,11 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
 
   /* When protocol is BGP-4+ NLRI length may be zero. */
   if (!len) 
-    return;
+    return 0;
 
   /* Check peer's family type. */
   if (family != peer->family)
-    return;
+    return 0;
 
   for (end = pnt + len; pnt < end; pnt += psize)
     {
@@ -895,7 +896,10 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
 	  zlog (peer->log, LOG_ERR, "Wrong prefix length %s/%d len %d",
 		inet_ntop (family, &p.u.prefix, buf, BUFSIZ),
 		p.prefixlen, len);
-	  return;
+	  bgp_notify_send (peer,
+			   BGP_NOTIFY_UPDATE_ERR,
+			   BGP_NOTIFY_UPDATE_MAL_ATTR);
+	  return -1;
 	}
 
       /* Fetch prefix length. */
@@ -906,7 +910,10 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
 	  zlog (peer->log, LOG_ERR, 
 		"Wrong prefix length. It exceeds end of packet %d",
 		p.prefixlen);
-	  return;
+	  bgp_notify_send (peer,
+			   BGP_NOTIFY_UPDATE_ERR,
+			   BGP_NOTIFY_UPDATE_MAL_ATTR);
+	  return -1;
 	}
 
       /* Copy prefix from nlri. */
@@ -941,7 +948,7 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
 #ifdef HAVE_MBGPV4
       if( peer->translate_update ) {
 	nlri_translate_update(peer, &p, attrnew);
-	return;
+	return 0;
       }
 #endif /* HAVE_MBGPV4 */
 
@@ -955,7 +962,7 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
       /* Process this information. */
       nlri_process (&p, br);
     }
-  return;
+  return 0;
 }
 
 int

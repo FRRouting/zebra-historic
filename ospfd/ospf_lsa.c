@@ -1755,7 +1755,10 @@ ospf_lsa_is_self_originated (struct ospf_lsa *lsa)
 	      {
 		/* to make it easier later */
 		SET_FLAG (lsa->flags, OSPF_LSA_SELF);
-		lsa->lsdb->count_self++;
+
+                if (lsa->lsdb)
+  		   lsa->lsdb->count_self++;
+
 		return 1;
 	      }
 	  }

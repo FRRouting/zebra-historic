@@ -20,6 +20,8 @@
  * 02111-1307, USA.  
  */
 
+static char rcsid[] = "$Id: bgp_attr.c,v 1.95 1999/12/06 23:04:12 kunihiro Exp $";
+
 #include <zebra.h>
 
 #include "linklist.h"
@@ -636,6 +638,7 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
   u_char snpa_len;
   u_char *lim;
   bgp_size_t nlri_len;
+  int ret;
   
   /* Set end of packet. */
   lim = stream_pnt (peer->ibuf) + length;
@@ -661,6 +664,10 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
       break;
     case 32:
       stream_get (&attr->mp_nexthop_global, peer->ibuf, 16);
+      stream_get (&attr->mp_nexthop_local, peer->ibuf, 16);
+
+#if 0  /* We can't completely detect the peer is shared or not when
+          the link is tunnel... */
       /* If peer is not on shared network, ignore inbound 
 	 link-local addresses */
       if (! peer->shared_network)
@@ -668,8 +675,7 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
 	  attr->mp_nexthop_len = 16;
 	  memset(&attr->mp_nexthop_local, 0, IPV6_MAX_BYTELEN);
 	}
-      else
-	stream_get (&attr->mp_nexthop_local, peer->ibuf, 16);
+#endif /* 0 */
       break;
 #endif /* HAVE_IPV6 */
     default:
@@ -698,9 +704,17 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
   nlri_len = lim - stream_pnt (peer->ibuf);
  
   if (afi == AFI_IP)
-    nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET, safi);
+    {
+      ret = nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET, safi);
+      if (ret < 0)
+	return ret;
+    }
   else if (afi == AFI_IP6)
-    nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET6, safi);
+    {
+      ret = nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET6, safi);
+      if (ret < 0)
+	return ret;
+    }
 
   stream_forward (peer->ibuf, nlri_len);
 
@@ -794,6 +808,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
+	  return -1;
 	}
 
       /* Fetch attribute flag and type. */
@@ -816,6 +831,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
+	  return -1;
 	}
 
       /* OK check attribute and store it's value. */
@@ -884,6 +900,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
+	  return -1;
 	}
     }
 
@@ -894,6 +911,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
 		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
+      return -1;
     }
   return 0;
 }

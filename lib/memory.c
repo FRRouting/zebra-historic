@@ -115,11 +115,23 @@ zstrdup (int type, char *str)
 }
 
 #ifdef MEMORY_LOG
+struct 
+{
+  char *name;
+  unsigned long alloc;
+  unsigned long t_malloc;
+  unsigned long c_malloc;
+  unsigned long t_calloc;
+  unsigned long c_calloc;
+  unsigned long t_realloc;
+  unsigned long t_free;
+  unsigned long c_strdup;
+} mstat [MTYPE_MAX];
+
 void
 mtype_log (char *func, void *memory, const char *file, int line, int type)
 {
-  zlog (NULL, LOG_INFO, "%s: %s %p %s %d",
-	  func, lookup (mstr, type), memory, file, line);
+  zlog_info ("%s: %s %p %s %d", func, lookup (mstr, type), memory, file, line);
 }
 
 void *
@@ -173,7 +185,7 @@ mtype_zfree (const char *file, int line, int type, void *ptr)
 
   mtype_log ("xfree", ptr, file, line, type);
 
-  xfree (type, ptr);
+  zfree (type, ptr);
 }
 
 char *
@@ -189,13 +201,13 @@ mtype_zstrdup (const char *file, int line, int type, char *str)
 
   return memory;
 }
-#endif /* MEMORY_LOG */
-
+#else
 struct 
 {
   char *name;
   unsigned long alloc;
 } mstat [MTYPE_MAX];
+#endif /* MTPYE_LOG */
 
 /* Increment allocation counter. */
 void

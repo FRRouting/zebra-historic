@@ -19,6 +19,7 @@
  * 02111-1307, USA.
  */
 
+static char rcsid[] = "$Id: newlist.c,v 1.4 1999/12/05 12:48:10 kunihiro Exp $";
 #include <zebra.h>
 
 #include "newlist.h"

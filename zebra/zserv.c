@@ -485,7 +485,8 @@ zebra_serv ()
 
   if (accept_sock < 0) 
     {
-      zlog (NULL, LOG_WARNING, "can't init client routing socket");
+      zlog_warn ("Can't bind to socket: %s", strerror (errno));
+      zlog_warn ("zebra can't provice full functionality due to above error");
       return;
     }
 
@@ -504,15 +505,17 @@ zebra_serv ()
 	       sizeof (struct sockaddr_in));
   if (ret < 0)
     {
-      zlog_warn ("can't bind to socket");
-      exit (1);
+      zlog_warn ("Can't bind to socket: %s", strerror (errno));
+      zlog_warn ("zebra can't provice full functionality due to above error");
+      return;
     }
 
   ret = listen (accept_sock, 1);
   if (ret < 0)
     {
-      zlog_warn ("can't listen to socket");
-      exit (1);
+      zlog_warn ("Can't listen to socket: %s", strerror (errno));
+      zlog_warn ("zebra can't provice full functionality due to above error");
+      return;
     }
 
   zebra_event (ZEBRA_SERV, accept_sock, NULL);

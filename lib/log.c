@@ -180,6 +180,15 @@ zlog(ZLOG *zl, int priority, const char *format, ...)
   if (zl == NULL)
     zl = zlog_default;
   
+  if (zl == NULL)
+    {
+      time_print (stdout);
+      vfprintf (stdout, format, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+      return;
+    }
+
   if (zl->flags & ZLOG_SYSLOG)
     vsyslog(priority, format, args);
 
@@ -212,6 +221,15 @@ zlog_info (const char *format, ...)
   zl = zlog_default;
   priority = LOG_INFO;
   
+  if (zl == NULL)
+    {
+      time_print (stdout);
+      vfprintf (stdout, format, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+      return;
+    }
+
   if (zl->flags & ZLOG_SYSLOG)
     vsyslog(priority, format, args);
 

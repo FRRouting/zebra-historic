@@ -66,7 +66,7 @@ void bgp_peer_delete (struct peer *peer);
 void bgp_announce_table (struct peer *peer);
 
 void nlri_process (struct prefix *p, struct bgp_info *br);
-void nlri_parse (struct peer *, struct attr *, u_char *, int, int, int);
+int nlri_parse (struct peer *, struct attr *, u_char *, int, int, int);
 void nlri_unfeasible (struct peer *, bgp_size_t);
 int nlri_delete (struct peer *, struct prefix *, int);
 

@@ -1,3 +1,7 @@
+1999-12-04  Rumen Svobodnikov <rumen@linux.tu-varna.acad.bg>
+
+	* memory.c (struct mstat): Revert to support MEMORY_LOG.
+
 1999-11-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* version.h: Bump up to 0.81c for testing new kernel codes.

@@ -312,8 +312,8 @@ bgp_stop_with_error (struct peer *peer)
   peer->v_start *= 2;
 
   /* Overflow check. */
-  if (peer->v_start >= (60 * 60))
-    peer->v_start = (60 * 60);
+  if (peer->v_start >= (60 * 2))
+    peer->v_start = (60 * 2);
 
   bgp_stop (peer);
 }
@@ -615,6 +615,5 @@ bgp_event (struct thread *thread)
 
   /* Make sure timer is set. */
   bgp_timer_set (peer);
-
   return 0;
 }

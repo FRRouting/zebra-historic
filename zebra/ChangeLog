@@ -1,7 +1,10 @@
-1999-11-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+1999-12-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
-	* kernel_socket.c (rtm_read): Check old pid for static route
-	insertion check.
+	* main.c (main): Change to default log output to ZLOG_STDOUT.
+
+	* zserv.c (zebra_serv): More detailed error print.
+
+1999-11-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* interface.c (if_dump_vty): BSDI/OS uses 64bit for interface
 	statistics counter.

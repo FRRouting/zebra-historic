@@ -161,7 +161,8 @@ bgp_write (struct thread *thread)
 {
   struct peer *peer;
   u_char type;
- struct stream *s; 
+  struct stream *s; 
+  int ret;
 
   /* Yes first of all get peer pointer. */
   peer = THREAD_ARG (thread);
@@ -176,11 +177,17 @@ bgp_write (struct thread *thread)
 
   /* There should be at least one packet. */
   s = stream_fifo_head (peer->obuf);
-  assert (s);
+  if (!s)
+    return 0;
   assert (stream_get_endp (s) >= BGP_HEADER_SIZE);
 
   /* peer->fd is writable. */
-  writen (peer->fd, STREAM_DATA (s), stream_get_endp (s));
+  ret = writen (peer->fd, STREAM_DATA (s), stream_get_endp (s));
+  if (ret <= 0)
+    {
+      bgp_stop (peer);
+      return 0;
+    }
 
   /* Retrieve BGP packet type. */
   stream_set_getp (s, BGP_MARKER_SIZE + 2);
@@ -200,10 +207,14 @@ bgp_write (struct thread *thread)
       peer->v_start *= 2;
 
       /* Overflow check. */
-      if (peer->v_start >= (60 * 60))
-	peer->v_start = (60 * 60);
+      if (peer->v_start >= (60 * 2))
+	peer->v_start = (60 * 2);
 
-      BGP_EVENT_ADD (peer, BGP_Stop);
+      /* BGP_EVENT_ADD (peer, BGP_Stop); */
+      bgp_stop (peer);
+      peer->status = Idle;
+      bgp_timer_set (peer);
+      return 0;
       break;
     case BGP_MSG_KEEPALIVE:
       peer->keepalive_out++;
@@ -278,6 +289,7 @@ void
 bgp_notify_send (struct peer *peer, u_char code, u_char sub_code)
 {
   struct stream *s;
+  struct thread t;
 
   /* Allocate new stream. */
   s = stream_new (BGP_MAX_PACKET_SIZE);
@@ -296,9 +308,10 @@ bgp_notify_send (struct peer *peer, u_char code, u_char sub_code)
   /* bgp_packet_dump (s); */
 
   /* Add packet to the peer. */
+  stream_fifo_free (peer->obuf);
   bgp_packet_add (peer, s);
 
-  BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
+  /* BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd); */
 
   /* For debug */
   {
@@ -309,6 +322,12 @@ bgp_notify_send (struct peer *peer, u_char code, u_char sub_code)
     bgp_notify.data = NULL;
     bgp_notify_print (peer, &bgp_notify);
   }
+
+  /* Call imidiately. */
+  BGP_WRITE_OFF (peer->t_write);
+    
+  t.arg = peer;
+  bgp_write (&t);
 }
 
 /* Send BGP notify packet with data potion. */
@@ -727,8 +746,8 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 #endif /* 0 */
 
   /* Network Layer Reachability Information. */
-  nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s), AF_INET, 
-	      SAFI_UNICAST);
+  ret = nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s),
+		    AF_INET, SAFI_UNICAST);
 
   /* All things should be done at here.  So if unused aspath or
      community must be freed. */
@@ -738,6 +757,10 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
     community_unintern (attr.community);
   if (attr.cluster)
     cluster_unintern (attr.cluster);
+
+  /* If nlri_parse return error, return immediately. */
+  if (ret < 0)
+    return;
 
   BGP_EVENT_ADD (peer, Receive_UPDATE_message);
 }

@@ -1,5 +1,17 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.83
+
+* bgpd
+
+** Serious bug fix about fetching global and link-local address at the
+same time.  Due to this bug, corrupted IPv6 prefix is generated.  If
+you uses bgpd for BGP-4+ please update to this version.  The bug is
+introduced in zebra-0.82.
+
+** When bgpd send Notify message, don't use thread manager.  It is now
+send to neighbor immediately.
+
 * Changes in zebra-0.82
 
 ** Solaris 2.6 support is added by Michael Handler
