@@ -1,5 +1,14 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.81
+
+** SNMP support is disabled in default.--enable-snmp option is added
+to configure script.
+
+* Changes in bgpd
+
+** Fix FSM bug which introduced in zebra-0.80.
+
 * Changes in zebra-0.80
 
 * access-list
@@ -116,9 +125,6 @@ GNU Zebra is not yet released, so this NEWS is about beta version.
   ipv6 bgp neighbor 3ffe:506::1 remote-as 2500
   ipv6 bgp neighbor 3ffe:506::1 prefix-list 6bone-filter out
   !
-  
-  It is hard to support the multiple BGP instance under current
-  configuration structure.  So `bgp multiple-instance' is disabled.
   
   At the same time some IPv6 specific commands are deleted from IPv4
   configuration.

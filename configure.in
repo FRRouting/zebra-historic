@@ -75,6 +75,8 @@ AC_ARG_ENABLE(bgp-announce,
 [  --disable-bgp-announce, turn off BGP route announcement])
 AC_ARG_ENABLE(netlink,
 [  --enable-netlink        force to use Linux netlink interface])
+AC_ARG_ENABLE(snmp,
+[  --enable-snmp           enable SNMP support])
 
 dnl -------------------
 dnl Check header files.
@@ -481,30 +483,32 @@ dnl AC_SUBST(LIB_REGEX)
 dnl ------------------
 dnl check SNMP library
 dnl ------------------
-AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
-if test "${HAVE_SNMP}" = ""; then
+if test "${enable_snmp}" = "yes";then
+  AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
+  if test "${HAVE_SNMP}" = ""; then
 	old_libs="${LIBS}"
 	LIBS="-L/usr/local/lib"
 	AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
 	LIBS="${old_libs}"
-fi
-if test "${HAVE_SNMP}" = "yes"; then
-  for ac_snmp in /usr/include/ucd-snmp/asn1.h /usr/local/include/ucd-snmp/asn1.h /dev/null
-  do
-    test x`ls ${ac_snmp} 2>/dev/null` = x"${ac_snmp}" && break
-  done
-  case ${ac_snmp} in
-    /usr/include/ucd-snmp/*) 
+  fi
+  if test "${HAVE_SNMP}" = "yes"; then
+    for ac_snmp in /usr/include/ucd-snmp/asn1.h /usr/local/include/ucd-snmp/asn1.h /dev/null
+    do
+      test x`ls ${ac_snmp} 2>/dev/null` = x"${ac_snmp}" && break
+    done
+    case ${ac_snmp} in
+      /usr/include/ucd-snmp/*) 
                   AC_DEFINE(HAVE_SNMP)
                   CFLAGS="${CFLAGS} -I/usr/include/ucd-snmp"
     		  LIBS="${LIBS} -lsnmp"
                   ;;
-    /usr/local/include/ucd-snmp/*) 
+      /usr/local/include/ucd-snmp/*) 
                   AC_DEFINE(HAVE_SNMP)
   	          CFLAGS="${CFLAGS} -I/usr/local/include/ucd-snmp"
   		  LIBS="${LIBS} -L/usr/local/lib -lsnmp"
                   ;;
-  esac
+    esac
+  fi
 fi
 
 dnl ----------------------------

@@ -23,7 +23,10 @@
 
 #ifdef HAVE_SNMP
 #include <asn1.h>
+#include <snmp.h>
+#include <snmp_impl.h>
 
+#include "if.h"
 #include "log.h"
 #include "prefix.h"
 #include "command.h"
@@ -31,167 +34,280 @@
 
 #include "ripd/ripd.h"
 
+/* RIPv2-MIB. */
+oid rip_oid [] = { 1,3,6,1,2,1,23 };
+
 /* Hook functions. */
 int rip2Globals_hook ();
-int rip2IfStatTable_hook ();
+int rip2IfStatEntry_hook ();
 int rip2IfConfAddress_hook ();
 int rip2PeerTable_hook ();
 
+/* RIPv2-MIB rip2Globals values. */
+#define rip2GlobalRouteChanges  1
+#define rip2GlobalQueries       2
+
+/* RIPv2-MIB rip2IfStatEntry. */
+#define rip2IfStatEntry         1
+
+/* RIPv2-MIB rip2IfStatTable. */
+#define rip2IfStatAddress       1
+#define rip2IfStatRcvBadPackets 2
+#define rip2IfStatRcvBadRoutes  3
+#define rip2IfStatSentUpdates   4
+#define rip2IfStatStatus        5
+
+/* RIPv2-MIB rip2IfConfTable. */
+#define rip2IfConfAddress       1
+#define rip2IfConfAuthType      2
+#define rip2IfConfAuthKey       3
+#define rip2IfConfSend          4
+#define rip2IfConfReceive       5
+#define rip2IfConfDefaultMetric 6
+#define rip2IfConfStatus        7
+#define rip2IfConfSrcAddress    8
+
+/* RIPv2-MIB rip2PeerTable. */
+#define rip2PeerAddress         1
+#define rip2PeerDomain          2
+#define rip2PeerLastUpdate      3
+#define rip2PeerVersion         4
+#define rip2PeerRcvBadPackets   5
+#define rip2PeerRcvBadRoutes    6
+
+/* RIPv2-MIB . */
 struct snmp_module rip2Globals_module[] =
 {
-  {"rip2GlobalRouteChanges",  1, rip2Globals_hook, NULL},
-  {"rip2GlobalQueries",       2, rip2Globals_hook, NULL},
-  {NULL,                      0, NULL,             NULL}
+  {rip2GlobalRouteChanges,   rip2Globals_hook, NULL},
+  {rip2GlobalQueries,        rip2Globals_hook, NULL},
+  {0,                        NULL,             NULL}
 };
 
-struct snmp_module rip2IfStatTable_module[] =
+struct snmp_module rip2IfStatEntry_module[] =
 {
-  {"rip2IfStatAddress",       1, rip2IfStatTable_hook, NULL},
-  {"rip2IfStatRcvBadPackets", 2, rip2IfStatTable_hook, NULL},
-  {"rip2IfStatRcvBadRoutes",  3, rip2IfStatTable_hook, NULL},
-  {"rip2IfStatSentUpdates",   4, rip2IfStatTable_hook, NULL},
-  {"rip2IfStatStatus",        5, rip2IfStatTable_hook, NULL},
-  {NULL,                      0, NULL,                 NULL}
+  {rip2IfStatAddress,        rip2IfStatEntry_hook, NULL},
+  {rip2IfStatRcvBadPackets,  rip2IfStatEntry_hook, NULL},
+  {rip2IfStatRcvBadRoutes,   rip2IfStatEntry_hook, NULL},
+  {rip2IfStatSentUpdates,    rip2IfStatEntry_hook, NULL},
+  {rip2IfStatStatus,         rip2IfStatEntry_hook, NULL},
+  {0,                        NULL,                 NULL}
+};
+
+struct snmp_module rip2IfStatTable_module[] = 
+{
+  {rip2IfStatEntry,          NULL,                 rip2IfStatEntry_module}
 };
 
 struct snmp_module rip2IfConfTable[] =
 {
-  {"rip2IfConfAddress",       1, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfAuthType",      2, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfAuthKey",       3, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfSend",          4, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfReceive",       5, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfDefaultMetric", 6, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfStatus",        7, rip2IfConfAddress_hook, NULL},
-  {"rip2IfConfSrcAddress",    8, rip2IfConfAddress_hook, NULL},
-  {NULL,                      0, NULL,                   NULL}
+  {rip2IfConfAddress,        rip2IfConfAddress_hook, NULL},
+  {rip2IfConfAuthType,       rip2IfConfAddress_hook, NULL},
+  {rip2IfConfAuthKey,        rip2IfConfAddress_hook, NULL},
+  {rip2IfConfSend,           rip2IfConfAddress_hook, NULL},
+  {rip2IfConfReceive,        rip2IfConfAddress_hook, NULL},
+  {rip2IfConfDefaultMetric,  rip2IfConfAddress_hook, NULL},
+  {rip2IfConfStatus,         rip2IfConfAddress_hook, NULL},
+  {rip2IfConfSrcAddress,     rip2IfConfAddress_hook, NULL},
+  {0,                        NULL,                   NULL}
 };
 
 struct snmp_module rip2PeerTable[] =
 {
-  {"rip2PeerAddress",         1, rip2PeerTable_hook, NULL},
-  {"rip2PeerDomain",          2, rip2PeerTable_hook, NULL},
-  {"rip2PeerLastUpdate",      3, rip2PeerTable_hook, NULL},
-  {"rip2PeerVersion",         4, rip2PeerTable_hook, NULL},
-  {"rip2PeerRcvBadPackets",   5, rip2PeerTable_hook, NULL},
-  {"rip2PeerRcvBadRoutes",    6, rip2PeerTable_hook, NULL},
-  {NULL,                      0, NULL,               NULL}
+  {rip2PeerAddress,          rip2PeerTable_hook, NULL},
+  {rip2PeerDomain,           rip2PeerTable_hook, NULL},
+  {rip2PeerLastUpdate,       rip2PeerTable_hook, NULL},
+  {rip2PeerVersion,          rip2PeerTable_hook, NULL},
+  {rip2PeerRcvBadPackets,    rip2PeerTable_hook, NULL},
+  {rip2PeerRcvBadRoutes,     rip2PeerTable_hook, NULL},
+  {0,                        NULL,               NULL}
 };
 
 struct snmp_module rip2_module[] =
 {
-  {"rip2Globals",             1, NULL, rip2Globals_module},
-  {"rip2IfStatTable",         2, NULL, NULL},
-  {"rip2IfConfTable",         3, NULL, NULL},
-  {"rip2PeerTable",           4, NULL, NULL},
-  {NULL,                      0, NULL, NULL}
+  {1, NULL, rip2Globals_module},
+  {2, NULL, rip2IfStatTable_module},
+  {3, NULL, rip2IfConfTable},
+  {4, NULL, rip2PeerTable},
+  {0, NULL, NULL}
 };
 
 struct snmp_module start_module[] = 
 {
-  {"rip2",                   23, NULL, rip2_module},
-  {NULL,                      0, NULL, NULL}
+  {23, NULL, rip2_module},
+  {0,  NULL, NULL}
 };
 
 int
-rip2Globals_hook (struct snmp_module *module, u_char *val_type, void **val, 
-                  size_t *val_len, oid instid[], size_t instid_len)
+rip2Globals_hook (struct snmp_module *module, oid instid[], size_t instid_len,
+		  u_char *val_type, void **val, size_t *val_len, int getnext)
 {
-  zlog_info ("rip2Globals_hook");
-
-  zlog_info ("module index is: %d", module->index);
-
+  /* Check single instance. */
   if (instid_len != 1)
     return -1;
   if (instid[0] != 0)
     return -1;
 
+  /* Retrun global counter. */
   switch (module->index)
     {
-    case 1:
+    case rip2GlobalRouteChanges:
       *val_type = ASN_INTEGER;
       *val_len  = sizeof (rip_global_route_changes);
       *val = &rip_global_route_changes;
-      return 0;
-    case 2:
+      break;
+    case rip2GlobalQueries:
       *val_type = ASN_INTEGER;
       *val_len  = sizeof (rip_global_queries);
       *val = &rip_global_queries;
-      return 0;
+      break;
     default:
       return -1;
+      break;
     }
+  return 0;
 }
 
+/* 23.2.1 .1.0.0.0.0 */
+/* .rip2(23).rip2IfStatTable(2).rip2IfStatEntry(1).rip2IfStatAddress(1).A.B.C.D  */
 int
-rip2IfStatTable_hook (struct snmp_module *module, u_char *val_type, void **val, 
-                      size_t *val_len, oid instid[], size_t instid_len)
+rip2IfStatEntry_hook (struct snmp_module *module, 
+		      oid instid[], size_t instid_len,
+		      u_char *val_type, void **val, size_t *val_len, 
+		      int getnext)
 {
+  static long tmp = 123;
+  static struct in_addr addr;
+
   zlog_info ("rip2IfStatTable_hook");
+
+  /* Instance should be rip2IfStatAddress.  */
+  if (instid_len != 4)
+    return -1;
+
+  oid2in_addr (instid, instid_len, &addr);
+
+  switch (module->index)
+    {
+    case rip2IfStatAddress:
+      *val_type = ASN_IPADDRESS;
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
+      break;
+    case rip2IfStatRcvBadPackets:
+      *val_type = ASN_INTEGER;
+      *val_len = sizeof (long);
+      *val = &tmp;
+      break;
+    case rip2IfStatRcvBadRoutes:
+      *val_type = ASN_INTEGER;
+      *val_len = sizeof (long);
+      *val = &tmp;
+      break;
+    case rip2IfStatSentUpdates:
+      *val_type = ASN_INTEGER;
+      *val_len = sizeof (long);
+      *val = &tmp;
+      break;
+    case rip2IfStatStatus:
+      *val_type = ASN_INTEGER;
+      *val_len = sizeof (long);
+      *val = &tmp;
+      break;
+    default:
+      return -1;
+      break;
+    }
   return 0;
 }
 
 int
-rip2IfConfAddress_hook (struct snmp_module *module, u_char *val_type, 
-		void **val, size_t *val_len, oid instid[], size_t instid_len)
+rip2IfConfAddress_hook (struct snmp_module *module,
+			oid instid[], size_t instid_len,
+			u_char *val_type, void **val, size_t *val_len,
+			int getnext)
 {
   zlog_info ("rip2IfConfAddress_hook");
+  zlog_info ("module index is: %d", module->index);
+
+  switch (module->index)
+    {
+    case rip2IfConfAddress:
+      break;
+    case rip2IfConfAuthType:
+      break;
+    case rip2IfConfAuthKey:
+      break;
+    case rip2IfConfSend:
+      break;
+    case rip2IfConfReceive:
+      break;
+    case rip2IfConfDefaultMetric:
+      break;
+    case rip2IfConfStatus:
+      break;
+    case rip2IfConfSrcAddress:
+      break;
+    default:
+      return -1;
+      break;
+    }
   return 0;
 }
 
 int
-rip2PeerTable_hook (struct snmp_module *module, u_char *val_type, void **val, 
-                    size_t *val_len, oid instid[], size_t instid_len)
+rip2PeerTable_hook (struct snmp_module *module,
+		    oid instid[], size_t instid_len,
+		    u_char *val_type, void **val, size_t *val_len,
+		    int getnext)
 {
   zlog_info ("rip2PeerTable_hook");
-  return 0;
-}
+  zlog_info ("module index is: %d", module->index);
 
-struct snmp_module *
-snmp_lookup_module (struct snmp_module *module, int index)
-{
-  int i;
-
-  if (! module->entry)
-    return NULL;
-
-  module = module->entry;
-
-  for (i = 0; i <= index; i++)
+  switch (module->index)
     {
-      if (module[i].name == NULL)
-	return NULL;
-
-      if (module[i].index == index)
-	return module + i;
+    case rip2PeerAddress:
+      break;
+    case rip2PeerDomain:
+      break;
+    case rip2PeerLastUpdate:
+      break;
+    case rip2PeerVersion:
+      break;
+    case rip2PeerRcvBadPackets:
+      break;
+    case rip2PeerRcvBadRoutes:
+      break;
+    default:
+      return -1;
+      break;
     }
-  return NULL;
+  return 0;
 }
 
 int
 rip_snmp (oid objid[], size_t objid_len, u_char *val_type, void **arg, 
-	  size_t *arg_len)
+	  size_t *arg_len, int getnext)
 {
   int ret;
   int index;
-  oid rip_oid[] = { 1,3,6,1,2,1,23 };
   oid *instid;
   size_t instid_len;
   struct snmp_module *module, *newmod;
 
-  zlog_info ("RIP oid size: %d", sizeof (rip_oid) / sizeof (oid));
+  zlog_info ("RIP oid size: %d", sizeof rip_oid / sizeof (oid));
 
   /* Check oid tree. */
   ret = memcmp (objid, rip_oid, sizeof (rip_oid));
-  if (ret == 0)
-    zlog_info ("OK this is RIP tree");
-  else
-    zlog_info ("No this is not RIP tree");
 
+  if (ret != 0)
+    {
+      zlog_info ("No this is not RIP tree");
+      return -1;
+    }
 
   /* Lookup MIB tree. */
   module = start_module;
-  index = sizeof (rip_oid) / sizeof (oid);
+  index = sizeof rip_oid / sizeof (oid);
 
   while(index < objid_len)
     {
@@ -201,6 +317,7 @@ rip_snmp (oid objid[], size_t objid_len, u_char *val_type, void **arg,
 
       if (newmod == NULL)
 	break;
+
       index++;
       module = newmod;
     }
@@ -210,10 +327,11 @@ rip_snmp (oid objid[], size_t objid_len, u_char *val_type, void **arg,
 
   if (module)
     {
-      zlog_info ("RIP module is %s", module->name);
+      /* zlog_info ("RIP module is %s", module->name); */
+
       if (module->func)
-	return (*module->func) (module, val_type, arg, arg_len, instid, 
-                                instid_len);
+	return (*module->func) (module, instid, instid_len,
+				val_type, arg, arg_len, getnext);
       else
 	return -1; /* SMUX_NOSUCHINSTANCE */
     }
@@ -224,9 +342,10 @@ rip_snmp (oid objid[], size_t objid_len, u_char *val_type, void **arg,
     }
 }
 
+/* Register RIPv2-MIB. */
 void
 rip_snmp_init ()
 {
-  smux_init (rip_snmp);
+  smux_init (rip_snmp, rip_oid, sizeof (rip_oid) / sizeof (oid));
 }
 #endif /* HAVE_SNMP */

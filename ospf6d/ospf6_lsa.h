@@ -230,5 +230,8 @@ void ospf6_lsa_str (struct ospf6_lsa *, char *, size_t);
 
 unsigned short ospf6_lsa_checksum (struct ospf6_lsa_hdr *);
 
+int
+ospf6_lsa_is_known (struct ospf6_lsa_hdr *);
+
 #endif /* OSPF6_LSA_H */
 

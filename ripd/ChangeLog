@@ -1,3 +1,16 @@
+1999-10-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.h (struct rip_peer): New structure added.
+
+1999-10-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_zebra.c (rip_zebra_ipv4_add): Increment
+	rip_global_route_changes when route change occur.
+	(rip_zebra_ipv4_delete): Likewise.
+
+	* ripd.c (rip_request_process): Increment rip_global_queries when
+	reply to the query is sent.
+
 1999-10-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rip_debug.c (rip_debug_reset): Reset function added.

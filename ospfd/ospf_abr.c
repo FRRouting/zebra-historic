@@ -288,6 +288,25 @@ ospf_abr_nexthops_belong_to_area (struct ospf_route *or,
   return 0;
 }
 
+
+int
+ospf_abr_should_accept (struct prefix *p, struct ospf_area *a)
+{
+  if (IMP_LIST_NAME (a))
+    {
+      if (IMP_LIST_PTR (a) == NULL)
+	IMP_LIST_PTR (a) = access_list_lookup (AF_INET, IMP_LIST_NAME (a));
+
+      if (IMP_LIST_PTR (a))
+        if (access_list_apply (IMP_LIST_PTR (a), p) == FILTER_DENY)
+           return 0;
+    }
+
+ return 1;
+}
+
+
+
 void
 ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 {
@@ -312,6 +331,13 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 
       if (ospf_abr_nexthops_belong_to_area (or, area))
 	continue;
+
+      if (!ospf_abr_should_accept (&n->p, area)){
+         zlog_info ("Z: ospf_abr_announce_network(): "
+                    "prefix %s/%d was denied by import-list",
+	            inet_ntoa (p->prefix), p->prefixlen);
+         continue; 
+      }
 
       if (area->external_routing != OSPF_AREA_DEFAULT && area->no_summary)
 	{
@@ -347,7 +373,7 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 
 
 int
-ospf_abr_should_announce(struct route_node *rn, struct ospf_route *or)
+ospf_abr_should_announce(struct prefix *p, struct ospf_route *or)
 {
   struct ospf_area *a = or->area;
 
@@ -357,12 +383,13 @@ ospf_abr_should_announce(struct route_node *rn, struct ospf_route *or)
 	EXP_LIST_PTR (a) = access_list_lookup (AF_INET, EXP_LIST_NAME (a));
 
       if (EXP_LIST_PTR (a))
-        if (access_list_apply (EXP_LIST_PTR (a), &rn->p) == FILTER_DENY)
+        if (access_list_apply (EXP_LIST_PTR (a), p) == FILTER_DENY)
            return 0;
     }
 
  return 1;
 }
+
 
 void
 ospf_abr_process_network_rt (struct route_table *rt)
@@ -403,7 +430,7 @@ ospf_abr_process_network_rt (struct route_table *rt)
 	}
 
       if ((or->path_type == OSPF_PATH_INTRA_AREA) &&
-          (! ospf_abr_should_announce(rn, or)) ){
+          (! ospf_abr_should_announce(&rn->p, or)) ){
          zlog_info("Z: ospf_abr_process_network_rt(): denied by export-list");
          continue;
       }
@@ -924,13 +951,10 @@ ospf_abr_manage_discard_routes ()
 	    continue;
 
 	  if (range->specifics)
-	    {
-	      if (ospf_add_discard_route (ospf_top->new_table, area,
-					  (struct prefix_ipv4 *) &rn->p))
-		ospf_zebra_add_discard ((struct prefix_ipv4 *) &rn->p);
-	    }
+            ospf_add_discard_route (ospf_top->new_table, area,
+			            (struct prefix_ipv4 *) &rn->p);
 	  else
-	    ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
+	    ospf_delete_discard_route ((struct prefix_ipv4 *) &rn->p);
 	}
     }
 }
@@ -956,17 +980,20 @@ ospf_abr_task ()
   zlog_info ("Z: ospf_abr_task(): prepare aggregates");
   ospf_abr_prepare_aggregates ();
 
-  zlog_info ("Z: ospf_abr_task(): process network RT");
-  ospf_abr_process_network_rt (ospf_top->new_table);
+  if (OSPF_IS_ABR) {
 
-  zlog_info ("Z: ospf_abr_task(): process router RT");
-  ospf_abr_process_router_rt (ospf_top->new_rtrs);
+     zlog_info ("Z: ospf_abr_task(): process network RT");
+     ospf_abr_process_network_rt (ospf_top->new_table);
 
-  zlog_info ("Z: ospf_abr_task(): announce aggregates");
-  ospf_abr_announce_aggregates (ospf_top->new_table);
+     zlog_info ("Z: ospf_abr_task(): process router RT");
+     ospf_abr_process_router_rt (ospf_top->new_rtrs);
 
-  zlog_info ("Z: ospf_abr_task(): announce stub defaults");
-  ospf_abr_announce_stub_defaults ();
+     zlog_info ("Z: ospf_abr_task(): announce aggregates");
+     ospf_abr_announce_aggregates (ospf_top->new_table);
+
+     zlog_info ("Z: ospf_abr_task(): announce stub defaults");
+     ospf_abr_announce_stub_defaults ();
+  }
 
   zlog_info ("Z: ospf_abr_task(): remove unapproved summaries");
   ospf_abr_remove_unapproved_summaries ();
@@ -986,8 +1013,7 @@ ospf_abr_task_timer (struct thread *t)
 
   ospf_check_abr_status ();
 
-  if (OSPF_IS_ABR)
-    ospf_abr_task ();
+  ospf_abr_task ();
 
  return 0;
 }

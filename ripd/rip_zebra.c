@@ -46,7 +46,11 @@ rip_zebra_ipv4_add (struct prefix_ipv4 *p, struct in_addr *nexthop,
 		    unsigned int ifindex)
 {
   if (zclient->redist[ZEBRA_ROUTE_RIP])
-    zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, ifindex);
+    {
+      zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_RIP, 0, 
+		      p, nexthop, ifindex);
+      rip_global_route_changes++;
+    }
 }
 
 void
@@ -54,7 +58,11 @@ rip_zebra_ipv4_delete (struct prefix_ipv4 *p, struct in_addr *nexthop,
 		       unsigned int ifindex)
 {
   if (zclient->redist[ZEBRA_ROUTE_RIP])
-    zebra_ipv4_delete (zclient->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, ifindex);
+    {
+      zebra_ipv4_delete (zclient->sock, ZEBRA_ROUTE_RIP, 0, 
+			 p, nexthop, ifindex);
+      rip_global_route_changes++;
+    }
 }
 
 /* Zebra route add and delete treatment. */

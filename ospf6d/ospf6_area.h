@@ -43,6 +43,8 @@ struct area
 
   struct thread  *spf_calc;
   struct thread  *route_calc;
+  int             stat_spf_execed;
+  int             stat_route_execed;
 
   struct route_table *table; /* new route table */
 };

@@ -727,6 +727,7 @@ ospf6_route_calc (struct thread *thread)
 
   area->route_calc = (struct thread *) NULL;
 
+  area->stat_route_execed++;
   /* log */
   if (IS_OSPF6_DUMP_AREA)
     zlog_info ("Area: route calculation for %s", area->str);

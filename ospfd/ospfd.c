@@ -136,6 +136,9 @@ ospf_area_free (struct ospf_area *area)
 {
   /* Free each route table. */
 
+  if (area->area_id.s_addr == OSPF_AREA_BACKBONE)
+    ospf_top->backbone = NULL;
+
   XFREE (MTYPE_OSPF_AREA, area);
 }
 
@@ -198,6 +201,7 @@ ospf_network_free (struct ospf_network *network)
 	  }
     }
 
+  ospf_schedule_abr_task ();
   XFREE (MTYPE_OSPF_NETWORK, network);
 }
 
@@ -1864,6 +1868,119 @@ ALIAS (no_area_export_list,
        "Name of the access-list\n")
 
 
+int
+ospf_set_area_import_list (struct ospf_area * area, char * list_name)
+{
+  struct access_list *list;
+  list = access_list_lookup(AF_INET, list_name);
+
+  IMP_LIST_PTR(area) = list;
+
+  if (IMP_LIST_NAME(area))
+    free (IMP_LIST_NAME(area));
+
+  IMP_LIST_NAME(area) = strdup (list_name);
+  ospf_schedule_abr_task ();
+
+  return CMD_SUCCESS;
+}
+
+int
+ospf_unset_area_import_list (struct ospf_area * area)
+{
+
+  IMP_LIST_PTR(area) = 0;
+
+  if (IMP_LIST_NAME(area))
+    free (IMP_LIST_NAME(area));
+
+  IMP_LIST_NAME(area) = NULL;
+  ospf_schedule_abr_task ();
+
+  return CMD_SUCCESS;
+}
+
+
+DEFUN (area_import_list,
+       area_import_list_cmd,
+       "area A.B.C.D import-list NAME",
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Set the filter for networks from other areas announced to the specified one\n"
+       "Name of the access-list\n")
+{
+  struct ospf_area *area;
+  struct in_addr area_id;
+  int ret;
+
+  ret = ospf_str2area_id (argv[0], &area_id);
+  if (!ret)
+    {
+      vty_out (vty, "OSPF Area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      area = ospf_area_new (area_id);
+      area->format = ret;
+      list_add_node (ospf_top->areas, area);
+      ospf_check_abr_status ();
+    }
+
+  return ospf_set_area_import_list(area, argv[1]);
+}
+
+ALIAS (area_import_list,
+       area_import_list_decimal_cmd,
+       "area <0-4294967295> import-list NAME",
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Set the filter for networks from other areas announced to the specified one\n"
+       "Name of the access-list\n")
+
+DEFUN (no_area_import_list,
+       no_area_import_list_cmd,
+       "no area A.B.C.D import-list NAME",
+       NO_STR
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Unset the filter for networks announced to other areas\n"
+       "Name of the access-list\n")
+{
+  struct ospf_area *area;
+  struct in_addr area_id;
+  int ret;
+
+  ret = ospf_str2area_id (argv[0], &area_id);
+  if (!ret)
+    {
+      vty_out (vty, "OSPF Area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+     vty_out (vty, "Area is not yet configured%s", VTY_NEWLINE);
+     return CMD_WARNING;
+    }
+
+  return ospf_unset_area_import_list(area);
+}
+
+ALIAS (no_area_import_list,
+       no_area_import_list_decimal_cmd,
+       "no area <0-4294967295> import-list NAME",
+       NO_STR
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Unset the filter for networks announced to other areas\n"
+       "Name of the access-list\n")
+
+
+
 
 
 DEFUN (area_authentication_message_digest,
@@ -2601,6 +2718,10 @@ ospf_config_write (struct vty *vty)
  	      vty_out (vty, " area %s export-list %s%s", buf, EXP_LIST_NAME(a),
                        VTY_NEWLINE);
 
+           if (IMP_LIST_NAME(a))
+ 	      vty_out (vty, " area %s import-list %s%s", buf, IMP_LIST_NAME(a),
+                       VTY_NEWLINE);
+
 	}
 
       /* virtual link print */
@@ -2716,6 +2837,11 @@ ospf_init ()
   install_element (OSPF_NODE, &area_export_list_decimal_cmd);
   install_element (OSPF_NODE, &no_area_export_list_cmd);
   install_element (OSPF_NODE, &no_area_export_list_decimal_cmd);
+
+  install_element (OSPF_NODE, &area_import_list_cmd);
+  install_element (OSPF_NODE, &area_import_list_decimal_cmd);
+  install_element (OSPF_NODE, &no_area_import_list_cmd);
+  install_element (OSPF_NODE, &no_area_import_list_decimal_cmd);
 
 
   /*

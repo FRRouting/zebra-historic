@@ -26,19 +26,23 @@
 struct snmp_module
 {
   /* Module name. */
-  char *name;
+  /* char *name; */
 
   /* Module index. */
   int index;
 
   /* Module function. */
-  int (*func) (struct snmp_module *, u_char *, void **, size_t *, 
-               oid instid[], size_t);
+  int (*func) (struct snmp_module *, oid instid[], size_t,
+	       u_char *, void **, size_t *, int);
 
   /* Link to lower module entry. */
   struct snmp_module *entry;
 };
 
-void smux_init (int (*func) (oid objid[], size_t, u_char *, void **, size_t *));
+void smux_init (int (*func) (oid oid[], size_t, u_char *, void **, size_t *, int), oid oid[], int);
+
+struct snmp_module *snmp_lookup_module (struct snmp_module *, int);
+
+void oid2in_addr (oid [], int, struct in_addr *);
 
 #endif /* _ZEBRA_SNMP_H */

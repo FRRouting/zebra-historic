@@ -114,13 +114,19 @@ ospf6_area_vty (struct vty *vty, struct area *o6a)
   listnode i;
   struct ospf6_if *o6i;
 
-  vty_out (vty, "   Area %s%s", o6a->str, VTY_NEWLINE);
-  vty_out (vty, "      Interface attached to this area:");
+  vty_out (vty, "    Area %s%s", o6a->str, VTY_NEWLINE);
+  vty_out (vty, "        Interface attached to this area:");
   for (i = listhead (o6a->if_list); i; nextnode (i))
     {
       o6i = (struct ospf6_if *) getdata (i);
       vty_out (vty, " %s", o6i->interface->name);
     }
   vty_out (vty, "%s", VTY_NEWLINE);
+  vty_out (vty, "        SPF algorithm executed %d times%s",
+           o6a->stat_spf_execed, VTY_NEWLINE);
+  vty_out (vty, "        Route calculation executed %d times%s",
+           o6a->stat_route_execed, VTY_NEWLINE);
+  vty_out (vty, "        Number of Area scoped LSAs is %u%s",
+           listcount (o6a->lsdb), VTY_NEWLINE);
 }
 

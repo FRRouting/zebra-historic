@@ -107,3 +107,4 @@ void ospf_prune_unreachable_networks(struct route_table *);
 void ospf_prune_unreachable_routers(struct route_table *);
 int  ospf_add_discard_route(struct route_table *, struct ospf_area *, 
 			    struct prefix_ipv4 *);
+void ospf_delete_discard_route (struct prefix_ipv4 *);

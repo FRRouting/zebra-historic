@@ -455,6 +455,7 @@ spf_calculation (struct thread *thread)
 
   area->spf_calc = (struct thread *)NULL;
 
+  area->stat_spf_execed++;
   zlog_info ("SPF Calculation for area %s", area->str);
 
   /* (1) */

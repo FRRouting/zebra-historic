@@ -142,7 +142,9 @@ bgp_connect_check (struct peer *peer)
 
   /* When status is 0 then TCP connection is established. */
   if (status == 0)
+    {
       BGP_EVENT_ADD (peer, TCP_connection_open);
+    }
   else
     {
       zlog (peer->log, LOG_INFO, "neighbor %s:%d: Connect failed : %s",

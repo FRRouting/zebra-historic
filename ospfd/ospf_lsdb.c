@@ -225,10 +225,7 @@ ospf_lsdb_free (struct ospf_lsdb *lsdb)
   ospf_lsdb_iterator (lsdb, lsdb, 0, lsdb_free);
 
   if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_HASH) && lsdb->hash)
-    {
-      XFREE (MTYPE_HASH_BACKET, lsdb->hash->index);
-      XFREE (MTYPE_HASH, lsdb->hash);
-    }
+    hash_free (lsdb->hash);
 
   if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_LIST) && lsdb->list) 
     list_delete_all (lsdb->list);
@@ -262,6 +259,8 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
       zlog_info ("Z: ospf_lsdb_add():Nothing to add, hah!");
       return NULL;
     }
+
+  assert (new->data);
 
   if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_HASH) && lsdb->hash) 
     {

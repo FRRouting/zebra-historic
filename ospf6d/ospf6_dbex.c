@@ -338,11 +338,18 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   received->from = from;
 
   /* (1) XXX, LSA Checksum */
-  cksum = ntohs (lsh->lsh_cksum);
-  if (ntohs (ospf6_lsa_checksum (lsh)) != cksum)
+  if (!ospf6_lsa_is_known (lsh))
     {
-      zlog_warn ("*** Wrong LSA cksum: recv:%#hx calc:%#hx", cksum,
-                 ntohs (ospf6_lsa_checksum (lsh)));
+      zlog_warn (" *** Unknown LSA!! step checksum");
+    }
+  else
+    {
+      cksum = ntohs (lsh->lsh_cksum);
+      if (ntohs (ospf6_lsa_checksum (lsh)) != cksum)
+        {
+          zlog_warn ("*** Wrong LSA cksum: recv:%#hx calc:%#hx", cksum,
+                     ntohs (ospf6_lsa_checksum (lsh)));
+        }
     }
 
   /* (2) XXX, should be relaxed */

@@ -36,6 +36,7 @@
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_zebra.h"
 #include "ospfd/ospf_asbr.h"
+#include "ospfd/ospf_abr.h"
 
 /* Zebra structure to hold current status. */
 struct zebra *zclient = NULL;
@@ -518,18 +519,46 @@ DEFUN (no_ospf_distribute_list_out_bgp,
 void
 ospf_acl_hook ()
 {
-  int i, inv = 0;
+  int i;
+  int dst_inv = 0;
+  int abr_inv = 0;
+  struct ospf_area *a;
+  listnode node;
 
-  if (ospf_top)
+  if (ospf_top){
+
     for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
       if (ospf_top->dist_lists_proto[i].name)
 	{
 	  ospf_top->dist_lists_proto[i].list = NULL; /* Invalidate */
-	  inv++;
+	  dst_inv++;
 	}
 
-  if (OSPF_IS_ASBR && inv)
+    LIST_ITERATOR (ospf_top->areas, node)
+    {
+      a = getdata (node);
+      if (a == NULL) continue;
+
+      if (EXP_LIST_NAME (a))
+        {
+          EXP_LIST_PTR(a) = NULL;
+          abr_inv++;
+        }
+
+      if (IMP_LIST_NAME (a))
+        {
+          IMP_LIST_PTR(a) = NULL;
+          abr_inv++;
+        }
+    }
+
+  }
+
+  if (OSPF_IS_ASBR && dst_inv)
     ospf_schedule_asbr_check ();
+
+  if (OSPF_IS_ABR && abr_inv)
+    ospf_schedule_abr_task ();
 }
 
 /* Zebra configuration write function. */

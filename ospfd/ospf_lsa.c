@@ -106,6 +106,9 @@ ospf_lsa_new ()
   struct ospf_lsa *new;
 
   new = XMALLOC (MTYPE_OSPF_LSA, sizeof (struct ospf_lsa));
+
+  assert (new);
+
   bzero (new, sizeof (struct ospf_lsa));
 
   new->flags = 0;
@@ -126,6 +129,9 @@ ospf_lsa_dup (struct ospf_lsa *lsa)
     return NULL;
 
   new = XMALLOC (MTYPE_OSPF_LSA, sizeof (struct ospf_lsa));
+
+  assert (new);
+
   bzero (new, sizeof (struct ospf_lsa));
 
   new->flags = lsa->flags;
@@ -161,6 +167,9 @@ ospf_lsa_data_new (size_t size)
   struct lsa_header *new;
 
   new = (struct lsa_header *) XMALLOC (MTYPE_OSPF_LSA_DATA, size);
+
+  assert(new);
+
   bzero (new, size);
 
   return new;

@@ -24,7 +24,7 @@ bgpd_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = bgpd.conf.sample bgpd.conf.sample2
 
-EXTRA_DIST = $(sysconf_DATA)
+EXTRA_DIST = $(sysconf_DATA) BGP4-MIB.txt
 
 install-sysconfDATA: $(sysconf_DATA)
 	@$(NORMAL_INSTALL)

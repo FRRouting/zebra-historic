@@ -189,8 +189,7 @@ bgp_start_timer (struct thread *thread)
   peer->t_start = NULL;
 
   if (debug (DEBUG_BGP_FSM))
-    zlog (NULL, LOG_DEBUG, "FSM[%s]: Timer (start timer expire).",
-	  peer->host);
+    zlog_info ("FSM[%s]: Timer (start timer expire).", peer->host);
 
   THREAD_VAL (thread) = BGP_Start;
   bgp_event (thread);
@@ -466,12 +465,12 @@ struct {
     /* Idle state: In Idle state, all events other than BGP_Start is
        ignored.  With BGP_Start event, finite state machine calls
        bgp_start(). */
-    {bgp_start, Connect},	/* BGP_Start                    */
-    {bgp_stop, Idle},		/* BGP_Stop                     */
-    {bgp_start, Idle},		/* TCP_connection_open          */
-    {bgp_stop, Idle},		/* TCP_connection_closed        */
+    {bgp_start,  Connect},	/* BGP_Start                    */
+    {bgp_stop,   Idle},		/* BGP_Stop                     */
+    {bgp_stop,   Idle},		/* TCP_connection_open          */
+    {bgp_stop,   Idle},		/* TCP_connection_closed        */
     {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_stop, Idle},		/* TCP_fatal_error              */
+    {bgp_stop,   Idle},		/* TCP_fatal_error              */
     {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
     {bgp_ignore, Idle},		/* Hold_Timer_expired           */
     {bgp_ignore, Idle},		/* KeepAlive_timer_expired      */
@@ -482,82 +481,82 @@ struct {
   },
   {
     /* Connect */
-    {bgp_ignore, Connect},	/* BGP_Start                    */
-    {bgp_stop,   Idle},		/* BGP_Stop                     */
+    {bgp_ignore,  Connect},	/* BGP_Start                    */
+    {bgp_stop,    Idle},	/* BGP_Stop                     */
     {bgp_connect_success, OpenSent}, /* TCP_connection_open          */
     {bgp_stop, Idle},		/* TCP_connection_closed        */
     {bgp_connect_fail, Active}, /* TCP_connection_open_failed   */
     {bgp_connect_fail, Idle},	/* TCP_fatal_error              */
-    {bgp_ignore, Connect},	/* ConnectRetry_timer_expired   */
-    {bgp_ignore, Idle},		/* Hold_Timer_expired           */
-    {bgp_ignore, Idle},		/* KeepAlive_timer_expired      */
-    {bgp_ignore, Idle},		/* Receive_OPEN_message         */
-    {bgp_ignore, Idle},		/* Receive_KEEPALIVE_message    */
-    {bgp_ignore, Idle},		/* Receive_UPDATE_message       */
-    {bgp_stop, Idle},		/* Receive_NOTIFICATION_message */
+    {bgp_ignore,  Connect},	/* ConnectRetry_timer_expired   */
+    {bgp_ignore,  Idle},	/* Hold_Timer_expired           */
+    {bgp_ignore,  Idle},	/* KeepAlive_timer_expired      */
+    {bgp_ignore,  Idle},	/* Receive_OPEN_message         */
+    {bgp_ignore,  Idle},	/* Receive_KEEPALIVE_message    */
+    {bgp_ignore,  Idle},	/* Receive_UPDATE_message       */
+    {bgp_stop,    Idle},	/* Receive_NOTIFICATION_message */
   },
   {
     /* Active, */
-    {bgp_ignore, Active},	/* BGP_Start                    */
-    {bgp_stop,   Idle},		/* BGP_Stop                     */
+    {bgp_ignore,  Active},	/* BGP_Start                    */
+    {bgp_stop,    Idle},	/* BGP_Stop                     */
     {bgp_connect_success, OpenSent}, /* TCP_connection_open          */
-    {bgp_stop, Idle},		/* TCP_connection_closed        */
-    {bgp_ignore, Active},	/* TCP_connection_open_failed   */
-    {bgp_ignore, Idle},		/* TCP_fatal_error              */
-    {bgp_start, Connect},	/* ConnectRetry_timer_expired   */
-    {bgp_ignore, Idle},		/* Hold_Timer_expired           */
-    {bgp_ignore, Idle},		/* KeepAlive_timer_expired      */
-    {bgp_ignore, Idle},		/* Receive_OPEN_message         */
-    {bgp_ignore, Idle},		/* Receive_KEEPALIVE_message    */
-    {bgp_ignore, Idle},		/* Receive_UPDATE_message       */
+    {bgp_stop,    Idle},	/* TCP_connection_closed        */
+    {bgp_ignore,  Active},	/* TCP_connection_open_failed   */
+    {bgp_ignore,  Idle},	/* TCP_fatal_error              */
+    {bgp_start,   Connect},	/* ConnectRetry_timer_expired   */
+    {bgp_ignore,  Idle},	/* Hold_Timer_expired           */
+    {bgp_ignore,  Idle},	/* KeepAlive_timer_expired      */
+    {bgp_ignore,  Idle},	/* Receive_OPEN_message         */
+    {bgp_ignore,  Idle},	/* Receive_KEEPALIVE_message    */
+    {bgp_ignore,  Idle},	/* Receive_UPDATE_message       */
     {bgp_stop_with_error, Idle}, /* Receive_NOTIFICATION_message */
   },
   {
     /* OpenSent, */
-    {bgp_ignore, OpenSent},	/* BGP_Start                    */
-    {bgp_stop,   Idle},		/* BGP_Stop                     */
-    {bgp_ignore, Idle},		/* TCP_connection_open          */
-    {bgp_stop,   Active},	/* TCP_connection_closed        */
-    {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_stop, Idle},		/* TCP_fatal_error              */
-    {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {bgp_ignore,  OpenSent},	/* BGP_Start                    */
+    {bgp_stop,    Idle},	/* BGP_Stop                     */
+    {bgp_stop,    Idle},	/* TCP_connection_open          */
+    {bgp_stop,    Active},	/* TCP_connection_closed        */
+    {bgp_ignore,  Idle},	/* TCP_connection_open_failed   */
+    {bgp_stop,    Idle},	/* TCP_fatal_error              */
+    {bgp_ignore,  Idle},	/* ConnectRetry_timer_expired   */
     {fsm_holdtime, Idle},	/* Hold_Timer_expired           */
-    {bgp_ignore, Idle},		/* KeepAlive_timer_expired      */
-    {fsm_open, OpenConfirm},	/* Receive_OPEN_message         */
-    {bgp_ignore, Idle},		/* Receive_KEEPALIVE_message    */
-    {bgp_ignore, Idle},		/* Receive_UPDATE_message       */
+    {bgp_ignore,  Idle},	/* KeepAlive_timer_expired      */
+    {fsm_open,    OpenConfirm},	/* Receive_OPEN_message         */
+    {bgp_ignore,  Idle},	/* Receive_KEEPALIVE_message    */
+    {bgp_ignore,  Idle},	/* Receive_UPDATE_message       */
     {bgp_stop_with_error, Idle}, /* Receive_NOTIFICATION_message */
   },
   {
     /* OpenConfirm, */
-    {bgp_ignore, OpenConfirm},	/* BGP_Start                    */
-    {bgp_stop,   Idle},		/* BGP_Stop                     */
-    {bgp_ignore, Idle},		/* TCP_connection_open          */
-    {bgp_stop, Idle},		/* TCP_connection_closed        */
-    {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_stop, Idle},		/* TCP_fatal_error              */
-    {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {bgp_ignore,  OpenConfirm},	/* BGP_Start                    */
+    {bgp_stop,    Idle},	/* BGP_Stop                     */
+    {bgp_stop,    Idle},	/* TCP_connection_open          */
+    {bgp_stop,    Idle},	/* TCP_connection_closed        */
+    {bgp_stop,    Idle},	/* TCP_connection_open_failed   */
+    {bgp_stop,    Idle},	/* TCP_fatal_error              */
+    {bgp_ignore,  Idle},	/* ConnectRetry_timer_expired   */
     {fsm_holdtime, Idle},	/* Hold_Timer_expired           */
-    {bgp_ignore, OpenConfirm},	/* KeepAlive_timer_expired      */
-    {bgp_ignore, Idle},		/* Receive_OPEN_message         */
+    {bgp_ignore,  OpenConfirm},	/* KeepAlive_timer_expired      */
+    {bgp_ignore,  Idle},	/* Receive_OPEN_message         */
     {bgp_establish, Established}, /* Receive_KEEPALIVE_message    */
-    {bgp_ignore, Idle},		/* Receive_UPDATE_message       */
+    {bgp_ignore,  Idle},	/* Receive_UPDATE_message       */
     {bgp_stop_with_error, Idle}, /* Receive_NOTIFICATION_message */
   },
   {
     /* Established, */
-    {bgp_ignore, Established},	/* BGP_Start                    */
-    {bgp_stop,   Idle},		/* BGP_Stop                     */
-    {bgp_ignore, Idle},		/* TCP_connection_open          */
-    {bgp_stop,   Idle},		/* TCP_connection_closed        */
-    {bgp_ignore, Idle},		/* TCP_connection_open_failed   */
-    {bgp_stop,   Idle},		/* TCP_fatal_error              */
-    {bgp_ignore, Idle},		/* ConnectRetry_timer_expired   */
+    {bgp_ignore,  Established},	/* BGP_Start                    */
+    {bgp_stop,    Idle},	/* BGP_Stop                     */
+    {bgp_stop,    Idle},	/* TCP_connection_open          */
+    {bgp_stop,    Idle},	/* TCP_connection_closed        */
+    {bgp_ignore,  Idle},	/* TCP_connection_open_failed   */
+    {bgp_stop,    Idle},	/* TCP_fatal_error              */
+    {bgp_ignore,  Idle},	/* ConnectRetry_timer_expired   */
     {fsm_holdtime_expire, Idle}, /* Hold_Timer_expired           */
     {fsm_keepalive_expire, Established}, /* KeepAlive_timer_expired      */
     {bgp_stop, Idle},		/* Receive_OPEN_message         */
     {fsm_keepalive, Established}, /* Receive_KEEPALIVE_message    */
-    {fsm_update, Established},	/* Receive_UPDATE_message       */
+    {fsm_update,   Established}, /* Receive_UPDATE_message       */
     {bgp_stop_with_error, Idle}, /* Receive_NOTIFICATION_message */
   },
 };

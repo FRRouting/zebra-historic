@@ -1,3 +1,28 @@
+1999-10-29  Alex Zinin <zinin@amt.ru>
+	* ospf_lsa.c ospf_lsdb.c :
+	add assertion in lsa and lsa->data alloc functions,
+	as well as in lsdb_add for new->data
+
+	* ospf_lsdb.c: free hash table correctly
+
+1999-10-28  John Capo <jc@irbs.com>
+
+	* ospf_packet.h (OSPF_PACKET_MAX): Correct MAX packet length
+	calculation
+
+1999-10-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* OSPF-TRAP-MIB.txt: New file added. Edited version of RFC1850.
+
+	* OSPF-MIB.txt: New file added.  Edited version of RFC1850.
+
+1999-10-27  Alex Zinin  <zinin@amt.ru>
+	* ospfd, ospf_zebra, ospf_abr
+	"area import-list" command is added.
+	This command allows to filter the inter-area routes
+	injected into an area. Access list hook function
+	extended to invalidate area exp/imp lists.
+
 1999-10-25  Yoshinobu Inoue  <shin@nd.net.fujitsu.co.jp>
 
 	* ospfd.c (ospf_interface_run): Enable to detect P2P network

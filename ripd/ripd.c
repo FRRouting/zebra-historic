@@ -52,28 +52,10 @@ long rip_global_route_changes = 0;
 long rip_global_queries = 0;
 
 /* Prototypes. */
-void 
-rip_event (enum rip_event, int);
+void rip_event (enum rip_event, int);
 
-int
-rip_triggered_update (struct thread *);
-
-void
-rip_output_process (struct interface *, struct sockaddr_in *, 
-		    int, int, u_char);
-
-/* Macro for timer turn on. */
-#define RIP_TIMER_ON(T,F,V) \
-      if (!(T)) \
-        (T) = thread_add_timer (master, (F), rinfo, (V))
-
-/* Macro for timer turn off. */
-#define RIP_TIMER_OFF(X) \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	}
+void rip_output_process (struct interface *, struct sockaddr_in *, 
+			 int, int, u_char);
 
 /* RIP output routes type. */
 enum
@@ -874,6 +856,7 @@ rip_request_process (struct rip_packet *packet, int size,
 
       rip_send_packet ((caddr_t) packet, size, from, ifp);
     }
+  rip_global_queries++;
 }
 
 #if RIP_RECVMSG
@@ -1525,6 +1508,8 @@ rip_clear_changed_flag ()
 int
 rip_triggered_interval (struct thread *t)
 {
+  int rip_triggered_update (struct thread *);
+
   rip->t_triggered_interval = NULL;
 
   if (rip->trigger)
@@ -2234,6 +2219,10 @@ rip_clean ()
 void
 rip_reset ()
 {
+  /* Reset global counters. */
+  rip_global_route_changes = 0;
+  rip_global_queries = 0;
+
   /* Call ripd related reset functions. */
   rip_zclient_reset ();
   rip_debug_reset ();
@@ -2276,6 +2265,11 @@ rip_init ()
   /* Filter related init. */
   rip_route_map_init ();
 
+  /* SNMP init. */
+#ifdef HAVE_SNMP
+  rip_snmp_init ();
+#endif /* HAVE_SNMP */
+
   /* Access list install. */
   access_list_init ();
   access_list_add_hook (rip_distribute_update_all);
@@ -2290,9 +2284,4 @@ rip_init ()
   distribute_list_init (RIP_NODE);
   distribute_list_add_hook (rip_distribute_update);
   distribute_list_delete_hook (rip_distribute_update);
-
-  /* SNMP init. */
-#ifdef HAVE_SNMP
-  rip_snmp_init ();
-#endif /* HAVE_SNMP */
 }

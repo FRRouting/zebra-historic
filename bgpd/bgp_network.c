@@ -31,6 +31,7 @@
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
+#include "bgpd/bgp_dump.h"
 
 /* BGP socket bind. */
 int
@@ -200,7 +201,18 @@ bgp_accept (struct thread *thread)
       return -1;
     }
 
-  if (peer->fd)
+  /* Peer status check .*/
+  if (peer->status != Active && peer->status != Connect)
+    {
+      if (debug (DEBUG_BGP_FSM))
+	zlog_info ("But peer is neither Active nor Connect status: %s", 
+		   inet_sutop (&su, buf));
+
+      close (bgp_sock);
+      return -1;
+    }
+
+  if (peer->fd >= 0)
     {
       close (peer->fd);
       BGP_READ_OFF (peer->t_read);

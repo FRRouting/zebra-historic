@@ -50,6 +50,7 @@ lsa_change (struct ospf6_lsa *lsa)
                                              area, 0);
       break;
     case LST_INTRA_AREA_PREFIX_LSA:
+    case LST_AS_EXTERNAL_LSA:
       area = (struct area *)lsa->scope;
       if (area->route_calc == (struct thread *)NULL)
         area->route_calc = thread_add_event (master, ospf6_route_calc,

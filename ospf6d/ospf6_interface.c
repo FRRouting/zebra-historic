@@ -613,6 +613,8 @@ ospf6_if_init ()
   install_node (&interface_node, ospf6_if_config_write);
 
   install_default (INTERFACE_NODE);
+  install_element (INTERFACE_NODE, &interface_desc_cmd);
+  install_element (INTERFACE_NODE, &no_interface_desc_cmd);
   install_element (INTERFACE_NODE, &ip6_ospf6_cost_cmd);
   install_element (INTERFACE_NODE, &ip6_ospf6_deadinterval_cmd);
   install_element (INTERFACE_NODE, &ip6_ospf6_hellointerval_cmd);

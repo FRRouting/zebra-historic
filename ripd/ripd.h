@@ -1,5 +1,5 @@
 /* RIP related values and structures.
- * Copyright (C) 1997, 1998 Kunihiro Ishiguro
+ * Copyright (C) 1997, 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -22,26 +22,24 @@
 #ifndef _ZEBRA_RIP_H
 #define _ZEBRA_RIP_H
 
-#include "if.h"
-
 /* RIP version number. */
-#define RIPv1                1
-#define RIPv2                2
+#define RIPv1                            1
+#define RIPv2                            2
 
 /* RIP command list. */
-#define RIP_REQUEST          1
-#define RIP_RESPONSE         2
-#define RIP_TRACEON          3	/* obsolete? */
-#define RIP_TRACEOFF         4	/* obsolete? */
-#define RIP_POLL             5
-#define RIP_POLL_ENTRY       6
-#define RIP_COMMAND_MAX      7
+#define RIP_REQUEST                      1
+#define RIP_RESPONSE                     2
+#define RIP_TRACEON                      3	/* obsolete? */
+#define RIP_TRACEOFF                     4	/* obsolete? */
+#define RIP_POLL                         5
+#define RIP_POLL_ENTRY                   6
+#define RIP_COMMAND_MAX                  7
 
 /* RIP metric infinity value.*/
-#define RIP_METRIC_INFINITY 16
+#define RIP_METRIC_INFINITY             16
 
 /* Normal RIP packet max size. */
-#define RIP_PACKET_MAXSIZ        512
+#define RIP_PACKET_MAXSIZ              512
 
 /* Max count of routing table entry in one rip packet. */
 #define RIP_MAX_RTE 25
@@ -52,26 +50,20 @@
 #endif
 
 /* RIP timers */
-#define RIP_UPDATE_TIMER_DEFAULT       30
-#define RIP_TIMEOUT_TIMER_DEFAULT     180
-#define RIP_GARBAGE_TIMER_DEFAULT     120
-
-#if 0
-#define RIP_INVALID_TIMER_DEFAULT     180
-#define RIP_HOLDDOWN_TIMER_DEFAULT    180
-#define RIP_FLUSH_TIMER_DEFALUT       240
-#endif /*0 */
+#define RIP_UPDATE_TIMER_DEFAULT        30
+#define RIP_TIMEOUT_TIMER_DEFAULT      180
+#define RIP_GARBAGE_TIMER_DEFAULT      120
 
 /* RIP port number. */
-#define RIP_PORT_DEFAULT            520
-#define RIP_VTY_PORT               2602
+#define RIP_PORT_DEFAULT               520
+#define RIP_VTY_PORT                  2602
 
 /* Default configuration file name. */
 #define RIPD_DEFAULT_CONFIG "ripd.conf"
 
-/* RIPng route types. */
-#define RIP_ROUTE_RTE              0
-#define RIP_ROUTE_STATIC           1
+/* RIP route types. */
+#define RIP_ROUTE_RTE                    0
+#define RIP_ROUTE_STATIC                 1
 
 /* RIP structure. */
 struct rip 
@@ -215,33 +207,80 @@ struct rip_interface
 
   /* Wake up thread. */
   struct thread *t_wakeup;
+
+  /* Interface statistics. */
+  int recv_badpackets;
+  int recv_badroutes;
+  int sent_updates;
+};
+
+/* RIP peer information. */
+struct rip_peer
+{
+  /* Peer address. */
+  struct in_addr addr;
+
+  /* Peer RIP tag value. */
+  int domain;
+
+  /* Last update time. */
+  time_t last_update;
+
+  /* Peer RIP version. */
+  int version;
+
+  /* Statistics. */
+  int recv_badpackets;
+  int recv_badroutes;
 };
 
 /* RIP accepet/announce methods. */
-#define RI_RIP_UNSPEC          0
-#define RI_RIP_VERSION_1       1
-#define RI_RIP_VERSION_2       2
-#define RI_RIP_VERSION_1_AND_2 3
-#define RI_RIP_NONE            4 /* This means this interface doesn't
-                                    send/recieve RIP packet.  */
+#define RI_RIP_UNSPEC                      0
+#define RI_RIP_VERSION_1                   1
+#define RI_RIP_VERSION_2                   2
+#define RI_RIP_VERSION_1_AND_2             3
+/* This means this interface doesn't send/recieve RIP packet.  */
+#define RI_RIP_NONE                        4 
+
 
 /* Split horizon definitions. */
-#define RI_RIP_SPLIT_HORIZON_UNSPEC   0
-#define RI_RIP_SPLIT_HORIZON_NONE     1
-#define RI_RIP_SPLIT_HORIZON          2
-#define RI_RIP_SPLIT_HORIZON_POISONED 3
+#define RI_RIP_SPLIT_HORIZON_UNSPEC        0
+#define RI_RIP_SPLIT_HORIZON_NONE          1
+#define RI_RIP_SPLIT_HORIZON               2
+#define RI_RIP_SPLIT_HORIZON_POISONED      3
 
 /* RIP default route's accept/announce methods. */
-#define RIP_DEFAULT_ADVERTISE_UNSPEC 0
-#define RIP_DEFAULT_ADVERTISE_NONE   1
-#define RIP_DEFAULT_ADVERTISE        2
-#define RIP_DEFAULT_ACCEPT_UNSPEC    0
-#define RIP_DEFAULT_ACCEPT_NONE      1
-#define RIP_DEFAULT_ACCEPT           2
+#define RIP_DEFAULT_ADVERTISE_UNSPEC       0
+#define RIP_DEFAULT_ADVERTISE_NONE         1
+#define RIP_DEFAULT_ADVERTISE              2
+#define RIP_DEFAULT_ACCEPT_UNSPEC          0
+#define RIP_DEFAULT_ACCEPT_NONE            1
+#define RIP_DEFAULT_ACCEPT                 2
 
 /* RIP multicast configuration. */
-#define RIP_MULTICAST 0
-#define RIP_BROADCAST 1
+#define RIP_MULTICAST                      0
+#define RIP_BROADCAST                      1
+
+/* RIP event. */
+enum rip_event 
+{
+  RIP_READ,
+  RIP_UPDATE_EVENT,
+  RIP_TRIGGERED_UPDATE,
+};
+
+/* Macro for timer turn on. */
+#define RIP_TIMER_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), rinfo, (V))
+
+/* Macro for timer turn off. */
+#define RIP_TIMER_OFF(X) \
+      if (X) \
+	{ \
+	  thread_cancel (X); \
+	  (X) = NULL; \
+	}
 
 /* For easy string print out. */
 struct message
@@ -250,19 +289,7 @@ struct message
   char *str;
 };
 
-/* RIP event. */
-enum rip_event 
-{
-  RIP_READ,
-  RIPNG_REQUEST_EVENT,
-  RIP_UPDATE_EVENT,
-  RIP_TRIGGERED_UPDATE,
-};
-
 #define LOOKUP(X, Y)  (X)[(Y)].str
-
-/* There is only one rip strucutre. */
-extern struct rip *rip;
 
 /* Prototypes. */
 void rip_init ();
@@ -289,12 +316,18 @@ void rip_redistribute_withdraw (int);
 void rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *, unsigned int);
 void rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, unsigned int);
 void rip_interface_multicast_set (int, struct interface *);
-int config_write_rip_network (struct vty *, int);
-int config_write_rip_redistribute (struct vty *, int);
 void rip_distribute_update_interface (struct interface *);
 
+int config_write_rip_network (struct vty *, int);
+int config_write_rip_redistribute (struct vty *, int);
+
+/* There is only one rip strucutre. */
+extern struct rip *rip;
+
+/* Master thread strucutre. */
 extern struct thread_master *master;
 
+/* RIP statistics. */
 extern long rip_global_route_changes;
 extern long rip_global_queries;
 

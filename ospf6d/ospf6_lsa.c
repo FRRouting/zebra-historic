@@ -1506,8 +1506,8 @@ ospf6_lsa_hdr_id_str (struct ospf6_lsa_hdr *lsa_hdr, char *buf, size_t bufsize)
   /* LS advrtr */
   inet_ntop (AF_INET, &lsa_hdr->lsh_advrtr, advrtr, sizeof (advrtr));
 
-  snprintf (buf, bufsize, "%s: id:%ul advrtr:%s",
-            type, ntohl (lsa_hdr->lsh_id), advrtr);
+  snprintf (buf, bufsize, "%s: id:%lu advrtr:%s",
+            type, (unsigned long) ntohl (lsa_hdr->lsh_id), advrtr);
 }
 
 void
@@ -1615,6 +1615,35 @@ ospf6_lsa_checksum_set (struct ospf6_lsa_hdr *lsh)
 int
 ospf6_lsa_checksum_ok (struct ospf6_lsa_hdr *lsh)
 {
+  return 0;
+}
+
+int
+ospf6_lsa_is_known (struct ospf6_lsa_hdr *lsh)
+{
+  switch (ntohs (lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+        return 1;
+      case LST_NETWORK_LSA:
+        return 1;
+      case LST_INTER_AREA_PREFIX_LSA:
+        return 0;
+      case LST_INTER_AREA_ROUTER_LSA:
+        return 0;
+      case LST_AS_EXTERNAL_LSA:
+        return 1;
+      case LST_GROUP_MEMBERSHIP_LSA:
+        return 0;
+      case LST_TYPE_7_LSA:
+        return 0;
+      case LST_LINK_LSA:
+        return 1;
+      case LST_INTRA_AREA_PREFIX_LSA:
+        return 1;
+      default:
+        return 0;
+    }
   return 0;
 }
 

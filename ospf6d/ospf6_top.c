@@ -23,14 +23,49 @@
 #include "ospf6d.h"
 
 void
+ospf6_vty_redistribute_config (struct vty *vty, struct ospf6 *ospf6)
+{
+  if (ospf6->redist_static || ospf6->redist_ripng || ospf6->redist_bgp)
+    vty_out (vty, " Redistributing External Routes from,%s", VTY_NEWLINE);
+  else
+    return;
+
+  if (ospf6->redist_static)
+    vty_out (vty, "    static with metric mapped to %hu%s",
+             ospf6->cost_static, VTY_NEWLINE);
+  if (ospf6->redist_ripng)
+    vty_out (vty, "    ripng with metric mapped to %hu%s",
+             ospf6->cost_ripng, VTY_NEWLINE);
+  if (ospf6->redist_bgp)
+    vty_out (vty, "    bgp with metric mapped to %hu%s",
+             ospf6->cost_bgp, VTY_NEWLINE);
+}
+
+void
 ospf6_vty (struct vty *vty)
 {
   listnode n;
   struct area *area;
+  char rid_buf[64];
+/*
   vty_out (vty, "\tVersion: %d\tRouter-ID: %s%s",
 	   ospf6->version, 
 	   inet4str (ospf6->router_id),
 	   VTY_NEWLINE);
+*/
+
+  inet_ntop (AF_INET, &ospf6->router_id, rid_buf, sizeof (rid_buf));
+
+  vty_out (vty, " Routing Process with ID %s%s", rid_buf, VTY_NEWLINE);
+  vty_out (vty, " Supports only single TOS(TOS0) routes%s", VTY_NEWLINE);
+
+  ospf6_vty_redistribute_config (vty, ospf6);
+
+  vty_out (vty, " Number of AS scoped LSAs is %u%s",
+           listcount (ospf6->lsdb), VTY_NEWLINE);
+
+  vty_out (vty, " Number of areas in this router is %u%s",
+           listcount (ospf6->area_list), VTY_NEWLINE);
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
       area = (struct area *) getdata (n);

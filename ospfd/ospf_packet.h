@@ -110,7 +110,7 @@ struct ospf_db_desc
 
 
 /* Macros. */
-#define OSPF_PACKET_MAX(oi)	((oi)->ifp->mtu - ((oi)->auth_md5 ? OSPF_AUTH_MD5_SIZE : 0))
+#define OSPF_PACKET_MAX(oi)	(((oi)->ifp->mtu - ((oi)->auth_md5 ? OSPF_AUTH_MD5_SIZE : 0)) - 88)
 
 #define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
 #define OSPF_OUTPUT_LENGTH(S)	((S)->endp)

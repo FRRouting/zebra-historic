@@ -1,3 +1,7 @@
+1999-10-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* BGP4-MIB.txt: New file added.  Edited version of RFC1657.
+
 1999-10-25  Bill Sommerfeld <sommerfeld@orchard.arlington.ma.us>
 
 	* bgp_route.c (bgp_announce): If we're not on a shared network

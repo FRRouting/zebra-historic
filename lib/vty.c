@@ -1732,7 +1732,6 @@ vty_event (enum event event, int sock, struct vty *vty)
     }
 }
 
-/* Who is on vty ? This is only vty function exist in vty.c ;-) */
 DEFUN (config_who,
        config_who_cmd,
        "who",

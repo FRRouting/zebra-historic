@@ -1188,9 +1188,16 @@ ospf_add_discard_route (struct route_table *rt, struct ospf_area *area,
   new_or->path_type = OSPF_PATH_INTER_AREA;
   rn->info = new_or;
 
+  ospf_zebra_add_discard (p);
+
   return 1;
 }
 
+void
+ospf_delete_discard_route (struct prefix_ipv4 *p)
+{
+ ospf_zebra_delete_discard(p);
+}
 
 
 void

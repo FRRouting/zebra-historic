@@ -226,6 +226,15 @@ struct ospf_area
 #define EXP_LIST_NAME(A) (A)->export_list.name
 #define EXP_LIST_PTR(A)  (A)->export_list.list
 
+  struct 
+  {
+    char *name;
+    struct access_list *list;
+  } import_list;			/* area acceptance list */
+
+#define IMP_LIST_NAME(A) (A)->import_list.name
+#define IMP_LIST_PTR(A)  (A)->import_list.list
+
 
   /* self originated LSAs reflesh thread test. */
   struct thread *t_router_lsa_self;

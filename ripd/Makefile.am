@@ -21,7 +21,7 @@ ripd_LDADD = ../lib/libzebra.a
 
 sysconf_DATA = ripd.conf.sample
 
-EXTRA_DIST = $(sysconf_DATA)
+EXTRA_DIST = $(sysconf_DATA) RIPv2-MIB.txt
 
 install-sysconfDATA: $(sysconf_DATA)
 	@$(NORMAL_INSTALL)
