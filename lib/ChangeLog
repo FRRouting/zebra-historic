@@ -1,3 +1,8 @@
+2002-08-19  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
+
+	* thread.c (timeval_adjust): Fix unconditional crush due to
+	FreeBSD's select() system call timeval value check.
+
 2002-07-07  Kunihiro Ishiguro  <kunihiro@ipinfusion.com>
 
 	* zebra-0.93 released.

@@ -480,9 +480,8 @@ bgp_announce_check (struct bgp_info *ri, struct peer *peer, struct prefix *p,
     if (! UNSUPPRESS_MAP_NAME (filter))
       return 0;
 
-  /* Default originate check */
-  if (CHECK_FLAG (peer->af_flags[afi][safi],
-      PEER_FLAG_DEFAULT_ORIGINATE_CHECK))
+  /* Default route check.  */
+  if (CHECK_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE))
     {
       if (p->family == AF_INET && p->u.prefix4.s_addr == INADDR_ANY)
 	return 0;
@@ -856,13 +855,13 @@ bgp_process (struct bgp *bgp, struct bgp_node *rn, afi_t afi, safi_t safi)
 int
 bgp_maximum_prefix_overflow (struct peer *peer, afi_t afi, safi_t safi)
 {
-  if (peer->pmax[afi][safi]
+  if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX)
       && peer->pcount[afi][safi] >= peer->pmax[afi][safi])
     {
       zlog (peer->log, LOG_INFO,
 	    "MAXPFXEXCEED: No. of prefix received from %s (afi %d): %ld exceed limit %ld",
 	    peer->host, afi, peer->pcount[afi][safi], peer->pmax[afi][safi]);
-      if (! peer->pmax_warning[afi][safi])
+      if (! CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING))
 	{
 	  char ndata[7];
 
@@ -1209,7 +1208,7 @@ bgp_update (struct peer *peer, struct prefix *p, struct attr *attr,
 
   /* If maximum prefix count is configured and current prefix
      count exeed it. */
-  if (! peer->pmax_warning[afi][safi])
+  if (! CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING))
     if (bgp_maximum_prefix_overflow (peer, afi, safi))
       return -1;
 
@@ -1346,15 +1345,13 @@ bgp_default_originate (struct peer *peer, afi_t afi, safi_t safi, int withdraw)
 
   if (withdraw)
     {
-      if (CHECK_FLAG (peer->af_flags[afi][safi], 
-		      PEER_FLAG_DEFAULT_ORIGINATE_CHECK))
+      if (CHECK_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE))
 	bgp_default_withdraw_send (peer, afi, safi);
-      UNSET_FLAG (peer->af_flags[afi][safi], 
-		  PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
+      UNSET_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE);
     }
   else
     {
-      SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
+      SET_FLAG (peer->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE);
       bgp_default_update_send (peer, &attr, afi, safi, from);
     }
 
@@ -4115,17 +4112,15 @@ flap_route_vty_out (struct vty *vty, struct prefix *p,
 }
 
 void
-route_vty_out_detail (struct vty *vty, struct prefix *p, 
+route_vty_out_detail (struct vty *vty, struct bgp *bgp, struct prefix *p, 
 		      struct bgp_info *binfo, afi_t afi, safi_t safi)
 {
   char buf[INET6_ADDRSTRLEN];
   char buf1[BUFSIZ];
   struct attr *attr;
-  struct bgp *bgp;
   int sockunion_vty_out (struct vty *, union sockunion *);
 	
   attr = binfo->attr;
-  bgp = bgp_get_default ();
 
   if (attr)
     {
@@ -4255,11 +4250,8 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 	  
       /* Line 5 display Extended-community */
       if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_EXT_COMMUNITIES))
-	{
-	  vty_out (vty, "      Extended Community:");
-	  ecommunity_vty_out (vty, attr->ecommunity);
-	  vty_out (vty, "%s", VTY_NEWLINE);
-	}
+	vty_out (vty, "      Extended Community: %s%s", attr->ecommunity->str,
+		 VTY_NEWLINE);
 	  
       /* Line 6 display Originator, Cluster-id */
       if ((attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID)) ||
@@ -4979,7 +4971,7 @@ bgp_show_route (struct vty *vty, char *view_name, char *ip_str,
                           header = 0;
                         }
                       display++;
-                      route_vty_out_detail (vty, &rm->p, ri, AFI_IP, SAFI_MPLS_VPN);
+                      route_vty_out_detail (vty, bgp, &rm->p, ri, AFI_IP, SAFI_MPLS_VPN);
                     }
                 }
             }
@@ -5001,7 +4993,7 @@ bgp_show_route (struct vty *vty, char *view_name, char *ip_str,
                       header = 0;
                     }
                   display++;
-                  route_vty_out_detail (vty, &rn->p, ri, afi, safi);
+                  route_vty_out_detail (vty, bgp, &rn->p, ri, afi, safi);
                 }
             }
         }
@@ -7284,8 +7276,8 @@ show_adj_route (struct vty *vty, struct peer *peer, afi_t afi, safi_t safi,
 
   output_count = 0;
 	
-  if (! in && CHECK_FLAG (peer->af_flags[afi][safi],
-			  PEER_FLAG_DEFAULT_ORIGINATE_CHECK))
+  if (! in && CHECK_FLAG (peer->af_sflags[afi][safi],
+			  PEER_STATUS_DEFAULT_ORIGINATE))
     {
       vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
       vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
@@ -7321,30 +7313,30 @@ show_adj_route (struct vty *vty, struct peer *peer, afi_t afi, safi_t safi,
 		}
 	    }
       }
-  else
-    {
-      for (adj = rn->adj_out; adj; adj = adj->next)
-	if (adj->peer == peer)
-	  {
-	    if (header1)
-	      {
-		vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
-		vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
-		vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s", VTY_NEWLINE, VTY_NEWLINE);
-		header1 = 0;
-	      }
-	    if (header2)
-	      {
-		vty_out (vty, BGP_SHOW_HEADER, VTY_NEWLINE);
-		header2 = 0;
-	      }
-	    if (adj->attr)
-	      {	
-		route_vty_out_tmp (vty, &rn->p, adj->attr, safi);
-		output_count++;
-	      }
-	  }
-    }
+    else
+      {
+	for (adj = rn->adj_out; adj; adj = adj->next)
+	  if (adj->peer == peer)
+	    {
+	      if (header1)
+		{
+		  vty_out (vty, "BGP table version is 0, local router ID is %s%s", inet_ntoa (bgp->router_id), VTY_NEWLINE);
+		  vty_out (vty, "Status codes: s suppressed, d damped, h history, * valid, > best, i - internal%s", VTY_NEWLINE);
+		  vty_out (vty, "Origin codes: i - IGP, e - EGP, ? - incomplete%s%s", VTY_NEWLINE, VTY_NEWLINE);
+		  header1 = 0;
+		}
+	      if (header2)
+		{
+		  vty_out (vty, BGP_SHOW_HEADER, VTY_NEWLINE);
+		  header2 = 0;
+		}
+	      if (adj->attr)
+		{	
+		  route_vty_out_tmp (vty, &rn->p, adj->attr, safi);
+		  output_count++;
+		}
+	    }
+      }
   
   if (output_count != 0)
     vty_out (vty, "%sTotal number of prefixes %ld%s",

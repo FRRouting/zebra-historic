@@ -361,7 +361,7 @@ ospf6_dbex_receive_lsa (struct ospf6_lsa_header *lsa_header,
       /* (f) */
       /* Self Originated LSA, section 13.4 */
       if (received->lsa_hdr->lsh_advrtr == ospf6->router_id
-          && have && ismore_recent < 0)
+          && (! have || ismore_recent < 0))
         {
           /* we're going to make new lsa or to flush this LSA. */
           if (IS_OSPF6_DUMP_DBEX)

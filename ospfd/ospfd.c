@@ -1,5 +1,5 @@
 /* OSPF version 2 daemon program.
- * Copyright (C) 1999, 2000 Toshiaki Takada
+   Copyright (C) 1999, 2000 Toshiaki Takada
 
 This file is part of GNU Zebra.
 

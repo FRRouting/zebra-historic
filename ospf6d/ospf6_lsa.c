@@ -775,6 +775,7 @@ ospf6_lsa_expire (struct thread *thread)
 {
   struct ospf6_lsa *lsa;
   struct ospf6_lsdb *lsdb = NULL;
+  void (*hook) (struct ospf6_lsa *, struct ospf6_lsa *);
 
   lsa = (struct ospf6_lsa *) THREAD_ARG (thread);
   assert (lsa && lsa->lsa_hdr);
@@ -804,12 +805,11 @@ ospf6_lsa_expire (struct thread *thread)
       else
         assert (0);
 
-#if 0
-      if (lsdb->hook)
-        (*lsdb->hook) (lsa, NULL);
-#else /*0*/
-      CALL_REMOVE_HOOK (&database_hook, lsa);
-#endif /*0*/
+      /* call LSDB hook to re-process LSA */
+      hook = ospf6_lsdb_hook[ntohs (lsa->header->type) &
+                             OSPF6_LSTYPE_CODE_MASK].hook;
+      if (hook)
+        (*hook) (NULL, lsa);
 
       /* do not free LSA, and do nothing about lslists.
          wait event (ospf6_lsdb_check_maxage) */

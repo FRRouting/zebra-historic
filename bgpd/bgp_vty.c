@@ -96,12 +96,6 @@ peer_lookup_vty (struct vty *vty, char *ip_str)
       return NULL;
     }
 
-  if (peer_address_self_check (&su))
-    {
-      vty_out (vty, "%% Cannot configure the local system as neighbor%s", VTY_NEWLINE);
-      return NULL;
-    }
-
   peer = peer_lookup (bgp, &su);
   if (! peer)
     {
@@ -126,12 +120,6 @@ peer_and_group_lookup_vty (struct vty *vty, char *peer_str)
   ret = str2sockunion (peer_str, &su);
   if (ret == 0)
     {
-      if (peer_address_self_check (&su))
-	{
-	  vty_out (vty, "%% Cannot configure the local system as neighbor%s", VTY_NEWLINE);
-	  return NULL;
-	}
-
       peer = peer_lookup (bgp, &su);
       if (peer)
 	return peer;
@@ -1121,7 +1109,8 @@ peer_remote_as_vty (struct vty *vty, char *peer_str, char *as_str, afi_t afi,
 
   if (peer_address_self_check (&su))
     {
-      vty_out (vty, "%% Cannot configure the local system as neighbor%s", VTY_NEWLINE);
+      vty_out (vty, "%% Can not configure the local system as neighbor%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1198,13 +1187,6 @@ DEFUN (no_neighbor,
     }
   else
     {
-      if (peer_address_self_check (&su))
-	{
-	  vty_out (vty, "%% Cannot configure the local system as neighbor%s",
-		   VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
-
       peer = peer_lookup (vty->index, &su);
       if (peer)
 	peer_delete (peer);
@@ -1408,6 +1390,13 @@ DEFUN (neighbor_set_peer_group,
   if (! group)
     {
       vty_out (vty, "%% Configure the peer-group first%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (peer_address_self_check (&su))
+    {
+      vty_out (vty, "%% Can not configure the local system as neighbor%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -2478,13 +2467,13 @@ DEFUN (no_neighbor_update_source,
 }
 
 int
-peer_default_originate_set_vty (struct vty *vty, char *ip_str, afi_t afi,
+peer_default_originate_set_vty (struct vty *vty, char *peer_str, afi_t afi,
 				safi_t safi, char *rmap, int set)
 {
   int ret;
   struct peer *peer;
 
-  peer = peer_lookup_vty (vty, ip_str);
+  peer = peer_and_group_lookup_vty (vty, peer_str);
   if (! peer)
     return CMD_WARNING;
 
@@ -2499,9 +2488,9 @@ peer_default_originate_set_vty (struct vty *vty, char *ip_str, afi_t afi,
 /* neighbor default-originate. */
 DEFUN (neighbor_default_originate,
        neighbor_default_originate_cmd,
-       NEIGHBOR_CMD "default-originate",
+       NEIGHBOR_CMD2 "default-originate",
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Originate default route to this neighbor\n")
 {
   return peer_default_originate_set_vty (vty, argv[0], bgp_node_afi (vty),
@@ -2510,9 +2499,9 @@ DEFUN (neighbor_default_originate,
 
 DEFUN (neighbor_default_originate_rmap,
        neighbor_default_originate_rmap_cmd,
-       NEIGHBOR_CMD "default-originate route-map WORD",
+       NEIGHBOR_CMD2 "default-originate route-map WORD",
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Originate default route to this neighbor\n"
        "Route-map to specify criteria to originate default\n"
        "route-map name\n")
@@ -2523,10 +2512,10 @@ DEFUN (neighbor_default_originate_rmap,
 
 DEFUN (no_neighbor_default_originate,
        no_neighbor_default_originate_cmd,
-       NO_NEIGHBOR_CMD "default-originate",
+       NO_NEIGHBOR_CMD2 "default-originate",
        NO_STR
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Originate default route to this neighbor\n")
 {
   return peer_default_originate_set_vty (vty, argv[0], bgp_node_afi (vty),
@@ -2535,10 +2524,10 @@ DEFUN (no_neighbor_default_originate,
 
 ALIAS (no_neighbor_default_originate,
        no_neighbor_default_originate_rmap_cmd,
-       NO_NEIGHBOR_CMD "default-originate route-map WORD",
+       NO_NEIGHBOR_CMD2 "default-originate route-map WORD",
        NO_STR
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Originate default route to this neighbor\n"
        "Route-map to specify criteria to originate default\n"
        "route-map name\n")
@@ -3356,7 +3345,7 @@ peer_maximum_prefix_set_vty (struct vty *vty, char *ip_str, afi_t afi,
   struct peer *peer;
   u_int32_t max;
 
-  peer = peer_lookup_vty (vty, ip_str);
+  peer = peer_and_group_lookup_vty (vty, ip_str);
   if (! peer)
     return CMD_WARNING;
 
@@ -3374,7 +3363,7 @@ peer_maximum_prefix_unset_vty (struct vty *vty, char *ip_str, afi_t afi,
   int ret;
   struct peer *peer;
 
-  peer = peer_lookup_vty (vty, ip_str);
+  peer = peer_and_group_lookup_vty (vty, ip_str);
   if (! peer)
     return CMD_WARNING;
 
@@ -3388,9 +3377,9 @@ peer_maximum_prefix_unset_vty (struct vty *vty, char *ip_str, afi_t afi,
    each peer configuration. */
 DEFUN (neighbor_maximum_prefix,
        neighbor_maximum_prefix_cmd,
-       NEIGHBOR_CMD "maximum-prefix <1-4294967295>",
+       NEIGHBOR_CMD2 "maximum-prefix <1-4294967295>",
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n"
        "maximum no. of prefix limit\n")
 {
@@ -3400,9 +3389,9 @@ DEFUN (neighbor_maximum_prefix,
 
 DEFUN (neighbor_maximum_prefix_warning,
        neighbor_maximum_prefix_warning_cmd,
-       NEIGHBOR_CMD "maximum-prefix <1-4294967295> warning-only",
+       NEIGHBOR_CMD2 "maximum-prefix <1-4294967295> warning-only",
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n"
        "maximum no. of prefix limit\n"
        "Only give warning message when limit is exceeded\n")
@@ -3413,10 +3402,10 @@ DEFUN (neighbor_maximum_prefix_warning,
 
 DEFUN (no_neighbor_maximum_prefix,
        no_neighbor_maximum_prefix_cmd,
-       NO_NEIGHBOR_CMD "maximum-prefix",
+       NO_NEIGHBOR_CMD2 "maximum-prefix",
        NO_STR
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n")
 {
   return peer_maximum_prefix_unset_vty (vty, argv[0], bgp_node_afi (vty),
@@ -3425,19 +3414,19 @@ DEFUN (no_neighbor_maximum_prefix,
  
 ALIAS (no_neighbor_maximum_prefix,
        no_neighbor_maximum_prefix_val_cmd,
-       NO_NEIGHBOR_CMD "maximum-prefix <1-4294967295>",
+       NO_NEIGHBOR_CMD2 "maximum-prefix <1-4294967295>",
        NO_STR
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n"
        "maximum no. of prefix limit\n")
 
 ALIAS (no_neighbor_maximum_prefix,
        no_neighbor_maximum_prefix_val2_cmd,
-       NO_NEIGHBOR_CMD "maximum-prefix <1-4294967295> warning-only",
+       NO_NEIGHBOR_CMD2 "maximum-prefix <1-4294967295> warning-only",
        NO_STR
        NEIGHBOR_STR
-       NEIGHBOR_ADDR_STR
+       NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n"
        "maximum no. of prefix limit\n"
        "Only give warning message when limit is exceeded\n")
@@ -6328,7 +6317,7 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
 	vty_out (vty, " default route-map %s%s,",
 		 p->default_rmap[afi][safi].map ? "*" : "",
 		 p->default_rmap[afi][safi].name);
-      if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE_CHECK))
+      if (CHECK_FLAG (p->af_sflags[afi][safi], PEER_STATUS_DEFAULT_ORIGINATE))
 	vty_out (vty, " default sent%s", VTY_NEWLINE);
       else
 	vty_out (vty, " default not sent%s", VTY_NEWLINE);
@@ -6404,11 +6393,12 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
   vty_out (vty, "  %ld accepted prefixes",
 	   p->pcount[afi][safi]);
   /* Maximum prefix */
-  if (p->pmax[afi][safi])
+  if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX))
     {
       vty_out (vty, ", maximum limit %ld%s",
 	       p->pmax[afi][safi],
-	       p->pmax_warning[afi][safi] ? " (warning-only)" : "");
+	       CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING)
+	       ? " (warning-only)" : "");
     }
   vty_out (vty, "%s", VTY_NEWLINE);
 

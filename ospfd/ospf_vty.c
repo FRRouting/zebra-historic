@@ -1320,7 +1320,6 @@ DEFUN (area_shortcut,
        "Enable shortcutting through the area\n"
        "Disable shortcutting through the area\n")
 {
-  struct ospf *ospf = vty->index;
   struct ospf_area *area;
   struct in_addr area_id;
   int mode;

@@ -420,15 +420,6 @@ bgp_stop (struct peer *peer)
         prefix_bgp_orf_remove_all (orf_name);
       }
 
-  UNSET_FLAG (peer->af_flags[AFI_IP][SAFI_UNICAST],
-	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
-  UNSET_FLAG (peer->af_flags[AFI_IP][SAFI_MULTICAST],
-	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
-  UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_UNICAST],
-	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
-  UNSET_FLAG (peer->af_flags[AFI_IP6][SAFI_MULTICAST],
-	      PEER_FLAG_DEFAULT_ORIGINATE_CHECK);
-
   /* Reset keepalive and holdtime */
   if (CHECK_FLAG (peer->config, PEER_CONFIG_TIMER))
     {

@@ -587,7 +587,6 @@ peer_af_flag_reset (struct peer *peer, afi_t afi, safi_t safi)
 
   /* Clear neighbor maximum-prefix */
   peer->pmax[afi][safi] = 0;
-  peer->pmax_warning[afi][safi] =  0;
 }
 
 /* peer global config reset */
@@ -1243,8 +1242,20 @@ peer_group2peer_config_copy (struct peer_group *group, struct peer *peer,
   else
     peer->v_routeadv = BGP_DEFAULT_EBGP_ROUTEADV;
 
+  /* maximum-prefix */
+  peer->pmax[afi][safi] = conf->pmax[afi][safi];
+
   /* allowas-in */
   peer->allowas_in[afi][safi] = conf->allowas_in[afi][safi];
+
+  /* default-originate route-map */
+  if (conf->default_rmap[afi][safi].name)
+    {
+      if (peer->default_rmap[afi][safi].name)
+	free (peer->default_rmap[afi][safi].name);
+      peer->default_rmap[afi][safi].name = strdup (conf->default_rmap[afi][safi].name);
+      peer->default_rmap[afi][safi].map = conf->default_rmap[afi][safi].map;
+    }
 
   /* update-source apply */
   if (conf->update_source)
@@ -2533,6 +2544,9 @@ int
 peer_default_originate_set (struct peer *peer, afi_t afi, safi_t safi,
 			    char *rmap)
 {
+  struct peer_group *group;
+  struct listnode *nn;
+
   /* Adress family must be activated.  */
   if (! peer->afc[afi][safi])
     return BGP_ERR_PEER_INACTIVE;
@@ -2554,6 +2568,28 @@ peer_default_originate_set (struct peer *peer, afi_t afi, safi_t safi,
 	  peer->default_rmap[afi][safi].name = strdup (rmap);
 	  peer->default_rmap[afi][safi].map = route_map_lookup_by_name (rmap);
 	}
+    }
+
+  if (! CHECK_FLAG (peer->sflags, PEER_STATUS_GROUP))
+    {
+      if (peer->status == Established && peer->afc_nego[afi][safi])
+	bgp_default_originate (peer, afi, safi, 0);
+      return 0;
+    }
+
+  /* peer-group member updates. */
+  group = peer->group;
+  LIST_LOOP (group->peer, peer, nn)
+    {
+      SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE);
+
+      if (rmap)
+	{
+	  if (peer->default_rmap[afi][safi].name)
+	    free (peer->default_rmap[afi][safi].name);
+	  peer->default_rmap[afi][safi].name = strdup (rmap);
+	  peer->default_rmap[afi][safi].map = route_map_lookup_by_name (rmap);
+	}
 
       if (peer->status == Established && peer->afc_nego[afi][safi])
 	bgp_default_originate (peer, afi, safi, 0);
@@ -2564,6 +2600,9 @@ peer_default_originate_set (struct peer *peer, afi_t afi, safi_t safi,
 int
 peer_default_originate_unset (struct peer *peer, afi_t afi, safi_t safi)
 {
+  struct peer_group *group;
+  struct listnode *nn;
+
   /* Adress family must be activated.  */
   if (! peer->afc[afi][safi])
     return BGP_ERR_PEER_INACTIVE;
@@ -2574,6 +2613,25 @@ peer_default_originate_unset (struct peer *peer, afi_t afi, safi_t safi)
 
   if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE))
     { 
+      UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE);
+
+      if (peer->default_rmap[afi][safi].name)
+	free (peer->default_rmap[afi][safi].name);
+      peer->default_rmap[afi][safi].name = NULL;
+      peer->default_rmap[afi][safi].map = NULL;
+    }
+
+  if (! CHECK_FLAG (peer->sflags, PEER_STATUS_GROUP))
+    {
+      if (peer->status == Established && peer->afc_nego[afi][safi])
+	bgp_default_originate (peer, afi, safi, 1);
+      return 0;
+    }
+
+  /* peer-group member updates. */
+  group = peer->group;
+  LIST_LOOP (group->peer, peer, nn)
+    {
       UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE);
 
       if (peer->default_rmap[afi][safi].name)
@@ -3645,24 +3703,83 @@ int
 peer_maximum_prefix_set (struct peer *peer, afi_t afi, safi_t safi,
 			 u_int32_t max, int warning)
 {
+  struct peer_group *group;
+  struct listnode *nn;
+
   if (! peer->afc[afi][safi])
     return BGP_ERR_PEER_INACTIVE;
 
+  SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX);
   peer->pmax[afi][safi] = max;
-  peer->pmax_warning[afi][safi] = (warning ? 1 : 0);
+  if (warning)
+    SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+  else
+    UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
 
+  if (! CHECK_FLAG (peer->sflags, PEER_STATUS_GROUP))
+    return 0;
+
+  group = peer->group;
+  LIST_LOOP (group->peer, peer, nn)
+    {
+      if (! peer->af_group[afi][safi])
+	continue;
+
+      SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX);
+      peer->pmax[afi][safi] = max;
+      if (warning)
+	SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+      else
+	UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+    }
   return 0;
 }
 
 int
 peer_maximum_prefix_unset (struct peer *peer, afi_t afi, safi_t safi)
 {
+  struct peer_group *group;
+  struct listnode *nn;
+
   if (! peer->afc[afi][safi])
     return BGP_ERR_PEER_INACTIVE;
 
-  peer->pmax[afi][safi] = 0;
-  peer->pmax_warning[afi][safi] =  0;
+  /* apply peer-group config */
+  if (peer->af_group[afi][safi])
+    {
+      if (CHECK_FLAG (peer->group->conf->af_flags[afi][safi],
+	  PEER_FLAG_MAX_PREFIX))
+	SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX);
+      else
+	UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX);
 
+      if (CHECK_FLAG (peer->group->conf->af_flags[afi][safi],
+	  PEER_FLAG_MAX_PREFIX_WARNING))
+	SET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+      else
+	UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+
+      peer->pmax[afi][safi] = peer->group->conf->pmax[afi][safi];
+      return 0;
+    }
+
+  UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX);
+  UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+  peer->pmax[afi][safi] = 0;
+
+  if (! CHECK_FLAG (peer->sflags, PEER_STATUS_GROUP))
+    return 0;
+
+  group = peer->group;
+  LIST_LOOP (group->peer, peer, nn)
+    {
+      if (! peer->af_group[afi][safi])
+	continue;
+
+      UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX);
+      UNSET_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING);
+      peer->pmax[afi][safi] = 0;
+    }
   return 0;
 }
 
@@ -4110,7 +4227,8 @@ bgp_config_write_peer (struct vty *vty, struct bgp *bgp,
     }
 
   /* Default information */
-  if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_DEFAULT_ORIGINATE))
+  if (peer_af_flag_check (peer, afi, safi, PEER_FLAG_DEFAULT_ORIGINATE)
+      && ! peer->af_group[afi][safi])
     {
       vty_out (vty, " neighbor %s default-originate", addr);
       if (peer->default_rmap[afi][safi].name)
@@ -4126,11 +4244,15 @@ bgp_config_write_peer (struct vty *vty, struct bgp *bgp,
 	     VTY_NEWLINE);
 
   /* maximum-prefix. */
-  if (peer->pmax[afi][safi])
-    vty_out (vty, " neighbor %s maximum-prefix %ld%s%s",
-	     addr, peer->pmax[afi][safi],
-	     peer->pmax_warning[afi][safi] ? " warning-only" : "",
-	     VTY_NEWLINE);
+  if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX))
+    if (! peer->af_group[afi][safi]
+	|| g_peer->pmax[afi][safi] != peer->pmax[afi][safi]
+	|| CHECK_FLAG (g_peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING)
+	   != CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING))
+      vty_out (vty, " neighbor %s maximum-prefix %ld%s%s",
+	       addr, peer->pmax[afi][safi],
+	       CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING)
+	       ? " warning-only" : "", VTY_NEWLINE);
 
   /* Route server client. */
   if (CHECK_FLAG (peer->af_flags[afi][safi], PEER_FLAG_RSERVER_CLIENT)

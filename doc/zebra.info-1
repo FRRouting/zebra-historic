@@ -1,4 +1,4 @@
-This is zebra.info, produced by makeinfo version 4.0b from zebra.texi.
+This is zebra.info, produced by makeinfo version 4.2 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software:
 START-INFO-DIR-ENTRY
@@ -8,8 +8,8 @@ END-INFO-DIR-ENTRY
    This file documents the GNU Zebra software which manages common
 TCP/IP routing protocols.
 
-   This is Edition 0.1, last updated 28 June 2002 of `The GNU Zebra
-Manual', for Zebra Version 0.93.
+   This is Edition 0.1, last updated 12 September 2002 of `The GNU
+Zebra Manual', for Zebra Version 0.93b.
 
    Copyright (C) 1999, 2000, 2001, 2002 Kunihiro Ishiguro
 
@@ -34,20 +34,20 @@ Zebra
 *****
 
    Zebra is a advanced routing software package that provides TCP/IP
-based routing protocols.  This is the Zebra Manual for zebra-0.93.
+based routing protocols.  This is the Zebra Manual for zebra-0.93b.
 
 * Menu:
 
 * Overview::
 * Installation::
 * Basic commands::
-* zebra::
+* Zebra::
 * RIP::
 * RIPng::
 * OSPFv2::
 * OSPFv3::
 * BGP::
-* vtysh::
+* VTY shell::
 * Filtering::
 * Route Map::
 * IPv6 Support::
@@ -235,7 +235,6 @@ when you find out Zebra runs on a platform which is not listed below.
    Some IPv6 stacks are in development.  Zebra supports following IPv6
 stacks.  For BSD, we recommend KAME IPv6 stack.  Solaris IPv6 stack is
 not yet supported.
-
 
    * Linux IPv6 stack for GNU/Linux 2.2.x and higher.
 
@@ -576,7 +575,7 @@ a port number when starting the daemon, these entries may not be needed.
 `/usr/local/etc/*.conf'. *Note Config Commands::.
 
 
-File: zebra.info,  Node: Basic commands,  Next: zebra,  Prev: Installation,  Up: Top
+File: zebra.info,  Node: Basic commands,  Next: Zebra,  Prev: Installation,  Up: Top
 
 Basic commands
 **************
@@ -817,7 +816,7 @@ all.
      Connected to localhost.
      Escape character is '^]'.
      
-     Hello, this is zebra (version 0.93)
+     Hello, this is zebra (version 0.93b)
      Copyright 1997-2000 Kunihiro Ishiguro
      
      
@@ -990,9 +989,9 @@ completions, insta-help, and VTY session management.
      completions.
 
 
-File: zebra.info,  Node: zebra,  Next: RIP,  Prev: Basic commands,  Up: Top
+File: zebra.info,  Node: Zebra,  Next: RIP,  Prev: Basic commands,  Up: Top
 
-zebra
+Zebra
 *****
 
    `zebra' is an IP routing manager.  It provides kernel routing table
@@ -1007,7 +1006,7 @@ different routing protocols.
 * zebra Terminal Mode Commands::  Commands for zebra's VTY
 
 
-File: zebra.info,  Node: Invoking zebra,  Next: Interface Commands,  Prev: zebra,  Up: zebra
+File: zebra.info,  Node: Invoking zebra,  Next: Interface Commands,  Prev: Zebra,  Up: Zebra
 
 Invoking zebra
 ==============
@@ -1033,7 +1032,7 @@ Options::), the `zebra' specific invocation options are listed below.
      When program terminates, retain routes added by zebra.
 
 
-File: zebra.info,  Node: Interface Commands,  Next: Static Route Commands,  Prev: Invoking zebra,  Up: zebra
+File: zebra.info,  Node: Interface Commands,  Next: Static Route Commands,  Prev: Invoking zebra,  Up: Zebra
 
 Interface Commands
 ==================
@@ -1061,7 +1060,7 @@ Interface Commands
      configuration.
 
 
-File: zebra.info,  Node: Static Route Commands,  Next: zebra Terminal Mode Commands,  Prev: Interface Commands,  Up: zebra
+File: zebra.info,  Node: Static Route Commands,  Next: zebra Terminal Mode Commands,  Prev: Interface Commands,  Up: Zebra
 
 Static Route Commands
 =====================
@@ -1122,7 +1121,7 @@ reachable, then the last route is installed into the kernel.
      specified table.
 
 
-File: zebra.info,  Node: zebra Terminal Mode Commands,  Prev: Static Route Commands,  Up: zebra
+File: zebra.info,  Node: zebra Terminal Mode Commands,  Prev: Static Route Commands,  Up: Zebra
 
 zebra Terminal Mode Commands
 ============================
@@ -1152,7 +1151,7 @@ zebra Terminal Mode Commands
      Display whether the host's IP v6 forwarding is enabled or not.
 
 
-File: zebra.info,  Node: RIP,  Next: RIPng,  Prev: zebra,  Up: Top
+File: zebra.info,  Node: RIP,  Next: RIPng,  Prev: Zebra,  Up: Top
 
 RIP
 ***
@@ -1489,62 +1488,4 @@ RIP distance
      Set default RIP distance to specified value when the route's
      source IP address matches the specified prefix and the specified
      access-list.
-
-
-File: zebra.info,  Node: RIP route-map,  Next: RIP Authentication,  Prev: RIP distance,  Up: RIP
-
-RIP route-map
-=============
-
-   Usage of `ripd''s route-map support.
-
-   Optional argument route-map MAP_NAME can be added to each
-`redistribute' statement.
-
-     redistribute static [route-map MAP_NAME]
-     redistribute connected [route-map MAP_NAME]
-     .....
-
-   Cisco applies route-map _before_ routes will exported to rip route
-table.  In current Zebra's test implementation, `ripd' applies route-map
-after routes are listed in the route table and before routes will be
-announced to an interface (something like output filter). I think it is
-not so clear, but it is draft and it may be changed at future.
-
-   Route-map statement (*note Route Map::) is needed to use route-map
-functionality.
-
-   Route-map's match statement
-
- - Route-map Command: match metric N
-     Match if the route has this metric.
-
- - Route-map Command: match ip address <access-list>
-     Match if route destination is permitted by access-list.
-
- - Route-map Command: match ip next-hot A.B.C.D
-     Cisco uses here <access-list>, `ripd' IPv4 address. Match if route
-     has this next-hop (meaning next-hop listed in the rip route table
-     - "show ip rip")
-
- - Route-map Command: match interface NAME
-     Notation of this match is different from Cisco. Cisco uses a list
-     of interfaces - NAME1 NAME2 ... NAMEN.  Ripd allows only one name
-     (maybe will change in the future).  Next - Cisco means interface
-     which includes next-hop of routes (it is somewhat similar to "ip
-     next-hop" statement).  Ripd means interface where this route will
-     be sent. This difference is because "next-hop" of same routes
-     which sends to different interfaces must be different. Maybe it'd
-     be better to made new matches - say "match interface-out NAME" or
-     something like that.
-
-   Route-map's set statement
-
- - Route-map Command: set metric <0-4294967295>
-     Set a metric for matched route when sending announcement.  The
-     metric value range is very large for compatibility with other
-     protocols.  For RIP, valid metric values are from 1 to 16.
-
- - Route-map Command: set next-hop A.B.C.D
-     Set next-hop field.
 

@@ -433,10 +433,13 @@ ospf6_zebra_route_update (int type, struct ospf6_route_req *request)
       linklist_add (nexthop, nexthop_list);
     }
 
-  if (type == REMOVE && nexthop_list->count == 0)
+  if (type == REMOVE && nexthop_list->count != 0)
+    type = ADD;
+  else if (type == REMOVE && nexthop_list->count == 0)
     {
-      if (! ospf6_route_end (&route))
-        ospf6_route_next (&route);
+      if (IS_OSPF6_DUMP_ZEBRA)
+        zlog_info ("ZEBRA:   all nexthop with the selected path has gone");
+
       if (! memcmp (&request->route, &route.route,
                     sizeof (struct ospf6_route)))
         {
@@ -444,7 +447,7 @@ ospf6_zebra_route_update (int type, struct ospf6_route_req *request)
           struct ospf6_path seconde_path;
 
           if (IS_OSPF6_DUMP_ZEBRA)
-            zlog_info ("ZEBRA:   find alternative path to add");
+            zlog_info ("ZEBRA:   found alternative path to add");
 
           linklist_remove (nexthop, nexthop_list);
           XFREE (MTYPE_OSPF6_OTHER, nexthop);
@@ -476,6 +479,13 @@ ospf6_zebra_route_update (int type, struct ospf6_route_req *request)
              requested route */
           if (IS_OSPF6_DUMP_ZEBRA)
             zlog_info ("ZEBRA:   can't find alternative path, remove");
+
+          if (IS_OSPF6_DUMP_ZEBRA)
+            {
+              zlog_info ("ZEBRA:   Debug: walk over the route ?");
+              ospf6_route_log_request ("Debug route", "***", &route);
+              ospf6_route_log_request ("Debug request", "***", request);
+            }
 
           nexthop = XCALLOC (MTYPE_OSPF6_OTHER,
                              sizeof (struct ospf6_nexthop));

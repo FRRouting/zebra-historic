@@ -117,7 +117,7 @@ ospf6_asbr_external_route_remove (struct ospf6_route_req *route)
   struct ospf6_lsa *lsa;
 
   lsa = ospf6_lsdb_lookup_lsdb (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
-                                htonl (route->path.origin.id),
+                                route->path.origin.id,
                                 ospf6->router_id, ospf6->lsdb);
   if (lsa)
     ospf6_lsa_premature_aging (lsa);
@@ -417,6 +417,9 @@ ospf6_asbr_external_refresh (void *old)
   struct ospf6_route_req route, *target;
 
   assert (ospf6);
+
+  if (IS_OSPF6_DUMP_ASBR)
+    zlog_info ("ASBR: refresh %s", lsa->str);
 
   target = NULL;
   for (ospf6_route_head (&route, ospf6->external_table);

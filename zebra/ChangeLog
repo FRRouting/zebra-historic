@@ -1,3 +1,8 @@
+2002-09-10  Jochen Friedrich <chris+zebra@scram.de>
+
+	* rt_netlink.c: Add check for EAGAIN.
+	* kernel_socket.c: Likewise
+
 2002-06-12  Israel Keys <ikeys@oz.agile.tv>
 
 	* rt_netlink.c: Setting the NLM_F_ACK flag on the netlink command

@@ -1,3 +1,24 @@
+2002-07-14  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_spf.c: unwanted assert() in ospf6_spf_nexthop_calculation()
+	is deleted.
+	* version: 0.9.6l
+
+2002-07-14  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_dbex.c: bug that ospf6d fails to refresh self-originated
+	LSA if he have not the LSA before has been fixed.
+	* ospf6_asbr.c: bug of failing removing ASE LSA when remove
+	message arrived from zebra has been fixed.
+	* version: 0.9.6k
+
+2002-07-13  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_zebra.c: bug reported [zebra 14642] fixed.
+	The bug was related to the synchronization between zebra
+	and ospf6d. Now synchronization will be correctly done.
+	* version: 0.9.6j
+
 2002-07-07  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
 
 	* ospf6_lsdb.c: bug fixed in ospf6_lsdb_type_router ().

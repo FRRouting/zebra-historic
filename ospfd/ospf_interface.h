@@ -200,6 +200,8 @@ void ospf_if_cleanup (struct ospf_interface *);
 void ospf_if_free (struct ospf_interface *);
 int ospf_if_up (struct ospf_interface *);
 int ospf_if_down (struct ospf_interface *);
+
+int ospf_if_is_up (struct ospf_interface *);
 struct ospf_interface *ospf_if_lookup_by_name (char *);
 struct ospf_interface *ospf_if_lookup_by_local_addr (struct interface *, struct in_addr);
 struct ospf_interface *ospf_if_lookup_by_prefix (struct prefix_ipv4 *);

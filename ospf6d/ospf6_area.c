@@ -100,28 +100,6 @@ ospf6_area_is_transit (struct ospf6_area *o6a)
 
 
 void
-ospf6_area_intra_topo_add (struct ospf6_route_req *topo_entry)
-{
-  if (topo_entry->route.type == OSPF6_DEST_TYPE_ROUTER)
-    {
-      if (CHECK_FLAG (topo_entry->path.router_bits, OSPF6_ROUTER_LSA_BIT_B))
-        ospf6_abr_abr_entry_add (topo_entry);
-    }
-  CALL_ADD_HOOK (&intra_topology_hook, topo_entry);
-}
-
-void
-ospf6_area_intra_topo_remove (struct ospf6_route_req *topo_entry)
-{
-  if (topo_entry->route.type == OSPF6_DEST_TYPE_ROUTER)
-    {
-      if (CHECK_FLAG (topo_entry->path.router_bits, OSPF6_ROUTER_LSA_BIT_E))
-        ospf6_abr_abr_entry_add (topo_entry);
-    }
-  CALL_REMOVE_HOOK (&intra_topology_hook, topo_entry);
-}
-
-void
 ospf6_area_route_add (void *data)
 {
   struct ospf6_route_req *route = data;

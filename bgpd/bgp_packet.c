@@ -42,6 +42,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_open.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
+#include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_advertise.h"
@@ -1557,6 +1558,8 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
     aspath_unintern (attr.aspath);
   if (attr.community)
     community_unintern (attr.community);
+  if (attr.ecommunity)
+    ecommunity_unintern (attr.ecommunity);
   if (attr.cluster)
     cluster_unintern (attr.cluster);
   if (attr.transit)

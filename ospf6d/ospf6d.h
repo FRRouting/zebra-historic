@@ -74,7 +74,7 @@
 #define HASHVAL 64
 #define MAXIOVLIST 1024
 
-#define OSPF6_DAEMON_VERSION    "0.9.6i"
+#define OSPF6_DAEMON_VERSION    "0.9.6l"
 
 #define AF_LINKSTATE  0xff
 

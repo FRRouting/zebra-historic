@@ -323,11 +323,12 @@ struct peer
 #define PEER_FLAG_NEXTHOP_UNCHANGED         (1 << 7) /* transparent-next-hop */
 #define PEER_FLAG_MED_UNCHANGED             (1 << 8) /* transparent-next-hop */
 #define PEER_FLAG_DEFAULT_ORIGINATE         (1 << 9) /* default-originate */
-#define PEER_FLAG_DEFAULT_ORIGINATE_CHECK   (1 << 10) /* default-originate check*/
-#define PEER_FLAG_REMOVE_PRIVATE_AS         (1 << 11) /* remove-private-as */
-#define PEER_FLAG_ALLOWAS_IN                (1 << 12) /* set allowas-in */
-#define PEER_FLAG_ORF_PREFIX_SM             (1 << 13) /* orf capability send-mode */
-#define PEER_FLAG_ORF_PREFIX_RM             (1 << 14) /* orf capability receive-mode */
+#define PEER_FLAG_REMOVE_PRIVATE_AS         (1 << 10) /* remove-private-as */
+#define PEER_FLAG_ALLOWAS_IN                (1 << 11) /* set allowas-in */
+#define PEER_FLAG_ORF_PREFIX_SM             (1 << 12) /* orf capability send-mode */
+#define PEER_FLAG_ORF_PREFIX_RM             (1 << 13) /* orf capability receive-mode */
+#define PEER_FLAG_MAX_PREFIX                (1 << 14) /* maximum prefix */
+#define PEER_FLAG_MAX_PREFIX_WARNING        (1 << 15) /* maximum prefix warning-only */
 
   /* default-originate route-map.  */
   struct
@@ -348,6 +349,7 @@ struct peer
   u_int16_t af_sflags[AFI_MAX][SAFI_MAX];
 #define PEER_STATUS_ORF_PREFIX_SEND   (1 << 0) /* prefix-list send peer */
 #define PEER_STATUS_ORF_WAIT_REFRESH  (1 << 1) /* wait refresh received peer */
+#define PEER_STATUS_DEFAULT_ORIGINATE (1 << 2) /* default-originate peer */
 
   /* Default attribute value for the peer. */
   u_int32_t config;
@@ -423,7 +425,6 @@ struct peer
 
   /* Max prefix count. */
   unsigned long pmax[AFI_MAX][SAFI_MAX];
-  u_char pmax_warning[AFI_MAX][SAFI_MAX];
 
   /* allowas-in. */
   char allowas_in[AFI_MAX][SAFI_MAX];

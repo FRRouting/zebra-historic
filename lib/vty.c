@@ -141,21 +141,23 @@ vty_out (struct vty *vty, const char *format, ...)
 }
 
 int
-vvty_out (struct vty *vty, const char *format, va_list va)
+vty_log_out (struct vty *vty, const char *proto_str, const char *format,
+	     va_list va)
 {
   int len;
-  /* XXX need overflow check */
   char buf[1024];
 
+  snprintf (buf, sizeof buf, "%s: ", proto_str);
+  write (vty->fd, buf, strlen (proto_str) + 2);
+
   len = vsnprintf (buf, sizeof buf, format, va);
-
   if (len < 0)
-    {    
-      zlog (NULL, LOG_INFO, "Vty closed due to vty output buffer shortage.");
-      return -1;
-    }
+    return -1;
+  write (vty->fd, (u_char *)buf, len);
 
-  buffer_write (vty->obuf, (u_char *)buf, len);
+  snprintf (buf, sizeof buf, "\r\n");
+  write (vty->fd, buf, 2);
+
   return len;
 }
 
@@ -2258,7 +2260,7 @@ vty_read_config (char *config_file,
   host_config_set (fullpath);
 }
 
-/* Small utility function which output loggin to the VTY. */
+/* Small utility function which output log to the VTY. */
 void
 vty_log (const char *proto_str, const char *format, va_list va)
 {
@@ -2268,12 +2270,7 @@ vty_log (const char *proto_str, const char *format, va_list va)
   for (i = 0; i < vector_max (vtyvec); i++)
     if ((vty = vector_slot (vtyvec, i)) != NULL)
       if (vty->monitor)
-	{
-	  vty_time_print (vty, 0);
-	  vty_out (vty, "%s: ", proto_str);
-	  vvty_out (vty, format, va);
-	  vty_out (vty, "\r\n");
-	}
+	vty_log_out (vty, proto_str, format, va);
 }
 
 int

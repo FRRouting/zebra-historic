@@ -187,7 +187,7 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *),
 	{
 	  if (errno == EINTR)
 	    continue;
-	  if (errno == EWOULDBLOCK)
+	  if (errno == EWOULDBLOCK || errno == EAGAIN)
 	    break;
 	  zlog (NULL, LOG_ERR, "%s recvmsg overrun", nl->name);
 	  continue;

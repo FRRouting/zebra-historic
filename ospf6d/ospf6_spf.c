@@ -379,9 +379,6 @@ ospf6_spf_nexthop_calculation (struct ospf6_vertex *W,
       /* V is broadcast network, W is router */
       assert (V->vertex_id.id.s_addr != 0);
       assert (W->vertex_id.id.s_addr == 0);
-
-      /* there should be the only one nexthop in V */
-      assert (V->nexthop_list->count == 1);
  
       linklist_head (V->nexthop_list, &node);
       n = (struct ospf6_nexthop *) node.data;

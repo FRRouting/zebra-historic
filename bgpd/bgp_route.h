@@ -148,9 +148,6 @@ int bgp_static_unset_vpnv4 (struct vty *, char *, char *, char *);
 int bgp_config_write_network (struct vty *, struct bgp *, afi_t, safi_t, int *);
 int bgp_config_write_distance (struct vty *, struct bgp *);
 
-void route_vty_out_detail (struct vty *, struct prefix *, struct bgp_info *,
-			   afi_t, safi_t);
-
 void bgp_aggregate_increment (struct bgp *, struct prefix *, struct bgp_info *,
 			      afi_t, safi_t);
 void bgp_aggregate_decrement (struct bgp *, struct prefix *, struct bgp_info *,

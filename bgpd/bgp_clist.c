@@ -74,6 +74,10 @@ community_entry_free (struct community_entry *entry)
 	community_free (entry->u.com);
       break;
     case EXTCOMMUNITY_LIST_STANDARD:
+      /* In case of standard extcommunity-list, configuration string
+	 is made by ecommunity_ecom2str().  */
+      if (entry->config)
+	XFREE (MTYPE_ECOMMUNITY_STR, entry->config);
       if (entry->u.ecom)
 	ecommunity_free (entry->u.ecom);
       break;

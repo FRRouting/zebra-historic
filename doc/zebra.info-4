@@ -1,4 +1,4 @@
-This is zebra.info, produced by makeinfo version 4.0b from zebra.texi.
+This is zebra.info, produced by makeinfo version 4.2 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software:
 START-INFO-DIR-ENTRY
@@ -8,8 +8,8 @@ END-INFO-DIR-ENTRY
    This file documents the GNU Zebra software which manages common
 TCP/IP routing protocols.
 
-   This is Edition 0.1, last updated 28 June 2002 of `The GNU Zebra
-Manual', for Zebra Version 0.93.
+   This is Edition 0.1, last updated 12 September 2002 of `The GNU
+Zebra Manual', for Zebra Version 0.93b.
 
    Copyright (C) 1999, 2000, 2001, 2002 Kunihiro Ishiguro
 
@@ -38,7 +38,9 @@ Command Index
 * access-class ACCESS-LIST:              Basic Config Commands.
 * access-list NAME deny IPV4-NETWORK:    IP Access List.
 * access-list NAME permit IPV4-NETWORK:  IP Access List.
-* aggregate-address NETWORK:             BGP network.
+* aggregate-address A.B.C.D/M:           Route Aggregation.
+* aggregate-address A.B.C.D/M as-set:    Route Aggregation.
+* aggregate-address A.B.C.D/M summary-only: Route Aggregation.
 * area <0-4294967295> authentication:    OSPF area.
 * area <0-4294967295> authentication message-digest: OSPF area.
 * area <0-4294967295> export-list NAME:  OSPF area.
@@ -67,15 +69,15 @@ Command Index
 * bgp config-type cisco:                 Multiple instance.
 * bgp config-type zebra:                 Multiple instance.
 * bgp multiple-instance:                 Multiple instance.
-* bgp router-id ROUTER-ID:               BGP router.
-* clear ip bgp PEER:                     BGP terminal mode commands.
-* clear ip bgp PEER soft in:             BGP terminal mode commands.
+* bgp router-id A.B.C.D:                 BGP router.
+* clear ip bgp PEER:                     More Show IP BGP.
+* clear ip bgp PEER soft in:             More Show IP BGP.
 * clear ip prefix-list:                  Clear counter of ip prefix-list.
 * clear ip prefix-list NAME:             Clear counter of ip prefix-list.
 * clear ip prefix-list NAME A.B.C.D/M:   Clear counter of ip prefix-list.
 * configure terminal:                    Basic Config Commands.
-* debug event:                           BGP terminal mode commands.
-* debug keepalive:                       BGP terminal mode commands.
+* debug event:                           More Show IP BGP.
+* debug keepalive:                       More Show IP BGP.
 * debug ospf ism:                        Debugging OSPF.
 * debug ospf ism (status|events|timers): Debugging OSPF.
 * debug ospf lsa:                        Debugging OSPF.
@@ -91,7 +93,7 @@ Command Index
 * debug ripng events:                    ripngd Terminal Mode Commands.
 * debug ripng packet:                    ripngd Terminal Mode Commands.
 * debug ripng zebra:                     ripngd Terminal Mode Commands.
-* debug update:                          BGP terminal mode commands.
+* debug update:                          More Show IP BGP.
 * default-information originate <1>:     Redistribute routes to OSPF.
 * default-information originate:         How to Announce RIP route.
 * default-information originate always:  Redistribute routes to OSPF.
@@ -106,8 +108,11 @@ Command Index
 * description DESCRIPTION ...:           Interface Commands.
 * distance <1-255> <1>:                  Redistribute routes to OSPF.
 * distance <1-255>:                      RIP distance.
+* distance <1-255> A.B.C.D/M <1>:        BGP distance.
 * distance <1-255> A.B.C.D/M:            RIP distance.
 * distance <1-255> A.B.C.D/M ACCESS-LIST: RIP distance.
+* distance <1-255> A.B.C.D/M WORD:       BGP distance.
+* distance bgp <1-255> <1-255> <1-255>:  BGP distance.
 * distance ospf (intra-area|inter-area|external) <1-255>: Redistribute routes to OSPF.
 * distribute-list ACCESS_LIST (in|out) IFNAME: ripngd Filtering Commands.
 * distribute-list ACCESS_LIST DIRECT IFNAME: Filtering RIP Routes.
@@ -126,12 +131,14 @@ Command Index
 * interface IFNAME:                      Interface Commands.
 * interface IFNAME area AREA:            OSPF6 router.
 * ip address ADDRESS:                    Interface Commands.
-* ip as-path access-list NAME TYPE AS_PATH: AS Path Access List.
+* ip as-path access-list WORD {permit|deny} LINE: AS Path Access List.
 * ip community-list <1-99> {permit|deny} COMMUNITY: Numbered BGP Community Lists.
 * ip community-list <100-199> {permit|deny} COMMUNITY: Numbered BGP Community Lists.
 * ip community-list expanded NAME {permit|deny} LINE: BGP Community Lists.
 * ip community-list NAME {permit|deny} COMMUNITY: Numbered BGP Community Lists.
 * ip community-list standard NAME {permit|deny} COMMUNITY: BGP Community Lists.
+* ip extcommunity-list expanded NAME {permit|deny} LINE: BGP Extended Community Lists.
+* ip extcommunity-list standard NAME {permit|deny} EXTCOMMUNITY: BGP Extended Community Lists.
 * ip ospf authentication-key AUTH_KEY:   OSPF interface.
 * ip ospf cost <1-65535>:                OSPF interface.
 * ip ospf dead-interval <1-65535>:       OSPF interface.
@@ -170,48 +177,53 @@ Command Index
 * log file FILENAME:                     Basic Config Commands.
 * log stdout:                            Basic Config Commands.
 * log syslog:                            Basic Config Commands.
+* match as-path WORD:                    Using AS Path in Route Map.
 * match aspath AS_PATH:                  Route Map Match Command.
 * match community COMMUNITY_LIST:        Route Map Match Command.
-* match community WORD:                  Using BGP Community in Route Map.
-* match community WORD exact-match:      Using BGP Community in Route Map.
-* match interface NAME:                  RIP route-map.
-* match ip address <access-list>:        RIP route-map.
+* match community WORD:                  BGP Community in Route Map.
+* match community WORD exact-match:      BGP Community in Route Map.
+* match extcommunity WORD:               BGP Extended Communities in Route Map.
+* match interface WORD:                  RIP route-map.
 * match ip address ACCESS_LIST:          Route Map Match Command.
+* match ip address prefix-list WORD:     RIP route-map.
+* match ip address WORD:                 RIP route-map.
+* match ip next-hop A.B.C.D:             RIP route-map.
 * match ip next-hop IPV4_ADDR:           Route Map Match Command.
-* match ip next-hot A.B.C.D:             RIP route-map.
+* match metric <0-4294967295>:           RIP route-map.
 * match metric METRIC:                   Route Map Match Command.
-* match metric N:                        RIP route-map.
 * multicast:                             Interface Commands.
 * neighbor A.B.C.D:                      RIP Configuration.
-* neighbor PEER default-originate:       Peer configuration.
-* neighbor PEER description ...:         Peer configuration.
+* neighbor PEER default-originate:       BGP Peer commands.
+* neighbor PEER description ...:         BGP Peer commands.
 * neighbor PEER distribute-list NAME [in|out]: Peer filtering.
-* neighbor PEER dont-capability-negotiate: Multiple Protocol Extension for BGP.
-* neighbor PEER ebgp-multihop:           Peer configuration.
+* neighbor PEER dont-capability-negotiate: Capability Negotiation.
+* neighbor PEER ebgp-multihop:           BGP Peer commands.
 * neighbor PEER filter-list NAME [in|out]: Peer filtering.
-* neighbor PEER interface IFNAME:        Peer configuration.
-* neighbor PEER maximum-prefix NUMBER:   Peer configuration.
-* neighbor PEER next-hop-self:           Peer configuration.
-* neighbor PEER override-capability:     Multiple Protocol Extension for BGP.
-* neighbor PEER port PORT:               Peer configuration.
+* neighbor PEER interface IFNAME:        BGP Peer commands.
+* neighbor PEER maximum-prefix NUMBER:   BGP Peer commands.
+* neighbor PEER next-hop-self:           BGP Peer commands.
+* neighbor PEER override-capability:     Capability Negotiation.
+* neighbor PEER peer-group WORD:         BGP Peer Group.
+* neighbor PEER port PORT:               BGP Peer commands.
 * neighbor PEER prefix-list NAME [in|out]: Peer filtering.
-* neighbor PEER remote-as AS-NUMBER:     BGP peer.
+* neighbor PEER remote-as ASN:           Defining Peer.
 * neighbor PEER route-map NAME [in|out]: Peer filtering.
 * neighbor PEER route-reflector-client:  Route Reflector.
-* neighbor PEER send-community:          Peer configuration.
-* neighbor PEER shutdown:                Peer configuration.
-* neighbor PEER strict-capability-match: Multiple Protocol Extension for BGP.
-* neighbor PEER update-source:           Peer configuration.
-* neighbor PEER version VERSION:         Peer configuration.
-* neighbor PEER weight WEIGHT:           Peer configuration.
+* neighbor PEER send-community:          BGP Peer commands.
+* neighbor PEER shutdown:                BGP Peer commands.
+* neighbor PEER strict-capability-match: Capability Negotiation.
+* neighbor PEER update-source:           BGP Peer commands.
+* neighbor PEER version VERSION:         BGP Peer commands.
+* neighbor PEER weight WEIGHT:           BGP Peer commands.
+* neighbor WORD peer-group:              BGP Peer Group.
+* network A.B.C.D/M:                     BGP route.
 * network A.B.C.D/M area <0-4294967295>: OSPF router.
 * network A.B.C.D/M area A.B.C.D:        OSPF router.
 * network IFNAME <1>:                    ripngd Configuration.
 * network IFNAME:                        RIP Configuration.
-* network NETWORK <1>:                   BGP network.
-* network NETWORK <2>:                   ripngd Configuration.
+* network NETWORK <1>:                   ripngd Configuration.
 * network NETWORK:                       RIP Configuration.
-* no aggregate-address NETWORK:          BGP network.
+* no aggregate-address A.B.C.D/M:        Route Aggregation.
 * no area <0-4294967295> authentication: OSPF area.
 * no area <0-4294967295> export-list NAME: OSPF area.
 * no area <0-4294967295> import-list NAME: OSPF area.
@@ -235,8 +247,8 @@ Command Index
 * no bandwidth <1-10000000>:             Interface Commands.
 * no banner motd:                        Basic Config Commands.
 * no bgp multiple-instance:              Multiple instance.
-* no debug event:                        BGP terminal mode commands.
-* no debug keepalive:                    BGP terminal mode commands.
+* no debug event:                        More Show IP BGP.
+* no debug keepalive:                    More Show IP BGP.
 * no debug ospf ism:                     Debugging OSPF.
 * no debug ospf ism (status|events|timers): Debugging OSPF.
 * no debug ospf lsa:                     Debugging OSPF.
@@ -246,7 +258,7 @@ Command Index
 * no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) [detail]: Debugging OSPF.
 * no debug ospf zebra:                   Debugging OSPF.
 * no debug ospf zebra (interface|redistribute): Debugging OSPF.
-* no debug update:                       BGP terminal mode commands.
+* no debug update:                       More Show IP BGP.
 * no default-information originate:      Redistribute routes to OSPF.
 * no default-metric:                     Redistribute routes to OSPF.
 * no default-metric <1-16>:              RIP Metric Manipulation.
@@ -257,9 +269,14 @@ Command Index
 * no distance ospf:                      Redistribute routes to OSPF.
 * no distribute-list NAME out (kernel|connected|static|rip|ospf: Redistribute routes to OSPF.
 * no exec-timeout:                       Basic Config Commands.
+* no ip as-path access-list WORD:        AS Path Access List.
+* no ip as-path access-list WORD {permit|deny} LINE: AS Path Access List.
 * no ip community-list expanded NAME:    BGP Community Lists.
 * no ip community-list NAME:             BGP Community Lists.
 * no ip community-list standard NAME:    BGP Community Lists.
+* no ip extcommunity-list expanded NAME: BGP Extended Community Lists.
+* no ip extcommunity-list NAME:          BGP Extended Community Lists.
+* no ip extcommunity-list standard NAME: BGP Extended Community Lists.
 * no ip ospf authentication-key:         OSPF interface.
 * no ip ospf cost:                       OSPF interface.
 * no ip ospf dead-interval:              OSPF interface.
@@ -281,23 +298,23 @@ Command Index
 * no log syslog:                         Basic Config Commands.
 * no multicast:                          Interface Commands.
 * no neighbor A.B.C.D:                   RIP Configuration.
-* no neighbor PEER default-originate:    Peer configuration.
-* no neighbor PEER description ...:      Peer configuration.
-* no neighbor PEER dont-capability-negotiate: Multiple Protocol Extension for BGP.
-* no neighbor PEER ebgp-multihop:        Peer configuration.
-* no neighbor PEER interface IFNAME:     Peer configuration.
-* no neighbor PEER maximum-prefix NUMBER: Peer configuration.
-* no neighbor PEER next-hop-self:        Peer configuration.
-* no neighbor PEER override-capability:  Multiple Protocol Extension for BGP.
+* no neighbor PEER default-originate:    BGP Peer commands.
+* no neighbor PEER description ...:      BGP Peer commands.
+* no neighbor PEER dont-capability-negotiate: Capability Negotiation.
+* no neighbor PEER ebgp-multihop:        BGP Peer commands.
+* no neighbor PEER interface IFNAME:     BGP Peer commands.
+* no neighbor PEER maximum-prefix NUMBER: BGP Peer commands.
+* no neighbor PEER next-hop-self:        BGP Peer commands.
+* no neighbor PEER override-capability:  Capability Negotiation.
 * no neighbor PEER route-reflector-client: Route Reflector.
-* no neighbor PEER shutdown:             Peer configuration.
-* no neighbor PEER strict-capability-match: Multiple Protocol Extension for BGP.
-* no neighbor PEER update-source:        Peer configuration.
-* no neighbor PEER weight WEIGHT:        Peer configuration.
+* no neighbor PEER shutdown:             BGP Peer commands.
+* no neighbor PEER strict-capability-match: Capability Negotiation.
+* no neighbor PEER update-source:        BGP Peer commands.
+* no neighbor PEER weight WEIGHT:        BGP Peer commands.
+* no network A.B.C.D/M:                  BGP route.
 * no network A.B.C.D/M area <0-4294967295>: OSPF router.
 * no network A.B.C.D/M area A.B.C.D:     OSPF router.
 * no network IFNAME:                     RIP Configuration.
-* no network NETWORK <1>:                BGP network.
 * no network NETWORK:                    RIP Configuration.
 * no ospf abr-type TYPE:                 OSPF router.
 * no ospf rfc1583compatibility:          OSPF router.
@@ -312,7 +329,7 @@ Command Index
 * no redistribute static:                How to Announce RIP route.
 * no rouer rip:                          RIP Configuration.
 * no route A.B.C.D/M:                    How to Announce RIP route.
-* no router bgp AS-NUMBER:               BGP router.
+* no router bgp ASN:                     BGP router.
 * no router ospf:                        OSPF router.
 * no router zebra:                       Redistribute routes to OSPF.
 * no shutdown:                           Interface Commands.
@@ -365,9 +382,9 @@ Command Index
 * route A.B.C.D/M:                       How to Announce RIP route.
 * route NETWORK:                         ripngd Configuration.
 * route-map ROUTE-MAP-NAME permit PRIORITY: Route Map Command.
-* router bgp AS-NUMBER <1>:              BGP instance and view.
-* router bgp AS-NUMBER:                  BGP router.
+* router bgp AS-NUMBER:                  BGP instance and view.
 * router bgp AS-NUMBER view NAME:        BGP instance and view.
+* router bgp ASN:                        BGP router.
 * router ospf:                           OSPF router.
 * router ospf6:                          OSPF6 router.
 * router rip:                            RIP Configuration.
@@ -378,36 +395,49 @@ Command Index
 * service advanced-vty:                  Basic Config Commands.
 * service password-encryption:           Basic Config Commands.
 * service terminal-length <0-512>:       Basic Config Commands.
+* set as-path prepend AS-PATH:           Using AS Path in Route Map.
 * set as-path prepend AS_PATH:           Route Map Set Command.
-* set comm-list WORD delete:             Using BGP Community in Route Map.
+* set comm-list WORD delete:             BGP Community in Route Map.
 * set community COMMUNITY <1>:           Route Map Set Command.
-* set community COMMUNITY:               Using BGP Community in Route Map.
-* set community COMMUNITY additive:      Using BGP Community in Route Map.
-* set community none:                    Using BGP Community in Route Map.
+* set community COMMUNITY:               BGP Community in Route Map.
+* set community COMMUNITY additive:      BGP Community in Route Map.
+* set community none:                    BGP Community in Route Map.
+* set extcommunity rt EXTCOMMUNITY:      BGP Extended Communities in Route Map.
+* set extcommunity soo EXTCOMMUNITY:     BGP Extended Communities in Route Map.
+* set ip next-hop A.B.C.D:               RIP route-map.
 * set ip next-hop IPV4_ADDRESS:          Route Map Set Command.
 * set ipv6 next-hop global IPV6_ADDRESS: Route Map Set Command.
 * set ipv6 next-hop local IPV6_ADDRESS:  Route Map Set Command.
 * set local-preference LOCAL_PREF:       Route Map Set Command.
 * set metric <0-4294967295>:             RIP route-map.
 * set metric METRIC:                     Route Map Set Command.
-* set next-hop A.B.C.D:                  RIP route-map.
 * set weight WEIGHT:                     Route Map Set Command.
-* show debug:                            BGP terminal mode commands.
+* show debug:                            More Show IP BGP.
 * show debugging ospf:                   Debugging OSPF.
 * show debugging rip:                    RIP Debug Commands.
 * show debugging ripng:                  ripngd Terminal Mode Commands.
 * show interface:                        zebra Terminal Mode Commands.
-* show ip bgp [NETWORK]:                 BGP terminal mode commands.
-* show ip bgp community COMMUNITY:       Display BGP Table by Community.
-* show ip bgp community COMMUNITY exact-match: Display BGP Table by Community.
-* show ip bgp community-list WORD:       Display BGP Table by Community.
-* show ip bgp community-list WORD exact-match: Display BGP Table by Community.
-* show ip bgp neighbor [PEER]:           BGP terminal mode commands.
-* show ip bgp regexp AS-REGEXP:          BGP terminal mode commands.
-* show ip bgp summary:                   BGP terminal mode commands.
+* show ip bgp:                           Show IP BGP.
+* show ip bgp A.B.C.D:                   Show IP BGP.
+* show ip bgp community:                 Display BGP Routes by Community.
+* show ip bgp community COMMUNITY <1>:   More Show IP BGP.
+* show ip bgp community COMMUNITY:       Display BGP Routes by Community.
+* show ip bgp community COMMUNITY exact-match <1>: More Show IP BGP.
+* show ip bgp community COMMUNITY exact-match: Display BGP Routes by Community.
+* show ip bgp community-list WORD <1>:   More Show IP BGP.
+* show ip bgp community-list WORD:       Display BGP Routes by Community.
+* show ip bgp community-list WORD exact-match <1>: More Show IP BGP.
+* show ip bgp community-list WORD exact-match: Display BGP Routes by Community.
+* show ip bgp neighbor [PEER]:           More Show IP BGP.
+* show ip bgp regexp LINE <1>:           More Show IP BGP.
+* show ip bgp regexp LINE:               Display BGP Routes by AS Path.
+* show ip bgp summary:                   More Show IP BGP.
 * show ip bgp view NAME:                 Viewing the view.
+* show ip bgp X:X::X:X:                  Show IP BGP.
 * show ip community-list:                BGP Community Lists.
 * show ip community-list NAME:           BGP Community Lists.
+* show ip extcommunity-list:             BGP Extended Community Lists.
+* show ip extcommunity-list NAME:        BGP Extended Community Lists.
 * show ip ospf:                          Showing OSPF information.
 * show ip ospf database:                 Showing OSPF information.
 * show ip ospf database (asbr-summary|external|network|router|summary): Showing OSPF information.
