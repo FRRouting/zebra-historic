@@ -344,8 +344,9 @@ bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr)
   stream_free (s);
 
   /* Dump packet if debug option is set. */
-  /* bgp_packet_dump (packet); */
-
+#ifdef DEBUG
+  bgp_packet_dump (packet);
+#endif /* DEBUG */
   /* Add packet to the peer. */
   bgp_packet_add (peer, packet);
 
@@ -493,6 +494,10 @@ bgp_update (struct peer *peer, bgp_size_t size)
 
   /* Get input buffer. */
   s = peer->ibuf;
+
+#ifdef DEBUG
+  bgp_packet_dump (s);
+#endif /* DEBUG */
 
   /* Status check. */
   if (peer->status != Established) 

@@ -45,8 +45,7 @@ struct ospf_header
 };
 
 /* OSPF Hello body format. */
-/* struct ospf_hello_body */
-struct _ospf_hello
+struct ospf_hello
 {
   struct in_addr network_mask;
   u_int16_t hello_interval;
@@ -143,7 +142,7 @@ struct ospf_lsa
 #define ospf_as_external_lsa    u.as_external_lsa
 
 /* OSPF Database Description body format. */
-struct _ospf_db_desc
+struct ospf_db_desc
 {
   u_int16_t interface_mtu;
   u_char options;
@@ -153,7 +152,7 @@ struct _ospf_db_desc
 };
 
 /* OSPF Link State Request body format. */
-struct _ospf_ls_req
+struct ospf_ls_req
 {
   u_int32_t ls_type;
   struct in_addr ls_id;
@@ -161,42 +160,20 @@ struct _ospf_ls_req
 };
 
 /* OSPF Link State Update body format. */
-struct _ospf_ls_upd
+struct ospf_ls_upd
 {
   u_int32_t number_lsa;
   struct ospf_lsa lsa[1];
 };
 
 /* OSPF Link State Ack body format. */
-struct _ospf_ls_ack
+struct ospf_ls_ack
 {
   struct ospf_lsa_header lsa_header[1];
 };
 
-/* OSPF packet structure format. */
-struct ospf_packet
-{
-  struct ospf_header header;
-  union
-  {
-    /* OSPF Hello body */
-    struct _ospf_hello hello;
-
-    /* OSPF Database Description body */
-    struct _ospf_db_desc db_desc;
-
-    /* OSPF Link State Request body */
-    struct _ospf_ls_req ls_req[1];
-
-    /* OSPF Link State Update body */
-    struct _ospf_ls_upd ls_upd;
-
-    /* OSPF Link State Ack body */
-    struct _ospf_ls_ack ls_ack;
-  } u;
-};
-
 /* Prototypes. */
 int ospf_read (struct thread *);
+void ospf_hello_send (struct ospf_interface *);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

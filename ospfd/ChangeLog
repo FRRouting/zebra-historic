@@ -1,3 +1,11 @@
+1999-04-02  Toshiaki Takada  <takada@zebra.org>
+	* ospf_neighbor.c: New file.
+	* ospf_neighbor.h: New file.
+	* ospf_nsm.c: New file.
+	* ospf_nsm.h: New file.
+	* ospf_packet.c: Add ospf_make_header (), ospf_hello () and
+	ospf_hello_send (). Now OSPFd can receive Hello and send Hello.
+
 1999-03-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf_packet.c: Add ospf_recv_packet ().  Now OSPF Hello can receive.

@@ -1,8 +1,27 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-19990403 snapshot
+
+* Changes in bgpd
+
+** When bgpd has 'router zebra', bgpd automatically select it's router
+ID as most highest interface's IP Address.
+
+** When AS path is empty (in case of iBGP), it doesn't include any AS
+segment.  This change is for announcement to gated under iBGP.
+
+* Changes in ospfd
+
+** OSPF hello packet send/receive works.
+
+* Changes in ospf6d
+
+** Yasuhiro Ohara's ospf6d codes is imported.  It is under development
+and can't be compiled on any platform.
+
 * Changes in zebra-19990327 snapshot
 
-* Changes in bgp
+* Changes in bgpd
 
 ** When BGP-4+ connection is done by IPv6 link-local address.  One
 have to specify interface index for the connection.  So I've added

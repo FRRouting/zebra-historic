@@ -25,3 +25,24 @@ install-sysconfDATA: $(sysconf_DATA)
 	    $(INSTALL_SDATA) $$p $(DESTDIR)$(sysconfdir)/$$p; \
 	  fi; fi; \
 	done
+
+depend:
+	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
+
+## File dependency.
+ripd.o: ripd.c ../lib/vector.h ../lib/vty.h ../lib/command.h \
+ ../lib/prefix.h ../lib/table.h ../lib/linklist.h ../lib/if.h \
+ ../lib/thread.h ../lib/memory.h ../lib/buffer.h ../lib/roken.h \
+ ../lib/log.h ../zebra/zebra.h ../ripd/ripd.h
+rip_interface.o: rip_interface.c ../lib/linklist.h ../lib/vector.h \
+ ../lib/vty.h ../lib/command.h ../lib/sockunion.h ../lib/if.h \
+ ../lib/prefix.h ../lib/memory.h ../lib/buffer.h ../lib/network.h \
+ ../lib/table.h ../lib/roken.h ../lib/log.h ../zebra/zebra.h \
+ ../zebra/connected.h ../ripd/ripd.h
+rip_main.o: rip_main.c ../lib/version.h ../lib/getopt.h \
+ ../lib/thread.h ../lib/vector.h ../lib/vty.h ../lib/command.h \
+ ../lib/memory.h ../lib/prefix.h ../lib/log.h ../zebra/zebra.h \
+ ../ripd/ripd.h
+rip_zebra.o: rip_zebra.c ../lib/thread.h ../lib/vector.h ../lib/vty.h \
+ ../lib/command.h ../lib/prefix.h ripd.h ../lib/buffer.h \
+ ../lib/network.h ../lib/client.h ../lib/log.h ../zebra/zebra.h

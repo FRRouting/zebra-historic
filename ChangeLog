@@ -1,3 +1,7 @@
+1999-03-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Add dependencies to each directory's Makefile.am.
+
 1999-03-02  Peter Galbavy  <Peter.Galbavy@knowledge.com>
 
 	* reworked include file structure, and configure so that all

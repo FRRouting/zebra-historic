@@ -31,6 +31,7 @@
 #include "log.h"
 #include "thread.h"
 #include "sockunion.h"
+#include "if.h"
 
 #include "bgpd.h"
 #include "bgp_route.h"
@@ -42,6 +43,11 @@ struct zebra
 {
   int enable;
   int sock;
+
+  u_char redist_static;		/* Redistribute static route. */
+  u_char redist_connect;	/* Redistribute connected route. */
+  u_char redist_rip;		/* Redistribute rip route. */
+  u_char redist_ripng;		/* Redistribute ripng route. */
 
   struct thread *t_read;
   struct thread *t_write;
@@ -62,6 +68,100 @@ zebra_close ()
 
   zebra.t_read = NULL;
   zebra.t_write = NULL;
+}
+
+/* Update default router id. */
+int
+bgp_if_update (struct interface *ifp)
+{
+  struct bgp *bgp;
+  listnode node;
+  extern list bgp_list;
+  listnode cn;
+
+  for (cn = listhead (ifp->connected); cn; nextnode (cn))
+    {
+      struct connected *co;
+      struct in_addr *addr;
+
+      co = getdata (cn);
+
+      if (co->address->family == AF_INET)
+	{
+	  addr = &co->address->u.prefix4;
+
+	  for (node = listhead (bgp_list); node; nextnode (node))
+	    {
+	      bgp = getdata (node);
+
+	      if (! (bgp->config & BGP_CONFIG_ROUTER_ID))
+		if (ntohl (bgp->ident) < ntohl (addr->s_addr))
+		  bgp->ident = addr->s_addr;
+	    }
+	}
+    }
+
+  return 0;
+}
+
+/* Get all interface information. */
+void
+bgp_zebra_get_interface (struct stream *s)
+{
+  struct interface *ifp;
+  struct connected *connected;
+  u_int32_t connected_count;
+  unsigned long endp;
+
+  endp = stream_get_endp (s);
+
+  while (stream_get_getp(s) < endp)
+    {
+      u_char tmpnam[INTERFACE_NAMSIZ + 1];
+
+      bzero (tmpnam, sizeof (tmpnam));
+
+      /* Get interface's name */
+      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
+
+      /* create interface structure */
+      ifp = if_get_by_name (tmpnam);
+
+      /* Get interface's index and values. */
+      ifp->index = stream_getc (s);
+      ifp->flags = stream_getl (s);
+      ifp->metric = stream_getl (s);
+      ifp->mtu = stream_getl (s);
+
+      /* Get interface's address. */
+      connected_count = stream_getl (s);
+
+      while (connected_count--)
+	{
+	  struct prefix *p;
+	  int plen;
+
+	  connected = connected_new ();
+
+	  p = prefix_new ();
+	  p->family = stream_getc (s);
+
+	  plen = prefix_blen (p);
+	  memcpy (&p->u.prefix, stream_pnt (s), plen);
+	  stream_forward (s, plen);
+	  p->prefixlen = stream_getc (s);
+	  connected->address = p;
+
+	  p = prefix_new ();
+	  memcpy (&p->u.prefix, stream_pnt (s), plen);
+	  stream_forward (s, plen);
+
+	  connected->destination = p;
+
+	  connected_add (ifp, connected);
+	}
+      bgp_if_update (ifp);
+    }
 }
 
 /* Read packet from zebra. */
@@ -107,7 +207,9 @@ zebra_read (struct thread *t)
     case ZEBRA_IPV4_ROUTE_DELETE:
     case ZEBRA_IPV6_ROUTE_ADD:
     case ZEBRA_IPV6_ROUTE_DELETE:
+      break;
     case ZEBRA_GET_ALL_INTERFACE:
+      bgp_zebra_get_interface (zebra.ibuf);
       break;
     default:
       break;
@@ -138,6 +240,24 @@ zebra_create ()
   zebra_get_all_interface (zebra.sock);
 
   return 0;
+}
+
+void
+bgp_zebra_redistribute (int type)
+{
+  if (zebra.redist_static)
+    return;
+
+  zebra.redist_static = 1;
+}
+
+void
+bgp_zebra_no_redistribute (int type)
+{
+  if (! zebra.redist_static)
+    return;
+
+  zebra.redist_static = 0;
 }
 
 void
@@ -261,4 +381,7 @@ zebra_init (int enable)
 
   /* Install command element for zebra node. */ 
   install_element (CONFIG_NODE, &router_zebra_cmd);
+
+  /* Interface related init. */
+  if_init ();
 }

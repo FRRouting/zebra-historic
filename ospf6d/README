@@ -1,0 +1,12 @@
+Support only FreeBSD2.2.7 with KAME(also aka Hydrangea).
+Can't compile under GNU/Linux.
+
+Intra area routing have been almost done, but this is broken
+because I'm now cleaning up everything.
+So this can't be compiled on any platform.
+
+Sorry, I'm now working.
+1999 04/02.
+
+Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+

@@ -28,6 +28,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "table.h"
 #include "if.h"
 #include "memory.h"
+#include "stream.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
@@ -99,6 +100,123 @@ ospf_area_free (struct area *area)
   XFREE (MTYPE_OSPF_AREA, area);
 }
 
+void
+ospf_loopback_run (struct ospf *ospf)
+{
+  listnode node;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+
+  for (node = listhead (ospf->if_list); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      oi = ifp->if_data;
+
+      if (if_is_up (ifp))
+	{
+	  /* If interface is loopback, change state. */
+	  if (if_is_loopback (ifp))
+	    if (oi->flag == OSPF_FLAG_SLEEP)
+	      {	      
+		oi->flag = OSPF_FLAG_RUNNING;
+		OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_LoopInd);
+	      }
+	}
+    }
+}
+
+void
+ospf_interface_run (struct ospf *ospf, struct prefix *p)
+{
+  struct interface *ifp;
+  listnode node;
+
+  /* get target interface. */
+  for (node = listhead (ospf->if_list); node; nextnode (node))
+    {
+      listnode cn;
+      struct ospf_interface *oi;
+      u_char flag = OSPF_FLAG_SLEEP;
+
+      ifp = getdata (node);
+      oi = ifp->if_data;
+
+      /* is interface up? */
+      if (! if_is_up (ifp))
+	continue;
+
+      if (oi->flag == OSPF_FLAG_RUNNING)
+	continue;
+
+      /* if interface prefix is match specified prefix,
+	 then create socket and join multicast group. */
+      for (cn = listhead (ifp->connected); cn; nextnode (cn))
+	{
+	  struct connected *co;
+	  struct sockaddr_in sa;
+	  struct in_addr addr;
+	  int sock;
+
+	  co = getdata (cn);
+	  /* get pointer of interface prefix. */
+	  oi->address = co->address;
+
+	  if (prefix_match (co->address, p))
+	    {
+	      /* create raw socket. */
+	      sock = ospf_serv_sock (ifp, AF_INET);
+	      if (sock < 0)
+		{
+		  zlog (NULL, LOG_WARNING,
+			"interface %s can't create raw socket", ifp->name);
+		  continue;
+		}
+
+	      /* join mcast group. */
+	      ospf_if_add_allspfrouters (sock, co->address);
+
+	      /* */
+	      bzero ((char *) &sa, sizeof (sa));
+	      inet_aton (OSPF_ALLSPFROUTERS, &addr);
+	      sa.sin_family = AF_INET;
+	      sa.sin_addr = addr;
+	      sa.sin_port = htons (0);
+/* 	      if (bind (sock, (struct sockaddr *) &sa, sizeof (sa)) < 0)
+		{
+		  zlog (NULL, LOG_WARNING,
+			"interface %s can't bind socket", ifp->name);
+		  continue;
+		}
+*/
+	      /* create input/output buffer stream. */
+	      ospf_if_stream_set (sock, ifp->if_data);
+
+	      /* Remember this interface is running. */
+	      flag = OSPF_FLAG_RUNNING;
+
+	      OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_InterfaceUp);
+	    }
+	}
+      oi->flag = flag;
+    }
+}
+
+void
+ospf_if_update ()
+{
+  struct ospf *ospf;
+  listnode node;
+  struct route_node *rn;
+
+  for (node = listhead (ospf_list); node; nextnode (node))
+    if ((ospf = getdata (node)) != NULL)
+      {
+	ospf_loopback_run (ospf);
+
+	for (rn = route_top (ospf->network_area); rn; rn = route_next (rn))
+	  ospf_interface_run (ospf, &rn->p);
+      }
+}
 
 /* router ospf command */
 DEFUN (router_ospf,
@@ -110,8 +228,6 @@ DEFUN (router_ospf,
 {
   u_int16_t process_id;
   struct ospf *ospf;
-  listnode node;
-  struct interface *ifp;
 
   process_id = strtol (argv[0], NULL, 10);
   if (!process_id)
@@ -137,16 +253,7 @@ DEFUN (router_ospf,
   vty->node = OSPF_NODE;
   vty->index = ospf;
 
-  for (node = listhead (ospf->if_list); node; nextnode (node))
-    {
-      ifp = getdata (node);
-      if (if_is_up (ifp))
-	{
-	  /* If interface is loopback, change state. */
-	  if (if_is_loopback (ifp))
-	    OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_LoopInd);
-	}
-    }
+  ospf_loopback_run (ospf);
 
   return CMD_SUCCESS;
 }
@@ -191,9 +298,7 @@ DEFUN (network_area,
   int format;
   struct ospf *ospf;
   struct area *area;
-  struct interface *ifp;
   struct route_node *route_node;
-  listnode node;
 
   ospf = vty->index;
 
@@ -236,60 +341,8 @@ DEFUN (network_area,
     }
   route_node->info = area;
 
-  /* get target interface. */
-  for (node = listhead (ospf->if_list); node; nextnode (node))
-    {
-      listnode cn;
+  ospf_interface_run (ospf, &p);
 
-      ifp = getdata (node);
-      /* is interface up? */
-      if (! if_is_up (ifp))
-	continue;
-
-      /* if interface prefix is match specified prefix,
-	 then create socket and join multicast group. */
-      for (cn = listhead (ifp->connected); cn; nextnode (cn))
-	{
-	  struct connected *co;
-	  struct sockaddr_in sa;
-	  struct in_addr addr;
-	  int sock;
-
-	  co = getdata (cn);
-	  if (prefix_match (co->address, &p))
-	    {
-	      /* create raw socket. */
-	      sock = ospf_serv_sock (ifp, AF_INET);
-	      if (sock < 0)
-		{
-		  zlog (NULL, LOG_WARNING,
-			"interface %s can't create raw socket", ifp->name);
-		  continue;
-		}
-
-	      /* join mcast group. */
-	      ospf_if_add_allspfrouters (sock, co->address);
-
-	      /* */
-	      bzero ((char *) &sa, sizeof (sa));
-	      inet_aton (OSPF_ALLSPFROUTERS, &addr);
-	      sa.sin_family = AF_INET;
-	      sa.sin_addr = addr;
-	      sa.sin_port = htons (0);
-	      if (bind (sock, (struct sockaddr *) &sa, sizeof (sa)) < 0)
-		{
-		  zlog (NULL, LOG_WARNING,
-			"interface %s can't bind socket", ifp->name);
-		  continue;
-		}
-
-	      /* create input/output buffer stream. */
-	      ospf_if_stream_set (sock, ifp->if_data);
-
-	      OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_InterfaceUp);
-	    }
-	}
-    }
   return CMD_SUCCESS;
 }
 

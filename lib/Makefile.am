@@ -15,3 +15,42 @@ libzebra_a_SOURCES = \
 version.c: Makefile
 	echo '' >version.c
 	echo 'char *host_name = "$(host_alias)";' >>version.c
+
+depend:
+	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
+
+## File dependency.
+buffer.o: buffer.c memory.h buffer.h roken.h
+checksum.o: checksum.c
+client.o: client.c ../zebra/zebra.h prefix.h client.h stream.h \
+ network.h roken.h
+command.o: command.c vector.h vty.h command.h memory.h log.h
+daemon.o: daemon.c
+distribute.o: distribute.c hash.h linklist.h if.h filter.h memory.h \
+ vector.h vty.h command.h
+dropline.o: dropline.c
+filter.o: filter.c prefix.h filter.h memory.h vector.h vty.h command.h
+getopt1.o: getopt1.c getopt.h
+getopt.o: getopt.c
+hash.o: hash.c hash.h memory.h log.h
+if.o: if.c linklist.h vector.h vty.h command.h if.h sockunion.h \
+ prefix.h ../zebra/connected.h memory.h buffer.h str.h log.h
+linklist.o: linklist.c linklist.h memory.h
+log.o: log.c log.h memory.h
+memory.o: memory.c log.h memory.h vector.h vty.h command.h
+network.o: network.c
+pid_output.o: pid_output.c
+prefix.o: prefix.c prefix.h vty.h sockunion.h memory.h log.h
+print_version.o: print_version.c version.h
+routemap.o: routemap.c linklist.h memory.h vector.h prefix.h \
+ routemap.h vty.h command.h
+sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h roken.h \
+ str.h log.h
+str.o: str.c str.h
+stream.o: stream.c stream.h memory.h network.h prefix.h
+table.o: table.c prefix.h table.h memory.h
+thread.o: thread.c thread.h memory.h log.h
+vector.o: vector.c vector.h memory.h
+version.o: version.c
+vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
+ sockunion.h thread.h memory.h str.h log.h

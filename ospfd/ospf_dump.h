@@ -26,5 +26,6 @@
 /* Prototypes. */
 int debug (unsigned int option);
 char *mes_lookup (message *, int, int);
+void ospf_packet_dump (struct stream *s);
 
 #endif /* _ZEBRA_OSPF_DUMP_H */

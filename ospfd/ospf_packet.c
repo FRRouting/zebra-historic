@@ -22,6 +22,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "linklist.h"
 #include "prefix.h"
+#include "table.h"
 #include "if.h"
 #include "thread.h"
 #include "stream.h"
@@ -29,33 +30,140 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_packet.h"
+#include "ospfd/ospf_dump.h"
 
-/* OSPF Hello message read. */
-void
-ospf_hello (struct ospf_interface *oi, u_int16_t size)
+/* Write packet. */
+int
+ospf_write (struct ospf_interface *oi, int length)
 {
-  /*
-    struct in_addr mask;
-    u_int16_t hello_interval;
-    u_char options;
-    u_char router_priority;
-    u_int32_t router_dead_interval;
-    struct in_addr d_router;
-    struct in_addr bd_router;
-  */
+  struct stream *s;
+  struct sockaddr_in sa;
+
+  s = oi->obuf;
+  sa.sin_family = AF_INET;
+  sa.sin_port = htons (0);
+  inet_aton (OSPF_ALLSPFROUTERS, &sa.sin_addr);
+
+  sendto (oi->fd, STREAM_DATA (oi->obuf), length, 0,
+	  (struct sockaddr *) &sa, sizeof (sa));
+
+  return 0;
 }
 
 void
-ospf_hello_send ()
+ospf_make_header (struct ospf_interface *oi, struct ospf_header *ospfh)
 {
+  ospfh->version = (u_char) OSPF_VERSION;
+  ospfh->type = (u_char) OSPF_MSG_HELLO;
 
+  ospfh->router_id = oi->address->u.prefix4;
+
+  ospfh->checksum = 0;
+  ospfh->area_id.s_addr = 0;
+  ospfh->auth_type = oi->auth_type;
+  bzero (ospfh->auth_data, sizeof (ospfh->auth_data));
+}
+
+/* OSPF Hello message read. */
+void
+ospf_hello (struct ip *iph, struct ospf_header *ospfh,
+	    struct ospf_interface *oi)
+{
+  struct ospf_hello *hello;
+  struct ospf_neighbor *nbr;
+  struct route_node *route_node;
+  struct prefix p;
+
+  zlog (NULL, LOG_INFO, "OSPF hello received");
+
+  hello = (struct ospf_hello *) STREAM_PNT (oi->ibuf);
+
+  /* get neighbor prefix. */
+  p.family = AF_INET;
+  p.prefixlen = ip_masklen (hello->network_mask);
+  p.u.prefix4 = iph->ip_src;
+
+  /* get neighbor information from table. */
+  route_node = route_node_get (oi->nbrs, &p);
+  if (route_node->info)
+    {
+      route_unlock_node (route_node);
+      return;
+    }
+
+  /* create OSPF Neighbor structure. */
+  nbr = ospf_nbr_new ();
+  nbr->host = strdup (inet_ntoa (iph->ip_src));
+  nbr->router_id = ospfh->router_id;
+  nbr->priority = hello->priority;
+  nbr->address = p;
+  nbr->options = hello->options;
+  nbr->d_router = hello->d_router;
+  nbr->bd_router = hello->bd_router;
+
+  route_node->info = nbr;
+}
+
+void
+ospf_hello_send (struct ospf_interface *oi)
+{
+  struct ospf_header *ospfh;
+  struct ospf_hello *hello;
+  struct ospf_neighbor *nbr;
+  struct route_node *node;
+  int length;
+  int in_cksum (void *ptr, int nbytes);
+
+  oi->obuf = stream_new (oi->ifp->mtu);
+  ospfh = (struct ospf_header *) (oi->obuf->data + oi->obuf->putp);
+
+  /* prepare OSPF header. */
+  ospf_make_header (oi, ospfh);
+  /*  stream_forward (oi->obuf, OSPF_HEADER_SIZE); */
+  oi->obuf->putp += OSPF_HEADER_SIZE;
+
+  /* prepare Hello body. */
+  hello = (struct ospf_hello *) (oi->obuf->data + oi->obuf->putp);
+  
+  hello->network_mask.s_addr = htonl (0xffffff80);
+  hello->hello_interval = htons (oi->v_hello);
+  hello->options = 2;
+  hello->priority = oi->router_priority;
+  hello->dead_interval = htonl (oi->v_wait);
+  hello->d_router = oi->d_router;
+  hello->bd_router = oi->bd_router;
+
+  /*  stream_forward (oi->obuf, 20); */
+  oi->obuf->putp += 20;
+
+  length = OSPF_HEADER_SIZE + 20;
+  for (node = route_top (oi->nbrs); node; node = route_next (node))
+    {
+      if (node->info == NULL)
+	continue;
+
+      nbr = node->info;
+
+      stream_put_ipv4 (oi->obuf, nbr->address.u.prefix4.s_addr);
+      length += 4; /* sizeof (nbr->address.u.prefix4.s_addr); */
+    }
+
+  ospfh->length = htons (length);
+  ospfh->checksum = in_cksum (ospfh, length);
+  ospf_write (oi, length);
+
+  zlog (NULL, LOG_INFO, "OSPF hello send");
+  /* OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd); */
 }
 
 void
 ospf_db_desc (struct ospf_interface *oi, u_int16_t size)
 {
 
+  zlog (NULL, LOG_INFO, "OSPF Database Description received");
 }
 
 void
@@ -67,7 +175,7 @@ ospf_db_desc_send ()
 void
 ospf_ls_req (struct ospf_interface *oi, u_int16_t size)
 {
-
+  zlog (NULL, LOG_INFO, "OSPF Link State Request received");
 }
 
 void
@@ -79,7 +187,7 @@ ospf_ls_req_send ()
 void
 ospf_ls_upd (struct ospf_interface *oi, u_int16_t size)
 {
-
+  zlog (NULL, LOG_INFO, "OSPF Link State Update received");
 }
 
 void
@@ -91,7 +199,7 @@ ospf_ls_upd_send ()
 void
 ospf_ls_ack (struct ospf_interface *oi, u_int16_t size)
 {
-
+  zlog (NULL, LOG_INFO, "OSPF Link State Acknowledgement received");
 }
 
 void
@@ -109,49 +217,6 @@ ospf_recv_packet (struct ospf_interface *oi)
 		  0, NULL, 0);
 
   return ret;
-}
-
-int
-ospf_read_packet (struct ospf_interface *oi, int size)
-{
-  int nbytes;
-
-  /* If size is zero then return. */
-  if (! size)
-    return 0;
-
-  /* Read packet from fd. */
-  nbytes = stream_read (oi->ibuf, oi->fd, size);
-
-  /* If read byte is smaller than zero then error occured. */
-  if (nbytes < 0)
-    {
-      zlog (NULL, LOG_WARNING, "interface %s: ospf_read_packet error: %m",
-	    oi->ifp->name);
-      /*       OSPF_ISM_EVENT_ADD (oi, ); */
-      return -1;
-    }
-
-  /* When read byte is zero, clear ospf interface and return. */
-  if (nbytes == 0)
-    {
-      zlog (NULL, LOG_WARNING,
-	    "interface %s: ospf connection closed at [%d]",
-	    oi->ifp->name, oi->fd);
-      /* OSPF_ISM_EVENT_ADD (oi, connection_closed); */
-      return -1;
-    }
-
-  /* If header size is different, print warning and return. */
-  if (nbytes != size)
-    {
-      zlog (NULL, LOG_WARNING,
-	    "interface %s: ospf_read_packet can't read all of packet %d/%d : %m ",
-	    oi->ifp->name, size, nbytes);
-      /* OSPF_ISM_EVENT_ADD (oi, fatal_error) */
-      return -1;
-    }
-  return 0;
 }
 
 int
@@ -174,10 +239,7 @@ ospf_read (struct thread *thread)
   struct ospf_interface *oi;
   struct ip *iph;
   struct ospf_header *ospfh;
-  u_char version, type;
-  u_int16_t length, check_sum, auth_type; 
-  struct in_addr router_id, area_id;
-  u_char auth_data [OSPF_AUTH_SIZE];
+  u_int16_t length;
 
   /* first of all get interface pointer. */
   oi = THREAD_ARG (thread);
@@ -192,40 +254,17 @@ ospf_read (struct thread *thread)
   if (ret < 0)
     return ret;
 
-  /* check packet size. if packet size is larger than interface MTU,
-     then allocate new buffer. */
-  if (ntohs (iph->ip_len) > oi->ifp->mtu)
-    {
-      oi->lbuf = stream_new (OSPF_MAX_PACKET_SIZE);
-    }
+#define DEBUG
+#ifdef DEBUG
+  /* IP Packet dump */
+  ospf_packet_dump (oi->ibuf);
+#endif /* DEBUG */
 
-  stream_forward (oi->ibuf, iph->ip_hl * 4);
-
-  ospfh = (struct ospf_header *) STREAM_PNT (oi->ibuf);
-
-  /* get header information. */
-  version = stream_getc (oi->ibuf);
-  type = stream_getc (oi->ibuf);
-  length = stream_getw (oi->ibuf);
-  router_id.s_addr = stream_get_ipv4 (oi->ibuf);
-  area_id.s_addr = stream_get_ipv4 (oi->ibuf);
-
-  /* get check sum, check later. */
-  check_sum = stream_getw (oi->ibuf);
-
-  /* check authentication. */
-  auth_type = stream_getw (oi->ibuf);
-  bzero (auth_data, sizeof (auth_data));
-  stream_strncpy (auth_data, oi->ibuf, OSPF_AUTH_SIZE);
-  if (! ospf_check_auth (auth_type, auth_data))
-    {
-      zlog (NULL, LOG_WARNING,
-	    "interface %s: ospf_read authentication failed", oi->ifp->name);
-      return -1;
-    }
+  /* get total ip length. */
+  length = ntohs (iph->ip_len);
 
   /* Packet size check. */
-  if (length > OSPF_MAX_PACKET_SIZE)
+  if (iph->ip_len > oi->ifp->mtu)
     {
       zlog (NULL, LOG_WARNING,
 	    "interface %s: ospf_read packet buffer over flow",
@@ -233,48 +272,46 @@ ospf_read (struct thread *thread)
       return 0;
     }
 
+  /* my packet should be discarded silently. */
+  if (iph->ip_src.s_addr == oi->address->u.prefix4.s_addr)
+    {
+      /*      zlog (NULL, LOG_WARNING, "It's me."); */
+      return 0;
+    }
+
+
+  /* Adjust size to message length. */
+  stream_forward (oi->ibuf, iph->ip_hl * 4);
+  length -= iph->ip_hl * 4;
+
+  /* get ospf packet header. */
+  ospfh = (struct ospf_header *) STREAM_PNT (oi->ibuf);
+  stream_forward (oi->ibuf, OSPF_HEADER_SIZE);
+
+  /* check authentication. */
+  if (! ospf_check_auth (ospfh->auth_type, ospfh->auth_data))
+    {
+      zlog (NULL, LOG_WARNING,
+	    "interface %s: ospf_read authentication failed", oi->ifp->name);
+      return -1;
+    }
+
   /* Adjust size to message length. */
   length -= OSPF_HEADER_SIZE;
 
   /* if check sum is invalid, packet is discarded. */
-  if (! ospf_check_sum (oi, check_sum))
+  if (! ospf_check_sum (oi, ospfh->checksum))
     {
       zlog (NULL, LOG_WARNING,
-	    "interface %s: ospf_read packet checksum error",
-	    oi->ifp->name);
+	    "interface %s: ospf_read packet checksum error", oi->ifp->name);
       return -1;
     }
 
-  /* IP Packet dump */
-#define DEBUG
-#ifdef DEBUG
-  zlog (NULL, LOG_INFO, "packet length %d", ret);
-  zlog (NULL, LOG_INFO, "ip_v=%d", iph->ip_v);
-  zlog (NULL, LOG_INFO, "ip_hl=%d", iph->ip_hl);
-  zlog (NULL, LOG_INFO, "ip_tos=%d", iph->ip_tos);
-  zlog (NULL, LOG_INFO, "ip_len=%d", ntohs (iph->ip_len));
-  zlog (NULL, LOG_INFO, "ip_id=%u", (u_int32_t) iph->ip_id);
-  zlog (NULL, LOG_INFO, "ip_off=%u", (u_int32_t) iph->ip_off);
-  zlog (NULL, LOG_INFO, "ip_ttl=%d", iph->ip_ttl);
-  zlog (NULL, LOG_INFO, "ip_p=%d", iph->ip_p);
-  zlog (NULL, LOG_INFO, "ip_sum=%u", (u_int32_t) iph->ip_sum);
-  zlog (NULL, LOG_INFO, "ip_src=%s",  inet_ntoa (iph->ip_src));
-  zlog (NULL, LOG_INFO, "ip_dst=%s", inet_ntoa (iph->ip_dst));
-  zlog (NULL, LOG_INFO, "ospf version %d", ospfh->version);
-  zlog (NULL, LOG_INFO, "ospf type %d", ospfh->type);
-  zlog (NULL, LOG_INFO, "ospf packet len %d", ntohs (ospfh->length));
-  zlog (NULL, LOG_INFO, "ospf router id %s", inet_ntoa (ospfh->router_id));
-  zlog (NULL, LOG_INFO, "ospf area id %s", inet_ntoa (ospfh->area_id));
-#endif /* DEBUG */
-
-
-  /* ospf_packet_dump (oi->ibuf); */
-
   /* Read rest of the packet and call each sort of packet routine. */
-  switch (type)
+  switch (ospfh->type)
     {
     case OSPF_MSG_HELLO:
-      ospf_hello (oi, length);
+      ospf_hello (iph, ospfh, oi);
       break;
     case OSPF_MSG_DB_DESC:
       ospf_db_desc (oi, length);
@@ -291,9 +328,13 @@ ospf_read (struct thread *thread)
     default:
       zlog (NULL, LOG_WARNING,
 	    "interface %s: OSPF packet header type %d is illegal",
-	    oi->ifp->name, type);
+	    oi->ifp->name, ospfh->type);
       break;
     }
+
+  OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
   return 0;
 }
+
+
 

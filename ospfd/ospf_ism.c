@@ -30,6 +30,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_dump.h"
+#include "ospfd/ospf_packet.h"
 
 /* OSPF ISM functions. */
 
@@ -45,7 +46,8 @@ ism_hello_timer (struct thread *thread)
 	oi->ifp->name);
 
   /* sending hello packet. */
-  /* actually add write thread and fire. */
+  /* add write thread and fire. */
+  ospf_hello_send (oi);
 
   OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
   /*

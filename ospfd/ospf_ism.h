@@ -22,7 +22,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPF_ISM_H
 #define _ZEBRA_OSPF_ISM_H
 
-/* OSPF Interface State Machine Status */
+/* OSPF Interface State Machine Status. */
 #define ISM_NoState                       0
 #define ISM_Down                          1
 #define ISM_Loopback                      2
@@ -34,7 +34,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ISM_DependUpon                    8
 #define OSPF_ISM_STATUS_MAX   	          9
 
-/* OSPF Interface State Machine Event */
+/* OSPF Interface State Machine Event. */
 #define ISM_NoEvent                       0
 #define ISM_InterfaceUp                   1
 #define ISM_WaitTimer                     2
@@ -45,12 +45,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define ISM_InterfaceDown                 7
 #define OSPF_ISM_EVENT_MAX                8
 
-/* Macro for OSPF read on. */
+/* Macro for OSPF ISM read on. */
 #define OSPF_ISM_READ_ON(T,F,V) \
       if (!(T)) \
         (T) = thread_add_read (master, (F), oi, (V));
 
-/* Macro for OSPF read off. */
+/* Macro for OSPF ISM read off. */
 #define OSPF_ISM_READ_OFF(X) \
       if (X) \
         { \
@@ -58,12 +58,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
           (X) = NULL; \
         }
 
-/* Macro for OSPF write add. */
+/* Macro for OSPF ISM write add. */
 #define OSPF_ISM_WRITE_ON(T,F,V) \
       if (!(T)) \
         (T) = thread_add_write (master, (F), oi, (V))
 
-/* Macro for OSPF write turn off. */
+/* Macro for OSPF ISM write turn off. */
 #define OSPF_ISM_WRITE_OFF (X) \
       if (X) \
         { \
@@ -71,12 +71,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
           (X) = NULL; \
         }
 
-/* Macro for timer turn on. */
+/* Macro for OSPF ISM timer turn on. */
 #define OSPF_ISM_TIMER_ON(T,F,V) \
       if (!(T)) \
         (T) = thread_add_timer (master, (F), oi, (V))
 
-/* Macro for timer turn off. */
+/* Macro for OSPF ISM timer turn off. */
 #define OSPF_ISM_TIMER_OFF(X) \
       if (X) \
         { \
@@ -84,6 +84,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
           (X) = NULL; \
         }
 
+/* Macro for OSPF event add. */
 #define OSPF_ISM_EVENT_ADD(I,E) \
       thread_add_event (master, ospf_ism_event, (I), (E))
 

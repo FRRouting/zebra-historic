@@ -1,6 +1,4 @@
 /*
- * $Id: bgpd.h,v 1.52 1999/02/22 12:15:38 developer Exp $
- *
  * BGP message definition header.
  * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
  *
@@ -40,7 +38,15 @@ struct bgp
 {
   as_t as;			/* BGP instance's AS. */
   ident_t ident;		/* BGP identifier. */
-  unsigned int config;
+
+#define BGP_CONFIG_ROUTER_ID 1
+  unsigned int config;		/* BGP configuration. */
+
+  u_char redist_static;		/* Redistribute static route. */
+  u_char redist_connect;	/* Redistribute connected route. */
+  u_char redist_rip;		/* Redistribute rip route. */
+  u_char redist_ripng;		/* Redistribute ripng route. */
+
   struct _list *peer;		/* BGP neighbor list */
 };
 
@@ -272,6 +278,7 @@ struct bgp_notify
 /* Macros. */
 #define BGP_INPUT(P)         ((P)->ibuf)
 #define BGP_INPUT_PNT(P)     (STREAM_PNT(BGP_INPUT(P)))
+
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 
@@ -335,6 +342,9 @@ void peer_delete_all ();
 void peer_delete (struct peer *peer);
 void bgp_open_recv (struct peer *peer, u_int16_t size);
 void bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify);
+
+void bgp_zebra_redistribute (int);
+void bgp_zebra_no_redistribute (int);
 
 extern struct thread_master *master;
 

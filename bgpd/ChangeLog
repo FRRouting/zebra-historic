@@ -1,3 +1,8 @@
+1999-04-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_empty_aspath): Change for peering with
+	gated.
+
 1999-03-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_main.c (main): Default loggin method changed from syslog to

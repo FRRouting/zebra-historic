@@ -1,8 +1,6 @@
 /*
- * $Id: bgp_dump.c,v 1.82 1999/02/22 12:15:37 developer Exp $
- *
  * BGP-4, BGP-4+, BGP-5 dump routine
- * Copyright (C) 1996, 97 Kunihiro Ishiguro
+ * Copyright (C) 1996, 97, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -321,25 +319,45 @@ bgp_packet_notify_dump (struct stream *s)
   bgp_notify_print(NULL, &bgp_notify);
 }
 
+/* Dump bgp update packet. */
 void
-bgp_packet_update_dump (struct stream *s)
+bgp_update_dump (struct stream *s)
 {
-  u_char flag;
-  u_char type;
-  bgp_size_t length;
+  u_char *endp;
+  bgp_size_t unfeasible_len;
+  bgp_size_t attr_total_len;
 
-  flag = stream_getc (s);
-  type = stream_getc (s);
+  unfeasible_len = stream_getw (s);
+  printf ("Unfeasible length: %d\n", unfeasible_len);
 
-  printf ("flag: %d\n", flag);
-  printf ("type: %d\n", type);
+  stream_forward (s, unfeasible_len);
+
+  attr_total_len = stream_getw (s);
+  printf ("Attribute length: %d\n", attr_total_len);
+
+  endp = STREAM_PNT (s) + attr_total_len;
+
+  while (STREAM_PNT (s) < endp)
+    {
+      u_char flag;
+      u_char type;
+      bgp_size_t length;
+
+      flag = stream_getc (s);
+      type = stream_getc (s);
+
+      printf ("flag: %d\n", flag);
+      printf ("type: %d\n", type);
   
-  if (flag & ATTR_FLAG_EXTLEN)
-    length = stream_getw (s);
-  else
-    length = stream_getc (s);
+      if (flag & ATTR_FLAG_EXTLEN)
+	length = stream_getw (s);
+      else
+	length = stream_getc (s);
 
-  printf ("length %d\n", length);
+      printf ("length %d\n", length);
+
+      stream_forward (s, length);
+    }
 }
 
 /* Debug dump of bgp packet. */
@@ -379,7 +397,7 @@ bgp_packet_dump (struct stream *s)
       return;
       break;
     case BGP_MSG_UPDATE:
-      bgp_packet_update_dump (s);
+      bgp_update_dump (s);
       break;
     case BGP_MSG_NOTIFY:
       bgp_packet_notify_dump (s);
@@ -444,6 +462,28 @@ DEFUN (show_debug_bgp, show_debug_bgp_cmd,
     vty_out (vty, "off\r\n");
 
   return CMD_SUCCESS;
+}
+
+/* debgp ip bgp [events|keepalives|updates] [recv|send] [detail] */
+DEFUN (debug_ip_bgp, debug_ip_bgp_cmd,
+       "debug ip bgp [DEBUG_OPTION]",
+       "Debug option\n"
+       "IP debug\n"
+       "BGP debug\n"
+       "BGP debug option\n"
+       "BGP debug option\n")
+{
+  /* All BGP option are set to normal level. */
+  if (argc == 0)
+    {
+      ;
+    }
+  if (argc == 1)
+    vty_out (vty, "option1 %s\r\n", argv[0]);
+  else if (argc == 2)
+    vty_out (vty, "option2 %s\r\n", argv[1]);
+  else
+    vty_out (vty, "no option\r\n");
 }
 
 /* Some define for BGP packet dump. */
@@ -572,4 +612,6 @@ bgp_dump_init ()
   install_element (CONFIG_NODE, &debug_bgp_cmd);
   install_element (ENABLE_NODE, &no_debug_bgp_cmd);
   install_element (CONFIG_NODE, &config_dumpfile_cmd);
+
+  install_element (ENABLE_NODE, &debug_ip_bgp_cmd);
 }

@@ -24,6 +24,7 @@
 
 #include "linklist.h"
 #include "prefix.h"
+#include "table.h"
 #include "if.h"
 #include "memory.h"
 #include "command.h"
@@ -53,16 +54,15 @@ ospf_if_new (struct interface *ifp)
   oi->fd = -1;
 
   /* Set default values. */
+  oi->flag = OSPF_FLAG_SLEEP;
   oi->type = OSPF_IFTYPE_BROADCAST;
   oi->status = ISM_Down;
+
   oi->auth_type = OSPF_AUTH_NULL;
   inet_aton ("0.0.0.0", &oi->d_router);
   inet_aton ("0.0.0.0", &oi->bd_router);
 
   /* Interface configurable values. */
-  oi->hello_interval = OSPF_HELLO_INTERVAL_DEFAULT;
-  oi->dead_interval = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
-
   oi->router_priority = OSPF_ROUTER_PRIORITY_DEFAULT;
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
   oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
@@ -73,7 +73,10 @@ ospf_if_new (struct interface *ifp)
   oi->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
 
   /* Initialize neighbor list. */
-  oi->neighbors = list_init ();
+  oi->nbrs = route_table_init ();
+
+  /* Kick ospf process if it is needed. */
+  ospf_if_update ();
 
   return oi;
 }
@@ -112,7 +115,6 @@ interface_config_write (struct vty *vty)
 
   return 0;
 }
-
 
 DEFUN (if_authentication_key,
        if_authentication_key_cmd,
@@ -197,7 +199,7 @@ void
 ospf_if_init ()
 {
   /* Initialize interface data structure. */
-  iflist = list_init ();
+  if_init ();
   if_add_hook (IF_NEW_HOOK, ospf_if_new_hook);
 
   /* Install interface node. */

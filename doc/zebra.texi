@@ -6,13 +6,13 @@
 
 @dircategory Routing Software
 @direntry
-* Zebra: (zebra).		The GNU Zebra routing software.
+* Zebra: (zebra).		The GNU Zebra routing software package.
 @end direntry
 
 @titlepage
 @title Zebra
-@subtitle A routing software for TCP/IP network
-@subtitle for snapshot zebra-19990327
+@subtitle A routing software package for TCP/IP network
+@subtitle for snapshot zebra-19990403
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -21,11 +21,11 @@
 @node Top, Overview, (dir), (dir)
 @top Zebra
 		     
-Zebra is a multi-server routing software which provides TCP/IP based
-routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns your
-machine into a full powered router.
+Zebra is a multi-server routing software package which provides TCP/IP
+based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
+your machine into a full powered router.
 
-This is Zebra Manual for snapshot zebra-19990327.
+This is the Zebra Manual for snapshot zebra-19990403.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -85,20 +85,21 @@ This manual describes @code{zebra} and some other beasts.
 @comment  node-name,  next,  previous,  up
 @section What is Zebra
 
-  Today, TCP/IP network is covering all over the world.  The Internet
-has deployed many countries and companies and to the home.  If you
-connect to the Internet you use TCP/IP routing function.  Zebra is a
-free TCP/IP routing software.  Zebra installed box works as a dedicated
-router.  With Zebra your machine talks with other router by routing
-protocol and updates kernel routing table. You can dynamically change
-the configuration and view routing table information from Zebra terminal
-interface.
+  Today, TCP/IP networks are covering all of the world.  The Internet
+has been in deployed many countries, companies and at home.  If you
+connect to the Internet you use TCP/IP routing functions.  Zebra is a
+free TCP/IP routing software package.  A Zebra installed box works as a
+dedicated router.  With Zebra your machine talks with other routers by
+means of routing protocols and updates the kernel routing table. You can
+dynamically change the configuration and view routing table information
+from the Zebra terminal interface.
 
-  For small network or stub network there is no need of routing
-software.  Only thing you have to do is setting up the interfaces and
-put a few command about static route and/or default route.  But network
-is rather large or network structure changes frequently, you will need
-dynamic routing protocol such as RIP, OSPF, BGP.  Zebra is for you.
+  For a small network or a stub network there is no need for routing
+software.  The only thing you have to do is to set up the interfaces and
+put a few command about static route and/or default route.  But if the
+network is rather large or if the network structure changes frequently,
+you will need dynamic routing protocols such as RIP, OSPF or BGP.  Zebra
+is for you
 
   Below is the list of currently supported routing protocol RFCs.
 
@@ -133,11 +134,11 @@ manager.
 
   @code{ripd} handles RIP protocol. @code{ospfd} is a daemon which
 supports OSPF version 2.  @code{bgpd} supports BGP-4 protocol.  For
-changing kernel routing table and for redistribution between different
-routing protocols, there is @code{zebra} daemon.  There is no need of
-these daemon to be running over the same machine.  This architecture
-makes new possibility of the routing system.  It is pretty easy adding
-new routing protocol daemon to the system.
+changing the kernel routing table and for redistribution between
+different routing protocols, there is @code{zebra} daemon.  There is no
+need for these daemons to be running over the same machine.  This
+architecture makes new possibility of the routing system.  It is pretty
+easy adding new routing protocol daemon to the system.
 
 @example
 @group
@@ -893,7 +894,7 @@ described in RFC1771.  bgpd also supports Multi Protocol Extension for
 BGP-4 (sometimes called as BGP-4+ or MBGP) which described in RFC2283.
 
 BGP-4 is one of the EGP (Exterior Gateway Protocol) and used for inter
-domain routing.
+domain routing.  
 
 @menu
 * Invoking bgpd::               
@@ -937,24 +938,50 @@ command.
 @end deffn
 
 @deffn Command {router bgp @var{as-number}} {}
-Enable BGP protocol process with specified @var{as-number}.
+Enable BGP protocol process with specified @var{as-number}.  After this
+statement you can input @code{BGP Command} listed below.
 @end deffn
 
 In @code{router bgp} clause there are neighbor specific configuration.
 
 @deffn {BGP Command} {bgp router-id @var{router-id}} {}
-This command specify router ID.
+This command specify router ID of the router.  If bgpd connect to zebra
+it gets interface and address information.  In that case default router
+ID value is selected as the largest IP Address of the interfaces.  When
+@code{router zebra} is not enabled bgpd can't get interface information
+so @code{router-id} is set to 0.0.0.0.  So please set router-id by
+yourself.
 @end deffn
 
 @deffn {BGP Command} {network @var{network}} {}
+This command add the announcement network.
+@example
+router bgp 1
+ network 10.0.0.0/8
+@end example
+This configuration means network 10.0.0.0/8 will be announced to the all
+neighbors.  Some vendor router don't advertize routes which doesn't
+exist in IGP routing table but bgp doesn't care about IGP routing table
+when announce the route.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} remote-as @var{as-number}} {}
+Create new neighbor as remote-as is @var{as-number}.  @var{peer} can be
+IPv4 address or IPv6 address.
+@example
+router bgp 1
+ neighbor 10.0.0.1 remote-as 2
+@end example
+In this case my router try to peer with AS2.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} shutdown} {}
 @deffnx {BGP Command} {no neighbor @var{peer} shutdown} {}
-Shutdown the peer.
+Shutdown the peer.  We can delete the neighbor's configuration by
+@code{no neighbor @var{peer} remote-as @var{as-number}} but all the
+configuration of the neighbor will be deleted.  When one want to
+preserve the configuration but want to drop BGP peer, please use this
+command.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} description ...} {}
@@ -1043,7 +1070,45 @@ packet sort:[peer IP address] routing information.
 @comment  node-name,  next,  previous,  up
 @section How to set up 6bone connection
 
+@example
+zebra configuration
+===================
+!
+! Actually there is no need of configuration of zebra
+!
 
+bgpd configuration
+==================
+!
+! This means routes goes into the kernel.
+!
+router zebra
+!
+! BGP-4+ configuraion
+!
+router bgp 7675
+  bgp router-id 10.0.0.1
+  network 3ffe:506::/32
+  neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 remote-as @var{as-number}
+  neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 route-map set-nexthop out
+  neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 remote-as @var{as-number}
+  neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 route-map set-nexthop out
+!
+access-list all permit any
+!
+! Set output nexthop address.
+!
+route-map set-nexthop permit 10
+ match ip address all
+ set ip nexthop 10.0.0.1
+ set ipv6 nexthop global 3ffe:1cfa:0:2:2c0:4fff:fe68:a225
+ set ipv6 nexthop local fe80::2c0:4fff:fe68:a225
+!
+! logfile FILENAME is obsolete.  Please use log file FILENAME
+!
+log file bgpd.log
+!
+@end example
 
 @node Filtering, Route map, bgpd, Top
 @comment  node-name,  next,  previous,  up

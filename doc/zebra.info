@@ -3,7 +3,7 @@ the input file zebra.texi.
 
 INFO-DIR-SECTION Routing Software
 START-INFO-DIR-ENTRY
-* Zebra: (zebra).		The GNU Zebra routing software.
+* Zebra: (zebra).		The GNU Zebra routing software package.
 END-INFO-DIR-ENTRY
 
 
@@ -12,11 +12,11 @@ File: zebra.info,  Node: Top,  Next: Overview,  Prev: (dir),  Up: (dir)
 Zebra
 *****
 
-   Zebra is a multi-server routing software which provides TCP/IP based
-routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns your
-machine into a full powered router.
+   Zebra is a multi-server routing software package which provides
+TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
+turns your machine into a full powered router.
 
-   This is Zebra Manual for snapshot zebra-19990327.
+   This is the Zebra Manual for snapshot zebra-19990403.
 
    This manual describes `zebra' and some other beasts.
 
@@ -76,20 +76,21 @@ File: zebra.info,  Node: What is Zebra,  Next: System architecture,  Prev: Overv
 What is Zebra
 =============
 
-   Today, TCP/IP network is covering all over the world.  The Internet
-has deployed many countries and companies and to the home.  If you
-connect to the Internet you use TCP/IP routing function.  Zebra is a
-free TCP/IP routing software.  Zebra installed box works as a dedicated
-router.  With Zebra your machine talks with other router by routing
-protocol and updates kernel routing table. You can dynamically change
-the configuration and view routing table information from Zebra terminal
-interface.
+   Today, TCP/IP networks are covering all of the world.  The Internet
+has been in deployed many countries, companies and at home.  If you
+connect to the Internet you use TCP/IP routing functions.  Zebra is a
+free TCP/IP routing software package.  A Zebra installed box works as a
+dedicated router.  With Zebra your machine talks with other routers by
+means of routing protocols and updates the kernel routing table. You can
+dynamically change the configuration and view routing table information
+from the Zebra terminal interface.
 
-   For small network or stub network there is no need of routing
-software.  Only thing you have to do is setting up the interfaces and
-put a few command about static route and/or default route.  But network
-is rather large or network structure changes frequently, you will need
-dynamic routing protocol such as RIP, OSPF, BGP.  Zebra is for you.
+   For a small network or a stub network there is no need for routing
+software.  The only thing you have to do is to set up the interfaces and
+put a few command about static route and/or default route.  But if the
+network is rather large or if the network structure changes frequently,
+you will need dynamic routing protocols such as RIP, OSPF or BGP.  Zebra
+is for you
 
    Below is the list of currently supported routing protocol RFCs.
 
@@ -131,9 +132,9 @@ There are some protocol specific daemons and a kernel routing table
 manager.
 
    `ripd' handles RIP protocol. `ospfd' is a daemon which supports OSPF
-version 2.  `bgpd' supports BGP-4 protocol.  For changing kernel
+version 2.  `bgpd' supports BGP-4 protocol.  For changing the kernel
 routing table and for redistribution between different routing
-protocols, there is `zebra' daemon.  There is no need of these daemon
+protocols, there is `zebra' daemon.  There is no need for these daemons
 to be running over the same machine.  This architecture makes new
 possibility of the routing system.  It is pretty easy adding new
 routing protocol daemon to the system.
@@ -919,20 +920,41 @@ is `bgpd.conf'.
      this command.
 
  - Command: router bgp AS-NUMBER
-     Enable BGP protocol process with specified AS-NUMBER.
+     Enable BGP protocol process with specified AS-NUMBER.  After this
+     statement you can input `BGP Command' listed below.
 
    In `router bgp' clause there are neighbor specific configuration.
 
  - BGP Command: bgp router-id ROUTER-ID
-     This command specify router ID.
+     This command specify router ID of the router.  If bgpd connect to
+     zebra it gets interface and address information.  In that case
+     default router ID value is selected as the largest IP Address of
+     the interfaces.  When `router zebra' is not enabled bgpd can't get
+     interface information so `router-id' is set to 0.0.0.0.  So please
+     set router-id by yourself.
 
  - BGP Command: network NETWORK
+     This command add the announcement network.
+          router bgp 1
+           network 10.0.0.0/8
+     This configuration means network 10.0.0.0/8 will be announced to
+     the all neighbors.  Some vendor router don't advertize routes
+     which doesn't exist in IGP routing table but bgp doesn't care
+     about IGP routing table when announce the route.
 
  - BGP Command: neighbor PEER remote-as AS-NUMBER
+     Create new neighbor as remote-as is AS-NUMBER.  PEER can be IPv4
+     address or IPv6 address.
+          router bgp 1
+           neighbor 10.0.0.1 remote-as 2
+     In this case my router try to peer with AS2.
 
  - BGP Command: neighbor PEER shutdown
  - BGP Command: no neighbor PEER shutdown
-     Shutdown the peer.
+     Shutdown the peer.  We can delete the neighbor's configuration by
+     `no neighbor PEER remote-as AS-NUMBER' but all the configuration
+     of the neighbor will be deleted.  When one want to preserve the
+     configuration but want to drop BGP peer, please use this command.
 
  - BGP Command: neighbor PEER description ...
  - BGP Command: no neighbor PEER description ...
@@ -1007,6 +1029,44 @@ File: zebra.info,  Node: How to set up 6bone connection,  Prev: bgpd log format,
 
 How to set up 6bone connection
 ==============================
+
+     zebra configuration
+     ===================
+     !
+     ! Actually there is no need of configuration of zebra
+     !
+     
+     bgpd configuration
+     ==================
+     !
+     ! This means routes goes into the kernel.
+     !
+     router zebra
+     !
+     ! BGP-4+ configuraion
+     !
+     router bgp 7675
+       bgp router-id 10.0.0.1
+       network 3ffe:506::/32
+       neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 remote-as AS-NUMBER
+       neighbor 3ffe:1cfa:0:2:2a0:c9ff:fe9e:f56 route-map set-nexthop out
+       neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 remote-as AS-NUMBER
+       neighbor 3ffe:1cfa:0:2:2c0:4fff:fe68:a231 route-map set-nexthop out
+     !
+     access-list all permit any
+     !
+     ! Set output nexthop address.
+     !
+     route-map set-nexthop permit 10
+      match ip address all
+      set ip nexthop 10.0.0.1
+      set ipv6 nexthop global 3ffe:1cfa:0:2:2c0:4fff:fe68:a225
+      set ipv6 nexthop local fe80::2c0:4fff:fe68:a225
+     !
+     ! logfile FILENAME is obsolete.  Please use log file FILENAME
+     !
+     log file bgpd.log
+     !
 
 
 File: zebra.info,  Node: Filtering,  Next: Route map,  Prev: bgpd,  Up: Top
@@ -1640,67 +1700,67 @@ VTY Key Index
 
 
 Tag Table:
-Node: Top223
-Node: Overview1678
-Node: What is Zebra2285
-Node: System architecture3934
-Node: Mailing list5776
-Node: Bug report6394
-Node: Installation7261
-Node: GNU/Linux configuration7811
-Node: Configure options9367
-Node: VTY port setup10864
-Node: Configuration File11588
-Node: Basic configuration12163
-Node: Sample Configuration12881
-Node: VTY13580
-Node: What is VTY14066
-Node: How to use VTY14284
-Node: View mode and Enable mode14834
-Node: Other modes15051
-Node: Command line editing15189
-Node: Advanced command line editing15784
-Node: Command line history16301
-Node: Command line completion16563
-Node: Command line help16786
-Node: zebra17066
-Node: Common invoking options17449
-Node: Invoking zebra17961
-Node: Interface18396
-Node: Static route18940
-Node: zebra terminal mode commands19153
-Node: ripd20054
-Node: Invoking ripd20315
-Node: ripd configuration20615
-Node: ripd terminal mode commands20770
-Node: ripngd20921
-Node: Invoking ripngd21242
-Node: ripngd configuration21497
-Node: ripngd terminal mode commands22161
-Node: ripngd filtering commands22383
-Node: ospfd22848
-Node: Invoking ospfd23139
-Node: ospfd configuration23389
-Node: ospfd terminal mode commands23719
-Node: bgpd23875
-Node: Invoking bgpd24431
-Node: bgpd configuration24807
-Node: bgpd terminal mode commands26127
-Node: bgpd sample session26766
-Node: bgpd log format26966
-Node: How to set up 6bone connection27456
-Node: Filtering27613
-Node: IP access-list27880
-Node: Route map28081
-Node: Route map command28564
-Node: IP address match command28768
-Node: BGP set command28990
-Node: IPv6 supports29286
-Node: Kernel interface29497
-Node: Linux netlink30627
-Node: Zebra protocol31410
-Node: Copying32077
-Node: Command Index51278
-Node: VTY Key Index55613
+Node: Top231
+Node: Overview1698
+Node: What is Zebra2305
+Node: System architecture4009
+Node: Mailing list5857
+Node: Bug report6475
+Node: Installation7342
+Node: GNU/Linux configuration7892
+Node: Configure options9448
+Node: VTY port setup10945
+Node: Configuration File11669
+Node: Basic configuration12244
+Node: Sample Configuration12962
+Node: VTY13661
+Node: What is VTY14147
+Node: How to use VTY14365
+Node: View mode and Enable mode14915
+Node: Other modes15132
+Node: Command line editing15270
+Node: Advanced command line editing15865
+Node: Command line history16382
+Node: Command line completion16644
+Node: Command line help16867
+Node: zebra17147
+Node: Common invoking options17530
+Node: Invoking zebra18042
+Node: Interface18477
+Node: Static route19021
+Node: zebra terminal mode commands19234
+Node: ripd20135
+Node: Invoking ripd20396
+Node: ripd configuration20696
+Node: ripd terminal mode commands20851
+Node: ripngd21002
+Node: Invoking ripngd21323
+Node: ripngd configuration21578
+Node: ripngd terminal mode commands22242
+Node: ripngd filtering commands22464
+Node: ospfd22929
+Node: Invoking ospfd23220
+Node: ospfd configuration23470
+Node: ospfd terminal mode commands23800
+Node: bgpd23956
+Node: Invoking bgpd24512
+Node: bgpd configuration24888
+Node: bgpd terminal mode commands27455
+Node: bgpd sample session28094
+Node: bgpd log format28294
+Node: How to set up 6bone connection28784
+Node: Filtering30015
+Node: IP access-list30282
+Node: Route map30483
+Node: Route map command30966
+Node: IP address match command31170
+Node: BGP set command31392
+Node: IPv6 supports31688
+Node: Kernel interface31899
+Node: Linux netlink33029
+Node: Zebra protocol33812
+Node: Copying34479
+Node: Command Index53680
+Node: VTY Key Index58015
 
 End Tag Table

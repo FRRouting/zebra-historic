@@ -475,7 +475,7 @@ if test "$ac_cv_htonl_works" = "no"; then
   fi
 fi
 
-AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile doc/Makefile)
+AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile doc/Makefile)
 
 echo "
 zebra configuration

@@ -1,0 +1,104 @@
+/* OSPF version 2  Neighbor State Machine
+   From RFC2328 [OSPF Version 2]
+   Copyright (C) 1999 Toshiaki Takada
+
+This file is part of GNU Zebra.
+
+GNU Zebra is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 2, or (at your option) any
+later version.
+
+GNU Zebra is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with GNU Zebra; see the file COPYING.  If not, write to the Free
+Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+02111-1307, USA.  */
+
+#ifndef _ZEBRA_OSPF_NSM_H
+#define _ZEBRA_OSPF_NSM_H
+
+/* OSPF Neighbor State Machine Status. */
+#define NSM_NoState             0
+#define NSM_Down		1
+#define NSM_Attempt		2
+#define NSM_Init		3
+#define NSM_TwoWay		4
+#define NSM_ExStart		5
+#define NSM_Exchange		6
+#define NSM_Loading		7
+#define NSM_Full		8
+#define NSM_DependUpon		9
+#define OSPF_NSM_STATUS_MAX    10
+
+/* OSPF Neighbor State Machine Event. */
+#define NSM_NoEvent	        0
+#define NSM_HelloReceived	1
+#define NSM_Start		2
+#define NSM_TwoWayReceived	3
+#define NSM_NegotiationDone	4
+#define NSM_ExchangeDone	5
+#define NSM_BadLSReq		6
+#define NSM_LoadingDone		7
+#define NSM_AdjOK		8
+#define NSM_SeqNumberMismatch	9
+#define NSM_OneWayReceived     10
+#define NSM_KillNbr	       11
+#define NSM_InactivityTimer    12
+#define NSM_LLDown	       13
+#define OSPF_NSM_EVENT_MAX     14
+
+/* Macro for OSPF NSM read on. */
+#define OSPF_NSM_READ_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_read (master, (F), nbr, (V));
+
+/* Macro for OSPF NSM read off. */
+#define OSPF_NSM_READ_OFF(X) \
+      if (X) \
+        { \
+          thread_cancel (X); \
+          (X) = NULL; \
+        }
+
+/* Macro for OSPF NSM write add. */
+#define OSPF_NSM_WRITE_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_write (master, (F), nbr, (V))
+
+/* Macro for OSPF NSM write turn off. */
+#define OSPF_NSM_WRITE_OFF (X) \
+      if (X) \
+        { \
+          thread_cancel (X); \
+          (X) = NULL; \
+        }
+
+/* Macro for OSPF NSM timer turn on. */
+#define OSPF_NSM_TIMER_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), nbr, (V))
+
+/* Macro for OSPF NSM timer turn off. */
+#define OSPF_NSM_TIMER_OFF(X) \
+      if (X) \
+        { \
+          thread_cancel (X); \
+          (X) = NULL; \
+        }
+
+/* Macro for OSPF NSM event add. */
+#define OSPF_NSM_EVENT_ADD(I,E) \
+      thread_add_event (master, ospf_nsm_event, (I), (E))
+
+#define LOOKUP(x, y)	mes_lookup(x, x ## _max, y)
+
+/* Prototypes. */
+int ospf_nsm_event (struct thread *);
+void nsm_change_status (struct ospf_neighbor *, int);
+
+#endif /* _ZEBRA_OSPF_NSM_H */

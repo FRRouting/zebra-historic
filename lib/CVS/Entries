@@ -1,7 +1,7 @@
 /.cvsignore/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /ChangeLog/1.11/Wed Mar 24 08:12:32 1999/-ko/
-/Makefile.am/1.3/Tue Mar  2 14:41:57 1999/-ko/
-/Makefile.in/1.4/Tue Mar  2 14:41:57 1999/-ko/
+/Makefile.am/1.4/Mon Mar 29 09:08:27 1999/-ko/
+/Makefile.in/1.5/Mon Mar 29 09:08:27 1999/-ko/
 /buffer.c/1.3/Sun Mar 14 23:17:37 1999/-ko/
 /buffer.h/1.2/Sun Mar 14 23:17:37 1999/-ko/
 /checksum.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
@@ -21,7 +21,7 @@
 /hash.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /hash.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /if.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
-/if.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
+/if.h/1.2/Tue Mar 30 07:43:35 1999/-ko/
 /linklist.c/1.2/Tue Mar  2 12:13:42 1999/-ko/
 /linklist.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
 /log.c/1.7/Wed Mar 17 03:15:53 1999/-ko/

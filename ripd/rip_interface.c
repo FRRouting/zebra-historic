@@ -131,6 +131,7 @@ rip_request (struct interface *ifp, int sock)
 	}
     
       bzero (&sin, sizeof (struct sockaddr_in));
+      sin.sin_family = AF_INET;
       sin.sin_port = htons (RIP_PORT_DEFAULT);
       sin.sin_addr.s_addr = htonl (INADDR_RIP_GROUP);
 

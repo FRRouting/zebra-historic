@@ -47,6 +47,8 @@
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
 
+#include "zebra/zebra.h"
+
 /* List head of bgp instance list. */
 list bgp_list;
 
@@ -55,8 +57,6 @@ list peer_list;
 
 /* BGP multiple instance option. */
 char bgp_multiple_instance;
-
-#define BGP_CONFIG_ROUTER_ID 1
 
 /* Top node of bgpd's routing table. */
 extern struct route_table *bgp_table_ipv4;
@@ -99,13 +99,11 @@ bgp_lookup_by_as (u_int16_t as)
   struct bgp *bgp; 
   listnode node;
 
-  node = listhead (bgp_list);
-  while (node)
+  for (node = listhead (bgp_list); node; nextnode (node))
     {
       bgp = getdata (node);
       if (bgp->as == as)
 	return bgp;
-      nextnode (node);
     }
   return NULL;
 }
@@ -1343,6 +1341,37 @@ DEFUN (clear_ip_bgp,
   return CMD_SUCCESS;
 }
 
+DEFUN (bgp_redistribute_static,
+       bgp_redistribute_static_cmd,
+       "redistribute static",
+       "Redistribute\n"
+       "Static route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+  bgp->redist_static = 1;
+  bgp_zebra_redistribute (ZEBRA_ROUTE_STATIC);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_static,
+       no_bgp_redistribute_static_cmd,
+       "no redistribute static",
+       NO_STR
+       "Redistribute\n"
+       "Static route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+  bgp->redist_static = 0;
+  bgp_zebra_no_redistribute (ZEBRA_ROUTE_STATIC);
+
+  return CMD_SUCCESS;
+}
+
 /* BGP peer configuration output function. */
 void
 bgp_peer_config_write (struct vty *vty, list bgp_peer)
@@ -1463,6 +1492,9 @@ bgp_config_write (struct vty *vty)
 		   VTY_NEWLINE);
 	}
       config_write_network (vty, bgp);
+      if (bgp->redist_static)
+	vty_out (vty, " redistribute static%s", VTY_NEWLINE);
+
       bgp_peer_config_write (vty, bgp->peer);
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
@@ -1500,6 +1532,8 @@ bgp_init ()
   install_element (BGP_NODE, &config_end_cmd);
   install_element (BGP_NODE, &config_exit_cmd);
   install_element (BGP_NODE, &config_help_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_static_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_static_cmd);
   install_element (BGP_NODE, &neighbor_cmd);
   install_element (BGP_NODE, &no_neighbor_cmd);
   install_element (BGP_NODE, &neighbor_ebgp_multihop_cmd);

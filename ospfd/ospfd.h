@@ -21,6 +21,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPFD_H
 #define _ZEBRA_OSPFD_H
 
+#define OSPF_VERSION		2
+
 /* Default protocol, port number. */
 #ifndef IPPROTO_OSPFIGP
 #define IPPROTO_OSPFIGP		89
@@ -35,6 +37,7 @@ enum
 {
   /* Debug option. */
   DEBUG_OSPF_ISM = 0x01,
+  DEBUG_OSPF_NSM = 0x02,
 };
 
 /* Architectual Constants */
@@ -59,9 +62,9 @@ enum
 
 /* OSPF interface default values. */
 #define OSPF_HELLO_INTERVAL_DEFAULT	   10
-#define OSPF_ROUTER_DEAD_INTERVAL_DEFAULT  20
+#define OSPF_ROUTER_DEAD_INTERVAL_DEFAULT  40
 
-#define OSPF_ROUTER_PRIORITY_DEFAULT	    0
+#define OSPF_ROUTER_PRIORITY_DEFAULT	    1
 #define OSPF_TRANSMIT_DELAY_DEFAULT        30
 #define OSPF_OUTPUT_COST_DEFAULT          100
 #define OSPF_RETRANSMIT_INTERVAL_DEFAULT   30
@@ -97,12 +100,15 @@ typedef struct message
 
 /* Messages */
 extern message ospf_ism_status_msg[];
+extern message ospf_nsm_status_msg[];
 extern int ospf_ism_status_msg_max;
+extern int ospf_nsm_status_msg_max;
 
 extern char *progname;
 
 /* Prototypes. */
 void ospf_init (void);
+void ospf_if_update (void);
 
 extern struct thread_master *master;
 

@@ -1,8 +1,6 @@
 /*
- * $Id: if.h,v 1.16 1999/02/19 17:01:48 developer Exp $
- *
  * Interface related header.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -21,6 +19,11 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
+#ifndef _ZEBRA_IF_H
+#define _ZEBRA_IF_H
+
+#include "linklist.h"
 
 /* Interface name length.
 
@@ -120,3 +123,5 @@ extern list iflist;
 extern struct cmd_element interface_desc_cmd;
 extern struct cmd_element no_interface_desc_cmd;
 extern struct cmd_element interface_cmd;
+
+#endif /* _ZEBRA_IF_H */

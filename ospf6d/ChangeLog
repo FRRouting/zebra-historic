@@ -1,0 +1,18 @@
+1999-03-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Merge from ospfd-zebra-990303 codes.
+
+1999-02-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.in: add new file.
+
+	* Makefile.am: @INCLUDES@ is added for OS/library specific IPv6
+	directory search.
+
+	* Import files from Yasuhiro Ohara <yasu@sfc.wide.ad.jp>'s ospfd.
+	Impterted files are:
+	Makefile.am, ospf_area.h, ospf_dump.c, ospf_interface.c,
+	ospf_interface.h, ospf_lsa.c, ospf_lsa.h, ospf_main.c,
+	ospf_mesg.c, ospf_mesg.h, ospf_neighbor.c,
+	ospf_neighbor.h,ospf_network.c, ospf_network.h, ospf_proto.h,
+	ospf_spf.c, ospf_spf.h, ospf_types.h, ospfd.c, ospfd.h

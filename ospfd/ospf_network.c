@@ -28,6 +28,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "log.h"
 
 #include "ospfd/ospfd.h"
+#include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_network.h"
 
@@ -40,8 +41,6 @@ ospf_serv_sock (struct interface *ifp, int family)
   ospf_sock = socket (family, SOCK_RAW, IPPROTO_OSPFIGP);
   if (ospf_sock < 0)
     return ospf_sock;
-
-  /*  thread_add_read (master, ospf_read, NULL, ospf_sock); */
 
   return ospf_sock;
 }

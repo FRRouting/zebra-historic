@@ -32,6 +32,10 @@
 
 #define OSPF_AUTH_SIZE			8
 
+/* OSPF interface flag. */
+#define OSPF_FLAG_SLEEP                 0
+#define OSPF_FLAG_RUNNING               1
+
 /* OSPF interface structure */
 struct ospf_interface
 {
@@ -40,7 +44,6 @@ struct ospf_interface
 
   /* Packet receive and send buffer. */
   struct stream *ibuf;			/* input buffer */
-  struct stream *lbuf;			/* large input buffer */
   struct stream *obuf;			/* output buffer */
 
   /* Interface data from zebra. */
@@ -50,8 +53,11 @@ struct ospf_interface
   int fd;
 
   /* OSPF Specific interface data. */
+  u_char flag;			        /* OSPF is enabled on this. */
   u_char type;				/* OSPF Network Type */
   int status;				/* OSPF Interface State */
+
+  struct prefix *address;		/* Interface prefix */
 
   struct in_addr router_id;		/* Router ID */
   struct in_addr area_id;		/* Area ID */
@@ -61,14 +67,12 @@ struct ospf_interface
   struct in_addr d_router;		/* Designated Router */
   struct in_addr bd_router;		/* Backup Designated Router */
 
-  u_int16_t hello_interval;		/* Hello Interval */
   u_char router_priority;		/* Router Priority */
-  u_int32_t dead_interval;		/* Router Dead Interval */
   u_int32_t transmit_delay;		/* Interface Transmisson Delay */
   u_int32_t output_cost;		/* Interface Output Cost */
   u_int32_t retransmit_interval;	/* Retransmission Interval */
 
-  struct _list *neighbors;		/* OSPF Neighbor List */
+  struct route_table *nbrs;                   /* OSPF Neighbor List */
 
   /* Timer values. */
   u_int32_t v_hello;			/* Hello Timer */

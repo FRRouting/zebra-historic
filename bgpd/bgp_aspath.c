@@ -415,10 +415,15 @@ aspath_empty_aspath ()
 {
   struct assegment segment;
 
+  return aspath_parse (NULL, 0);
+
+#if 0
+  /* This is not acceptable for gated. */
   segment.type = AS_SEQUENCE;
   segment.length = 0;
 
   return aspath_parse ((caddr_t) &segment, AS_HEADER_SIZE);
+#endif /* 0 */  
 }
 
 /* Special purpose function. */
