@@ -96,9 +96,7 @@ ospf6_area_is_transit (struct ospf6_area *o6a)
 {
   return 0;
 }
-
 
-
 void
 ospf6_area_route_add (void *data)
 {
@@ -316,7 +314,7 @@ ALIAS (show_ipv6_ospf6_area_route,
        ROUTE_STR
        "Specify IPv6 address\n"
        "Detailed information\n"
-       )
+       );
 
 void
 ospf6_area_init ()
@@ -328,5 +326,3 @@ ospf6_area_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_area_route_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_area_route_prefix_cmd);
 }
-
-

@@ -1,22 +1,22 @@
 /* BGP VTY interface.
    Copyright (C) 1996, 97, 98, 99, 2000 Kunihiro Ishiguro
 
-This file is part of GNU Zebra.
+   This file is part of GNU Zebra.
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
+   GNU Zebra is free software; you can redistribute it and/or modify it
+   under the terms of the GNU General Public License as published by the
+   Free Software Foundation; either version 2, or (at your option) any
+   later version.
 
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
+   GNU Zebra is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with GNU Zebra; see the file COPYING.  If not, write to the Free
+   Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+   02111-1307, USA.  */
 
 #include <zebra.h>
 
@@ -34,6 +34,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_debug.h"
+#include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_open.h"
 #include "bgpd/bgp_route.h"
@@ -333,7 +334,7 @@ ALIAS (router_bgp,
        BGP_STR
        AS_STR
        "BGP view\n"
-       "view name\n")
+       "view name\n");
 
 /* "no router bgp" commands. */
 DEFUN (no_router_bgp,
@@ -374,7 +375,7 @@ ALIAS (no_router_bgp,
        BGP_STR
        AS_STR
        "BGP view\n"
-       "view name\n")
+       "view name\n");
 
 /* BGP router-id.  */
 
@@ -443,7 +444,7 @@ ALIAS (no_bgp_router_id,
        NO_STR
        BGP_STR
        "Override configured router identifier\n"
-       "Manually configured router identifier\n")
+       "Manually configured router identifier\n");
 
 /* BGP Cluster ID.  */
 
@@ -477,7 +478,7 @@ ALIAS (bgp_cluster_id,
        "bgp cluster-id <1-4294967295>",
        BGP_STR
        "Configure Route-Reflector Cluster-id\n"
-       "Route-Reflector Cluster-id as 32 bit quantity\n")
+       "Route-Reflector Cluster-id as 32 bit quantity\n");
 
 DEFUN (no_bgp_cluster_id,
        no_bgp_cluster_id_cmd,
@@ -513,7 +514,7 @@ ALIAS (no_bgp_cluster_id,
        NO_STR
        BGP_STR
        "Configure Route-Reflector Cluster-id\n"
-       "Route-Reflector Cluster-id in IP address format\n")
+       "Route-Reflector Cluster-id in IP address format\n");
 
 DEFUN (bgp_confederation_identifier,
        bgp_confederation_identifier_cmd,
@@ -563,7 +564,7 @@ ALIAS (no_bgp_confederation_identifier,
        "BGP specific commands\n"
        "AS confederation parameters\n"
        "AS number\n"
-       "Set routing domain confederation AS\n")
+       "Set routing domain confederation AS\n");
 
 DEFUN (bgp_confederation_peers,
        bgp_confederation_peers_cmd,
@@ -673,7 +674,7 @@ ALIAS (no_bgp_timers,
        "Adjust routing timers\n"
        "BGP timers\n"
        "Keepalive interval\n"
-       "Holdtime\n")
+       "Holdtime\n");
 
 DEFUN (bgp_client_to_client_reflection,
        bgp_client_to_client_reflection_cmd,
@@ -878,6 +879,34 @@ DEFUN (no_bgp_bestpath_aspath_ignore,
   return CMD_SUCCESS;
 }
 
+/* "bgp log-neighbor-changes" configuration.  */
+DEFUN (bgp_log_neighbor_changes,
+       bgp_log_neighbor_changes_cmd,
+       "bgp log-neighbor-changes",
+       "BGP specific commands\n"
+       "Log neighbor up/down and reset reason\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  bgp_flag_set (bgp, BGP_FLAG_LOG_NEIGHBOR_CHANGES);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_log_neighbor_changes,
+       no_bgp_log_neighbor_changes_cmd,
+       "no bgp log-neighbor-changes",
+       NO_STR
+       "BGP specific commands\n"
+       "Log neighbor up/down and reset reason\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  bgp_flag_unset (bgp, BGP_FLAG_LOG_NEIGHBOR_CHANGES);
+  return CMD_SUCCESS;
+}
+
 /* "bgp bestpath med" configuration. */
 DEFUN (bgp_bestpath_med,
        bgp_bestpath_med_cmd,
@@ -924,7 +953,7 @@ ALIAS (bgp_bestpath_med2,
        "Change the default bestpath selection\n"
        "MED attribute\n"
        "Treat missing MED as the least preferred one\n"
-       "Compare MED among confederation paths\n")
+       "Compare MED among confederation paths\n");
 
 DEFUN (no_bgp_bestpath_med,
        no_bgp_bestpath_med_cmd,
@@ -974,7 +1003,7 @@ ALIAS (no_bgp_bestpath_med2,
        "Change the default bestpath selection\n"
        "MED attribute\n"
        "Treat missing MED as the least preferred one\n"
-       "Compare MED among confederation paths\n")
+       "Compare MED among confederation paths\n");
 
 /* "no bgp default ipv4-unicast". */
 DEFUN (no_bgp_default_ipv4_unicast,
@@ -1078,7 +1107,7 @@ ALIAS (no_bgp_default_local_preference,
        "BGP specific commands\n"
        "Configure BGP defaults\n"
        "local preference (higher=more preferred)\n"
-       "Configure default local preference value\n")
+       "Configure default local preference value\n");
 
 static int
 peer_remote_as_vty (struct vty *vty, char *peer_str, char *as_str, afi_t afi,
@@ -1202,7 +1231,7 @@ ALIAS (no_neighbor,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
        "Specify a BGP neighbor\n"
-       AS_STR)
+       AS_STR);
 
 DEFUN (no_neighbor_peer_group,
        no_neighbor_peer_group_cmd,
@@ -1312,7 +1341,7 @@ ALIAS (no_neighbor_local_as,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Specify a local-as number\n"
-       "AS number used as local AS\n")
+       "AS number used as local AS\n");
 
 ALIAS (no_neighbor_local_as,
        no_neighbor_local_as_val2_cmd,
@@ -1322,7 +1351,7 @@ ALIAS (no_neighbor_local_as,
        NEIGHBOR_ADDR_STR2
        "Specify a local-as number\n"
        "AS number used as local AS\n"
-       "Do not prepend local-as to updates from ebgp peers\n")
+       "Do not prepend local-as to updates from ebgp peers\n");
 
 DEFUN (neighbor_activate,
        neighbor_activate_cmd,
@@ -2001,7 +2030,7 @@ ALIAS (neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "As-path attribute\n"
        "Nexthop attribute\n"
-       "Med attribute\n")
+       "Med attribute\n");
 
 ALIAS (neighbor_attr_unchanged,
        neighbor_attr_unchanged6_cmd,
@@ -2011,7 +2040,7 @@ ALIAS (neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "As-path attribute\n"
        "Med attribute\n"
-       "Nexthop attribute\n")
+       "Nexthop attribute\n");
 
 ALIAS (neighbor_attr_unchanged,
        neighbor_attr_unchanged7_cmd,
@@ -2021,7 +2050,7 @@ ALIAS (neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Nexthop attribute\n"
        "Med attribute\n"
-       "As-path attribute\n")
+       "As-path attribute\n");
 
 ALIAS (neighbor_attr_unchanged,
        neighbor_attr_unchanged8_cmd,
@@ -2031,7 +2060,7 @@ ALIAS (neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Nexthop attribute\n"
        "As-path attribute\n"
-       "Med attribute\n")
+       "Med attribute\n");
 
 ALIAS (neighbor_attr_unchanged,
        neighbor_attr_unchanged9_cmd,
@@ -2041,7 +2070,7 @@ ALIAS (neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Med attribute\n"
        "Nexthop attribute\n"
-       "As-path attribute\n")
+       "As-path attribute\n");
 
 ALIAS (neighbor_attr_unchanged,
        neighbor_attr_unchanged10_cmd,
@@ -2051,7 +2080,7 @@ ALIAS (neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Med attribute\n"
        "As-path attribute\n"
-       "Nexthop attribute\n")
+       "Nexthop attribute\n");
 
 DEFUN (no_neighbor_attr_unchanged,
        no_neighbor_attr_unchanged_cmd,
@@ -2111,7 +2140,7 @@ DEFUN (no_neighbor_attr_unchanged2,
     SET_FLAG (flags, PEER_FLAG_MED_UNCHANGED);
 
   return peer_af_flag_unset_vty (vty, argv[0], bgp_node_afi (vty),
-			       bgp_node_safi (vty), flags);
+				 bgp_node_safi (vty), flags);
 }
 
 DEFUN (no_neighbor_attr_unchanged3,
@@ -2155,7 +2184,7 @@ DEFUN (no_neighbor_attr_unchanged4,
     SET_FLAG (flags, PEER_FLAG_NEXTHOP_UNCHANGED);
 
   return peer_af_flag_unset_vty (vty, argv[0], bgp_node_afi (vty),
-			       bgp_node_safi (vty), flags);
+				 bgp_node_safi (vty), flags);
 }
 
 ALIAS (no_neighbor_attr_unchanged,
@@ -2167,7 +2196,7 @@ ALIAS (no_neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "As-path attribute\n"
        "Nexthop attribute\n"
-       "Med attribute\n")
+       "Med attribute\n");
 
 ALIAS (no_neighbor_attr_unchanged,
        no_neighbor_attr_unchanged6_cmd,
@@ -2178,7 +2207,7 @@ ALIAS (no_neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "As-path attribute\n"
        "Med attribute\n"
-       "Nexthop attribute\n")
+       "Nexthop attribute\n");
 
 ALIAS (no_neighbor_attr_unchanged,
        no_neighbor_attr_unchanged7_cmd,
@@ -2189,7 +2218,7 @@ ALIAS (no_neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Nexthop attribute\n"
        "Med attribute\n"
-       "As-path attribute\n")
+       "As-path attribute\n");
 
 ALIAS (no_neighbor_attr_unchanged,
        no_neighbor_attr_unchanged8_cmd,
@@ -2200,7 +2229,7 @@ ALIAS (no_neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Nexthop attribute\n"
        "As-path attribute\n"
-       "Med attribute\n")
+       "Med attribute\n");
 
 ALIAS (no_neighbor_attr_unchanged,
        no_neighbor_attr_unchanged9_cmd,
@@ -2211,7 +2240,7 @@ ALIAS (no_neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Med attribute\n"
        "Nexthop attribute\n"
-       "As-path attribute\n")
+       "As-path attribute\n");
 
 ALIAS (no_neighbor_attr_unchanged,
        no_neighbor_attr_unchanged10_cmd,
@@ -2222,7 +2251,7 @@ ALIAS (no_neighbor_attr_unchanged,
        "BGP attribute is propagated unchanged to this neighbor\n"
        "Med attribute\n"
        "As-path attribute\n"
-       "Nexthop attribute\n")
+       "Nexthop attribute\n");
 
 /* For old version Zebra compatibility.  */
 DEFUN (neighbor_transparent_as,
@@ -2324,7 +2353,7 @@ ALIAS (no_neighbor_ebgp_multihop,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Allow EBGP neighbors not on directly connected networks\n"
-       "maximum hop count\n")
+       "maximum hop count\n");
 
 /* Enforce multihop.  */
 DEFUN (neighbor_enforce_multihop,
@@ -2413,7 +2442,7 @@ ALIAS (no_neighbor_description,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Neighbor specific description\n"
-       "Up to 80 characters describing this neighbor\n")
+       "Up to 80 characters describing this neighbor\n");
 
 /* Neighbor update-source. */
 int
@@ -2530,7 +2559,7 @@ ALIAS (no_neighbor_default_originate,
        NEIGHBOR_ADDR_STR2
        "Originate default route to this neighbor\n"
        "Route-map to specify criteria to originate default\n"
-       "route-map name\n")
+       "route-map name\n");
 
 /* Set neighbor's BGP port.  */
 int
@@ -2589,7 +2618,7 @@ ALIAS (no_neighbor_port,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
        "Neighbor's BGP port\n"
-       "TCP port number\n")
+       "TCP port number\n");
 
 /* neighbor weight. */
 int
@@ -2653,7 +2682,7 @@ ALIAS (no_neighbor_weight,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Set default weight for routes from this neighbor\n"
-       "default weight\n")
+       "default weight\n");
 
 /* Override capability negotiation. */
 DEFUN (neighbor_override_capability,
@@ -2822,7 +2851,7 @@ ALIAS (no_neighbor_timers_connect,
        NEIGHBOR_ADDR_STR
        "BGP per neighbor timers\n"
        "BGP connect timer\n"
-       "Connect timer\n")
+       "Connect timer\n");
 
 int
 peer_advertise_interval_vty (struct vty *vty, char *ip_str, char *time_str,
@@ -2876,7 +2905,7 @@ ALIAS (no_neighbor_advertise_interval,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
        "Minimum interval between sending BGP routing updates\n"
-       "time in seconds\n")
+       "time in seconds\n");
 
 int
 peer_version_vty (struct vty *vty, char *ip_str, char *str)
@@ -3339,19 +3368,25 @@ DEFUN (no_neighbor_unsuppress_map,
 
 int
 peer_maximum_prefix_set_vty (struct vty *vty, char *ip_str, afi_t afi,
-			     safi_t safi, char *num_str, int warning)
+			     safi_t safi, char *num_str, char *threshold_str,
+			     int warning)
 {
   int ret;
   struct peer *peer;
   u_int32_t max;
+  u_char threshold;
 
   peer = peer_and_group_lookup_vty (vty, ip_str);
   if (! peer)
     return CMD_WARNING;
 
   VTY_GET_INTEGER ("maxmum number", max, num_str);
+  if (threshold_str)
+    threshold = atoi (threshold_str);
+  else
+    threshold = MAXIMUM_PREFIX_THRESHOLD_DEFAULT;
 
-  ret = peer_maximum_prefix_set (peer, afi, safi, max, warning);
+  ret = peer_maximum_prefix_set (peer, afi, safi, max, threshold, warning);
 
   return bgp_vty_return (vty, ret);
 }
@@ -3384,7 +3419,20 @@ DEFUN (neighbor_maximum_prefix,
        "maximum no. of prefix limit\n")
 {
   return peer_maximum_prefix_set_vty (vty, argv[0], bgp_node_afi (vty),
-				      bgp_node_safi (vty), argv[1], 0);
+				      bgp_node_safi (vty), argv[1], NULL, 0);
+}
+
+DEFUN (neighbor_maximum_prefix_threshold,
+       neighbor_maximum_prefix_threshold_cmd,
+       NEIGHBOR_CMD2 "maximum-prefix <1-4294967295> <1-100>",
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR2
+       "Maximum number of prefix accept from this peer\n"
+       "maximum no. of prefix limit\n"
+       "Threshold value (%) at which to generate a warning msg\n")
+{
+  return peer_maximum_prefix_set_vty (vty, argv[0], bgp_node_afi (vty),
+				      bgp_node_safi (vty), argv[1], argv[2], 0);
 }
 
 DEFUN (neighbor_maximum_prefix_warning,
@@ -3397,7 +3445,21 @@ DEFUN (neighbor_maximum_prefix_warning,
        "Only give warning message when limit is exceeded\n")
 {
   return peer_maximum_prefix_set_vty (vty, argv[0], bgp_node_afi (vty),
-				      bgp_node_safi (vty), argv[1], 1);
+				      bgp_node_safi (vty), argv[1], NULL, 1);
+}
+
+DEFUN (neighbor_maximum_prefix_threshold_warning,
+       neighbor_maximum_prefix_threshold_warning_cmd,
+       NEIGHBOR_CMD2 "maximum-prefix <1-4294967295> <1-100> warning-only",
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR2
+       "Maximum number of prefix accept from this peer\n"
+       "maximum no. of prefix limit\n"
+       "Threshold value (%) at which to generate a warning msg\n"
+       "Only give warning message when limit is exceeded\n")
+{
+  return peer_maximum_prefix_set_vty (vty, argv[0], bgp_node_afi (vty),
+				      bgp_node_safi (vty), argv[1], argv[2], 1);
 }
 
 DEFUN (no_neighbor_maximum_prefix,
@@ -3419,17 +3481,28 @@ ALIAS (no_neighbor_maximum_prefix,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n"
-       "maximum no. of prefix limit\n")
+       "maximum no. of prefix limit\n");
 
 ALIAS (no_neighbor_maximum_prefix,
        no_neighbor_maximum_prefix_val2_cmd,
+       NO_NEIGHBOR_CMD2 "maximum-prefix <1-4294967295> <1-100> warning-only",
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR2
+       "Maximum number of prefix accept from this peer\n"
+       "maximum no. of prefix limit\n"
+       "Threshold value (%) at which to generate a warning msg\n"
+       "Only give warning message when limit is exceeded\n");
+
+ALIAS (no_neighbor_maximum_prefix,
+       no_neighbor_maximum_prefix_val3_cmd,
        NO_NEIGHBOR_CMD2 "maximum-prefix <1-4294967295> warning-only",
        NO_STR
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Maximum number of prefix accept from this peer\n"
        "maximum no. of prefix limit\n"
-       "Only give warning message when limit is exceeded\n")
+       "Only give warning message when limit is exceeded\n");
 
 /* "neighbor allowas-in" */
 DEFUN (neighbor_allowas_in,
@@ -3464,7 +3537,7 @@ ALIAS (neighbor_allowas_in,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR2
        "Accept as-path with my AS present in it\n"
-       "Number of occurances of AS number\n")
+       "Number of occurances of AS number\n");
 
 DEFUN (no_neighbor_allowas_in,
        no_neighbor_allowas_in_cmd,
@@ -3528,7 +3601,7 @@ ALIAS (address_family_ipv6_unicast,
        address_family_ipv6_cmd,
        "address-family ipv6",
        "Enter Address Family command mode\n"
-       "Address family\n")
+       "Address family\n");
 
 DEFUN (address_family_vpnv4,
        address_family_vpnv4_cmd,
@@ -3545,7 +3618,7 @@ ALIAS (address_family_vpnv4,
        "address-family vpnv4 unicast",
        "Enter Address Family command mode\n"
        "Address family\n"
-       "Address Family Modifier\n")
+       "Address Family Modifier\n");
 
 DEFUN (exit_address_family,
        exit_address_family_cmd,
@@ -3561,13 +3634,13 @@ DEFUN (exit_address_family,
 
 /* BGP clear sort. */
 enum clear_sort
-{
-  clear_all,
-  clear_peer,
-  clear_group,
-  clear_external,
-  clear_as
-};
+  {
+    clear_all,
+    clear_peer,
+    clear_group,
+    clear_external,
+    clear_as
+  };
 
 void
 bgp_clear_vty_error (struct vty *vty, struct peer *peer, afi_t afi,
@@ -3787,7 +3860,7 @@ ALIAS (clear_ip_bgp_all,
        "clear bgp *",
        CLEAR_STR
        BGP_STR
-       "Clear all peers\n")
+       "Clear all peers\n");
 
 ALIAS (clear_ip_bgp_all,
        clear_bgp_ipv6_all_cmd,
@@ -3795,7 +3868,7 @@ ALIAS (clear_ip_bgp_all,
        CLEAR_STR
        BGP_STR
        "Address family\n"
-       "Clear all peers\n")
+       "Clear all peers\n");
 
 ALIAS (clear_ip_bgp_all,
        clear_ip_bgp_instance_all_cmd,
@@ -3805,7 +3878,7 @@ ALIAS (clear_ip_bgp_all,
        BGP_STR
        "BGP view\n"
        "view name\n"
-       "Clear all peers\n")
+       "Clear all peers\n");
 
 ALIAS (clear_ip_bgp_all,
        clear_bgp_instance_all_cmd,
@@ -3814,7 +3887,7 @@ ALIAS (clear_ip_bgp_all,
        BGP_STR
        "BGP view\n"
        "view name\n"
-       "Clear all peers\n")
+       "Clear all peers\n");
 
 DEFUN (clear_ip_bgp_peer,
        clear_ip_bgp_peer_cmd, 
@@ -3834,7 +3907,7 @@ ALIAS (clear_ip_bgp_peer,
        CLEAR_STR
        BGP_STR
        "BGP neighbor address to clear\n"
-       "BGP IPv6 neighbor to clear\n")
+       "BGP IPv6 neighbor to clear\n");
 
 ALIAS (clear_ip_bgp_peer,
        clear_bgp_ipv6_peer_cmd, 
@@ -3843,7 +3916,7 @@ ALIAS (clear_ip_bgp_peer,
        BGP_STR
        "Address family\n"
        "BGP neighbor address to clear\n"
-       "BGP IPv6 neighbor to clear\n")
+       "BGP IPv6 neighbor to clear\n");
 
 DEFUN (clear_ip_bgp_peer_group,
        clear_ip_bgp_peer_group_cmd, 
@@ -3863,7 +3936,7 @@ ALIAS (clear_ip_bgp_peer_group,
        CLEAR_STR
        BGP_STR
        "Clear all members of peer-group\n"
-       "BGP peer-group name\n")
+       "BGP peer-group name\n");
 
 ALIAS (clear_ip_bgp_peer_group,
        clear_bgp_ipv6_peer_group_cmd, 
@@ -3872,7 +3945,7 @@ ALIAS (clear_ip_bgp_peer_group,
        BGP_STR
        "Address family\n"
        "Clear all members of peer-group\n"
-       "BGP peer-group name\n")
+       "BGP peer-group name\n");
 
 DEFUN (clear_ip_bgp_external,
        clear_ip_bgp_external_cmd,
@@ -3890,7 +3963,7 @@ ALIAS (clear_ip_bgp_external,
        "clear bgp external",
        CLEAR_STR
        BGP_STR
-       "Clear all external peers\n")
+       "Clear all external peers\n");
 
 ALIAS (clear_ip_bgp_external,
        clear_bgp_ipv6_external_cmd, 
@@ -3898,7 +3971,7 @@ ALIAS (clear_ip_bgp_external,
        CLEAR_STR
        BGP_STR
        "Address family\n"
-       "Clear all external peers\n")
+       "Clear all external peers\n");
 
 DEFUN (clear_ip_bgp_as,
        clear_ip_bgp_as_cmd,
@@ -3916,7 +3989,7 @@ ALIAS (clear_ip_bgp_as,
        "clear bgp <1-65535>",
        CLEAR_STR
        BGP_STR
-       "Clear peers with the AS number\n")
+       "Clear peers with the AS number\n");
 
 ALIAS (clear_ip_bgp_as,
        clear_bgp_ipv6_as_cmd,
@@ -3924,7 +3997,7 @@ ALIAS (clear_ip_bgp_as,
        CLEAR_STR
        BGP_STR
        "Address family\n"
-       "Clear peers with the AS number\n")
+       "Clear peers with the AS number\n");
 
 /* Outbound soft-reconfiguration */
 DEFUN (clear_ip_bgp_all_soft_out,
@@ -3952,7 +4025,7 @@ ALIAS (clear_ip_bgp_all_soft_out,
        IP_STR
        BGP_STR
        "Clear all peers\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_ip_bgp_all_soft_out,
        clear_ip_bgp_instance_all_soft_out_cmd,
@@ -3964,7 +4037,7 @@ ALIAS (clear_ip_bgp_all_soft_out,
        "view name\n"
        "Clear all peers\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_all_ipv4_soft_out,
        clear_ip_bgp_all_ipv4_soft_out_cmd,
@@ -3997,7 +4070,7 @@ ALIAS (clear_ip_bgp_all_ipv4_soft_out,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_instance_all_ipv4_soft_out,
        clear_ip_bgp_instance_all_ipv4_soft_out_cmd,
@@ -4046,7 +4119,7 @@ ALIAS (clear_ip_bgp_all_vpnv4_soft_out,
        "Clear all peers\n"
        "Address family\n"
        "Address Family Modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_bgp_all_soft_out,
        clear_bgp_all_soft_out_cmd,
@@ -4074,7 +4147,7 @@ ALIAS (clear_bgp_all_soft_out,
        "view name\n"
        "Clear all peers\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_all_soft_out,
        clear_bgp_all_out_cmd,
@@ -4082,7 +4155,7 @@ ALIAS (clear_bgp_all_soft_out,
        CLEAR_STR
        BGP_STR
        "Clear all peers\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_all_soft_out,
        clear_bgp_ipv6_all_soft_out_cmd,
@@ -4092,7 +4165,7 @@ ALIAS (clear_bgp_all_soft_out,
        "Address family\n"
        "Clear all peers\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_all_soft_out,
        clear_bgp_ipv6_all_out_cmd,
@@ -4101,7 +4174,7 @@ ALIAS (clear_bgp_all_soft_out,
        BGP_STR
        "Address family\n"
        "Clear all peers\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_peer_soft_out,
        clear_ip_bgp_peer_soft_out_cmd,
@@ -4124,7 +4197,7 @@ ALIAS (clear_ip_bgp_peer_soft_out,
        IP_STR
        BGP_STR
        "BGP neighbor address to clear\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_peer_ipv4_soft_out,
        clear_ip_bgp_peer_ipv4_soft_out_cmd,
@@ -4157,7 +4230,7 @@ ALIAS (clear_ip_bgp_peer_ipv4_soft_out,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_peer_vpnv4_soft_out,
        clear_ip_bgp_peer_vpnv4_soft_out_cmd,
@@ -4184,7 +4257,7 @@ ALIAS (clear_ip_bgp_peer_vpnv4_soft_out,
        "BGP neighbor address to clear\n"
        "Address family\n"
        "Address Family Modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_bgp_peer_soft_out,
        clear_bgp_peer_soft_out_cmd,
@@ -4209,7 +4282,7 @@ ALIAS (clear_bgp_peer_soft_out,
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_peer_soft_out,
        clear_bgp_peer_out_cmd,
@@ -4218,7 +4291,7 @@ ALIAS (clear_bgp_peer_soft_out,
        BGP_STR
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_peer_soft_out,
        clear_bgp_ipv6_peer_out_cmd,
@@ -4228,7 +4301,7 @@ ALIAS (clear_bgp_peer_soft_out,
        "Address family\n"
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_peer_group_soft_out,
        clear_ip_bgp_peer_group_soft_out_cmd, 
@@ -4253,7 +4326,7 @@ ALIAS (clear_ip_bgp_peer_group_soft_out,
        BGP_STR
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_peer_group_ipv4_soft_out,
        clear_ip_bgp_peer_group_ipv4_soft_out_cmd,
@@ -4288,7 +4361,7 @@ ALIAS (clear_ip_bgp_peer_group_ipv4_soft_out,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_bgp_peer_group_soft_out,
        clear_bgp_peer_group_soft_out_cmd,
@@ -4313,7 +4386,7 @@ ALIAS (clear_bgp_peer_group_soft_out,
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_peer_group_soft_out,
        clear_bgp_peer_group_out_cmd,
@@ -4322,7 +4395,7 @@ ALIAS (clear_bgp_peer_group_soft_out,
        BGP_STR
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_peer_group_soft_out,
        clear_bgp_ipv6_peer_group_out_cmd,
@@ -4332,7 +4405,7 @@ ALIAS (clear_bgp_peer_group_soft_out,
        "Address family\n"
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_external_soft_out,
        clear_ip_bgp_external_soft_out_cmd, 
@@ -4355,7 +4428,7 @@ ALIAS (clear_ip_bgp_external_soft_out,
        IP_STR
        BGP_STR
        "Clear all external peers\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_external_ipv4_soft_out,
        clear_ip_bgp_external_ipv4_soft_out_cmd,
@@ -4388,7 +4461,7 @@ ALIAS (clear_ip_bgp_external_ipv4_soft_out,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_bgp_external_soft_out,
        clear_bgp_external_soft_out_cmd,
@@ -4411,7 +4484,7 @@ ALIAS (clear_bgp_external_soft_out,
        "Address family\n"
        "Clear all external peers\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_external_soft_out,
        clear_bgp_external_out_cmd,
@@ -4419,7 +4492,7 @@ ALIAS (clear_bgp_external_soft_out,
        CLEAR_STR
        BGP_STR
        "Clear all external peers\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_external_soft_out,
        clear_bgp_ipv6_external_out_cmd,
@@ -4428,7 +4501,7 @@ ALIAS (clear_bgp_external_soft_out,
        BGP_STR
        "Address family\n"
        "Clear all external peers\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_as_soft_out,
        clear_ip_bgp_as_soft_out_cmd,
@@ -4451,7 +4524,7 @@ ALIAS (clear_ip_bgp_as_soft_out,
        IP_STR
        BGP_STR
        "Clear peers with the AS number\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_as_ipv4_soft_out,
        clear_ip_bgp_as_ipv4_soft_out_cmd,
@@ -4484,7 +4557,7 @@ ALIAS (clear_ip_bgp_as_ipv4_soft_out,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_ip_bgp_as_vpnv4_soft_out,
        clear_ip_bgp_as_vpnv4_soft_out_cmd,
@@ -4511,7 +4584,7 @@ ALIAS (clear_ip_bgp_as_vpnv4_soft_out,
        "Clear peers with the AS number\n"
        "Address family\n"
        "Address Family modifier\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 DEFUN (clear_bgp_as_soft_out,
        clear_bgp_as_soft_out_cmd,
@@ -4534,7 +4607,7 @@ ALIAS (clear_bgp_as_soft_out,
        "Address family\n"
        "Clear peers with the AS number\n"
        "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_as_soft_out,
        clear_bgp_as_out_cmd,
@@ -4542,7 +4615,7 @@ ALIAS (clear_bgp_as_soft_out,
        CLEAR_STR
        BGP_STR
        "Clear peers with the AS number\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 ALIAS (clear_bgp_as_soft_out,
        clear_bgp_ipv6_as_out_cmd,
@@ -4551,7 +4624,7 @@ ALIAS (clear_bgp_as_soft_out,
        BGP_STR
        "Address family\n"
        "Clear peers with the AS number\n"
-       "Soft reconfig outbound update\n")
+       "Soft reconfig outbound update\n");
 
 /* Inbound soft-reconfiguration */
 DEFUN (clear_ip_bgp_all_soft_in,
@@ -4582,7 +4655,7 @@ ALIAS (clear_ip_bgp_all_soft_in,
        "view name\n"
        "Clear all peers\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_ip_bgp_all_soft_in,
        clear_ip_bgp_all_in_cmd,
@@ -4591,7 +4664,7 @@ ALIAS (clear_ip_bgp_all_soft_in,
        IP_STR
        BGP_STR
        "Clear all peers\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_all_in_prefix_filter,
        clear_ip_bgp_all_in_prefix_filter_cmd,
@@ -4621,7 +4694,7 @@ ALIAS (clear_ip_bgp_all_in_prefix_filter,
        "view name\n"
        "Clear all peers\n"
        "Soft reconfig inbound update\n"
-       "Push out prefix-list ORF and do inbound soft reconfig\n")
+       "Push out prefix-list ORF and do inbound soft reconfig\n");
 
 
 DEFUN (clear_ip_bgp_all_ipv4_soft_in,
@@ -4655,7 +4728,7 @@ ALIAS (clear_ip_bgp_all_ipv4_soft_in,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_instance_all_ipv4_soft_in,
        clear_ip_bgp_instance_all_ipv4_soft_in_cmd,
@@ -4747,7 +4820,7 @@ ALIAS (clear_ip_bgp_all_vpnv4_soft_in,
        "Clear all peers\n"
        "Address family\n"
        "Address Family Modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_all_soft_in,
        clear_bgp_all_soft_in_cmd,
@@ -4760,7 +4833,7 @@ DEFUN (clear_bgp_all_soft_in,
 {
   if (argc == 1)
     return bgp_clear_vty (vty, argv[0], AFI_IP6, SAFI_UNICAST, clear_all,
-                        BGP_CLEAR_SOFT_IN, NULL);
+			  BGP_CLEAR_SOFT_IN, NULL);
 
   return bgp_clear_vty (vty, NULL, AFI_IP6, SAFI_UNICAST, clear_all,
 			BGP_CLEAR_SOFT_IN, NULL);
@@ -4775,7 +4848,7 @@ ALIAS (clear_bgp_all_soft_in,
        "view name\n"
        "Clear all peers\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_all_soft_in,
        clear_bgp_ipv6_all_soft_in_cmd,
@@ -4785,7 +4858,7 @@ ALIAS (clear_bgp_all_soft_in,
        "Address family\n"
        "Clear all peers\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_all_soft_in,
        clear_bgp_all_in_cmd,
@@ -4793,7 +4866,7 @@ ALIAS (clear_bgp_all_soft_in,
        CLEAR_STR
        BGP_STR
        "Clear all peers\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_all_soft_in,
        clear_bgp_ipv6_all_in_cmd,
@@ -4802,7 +4875,7 @@ ALIAS (clear_bgp_all_soft_in,
        BGP_STR
        "Address family\n"
        "Clear all peers\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_all_in_prefix_filter,
        clear_bgp_all_in_prefix_filter_cmd,
@@ -4825,7 +4898,7 @@ ALIAS (clear_bgp_all_in_prefix_filter,
        "Address family\n"
        "Clear all peers\n"
        "Soft reconfig inbound update\n"
-       "Push out prefix-list ORF and do inbound soft reconfig\n")
+       "Push out prefix-list ORF and do inbound soft reconfig\n");
 
 DEFUN (clear_ip_bgp_peer_soft_in,
        clear_ip_bgp_peer_soft_in_cmd,
@@ -4848,7 +4921,7 @@ ALIAS (clear_ip_bgp_peer_soft_in,
        IP_STR
        BGP_STR
        "BGP neighbor address to clear\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
        
 DEFUN (clear_ip_bgp_peer_in_prefix_filter,
        clear_ip_bgp_peer_in_prefix_filter_cmd,
@@ -4895,7 +4968,7 @@ ALIAS (clear_ip_bgp_peer_ipv4_soft_in,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_peer_ipv4_in_prefix_filter,
        clear_ip_bgp_peer_ipv4_in_prefix_filter_cmd,
@@ -4943,7 +5016,7 @@ ALIAS (clear_ip_bgp_peer_vpnv4_soft_in,
        "BGP neighbor address to clear\n"
        "Address family\n"
        "Address Family Modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_peer_soft_in,
        clear_bgp_peer_soft_in_cmd,
@@ -4968,7 +5041,7 @@ ALIAS (clear_bgp_peer_soft_in,
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_peer_soft_in,
        clear_bgp_peer_in_cmd,
@@ -4977,7 +5050,7 @@ ALIAS (clear_bgp_peer_soft_in,
        BGP_STR
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_peer_soft_in,
        clear_bgp_ipv6_peer_in_cmd,
@@ -4987,7 +5060,7 @@ ALIAS (clear_bgp_peer_soft_in,
        "Address family\n"
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_peer_in_prefix_filter,
        clear_bgp_peer_in_prefix_filter_cmd,
@@ -5012,7 +5085,7 @@ ALIAS (clear_bgp_peer_in_prefix_filter,
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
        "Soft reconfig inbound update\n"
-       "Push out the existing ORF prefix-list\n")
+       "Push out the existing ORF prefix-list\n");
 
 DEFUN (clear_ip_bgp_peer_group_soft_in,
        clear_ip_bgp_peer_group_soft_in_cmd,
@@ -5037,7 +5110,7 @@ ALIAS (clear_ip_bgp_peer_group_soft_in,
        BGP_STR
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_peer_group_in_prefix_filter,
        clear_ip_bgp_peer_group_in_prefix_filter_cmd,
@@ -5087,7 +5160,7 @@ ALIAS (clear_ip_bgp_peer_group_ipv4_soft_in,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_peer_group_ipv4_in_prefix_filter,
        clear_ip_bgp_peer_group_ipv4_in_prefix_filter_cmd,
@@ -5134,7 +5207,7 @@ ALIAS (clear_bgp_peer_group_soft_in,
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_peer_group_soft_in,
        clear_bgp_peer_group_in_cmd,
@@ -5143,7 +5216,7 @@ ALIAS (clear_bgp_peer_group_soft_in,
        BGP_STR
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_peer_group_soft_in,
        clear_bgp_ipv6_peer_group_in_cmd,
@@ -5153,7 +5226,7 @@ ALIAS (clear_bgp_peer_group_soft_in,
        "Address family\n"
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_peer_group_in_prefix_filter,
        clear_bgp_peer_group_in_prefix_filter_cmd,
@@ -5178,7 +5251,7 @@ ALIAS (clear_bgp_peer_group_in_prefix_filter,
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
        "Soft reconfig inbound update\n"
-       "Push out prefix-list ORF and do inbound soft reconfig\n")
+       "Push out prefix-list ORF and do inbound soft reconfig\n");
 
 DEFUN (clear_ip_bgp_external_soft_in,
        clear_ip_bgp_external_soft_in_cmd,
@@ -5201,7 +5274,7 @@ ALIAS (clear_ip_bgp_external_soft_in,
        IP_STR
        BGP_STR
        "Clear all external peers\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_external_in_prefix_filter,
        clear_ip_bgp_external_in_prefix_filter_cmd,
@@ -5248,7 +5321,7 @@ ALIAS (clear_ip_bgp_external_ipv4_soft_in,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_external_ipv4_in_prefix_filter,
        clear_ip_bgp_external_ipv4_in_prefix_filter_cmd,
@@ -5292,7 +5365,7 @@ ALIAS (clear_bgp_external_soft_in,
        "Address family\n"
        "Clear all external peers\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_external_soft_in,
        clear_bgp_external_in_cmd,
@@ -5300,7 +5373,7 @@ ALIAS (clear_bgp_external_soft_in,
        CLEAR_STR
        BGP_STR
        "Clear all external peers\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_external_soft_in,
        clear_bgp_ipv6_external_in_cmd,
@@ -5309,7 +5382,7 @@ ALIAS (clear_bgp_external_soft_in,
        BGP_STR
        "Address family\n"
        "Clear all external peers\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_external_in_prefix_filter,
        clear_bgp_external_in_prefix_filter_cmd,
@@ -5332,7 +5405,7 @@ ALIAS (clear_bgp_external_in_prefix_filter,
        "Address family\n"
        "Clear all external peers\n"
        "Soft reconfig inbound update\n"
-       "Push out prefix-list ORF and do inbound soft reconfig\n")
+       "Push out prefix-list ORF and do inbound soft reconfig\n");
 
 DEFUN (clear_ip_bgp_as_soft_in,
        clear_ip_bgp_as_soft_in_cmd,
@@ -5355,7 +5428,7 @@ ALIAS (clear_ip_bgp_as_soft_in,
        IP_STR
        BGP_STR
        "Clear peers with the AS number\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_as_in_prefix_filter,
        clear_ip_bgp_as_in_prefix_filter_cmd,
@@ -5402,7 +5475,7 @@ ALIAS (clear_ip_bgp_as_ipv4_soft_in,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_ip_bgp_as_ipv4_in_prefix_filter,
        clear_ip_bgp_as_ipv4_in_prefix_filter_cmd,
@@ -5450,7 +5523,7 @@ ALIAS (clear_ip_bgp_as_vpnv4_soft_in,
        "Clear peers with the AS number\n"
        "Address family\n"
        "Address Family modifier\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_as_soft_in,
        clear_bgp_as_soft_in_cmd,
@@ -5473,7 +5546,7 @@ ALIAS (clear_bgp_as_soft_in,
        "Address family\n"
        "Clear peers with the AS number\n"
        "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_as_soft_in,
        clear_bgp_as_in_cmd,
@@ -5481,7 +5554,7 @@ ALIAS (clear_bgp_as_soft_in,
        CLEAR_STR
        BGP_STR
        "Clear peers with the AS number\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 ALIAS (clear_bgp_as_soft_in,
        clear_bgp_ipv6_as_in_cmd,
@@ -5490,7 +5563,7 @@ ALIAS (clear_bgp_as_soft_in,
        BGP_STR
        "Address family\n"
        "Clear peers with the AS number\n"
-       "Soft reconfig inbound update\n")
+       "Soft reconfig inbound update\n");
 
 DEFUN (clear_bgp_as_in_prefix_filter,
        clear_bgp_as_in_prefix_filter_cmd,
@@ -5513,7 +5586,7 @@ ALIAS (clear_bgp_as_in_prefix_filter,
        "Address family\n"
        "Clear peers with the AS number\n"
        "Soft reconfig inbound update\n"
-       "Push out prefix-list ORF and do inbound soft reconfig\n")
+       "Push out prefix-list ORF and do inbound soft reconfig\n");
 
 /* Both soft-reconfiguration */
 DEFUN (clear_ip_bgp_all_soft,
@@ -5527,7 +5600,7 @@ DEFUN (clear_ip_bgp_all_soft,
 {
   if (argc == 1)
     return bgp_clear_vty (vty, argv[0], AFI_IP, SAFI_UNICAST, clear_all,
-                        BGP_CLEAR_SOFT_BOTH, NULL);
+			  BGP_CLEAR_SOFT_BOTH, NULL);
 
   return bgp_clear_vty (vty, NULL, AFI_IP, SAFI_UNICAST, clear_all,
 			BGP_CLEAR_SOFT_BOTH, NULL);
@@ -5542,7 +5615,7 @@ ALIAS (clear_ip_bgp_all_soft,
        "BGP view\n"
        "view name\n"
        "Clear all peers\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 
 DEFUN (clear_ip_bgp_all_ipv4_soft,
@@ -5612,7 +5685,7 @@ DEFUN (clear_bgp_all_soft,
 {
   if (argc == 1)
     return bgp_clear_vty (vty, argv[0], AFI_IP6, SAFI_UNICAST, clear_all,
-                        BGP_CLEAR_SOFT_BOTH, argv[0]);
+			  BGP_CLEAR_SOFT_BOTH, argv[0]);
  
   return bgp_clear_vty (vty, NULL, AFI_IP6, SAFI_UNICAST, clear_all,
 			BGP_CLEAR_SOFT_BOTH, argv[0]);
@@ -5626,7 +5699,7 @@ ALIAS (clear_bgp_all_soft,
        "BGP view\n"
        "view name\n"
        "Clear all peers\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 ALIAS (clear_bgp_all_soft,
        clear_bgp_ipv6_all_soft_cmd,
@@ -5635,7 +5708,7 @@ ALIAS (clear_bgp_all_soft,
        BGP_STR
        "Address family\n"
        "Clear all peers\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 DEFUN (clear_ip_bgp_peer_soft,
        clear_ip_bgp_peer_soft_cmd,
@@ -5706,7 +5779,7 @@ ALIAS (clear_bgp_peer_soft,
        "Address family\n"
        "BGP neighbor address to clear\n"
        "BGP IPv6 neighbor to clear\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 DEFUN (clear_ip_bgp_peer_group_soft,
        clear_ip_bgp_peer_group_soft_cmd,
@@ -5764,7 +5837,7 @@ ALIAS (clear_bgp_peer_group_soft,
        "Address family\n"
        "Clear all members of peer-group\n"
        "BGP peer-group name\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 DEFUN (clear_ip_bgp_external_soft,
        clear_ip_bgp_external_soft_cmd,
@@ -5818,7 +5891,7 @@ ALIAS (clear_bgp_external_soft,
        BGP_STR
        "Address family\n"
        "Clear all external peers\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 DEFUN (clear_ip_bgp_as_soft,
        clear_ip_bgp_as_soft_cmd,
@@ -5887,7 +5960,7 @@ ALIAS (clear_bgp_as_soft,
        BGP_STR
        "Address family\n"
        "Clear peers with the AS number\n"
-       "Soft reconfig\n")
+       "Soft reconfig\n");
 
 /* Show BGP peer's summary information. */
 int
@@ -5944,10 +6017,11 @@ bgp_show_summary (struct vty *vty, struct bgp *bgp, int afi, int safi)
 
 	  vty_out (vty, "%5d %7d %7d %8d %4d %4ld ",
 		   peer->as,
-		   peer->open_in + peer->update_in +
-		   peer->keepalive_in + peer->notify_in + peer->refresh_in,
-		   peer->open_out + peer->update_out +
-		   peer->keepalive_out + peer->notify_out + peer->refresh_out,
+		   peer->open_in + peer->update_in + peer->keepalive_in
+		   + peer->notify_in + peer->refresh_in + peer->dynamic_cap_in,
+		   peer->open_out + peer->update_out + peer->keepalive_out
+		   + peer->notify_out + peer->refresh_out
+		   + peer->dynamic_cap_out,
 		   0, 0, peer->obuf->count);
 
 	  vty_out (vty, "%8s", 
@@ -6134,7 +6208,7 @@ ALIAS (show_bgp_summary,
        SHOW_STR
        BGP_STR
        "Address family\n"
-       "Summary of BGP neighbor status\n")
+       "Summary of BGP neighbor status\n");
 
 ALIAS (show_bgp_instance_summary,
        show_bgp_instance_ipv6_summary_cmd,
@@ -6144,7 +6218,7 @@ ALIAS (show_bgp_instance_summary,
        "BGP view\n"
        "View name\n"
        "Address family\n"
-       "Summary of BGP neighbor status\n")
+       "Summary of BGP neighbor status\n");
 
 /* old command */
 DEFUN (show_ipv6_bgp_summary, 
@@ -6173,10 +6247,10 @@ DEFUN (show_ipv6_mbgp_summary,
 
 /* Show BGP peer's information. */
 enum show_type
-{
-  show_all,
-  show_peer
-};
+  {
+    show_all,
+    show_peer
+  };
 
 void
 bgp_show_peer_afi_orf_cap (struct vty *vty, struct peer *p,
@@ -6273,13 +6347,13 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
     {
       vty_out (vty, "  Outbound Route Filter (ORF):");
       if (CHECK_FLAG (p->af_sflags[afi][safi], PEER_STATUS_ORF_PREFIX_SEND))
-	  vty_out (vty, " sent;");
+	vty_out (vty, " sent;");
       if (orf_pfx_count)
 	vty_out (vty, " received (%d entries)", orf_pfx_count);
       vty_out (vty, "%s", VTY_NEWLINE);
     }
   if (CHECK_FLAG (p->af_sflags[afi][safi], PEER_STATUS_ORF_WAIT_REFRESH))
-      vty_out (vty, "  First update is deferred until ORF or ROUTE-REFRESH is received%s", VTY_NEWLINE);
+    vty_out (vty, "  First update is deferred until ORF or ROUTE-REFRESH is received%s", VTY_NEWLINE);
 
   if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_REFLECTOR_CLIENT))
     vty_out (vty, "  Route-Reflector Client%s", VTY_NEWLINE);
@@ -6302,7 +6376,7 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
     {
       vty_out (vty, "  Community attribute sent to this neighbor");
       if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_COMMUNITY)
-	&& CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
+	  && CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
 	vty_out (vty, " (both)%s", VTY_NEWLINE);
       else if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_SEND_EXT_COMMUNITY))
 	vty_out (vty, " (extended)%s", VTY_NEWLINE);
@@ -6390,17 +6464,17 @@ bgp_show_peer_afi (struct vty *vty, struct peer *p, afi_t afi, safi_t safi)
 	     filter->usmap.name, VTY_NEWLINE);
 
   /* Receive prefix count */
-  vty_out (vty, "  %ld accepted prefixes",
-	   p->pcount[afi][safi]);
+  vty_out (vty, "  %ld accepted prefixes%s", p->pcount[afi][safi], VTY_NEWLINE);
+
   /* Maximum prefix */
   if (CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX))
     {
-      vty_out (vty, ", maximum limit %ld%s",
-	       p->pmax[afi][safi],
+      vty_out (vty, "  maximum limit %ld%s%s", p->pmax[afi][safi],
 	       CHECK_FLAG (p->af_flags[afi][safi], PEER_FLAG_MAX_PREFIX_WARNING)
-	       ? " (warning-only)" : "");
+	       ? " (warning-only)" : "", VTY_NEWLINE);
+      vty_out (vty, "  Threshold for warning message %d%%%s", p->pmax_threshold[afi][safi],
+	       VTY_NEWLINE);
     }
-  vty_out (vty, "%s", VTY_NEWLINE);
 
   vty_out (vty, "%s", VTY_NEWLINE);
 }
@@ -6447,7 +6521,8 @@ bgp_show_peer (struct vty *vty, struct peer *p)
 	   VTY_NEWLINE);
 
   /* Confederation */
-  if (bgp_confederation_peers_check (bgp, p->as)) 
+  if (CHECK_FLAG (bgp->config, BGP_CONFIG_CONFEDERATION)
+      && bgp_confederation_peers_check (bgp, p->as))
     vty_out (vty, "  Neighbor under common administration%s", VTY_NEWLINE);
   
   /* Status. */
@@ -6610,11 +6685,11 @@ bgp_show_peer (struct vty *vty, struct peer *p)
 
   /* Packet counts. */
   vty_out(vty, "  Received %d messages, %d notifications, %d in queue%s",
-	  p->open_in + p->update_in + p->keepalive_in,
-	  p->notify_in, 0, VTY_NEWLINE);
+	  p->open_in + p->update_in + p->keepalive_in + p->refresh_in
+	  + p->dynamic_cap_in, p->notify_in, 0, VTY_NEWLINE);
   vty_out(vty, "  Sent %d messages, %d notifications, %ld in queue%s",
-	  p->open_out + p->update_out + p->keepalive_out,
-	  p->notify_out, p->obuf->count, VTY_NEWLINE);
+	  p->open_out + p->update_out + p->keepalive_out + p->refresh_out
+	  + p->dynamic_cap_out, p->notify_out, p->obuf->count, VTY_NEWLINE);
   vty_out(vty, "  Route refresh request: received %d, sent %d%s",
 	  p->refresh_in, p->refresh_out, VTY_NEWLINE);
 
@@ -6658,6 +6733,13 @@ bgp_show_peer (struct vty *vty, struct peer *p)
   vty_out (vty, "  Connections established %d; dropped %d%s",
 	   p->established, p->dropped,
 	   VTY_NEWLINE);
+
+  if (! p->dropped)
+    vty_out (vty, "  Last reset never%s", VTY_NEWLINE);
+  else
+    vty_out (vty, "  Last reset %s, due to %s%s",
+	     peer_uptime (p->resettime, timebuf, BGP_UPTIME_LEN),
+	     peer_down_str[(int) p->last_reset], VTY_NEWLINE);
 
   if (CHECK_FLAG (p->sflags, PEER_STATUS_PREFIX_OVERFLOW))
     {
@@ -6823,7 +6905,7 @@ ALIAS (show_ip_bgp_neighbors,
        "Address family\n"
        "Address Family modifier\n"
        "Address Family modifier\n"
-       "Detailed information on TCP and BGP neighbor connections\n")
+       "Detailed information on TCP and BGP neighbor connections\n");
 
 ALIAS (show_ip_bgp_neighbors,
        show_ip_bgp_vpnv4_all_neighbors_cmd,
@@ -6833,7 +6915,7 @@ ALIAS (show_ip_bgp_neighbors,
        BGP_STR
        "Display VPNv4 NLRI specific information\n"
        "Display information about all VPNv4 NLRIs\n"
-       "Detailed information on TCP and BGP neighbor connections\n")
+       "Detailed information on TCP and BGP neighbor connections\n");
 
 ALIAS (show_ip_bgp_neighbors,
        show_ip_bgp_vpnv4_rd_neighbors_cmd,
@@ -6844,14 +6926,14 @@ ALIAS (show_ip_bgp_neighbors,
        "Display VPNv4 NLRI specific information\n"
        "Display information for a route distinguisher\n"
        "VPN Route Distinguisher\n"
-       "Detailed information on TCP and BGP neighbor connections\n")
+       "Detailed information on TCP and BGP neighbor connections\n");
 
 ALIAS (show_ip_bgp_neighbors,
        show_bgp_neighbors_cmd,
        "show bgp neighbors",
        SHOW_STR
        BGP_STR
-       "Detailed information on TCP and BGP neighbor connections\n")
+       "Detailed information on TCP and BGP neighbor connections\n");
 
 ALIAS (show_ip_bgp_neighbors,
        show_bgp_ipv6_neighbors_cmd,
@@ -6859,7 +6941,7 @@ ALIAS (show_ip_bgp_neighbors,
        SHOW_STR
        BGP_STR
        "Address family\n"
-       "Detailed information on TCP and BGP neighbor connections\n")
+       "Detailed information on TCP and BGP neighbor connections\n");
 
 DEFUN (show_ip_bgp_neighbors_peer,
        show_ip_bgp_neighbors_peer_cmd,
@@ -6885,7 +6967,7 @@ ALIAS (show_ip_bgp_neighbors_peer,
        "Address Family modifier\n"
        "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
-       "Neighbor to display information about\n")
+       "Neighbor to display information about\n");
 
 ALIAS (show_ip_bgp_neighbors_peer,
        show_ip_bgp_vpnv4_all_neighbors_peer_cmd,
@@ -6896,7 +6978,7 @@ ALIAS (show_ip_bgp_neighbors_peer,
        "Display VPNv4 NLRI specific information\n"
        "Display information about all VPNv4 NLRIs\n"
        "Detailed information on TCP and BGP neighbor connections\n"
-       "Neighbor to display information about\n")
+       "Neighbor to display information about\n");
 
 ALIAS (show_ip_bgp_neighbors_peer,
        show_ip_bgp_vpnv4_rd_neighbors_peer_cmd,
@@ -6907,7 +6989,7 @@ ALIAS (show_ip_bgp_neighbors_peer,
        "Display VPNv4 NLRI specific information\n"
        "Display information about all VPNv4 NLRIs\n"
        "Detailed information on TCP and BGP neighbor connections\n"
-       "Neighbor to display information about\n")
+       "Neighbor to display information about\n");
 
 ALIAS (show_ip_bgp_neighbors_peer,
        show_bgp_neighbors_peer_cmd,
@@ -6916,7 +6998,7 @@ ALIAS (show_ip_bgp_neighbors_peer,
        BGP_STR
        "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
-       "Neighbor to display information about\n")
+       "Neighbor to display information about\n");
 
 ALIAS (show_ip_bgp_neighbors_peer,
        show_bgp_ipv6_neighbors_peer_cmd,
@@ -6926,7 +7008,7 @@ ALIAS (show_ip_bgp_neighbors_peer,
        "Address family\n"
        "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
-       "Neighbor to display information about\n")
+       "Neighbor to display information about\n");
 
 DEFUN (show_ip_bgp_instance_neighbors,
        show_ip_bgp_instance_neighbors_cmd,
@@ -7321,7 +7403,7 @@ ALIAS (no_bgp_redistribute_ipv4_rmap_metric,
        "Metric for redistributed routes\n"
        "Default metric\n"
        "Route map reference\n"
-       "Pointer to route-map entries\n")
+       "Pointer to route-map entries\n");
 
 #ifdef HAVE_IPV6
 DEFUN (bgp_redistribute_ipv6,
@@ -7575,7 +7657,7 @@ ALIAS (no_bgp_redistribute_ipv6_rmap_metric,
        "Metric for redistributed routes\n"
        "Default metric\n"
        "Route map reference\n"
-       "Pointer to route-map entries\n")
+       "Pointer to route-map entries\n");
 #endif /* HAVE_IPV6 */
 
 int
@@ -7615,39 +7697,39 @@ bgp_config_write_redistribute (struct vty *vty, struct bgp *bgp, afi_t afi,
 
 /* BGP node structure. */
 struct cmd_node bgp_node =
-{
-  BGP_NODE,
-  "%s(config-router)# ",
-  1,
-};
+  {
+    BGP_NODE,
+    "%s(config-router)# ",
+    1,
+  };
 
 struct cmd_node bgp_ipv4_unicast_node =
-{
-  BGP_IPV4_NODE,
-  "%s(config-router-af)# ",
-  1,
-};
+  {
+    BGP_IPV4_NODE,
+    "%s(config-router-af)# ",
+    1,
+  };
 
 struct cmd_node bgp_ipv4_multicast_node =
-{
-  BGP_IPV4M_NODE,
-  "%s(config-router-af)# ",
-  1,
-};
+  {
+    BGP_IPV4M_NODE,
+    "%s(config-router-af)# ",
+    1,
+  };
 
 struct cmd_node bgp_ipv6_unicast_node = 
-{
-  BGP_IPV6_NODE,
-  "%s(config-router-af)# ",
-  1,
-};
+  {
+    BGP_IPV6_NODE,
+    "%s(config-router-af)# ",
+    1,
+  };
 
 struct cmd_node bgp_vpnv4_node =
-{
-  BGP_VPNV4_NODE,
-  "%s(config-router-af)# ",
-  1
-};
+  {
+    BGP_VPNV4_NODE,
+    "%s(config-router-af)# ",
+    1
+  };
 
 void
 bgp_vty_init ()
@@ -7741,6 +7823,10 @@ bgp_vty_init ()
   /* "bgp bestpath as-path ignore" commands */
   install_element (BGP_NODE, &bgp_bestpath_aspath_ignore_cmd);
   install_element (BGP_NODE, &no_bgp_bestpath_aspath_ignore_cmd);
+
+  /* "bgp log-neighbor-changes" commands */
+  install_element (BGP_NODE, &bgp_log_neighbor_changes_cmd);
+  install_element (BGP_NODE, &no_bgp_log_neighbor_changes_cmd);
 
   /* "bgp bestpath med" commands */
   install_element (BGP_NODE, &bgp_bestpath_med_cmd);
@@ -8170,30 +8256,45 @@ bgp_vty_init ()
 
   /* "neighbor maximum-prefix" commands. */
   install_element (BGP_NODE, &neighbor_maximum_prefix_cmd);
+  install_element (BGP_NODE, &neighbor_maximum_prefix_threshold_cmd);
   install_element (BGP_NODE, &neighbor_maximum_prefix_warning_cmd);
+  install_element (BGP_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
   install_element (BGP_NODE, &no_neighbor_maximum_prefix_cmd);
   install_element (BGP_NODE, &no_neighbor_maximum_prefix_val_cmd);
   install_element (BGP_NODE, &no_neighbor_maximum_prefix_val2_cmd);
+  install_element (BGP_NODE, &no_neighbor_maximum_prefix_val3_cmd);
   install_element (BGP_IPV4_NODE, &neighbor_maximum_prefix_cmd);
+  install_element (BGP_IPV4_NODE, &neighbor_maximum_prefix_threshold_cmd);
   install_element (BGP_IPV4_NODE, &neighbor_maximum_prefix_warning_cmd);
+  install_element (BGP_IPV4_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
   install_element (BGP_IPV4_NODE, &no_neighbor_maximum_prefix_cmd);
   install_element (BGP_IPV4_NODE, &no_neighbor_maximum_prefix_val_cmd);
   install_element (BGP_IPV4_NODE, &no_neighbor_maximum_prefix_val2_cmd);
+  install_element (BGP_IPV4_NODE, &no_neighbor_maximum_prefix_val3_cmd);
   install_element (BGP_IPV4M_NODE, &neighbor_maximum_prefix_cmd);
+  install_element (BGP_IPV4M_NODE, &neighbor_maximum_prefix_threshold_cmd);
   install_element (BGP_IPV4M_NODE, &neighbor_maximum_prefix_warning_cmd);
+  install_element (BGP_IPV4M_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
   install_element (BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_cmd);
   install_element (BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_val_cmd);
   install_element (BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_val2_cmd);
+  install_element (BGP_IPV4M_NODE, &no_neighbor_maximum_prefix_val3_cmd);
   install_element (BGP_IPV6_NODE, &neighbor_maximum_prefix_cmd);
+  install_element (BGP_IPV6_NODE, &neighbor_maximum_prefix_threshold_cmd);
   install_element (BGP_IPV6_NODE, &neighbor_maximum_prefix_warning_cmd);
+  install_element (BGP_IPV6_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
   install_element (BGP_IPV6_NODE, &no_neighbor_maximum_prefix_cmd);
   install_element (BGP_IPV6_NODE, &no_neighbor_maximum_prefix_val_cmd);
   install_element (BGP_IPV6_NODE, &no_neighbor_maximum_prefix_val2_cmd);
+  install_element (BGP_IPV6_NODE, &no_neighbor_maximum_prefix_val3_cmd);
   install_element (BGP_VPNV4_NODE, &neighbor_maximum_prefix_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_maximum_prefix_threshold_cmd);
   install_element (BGP_VPNV4_NODE, &neighbor_maximum_prefix_warning_cmd);
+  install_element (BGP_VPNV4_NODE, &neighbor_maximum_prefix_threshold_warning_cmd);
   install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_cmd);
   install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_val_cmd);
   install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_val2_cmd);
+  install_element (BGP_VPNV4_NODE, &no_neighbor_maximum_prefix_val3_cmd);
 
   /* "neighbor allowas-in" */
   install_element (BGP_NODE, &neighbor_allowas_in_cmd);
@@ -8705,7 +8806,7 @@ ALIAS (ip_community_list_standard,
        COMMUNITY_LIST_STR
        "Community list number (standard)\n"
        "Specify community to reject\n"
-       "Specify community to accept\n")
+       "Specify community to accept\n");
 
 DEFUN (ip_community_list_expanded,
        ip_community_list_expanded_cmd,
@@ -8742,7 +8843,7 @@ ALIAS (ip_community_list_name_standard,
        "Add a standard community-list entry\n"
        "Community list name\n"
        "Specify community to reject\n"
-       "Specify community to accept\n")
+       "Specify community to accept\n");
 
 DEFUN (ip_community_list_name_expanded,
        ip_community_list_name_expanded_cmd,
@@ -9059,7 +9160,7 @@ ALIAS (ip_extcommunity_list_standard,
        EXTCOMMUNITY_LIST_STR
        "Extended Community list number (standard)\n"
        "Specify community to reject\n"
-       "Specify community to accept\n")
+       "Specify community to accept\n");
 
 DEFUN (ip_extcommunity_list_expanded,
        ip_extcommunity_list_expanded_cmd,
@@ -9096,7 +9197,7 @@ ALIAS (ip_extcommunity_list_name_standard,
        "Specify standard extcommunity-list\n"
        "Extended Community list name\n"
        "Specify community to reject\n"
-       "Specify community to accept\n")
+       "Specify community to accept\n");
 
 DEFUN (ip_extcommunity_list_name_expanded,
        ip_extcommunity_list_name_expanded_cmd,
@@ -9364,11 +9465,11 @@ community_list_config_write (struct vty *vty)
 }
 
 struct cmd_node community_list_node =
-{
-  COMMUNITY_LIST_NODE,
-  "",
-  1				/* Export to vtysh.  */
-};
+  {
+    COMMUNITY_LIST_NODE,
+    "",
+    1				/* Export to vtysh.  */
+  };
 
 void
 community_list_vty ()

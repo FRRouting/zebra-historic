@@ -193,6 +193,13 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *),
 	  continue;
 	}
 
+      if (snl.nl_pid != 0)
+	{
+	  zlog (NULL, LOG_ERR, "Ignoring non kernel message from pid %u",
+		snl.nl_pid);
+	  continue;
+	}
+
       if (status == 0)
 	{
 	  zlog (NULL, LOG_ERR, "%s EOF", nl->name);
@@ -809,7 +816,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       if (ifp == NULL)
 	{
 	  zlog (NULL, LOG_WARNING, "interface %s is deleted but can't find",
-		ifp->name);
+                name);
 	  return 0;
 	}
       
@@ -1083,7 +1090,9 @@ netlink_route (int cmd, int family, void *dest, int length, void *gate,
 
   if (cmd == RTM_NEWROUTE) 
     {
+#if 0
       req.r.rtm_protocol = RTPROT_ZEBRA;
+#endif
       req.r.rtm_scope = RT_SCOPE_UNIVERSE;
 
       if (discard)
@@ -1144,6 +1153,10 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib,
   req.r.rtm_family = family;
   req.r.rtm_table = rib->table;
   req.r.rtm_dst_len = p->prefixlen;
+
+#ifdef RTM_F_EQUALIZE
+  req.r.rtm_flags |= RTM_F_EQUALIZE;
+#endif /* RTM_F_EQUALIZE */
 
   if (rib->flags & ZEBRA_FLAG_BLACKHOLE)
     discard = 1;

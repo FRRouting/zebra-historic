@@ -307,6 +307,33 @@ bgp_uptime_reset (struct peer *peer)
   peer->uptime = time (NULL);
 }
 
+/* BGP Peer Down Cause */
+char *peer_down_str[] =
+{
+  "",
+  "Router ID changed",
+  "Remote AS changed",
+  "Local AS change",
+  "Cluster ID changed",
+  "Confederation identifier changed",
+  "Confederation peer changed",
+  "RR client config change",
+  "RS client config change",
+  "Update source change",
+  "Address family activated",
+  "Admin. shutdown",
+  "User reset",
+  "BGP Notification received",
+  "BGP Notification send",
+  "Peer closed the session",
+  "Neighbor deleted",
+  "Peer-group add member",
+  "Peer-group delete member",
+  "Capability changed",
+  "Passive config change",
+  "Multihop config change"
+};
+
 /* Administrative BGP peer stop event. */
 int
 bgp_stop (struct peer *peer)
@@ -322,6 +349,15 @@ bgp_stop (struct peer *peer)
       established = 1;
       peer->dropped++;
       bgp_fsm_change_status (peer, Idle);
+
+      /* bgp log-neighbor-changes of neighbor Down */
+      if (bgp_flag_check (peer->bgp, BGP_FLAG_LOG_NEIGHBOR_CHANGES))
+	zlog_info ("%%ADJCHANGE: neighbor %s Down %s", peer->host,
+		   peer_down_str [(int) peer->last_reset]);
+
+      /* set last reset time */
+      peer->resettime = time (NULL);
+
 #ifdef HAVE_SNMP
       bgpTrapBackwardTransition (peer);
 #endif /* HAVE_SNMP */
@@ -629,6 +665,11 @@ bgp_establish (struct peer *peer)
   /* Increment established count. */
   peer->established++;
   bgp_fsm_change_status (peer, Established);
+
+  /* bgp log-neighbor-changes of neighbor Up */
+  if (bgp_flag_check (peer->bgp, BGP_FLAG_LOG_NEIGHBOR_CHANGES))
+    zlog_info ("%%ADJCHANGE: neighbor %s Up", peer->host);
+
 #ifdef HAVE_SNMP
   bgpTrapEstablished (peer);
 #endif /* HAVE_SNMP */

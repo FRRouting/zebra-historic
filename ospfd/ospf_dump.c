@@ -795,7 +795,7 @@ ALIAS (debug_ospf_packet,
        "OSPF all packets\n"
        "Packet sent\n"
        "Packet received\n"
-       "Detail information\n")
+       "Detail information\n");
 
 ALIAS (debug_ospf_packet,
        debug_ospf_packet_send_recv_detail_cmd,
@@ -811,7 +811,7 @@ ALIAS (debug_ospf_packet,
        "OSPF all packets\n"
        "Packet sent\n"
        "Packet received\n"
-       "Detail Information\n")
+       "Detail Information\n");
        
 
 DEFUN (no_debug_ospf_packet,
@@ -900,7 +900,7 @@ ALIAS (no_debug_ospf_packet,
        "OSPF all packets\n"
        "Packet sent\n"
        "Packet received\n"
-       "Detail Information\n")
+       "Detail Information\n");
 
 ALIAS (no_debug_ospf_packet,
        no_debug_ospf_packet_send_recv_detail_cmd,
@@ -917,7 +917,7 @@ ALIAS (no_debug_ospf_packet,
        "OSPF all packets\n"
        "Packet sent\n"
        "Packet received\n"
-       "Detail Information\n")
+       "Detail Information\n");
 
 
 DEFUN (debug_ospf_ism,
@@ -968,7 +968,7 @@ ALIAS (debug_ospf_ism,
        "OSPF Interface State Machine\n"
        "ISM Status Information\n"
        "ISM Event Information\n"
-       "ISM TImer Information\n")
+       "ISM TImer Information\n");
 
 DEFUN (no_debug_ospf_ism,
        no_debug_ospf_ism_cmd,
@@ -1019,7 +1019,7 @@ ALIAS (no_debug_ospf_ism,
        "OSPF Interface State Machine\n"
        "ISM Status Information\n"
        "ISM Event Information\n"
-       "ISM Timer Information\n")
+       "ISM Timer Information\n");
 
 
 DEFUN (debug_ospf_nsm,
@@ -1070,7 +1070,7 @@ ALIAS (debug_ospf_nsm,
        "OSPF Neighbor State Machine\n"
        "NSM Status Information\n"
        "NSM Event Information\n"
-       "NSM Timer Information\n")
+       "NSM Timer Information\n");
 
 DEFUN (no_debug_ospf_nsm,
        no_debug_ospf_nsm_cmd,
@@ -1122,7 +1122,7 @@ ALIAS (no_debug_ospf_nsm,
        "OSPF Interface State Machine\n"
        "NSM Status Information\n"
        "NSM Event Information\n"
-       "NSM Timer Information\n")
+       "NSM Timer Information\n");
 
 
 DEFUN (debug_ospf_lsa,
@@ -1178,7 +1178,7 @@ ALIAS (debug_ospf_lsa,
        "LSA Generation\n"
        "LSA Flooding\n"
        "LSA Install/Delete\n"
-       "LSA Refresh\n")
+       "LSA Refresh\n");
 
 DEFUN (no_debug_ospf_lsa,
        no_debug_ospf_lsa_cmd,
@@ -1235,7 +1235,7 @@ ALIAS (no_debug_ospf_lsa,
        "LSA Generation\n"
        "LSA Flooding\n"
        "LSA Install/Delete\n"
-       "LSA Refres\n")
+       "LSA Refres\n");
 
 
 DEFUN (debug_ospf_zebra,
@@ -1281,7 +1281,7 @@ ALIAS (debug_ospf_zebra,
        OSPF_STR
        "OSPF Zebra information\n"
        "Zebra interface\n"
-       "Zebra redistribute\n")
+       "Zebra redistribute\n");
 
 DEFUN (no_debug_ospf_zebra,
        no_debug_ospf_zebra_cmd,
@@ -1328,7 +1328,7 @@ ALIAS (no_debug_ospf_zebra,
        OSPF_STR
        "OSPF Zebra information\n"
        "Zebra interface\n"
-       "Zebra redistribute\n")
+       "Zebra redistribute\n");
 
 DEFUN (debug_ospf_event,
        debug_ospf_event_cmd,
