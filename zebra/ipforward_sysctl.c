@@ -47,6 +47,48 @@ ipforward ()
   return ipforwarding;
 }
 
+int
+ipforward_on ()
+{
+  int mib [MIB_SIZ];
+  int ipforwarding = 1;
+  int len;
+
+  mib [0] = CTL_NET;
+  mib [1] = PF_INET;
+  mib [2] = IPPROTO_IP;
+  mib [3] = IPCTL_FORWARDING;
+
+  len = sizeof ipforwarding;
+  if (sysctl (mib, MIB_SIZ, NULL, NULL, &ipforwarding, len) < 0) 
+    {
+      zlog (NULL, LOG_WARNING, "can't set ipforwarding on");
+      return -1;
+    }
+  return ipforwarding;
+}
+
+int
+ipforward_off ()
+{
+  int mib [MIB_SIZ];
+  int ipforwarding = 0;
+  int len;
+
+  mib [0] = CTL_NET;
+  mib [1] = PF_INET;
+  mib [2] = IPPROTO_IP;
+  mib [3] = IPCTL_FORWARDING;
+
+  len = sizeof ipforwarding;
+  if (sysctl (mib, MIB_SIZ, NULL, NULL, &ipforwarding, len) < 0) 
+    {
+      zlog (NULL, LOG_WARNING, "can't set ipforwarding on");
+      return -1;
+    }
+  return ipforwarding;
+}
+
 #ifdef HAVE_IPV6
 int
 ipforward_ipv6 ()
@@ -67,6 +109,58 @@ ipforward_ipv6 ()
 
   len = sizeof ip6forwarding;
   if (sysctl (mib, MIB_SIZ, &ip6forwarding, &len, 0, 0) < 0) 
+    {
+      log_warn ("can't get ip6forwarding value\n");
+      return -1;
+    }
+  return ip6forwarding;
+}
+
+int
+ipforward_ipv6_on ()
+{
+  int mib [MIB_SIZ];
+  int ip6forwarding = 1;
+  int len;
+
+  mib [0] = CTL_NET;
+  mib [1] = PF_INET6;
+#ifdef KAME
+  mib [2] = IPPROTO_IPV6;
+  mib [3] = IPV6CTL_FORWARDING;
+#else /* NOT KAME */
+  mib [2] = IPPROTO_IP;
+  mib [3] = IP6CTL_FORWARDING;
+#endif /* KAME */
+
+  len = sizeof ip6forwarding;
+  if (sysctl (mib, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
+    {
+      log_warn ("can't get ip6forwarding value\n");
+      return -1;
+    }
+  return ip6forwarding;
+}
+
+int
+ipforward_ipv6_off ()
+{
+  int mib [MIB_SIZ];
+  int ip6forwarding = 0;
+  int len;
+
+  mib [0] = CTL_NET;
+  mib [1] = PF_INET6;
+#ifdef KAME
+  mib [2] = IPPROTO_IPV6;
+  mib [3] = IPV6CTL_FORWARDING;
+#else /* NOT KAME */
+  mib [2] = IPPROTO_IP;
+  mib [3] = IP6CTL_FORWARDING;
+#endif /* KAME */
+
+  len = sizeof ip6forwarding;
+  if (sysctl (mib, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
     {
       log_warn ("can't get ip6forwarding value\n");
       return -1;

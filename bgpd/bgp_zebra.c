@@ -183,50 +183,46 @@ zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       if (command == ZEBRA_IPV4_ROUTE_ADD)
 	nlri_process ((struct prefix *)&p, bgp_info);
       else
-	;
+	nlri_delete (peer_self, (struct prefix *)&p);
     }
   return 0;
 }
 
 #ifdef HAVE_IPV6
-#include "buffer.h"		/* for GETL */
-
 /* Zebra route add and delete treatment. */
 int
 zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 {
   u_char type;
   struct in6_addr nexthop;
-  u_char *pnt;
   u_char *lim;
   struct stream *s;
 
   s = zebra->ibuf;
 
-  pnt = stream_pnt (s);
-  lim = pnt + length;
+  lim = stream_pnt (s) + length;
 
   /* Fetch type and nexthop first. */
-  type = *pnt++;
-  memcpy(&nexthop, pnt, sizeof (struct in6_addr));
-  pnt += sizeof (struct in6_addr);
+  type = stream_getc (s);
+  memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
+  stream_forward (s, sizeof (struct in6_addr));
 
-  /* Then fetch IPv4 prefixes. */
-  while (pnt < lim)
+  /* Then fetch IPv6 prefixes. */
+  while (stream_pnt (s) < lim)
     {
       int size;
       struct prefix_ipv6 p;
       struct bgp_info *bgp_info;
       unsigned int ifindex;
 
-      GETL (ifindex, pnt);
+      ifindex = stream_getl (s);
 
       bzero (&p, sizeof (struct prefix_ipv6));
       p.family = AF_INET6;
-      p.prefixlen = *pnt++;
+      p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, pnt, size);
-      pnt += size;
+      memcpy (&p.prefix, stream_pnt (s), size);
+      stream_forward (s, size);
 
       bgp_info = bgp_info_new ();
       bgp_info->type = type;
@@ -236,7 +232,7 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
       if (command == ZEBRA_IPV6_ROUTE_ADD)
 	nlri_process ((struct prefix *)&p, bgp_info);
       else
-	;
+	nlri_delete (peer_self, (struct prefix *)&p);
     }
   return 0;
 }

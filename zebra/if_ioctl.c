@@ -48,26 +48,28 @@
 void
 if_get_index (struct interface *ifp)
 {
-  int ret;
-  static int fake_index = 1;
-
   struct ifreq ifreq;
 
   ifreq_set_name (&ifreq, ifp);
   
 #ifdef SIOCGIFINDEX
-  ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
+  {
+    int ret;
+    static int fake_index = 1;
 
-  /* Make fake index for the interface */
-  if (ret < 0)
-    {
-      ifp->index= fake_index++;
-      return;
-    }
-  ifp->index = ifreq.ifr_ifindex;
-  /* If there is method to get interface's index. Make fake index for
-     the interface. */
-  ifp->index= fake_index++;
+    ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
+
+    /* Make fake index for the interface */
+    if (ret < 0)
+      {
+	ifp->index= fake_index++;
+	return;
+      }
+    ifp->index = ifreq.ifr_ifindex;
+    /* If there is method to get interface's index. Make fake index for
+       the interface. */
+    ifp->index= fake_index++;
+  }
 #endif /* SIOCGIFINDEX */
 }
 

@@ -25,6 +25,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "linklist.h"
 #include "prefix.h"
 #include "stream.h"
+#include "table.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
@@ -36,8 +37,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
+
+extern unsigned long ospf_debug_nsm;
+
 
-/* OSPF NSM functions. */
+/* OSPF NSM Timer functions. */
 
 int
 ospf_inactivity_timer (struct thread *thread)
@@ -45,6 +49,7 @@ ospf_inactivity_timer (struct thread *thread)
   struct ospf_neighbor *nbr;
 
   nbr = THREAD_ARG (thread);
+  nbr->t_inactivity = NULL;
 
   OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_InactivityTimer);
 
@@ -55,10 +60,71 @@ ospf_inactivity_timer (struct thread *thread)
 }
 
 int
+ospf_db_desc_timer (struct thread *thread)
+{
+  struct ospf_interface *oi;
+  struct ospf_neighbor *nbr;
+
+  nbr = THREAD_ARG (thread);
+  nbr->t_db_desc = NULL;
+
+  oi = nbr->oi;
+
+  zlog (NULL, LOG_INFO, "NSM [%s]: Timer (DD Retransmit timer expire)",
+	nbr->host);
+
+  /* Sending DD packet. */
+  OSPF_NSM_WRITE_ON (nbr->t_write, ospf_db_desc_send, oi->fd);
+
+  /* DD Retransmit timer set. */
+  OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
+
+  return 0;
+}
+
+/* Hook function called after ospf NSM event is occured. */
+
+void
+nsm_timer_set (struct ospf_neighbor *nbr)
+{
+  switch (nbr->status)
+    {
+    case NSM_Down:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    case NSM_Attempt:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    case NSM_Init:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    case NSM_TwoWay:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    case NSM_ExStart:
+      OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
+      break;
+    case NSM_Exchange:
+      OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
+      break;
+    case NSM_Loading:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    case NSM_Full:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    default:
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      break;
+    }
+}
+
+
+/* OSPF NSM functions. */
+int
 nsm_ignore (struct ospf_neighbor *nbr)
 {
-  if (debug (DEBUG_OSPF_NSM))
-    zlog (NULL, LOG_INFO, "NSM [%s]: nsm_ignore called", nbr->host);
+  zlog (NULL, LOG_INFO, "NSM [%s]: nsm_ignore called", nbr->host);
 
   return 0;
 }
@@ -114,8 +180,8 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
       else
 	nbr->dd_seqnum++;
 
+      /* Send Initial DD packet. */
       OSPF_NSM_WRITE_ON (nbr->t_write, ospf_db_desc_send, oi->fd);
-      /* DD packet retransmitsion timer set. */
     }
 
   /* Schedule DR Election. */
@@ -127,16 +193,53 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
 int
 nsm_negotiation_done (struct ospf_neighbor *nbr)
 {
+  struct ospf_area *area;
+  struct route_node *rn;
+
+  area = nbr->oi->area;
+
+  /* List router-LSAs. */
+  for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      list_add_node (nbr->db_summary, rn->info);
+    }
+
+  /* List network-LSAs. */
+  for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      list_add_node (nbr->db_summary, rn->info);
+    }
+
+  /* List summary-LSAs. */
+  for (rn = route_top (area->summary_lsa); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      list_add_node (nbr->db_summary, rn->info);
+    }
+
   return 0;
 }
 
 int
 nsm_exchange_done (struct ospf_neighbor *nbr)
 {
+  struct ospf_interface *oi;
+
+  oi = nbr->oi;
+
   if (list_isempty (nbr->ls_request))
     return NSM_Full;
 
   /* Send Link State Request. */
+  OSPF_NSM_WRITE_ON (nbr->t_write, ospf_ls_req_send, oi->fd);
 
   return NSM_Loading;
 }
@@ -144,6 +247,9 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
 int
 nsm_bad_ls_req (struct ospf_neighbor *nbr)
 {
+  /* Reset flags. */
+  nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
+
   return 0;
 }
 
@@ -156,6 +262,9 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
 int
 nsm_seq_number_mismatch (struct ospf_neighbor *nbr)
 {
+  /* Reset flags. */
+  nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
+
   return 0;
 }
 
@@ -365,9 +474,10 @@ void
 nsm_change_status (struct ospf_neighbor *nbr, int status)
 {
   /* Logging change of status. */
-  zlog (NULL, LOG_INFO, "NSM Status change [%s] %s -> %s", nbr->host,
-	LOOKUP (ospf_nsm_status_msg, nbr->status),
-	LOOKUP (ospf_nsm_status_msg, status));
+  if (ospf_debug_nsm)
+    zlog (NULL, LOG_INFO, "NSM Status change [%s] %s -> %s", nbr->host,
+	  LOOKUP (ospf_nsm_status_msg, nbr->status),
+	  LOOKUP (ospf_nsm_status_msg, status));
 
   nbr->status = status;
   /* Preserve old status? */
@@ -390,7 +500,7 @@ ospf_nsm_event (struct thread *thread)
   if (! next_state)
     next_state = NSM [nbr->status][event].next_state;
 
-  if (debug (DEBUG_OSPF_NSM))
+  if (0)
     zlog (NULL, LOG_INFO, "OSPF NSM[%s]: %s (%s)", nbr->host,
 	  LOOKUP (ospf_nsm_status_msg, nbr->status),
 	  ospf_nsm_event_str [event]);
@@ -400,7 +510,8 @@ ospf_nsm_event (struct thread *thread)
     nsm_change_status (nbr, next_state);
 
   /* Make sure timer is set. */
-  /*  nsm_timer_set (nbr); */
+  nsm_timer_set (nbr);
 
   return 0;
 }
+

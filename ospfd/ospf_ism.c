@@ -23,8 +23,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "thread.h"
 #include "linklist.h"
-#include "if.h"
 #include "prefix.h"
+#include "if.h"
 #include "table.h"
 #include "log.h"
 
@@ -37,6 +37,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
+
+extern unsigned long ospf_debug_ism;
+
 
 /* elect DR and BDR. Refer to RFC2319 section 9.4 */
 struct in_addr
@@ -252,7 +255,7 @@ ospf_hello_timer (struct thread *thread)
   struct ospf_interface *oi;
 
   oi = THREAD_ARG (thread);
-  oi->t_hello = 0;
+  oi->t_hello = NULL;
 
   zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Hello timer expire)",
 	oi->ifp->name);
@@ -272,7 +275,7 @@ ospf_wait_timer (struct thread *thread)
   struct ospf_interface *oi;
 
   oi = THREAD_ARG (thread);
-  oi->t_wait = 0;
+  oi->t_wait = NULL;
 
   zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Wait timer expire)",
 	oi->ifp->name);
@@ -282,7 +285,7 @@ ospf_wait_timer (struct thread *thread)
   return 0;
 }
 
-/* Hook function called after ospf event is occured. And vty's
+/* Hook function called after ospf ISM event is occured. And vty's
    network command invoke this function after making interface
    structure. */
 void
@@ -358,28 +361,24 @@ ism_stop (struct ospf_interface *oi)
 int
 ism_interface_up (struct ospf_interface *oi)
 {
-  struct ospf_lsa *lsa;
+  int next_state = 0;
 
   /* if network type is point-to-point, Point-to-MultiPoint or virtual link,
      the state transitions to Point-to-Point. */
   if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
       oi->type == OSPF_IFTYPE_POINTOMULTIPOINT ||
       oi->type == OSPF_IFTYPE_VIRTUALLINK)
-    return ISM_PointToPoint;
+    next_state = ISM_PointToPoint;
   /* Else if the router is not eligible to DR, the state transitions to
      DROther. */
   else if (oi->priority == 0) /* router is eligible? */
-    return ISM_DROther;
+    next_state = ISM_DROther;
   else
     /* Otherwise, the state transitions to Waiting. */
-    return ISM_Waiting;
-
-  /* Originate router-LSA. */
-  lsa = ospf_router_lsa (oi);
-  list_add_node (oi->area->router_lsa, lsa);
+    next_state = ISM_Waiting;
 
   /*  ospf_ism_event (t); */
-  return 0;
+  return next_state;
 }
 
 int
@@ -457,8 +456,7 @@ ism_neighbor_change (struct ospf_interface *oi)
 int
 ism_ignore (struct ospf_interface *oi)
 {
-  if (debug (DEBUG_OSPF_ISM))
-    zlog (NULL, LOG_INFO, "ISM [%s]: ism_ignore called", oi->ifp->name);
+  zlog (NULL, LOG_INFO, "ISM [%s]: ism_ignore called", oi->ifp->name);
 
   return 0;
 }
@@ -574,12 +572,30 @@ static char *ospf_ism_event_str[] =
 void
 ism_change_status (struct ospf_interface *oi, int status)
 {
+  struct ospf_lsa *lsa;
+
   /* Logging change of status. */
-  zlog (NULL, LOG_INFO, "ISM Status change [%s] %s -> %s", oi->ifp->name,
-	LOOKUP (ospf_ism_status_msg, oi->status),
-	LOOKUP (ospf_ism_status_msg, status));
+  if (ospf_debug_ism)
+    zlog (NULL, LOG_INFO, "ISM Status change [%s] %s -> %s", oi->ifp->name,
+	  LOOKUP (ospf_ism_status_msg, oi->status),
+	  LOOKUP (ospf_ism_status_msg, status));
 
   oi->status = status;
+
+  /* Originate router-LSA. */
+  if (oi->area)
+    {
+      lsa = ospf_router_lsa (oi);
+      ospf_add_router_lsa (oi->area, lsa);
+    }
+
+  /* Originate network-LSA. */
+  if (status == ISM_DR)
+    {
+      lsa = ospf_network_lsa (oi);
+      ospf_add_network_lsa (oi->area, lsa);
+    }
+
   /* Preserve old status? */
 }
 
@@ -600,7 +616,7 @@ ospf_ism_event (struct thread *thread)
   if (! next_state)
     next_state = ISM [oi->status][event].next_state;
 
-  if (debug (DEBUG_OSPF_ISM))
+  if (0)
     zlog (NULL, LOG_INFO, "OSPF ISM[%s]: %s (%s)", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  ospf_ism_event_str[event]);

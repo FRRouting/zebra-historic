@@ -28,7 +28,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define IPPROTO_OSPFIGP		89
 #endif /* IPPROTO_OSPFIGP */
 
+/* VTY port number. */
 #define OSPF_VTY_PORT	       2604
+
+/* IP TTL for OSPF protocol. */
+#define OSPF_IP_TTL		1
 
 /* Default configuration file name for ospfd. */
 #define OSPF_DEFAULT_CONFIG   "ospfd.conf"
@@ -44,9 +48,9 @@ enum
 #define OSPF_LS_REFRESH_TIME		      1800
 #define OSPF_MIN_LS_INTERVAL		         5
 #define OSPF_MIN_LS_ARRIVAL		         1
-#define OSPF_MAX_AGE			      3600
+#define OSPF_LSA_MAX_AGE		      3600
 #define OSPF_CHECK_AGE			       300
-#define OSPF_MAX_AGE_DIFF		       900
+#define OSPF_LSA_MAX_AGE_DIFF		       900
 #define OSPF_LS_INFINITY		  0xffffff
 #define OSPF_DEFAULT_DESTINATION	0x00000000	/* 0.0.0.0 */
 #define OSPF_INITIAL_SEQUENCE_NUMBER	0x80000001
@@ -67,7 +71,7 @@ enum
 #define OSPF_ROUTER_DEAD_INTERVAL_DEFAULT  40
 #define OSPF_HELLO_INTERVAL_DEFAULT	   10
 #define OSPF_ROUTER_PRIORITY_DEFAULT	    1
-#define OSPF_RETRANSMIT_INTERVAL_DEFAULT   30
+#define OSPF_RETRANSMIT_INTERVAL_DEFAULT    5
 #define OSPF_TRANSMIT_DELAY_DEFAULT         1
 
 /* Area ID Format type. */
@@ -92,9 +96,10 @@ enum
 #define OSPF_DD_FLAG_M			 0x02
 #define OSPF_DD_FLAG_I			 0x04
 
-/* OSPF Master/Slave. */
-#define OSPF_DD_SLAVE		 	 0x00
-#define OSPF_DD_MASTER		 	 0x01
+/* OSPF Database Description Initial flags. */
+#define OSPF_DD_INITIALIZE	 	 0
+#define OSPF_DD_EXCHANGING	 	 1
+#define OSPF_DD_FINISHED		 2
 
 /* OSPF instance structure. */
 struct ospf
@@ -107,6 +112,8 @@ struct ospf
   struct route_table *networks;		/* OSPF config networks. */
 
   int ls_seqnum;			/* LS Sequence Number. */
+
+  struct route_table *external_lsa;	/* AS-External-LSAs. */
 };
 
 /* OSPF area structure. */
@@ -124,11 +131,11 @@ struct ospf_area
   int auth_type;			/* Authentication type. */
 
   /* LSAs. */
-  list router_lsa;
-  list network_lsa;
-  list summary_lsa;
+  struct route_table *router_lsa;	/* Router-LSAs. */
+  struct route_table *network_lsa;	/* Network-LSAs. */
+  struct route_table *summary_lsa;	/* Summary-LSAs. */
 
-  /* shortest path tree. */
+  /* Shortest Path Tree. */
   /* TransitCapability. */
 };
 

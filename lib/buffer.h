@@ -66,14 +66,6 @@ struct buffer_data
 #define BUFFER_STREAM      1
 #define BUFFER_VTY         2
 
-#define GETL(val, pnt) \
-do { \
-  (val) = (u_int32_t)(*(pnt)++) << 24; \
-  (val) |= (u_int32_t)(*(pnt)++) << 16; \
-  (val) |= (u_int32_t)(*(pnt)++) << 8; \
-  (val) |= (u_int32_t)(*(pnt)++); \
-} while (0)
-
 #define PUTC(val, pnt) \
   (*(u_char *)(pnt)++) = (u_char)(val)
 

@@ -21,10 +21,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPF_NETWORK_H
 #define _ZEBRA_OSPF_NETWORK_H
 
-/* Macros. */
-#define IPV4_ADDR_GT(X,Y)	(ntohl ((X).s_addr) > ntohl ((Y).s_addr))
-#define IPV4_ADDR_LT(X,Y)	(ntohl ((X).s_addr) < ntohl ((Y).s_addr))
-
 /* Prototypes. */
 int ospf_serv_sock (struct interface *, int);
 int ospf_serv_sock_init (struct interface *, struct prefix *);

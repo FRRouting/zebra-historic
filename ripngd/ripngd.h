@@ -128,6 +128,9 @@ struct ripng_info
   /* This route's type.  Static, ripng or aggregate. */
   u_char type;
 
+  /* Sub type for static route. */
+  u_char sub_type;
+
   /* RIPng specific information */
   struct in6_addr nexthop;	
   struct in6_addr gateway;
@@ -172,6 +175,7 @@ struct ripng_slot
 #define RIPNG_SLOT_RTE(R)           ((R)->rinfo[0])
 #define RIPNG_SLOT_STATIC(R)        ((R)->rinfo[1])
 #define RIPNG_SLOT_AGGREGATE(R)     ((R)->rinfo[2])
+#define RIPNG_SLOT_MAX              3
 
 enum event
 {
@@ -202,6 +206,7 @@ extern struct ripng *ripng;
 /* Prototypes. */
 void ripng_init ();
 void ripng_if_init ();
+void ripng_terminate ();
 
 struct ripng_info *ripng_info_new ();
 void ripng_info_free (struct ripng_info *rinfo);
@@ -219,5 +224,11 @@ ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 
 void
 zebra_start ();
+
+void
+ripng_route_add (int type, struct prefix_ipv6 *p);
+
+void
+ripng_route_delete (int type, struct prefix_ipv6 *p);
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

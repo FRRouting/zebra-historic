@@ -105,3 +105,4 @@ int ospf_nsm_event (struct thread *);
 void nsm_change_status (struct ospf_neighbor *, int);
 
 #endif /* _ZEBRA_OSPF_NSM_H */
+

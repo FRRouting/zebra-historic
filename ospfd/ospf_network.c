@@ -21,10 +21,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <zebra.h>
 
 #include "thread.h"
-#include "log.h"
 #include "linklist.h"
-#include "if.h"
 #include "prefix.h"
+#include "if.h"
+#include "sockunion.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
@@ -64,7 +64,7 @@ ospf_if_add_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
 	      (char *) &m, sizeof (struct ip_mreq));
 
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_ADD_MEMBERSHIP:%s",
+    zlog (NULL, LOG_WARNING, "can't setsockopt IP_ADD_MEMBERSHIP: %s",
 	  strerror (errno));
 
   zlog (NULL, LOG_INFO, "interface %s join AllSPFRouters Multicast group.",
@@ -88,7 +88,7 @@ ospf_if_drop_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
 		    (char *) &m, sizeof (struct ip_mreq));
 
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_DROP_MEMBERSHIP:%s",
+    zlog (NULL, LOG_WARNING, "can't setsockopt IP_DROP_MEMBERSHIP: %s",
 	  strerror (errno));
 
   zlog (NULL, LOG_INFO, "interface %s leave AllSPFRouters Multicast group.",
@@ -112,7 +112,7 @@ ospf_if_add_alldrouters (struct interface *ifp, int sock, struct prefix *p)
   ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 		    (char *) &m, sizeof (struct ip_mreq));
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_ADD_MEMBERSHIP:%s",
+    zlog (NULL, LOG_WARNING, "can't setsockopt IP_ADD_MEMBERSHIP: %s",
 	  strerror (errno));
 
   zlog (NULL, LOG_INFO, "interface %s join AllDRouters Multicast group.",
@@ -135,7 +135,7 @@ ospf_if_drop_alldrouters (struct interface *ifp, int sock, struct prefix *p)
   ret = setsockopt (sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
 		    (char *) &m, sizeof (struct ip_mreq));
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_DROP_MEMBERSHIP:%s\n",
+    zlog (NULL, LOG_WARNING, "can't setsockopt IP_DROP_MEMBERSHIP: %s",
 	  strerror (errno));
 
   zlog (NULL, LOG_INFO, "interface %s leave AllDRouters Multicast group.",
@@ -154,7 +154,7 @@ ospf_if_ipmulticast (int sock, struct prefix *p)
 
   ret = setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof (addr));
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_MULTICAST_IF:%s\n",
+    zlog (NULL, LOG_WARNING, "can't setsockopt IP_MULTICAST_IF: %s",
 	  strerror (errno));
 
   return ret;
@@ -180,6 +180,11 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
     }
 
   oi->fd = sock;
+
+  /* Set TTL to 1. */
+  ret = sockopt_ttl (AF_INET, sock, OSPF_IP_TTL);
+  if (ret < 0)
+    return ret;
 
   /* Point-to-Point and Broadcast Network should be joined to
      ALLSPFROUTERS multicast group. */

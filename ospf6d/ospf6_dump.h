@@ -36,6 +36,8 @@ extern char   *rlsatype_name[];
 char *print_lsahdr (struct lsa_hdr *);
 void ospf6_log_init ();
 char *inet4str(unsigned long);
+void log_pointer (const char *, ...);
+void log_spf (const char *, ...);
 
 #endif /* OSPF6_DUMP_H */
 

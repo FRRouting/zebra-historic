@@ -454,17 +454,14 @@ rvmsg_ok:
       return -1;
     }
 
-#ifdef DEBUG_OSPF6
   {
-    char *srcname, ntopbuf[32];
-    srcname = (char *)&src->sin6_addr;
+    char ntopbuf[32];
     zvlog_debug ("Recv %s from %s on %s",
                   mesg_name[ospf6_hdr->type],
-                  inet_ntop (src->sin6_family, srcname,
+                  inet_ntop (src->sin6_family, (char *)&src->sin6_addr,
                              ntopbuf, sizeof (ntopbuf)),
                   ospf6_if->interface->name);
   }
-#endif
 
   if (proc_ospf6_hdr(iov, ospf6_if) < 0)
     goto prmsg_bad;
@@ -752,7 +749,6 @@ ospf6_send (u_char msgtype, struct iovec *iov,
 
   num = sendmsg (ospf6_sock, &smsghdr, 0);
 
-#ifdef DEBUG_OSPF6
   {
     char *dstname, ntopbuf[32], ifnamebuf[16];
     struct ospf6_hdr *ospf6_hdr = (struct ospf6_hdr *)iov[0].iov_base;
@@ -763,7 +759,6 @@ ospf6_send (u_char msgtype, struct iovec *iov,
                             ntopbuf, sizeof (ntopbuf)),
                  if_indextoname (pktinfo->ipi6_ifindex, ifnamebuf));
   }
-#endif
 
   if (num != iov_totallen (iov))
     {
@@ -944,9 +939,8 @@ send_linkstate_ack (struct thread *thread)
     {
       p = (struct lsa_internal *) getdata (i);
       attach_lsa_hdr_to_iov (p, iov);
-#ifdef DEBUG_OSPF6
+
       zvlog_debug ("LSACK(delayed): %s", print_lsahdr (p->lsh));
-#endif
     }
 
   dst.sin6_family = AF_INET6;

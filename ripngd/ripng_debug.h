@@ -1,6 +1,6 @@
 /*
  * RIPng debug output routines
- * Copyright (C) 1998 Kunihiro Ishiguro
+ * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -23,31 +23,30 @@
 #ifndef _ZEBRA_RIPNG_DEBUG_H
 #define _ZEBRA_RIPNG_DEBUG_H
 
-/* Debug sort enumeration. */
-enum
-{
-  /* Debug option sort. */
-  DEBUG_EVENT  = 0x01,
-  DEBUG_PACKET = 0x02,
-  DEBUG_ACTION = 0x04,
-  DEBUG_ZEBRA   = 0x08,
-};
+/* Debug flags. */
+#define RIPNG_DEBUG_EVENT   0x01
 
-#if 0
-enum
-{
-  /* Debug direction. */
-  DEBUG_BOTH   = 0x01,
-  DEBUG_IN     = 0x02,
-  DEBUG_OUT    = 0x04,
+#define RIPNG_DEBUG_PACKET  0x01
+#define RIPNG_DEBUG_SEND    0x20
+#define RIPNG_DEBUG_RECV    0x40
+#define RIPNG_DEBUG_DETAIL  0x80
 
-  /* Debug detail. */
-  DEBUG_NORMAL = 0x01,
-  DEBUG_DETAIL = 0x02,
-};
-#endif /* 0 */
+#define RIPNG_DEBUG_ZEBRA   0x01
 
-int debug (unsigned int option);
+/* Debug related macro. */
+#define IS_RIPNG_DEBUG_EVENT  (ripng_debug_event & RIPNG_DEBUG_EVENT)
+
+#define IS_RIPNG_DEBUG_PACKET (ripng_debug_packet & RIPNG_DEBUG_PACKET)
+#define IS_RIPNG_DEBUG_SEND   (ripng_debug_packet & RIPNG_DEBUG_SEND)
+#define IS_RIPNG_DEBUG_RECV   (ripng_debug_packet & RIPNG_DEBUG_RECV)
+#define IS_RIPNG_DEBUG_DETAIL (ripng_debug_packet & RIPNG_DEBUG_DETAIL)
+
+#define IS_RIPNG_DEBUG_ZEBRA  (ripng_debug_zebra & RIPNG_DEBUG_ZEBRA)
+
+extern unsigned long ripng_debug_event;
+extern unsigned long ripng_debug_packet;
+extern unsigned long ripng_debug_zebra;
+
 void ripng_debug_init ();
 
 #endif /* _ZEBRA_RIPNG_DEBUG_H */

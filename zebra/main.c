@@ -33,6 +33,8 @@
 #include "memory.h"
 #include "log.h"
 
+#include "zebra/debug.h"
+
 /* Master of threads. */
 struct thread_master *master;
 
@@ -209,6 +211,7 @@ main (int argc, char **argv)
   zebra_init ();
   rib_init ();
   zebra_if_init ();
+  zebra_debug_init ();
   access_list_init ();
 
   /* Make kernel routing socket. */
@@ -216,7 +219,6 @@ main (int argc, char **argv)
   interface_list ();
   route_read ();
 
-  hostinfo_get ();
   sort_node ();
 
   /* Configuration file read*/

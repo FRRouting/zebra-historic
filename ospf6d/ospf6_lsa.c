@@ -49,20 +49,19 @@ malloc_lsa (struct lsa_hdr *lsh)
   struct lsa_hdr *retval;
   retval = (struct lsa_hdr *)XMALLOC(MTYPE_OSPF_LSA, ntohs (lsh->lsh_len));
   memset (retval, 0, ntohs (lsh->lsh_len));
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Allocate LSA Body(%#x[%#x]) for %s",
+
+  log_pointer ("Allocate LSA Body(%#x[%#x]) for %s",
                retval, ntohs (lsh->lsh_len), print_lsahdr (lsh));
-#endif /*DEBUG_LSAPTR*/
+
   return retval;
 }
 
 void
 free_lsa (struct lsa_hdr *lsh)
 {
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Free LSA Body(%#x) for %s",
+  log_pointer ("Free LSA Body(%#x) for %s",
                lsh, print_lsahdr (lsh));
-#endif /*DEBUG_LSAPTR*/
+
   XFREE (MTYPE_OSPF_LSA, lsh);
   return;
 }
@@ -74,10 +73,10 @@ malloc_lsa_internal_hdr (struct lsa_hdr *lsh)
   retval = (struct lsa_internal *)
     XMALLOC (MTYPE_OSPF_LSA, sizeof (struct lsa_internal));
   memset (retval, 0, sizeof (struct lsa_internal));
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Allocate LSA Internal Hdr(%#x[%#x]) for %s",
+
+  log_pointer ("Allocate LSA Internal Hdr(%#x[%#x]) for %s",
                retval, sizeof (struct lsa_internal), print_lsahdr (lsh));
-#endif /*DEBUG_LSAPTR*/
+
   return retval;
 }
 
@@ -90,10 +89,9 @@ free_lsa_internal_hdr (struct lsa_internal *lsi)
   assert (lsi->retransing_nbr);
   list_delete_all (lsi->retransing_nbr);
 
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Free LSA Internal Hdr(%#x) for %s",
+  log_pointer ("Free LSA Internal Hdr(%#x) for %s",
                lsi, print_lsahdr (lsi->lsh));
-#endif /*DEBUG_LSAPTR*/
+
   XFREE (MTYPE_OSPF_LSA, lsi);
   return;
 }
@@ -133,19 +131,21 @@ lsa_delete (struct lsa_internal *lsi)
       assert (lsi->ospf6_if);
       lsa_delete_from_list (lsi, lsi->ospf6_if->linklocal_lsa);
       break;
+
     case SCOPE_AREA:
       assert (lsi->area);
       lsa_delete_from_list (lsi, lsi->area->lsdb
                [typeindex(lsi->lsh->lsh_type)][hash(lsi->lsh->lsh_id)]);
       break;
+
     case SCOPE_AS:
       break;
+
     case SCOPE_RESERVED:
     default:
       zvlog_debug ("Not Reached!?");
       break;
     }
-
   return 0;
 }
 
@@ -337,9 +337,7 @@ lsa_install (struct lsa_internal *newp)
   if (oldp)
     {
       assert (oldp->lsh);
-#ifdef DEBUG_LSAPTR
-      zvlog_debug ("LSAPTR: Find Old One[%#x]", oldp);
-#endif /*DEBUG_LSAPTR*/
+      log_pointer ("Find Old One[%#x] in lsa_install()", oldp);
 
       /* XXX Do I have to put on the neighbor's retranslist ?
          I think so */
@@ -355,8 +353,8 @@ lsa_install (struct lsa_internal *newp)
       lsa_delete (oldp);
     }
 
-    switch (GET_LSASCOPE (newp->lsh->lsh_type))
-      {
+  switch (GET_LSASCOPE (newp->lsh->lsh_type))
+    {
       case SCOPE_LINKLOCAL:
         assert (newp->ospf6_if);
         list_add_node (newp->ospf6_if->linklocal_lsa, newp);
@@ -373,12 +371,10 @@ lsa_install (struct lsa_internal *newp)
       default:
         zvlog_warn ("Not Reached!?");
         break;
-      }
+    }
 
-#ifdef DEBUG_LSAPTR
-      zvlog_debug ("LSAPTR: new LSA[ihdr:%#x][body:%#x] Installed!",
-                   newp, newp->lsh);
-#endif /*DEBUG_LSAPTR*/
+  log_pointer ("new LSA[ihdr:%#x][body:%#x] Installed!",
+               newp, newp->lsh);
 
   newp->installed = now.tv_sec;
 
@@ -931,9 +927,7 @@ construct_network_lsa (struct ospf6_if *ospf6_if)
   space = sizeof (struct lsa_hdr) + sizeof (struct network_lsa)
     + sizeof (rtr_id_t) * (attached_rtr + 1);
   lsa = XMALLOC (MTYPE_OSPF_LSA, space);
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Alloc LSA body[%#x] for our Network-LSA", lsa);
-#endif /*DEBUG_LSAPTR*/
+  log_pointer ("LSAPTR: Alloc LSA body[%#x] for our Network-LSA", lsa);
   memset (lsa, 0, space);
 
   lsh = (struct lsa_hdr *) lsa;
@@ -1163,7 +1157,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
         }
       else
         {
-          zvlog_debug ("My Link-LSA: [%s]", print_lsahdr (lsi->lsh));
+          zvlog_debug ("My Link-LSA: %s", print_lsahdr (lsi->lsh));
           linklsa = (struct link_lsa *)(lsi->lsh + 1);
           p = (struct ospf6_prefix *)(linklsa + 1);
           for (i = 0; i < ntohl (linklsa->llsa_prefix_num);
@@ -1194,7 +1188,7 @@ int construct_intra_prefix_lsa (struct ospf6_if *ospf6_if)
         }
       else
         {
-          zvlog_debug ("My Link-LSA: [%s]", print_lsahdr (lsi->lsh));
+          zvlog_debug ("My Link-LSA: %s", print_lsahdr (lsi->lsh));
           linklsa = (struct link_lsa *)(lsi->lsh + 1);
           p = (struct ospf6_prefix *)(linklsa + 1);
           for (i = 0; i < ntohl (linklsa->llsa_prefix_num);

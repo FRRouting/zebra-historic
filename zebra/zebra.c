@@ -23,9 +23,7 @@
 #include <zebra.h>
 
 #include "prefix.h"
-#include "vector.h"
 #include "linklist.h"
-#include "vty.h"
 #include "command.h"
 #include "if.h"
 #include "thread.h"
@@ -41,23 +39,24 @@
 
 #include "zebra/zebra.h"
 #include "zebra/redistribute.h"
+#include "zebra/debug.h"
 
-/* This host's information. */
-struct
-{
-  /* IP forwarding */
-  int ipforward;
-
-  /* IPv6 capable host. */
-  int ipv6;
-  int ipv6forward;
-
-} hinfo;
+int ipforward ();
+int ipforward_on ();
+int ipforward_off ();
+#ifdef HAVE_IPV6
+int ipforward_ipv6 ();
+int ipforward_ipv6_on ();
+int ipforward_ipv6_off ();
+#endif /* HAVE_IPV6 */
 
 /* Event list of zebra. */
 enum event { ZEBRA_SERV, ZEBRA_READ, ZEBRA_WRITE };
 
 list client_list;
+
+/* Default rtm_table for all clients */
+int rtm_table_default;
 
 /* For logging of zebra meesages. */
 char *zebra_command_str [] =
@@ -76,30 +75,15 @@ char *zebra_command_str [] =
 
 void zebra_event (enum event event, int sock, struct zebra_client *client);
 
-/* Debug related variables and functions. */
-unsigned int debug_zebra_opt = 0;
-
-#define DEBUG_EVENT   0x01
-#define DEBUG_PACKET  0x02
-
 void
-debug_set (unsigned int option)
+zebra_forward_on ()
 {
-  debug_zebra_opt |= option;
+  ipforward_on ();
+#ifdef HAVE_IPV6
+  ipforward_ipv6_on ();
+#endif /* HAVE_IPV6 */
 }
 
-void
-debug_unset (unsigned int option)
-{
-  debug_zebra_opt &= ~option;
-}
-
-int
-debug_is_set (unsigned int option)
-{
-  return debug_zebra_opt & option;
-}     
-
 /* Zebra route add and delete treatment. */
 void
 zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
@@ -150,23 +134,23 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
   pnt = stream_pnt (client->ibuf);
   lim = pnt + length;
 
-  type = *pnt++;
-  memcpy (&nexthop, pnt, sizeof (struct in6_addr));
-  pnt += sizeof (struct in6_addr);
+  type = stream_getc (client->ibuf);
+  memcpy (&nexthop, stream_pnt (client->ibuf), sizeof (struct in6_addr));
+  stream_forward (client->ibuf, sizeof (struct in6_addr));
   
-  while (pnt < lim)
+  while (stream_pnt (client->ibuf) < lim)
     {
       int size;
       struct prefix_ipv6 p;
       
-      GETL(ifindex, pnt);
+      ifindex = stream_getl (client->ibuf);
 
       bzero (&p, sizeof (struct prefix_ipv6));
       p.family = AF_INET6;
-      p.prefixlen = *pnt++;
+      p.prefixlen = stream_getc (client->ibuf);
       size = PSIZE(p.prefixlen);
-      memcpy (&p.prefix, pnt, size);
-      pnt += size;
+      memcpy (&p.prefix, stream_pnt (client->ibuf), size);
+      stream_forward (client->ibuf, size);
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
 	rib_add_ipv6 (type, &p, &nexthop, ifindex, 0);
@@ -296,21 +280,17 @@ zebra_request_hostinfo (int sock)
   PUTL(ZEBRA_GET_HOSTINFO, pnt);
 
   /* Ip forwarding. 0 => OFF, 1 => ON */
-  *pnt++ = (hinfo.ipforward == 0 ? 0 : 1);
+  *pnt++ = ipforward ();
   
   /* ip forwarding6 . 0 => OFF, 1 => ON */
 #ifdef HAVE_IPV6
-  *pnt = (hinfo.ipv6forward == 0 ? 0 : 1);
+  *pnt = (ipforward_ipv6 () == 0 ? 0 : 1);
 #else
   *pnt = 0;
 #endif /* HAVE_IPV6*/
 
   writen (sock, buf, 10);
 }
-
-/* Default rtm_table for all clients */
-int rtm_table_default;
-
 
 /* Handler of zebra service request. */
 int
@@ -331,7 +311,7 @@ zebra_read (struct thread *thread)
   nbyte = stream_read (client->ibuf, sock, 3);
   if (nbyte <= 0) 
     {
-      if (debug_is_set (DEBUG_EVENT))
+      if (IS_ZEBRA_DEBUG_EVENT)
 	zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
       zebra_close (client);
       return -1;
@@ -348,7 +328,7 @@ zebra_read (struct thread *thread)
       nbyte = stream_read (client->ibuf, sock, length);
       if (nbyte <= 0) 
 	{
-	  if (debug_is_set (DEBUG_EVENT))
+	  if (IS_ZEBRA_DEBUG_EVENT)
 	    zlog (NULL, LOG_INFO, "connection closed [%d] when reading zebra data", sock);
 	  zebra_close (client);
 	  return -1;
@@ -356,10 +336,10 @@ zebra_read (struct thread *thread)
     }
 
   /* Debug packet information. */
-  if (debug_is_set (DEBUG_EVENT))
+  if (IS_ZEBRA_DEBUG_EVENT)
     zlog (NULL, LOG_INFO, "connection from socket [%d]", sock);
 
-  if (debug_is_set (DEBUG_PACKET))
+  if (IS_ZEBRA_DEBUG_PACKET && IS_ZEBRA_DEBUG_RECV)
     zlog (NULL, LOG_INFO, "zebra message received [%s] %d", 
 	 zebra_command_str[command], length);
 
@@ -456,10 +436,14 @@ client_lookup (int sock)
 int
 zebra_accept (struct thread *thread)
 {
-  size_t size;
   struct sockaddr_in client;
   int accept_sock;
   int client_sock;
+#ifdef HAVE_SOCKLEN_T
+  socklen_t size;
+#else
+  int size;
+#endif /* HAVE_SOCKLEN_T */
 
   accept_sock = THREAD_FD (thread);
 
@@ -510,27 +494,6 @@ zebra_serv ()
 
   zebra_event (ZEBRA_SERV, accept_sock, NULL);
 }
-
-
-/* Host information logging. */
-void
-hostinfo_get ()
-{
-  int ipforward ();
-#ifdef HAVE_IPV6
-  int ipforward_ipv6 ();
-#endif /* HAVE_IPV6 */
-
-  hinfo.ipforward = ipforward ();
-
-#ifdef HAVE_IPV6
-  hinfo.ipv6 = 1;
-  hinfo.ipv6forward = ipforward_ipv6 ();
-#else
-  hinfo.ipv6 = 0;
-  hinfo.ipv6forward = 0;
-#endif /* HAVE_IPV6 */
-}
 
 /* Zebra's event management function. */
 extern struct thread_master *master;
@@ -573,6 +536,25 @@ DEFUN (config_table,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_ip_forwarding,
+       no_ip_forwarding_cmd,
+       "no ip forwarding",
+       NO_STR
+       IP_STR
+       "Doesn't forward IP protocol packet")
+{
+  int ret;
+
+  ret = ipforward_off ();
+  if (ret != 0)
+    {
+      vty_out (vty, "Can't turn off IP forwarding\r\n");
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
+}
+
 /* Table configuration write function. */
 int
 config_write_table (struct vty *vty)
@@ -597,87 +579,69 @@ struct radix_top *ipv6_static_radix;
 #endif /* HAVE_IPV6 */
 
 /* Only display ip forwarding is enabled or not. */
-DEFUN (show_ipforward,
-       show_ipforward_cmd,
-       "show ipforward",
+DEFUN (show_ip_forwarding,
+       show_ip_forwarding_cmd,
+       "show ip forwarding",
        SHOW_STR
-       "IP forward information\n")
+       IP_STR
+       "IP forwarding status\n")
 {
-  vty_out (vty, "ip forward is [%s]\r\n", 
-	   hinfo.ipforward == 0 ? "off" : "on");
+  int ret;
+
+  ret = ipforward ();
+
+  if (ret == 0)
+    vty_out (vty, "ip forward is off\r\n");
+  else
+    vty_out (vty, "ip forward is on\r\n");
   return CMD_SUCCESS;
 }
 
 DEFUN (ip_route, 
        ip_route_cmd,
-       "ip route IPV4_ADDRESS IPV4_ADDRESS [IPV4_ADDRESS]",
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
        "IP information\n"
        "IP routing set\n"
-       "IP Address\n"
-       "IP Address\n"
-       "IP Netmask\n")
+       "IP desitination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
 {
   int ret;
   struct prefix_ipv4 p;
   struct in_addr gate;
   int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
 
   /* a.b.c.d/mask gateway format. */
-  if (argc == 2)
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (!ret)
     {
-      /* a.b.c.d/mask */
-      ret = str2prefix_ipv4 (argv[0], &p);
-      if (!ret)
-	{
-	  vty_out (vty, "Please specify address by a.b.c.d/mask "
-		   "or a.b.c.d x.x.x.x\r\n");
-	  return CMD_WARNING;
-	}
-      /* Gateway. */
-      ret = inet_aton (argv[1], &gate);
-      if (!ret)	
-	{
-	  vty_out (vty, "Gateway address is invalid\r\n");
-	  return CMD_WARNING;
-	}
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x\r\n");
+      return CMD_WARNING;
     }
-
-  /* a.b.c.d x.x.x.x gateway format. */
-  if (argc == 3)
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+  if (!ret)	
     {
-      struct in_addr tmpmask;
-
-      /* a.b.c.d */
-      ret = inet_aton (argv[0], &p.prefix);
-      if (!ret)	
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
 	{
-	  vty_out (vty, "destination address is invalid\r\n");
+	  vty_out (vty, "Gateway address or device name is invalid\r\n");
 	  return CMD_WARNING;
 	}
-
-      /* x.x.x.x */
-      ret = inet_aton (argv[1], &tmpmask);
-      if (!ret)	
-	{
-	  vty_out (vty, "netmask address is invalid\r\n");
-	  return CMD_WARNING;
-	}
-      p.prefixlen = ip_masklen (tmpmask);
-
-      /* Gateway. */
-      ret = inet_aton (argv[2], &gate);
-      if (!ret)	
-	{
-	  vty_out (vty, "gateway address is invalid\r\n");
-	  return CMD_WARNING;
-	}
+      ifindex = ifp->index;
     }
 
   /* Make sure mask is applied and set type to static route*/
   apply_mask (&p);
 
   /* We need rib error treatment here. */
-  ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+  if (ifindex)
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+  else
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
 
   /* Error checking and display meesage. */
   if (ret)
@@ -685,7 +649,7 @@ DEFUN (ip_route,
       switch (ret)
 	{
 	case ZEBRA_ERR_RTEXIST:
-	  vty_out (vty, "same static route already exists ");
+	  vty_out (vty, "Same static route already exists ");
 	  break;
 	case ZEBRA_ERR_RTUNREACH:
 	  vty_out (vty, "network is unreachable ");
@@ -697,7 +661,88 @@ DEFUN (ip_route,
 	  vty_out (vty, "route doesn't match ");
 	  break;
 	}
-      vty_out (vty, "[%s/%d].\r\n", inet_ntoa (p.prefix), p.prefixlen);
+      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (ip_route_mask,
+       ip_route_mask_cmd,
+       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP desitination prefix\n"
+       "IP desitination netmask\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+  struct in_addr tmpmask;
+
+  /* A.B.C.D */
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  /* X.X.X.X */
+  ret = inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid\r\n");
+      return CMD_WARNING;
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+
+  /* Gateway. */
+  ret = inet_aton (argv[2], &gate);
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[2]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid\r\n");
+	  return CMD_WARNING;
+	}
+      ifindex = ifp->index;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask (&p);
+
+  /* We need rib error treatment here. */
+  if (ifindex)
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+  else
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+
+  /* Error checking and display meesage. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "Same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
 
       return CMD_WARNING;
     }
@@ -706,77 +751,49 @@ DEFUN (ip_route,
 
 DEFUN (no_ip_route, 
        no_ip_route_cmd,
-       "no ip route IPV4_ADDRESS IPV4_ADDRESS [IPV4_ADDRESS]",
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
        NO_STR
        "IP information\n"
        "IP routing set\n"
-       "IP Address\n"
-       "IP Address\n"
-       "IP Netmask\n")
+       "IP desitination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
 {
   int ret;
   struct prefix_ipv4 p;
   struct in_addr gate;
   int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
 
-  if (argc <= 1 || argc >= 4)
+  ret = str2prefix_ipv4 (argv[0], &p);
+
+  if (! ret)
     {
-      vty_out (vty, "Please specify address as a.b.c.d/mask "
-	       "or a.b.c.d m.m.m.m\r\n");
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x\r\n");
       return CMD_WARNING;
     }
-
-  /* a.b.c.d/mask gateway */
-  if (argc == 2)
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+  if (!ret)	
     {
-      ret = str2prefix_ipv4 (argv[0], &p);
-
-      if (! ret)
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
 	{
-	  vty_out (vty, "Please specify address by a.b.c.d/mask "
-		   "or a.b.c.d x.x.x.x\r\n");
+	  vty_out (vty, "Gateway address or device name is invalid\r\n");
 	  return CMD_WARNING;
 	}
-      /* Gateway. */
-      ret = inet_aton (argv[1], &gate);
-      if (!ret)	
-	{
-	  vty_out (vty, "gateway address is invalid\r\n");
-	  return CMD_WARNING; 
-	}
-    }
-
-  /* a.b.c.d x.x.x.x gateway */
-  if (argc == 3)
-    {
-      struct in_addr tmpmask;
-
-      ret = inet_aton (argv[0], &p.prefix);
-      if (!ret)	
-	{
-	  vty_out (vty, "destination address is invalid\r\n");
-	  return CMD_WARNING; 
-	}
-      inet_aton (argv[1], &tmpmask);
-      if (!ret)	
-	{
-	  vty_out (vty, "netmask address is invalid\r\n");
-	  return CMD_WARNING; 
-	}
-      p.prefixlen = ip_masklen (tmpmask);
-      
-      ret = inet_aton (argv[2], &gate);
-      if (!ret)	
-	{
-	  vty_out (vty, "gateway address is invalid\r\n");
-	  return CMD_WARNING; 
-	}
+      ifindex = ifp->index;
     }
 
   /* Make sure mask is applied. */
   apply_mask (&p);
 
-  ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+  if (ifindex)
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+  else
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
 
   if (ret)
     {
@@ -794,81 +811,124 @@ DEFUN (no_ip_route,
 	case ZEBRA_ERR_RTNOEXIST:
 	  vty_out (vty, "route doesn't match ");
 	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
 	}
-      vty_out (vty, "[%s/%d].\r\n", inet_ntoa (p.prefix), p.prefixlen);
+      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
 
       return CMD_WARNING;
     }
   return CMD_SUCCESS;
 }
 
-/* Debug options. */
-DEFUN (show_debug_zebra, 
-       show_debug_zebra_cmd,
-       "show debug zebra",
-       SHOW_STR
-       "Show debug information\n"
-       "Zebra debug information\n")
-{
-  vty_out (vty, "Debug option of zebra\r\n");
-  vty_out (vty, "=====================\r\n");
-
-  vty_out (vty, "debug zebra event   : ");
-  vty_out (vty, "%s\r\n", debug_is_set (DEBUG_EVENT) ? "set" : "unset");
-
-  vty_out (vty, "debug zebra packet  : ");
-  vty_out (vty, "%s\r\n", debug_is_set (DEBUG_PACKET) ? "set" : "unset");
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_zebra,
-       debug_zebra_cmd,
-       "debug zebra [DEBUG_OPT]",
-       "Debugging functions (see also 'undebug')\n"
-       "Set zebra debug option\n"
-       "zebra debug options\n")
-{
-  if (argc == 0)
-    {
-      vty_out (vty, "Debug optoin of zebra\r\n");
-      vty_out (vty, "---------------------\r\n");
-      vty_out (vty, "debug zebra event  -- Event of zebra.\r\n");
-      vty_out (vty, "debug zebra packet -- Packet of zebra.\r\n");
-      vty_out (vty, "---------------------\r\n");
-      return CMD_SUCCESS;
-    }
-  if (strcmp (argv[0], "event") == 0)
-    debug_set (DEBUG_EVENT);
-  if (strcmp (argv[0], "packet") == 0)
-    debug_set (DEBUG_PACKET);
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_zebra,
-       no_debug_zebra_cmd,
-       "no debug zebra [DEBUG_OPT]",
+DEFUN (no_ip_route_mask,
+       no_ip_route_mask_cmd,
+       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
        NO_STR
-       "Debugging functions (see also 'undebug')\n"
-       "Set zebra debug option\n"
-       "zebra debug options\n")
+       "IP information\n"
+       "IP routing set\n"
+       "IP desitination prefix\n"
+       "IP desitination netmask\n"
+       "IP gateway interface name\n")
 {
-  if (strcmp (argv[0], "event") == 0)
-    debug_unset (DEBUG_EVENT);
-  if (strcmp (argv[0], "packet") == 0)
-    debug_unset (DEBUG_PACKET);
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct in_addr tmpmask;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid\r\n");
+      return CMD_WARNING; 
+    }
+  inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid\r\n");
+      return CMD_WARNING; 
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+      
+  ret = inet_aton (argv[2], &gate);
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid\r\n");
+	  return CMD_WARNING;
+	}
+      ifindex = ifp->index;
+    }
+
+  /* Make sure mask is applied. */
+  apply_mask (&p);
+
+  if (ifindex)
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+  else
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.\r\n", inet_ntoa (p.prefix), p.prefixlen);
+
+      return CMD_WARNING;
+    }
   return CMD_SUCCESS;
 }
 
 #ifdef HAVE_IPV6
 /* Only display ipv6 forwarding is enabled or not. */
-DEFUN (show_ipv6forward, 
-       show_ipv6forward_cmd,
-       "show ipv6forward", 
+DEFUN (show_ipv6_forwarding,
+       show_ipv6_forwarding_cmd,
+       "show ipv6 forwarding",
        SHOW_STR
-       "Show ipv6forward status\n")
+       "IPv6 information\n"
+       "Forwarding status\n")
 {
-  vty_out (vty, "ipv6 forward is [%s]\r\n", 
-	   hinfo.ipv6forward == 0 ? "off" : "on");
+  int ret;
+
+  ret = ipforward_ipv6 ();
+
+  switch (ret)
+    {
+    case -1:
+      vty_out (vty, "ipv6 forwarding is unknown\r\n");
+      break;
+    case 0:
+      vty_out (vty, "ipv6 forwarding is %s\r\n", "off");
+      break;
+    case 1:
+      vty_out (vty, "ipv6 forwarding is %s\r\n", "on");
+      break;
+    default:
+      vty_out (vty, "ipv6 forwarding is %s\r\n", "off");
+      break;
+    }
   return CMD_SUCCESS;
 }
 
@@ -972,18 +1032,38 @@ DEFUN (no_ipv6_route,
   vty_out (vty, "static route deleted\r\n");
   return CMD_SUCCESS;
 }
+
+DEFUN (no_ipv6_forwarding,
+       no_ipv6_forwarding_cmd,
+       "no ipv6 forwarding",
+       NO_STR
+       IP_STR
+       "Doesn't forward IPv6 protocol packet")
+{
+  int ret;
+
+  ret = ipforward_ipv6_off ();
+  if (ret != 0)
+    {
+      vty_out (vty, "Can't turn off IPv6 forwarding\r\n");
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
+}
+
 #endif /* HAVE_IPV6 */
        
 /* Static ip route configuration write function. */
 int
 config_write_ip (struct vty *vty)
 {
-  extern void rib_static_list (struct vty *, struct route_table *);
+  extern int rib_static_list (struct vty *, struct route_table *);
   int write = 0;
 
-  rib_static_list (vty, ipv4_rib_table);
+  write += rib_static_list (vty, ipv4_rib_table);
 #ifdef HAVE_IPV6
-  rib_static_list (vty, ipv6_rib_table);
+  write += rib_static_list (vty, ipv6_rib_table);
 #endif /* HAVE_IPV6 */
 
   return write;
@@ -1003,6 +1083,9 @@ zebra_init ()
   /* Client list init. */
   client_list = list_init ();
 
+  /* Forwarding on. */
+  zebra_forward_on ();
+
   /* Make zebra server socket. */
   zebra_serv ();
 
@@ -1010,24 +1093,24 @@ zebra_init ()
   install_node (&ip_node, config_write_ip);
   install_node (&table_node, config_write_table);
 
-  install_element (VIEW_NODE, &show_ipforward_cmd);
-  install_element (VIEW_NODE, &show_debug_zebra_cmd);
-  install_element (ENABLE_NODE, &show_ipforward_cmd);
-  install_element (ENABLE_NODE, &show_debug_zebra_cmd);
-  install_element (ENABLE_NODE, &debug_zebra_cmd);
-  install_element (ENABLE_NODE, &no_debug_zebra_cmd);
+  install_element (VIEW_NODE, &show_ip_forwarding_cmd);
+  install_element (ENABLE_NODE, &show_ip_forwarding_cmd);
   install_element (CONFIG_NODE, &ip_route_cmd);
+  install_element (CONFIG_NODE, &ip_route_mask_cmd);
   install_element (CONFIG_NODE, &no_ip_route_cmd);
-  install_element (CONFIG_NODE, &debug_zebra_cmd);
-  install_element (CONFIG_NODE, &no_debug_zebra_cmd);
+  install_element (CONFIG_NODE, &no_ip_route_mask_cmd);
+  install_element (CONFIG_NODE, &no_ip_forwarding_cmd);
+
 #ifdef HAVE_LINUX_RTNETLINK_H
   install_element (VIEW_NODE, &show_table_cmd);
   install_element (CONFIG_NODE, &config_table_cmd);
 #endif
+
 #ifdef HAVE_IPV6
-  install_element (VIEW_NODE, &show_ipv6forward_cmd);
-  install_element (ENABLE_NODE, &show_ipv6forward_cmd);
+  install_element (VIEW_NODE, &show_ipv6_forwarding_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_forwarding_cmd);
   install_element (CONFIG_NODE, &ipv6_route_cmd);
   install_element (CONFIG_NODE, &no_ipv6_route_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_forwarding_cmd);
 #endif /* HAVE_IPV6 */
 }

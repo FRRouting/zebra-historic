@@ -1,3 +1,12 @@
+1999-06-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ipforward_proc.c: ipforward_on () and ipforward_off () added.
+
+1999-06-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ipforward_proc.c (ipforward_ipv6): Check for IPv6 forwarding
+	using /proc file system is added.
+
 1999-06-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* if_ioctl.c (if_get_index): Interface index set bug is fixed by

@@ -83,13 +83,7 @@ struct zebra_client
   int rtm_table;
 
   /* This client's redistribute flag. */
-  u_char redist_static;		/* Redistribute static route. */
-  u_char redist_connect;	/* Redistribute connected route. */
-  u_char redist_rip;		/* Redistribute rip route. */
-  u_char redist_ripng;		/* Redistribute ripng route. */
-  u_char redist_ospf;		/* Redistribute ospf route. */
-  u_char redist_ospf6;		/* Redistribute ospf6 route. */
-  u_char redist_bgp;		/* Redistribute bgp route. */
+  u_char redist[ZEBRA_ROUTE_MAX];
 };
 
 /* Count prefix size from mask length */

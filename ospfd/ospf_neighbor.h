@@ -39,7 +39,8 @@ struct ospf_neighbor
   /* OSPF neighbor Information */
   char *host;				/* Printable address of the neighbor.*/
   u_char status;			/* NSM status. */
-  u_char ms_flag;			/* Master/Slave bit flag. */
+  u_char dd_init;			/* DD Initial flags. */
+  u_char dd_flags;			/* DD bit flags. */
   u_int32_t dd_seqnum;			/* DD Sequence Number. */
 
   /* Neighbor Information from Hello. */
@@ -57,29 +58,29 @@ struct ospf_neighbor
   u_int32_t last_dd_seqnum;
 
   /* LSA data. */
-  list ls_retransmission;
+  list ls_retransmit;
   list db_summary;
   list ls_request;
 
   /* Timer values. */
   u_int32_t v_inactivity;
+  u_int32_t v_db_desc;
 
   /* Threads. */
   struct thread *t_read;
   struct thread *t_write;
   struct thread *t_inactivity;
+  struct thread *t_db_desc;
 
   /* Statistics Field */
 };
 
 /* Prototypes. */
-struct ospf_neighbor *ospf_nbr_new ();
+struct ospf_neighbor *ospf_nbr_new (struct ospf_interface *);
 void ospf_nbr_free (struct ospf_neighbor *);
 int ospf_nbr_bidirectional (struct in_addr *, struct in_addr *, int);
 void ospf_nbr_add_myself (struct ospf_interface *);
-int ospf_nbr_count (struct route_table *);
+int ospf_nbr_count (struct route_table *, int);
 struct ospf_neighbor *ospf_nbr_lookup_by_router_id (struct route_table *, struct in_addr *);
-int ospf_adjacent_count (struct route_table *);
-int ospf_fully_adjacent_count (struct route_table *);
 
 #endif /* _ZEBRA_OSPF_NEIGHBOR_H */

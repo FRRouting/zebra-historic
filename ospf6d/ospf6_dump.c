@@ -93,7 +93,7 @@ char *print_lsahdr (struct lsa_hdr *lsh)
   inet_ntop (AF_INET, &lsh->lsh_advrtr, tmp, sizeof (tmp));
   inet_ntop (AF_INET, &lsh->lsh_id, tmp2, sizeof (tmp2));
 
-  sprintf (buf, "[%s: id %s, AdvRtr %s]",
+  sprintf (buf, "[%s,id:%s,Adv:%s]",
            lstype_name[typeindex(lsh->lsh_type)], tmp2, tmp);
   return buf;
 }
@@ -118,5 +118,29 @@ inet4str (unsigned long id)
 {
   inet_ntop (AF_INET, &id, strbuf, sizeof (strbuf));
   return(strbuf);
+}
+
+void
+log_pointer (const char *format, ...)
+{
+#ifdef DEBUG_POINTER
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_DEBUG, format, args);
+  return;
+#endif /*DEBUG_POINTER*/
+}
+
+void
+log_spf (const char *format, ...)
+{
+#ifdef DEBUG_SPF
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_DEBUG, format, args);
+  return;
+#endif /*DEBUG_SPF*/
 }
 

@@ -246,9 +246,8 @@ loading_done (struct thread *thread)
     nbs_change (NBS_FULL, "LoadingDone", nbr);
   else
     {
-#ifdef DEBUG_OSPF6
-      zvlog_debug ("BUG: LoadingDone but Requestlist Not Empty");
-#endif
+      zvlog_debug ("BUG: LoadingDone for %s but Requestlist Not Empty",
+                   nbr->str);
       assert (0);
     }
 

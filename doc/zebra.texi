@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.68
+@subtitle for zebra-0.69
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.68.
+This is the Zebra Manual for zebra-0.69.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -399,8 +399,8 @@ accept connection.
 Set enable password.
 @end deffn
 
-@deffn Command {lines @var{nroflines}} {}
-Override no. of terminal lines for vty interface.  Set it to zero to
+@deffn Command {lines @var{lines}} {}
+Override number of terminal lines for vty interface.  Set it to zero to
 avoid pagination.
 @end deffn
 
@@ -819,6 +819,19 @@ When program terminates, retain added route by ripd.
 @comment  node-name,  next,  previous,  up
 @section ripd configuration
 
+@deffn Command {router rip} {}
+Enable RIP process.
+@end deffn
+
+@deffn {RIP Command} {version @var{version}} {}
+Set RIP version.  @var{version} must be 1 or 2.
+@end deffn
+
+@deffn Command {router zebra} {}
+This command is set default and doesn't appear configuration.  With this
+statement, RIP routes go to the @code{zebra} daemon.
+@end deffn
+
 @node ripd terminal mode commands,  , ripd configuration, ripd
 @comment  node-name,  next,  previous,  up
 @section ripd terminal mode commands
@@ -850,12 +863,6 @@ be specified (@pxref{Common invoking options}).
 
 Currently ripngd supports following commands.
 
-@deffn Command {router zebra} {}
-With this statement, RIPng routes go to the @code{zebra} daemon.  If you
-want to install RIPng routes into the kernel.  You have to specify this
-command.
-@end deffn
-
 @deffn Command {router ripng} {}
 Enable RIPng.
 @end deffn
@@ -872,11 +879,33 @@ Set RIPng enable interface by @var{network}
 Set RIPng enable interface by @var{ifname}
 @end deffn
 
+@deffn {RIPng Command} {route @var{network}} {}
+Set RIPng static routing announcement of @var{network}.
+@end deffn
+
+@deffn Command {router zebra} {}
+This command is set default and doesn't appear configuration.  With this
+statement, RIPng routes go to the @code{zebra} daemon.  Then it will
+install into the kernel.
+@end deffn
+
 @node ripngd terminal mode commands, ripngd filtering commands, ripngd configuration, ripngd
 @comment  node-name,  next,  previous,  up
 @section ripngd terminal mode commands
 
 @deffn Command {show ip ripng} {}
+@end deffn
+
+@deffn Command {show debugging ripng} {}
+@end deffn
+
+@deffn Command {debug ripng events} {}
+@end deffn
+
+@deffn Command {debug ripng packet} {}
+@end deffn
+
+@deffn Command {debug ripng zebra} {}
 @end deffn
 
 @node ripngd filtering commands,  , ripngd terminal mode commands, ripngd

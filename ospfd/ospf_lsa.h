@@ -22,13 +22,13 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_LSA_H
 
 /* OSPF LSA Type definition. */
-#define OSPF_MIN_LSA		0
+#define OSPF_MIN_LSA		1
 #define OSPF_ROUTER_LSA         1
 #define OSPF_NETWORK_LSA        2
 #define OSPF_SUMMARY_LSA        3
 #define OSPF_SUMMARY_LSA_ASBR   4
 #define OSPF_AS_EXTERNAL_LSA    5
-#define OSPF_MAX_LSA		6
+#define OSPF_MAX_LSA		5
 
 #define OSPF_LSA_HEADER_SIZE	20
 
@@ -56,38 +56,52 @@ struct ospf_lsa
 #define ROUTER_LSA_EXTERNAL	       0x02
 #define ROUTER_LSA_BORDER	       0x01
 
+/* OSPF Router-LSAs structure. */
+struct router_lsa
+{
+  struct ospf_lsa header;
+  u_char flags;
+  u_char zero;
+  u_int16_t links;
+};
+
 /* OSPF Network-LSAs structure. */
 struct network_lsa
 {
-  struct in_addr network_mask;
-  struct in_addr attached_router[1];
+  struct ospf_lsa header;
+  struct in_addr mask;
+  struct in_addr routers[1];
 };
 
 /* OSPF Summary-LSAs structure. */
 struct summary_lsa
 {
-  struct in_addr network_mask;
-  struct /* _tos_metric */
-  {
-    u_char tos;                 /* 0 is normal */
-    u_char metric[3];
-  } tos_metric[1];
+  struct ospf_lsa header;
+  struct in_addr mask;
+  /* metric */
 };
 
 /* OSPF AS-external-LSAs structure. */
 struct as_external_lsa
 {
-  struct in_addr network_mask;
-  struct lsa_metric
-  {
-    u_char tos;
-    u_char metric[3];
-    struct in_addr fwd_address;
-    struct in_addr ext_route_tag;
-  } lsa_metric[1];
+  struct ospf_lsa header;
+  struct in_addr mask;
+  /* metric */
 };
 
 /* Prototypes. */
 struct ospf_lsa *ospf_router_lsa (struct ospf_interface *);
+struct ospf_lsa *ospf_network_lsa (struct ospf_interface *);
+u_int16_t ospf_lsa_checksum (struct ospf_lsa *);
+void ospf_add_router_lsa (struct ospf_area *, struct ospf_lsa *);
+void ospf_add_network_lsa (struct ospf_area *, struct ospf_lsa *);
+void ospf_add_summary_lsa (struct ospf_area *, struct ospf_lsa *);
+struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
+				  struct in_addr, struct in_addr);
+struct ospf_lsa *ospf_lsa_lookup_by_header (struct ospf_area *,
+					    struct ospf_lsa *);
+int ospf_lsa_more_recent (struct ospf_lsa *, struct ospf_lsa *);
+int ospf_lsa_count (struct ospf_area *);
+void ospf_lsa_init ();
 
 #endif /* _ZEBRA_OSPF_LSA_H */

@@ -20,27 +20,94 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include <zebra.h>
 
-#include "stream.h"
 #include "linklist.h"
-#include "if.h"
 #include "prefix.h"
+#include "if.h"
 #include "table.h"
 #include "memory.h"
+#include "command.h"
+#include "vty.h"
+#include "stream.h"
 #include "log.h"
 
 #include "ospfd/ospfd.h"
+#include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_lsa.h"
 
+/* LSA Type String. */
+char *ospf_lsa_type_str[] =
+{
+  NULL,
+  "router-LSA",
+  "network-LSA",
+  "summary-LSA",
+  "summary-LSA",
+  "AS-external-LSA",
+};
+
+
+
+/* Fletcher Checksum -- Refer to RFC1008. */
+#define MODX		     4102
+#define LSA_CHECKSUM_OFFSET    15
+
+u_int16_t
+ospf_lsa_checksum (struct ospf_lsa *lsa)
+{
+  u_char *sp, *ep, *p, *q;
+  int c0 = 0, c1 = 0;
+  int r, x, y;
+  u_int16_t length;
+
+  lsa->checksum = 0;
+  length = ntohs (lsa->length) - 2;
+  sp = (char *) &lsa->options;
+
+  for (ep = sp + length; sp < ep; sp = q)
+    {
+      q = sp + MODX;
+      if (q > ep)
+	q = ep;
+      for (p = sp; p < q; p++)
+	{
+	  c0 += *p;
+	  c1 += c0;
+	}
+      c0 %= 255;
+      c1 %= 255;
+    }
+
+  r = (c1 << 8) + c0;
+
+  x = ((length - LSA_CHECKSUM_OFFSET) * c0 - c1) % 255;
+  if (x <= 0)
+    x += 255;
+  y = 510 - c0 - x;
+  if (y > 255)
+    y -= 255;
+
+  lsa->checksum = x + (y << 8);
+
+  return (r);
+}
+
+/* free LSA. */
+void
+ospf_lsa_free (struct ospf_lsa *lsa)
+{
+  XFREE (MTYPE_OSPF_LSA, lsa);
+}
+
 /* Originate Router-LSA. */
 struct ospf_lsa *
 ospf_router_lsa (struct ospf_interface *oi)
 {
   struct ospf *ospf;
-  struct ospf_lsa *lsa;
+  struct ospf_lsa *lsa, *new;
   listnode node;
   struct stream *s;
   int flag = 0;
@@ -49,18 +116,19 @@ ospf_router_lsa (struct ospf_interface *oi)
   int length = 0;
   u_int32_t putp;
 
-  ospf = oi->ospf;
+  /*  ospf = oi->ospf; */
+  ospf = ospf_top;
 
   s = stream_new (oi->ifp->mtu);
   lsa = (struct ospf_lsa *) s->data;
 
   lsa->options = oi->options;
-  lsa->type = OSPF_ROUTER_LSA;
+  lsa->type = (u_char) OSPF_ROUTER_LSA;
   lsa->id = ospf->router_id;
   lsa->adv_router = ospf->router_id;
   lsa->ls_seqnum = htonl (ospf->ls_seqnum++);
 
-  stream_forward (s, OSPF_LSA_HEADER_SIZE);
+  ospf_output_forward (s, OSPF_LSA_HEADER_SIZE);
   length = OSPF_LSA_HEADER_SIZE;
 
   /* set bit V if virtual link endpoint. */
@@ -69,11 +137,11 @@ ospf_router_lsa (struct ospf_interface *oi)
   stream_putc (s, flag);
   
   /* Skip 1 octet. */
-  stream_forward (s, 1);
+  ospf_output_forward (s, 1);
 
   /* keep pointer to # links. */
   putp = s->putp;
-  stream_forward (s, 2);
+  ospf_output_forward (s, 2);
   length += 4;
 
   /* Link Information. */
@@ -87,15 +155,19 @@ ospf_router_lsa (struct ospf_interface *oi)
       ifp = getdata (node);
       o = ifp->if_data;
 
+      if (o->flag != OSPF_IF_ENABLE)
+	continue;
+
+      if (o->area == NULL)
+	continue;
+
       /* Area check. */
-      if (!IPV4_ADDR_CMP (&o->area->area_id, &oi->area->area_id))
+      if (IPV4_ADDR_CMP (&o->area->area_id, &oi->area->area_id))
 	continue;
 
       /* if status is Down. */
-      if (o->status == ISM_Down)
-	continue;
-
-      /* is interface loopback? */
+      /*      if (o->status == ISM_Down)
+	      continue; */
 
       /* Describe link. */
       switch (o->type)
@@ -115,7 +187,7 @@ ospf_router_lsa (struct ospf_interface *oi)
 	      link_data = mask;
 	      link_cost = o->output_cost;
 	    }
-	  else if (ospf_fully_adjacent_count (oi->nbrs))
+	  else if (ospf_nbr_count (oi->nbrs, NSM_Full))
 	    {
 	      /* Describe Type 2 link. */
 	      link_type = LSA_LINK_TYPE_TRANSIT;
@@ -157,36 +229,451 @@ ospf_router_lsa (struct ospf_interface *oi)
   /* Set length. */
   lsa->length = htons (length);
 
-  return lsa;
-}
+  /* Set Checksum. */
+  ospf_lsa_checksum (lsa);
 
-struct ospf_lsa *
-ospf_lsa_header (struct ospf_interface *oi, u_char type)
-{
-  struct ospf_lsa *new;
-
-  new = XMALLOC (MTYPE_OSPF_LSA, sizeof (struct ospf_lsa));
-  bzero (new, sizeof (struct ospf_lsa));
-
-  new->options = oi->options;
-  new->type = type;
-
-  switch (type)
-    {
-    case OSPF_NETWORK_LSA:
-      new->id = oi->address->u.prefix4;
-      break;
-    case OSPF_SUMMARY_LSA_ASBR:
-      new->id = ospf_top->router_id;
-      break;
-    }
-
-  new->adv_router = ospf_top->router_id;
-  new->ls_seqnum = ospf_top->ls_seqnum++;
-
-  new->checksum = 0;
-  new->length = 0;
+  /* Copy LSA to store. */
+  new = (struct ospf_lsa *) XMALLOC (MTYPE_OSPF_LSA, length);
+  memcpy (new, lsa, length);
+  stream_free (s);
 
   return new;
 }
 
+/* Originate Network-LSA. */
+struct ospf_lsa *
+ospf_network_lsa (struct ospf_interface *oi)
+{
+  struct ospf *ospf;
+  struct ospf_lsa *lsa, *new;
+  struct ospf_neighbor *nbr;
+  struct in_addr mask;
+  struct route_node *rn;
+  struct stream *s;
+  int length;
+
+  ospf = oi->ospf;
+
+  /* Get Router ID of Desginated Router. */
+  nbr = ospf_nbr_lookup_by_router_id (oi->nbrs, &oi->d_router);
+
+  s = stream_new (oi->ifp->mtu);
+  lsa = (struct ospf_lsa *) s->data;
+
+  /* LS age should be 0. */
+  lsa->options = oi->options;
+  lsa->type = (u_char) OSPF_NETWORK_LSA;
+  if (nbr)
+    lsa->id = nbr->address.u.prefix4;
+  else
+    lsa->id.s_addr = 0;
+  lsa->adv_router = ospf->router_id;
+  lsa->ls_seqnum = htonl (ospf->ls_seqnum++);
+
+  ospf_output_forward (s, OSPF_LSA_HEADER_SIZE);
+  length = OSPF_LSA_HEADER_SIZE;
+
+  masklen2ip (nbr->address.prefixlen, &mask);
+
+  /* Put Network Mask. */
+  stream_put_ipv4 (s, mask.s_addr);
+  length += 4;
+
+  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+      nbr = rn->info;
+
+      /* this is myself. */
+      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+	continue;
+
+      stream_put_ipv4 (s, nbr->router_id.s_addr);
+      length += 4;
+    }
+
+  /* Set length. */
+  lsa->length = htons (length);
+
+  /* Set Checksum. */
+  ospf_lsa_checksum (lsa);
+
+  /* Copy LSA to store. */
+  new = (struct ospf_lsa *) XMALLOC (MTYPE_OSPF_LSA, length);
+  memcpy (new, lsa, length);
+  stream_free (s);
+
+  return new;
+}
+
+/* Add router-LSA to an area. */
+void
+ospf_add_router_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
+{
+  struct route_node *rn;
+  struct prefix p;
+
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_BITLEN;
+  p.u.prefix4 = lsa->id;
+
+  rn = route_node_get (area->router_lsa, &p);
+  if (rn->info)
+    {
+#ifdef DEBUG
+      zlog (NULL, LOG_INFO, "There is already router-LSA for %s",
+	    inet_ntoa (lsa->id));
+#endif
+      route_unlock_node (rn);
+      ospf_lsa_free (rn->info);
+    }
+  rn->info = lsa;
+
+  return;
+}
+
+/* Add network-LSA to an area. */
+void
+ospf_add_network_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
+{
+  struct route_node *rn;
+  struct prefix p;
+  
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_BITLEN;
+  p.u.prefix4 = lsa->id;
+
+  rn = route_node_get (area->network_lsa, &p);
+  if (rn->info)
+    {
+#ifdef DEBUG
+      zlog (NULL, LOG_WARNING, "There is already network-LSA for %s",
+	    inet_ntoa (lsa->id));
+#endif
+      route_unlock_node (rn);
+      ospf_lsa_free (rn->info);
+      return;
+    }
+  rn->info = lsa;
+
+  return;
+}
+
+void
+ospf_add_summary_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
+{
+  return;
+}
+
+struct ospf_lsa *
+ospf_lsa_lookup (struct ospf_area *area, u_int32_t ls_type,
+		 struct in_addr ls_id, struct in_addr adv_router)
+{
+  struct route_node *rn;
+  struct ospf_lsa *match;
+  struct prefix p;
+
+  match = NULL;
+  switch (ls_type)
+    {
+    case OSPF_ROUTER_LSA:
+      p.family = AF_INET;
+      p.prefixlen = IPV4_MAX_BITLEN;
+      p.u.prefix4 = ls_id;
+      rn = route_node_get (area->router_lsa, &p);
+      if (rn->info)
+	{
+	  route_unlock_node (rn);
+	  match = (struct ospf_lsa *) rn->info;
+	}
+      break;
+    case OSPF_NETWORK_LSA:
+      p.family = AF_INET;
+      p.prefixlen = IPV4_MAX_BITLEN;
+      p.u.prefix4 = ls_id;
+      rn = route_node_get (area->network_lsa, &p);
+      if (rn->info)
+	{
+	  route_unlock_node (rn);
+	  match = (struct ospf_lsa *) rn->info;
+	}
+      break;
+    case OSPF_SUMMARY_LSA:
+    case OSPF_SUMMARY_LSA_ASBR:
+      break;
+    case OSPF_AS_EXTERNAL_LSA:
+      break;
+    default:
+      break;
+    }
+
+  return match;
+}
+
+struct ospf_lsa *
+ospf_lsa_lookup_by_header (struct ospf_area *area, struct ospf_lsa *lsa)
+{
+  struct ospf_lsa *match;
+
+  match = ospf_lsa_lookup (area, lsa->type, lsa->id, lsa->adv_router);
+
+  return match;
+}
+
+/* return +n, l1 is more recent.
+   return -n, l2 is more recent.
+   return 0, l1 and l2 is identical. */
+int
+ospf_lsa_more_recent (struct ospf_lsa *l1, struct ospf_lsa *l2)
+{
+  int r;
+
+  /* compare LS sequence number. */
+  r = ntohl (l1->ls_seqnum) - ntohl (l2->ls_seqnum);
+  if (r)
+    return r;
+
+  /* compare LS checksum. */
+  r = ntohs (l1->checksum) - ntohs (l2->checksum);
+  if (r)
+    return r;
+
+  /* compare LS age. */
+  if (ntohs (l1->ls_age) == OSPF_LSA_MAX_AGE &&
+      ntohs (l2->ls_age) != OSPF_LSA_MAX_AGE)
+    return 1;
+  else if (ntohs (l1->ls_age) != OSPF_LSA_MAX_AGE &&
+	   ntohs (l2->ls_age) == OSPF_LSA_MAX_AGE)
+    return -1;
+
+  /* compare LS age with MaxAgeDiff. */
+  if (ntohs (l1->ls_age) - ntohs (l2->ls_age) > OSPF_LSA_MAX_AGE_DIFF)
+    return 1;
+  else if (ntohs (l2->ls_age) - ntohs (l1->ls_age) > OSPF_LSA_MAX_AGE_DIFF)
+    return -1;
+
+  /* LSAs are identical. */
+  return 0;
+}
+
+int
+ospf_lsa_count (struct ospf_area *area)
+{
+  int count = 0;
+  struct route_node *rn;
+
+  /* Count router-LSAs. */
+  for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      count++;
+    }
+
+  /* Count network-LSAs. */
+  for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      count++;
+    }
+
+  /* Count summary-LSAs. */
+  for (rn = route_top (area->summary_lsa); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      count++;
+    }
+
+  return count;
+}
+
+
+void
+show_ip_ospf_database_all (struct vty *vty)
+{
+  listnode node;
+  struct route_node *rn;
+
+  for (node = listhead (ospf_top->areas); node; nextnode (node))
+    {
+      struct ospf_area *area;
+      struct ospf_lsa *lsa;
+
+      area = getdata (node);
+
+      /* show Router-LSAs. */
+      vty_out (vty, "                Router Link States (Area %s)\r\n\r\n",
+	       inet_ntoa (area->area_id));
+      vty_out (vty, "Link ID         ADV Router      Age         Seq#       Checksum Link count\r\n");
+
+      for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  lsa = (struct ospf_lsa *) rn->info;
+
+	  vty_out (vty, "%-15s ", inet_ntoa (lsa->id));
+	  vty_out (vty, "%-15s %-11d 0x%08x 0x%04x   %-d\r\n",
+		   inet_ntoa (lsa->adv_router), ntohs (lsa->ls_age),
+		       ntohl (lsa->ls_seqnum), ntohs (lsa->checksum),
+		   0);
+	}
+      vty_out (vty, "\r\n");
+
+      /* show Network-LSAs. */
+      vty_out (vty, "                Router Link States (Area %s)\r\n\r\n",
+	       inet_ntoa (area->area_id));
+      vty_out (vty, "Link ID         ADV Router      Age         Seq#       Checksum\r\n");
+      for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  lsa = (struct ospf_lsa *) rn->info;
+
+	  vty_out (vty, "%-15s ", inet_ntoa (lsa->id));
+	  vty_out (vty, "%-15s %-11d 0x%08x 0x%04x\r\n",
+		   inet_ntoa (lsa->adv_router), ntohs (lsa->ls_age),
+		       ntohl (lsa->ls_seqnum), ntohs (lsa->checksum));
+	}
+      vty_out (vty, "\r\n");
+    }
+}
+
+void
+show_ip_ospf_database_network (struct vty *vty)
+{
+  listnode node;
+  struct route_node *rn;
+
+  for (node = listhead (ospf_top->areas); node; nextnode (node))
+    {
+      struct ospf_area *area;
+      struct ospf_lsa *lsa;
+      struct network_lsa *nl;
+      int length, i;
+
+      area = getdata (node);
+
+      for (rn = route_top (area->network_lsa); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  lsa = (struct ospf_lsa *) rn->info;
+	  nl = (struct network_lsa *) rn->info;
+
+	  vty_out (vty, "                Net Link States (Area %s)\r\n\r\n",
+		   inet_ntoa (area->area_id));
+	  vty_out (vty, "  LS age: %d\r\n", lsa->ls_age);
+	  vty_out (vty, "  Options: %d\r\n", lsa->options);
+	  vty_out (vty, "  LS Type: Network Links\r\n");
+	  vty_out (vty, "  Link State ID: %s (address of Designated Router)\r\n",
+		   inet_ntoa (lsa->id));
+	  vty_out (vty, "  Advertising Router: %s\r\n",
+		   inet_ntoa (lsa->adv_router));
+	  vty_out (vty, "  LS Seq Number: %08x\r\n", ntohl (lsa->ls_seqnum));
+	  vty_out (vty, "  Checksum: 0x%04x\r\n", lsa->checksum);
+	  vty_out (vty, "  Length: %d\r\n", ntohs (lsa->length));
+	  vty_out (vty, "  Network Mask: /%d\r\n",
+		   ip_masklen (nl->mask));
+
+	  
+	  length = lsa->length - OSPF_LSA_HEADER_SIZE;
+	  for (i = 0; length > 0; i++, length -= 4)
+	    vty_out (vty, "        Attached Router: %s\r\n",
+		     inet_ntoa (nl->routers[i]));
+	}
+      vty_out (vty, "\r\n");
+    }
+}
+
+void
+show_ip_ospf_database_router (struct vty *vty)
+{
+  listnode node;
+  struct route_node *rn;
+
+  for (node = listhead (ospf_top->areas); node; nextnode (node))
+    {
+      struct ospf_area *area;
+      struct ospf_lsa *lsa;
+      struct router_lsa *rl;
+      
+      area = getdata (node);
+
+      for (rn = route_top (area->router_lsa); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  lsa = (struct ospf_lsa *) rn->info;
+	  rl = (struct router_lsa *) rn->info;
+
+	  vty_out (vty, "                Router Link States (Area %s)\r\n\r\n",
+		   inet_ntoa (area->area_id));
+	  vty_out (vty, "  LS age: %d\r\n", ntohs (lsa->ls_age));
+	  vty_out (vty, "  Options: %d\r\n", lsa->options);
+	  vty_out (vty, "  LS Type: Router Links\r\n");
+	  vty_out (vty, "  Link State ID: %s\r\n", inet_ntoa (lsa->id));
+	  vty_out (vty, "  Advertising Router: %s\r\n",
+		   inet_ntoa (lsa->adv_router));
+	  vty_out (vty, "  LS Seq Number: %08x\r\n", ntohl (lsa->ls_seqnum));
+	  vty_out (vty, "  Checksum: 0x%04x\r\n", lsa->checksum);
+	  vty_out (vty, "  Length: %d\r\n", ntohs (lsa->length));
+	  
+	  vty_out (vty, "   Number of Links: %d\r\n", ntohs (rl->links));
+	}
+      vty_out (vty, "\r\n");
+    }
+}
+
+DEFUN (show_ip_ospf_database,
+       show_ip_ospf_database_cmd,
+       "show ip ospf database",
+       SHOW_STR
+       IP_STR
+       "OSPF information\n"
+       "Database summary\n")
+{
+  vty_out (vty, "\r\n       OSPF Router with ID (%s)\r\n\r\n\r\n",
+	   inet_ntoa (ospf_top->router_id));
+
+  /* show all LSA. */
+  if (argc == 0)
+    show_ip_ospf_database_all (vty);
+  else if (argc == 1)
+    if (strncmp (argv[0], "n", 1) == 0)
+      show_ip_ospf_database_network (vty);
+    else if (strncmp (argv[0], "r", 1) == 0)
+      show_ip_ospf_database_router (vty);
+    else
+      return CMD_WARNING;
+
+  return CMD_SUCCESS;
+}
+       
+ALIAS (show_ip_ospf_database,
+       show_ip_ospf_database_type_cmd,
+       "show ip ospf database (network|router)",
+       SHOW_STR
+       IP_STR
+       "OSPF information\n"
+       "Database summary\n"
+       "Network link states"
+       "Router link states")
+
+/* Install LSA related commands. */
+void
+ospf_lsa_init ()
+{
+  install_element (ENABLE_NODE, &show_ip_ospf_database_cmd);
+  install_element (ENABLE_NODE, &show_ip_ospf_database_type_cmd);
+}

@@ -23,12 +23,23 @@
 #ifndef _ZEBRA_RIB_H
 #define _ZEBRA_RIB_H
 
+#define RIB_FIB    0x01
+#define RIB_LINK   0x02
+
+#define RIB_FIB_SET(RIB) (((RIB)->flag) |= RIB_FIB)
+#define RIB_FIB_UNSET(RIB) (((RIB)->flag) &= ~RIB_FIB)
+#define IS_RIB_FIB(RIB)  (((RIB)->flag) & RIB_FIB)
+
+#define RIB_LINK_SET(RIB) (((RIB)->flag) |= RIB_LINK)
+#define RIB_LINK_UNSET(RIB) (((RIB)->flag) &= ~RIB_LINK)
+#define IS_RIB_LINK(RIB) (((RIB)->flag) & RIB_LINK)
+
 /* Structure for routing information base. */
 struct rib
 {
   int type;			/* Type of this route */
-  int fib;			/* Have this route goes to fib. */
-  int pref;			/* Preference of this route. */
+  unsigned int flag;		/* Have this route goes to fib. */
+  int distance;			/* Distance of this route. */
   int ifindex;			/* Interface index. */
   int table;			/* Which routing table */
   union
@@ -37,6 +48,7 @@ struct rib
 #ifdef HAVE_IPV6
     struct in6_addr gate6;
 #endif
+    char *ifname;
   } u;
 
   struct rib *next;

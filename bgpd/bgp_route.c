@@ -255,6 +255,24 @@ nlri_node_get (struct prefix *p)
 
  */
 
+/* If community attribute includes no_export then return 1. */
+int
+bgp_community_filter (struct peer *peer, struct bgp_info *info)
+{
+  if (info->attr->community)
+    {
+      /* NO_ADVERTISE check. */
+      if (community_include (info->attr->community, COMMUNITY_NO_ADVERTISE))
+	return 1;
+
+      /* NO_EXPORT check. */
+      if (bgp_peer_sort (peer) == BGP_PEER_EBGP &&
+	  community_include (info->attr->community, COMMUNITY_NO_EXPORT))
+	return 1;
+    }
+  return 0;
+}
+
 /* Announce the prefix and information. */
 void
 bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
@@ -262,8 +280,14 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
   struct attr attr;
   struct bgp_info bgp_info;
 
+  /* Aggregated and suppressed. */
   if (info->suppress_count)
     return;
+
+  /* Community check. */
+  if (peer->send_community)
+    if (bgp_community_filter (peer, info))
+      return;
 
   /* Apply output filter. */
   if (bgp_output_filter (peer, p, info) == FILTER_DENY)
@@ -1391,7 +1415,8 @@ config_write_network (struct vty *vty, struct bgp *bgp)
   for (node = route_top (bgp_static_ipv4); node; node = route_next (node)) 
     if ((route = node->info) != NULL)
       vty_out (vty, " network %s/%d%s", 
-	       inet_ntoa (node->p.u.prefix4), node->p.prefixlen, VTY_NEWLINE);
+	       inet_ntop (AF_INET, &node->p.u.prefix4, buf, BUFSIZ), 
+	       node->p.prefixlen, VTY_NEWLINE);
 #ifdef HAVE_IPV6
   for (node = route_top (bgp_static_ipv6); node; node = route_next (node)) 
     if ((route = node->info) != NULL)
@@ -1403,7 +1428,8 @@ config_write_network (struct vty *vty, struct bgp *bgp)
   for (node = route_top (bgp_aggregate_ipv4); node; node = route_next (node))
     if ((route = node->info) != NULL)
       vty_out (vty, " aggregate-address %s/%d summary-only%s",
-	       inet_ntoa (node->p.u.prefix4), node->p.prefixlen, VTY_NEWLINE);
+	       inet_ntop (AF_INET, &node->p.u.prefix4, buf, BUFSIZ),
+	       node->p.prefixlen, VTY_NEWLINE);
 #ifdef HAVE_IPV6
   for (node = route_top (bgp_aggregate_ipv6); node; node = route_next (node))
     if ((route = node->info) != NULL)

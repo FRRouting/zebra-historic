@@ -60,7 +60,7 @@ static void
 zerror (const char *fname, int type, size_t size)
 {
   fprintf (stderr, "%s : can't allocate memory for `%s' size %d\n", 
-	   fname, lookup (mstr, type), size);
+	   fname, lookup (mstr, type), (int) size);
   exit (1);
 }
 

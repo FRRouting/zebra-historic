@@ -1,5 +1,55 @@
-GNU Zebra is not yet released, so this NEWS is about snapshot.
+GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.69
+
+* Changes in zebra
+
+** zebra redistirbution supports dynamic notification of the route
+change.  If you add static route while running zebra, it will be
+reflected to other protocol daemon which set `redistribute static'.
+
+** If static route installation is failed due to the error.  The
+static route is not added to the configuration and zebra routing
+table.
+
+** zebra sets forwarding flag to on when it starts up.
+
+** `no ip forwarding' turn off IPv4 forwarding.
+
+** `no ipv6 forwarding' turn off IPv6 forwarding.
+
+** Change `show ipforward' command to `show ip forwarding'.
+
+** Change `show ipv6forward' command to `show ipv6 forwarding'.
+
+** `ip route A.B.C.D/M INTERFACE' works.  So you can set `ip route
+10.0.0.0/8 eth0'.
+
+* Changes in bgpd
+
+** `neighbor PEER send-community' command is added.  If the option is
+set, bgpd will send community attribute to the peer.
+
+** When a BGP route has no-export community attribute and
+send-community is set to the peer, the route is not announced to the
+peer.
+
+* Changes in ripngd
+
+** When ripngd terminates, delete all installed route.
+
+** `redistribute static', `redistribute connected' works.
+
+** Change `debug ripng event' to `debug ripng events'.
+
+** Change `show debug ripng' to `show debugging ripng'.
+
+** Bug of static route deletion is fixed.
+
+* Changes in ospfd
+
+** LS request and LS update can be send and received.
+
 * Changes in zebra-0.68
 
 * Changes in lib

@@ -50,3 +50,15 @@ ipforward ()
   ret = atoi (oq.data);
   return ret;
 }
+
+int
+ipforward_on ()
+{
+  ;
+}
+
+int
+ipforward_off ()
+{
+  ;
+}

@@ -21,14 +21,14 @@
 
 #include "ospf6d.h"
 
-void
+static void
 print_vertex (struct vertex *W)
 {
-  zvlog_debug ("SPFCALC:    VertexID-1 = %s", inet4str (W->vtx_id[0]));
-  zvlog_debug ("SPFCALC:    VertexID-2 = %s", inet4str (W->vtx_id[1]));
+  log_spf ("    VertexID-1 = %s", inet4str (W->vtx_id[0]));
+  log_spf ("    VertexID-2 = %s", inet4str (W->vtx_id[1]));
 }
 
-struct vertex *
+static struct vertex *
 make_vertex (struct lsa_internal *lsa)
 {
   struct vertex *v;
@@ -59,7 +59,7 @@ make_vertex (struct lsa_internal *lsa)
   return v;
 }
 
-int
+static int
 vertex_free (struct vertex *v)
 {
   while (listcount (v->vtx_nexthops))
@@ -78,12 +78,12 @@ vertex_free (struct vertex *v)
   return 0;
 }
 
-int
+static int
 spf_install (struct vertex *v, struct area *area)
 {
   if (v->vtx_parent == (struct vertex *)NULL)
     {
-      zvlog_debug ("SPFCALC: Installing Root...");
+      log_spf ("Installing Root...");
       print_vertex (v);
       area->spftree.root = v;
     }
@@ -99,7 +99,7 @@ spf_install (struct vertex *v, struct area *area)
   return 0;
 }
 
-int
+static int
 spf_init (struct area *area)
 {
   int i, j;
@@ -147,40 +147,17 @@ spf_init (struct area *area)
   v->vtx_depth = 0;
   spf_install (v, area);
 
-  if (area->rt_table_prev)
-    {
-      XFREE (MTYPE_OSPF6_ROUTE, area->rt_table_prev);
-      area->rt_table_prev = NULL;
-      area->tablesize_prev = 0;
-    }
-  if (area->ospf6->isinstall && area->rt_table)
-    {
-      area->rt_table_prev = area->rt_table;
-      area->rt_table = NULL;
-      area->tablesize_prev = area->tablesize;
-      area->tablesize = 0;
-    }
-  else if (area->rt_table)
-    {
-      XFREE (MTYPE_OSPF6_ROUTE, area->rt_table);
-      area->rt_table = NULL;
-      area->tablesize = 0;
-    }
-
-  area->rt_table = (struct routing_table_entry *)
-    XMALLOC (MTYPE_OSPF6_ROUTE, ROUTING_TABLE_SIZE);
-  area->tablesize = 0;
-  memset (area->rt_table, 0, ROUTING_TABLE_SIZE);
-
+  rtable_init (&area->rtable);
   return 0;
 }
 
-void free_nexthop (struct nexthop_info *nh)
+static void
+free_nexthop (struct nexthop_info *nh)
 {
   XFREE (MTYPE_OSPF6_ROUTE, nh);
 }
 
-struct nexthop_info *
+static struct nexthop_info *
 make_nexthop (unsigned long ifindex, unsigned long id_one,
               unsigned long id_two)
 {
@@ -230,7 +207,7 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
   return nexthopinfo;
 }
 
-struct vertex *
+static struct vertex *
 router_link (struct vertex *V)
 {
   static struct router_lsd *currentlink;
@@ -368,7 +345,7 @@ router_link (struct vertex *V)
       return W;
 
     default:
-      zlog (NULL, LOG_WARNING,"WARN: Some thing has gone wrong in SPFCALC"
+      zvlog_warn ("Some thing has gone wrong in SPF calculation"
                   " for Area[%s], reset",
                   inet4str (V->vtx_lsa->area->area_id));
       lsa = (struct lsa_internal *)NULL;
@@ -376,7 +353,7 @@ router_link (struct vertex *V)
     }
 }
 
-struct vertex *
+static struct vertex *
 network_link (struct vertex *V)
 {
   static rtr_id_t *currentlink;
@@ -492,7 +469,7 @@ spf_calculation (struct thread *thread)
   area->spf_calc = (struct thread *)NULL;
 
   /* Commented out due to compilation error. */
-  /* zvlog_info ("Doing SPF Calculation for %s...", area->str); */
+  zvlog_info ("Doing SPF Calculation for area %s", area->str);
 
   /* (1) */
   spf_init (area);
@@ -504,7 +481,7 @@ spf_calculation (struct thread *thread)
     {
       for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
         {
-          zvlog_debug ("SPFCALC: Current Candidate:");
+          log_spf ("Current Candidate:");
           print_vertex (W);
 
           already = 0;
@@ -521,7 +498,7 @@ spf_calculation (struct thread *thread)
             }
           if (already)
             {
-              zvlog_debug ("SPFCALC:  Already on the SPF Tree");
+              log_spf ("Already on the SPF Tree");
               vertex_free (W);
               continue;
             }
@@ -563,7 +540,7 @@ spf_calculation (struct thread *thread)
             closest = p;
         }
       list_delete_by_val (candidatelist, closest);
-      zvlog_debug ("SPFCALC: Installing ...");
+      log_spf ("Installing ...");
       print_vertex (closest);
       spf_install (closest, area);
       V = closest;
@@ -572,28 +549,8 @@ spf_calculation (struct thread *thread)
   assert (listcount (candidatelist) == 0);
   list_free (candidatelist);
 
-  zvlog_debug ("SPFCALC: SPF Calculation Done!!");
+  zvlog_info ("SPF Calculation Done for area %s", area->str);
   return 0;
-}
-
-/* is this prefix already installed to internal routing table? */
-int
-route_isinstalled (struct ospf6_prefix *prefix, struct area *area)
-{
-  int k, already;
-
-  already = 0;
-  for (k = 0; k < area->tablesize; k++)
-    {
-      if (!memcmp (&area->rt_table[k].destination,
-          (prefix + 1), OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len)))
-        {
-          already++;
-          break;
-        }
-    }
-
-  return already;
 }
 
 void
@@ -601,6 +558,7 @@ route_install_internal (struct ospf6_prefix *dst, cost_t cost,
                         struct in6_addr *nexthop, unsigned long ifindex,
                         struct area *area)
 {
+#if 0
   char str[64];
 
   /* Install Internal Routing Table */
@@ -630,6 +588,7 @@ route_install_internal (struct ospf6_prefix *dst, cost_t cost,
               sizeof (struct in6_addr));
     }
   area->tablesize++;
+#endif
   return;
 }
 
@@ -666,6 +625,7 @@ get_prefix_lsa_of_vertex (struct vertex *v, struct area *area)
 void
 add_route_internal_table (struct vertex *v, struct area *area)
 {
+#if 0
   list lsalist = NULL;
   listnode n;
   struct intra_area_prefix_lsa *intra_prefix_lsa;
@@ -737,7 +697,7 @@ add_route_internal_table (struct vertex *v, struct area *area)
               return;
             }
 
-          if (route_isinstalled (prefix, area))
+          if (rtable_lookup (XXX))
             {
               zvlog_debug ("ROUTECALC: already installed");
               continue;
@@ -755,6 +715,7 @@ add_route_internal_table (struct vertex *v, struct area *area)
     }
 
   list_delete_all (lsalist);
+#endif
   return;
 }
 
@@ -792,6 +753,7 @@ routing_table_calculation (struct thread *thread)
 #define DELETE      0
 int install_route (struct area *area)
 {
+#if 0
   int i, j, remain;
   struct routing_table_entry *current;
   struct prefix_ipv6 p;
@@ -852,11 +814,13 @@ int install_route (struct area *area)
         }
     }
 
+#endif
   return 0;
 }
 
 int noinstall_route (struct area *area)
 {
+#if 0
   int i;
   struct routing_table_entry *current;
   struct prefix_ipv6 p;
@@ -878,6 +842,7 @@ int noinstall_route (struct area *area)
 
   XFREE (MTYPE_OSPF6_ROUTE, area->rt_table_prev);
   area->tablesize_prev = 0;
+#endif
   return 0;
 }
 

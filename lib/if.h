@@ -104,6 +104,7 @@ struct interface *if_new (void);
 struct interface *if_lookup_by_index (int);
 struct interface *if_lookup_by_name (char *);
 struct interface *if_get_by_name (char *);
+void if_delete (struct interface *);
 int if_is_up (struct interface *);
 int if_is_loopback (struct interface *);
 int if_is_broadcast (struct interface *);

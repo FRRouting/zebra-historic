@@ -955,6 +955,55 @@ DEFUN (no_neighbor_route_reflector_client,
   return CMD_SUCCESS;
 }
 
+DEFUN (neighbor_send_community,
+       neighbor_send_community_cmd,
+       "neighbor A.B.C.D send-community",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Configure send community attribute to this neighbor\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->send_community = 1;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_send_community,
+       no_neighbor_send_community_cmd,
+       "no neighbor A.B.C.D send-community",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Configure send community attribute to this neighbor\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->send_community = 0;
+
+  return CMD_SUCCESS;
+}
+
 /* Set route-map to the peer. */
 static void
 bgp_route_map_set (struct peer *peer, int direct, char *route_map)
@@ -2151,6 +2200,15 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	    vty_out (vty, " ebgp-multihop %d%s", peer->ttl, VTY_NEWLINE);
 	}
 
+      /* send-community print. */
+      if (peer->send_community)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+
+	  vty_out (vty, " send-community%s", VTY_NEWLINE);
+	}
+
       /* distribute-list print. */
       if (peer->distribute[BGP_FILTER_IN].name)
 	{
@@ -2356,6 +2414,8 @@ bgp_init ()
   install_element (BGP_NODE, &neighbor_interface_cmd);
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
+  install_element (BGP_NODE, &neighbor_send_community_cmd);
+  install_element (BGP_NODE, &no_neighbor_send_community_cmd);
 
   /* Make empty list of bgp and peer list. */
   bgp_list = list_init ();

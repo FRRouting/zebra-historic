@@ -58,7 +58,7 @@ ripng_slot_check (struct route_node *node)
 
 /* RIPng routes treatment. */
 int
-ripng_static_add (struct route_node *node, u_char metric)
+ripng_static_add (struct route_node *node, u_char metric, int sub_type)
 {
   struct ripng_slot *slot;
   struct ripng_info *rinfo;
@@ -71,16 +71,19 @@ ripng_static_add (struct route_node *node, u_char metric)
 
   /* There is already same static route. */
   if (RIPNG_SLOT_STATIC(slot))
-    return -1;
+    {
+      ripng_info_free (RIPNG_SLOT_STATIC(slot));
+      route_unlock_node (node);
+    }
 
   /* Make new static route information. */
   rinfo = ripng_info_new ();
   rinfo->type = RIPNG_ROUTE_STATIC;
+  rinfo->sub_type = sub_type;
   rinfo->metric = metric;
   rinfo->timer = 0;
   rinfo->fib = 0;
   RIPNG_SLOT_STATIC(slot) = rinfo;
-  ripng_slot_check (node);
 
   return 0;
 }
@@ -101,6 +104,7 @@ ripng_static_delete (struct route_node *node)
 
   ripng_info_free (RIPNG_SLOT_STATIC(slot));
   RIPNG_SLOT_STATIC(slot) = NULL;
+  ripng_slot_check (node);
   
   route_unlock_node (node);
 
@@ -156,4 +160,28 @@ ripng_aggregate_delete (struct route_node *node)
   route_unlock_node (node);
 
   return 0;
+}
+
+extern struct route_table *ripng_table;
+
+void
+ripng_route_add (int type, struct prefix_ipv6 *p)
+{
+  int ret;
+  int metric = 0;
+  struct route_node *node;
+
+  node = route_node_get (ripng_table, (struct prefix *)p);
+  ret = ripng_static_add (node, metric, 0);
+}
+
+void
+ripng_route_delete (int type, struct prefix_ipv6 *p)
+{
+  int ret;
+  struct route_node *node;
+
+  node = route_node_get (ripng_table, (struct prefix *) p);
+  ret = ripng_static_delete (node);
+  route_unlock_node (node);
 }

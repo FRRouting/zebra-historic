@@ -22,13 +22,13 @@
 
 #include <zebra.h>
 
+#include "thread.h"
 #include "linklist.h"
 #include "prefix.h"
-#include "table.h"
 #include "if.h"
+#include "table.h"
 #include "memory.h"
 #include "command.h"
-#include "thread.h"
 #include "stream.h"
 #include "log.h"
 
@@ -222,7 +222,7 @@ DEFUN (if_ospf_message_digest_key,
 
 DEFUN (if_ospf_cost,
        if_ospf_cost_cmd,
-       "ospf cost COST",
+       "ospf cost <1-65535>",
        "OSPF interface commands\n"
        "Interface cost\n"
        "Cost")
@@ -268,7 +268,7 @@ DEFUN (no_if_ospf_cost,
 
 DEFUN (if_ospf_dead_interval,
        if_ospf_dead_interval_cmd,
-       "ospf dead-interval INTERVAL",
+       "ospf dead-interval <1-65535>",
        "OSPF interface commands\n"
        "Interval after which a neighbor is declared dead\n"
        "Seconds")
@@ -314,7 +314,7 @@ DEFUN (no_if_ospf_dead_interval,
 
 DEFUN (if_ospf_hello_interval,
        if_ospf_hello_interval_cmd,
-       "ospf hello-interval INTERVAL",
+       "ospf hello-interval <1-65535>",
        "OSPF interface commands\n"
        "Time between HELLO packets\n"
        "Seconds")
@@ -358,12 +358,15 @@ DEFUN (no_if_ospf_hello_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_network_broadcast,
-       if_ospf_network_broadcast_cmd,
-       "ospf network broadcast",
+DEFUN (if_ospf_network,
+       if_ospf_network_cmd,
+       "ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point",
        "OSPF interface commands\n"
        "Network type\n"
-       "Specify OSPF broadcast multi-access network")
+       "Specify OSPF broadcast multi-access network\n"
+       "Specify OSPF NBMA network\n"
+       "Specify OSPF point-to-multipoint network\n"
+       "Specify OSPF point-to-point network\n")
 {
   struct interface *ifp;
   struct ospf_interface *oi;
@@ -371,61 +374,14 @@ DEFUN (if_ospf_network_broadcast,
   ifp = vty->index;
   oi = ifp->if_data;
 
-  oi->type = OSPF_IFTYPE_BROADCAST;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (if_ospf_network_non_broadcast,
-       if_ospf_network_non_broadcast_cmd,
-       "ospf network non-broadcast",
-       "OSPF interface commands\n"
-       "Network type\n"
-       "Specify OSPF NBMA network")
-{
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->if_data;
-
-  oi->type = OSPF_IFTYPE_NBMA;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (if_ospf_network_point_to_multipoint,
-       if_ospf_network_point_to_multipoint_cmd,
-       "ospf network point-to-multipoint",
-       "OSPF interface commands\n"
-       "Network type\n"
-       "Specify OSPF point-to-multipoint network")
-{
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->if_data;
-
-  oi->type = OSPF_IFTYPE_POINTOMULTIPOINT;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (if_ospf_network_point_to_point,
-       if_ospf_network_point_to_point_cmd,
-       "ospf network point-to-point",
-       "OSPF interface commands\n"
-       "Network type\n"
-       "Specify OSPF point-to-point network")
-{
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->if_data;
-
-  oi->type = OSPF_IFTYPE_POINTOPOINT;
+  if (strncmp (argv[0], "b", 1) == 0)
+    oi->type = OSPF_IFTYPE_BROADCAST;
+  else if (strncmp (argv[0], "n", 1) == 0)
+    oi->type = OSPF_IFTYPE_NBMA;
+  else if (strncmp (argv[0], "point-to-m", 10) == 0)
+    oi->type = OSPF_IFTYPE_POINTOMULTIPOINT;
+  else if (strncmp (argv[0], "point-to-p", 10) == 0)
+    oi->type = OSPF_IFTYPE_POINTOPOINT;
 
   return CMD_SUCCESS;
 }
@@ -450,7 +406,7 @@ DEFUN (no_if_ospf_network,
 
 DEFUN (if_ospf_priority,
        if_ospf_priority_cmd,
-       "ospf priority NUMBER",
+       "ospf priority <0-255>",
        "OSPF interface commands\n"
        "Router priority\n"
        "Priority")
@@ -496,7 +452,7 @@ DEFUN (no_if_ospf_priority,
 
 DEFUN (if_ospf_retransmit_interval,
        if_ospf_retransmit_interval_cmd,
-       "ospf retransmit-interval INTERVAL",
+       "ospf retransmit-interval <1-65535>",
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements\n"
        "Seconds")
@@ -542,7 +498,7 @@ DEFUN (no_if_ospf_retransmit_interval,
 
 DEFUN (if_ospf_transmit_delay,
        if_ospf_transmit_delay_cmd,
-       "ospf transmit-delay DELAY",
+       "ospf transmit-delay <1-65535>",
        "OSPF interface commands\n"
        "Link state transmit delay\n"
        "Seconds")
@@ -570,7 +526,7 @@ DEFUN (if_ospf_transmit_delay,
 
 DEFUN (no_if_ospf_transmit_delay,
        no_if_ospf_transmit_delay_cmd,
-       "no ospf transmit-delay DELAY",
+       "no ospf transmit-delay",
        NO_STR
        "OSPF interface commands\n"
        "Link state transmit delay")
@@ -619,10 +575,7 @@ ospf_if_init ()
   install_element (INTERFACE_NODE, &no_if_ospf_dead_interval_cmd);
   install_element (INTERFACE_NODE, &if_ospf_hello_interval_cmd);
   install_element (INTERFACE_NODE, &no_if_ospf_hello_interval_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_network_broadcast_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_network_non_broadcast_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_network_point_to_multipoint_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_network_point_to_point_cmd);
+  install_element (INTERFACE_NODE, &if_ospf_network_cmd);
   install_element (INTERFACE_NODE, &no_if_ospf_network_cmd);
   install_element (INTERFACE_NODE, &if_ospf_priority_cmd);
   install_element (INTERFACE_NODE, &no_if_ospf_priority_cmd);

@@ -446,7 +446,7 @@ thread_timer_sub (struct timeval a, struct timeval b)
 void
 thread_timer_dump (struct timeval tv)
 {
-  printf ("Timer : %ld:%ld\n", tv.tv_sec, tv.tv_usec);
+  printf ("Timer : %ld:%ld\n", (long int) tv.tv_sec, (long int) tv.tv_usec);
 }
 
 /* Fetch next ready thread. */

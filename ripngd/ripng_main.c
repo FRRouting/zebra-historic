@@ -83,6 +83,58 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
   exit (status);
 }
 
+/* SIGHUP handler. */
+void 
+sighup (int sig)
+{
+  zlog (NULL, LOG_INFO, "SIGHUP received");
+}
+
+/* SIGINT handler. */
+void
+sigint (int sig)
+{
+  zlog (NULL, LOG_INFO, "Terminating on signal");
+
+  if (! retain_mode)
+    ripng_terminate ();
+
+  exit (0);
+}
+
+/* Signale wrapper. */
+RETSIGTYPE *
+signal_set (int signo, void (*func)(int))
+{
+  int ret;
+  struct sigaction sig;
+  struct sigaction osig;
+
+  sig.sa_handler = func;
+  sigemptyset (&sig.sa_mask);
+  sig.sa_flags = 0;
+#ifdef SA_RESTART
+  sig.sa_flags |= SA_RESTART;
+#endif /* SA_RESTART */
+
+  ret = sigaction (signo, &sig, &osig);
+
+  if (ret < 0) 
+    return (SIG_ERR);
+  else
+    return (osig.sa_handler);
+}
+
+/* Initialization of signal handles. */
+void
+signal_init ()
+{
+  signal_set (SIGHUP, sighup);
+  signal_set (SIGINT, sigint);
+  signal_set (SIGTERM, sigint);
+  signal_set (SIGPIPE, SIG_IGN);
+}
+
 /* RIPngd main routine. */
 int
 main (int argc, char **argv)
@@ -143,7 +195,7 @@ main (int argc, char **argv)
   master = thread_make_master ();
 
   /* Library inits. */
-  /* log_init (); */
+  signal_init ();
   cmd_init ();
   vty_init ();
 

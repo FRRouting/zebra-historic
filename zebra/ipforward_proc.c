@@ -35,10 +35,9 @@ ipforward ()
   char buf[10];
 
   fp = fopen (proc_net_snmp, "r");
-  if (fp == NULL) {
-    /* need logging here */
+
+  if (fp == NULL)
     return -1;
-  }
 
   /* We don't care about the first line. */
   dropline (fp);
@@ -49,13 +48,101 @@ ipforward ()
   pnt = fgets (buf, 6, fp);
   sscanf (buf, "Ip: %d", &ipforwarding);
 
-  return ipforwarding;
+  if (ipforwarding == 1)
+    return 1;
+
+  return 0;
 }
 
+/* char proc_ipv4_forwarding[] = "/proc/sys/net/ipv4/conf/all/forwarding"; */
+char proc_ipv4_forwarding[] = "/proc/sys/net/ipv4/ip_forward";
+
+int
+ipforward_on ()
+{
+  FILE *fp;
+
+  fp = fopen (proc_ipv4_forwarding, "w");
+  
+  if (fp == NULL)
+    return -1;
+
+  fprintf (fp, "1\n");
+
+  fclose (fp);
+
+  return ipforward ();
+}
+
+int
+ipforward_off ()
+{
+  FILE *fp;
+
+  fp = fopen (proc_ipv4_forwarding, "w");
+  
+  if (fp == NULL)
+    return -1;
+
+  fprintf (fp, "0\n");
+
+  fclose (fp);
+
+  return ipforward ();
+}
 #ifdef HAVE_IPV6
+
+char proc_ipv6_forwarding[] = "/proc/sys/net/ipv6/conf/all/forwarding";
+
 int
 ipforward_ipv6 ()
 {
-  return 0;
+  FILE *fp;
+  char buf[5];
+  int ipforwarding = 0;
+
+  fp = fopen (proc_ipv6_forwarding, "r");
+
+  if (fp == NULL)
+    return -1;
+
+  fgets (buf, 2, fp);
+  sscanf (buf, "%d", &ipforwarding);
+
+  return ipforwarding;
+}
+
+int
+ipforward_ipv6_on ()
+{
+  FILE *fp;
+
+  fp = fopen (proc_ipv6_forwarding, "w");
+  
+  if (fp == NULL)
+    return -1;
+
+  fprintf (fp, "1\n");
+
+  fclose (fp);
+
+  return ipforward_ipv6 ();
+}
+
+int
+ipforward_ipv6_off ()
+{
+  FILE *fp;
+
+  fp = fopen (proc_ipv6_forwarding, "w");
+  
+  if (fp == NULL)
+    return -1;
+
+  fprintf (fp, "0\n");
+
+  fclose (fp);
+
+  return ipforward_ipv6 ();
 }
 #endif /* HAVE_IPV6 */

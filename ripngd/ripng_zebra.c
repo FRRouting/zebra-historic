@@ -59,6 +59,76 @@ ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
   if (zebra->redist[ZEBRA_ROUTE_RIPNG])
     zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_RIPNG, p, nexthop, ifindex);
 }
+
+/* Zebra route add and delete treatment. */
+int
+ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
+{
+  u_char type;
+  struct in6_addr nexthop;
+  u_char *lim;
+  struct stream *s;
+
+  s = zebra->ibuf;
+
+  lim = stream_pnt (s) + length;
+
+  /* Fetch type and nexthop first. */
+  type = stream_getc (s);
+  memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
+  stream_forward (s, sizeof (struct in6_addr));
+
+  /* Then fetch IPv6 prefixes. */
+  while (stream_pnt (s) < lim)
+    {
+      int size;
+      struct prefix_ipv6 p;
+      unsigned int ifindex;
+
+      ifindex = stream_getl (s);
+
+      bzero (&p, sizeof (struct prefix_ipv6));
+      p.family = AF_INET6;
+      p.prefixlen = stream_getc (s);
+      size = PSIZE (p.prefixlen);
+      memcpy (&p.prefix, stream_pnt (s), size);
+      stream_forward (s, size);
+
+      if (command == ZEBRA_IPV6_ROUTE_ADD)
+	ripng_route_add (type, &p);
+      else
+	ripng_route_delete (type, &p);
+    }
+  return 0;
+}
+
+int
+ripng_redistribute_set (int type)
+{
+  if (zebra->redist[type])
+    return CMD_SUCCESS;
+
+  zebra->redist[type] = 1;
+
+  if (zebra->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, type);
+
+  return CMD_SUCCESS;
+}
+
+int
+ripng_redistribute_unset (int type)
+{
+  if (! zebra->redist[type])
+    return CMD_SUCCESS;
+
+  zebra->redist[type] = 0;
+
+  if (zebra->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+
+  return CMD_SUCCESS;
+}
 
 DEFUN (router_zebra,
        router_zebra_cmd,
@@ -82,8 +152,8 @@ DEFUN (router_zebra,
   return CMD_SUCCESS;
 }
 
-DEFUN (redistribute_ripng,
-       redistribute_ripng_cmd,
+DEFUN (ripng_redistribute_ripng,
+       ripng_redistribute_ripng_cmd,
        "redistribute ripng",
        "Redistribute control\n"
        "RIPng route\n")
@@ -92,8 +162,8 @@ DEFUN (redistribute_ripng,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_redistribute_ripng,
-       no_redistribute_ripng_cmd,
+DEFUN (no_ripng_redistribute_ripng,
+       no_ripng_redistribute_ripng_cmd,
        "no redistribute ripng",
        NO_STR
        "Redistribute control\n"
@@ -101,6 +171,75 @@ DEFUN (no_redistribute_ripng,
 {
   zebra->redist[ZEBRA_ROUTE_RIPNG] = 0;
   return CMD_SUCCESS;
+}
+
+DEFUN (ripng_redistribute_static,
+       ripng_redistribute_static_cmd,
+       "redistribute static",
+       "Redistribute control\n"
+       "Static route\n")
+{
+  return ripng_redistribute_set (ZEBRA_ROUTE_STATIC);
+}
+
+DEFUN (no_ripng_redistribute_static,
+       no_ripng_redistribute_static_cmd,
+       "no redistribute static",
+       NO_STR
+       "Redistribute control\n"
+       "Static route\n")
+{
+  return ripng_redistribute_unset (ZEBRA_ROUTE_STATIC);
+}
+
+DEFUN (ripng_redistribute_connected,
+       ripng_redistribute_connected_cmd,
+       "redistribute connected",
+       "Redistribute control\n"
+       "Connected route\n")
+{
+  return ripng_redistribute_set (ZEBRA_ROUTE_CONNECT);
+}
+
+DEFUN (no_ripng_redistribute_connected,
+       no_ripng_redistribute_connected_cmd,
+       "no redistribute connected",
+       NO_STR
+       "Redistribute control\n"
+       "Connected route\n")
+{
+  return ripng_redistribute_unset (ZEBRA_ROUTE_CONNECT);
+}
+
+DEFUN (ripng_redistribute_bgp,
+       ripng_redistribute_bgp_cmd,
+       "redistribute bgp",
+       "Redistribute control\n"
+       "BGP route\n")
+{
+  return ripng_redistribute_set (ZEBRA_ROUTE_BGP);
+}
+
+DEFUN (no_ripng_redistribute_bgp,
+       no_ripng_redistribute_bgp_cmd,
+       "no redistribute bgp",
+       NO_STR
+       "Redistribute control\n"
+       "BGP route\n")
+{
+  return ripng_redistribute_unset (ZEBRA_ROUTE_BGP);
+}
+
+void
+ripng_redistribute_write (struct vty *vty)
+{
+  int i;
+  char *str[] = { "system", "kernel", "connected", "static", "rip",
+		  "ripng", "ospf", "ospf6", "bgp"};
+
+  for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+    if (i != zebra->redist_default && zebra->redist[i])
+      vty_out (vty, " redistribute %s%s", str[i], VTY_NEWLINE);
 }
 
 /* RIPng configuration write function. */
@@ -150,6 +289,8 @@ zebra_init ()
 
   /* Set call back functions. */
   zebra->get_all_interface = ripng_zebra_get_interface;
+  zebra->ipv6_route_add = ripng_zebra_read_ipv6;
+  zebra->ipv6_route_delete = ripng_zebra_read_ipv6;
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
@@ -159,6 +300,12 @@ zebra_init ()
   install_element (ZEBRA_NODE, &config_end_cmd);
   install_element (ZEBRA_NODE, &config_exit_cmd);
   install_element (ZEBRA_NODE, &config_help_cmd);
-  install_element (ZEBRA_NODE, &redistribute_ripng_cmd);
-  install_element (ZEBRA_NODE, &no_redistribute_ripng_cmd);
+  install_element (ZEBRA_NODE, &ripng_redistribute_ripng_cmd);
+  install_element (ZEBRA_NODE, &no_ripng_redistribute_ripng_cmd);
+  install_element (RIPNG_NODE, &ripng_redistribute_static_cmd);
+  install_element (RIPNG_NODE, &no_ripng_redistribute_static_cmd);
+  install_element (RIPNG_NODE, &ripng_redistribute_connected_cmd);
+  install_element (RIPNG_NODE, &no_ripng_redistribute_connected_cmd);
+  install_element (RIPNG_NODE, &ripng_redistribute_bgp_cmd);
+  install_element (RIPNG_NODE, &no_ripng_redistribute_bgp_cmd);
 }

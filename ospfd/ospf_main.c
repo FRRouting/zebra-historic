@@ -22,17 +22,18 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "version.h"
 #include "getopt.h"
+#include "thread.h"
 #include "linklist.h"
 #include "if.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
-#include "thread.h"
-#include "log.h"
 #include "filter.h"
+#include "log.h"
 
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_zebra.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospfd.h"
 #include "zebra/zebra.h"
 
@@ -198,6 +199,7 @@ main (int argc, char **argv)
   /* Library inits. */
   signal_init ();
   cmd_init ();
+  debug_init ();
   vty_init ();
   /* memory_init (); */
 
@@ -206,6 +208,7 @@ main (int argc, char **argv)
   /* OSPFd inits. */
   ospf_init ();
   ospf_if_init ();
+  ospf_lsa_init ();
 
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);

@@ -30,7 +30,7 @@ void
 ripng_slot_add (struct route_node *node);
 
 int
-ripng_static_add (struct route_node *node, u_char metric);
+ripng_static_add (struct route_node *node, u_char metric, int sub_type);
 
 int
 ripng_static_delete (struct route_node *node);

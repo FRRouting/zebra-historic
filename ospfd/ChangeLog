@@ -1,12 +1,57 @@
+1999-06-21  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_nsm.c (ospf_db_desc_timer): function added.
+	(nsm_timer_set) function added.
+	* ospf_dump.c (ospf_option_dump): function added.
+	* ospf_packet.c (ospf_ls_req) (ospf_make_ls_req): function added.
+
+1999-06-20  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (ospf_lsa_more_recent): function added.
+	* ospf_neighbor.h (struct ospf_neighbor): Change member ms_flag
+	to dd_flags.
+	
+1999-06-19  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c: DEFUN (show_ip_ospf_database) Added.
+	* ospf_interface.c (if_ospf_cost), (if_ospf_dead_interval),
+	(if_ospf_hello_interval), (if_ospf_priority),
+	(if_ospf_retransmit_interval), (if_ospf_transmit_delay)
+	argument changed from NUMBER to <range>.
+	DEFUN (if_ospf_network_broadcast),
+	DEFUN (if_ospf_network_non_broadcast),
+	DEFUN (if_ospf_network_point_to_multipoint),
+	DEFUN (if_ospf_network_point_to_point) functions are combined to
+	DEFUN (if_ospf_network).
+	
+1999-06-18  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c: ospf_add_router_lsa (), ospf_add_network_lsa (),
+	ospf_lsa_lookup (), ospf_lsa_count () Added.
+
+1999-06-15  Toshiaki Takada  <takada@zebra.org>
+
+	* DEFUN (ospf_debug_ism), DEFUN (ospf_debug_nsm),
+	DEFUN (no_ospf_debug_ism), DEFUN (no_ospf_debug_nsm) Added.
+	`debug ospf ism' command shows debug message.
+	`debuf ospf nsm' command shows debug message.
+
+1999-06-14  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c: ospf_network_lsa () Added.
+	ospf_lsa_checksum () Added.
+	* DEFUN (ospf_debug_packet), DEFUN (no_ospf_debug_packet) Added.
+	`debug ospf packet' command shows debug message.
+
 1999-06-13  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_packet.h: Remove struct ospf_ls_req {}, ospf_ls_upd {},
 	ospf_ls_ack {}.
-	
+
 1999-06-11  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_dump.c: fix IP packet length treatment.
-	
+
 1999-06-10  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_ism.h: Add OSPF_ISM_EVENT_EXECUTE() Macro Added.

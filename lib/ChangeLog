@@ -1,3 +1,13 @@
+1999-06-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* buffer.h (GETL): Remove GETL macro.
+
+	* version.h: Bump up to 0.69.
+
+1999-06-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c (connected_add): Commented out connected_log.
+
 1999-06-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* command.h (struct cmd_element ): strvec and descvec is combined

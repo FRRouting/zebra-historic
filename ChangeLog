@@ -1,3 +1,15 @@
+1999-06-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --enabe-all-in-one option.
+
+1999-06-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add socklen_t check.
+
+1999-06-16  Gerhard Poul <gpoul@gnu.org>
+
+	* Many compile warnings fixed.
+
 1999-05-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: Change message from Linux 2.2.X IPv6 to Linux IPv6.

@@ -32,6 +32,7 @@ struct area
 {
   struct ospf6   *ospf6;         /* back pointer */
   unsigned long   area_id;
+  char            str[16];       /* Area ID string */
   unsigned char   options[3];    /* OSPF Option including external capability */
   list            ospf6_if_list; /* OSPF interface to this area */
   list            lsdb[AREALSTYPESIZE][HASHVAL];
@@ -47,11 +48,7 @@ struct area
   struct thread  *spf_calc;
   struct thread  *route_calc;
 
-  /* XXX routing table fake */
-  struct routing_table_entry *rt_table;
-  struct routing_table_entry *rt_table_prev;
-  int                         tablesize;
-  int                         tablesize_prev;
+  struct ospf6_rtable rtable;           /* routing table for this area */
 };
 
 #endif /* OSPF_AREA_H */

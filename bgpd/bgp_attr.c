@@ -747,8 +747,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
       if (attr_endp > endp)
 	{
 	  zlog (peer->log, LOG_WARNING, 
-		"neighbor %s: BGP attribute length is too large %d",
-		peer->host, length);
+		"neighbor %s: BGP type %d length %d is too large, attribute total length is %d.  attr_endp is %p.  endp is %p", peer->host, type, length, size, attr_endp, endp);
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
@@ -967,7 +966,8 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
     }
 
   /* Community attribute. */
-  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES))
+  if (peer->send_community && 
+      (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES)))
     {
       if (attr->community->size * 4 > 255)
 	{

@@ -23,11 +23,30 @@
 #ifndef _ZEBRA_OSPF_DUMP_H
 #define _ZEBRA_OSPF_DUMP_H
 
+/* Debug Flags. */
+#define OSPF_DEBUG_HELLO	0x01
+#define OSPF_DEBUG_DB_DESC	0x02
+#define OSPF_DEBUG_LS_REQ	0x04
+#define OSPF_DEBUG_LS_UPD	0x08
+#define OSPF_DEBUG_LS_ACK	0x10
+#define OSPF_DEBUG_SEND		0x20
+#define OSPF_DEBUG_RECV		0x40
+#define OSPF_DEBUG_DETAIL	0x80
+#define OSPF_DEBUG_PACKET	0x7f
+
+#define OSPF_DEBUG_ISM		0x01
+#define OSPF_DEBUG_NSM		0x01
+
+/* Message Strings. */
+extern char *ospf_packet_type_str[];
+extern char *ospf_lsa_type_str[];
+
 /* Prototypes. */
-int debug (unsigned int option);
 char *mes_lookup (message *, int, int);
 void ospf_nbr_state_message (struct ospf_neighbor *, char *, size_t);
 char *ospf_timer_dump (struct thread *, char *, size_t);
+void ospf_ip_header_dump (struct stream *s);
 void ospf_packet_dump (struct stream *s);
+void debug_init ();
 
 #endif /* _ZEBRA_OSPF_DUMP_H */

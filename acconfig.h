@@ -40,6 +40,9 @@
 /* whether sockaddr_in6 has a sin6_scope_id field */
 #undef HAVE_SIN6_SCOPE_ID
 
+/* Define if there is socklen_t. */
+#undef HAVE_SOCKLEN_T
+
 /* Define if there is ifaliasreq structure. */
 #undef HAVE_IFALIASREQ
 
@@ -55,7 +58,10 @@
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
 
-/* Define is disable-bgp-announce option is specified. */
+/* Define if all-in-one option is specified. */
+#undef ALL_IN_ONE
+
+/* Define if disable-bgp-announce option is specified. */
 #undef DISABLE_BGP_ANNOUNCE
 
 /* Define this if htnol is broken, but can be fixed with define magic */

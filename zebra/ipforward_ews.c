@@ -46,3 +46,15 @@ ipforward ()
   close (fd);
   return *(int *)buf;
 }
+
+int
+ipforward_on ()
+{
+  ;
+}
+
+int
+ipforward_off ()
+{
+  ;
+}

@@ -7,10 +7,9 @@
 hostname ripngd
 password zebra
 !
-debug ripng event
-debug ripng packet
+! debug ripng events
+! debug ripng packet
 !
-router zebra
 !
 router ripng
 ! network sit1

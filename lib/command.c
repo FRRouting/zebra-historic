@@ -253,6 +253,12 @@ cmd_make_descvec (char *string, char *descstr)
       while (isspace (*cp) && *cp != '\0')
 	cp++;
 
+      if (*cp == '(')
+	{
+	  multiple = 1;
+	  cp++;
+	}
+
       if (*cp == '\0') 
 	return allvec;
 

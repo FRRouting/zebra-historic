@@ -90,6 +90,7 @@ struct peer
   /* Default attribute value for this peer. */
   unsigned int def;		/* Option set flag. */
   long localpref;		/* default local preference. */
+  int send_community;		/* Community attribute send flag. */
   int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */
 

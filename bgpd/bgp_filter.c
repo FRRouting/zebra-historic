@@ -433,10 +433,9 @@ as_list_delete_hook (void (*func) ())
 
 DEFUN (ip_as_path, ip_as_path_cmd,
        "ip as-path access-list NAME (deny|permit) ...",
-       "Set AS path access list definition\n"
        IP_STR
-       "AS path\n"
-       "Access list\n"
+       "Set AS path access list definition\n"
+       "AS path access list\n"
        "Access list name\n"
        "Access list for denies\n"
        "Access list for permits\n"

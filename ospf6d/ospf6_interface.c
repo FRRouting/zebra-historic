@@ -28,11 +28,9 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
 
   ifs_prev = ospf6_if->state;
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFSCHANGE: [%s]->[%s](%s) on %s",
-              ifs_name[ifs_prev], ifs_name[ifs_next], reason,
-              ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] %s -> %s (%s)",
+              ospf6_if->interface->name,
+              ifs_name[ifs_prev], ifs_name[ifs_next], reason);
 
   switch (ifs_prev)
     {
@@ -82,17 +80,16 @@ dr_change (struct ospf6_if *ospf6_if)
       && ospf6_if->prevbdr == ospf6_if->bdr)
     return 0; /* Nothing has been changed */
 
-#ifdef DEBUG_OSPF6
   {
     char dr[16], bdr[16], prevdr[16], prevbdr[16];
     inet_ntop (AF_INET, &ospf6_if->prevdr, prevdr, sizeof (prevdr));
     inet_ntop (AF_INET, &ospf6_if->prevbdr, prevbdr, sizeof (prevbdr));
     inet_ntop (AF_INET, &ospf6_if->dr, dr, sizeof (dr));
     inet_ntop (AF_INET, &ospf6_if->bdr, bdr, sizeof (bdr));
-    zvlog_info ("DRCHANGE: {DR[%s], BDR[%s]}->{DR[%s], BDR[%s]}",
+    zvlog_info ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
+                ospf6_if->interface->name,
                 prevdr, prevbdr, dr, bdr);
   }
-#endif
 
   construct_router_lsa (ospf6_if->area);
   if (ospf6_if->state == IFS_DR)
@@ -169,9 +166,7 @@ interface_up (struct thread *thread)
   ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
   assert (ospf6_if);
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFEVENT: InterfaceUp on %s", ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] InterfaceUp", ospf6_if->interface->name);
 
   assert (ospf6_if->interface);
   if (!if_is_up (ospf6_if->interface))
@@ -196,28 +191,20 @@ interface_up (struct thread *thread)
   if (mcast_join (ospf6_sock, (struct sockaddr *)&allspfrouters6,
                   ospf6_if->interface->name,
                   ospf6_if->interface->index) < 0)
-    zvlog_warn ("mcast_join() failed: %s\n", strerror (errno));
+    zvlog_warn ("mcast_join() failed for %s: %s\n",
+                ospf6_if->interface->name, strerror (errno));
 
-#ifdef DEBUG_MY_PACKET
-  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
-                  &on, sizeof (u_int)) < 0)
-    {
-      zlog (NULL, LOG_WARNING,"setsockopt() failed: IPV6_MULTICAST_LOOP: %s",
-                  strerror (errno));
-    }
-#else
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
                   &off, sizeof (u_int)) < 0)
     {
-      zlog (NULL, LOG_WARNING,"setsockopt() failed: IPV6_MULTICAST_LOOP: %s",
+      zvlog_warn ("setsockopt() failed: IPV6_MULTICAST_LOOP: %s",
                   strerror (errno));
     }
-#endif
 
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_PKTINFO,
                   &on, sizeof (int)) < 0)
     {
-      zlog (NULL, LOG_WARNING,"IPV6_PKTINFO setsockopt failed");
+      zvlog_warn ("IPV6_PKTINFO setsockopt failed");
       return -1;
     }
 
@@ -253,9 +240,7 @@ wait_timer (struct thread *thread)
   if (ospf6_if->state != IFS_WAITING)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFEVENT: WaitTimer on %s", ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] WaitTimer", ospf6_if->interface->name);
 
   ifs_change (dr_election (ospf6_if), "WaitTimer:DR Election", ospf6_if);
   return 0;
@@ -268,9 +253,7 @@ int backup_seen (struct thread *thread)
   ospf6_if = (struct ospf6_if *)THREAD_ARG  (thread);
   assert (ospf6_if);
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFEVENT: BackupSeen on %s", ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] BackupSeen", ospf6_if->interface->name);
 
   if (ospf6_if->state == IFS_WAITING)
     ifs_change (dr_election (ospf6_if), "BackupSeen:DR Election", ospf6_if);
@@ -290,9 +273,7 @@ int neighbor_change (struct thread *thread)
       ospf6_if->state != IFS_DR)
     return 0;
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFEVENT: NeighborChange on %s", ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] NeighborChange", ospf6_if->interface->name);
 
   ifs_change (dr_election (ospf6_if), "NeighborChange:DR Election", ospf6_if);
 
@@ -307,9 +288,7 @@ loopind (struct thread *thread)
   ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
   assert (ospf6_if);
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFEVENT: LoopInd on %s", ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] LoopInd", ospf6_if->interface->name);
 
   return 0;
 }
@@ -322,9 +301,7 @@ interface_down (struct thread *thread)
   ospf6_if = (struct ospf6_if *)THREAD_ARG (thread);
   assert (ospf6_if);
 
-#ifdef DEBUG_OSPF6
-  zvlog_info ("IFEVENT: InterfaceDown on %s", ospf6_if->interface->name);
-#endif
+  zvlog_info ("I/F [%s] InterfaceDown", ospf6_if->interface->name);
 
   if (ospf6_if->state == IFS_NONE)
     return 1;

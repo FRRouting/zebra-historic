@@ -84,6 +84,7 @@ proc_route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
+      p.family = AF_INET;
       sscanf (dest, "%lX", (unsigned long *)&p.prefix);
       sscanf (mask, "%lX", (unsigned long *)&tmpmask);
       p.prefixlen = ip_masklen (tmpmask);
@@ -140,6 +141,7 @@ proc_ipv6_route_read ()
       if (! (flags & RTF_GATEWAY))
 	continue;
 
+      p.family = AF_INET6;
       str2in6_addr (dest, &p.prefix);
       str2in6_addr (gate, &gateway);
       p.prefixlen = dest_plen;

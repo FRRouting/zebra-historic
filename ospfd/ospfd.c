@@ -36,6 +36,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
+#include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
 
@@ -88,9 +89,9 @@ ospf_area_new (struct in_addr area_id)
   new->default_cost = 1;
   new->auth_type = OSPF_AUTH_NULL;
 
-  new->router_lsa = list_init ();
-  new->network_lsa = list_init ();
-  new->summary_lsa = list_init ();
+  new->router_lsa = route_table_init ();
+  new->network_lsa = route_table_init ();
+  new->summary_lsa = route_table_init ();
 
   return new;
 }
@@ -98,9 +99,7 @@ ospf_area_new (struct in_addr area_id)
 void
 ospf_area_free (struct ospf_area *area)
 {
-  list_delete_all (area->router_lsa);
-  list_delete_all (area->network_lsa);
-  list_delete_all (area->summary_lsa);
+  /* Free each route table. */
 
   XFREE (MTYPE_OSPF_AREA, area);
 }
@@ -194,7 +193,7 @@ ospf_get_router_id (list if_list)
 	  if (if_is_loopback (ifp))
 	    continue;
 
-	  if (IPV4_ADDR_LT (router_id, co->address->u.prefix4))
+	  if (IPV4_ADDR_CMP (&router_id, &co->address->u.prefix4) < 0)
 	    router_id = co->address->u.prefix4;
 	}
     }
@@ -287,6 +286,9 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 
 	      /* Add Pseudo Neighbor. */
 	      ospf_nbr_add_myself (oi);
+
+	      /* Relate ospf interface to ospf instance. */
+	      oi->ospf = ospf_top;
 
 	      break;
 	    }
@@ -790,7 +792,8 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
 	   ospf_timer_dump (oi->t_hello, buf, 9));
 
   vty_out (vty, "  Neighbor Count is %d, Adjacent neighbor count is %d\r\n",
-	   ospf_nbr_count (oi->nbrs), ospf_adjacent_count (oi->nbrs));
+	   ospf_nbr_count (oi->nbrs, 0),
+	   ospf_nbr_count (oi->nbrs, NSM_Full));
 }
 
 DEFUN (show_ip_ospf_interface,
@@ -973,7 +976,7 @@ struct cmd_node ospf_node =
   "%s(config-router)# ",
 };
 
-/* Install ospf related commands. */
+/* Install OSPF related commands. */
 void
 ospf_init ()
 {

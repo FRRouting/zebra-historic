@@ -56,4 +56,5 @@ int community_match (struct community *, struct community *);
 int community_cmp (struct community *, struct community *);
 struct community *community_merge (struct community *, struct community *);
 struct community *community_dup (struct community *);
+int community_include (struct community *, u_int32_t);
 #endif /* _ZEBRA_BGP_COMMUNITY_H */

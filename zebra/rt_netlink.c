@@ -35,6 +35,8 @@
 #include "connected.h"
 #include "rib.h"
 
+/* #define DEBUG */
+
 /* Socket interface to kernel */
 struct 
 {
@@ -71,7 +73,10 @@ netlink_socket ()
   snl.nl_family = AF_NETLINK;
   snl.nl_groups = 0;
 
-  snl.nl_groups = RTMGRP_IPV6_ROUTE|RTMGRP_IPV4_ROUTE;
+  snl.nl_groups = RTMGRP_LINK|RTMGRP_IPV4_ROUTE|RTMGRP_IPV4_IFADDR;
+#ifdef HAVE_IPV6
+  snl.nl_groups |= RTMGRP_IPV6_ROUTE|RTMGRP_IPV6_IFADDR;
+#endif /* HAVE_IPV6 */
   
   /* Bind the socket to the netlink structure for anything. */
   ret = bind (netlink.sock, (struct sockaddr *) &snl, sizeof snl);
@@ -408,7 +413,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (rtm->rtm_family == AF_INET)
     {
       struct prefix_ipv4 p;
-      p.family = rtm->rtm_family;
+      p.family = AF_INET;
       memcpy (&p.prefix, dest, 4);
       p.prefixlen = rtm->rtm_dst_len;
       rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, gate, index, table);
@@ -417,7 +422,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (rtm->rtm_family == AF_INET6)
     {
       struct prefix_ipv6 p;
-      p.family = rtm->rtm_family;
+      p.family = AF_INET6;
       memcpy (&p.prefix, dest, 16);
       p.prefixlen = rtm->rtm_dst_len;
       rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, gate, index, table);
@@ -471,6 +476,9 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     return 0;
   if (rtm->rtm_protocol == RTPROT_KERNEL)
     return 0;
+  if (rtm->rtm_protocol == RTPROT_ZEBRA)
+    return 0;
+
   if (rtm->rtm_src_len != 0)
     return 0;
   
@@ -489,12 +497,17 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (tb[RTA_GATEWAY])
     gate = RTA_DATA (tb[RTA_GATEWAY]);
   else
-    return 0;
+    {
+#ifdef DEBUG
+      printf ("no gateway\n");
+#endif /* DEBUG */
+      return 0;
+    }
 
   if (rtm->rtm_family == AF_INET)
     {
       struct prefix_ipv4 p;
-      p.family = rtm->rtm_family;
+      p.family = AF_INET;
       memcpy (&p.prefix, dest, 4);
       p.prefixlen = rtm->rtm_dst_len;
       if (h->nlmsg_type == RTM_NEWROUTE)
@@ -507,12 +520,10 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     {
       struct prefix_ipv6 p;
 
-      /* It seems even IPv6 route is added/deleted by myself, this
-         message is send.  So tempolary return at here. I'll
-         investigate why it occur. */
-      return 0;
+      /* Hmmm.  I still can't find the reason. */
+      /* return 0; */
 
-      p.family = rtm->rtm_family;
+      p.family = AF_INET6;
       memcpy (&p.prefix, dest, 16);
       p.prefixlen = rtm->rtm_dst_len;
       if (h->nlmsg_type == RTM_NEWROUTE)
@@ -522,6 +533,110 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     }
 #endif /* HAVE_IPV6 */
 
+  return 0;
+}
+
+int
+netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
+{
+  int len;
+  struct ifinfomsg *ifi;
+  struct rtattr *tb [IFLA_MAX + 1];
+  struct interface *ifp;
+  char *name;
+
+  ifi = NLMSG_DATA (h);
+
+  if (! (h->nlmsg_type == RTM_NEWLINK || h->nlmsg_type == RTM_DELLINK))
+    {
+      /* If this is not link add/delete message so print warning. */
+      zlog (NULL, LOG_WARNING, "Kernel message: %d\n", h->nlmsg_type);
+      return 0;
+    }
+
+  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct ifinfomsg));
+  if (len < 0)
+    return -1;
+
+  /* Looking up interface name. */
+  bzero (tb, sizeof tb);
+  netlink_parse_rtattr (tb, IFLA_MAX, IFLA_RTA (ifi), len);
+  if (tb[IFLA_IFNAME] == NULL)
+    return -1;
+  name = (char *)RTA_DATA(tb[IFLA_IFNAME]);
+
+  /* Add interface. */
+  
+  if (h->nlmsg_type == RTM_NEWLINK)
+    {
+      ifp = if_lookup_by_name (name);
+      if (ifp == NULL)
+	{
+	  ifp = if_get_by_name (name);
+	  zlog (NULL, LOG_INFO, "interface %s index %d is added.",
+		ifp->name, ifi->ifi_index);
+	}      
+      ifp->index = ifi->ifi_index;
+      ifp->flags = ifi->ifi_flags & 0x0000fffff;
+      ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
+      ifp->metric = 1;
+
+      /* If new link is added. */
+      /**/
+    }
+  else
+    {
+      ifp = if_lookup_by_name (name);
+
+      if (ifp == NULL)
+	zlog (NULL, LOG_WARNING, "interface %s is deleted but can't find",
+	      ifp->name);
+
+      zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
+	    ifp->name, ifp->index);
+
+      if_delete (ifp);
+    }
+  return 0;
+}
+
+int
+netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h)
+{
+  switch (h->nlmsg_type)
+    {
+    case RTM_NEWROUTE:
+#ifdef DEBUG
+      printf ("RTM_NEWROUTE %d\n", h->nlmsg_type);
+#endif /* DEBUG */
+      return netlink_route_change (snl, h);
+      break;
+    case RTM_DELROUTE:
+#ifdef DEBUG
+      printf ("RTM_DELROUTE %d\n", h->nlmsg_type);
+#endif /* DEBUG */
+      return netlink_route_change (snl, h);
+      break;
+    case RTM_NEWLINK:
+    case RTM_DELLINK:
+      return netlink_link_change (snl, h);
+      break;
+    case RTM_NEWADDR:
+#ifdef DEBUG
+      printf ("RTM_NEWADDR %d\n", h->nlmsg_type);
+#endif /* DEBUG */
+      return netlink_interface_addr (snl, h);
+      break;
+    case RTM_DELADDR:
+#ifdef DEBUG
+      printf ("RTM_DELADDR %d\n", h->nlmsg_type);
+#endif /* DEBUG */
+      break;
+    default:
+#ifdef DEBUG
+      printf ("unknown message %d\n", h->nlmsg_type);
+#endif /* DEBUG */
+    }
   return 0;
 }
 
@@ -658,7 +773,7 @@ netlink_talk (struct nlmsghdr *n)
 
   /* At this point we don't detect error.  Because if sendmsg success,
      there will be no error so recvmsg() blocks. */
-  return 0;
+  /* return 0; */
   
   /* Result of netlink message. */
   iov.iov_base = buf;
@@ -667,6 +782,9 @@ netlink_talk (struct nlmsghdr *n)
   while (1)
     {
       /* Call recvmsg ().  But it block when sendmsg result is success... */
+
+      /* Now it should be work fine.  So I activate this routine from
+         zebra-0.69. */
       status = recvmsg (netlink.sock, &msg, 0);
       if (status < 0)
 	{
@@ -721,7 +839,7 @@ netlink_talk (struct nlmsghdr *n)
 	    return -1;
 	  }
 
-	zlog (NULL, LOG_ERR, "netlink_talk unexpected reply.");
+	/* zlog (NULL, LOG_ERR, "netlink_talk unexpected reply."); */
 	
 	status -= NLMSG_ALIGN(len);
 	h = (struct nlmsghdr*) ((char*)h + NLMSG_ALIGN(len));
@@ -856,10 +974,11 @@ extern struct thread_master *master;
 int
 kernel_read (struct thread *thread)
 {
+  int ret;
   int sock;
 
   sock = THREAD_FD (thread);
-  netlink_parse_info (netlink_route_change);
+  ret = netlink_parse_info (netlink_information_fetch);
   thread_add_read (master, kernel_read, NULL, netlink.sock);
 
   return 0;

@@ -196,6 +196,17 @@ community_match (struct community *com1, struct community *com2)
   return 0;
 }
 
+int
+community_include (struct community *com, u_int32_t val)
+{
+  int i;
+
+  for (i = 0; i < com->size; i++)
+    if (com_nthval (com, i) == ntohl (val))
+      return 1;
+  return 0;
+}
+
 /* If two aspath have same value then return 1 else return 0. This
    function is used by hash package. */
 int

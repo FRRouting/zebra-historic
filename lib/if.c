@@ -393,5 +393,5 @@ connected_add (struct interface *ifp, struct connected *connected)
   list_add_node (ifp->connected, connected);
   connected->ifp = ifp;
 
-  connected_log (connected);
+  /* connected_log (connected); */
 }

@@ -81,6 +81,7 @@ struct ospf_db_desc
 #define IS_SET_DD_I(X)		((X) & OSPF_DD_FLAG_I)
 
 /* Prototypes. */
+void ospf_output_forward (struct stream *, int);
 int ospf_read (struct thread *);
 int ospf_hello_send (struct thread *);
 int ospf_db_desc_send (struct thread *);

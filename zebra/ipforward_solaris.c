@@ -63,3 +63,15 @@ ipforward ()
   free (buf);
   return ipforwarding;
 }
+
+int
+ipforward_on ()
+{
+  ;
+}
+
+int
+ipforward_off ()
+{
+  ;
+}

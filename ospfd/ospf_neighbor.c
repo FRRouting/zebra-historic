@@ -40,7 +40,7 @@
 #include "ospfd/ospf_network.h"
 
 struct ospf_neighbor *
-ospf_nbr_new ()
+ospf_nbr_new (struct ospf_interface *oi)
 {
   struct ospf_neighbor *nbr;
 
@@ -51,11 +51,19 @@ ospf_nbr_new ()
   /* file descriptor reset. */
   nbr->fd = -1;
 
+  /* Relate Neighbor to Interface. */
+  nbr->oi = oi;
+
   /* Set default values. */
   nbr->status = NSM_Down;
 
-  nbr->v_inactivity = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
+  nbr->v_inactivity = oi->v_wait;
+  nbr->v_db_desc = oi->retransmit_interval;
   nbr->priority = -1;
+
+  /* DD flags. */
+  nbr->dd_flags = OSPF_DD_FLAG_MS|OSPF_DD_FLAG_M|OSPF_DD_FLAG_I;
+  nbr->dd_init = OSPF_DD_INITIALIZE;
 
   /* Reset Last Received Database Description. */
   nbr->last_options = (char) 0;
@@ -63,7 +71,7 @@ ospf_nbr_new ()
   nbr->last_dd_seqnum = 0;
 
   /* Initialize lists. */
-  nbr->ls_retransmission = list_init ();
+  nbr->ls_retransmit = list_init ();
   nbr->db_summary = list_init ();
   nbr->ls_request = list_init ();
 
@@ -73,7 +81,7 @@ ospf_nbr_new ()
 void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
-  list_delete_all (nbr->ls_retransmission);
+  list_delete_all (nbr->ls_retransmit);
   list_delete_all (nbr->db_summary);
   list_delete_all (nbr->ls_request);
 
@@ -123,11 +131,10 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
     }
   else
     {
-      nbr = ospf_nbr_new ();
+      nbr = ospf_nbr_new (oi);
       rn->info = nbr;
     }
 
-  nbr->oi = oi;
   nbr->status = NSM_TwoWay;
   nbr->router_id = ospf_top->router_id;
   nbr->d_router = oi->d_router;
@@ -136,9 +143,9 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
   nbr->address = p;
 }
 
-/* get neighbor count. */
+/* Get neighbor count by status. */
 int
-ospf_nbr_count (struct route_table *nbrs)
+ospf_nbr_count (struct route_table *nbrs, int status)
 {
   struct route_node *rn;
   struct ospf_neighbor *nbr;
@@ -157,7 +164,8 @@ ospf_nbr_count (struct route_table *nbrs)
       if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
-      count++;
+      if (status == 0 || nbr->status == status)
+	count++;
     }
 
   return count;
@@ -184,35 +192,3 @@ ospf_nbr_lookup_by_router_id (struct route_table *nbrs,
   return NULL;
 }
 
-int
-ospf_adjacent_count (struct route_table *nbrs)
-{
-  return 0;
-}
-
-int
-ospf_fully_adjacent_count (struct route_table *nbrs)
-{
-  struct route_node *rn;
-  struct ospf_neighbor *nbr;
-  int count = 0;
-
-  if (nbrs == NULL)
-    return 0;
-
-  for (rn = route_top (nbrs); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-      nbr = rn->info;
-
-      /* this is myself. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
-	continue;
-
-      if (nbr->status == NSM_Full)
-	count++;
-    }
-
-  return count;
-}

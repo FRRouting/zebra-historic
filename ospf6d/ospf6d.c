@@ -92,11 +92,12 @@ make_area (area_id_t area_id, struct ospf6 *ospf6)
   if (!area)
     {
       /* xxx */
-      zlog (NULL, LOG_WARNING,"Can't alloc area for %lu.", area_id);
+      zvlog_warn ("Can't alloc area for %s", inet4str (area_id));
       return (struct area *)NULL;
     }
 
   area->area_id = area_id;
+  inet_ntop (AF_INET, &area_id, area->str, sizeof (area->str));
   area->ospf6_if_list = list_init ();
 
   area->router_lsa_seqnum = area->network_lsa_seqnum
@@ -215,7 +216,7 @@ neighbor_new ()
   if (new)
     memset (new, 0, sizeof (struct neighbor));
   else
-    zlog (NULL, LOG_WARNING, "Can't malloc neighbor");
+    zvlog_warn ("Can't malloc neighbor");
 
   return new;
 }
@@ -1218,9 +1219,7 @@ DEFUN (show_ipv6_route_ospf6,
   struct area *area;
   instance_id_t instance_id;
   area_id_t area_id;
-  int i;
-  char ifname[64];
-  char ntop_buf[2][INET6_ADDRSTRLEN];
+  struct ospf6_rtentry *p;
 
   if (argc)
     {
@@ -1250,16 +1249,9 @@ DEFUN (show_ipv6_route_ospf6,
   vty_out (vty, "%-22s/%3s %-39s %-3s %5s\r\n",
      "DESTINATION", "LEN", "NEXTHOP", "IF", "COST");
   vty_out (vty, "----------\r\n");
-  for (i = 0; i < area->tablesize; i++)
+  for (p = area->rtable.current_top; p; p = p->next)
     {
-      inet_ntop (AF_INET6, &area->rt_table[i].destination, ntop_buf[0],
-                 sizeof (ntop_buf[0]));
-      inet_ntop (AF_INET6, &area->rt_table[i].next_hop, ntop_buf[1],
-                 sizeof (ntop_buf[1]));
-      if_indextoname (area->rt_table[i].ifindex, ifname);
-      vty_out (vty, "%-22s/%3d %-39s %-3s %5d\r\n",
-               ntop_buf[0], area->rt_table[i].prefixlength, 
-               ntop_buf[1], ifname, area->rt_table[i].cost);
+      rtable_vty_entry (vty, p);
     }
 
   return CMD_SUCCESS;

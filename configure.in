@@ -51,6 +51,8 @@ AC_AIX
 dnl ----------------------
 dnl Packages configuration
 dnl ----------------------
+AC_ARG_ENABLE(all-in-one,
+[  --enable-all-in-one,    Make all protocol daemon linked version zebra])
 AC_ARG_ENABLE(ipv6,
 [  --disable-ipv6          turn off IPv6 related features and daemons])
 AC_ARG_ENABLE(zebra,
@@ -338,6 +340,13 @@ if test x"$RIPNGD" = x""; then
 fi
 fi
 
+dnl -----------------------
+dnl All in one option check
+dnl -----------------------
+if test "${enable_all_in_one}" = "yes";then
+  AC_DEFINE(ALL_IN_ONE)
+fi
+
 dnl --------------------
 dnl Daemon disable check
 dnl --------------------
@@ -423,6 +432,17 @@ if test "$zebra_cv_ipv6" = yes; then
  AC_DEFINE(HAVE_SIN6_SCOPE_ID)],
  AC_MSG_RESULT(no))
 fi
+
+dnl ----------------------------
+dnl check socklen_t exist or not
+dnl ----------------------------
+AC_MSG_CHECKING(whther socklen_t is defined)
+AC_TRY_COMPILE([#include <sys/types.h>
+#include <netinet/in.h>
+],[socklen_t ac_x;],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SOCKLEN_T)],
+ AC_MSG_RESULT(no))
 
 dnl --------------------------
 dnl check structure ifaliasreq

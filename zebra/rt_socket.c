@@ -47,7 +47,19 @@ struct
 {
   int sock;
 } routing = { -1 };
+
+/* Initialize prototype of struct sockaddr_in. */
+static struct sockaddr_in sin_proto = 
+{
+#ifdef HAVE_SIN_LEN
+  sizeof (struct sockaddr_in), 
+#endif /* HAVE_SIN_LEN */
+  AF_INET, 0, {0}, {0}
+};
 
+#include "linklist.h"
+#include "if.h"
+
 /* Interface function for the kernel routing table updates.  Support
    for RTM_CHANGE will be needed. */
 int
@@ -59,6 +71,7 @@ rtm_write (int message,
 {
   int ret;
   caddr_t pnt;
+  struct sockaddr_in tmp_gate = sin_proto;
 
   /* Sequencial number of routing message. */
   static int msg_seq = 0;
@@ -78,15 +91,16 @@ rtm_write (int message,
   msg.rtm.rtm_version = RTM_VERSION;
   msg.rtm.rtm_type = message;
   msg.rtm.rtm_seq = msg_seq++;
-  msg.rtm.rtm_addrs = RTA_DST|RTA_GATEWAY;
+  msg.rtm.rtm_addrs = RTA_DST;
+  msg.rtm.rtm_addrs |= RTA_GATEWAY;
   msg.rtm.rtm_flags = RTF_UP;
-  msg.rtm.rtm_index = 0;
+  msg.rtm.rtm_index = index;
 
   /* Sould we add default route treatment to this function? (in that
      case RTF_GATEWAY doesn't need ?)*/
   if (mask)
     {
-      if (message == RTM_ADD) 
+      if (gate && (message == RTM_ADD))
 	msg.rtm.rtm_flags |= RTF_GATEWAY;
       msg.rtm.rtm_addrs |= RTA_NETMASK;
     }
@@ -94,6 +108,30 @@ rtm_write (int message,
     {
       if (message == RTM_ADD) 
 	msg.rtm.rtm_flags |= RTF_HOST;
+    }
+
+  /* Route to the interface test. */
+  if (! gate)
+    {
+      struct interface *ifp;
+      listnode node;
+      struct connected *connected;
+
+      ifp = if_lookup_by_index (index);      
+      if (ifp)
+	for (node = listhead (ifp->connected); node; nextnode (node))
+	  {
+	    struct prefix *p;
+
+	    connected = getdata (node);
+	    p = connected->address;
+
+	    if (p->family == dest->sa.sa_family)
+	      {
+		tmp_gate.sin_addr = p->u.prefix4;
+		gate = &tmp_gate;
+	      }
+	  }
     }
 
 /* Socket length roundup function. */
@@ -136,7 +174,7 @@ rtm_write (int message,
       if (errno == ENETUNREACH)
 	return ZEBRA_ERR_RTUNREACH;
       
-      zlog (NULL, LOG_WARNING, "write : %m (%d)", errno);
+      zlog (NULL, LOG_WARNING, "write : %s (%d)", strerror (errno), errno);
       return -1;
     }
   return 0;
@@ -165,15 +203,6 @@ sin_masklen (struct in_addr mask)
   return len;
 }
 
-/* Initialize prototype of struct sockaddr_in. */
-static struct sockaddr_in sin_proto = 
-{
-#ifdef HAVE_SIN_LEN
-  sizeof (struct sockaddr_in), 
-#endif /* HAVE_SIN_LEN */
-  AF_INET, 0, {0}, {0}
-};
-
 /* Interface between zebra message and rtm message. */
 int
 kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
@@ -184,7 +213,8 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
 
   sin_dest = sin_mask = sin_gate = sin_proto;
   sin_dest.sin_addr = dest->prefix;
-  sin_gate.sin_addr = *gate;
+  if (gate)
+    sin_gate.sin_addr = *gate;
 
   /* Convert prefixlen to struct sockaddr_in. */
   if (dest->prefixlen != 32)
@@ -200,7 +230,7 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
   return rtm_write (message,
 		    (union sockunion *)&sin_dest, 
 		    (union sockunion *)mask, 
-		    (union sockunion *)&sin_gate,
+		    gate ? (union sockunion *)&sin_gate : NULL,
 		    index);
 }
 
@@ -273,13 +303,14 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
 
   sin_dest = sin_mask = sin_gate = sin6_proto;
   sin_dest.sin6_addr = dest->prefix;
-  sin_gate.sin6_addr = *gate;
 
   /* Under kame set interface index to link local address. */
 #ifdef KAME
   if (IN6_IS_ADDR_LINKLOCAL(gate)) 
     SET_IN6_LINKLOCAL_IFINDEX (*gate, index);
 #endif /* KAME */
+
+  sin_gate.sin6_addr = *gate;
 
   /* Check and convert prefixlen. */
   if (dest->prefixlen != 128)
