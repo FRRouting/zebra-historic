@@ -33,6 +33,13 @@ $hash{'router_ripng_cmd'} = "ignore";
 $hash{'router_ospf_cmd'} = "ignore";
 $hash{'router_ospf6_cmd'} = "ignore";
 $hash{'router_bgp_cmd'} = "ignore";
+$hash{'address_family_vpnv4_cmd'} = "ignore";
+$hash{'address_family_vpnv4_unicast_cmd'} = "ignore";
+$hash{'key_chain_cmd'} = "ignore";
+$hash{'key_cmd'} = "ignore";
+$hash{'route_map_cmd'} = "ignore";
+$hash{'set_metric_cmd'} = "ignore";
+$hash{'set_ip_nexthop_cmd'} = "ignore";
 
 foreach (@ARGV) {
     $file = $_;
@@ -45,8 +52,23 @@ foreach (@ARGV) {
     @defun = ($line =~ /(?:DEFUN|ALIAS)\s*\((.+?)\)\n/sg);
     @install = ($line =~ /install_element \([A-Z_]+, &[^;]*;\n/sg);
 
-    ($protocol) = ($file =~ /\/([a-z0-9]+)\//);
-    $protocol = "VTYSH_" . uc $protocol;
+    if ($file =~ /lib/) {
+	if ($file =~ /keychain.c/) {
+	    $protocol = "VTYSH_RIPD";
+	}
+	if ($file =~ /routemap.c/) {
+	    $protocol = "VTYSH_RIPD|VTYSH_OSPFD|VTYSH_BGPD";
+	}
+	if ($file =~ /filter.c/) {
+	    $protocol = "VTYSH_RIPD|VTYSH_OSPFD|VTYSH_BGPD";
+	}
+	if ($file =~ /plist.c/) {
+	    $protocol = "VTYSH_RIPD|VTYSH_BGPD";
+	}
+    } else {
+	($protocol) = ($file =~ /\/([a-z0-9]+)\//);
+	$protocol = "VTYSH_" . uc $protocol;
+    }
 
     foreach (@defun) {
 	my (@arg);
@@ -63,6 +85,7 @@ foreach (@ARGV) {
 	$struct = "$arg[1]";
 	$struct =~ s/^\s+//g;
 	$struct =~ s/\s+$//g;
+	$arg[1] = $struct . "_vtysh";
 
 	$arg_str = join (", ", @arg);
 
@@ -77,8 +100,11 @@ foreach (@ARGV) {
     foreach (@install) {
 	$struct = $_;
 	($index) = ($struct =~ /&([^\)]+)/);
-	if (defined ($install{$index . $protocol})) {
-	    push (@init, $struct);
+	$struct_str = $struct;
+	$struct_str =~ s/_cmd/_cmd_vtysh/;
+	if (defined ($install{$index . $protocol}) && ! defined ($install_check{$struct})) {
+	    $install_check{$struct} = $struct;
+	    push (@init, $struct_str);
 	}
     }
 }

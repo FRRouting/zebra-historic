@@ -115,7 +115,7 @@ as_filter_free (struct as_filter *asfilter)
   if (asfilter->reg)
     bgp_regex_free (asfilter->reg);
   if (asfilter->reg_str)
-    free (asfilter->reg_str);
+    XFREE (MTYPE_AS_FILTER_STR, asfilter->reg_str);
   XFREE (MTYPE_AS_FILTER, asfilter);
 }
 
@@ -128,7 +128,7 @@ as_filter_make (regex_t *reg, char *reg_str, enum as_filter_type type)
   asfilter = as_filter_new ();
   asfilter->reg = reg;
   asfilter->type = type;
-  asfilter->reg_str = strdup (reg_str);
+  asfilter->reg_str = XSTRDUP (MTYPE_AS_FILTER_STR, reg_str);
 
   return asfilter;
 }
@@ -475,9 +475,9 @@ DEFUN (ip_as_path, ip_as_path_cmd,
   int first = 0;
 
   /* Check the filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = AS_FILTER_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = AS_FILTER_DENY;
   else
     {
@@ -557,9 +557,9 @@ DEFUN (no_ip_as_path,
     }
 
   /* Check the filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = AS_FILTER_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = AS_FILTER_DENY;
   else
     {

@@ -69,6 +69,7 @@ if_create ()
   
   listnode_add (iflist, ifp);
   ifp->connected = list_new ();
+  ifp->connected->del = (void (*) (void *)) connected_free;
 
   if (if_master.if_new_hook)
     (*if_master.if_new_hook) (ifp);
@@ -84,6 +85,9 @@ if_delete (struct interface *ifp)
 
   if (if_master.if_delete_hook)
     (*if_master.if_delete_hook) (ifp);
+
+  /* Free connected address list */
+  list_delete (ifp->connected);
 
   XFREE (MTYPE_IF, ifp);
 }
@@ -106,7 +110,7 @@ if_add_hook (int type, int (*func)(struct interface *ifp))
 
 /* Interface existance check by index. */
 struct interface *
-if_lookup_by_index (int index)
+if_lookup_by_index (unsigned int index)
 {
   listnode node;
   struct interface *ifp;
@@ -191,10 +195,13 @@ if_lookup_address (struct in_addr src)
   struct interface *ifp;
   struct prefix *p;
   struct connected *c;
+  struct interface *match;
 
   addr.family = AF_INET;
   addr.prefix = src;
   addr.prefixlen = IPV4_MAX_BITLEN;
+
+  match = NULL;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
@@ -225,12 +232,12 @@ if_lookup_address (struct in_addr src)
 	      if (p->family == AF_INET)
 		{
 		  if (prefix_match (p, (struct prefix *) &addr))
-		    return ifp;
+		    match = ifp;
 		}
 	    }
 	}
     }
-  return NULL;
+  return match;
 }
 
 /* Get interface by name if given name interface doesn't exist create
@@ -403,6 +410,8 @@ DEFUN (no_interface_desc,
   return CMD_SUCCESS;
 }
 
+
+/* See also wrapper function zebra_interface() in zebra/interface.c */
 DEFUN (interface,
        interface_cmd,
        "interface IFNAME",
@@ -539,29 +548,41 @@ connected_add (struct interface *ifp, struct connected *connected)
 {
   struct listnode *node;
   struct listnode *next;
+  struct listnode *prev;
   struct connected *ifc;
+  int found;
 
 #ifdef CONNECTED_DEBUG
   connected_log (connected, "add");
 #endif /* CONNECTED_DEBUG */
 
-  /* Check existing prefix information. */
+  /* Check existing prefix information. 
+     Keep list in order if old info found, essential for repeatable
+     operation in some daemons */
+  prev = NULL;
+  found = 0;
   for (node = listhead (ifp->connected); node; node = next)
     {
       ifc = getdata (node);
+      prev = node->prev;
       next = node->next;
 
       if (connected_same_prefix (ifc->address, connected->address))
 	{
 	  /* zlog_info ("same prefix %s", inet_ntoa (ifc->address->u.prefix4)); */
+	  found = 1;
 	  listnode_delete (ifp->connected, ifc);
+	  connected_free (ifc);
 	  break;
 	}
     }
 
   /* Link connected address to interface. */
   connected->ifp = ifp;
-  listnode_add (ifp->connected, connected);
+  if (!found)
+    listnode_add (ifp->connected, connected);
+  else
+    listnode_add_after (ifp->connected, prev, connected);
 }
 
 struct connected *

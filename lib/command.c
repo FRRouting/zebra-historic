@@ -38,7 +38,7 @@ struct host host;
 char *default_motd = 
 "\r\n\
 Hello, this is zebra (version " ZEBRA_VERSION ")\r\n\
-Copyright 1996-2000 Kunihiro Ishiguro\r\n\
+Copyright 1996-2001 Kunihiro Ishiguro\r\n\
 \r\n";
 
 /* Standard command node structures. */
@@ -70,6 +70,7 @@ struct cmd_node config_node =
 {
   CONFIG_NODE,
   "%s(config)# ",
+  1
 };
 
 /* Install top node of command vector. */
@@ -1698,7 +1699,9 @@ cmd_execute_command (vector vline, struct vty *vty, struct cmd_element **cmd)
       if (match == vararg_match)
 	break;
 
-      if ((ret = is_cmd_ambiguous (command, cmd_vector, index, match)) == 1)
+      ret = is_cmd_ambiguous (command, cmd_vector, index, match);
+
+      if (ret == 1)
 	{
 	  vector_free (cmd_vector);
 	  return CMD_ERR_AMBIGUOUS;
@@ -1723,6 +1726,9 @@ cmd_execute_command (vector vline, struct vty *vty, struct cmd_element **cmd)
 	if (match == vararg_match || index >= cmd_element->cmdsize)
 	  {
 	    matched_element = cmd_element;
+#if 0
+	    printf ("DEBUG: %s\n", cmd_element->string);
+#endif
 	    matched_count++;
 	  }
 	else
@@ -1790,7 +1796,8 @@ cmd_execute_command (vector vline, struct vty *vty, struct cmd_element **cmd)
 
 /* Execute command by argument readline. */
 int
-cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
+cmd_execute_command_strict (vector vline, struct vty *vty, 
+			    struct cmd_element **cmd)
 {
   int i;
   int index;
@@ -1805,7 +1812,7 @@ cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
   char *command;
 
   /* Make copy of command element */
-  cmd_vector = vector_copy (cmd_node_vector (v, vty->node));
+  cmd_vector = vector_copy (cmd_node_vector (cmdvec, vty->node));
 
   for (index = 0; index < vector_max (vline); index++) 
     {
@@ -1897,6 +1904,13 @@ cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
 	return CMD_ERR_EXEED_ARGC_MAX;
     }
 
+  /* For vtysh execution. */
+  if (cmd)
+    *cmd = matched_element;
+
+  if (matched_element->daemon)
+    return CMD_SUCCESS_DAEMON;
+
   /* Now execute matched command */
   return (*matched_element->func) (matched_element, vty, argc, argv);
 }
@@ -1916,7 +1930,7 @@ config_from_file (struct vty *vty, FILE *fp)
       if (vline == NULL)
 	continue;
       /* Execute configuration command : this is strict match */
-      ret = cmd_execute_command_strict (cmdvec, vline, vty);
+      ret = cmd_execute_command_strict (vline, vty, NULL);
 
       /* Try again with setting node to CONFIG_NODE */
       if (ret != CMD_SUCCESS && ret != CMD_WARNING)
@@ -1925,18 +1939,18 @@ config_from_file (struct vty *vty, FILE *fp)
 	    {
 	      vty->node = KEYCHAIN_NODE;
 
-	      ret = cmd_execute_command_strict (cmdvec, vline, vty);
+	      ret = cmd_execute_command_strict (vline, vty, NULL);
 
 	      if (ret != CMD_SUCCESS && ret != CMD_WARNING)
 		{
 		  vty->node = CONFIG_NODE;
-		  ret = cmd_execute_command_strict (cmdvec, vline, vty);
+		  ret = cmd_execute_command_strict (vline, vty, NULL);
 		}
 	    }
 	  else
 	    {
 	      vty->node = CONFIG_NODE;
-	      ret = cmd_execute_command_strict (cmdvec, vline, vty);
+	      ret = cmd_execute_command_strict (vline, vty, NULL);
 	    }
 	}	  
 
@@ -2026,8 +2040,10 @@ DEFUN (config_exit,
       break;
     case BGP_VPNV4_NODE:
       vty->node = BGP_NODE;
+      break;
     case KEYCHAIN_KEY_NODE:
       vty->node = KEYCHAIN_NODE;
+      break;
     default:
       break;
     }
@@ -2053,9 +2069,6 @@ DEFUN (config_end,
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
-      vty_config_unlock (vty);
-      vty->node = ENABLE_NODE;
-      break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -2069,6 +2082,7 @@ DEFUN (config_end,
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case VTY_NODE:
+      vty_config_unlock (vty);
       vty->node = ENABLE_NODE;
       break;
     default:
@@ -2110,19 +2124,9 @@ command argument (e.g. 'show ?') and describes each possible%s\
 argument.%s\
 2. Partial help is provided when an abbreviated argument is entered%s\
    and you want to know what arguments match the input%s\
-   (e.g. 'show me?'.)%s%s", VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE, 
-	   VTY_NEWLINE,
-	   VTY_NEWLINE);
+   (e.g. 'show me?'.)%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE,
+	   VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE,
+	   VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
   return CMD_SUCCESS;
 }
 
@@ -2154,20 +2158,32 @@ DEFUN (config_write_file,
   int fd;
   struct cmd_node *node;
   char *config_file;
+  char *config_file_tmp = NULL;
+  char *config_file_sav = NULL;
   struct vty *file_vty;
 
   /* Get filename. */
   config_file = host.config;
+  
+  config_file_sav = malloc (strlen (config_file) + strlen (CONF_BACKUP_EXT) + 1);
+  strcpy (config_file_sav, config_file);
+  strcat (config_file_sav, CONF_BACKUP_EXT);
 
+
+  config_file_tmp = malloc (strlen (config_file) + 8);
+  sprintf (config_file_tmp, "%s.XXXXXX", config_file);
+  
   /* Open file to configuration write. */
-  fd = open (config_file, O_CREAT | O_WRONLY | O_TRUNC);
+  fd = mkstemp (config_file_tmp);
   if (fd < 0)
     {
-      vty_out (vty, "Can't open configuration file %s.%s", config_file,
+      vty_out (vty, "Can't open configuration file %s.%s", config_file_tmp,
 	       VTY_NEWLINE);
+      free (config_file_tmp);
+      free (config_file_sav);
       return CMD_WARNING;
     }
-
+  
   /* Make vty for configuration file. */
   file_vty = vty_new ();
   file_vty->fd = fd;
@@ -2184,10 +2200,53 @@ DEFUN (config_write_file,
 	if ((*node->func) (file_vty))
 	  vty_out (file_vty, "!\n");
       }
+  vty_close (file_vty);
+
+  if (unlink (config_file_sav) != 0)
+    if (errno != ENOENT)
+      {
+	vty_out (vty, "Can't unlink backup configuration file %s.%s", config_file_sav,
+		 VTY_NEWLINE);
+	free (config_file_sav);
+	free (config_file_tmp);
+	unlink (config_file_tmp);	
+	return CMD_WARNING;
+      }
+  if (link (config_file, config_file_sav) != 0)
+    {
+      vty_out (vty, "Can't backup old configuration file %s.%s", config_file_sav,
+	        VTY_NEWLINE);
+      free (config_file_sav);
+      free (config_file_tmp);
+      unlink (config_file_tmp);
+      return CMD_WARNING;
+    }
+  sync ();
+  if (unlink (config_file) != 0)
+    {
+      vty_out (vty, "Can't unlink configuration file %s.%s", config_file,
+	        VTY_NEWLINE);
+      free (config_file_sav);
+      free (config_file_tmp);
+      unlink (config_file_tmp);
+      return CMD_WARNING;      
+    }
+  if (link (config_file_tmp, config_file) != 0)
+    {
+      vty_out (vty, "Can't save configuration file %s.%s", config_file,
+	       VTY_NEWLINE);
+      free (config_file_sav);
+      free (config_file_tmp);
+      unlink (config_file_tmp);
+      return CMD_WARNING;      
+    }
+  unlink (config_file_tmp);
+  sync ();
+  
+  free (config_file_sav);
+  free (config_file_tmp);
   vty_out (vty, "Configuration saved to %s%s", config_file,
 	   VTY_NEWLINE);
-
-  vty_close (file_vty);
   return CMD_SUCCESS;
 }
 
@@ -2235,6 +2294,7 @@ DEFUN (config_write_terminal,
 	    if ((*node->func) (vty))
 	      vty_out (vty, "!%s", VTY_NEWLINE);
 	  }
+      vty_out (vty, "end%s",VTY_NEWLINE);
     }
   return CMD_SUCCESS;
 }
@@ -2828,23 +2888,25 @@ cmd_init (int terminal)
   install_element (CONFIG_NODE, &enable_password_cmd);
   install_element (CONFIG_NODE, &enable_password_text_cmd);
   install_element (CONFIG_NODE, &no_enable_password_cmd);
-  install_element (CONFIG_NODE, &config_log_stdout_cmd);
-  install_element (CONFIG_NODE, &no_config_log_stdout_cmd);
-  install_element (CONFIG_NODE, &config_log_file_cmd);
-  install_element (CONFIG_NODE, &no_config_log_file_cmd);
-  install_element (CONFIG_NODE, &config_log_syslog_cmd);
-  install_element (CONFIG_NODE, &no_config_log_syslog_cmd);
-  install_element (CONFIG_NODE, &config_log_trap_cmd);
-  install_element (CONFIG_NODE, &no_config_log_trap_cmd);
-  install_element (CONFIG_NODE, &config_log_record_priority_cmd);
-  install_element (CONFIG_NODE, &no_config_log_record_priority_cmd);
-
-  install_element (CONFIG_NODE, &service_password_encrypt_cmd);
-  install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
-  install_element (CONFIG_NODE, &banner_motd_default_cmd);
-  install_element (CONFIG_NODE, &no_banner_motd_cmd);
-  install_element (CONFIG_NODE, &service_terminal_length_cmd);
-  install_element (CONFIG_NODE, &no_service_terminal_length_cmd);
+  if (terminal)
+    {
+      install_element (CONFIG_NODE, &config_log_stdout_cmd);
+      install_element (CONFIG_NODE, &no_config_log_stdout_cmd);
+      install_element (CONFIG_NODE, &config_log_file_cmd);
+      install_element (CONFIG_NODE, &no_config_log_file_cmd);
+      install_element (CONFIG_NODE, &config_log_syslog_cmd);
+      install_element (CONFIG_NODE, &no_config_log_syslog_cmd);
+      install_element (CONFIG_NODE, &config_log_trap_cmd);
+      install_element (CONFIG_NODE, &no_config_log_trap_cmd);
+      install_element (CONFIG_NODE, &config_log_record_priority_cmd);
+      install_element (CONFIG_NODE, &no_config_log_record_priority_cmd);
+      install_element (CONFIG_NODE, &service_password_encrypt_cmd);
+      install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
+      install_element (CONFIG_NODE, &banner_motd_default_cmd);
+      install_element (CONFIG_NODE, &no_banner_motd_cmd);
+      install_element (CONFIG_NODE, &service_terminal_length_cmd);
+      install_element (CONFIG_NODE, &no_service_terminal_length_cmd);
+    }
 
   srand(time(NULL));
 }

@@ -29,6 +29,7 @@
 #define VTYSH_OSPF6D 0x10
 #define VTYSH_BGPD   0x20
 #define VTYSH_ALL    VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD
+#define VTYSH_RMAP   VTYSH_RIPD|VTYSH_OSPFD|VTYSH_BGPD
 
 #define VTYSH_INDEX_ZEBRA 0
 #define VTYSH_INDEX_RIP   1
@@ -39,18 +40,18 @@
 #define VTYSH_INDEX_MAX   6
 
 /* UNIX domain socket path. */
-#define ZEBRA_PATH "/tmp/zebra"
-#define RIP_PATH "/tmp/ripd"
-#define RIPNG_PATH "/tmp/ripngd"
-#define OSPF_PATH "/tmp/ospfd"
-#define OSPF6_PATH "/tmp/ospf6d"
-#define BGP_PATH "/tmp/bgpd"
+#define ZEBRA_PATH "/tmp/.zebra"
+#define RIP_PATH "/tmp/.ripd"
+#define RIPNG_PATH "/tmp/.ripngd"
+#define OSPF_PATH "/tmp/.ospfd"
+#define OSPF6_PATH "/tmp/.ospf6d"
+#define BGP_PATH "/tmp/.bgpd"
 
 /* vtysh local configuration file. */
 #define VTYSH_DEFAULT_CONFIG "vtysh.conf"
 
 /* Integrated configuration file. */
-#define ZEBRA_DEFAULT_CONFIG "Zebra.conf"
+#define INTEGRATE_DEFAULT_CONFIG "Zebra.conf"
 
 void vtysh_init_vty ();
 void vtysh_init_cmd ();
@@ -61,6 +62,18 @@ void vtysh_user_init ();
 void vtysh_execute (char *);
 
 char *vtysh_prompt ();
+
+void vtysh_config_write ();
+
+int vtysh_config_from_file (struct vty *, FILE *);
+
+void vtysh_read_config (char *, char *, char *);
+
+void vtysh_config_parse (char *);
+
+void vtysh_config_dump (FILE *);
+
+void vtysh_config_init ();
 
 /* Child process execution flag. */
 extern int execute_flag;

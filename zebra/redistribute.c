@@ -120,6 +120,7 @@ zebra_redistribute_default (struct zserv *client)
 }
 
 /* Redistribute routes. */
+#ifdef OLD_RIB
 void
 zebra_redistribute (struct zserv *client, int type)
 {
@@ -140,11 +141,38 @@ zebra_redistribute (struct zserv *client, int type)
 			&rib->u.gate6, rib->u.ifindex);
 #endif /* HAVE_IPV6 */
 }
+#else
+void
+zebra_redistribute (struct zserv *client, int type)
+{
+#ifdef HAVE_IPV6
+  struct rib *rib = NULL;
+#endif /* HAVE_IPV6 */
+  struct new_rib *newrib;
+  struct route_node *rn;
+
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    for (newrib = rn->info; newrib; newrib = newrib->next)
+      if (CHECK_FLAG (newrib->flags, RIB_FLAG_SELECTED) 
+	  && newrib->type == type 
+	  && zebra_check_addr (&rn->p))
+	zsend_ipv4_add_multipath (client, rn, newrib);
+  
+#ifdef HAVE_IPV6
+  for (rn = route_top (ipv6_rib_table); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      if (IS_RIB_FIB (rib) && rib->type == type && zebra_check_addr (&rn->p))
+	zsend_ipv6_add (client, type, 0, (struct prefix_ipv6 *)&rn->p,
+			&rib->u.gate6, rib->u.ifindex);
+#endif /* HAVE_IPV6 */
+}
+#endif /* OLD_RIB */
 
 extern list client_list;
 
+#ifndef OLD_RIB
 void
-redistribute_add (struct route_node *np, struct rib *rib)
+redistribute_add_multipath (struct route_node *rn, struct new_rib *rib)
 {
   listnode node;
   struct zserv *client;
@@ -152,40 +180,79 @@ redistribute_add (struct route_node *np, struct rib *rib)
   for (node = listhead (client_list); node; nextnode (node))
     if ((client = getdata (node)) != NULL)
       {
-	if (is_default (&np->p))
+	if (is_default (&rn->p))
 	  {
 	    if (client->redist_default || client->redist[rib->type])
 	      {
-		if (np->p.family == AF_INET)
+		if (rn->p.family == AF_INET)
+		  zsend_ipv4_add_multipath (client, rn, rib);
+#if 0
+#ifdef HAVE_IPV6
+		if (rn->p.family == AF_INET6)
+		  zsend_ipv6_add_multipath (client, rn, rib);
+#endif /* HAVE_IPV6 */	  
+#endif /* 0 */
+	      }
+	  }
+	else if (client->redist[rib->type])
+	  {
+	    if (rn->p.family == AF_INET)
+	      zsend_ipv4_add_multipath (client, rn, rib);
+#if 0
+#ifdef HAVE_IPV6
+	    if (rn->p.family == AF_INET6)
+	      zsend_ipv6_add_multipath (client, rn, rib);
+#endif /* HAVE_IPV6 */	  
+#endif /* 0 */
+	  }
+      }
+}
+#endif /* OLD_RIB */
+
+void
+redistribute_add (struct route_node *rn, struct rib *rib)
+{
+  listnode node;
+  struct zserv *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    if ((client = getdata (node)) != NULL)
+      {
+	if (is_default (&rn->p))
+	  {
+	    if (client->redist_default || client->redist[rib->type])
+	      {
+		if (rn->p.family == AF_INET)
 		  zsend_ipv4_add (client, rib->type, 0,
-				  (struct prefix_ipv4 *)&np->p, &rib->u.gate4,
+				  (struct prefix_ipv4 *)&rn->p, &rib->u.gate4,
 				  rib->u.ifindex);
 #ifdef HAVE_IPV6
-		if (np->p.family == AF_INET6)
+		if (rn->p.family == AF_INET6)
 		  zsend_ipv6_add (client, rib->type, 0,
-				  (struct prefix_ipv6 *)&np->p, &rib->u.gate6,
+				  (struct prefix_ipv6 *)&rn->p, &rib->u.gate6,
 				  rib->u.ifindex);
 #endif /* HAVE_IPV6 */	  
 	      }
 	  }
 	else if (client->redist[rib->type])
 	  {
-	    if (np->p.family == AF_INET)
+	    if (rn->p.family == AF_INET)
 	      zsend_ipv4_add (client, rib->type, 0,
-			      (struct prefix_ipv4 *)&np->p, &rib->u.gate4,
+			      (struct prefix_ipv4 *)&rn->p, &rib->u.gate4,
 			      rib->u.ifindex);
 #ifdef HAVE_IPV6
-	    if (np->p.family == AF_INET6)
+	    if (rn->p.family == AF_INET6)
 	      zsend_ipv6_add (client, rib->type, 0,
-			      (struct prefix_ipv6 *)&np->p, &rib->u.gate6,
+			      (struct prefix_ipv6 *)&rn->p, &rib->u.gate6,
 			      rib->u.ifindex);
 #endif /* HAVE_IPV6 */	  
 	  }
       }
 }
 
+#ifndef OLD_RIB
 void
-redistribute_delete (struct route_node *np, struct rib *rib)
+redistribute_delete_multipath (struct route_node *rn, struct new_rib *rib)
 {
   listnode node;
   struct zserv *client;
@@ -193,19 +260,62 @@ redistribute_delete (struct route_node *np, struct rib *rib)
   for (node = listhead (client_list); node; nextnode (node))
     if ((client = getdata (node)) != NULL)
       {
-	if (is_default (&np->p))
+	if (is_default (&rn->p))
 	  {
 	    if (client->redist_default || client->redist[rib->type])
 	      {
-		if (np->p.family == AF_INET)
+		if (rn->p.family == AF_INET)
+		  zsend_ipv4_delete_multipath (client, rn, rib);
+#if 0
+#ifdef HAVE_IPV6
+		if (rn->p.family == AF_INET6)
+		  zsend_ipv6_delete (client, rib->type, 0,
+				     (struct prefix_ipv6 *)&rn->p,
+				     &rib->u.gate6,
+				     rib->u.ifindex);
+#endif /* HAVE_IPV6 */	  
+#endif /* 0 */
+	      }
+	  }
+	else if (client->redist[rib->type])
+	  {
+	    if (rn->p.family == AF_INET)
+	      zsend_ipv4_delete_multipath (client, rn, rib);
+#if 0
+#ifdef HAVE_IPV6
+	    if (rn->p.family == AF_INET6)
+	      zsend_ipv6_delete (client, rib->type, 0,
+				 (struct prefix_ipv6 *)&rn->p, &rib->u.gate6,
+				 rib->u.ifindex);
+#endif /* HAVE_IPV6 */	  
+#endif /* 0 */
+	  }
+      }
+}
+#endif /* ! OLD_RIB */
+
+void
+redistribute_delete (struct route_node *rn, struct rib *rib)
+{
+  listnode node;
+  struct zserv *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    if ((client = getdata (node)) != NULL)
+      {
+	if (is_default (&rn->p))
+	  {
+	    if (client->redist_default || client->redist[rib->type])
+	      {
+		if (rn->p.family == AF_INET)
 		  zsend_ipv4_delete (client, rib->type, 0, 
-				     (struct prefix_ipv4 *)&np->p,
+				     (struct prefix_ipv4 *)&rn->p,
 				     &rib->u.gate4,
 				     rib->u.ifindex);
 #ifdef HAVE_IPV6
-		if (np->p.family == AF_INET6)
+		if (rn->p.family == AF_INET6)
 		  zsend_ipv6_delete (client, rib->type, 0,
-				     (struct prefix_ipv6 *)&np->p,
+				     (struct prefix_ipv6 *)&rn->p,
 				     &rib->u.gate6,
 				     rib->u.ifindex);
 #endif /* HAVE_IPV6 */	  
@@ -213,14 +323,14 @@ redistribute_delete (struct route_node *np, struct rib *rib)
 	  }
 	else if (client->redist[rib->type])
 	  {
-	    if (np->p.family == AF_INET)
+	    if (rn->p.family == AF_INET)
 	      zsend_ipv4_delete (client, rib->type, 0, 
-				 (struct prefix_ipv4 *)&np->p, &rib->u.gate4,
+				 (struct prefix_ipv4 *)&rn->p, &rib->u.gate4,
 				 rib->u.ifindex);
 #ifdef HAVE_IPV6
-	    if (np->p.family == AF_INET6)
+	    if (rn->p.family == AF_INET6)
 	      zsend_ipv6_delete (client, rib->type, 0,
-				 (struct prefix_ipv6 *)&np->p, &rib->u.gate6,
+				 (struct prefix_ipv6 *)&rn->p, &rib->u.gate6,
 				 rib->u.ifindex);
 #endif /* HAVE_IPV6 */	  
 	  }

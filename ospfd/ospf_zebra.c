@@ -44,8 +44,9 @@
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_zebra.h"
-
-extern unsigned long term_debug_ospf_zebra;
+#ifdef HAVE_SNMP
+#include "ospfd/ospf_snmp.h"
+#endif /* HAVE_SNMP */
 
 /* Zebra structure to hold current status. */
 struct zclient *zclient = NULL;
@@ -66,6 +67,10 @@ ospf_interface_add (int command, struct zclient *zclient, zebra_size_t length)
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
   ospf_if_update ();
+
+#ifdef HAVE_SNMP
+  ospf_snmp_if_update (ifp);
+#endif /* HAVE_SNMP */
 
   return 0;
 }
@@ -94,6 +99,10 @@ ospf_interface_delete (int command, struct zclient *zclient,
   if (IS_DEBUG_OSPF (zebra, ZEBRA_INTERFACE))
     zlog_info ("Zebra: interface delete %s index %d flags %d metric %d mtu %d",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);  
+
+#ifdef HAVE_SNMP
+  ospf_snmp_if_delete (ifp);
+#endif /* HAVE_SNMP */
 
 #ifdef HAVE_IF_PSEUDO
   if (!IS_IF_PSEUDO(ifp))
@@ -184,7 +193,7 @@ ospf_interface_state_up (int command, struct zclient *zclient,
 	  oi = ifp->info;
 	  old_cost = oi->output_cost;
 	  oi->output_cost = ospf_if_get_output_cost (oi);
-	  if (old_cost != oi->output_cost)
+	  if (old_cost != oi->output_cost && oi->area != NULL)
 	    ospf_router_lsa_timer_add (oi->area);
 	}
       return 0;
@@ -244,6 +253,10 @@ ospf_interface_address_add (int command, struct zclient *zclient,
 
   ospf_if_update ();
 
+#ifdef HAVE_SNMP
+  ospf_snmp_if_update (c->ifp);
+#endif /* HAVE_SNMP */
+
   return 0;
 }
 
@@ -251,6 +264,34 @@ int
 ospf_interface_address_delete (int command, struct zclient *zclient,
 			       zebra_size_t length)
 {
+  struct connected *c;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+
+  c = zebra_interface_address_delete_read (zclient->ibuf);
+
+  if (c == NULL)
+    return 0;
+
+  ifp = c->ifp;
+  oi = ifp->info;
+
+  /* Clean up if address was our primary */
+  if (prefix_match (c->address, oi->address))
+    {
+      /* Call interface hook functions to clean up */
+      ospf_if_cleanup(oi, 0);
+    }
+
+#ifdef HAVE_SNMP
+  ospf_snmp_if_update (c->ifp);
+#endif /* HAVE_SNMP */
+
+  connected_free (c);
+
+  /* Check ffor another subnet that could take over */
+  ospf_if_update();
+
   return 0;
 }
 
@@ -270,6 +311,7 @@ ospf_zebra_add (struct prefix_ipv4 *p, struct in_addr *nexthop,
       SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
       api.nexthop_num = 1;
       api.nexthop = &nexthop;
+      api.ifindex_num = 0;
       SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
       api.metric = metric;
 
@@ -296,6 +338,96 @@ ospf_zebra_add (struct prefix_ipv4 *p, struct in_addr *nexthop,
 }
 
 void
+ospf_zebra_add_multipath (struct prefix_ipv4 *p, struct ospf_route *or)
+{
+  u_char message;
+  u_char distance;
+  u_char flags;
+  int psize;
+  struct stream *s;
+  struct ospf_path *path;
+  listnode node;
+
+  if (zclient->redist[ZEBRA_ROUTE_OSPF])
+    {
+      message = 0;
+      flags = 0;
+
+      /* OSPF pass nexthop and metric */
+      SET_FLAG (message, ZAPI_MESSAGE_NEXTHOP);
+      SET_FLAG (message, ZAPI_MESSAGE_METRIC);
+
+      /* Distance value. */
+      distance = ospf_distance_apply (p, or);
+      if (distance)
+	SET_FLAG (message, ZAPI_MESSAGE_DISTANCE);
+
+      /* Make packet. */
+      s = zclient->obuf;
+      stream_reset (s);
+
+      /* Length place holder. */
+      stream_putw (s, 0);
+
+      /* Put command, type, flags, message. */
+      stream_putc (s, ZEBRA_IPV4_ROUTE_ADD);
+      stream_putc (s, ZEBRA_ROUTE_OSPF);
+      stream_putc (s, flags);
+      stream_putc (s, message);
+  
+      /* Put prefix information. */
+      psize = PSIZE (p->prefixlen);
+      stream_putc (s, p->prefixlen);
+      stream_write (s, (u_char *)&p->prefix, psize);
+
+      /* Nexthop count. */
+      stream_putc (s, or->path->count);
+
+      /* Nexthop, ifindex, distance and metric information. */
+      for (node = listhead (or->path); node; nextnode (node))
+	{
+	  path = getdata (node);
+
+	  if (path->nexthop.s_addr != INADDR_ANY)
+	    {
+	      stream_putc (s, ZEBRA_NEXTHOP_IPV4);
+	      stream_put_in_addr (s, &path->nexthop);
+	    }
+	  else
+	    {
+	      stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
+	      if (path->ifp)
+		stream_putl (s, path->ifp->ifindex);
+	      else
+		stream_putl (s, 0);
+	    }
+	}
+
+      if (CHECK_FLAG (message, ZAPI_MESSAGE_DISTANCE))
+	stream_putc (s, distance);
+      if (CHECK_FLAG (message, ZAPI_MESSAGE_METRIC))
+	stream_putl (s, or->cost);
+
+      stream_putw_at (s, 0, stream_get_endp (s));
+
+      writen (zclient->sock, s->data, stream_get_endp (s));
+
+#if 0
+      if (IS_DEBUG_OSPF (zebra, ZEBRA_REDISTRIBUTE))
+	{
+	  char *nexthop_str;
+
+	  nexthop_str = strdup (inet_ntoa (*nexthop));
+	  zlog_info ("Zebra: Route add %s/%d nexthop %s metric %d",
+		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str,
+		     metric);
+	  free (nexthop_str);
+	}
+#endif /* 0 */
+    }
+}
+
+void
 ospf_zebra_delete (struct prefix_ipv4 *p, struct in_addr *nexthop)
 {
   struct zapi_ipv4 api;
@@ -308,6 +440,7 @@ ospf_zebra_delete (struct prefix_ipv4 *p, struct in_addr *nexthop)
       SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
       api.nexthop_num = 1;
       api.nexthop = &nexthop;
+      api.ifindex_num = 0;
       /* Do not pass metric when delete route. 
 	SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
 	api.metric = metric;
@@ -324,6 +457,42 @@ ospf_zebra_delete (struct prefix_ipv4 *p, struct in_addr *nexthop)
 		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str);
 	  free (nexthop_str);
 	}
+    }
+}
+
+void
+ospf_zebra_delete_multipath (struct prefix_ipv4 *p, struct ospf_route *or)
+{
+  struct zapi_ipv4 api;
+
+  if (zclient->redist[ZEBRA_ROUTE_OSPF])
+    {
+      api.type = ZEBRA_ROUTE_OSPF;
+      api.flags = 0;
+      api.message = 0;
+      /* Do not send nexthop information when delete route.
+      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
+      api.nexthop_num = 1;
+      api.nexthop = &nexthop;
+      api.ifindex_num = 0;
+      */
+      /* Do not pass metric when delete route. 
+	SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
+	api.metric = metric;
+      */
+      zapi_ipv4_delete (zclient, p, &api);
+
+#if 0
+      if (IS_DEBUG_OSPF (zebra, ZEBRA_REDISTRIBUTE))
+	{
+	  char *nexthop_str;
+
+	  nexthop_str = strdup (inet_ntoa (*nexthop));
+	  zlog_info ("Zebra: Route delete %s/%d nexthop %s",
+		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str);
+	  free (nexthop_str);
+	}
+#endif /* 0 */
     }
 }
 
@@ -345,6 +514,7 @@ ospf_zebra_add_discard (struct prefix_ipv4 *p)
       SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
       api.nexthop_num = 1;
       api.nexthop = &nexthop;
+      api.ifindex_num = 0;
 
       zapi_ipv4_add (zclient, p, &api);
     }
@@ -368,6 +538,7 @@ ospf_zebra_delete_discard (struct prefix_ipv4 *p)
       SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
       api.nexthop_num = 1;
       api.nexthop = &nexthop;
+      api.ifindex_num = 0;
 
       zapi_ipv4_delete (zclient, p, &api);
     }
@@ -692,8 +863,16 @@ ospf_zebra_read_ipv4 (int command, struct zclient *zclient,
 		ospf_external_lsa_refresh_default ();
 	      else
 		{
-		  if (!ospf_external_info_find_lsa (&ei->p))
+		  struct ospf_lsa *current;
+
+		  current = ospf_external_info_find_lsa (&ei->p);
+		  if (!current)
 		    ospf_external_lsa_originate (ei);
+		  else if (IS_LSA_MAXAGE (current))
+		    ospf_external_lsa_refresh (current, ei, LSA_REFRESH_FORCE);
+		  else
+		    zlog_warn ("ospf_zebra_read_ipv4() : %s already exists",
+			       inet_ntoa (p.prefix));
 		}
 	    }
 	}

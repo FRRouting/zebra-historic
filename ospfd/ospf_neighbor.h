@@ -46,6 +46,8 @@ struct ospf_neighbor
 
   /* Last sent Database Description packet. */
   struct ospf_packet *last_send;
+  /* Timestemp when last Database Description packet was sent */
+  struct timeval last_send_ts;
 
   /* Last received Databse Description packet. */
   struct
@@ -62,6 +64,8 @@ struct ospf_neighbor
   struct new_lsdb db_sum;
   struct new_lsdb ls_req;
   struct ospf_lsa *ls_req_last;
+
+  u_int32_t crypt_seqnum;           /* Cryptographic Sequence Number. */
 
   /* Timer values. */
   u_int32_t v_inactivity;

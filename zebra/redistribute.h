@@ -31,6 +31,11 @@ void zebra_redistribute_delete (int, struct zserv *, int);
 void zebra_redistribute_default_add (int, struct zserv *, int);
 void zebra_redistribute_default_delete (int, struct zserv *, int);
 
+#ifndef OLD_RIB
+void redistribute_add_multipath (struct route_node *, struct new_rib *);
+void redistribute_delete_multipath (struct route_node *, struct new_rib *);
+#endif /* ! OLD_RIB */
+
 void redistribute_add (struct route_node *np, struct rib *rib);
 void redistribute_delete (struct route_node *np, struct rib *rib);
 

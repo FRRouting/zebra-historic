@@ -510,11 +510,11 @@ rip_timeout (struct thread *t)
   RIP_TIMER_ON (rinfo->t_garbage_collect, rip_garbage_collect, 
 		rip->garbage_time);
 
+  rip_zebra_ipv4_delete ((struct prefix_ipv4 *)&rn->p, &rinfo->nexthop,
+			 rinfo->metric);
   /* - The metric for the route is set to 16 (infinity).  This causes
      the route to be removed from service. */
   rinfo->metric = RIP_METRIC_INFINITY;
-  rip_zebra_ipv4_delete ((struct prefix_ipv4 *)&rn->p, &rinfo->nexthop,
-			 rinfo->metric);
   rinfo->flags &= ~RIP_RTF_FIB;
 
   /* - The route change flag is to indicate that this entry has been
@@ -813,7 +813,28 @@ rip_rte_process (struct rte *rte, struct sockaddr_in *from,
 	  rinfo->ifindex = ifp->ifindex;
 	  rinfo->distance = rip_distance_apply (rinfo);
 
-	  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop))
+	  /* Should a new route to this network be established
+	     while the garbage-collection timer is running, the
+	     new route will replace the one that is about to be
+	     deleted.  In this case the garbage-collection timer
+	     must be cleared. */
+
+	  if (oldmetric == RIP_METRIC_INFINITY &&
+	      rinfo->metric < RIP_METRIC_INFINITY)
+	    {
+	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+
+	      if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop))
+		IPV4_ADDR_COPY (&rinfo->nexthop, nexthop);
+
+	      rip_zebra_ipv4_add (&p, nexthop, rinfo->metric,
+				  rinfo->distance);
+	      rinfo->flags |= RIP_RTF_FIB;
+	    }
+
+
+	  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop) &&
+	      oldmetric != RIP_METRIC_INFINITY)
 	    {
 #if 0
 	      rip_zebra_ipv4_delete (&p, &rinfo->nexthop, oldmetric);
@@ -860,7 +881,28 @@ rip_rte_process (struct rte *rte, struct sockaddr_in *from,
 	  rinfo->ifindex = ifp->ifindex;
 	  rinfo->distance = rip_distance_apply (rinfo);
 
-	  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop))
+	  /* Should a new route to this network be established
+	     while the garbage-collection timer is running, the
+	     new route will replace the one that is about to be
+	     deleted.  In this case the garbage-collection timer
+	     must be cleared. */
+
+	  if (oldmetric == RIP_METRIC_INFINITY &&
+	      rinfo->metric < RIP_METRIC_INFINITY)
+	    {
+	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+
+	      if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop))
+		IPV4_ADDR_COPY (&rinfo->nexthop, nexthop);
+
+	      rip_zebra_ipv4_add (&p, nexthop, rinfo->metric,
+				  rinfo->distance);
+	      rinfo->flags |= RIP_RTF_FIB;
+	    }
+
+
+	  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop) &&
+	      oldmetric != RIP_METRIC_INFINITY)
 	    {
 	      rip_zebra_ipv4_delete (&p, &rinfo->nexthop, oldmetric);
 	      rip_zebra_ipv4_add (&p, nexthop, rinfo->metric,
@@ -895,7 +937,7 @@ rip_rte_process (struct rte *rte, struct sockaddr_in *from,
 		  /* - The metric for the route is set to 16
 		     (infinity).  This causes the route to be removed
 		     from service.*/
-		  rip_zebra_ipv4_delete (&p, &rinfo->nexthop, rinfo->metric);
+		  rip_zebra_ipv4_delete (&p, &rinfo->nexthop, oldmetric);
 		  rinfo->flags &= ~RIP_RTF_FIB;
 
 		  /* - The route change flag is to indicate that this
@@ -909,13 +951,6 @@ rip_rte_process (struct rte *rte, struct sockaddr_in *from,
 	    {
 	      /* otherwise, re-initialize the timeout. */
 	      rip_timeout_update (rinfo);
-
-	      /* Should a new route to this network be established
-		 while the garbage-collection timer is running, the
-		 new route will replace the one that is about to be
-		 deleted.  In this case the garbage-collection timer
-		 must be cleared. */
-	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
 	    }
 	}
       /* Unlock tempolary lock of the route. */
@@ -1542,13 +1577,17 @@ rip_redistribute_add (int type, int sub_type, struct prefix_ipv4 *p,
 
       RIP_TIMER_OFF (rinfo->t_timeout);
       RIP_TIMER_OFF (rinfo->t_garbage_collect);
-      route_unlock_node (rp);
-    }
-  else
-    {
-      rinfo = rip_info_new ();
+
+      rip_zebra_ipv4_delete ((struct prefix_ipv4 *)&rp->p, &rinfo->nexthop,
+			 rinfo->metric);
+      rp->info = NULL;
+      rip_info_free (rinfo);
+      
+      route_unlock_node (rp);      
     }
 
+  rinfo = rip_info_new ();
+    
   rinfo->type = type;
   rinfo->sub_type = sub_type;
   rinfo->ifindex = ifindex;
@@ -1606,10 +1645,13 @@ rip_request_process (struct rip_packet *packet, int size,
   struct prefix_ipv4 p;
   struct route_node *rp;
   struct rip_info *rinfo;
-  /* struct rip_interface *ri; */
+  struct rip_interface *ri;
 
-  /* Check RIP is enabled on this interface or not. */
-  ;
+  ri = ifp->info;
+
+  /* When passive interface is specified, suppress responses */
+  if (ri->passive)
+    return;
 
   /* RIP peer update. */
   rip_peer_update (from, packet->version);
@@ -2171,13 +2213,11 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
   struct route_node *rp;
   struct rip_info *rinfo;
   struct rip_interface *ri;
-  struct prefix_ipv4 *ppref_ipv4;
   struct prefix_ipv4 *p;
+  struct prefix_ipv4 classfull;
   int num;
   int rtemax;
 
-  ppref_ipv4 = NULL;
-  
 #ifdef NEW_RIP_TABLE
   return;
 #endif /* NEW_RIP_TABLE */
@@ -2219,26 +2259,21 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 	
 	if (version == RIPv1)
 	  {
-	    ppref_ipv4 = XMALLOC (MTYPE_PREFIX_IPV4,
-				  sizeof (struct prefix_ipv4));
-	    memcpy (ppref_ipv4, &rp->p, sizeof (struct prefix_ipv4));
+	    memcpy (&classfull, &rp->p, sizeof (struct prefix_ipv4));
 
 	    if (IS_RIP_DEBUG_PACKET)
 	      zlog_info("%s/%d before RIPv1 mask check ",
-			inet_ntoa (ppref_ipv4->prefix), ppref_ipv4->prefixlen);
+			inet_ntoa (classfull.prefix), classfull.prefixlen);
 
-	    apply_classful_mask_ipv4 (ppref_ipv4);
-	    p = ppref_ipv4;
+	    apply_classful_mask_ipv4 (&classfull);
+	    p = &classfull;
 
 	    if (IS_RIP_DEBUG_PACKET)
 	      zlog_info("%s/%d after RIPv1 mask check",
 			inet_ntoa (p->prefix), p->prefixlen);
 	  }
 	else 
-	  {
-	    ppref_ipv4 = NULL;
-	    p = (struct prefix_ipv4 *) &rp->p;
-	  }
+	  p = (struct prefix_ipv4 *) &rp->p;
 
 	/* Apply output filters. */
 	ret = rip_outgoing_filter (p, ri);
@@ -2340,9 +2375,6 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 
   /* Statistics updates. */
   ri->sent_updates++;
-  /* Freeing memory */
-  if (ppref_ipv4)
-    XFREE(MTYPE_PREFIX_IPV4,ppref_ipv4);
 }
 
 /* Send RIP packet to the interface. */

@@ -111,6 +111,7 @@ struct ospf6_router_lsa
 #define OSPF6_ROUTER_LSA_CLEAR(x,y)  ((x)->bits &= ~(y))
 #define OSPF6_ROUTER_LSA_CLEAR_ALL_BITS(x)  ((x)->bits = 0)
 
+/* Link State Description in Router-LSA */
 struct ospf6_router_lsd
 {
   u_char    type;
@@ -139,6 +140,13 @@ struct ospf6_network_lsa
   u_char options[3];
   /* followed by router_id(s) */
 };
+
+/* Link State Description in Router-LSA */
+struct ospf6_network_lsd
+{
+  u_int32_t adv_router;
+};
+
 
 struct link_lsa
 {
@@ -268,6 +276,12 @@ struct ospf6_lsa
   list                   dbdesc_neighbor;
 
   struct ospf6_lsa_hdr  *lsa_hdr;   /* lsa instance */
+
+  /* statistics */
+  u_long turnover_num;
+  u_long turnover_total;
+  u_long turnover_min;
+  u_long turnover_max;
 };
 #define OSPF6_LSA_FLOODBACK   (1 << 0)
 #define OSPF6_LSA_DUPLICATE   (1 << 1)
@@ -290,6 +304,8 @@ extern char *ospf6_lsa_type_strings[];
            (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
 
 /* Function Prototypes */
+char *
+ospf6_lsa_print_id (struct ospf6_lsa_header *lsa_header, char *buf, int size);
 
 struct router_lsd *
 get_router_lsd (u_int32_t, struct ospf6_lsa *);
@@ -300,11 +316,12 @@ void
 ospf6_lsa_remove_all_reference (struct ospf6_lsa *);
 
 int ospf6_lsa_issame (struct ospf6_lsa_header *, struct ospf6_lsa_header *);
+int ospf6_lsa_differ (struct ospf6_lsa *lsa1, struct ospf6_lsa *lsa2);
 int ospf6_lsa_match (u_int16_t, u_int32_t, u_int32_t,
                      struct ospf6_lsa_header *);
 
 void
-ospf6_lsa_vty (struct vty *, struct ospf6_lsa *);
+ospf6_lsa_show (struct vty *, struct ospf6_lsa *);
 
 struct ospf6_lsa *
 ospf6_lsa_create (struct ospf6_lsa_header *);
@@ -322,6 +339,14 @@ void ospf6_lsa_premature_aging (struct ospf6_lsa *);
 
 int ospf6_lsa_check_recent (struct ospf6_lsa *, struct ospf6_lsa *);
 
+int
+ospf6_lsa_lsd_num (struct ospf6_lsa_header *lsa_header);
+void *
+ospf6_lsa_lsd_get (int index, struct ospf6_lsa_header *lsa_header);
+int
+ospf6_lsa_lsd_is_refer_ok (int index1, struct ospf6_lsa_header *lsa_header1,
+                           int index2, struct ospf6_lsa_header *lsa_header2);
+
 void ospf6_lsa_maxage_remove (struct ospf6_lsa *);
 
 int ospf6_lsa_expire (struct thread *);
@@ -338,6 +363,7 @@ void ospf6_lsa_update_intra_prefix_stub (struct ospf6_area *);
 void ospf6_lsa_reoriginate (struct ospf6_lsa *);
 
 u_int16_t ospf6_lsa_get_scope_type (u_int16_t);
+int ospf6_lsa_is_known_type (struct ospf6_lsa_header *lsa_header);
 
 #endif /* OSPF6_LSA_H */
 

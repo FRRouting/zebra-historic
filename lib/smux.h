@@ -37,6 +37,7 @@
 #define SMUX_GETNEXT    (ASN_CONTEXT | ASN_CONSTRUCTOR | 1)
 #define SMUX_GETRSP     (ASN_CONTEXT | ASN_CONSTRUCTOR | 2)
 #define SMUX_SET	(ASN_CONTEXT | ASN_CONSTRUCTOR | 3)
+#define SMUX_TRAP	(ASN_CONTEXT | ASN_CONSTRUCTOR | 4)
 
 #define SMUX_MAX_FAILURE 3
 
@@ -62,19 +63,20 @@ struct variable;
     theoid, sizeof(theoid)/sizeof(oid))
 
 typedef int (WriteMethod)(int action,
-  u_char  *var_val,
-  u_char   var_val_type,
-  size_t   var_val_len,
-  u_char  *statP,
-  oid     *name,
-  size_t   length);
+			  u_char  *var_val,
+			  u_char   var_val_type,
+			  size_t   var_val_len,
+			  u_char  *statP,
+			  oid     *name,
+			  size_t   length,
+			  struct variable *v);
 
-typedef u_char *(FindVarMethod)(struct variable *vp,
-  oid     *name,
-  size_t  *length,
-  int      exact,
-  size_t  *var_len,
-  WriteMethod   **write_method);
+typedef u_char *(FindVarMethod)(struct variable *v,
+				oid     *name,
+				size_t  *length,
+				int      exact,
+				size_t  *var_len,
+				WriteMethod   **write_method);
 
 /* SNMP variable */
 struct variable
@@ -116,6 +118,13 @@ struct subtree
   int registered;
 };
 
+struct trap_object
+{
+  FindVarMethod *findVar;
+  u_char namelen;
+  oid name[MAX_OID_LEN];
+};
+
 /* Declare SMUX return value. */
 #define SNMP_LOCAL_VARIABLES \
   static int32_t snmp_int_val; \
@@ -140,6 +149,7 @@ void smux_start (void);
 void smux_register_mib(char *, struct variable *, size_t, int, oid [], size_t);
 int smux_header_generic (struct variable *, oid [], size_t *, int, size_t *, 
     WriteMethod **);
+int smux_trap (oid *, size_t, oid *, size_t, struct trap_object *, size_t, unsigned int);
 
 int oid_compare (oid *, int, oid *, int);
 void oid2in_addr (oid [], int, struct in_addr *);

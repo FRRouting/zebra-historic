@@ -25,10 +25,11 @@
 #include "log.h"
 #include "command.h"
 
-#include "ospf6_interface.h"
-#include "ospf6_top.h"
 #include "ospf6_lsdb.h"
 
+#include "ospf6_top.h"
+#include "ospf6_area.h"
+#include "ospf6_interface.h"
 
 static struct in6_addr *
 ospf6_interface_update_linklocal_address (struct interface *ifp)
@@ -121,16 +122,16 @@ ospf6_interface_if_del (struct interface *ifp, struct ospf6 *o6)
   if (!o6i)
     return;
 
-  /* cut link */
-  o6i->interface = NULL;
-  ifp->info = NULL;
-
   /* interface stop */
   if (o6i->area)
     thread_execute (master, interface_down, o6i, 0);
 
   listnode_delete (o6i->area->if_list, o6i);
   o6i->area = (struct ospf6_area *) NULL;
+
+  /* cut link */
+  o6i->interface = NULL;
+  ifp->info = NULL;
 
   ospf6_interface_delete (o6i);
 }
@@ -245,6 +246,23 @@ ospf6_interface_lookup_by_name (char *ifname, struct ospf6 *o6)
 
 
 int
+ospf6_interface_count_neighbor_in_state (u_char state,
+                                         struct ospf6_interface *o6i)
+{
+  listnode n;
+  struct ospf6_neighbor *o6n;
+  int count = 0;
+
+  for (n = listhead (o6i->neighbor_list); n; nextnode (n))
+    {
+      o6n = (struct ospf6_neighbor *) getdata (n);
+      if (o6n->state == state)
+        count++;
+    }
+  return count;
+}
+
+int
 ospf6_interface_count_full_neighbor (struct ospf6_interface *o6i)
 {
   listnode n;
@@ -261,21 +279,26 @@ ospf6_interface_count_full_neighbor (struct ospf6_interface *o6i)
 }
 
 int
-ospf6_interface_is_enabled (struct ospf6_interface *o6i)
+ospf6_interface_is_enabled (unsigned int ifindex)
 {
-  assert (o6i);
-  if (o6i->state > IFS_DOWN)
-    {
-      assert (o6i->area);
-      return 1;
-    }
+  struct ospf6_interface *o6i;
 
-  return 0;
+  o6i = ospf6_interface_lookup_by_index (ifindex, ospf6);
+  if (! o6i)
+    return 0;
+
+  if (! o6i->area)
+    return 0;
+
+  if (o6i->state <= IFS_DOWN)
+    return 0;
+
+  return 1;
 }
 
 /* show specified interface structure */
 int
-show_if (struct vty *vty, struct interface *iface)
+ospf6_interface_show (struct vty *vty, struct interface *iface)
 {
   struct ospf6_interface *ospf6_interface;
   struct connected *c;
@@ -333,12 +356,14 @@ show_if (struct vty *vty, struct interface *iface)
 
   if (ospf6_interface->area)
     {
+      inet_ntop (AF_INET, &ospf6_interface->area->ospf6->router_id,
+                 strbuf, sizeof (strbuf));
       vty_out (vty, "  Instance ID %lu, Router ID %s%s",
-	       ospf6_interface->instance_id,
-	       inet4str (ospf6_interface->area->ospf6->router_id),
+	       ospf6_interface->instance_id, strbuf,
 	       VTY_NEWLINE);
-      vty_out (vty, "  Area ID %s, Cost %hu%s",
-	       inet4str (ospf6_interface->area->area_id), 
+      inet_ntop (AF_INET, &ospf6_interface->area->area_id,
+                 strbuf, sizeof (strbuf));
+      vty_out (vty, "  Area ID %s, Cost %hu%s", strbuf,
 	       ospf6_interface->cost, VTY_NEWLINE);
     }
   else
@@ -369,6 +394,93 @@ show_if (struct vty *vty, struct interface *iface)
 
   return 0;
 }
+
+void
+ospf6_interface_statistics_show (struct vty *vty, struct ospf6_interface *o6i)
+{
+  struct timeval now, uptime;
+  u_long recv_total, send_total;
+  u_long bps_total_avg, bps_tx_avg, bps_rx_avg;
+  int i;
+
+  gettimeofday (&now, (struct timezone *) NULL);
+  ospf6_timeval_sub (&now, &ospf6->starttime, &uptime);
+
+  recv_total = send_total = 0;
+  for (i = 0; i < MSGT_MAX; i++)
+    {
+      recv_total += o6i->message_stat[i].recv_octet;
+      send_total += o6i->message_stat[i].send_octet;
+    }
+  bps_total_avg = (recv_total + send_total) * 8 / uptime.tv_sec;
+  bps_tx_avg = send_total * 8 / uptime.tv_sec;
+  bps_rx_avg = recv_total * 8 / uptime.tv_sec;
+
+  vty_out (vty, "  Statistics of interface %s%s",
+           o6i->interface->name, VTY_NEWLINE);
+  vty_out (vty, "    Number of Neighbor: %d%s",
+           listcount (o6i->neighbor_list), VTY_NEWLINE);
+
+  vty_out (vty, "    %-8s %4s %4s %7s %7s%s",
+           "Type", "tx", "rx", "tx-byte", "rx-byte", VTY_NEWLINE);
+  for (i = 0; i < MSGT_MAX; i++)
+    {
+      vty_out (vty, "    %-8s %4d %4d %7d %7d%s",
+               ospf6_message_type_string[i],
+               o6i->message_stat[i].send, o6i->message_stat[i].recv,
+               o6i->message_stat[i].send_octet,
+               o6i->message_stat[i].recv_octet,
+               VTY_NEWLINE);
+    }
+
+  vty_out (vty, "    Average Link bandwidth: %dbps (Tx: %dbps Rx: %dbps)%s",
+           bps_total_avg, bps_tx_avg, bps_rx_avg, VTY_NEWLINE);
+}
+
+/* show interface */
+DEFUN (show_ipv6_ospf6_interface,
+       show_ipv6_ospf6_interface_ifname_cmd,
+       "show ipv6 ospf6 interface IFNAME",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       INTERFACE_STR
+       IFNAME_STR
+       )
+{
+  struct interface *ifp;
+  listnode i;
+
+  if (argc)
+    {
+      ifp = if_lookup_by_name (argv[0]);
+      if (!ifp)
+        {
+          vty_out (vty, "No such Interface: %s%s", argv[0],
+		   VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+      ospf6_interface_show (vty, ifp);
+    }
+  else
+    {
+      for (i = listhead (iflist); i; nextnode (i))
+        {
+          ifp = (struct interface *)getdata (i);
+          ospf6_interface_show (vty, ifp);
+        }
+    }
+  return CMD_SUCCESS;
+}
+
+ALIAS (show_ipv6_ospf6_interface,
+       show_ipv6_ospf6_interface_cmd,
+       "show ipv6 ospf6 interface",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       INTERFACE_STR
+       )
 
 /* interface variable set command */
 DEFUN (ipv6_ospf6_cost,
@@ -603,6 +715,11 @@ ospf6_interface_init ()
 {
   /* Install interface node. */
   install_node (&interface_node, ospf6_interface_config_write);
+
+  install_element (VIEW_NODE, &show_ipv6_ospf6_interface_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
 
   install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);

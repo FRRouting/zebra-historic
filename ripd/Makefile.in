@@ -75,6 +75,7 @@ LIBPAM = @LIBPAM@
 LIB_IPV6 = @LIB_IPV6@
 LIB_REGEX = @LIB_REGEX@
 MAKEINFO = @MAKEINFO@
+MULTIPATH_NUM = @MULTIPATH_NUM@
 OSPF6D = @OSPF6D@
 OSPFD = @OSPFD@
 OTHER_METHOD = @OTHER_METHOD@
@@ -148,7 +149,7 @@ all: all-redirect
 .SUFFIXES:
 .SUFFIXES: .S .c .o .s
 $(srcdir)/Makefile.in: Makefile.am $(top_srcdir)/configure.in $(ACLOCAL_M4) 
-	cd $(top_srcdir) && $(AUTOMAKE) --gnu --include-deps ripd/Makefile
+	cd $(top_srcdir) && $(AUTOMAKE) --foreign --include-deps ripd/Makefile
 
 Makefile: $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) \

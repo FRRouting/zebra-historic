@@ -43,11 +43,7 @@ route_table_init (void)
 void
 route_table_finish (struct route_table *rt)
 {
-#if 0
-  XFREE (MTYPE_ROUTE_TABLE, rt);
-#else
   route_table_free (rt);
-#endif /*0*/
 }
 
 /* Allocate new route node. */
@@ -344,11 +340,6 @@ route_node_get (struct route_table *table, struct prefix *p)
 	}
     }
   route_lock_node (new);
-
-  /* For debug. */
-#ifdef DEBUG
-  route_dump_node (table);
-#endif /* DEBUG */
   
   return new;
 }
@@ -488,88 +479,3 @@ route_next_until (struct route_node *node, struct route_node *limit)
   route_unlock_node (start);
   return NULL;
 }
-
-#ifdef TEST2
-main ()
-{
-  FILE *fp;
-  char buf[BUFSIZ];
-  struct prefix prefix;
-  struct route_node *node;
-  struct route_table *table;
-
-  fp = fopen ("file", "r");
-  if (fp == NULL)
-    {
-      perror ("open");
-      exit (1);
-    }
-  table = route_table_init ();
-
-  while (fgets (buf, BUFSIZ, fp))
-    {
-      str2prefix_ipv6 (buf, &prefix);
-
-      node = route_node_get (table, &prefix);
-
-      node->route = NULL;
-    }
-
-  for (node = route_top (table); node; node = route_next (node))
-    {
-      printf ("[%d] %s/%d\n", 
-	      node->lock,
-	      inet_ntop (AF_INET6, &node->p.u.prefix6, buf, BUFSIZ),
-	      node->p.prefixlen);
-    }
-#if 0
-  for (node = route_top (table); node; node = route_next (node))
-    {
-      printf ("[%d] %s/%d\n", 
-	      node->lock,
-	      inet_ntop (AF_INET6, &node->prefix, buf, BUFSIZ),
-	      node->prefixlen);
-    }
-#endif
-}
-#endif /* TEST2 */
-
-#ifdef TEST
-int
-main ()
-{
-  struct prefix a;
-  struct prefix b;
-  struct prefix c;
-  struct prefix d;
-  struct prefix e;
-  struct route_table *top;
-  struct route_node *node;
-
-  str2prefix ("::/0", &a);
-  str2prefix ("F000::/4", &b);
-  str2prefix ("0101::/16", &c);
-  str2prefix ("200::/8", &d);
-  str2prefix ("0100::/8", &e);
-
-  top = route_table_init ();
-
-  route_node_get (top, &a);
-  node = route_node_get (top, &b);
-  /* route_node_get (top, &c); */
-  route_node_get (top, &d);
-
-  route_dump_node (top);
-
-  printf ("=======\n");
-
-  node = route_node_lookup (top, &d);
-  if (node)
-    printf ("found it\n");
-
-
-  route_dump_node (top);
-
-  exit (0);
-}
-#endif /* TEST */

@@ -75,6 +75,7 @@ LIBPAM = @LIBPAM@
 LIB_IPV6 = @LIB_IPV6@
 LIB_REGEX = @LIB_REGEX@
 MAKEINFO = @MAKEINFO@
+MULTIPATH_NUM = @MULTIPATH_NUM@
 OSPF6D = @OSPF6D@
 OSPFD = @OSPFD@
 OTHER_METHOD = @OTHER_METHOD@
@@ -95,7 +96,7 @@ LIBS = @LIBS@ @CURSES@ @LIBPAM@
 
 bin_PROGRAMS = vtysh
 
-vtysh_SOURCES = vtysh_main.c vtysh.c vtysh_cmd.c vtysh_user.c
+vtysh_SOURCES = vtysh_main.c vtysh.c vtysh_cmd.c vtysh_user.c vtysh_config.c
 noinst_HEADERS = vtysh.h vtysh_user.h
 vtysh_LDADD = ../lib/libzebra.a
 
@@ -109,7 +110,8 @@ PROGRAMS =  $(bin_PROGRAMS)
 
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
-vtysh_OBJECTS =  vtysh_main.o vtysh.o vtysh_cmd.o vtysh_user.o
+vtysh_OBJECTS =  vtysh_main.o vtysh.o vtysh_cmd.o vtysh_user.o \
+vtysh_config.o
 vtysh_DEPENDENCIES =  ../lib/libzebra.a
 vtysh_LDFLAGS = 
 CFLAGS = @CFLAGS@
@@ -134,7 +136,7 @@ all: all-redirect
 .SUFFIXES:
 .SUFFIXES: .S .c .o .s
 $(srcdir)/Makefile.in: Makefile.am $(top_srcdir)/configure.in $(ACLOCAL_M4) 
-	cd $(top_srcdir) && $(AUTOMAKE) --gnu --include-deps vtysh/Makefile
+	cd $(top_srcdir) && $(AUTOMAKE) --foreign --include-deps vtysh/Makefile
 
 Makefile: $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) \
@@ -324,7 +326,7 @@ maintainer-clean-generic clean mostlyclean distclean maintainer-clean
 
 
 rebuild:
-	./extract.pl ../zebra/*.c ../ripd/*.c ../ripngd/*.c ../ospfd/*.c ../ospf6d/*.c ../bgpd/*.c >vtysh_cmd.c
+	./extract.pl ../zebra/*.c ../ripd/*.c ../ripngd/*.c ../ospfd/*.c ../ospf6d/*.c ../bgpd/*.c ../lib/keychain.c ../lib/routemap.c ../lib/filter.c ../lib/plist.c >vtysh_cmd.c
 
 depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c

@@ -385,11 +385,17 @@ route_set_metric_compile (char *arg)
   metric = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
   *metric = atoi (arg);
 
+  return metric;
+
+#if 0
+  /* To make it consistent to other daemon, metric check is commented
+     out.*/
   if (*metric >= 0 && *metric <= 16)
     return metric;
 
   XFREE (MTYPE_ROUTE_MAP_COMPILED, metric);
   return NULL;
+#endif /* 0 */
 }
 
 /* Free route map's compiled `set metric' value. */

@@ -40,6 +40,13 @@ struct bgp_info
 
   /* Selected route flag. */
   u_char selected;
+  u_char as_selected;
+
+  /* BGP info status. */
+  u_char flags;
+#define BGP_INFO_CHANGED   (1 << 0)
+#define BGP_INFO_DAMPED    (1 << 1)
+#define BGP_INFO_HISTORY   (1 << 2)
 
   /* Pointer to peer structure. */
   struct peer *peer;
@@ -55,6 +62,9 @@ struct bgp_info
 
   /* Time */
   time_t uptime;
+
+  /* Pointer to dampening structure */
+  struct bgp_damp_info *bgp_damp_info;
 };
 
 /* I want to change structure name from bgp_route to bgp_info. */
@@ -72,6 +82,8 @@ struct bgp_info_tag
 
   /* Selected route flag. */
   u_char selected;
+  u_char as_selected;
+  u_char flags;
 
   /* Pointer to peer structure. */
   struct peer *peer;
@@ -87,6 +99,9 @@ struct bgp_info_tag
 
   /* Time */
   time_t uptime;
+
+  /* Pointer to dampening structure */
+  struct bgp_damp_info *bgp_damp_info;
 
   /* Tag */
   u_char tag[3];

@@ -60,6 +60,10 @@ void
 ospf6_lsdb_collect_type_advrtr (list, unsigned short,
                                 unsigned long, void *);
 
+struct ospf6_lsa *
+ospf6_lsdb_lookup_from_lsdb (u_int16_t type, u_int32_t ls_id,
+                             u_int32_t advrtr, list lsdb);
+
 struct ospf6_lsa*
 ospf6_lsdb_lookup (u_int16_t, u_int32_t, u_int32_t, struct ospf6 *);
 

@@ -84,21 +84,22 @@ struct ospf6_interface
   list lsdb;
 
   /* statistics */
-  unsigned int ospf6_stat_dr_election;
-  unsigned int ospf6_stat_delayed_lsack;
+  u_int ospf6_stat_dr_election;
+  u_int ospf6_stat_delayed_lsack;
+
+  struct ospf6_message_stat message_stat[MSGT_MAX];
 };
 
 
-
 /* Function Prototypes */
 struct ospf6_interface *
-  ospf6_interface_create (struct interface *, struct ospf6 *);
+ospf6_interface_create (struct interface *, struct ospf6 *);
+void ospf6_interface_delete (struct ospf6_interface *);
 
-void
-  ospf6_interface_delete (struct ospf6_interface *);
-
-struct in6_addr *
-  ospf6_interface_linklocal_addr (struct interface *);
+struct ospf6_interface *
+ospf6_interface_lookup_by_index (int, struct ospf6 *);
+struct ospf6_interface *
+ospf6_interface_lookup_by_name (char *, struct ospf6 *);
 
 void ospf6_interface_if_add (struct interface *, struct ospf6 *);
 void ospf6_interface_if_del (struct interface *, struct ospf6 *);
@@ -106,20 +107,18 @@ void ospf6_interface_state_update (struct interface *);
 void ospf6_interface_address_update (struct interface *);
 
 void ospf6_interface_init ();
-void delete_ospf6_interface (struct ospf6_interface *);
 
-struct ospf6_interface *
-ospf6_interface_lookup_by_index (int, struct ospf6 *);
-struct ospf6_interface *
-ospf6_interface_lookup_by_name (char *, struct ospf6 *);
-
+int
+ospf6_interface_count_neighbor_in_state (u_char state,
+                                         struct ospf6_interface *o6i);
 int
 ospf6_interface_count_full_neighbor (struct ospf6_interface *);
 
-int ospf6_interface_is_enabled (struct ospf6_interface *);
-int show_if (struct vty *, struct interface *);
-int ospf6_interface_config_write (struct vty *);
-void ospf6_interface_init ();
+int ospf6_interface_is_enabled (u_int32_t ifindex);
+
+void
+ospf6_interface_statistics_show (struct vty *vty,
+                                 struct ospf6_interface *o6i);
 
 #endif /* OSPF6_INTERFACE_H */
 

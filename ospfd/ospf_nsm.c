@@ -48,7 +48,6 @@
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_abr.h"
 
-extern unsigned long term_debug_ospf_nsm;
 void nsm_reset_nbr (struct ospf_neighbor *);
 
 
@@ -85,11 +84,9 @@ ospf_db_desc_timer (struct thread *thread)
     zlog (NULL, LOG_INFO, "NSM[%s:%s]: Timer (DD Retransmit timer expire)",
 	  nbr->oi->ifp->name, inet_ntoa (nbr->src));
 
-  /* Sending DD packet. If Last send DD packet remains, re-send it. */
-  if (nbr->last_send)
-    ospf_db_desc_resend (nbr);
-  else
-    ospf_db_desc_send (nbr);
+  /* resent last send DD packet. */
+  assert (nbr->last_send);
+  ospf_db_desc_resend (nbr);
 
   /* DD Retransmit timer set. */
   OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
@@ -106,18 +103,23 @@ nsm_timer_set (struct ospf_neighbor *nbr)
     {
     case NSM_Down:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
       break;
     case NSM_Attempt:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
       break;
     case NSM_Init:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
       break;
     case NSM_TwoWay:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
       break;
     case NSM_ExStart:
       OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
+      OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
       break;
     case NSM_Exchange:
       OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
@@ -204,21 +206,6 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
     next_state = NSM_ExStart;
 
-  if (next_state == NSM_ExStart)
-    {
-      /* Get initial sequence number from time (). */
-      if (nbr->dd_seqnum == 0)
-	nbr->dd_seqnum = time (NULL);
-      else
-	nbr->dd_seqnum++;
-
-      /* Send Initial DD packet. */
-      ospf_db_desc_send (nbr);
-    }
-
-  /* Schedule DR Election. */
-  /*  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange); */
-
   return next_state;
 }
 
@@ -241,6 +228,12 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 
   if (lsa == NULL)
     return 0;
+
+#ifdef HAVE_NSSA
+  /* Stay away from any Local Translated Type-7 LSAs */
+  if (CHECK_FLAG (lsa->flags, OSPF_LSA_LOCAL_XLT))
+    return 0;
+#endif /* HAVE_NSSA */
 
   if (IS_LSA_MAXAGE (lsa))
     {
@@ -331,14 +324,8 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
 int
 nsm_bad_ls_req (struct ospf_neighbor *nbr)
 {
-  /* Reset flags. */
-  nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
-
   /* Clear neighbor. */
   nsm_reset_nbr (nbr);
-
-  /* Send initial DD packet. */
-  ospf_db_desc_send (nbr);
 
   return 0;
 }
@@ -364,36 +351,15 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
       IPV4_ADDR_SAME (&oi->address->u.prefix4, &BDR (oi)))
     flag = 1;
 
-  /* Neighboring Router is the DRouter or the BDRouter. */
-  /*
-  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router) ||
-      IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
-  */
   if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &DR (oi)) ||
       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &BDR (oi)))
     flag = 1;
 
   if (nbr->status == NSM_TwoWay && flag == 1)
-    {
-      next_state = NSM_ExStart;
-
-      /* Get initial sequence number from time (). */
-      if (nbr->dd_seqnum == 0)
-	nbr->dd_seqnum = time (NULL);
-      else
-	nbr->dd_seqnum++;
-
-      /* Send initial DD packet. */
-      ospf_db_desc_send (nbr);
-    }
+    next_state = NSM_ExStart;
   else if (nbr->status >= NSM_ExStart && flag == 0)
     next_state = NSM_TwoWay;
 
-  /* Schedule DR Election. */
-  /*
-  if (nbr->status != next_state)
-    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
-  */
 
   return next_state;
 }
@@ -401,14 +367,8 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
 int
 nsm_seq_number_mismatch (struct ospf_neighbor *nbr)
 {
-  /* Reset flags. */
-  nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
-
   /* Clear neighbor. */
   nsm_reset_nbr (nbr);
-
-  /* Send initial DD packet. */
-  ospf_db_desc_send (nbr);
 
   return 0;
 }
@@ -416,11 +376,6 @@ nsm_seq_number_mismatch (struct ospf_neighbor *nbr)
 int
 nsm_oneway_received (struct ospf_neighbor *nbr)
 {
-  /* Reset flags. */
-  nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
-  /* Note we don't need to change the master-slave (MS) flag status.  */
-  /* Changed. we should reset master-slave (MS) flag. */
-
   /* Clear neighbor. */
   nsm_reset_nbr (nbr);
 
@@ -738,6 +693,10 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 	    if (vl_area->full_vls > 0)
 	      if (--vl_area->full_vls == 0)
 		ospf_schedule_abr_task ();
+ 
+          /* clear neighbor retransmit list */
+          if (!ospf_ls_retransmit_isempty (nbr))
+            ospf_ls_retransmit_clear (nbr);
 	}
 
       zlog_info ("nsm_change_status(): "
@@ -768,7 +727,23 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 	    ospf_network_lsa_timer_add (oi);
 	}
     }
-    
+
+  /* Start DD exchange protocol */
+  if (status == NSM_ExStart)
+    {
+      if (nbr->dd_seqnum == 0)
+	nbr->dd_seqnum = time (NULL);
+      else
+	nbr->dd_seqnum++;
+
+      nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
+      ospf_db_desc_send (nbr);
+    }
+
+  /* clear cryptographic sequence number */
+  if (status == NSM_Down)
+    nbr->crypt_seqnum = 0;
+  
   /* Generete NeighborChange ISM event. */
   if ((old_status < NSM_TwoWay && status >= NSM_TwoWay) ||
       (old_status >= NSM_TwoWay && status < NSM_TwoWay))

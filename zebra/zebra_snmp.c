@@ -34,21 +34,9 @@
 #include "table.h"
 
 #include "zebra/rib.h"
-
 
 #define IPFWMIB 1,3,6,1,2,1,4,24
-/* #define ZEBRAOID 1,3,6,1,4,1,4,3,1,4 */
 #define ZEBRAOID 1,3,6,1,4,1,3317,1,2,1
-
-/* BGP4-MIB. */
-oid ipfw_oid [] = { IPFWMIB };
-oid zebra_oid [] = { ZEBRAOID };
-
-/* Hook functions. */
-u_char * ipFwNumber ();
-u_char * ipFwTable ();
-u_char * ipCidrNumber ();
-u_char * ipCidrTable ();
 
 /* ipForwardTable */
 #define IPFORWARDDEST                         1
@@ -91,6 +79,15 @@ u_char * ipCidrTable ();
 #define ROWSTATUS ASN_INTEGER
 #define IPADDRESS ASN_IPADDRESS
 #define OBJECTIDENTIFIER ASN_OBJECT_ID
+
+oid ipfw_oid [] = { IPFWMIB };
+oid zebra_oid [] = { ZEBRAOID };
+
+/* Hook functions. */
+u_char * ipFwNumber ();
+u_char * ipFwTable ();
+u_char * ipCidrNumber ();
+u_char * ipCidrTable ();
 
 struct variable zebra_variables[] = 
 {

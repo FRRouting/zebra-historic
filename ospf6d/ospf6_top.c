@@ -24,79 +24,46 @@
 
 #include "ospf6_redistribute.h"
 
-void
-ospf6_vty_redistribute_config (struct vty *vty, struct ospf6 *ospf6)
+int
+ospf6_top_count_neighbor_in_state (u_char state, struct ospf6 *o6)
 {
-  if (ospf6->redist_static || ospf6->redist_kernel || ospf6->redist_ripng || ospf6->redist_bgp)
-    vty_out (vty, " Redistributing External Routes from,%s", VTY_NEWLINE);
-  else
-    return;
+  listnode node;
+  struct ospf6_area *o6a;
+  int count = 0;
 
-  if (ospf6->redist_static && ospf6->rmap[ZEBRA_ROUTE_STATIC].map)
-    vty_out (vty, "    static with route-map %s%s",
-             ospf6->rmap[ZEBRA_ROUTE_STATIC].name , VTY_NEWLINE);
-  else if (ospf6->redist_static)
-    vty_out (vty, "    static%s", VTY_NEWLINE);
-
-  if (ospf6->redist_kernel && ospf6->rmap[ZEBRA_ROUTE_KERNEL].map)
-    vty_out (vty, "    kernel with route-map %s%s",
-             ospf6->rmap[ZEBRA_ROUTE_KERNEL].name , VTY_NEWLINE);
-  else if (ospf6->redist_kernel)
-    vty_out (vty, "    kernel%s", VTY_NEWLINE);
-
-  if (ospf6->redist_connected && ospf6->rmap[ZEBRA_ROUTE_CONNECT].map)
-    vty_out (vty, "    connected with route-map %s%s",
-             ospf6->rmap[ZEBRA_ROUTE_CONNECT].name , VTY_NEWLINE);
-  else if (ospf6->redist_connected)
-    vty_out (vty, "    connected%s", VTY_NEWLINE);
-
-  if (ospf6->redist_ripng && ospf6->rmap[ZEBRA_ROUTE_RIPNG].map)
-    vty_out (vty, "    ripng with route-map %s%s",
-             ospf6->rmap[ZEBRA_ROUTE_RIPNG].name , VTY_NEWLINE);
-  else if (ospf6->redist_ripng)
-    vty_out (vty, "    ripng%s", VTY_NEWLINE);
-
-  if (ospf6->redist_bgp && ospf6->rmap[ZEBRA_ROUTE_BGP].map)
-    vty_out (vty, "    bgp with route-map %s%s",
-             ospf6->rmap[ZEBRA_ROUTE_BGP].name , VTY_NEWLINE);
-  else if (ospf6->redist_bgp)
-    vty_out (vty, "    bgp%s", VTY_NEWLINE);
-
+  for (node = listhead (o6->area_list); node; nextnode (node))
+    {
+      o6a = (struct ospf6_area *) getdata (node);
+      count += ospf6_area_count_neighbor_in_state (state, o6a);
+    }
+  return count;
 }
 
 void
-ospf6_vty (struct vty *vty)
+ospf6_show (struct vty *vty)
 {
   listnode n;
   struct ospf6_area *area;
+  char id_string[32];
+  unsigned long day, hour, min, sec;
+  struct timeval now, running;
 
   /* process id, router id */
-  {
-    char rid_buf[64];
-    inet_ntop (AF_INET, &ospf6->router_id, rid_buf, sizeof (rid_buf));
-    vty_out (vty, " Routing Process (%lu) with ID %s%s",
-             ospf6->process_id, rid_buf, VTY_NEWLINE);
-  }
+  inet_ntop (AF_INET, &ospf6->router_id, id_string, sizeof (id_string));
+  vty_out (vty, " Routing Process (%lu) with ID %s%s",
+           ospf6->process_id, id_string, VTY_NEWLINE);
 
   /* running time */
-  {
-    unsigned long day, hour, min, sec, left;
-    struct timeval now;
-
-    gettimeofday (&now, (struct timezone *)NULL);
-    left = now.tv_sec - ospf6->starttime.tv_sec;
-    day = left / 86400; left -= day * 86400;
-    hour = left / 3600; left -= hour * 3600;
-    min = left / 60;    left -= min * 60;
-    sec = left;
-    vty_out (vty, " Running %d days %d hours %d minutes %d seconds%s",
-             day, hour, min, sec, VTY_NEWLINE);
-  }
+  gettimeofday (&now, (struct timezone *)NULL);
+  ospf6_timeval_sub (&now, &ospf6->starttime, &running);
+  ospf6_timeval_decode (&running, &day, &hour, &min, &sec, NULL, NULL);
+  vty_out (vty, " Running %d days %d hours %d minutes %d seconds%s",
+           day, hour, min, sec, VTY_NEWLINE);
 
   vty_out (vty, " Supports only single TOS(TOS0) routes%s", VTY_NEWLINE);
 
   /* Redistribute config */
-  ospf6_vty_redistribute_config (vty, ospf6);
+  ospf6_redistribute_show_config (vty, ospf6);
 
   /* LSAs */
   vty_out (vty, " Number of AS scoped LSAs is %u%s",
@@ -110,9 +77,33 @@ ospf6_vty (struct vty *vty)
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
       area = (struct ospf6_area *) getdata (n);
-      ospf6_area_vty (vty, area);
+      ospf6_area_show (vty, area);
     }
+}
 
+void
+ospf6_statistics_show (struct vty *vty, struct ospf6 *o6)
+{
+  listnode node;
+  struct ospf6_area *o6a;
+  char running_time[128];
+  struct timeval now, running;
+
+  gettimeofday (&now, (struct timezone *) NULL);
+  ospf6_timeval_sub (&now, &o6->starttime, &running);
+  ospf6_timeval_string (&running, running_time, sizeof (running_time));
+
+  vty_out (vty, "Statistics of OSPF process %d%s",
+           o6->process_id, VTY_NEWLINE);
+  vty_out (vty, "  Running: %s%s", running_time, VTY_NEWLINE);
+
+  ospf6_route_statistics_show (vty, o6->route_table);
+
+  for (node = listhead (o6->area_list); node; nextnode (node))
+    {
+      o6a = (struct ospf6_area *) getdata (node);
+      ospf6_area_statistics_show (vty, o6a);
+    }
 }
 
 static struct ospf6 *
@@ -125,7 +116,7 @@ ospf6_new ()
   return new;
 }
 
-static void
+void
 ospf6_free (struct ospf6 *ospf6)
 {
   XFREE (MTYPE_OSPF6_TOP, ospf6);
@@ -145,19 +136,14 @@ ospf6_create (unsigned long process_id)
   ospf6->version = OSPF6_VERSION;
   ospf6->area_list = list_new ();
   ospf6->lsdb = list_new ();
-  ospf6->ase_ls_id = 0;
 
   /* route table init */
-  ospf6->table = ospf6_route_table_init ();
-  ospf6->table_zebra = ospf6_route_table_init ();
-  ospf6->table_redistribute = ospf6_route_table_init ();
-  ospf6->table_connected = ospf6_route_table_init ();
-  ospf6->table_external = ospf6_route_table_init ();
 
   ospf6_redistribute_init (ospf6);
 
-  /* default redistribute */
-  ospf6->redist_connected = 1;
+  ospf6->route_table = route_table_init ();
+  ospf6->external_table = route_table_init ();
+  ospf6->nexthop_list = list_new ();
 
   return ospf6;
 }
@@ -188,13 +174,15 @@ ospf6_delete (struct ospf6 *ospf6)
   /* finish AS scope link state database */
   ospf6_lsdb_finish_as (ospf6);
 
-  /* finish route tables */
-  ospf6_route_table_finish (ospf6->table);
-  ospf6_route_table_finish (ospf6->table_zebra);
-  ospf6_route_table_finish (ospf6->table_connected);
-  ospf6_route_table_finish (ospf6->table_external);
 
   ospf6_redistribute_finish (ospf6);
+
+  /* finish route tables */
+  ospf6_route_delete_all (ospf6->route_table);
+  route_table_finish (route_table);
+  ospf6_redistribute_delete_all (ospf6->external_table);
+  route_table_finish (external_table);
+  list_delete (ospf6->nexthop_list);
 
   ospf6_free (ospf6);
 #endif
@@ -223,7 +211,12 @@ ospf6_stop ()
 int
 ospf6_is_asbr (struct ospf6 *o6)
 {
-  return (o6->redist_static || o6->redist_kernel
-          || o6->redist_ripng  || o6->redist_bgp);
+  int i = 0;
+  i |= ospf6_zebra_is_redistribute (ZEBRA_ROUTE_SYSTEM);
+  i |= ospf6_zebra_is_redistribute (ZEBRA_ROUTE_STATIC);
+  i |= ospf6_zebra_is_redistribute (ZEBRA_ROUTE_KERNEL);
+  i |= ospf6_zebra_is_redistribute (ZEBRA_ROUTE_RIPNG);
+  i |= ospf6_zebra_is_redistribute (ZEBRA_ROUTE_BGP);
+  return (i);
 }
 

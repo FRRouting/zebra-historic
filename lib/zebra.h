@@ -148,12 +148,14 @@
 #include <netinet/icmp6.h>
 #endif /* HAVE_NETINET_ICMP6_H */
 
+#ifdef HAVE_LIBUTIL_H
+#include <libutil.h>
+#endif /* HAVE_LIBUTIL_H */
+
 #ifdef BSDI_NRL
 
 #ifdef HAVE_NETINET6_IN6_H
 #include <netinet6/in6.h>
-#else
-#warn "Are you sure it is BSD/OS 4.0?"
 #endif /* HAVE_NETINET6_IN6_H */
 
 #ifdef NRL
@@ -214,16 +216,24 @@
 #define ZEBRA_FAMILY_MAX                 3
 
 /* Error codes of zebra. */
-#define ZEBRA_ERR_RTEXIST                1
-#define ZEBRA_ERR_RTUNREACH              2
-#define ZEBRA_ERR_EPERM                  3
-#define ZEBRA_ERR_RTNOEXIST              4
+#define ZEBRA_ERR_RTEXIST               -1
+#define ZEBRA_ERR_RTUNREACH             -2
+#define ZEBRA_ERR_EPERM                 -3
+#define ZEBRA_ERR_RTNOEXIST             -4
 
 /* Zebra message flags */
 #define ZEBRA_FLAG_INTERNAL           0x01
 #define ZEBRA_FLAG_SELFROUTE          0x02
 #define ZEBRA_FLAG_BLACKHOLE          0x04
 #define ZEBRA_FLAG_IBGP               0x08
+
+/* Zebra nexthop flags. */
+#define ZEBRA_NEXTHOP_IFINDEX            1
+#define ZEBRA_NEXTHOP_IFNAME             2
+#define ZEBRA_NEXTHOP_IPV4               3
+#define ZEBRA_NEXTHOP_IPV4_IFINDEX       4
+#define ZEBRA_NEXTHOP_IPV6               5
+#define ZEBRA_NEXTHOP_IPV6_IFINDEX       6
 
 #ifndef INADDR_LOOPBACK
 #define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */

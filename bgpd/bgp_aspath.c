@@ -440,6 +440,32 @@ aspath_loop_check (struct aspath *aspath, as_t asno)
   return 0;
 }
 
+/* AS path first as check.  If aspath starts with asno then return 1.
+   NOTE - Only to be used for EBGP Paths */
+int
+aspath_firstas_check (struct aspath *aspath, as_t asno)
+{
+  caddr_t pnt;
+  struct assegment *assegment;
+
+  if (aspath == NULL)
+    return 0;
+
+  pnt = aspath->data;
+  assegment = (struct assegment *) pnt;
+
+  if (assegment == NULL)
+    return 0;
+
+  if (assegment->type != AS_SEQUENCE)
+    return 0;
+
+  if (assegment->asval[0] == htons(asno))
+    return 1;
+
+  return 0;
+}
+
 /* Merge as1 to as2.  as2 should be uninterned aspath. */
 struct aspath *
 aspath_merge (struct aspath *as1, struct aspath *as2)
@@ -645,8 +671,12 @@ aspath_cmp_left_confed (struct aspath *aspath1, struct aspath *aspath2)
 {
   struct assegment *seg1;
   struct assegment *seg2;
+
   as_t as1;
   as_t as2;
+
+  if (aspath1->count || aspath2->count) 
+    return 0;
 
   seg1 = (struct assegment *) aspath1->data;
   seg2 = (struct assegment *) aspath2->data;

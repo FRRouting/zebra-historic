@@ -91,6 +91,7 @@ void bgp_attr_init ();
 int bgp_attr_parse (struct peer *, struct attr *, bgp_size_t, 
 		    struct bgp_nlri *, struct bgp_nlri *);
 int bgp_attr_check (struct peer *, struct attr *);
+int attrhash_cmp (struct attr *, struct attr *);
 
 struct attr *bgp_attr_intern (struct attr *attr);
 void bgp_attr_unintern (struct attr *);

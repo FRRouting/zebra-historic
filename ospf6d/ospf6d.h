@@ -50,9 +50,8 @@
 #include "ospf6_types.h"
 #include "ospf6_prefix.h"
 #include "ospf6_mesg.h"
-#include "ospf6_spf.h"
-#include "ospf6_rtable.h"
 #include "ospf6_proto.h"
+#include "ospf6_spf.h"
 #include "ospf6_redistribute.h"
 #include "ospf6_top.h"
 #include "ospf6_area.h"
@@ -62,16 +61,14 @@
 #include "ospf6_nsm.h"
 #include "ospf6_lsa.h"
 #include "ospf6_lsdb.h"
+#include "ospf6_route.h"
 #include "ospf6_dbex.h"
 #include "ospf6_network.h"
 #include "ospf6_zebra.h"
 #include "ospf6_dump.h"
 #include "ospf6_routemap.h"
 
-#define OSPF6_DAEMON_VERSION    "0.7.d"
-
-/* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
-/* #define DISABLE_IPV6_CHECKSUM */
+#define OSPF6_DAEMON_VERSION    "0.8.l"
 
 /* global variables */
 extern char *progname;
@@ -91,7 +88,7 @@ extern char *recent_reason;
 
 /* Default port values. */
 #define OSPF6_VTY_PORT             2606
-#define OSPF6_VTYSH_PATH           "/tmp/ospf6d"
+#define OSPF6_VTYSH_PATH           "/tmp/.ospf6d"
 
 #ifdef INRIA_IPV6
 #ifndef IPV6_PKTINFO
@@ -114,9 +111,32 @@ extern char *recent_reason;
 #define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP
 #endif
 #endif
+
 
 /* Function Prototypes */
+void
+ospf6_timeval_add (const struct timeval *t1, const struct timeval *t2,
+                   struct timeval *result);
+void
+ospf6_timeval_sub (const struct timeval *t1, const struct timeval *t2,
+                   struct timeval *result);
+void
+ospf6_timeval_div (const struct timeval *t1, u_int by,
+                   struct timeval *result);
+int
+ospf6_timeval_cmp (const struct timeval *t1, const struct timeval *t2);
+void
+ospf6_timeval_add_equal (const struct timeval *t, struct timeval *result);
+void
+ospf6_timeval_sub_equal (const struct timeval *t, struct timeval *result);
+void
+ospf6_timeval_decode (const struct timeval *t, long *dayp, long *hourp,
+                      long *minp, long *secp, long *msecp, long *usecp);
+void
+ospf6_timeval_string (struct timeval *tv, char *buf, int size);
+
 void ospf6_init ();
 void ospf6_terminate ();
 
 #endif /* OSPF6D_H */
+

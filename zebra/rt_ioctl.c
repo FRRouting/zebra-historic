@@ -24,6 +24,10 @@
 
 #include "prefix.h"
 #include "log.h"
+#include "if.h"
+
+#include "zebra/rib.h"
+#include "zebra/debug.h"
 
 /* Initialize of kernel interface.  There is no kernel communication
    support under ioctl().  So this is dummy stub function. */
@@ -114,6 +118,7 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
   /* Additional flags */
   rtentry.rt_flags |= flags;
 
+
   /* For tagging route. */
   /* rtentry.rt_flags |= RTF_DYNAMIC; */
 
@@ -170,6 +175,181 @@ kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 {
   return kernel_ioctl_ipv4 (SIOCDELRT, dest, gate, index, flags);
 }
+
+#ifndef OLD_RIB
+/* Interface to ioctl route message. */
+int
+kernel_ioctl_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
+			     int family)
+{
+  int ret;
+  int sock;
+  struct rtentry rtentry;
+  struct sockaddr_in sin_dest, sin_mask, sin_gate;
+  struct nexthop *nexthop;
+  int nexthop_num = 0;
+  struct interface *ifp;
+
+  memset (&rtentry, 0, sizeof (struct rtentry));
+
+  /* Make destination. */
+  memset (&sin_dest, 0, sizeof (struct sockaddr_in));
+  sin_dest.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+  sin_dest.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
+  sin_dest.sin_addr = p->u.prefix4;
+
+  memset (&sin_gate, 0, sizeof (struct sockaddr_in));
+
+  /* Make gateway. */
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    {
+      if ((cmd == SIOCADDRT 
+	   && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	  || (cmd == SIOCDELRT
+	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+	{
+	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+	    {
+	      if (nexthop->rtype == NEXTHOP_TYPE_IPV4)
+		{
+		  sin_gate.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+		  sin_gate.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
+		  sin_gate.sin_addr = nexthop->rgate.ipv4;
+		  rtentry.rt_flags |= RTF_GATEWAY;
+		}
+	      if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
+		  || nexthop->rtype == NEXTHOP_TYPE_IFNAME)
+		{
+		  ifp = if_lookup_by_index (nexthop->rifindex);
+		  if (ifp)
+		    rtentry.rt_dev = ifp->name;
+		  else
+		    return -1;
+		}
+	    }
+	  else
+	    {
+	      if (nexthop->type == NEXTHOP_TYPE_IPV4)
+		{
+		  sin_gate.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+		  sin_gate.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
+		  sin_gate.sin_addr = nexthop->gate.ipv4;
+		  rtentry.rt_flags |= RTF_GATEWAY;
+		}
+	      if (nexthop->type == NEXTHOP_TYPE_IFINDEX
+		  || nexthop->type == NEXTHOP_TYPE_IFNAME)
+		{
+		  ifp = if_lookup_by_index (nexthop->ifindex);
+		  if (ifp)
+		    rtentry.rt_dev = ifp->name;
+		  else
+		    return -1;
+		}
+	    }
+
+	  if (cmd == SIOCADDRT)
+	    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+	  nexthop_num++;
+	  break;
+	}
+    }
+
+  /* If there is no useful nexthop then return. */
+  if (nexthop_num == 0)
+    {
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	zlog_info ("netlink_route_multipath(): No useful nexthop.");
+      return 0;
+    }
+
+  memset (&sin_mask, 0, sizeof (struct sockaddr_in));
+  sin_mask.sin_family = AF_INET;
+#ifdef HAVE_SIN_LEN
+  sin_mask.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
+  masklen2ip (p->prefixlen, &sin_mask.sin_addr);
+
+  /* Set destination address, mask and gateway.*/
+  memcpy (&rtentry.rt_dst, &sin_dest, sizeof (struct sockaddr_in));
+
+  if (rtentry.rt_flags & RTF_GATEWAY)
+    memcpy (&rtentry.rt_gateway, &sin_gate, sizeof (struct sockaddr_in));
+
+#ifndef SUNOS_5
+  memcpy (&rtentry.rt_genmask, &sin_mask, sizeof (struct sockaddr_in));
+#endif /* SUNOS_5 */
+
+  /* Metric.  It seems metric minus one value is installed... */
+  rtentry.rt_metric = rib->metric;
+
+  /* Routing entry flag set. */
+  if (p->prefixlen == 32)
+    rtentry.rt_flags |= RTF_HOST;
+
+  rtentry.rt_flags |= RTF_UP;
+
+  /* Additional flags */
+  /* rtentry.rt_flags |= flags; */
+
+  /* For tagging route. */
+  /* rtentry.rt_flags |= RTF_DYNAMIC; */
+
+  /* Open socket for ioctl. */
+  sock = socket (AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0)
+    {
+      zlog_warn ("can't make socket\n");
+      return -1;
+    }
+
+  /* Send message by ioctl(). */
+  ret = ioctl (sock, cmd, &rtentry);
+  if (ret < 0)
+    {
+      switch (errno) 
+	{
+	case EEXIST:
+	  close (sock);
+	  return ZEBRA_ERR_RTEXIST;
+	  break;
+	case ENETUNREACH:
+	  close (sock);
+	  return ZEBRA_ERR_RTUNREACH;
+	  break;
+	case EPERM:
+	  close (sock);
+	  return ZEBRA_ERR_EPERM;
+	  break;
+	}
+
+      close (sock);
+      zlog_warn ("write : %s (%d)", strerror (errno), errno);
+      return ret;
+    }
+  close (sock);
+
+  return ret;
+}
+
+int
+kernel_add_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+{
+  return kernel_ioctl_ipv4_multipath (SIOCADDRT, p, rib, AF_INET);
+}
+
+int
+kernel_delete_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+{
+  return kernel_ioctl_ipv4_multipath (SIOCDELRT, p, rib, AF_INET);
+}
+#endif /* OLD_RIB */
 
 #ifdef HAVE_IPV6
 

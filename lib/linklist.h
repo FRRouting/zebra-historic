@@ -53,6 +53,7 @@ void list_free (struct list *);
 
 void listnode_add (struct list *, void *);
 void listnode_add_sort (struct list *, void *);
+void listnode_add_after (struct list *, struct listnode *, void *);
 void listnode_delete (struct list *, void *);
 struct listnode *listnode_lookup (struct list *, void *);
 

@@ -574,9 +574,6 @@ vty_end_config (struct vty *vty)
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
-      vty_config_unlock (vty);
-      vty->node = ENABLE_NODE;
-      break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -590,6 +587,7 @@ vty_end_config (struct vty *vty)
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case VTY_NODE:
+      vty_config_unlock (vty);
       vty->node = ENABLE_NODE;
       break;
     default:
@@ -981,9 +979,6 @@ vty_stop_input (struct vty *vty)
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
-      vty_config_unlock (vty);
-      vty->node = ENABLE_NODE;
-      break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -996,6 +991,7 @@ vty_stop_input (struct vty *vty)
     case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case VTY_NODE:
+      vty_config_unlock (vty);
       vty->node = ENABLE_NODE;
       break;
     default:
@@ -1484,10 +1480,12 @@ vty_flush (struct thread *thread)
 	  if (vty->status == VTY_CLOSE)
 	    vty_close (vty);
 	  else
-	    vty->status = VTY_NORMAL;
+	    {
+	      vty->status = VTY_NORMAL;
 	  
-	  if (vty->lines == 0)
-	    vty_event (VTY_READ, vty_sock, vty);
+	      if (vty->lines == 0)
+		vty_event (VTY_READ, vty_sock, vty);
+	    }
 	}
       else
 	{
@@ -1665,12 +1663,13 @@ vty_serv_sock_addrinfo (unsigned short port)
   req.ai_family = AF_UNSPEC;
   req.ai_socktype = SOCK_STREAM;
   sprintf (port_str, "%d", port);
+  port_str[sizeof (port_str) - 1] = '\0';
 
   ret = getaddrinfo (NULL, port_str, &req, &ainfo);
 
   if (ret != 0)
     {
-      fprintf (stderr, "getaddrinfo failed: %s\n", strerror (errno));
+      fprintf (stderr, "getaddrinfo failed: %s\n", gai_strerror (ret));
       exit (1);
     }
 
@@ -1678,6 +1677,13 @@ vty_serv_sock_addrinfo (unsigned short port)
 
   do
     {
+      if (ainfo->ai_family != AF_INET
+#ifdef HAVE_IPV6
+	  && ainfo->ai_family != AF_INET6
+#endif /* HAVE_IPV6 */
+	  )
+	continue;
+
       sock = socket (ainfo->ai_family, ainfo->ai_socktype, ainfo->ai_protocol);
       if (sock < 0)
 	continue;
@@ -1687,11 +1693,17 @@ vty_serv_sock_addrinfo (unsigned short port)
 
       ret = bind (sock, ainfo->ai_addr, ainfo->ai_addrlen);
       if (ret < 0)
+	{
+	  close (sock);	/* Avoid sd leak. */
 	continue;
+	}
 
       ret = listen (sock, 3);
       if (ret < 0) 
+	{
+	  close (sock);	/* Avoid sd leak. */
 	continue;
+	}
 
       vty_event (VTY_SERV, sock, NULL);
     }
@@ -1714,19 +1726,27 @@ vty_serv_sock_family (unsigned short port, int family)
 
   /* Make new socket. */
   accept_sock = sockunion_stream_socket (&su);
+  if (accept_sock < 0)
+    return;
 
   /* This is server, so reuse address. */
   sockopt_reuseaddr (accept_sock);
   sockopt_reuseport (accept_sock);
 
   /* Bind socket to universal address and given port. */
-  sockunion_bind (accept_sock, &su, port, NULL);
+  ret = sockunion_bind (accept_sock, &su, port, NULL);
+  if (ret < 0)
+    {
+      close (accept_sock);	/* Avoid sd leak. */
+      return;
+    }
 
   /* Listen socket under queue 3. */
   ret = listen (accept_sock, 3);
   if (ret < 0) 
     {
       zlog (NULL, LOG_WARNING, "can't listen socket");
+      close (accept_sock);	/* Avoid sd leak. */
       return;
     }
 
@@ -1743,7 +1763,7 @@ void
 vty_serv_un (char *path)
 {
   int ret;
-  int sock;
+  int sock, len;
   struct sockaddr_un serv;
   mode_t old_mask;
 
@@ -1765,16 +1785,27 @@ vty_serv_un (char *path)
   memset (&serv, 0, sizeof (struct sockaddr_un));
   serv.sun_family = AF_UNIX;
   strncpy (serv.sun_path, path, strlen (path));
+#ifdef HAVE_SUN_LEN
+  len = serv.sun_len = SUN_LEN(&serv);
+#else
+  len = sizeof (serv.sun_family) + strlen (serv.sun_path);
+#endif /* HAVE_SUN_LEN */
 
-  ret = bind (sock, (struct sockaddr *) &serv, sizeof (struct sockaddr_un));
+  ret = bind (sock, (struct sockaddr *) &serv, len);
   if (ret < 0)
     {
       perror ("bind");
-      close (sock);
+      close (sock);	/* Avoid sd leak. */
       return;
     }
 
-  listen (sock, 5);
+  ret = listen (sock, 5);
+  if (ret < 0)
+    {
+      perror ("listen");
+      close (sock);	/* Avoid sd leak. */
+      return;
+    }
 
   umask (old_mask);
 
@@ -1838,7 +1869,6 @@ vtysh_read (struct thread *thread)
   nbytes = read (sock, buf, VTY_READ_BUFSIZ);
   if (nbytes <= 0)
     {
-
       vty_close (vty);
 #ifdef VTYSH_DEBUG
       printf ("close vtysh\n");
@@ -1850,14 +1880,18 @@ vtysh_read (struct thread *thread)
   printf ("line: %s\n", buf);
 #endif /* VTYSH_DEBUG */
 
+  vty_ensure (vty, nbytes);
+  memcpy (vty->buf, buf, nbytes);
+  
   /* Pass this line to parser. */
-  vty->buf = buf;
   ret = vty_execute (vty);
-  vty->buf = NULL;
+
+  vty_clear_buf (vty);
 
   /* Return result. */
 #ifdef VTYSH_DEBUG
   printf ("result: %d\n", ret);
+  printf ("vtysh node: %d\n", vty->node);
 #endif /* VTYSH_DEBUG */
 
   header[3] = ret;
@@ -1975,8 +2009,6 @@ vty_read_file (FILE *confp)
   /* Execute configuration file */
   ret = config_from_file (vty, confp);
 
-  vty_close (vty);
-
   if (ret != CMD_SUCCESS) 
     {
       switch (ret)
@@ -1990,8 +2022,67 @@ vty_read_file (FILE *confp)
 	}
       fprintf (stderr, "Error occured during reading below line.\n%s\n", 
 	       vty->buf);
+      vty_close (vty);
       exit (1);
     }
+
+  vty_close (vty);
+}
+
+FILE *
+vty_use_backup_config (char *fullpath)
+{
+  char *fullpath_sav, *fullpath_tmp;
+  FILE *ret = NULL;
+  struct stat buf;
+  int tmp, sav;
+  int c;
+  char buffer[512];
+  
+  fullpath_sav = malloc (strlen (fullpath) + strlen (CONF_BACKUP_EXT) + 1);
+  strcpy (fullpath_sav, fullpath);
+  strcat (fullpath_sav, CONF_BACKUP_EXT);
+  if (stat (fullpath_sav, &buf) == -1)
+    {
+      free (fullpath_sav);
+      return NULL;
+    }
+
+  fullpath_tmp = malloc (strlen (fullpath) + 8);
+  sprintf (fullpath_tmp, "%s.XXXXXX", fullpath);
+  
+  /* Open file to configuration write. */
+  tmp = mkstemp (fullpath_tmp);
+  if (tmp < 0)
+    {
+      free (fullpath_sav);
+      free (fullpath_tmp);
+      return NULL;
+    }
+
+  sav = open (fullpath_sav, O_RDONLY);
+  if (sav < 0)
+    {
+      free (fullpath_sav);
+      free (fullpath_tmp);
+      unlink (fullpath_tmp);
+      return NULL;
+    }
+  
+  while((c = read (sav, buffer, 512)) > 0)
+    write (tmp, buffer, c);
+  
+  close (sav);
+  close (tmp);
+  
+  if (link (fullpath_tmp, fullpath) == 0)
+    ret = fopen (fullpath, "r");
+
+  unlink (fullpath_tmp);
+  
+  free (fullpath_sav);
+  free (fullpath_tmp);
+  return fopen (fullpath, "r");
 }
 
 /* Read up configuration file from file_name. */
@@ -2021,16 +2112,30 @@ vty_read_config (char *config_file,
 
       if (confp == NULL)
 	{
-	  fprintf (stderr, "can't open configuration file [%s]\n", 
-		   config_file);
-	  exit(1);
+	  confp = vty_use_backup_config (fullpath);
+	  if (confp)
+	    fprintf (stderr, "WARNING: using backup configuration file!\n");
+	  else
+	    {
+	      fprintf (stderr, "can't open configuration file [%s]\n", 
+		       config_file);
+	      exit(1);
+	    }
 	}
     }
   else
     {
       /* Relative path configuration file open. */
       if (config_current_dir)
-	confp = fopen (config_current_dir, "r");
+	{
+	  confp = fopen (config_current_dir, "r");
+	  if (confp == NULL)
+	    {
+	      confp = vty_use_backup_config (config_current_dir);
+	      if (confp)
+		fprintf (stderr, "WARNING: using backup configuration file!\n");
+	    }
+	}
 
       /* If there is no relative path exists, open system default file. */
       if (confp == NULL)
@@ -2038,9 +2143,18 @@ vty_read_config (char *config_file,
 	  confp = fopen (config_default_dir, "r");
 	  if (confp == NULL)
 	    {
-	      fprintf (stderr, "can't open configuration file [%s]\n",
-		       config_default_dir);
-	      exit (1);
+	      confp = vty_use_backup_config (config_default_dir);
+	      if (confp)
+		{
+		  fprintf (stderr, "WARNING: using backup configuration file!\n");
+		  fullpath = config_default_dir;
+		}
+	      else
+		{
+		  fprintf (stderr, "can't open configuration file [%s]\n",
+			   config_default_dir);
+		  exit (1);
+		}
 	    }      
 	  else
 	    fullpath = config_default_dir;
@@ -2438,6 +2552,46 @@ vty_reset ()
       {
 	thread_cancel (vty_serv_thread);
 	vector_slot (Vvty_serv_thread, i) = NULL;
+      }
+
+  vty_timeout_val = VTY_TIMEOUT_DEFAULT;
+
+  if (vty_accesslist_name)
+    {
+      XFREE(MTYPE_VTY, vty_accesslist_name);
+      vty_accesslist_name = NULL;
+    }
+
+  if (vty_ipv6_accesslist_name)
+    {
+      XFREE(MTYPE_VTY, vty_ipv6_accesslist_name);
+      vty_ipv6_accesslist_name = NULL;
+    }
+}
+
+/* for ospf6d easy temprary reload function */
+/* vty_reset + close accept socket */
+void
+vty_finish ()
+{
+  int i;
+  struct vty *vty;
+  struct thread *vty_serv_thread;
+
+  for (i = 0; i < vector_max (vtyvec); i++)
+    if ((vty = vector_slot (vtyvec, i)) != NULL)
+      {
+	buffer_reset (vty->obuf);
+	vty->status = VTY_CLOSE;
+	vty_close (vty);
+      }
+
+  for (i = 0; i < vector_max (Vvty_serv_thread); i++)
+    if ((vty_serv_thread = vector_slot (Vvty_serv_thread, i)) != NULL)
+      {
+	thread_cancel (vty_serv_thread);
+	vector_slot (Vvty_serv_thread, i) = NULL;
+        close (i);
       }
 
   vty_timeout_val = VTY_TIMEOUT_DEFAULT;

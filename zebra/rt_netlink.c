@@ -31,6 +31,7 @@
 #include "log.h"
 #include "prefix.h"
 #include "connected.h"
+#include "table.h"
 #include "rib.h"
 
 #include "zebra/zserv.h"
@@ -38,65 +39,93 @@
 #include "zebra/interface.h"
 #include "zebra/debug.h"
 
-/* #define DEBUG */ 
+/* #define DEBUG */
 
 /* Socket interface to kernel */
-struct 
+struct nlsock
 {
   int sock;
   int seq;
   struct sockaddr_nl snl;
-} netlink = { -1, 0, {0} };
+  char *name;
+} netlink =	{ -1, 0, {0}, "netlink-listen" },	/* kernel messages */
+  netlink_cmd = { -1, 0, {0}, "netlink-cmd" };		/* command channel */
+
+struct message nlmsg_str[] =
+{
+  {RTM_NEWROUTE, "RTM_NEWROUTE"},
+  {RTM_DELROUTE, "RTM_DELROUTE"},
+  {RTM_GETROUTE, "RTM_GETROUTE"},
+  {RTM_NEWLINK,  "RTM_NEWLINK"},
+  {RTM_DELLINK,  "RTM_DELLINK"},
+  {RTM_GETLINK,  "RTM_GETLINK"},
+  {RTM_NEWADDR,  "RTM_NEWADDR"},
+  {RTM_DELADDR,  "RTM_DELADDR"},
+  {RTM_GETADDR,  "RTM_GETADDR"},
+  {0,            NULL}
+};
 
 extern int rtm_table_default;
 
 /* Make socket for Linux netlink interface. */
-int
-netlink_socket ()
+static int
+netlink_socket (struct nlsock *nl, unsigned long groups)
 {
   int ret;
   struct sockaddr_nl snl;
+  int sock;
+  int namelen;
 
-  netlink.sock = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-  if (netlink.sock < 0)
+  sock = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+  if (sock < 0)
     {
-      zlog (NULL, LOG_ERR, "Can't open netlink socket: %s", strerror (errno));
-      return -1;
-    }
-
-  ret = fcntl (netlink.sock, F_SETFL, O_NONBLOCK);
-  if (ret < 0)
-    {
-      zlog (NULL, LOG_ERR, "Can't set netlink socket flags: %s",
-           strerror (errno));
-      return -1;
-    }
-  
-  bzero (&snl, sizeof snl);
-  snl.nl_family = AF_NETLINK;
-  snl.nl_groups = 0;
-
-  snl.nl_groups = RTMGRP_LINK|RTMGRP_IPV4_ROUTE|RTMGRP_IPV4_IFADDR;
-#ifdef HAVE_IPV6
-  snl.nl_groups |= RTMGRP_IPV6_ROUTE|RTMGRP_IPV6_IFADDR;
-#endif /* HAVE_IPV6 */
-  
-  /* Bind the socket to the netlink structure for anything. */
-  ret = bind (netlink.sock, (struct sockaddr *) &snl, sizeof snl);
-  if (ret < 0)
-    {
-      zlog (NULL, LOG_ERR, "Can't bind netlink socket to group 0: %s", 
+      zlog (NULL, LOG_ERR, "Can't open %s socket: %s", nl->name,
 	    strerror (errno));
-      close (netlink.sock);
-      netlink.sock = -1;
       return -1;
     }
+
+  ret = fcntl (sock, F_SETFL, O_NONBLOCK);
+  if (ret < 0)
+    {
+      zlog (NULL, LOG_ERR, "Can't set %s socket flags: %s", nl->name,
+	    strerror (errno));
+      close (sock);
+      return -1;
+    }
+  
+  memset (&snl, 0, sizeof snl);
+  snl.nl_family = AF_NETLINK;
+  snl.nl_groups = groups;
+
+  /* Bind the socket to the netlink structure for anything. */
+  ret = bind (sock, (struct sockaddr *) &snl, sizeof snl);
+  if (ret < 0)
+    {
+      zlog (NULL, LOG_ERR, "Can't bind %s socket to group 0x%x: %s", 
+	    nl->name, snl.nl_groups, strerror (errno));
+      close (sock);
+      return -1;
+    }
+
+  /* multiple netlink sockets will have different nl_pid */
+  namelen = sizeof snl;
+  ret = getsockname (sock, (struct sockaddr *) &snl, &namelen);
+  if (ret < 0 || namelen != sizeof snl)
+    {
+      zlog (NULL, LOG_ERR, "Can't get %s socket name: %s", nl->name,
+	    strerror (errno));
+      close (sock);
+      return -1;
+    }
+
+  nl->snl = snl;
+  nl->sock = sock;
   return ret;
 }
 
 /* Get type specified information from netlink. */
-int
-netlink_request (int family, int type)
+static int
+netlink_request (int family, int type, struct nlsock *nl)
 {
   int ret;
   struct sockaddr_nl snl;
@@ -109,40 +138,49 @@ netlink_request (int family, int type)
 
 
   /* Check netlink socket. */
-  if (netlink.sock < 0)
+  if (nl->sock < 0)
     {
-      zlog (NULL, LOG_ERR, "netlink socket isn't active.");
+      zlog (NULL, LOG_ERR, "%s socket isn't active.", nl->name);
       return -1;
     }
 
-  bzero (&snl, sizeof snl);
+  memset (&snl, 0, sizeof snl);
   snl.nl_family = AF_NETLINK;
 
   req.nlh.nlmsg_len = sizeof req;
   req.nlh.nlmsg_type = type;
   req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
   req.nlh.nlmsg_pid = 0;
-  req.nlh.nlmsg_seq = ++netlink.seq;
+  req.nlh.nlmsg_seq = ++nl->seq;
   req.g.rtgen_family = family;
-  
-  ret = sendto (netlink.sock, (void*) &req, sizeof req, 0, 
+
+#if 0
+  /* This will never work because the VTY config hasn't been read yet */
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("netlink_request: %s type %s(%u), seq=%u", nl->name,
+	      lookup (nlmsg_str, req.nlh.nlmsg_type), req.nlh.nlmsg_type,
+	      req.nlh.nlmsg_seq);
+#endif
+ 
+  ret = sendto (nl->sock, (void*) &req, sizeof req, 0, 
 		(struct sockaddr*) &snl, sizeof snl);
   if (ret < 0)
     {
-      zlog (NULL, LOG_ERR, "netlink sendto failed: %s", strerror (errno));
+      zlog (NULL, LOG_ERR, "%s sendto failed: %s", nl->name, strerror (errno));
       return -1;
     }
   return 0;
 }
 
-/* Recieve message from netlink interface and pass those information
+/* Receive message from netlink interface and pass those information
    to the given function. */
-int
-netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
+static int
+netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *),
+		    struct nlsock *nl)
 {
   int status;
-  int ret;
-  int seq = 0;
+  int ret = 0;
+  int error;
 
   while (1)
     {
@@ -152,85 +190,95 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
       struct msghdr msg = { (void*)&snl, sizeof snl, &iov, 1, NULL, 0, 0};
       struct nlmsghdr *h;
 
-      status = recvmsg (netlink.sock, &msg, 0);
+      status = recvmsg (nl->sock, &msg, 0);
 
       if (status < 0)
 	{
 	  if (errno == EINTR)
 	    continue;
 	  if (errno == EWOULDBLOCK)
-            return 0;
-	  zlog (NULL, LOG_ERR, "netlink recvmsg overrun");
+	    break;
+	  zlog (NULL, LOG_ERR, "%s recvmsg overrun", nl->name);
 	  continue;
 	}
 
       if (status == 0)
 	{
-	  zlog (NULL, LOG_ERR, "netlink EOF");
+	  zlog (NULL, LOG_ERR, "%s EOF", nl->name);
 	  return -1;
 	}
 
       if (msg.msg_namelen != sizeof snl)
 	{
-	  zlog (NULL, LOG_ERR, "netlink sender address length error: length %d",
-	       msg.msg_namelen);
+	  zlog (NULL, LOG_ERR, "%s sender address length error: length %d",
+	       nl->name, msg.msg_namelen);
 	  return -1;
 	}
 
       for (h = (struct nlmsghdr *) buf; NLMSG_OK (h, status); 
 	   h = NLMSG_NEXT (h, status))
 	{
-	  /* Message sequence. */
-	  seq = h->nlmsg_seq;
-	  
-#if 0
-	  /* pid and seq check. */
-	  if (seq && seq != netlink.seq)
-	    continue;
-#endif
-
 	  /* Finish of reading. */
 	  if (h->nlmsg_type == NLMSG_DONE)
-	    return 0;
+	    return ret;
 
 	  /* Error handling. */
 	  if (h->nlmsg_type == NLMSG_ERROR)
 	    {
 	      struct nlmsgerr *err = (struct nlmsgerr *) NLMSG_DATA (h);
 	      if (h->nlmsg_len < NLMSG_LENGTH (sizeof (struct nlmsgerr)))
-		zlog (NULL, LOG_ERR, "netlink error: message truncated");
-	      else
-		zlog (NULL, LOG_ERR, "netlink error: %s", 
-		      strerror (-err->error));
-	      return -1;
+		{
+		  zlog (NULL, LOG_ERR, "%s error: message truncated",
+			nl->name);
+		  return -1;
+		}
+	      zlog (NULL, LOG_ERR, "%s error: %s, type=%s(%u), seq=%u, pid=%d",
+		    nl->name, strerror (-err->error),
+		    lookup (nlmsg_str, err->msg.nlmsg_type),
+		    err->msg.nlmsg_type, err->msg.nlmsg_seq,
+		    err->msg.nlmsg_pid);
+	      ret = -1;
+	      continue;
 	    }
 
 	  /* OK we got netlink message. */
-	  ret = (*filter) (&snl, h);
-	  if (ret < 0)
+	  if (IS_ZEBRA_DEBUG_KERNEL)
+	    zlog_info ("netlink_parse_info: %s type %s(%u), seq=%u, pid=%d",
+		      nl->name,
+		      lookup (nlmsg_str, h->nlmsg_type), h->nlmsg_type,
+		      h->nlmsg_seq, h->nlmsg_pid);
+
+	  /* skip unsolicited messages originating from command socket */
+	  if (nl != &netlink_cmd && h->nlmsg_pid == netlink_cmd.snl.nl_pid)
 	    {
-	      zlog (NULL, LOG_ERR, "netlink filter function error");
-	      return ret;
+	      if (IS_ZEBRA_DEBUG_KERNEL)
+		zlog_info ("netlink_parse_info: %s packet comes from %s",
+			  nl->name, netlink_cmd.name);
+	      continue;
+	    }
+
+	  error = (*filter) (&snl, h);
+	  if (error < 0)
+	    {
+	      zlog (NULL, LOG_ERR, "%s filter function error", nl->name);
+	      ret = error;
 	    }
 	}
 
       /* After error care. */
       if (msg.msg_flags & MSG_TRUNC)
 	{
-	  zlog (NULL, LOG_ERR, "netlink error: message truncated");
+	  zlog (NULL, LOG_ERR, "%s error: message truncated", nl->name);
 	  continue;
 	}
       if (status)
 	{
-	  zlog (NULL, LOG_ERR, "netlink error: data remnant size %d", status);
+	  zlog (NULL, LOG_ERR, "%s error: data remnant size %d", nl->name,
+		status);
 	  return -1;
 	}
-      /* This message will be from kernel but reply to user request. */
-      if (seq == 0)
-	return 0;
     }
-
-  return 0;
+  return ret;
 }
 
 /* Utility function for parse rtattr. */
@@ -245,7 +293,8 @@ netlink_parse_rtattr (struct rtattr **tb, int max, struct rtattr *rta, int len)
     }
 }
 
-/* Parse netlink interface information. */
+/* Called from interface_lookup_netlink().  This function is only used
+   during bootstrap. */
 int
 netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
@@ -266,7 +315,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
     return -1;
 
   /* Looking up interface name. */
-  bzero (tb, sizeof tb);
+  memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, IFLA_MAX, IFLA_RTA (ifi), len);
   if (tb[IFLA_IFNAME] == NULL)
     return -1;
@@ -282,6 +331,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
 
   /* Hardware type and address. */
   ifp->hw_type = ifi->ifi_type;
+
   if (tb[IFLA_ADDRESS])
     {
       int hw_addr_len;
@@ -305,9 +355,10 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	    ifp->hw_addr_len = hw_addr_len;
 	}
     }
-
-  /* If verbose mode log interface index. */
-  /* zlog_info ("interface %s index %d.\n", ifp->name, ifp->ifindex); */
+#ifdef DEBUG
+    printf ("RTM_NEWLINK interface %s ifindex %d mtu %d %s\n",
+	    ifp->name, ifp->ifindex, ifp->mtu, if_is_up (ifp) ? "up" : "down");
+#endif /* DEBUG */
 
   return 0;
 }
@@ -321,8 +372,10 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   struct rtattr *tb [IFA_MAX + 1];
   struct interface *ifp;
   void *addr = NULL;
-  void *ptpaddr = NULL;
   void *broad = NULL;
+#ifdef DEBUG
+  char buf[BUFSIZ];
+#endif /* DEBUG */
 
   ifa = NLMSG_DATA (h);
 
@@ -333,10 +386,6 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
       )
     return 0;
 
-#ifdef DEBUG
-  printf ("%s\n", ifa->ifa_family == AF_INET ? "ipv4" : "ipv6");
-#endif /* DEBUG */
-
   if (h->nlmsg_type != RTM_NEWADDR && h->nlmsg_type != RTM_DELADDR)
     return 0;
 
@@ -344,15 +393,14 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (len < 0)
     return -1;
 
-  bzero (tb, sizeof tb);
+  memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, IFA_MAX, IFA_RTA (ifa), len);
 
   ifp = if_lookup_by_index (ifa->ifa_index);
   if (ifp == NULL)
     {
-      zlog (NULL, LOG_INFO,
-	    "netlink_interface_addr can't find interface by index %d",
-	    ifa->ifa_index);
+      zlog_err ("netlink_interface_addr can't find interface by index %d",
+		ifa->ifa_index);
       return -1;
     }
 
@@ -365,11 +413,7 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	{
 	  addr = RTA_DATA (tb[IFA_LOCAL]);
 	  if (tb[IFA_ADDRESS]) 
-	    {
-	      broad = RTA_DATA (tb[IFA_ADDRESS]);
-	      zlog(NULL,LOG_INFO,"setting ptpaddr");
-	      ptpaddr = RTA_DATA (tb[IFA_ADDRESS]);
-	    }
+	    broad = RTA_DATA (tb[IFA_ADDRESS]);
 	  else
 	    broad = NULL;
 	}
@@ -400,34 +444,23 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
     printf ("This address is for label %s\n", (char *) RTA_DATA (tb[IFA_LABEL]));
 #endif /* 0 */
 
+#ifdef DEBUG
+  printf ("%s %s/%d\n",
+	  h->nlmsg_type == RTM_NEWADDR ? "RTM_NEWADDR" : "RTM_DELADDR",
+	  inet_ntop (ifa->ifa_family, addr, buf, BUFSIZ), ifa->ifa_prefixlen);
+#endif /* DEBUG */
+
   /* Register interface address to the interface. */
   if (ifa->ifa_family == AF_INET)
     {
       if (h->nlmsg_type == RTM_NEWADDR) 
-	{
-	  connected_add_ipv4 (ifp, 
-			      (struct in_addr *) addr, ifa->ifa_prefixlen, 
-			      (struct in_addr *) broad);
-	  if (ptpaddr) 
-	    {
-	      connected_add_ipv4 (ifp,
-				  (struct in_addr *) ptpaddr, ifa->ifa_prefixlen,
-				  (struct in_addr *) broad);
-	    } 
-	  
-	}
+	connected_add_ipv4 (ifp, 
+			    (struct in_addr *) addr, ifa->ifa_prefixlen, 
+			    (struct in_addr *) broad);
       else 
-	{
-	  connected_delete_ipv4 (ifp, 
-				 (struct in_addr *) addr, ifa->ifa_prefixlen, 
-				 (struct in_addr *) broad);
-	  if (ptpaddr) 
-	    {
-	      connected_delete_ipv4 (ifp,
-				     (struct in_addr *) ptpaddr, ifa->ifa_prefixlen,
-				     (struct in_addr *) broad);
-	    }
-	}
+	connected_delete_ipv4 (ifp, 
+			       (struct in_addr *) addr, ifa->ifa_prefixlen, 
+			       (struct in_addr *) broad);
     }
 #ifdef HAVE_IPV6
   if (ifa->ifa_family == AF_INET6)
@@ -454,6 +487,9 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   struct rtmsg *rtm;
   struct rtattr *tb [RTA_MAX + 1];
   u_char flags = 0;
+#ifdef DEBUG
+  char buf[BUFSIZ];
+#endif /* DEBUG */
   
   char anyaddr[16] = {0};
 
@@ -479,7 +515,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (len < 0)
     return -1;
 
-  bzero (tb, sizeof tb);
+  memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
 
   if (rtm->rtm_flags & RTM_F_CLONED)
@@ -507,6 +543,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
   else
     dest = anyaddr;
 
+  /* Multipath treatment is needed. */
   if (tb[RTA_GATEWAY])
     gate = RTA_DATA (tb[RTA_GATEWAY]);
   else
@@ -518,6 +555,9 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
       p.family = AF_INET;
       memcpy (&p.prefix, dest, 4);
       p.prefixlen = rtm->rtm_dst_len;
+#ifdef DEBUG
+      printf ("RTM_NEWROUTE %s/%d\n", inet_ntop (AF_INET, &p.prefix, buf, BUFSIZ), p.prefixlen);
+#endif /* DEBUG */
       rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, flags, &p, gate, index, table, 0, 0);
     }
 #ifdef HAVE_IPV6
@@ -527,6 +567,9 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
       p.family = AF_INET6;
       memcpy (&p.prefix, dest, 16);
       p.prefixlen = rtm->rtm_dst_len;
+#ifdef DEBUG
+      printf ("RTM_NEWROUTE %s/%d\n", inet_ntop (AF_INET6, &p.prefix, buf, BUFSIZ), p.prefixlen);
+#endif /* DEBUG */
       rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, flags, &p, gate, index, table);
     }
 #endif /* HAVE_IPV6 */
@@ -600,15 +643,13 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (len < 0)
     return -1;
 
-  bzero (tb, sizeof tb);
+  memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
 
   if (rtm->rtm_flags & RTM_F_CLONED)
     {
       return 0;
     }
-
-#ifndef DEBUG
   if (rtm->rtm_protocol == RTPROT_REDIRECT)
     {
       return 0;
@@ -617,11 +658,10 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     {
       return 0;
     }
-  if (rtm->rtm_protocol == RTPROT_ZEBRA)
+  if (rtm->rtm_protocol == RTPROT_ZEBRA && h->nlmsg_type == RTM_NEWROUTE)
     {
       return 0;
     }
-#endif /* DEBUG */
 
   if (rtm->rtm_src_len != 0)
     {
@@ -664,6 +704,7 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       if (rtm->rtm_family == AF_INET6)
 	{
 	  struct prefix_ipv6 p;
+	  char buf[BUFSIZ];
 	  p.family = AF_INET6;
 	  memcpy (&p.prefix, dest, 16);
 	  p.prefixlen = rtm->rtm_dst_len;
@@ -677,7 +718,6 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	}
 #endif /* HAVE_IPV6 */
 #endif /* DEBUG */
-      return 0;
     }
 
   if (rtm->rtm_family == AF_INET)
@@ -746,10 +786,6 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 
   ifi = NLMSG_DATA (h);
 
-#ifdef DEBUG
-  printf ("ifindex %d\n", ifi->ifi_index);
-#endif /* DEBUG */
-
   if (! (h->nlmsg_type == RTM_NEWLINK || h->nlmsg_type == RTM_DELLINK))
     {
       /* If this is not link add/delete message so print warning. */
@@ -763,7 +799,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     return -1;
 
   /* Looking up interface name. */
-  bzero (tb, sizeof tb);
+  memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, IFLA_MAX, IFLA_RTA (ifi), len);
   if (tb[IFLA_IFNAME] == NULL)
     return -1;
@@ -773,19 +809,26 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (h->nlmsg_type == RTM_NEWLINK)
     {
       ifp = if_lookup_by_name (name);
+#ifdef OLD_RIB
       if (ifp == NULL)
 	{
-	  ifp = if_get_by_name (name);
-	  zlog_info ("interface %s index %d is added.", 
-		     ifp->name, ifi->ifi_index);
+	  ifp = if_get_by_name(name);
 
+	  zlog_info ("interface %s index %d is added.", 
+		 ifp->name, ifi->ifi_index);
+#else /* OLD_RIB */
+      if (ifp == NULL || IS_IF_INACTIVE(ifp))
+	{
+	  if (ifp == NULL)
+	    ifp = if_get_by_name (name);
+#endif  /* OLD_RIB */
 	  ifp->ifindex = ifi->ifi_index;
 	  ifp->flags = ifi->ifi_flags & 0x0000fffff;
 	  ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
 	  ifp->metric = 1;
 
 	  /* If new link is added. */
-	  zebra_interface_add_update (ifp);
+	  if_add_update(ifp);
 	}      
       else
 	{
@@ -801,9 +844,6 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	      if (! if_is_up (ifp))
 		{
 		  if_down (ifp);
-#ifdef DEBUG
-		  printf ("Interface status changed to down message\n");
-#endif /* DEBUG */
 		}
 	    }
 	  else
@@ -812,9 +852,6 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	      if (if_is_up (ifp))
 		{
 		  if_up (ifp);
-#ifdef DEBUG
-		  printf ("Interface status changed to up message\n");
-#endif /* DEBUG */
 		}
 	    }
 #else
@@ -875,13 +912,17 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       ifp = if_lookup_by_name (name);
 
       if (ifp == NULL)
-	zlog (NULL, LOG_WARNING, "interface %s is deleted but can't find",
-	      ifp->name);
-
+	{
+	  zlog (NULL, LOG_WARNING, "interface %s is deleted but can't find",
+		ifp->name);
+	  return 0;
+	}
+      
+#ifdef OLD_RIB
       zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
 	    ifp->name, ifp->ifindex);
 
-#ifdef HAVE_IF_PSEUDO      
+#ifdef HAVE_IF_PSEUDO 
       rib_if_delete(ifp);
 #endif /* HAVE_IF_PSEUDO */      
       zebra_interface_delete_update (ifp);
@@ -896,29 +937,17 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	ifp->ifindex=INTERFACE_PSEUDO;
       }
 #endif /* HAVE_IF_PSEUDO */
+#else /* OLD_RIB */
+      if_delete_update (ifp);
+#endif /* OLD_RIB */
     }
 
   return 0;
 }
 
-struct message nlmsg_str[] =
-{
-  {RTM_NEWROUTE, "RTM_NEWROUTE"},
-  {RTM_DELROUTE, "RTM_DELROUTE"},
-  {RTM_NEWLINK,  "RTM_NEWLINK"},
-  {RTM_DELLINK,  "RTM_DELLINK"},
-  {RTM_NEWADDR,  "RTM_NEWADDR"},
-  {RTM_DELADDR,  "RTM_DELADDR"},
-  {0,            NULL}
-};
-
 int
 netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
-  if (IS_ZEBRA_DEBUG_KERNEL)
-    zlog_info ("%s netlink message is received",
-	       lookup(nlmsg_str, h->nlmsg_type));
-
   switch (h->nlmsg_type)
     {
     case RTM_NEWROUTE:
@@ -953,27 +982,27 @@ interface_lookup_netlink ()
   int ret;
 
   /* Get interface information. */
-  ret = netlink_request (AF_PACKET, RTM_GETLINK);
+  ret = netlink_request (AF_PACKET, RTM_GETLINK, &netlink_cmd);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface);
+  ret = netlink_parse_info (netlink_interface, &netlink_cmd);
   if (ret < 0)
     return ret;
 
   /* Get IPv4 address of the interfaces. */
-  ret = netlink_request (AF_INET, RTM_GETADDR);
+  ret = netlink_request (AF_INET, RTM_GETADDR, &netlink_cmd);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface_addr);
+  ret = netlink_parse_info (netlink_interface_addr, &netlink_cmd);
   if (ret < 0)
     return ret;
 
 #ifdef HAVE_IPV6
   /* Get IPv6 address of the interfaces. */
-  ret = netlink_request (AF_INET6, RTM_GETADDR);
+  ret = netlink_request (AF_INET6, RTM_GETADDR, &netlink_cmd);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_interface_addr);
+  ret = netlink_parse_info (netlink_interface_addr, &netlink_cmd);
   if (ret < 0)
     return ret;
 #endif /* HAVE_IPV6 */
@@ -981,26 +1010,27 @@ interface_lookup_netlink ()
   return 0;
 }
 
-/* Routing table read function using netlink interface. */
+/* Routing table read function using netlink interface.  Only called
+   bootstrap time. */
 int
 netlink_route_read ()
 {
   int ret;
 
   /* Get IPv4 routing table. */
-  ret = netlink_request (AF_INET, RTM_GETROUTE);
+  ret = netlink_request (AF_INET, RTM_GETROUTE, &netlink_cmd);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_routing_table);
+  ret = netlink_parse_info (netlink_routing_table, &netlink_cmd);
   if (ret < 0)
     return ret;
 
 #ifdef HAVE_IPV6
   /* Get IPv6 routing table. */
-  ret = netlink_request (AF_INET6, RTM_GETROUTE);
+  ret = netlink_request (AF_INET6, RTM_GETROUTE, &netlink_cmd);
   if (ret < 0)
     return ret;
-  ret = netlink_parse_info (netlink_routing_table);
+  ret = netlink_parse_info (netlink_routing_table, &netlink_cmd);
   if (ret < 0)
     return ret;
 #endif /* HAVE_IPV6 */
@@ -1030,6 +1060,26 @@ addattr_l (struct nlmsghdr *n, int maxlen, int type, void *data, int alen)
   return 0;
 }
 
+int
+rta_addattr_l (struct rtattr *rta, int maxlen, int type, void *data, int alen)
+{
+  int len;
+  struct rtattr *subrta;
+
+  len = RTA_LENGTH(alen);
+
+  if (RTA_ALIGN(rta->rta_len) + len > maxlen)
+    return -1;
+
+  subrta = (struct rtattr*) (((char*)rta) + RTA_ALIGN (rta->rta_len));
+  subrta->rta_type = type;
+  subrta->rta_len = len;
+  memcpy (RTA_DATA(subrta), data, alen);
+  rta->rta_len = NLMSG_ALIGN (rta->rta_len) + len;
+
+  return 0;
+}
+
 /* Utility function comes from iproute2. 
    Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru> */
 int
@@ -1052,6 +1102,13 @@ addattr32 (struct nlmsghdr *n, int maxlen, int type, int data)
   return 0;
 }
 
+static int
+netlink_talk_filter (struct sockaddr_nl *snl, struct nlmsghdr *h)
+{
+  zlog_warn ("netlink_talk: ignoring message type 0x%04x", h->nlmsg_type);
+  return 0;
+}
+
 /* sendmsg() to netlink socket then recvmsg(). */
 int
 netlink_talk (struct nlmsghdr *n)
@@ -1060,116 +1117,66 @@ netlink_talk (struct nlmsghdr *n)
   struct sockaddr_nl snl;
   struct iovec iov = { (void*) n, n->nlmsg_len };
   struct msghdr msg = {(void*) &snl, sizeof snl, &iov, 1, NULL, 0, 0};
-  char   buf[4096];
-  struct nlmsghdr *h;
 
-  bzero (&snl, sizeof snl);
+  memset (&snl, 0, sizeof snl);
   snl.nl_family = AF_NETLINK;
   
-  n->nlmsg_seq = ++netlink.seq;
+  n->nlmsg_seq = ++netlink_cmd.seq;
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("netlink_talk: %s type %s(%u), seq=%u", netlink_cmd.name,
+	      lookup (nlmsg_str, n->nlmsg_type), n->nlmsg_type,
+	      n->nlmsg_seq);
+
+  /* Send message to netlink interface. */
+  status = sendmsg (netlink_cmd.sock, &msg, 0);
+  if (status < 0)
+    {
+      zlog (NULL, LOG_ERR, "netlink_talk sendmsg() error: %s",
+	    strerror (errno));
+      return -1;
+    }
+
+  status = netlink_parse_info (netlink_talk_filter, &netlink_cmd);
+  return status;
+}
+
+/* sendmsg() to netlink socket then recvmsg(). */
+int
+netlink_talk_ipv6 (struct nlmsghdr *n)
+{
+  int status;
+  struct sockaddr_nl snl;
+  struct iovec iov = { (void*) n, n->nlmsg_len };
+  struct msghdr msg = {(void*) &snl, sizeof snl, &iov, 1, NULL, 0, 0};
+
+  memset (&snl, 0, sizeof snl);
+  snl.nl_family = AF_NETLINK;
+  
+  n->nlmsg_seq = ++netlink_cmd.seq;
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("netlink_talk: %s type %s(%u), seq=%u", netlink_cmd.name,
+	      lookup (nlmsg_str, n->nlmsg_type), n->nlmsg_type,
+	      n->nlmsg_seq);
 
   /* Send message to netlink interface. */
   status = sendmsg (netlink.sock, &msg, 0);
   if (status < 0)
     {
-      zlog (NULL, LOG_ERR, "netlink_talk sendmsg() error: %s", strerror (errno));
+      zlog (NULL, LOG_ERR, "netlink_talk sendmsg() error: %s",
+	    strerror (errno));
       return -1;
     }
 
-  /* At this point we don't detect error.  Because if sendmsg success,
-     there will be no error so recvmsg() blocks. */
-  /* return 0; */
-  
-  /* Result of netlink message. */
-  iov.iov_base = buf;
-  iov.iov_len = sizeof buf;
-
-  while (1)
-    {
-      /* Call recvmsg ().  But it block when sendmsg result is success... */
-
-      /* Now it should be work fine.  So I activate this routine from
-         zebra-0.69. */
-      status = recvmsg (netlink.sock, &msg, 0);
-      if (status < 0)
-	{
-	  if (errno == EINTR)
-	    continue;
-	  if (errno == EWOULDBLOCK)
-            return 0;
-	  zlog (NULL, LOG_ERR, "netlink_talk recvmsg() error: %s", strerror (errno));
-	  return -1;
-	}
-      if (status == 0)
-	{
-	  zlog (NULL, LOG_ERR, "netlink_talk EOF on netlink: %s", strerror (errno));
-	  return -1;
-	}
-      if (msg.msg_namelen != sizeof snl) 
-	{
-	  zlog (NULL, LOG_ERR, "netlink_talk sender address length %d", msg.msg_namelen);
-	  return -1;
-	}
-
-      /* Parse return value. */
-      for (h = (struct nlmsghdr*) buf; status >= sizeof (struct nlmsghdr); ) {
-	int len = h->nlmsg_len;
-	pid_t pid = h->nlmsg_pid;
-	int l = len - sizeof(*h);
-	unsigned seq = h->nlmsg_seq;
-
-	/* Chech length. */
-	if (l < 0 || len > status) 
-	  {
-	    if (msg.msg_flags & MSG_TRUNC) 
-	      {
-		zlog (NULL, LOG_ERR, "netlink_talk truncated message\n");
-		return -1;
-	      }
-	    zlog (NULL, LOG_ERR, "netlink_talk malformed message: len=%d", len);
-	    return -1;
-	  }
-	
-	if (h->nlmsg_pid != pid || h->nlmsg_seq != seq) 
-	  continue;
-
-	if (h->nlmsg_type == NLMSG_ERROR) 
-	  {
-	    struct nlmsgerr *err = (struct nlmsgerr*)NLMSG_DATA(h);
-
-	    if (l < sizeof(struct nlmsgerr)) 
-	      zlog (NULL, LOG_ERR, "netlink_talk message truncated\n");
-	    else 
-	      zlog (NULL, LOG_ERR, "netlink_talk error: %s", strerror (-err->error));
-	    return -1;
-	  }
-
-	/* zlog (NULL, LOG_ERR, "netlink_talk unexpected reply."); */
-	
-	status -= NLMSG_ALIGN(len);
-	h = (struct nlmsghdr*) ((char*)h + NLMSG_ALIGN(len));
-      }
-
-      if (msg.msg_flags & MSG_TRUNC) 
-	{
-	  zlog (NULL, LOG_ERR, "netlink_talk message truncated\n");
-	  continue;
-      }
-
-      if (status) 
-	{
-	  zlog (NULL, LOG_ERR, "netlink_talk error remnant of size %d", status);
-	  return -1;
-	}
-    }
-  
-  return 0;
+  status = netlink_parse_info (netlink_talk_filter, &netlink);
+  return status;
 }
 
 /* Routing table change via netlink interface. */
 int
-netlink_route (int cmd, unsigned long flags, int family, void *dest,
-	       int length, void *gate, int index, int zebra_flags, int table)
+netlink_route (int cmd, int family, void *dest, int length, void *gate,
+	       int index, int zebra_flags, int table)
 {
   int ret;
   int bytelen;
@@ -1182,23 +1189,22 @@ netlink_route (int cmd, unsigned long flags, int family, void *dest,
     char buf[1024];
   } req;
 
-  bzero (&req, sizeof req);
+  memset (&req, 0, sizeof req);
 
   bytelen = (family == AF_INET ? 4 : 16);
 
   req.n.nlmsg_len = NLMSG_LENGTH (sizeof (struct rtmsg));
-  req.n.nlmsg_flags = NLM_F_REQUEST | flags;
+  req.n.nlmsg_flags = NLM_F_CREATE | NLM_F_REQUEST;
   req.n.nlmsg_type = cmd;
   req.r.rtm_family = family;
   req.r.rtm_table = table;
   req.r.rtm_dst_len = length;
 
-  if (cmd != RTM_DELROUTE) 
+  if (cmd == RTM_NEWROUTE) 
     {
       req.r.rtm_protocol = RTPROT_ZEBRA;
       req.r.rtm_scope = RT_SCOPE_UNIVERSE;
-      /* req.r.rtm_scope = RT_SCOPE_HOST; */
-      /* req.r.rtm_scope = RT_SCOPE_LINK; */
+
       if (zebra_flags & ZEBRA_FLAG_BLACKHOLE)
 	req.r.rtm_type = RTN_BLACKHOLE;
       else
@@ -1213,11 +1219,16 @@ netlink_route (int cmd, unsigned long flags, int family, void *dest,
     addattr32 (&req.n, sizeof req, RTA_OIF, index);
 
   /* Destination netlink address. */
-  bzero (&snl, sizeof snl);
+  memset (&snl, 0, sizeof snl);
   snl.nl_family = AF_NETLINK;
 
   /* Talk to netlink socket. */
-  ret = netlink_talk (&req.n);
+#ifdef HAVE_IPV6
+  if (family == AF_INET6)
+    ret = netlink_talk_ipv6 (&req.n);
+  else
+#endif /* HAVE_IPV6 */
+    ret = netlink_talk (&req.n);
   if (ret < 0)
     return -1;
 
@@ -1229,11 +1240,8 @@ int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 		 int index, int flags, int table)
 {
-  int ret;
-
-  ret = netlink_route (RTM_NEWROUTE, NLM_F_CREATE, AF_INET, &dest->prefix,
-		       dest->prefixlen, gate, index, flags, table);
-  return ret;
+  return netlink_route (RTM_NEWROUTE, AF_INET, &dest->prefix, dest->prefixlen,
+			gate, index, flags, table);
 }
 
 /* Delete IPv4 route from the kernel. */
@@ -1241,24 +1249,198 @@ int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 		    int index, int flags, int table)
 {
-  int ret;
-
-  ret = netlink_route (RTM_DELROUTE, NLM_F_CREATE, AF_INET, &dest->prefix,
-		       dest->prefixlen, gate, index, flags, table);
-  return ret;
+  return netlink_route (RTM_DELROUTE, AF_INET, &dest->prefix, dest->prefixlen,
+			gate, index, flags, table);
 }
+
+#ifndef OLD_RIB
+/* Routing table change via netlink interface. */
+int
+netlink_route_multipath (int cmd, struct prefix *p, struct new_rib *rib,
+			 int family)
+{
+  int bytelen;
+  struct sockaddr_nl snl;
+  struct nexthop *nexthop = NULL;
+  int nexthop_num = 0;
+
+  struct 
+  {
+    struct nlmsghdr n;
+    struct rtmsg r;
+    char buf[1024];
+  } req;
+
+  memset (&req, 0, sizeof req);
+
+  bytelen = (family == AF_INET ? 4 : 16);
+
+  req.n.nlmsg_len = NLMSG_LENGTH (sizeof (struct rtmsg));
+  req.n.nlmsg_flags = NLM_F_CREATE | NLM_F_REQUEST;
+  req.n.nlmsg_type = cmd;
+  req.r.rtm_family = family;
+  req.r.rtm_table = rib->table;
+  req.r.rtm_dst_len = p->prefixlen;
+
+  if (cmd == RTM_NEWROUTE) 
+    {
+      req.r.rtm_protocol = RTPROT_ZEBRA;
+      req.r.rtm_scope = RT_SCOPE_UNIVERSE;
+
+      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_BLACKHOLE))
+	req.r.rtm_type = RTN_BLACKHOLE;
+      else
+	req.r.rtm_type = RTN_UNICAST;
+    }
+
+  addattr_l (&req.n, sizeof req, RTA_DST, &p->u.prefix, bytelen);
+
+  /* Metric. */
+  addattr32 (&req.n, sizeof req, RTA_PRIORITY, rib->metric);
+
+  /* Multipath case. */
+  if (rib->nexthop_active_num == 1 || MULTIPATH_NUM == 1)
+    {
+      for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+	{
+	  if ((cmd == RTM_NEWROUTE 
+	       && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	      || (cmd == RTM_DELROUTE
+		  && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+	    {
+	      if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+		{
+		  if (nexthop->rtype == NEXTHOP_TYPE_IPV4)
+		    addattr_l (&req.n, sizeof req, RTA_GATEWAY,
+			       &nexthop->rgate.ipv4, bytelen);
+		  if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
+		      || nexthop->rtype == NEXTHOP_TYPE_IFNAME)
+		    addattr32 (&req.n, sizeof req, RTA_OIF,
+			       nexthop->rifindex);
+		}
+	      else
+		{
+		  if (nexthop->type == NEXTHOP_TYPE_IPV4)
+		    addattr_l (&req.n, sizeof req, RTA_GATEWAY,
+			       &nexthop->gate.ipv4, bytelen);
+		  if (nexthop->type == NEXTHOP_TYPE_IFINDEX
+		      || nexthop->type == NEXTHOP_TYPE_IFNAME)
+		    addattr32 (&req.n, sizeof req, RTA_OIF, nexthop->ifindex);
+		}
+
+	      if (cmd == RTM_NEWROUTE)
+		SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+	      nexthop_num++;
+	      break;
+	    }
+	}
+    }
+  else
+    {
+      char buf[1024];
+      struct rtattr *rta = (void *) buf;
+      struct rtnexthop *rtnh;
+
+      rta->rta_type = RTA_MULTIPATH;
+      rta->rta_len = RTA_LENGTH(0);
+      rtnh = RTA_DATA(rta);
+
+      nexthop_num = 0;
+      for (nexthop = rib->nexthop;
+	   nexthop && (MULTIPATH_NUM == 0 || nexthop_num < MULTIPATH_NUM);
+	   nexthop = nexthop->next)
+	{
+	  if ((cmd == RTM_NEWROUTE 
+	       && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	      || (cmd == RTM_DELROUTE
+		  && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+	    {
+	      nexthop_num++;
+
+	      rtnh->rtnh_len = sizeof (*rtnh);
+	      rtnh->rtnh_flags = 0;
+	      rtnh->rtnh_hops = 0;
+	      rta->rta_len += rtnh->rtnh_len;
+
+	      if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+		{
+		  if (nexthop->rtype == NEXTHOP_TYPE_IPV4)
+		    {
+		      rta_addattr_l (rta, 4096, RTA_GATEWAY,
+				     &nexthop->rgate.ipv4, bytelen);
+		      rtnh->rtnh_len += sizeof (struct rtattr) + 4;
+		    }
+		  if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
+		      || nexthop->rtype == NEXTHOP_TYPE_IFNAME)
+		    rtnh->rtnh_ifindex = nexthop->rifindex;
+		  else
+		    rtnh->rtnh_ifindex = 0;
+		}
+	      else
+		{
+		  if (nexthop->type == NEXTHOP_TYPE_IPV4)
+		    {
+		      rta_addattr_l (rta, 4096, RTA_GATEWAY,
+				     &nexthop->gate.ipv4, bytelen);
+		      rtnh->rtnh_len += sizeof (struct rtattr) + 4;
+		    }
+		  if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
+		      || nexthop->rtype == NEXTHOP_TYPE_IFNAME)
+		    rtnh->rtnh_ifindex = nexthop->ifindex;
+		  else
+		    rtnh->rtnh_ifindex = 0;
+		}
+	      rtnh = RTNH_NEXT(rtnh);
+
+	      if (cmd == RTM_NEWROUTE)
+		SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+	    }
+	}
+
+      if (rta->rta_len > RTA_LENGTH (0))
+	addattr_l (&req.n, 1024, RTA_MULTIPATH, RTA_DATA(rta),
+		   RTA_PAYLOAD(rta));
+    }
+
+  /* If there is no useful nexthop then return. */
+  if (nexthop_num == 0)
+    {
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	zlog_info ("netlink_route_multipath(): No useful nexthop.");
+      return 0;
+    }
+
+  /* Destination netlink address. */
+  memset (&snl, 0, sizeof snl);
+  snl.nl_family = AF_NETLINK;
+
+
+  /* Talk to netlink socket. */
+  return netlink_talk (&req.n);
+}
+
+int
+kernel_add_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+{
+  return netlink_route_multipath (RTM_NEWROUTE, p, rib, AF_INET);
+}
+
+int
+kernel_delete_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+{
+  return netlink_route_multipath (RTM_DELROUTE, p, rib, AF_INET);
+}
+#endif /* OLD_RIB */
 
 #ifdef HAVE_IPV6
 /* Add IPv6 route to the kernel. */
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int flags, int table)
+		 int index, int flags, int table)
 {
-  int ret;
-
-  ret = netlink_route (RTM_NEWROUTE, NLM_F_CREATE, AF_INET6, &dest->prefix,
-		       dest->prefixlen, gate, index, flags, table);
-  return ret;
+  return netlink_route (RTM_NEWROUTE, AF_INET6, &dest->prefix, dest->prefixlen,
+			gate, index, flags, table);
 }
 
 /* Delete IPv6 route from the kernel. */
@@ -1266,11 +1448,8 @@ int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
 		    int index, int flags, int table)
 {
-  int ret;
-
-  ret = netlink_route (RTM_DELROUTE, NLM_F_CREATE, AF_INET6, &dest->prefix,
-		       dest->prefixlen, gate, index, flags, table);
-  return ret;
+  return netlink_route (RTM_DELROUTE, AF_INET6, &dest->prefix, dest->prefixlen,
+			gate, index, flags, table);
 }
 #endif /* HAVE_IPV6 */
 
@@ -1286,7 +1465,7 @@ kernel_read (struct thread *thread)
   int sock;
 
   sock = THREAD_FD (thread);
-  ret = netlink_parse_info (netlink_information_fetch);
+  ret = netlink_parse_info (netlink_information_fetch, &netlink);
   thread_add_read (master, kernel_read, NULL, netlink.sock);
 
   return 0;
@@ -1297,7 +1476,14 @@ kernel_read (struct thread *thread)
 void
 kernel_init ()
 {
-  netlink_socket ();
+  unsigned long groups;
+
+  groups = RTMGRP_LINK|RTMGRP_IPV4_ROUTE|RTMGRP_IPV4_IFADDR;
+#ifdef HAVE_IPV6
+  groups |= RTMGRP_IPV6_ROUTE|RTMGRP_IPV6_IFADDR;
+#endif /* HAVE_IPV6 */
+  netlink_socket (&netlink, groups);
+  netlink_socket (&netlink_cmd, 0);
 
   /* Register kernel socket. */
   if (netlink.sock > 0)

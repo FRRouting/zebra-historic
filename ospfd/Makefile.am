@@ -17,7 +17,7 @@ noinst_HEADERS = \
 	ospf_dump.h ospf_interface.h ospf_ism.h ospf_neighbor.h \
 	ospf_network.h ospf_nsm.h ospf_packet.h ospf_zebra.h ospfd.h \
 	ospf_lsa.h ospf_spf.h ospf_route.h ospf_ase.h ospf_abr.h ospf_ia.h \
-	ospf_flood.h ospf_lsdb.h ospf_asbr.h
+	ospf_flood.h ospf_lsdb.h ospf_asbr.h ospf_snmp.h
 
 ospfd_SOURCES = \
 	ospf_main.c $(libospf_a_SOURCES)
@@ -52,7 +52,7 @@ ospf_abr.o: ospf_abr.c ../lib/thread.h ../lib/memory.h \
  ../ospfd/ospf_lsa.h ../ospfd/ospf_lsdb.h ../ospfd/ospf_neighbor.h \
  ../ospfd/ospf_nsm.h ../ospfd/ospf_spf.h ../ospfd/ospf_route.h \
  ../ospfd/ospf_ia.h ../ospfd/ospf_flood.h ../ospfd/ospf_abr.h \
- ../ospfd/ospf_ase.h ../ospfd/ospf_zebra.h
+ ../ospfd/ospf_ase.h ../ospfd/ospf_zebra.h ../ospfd/ospf_dump.h
 ospf_asbr.o: ospf_asbr.c ../lib/thread.h ../lib/memory.h \
  ../lib/linklist.h ../lib/prefix.h ../lib/if.h ../lib/table.h \
  ../lib/vty.h ../lib/filter.h ../lib/log.h ../ospfd/ospfd.h \
@@ -66,7 +66,7 @@ ospf_ase.o: ospf_ase.c ../lib/thread.h ../lib/memory.h ../lib/hash.h \
  ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h ../ospfd/ospf_asbr.h \
  ../ospfd/ospf_lsa.h ../ospfd/ospf_lsdb.h ../ospfd/ospf_neighbor.h \
  ../ospfd/ospf_nsm.h ../ospfd/ospf_spf.h ../ospfd/ospf_route.h \
- ../ospfd/ospf_ase.h ../ospfd/ospf_zebra.h
+ ../ospfd/ospf_ase.h ../ospfd/ospf_zebra.h ../ospfd/ospf_dump.h
 ospf_dump.o: ospf_dump.c ../lib/linklist.h ../lib/thread.h \
  ../lib/prefix.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/stream.h ../lib/log.h ../ospfd/ospfd.h ../lib/filter.h \
@@ -82,14 +82,15 @@ ospf_flood.o: ospf_flood.c ../lib/linklist.h ../lib/prefix.h \
  ../ospfd/ospf_lsa.h ../ospfd/ospf_lsdb.h ../ospfd/ospf_neighbor.h \
  ../ospfd/ospf_nsm.h ../ospfd/ospf_spf.h ../ospfd/ospf_flood.h \
  ../ospfd/ospf_packet.h ../ospfd/ospf_abr.h ../ospfd/ospf_route.h \
- ../ospfd/ospf_zebra.h
+ ../ospfd/ospf_zebra.h ../ospfd/ospf_dump.h
 ospf_ia.o: ospf_ia.c ../lib/thread.h ../lib/memory.h ../lib/hash.h \
  ../lib/linklist.h ../lib/prefix.h ../lib/table.h ../lib/log.h \
  ../ospfd/ospfd.h ../lib/filter.h ../lib/if.h \
  ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h ../ospfd/ospf_asbr.h \
  ../ospfd/ospf_lsa.h ../ospfd/ospf_lsdb.h ../ospfd/ospf_neighbor.h \
  ../ospfd/ospf_nsm.h ../ospfd/ospf_spf.h ../ospfd/ospf_route.h \
- ../ospfd/ospf_ase.h ../ospfd/ospf_abr.h ../ospfd/ospf_ia.h
+ ../ospfd/ospf_ase.h ../ospfd/ospf_abr.h ../ospfd/ospf_ia.h \
+ ../ospfd/ospf_dump.h
 ospf_interface.o: ospf_interface.c ../lib/thread.h ../lib/linklist.h \
  ../lib/prefix.h ../lib/if.h ../lib/table.h ../lib/memory.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/stream.h \
@@ -97,7 +98,7 @@ ospf_interface.o: ospf_interface.c ../lib/thread.h ../lib/linklist.h \
  ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h ../ospfd/ospf_asbr.h \
  ../ospfd/ospf_lsa.h ../ospfd/ospf_lsdb.h ../ospfd/ospf_neighbor.h \
  ../ospfd/ospf_nsm.h ../ospfd/ospf_packet.h ../ospfd/ospf_abr.h \
- ../ospfd/ospfd.h ../lib/filter.h
+ ../ospfd/ospfd.h ../lib/filter.h ../ospfd/ospf_dump.h
 ospf_ism.o: ospf_ism.c ../lib/thread.h ../lib/linklist.h \
  ../lib/prefix.h ../lib/if.h ../lib/table.h ../lib/log.h \
  ../ospfd/ospfd.h ../lib/filter.h ../ospfd/ospf_interface.h \
@@ -161,7 +162,7 @@ ospf_route.o: ospf_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/sockunion.h \
  ../ospfd/ospfd.h ../lib/filter.h ../ospfd/ospf_interface.h \
  ../ospfd/ospf_asbr.h ../ospfd/ospf_lsa.h ../ospfd/ospf_route.h \
- ../ospfd/ospf_spf.h ../ospfd/ospf_zebra.h
+ ../ospfd/ospf_spf.h ../ospfd/ospf_zebra.h ../ospfd/ospf_dump.h
 ospf_routemap.o: ospf_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/routemap.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/log.h ../ospfd/ospfd.h ../lib/filter.h ../lib/if.h \
@@ -174,7 +175,8 @@ ospf_spf.o: ospf_spf.c ../lib/thread.h ../lib/memory.h ../lib/hash.h \
  ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h ../ospfd/ospf_asbr.h \
  ../ospfd/ospf_lsa.h ../ospfd/ospf_lsdb.h ../ospfd/ospf_neighbor.h \
  ../ospfd/ospf_nsm.h ../ospfd/ospf_spf.h ../ospfd/ospf_route.h \
- ../ospfd/ospf_ia.h ../ospfd/ospf_ase.h ../ospfd/ospf_abr.h
+ ../ospfd/ospf_ia.h ../ospfd/ospf_ase.h ../ospfd/ospf_abr.h \
+ ../ospfd/ospf_dump.h
 ospf_zebra.o: ospf_zebra.c ../lib/thread.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/network.h ../lib/prefix.h \
  ../lib/routemap.h ../lib/table.h ../lib/stream.h ../lib/memory.h \

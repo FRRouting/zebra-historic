@@ -65,10 +65,13 @@ struct capability
 void
 bgp_capability_mp_log (struct peer *peer, struct capability *cap, char *direct)
 {
-  zlog_info ("%s [Open:%s] Capability Code = %u, Capabilty Lenth = %u, "
-	     "Capabilities  afi = %u, safi = %u",
-	     peer->host, direct,
-	     cap->code, cap->length, ntohs(cap->mpc.afi) , cap->mpc.safi);
+  if (BGP_DEBUG (normal, NORMAL))
+    {
+      zlog_info ("%s OPEN has CAPABILITY code: %u, length %u",
+		 peer->host, cap->code, cap->length);
+      zlog_info ("%s OPEN has MP_EXT CAP for afi/safi: %u/%u",
+		 peer->host, ntohs(cap->mpc.afi) , cap->mpc.safi);
+    }
 }
 
 void
@@ -145,6 +148,8 @@ bgp_capability_mp (struct peer *peer, struct capability *cap)
     {
       if (cap->mpc.safi == SAFI_UNICAST)
 	{
+	  peer->afc_recv[AFI_IP][SAFI_UNICAST] = 1;
+
 	  if (peer->afc[AFI_IP][SAFI_UNICAST])
 	    peer->afc_nego[AFI_IP][SAFI_UNICAST] = 1;
 	  else
@@ -152,6 +157,8 @@ bgp_capability_mp (struct peer *peer, struct capability *cap)
 	}
       else if (cap->mpc.safi == SAFI_MULTICAST) 
 	{
+	  peer->afc_recv[AFI_IP][SAFI_MULTICAST] = 1;
+
 	  if (peer->afc[AFI_IP][SAFI_MULTICAST])
 	    peer->afc_nego[AFI_IP][SAFI_MULTICAST] = 1;
 	  else
@@ -159,6 +166,8 @@ bgp_capability_mp (struct peer *peer, struct capability *cap)
 	}
       else if (cap->mpc.safi == BGP_SAFI_VPNV4)
 	{
+	  peer->afc_recv[AFI_IP][SAFI_MPLS_VPN] = 1;
+
 	  if (peer->afc[AFI_IP][SAFI_MPLS_VPN])
 	    peer->afc_nego[AFI_IP][SAFI_MPLS_VPN] = 1;
 	  else
@@ -172,6 +181,8 @@ bgp_capability_mp (struct peer *peer, struct capability *cap)
     {
       if (cap->mpc.safi == SAFI_UNICAST)
 	{
+	  peer->afc_recv[AFI_IP6][SAFI_UNICAST] = 1;
+
 	  if (peer->afc[AFI_IP6][SAFI_UNICAST])
 	    peer->afc_nego[AFI_IP6][SAFI_UNICAST] = 1;
 	  else
@@ -179,6 +190,8 @@ bgp_capability_mp (struct peer *peer, struct capability *cap)
 	}
       else if (cap->mpc.safi == SAFI_MULTICAST)
 	{
+	  peer->afc_recv[AFI_IP6][SAFI_MULTICAST] = 1;
+
 	  if (peer->afc[AFI_IP6][SAFI_MULTICAST])
 	    peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = 1;
 	  else
@@ -216,7 +229,7 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
       /* We need at least capability code and capability length. */
       if (pnt + 2 > end)
 	{
-	  zlog_info ("Capability length error");
+	  zlog_info ("%s Capability length error", peer->host);
 	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	  return -1;
 	}
@@ -224,7 +237,7 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
       /* Capability length check. */
       if (pnt + (cap.length + 2) > end)
 	{
-	  zlog_info ("Capability length error");
+	  zlog_info ("%s Capability length error", peer->host);
 	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	  return -1;
 	}
@@ -253,32 +266,41 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
       else if (cap.code == CAPABILITY_CODE_REFRESH ||
 	       cap.code == CAPABILITY_CODE_REFRESH_01)
 	{
-	  zlog_info ("%s [Open:RECV] Route Refresh Capability", peer->host);
+	  if (BGP_DEBUG (normal, NORMAL))
+	    zlog_info ("%s OPEN has CAPABILITY code: %d, length %d",
+		       peer->host, cap.code, cap.length);
 
 	  /* Check length. */
 	  if (cap.length != 0)
 	    {
-	      zlog_info ("Route Refresh Capability length error %d",
-			 cap.length);
+	      zlog_info ("%s Route Refresh Capability length error %d",
+			 peer->host, cap.length);
 	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	      return -1;
 	    }
 
+	  if (BGP_DEBUG (normal, NORMAL))
+	    zlog_info ("%s OPEN has ROUTE-REFRESH capability(%s) for all address-families",
+		       peer->host,
+		       cap.code == CAPABILITY_CODE_REFRESH ? "old" : "new");
+
 	  /* BGP refresh capability */
-	  if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
-	    peer->refresh_nego = 1;
+	  if (cap.code == CAPABILITY_CODE_REFRESH)
+	    peer->refresh_nego_old = 1;
 	  else
-	    zlog_warn ("Ignore route refresh capability");
+	    peer->refresh_nego_new = 1;
 	}
       else if (cap.code > 128)
 	{
 	  /* We ignore sending Nofify's for vendor specific
 	     capabilities. Seems reasonable for now...  */
-	  zlog_warn ("Vendor specific capability %d", cap.code);
+	  zlog_warn ("%s Vendor specific capability %d",
+		     peer->host, cap.code);
 	}
       else
 	{
-	  zlog_warn ("Unknown capability %d", cap.code);
+	  zlog_warn ("%s unrecognized capability code: %d - ignored",
+		     peer->host, cap.code);
 	  memcpy (*error, &cap, cap.length + 2);
 	  *error += cap.length + 2;
 	}
@@ -327,12 +349,16 @@ bgp_open_option_parse (struct peer *peer, u_char length, int *capability)
   end = pnt + length;
   error = error_data;
 
+  if (BGP_DEBUG (normal, NORMAL))
+    zlog_info ("%s rcv OPEN w/ OPTION parameter len: %u",
+	       peer->host, length);
+  
   while (pnt < end) 
     {
       /* Check the length. */
       if (pnt + 2 > end)
 	{
-	  zlog_info ("Option length error");
+	  zlog_info ("%s Option length error", peer->host);
 	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	  return -1;
 	}
@@ -344,11 +370,18 @@ bgp_open_option_parse (struct peer *peer, u_char length, int *capability)
       /* Option length check. */
       if (pnt + opt_length > end)
 	{
-	  zlog_info ("Option length error");
+	  zlog_info ("%s Option length error", peer->host);
 	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	  return -1;
 	}
 
+      if (BGP_DEBUG (normal, NORMAL))
+	zlog_info ("%s rcvd OPEN w/ optional parameter type %u (%s) len %u",
+		   peer->host, opt_type,
+		   opt_type == BGP_OPEN_OPT_AUTH ? "Authentication" :
+		   opt_type == BGP_OPEN_OPT_CAP ? "Capability" : "Unknown",
+		   opt_length);
+  
       switch (opt_type)
 	{
 	case BGP_OPEN_OPT_AUTH:
@@ -453,12 +486,13 @@ bgp_open_capability (struct stream *s, struct peer *peer)
       && ! peer->afc[AFI_IP][SAFI_MPLS_VPN]
       && ! peer->afc[AFI_IP6][SAFI_UNICAST] 
       && ! peer->afc[AFI_IP6][SAFI_MULTICAST]
-      && ! CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+      && ! CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ROUTE_REFRESH))
     return;
 
   /* IPv4 unicast. */
   if (peer->afc[AFI_IP][SAFI_UNICAST])
     {
+      peer->afc_adv[AFI_IP][SAFI_UNICAST] = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_MP);
@@ -470,6 +504,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
   /* IPv4 multicast. */
   if (peer->afc[AFI_IP][SAFI_MULTICAST])
     {
+      peer->afc_adv[AFI_IP][SAFI_MULTICAST] = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_MP);
@@ -481,6 +516,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
   /* IPv4 VPN */
   if (peer->afc[AFI_IP][SAFI_MPLS_VPN])
     {
+      peer->afc_adv[AFI_IP][SAFI_MPLS_VPN] = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_MP);
@@ -493,6 +529,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
   /* IPv6 unicast. */
   if (peer->afc[AFI_IP6][SAFI_UNICAST])
     {
+      peer->afc_adv[AFI_IP6][SAFI_UNICAST] = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_MP);
@@ -504,6 +541,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
   /* IPv6 multicast. */
   if (peer->afc[AFI_IP6][SAFI_MULTICAST])
     {
+      peer->afc_adv[AFI_IP6][SAFI_MULTICAST] = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_MP);
@@ -514,13 +552,23 @@ bgp_open_capability (struct stream *s, struct peer *peer)
     }
 #endif /* HAVE_IPV6 */
 
-  /* Route refresh. */
-  if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+  /* Route refresh. (OLD) */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ROUTE_REFRESH))
     {
       peer->refresh_adv = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_REFRESH_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_REFRESH);
+      stream_putc (s, CAPABILITY_CODE_REFRESH_LEN);
+    }
+  
+  /* Route refresh. (NEW) */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_CAPABILITY_ROUTE_REFRESH))
+    {
+      peer->refresh_adv = 1;
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_REFRESH_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_REFRESH_01);
       stream_putc (s, CAPABILITY_CODE_REFRESH_LEN);
     }
 

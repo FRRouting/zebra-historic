@@ -39,8 +39,8 @@ struct community
 
 /* Macros of community attribute. */
 #define com_length(X)    ((X)->size * 4)
-#define com_lastval(X)   (*((X)->val + (X)->size - 1))
-#define com_nthval(X,n)  (*((X)->val + (n)))
+#define com_lastval(X)   ((X)->val + (X)->size - 1)
+#define com_nthval(X,n)  ((X)->val + (n))
 
 /* Prototypes of community attribute functions. */
 void community_init ();
@@ -57,6 +57,8 @@ struct community *community_str2com (char *);
 int community_match (struct community *, struct community *);
 int community_cmp (struct community *, struct community *);
 struct community *community_merge (struct community *, struct community *);
+struct community *community_delete (struct community *, struct community *);
 struct community *community_dup (struct community *);
 int community_include (struct community *, u_int32_t);
+void community_del_val (struct community *, u_int32_t *);
 #endif /* _ZEBRA_BGP_COMMUNITY_H */

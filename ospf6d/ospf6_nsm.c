@@ -150,7 +150,9 @@ twoway_received (struct thread *thread)
   DD_MBIT_SET (o6n->dd_bits);
   DD_IBIT_SET (o6n->dd_bits);
 
-  thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_dbdesc)
+    thread_cancel (o6n->thread_dbdesc);
+  o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -186,9 +188,9 @@ exchange_done (struct thread *thread)
   if (o6n->state != NBS_EXCHANGE)
     return 0;
 
-  if (o6n->thread_dbdesc_retrans)
-    thread_cancel (o6n->thread_dbdesc_retrans);
-  o6n->thread_dbdesc_retrans = (struct thread *) NULL;
+  if (o6n->thread_dbdesc)
+    thread_cancel (o6n->thread_dbdesc);
+  o6n->thread_dbdesc = (struct thread *) NULL;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
     zlog_info ("Neighbor Event %s: *ExchangeDone*", o6n->str);
@@ -254,7 +256,9 @@ adj_ok (struct thread *thread)
       DD_MBIT_SET (o6n->dd_bits);
       DD_IBIT_SET (o6n->dd_bits);
 
-      thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+      if (o6n->thread_dbdesc)
+        thread_cancel (o6n->thread_dbdesc);
+      o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
       return 0;
     }
@@ -296,7 +300,9 @@ seqnumber_mismatch (struct thread *thread)
   DD_IBIT_SET (o6n->dd_bits);
   ospf6_neighbor_list_remove_all (o6n);
 
-  thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_dbdesc)
+    thread_cancel (o6n->thread_dbdesc);
+  o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -325,7 +331,9 @@ bad_lsreq (struct thread *thread)
   DD_IBIT_SET (o6n->dd_bits);
   ospf6_neighbor_list_remove_all (o6n);
 
-  thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
+  if (o6n->thread_dbdesc)
+    thread_cancel (o6n->thread_dbdesc);
+  o6n->thread_dbdesc = thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }

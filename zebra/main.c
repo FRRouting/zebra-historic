@@ -31,6 +31,7 @@
 #include "prefix.h"
 #include "log.h"
 
+#include "zebra/rib.h"
 #include "zebra/zserv.h"
 #include "zebra/debug.h"
 #include "zebra/rib.h"
@@ -251,6 +252,10 @@ main (int argc, char **argv)
 
   /* Sort VTY commands. */
   sort_node ();
+
+#ifdef HAVE_SNMP
+  zebra_snmp_init ();
+#endif /* HAVE_SNMP */
 
   /* Clean up self inserted route. */
   if (! keep_kernel_mode)

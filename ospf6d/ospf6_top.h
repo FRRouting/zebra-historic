@@ -46,37 +46,6 @@ struct ospf6
   /* AS scope link state database */
   list lsdb;
 
-  /* current routing table */
-  struct route_table *table;
-
-  /* zebra/system routing table */
-  struct route_table *table_zebra;
-
-  /* redistribute routing table */
-  struct route_table *table_redistribute;
-
-  /* redistribute configuration */
-  int redist_connected;
-  int redist_static;
-  int redist_ripng;
-  int redist_bgp;
-  int redist_kernel;
-
-  /* XXX, redistribute cost */
-  unsigned short cost_static;
-  unsigned short cost_ripng;
-  unsigned short cost_bgp;
-  unsigned short cost_kernel;
-
-  /* XXX, redistribute table */
-  struct route_table *table_external;
-  struct route_table *table_connected;
-
-  /* map of redistributed route and external LSA */
-  struct route_table *redistribute_map;
-  /* XXX, next LS-ID of AS-external-LSA */
-  unsigned long ase_ls_id;
-
   /* redistribute route-map */
   struct
   {
@@ -84,12 +53,23 @@ struct ospf6
     struct route_map *map;
   } rmap[ZEBRA_ROUTE_MAX];
 
-  struct thread *route_calculation;
+  struct thread *t_route_calculation;
   u_int stat_route_calculation_execed;
+
+  struct route_table *route_table;
+  struct route_table *route_table_previous;
+  struct route_table *external_table;
+
+  list nexthop_list;
 };
 
 /* prototypes */
-void ospf6_vty (struct vty *);
+int
+ospf6_top_count_neighbor_in_state (u_char state, struct ospf6 *o6);
+
+void ospf6_show (struct vty *);
+void ospf6_statistics_show (struct vty *vty, struct ospf6 *o6);
+
 struct ospf6 *ospf6_start ();
 void ospf6_stop ();
 

@@ -168,6 +168,10 @@ struct desc
   int funcname \
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)
 
+/* DEFUN_NOSH for commands that vtysh should ignore */
+#define DEFUN_NOSH(funcname, cmdname, cmdstr, helpstr) \
+  DEFUN(funcname, cmdname, cmdstr, helpstr)
+
 /* DEFSH for vtysh. */
 #define DEFSH(daemon, cmdname, cmdstr, helpstr) \
   struct cmd_element cmdname = \
@@ -221,7 +225,8 @@ struct desc
 #define BGP_STR "BGP information\n"
 #define OSPF_STR "OSPF information\n"
 #define NEIGHBOR_STR "Specify neighbor router\n"
-#define DEBUG_STR "Debugging functions\n"
+#define DEBUG_STR "Debugging functions (see also 'undebug')\n"
+#define UNDEBUG_STR "Disable debugging functions (see also 'debug')\n"
 #define ROUTER_STR "Enable a routing process\n"
 #define AS_STR "AS number\n"
 #define MBGP_STR "MBGP information\n"
@@ -239,6 +244,12 @@ struct desc
 #define OSPF6_INSTANCE_STR "<1-65535> Instance ID\n"
 #define SECONDS_STR "<1-65535> Seconds\n"
 #define ROUTE_STR "Routing Table\n"
+#define PREFIX_LIST_STR "Build a prefix list\n"
+#define OSPF6_DUMP_TYPE_LIST \
+"(hello|dbdesc|lsreq|lsupdate|lsack|neighbor|interface|area|"\
+"lsa|zebra|config|dbex|spf|route|lsdb|redistribute)"
+
+#define CONF_BACKUP_EXT ".sav"
 
 /* IPv4 only machine should not accept IPv6 address for peer's IP
    address.  So we replace VTY command string like below. */
@@ -265,6 +276,7 @@ char **cmd_complete_command ();
 char *cmd_prompt (enum node_type);
 int config_from_file (struct vty *, FILE *);
 int cmd_execute_command (vector, struct vty *, struct cmd_element **);
+int cmd_execute_command_strict (vector, struct vty *, struct cmd_element **);
 void config_replace_string (struct cmd_element *, char *, ...);
 void cmd_init (int);
 

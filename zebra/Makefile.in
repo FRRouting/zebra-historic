@@ -74,6 +74,7 @@ KERNEL_METHOD = @KERNEL_METHOD@
 LIBPAM = @LIBPAM@
 LIB_REGEX = @LIB_REGEX@
 MAKEINFO = @MAKEINFO@
+MULTIPATH_NUM = @MULTIPATH_NUM@
 OSPF6D = @OSPF6D@
 OSPFD = @OSPFD@
 OTHER_METHOD = @OTHER_METHOD@
@@ -88,7 +89,7 @@ VTYSH = @VTYSH@
 ZEBRA = @ZEBRA@
 
 INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
-DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
+DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\" -DMULTIPATH_NUM=@MULTIPATH_NUM@
 INSTALL_SDATA = @INSTALL@ -m 600
 
 LIB_IPV6 = @LIB_IPV6@
@@ -156,7 +157,7 @@ all: all-redirect
 .SUFFIXES:
 .SUFFIXES: .S .c .o .s
 $(srcdir)/Makefile.in: Makefile.am $(top_srcdir)/configure.in $(ACLOCAL_M4) 
-	cd $(top_srcdir) && $(AUTOMAKE) --gnu --include-deps zebra/Makefile
+	cd $(top_srcdir) && $(AUTOMAKE) --foreign --include-deps zebra/Makefile
 
 Makefile: $(srcdir)/Makefile.in  $(top_builddir)/config.status
 	cd $(top_builddir) \
@@ -352,9 +353,11 @@ depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
 client_main.o: client_main.c ../lib/prefix.h ../lib/stream.h \
- ../lib/zclient.h ../lib/if.h ../lib/linklist.h
+ ../lib/zclient.h ../lib/if.h ../lib/linklist.h ../lib/thread.h \
+ ../lib/table.h ../zebra/rib.h ../zebra/zserv.h
 connected.o: connected.c ../lib/prefix.h ../lib/linklist.h ../lib/if.h \
- rib.h ../lib/table.h ../zebra/zserv.h ../zebra/redistribute.h
+ ../lib/table.h rib.h ../lib/log.h ../zebra/zserv.h \
+ ../zebra/redistribute.h
 debug.o: debug.c ../lib/command.h ../lib/vector.h ../lib/vty.h debug.h
 if_ioctl.o: if_ioctl.c ../lib/if.h ../lib/linklist.h \
  ../lib/sockunion.h ../lib/prefix.h ioctl.h connected.h \
@@ -368,7 +371,8 @@ if_sysctl.o: if_sysctl.c ../lib/if.h ../lib/linklist.h \
 interface.o: interface.c ../lib/if.h ../lib/linklist.h ../lib/vty.h \
  ../lib/sockunion.h ../lib/prefix.h ../lib/command.h ../lib/vector.h \
  ../lib/memory.h ioctl.h connected.h ../lib/log.h ../lib/zclient.h \
- ../zebra/interface.h ../zebra/rtadv.h ../zebra/zserv.h ../zebra/rib.h
+ ../zebra/interface.h ../zebra/rtadv.h ../zebra/rib.h ../zebra/zserv.h \
+ ../zebra/redistribute.h ../lib/table.h
 ioctl.o: ioctl.c ../lib/linklist.h ../lib/if.h ../lib/prefix.h ioctl.h \
  rt.h ../lib/log.h
 ipforward_aix.o: ipforward_aix.c
@@ -382,28 +386,31 @@ irdp.o: irdp.c ../lib/if.h ../lib/linklist.h ../lib/stream.h \
 kernel_netlink.o: kernel_netlink.c
 kernel_socket.o: kernel_socket.c ../lib/if.h ../lib/linklist.h \
  ../lib/prefix.h ../lib/sockunion.h connected.h ../lib/memory.h \
- ioctl.h ../lib/log.h ../lib/str.h rib.h ../zebra/interface.h \
- ../zebra/zserv.h ../lib/thread.h
+ ioctl.h ../lib/log.h ../lib/str.h ../lib/table.h rib.h \
+ ../zebra/interface.h ../zebra/zserv.h ../lib/thread.h
 main.o: main.c ../lib/version.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/thread.h ../lib/filter.h ../lib/if.h \
  ../lib/linklist.h ../lib/memory.h ../lib/prefix.h ../lib/log.h \
- ../zebra/zserv.h ../zebra/debug.h ../zebra/rib.h
+ ../zebra/rib.h ../zebra/zserv.h ../zebra/debug.h
 mtu_kvm.o: mtu_kvm.c ../lib/if.h ../lib/linklist.h
 redistribute.o: redistribute.c ../lib/vector.h ../lib/vty.h \
  ../lib/command.h ../lib/prefix.h ../lib/table.h ../lib/stream.h \
  ../lib/zclient.h ../lib/if.h ../lib/linklist.h ../zebra/rib.h \
  ../zebra/zserv.h ../zebra/redistribute.h
 rib.o: rib.c ../lib/prefix.h ../lib/table.h ../lib/memory.h \
- ../lib/vector.h ../lib/vty.h ../lib/str.h ../lib/command.h \
+ ../lib/vty.h ../lib/str.h ../lib/command.h ../lib/vector.h \
  ../lib/linklist.h ../lib/if.h rib.h rt.h ../lib/log.h \
- ../lib/sockunion.h ../zebra/zserv.h ../zebra/redistribute.h
-rt_ioctl.o: rt_ioctl.c ../lib/prefix.h ../lib/log.h
+ ../lib/sockunion.h ../lib/thread.h ../zebra/zserv.h \
+ ../zebra/redistribute.h
+rt_ioctl.o: rt_ioctl.c ../lib/prefix.h ../lib/log.h ../lib/if.h \
+ ../lib/linklist.h ../zebra/rib.h ../zebra/debug.h
 rt_netlink.o: rt_netlink.c ../lib/linklist.h ../lib/if.h ../lib/log.h \
- ../lib/prefix.h connected.h rib.h ../zebra/zserv.h \
- ../zebra/redistribute.h ../lib/table.h ../zebra/interface.h \
- ../zebra/debug.h ../lib/thread.h
+ ../lib/prefix.h connected.h ../lib/table.h rib.h ../zebra/zserv.h \
+ ../zebra/redistribute.h ../zebra/interface.h ../zebra/debug.h \
+ ../lib/thread.h
 rt_socket.o: rt_socket.c ../lib/if.h ../lib/linklist.h ../lib/prefix.h \
- ../lib/sockunion.h ../lib/log.h ../lib/str.h
+ ../lib/sockunion.h ../lib/log.h ../lib/str.h ../zebra/debug.h \
+ ../zebra/rib.h
 rtadv.o: rtadv.c ../lib/memory.h ../lib/sockopt.h ../lib/thread.h \
  ../lib/if.h ../lib/linklist.h ../lib/log.h ../lib/prefix.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../zebra/interface.h \
@@ -417,10 +424,9 @@ rtread_sysctl.o: rtread_sysctl.c ../lib/memory.h ../lib/log.h
 zebra_snmp.o: zebra_snmp.c
 zserv.o: zserv.c ../lib/prefix.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/if.h ../lib/linklist.h ../lib/thread.h \
- ../lib/stream.h ../lib/memory.h rib.h ../lib/network.h \
- ../lib/sockunion.h ../lib/log.h ../lib/table.h ../lib/zclient.h \
- ../zebra/zserv.h ../zebra/redistribute.h ../zebra/debug.h \
- ../zebra/ipforward.h
+ ../lib/stream.h ../lib/memory.h ../lib/table.h rib.h ../lib/network.h \
+ ../lib/sockunion.h ../lib/log.h ../lib/zclient.h ../zebra/zserv.h \
+ ../zebra/redistribute.h ../zebra/debug.h ../zebra/ipforward.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

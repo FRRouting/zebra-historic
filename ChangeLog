@@ -1,3 +1,66 @@
+2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+	* configure.in (LIBS): Add check for sun_len field in struct
+	sun_len.
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: Include init/redhat files to distribution.
+
+2001-01-07  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* configure.in: check libm.a for BGPd compile error.
+	AC_CHECK_LIB(m, main) was added.
+
+2000-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: --enable-unixdomain becomes default.  Add
+	--enable-tcp-zebra for TCP/IP communication between protocol
+	daemon and zebra.
+
+	* COPYING.LIB: Added for lib/getopt.c, lib/getopt.h,
+	lib/getopt1.c, lib/md5-gnu.h, lib/md5.c, lib/regex-gnu.h,
+	lib/regex.c.
+
+	* Makefile.am (dist-hook): Include tools/*.cgi to distribution.
+
+2000-12-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (MULTIPATH_NUM): --enable-multipath=ARG specify
+	multipath number.  ARG must be digit.
+
+2000-12-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --enable-newrib for test new RIB code.
+
+2000-11-25  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* configure.in, config.h.in: Add check for libutil.h and
+	setproctitle().
+
+2000-10-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --enable-nssa for OSPF NSSA option.
+
+	* acconfig.h: Define HAVE_NSSA.
+
+2000-10-25  "Bjoern A. Zeeb" <bzeeb+zebra@zabbadoz.net>
+
+	* configure.in: pam_misc is only linked when the platform is
+	GNU/Linux.
+
+2000-10-24  Arkadiusz Miskiewicz <misiek@pld.org.pl>
+
+	* configure.in (LIBS): Add check for crypto library.  test x`ls
+	${ac_snmp}` is replaced with sipmle test -f.
+
+2000-10-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --enable-unixdomain option.  This will be
+	default behavior in zebra-0.90.
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.89 is released.

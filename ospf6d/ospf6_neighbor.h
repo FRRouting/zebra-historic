@@ -22,75 +22,43 @@
 #ifndef OSPF6_NEIGHBOR_H
 #define OSPF6_NEIGHBOR_H
 
-struct neighbor
-{
-  struct ospf6_interface     *ospf6_interface;
-  unsigned char        state;
-  struct thread       *inactivity_timer;
-  struct thread       *send_lsreq;       /* Retransmit LSReq */
-  struct thread       *send_update;      /* Retransmit LSUpdate */
-  unsigned char        dd_bits;          /* including MASTER bit */
-  unsigned long        seqnum;        /* DD sequence number */
-  char                 str[16];          /* Router ID String */
-  unsigned long        rtr_id;           /* Router ID of this neighbor */
-  unsigned char        rtr_pri;          /* Router Priority of this neighbor */
-  unsigned long        ifid;
-  unsigned long        prevdr;
-  unsigned long        dr;
-  unsigned long        prevbdr;
-  unsigned long        bdr;
-  char                 options[3];     /* Link-LSA's options field */
-  struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link   */
-                                       /* , should be LinkLocal address    */
-  struct ospf6_dbdesc last_dd;         /* last received DD , including     */
-                                       /* OSPF capability of this neighbor */
-
-  /* LSAs to retransmit to this neighbor */
-  list dbdesc_lsa;
-
-  /* LSA lists for this neighbor */
-  list summarylist;
-  list requestlist;
-  list retranslist;
-
-  /* new member for dbdesc */
-  /* retransmission thread */
-  struct thread *thread_dbdesc_retrans;        /* Retransmit DbDesc */
-  struct iovec dbdesc_last_send[1024];   /* placeholder for DbDesc */
-  struct thread *thread_lsreq_retrans;         /* Retransmit LsReq */
-
-  /* statistics */
-  unsigned int ospf6_stat_state_changed;
-  unsigned int ospf6_stat_seqnum_mismatch;
-  unsigned int ospf6_stat_bad_lsreq;
-  unsigned int ospf6_stat_oneway_received;
-  unsigned int ospf6_stat_inactivity_timer;
-  unsigned int ospf6_stat_dr_election;
-  unsigned int ospf6_stat_retrans_dbdesc;
-  unsigned int ospf6_stat_retrans_lsreq;
-  unsigned int ospf6_stat_retrans_lsupdate;
-  unsigned int ospf6_stat_received_lsa;
-  unsigned int ospf6_stat_received_lsupdate;
-};
 struct ospf6_neighbor
 {
+  /* OSPFv3 Interface this neighbor belongs to */
   struct ospf6_interface *ospf6_interface;
-  u_char                  state;
-  u_char        dd_bits;          /* including MASTER bit */
-  u_int32_t     seqnum;        /* DD sequence number */
-  char                 str[16];          /* Router ID String */
-  u_int32_t        rtr_id;           /* Router ID of this neighbor */
-  u_char        rtr_pri;          /* Router Priority of this neighbor */
-  u_int32_t        ifid;
-  u_int32_t        prevdr;
-  u_int32_t        dr;
-  u_int32_t        prevbdr;
-  u_int32_t        bdr;
-  char                 options[3];     /* Link-LSA's options field */
-  struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link */
-                                       /* Probably LinkLocal address     */
-  struct ospf6_dbdesc last_dd; /* last received DD , including     */
-                                       /* OSPF capability of this neighbor */
+
+  /* Neighbor state */
+  u_char state;
+
+  /* including MASTER bit */
+  u_char dd_bits;
+
+  /* DD sequence number */
+  u_int32_t seqnum;
+
+  /* Neighbor Router ID String */
+  char str[16];
+
+  /* Neighbor Router ID */
+  u_int32_t rtr_id;
+
+  /* Router Priority of this neighbor */
+  u_char rtr_pri;
+
+  u_int32_t ifid;
+  u_int32_t dr;
+  u_int32_t bdr;
+  u_int32_t prevdr;
+  u_int32_t prevbdr;
+
+  /* Link-LSA's options field */
+  char options[3];
+
+  /* IPaddr of I/F on our side link */
+  struct in6_addr hisaddr;
+
+  /* last received DD , including OSPF capability of this neighbor */
+  struct ospf6_dbdesc last_dd;
 
   /* LSAs to retransmit to this neighbor */
   list dbdesc_lsa;
@@ -100,14 +68,21 @@ struct ospf6_neighbor
   list requestlist;
   list retranslist;
 
-  struct iovec dbdesc_last_send[1024];   /* placeholder for DbDesc */
+  /* placeholder for DbDesc */
+  struct iovec dbdesc_last_send[1024];
 
   struct thread          *inactivity_timer;
   /* new member for dbdesc */
   /* retransmission thread */
-  struct thread          *send_update;      /* Retransmit LSUpdate */
-  struct thread *thread_dbdesc_retrans;        /* Retransmit DbDesc */
-  struct thread *thread_lsreq_retrans;         /* Retransmit LsReq */
+
+  /* Retransmit LSUpdate */
+  struct thread *send_update;
+
+  /* Retransmit DbDesc */
+  struct thread *thread_dbdesc;
+
+  /* Retransmit LsReq */
+  struct thread *thread_rxmt_lsreq;
 
   /* statistics */
   u_int ospf6_stat_state_changed;
@@ -121,6 +96,8 @@ struct ospf6_neighbor
   u_int ospf6_stat_retrans_lsupdate;
   u_int ospf6_stat_received_lsa;
   u_int ospf6_stat_received_lsupdate;
+
+  struct timeval tv_last_hello_received;
 };
 
 
@@ -178,9 +155,9 @@ ospf6_neighbor_delete (struct ospf6_neighbor *);
 struct ospf6_neighbor *
 ospf6_neighbor_lookup (u_int32_t, struct ospf6_interface *);
 
-void ospf6_neighbor_vty_summary (struct vty *, struct ospf6_neighbor *);
-void ospf6_neighbor_vty (struct vty *, struct ospf6_neighbor *);
-void ospf6_neighbor_vty_detail (struct vty *, struct ospf6_neighbor *);
+void ospf6_neighbor_show_summary (struct vty *, struct ospf6_neighbor *);
+void ospf6_neighbor_show (struct vty *, struct ospf6_neighbor *);
+void ospf6_neighbor_show_detail (struct vty *, struct ospf6_neighbor *);
 
 #endif /* OSPF6_NEIGHBOR_H */
 

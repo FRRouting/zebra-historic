@@ -23,15 +23,26 @@
 #ifndef _ZEBRA_OSPF_LSA_H
 #define _ZEBRA_OSPF_LSA_H
 
+/* OSPF LSA Range definition. */
+#define OSPF_MIN_LSA		1  /* begin range here */
+#ifdef HAVE_NSSA
+#define OSPF_MAX_LSA		8  /* range ends below here */
+#else /* ! HAVE_NSSA */
+#define OSPF_MAX_LSA		6  /* range ends below here */
+#endif /* HAVE_NSSA */
+
 /* OSPF LSA Type definition. */
 #define OSPF_UNKNOWN_LSA	0
-#define OSPF_MIN_LSA		1
 #define OSPF_ROUTER_LSA         1
 #define OSPF_NETWORK_LSA        2
 #define OSPF_SUMMARY_LSA        3
 #define OSPF_SUMMARY_LSA_ASBR   4
 #define OSPF_AS_EXTERNAL_LSA    5
-#define OSPF_MAX_LSA		6
+
+#ifdef HAVE_NSSA
+#define OSPF_GROUP_MEMBER_LSA	6
+#define OSPF_AS_NSSA_LSA	7
+#endif /* HAVE_NSSA */
 
 #define OSPF_LSA_HEADER_SIZE	20
 #define OSPF_MAX_LSA_SIZE	1500
@@ -63,6 +74,9 @@ struct ospf_lsa
 #define OSPF_LSA_RECEIVED	  0x04
 #define OSPF_LSA_APPROVED	  0x08
 #define OSPF_LSA_DISCARD	  0x10
+#ifdef HAVE_NSSA
+#define OSPF_LSA_LOCAL_XLT	  0x20
+#endif /* HAVE_NSSA */
 
   /* LSA data. */
   struct lsa_header *data;
@@ -235,13 +249,15 @@ struct ospf_lsa *ospf_summary_lsa_originate (struct prefix_ipv4 *, u_int32_t,
 struct ospf_lsa *ospf_summary_asbr_lsa_originate (struct prefix_ipv4 *,
 						  u_int32_t,
 						  struct ospf_area *);
-void ospf_summary_lsa_refresh (struct ospf_lsa *);
-void ospf_summary_asbr_lsa_refresh (struct ospf_lsa *);
+struct ospf_lsa *ospf_summary_lsa_refresh (struct ospf_lsa *);
+struct ospf_lsa *ospf_summary_asbr_lsa_refresh (struct ospf_lsa *);
 
 struct ospf_lsa *ospf_lsa_install (struct ospf_interface *, struct ospf_lsa *);
 
 void ospf_external_lsa_flush (u_char, struct prefix_ipv4 *,
 			      unsigned int, struct in_addr);
+
+struct in_addr ospf_get_ip_from_ifp (struct interface *ifp);
 
 struct ospf_lsa *ospf_external_lsa_originate (struct external_info *);
 int ospf_external_lsa_originate_timer (struct thread *);

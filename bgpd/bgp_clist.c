@@ -30,11 +30,19 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
+#include "bgpd/bgp_aspath.h"
+#include "bgpd/bgp_regex.h"
 
 enum community_entry_type
 {
   COMMUNITY_DENY,
   COMMUNITY_PERMIT
+};
+
+enum community_entry_style
+{
+  COMMUNITY_LIST,
+  COMMUNITY_REGEXP,
 };
 
 struct community_list_list
@@ -56,7 +64,11 @@ struct community_entry
 
   enum community_entry_type type;
 
+  enum community_entry_style style;
+
   struct community *com;
+  char *regexp;
+  regex_t *reg;
 };
 
 static struct community_list_master community_list_master =
@@ -80,6 +92,11 @@ community_entry_free (struct community_entry *entry)
 {
   if (entry->com)
     community_free (entry->com);
+  if (entry->regexp)
+    {
+      XFREE (MTYPE_COMMUNITY_REGEXP, entry->regexp);
+      bgp_regex_free (entry->reg);
+    }
   XFREE (MTYPE_COMMUNITY_ENTRY, entry);
 }
 
@@ -91,6 +108,7 @@ community_entry_make (struct community *com, enum community_entry_type type)
   entry = community_entry_new ();
   entry->com = com;
   entry->type = type;
+  entry->style = COMMUNITY_LIST;
 
   return entry;
 }
@@ -234,8 +252,22 @@ community_entry_lookup (struct community_list *list,
   struct community_entry *entry;
 
   for (entry = list->head; entry; entry = entry->next)
-    if (community_cmp (entry->com, com))
-      return entry;
+    if (entry->style == COMMUNITY_LIST)
+      if (community_cmp (entry->com, com))
+	return entry;
+  return NULL;
+}
+
+struct community_entry *
+community_entry_regexp_lookup (struct community_list *list,
+			       char *str, enum community_entry_type type)
+{
+  struct community_entry *entry;
+
+  for (entry = list->head; entry; entry = entry->next)
+    if (entry->style == COMMUNITY_REGEXP)
+      if (strcmp (entry->regexp, str) == 0)
+	return entry;
   return NULL;
 }
 
@@ -313,13 +345,96 @@ community_list_entry_delete (struct community_list *list,
 }
 
 int
+community_match_regexp (struct community_entry *entry,
+			struct community *com)
+{
+  int i;
+  char c[12];
+  u_int32_t comval;
+
+  for (i = 0; i < com->size; i++)
+    {
+      memcpy (&comval, com_nthval (com, i), sizeof (u_int32_t));
+      comval = ntohl (comval);
+
+      sprintf(c, "%d:%d", (comval >> 16) & 0xFFFF, comval & 0xFFFF);
+      
+      if (regexec (entry->reg, c, 0, NULL, 0) == 0)
+	return 1;
+    }
+  return 0;
+}
+
+struct community *
+community_delete_regexp (struct community *com, regex_t *reg)
+{
+  int i;
+  char c[12];
+  u_int32_t comval;
+
+  i = 0;
+  while (i < com->size)
+    {
+      memcpy (&comval, com_nthval (com, i), sizeof (u_int32_t));
+      comval = ntohl (comval);
+
+      sprintf(c, "%d:%d", (comval >> 16) & 0xFFFF, comval & 0xFFFF);
+
+      if (regexec (reg, c, 0, NULL, 0) == 0)
+	{
+	  /* Matched - delete! */
+	  community_del_val (com, com_nthval (com, i));
+	}
+      else
+	i++;
+    }
+
+  return com;
+}
+
+/* Delete all permitted communities in the list from com1 */
+struct community *
+community_list_delete_entries (struct community *com1,
+			       struct community_list *list)
+{
+  struct community_entry *entry;
+
+  for (entry = list->head; entry; entry = entry->next)
+    {
+      if (entry->style == COMMUNITY_LIST)
+	{
+	  if (entry->type == COMMUNITY_PERMIT)
+	    community_delete (com1, entry->com);
+	}
+      else if (entry->style == COMMUNITY_REGEXP)
+	{
+	  if (entry->type == COMMUNITY_PERMIT)
+	    community_delete_regexp (com1, entry->reg);
+	}
+    }
+
+  return com1;
+}
+
+
+int
 community_list_match (struct community *com, struct community_list *list)
 {
   struct community_entry *entry;
 
   for (entry = list->head; entry; entry = entry->next)
-    if (community_match (com, entry->com))
-      return 1;
+    {
+      if (entry->style == COMMUNITY_LIST)
+	{
+	  if (community_match (com, entry->com))
+	    return 1;
+	}
+      else if (entry->style == COMMUNITY_REGEXP)
+	{
+	  if (community_match_regexp (entry, com))
+	    return 1;
+	}
+    }
   return 0;
 }
 
@@ -329,8 +444,9 @@ community_list_match_exact (struct community *com, struct community_list *list)
   struct community_entry *entry;
 
   for (entry = list->head; entry; entry = entry->next)
-    if (community_cmp (com, entry->com))
-      return 1;
+    if (entry->style == COMMUNITY_LIST)
+      if (community_cmp (com, entry->com))
+	return 1;
   return 0;
 }
 
@@ -369,9 +485,18 @@ community_list_dup_check (struct community_list *list,
   
   for (entry = list->head; entry; entry = entry->next)
     {
-      if (entry->type == new->type
-	  && community_cmp (entry->com, new->com))
-	return 1;
+      if (entry->style == COMMUNITY_LIST)
+	{
+	  if (entry->type == new->type
+	      && community_cmp (entry->com, new->com))
+	    return 1;
+	}
+      else if (entry->style == COMMUNITY_REGEXP)
+	{
+	  if (entry->type == new->type
+	      && (strcmp(entry->regexp, new->regexp) == 0))
+	    return 1;
+	}
     }
   return 0;
 }
@@ -390,14 +515,15 @@ DEFUN (ip_community_list, ip_community_list_cmd,
   struct community_list *list;
   struct community *com;
   struct buffer *b;
+  regex_t *regex;
   int i;
   char *str;
   int first = 0;
 
   /* Check the list type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = COMMUNITY_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = COMMUNITY_DENY;
   else
     {
@@ -421,17 +547,31 @@ DEFUN (ip_community_list, ip_community_list_cmd,
   buffer_free (b);
 
   com = community_str2com (str);
-  if (! com)
+  if (com)
     {
-      vty_out (vty, "Community-list malformed: %s%s", str,
-	       VTY_NEWLINE);
+      entry = community_entry_make (com, type);
       free (str);
-      return CMD_WARNING;
     }
-
-  entry = community_entry_make (com, type);
-  
-  free (str);
+  else
+    {
+      regex = bgp_regcomp (str);
+      if (regex)
+	{
+	  entry = community_entry_new ();
+	  entry->reg = regex;
+	  entry->regexp = XSTRDUP (MTYPE_COMMUNITY_REGEXP, str);
+	  entry->type = type;
+	  entry->style = COMMUNITY_REGEXP;
+	  free(str);
+	}
+      else
+	{
+	  vty_out (vty, "Community-list malformed: %s%s", str,
+		   VTY_NEWLINE);
+	  free (str);
+	  return CMD_WARNING;
+	}
+    }
 
   /* Install new community list to the community_list. */
   list = community_list_get (argv[0]);
@@ -460,6 +600,7 @@ DEFUN (no_ip_community_list,
   struct community_list *list;
   struct community *com;
   struct buffer *b;
+  regex_t *regex;
   int i;
   char *str;
   int first = 0;
@@ -473,9 +614,9 @@ DEFUN (no_ip_community_list,
     }
 
   /* Check the list type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = COMMUNITY_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = COMMUNITY_DENY;
   else
     {
@@ -500,16 +641,28 @@ DEFUN (no_ip_community_list,
   buffer_free (b);
 
   com = community_str2com (str);
-  free (str);
 
-  if (! com)
+  if (com)
     {
-      vty_out (vty, "Community-list malformed: %s%s", str,
-	       VTY_NEWLINE);
-      return CMD_WARNING;
+      free (str);
+      entry = community_entry_lookup (list, com, type);
     }
-
-  entry = community_entry_lookup (list, com, type);
+  else
+    {
+      regex = bgp_regcomp (str);
+      if (regex)
+	{
+	  entry = community_entry_regexp_lookup (list, str, type);
+	  free(str);
+	}
+      else
+	{
+ 	  vty_out (vty, "Community-list malformed: %s%s", str,
+ 		   VTY_NEWLINE);
+ 	  free (str);
+	  return CMD_WARNING;
+ 	}
+    }
 
   if (entry == NULL)
     {
@@ -556,20 +709,26 @@ config_write_community (struct vty *vty)
   for (list = community_list_master.num.head; list; list = list->next)
     for (entry = list->head; entry; entry = entry->next)
       {
-	vty_out (vty, "ip community-list %s %s%s%s",
-		 list->name, community_type_str (entry->type), 
-		 community_print (entry->com),
-		 VTY_NEWLINE);
+	vty_out (vty, "ip community-list %s %s%s%s%s",
+		 list->name,
+		 community_type_str (entry->type),
+		 entry->style == COMMUNITY_LIST ? "" : " ",
+		 entry->style == COMMUNITY_LIST
+		 ? community_print (entry->com) : entry->regexp,
+  		 VTY_NEWLINE);
 	write++;
       }
 
   for (list = community_list_master.str.head; list; list = list->next)
     for (entry = list->head; entry; entry = entry->next)
       {
-	vty_out (vty, "ip community-list %s %s%s%s",
-		 list->name, community_type_str (entry->type), 
-		 community_print (entry->com),
-		 VTY_NEWLINE);
+ 	vty_out (vty, "ip community-list %s %s%s%s%s",
+ 		 list->name,
+ 		 community_type_str (entry->type),
+ 		 entry->style == COMMUNITY_LIST ? "" : " ",
+ 		 entry->style == COMMUNITY_LIST
+ 		 ? community_print (entry->com) : entry->regexp,
+  		 VTY_NEWLINE);
 	write++;
       }
   return write;

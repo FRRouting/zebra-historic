@@ -44,6 +44,7 @@
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_ase.h"
 #include "ospfd/ospf_zebra.h"
+#include "ospfd/ospf_dump.h"
 
 #define DEBUG
 
@@ -299,6 +300,13 @@ ospf_ase_calculate_route (struct ospf_lsa * lsa, void * p_arg, int n_arg)
   
   assert (lsa);
   al = (struct as_external_lsa *) lsa->data;
+
+#ifdef HAVE_NSSA
+  /* Stay away from any Local Translated Type-7 LSAs */
+  if (CHECK_FLAG (lsa->flags, OSPF_LSA_LOCAL_XLT))
+    return 0;
+#endif /* HAVE_NSSA */
+
   zlog_info ("Route[External]: Calculate AS-external-LSA to %s/%d",
 	     inet_ntoa (al->header.id), ip_masklen (al->mask));
   /* (1) If the cost specified by the LSA is LSInfinity, or if the
@@ -516,6 +524,7 @@ ospf_ase_calculate_route (struct ospf_lsa * lsa, void * p_arg, int n_arg)
   return 0;
 }
 
+#ifdef OLD_RIB
 int
 ospf_ase_compare_tables (struct route_table *new_external_route,
 			 struct route_table *old_external_route)
@@ -560,11 +569,101 @@ ospf_ase_compare_tables (struct route_table *new_external_route,
       }
   return 0;
 }
+#else
+int
+ospf_ase_route_match_same (struct route_table *rt, struct prefix *prefix,
+			   struct ospf_route *newor)
+{
+  struct route_node *rn;
+  struct ospf_route *or;
+  struct ospf_path *op;
+  struct ospf_path *newop;
+  listnode n1;
+  listnode n2;
+
+  if (! rt || ! prefix)
+    return 0;
+
+   rn = route_node_lookup (rt, prefix);
+   if (! rn || ! rn->info)
+     return 0;
+ 
+   route_unlock_node (rn);
+
+   or = rn->info;
+   if (or->path_type != newor->path_type)
+     return 0;
+
+   switch (or->path_type)
+     {
+     case OSPF_PATH_TYPE1_EXTERNAL:
+       if (or->cost != newor->cost)
+	 return 0;
+       break;
+     case OSPF_PATH_TYPE2_EXTERNAL:
+       if ((or->cost != newor->cost) ||
+	   (or->u.ext.type2_cost != newor->u.ext.type2_cost))
+	 return 0;
+       break;
+     default:
+       assert (0);
+       return 0;
+     }
+   
+   if (or->path->count != newor->path->count)
+     return 0;
+       
+   /* Check each path. */
+   for (n1 = listhead (or->path), n2 = listhead (newor->path);
+	n1 && n2; nextnode (n1), nextnode (n2))
+     { 
+       op = getdata (n1);
+       newop = getdata (n2);
+       
+       if (! IPV4_ADDR_SAME (&op->nexthop, &newop->nexthop))
+	 return 0;
+     }
+   return 1;
+}
+
+int
+ospf_ase_compare_tables (struct route_table *new_external_route,
+			 struct route_table *old_external_route)
+{
+  struct route_node *rn, *new_rn;
+  struct ospf_route *or;
+  
+  /* Remove deleted routes */
+  for (rn = route_top (old_external_route); rn; rn = route_next (rn))
+    if ((or = rn->info))
+      {
+	if (! (new_rn = route_node_lookup (new_external_route, &rn->p)))
+	  ospf_zebra_delete_multipath ((struct prefix_ipv4 *) &rn->p, or);
+	else
+	  route_unlock_node (new_rn);
+      }
+  
+	
+  /* Install new routes */
+  for (rn = route_top (new_external_route); rn; rn = route_next (rn))
+    if ((or = rn->info) != NULL)
+      if (! ospf_ase_route_match_same (old_external_route, &rn->p, or))
+	ospf_zebra_add_multipath ((struct prefix_ipv4 *) &rn->p, or);
+				       
+  return 0;
+}
+#endif /* OLD_RIB */
+
 
 int
 ospf_ase_calculate_timer (struct thread *t)
 {
   struct ospf *ospf;
+
+#ifdef HAVE_NSSA
+      listnode node;
+      struct ospf_area *area;
+#endif /* HAVE_NSSA */
 
   ospf = THREAD_ARG (t);
   ospf->t_ase_calc = NULL;
@@ -576,6 +675,23 @@ ospf_ase_calculate_timer (struct thread *t)
       /* Calculate external route for each AS-external-LSA */
       foreach_lsa (EXTERNAL_LSDB (ospf_top), NULL, 0,
 		   ospf_ase_calculate_route);
+
+#ifdef HAVE_NSSA
+      /*  This version simple adds to the table all NSSA areas  */
+      if (ospf_top->anyNSSA)
+	for (node = listhead (ospf_top->areas); node; nextnode (node))
+	  {
+	    area = getdata (node);
+	    if (IS_DEBUG_OSPF_NSSA)
+	      zlog_info ("ospf_ase_calculate_timer(): looking at area %s",
+			 inet_ntoa (area->area_id));
+
+	    if (area->external_routing == OSPF_AREA_NSSA)
+
+	      foreach_lsa (NSSA_LSDB (area), NULL, 0,
+			   ospf_ase_calculate_route);
+	  }
+#endif /* HAVE_NSSA */
 
       /* Compare old and new external routing table and install the
 	 difference info zebra/kernel */

@@ -334,12 +334,48 @@ bgp_stop (struct peer *peer)
   /* Reset all negotiated variables */
   peer->afc_nego[AFI_IP][SAFI_UNICAST] = 0;
   peer->afc_nego[AFI_IP][SAFI_MULTICAST] = 0;
+  peer->afc_nego[AFI_IP][SAFI_MPLS_VPN] = 0;
   peer->afc_nego[AFI_IP6][SAFI_UNICAST] = 0;
   peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = 0;
+  peer->afc_adv[AFI_IP][SAFI_UNICAST] = 0;
+  peer->afc_adv[AFI_IP][SAFI_MULTICAST] = 0;
+  peer->afc_adv[AFI_IP][SAFI_MPLS_VPN] = 0;
+  peer->afc_adv[AFI_IP6][SAFI_UNICAST] = 0;
+  peer->afc_adv[AFI_IP6][SAFI_MULTICAST] = 0;
+  peer->afc_recv[AFI_IP][SAFI_UNICAST] = 0;
+  peer->afc_recv[AFI_IP][SAFI_MULTICAST] = 0;
+  peer->afc_recv[AFI_IP][SAFI_MPLS_VPN] = 0;
+  peer->afc_recv[AFI_IP6][SAFI_UNICAST] = 0;
+  peer->afc_recv[AFI_IP6][SAFI_MULTICAST] = 0;
 
   /* Reset route refresh flag. */
   peer->refresh_adv = 0;
-  peer->refresh_nego = 0;
+  peer->refresh_nego_old = 0;
+  peer->refresh_nego_new = 0;
+
+  /* Reset keepalive and holdtime */
+  if (peer->config & PEER_CONFIG_TIMER)
+    {
+      peer->v_keepalive = peer->keepalive;
+      peer->v_holdtime = peer->holdtime;
+    }
+  else
+    {
+      peer->v_keepalive = BGP_DEFAULT_KEEPALIVE;
+      peer->v_holdtime = BGP_DEFAULT_HOLDTIME;
+    }
+
+  /* Increment Dropped count. */
+  if (peer->status == Established)
+    {
+      peer->dropped++;
+      fsm_change_status (peer, Idle);
+#ifdef HAVE_SNMP
+      bgpTrapBackwardTransition (peer);
+#endif /* HAVE_SNMP */
+    }
+
+  peer->update_time = 0;
 
   return 0;
 }
@@ -507,6 +543,13 @@ bgp_establish (struct peer *peer)
 
   /* Clear start timer value to default. */
   peer->v_start = BGP_INIT_START_TIMER;
+
+  /* Increment established count. */
+  peer->established++;
+  fsm_change_status (peer, Established);
+#ifdef HAVE_SNMP
+  bgpTrapEstablished (peer);
+#endif /* HAVE_SNMP */
 
   /* Reset uptime, send keepalive, send current table. */
   bgp_uptime_reset (peer);

@@ -113,6 +113,7 @@ int zclient_start (struct zclient *);
 void zclient_stop (struct zclient *);
 void zclient_reset (struct zclient *);
 int zclient_socket ();
+int zclient_socket_un (char *);
 
 void zclient_redistribute_set (struct zclient *, int);
 void zclient_redistribute_unset (struct zclient *, int);

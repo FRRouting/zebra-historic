@@ -248,8 +248,10 @@ struct memory_list memory_list_lib[] =
   { MTYPE_HASH,               "Hash            : %ld\r\n" },
   { MTYPE_HASH_BACKET,        "Hash Bucket     : %ld\r\n" },
   { MTYPE_ACCESS_LIST,        "Access List     : %ld\r\n" },
+  { MTYPE_ACCESS_LIST_STR,    "Access List Str : %ld\r\n" },
   { MTYPE_ACCESS_FILTER,      "Access Filter   : %ld\r\n" },
   { MTYPE_PREFIX_LIST,        "Prefix List     : %ld\r\n" },
+  { MTYPE_PREFIX_LIST_STR,    "Prefix List Str : %ld\r\n" },
   { MTYPE_PREFIX_LIST_ENTRY,  "Prefix List Entry : %ld\r\n"},
   { MTYPE_ROUTE_MAP,          "Route map       : %ld\r\n" },
   { MTYPE_ROUTE_MAP_NAME,     "Route map name  : %ld\r\n" },
@@ -262,6 +264,7 @@ struct memory_list memory_list_lib[] =
   { MTYPE_STREAM,             "Stream          : %ld\r\n" },
   { MTYPE_KEYCHAIN,           "Key chain       : %ld\r\n" },
   { MTYPE_KEY,                "Key             : %ld\r\n" },
+  { MTYPE_VTY,                "VTY             : %ld\r\n" },
   { -1, NULL }
 };
 
@@ -274,6 +277,7 @@ struct memory_list memory_list_bgp[] =
   { 0,                        "---------------------\r\n" },
   { MTYPE_AS_LIST,            "BGP as list     : %ld\r\n" },
   { MTYPE_AS_FILTER,          "BGP as filter   : %ld\r\n" },
+  { MTYPE_AS_FILTER_STR,      "BGP as filter str %ld\r\n" },
   { 0,                        "---------------------\r\n" },
   { MTYPE_COMMUNITY,          "Community       : %ld\r\n" },
   { MTYPE_COMMUNITY_VAL,      "Community val   : %ld\r\n" },
@@ -282,6 +286,7 @@ struct memory_list memory_list_bgp[] =
   { MTYPE_CLUSTER_VAL,        "Cluster list val: %ld\r\n" },
   { 0,                        "---------------------\r\n" },
   { MTYPE_BGP_DISTANCE,       "BGP distance    : %ld\r\n" },
+  { MTYPE_BGP_NEXTHOP_CACHE,  "BGP nexthop cache:%ld\r\n" },
   { -1, NULL }
 };
 
@@ -326,6 +331,24 @@ struct memory_list memory_list_ospf[] =
   { -1, NULL },
 };
 
+struct memory_list memory_list_ospf6[] =
+{
+  { MTYPE_OSPF6_TOP,          "OSPF6 top       : %ld\r\n" },
+  { MTYPE_OSPF6_AREA,         "OSPF6 area      : %ld\r\n" },
+  { MTYPE_OSPF6_IF,           "OSPF6 interface : %ld\r\n" },
+  { MTYPE_OSPF6_NEIGHBOR,     "OSPF6 neighbor  : %ld\r\n" },
+  { MTYPE_OSPF6_ROUTE,        "OSPF6 route     : %ld\r\n" },
+  { MTYPE_OSPF6_PREFIX,       "OSPF6 prefix    : %ld\r\n" },
+  { MTYPE_OSPF6_MESSAGE,      "OSPF6 message   : %ld\r\n" },
+  { MTYPE_OSPF6_LSA,          "OSPF6 LSA       : %ld\r\n" },
+  { MTYPE_OSPF6_VERTEX,       "OSPF6 vertex    : %ld\r\n" },
+  { MTYPE_OSPF6_SPFTREE,      "OSPF6 SPF tree  : %ld\r\n" },
+  { MTYPE_OSPF6_NEXTHOP,      "OSPF6 nexthop   : %ld\r\n" },
+  { MTYPE_OSPF6_EXTERNAL_INFO,"OSPF6 ext. info : %ld\r\n" },
+  { MTYPE_OSPF6_OTHER,        "OSPF6 other     : %ld\r\n" },
+  { -1, NULL },
+};
+
 struct memory_list memory_list_separator[] =
 {
   { 0,                        "---------------------\r\n" },
@@ -356,6 +379,8 @@ DEFUN (show_memory_all,
   show_memory_vty (vty, memory_list_rip);
   show_memory_vty (vty, memory_list_separator);
   show_memory_vty (vty, memory_list_ospf);
+  show_memory_vty (vty, memory_list_separator);
+  show_memory_vty (vty, memory_list_ospf6);
   show_memory_vty (vty, memory_list_separator);
   show_memory_vty (vty, memory_list_bgp);
 
@@ -412,6 +437,17 @@ DEFUN (show_memory_ospf,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_memory_ospf6,
+       show_memory_ospf6_cmd,
+       "show memory ospf6",
+       SHOW_STR
+       "Memory statistics\n"
+       "OSPF6 memory\n")
+{
+  show_memory_vty (vty, memory_list_ospf6);
+  return CMD_SUCCESS;
+}
+
 void
 memory_init ()
 {
@@ -421,6 +457,7 @@ memory_init ()
   install_element (VIEW_NODE, &show_memory_rip_cmd);
   install_element (VIEW_NODE, &show_memory_bgp_cmd);
   install_element (VIEW_NODE, &show_memory_ospf_cmd);
+  install_element (VIEW_NODE, &show_memory_ospf6_cmd);
 
   install_element (ENABLE_NODE, &show_memory_cmd);
   install_element (ENABLE_NODE, &show_memory_all_cmd);
@@ -428,4 +465,5 @@ memory_init ()
   install_element (ENABLE_NODE, &show_memory_rip_cmd);
   install_element (ENABLE_NODE, &show_memory_bgp_cmd);
   install_element (ENABLE_NODE, &show_memory_ospf_cmd);
+  install_element (ENABLE_NODE, &show_memory_ospf6_cmd);
 }

@@ -281,6 +281,33 @@ attrhash_init ()
   attrhash->hash_cmp = attrhash_cmp;
 }
 
+void
+attr_dump_vty (struct vty *vty, struct attr *attr)
+{
+  vty_out (vty, "attr[%d] nexthp %s%s", attr->refcnt,
+	   inet_ntoa (attr->nexthop), VTY_NEWLINE);
+}
+
+void
+attrhash_dump (struct vty *vty)
+{
+  int i;
+  HashBacket *mp;
+
+  for (i = 0; i < HASHTABSIZE; i++)
+    if ((mp = (HashBacket *) hash_head (attrhash, i)) != NULL)
+      while (mp) 
+	{
+	  struct attr *attr;
+
+	  attr = (struct attr *) mp->data;
+
+	  attr_dump_vty (vty, attr);
+
+	  mp = mp->next;
+	}
+}
+
 /* Internet argument attribute. */
 struct attr *
 bgp_attr_intern (struct attr *attr)
@@ -545,8 +572,8 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
   /* If we're a confederation, we need to check the confed id too */
   if (bgp != NULL && CHECK_FLAG(bgp->config, BGP_CONFIG_CONFEDERATION))
     {
-      if(aspath_loop_check(attr->aspath,
-			   bgp->confederation_id))
+      if (aspath_loop_check(attr->aspath,
+			    bgp->confederation_id))
 	{
 	  zlog (peer->log, LOG_ERR, 
 		"%s: Has our own AS (%d) in the update",
@@ -556,7 +583,25 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_AS_ROUTE_LOOP);	  
+	  return -1;
 	}      
+    }
+
+  if (bgp != NULL && CHECK_FLAG(bgp->config, BGP_CONFIG_ENFORCE_FIRST_AS))
+    {
+      if (peer_sort (peer) == BGP_PEER_EBGP 
+	  && ! aspath_firstas_check(attr->aspath, peer->as))
+ 	{
+ 	  zlog (peer->log, LOG_ERR,
+ 		"%s: Incorrect first AS (not %d) and enforce-first-as is enabled",
+ 		peer->host,
+ 		peer->as);
+
+ 	  bgp_notify_send (peer,
+ 			   BGP_NOTIFY_UPDATE_ERR,
+ 			   BGP_NOTIFY_UPDATE_MAL_AS_PATH);
+	  return -1;
+ 	}
     }
 
   /* Forward pointer. */

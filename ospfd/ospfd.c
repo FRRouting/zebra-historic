@@ -53,9 +53,6 @@
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_ase.h"
 
-/* For control debug info. */
-int ospf_zlog = 0;
-
 /* OSPF instance top. */
 struct ospf *ospf_top;
 
@@ -71,7 +68,38 @@ static char *ospf_network_type_str[] =
   "VIRTUALLINK"
 };
 
-
+/* Temporary Area Format Routine AREA-ID and TYPE to ASCII */
+char*
+ait_ntoa (struct in_addr inaddr, int type)
+{
+
+#ifdef HAVE_NSSA
+
+	static char	buf[50];
+	static char typ[10];
+
+	typ[0]=0;
+
+	if (type == OSPF_AREA_NSSA) strcpy (typ, "NSSA");
+	if (type == OSPF_AREA_STUB) strcpy (typ, "Stub");
+
+	if (typ[0]==0)
+	sprintf (buf, "(%s)", inet_ntoa(inaddr));
+	else
+	sprintf (buf, "(%s [%s])", inet_ntoa(inaddr), typ);
+
+return buf;
+
+#else /* ! HAVE_NSSA */
+
+return (inet_ntoa(inaddr));
+
+#endif /* HAVE_NSSA */
+
+}
+
+
+
 /* Get Router ID from ospf interface list. */
 struct in_addr
 ospf_router_id_get (list if_list)
@@ -115,7 +143,8 @@ ospf_router_id_update ()
   listnode node;
   struct in_addr router_id, router_id_old;
 
-  zlog_info ("Router-ID[OLD:%s]: Update",inet_ntoa (ospf_top->router_id));
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("Router-ID[OLD:%s]: Update",inet_ntoa (ospf_top->router_id));
 
   router_id_old = ospf_top->router_id;
 
@@ -126,7 +155,8 @@ ospf_router_id_update ()
 
   ospf_top->router_id = router_id;
   
-  zlog_info ("Router-ID[NEW:%s]: Update", inet_ntoa (ospf_top->router_id));
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("Router-ID[NEW:%s]: Update", inet_ntoa (ospf_top->router_id));
 
   if (!IPV4_ADDR_SAME (&router_id_old, &router_id))
     {
@@ -167,7 +197,8 @@ ospf_router_id_update ()
 int
 ospf_router_id_update_timer (struct thread *thread)
 {
-  zlog_info ("Router-ID: Update timer fired!");
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("Router-ID: Update timer fired!");
 
   ospf_top->t_router_id_update = NULL;
   ospf_router_id_update ();
@@ -303,6 +334,10 @@ ospf_area_free (struct ospf_area *area)
   foreach_lsa (SUMMARY_ASBR_LSDB (area), area->lsdb, 0,
 	       ospf_lsa_discard_callback);
 
+#ifdef HAVE_NSSA
+  foreach_lsa (NSSA_LSDB (area), area->lsdb, 0, ospf_lsa_discard_callback);
+#endif /* HAVE_NSSA */
+
   new_lsdb_delete_all (area->lsdb);
   new_lsdb_free (area->lsdb);
 
@@ -437,7 +472,8 @@ ospf_loopback_run (struct ospf *ospf)
             if (oi->flag == OSPF_IF_DISABLE)
               {       
                 oi->flag = OSPF_IF_ENABLE;
-                zlog_info ("ISM[%s]: start.", ifp->name);
+		if (IS_DEBUG_OSPF_EVENT)
+		  zlog_info ("ISM[%s]: start.", ifp->name);
                 OSPF_ISM_EVENT_SCHEDULE (ifp->info, ISM_LoopInd);
               }
         }
@@ -517,6 +553,23 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 		      oi->type = OSPF_IFTYPE_POINTOPOINT;
 		  }
 
+		/* Set area flag. */
+		switch (area->external_routing)
+		  {
+		  case OSPF_AREA_DEFAULT:
+		    SET_FLAG (oi->nbr_self->options, OSPF_OPTION_E);
+		    break;
+		  case OSPF_AREA_STUB:
+		    UNSET_FLAG (oi->nbr_self->options, OSPF_OPTION_E);
+		    break;
+#ifdef HAVE_NSSA
+		  case OSPF_AREA_NSSA:
+		    UNSET_FLAG (oi->nbr_self->options, OSPF_OPTION_E);
+		    SET_FLAG (oi->nbr_self->options, OSPF_OPTION_NP);
+		    break;
+#endif /* HAVE_NSSA */
+		  }
+
 		ospf_area_add_if (oi->area, ifp);
 
 		if (if_is_up (ifp)) 
@@ -526,6 +579,34 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 	      }
 	}
       oi->flag = flag;
+    }
+}
+
+void
+ospf_ls_upd_queue_empty (struct ospf_interface *oi)
+{
+  struct route_node *rn;
+  listnode node;
+  list lst;
+  struct ospf_lsa *lsa;
+
+  /* empty ls update queue */
+  for (rn = route_top (oi->ls_upd_queue); rn;
+       rn = route_next (rn))
+    if ((lst = (list) rn->info))
+      {
+	for (node = listhead (lst); node; nextnode (node))
+	  if ((lsa = getdata (node)))
+	    ospf_lsa_unlock (lsa);
+	list_free (lst);
+	rn->info = NULL;
+      }
+  
+  /* remove update event */
+  if (oi->t_ls_upd_event)
+    {
+      thread_cancel (oi->t_ls_upd_event);
+      oi->t_ls_upd_event = NULL;
     }
 }
 
@@ -563,6 +644,8 @@ ospf_interface_down (struct ospf *ospf, struct prefix *p,
 		    /* Remember this interface is not running. */
 		    flag = OSPF_IF_DISABLE;
 
+		    ospf_ls_upd_queue_empty (oi);
+		    
 		    /* This interface goes down. */
 		    OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceDown);
 
@@ -642,6 +725,10 @@ DEFUN (router_ospf,
        "Enable a routing process\n"
        "Start OSPF configuration\n")
 {
+#ifdef HAVE_NSSA
+  zlog_info ("ROUTER OSPF:   NSSA Enabled by --enable-nssa");
+#endif /* HAVE_NSSA */
+
   /* There is already active ospf instance. */
   if (ospf_top != NULL)
     {
@@ -683,6 +770,10 @@ DEFUN (no_router_ospf,
       vty_out (vty, "There isn't active ospf instance.%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
+
+  /* Unredister redistribution */
+  for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+    ospf_redistribute_unset (i);
 
   /* Clear static neighbors */
   for (node = listhead (ospf_top->nbr_static); node; nextnode (node))
@@ -1302,10 +1393,20 @@ DEFUN (area_range_suppress,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_NSSA
+ALIAS (area_range_suppress,
+       area_range_suppress_decimal_cmd,
+       "area <0-4294967295> range IPV4_PREFIX not-advertise",
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Configure OSPF DECIMAL area range for route summarization\n"
+       "area range prefix\n"
+       "do not advertise this range\n")
+#endif /* HAVE_NSSA */
 
 DEFUN (no_area_range_suppress,
        no_area_range_suppress_cmd,
-       "no area A.B.C.D range IPV4_PREFIX suppress",
+       "no area A.B.C.D range IPV4_PREFIX not-advertise",
        NO_STR
        "OSPF area parameters\n"
        "OSPF area ID\n"
@@ -1482,6 +1583,108 @@ DEFUN (no_area_range_subst,
   return CMD_SUCCESS;
 }
 
+struct ospf_vl_data *
+ospf_find_vl_data (struct in_addr area_id, int format,
+		   struct in_addr vl_peer, struct vty *vty)
+{
+  struct ospf_area *area;
+  struct ospf_vl_data *vl_data;
+
+  if (area_id.s_addr == OSPF_AREA_BACKBONE)
+    {
+      vty_out (vty, "Configuring VLs over the backbone is not allowed%s",
+               VTY_NEWLINE);
+      return NULL;
+    }
+  area = ospf_area_get (area_id, format);
+
+  if (area->external_routing != OSPF_AREA_DEFAULT)
+    {
+      if (format == OSPF_AREA_ID_FORMAT_ADDRESS)
+	vty_out (vty, "Area %s is %s%s",
+		 inet_ntoa (area_id),
+#ifdef HAVE_NSSA
+		 area->external_routing == OSPF_AREA_NSSA?"nssa":"stub",
+#else
+		 "stub",
+#endif /* HAVE_NSSA */		 
+		 VTY_NEWLINE);
+      else
+	vty_out (vty, "Area %d is %s%s",
+		 ntohl (area_id.s_addr),
+#ifdef HAVE_NSSA
+		 area->external_routing == OSPF_AREA_NSSA?"nssa":"stub",
+#else
+		 "stub",
+#endif /* HAVE_NSSA */		 
+		 VTY_NEWLINE);	
+      return NULL;
+    }
+  
+  if ((vl_data = ospf_vl_lookup (area, vl_peer)) == NULL)
+    {
+      vl_data = ospf_vl_data_new (area, vl_peer);
+      if (vl_data->vl_oi == NULL)
+	{
+	  vl_data->vl_oi = ospf_vl_new (vl_data);
+	  ospf_vl_add (vl_data);
+	  ospf_spf_calculate_schedule ();
+	}
+    }
+  return vl_data;
+}
+
+int
+ospf_vl_set_security (struct in_addr area_id, int format,
+		      struct in_addr vl_peer,  char *key, u_char key_id,
+		     char *md5_key, struct vty *vty)
+{
+  struct crypt_key *ck;
+  struct ospf_vl_data *vl_data;
+
+  vl_data = ospf_find_vl_data (area_id, format, vl_peer, vty);
+  if (!vl_data)
+    return CMD_WARNING;
+  
+  if (key)
+    strncpy (vl_data->vl_oi->auth_simple, key, OSPF_AUTH_SIMPLE_SIZE);
+  else if (md5_key)
+    {
+      if (ospf_crypt_key_lookup (vl_data->vl_oi, key_id) != NULL)
+	{
+	  vty_out (vty, "OSPF: Key %d already exists%s",
+		   key_id, VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      ck = ospf_crypt_key_new ();
+      ck->key_id = key_id;
+      strncpy (ck->auth_key, md5_key, OSPF_AUTH_MD5_SIZE);
+      
+      ospf_crypt_key_add (vl_data->vl_oi->auth_crypt, ck);
+    }
+  
+  return CMD_SUCCESS;
+}
+
+int
+ospf_vl_set_timers (struct in_addr area_id, int format,
+		     struct in_addr vl_peer, u_int16_t hello_interval,
+		     u_int16_t retransmit_interval, u_int16_t transmit_delay,
+		     u_int16_t dead_interval, struct vty *vty)
+{
+  struct ospf_vl_data *vl_data;
+
+  vl_data = ospf_find_vl_data (area_id, format, vl_peer, vty);
+  if (!vl_data)
+    return CMD_WARNING;
+  
+  vl_data->vl_oi->v_hello = hello_interval;
+  vl_data->vl_oi->v_wait = dead_interval;
+  vl_data->vl_oi->retransmit_interval = retransmit_interval;
+  vl_data->vl_oi->transmit_delay = transmit_delay;
+  
+  return CMD_SUCCESS;
+}
 
 DEFUN (area_vlink,
        area_vlink_cmd,
@@ -1491,26 +1694,15 @@ DEFUN (area_vlink,
        "Configure a virtual link\n"
        "Router ID of the remote ABR\n")
 {
-  struct ospf_area *area;
   struct in_addr area_id, vl_peer;
-  struct ospf_vl_data *vl_data;
-  int ret;
+  int ret, format;
 
-  ret = ospf_str2area_id (argv[0], &area_id);
-  if (!ret)
+  format = ospf_str2area_id (argv[0], &area_id);
+  if (!format)
     {
       vty_out (vty, "OSPF area ID is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-
-  if (area_id.s_addr == OSPF_AREA_BACKBONE)
-    {
-      vty_out (vty, "Configuring VLs over the backbone is not allowed%s",
-               VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  area = ospf_area_get (area_id, ret);
 
   ret = inet_aton (argv[1], &vl_peer);
   if (! ret)
@@ -1520,19 +1712,11 @@ DEFUN (area_vlink,
       return CMD_WARNING;
     }
 
-  if ((vl_data = ospf_vl_lookup (area, vl_peer)))
-    return CMD_SUCCESS;
-
-  vl_data = ospf_vl_data_new (area, vl_peer);
-
-  if (vl_data->vl_oi == NULL)
-    {
-      vl_data->vl_oi = ospf_vl_new (vl_data);
-      ospf_vl_add (vl_data);
-      ospf_spf_calculate_schedule ();
-    }
-
-  return CMD_SUCCESS;
+  return ospf_vl_set_timers (area_id, format, vl_peer,
+			   OSPF_HELLO_INTERVAL_DEFAULT,
+			   OSPF_RETRANSMIT_INTERVAL_DEFAULT,
+			   OSPF_TRANSMIT_DELAY_DEFAULT,
+			   OSPF_ROUTER_DEAD_INTERVAL_DEFAULT, vty);
 }
 
 ALIAS (area_vlink,
@@ -1542,6 +1726,345 @@ ALIAS (area_vlink,
        "OSPF area ID as a decimal value\n"
        "Configure a virtual link\n"
        "Router ID of the remote ABR\n")
+
+DEFUN (area_vlink_param,
+       area_vlink_param_cmd,
+       "area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535>",
+       "OSPF area parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Time between HELLO packets\n"
+       "Seconds\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds\n"       
+       "Link state transmit delay\n"
+       "Seconds\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds\n")
+{
+  struct in_addr area_id, vl_peer;
+  int ret, format;
+  int hello, retransmit, transmit, dead;
+
+  format = ospf_str2area_id (argv[0], &area_id);
+  if (!format)
+    {
+      vty_out (vty, "OSPF area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &vl_peer);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid Router ID as a.b.c.d%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  hello = strtol (argv[2], NULL, 10);
+  if (hello < 0)
+    return CMD_WARNING;
+  retransmit = strtol (argv[3], NULL, 10);
+  if (retransmit < 0)
+    return CMD_WARNING;
+  transmit = strtol (argv[4], NULL, 10);
+  if (transmit < 0)
+    return CMD_WARNING;
+  dead = strtol (argv[5], NULL, 10);
+  if (dead < 0)
+    return CMD_WARNING;
+
+  return ospf_vl_set_timers (area_id, format, vl_peer, hello, retransmit,
+			     transmit, dead, vty);
+}      
+
+ALIAS (area_vlink_param,
+       area_vlink_param_decimal_cmd,
+       "area <0-4294967295> virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535>",
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Time between HELLO packets\n"
+       "Seconds\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds\n"       
+       "Link state transmit delay\n"
+       "Seconds\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds\n")
+
+
+
+DEFUN (area_vlink_param_auth,
+       area_vlink_param_auth_cmd,
+       "area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> authentication-key AUTH_KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Time between HELLO packets\n"
+       "Seconds\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds\n"       
+       "Link state transmit delay\n"
+       "Seconds\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds\n"
+       "Authentication password (key)\n"
+       "The OSPF password (key)")
+{
+  struct in_addr area_id, vl_peer;
+  int ret, format;
+  int hello, retransmit, transmit, dead;
+  char key[OSPF_AUTH_SIMPLE_SIZE+1];
+
+  format = ospf_str2area_id (argv[0], &area_id);
+  if (!format)
+    {
+      vty_out (vty, "OSPF area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &vl_peer);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid Router ID as a.b.c.d%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  hello = strtol (argv[2], NULL, 10);
+  if (hello < 0)
+    return CMD_WARNING;
+  retransmit = strtol (argv[3], NULL, 10);
+  if (retransmit < 0)
+    return CMD_WARNING;
+  transmit = strtol (argv[4], NULL, 10);
+  if (transmit < 0)
+    return CMD_WARNING;
+  dead = strtol (argv[5], NULL, 10);
+  if (dead < 0)
+    return CMD_WARNING;
+
+  bzero (key, OSPF_AUTH_SIMPLE_SIZE + 1);
+  strncpy (key, argv[6], OSPF_AUTH_SIMPLE_SIZE);
+
+  ret = ospf_vl_set_timers (area_id, format, vl_peer, hello, retransmit,
+			   transmit, dead, vty);
+  if (ret != CMD_SUCCESS)
+    return ret;
+  return ospf_vl_set_security (area_id, format, vl_peer, key, 0, NULL, vty);
+}      
+
+ALIAS (area_vlink_param_auth,
+       area_vlink_param_auth_decimal_cmd,
+       "area <0-4294967295> virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> authentication-key AUTH_KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Time between HELLO packets\n"
+       "Seconds\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds\n"       
+       "Link state transmit delay\n"
+       "Seconds\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds\n"
+       "Authentication password (key)\n"
+       "The OSPF password (key)")
+     
+
+DEFUN (area_vlink_param_md5,
+       area_vlink_param_md5_cmd,
+       "area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> message-digest-key <1-255> md5 KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Time between HELLO packets\n"
+       "Seconds\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds\n"       
+       "Link state transmit delay\n"
+       "Seconds\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds\n"
+       "Message digest authentication password (key)\n"
+       "Key ID\n"
+       "Use MD5 algorithm\n"
+       "The OSPF password (key)")
+{
+  struct in_addr area_id, vl_peer;
+  int ret, format, key_id;
+  int hello, retransmit, transmit, dead;
+  char key[OSPF_AUTH_MD5_SIZE+1];
+
+  format = ospf_str2area_id (argv[0], &area_id);
+  if (!format)
+    {
+      vty_out (vty, "OSPF area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &vl_peer);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid Router ID as a.b.c.d%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  hello = strtol (argv[2], NULL, 10);
+  if (hello < 0)
+    return CMD_WARNING;
+  retransmit = strtol (argv[3], NULL, 10);
+  if (retransmit < 0)
+    return CMD_WARNING;
+  transmit = strtol (argv[4], NULL, 10);
+  if (transmit < 0)
+    return CMD_WARNING;
+  dead = strtol (argv[5], NULL, 10);
+  if (dead < 0)
+    return CMD_WARNING;
+
+  key_id = strtol (argv[6], NULL, 10);
+  if (key_id < 0)
+    return CMD_WARNING;
+  bzero (key, OSPF_AUTH_MD5_SIZE + 1);
+  strncpy (key, argv[7], OSPF_AUTH_MD5_SIZE);
+
+  ret = ospf_vl_set_timers (area_id, format, vl_peer, hello, retransmit,
+			   transmit, dead, vty);
+  if (ret != CMD_SUCCESS)
+    return ret;
+  return ospf_vl_set_security (area_id, format, vl_peer, NULL,
+			       key_id, key, vty);
+}      
+
+ALIAS (area_vlink_param_md5,
+       area_vlink_param_md5_decimal_cmd,
+       "area <0-4294967295> virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> message-digest-key <1-255> md5 KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Time between HELLO packets\n"
+       "Seconds\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds\n"       
+       "Link state transmit delay\n"
+       "Seconds\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds\n"
+       "Message digest authentication password (key)\n"
+       "Key ID\n"
+       "Use MD5 algorithm\n"
+       "The OSPF password (key)")
+
+
+DEFUN (area_vlink_md5,
+       area_vlink_md5_cmd,
+       "area A.B.C.D virtual-link A.B.C.D message-digest-key <1-255> md5 KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Message digest authentication password (key)\n"
+       "Key ID\n"
+       "Use MD5 algorithm\n"
+       "The OSPF password (key)")
+{
+  struct in_addr area_id, vl_peer;
+  int ret, format, key_id;
+  char key[OSPF_AUTH_MD5_SIZE+1];
+
+  format = ospf_str2area_id (argv[0], &area_id);
+  if (!format)
+    {
+      vty_out (vty, "OSPF area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &vl_peer);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid Router ID as a.b.c.d%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  key_id = strtol (argv[2], NULL, 10);
+  if (key_id < 0)
+    return CMD_WARNING;
+  bzero (key, OSPF_AUTH_MD5_SIZE + 1);
+  strncpy (key, argv[3], OSPF_AUTH_MD5_SIZE);
+
+  return ospf_vl_set_security (area_id, format, vl_peer,
+			       NULL, key_id, key, vty);
+}
+
+ALIAS (area_vlink_md5,
+       area_vlink_md5_decimal_cmd,
+       "area <0-4294967295> virtual-link A.B.C.D message-digest-key <1-255> md5 KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Message digest authentication password (key)\n"
+       "Key ID\n"
+       "Use MD5 algorithm\n"
+       "The OSPF password (key)")
+
+DEFUN (area_vlink_auth,
+       area_vlink_auth_cmd,
+       "area A.B.C.D virtual-link A.B.C.D authentication-key AUTH_KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Authentication password (key)\n"
+       "The OSPF password (key)")
+{
+  struct in_addr area_id, vl_peer;
+  int ret, format;
+  char key[OSPF_AUTH_SIMPLE_SIZE+1];
+
+  format = ospf_str2area_id (argv[0], &area_id);
+  if (!format)
+    {
+      vty_out (vty, "OSPF area ID is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &vl_peer);
+  if (! ret)
+    {
+      vty_out (vty, "Please specify valid Router ID as a.b.c.d%s",
+               VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  bzero (key, OSPF_AUTH_SIMPLE_SIZE + 1);
+  strncpy (key, argv[2], OSPF_AUTH_SIMPLE_SIZE);
+
+  return ospf_vl_set_security (area_id, format, vl_peer,
+			       key, 0, NULL, vty);
+}
+
+ALIAS (area_vlink_auth,
+       area_vlink_auth_decimal_cmd,
+       "area <0-4294967295> virtual-link A.B.C.D authentication-key AUTH_KEY",
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure a virtual link\n"
+       "Router ID of the remote ABR\n"
+       "Authentication password (key)\n"
+       "The OSPF password (key)")
+
+     
 
 DEFUN (no_area_vlink,
        no_area_vlink_cmd,
@@ -1739,15 +2262,17 @@ ospf_area_type_set (struct ospf_area *area, int type)
 
   if (area->external_routing == type)
     {
-      zlog_info ("Area[%s]: Types are the same, ignored.",
-		 inet_ntoa (area->area_id));
+      if (IS_DEBUG_OSPF_EVENT)
+	zlog_info ("Area[%s]: Types are the same, ignored.",
+		   inet_ntoa (area->area_id));
       return;
     }
 
   area->external_routing = type;
 
-  zlog_info ("Area[%s]: Configured as %s", inet_ntoa (area->area_id),
-	     LOOKUP (ospf_area_type_msg, type));
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("Area[%s]: Configured as %s", inet_ntoa (area->area_id),
+	       LOOKUP (ospf_area_type_msg, type));
 
   switch (area->external_routing)
     {
@@ -1764,13 +2289,32 @@ ospf_area_type_set (struct ospf_area *area, int type)
 	  if ((oi = ifp->info) != NULL)
 	    if (oi->nbr_self != NULL)
 	      {
-		zlog_info ("setting options on %s accordingly", ifp->name);
+		if (IS_DEBUG_OSPF_EVENT)
+		  zlog_info ("setting options on %s accordingly", ifp->name);
 		UNSET_FLAG (oi->nbr_self->options, OSPF_OPTION_E);
-		zlog_info ("options set on %s: %x",
-			   ifp->name, OPTIONS (oi));
+		if (IS_DEBUG_OSPF_EVENT)
+		  zlog_info ("options set on %s: %x",
+			     ifp->name, OPTIONS (oi));
 	      }
       break;
     case OSPF_AREA_NSSA:
+#ifdef HAVE_NSSA
+      if (IS_DEBUG_OSPF_EVENT)
+	zlog_info ("Scanning all NSSA interfaces for area %ld, start %ld",
+		   area, listhead (area->iflist) );
+
+      for (node = listhead (area->iflist); node; nextnode (node))
+	if ((ifp = getdata (node)) != NULL)
+	  if ((oi = ifp->info) != NULL)
+	    if (oi->nbr_self != NULL)
+	      {
+		zlog_info ("setting nssa options on %s accordingly", ifp->name);
+		UNSET_FLAG (oi->nbr_self->options, OSPF_OPTION_E);
+		SET_FLAG (oi->nbr_self->options, OSPF_OPTION_NP);
+		zlog_info ("options set on %s: %x",
+			   ifp->name, OPTIONS (oi));
+	      }
+#endif /* HAVE_NSSA */
       break;
     default:
       break;
@@ -1781,11 +2325,30 @@ ospf_area_type_set (struct ospf_area *area, int type)
 }
 
 int
-ospf_area_stub_cmd (struct vty *vty, int argc, char **argv, int no_summary)
+ospf_area_stub_cmd (struct vty *vty, int argc, char **argv, int no_summary,
+		    int xlate)
 {
   struct ospf_area *area;
   struct in_addr area_id;
   int ret;
+
+#ifdef HAVE_NSSA
+  int nssa = 0;
+
+  zlog_info ("OSPF Area ID set for STUB/NSSA Code = %d", no_summary);
+
+/*  Special translation of no_summary into nssa/no_summary  */
+/*  0, 1 = no nssa	    2, 3 = nssa */
+/*  0, 2 = no_summary off   1, 3 = no_summary on  */
+
+  if (no_summary >1)
+	{
+	  nssa = 1;       /* set nssa */
+	  no_summary = no_summary - 2; /* translate 2 into 0, 3 into 1 */
+	}
+#endif /* HAVE_NSSA */
+
+
 
   ret = ospf_str2area_id (argv[0], &area_id);
   if (!ret)
@@ -1810,11 +2373,34 @@ ospf_area_stub_cmd (struct vty *vty, int argc, char **argv, int no_summary)
       return CMD_WARNING;
     }
 
+#ifdef HAVE_NSSA
+  /* Set transllator Role to zero or other. */
+  area->NSSATranslatorRole = xlate;
+  area->NSSATranslator = xlate;
+
+  if (nssa)
+    {
+      if (area->external_routing != OSPF_AREA_NSSA)
+	ospf_top->anyNSSA++;
+      ospf_area_type_set (area, OSPF_AREA_NSSA);
+      zlog_info ("OSPF_AREA_NSSA");
+    }
+  else
+    {
+      ospf_area_type_set (area, OSPF_AREA_STUB);
+      zlog_info ("OSPF_AREA_STUB");
+    }
+#else /* ! HAVE_NSSA */
   ospf_area_type_set (area, OSPF_AREA_STUB);
+  zlog_info ("OSPF_AREA_STUB");
+#endif /* HAVE_NSSA */
+
   area->no_summary = no_summary;
 
   return CMD_SUCCESS;
 }
+
+/*********************************************************************************/
 
 DEFUN (area_stub,
        area_stub_cmd,
@@ -1823,7 +2409,7 @@ DEFUN (area_stub,
        "OSPF area ID in IP address format\n"
        "Configure OSPF area as stub\n")
 {
-  return ospf_area_stub_cmd (vty, argc, argv, 0);
+  return ospf_area_stub_cmd (vty, argc, argv, 0, 0);
 }
 
 ALIAS (area_stub,
@@ -1833,24 +2419,192 @@ ALIAS (area_stub,
        "OSPF area ID as a decimal value\n"
        "Configure OSPF area as stub\n")
 
+#ifdef HAVE_NSSA
+DEFUN (area_nssa,
+       area_nssa_cmd,
+       "area A.B.C.D nssa",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 2, 0);
+}
+
+ALIAS (area_nssa,
+       area_nssa_decimal_cmd,
+       "area <0-4294967295> nssa",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n")
+/*****************************************************************************
+**/
+
+DEFUN (area_nssa_never,
+       area_nssa_t_never_cmd,
+       "area A.B.C.D nssa translate-never",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure NSSA-ABR to never translate\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 2, OSPF_NSSA_ROLE_NEVER);
+}
+
+ALIAS (area_nssa_never,
+       area_nssa_t_never_decimal_cmd,
+       "area <0-4294967295> nssa translate-never",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure NSSA-ABR to never translate\n")
+/*****************************************************************************
+**/
+
+DEFUN (area_nssa_candidate,
+       area_nssa_t_candidate_cmd,
+       "area A.B.C.D nssa translate-candidate",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure NSSA-ABR for translate election\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 2, OSPF_NSSA_ROLE_CANDIDATE);
+}
+
+ALIAS (area_nssa_candidate,
+       area_nssa_t_candidate_decimal_cmd,
+       "area <0-4294967295> nssa translate-candidate",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure NSSA-ABR for translate election\n")
+/*****************************************************************************
+**/
+
+DEFUN (area_nssa_always,
+       area_nssa_t_always_cmd,
+       "area A.B.C.D nssa translate-always",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure NSSA-ABR to always translate\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 2, OSPF_NSSA_ROLE_ALWAYS);
+}
+
+ALIAS (area_nssa_always,
+       area_nssa_t_always_decimal_cmd,
+       "area <0-4294967295> nssa translate-always",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure NSSA-ABR to always translate\n")
+
+/*************************    NSSA no-summary ********************************
+***/
+
+DEFUN (area_nssa_nosum,
+       area_nssa_nosum_cmd,
+       "area A.B.C.D nssa no-summary",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n"
+       "Do not inject inter-area routes into nssa\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 3, 0);
+}
+
+ALIAS (area_nssa_nosum,
+       area_nssa_nosum_decimal_cmd,
+       "area <0-4294967295> nssa no-summary",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n"
+       "Do not inject inter-area routes into nssa\n")
+
+/*****************************************************************************
+**/
+
+DEFUN (area_nssa_nosum_never,
+       area_nssa_nosum_t_never_cmd,
+       "area A.B.C.D nssa no-summary translate-never",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n"
+       "No inter-area routes into nssa, nor translation\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 3, OSPF_NSSA_ROLE_NEVER);
+}
+
+ALIAS (area_nssa_nosum_never,
+       area_nssa_nosum_t_never_decimal_cmd,
+       "area <0-4294967295> nssa no-summary translate-never",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n"
+       "No inter-area routes into nssa, nor translation\n")
+
+/*****************************************************************************
+**/
+
+DEFUN (area_nssa_nosum_candidate,
+       area_nssa_nosum_t_candidate_cmd,
+       "area A.B.C.D nssa no-summary translate-candidate",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n"
+       "No inter-area routes into nssa, translation election\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 3, OSPF_NSSA_ROLE_CANDIDATE);
+}
+
+ALIAS (area_nssa_nosum_candidate,
+       area_nssa_nosum_t_candidate_decimal_cmd,
+       "area <0-4294967295> nssa no-summary translate-candidate",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n"
+       "No inter-area routes into nssa, translation election\n")
+
+/*****************************************************************************
+**/
+
+DEFUN (area_nssa_nosum_always,
+       area_nssa_nosum_t_always_cmd,
+       "area A.B.C.D nssa no-summary translate-always",
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n"
+       "No inter-area routes into nssa, always translate\n")
+{
+  return ospf_area_stub_cmd (vty, argc, argv, 3, OSPF_NSSA_ROLE_ALWAYS);
+}
+
+ALIAS (area_nssa_nosum_always,
+       area_nssa_nosum_t_always_decimal_cmd,
+       "area <0-4294967295> nssa no-summary translate-always",
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n"
+       "No inter-area routes into nssa, always translate\n")
+
+#endif /* HAVE_NSSA */
+/*********************************************************************************/
+
 DEFUN (area_stub_nosum,
        area_stub_nosum_cmd,
        "area A.B.C.D stub no-summary",
-       "OSPF area parameters\n"
+       "OSPF stub parameters\n"
        "OSPF area ID in IP address format\n"
        "Configure OSPF area as stub\n"
-       "Do not inject inter-area routes into area\n")
+       "Do not inject inter-area routes into stub\n")
 {
-  return ospf_area_stub_cmd (vty, argc, argv, 1);
+  return ospf_area_stub_cmd (vty, argc, argv, 1, 0);
 }
 
 ALIAS (area_stub_nosum,
        area_stub_nosum_decimal_cmd,
        "area <0-4294967295> stub no-summary",
-       "OSPF area parameters\n"
+       "OSPF stub parameters\n"
        "OSPF area ID as a decimal value\n"
        "Configure OSPF area as stub\n"
-       "Do not inject inter-area routes into area\n")
+       "Do not inject inter-area routes into stub\n")
+
+/*********************************************************************************/
 
 int
 ospf_no_area_stub_cmd (struct vty *vty, int argc, char **argv, int no_summary)
@@ -1858,6 +2612,26 @@ ospf_no_area_stub_cmd (struct vty *vty, int argc, char **argv, int no_summary)
   struct ospf_area *area;
   struct in_addr area_id;
   int ret;
+
+
+#ifdef HAVE_NSSA
+  int nssa = 0;
+
+ vty_out (vty, "\nOSPF No-Area ID set for STUB/NSSA Code = %d\n\n", no_summary);
+
+
+/*  Special translation of no_summary into nssa/no_summary  */
+/*  0, 1 = no nssa	    2, 3 = nssa */
+/*  0, 2 = no_summary off   1, 3 = no_summary on  */
+
+  if (no_summary >1)
+	{
+	  nssa = 1;       /* set nssa */
+	  no_summary = no_summary - 2; /* translate 2 into 0, 3 into 1 */
+	}
+#endif /* HAVE_NSSA */
+
+
 
   ret = ospf_str2area_id (argv[0], &area_id);
   if (!ret)
@@ -1883,17 +2657,37 @@ ospf_no_area_stub_cmd (struct vty *vty, int argc, char **argv, int no_summary)
       return CMD_SUCCESS;
     }
 
+
+#ifdef HAVE_NSSA
+
+  if (area->external_routing == OSPF_AREA_NSSA)
+  {
+    ospf_area_type_set (area, OSPF_AREA_DEFAULT);
+
+    ospf_area_check_free (area_id);
+
+    if (ospf_top->anyNSSA >0)
+      ospf_top->anyNSSA--;
+
+    return CMD_SUCCESS;
+  }
+#endif /* HAVE_NSSA */
+
+
   if (area->external_routing == OSPF_AREA_STUB)
     ospf_area_type_set (area, OSPF_AREA_DEFAULT);
   else
     {
-      vty_out (vty, "Area is not stub%s", VTY_NEWLINE);
+      vty_out (vty, "Area is not stub nor nssa%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
+
 
   ospf_area_check_free (area_id);
   return CMD_SUCCESS;
 }
+
+/*********************************************************************************/
 
 DEFUN (no_area_stub,
        no_area_stub_cmd,
@@ -1913,6 +2707,31 @@ ALIAS (no_area_stub,
        "OSPF area parameters\n"
        "OSPF area ID as a decimal value\n"
        "Configure OSPF area as stub\n")
+
+#ifdef HAVE_NSSA
+/*********************************************************************************/
+
+DEFUN (no_area_nssa,
+       no_area_nssa_cmd,
+       "no area A.B.C.D nssa",
+       NO_STR
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n")
+{
+  return ospf_no_area_stub_cmd (vty, argc, argv, 2);
+}
+
+ALIAS (no_area_nssa,
+       no_area_nssa_decimal_cmd,
+       "no area <0-4294967295> nssa",
+       NO_STR
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n")
+
+/*********************************************************************************/
+#endif /* HAVE_NSSA */
 
 DEFUN (no_area_stub_nosum,
        no_area_stub_nosum_cmd,
@@ -1934,6 +2753,33 @@ ALIAS (no_area_stub_nosum,
        "OSPF area ID as a decimal value\n"
        "Configure OSPF area as stub\n"
        "Do not inject inter-area routes into area\n")
+
+#ifdef HAVE_NSSA
+/*********************************************************************************/
+
+DEFUN (no_area_nssa_nosum,
+       no_area_nssa_nosum_cmd,
+       "no area A.B.C.D nssa no-summary",
+       NO_STR
+       "OSPF nssa parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as nssa\n"
+       "Do not inject inter-area routes into nssa\n")
+{
+  return ospf_no_area_stub_cmd (vty, argc, argv, 3);
+}
+
+ALIAS (no_area_nssa_nosum,
+       no_area_nssa_nosum_decimal_cmd,
+       "no area <0-4294967295> nssa no-summary",
+       NO_STR
+       "OSPF nssa parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Configure OSPF area as nssa\n"
+       "Do not inject inter-area routes into nssa\n")
+
+/*********************************************************************************/
+#endif /* HAVE_NSSA */
 
 DEFUN (area_default_cost,
        area_default_cost_cmd,
@@ -2555,6 +3401,14 @@ show_ip_ospf_area (struct vty *vty, struct ospf_area *area)
 		 area->no_summary ? ", no summary" : "",
 		 area->shortcut_configured ? "; " : "");
 
+#ifdef HAVE_NSSA
+
+      else
+      if (area->external_routing == OSPF_AREA_NSSA)
+	vty_out (vty, " (NSSA%s%s)",
+		 area->no_summary ? ", no summary" : "",
+		 area->shortcut_configured ? "; " : "");
+#endif /* HAVE_NSSA */
 
       vty_out (vty, "%s", VTY_NEWLINE);
       vty_out (vty, "   Shortcutting mode: %s",
@@ -2567,6 +3421,11 @@ show_ip_ospf_area (struct vty *vty, struct ospf_area *area)
   vty_out (vty, "   Number of interfaces in this area: Total: %d, "
 	   "Active: %d%s", listcount (area->iflist),
 	   area->act_ints, VTY_NEWLINE);
+
+#ifdef HAVE_NSSA
+  if (area->external_routing == OSPF_AREA_NSSA)
+    vty_out (vty, "   It is an NSSA configuration. %s   Elected Translator performs type-7/type-5 LSA translation. %s", VTY_NEWLINE, VTY_NEWLINE);
+#endif /* HAVE_NSSA */
 
   /* Show number of fully adjacent neighbors. */
   vty_out (vty, "   Number of fully adjacent neighbors in this area:"
@@ -2690,7 +3549,8 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   vty_out (vty, "  Internet Address %s/%d,",
            inet_ntoa (oi->address->u.prefix4), oi->address->prefixlen);
 
-  vty_out (vty, " Area %s%s", inet_ntoa (oi->area->area_id), VTY_NEWLINE);
+  vty_out (vty, " Area %s%s", ait_ntoa (oi->area->area_id, oi->area->external_routing), 
+	  VTY_NEWLINE);
 
   vty_out (vty, "  Router ID %s, Network Type %s, Cost: %d%s",
            inet_ntoa (ospf_top->router_id), ospf_network_type_str[oi->type],
@@ -2921,7 +3781,7 @@ show_ip_ospf_nbr_static_detail_sub (struct vty *vty, struct interface *ifp,
 	   inet_ntoa (nbr_static->addr), VTY_NEWLINE);
   /* Show Area ID. */
   vty_out (vty, "    In the area %s via interface %s%s",
-	   inet_ntoa (oi->area->area_id), ifp->name, VTY_NEWLINE);
+	   ait_ntoa (oi->area->area_id, oi->area->external_routing), ifp->name, VTY_NEWLINE);
   /* Show neighbor priority and state. */
   vty_out (vty, "    Neighbor priority is %d, State is %s,",
 	   nbr_static->priority, "Down");
@@ -2959,7 +3819,7 @@ show_ip_ospf_neighbor_detail_sub (struct vty *vty, struct interface *ifp,
 	   inet_ntoa (nbr->address.u.prefix4), VTY_NEWLINE);
   /* Show Area ID. */
   vty_out (vty, "    In the area %s via interface %s%s",
-	   inet_ntoa (oi->area->area_id), ifp->name, VTY_NEWLINE);
+	   ait_ntoa (oi->area->area_id, oi->area->external_routing), ifp->name, VTY_NEWLINE);
   /* Show neighbor priority and state. */
   vty_out (vty, "    Neighbor priority is %d, State is %s,",
 	   nbr->priority, LOOKUP (ospf_nsm_status_msg, nbr->status));
@@ -3467,7 +4327,7 @@ DEFUN (no_neighbor,
 {
   int ret;
   listnode node;
-  struct ospf_nbr_static *nbr_static;
+  struct ospf_nbr_static *nbr_static = NULL;
   struct in_addr addr;
 
   ret = inet_aton(argv[0], &addr);
@@ -3785,17 +4645,11 @@ config_write_network_area (struct vty *vty)
     if (rn->info)
       {
 	struct ospf_network *n = rn->info;
-	struct ospf_area *area;
-
-	area = ospf_area_lookup_by_area_id (n->area_id);
 
 	bzero (buf, INET_ADDRSTRLEN);
 
 	/* Create Area ID string by specified Area ID format. */
-	/* No Area Structure, is it error? */
-	if (!area)
-	  strncpy (buf, inet_ntoa (n->area_id), INET_ADDRSTRLEN);
-	else if (area->format == OSPF_AREA_ID_FORMAT_ADDRESS)
+	if (n->format == OSPF_AREA_ID_FORMAT_ADDRESS)
 	  strncpy (buf, inet_ntoa (n->area_id), INET_ADDRSTRLEN);
 	else
 	  sprintf (buf, "%lu", 
@@ -3838,8 +4692,19 @@ config_write_ospf_area (struct vty *vty)
 		 ospf_shortcut_mode_str[area->shortcut_configured],
 		 VTY_NEWLINE);
 
-      if (area->external_routing == OSPF_AREA_STUB)
-	{
+      if (
+	     (area->external_routing == OSPF_AREA_STUB)
+#ifdef HAVE_NSSA
+		|| (area->external_routing == OSPF_AREA_NSSA)
+#endif /* HAVE_NSSA */
+	 )
+		{
+
+#ifdef HAVE_NSSA
+      if (area->external_routing == OSPF_AREA_NSSA)
+	  vty_out (vty, " area %s nssa", buf);
+      else
+#endif /* HAVE_NSSA */
 	  vty_out (vty, " area %s stub", buf);
 
 	  if (area->no_summary)
@@ -3850,7 +4715,7 @@ config_write_ospf_area (struct vty *vty)
 	  if (area->default_cost != 1)
 	    vty_out (vty, " area %s default-cost %lu%s", buf, 
 		     area->default_cost, VTY_NEWLINE);
-	}
+		}
 
       for (rn1 = route_top (area->ranges); rn1; rn1 = route_next (rn1))
 	if (rn1->info)
@@ -3861,7 +4726,7 @@ config_write_ospf_area (struct vty *vty)
 		     inet_ntoa (rn1->p.u.prefix4), rn1->p.prefixlen);
 
 	    if (CHECK_FLAG (range->flags, OSPF_RANGE_SUPPRESS))
-	      vty_out (vty, " suppress");
+	      vty_out (vty, " not-advertise");
 
 	    if (CHECK_FLAG (range->flags, OSPF_RANGE_SUBST))
 	      vty_out (vty, " substitute %s/%d",
@@ -3917,7 +4782,10 @@ config_write_virtual_link (struct vty *vty)
   /* Virtual-Link print */
   for (node = listhead (ospf_top->vlinks); node; nextnode (node))
     {
+      listnode n2;
+      struct crypt_key *ck;
       struct ospf_vl_data *vl_data = getdata (node);
+      struct ospf_interface *oi;
 
       if (vl_data != NULL)
 	{
@@ -3928,9 +4796,39 @@ config_write_virtual_link (struct vty *vty)
 	  else
 	    sprintf (buf, "%lu", 
 		     (unsigned long int) ntohl (vl_data->vl_area_id.s_addr));
-	  
-	  vty_out(vty, " area %s virtual-link %s%s", buf,
-		  inet_ntoa (vl_data->vl_peer), VTY_NEWLINE);
+	  oi = vl_data->vl_oi;
+
+	  /* timers */
+	  if (oi->v_hello != OSPF_HELLO_INTERVAL_DEFAULT ||
+	      oi->v_wait != OSPF_ROUTER_DEAD_INTERVAL_DEFAULT ||
+	      oi->retransmit_interval != OSPF_RETRANSMIT_INTERVAL_DEFAULT ||
+	      oi->transmit_delay != OSPF_TRANSMIT_DELAY_DEFAULT)
+	    vty_out (vty, " area %s virtual-link %s hello-interval %d retransmit-interval %d transmit-delay %d dead-interval %d%s",
+		     buf,
+		     inet_ntoa (vl_data->vl_peer), 
+		     oi->v_hello, oi->retransmit_interval,
+		     oi->transmit_delay, oi->v_wait,
+		     VTY_NEWLINE);
+	  else
+	    vty_out (vty, " area %s virtual-link %s%s", buf,
+		     inet_ntoa (vl_data->vl_peer), VTY_NEWLINE);
+	  /* Auth key */
+	  if (vl_data->vl_oi->auth_simple[0] != '\0')
+	    vty_out (vty, " area %s virtual-link %s authentication-key %s%s",
+		     buf,
+		     inet_ntoa (vl_data->vl_peer),
+		     vl_data->vl_oi->auth_simple,
+		     VTY_NEWLINE);
+	  /* md5 keys */
+	  for (n2 = listhead (vl_data->vl_oi->auth_crypt); n2; nextnode (n2))
+	    {
+	      ck = getdata (n2);
+	      vty_out (vty, " area %s virtual-link %s message-digest-key %d md5 %s%s",
+		       buf,
+		       inet_ntoa (vl_data->vl_peer),
+		       ck->key_id, ck->auth_key, VTY_NEWLINE);
+	    }
+	 
 	}
     }
 
@@ -4031,6 +4929,8 @@ struct cmd_node ospf_node =
 void
 ospf_init ()
 {
+
+
   /* Install ospf top node. */
   install_node (&ospf_node, ospf_config_write);
 
@@ -4090,10 +4990,23 @@ ospf_init ()
   install_element (OSPF_NODE, &no_area_range_decimal_cmd);
   install_element (OSPF_NODE, &no_area_range_cmd);
   install_element (OSPF_NODE, &area_range_suppress_cmd);
+#ifdef HAVE_NSSA
+  install_element (OSPF_NODE, &area_range_suppress_decimal_cmd);
+#endif /* HAVE_NSSA */
   install_element (OSPF_NODE, &no_area_range_suppress_cmd);
   install_element (OSPF_NODE, &area_range_subst_cmd);
   install_element (OSPF_NODE, &no_area_range_subst_cmd);
 
+  install_element (OSPF_NODE, &area_vlink_auth_decimal_cmd);
+  install_element (OSPF_NODE, &area_vlink_auth_cmd);
+  install_element (OSPF_NODE, &area_vlink_md5_decimal_cmd);
+  install_element (OSPF_NODE, &area_vlink_md5_cmd);
+  install_element (OSPF_NODE, &area_vlink_param_md5_decimal_cmd);
+  install_element (OSPF_NODE, &area_vlink_param_md5_cmd);
+  install_element (OSPF_NODE, &area_vlink_param_auth_decimal_cmd);
+  install_element (OSPF_NODE, &area_vlink_param_auth_cmd);
+  install_element (OSPF_NODE, &area_vlink_param_decimal_cmd);
+  install_element (OSPF_NODE, &area_vlink_param_cmd);
   install_element (OSPF_NODE, &area_vlink_decimal_cmd);
   install_element (OSPF_NODE, &area_vlink_cmd);
   install_element (OSPF_NODE, &no_area_vlink_decimal_cmd);
@@ -4107,6 +5020,34 @@ ospf_init ()
   install_element (OSPF_NODE, &no_area_stub_nosum_decimal_cmd);
   install_element (OSPF_NODE, &no_area_stub_cmd);
   install_element (OSPF_NODE, &no_area_stub_decimal_cmd);
+
+#ifdef HAVE_NSSA
+  install_element (OSPF_NODE, &area_nssa_nosum_cmd);
+  install_element (OSPF_NODE, &area_nssa_nosum_decimal_cmd);
+  install_element (OSPF_NODE, &area_nssa_cmd);
+  install_element (OSPF_NODE, &area_nssa_decimal_cmd);
+
+  install_element (OSPF_NODE, &area_nssa_nosum_t_never_cmd);
+  install_element (OSPF_NODE, &area_nssa_nosum_t_never_decimal_cmd);
+  install_element (OSPF_NODE, &area_nssa_t_never_cmd);
+  install_element (OSPF_NODE, &area_nssa_t_never_decimal_cmd);
+
+  install_element (OSPF_NODE, &area_nssa_nosum_t_candidate_cmd);
+  install_element (OSPF_NODE, &area_nssa_nosum_t_candidate_decimal_cmd);
+  install_element (OSPF_NODE, &area_nssa_t_candidate_cmd);
+  install_element (OSPF_NODE, &area_nssa_t_candidate_decimal_cmd);
+
+  install_element (OSPF_NODE, &area_nssa_nosum_t_always_cmd);
+  install_element (OSPF_NODE, &area_nssa_nosum_t_always_decimal_cmd);
+  install_element (OSPF_NODE, &area_nssa_t_always_cmd);
+  install_element (OSPF_NODE, &area_nssa_t_always_decimal_cmd);
+
+  install_element (OSPF_NODE, &no_area_nssa_nosum_cmd);
+  install_element (OSPF_NODE, &no_area_nssa_nosum_decimal_cmd);
+  install_element (OSPF_NODE, &no_area_nssa_cmd);
+  install_element (OSPF_NODE, &no_area_nssa_decimal_cmd);
+#endif /* HAVE_NSSA */
+
   install_element (OSPF_NODE, &area_default_cost_cmd);
   install_element (OSPF_NODE, &area_default_cost_decimal_cmd);
   install_element (OSPF_NODE, &no_area_default_cost_cmd);

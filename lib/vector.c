@@ -25,16 +25,11 @@
 #include "vector.h"
 #include "memory.h"
 
-/* For statistics */
-int vector_alloc = 0;
-int vector_data_alloc = 0;
-
 /* Initialize vector : allocate memory and return vector. */
 vector
 vector_init (unsigned int size)
 {
   vector v = XMALLOC (MTYPE_VECTOR, sizeof (struct _vector));
-  vector_alloc++;
 
   /* allocate at least one slot */
   if (size == 0)
@@ -43,8 +38,7 @@ vector_init (unsigned int size)
   v->alloced = size;
   v->max = 0;
   v->index = XMALLOC (MTYPE_VECTOR_INDEX, sizeof (void *) * size);
-  vector_data_alloc++;
-  bzero (v->index, sizeof (void *) * size);
+  memset (v->index, 0, sizeof (void *) * size);
   return v;
 }
 
@@ -52,14 +46,12 @@ void
 vector_only_wrapper_free (vector v)
 {
   XFREE (MTYPE_VECTOR, v);
-  vector_alloc--;
 }
 
 void
 vector_only_index_free (void *index)
 {
   XFREE (MTYPE_VECTOR_INDEX, index);
-  vector_data_alloc--;
 }
 
 void
@@ -67,8 +59,6 @@ vector_free (vector v)
 {
   XFREE (MTYPE_VECTOR_INDEX, v->index);
   XFREE (MTYPE_VECTOR, v);
-  vector_alloc--;
-  vector_data_alloc--;
 }
 
 vector
@@ -76,18 +66,13 @@ vector_copy (vector v)
 {
   unsigned int size;
   vector new = XMALLOC (MTYPE_VECTOR, sizeof (struct _vector));
-  vector_alloc++;
 
   new->max = v->max;
   new->alloced = v->alloced;
 
   size = sizeof (void *) * (v->alloced);
-#ifdef DEBUG
-  printf ("vector_copy max [%d] alloc [%d]  size [%d]\n", new->max, new->alloced, size);
-#endif /* DEBUG */
   new->index = XMALLOC (MTYPE_VECTOR_INDEX, size);
-  vector_data_alloc++;
-  bcopy (v->index, new->index, size);
+  memcpy (new->index, v->index, size);
 
   return new;
 }
@@ -101,12 +86,11 @@ vector_ensure (vector v, unsigned int num)
 
   v->index = XREALLOC (MTYPE_VECTOR_INDEX, 
 		       v->index, sizeof (void *) * (v->alloced * 2));
-  bzero (&v->index[v->alloced], sizeof (void *) * v->alloced);
+  memset (&v->index[v->alloced], 0, sizeof (void *) * v->alloced);
   v->alloced *= 2;
   
-  if (v->alloced <= num) {
+  if (v->alloced <= num)
     vector_ensure (v, num);
-  }
 }
 
 /* This function only returns next empty slot index.  It dose not mean
@@ -120,11 +104,10 @@ vector_empty_slot (vector v)
   if (v->max == 0)
     return 0;
 
-  for (i = 0; i < v->max; i++) {
-    if (v->index[i] == 0) {
+  for (i = 0; i < v->max; i++)
+    if (v->index[i] == 0)
       return i;
-    }
-  }
+
   return i;
 }
 
@@ -138,9 +121,10 @@ vector_set (vector v, void *val)
   vector_ensure (v, i);
 
   v->index[i] = val;
-  if (v->max <= i) {
+
+  if (v->max <= i)
     v->max = i + 1;
-  }
+
   return i;
 }
 
@@ -151,9 +135,10 @@ vector_set_index (vector v, unsigned int i, void *val)
   vector_ensure (v, i);
 
   v->index[i] = val;
-  if (v->max <= i) {
+
+  if (v->max <= i)
     v->max = i + 1;
-  }
+
   return i;
 }
 
@@ -174,11 +159,12 @@ vector_unset (vector v, unsigned int i)
 
   v->index[i] = NULL;
 
-  if (i + 1 == v->max) {
-    v->max--;
-    while (v->index[--i] == NULL && v->max-- && i) 
-      ;				/* Is this ugly ? */
-  }
+  if (i + 1 == v->max) 
+    {
+      v->max--;
+      while (i && v->index[--i] == NULL && v->max--) 
+	;				/* Is this ugly ? */
+    }
 }
 
 /* Count the number of not emplty slot. */
@@ -188,10 +174,10 @@ vector_count (vector v)
   unsigned int i;
   unsigned count = 0;
 
-  for (i = 0; i < v->max; i++) {
+  for (i = 0; i < v->max; i++) 
     if (v->index[i] != NULL)
       count++;
-  }
+
   return count;
 }
 
@@ -204,42 +190,7 @@ vector_describe (FILE *fp, vector v)
   fprintf (fp, "vecotor max : %d\n", v->max);
   fprintf (fp, "vecotor alloced : %d\n", v->alloced);
 
-  for (i = 0; i < v->max; i++) {
-    if (v->index[i] != NULL) {
+  for (i = 0; i < v->max; i++)
+    if (v->index[i] != NULL)
       fprintf (fp, "vector [%d]: %p\n", i, vector_slot (v, i));
-    }
-  }
 }
-
-#ifdef TEST
-#define INTERFACE_INIT_SIZE 1
-
-main ()
-{
-  int i;
-  char kuni[] = "kuni";
-  char mio[] = "mio";
-  char *p;
-
-  vector ifvec;
-
-  ifvec = vector_init (INTERFACE_INIT_SIZE);
-
-  vector_describe (stdout, ifvec);
-  vector_set_index (ifvec, 1023, kuni);
-
-  vector_set_index (ifvec, 1, kuni);
-  vector_set_index (ifvec, 2, mio);
-  vector_set_index (ifvec, 3, kuni);
-  vector_set_index (ifvec, 4, mio);
-
-  vector_unset (ifvec, 1023);
-
-  vector_describe (stdout, ifvec);
-  for (i = 0; i <= ifvec->max; i++) {
-    if (ifvec->index[i] != NULL) {
-      printf ("slot %d: %s\n", i, vector_slot (ifvec, i));
-    }
-  }
-}
-#endif /* TEST */

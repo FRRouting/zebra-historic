@@ -411,13 +411,13 @@ ecommunity_print (struct ecommunity *ecom)
       if (*pnt == ECOMMUNITY_ROUTE_TARGET)
 	{
 	  if (type != ECOMMUNITY_ROUTE_TARGET)
-	    printf (" rt");
+	    printf (" RT:");
 	  type = ECOMMUNITY_ROUTE_TARGET;
 	}
       else if (*pnt == ECOMMUNITY_SITE_ORIGIN)
 	{
 	  if (type != ECOMMUNITY_SITE_ORIGIN)
-	    printf (" soo");
+	    printf (" SOO:");
 	  type = ECOMMUNITY_SITE_ORIGIN;
 	}
       pnt++;
@@ -432,7 +432,7 @@ ecommunity_print (struct ecommunity *ecom)
 	  eas.val |= (*pnt++ << 8);
 	  eas.val |= (*pnt++);
 
-	  printf (" %d:%d", eas.as, eas.val);
+	  printf ("%d:%d", eas.as, eas.val);
 	}
       else if (encode == ECOMMUNITY_ENCODE_IP)
 	{
@@ -441,7 +441,7 @@ ecommunity_print (struct ecommunity *ecom)
 	  eip.val = (*pnt++ << 8);
 	  eip.val |= (*pnt++);
 
-	  printf (" %s:%d", inet_ntoa (eip.ip), eip.val);
+	  printf ("%s:%d", inet_ntoa (eip.ip), eip.val);
 	}
     }
 
@@ -473,13 +473,13 @@ ecommunity_vty_out (struct vty *vty, struct ecommunity *ecom)
       if (*pnt == ECOMMUNITY_ROUTE_TARGET)
 	{
 	  if (type != ECOMMUNITY_ROUTE_TARGET)
-	    vty_out (vty, " rt");
+	    vty_out (vty, " RT:");
 	  type = ECOMMUNITY_ROUTE_TARGET;
 	}
       else if (*pnt == ECOMMUNITY_SITE_ORIGIN)
 	{
 	  if (type != ECOMMUNITY_SITE_ORIGIN)
-	    vty_out (vty, " soo");
+	    vty_out (vty, " SOO:");
 	  type = ECOMMUNITY_SITE_ORIGIN;
 	}
       pnt++;
@@ -494,7 +494,7 @@ ecommunity_vty_out (struct vty *vty, struct ecommunity *ecom)
 	  eas.val |= (*pnt++ << 8);
 	  eas.val |= (*pnt++);
 
-	  vty_out (vty, " %d:%d", eas.as, eas.val);
+	  vty_out (vty, "%d:%d", eas.as, eas.val);
 	}
       else if (encode == ECOMMUNITY_ENCODE_IP)
 	{
@@ -503,7 +503,7 @@ ecommunity_vty_out (struct vty *vty, struct ecommunity *ecom)
 	  eip.val = (*pnt++ << 8);
 	  eip.val |= (*pnt++);
 
-	  vty_out (vty, " %s:%d", inet_ntoa (eip.ip), eip.val);
+	  vty_out (vty, "%s:%d", inet_ntoa (eip.ip), eip.val);
 	}
     }
 }

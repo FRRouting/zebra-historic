@@ -1,25 +1,22 @@
 
 			   Zebra TODO list
-			  (random in order)
+                             2000/12/29
 
 zebra:
 
 o IPv6 router advertisement code finish.
 o Pointopoint address configuration.
 o Multiple (alias) address configuration for the interface when kernel
-  support it.
-o multipath support.
+  support it [just starting].
 
 bgpd:
 
-o peer-group functionality.
-o route server support
-o route flap dampening.
-o MRT compatible packet dump code merge.
-o aggregate-address support complete (as-set etc.).
+o Peer-group functionality.
+o Route server support
+o Route flap dampening [Implementation is almost finished, will be added soon].
+o Aggregate-address support complete (as-set etc.).
 o BGP TCP MD5 authentication (on OpenBSD) by password command.
 o HUP signal support (reload configuration file).
-o BGP4-MIB support (and extention such as SNMP traps for route-withdrawls)
 o BGP multi-path extension ("load balancing")
 o Dynamic query to the Routing Registry.
 
@@ -27,22 +24,21 @@ ripd:
 
 o Interface sort with interface's address (needed for RIPv2 MIB).
 o Multipath support.
-o Fix multicast announce problem on OpenBSD.
 
 ospfd:
 
-o rewrite the incremental RT update code.
-o route-map support for redistribution.
-o NSSA.
+o Rewrite the incremental RT update code.
+o NSSA [undergoing by dick@ipinfusion.com --enable-nssa can turn on the feature].
 o Opaque LSA support and API.
 o Demand circuits.
 o Multiple instances.
-o OSPF MIB.
+o OSPF MIB [SNMP get is amost finished].
 o HUP signal treatment.
 
-Multicast protocols such as PIM-SM, PIM-DM, BGMP will be supported in
+Multicast protocols such as PIM-SM, PIM-DM will be supported in
 Zebra-2.0.  Currently we are concentrating forthcoming Zebra-1.0
 release which provides common unicast routing protocols.
 
+And also we are planning to add IS-IS module in Zebra-2.0.
 --
 Kunihiro Ishiguro <kunihiro@zebra.org>

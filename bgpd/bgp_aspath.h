@@ -77,5 +77,6 @@ void aspath_print_vty (struct vty *, struct aspath *);
 void aspath_print_all_vty (struct vty *);
 unsigned int aspath_key_make (struct aspath *);
 int aspath_loop_check (struct aspath *, as_t);
+int aspath_firstas_check (struct aspath *, as_t);
 
 #endif /* _ZEBRA_BGP_ASPATH_H */

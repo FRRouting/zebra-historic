@@ -1,3 +1,68 @@
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+2001-01-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.h (RIP_VTYSH_PATH): Change "/tmp/ripd" to "/tmp/.ripd".
+
+2000-12-25  David Lipovkov <davidl@nbase.co.il>
+
+	* ripd.c (rip_rte_process): When a route is in garbage collection
+	process (invalid with metric 16) and a router receives the same
+	route with valid metric then route was not installed into zebra
+	rib, but only into ripd rib. Moreover , it will never get into
+	zebra rib, because ripd wrongly assumes it's already there.
+	(rip_redistribute_add): When doing redistribute into rip other
+	route (e.g. connected) and the same route exists in ripd rib we
+	changed it in place - bug. Now we don't forget to remove old route
+	from zebra.
+	(rip_timeout): When removing routes from zebra I made sure that we
+	remove route with the metric we have in zebra and not the new
+	one. It doesn't make a difference now,but could be significant
+	when multipath support is done.
+
+2000-12-25  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_zebra.c (rip_metric_unset): Fix bug of metric value unset.
+
+2000-11-25  Frank van Maarseveen <F.vanMaarseveen@inter.NL.net>
+
+	* ripd.c (rip_request_process): Check passive flag of the
+	interface.
+
+2000-11-23  Frank van Maarseveen <F.vanMaarseveen@inter.NL.net>
+
+	* rip_interface.c (rip_multicast_join): When IP_ADD_MEMBERSHIP
+	failed do not set runnning flag to the interface.
+
+2000-11-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_output_process): Memory leak related classfull
+	network generation is fixed.
+
+2000-11-16  Frank van Maarseveen <F.vanMaarseveen@inter.NL.net>
+
+	* rip_interface.c (if_check_address): Obsolete pointopoint address
+	check is removed.
+
+2000-11-02  Frank van Maarseveen <F.vanMaarseveen@inter.NL.net>
+
+	* rip_interface.c (if_check_address): Add pointopoint address
+	check.
+	(rip_interface_up): Add check for passive interface when interface
+	goes up.
+
+2000-10-23  Jochen Friedrich <jochen@scram.de>
+
+	* rip_snmp.c: rip_oid and ripd_oid are used in smux_open after it
+	is registered.  So those variables must be static.
+
+2000-10-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c: Change to "no ip rip (send|receive)" command
+	accept version number argument.
+
 2000-10-17  Akihiro Mizutani <mizutani@dml.com>
 
 	* rip_routemap.c (route_set_ip_nexthop_compile): Change "match ip

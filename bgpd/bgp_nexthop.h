@@ -25,7 +25,7 @@
 #define BGP_SCAN_INTERVAL_DEFAULT 60
 
 void bgp_scan_init ();
-u_int32_t bgp_nexthop_lookup (struct peer *peer, struct in_addr);
+u_int32_t bgp_nexthop_lookup (struct peer *peer, struct in_addr, int *);
 void bgp_connected_add (struct connected *c);
 void bgp_connected_delete (struct connected *c);
 u_int32_t bgp_multiaccess_check_v4 (struct in_addr, char *);

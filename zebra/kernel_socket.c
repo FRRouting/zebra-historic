@@ -29,6 +29,7 @@
 #include "ioctl.h"
 #include "log.h"
 #include "str.h"
+#include "table.h"
 #include "rib.h"
 
 #include "zebra/interface.h"
@@ -412,10 +413,9 @@ rtm_read (struct rt_msghdr *rtm)
   if (! (flags & RTF_GATEWAY))
     {
 #ifdef DEBUG
-      printf ("This is connected route");
-#else
-      return;
+      zlog_info ("This is connected route");
 #endif  /* DEBUG */
+      return;
     }
 
   if (flags & RTF_PROTO1)
@@ -463,7 +463,8 @@ rtm_write (int message,
 	   union sockunion *mask,
 	   union sockunion *gate,
 	   unsigned int index,
-	   int zebra_flags)
+	   int zebra_flags,
+	   int metric)
 {
   int ret;
   caddr_t pnt;
@@ -509,6 +510,12 @@ rtm_write (int message,
   msg.rtm.rtm_addrs |= RTA_GATEWAY;
   msg.rtm.rtm_flags = RTF_UP;
   msg.rtm.rtm_index = index;
+
+  if (metric != 0)
+    {
+      msg.rtm.rtm_rmx.rmx_hopcount = metric;
+      msg.rtm.rtm_inits |= RTV_HOPCOUNT;
+    }
 
   if (gate && message == RTM_ADD)
     msg.rtm.rtm_flags |= RTF_GATEWAY;

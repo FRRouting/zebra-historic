@@ -80,6 +80,7 @@ struct ospf_interface
 #define OSPF_IFTYPE_VIRTUALLINK		5
 #define OSPF_IFTYPE_MAX			6
   int status;				/* OSPF Interface State */
+  u_int32_t status_change;	        /* Number of status change. */
 
   struct prefix *address;		/* Interface prefix */
   struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
@@ -158,6 +159,7 @@ struct ospf_interface
 
 /* Prototypes. */
 struct ospf_interface *ospf_if_new ();
+void ospf_if_cleanup (struct ospf_interface *oi, int free_mem);
 int ospf_if_up (struct interface *ifp);
 int ospf_if_down (struct interface *ifp);
 struct ospf_interface *ospf_if_lookup_by_name (char *);
@@ -184,5 +186,7 @@ int ospf_full_virtual_nbrs (struct ospf_area *);
 int ospf_vls_in_area (struct ospf_area *);
 
 struct crypt_key *ospf_crypt_key_lookup (struct ospf_interface *, u_char);
+struct crypt_key *ospf_crypt_key_new ();
+void ospf_crypt_key_add (list, struct crypt_key *);
 
 #endif /* _ZEBRA_OSPF_INTERFACE_H */

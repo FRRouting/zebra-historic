@@ -1,3 +1,111 @@
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+2001-01-04  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_mesg.c,ospf6_lsa.c: doubly cancel thread bug fixed.
+	version 0.8.k CRASHed for this.
+	* ospf6_lsa.c: bug of logging fixed.
+	version: 0.8.l
+
+2001-01-04  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_neighbor.c: fix typo when trying to delete
+	MaxAge AS-External LSA. MaxAge LSA remaining bug is expected
+	to be fixed.
+	version: 0.8.k
+
+2001-01-04  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_mesg.c: add I/F Mtu check for sending LS Update.
+
+	* ospf6_dbex.c, ospf6_mesg.c, ospf6_neighbor.c, ospf6_neighbor.h,
+	ospf6_spf.c: Changed type of hisaddr field in ospf6_neighbor
+	structure, from sockaddr_in6 to in6_addr. No protocol/processing
+	changed.
+
+2001-01-04  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_mesg.c, ospf6_neighbor.[ch]: Speed up of
+	Database Exchange.
+	version: 0.8.j
+
+	Because the LS Request list was checked only when attempt
+	to send (retransmit) LS Request packet, Loading state lasted
+	long (for RxmtInterval) unexpectedly. This was fixed; LS Request
+	packet will be send as soon as one received a LS Update packet.
+
+2001-01-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6d.h (OSPF6_VTYSH_PATH): Change "/tmp/ospf6d" to
+	/tmp/.ospf6d".
+
+2000-12-29  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_dump.[ch]: simplified.
+
+2000-12-19  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_route.c: Fix bug of using unavailable route.
+	version: 0.8.d
+
+2000-11-30  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_spf.c: calculate statistics. version: 0.8.d
+
+2000-11-26  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_mesg.c, ospf6_nsm.c: LSDB sync bug fixed.
+	version: 0.8.c
+
+2000-11-26  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_dbex.c: Start debugging and cleaning.
+
+	* ospf6_area.c, ospf6_dbex.c, ospf6_interface.c, ospf6_lsa.c,
+	ospf6_proto.c, ospf6_top.c: add some function to clarify codes.
+
+2000-11-26  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_spf.c: Delete old garbage (which was enclosed by #if 0)
+
+	* ospf6_redistribute.c: "redistribute ospf6" was generated in
+	"router ospf6" in config file. It is a bug, and fixed.
+	wrong warning message was deleted.
+
+	* ospf6_main.c: If daemon mode, ospf6d was silent even if
+	the config file was wrong. It is a bug, and fixed.
+
+	* ospf6_route.c, ospf6_zebra.c: Zebra syncronization method
+	has been changed. delete garbages. allow nexthop of :: in case
+	of connected route.
+
+	* ospf6_dbex.c: Delete annoying log messages.
+
+	* ospf6_lsa.c: Changed string for LSA log.
+
+2000-11-21  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf6_spf.c: some careless bug fixed.
+
+	* ospf6_route.c: changed not to send garbage route
+          whose nexthop is not linklocal address.
+
+2000-11-09  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+        * ospf6_rtable.c: renamed to ospf6_route.c
+        whole functionality has been rewritten as new code.
+        new functions not yet installs routes; the old
+        functions still remains. cleaning log messages.
+
+	* ospf6_spf.c: whole functionality has been rewritten
+	as new code. new command "show ipv6 ospf6 spf node",
+	"show ipv6 ospf6 spf tree", "show ipv6 ospf6 spf table"
+	has been added. Memory leak was fixed. cleaning log messages.
+
+	* ospf6d version: 0.7.c
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.89 is released.

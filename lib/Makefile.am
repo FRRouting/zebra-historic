@@ -8,10 +8,9 @@ noinst_LIBRARIES = libzebra.a
 libzebra_a_SOURCES = \
 	version.c network.c pid_output.c getopt.c getopt1.c daemon.c \
 	print_version.c checksum.c vector.c linklist.c vty.c command.c \
-	sockunion.c prefix.c thread.c if.c memory.c buffer.c buffer.c \
-	table.c hash.c filter.c routemap.c distribute.c stream.c str.c \
-	log.c plist.c zclient.c sockopt.c smux.c md5.c if_rmap.c flap.c \
-	keychain.c
+	sockunion.c prefix.c thread.c if.c memory.c buffer.c table.c hash.c \
+	filter.c routemap.c distribute.c stream.c str.c log.c plist.c \
+	zclient.c sockopt.c smux.c md5.c if_rmap.c flap.c keychain.c
 
 libzebra_a_DEPENDENCIES = @LIB_REGEX@
 
@@ -80,4 +79,4 @@ version.o: version.c
 vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
  sockunion.h thread.h memory.h str.h log.h prefix.h filter.h if.h
 zclient.o: zclient.c prefix.h stream.h network.h if.h linklist.h log.h \
- thread.h zclient.h memory.h ../zebra/zserv.h
+ thread.h zclient.h memory.h table.h ../zebra/rib.h ../zebra/zserv.h

@@ -26,33 +26,6 @@
 #include "ospf6_lsa.h"
 #include "ospf6_mesg.h"
 
-struct ospf6_log
-{
-  void (*err)       (const char *format, ...);
-  void (*warn)      (const char *format, ...);
-  void (*notice)    (const char *format, ...);
-  void (*interface) (const char *format, ...);
-  void (*neighbor)  (const char *format, ...);
-  void (*ism)       (const char *format, ...);
-  void (*nsm)       (const char *format, ...);
-  void (*lsa)       (const char *format, ...);
-  void (*lsdb)      (const char *format, ...);
-  void (*dbex)      (const char *format, ...);
-  void (*packet)    (const char *format, ...);
-  void (*network)   (const char *format, ...);
-  void (*spf)       (const char *format, ...);
-  void (*rtable)    (const char *format, ...);
-  void (*zebra)     (const char *format, ...);
-  void (*debug)     (const char *format, ...);
-  void (*pointer)   (const char *format, ...);
-};
-
-/* Global logging buffer */
-extern char strbuf[1024];
-
-/* Logging function switch */
-extern struct ospf6_log o6log;
-
 /* Strings for logging */
 extern char   *ifs_name[];
 extern char   *nbs_name[];
@@ -64,50 +37,10 @@ extern char   *rlsatype_name[];
 
 /* Function Prototypes */
 char *print_lsreq (struct ospf6_lsreq *);
-char *print_ls_reference (struct ospf6_lsa_hdr *);
 char *print_lsahdr (struct ospf6_lsa_hdr *);
-char *inet4str(unsigned long);
 void ospf6_log_init ();
 
 /* new */
-extern unsigned char ospf6_message_hello_dump;
-extern unsigned char ospf6_message_dbdesc_dump;
-extern unsigned char ospf6_message_lsreq_dump;
-extern unsigned char ospf6_message_lsupdate_dump;
-extern unsigned char ospf6_message_lsack_dump;
-extern unsigned char ospf6_neighbor_dump;
-extern unsigned char ospf6_interface_dump;
-extern unsigned char ospf6_area_dump;
-extern unsigned char ospf6_lsa_dump;
-extern unsigned char ospf6_zebra_dump;
-extern unsigned char ospf6_config_dump;
-extern unsigned char ospf6_dbex_dump;
-extern unsigned char ospf6_spf_dump;
-extern unsigned char ospf6_route_dump;
-extern unsigned char ospf6_lsdb_dump;
-
-#define IS_OSPF6_DUMP_HELLO (ospf6_message_hello_dump)
-#define IS_OSPF6_DUMP_DBDESC (ospf6_message_dbdesc_dump)
-#define IS_OSPF6_DUMP_LSREQ (ospf6_message_lsreq_dump)
-#define IS_OSPF6_DUMP_LSUPDATE (ospf6_message_lsupdate_dump)
-#define IS_OSPF6_DUMP_LSACK (ospf6_message_lsack_dump)
-#define IS_OSPF6_DUMP_MESSAGE(x) (is_ospf6_message_dump(x))
-#define IS_OSPF6_DUMP_MESSAGE_ALL (IS_OSPF6_DUMP_HELLO && \
-                                   IS_OSPF6_DUMP_DBDESC && \
-                                   IS_OSPF6_DUMP_LSREQ && \
-                                   IS_OSPF6_DUMP_LSUPDATE && \
-                                   IS_OSPF6_DUMP_LSACK)
-
-#define IS_OSPF6_DUMP_NEIGHBOR (ospf6_neighbor_dump)
-#define IS_OSPF6_DUMP_INTERFACE (ospf6_interface_dump)
-#define IS_OSPF6_DUMP_AREA (ospf6_area_dump)
-#define IS_OSPF6_DUMP_LSA (ospf6_lsa_dump)
-#define IS_OSPF6_DUMP_ZEBRA (ospf6_zebra_dump)
-#define IS_OSPF6_DUMP_CONFIG (ospf6_config_dump)
-#define IS_OSPF6_DUMP_DBEX (ospf6_dbex_dump)
-#define IS_OSPF6_DUMP_SPF (ospf6_spf_dump)
-#define IS_OSPF6_DUMP_ROUTE (ospf6_route_dump)
-#define IS_OSPF6_DUMP_LSDB (ospf6_lsdb_dump)
 
 char *ospf6_message_name (unsigned char);
 void ospf6_dump_message (struct iovec *);
@@ -120,5 +53,53 @@ void ospf6_dump_ddbit (unsigned char, char *, size_t);
 void
 ospf6_dump_lsa_header_print (char *, int , struct ospf6_lsa_header *);
 
-#endif /* OSPF6_DUMP_H */
+enum ospf6_dump_type
+{
+  OSPF6_DUMP_HELLO,
+  OSPF6_DUMP_DBDESC,
+  OSPF6_DUMP_LSREQ,
+  OSPF6_DUMP_LSUPDATE,
+  OSPF6_DUMP_LSACK,
+  OSPF6_DUMP_NEIGHBOR,
+  OSPF6_DUMP_INTERFACE,
+  OSPF6_DUMP_AREA,
+  OSPF6_DUMP_LSA,
+  OSPF6_DUMP_ZEBRA,
+  OSPF6_DUMP_CONFIG,
+  OSPF6_DUMP_DBEX,
+  OSPF6_DUMP_SPF,
+  OSPF6_DUMP_ROUTE,
+  OSPF6_DUMP_LSDB,
+  OSPF6_DUMP_REDISTRIBUTE,
+  OSPF6_DUMP_MAX
+};
 
+struct _ospf6_dump
+{
+  int dump;
+  char *string;
+};
+
+extern struct _ospf6_dump ospf6_dump[];
+
+#define IS_OSPF6_DUMP_HELLO        (ospf6_dump[OSPF6_DUMP_HELLO].dump)
+#define IS_OSPF6_DUMP_DBDESC       (ospf6_dump[OSPF6_DUMP_DBDESC].dump)
+#define IS_OSPF6_DUMP_LSREQ        (ospf6_dump[OSPF6_DUMP_LSREQ].dump)
+#define IS_OSPF6_DUMP_LSUPDATE     (ospf6_dump[OSPF6_DUMP_LSUPDATE].dump)
+#define IS_OSPF6_DUMP_LSACK        (ospf6_dump[OSPF6_DUMP_LSACK].dump)
+#define IS_OSPF6_DUMP_NEIGHBOR     (ospf6_dump[OSPF6_DUMP_NEIGHBOR].dump)
+#define IS_OSPF6_DUMP_INTERFACE    (ospf6_dump[OSPF6_DUMP_INTERFACE].dump)
+#define IS_OSPF6_DUMP_AREA         (ospf6_dump[OSPF6_DUMP_AREA].dump)
+#define IS_OSPF6_DUMP_LSA          (ospf6_dump[OSPF6_DUMP_LSA].dump)
+#define IS_OSPF6_DUMP_ZEBRA        (ospf6_dump[OSPF6_DUMP_ZEBRA].dump)
+#define IS_OSPF6_DUMP_CONFIG       (ospf6_dump[OSPF6_DUMP_CONFIG].dump)
+#define IS_OSPF6_DUMP_DBEX         (ospf6_dump[OSPF6_DUMP_DBEX].dump)
+#define IS_OSPF6_DUMP_SPF          (ospf6_dump[OSPF6_DUMP_SPF].dump)
+#define IS_OSPF6_DUMP_ROUTE        (ospf6_dump[OSPF6_DUMP_ROUTE].dump)
+#define IS_OSPF6_DUMP_LSDB         (ospf6_dump[OSPF6_DUMP_LSDB].dump)
+#define IS_OSPF6_DUMP_REDISTRIBUTE (ospf6_dump[OSPF6_DUMP_REDISTRIBUTE].dump)
+
+/* Backward campatibility 2000/12/29 */
+#define IS_OSPF6_DUMP_MESSAGE(x) (is_ospf6_message_dump(x))
+
+#endif /* OSPF6_DUMP_H */

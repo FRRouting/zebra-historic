@@ -30,6 +30,13 @@
 #define ZLOG_STDOUT             0x04
 #define ZLOG_STDERR             0x08
 
+#define ZLOG_NOLOG_INDEX        0
+#define ZLOG_FILE_INDEX         1
+#define ZLOG_SYSLOG_INDEX       2
+#define ZLOG_STDOUT_INDEX       3
+#define ZLOG_STDERR_INDEX       4
+#define ZLOG_MAX_INDEX          5
+
 typedef enum 
 {
   ZLOG_NONE,

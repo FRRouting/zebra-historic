@@ -34,7 +34,7 @@
 
 /* VTY port number. */
 #define OSPF_VTY_PORT          2604
-#define OSPF_VTYSH_PATH        "/tmp/ospfd"
+#define OSPF_VTYSH_PATH        "/tmp/.ospfd"
 
 /* IP TTL for OSPF protocol. */
 #define OSPF_IP_TTL             1
@@ -96,6 +96,7 @@
 #define OSPF_OPTION_NP                   0x08
 #define OSPF_OPTION_EA                   0x10
 #define OSPF_OPTION_DC                   0x20
+#define OSPF_OPTION_O                    0x40
 
 /* OSPF Database Description flags. */
 #define OSPF_DD_FLAG_MS                  0x01
@@ -134,6 +135,9 @@ struct ospf
 #define OSPF_ABR_IBM            2
 #define OSPF_ABR_CISCO          3
 #define OSPF_ABR_SHORTCUT       4
+
+  /* NSSA ABR */
+  u_char anyNSSA;		/* Bump for every NSSA attached. */
 
   /* Configured variables. */
   u_char RFC1583Compat;			/* RFC1583Compatibility flag. */
@@ -291,6 +295,14 @@ struct ospf_area
   u_int32_t default_cost;               /* StubDefaultCost. */
   int auth_type;                        /* Authentication type. */
 
+#ifdef HAVE_NSSA
+  u_char NSSATranslatorRole;          /* NSSA Role during configuration */
+#define OSPF_NSSA_ROLE_NEVER     0
+#define OSPF_NSSA_ROLE_ALWAYS    1
+#define OSPF_NSSA_ROLE_CANDIDATE 2
+  u_char NSSATranslator;              /* NSSA Role after election process */
+#endif /* HAVE_NSSA */
+
   u_char transit;			/* TransitCapability. */
 #define OSPF_TRANSIT_FALSE      0
 #define OSPF_TRANSIT_TRUE       1
@@ -440,6 +452,7 @@ extern char *progname;
 /* Prototypes. */
 void ospf_init (void);
 void ospf_if_update (void);
+void ospf_ls_upd_queue_empty (struct ospf_interface *oi);
 void ospf_terminate (void);
 void ospf_route_init (void);
 void ospf_nbr_static_if_update (struct ospf_interface *);
@@ -462,5 +475,7 @@ void ospf_route_map_init ();
 void ospf_snmp_init ();
 
 extern int ospf_zlog;
+
+char *ait_ntoa (struct in_addr, int);
 
 #endif /* _ZEBRA_OSPFD_H */

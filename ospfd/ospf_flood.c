@@ -46,9 +46,9 @@
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_zebra.h"
+#include "ospfd/ospf_dump.h"
 
 extern struct zclient *zclient;
-
 
 /* Do the LSA acking specified in table 19, Section 13.5, row 2
  * This get called from ospf_flood_out_interface. Declared inline 
@@ -119,8 +119,9 @@ ospf_process_self_originated_lsa (struct ospf_lsa *new, struct ospf_area *area)
   struct interface *ifp;
   struct external_info *ei;
   
-  zlog_info ("LSA[Type%d:%s]: Process self-originated LSA",
-	     new->data->type, inet_ntoa (new->data->id));
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("LSA[Type%d:%s]: Process self-originated LSA",
+	       new->data->type, inet_ntoa (new->data->id));
 
   /* If we're here, we installed a self-originated LSA that we received
      from a neighbor, i.e. it's more recent.  We must see whether we want
@@ -174,16 +175,32 @@ ospf_process_self_originated_lsa (struct ospf_lsa *new, struct ospf_area *area)
       ospf_schedule_abr_task ();
       break;
     case OSPF_AS_EXTERNAL_LSA :
+#ifdef HAVE_NSSA
+    case OSPF_AS_NSSA_LSA:
+#endif /* HAVE_NSSA */
       ei = ospf_external_info_check (new);
       if (ei)
 	ospf_external_lsa_refresh (new, ei, LSA_REFRESH_FORCE);
       else
 	ospf_lsa_flush_as (new);
       break;
+    default:
+      break;
     }
 }
 
 /* OSPF LSA flooding -- RFC2328 Section 13.(5). */
+
+/* Now Updated for NSSA operation, as follows:
+
+	Type-5's have no change.
+
+	Type-7's can be received, and will Flood the AS as Type-5's
+	They will also flood the local NSSA Area as Type-7's
+
+	The LSDB will be updated as Type-5's, and during re-fresh
+	will be converted back to Type-7's (if within an NSSA).
+*/
 int
 ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
 	    struct ospf_lsa *new)
@@ -192,7 +209,11 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
   struct timeval now;
   int lsa_ack_flag;
 
-  zlog_info ("LSA[Flooding]: start");
+  /* Type-7 LSA's will be flooded throughout their native NSSA area,
+     but will also be flooded as Type-5's into ABR capable links.  */
+
+  if (IS_DEBUG_OSPF_EVENT)
+    zlog_info ("LSA[Flooding]: start");
 
   lsa_ack_flag = 0;
   oi = nbr->oi;
@@ -209,7 +230,8 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
       tv_cmp (tv_sub (now, current->tv_recv),
 	      int2tv (OSPF_MIN_LS_ARRIVAL)) < 0)
     {
-      zlog_info ("LSA[Flooding]: LSA is received recently.");
+      if (IS_DEBUG_OSPF_EVENT)
+	zlog_info ("LSA[Flooding]: LSA is received recently.");
       return -1;
     }
 
@@ -220,11 +242,12 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
      interface. */
   lsa_ack_flag = ospf_flood_through (nbr, new);
 
-  /* Remove the current database copy from all neighbors'
-     Link state retransmission lists. */
+  /* Remove the current database copy from all neighbors' Link state
+     retransmission lists.  Only AS_EXTERNAL does not have area ID.
+     All other (even NSSA's) do have area ID.  */
   if (current)
     {
-      if(current->data->type != OSPF_AS_EXTERNAL_LSA) 
+      if (current->data->type != OSPF_AS_EXTERNAL_LSA)
 	ospf_ls_retransmit_delete_nbr_all (nbr->oi->area, current);
       else
 	ospf_ls_retransmit_delete_nbr_all (NULL, current);
@@ -242,6 +265,7 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
   */
   SET_FLAG (new->flags, OSPF_LSA_RECEIVED);
   ospf_lsa_is_self_originated (new); /* Let it set the flag */
+
   new = ospf_lsa_install (nbr->oi, new);
 
   /* Acknowledge the receipt of the LSA by sending a Link State
@@ -272,14 +296,26 @@ ospf_flood_through_interface (struct interface *ifp,
   struct ospf_neighbor *onbr;
   struct route_node *rn;
   int retx_flag;
+#ifdef HAVE_NSSA
+  struct as_external_lsa *extlsa; /* pointer to an External LSA */
+#endif /* HAVE_NSSA */
 
-  if (ospf_zlog)
+  if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_flood_through_interface(): considering int %s",
 	       ifp->name); 
 
   if (!ospf_if_is_enable (ifp))
     return 0;
 
+#ifdef HAVE_NSSA /* here is where we can set an NSSA FWD ADDR per ifp */
+  if (lsa->data->type == OSPF_AS_NSSA_LSA)
+    {
+      extlsa = (struct as_external_lsa *)(lsa->data);
+      extlsa->e[0].fwd_addr = ospf_get_ip_from_ifp (ifp); /* 1st Id in ifp */
+    }
+  /* set 1st connection */
+#endif
+  
   /* Remember if new LSA is aded to a retransmit list. */
   retx_flag = 0;
 
@@ -294,7 +330,7 @@ ospf_flood_through_interface (struct interface *ifp,
 	continue;
 
       onbr = rn->info;
-      if (ospf_zlog)
+      if (IS_DEBUG_OSPF_EVENT)
 	zlog_info ("ospf_flood_through_interface(): considering nbr %s",
 		   inet_ntoa (onbr->router_id));
 
@@ -312,7 +348,7 @@ ospf_flood_through_interface (struct interface *ifp,
 	 already.  Compare the new LSA to the neighbor's copy: */
       if (onbr->status < NSM_Full)
 	{
-	  if (ospf_zlog)
+	  if (IS_DEBUG_OSPF_EVENT)
 	    zlog_info ("ospf_flood_through_interface(): nbr adj is not Full");
 	  ls_req = ospf_ls_request_lookup (onbr, lsa);
 	  if (ls_req != NULL)
@@ -394,7 +430,7 @@ ospf_flood_through_interface (struct interface *ifp,
      State Update packet (until the LS age field reaches the maximum
      value of MaxAge). */
 
-  if (ospf_zlog)
+  if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("ospf_flood_through_interface(): "
 	       "sending upd to int %s", oi->ifp->name);
   /*  RFC2328  Section 13.3
@@ -452,9 +488,39 @@ ospf_flood_through_as (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
   listnode node;
   int lsa_ack_flag;
 
+#ifdef HAVE_NSSA
+  /* Keep track of first area, second area....nth area. */
+  int doing_area = 0; 
+  /* Duplicate/Alternate LSA with P-bit off. */
+  struct ospf_lsa *dup, *alt; 
+
+  alt = lsa;
+  dup = lsa;
+#endif /* HAVE_NSSA */
+
   lsa_ack_flag = 0;
 
-  /* AS-external-LSAs are flooded throughout the entire AS, with the
+  /* The incoming LSA is type 5 or type 7  (AS-EXTERNAL or AS-NSSA )
+
+     It could come from FLOODING, from SELF-ORIGINATION, or from
+     TRANSLATING, and could be installed as Type-7 or Type-5 or Both.
+
+     If Type-5:  Flood as such to all non-NSSA areas.
+	    (could be normal Type-5, or Translated NSSA ABR_TASK)
+	    (double-check the NP bit to be safe)
+
+     If Type-7:  Flood only to NSSA areas.
+	An NSSA-IR will only see one NSSA area, so sending to all areas is O.K.
+	An NSSA-ABR may see several areas, maybe with several NSSAs;
+
+	 Doing Area First time....Leave P-bit on (if so).
+	 Doing Area Nth time......Make duplicate, send with P-bit off, discard.
+
+     To make a duplicate, an LSA copy is instantiated with P-bit off;
+     Any subsequent NSSA areas will use the alternate instantiated
+     LSA.
+
+     AS-external-LSAs are flooded throughout the entire AS, with the
      exception of stub areas (see Section 3.6).  The eligible
      interfaces are all the router's interfaces, excluding virtual
      links and those interfaces attaching to stub areas.  */
@@ -464,24 +530,69 @@ ospf_flood_through_as (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
       struct ospf_area *area = getdata (node);
       listnode if_node;
 
+#ifdef HAVE_NSSA
+      alt = lsa;  /* begin every area processing incoming lsa */
+#endif /* HAVE_NSSA */
+
       switch (area->external_routing)
 	{
 	  /* Don't send AS externals into stub areas.  Various types
-             of support for partial stub areas can be implemented here. */
+             of support for partial stub areas can be implemented
+             here.  NSSA's will receive Type-7's that have areas
+             matching the originl LSA. */
+	case OSPF_AREA_NSSA:	/* Sending Type 5 or 7 into NSSA area */
+#ifdef HAVE_NSSA
+	  /* Type-7, flood NSSA area */
+          if (lsa->data->type == OSPF_AS_NSSA_LSA) 
+	    {
+	      /* We will send it. */
+	      continue_flag = 0;
+
+	      /* Another NSSA area */
+	      doing_area++; 
+
+	      /* doing_area == 1 on first one, ==2 on second one, ==3
+                 on third... */
+	      if (doing_area == 2) 
+		{
+		  /* On just second one, make lsa with p-bit off. */
+
+		  /* Make a duplicate instance, lock = 1. */
+		  dup = ospf_lsa_dup (lsa); 
+
+		  /* Turn the p-bit off. */
+		  UNSET_FLAG(dup->data->options, OSPF_OPTION_NP);
+
+		  /* last AS flooding, will discard this duplicate */
+		}
+	      if (doing_area >= 2)
+		alt = dup; /* point to duplicate LSA */
+	    }
+          else
+	    continue_flag = 1;  /* Skip this NSSA area for Type-5's et al */
+          break;
+#endif /* HAVE_NSSA */
 	case OSPF_AREA_TYPE_MAX:
-	case OSPF_AREA_NSSA:
 	case OSPF_AREA_STUB:
-	  continue_flag = 1;
+	  continue_flag = 1;	/* Skip this area. */
 	  break;
 	case OSPF_AREA_DEFAULT:
 	default:
-	  continue_flag = 0;
+#ifdef HAVE_NSSA
+	  /* No Type-7 into normal area */
+          if (lsa->data->type == OSPF_AS_NSSA_LSA) 
+	    continue_flag = 1; /* skip Type-7 */
+          else
+#endif /* HAVE_NSSA */
+	    continue_flag = 0;	/* Do this area. */
 	  break;
 	}
       
       /* Do continue for above switch.  Saves a big if then mess */
       if (continue_flag) 
-	continue;
+	continue; /* main for-loop */
+      
+      /* send to every interface in this area */
 
       for (if_node = listhead (area->iflist); if_node; nextnode (if_node))
 	{
@@ -490,20 +601,48 @@ ospf_flood_through_as (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
 
 	  /* Skip virtual links */
 	  if (oi->type !=  OSPF_IFTYPE_VIRTUALLINK)
-	    if (ospf_flood_through_interface (ifp, inbr, lsa))
-	      lsa_ack_flag = 1;
+	    {
+#ifdef HAVE_NSSA
+	      /* Every Area scan starts with alt = lsa;
+		 if a second NSSA is encountered, alt is set to a duplicate
+		 lsa that has the P-bit off.
+
+		 Intermediate areas will continue to use original lsa, but
+		 each nth NSSA area will use the duplicate lsa.
+	      */
+
+	      /* lsa or dup */
+	      if (ospf_flood_through_interface (ifp, inbr, alt)) 
+		lsa_ack_flag = 1;
+#else /* ! HAVE_NSSA */
+	      if (ospf_flood_through_interface (ifp, inbr, lsa)) /* lsa */
+		lsa_ack_flag = 1;
+#endif
+	    }
 	}
-    }
+    } /* main area for-loop */
+
+#ifdef HAVE_NSSA
+      if (doing_area >= 2)
+	ospf_lsa_discard (dup); /* Last transmit will delete. */
+#endif /* HAVE_NSSA */
   
   return (lsa_ack_flag);
 }
-
 
 int
 ospf_flood_through (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
 {
   int lsa_ack_flag = 0;
   
+  /* Type-7 LSA's for NSSA are flooded throughout the AS here, and
+     upon return are updated in the LSDB for Type-7's.  Later,
+     re-fresh will re-send them (and also, if ABR, packet code will
+     translate to Type-5's)
+  
+     As usual, Type-5 LSA's (if not DISCARDED because we are STUB or
+     NSSA) are flooded throughout the AS, and are updated in the
+     global table.  */
   switch (lsa->data->type)
     {
     case OSPF_ROUTER_LSA:
@@ -512,9 +651,19 @@ ospf_flood_through (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
     case OSPF_SUMMARY_LSA_ASBR:
       lsa_ack_flag = ospf_flood_through_area (inbr->oi->area, inbr, lsa);
       break;
-    case OSPF_AS_EXTERNAL_LSA:
+    case OSPF_AS_EXTERNAL_LSA: /* Type-5 */
       lsa_ack_flag = ospf_flood_through_as (inbr, lsa);
       break;
+#ifdef HAVE_NSSA
+      /* Type-7 Only received within NSSA, then flooded */
+    case OSPF_AS_NSSA_LSA:
+      /* Any P-bit was installed with the Type-7. */
+      lsa_ack_flag = ospf_flood_through_area (inbr->oi->area, inbr, lsa);
+
+      if (IS_DEBUG_OSPF_EVENT)
+	zlog_info ("ospf_flood_through: LOCAL NSSA FLOOD of Type-7.");
+      break;
+#endif /* HAVE_NSSA */
     default:
       break;
     }
@@ -600,11 +749,27 @@ ospf_ls_retransmit_isempty (struct ospf_neighbor *nbr)
 void
 ospf_ls_retransmit_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 {
-  if (!ospf_ls_retransmit_lookup (nbr, lsa))
+  struct ospf_lsa *old;
+
+  old = ospf_ls_retransmit_lookup (nbr, lsa);
+
+  if (ospf_lsa_more_recent (old, lsa) < 0)
+    {
+      if (old)
+	{
+	  old->retransmit_counter--;
+	  new_lsdb_delete (&nbr->ls_rxmt, old);
+	}
+      lsa->retransmit_counter++;
+      new_lsdb_add (&nbr->ls_rxmt, lsa);
+    }
+/*
+    if (!ospf_ls_retransmit_lookup (nbr, lsa))
     {
       lsa->retransmit_counter++;
       new_lsdb_add (&nbr->ls_rxmt, lsa);
     }
+*/    
 }
 
 /* Remove LSA from neibghbor's ls-retransmit list. */

@@ -37,9 +37,9 @@ list_new ()
 
 /* Free list. */
 void
-list_free (struct list *list)
+list_free (struct list *l)
 {
-  XFREE (MTYPE_LINK_LIST, list);
+  XFREE (MTYPE_LINK_LIST, l);
 }
 
 /* Allocate new listnode.  Internal use only. */
@@ -121,6 +121,41 @@ listnode_add_sort (struct list *list, void *val)
   list->count++;
 }
 
+void
+listnode_add_after (struct list *list, struct listnode *pp, void *val)
+{
+  struct listnode *nn;
+
+  nn = listnode_new ();
+  nn->data = val;
+
+  if (pp == NULL)
+    {
+      if (list->head)
+	list->head->prev = nn;
+      else
+	list->tail = nn;
+
+      nn->next = list->head;
+      nn->prev = pp;
+
+      list->head = nn;
+    }
+  else
+    {
+      if (pp->next)
+	pp->next->prev = nn;
+      else
+	list->tail = nn;
+
+      nn->next = pp->next;
+      nn->prev = pp;
+
+      pp->next = nn;
+    }
+}
+
+
 /* Delete specific date pointer from the list. */
 void
 listnode_delete (struct list *list, void *val)
@@ -158,6 +193,8 @@ list_delete_all_node (struct list *list)
   for (node = list->head; node; node = next)
     {
       next = node->next;
+      if (list->del)
+	(*list->del) (node->data);
       listnode_free (node);
     }
   list->head = list->tail = NULL;
@@ -175,7 +212,7 @@ list_delete (struct list *list)
     {
       next = node->next;
       if (list->del)
-	(list->del) (node->data);
+	(*list->del) (node->data);
       listnode_free (node);
     }
   list_free (list);

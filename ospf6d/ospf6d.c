@@ -29,11 +29,162 @@ list nexthoplist = NULL;
 struct sockaddr_in6 allspfrouters6;
 struct sockaddr_in6 alldrouters6;
 char *recent_reason; /* set by ospf6_lsa_check_recent () */
+int proctitle_mode = 0;
 
 char ospf6_daemon_version[] = OSPF6_DAEMON_VERSION;
 
 
+/* timeval calculation */
+void
+ospf6_timeval_add (const struct timeval *t1, const struct timeval *t2,
+                   struct timeval *result)
+{
+  long moveup = 0;
+
+  result->tv_usec = t1->tv_usec + t2->tv_usec;
+  while (result->tv_usec > 1000000)
+    {
+      result->tv_usec -= 1000000;
+      moveup ++;
+    }
+
+  result->tv_sec = t1->tv_sec + t2->tv_sec + moveup;
+}
+
+void
+ospf6_timeval_sub (const struct timeval *t1, const struct timeval *t2,
+                   struct timeval *result)
+{
+  long usec, movedown = 0;
+
+  if (t1->tv_sec < t2->tv_sec ||
+      (t1->tv_sec == t2->tv_sec && t1->tv_usec < t2->tv_usec))
+    {
+      result->tv_sec = 0;
+      result->tv_usec = 0;
+      return;
+    }
+
+  if (t1->tv_usec < t2->tv_usec)
+    {
+      usec = t1->tv_usec + 1000000;
+      movedown++;
+    }
+  else
+    usec = t1->tv_usec;
+  result->tv_usec = usec - t2->tv_usec;
+
+  result->tv_sec = t1->tv_sec - t2->tv_sec - movedown;
+}
+
+void
+ospf6_timeval_div (const struct timeval *t1, u_int by,
+                   struct timeval *result)
+{
+  long movedown;
+
+  if (by == 0)
+    {
+      result->tv_sec = 0;
+      result->tv_usec = 0;
+      return;
+    }
+
+  movedown = t1->tv_sec % by;
+  result->tv_sec = t1->tv_sec / by;
+  result->tv_usec = (t1->tv_usec + movedown * 1000000) / by;
+}
+
+/* return -1 if t1 greater, return 1 if t2 greater.
+   return 0 if t1 == t2 */
+int
+ospf6_timeval_cmp (const struct timeval *t1, const struct timeval *t2)
+{
+  if (t1->tv_sec > t2->tv_sec)
+    return -1;
+  if (t1->tv_sec < t2->tv_sec)
+    return 1;
+  if (t1->tv_usec > t2->tv_usec)
+    return -1;
+  if (t1->tv_usec < t2->tv_usec)
+    return 1;
+  return 0;
+}
+
+void
+ospf6_timeval_add_equal (const struct timeval *t, struct timeval *result)
+{
+  struct timeval tmp;
+  ospf6_timeval_add (t, result, &tmp);
+  result->tv_sec = tmp.tv_sec;
+  result->tv_usec = tmp.tv_usec;
+}
+
+void
+ospf6_timeval_sub_equal (const struct timeval *t, struct timeval *result)
+{
+  struct timeval tmp;
+  ospf6_timeval_sub (result, t, &tmp);
+  result->tv_sec = tmp.tv_sec;
+  result->tv_usec = tmp.tv_usec;
+}
+
+void
+ospf6_timeval_decode (const struct timeval *t, long *dayp, long *hourp,
+                      long *minp, long *secp, long *msecp, long *usecp)
+{
+  long day, hour, min, sec, msec, usec, left;
+
+  left = t->tv_sec;
+  day = left / 86400; left -= day * 86400;
+  hour = left / 3600; left -= hour * 3600;
+  min = left / 60; left -= min * 60;
+  sec = left;
+  left = t->tv_usec;
+  msec = left / 1000; left -= msec * 1000;
+  usec = left;
+
+  if (dayp) *dayp = day;
+  if (hourp) *hourp = hour;
+  if (minp) *minp = min;
+  if (secp) *secp = sec;
+  if (msecp) *msecp = msec;
+  if (usecp) *usecp = usec;
+}
+
+void
+ospf6_timeval_string (struct timeval *tv, char *buf, int size)
+{
+  char days[16], hours[16], mins[16], secs[16], msecs[16], usecs[16];
+  long day, hour, min, sec, msec, usec;
+
+  ospf6_timeval_decode (tv, &day, &hour, &min, &sec, &msec, &usec);
+  snprintf (days, sizeof (days), "%ld days ", day);
+  snprintf (hours, sizeof (hours), "%ld hours ", hour);
+  snprintf (mins, sizeof (mins), "%ld mins ", min);
+  snprintf (secs, sizeof (secs), "%ld secs ", sec);
+  snprintf (msecs, sizeof (msecs), "%ld msecs ", msec);
+  snprintf (usecs, sizeof (usecs), "%ld usecs ", usec);
+
+  snprintf (buf, size, "%s%s%s%s%s%s",
+            (day ? days : ""), (hour ? hours : ""),
+            (min ? mins : ""), (sec ? secs : ""),
+            (msec ? msecs : ""), (usec ? usecs : ""));
+}
+
+
 /* vty commands */
+/* for reload */
+extern void _reload ();
+DEFUN (reload,
+       reload_cmd,
+       "reload",
+       "Reloads\n")
+{
+  _reload ();
+  return CMD_SUCCESS;
+}
+
 /* Show version. */
 DEFUN (show_version_ospf6,
        show_version_ospf6_cmd,
@@ -88,16 +239,16 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
           if (!nbr)
             return CMD_ERR_NO_MATCH;
           if (argc == 3)
-            ospf6_neighbor_vty_detail (vty, nbr);
+            ospf6_neighbor_show_detail (vty, nbr);
           else
-            ospf6_neighbor_vty (vty, nbr);
+            ospf6_neighbor_show (vty, nbr);
           return CMD_SUCCESS;
         }
 
       for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
         {
           nbr = (struct ospf6_neighbor *) getdata (i);
-          ospf6_neighbor_vty_summary (vty, nbr);
+          ospf6_neighbor_show_summary (vty, nbr);
         }
       return CMD_SUCCESS;
     }
@@ -111,7 +262,7 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
           for (k = listhead (ospf6_interface->neighbor_list); k; nextnode (k))
             {
               nbr = (struct ospf6_neighbor *)getdata (k);
-              ospf6_neighbor_vty_summary (vty, nbr);
+              ospf6_neighbor_show_summary (vty, nbr);
             }
         }
     }
@@ -204,7 +355,7 @@ DEFUN (show_ipv6_ospf6,
   if (!ospf6)
     vty_out (vty, "ospfv6 not started%s", VTY_NEWLINE);
   else
-    ospf6_vty (vty);
+    ospf6_show (vty);
   return CMD_SUCCESS;
 }
 
@@ -267,6 +418,7 @@ DEFUN (show_ipv6_ospf6_nexthoplist,
        OSPF6_STR
        "List of nexthop\n")
 {
+#if 0
   listnode i;
   struct ospf6_nexthop *nh;
   char buf[128];
@@ -277,53 +429,22 @@ DEFUN (show_ipv6_ospf6_nexthoplist,
       vty_out (vty, "%s%s", buf,
 	       VTY_NEWLINE);
     }
+#endif
   return CMD_SUCCESS;
 }
 
-/* show interface */
-DEFUN (show_ipv6_ospf6_interface,
-       show_ipv6_ospf6_interface_ifname_cmd,
-       "show ipv6 ospf6 interface IFNAME",
+DEFUN (show_ipv6_ospf6_statistics,
+       show_ipv6_ospf6_statistics_cmd,
+       "show ipv6 ospf6 statistics",
        SHOW_STR
        IP6_STR
        OSPF6_STR
-       INTERFACE_STR
-       IFNAME_STR
-       )
+       "Statistics\n")
 {
-  struct interface *ifp;
-  listnode i;
-
-  if (argc)
-    {
-      ifp = if_lookup_by_name (argv[0]);
-      if (!ifp)
-        {
-          vty_out (vty, "No such Interface: %s%s", argv[0],
-		   VTY_NEWLINE);
-          return CMD_WARNING;
-        }
-      show_if (vty, ifp);
-    }
-  else
-    {
-      for (i = listhead (iflist); i; nextnode (i))
-        {
-          ifp = (struct interface *)getdata (i);
-          show_if (vty, ifp);
-        }
-    }
+  ospf6_statistics_show (vty, ospf6);
   return CMD_SUCCESS;
 }
 
-ALIAS (show_ipv6_ospf6_interface,
-       show_ipv6_ospf6_interface_cmd,
-       "show ipv6 ospf6 interface",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       INTERFACE_STR
-       )
 /* change Router_ID commands. */
 DEFUN (router_id,
        router_id_cmd,
@@ -366,6 +487,7 @@ DEFUN (interface_area,
 
   ifp = if_get_by_name (argv[0]);
 
+  /* find/create ospf6 interface */
   o6i = (struct ospf6_interface *) ifp->info;
   if (!o6i)
     o6i = ospf6_interface_create (ifp, ospf6);
@@ -539,13 +661,65 @@ DEFUN (no_passive_interface,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_SETPROCTITLE
+extern int _argc;
+extern char **_argv;
+
+DEFUN (set_proctitle,
+       set_proctitle_cmd,
+       "set proctitle (version|normal|none)",
+       "Set command\n"
+       "Process title\n"
+       "Version information\n"
+       "Normal command-line options\n"
+       "Just program name\n"
+       )
+{
+  int i;
+  char buf[64], tmp[64];
+
+  if (strncmp (argv[0], "v", 1) == 0)
+    {
+      proctitle_mode = 1;
+      setproctitle ("%s Zebra: %s", OSPF6_DAEMON_VERSION, ZEBRA_VERSION);
+    }
+  else if (strncmp (argv[0], "nor", 3) == 0)
+    {
+      proctitle_mode = 0;
+      memset (tmp, 0, sizeof (tmp));
+      memset (buf, 0, sizeof (buf));
+      for (i = 0; i < _argc; i++)
+        {
+          snprintf (buf, sizeof (buf), "%s%s ", tmp, _argv[i]);
+          memcpy (&tmp, &buf, sizeof (tmp));
+        }
+      setproctitle (buf);
+    }
+  else if (strncmp (argv[0], "non", 3) == 0)
+    {
+      proctitle_mode = -1;
+      setproctitle (NULL);
+    }
+  else
+    return CMD_ERR_NO_MATCH;
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_SETPROCTITLE */
+
 /* OSPF configuration write function. */
 int
 ospf6_config_write (struct vty *vty)
 {
   listnode j, k;
+  char buf[64];
   struct ospf6_area *area;
   struct ospf6_interface *ospf6_interface;
+
+  if (proctitle_mode == 1)
+    vty_out (vty, "set proctitle version%s!%s", VTY_NEWLINE);
+  else if (proctitle_mode == -1)
+    vty_out (vty, "set proctitle none%s!%s", VTY_NEWLINE);
 
   if (!ospf6)
     {
@@ -554,10 +728,12 @@ ospf6_config_write (struct vty *vty)
     }
 
   /* OSPFv6 configuration. */
+  if (!ospf6)
+    return CMD_SUCCESS;
+
+  inet_ntop (AF_INET, &ospf6->router_id, buf, sizeof (buf));
   vty_out (vty, "router ospf6%s", VTY_NEWLINE);
-  vty_out (vty, " router-id %s%s",
-                 inet4str(ospf6->router_id),
-                 VTY_NEWLINE);
+  vty_out (vty, " router-id %s%s", buf, VTY_NEWLINE);
 
   ospf6_redistribute_config_write (vty);
 
@@ -568,8 +744,7 @@ ospf6_config_write (struct vty *vty)
         {
           ospf6_interface = (struct ospf6_interface *)getdata (k);
           vty_out (vty, " interface %s area %s%s",
-                   ospf6_interface->interface->name,
-                   inet4str (area->area_id),
+                   ospf6_interface->interface->name, area->str,
                    VTY_NEWLINE);
           if (ospf6_interface->is_passive)
             vty_out (vty, " passive-interface %s%s",
@@ -600,12 +775,12 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
 
-  install_element (VIEW_NODE, &show_ipv6_ospf6_interface_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
+
+  install_element (VIEW_NODE, &show_ipv6_ospf6_statistics_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
   install_element (ENABLE_NODE, &show_version_ospf6_cmd);
@@ -613,15 +788,22 @@ ospf6_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
 
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_statistics_cmd);
+
+
+  install_element (ENABLE_NODE, &reload_cmd);
+
   install_element (CONFIG_NODE, &router_ospf6_cmd);
   install_element (CONFIG_NODE, &interface_cmd);
+
+#ifdef HAVE_SETPROCTITLE
+  install_element (CONFIG_NODE, &set_proctitle_cmd);
+#endif /* HAVE_SETPROCTITLE */
 
   install_default (OSPF6_NODE);
   install_element (OSPF6_NODE, &router_id_cmd);
@@ -652,10 +834,11 @@ ospf6_init ()
   prefix_list_delete_hook (xxx);
 #endif
 
-  /* Install ospf6 route map */
   ospf6_routemap_init ();
   ospf6_lsdb_init ();
-  ospf6_rtable_init ();
+
+  ospf6_spf_init ();
+  ospf6_route_init ();
 }
 
 void

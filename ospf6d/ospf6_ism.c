@@ -86,7 +86,7 @@ dr_change (struct ospf6_interface *ospf6_interface)
       inet_ntop (AF_INET, &ospf6_interface->prevbdr, prevbdr, sizeof (prevbdr));
       inet_ntop (AF_INET, &ospf6_interface->dr, dr, sizeof (dr));
       inet_ntop (AF_INET, &ospf6_interface->bdr, bdr, sizeof (bdr));
-      o6log.ism ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
+      zlog_info ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
                  ospf6_interface->interface->name, prevdr, prevbdr, dr, bdr);
     }
 
@@ -153,15 +153,10 @@ interface_up (struct thread *thread)
 #endif /*FREEBSD_32*/
 
   /* Join AllSPFRouters */
-  if (ospf6_join_allspfrouters (ospf6_interface->interface->ifindex) < 0)
-    {
-      zlog_warn ("ISM %s retry interface_up after 2 seconds",
-                 ospf6_interface->interface->name);
-      thread_add_timer (master, interface_up, ospf6_interface, 2);
-      return -1;
-    }
+  ospf6_join_allspfrouters (ospf6_interface->interface->ifindex);
 
   /* set socket options */
+  ospf6_set_reuseaddr ();
   ospf6_reset_mcastloop ();
   ospf6_set_pktinfo ();
   ospf6_set_checksum ();
@@ -202,7 +197,8 @@ wait_timer (struct thread *thread)
   if (ospf6_interface->state != IFS_WAITING)
     return 0;
 
-  o6log.ism ("I/F [%s] WaitTimer", ospf6_interface->interface->name);
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("I/F [%s] WaitTimer", ospf6_interface->interface->name);
 
   ifs_change (dr_election (ospf6_interface), "WaitTimer:DR Election", ospf6_interface);
   return 0;
@@ -215,7 +211,8 @@ int backup_seen (struct thread *thread)
   ospf6_interface = (struct ospf6_interface *)THREAD_ARG  (thread);
   assert (ospf6_interface);
 
-  o6log.ism ("I/F [%s] BackupSeen", ospf6_interface->interface->name);
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("I/F [%s] BackupSeen", ospf6_interface->interface->name);
 
   if (ospf6_interface->state == IFS_WAITING)
     ifs_change (dr_election (ospf6_interface), "BackupSeen:DR Election", ospf6_interface);
@@ -235,7 +232,8 @@ int neighbor_change (struct thread *thread)
       ospf6_interface->state != IFS_DR)
     return 0;
 
-  o6log.ism ("I/F [%s] NeighborChange", ospf6_interface->interface->name);
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("I/F [%s] NeighborChange", ospf6_interface->interface->name);
 
   ifs_change (dr_election (ospf6_interface), "NeighborChange:DR Election", ospf6_interface);
 
@@ -250,7 +248,8 @@ loopind (struct thread *thread)
   ospf6_interface = (struct ospf6_interface *)THREAD_ARG (thread);
   assert (ospf6_interface);
 
-  o6log.ism ("I/F [%s] LoopInd", ospf6_interface->interface->name);
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("I/F [%s] LoopInd", ospf6_interface->interface->name);
 
   return 0;
 }
@@ -263,7 +262,8 @@ interface_down (struct thread *thread)
   ospf6_interface = (struct ospf6_interface *)THREAD_ARG (thread);
   assert (ospf6_interface);
 
-  o6log.ism ("I/F [%s] InterfaceDown", ospf6_interface->interface->name);
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("I/F [%s] InterfaceDown", ospf6_interface->interface->name);
 
   if (ospf6_interface->state == IFS_NONE)
     return 1;

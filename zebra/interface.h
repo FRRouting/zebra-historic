@@ -146,6 +146,8 @@ struct zebra_if
 #endif /* RTADV */
 };
 
+void if_delete_update (struct interface *ifp);
+void if_add_update (struct interface *ifp);
 void if_up (struct interface *);
 void if_down (struct interface *);
 void zebra_interface_up_update (struct interface *ifp);

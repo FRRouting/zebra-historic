@@ -2,11 +2,166 @@ GNU Zebra is not yet released, so this NEWS is about beta version.
 
 * Changes in zebra-0.90
 
+** From this beta release, --enable-unixdomain and --enable-newrib
+becomes default.  So both options are removed from configure.in.  To
+revert old behavior please specify below option.
+
+--enable-tcp-zebra # TCP/IP socket is used for protocol daemon and zebra.
+--enable-oldrib    # Turn on old RIB implementation.
+
+Old RIB implementation will be removed in zebra-0.91.
+
+** From this beta release --enable-multipath is supported.  This
+option is only effective on GNU/Linux kernel with
+CONFIG_IP_ADVANCED_ROUTER and CONFIG_IP_ROUTE_MULTIPATH is set.
+
+--enable-multipath=ARG  # ARG must be digit.  When ARG is 0 unlimit multipath number.
+
+** From this release we do not include guile files.
+
 * Changes in lib
 
 ** newlist.[ch] is merged with linklist.[ch].
 
+** Now Zebra works on MacOS X public beta.
+
+** Access-list can have remark.  "access-list WORD remark LINE" define
+remark for specified access-list.
+
+** Key of key-chain is sorted by it's idetifier value.
+
+** prefix-list rule is slightly changed.  The rule of "len <= ge-value
+<= le-value" is changed to "len < ge-value <= le-value".
+
+** According to above prefix-list rule change, add automatic
+conversion function of an old rule. ex.) 10.0.0.0/8 ge 8 -> 10.0.0.0/8
+le 32
+
+** SMUX can handle SNMP trap.
+
+** In our event library, event thread is executed before any other
+thread like timer, read and write event.
+
+** Robust method for writing configuration file and recover from
+backing up config file.
+
+** Display "end" at the end of configuration.
+
+** Fix memory leak in vtysh_read().
+
+** Fix memroy leak about access-list and prefix-list name.
+
+* Changes in zebra
+
+** UNIX domain socket server of zebra protocol is added.
+
+** Fix PointoPoint interface network bug.  The destination network
+should be installed into routing table instead of local network.
+
+** Metric value is reflected to kernel routing table.
+
+** "show ip route" display uptime of RIP,OSPF,BGP routes.
+
+** New RIB implementation is added.
+
+Now we have enhanced RIB (routing information base) implementation in
+zebra.  New RIB has many new features and fixed some bugs which exist
+in old RIB code.
+
+*** Static route with distance value
+
+    Static route can be specified with administrative distance.  The
+  distance value 255 means it is not installed into the kernel.
+  Default value of distance for static route is 1.
+  
+    ip route A.B.C.D/M A.B.C.D <1-255>
+    ip route A.B.C.D/M IFNAME <1-255>
+  
+    If the least distance value's route's nexthop are unreachable,
+  select the least distance value route which has reachable nexthop is
+  selected.
+  
+    ip route 0.0.0.0/0 10.0.0.1
+    ip route 0.0.0.0/0 11.0.0.1 2
+  
+    In this case, when 10.0.0.1 is unreachable and 11.0.0.1 is
+  reachable.  The route with nexthop 11.0.0.1 will be installed into
+  forwarding table.
+  
+    zebra> show ip route
+    S>* 0.0.0.0/0 [2/0] via 11.0.0.1
+    S   0.0.0.0/0 [1/0] via 10.0.0.1 inactive
+  
+    If the nexthop is unreachable "inactive" is displayed.  You can
+  specify any string to IFNAME.  There is no need of the interface is
+  there when you configure the route.
+  
+    ip route 1.1.1.1/32 ppp0
+  
+  When ppp0 comes up, the route is installed properly.
+
+*** Multiple nexthop routes for one prefix
+
+    Multiple nexthop routes can be specified for one prefix.  Even the
+  kernel support only one nexthop for one prefix user can configure
+  multiple nexthop.
+  
+    When you configure routes like below, prefix 10.0.0.1 has three
+  nexthop.
+  
+    ip route 10.0.0.1/32 10.0.0.2
+    ip route 10.0.0.1/32 10.0.0.3
+    ip route 10.0.0.1/32 eth0
+  
+    If there is no route to 10.0.0.2 and 10.0.0.3.  And interface eth0
+    is reachable, then the last route is installed into the kernel.
+  
+    zebra> show ip route
+    S>  10.0.0.1/32 [1/0] via 10.0.0.2 inactive
+                          via 10.0.0.3 inactive
+      *                   is directly connected, eth0
+  
+    '*' means this nexthop is installed into the kernel. 
+
+*** Multipath (more than one nexthop for one prefix) can be installed into the kernel.
+
+    When the kernel support multipath, zebra can install multipath
+  routes into the kernel.  Before doing that please make it sure that
+  setting --enable-multipath=ARG to configure script.  ARG must be digit
+  value.  When specify 0 to ARG, there is no limitation of the number
+  of the multipath.  Currently only GNU/Linux with netlink interface is
+  supported.
+  
+    ip route 10.0.0.1/32 10.0.0.2
+    ip route 10.0.0.1/32 10.0.0.3
+    ip route 10.0.0.1/32 eth0
+  
+    zebra> show ip route
+    S>* 10.0.0.1/32 [1/0] via 10.0.0.2
+      *                   via 10.0.0.3
+                          is directly connected, eth0
+
+*** Kernel message delete installed route.
+
+    After zebra install static or dynamic route into the kernel.
+  
+    R>* 0.0.0.0/0 [120/3] via 10.0.0.1
+  
+    If you delete this route outside zebra, old zebra does not reinstall
+  route again.  Now the route is re-processed and properly reinstall the
+  static or dynamic route into the kernel.
+
+** GNU/Linux netlink socket handling is improved to fix race condition
+between kernel message and user command responce.
+
 * Changes in bgpd
+
+** Add show neighbor's routes command.
+
+  "show ip bgp neighbors (A.B.C.D|X:X::X:X) routes"
+  "show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X) routes"
+  "show ipv6 bgp neighbors (A.B.C.D|X:X::X:X) routes"
+  "show ipv6 mbgp neighbors (A.B.C.D|X:X::X:X) routes"
 
 ** BGP passive peer support problem is fixed.
 
@@ -14,6 +169,172 @@ GNU Zebra is not yet released, so this NEWS is about beta version.
 
 ** On multiaccess media, if the nexthop is reachable nexthop is passed
 as it is.
+
+** Remove zebra-0.88 compatibility commands.
+
+  "match ip prefix-list WORD"
+  "match ipv6 prefix-list WORD"
+
+  Instead of above please use below commands.
+
+  "match ip address prefix-list WORD"
+  "match ipv6 address prefix-list WORD"
+
+** Fix bug of holdtimer is not reset when bgp cleared.
+
+** "show ip bgp summary" display peer establish/drop count.
+
+** Change "match ip next-hop" argument from IP address to access-list
+name.
+
+** When "bgp enforce-first-as" is enabled, check EBGP peer's update
+has it's AS number in the first AS number in AS sequence.
+
+** New route-map command "set community-delete COMMUNITY-LIST" is
+added.  Community matched the CoMMUNITY-LIST is removed from the
+community.
+
+** BGP-MIB implementation is finished.
+
+** When BGP connection comes from unconfigured IP address, close
+socket immediately.
+
+** Do not compare router ID when the routes comes from EBGP peer.
+When originator ID is same, take shorter cluster-list route.  If
+cluster-list is same take smaller IP address neighbor's route.
+
+** Add "bgp bestpath as-path ignore" command.  When this option is
+set, do not concider AS path length when route selection.
+
+** Add "bgp bestpath compare-routerid".  When this option is set,
+compare router ID when the routes comes from EBGP peer.
+
+** Add "bgp deterministic-med" process.
+
+** BGP flap dampening feature is added.
+
+** When IBGP nexthop is changed, it is reflected to RIB.
+
+** Change "neighbor route-refresh" command to "neighbor capability
+route-refresh".
+
+* Changes in ripd
+
+** Change "match ip next-hop" argument from IP address to access-list
+name.
+
+** "no ip rip (send|receive)" command accept version number argument.
+
+** Memory leak related classfull network generation is fixed.
+
+** When a route is in garbage collection process (invalid with metric
+16) and a router receives the same route with valid metric then route
+was not installed into zebra rib, but only into ripd rib. Moreover ,
+it will never get into zebra rib, because ripd wrongly assumes it's
+already there.
+
+* Change in ospfd
+
+** Fix bug of refreshing default route.
+
+** --enable-nssa turn on undergoing NSSA feature.
+
+** Fix bug of Hello packet's option is not properly set when interface
+comes up.
+
+** Reduce unconditional logging.
+
+** Add nexthop to OSPF path only when it is not there.
+
+** When there is no DR on network (suppose you have only one router
+with interface priority 0). It's router LSA does not contain the link
+information about this network.
+
+** When you change a priority of interface from/to 0
+ISM_NeighborChange event should be scheduled in order to elect new
+DR/BDR on the network.
+
+** When we add some LSA into retransmit list we need to check whether
+the present old LSA in retransmit list is not more recent than the new
+one.
+
+** In states Loading and Full the slave must resend its last Database
+Description packet in response to duplicate Database Description
+packets received from the master.  For this reason the slave must wait
+RouterDeadInterval seconds before freeing the last Database
+Description packet. Reception of a Database Description packet from
+the master after this interval will generate a SeqNumberMismatch
+neighbor event. RFC2328 Section 10.8
+
+** Virtual link can not configured in stub area.
+
+** Clear a ls_upd_queue queue of the interface when interface goes
+down.
+
+** "no router ospf" unregister redistribution requests from zebra.
+
+** New command for virtual-link configuration is added.
+
+  "area A.B.C.D virtual-link A.B.C.D"
+  "area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535>"
+  "area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> authentication-key AUTH_KEY"
+  "area A.B.C.D virtual-link A.B.C.D authentication-key AUTH_KEY"
+  "area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> message-digest-key <1-255> md5 KEY"
+  "area A.B.C.D virtual-link A.B.C.D message-digest-key <1-255> md5 KEY"
+
+** Clear cryptographic sequence number when neighbor status is changed
+to NSM down.
+
+** Make Summary LSA's origination and refreshment as same as other
+type of LSA.
+
+** New OSPF pakcet read method. Now maximum packet length may be 65535
+bytes (maximum IP packet length).
+
+** Checking the age of the found LSA and if the LSA is MAXAGE we
+should call refresh instead of originate.
+
+** Install multipath information to zebra.
+
+** Fix socket descriptor leak when system call failed.
+
+* Changes in ospf6d
+
+** Whole functionality has been rewritten as new code. new command
+"show ipv6 ospf6 spf node", "show ipv6 ospf6 spf tree", "show ipv6
+ospf6 spf table" has been added.
+
+** Change to do not send garbage route whose nexthop is not linklocal
+address.
+
+** "redistribute ospf6" was generated in "router ospf6" in config
+file. It is fixed.
+
+** LSDB sync bug is fixed.
+
+** Fix bug of using unavailable route.
+
+* Changes in vtysh
+
+** route-map and access-list configuration is merged into one
+configuration.
+
+** /usr/local/etc/Zebra.conf is integrated configuration file.  "write
+memory" in vtysh will write whole configuration to this file.
+
+** When -b option is specified to vtysh, vtysh read
+/usr/local/etc/Zebra.conf file then pass the confuguration to proper
+protocol daemon.  So make all protocol daemon's configuration file
+empty then invoke all daemon.  After that vtysh -b will setup saved
+configuration.
+
+zebrastart.sh
+=============
+/usr/local/sbin/zebra -d
+/usr/local/sbin/ripd -d
+/usr/local/sbin/ospfd -d
+/usr/local/sbin/bgpd -d
+/usr/local/bin/vtysh -b
 
 * Changes in zebra-0.89
 
@@ -22,7 +343,7 @@ as it is.
 ** distribute-list can set all interface's access-list and prefix-list
 configuration.
 
-* Changes in rip
+* Changes in ripd
 
 ** "show ip protocols" display proper distribute-list settings and
 distance settings.

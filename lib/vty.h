@@ -151,6 +151,7 @@ struct vty
 void vty_init (void);
 void vty_init_vtysh (void);
 void vty_reset (void);
+void vty_finish (void);
 struct vty *vty_new (void);
 int vty_out (struct vty *, const char *, ...);
 void vty_read_config (char *, char *, char *);

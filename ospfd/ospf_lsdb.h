@@ -61,6 +61,14 @@ struct ospf_lsdb
 #define SUMMARY_LSDB(A)      ((A)->lsdb->type[OSPF_SUMMARY_LSA].db)
 #define SUMMARY_ASBR_LSDB(A) ((A)->lsdb->type[OSPF_SUMMARY_LSA_ASBR].db)
 #define EXTERNAL_LSDB(O)     ((O)->lsdb->type[OSPF_AS_EXTERNAL_LSA].db)
+#ifdef HAVE_NSSA
+/* Dummy Type-6. */
+#define NSSA_LSDB(A)           ((A)->lsdb->type[OSPF_AS_NSSA_LSA].db)
+/* Future Type-8. */
+/* Future Type-9. */
+/* Future Type-10. */
+/* Future Type-11. */
+#endif /* HAVE_NSSA */
 #define AREA_LSDB(A,T)       ((A)->lsdb->type[(T)].db)
 
 /* Prototypes. */

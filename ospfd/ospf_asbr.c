@@ -43,9 +43,6 @@
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_zebra.h"
 #include "ospfd/ospf_dump.h"
-
-extern unsigned long term_debug_ospf_lsa;
-
 
 /* Remove external route. */
 void

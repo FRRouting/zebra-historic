@@ -55,6 +55,9 @@
 #define OSPF_DEBUG_ZEBRA_REDISTRIBUTE  0x02
 #define OSPF_DEBUG_ZEBRA	       0x03
 
+#define OSPF_DEBUG_EVENT        0x01
+#define OSPF_DEBUG_NSSA		0x02
+
 /* Macro for setting debug option. */
 #define CONF_DEBUG_PACKET_ON(a, b)	    conf_debug_ospf_packet[a] |= (b)
 #define CONF_DEBUG_PACKET_OFF(a, b)	    conf_debug_ospf_packet[a] &= ~(b)
@@ -91,11 +94,22 @@
 	(term_debug_ospf_packet[a] & OSPF_DEBUG_ ## b)
 #define IS_DEBUG_OSPF(a, b) \
 	(term_debug_ospf_ ## a & OSPF_DEBUG_ ## b)
+#define IS_DEBUG_OSPF_EVENT IS_DEBUG_OSPF(event,EVENT)
+#define IS_DEBUG_OSPF_NSSA  IS_DEBUG_OSPF(event,NSSA)
 
 #define IS_CONF_DEBUG_OSPF_PACKET(a, b) \
 	(conf_debug_ospf_packet[a] & OSPF_DEBUG_ ## b)
 #define IS_CONF_DEBUG_OSPF(a, b) \
 	(conf_debug_ospf_ ## a & OSPF_DEBUG_ ## b)
+
+/* Extern debug flag. */
+extern unsigned long term_debug_ospf_packet[];
+extern unsigned long term_debug_ospf_event;
+extern unsigned long term_debug_ospf_ism;
+extern unsigned long term_debug_ospf_nsm;
+extern unsigned long term_debug_ospf_lsa;
+extern unsigned long term_debug_ospf_zebra;
+extern unsigned long term_debug_ospf_nssa;
 
 /* Message Strings. */
 extern char *ospf_packet_type_str[];

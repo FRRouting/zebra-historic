@@ -25,6 +25,9 @@
 /* Define if you have the inet_pton function.  */
 #undef HAVE_INET_PTON
 
+/* Define if you have the setproctitle function.  */
+#undef HAVE_SETPROCTITLE
+
 /* Define if you have ipv6 stack.  */
 #undef HAVE_IPV6
 
@@ -39,6 +42,9 @@
 
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
+
+/* whether sockaddr_un has a sun_len field */
+#undef HAVE_SUN_LEN
 
 /* whether sockaddr_in6 has a sin6_scope_id field */
 #undef HAVE_SIN6_SCOPE_ID
@@ -96,6 +102,15 @@
 
 /* PAM support */
 #undef USE_PAM
+
+/* TCP/IP communication between zebra and protocol daemon. */
+#undef HAVE_TCP_ZEBRA
+
+/* OSPF NSSA option */
+#undef HAVE_NSSA
+
+/* Old RIB. */
+#undef OLD_RIB
 
 /* PATHS */
 #undef PATH_ZEBRA_PID

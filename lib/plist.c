@@ -188,7 +188,7 @@ prefix_list_insert (int family, char *name)
 
   /* Allocate new prefix_list and copy given name. */
   plist = prefix_list_new ();
-  plist->name = strdup (name);
+  plist->name = XSTRDUP (MTYPE_PREFIX_LIST_STR, name);
   plist->master = master;
 
   /* If name is made by all digit character.  We treat it as
@@ -314,6 +314,9 @@ prefix_list_delete (struct prefix_list *plist)
   /* Make sure master's recent changed prefix-list information is
      cleared. */
   master->recent = NULL;
+
+  if (plist->name)
+    XFREE (MTYPE_PREFIX_LIST_STR, plist->name);
 
   prefix_list_free (plist);
 
@@ -634,9 +637,6 @@ prefix_list_print (struct prefix_list *plist)
     }
 }
 
-/* Description of the `prefix-list' statement.  */
-#define PREFIX_LIST_STR "Build a prefix list\n"
-
 /* Retrun 1 when plist already include pentry policy. */
 struct prefix_list_entry *
 prefix_entry_dup_check (struct prefix_list *plist,
@@ -724,13 +724,67 @@ vty_prefix_list_install (struct vty *vty, int family,
 #endif /* HAVE_IPV6 */
     }
 
+  /* old rule(len <= ge-value <= le-value) compatibility */
+  if (ge && ! le)
+    {
+      genum = atoi (ge);
+      if (genum == p.prefixlen)
+	{
+	  lenum = (family == AF_INET ? 32 : 128);
+	  vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		   prefix, VTY_NEWLINE);
+	  vty_out (vty, "  %s ge %d -> %s le %d changed automatically.%s",
+		   prefix, genum, prefix, lenum, VTY_NEWLINE);
+	  ge = NULL;
+	  genum = -1;
+	}
+    } else if (! ge && le)
+	{
+	  lenum = atoi (le);
+	  if (lenum == p.prefixlen)
+	    {
+	      vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		       prefix, VTY_NEWLINE);
+	      vty_out (vty, "  %s le %d -> %s changed automatically.%s",
+		       prefix, lenum, prefix, VTY_NEWLINE);
+	      le = NULL;
+	      lenum = -1;
+	    }
+	}
+      else if (ge && le)
+        {
+	  genum = atoi (ge);
+	  lenum = atoi (le);
+	  if (genum == p.prefixlen && lenum == p.prefixlen)
+	    {
+	      vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		       prefix, VTY_NEWLINE);
+	      vty_out (vty, "  %s ge %d le %d -> %s changed automatically.%s",
+		       prefix, genum, lenum, prefix, VTY_NEWLINE);
+	      ge = NULL;
+	      le = NULL;
+	      genum = -1;
+	      lenum = -1;
+	    }
+	  else if (genum == p.prefixlen)
+	    {
+	      vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		       prefix, VTY_NEWLINE);
+	      vty_out (vty, "  %s ge %d le %d -> %s le %d changed automatically.%s",
+		       prefix, genum, lenum, prefix, lenum, VTY_NEWLINE);
+	      ge = NULL;
+	      genum = -1;
+	    }
+	}
+
   /* ge and le check. */
   if (ge)
     {
       genum = atoi (ge);
-      if (! any && genum < p.prefixlen)
+      if (! any && genum <= p.prefixlen)
 	{
-	  vty_out (vty, "ge value must be greater than or equal to prefix length%s", VTY_NEWLINE);
+	  vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		   prefix, VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
     }
@@ -738,9 +792,10 @@ vty_prefix_list_install (struct vty *vty, int family,
   if (le)
     {
       lenum = atoi (le);
-      if (! any && lenum < p.prefixlen)
+      if (! any && lenum <= p.prefixlen)
 	{
-	  vty_out (vty, "le value must be lesser than or equal to prefix length%s", VTY_NEWLINE);
+	  vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		   prefix, VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
     }
@@ -749,8 +804,8 @@ vty_prefix_list_install (struct vty *vty, int family,
     {
       if (genum > lenum)
 	{
-	  vty_out (vty, "le or ge value error; please make it sure le >= ge%s",
-		   VTY_NEWLINE);
+	  vty_out (vty, "%%Invalid prefix range for %s, make sure: len < ge-value <= le-value%s",
+		   prefix, VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
     }
@@ -767,8 +822,13 @@ vty_prefix_list_install (struct vty *vty, int family,
   if (dup)
     {
       prefix_list_entry_free (pentry);
-      vty_out (vty, "%Insertion failed - prefix-list entry %d exists%s",
-	       dup->seq, VTY_NEWLINE);
+      vty_out (vty, "%%Insertion failed - prefix-list entry exists:%s",
+	       VTY_NEWLINE);
+      vty_out (vty, "   seq %d %s %s%s%s%s%s%s",
+	       dup->seq, typestr, prefix,
+	       ge ? " ge " : "", ge ? ge : "",
+	       le ? " le " : "", le ? le : "",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
 

@@ -42,6 +42,7 @@ int ospf6_join_allspfrouters (u_int);
 void ospf6_leave_allspfrouters (u_int);
 void ospf6_join_alldrouters (u_int);
 void ospf6_leave_alldrouters (u_int);
+void ospf6_set_reuseaddr ();
 void ospf6_reset_mcastloop ();
 void ospf6_set_pktinfo ();
 void ospf6_set_checksum ();

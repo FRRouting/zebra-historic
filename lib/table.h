@@ -65,4 +65,4 @@ struct route_node * route_lock_node (struct route_node *node);
 void route_unlock_node (struct route_node *node);
 void route_node_delete (struct route_node *node);
 
-#endif
+#endif /* _ZEBRA_TABLE_H */

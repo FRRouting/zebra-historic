@@ -168,6 +168,7 @@ bgp_accept (struct thread *thread)
   int accept_sock;
   union sockunion su;
   struct peer *peer;
+  struct peer *peer1;
   char buf[SU_ADDRSTRLEN];
 
   /* Regiser accept thread. */
@@ -186,11 +187,18 @@ bgp_accept (struct thread *thread)
     zlog_info ("[Event] BGP connection from host %s", inet_sutop (&su, buf));
   
   /* Check remote IP address */
-  if (! peer_lookup_by_su (&su))
+  peer1 = peer_lookup_by_su (&su);
+  if (! peer1 || peer1->status == Idle)
     {
       if (BGP_DEBUG (events, EVENTS))
-	zlog_info ("[Event] BGP connection IP address %s is not configured",
-		   inet_sutop (&su, buf));
+	{
+	  if (! peer1)
+	    zlog_info ("[Event] BGP connection IP address %s is not configured",
+		       inet_sutop (&su, buf));
+	  else
+	    zlog_info ("[Event] BGP connection IP address %s is Idle state",
+		       inet_sutop (&su, buf));
+	}
       close (bgp_sock);
       return -1;
     }
@@ -234,12 +242,13 @@ bgp_serv_sock_addrinfo (unsigned short port)
   req.ai_family = AF_UNSPEC;
   req.ai_socktype = SOCK_STREAM;
   sprintf (port_str, "%d", port);
+  port_str[sizeof(port_str)-1] = '\0';
 
   ret = getaddrinfo (NULL, port_str, &req, &ainfo);
 
   if (ret != 0)
     {
-      fprintf (stderr, "getaddrinfo failed: %s\n", strerror (errno));
+      fprintf (stderr, "getaddrinfo failed: %s\n", gai_strerror (ret));
       exit (1);
     }
 
@@ -247,6 +256,13 @@ bgp_serv_sock_addrinfo (unsigned short port)
 
   do
     {
+      if (ainfo->ai_family != AF_INET
+#ifdef HAVE_IPV6
+	  && ainfo->ai_family != AF_INET6
+#endif /* HAVE_IPV6 */
+	  )
+	continue;
+     
       sock = socket (ainfo->ai_family, ainfo->ai_socktype, ainfo->ai_protocol);
       if (sock < 0)
 	continue;

@@ -47,11 +47,6 @@ ospf6_redistribute_routemap_set (struct ospf6 *o6, int type, char *mapname)
 
   o6->rmap[type].name = strdup (mapname);
   o6->rmap[type].map = route_map_lookup_by_name (mapname);
-
-#if 0
-  if (o6->rmap[type].map == NULL)
-    zlog_info ("DEBUG: route-map set failed");
-#endif
 }
 
 void
@@ -79,155 +74,194 @@ ospf6_redistribute_routemap_unset (struct ospf6 *o6, int type)
   o6->rmap[type].map = NULL;
 }
 
-u_int32_t
-ospf6_redistribute_lsid_get (struct prefix_ipv6 *p)
+static u_int32_t
+ospf6_redistribute_get_id (struct prefix_ipv6 *p)
 {
-  u_int32_t lsid = 1;
+  u_int32_t id;
   struct ospf6_lsa *lsa;
+  struct ospf6_as_external_lsa *external_lsa;
   struct prefix_ipv6 prefix6;
-  struct ospf6_as_external_lsa *aselsa;
 
-  prefix6.family = AF_INET6;
+  /* Start redistributing from LSID 1 */
+  id = 1;
 
   while (1)
     {
-      lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL), htonl (lsid),
-                               ospf6->router_id, ospf6);
+      lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
+                               htonl (id), ospf6->router_id, ospf6);
       if (! lsa)
         break;
 
-      aselsa = (struct ospf6_as_external_lsa *) (lsa->lsa_hdr + 1);
-      prefix6.prefixlen = aselsa->ospf6_prefix.prefix_length;
-      ospf6_prefix_in6_addr (&aselsa->ospf6_prefix, &prefix6.prefix);
+      external_lsa = (struct ospf6_as_external_lsa *) (lsa->lsa_hdr + 1);
+      prefix6.family = AF_INET6;
+      prefix6.prefixlen = external_lsa->ospf6_prefix.prefix_length;
+      ospf6_prefix_in6_addr (&external_lsa->ospf6_prefix, &prefix6.prefix);
 
       if (prefix_same ((struct prefix *) &prefix6, (struct prefix *) p))
         break;
 
-      lsid ++;
+      id ++;
     }
 
-  return lsid;
+  return id;
 }
 
 void
 ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
 {
-  char buf[128];
-  struct ospf6_redistribute_info *info;
   int ret;
+  char buf[128];
   struct route_node *rn;
+  struct ospf6_redistribute_info *ri;
 
+  /* for log */
+  inet_ntop (AF_INET6, &p->prefix, buf, sizeof (buf));
+
+  /* Ignore Connected prefix of OSPF enabled Interface */
   if (type == ZEBRA_ROUTE_CONNECT)
-    return;
-
-  /* set redistribute info */
-  info = XMALLOC (MTYPE_OSPF6_OTHER, sizeof (struct ospf6_redistribute_info));
-  if (!info)
     {
-      zlog_err ("Redistribute: Can't malloc ospf6_redistribute_info");
-      return;
-    }
-
-  memset (info, 0, sizeof (struct ospf6_redistribute_info));
-  info->metric_type = 1;
-  info->metric = 100;
-  info->type = type;
-  info->ifindex = ifindex;
-
-  if (ospf6->rmap[type].map)
-    {
-      ret = route_map_apply (ospf6->rmap[type].map, (struct prefix *)p,
-                             RMAP_OSPF6, info);
-      if (ret == RMAP_DENYMATCH)
+      if (ospf6_interface_is_enabled (ifindex))
         {
-          XFREE (MTYPE_OSPF6_OTHER, info);
+          if (IS_OSPF6_DUMP_REDISTRIBUTE)
+            zlog_info ("Redistribute: add: ignore connect route of enabled "
+                       "interface: prefix: %s/%d ifindex: %d",
+                       buf, p->prefixlen, ifindex);
           return;
         }
     }
 
-  info->ls_id = ospf6_redistribute_lsid_get (p);
-  rn = route_node_get (ospf6->redistribute_map, (struct prefix *) p);
-  rn->info = info;
-
-  /* log */
-/*  if (IS_OSPF6_DUMP_ROUTE) */
+  /* set redistribute info */
+  ri = XMALLOC (MTYPE_OSPF6_EXTERNAL_INFO,
+                sizeof (struct ospf6_redistribute_info));
+  if (!ri)
     {
-      zlog_info ("Redistribute add: type:%d index:%d %s/%d LS-ID %lu",
-                 type, ifindex,
-                 inet_ntop (AF_INET6, &p->prefix, buf, sizeof (buf)),
-                 p->prefixlen, info->ls_id);
+      zlog_err ("Redistribute: add: Can't allocate memory for external info");
+      return;
     }
 
-  ospf6_lsa_update_as_external (info->ls_id, ospf6);
+  memset (ri, 0, sizeof (struct ospf6_redistribute_info));
+  ri->metric_type = OSPF6_REDISTRIBUTE_DEFAULT_TYPE;
+  ri->metric = OSPF6_REDISTRIBUTE_DEFAULT_METRIC;
+  ri->type = type;
+  ri->ifindex = ifindex;
+  ri->id = ospf6_redistribute_get_id (p);
+
+  /* test applying deny match */
+  if (ospf6->rmap[type].map)
+    {
+      ret = route_map_apply (ospf6->rmap[type].map, (struct prefix *)p,
+                             RMAP_OSPF6, ri);
+      if (ret == RMAP_DENYMATCH)
+        {
+          XFREE (MTYPE_OSPF6_EXTERNAL_INFO, ri);
+          if (IS_OSPF6_DUMP_REDISTRIBUTE)
+            zlog_info ("Redistribute: add: applied deny match: "
+                       "prefix: %s/%d ifindex: %d", buf, p->prefixlen, ifindex);
+          return;
+        }
+    }
+
+  /* log */
+  if (IS_OSPF6_DUMP_REDISTRIBUTE)
+    zlog_info ("Redistribute: add: type: %d index: %d prefix: %s/%d id: %lu",
+               type, ifindex, buf, p->prefixlen, ri->id);
+
+  /* install new external info */
+  rn = route_node_get (ospf6->external_table, (struct prefix *) p);
+  if (rn->info)
+    XFREE (MTYPE_OSPF6_EXTERNAL_INFO, rn->info);
+  rn->info = ri;
+
+  /* update AS-external LSA */
+  ospf6_lsa_update_as_external (ri->id, ospf6);
 }
 
 void
 ospf6_redistribute_route_remove (int type, int ifindex, struct prefix_ipv6 *p)
 {
   char buf[128];
-  struct ospf6_lsa *lsa = NULL;
-  struct ospf6_redistribute_info *info;
+  struct ospf6_lsa *lsa;
   struct route_node *rn;
+  struct ospf6_redistribute_info *ri;
 
-  rn = route_node_lookup (ospf6->redistribute_map, (struct prefix *) p);
+  /* for log */
+  inet_ntop (AF_INET6, &p->prefix, buf, sizeof (buf));
+
+  rn = route_node_lookup (ospf6->external_table, (struct prefix *) p);
   if (! rn)
-    return;
-
-  info = rn->info;
-  if (! info)
-    return;
-
-  if (info->type != type || info->ifindex != ifindex)
-    return;
-
-  /* log */
-  if (IS_OSPF6_DUMP_ROUTE)
     {
-      zlog_info ("Redistribute remove: type:%d index:%d %s/%d", type,
-                 ifindex, inet_ntop (AF_INET6, &p->prefix, buf, sizeof (buf)),
-                 p->prefixlen);
+      zlog_warn ("Redistribute: remove: no such route: prefix: %s/%d",
+                 buf, p->prefixlen);
+      return;
     }
 
+  ri = rn->info;
+  if (! ri)
+    {
+      zlog_warn ("Redistribute: remove: no external info: prefix: %s/%d",
+                 buf, p->prefixlen);
+      return;
+    }
+
+  if (ri->type != type || ri->ifindex != ifindex)
+    {
+      zlog_warn ("Redistribute: remove: type or ifindex mismatch: "
+                 "prefix: %s/%d", buf, p->prefixlen);
+      return;
+    }
+
+  /* log */
+  if (IS_OSPF6_DUMP_REDISTRIBUTE)
+    zlog_info ("Redistribute: remove: type: %d index: %d prefix: %s/%d",
+               type, ifindex, buf, p->prefixlen);
+
   lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
-                           htonl (info->ls_id),
-                           ospf6->router_id, (void *) ospf6);
+                           htonl (ri->id), ospf6->router_id, ospf6);
   if (lsa)
     ospf6_lsa_premature_aging (lsa);
 
-  XFREE (MTYPE_OSPF6_OTHER, info);
+  XFREE (MTYPE_OSPF6_EXTERNAL_INFO, ri);
   rn->info = NULL;
 }
 
-DEFUN (show_ipv6_ospf6_redistribute_map,
-       show_ipv6_ospf6_redistribute_map_cmd,
-       "show ipv6 ospf6 redistribute map",
+DEFUN (show_ipv6_route_ospf6_external,
+       show_ipv6_route_ospf6_external_cmd,
+       "show ipv6 route ospf6 external",
        SHOW_STR
        IP6_STR
+       ROUTE_STR
        OSPF6_STR
-       "redistribute infomation\n"
-       "LS ID mapping\n")
+       "redistributing External information\n"
+       )
 {
+  char buf[96], pstring[96], istring[16], rstring[32], ostring[32];
   struct ospf6 *o6 = ospf6;
   struct route_node *rn;
-  struct ospf6_redistribute_info *info;
-  char buf[128];
+  struct ospf6_redistribute_info *ri;
 
   static char *type_name[ZEBRA_ROUTE_MAX] =
-    { "System", "Kernel", "Connect", "Static", "RIP", "RIPng",
-      "OSPF", "OSPF6", "BGP" };
+    { "X", "K", "C", "S", "r", "R", "o", "O", "B" };
 
-  for (rn = route_top (o6->redistribute_map); rn; rn = route_next (rn))
+  vty_out (vty, "Codes: K - kernel, C - connected, S - static,"
+                "       R - RIPng,  B - BGP4+ route.%s", VTY_NEWLINE);
+
+  for (rn = route_top (o6->external_table); rn; rn = route_next (rn))
     {
       if (! rn || ! rn->info)
         continue;
 
-      info = (struct ospf6_redistribute_info *) rn->info;
-      inet_ntop (rn->p.family, &rn->p.u.prefix6, buf, sizeof (buf));
-      snprintf (buf, sizeof (buf), "%s/%d", buf, rn->p.prefixlen);
-      vty_out (vty, "%-38s I/F:%d LS-ID:%lu Type-%d Metric %d %s%s",
-               buf, info->ifindex, info->ls_id,
-               info->metric_type, info->metric,
-               type_name[info->type], VTY_NEWLINE);
+      ri = (struct ospf6_redistribute_info *) rn->info;
+
+      inet_ntop (AF_INET, &o6->router_id, rstring, sizeof (rstring));
+      snprintf (ostring, sizeof (ostring), "%s[%d]", rstring, ri->id);
+      inet_ntop (AF_INET6, &rn->p.u.prefix6, buf, sizeof (buf));
+      snprintf (pstring, sizeof (pstring), "%s/%d", buf, rn->p.prefixlen);
+      if (! if_indextoname (ri->ifindex, istring))
+        snprintf (istring, sizeof (istring), "%d", ri->ifindex);
+
+      vty_out (vty, "%s %-43s %-19s Type-%d %d %s%s",
+               type_name[ri->type], pstring, ostring,
+               ri->metric_type, ri->metric, istring, VTY_NEWLINE);
     }
 
   return CMD_SUCCESS;
@@ -239,7 +273,6 @@ DEFUN (ospf6_redistribute_static,
        "Redistribute\n"
        "Static route\n")
 {
-  ospf6->redist_static = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_STATIC);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_STATIC);
   return CMD_SUCCESS;
@@ -253,7 +286,6 @@ DEFUN (ospf6_redistribute_static_routemap,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 {
-  ospf6->redist_static = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_STATIC);
   ospf6_redistribute_routemap_set (ospf6, ZEBRA_ROUTE_STATIC, argv[0]);
   return CMD_SUCCESS;
@@ -266,7 +298,6 @@ DEFUN (no_ospf6_redistribute_static,
        "Redistribute\n"
        "Static route\n")
 {
-  ospf6->redist_static = 0;
   ospf6_zebra_no_redistribute (ZEBRA_ROUTE_STATIC);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_STATIC);
   return CMD_SUCCESS;
@@ -278,7 +309,6 @@ DEFUN (ospf6_redistribute_kernel,
        "Redistribute\n"
        "Static route\n")
 {
-  ospf6->redist_kernel = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_KERNEL);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_KERNEL);
   return CMD_SUCCESS;
@@ -292,7 +322,6 @@ DEFUN (ospf6_redistribute_kernel_routemap,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 {
-  ospf6->redist_kernel = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_KERNEL);
   ospf6_redistribute_routemap_set (ospf6, ZEBRA_ROUTE_KERNEL, argv[0]);
   return CMD_SUCCESS;
@@ -305,7 +334,6 @@ DEFUN (no_ospf6_redistribute_kernel,
        "Redistribute\n"
        "Static route\n")
 {
-  ospf6->redist_kernel = 0;
   ospf6_zebra_no_redistribute (ZEBRA_ROUTE_KERNEL);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_KERNEL);
   return CMD_SUCCESS;
@@ -317,7 +345,6 @@ DEFUN (ospf6_redistribute_connected,
        "Redistribute\n"
        "Connected route\n")
 {
-  ospf6->redist_connected = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_CONNECT);
   return CMD_SUCCESS;
@@ -331,7 +358,6 @@ DEFUN (ospf6_redistribute_connected_routemap,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 {
-  ospf6->redist_connected = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
   ospf6_redistribute_routemap_set (ospf6, ZEBRA_ROUTE_CONNECT, argv[0]);
   return CMD_SUCCESS;
@@ -344,7 +370,6 @@ DEFUN (no_ospf6_redistribute_connected,
        "Redistribute\n"
        "Connected route\n")
 {
-  ospf6->redist_connected = 0;
   ospf6_zebra_no_redistribute (ZEBRA_ROUTE_CONNECT);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_CONNECT);
   return CMD_SUCCESS;
@@ -356,7 +381,6 @@ DEFUN (ospf6_redistribute_ripng,
        "Redistribute\n"
        "RIPng route\n")
 {
-  ospf6->redist_ripng = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_RIPNG);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_RIPNG);
   return CMD_SUCCESS;
@@ -370,7 +394,6 @@ DEFUN (ospf6_redistribute_ripng_routemap,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 {
-  ospf6->redist_ripng = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_RIPNG);
   ospf6_redistribute_routemap_set (ospf6, ZEBRA_ROUTE_RIPNG, argv[0]);
   return CMD_SUCCESS;
@@ -383,7 +406,6 @@ DEFUN (no_ospf6_redistribute_ripng,
        "Redistribute\n"
        "RIPng route\n")
 {
-  ospf6->redist_ripng = 0;
   ospf6_zebra_no_redistribute (ZEBRA_ROUTE_RIPNG);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_RIPNG);
   return CMD_SUCCESS;
@@ -395,7 +417,6 @@ DEFUN (ospf6_redistribute_bgp,
        "Redistribute\n"
        "RIPng route\n")
 {
-  ospf6->redist_bgp = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_BGP);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_BGP);
   return CMD_SUCCESS;
@@ -409,7 +430,6 @@ DEFUN (ospf6_redistribute_bgp_routemap,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 {
-  ospf6->redist_bgp = 1;
   ospf6_zebra_redistribute (ZEBRA_ROUTE_BGP);
   ospf6_redistribute_routemap_set (ospf6, ZEBRA_ROUTE_BGP, argv[0]);
   return CMD_SUCCESS;
@@ -422,68 +442,73 @@ DEFUN (no_ospf6_redistribute_bgp,
        "Redistribute\n"
        "RIPng route\n")
 {
-  ospf6->redist_bgp = 0;
   ospf6_zebra_no_redistribute (ZEBRA_ROUTE_BGP);
   ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_BGP);
   return CMD_SUCCESS;
 }
 
+char *zebra_route_string[] = { "system", "kernel", "connected", "static",
+                               "rip", "ripng", "ospf", "ospf6", "bgp" };
 int
 ospf6_redistribute_config_write (struct vty *vty)
 {
-  /* redistribution */
-  if (!ospf6->redist_connected)
-    vty_out (vty, " no redistribute connected%s", VTY_NEWLINE);
-  else if (ospf6->rmap[ZEBRA_ROUTE_CONNECT].map)
-    vty_out (vty, " redistribute connected route-map %s%s",
-             ospf6->rmap[ZEBRA_ROUTE_CONNECT].name, VTY_NEWLINE);
+  int i;
 
-  if (ospf6->redist_static)
+  for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
     {
-      if (ospf6->rmap[ZEBRA_ROUTE_STATIC].map)
-        vty_out (vty, " redistribute static route-map %s%s",
-                 ospf6->rmap[ZEBRA_ROUTE_STATIC].name, VTY_NEWLINE);
-      else
-        vty_out (vty, " redistribute static%s", VTY_NEWLINE);
-    }
+      if (i == ZEBRA_ROUTE_OSPF6)
+        continue;
 
-  if (ospf6->redist_kernel)
-    {
-      if (ospf6->rmap[ZEBRA_ROUTE_KERNEL].map)
-        vty_out (vty, " redistribute kernel route-map %s%s",
-                 ospf6->rmap[ZEBRA_ROUTE_KERNEL].name, VTY_NEWLINE);
-      else
-        vty_out (vty, " redistribute kernel%s", VTY_NEWLINE);
-    }
+      if (ospf6_zebra_is_redistribute (i) == 0)
+        continue;
 
-  if (ospf6->redist_ripng)
-    {
-      if (ospf6->rmap[ZEBRA_ROUTE_RIPNG].map)
-        vty_out (vty, " redistribute ripng route-map %s%s",
-                 ospf6->rmap[ZEBRA_ROUTE_RIPNG].name, VTY_NEWLINE);
+      if (ospf6->rmap[i].map)
+        vty_out (vty, " redistribute %s route-map %s%s",
+                 zebra_route_string[i], ospf6->rmap[i].name, VTY_NEWLINE);
       else
-        vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
-    }
-
-  if (ospf6->redist_bgp)
-    {
-      if (ospf6->rmap[ZEBRA_ROUTE_BGP].map)
-        vty_out (vty, " redistribute bgp route-map %s%s",
-                 ospf6->rmap[ZEBRA_ROUTE_BGP].name, VTY_NEWLINE);
-      else
-        vty_out (vty, " redistribute bgp%s", VTY_NEWLINE);
+        vty_out (vty, " redistribute %s%s",
+                 zebra_route_string[i], VTY_NEWLINE);
     }
 
   return 0;
 }
 
 void
+ospf6_redistribute_show_config (struct vty *vty, struct ospf6 *o6)
+{
+  int i;
+
+  if (ospf6_zebra_is_redistribute(ZEBRA_ROUTE_SYSTEM) ||
+      ospf6_zebra_is_redistribute(ZEBRA_ROUTE_KERNEL) ||
+      ospf6_zebra_is_redistribute(ZEBRA_ROUTE_STATIC) ||
+      ospf6_zebra_is_redistribute(ZEBRA_ROUTE_RIPNG) ||
+      ospf6_zebra_is_redistribute(ZEBRA_ROUTE_BGP))
+    vty_out (vty, " Redistributing External Routes from,%s", VTY_NEWLINE);
+  else
+    return;
+
+  for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+    {
+      if (i == ZEBRA_ROUTE_OSPF6)
+        continue;
+
+      if (ospf6_zebra_is_redistribute (i))
+        {
+          if (o6->rmap[i].map)
+            vty_out (vty, "    %s with route-map %s%s",
+                     zebra_route_string[i], o6->rmap[i].name,
+                     VTY_NEWLINE);
+          else
+            vty_out (vty, "    %s%s", zebra_route_string[i], VTY_NEWLINE);
+        }
+    }
+}
+
+void
 ospf6_redistribute_init (struct ospf6 *o6)
 {
-  o6->redistribute_map = route_table_init ();
-
-  install_element (VIEW_NODE, &show_ipv6_ospf6_redistribute_map_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_redistribute_map_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_external_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_external_cmd);
 
   install_element (OSPF6_NODE, &ospf6_redistribute_static_cmd);
   install_element (OSPF6_NODE, &ospf6_redistribute_static_routemap_cmd);
@@ -506,22 +531,16 @@ void
 ospf6_redistribute_finish (struct ospf6 *o6)
 {
   struct route_node *rn;
-  list l;
-  listnode n;
-  struct ospf6_redistribute_info *info;
+  struct ospf6_redistribute_info *ri;
 
-  for (rn = route_top (o6->redistribute_map); rn; rn = route_next (rn))
+  for (rn = route_top (o6->external_table); rn; rn = route_next (rn))
     {
-      l = (list) rn->info;
-      while ((n = listhead (l)) != NULL)
-        {
-          info = (struct ospf6_redistribute_info *) getdata (n);
-          ospf6_redistribute_route_remove (info->type, info->ifindex,
-                                           (struct prefix_ipv6 *) &rn->p);
-        }
-      list_delete (l);
-      rn->info = NULL;
+      ri = rn->info;
+      if (ri)
+        ospf6_redistribute_route_remove (ri->type, ri->ifindex,
+                                         (struct prefix_ipv6 *) &rn->p);
     }
-  route_table_finish (o6->redistribute_map);
+
+  route_table_finish (o6->external_table);
 }
 

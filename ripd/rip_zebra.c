@@ -67,6 +67,7 @@ rip_zebra_ipv4_add (struct prefix_ipv4 *p, struct in_addr *nexthop,
       SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
       api.nexthop_num = 1;
       api.nexthop = &nexthop;
+      api.ifindex_num = 0;
       SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
       api.metric = metric;
 
@@ -96,6 +97,7 @@ rip_zebra_ipv4_delete (struct prefix_ipv4 *p, struct in_addr *nexthop,
       SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
       api.nexthop_num = 1;
       api.nexthop = &nexthop;
+      api.ifindex_num = 0;
       SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
       api.metric = metric;
 
@@ -179,20 +181,31 @@ rip_redistribute_metric_set (int type, int metric)
   rip->route_map[type].metric = metric;
 }
 
-/* RIP route-map unset for redistribution */
-void
-rip_routemap_unset (int type)
+int
+rip_metric_unset (int type,int metric)
 {
-  if (! rip->route_map[type].name)
-    return;
+#define DONT_CARE_METRIC_RIP 17  
+  if (metric != DONT_CARE_METRIC_RIP &&
+      rip->route_map[type].metric != metric)
+    return 1;
+  rip->route_map[type].metric_config = 0;
+  rip->route_map[type].metric = 0;
+  return 0;
+}
+
+/* RIP route-map unset for redistribution */
+int
+rip_routemap_unset (int type,char *name)
+{
+  if (! rip->route_map[type].name ||
+      (name != NULL && strcmp(rip->route_map[type].name,name)))
+    return 1;
 
   free (rip->route_map[type].name);
   rip->route_map[type].name = NULL;
   rip->route_map[type].map = NULL;
-  rip->route_map[type].metric_config = 0;
-  rip->route_map[type].metric = 0;
 
-  return;
+  return 0;
 }
 
 /* Redistribution types */
@@ -352,7 +365,8 @@ DEFUN (no_rip_redistribute_type,
       if (strncmp(redist_type[i].str, argv[0], 
 		  redist_type[i].str_min_len) == 0) 
 	{
-	  rip_routemap_unset (redist_type[i].type);
+	  rip_metric_unset (redist_type[i].type, DONT_CARE_METRIC_RIP);
+	  rip_routemap_unset (redist_type[i].type,NULL);
 	  rip_redistribute_unset (redist_type[i].type);
 	  return CMD_SUCCESS;
         }
@@ -414,7 +428,8 @@ DEFUN (no_rip_redistribute_type_routemap,
       if (strncmp(redist_type[i].str, argv[0], 
 		  redist_type[i].str_min_len) == 0) 
 	{
-	  rip_routemap_unset (redist_type[i].type);
+	  if (rip_routemap_unset (redist_type[i].type,argv[1]))
+	    return CMD_WARNING;
 	  rip_redistribute_unset (redist_type[i].type);
 	  return CMD_SUCCESS;
         }
@@ -479,7 +494,8 @@ DEFUN (no_rip_redistribute_type_metric,
       if (strncmp(redist_type[i].str, argv[0], 
 		  redist_type[i].str_min_len) == 0) 
 	{
-	  rip_routemap_unset (redist_type[i].type);
+	  if (rip_metric_unset (redist_type[i].type, atoi(argv[1])))
+	    return CMD_WARNING;
 	  rip_redistribute_unset (redist_type[i].type);
 	  return CMD_SUCCESS;
         }
@@ -513,7 +529,13 @@ DEFUN (no_rip_redistribute_type_metric_routemap,
       if (strncmp(redist_type[i].str, argv[0], 
 		  redist_type[i].str_min_len) == 0) 
 	{
-	  rip_routemap_unset (redist_type[i].type);
+	  if (rip_metric_unset (redist_type[i].type, atoi(argv[1])))
+	    return CMD_WARNING;
+	  if (rip_routemap_unset (redist_type[i].type, argv[2]))
+	    {
+	      rip_redistribute_metric_set(redist_type[i].type, atoi(argv[1]));   
+	      return CMD_WARNING;
+	    }
 	  rip_redistribute_unset (redist_type[i].type);
 	  return CMD_SUCCESS;
         }
@@ -760,7 +782,7 @@ ripd_api_set_redist_type_mode (int type,
     }
   else
     {
-      rip_routemap_unset (type);
+      rip_routemap_unset (type, route_map_name);
       rip_redistribute_unset (type);
     }
 
@@ -796,7 +818,7 @@ ripd_api_set_redist_type_metric (int type,
     }
   else
     {
-      rip_routemap_unset (type);
+      rip_metric_unset (type, metric);
       rip_redistribute_unset (type);
     }
 

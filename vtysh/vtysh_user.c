@@ -95,10 +95,10 @@ struct list *userlist;
 struct user *
 user_new ()
 {
-  struct user *new;
-  new = XMALLOC (0, sizeof (struct user));
-  memset (new, 0, sizeof (struct user));
-  return new;
+  struct user *user;
+  user = XMALLOC (0, sizeof (struct user));
+  memset (user, 0, sizeof (struct user));
+  return user;
 }
 
 void

@@ -25,7 +25,8 @@
 /* Default port information. */
 #define ZEBRA_PORT                    2600
 #define ZEBRA_VTY_PORT                2601
-#define ZEBRA_VTYSH_PATH              "/tmp/zebra"
+#define ZEBRA_VTYSH_PATH              "/tmp/.zebra"
+#define ZEBRA_SERV_PATH               "/tmp/.zserv"
 
 /* Default configuration filename. */
 #define DEFAULT_CONFIG_FILE "zebra.conf"
@@ -98,6 +99,16 @@ int
 zsend_ipv4_delete (struct zserv *client, int type, int flags,
 		   struct prefix_ipv4 *p, struct in_addr *nexthop,
 		   unsigned int ifindex);
+
+#ifndef OLD_RIB
+int
+zsend_ipv4_add_multipath (struct zserv *, struct route_node *,
+			  struct new_rib *);
+
+int
+zsend_ipv4_delete_multipath (struct zserv *, struct route_node *,
+			     struct new_rib *);
+#endif /* OLD_RIB */
 
 #ifdef HAVE_IPV6
 int

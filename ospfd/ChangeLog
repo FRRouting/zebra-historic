@@ -1,3 +1,491 @@
+2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+	* ospf_packet.c (ospf_recv_packet): Use ip_len adjestment code to
+	NetBSD.
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_route_delete): Use
+	ospf_zebra_delete_multipath.
+
+2001-01-09  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* ospf_interface.c (ospf_if_cleanup): Function name is renamed
+	from ospf_if_free().  Rewrite whole procudure to support primary
+	address deletion.
+
+	* ospf_zebra.c (ospf_interface_address_delete): Add primary
+	address deletion process.
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_recv_packet): OpenBSD has same ip_len
+	treatment like FreeBSD.
+
+2001-01-09  endo@suri.co.jp (Masahiko Endo)
+
+	* ospf_packet.c (ospf_recv_packet): FreeBSD kernel network code
+	strips IP header size from receiving IP Packet.  So we adjust
+	ip_len to whole IP packet size by adding IP header size.
+
+2001-01-08  endo@suri.co.jp (Masahiko Endo)
+
+	* ospf_network.c (ospf_serv_sock): When socket() is failed return
+	immediately.
+	(ospf_serv_sock): Close socket when it is not used.
+
+	* ospf_packet.c (ospf_write): Set sin_len when HAVE_SIN_LEN is
+	defined.
+	(ospf_write): When bind is fined, close sock.
+
+2001-01-07  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospf_zebra.c (ospf_interface_state_up): Fixes coredump that
+	appears when you try to configure bandwidth on the ppp interface
+	that is not yet configured in ospfd.
+
+2001-01-07  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospf_route.c (show_ip_ospf_route_external): "show ip ospf route"
+	will print nexthops for AS-external routes.
+
+	* ospf_ase.c (ospf_ase_route_match_same): New function to compare
+	ASE route under multipath environment.
+	(ospf_ase_compare_tables): Likewise.
+
+2001-01-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.h (OSPF_VTYSH_PATH): Change "/tmp/ospfd" to "/tmp/.ospfd".
+
+2000-12-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_route_install): Install multipath information
+	to zebra daemon.
+
+	* ospf_zebra.c (ospf_zebra_add_multipath): Function for passing
+	multipath information to zebra daemon.
+
+2000-12-25  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospf_packet.c (ospf_write): Call ospf_packet_delete when sendto
+	fail.
+	(DISCARD_LSA): Add argument N for logging point of DISCARD_LSA is
+	called.
+
+	* ospf_lsa.c (ospf_external_lsa_refresh): NSSA install_flood will
+	leave Type-7 LSA at Lock Count = 2.
+
+	* ospf_flood.c (ospf_flood_through): Flood_though_as updated for
+	NSSA no P-bit off during Area flooding, but P-bit is turned off
+	for mulitple NSSA AS flooding.
+
+	* ospf_ase.c (ospf_ase_calculate_timer): Added calculations for
+	Type-7 LSDB.
+
+	* ospf_abr.c (ospf_abr_translate_nssa): Removed one unlock call.
+	(ospf_abr_announce_nssa_defaults): Corrected Debug from EVENT to
+	NSSA.
+
+2000-12-25  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospf_zebra.c (ospf_zebra_read_ipv4): Checking the age of the
+	found LSA and if the LSA is MAXAGE we should call refresh instead
+	of originate.
+
+2000-12-18  Dick Glasspool <dick@ipinfusion.com>
+	   	   
+	* ospf_abr.c: Removed redundant "...flood" in
+	announce_network_to_area().  Repaired nssa Unlock by using
+	discard.
+
+	* ospf_packet.c: Removed old NSSA translate during mk_ls_update.
+	
+	* ospfd.c: Free up all data bases including NSSA.
+
+	* ospf_lsa.c: Now allow removal of XLATE LSA's Check in
+	discard_callback. Added routine to get ip addr from within the
+	ifp.
+
+	* ospf_flood.c: Now set Forward Address for outgoing Type-7.
+
+	* ospf_lsa.h: Added prototype for the below. struct in_addr
+	ospf_get_ip_from_ifp (struct interface *ifp).
+
+2000-12-14  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospf_packet.c (ospf_recv_packet): New OSPF pakcet read method.
+	Now maximum packet length may be 65535 bytes (maximum IP packet
+	length).
+
+	* ospf_interface.c (ospf_if_stream_set): Don't make input buffer.
+
+	* ospfd.c (config_write_network_area): Remove unnecessary area
+	lookup code.
+
+2000-12-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_read): Accept packet bigger than MTU value.
+
+2000-12-13  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospfd.c (config_write_network_area): Fix bug in
+	config_write_network_area function.
+
+2000-12-12  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospf_abr.c (ospf_abr_announce_network_to_area): Make Summary
+	LSA's origination and refreshment as same as other type of LSA.
+
+	* ospf_lsa.c (ospf_summary_lsa_refresh): Return struct ospf_lsa *.
+
+	* ospf_lsa.c (ospf_summary_asbr_lsa_refresh): Likewise.
+
+2000-12-08  Dick Glasspool <dick@ipinfusion.com>
+
+	The bulk of NSSA changes are contained herein; This version will
+	require manual setting of "always" for NSSA Translator, and will
+	not perform aggregation yet.
+
+	* ospf_dump.c: "debug ospf nssa" is added.
+
+	* ospf_dump.h: Likewise.
+
+	* ospf_packet.c (ospf_hello): Display router ID on Bad NSSA Hello.
+
+	* ospfd.c: Discard_LSA to stay away from LOCAL_XLT Process NSSA
+	'never, candidate, always'.  Change "suppress" to "not-advertise".
+
+	* ospfd.h: Add TranslatorRole to struct ospf_area.  Add anyNSSA to
+	struct ospf.
+
+	* ospf_ase.c (ospf_ase_calculate_route): External to stay away
+	from LOCAL_XLT
+
+	* ospf_nsm.c (ospf_db_summary_add): External to stay away from
+	LOCAL_XLT
+
+	* ospf_abr.c: Major logic added for abr_nssa_task().  If ABR, and
+	NSSA translator, then do it.  Approve the global list, and flush
+	any unapproved.
+	
+	* ospf_lsa.h: New LSA flag OSPF_LSA_LOCAL_XLT to indicate that the
+	Type-5 resulted from a Local Type-7 translation; not used for
+	flooding, but used for flushing.
+
+	* ospf_flood.c: New NSSA flooding.
+
+2000-12-08  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospfd.c (ospf_find_vl_data): New function for looking up virtual
+	link data.
+	(ospf_vl_set_security): Virtual link configuration with
+	authentication.
+	(ospf_vl_set_timers): Set timers for virtual link.
+
+	* New commands are added.
+	"area A.B.C.D virtual-link A.B.C.D"
+	"area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535>"
+	"area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> authentication-key AUTH_KEY"
+	"area A.B.C.D virtual-link A.B.C.D authentication-key AUTH_KEY"
+	"area A.B.C.D virtual-link A.B.C.D hello-interval <1-65535> retransmit-interval <3-65535> transmit-delay <1-65535> dead-interval <1-65535> message-digest-key <1-255> md5 KEY"
+	"area A.B.C.D virtual-link A.B.C.D message-digest-key <1-255> md5 KEY"
+
+	* ospf_packet.c (ospf_check_md5_digest): Add neighbor's
+	cryptographic sequence number treatment.
+	(ospf_check_auth): OSPF input buffer is added to argument.
+	(ospf_read): Save neighbor's cryptographic sequence number.
+
+	* ospf_nsm.c (nsm_change_status): Clear cryptographic sequence
+	number when neighbor status is changed to NSM down.
+
+	* ospf_neighbor.c (ospf_nbr_new): Set zero to crypt_seqnum.
+
+	* ospf_neighbor.h (struct ospf_neighbor): Add cryptographic
+	sequence number to neighbor structure.
+
+2000-11-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_snmp.c (ospfIfLookup): OSPF MIB updates.
+	(ospfExtLsdbEntry): Add OspfExtLsdbTable treatment.
+
+2000-11-28  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospfd.c (ospf_interface_down): Clear a ls_upd_queue queue of the
+	interface.
+	(ospf_ls_upd_queue_empty): New function to empty ls update queue
+	of the OSPF interface.
+	(no_router_ospf): 'no router ospf' unregister redistribution
+	requests from zebra.
+
+2000-11-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_ism.c (ism_change_status): Increment status change number.
+
+	* ospf_interface.h (struct ospf_interface): Add new member for
+	status change statistics.
+
+	* Makefile.am: Update dependencies.
+
+	* ospf_zebra.c (ospf_interface_add): OSPF SNMP interface update.
+	(ospf_interface_delete): OSPF SNMP interface delete.
+
+	* ospf_snmp.h: New file is added.
+
+2000-11-23  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospfd.h: Add new ospf_area structure member for
+	NSSATranslatorRole and NSSATranslator state.
+
+	* ospfd.c: Provided for eventual commands to specify NSSA
+	elections for "translator- ALWAYS/NEVER/CANDIDATE". Provided for
+	decimal integer version of area-suppress.
+
+	* ospf_flood.c: Flood Type-7's only into NSSA (not AS).
+
+	* ospf_lsa.c: Undo some previous changes for NSSA.  If NSSA
+	translator, advertise Nt bit.
+
+	* ospf_route.c: 1st version of "sh ip os border-routers".
+
+2000-11-23  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospfd.c (area_vlink): Virtual link can not configured in stub
+	area.
+
+2000-11-23  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospf_packet.c (ospf_db_desc): In states Loading and Full the
+	slave must resend its last Database Description packet in response
+	to duplicate Database Description packets received from the
+	master.  For this reason the slave must wait RouterDeadInterval
+	seconds before freeing the last Database Description packet.
+	Reception of a Database Description packet from the master after
+	this interval will generate a SeqNumberMismatch neighbor
+	event. RFC2328 Section 10.8
+	(ospf_make_db_desc): DD Master flag treatment.
+
+	* ospf_nsm.c (nsm_twoway_received): Move DD related procedure to
+	nsm_change_status().
+	(nsm_bad_ls_req): Likewise.
+	(nsm_adj_ok): Likewise.
+	(nsm_seq_number_mismatch): Likewise.
+	(nsm_oneway_received): Likewise.
+
+	* ospf_neighbor.h (struct ospf_neighbor): New structure member
+	last_send_ts for timestemp when last Database Description packet
+	was sent.
+
+	* ospf_nsm.c (ospf_db_desc_timer): Make it sure nbr->last_send is
+	there.  Call ospf_db_desc_resend() in any case.
+
+2000-11-16  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospf_lsa.c (lsa_link_broadcast_set): When there is no DR on
+	network (suppose you have only one router with interface priority
+	0). It's router LSA does not contain the link information about
+	this network.
+
+	* ospf_nsm.c (nsm_timer_set): When you change a priority of
+	interface from/to 0 ISM_NeighborChange event should be scheduled
+	in order to elect new DR/BDR on the network.
+
+	* ospf_interface.c (ip_ospf_priority): Likewise.
+
+	* ospf_flood.c (ospf_ls_retransmit_add): When we add some LSA into
+	retransmit list we need to check whether the present old LSA in
+	retransmit list is not more recent than the new
+	one.
+
+2000-11-09  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospf_packet.c: Allows for NSSA Type-7 LSA's throughout the NSSA
+	area.  Any that exit the NSSA area are translated to type-5 LSA's.
+	The instantiated image is restored after translation.
+	(ospf_ls_upd_send_list): Renamed to ospf_ls_upd_queu_send().
+	(ospf_ls_upd_send): Old function which enclosed by #ifdef 0 is
+	removed.
+	(ospf_ls_ack_send): Likewise.
+
+	* ospf_flood.c: NSSA-LSA's without P-bit will be restricted to
+	local area.  Otherwise they are allowed out the area to be
+	translated by ospf_packet.c.
+
+	* ospf_lsa.c: Undo some previous changes for NSSA.
+
+	* ospf_lsdb.h: New access for type 7.
+
+2000-11-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_path_exist): New function to check nexthop
+	and interface are in current OSPF path or not.
+	(ospf_route_copy_nexthops_from_vertex): Add nexthop to OSPF path
+	when it is not there.  Reported by Michael Rozhavsky
+	<mrozhavsky@opticalaccess.com>
+
+2000-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_dump.c (config_write_debug): Add seventh string "detail" is
+	added for flag is OSPF_DEBUG_SEND | OSPF_DEBUG_RECV |
+	OSPF_DEBUG_DETAIL.
+
+2000-11-06   Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* ospf_lsa.c (router_lsa_flags): ASBR can't exit in stub area.
+
+2000-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsa.c (ospf_router_lsa_originate): Reduce unconditional
+	logging.
+
+2000-11-06  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospfd.h: Add ait_ntoa function prototype.
+
+	* ospfd.c (ait_ntoa): New function for displaying area ID and
+	Stub/NSSA status.
+	(show_ip_ospf_interface_sub): Use ait_ntoa.
+	(show_ip_ospf_nbr_static_detail_sub): Likewise.
+	(show_ip_ospf_neighbor_detail_sub): Likewise.
+
+	* ospf_route.c (ospf_intra_route_add): Set external routing type
+	to ospf route.
+	(ospf_intra_add_router): Likewise.
+	(ospf_intra_add_transit): Likewise.
+	(ospf_intra_add_stub): Likewise.
+	(ospf_add_discard_route): Likewise.
+	(show_ip_ospf_route_network): Use ait_ntoa.
+	(show_ip_ospf_route_network): Likewise.
+	(show_ip_ospf_route_router): Likewise.
+
+	* ospf_lsa.c (show_lsa_detail): Use ait_ntoa.
+	(show_lsa_detail_adv_router): Likewise.
+	(show_ip_ospf_database_summary): Likewise.
+
+	* ospf_route.h (struct route_standard): Add new member
+	external_routing.
+
+	* ospf_ia.c (process_summary_lsa): Set external routing tyep to ospf
+	route.
+	(ospf_update_network_route): Likewise.
+	(ospf_update_router_route): Likewise.
+
+2000-11-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_flood.c (ospf_process_self_originated_lsa): Enclose
+	OSPF_AS_NSSA_LSA treatment with #ifdef HAVE_NSSA.
+
+2000-11-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Unconditional logging is enclosed with if (IS_DEBUG_OSPF_EVENT).
+	Please specify "debug ospf event" for enable logging.
+
+	* ospf_ism.c: Do not extern debug flag varible.  It is done by
+	ospf_debug.h
+	* ospf_asbr.c: Likewise.
+	* ospf_lsa.c: Likewise.
+	* ospf_nsm.c: Likewise.
+	* ospf_zebra.c: Likewise.
+
+	* ospf_dump.c (debug_ospf_event): New command "debug ospf event"
+	is added.
+
+	* ospfd.c (router_ospf): Change logging from vty_out() to
+	zlog_info().
+	(ospf_area_stub_cmd): Likewise.
+
+	* ospf_dump.h: Extern term_debug flags.
+	(OSPF_DEBUG_EVENT): Add new flag.
+	(IS_DEBUG_OSPF_EVENT): Add new macro.
+
+2000-11-03  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospf_flood.c (ospf_process_self_originated_lsa):
+	OSPF_AS_NSSA_LSA is treated as same as OSPF_AS_EXTERNAL_LSA.
+	(ospf_flood): Type-5's have no change.  Type-7's can be received,
+	and will Flood the AS as Type-5's They will also flood the local
+	NSSA Area as Type-7's.  The LSDB will be updated as Type-5's, and
+	during re-fresh will be converted back to Type-7's (if within an
+	NSSA).
+	(ospf_flood_through): Incoming Type-7's were allowed here if our
+	neighbor was an NSSA.  So Flood our area with the Type-7 and also
+	if we are an ABR, flood thru AS as Type-5.
+
+	* ospf_lsa.c (ospf_external_lsa_refresh): Flood NSSA both NSSA
+	area and other area.
+
+	* ospf_packet.c (ospf_db_desc_proc): When AS External LSA is
+	exists in DD packet, make it sure that this area is not stub.
+	(ospf_ls_upd_list_lsa): When LSA type is NSSA then set lsa's area
+	to NULL.
+	(ospf_ls_upd): If the LSA is AS External LSA and the area is stub
+	then discard the lsa.  If the LSA is NSSA LSA and the area is not
+	NSSA then discard the lsa.
+
+2000-11-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (ospf_interface_run): Fix bug of Hello packet's option
+	is not properly set when interface comes up.
+
+2000-11-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.h (OSPF_OPTION_O): Add new hello header option.
+
+2000-11-01  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospf_lsa.h: Define OSPF_MAX_LSA to 8 when HAVE_NSSA is enabled.
+	(OSPF_GROUP_MEMBER_LSA): Define OSPF_GROUP_MEMBER_LSA.
+
+	* ospf_lsa.c (show_database_desc): Add "Group Membership LSA"
+	string.
+
+2000-10-31  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospf_lsa.h (OSPF_AS_NSSA_LSA): Define OSPF_AS_NSSA_LSA.
+	
+	* ospf_lsa.c (show_ip_ospf_database): NSSA database display
+	function is added.  ALIASES which have "show ip ospf database
+	nssa-external" is added.
+	(show_ip_ospf_border_routers): New command "show ip ospf
+	border-routers" is added.
+
+2000-10-30  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospfd.c (router_ospf): NSSA Enabled message is added for
+	testing.
+	(ospf_area_type_set): Are type set for NSSA area.
+	(ospf_area_stub_cmd): Special translation of no_summary into NSSA
+	and summary information. If NSSA is enabled pass the information
+	to ospf_area_type_set().
+	(area_nssa): New commands are added:
+	"area A.B.C.D nssa"
+	"area <0-4294967295> nssa"
+	"area A.B.C.D nssa no-summary"
+	"area <0-4294967295> nssa no-summary"
+	(ospf_no_area_stub_cmd): Special translation of no_summary into
+	NSSA and summary information.  If external_routing is
+	OSPF_AREA_NSSA unset area with ospf_area_type_set (area,
+	OSPF_AREA_DEFAULT).
+	(show_ip_ospf_area): Display NSSA status.
+	(config_write_ospf_area): Show NSSA configuration.
+
+	* ospf_packet.c (ospf_hello): For NSSA support, ensure that NP is
+	on and E is off.
+
+2000-10-26  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospf_lsa.c (ospf_network_lsa_body_set): The network-LSA lists
+	those routers that are fully adjacent to the Designated Router;
+	each fully adjacent router is identified by its OSPF Router ID.
+	The Designated Router includes itself in this list. RFC2328,
+	Section 12.4.2.
+
+2000-10-23  Jochen Friedrich <jochen@scram.de>
+
+	* ospf_snmp.c: ospf_oid and ospfd_oid are used in smux_open after
+	it is registered.  So those variables must be static.
+
 2000-10-18  K N Sridhar <sridhar@euler.ece.iisc.ernet.in>
 
 	* ospfd.c: Add area_default_cost_decimal_cmd and

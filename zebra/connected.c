@@ -25,8 +25,10 @@
 #include "prefix.h"
 #include "linklist.h"
 #include "if.h"
+#include "table.h"
 #include "rib.h"
 #include "table.h"
+#include "log.h"
 
 #include "zebra/zserv.h"
 #include "zebra/redistribute.h"
@@ -48,28 +50,63 @@ connected_check_ipv4 (struct interface *ifp, struct prefix *p)
   return 0;
 }
 
+/* Called from if_up(). */
+void
+connected_up_ipv4 (struct interface *ifp, struct connected *ifc)
+{
+  struct prefix_ipv4 p;
+  struct prefix_ipv4 *addr;
+  struct prefix_ipv4 *dest;
+
+  addr = (struct prefix_ipv4 *) ifc->address;
+  dest = (struct prefix_ipv4 *) ifc->destination;
+
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = addr->prefixlen;
+
+  if (if_is_pointopoint (ifp))
+    p.prefix = dest->prefix;
+  else
+    p.prefix = addr->prefix;
+
+  /* Apply mask to the network. */
+  apply_mask_ipv4 (&p);
+
+  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
+     address. */
+  if (prefix_ipv4_any (&p))
+    return;
+
+#ifdef OLD_RIB
+  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0, 0, 0);
+#else /* OLD_RIB */
+  if (! rib_check_for_connected_ipv4 (&p, 0))
+    {
+      rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0, 0, 0);
+      rib_update (0, NULL);
+    }
+#endif /* OLD_RIB */
+}
+
 /* Add connected IPv4 route to the interface. */
 void
 connected_add_ipv4 (struct interface *ifp, struct in_addr *addr, 
 		    int prefixlen, struct in_addr *broad)
 {
   struct prefix_ipv4 *p;
-  struct prefix_ipv4 rib;
-  struct connected *connected;
+  struct connected *ifc;
+
+  /* Make connected structure. */
+  ifc = connected_new ();
+  ifc->ifp = ifp;
 
   /* Allocate new connected address. */
-  connected = connected_new ();
-
   p = prefix_ipv4_new ();
   p->family = AF_INET;
   p->prefix = *addr;
   p->prefixlen = prefixlen;
-
-  /* For connected route. */
-  rib = *p;
-
-  connected->address = (struct prefix *) p;
-  connected->ifp = ifp;
+  ifc->address = (struct prefix *) p;
 
   /* If there is broadcast or pointopoint address. */
   if (broad)
@@ -77,40 +114,55 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
       p = prefix_ipv4_new ();
       p->family = AF_INET;
       p->prefix = *broad;
-      connected->destination = (struct prefix *) p;
+      ifc->destination = (struct prefix *) p;
     }
 
   /* Ok link connected to interface. */
-  connected_add (ifp, connected);
+  connected_add (ifp, ifc);
 
   /* Update interface address information to protocol daemon. */
-  zebra_interface_address_add_update (ifp, connected);
+  zebra_interface_address_add_update (ifp, ifc);
+
+  if (if_is_up(ifp))
+      connected_up_ipv4 (ifp, ifc);
+}
+
+void
+connected_down_ipv4 (struct interface *ifp, struct connected *ifc)
+{
+  struct prefix_ipv4 p;
+  struct prefix_ipv4 *addr;
+  struct prefix_ipv4 *dest;
+
+  addr = (struct prefix_ipv4 *)ifc->address;
+  dest = (struct prefix_ipv4 *)ifc->destination;
+
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = addr->prefixlen;
+
+  if (if_is_pointopoint (ifp))
+    p.prefix = dest->prefix;
+  else
+    p.prefix = addr->prefix;
 
   /* Apply mask to the network. */
-  apply_mask_ipv4 (&rib);
+  apply_mask_ipv4 (&p);
 
   /* In case of connected address is 0.0.0.0/0 we treat it tunnel
      address. */
-  if (prefix_ipv4_any (&rib))
+  if (prefix_ipv4_any (&p))
     return;
 
-  if (if_is_up(ifp))
-    rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0, 0, 0);
-
-#if 0 /* PtP support */
-  /* PointToPoint address care */
-  if (ifp->flags & IFF_POINTOPOINT){
-    rib = *p;
-
-    apply_mask_ipv4 (&rib);
-
-    if (prefix_ipv4_any (&rib))
-      return;
-
-    if (if_is_up(ifp))
-      rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0, 0, 0);
-  }
-#endif /* Ptp support */
+#ifdef OLD_RIB
+  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
+#else /* OLD_RIB */
+  if ( rib_check_for_connected_ipv4(&p, ifp->ifindex))
+    {
+      rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
+      rib_update (0, NULL);
+    }
+#endif /* OLD_RIB */
 }
 
 /* Delete connected IPv4 route to the interface. */
@@ -128,67 +180,21 @@ connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr,
   mp = p;
 
   ifc = connected_delete_by_prefix (ifp, (struct prefix *) &p);
-
-  if (ifc)
+  if (! ifc)
     {
-      /* Update interface address information to protocol daemon. */
-      zebra_interface_address_delete_update (ifp, ifc);
-
-      connected_free (ifc);
+      zlog_info ("Can't find prefix from interface %s/%d",
+		 inet_ntoa (*addr), prefixlen);
+      return;
     }
 
-  /* Apply mask to the network. */
-  apply_mask_ipv4 (&mp);
+  /* Update interface address information to protocol daemon. */
+  zebra_interface_address_delete_update (ifp, ifc);
 
-  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
-     address. */
-  if (prefix_ipv4_any (&mp))
-    return;
+  connected_down_ipv4 (ifp, ifc);
 
-  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->ifindex, 0);
+  connected_free (ifc);
 }
 
-void
-connected_up_ipv4 (struct interface *ifp, struct in_addr *addr, 
-		   int prefixlen)
-{
-  struct prefix_ipv4 p;
-
-  p.family = AF_INET;
-  p.prefix = *addr;
-  p.prefixlen = prefixlen;
-
-  /* Apply mask to the network. */
-  apply_mask_ipv4 (&p);
-
-  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
-     address. */
-  if (prefix_ipv4_any (&p))
-    return;
-
-  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0, 0, 0);
-}
-
-void
-connected_down_ipv4 (struct interface *ifp, struct in_addr *addr, 
-		     int prefixlen)
-{
-  struct prefix_ipv4 p;
-
-  p.family = AF_INET;
-  p.prefix = *addr;
-  p.prefixlen = prefixlen;
-
-  /* Apply mask to the network. */
-  apply_mask_ipv4 (&p);
-
-  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
-     address. */
-  if (prefix_ipv4_any (&p))
-    return;
-
-  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
-}
 
 #ifdef HAVE_IPV6
 /* If same interface address is already exist... */

@@ -45,6 +45,7 @@ struct option longopts[] =
   { "bgp_port",    required_argument, NULL, 'p'},
   { "vty_port",    required_argument, NULL, 'P'},
   { "retain",      no_argument,       NULL, 'r'},
+  { "no_kernel",   no_argument,       NULL, 'n'},
   { "version",     no_argument,       NULL, 'v'},
   { "help",        no_argument,       NULL, 'h'},
   { 0 }
@@ -60,12 +61,17 @@ char *progname;
 /* Route retain mode flag. */
 int retain_mode = 0;
 
+/* Do not pass information to zebra */
+int no_kernel_mode = 0;
+
 /* Master of threads. */
 struct thread_master *master;
 
 char *config_file = NULL;
 
 int vty_port = BGP_VTY_PORT;
+
+time_t bgp_start_time;
 
 /* Help information display. */
 static void
@@ -83,6 +89,7 @@ redistribution between different routing protocols.\n\n\
 -p, --bgp_port     Set bgp protocol's port number\n\
 -P, --vty_port     Set vty's port number\n\
 -r, --retain       When program terminates, retain added route by bgpd.\n\
+-n, --no_kernel    Do not install route to kernel.\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
@@ -118,7 +125,7 @@ sigint (int sig)
 {
   zlog (NULL, LOG_INFO, "Terminating on signal");
 
-  if (!retain_mode)
+  if (!retain_mode && ! no_kernel_mode)
     bgp_terminate ();
 
   exit (0);
@@ -187,7 +194,7 @@ main (int argc, char **argv)
   /* Command line argument treatment. */
   while (1) 
     {
-      opt = getopt_long (argc, argv, "df:hp:P:rv", longopts, 0);
+      opt = getopt_long (argc, argv, "df:hp:P:rnv", longopts, 0);
     
       if (opt == EOF)
 	break;
@@ -210,6 +217,9 @@ main (int argc, char **argv)
 	  break;
 	case 'r':
 	  retain_mode = 1;
+	  break;
+	case 'n':
+	  no_kernel_mode = 1;
 	  break;
 	case 'v':
 	  print_version ();
@@ -256,6 +266,7 @@ main (int argc, char **argv)
   /* Print banner. */
   zlog_info ("BGPd %s starting: vty@%d, bgp@%d",
 	     ZEBRA_VERSION, vty_port, bgp_port);
+  bgp_start_time = time (NULL);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

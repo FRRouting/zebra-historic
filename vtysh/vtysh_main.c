@@ -44,9 +44,13 @@ char *progname;
 char *config_file = NULL;
 
 /* Configuration file and directory. */
-/* char config_current[] = VTYSH_DEFAULT_CONFIG; */
 char *config_current = NULL;
 char config_default[] = SYSCONFDIR VTYSH_DEFAULT_CONFIG;
+
+/* Integrated configuration file. */
+char *integrate_file = NULL;
+char *integrate_current = NULL;
+char integrate_default[] = SYSCONFDIR INTEGRATE_DEFAULT_CONFIG;
 
 /* Flag for indicate executing child command. */
 int execute_flag = 0;
@@ -140,10 +144,9 @@ usage (int status)
       printf ("Usage : %s [OPTION...]\n\n\
 Daemon which manages kernel routing table management and \
 redistribution between different routing protocols.\n\n\
--b, --batch              Execute command in batch mode\n\
+-b, --boot               Execute boot startup configuration\n\
 -e, --eval               Execute argument as command\n\
 -h, --help               Display this help and exit\n\
--i, --integrated-config  Integrated configuration file name\n\
 \n\
 Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
     }
@@ -153,10 +156,9 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
 /* VTY shell options, we use GNU getopt library. */
 struct option longopts[] = 
 {
-  { "batch",                no_argument,             NULL, 'b'},
+  { "boot",                no_argument,             NULL, 'b'},
   { "eval",                 required_argument,       NULL, 'e'},
   { "help",                 no_argument,             NULL, 'h'},
-  { "integrated-config",    required_argument,       NULL, 'i'},
   { 0 }
 };
 
@@ -189,7 +191,7 @@ main (int argc, char **argv, char **env)
   char *p;
   int opt;
   int eval_flag = 0;
-  int batch_flag = 0;
+  int boot_flag = 0;
   char *eval_line = NULL;
   char *integrated_file = NULL;
 
@@ -199,7 +201,7 @@ main (int argc, char **argv, char **env)
   /* Option handling. */
   while (1) 
     {
-      opt = getopt_long (argc, argv, "be:hi:", longopts, 0);
+      opt = getopt_long (argc, argv, "be:h", longopts, 0);
     
       if (opt == EOF)
 	break;
@@ -209,7 +211,7 @@ main (int argc, char **argv, char **env)
 	case 0:
 	  break;
 	case 'b':
-	  batch_flag = 1;
+	  boot_flag = 1;
 	  break;
 	case 'e':
 	  eval_flag = 1;
@@ -236,6 +238,7 @@ main (int argc, char **argv, char **env)
   vtysh_init_vty ();
   vtysh_init_cmd ();
   vtysh_user_init ();
+  vtysh_config_init ();
 
   vty_init_vtysh ();
 
@@ -244,7 +247,7 @@ main (int argc, char **argv, char **env)
   vtysh_connect_all ();
 
   /* Read vtysh configuration file. */
-  vty_read_config (config_file, config_current, config_default);
+  vtysh_read_config (config_file, config_current, config_default);
 
   /* If eval mode */
   if (eval_flag)
@@ -252,9 +255,13 @@ main (int argc, char **argv, char **env)
       vtysh_execute (eval_line);
       exit (0);
     }
-
-  if (batch_flag)
-    exit (0);
+  
+  /* Boot startup configuration file. */
+  if (boot_flag)
+    {
+      vtysh_read_config (integrate_file, integrate_current, integrate_default);
+      exit (0);
+    }
 
   vtysh_readline_init ();
 

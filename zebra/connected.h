@@ -35,11 +35,9 @@ connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr,
 		       int prefixlen, struct in_addr *broad);
 
 void
-connected_up_ipv4 (struct interface *ifp, struct in_addr *addr, 
-		   int prefixlen);
+connected_up_ipv4 (struct interface *, struct connected *);
 void
-connected_down_ipv4 (struct interface *ifp, struct in_addr *addr, 
-		     int prefixlen);
+connected_down_ipv4 (struct interface *, struct connected *);
 
 #ifdef HAVE_IPV6
 int

@@ -276,8 +276,8 @@ DEFUN (ospf6_routemap_no_set_metric_type,
 }
 
 /* add "set metric" */
-DEFUN (ospf6_routemap_set_metric,
-       ospf6_routemap_set_metric_cmd,
+DEFUN (set_metric,
+       set_metric_cmd,
        "set metric <0-4294967295>",
        "Set value\n"
        "Metric value\n"
@@ -289,8 +289,8 @@ DEFUN (ospf6_routemap_set_metric,
 }
 
 /* delete "set metric" */
-DEFUN (ospf6_routemap_no_set_metric,
-       ospf6_routemap_no_set_metric_cmd,
+DEFUN (no_set_metric,
+       no_set_metric_cmd,
        "no set metric <0-4294967295>",
        NO_STR
        "Set value\n"
@@ -351,8 +351,8 @@ ospf6_routemap_init ()
   install_element (RMAP_NODE, &ospf6_routemap_no_set_metric_type_cmd);
 
   /* ASE Metric */
-  install_element (RMAP_NODE, &ospf6_routemap_set_metric_cmd);
-  install_element (RMAP_NODE, &ospf6_routemap_no_set_metric_cmd);
+  install_element (RMAP_NODE, &set_metric_cmd);
+  install_element (RMAP_NODE, &no_set_metric_cmd);
 
   /* ASE Metric */
   install_element (RMAP_NODE, &ospf6_routemap_set_forwarding_cmd);

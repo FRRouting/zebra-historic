@@ -1,6 +1,6 @@
 /*
  * Route map function of ospfd.
- * Copyright (C) 2000 DML Networks, Inc.
+ * Copyright (C) 2000 IP Infusion Inc.
  *
  * Written by Toshiaki Takada.
  *

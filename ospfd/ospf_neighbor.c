@@ -72,17 +72,11 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   nbr->nbr_static = NULL;
 
-  /* Initialize lists. */
-  /* nbr->ls_retransmit = list_init (); */
-  /* nbr->db_summary = list_init (); */
-  /* nbr->ls_request = list_init (); */
   new_lsdb_init (&nbr->db_sum);
   new_lsdb_init (&nbr->ls_rxmt);
   new_lsdb_init (&nbr->ls_req);
 
-  /* Start periodic timer thread ospf_ls_upd_timer (). */
-  /* Will be starter on NSM_Exchange event */
-  /*OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);*/
+  nbr->crypt_seqnum = 0;
 
   return nbr;
 }

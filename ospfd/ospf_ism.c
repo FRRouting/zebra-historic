@@ -43,9 +43,6 @@
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_abr.h"
-
-extern unsigned long term_debug_ospf_ism;
-
 
 /* elect DR and BDR. Refer to RFC2319 section 9.4 */
 struct ospf_neighbor *
@@ -637,6 +634,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 
   old_status = oi->status;
   oi->status = status;
+  oi->status_change++;
 
   if (old_status == ISM_Down || status == NSM_Down)
     ospf_check_abr_status();

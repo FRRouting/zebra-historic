@@ -76,6 +76,16 @@ keychain_lookup (char *name)
   return NULL;
 }
 
+int
+key_cmp_func (struct key *k1, struct key *k2)
+{
+  if (k1->index > k2->index)
+    return 1;
+  if (k1->index < k2->index)
+    return -1;
+  return 0;
+}
+
 void
 key_delete_func (struct key *key)
 {
@@ -97,6 +107,7 @@ keychain_get (char *name)
   keychain = keychain_new ();
   keychain->name = strdup (name);
   keychain->key = list_new ();
+  keychain->key->cmp = (int (*)(void *, void *)) key_cmp_func;
   keychain->key->del = (void (*)(void *)) key_delete_func;
   listnode_add (keychain_list, keychain);
 
@@ -205,7 +216,7 @@ key_get (struct keychain *keychain, u_int32_t index)
 
   key = key_new ();
   key->index = index;
-  listnode_add (keychain->key, key);
+  listnode_add_sort (keychain->key, key);
 
   return key;
 }
@@ -859,14 +870,14 @@ struct cmd_node keychain_node =
 {
   KEYCHAIN_NODE,
   "%s(config-keychain)# ",
-  0
+  1
 };
 
 struct cmd_node keychain_key_node =
 {
   KEYCHAIN_KEY_NODE,
   "%s(config-keychain-key)# ",
-  0
+  1
 };
 
 int
@@ -958,8 +969,15 @@ keychain_init ()
   install_element (CONFIG_NODE, &no_key_chain_cmd);
   install_element (KEYCHAIN_NODE, &key_cmd);
   install_element (KEYCHAIN_NODE, &no_key_cmd);
+
+  install_element (KEYCHAIN_NODE, &key_chain_cmd);
+  install_element (KEYCHAIN_NODE, &no_key_chain_cmd);
+
   install_element (KEYCHAIN_KEY_NODE, &key_string_cmd);
   install_element (KEYCHAIN_KEY_NODE, &no_key_string_cmd);
+
+  install_element (KEYCHAIN_KEY_NODE, &key_chain_cmd);
+  install_element (KEYCHAIN_KEY_NODE, &no_key_chain_cmd);
 
   install_element (KEYCHAIN_KEY_NODE, &key_cmd);
   install_element (KEYCHAIN_KEY_NODE, &no_key_cmd);

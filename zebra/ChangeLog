@@ -1,3 +1,151 @@
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+2001-01-09  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* interface.c (if_new_intern_ifindex): Allocate a new internal
+	interface index.
+	(if_addr_refresh): Fix up ip addresses configured via zebra.
+	(if_add_update): Handle an interface addition.
+	(if_delete_update): Handle an interface delete event.
+
+	* rib.c (nexthop_ipv4_add): Add kernel route deletion process when
+	interface goes down.
+
+2001-01-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* interface.c (if_dump_vty): When HAVE_NET_RT_IFLIST is defined,
+	NetBSD also use this function.  Suggested by Jasper Wallace
+	<jasper@ivision.co.uk>.
+
+2001-01-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (nexthop_active_ipv4): Move back to set methodo to old
+	one.
+
+2001-01-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_add_ipv4): EBGP multihop set ZEBRA_FLAG_INTERNAL
+	flag, so treat it.
+
+2001-01-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_talk_ipv6): When IPv6 route message is
+	sent from netlink_cmd, the same message comes from netlink.  To
+	avoid confusion, temporary netlink_talk_ipv6 use netlink.sock
+	instead of netlink_cmd.sock.
+
+2001-01-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.h (ZEBRA_SERV_PATH): Change "/tmp/zebra" to "/tmp/.zebra".
+	Change "/tmp/zserv" to "/tmp/.zserv".
+	
+2000-12-29  Frank van Maarseveen <F.vanMaarseveen@inter.NL.net>
+
+	* rt_netlink.c (struct nlsock): Divide kernel message into listen
+	socket and command socket.
+	(netlink_talk): Remove socket listen code.  Use netlink_parse_info
+	for read kernel response.
+
+2000-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (vty_show_ip_route): Show uptime of the RIP,OSPF,BGP
+	routes.
+
+2000-12-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_route_multipath): Metric value is
+	reflected to kernel routing table.
+
+	* rt_ioctl.c (kernel_ioctl_ipv4_multipath): Likewise.
+
+	* kernel_socket.c (rtm_write): Likewise.
+
+	* rib.c (nexthop_active_ipv4): Only iBGP route perform recursive
+	nexthop lookup.
+
+	* rt_ioctl.c (kernel_ioctl_ipv4_multipath): Add ioctl version of
+	new RIB implementation.
+
+2000-12-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.h: Remove MULTIPATH_NUM.  It is defined by configure script.
+
+2000-12-25  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* rib.c (rib_if_up): Call rib_fib_set instead of RIB_FIB_SET for
+	proper redistribution.
+
+2000-12-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (nexthop_active_ipv4): Add self lookup nexthop check.
+	(show_ip_route_protocol): Support new RIB.
+
+	* rt_netlink.c (netlink_route_change): Do not return when gate is
+	NULL.
+
+2000-12-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_lookup_ipv4_nexthop): IBGP nexthop check function is
+	updated.
+	(rib_add_ipv4): Free implicit withdraw route's RIB.
+
+2000-12-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (nexthop_active_ipv4): Check indirect nexthop.
+
+	* redistribute.c (redistribute_add_multipath): Redistribution
+	works with new rib code.
+
+2000-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_route_multipath): Check useful nexthop
+	number.
+	(netlink_route_multipath): Clear rtnh_flags and rtnh_hops.
+
+	* rib.c (nexthop_active_update): Set flag for the rib's nexthop
+	activity is changed.
+	(nexthop_active_check): Before checking interface is up, make it
+	sure the interface exist.
+
+2000-11-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (ip_route): New RIB prototype.
+
+2000-11-16  Yon Uriarte <ukl2@rz.uni-karlsruhe.de>
+
+	* zserv.c (zsend_interface_add): Send hardware address when
+	hw_addr_len is greater than 0.
+
+2000-11-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* connected.c (connected_up_ipv4): Fix ptop bug.  The destination
+	network should be installed into routing table.
+	(connected_down_ipv4): Likewise.
+	(connected_add_ipv4): Change to use connected_up_ipv4.
+	(connected_delete_ipv4): Likewise.
+
+2000-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_interface_addr): Revert Harald Welte
+	<laforge@gnumonks.org>'s ptop patch then back to original code to
+	avoid duplicated connected route problem.  Suggested by Frank van
+	Maarseveen <F.vanMaarseveen@inter.NL.net>.
+
+	* kernel_socket.c (rtm_read): Make behavior consistent even #ifdef
+	DEBUG is defined.  Reported by Jun-ichiro itojun Hagino
+	<itojun@iijlab.net>.
+
+2000-10-23  Jochen Friedrich <jochen@scram.de>
+
+	* main.c (main): Call zebra_snmp_init() when it is enabled.
+
+2000-10-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.c (zebra_serv_un): UNIX domain socket server of zebra
+	protocol.
+
 2000-10-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rib.c (rib_add_ipv4): Same check bug is fixed.
@@ -15,7 +163,7 @@
 
 2000-09-24  Harald Welte <laforge@gnumonks.org>
 
-	* rt_netlink.c (netlink_interface_addr): Fix pont-to-point address
+	* rt_netlink.c (netlink_interface_addr): Fix point-to-point address
 	treatment in netlink interface.
 
 2000-09-21  David Lipovkov <dlipovkov@OpticalAccess.com>

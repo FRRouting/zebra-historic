@@ -398,6 +398,13 @@ buffer_flush_vty (struct buffer *b, int fd, int size,
   struct buffer_data *out;
   struct buffer_data *next;
 
+#ifdef  IOV_MAX
+  int iov_size;
+  int total_size;
+  struct iovec *c_iov;
+  int c_nbytes;
+#endif /* IOV_MAX */
+
   /* For erase and more data add two to b's buffer_data count.*/
   if (b->alloc == 1)
     iov = small_iov;
@@ -445,7 +452,42 @@ buffer_flush_vty (struct buffer *b, int fd, int size,
     }
 
   /* We use write or writev*/
-  nbytes = writev (fd, iov, iov_index);
+
+#ifdef IOV_MAX
+  /* IOV_MAX are normally defined in <sys/uio.h> , Posix.1g.
+     example: Solaris2.6 are defined IOV_MAX size at 16.     */
+  c_iov = iov;
+  total_size = iov_index;
+  nbytes = 0;
+
+  while( total_size > 0 )
+    {
+       /* initialize write vector size at once */
+       iov_size = ( total_size > IOV_MAX ) ? IOV_MAX : total_size;
+
+       c_nbytes = writev (fd, c_iov, iov_size );
+
+       if( c_nbytes < 0 )
+         {
+           if(errno == EINTR)
+             ;
+             ;
+           if(errno == EWOULDBLOCK)
+             ;
+             ;
+           nbytes = c_nbytes;
+           break;
+
+         }
+
+        nbytes += c_nbytes;
+
+       /* move pointer io-vector */
+       c_iov += iov_size;
+       total_size -= iov_size;
+    }
+#else  /* IOV_MAX */
+   nbytes = writev (fd, iov, iov_index);
 
   /* Error treatment. */
   if (nbytes < 0)
@@ -455,6 +497,7 @@ buffer_flush_vty (struct buffer *b, int fd, int size,
       if (errno == EWOULDBLOCK)
 	;
     }
+#endif /* IOV_MAX */
 
   /* Free printed buffer data. */
   for (out = b->head; out && out != data; out = next)

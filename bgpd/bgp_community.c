@@ -59,15 +59,72 @@ community_add_val (struct community *com, u_int32_t val)
     com->val = XREALLOC (MTYPE_COMMUNITY_VAL, com->val, com_length (com));
   else
     com->val = XMALLOC (MTYPE_COMMUNITY_VAL, com_length (com));
-  com_lastval (com) = htonl (val);
+
+  val = htonl (val);
+  memcpy (com_lastval (com), &val, sizeof (u_int32_t));
+}
+
+/* Delete one community. */
+void
+community_del_val (struct community *com, u_int32_t *val)
+{
+  int i = 0;
+  int c = 0;
+
+  if (! com->val)
+    return;
+
+  while (i < com->size)
+    {
+      if (memcmp (com->val + i, val, sizeof (u_int32_t)) == 0)
+	{
+	  c = com->size -i -1;
+
+	  if (c > 0)
+	    memcpy (com->val + i, com->val + (i + 1), c * sizeof (val));
+
+	  com->size--;
+
+	  if (com->size > 0)
+	    com->val = XREALLOC (MTYPE_COMMUNITY_VAL, com->val,
+				 com_length (com));
+	  else
+	    {
+	      XFREE (MTYPE_COMMUNITY_VAL, com->val);
+	      com->val = NULL;
+	    }
+	  return;
+	}
+      i++;
+    }
+}
+
+/* Delete all communities listed in com2 from com1 */
+struct community *
+community_delete (struct community *com1, struct community *com2)
+{
+  int i = 0;
+
+  while(i < com2->size)
+    {
+      community_del_val (com1, com2->val + i);
+      i++;
+    }
+
+  return com1;
 }
 
 /* Callback function from qsort(). */
 int
 community_compare (const void *a1, const void *a2)
 {
-  u_int32_t v1 = ntohl (*((u_int32_t *) a1));
-  u_int32_t v2 = ntohl (*((u_int32_t *) a2));
+  u_int32_t v1;
+  u_int32_t v2;
+
+  memcpy (&v1, a1, sizeof (u_int32_t));
+  memcpy (&v2, a2, sizeof (u_int32_t));
+  v1 = ntohl (v1);
+  v2 = ntohl (v2);
 
   if (v1 < v2)
     return -1;
@@ -81,9 +138,13 @@ community_include (struct community *com, u_int32_t val)
 {
   int i;
 
+  val = htonl (val);
+
   for (i = 0; i < com->size; i++)
-    if (ntohl (com_nthval (com, i)) == val)
-      return 1;
+    {
+      if (memcmp (&val, com_nthval (com, i), sizeof (u_int32_t)) == 0)
+	return 1;
+    }
   return 0;
 }
 
@@ -99,7 +160,9 @@ community_uniq_sort (struct community *com)
   
   for (i = 0; i < com->size; i++)
     {
-      val = ntohl (com_nthval (com, i));
+      memcpy (&val, com_nthval (com, i), sizeof (u_int32_t));
+      val = ntohl (val);
+
       if (! community_include (new, val))
 	community_add_val (new, val);
     }
@@ -221,7 +284,8 @@ community_print (struct community *com)
 
   for (i = 0; i < com->size; i++) 
     {
-      comval = ntohl (com_nthval (com, i));
+      memcpy (&comval, com_nthval (com, i), sizeof (u_int32_t));
+      comval = ntohl (comval);
       switch (comval) 
 	{
 	case COMMUNITY_NO_EXPORT:
@@ -265,15 +329,24 @@ community_hash_make (struct community *com)
 int
 community_match (struct community *com1, struct community *com2)
 {
-  int i;
+  int i = 0;
+  int j = 0;
 
   if (com1->size < com2->size)
     return 0;
 
-  for (i = 0; i <= com1->size - com2->size; i++)
-    if (memcmp (com1->val + i, com2->val, com2->size * 4) == 0)
-      return 1;
-  return 0;
+  /* Every community on com2 needs to be on com1 for this to match */
+  while (i < com1->size && j < com2->size)
+    {
+      if (memcmp (com1->val + i, com2->val + j, sizeof (u_int32_t)) == 0)
+	j++;
+      i++;
+    }
+
+  if (j == com2->size)
+    return 1;
+  else
+    return 0;
 }
 
 /* If two aspath have same value then return 1 else return 0. This
@@ -325,7 +398,8 @@ community_print_vty (struct vty *vty, struct community *com)
 
   for (i = 0; i < com->size; i++) 
     {
-      comval = ntohl (com_nthval (com, i));
+      memcpy (&comval, com_nthval (com, i), sizeof (u_int32_t));
+      comval = ntohl (comval);
       switch (comval) 
 	{
 	case COMMUNITY_NO_EXPORT:

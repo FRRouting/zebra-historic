@@ -36,7 +36,8 @@ void thread_master_debug (struct thread_master *);
 #define THREAD_WRITE 1
 #define THREAD_TIMER 2
 #define THREAD_EVENT 3
-#define THREAD_UNUSED 4
+#define THREAD_READY 4
+#define THREAD_UNUSED 5
 
 /* Make thread master. */
 struct thread_master *
@@ -183,6 +184,19 @@ thread_destroy_master (struct thread_master *m)
       thread = t->next;
 
       thread_list_delete (&m->event, t);
+      t->type = THREAD_UNUSED;
+      thread_add_unuse (m, t);
+    }
+
+  thread = m->ready.head;
+  while (thread)
+    {
+      struct thread *t;
+
+      t = thread;
+      thread = t->next;
+
+      thread_list_delete (&m->ready, t);
       t->type = THREAD_UNUSED;
       thread_add_unuse (m, t);
     }
@@ -405,6 +419,12 @@ thread_cancel (struct thread *thread)
 #endif /* DEBUG */  
       thread_list_delete (&thread->master->event, thread);
       break;
+    case THREAD_READY:
+#ifdef DEBUG
+      printf ("cancel ready\n");
+#endif /* DEBUG */  
+      thread_list_delete (&thread->master->ready, thread);
+      break;
     default:
       break;
     }
@@ -486,6 +506,15 @@ thread_fetch (struct thread_master *m,
 
   /* If there is event process it first. */
   while ((thread = thread_trim_head (&m->event)))
+    {
+      *fetch = *thread;
+      thread->type = THREAD_UNUSED;
+      thread_add_unuse (m, thread);
+      return fetch;
+    }
+
+  /* If there is ready threads process them */
+  while ((thread = thread_trim_head (&m->ready)))
     {
       *fetch = *thread;
       thread->type = THREAD_UNUSED;
@@ -580,8 +609,8 @@ thread_fetch (struct thread_master *m,
 	  assert (FD_ISSET (t->u.fd, &m->readfd));
 	  FD_CLR(t->u.fd, &m->readfd);
 	  thread_list_delete (&m->read, t);
-	  thread_list_add (&m->event, t);
-	  t->type = THREAD_EVENT;
+	  thread_list_add (&m->ready, t);
+	  t->type = THREAD_READY;
 	}
     }
 #ifdef DEBUG
@@ -609,8 +638,8 @@ thread_fetch (struct thread_master *m,
 	  assert (FD_ISSET (t->u.fd, &m->writefd));
 	  FD_CLR(t->u.fd, &m->writefd);
 	  thread_list_delete (&m->write, t);
-	  thread_list_add (&m->event, t);
-	  t->type = THREAD_EVENT;
+	  thread_list_add (&m->ready, t);
+	  t->type = THREAD_READY;
 	}
     }
 
@@ -631,15 +660,15 @@ thread_fetch (struct thread_master *m,
       if (thread_timer_cmp (timer_now, t->u.sands) >= 0)
       {
 	thread_list_delete (&m->timer, t);
-	thread_list_add (&m->event, t);
-	t->type = THREAD_EVENT;
+	thread_list_add (&m->ready, t);
+	t->type = THREAD_READY;
       }
     }
 
   /* Return one event. */
-  thread = thread_trim_head (&m->event);
+  thread = thread_trim_head (&m->ready);
 
-  /* There is no events. */
+  /* There is no ready thread. */
   if (!thread)
     goto retry;
 

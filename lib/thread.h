@@ -38,6 +38,7 @@ struct thread_master
   struct thread_list write;
   struct thread_list timer;
   struct thread_list event;
+  struct thread_list ready;
   struct thread_list unuse;
   fd_set readfd;
   fd_set writefd;

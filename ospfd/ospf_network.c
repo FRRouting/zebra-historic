@@ -49,7 +49,10 @@ ospf_serv_sock (struct interface *ifp, int family)
 
   ospf_sock = socket (family, SOCK_RAW, IPPROTO_OSPFIGP);
   if (ospf_sock < 0)
+    {
+      zlog_warn ("ospf_serv_sock: socket: %s", strerror (errno));
     return ospf_sock;
+    }
 
   /*
   sockopt_reuseaddr (ospf_sock);
@@ -58,14 +61,21 @@ ospf_serv_sock (struct interface *ifp, int family)
   /* Set TTL to 1. */
 
   oi = ifp->info;
-  if (oi == NULL) return -1;
+  if (oi == NULL)
+    {
+      close (ospf_sock);	/* Prevent sd leak. */
+      return -1;
+    }
 
   if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
      ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_VL_IP_TTL);
   else 
      ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_IP_TTL);
   if (ret < 0)
+    {
+      close (ospf_sock);	/* Prevent sd leak. */
     return ret;
+    }
 
   /* Set precedence field. */
 #ifdef IPTOS_PREC_INTERNETCONTROL
@@ -75,6 +85,7 @@ ospf_serv_sock (struct interface *ifp, int family)
   if (ret < 0)
     {
       zlog_warn ("can't set sockopt IP_TOS %d to socket %d", tos, ospf_sock);
+      close (ospf_sock);	/* Prevent sd leak. */
       return ret;
     }
 #endif /* IPTOS_PREC_INTERNETCONTROL */
@@ -211,6 +222,7 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
   
       if (ret < 0) {
 	zlog_warn ("can't bind socket to device %s", ifp->name);
+        close (sock);	/* Prevent sd leak. */
 	return ret;
       }
     }
@@ -226,7 +238,11 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
       /* Join mcast group. */
       ret = ospf_if_add_allspfrouters (ifp, sock, p);
       if (ret < 0)
+	{
+          close (sock);	/* Prevent sd leak. */
+	  oi->fd = -1;
 	return ret;
+	}
 
       /* Create input/output buffer stream. */
       ospf_if_stream_set (oi);

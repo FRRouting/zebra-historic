@@ -83,15 +83,18 @@ struct bgp
   char *name;
 
   /* BGP configuration. */
-#define BGP_CONFIG_ROUTER_ID            0x001
-#define BGP_CONFIG_CLUSTER_ID           0x002
-#define BGP_CONFIG_CONFEDERATION        0x004
-#define BGP_CONFIG_ALWAYS_COMPARE_MED   0x008
-#define BGP_CONFIG_DETERMINISTIC_MED    0x010
-#define BGP_CONFIG_MED_MISSING_AS_WORST 0x020
-#define BGP_CONFIG_MED_CONFED           0x040
-#define BGP_CONFIG_NO_DEFAULT_IPV4      0x080
-#define BGP_CONFIG_NO_CLIENT_TO_CLIENT  0x100
+#define BGP_CONFIG_ROUTER_ID              (1 << 0)
+#define BGP_CONFIG_CLUSTER_ID             (1 << 1)
+#define BGP_CONFIG_CONFEDERATION          (1 << 2)
+#define BGP_CONFIG_ALWAYS_COMPARE_MED     (1 << 3)
+#define BGP_CONFIG_DETERMINISTIC_MED      (1 << 4)
+#define BGP_CONFIG_MED_MISSING_AS_WORST   (1 << 5)
+#define BGP_CONFIG_MED_CONFED             (1 << 6)
+#define BGP_CONFIG_NO_DEFAULT_IPV4        (1 << 7)
+#define BGP_CONFIG_NO_CLIENT_TO_CLIENT    (1 << 8)
+#define BGP_CONFIG_ENFORCE_FIRST_AS       (1 << 9)
+#define BGP_CONFIG_COMPARE_ROUTER_ID      (1 << 10)
+#define BGP_CONFIG_ASPATH_IGNORE          (1 << 11)
   u_int16_t config;
 
   /* BGP identifier. */
@@ -283,41 +286,43 @@ struct peer
   /* Peer address family configuration. */
   u_char afc[AFI_MAX][SAFI_MAX];
   u_char afc_nego[AFI_MAX][SAFI_MAX];
+  u_char afc_adv[AFI_MAX][SAFI_MAX];
+  u_char afc_recv[AFI_MAX][SAFI_MAX];
 
   /* Route refresh capability. */
   u_char refresh_adv;
-  u_char refresh_nego;
+  u_char refresh_nego_old;
+  u_char refresh_nego_new;
 
   /* User configuration flags. */
   u_int16_t flags;
-#define PEER_FLAG_PASSIVE             0x0001 /* passive mode */
-#define PEER_FLAG_SHUTDOWN            0x0002 /* shutdown */
-#define PEER_FLAG_NEXTHOP_SELF        0x0004 /* next-hop-self */
-#define PEER_FLAG_SOFT_RECONFIG       0x0008 /* soft-reconfiguration */
-#define PEER_FLAG_SEND_COMMUNITY      0x0010 /* send-community */
-#define PEER_FLAG_REFLECTOR_CLIENT    0x0020 /* reflector-client */
-#define PEER_FLAG_RSERVER_CLIENT      0x0040 /* route-server-client */
-#define PEER_FLAG_DEFAULT_ORIGINATE   0x0080 /* default-originate */
-#define PEER_FLAG_DONT_CAPABILITY     0x0100 /* dont-capability */
-#define PEER_FLAG_OVERRIDE_CAPABILITY 0x0200 /* override-capability */
-#define PEER_FLAG_STRICT_CAP_MATCH    0x0400 /* strict-capability-match */
-#define PEER_FLAG_ROUTE_REFRESH       0x0800 /* route-refresh */
-#define PEER_FLAG_TRANSPARENT_AS      0x1000 /* transparent-as */
-#define PEER_FLAG_TRANSPARENT_NEXTHOP 0x2000 /* transparent-next-hop */
-#define PEER_FLAG_SEND_EXT_COMMUNITY  0x4000 /* send-community extended */
+#define PEER_FLAG_PASSIVE                  (1 << 0) /* passive mode */
+#define PEER_FLAG_SHUTDOWN                 (1 << 1) /* shutdown */
+#define PEER_FLAG_NEXTHOP_SELF             (1 << 2) /* next-hop-self */
+#define PEER_FLAG_SOFT_RECONFIG            (1 << 3) /* soft-reconfiguration */
+#define PEER_FLAG_SEND_COMMUNITY           (1 << 4) /* send-community */
+#define PEER_FLAG_REFLECTOR_CLIENT         (1 << 5) /* reflector-client */
+#define PEER_FLAG_RSERVER_CLIENT           (1 << 6) /* route-server-client */
+#define PEER_FLAG_DEFAULT_ORIGINATE        (1 << 7) /* default-originate */
+#define PEER_FLAG_DONT_CAPABILITY          (1 << 8) /* dont-capability */
+#define PEER_FLAG_OVERRIDE_CAPABILITY      (1 << 9) /* override-capability */
+#define PEER_FLAG_STRICT_CAP_MATCH         (1 << 10) /* strict-capability-match */
+#define PEER_FLAG_CAPABILITY_ROUTE_REFRESH (1 << 11) /* route-refresh */
+#define PEER_FLAG_TRANSPARENT_AS           (1 << 12) /* transparent-as */
+#define PEER_FLAG_TRANSPARENT_NEXTHOP      (1 << 13) /* transparent-next-hop */
+#define PEER_FLAG_SEND_EXT_COMMUNITY       (1 << 14) /* send-community extended */
 
   /* Peer status flags. */
   u_int16_t sflags;
-#define PEER_STATUS_ACCEPT_PEER	      0x0001 /* accept peer */
-#define PEER_STATUS_PREFIX_OVERFLOW   0x0002 /* prefix-overflow */
-#define PEER_STATUS_CAPABILITY_OPEN   0x0004 /* capability open send */
+#define PEER_STATUS_ACCEPT_PEER	      (1 << 0) /* accept peer */
+#define PEER_STATUS_PREFIX_OVERFLOW   (1 << 1) /* prefix-overflow */
+#define PEER_STATUS_CAPABILITY_OPEN   (1 << 2) /* capability open send */
 
   /* Default attribute value for the peer. */
   u_int32_t config;
-#define PEER_CONFIG_WEIGHT            0x0001 /* Default weight. */
-#define PEER_CONFIG_HOLDTIME          0x0002 /* holdtime */
-#define PEER_CONFIG_KEEPALIVE         0x0004 /* keepalive */
-#define PEER_CONFIG_CONNECT           0x0008 /* connect */
+#define PEER_CONFIG_WEIGHT            (1 << 0) /* Default weight. */
+#define PEER_CONFIG_TIMER             (1 << 1) /* keepalive & holdtime */
+#define PEER_CONFIG_CONNECT           (1 << 2) /* connect */
   u_int32_t weight;
   u_int32_t holdtime;
   u_int32_t keepalive;
@@ -346,10 +351,17 @@ struct peer
   u_int32_t open_out;		/* Open message output count */
   u_int32_t update_in;		/* Update message input count */
   u_int32_t update_out;		/* Update message ouput count */
+  time_t update_time;		/* Update message received time. */
   u_int32_t keepalive_in;	/* Keepalive input count */
   u_int32_t keepalive_out;	/* Keepalive output count */
   u_int32_t notify_in;		/* Notify input count */
   u_int32_t notify_out;		/* Notify output count */
+  u_int32_t refresh_in;		/* Route Refresh input count */
+  u_int32_t refresh_out;	/* Route Refresh output count */
+
+  /* BGP state count */
+  u_int32_t established;	/* Established */
+  u_int32_t dropped;		/* Dropped */
 
   /* Adj-RIBs-In.  */
   struct route_table *adj_in[AFI_MAX][SAFI_MAX];
@@ -491,7 +503,7 @@ struct bgp_nlri
 /* Default port values. */
 #define BGP_PORT_DEFAULT   179
 #define BGP_VTY_PORT      2605
-#define BGP_VTYSH_PATH    "/tmp/bgpd"
+#define BGP_VTYSH_PATH    "/tmp/.bgpd"
 
 /* Default configuration file name for bgpd. */
 #define BGP_DEFAULT_CONFIG "bgpd.conf"
@@ -500,7 +512,9 @@ struct bgp_nlri
 #define BGP_INIT_START_TIMER        5
 #define BGP_ERROR_START_TIMER      30
 #define BGP_DEFAULT_HOLDTIME      180
-#define BGP_DEFAULT_KEEPALIVE      30
+#define BGP_DEFAULT_KEEPALIVE      60 
+#define BGP_DEFAULT_ASORIGINATE    15
+#define BGP_DEFAULT_ROUTEADV       30
 #define BGP_CLEAR_CONNECT_RETRY    20
 #define BGP_DEFAULT_CONNECT_RETRY 120
 
@@ -565,6 +579,9 @@ struct peer *peer_create_accept ();
 
 int peer_active (struct peer *);
 
+void bgpTrapEstablished (struct peer *);
+void bgpTrapBackwardTransition (struct peer *);
+
 extern struct message bgp_status_msg[];
 extern int bgp_status_msg_max;
 
@@ -578,5 +595,9 @@ extern struct list *bgp_list;
 /* All peer instance.  This linked list is rarely used.  Usually
    bgp_list is used to walk down peer's list.  */
 extern struct list *peer_list;
+
+extern time_t bgp_start_time;
+
+extern int no_kernel_mode;
 
 #endif /* _ZEBRA_BGPD_H */

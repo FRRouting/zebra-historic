@@ -770,7 +770,8 @@ route_map_init ()
 }
 
 /* VTY related functions. */
-DEFUN (route_map, route_map_cmd,
+DEFUN (route_map,
+       route_map_cmd,
        "route-map WORD (deny|permit) <1-65535>",
        "Create route-map or enter route-map command mode\n"
        "Route map tag\n"
@@ -818,7 +819,8 @@ DEFUN (route_map, route_map_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_route_map_all, no_route_map_all_cmd,
+DEFUN (no_route_map_all,
+       no_route_map_all_cmd,
        "no route-map WORD",
        NO_STR
        "Create route-map or enter route-map command mode\n"
@@ -839,7 +841,8 @@ DEFUN (no_route_map_all, no_route_map_all_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_route_map, no_route_map_cmd,
+DEFUN (no_route_map,
+       no_route_map_cmd,
        "no route-map WORD (deny|permit) <1-65535>",
        NO_STR
        "Create route-map or enter route-map command mode\n"

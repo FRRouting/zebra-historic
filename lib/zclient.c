@@ -29,7 +29,9 @@
 #include "thread.h"
 #include "zclient.h"
 #include "memory.h"
+#include "table.h"
 
+#include "zebra/rib.h"
 #include "zebra/zserv.h"
 
 /* Zebra client events. */
@@ -161,6 +163,39 @@ zclient_socket ()
   return sock;
 }
 
+/* For sockaddr_un. */
+#include <sys/un.h>
+
+int
+zclient_socket_un (char *path)
+{
+  int ret;
+  int sock, len;
+  struct sockaddr_un addr;
+
+  sock = socket (AF_UNIX, SOCK_STREAM, 0);
+  if (sock < 0)
+    return -1;
+  
+  /* Make server socket. */ 
+  memset (&addr, 0, sizeof (struct sockaddr_un));
+  addr.sun_family = AF_UNIX;
+  strncpy (addr.sun_path, path, strlen (path));
+#ifdef HAVE_SUN_LEN
+  len = addr.sun_len = SUN_LEN(&addr);
+#else
+  len = sizeof (addr.sun_family) + strlen (addr.sun_path);
+#endif /* HAVE_SUN_LEN */
+
+  ret = connect (sock, (struct sockaddr *) &addr, len);
+  if (ret < 0)
+    {
+      close (sock);
+      return -1;
+    }
+  return sock;
+}
+
 /* Send simple Zebra message. */
 int
 zebra_message_send (struct zclient *zclient, int command)
@@ -200,7 +235,11 @@ zclient_start (struct zclient *zclient)
     return 0;
 
   /* Make socket. */
+#ifdef HAVE_TCP_ZEBRA
   zclient->sock = zclient_socket ();
+#else
+  zclient->sock = zclient_socket_un (ZEBRA_SERV_PATH);
+#endif /* HAVE_TCP_ZEBRA */
   if (zclient->sock < 0)
     {
       if (zclient_debug)
@@ -276,6 +315,7 @@ zapi_ipv4_add (struct zclient *zclient, struct prefix_ipv4 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
+#ifdef OLD_RIB
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num);
@@ -288,6 +328,24 @@ zapi_ipv4_add (struct zclient *zclient, struct prefix_ipv4 *p,
       for (i = 0; i < api->ifindex_num; i++)
 	stream_putl (s, api->ifindex[i]);
     }
+#else
+  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      stream_putc (s, api->nexthop_num + api->ifindex_num);
+
+      for (i = 0; i < api->nexthop_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IPV4);
+	  stream_put_in_addr (s, api->nexthop[i]);
+	}
+      for (i = 0; i < api->ifindex_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
+	  stream_putl (s, api->ifindex[i]);
+	}
+    }
+#endif /* OLD_RIB */
+
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -326,6 +384,7 @@ zapi_ipv4_delete (struct zclient *zclient, struct prefix_ipv4 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
+#ifdef OLD_RIB
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num);
@@ -338,6 +397,23 @@ zapi_ipv4_delete (struct zclient *zclient, struct prefix_ipv4 *p,
       for (i = 0; i < api->ifindex_num; i++)
 	stream_putl (s, api->ifindex[i]);
     }
+#else
+  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      stream_putc (s, api->nexthop_num + api->ifindex_num);
+
+      for (i = 0; i < api->nexthop_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IPV4);
+	  stream_put_in_addr (s, api->nexthop[i]);
+	}
+      for (i = 0; i < api->ifindex_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
+	  stream_putl (s, api->ifindex[i]);
+	}
+    }
+#endif /* OLD_RIB */
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -377,6 +453,7 @@ zapi_ipv6_add (struct zclient *zclient, struct prefix_ipv6 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
+#ifdef OLD_RIB
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num);
@@ -389,6 +466,23 @@ zapi_ipv6_add (struct zclient *zclient, struct prefix_ipv6 *p,
       for (i = 0; i < api->ifindex_num; i++)
 	stream_putl (s, api->ifindex[i]);
     }
+#else
+  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      stream_putc (s, api->nexthop_num + api->ifindex_num);
+
+      for (i = 0; i < api->nexthop_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IPV6);
+	  stream_write (s, (u_char *)api->nexthop[i], 16);
+	}
+      for (i = 0; i < api->ifindex_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
+	  stream_putl (s, api->ifindex[i]);
+	}
+    }
+#endif /* OLD_RIB */
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -427,6 +521,7 @@ zapi_ipv6_delete (struct zclient *zclient, struct prefix_ipv6 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
+#ifdef OLD_RIB
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num);
@@ -439,6 +534,23 @@ zapi_ipv6_delete (struct zclient *zclient, struct prefix_ipv6 *p,
       for (i = 0; i < api->ifindex_num; i++)
 	stream_putl (s, api->ifindex[i]);
     }
+#else
+  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      stream_putc (s, api->nexthop_num + api->ifindex_num);
+
+      for (i = 0; i < api->nexthop_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IPV6);
+	  stream_write (s, (u_char *)api->nexthop[i], 16);
+	}
+      for (i = 0; i < api->ifindex_num; i++)
+	{
+	  stream_putc (s, ZEBRA_NEXTHOP_IFINDEX);
+	  stream_putl (s, api->ifindex[i]);
+	}
+    }
+#endif /* OLD_RIB */
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -501,6 +613,10 @@ zebra_interface_add_read (struct stream *s)
   ifp->metric = stream_getl (s);
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
+#ifndef HAVE_SOCKADDR_DL
+  ifp->hw_addr_len = stream_getl (s);
+  stream_get (ifp->hw_addr, s, ifp->hw_addr_len);
+#endif /* HAVE_SOCKADDR_DL */
 
 #ifdef HAVE_IF_PSEUDO
   if (IS_IF_PSEUDO(ifp)){

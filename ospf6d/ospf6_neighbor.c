@@ -35,6 +35,12 @@
 #include "ospf6_nsm.h"
 #include "ospf6_lsa.h"
 #include "ospf6_lsdb.h"
+
+void
+ospf6_neighbor_stamp_hello (struct ospf6_neighbor *o6n)
+{
+}
+
 int
 ospf6_neighbor_last_dbdesc_release (struct thread *thread)
 {
@@ -346,7 +352,7 @@ ospf6_neighbor_retrans_remove (struct ospf6_lsa *lsa,
                                             lsa->scope);
       else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
         ospf6_lsdb_check_maxage_area ((struct ospf6_area *) lsa->scope);
-      else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
+      else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (lsa_header->type)))
         ospf6_lsdb_check_maxage_as ((struct ospf6 *) lsa->scope);
     }
 }
@@ -377,13 +383,13 @@ ospf6_neighbor_thread_cancel_all (struct ospf6_neighbor *o6n)
     thread_cancel (o6n->send_update);
   o6n->send_update = (struct thread *) NULL;
 
-  if (o6n->thread_dbdesc_retrans)
-    thread_cancel (o6n->thread_dbdesc_retrans);
-  o6n->thread_dbdesc_retrans = (struct thread *) NULL;
+  if (o6n->thread_dbdesc)
+    thread_cancel (o6n->thread_dbdesc);
+  o6n->thread_dbdesc = (struct thread *) NULL;
 
-  if (o6n->thread_lsreq_retrans)
-    thread_cancel (o6n->thread_lsreq_retrans);
-  o6n->thread_lsreq_retrans = (struct thread *) NULL;
+  if (o6n->thread_rxmt_lsreq)
+    thread_cancel (o6n->thread_rxmt_lsreq);
+  o6n->thread_rxmt_lsreq = (struct thread *) NULL;
 }
 
 
@@ -461,7 +467,7 @@ ospf6_neighbor_lookup (u_int32_t router_id,
 /* vty functions */
 /* show neighbor structure */
 void
-ospf6_neighbor_vty_summary (struct vty *vty, struct ospf6_neighbor *nbr)
+ospf6_neighbor_show_summary (struct vty *vty, struct ospf6_neighbor *nbr)
 {
   char rtrid[16], dr[16], bdr[16];
 
@@ -482,10 +488,10 @@ ospf6_neighbor_vty_summary (struct vty *vty, struct ospf6_neighbor *nbr)
 }
 
 void
-ospf6_neighbor_vty (struct vty *vty, struct ospf6_neighbor *o6n)
+ospf6_neighbor_show (struct vty *vty, struct ospf6_neighbor *o6n)
 {
   char hisaddr[64];
-  inet_ntop (AF_INET6, &o6n->hisaddr.sin6_addr, hisaddr, sizeof (hisaddr));
+  inet_ntop (AF_INET6, &o6n->hisaddr, hisaddr, sizeof (hisaddr));
   vty_out (vty, " Neighbor %s, interface address %s%s",
                 o6n->str, hisaddr, VTY_NEWLINE);
   vty_out (vty, "    In the area %s via interface %s(ifindex %d)%s",
@@ -499,10 +505,10 @@ ospf6_neighbor_vty (struct vty *vty, struct ospf6_neighbor *o6n)
 }
 
 void
-ospf6_neighbor_vty_detail (struct vty *vty, struct ospf6_neighbor *o6n)
+ospf6_neighbor_show_detail (struct vty *vty, struct ospf6_neighbor *o6n)
 {
   char dbdesc_bit[64], hisdr[16], hisbdr[16];
-  ospf6_neighbor_vty (vty, o6n);
+  ospf6_neighbor_show (vty, o6n);
 
   inet_ntop (AF_INET, &o6n->dr, hisdr, sizeof (hisdr));
   inet_ntop (AF_INET, &o6n->bdr, hisbdr, sizeof (hisbdr));
@@ -547,5 +553,19 @@ ospf6_neighbor_vty_detail (struct vty *vty, struct ospf6_neighbor *o6n)
                 VTY_NEWLINE);
 }
 
+void
+ospf6_neighbor_timestamp_hello (struct ospf6_neighbor *o6n)
+{
+  struct timeval now, interval;
+  gettimeofday (&now, (struct timezone *) NULL);
+  if (o6n->tv_last_hello_received.tv_sec)
+    {
+      ospf6_timeval_sub (&now, &o6n->tv_last_hello_received, &interval);
+      zlog_info ("Hello Interval %s : %d msec",
+                  o6n->str, interval.tv_sec * 1000 + interval.tv_usec % 1000);
+    }
+  o6n->tv_last_hello_received.tv_sec = now.tv_sec;
+  o6n->tv_last_hello_received.tv_usec = now.tv_usec;
+}
 
 

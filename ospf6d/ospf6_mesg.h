@@ -117,7 +117,18 @@ struct ospf6_lsupdate
   u_int32_t lsupdate_num;
 };
 
+struct ospf6_message_stat
+{
+  u_int32_t send;
+  u_int32_t send_octet;
+  u_int32_t recv;
+  u_int32_t recv_octet;
+};
+
 /* Link State Acknowledgement will include only LSA header.*/
+
+/* Type string */
+extern char *ospf6_message_type_string[];
 
 /* Function Prototypes */
 int ospf6_receive (struct thread *);

@@ -1,3 +1,32 @@
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+2001-01-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.h (ZEBRA_PATH): Fix new vtysh path.  Reported by "Matt
+	Ranney" <mjr@ranney.com>
+
+2000-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (DEFUNSH): Add "address-family vpnv4" DEFUNSH.
+
+2000-10-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (execute_command): Add two arguemnt support for
+	executing child process.
+	(vtysh_telnet_port): New command "telnet WORD PORT" is added.
+
+2000-10-23  Akihiro Mizutani <mizutani@dml.com>
+
+	* vtysh.c (vtysh_write_memory): Display [OK] when configuration is
+	saved without problem.
+
+2000-10-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (vtysh_config_from_file): "key chain" command with -b
+	flag problem is fixed.
+
 2000-10-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* vtysh_user.c: Change to use linklist.c.

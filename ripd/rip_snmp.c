@@ -112,6 +112,10 @@
 /* Define SNMP local variables. */
 SNMP_LOCAL_VARIABLES
 
+/* RIP-MIB instances. */
+oid rip_oid [] = { RIPV2MIB };
+oid ripd_oid [] = { RIPDOID };
+
 /* Interface cache table sorted by interface's address. */
 struct route_table *rip_ifaddr_table;
 
@@ -986,9 +990,6 @@ rip2PeerTable (struct variable *v, oid name[], size_t *length,
 void
 rip_snmp_init ()
 {
-  oid rip_oid [] = { RIPV2MIB };
-  oid ripd_oid [] = { RIPDOID };
-
   rip_ifaddr_table = route_table_init ();
 
   smux_init (ripd_oid, sizeof (ripd_oid) / sizeof (oid));

@@ -28,6 +28,9 @@
 
 #include "ospf6_top.h"
 
+#define OSPF6_REDISTRIBUTE_DEFAULT_TYPE    1
+#define OSPF6_REDISTRIBUTE_DEFAULT_METRIC  100
+
 struct ospf6_redistribute_info
 {
   /* protocol type */
@@ -37,7 +40,7 @@ struct ospf6_redistribute_info
   int ifindex;
 
   /* ASE LS ID */
-  u_int32_t ls_id;
+  u_int32_t id;
 
   /* ASE Metric-type */
   int metric_type;
@@ -59,6 +62,7 @@ u_int32_t ospf6_redistribute_ls_id_lookup (int , struct prefix_ipv6 *,
 void ospf6_redistribute_route_add (int, int, struct prefix_ipv6 *);
 void ospf6_redistribute_route_remove (int, int, struct prefix_ipv6 *);
 int ospf6_redistribute_config_write (struct vty *);
+void ospf6_redistribute_show_config (struct vty *, struct ospf6 *);
 void ospf6_redistribute_init (struct ospf6 *);
 void ospf6_redistribute_finish (struct ospf6 *);
 

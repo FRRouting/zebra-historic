@@ -77,7 +77,8 @@ ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
 		    (char *)&mreq, sizeof (mreq));
 
   if (ret < 0) 
-    zlog (NULL, LOG_INFO, "can't setsockopt IP_ADD_MEMBERSHIP");
+    zlog (NULL, LOG_INFO, "can't setsockopt IP_ADD_MEMBERSHIP %s",
+	  strerror (errno));
 
   return ret;
 }
@@ -303,7 +304,7 @@ rip_request_neighbor_all ()
 }
 
 /* Multicast packet receive socket. */
-void
+int
 rip_multicast_join (struct interface *ifp, int sock)
 {
   listnode cnode;
@@ -326,9 +327,11 @@ rip_multicast_join (struct interface *ifp, int sock)
 	    continue;
       
 	  group.s_addr = htonl (INADDR_RIP_GROUP);
-	  ipv4_multicast_join (sock, group, p->prefix);
+	  if (ipv4_multicast_join (sock, group, p->prefix) < 0)
+	    return -1;
 	}
     }
+  return 0;
 }
 
 /* Leave from multicast group. */
@@ -383,6 +386,7 @@ if_check_address (struct in_addr addr)
 
 	  if (p->family != AF_INET)
 	    continue;
+
 	  if (IPV4_ADDR_CMP (&p->prefix, &addr) == 0)
 	    return 1;
 	}
@@ -497,6 +501,9 @@ rip_interface_up (int command, struct zclient *zclient, zebra_size_t length)
   /* Check if this interface is RIP enabled or not.*/
   rip_enable_apply (ifp);
  
+  /* Check for a passive interface */
+  rip_passive_interface_apply (ifp);
+
   /* Apply distribute list to the all interface. */
   rip_distribute_update_interface (ifp);
 
@@ -824,12 +831,12 @@ rip_interface_address_delete (int command, struct zclient *zclient,
 int
 rip_enable_network_lookup (struct interface *ifp)
 {
-  listnode listnode;
+  struct listnode *nn;
   struct connected *connected;
   struct prefix_ipv4 address;
 
-  for (listnode = listhead (ifp->connected); listnode; nextnode (listnode))
-    if ((connected = getdata (listnode)) != NULL)
+  for (nn = listhead (ifp->connected); nn; nextnode (nn))
+    if ((connected = getdata (nn)) != NULL)
       {
 	struct prefix *p; 
 	struct route_node *node;
@@ -956,7 +963,14 @@ rip_interface_wakeup (struct thread *t)
   ri->t_wakeup = NULL;
 
   /* Join to multicast group. */
-  rip_multicast_join (ifp, rip->sock);
+  if (rip_multicast_join (ifp, rip->sock) < 0)
+    {
+      zlog_err ("multicast join failed, interface %s not running", ifp->name);
+      return 0;
+    }
+
+  /* Set running flag. */
+  ri->running = 1;
 
   /* Send RIP request to the interface. */
   rip_request_interface (ifp);
@@ -968,14 +982,14 @@ rip_interface_wakeup (struct thread *t)
 void
 rip_interface_route_add (struct interface *ifp)
 {
-  listnode listnode;
+  listnode nn;
   struct connected *connected;
   struct prefix *p; 
   struct route_node *node;
   struct rip_info *rinfo;
 
-  for (listnode = listhead (ifp->connected); listnode; nextnode (listnode))
-    if ((connected = getdata (listnode)) != NULL)
+  for (nn = listhead (ifp->connected); nn; nextnode (nn))
+    if ((connected = getdata (nn)) != NULL)
       {
 	p = connected->address;
 
@@ -1043,8 +1057,6 @@ rip_enable_apply (struct interface *ifp)
 	  if (! ri->t_wakeup)
 	    ri->t_wakeup = thread_add_timer (master, rip_interface_wakeup,
 					     ifp, 1);
-	  ri->running = 1;
-
 #ifdef NEW_RIP_TABLE
 	  rip_interface_route_add (ifp);
 #endif /* NEW_RIP_TABLE */
@@ -1371,8 +1383,8 @@ DEFUN (ip_rip_receive_version,
        "ip rip receive version (1|2)",
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement reception\n"
-       "version control\n"
+       "Advertisement reception\n"
+       "Version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1401,8 +1413,8 @@ DEFUN (ip_rip_receive_version_1,
        "ip rip receive version 1 2",
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement reception\n"
-       "version control\n"
+       "Advertisement reception\n"
+       "Version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1422,8 +1434,8 @@ DEFUN (ip_rip_receive_version_2,
        "ip rip receive version 2 1",
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement reception\n"
-       "version control\n"
+       "Advertisement reception\n"
+       "Version control\n"
        "RIP version 2\n"
        "RIP version 1\n")
 {
@@ -1444,8 +1456,8 @@ DEFUN (no_ip_rip_receive_version,
        NO_STR
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement reception\n"
-       "version control\n")
+       "Advertisement reception\n"
+       "Version control\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1457,13 +1469,24 @@ DEFUN (no_ip_rip_receive_version,
   return CMD_SUCCESS;
 }
 
+ALIAS (no_ip_rip_receive_version,
+       no_ip_rip_receive_version_num_cmd,
+       "no ip rip receive version (1|2)",
+       NO_STR
+       IP_STR
+       "Routing Information Protocol\n"
+       "Advertisement reception\n"
+       "Version control\n"
+       "Version 1\n"
+       "Version 2\n")
+
 DEFUN (ip_rip_send_version,
        ip_rip_send_version_cmd,
        "ip rip send version (1|2)",
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement transmission\n"
-       "version control\n"
+       "Advertisement transmission\n"
+       "Version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1492,8 +1515,8 @@ DEFUN (ip_rip_send_version_1,
        "ip rip send version 1 2",
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement transmission\n"
-       "version control\n"
+       "Advertisement transmission\n"
+       "Version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1513,8 +1536,8 @@ DEFUN (ip_rip_send_version_2,
        "ip rip send version 2 1",
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement transmission\n"
-       "version control\n"
+       "Advertisement transmission\n"
+       "Version control\n"
        "RIP version 2\n"
        "RIP version 1\n")
 {
@@ -1535,8 +1558,8 @@ DEFUN (no_ip_rip_send_version,
        NO_STR
        IP_STR
        "Routing Information Protocol\n"
-       "advertisement transmission\n"
-       "version control\n")
+       "Advertisement transmission\n"
+       "Version control\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1547,6 +1570,17 @@ DEFUN (no_ip_rip_send_version,
   ri->ri_send = RI_RIP_UNSPEC;
   return CMD_SUCCESS;
 }
+
+ALIAS (no_ip_rip_send_version,
+       no_ip_rip_send_version_num_cmd,
+       "no ip rip send version (1|2)",
+       NO_STR
+       IP_STR
+       "Routing Information Protocol\n"
+       "Advertisement transmission\n"
+       "Version control\n"
+       "Version 1\n"
+       "Version 2\n")
 
 DEFUN (ip_rip_authentication_mode,
        ip_rip_authentication_mode_cmd,
@@ -1964,11 +1998,13 @@ rip_if_init ()
   install_element (INTERFACE_NODE, &ip_rip_send_version_1_cmd);
   install_element (INTERFACE_NODE, &ip_rip_send_version_2_cmd);
   install_element (INTERFACE_NODE, &no_ip_rip_send_version_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_send_version_num_cmd);
 
   install_element (INTERFACE_NODE, &ip_rip_receive_version_cmd);
   install_element (INTERFACE_NODE, &ip_rip_receive_version_1_cmd);
   install_element (INTERFACE_NODE, &ip_rip_receive_version_2_cmd);
   install_element (INTERFACE_NODE, &no_ip_rip_receive_version_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_receive_version_num_cmd);
 
   install_element (INTERFACE_NODE, &ip_rip_authentication_mode_cmd);
   install_element (INTERFACE_NODE, &no_ip_rip_authentication_mode_cmd);

@@ -1,3 +1,196 @@
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+	* command.c: Update Copyright year.
+
+2001-01-09  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* if.c (if_create): Register connected_free() function for
+	deletion.
+	(if_delete): Free connected information when the interface is
+	deleted.
+	(if_lookup_by_index): Fix argument type from int to unsigned int.
+	(connected_add): Keep list in order if old info found, essential
+	for repeatable operation in some daemons.
+
+2001-01-09  endo@suri.co.jp (Masahiko Endo)
+
+	* vty.c (vty_flush): When vty->statis is VTY_CLOSE do not add vty
+	read thread.
+
+2001-01-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c (access_list_delete): Access-list name is not freed.
+
+	* plist.c (prefix_list_delete): Prefix-list name is not freed.
+
+2000-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.c (zclient_start): Change to use UNIX domain
+	socket for zebra communication.
+
+	* vector.c (vector_init): vector_alloc and vector_data_alloc is
+	removed.  All memory allocation count should be maintained by
+	XMALLOC and XFREE macros.
+
+2000-12-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_NEXTHOP_IFINDEX): Define ZEBRA_NEXTHOP_* values.
+
+2000-12-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_ERR_RTEXIST): Make zebra error code to negative
+	value.
+
+2000-12-25  "Wataru Uno" <wataru@po.ntts.co.jp>
+
+	* vty.c (vtysh_read): Don't allocate new buffer because buffer is
+	allocated in vty_new ().
+
+2000-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_AS_FILTER_STR.
+
+	* command.c (config_write_terminal): Display "end" at the end of
+	configuration.
+
+	* plist.c (vty_prefix_list_install): Use AF_INET to determine
+	lenum length.
+
+2000-12-13  "Wataru Uno" <wataru@po.ntts.co.jp>
+
+	* buffer.c (buffer_flush_vty): If IOV_MAX defined in the System,
+	then all lines write by IOV_MAX.
+
+2000-12-12  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* command.c (config_write_file): Robust method for writing
+	configuration file and recover from backing up config file.
+
+2000-11-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* smux.c (smux_connect): More fail check.
+	(smux_trap): When SMUX connection is not established, do nothing.
+
+2000-11-28  Gleb Natapov <gleb@nbase.co.il>
+
+	* thread.c (thread_fetch): Execut event list first.  Old event
+	list is renamed to ready list.  With this change, event thread is
+	executed before any other thread.
+
+	* thread.h (struct thread_master): Add ready list.
+
+2000-11-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* linklist.c (listnode_add_after): Add node right after the
+	listnode pointer.
+
+2000-11-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* smux.h: Pass struct variable to WriteMethod.
+
+2000-11-25  Frank van Maarseveen <F.vanMaarseveen@inter.NL.net>
+
+	* if.c (if_lookup_address): When looking up interface with IP
+	address, Sometimes multiple interfaces will match.  Now PtP
+	interfaces prevail in such a case which seem the right thing to
+	do: There will probably also be host routes which usually prevail
+	over network routes.
+
+2000-11-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* smux.c (smux_trap): SMUX trap implementation.
+
+2000-11-19  Akihiro Mizutani <mizutani@dml.com>
+
+	* plist.c: Add automatic conversion function of an old rule. 
+	ex.) 10.0.0.0/8 ge 8 -> 10.0.0.0/8 le 32
+
+2000-11-16  Yon Uriarte <ukl2@rz.uni-karlsruhe.de>
+
+	* zclient.c (zebra_interface_add_read): Read hardware address when
+	hw_addr_len is greater than 0.
+
+2000-11-15  Akihiro Mizutani <mizutani@dml.com>
+
+	* plist.c: The rule of "len <= ge-value <= le-value" 
+	was changed to "len < ge-value <= le-value".
+
+2000-11-09  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* memory.[ch]: Added #define and functions for ospf6d.
+
+	* log.[ch]: some platform says that the data of used va_list
+	is undefined. Changed to hold list of va_list for each
+	vsnprintf.
+
+2000-11-07  Rick Payne <rickp@rossfell.co.uk>
+
+	* memory.h (enum): Add MTYPE_COMMUNITY_REGEXP.
+
+2000-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (config_exit): Fix bug of missing break after case
+	BGP_VPNV4_NODE.
+
+2000-10-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vector.c (vector_unset): Check i is not nevative.
+
+2000-10-24  Arkadiusz Miskiewicz <misiek@pld.org.pl>
+
+	* smux.c (smux_sock): Set terminating '\0'.  Check address family.
+
+	* vty.c (vty_serv_sock_addrinfo): Set terminating '\0'. Use
+	gai_strerror.  Check address family.
+
+2000-10-23  Jochen Friedrich <jochen@scram.de>
+
+	* smux.c: Use linklist rather than vector.
+	(smux_getnext): A SMUX subagent has to behave as if it manages the
+	whole SNMP MIB tree itself. It's the duty of the master agent to
+	collect the best answer and return it to the manager. See RFC 1227
+	chapter 3.1.6 for the glory details :-). ucd-snmp really behaves
+	bad here as it actually might ask multiple times for the same
+	GETNEXT request as it throws away the answer when it expects it in
+	a different subtree and might come back later with the very same
+	request.
+
+2000-10-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_init): Log related command are only installed for
+	terminal mode.
+
+2000-10-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (libzebra_a_SOURCES): Remove duplicated buffer.c.
+
+	* zebra.h: Remove #warn directive.
+
+2000-10-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* keychain.c (keychain_init): Register "key chain" command to
+	KEYCHAIN_NODE and KEYCHAIN_KEY_NODE.
+
+	* vty.c (vty_end_config): Fix missing vty_cinfig_unlock for other
+	CONFIG_NODE.
+
+	* command.c (config_end): Likewise.
+
+	* keychain.c (keychain_get): Key is sorted by it's identifier
+	value.
+
+2000-10-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* linklist.c (list_delete_all_node): Call delete function if it is
+	defined.
+
+	* command.c (cmd_execute_command_strict): Add modification for
+	vtysh.
+	(cmd_execute_command_strict): Remove first argument cmdvec because
+	it is global varibale in command.c.
+
 2000-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* command.c (cmd_init): Install

@@ -292,6 +292,16 @@ ospf6_leave_alldrouters (u_int ifindex)
     zlog_info ("Network: Leave AllDRouters on ifindex %d", ifindex);
 }
 
+/* setsockopt ReUseAddr to on */
+void
+ospf6_set_reuseaddr ()
+{
+  u_int on = 0;
+  if (setsockopt (ospf6_sock, SOL_SOCKET, SO_REUSEADDR, &on,
+                  sizeof (u_int)) < 0)
+    zlog_warn ("Network: set SO_REUSEADDR failed: %s", strerror (errno));
+}
+
 /* setsockopt MulticastLoop to off */
 void
 ospf6_reset_mcastloop ()

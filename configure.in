@@ -81,7 +81,16 @@ AC_ARG_ENABLE(broken-aliases,
 AC_ARG_ENABLE(snmp,
 [  --enable-snmp           enable SNMP support])
 AC_ARG_WITH(libpam,
-[  --with-libpam            use libpam for PAM support in vtysh])
+[  --with-libpam           use libpam for PAM support in vtysh])
+AC_ARG_ENABLE(tcpsock,
+[  --enable-tcp-zebra      enable TCP/IP socket connection between zebra and protocol daemon])
+dnl Temporary option until OSPF NSSA implementation complete
+AC_ARG_ENABLE(nssa,
+[  --enable-nssa           enable OSPF NSSA option])
+AC_ARG_ENABLE(oldrib,
+[  --enable-oldrib         enable old RIB code.  This option will be removed in zebra-0.91.])
+AC_ARG_ENABLE(multipath,
+[  --enable-multipath=ARG  enable multipath function, ARG must be digit])
 
 if test "${enable_broken_aliases}" = "yes"; then
   if test "${enable_netlink}" = "yes"
@@ -93,11 +102,43 @@ if test "${enable_broken_aliases}" = "yes"; then
   enable_netlink=no
 fi
 
+if test "${enable_tcp_zebra}" = "yes"; then
+  AC_DEFINE(HAVE_TCP_ZEBRA)
+fi
+
+if test "${enable_nssa}" = "yes"; then
+  AC_DEFINE(HAVE_NSSA)
+fi
+
+if test "${enable_oldrib}" = "yes"; then
+  AC_DEFINE(OLD_RIB)
+fi
+
+changequote(, )dnl
+
+MULTIPATH_NUM=1
+
+case "${enable_multipath}" in
+  [0-9]|[1-9][0-9])
+    MULTIPATH_NUM="${enable_multipath}"
+    ;;
+  "")
+    ;;
+  *)           
+    echo "Please specify digit to --enable-multipath ARG."
+    exit 1
+    ;;
+esac
+
+changequote([, ])dnl
+
+AC_SUBST(MULTIPATH_NUM)
+
 dnl -------------------
 dnl Check header files.
 dnl -------------------
 AC_STDC_HEADERS
-AC_CHECK_HEADERS(string.h stropts.h sys/conf.h sys/ksym.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h sys/types.h net/if_dl.h net/if_var.h linux/version.h kvm.h netdb.h netinet/in.h net/netopt.h netinet/in_var.h netinet/in6_var.h netinet/in6.h inet/nd.h asm/types.h linux/rtnetlink.h netinet/icmp6.h)
+AC_CHECK_HEADERS(string.h stropts.h sys/conf.h sys/ksym.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h sys/types.h net/if_dl.h net/if_var.h linux/version.h kvm.h netdb.h netinet/in.h net/netopt.h netinet/in_var.h netinet/in6_var.h netinet/in6.h inet/nd.h asm/types.h linux/rtnetlink.h netinet/icmp6.h libutil.h)
 
 dnl check some types
 AC_C_CONST
@@ -146,17 +187,16 @@ case "${host_cpu}-${host_os}" in
   ;;
 esac
 
-
 dnl ---------------------
 dnl Integrated VTY option
 dnl ---------------------
 case "${enable_vtysh}" in
   "yes") VTYSH="vtysh";
          AC_DEFINE(VTYSH)
-         AC_CHECK_LIB(ncurses, tputs)
+	 AC_CHECK_LIB(tinfo, tputs, , AC_CHECK_LIB(ncurses, tputs))
          AC_CHECK_LIB(readline, main)
          if test $ac_cv_lib_readline_main = no; then
-           AC_MSG_ERROR([vtysh need libreadline but was not found on your system.])
+           AC_MSG_ERROR([vtysh needs libreadline but was not found on your system.])
          fi
 	 AC_CHECK_HEADER(readline/history.h)
 	 if test $ac_cv_header_readline_history_h = no;then
@@ -179,7 +219,17 @@ dnl ----------
 dnl PAM module
 dnl ----------
 if test "$with_libpam" = "yes";then
+ if test x"$opsys" = x"gnu-linux"; then
+  # I think we mimght only need this on redhat linux 6.x
+  # and Debian 2.2 so please contribute
+  # I do not have access to other OS than FreeBSD >3 and
+  # some different linux distributions
+  # Someone who knows how should add some more detailed
+  # tests for -lpam_misc and -ldl in here
   LIBPAM="-lpam -lpam_misc -ldl"
+ else
+  LIBPAM="-lpam"
+ fi
   AC_DEFINE(USE_PAM)
 fi
 AC_SUBST(LIBPAM)
@@ -202,6 +252,7 @@ dnl check existance of functions
 dnl ----------------------------
 AC_CHECK_FUNCS(bcopy bzero strerror inet_aton daemon snprintf vsnprintf strlcat strlcpy if_nametoindex if_indextoname getifaddrs)
 dnl AC_REPLACE_FUNCS(vsnprintf)
+AC_CHECK_FUNCS(setproctitle, ,[AC_CHECK_LIB(util, setproctitle, [LIBS="$LIBS -lutil"; AC_DEFINE(HAVE_SETPROCTITLE)])])
 
 dnl ------------------------------------
 dnl Determine routing get and set method
@@ -516,6 +567,7 @@ AC_CHECK_LIB(c, inet_ntop, [AC_DEFINE(HAVE_INET_NTOP)])
 AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
 AC_CHECK_LIB(crypt, crypt)
 AC_CHECK_LIB(resolv, res_init)
+AC_CHECK_LIB(m, main)
 
 dnl ---------------------------------------------------
 dnl BSD/OS 4.1 define inet_XtoY function as __inet_XtoY
@@ -549,7 +601,19 @@ dnl ------------------
 dnl check SNMP library
 dnl ------------------
 if test "${enable_snmp}" = "yes";then
-  AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
+dnl  AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes)
+  unset ac_cv_lib_snmp_asn_parse_int
+  AC_CHECK_LIB(snmp, asn_parse_int, HAVE_SNMP=yes, )
+  if test "${HAVE_SNMP}" = ""; then
+    unset ac_cv_lib_snmp_asn_parse_int
+    AC_CHECK_LIB(crypto, main, [NEED_CRYPTO=yes ], )
+	if test "${NEED_CRYPTO}" = ""; then 
+		AC_CHECK_LIB(snmp, asn_parse_int, [HAVE_SNMP=yes; NEED_CRYPTO=yes ],)
+	else
+	    AC_CHECK_LIB(snmp, asn_parse_int, [HAVE_SNMP=yes; NEED_CRYPTO=yes;LIBS="$LIBS -lcrypto" ],,"-lcrypto")
+	fi
+  fi
+
   if test "${HAVE_SNMP}" = ""; then
 	old_libs="${LIBS}"
 	LIBS="-L/usr/local/lib"
@@ -559,7 +623,7 @@ if test "${enable_snmp}" = "yes";then
   if test "${HAVE_SNMP}" = "yes"; then
     for ac_snmp in /usr/include/ucd-snmp/asn1.h /usr/local/include/ucd-snmp/asn1.h /dev/null
     do
-      test x`ls ${ac_snmp} 2>/dev/null` = x"${ac_snmp}" && break
+      test -f "${ac_snmp}" && break
     done
     case ${ac_snmp} in
       /usr/include/ucd-snmp/*) 
@@ -573,6 +637,9 @@ if test "${enable_snmp}" = "yes";then
   		  LIBS="${LIBS} -L/usr/local/lib -lsnmp"
                   ;;
     esac
+    if test "${NEED_CRYPTO}" = "yes"; then
+      LIBS="${LIBS} -lcrypto"
+    fi
   fi
 fi
 
@@ -596,6 +663,17 @@ AC_TRY_COMPILE([#include <sys/types.h>
 ],[static struct sockaddr_in ac_i;int ac_j = sizeof (ac_i.sin_len);],
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_SIN_LEN)],
+ AC_MSG_RESULT(no))
+
+dnl ----------------------------
+dnl check sun_len of sockaddr_un
+dnl ----------------------------
+AC_MSG_CHECKING(whether struct sockaddr_un has a sun_len field)
+AC_TRY_COMPILE([#include <sys/types.h>
+#include <sys/un.h>
+],[static struct sockaddr_un ac_i;int ac_j = sizeof (ac_i.sun_len);],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SUN_LEN)],
  AC_MSG_RESULT(no))
 
 dnl -----------------------------------
@@ -740,7 +818,7 @@ if test "$ac_cv_htonl_works" = "no"; then
   fi
 fi
 
-AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile guile/Makefile vtysh/Makefile doc/Makefile)
+AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile vtysh/Makefile doc/Makefile)
 
 echo "
 zebra configuration

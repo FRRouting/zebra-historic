@@ -23,11 +23,33 @@
 #include "ospf6d.h"
 
 int
+ospf6_area_count_neighbor_in_state (u_char state, struct ospf6_area *o6a)
+{
+  listnode node;
+  struct ospf6_interface *o6i;
+  int count = 0;
+
+  for (node = listhead (o6a->if_list); node; nextnode (node))
+    {
+      o6i = (struct ospf6_interface *) getdata (node);
+      count += ospf6_interface_count_neighbor_in_state (state, o6i);
+    }
+
+  return count;
+}
+
+int
 ospf6_area_is_stub (struct ospf6_area *o6a)
 {
   if (OSPF6_OPT_ISSET (o6a->options, OSPF6_OPT_E))
     return 0;
   return 1;
+}
+
+int
+ospf6_area_is_transit (struct ospf6_area *o6a)
+{
+  return 0;
 }
 
 /* Make new area structure */
@@ -43,7 +65,7 @@ ospf6_area_create (u_int32_t area_id)
     {
       char str[16];
       inet_ntop (AF_INET, &area_id, str, sizeof (str));
-      zlog_err ("can't malloc area %s", str);
+      zlog_err ("can't allocate memory for Area %s", str);
       return NULL;
     }
 
@@ -52,8 +74,14 @@ ospf6_area_create (u_int32_t area_id)
   inet_ntop (AF_INET, &area_id, o6a->str, sizeof (o6a->str));
   o6a->area_id = area_id;
   o6a->if_list = list_new ();
+
+#if 0
   o6a->table = ospf6_route_table_init ();
+#endif
+
   o6a->lsdb = list_new ();
+  o6a->spf_tree = ospf6_spftree_create ();
+  o6a->table_topology = route_table_init ();
 
   /* xxx, set options */
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_V6);
@@ -91,8 +119,15 @@ ospf6_area_delete (struct ospf6_area *o6a)
     thread_cancel (o6a->route_calc);
   o6a->route_calc = (struct thread *) NULL;
 
+#if 0
   /* route table terminate */
   ospf6_route_table_finish (o6a->table);
+#endif
+
+  /* new */
+  ospf6_spftree_delete (o6a->spf_tree);
+  ospf6_route_delete_all (o6a->table_topology);
+  route_table_finish (o6a->table_topology);
 
   /* free area */
   XFREE (MTYPE_OSPF6_AREA, o6a);
@@ -115,7 +150,7 @@ ospf6_area_lookup (u_int32_t area_id, struct ospf6 *o6)
 }
 
 void
-ospf6_area_vty (struct vty *vty, struct ospf6_area *o6a)
+ospf6_area_show (struct vty *vty, struct ospf6_area *o6a)
 {
   listnode i;
   struct ospf6_interface *o6i;
@@ -128,9 +163,25 @@ ospf6_area_vty (struct vty *vty, struct ospf6_area *o6a)
       vty_out (vty, " %s", o6i->interface->name);
     }
   vty_out (vty, "%s", VTY_NEWLINE);
-  vty_out (vty, "        SPF algorithm executed %d times%s",
-           o6a->stat_spf_execed, VTY_NEWLINE);
+
   vty_out (vty, "        Number of Area scoped LSAs is %u%s",
            listcount (o6a->lsdb), VTY_NEWLINE);
+}
+
+void
+ospf6_area_statistics_show (struct vty *vty, struct ospf6_area *o6a)
+{
+  listnode node;
+  struct ospf6_interface *o6i;
+
+  vty_out (vty, "  Statistics of Area %s%s", o6a->str, VTY_NEWLINE);
+  ospf6_spf_statistics_show (vty, o6a->spf_tree);
+
+  for (node = listhead (o6a->if_list); node; nextnode (node))
+    {
+      o6i = (struct ospf6_interface *) getdata (node);
+      if (listcount (o6i->neighbor_list) != 0)
+        ospf6_interface_statistics_show (vty, o6i);
+    }
 }
 

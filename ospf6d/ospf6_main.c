@@ -61,10 +61,19 @@ char config_default[] = SYSCONFDIR OSPF6_DEFAULT_CONFIG;
 
 /* ospf6d program name. */
 char *progname;
+
 /* is daemon? */
 int daemon_mode = 0;
+
 /* Master of threads. */
 struct thread_master *master;
+
+/* for reload */
+char _cwd[64];
+char _progpath[64];
+int _argc;
+char **_argv;
+char **_envp;
 
 /* Help information display. */
 static void
@@ -90,9 +99,17 @@ Report bugs to yasu@sfc.wide.ad.jp\n", progname);
 
 
 void
+_reload ()
+{
+  zlog_info ("Reload");
+  vty_finish ();
+  execve (_progpath, _argv, _envp);
+}
+
+void
 terminate (int i)
 {
-  ospf6_terminate ();
+  ospf6_delete (ospf6);
   unlink (PATH_OSPF6D_PID);
   exit (i);
 }
@@ -101,26 +118,31 @@ terminate (int i)
 void 
 sighup (int sig)
 {
-  zlog (NULL, LOG_INFO, "SIGHUP received");
+  zlog_info ("SIGHUP received");
+  _reload ();
 }
 
 /* SIGINT handler. */
 void
 sigint (int sig)
 {
-  zlog (NULL, LOG_INFO, "Terminating on signal");
+  zlog_info ("SIGINT received");
+  terminate (0);
+}
 
-  /* Close all ospf peer and free all of resources. */
-  ospf6_delete (ospf6);
-
-  unlink (PATH_OSPF6D_PID);
-  exit (0);
+/* SIGTERM handler. */
+void
+sigterm (int sig)
+{
+  zlog_info ("SIGTERM received");
+  terminate (0);
 }
 
 /* SIGUSR1 handler. */
 void
 sigusr1 (int sig)
 {
+  zlog_info ("SIGUSR1 received");
   zlog_rotate (NULL);
 }
 
@@ -153,7 +175,7 @@ signal_init ()
 {
   signal_set (SIGHUP, sighup);
   signal_set (SIGINT, sigint);
-  signal_set (SIGTERM, sigint);
+  signal_set (SIGTERM, sigterm);
   signal_set (SIGPIPE, SIG_IGN);
 #ifdef SIGTSTP
   signal_set (SIGTSTP, SIG_IGN);
@@ -170,7 +192,7 @@ signal_init ()
 /* Main routine of ospf6d. Treatment of argument and start ospf finite
    state machine is handled here. */
 int
-main (int argc, char **argv)
+main (int argc, char *argv[], char *envp[])
 {
   char *p;
   int opt;
@@ -181,6 +203,16 @@ main (int argc, char **argv)
 
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
+
+  /* for reload */
+  _argc = argc;
+  _argv = argv;
+  _envp = envp;
+  getcwd (_cwd, sizeof (_cwd));
+  if (*argv[0] == '.')
+    snprintf (_progpath, sizeof (_progpath), "%s/%s", _cwd, _argv[0]);
+  else
+    snprintf (_progpath, sizeof (_progpath), "%s", argv[0]);
 
   /* Command line argument treatment. */
   while (1) 
@@ -216,16 +248,6 @@ main (int argc, char **argv)
         }
     }
 
-  if (daemon_mode)
-    daemon (0, 0);
-
-  /* pid file create */
-#if 0
-  pid_output_lock (PATH_OSPF6D_PID);
-#else
-  pid_output (PATH_OSPF6D_PID);
-#endif
-
   /* thread master */
   master = thread_make_master ();
 
@@ -238,10 +260,18 @@ main (int argc, char **argv)
   memory_init ();
   sort_node ();
 
-  nexthop_init ();
-
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
+
+  if (daemon_mode)
+    daemon (0, 0);
+
+  /* pid file create */
+#if 0
+  pid_output_lock (PATH_OSPF6D_PID);
+#else
+  pid_output (PATH_OSPF6D_PID);
+#endif
 
   /* Make ospf protocol socket. */
   ospf6_serv_sock ();
@@ -251,12 +281,17 @@ main (int argc, char **argv)
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, OSPF6_VTYSH_PATH);
 
   /* Print start message */
-  zlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);
+  zlog_info ("OSPF6d (%s %s) starts", ZEBRA_VERSION, OSPF6_DAEMON_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))
     thread_call (&thread);
 
+  /* Log in case thread failed */
+  zlog_warn ("Thread failed");
+  terminate (0);
+
   /* Not reached. */
   exit (0);
 }
+

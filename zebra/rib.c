@@ -24,7 +24,6 @@
 #include "prefix.h"
 #include "table.h"
 #include "memory.h"
-#include "vector.h"
 #include "vty.h"
 #include "str.h"
 #include "command.h"
@@ -34,17 +33,21 @@
 #include "rt.h"
 #include "log.h"
 #include "sockunion.h"
+#include "thread.h"
 
 #include "zebra/zserv.h"
 #include "zebra/redistribute.h"
 
 /* Routing information base. */
 struct route_table *ipv4_rib_table;
-struct route_table *ipv4_rib_static;
+struct route_table *static_ipv4_table;
 #ifdef HAVE_IPV6
 struct route_table *ipv6_rib_table;
 struct route_table *ipv6_rib_static;
 #endif /* HAVE_IPV6 */
+
+/* Default rtm_table for all clients */
+extern int rtm_table_default;
 
 /* Each route type's strings and default preference. */
 struct
@@ -67,7 +70,7 @@ struct
   { ZEBRA_ROUTE_BGP,     "B", "bgp",        20},
 };
 
-struct nexthop
+struct static_ipv6
 {
   union
   {
@@ -79,28 +82,28 @@ struct nexthop
   char *ifname;
 };
 
-struct nexthop *
-nexthop_new ()
+struct static_ipv6 *
+static_ipv6_new ()
 {
-  struct nexthop *new;
-  new = XMALLOC (MTYPE_NEXTHOP, sizeof (struct nexthop));
-  bzero (new, sizeof (struct nexthop));
+  struct static_ipv6 *new;
+  new = XMALLOC (MTYPE_NEXTHOP, sizeof (struct static_ipv6));
+  bzero (new, sizeof (struct static_ipv6));
   return new;
 }
 
 void
-nexthop_free (struct nexthop *nexthop)
+static_ipv6_free (struct static_ipv6 *nexthop)
 {
   if (nexthop->ifname)
     free (nexthop->ifname);
   XFREE (MTYPE_NEXTHOP, nexthop);
 }
 
-
 #ifdef HAVE_IF_PSEUDO
 /* New routing information base. */
 struct rib *
-rib_create (int type, u_char flags, int distance, int ifindex, char *ifname, int table)
+rib_create (int type, u_char flags, int distance, int ifindex,
+	    char *ifname, int table)
 {
   struct rib *new;
 
@@ -111,9 +114,9 @@ rib_create (int type, u_char flags, int distance, int ifindex, char *ifname, int
   new->distance = distance;
   new->u.ifindex = ifindex;
   new->table = table;
-  if (ifname){
-    strncpy(new->u.ifname,ifname,INTERFACE_NAMSIZ);
-  }
+
+  if (ifname)
+    strncpy(new->u.ifname, ifname, INTERFACE_NAMSIZ);
 
   return new;
 }
@@ -189,16 +192,6 @@ rib_log (char *message, struct prefix *p, struct rib *rib)
 	route_info[rib->type].str_long, message,
 	inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ), p->prefixlen,
 	logbuf);
-}
-
-/* If type is system route's type then return 1. */
-int
-rib_system_route (type)
-{
-  if (type == ZEBRA_ROUTE_KERNEL || type == ZEBRA_ROUTE_CONNECT)
-    return 1;
-  else
-    return 0;
 }
 
 /* Add rib to the rib list. */
@@ -346,7 +339,7 @@ rib_add_ipv4_internal (struct prefix_ipv4 *p, struct rib *rib, int table)
 #ifdef HAVE_IF_PSEUDO
 int
 rib_add_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p, 
-	      struct in_addr *gate, char *ifname , int table)
+		     struct in_addr *gate, char *ifname , int table)
 {
 
   int distance;
@@ -373,6 +366,7 @@ rib_add_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p,
   /* Lookup route node. */
   np = route_node_get (ipv4_rib_table, (struct prefix *) p);
 
+
   /* Logging. */
   rib_log ("add pseudo", (struct prefix *)p, rib);
 #if 0  
@@ -389,6 +383,1154 @@ rib_add_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p,
 }
 #endif /* HAVE_IF_PSEUDO */
 
+/* If type is system route's type then return 1. */
+int
+rib_system_route (type)
+{
+  if (type == ZEBRA_ROUTE_KERNEL || type == ZEBRA_ROUTE_CONNECT)
+    return 1;
+  else
+    return 0;
+}
+
+#ifndef OLD_RIB
+
+/* Add nexthop to the end of the list.  */
+void
+nexthop_add (struct new_rib *rib, struct nexthop *nexthop)
+{
+  struct nexthop *last;
+
+  for (last = rib->nexthop; last && last->next; last = last->next)
+    ;
+  if (last)
+    last->next = nexthop;
+  else
+    rib->nexthop = nexthop;
+  nexthop->prev = last;
+
+  rib->nexthop_num++;
+}
+
+/* Delete specified nexthop from the list. */
+void
+nexthop_delete (struct new_rib *rib, struct nexthop *nexthop)
+{
+  if (nexthop->next)
+    nexthop->next->prev = nexthop->prev;
+  if (nexthop->prev)
+    nexthop->prev->next = nexthop->next;
+  else
+    rib->nexthop = nexthop->next;
+  rib->nexthop_num--;
+}
+
+/* Free nexthop. */
+void
+nexthop_free (struct nexthop *nexthop)
+{
+  if (nexthop->type == NEXTHOP_TYPE_IFNAME && nexthop->gate.ifname)
+    free (nexthop->gate.ifname);
+  XFREE (MTYPE_NEXTHOP, nexthop);
+}
+
+struct nexthop *
+nexthop_ifindex_add (struct new_rib *rib, unsigned int ifindex)
+{
+  struct nexthop *nexthop;
+
+  nexthop = XMALLOC (MTYPE_NEXTHOP, sizeof (struct nexthop));
+  memset (nexthop, 0, sizeof (struct nexthop));
+  nexthop->type = NEXTHOP_TYPE_IFINDEX;
+  nexthop->ifindex = ifindex;
+
+  nexthop_add (rib, nexthop);
+
+  return nexthop;
+}
+
+struct nexthop *
+nexthop_ifname_add (struct new_rib *rib, char *ifname)
+{
+  struct nexthop *nexthop;
+
+  nexthop = XMALLOC (MTYPE_NEXTHOP, sizeof (struct nexthop));
+  memset (nexthop, 0, sizeof (struct nexthop));
+  nexthop->type = NEXTHOP_TYPE_IFNAME;
+  nexthop->gate.ifname = strdup (ifname);
+
+  nexthop_add (rib, nexthop);
+
+  return nexthop;
+}
+
+struct nexthop *
+nexthop_ipv4_add (struct new_rib *rib, 
+		  struct in_addr *ipv4, 
+		  unsigned int krnl_ifindex)
+{
+  struct nexthop *nexthop;
+
+  nexthop = XMALLOC (MTYPE_NEXTHOP, sizeof (struct nexthop));
+  memset (nexthop, 0, sizeof (struct nexthop));
+  nexthop->krnl_ifindex = krnl_ifindex;
+  nexthop->type = NEXTHOP_TYPE_IPV4;
+  nexthop->gate.ipv4 = *ipv4;
+
+  nexthop_add (rib, nexthop);
+
+  return nexthop;
+}
+
+#ifdef HAVE_IPV6
+struct nexthop *
+nexthop_ipv6_add (struct new_rib *rib, 
+		  struct in6_addr *ipv6,
+		  unsigned int krnl_ifindex)
+{
+  struct nexthop *nexthop;
+
+  nexthop = XMALLOC (MTYPE_NEXTHOP, sizeof (struct nexthop));
+  memset (nexthop, 0, sizeof (struct nexthop));
+  nexthop->krnl_ifindex = krnl_ifindex;
+  nexthop->type = NEXTHOP_TYPE_IPV6;
+  nexthop->gate.ipv6 = *ipv6;
+
+  nexthop_add (rib, nexthop);
+
+  return nexthop;
+}
+#endif /* HAVE_IPV6 */
+
+/* If force flag is not set, do not modify falgs at all for uninstall
+   the route from FIB. */
+int
+nexthop_active_ipv4 (struct new_rib *rib, struct nexthop *nexthop, int set,
+		     struct route_node *top)
+{
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+  struct new_rib *match;
+  struct nexthop *newhop;
+
+  nexthop->ifindex = 0;
+
+  if (set)
+    UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE);
+
+  /* Make lookup prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_PREFIXLEN;
+  p.prefix = nexthop->gate.ipv4;
+
+  rn = route_node_match (ipv4_rib_table, (struct prefix *) &p);
+  while (rn)
+    {
+      route_unlock_node (rn);
+      
+      /* If lookup self prefix return immidiately. */
+      if (rn == top)
+	return 0;
+
+      /* Pick up selected route. */
+      for (match = rn->info; match; match = match->next)
+	if (CHECK_FLAG (match->flags, RIB_FLAG_SELECTED))
+	  break;
+
+      /* If there is no selected route or matched route is EGP, go up
+         tree. */
+      if (! match || match->type == ZEBRA_ROUTE_BGP)
+	{
+	  do {
+	    rn = rn->parent;
+	  } while (rn && rn->info == NULL);
+	  if (rn)
+	    route_lock_node (rn);
+	}
+      else
+	{
+	  if (match->type == ZEBRA_ROUTE_CONNECT)
+	    {
+	      /* Directly point connected route. */
+	      newhop = match->nexthop;
+	      if (newhop)
+		nexthop->ifindex = newhop->ifindex;
+	      
+	      return 1;
+	    }
+	  else if (CHECK_FLAG (rib->flags, RIB_FLAG_INTERNAL))
+	    {
+	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
+		if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
+		    && ! CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE))
+		  {
+		    if (set)
+		      {
+			SET_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE);
+			nexthop->rtype = newhop->type;
+			if (newhop->type == NEXTHOP_TYPE_IPV4)
+			  nexthop->rgate.ipv4 = newhop->gate.ipv4;
+			if (newhop->type == NEXTHOP_TYPE_IFINDEX
+			    || newhop->type == NEXTHOP_TYPE_IFNAME)
+			  nexthop->rifindex = newhop->ifindex;
+		      }
+		    return 1;
+		  }
+	      return 0;
+	    }
+	  else
+	    {
+	      return 0;
+	    }
+	}
+    }
+  return 0;
+}
+
+int
+nexthop_active_check (struct route_node *rn, struct new_rib *rib,
+		      struct nexthop *nexthop, int set)
+{
+  struct interface *ifp;
+
+  switch (nexthop->type)
+    {
+    case NEXTHOP_TYPE_IFINDEX:
+      ifp = if_lookup_by_index (nexthop->ifindex);
+      if (ifp && if_is_up (ifp))
+	SET_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+      else
+	UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+      break;
+    case NEXTHOP_TYPE_IFNAME:
+      ifp = if_lookup_by_name (nexthop->gate.ifname);
+      if (ifp && if_is_up (ifp))
+	{
+	  if (set)
+	    nexthop->ifindex = ifp->ifindex;
+	  SET_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+	}
+      else
+	{
+	  if (set)
+	    nexthop->ifindex = 0;
+	  UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+	}
+      break;
+    case NEXTHOP_TYPE_IPV4:
+      if (nexthop_active_ipv4 (rib, nexthop, set, rn))
+	SET_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+      else
+	UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+      break;
+    }
+  return CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+}
+
+int
+nexthop_active_update (struct route_node *rn, struct new_rib *rib, int set)
+{
+  struct nexthop *nexthop;
+  int active;
+
+  rib->nexthop_active_num = 0;
+  UNSET_FLAG (rib->flags, RIB_FLAG_CHANGED);
+
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    {
+      active = CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+      rib->nexthop_active_num += nexthop_active_check (rn, rib, nexthop, set);
+      if (active != CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	SET_FLAG (rib->flags, RIB_FLAG_CHANGED);
+    }
+  return rib->nexthop_active_num;
+}
+
+#define RIB_SYSTEM_ROUTE(R) \
+        ((R)->type == ZEBRA_ROUTE_KERNEL || (R)->type == ZEBRA_ROUTE_CONNECT)
+
+void
+newrib_free (struct new_rib *rib)
+{
+  struct nexthop *nexthop;
+  struct nexthop *next;
+
+  for (nexthop = rib->nexthop; nexthop; nexthop = next)
+    {
+      next = nexthop->next;
+      nexthop_free (nexthop);
+    }
+  XFREE (MTYPE_RIB, rib);
+}
+
+void
+rib_install_kernel (struct route_node *rn, struct new_rib *rib)
+{
+  int ret;
+  struct nexthop *nexthop;
+
+  ret = kernel_add_ipv4_multipath (&rn->p, rib);
+
+  if (ret < 0)
+    {
+      for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+	UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+    }
+}
+
+/* Uninstall the route from kernel. */
+int
+rib_uninstall_kernel (struct route_node *rn, struct new_rib *rib)
+{
+  int ret;
+  struct nexthop *nexthop;
+
+  ret = kernel_delete_ipv4_multipath (&rn->p, rib);
+
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+  return ret;
+}
+
+/* Uninstall the route from kernel. */
+void
+rib_uninstall (struct route_node *rn, struct new_rib *rib)
+{
+  if (CHECK_FLAG (rib->flags, RIB_FLAG_SELECTED))
+    {
+      redistribute_delete_multipath (rn, rib);
+      if (! RIB_SYSTEM_ROUTE (rib))
+	rib_uninstall_kernel (rn, rib);
+      UNSET_FLAG (rib->flags, RIB_FLAG_SELECTED);
+    }
+}
+
+/* Core function for processing routing information base. */
+void
+rib_process (struct route_node *rn, struct new_rib *del)
+{
+  struct new_rib *rib;
+  struct new_rib *fib = NULL;
+  struct new_rib *select = NULL;
+
+  for (rib = rn->info; rib; rib = rib->next)
+    {
+      /* Currently installed rib. */
+      if (CHECK_FLAG (rib->flags, RIB_FLAG_SELECTED))
+	fib = rib;
+
+      /* Skip unreachable nexthop. */
+      if (! nexthop_active_update (rn, rib, 0))
+	continue;
+
+      /* Infinit distance. */
+      if (rib->distance == DISTANCE_INFINITY)
+	continue;
+
+      /* Newly selected rib. */
+      if (! select || rib->distance < select->distance)
+	select = rib;
+    }
+
+  /* Deleted route check. */
+  if (del && CHECK_FLAG (del->flags, RIB_FLAG_SELECTED))
+    fib = del;
+
+  /* Same route is selected. */
+  if (select && select == fib)
+    {
+      if (CHECK_FLAG (select->flags, RIB_FLAG_CHANGED))
+	{
+	  redistribute_delete_multipath (rn, select);
+	  if (! RIB_SYSTEM_ROUTE (select))
+	    rib_uninstall_kernel (rn, select);
+
+	  /* Set real nexthop. */
+	  nexthop_active_update (rn, select, 1);
+  
+	  if (! RIB_SYSTEM_ROUTE (select))
+	    rib_install_kernel (rn, select);
+	  redistribute_add_multipath (rn, select);
+	}
+      return;
+    }
+
+  /* Uninstall old rib from forwarding table. */
+  if (fib)
+    {
+      redistribute_delete_multipath (rn, fib);
+      if (! RIB_SYSTEM_ROUTE (fib))
+	rib_uninstall_kernel (rn, fib);
+      UNSET_FLAG (fib->flags, RIB_FLAG_SELECTED);
+
+      /* Set real nexthop. */
+      nexthop_active_update (rn, fib, 1);
+    }
+
+  /* Install new rib into forwarding table. */
+  if (select)
+    {
+      /* Set real nexthop. */
+      nexthop_active_update (rn, select, 1);
+
+      if (! RIB_SYSTEM_ROUTE (select))
+	rib_install_kernel (rn, select);
+      SET_FLAG (select->flags, RIB_FLAG_SELECTED);
+      redistribute_add_multipath (rn, select);
+    }
+}
+
+/* Add RIB to head of the route node. */
+void
+rib_addnode (struct route_node *rn, struct new_rib *rib)
+{
+  struct new_rib *head;
+
+  head = rn->info;
+  if (head)
+    head->prev = rib;
+  rib->next = head;
+  rn->info = rib;
+}
+
+void
+rib_delnode (struct route_node *rn, struct new_rib *rib)
+{
+  if (rib->next)
+    rib->next->prev = rib->prev;
+  if (rib->prev)
+    rib->prev->next = rib->next;
+  else
+    rn->info = rib->next;
+}
+
+int
+rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p, 
+	      struct in_addr *gate, unsigned int ifindex, int table,
+	      u_int32_t metric, u_char distance)
+{
+  struct new_rib *rib;
+  struct new_rib *same = NULL;
+  struct route_node *rn;
+  struct nexthop *nexthop;
+
+  /* Make it sure prefixlen is applied to the prefix. */
+  apply_mask_ipv4 (p);
+
+  /* Set default distance by route type. */
+  if (distance == 0)
+    {
+      distance = route_info[type].distance;
+
+      /* iBGP distance is 200. */
+      if (type == ZEBRA_ROUTE_BGP && CHECK_FLAG (flags, ZEBRA_FLAG_IBGP))
+	distance = 200;
+    }
+
+  /* Lookup route node.*/
+  rn = route_node_get (ipv4_rib_table, (struct prefix *) p);
+
+  /* If same type of route are installed, treat it as a implicit
+     withdraw. */
+  for (rib = rn->info; rib; rib = rib->next)
+    if (rib->type == type)
+      {
+	same = rib;
+	rib_delnode (rn, same);
+	route_unlock_node (rn);
+	break;
+      }
+
+  /* Allocate new rib structure. */
+  rib = XMALLOC (MTYPE_RIB, sizeof (struct new_rib));
+  memset (rib, 0, sizeof (struct new_rib));
+  rib->type = type;
+  rib->distance = distance;
+  rib->flags = flags;
+  rib->metric = metric;
+  rib->table = table;
+  rib->nexthop_num = 0;
+
+  if (CHECK_FLAG (flags, ZEBRA_FLAG_INTERNAL))
+    SET_FLAG (rib->flags, RIB_FLAG_INTERNAL);
+  
+  /* Nexthop settings. */
+  if (gate)
+    /* Pass through ifindex so that we can keep track of kernel routes */
+    nexthop_ipv4_add (rib, gate, ifindex);
+  else
+    nexthop_ifindex_add (rib, ifindex);
+
+  /* If this route is kernel route, set FIB flag to the route. */
+  if (type == ZEBRA_ROUTE_KERNEL || type == ZEBRA_ROUTE_CONNECT)
+    for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+      SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+  /* Link new rib to node.*/
+  rib_addnode (rn, rib);
+
+  /* Process this route node. */
+  rib_process (rn, same);
+
+  /* Free implicit route.*/
+  if (same)
+    newrib_free (same);
+
+  return 0;
+}
+
+int
+rib_add_ipv4_multipath (struct prefix_ipv4 *p, struct new_rib *rib)
+{
+  struct route_node *rn;
+  struct new_rib *same;
+  struct nexthop *nexthop;
+
+  /* Make it sure prefixlen is applied to the prefix. */
+  apply_mask_ipv4 (p);
+
+  /* Set default distance by route type. */
+  if (rib->distance == 0)
+    {
+      rib->distance = route_info[rib->type].distance;
+
+      /* iBGP distance is 200. */
+      if (rib->type == ZEBRA_ROUTE_BGP 
+	  && CHECK_FLAG (rib->flags, ZEBRA_FLAG_IBGP))
+	rib->distance = 200;
+    }
+
+  /* Lookup route node.*/
+  rn = route_node_get (ipv4_rib_table, (struct prefix *) p);
+
+  /* If same type of route are installed, treat it as a implicit
+     withdraw. */
+  for (same = rn->info; same; same = same->next)
+    if (same->type == rib->type)
+      {
+	rib_delnode (rn, same);
+	route_unlock_node (rn);
+	break;
+      }
+
+  /* Allocate new rib structure. */
+  if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
+    SET_FLAG (rib->flags, RIB_FLAG_INTERNAL);
+  
+  /* If this route is kernel route, set FIB flag to the route. */
+  if (rib->type == ZEBRA_ROUTE_KERNEL || rib->type == ZEBRA_ROUTE_CONNECT)
+    for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+      SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+  /* Link new rib to node.*/
+  rib_addnode (rn, rib);
+
+  /* Process this route node. */
+  rib_process (rn, same);
+
+  /* Free implicit route.*/
+  if (same)
+    newrib_free (same);
+
+  return 0;
+}
+
+int
+rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
+		 struct in_addr *gate, unsigned int ifindex, int table)
+{
+  struct route_node *rn;
+  struct new_rib *rib;
+  struct new_rib *fib = NULL;
+  struct new_rib *same = NULL;
+  struct nexthop *nexthop;
+
+  /* Apply mask. */
+  apply_mask_ipv4 (p);
+
+  /* Lookup route node. */
+  rn = route_node_lookup (ipv4_rib_table, (struct prefix *) p);
+  if (! rn)
+    {
+      char buf1[BUFSIZ];
+      char buf2[BUFSIZ];
+
+      if (gate)
+	zlog_info ("route %s/%d via %s ifindex %d doesn't exist in rib",
+		   inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ), p->prefixlen,
+		   inet_ntop (AF_INET, gate, buf2, BUFSIZ),
+		   ifindex);
+      else
+	zlog_info ("route %s/%d ifindex %d doesn't exist in rib",
+		   inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ), p->prefixlen,
+		   ifindex);
+      return ZEBRA_ERR_RTNOEXIST;
+    }
+
+  /* Lookup same type route. */
+  for (rib = rn->info; rib; rib = rib->next)
+    {
+      if (CHECK_FLAG (rib->flags, RIB_FLAG_SELECTED))
+	fib = rib;
+
+      if (rib->type == type && rib->table == table)
+	same = rib;
+    }
+
+  /* If same type of route can't be found and this message is from
+     kernel. */
+  if (! same)
+    {
+      if (fib && type == ZEBRA_ROUTE_KERNEL)
+	{
+	  /* Unset flags. */
+	  for (nexthop = fib->nexthop; nexthop; nexthop = nexthop->next)
+	    UNSET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+	  UNSET_FLAG (fib->flags, RIB_FLAG_SELECTED);
+	}
+      else
+	{
+	  char buf1[BUFSIZ];
+	  char buf2[BUFSIZ];
+
+	  if (gate)
+	    zlog_info ("route %s/%d via %s ifindex %d type %d doesn't exist in rib",
+		       inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ),
+		       p->prefixlen,
+		       inet_ntop (AF_INET, gate, buf2, BUFSIZ),
+		       ifindex,
+		       type);
+	  else
+	    zlog_info ("route %s/%d ifindex %d type %d doesn't exist in rib",
+		       inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ),
+		       p->prefixlen,
+		       ifindex,
+		       type);
+	  return ZEBRA_ERR_RTNOEXIST;
+	}
+    }
+
+  if (same)
+    rib_delnode (rn, same);
+
+  rib_process (rn, same);
+
+  if (same)
+    {
+      newrib_free (same);
+      route_unlock_node (rn);
+    }
+
+  route_unlock_node (rn);
+
+  return 0;
+}
+
+/* Checks whether a route is in the RIB or not */
+int
+rib_check_for_connected_ipv4(struct prefix_ipv4 *p, unsigned int ifindex ) 
+{
+  struct route_node *rn;
+  struct new_rib *rib;
+  struct nexthop *nexthop;
+
+  rn = route_node_lookup (ipv4_rib_table, (struct prefix *)p);
+  if (!rn)
+    return 0;
+
+  for (rib = rn->info; rib; rib = rib->next)
+    {
+      if (rib->type != ZEBRA_ROUTE_CONNECT 
+	  || rib->table != 0)
+	continue;
+
+      
+      if (!ifindex)
+	{
+	  route_unlock_node (rn);
+	  return 1;
+	}
+
+      /* Scan nexthops to check ifindex */
+      for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+	{
+	  if (nexthop->type != NEXTHOP_TYPE_IFINDEX)
+	    continue;
+	  
+	  if (nexthop->ifindex != ifindex)
+	    continue;
+
+	  route_unlock_node (rn);
+	  return 1;
+	}
+    }
+
+  route_unlock_node (rn);
+  return 0;
+}
+
+
+/* Install static route into rib. */
+void
+rib_static_install (struct prefix_ipv4 *p, struct static_ipv4 *si)
+{
+  struct new_rib *rib;
+  struct route_node *rn;
+
+  /* Lookup existing route */
+  rn = route_node_get (ipv4_rib_table, (struct prefix *) p);
+  for (rib = rn->info; rib; rib = rib->next)
+    if (rib->type == ZEBRA_ROUTE_STATIC && rib->distance == si->distance)
+      break;
+
+  if (rib)
+    {
+      /* Same distance static route is there.  Update it with new
+         nexthop. */
+      rib_uninstall (rn, rib);
+      route_unlock_node (rn);
+
+      if (CHECK_FLAG (si->flags, STATIC_IPV4_GATEWAY))
+	nexthop_ipv4_add (rib, &si->gate.ipv4, 0);
+      if (CHECK_FLAG (si->flags, STATIC_IPV4_IFNAME))
+	nexthop_ifname_add (rib, si->gate.ifname);
+
+      rib_process (rn, NULL);
+    }
+  else
+    {
+      /* This is new static route. */
+      rib = XMALLOC (MTYPE_RIB, sizeof (struct new_rib));
+      memset (rib, 0, sizeof (struct new_rib));
+
+      rib->type = ZEBRA_ROUTE_STATIC;
+      rib->distance = si->distance;
+      rib->metric = 0;
+      rib->nexthop_num = 0;
+
+      if (CHECK_FLAG (si->flags, STATIC_IPV4_GATEWAY))
+	nexthop_ipv4_add (rib, &si->gate.ipv4, 0);
+      if (CHECK_FLAG (si->flags, STATIC_IPV4_IFNAME))
+	nexthop_ifname_add (rib, si->gate.ifname);
+
+      /* Link this rib to the tree. */
+      rib_addnode (rn, rib);
+
+      /* Process this prefix. */
+      rib_process (rn, NULL);
+    }
+}
+
+int
+rib_static_nexthop_same (struct nexthop *nexthop, struct static_ipv4 *si)
+{
+  if (nexthop->type == NEXTHOP_TYPE_IPV4
+      && CHECK_FLAG (si->flags, STATIC_IPV4_GATEWAY)
+      && IPV4_ADDR_SAME (&nexthop->gate.ipv4, &si->gate.ipv4))
+    return 1;
+  if (nexthop->type == NEXTHOP_TYPE_IFNAME
+      && CHECK_FLAG (si->flags, STATIC_IPV4_IFNAME)
+      && strcmp (nexthop->gate.ifname, si->gate.ifname) == 0)
+    return 1;
+  return 0;;
+}
+
+/* Update all static route status to check nexthop. */
+void
+static_ipv4_update ()
+{
+  struct route_node *rn;
+  struct route_node *ribrn;
+
+  for (rn = route_top (static_ipv4_table); rn; rn = route_next (rn))
+    if (rn->info)
+      {
+	ribrn = route_node_get (ipv4_rib_table, &rn->p);
+	rib_process (ribrn, NULL);
+	route_unlock_node (ribrn);
+      }
+}
+
+/* Uninstall static route from RIB. */
+void
+rib_static_uninstall (struct prefix_ipv4 *p, struct static_ipv4 *si)
+{
+  struct route_node *rn;
+  struct new_rib *rib;
+  struct nexthop *nexthop;
+
+  /* Lookup existing route with type and distance. */
+  rn = route_node_lookup (ipv4_rib_table, (struct prefix *) p);
+  if (! rn)
+    return;
+
+  for (rib = rn->info; rib; rib = rib->next)
+    if (rib->type == ZEBRA_ROUTE_STATIC && rib->distance == si->distance)
+      break;
+  if (! rib)
+    {
+      route_unlock_node (rn);
+      return;
+    }
+
+  /* Lookup nexthop. */
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    if (rib_static_nexthop_same (nexthop, si))
+      break;
+
+  /* Can't find nexthop. */
+  if (! nexthop)
+    {
+      route_unlock_node (rn);
+      return;
+    }
+  
+  /* Check nexthop. */
+  if (rib->nexthop_num == 1)
+    {
+      rib_delnode (rn, rib);
+      rib_process (rn, rib);
+      newrib_free (rib);
+      route_unlock_node (rn);
+    }
+  else
+    {
+      rib_uninstall (rn, rib);
+      nexthop_delete (rib, nexthop);
+      nexthop_free (nexthop);
+      rib_process (rn, rib);
+    }
+
+  /* Unlock node. */
+  route_unlock_node (rn);
+}
+
+/* Add static route into static route configuration. */
+int
+static_ipv4_add (struct prefix_ipv4 *p, struct in_addr *gate, char *ifname,
+		 u_char distance, int table)
+{
+  u_char flags = 0;
+  struct route_node *rn;
+  struct static_ipv4 *si;
+  struct static_ipv4 *pp;
+  struct static_ipv4 *cp;
+  
+  /* Lookup static route prefix. */
+  rn = route_node_get (static_ipv4_table, (struct prefix *) p);
+
+  /* Make flags. */
+  if (gate)
+    SET_FLAG (flags, STATIC_IPV4_GATEWAY);
+  if (ifname)
+    SET_FLAG (flags, STATIC_IPV4_IFNAME);
+
+  /* Do nothing if there is a same static route.  */
+  for (si = rn->info; si; si = si->next)
+    {
+      if (distance == si->distance 
+	  && flags == si->flags
+	  && (! gate || IPV4_ADDR_SAME (gate, &si->gate.ipv4))
+	  && (! ifname || strcmp (ifname, si->gate.ifname) == 0))
+	{
+	  route_unlock_node (rn);
+	  return 0;
+	}
+    }
+
+  /* Make new static route structure. */
+  si = XMALLOC (MTYPE_STATIC_IPV4, sizeof (struct static_ipv4));
+  memset (si, 0, sizeof (struct static_ipv4));
+
+  si->flags = flags;
+  si->distance = distance;
+
+  if (gate)
+    si->gate.ipv4 = *gate;
+  if (ifname)
+    si->gate.ifname = XSTRDUP (0, ifname);
+
+  /* Add new static route information to the tree with sort by
+     distance value and gateway address. */
+  for (pp = NULL, cp = rn->info; cp; pp = cp, cp = cp->next)
+    {
+      if (si->distance < cp->distance)
+	break;
+      if (si->distance > cp->distance)
+	continue;
+      if (CHECK_FLAG (si->flags, STATIC_IPV4_GATEWAY) 
+	  && CHECK_FLAG (cp->flags, STATIC_IPV4_GATEWAY))
+	{
+	  if (ntohl (si->gate.ipv4.s_addr) < ntohl (cp->gate.ipv4.s_addr))
+	    break;
+	  if (ntohl (si->gate.ipv4.s_addr) > ntohl (cp->gate.ipv4.s_addr))
+	    continue;
+	}
+    }
+
+  /* Make linked list. */
+  if (pp)
+    pp->next = si;
+  else
+    rn->info = si;
+  if (cp)
+    cp->prev = si;
+  si->prev = pp;
+  si->next = cp;
+
+  /* Install into rib. */
+  rib_static_install (p, si);
+
+  return 1;
+}
+
+/* Delete static route from static route configuration. */
+int
+static_ipv4_delete (struct prefix_ipv4 *p, struct in_addr *gate, char *ifname,
+		    u_char distance, int table)
+{
+  u_char flags = 0;
+  struct route_node *rn;
+  struct static_ipv4 *si;
+
+  /* Lookup static route prefix. */
+  rn = route_node_lookup (static_ipv4_table, (struct prefix *) p);
+  if (! rn)
+    return 0;
+
+  /* Make flags. */
+  if (gate)
+    SET_FLAG (flags, STATIC_IPV4_GATEWAY);
+  if (ifname)
+    SET_FLAG (flags, STATIC_IPV4_IFNAME);
+
+  /* Find same static route is the tree */
+  for (si = rn->info; si; si = si->next)
+    if (distance == si->distance 
+	&& flags == si->flags
+	&& (! gate || IPV4_ADDR_SAME (gate, &si->gate.ipv4))
+	&& (! ifname || strcmp (ifname, si->gate.ifname) == 0))
+      break;
+
+  /* Can't find static route. */
+  if (! si)
+    {
+      route_unlock_node (rn);
+      return 0;
+    }
+
+  /* Install into rib. */
+  rib_static_uninstall (p, si);
+
+  /* Unlink static route from linked list. */
+  if (si->prev)
+    si->prev->next = si->next;
+  else
+    rn->info = si->next;
+  if (si->next)
+    si->next->prev = si->prev;
+  
+  /* Free static route configuration. */
+  XFREE (MTYPE_STATIC_IPV4, si);
+
+  return 1;
+}
+
+/* Write IPv4 static route configuration. */
+int
+static_ipv4_write (struct vty *vty)
+{
+  struct route_node *rn;
+  struct static_ipv4 *si;  
+
+  for (rn = route_top (static_ipv4_table); rn; rn = route_next (rn))
+    for (si = rn->info; si; si = si->next)
+      {
+	vty_out (vty, "ip route %s/%d", inet_ntoa (rn->p.u.prefix4),
+		 rn->p.prefixlen);
+	if (CHECK_FLAG (si->flags, STATIC_IPV4_GATEWAY))
+	  vty_out (vty, " %s", inet_ntoa (si->gate.ipv4));
+	if (CHECK_FLAG (si->flags, STATIC_IPV4_IFNAME))
+	  vty_out (vty, " %s", si->gate.ifname);
+	if (si->distance != ZEBRA_STATIC_DISTANCE_DEFAULT)
+	  vty_out (vty, " %d", si->distance);
+	vty_out (vty, "%s", VTY_NEWLINE);
+      }
+  return 0;
+}
+
+/* General fucntion for static route. */
+int
+static_ipv4_func (struct vty *vty, int add_cmd,
+		  char *dest_str, char *mask_str, char *gate_str,
+		  char *distance_str)
+{
+  int ret;
+  u_char distance;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  struct in_addr mask;
+  char *ifname;
+  int table = rtm_table_default;
+  
+  ret = str2prefix_ipv4 (dest_str, &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "%% Malformed address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Cisco like mask notation. */
+  if (mask_str)
+    {
+      ret = inet_aton (mask_str, &mask);
+      if (ret == 0)
+	{
+	  vty_out (vty, "%% Malformed address%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      p.prefixlen = ip_masklen (mask);
+    }
+
+  /* Apply mask for given prefix. */
+  apply_mask_ipv4 (&p);
+
+  /* Administrative distance. */
+  if (distance_str)
+    distance = atoi (distance_str);
+  else
+    distance = ZEBRA_STATIC_DISTANCE_DEFAULT;
+
+  /* When gateway is A.B.C.D format, gate is treated as nexthop
+     address other case gate is treated as interface name. */
+  ret = inet_aton (gate_str, &gate);
+  if (ret)
+    ifname = NULL;
+  else
+    ifname = gate_str;
+
+  if (add_cmd)
+    static_ipv4_add (&p, ifname ? NULL : &gate, ifname, distance, table);
+  else
+    static_ipv4_delete (&p, ifname ? NULL : &gate, ifname, distance, table);
+
+  /* static_ipv4_update (); */
+
+  return CMD_SUCCESS;
+}
+
+/* Static route configuration. */
+DEFUN (ip_route, 
+       ip_route_cmd,
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n")
+{
+  return static_ipv4_func (vty, 1, argv[0], NULL, argv[1], NULL);
+}
+
+DEFUN (ip_route_mask,
+       ip_route_mask_cmd,
+       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix\n"
+       "IP destination prefix mask\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n")
+{
+  return static_ipv4_func (vty, 1, argv[0], argv[1], argv[2], NULL);
+}
+
+DEFUN (ip_route_pref,
+       ip_route_pref_cmd,
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE) <1-255>",
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n"
+       "Distance value for this route\n")
+{
+  return static_ipv4_func (vty, 1, argv[0], NULL, argv[1], argv[2]);
+}
+
+DEFUN (ip_route_mask_pref,
+       ip_route_mask_pref_cmd,
+       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) <1-255>",
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix\n"
+       "IP destination prefix mask\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n"
+       "Distance value for this route\n")
+{
+  return static_ipv4_func (vty, 1, argv[0], argv[1], argv[2], argv[3]);
+}
+
+DEFUN (no_ip_route, 
+       no_ip_route_cmd,
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n")
+{
+  return static_ipv4_func (vty, 0, argv[0], NULL, argv[1], NULL);
+}
+
+DEFUN (no_ip_route_mask,
+       no_ip_route_mask_cmd,
+       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix\n"
+       "IP destination prefix mask\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n")
+{
+  return static_ipv4_func (vty, 0, argv[0], argv[1], argv[2], NULL);
+}
+
+DEFUN (no_ip_route_pref,
+       no_ip_route_pref_cmd,
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE) <1-255>",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n"
+       "Distance value for this route\n")
+{
+  return static_ipv4_func (vty, 0, argv[0], NULL, argv[1], argv[2]);
+}
+
+DEFUN (no_ip_route_mask_pref,
+       no_ip_route_mask_pref_cmd,
+       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) <1-255>",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IP destination prefix\n"
+       "IP destination prefix mask\n"
+       "IP gateway address\n"
+       "IP gateway interface name\n"
+       "Distance value for this route\n")
+{
+  return static_ipv4_func (vty, 0, argv[0], argv[1], argv[2], argv[3]);
+}
+#else
 /* Add prefix into rib. If there is a same type prefix, then we assume
    it as implicit replacement of the route. */
 int
@@ -504,13 +1646,13 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 
 	      /* If the new route is received from kernel,
 		 do not install it into kernel */
-	      if (!rib_system_route (rib->type))
+	      if (! rib_system_route (rib->type))
 		{
 		  if (gate && (flags & ZEBRA_FLAG_INTERNAL))
 		    ret = rib_add_ipv4_internal (p, rib, table);
 		  else
 		    ret = kernel_add_ipv4 (p, &rib->u.gate4, ifindex, flags,
-				       table);
+					   table);
 		  
 		  if (ret != 0)
 		    {
@@ -568,6 +1710,688 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 
   return 0;
 }
+#endif /* ! OLD_RIB */
+
+#ifdef OLD_RIB
+#ifndef HAVE_IF_PSEUDO
+DEFUN (ip_route, 
+       ip_route_cmd,
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  /* a.b.c.d/mask gateway format. */
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", 
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      ifindex = ifp->ifindex;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv4 (&p);
+
+  /* We need rib error treatment here. */
+  if (ifindex)
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table, 0, 0);
+  else
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
+
+  /* Error checking and display message. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix), p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (ip_route_mask,
+       ip_route_mask_cmd,
+       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+  struct in_addr tmpmask;
+
+  /* A.B.C.D */
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* X.X.X.X */
+  ret = inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+
+  /* Gateway. */
+  ret = inet_aton (argv[2], &gate);
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[2]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      ifindex = ifp->ifindex;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv4 (&p);
+
+  /* We need rib error treatment here. */
+  if (ifindex)
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table, 0, 0);
+  else
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
+
+  /* Error checking and display meesage. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "Same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_route, 
+       no_ip_route_cmd,
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE|unknown)",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n"
+       "unknown interface\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+
+  if (ret <= 0)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      /* route on "unknown" interface */
+      if (!strcmp(argv[1],"unknown")){
+	ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, INTERFACE_UNKNOWN, table);
+      }
+
+      /* route on known interface */
+      else{
+	ifp = if_lookup_by_name (argv[1]);
+	if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      ifindex = ifp->ifindex;
+      ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+  }
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_route_mask,
+       no_ip_route_mask_cmd,
+       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct in_addr tmpmask;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING; 
+    }
+  inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING; 
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+      
+  ret = inet_aton (argv[2], &gate);
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      ifindex = ifp->ifindex;
+    }
+
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  if (ifindex)
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+  else
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+#else
+DEFUN (ip_route, 
+       ip_route_cmd,
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct interface *ifp;
+
+  /* a.b.c.d/mask gateway format. */
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", 
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_add_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0 , &p, NULL, ifp->name, table);
+      }
+      else {
+	ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifp->ifindex, table, 0, 0);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
+  }
+    
+
+  /* Error checking and display message. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix), p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+DEFUN (ip_route_mask,
+       ip_route_mask_cmd,
+       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct interface *ifp;
+  struct in_addr tmpmask;
+
+  /* A.B.C.D */
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* X.X.X.X */
+  ret = inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[2], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[2]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", 
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_add_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0 , &p, NULL, ifp->name, table);
+      }
+      else {
+	ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifp->ifindex, table, 0 ,0);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
+  }
+    
+
+  /* Error checking and display message. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix), p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+DEFUN (no_ip_route, 
+       no_ip_route_cmd,
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+
+  if (ret <= 0)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  /* route on deleted interface */
+	  if (rib_delete_ipv4_pseudo(ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				     argv[1], table) == ZEBRA_ERR_RTNOEXIST){
+	    vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	    return CMD_WARNING;
+	  }
+	}
+      ifindex = ifp->ifindex;
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_delete_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				      ifp->name, table);
+      }
+      else{
+	ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+  }
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_route_mask,
+       no_ip_route_mask_cmd,
+       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct in_addr tmpmask;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING; 
+    }
+  inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING; 
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+      
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[2], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[2]);
+      if (! ifp)
+	{
+	  /* route on deleted interface */
+	  if (rib_delete_ipv4_pseudo(ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				     argv[2], table) == ZEBRA_ERR_RTNOEXIST){
+	    vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	    return CMD_WARNING;
+	  }
+	}
+      ifindex = ifp->ifindex;
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_delete_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				      ifp->name, table);
+      }
+      else{
+	ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+  }
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+#endif /* HAVE_IF_PSEUDO */
+#endif /* OLD_RIB */
 
 #ifdef HAVE_IF_PSEUDO
 int
@@ -639,6 +2463,7 @@ rib_delete_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p,
 }
 #endif /* HAVE_IF_PSEUDO */
 
+#ifdef OLD_RIB
 /* Delete prefix from the rib. */
 int
 rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
@@ -733,6 +2558,7 @@ rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 
   return ret;
 }
+#endif /* OLD_RIB */
 
 /* Vty list of static route configuration. */
 int
@@ -791,6 +2617,7 @@ rib_static_list (struct vty *vty, struct route_table *top)
 }
 
 /* Delete all added route and close rib. */
+#ifdef OLD_RIB
 void
 rib_close_ipv4 ()
 {
@@ -809,7 +2636,22 @@ rib_close_ipv4 ()
 				&rib->u.gate4, rib->u.ifindex, 0, rib->table);
 	}
 }
+#else
+void
+rib_close_ipv4 ()
+{
+  struct route_node *rn;
+  struct new_rib *rib;
 
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      if (! RIB_SYSTEM_ROUTE (rib)
+	  && CHECK_FLAG (rib->flags, RIB_FLAG_SELECTED))
+	rib_uninstall_kernel (rn, rib);
+}
+#endif /* OLD_RIB */
+
+#ifdef OLD_RIB
 u_int32_t
 rib_lookup_ipv4_nexthop (struct in_addr addr)
 {
@@ -847,7 +2689,58 @@ rib_lookup_ipv4_nexthop (struct in_addr addr)
     }
   return 0;
 }
+#else
+struct new_rib *
+rib_lookup_ipv4_nexthop (struct in_addr addr)
+{
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+  struct new_rib *match;
+  struct nexthop *newhop;
 
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_PREFIXLEN;
+  p.prefix = addr;
+
+  rn = route_node_match (ipv4_rib_table, (struct prefix *) &p);
+
+  while (rn)
+    {
+      route_unlock_node (rn);
+      
+      /* Pick up selected route. */
+      for (match = rn->info; match; match = match->next)
+	if (CHECK_FLAG (match->flags, RIB_FLAG_SELECTED))
+	  break;
+
+      /* If there is no selected route or matched route is EGP, go up
+         tree. */
+      if (! match || match->type == ZEBRA_ROUTE_BGP)
+	{
+	  do {
+	    rn = rn->parent;
+	  } while (rn && rn->info == NULL);
+	  if (rn)
+	    route_lock_node (rn);
+	}
+      else
+	{
+	  if (match->type == ZEBRA_ROUTE_CONNECT)
+	    /* Directly point connected route. */
+	    return match;
+	  else
+	    {
+	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
+		if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB))
+		  return match;
+	      return NULL;
+	    }
+	}
+    }
+  return NULL;
+}
+#endif /* OLD_RIB */
 
 void
 print_ip_route_vty (struct vty *vty, struct rib *rib, struct prefix *p)
@@ -892,9 +2785,6 @@ print_ip_route_vty (struct vty *vty, struct rib *rib, struct prefix *p)
 void
 show_ip_route_vty (struct vty *vty, struct route_node *np)
 {
-#ifdef HAVE_IF_PSEUDO
-  int len;
-#endif /* HAVE_IF_PSEUDO */
   struct rib *rib;
   for (rib = np->info; rib; rib = rib->next)
     {
@@ -952,6 +2842,7 @@ show_ip_route_vty_detail (struct vty *vty, struct route_node *np)
     }
 }
 
+#ifdef OLD_RIB
 /* Command function calling from vty. */
 DEFUN (show_ip_route, show_ip_route_cmd,
        "show ip route",
@@ -1077,6 +2968,367 @@ DEFUN (show_ip_route_protocol,
     show_ip_route_type_vty (vty, np, route_type);  
   return CMD_SUCCESS;
 }
+#else
+/* Each route type's strings and default preference. */
+struct
+{  
+  int key;
+  char c;
+} route_char[] =
+{
+  { ZEBRA_ROUTE_SYSTEM,  'X'},
+  { ZEBRA_ROUTE_KERNEL,  'K'},
+  { ZEBRA_ROUTE_CONNECT, 'C'},
+  { ZEBRA_ROUTE_STATIC,  'S'},
+  { ZEBRA_ROUTE_RIP,     'R'},
+  { ZEBRA_ROUTE_RIPNG,   'R'},
+  { ZEBRA_ROUTE_OSPF,    'O'},
+  { ZEBRA_ROUTE_OSPF6,   'O'},
+  { ZEBRA_ROUTE_BGP,     'B'},
+};
+
+/* New RIB.  Detailed information for IPv4 route. */
+void
+vty_show_ip_route_detail (struct vty *vty, struct route_node *rn)
+{
+  struct new_rib *rib;
+  struct nexthop *nexthop;
+
+  for (rib = rn->info; rib; rib = rib->next)
+    {
+      vty_out (vty, "Routing entry for %s/%d%s", 
+	       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
+	       VTY_NEWLINE);
+      vty_out (vty, "  Known via \"%s\"", route_info[rib->type].str_long);
+      vty_out (vty, ", distance %d, metric %d", rib->distance, rib->metric);
+      if (CHECK_FLAG (rib->flags, RIB_FLAG_SELECTED))
+	vty_out (vty, ", best");
+      vty_out (vty, "%s", VTY_NEWLINE);
+
+#define ONE_DAY_SECOND 60*60*24
+#define ONE_WEEK_SECOND 60*60*24*7
+      if (rib->type == ZEBRA_ROUTE_RIP
+	  || rib->type == ZEBRA_ROUTE_OSPF
+	  || rib->type == ZEBRA_ROUTE_BGP)
+	{
+	  time_t uptime;
+	  struct tm *tm;
+
+	  uptime = time (NULL);
+	  uptime -= rib->uptime;
+	  tm = gmtime (&uptime);
+
+	  vty_out (vty, "  Last update ");
+
+	  if (uptime < ONE_DAY_SECOND)
+	    vty_out (vty,  "%02d:%02d:%02d", 
+		     tm->tm_hour, tm->tm_min, tm->tm_sec);
+	  else if (uptime < ONE_WEEK_SECOND)
+	    vty_out (vty, "%dd%02dh%02dm", 
+		     tm->tm_yday, tm->tm_hour, tm->tm_min);
+	  else
+	    vty_out (vty, "%02dw%dd%02dh", 
+		     tm->tm_yday/7,
+		     tm->tm_yday - ((tm->tm_yday/7) * 7), tm->tm_hour);
+	  vty_out (vty, " ago%s", VTY_NEWLINE);
+	}
+
+      for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+	{
+	  vty_out (vty, "  %c",
+		   CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB) ? '*' : ' ');
+
+	  switch (nexthop->type)
+	    {
+	    case NEXTHOP_TYPE_IPV4:
+	      vty_out (vty, " %s", inet_ntoa (nexthop->gate.ipv4));
+	      if (nexthop->ifindex)
+		vty_out (vty, ", via %s", ifindex2ifname (nexthop->ifindex));
+	      break;
+	    case NEXTHOP_TYPE_IFINDEX:
+	      vty_out (vty, " directly connected, %s",
+		       ifindex2ifname (nexthop->ifindex));
+	      break;
+	    case NEXTHOP_TYPE_IFNAME:
+	      vty_out (vty, " directly connected, %s",
+		       nexthop->gate.ifname);
+	      break;
+	    default:
+	      break;
+	    }
+	  if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	    vty_out (vty, " inactive");
+
+	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+	    {
+	      vty_out (vty, " (recursive");
+		
+	      switch (nexthop->rtype)
+		{
+		case NEXTHOP_TYPE_IPV4:
+		  vty_out (vty, " via %s)", inet_ntoa (nexthop->rgate.ipv4));
+		  break;
+		case NEXTHOP_TYPE_IFINDEX:
+		case NEXTHOP_TYPE_IFNAME:
+		  vty_out (vty, " is directly connected, %s)",
+			   ifindex2ifname (nexthop->rifindex));
+		  break;
+		default:
+		  break;
+		}
+	    }
+	  vty_out (vty, "%s", VTY_NEWLINE);
+	}
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
+}
+
+void
+vty_show_ip_route (struct vty *vty, struct route_node *rn, struct new_rib *rib)
+{
+  struct nexthop *nexthop;
+  int len = 0;
+  char buf[BUFSIZ];
+
+  /* Nexthop information. */
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    {
+      if (nexthop == rib->nexthop)
+	{
+	  /* Prefix information. */
+	  len = vty_out (vty, "%c%c%c %s/%d",
+			 route_char[rib->type].c,
+			 CHECK_FLAG (rib->flags, RIB_FLAG_SELECTED)
+			 ? '>' : ' ',
+			 CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
+			 ? '*' : ' ',
+			 inet_ntop (AF_INET, &rn->p.u.prefix, buf,
+				    BUFSIZ),
+			 rn->p.prefixlen);
+		
+	  /* Distance and metric display. */
+	  if (rib->type != ZEBRA_ROUTE_CONNECT 
+	      && rib->type != ZEBRA_ROUTE_KERNEL)
+	    len += vty_out (vty, " [%d/%d]", rib->distance,
+			    rib->metric);
+	}
+      else
+	vty_out (vty, "  %c%*c",
+		 CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
+		 ? '*' : ' ',
+		 len - 3, ' ');
+
+      switch (nexthop->type)
+	{
+	case NEXTHOP_TYPE_IPV4:
+	  vty_out (vty, " via %s", inet_ntoa (nexthop->gate.ipv4));
+	  if (nexthop->ifindex)
+	    vty_out (vty, ", %s", ifindex2ifname (nexthop->ifindex));
+	  break;
+	case NEXTHOP_TYPE_IFINDEX:
+	  vty_out (vty, " is directly connected, %s",
+		   ifindex2ifname (nexthop->ifindex));
+	  break;
+	case NEXTHOP_TYPE_IFNAME:
+	  vty_out (vty, " is directly connected, %s",
+		   nexthop->gate.ifname);
+	  break;
+	default:
+	  break;
+	}
+      if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	vty_out (vty, " inactive");
+
+      if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+	{
+	  vty_out (vty, " (recursive");
+		
+	  switch (nexthop->rtype)
+	    {
+	    case NEXTHOP_TYPE_IPV4:
+	      vty_out (vty, " via %s)", inet_ntoa (nexthop->rgate.ipv4));
+	      break;
+	    case NEXTHOP_TYPE_IFINDEX:
+	    case NEXTHOP_TYPE_IFNAME:
+	      vty_out (vty, " is directly connected, %s)",
+		       ifindex2ifname (nexthop->rifindex));
+	      break;
+	    default:
+	      break;
+	    }
+	}
+
+      if (rib->type == ZEBRA_ROUTE_RIP
+	  || rib->type == ZEBRA_ROUTE_OSPF
+	  || rib->type == ZEBRA_ROUTE_BGP)
+	{
+	  time_t uptime;
+	  struct tm *tm;
+
+	  uptime = time (NULL);
+	  uptime -= rib->uptime;
+	  tm = gmtime (&uptime);
+
+#define ONE_DAY_SECOND 60*60*24
+#define ONE_WEEK_SECOND 60*60*24*7
+
+	  if (uptime < ONE_DAY_SECOND)
+	    vty_out (vty,  ", %02d:%02d:%02d", 
+		     tm->tm_hour, tm->tm_min, tm->tm_sec);
+	  else if (uptime < ONE_WEEK_SECOND)
+	    vty_out (vty, ", %dd%02dh%02dm", 
+		     tm->tm_yday, tm->tm_hour, tm->tm_min);
+	  else
+	    vty_out (vty, ", %02dw%dd%02dh", 
+		     tm->tm_yday/7,
+		     tm->tm_yday - ((tm->tm_yday/7) * 7), tm->tm_hour);
+	}
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
+}
+
+DEFUN (show_ip_route,
+       show_ip_route_cmd,
+       "show ip route",
+       SHOW_STR
+       IP_STR
+       "IP routing table\n")
+{
+  struct route_node *rn;
+  struct new_rib *rib;
+  int first = 1;
+
+  /* Show all IPv4 routes. */
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      {
+	if (first)
+	  {
+	    vty_out (vty, "Codes: K - kernel route, C - connected, S - static, R - RIP, O - OSPF,%s       B - BGP, > - selected route, * - FIB route%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	    first = 0;
+	  }
+	vty_show_ip_route (vty, rn, rib);
+      }
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ip_route_protocol,
+       show_ip_route_protocol_cmd,
+       "show ip route (bgp|connected|kernel|ospf|rip|static)",
+       SHOW_STR
+       IP_STR
+       "IP routing table\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Connected\n"
+       "Kernel\n"
+       "Open Shortest Path First (OSPF)\n"
+       "Routing Information Protocol (RIP)\n"
+       "Static routes\n")
+{
+  int type;
+  struct route_node *rn;
+  struct new_rib *rib;
+  int first = 1;
+
+  if (strncmp (argv[0], "b", 1) == 0)
+    type = ZEBRA_ROUTE_BGP;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    type = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "k", 1) ==0)
+    type = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "o", 1) == 0)
+    type = ZEBRA_ROUTE_OSPF;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    type = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    type = ZEBRA_ROUTE_STATIC;
+  else 
+    {
+      vty_out (vty, "Unknown route type%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  
+  /* Show matched type IPv4 routes. */
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = rib->next)
+      if (rib->type == type)
+	{
+	  if (first)
+	    {
+	      vty_out (vty, "Codes: K - kernel route, C - connected, S - static, R - RIP, O - OSPF,%s       B - BGP, > - selected route, * - FIB route%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+	      first = 0;
+	    }
+	  vty_show_ip_route (vty, rn, rib);
+	}
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ip_route_addr,
+       show_ip_route_addr_cmd,
+       "show ip route A.B.C.D",
+       SHOW_STR
+       IP_STR
+       "IP routing table\n"
+       "Network in the IP routing table to display\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "Malformed IPv4 address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  rn = route_node_match (ipv4_rib_table, (struct prefix *) &p);
+  if (! rn)
+    {
+      vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  vty_show_ip_route_detail (vty, rn);
+
+  route_unlock_node (rn);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ip_route_prefix,
+       show_ip_route_prefix_cmd,
+       "show ip route A.B.C.D/M",
+       SHOW_STR
+       IP_STR
+       "IP routing table\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "Malformed IPv4 address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  rn = route_node_match (ipv4_rib_table, (struct prefix *) &p);
+  if (! rn || rn->p.prefixlen != p.prefixlen)
+    {
+      vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  vty_show_ip_route_detail (vty, rn);
+
+  route_unlock_node (rn);
+
+  return CMD_SUCCESS;
+}
+#endif /* OLD_RIB */
 
 #ifdef HAVE_IPV6
 int
@@ -1190,7 +3442,11 @@ rib_add_ipv6 (int type, int flags, struct prefix_ipv6 *p,
   if (rib_bogus_ipv6 (type, p, gate, ifindex, table))
     return 0;
 
+#ifdef HAVE_IF_PSEUDO
+  rib = rib_create (type, flags, distance, ifindex, NULL, metric);
+#else
   rib = rib_create (type, flags, distance, ifindex, table, metric);
+#endif /* HAVE_IF_PSEUDO */
 
   if (gate)
     memcpy (&rib->u.gate6, gate, sizeof (struct in6_addr));
@@ -1417,7 +3673,7 @@ rib_close_ipv6 ()
 int
 ipv6_static_add (struct prefix_ipv6 *p, struct in6_addr *gate, char *ifname)
 {
-  struct nexthop *nexthop;
+  struct static_ipv6 *nexthop;
   struct route_node *node;
 
   node = route_node_get (ipv6_rib_static, (struct prefix *) p);
@@ -1430,7 +3686,7 @@ ipv6_static_add (struct prefix_ipv6 *p, struct in6_addr *gate, char *ifname)
     }
 
   /* Allocate new nexthop structure. */
-  nexthop = nexthop_new ();
+  nexthop = static_ipv6_new ();
 
   if (gate)
     nexthop->u.nexthop6 = *gate;
@@ -1448,7 +3704,7 @@ int
 ipv6_static_delete (struct prefix_ipv6 *p, struct in6_addr *gate, char *ifname)
 {
   struct route_node *node;
-  struct nexthop *nexthop;
+  struct static_ipv6 *nexthop;
 
   node = route_node_lookup (ipv6_rib_static, (struct prefix *) p);
   if (! node)
@@ -1477,7 +3733,7 @@ ipv6_static_delete (struct prefix_ipv6 *p, struct in6_addr *gate, char *ifname)
 	}
     }
 
-  nexthop_free (nexthop);
+  static_ipv6_free (nexthop);
   node->info = NULL;
 
   route_unlock_node (node);
@@ -1490,7 +3746,7 @@ int
 ipv6_static_list (struct vty *vty)
 {
   struct route_node *np;
-  struct nexthop *nexthop;
+  struct static_ipv6 *nexthop;
   char b1[BUFSIZ];
   char b2[BUFSIZ];
   int write = 0;
@@ -1516,7 +3772,9 @@ ipv6_static_list (struct vty *vty)
   return write;
 }
 
-DEFUN (ipv6_route, ipv6_route_cmd,
+
+DEFUN (ipv6_route,
+       ipv6_route_cmd,
        "ipv6 route X:X::X:X/M X:X::X:X",
        "IP information\n"
        "IP routing set\n"
@@ -1639,6 +3897,7 @@ DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
   return CMD_SUCCESS;
 }
 
+
 DEFUN (no_ipv6_route,
        no_ipv6_route_cmd,
        "no ipv6 route IPV6_ADDRESS IPV6_ADDRESS",
@@ -1743,6 +4002,178 @@ DEFUN (no_ipv6_route_ifname,
   return CMD_SUCCESS;
 }
 
+#if 0
+void
+static_ipv6_add ()
+{
+  ;
+}
+
+void
+static_ipv6_delete ()
+{
+  ;
+}
+
+/* General fucntion for IPv6 static route. */
+int
+static_ipv6_func (struct vty *vty, int add_cmd, char *dest_str,
+		  char *gate_str, char *ifname, char *distance_str)
+{
+  int ret;
+  u_char distance;
+  struct prefix_ipv6 p;
+  struct in6_addr gate;
+  int table = rtm_table_default;
+  
+  ret = str2prefix_ipv6 (dest_str, &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "%% Malformed address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Apply mask for given prefix. */
+  apply_mask_ipv6 (&p);
+
+  /* Administrative distance. */
+  if (distance_str)
+    distance = atoi (distance_str);
+  else
+    distance = ZEBRA_STATIC_DISTANCE_DEFAULT;
+
+  /* When gateway is A.B.C.D format, gate is treated as nexthop
+     address other case gate is treated as interface name. */
+  ret = inet_pton (AF_INET6, gate_str, &gate);
+
+  /* When ifname is specified. */
+  if (ifname)
+    {
+      if (ret)
+	vty_out (vty, "");
+    }
+  else
+    {
+      if (ret)
+	ifname = NULL;
+      else
+	ifname = gate_str;
+    }
+
+  if (add_cmd)
+    static_ipv6_add (&p, ifname ? NULL : &gate, ifname, distance, table);
+  else
+    static_ipv6_delete (&p, ifname ? NULL : &gate, ifname, distance, table);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_route,
+       ipv6_route_cmd,
+       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)",
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
+{
+  return static_ipv6_func (vty, 1, argv[0], argv[1], NULL, NULL);
+}
+
+DEFUN (ipv6_route_ifname,
+       ipv6_route_ifname_cmd,
+       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE",
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
+{
+  return static_ipv6_func (vty, 1, argv[0], argv[1], argv[2], NULL);
+}
+
+DEFUN (ipv6_route_pref,
+       ipv6_route_pref_cmd,
+       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>",
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n"
+       "Distance value for this prefix\n")
+{
+  return static_ipv6_func (vty, 1, argv[0], argv[1], NULL, argv[2]);
+}
+
+DEFUN (ipv6_route_ifname_pref,
+       ipv6_route_ifname_pref_cmd,
+       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE <1-255>",
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n"
+       "Distance value for this prefix\n")
+{
+  return static_ipv6_func (vty, 1, argv[0], argv[1], argv[2], argv[3]);
+}
+
+DEFUN (no_ipv6_route,
+       no_ipv6_route_cmd,
+       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
+{
+  return static_ipv6_func (vty, 0, argv[0], argv[1], NULL, NULL);
+}
+
+DEFUN (no_ipv6_route_ifname,
+       no_ipv6_route_ifname_cmd,
+       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
+{
+  return static_ipv6_func (vty, 0, argv[0], argv[1], argv[2], NULL);
+}
+
+DEFUN (no_ipv6_route_pref,
+       no_ipv6_route_pref_cmd,
+       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n"
+       "Distance value for this prefix\n")
+{
+  return static_ipv6_func (vty, 0, argv[0], argv[1], NULL, argv[2]);
+}
+
+DEFUN (no_ipv6_route_ifname_pref,
+       no_ipv6_route_ifname_pref_cmd,
+       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE <1-255>",
+       NO_STR
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n"
+       "Distance value for this prefix\n")
+{
+  return static_ipv6_func (vty, 0, argv[0], argv[1], argv[2], argv[3]);
+}
+
+#endif /* 0 */
+
 /* show ip6 command*/
 DEFUN (show_ipv6,
        show_ipv6_cmd,
@@ -1798,12 +4229,35 @@ DEFUN (show_ipv6,
 }
 #endif /* HAVE_IPV6 */
 
-static void
+#ifndef OLD_RIB
+void
+rib_weed_table_new (struct route_table *rib_table)
+{
+  struct route_node *rn;
+  struct new_rib *rib;
+  struct new_rib *next;
+
+  for (rn = route_top (rib_table); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = next)
+      {
+	next = rib->next;
+
+        if (rib->table != rtm_table_default &&
+	    rib->table != RT_TABLE_MAIN)
+	  {
+	    rib_delnode (rn, rib);
+	    newrib_free (rib);
+	    route_unlock_node (rn);
+	  }
+      }
+}
+#endif /* OLD_RIB */
+
+void
 rib_weed_table (struct route_table *rib_table)
 {
   struct route_node *np;
   struct rib *rib;
-  extern int rtm_table_default;
 
   for (np = route_top (rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
@@ -1821,11 +4275,54 @@ rib_weed_table (struct route_table *rib_table)
 void
 rib_weed_tables ()
 {
+#ifdef OLD_RIB
   rib_weed_table (ipv4_rib_table);
+#else
+  rib_weed_table_new (ipv4_rib_table);
+#endif /* OLD_RIB */
+
 #ifdef HAVE_IPV6
   rib_weed_table (ipv6_rib_table);
 #endif /* HAVE_IPV6 */
 }
+
+#ifndef OLD_RIB
+void
+zebra_sweep_table_new (struct route_table *rib_table)
+{
+  struct route_node *rn;
+  struct new_rib *rib;
+  struct new_rib *next;
+  int ret = 0;
+
+  for (rn = route_top (rib_table); rn; rn = route_next (rn))
+    for (rib = rn->info; rib; rib = next)
+      {
+	next = rib->next;
+
+        if ((rib->type == ZEBRA_ROUTE_KERNEL) && 
+	    CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELFROUTE))
+          {
+	    if (rn->p.family == AF_INET)
+	      ret = rib_uninstall_kernel (rn, rib);
+#if 0
+#ifdef HAVE_IPV6
+	    else
+	      ret = kernel_delete_ipv6 ((struct prefix_ipv6 *)&rn->p,
+					&rib->u.gate6, rib->u.ifindex, 
+					0, rib->table);
+#endif /* HAVE_IPV6 */
+#endif /* 0 */
+	    if (! ret)
+	      {
+		rib_delnode (rn, rib);
+		newrib_free (rib);
+		route_unlock_node (rn);
+	      }
+          }
+      }
+}
+#endif /* OLD_RIB */
 
 void
 zebra_sweep_table (struct route_table *rib_table)
@@ -1866,7 +4363,11 @@ zebra_sweep_table (struct route_table *rib_table)
 void
 zebra_sweep_route ()
 {
+#ifdef OLD_RIB
   zebra_sweep_table (ipv4_rib_table);
+#else
+  zebra_sweep_table_new (ipv4_rib_table);
+#endif /* OLD_RIB */
 #ifdef HAVE_IPV6  
   zebra_sweep_table (ipv6_rib_table);
 #endif /* HAVE_IPV6 */
@@ -1888,7 +4389,12 @@ config_write_ip (struct vty *vty)
 {
   int write = 0;
 
+#ifdef OLD_RIB
   write += rib_static_list (vty, ipv4_rib_table);
+#else
+  static_ipv4_write (vty);
+#endif /* OLD_RIB*/
+
 #ifdef HAVE_IPV6
   write += ipv6_static_list (vty);
 #endif /* HAVE_IPV6 */
@@ -1911,7 +4417,8 @@ rib_init ()
   install_node (&ip_node, config_write_ip);
 
   ipv4_rib_table = route_table_init ();
-  ipv4_rib_static = route_table_init ();
+  static_ipv4_table = route_table_init ();
+
   install_element (VIEW_NODE, &show_ip_route_cmd);
   install_element (VIEW_NODE, &show_ip_route_addr_cmd);
   install_element (VIEW_NODE, &show_ip_route_prefix_cmd);
@@ -1920,23 +4427,40 @@ rib_init ()
   install_element (ENABLE_NODE, &show_ip_route_addr_cmd);
   install_element (ENABLE_NODE, &show_ip_route_prefix_cmd);
   install_element (ENABLE_NODE, &show_ip_route_protocol_cmd);
-  
+
+  install_element (CONFIG_NODE, &ip_route_cmd);
+  install_element (CONFIG_NODE, &ip_route_mask_cmd);
+  install_element (CONFIG_NODE, &no_ip_route_cmd);
+  install_element (CONFIG_NODE, &no_ip_route_mask_cmd);
 
 #ifdef HAVE_IPV6
   ipv6_rib_table = route_table_init ();
   ipv6_rib_static = route_table_init ();
+
   install_element (CONFIG_NODE, &ipv6_route_cmd);
   install_element (CONFIG_NODE, &ipv6_route_ifname_cmd);
   install_element (CONFIG_NODE, &no_ipv6_route_cmd);
   install_element (CONFIG_NODE, &no_ipv6_route_ifname_cmd);
+#if 0
+  install_element (CONFIG_NODE, &ipv6_route_pref_cmd);
+  install_element (CONFIG_NODE, &ipv6_route_ifname_pref_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_route_pref_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_route_ifname_pref_cmd);
+#endif /* 0 */
 
   install_element (VIEW_NODE, &show_ipv6_cmd);
   install_element (ENABLE_NODE, &show_ipv6_cmd);
 #endif /* HAVE_IPV6 */
+
+#ifndef OLD_RIB
+  install_element (CONFIG_NODE, &ip_route_pref_cmd);
+  install_element (CONFIG_NODE, &ip_route_mask_pref_cmd);
+  install_element (CONFIG_NODE, &no_ip_route_pref_cmd);
+  install_element (CONFIG_NODE, &no_ip_route_mask_pref_cmd);
+#endif /* OLD_RIB */
 }
 
-/* Interface change related functions. */
-
+#ifdef OLD_RIB
 /* Check all static routes then install it into the kernel. */
 void
 rib_if_up (struct interface *ifp)
@@ -1976,7 +4500,7 @@ rib_if_up (struct interface *ifp)
 					 NULL,
 					 best->u.ifindex, best->flags, 0);
 		  if (ret == 0)
-		    RIB_FIB_SET (best);
+		    rib_fib_set (rn, best);
 		}
 	    }
 	  else
@@ -1997,7 +4521,7 @@ rib_if_up (struct interface *ifp)
 					   &best->u.gate4,
 					   best->u.ifindex, best->flags, 0);
 		    if (ret == 0)
-		      RIB_FIB_SET (best);
+		      rib_fib_set (rn, best);
 		  }
 	      }		
 	    }
@@ -2024,19 +4548,149 @@ rib_if_down (struct interface *ifp)
 	    {
 	      if (rib->type == ZEBRA_ROUTE_STATIC && IS_RIB_FIB (rib))
 		{
-		  RIB_FIB_UNSET (rib);
+		  rib_fib_unset (rn, rib);
 		}
 	      if (rib->type == ZEBRA_ROUTE_KERNEL && IS_RIB_FIB (rib))
 		{
 		  rib_delete_ipv4 (rib->type, rib->flags, 
 				   (struct prefix_ipv4 *)&rn->p,
 				   &rib->u.gate4, rib->u.ifindex, 0);
+                  redistribute_delete (rn, rib);
 		}
 	    }
 	}
     }
 }
+#else
+void
+rib_if_update_nexthop(struct route_node *rn, 
+		      unsigned int ifindex, 
+		      struct prefix *p,
+		      int type)
+{
+  struct new_rib *rib;
+  struct new_rib *nrib;
+  struct nexthop *nexthop;
+  struct nexthop *nnexthop;
 
+  /* Lock node to prevent problems */
+  route_lock_node(rn);
+
+  /* Clean up node BEFORE the slaughter */
+  rib_process(rn, NULL);
+
+  /* This is where we should return if an interface is coming up */
+  if (ifindex == 0)
+    {
+      route_unlock_node (rn);
+      return;
+    }
+
+  for (rib = rn->info; rib; rib = nrib)
+    {
+      nrib = rib->next;
+
+      if (type != 0 && rib->type != type)
+	continue;
+      
+      /* Always skip static routes */
+      if (rib->type == ZEBRA_ROUTE_STATIC)
+	continue;
+
+      /* Loop over nexthops and delete garbage */
+      for (nexthop = rib->nexthop; nexthop; nexthop = nnexthop)
+	{
+	  nnexthop = nexthop->next;
+
+	  /* Skip interfaces that don't match */
+	  if (nexthop->krnl_ifindex != ifindex && nexthop->ifindex != ifindex)
+	    continue;
+
+	  if ( p != NULL )
+	    {
+	      struct prefix n;
+
+	      /* turn nexthop into a prefix */
+	      switch (nexthop->type)
+		{
+		case NEXTHOP_TYPE_IPV4:
+		case NEXTHOP_TYPE_IPV4_IFINDEX:
+		  n.family = AF_INET;
+		  n.u.prefix4 = nexthop->gate.ipv4;
+		  n.prefixlen = IPV4_MAX_PREFIXLEN;
+		  break;
+
+#ifdef HAVE_IPV6
+		case NEXTHOP_TYPE_IPV6:
+		case NEXTHOP_TYPE_IPV6_IFINDEX:
+		  n.family = AF_INET6;
+		  /* Don't worry, this works! */
+		  n.u.prefix6 = nexthop->gate.ipv6;
+		  n.prefixlen = IPV6_MAX_PREFIXLEN;
+		  break;
+#endif
+		default:
+		  goto case_continue;
+		  break;
+		}
+	      
+	      /* Do comparision */
+	      if( !prefix_match (p, &n) )
+		continue;
+
+
+	    }
+	  /* Found something - do deezz business! */
+	  if (rib->nexthop_num == 1)  
+	    {
+	      rib_delnode (rn, rib);
+	      rib_process (rn, rib);
+	      newrib_free (rib);
+	      route_unlock_node (rn);
+	      continue;
+	    }
+	  else
+	    {
+	      rib_uninstall (rn, rib);
+	      nexthop_delete (rib, nexthop);
+	      nexthop_free (nexthop);
+	      rib_process (rn, rib);
+	    }
+
+	    case_continue:
+	}
+    }
+
+  route_unlock_node (rn);
+}
+
+/* RIB update function. */
+void
+rib_update (unsigned int ifindex, struct prefix *p)
+{
+  struct route_node *rn;
+
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    rib_if_update_nexthop(rn, ifindex, p, ZEBRA_ROUTE_KERNEL);
+}
+
+/* Interface goes up. */
+void
+rib_if_up (struct interface *ifp)
+{
+  rib_update (0, NULL);
+}
+
+/* Interface goes down. */
+void
+rib_if_down (struct interface *ifp)
+{
+  rib_update (ifp->ifindex, NULL);
+}
+#endif /* OLD_RIB */
+
+#ifdef OLD_RIB
+#ifdef HAVE_IF_PSEUDO
 void
 rib_if_delete (struct interface *ifp)
 {
@@ -2050,24 +4704,23 @@ rib_if_delete (struct interface *ifp)
 	{
 	  if (ifp->ifindex == rib->u.ifindex)
 	    {
-#ifdef HAVE_IF_PSEUDO
-	      if (IS_IF_PSEUDO(ifp)){
+	      if (IS_IF_PSEUDO(ifp))
 		rib->u.ifindex=INTERFACE_PSEUDO;
-	      }
 	      else
 		rib->u.ifindex=INTERFACE_UNKNOWN;
-#else
-	      rib->u.ifindex=INTERFACE_UNKNOWN;
-#endif /* HAVE_IF_PSEUDO */
+
 	      if (IS_RIB_FIB (rib))
 		{
-		  RIB_FIB_UNSET (rib);
+		  rib_fib_unset (rn, rib);
 		}
 	    }
 	}
     }
 }
+#endif /* HAVE_IF_PSEUDO */
+#endif /* OLD_RIB */
 
+#ifdef OLD_RIB
 #ifdef HAVE_IF_PSEUDO	    
 void rib_ifindex_update_name(char *name,int ifindex_new)
 {
@@ -2104,3 +4757,4 @@ void rib_ifindex_update_name(char *name,int ifindex_new)
     }  
 }
 #endif /* HAVE_IF_PSEUDO */     
+#endif /* OLD_RIB */

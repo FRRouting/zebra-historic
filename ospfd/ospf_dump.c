@@ -124,6 +124,7 @@ unsigned long conf_debug_ospf_ism = 0;
 unsigned long conf_debug_ospf_nsm = 0;
 unsigned long conf_debug_ospf_lsa = 0;
 unsigned long conf_debug_ospf_zebra = 0;
+unsigned long conf_debug_ospf_nssa = 0;
 
 /* Enable debug option variables -- valid only session. */
 unsigned long term_debug_ospf_packet[5] = {0, 0, 0, 0, 0};
@@ -132,7 +133,7 @@ unsigned long term_debug_ospf_ism = 0;
 unsigned long term_debug_ospf_nsm = 0;
 unsigned long term_debug_ospf_lsa = 0;
 unsigned long term_debug_ospf_zebra = 0;
-
+unsigned long term_debug_ospf_nssa = 0;
 
 void
 ospf_nbr_state_message (struct ospf_neighbor *nbr, char *buf, size_t size)
@@ -1227,7 +1228,60 @@ ALIAS (no_debug_ospf_zebra,
        "OSPF Zebra information\n"
        "Zebra interface\n"
        "Zebra redistribute\n")
+
+DEFUN (debug_ospf_event,
+       debug_ospf_event_cmd,
+       "debug ospf event",
+       DEBUG_STR
+       OSPF_STR
+       "OSPF event information\n")
+{
+  if (vty->node == CONFIG_NODE)
+    CONF_DEBUG_ON (event, EVENT);
+  TERM_DEBUG_ON (event, EVENT);
+  return CMD_SUCCESS;
+}
 
+DEFUN (no_debug_ospf_event,
+       no_debug_ospf_event_cmd,
+       "no debug ospf event",
+       NO_STR
+       DEBUG_STR
+       OSPF_STR
+       "OSPF event information\n")
+{
+  if (vty->node == CONFIG_NODE)
+    CONF_DEBUG_OFF (event, EVENT);
+  TERM_DEBUG_OFF (event, EVENT);
+  return CMD_SUCCESS;
+}
+
+DEFUN (debug_ospf_nssa,
+       debug_ospf_nssa_cmd,
+       "debug ospf nssa",
+       DEBUG_STR
+       OSPF_STR
+       "OSPF nssa information\n")
+{
+  if (vty->node == CONFIG_NODE)
+    CONF_DEBUG_ON (nssa, NSSA);
+  TERM_DEBUG_ON (nssa, NSSA);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_ospf_nssa,
+       no_debug_ospf_nssa_cmd,
+       "no debug ospf nssa",
+       NO_STR
+       DEBUG_STR
+       OSPF_STR
+       "OSPF nssa information\n")
+{
+  if (vty->node == CONFIG_NODE)
+    CONF_DEBUG_OFF (nssa, NSSA);
+  TERM_DEBUG_OFF (nssa, NSSA);
+  return CMD_SUCCESS;
+}
 
 DEFUN (show_debugging_ospf,
        show_debugging_ospf_cmd,
@@ -1329,7 +1383,7 @@ config_write_debug (struct vty *vty)
 
   char *type_str[] = {"hello", "dd", "ls-request", "ls-update", "ls-ack"};
   char *detail_str[] = {"", " send", " recv", "", " detail",
-			" send detail", " recv detail"};
+			" send detail", " recv detail", " detail"};
 
   /* debug ospf ism (status|events|timers). */
   if (IS_CONF_DEBUG_OSPF (ism, ISM) == OSPF_DEBUG_ISM)
@@ -1385,6 +1439,20 @@ config_write_debug (struct vty *vty)
       write = 1;
     }
 
+  /* debug ospf event. */
+  if (IS_CONF_DEBUG_OSPF (event, EVENT) == OSPF_DEBUG_EVENT)
+    {
+      vty_out (vty, "debug ospf event%s", VTY_NEWLINE);
+      write = 1;
+    }
+
+  /* debug ospf nssa. */
+  if (IS_CONF_DEBUG_OSPF (nssa, NSSA) == OSPF_DEBUG_NSSA)
+    {
+      vty_out (vty, "debug ospf nssa%s", VTY_NEWLINE);
+      write = 1;
+    }
+  
   /* debug ospf packet all detail. */
   r = OSPF_DEBUG_SEND_RECV|OSPF_DEBUG_DETAIL;
   for (i = 0; i < 5; i++)
@@ -1444,6 +1512,10 @@ debug_init ()
   install_element (ENABLE_NODE, &debug_ospf_lsa_cmd);
   install_element (ENABLE_NODE, &debug_ospf_zebra_sub_cmd);
   install_element (ENABLE_NODE, &debug_ospf_zebra_cmd);
+  install_element (ENABLE_NODE, &debug_ospf_event_cmd);
+#ifdef HAVE_NSSA
+  install_element (ENABLE_NODE, &debug_ospf_nssa_cmd);
+#endif /* HAVE_NSSA */
   install_element (ENABLE_NODE, &no_debug_ospf_packet_send_recv_detail_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_packet_send_recv_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_packet_all_cmd);
@@ -1455,6 +1527,10 @@ debug_init ()
   install_element (ENABLE_NODE, &no_debug_ospf_lsa_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_zebra_sub_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_zebra_cmd);
+  install_element (ENABLE_NODE, &no_debug_ospf_event_cmd);
+#ifdef HAVE_NSSA
+  install_element (ENABLE_NODE, &no_debug_ospf_nssa_cmd);
+#endif /* HAVE_NSSA */
 
   install_element (CONFIG_NODE, &debug_ospf_packet_send_recv_detail_cmd);
   install_element (CONFIG_NODE, &debug_ospf_packet_send_recv_cmd);
@@ -1467,6 +1543,10 @@ debug_init ()
   install_element (CONFIG_NODE, &debug_ospf_lsa_cmd);
   install_element (CONFIG_NODE, &debug_ospf_zebra_sub_cmd);
   install_element (CONFIG_NODE, &debug_ospf_zebra_cmd);
+  install_element (CONFIG_NODE, &debug_ospf_event_cmd);
+#ifdef HAVE_NSSA
+  install_element (CONFIG_NODE, &debug_ospf_nssa_cmd);
+#endif /* HAVE_NSSA */
   install_element (CONFIG_NODE, &no_debug_ospf_packet_send_recv_detail_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf_packet_send_recv_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf_packet_all_cmd);
@@ -1478,5 +1558,8 @@ debug_init ()
   install_element (CONFIG_NODE, &no_debug_ospf_lsa_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf_zebra_sub_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf_zebra_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_event_cmd);
+#ifdef HAVE_NSSA
+  install_element (CONFIG_NODE, &no_debug_ospf_nssa_cmd);
+#endif /* HAVE_NSSA */
 }
-

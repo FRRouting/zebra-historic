@@ -257,6 +257,9 @@ access_list_delete (struct access_list *access)
   else
     list->head = access->next;
 
+  if (access->name)
+    XFREE (MTYPE_ACCESS_LIST_STR, access->name);
+
   if (access->remark)
     XFREE (MTYPE_TMP, access->remark);
 
@@ -272,7 +275,7 @@ access_list_insert (int family, char *name)
   long number;
   struct access_list *access;
   struct access_list *point;
-  struct access_list_list *list;
+  struct access_list_list *alist;
   struct access_master *master;
 
   master = access_master_get (family);
@@ -281,7 +284,7 @@ access_list_insert (int family, char *name)
 
   /* Allocate new access_list and copy given name. */
   access = access_list_new ();
-  access->name = strdup (name);
+  access->name = XSTRDUP (MTYPE_ACCESS_LIST_STR, name);
   access->master = master;
 
   /* If name is made by all digit character.  We treat it as
@@ -300,9 +303,9 @@ access_list_insert (int family, char *name)
       access->type = ACCESS_TYPE_NUMBER;
 
       /* Set access_list to number list. */
-      list = &master->num;
+      alist = &master->num;
 
-      for (point = list->head; point; point = point->next)
+      for (point = alist->head; point; point = point->next)
 	if (atol (point->name) >= number)
 	  break;
     }
@@ -311,36 +314,36 @@ access_list_insert (int family, char *name)
       access->type = ACCESS_TYPE_STRING;
 
       /* Set access_list to string list. */
-      list = &master->str;
+      alist = &master->str;
   
       /* Set point to insertion point. */
-      for (point = list->head; point; point = point->next)
+      for (point = alist->head; point; point = point->next)
 	if (strcmp (point->name, name) >= 0)
 	  break;
     }
 
   /* In case of this is the first element of master. */
-  if (list->head == NULL)
+  if (alist->head == NULL)
     {
-      list->head = list->tail = access;
+      alist->head = alist->tail = access;
       return access;
     }
 
   /* In case of insertion is made at the tail of access_list. */
   if (point == NULL)
     {
-      access->prev = list->tail;
-      list->tail->next = access;
-      list->tail = access;
+      access->prev = alist->tail;
+      alist->tail->next = access;
+      alist->tail = access;
       return access;
     }
 
   /* In case of insertion is made at the head of access_list. */
-  if (point == list->head)
+  if (point == alist->head)
     {
-      access->next = list->head;
-      list->head->prev = access;
-      list->head = access;
+      access->next = alist->head;
+      alist->head->prev = access;
+      alist->head = access;
       return access;
     }
 

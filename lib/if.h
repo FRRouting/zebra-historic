@@ -40,18 +40,13 @@
 #define INTERFACE_NAMSIZ      20
 #define INTERFACE_HWADDR_MAX  20
 
+#ifdef OLD_RIB /* junk */
+
 #ifdef HAVE_IF_PSEUDO
 #define IF_PSEUDO      0x01
 #define IF_PSEUDO_SET(IF) (((IF)->status) |= IF_PSEUDO)
 #define IF_PSEUDO_UNSET(IF) (((IF)->status) &= ~IF_PSEUDO)
 #define IS_IF_PSEUDO(IF) (((IF)->status) & IF_PSEUDO)
-
-#if 0
-#define IF_UNKOWN      0x02
-#define IF_UNKNOWN_SET(IF) (((IF)->status) |= IF_UNKNOWN)
-#define IF_UNKNOWN_UNSET(IF) (((IF)->status) &= ~IF_UNKNOWN)
-#define IS_IF_UNKNOWN(IF) (((IF)->status) & IF_UNKNOWN)
-#endif
 #endif /* HAVE_IF_PSEUDO */
 
 #ifndef INTERFACE_UNKNOWN
@@ -61,6 +56,29 @@
 #ifndef INTERFACE_PSEUDO
 #define INTERFACE_PSEUDO 0
 #endif  /* INTERFACE_PSEUDO */
+
+#endif /* OLD_RIB */
+
+/* Get RID of the following once the New RIB is in place... */
+
+/* Stuff for interface munging etc */
+/* Logical sub interfaces */
+#define IF_LSUB   0x01
+#define IF_LSUB_SET(IF) (((IF)->status) |= IF_LSUB)
+#define IF_LSUB_UNSET(IF) (((IF)->status) &= ~IF_LSUB)
+#define IS_IF_LSUB(IF) (((IF)->status) & IF_LSUB)
+
+/* Interface InActive  flag */
+#define IF_INACTIVE   0x02
+#define IF_INACTIVE_SET(IF) (((IF)->status) |= IF_INACTIVE)
+#define IF_INACTIVE_UNSET(IF) (((IF)->status) &= ~IF_INACTIVE)
+#define IS_IF_INACTIVE(IF) (((IF)->status) & IF_INACTIVE)
+
+/* Internal IF Index #defines */
+/* Internal If indexes start at 0xFFFFFFFF and go down to 1 greater than
+   this */
+#define IFINDEX_INTERNBASE 0x80000000
+
 
 #ifdef HAVE_PROC_NET_DEV
 struct if_stats
@@ -136,10 +154,6 @@ struct interface
 
   /* Connected address list. */
   list connected;
-#if 0
-  struct list *ifa_v4;
-  struct list *ifa_v6;
-#endif /* 0 */
 
   /* Daemon specific interface data pointer. */
   void *info;
@@ -193,7 +207,7 @@ struct connected
 /* Prototypes. */
 struct interface *if_new (void);
 struct interface *if_create (void);
-struct interface *if_lookup_by_index (int);
+struct interface *if_lookup_by_index (unsigned int);
 struct interface *if_lookup_by_name (char *);
 struct interface *if_lookup_exact_address (struct in_addr);
 struct interface *if_lookup_address (struct in_addr);

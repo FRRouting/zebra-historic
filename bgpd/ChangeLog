@@ -1,3 +1,346 @@
+2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.90 is released.
+
+	* bgp_route.h (BGP_INFO_HISTORY): Remove damped member from struct
+	bgp_info.  Instead of that use BGP_INFO_DAMPED flag.
+	(struct bgp_info): Remove invalid member from struct bgp_info.
+	Instead of that use BGP_INFO_HISTORY flag.
+
+2001-01-10  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_damp.c (bgp_damp_info_print): New function to display
+	dampening status.
+	(DEFAULT_HARF_LIFE): Define default value.
+	(DEFAULT_REUSE): Likewise.
+	(DEFAULT_SUPPRESS): Likewise.
+	(bgp_config_write_damp): When config value is same as default
+	value, simply display "bgp dampening" to configuration.
+
+	* bgp_damp.h (struct bgp_damp_info): Add flap member.
+
+	* bgp_route.h (struct bgp_info): Added for BGP flap dampening
+	history status.
+
+2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (bgp_connected_add): Point-to-point connected
+	address is properly handled.
+	(bgp_connected_delete): Likewise.
+
+	* bgp_route.c (bgp_route_init): Turn off BGP Flap dampening code
+	until it works fine.
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_show_summary): Add BGP_VERSION_MP_4 case.
+
+	* bgp_route.c (bgp_update): When this is not damped route, clear
+	ri pointer.
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_main.c: Add "-n" no_kernel option to not install route to
+	kernel.  Suggested by: "Matt Ranney" <mjr@ranney.com>
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (bgp_connected_add): Revert point-to-point
+	connected route patch.  Reported by ruud@ruud.org (Ruud de Rooij)
+
+	* bgp_damp.c (bgp_config_write_damp): Add configuration display
+	function.
+
+	* bgp_route.c (bgp_info_free): Set NULL to BGP dampening
+	information when BGP info structure is freed.
+	(bgp_info_cmp): Check damped flag.
+	(bgp_announce_check): Damped route is not announced.
+
+2001-01-09  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgpd.c (neighbor_capability_route_refresh): Change "neighbor
+	route-refresh" command to "neighbor capability route-refresh".
+	(clear_bgp_soft_in): Change soft-reconfig method.
+
+	clear ip bgp <neighbor> soft in
+        --------------------------------------
+        Try stored cache first then route-refresh
+
+        clear ip bgp <neighbor> in
+        ---------------------------------
+        Try route-refresh first then try to use stored cache
+
+2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (bgp_connected_add): Check point-to-point
+	connected route.  Reported by ruud@ruud.org (Ruud de Rooij)
+
+2001-01-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (bgp_nexthop_lookup): When IBGP nexthop is
+	changed, refresh it.
+
+2001-01-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.h (struct bgp_info_tag): Add as_selected to
+	bgp_info_tag.
+
+2001-01-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.h (struct bgp_info_tag): Add damped and bgp_damp_info
+	member for BGP flap dampening.
+
+	* bgp_damp.c: New file is added.
+
+	* bgp_damp.h: Likewise.
+
+2001-01-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h (BGP_VTYSH_PATH): Change "/tmp/bgpd" to "/tmp/.bgpd".
+
+2000-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (zlookup_connect): Change to use UNIX domain
+	socket for zebra communication.
+
+2000-12-29  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (bgp_process): Fix "bgp deterministic-med" process.
+
+2000-12-27  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (bgp_process): Add "bgp deterministic-med" process.
+
+2000-12-25  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (bgp_info_cmp): Use ntohl comparing router ID.
+
+2000-12-18  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (bgp_info_cmp): When over three same prefix exit,
+	withdrawing best prefix perform router ID comparison.
+
+2000-12-15  Akihiro Mizutani  <mizutani@dml.com>
+
+	* bgp_route.c (bgp_info_cmp): Do not compare router ID when the
+	routes comes from EBGP peer.  When originator ID is same, take
+	shorter cluster-list route.  If cluster-list is same take smaller
+	IP address neighbor's route.
+
+	* bgpd.c (bgp_bestpath_aspath_ignore): Add "bgp bestpath as-path
+	ignore" command.  When this option is set, do not concider AS path
+	length when route selection.
+	(bgp_bestpath_compare_router_id): Add "bgp bestpath
+	compare-routerid".  When this option is set, compare router ID
+	when the routes comes from EBGP peer.
+	
+2000-12-15  Akihiro Mizutani  <mizutani@dml.com>
+
+	* bgp_route.c (bgp_info_cmp): Compare originator ID when it is
+	available.
+
+2000-12-14  Akihiro Mizutani  <mizutani@dml.com>
+
+	* bgp_packet.c (bgp_notify_receive): Disply received Notify data
+	information.
+
+2000-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_filter.c (as_filter_free): Use MTYPE_AS_FILTER_STR to make
+	it sure the memory is freed.
+
+	* bgp_route.c (route_vty_out_detail): Do not use AF_INET6 outside
+	HAVE_IPV6.
+
+2000-12-08  Akihiro Mizutani  <mizutani@dml.com>
+
+	* bgp_packet.c (bgp_notify_send_with_data): Store BGP notification
+	data part.
+
+	* bgp_network.c (bgp_accept): When BGP connection comes from
+	unconfigured IP address, close socket immediately.
+
+	* bgpd.c: Fix some display format.
+
+2000-11-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_keepalive_send): Delete duplicate
+	bgp_packet_set_size () call.
+
+2000-11-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_read_packet): Remove debug codes.
+
+2000-11-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_snmp.c (write_bgpPeerTable): Add SNMP set method routine.
+
+	* bgp_fsm.c (bgp_stop): Use fsm_change_status to change peer's
+	status.
+	(bgp_establish): Likewise.
+
+2000-11-26  Akihiro Mizutani  <mizutani@dml.com>
+
+	* bgp_open.c: Fix error messages.
+
+2000-11-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c (bgp_establish): Call BGP trap when the peer is
+	established.
+	(bgp_stop): Call BGP trap when the peer is dropped.
+
+2000-11-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_snmp.c (bgp4PathAttrTable): Return BGP path attribute table.
+
+	* bgpd.h (struct peer): Add update_time for track last update
+	received time.
+
+	* bgp_packet.c (bgp_notify_receive): Preserv notify code and sub
+	code in any case.
+
+	* bgp_snmp.c (bgpPeerTable): Return remote router ID instead of
+	peering IP address.
+	(bgpPeerTable): Return actual BGP version number.
+
+2000-11-22  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_debug.c (bgp_notify_print): Notify data length display bug
+	is fixed.
+
+2000-11-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (zlookup_connect): When UNIX domain connection to
+	zebra is enabled, use the method.
+
+2000-11-16  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.c: Revise debug message output.
+
+2000-11-15  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_clist.c (ip_community_list): Fix bug of string comparison.
+
+2000-11-14  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_community.c (community_match): Fix bug of memcmp return
+	value check.
+
+2000-11-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_clist.c (community_list_match_exact): Add check for
+	entry->style is COMMUNITY_LIST.
+	(community_match_regexp): Apply new com_nthval macro.
+
+2000-11-07  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_routemap.c (route_set_community_delete): "set
+	community-delete COMMUNITY-LIST" is added.
+
+	* bgp_community.c (community_del_val): Delete one community.
+	(community_delete): Delete all community included in list.
+	(community_match): Fix bug of matching community value.
+
+	* bgp_clist.c (community_entry_free): Free community regular
+	expression.
+	(community_entry_make): Default style is COMMUNITY_LIST.
+	(community_entry_lookup): Make it sure style is COMMUNITY_LIST.
+	(community_entry_regexp_lookup): New function for community
+	regular expression lookup.
+	(community_match_regexp): New function.
+	(community_delete_regexp): New function.
+	(community_list_delete_entries): New function.
+	(community_list_match): Add COMMUNITY_REGEXP treatment.
+	(community_list_match_exact): Likewise.
+	(config_write_community): Write community list according to
+	entry->style.
+
+2000-11-07  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_attr.c (bgp_attr_aspath): AS path first AS check.
+
+	* bgp_clist.c (struct community_entry): Add style, regexp, reg to
+	community_entry.
+
+2000-11-06  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_aspath.c (aspath_firstas_check): AS path first AS check.
+
+	* bgpd.c (bgp_enforce_first_as): New command "bgp
+	enforce-first-as".
+
+	* bgpd.h (BGP_CONFIG_ENFORCE_FIRST_AS): Add new flag.
+
+2000-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_community.c (community_compare): Copy byte stream data to
+	actual value instead of using type casting hack.
+	(community_add_val): Likewise.
+	(community_uniq_sort): Likewise.
+	(community_print): Likewise.
+	(community_print_vty): Likewise.
+	(community_include): Use memcmp to compare community value.
+
+	* bgp_community.h (com_lastval): com_lastval and com_nthval macro
+	return pointer.
+
+2000-11-06  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.h (struct peer): Add established and dropped member for
+	count peering up/down statistics.
+
+	* bgpd.c (bgp_show_peer): Display peering up/down statistics.
+
+	* bgp_fsm.c (bgp_establish): Increment established count.
+	(bgp_stop): Increment dropped count.
+
+	* bgp_packet.c (bgp_notify_receive): Increament notify count.
+
+2000-11-1  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_fsm.c: Fix bug of holdtimer is not reset when bgp cleared. 
+
+2000-10-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h: Static bit flag is set by (1 << DIGIT).
+
+2000-10-24  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_ecommunity.c (ecommunity_dup): Extended community display
+	format fix.
+
+2000-10-24  Arkadiusz Miskiewicz <misiek@pld.org.pl>
+
+	* bgp_network.c (bgp_serv_sock_addrinfo): Use gai_strerror.
+	(bgp_serv_sock_addrinfo): Check address family.
+
+2000-10-23  Jochen Friedrich <jochen@scram.de>
+
+	* bgp_snmp.c: bgp_oid and bgpd_oid are used in smux_open after it
+	is registered.  So those variables must be static.
+
+2000-10-23  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_routemap.c (route_match_ip_next_hop): Change "match ip
+	next-hop" argument from IP address to access-list name.
+	Remove zebra-0.88 compatibility commands.
+        "match ip prefix-list WORD"
+        "match ipv6 prefix-list WORD"
+	
+2000-10-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c (route_match_ipv6_next_hop_compile): Fix bug of
+	passing the pointer to the pointer of struct in6_addr instead of
+	the pointer of struct in6_addr in "match ipv6 next-hop" command.
+
+	* bgp_route.c (bgp_announce_check): Enclose IPv6 part with
+	HAVE_IPV6.
+
+2000-10-20  Jasper Wallace <jasper@ivision.co.uk>
+
+	* bgp_snmp.c (bgpPeerTable): ntohs missing bug is fixed.  Change
+	to use linklist.c.  Define COUNTER32 as ASN_COUNTER.
+
 2000-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_route.c (bgp_announce_check): attr->nexthop empty check

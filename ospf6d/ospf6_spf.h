@@ -22,38 +22,70 @@
 #ifndef OSPF6_SPF_H
 #define OSPF6_SPF_H
 
-#define MAX_ENTRY          ( 256 )
-#define ROUTING_TABLE_SIZE (sizeof (struct routing_table_entry) * MAX_ENTRY)
+#include "prefix.h"
 
-struct vertex                /* Transit Vertex */
+/* Transit Vertex */
+struct ospf6_vertex
 {
-#define vtx_rtrid vtx_id[0]
-#define vtx_ifid  vtx_id[1]
-  unsigned long        vtx_id[2];    /* [Router-ID][Interface-ID] */
-                                     /* Network vertex when Interface-ID !0 */
-  char str[128];                     /* Identifier String */
-  struct ospf6_lsa    *vtx_lsa;      /* Associated LSA */
-  list                 vtx_nexthops; /* For ECMP */
-  cost_t               vtx_distance; /* Distance from Root (Cost) */
-  list                 vtx_path;     /* Lower node */
-  list                 vtx_parent;   /* for vertex on candidate list */
-  unsigned char        vtx_depth;    /* for vertex on spf tree */
-};
-#define MAXDEPTH       256
+  /* Vertex Identifier */
+  struct prefix_ls vertex_id;
 
-struct spftree
+  /* Identifier String */
+  char string[128];
+
+  /* Distance from Root (Cost) */
+  u_int16_t distance;
+
+  /* Depth of this node */
+  u_char depth;
+
+  /* nexthops to this node */
+  list nexthop_list;
+
+  /* upper nodes in spf tree */
+  list parent_list;
+
+  /* lower nodes in spf tree */
+  list path_list;
+
+  /* capability bits */
+  u_char capability_bits;
+
+  /* Optional capabilities */
+  u_char opt_capability[3];
+};
+
+struct ospf6_spftree
 {
-  struct vertex *root;
-  list searchlist[HASHVAL][HASHVAL];   /* having (struct vertex *) as data */
-  list depthlist[MAXDEPTH];            /* having (struct vertex *) as data */
+  /* calculation thread */
+  struct thread *t_spf_calculation;
+
+  /* root of this tree */
+  struct ospf6_vertex *root;
+
+  /* list for search */
+  list list;
+
+  /* statistics */
+  u_int32_t timerun;
+
+  struct timeval runtime_total;
+  struct timeval runtime_min;
+  struct timeval runtime_max;
+
+  struct timeval updated_time;
+  struct timeval interval_total;
+  struct timeval interval_min;
+  struct timeval interval_max;
 };
 
-#define IS_VTX_ROUTER_TYPE(x)  (!(x)->vtx_id[1])
-#define IS_VTX_NETWORK_TYPE(x) ((x)->vtx_id[1])
-
-/* Function Prototypes */
-int spf_calculation (struct thread *);
-int ospf6_spf_calculation (u_int32_t);
+void
+ospf6_spf_calculation_schedule (u_int32_t area_id);
+struct ospf6_spftree *ospf6_spftree_create ();
+void
+ospf6_spf_statistics_show (struct vty *vty, struct ospf6_spftree *spf_tree);
+void ospf6_spftree_delete (struct ospf6_spftree *spf_tree);
+void ospf6_spf_init ();
 
 #endif /* OSPF6_SPF_H */
 
