@@ -569,6 +569,7 @@ vty_end_config (struct vty *vty)
     case RIP_NODE:
     case RIPNG_NODE:
     case BGP_NODE:
+    case BGP_VPNV4_NODE:
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
@@ -755,6 +756,14 @@ vty_complete_command (struct vty *vty)
       vty_self_insert (vty, ' ');
       break;
     case CMD_COMPLETE_MATCH:
+      vty_prompt (vty);
+      vty_redraw_line (vty);
+      vty_backward_pure_word (vty);
+      vty_insert_word_overwrite (vty, matched[0]);
+      XFREE (MTYPE_TMP, matched[0]);
+      return;
+      break;
+    case CMD_COMPLETE_LIST_MATCH:
       for (i = 0; matched[i] != NULL; i++)
 	{
 	  if (i != 0 && ((i % 6) == 0))
@@ -954,14 +963,29 @@ vty_stop_input (struct vty *vty)
       break;
     }
   vty_prompt (vty);
+
+  /* Set history pointer to the latest one. */
+  vty->hp = vty->hindex;
 }
 
 /* Add current command line to the history buffer. */
 static void
 vty_hist_add (struct vty *vty)
 {
+  int index;
+
   if (vty->length == 0)
     return;
+
+  index = vty->hindex ? vty->hindex - 1 : VTY_MAXHIST - 1;
+
+  /* Ignore the same string as previous one. */
+  if (vty->hist[index])
+    if (strcmp (vty->buf, vty->hist[index]) == 0)
+      {
+      vty->hp = vty->hindex;
+      return;
+      }
 
   /* Insert history entry. */
   if (vty->hist[vty->hindex])
@@ -1138,12 +1162,12 @@ vty_read (struct thread *thread)
 	    case 'q':
 	    case 'Q':
 	      if (vty->output_func)
-		(*vty->output_func) (vty, vty->output, 1);
+		(*vty->output_func) (vty, 1);
 	      vty_buffer_reset (vty);
 	      break;
 	    default:
 	      if (vty->output_func)
-		(*vty->output_func) (vty, vty->output, 0);
+		(*vty->output_func) (vty, 0);
 	      break;
 	    }
 	  continue;
@@ -1340,7 +1364,7 @@ vty_flush (struct thread *thread)
 	  else
 	    {
 	      if (vty->output_func)
-		(*vty->output_func) (vty, vty->output, 0);
+		(*vty->output_func) (vty, 0);
 	      vty_event (VTY_WRITE, vty_sock, vty);
 	    }
 	}
@@ -1639,7 +1663,7 @@ vty_serv_un (char *path)
   serv.sun_family = AF_LOCAL;
   strncpy (serv.sun_path, path, strlen (path));
 
-  ret = bind (sock, &serv, sizeof (struct sockaddr_un));
+  ret = bind (sock, (struct sockaddr *) &serv, sizeof (struct sockaddr_un));
   if (ret < 0)
     {
       perror ("bind");
@@ -1663,7 +1687,7 @@ vtysh_accept (struct thread *thread)
   
   accept_sock = THREAD_FD (thread);
 
-  sock = accept (accept_sock, &client, &client_len);
+  sock = accept (accept_sock, (struct sockaddr *) &client, &client_len);
 
   printf ("VTY shell accept\n");
 
@@ -2163,6 +2187,31 @@ DEFUN (no_terminal_monitor,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_history,
+       show_history_cmd,
+       "show history",
+       SHOW_STR
+       "Display the session command history\n")
+{
+  int index;
+
+  for (index = vty->hindex + 1; index != vty->hindex;)
+    {
+      if (index == VTY_MAXHIST)
+	{
+	  index = 0;
+	  continue;
+	}
+
+      if (vty->hist[index] != NULL)
+	vty_out (vty, "  %s%s", vty->hist[index], VTY_NEWLINE);
+
+      index++;
+    }
+
+  return CMD_SUCCESS;
+}
+
 /* Display current configuration. */
 int
 vty_config_write (struct vty *vty)
@@ -2262,12 +2311,15 @@ vty_init ()
   install_node (&vty_node, vty_config_write);
 
   install_element (VIEW_NODE, &config_who_cmd);
+  install_element (VIEW_NODE, &show_history_cmd);
   install_element (ENABLE_NODE, &config_who_cmd);
   install_element (CONFIG_NODE, &line_vty_cmd);
   install_element (CONFIG_NODE, &service_advanced_vty_cmd);
   install_element (CONFIG_NODE, &no_service_advanced_vty_cmd);
+  install_element (CONFIG_NODE, &show_history_cmd);
   install_element (ENABLE_NODE, &terminal_monitor_cmd);
   install_element (ENABLE_NODE, &no_terminal_monitor_cmd);
+  install_element (ENABLE_NODE, &show_history_cmd);
 
   install_default (VTY_NODE);
   install_element (VTY_NODE, &exec_timeout_min_cmd);

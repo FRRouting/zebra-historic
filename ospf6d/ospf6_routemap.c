@@ -40,6 +40,7 @@ ospf6_routemap_rule_match_address_prefixlist (void *rule,
                                               void *object)
 {
   struct prefix_list *plist;
+  char buf[128];
 
   if (type != RMAP_OSPF6)
     return RMAP_NOMATCH;
@@ -52,9 +53,13 @@ ospf6_routemap_rule_match_address_prefixlist (void *rule,
     return RMAP_NOMATCH;
 
   if (prefix_list_apply (plist, prefix) == PREFIX_DENY)
-    zlog_info ("DEBUG: apply prefix-list %s NOT MATCH", rule);
+    zlog_info ("DEBUG: apply prefix-list %s against %s/%d NOT MATCH", rule,
+	       inet_ntop (AF_INET6, &prefix->u.prefix6, buf, sizeof (buf)),
+	       prefix->prefixlen);
   else
-    zlog_info ("DEBUG: apply prefix-list %s MATCH", rule);
+    zlog_info ("DEBUG: apply prefix-list %s against %s/%d MATCH", rule,
+	       inet_ntop (AF_INET6, &prefix->u.prefix6, buf, sizeof (buf)),
+	       prefix->prefixlen);
 
   return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
           RMAP_NOMATCH : RMAP_MATCH);

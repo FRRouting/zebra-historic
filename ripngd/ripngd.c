@@ -517,8 +517,10 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
   int same = 0;
 
   /* Make prefix structure. */
+  memset (&p, 0, sizeof (struct prefix_ipv6));
   p.family = AF_INET6;
-  p.prefix = rte->addr;
+  /* p.prefix = rte->addr; */
+  IPV6_ADDR_COPY (&p.prefix, &rte->addr);
   p.prefixlen = rte->prefixlen;
 
   /* Make sure mask is applied. */
@@ -611,8 +613,7 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
 	  rinfo->ifindex = ifp->ifindex;
 
 	  /* - Initialize the timeout for the route.  If the
-	     garbage-collection timer is running for this route, stop it
-	     (see section 2.3 for a discussion of the timers). */
+	     garbage-collection timer is running for this route, stop it. */
 	  ripng_timeout_update (rinfo);
 
 	  /* - Set the route change flag. */
@@ -776,18 +777,27 @@ ripng_redistribute_delete (int type, int sub_type, struct prefix_ipv6 *p,
 
   rp = route_node_lookup (ripng_table, (struct prefix *) p);
 
-  if (rp && (rinfo = rp->info) != NULL)
+  if (rp)
     {
-      if (rinfo->type == type &&
-	  rinfo->sub_type == sub_type &&
-	  rinfo->ifindex == ifindex)
+      rinfo = rp->info;
+
+      if (rinfo != NULL
+	  && rinfo->type == type 
+	  && rinfo->sub_type == sub_type 
+	  && rinfo->ifindex == ifindex)
 	{
 	  rp->info = NULL;
+
+	  RIPNG_TIMER_OFF (rinfo->t_timeout);
+	  RIPNG_TIMER_OFF (rinfo->t_garbage_collect);
+	  
 	  ripng_info_free (rinfo);
 
 	  route_unlock_node (rp);
-	  route_unlock_node (rp);
 	}
+
+      /* For unlock route_node_lookup (). */
+      route_unlock_node (rp);
     }
 }
 
@@ -803,10 +813,14 @@ ripng_redistribute_withdraw (int type)
       {
 	if (rinfo->type == type)
 	  {
-	    rinfo->rp->info = NULL;
-	    route_unlock_node (rp);
+	    rp->info = NULL;
+
+	    RIPNG_TIMER_OFF (rinfo->t_timeout);
+	    RIPNG_TIMER_OFF (rinfo->t_garbage_collect);
 
 	    ripng_info_free (rinfo);
+
+	    route_unlock_node (rp);
 	  }
       }
 }
@@ -981,6 +995,7 @@ ripng_request_process (struct ripng_packet *packet,int size,
 	 field.  Once all the entries have been filled in, change the
 	 command from Request to Response and send the datagram back
 	 to the requestor. */
+      memset (&p, 0, sizeof (struct prefix_ipv6));
       p.family = AF_INET6;
 
       for (; ((caddr_t) rte) < lim; rte++)
@@ -1656,7 +1671,7 @@ DEFUN (show_ipv6_ripng,
 
   /* Header of display. */ 
   vty_out (vty, "%sCodes: R - RIPng%s%s"
-	   "   Network                            "
+	   "   Network                           "
 	   "Next Hop                  If Met Tag Time%s", VTY_NEWLINE,
 	   VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
   
@@ -1675,7 +1690,7 @@ DEFUN (show_ipv6_ripng,
 			 inet6_ntop (&p->prefix), p->prefixlen);
 #endif /* DEBUG */
 
-	  len = 38 - len;
+	  len = 37 - len;
 	  if (len > 0)
 	    vty_out (vty, "%*s", len, " ");
 
@@ -1701,7 +1716,7 @@ DEFUN (show_ipv6_ripng,
 			 rinfo->suppress ? "s" : " ",
 			 inet6_ntop (&p->prefix), p->prefixlen);
 #endif /* DEBUG */
-	  len = 38 - len;
+	  len = 37 - len;
 	  if (len > 0)
 	    vty_out (vty, "%*s", len, " ");
 

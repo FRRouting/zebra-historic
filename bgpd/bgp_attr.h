@@ -77,6 +77,9 @@ struct attr
   /* Community structure */
   struct community *community;	
 
+  /* Extended Communities attribute. */
+  struct ecommunity *ecommunity;
+
   /* Invalid. */
   u_char invalid;
 };
@@ -96,8 +99,8 @@ void bgp_attr_flush (struct attr *);
 struct attr *bgp_attr_default_set (struct attr *attr, u_char);
 struct attr *bgp_attr_default_intern (u_char);
 
-bgp_size_t bgp_packet_attribute (struct peer_conf *conf, struct peer *, struct stream *, struct attr *, struct prefix *, afi_t, safi_t, struct peer *);
-bgp_size_t bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p, afi_t, safi_t);
+bgp_size_t bgp_packet_attribute (struct peer_conf *conf, struct peer *, struct stream *, struct attr *, struct prefix *, afi_t, safi_t, struct peer *, struct prefix_rd *, u_char *);
+bgp_size_t bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p, afi_t, safi_t, struct prefix_rd *, u_char *);
 int  cluster_loop_check (struct cluster_list *cluster, struct in_addr originator);
 struct cluster_list *cluster_parse (caddr_t, int);
 struct cluster_list *cluster_intern (struct cluster_list *);

@@ -68,28 +68,26 @@ struct ospf_lsa
   struct lsa_header *data;
 
   /* Received time stamp. */
-  time_t ts;
+  struct timeval tv_recv;
 
-  /* Timer value. */
-  u_int32_t v_age;
-  
-  /* Thread. */
-  struct thread *t_age;
+  /* Last time it was originated */
+  struct timeval tv_orig;
 
   /* References to this LSA in neighbor retrans. lists*/
   u_int ref;
 
   /* Parent LSDB. */
-  struct ospf_lsdb *lsdb;
+  /* struct ospf_lsdb *lsdb; */
+  struct new_lsdb *lsdb;
 
   /* Related Route. */
   void *route;
 
-  /* Last time it was originated */
-  time_t originated; 
-
   /* Refreshement List or Queue */
   list refresh_list;
+
+  /* area the lsa belongs to NULL if none (external lsas for instance) */
+  struct ospf_area *area;
 };
 
 /* OSPF LSA Link Type. */
@@ -115,7 +113,8 @@ struct router_lsa_link
 {
   struct in_addr link_id;
   struct in_addr link_data;
-  struct {
+  struct
+  {
     u_char type;
     u_char tos_count;
     u_int16_t metric;
@@ -129,7 +128,8 @@ struct router_lsa
   u_char flags;
   u_char zero;
   u_int16_t links;
-  struct {
+  struct
+  {
     struct in_addr link_id;
     struct in_addr link_data;
     u_char type;
@@ -160,42 +160,24 @@ struct as_external_lsa
 {
   struct lsa_header header;
   struct in_addr mask;
-  struct {
+  struct
+  {
     u_char tos;
     u_char metric[3];
     struct in_addr fwd_addr;
     u_int32_t route_tag;
-    /*    struct in_addr route_tag; */
   } e[1];
 };
-
-/* Redistributed external information. */
-struct external_info
-{
-  u_char flags;				/* Origination flag. */
-  struct prefix_ipv4 p;			/* Prefix. */
-  unsigned int ifindex;			/* Interface Index. */
-  struct in_addr nexthop;		/* Nexhoop address. */
-  u_int32_t tag;			/* Additional Route tag. */
-  /* struct ospf_lsa *lsa; */		/* Originated-LSA. */
-};
-
-#define EXTERNAL_INITIAL		0x00
-#define EXTERNAL_ORIGINATED		0x01
-#define EXTERNAL_FILTERED		0x02
-
-
-#define EXTERNAL_METRIC_TYPE_1      0
-#define EXTERNAL_METRIC_TYPE_2      1
 
 /* Macros. */
 #define GET_METRIC(x) get_metric(x)
 #define IS_EXTERNAL_METRIC(x)   ((x) & 0x80)
 
-#define GET_AGE(x)      (ntohs ((x)->data->ls_age) + time (NULL) - (x)->ts)
-#define LS_AGE(x)       (OSPF_LSA_MAX_AGE < GET_AGE(x) ? \
-                                            OSPF_LSA_MAX_AGE : GET_AGE(x))
+#define GET_AGE(x)     (ntohs ((x)->data->ls_age) + time (NULL) - (x)->tv_recv)
+#define LS_AGE(x)      (OSPF_LSA_MAX_AGE < get_age(x) ? \
+                                           OSPF_LSA_MAX_AGE : get_age(x))
 
+#if 0
 #define OSPF_SUMMARY_LSA_SELF_FIND_BY_PREFIX(A,P) \
         ospf_lsdb_iterator (SUMMARY_LSA ((A)), \
                             (struct prefix_ipv4 *) (P), 0, find_summary)
@@ -203,10 +185,25 @@ struct external_info
 #define OSPF_SUMMARY_ASBR_LSA_SELF_FIND_BY_PREFIX(A,P) \
         ospf_lsdb_iterator (SUMMARY_LSA_ASBR ((A)), \
                             (struct prefix_ipv4 *) (P), 0, find_asbr_summary)
+#else
+#define OSPF_SUMMARY_LSA_SELF_FIND_BY_PREFIX(A,P) \
+        foreach_lsa (SUMMARY_LSDB ((A)), \
+                     (struct prefix_ipv4 *) (P), 0, find_summary)
 
+#define OSPF_SUMMARY_ASBR_LSA_SELF_FIND_BY_PREFIX(A,P) \
+        foreach_lsa (SUMMARY_ASBR_LSDB ((A)), \
+                     (struct prefix_ipv4 *) (P), 0, find_asbr_summary)
+#endif
+
+#if 0
 #define OSPF_EXTERNAL_LSA_SELF_FIND_BY_PREFIX(P) \
 	ospf_lsdb_iterator (ospf_top->external_lsa, \
                             ((struct prefix_ipv4 *) (P)), 0, find_external)
+#endif
+
+#define OSPF_LSA_UPDATE_TIMER_ON(T,F) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), 0, 2)
 
 struct ospf_route;
 struct new_lsdb;
@@ -218,9 +215,7 @@ struct ospf_lsa *ospf_summary_lsa (struct prefix_ipv4 *, u_int32_t,
 				   struct ospf_area *, struct ospf_lsa*);
 struct ospf_lsa *ospf_summary_asbr_lsa (struct prefix_ipv4 *, u_int32_t, 
 		                        struct ospf_area *, struct ospf_lsa *);
-struct ospf_lsa *ospf_external_lsa (struct prefix_ipv4 *, u_char ,
-				    u_int32_t, u_int32_t, struct in_addr,
-                                    struct ospf_lsa *);
+
 u_int16_t ospf_lsa_checksum (struct lsa_header *);
 struct ospf_lsa *ospf_lsa_new ();
 struct ospf_lsa *ospf_lsa_dup ();
@@ -241,10 +236,6 @@ void ospf_external_lsa_flush (u_char, struct prefix_ipv4 *,
 
 struct ospf_lsa *ospf_external_lsa_originate (u_char, struct external_info *);
 int ospf_external_lsa_originate_timer (struct thread *);
-struct external_info *ospf_external_info_add (u_char, struct prefix_ipv4,
-					      unsigned int, struct in_addr);
-void ospf_external_info_delete (u_char, struct prefix_ipv4);
-
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
 				  struct in_addr, struct in_addr);
 struct ospf_lsa *ospf_lsa_lookup_by_id (struct ospf_area *,u_int32_t, struct in_addr);
@@ -254,8 +245,10 @@ int ospf_lsa_more_recent (struct ospf_lsa *, struct ospf_lsa *);
 int ospf_lsa_different (struct ospf_lsa *, struct ospf_lsa *);
 void ospf_lsa_flush_self_originated (struct ospf_neighbor *,
 				     struct ospf_lsa *, struct ospf_lsa *);
+#if 0
 int ospf_lsa_count (struct ospf_area *);
 int ospf_lsa_count_table (struct ospf_lsdb *);
+#endif
 void ospf_lsa_init ();
 
 int ospf_lsa_is_self_originated (struct ospf_lsa *);
@@ -266,17 +259,19 @@ int find_external (struct ospf_lsa *, void *, int);
 
 void ospf_lsa_maxage (struct ospf_lsa *);
 u_int32_t get_metric (u_char *);
-void ospf_update_router_lsas ();
+int get_age (struct ospf_lsa *);
 
+int ospf_router_lsa_update_timer (struct thread *);
 int ospf_lsa_maxage_walker (struct thread *);
-void ospf_schedule_update_router_lsas ();
 
 int ospf_network_lsa_refresh (struct thread *);
 struct ospf_lsa *ospf_external_lsa_refresh (struct ospf_lsa *);
 
+#if 0
 struct in_addr ospf_get_free_id_for_prefix (struct ospf_lsdb *,
 					    struct prefix_ipv4 *,
 					    struct in_addr);
+#endif
 struct in_addr ospf_lsa_unique_id (struct new_lsdb *, u_char,
 				   struct prefix_ipv4 *);
 void ospf_schedule_lsa_flood_area (struct ospf_area *, struct ospf_lsa *);
@@ -287,6 +282,12 @@ void ospf_schedule_network_lsa_originate (struct ospf_interface *);
 void ospf_refresher_register_lsa (struct ospf *, struct ospf_lsa *);
 void ospf_refresher_unregister_lsa (struct ospf_lsa *);
 
-int ospf_forward_address_get (struct in_addr, struct in_addr *);
+struct timeval tv_adjust (struct timeval);
+int tv_ceil (struct timeval);
+int tv_floor (struct timeval);
+struct timeval int2tv (int);
+struct timeval tv_add (struct timeval, struct timeval);
+struct timeval tv_sub (struct timeval, struct timeval);
+int tv_cmp (struct timeval, struct timeval);
 
 #endif /* _ZEBRA_OSPF_LSA_H */

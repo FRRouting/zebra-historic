@@ -33,6 +33,7 @@
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -70,9 +71,11 @@ ospf_nbr_new (struct ospf_interface *oi)
   nbr->last_send = NULL;
 
   /* Initialize lists. */
-  nbr->ls_retransmit = list_init ();
-  nbr->db_summary = list_init ();
+  /* nbr->ls_retransmit = list_init (); */
+  /* nbr->db_summary = list_init (); */
   /* nbr->ls_request = list_init (); */
+  new_lsdb_init (&nbr->db_sum);
+  new_lsdb_init (&nbr->ls_rxmt);
   new_lsdb_init (&nbr->ls_req);
 
   /* Start periodic timer thread ospf_ls_upd_timer (). */
@@ -85,6 +88,10 @@ void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
   /* Free retransmit list. */
+  if (ospf_ls_retransmit_count (nbr))
+    ospf_ls_retransmit_clear (nbr);
+
+#if 0
   if (nbr->ls_retransmit != NULL && listcount (nbr->ls_retransmit))
     {
       ospf_ls_retransmit_clear (nbr);
@@ -93,11 +100,18 @@ ospf_nbr_free (struct ospf_neighbor *nbr)
   /* Free DB summary list. */
   if (nbr->db_summary != NULL && listcount (nbr->db_summary))
     list_delete_all (nbr->db_summary);
+#endif
+
+  /* Free DB summary list. */
+  if (ospf_db_summary_count (nbr))
+    ospf_db_summary_delete_all (nbr);
 
   /* Free ls request list. */
   if (ospf_ls_request_count (nbr))
     ospf_ls_request_delete_all (nbr);
 
+  new_lsdb_cleanup (&nbr->ls_req);
+  
   /* Clear last send packet. */
   if (nbr->last_send)
     ospf_packet_free (nbr->last_send);
@@ -207,7 +221,6 @@ ospf_nbr_count (struct route_table *nbrs, int status)
 
   return count;
 }
-
 
 struct ospf_neighbor *
 ospf_nbr_lookup_by_addr (struct route_table *nbrs,

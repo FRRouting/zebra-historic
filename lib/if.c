@@ -478,7 +478,9 @@ connected_log (struct connected *connected)
   p = connected->destination;
   if (p)
     {
+#if 0 /* want v6 connected address to be logged, too. */
       if (p->family == AF_INET)
+#endif
 	strncat (logbuf, inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		 BUFSIZ - strlen(logbuf));
     }

@@ -40,19 +40,24 @@ ospf6_prefix_free (struct ospf6_prefix *p)
 }
 
 struct ospf6_prefix *
-ospf6_prefix_make (unsigned short metric, struct prefix_ipv6 *p)
+ospf6_prefix_make (u_int8_t opt, u_int16_t metric, struct prefix_ipv6 *p)
 {
+  struct prefix_ipv6 netp;
   struct ospf6_prefix *o6p;
   size_t o6psize;
 
-  o6psize = OSPF6_PREFIX_SPACE (p->prefixlen) + sizeof (struct ospf6_prefix);
+  /* copy prefix and apply mask */
+  prefix_copy ((struct prefix *)&netp, (struct prefix *)p);
+  apply_mask_ipv6 (&netp);
+
+  o6psize = OSPF6_PREFIX_SPACE (netp.prefixlen) + sizeof (struct ospf6_prefix);
   o6p = ospf6_prefix_new (o6psize);
 
-  o6p->o6p_prefix_len = p->prefixlen;
-  /* XXX, o6p->o6p_prefix_opt */
+  o6p->o6p_prefix_len = netp.prefixlen;
+  o6p->o6p_prefix_opt = opt;
   o6p->o6p_prefix_metric = htons (metric);
 
-  memcpy (o6p + 1, &p->prefix, OSPF6_PREFIX_SPACE (p->prefixlen));
+  memcpy (o6p + 1, &netp.prefix, OSPF6_PREFIX_SPACE (netp.prefixlen));
 
   return o6p;
 }
@@ -155,4 +160,12 @@ ospf6_prefix_copy (struct ospf6_prefix *dst, struct ospf6_prefix *src,
 
   return;
 }
+
+void
+ospf6_prefix_list_add (struct in6_addr *prefix, u_int8_t prefix_len,
+                       u_int8_t prefix_opt, u_int16_t prefix_metric)
+{
+}
+
+
 

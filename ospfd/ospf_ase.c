@@ -35,13 +35,13 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_spf.h"
 #include "ospfd/ospf_route.h"
-#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_ase.h"
 #include "ospfd/ospf_zebra.h"
 
@@ -147,36 +147,25 @@ ospf_ase_complete_direct_routes (struct ospf_route *ro, struct in_addr nexthop)
 }
 
 int
-ospf_ase_check_fwd_addr (struct in_addr fwd_addr)
+ospf_ase_forward_address_check (struct in_addr fwd_addr)
 {
-  listnode if_node, cn_node;
+  listnode ifn, cn;
   struct interface *ifp;
   struct ospf_interface *oi;
   struct connected *co;
 
-  LIST_ITERATOR (ospf_top->iflist, if_node)
-    {
-      if ((ifp = getdata (if_node)) == NULL)
-	continue;
-
-      if (! if_is_up (ifp))
-	continue;
-
-      if ((oi = ifp->info) == NULL)
-	continue;
-
-      if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-	continue;
-
-      if (oi->flag == OSPF_IF_DISABLE)
-	continue;
-
-      for (cn_node = listhead (ifp->connected); cn_node; nextnode (cn_node))
-	if ((co = getdata (cn_node)) != NULL)
-	  /* Hey, this address is ours !!! */
-	  if (IPV4_ADDR_SAME (&co->address->u.prefix4, &fwd_addr))
-	    return 0;
-    }
+  for (ifn = listhead (ospf_top->iflist); ifn; nextnode (ifn))
+    if ((ifp = getdata (ifn)) != NULL)
+      if (if_is_up (ifp))
+	if ((oi = ifp->info) != NULL)
+	  if (oi->type != OSPF_IFTYPE_VIRTUALLINK &&
+	      oi->flag != OSPF_IF_DISABLE)
+	    /* Check each connected. */
+	    for (cn = listhead (ifp->connected); cn; nextnode (cn))
+	      if ((co = getdata (cn)) != NULL)
+		/* Address matches. */
+		if (IPV4_ADDR_SAME (&co->address->u.prefix4, &fwd_addr))
+		  return 0;
 
   return 1;
 }
@@ -197,8 +186,6 @@ ospf_ase_calculate_asbr_route (struct route_table *rt_network,
   asbr.prefixlen = IPV4_MAX_BITLEN;
   apply_mask_ipv4 (&asbr);
 
-zlog_info ("T: asbr.prefix = al->header.adv_router: %s",
-	   inet_ntoa (al->header.adv_router));
   asbr_route = ospf_find_asbr_route (rt_router, &asbr);
 
   if (asbr_route == NULL)
@@ -219,7 +206,7 @@ zlog_info ("T: asbr.prefix = al->header.adv_router: %s",
       zlog_info ("Z: ospf_ase_calculate(): "
 		 "Forwarding address is not 0.0.0.0.");
 
-      if (! ospf_ase_check_fwd_addr (al->e[0].fwd_addr))
+      if (! ospf_ase_forward_address_check (al->e[0].fwd_addr))
 	{
 	  zlog_info ("Z: ospf_ase_calculate(): "
 		     "Forwarding address is one of our addresses, Ignore.");
@@ -258,8 +245,7 @@ zlog_info ("T: asbr.prefix = al->header.adv_router: %s",
 
 struct ospf_route *
 ospf_ase_calculate_new_route (struct ospf_lsa *lsa,
-			      struct ospf_route *asbr_route,
-			      u_int32_t metric)
+			      struct ospf_route *asbr_route, u_int32_t metric)
 {
   struct as_external_lsa *al;
   struct ospf_route *new;
@@ -275,13 +261,13 @@ ospf_ase_calculate_new_route (struct ospf_lsa *lsa,
 
   if (!IS_EXTERNAL_METRIC (al->e[0].tos))
     {
-      zlog_info ("Z: ospf_ase_calculate_new_route(): This is Type-1 route.");
+      zlog_info ("Route[External]: type-1 created.");
       new->path_type = OSPF_PATH_TYPE1_EXTERNAL;
       new->cost = asbr_route->cost + metric;		/* X + Y */
     }
   else
     {
-      zlog_info ("Z: ospf_ase_calculate_new_route(): This is Type-2 route.");
+      zlog_info ("Route[External]: type-2 created.");
       new->path_type = OSPF_PATH_TYPE2_EXTERNAL;
       new->cost = asbr_route->cost;			/* X */
       new->u.ext.type2_cost = metric;			/* Y */
@@ -293,11 +279,39 @@ ospf_ase_calculate_new_route (struct ospf_lsa *lsa,
   new->u.ext.tag = ntohl (al->e[0].route_tag);
   new->u.ext.asbr = asbr_route;
 
-  zlog_info ("T: new = %x", new);
-  zlog_info ("T: asbr_route = %x", asbr_route);
   assert (new != asbr_route);
 
   return new;
+}
+
+void
+ospf_ase_calculate_route_delete (struct route_table *rt_external,
+				 struct ospf_lsa *lsa)
+{
+  struct as_external_lsa *al = (struct as_external_lsa *) lsa->data;
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+  struct ospf_route *or;
+  listnode node;
+
+  p.family = AF_INET;
+  p.prefix = al->header.id;
+  p.prefixlen = ip_masklen (al->mask);
+  apply_mask_ipv4 (&p);
+
+  if ((rn = route_node_lookup (rt_external, (struct prefix *) &p)) != NULL)
+    if ((or = rn->info))
+      {
+	for (node = listhead (or->path); node; nextnode (node))
+	  {
+	    struct ospf_path *op = node->data;
+	    ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, &op->nexthop);
+	  }
+
+	rn->info = NULL;
+	ospf_route_free (or);
+	route_unlock_node (rn);
+      }
 }
 
 struct ospf_route *
@@ -312,7 +326,7 @@ ospf_ase_calculate_route_add (struct ospf_route *new,
   listnode node;
   int ret;
 
-  zlog_info ("T: ospf_ase_calculate_route_add(): start");
+  zlog_info ("Route[External]: calculate start");
 
   /* Set prefix. */
   p.family = AF_INET;
@@ -325,7 +339,8 @@ ospf_ase_calculate_route_add (struct ospf_route *new,
   /* If there is no route, create new one. */
   if ((rn = route_node_lookup (rt_external, (struct prefix *) &p)) == NULL)
     {
-      zlog_info ("T: ospf_ase_calculate(): Adding the new route");
+      zlog_info ("Route[External]: Adding a new route %s/%d",
+		 inet_ntoa (p.prefix), p.prefixlen);
 
       ospf_route_add (rt_external, &p, new, asbr_route);
 
@@ -353,67 +368,71 @@ ospf_ase_calculate_route_add (struct ospf_route *new,
   if ((or = rn->info) == NULL)
     return new;
 
-  zlog_info ("T: ospf_ase_calculate(): "
-	     "Another route to the same destination is found");
+  zlog_info ("Route[External]: Another route to %s/%d exists",
+	     inet_ntoa (p.prefix), p.prefixlen);
 
   /* Check the existing route. */
   /* First check the old route's ASBR route is valid. */
   q.family = AF_INET;
   q.prefix = or->u.ext.asbr->id;
-  q.prefixlen = ip_masklen (or->u.ext.asbr->mask);
+/*  q.prefixlen = ip_masklen (or->u.ext.asbr->mask); */
+  q.prefixlen = IPV4_MAX_BITLEN;
 
   if (ospf_find_asbr_route (ospf_top->new_rtrs, (struct prefix_ipv4 *) &q))
     ret = ospf_route_cmp (new, or);
   else
     {
-      zlog_info ("T: ospf_ase_calculate_route_add(): "
-		 "ASBR route for %x is invalid, ignore it.", or);
+      zlog_info ("Route[External]: ASBR route %s/%d not exist, ignore it",
+		 inet_ntoa (q.prefix), q.prefixlen);
       ret = -1;
     }
 
   /* New route is better. */
   if (ret < 0)
     {
+      struct ospf_path *op;
+      listnode node;
+
+      for (node = listhead (or->path); node; nextnode (node))
+	{
+	  op = node->data;
+	  /* First, delete Old route from zebra. */
+	  ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, &op->nexthop);
+	}
+
       ospf_route_subst (rn, new, asbr_route);
       if (al->e[0].fwd_addr.s_addr)
 	ospf_ase_complete_direct_routes (new, al->e[0].fwd_addr);
 
-      zlog_info ("T: ospf_ase_calculate(): "
-		 "Substituted old route with the new one");
+      zlog_info ("Route[External]: Substituted old route with the new one");
+
+      for (node = listhead (new->path); node; nextnode (node))
+	{
+	  op = node->data;
+	  /* Second, add new route to zebra. */
+	  ospf_zebra_add ((struct prefix_ipv4 *) &rn->p, &op->nexthop);
+	}
+
       return new;
     }
   /* Old route is better. */
   else if (ret > 0)
-    {
-      zlog_info ("T: ospf_ase_calculate(): The old route is better.");
-
-      /* Make sure setting newly calculated ASBR route.*/
-      or->u.ext.asbr = asbr_route;
-      ospf_route_free (new);
-      return or;
-    }
+    zlog_info ("Route[External]: Old route is better");
   /* Routes are the same. */
   else
     {
-      zlog_info ("T: ospf_ase_calculate(): The routes are equal, merging.");
+      zlog_info ("Route[External]: Routes are equal, merging.");
 
-      /* route_lock_node (rn); */
       ospf_route_copy_nexthops (or, asbr_route->path);
       if (al->e[0].fwd_addr.s_addr)
 	ospf_ase_complete_direct_routes (or, al->e[0].fwd_addr);
-
-      /* Make sure setting newly calculated ASBR route.*/
-      or->u.ext.asbr = asbr_route;
-      ospf_route_free (new);
-      /* route_unlock_node (rn); */
-
-      return or;
     }
 
-  /* Not reached.*/
-  zlog_info ("T: Unreached Statemen.");
+  /* Make sure setting newly calculated ASBR route.*/
+  or->u.ext.asbr = asbr_route;
   ospf_route_free (new);
-  return NULL;
+
+  return or;
 }
 
 void
@@ -481,8 +500,7 @@ ospf_ase_calculate (struct ospf_lsa *lsa,
     if (LS_AGE (lsa) != OSPF_LSA_MAX_AGE)
       if (!CHECK_FLAG (lsa->flags, OSPF_LSA_SELF))
 	{
-	  zlog_info ("T: ospf_ase_calculate(): "
-		     "Calculate AS-external-LSA to %s/%d",
+	  zlog_info ("Route[External]: Calculate AS-external-LSA to %s/%d",
 		     inet_ntoa (al->header.id), ip_masklen (al->mask));
 
 	  /* Register AS-external-LSA for Looking up later. */
@@ -497,6 +515,13 @@ ospf_ase_calculate (struct ospf_lsa *lsa,
 					      ospf_top->external_route);
 	      return 1;
 	    }
+	  else
+	    {
+	      zlog_info ("Route[External]: Delete route %s/%d",
+			 inet_ntoa (al->header.id), ip_masklen (al->mask));
+	      ospf_ase_calculate_route_delete (ospf_top->external_route, lsa);
+	      lsa->route = NULL;
+	    }
 	}
 
   return 0;
@@ -505,9 +530,71 @@ ospf_ase_calculate (struct ospf_lsa *lsa,
 #define OSPF_ASE_CALC_INTERVAL 1
 
 int
+ospf_asbr_route_same (list a, list b)
+{
+  struct ospf_route *or, *or2;
+  listnode node, node2, node3;
+  int found;
+
+  for (node = listhead (a); node; nextnode (node))
+    if ((or = getdata (node)) != NULL)
+      {
+	found = 0;
+	for (node2 = listhead (b); node2; nextnode (node2))
+	  if ((or2 = getdata (node2)) != NULL)
+	    {
+	      if (ospf_route_cmp (or, or2) == 0)
+		{
+		  /* compare paths */
+		  for (node3 = listhead(or->path);node3; nextnode (node3))
+		    {
+		      if (!node3->data)
+			continue;
+		      if (ospf_path_lookup (or2->path, (struct ospf_path*)node3->data) == NULL)
+			return 0;
+		    }
+		  found = 1;
+		  break;
+		}
+	    }
+			  
+	if (!found)
+	  return 0;
+      }
+
+  for (node = listhead (b); node; nextnode (node))
+    if ((or = getdata (node)) != NULL)
+      {
+	found = 0;
+	for (node2 = listhead (a); node2; nextnode (node2))
+	  if ((or2 = getdata (node2)) != NULL)
+	    {
+	      if (ospf_route_cmp (or, or2) == 0)
+		{
+		  /* compare paths */
+		  for (node3 = listhead (or2->path); node3; nextnode (node3))
+		    {
+		      if (!node3->data)
+			continue;
+		      if (ospf_path_lookup (or->path, (struct ospf_path*)node3->data) == NULL)
+			return 0;
+		    }
+		  found = 1;
+		  break;
+		}
+	    }
+
+	if (!found)
+	  return 0;
+      }
+  return 1;
+}
+
+int
 ospf_ase_calculate_timer (struct thread *t)
 {
   struct ospf *ospf;
+  struct ospf_lsa *lsa;
   struct route_node *rn1, *rn2, *rn3;
 
   ospf = THREAD_ARG (t);
@@ -521,10 +608,45 @@ ospf_ase_calculate_timer (struct thread *t)
 
       /* Sanity check. */
       if (ospf->new_rtrs == NULL)
-	{
-	  zlog_info ("T: ospf_ase_calculate() new_rtrs = NULL");
-	  return 0;
-	}
+	return 0;
+
+      /* Check difference of old Router route and new router route. */
+      if (ospf->old_rtrs)
+	for (rn1 = route_top (ospf->old_rtrs); rn1; rn1 = route_next (rn1))
+	  if (rn1->info != NULL)
+	    {
+	      rn2 = route_node_lookup (ospf->new_rtrs, &rn1->p);
+	      if (rn2)
+		if (rn2->info)
+		  {
+		    if (ospf_asbr_route_same ((list) rn1->info,
+					      (list) rn2->info))
+		      {
+			route_unlock_node (rn2);
+			continue;
+		      }
+		  }
+
+	      rn2 = route_node_lookup (ospf->rtrs_external, &rn1->p);
+	      if (rn2)
+		if (rn2->info)
+		  {
+		    for (rn3 = route_top (rn2->info); rn3; rn3 = route_next (rn3))
+		      if ((lsa = rn3->info) != NULL)
+			{
+			  zlog_info ("Route[External]: Delete route %s",
+				     inet_ntoa (lsa->data->id));
+			  ospf_ase_calculate_route_delete (ospf->external_route, lsa);
+			  lsa->route = NULL;
+			}
+		    /*
+		    route_table_free (rn2->info);
+		    rn2->info = NULL;
+		    route_unlock_node (rn2);
+		    route_unlock_node (rn2);
+		    */
+		  }
+	    }
 
       /* Check newly installed Router route by timestamp. */
       for (rn1 = route_top (ospf->new_rtrs); rn1; rn1 = route_next (rn1))
@@ -541,7 +663,8 @@ ospf_ase_calculate_timer (struct thread *t)
 		continue;
 	      }
 
-	    if (or->ctime >= ospf->ts_spf)
+            if (1) 
+	 /* if (or->ctime >= ospf->ts_spf)  */
 	      {
 		rn2 = route_node_lookup (ospf->rtrs_external, &rn1->p);
 
@@ -549,9 +672,13 @@ ospf_ase_calculate_timer (struct thread *t)
 		   calculate external route. */
 		if (rn2 != NULL)
 		  for (rn3 = route_top (rn2->info); rn3; rn3 = route_next (rn3))
-		    if (rn3->info != NULL)
-		      ospf_ase_calculate (rn3->info, ospf->new_table,
-					  ospf->new_rtrs);
+		    {
+		      if (rn3->info != NULL)
+			{
+			ospf_ase_calculate (rn3->info, ospf->new_table,
+					    ospf->new_rtrs);
+			}
+		    }
 	      }
 	  }
     }

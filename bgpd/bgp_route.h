@@ -54,6 +54,38 @@ struct bgp_info
   time_t uptime;
 };
 
+/* I want to change structure name from bgp_route to bgp_info. */
+struct bgp_info_tag
+{
+  /* For linked list. */
+  struct bgp_info_tag *next;
+  struct bgp_info_tag *prev;
+
+  /* Type of this prefix */
+  u_char type;
+
+  /* Type of bgp prefix. */
+  u_char sub_type;
+
+  /* Selected route flag. */
+  u_char selected;
+
+  /* Pointer to peer structure. */
+  struct peer *peer;
+
+  /* Pointer to attributes structure. */
+  struct attr *attr;
+
+  /* Aggregate related information. */
+  int suppress;
+  
+  /* Time */
+  time_t uptime;
+
+  /* Tag */
+  u_char tag[3];
+};
+
 /* Prototypes. */
 void bgp_route_init ();
 void bgp_announce_table (struct peer *);
@@ -67,6 +99,13 @@ void bgp_redistribute_add (struct prefix *, u_char);
 void bgp_redistribute_delete (struct prefix *, u_char);
 void bgp_redistribute_withdraw (struct bgp *, afi_t, int);
 
+void bgp_static_delete (struct bgp *);
+int bgp_static_set_vpnv4 (struct vty *vty, char *, char *, char *);
+
+int bgp_static_unset_vpnv4 (struct vty *, char *, char *, char *);
+
 int bgp_config_write_network (struct vty *, struct bgp *, afi_t);
+
+void route_vty_out_detail (struct vty *, struct prefix *, struct bgp_info *);
 
 #endif /* _ZEBRA_BGP_ROUTE_H */

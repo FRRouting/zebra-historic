@@ -73,6 +73,9 @@ void ospf6_lsdb_collect_type (list, unsigned short, void *);
 
 struct ospf6_lsa*
 ospf6_lsdb_lookup (unsigned short, unsigned long, unsigned long, void *);
+struct ospf6_lsa*
+ospf6_lsdb_lookup_new (unsigned short, unsigned long,
+                       unsigned long, struct ospf6 *);
 void ospf6_lsdb_add (struct ospf6_lsa *);
 void ospf6_lsdb_remove (struct ospf6_lsa *);
 
@@ -93,6 +96,7 @@ void ospf6_lsdb_maxage_remove_as (struct ospf6 *);
 void ospf6_lsdb_check_maxage_lsa (struct ospf6 *);
 
 void ospf6_lsdb_interface_update (struct ospf6_interface *);
+void ospf6_lsdb_init ();
 
 #endif /* OSPF6_LSDB_H */
 

@@ -29,10 +29,13 @@
 #include "thread.h"
 #include "version.h"
 #include "memory.h"
+#include "prefix.h"
 #include "log.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_network.h"
+#include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_mplsvpn.h"
 
 /* bgpd options, we use GNU getopt library. */
 struct option longopts[] = 
@@ -231,6 +234,7 @@ main (int argc, char **argv)
   vty_init ();
   memory_init ();
   bgp_init ();
+  bgp_mplsvpn_init ();
   sort_node ();
 
   /* Parse config file. */

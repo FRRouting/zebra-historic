@@ -231,15 +231,16 @@
 #endif
 
 /* Address family numbers from RFC1700. */
-#define AFI_IP                   1
-#define AFI_IP6                  2
-#define AFI_MAX                  3
+#define AFI_IP                    1
+#define AFI_IP6                   2
+#define AFI_MAX                   3
 
 /* Subsequent Address Family Identifier. */
-#define SAFI_UNICAST             1
-#define SAFI_MULTICAST           2
-#define SAFI_UNICAST_MULTICAST   3
-#define SAFI_MAX                 3
+#define SAFI_UNICAST              1
+#define SAFI_MULTICAST            2
+#define SAFI_UNICAST_MULTICAST    3
+#define SAFI_MPLS_VPN             4
+#define SAFI_MAX                  5
 
 /* AFI and SAFI type. */
 typedef u_int16_t afi_t;

@@ -27,7 +27,7 @@
 void
 ospf6_vty_redistribute_config (struct vty *vty, struct ospf6 *ospf6)
 {
-  if (ospf6->redist_static || ospf6->redist_ripng || ospf6->redist_bgp)
+  if (ospf6->redist_static || ospf6->redist_kernel || ospf6->redist_ripng || ospf6->redist_bgp)
     vty_out (vty, " Redistributing External Routes from,%s", VTY_NEWLINE);
   else
     return;
@@ -35,6 +35,9 @@ ospf6_vty_redistribute_config (struct vty *vty, struct ospf6 *ospf6)
   if (ospf6->redist_static)
     vty_out (vty, "    static with metric mapped to %hu%s",
              ospf6->cost_static, VTY_NEWLINE);
+  if (ospf6->redist_kernel)
+    vty_out (vty, "    kernel with metric mapped to %hu%s",
+             ospf6->cost_kernel, VTY_NEWLINE);
   if (ospf6->redist_ripng)
     vty_out (vty, "    ripng with metric mapped to %hu%s",
              ospf6->cost_ripng, VTY_NEWLINE);

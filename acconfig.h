@@ -13,6 +13,9 @@
 /* Define if you have the AF_ROUTE socket.  */
 #undef HAVE_AF_ROUTE
 
+/* Define if you have the inet_aton function.  */
+#undef HAVE_INET_ATON
+
 /* Define if you have the inet_ntop function.  */
 #undef HAVE_INET_NTOP
 

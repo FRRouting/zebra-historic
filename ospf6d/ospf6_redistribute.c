@@ -118,12 +118,8 @@ ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
   int ret;
   struct route_node *rn;
 
-  /* XXX */
   if (type == ZEBRA_ROUTE_CONNECT)
-    {
-      ospf6_redist_connected_route_add (type, ifindex, p);
-      return;
-    }
+    return;
 
   /* set redistribute info */
   info = XMALLOC (MTYPE_OSPF6_OTHER, sizeof (struct ospf6_redistribute_info));
@@ -275,6 +271,45 @@ DEFUN (no_ospf6_redistribute_static,
   return CMD_SUCCESS;
 }
 
+DEFUN (ospf6_redistribute_kernel,
+       ospf6_redistribute_kernel_cmd,
+       "redistribute kernel",
+       "Redistribute\n"
+       "Static route\n")
+{
+  ospf6->redist_kernel = 1;
+  ospf6_zebra_redistribute (ZEBRA_ROUTE_KERNEL);
+  ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_KERNEL);
+  return CMD_SUCCESS;
+}
+
+DEFUN (ospf6_redistribute_kernel_routemap,
+       ospf6_redistribute_kernel_routemap_cmd,
+       "redistribute kernel route-map WORD",
+       "Redistribute\n"
+       "Static routes\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+{
+  ospf6->redist_kernel = 1;
+  ospf6_zebra_redistribute (ZEBRA_ROUTE_KERNEL);
+  ospf6_redistribute_routemap_set (ospf6, ZEBRA_ROUTE_KERNEL, argv[0]);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf6_redistribute_kernel,
+       no_ospf6_redistribute_kernel_cmd,
+       "no redistribute kernel",
+       NO_STR
+       "Redistribute\n"
+       "Static route\n")
+{
+  ospf6->redist_kernel = 0;
+  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_KERNEL);
+  ospf6_redistribute_routemap_unset (ospf6, ZEBRA_ROUTE_KERNEL);
+  return CMD_SUCCESS;
+}
+
 DEFUN (ospf6_redistribute_connected,
        ospf6_redistribute_connected_cmd,
        "redistribute connected",
@@ -411,6 +446,15 @@ ospf6_redistribute_config_write (struct vty *vty)
         vty_out (vty, " redistribute static%s", VTY_NEWLINE);
     }
 
+  if (ospf6->redist_kernel)
+    {
+      if (ospf6->rmap[ZEBRA_ROUTE_KERNEL].map)
+        vty_out (vty, " redistribute kernel route-map %s%s",
+                 ospf6->rmap[ZEBRA_ROUTE_KERNEL].name, VTY_NEWLINE);
+      else
+        vty_out (vty, " redistribute kernel%s", VTY_NEWLINE);
+    }
+
   if (ospf6->redist_ripng)
     {
       if (ospf6->rmap[ZEBRA_ROUTE_RIPNG].map)
@@ -443,6 +487,9 @@ ospf6_redistribute_init (struct ospf6 *o6)
   install_element (OSPF6_NODE, &ospf6_redistribute_static_cmd);
   install_element (OSPF6_NODE, &ospf6_redistribute_static_routemap_cmd);
   install_element (OSPF6_NODE, &no_ospf6_redistribute_static_cmd);
+  install_element (OSPF6_NODE, &ospf6_redistribute_kernel_cmd);
+  install_element (OSPF6_NODE, &ospf6_redistribute_kernel_routemap_cmd);
+  install_element (OSPF6_NODE, &no_ospf6_redistribute_kernel_cmd);
   install_element (OSPF6_NODE, &ospf6_redistribute_connected_cmd);
   install_element (OSPF6_NODE, &ospf6_redistribute_connected_routemap_cmd);
   install_element (OSPF6_NODE, &no_ospf6_redistribute_connected_cmd);

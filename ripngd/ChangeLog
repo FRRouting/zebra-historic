@@ -1,3 +1,12 @@
+2000-06-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_route_process): Clear prefix_ipv6 before using
+	it.
+	(ripng_redistribute_delete): Fix bug of missing
+	route_unlock_node() when redistribute route is not found.
+	(ripng_redistribute_delete): Make it sure that timers are off.
+	(ripng_redistribute_delete): Likewise.
+
 2000-01-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripngd.c (ripng_route_process): Fix bug of mis-checking of same

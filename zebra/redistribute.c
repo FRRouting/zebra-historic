@@ -194,6 +194,17 @@ zebra_interface_add_update (struct interface *ifp)
       zebra_interface_add (client->fd, ifp);
 }
 
+void
+zebra_interface_delete_update (struct interface *ifp)
+{
+  listnode node;
+  struct zebra_client *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    if ((client = getdata (node)) != NULL)
+      zebra_interface_delete (client->fd, ifp);
+}
+
 /* Interface address addition. */
 void
 zebra_interface_address_add_update (struct interface *ifp, struct connected *c)

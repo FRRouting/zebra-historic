@@ -89,9 +89,13 @@ void
 route_table_free (struct route_table *rt)
 {
   struct route_node *rn;
+  struct route_node *next;
 
-  for (rn = route_top (rt); rn; rn = route_next (rn))
-    route_node_free (rn);
+  for (rn = route_top (rt); rn; rn = next)
+    {
+      next = route_next (rn);
+      route_node_free (rn);
+    }
 
   XFREE (MTYPE_ROUTE_TABLE, rt);
 }

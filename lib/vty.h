@@ -85,6 +85,8 @@ struct vty
   int width;
   int height;
 
+  int scroll_one;
+
   /* Configure lines. */
   int lines;
 
@@ -109,9 +111,12 @@ struct vty
   struct thread *t_output;
 
   /* Output data pointer. */
-  void *output;
-
-  int (*output_func) (struct vty *, void *, int);
+  int (*output_func) (struct vty *, int);
+  void (*output_clean) (struct vty *);
+  struct route_node *output_rn;
+  unsigned long output_count;
+  int output_type;
+  void *output_arg;
 };
 
 /* Small macro to determine newline is newline only or linefeed needed. */

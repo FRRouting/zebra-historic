@@ -107,15 +107,41 @@ route_map_add (char *name)
   return map;
 }
 
+/* Free route map index. */
+static void
+route_map_index_free (struct route_map_index *index)
+{
+  struct route_map_rule *rule;
+
+  /* Free route match. */
+  while ((rule = index->match_list.head) != NULL)
+    route_map_rule_delete (&index->match_list, rule);
+
+  /* Free route set. */
+  while ((rule = index->set_list.head) != NULL)
+    route_map_rule_delete (&index->set_list, rule);
+
+  XFREE (MTYPE_ROUTE_MAP_INDEX, index);
+}
+
 /* Route map delete from list. */
 static void
 route_map_delete (struct route_map *map)
 {
   struct route_map_list *list;
+  struct route_map_index *index;
+  struct route_map_index *next;
 
+  for (index = map->head; index; index = next)
+    {
+      next = index->next;
+      route_map_index_free (index);
+    }
   /* Return if route map doesn't exist. */
+  /*
   if (map->head != NULL || map->tail != NULL)
     return;
+  */
 
   if (map->name)
     XFREE (MTYPE_ROUTE_MAP_NAME, map->name);
@@ -461,6 +487,13 @@ route_map_add_match (struct route_map_index *index, char *match_name,
   else
     compile = NULL;
 
+  /* If argument is completely same ignore it. */
+  for (rule = index->match_list.head; rule; rule = rule->next)
+    {
+      if (rule->cmd == cmd && rulecmp (rule->rule_str, match_arg) == 0)
+	return 0;
+    }
+
   /* Add new route map match rule. */
   rule = route_map_rule_new ();
   rule->cmd = cmd;
@@ -504,6 +537,7 @@ route_map_add_set (struct route_map_index *index, char *set_name,
 		   char *set_arg)
 {
   struct route_map_rule *rule;
+  struct route_map_rule *next;
   struct route_map_rule_cmd *cmd;
   void *compile;
 
@@ -524,9 +558,12 @@ route_map_add_set (struct route_map_index *index, char *set_name,
  /* Add by WJL. if old set command of same kind exist, delete it first
     to ensure only one set command of same kind exist under a
     route_map_index. */
-  for (rule = index->set_list.head; rule; rule = rule->next)
-    if (rule->cmd == cmd) 
-      route_map_rule_delete (&index->set_list, rule);
+  for (rule = index->set_list.head; rule; rule = next)
+    {
+      next = rule->next;
+      if (rule->cmd == cmd) 
+	route_map_rule_delete (&index->set_list, rule);
+    }
 
   /* Add new route map match rule. */
   rule = route_map_rule_new ();
@@ -710,10 +747,10 @@ route_map_init ()
 DEFUN (route_map, route_map_cmd,
        "route-map WORD (deny|permit) <1-65535>",
        "Create route-map or enter route-map command mode\n"
-       "Route map tag name\n"
+       "Route map tag\n"
        "Route map denies set operations\n"
        "Route map permits set operations\n"
-       "Route map sequence number\n")
+       "Sequence to insert to/delete from existing route-map entry\n")
 {
   int permit;
   unsigned long pref;
@@ -754,13 +791,35 @@ DEFUN (route_map, route_map_cmd,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_route_map_all, no_route_map_all_cmd,
+       "no route-map WORD",
+       NO_STR
+       "Create route-map or enter route-map command mode\n"
+       "Route map tag\n")
+{
+  struct route_map *map;
+
+  map = route_map_lookup_by_name (argv[0]);
+  if (map == NULL)
+    {
+      vty_out (vty, "can't find route-map with name %s%s",
+	       argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  route_map_delete (map);
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (no_route_map, no_route_map_cmd,
-       "no route-map NAME (deny|permit) <1-65535>",
+       "no route-map WORD (deny|permit) <1-65535>",
        NO_STR
        "Create route-map or enter route-map command mode\n"
        "Route map tag\n"
-       "Route map set operations\n"
-       "Route map preference\n")
+       "Route map denies set operations\n"
+       "Route map permits set operations\n"
+       "Sequence to insert to/delete from existing route-map entry\n")
 {
   int permit;
   unsigned long pref;
@@ -959,11 +1018,10 @@ route_map_init_vty ()
   install_node (&rmap_node, route_map_config_write);
 
   /* Install route map commands. */
+  install_default (RMAP_NODE);
   install_element (CONFIG_NODE, &route_map_cmd);
   install_element (CONFIG_NODE, &no_route_map_cmd);
-  install_element (RMAP_NODE, &config_end_cmd);
-  install_element (RMAP_NODE, &config_exit_cmd);
-  install_element (RMAP_NODE, &config_help_cmd);
+  install_element (CONFIG_NODE, &no_route_map_all_cmd);
 
   /* Install the on-match stuff */
   install_element (RMAP_NODE, &rmap_onmatch_next_cmd);

@@ -82,6 +82,7 @@ enum node_type
   RIP_NODE,			/* RIP protocol mode node. */ 
   RIPNG_NODE,			/* RIPng protocol mode node. */
   BGP_NODE,			/* BGP protocol mode which includes BGP4+ */
+  BGP_VPNV4_NODE,		/* BGP MPLS-VPN PE exchange. */
   BGP_IPV6_NODE,		/* BGP IPv6 address family */
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
@@ -145,7 +146,7 @@ struct desc
 #define CMD_ERR_NOTHING_TODO     6
 #define CMD_COMPLETE_FULL_MATCH  7
 #define CMD_COMPLETE_MATCH       8
-/* #define CMD_VARARG_MATCH         9 */
+#define CMD_COMPLETE_LIST_MATCH  9
 
 /* Argc max counts. */
 #define CMD_ARGC_MAX   25
@@ -188,7 +189,9 @@ struct desc
 #define IPV6_STR "IPv6 information\n"
 #define NO_STR "Negate a command or set its defaults\n"
 #define CLEAR_STR "Reset functions\n"
+#define RIP_STR "RIP information\n"
 #define BGP_STR "BGP information\n"
+#define OSPF_STR "OSPF information\n"
 #define NEIGHBOR_STR "Specify neighbor router\n"
 #define DEBUG_STR "Debugging functions\n"
 

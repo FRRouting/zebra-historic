@@ -29,6 +29,7 @@ struct prefix
   u_char family;
   u_char safi;
   u_char prefixlen;
+  u_char padding;
   union 
   {
     u_char prefix;
@@ -41,6 +42,7 @@ struct prefix
       struct in_addr id;
       struct in_addr adv_router;
     } lp;
+    u_char val[8];
   } u;
 };
 
@@ -50,6 +52,7 @@ struct prefix_ipv4
   u_char family;
   u_char safi;
   u_char prefixlen;
+  u_char padding;
   struct in_addr prefix;
 };
 
@@ -60,6 +63,7 @@ struct prefix_ipv6
   u_char family;
   u_char safi;
   u_char prefixlen;
+  u_char padding;
   struct in6_addr prefix;
 };
 #endif /* HAVE_IPV6 */
@@ -69,8 +73,19 @@ struct prefix_ls
   u_char family;
   u_char safi;
   u_char prefixlen;
+  u_char padding;
   struct in_addr id;
   struct in_addr adv_router;
+};
+
+/* Prefix for routing distinguisher. */
+struct prefix_rd
+{
+  u_char family;
+  u_char safi;
+  u_char prefixlen;
+  u_char padding;
+  u_char val[8];
 };
 
 #ifndef INET_ADDRSTRLEN

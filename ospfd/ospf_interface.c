@@ -36,6 +36,7 @@
 #include "ospfd/ospf_network.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -168,16 +169,10 @@ ospf_if_lookup_by_name (char *name)
   struct ospf_interface *oi;
 
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
-    {
-      if ((ifp = getdata (node)) == NULL)
-        continue;
-
-      if ((oi = ifp->info) == NULL)
-        continue;
-
-      if (strncmp(name, ifp->name, sizeof ifp->name) == 0)
-        return oi;
-    }
+    if ((ifp = getdata (node)) != NULL)
+      if ((oi = ifp->info) != NULL)
+	if (strncmp(name, ifp->name, sizeof ifp->name) == 0)
+	  return oi;
 
   return NULL;
 }
@@ -190,19 +185,11 @@ ospf_if_lookup_by_addr (struct in_addr *address)
   struct ospf_interface *oi;
 
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
-    {
-      if ((ifp = getdata (node)) == NULL)
-        continue;
-
-      if ((oi = ifp->info) == NULL)
-        continue;
-
-      if (!ospf_if_is_enable (ifp))
-        continue;
-
-      if (IPV4_ADDR_SAME (address, &oi->address->u.prefix4))
-        return oi;
-    }
+    if ((ifp = getdata (node)) != NULL)
+      if ((oi = ifp->info) != NULL)
+	if (ospf_if_is_enable (ifp))
+	  if (IPV4_ADDR_SAME (address, &oi->address->u.prefix4))
+	    return oi;
 
   return NULL;
 }
@@ -210,50 +197,33 @@ ospf_if_lookup_by_addr (struct in_addr *address)
 struct ospf_interface *
 ospf_if_lookup_by_prefix (struct prefix_ipv4 *p)
 {
-  listnode node, co_node;
+  listnode node, n2;
   struct ospf_interface *oi;
   struct interface *ifp;
   struct prefix_ipv4 ip;
-  struct connected * co;
+  struct connected *co;
 
-  zlog_info ("Z: ospf_if_lookup_by_prefix(): Start");
-
+  /* Check each Interface. */
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
-    {
-      if ((ifp = getdata (node)) == NULL)
-        continue;
+    if ((ifp = getdata (node)) != NULL)
+      if ((oi = ifp->info) != NULL)
+	if (oi->address != NULL)
+	  /* Check each connected prefix. */
+	  for (n2 = listhead (ifp->connected); n2; nextnode (n2))
+	    if ((co = getdata (n2)) != NULL)
+	      if (co->address->family == AF_INET)
+		{
+		  prefix_copy ((struct prefix *) &ip, co->address);
 
-      zlog_info ("Z: ospf_if_lookup_by_prefix(): looking at %s", ifp->name);
+		  zlog_info ("Z: ospf_if_lookup_by_prefix(): prefix is %s/%d",
+			     inet_ntoa (ip.prefix), ip.prefixlen);
 
-      if ((oi = ifp->info) == NULL)
-        continue;
+		  apply_mask_ipv4 (&ip);
 
-      if (oi->address == NULL)
-        continue;
+		  if (prefix_same ((struct prefix *) &ip, (struct prefix *) p))
+		    return oi;
+		}
 
-      LIST_ITERATOR (ifp->connected, co_node)
-       {
-         co = getdata (co_node);
-         if (co == NULL)
-            continue;
-
-         if (co->address->family != AF_INET)
-            continue;
-
-         prefix_copy ((struct prefix *) &ip, co->address);
-
-         zlog_info ("Z: ospf_if_lookup_by_prefix(): prefix is %s/%d",
-                    inet_ntoa (ip.prefix), ip.prefixlen);
-
-         apply_mask_ipv4 (&ip);
-
-         if (prefix_same ((struct prefix *) &ip, (struct prefix *) p))
-            return oi;
-       }
-
-    }
-
-  zlog_info ("Z: ospf_if_lookup_by_prefix(): I didn't find it");
   return NULL;
 }
 
@@ -368,6 +338,8 @@ ospf_if_down (struct interface *ifp)
 
   OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceDown);
   ospf_if_stream_unset (oi);
+  close (oi->fd);
+  oi->fd = -1;
 
   return 1;
 }
@@ -376,7 +348,7 @@ ospf_if_down (struct interface *ifp)
 /* Virtual Link related functions. */
 
 struct ospf_vl_data *
-ospf_vl_data_new (struct ospf_area * area, struct in_addr vl_peer)
+ospf_vl_data_new (struct ospf_area *area, struct in_addr vl_peer)
 {
   struct ospf_vl_data *vl_data;
 
@@ -518,6 +490,8 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
   listnode node;
   struct ospf_nexthop *nh;
   int ret;
+  int i;
+  struct router_lsa *rl;
 
   voi = vl_data->vl_oi;
 
@@ -546,7 +520,23 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
   if (voi->fd == -1)
     ret = ospf_serv_sock_init (voi->ifp, voi->address);
 
-  vl_data->peer_addr = v->address;
+
+  rl = (struct router_lsa *)v->lsa;
+  
+  for (i = 0; i < ntohs (rl->links); i++)
+    {
+      switch (rl->link[i].type)
+	{
+	case LSA_LINK_TYPE_VIRTUALLINK:
+	  zlog_info ("Z: found back link through VL");
+	case LSA_LINK_TYPE_TRANSIT:
+	case LSA_LINK_TYPE_POINTOPOINT:
+	  vl_data->peer_addr = rl->link[i].link_data;
+	  zlog_info ("Z: %s peer address is %s\n",
+		     vl_data->vl_oi->ifp->name, inet_ntoa(vl_data->peer_addr));
+	  return;
+	}
+    }
 }
 
 

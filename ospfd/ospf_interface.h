@@ -23,22 +23,8 @@
 #ifndef _ZEBRA_OSPF_INTERFACE_H
 #define _ZEBRA_OSPF_INTERFACE_H
 
-/* OSPF interface type definition. */
-#define OSPF_IFTYPE_POINTOPOINT		1
-#define OSPF_IFTYPE_BROADCAST		2
-#define OSPF_IFTYPE_NBMA		3
-#define OSPF_IFTYPE_POINTOMULTIPOINT	4
-#define OSPF_IFTYPE_VIRTUALLINK		5
-
-/* OSPF interface flag. */
-#define OSPF_IF_DISABLE                 0
-#define OSPF_IF_ENABLE                  1
-
 #define OSPF_AUTH_SIMPLE_SIZE           8
 #define OSPF_AUTH_MD5_SIZE             16
-
-#define OSPF_IF_ACTIVE                  0
-#define OSPF_IF_PASSIVE		        1
 
 struct ospf_interface;
 
@@ -82,33 +68,46 @@ struct ospf_interface
 
   /* OSPF Specific interface data. */
   u_char flag;			        /* OSPF is enabled on this */
+#define OSPF_IF_DISABLE                 0
+#define OSPF_IF_ENABLE                  1
   u_char type;				/* OSPF Network Type */
-  u_char passive_interface;             /* OSPF Interface is passive */
+#define OSPF_IFTYPE_NONE		0
+#define OSPF_IFTYPE_POINTOPOINT		1
+#define OSPF_IFTYPE_BROADCAST		2
+#define OSPF_IFTYPE_NBMA		3
+#define OSPF_IFTYPE_POINTOMULTIPOINT	4
+#define OSPF_IFTYPE_VIRTUALLINK		5
+#define OSPF_IFTYPE_MAX			6
   int status;				/* OSPF Interface State */
 
   struct prefix *address;		/* Interface prefix */
   struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
   struct ospf_area *area;		/* OSPF Area */
 
+  /* Configured varables. */
+  u_int32_t transmit_delay;		/* Interface Transmisson Delay */
+  u_int32_t output_cost;		/* Interface Output Cost */
+  u_int32_t retransmit_interval;	/* Retransmission Interval */
+  u_char passive_interface;             /* OSPF Interface is passive */
+#define OSPF_IF_ACTIVE                  0
+#define OSPF_IF_PASSIVE		        1
+
   /* Authentication data. */
   u_char auth_simple[OSPF_AUTH_SIMPLE_SIZE + 1];       /* Simple password. */
   list auth_crypt;			/* List of Auth cryptographic data. */
   u_int32_t crypt_seqnum;		/* Cryptographic Sequence Number */ 
 
-  /* */
-  u_int32_t transmit_delay;		/* Interface Transmisson Delay */
-  u_int32_t output_cost;		/* Interface Output Cost */
-  u_int32_t retransmit_interval;	/* Retransmission Interval */
-
   /* Neighbor information. */
   struct route_table *nbrs;             /* OSPF Neighbor List */
   struct ospf_neighbor *nbr_self;	/* Neighbor Self */
+#define DR(I)			((I)->nbr_self->d_router)
+#define BDR(I)			((I)->nbr_self->bd_router)
+#define OPTIONS(I)		((I)->nbr_self->options)
+#define PRIORITY(I)		((I)->nbr_self->priority)
 
-  struct ospf_lsa *network_lsa_self;	/* self-originated network-LSA */
-  struct ospf_lsa *summary_lsa_self;	/* self-originated summary-LSA */
-
-  struct thread *t_network_lsa_self;    /* self-originated network-LSA
-                                           reflesh thread. */
+  /* self-originated LSAs. */
+  struct ospf_lsa *network_lsa_self;	/* network-LSA. */
+  struct ospf_lsa *summary_lsa_self;	/* summary-LSA. */
 
   list ls_ack;				/* Link State Acknowledgment list. */
 
@@ -123,6 +122,8 @@ struct ospf_interface
   struct thread *t_hello;
   struct thread *t_wait;
   struct thread *t_ls_ack;
+  struct thread *t_network_lsa_self;    /* self-originated network-LSA
+                                           reflesh thread. */
 
   /* Statistics fields. */
   u_int32_t hello_in;	        /* Hello message input count. */
@@ -139,11 +140,6 @@ struct ospf_interface
 
   u_int full_nbrs;
 };
-
-#define DR(I)			((I)->nbr_self->d_router)
-#define BDR(I)			((I)->nbr_self->bd_router)
-#define OPTIONS(I)		((I)->nbr_self->options)
-#define PRIORITY(I)		((I)->nbr_self->priority)
 
 /* Prototypes. */
 struct ospf_interface *ospf_if_new ();

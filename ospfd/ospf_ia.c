@@ -34,6 +34,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -92,17 +93,25 @@ ospf_ia_network_route (struct route_table *rt, struct prefix_ipv4 *p,
 
 	  /* Check the existing route. */
 	  if ((res = ospf_route_cmp (new_or, or)) < 0)
-	    ospf_route_subst (rn1, new_or, abr_or);
+	    {
+	      /* New route is better, so replace old one. */
+	      ospf_route_subst (rn1, new_or, abr_or);
+	    }
 	  else if (res == 0)
 	    {
-	      ospf_route_free (new_or);
-	      return; /* Sorry, you're worse*/
-	    }
-	  else
-	    {
+	      /* New and old route are equal, so next hops can be added. */
 	      route_lock_node (rn1);
 	      ospf_route_copy_nexthops (or, abr_or->path);
 	      route_unlock_node (rn1);
+
+	      /* new route can be deleted, because existing route has been updated. */
+	      ospf_route_free (new_or);
+	    }
+	  else
+	    {
+	      /* New route is worse, so free it. */
+	      ospf_route_free (new_or);
+	      return;
 	    }
 	} /* if (or)*/
     } /*if (rn1)*/
@@ -114,7 +123,6 @@ ospf_ia_network_route (struct route_table *rt, struct prefix_ipv4 *p,
       ospf_route_add (rt, p, new_or, abr_or);
     }
 }
-
 
 void
 ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
@@ -269,12 +277,14 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
 
 void
 ospf_examine_summaries (struct ospf_area * area,
-                        struct ospf_lsdb *lsdb,
+                        /* struct ospf_lsdb *lsdb, */
+			struct route_table *lsdb_rt,
                         struct route_table *rt,
                         struct route_table *rtrs)
 {
   struct ia_args args = {rt, rtrs, area};
-  ospf_lsdb_iterator (lsdb, &args, 0, process_summary_lsa);
+  /* ospf_lsdb_iterator (lsdb, &args, 0, process_summary_lsa); */
+  foreach_lsa (lsdb_rt, &args, 0, process_summary_lsa);
 }
 
 int
@@ -557,13 +567,15 @@ process_transit_summary_lsa (struct ospf_lsa *l, void *v, int i)
 
 void
 ospf_examine_transit_summaries (struct ospf_area *area,
-                                struct ospf_lsdb *lsdb,
+                                /* struct ospf_lsdb *lsdb, */
+				struct route_table *lsdb_rt,
                                 struct route_table *rt,
                                 struct route_table *rtrs)
 {
   struct ia_args args = {rt, rtrs, area};
 
-  ospf_lsdb_iterator (lsdb, &args, 0, process_transit_summary_lsa);
+  /* ospf_lsdb_iterator (lsdb, &args, 0, process_transit_summary_lsa); */
+  foreach_lsa (lsdb_rt, &args, 0, process_transit_summary_lsa);
 }
 
 void
@@ -595,8 +607,8 @@ ospf_ia_routing (struct route_table *rt,
               LIST_ITERATOR (ospf_top->areas, node)
                 if ((area = getdata (node)) != NULL)
                   if (area != ospf_top->backbone)
-                  if (ospf_area_is_transit (area))
-                    OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
+		    if (ospf_area_is_transit (area))
+		      OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
             }
           else
             zlog_info ("Z: ospf_ia_routing():backbone area NOT found");
@@ -618,8 +630,8 @@ ospf_ia_routing (struct route_table *rt,
               LIST_ITERATOR (ospf_top->areas, node)
                 if ((area = getdata (node)) != NULL)
                   if (area != ospf_top->backbone)
-                  if (ospf_area_is_transit (area))
-                    OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
+		    if (ospf_area_is_transit (area))
+		      OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
             }
           else
             { /* No active BB connection--consider all areas */
@@ -647,16 +659,12 @@ ospf_ia_routing (struct route_table *rt,
           LIST_ITERATOR (ospf_top->areas, node)
             if ((area = getdata (node)) != NULL)
               if (area != ospf_top->backbone)
-              if (ospf_area_is_transit (area) ||
-                  ( (area->shortcut_configured != OSPF_SHORTCUT_DISABLE) &&
-                    ( (ospf_top->backbone == NULL) ||
-                      ( (area->shortcut_configured == OSPF_SHORTCUT_ENABLE) &&
-                        area->shortcut_capability
-                      )
-                    )
-                  )
-                 )
-                OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
+		if (ospf_area_is_transit (area) ||
+		    ((area->shortcut_configured != OSPF_SHORTCUT_DISABLE) &&
+		     ((ospf_top->backbone == NULL) ||
+                      ((area->shortcut_configured == OSPF_SHORTCUT_ENABLE) &&
+		       area->shortcut_capability))))
+		  OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
           break;
         default:
           break;

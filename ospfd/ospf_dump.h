@@ -54,16 +54,46 @@
 #define OSPF_DEBUG_ZEBRA	       0x03
 
 /* Macro for setting debug option. */
-#define DEBUG_PACKET_ON(a, b)		ospf_debug_packet[a] |= (b)
-#define DEBUG_PACKET_OFF(a, b)		ospf_debug_packet[a] &= ~(b)
+#define CONF_DEBUG_PACKET_ON(a, b)	    conf_debug_ospf_packet[a] |= (b)
+#define CONF_DEBUG_PACKET_OFF(a, b)	    conf_debug_ospf_packet[a] &= ~(b)
+#define TERM_DEBUG_PACKET_ON(a, b)	    term_debug_ospf_packet[a] |= (b)
+#define TERM_DEBUG_PACKET_OFF(a, b)	    term_debug_ospf_packet[a] &= ~(b)
+#define DEBUG_PACKET_ON(a, b) \
+    do { \
+      CONF_DEBUG_PACKET_ON(a, b); \
+      TERM_DEBUG_PACKET_ON(a, b); \
+    } while (0)
+#define DEBUG_PACKET_OFF(a, b) \
+    do { \
+      CONF_DEBUG_PACKET_OFF(a, b); \
+      TERM_DEBUG_PACKET_OFF(a, b); \
+    } while (0)
 
-#define DEBUG_ON(a, b)			ospf_debug_ ## a |= (OSPF_DEBUG_ ## b)
-#define DEBUG_OFF(a, b)			ospf_debug_ ## a &= ~(OSPF_DEBUG_ ## b)
+#define CONF_DEBUG_ON(a, b)	 conf_debug_ospf_ ## a |= (OSPF_DEBUG_ ## b)
+#define CONF_DEBUG_OFF(a, b)	 conf_debug_ospf_ ## a &= ~(OSPF_DEBUG_ ## b)
+#define TERM_DEBUG_ON(a, b)	 term_debug_ospf_ ## a |= (OSPF_DEBUG_ ## b)
+#define TERM_DEBUG_OFF(a, b)	 term_debug_ospf_ ## a &= ~(OSPF_DEBUG_ ## b)
+#define DEBUG_ON(a, b) \
+     do { \
+       CONF_DEBUG_ON(a, b); \
+       TERM_DEBUG_ON(a, b); \
+     } while (0)
+#define DEBUG_OFF(a, b) \
+     do { \
+       CONF_DEBUG_OFF(a, b); \
+       TERM_DEBUG_OFF(a, b); \
+     } while (0)
 
 /* Macro for checking debug option. */
-#define IS_OSPF_DEBUG_PACKET(a, b)	(ospf_debug_packet[a] & \
-                                         OSPF_DEBUG_ ## b)
-#define IS_OSPF_DEBUG(a, b)		(ospf_debug_ ## a & OSPF_DEBUG_ ## b)
+#define IS_DEBUG_OSPF_PACKET(a, b) \
+	(term_debug_ospf_packet[a] & OSPF_DEBUG_ ## b)
+#define IS_DEBUG_OSPF(a, b) \
+	(term_debug_ospf_ ## a & OSPF_DEBUG_ ## b)
+
+#define IS_CONF_DEBUG_OSPF_PACKET(a, b) \
+	(conf_debug_ospf_packet[a] & OSPF_DEBUG_ ## b)
+#define IS_CONF_DEBUG_OSPF(a, b) \
+	(conf_debug_ospf_ ## a & OSPF_DEBUG_ ## b)
 
 /* Message Strings. */
 extern char *ospf_packet_type_str[];

@@ -12,12 +12,13 @@ libbgp_a_SOURCES = \
 	bgpd.c bgp_fsm.c bgp_aspath.c bgp_community.c bgp_attr.c \
 	bgp_debug.c bgp_route.c bgp_zebra.c bgp_open.c bgp_routemap.c \
 	bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c bgp_clist.c \
-	bgp_dump.c bgp_snmp.c
+	bgp_dump.c bgp_snmp.c bgp_ecommunity.c bgp_mplsvpn.c 
 
 noinst_HEADERS = \
 	bgp_aspath.h bgp_attr.h bgp_community.h bgp_debug.h bgp_fsm.h \
 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h \
-	bgpd.h bgp_filter.h bgp_clist.h bgp_dump.h bgp_zebra.h
+	bgpd.h bgp_filter.h bgp_clist.h bgp_dump.h bgp_zebra.h \
+	bgp_ecommunity.h bgp_mplsvpn.h
 
 bgpd_SOURCES = \
 	bgp_main.c $(libbgp_a_SOURCES)
@@ -58,7 +59,7 @@ bgp_attr.o: bgp_attr.c ../lib/linklist.h ../lib/prefix.h \
  ../lib/stream.h ../lib/log.h ../lib/hash.h ../lib/newlist.h \
  ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_attr.h \
  ../bgpd/bgp_route.h ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h \
- ../bgpd/bgp_debug.h ../bgpd/bgp_packet.h
+ ../bgpd/bgp_debug.h ../bgpd/bgp_packet.h ../bgpd/bgp_ecommunity.h
 bgp_btoa.o: bgp_btoa.c ../lib/stream.h ../lib/log.h ../bgpd/bgpd.h \
  ../lib/sockunion.h ../bgpd/bgp_dump.h
 bgp_clist.o: bgp_clist.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
@@ -76,6 +77,8 @@ bgp_dump.o: bgp_dump.c ../lib/log.h ../lib/stream.h ../lib/sockunion.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/prefix.h \
  ../lib/thread.h ../lib/table.h ../bgpd/bgpd.h ../bgpd/bgp_route.h \
  ../bgpd/bgp_dump.h
+bgp_ecommunity.o: bgp_ecommunity.c ../lib/hash.h ../lib/memory.h \
+ ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_ecommunity.h
 bgp_filter.o: bgp_filter.c ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/log.h ../lib/memory.h ../lib/buffer.h \
  ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_aspath.h \
@@ -86,8 +89,12 @@ bgp_fsm.o: bgp_fsm.c ../lib/linklist.h ../lib/prefix.h ../lib/vty.h \
  ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h ../bgpd/bgp_network.h \
  ../bgpd/bgp_route.h ../bgpd/bgp_dump.h
 bgp_main.o: bgp_main.c ../lib/vector.h ../lib/vty.h ../lib/command.h \
- ../lib/thread.h ../lib/version.h ../lib/memory.h ../lib/log.h \
- ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_network.h
+ ../lib/thread.h ../lib/version.h ../lib/memory.h ../lib/prefix.h \
+ ../lib/log.h ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_network.h \
+ ../bgpd/bgp_attr.h ../bgpd/bgp_mplsvpn.h
+bgp_mplsvpn.o: bgp_mplsvpn.c ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/prefix.h ../lib/newlist.h ../lib/table.h \
+ ../lib/log.h ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_attr.h
 bgp_network.o: bgp_network.c ../lib/thread.h ../lib/sockunion.h \
  ../lib/memory.h ../lib/log.h ../lib/if.h ../lib/linklist.h \
  ../lib/prefix.h ../lib/newlist.h ../bgpd/bgpd.h ../bgpd/bgp_fsm.h \
@@ -103,7 +110,7 @@ bgp_packet.o: bgp_packet.c ../lib/thread.h ../lib/stream.h \
  ../lib/newlist.h ../bgpd/bgpd.h ../bgpd/bgp_dump.h ../bgpd/bgp_attr.h \
  ../bgpd/bgp_debug.h ../bgpd/bgp_fsm.h ../bgpd/bgp_route.h \
  ../bgpd/bgp_packet.h ../bgpd/bgp_open.h ../bgpd/bgp_aspath.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_network.h
+ ../bgpd/bgp_community.h ../bgpd/bgp_network.h ../bgpd/bgp_mplsvpn.h
 bgp_regex.o: bgp_regex.c ../lib/log.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/memory.h bgpd.h ../lib/sockunion.h bgp_aspath.h \
  bgp_regex.h ../lib/regex-gnu.h
@@ -122,7 +129,8 @@ bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/plist.h ../lib/regex-gnu.h ../lib/buffer.h ../lib/table.h \
  ../lib/sockunion.h ../lib/newlist.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h \
  ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_regex.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_clist.h ../bgpd/bgp_filter.h
+ ../bgpd/bgp_community.h ../bgpd/bgp_clist.h ../bgpd/bgp_filter.h \
+ ../bgpd/bgp_mplsvpn.h ../bgpd/bgp_ecommunity.h
 bgp_snmp.o: bgp_snmp.c
 bgp_zebra.o: bgp_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/stream.h ../lib/network.h ../lib/prefix.h ../lib/roken.h \

@@ -18,11 +18,11 @@
 @c Info entry
 @dircategory Routing Software
 @direntry
-* Zebra: (zebra).		The GNU Zebra routing software.
+* Zebra: (zebra).		The @sc{gnu} Zebra routing software.
 @end direntry
 
 @ifinfo
-This file documents the GNU Zebra software which manages common TCP/IP
+This file documents the @sc{gnu} Zebra software which manages common TCP/IP
 routing protocols.
 
 This is Edition @value{EDITION}, last updated @value{UPDATED} of
@@ -88,7 +88,7 @@ Zebra is a routing software package that manages TCP/IP based routing
 protocols.  Adding to routing protocol support, Zebra provides interface
 address configuration and advanced filtering.
 
-This is the GNU Zebra Manual for zebra-@value{VERSION}.
+This is the @sc{gnu} Zebra Manual for zebra-@value{VERSION}.
 @end ifnottex
 
 @menu
@@ -139,8 +139,8 @@ commands.  Due to this design, you can add new protocol daemon to Zebra
 easily.  You can use Zebra library as your program's client user
 interface.
 
-  Zebra is an official GNU software and distributed under the GNU
-General Public License.
+  Zebra is an official @sc{gnu} software and distributed under the
+@sc{gnu} General Public License.
 
 @menu
 * About Zebra::                 Basic information about Zebra
@@ -252,16 +252,16 @@ each daemon with UNIX domain socket then work as proxy of user input.
 
   Zebra was planned to use multi-threaded mechanism when it runs with a
 kernel that supports multi-threads.  But at this moment, the thread
-library which comes with GNU/Linux or FreeBSD has some problems for
+library which comes with @sc{gnu}/Linux or FreeBSD has some problems for
 running reliable services such as routing software, so we don't use
 threads at all, instead we use the @command{select(2)} system call for
 multiplexing the events.
 
-  When @command{zebra} runs under a GNU Hurd kernel it will act as a
-kernel routing table itself.  Under GNU Hurd, all TCP/IP services are
+  When @command{zebra} runs under a @sc{gnu} Hurd kernel it will act as a
+kernel routing table itself.  Under @sc{gnu} Hurd, all TCP/IP services are
 provided by user processes called @command{pfinet}.  Zebra will provide
 all the routing selection mechanisms for the process.  This feature will
-be implemented when GNU Hurd becomes stable.
+be implemented when @sc{gnu} Hurd becomes stable.
 
 @node Supported Platforms, Supported RFC, System Architecture, Overview
 @comment  node-name,  next,  previous,  up
@@ -272,7 +272,7 @@ be implemented when GNU Hurd becomes stable.
 @cindex Compatibility with other systems
 @cindex Operating systems that support Zebra
 
-  Currently Zebra supports GNU/Linux, BSD and Solaris.  Below is a list
+  Currently Zebra supports @sc{gnu}/Linux, BSD and Solaris.  Below is a list
 of OS version on which Zebra runs.  Porting Zebra to other platform is
 not so hard work.  Platform dependent codes are only exists in
 @command{zebra} daemon.  Protocol daemons are platform independent.
@@ -386,8 +386,9 @@ site located at:
 
 @url{ftp://ftp.zebra.org/pub/zebra}
 
-  Once Zebra is released you can get it from GNU FTP site and many it's
-mirror sites.  We are planning Zebra-1.0 as a first released version.
+  Once Zebra is released you can get it from @sc{gnu} FTP site and many
+it's mirror sites.  We are planning Zebra-1.0 as a first released
+version.
 
   Zebra's official web page is located at:
 
@@ -527,10 +528,10 @@ Do not build bgpd.
 Make @command{bgpd} which does not make bgp announcements at all.  This
 feature is good for using @command{bgpd} as BGP announcement listener.
 @item --enable-netlink
-Force to enable GNU/Linux netlink interface.  Zebra configure script
-detects netlink interface by checking header file.  When header file
-does not match to the current running kernel configure script will not
-turn on netlink support.
+Force to enable @sc{gnu}/Linux netlink interface.  Zebra configure
+script detects netlink interface by checking header file.  When header
+file does not match to the current running kernel configure script will
+not turn on netlink support.
 @item --enable-snmp
 Enable SNMP support.  In default, SNMP support is disabled.
 @end table
@@ -562,7 +563,7 @@ This command will configure zebra and the routing daemons.
 @cindex Building on Linux boxes
 @cindex Linux configurations
 
-There are several options available only to GNU/Linux systems:
+There are several options available only to @sc{gnu}/Linux systems:
 @footnote{GNU/Linux has very flexible kernel configuration features.  If
 you use GNU/Linux, make sure that the current kernel configuration is
 what you want.  Zebra will run with any kernel configuration but some
@@ -589,10 +590,11 @@ This option should be specified when you use @command{ripd} or
 
 @end table
 
-IPv6 support is added from GNU/Linux kernel version 2.2.  If you try to
-use the Zebra IPv6 feature on a GNU/Linux kernel, please make sure the
-following libraries have been installed.  Please note that these
-libraries will not be needed when you uses GNU C library 2.1 or upper.
+IPv6 support is added from @sc{gnu}/Linux kernel version 2.2.  If you
+try to use the Zebra IPv6 feature on a @sc{gnu}/Linux kernel, please
+make sure the following libraries have been installed.  Please note that
+these libraries will not be needed when you uses @sc{gnu} C library 2.1
+or upper.
 
 @table @code
 

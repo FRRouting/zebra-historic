@@ -27,10 +27,12 @@
 #define OSPF_DESTINATION_NETWORK	2
 #define OSPF_DESTINATION_DISCARD	3
 
+#define OSPF_PATH_MIN			0
 #define OSPF_PATH_INTRA_AREA		1
 #define OSPF_PATH_INTER_AREA		2
 #define OSPF_PATH_TYPE1_EXTERNAL	3
 #define OSPF_PATH_TYPE2_EXTERNAL	4
+#define OSPF_PATH_MAX			5
 
 /* OSPF Path. */
 struct ospf_path
@@ -124,91 +126,88 @@ struct ospf_route
 };
 
 #else
+/* OSPF netxhop. */
+struct ospf_nexthop
+{
+  /* Nexthop Address or Interface. */
+  union
+  {
+    struct in_addr address;
+    struct interface *ifp;
+  } nh;
+
+  /* Advertising Router. */
+  struct in_addr adv_router;
+
+  /* Pointer to ABR/ASBR route. */
+  struct ospf_route *router;
+
+  /* Tag value. */ 
+  u_int32_t tag;
+};
+
 /* OSPF Route. */
-struct ospf_route
+struct ospf_path
+{
+  /* Cost. */
+  u_int32_t cost;
+
+  /* Path-Type specific info. */
+  union
+  {
+    struct ospf_area *area;    /* OSPF Area for Intra/Inter-Area route. */
+    u_int32_t type2_cost;      /* Type-2 cost for External route. */
+  } u;
+
+  /* Nexthops. */
+  list nexthop;
+#if 0
+  /* Link State Origin. */
+  struct ospf_lsa *origin;
+#endif  
+};
+
+struct network_route
 {
   /* Create time. */
   time_t ctime;
 
-  /* Modified time. */
-  time_t mtime;
-
   /* Destination Type. */
-  u_char type;
+  /* u_char dtype; */
 
-  /* Destination ID. */		/* i.e. Link State ID. */
+  /* Destination ID. */
   struct in_addr id;
 
   /* Address Mask. */
-  struct in_addr mask;		/* Only valid for networks. */
+  struct in_addr mask;
 
-  /* Path Type. */
-  u_char path_type;
-
-  /* Link Sate Origin. */
-  /* struct lsa_header *origin; */
-  struct lsa_header *origin;
-
-  /* List of Paths. */
-  list path;
-
-  /* Link State Cost. */
-  u_int32_t cost;		/* i.e. metric. */
-
-
-  /* Optional Capability. */
-  u_char options;		/* Get from LSA header. */
-
-  /* Associated Area. */
-  struct ospf_area *area;	/* Link to an area structure. */
-
-  /*  */
-  u_char flags; 		/* From router-LSA */
+  /* Store each type of paths. */
+  struct ospf_path *path[OSPF_PATH_MAX];
 };
 
-struct ospf_external_route
+struct router_route
 {
   /* Create time. */
   time_t ctime;
 
-  /* Modified time. */
-  time_t mtime;
-
   /* Destination Type. */
-  u_char type;
+  /* u_char dtype; */
 
-  /* Destination ID. */		/* i.e. Link State ID. */
+  /* Destination ID. */
   struct in_addr id;
 
-  /* Address Mask. */		/* Only valid for networks. */
-  struct in_addr mask;
+  /* Optional Capability. */
+  u_char options;
 
-  /* Path Type. */
-  u_char path_type;		/* Either type 1 ext. or type2 ext. */
-
-  /* Link State Origin. */
-  struct ospf_lsa *lsa;
-
-  /* List of Paths. */
+  /* Store list of paths. */
   list path;
-
-  /* Link State Cost. */
-  u_int32_t cost;		/* i.e. metric. */
-
-
-  /* Link State Cost Type2. */
-  u_int32_t type2_cost;
-
-  /* Tag value. */
-  u_int32_t tag;
-
-  /* ASBR route. */
-  struct ospf_route *asbr;
 };
+
 #endif
 
 struct ospf_path *ospf_path_new ();
 void ospf_path_free (struct ospf_path *op);
+struct ospf_path *ospf_path_lookup (list, struct ospf_path *);
 struct ospf_route *ospf_route_new ();
 void ospf_route_free (struct ospf_route *or);
 void ospf_route_delete (struct route_table *rt);

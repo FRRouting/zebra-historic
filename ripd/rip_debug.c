@@ -33,8 +33,8 @@ DEFUN (show_debugging_rip,
        show_debugging_rip_cmd,
        "show debugging rip",
        SHOW_STR
-       "RIP configuration\n"
-       "Debugging information\n")
+       DEBUG_STR
+       RIP_STR)
 {
   vty_out (vty, "Zebra debugging status:%s", VTY_NEWLINE);
 
@@ -72,8 +72,8 @@ DEFUN (debug_rip_events,
        debug_rip_events_cmd,
        "debug rip events",
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip events\n")
+       RIP_STR
+       "RIP events\n")
 {
   rip_debug_event = RIP_DEBUG_EVENT;
   return CMD_WARNING;
@@ -83,8 +83,8 @@ DEFUN (debug_rip_packet,
        debug_rip_packet_cmd,
        "debug rip packet",
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip packet\n")
+       RIP_STR
+       "RIP packet\n")
 {
   rip_debug_packet = RIP_DEBUG_PACKET;
   rip_debug_packet |= RIP_DEBUG_SEND;
@@ -96,10 +96,10 @@ DEFUN (debug_rip_packet_direct,
        debug_rip_packet_direct_cmd,
        "debug rip packet (recv|send)",
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip packet\n"
-       "Debug option set for receive packet\n"
-       "Debug option set for send packet\n")
+       RIP_STR
+       "RIP packet\n"
+       "RIP receive packet\n"
+       "RIP send packet\n")
 {
   rip_debug_packet = RIP_DEBUG_PACKET;
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
@@ -114,11 +114,11 @@ DEFUN (debug_rip_packet_detail,
        debug_rip_packet_detail_cmd,
        "debug rip packet (recv|send) detail",
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip packet\n"
-       "Debug option set for receive packet\n"
-       "Debug option set for send packet\n"
-       "Debug option set detaied information\n")
+       RIP_STR
+       "RIP packet\n"
+       "RIP receive packet\n"
+       "RIP send packet\n"
+       "Detailed information display\n")
 {
   rip_debug_packet = RIP_DEBUG_PACKET;
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
@@ -133,8 +133,8 @@ DEFUN (debug_rip_zebra,
        debug_rip_zebra_cmd,
        "debug rip zebra",
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip and zebra communication\n")
+       RIP_STR
+       "RIP and ZEBRA communication\n")
 {
   rip_debug_zebra = RIP_DEBUG_ZEBRA;
   return CMD_WARNING;
@@ -145,8 +145,8 @@ DEFUN (no_debug_rip_events,
        "no debug rip events",
        NO_STR
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip events\n")
+       RIP_STR
+       "RIP events\n")
 {
   rip_debug_event = 0;
   return CMD_SUCCESS;
@@ -157,8 +157,8 @@ DEFUN (no_debug_rip_packet,
        "no debug rip packet",
        NO_STR
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip packet\n")
+       RIP_STR
+       "RIP packet\n")
 {
   rip_debug_packet = 0;
   return CMD_SUCCESS;
@@ -169,10 +169,10 @@ DEFUN (no_debug_rip_packet_direct,
        "no debug rip packet (recv|send)",
        NO_STR
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip packet\n"
-       "Debug option set for receive packet\n"
-       "Debug option set for send packet\n")
+       RIP_STR
+       "RIP packet\n"
+       "RIP option set for receive packet\n"
+       "RIP option set for send packet\n")
 {
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
     rip_debug_packet &= ~RIP_DEBUG_SEND;
@@ -186,8 +186,8 @@ DEFUN (no_debug_rip_zebra,
        "no debug rip zebra",
        NO_STR
        DEBUG_STR
-       "RIP configuration\n"
-       "Debug option set for rip and zebra communication\n")
+       RIP_STR
+       "RIP and ZEBRA communication\n")
 {
   rip_debug_zebra = 0;
   return CMD_WARNING;
@@ -256,8 +256,6 @@ rip_debug_init ()
   rip_debug_zebra = 0;
 
   install_node (&debug_node, config_write_debug);
-
-  install_element (VIEW_NODE, &show_debugging_rip_cmd);
 
   install_element (ENABLE_NODE, &show_debugging_rip_cmd);
   install_element (ENABLE_NODE, &debug_rip_events_cmd);

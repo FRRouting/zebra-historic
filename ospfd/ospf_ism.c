@@ -1,7 +1,7 @@
 /*
  * OSPF version 2  Interface State Machine
  *   From RFC2328 [OSPF Version 2] 
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  *
@@ -33,6 +33,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -43,7 +44,7 @@
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_abr.h"
 
-extern unsigned long ospf_debug_ism;
+extern unsigned long term_debug_ospf_ism;
 
 
 /* elect DR and BDR. Refer to RFC2319 section 9.4 */
@@ -51,25 +52,24 @@ struct ospf_neighbor *
 ospf_dr_election_sub (list routers)
 {
   listnode node;
-  struct ospf_neighbor *r, *max = NULL;
+  struct ospf_neighbor *nbr, *max = NULL;
 
   /* Choose highest router priority.
      In case of tie, choose highest Router ID. */
   for (node = listhead (routers); node; nextnode (node))
     {
-      r = getdata (node);
+      nbr = getdata (node);
 
       if (max == NULL)
+	max = nbr;
+      else
 	{
-	  max = r;
-	  continue;
+	  if (max->priority < nbr->priority)
+	    max = nbr;
+	  else if (max->priority == nbr->priority)
+	    if (IPV4_ADDR_CMP (&max->router_id, &nbr->router_id) < 0)
+	      max = nbr;
 	}
-
-      if (max->priority < r->priority)
-	max = r;
-      else if (max->priority == r->priority)
-	if (IPV4_ADDR_CMP (&max->router_id, &r->router_id) < 0)
-	  max = r;
     }
 
   return max;
@@ -106,9 +106,9 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
 
   /* Set DR to interface. */
   if (dr)
-     DR (oi) = dr->address.u.prefix4;
+    DR (oi) = dr->address.u.prefix4;
   else 
-     DR(oi).s_addr = 0;
+    DR(oi).s_addr = 0;
 
   list_delete_all (dr_list);
 
@@ -177,26 +177,17 @@ ospf_dr_eligible_routers (struct route_table *nbrs, list el_list)
   struct ospf_neighbor *nbr;
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
-    {
-      if ((nbr = rn->info) == NULL)
-	continue;
-
+    if ((nbr = rn->info) != NULL)
       /* Ignore 0.0.0.0 node*/
-      if (nbr->router_id.s_addr == 0)
-	continue;
-
-      /* Is neighbor eligible? */
-      if (nbr->priority == 0)
-	continue;
-
-      /* Is neighbor upper 2-Way? */
-      if (nbr->status < NSM_TwoWay)
-	continue;
-
-      list_add_node (el_list, nbr);
-    }
+      if (nbr->router_id.s_addr != 0)
+	/* Is neighbor eligible? */
+	if (nbr->priority != 0)
+	  /* Is neighbor upper 2-Way? */
+	  if (nbr->status >= NSM_TwoWay)
+	    list_add_node (el_list, nbr);
 }
 
+/* Generate AdjOK? NSM event. */
 void
 ospf_dr_change (struct route_table *nbrs)
 {
@@ -204,24 +195,14 @@ ospf_dr_change (struct route_table *nbrs)
   struct ospf_neighbor *nbr;
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
-    {
-      if ((nbr = rn->info) == NULL)
-	continue;
-
+    if ((nbr = rn->info) != NULL)
       /* Ignore 0.0.0.0 node*/
-      if (nbr->router_id.s_addr == 0)
-	continue;
-
-      /* Is neighbor upper 2-Way? */
-      if (nbr->status < NSM_TwoWay)
-	continue;
-
-      /* Ignore myself. */
-      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
-	continue;
-
-      OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_AdjOK);
-    }
+      if (nbr->router_id.s_addr != 0)
+	/* Is neighbor upper 2-Way? */
+	if (nbr->status >= NSM_TwoWay)
+	  /* Ignore myself. */
+	  if (!IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	    OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_AdjOK);
 }
 
 int
@@ -247,25 +228,21 @@ ospf_dr_election (struct ospf_interface *oi)
   dr = ospf_elect_dr (oi, el_list);
 
   new_status = ospf_ism_status (oi);
-#define DEBUG
-#ifdef DEBUG
-  zlog_info ("Elect BDR = %s", inet_ntoa (BDR (oi)));
-  zlog_info ("Elect DR  = %s", inet_ntoa (DR (oi)));
-#endif /* DEBUG */
+
+  zlog_info ("DR-Election[1st]: Backup %s", inet_ntoa (BDR (oi)));
+  zlog_info ("DR-Election[1st]: DR     %s", inet_ntoa (DR (oi)));
 
   if (IPV4_ADDR_SAME (&DR (oi), &BDR (oi)))
     {
       list_delete_by_val (el_list, dr);
 
       ospf_elect_bdr (oi, el_list);
-      /*      ospf_elect_dr (oi, el_list); */
+   /* ospf_elect_dr (oi, el_list); */
 
       new_status = ospf_ism_status (oi);
 
-#ifdef DEBUG
-      zlog_info ("Elect BDR = %s", inet_ntoa (BDR (oi)));
-      zlog_info ("Elect DR  = %s", inet_ntoa (DR (oi)));
-#endif /* DEBUG */
+      zlog_info ("DR-Election[2nd]: Backup %s", inet_ntoa (BDR (oi)));
+      zlog_info ("DR-Election[2nd]: DR     %s", inet_ntoa (DR (oi)));
     }
 
   list_delete_all (el_list);
@@ -295,7 +272,7 @@ ospf_hello_timer (struct thread *thread)
   oi = THREAD_ARG (thread);
   oi->t_hello = NULL;
 
-  if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
+  if (IS_DEBUG_OSPF (ism, ISM_TIMERS))
     zlog (NULL, LOG_DEBUG, "ISM[%s]: Timer (Hello timer expire)",
 	  oi->ifp->name);
 
@@ -316,7 +293,7 @@ ospf_wait_timer (struct thread *thread)
   oi = THREAD_ARG (thread);
   oi->t_wait = NULL;
 
-  if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
+  if (IS_DEBUG_OSPF (ism, ISM_TIMERS))
     zlog (NULL, LOG_DEBUG, "ISM[%s]: Timer (Wait timer expire)",
 	  oi->ifp->name);
 
@@ -427,7 +404,7 @@ ism_loop_ind (struct ospf_interface *oi)
   int ret = 0;
 
   /* call ism_interface_down. */
-  /*  ret = ism_interface_down (oi); */
+  /* ret = ism_interface_down (oi); */
 
   return ret;
 }
@@ -448,7 +425,11 @@ ism_interface_down (struct ospf_interface *oi)
 	/* if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id)) */
 	/* This is myself. */
 	if (nbr == oi->nbr_self)
-	  continue;
+	  {
+	    nbr->d_router.s_addr = 0;
+	    nbr->bd_router.s_addr = 0;
+	    continue;
+	  }
 
 	OSPF_NSM_EVENT_EXECUTE (nbr, NSM_KillNbr);
       }
@@ -468,37 +449,25 @@ ism_interface_down (struct ospf_interface *oi)
 int
 ism_backup_seen (struct ospf_interface *oi)
 {
-  int status;
-
-  status = ospf_dr_election (oi);
-
-  return status;
+  return ospf_dr_election (oi);
 }
 
 int
 ism_wait_timer (struct ospf_interface *oi)
 {
-  int status;
-
-  status = ospf_dr_election (oi);
-
-  return status;
+  return ospf_dr_election (oi);
 }
 
 int
 ism_neighbor_change (struct ospf_interface *oi)
 {
-  int status;
-
-  status = ospf_dr_election (oi);
-
-  return status;
+  return ospf_dr_election (oi);
 }
 
 int
 ism_ignore (struct ospf_interface *oi)
 {
-  if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
+  if (IS_DEBUG_OSPF (ism, ISM_EVENTS))
     zlog (NULL, LOG_INFO, "ISM[%s]: ism_ignore called", oi->ifp->name);
 
   return 0;
@@ -619,7 +588,7 @@ ism_change_status (struct ospf_interface *oi, int status)
   struct ospf_lsa *lsa;
 
   /* Logging change of status. */
-  if (IS_OSPF_DEBUG (ism, ISM_STATUS))
+  if (IS_DEBUG_OSPF (ism, ISM_STATUS))
     zlog (NULL, LOG_INFO, "ISM[%s]: Status change %s -> %s", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  LOOKUP (ospf_ism_status_msg, status));
@@ -633,44 +602,31 @@ ism_change_status (struct ospf_interface *oi, int status)
   /* Originate router-LSA. */
   if (oi->area)
     {
-     if (status == ISM_Down)
-       {
-	 if (oi->area->act_ints > 0)
-	   oi->area->act_ints--;
-       }
-     else if (old_status == ISM_Down)
-       oi->area->act_ints++;
+      if (status == ISM_Down)
+	{
+	  if (oi->area->act_ints > 0)
+	    oi->area->act_ints--;
+	}
+      else if (old_status == ISM_Down)
+	oi->area->act_ints++;
 
-#if 0
-      lsa = ospf_router_lsa (oi->area);
-      lsa = ospf_router_lsa_install (oi->area, lsa);
-
-      /* Add LSA to related neighbor's retransmission list. */
-      if (oi->status == ISM_DR || oi->status == ISM_Backup ||
-	  oi->status == ISM_DROther)
-	ospf_ls_retransmit_add_nbr_all (oi, lsa);
-#endif /* 0 */
-
+      /* schedule router-LSA originate. */
       ospf_schedule_router_lsa_originate (oi->area);
     }
 
   /* Originate network-LSA. */
   if (old_status != ISM_DR && status == ISM_DR)
-    {
-/*      lsa = ospf_network_lsa (oi);
-      ospf_network_lsa_install (oi, lsa); */
-
-      ospf_schedule_network_lsa_originate (oi);
-
-    }
+    ospf_schedule_network_lsa_originate (oi);
   else if (old_status == ISM_DR && status != ISM_DR)
     {
       /* Free self originated network LSA. */
       lsa = oi->network_lsa_self;
       if (lsa)
 	{
-	  ospf_lsdb_delete (lsa->lsdb, lsa);
-	  ospf_lsa_free (lsa);
+/*	  new_lsdb_delete ((struct new_lsdb *) lsa->lsdb, lsa);
+	  ospf_lsa_free (lsa); */
+	  ospf_lsa_flush_area (lsa, oi->area);
+	  OSPF_TIMER_OFF (oi->t_network_lsa_self);
 	}
       oi->network_lsa_self = NULL;
     }
@@ -698,7 +654,7 @@ ospf_ism_event (struct thread *thread)
   if (! next_state)
     next_state = ISM [oi->status][event].next_state;
 
-  if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
+  if (IS_DEBUG_OSPF (ism, ISM_EVENTS))
     zlog (NULL, LOG_INFO, "ISM[%s]: %s (%s)", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  ospf_ism_event_str[event]);

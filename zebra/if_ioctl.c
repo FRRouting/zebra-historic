@@ -275,8 +275,8 @@ interface_info_ioctl ()
 #ifdef SIOCGIFHWADDR
       if_get_hwaddr (ifp);
 #endif /* SIOCGIFHWADDR */
-      if_get_addr (ifp);
       if_get_flags (ifp);
+      if_get_addr (ifp);
       if_get_mtu (ifp);
       if_get_metric (ifp);
     }

@@ -109,7 +109,7 @@ filter_new ()
 {
   struct filter *new;
 
-  new = XMALLOC (MTYPE_FILTER, sizeof (struct filter));
+  new = XMALLOC (MTYPE_ACCESS_FILTER, sizeof (struct filter));
   bzero (new, sizeof (struct filter));
   return new;
 }
@@ -117,7 +117,7 @@ filter_new ()
 void
 filter_free (struct filter *filter)
 {
-  XFREE (MTYPE_FILTER, filter);
+  XFREE (MTYPE_ACCESS_FILTER, filter);
 }
 
 /* Return string of filter_type. */
@@ -526,12 +526,13 @@ access_list_dup_check (struct access_list *access, struct filter *new)
 }
 
 DEFUN (access_list, access_list_cmd,
-       "access-list NAME (deny|permit) (A.B.C.D/M|any)",
-       "Set access list definition\n"
-       "Access list name\n"
-       "Access list for denies\n"
-       "Access list for permits\n"
-       "Access list address. e.g. 10.0.0.0/8.\n")
+       "access-list WORD (deny|permit) (A.B.C.D/M|any)",
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 10.0.0.0/8\n"
+       "Any prefix to match\n")
 {
   int ret;
   enum filter_type type;
@@ -578,14 +579,16 @@ DEFUN (access_list, access_list_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_access_list, no_access_list_cmd,
-       "no access-list NAME (deny|permit) (A.B.C.D/M|any)",
-       "Unset access list\n"
-       "Set access list definition\n"
-       "Access list name\n"
-       "Access list for denies\n"
-       "Access list for permits\n"
-       "Access list address\n")
+DEFUN (no_access_list,
+       no_access_list_cmd,
+       "no access-list WORD (deny|permit) (A.B.C.D/M|any)",
+       NO_STR 
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 10.0.0.0/8\n"
+       "Any prefix to match\n")
 {
   int ret;
   enum filter_type type;
@@ -615,7 +618,7 @@ DEFUN (no_access_list, no_access_list_cmd,
 
   /* Check string format of prefix and prefixlen. */
   if (strcmp (argv[2], "any") == 0)
-      filter = filter_lookup (access, NULL, type);
+    filter = filter_lookup (access, NULL, type);
   else
     {
       ret = str2prefix_ipv4 (argv[2], (struct prefix_ipv4 *) &p);
@@ -647,15 +650,40 @@ DEFUN (no_access_list, no_access_list_cmd,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_access_list_all,
+       no_access_list_all_cmd,
+       "no access-list WORD",
+       NO_STR
+       "Add an access list entry\n"
+       "Access-list name\n")
+{
+  struct access_list *access;
+
+  /* Looking up access_list. */
+  access = access_list_lookup (AF_INET, argv[0]);
+  if (access == NULL)
+    {
+      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Delete all filter from access-list. */
+  access_list_delete (access);
+ 
+  return CMD_SUCCESS;
+}
+
 #ifdef HAVE_IPV6
 DEFUN (ipv6_access_list, ipv6_access_list_cmd,
-       "ipv6 access-list NAME (deny|permit) IPV6_PREFIX",
+       "ipv6 access-list WORD (deny|permit) (X:X::X:X/M|any)",
        IPV6_STR
-       "Set access list definition\n"
-       "Access list name\n"
-       "Access list for denies\n"
-       "Access list for permits\n"
-       "Access list address. e.g. 10.0.0.0/8.\n")
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 3ffe:506::/32\n"
+       "Any prefixi to match\n")
 {
   int ret;
   enum filter_type type;
@@ -697,15 +725,17 @@ DEFUN (ipv6_access_list, ipv6_access_list_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_ipv6_access_list, no_ipv6_access_list_cmd,
-       "no ipv6 access-list NAME (deny|permit) IPV6_PREFIX",
-       "Unset access list\n"
+DEFUN (no_ipv6_access_list,
+       no_ipv6_access_list_cmd,
+       "no ipv6 access-list WORD (deny|permit) (X:X::X:X/M|any)",
+       NO_STR
        IPV6_STR
-       "Set access list definition\n"
-       "Access list name\n"
-       "Access list for denies\n"
-       "Access list for permits\n"
-       "Access list address\n")
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 3ffe:506::/32\n"
+       "Any prefixi to match\n")
 {
   int ret;
   enum filter_type type;
@@ -764,6 +794,31 @@ DEFUN (no_ipv6_access_list, no_ipv6_access_list_cmd,
 
   /* Delete filter from access_list. */
   access_list_filter_delete (access, filter);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_access_list_all,
+       no_ipv6_access_list_all_cmd,
+       "no ipv6 access-list WORD",
+       NO_STR
+       IPV6_STR
+       "Add an access list entry\n"
+       "Access-list name\n")
+{
+  struct access_list *access;
+
+  /* Looking up access_list. */
+  access = access_list_lookup (AF_INET6, argv[0]);
+  if (access == NULL)
+    {
+      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Delete filter from access_list. */
+  access_list_delete (access);
 
   return CMD_SUCCESS;
 }
@@ -884,6 +939,7 @@ access_list_init_ipv4 ()
 
   install_element (CONFIG_NODE, &access_list_cmd);
   install_element (CONFIG_NODE, &no_access_list_cmd);
+  install_element (CONFIG_NODE, &no_access_list_all_cmd);
 }
 
 #ifdef HAVE_IPV6
@@ -935,6 +991,7 @@ access_list_init_ipv6 ()
 
   install_element (CONFIG_NODE, &ipv6_access_list_cmd);
   install_element (CONFIG_NODE, &no_ipv6_access_list_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_access_list_all_cmd);
 }
 #endif /* HAVE_IPV6 */
 

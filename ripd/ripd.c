@@ -779,18 +779,21 @@ rip_redistribute_delete (int type, int sub_type, struct prefix_ipv4 *p,
 
   rp = route_node_lookup (rip->table, (struct prefix *) p);
 
-  if (rp && (rinfo = rp->info) != NULL)
+  if (rp)
     {
-      if (rinfo->type == type &&
-	  rinfo->sub_type == sub_type &&
-	  rinfo->ifindex == ifindex)
+      rinfo = rp->info;
+
+      if (rinfo != NULL
+	  && rinfo->type == type 
+	  && rinfo->sub_type == sub_type 
+	  && rinfo->ifindex == ifindex)
 	{
 	  rp->info = NULL;
 	  rip_info_free (rinfo);
 
 	  route_unlock_node (rp);
-	  route_unlock_node (rp);
 	}
+      route_unlock_node (rp);
     }
 }
 

@@ -56,9 +56,10 @@ struct ospf_neighbor
   } last_recv;
 
   /* LSA data. */
-  list ls_retransmit;
-  list db_summary;
-  /* list ls_request; */
+  /* list ls_retransmit; */
+  /* list db_summary; */
+  struct new_lsdb ls_rxmt;
+  struct new_lsdb db_sum;
   struct new_lsdb ls_req;
   struct ospf_lsa *ls_req_last;
 

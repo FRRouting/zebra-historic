@@ -145,7 +145,8 @@ interface_up (struct thread *thread)
   assert (ospf6_interface->interface);
 
   if (IS_OSPF6_DUMP_INTERFACE)
-    zlog_info ("Interface Event %s: InterfaceUp", ospf6_interface->interface->name);
+    zlog_info ("Interface Event %s: InterfaceUp",
+               ospf6_interface->interface->name);
 
   /* check physical interface is up */
   if (!if_is_up (ospf6_interface->interface))
@@ -158,7 +159,8 @@ interface_up (struct thread *thread)
   /* if already enabled, do nothing */
   if (ospf6_interface->state > IFS_DOWN)
     {
-      zlog_warn ("*** Interface %s is already up", ospf6_interface->interface->name);
+      zlog_warn ("*** Interface %s is already up",
+                 ospf6_interface->interface->name);
       return 0;
     }
 
@@ -189,7 +191,8 @@ interface_up (struct thread *thread)
   ospf6_set_checksum ();
 
   /* Schedule Hello */
-  thread_add_event (master, ospf6_send_hello, ospf6_interface, 0);
+  if (! ospf6_interface->is_passive)
+    thread_add_event (master, ospf6_send_hello, ospf6_interface, 0);
 
   /* decide next interface state */
   if (if_is_pointopoint (ospf6_interface->interface))
@@ -204,7 +207,7 @@ interface_up (struct thread *thread)
     }
 
   /* construct LSAs */
-  ospf6_lsa_originate_link (ospf6_interface);
+  ospf6_lsa_update_link (ospf6_interface);
   ospf6_lsa_originate_intraprefix (ospf6_interface);
 
   return 0;

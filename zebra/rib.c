@@ -1589,14 +1589,21 @@ rib_if_up (struct interface *ifp)
 	  else
 	    {
 	      ifp_gate = if_lookup_address (best->u.gate4);
-	      if (ifp_gate->ifindex == ifp->ifindex)
-		{
-		  ret = kernel_add_ipv4 ((struct prefix_ipv4 *)&rn->p,
-					 &best->u.gate4,
-					 best->u.ifindex, best->flags, 0);
-		  if (ret == 0)
-		    RIB_FIB_SET (best);
-		}		  
+	      if (ifp_gate){
+		if (ifp_gate->ifindex == ifp->ifindex)
+		  {
+		    /* route with unknown interface */
+		    if (best->u.ifindex == INTERFACE_UNKNOWN){
+		      best->u.ifindex=ifp->ifindex;
+		    }
+
+		    ret = kernel_add_ipv4 ((struct prefix_ipv4 *)&rn->p,
+					   &best->u.gate4,
+					   best->u.ifindex, best->flags, 0);
+		    if (ret == 0)
+		      RIB_FIB_SET (best);
+		  }
+	      }		
 	    }
 	}
     }
@@ -1615,6 +1622,29 @@ rib_if_down (struct interface *ifp)
 	{
 	  if (ifp->ifindex == rib->u.ifindex)
 	    {
+	      if (IS_RIB_FIB (rib))
+		{
+		  RIB_FIB_UNSET (rib);
+		}
+	    }
+	}
+    }
+}
+
+void
+rib_if_delete (struct interface *ifp)
+{
+  struct route_node *rn;
+  struct rib *rib;
+
+  /* Walk down all routes and remove them from FIB making ifindex UNKNOWN */
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    {
+      for (rib = rn->info; rib; rib = rib->next)
+	{
+	  if (ifp->ifindex == rib->u.ifindex)
+	    {
+	      rib->u.ifindex=INTERFACE_UNKNOWN;
 	      if (IS_RIB_FIB (rib))
 		{
 		  RIB_FIB_UNSET (rib);

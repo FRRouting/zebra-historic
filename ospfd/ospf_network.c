@@ -32,6 +32,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_network.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -94,7 +95,7 @@ ospf_if_add_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
   m.imr_interface = p->u.prefix4;
 
   ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-	      (char *) &m, sizeof (struct ip_mreq));
+		    (char *) &m, sizeof (struct ip_mreq));
 
   if (ret < 0)
     zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));

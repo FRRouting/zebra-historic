@@ -118,6 +118,9 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 	    case SAFI_UNICAST_MULTICAST:
 	      vty_out (vty, "SAFI Unicast Multicast");
 	      break;
+	    case BGP_SAFI_VPNV4:
+	      vty_out (vty, "SAFI MPLS-VPN");
+	      break;
 	    default:
 	      vty_out (vty, "SAFI Unknown %d ", cap.mpc.safi);
 	      break;
@@ -152,6 +155,13 @@ bgp_capability_mp (struct peer *peer, struct capability *cap)
 	{
 	  if (peer->afc[AFI_IP][SAFI_MULTICAST])
 	    peer->afc_nego[AFI_IP][SAFI_MULTICAST] = 1;
+	  else
+	    return -1;
+	}
+      else if (cap->mpc.safi == BGP_SAFI_VPNV4)
+	{
+	  if (peer->afc[AFI_IP][SAFI_MPLS_VPN])
+	    peer->afc_nego[AFI_IP][SAFI_MPLS_VPN] = 1;
 	  else
 	    return -1;
 	}
@@ -248,7 +258,8 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 	  /* Check length. */
 	  if (cap.length != 0)
 	    {
-	      zlog_info ("Capability route refresh length error");
+	      zlog_info ("Route Refresh Capability length error %d",
+			 cap.length);
 	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	      return -1;
 	    }
@@ -397,6 +408,7 @@ bgp_open_option_parse (struct peer *peer, u_char length, int *capability)
     {
       if (! peer->afc_nego[AFI_IP][SAFI_UNICAST] 
 	  && ! peer->afc_nego[AFI_IP][SAFI_MULTICAST]
+	  && ! peer->afc_nego[AFI_IP][SAFI_MPLS_VPN]
 	  && ! peer->afc_nego[AFI_IP6][SAFI_UNICAST]
 	  && ! peer->afc_nego[AFI_IP6][SAFI_MULTICAST])
 	{
@@ -438,6 +450,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
     
   /* When the peer is IPv4 unicast only, do not send capability. */
   if (! peer->afc[AFI_IP][SAFI_MULTICAST] 
+      && ! peer->afc[AFI_IP][SAFI_MPLS_VPN]
       && ! peer->afc[AFI_IP6][SAFI_UNICAST] 
       && ! peer->afc[AFI_IP6][SAFI_MULTICAST]
       && ! CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
@@ -464,6 +477,17 @@ bgp_open_capability (struct stream *s, struct peer *peer)
       stream_putw (s, AFI_IP);
       stream_putc (s, 0);
       stream_putc (s, SAFI_MULTICAST);
+    }
+  /* IPv4 VPN */
+  if (peer->afc[AFI_IP][SAFI_MPLS_VPN])
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_MP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN);
+      stream_putw (s, AFI_IP);
+      stream_putc (s, 0);
+      stream_putc (s, BGP_SAFI_VPNV4);
     }
 #ifdef HAVE_IPV6
   /* IPv6 unicast. */

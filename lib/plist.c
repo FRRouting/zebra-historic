@@ -635,7 +635,7 @@ prefix_list_print (struct prefix_list *plist)
 }
 
 /* Description of the `prefix-list' statement.  */
-#define PREFIX_LIST_STR "prefix-list definition\n"
+#define PREFIX_LIST_STR "Build a prefix list\n"
 
 /* Retrun 1 when plist already include pentry policy. */
 struct prefix_list_entry *
@@ -1153,14 +1153,14 @@ vty_clear_prefix_list (struct vty *vty, int family, char *name, char *prefix)
 
 DEFUN (ip_prefix_list,
        ip_prefix_list_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any)",
+       "ip prefix-list WORD (deny|permit) (A.B.C.D/M|any)",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Any prefix match. Same as \"0.0.0.0/0 le 32\"\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], NULL, 
 				  argv[1], argv[2], NULL, NULL);
@@ -1168,16 +1168,15 @@ DEFUN (ip_prefix_list,
 
 DEFUN (ip_prefix_list_ge,
        ip_prefix_list_ge_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32>",
+       "ip prefix-list WORD (deny|permit) A.B.C.D/M ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], NULL, argv[1], 
 				 argv[2], argv[3], NULL);
@@ -1185,18 +1184,17 @@ DEFUN (ip_prefix_list_ge,
 
 DEFUN (ip_prefix_list_ge_le,
        ip_prefix_list_ge_le_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
+       "ip prefix-list WORD (deny|permit) A.B.C.D/M ge <0-32> le <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], NULL, argv[1], 
 				  argv[2], argv[3], argv[4]);
@@ -1204,16 +1202,15 @@ DEFUN (ip_prefix_list_ge_le,
 
 DEFUN (ip_prefix_list_le,
        ip_prefix_list_le_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32>",
+       "ip prefix-list WORD (deny|permit) A.B.C.D/M le <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], NULL, argv[1],
 				  argv[2], NULL, argv[3]);
@@ -1221,18 +1218,17 @@ DEFUN (ip_prefix_list_le,
 
 DEFUN (ip_prefix_list_le_ge,
        ip_prefix_list_le_ge_cmd,
-       "ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
+       "ip prefix-list WORD (deny|permit) A.B.C.D/M le <0-32> ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], NULL, argv[1],
 				  argv[2], argv[4], argv[3]);
@@ -1240,16 +1236,16 @@ DEFUN (ip_prefix_list_le_ge,
 
 DEFUN (ip_prefix_list_seq,
        ip_prefix_list_seq_cmd,
-       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any)",
+       "ip prefix-list WORD seq <1-4294967295> (deny|permit) (A.B.C.D/M|any)",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Any prefix match. Same as \"0.0.0.0/0 le 32\"\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], argv[1], argv[2],
 				  argv[3], NULL, NULL);
@@ -1257,18 +1253,17 @@ DEFUN (ip_prefix_list_seq,
 
 DEFUN (ip_prefix_list_seq_ge,
        ip_prefix_list_seq_ge_cmd,
-       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32>",
+       "ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], argv[1], argv[2],
 				  argv[3], argv[4], NULL);
@@ -1276,20 +1271,19 @@ DEFUN (ip_prefix_list_seq_ge,
 
 DEFUN (ip_prefix_list_seq_ge_le,
        ip_prefix_list_seq_ge_le_cmd,
-       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
+       "ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M ge <0-32> le <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], argv[1], argv[2],
 				  argv[3], argv[4], argv[5]);
@@ -1297,18 +1291,17 @@ DEFUN (ip_prefix_list_seq_ge_le,
 
 DEFUN (ip_prefix_list_seq_le,
        ip_prefix_list_seq_le_cmd,
-       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32>",
+       "ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M le <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], argv[1], argv[2],
 				  argv[3], NULL, argv[4]);
@@ -1316,20 +1309,19 @@ DEFUN (ip_prefix_list_seq_le,
 
 DEFUN (ip_prefix_list_seq_le_ge,
        ip_prefix_list_seq_le_ge_cmd,
-       "ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
+       "ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M le <0-32> ge <0-32>",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET, argv[0], argv[1], argv[2],
 				  argv[3], argv[5], argv[4]);
@@ -1337,11 +1329,11 @@ DEFUN (ip_prefix_list_seq_le_ge,
 
 DEFUN (no_ip_prefix_list,
        no_ip_prefix_list_cmd,
-       "no ip prefix-list NAME",
+       "no ip prefix-list WORD",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n")
+       "Name of a prefix list\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], NULL, NULL,
 				    NULL, NULL, NULL);
@@ -1349,15 +1341,15 @@ DEFUN (no_ip_prefix_list,
 
 DEFUN (no_ip_prefix_list_prefix,
        no_ip_prefix_list_prefix_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any)",
+       "no ip prefix-list WORD (deny|permit) (A.B.C.D/M|any)",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Any prefix match.  Same as \"0.0.0.0/0 le 32\"\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], NULL, argv[1],
 				    argv[2], NULL, NULL);
@@ -1365,17 +1357,16 @@ DEFUN (no_ip_prefix_list_prefix,
 
 DEFUN (no_ip_prefix_list_ge,
        no_ip_prefix_list_ge_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32>",
+       "no ip prefix-list WORD (deny|permit) A.B.C.D/M ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], NULL, argv[1],
 				    argv[2], argv[3], NULL);
@@ -1383,19 +1374,18 @@ DEFUN (no_ip_prefix_list_ge,
 
 DEFUN (no_ip_prefix_list_ge_le,
        no_ip_prefix_list_ge_le_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
+       "no ip prefix-list WORD (deny|permit) A.B.C.D/M ge <0-32> le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], NULL, argv[1],
 				    argv[2], argv[3], argv[4]);
@@ -1403,17 +1393,16 @@ DEFUN (no_ip_prefix_list_ge_le,
 
 DEFUN (no_ip_prefix_list_le,
        no_ip_prefix_list_le_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32>",
+       "no ip prefix-list WORD (deny|permit) A.B.C.D/M le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], NULL, argv[1],
 				    argv[2], NULL, argv[3]);
@@ -1421,19 +1410,18 @@ DEFUN (no_ip_prefix_list_le,
 
 DEFUN (no_ip_prefix_list_le_ge,
        no_ip_prefix_list_le_ge_cmd,
-       "no ip prefix-list NAME (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
+       "no ip prefix-list WORD (deny|permit) A.B.C.D/M le <0-32> ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], NULL, argv[1],
 				    argv[2], argv[4], argv[3]);
@@ -1441,17 +1429,17 @@ DEFUN (no_ip_prefix_list_le_ge,
 
 DEFUN (no_ip_prefix_list_seq,
        no_ip_prefix_list_seq_cmd,
-       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any)",
+       "no ip prefix-list WORD seq <1-4294967295> (deny|permit) (A.B.C.D/M|any)",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Any prefix match.  Same as \"0.0.0.0/0 le 32\"\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], argv[1], argv[2],
 				    argv[3], NULL, NULL);
@@ -1459,19 +1447,18 @@ DEFUN (no_ip_prefix_list_seq,
 
 DEFUN (no_ip_prefix_list_seq_ge,
        no_ip_prefix_list_seq_ge_cmd,
-       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32>",
+       "no ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], argv[1], argv[2],
 				    argv[3], argv[4], NULL);
@@ -1479,21 +1466,20 @@ DEFUN (no_ip_prefix_list_seq_ge,
 
 DEFUN (no_ip_prefix_list_seq_ge_le,
        no_ip_prefix_list_seq_ge_le_cmd,
-       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) ge <0-32> le <0-32>",
+       "no ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M ge <0-32> le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], argv[1], argv[2],
 				    argv[3], argv[4], argv[5]);
@@ -1501,19 +1487,18 @@ DEFUN (no_ip_prefix_list_seq_ge_le,
 
 DEFUN (no_ip_prefix_list_seq_le,
        no_ip_prefix_list_seq_le_cmd,
-       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32>",
+       "no ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M le <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], argv[1], argv[2],
 				    argv[3], NULL, argv[4]);
@@ -1521,21 +1506,20 @@ DEFUN (no_ip_prefix_list_seq_le,
 
 DEFUN (no_ip_prefix_list_seq_le_ge,
        no_ip_prefix_list_seq_le_ge_cmd,
-       "no ip prefix-list NAME seq <1-4294967295> (deny|permit) (A.B.C.D/M|any) le <0-32> ge <0-32>",
+       "no ip prefix-list WORD seq <1-4294967295> (deny|permit) A.B.C.D/M le <0-32> ge <0-32>",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv4 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET, argv[0], argv[1], argv[2],
 				    argv[3], argv[5], argv[4]);
@@ -1546,7 +1530,7 @@ DEFUN (ip_prefix_list_sequence_number,
        "ip prefix-list sequence-number",
        IP_STR
        PREFIX_LIST_STR
-       "Enable use of prefix-list sequential number\n")
+       "Include/exclude sequence numbers in NVGEN\n")
 {
   prefix_master_ipv4.seqnum = 1;
   return CMD_SUCCESS;
@@ -1558,7 +1542,7 @@ DEFUN (no_ip_prefix_list_sequence_number,
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "Disable use of prefix-list sequential number\n")
+       "Include/exclude sequence numbers in NVGEN\n")
 {
   prefix_master_ipv4.seqnum = 0;
   return CMD_SUCCESS;
@@ -1566,12 +1550,12 @@ DEFUN (no_ip_prefix_list_sequence_number,
 
 DEFUN (ip_prefix_list_description,
        ip_prefix_list_description_cmd,
-       "ip prefix-list NAME description .DESCRIPTION",
+       "ip prefix-list WORD description .LINE",
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "Description\n"
-       "Description string\n")
+       "Name of a prefix list\n"
+       "Prefix-list specific description\n"
+       "Up to 80 characters describing this prefix-list\n")
 {
   struct prefix_list *plist;
   struct buffer *b;
@@ -1603,25 +1587,25 @@ DEFUN (ip_prefix_list_description,
 
 DEFUN (no_ip_prefix_list_description,
        no_ip_prefix_list_description_cmd,
-       "no ip prefix-list NAME description",
+       "no ip prefix-list WORD description",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "Description\n")
+       "Name of a prefix list\n"
+       "Prefix-list specific description\n")
 {
   return vty_prefix_list_desc_unset (vty, AF_INET, argv[0]);
 }
 
 ALIAS (no_ip_prefix_list_description,
        no_ip_prefix_list_description_arg_cmd,
-       "no ip prefix-list NAME description .DESCRIPTION",
+       "no ip prefix-list WORD description .LINE",
        NO_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "Description\n"
-       "Description string\n")
+       "Name of a prefix list\n"
+       "Prefix-list specific description\n"
+       "Up to 80 characters describing this prefix-list\n")
 
 DEFUN (show_ip_prefix_list,
        show_ip_prefix_list_cmd,
@@ -1635,48 +1619,48 @@ DEFUN (show_ip_prefix_list,
 
 DEFUN (show_ip_prefix_list_name,
        show_ip_prefix_list_name_cmd,
-       "show ip prefix-list NAME",
+       "show ip prefix-list WORD",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n")
+       "Name of a prefix list\n")
 {
   return vty_show_prefix_list (vty, AF_INET, argv[0], NULL, normal_display);
 }
 
 DEFUN (show_ip_prefix_list_name_seq,
        show_ip_prefix_list_name_seq_cmd,
-       "show ip prefix-list NAME seq <1-4294967295>",
+       "show ip prefix-list WORD seq <1-4294967295>",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number lookup\n"
-       "prefix-list sequential number\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n")
 {
   return vty_show_prefix_list (vty, AF_INET, argv[0], argv[1], sequential_display);
 }
 
 DEFUN (show_ip_prefix_list_prefix,
        show_ip_prefix_list_prefix_cmd,
-       "show ip prefix-list NAME A.B.C.D/M",
+       "show ip prefix-list WORD A.B.C.D/M",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix lookup\n")
+       "Name of a prefix list\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n")
 {
   return vty_show_prefix_list_prefix (vty, AF_INET, argv[0], argv[1], normal_display);
 }
 
 DEFUN (show_ip_prefix_list_prefix_longer,
        show_ip_prefix_list_prefix_longer_cmd,
-       "show ip prefix-list NAME A.B.C.D/M longer",
+       "show ip prefix-list WORD A.B.C.D/M longer",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix lookup\n"
+       "Name of a prefix list\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
        "Lookup longer prefix\n")
 {
   return vty_show_prefix_list_prefix (vty, AF_INET, argv[0], argv[1], longer_display);
@@ -1684,12 +1668,12 @@ DEFUN (show_ip_prefix_list_prefix_longer,
 
 DEFUN (show_ip_prefix_list_prefix_first_match,
        show_ip_prefix_list_prefix_first_match_cmd,
-       "show ip prefix-list NAME A.B.C.D/M first-match",
+       "show ip prefix-list WORD A.B.C.D/M first-match",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix lookup\n"
+       "Name of a prefix list\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
        "First matched prefix\n")
 {
   return vty_show_prefix_list_prefix (vty, AF_INET, argv[0], argv[1], first_match_display);
@@ -1701,19 +1685,19 @@ DEFUN (show_ip_prefix_list_summary,
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "Summary information display")
+       "Summary of prefix lists\n")
 {
   return vty_show_prefix_list (vty, AF_INET, NULL, NULL, summary_display);
 }
 
 DEFUN (show_ip_prefix_list_summary_name,
        show_ip_prefix_list_summary_name_cmd,
-       "show ip prefix-list summary NAME",
+       "show ip prefix-list summary WORD",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "Summary information display"
-       "prefix-list name\n")
+       "Summary of prefix lists\n"
+       "Name of a prefix list\n")
 {
   return vty_show_prefix_list (vty, AF_INET, argv[0], NULL, summary_display);
 }
@@ -1725,19 +1709,19 @@ DEFUN (show_ip_prefix_list_detail,
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "Detailed information display")
+       "Detail of prefix lists\n")
 {
   return vty_show_prefix_list (vty, AF_INET, NULL, NULL, detail_display);
 }
 
 DEFUN (show_ip_prefix_list_detail_name,
        show_ip_prefix_list_detail_name_cmd,
-       "show ip prefix-list detail NAME",
+       "show ip prefix-list detail WORD",
        SHOW_STR
        IP_STR
        PREFIX_LIST_STR
-       "Detailed information display"
-       "prefix-list name\n")
+       "Detail of prefix lists\n"
+       "Name of a prefix list\n")
 {
   return vty_show_prefix_list (vty, AF_INET, argv[0], NULL, detail_display);
 }
@@ -1745,7 +1729,7 @@ DEFUN (show_ip_prefix_list_detail_name,
 DEFUN (clear_ip_prefix_list,
        clear_ip_prefix_list_cmd,
        "clear ip prefix-list",
-       "Reset value\n"
+       CLEAR_STR
        IP_STR
        PREFIX_LIST_STR)
 {
@@ -1754,23 +1738,23 @@ DEFUN (clear_ip_prefix_list,
 
 DEFUN (clear_ip_prefix_list_name,
        clear_ip_prefix_list_name_cmd,
-       "clear ip prefix-list NAME",
-       "Reset value\n"
+       "clear ip prefix-list WORD",
+       CLEAR_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n")
+       "Name of a prefix list\n")
 {
   return vty_clear_prefix_list (vty, AF_INET, argv[0], NULL);
 }
 
 DEFUN (clear_ip_prefix_list_name_prefix,
        clear_ip_prefix_list_name_prefix_cmd,
-       "clear ip prefix-list NAME A.B.C.D/M",
-       "Reset value\n"
+       "clear ip prefix-list WORD A.B.C.D/M",
+       CLEAR_STR
        IP_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "specifiy prefix to be cleared\n")
+       "Name of a prefix list\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n")
 {
   return vty_clear_prefix_list (vty, AF_INET, argv[0], argv[1]);
 }
@@ -1778,14 +1762,14 @@ DEFUN (clear_ip_prefix_list_name_prefix,
 #ifdef HAVE_IPV6
 DEFUN (ipv6_prefix_list,
        ipv6_prefix_list_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any)",
+       "ipv6 prefix-list WORD (deny|permit) (X:X::X:X/M|any)",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Any prefix match.  Same as \"::0/0 le 128\"\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], NULL, 
 				  argv[1], argv[2], NULL, NULL);
@@ -1793,16 +1777,15 @@ DEFUN (ipv6_prefix_list,
 
 DEFUN (ipv6_prefix_list_ge,
        ipv6_prefix_list_ge_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
+       "ipv6 prefix-list WORD (deny|permit) X:X::X:X/M ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], NULL, argv[1], 
 				 argv[2], argv[3], NULL);
@@ -1810,18 +1793,18 @@ DEFUN (ipv6_prefix_list_ge,
 
 DEFUN (ipv6_prefix_list_ge_le,
        ipv6_prefix_list_ge_le_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
+       "ipv6 prefix-list WORD (deny|permit) X:X::X:X/M ge <0-128> le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
+
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], NULL, argv[1], 
 				  argv[2], argv[3], argv[4]);
@@ -1829,16 +1812,15 @@ DEFUN (ipv6_prefix_list_ge_le,
 
 DEFUN (ipv6_prefix_list_le,
        ipv6_prefix_list_le_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128>",
+       "ipv6 prefix-list WORD (deny|permit) X:X::X:X/M le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], NULL, argv[1],
 				  argv[2], NULL, argv[3]);
@@ -1846,18 +1828,17 @@ DEFUN (ipv6_prefix_list_le,
 
 DEFUN (ipv6_prefix_list_le_ge,
        ipv6_prefix_list_le_ge_cmd,
-       "ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
+       "ipv6 prefix-list WORD (deny|permit) X:X::X:X/M le <0-128> ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], NULL, argv[1],
 				  argv[2], argv[4], argv[3]);
@@ -1865,16 +1846,16 @@ DEFUN (ipv6_prefix_list_le_ge,
 
 DEFUN (ipv6_prefix_list_seq,
        ipv6_prefix_list_seq_cmd,
-       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any)",
+       "ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) (X:X::X:X/M|any)",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Any prefix match.  Same as \"::0/0 le 128\"\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], argv[1], argv[2],
 				  argv[3], NULL, NULL);
@@ -1882,18 +1863,17 @@ DEFUN (ipv6_prefix_list_seq,
 
 DEFUN (ipv6_prefix_list_seq_ge,
        ipv6_prefix_list_seq_ge_cmd,
-       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
+       "ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], argv[1], argv[2],
 				  argv[3], argv[4], NULL);
@@ -1901,20 +1881,19 @@ DEFUN (ipv6_prefix_list_seq_ge,
 
 DEFUN (ipv6_prefix_list_seq_ge_le,
        ipv6_prefix_list_seq_ge_le_cmd,
-       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
+       "ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M ge <0-128> le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], argv[1], argv[2],
 				  argv[3], argv[4], argv[5]);
@@ -1922,18 +1901,17 @@ DEFUN (ipv6_prefix_list_seq_ge_le,
 
 DEFUN (ipv6_prefix_list_seq_le,
        ipv6_prefix_list_seq_le_cmd,
-       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128>",
+       "ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M le <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], argv[1], argv[2],
 				  argv[3], NULL, argv[4]);
@@ -1941,20 +1919,19 @@ DEFUN (ipv6_prefix_list_seq_le,
 
 DEFUN (ipv6_prefix_list_seq_le_ge,
        ipv6_prefix_list_seq_le_ge_cmd,
-       "ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
+       "ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M le <0-128> ge <0-128>",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_install (vty, AF_INET6, argv[0], argv[1], argv[2],
 				  argv[3], argv[5], argv[4]);
@@ -1962,11 +1939,11 @@ DEFUN (ipv6_prefix_list_seq_le_ge,
 
 DEFUN (no_ipv6_prefix_list,
        no_ipv6_prefix_list_cmd,
-       "no ipv6 prefix-list NAME",
+       "no ipv6 prefix-list WORD",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n")
+       "Name of a prefix list\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], NULL, NULL,
 				    NULL, NULL, NULL);
@@ -1974,15 +1951,15 @@ DEFUN (no_ipv6_prefix_list,
 
 DEFUN (no_ipv6_prefix_list_prefix,
        no_ipv6_prefix_list_prefix_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any)",
+       "no ipv6 prefix-list WORD (deny|permit) (X:X::X:X/M|any)",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Any prefix match.  Same as \"::0/0 le 128\"\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], NULL, argv[1],
 				    argv[2], NULL, NULL);
@@ -1990,17 +1967,16 @@ DEFUN (no_ipv6_prefix_list_prefix,
 
 DEFUN (no_ipv6_prefix_list_ge,
        no_ipv6_prefix_list_ge_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
+       "no ipv6 prefix-list WORD (deny|permit) X:X::X:X/M ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], NULL, argv[1],
 				    argv[2], argv[3], NULL);
@@ -2008,19 +1984,18 @@ DEFUN (no_ipv6_prefix_list_ge,
 
 DEFUN (no_ipv6_prefix_list_ge_le,
        no_ipv6_prefix_list_ge_le_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
+       "no ipv6 prefix-list WORD (deny|permit) X:X::X:X/M ge <0-128> le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], NULL, argv[1],
 				    argv[2], argv[3], argv[4]);
@@ -2028,17 +2003,16 @@ DEFUN (no_ipv6_prefix_list_ge_le,
 
 DEFUN (no_ipv6_prefix_list_le,
        no_ipv6_prefix_list_le_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128>",
+       "no ipv6 prefix-list WORD (deny|permit) X:X::X:X/M le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], NULL, argv[1],
 				    argv[2], NULL, argv[3]);
@@ -2046,19 +2020,18 @@ DEFUN (no_ipv6_prefix_list_le,
 
 DEFUN (no_ipv6_prefix_list_le_ge,
        no_ipv6_prefix_list_le_ge_cmd,
-       "no ipv6 prefix-list NAME (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
+       "no ipv6 prefix-list WORD (deny|permit) X:X::X:X/M le <0-128> ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], NULL, argv[1],
 				    argv[2], argv[4], argv[3]);
@@ -2066,17 +2039,17 @@ DEFUN (no_ipv6_prefix_list_le_ge,
 
 DEFUN (no_ipv6_prefix_list_seq,
        no_ipv6_prefix_list_seq_cmd,
-       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any)",
+       "no ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) (X:X::X:X/M|any)",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Any prefix match.  Same as \"::0/0 le 128\"\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], argv[1], argv[2],
 				    argv[3], NULL, NULL);
@@ -2084,19 +2057,18 @@ DEFUN (no_ipv6_prefix_list_seq,
 
 DEFUN (no_ipv6_prefix_list_seq_ge,
        no_ipv6_prefix_list_seq_ge_cmd,
-       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128>",
+       "no ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], argv[1], argv[2],
 				    argv[3], argv[4], NULL);
@@ -2104,21 +2076,20 @@ DEFUN (no_ipv6_prefix_list_seq_ge,
 
 DEFUN (no_ipv6_prefix_list_seq_ge_le,
        no_ipv6_prefix_list_seq_ge_le_cmd,
-       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) ge <0-128> le <0-128>",
+       "no ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M ge <0-128> le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], argv[1], argv[2],
 				    argv[3], argv[4], argv[5]);
@@ -2126,19 +2097,18 @@ DEFUN (no_ipv6_prefix_list_seq_ge_le,
 
 DEFUN (no_ipv6_prefix_list_seq_le,
        no_ipv6_prefix_list_seq_le_cmd,
-       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128>",
+       "no ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M le <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], argv[1], argv[2],
 				    argv[3], NULL, argv[4]);
@@ -2146,21 +2116,20 @@ DEFUN (no_ipv6_prefix_list_seq_le,
 
 DEFUN (no_ipv6_prefix_list_seq_le_ge,
        no_ipv6_prefix_list_seq_le_ge_cmd,
-       "no ipv6 prefix-list NAME seq <1-4294967295> (deny|permit) (IPV6_PREFIX|any) le <0-128> ge <0-128>",
+       "no ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) X:X::X:X/M le <0-128> ge <0-128>",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number definition\n"
-       "prefix-list sequential number\n"
-       "prefix-list for denies\n"
-       "prefix-list for permits\n"
-       "IPv6 prefix\n"
-       "Any prefix match\n"
-       "Lesser or equal prefix length\n"
-       "Prefix length\n"
-       "Greater or equal prefix length\n"
-       "Prefix length\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
+       "Maximum prefix length to be matched\n"
+       "Maximum prefix length\n"
+       "Minimum prefix length to be matched\n"
+       "Minimum prefix length\n")
 {
   return vty_prefix_list_uninstall (vty, AF_INET6, argv[0], argv[1], argv[2],
 				    argv[3], argv[5], argv[4]);
@@ -2170,8 +2139,8 @@ DEFUN (ipv6_prefix_list_sequence_number,
        ipv6_prefix_list_sequence_number_cmd,
        "ipv6 prefix-list sequence-number",
        IPV6_STR
-       "Set prefix list definition\n"
-       "Enable use of prefix-list sequential number\n")
+       PREFIX_LIST_STR
+       "Include/exclude sequence numbers in NVGEN\n")
 {
   prefix_master_ipv6.seqnum = 1;
   return CMD_SUCCESS;
@@ -2183,7 +2152,7 @@ DEFUN (no_ipv6_prefix_list_sequence_number,
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "Disable use of prefix-list sequential number\n")
+       "Include/exclude sequence numbers in NVGEN\n")
 {
   prefix_master_ipv6.seqnum = 0;
   return CMD_SUCCESS;
@@ -2191,12 +2160,12 @@ DEFUN (no_ipv6_prefix_list_sequence_number,
 
 DEFUN (ipv6_prefix_list_description,
        ipv6_prefix_list_description_cmd,
-       "ipv6 prefix-list NAME description .DESCRIPTION",
+       "ipv6 prefix-list WORD description .LINE",
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "Description\n"
-       "Description string\n")
+       "Name of a prefix list\n"
+       "Prefix-list specific description\n"
+       "Up to 80 characters describing this prefix-list\n")
 {
   struct prefix_list *plist;
   struct buffer *b;
@@ -2228,25 +2197,25 @@ DEFUN (ipv6_prefix_list_description,
 
 DEFUN (no_ipv6_prefix_list_description,
        no_ipv6_prefix_list_description_cmd,
-       "no ipv6 prefix-list NAME description",
+       "no ipv6 prefix-list WORD description",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "Description\n")
+       "Name of a prefix list\n"
+       "Prefix-list specific description\n")
 {
   return vty_prefix_list_desc_unset (vty, AF_INET6, argv[0]);
 }
 
 ALIAS (no_ipv6_prefix_list_description,
        no_ipv6_prefix_list_description_arg_cmd,
-       "no ipv6 prefix-list NAME description .DESCRIPTION",
+       "no ipv6 prefix-list WORD description .LINE",
        NO_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "Description\n"
-       "Description string\n")
+       "Name of a prefix list\n"
+       "Prefix-list specific description\n"
+       "Up to 80 characters describing this prefix-list\n")
 
 DEFUN (show_ipv6_prefix_list,
        show_ipv6_prefix_list_cmd,
@@ -2260,48 +2229,48 @@ DEFUN (show_ipv6_prefix_list,
 
 DEFUN (show_ipv6_prefix_list_name,
        show_ipv6_prefix_list_name_cmd,
-       "show ipv6 prefix-list NAME",
+       "show ipv6 prefix-list WORD",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n")
+       "Name of a prefix list\n")
 {
   return vty_show_prefix_list (vty, AF_INET6, argv[0], NULL, normal_display);
 }
 
 DEFUN (show_ipv6_prefix_list_name_seq,
        show_ipv6_prefix_list_name_seq_cmd,
-       "show ipv6 prefix-list NAME seq <1-4294967295>",
+       "show ipv6 prefix-list WORD seq <1-4294967295>",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix-list sequential number lookup\n"
-       "prefix-list sequential number\n")
+       "Name of a prefix list\n"
+       "sequence number of an entry\n"
+       "Sequence number\n")
 {
   return vty_show_prefix_list (vty, AF_INET6, argv[0], argv[1], sequential_display);
 }
 
 DEFUN (show_ipv6_prefix_list_prefix,
        show_ipv6_prefix_list_prefix_cmd,
-       "show ipv6 prefix-list NAME IPV6_PREFIX",
+       "show ipv6 prefix-list WORD X:X::X:X/M",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix lookup\n")
+       "Name of a prefix list\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n")
 {
   return vty_show_prefix_list_prefix (vty, AF_INET6, argv[0], argv[1], normal_display);
 }
 
 DEFUN (show_ipv6_prefix_list_prefix_longer,
        show_ipv6_prefix_list_prefix_longer_cmd,
-       "show ipv6 prefix-list NAME IPV6_PREFIX longer",
+       "show ipv6 prefix-list WORD X:X::X:X/M longer",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix lookup\n"
+       "Name of a prefix list\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
        "Lookup longer prefix\n")
 {
   return vty_show_prefix_list_prefix (vty, AF_INET6, argv[0], argv[1], longer_display);
@@ -2309,12 +2278,12 @@ DEFUN (show_ipv6_prefix_list_prefix_longer,
 
 DEFUN (show_ipv6_prefix_list_prefix_first_match,
        show_ipv6_prefix_list_prefix_first_match_cmd,
-       "show ipv6 prefix-list NAME IPV6_PREFIX first-match",
+       "show ipv6 prefix-list WORD X:X::X:X/M first-match",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "prefix lookup\n"
+       "Name of a prefix list\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n"
        "First matched prefix\n")
 {
   return vty_show_prefix_list_prefix (vty, AF_INET6, argv[0], argv[1], first_match_display);
@@ -2326,19 +2295,19 @@ DEFUN (show_ipv6_prefix_list_summary,
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "Summary information display")
+       "Summary of prefix lists\n")
 {
   return vty_show_prefix_list (vty, AF_INET6, NULL, NULL, summary_display);
 }
 
 DEFUN (show_ipv6_prefix_list_summary_name,
        show_ipv6_prefix_list_summary_name_cmd,
-       "show ipv6 prefix-list summary NAME",
+       "show ipv6 prefix-list summary WORD",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "Summary information display"
-       "prefix-list name\n")
+       "Summary of prefix lists\n"
+       "Name of a prefix list\n")
 {
   return vty_show_prefix_list (vty, AF_INET6, argv[0], NULL, summary_display);
 }
@@ -2349,19 +2318,19 @@ DEFUN (show_ipv6_prefix_list_detail,
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "Detail information display")
+       "Detail of prefix lists\n")
 {
   return vty_show_prefix_list (vty, AF_INET6, NULL, NULL, detail_display);
 }
 
 DEFUN (show_ipv6_prefix_list_detail_name,
        show_ipv6_prefix_list_detail_name_cmd,
-       "show ipv6 prefix-list detail NAME",
+       "show ipv6 prefix-list detail WORD",
        SHOW_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "Detail information display"
-       "prefix-list name\n")
+       "Detail of prefix lists\n"
+       "Name of a prefix list\n")
 {
   return vty_show_prefix_list (vty, AF_INET6, argv[0], NULL, detail_display);
 }
@@ -2369,7 +2338,7 @@ DEFUN (show_ipv6_prefix_list_detail_name,
 DEFUN (clear_ipv6_prefix_list,
        clear_ipv6_prefix_list_cmd,
        "clear ipv6 prefix-list",
-       "Reset value\n"
+       CLEAR_STR
        IPV6_STR
        PREFIX_LIST_STR)
 {
@@ -2378,23 +2347,23 @@ DEFUN (clear_ipv6_prefix_list,
 
 DEFUN (clear_ipv6_prefix_list_name,
        clear_ipv6_prefix_list_name_cmd,
-       "clear ipv6 prefix-list NAME",
-       "Reset value\n"
+       "clear ipv6 prefix-list WORD",
+       CLEAR_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n")
+       "Name of a prefix list\n")
 {
   return vty_clear_prefix_list (vty, AF_INET6, argv[0], NULL);
 }
 
 DEFUN (clear_ipv6_prefix_list_name_prefix,
        clear_ipv6_prefix_list_name_prefix_cmd,
-       "clear ipv6 prefix-list NAME IPV6_PREFIX",
-       "Reset value\n"
+       "clear ipv6 prefix-list WORD X:X::X:X/M",
+       CLEAR_STR
        IPV6_STR
        PREFIX_LIST_STR
-       "prefix-list name\n"
-       "specifiy prefix to be cleared\n")
+       "Name of a prefix list\n"
+       "IPv6 prefix <network>/<length>, e.g., 3ffe::/16\n")
 {
   return vty_clear_prefix_list (vty, AF_INET6, argv[0], argv[1]);
 }

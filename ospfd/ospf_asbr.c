@@ -34,6 +34,7 @@
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -41,8 +42,11 @@
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_zebra.h"
-#include "ospfd/ospf_asbr.h"
+#include "ospfd/ospf_dump.h"
 
+extern unsigned long term_debug_ospf_lsa;
+
+
 /* Remove external route. */
 void
 ospf_external_route_remove (struct prefix_ipv4 *p)
@@ -55,23 +59,21 @@ ospf_external_route_remove (struct prefix_ipv4 *p)
   if (rn)
     if ((or = rn->info))
       {
+	zlog_info ("Route[%s/%d]: external path deleted",
+		   inet_ntoa (p->prefix), p->prefixlen);
+
 	/* Remove route from zebra. */
-#if 1
-zlog_info ("hoge or->type %d", or->type);
         if (or->type == OSPF_DESTINATION_NETWORK)
 	  {
-zlog_info ("hoge 1.2");
-          for (node = listhead (or->path); node; nextnode (node))
-            {
-              struct ospf_path *path = getdata (node);
-
-zlog_info ("hoge 2");
-              if (path->nexthop.s_addr != INADDR_ANY)
-                ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p,
-                                   &path->nexthop);
-            }
+	    for (node = listhead (or->path); node; nextnode (node))
+	      {
+		struct ospf_path *path = getdata (node);
+		if (path->nexthop.s_addr != INADDR_ANY)
+		  ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p,
+				     &path->nexthop);
+	      }
 	  }
-#endif
+
 	ospf_route_free (or);
 	rn->info = NULL;
 
@@ -80,8 +82,8 @@ zlog_info ("hoge 2");
 	return;
       }
 
-  zlog_info ("ospf_external_route_remove(): No such prefix %s",
-	     inet_ntoa (p->prefix));
+  zlog_info ("Route[%s/%d]: no such external path",
+	     inet_ntoa (p->prefix), p->prefixlen);
 }
 
 /* Lookup external route. */
@@ -98,53 +100,95 @@ ospf_external_route_lookup (struct prefix_ipv4 *p)
 	return rn->info;
     }
 
-  zlog_warn ("ospf_external_route_lookup(): There's no match route for %s/%d",
+  zlog_warn ("Route[%s/%d]: lookup, no such prefix",
 	     inet_ntoa (p->prefix), p->prefixlen);
+
   return NULL;
 }
 
-#if 0
-/* Create new External route. */
-struct ospf_external_route *
-ospf_external_route_new ()
+
+/* Create an External info for AS-external-LSA. */
+struct external_info *
+ospf_external_info_add (u_char type, struct prefix_ipv4 p,
+			unsigned int ifindex, struct in_addr nexthop)
 {
-  struct ospf_external_route *new;
+  struct external_info *new;
+  struct route_node *rn;
 
-  new = XMALLOC (MTYPE_OSPF_EXTERNAL_ROUTE, 
-		 sizeof (struct ospf_external_route));
-  memset (new, 0, sizeof (struct ospf_external_route));
+  /* Initialize route table. */
+  if (EXTERNAL_INFO (type) == NULL)
+    EXTERNAL_INFO (type) = route_table_init ();
 
-  new->ctime = time (NULL);
-  new->mtime = new->ctime;
+  rn = route_node_get (EXTERNAL_INFO (type), (struct prefix *) &p);
+  /* If old info exists, -- discard new one or overwrite with new one? */
+  if (rn)
+    if (rn->info)
+      {
+	route_unlock_node (rn);
+	zlog_warn ("Redistribute[%s]: %s/%d already exists, discard.",
+		   LOOKUP (ospf_redistributed_proto, type),
+		   inet_ntoa (p.prefix), p.prefixlen);
+	/* XFREE (MTYPE_OSPF_TMP, rn->info); */
+	return NULL;
+      }
 
+  new = (struct external_info *)
+    XMALLOC (MTYPE_OSPF_EXTERNAL_INFO, sizeof (struct external_info));
+  new->flags = EXTERNAL_INITIAL;
+  new->p = p;
+  new->ifindex = ifindex;
+  new->nexthop = nexthop;
+  new->tag = 0;
+
+  rn->info = new;
+
+  if (IS_DEBUG_OSPF (lsa, LSA_GENERATE))
+    zlog_info ("Redistribute[%s]: %s/%d external info created.",
+	       LOOKUP (ospf_redistributed_proto, type),
+	       inet_ntoa (p.prefix), p.prefixlen);
   return new;
 }
 
-/* Find External route. */
-struct ospf_external_route *
-ospf_external_route_lookup (struct prefix_ipv4 *p)
+void
+ospf_external_info_delete (u_char type, struct prefix_ipv4 p)
 {
   struct route_node *rn;
 
-  rn = route_node_get (ospf_top->external_self, (struct prefix *) p);
+  rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) &p);
+  if (rn == NULL)
+    return;
 
-  if (rn->info != NULL)
+  XFREE (MTYPE_OSPF_EXTERNAL_INFO, rn->info);
+  rn->info = NULL;
+  route_unlock_node (rn);
+  route_unlock_node (rn);
+}
+
+struct external_info *
+ospf_external_info_lookup (u_char type, struct prefix_ipv4 *p)
+{
+  struct route_node *rn;
+  rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) p);
+  if (rn)
     {
-      route_unlock_node (rn);
-      return rn->info;
+      if (rn->info)
+	{
+	  route_unlock_node (rn);
+	  return rn->info;
+	}
+      else
+	route_unlock_node (rn);
     }
 
   return NULL;
 }
 
-#endif
-
+
 /* Update ASBR status. */
 void
 ospf_asbr_status_update (u_char status)
 {
-  zlog_info ("K: ospf_ase_status_update(): Start");
-  zlog_info ("K: ospf_ase_status_update(): new status %d", status);
+  zlog_info ("ASBR[Status:%d]: Update", status);
 
   /* ASBR on. */
   if (status)
@@ -152,7 +196,7 @@ ospf_asbr_status_update (u_char status)
       /* Already ASBR. */
       if (OSPF_IS_ASBR)
 	{
-	  zlog_info ("K: ospf_ase_status_update(): Already ASBR");
+	  zlog_info ("ASBR[Status:%d]: Already ASBR", status);
 	  return;
 	}
       SET_FLAG (ospf_top->flags, OSPF_FLAG_ASBR);
@@ -162,99 +206,17 @@ ospf_asbr_status_update (u_char status)
       /* Already non ASBR. */
       if (! OSPF_IS_ASBR)
 	{
-	  zlog_info ("K: ospf_ase_status_update(): Already non ASBR");
+	  zlog_info ("ASBR[Status:%d]: Already noo ASBR", status);
 	  return;
 	}
       UNSET_FLAG (ospf_top->flags, OSPF_FLAG_ASBR);
     }
 
+  /* Transition from/to status ASBR, schedule timer. */
   ospf_spf_calculate_schedule ();
-  ospf_schedule_update_router_lsas ();
-
-  zlog_info ("K: ospf_ase_status_update(): Stop");
+  OSPF_LSA_UPDATE_TIMER_ON (ospf_top->t_rlsa_update,
+			    ospf_router_lsa_update_timer);
 }
-
-#if 0
-/* Check the prefix should be announced.
-   0: deny, 1: permit. */
-int
-ospf_asbr_should_announce (struct prefix_ipv4 *p,
-			   struct ospf_route *er)
-     /*   u_char type, u_int ifindex, struct in_addr nexthop) */
-{
-  u_char type = er->type;
-
-  if (DISTRIBUTE_NAME (type))
-    {
-      if (DISTRIBUTE_LIST (type) == NULL)
-	DISTRIBUTE_LIST (type) =
-	  access_list_lookup (AF_INET, DISTRIBUTE_NAME (type));
-
-      if (DISTRIBUTE_LIST (type))
-        if (access_list_apply (DISTRIBUTE_LIST (type), p) == FILTER_DENY)
-	  {
-	    zlog_info ("Z: ASBR: prefix %s/%d denied by ditribute-list",
-		       inet_ntoa (p->prefix), p->prefixlen);
-	    return 0;
-	  }
-    }
-
-  /*
-  if (nexthop.s_addr)
-    return 1;
-  */
-
-  if (type != ZEBRA_ROUTE_CONNECT)
-    return 1;
-
-  /*
-  if ((ifp = if_lookup_by_index (ifindex)) != NULL)
-    if ((oi = ifp->info) != NULL)
-      if (oi->flag != OSPF_IF_DISABLE)
-	return 0;
-  */
-
-  return 1;
-}
-
-void
-ospf_asbr_route_remove (struct route_node *rn, u_char type)
-{
-  struct ospf_lsa *lsa = NULL;
-  struct ospf_route *er;
-
-  zlog_info ("ospf_asbr_route_remove(): Start");
-
-  if (! rn->info)
-    return;
-
-  zlog_info ("ospf_asbr_route_remove(): removing %s",
-	     inet_ntoa (rn->p.u.prefix4));
-
-  /* Lookup external route and LSA. */
-  er = rn->info;
-  lsa = er->u.ext.origin;
-
-  if (er->type != type)
-    {
-      zlog_info ("ospf_asbr_route_remove(): type mismatch type %d er type %d",
-		 type, er->type);
-      return;
-    }
-
-  /* Flush LSA. */
-  if (lsa)
-    ospf_lsa_flush_as (lsa);
-
-  /* Free external route. */
-  ospf_route_free (er);
-
-  rn->info = NULL;
-  route_unlock_node (rn);
-
-  zlog_info ("ospf_asbr_route_remove(): Stop");
-}
-#endif
 
 void
 ospf_redistribute_withdraw (u_char type)
@@ -263,9 +225,8 @@ ospf_redistribute_withdraw (u_char type)
   struct external_info *ei;
 
   /* Delete external info for specified type. */
-  if (ospf_top->external_info[type])
-    for (rn = route_top (ospf_top->external_info[type]);
-	 rn; rn = route_next (rn))
+  if (EXTERNAL_INFO (type))
+    for (rn = route_top (EXTERNAL_INFO (type)); rn; rn = route_next (rn))
       if ((ei = rn->info))
 	if (ei->flags == EXTERNAL_ORIGINATED)
 	  {
@@ -274,6 +235,7 @@ ospf_redistribute_withdraw (u_char type)
 	  }
 }
 
+#if 0
 int
 unapprove_lsa (struct ospf_lsa *lsa, void *v, int i)
 {
@@ -290,7 +252,6 @@ ospf_asbr_unapprove_lsas ()
   /* ospf_lsdb_iterator (ospf_top->external_lsa, NULL, 0, unapprove_lsa); */
 }
 
-#if 0
 /* Check all AS external route. */
 void
 ospf_asbr_check_lsas ()
@@ -366,6 +327,7 @@ ospf_asbr_check_lsas ()
 }
 #endif
 
+#if 0
 int
 flush_unapproved (struct ospf_lsa *lsa, void * v, int i)
 {
@@ -388,9 +350,12 @@ ospf_asbr_flush_unapproved_lsas ()
   ospf_lsdb_iterator (ospf_top->external_lsa, NULL, 0, flush_unapproved);
   */
 }
+#endif
 
 /* This function performs checking of self-originated LSAs
    unapproved LSAs are flushed from the domain */
+
+#if 0
 void 
 ospf_asbr_check ()
 {
@@ -416,3 +381,4 @@ ospf_schedule_asbr_check ()
       thread_add_timer (master, ospf_asbr_check_timer,
 			0, OSPF_ASBR_CHECK_DELAY);
 }
+#endif

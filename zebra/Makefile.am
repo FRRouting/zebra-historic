@@ -22,7 +22,7 @@ sbin_PROGRAMS = zebra
 
 zebra_SOURCES = \
 	zserv.c main.c interface.c connected.c ioctl.c rib.c redistribute.c \
-	debug.c rtadv.c zebra_snmp.c irdp.c
+	debug.c rtadv.c zebra_snmp.c
 
 noinst_HEADERS = \
 	connected.h ioctl.h rib.h rt.h zserv.h redistribute.h debug.h rtadv.h \
@@ -40,7 +40,7 @@ EXTRA_DIST = $(sysconf_DATA) if_ioctl.c if_netlink.c if_proc.c if_sysctl.c \
 	ipforward_solaris.c ipforward_sysctl.c rt_ioctl.c rt_netlink.c \
 	rt_socket.c rtread_netlink.c rtread_proc.c rtread_sysctl.c \
 	rtread_getmsg.c kernel_socket.c kernel_netlink.c mtu_kvm.c \
-	GNOME-SMI GNOME-PRODUCT-ZEBRA-MIB
+	GNOME-SMI GNOME-PRODUCT-ZEBRA-MIB irdp.c
 
 zebra : $(zebra_OBJECTS) $(otherobj) ../lib/libzebra.a
 	$(CC) -g -o zebra $(zebra_OBJECTS) $(otherobj) ../lib/libzebra.a $(LIBS) $(LIB_IPV6)

@@ -35,6 +35,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -44,7 +45,6 @@
 #include "ospfd/ospf_ia.h"
 #include "ospfd/ospf_ase.h"
 #include "ospfd/ospf_abr.h"
-#include "ospfd/ospf_asbr.h"
 
 #define DEBUG
 
@@ -105,12 +105,13 @@ ospf_vertex_free (struct vertex *v)
 {
   listnode node;
 
-  if (listcount (v->child) > 0)
-    list_free (v->child);
+  list_delete_all (v->child);
 
   if (listcount (v->nexthop) > 0)
     for (node = listhead (v->nexthop); node; nextnode (node))
       ospf_nexthop_free (node->data);
+
+  list_delete_all (v->nexthop);
 
   XFREE (MTYPE_OSPF_VERTEX, v);
 }
@@ -181,8 +182,7 @@ ospf_vertex_lookup (list list, struct in_addr id, int type)
 }
 
 int
-ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v,
-                   struct in_addr *addr)
+ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v)
 {
   int i;
   int length;
@@ -221,10 +221,6 @@ ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v,
               if (v->type == OSPF_ROUTER_LSA &&
                   IPV4_ADDR_SAME (&rl->link[i].link_id, &v->id))
                 {
-                  if (rl->link[i].type == LSA_LINK_TYPE_VIRTUALLINK)
-                     zlog_info("Z: found back link through VL");
-                  if (addr)
-                    *addr = rl->link[i].link_data;
                   return 1;
                 }
               break;
@@ -233,10 +229,8 @@ ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v,
               if (v->type == OSPF_NETWORK_LSA &&
                   IPV4_ADDR_SAME (&rl->link[i].link_id, &v->id))
                 {
-                  if (addr)
-                    *addr = rl->link[i].link_data;
                   return 1;
-              }
+		}
               break;
             case LSA_LINK_TYPE_STUB:
               /* Not take into count? */
@@ -354,10 +348,6 @@ ospf_nexthop_calculation (struct ospf_area *area,
 /*      else 
         ospf_nexthop_free (nh);*/
 
-      ospf_lsa_has_link (w->lsa, v->lsa, &w->address);
-
-      zlog_info ("Z: we use %s", inet_ntoa(w->address));
-      zlog_info ("Z: to reach rtr %s", inet_ntoa(w->lsa->id));
       return;
     }
   /* In case of W's parent is network connected to root. */
@@ -432,6 +422,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
   struct router_lsa_link *l = NULL;
   struct in_addr *r;
   listnode node;
+  int type = 0;
 
   /* If this is a router-LSA, and bit V of the router-LSA (see Section
      A.4.2:RFC2328) is set, set Area A's TransitCapability to TRUE.  */
@@ -458,19 +449,19 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
              link in V's LSA.  Links to stub networks will be
              considered in the second stage of the shortest path
              calculation. */
-          if (l->m[0].type == LSA_LINK_TYPE_STUB)
+          if ((type = l->m[0].type) == LSA_LINK_TYPE_STUB)
             continue;
 
           /* (b) Otherwise, W is a transit vertex (router or transit
              network).  Look up the vertex W's LSA (router-LSA or
              network-LSA) in Area A's link state database. */
-          switch (l->m[0].type)
+          switch (type)
             {
             case LSA_LINK_TYPE_POINTOPOINT:
             case LSA_LINK_TYPE_VIRTUALLINK:
-              if (l->m[0].type == LSA_LINK_TYPE_VIRTUALLINK)
+              if (type == LSA_LINK_TYPE_VIRTUALLINK)
                  zlog_info ("Z: looking up LSA through VL: %s",
-                            inet_ntoa(l->link_id));
+                            inet_ntoa (l->link_id));
 
               w_lsa = ospf_lsa_lookup (area, OSPF_ROUTER_LSA, l->link_id,
                                        l->link_id);
@@ -481,13 +472,12 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
               zlog_info ("Z: Looking up Network LSA, ID: %s",
                          inet_ntoa(l->link_id));
               w_lsa = ospf_lsa_lookup_by_id (area, OSPF_NETWORK_LSA,
-                                             l->link_id);
-
+					     l->link_id);
               if (w_lsa)
                 zlog_info("Z: found the LSA");
               break;
             default:
-              zlog_warn ("Invalid LSA link type %d", l->m[0].type);
+              zlog_warn ("Invalid LSA link type %d", type);
               continue;
             }
         }
@@ -510,7 +500,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
       if (LS_AGE (w_lsa) == OSPF_LSA_MAX_AGE)
         continue;
 
-      if (! ospf_lsa_has_link (w_lsa->data, v->lsa, NULL))
+      if (! ospf_lsa_has_link (w_lsa->data, v->lsa))
         {
           zlog_info ("Z: The LSA doesn't have a link back");
           continue;
@@ -612,16 +602,16 @@ ospf_spf_route_free (struct route_table *table)
 
   for (rn = route_top (table); rn; rn = route_next (rn))
     {
-      if (rn->info)
-        {
-          v = rn->info;
-
-          ospf_vertex_free (v);
-          rn->info = NULL;
-        }
+      if ((v = rn->info))
+	{
+	  ospf_vertex_free (v);
+	  rn->info = NULL;
+	}
 
       route_unlock_node (rn);
     }
+
+  route_table_finish (table);
 }
 
 void
@@ -723,23 +713,21 @@ ospf_rtrs_free (struct route_table *rtrs)
   list or_list;
   listnode node;
 
-  zlog_info ("ospf_rtrs_free()");
+  zlog_info ("Route: Router Routing Table free");
 
   for (rn = route_top (rtrs); rn; rn = route_next (rn))
     if ((or_list = rn->info) != NULL)
       {
-        for (node = listhead (or_list); node; nextnode (node))
-          {
-            ospf_route_free (node->data);
-            zlog_info ("T: ospf_route_free (node->data) = %x", node->data);
-          }
+	for (node = listhead (or_list); node; nextnode (node))
+	  ospf_route_free (node->data);
 
-        list_delete_all (or_list);
+	list_delete_all (or_list);
 
-        /* Unlock the node. */
-        rn->info = NULL;
-        route_unlock_node (rn);
+	/* Unlock the node. */
+	rn->info = NULL;
+	route_unlock_node (rn);
       }
+  route_table_finish (rtrs);
 }
 
 void
@@ -891,6 +879,9 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
   ospf_spf_route_free (rv);
   ospf_spf_route_free (nv);
 
+  /* Free candidate list */
+  list_free (candidate);
+
   /* Increment SPF Calculation Counter. */
   area->spf_calculation++;
 
@@ -899,21 +890,6 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
   zlog_info ("ospf_spf_calculate: Stop");
 }
 
-#define OSPF_SPF_CALC_INTERVAL 10
-
-void ospf_spf_calculate_timer_add ();
-
-/* Add schedule for SPF calculation.  To avoid frequenst SPF calc, we
-   set timer for SPF calc. */
-void
-ospf_spf_calculate_schedule ()
-{
-  if (! ospf_top)
-    return;
-
-  ospf_top->spf_calc = 1;
-}
-
 /* Timer for SPF calculation. */
 int
 ospf_spf_calculate_timer (struct thread *t)
@@ -923,78 +899,100 @@ ospf_spf_calculate_timer (struct thread *t)
   /* struct ospf_area *area; */
   listnode node;
 
-  zlog_info ("Z: ospf_spf_calculate_timer: Start");
+  zlog_info ("SPF: Timer (SPF calculation expire)");
   
   ospf = THREAD_ARG (t);
-
   ospf->t_spf_calc = NULL;
 
-  if (ospf->spf_calc)
+  /* Allocate new table tree. */
+  new_table = route_table_init ();
+  new_rtrs  = route_table_init ();
+
+  ospf_vl_unapprove ();
+
+  /* Calculate SPF for each area. */
+  for (node = listhead (ospf->areas); node; node = nextnode (node))
+    ospf_spf_calculate (node->data, new_table, new_rtrs);
+
+  ospf_vl_shut_unapproved ();
+
+  ospf_ia_routing (new_table, new_rtrs);
+
+  ospf_prune_unreachable_networks (new_table);
+  ospf_prune_unreachable_routers (new_rtrs);
+
+  /* AS-external-LSA calculation should not be performed here. */
+
+  /* If new Router Route is installed,
+     then schedule re-calculate External routes. */
+  if (1)
+    ospf_ase_calculate_schedule ();
+
+  ospf_ase_calculate_timer_add ();
+
+  /* Update routing table. */
+  ospf_route_install (new_table);
+
+  /* Update ABR/ASBR routing table */
+  if (ospf_top->old_rtrs)
     {
-      ospf->spf_calc = 0;
-      
-      /* Allocate new table tree. */
-      new_table = route_table_init ();
-      new_rtrs  = route_table_init ();
-
-      ospf_vl_unapprove ();
-
-      /* Calculate SPF for each area. */
-      for (node = listhead (ospf->areas); node; node = nextnode (node))
-        ospf_spf_calculate (node->data, new_table, new_rtrs);
-
-      ospf_vl_shut_unapproved ();
-
-      ospf_ia_routing (new_table, new_rtrs);
-
-      ospf_prune_unreachable_networks (new_table);
-      ospf_prune_unreachable_routers (new_rtrs);
-
-      /* AS-external-LSA calculation should not be performed here. */
-
-      /* If new Router Route is installed,
-         then schedule re-calculate External routes. */
-      if (1)
-        ospf_ase_calculate_schedule ();
-
-      ospf_ase_calculate_timer_add ();
-
-      /* Update routing table. */
-      ospf_route_install (new_table);
-
-      /* Update ABR/ASBR routing table */
-      if (ospf_top->old_rtrs)
-        {
-          /* old_rtrs's node holds linked list of ospf_route. --kunihiro. */
-          /* ospf_route_delete (ospf_top->old_rtrs); */
-          ospf_rtrs_free (ospf_top->old_rtrs);
-        }
-
-      ospf_top->old_rtrs = ospf_top->new_rtrs;
-      ospf_top->new_rtrs = new_rtrs;
-
-      if (OSPF_IS_ABR) 
-        ospf_abr_task (new_table, new_rtrs);
-
-      if (OSPF_IS_ASBR) 
-        ospf_asbr_check ();
+      /* old_rtrs's node holds linked list of ospf_route. --kunihiro. */
+      /* ospf_route_delete (ospf_top->old_rtrs); */
+      ospf_rtrs_free (ospf_top->old_rtrs);
     }
 
-  /* Register myself. */
-  ospf_spf_calculate_timer_add ();
+  ospf_top->old_rtrs = ospf_top->new_rtrs;
+  ospf_top->new_rtrs = new_rtrs;
 
-  zlog_info ("Z: ospf_spf_calculate_timer: Stop");
+  if (OSPF_IS_ABR) 
+    ospf_abr_task (new_table, new_rtrs);
+
+#if 0
+  if (OSPF_IS_ASBR) 
+    ospf_asbr_check ();
+#endif
+
+  zlog_info ("SPF: calculation complete");
 
   return 0;
 }
 
+/* Add schedule for SPF calculation.  To avoid frequenst SPF calc, we
+   set timer for SPF calc. */
 void
-ospf_spf_calculate_timer_add ()
+ospf_spf_calculate_schedule ()
 {
-  if (! ospf_top)
+  time_t ht, delay;
+
+  zlog_info ("SPF: calculation timer scheduled");
+
+  /* OSPF instance does not exist. */
+  if (!ospf_top)
     return;
 
-  if (! ospf_top->t_spf_calc)
-    ospf_top->t_spf_calc = thread_add_timer (master, ospf_spf_calculate_timer,
-                                             ospf_top, OSPF_SPF_CALC_INTERVAL);
+  /* SPF calculation timer is already scheduled. */
+  if (ospf_top->t_spf_calc)
+    {
+      zlog_info ("SPF: calculation timer is already scheduled: %x",
+		 ospf_top->t_spf_calc);
+      return;
+    }
+
+  ht = time (NULL) - ospf_top->ts_spf;
+
+  /* Get SPF calculation delay time. */
+  if (ht < ospf_top->spf_holdtime)
+    {
+      if (ospf_top->spf_holdtime - ht < ospf_top->spf_delay)
+	delay = ospf_top->spf_delay;
+      else
+	delay = ospf_top->spf_holdtime - ht;
+    }
+  else
+    delay = ospf_top->spf_delay;
+
+  zlog_info ("SPF: calculation timer delay = %d", delay);
+  ospf_top->t_spf_calc =
+    thread_add_timer (master, ospf_spf_calculate_timer, ospf_top, delay);
 }
+

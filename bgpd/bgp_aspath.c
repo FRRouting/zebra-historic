@@ -623,9 +623,6 @@ aspath_cmp_left (struct aspath *aspath1, struct aspath *aspath2)
     return 0;
   as2 = seg2->asval[0];
 
-  printf ("as1: %d\n", ntohs (as1));
-  printf ("as2: %d\n", ntohs (as2));
-
   if (as1 == as2)
     return 1;
 

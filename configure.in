@@ -501,6 +501,13 @@ AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
 AC_CHECK_LIB(crypt, crypt)
 AC_CHECK_LIB(resolv, res_init)
 
+dnl ---------------------------------------------------
+dnl BSD/OS 4.1 define inet_XtoY function as __inet_XtoY
+dnl ---------------------------------------------------
+AC_CHECK_FUNC(__inet_ntop, AC_DEFINE(HAVE_INET_NTOP))
+AC_CHECK_FUNC(__inet_pton, AC_DEFINE(HAVE_INET_PTON))
+AC_CHECK_FUNC(__inet_aton, AC_DEFINE(HAVE_INET_ATON))
+
 dnl ---------------------------
 dnl check system has GNU regexp
 dnl ---------------------------

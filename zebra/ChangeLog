@@ -1,3 +1,38 @@
+2000-06-13  David Lipovkov <davidl@nbase.co.il>
+
+	* rib.c (rib_if_up): Add check for unknown interface.
+
+2000-06-13 Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.h: Define INTERFACE_UNKNOWN.
+
+2000-06-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (EXTRA_DIST): Move irdp.c until implementation is
+	finished.
+
+2000-06-05  David Lipovkov <davidl@nbase.co.il>
+
+	* interface.c (if_zebra_delete_hook): Call rib_if_delete().
+
+	* redistribute.c (zebra_interface_delete_update): New function.
+
+	* redistribute.h (zebra_interface_delete_update): New function
+	prototype.
+
+	* rib.c (rib_if_delete): New function.  Walk down all routes and
+	delete all on the interface.
+
+	* rib.h: New function prototype.
+
+	* rt_netlink.c (netlink_link_change): Call
+	zebra_interface_delete_update ().
+
+2000-05-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (interface_info_ioctl): Check interface's flag before
+	checking interface's address.
+
 2000-04-26  Jochen Friedrich <jochen@nwe.de>
 
 	* GNOME-PRODUCT-ZEBRA-MIB: New file.
@@ -18,6 +53,12 @@
 
 	* zserv.c (zebra_client_close): Remove client structure from
 	client_list when connection is terminated.
+
+2000-03-21  David Lipovkov <davidl@nbase.co.il>
+
+	* connected.c (connected_add_ipv4): Allows all necessary structure
+	updates for connected route, but doesn't insert it into rib if
+	it's interface is down.
 
 2000-01-21  Hideto Yamakawa <hideto.yamakawa@soliton.co.jp>
 

@@ -1,6 +1,5 @@
-/*
- * OSPF calculation.
- * Copyright (C) 1999 Kunihiro Ishiguro
+/* MPLS-VPN
+ * Copyright (C) 2000 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -17,32 +16,33 @@
  * You should have received a copy of the GNU General Public License
  * along with GNU Zebra; see the file COPYING.  If not, write to the Free
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
- * 02111-1307, USA.
+ * 02111-1307, USA.  
  */
 
-#define OSPF_VERTEX_ROUTER  1
-#define OSPF_VERTEX_NETWORK 2
+#ifndef _ZEBRA_BGP_MPLSVPN_H
+#define _ZEBRA_BGP_MPLSVPN_H
 
-#define OSPF_VERTEX_PROCESSED      0x01
+#define RD_TYPE_AS  0
+#define RD_TYPE_IP  1
 
-
-struct vertex
+struct rd_as
 {
-  u_char flags;
-  u_char type;
-  struct in_addr id;
-  struct lsa_header *lsa;
-  u_int32_t distance;
-  list child;
-  list nexthop;
+  u_int16_t type;
+  as_t as;
+  u_int32_t val;
 };
 
-struct ospf_nexthop
+struct rd_ip
 {
-  struct interface *ifp;
-  struct in_addr router;
-  struct vertex *parent;
+  u_int16_t type;
+  struct in_addr ip;
+  u_int16_t val;
 };
 
-void ospf_spf_calculate_schedule ();
-/* void ospf_spf_calculate_timer_add (); */
+void bgp_mplsvpn_init ();
+int nlri_parse_vpnv4 (struct peer *, struct attr *, struct bgp_nlri *);
+u_int32_t decode_label (u_char *);
+int str2prefix_rd (u_char *, struct prefix_rd *);
+int str2tag (u_char *, u_char *);
+
+#endif /* _ZEBRA_BGP_MPLSVPN_H */

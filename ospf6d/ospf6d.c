@@ -29,7 +29,7 @@ list nexthoplist = NULL;
 struct sockaddr_in6 allspfrouters6;
 struct sockaddr_in6 alldrouters6;
 char *recent_reason; /* set by ospf6_lsa_check_recent () */
-char rcsid[] = "$Id: ospf6d.c,v 1.82 2000/03/28 02:49:46 yasu Exp $";
+char rcsid[] = "$Id: ospf6d.c,v 1.85 2000/05/10 16:58:20 yasu Exp $";
 
 
 /* vty commands */
@@ -358,355 +358,6 @@ ALIAS (show_ipv6_ospf6_interface,
        OSPF6_STR
        INTERFACE_STR
        )
-
-DEFUN (show_ipv6_ospf6_database_router,
-       show_ipv6_ospf6_database_router_cmd,
-       "show ipv6 ospf6 database router",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSA\n"
-       )
-{
-  listnode j, k;
-  struct area *area;
-  list l;
-
-  for (j = listhead (ospf6->area_list); j; nextnode (j))
-    {
-      area = (struct area *) getdata (j);
-      vty_out (vty, "Area %s%s", inet4str (area->area_id),
-	       VTY_NEWLINE);
-      l = list_init ();
-      ospf6_lsdb_collect_type (l, htons (LST_ROUTER_LSA), area);
-      for (k = listhead (l); k; nextnode (k))
-        {
-          vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
-        }
-      list_delete_all (l);
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database_network,
-       show_ipv6_ospf6_database_network_cmd,
-       "show ipv6 ospf6 database network",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Network-LSA\n"
-       )
-{
-  listnode j, k;
-  struct area *area;
-  list l;
-
-  for (j = listhead (ospf6->area_list); j; nextnode (j))
-    {
-      area = (struct area *) getdata (j);
-      vty_out (vty, "Area %s%s", inet4str (area->area_id), VTY_NEWLINE);
-      l = list_init ();
-      ospf6_lsdb_collect_type (l, htons (LST_NETWORK_LSA), area);
-      for (k = listhead (l); k; nextnode (k))
-        {
-          vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
-        }
-      list_delete_all (l);
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database_link,
-       show_ipv6_ospf6_database_link_cmd,
-       "show ipv6 ospf6 database link",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Link-LSA\n"
-       )
-{
-  listnode j, k, n;
-  list l;
-  struct area *area;
-  struct ospf6_interface *ospf6_interface;
-
-  for (j = listhead (ospf6->area_list); j; nextnode (j))
-    {
-      area = (struct area *) getdata (j);
-      vty_out (vty, "Area %s%s", inet4str (area->area_id),
-	       VTY_NEWLINE);
-      for (k = listhead (area->if_list); k; nextnode (k))
-        {
-          ospf6_interface = (struct ospf6_interface *) getdata (k);
-          vty_out (vty, "Interface %s%s", ospf6_interface->interface->name,
-		   VTY_NEWLINE);
-          l = list_init ();
-          ospf6_lsdb_collect_type (l, htons (LST_LINK_LSA), ospf6_interface);
-          for (n = listhead (l); n; nextnode (n))
-            {
-              vty_lsa (vty, (struct ospf6_lsa *) getdata (n));
-            }
-          list_delete_all (l);
-        }
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database_intraprefix,
-       show_ipv6_ospf6_database_intraprefix_cmd,
-       "show ipv6 ospf6 database intra-area-prefix",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Intra-Area-Prefix-LSA\n"
-       )
-{
-  listnode j, k;
-  struct area *area;
-  list l;
-
-  for (j = listhead (ospf6->area_list); j; nextnode (j))
-    {
-      area = (struct area *) getdata (j);
-      vty_out (vty, "Area %s%s", inet4str (area->area_id),
-	       VTY_NEWLINE);
-      l = list_init ();
-      ospf6_lsdb_collect_type (l, htons (LST_INTRA_AREA_PREFIX_LSA), area);
-      for (k = listhead (l); k; nextnode (k))
-        {
-          vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
-        }
-      list_delete_all (l);
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database_asexternal,
-       show_ipv6_ospf6_database_asexternal_cmd,
-       "show ipv6 ospf6 database as-external",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "AS-External-LSA\n"
-       )
-{
-  listnode j;
-
-  for (j = listhead (ospf6->lsdb); j; nextnode (j))
-    {
-      vty_lsa (vty, (struct ospf6_lsa *) getdata (j));
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_database,
-       show_ipv6_ospf6_database_cmd,
-       "show ipv6 ospf6 database",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       )
-{
-  show_ipv6_ospf6_database_router (&show_ipv6_ospf6_database_router_cmd,
-                                   vty, 0, NULL);
-  show_ipv6_ospf6_database_network (&show_ipv6_ospf6_database_network_cmd,
-                                    vty, 0, NULL);
-  show_ipv6_ospf6_database_link (&show_ipv6_ospf6_database_link_cmd,
-                                 vty, 0, NULL);
-  show_ipv6_ospf6_database_intraprefix (&show_ipv6_ospf6_database_intraprefix_cmd,
-                                        vty, 0, NULL);
-  show_ipv6_ospf6_database_asexternal (&show_ipv6_ospf6_database_asexternal_cmd,
-                                        vty, 0, NULL);
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_route_ospf6_area_detail,
-       show_ipv6_route_ospf6_area_detail_cmd,
-       "show ipv6 route ospf6 area A.B.C.D (detail|)",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       OSPF6_STR
-       "show route table in area structure\n"
-       "OSPF6 area ID\n"
-       "detailed infomation\n"
-       )
-{
-  struct area *area;
-  area_id_t area_id;
-  struct route_node *rn;
-
-  if (!ospf6)
-    {
-      vty_out (vty, "OSPF6 not started%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  if (argc && strncmp (argv[0], "d", 1) != 0)
-    inet_pton (AF_INET, argv[0], &area_id);
-  else
-    area_id = 0;
-
-  area = ospf6_area_lookup (area_id);
-  if (!area)
-    {
-       vty_out (vty, "no match by area id: %s%s", argv[0],
-		VTY_NEWLINE);
-       return CMD_WARNING;
-    }
-
-  for (rn = route_top (area->table); rn; rn = route_next (rn))
-    {
-      if (rn->info)
-        {
-          if (strncmp (argv[argc-1], "detail", 7) == 0)
-            ospf6_route_vty_new (vty, rn, 1);
-          else
-            ospf6_route_vty_new (vty, rn, 0);
-        }
-    }
-
-  return CMD_SUCCESS;
-}
-
-ALIAS (show_ipv6_route_ospf6_area_detail,
-       show_ipv6_route_ospf6_area_cmd,
-       "show ipv6 route ospf6 area A.B.C.D",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       OSPF6_STR
-       "show route table in area structure\n"
-       "OSPF6 area ID\n"
-       )
-
-ALIAS (show_ipv6_route_ospf6_area_detail,
-       show_ipv6_route_ospf6_backbone_detail_cmd,
-       "show ipv6 route ospf6 backbone (detail|)",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       OSPF6_STR
-       "show route table in area structure\n"
-       "detailed infomation\n"
-       )
-
-ALIAS (show_ipv6_route_ospf6_area_detail,
-       show_ipv6_route_ospf6_backbone_cmd,
-       "show ipv6 route ospf6 backbone",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       OSPF6_STR
-       "show route table in area structure\n"
-       )
-
-DEFUN (show_ipv6_route_ospf6_detail,
-       show_ipv6_route_ospf6_detail_cmd,
-       "show ipv6 route ospf6 (detail|)",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       OSPF6_STR
-       "detailed infomation\n"
-       )
-{
-  struct route_node *rn;
-
-  if (!ospf6)
-    {
-      vty_out (vty, "OSPF6 not started%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  for (rn = route_top (ospf6->table); rn; rn = route_next (rn))
-    {
-      if (rn->info)
-#if 0
-        ospf6_route_vty (vty, rn);
-#else
-        if (strncmp (argv[argc-1], "detail", 7) == 0)
-          ospf6_route_vty_new (vty, rn, 1);
-        else
-          ospf6_route_vty_new (vty, rn, 0);
-#endif
-    }
-
-  return CMD_SUCCESS;
-}
-
-ALIAS (show_ipv6_route_ospf6_detail,
-       show_ipv6_route_ospf6_cmd,
-       "show ipv6 route ospf6",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       OSPF6_STR
-       )
-
-DEFUN (show_ipv6_route_connected,
-       show_ipv6_route_connected_cmd,
-       "show ipv6 route connected",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       "connected route to advertise\n"
-       )
-{
-  struct route_node *rn;
-
-  if (!ospf6)
-    {
-      vty_out (vty, "OSPF6 not started%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  for (rn = route_top (ospf6->table_connected); rn; rn = route_next (rn))
-    {
-      if (rn->info)
-        ospf6_route_vty (vty, rn);
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_route_redistribute,
-       show_ipv6_route_redistribute_cmd,
-       "show ipv6 route redistribute",
-       SHOW_STR
-       IP6_STR
-       ROUTE_STR
-       "redistributed route\n"
-       )
-{
-  struct route_node *rn;
-
-  if (!ospf6)
-    {
-      vty_out (vty, "OSPF6 not started%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  for (rn = route_top (ospf6->table_external); rn; rn = route_next (rn))
-    {
-      if (rn->info)
-        ospf6_route_vty (vty, rn);
-    }
-
-  return CMD_SUCCESS;
-}
-
 /* change Router_ID commands. */
 DEFUN (router_id,
        router_id_cmd,
@@ -773,6 +424,55 @@ DEFUN (interface_area,
   return CMD_SUCCESS;
 }
 
+DEFUN (passive_interface,
+       passive_interface_cmd,
+       "passive-interface IFNAME",
+       "Suppress routing updates on an interface\n"
+       IFNAME_STR
+       )
+{
+  struct interface *ifp;
+  struct ospf6_interface *o6i;
+
+  ifp = if_get_by_name (argv[0]);
+  if (ifp->info)
+    o6i = (struct ospf6_interface *) ifp->info;
+  else
+    o6i = ospf6_interface_create (ifp, ospf6);
+
+  o6i->is_passive = 1;
+  if (o6i->thread_send_hello)
+    {
+      thread_cancel (o6i->thread_send_hello);
+      o6i->thread_send_hello = (struct thread *) NULL;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_passive_interface,
+       no_passive_interface_cmd,
+       "no passive-interface IFNAME",
+       NO_STR
+       "Suppress routing updates on an interface\n"
+       IFNAME_STR
+       )
+{
+  struct interface *ifp;
+  struct ospf6_interface *o6i;
+
+  ifp = if_lookup_by_name (argv[0]);
+  if (! ifp)
+    return CMD_ERR_NO_MATCH;
+
+  o6i = (struct ospf6_interface *) ifp->info;
+  o6i->is_passive = 0;
+  if (o6i->thread_send_hello == NULL)
+    thread_add_event (master, ospf6_send_hello, o6i, 0);
+
+  return CMD_SUCCESS;
+}
+
 /* OSPF configuration write function. */
 int
 ospf6_config_write (struct vty *vty)
@@ -795,10 +495,14 @@ ospf6_config_write (struct vty *vty)
       for (k = listhead (area->if_list); k; nextnode (k))
         {
           ospf6_interface = (struct ospf6_interface *)getdata (k);
-          vty_out (vty, " interface %s area %s",
-                         ospf6_interface->interface->name,
-                         inet4str (area->area_id));
-          vty_out (vty, "%s", VTY_NEWLINE);
+          vty_out (vty, " interface %s area %s%s",
+                   ospf6_interface->interface->name,
+                   inet4str (area->area_id),
+                   VTY_NEWLINE);
+          if (ospf6_interface->is_passive)
+            vty_out (vty, " passive-interface %s%s",
+                     ospf6_interface->interface->name,
+                     VTY_NEWLINE);
         }
     }
   vty_out (vty, "!%s", VTY_NEWLINE);
@@ -824,38 +528,20 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_requestlist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_retranslist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_network_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_router_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_link_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_database_asexternal_cmd);
+
   install_element (VIEW_NODE, &show_ipv6_ospf6_interface_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_ospf6_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_ospf6_detail_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_detail_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_detail_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_connected_cmd);
-  install_element (VIEW_NODE, &show_ipv6_route_redistribute_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_version_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_requestlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_retranslist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_network_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_router_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_link_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_asexternal_cmd);
+
   install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
@@ -863,21 +549,14 @@ ospf6_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
-  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_detail_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_detail_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_backbone_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_backbone_detail_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_connected_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_route_redistribute_cmd);
-
   install_element (CONFIG_NODE, &router_ospf6_cmd);
   install_element (CONFIG_NODE, &interface_cmd);
 
   install_default (OSPF6_NODE);
   install_element (OSPF6_NODE, &router_id_cmd);
   install_element (OSPF6_NODE, &interface_area_cmd);
+  install_element (OSPF6_NODE, &passive_interface_cmd);
+  install_element (OSPF6_NODE, &no_passive_interface_cmd);
 
   /* Make empty list of top list. */
   if_init ();
@@ -902,6 +581,8 @@ ospf6_init ()
 
   /* Install ospf6 route map */
   ospf6_routemap_init ();
+  ospf6_lsdb_init ();
+  ospf6_rtable_init ();
 }
 
 void

@@ -87,6 +87,8 @@ struct bgp
 #define BGP_CONFIG_CLUSTER_ID         0x02
 #define BGP_CONFIG_CONFEDERATION      0x04
 #define BGP_CONFIG_ALWAYS_COMPARE_MED 0x08
+#define BGP_CONFIG_MISSING_AS_WORST   0x10
+#define BGP_CONFIG_NO_DEFAULT_IPV4    0x20
   u_int16_t config;
 
   /* BGP identifier. */
@@ -118,7 +120,7 @@ struct bgp
      included.  */
   struct route_table *aggregate[AFI_MAX];
 
-  /* Loc-RIB of this BGP */
+  /* Routing information base. */
   struct route_table *rib[AFI_MAX][SAFI_MAX];
 
   /* BGP redistribute configuration. */
@@ -290,6 +292,7 @@ struct peer
 #define PEER_FLAG_ROUTE_REFRESH       0x0800 /* route-refresh */
 #define PEER_FLAG_TRANSPARENT_AS      0x1000 /* transparent-as */
 #define PEER_FLAG_TRANSPARENT_NEXTHOP 0x2000 /* transparent-next-hop */
+#define PEER_FLAG_SEND_EXT_COMMUNITY  0x4000 /* send-community extended */
 
   /* Peer status flags. */
   u_int16_t sflags;
@@ -398,6 +401,7 @@ struct bgp_nlri
 #define BGP_ATTR_RCID_PATH         13
 #define BGP_ATTR_MP_REACH_NLRI     14
 #define BGP_ATTR_MP_UNREACH_NLRI   15
+#define BGP_ATTR_EXT_COMMUNITIES   16
 
 /* BGP Update ORIGIN */
 #define BGP_ORIGIN_IGP              0
@@ -484,6 +488,9 @@ struct bgp_nlri
 #define BGP_CLEAR_CONNECT_RETRY    20
 #define BGP_DEFAULT_CONNECT_RETRY 120
 
+/* SAFI which used in open capability negotiation. */
+#define BGP_SAFI_VPNV4            128
+
 /* Macros. */
 #define BGP_INPUT(P)         ((P)->ibuf)
 #define BGP_INPUT_PNT(P)     (STREAM_PNT(BGP_INPUT(P)))
@@ -512,7 +519,7 @@ enum
 #ifdef HAVE_IPV6
 #define NEIGHBOR_CMD       "neighbor (A.B.C.D|X:X::X:X) "
 #define NO_NEIGHBOR_CMD    "no neighbor (A.B.C.D|X:X::X:X) "
-#define NEIGHBOR_ADDR_STR  "IP address\nIPv6address\n"
+#define NEIGHBOR_ADDR_STR  "IP address\nIPv6 address\n"
 #else
 #define NEIGHBOR_CMD       "neighbor A.B.C.D "
 #define NO_NEIGHBOR_CMD    "no neighbor A.B.C.D "
@@ -561,6 +568,8 @@ struct bgp *bgp_get_default ();
 struct bgp *bgp_lookup_by_name (char *);
 struct peer *peer_lookup_with_open (union sockunion *, as_t, struct in_addr *);
 struct peer *peer_create_accept ();
+
+int peer_active (struct peer *);
 
 extern struct message bgp_status_msg[];
 extern int bgp_status_msg_max;

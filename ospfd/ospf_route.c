@@ -33,10 +33,10 @@
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_route.h"
 #include "ospfd/ospf_spf.h"
-#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_zebra.h"
 
 struct ospf_route *
@@ -137,6 +137,8 @@ ospf_route_table_free (struct route_table *rt)
 	rn->info = NULL;
 	route_unlock_node (rn);
       }
+
+   route_table_finish (rt);
 }
 
 /* If a prefix and a nexthop match any route in the routing table,
@@ -462,7 +464,7 @@ void
 ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 		     struct vertex *v, struct ospf_area *area)
 {
-  u_int16_t cost;
+  u_int32_t cost;
   struct route_node *rn;
   struct ospf_route *or;
   struct prefix_ipv4 p;
@@ -672,41 +674,31 @@ show_ip_ospf_route_network (struct vty *vty, struct route_table *rt)
 {
   struct route_node *rn;
   struct ospf_route *or;
-  char buf1[BUFSIZ];
-  char buf2[BUFSIZ];
   listnode pnode;
   struct ospf_path *path;
 
-  vty_out (vty, "========== OSPF network routing table ==========%s",
+  vty_out (vty, "============ OSPF network routing table ============%s",
 	   VTY_NEWLINE);
 
   for (rn = route_top (rt); rn; rn = route_next (rn))
     if ((or = rn->info) != NULL)
       {
+	char buf1[19];
+	snprintf (buf1, 19, "%s/%d",
+		  inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen);
+
 	switch (or->path_type)
 	  {
 	  case OSPF_PATH_INTER_AREA:
 	    if (or->type == OSPF_DESTINATION_NETWORK)
-	      vty_out (vty, "N IA %s/%d \t[%d] area: %s%s", 
-		       inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		       rn->p.prefixlen, or->cost,
-		       inet_ntop (AF_INET, &or->u.std.area->area_id, buf2,
-				  BUFSIZ),
-		       VTY_NEWLINE);
-
+	      vty_out (vty, "N IA %-18s    [%d] area: %s%s", buf1, or->cost,
+		       inet_ntoa (or->u.std.area->area_id), VTY_NEWLINE);
 	    else if (or->type == OSPF_DESTINATION_DISCARD)
-	      vty_out (vty, "D IA %s/%d \tDiscard entry%s", 
-		       inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		       rn->p.prefixlen,
-		       VTY_NEWLINE);
+	      vty_out (vty, "D IA %-18s    Discard entry%s", buf1, VTY_NEWLINE);
 	    break;
 	  case OSPF_PATH_INTRA_AREA:
-	    vty_out (vty, "N    %s/%d \t[%d] area: %s%s", 
-		     inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		     rn->p.prefixlen, or->cost,
-		     inet_ntop (AF_INET, &or->u.std.area->area_id, buf2,
-				BUFSIZ),
-		     VTY_NEWLINE);
+	    vty_out (vty, "N    %-18s    [%d] area: %s%s", buf1, or->cost,
+		     inet_ntoa (or->u.std.area->area_id), VTY_NEWLINE);
 	    break;
 	  default:
 	    break;
@@ -716,20 +708,19 @@ show_ip_ospf_route_network (struct vty *vty, struct route_table *rt)
  	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
 	    {
 	      path = getdata (pnode);
-
-	      if (path->ifp == NULL)
-		continue;
-
-	      if (path->nexthop.s_addr == 0)
-		vty_out (vty, "\t\t\tdirectly attached to %s%s",
-			 path->ifp->name, VTY_NEWLINE);
-	      else 
-		vty_out (vty, "\t\t\tvia %s, %s%s",
-			 inet_ntoa (path->nexthop), path->ifp->name,
-			 VTY_NEWLINE);
+	      if (path->ifp != NULL)
+		{
+		  if (path->nexthop.s_addr == 0)
+		    vty_out (vty, "%24s   directly attached to %s%s",
+			     "", path->ifp->name, VTY_NEWLINE);
+		  else 
+		    vty_out (vty, "%24s   via %s, %s%s", "",
+			     inet_ntoa (path->nexthop), path->ifp->name,
+			     VTY_NEWLINE);
+		}
 	    }
       }
-
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 
 void
@@ -737,71 +728,49 @@ show_ip_ospf_route_router (struct vty *vty, struct route_table *rtrs)
 {
   struct route_node *rn;
   struct ospf_route *or;
-  char buf1[BUFSIZ];
-  char buf2[BUFSIZ];
-  listnode pnode, nnode;
+  listnode pn, nn;
   struct ospf_path *path;
 
-  vty_out (vty, "========== OSPF router routing table ==========%s",
+  vty_out (vty, "============ OSPF router routing table =============%s",
 	   VTY_NEWLINE);
   for (rn = route_top (rtrs); rn; rn = route_next (rn))
-    {
-      int flag;
+    if (rn->info)
+      {
+	int flag = 0;
 
-      if (rn->info == NULL)
-	continue;
+	vty_out (vty, "R    %-15s    ", inet_ntoa (rn->p.u.prefix4));
 
-      flag = 0;
-      vty_out (vty, "R    %s \t", 
-	       inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ));
-
-      for (nnode = listhead ((list) rn->info); nnode; nextnode (nnode)) 
-	{
-	  if ((or = getdata (nnode)) == NULL)
-	    continue;
-
-          if (flag)
-	    vty_out(vty,"      \t\t\t" );
-
-          flag = 1;
-
-	  switch (or->path_type)
+	for (nn = listhead ((list) rn->info); nn; nextnode (nn))
+	  if ((or = getdata (nn)) != NULL)
 	    {
-	    case OSPF_PATH_INTRA_AREA:
-	      vty_out (vty, "   [%d] area: %s", or->cost,
-		       inet_ntop (AF_INET, &or->u.std.area->area_id,
-				  buf2, BUFSIZ));
-	      break;
-	    case OSPF_PATH_INTER_AREA:
-	      vty_out (vty, "IA [%d] area: %s", or->cost,
-		       inet_ntop (AF_INET, &or->u.std.area->area_id,
-				  buf2, BUFSIZ));
-	      break;
-	    default:
-	      break;
+	      if (flag++)
+		vty_out(vty,"                              " );
+
+	      /* Show path. */
+	      vty_out (vty, "%s [%d] area: %s",
+		       (or->path_type == OSPF_PATH_INTER_AREA ? "IA" : "  "),
+		       or->cost, inet_ntoa (or->u.std.area->area_id));
+
+	      /* Show flags. */
+	      vty_out (vty, "%s%s%s",
+		       (or->u.std.flags & ROUTER_LSA_BORDER ? ", ABR" : ""),
+		       (or->u.std.flags & ROUTER_LSA_EXTERNAL ? ", ASBR" : ""),
+		       VTY_NEWLINE);
+
+	      for (pn = listhead (or->path); pn; nextnode (pn))
+		{
+		  path = getdata (pn);
+		  if (path->nexthop.s_addr == 0)
+		    vty_out (vty, "%24s   directly attached to %s%s",
+			     "", path->ifp->name, VTY_NEWLINE);
+		  else 
+		    vty_out (vty, "%24s   via %s, %s%s", "",
+			     inet_ntoa (path->nexthop), path->ifp->name,
+			     VTY_NEWLINE);
+		}
 	    }
-
-	  if (or->u.std.flags & ROUTER_LSA_BORDER)
-	    vty_out (vty, ", ABR");
-
-	  if (or->u.std.flags & ROUTER_LSA_EXTERNAL)
-	    vty_out (vty, ", ASBR");
-
-	  vty_out (vty, "%s", VTY_NEWLINE);
-
-	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
-	    {
-	      path = getdata (pnode);
-	      if (path->nexthop.s_addr == 0)
-		vty_out (vty, "\t\t\t   directly attached to %s%s",
-			 path->ifp->name, VTY_NEWLINE);
-	      else 
-		vty_out (vty, "\t\t\t   via %s, %s%s",
-			 inet_ntoa (path->nexthop), path->ifp->name,
-			 VTY_NEWLINE);
-	    }
-	}
-    }
+      }
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 
 void
@@ -809,28 +778,29 @@ show_ip_ospf_route_external (struct vty *vty, struct route_table *rt)
 {
   struct route_node *rn;
   struct ospf_route *er;
-  char buf1[BUFSIZ];
 
-  vty_out (vty, "========== OSPF external routing table ==========%s",
+  vty_out (vty, "============ OSPF external routing table ===========%s",
 	   VTY_NEWLINE);
   for (rn = route_top (rt); rn; rn = route_next (rn))
     if ((er = rn->info) != NULL)
       {
+	char buf1[19];
+	snprintf (buf1, 19, "%s/%d",
+		  inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen);
+
 	switch (er->path_type)
 	  {
 	  case OSPF_PATH_TYPE1_EXTERNAL:
-	    vty_out (vty, "N E1 %s/%d \t[%d], tag: %u%s", 
-		     inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		     rn->p.prefixlen, er->cost, er->u.ext.tag, VTY_NEWLINE);
+	    vty_out (vty, "N E1 %-18s    [%d] tag: %u%s", buf1,
+		     er->cost, er->u.ext.tag, VTY_NEWLINE);
 	    break;
 	  case OSPF_PATH_TYPE2_EXTERNAL:
-	    vty_out (vty, "N E2 %s/%d \t[%d/%d], tag: %u%s", 
-		     inet_ntop (AF_INET, &rn->p.u.prefix4, buf1, BUFSIZ),
-		     rn->p.prefixlen, er->cost, er->u.ext.type2_cost,
-		     er->u.ext.tag, VTY_NEWLINE);
+	    vty_out (vty, "N E2 %-18s    [%d/%d] tag: %u%s", buf1, er->cost,
+		     er->u.ext.type2_cost, er->u.ext.tag, VTY_NEWLINE);
 	    break;
 	  }
       }
+  vty_out (vty, "%s", VTY_NEWLINE);
 }
 
 DEFUN (show_ip_ospf_route,
@@ -910,7 +880,7 @@ ospf_route_cmp (struct ospf_route *r1, struct ospf_route *r2)
   if ((ret = (r1->path_type - r2->path_type)))
     return ret;
 
-zlog_info ("T: ospf_route_cmp(): Path types are the same.");
+  zlog_info ("Route[Compare]: Path types are the same.");
   /* Path types are the same, compare any cost. */
   switch (r1->path_type)
     {
@@ -938,7 +908,6 @@ zlog_info ("T: ospf_route_cmp(): Path types are the same.");
       break;
     }      
 
-zlog_info ("T: ospf_route_cmp(): Compare the costs");
   /* Anyway, compare the costs. */
   return (r1->cost - r2->cost);
 }
@@ -1037,9 +1006,11 @@ ospf_route_add (struct route_table *rt, struct prefix_ipv4 *p,
 
   rn = route_node_get (rt, (struct prefix *) p);
 
+#if 0
   zlog_info ("Z: ospf_route_add(): rn->info != NULL: %d", (rn->info != NULL));
   zlog_info ("T: route->id = %s", inet_ntoa (p->prefix));
   zlog_info ("T: route %x", new_or);
+#endif
 
   ospf_route_copy_nexthops (new_or, over->path);
 

@@ -250,7 +250,7 @@ community_merge (struct community *com1, struct community *com2)
     com1->val = XREALLOC (MTYPE_COMMUNITY_VAL, com1->val, 
 			  (com1->size + com2->size) * 4);
   else
-    com1->val = XMALLOC (MTYPE_COMMUNITY, (com1->size + com2->size) * 4);
+    com1->val = XMALLOC (MTYPE_COMMUNITY_VAL, (com1->size + com2->size) * 4);
 
   memcpy (com1->val + com1->size, com2->val, com2->size * 4);
   com1->size += com2->size;
@@ -421,9 +421,9 @@ community_add_val (struct community *com, u_int32_t val)
 {
   com->size++;
   if (com->val)
-    com->val = XREALLOC (MTYPE_COMMUNITY, com->val, com_length (com));
+    com->val = XREALLOC (MTYPE_COMMUNITY_VAL, com->val, com_length (com));
   else
-    com->val = XMALLOC (MTYPE_COMMUNITY, com_length (com));
+    com->val = XMALLOC (MTYPE_COMMUNITY_VAL, com_length (com));
   com_lastval (com) = htonl (val);
 }
 

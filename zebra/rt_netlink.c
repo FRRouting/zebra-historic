@@ -37,7 +37,7 @@
 #include "zebra/redistribute.h"
 #include "zebra/interface.h"
 
-/* #define DEBUG */
+/* #define DEBUG */ 
 
 /* Socket interface to kernel */
 struct 
@@ -808,9 +808,8 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
 	    ifp->name, ifp->ifindex);
 
-      /* If the interface is deleted. */
-      ;
-
+      zebra_interface_delete_update (ifp);
+      
       if_delete (ifp);
     }
 

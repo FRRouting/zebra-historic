@@ -24,9 +24,9 @@
 
 struct ospf6_prefix
 {
-  unsigned char  o6p_prefix_len;
-  unsigned char  o6p_prefix_opt;
-  unsigned short o6p_prefix_metric;
+  u_int8_t o6p_prefix_len;
+  u_int8_t o6p_prefix_opt;
+  u_int16_t o6p_prefix_metric;
   /* followed by one address_prefix */
 };
 
@@ -44,8 +44,8 @@ struct ospf6_prefix
 
 
 /* Function Prototypes */
-struct ospf6_prefix *ospf6_prefix_make (unsigned short,
-                                        struct prefix_ipv6 *);
+struct ospf6_prefix *
+  ospf6_prefix_make (u_int8_t, u_int16_t, struct prefix_ipv6 *);
 void ospf6_prefix_free (struct ospf6_prefix *);
 void ospf6_prefix_add (list, struct ospf6_prefix *);
 void ospf6_prefix_in6_addr (struct ospf6_prefix *, struct in6_addr *);

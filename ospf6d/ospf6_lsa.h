@@ -28,15 +28,32 @@
 /* LSA definition */
 
 /* Type */
-#define LST_ROUTER_LSA              0x2001
-#define LST_NETWORK_LSA             0x2002
-#define LST_INTER_AREA_PREFIX_LSA   0x2003
-#define LST_INTER_AREA_ROUTER_LSA   0x2004
-#define LST_AS_EXTERNAL_LSA         0x4005
-#define LST_GROUP_MEMBERSHIP_LSA    0x2006
-#define LST_TYPE_7_LSA              0x2007
-#define LST_LINK_LSA                0x0008
-#define LST_INTRA_AREA_PREFIX_LSA   0x2009
+#define LST_ROUTER_LSA                  0x2001
+#define OSPF6_LSA_TYPE_ROUTER           0x2001
+
+#define LST_NETWORK_LSA                 0x2002
+#define OSPF6_LSA_TYPE_NETWORK          0x2002
+
+#define LST_INTER_AREA_PREFIX_LSA       0x2003
+#define OSPF6_LSA_TYPE_INTER_PREFIX     0x2003
+
+#define LST_INTER_AREA_ROUTER_LSA       0x2004
+#define OSPF6_LSA_TYPE_INTER_ROUTER     0x2004
+
+#define LST_AS_EXTERNAL_LSA             0x4005
+#define OSPF6_LSA_TYPE_AS_EXTERNAL      0x4005
+
+#define LST_GROUP_MEMBERSHIP_LSA        0x2006
+#define OSPF6_LSA_TYPE_GROUP_MEMBERSHIP 0x2006
+
+#define LST_TYPE_7_LSA                  0x2007
+#define OSPF6_LSA_TYPE_TYPE_7           0x2007
+
+#define LST_LINK_LSA                    0x0008
+#define OSPF6_LSA_TYPE_LINK             0x0008
+
+#define LST_INTRA_AREA_PREFIX_LSA       0x2009
+#define OSPF6_LSA_TYPE_INTRA_PREFIX     0x2009
 
 /* lsa scope */
 #define SCOPE_MASK       0x6000
@@ -86,6 +103,14 @@ struct network_lsa
 };
 
 struct link_lsa
+{
+  u_char          llsa_rtr_pri;
+  u_char          llsa_options[3];
+  struct in6_addr llsa_linklocal;
+  u_int32_t       llsa_prefix_num;
+  /* followed by prefix(es) */
+};
+struct ospf6_link_lsa
 {
   u_char          llsa_rtr_pri;
   u_char          llsa_options[3];
@@ -237,6 +262,9 @@ unsigned short ospf6_lsa_checksum (struct ospf6_lsa_hdr *);
 
 int
 ospf6_lsa_is_known (struct ospf6_lsa_hdr *);
+
+/*xxx*/
+void ospf6_lsa_update_link (struct ospf6_interface *);
 
 #endif /* OSPF6_LSA_H */
 

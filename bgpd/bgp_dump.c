@@ -170,21 +170,26 @@ bgp_dump_routes_entry (struct bgp_info *info, int afi)
 void
 bgp_dump_routes_func ()
 {
-  struct route_node *node;
+  struct route_node *rn;
   struct bgp_info *info;
   struct bgp *bgp;
+  struct route_table *table;
 
   bgp = bgp_get_default ();
   if (!bgp)
     return;
 
-  for (node = route_top (bgp->rib[AFI_IP][SAFI_UNICAST]); node; node = route_next (node))
-    for (info = node->info; info; info = info->next)
+  table = bgp->rib[AFI_IP][SAFI_UNICAST];
+
+  for (rn = route_top (table); rn; rn = route_next (rn))
+    for (info = rn->info; info; info = info->next)
       bgp_dump_routes_entry (info, AFI_IP);
 
 #ifdef HAVE_IPV6
-  for (node = route_top (bgp->rib[AFI_IP6][SAFI_UNICAST]); node; node = route_next (node))
-    for (info = node->info; info; info = info->next)
+  table = bgp->rib[AFI_IP6][SAFI_UNICAST];
+  
+  for (rn = route_top (table); rn; rn = route_next (rn))
+    for (info = rn->info; info; info = info->next)
       bgp_dump_routes_entry (info, AFI_IP6);
 #endif /* HAVE_IPV6 */
 

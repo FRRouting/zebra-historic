@@ -233,82 +233,164 @@ struct memory_list
 {
   int index;
   char *format;
-} memory_list[] =
-{
-  { MTYPE_ROUTE_TABLE,     "Route table     : %ld\r\n" },
-  { MTYPE_ROUTE_NODE,      "Route node      : %ld\r\n" },
-  { MTYPE_RIB,             "RIB             : %ld\r\n" },
-  { MTYPE_LINK_LIST,       "Link List       : %ld\r\n" },
-  { MTYPE_LINK_NODE,       "Link Node       : %ld\r\n" },
-  { MTYPE_HASH,            "Hash            : %ld\r\n" },
-  { MTYPE_HASH_BACKET,     "Hash Bucket     : %ld\r\n" },
-  { MTYPE_FILTER,          "Filter Entry    : %ld\r\n" },
-  { MTYPE_ACCESS_LIST,     "Access List     : %ld\r\n" },
-  { MTYPE_PREFIX_LIST,     "Prefix List     : %ld\r\n" },
-  { MTYPE_PREFIX_LIST_ENTRY, "Prefix List Entry : %ld\r\n"},
-  { MTYPE_ROUTE_MAP,       "Route map       : %ld\r\n" },
-  { MTYPE_ROUTE_MAP_NAME,  "Route map name  : %ld\r\n" },
-  { MTYPE_ROUTE_MAP_INDEX, "Route map index : %ld\r\n" },
-  { MTYPE_ROUTE_MAP_RULE,  "Route map rule  : %ld\r\n" },
-  { MTYPE_ROUTE_MAP_RULE_STR, "Route map rule str: %ld\r\n" },
-  { 0,                     "---------------------\r\n" },
-  { MTYPE_ATTR,            "BGP attribute   : %ld\r\n" },
-  { MTYPE_AS_PATH,         "BGP aspath      : %ld\r\n" },
-  { MTYPE_AS_SEG,          "BGP aspath seg  : %ld\r\n" },
-  { MTYPE_AS_STR,          "BGP aspath str  : %ld\r\n" },
-  { 0,                     "---------------------\r\n" },
-  { MTYPE_AS_LIST,         "BGP as list     : %ld\r\n" },
-  { MTYPE_AS_FILTER,       "BGP as filter   : %ld\r\n" },
-  { 0,                     "---------------------\r\n" },
-  { MTYPE_DESC,            "Command desc    : %ld\r\n" },
-  { 0,                     "---------------------\r\n" },
-  { MTYPE_CLUSTER,         "Cluster list    : %ld\r\n" },
-  { MTYPE_CLUSTER_VAL,     "Cluster list val: %ld\r\n" },
-  { 0,                     "---------------------\r\n" },
-  { MTYPE_BUFFER,          "Buffer          : %ld\r\n" },
-  { MTYPE_BUFFER_DATA,     "Buffer data     : %ld\r\n" },
-  { MTYPE_STREAM,          "Stream          : %ld\r\n" },
-  { MTYPE_RIP_INFO,        "RIP info        : %ld\r\n" },
-  { 0,                     "---------------------\r\n" },
-  { MTYPE_OSPF_TOP,        "OSPF top        : %ld\r\n" },
-  { MTYPE_OSPF_AREA,       "OSPF area       : %ld\r\n" },
-  { MTYPE_OSPF_AREA_RANGE, "OSPF area range : %ld\r\n" },
-  { MTYPE_OSPF_NETWORK,    "OSPF network    : %ld\r\n" },
-  { MTYPE_OSPF_IF,         "OSPF interface  : %ld\r\n" },
-  { MTYPE_OSPF_NEIGHBOR,   "OSPF neighbor   : %ld\r\n" },
-  { MTYPE_OSPF_ROUTE,      "OSPF route      : %ld\r\n" },
-  { MTYPE_OSPF_ADDR,       "OSPF address    : %ld\r\n" },
-  { MTYPE_OSPF_MESSAGE,    "OSPF message    : %ld\r\n" },
-  { MTYPE_OSPF_TMP,        "OSPF tmp mem    : %ld\r\n" },
-  { MTYPE_OSPF_LSA,        "OSPF LSA        : %ld\r\n" },
-  { MTYPE_OSPF_LSA_DATA,   "OSPF LSA data   : %ld\r\n" },
-  { MTYPE_OSPF_LSDB,       "OSPF LSDB       : %ld\r\n" },
-  { MTYPE_OSPF_PACKET,     "OSPF packet     : %ld\r\n" },
-  { MTYPE_OSPF_FIFO,       "OSPF FIFO queue : %ld\r\n" },
-  { MTYPE_OSPF_VERTEX,     "OSPF vertex     : %ld\r\n" },
-  { MTYPE_OSPF_NEXTHOP,    "OSPF nexthop    : %ld\r\n" },
-  { MTYPE_OSPF_PATH,	   "OSPF path       : %ld\r\n" },
-  { MTYPE_OSPF_VL_DATA,    "OSPF VL data    : %ld\r\n" },
-  { MTYPE_OSPF_CRYPT_KEY,  "OSPF crypt key  : %ld\r\n" },
-  { MTYPE_OSPF_EXTERNAL_INFO, "OSPF ext. info  : %ld\r\n" },
-  { -1, NULL },
-
 };
 
-DEFUN (show_memory,
-       show_memory_cmd,
-       "show memory",
-       "Show running system information\n"
-       "Memory statistics\n")
+struct memory_list memory_list_lib[] =
+{
+  { MTYPE_TMP,                "Temporary memory: %ld\r\n" },
+  { MTYPE_ROUTE_TABLE,        "Route table     : %ld\r\n" },
+  { MTYPE_ROUTE_NODE,         "Route node      : %ld\r\n" },
+  { MTYPE_RIB,                "RIB             : %ld\r\n" },
+  { MTYPE_LINK_LIST,          "Link List       : %ld\r\n" },
+  { MTYPE_LINK_NODE,          "Link Node       : %ld\r\n" },
+  { MTYPE_HASH,               "Hash            : %ld\r\n" },
+  { MTYPE_HASH_BACKET,        "Hash Bucket     : %ld\r\n" },
+  { MTYPE_ACCESS_LIST,        "Access List     : %ld\r\n" },
+  { MTYPE_ACCESS_FILTER,      "Access Filter   : %ld\r\n" },
+  { MTYPE_PREFIX_LIST,        "Prefix List     : %ld\r\n" },
+  { MTYPE_PREFIX_LIST_ENTRY,  "Prefix List Entry : %ld\r\n"},
+  { MTYPE_ROUTE_MAP,          "Route map       : %ld\r\n" },
+  { MTYPE_ROUTE_MAP_NAME,     "Route map name  : %ld\r\n" },
+  { MTYPE_ROUTE_MAP_INDEX,    "Route map index : %ld\r\n" },
+  { MTYPE_ROUTE_MAP_RULE,     "Route map rule  : %ld\r\n" },
+  { MTYPE_ROUTE_MAP_RULE_STR, "Route map rule str: %ld\r\n" },
+  { MTYPE_DESC,               "Command desc    : %ld\r\n" },
+  { MTYPE_BUFFER,             "Buffer          : %ld\r\n" },
+  { MTYPE_BUFFER_DATA,        "Buffer data     : %ld\r\n" },
+  { MTYPE_STREAM,             "Stream          : %ld\r\n" },
+  { -1, NULL }
+};
+
+struct memory_list memory_list_bgp[] =
+{
+  { MTYPE_ATTR,               "BGP attribute   : %ld\r\n" },
+  { MTYPE_AS_PATH,            "BGP aspath      : %ld\r\n" },
+  { MTYPE_AS_SEG,             "BGP aspath seg  : %ld\r\n" },
+  { MTYPE_AS_STR,             "BGP aspath str  : %ld\r\n" },
+  { 0,                        "---------------------\r\n" },
+  { MTYPE_AS_LIST,            "BGP as list     : %ld\r\n" },
+  { MTYPE_AS_FILTER,          "BGP as filter   : %ld\r\n" },
+  { 0,                        "---------------------\r\n" },
+  { MTYPE_CLUSTER,            "Cluster list    : %ld\r\n" },
+  { MTYPE_CLUSTER_VAL,        "Cluster list val: %ld\r\n" },
+  { -1, NULL }
+};
+
+struct memory_list memory_list_rip[] =
+{
+  { MTYPE_RIP_INFO,           "RIP info        : %ld\r\n" },
+  { -1, NULL }
+};
+
+struct memory_list memory_list_ospf[] =
+{
+  { MTYPE_OSPF_TOP,           "OSPF top        : %ld\r\n" },
+  { MTYPE_OSPF_AREA,          "OSPF area       : %ld\r\n" },
+  { MTYPE_OSPF_AREA_RANGE,    "OSPF area range : %ld\r\n" },
+  { MTYPE_OSPF_NETWORK,       "OSPF network    : %ld\r\n" },
+  { MTYPE_OSPF_IF,            "OSPF interface  : %ld\r\n" },
+  { MTYPE_OSPF_NEIGHBOR,      "OSPF neighbor   : %ld\r\n" },
+  { MTYPE_OSPF_ROUTE,         "OSPF route      : %ld\r\n" },
+  { MTYPE_OSPF_ADDR,          "OSPF address    : %ld\r\n" },
+  { MTYPE_OSPF_MESSAGE,       "OSPF message    : %ld\r\n" },
+  { MTYPE_OSPF_TMP,           "OSPF tmp mem    : %ld\r\n" },
+  { MTYPE_OSPF_LSA,           "OSPF LSA        : %ld\r\n" },
+  { MTYPE_OSPF_LSA_DATA,      "OSPF LSA data   : %ld\r\n" },
+  { MTYPE_OSPF_LSDB,          "OSPF LSDB       : %ld\r\n" },
+  { MTYPE_OSPF_PACKET,        "OSPF packet     : %ld\r\n" },
+  { MTYPE_OSPF_FIFO,          "OSPF FIFO queue : %ld\r\n" },
+  { MTYPE_OSPF_VERTEX,        "OSPF vertex     : %ld\r\n" },
+  { MTYPE_OSPF_NEXTHOP,       "OSPF nexthop    : %ld\r\n" },
+  { MTYPE_OSPF_PATH,	      "OSPF path       : %ld\r\n" },
+  { MTYPE_OSPF_VL_DATA,       "OSPF VL data    : %ld\r\n" },
+  { MTYPE_OSPF_CRYPT_KEY,     "OSPF crypt key  : %ld\r\n" },
+  { MTYPE_OSPF_EXTERNAL_INFO, "OSPF ext. info  : %ld\r\n" },
+  { -1, NULL },
+};
+
+struct memory_list memory_list_separator[] =
+{
+  { 0,                        "---------------------\r\n" },
+  {-1, NULL}
+};
+
+void
+show_memory_vty (struct vty *vty, struct memory_list *list)
 {
   struct memory_list *m;
 
-  for (m = memory_list; m->index >= 0; m++)
+  for (m = list; m->index >= 0; m++)
     if (m->index == 0)
       vty_out (vty, m->format);
     else
       vty_out (vty, m->format, mstat[m->index].alloc);
+}
 
+DEFUN (show_memory_all,
+       show_memory_all_cmd,
+       "show memory all",
+       "Show running system information\n"
+       "Memory statistics\n"
+       "All memory statistics\n")
+{
+  show_memory_vty (vty, memory_list_lib);
+  show_memory_vty (vty, memory_list_separator);
+  show_memory_vty (vty, memory_list_rip);
+  show_memory_vty (vty, memory_list_separator);
+  show_memory_vty (vty, memory_list_ospf);
+  show_memory_vty (vty, memory_list_separator);
+  show_memory_vty (vty, memory_list_bgp);
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (show_memory_all,
+       show_memory_cmd,
+       "show memory",
+       "Show running system information\n"
+       "Memory statistics\n")
+
+DEFUN (show_memory_lib,
+       show_memory_lib_cmd,
+       "show memory lib",
+       SHOW_STR
+       "Memory statistics\n"
+       "Library memory\n")
+{
+  show_memory_vty (vty, memory_list_lib);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_memory_rip,
+       show_memory_rip_cmd,
+       "show memory rip",
+       SHOW_STR
+       "Memory statistics\n"
+       "RIP memory\n")
+{
+  show_memory_vty (vty, memory_list_rip);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_memory_bgp,
+       show_memory_bgp_cmd,
+       "show memory bgp",
+       SHOW_STR
+       "Memory statistics\n"
+       "BGP memory\n")
+{
+  show_memory_vty (vty, memory_list_bgp);
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_memory_ospf,
+       show_memory_ospf_cmd,
+       "show memory ospf",
+       SHOW_STR
+       "Memory statistics\n"
+       "OSPF memory\n")
+{
+  show_memory_vty (vty, memory_list_ospf);
   return CMD_SUCCESS;
 }
 
@@ -316,5 +398,16 @@ void
 memory_init ()
 {
   install_element (VIEW_NODE, &show_memory_cmd);
+  install_element (VIEW_NODE, &show_memory_all_cmd);
+  install_element (VIEW_NODE, &show_memory_lib_cmd);
+  install_element (VIEW_NODE, &show_memory_rip_cmd);
+  install_element (VIEW_NODE, &show_memory_bgp_cmd);
+  install_element (VIEW_NODE, &show_memory_ospf_cmd);
+
   install_element (ENABLE_NODE, &show_memory_cmd);
+  install_element (ENABLE_NODE, &show_memory_all_cmd);
+  install_element (ENABLE_NODE, &show_memory_lib_cmd);
+  install_element (ENABLE_NODE, &show_memory_rip_cmd);
+  install_element (ENABLE_NODE, &show_memory_bgp_cmd);
+  install_element (ENABLE_NODE, &show_memory_ospf_cmd);
 }

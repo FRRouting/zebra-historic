@@ -1,7 +1,7 @@
 /*
  * OSPF version 2  Neighbor State Machine
  * From RFC2328 [OSPF Version 2]
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  *
@@ -37,6 +37,7 @@
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -47,7 +48,7 @@
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_abr.h"
 
-extern unsigned long ospf_debug_nsm;
+extern unsigned long term_debug_ospf_nsm;
 
 
 /* OSPF NSM Timer functions. */
@@ -59,9 +60,9 @@ ospf_inactivity_timer (struct thread *thread)
   nbr = THREAD_ARG (thread);
   nbr->t_inactivity = NULL;
 
-  if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
-    zlog (NULL, LOG_DEBUG, "NSM[%s]: Timer (Inactivity timer expire)",
-	  inet_ntoa (nbr->router_id));
+  if (IS_DEBUG_OSPF (nsm, NSM_TIMERS))
+    zlog (NULL, LOG_DEBUG, "NSM[%s:%s]: Timer (Inactivity timer expire)",
+	  nbr->oi->ifp->name, inet_ntoa (nbr->router_id));
 
   OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_InactivityTimer);
 
@@ -79,9 +80,9 @@ ospf_db_desc_timer (struct thread *thread)
 
   oi = nbr->oi;
 
-  if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
-    zlog (NULL, LOG_INFO, "NSM[%s]: Timer (DD Retransmit timer expire)",
-	  inet_ntoa (nbr->src));
+  if (IS_DEBUG_OSPF (nsm, NSM_TIMERS))
+    zlog (NULL, LOG_INFO, "NSM[%s:%s]: Timer (DD Retransmit timer expire)",
+	  nbr->oi->ifp->name, inet_ntoa (nbr->src));
 
   /* Sending DD packet. If Last send DD packet remains, re-send it. */
   if (nbr->last_send)
@@ -137,9 +138,9 @@ nsm_timer_set (struct ospf_neighbor *nbr)
 int
 nsm_ignore (struct ospf_neighbor *nbr)
 {
-  if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
-    zlog (NULL, LOG_INFO, "NSM[%s]: nsm_ignore called",
-	  inet_ntoa (nbr->router_id));
+  if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
+    zlog (NULL, LOG_INFO, "NSM[%s:%s]: nsm_ignore called",
+	  nbr->oi->ifp->name, inet_ntoa (nbr->router_id));
 
   return 0;
 }
@@ -204,30 +205,63 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
   return next_state;
 }
 
-/* Add LSA to neighbor's summary list. */
+int
+ospf_db_summary_count (struct ospf_neighbor *nbr)
+{
+  return new_lsdb_count (&nbr->db_sum);
+}
+
+int
+ospf_db_summary_isempty (struct ospf_neighbor *nbr)
+{
+  return new_lsdb_isempty (&nbr->db_sum);
+}
+
 int
 ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 {
   struct ospf_neighbor *nbr;
 
-  if (v == NULL)
+  if ((nbr = (struct ospf_neighbor *) v) == NULL)
     return 0;
 
   if (lsa == NULL)
     return 0;
 
-  nbr = (struct ospf_neighbor *) v;
-
   if (LS_AGE (lsa) == OSPF_LSA_MAX_AGE)
     {
-      zlog_info ("Z: ospf_db_summary_add() : MaxAge LSA ID: %s", 
-		 inet_ntoa (lsa->data->id));
+      zlog_info ("LSA[Type%d:%s]: LSA is MaxAge, add retransmit list",
+		 lsa->data->id, inet_ntoa (lsa->data->id));
       ospf_ls_retransmit_add (nbr, lsa);                      
     }
   else 
-    list_add_node (nbr->db_summary, lsa);
+    new_lsdb_add (&nbr->db_sum, lsa);
 
   return 0;
+}
+
+void
+ospf_db_summary_delete_all (struct ospf_neighbor *nbr)
+{
+  new_lsdb_delete_all (&nbr->db_sum);
+}
+
+void
+ospf_db_summary_clear (struct ospf_neighbor *nbr)
+{
+  struct new_lsdb *lsdb;
+  int i;
+
+  lsdb = &nbr->db_sum;
+  for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
+    {
+      struct route_table *table = lsdb->type[i].db;
+      struct route_node *rn;
+
+      for (rn = route_top (table); rn; rn = route_next (rn))
+	if (rn->info)
+	  new_lsdb_delete (&nbr->db_sum, rn->info);
+    }
 }
 
 
@@ -246,10 +280,16 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
 
   area = nbr->oi->area;
 
+  foreach_lsa (ROUTER_LSDB (area), nbr, 0, ospf_db_summary_add);
+  foreach_lsa (NETWORK_LSDB (area), nbr, 0, ospf_db_summary_add);
+  foreach_lsa (SUMMARY_LSDB (area), nbr, 0, ospf_db_summary_add);
+  foreach_lsa (SUMMARY_ASBR_LSDB (area), nbr, 0, ospf_db_summary_add);
+#if 0
   ospf_lsdb_iterator (ROUTER_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (NETWORK_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (SUMMARY_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (SUMMARY_LSA_ASBR (area), nbr, 0, ospf_db_summary_add);
+#endif
   
   if (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK &&
       area->external_routing == OSPF_AREA_DEFAULT)
@@ -316,8 +356,12 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
     flag = 1;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
+  /*
   if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router) ||
       IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
+  */
+  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &DR (oi)) ||
+      IPV4_ADDR_SAME (&nbr->address.u.prefix4, &BDR (oi)))
     flag = 1;
 
   if (nbr->status == NSM_TwoWay && flag == 1)
@@ -377,20 +421,17 @@ nsm_oneway_received (struct ospf_neighbor *nbr)
 void
 nsm_reset_nbr (struct ospf_neighbor *nbr)
 {
-  /* Clear Link State Retransmission list. */
-  if (!list_isempty (nbr->ls_retransmit))
-    {
-      ospf_ls_retransmit_clear (nbr);
-      list_delete_all_node (nbr->ls_retransmit);
-    }
-
   /* Clear Database Summary list. */
-  if (!list_isempty (nbr->db_summary))
-    list_delete_all_node (nbr->db_summary);
+  if (!ospf_db_summary_isempty (nbr))
+    ospf_db_summary_clear (nbr);
 
   /* Clear Link State Request list. */
-  if (! ospf_ls_request_isempty (nbr))
+  if (!ospf_ls_request_isempty (nbr))
     ospf_ls_request_delete_all (nbr);
+
+  /* Clear Link State Retransmission list. */
+  if (!ospf_ls_retransmit_isempty (nbr))
+    ospf_ls_retransmit_clear (nbr);
 
   /* Cancel thread. */
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
@@ -623,9 +664,9 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
   struct ospf_interface *oi;
 
   /* Logging change of status. */
-  if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
-    zlog_info ("NSM Status change [%s:%s] %s -> %s",
-	       inet_ntoa (nbr->router_id), nbr->oi->ifp->name,
+  if (IS_DEBUG_OSPF (nsm, NSM_STATUS))
+    zlog_info ("NSM[%s:%s]: Status change %s -> %s",
+	       nbr->oi->ifp->name, inet_ntoa (nbr->router_id),
 	       LOOKUP (ospf_nsm_status_msg, nbr->status),
 	       LOOKUP (ospf_nsm_status_msg, status));
 
@@ -667,7 +708,7 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 		ospf_schedule_abr_task ();
 	}
 
-      zlog_info ("Z:nsm_change_status(): "
+      zlog_info ("Z: nsm_change_status(): "
 		 "scheduling new router-LSA origination");
 
       ospf_schedule_router_lsa_originate (oi->area);
@@ -678,11 +719,11 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
       /* Originate network-LSA. */
       if (oi->status == ISM_DR)
 	{
-/*	  thread_execute (master, ospf_network_lsa_refresh, oi, 0); */
 	  if (oi->network_lsa_self && oi->full_nbrs == 0)
 	    {
 	      ospf_lsa_flush_area (oi->network_lsa_self, oi->area);
 	      oi->network_lsa_self = NULL;
+	      OSPF_TIMER_OFF (oi->t_network_lsa_self);
 	    }
 	  else
 	    ospf_schedule_network_lsa_originate (oi);
@@ -722,8 +763,9 @@ ospf_nsm_event (struct thread *thread)
      deleted. */
   if (event == NSM_KillNbr || event == NSM_InactivityTimer)
     {
-      if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
-	zlog_info ("NSM[%s]: the neighbor is deleted", inet_ntoa (router_id));
+      if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
+	zlog_info ("NSM[%s:%s]: neighbor deleted",
+		   oi->ifp->name, inet_ntoa (router_id));
 
       /* Timers are canceled in ospf_nbr_free, moreover we cannot call
          nsm_timer_set here because nbr is freed already!!!*/
@@ -735,8 +777,9 @@ ospf_nsm_event (struct thread *thread)
   if (! next_state)
     next_state = NSM [nbr->status][event].next_state;
 
-  if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
-    zlog_info ("NSM[%s]: %s (%s)", inet_ntoa (nbr->router_id),
+  if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
+    zlog_info ("NSM[%s:%s]: %s (%s)", oi->ifp->name,
+	       inet_ntoa (nbr->router_id),
 	       LOOKUP (ospf_nsm_status_msg, nbr->status),
 	       ospf_nsm_event_str [event]);
   

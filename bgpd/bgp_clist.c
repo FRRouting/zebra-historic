@@ -257,6 +257,13 @@ void
 community_list_delete (struct community_list *list)
 {
   struct community_list_list *clist;
+  struct community_entry *entry, *next;
+
+  for (entry = list->head; entry; entry = next)
+    {
+      next = entry->next;
+      community_entry_free (entry);
+    }
 
   if (list->sort == COMMUNITY_LIST_NUMBER)
     clist = &community_list_master.num;
@@ -359,13 +366,13 @@ community_list_dup_check (struct community_list *list,
 }
 
 DEFUN (ip_community_list, ip_community_list_cmd,
-       "ip community-list NAME (deny|permit) .COMMUNITY",
+       "ip community-list WORD (deny|permit) .AA:NN",
        IP_STR
-       "Community attribute list\n"
+       "Add a community list entry\n"
        "Community list name\n"
-       "Community list for denies\n"
-       "Community list for permits\n"
-       "Community list. e.g. no-export 7675:70\n")
+       "Specify community to reject\n"
+       "Specify community to accept\n"
+       "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 {
   enum community_entry_type type;
   struct community_entry *entry;
@@ -426,15 +433,16 @@ DEFUN (ip_community_list, ip_community_list_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_ip_community_list, no_ip_community_list_cmd,
-       "no ip community-list NAME (deny|permit) .COMMUNITY",
+DEFUN (no_ip_community_list,
+       no_ip_community_list_cmd,
+       "no ip community-list WORD (deny|permit) .AA:NN",
        NO_STR
        IP_STR
-       "Community attribute list\n"
+       "Add a community list entry\n"
        "Community list name\n"
-       "Community list for denies\n"
-       "Community list for permits\n"
-       "Community list. e.g no-export 7675:70\n")
+       "Specify community to reject\n"
+       "Specify community to accept\n"
+       "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 {
   enum community_entry_type type;
   struct community_entry *entry;
@@ -504,6 +512,29 @@ DEFUN (no_ip_community_list, no_ip_community_list_cmd,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_ip_community_list_all,
+       no_ip_community_list_all_cmd,
+       "no ip community-list WORD",
+       NO_STR
+       IP_STR
+       "Add a community list entry\n"
+       "Community list name\n")
+{
+  struct community_list *list;
+
+  list = community_list_lookup (argv[0]);
+  if (list == NULL)
+    {
+      vty_out (vty, "ip community-list %s doesn't exist.%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  community_list_delete (list);
+
+  return CMD_SUCCESS;
+}
+
 int
 config_write_community (struct vty *vty)
 {
@@ -546,6 +577,7 @@ community_list_init ()
 
   install_element (CONFIG_NODE, &ip_community_list_cmd);
   install_element (CONFIG_NODE, &no_ip_community_list_cmd);
+  install_element (CONFIG_NODE, &no_ip_community_list_all_cmd);
 }
 
 void

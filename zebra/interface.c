@@ -81,6 +81,7 @@ if_zebra_new_hook (struct interface *ifp)
 int
 if_zebra_delete_hook (struct interface *ifp)
 {
+  rib_if_delete(ifp);
   if (ifp->info)
     XFREE (MTYPE_TMP, ifp->info);
   return 0;

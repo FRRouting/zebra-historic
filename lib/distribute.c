@@ -295,12 +295,12 @@ distribute_list_prefix_unset (char *ifname, enum distribute_type type,
 }
 
 DEFUN (distribute_list, distribute_list_cmd,
-       "distribute-list ALIST_NAME (in|out) IFNAME",
-       "Distribute list set\n"
-       "Distribute list access-list name\n"
-       "Distribute list set for input filtering\n"
-       "Distribute list set for output filtering\n"
-       "Distribute list interface name\n")
+       "distribute-list WORD (in|out) WORD",
+       "Filter networks in routing updates\n"
+       "Access-list name\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n"
+       "Interface name\n")
 {
   enum distribute_type type;
   struct distribute *dist;
@@ -323,13 +323,13 @@ DEFUN (distribute_list, distribute_list_cmd,
 }       
 
 DEFUN (no_districute_list, no_distribute_list_cmd,
-       "no distribute-list ALIST_NAME (in|out) IFNAME",
+       "no distribute-list WORD (in|out) WORD",
        NO_STR
-       "Distribute list unset\n"
-       "Distribute list access-list name\n"
-       "Distribute list for input filtering\n"
-       "Distribute list for output filtering\n"
-       "Distribute list interface name\n")
+       "Filter networks in routing updates\n"
+       "Access-list name\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n"
+       "Interface name\n")
 {
   int ret;
   enum distribute_type type;
@@ -355,13 +355,13 @@ DEFUN (no_districute_list, no_distribute_list_cmd,
 }       
 
 DEFUN (districute_list_prefix, distribute_list_prefix_cmd,
-       "distribute-list prefix PLIST_NAME (in|out) IFNAME",
-       "Distribute list set\n"
-       "Distribute list for prefix-list\n"
-       "Distribute list prefix-list name\n"
-       "Distribute list set for input filtering\n"
-       "Distribute list set for output filtering\n"
-       "Distribute list interface name\n")
+       "distribute-list prefix WORD (in|out) WORD",
+       "Filter networks in routing updates\n"
+       "Filter prefixes in routing updates\n"
+       "Name of an IP prefix-list\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n"
+       "Interface name\n")
 {
   enum distribute_type type;
   struct distribute *dist;
@@ -385,14 +385,14 @@ DEFUN (districute_list_prefix, distribute_list_prefix_cmd,
 }       
 
 DEFUN (no_districute_list_prefix, no_distribute_list_prefix_cmd,
-       "no distribute-list prefix ALIST_NAME (in|out) IFNAME",
+       "no distribute-list prefix WORD (in|out) WORD",
        NO_STR
-       "Distribute list unset\n"
-       "Distribute list for prefix-list\n"
-       "Distribute list prefix-list name\n"
-       "Distribute list for input filtering\n"
-       "Distribute list for output filtering\n"
-       "Distribute list interface name\n")
+       "Filter networks in routing updates\n"
+       "Filter prefixes in routing updates\n"
+       "Name of an IP prefix-list\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n"
+       "Interface name\n")
 {
   int ret;
   enum distribute_type type;

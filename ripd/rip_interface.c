@@ -42,6 +42,7 @@
 #include "ripd/rip_debug.h"
 
 void rip_enable_apply (struct interface *);
+int rip_if_down(struct interface *ifp);
 
 struct message ri_version_msg[] = 
 {
@@ -440,10 +441,7 @@ int
 rip_interface_down (int command, struct zebra *zebra, zebra_size_t length)
 {
   struct interface *ifp;
-  struct route_node *rp;
-  struct rip_info *rinfo;
   struct stream *s;
-  struct rip_interface *ri = NULL;
 
   s = zebra->ibuf;  
   /* zebra_interface_state_read() updates interface structure in iflist */
@@ -452,58 +450,7 @@ rip_interface_down (int command, struct zebra *zebra, zebra_size_t length)
   if (ifp == NULL)
     return 0;
 
-  /* Clear RIP dynamic routes on the interface*/
-  if (rip)
-    {
-      for (rp = route_top (rip->table); rp; rp = route_next (rp))
-	if ((rinfo = rp->info) != NULL)
-	  {
-	    /* routes got through RIP */
-	    if (rinfo->ifindex == ifp->ifindex &&
-		rinfo->type == ZEBRA_ROUTE_RIP &&
-		rinfo->sub_type == RIP_ROUTE_RTE){
-
-	      rip_zebra_ipv4_delete ( (struct prefix_ipv4 *)&rp->p,
-				      &rinfo->nexthop,rinfo->ifindex);
-
-	      RIP_TIMER_OFF (rinfo->t_timeout);
-	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
-	      
-	      rp->info = NULL;
-	      route_unlock_node (rp);
-	      
-	      rip_info_free (rinfo);
-	    }
-	    else
-	      /* all redistributed routes but kernel and static and system */
-	      if ((rinfo->ifindex == ifp->ifindex) &&
-		  (rinfo->type != ZEBRA_ROUTE_STATIC) &&
-		  (rinfo->type != ZEBRA_ROUTE_KERNEL) &&
-		  (rinfo->type != ZEBRA_ROUTE_SYSTEM)){
-
-		rip_redistribute_delete(rinfo->type,rinfo->sub_type,
-					(struct prefix_ipv4 *)&rp->p,
-					rinfo->ifindex);
-	      }
-	  }
-    }
-	    
-  ri = ifp->info;
-  
-  if (ri->running)
-   {
-     if (IS_RIP_DEBUG_EVENT)
-       zlog_info ("turn off %s", ifp->name);
-
-     /* Leave from multicast group. */
-     rip_multicast_leave (ifp, rip->sock);
-
-     ri->running = 0;
-   }
-
-  if (IS_RIP_DEBUG_ZEBRA)
-    zlog_info ("interface %s index %d flags %d metric %d mtu %d is down",
-	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+  rip_if_down(ifp);
  
   return 0;
 }
@@ -558,6 +505,89 @@ rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 int
 rip_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
 {
+  struct interface *ifp;
+  struct stream *s;
+
+
+  s = zebra->ibuf;  
+  /* zebra_interface_state_read() updates interface structure in iflist */
+  ifp = zebra_interface_state_read(s);
+
+  if (ifp == NULL)
+    return 0;
+
+  if (if_is_up (ifp)){
+    rip_if_down(ifp);
+  } 
+  
+  zlog_info("interface delete %s index %d flags %d metric %d mtu %d",
+	    ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);  
+  
+  if_delete(ifp);
+
+  return 0;
+}
+
+int
+rip_if_down(struct interface *ifp)
+{
+  struct route_node *rp;
+  struct rip_info *rinfo;
+  struct rip_interface *ri = NULL;
+
+    /* Clear RIP dynamic routes on the interface*/
+  if (rip)
+    {
+      for (rp = route_top (rip->table); rp; rp = route_next (rp))
+	if ((rinfo = rp->info) != NULL)
+	  {
+	    /* routes got through RIP */
+	    if (rinfo->ifindex == ifp->ifindex &&
+		rinfo->type == ZEBRA_ROUTE_RIP &&
+		rinfo->sub_type == RIP_ROUTE_RTE){
+
+	      rip_zebra_ipv4_delete ( (struct prefix_ipv4 *)&rp->p,
+				      &rinfo->nexthop,rinfo->ifindex);
+
+	      RIP_TIMER_OFF (rinfo->t_timeout);
+	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+	      
+	      rp->info = NULL;
+	      route_unlock_node (rp);
+	      
+	      rip_info_free (rinfo);
+	    }
+	    else
+	      /* all redistributed routes but kernel and static and system */
+	      if ((rinfo->ifindex == ifp->ifindex) &&
+		  (rinfo->type != ZEBRA_ROUTE_STATIC) &&
+		  (rinfo->type != ZEBRA_ROUTE_KERNEL) &&
+		  (rinfo->type != ZEBRA_ROUTE_SYSTEM)){
+
+		rip_redistribute_delete(rinfo->type,rinfo->sub_type,
+					(struct prefix_ipv4 *)&rp->p,
+					rinfo->ifindex);
+	      }
+	  }
+    }
+	    
+  ri = ifp->info;
+  
+  if (ri->running)
+   {
+     if (IS_RIP_DEBUG_EVENT)
+       zlog_info ("turn off %s", ifp->name);
+
+     /* Leave from multicast group. */
+     rip_multicast_leave (ifp, rip->sock);
+
+     ri->running = 0;
+   }
+
+  if (IS_RIP_DEBUG_ZEBRA)
+    zlog_info ("interface %s index %d flags %d metric %d mtu %d is down",
+	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
+
   return 0;
 }
 

@@ -23,21 +23,42 @@
 #ifndef _ZEBRA_OSPF_ASBR_H
 #define _ZEBRA_OSPF_ASBR_H
 
+/* Redistributed external information. */
+struct external_info
+{
+  /* Origination flags. */
+  u_char flags;
+#define EXTERNAL_INITIAL		0x00
+#define EXTERNAL_ORIGINATED		0x01
+#define EXTERNAL_FILTERED		0x02
+
+  /* Prefix. */
+  struct prefix_ipv4 p;
+
+  /* Interface index. */
+  unsigned int ifindex;
+
+  /* Nexthop address. */
+  struct in_addr nexthop;
+
+  /* Additional Route tag. */
+  u_int32_t tag;
+
+  /* struct ospf_lsa *lsa; */		/* Originated-LSA. */
+};
+
 #define OSPF_ASBR_CHECK_DELAY 30
 
 void ospf_external_route_remove (struct prefix_ipv4 *p);
+struct external_info *ospf_external_info_add (u_char, struct prefix_ipv4,
+					      unsigned int, struct in_addr);
+void ospf_external_info_delete (u_char, struct prefix_ipv4);
+struct external_info *ospf_external_info_lookup (u_char, struct prefix_ipv4 *);
 
 void ospf_asbr_status_update (u_char);
-#if 0
-struct ospf_external_route *ospf_external_route_new ();
-struct ospf_external_route *ospf_external_route_lookup (struct prefix_ipv4 *);
-void ospf_asbr_route_add (u_char, struct prefix_ipv4 *,
-			  unsigned int, struct in_addr);
-void ospf_asbr_route_delete (u_char, struct prefix_ipv4 *,
-			     unsigned int, struct in_addr);
-#endif
+
 void ospf_redistribute_withdraw (u_char);
-void ospf_asbr_check();
+void ospf_asbr_check ();
 void ospf_schedule_asbr_check ();
 void ospf_asbr_route_install_lsa (struct ospf_lsa *lsa);
 

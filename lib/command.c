@@ -249,7 +249,7 @@ cmd_make_descvec (char *string, char *descstr)
 	}
       if (*cp == '|')
 	{
-	  if (!multiple)
+	  if (! multiple)
 	    {
 	      fprintf (stderr, "Command parse error!: %s\n", string);
 	      exit (1);
@@ -866,11 +866,6 @@ cmd_ipv6_prefix_match (char *str)
       str++;
     }
 
-#if 0
-  printf("nums=%d\n", nums);
-  printf("colons=%d\n", colons);
-#endif /* 0 */
-
   if (state < STATE_MASK)
     return partly_match;
 
@@ -881,8 +876,13 @@ cmd_ipv6_prefix_match (char *str)
   if (mask < 0 || mask > 128)
     return no_match;
   
+/* I don't know why mask < 13 makes command match partly.
+   Forgive me to make this comments. I Want to set static default route
+   because of lack of function to originate default in ospf6d; sorry
+       yasu
   if (mask < 13)
     return partly_match;
+*/
 
   return exact_match;
 }
@@ -966,9 +966,12 @@ cmd_filter_by_completion (char *command, vector v, int index)
 		str = desc->cmd;
 
 		if (CMD_VARARG (str))
-		  return vararg_match;
-
-		if (CMD_RANGE (str))
+		  {
+		    if (match_type < vararg_match)
+		      match_type = vararg_match;
+		    matched++;
+		  }
+		else if (CMD_RANGE (str))
 		  {
 		    if (cmd_range_match (str, command))
 		      {
@@ -1078,9 +1081,12 @@ cmd_filter_by_string (char *command, vector v, int index)
 		str = desc->cmd;
 
 		if (CMD_VARARG (str))
-		  return vararg_match;
-
-		if (CMD_RANGE (str))
+		  {
+		    if (match_type < vararg_match)
+		      match_type = vararg_match;
+		    matched++;
+		  }
+		else if (CMD_RANGE (str))
 		  {
 		    if (cmd_range_match (str, command))
 		      {
@@ -1204,15 +1210,6 @@ is_cmd_ambiguous (char *command, vector v, int index, enum match_type type)
  	      case ipv6_match:
 		if (CMD_IPV6 (str))
 		  match++;
-#if 0
-		if ((ret = cmd_ipv6_match (command)) != no_match)
-		  {
-		    if (ret == partly_match)
-		      return 2; /* There is incomplete match. */
-
-		    match++;
-		  }
-#endif /* 0*/
 		break;
 	      case ipv6_prefix_match:
 		if ((ret = cmd_ipv6_prefix_match (command)) != no_match)
@@ -1224,14 +1221,6 @@ is_cmd_ambiguous (char *command, vector v, int index, enum match_type type)
 		  }
 		break;
 	      case ipv4_match:
-#if 0
-		if ((ret = cmd_ipv4_match (command)) != no_match)
-		  {
-		    if (ret == partly_match)
-		      return 2; /* There is incomplete match. */
-		    match++;
-		  }
-#endif /* 0 */
 		if (CMD_IPV4 (str))
 		  match++;
 		break;
@@ -1263,20 +1252,20 @@ is_cmd_ambiguous (char *command, vector v, int index, enum match_type type)
 char *
 cmd_entry_function (char *src, char *dst)
 {
+  /* Skip variable arguments. */
+  if (CMD_OPTION (dst) || CMD_VARIABLE (dst) || CMD_VARARG (dst) ||
+      CMD_IPV4 (dst) || CMD_IPV4_PREFIX (dst) || CMD_RANGE (dst))
+    return NULL;
+
   /* In case of 'command \t', given src is NULL string. */
   if (src == NULL)
-    {
-      if (CMD_OPTION (dst) || CMD_VARIABLE (dst) || CMD_VARARG (dst) ||
-	  CMD_IPV4 (dst) || CMD_IPV4_PREFIX (dst) || CMD_RANGE (dst))
-	return NULL;
-      else
-	return dst;
-    }
+    return dst;
 
+  /* Matched with input string. */
   if (strncmp (src, dst, strlen (src)) == 0)
     return dst;
-  else
-    return NULL;
+
+  return NULL;
 }
 
 /* If src matches dst return dst string, otherwise return NULL */
@@ -1486,15 +1475,46 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
       }
   vector_free (cmd_vector);
 
-#if 1
   if (vector_slot (matchvec, 0) == NULL)
     {
       vector_free (matchvec);
       *status= CMD_ERR_NO_MATCH;
     }
-#endif /* 0 */
 
   return matchvec;
+}
+
+/* Check LCD of matched command. */
+int
+cmd_lcd (char **matched)
+{
+  int i;
+  int j;
+  int lcd = -1;
+  char *s1, *s2;
+  char c1, c2;
+
+  if (matched[0] == NULL || matched[1] == NULL)
+    return 0;
+
+  for (i = 1; matched[i] != NULL; i++)
+    {
+      s1 = matched[i - 1];
+      s2 = matched[i];
+
+      for (j = 0; (c1 = s1[j]) && (c2 = s2[j]); j++)
+	if (c1 != c2)
+	  break;
+
+      if (lcd < 0)
+	lcd = j;
+      else
+	{
+	  if (lcd > j)
+	    lcd = j;
+	}
+    }
+  return lcd;
 }
 
 /* Command line completion support. */
@@ -1511,6 +1531,7 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
   struct desc *desc;
   vector descvec;
   char *command;
+  int lcd;
 
   /* First, filter by preceeding command string */
   for (i = 0; i < index; i++)
@@ -1532,7 +1553,7 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 	  return NULL;
 	}
       /*
-      else if (ret == 2)
+	else if (ret == 2)
 	{
 	  vector_free (cmd_vector);
 	  *status = CMD_ERR_NO_MATCH;
@@ -1597,39 +1618,38 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
       *status = CMD_COMPLETE_FULL_MATCH;
       return match_str;
     }
+  /* Make it sure last element is NULL. */
+  vector_set (matchvec, NULL);
 
-  /* Check complete match or partly match and make lcd of these
-     matches.  Sorry for complication. */
-  {
-    int i;
-    int j;
-    int index;
+  /* Check LCD of matched strings. */
+  if (vector_slot (vline, index) != NULL)
+    {
+      lcd = cmd_lcd ((char **) matchvec->index);
 
-    index = 0;
-    for (i = 0; i < vector_max (matchvec) - 1; i++)
-      {
-	char c1, c2;
-	char *s1 = vector_slot (matchvec, i);
-	char *s2 = vector_slot (matchvec, i + 1);
-	for (j = 0; (c1 = s1[j]) && (c2 = s2[j]); j++)
-	  if (c1 != c2)
-	    break;
-	if (index > j)
-	  index = j;
-      }
-  }
+      if (lcd)
+	{
+	  int len = strlen (vector_slot (vline, index));
+	  
+	  if (len < lcd)
+	    {
+	      char *lcdstr;
+	      
+	      lcdstr = XMALLOC (MTYPE_TMP, lcd + 1);
+	      memcpy (lcdstr, matchvec->index[0], lcd);
+	      lcdstr[lcd] = '\0';
+
+	      match_str = (char **) &lcdstr;
+	      vector_free (matchvec);
+	      *status = CMD_COMPLETE_MATCH;
+	      return match_str;
+	    }
+	}
+    }
 
   match_str = (char **) matchvec->index;
   vector_only_wrapper_free (matchvec);
-  *status = CMD_COMPLETE_MATCH;
+  *status = CMD_COMPLETE_LIST_MATCH;
   return match_str;
-}
-
-/* Command line parser. */
-void
-cmd_parse ()
-{
-  ;
 }
 
 /* Execute command by argument vline vector. */
@@ -1688,10 +1708,6 @@ cmd_execute_command (vector vline, struct vty *vty)
 	  {
 	    matched_element = cmd_element;
 	    matched_count++;
-#ifdef DEBUG
-	vty_out (vty, "DEBUG: match type %d%s", match, VTY_NEWLINE);
-	vty_out (vty, "DEBUG: %s%s", cmd_element->string, VTY_NEWLINE);
-#endif /* DEBUG */
 	  }
 	else
 	  {
@@ -1965,6 +1981,8 @@ DEFUN (config_exit,
     case VTY_NODE:
       vty->node = CONFIG_NODE;
       break;
+    case BGP_VPNV4_NODE:
+      vty->node = BGP_NODE;
     default:
       break;
     }
@@ -1998,6 +2016,7 @@ DEFUN (config_end,
     case RIP_NODE:
     case RIPNG_NODE:
     case BGP_NODE:
+    case BGP_VPNV4_NODE:
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
@@ -2167,6 +2186,40 @@ ALIAS (config_write_terminal,
        "show running-config",
        SHOW_STR
        "running configuration\n")
+
+/* Write startup configuration into the terminal. */
+DEFUN (show_startup_config,
+       show_startup_config_cmd,
+       "show startup-config",
+       SHOW_STR
+       "Contentes of startup configuration\n")
+{
+  char buf[BUFSIZ];
+  FILE *confp;
+
+  confp = fopen (host.config, "r");
+  if (confp == NULL)
+    {
+      vty_out (vty, "Can't open configuration file [%s]%s",
+	       host.config, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  while (fgets (buf, BUFSIZ, confp))
+    {
+      char *cp = buf;
+
+      while (*cp != '\r' && *cp != '\n' && *cp != '\0')
+	cp++;
+      *cp = '\0';
+
+      vty_out (vty, "%s%s", buf, VTY_NEWLINE);
+    }
+
+  fclose (confp);
+
+  return CMD_SUCCESS;
+}
 
 /* Hostname configuration */
 DEFUN (config_hostname, 
@@ -2621,6 +2674,10 @@ install_default (enum node_type node)
   install_element (node, &config_end_cmd);
   install_element (node, &config_help_cmd);
   install_element (node, &config_list_cmd);
+
+  install_element (node, &config_write_terminal_cmd);
+  install_element (node, &config_write_file_cmd);
+  install_element (node, &config_write_memory_cmd);
 }
 
 /* Initialize command interface. Install basic nodes and commands. */
@@ -2659,10 +2716,8 @@ cmd_init ()
   install_default (ENABLE_NODE);
   install_element (ENABLE_NODE, &config_disable_cmd);
   install_element (ENABLE_NODE, &config_terminal_cmd);
-  install_element (ENABLE_NODE, &config_write_terminal_cmd);
   install_element (ENABLE_NODE, &show_running_config_cmd);
-  install_element (ENABLE_NODE, &config_write_file_cmd);
-  install_element (ENABLE_NODE, &config_write_memory_cmd);
+  install_element (ENABLE_NODE, &show_startup_config_cmd);
   install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
   install_element (ENABLE_NODE, &config_terminal_length_cmd);
@@ -2681,7 +2736,6 @@ cmd_init ()
   install_element (CONFIG_NODE, &no_config_log_file_cmd);
   install_element (CONFIG_NODE, &config_log_syslog_cmd);
   install_element (CONFIG_NODE, &no_config_log_syslog_cmd);
-
   install_element (CONFIG_NODE, &config_log_trap_cmd);
   install_element (CONFIG_NODE, &no_config_log_trap_cmd);
   install_element (CONFIG_NODE, &config_log_record_priority_cmd);

@@ -42,6 +42,7 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_network.h"
+#include "bgpd/bgp_mplsvpn.h"
 
 int stream_put_prefix (struct stream *, struct prefix *);
 
@@ -394,7 +395,7 @@ bgp_notify_send (struct peer *peer, u_char code, u_char sub_code)
 void
 bgp_update_send (struct peer_conf *conf, struct peer *peer,
 		 struct prefix *p, struct attr *attr, afi_t afi, safi_t safi,
-		 struct peer *from)
+		 struct peer *from, struct prefix_rd *prd, u_char *tag)
 {
   struct stream *s;
   struct stream *packet;
@@ -425,7 +426,7 @@ bgp_update_send (struct peer_conf *conf, struct peer *peer,
   /* Make place for total attribute length.  */
   pos = stream_get_putp (s);
   stream_putw (s, 0);
-  total_attr_len = bgp_packet_attribute (conf, peer, s, attr, p, afi, safi, from);
+  total_attr_len = bgp_packet_attribute (conf, peer, s, attr, p, afi, safi, from, prd, tag);
 
   /* Set Total Path Attribute Length. */
   stream_putw_at (s, pos, total_attr_len);
@@ -453,7 +454,8 @@ bgp_update_send (struct peer_conf *conf, struct peer *peer,
 
 /* Send BGP update packet. */
 void
-bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
+bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi,
+		   struct prefix_rd *prd, u_char *tag)
 {
   struct stream *s;
   struct stream *packet;
@@ -495,11 +497,12 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
   /* Make attribute. */
 #ifdef HAVE_IPV6
   if((p->family == AF_INET6)
-     || (p->family == AF_INET && safi == SAFI_MULTICAST))
+     || (p->family == AF_INET && safi == SAFI_MULTICAST)
+     || (p->family == AF_INET && safi == SAFI_MPLS_VPN))
     {
       pos = stream_get_putp (s);
       stream_putw (s, 0);
-      total_attr_len = bgp_packet_withdraw (peer, s, p, afi, safi);
+      total_attr_len = bgp_packet_withdraw (peer, s, p, afi, safi, prd, tag);
 
       /* Set Total Path Attribute Length. */
       stream_putw_at (s, pos, total_attr_len);
@@ -971,6 +974,18 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  && mp_withdraw.afi == AFI_IP6 
 	  && mp_withdraw.safi == SAFI_MULTICAST)
 	nlri_parse (peer, NULL, &mp_withdraw);
+    }
+  if (peer->afc[AFI_IP][SAFI_MPLS_VPN])
+    {
+      if (mp_update.length 
+	  && mp_update.afi == AFI_IP 
+	  && mp_update.safi == BGP_SAFI_VPNV4)
+	nlri_parse_vpnv4 (peer, &attr, &mp_update);
+
+      if (mp_withdraw.length 
+	  && mp_withdraw.afi == AFI_IP 
+	  && mp_withdraw.safi == BGP_SAFI_VPNV4)
+	nlri_parse_vpnv4 (peer, NULL, &mp_withdraw);
     }
 
   /* Everything is done.  We unintern temporary structures which

@@ -77,10 +77,18 @@ bgp_timer_set (struct peer *peer)
     {
     case Idle:
       /* First entry point of peer's finite state machine.  In Idle
-	 status timer_start is on.  All other timer must be turned
-	 off. */
-      jitter = bgp_start_jitter (peer->v_start);
-      BGP_TIMER_ON (peer->t_start, bgp_start_timer, peer->v_start + jitter);
+	 status start timer is on unless peer is shutdown or peer is
+	 inactive.  All other timer must be turned off */
+      if (CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN) || ! peer_active (peer))
+	{
+	  BGP_TIMER_OFF (peer->t_start);
+	}
+      else
+	{
+	  jitter = bgp_start_jitter (peer->v_start);
+	  BGP_TIMER_ON (peer->t_start, bgp_start_timer,
+			peer->v_start + jitter);
+	}
       BGP_TIMER_OFF (peer->t_connect);
       BGP_TIMER_OFF (peer->t_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);
@@ -476,6 +484,9 @@ bgp_establish (struct peer *peer)
   if (notify->data)
     XFREE (MTYPE_TMP, notify->data);
   memset (notify, 0, sizeof (struct bgp_notify));
+
+  /* Clear start timer value to default. */
+  peer->v_start = BGP_INIT_START_TIMER;
 
   /* Reset uptime, send keepalive, send current table. */
   bgp_uptime_reset (peer);

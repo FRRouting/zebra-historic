@@ -36,4 +36,6 @@ int ospf_ase_calculate (struct ospf_lsa *, struct route_table *,
 void ospf_ase_calculate_schedule ();
 void ospf_ase_calculate_timer_add ();
 
+void ospf_ase_rtrs_register_lsa (struct ospf_lsa *);
+
 #endif /* _ZEBRA_OSPF_ASE_H */

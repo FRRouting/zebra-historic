@@ -1,7 +1,51 @@
+2000-06-13  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_interface.c (rip_interface_delete): All work is done in
+	rip_if_down().
+
+2000-06-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_redistribute_delete): Fix bug of missing
+	route_unlock_node() when redistribute route is not found.
+
+2000-06-05  Akihirof Mizutani <mizutani@dml.com>
+
+	* rip_debug.c (rip_debug_init): Disable show debugging in
+	VIEW_NODE like other protocol daemon.
+
+	* rip_routemap.c: Change command argument to more comprehensive.
+
+	METRIC       -> <0-16>
+	IFNAME       -> WORD
+	IP_ADDR      -> A.B.C.D
+	ACCSESS_LIST -> WORD
+
+2000-06-05  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_interface.c (rip_interface_delete): Delete all routes
+	include static and kernel through the interface , because even if
+	the interface is added again there is no guarantee that it will
+	get the same ifindex as before.
+
+2000-05-31  Akihirof Mizutani <mizutani@dml.com>
+
+	* rip_debug.c: Fix rip debug help string.
+
 2000-04-27  Mirko Karanovic <mkaranov@torsel.alcatel.com>
 
 	* rip_interface.c (rip_interface_down): Remove interface from
 	multicast group when interface goes down.
+
+2000-04-03  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_interface.c (rip_interface_down): Implemented rip functions
+	for interface up/down events: rip_interface_up() and
+	rip_interface_down()
+
+2000-03-16  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_zebra.c (rip_zclient_init): Added rip functions for
+	interface up/down events.
 
 2000-02-15  Hidetoshi Shimokawa <simokawa@sat.t.u-tokyo.ac.jp>
 

@@ -27,6 +27,10 @@
 #define RIB_LINK      0x02
 #define RIB_INTERNAL  0x04
 
+#ifndef INTERFACE_UNKNOWN
+#define INTERFACE_UNKNOWN 0
+#endif /* INTERFACE_UNKNOWN */
+
 #define RIB_FIB_SET(RIB) (((RIB)->status) |= RIB_FIB)
 #define RIB_FIB_UNSET(RIB) (((RIB)->status) &= ~RIB_FIB)
 #define IS_RIB_FIB(RIB)  (((RIB)->status) & RIB_FIB)
@@ -99,5 +103,7 @@ rib_delete_ipv6 (int type, int flags, struct prefix_ipv6 *p,
 
 void rib_if_up (struct interface *);
 void rib_if_down (struct interface *);
+void rib_if_delete (struct interface *);
+
 
 #endif /*_ZEBRA_RIB_H */

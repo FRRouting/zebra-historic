@@ -174,8 +174,8 @@ ospf6_zebra_if_del (int command, struct zebra *zebra, zebra_size_t length)
 }
 
 int
-ospf6_zebra_if_address_add (int command, struct zebra *zebra,
-                            zebra_size_t length)
+ospf6_zebra_if_address_update (int command, struct zebra *zebra,
+                               zebra_size_t length)
 {
   struct connected *c;
 
@@ -186,56 +186,13 @@ ospf6_zebra_if_address_add (int command, struct zebra *zebra,
 
   if (IS_OSPF6_DUMP_ZEBRA)
     {
-      struct prefix *p;
-      char buf[128];
-
-      p = c->address;
-      if (p->family == AF_INET6)
-        {
-          inet_ntop (p->family, &p->u.prefix6, buf, sizeof (buf));
-          zlog_info ("Zebra connected address add: %s/%d",
-                     buf, p->prefixlen);
-        }
+      zlog_info ("Zebra I/F address change:");
+      connected_log (c);
     }
 
   ospf6_interface_address_update (c->ifp);
 
   return 0;
-}
-
-int
-ospf6_zebra_if_address_delete (int command, struct zebra *zebra,
-                                zebra_size_t length)
-{
-#if 1
-  /* xxx, not yet */
-  return 0;
-#else
-  struct connected *c;
-
-  c = zebra_interface_address_add_read (zebra->ibuf);
-
-  if (c == NULL)
-    return 0;
-
-  if (IS_OSPF6_DUMP_ZEBRA)
-    {
-      struct prefix *p;
-      char buf[128];
-
-      p = c->address;
-      if (p->family == AF_INET6)
-        {
-          inet_ntop (p->family, &p->u.prefix6, buf, sizeof (buf));
-          zlog_info ("Zebra connected address add: %s/%d",
-                     buf, p->prefixlen);
-        }
-    }
-
-  ospf6_interface_address_update (c->ifp);
-
-  return 0;
-#endif
 }
 
 
@@ -325,9 +282,7 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
   unsigned char dest_type;
   list nhlist_dummy = list_init ();
   struct ospf6_lsa *new;
-  struct ospf6_interface *o6if;
   struct ospf6_nexthop *nh;
-  struct in6_addr in6;
   listnode i;
 
   prefix2str ((struct prefix *)p, p_str, sizeof (p_str));
@@ -338,15 +293,7 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
   switch (type)
     {
       case ZEBRA_ROUTE_CONNECT:
-        type_str = "connected";
-        dest_type = DTYPE_PREFIX;
-        rt = ospf6->table_connected;
-        redist_conf = ospf6->redist_connected;
-        cost = 0;
-        memset (&in6, 0, sizeof (in6));
-        nh = nexthop_make (ifindex, &in6, 0);
-        list_add_node (nhlist_dummy, nh);
-        break;
+        return;
 
       case ZEBRA_ROUTE_STATIC:
         type_str = "static";
@@ -354,6 +301,14 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
         rt = ospf6->table_external;
         redist_conf = ospf6->redist_static;
         cost = ospf6->cost_static;
+        break;
+
+      case ZEBRA_ROUTE_KERNEL:
+        type_str = "kernel";
+        dest_type = DTYPE_KERNEL_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_kernel;
+        cost = ospf6->cost_kernel;
         break;
 
       case ZEBRA_ROUTE_RIPNG:
@@ -404,15 +359,6 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
       /* LSA construction */
       if (rt == ospf6->table_external)
         new = ospf6_make_as_external_lsa (rn);
-      else if (rt == ospf6->table_connected)
-        {
-          o6if = ospf6_interface_lookup_by_index (ifindex, ospf6);
-          assert (o6if);
-          if (ospf6_interface_is_enabled (o6if))
-            new = ospf6_make_link_lsa (o6if);
-          else
-            new = (struct ospf6_lsa *) NULL;
-        }
       else
         new = (struct ospf6_lsa *) NULL;
 
@@ -428,48 +374,6 @@ ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
   for (i = listhead (nhlist_dummy); i; nextnode (i))
     {
       nh = (struct ospf6_nexthop *) getdata (i);
-      nexthop_delete (nh);
-    }
-  list_delete_all (nhlist_dummy);
-}
-
-void
-ospf6_redist_connected_route_add (int type, int ifindex,
-                                  struct prefix_ipv6 *p)
-{
-  struct ospf6_interface *o6i;
-  struct ospf6_route_node_info info;
-  struct ospf6_nexthop *nh;
-  struct in6_addr in6;
-  list nhlist_dummy;
-  listnode n;
-  struct ospf6_lsa *new = (struct ospf6_lsa *)NULL;
-
-  nhlist_dummy = list_init ();
-  memset (&in6, 0, sizeof (in6));
-  nh = nexthop_make (ifindex, &in6, 0);
-  list_add_node (nhlist_dummy, nh);
-  memset (&info, 0, sizeof (info));
-  info.dest_type = DTYPE_PREFIX;
-  info.cost = 0;
-  info.nhlist = nhlist_dummy;
-
-  ospf6_route_add (p, &info, ospf6->table_connected);
-
-  o6i = ospf6_interface_lookup_by_index (ifindex, ospf6);
-  if (ospf6_interface_is_enabled (o6i))
-    new = ospf6_make_link_lsa (o6i);
-
-  if (new)
-    {
-      ospf6_lsa_flood (new);
-      ospf6_lsdb_install (new);
-      ospf6_lsa_unlock (new);
-    }
-
-  for (n = listhead (nhlist_dummy); n; nextnode (n))
-    {
-      nh = (struct ospf6_nexthop *) getdata (n);
       nexthop_delete (nh);
     }
   list_delete_all (nhlist_dummy);
@@ -604,17 +508,10 @@ ospf6_zebra_read_ipv6 (int command, struct zebra *zebra,
       size = PSIZE (p.prefixlen);
       stream_get (&p.prefix, s, size);
 
-#if 0
-      if (command == ZEBRA_IPV6_ROUTE_ADD)
-        ospf6_redist_route_add (type, ifindex, &p);
-      else
-        ospf6_redist_route_delete (type, ifindex, &p);
-#else
       if (command == ZEBRA_IPV6_ROUTE_ADD)
         ospf6_redistribute_route_add (type, ifindex, &p);
       else
         ospf6_redistribute_route_remove (type, ifindex, &p);
-#endif /*0*/
     }
   return 0;
 }
@@ -742,15 +639,15 @@ ospf6_zebra_init ()
   zclient_init (zebra, ZEBRA_ROUTE_OSPF6);
   zebra->interface_add = ospf6_zebra_if_add;
   zebra->interface_delete = ospf6_zebra_if_del;
-  zebra->interface_address_add = ospf6_zebra_if_address_add;
-  zebra->interface_address_delete = ospf6_zebra_if_address_delete;
+  zebra->interface_address_add = ospf6_zebra_if_address_update;
+  zebra->interface_address_delete = ospf6_zebra_if_address_update;
   zebra->ipv4_route_add = NULL;
   zebra->ipv4_route_delete = NULL;
   zebra->ipv6_route_add = ospf6_zebra_read_ipv6;
   zebra->ipv6_route_delete = ospf6_zebra_read_ipv6;
 
   /* redistribute connected route by default */
-  ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
+  /* ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT); */
 
   /* Install zebra node. */
   install_node (&zebra_node, ospf6_zebra_config_write);

@@ -472,33 +472,34 @@ struct route_map_rule_cmd route_set_ip_nexthop_cmd =
 };
 
 #define MATCH_STR "Match values from routing table\n"
+#define SET_STR "Set values in destination routing protocol\n"
 
 DEFUN (match_metric, 
        match_metric_cmd,
-       "match metric METRIC",
+       "match metric <0-16>",
        MATCH_STR
-       "Metric\n"
-       "METRIC value\n")
+       "Match metric of route\n"
+       "Metric value\n")
 {
   return rip_route_match_add (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (no_match_metric,
        no_match_metric_cmd,
-       "no match metric METRIC",
+       "no match metric <0-16>",
        NO_STR
        MATCH_STR
-       "Metric\n"
-       "METRIC value\n")
+       "Match metric of route\n"
+       "Metric value\n")
 {
   return rip_route_match_delete (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (match_interface,
        match_interface_cmd,
-       "match interface IFNAME",
-       "Match value\n"
-       "Interface\n"
+       "match interface WORD",
+       MATCH_STR
+       "Match first hop interface of route\n"
        "Interface name\n")
 {
   return rip_route_match_add (vty, vty->index, "interface", argv[0]);
@@ -506,10 +507,10 @@ DEFUN (match_interface,
 
 DEFUN (no_match_interface,
        no_match_interface_cmd,
-       "no match interface IFNAME",
+       "no match interface WORD",
        NO_STR
-       "Match value\n"
-       "Interface\n"
+       MATCH_STR
+       "Match first hop interface of route\n"
        "Interface name\n")
 {
   return rip_route_match_delete (vty, vty->index, "interface", argv[0]);
@@ -517,46 +518,46 @@ DEFUN (no_match_interface,
 
 DEFUN (match_ip_nexthop,
        match_ip_nexthop_cmd,
-       "match ip next-hop IP_ADDR",
+       "match ip next-hop A.B.C.D",
        MATCH_STR
        IP_STR
-       "Next hop of the route\n"
-       "IP Address of the next hop\n")
+       "Next hop address\n"
+       "IP address of next hop\n")
 {
   return rip_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_match_ip_nexthop,
        no_match_ip_nexthop_cmd,
-       "no match ip next-hop IP_ADDR",
+       "no match ip next-hop A.B.C.D",
        NO_STR
        MATCH_STR
        IP_STR
-       "Next hop of the route\n"
-       "IP Address of the next hop\n")
+       "Next hop address\n"
+       "IP address of next hop\n")
 {
   return rip_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (match_ip_address, 
        match_ip_address_cmd,
-       "match ip address ACCESS_LIST",
+       "match ip address WORD",
        MATCH_STR
        IP_STR
-       "Address\n"
-       "IP Address access-list match command\n")
+       "Match address of route\n"
+       "IP access-list name\n")
 {
   return rip_route_match_add (vty, vty->index, "ip address", argv[0]);
 }
 
 DEFUN (no_match_ip_address, 
        no_match_ip_address_cmd,
-       "no match ip address ACCESS_LIST",
+       "no match ip address WORD",
        NO_STR
        MATCH_STR
        IP_STR
-       "IP address\n"
-       "Delete IP Address access-list match command\n")
+       "Match address of route\n"
+       "IP access-list name\n")
 {
   return rip_route_match_delete (vty, vty->index, "ip address", argv[0]);
 }
@@ -565,44 +566,44 @@ DEFUN (no_match_ip_address,
 
 DEFUN (set_metric,
        set_metric_cmd,
-       "set metric METRIC",
-       "Set value\n"
-       "Metric\n"
-       "METRIC value\n")
+       "set metric <0-16>",
+       SET_STR
+       "Metric value for destination routing protocol\n"
+       "Metric value\n")
 {
   return rip_route_set_add (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (no_set_metric,
        no_set_metric_cmd,
-       "no set metric METRIC",
+       "no set metric <0-16>",
        NO_STR
-       "Set value\n"
-       "Metric\n"
-       "METRIC value\n")
+       SET_STR
+       "Metric value for destination routing protocol\n"
+       "Metric value\n")
 {
   return rip_route_set_delete (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
-       "set ip next-hop IP_ADDR",
-       "Set value\n"
+       "set ip next-hop A.B.C.D",
+       SET_STR
        IP_STR
-       "Next hop of the route\n"
-       "IP Address of the next hop\n")
+       "Next hop address\n"
+       "IP address of next hop\n")
 {
   return rip_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_set_ip_nexthop,
        no_set_ip_nexthop_cmd,
-       "no set ip next-hop IP_ADDR",
+       "no set ip next-hop A.B.C.D",
        NO_STR
-       "Set value\n"
+       SET_STR
        IP_STR
-       "Next hop of the route\n"
-       "IP Address of the next hop\n")
+       "Next hop address\n"
+       "IP address of next hop\n")
 {
   return rip_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
 }

@@ -48,6 +48,8 @@
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_filter.h"
+#include "bgpd/bgp_mplsvpn.h"
+#include "bgpd/bgp_ecommunity.h"
 
 /* Memo of route-map commands.
 
@@ -316,10 +318,15 @@ void *
 route_match_metric_compile (char *arg)
 {
   u_int32_t *med;
+  char *endptr = NULL;
 
   med = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
-  *med = atoi (arg);
-
+  *med = strtoul (arg, &endptr, 10);
+  if (*endptr != '\0' || *med == ULONG_MAX)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, med);
+      return NULL;
+    }
   return med;
 }
 
@@ -877,11 +884,6 @@ route_set_community (void *rule, struct prefix *prefix, route_map_object_t type,
       if (!com)
 	return RMAP_OKAY;
     
-#if 0
-      if (bgp_info->attr->community)
-	community_free (bgp_info->attr->community);
-#endif /* 0 */
-    
       bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
       bgp_info->attr->community = community_dup (com);
     }
@@ -979,6 +981,161 @@ struct route_map_rule_cmd route_set_community_additive_cmd =
   route_set_community_additive,
   route_set_community_additive_compile,
   route_set_community_additive_free,
+};
+
+/* "community set none". */
+route_map_result_t
+route_set_community_none (void *rule, struct prefix *prefix,
+			  route_map_object_t type, void *object)
+{
+  struct bgp_info *bgp_info;
+
+  if (type == RMAP_BGP)
+    {
+      bgp_info = object;
+      bgp_info->attr->flag &= ~(ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES));
+      bgp_info->attr->community = NULL;
+    }
+  return RMAP_OKAY;
+}
+
+void *
+route_set_community_none_compile (char *arg)
+{
+  /* Only return success. */
+  return (void *) 1;
+}
+
+void
+route_set_community_none_free (void *rule)
+{
+  return;
+}
+
+struct route_map_rule_cmd route_set_community_none_cmd = 
+{
+  "community none",
+  route_set_community_none,
+  route_set_community_none_compile,
+  route_set_community_none_free,
+};
+
+/* `set extcommunity rt COMMUNITY' */
+
+/* For community set mechanism. */
+route_map_result_t
+route_set_ecommunity_rt (void *rule, struct prefix *prefix, 
+			 route_map_object_t type, void *object)
+{
+  struct ecommunity *ecom;
+  struct ecommunity *new_ecom;
+  struct ecommunity *old_ecom;
+  struct bgp_info *bgp_info;
+
+  if (type == RMAP_BGP)
+    {
+      ecom = rule;
+      bgp_info = object;
+    
+      if (! ecom)
+	return RMAP_OKAY;
+    
+      /* We assume additive for Extended Community. */
+      old_ecom = bgp_info->attr->ecommunity;
+
+      if (old_ecom)
+	new_ecom = ecommunity_merge (ecommunity_dup (old_ecom), ecom);
+      else
+	new_ecom = ecommunity_dup (ecom);
+
+      bgp_info->attr->ecommunity = new_ecom;
+
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+    }
+  return RMAP_OKAY;
+}
+
+/* Compile function for set community. */
+void *
+route_set_ecommunity_rt_compile (char *arg)
+{
+  struct ecommunity *ecom;
+
+  ecom = ecommunity_str2com (ECOMMUNITY_ROUTE_TARGET, arg);
+  if (! ecom)
+    return NULL;
+  return ecom;
+}
+
+/* Free function for set community. */
+void
+route_set_ecommunity_rt_free (void *rule)
+{
+  struct ecommunity *ecom = rule;
+  ecommunity_free (ecom);
+}
+
+/* Set community rule structure. */
+struct route_map_rule_cmd route_set_ecommunity_rt_cmd = 
+{
+  "extcommunity rt",
+  route_set_ecommunity_rt,
+  route_set_ecommunity_rt_compile,
+  route_set_ecommunity_rt_free,
+};
+
+/* `set extcommunity soo COMMUNITY' */
+
+/* For community set mechanism. */
+route_map_result_t
+route_set_ecommunity_soo (void *rule, struct prefix *prefix, 
+			 route_map_object_t type, void *object)
+{
+  struct ecommunity *ecom;
+  struct bgp_info *bgp_info;
+
+  if (type == RMAP_BGP)
+    {
+      ecom = rule;
+      bgp_info = object;
+    
+      if (! ecom)
+	return RMAP_OKAY;
+    
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES);
+      bgp_info->attr->ecommunity = ecommunity_dup (ecom);
+    }
+  return RMAP_OKAY;
+}
+
+/* Compile function for set community. */
+void *
+route_set_ecommunity_soo_compile (char *arg)
+{
+  struct ecommunity *ecom;
+
+  ecom = ecommunity_str2com (ECOMMUNITY_SITE_ORIGIN, arg);
+  if (! ecom)
+    return NULL;
+  
+  return ecom;
+}
+
+/* Free function for set community. */
+void
+route_set_ecommunity_soo_free (void *rule)
+{
+  struct ecommunity *ecom = rule;
+  ecommunity_free (ecom);
+}
+
+/* Set community rule structure. */
+struct route_map_rule_cmd route_set_ecommunity_soo_cmd = 
+{
+  "extcommunity soo",
+  route_set_ecommunity_soo,
+  route_set_ecommunity_soo_compile,
+  route_set_ecommunity_soo_free,
 };
 
 /* `set origin ORIGIN' */
@@ -1617,149 +1774,150 @@ bgp_route_map_update ()
 }
 
 #define MATCH_STR "Match values from routing table\n"
+#define SET_STR "Set values in destination routing protocol\n"
 
 DEFUN (match_ip_address, 
        match_ip_address_cmd,
-       "match ip address ACCESS_LIST",
+       "match ip address WORD",
        MATCH_STR
        IP_STR
-       "Address\n"
-       "IP Address access-list match command\n")
+       "Match address of route\n"
+       "IP access-list name\n")
 {
   return bgp_route_match_add (vty, vty->index, "ip address", argv[0]);
 }
 
 DEFUN (no_match_ip_address, 
        no_match_ip_address_cmd,
-       "no match ip address ACCESS_LIST",
+       "no match ip address WORD",
        NO_STR
        MATCH_STR
        IP_STR
-       "IP address\n"
-       "Delete IP Address access-list match command\n")
+       "Match address of route\n"
+       "IP access-list name\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ip address", argv[0]);
 }
 
 DEFUN (match_ip_next_hop, 
        match_ip_next_hop_cmd,
-       "match ip next-hop IP_ADDR",
+       "match ip next-hop A.B.C.D",
        MATCH_STR
        IP_STR
-       "Next hop of the route\n"
-       "IP Address of the next hop\n")
+       "Match next-hop address of route\n"
+       "IP address of next hop\n")
 {
   return bgp_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_match_ip_next_hop,
        no_match_ip_next_hop_cmd,
-       "no match ip next-hop IP_ADDR",
+       "no match ip next-hop A.B.C.D",
        NO_STR
        MATCH_STR
        IP_STR
-       "Next hop of the route\n"
-       "IP Address of the next hop\n")
+       "Match next-hop address of route\n"
+       "IP address of next hop\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (match_ip_prefix_list, 
        match_ip_prefix_list_cmd,
-       "match ip prefix-list PREFIX_LIST",
+       "match ip prefix-list WORD",
        MATCH_STR
        IP_STR
-       "prefix-list\n"
-       "prefix-list name\n")
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 {
   return bgp_route_match_add (vty, vty->index, "ip prefix-list", argv[0]);
 }
 
 DEFUN (no_match_ip_prefix_list,
        no_match_ip_prefix_list_cmd,
-       "no match ip prefix-list PREFIX_LIST",
+       "no match ip prefix-list WORD",
        NO_STR
        MATCH_STR
        IP_STR
-       "prefix-list\n"
-       "prefix-list name\n")
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ip prefix-list", argv[0]);
 }
 
 DEFUN (match_ip_address_prefix_list, 
        match_ip_address_prefix_list_cmd,
-       "match ip address prefix-list PREFIX_LIST",
+       "match ip address prefix-list WORD",
        MATCH_STR
        IP_STR
-       "IP address\n"
-       "prefix-list\n"
-       "prefix-list name\n")
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 {
   return bgp_route_match_add (vty, vty->index, "ip address prefix-list", argv[0]);
 }
 
 DEFUN (no_match_ip_address_prefix_list,
        no_match_ip_address_prefix_list_cmd,
-       "no match ip address prefix-list PREFIX_LIST",
+       "no match ip address prefix-list WORD",
        NO_STR
        MATCH_STR
        IP_STR
-       "IP address\n"
-       "prefix-list\n"
-       "prefix-list name\n")
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ip address prefix-list", argv[0]);
 }
 
 DEFUN (match_metric, 
        match_metric_cmd,
-       "match metric MED",
+       "match metric <0-4294967295>",
        MATCH_STR
-       "Metric\n"
-       "MED value\n")
+       "Match metric of route\n"
+       "Metric value\n")
 {
   return bgp_route_match_add (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (no_match_metric,
        no_match_metric_cmd,
-       "no match metric MED",
+       "no match metric <0-4294967295>",
        NO_STR
        MATCH_STR
-       "Metric\n"
-       "MED value\n")
+       "Match metric of route\n"
+       "Metric value\n")
 {
   return bgp_route_match_delete (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (match_community, 
        match_community_cmd,
-       "match community COMMUNITY",
+       "match community WORD",
        MATCH_STR
-       "Community\n"
-       "Community value\n")
+       "Match BGP community list\n"
+       "Community-list name (not community value itself)\n")
 {
   return bgp_route_match_add (vty, vty->index, "community", argv[0]);
 }
 
 DEFUN (no_match_community,
        no_match_community_cmd,
-       "no match community COMMUNITY",
+       "no match community WORD",
        NO_STR
        MATCH_STR
-       "Community\n"
-       "Community value\n")
+       "Match BGP community list\n"
+       "Community-list name (not community value itself)\n")
 {
   return bgp_route_match_delete (vty, vty->index, "community", argv[0]);
 }
 
 DEFUN (match_aspath,
        match_aspath_cmd,
-       "match as-path AS-PATH-NAME",
+       "match as-path WORD",
        MATCH_STR
-       "AS Path\n"
-       "as-path access-list NAME\n")
+       "Match BGP AS path list\n"
+       "AS path access-list name\n")
 {
   int i;
   struct buffer *b;
@@ -1787,11 +1945,11 @@ DEFUN (match_aspath,
 
 DEFUN (no_match_aspath,
        no_match_aspath_cmd,
-       "no match as-path AS-PATH-NAME",
+       "no match as-path WORD",
        NO_STR
        MATCH_STR
-       "AS Path\n"
-       "as-path access-list NAME\n")
+       "Match BGP AS path list\n"
+       "AS path access-list name\n")
 {
   int i;
   struct buffer *b;
@@ -1819,131 +1977,120 @@ DEFUN (no_match_aspath,
 
 DEFUN (match_nlri, 
        match_nlri_cmd,
-       "match nlri NLRI",
+       "match nlri (multicast|unicast)",
        MATCH_STR
-       "Nlri\n"
-       "Nlri NLRI\n")
+       "Match Network Layer Reachability Information\n"
+       "Multicast\n"
+       "Unicast\n")
 {
-  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
-    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
-    return CMD_WARNING;
-  }
   return bgp_route_match_add (vty, vty->index, "nlri", argv[0]);
 }
 
 DEFUN (no_match_nlri,
        no_match_nlri_cmd,
-       "no match nlri NLRI",
+       "no match nlri (multicast|unicast)",
        NO_STR
        MATCH_STR
-       "Nlri\n"
-       "Nlri NLRI\n")
+       "Match Network Layer Reachability Information\n"
+       "Multicast\n"
+       "Unicast\n")
 {
-  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
-    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
-    return CMD_WARNING;
-  }
   return bgp_route_match_delete (vty, vty->index, "nlri", argv[0]);
 }
+
 DEFUN (set_nlri, 
        set_nlri_cmd,
-       "set nlri NLRI",
-       MATCH_STR
-       "Nlri\n"
-       "Nlri NLRI\n")
+       "set nlri (multicast|unicast)",
+       SET_STR
+       "Network Layer Reachability Information\n"
+       "Multicast\n"
+       "Unicast\n")
 {
-  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
-    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
-    return CMD_WARNING;
-  }
   return bgp_route_set_add (vty, vty->index, "nlri", argv[0]);
 }
 
 DEFUN (no_set_nlri,
        no_set_nlri_cmd,
-       "no set nlri NLRI",
+       "no set nlri (multicast|unicast)",
        NO_STR
-       MATCH_STR
-       "Nlri\n"
-       "Nlri NLRI\n")
+       SET_STR
+       "Network Layer Reachability Information\n"
+       "Multicast\n"
+       "Unicast\n")
 {
-  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
-    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
-    return CMD_WARNING;
-  }
   return bgp_route_set_delete (vty, vty->index, "nlri", argv[0]);
 }
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
-       "set ip next-hop IP_ADDR",
-       "Set value\n"
-       "IP address\n"
-       "Next hop\n"
-       "IP Address\n")
+       "set ip next-hop A.B.C.D",
+       SET_STR
+       IP_STR
+       "Next hop address\n"
+       "IP address of next hop\n")
 {
   return bgp_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_set_ip_nexthop,
        no_set_ip_nexthop_cmd,
-       "no set ip next-hop IP_ADDR",
+       "no set ip next-hop A.B.C.D",
        NO_STR
-       "Set value\n"
-       "IP address\n"
-       "Next hop\n"
-       "IP Address\n")
+       SET_STR
+       IP_STR
+       "Next hop address\n"
+       "IP address of next hop\n")
 {
   return bgp_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (set_metric,
        set_metric_cmd,
-       "set metric METRIC",
-       "Set value\n"
-       "Metric\n"
-       "MED value\n")
+       "set metric <0-4294967295>",
+       SET_STR
+       "Metric value for destination routing protocol\n"
+       "Metric value\n")
 {
   return bgp_route_set_add (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (no_set_metric,
        no_set_metric_cmd,
-       "no set metric METRIC",
+       "no set metric <0-4294967295>",
        NO_STR
-       "Set value\n"
-       "Metric\n"
-       "MED value\n")
+       SET_STR
+       "Metric value for destination routing protocol\n"
+       "Metric value\n")
 {
   return bgp_route_set_delete (vty, vty->index, "metric", argv[0]);
 }
 
 DEFUN (set_local_pref,
        set_local_pref_cmd,
-       "set local-preference LOCAL_PREF",
-       "Set value\n"
-       "Local preference\n"
-       "Local preference value\n")
+       "set local-preference <0-4294967295>",
+       SET_STR
+       "BGP local preference path attribute\n"
+       "Preference value\n")
 {
   return bgp_route_set_add (vty, vty->index, "local-preference", argv[0]);
 }
 
 DEFUN (no_set_local_pref,
        no_set_local_pref_cmd,
-       "no set local-preference LOCAL_PREF",
+       "no set local-preference <0-4294967295>",
        NO_STR
-       "Set value\n"
-       "Local preference\n"
-       "Local preference value\n")
+       SET_STR
+       "BGP local preference path attribute\n"
+       "Preference value\n")
 {
   return bgp_route_set_delete (vty, vty->index, "local-preference", argv[0]);
 }
 
 DEFUN (set_weight,
        set_weight_cmd,
-       "set weight WEIGHT",
-       "Set value\n"
-       "Weight\n"
+       "set weight <0-4294967295>",
+       SET_STR
+       "BGP weight for routing table\n"
        "Weight value\n")
 {
   return bgp_route_set_add (vty, vty->index, "weight", argv[0]);
@@ -1951,10 +2098,10 @@ DEFUN (set_weight,
 
 DEFUN (no_set_weight,
        no_set_weight_cmd,
-       "no set weight WEIGHT",
+       "no set weight <0-4294967295>",
        NO_STR
-       "Set value\n"
-       "Weight\n"
+       SET_STR
+       "BGP weight for routing table\n"
        "Weight value\n")
 {
   return bgp_route_set_delete (vty, vty->index, "weight", argv[0]);
@@ -1963,11 +2110,11 @@ DEFUN (no_set_weight,
 
 DEFUN (set_aspath_prepend,
        set_aspath_prepend_cmd,
-       "set as-path prepend .PREPEND-AS",
-       "Set value\n"
-       "AS path\n"
-       "AS path prepend\n"
-       "ASes to prepend\n")
+       "set as-path prepend .<1-65535>",
+       SET_STR
+       "Prepend string for a BGP AS-path attribute\n"
+       "Prepend to the as-path\n"
+       "AS number\n")
 {
   int i;
   struct buffer *b;
@@ -1995,12 +2142,12 @@ DEFUN (set_aspath_prepend,
 
 DEFUN (no_set_aspath_prepend,
        no_set_aspath_prepend_cmd,
-       "no set as-path prepend .PREPEND-AS",
+       "no set as-path prepend .<1-65535>",
        NO_STR
-       "Set value\n"
-       "AS path\n"
-       "AS path prepend\n"
-       "ASes to prepend\n")
+       SET_STR
+       "Prepend string for a BGP AS-path attribute\n"
+       "Prepend to the as-path\n"
+       "AS number\n")
 {
   int i;
   struct buffer *b;
@@ -2028,10 +2175,10 @@ DEFUN (no_set_aspath_prepend,
 
 DEFUN (set_community,
        set_community_cmd,
-       "set community .COMMUNITY",
-       "Set value\n"
-       "Community\n"
-       "Community value")
+       "set community .AA:NN",
+       SET_STR
+       "BGP community attribute\n"
+       "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 {
   int i;
   struct buffer *b;
@@ -2059,11 +2206,11 @@ DEFUN (set_community,
 
 DEFUN (no_set_community,
        no_set_community_cmd,
-       "no set community .COMMUNITY",
+       "no set community .AA:NN",
        NO_STR
-       "Set value\n"
-       "Community\n"
-       "Community value")
+       SET_STR
+       "BGP community attribute\n"
+       "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 {
   int i;
   struct buffer *b;
@@ -2089,139 +2236,12 @@ DEFUN (no_set_community,
   return bgp_route_set_delete (vty, vty->index, "community", str);
 }
 
-DEFUN (set_origin,
-       set_origin_cmd,
-       "set origin (egp|igp|incomplete)",
-       "Set value\n"
-       "Origin attribute\n"
-       "remote EGP\n"
-       "local IGP\n"
-       "unknown origin\n")
-{
-  return bgp_route_set_add (vty, vty->index, "origin", argv[0]);
-}
-
-DEFUN (no_set_origin,
-       no_set_origin_cmd,
-       "no set origin (egp|igp|incomplete)",
-       NO_STR
-       "Set value\n"
-       "Origin attribute\n"
-       "remote EGP\n"
-       "local IGP\n"
-       "unknown origin\n")
-{
-  return bgp_route_set_delete (vty, vty->index, "origin", argv[0]);
-}
-
-DEFUN (set_atomic_aggregate,
-       set_atomic_aggregate_cmd,
-       "set atomic-aggregate",
-       "Set value\n"
-       "Atomic aggregate\n" )
-{
-  return bgp_route_set_add (vty, vty->index, "atomic-aggregate", NULL);
-}
-
-DEFUN (no_set_atomic_aggregate,
-       no_set_atomic_aggregate_cmd,
-       "no set atomic-aggregate",
-       NO_STR
-       "Set value\n"
-       "Atomic aggregate\n" )
-{
-  return bgp_route_set_delete (vty, vty->index, "atomic-aggregate", NULL);
-}
-
-DEFUN (set_aggregator_as,
-       set_aggregator_as_cmd,
-       "set aggregator as AS A.B.C.D",
-       "Set value\n"
-       "Aggregator attribute\n"
-       "Aggregator as attribute\n"
-       "AS value\n"
-       "Aggregator's IP Address\n")
-{
-  int ret;
-  as_t as;
-  struct in_addr address;
-  char *endptr = NULL;
-  char *argstr;
-
-  as = strtoul (argv[0], &endptr, 10);
-  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
-    {
-      vty_out (vty, "AS path value malformed%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ret = inet_aton (argv[1], &address);
-  if (ret == 0)
-    {
-      vty_out (vty, "Aggregator IP Address is invalid%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  argstr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED,
-		    strlen (argv[0]) + strlen (argv[1]) + 2);
-
-  sprintf (argstr, "%s %s", argv[0], argv[1]);
-
-  ret = bgp_route_set_add (vty, vty->index, "aggregator as", argstr);
-
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
-
-  return ret;
-}
-
-DEFUN (no_set_aggregator_as,
-       no_set_aggregator_as_cmd,
-       "no set aggregator as AS A.B.C.D",
-       NO_STR
-       "Set value\n"
-       "Aggregator attribute\n"
-       "Aggregator as attribute\n"
-       "AS value\n"
-       "Aggregator's IP Address\n")
-{
-  int ret;
-  as_t as;
-  struct in_addr address;
-  char *endptr = NULL;
-  char *argstr;
-
-  as = strtoul (argv[0], &endptr, 10);
-  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
-    {
-      vty_out (vty, "AS path value malformed%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ret = inet_aton (argv[1], &address);
-  if (ret == 0)
-    {
-      vty_out (vty, "Aggregator IP Address is invalid%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  argstr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED,
-		    strlen (argv[0]) + strlen (argv[1]) + 2);
-
-  sprintf (argstr, "%s %s", argv[0], argv[1]);
-
-  ret = bgp_route_set_delete (vty, vty->index, "aggregator as", argstr);
-
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
-
-  return ret;
-}
-
 DEFUN (set_community_additive,
        set_community_additive_cmd,
-       "set community-additive .COMMUNITY",
-       "Set value\n"
-       "Add community value to existing one\n"
-       "Community value")
+       "set community-additive .AA:NN",
+       SET_STR
+       "BGP community attribute (Add to the existing community)\n"
+       "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 {
   int i;
   struct buffer *b;
@@ -2249,12 +2269,11 @@ DEFUN (set_community_additive,
 
 DEFUN (no_set_community_additive,
        no_set_community_additive_cmd,
-       "no set community-additive .COMMUNITY",
+       "no set community-additive .AA:NN",
        NO_STR
-       "Set value\n"
-       "Community\n"
-       "Community value to existing one\n"
-       "Community value")
+       SET_STR
+       "BGP community attribute (Add to the existing community)\n"
+       "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 {
   int i;
   struct buffer *b;
@@ -2279,123 +2298,402 @@ DEFUN (no_set_community_additive,
 
   return bgp_route_set_delete (vty, vty->index, "community-additive", str);
 }
+
+DEFUN (set_community_none,
+       set_community_none_cmd,
+       "set community none",
+       SET_STR
+       "BGP community attribute\n"
+       "No community attribute\n")
+{
+  return bgp_route_set_add (vty, vty->index, "community none", NULL);
+}
+
+DEFUN (no_set_community_none,
+       no_set_community_none_cmd,
+       "no set community none",
+       NO_STR
+       SET_STR
+       "BGP community attribute\n"
+       "No community attribute\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "community none", NULL);
+}
+
+DEFUN (set_ecommunity_rt,
+       set_ecommunity_rt_cmd,
+       "set extcommunity rt .ASN:nn_or_IP-address:nn",
+       SET_STR
+       "BGP extended community attribute\n"
+       "Route Target extened communityt\n"
+       "VPN extended community\n")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_add (vty, vty->index, "extcommunity rt", str);
+}
+
+DEFUN (no_set_ecommunity_rt,
+       no_set_ecommunity_rt_cmd,
+       "no set extcommunity rt .ASN:nn_or_IP-address:nn",
+       NO_STR
+       SET_STR
+       "BGP extended community attribute\n"
+       "Route Target extened communityt\n"
+       "VPN extended community\n")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_delete (vty, vty->index, "extcommunity rt", str);
+}
+
+DEFUN (set_ecommunity_soo,
+       set_ecommunity_soo_cmd,
+       "set extcommunity soo .ASN:nn_or_IP-address:nn",
+       SET_STR
+       "BGP extended community attribute\n"
+       "Site-of-Origin extended community\n"
+       "VPN extended community\n")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_add (vty, vty->index, "extcommunity soo", str);
+}
+
+DEFUN (no_set_ecommunity_soo,
+       no_set_ecommunity_soo_cmd,
+       "no set extcommunity soo .ASN:nn_or_IP-address:nn",
+       NO_STR
+       SET_STR
+       "BGP extended community attribute\n"
+       "Site-of-Origin extended community\n"
+       "VPN extended community\n")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_delete (vty, vty->index, "extcommunity soo", str);
+}
+
+DEFUN (set_origin,
+       set_origin_cmd,
+       "set origin (egp|igp|incomplete)",
+       SET_STR
+       "BGP origin code\n"
+       "remote EGP\n"
+       "local IGP\n"
+       "unknown heritage\n")
+{
+  return bgp_route_set_add (vty, vty->index, "origin", argv[0]);
+}
+
+DEFUN (no_set_origin,
+       no_set_origin_cmd,
+       "no set origin (egp|igp|incomplete)",
+       NO_STR
+       SET_STR
+       "BGP origin code\n"
+       "remote EGP\n"
+       "local IGP\n"
+       "unknown heritage\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "origin", argv[0]);
+}
+
+DEFUN (set_atomic_aggregate,
+       set_atomic_aggregate_cmd,
+       "set atomic-aggregate",
+       SET_STR
+       "BGP atomic aggregate attribute\n" )
+{
+  return bgp_route_set_add (vty, vty->index, "atomic-aggregate", NULL);
+}
+
+DEFUN (no_set_atomic_aggregate,
+       no_set_atomic_aggregate_cmd,
+       "no set atomic-aggregate",
+       NO_STR
+       SET_STR
+       "BGP atomic aggregate attribute\n" )
+{
+  return bgp_route_set_delete (vty, vty->index, "atomic-aggregate", NULL);
+}
+
+DEFUN (set_aggregator_as,
+       set_aggregator_as_cmd,
+       "set aggregator as <1-65535> A.B.C.D",
+       SET_STR
+       "BGP aggregator attribute\n"
+       "AS number of aggregator\n"
+       "AS number\n"
+       "IP address of aggregator\n")
+{
+  int ret;
+  as_t as;
+  struct in_addr address;
+  char *endptr = NULL;
+  char *argstr;
+
+  as = strtoul (argv[0], &endptr, 10);
+  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
+    {
+      vty_out (vty, "AS path value malformed%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &address);
+  if (ret == 0)
+    {
+      vty_out (vty, "Aggregator IP address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  argstr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED,
+		    strlen (argv[0]) + strlen (argv[1]) + 2);
+
+  sprintf (argstr, "%s %s", argv[0], argv[1]);
+
+  ret = bgp_route_set_add (vty, vty->index, "aggregator as", argstr);
+
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
+
+  return ret;
+}
+
+DEFUN (no_set_aggregator_as,
+       no_set_aggregator_as_cmd,
+       "no set aggregator as <1-65535> A.B.C.D",
+       NO_STR
+       SET_STR
+       "BGP aggregator attribute\n"
+       "AS number of aggregator\n"
+       "AS number\n"
+       "IP address of aggregator\n")
+{
+  int ret;
+  as_t as;
+  struct in_addr address;
+  char *endptr = NULL;
+  char *argstr;
+
+  as = strtoul (argv[0], &endptr, 10);
+  if (as == 0 || as == ULONG_MAX || *endptr != '\0')
+    {
+      vty_out (vty, "AS path value malformed%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = inet_aton (argv[1], &address);
+  if (ret == 0)
+    {
+      vty_out (vty, "Aggregator IP address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  argstr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED,
+		    strlen (argv[0]) + strlen (argv[1]) + 2);
+
+  sprintf (argstr, "%s %s", argv[0], argv[1]);
+
+  ret = bgp_route_set_delete (vty, vty->index, "aggregator as", argstr);
+
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, argstr);
+
+  return ret;
+}
+
 
 #ifdef HAVE_IPV6
 DEFUN (match_ipv6_address, 
        match_ipv6_address_cmd,
-       "match ipv6 address ACCESS_LIST",
+       "match ipv6 address WORD",
        MATCH_STR
        IPV6_STR
-       "Address\n"
-       "IPv6 Address access-list match command\n")
+       "Match IPv6 address of route\n"
+       "IPv6 access-list name\n")
 {
   return bgp_route_match_add (vty, vty->index, "ipv6 address", argv[0]);
 }
 
 DEFUN (no_match_ipv6_address, 
        no_match_ipv6_address_cmd,
-       "no match ipv6 address ACCESS_LIST",
+       "no match ipv6 address WORD",
        NO_STR
        MATCH_STR
        IPV6_STR
-       "IPv6 address\n"
-       "Delete IPv6 Address access-list match command\n")
+       "Match IPv6 address of route\n"
+       "IPv6 access-list name\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ipv6 address", argv[0]);
 }
 
 DEFUN (match_ipv6_next_hop, 
        match_ipv6_next_hop_cmd,
-       "match ipv6 next-hop IP_ADDR",
+       "match ipv6 next-hop X:X::X:X",
        MATCH_STR
        IPV6_STR
-       "Next hop of the route\n"
-       "IPv6 Address of the next hop\n")
+       "Match IPv6 next-hop address of route\n"
+       "IPv6 address of next hop\n")
 {
   return bgp_route_match_add (vty, vty->index, "ipv6 next-hop", argv[0]);
 }
 
 DEFUN (no_match_ipv6_next_hop,
        no_match_ipv6_next_hop_cmd,
-       "no match ipv6 next-hop IP_ADDR",
+       "no match ipv6 next-hop X:X::X:X",
        NO_STR
        MATCH_STR
        IPV6_STR
-       "Next hop of the route\n"
-       "IPv6 Address of the next hop\n")
+       "Match IPv6 next-hop address of route\n"
+       "IPv6 address of next hop\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ipv6 next-hop", argv[0]);
 }
 
 DEFUN (match_ipv6_prefix_list, 
        match_ipv6_prefix_list_cmd,
-       "match ipv6 prefix-list PREFIX_LIST",
+       "match ipv6 prefix-list WORD",
        MATCH_STR
        IPV6_STR
-       "prefix-list\n"
-       "prefix-list name\n")
+       "Match entries of IPv6 prefix-list\n"
+       "IPv6 prefix-list name\n")
 {
   return bgp_route_match_add (vty, vty->index, "ipv6 prefix-list", argv[0]);
 }
 
 DEFUN (no_match_ipv6_prefix_list,
        no_match_ipv6_prefix_list_cmd,
-       "no match ipv6 prefix-list PREFIX_LIST",
+       "no match ipv6 prefix-list WORD",
        NO_STR
        MATCH_STR
        IPV6_STR
-       "prefix-list\n"
-       "prefix-list name\n")
+       "Match entries of IPv6 prefix-list\n"
+       "IPv6 prefix-list name\n")
 {
   return bgp_route_match_delete (vty, vty->index, "ipv6 prefix-list", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_global,
        set_ipv6_nexthop_global_cmd,
-       "set ipv6 next-hop global IP_ADDR",
-       "Set value\n"
-       "IPv6 address\n"
-       "Next hop\n"
-       "Global\n"
-       "IP Address\n")
+       "set ipv6 next-hop global X:X::X:X",
+       SET_STR
+       IPV6_STR
+       "IPv6 next-hop address\n"
+       "IPv6 global address\n"
+       "IPv6 address of next hop\n")
 {
   return bgp_route_set_add (vty, vty->index, "ipv6 next-hop global", argv[0]);
 }
 
 DEFUN (no_set_ipv6_nexthop_global,
        no_set_ipv6_nexthop_global_cmd,
-       "no set ipv6 next-hop global IP_ADDR",
+       "no set ipv6 next-hop global X:X::X:X",
        NO_STR
-       "Set value\n"
-       "IPv6 address\n"
-       "Next hop\n"
-       "Global\n"
-       "IP Address\n")
+       SET_STR
+       IPV6_STR
+       "IPv6 next-hop address\n"
+       "IPv6 global address\n"
+       "IPv6 address of next hop\n")
 {
   return bgp_route_set_delete (vty, vty->index, "ipv6 next-hop global", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_local,
        set_ipv6_nexthop_local_cmd,
-       "set ipv6 next-hop local IP_ADDR",
-       "Set value\n"
-       "IPv6 address\n"
-       "Next hop\n"
-       "Local\n"
-       "IP Address\n")
+       "set ipv6 next-hop local X:X::X:X",
+       SET_STR
+       IPV6_STR
+       "IPv6 next-hop address\n"
+       "IPv6 local address\n"
+       "IPv6 address of next hop\n")
 {
   return bgp_route_set_add (vty, vty->index, "ipv6 next-hop local", argv[0]);
 }
 
 DEFUN (no_set_ipv6_nexthop_local,
        no_set_ipv6_nexthop_local_cmd,
-       "no set ipv6 next-hop local IP_ADDR",
+       "no set ipv6 next-hop local X:X::X:X",
        NO_STR
-       "Set value\n"
-       "IPv6 address\n"
-       "Next hop\n"
-       "Local\n"
-       "IP Address\n")
+       SET_STR
+       IPV6_STR
+       "IPv6 next-hop address\n"
+       "IPv6 local address\n"
+       "IPv6 address of next hop\n")
 {
   return bgp_route_set_delete (vty, vty->index, "ipv6 next-hop local", argv[0]);
 }
@@ -2403,21 +2701,21 @@ DEFUN (no_set_ipv6_nexthop_local,
 
 DEFUN (set_originator_id,
        set_originator_id_cmd,
-       "set originator-id IP_ADDR",
-       "Set value\n"
-       "Originator ID\n"
-       "IP Address\n")
+       "set originator-id A.B.C.D",
+       SET_STR
+       "BGP originator ID attribute\n"
+       "IP address of originator\n")
 {
   return bgp_route_set_add (vty, vty->index, "originator-id", argv[0]);
 }
 
 DEFUN (no_set_originator_id,
        no_set_originator_id_cmd,
-       "no set originator-id IP_ADDR",
+       "no set originator-id A.B.C.D",
        NO_STR
-       "Set value\n"
-       "Originator ID\n"
-       "IP Address\n")
+       SET_STR
+       "BGP originator ID attribute\n"
+       "IP address of originator\n")
 {
   return bgp_route_set_delete (vty, vty->index, "originator-id", argv[0]);
 }
@@ -2439,19 +2737,23 @@ bgp_route_map_init ()
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_community_cmd);
   route_map_install_match (&route_match_nlri_cmd);
+  route_map_install_match (&route_match_metric_cmd);
 
   route_map_install_set (&route_set_ip_nexthop_cmd);
   route_map_install_set (&route_set_local_pref_cmd);
   route_map_install_set (&route_set_weight_cmd);
   route_map_install_set (&route_set_metric_cmd);
   route_map_install_set (&route_set_aspath_prepend_cmd);
-  route_map_install_set (&route_set_community_cmd);
   route_map_install_set (&route_set_origin_cmd);
   route_map_install_set (&route_set_atomic_aggregate_cmd);
   route_map_install_set (&route_set_aggregator_as_cmd);
+  route_map_install_set (&route_set_community_cmd);
   route_map_install_set (&route_set_community_additive_cmd);
+  route_map_install_set (&route_set_community_none_cmd);
   route_map_install_set (&route_set_nlri_cmd);
   route_map_install_set (&route_set_originator_id_cmd);
+  route_map_install_set (&route_set_ecommunity_rt_cmd);
+  route_map_install_set (&route_set_ecommunity_soo_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -2482,8 +2784,6 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_set_metric_cmd);
   install_element (RMAP_NODE, &set_aspath_prepend_cmd);
   install_element (RMAP_NODE, &no_set_aspath_prepend_cmd);
-  install_element (RMAP_NODE, &set_community_cmd);
-  install_element (RMAP_NODE, &no_set_community_cmd);
   install_element (RMAP_NODE, &set_origin_cmd);
   install_element (RMAP_NODE, &no_set_origin_cmd);
   install_element (RMAP_NODE, &set_atomic_aggregate_cmd);
@@ -2492,10 +2792,16 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_set_aggregator_as_cmd);
   install_element (RMAP_NODE, &set_nlri_cmd);
   install_element (RMAP_NODE, &no_set_nlri_cmd);
-
-  /* set community-additive. */
+  install_element (RMAP_NODE, &set_community_cmd);
+  install_element (RMAP_NODE, &no_set_community_cmd);
   install_element (RMAP_NODE, &set_community_additive_cmd);
   install_element (RMAP_NODE, &no_set_community_additive_cmd);
+  install_element (RMAP_NODE, &set_community_none_cmd);
+  install_element (RMAP_NODE, &no_set_community_none_cmd);
+  install_element (RMAP_NODE, &set_ecommunity_rt_cmd);
+  install_element (RMAP_NODE, &no_set_ecommunity_rt_cmd);
+  install_element (RMAP_NODE, &set_ecommunity_soo_cmd);
+  install_element (RMAP_NODE, &no_set_ecommunity_soo_cmd);
 
 #ifdef HAVE_IPV6
   route_map_install_match (&route_match_ipv6_address_cmd);

@@ -32,6 +32,7 @@ void redistribute_add (struct route_node *np, struct rib *rib);
 void redistribute_delete (struct route_node *np, struct rib *rib);
 
 void zebra_interface_add_update (struct interface *ifp);
+void zebra_interface_delete_update (struct interface *ifp);
 void zebra_interface_address_add_update (struct interface *ifp, 
 					 struct connected *c);
 

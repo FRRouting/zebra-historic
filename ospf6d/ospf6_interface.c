@@ -92,6 +92,7 @@ ospf6_interface_create (struct interface *ifp, struct ospf6 *o6)
   o6i->lladdr = (struct in6_addr *) NULL;
   o6i->area = (struct area *) NULL;
   o6i->state = IFS_DOWN;
+  o6i->is_passive = 0;
   o6i->neighbor_list = list_init ();
   ospf6_lsdb_init_interface (o6i);
   o6i->transdelay = 1;
@@ -102,7 +103,8 @@ ospf6_interface_create (struct interface *ifp, struct ospf6 *o6)
   o6i->cost = 1;
   o6i->ifmtu = 1500;
 
-  o6i->prefix_list = list_init ();
+  o6i->network_prefixes = list_init ();
+  /*o6i->connected_prefixes = list_init ();*/
 
   o6i->lsa_seqnum_link = o6i->lsa_seqnum_network
                        = o6i->lsa_seqnum_intra_prefix
@@ -132,6 +134,8 @@ ospf6_interface_if_add (struct interface *ifp, struct ospf6 *o6)
     return;
 
   o6i->if_id = ifp->ifindex;
+
+  ospf6_interface_address_update (ifp);
 
   /* interface start */
   if (o6i->area)
@@ -174,12 +178,12 @@ ospf6_interface_address_update (struct interface *ifp)
     return;
 
   /* create new Link-LSA */
-#if 0
-  ospf6_lsdb_interface_update (o6i);
+#if 1
+  ospf6_lsa_update_link (o6i);
 #else
   {
     struct ospf6_lsa *lsa = NULL;
-    lsa = ospf6_make_link_lsa (o6i);
+    lsa = ospf6_make_link_lsax (o6i);
     if (!lsa)
       return;
 
@@ -351,9 +355,10 @@ show_if (struct vty *vty, struct interface *iface)
   else
     vty_out (vty, "  Not Attached to Area%s", VTY_NEWLINE);
 
-  vty_out (vty, "  State %s, Transmit Delay %lu sec%s",
+  vty_out (vty, "  State %s, Transmit Delay %lu sec, Priority %d%s",
            ifs_name[ospf6_interface->state],
            ospf6_interface->transdelay,
+           ospf6_interface->priority,
 	   VTY_NEWLINE);
   vty_out (vty, "  Timer intervals configured:%s", VTY_NEWLINE);
   vty_out (vty, "   Hello %lu, Dead %lu, Retransmit %lu%s",

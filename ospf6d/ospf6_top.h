@@ -61,11 +61,13 @@ struct ospf6
   int redist_static;
   int redist_ripng;
   int redist_bgp;
+  int redist_kernel;
 
   /* XXX, redistribute cost */
   unsigned short cost_static;
   unsigned short cost_ripng;
   unsigned short cost_bgp;
+  unsigned short cost_kernel;
 
   /* XXX, redistribute table */
   struct route_table *table_external;
@@ -88,11 +90,7 @@ struct ospf6
 };
 
 /* prototypes */
-struct ospf6 *ospf6_create (unsigned long);
-void ospf6_delete (struct ospf6 *);
 void ospf6_vty (struct vty *);
-
-/* xxx temporary */
 struct ospf6 *ospf6_start ();
 void ospf6_stop ();
 

@@ -420,7 +420,7 @@ DEFUN (debug_bgp_fsm,
        "debug bgp fsm",
        DEBUG_STR
        BGP_STR
-       "Finite Stete Machine\n")
+       "BGP Finite Stete Machine\n")
 {
   DEBUG_ON (fsm, FSM);
   return CMD_SUCCESS;
@@ -461,24 +461,26 @@ DEFUN (no_debug_bgp_events,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_debug_bgp, show_debug_bgp_cmd,
-       "show debug bgp",
+DEFUN (show_debugging_bgp,
+       show_debugging_bgp_cmd,
+       "show debugging bgp",
        SHOW_STR
        DEBUG_STR
        BGP_STR)
 {
-  if (BGP_DEBUG (fsm, FSM))
-    vty_out (vty, "debug bgp fsm%s", VTY_NEWLINE);
+  vty_out (vty, "Zebra debugging status:%s", VTY_NEWLINE);
+
   if (BGP_DEBUG (events, EVENTS))
-    vty_out (vty, "debug bgp events%s", VTY_NEWLINE);
+    vty_out (vty, "  BGP events debugging is on%s", VTY_NEWLINE);
+  if (BGP_DEBUG (fsm, FSM))
+    vty_out (vty, "  BGP fsm debugging is on%s", VTY_NEWLINE);
   return CMD_SUCCESS;
 }
 
 void
 bgp_debug_init ()
 {
-  install_element (VIEW_NODE, &show_debug_bgp_cmd);
-  install_element (ENABLE_NODE, &show_debug_bgp_cmd);
+  install_element (ENABLE_NODE, &show_debugging_bgp_cmd);
 
   install_element (ENABLE_NODE, &debug_bgp_fsm_cmd);
   install_element (CONFIG_NODE, &debug_bgp_fsm_cmd);

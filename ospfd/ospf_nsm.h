@@ -116,7 +116,10 @@
 /* Prototypes. */
 int ospf_nsm_event (struct thread *);
 void nsm_change_status (struct ospf_neighbor *, int);
-void ospf_check_nbr_loading(struct ospf_neighbor *);
+void ospf_check_nbr_loading (struct ospf_neighbor *);
+int ospf_db_summary_isempty (struct ospf_neighbor *);
+int ospf_db_summary_count (struct ospf_neighbor *);
+void ospf_db_summary_delete_all (struct ospf_neighbor *);
 
 #endif /* _ZEBRA_OSPF_NSM_H */
 

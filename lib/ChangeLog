@@ -1,3 +1,147 @@
+2000-06-12  Akihiro Mizutani <mizutani@dml.com>
+
+	* distribute.c: Fix help strings.
+
+2000-06-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_complete_command): Add check for vector_slot
+	(vline, index) is not NULL when calculating lcd.
+	(cmd_entry_function): First check variable arguemnt to prevent it
+	from completion.
+
+2000-06-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.h (struct vty ): Add output_count member for displaying
+	output route count.  Remove arugment arg from output_func because
+	the value is passed by vty argument.  Change output to output_rn.
+	Add output_clean function pointer member.  Add output_type member.
+
+2000-06-10  Toshiaki Takada <takada@zebra.org>
+
+	* command.c (show_startup_config): Add "show startup-config"
+	command.
+
+2000-06-06  Akihiro Mizutani <mizutani@dml.com>
+
+	* filter.c: Fix help strings.
+
+2000-06-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* prefix.h (struct prefix_rd): New prefix structure for routing
+	distinguisher.
+	(struct prefix): Add padding to every prefix structure.
+
+
+	* routemap.c (route_map_add_match): When completely same match
+	statement exists, don't duplicate it.
+
+2000-06-05  Akihiro Mizutani <mizutani@dml.com>
+
+	* routemap.c: Change NAME to WORD.
+
+	* plist.c: Fix help strings.
+
+2000-06-02  Akihiro Mizutani <mizutani@dml.com>
+
+	* routemap.c: Fix route-map help strings.
+
+2000-06-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_filter_by_completion): Fix CMD_VARARG treatment
+	to filter other non vararg commands.
+
+	* routemap.c (route_map_init_vty): Use install_default() for
+	install common commands into route-map node..
+
+2000-06-01  Akihiro Mizutani  <mizutani@dml.com>
+
+	* command.h (OSPF_STR):  Macro added.
+
+2000-05-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_complete_command): LCD completion must not modify
+	installed command string.
+
+	* plist.c (ipv6_prefix_list): Fix wrong syntax definition.  Change
+	X:X::X:X to X:X::X:X/M.
+
+2000-05-31  Toshiaki Takada  <takada@zebra.org>
+
+	* vty.c (show_history):  New defun added.
+
+2000-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (CMD_COMPLETE_LIST_MATCH): New define for completion
+	list.  CMD_COMPLETE_MATCH is used for LCD completion.
+
+	* vty.c (vty_complete_command): Matched string's LCD is completed.
+
+	* command.c (cmd_lcd): New function for calculate LCD of matched
+	strings.
+
+2000-05-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (install_default): config_write_terminal_cmd,
+	config_write_file_cmd, config_write_memory_cmd are added to
+	default node.
+
+	* memory.c (memory_init): Divide show memory command into each
+	sort.
+
+	* command.c (cmd_init): config_write_terminal_cmd,
+	config_write_file_cmd, config_write_memory_cmd are added to
+	CONFIG_NODE.
+
+	* routemap.c (route_map_index_free): New function.
+	(no_route_map_all): New DEFUN for "no route-map NAME".
+
+	* filter.c (no_access_list_all): New DEFUN for delete access-list
+	with NAME.
+	(no_ipv6_access_list_all): Likewise.
+
+2000-05-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* plist.c: Change IPV6_PREFIX to X:X::X:X.  When "any" is
+	specified, user can not use "ge" and "le" statement.
+
+2000-05-22  Thomas Molkenbur <tmo@datus.datus.com>
+
+	* routemap.c (route_map_add_set): Fix bug of next pointer missing.
+
+	* table.c (route_table_free): Like wise.
+
+2000-05-22  Toshiaki Takada  <takada@zebra.org>
+
+	* vty.c (vty_stop_input): Set history pointer to the latest one.
+
+	* vty.c (vty_hist_add): Do not add command line history when input
+	is as same as previous one.
+
+2000-05-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_ECOMMUNITY and MTYPE_ECOMMUNITY_VAL.
+
+2000-05-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add BGP_VPNV4_NODE.
+
+2000-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vtysh_accept): Add cast of struct sockaddr * to bind
+	argument.  Reported by: Vesselin Mladenov <mladenov@netbg.com>.
+
+	* filter.c (ipv6_access_list): Add IPv6 prefix example instead of
+	IPv4 example.  Reported by: Love <lha@s3.kth.se>.
+
+	* command.c (cmd_complete_command): Make it sure last element of
+	matchvec is NULL.  This fix problem which cause crush in
+	vty_complete_command().  Reported by: JINMEI Tatuya
+	<jinmei@isl.rdc.toshiba.co.jp>.
+
+2000-04-28  Love <lha@s3.kth.se>
+
+	* prefix.h (struct prefix): Add padding.
+
 2000-04-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* command.c (show_version): Update copyright year.
@@ -1038,7 +1182,8 @@
 
 	* host.c (config_logfile): change 'log PATH' to 'logfile PATH'.
 
-	* sockunion.c (sockunion_sameprefix): add sameprefix for sockunion.
+	* sockunion.c (sockunion_sameprefix): add same prefix for
+	sockunion.
 
 1997-12-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
 

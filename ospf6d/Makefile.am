@@ -12,14 +12,15 @@ libospf6_a_SOURCES = \
 	ospf6_neighbor.c ospf6_mesg.c ospf6_lsa.c ospf6_spf.c \
 	ospf6_rtable.c ospf6_zebra.c ospf6_ism.c ospf6_dbex.c \
 	ospf6_lsdb.c ospf6_prefix.c ospf6_top.c ospf6_area.c ospf6_nsm.c \
-        ospf6_redistribute.c ospf6_routemap.c
+	ospf6_redistribute.c ospf6_routemap.c ospf6_list.c
 
 noinst_HEADERS = \
 	ospf6_area.h ospf6_dump.h ospf6_interface.h ospf6_lsa.h \
 	ospf6_mesg.h ospf6_neighbor.h ospf6_network.h ospf6_proto.h \
 	ospf6_spf.h ospf6_rtable.h ospf6_types.h ospf6_zebra.h ospf6d.h \
 	ospf6_rtable.h ospf6_ism.h ospf6_dbex.h ospf6_lsdb.h ospf6_prefix.h \
-	ospf6_top.h ospf6_nsm.h ospf6_redistribute.h ospf6_routemap.h
+	ospf6_top.h ospf6_nsm.h ospf6_redistribute.h ospf6_routemap.h \
+	ospf6_list.h
 
 ospf6d_SOURCES = \
 	ospf6_main.c $(libospf6_a_SOURCES)
@@ -241,3 +242,4 @@ ospf6d.o: ospf6d.c ospf6d.h ../lib/version.h ../lib/log.h \
  ospf6_interface.h ospf6_neighbor.h ospf6_ism.h ospf6_nsm.h \
  ospf6_lsa.h ospf6_lsdb.h ospf6_dbex.h ospf6_network.h ospf6_zebra.h \
  ospf6_dump.h ospf6_routemap.h
+ospf6_list.o: ospf6_list.c ospf6_list.h ../lib/memory.h ../lib/log.h

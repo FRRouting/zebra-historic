@@ -1,3 +1,16 @@
+2000-06-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to zebra-0.87.
+
+2000-06-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Remove --enable-mpls-vpn.  Now MPLS-VPN support is
+	default.
+
+	* Set version to zebra-0.87-pre
+
+	* Makefile.am: Likewise.
+
 2000-04-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Set version to 0.86.

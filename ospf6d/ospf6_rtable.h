@@ -31,6 +31,7 @@
 #define DTYPE_STATIC_REDISTRIBUTE 0xf1 /* redistributed from static */
 #define DTYPE_RIPNG_REDISTRIBUTE  0xf2 /* redistributed from ripng */
 #define DTYPE_BGP_REDISTRIBUTE    0xf3 /* redistributed from bgp */
+#define DTYPE_KERNEL_REDISTRIBUTE 0xf4 /* redistributed from kernel */
 
 /* Path-types (from RFC2328 11), decreasing order of preference */
 #define PTYPE_INTRA          1    /* intra-area */
@@ -104,5 +105,8 @@ int ospf6_route_calc (struct thread *);
 void ospf6_route_update_zebra ();
 
 void ospf6_route_vty_new (struct vty *, struct route_node *, int);
+
+void ospf6_rtable_init ();
+
 #endif /* OSPF6_RTABLE_H */
 

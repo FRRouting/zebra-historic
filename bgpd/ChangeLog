@@ -1,3 +1,186 @@
+2000-06-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_mplsvpn.c (no_vpnv4_network): "no network A.B.C.D/M rd WORD
+	tag WORD" command is added.
+
+	* bgp_ecommunity.c (ecommunity_vty_out): New function added.
+
+2000-06-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_show): Fix total number of prefix count bug.
+
+	* bgpd.c (bgp_show_peer): Display VPNv4 unicast configuration and
+	negotiation result in "show ip bgp neighbors".
+
+2000-06-12  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.c: Fix help strings.
+	
+	* bgpd.h: Likewise.
+	
+2000-06-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_aggregate_unset): Fix bug of checking rn->info
+	instead of rn.  Reported by Akihiro Mizutani <mizutani@dml.com>.
+
+	* bgp_mplsvpn.c (vpnv4_network): For testing purpose, "network
+	A.B.C.D rd RD" is added to address-family vpnv4 unicast node.
+
+	* bgp_route.c (bgp_static_set): Set safi to p.safi.
+
+2000-06-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_show_prefix_list): Change to use bgp_show().
+	(bgp_show_regexp): Change to use bgp_show().
+	(show_adj_route): Change to display header.
+
+	* bgpd.c (clear_bgp): Set peer->v_start to default value when peer
+	is cleared manually.
+
+	* bgp_route.c (bgp_show_route): New function which display
+	specific BGP route.  Divided from bgp_show().
+	(bgp_static_delete): Delete all static route.
+
+2000-06-09  NOGUCHI Kay <kay@v6.access.co.jp>
+
+	* bgp_route.c (show_ipv6_bgp): "show ipv6 bgp" is broken with
+	invalid privious fix.  Now show_ipv6_bgp and show_ipv6_bgp_route
+	take care of "show ipv6 bgp [X:X::X:X]".  Same change for "show ip
+	mbgp" and "show ipv6 mbgp".
+
+2000-06-07  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c: Fix help strings and command arguments.
+
+2000-06-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_ecommunity.c: Include prefix.h
+
+2000-06-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.h (struct bgp_info_tag): New structure to hold tag
+	value.
+
+	* bgp_route.c (bgp_adj_set): table NULL check is added.
+	(bgp_adj_unset): Likewise.
+	(bgp_adj_lookup): Likewise.
+	(bgp_adj_clear): Likewise.
+	(route_vty_out): Add SAFI check for nexthop display.
+	(bgp_withdraw): Add SAFI check for withdraw route.
+
+	* Remove all #ifdef MPLS_VPN then include it as default.
+
+	* bgpd.c: Temporary disable peer-group command until the
+	implementation is completed.
+
+	* bgp_routemap.c (bgp_route_map_init): Install
+	route_metric_match_cmd.
+	(route_match_metric_compile): MED value compile using strtoul.
+
+2000-06-05  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_filter.c: Fix help strings.  Change REGEXP to LINE.  Change
+	NAME to WORD.
+
+	* Change command argument to more comprehensive.
+
+	METRIC         -> <0-4294967295>
+	WEIGHT         -> <0-4294967295>
+	LOCAL_PREF     -> <0-4294967295>
+	IP_ADDR        -> A.B.C.D
+	AS             -> <1-65535>
+	AS-PATH-NAME   -> WORD
+	ACCESS_LIST    -> WORD
+	PREFIX_LIST    -> WORD
+	COMMUNITY      -> AA:NN
+	EXT_COMMUNITY  -> ASN:nn_or_IP-address:nn
+	IPv6_ADDR      -> X:X::X:X
+
+	* bgp_clist.c: Fix help strings.
+
+2000-06-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (peer_active): Add new function for check the peer is
+	active or not.
+	(neighbor_activate): New command "neighbor PEER activate" and "no
+	neighbor PEER activate" are added.
+
+	* bgp_packet.c: Include bgpd/bgp_mplsvpn.h.
+
+2000-06-02  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_clist.c: Fix commuity-list help strings.
+
+	* bgp_routemap.c: Fix "set community" help strings.  Add #define
+	SET_STR.  Use (unicast|multicast) argument for "set nlri" command.
+	
+2000-06-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c (route_set_community_none_cmd): "set community
+	none" command is added to route-map.
+
+2000-06-01  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_debug.c: Change "show debug" to "show debugging".  Now "show
+	debugging" is not used in VIEW_NODE.
+
+2000-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c (bgp_timer_set): Add check for shutdown flag.  This
+	fix unconditional BGP connection.
+
+	* bgpd.c (peer_shutdown): Replace peer_shutdown() with
+	peer_change_flag_with_reset().
+
+2000-05-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (no_bgp_default_ipv4_unicast): Add "no bgp default
+	ipv4-unicast" command.
+
+	* bgpd.h (BGP_CONFIG_NO_DEFAULT_IPV4): Add new definition.
+
+	* bgp_filter.c (as_list_delete): Free all AS filter.
+
+	* bgp_clist.c (community_list_delete): Free all community entry.
+
+	* bgp_filter.c (no_ip_as_path_all): New DEFUN for "no ip as-path
+	access-list NAME".
+
+	* bgp_clist.c (no_ip_community_list_all): New DEFUN for "no ip
+	community-list NAME".
+
+2000-05-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (ipv6_mbgp_neighbor_routes): Change "show ip bgp PEER
+	routes" to "show ip bgp PEER received-routes"
+
+2000-05-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_ecommunity.c (ecommunity_parse): New file for Extended
+	Communities attribute.
+	* bgp_ecommunity.h: Likewise.
+
+2000-05-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_mplsvpn.h: New file for MPLS-VPN.
+	* bgp_mplsvpn.c: Likewise.
+
+	* bgpd.c (bgp_delete): Fix bug of "no router bgp" crush.
+
+2000-05-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_bestpath_missing_as_worst): Add "bgp bestpath
+	missing-as-worst".
+
+2000-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c (match_community): Clarify help of "match
+	community".
+
+2000-05-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_cmp_left): Remove debug code.
+
 2000-04-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_route.c (bgp_info_cmp): Compare MED only both routes comes

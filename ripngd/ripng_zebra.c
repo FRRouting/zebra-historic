@@ -83,7 +83,7 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 
       ifindex = stream_getl (s);
 
-      bzero (&p, sizeof (struct prefix_ipv6));
+      memset (&p, 0, sizeof (struct prefix_ipv6));
       p.family = AF_INET6;
       p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);

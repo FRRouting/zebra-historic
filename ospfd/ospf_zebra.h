@@ -23,6 +23,9 @@
 #ifndef _ZEBRA_OSPF_ZEBRA_H
 #define _ZEBRA_OSPF_ZEBRA_H
 
+#define EXTERNAL_METRIC_TYPE_1      0
+#define EXTERNAL_METRIC_TYPE_2      1
+
 /* Prototypes */
 void zebra_init ();
 void ospf_zclient_start ();

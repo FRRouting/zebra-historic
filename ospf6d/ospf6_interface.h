@@ -39,8 +39,8 @@ struct ospf6_interface
   /* linklocal address of this I/F */
   struct in6_addr *lladdr;
 
-  /* list of prefixes: struct in6_addr */
-  list prefix_list;
+  /* list of network prefixes: used by DR only */
+  list network_prefixes;
 
   /* Interface ID; same as ifindex */
   u_int32_t if_id;
@@ -67,6 +67,9 @@ struct ospf6_interface
 
   /* Interface State */
   u_char state;
+
+  /* OSPF6 Interface flag */
+  int is_passive;
 
   /* Decision of DR Election */
   u_int32_t dr;

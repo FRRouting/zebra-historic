@@ -673,34 +673,9 @@ ospf6_route_str (struct route_node *node, char *buf, size_t bufsize)
 }
 
 void
-ospf6_route_vty (struct vty *vty, struct route_node *node)
-{
-  char rnbuf[128], nhbuf[128];
-  struct ospf6_route_node_info *info;
-  listnode n;
-  struct ospf6_nexthop *nh;
-
-  ospf6_route_str (node, rnbuf, sizeof (rnbuf));
-
-  info = (struct ospf6_route_node_info *) node->info;
-
-  /* xxx, save entry of no nexthop */
-  if (list_isempty (info->nhlist))
-    vty_out (vty, "%s%s", rnbuf,
-	     VTY_NEWLINE);
-
-  for (n = listhead (info->nhlist); n; nextnode (n))
-    {
-      nh = (struct ospf6_nexthop *) getdata (n);
-      nexthop_str (nh, nhbuf, sizeof (nhbuf));
-      vty_out (vty, "%s %s%s", rnbuf, nhbuf, VTY_NEWLINE);
-    }
-}
-
-void
 ospf6_route_table_vty (struct vty *vty, struct route_node *rn, int detail)
 {
-  char destination[128], nexthop[128];
+  char destination[128], buf[128];
   listnode n;
   struct ospf6_nexthop *nh;
   struct ospf6_route_node_info *info;
@@ -711,13 +686,24 @@ ospf6_route_table_vty (struct vty *vty, struct route_node *rn, int detail)
   for (n = listhead (info->nhlist); n; nextnode (n))
     {
       nh = (struct ospf6_nexthop *) getdata (n);
-      nexthop_str (nh, nexthop, sizeof (nexthop));
-      vty_out (vty, "%-38s %-25s%s", destination, nexthop, VTY_NEWLINE);
-      if (detail)
-        vty_out (vty, "    %s %s %s %s %lu%s",
-                 dtype_string[info->dest_type], "xxx",
-                 info->area->str, ptype_string[info->path_type],
-                 info->cost, VTY_NEWLINE);
+      nexthop_str (nh, buf, sizeof (buf));
+      vty_out (vty, "%-38s %-25s%s", destination, buf, VTY_NEWLINE);
+
+      if (!detail)
+        continue;
+
+      vty_out (vty, "    %s %s %s %s %lu%s",
+               dtype_string[info->dest_type], "xxx",
+               info->area->str, ptype_string[info->path_type],
+               info->cost, VTY_NEWLINE);
+
+      if (! info->ls_origin)
+        continue;
+      vty_out (vty, "    Origin: %s Advrtr:%s LS-ID:%lu%s",
+               lstype_name[typeindex (info->ls_origin->lsa_hdr->lsh_type)],
+               inet_ntop (AF_INET, &info->ls_origin->lsa_hdr->lsh_advrtr,
+                          buf, sizeof (buf)),
+               (unsigned long) ntohl (info->ls_origin->lsa_hdr->lsh_id));
     }
 }
 
@@ -749,8 +735,8 @@ ospf6_route_intra_vty (struct vty *vty, struct route_node *rn, int detail)
                  destination, nexthop, VTY_NEWLINE);
       if (detail)
         vty_out (vty, "    %s %s %s %lu%s",
-                 "xxx",
-                 info->area->str, ptype_string[info->path_type],
+                 "xxx", info->area->str,
+                 ptype_string[info->path_type],
                  info->cost, VTY_NEWLINE);
     }
 }
@@ -1207,4 +1193,186 @@ ospf6_route_update_zebra ()
       list_delete_all (nhdiff);
     }
 }
+
+
+DEFUN (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_area_detail_cmd,
+       "show ipv6 route ospf6 area A.B.C.D (detail|)",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "show route table in area structure\n"
+       "OSPF6 area ID\n"
+       "detailed infomation\n"
+       )
+{
+  struct area *area;
+  area_id_t area_id;
+  struct route_node *rn;
+
+  if (!ospf6)
+    {
+      vty_out (vty, "OSPF6 not started%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (argc && strncmp (argv[0], "d", 1) != 0)
+    inet_pton (AF_INET, argv[0], &area_id);
+  else
+    area_id = 0;
+
+  area = ospf6_area_lookup (area_id);
+  if (!area)
+    {
+       vty_out (vty, "no match by area id: %s%s", argv[0],
+		VTY_NEWLINE);
+       return CMD_WARNING;
+    }
+
+  for (rn = route_top (area->table); rn; rn = route_next (rn))
+    {
+      if (rn->info)
+        {
+          if (strncmp (argv[argc-1], "detail", 7) == 0)
+            ospf6_route_vty_new (vty, rn, 1);
+          else
+            ospf6_route_vty_new (vty, rn, 0);
+        }
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_area_cmd,
+       "show ipv6 route ospf6 area A.B.C.D",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "show route table in area structure\n"
+       "OSPF6 area ID\n"
+       )
+
+ALIAS (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_backbone_detail_cmd,
+       "show ipv6 route ospf6 backbone (detail|)",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "show route table in area structure\n"
+       "detailed infomation\n"
+       )
+
+ALIAS (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_backbone_cmd,
+       "show ipv6 route ospf6 backbone",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "show route table in area structure\n"
+       )
+
+DEFUN (show_ipv6_route_ospf6_detail,
+       show_ipv6_route_ospf6_detail_cmd,
+       "show ipv6 route ospf6 (detail|)",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "detailed infomation\n"
+       )
+{
+  struct route_node *rn;
+  int i, ret, detail;
+  struct prefix p;
+
+  ret = 0;
+  detail = 0;
+
+  if (!ospf6)
+    {
+      vty_out (vty, "OSPF6 not started%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  for (i = 0; i < argc; i++)
+    {
+      if (strncmp (argv[argc-1], "detail", 7) == 0)
+        {
+          detail = 1;
+          continue;
+        }
+
+      ret = str2prefix_ipv6 (argv[i], (struct prefix_ipv6 *) &p);
+      if (ret != 1)
+        continue;
+    }
+
+  if (ret)
+    {
+      rn = route_node_match (ospf6->table, &p);
+      if (rn && rn->info)
+        {
+          ospf6_route_vty_new (vty, rn, 1);
+          route_unlock_node (rn);
+        }
+      else
+        vty_out (vty, "Route not found.%s", VTY_NEWLINE);
+      return CMD_SUCCESS;
+    }
+
+  for (rn = route_top (ospf6->table); rn; rn = route_next (rn))
+    {
+      if (! rn->info)
+        continue;
+
+      ospf6_route_vty_new (vty, rn, detail);
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (show_ipv6_route_ospf6_detail,
+       show_ipv6_route_ospf6_cmd,
+       "show ipv6 route ospf6",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       )
+
+ALIAS (show_ipv6_route_ospf6_detail,
+       show_ipv6_route_ospf6_prefix_cmd,
+       "show ipv6 route ospf6 X::X",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "IPv6 Address search\n"
+       )
+
+void
+ospf6_rtable_init ()
+{
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_prefix_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_detail_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_detail_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_detail_cmd);
+
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_prefix_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_detail_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_detail_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_backbone_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_backbone_detail_cmd);
+}
+
 

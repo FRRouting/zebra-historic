@@ -1,5 +1,100 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.87
+
+* Changes in lib
+
+** "show startup-config" command is added.
+
+** "show history" command is added.
+
+** Memory statistics command is changed.  New command
+
+   show memory all
+   show memory lib
+   show memory rip
+   show memory ospf
+   show memory bgp
+
+are added.
+
+** Filters can be removed only specify it's name.  New command
+
+   no access-list NAME
+   no ip community-list NAME
+   no ip as-path access-list NAME
+   no route-map NAME
+
+are added.
+
+** At any node, user can view/save user configuration.
+
+   write terminal
+   write file
+   wirte memory
+
+are added to every node in default.
+
+** LCD completion is added.  For example both "ip" and "ipv6" command
+are exist, "i" then press TAB will be expanded to "ip".
+
+** "show history" command is added.
+
+* Changes in bgpd
+
+** "show ip bgp" family shows total number of prefixes.
+
+** "no bgp default ipv4-unicast" command is added.
+
+** Extended Communities support is added.
+
+** "no neighbor PEER send-community extended" command is added.
+
+** MPLS-VPN PE-RR support is added.
+
+ New address family vpnv4 unicast is introduced.
+
+  !
+  address-family vpnv4 unicast
+   neighobr PEER activate
+   network A.B.C.D rd RD tag TAG
+  exit-address-family
+  !
+
+ To make it route-reflector, please configure it under normal router
+bgp ASN.
+
+  !
+  router bgp 7675
+   no bgp default ipv4-unicast
+   bgp router-id 10.0.0.100
+   bgp cluster-id 10.0.0.100
+   neighbor 10.0.0.1 remote-as 65535
+   neighbor 10.0.0.1 route-reflector-client
+   neighbor 10.0.0.2 remote-as 65535
+   neighbor 10.0.0.2 route-reflector-client
+   neighbor 10.0.0.3 remote-as 65535
+   neighbor 10.0.0.3 route-reflector-client
+  !
+  address-family vpnv4 unicast
+   neighbor 10.0.0.1 activate
+   neighbor 10.0.0.2 activate
+   neighbor 10.0.0.3 activate
+  exit-address-family
+  !
+
+* Changes in ospfd
+
+** Many many bugs are fixed.
+
+* Changes in ripd
+
+** Better interface up/down event handle.
+
+* Changes in zebra
+
+** Better interface up/down event handle.
+
 * Changes in zebra-0.86
 
 * Changes in lib

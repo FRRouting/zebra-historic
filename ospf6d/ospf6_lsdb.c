@@ -581,6 +581,54 @@ ospf6_lsdb_lookup (unsigned short type, unsigned long id,
   return NULL;
 }
 
+/* new ordinary lookup function */
+struct ospf6_lsa *
+ospf6_lsdb_lookup_new (unsigned short type, unsigned long id,
+                       unsigned long advrtr, struct ospf6 *o6)
+{
+  struct ospf6_interface *o6i;
+  struct area *area;
+  struct ospf6_lsa *found;
+  listnode i, j;
+
+  found = (struct ospf6_lsa *) NULL;
+  switch (ospf6_lsa_get_scope_type (type))
+    {
+      case SCOPE_LINKLOCAL:
+        for (i = listhead (o6->area_list); i; nextnode (i))
+          {
+            area = (struct area *) getdata (i);
+            for (j = listhead (area->if_list); j; nextnode (j))
+              {
+                o6i = (struct ospf6_interface *) getdata (j);
+                found = ospf6_lsdb_lookup_interface (type, id, advrtr, o6i);
+                if (found)
+                  return found;
+              }
+          }
+        break;
+      case SCOPE_AREA:
+        for (i = listhead (o6->area_list); i; nextnode (i))
+          {
+            area = (struct area *) getdata (i);
+            found = ospf6_lsdb_lookup_area (type, id, advrtr, area);
+            if (found)
+              return found;
+          }
+        break;
+      case SCOPE_AS:
+        found = ospf6_lsdb_lookup_as (type, id, advrtr, o6);
+        if (found)
+          return found;
+        break;
+      case SCOPE_RESERVED:
+      default:
+        zlog_info ("LSDB lookup: Unknown scope");
+        break;
+    }
+  return NULL;
+}
+
 void
 ospf6_lsdb_add (struct ospf6_lsa *lsa)
 {
@@ -884,5 +932,218 @@ ospf6_lsdb_check_maxage_lsa (struct ospf6 *o6)
     }
 
   list_delete_all (remove_list);
+}
+
+
+DEFUN (show_ipv6_ospf6_database_router,
+       show_ipv6_ospf6_database_router_cmd,
+       "show ipv6 ospf6 database router",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "Router-LSA\n"
+       )
+{
+  listnode j, k;
+  struct area *area;
+  list l;
+
+  for (j = listhead (ospf6->area_list); j; nextnode (j))
+    {
+      area = (struct area *) getdata (j);
+      vty_out (vty, "Area %s%s", inet4str (area->area_id),
+	       VTY_NEWLINE);
+      l = list_init ();
+      ospf6_lsdb_collect_type (l, htons (LST_ROUTER_LSA), area);
+      for (k = listhead (l); k; nextnode (k))
+        {
+          vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
+        }
+      list_delete_all (l);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ipv6_ospf6_database_network,
+       show_ipv6_ospf6_database_network_cmd,
+       "show ipv6 ospf6 database network",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "Network-LSA\n"
+       )
+{
+  listnode j, k;
+  struct area *area;
+  list l;
+
+  for (j = listhead (ospf6->area_list); j; nextnode (j))
+    {
+      area = (struct area *) getdata (j);
+      vty_out (vty, "Area %s%s", inet4str (area->area_id), VTY_NEWLINE);
+      l = list_init ();
+      ospf6_lsdb_collect_type (l, htons (LST_NETWORK_LSA), area);
+      for (k = listhead (l); k; nextnode (k))
+        {
+          vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
+        }
+      list_delete_all (l);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ipv6_ospf6_database_link,
+       show_ipv6_ospf6_database_link_cmd,
+       "show ipv6 ospf6 database link",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "Link-LSA\n"
+       )
+{
+  listnode j, k, n;
+  list l;
+  struct area *area;
+  struct ospf6_interface *ospf6_interface;
+
+  for (j = listhead (ospf6->area_list); j; nextnode (j))
+    {
+      area = (struct area *) getdata (j);
+      vty_out (vty, "Area %s%s", inet4str (area->area_id),
+	       VTY_NEWLINE);
+      for (k = listhead (area->if_list); k; nextnode (k))
+        {
+          ospf6_interface = (struct ospf6_interface *) getdata (k);
+          vty_out (vty, "Interface %s%s", ospf6_interface->interface->name,
+		   VTY_NEWLINE);
+          l = list_init ();
+          ospf6_lsdb_collect_type (l, htons (LST_LINK_LSA), ospf6_interface);
+          for (n = listhead (l); n; nextnode (n))
+            {
+              vty_lsa (vty, (struct ospf6_lsa *) getdata (n));
+            }
+          list_delete_all (l);
+        }
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ipv6_ospf6_database_intraprefix,
+       show_ipv6_ospf6_database_intraprefix_cmd,
+       "show ipv6 ospf6 database intra-area-prefix",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "Intra-Area-Prefix-LSA\n"
+       )
+{
+  listnode j, k;
+  struct area *area;
+  list l;
+
+  for (j = listhead (ospf6->area_list); j; nextnode (j))
+    {
+      area = (struct area *) getdata (j);
+      vty_out (vty, "Area %s%s", inet4str (area->area_id),
+	       VTY_NEWLINE);
+      l = list_init ();
+      ospf6_lsdb_collect_type (l, htons (LST_INTRA_AREA_PREFIX_LSA), area);
+      for (k = listhead (l); k; nextnode (k))
+        {
+          vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
+        }
+      list_delete_all (l);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ipv6_ospf6_database_asexternal,
+       show_ipv6_ospf6_database_asexternal_cmd,
+       "show ipv6 ospf6 database as-external",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "AS-External-LSA\n"
+       )
+{
+  listnode j;
+  u_int32_t advrtr = 0;
+  struct ospf6_lsa *lsa;
+
+  if (argc)
+    inet_pton (AF_INET, argv[0], &advrtr);
+
+  for (j = listhead (ospf6->lsdb); j; nextnode (j))
+    {
+      lsa = (struct ospf6_lsa *) getdata (j);
+      if (advrtr && lsa->lsa_hdr->lsh_advrtr != advrtr)
+        continue;
+      vty_lsa (vty, lsa);
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (show_ipv6_ospf6_database_asexternal,
+       show_ipv6_ospf6_database_asexternal_advrtr_cmd,
+       "show ipv6 ospf6 database as-external advrtr A.B.C.D",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "AS-External-LSA\n"
+       "Advertising Router\n"
+       "Router ID\n"
+       )
+
+DEFUN (show_ipv6_ospf6_database,
+       show_ipv6_ospf6_database_cmd,
+       "show ipv6 ospf6 database",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       )
+{
+  show_ipv6_ospf6_database_router (&show_ipv6_ospf6_database_router_cmd,
+                                   vty, 0, NULL);
+  show_ipv6_ospf6_database_network (&show_ipv6_ospf6_database_network_cmd,
+                                    vty, 0, NULL);
+  show_ipv6_ospf6_database_link (&show_ipv6_ospf6_database_link_cmd,
+                                 vty, 0, NULL);
+  show_ipv6_ospf6_database_intraprefix (&show_ipv6_ospf6_database_intraprefix_cmd,
+                                        vty, 0, NULL);
+  show_ipv6_ospf6_database_asexternal (&show_ipv6_ospf6_database_asexternal_cmd,
+                                        vty, 0, NULL);
+  return CMD_SUCCESS;
+}
+
+void
+ospf6_lsdb_init ()
+{
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_network_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_router_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_link_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_asexternal_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_asexternal_advrtr_cmd);
+
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_network_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_router_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_link_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_asexternal_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_asexternal_advrtr_cmd);
 }
 

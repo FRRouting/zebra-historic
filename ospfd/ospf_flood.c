@@ -29,10 +29,12 @@
 #include "thread.h"
 #include "memory.h"
 #include "log.h"
+#include "zclient.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_lsdb.h"
 #include "ospfd/ospf_neighbor.h"
@@ -41,9 +43,45 @@
 #include "ospfd/ospf_flood.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_abr.h"
-#include "ospfd/ospf_asbr.h"
+
+extern struct zebra *zclient;
 
 
+/* Check LSA is related to external info. */
+int
+ospf_external_info_check (struct ospf_lsa *lsa)
+{
+  struct as_external_lsa *al;
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+  int type;
+
+  al = (struct as_external_lsa *) lsa->data;
+
+  p.family = AF_INET;
+  p.prefix = lsa->data->id;
+  p.prefixlen = ip_masklen (al->mask);
+
+  for (type = 0; type < ZEBRA_ROUTE_MAX; type++)
+    if (zclient->redist[type])
+      if (EXTERNAL_INFO (type))
+	{
+	  rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) &p);
+	  if (rn != NULL)
+	    {
+	      if (rn->info != NULL)
+		{
+		  route_unlock_node (rn);
+		  return 1;
+		}
+	      else
+		route_unlock_node (rn);
+	    }
+	}
+
+  return 0;
+}
+
 void
 ospf_process_self_originated_lsa (struct ospf_lsa *new, struct ospf_area *area)
 {
@@ -52,7 +90,8 @@ ospf_process_self_originated_lsa (struct ospf_lsa *new, struct ospf_area *area)
   struct ospf_interface *oi;
   struct interface *ifp;
 
-  zlog_info ("Z: Processing self-originated and installed LSA");
+  zlog_info ("LSA[Type%d:%s]: Process self-originated LSA",
+	     new->data->type, inet_ntoa (new->data->id));
 
   /* If we're here, we installed a self-originated LSA that we received
      from a neighbor, i.e. it's more recent.  We must see whether we want
@@ -63,18 +102,13 @@ ospf_process_self_originated_lsa (struct ospf_lsa *new, struct ospf_area *area)
   switch (new->data->type)
     {
     case OSPF_ROUTER_LSA:
-      zlog_info ("LSA: Self-originated router-LSA");
- 
       /* Originate a new instance and schedule flooding */
       /* It shouldn't be necessary, but anyway */
       area->router_lsa_self = new;
 
       ospf_schedule_router_lsa_originate (area);
       return;
-
     case OSPF_NETWORK_LSA:
-      zlog_info ("LSA: Self-originated network-LSA");
-
       /* We must find the interface the LSA could belong to.
 	 If the interface is no more a broadcast type or we are no more
 	 the DR, we flush the LSA otherwise -- create the new instance and
@@ -104,15 +138,15 @@ ospf_process_self_originated_lsa (struct ospf_lsa *new, struct ospf_area *area)
 		  ospf_schedule_network_lsa_originate (oi);
 		  return;
 		}
-
    case OSPF_SUMMARY_LSA:
    case OSPF_SUMMARY_LSA_ASBR:
-     zlog_info ("LSA: Self-originated summary-LSA");
      ospf_schedule_abr_task ();
      break;
    case OSPF_AS_EXTERNAL_LSA :
-     zlog_info ("LSA: Self-originated AS-external-LSA");
-     ospf_external_lsa_refresh (new);
+     if (ospf_external_info_check (new))
+       ospf_external_lsa_refresh (new);
+     else
+       ospf_lsa_flush_as (new);
      /* ospf_schedule_asbr_check (); */
      break;
   }
@@ -124,19 +158,29 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
 	    struct ospf_lsa *new)
 {
   struct ospf_interface *oi;
-  time_t ts;
+  /* time_t ts; */
+  struct timeval now;
+
+  zlog_info ("LSA[:Flooding]: start");
 
   oi = nbr->oi;
 
   /* Get current time. */
-  ts = time (NULL);
+  /* ts = time (NULL); */
+  gettimeofday (&now, NULL);
 
   /* If there is already a database copy, and if the
      database copy was received via flooding and installed less
      than MinLSArrival seconds ago, discard the new LSA
      (without acknowledging it). */
-  if (current && (ts - current->ts) < OSPF_MIN_LS_INTERVAL)
-    return -1;
+  /*  if (current && (ts - current->tv_recv) < OSPF_MIN_LS_ARRIVAL) */
+  if (current != NULL &&
+      tv_cmp (tv_sub (now, current->tv_recv),
+	      int2tv (OSPF_MIN_LS_ARRIVAL)) < 0)
+    {
+      zlog_info ("LSA[:Flooding]: LSA is received recently.");
+      return -1;
+    }
 
   /* Flood the new LSA out some subset of the router's interfaces.
      In some cases (e.g., the state of the receiving interface is
@@ -148,7 +192,12 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
   /* Remove the current database copy from all neighbors'
      Link state retransmission lists. */
   if (current)
-    ospf_ls_retransmit_delete_nbr_all (current);
+    {
+      if(current->data->type != OSPF_AS_EXTERNAL_LSA) 
+	ospf_ls_retransmit_delete_nbr_all (nbr->oi->area, current);
+      else
+	ospf_ls_retransmit_delete_nbr_all (NULL, current);
+    }
 
   /* Install the new LSA in the link state database
      (replacing the current database copy).  This may cause the
@@ -176,7 +225,6 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
 
   return 0;
 }
-
 
 /* OSPF LSA flooding -- RFC2328 Section 13.3. */
 void
@@ -365,7 +413,7 @@ ospf_flood_through (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
 }
 
 
-#if 1
+/* Management functions for neighbor's Link State Request list. */
 void
 ospf_ls_request_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 {
@@ -408,73 +456,12 @@ ospf_ls_request_lookup (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 {
   return new_lsdb_lookup (&nbr->ls_req, lsa);
 }
-#else
-/* Add LSA header to be requested to neighbor's ls-request list. */
-void
-ospf_ls_request_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
-{
-  list_add_node (nbr->ls_request, lsa);
-}
-
-unsigned long
-ospf_ls_request_count (struct ospf_neighbor *nbr)
-{
-  return listcount (nbr->ls_request);
-}
-
-int
-ospf_ls_request_isempty (struct ospf_neighbor *nbr)
-{
-  return list_isempty (nbr->ls_request);
-}
-
-/* Remove LSA header from neighbor's ls-request list. */
-void
-ospf_ls_request_delete (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
-{
-  list_delete_by_val (nbr->ls_request, lsa);
-  ospf_lsa_free (lsa);
-}
-
-/* Remove all LSA header from neighbor's ls-requenst list. */
-void
-ospf_ls_request_delete_all (struct ospf_neighbor *nbr)
-{
-  listnode node;
-
-  while ((node = listhead (nbr->ls_request)) != NULL)
-    ospf_ls_request_delete (nbr, node->data);
-}
-
-/* Lookup LSA header from neighbor's ls-request list. */
-struct ospf_lsa *
-ospf_ls_request_lookup (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
-{
-  listnode node;
-  struct ospf_lsa *find;
-
-  for (node = listhead (nbr->ls_request); node; nextnode (node))
-    {
-      find = getdata (node);
-
-      if (find->data->type == lsa->data->type &&
-	  IPV4_ADDR_SAME (&find->data->id, &lsa->data->id) &&
-	  IPV4_ADDR_SAME (&find->data->adv_router, &lsa->data->adv_router))
-	return find;
-    }
-
-  return NULL;
-}
-#endif /* NEW_LS_REQUEST */
-
-/* Management functions for neighbor's ls-request list. */
 
 struct ospf_lsa *
 ospf_ls_request_new (struct lsa_header *lsah)
 {
   struct ospf_lsa *new;
 
-zlog_info ("T: ospf_lsa_new() in ospf_ls_request_new");
   new = ospf_lsa_new ();
   new->data = ospf_lsa_data_new (OSPF_LSA_HEADER_SIZE);
   memcpy (new->data, lsah, OSPF_LSA_HEADER_SIZE);
@@ -490,7 +477,137 @@ ospf_ls_request_free (struct ospf_lsa *lsa)
 }
 
 /* Management functions for neighbor's ls-retransmit list. */
+#if 1
+unsigned long
+ospf_ls_retransmit_count (struct ospf_neighbor *nbr)
+{
+  return new_lsdb_count (&nbr->ls_rxmt);
+}
 
+int
+ospf_ls_retransmit_isempty (struct ospf_neighbor *nbr)
+{
+  return new_lsdb_isempty (&nbr->ls_rxmt);
+}
+
+/* Add LSA to be retransmitted to neighbor's ls-retransmit list. */
+void
+ospf_ls_retransmit_add (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+{
+  new_lsdb_add (&nbr->ls_rxmt, lsa);
+  lsa->ref++;
+}
+
+/* Remove LSA from neibghbor's ls-retransmit list. */
+void
+ospf_ls_retransmit_delete (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+{
+  new_lsdb_delete (&nbr->ls_rxmt, lsa);
+  if (lsa->ref)
+    lsa->ref--;
+}
+
+/* Clear neighbor's ls-retransmit list. */
+void
+ospf_ls_retransmit_clear (struct ospf_neighbor *nbr)
+{
+  struct route_node *rn;
+  struct ospf_lsa *lsa;
+  struct new_lsdb *lsdb;
+  int i;
+
+  lsdb = &nbr->ls_rxmt;
+
+  for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
+    {
+      struct route_table *table = lsdb->type[i].db;
+
+      for (rn = route_top (table); rn; rn = route_next (rn))
+	if ((lsa = rn->info) != NULL)
+	  {
+	    if (lsa->ref)
+	      lsa->ref--;
+	    new_lsdb_delete (&nbr->ls_rxmt, lsa);
+	  }
+    }
+}
+
+/* Lookup LSA from neighbor's ls-retransmit list. */
+struct ospf_lsa *
+ospf_ls_retransmit_lookup (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
+{
+  return new_lsdb_lookup (&nbr->ls_rxmt, lsa);
+}
+
+/* Remove a neighbor's Link State Retransmit list. */
+void
+ospf_ls_retransmit_delete_all (struct ospf_neighbor *nbr)
+{
+  new_lsdb_delete_all (&nbr->ls_rxmt);
+}
+
+/* Remove All neighbor/interface's Link State Retransmit list in area. */
+void
+ospf_ls_retransmit_delete_nbr_all (struct ospf_area *area,
+				   struct ospf_lsa *lsa)
+{
+  listnode node;
+  list iflist = area ? area->iflist : ospf_top->iflist;
+  
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      struct interface *ifp = node->data;
+      struct ospf_interface *oi = ifp->info;
+      struct route_node *rn;
+      struct ospf_neighbor *nbr;
+      struct ospf_lsa *lsr;
+      
+      if (ospf_if_is_enable (ifp))
+	for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	  /* If LSA find in LS-retransmit list, then remove it. */
+	  if ((nbr = rn->info) != NULL)
+	    {
+	      lsr = ospf_ls_retransmit_lookup (nbr, lsa);
+	     
+	      /* If LSA find in ls-retransmit list, remove it. */
+	      if (lsr != NULL && lsr->data->ls_seqnum == lsa->data->ls_seqnum)
+		ospf_ls_retransmit_delete (nbr, lsr);
+	      /* ospf_ls_retransmit_clear (nbr); */
+	    }
+    }
+}
+
+/* Add LSA to the current database copy of all neighbors'
+   Link state retransmission lists. */
+void
+ospf_ls_retransmit_add_nbr_all (struct ospf_interface *ospfi,
+				struct ospf_lsa *lsa)
+{
+  listnode node;
+
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      struct interface *ifp = node->data;
+      struct ospf_interface *oi = ifp->info;
+      struct route_node *rn;
+      struct ospf_neighbor *nbr;
+      struct ospf_lsa *old;
+
+      if (ospf_if_is_enable (ifp))
+	if (OSPF_AREA_SAME (&ospfi->area, &oi->area))
+	  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	    if ((nbr = rn->info) != NULL)
+	      if (nbr->status == NSM_Full)
+		{
+		  if ((old = ospf_ls_retransmit_lookup (nbr, lsa)))
+		    ospf_ls_retransmit_delete (nbr, old);
+
+		  ospf_ls_retransmit_add (nbr, lsa);
+		}
+    }
+}
+
+#else
 void
 debug_ospf_ls_retransmit (struct ospf_neighbor *nbr)
 {
@@ -641,7 +758,9 @@ ospf_ls_retransmit_add_nbr_all (struct ospf_interface *ospfi,
 	}
     }
 }
+#endif
 
+
 /* Sets ls_age to MaxAge and floods throu the area. 
    When we implement ASE routing, there will be anothe function
    flushing an LSA from the whole domain. */

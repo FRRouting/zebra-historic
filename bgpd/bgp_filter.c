@@ -340,6 +340,13 @@ void
 as_list_delete (struct as_list *aslist)
 {
   struct as_list_list *list;
+  struct as_filter *filter, *next;
+
+  for (filter = aslist->head; filter; filter = next)
+    {
+      next = filter->next;
+      as_filter_free (filter);
+    }
 
   if (aslist->type == ACCESS_TYPE_NUMBER)
     list = &as_list_master.num;
@@ -449,14 +456,14 @@ as_list_dup_check (struct as_list *aslist, struct as_filter *new)
 }
 
 DEFUN (ip_as_path, ip_as_path_cmd,
-       "ip as-path access-list NAME (deny|permit) .REGEXP",
+       "ip as-path access-list WORD (deny|permit) .LINE",
        IP_STR
-       "Set AS path access list definition\n"
-       "AS path access list\n"
-       "Access list name\n"
-       "Access list for denies\n"
-       "Access list for permits\n"
-       "AS path regexp\n")
+       "BGP autonomous system path filter\n"
+       "Specify an access list name\n"
+       "Regular expression access list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "A regular-expression to match the BGP AS paths\n")
 {
   enum as_filter_type type;
   struct as_filter *asfilter;
@@ -519,17 +526,17 @@ DEFUN (ip_as_path, ip_as_path_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_ip_as_path, no_ip_as_path_cmd,
-       "no ip as-path access-list NAME (deny|permit) .REGEXP",
-       "Set AS path access list definition\n"
+DEFUN (no_ip_as_path,
+       no_ip_as_path_cmd,
+       "no ip as-path access-list WORD (deny|permit) .LINE",
        NO_STR
        IP_STR
-       "AS path\n"
-       "Access list\n"
-       "Access list name\n"
-       "Access list for denies\n"
-       "Access list for permits\n"
-       "AS path regexp\n")
+       "BGP autonomous system path filter\n"
+       "Specify an access list name\n"
+       "Regular expression access list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "A regular-expression to match the BGP AS paths\n")
 {
   enum as_filter_type type;
   struct as_filter *asfilter;
@@ -602,6 +609,30 @@ DEFUN (no_ip_as_path, no_ip_as_path_cmd,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_ip_as_path_all,
+       no_ip_as_path_all_cmd,
+       "no ip as-path access-list WORD",
+       NO_STR
+       IP_STR
+       "BGP autonomous system path filter\n"
+       "Specify an access list name\n"
+       "Regular expression access list name\n")
+{
+  struct as_list *aslist;
+
+  aslist = as_list_lookup (argv[0]);
+  if (aslist == NULL)
+    {
+      vty_out (vty, "ip as-path access-list %s doesn't exist%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  as_list_delete (aslist);
+
+  return CMD_SUCCESS;
+}
+
 int
 config_write_as_list (struct vty *vty)
 {
@@ -645,6 +676,7 @@ bgp_filter_init ()
 
   install_element (CONFIG_NODE, &ip_as_path_cmd);
   install_element (CONFIG_NODE, &no_ip_as_path_cmd);
+  install_element (CONFIG_NODE, &no_ip_as_path_all_cmd);
 }
 
 /* For test. */
