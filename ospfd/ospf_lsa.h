@@ -154,6 +154,7 @@ struct ospf_lsa *ospf_router_lsa (struct ospf_interface *);
 struct ospf_lsa *ospf_network_lsa (struct ospf_interface *);
 u_int16_t ospf_lsa_checksum (struct lsa_header *);
 struct ospf_lsa *ospf_lsa_new ();
+struct ospf_lsa *ospf_lsa_dup ();
 void ospf_lsa_free (struct ospf_lsa *lsa);
 struct lsa_header *ospf_lsa_data_new (size_t);
 void ospf_lsa_data_free (struct lsa_header *);

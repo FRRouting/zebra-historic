@@ -1,10 +1,22 @@
+1999-08-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_interface.c (interface_config_write): Add check for
+	oi->nbr_self.
+
+1999-08-25  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (ospf_lsa_dup): New function added.
+
+	* ospf_packet.c (ospf_write), (ospf_read): Print send/recv
+	interface in debug message.
+
 1999-08-25  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_packet.c (ospf_ls_ack_send): The name is changed from
 	`ospf_ls_ack_send'.
 	(ospf_ls_ack_send_delayed) (ospf_ls_ack_timer): New function added.
 	Delayed Link State Acknowledgment is scheduled by timer.
-	
+
 1999-08-25  Alex Zinin  <zinin@amt.ru>
 
 	* ospf_lsa.c (ospf_router_lsa): Incorrectly included link to

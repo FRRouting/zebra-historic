@@ -647,7 +647,12 @@ step_two:
                   continue;
                 }
               else
-                assert (0);
+                {
+                  o6log.neighbor ("!!the same router id"
+                                  " for different neighbor");
+                  list_delete_node (candidate_list, i);
+                  continue;
+                }
             }
         }
       if (!list_isempty (candidate_list))

@@ -1,3 +1,7 @@
+1999-08-27  itojun@iijlab.net
+
+	* configure.in (LIBS): Fix problem about libsnmp.a check.
+
 1999-08-26  kay <kay@v6.access.co.jp>
 
 	* configure.in (CFLAGS): Add <sys/socket.h> to check socklen_t.

@@ -1519,3 +1519,48 @@ ospf6_receive (struct thread *thread)
   return 0;
 }
 
+
+/* send section */
+static void
+ospf6_send_new (struct iovec *message, struct sockaddr *dst, u_int ifindex)
+{
+  int retval;
+  struct msghdr smsghdr;
+  struct cmsghdr *scmsgp;
+  struct in6_pktinfo *pktinfo;
+  u_char cmsgbuf[CMSG_SPACE(sizeof (struct in6_pktinfo))];
+
+  /* set message to send */
+  smsghdr.msg_iov = message;
+  smsghdr.msg_iovlen = iov_count (message);
+
+  /* set destination */
+  smsghdr.msg_name = (caddr_t)dst;
+  smsghdr.msg_namelen = sizeof (struct sockaddr_in6);
+
+  /* set control message */
+  smsghdr.msg_control = (caddr_t)cmsgbuf;
+  smsghdr.msg_controllen = sizeof (cmsgbuf);
+
+  /* set outgoing interface using ancillary data */
+  scmsgp = (struct cmsghdr *)cmsgbuf;
+  scmsgp->cmsg_level = IPPROTO_IPV6;
+  scmsgp->cmsg_type = IPV6_PKTINFO;
+  scmsgp->cmsg_len = CMSG_LEN (sizeof (struct in6_pktinfo));
+  pktinfo = (struct in6_pktinfo *)(CMSG_DATA (scmsgp));
+  pktinfo->ipi6_ifindex = ifindex;
+  memset (&pktinfo->ipi6_addr, 0, sizeof (struct in6_addr));
+  /* scmsgp = CMSG_NXTHDR(&smsghdr, scmsgp); */
+
+  /* send ospf6 message */
+  retval = sendmsg (ospf6_sock, &smsghdr, 0);
+  if (retval != iov_totallen (message))
+    zlog_warn ("*** send error (%d): %s", retval, strerror (errno));
+}
+
+static void
+ospf6_message_send (unsigned char type, struct iovec *message, 
+                    struct in6_addr *dst, u_int ifindex)
+{
+}
+

@@ -280,6 +280,207 @@ ospf6_zebra_route_delete (struct prefix_ipv6 *dst,
   ospf6_route_delete (dst, info, ospf6->table_zebra);
 }
 
+/* add/delete redistribution from zebra */
+void
+ospf6_redist_route_add (int type, int ifindex, struct prefix_ipv6 *p)
+{
+  char *type_str = NULL, p_str[128];
+  int redist_conf;
+  unsigned short cost;
+  struct route_table *rt;
+  struct route_node *rn;
+  struct ospf6_route_node_info info;
+  unsigned char dest_type;
+  list nhlist_dummy = list_init ();
+  struct ospf6_lsa *new;
+  struct ospf6_if *o6if;
+  struct ospf6_nexthop *nh;
+  struct in6_addr in6;
+  listnode i;
+
+  prefix2str ((struct prefix *)p, p_str, sizeof (p_str));
+  dest_type = DTYPE_NONE;
+  cost = 0;
+  rt = NULL;
+
+  switch (type)
+    {
+      case ZEBRA_ROUTE_CONNECT:
+        type_str = "connected";
+        dest_type = DTYPE_PREFIX;
+        rt = ospf6->table_connected;
+        redist_conf = ospf6->redist_connected;
+        cost = 0;
+        memset (&in6, 0, sizeof (in6));
+        nh = nexthop_make (ifindex, &in6, 0);
+        list_add_node (nhlist_dummy, nh);
+        break;
+
+      case ZEBRA_ROUTE_STATIC:
+        type_str = "static";
+        dest_type = DTYPE_STATIC_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_static;
+        cost = ospf6->cost_static;
+        break;
+
+      case ZEBRA_ROUTE_RIPNG:
+        type_str = "ripng";
+        dest_type = DTYPE_RIPNG_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_ripng;
+        cost = ospf6->cost_ripng;
+        break;
+
+      case ZEBRA_ROUTE_BGP:
+        type_str = "bgp";
+        dest_type = DTYPE_BGP_REDISTRIBUTE;
+        rt = ospf6->table_external;
+        redist_conf = ospf6->redist_bgp;
+        cost = ospf6->cost_bgp;
+        break;
+
+      default:
+        type_str = "unknown";
+        dest_type = DTYPE_NONE;
+        redist_conf = 0;
+        break;
+    }
+
+  /* log */
+  o6log.zebra ("redist_add: %d %s %s", ifindex, type_str, p_str);
+
+  /* set info */
+  memset (&info, 0, sizeof (info));
+  info.dest_type = dest_type;
+  if (redist_conf == 1)
+    info.path_type = PTYPE_TYPE1_EXTERNAL;
+  else if (redist_conf == 2)
+    info.path_type = PTYPE_TYPE2_EXTERNAL;
+  info.cost = cost;
+  /* xxx, make lsa and set info.ls_origin */
+  info.nhlist = nhlist_dummy;
+
+  /* add redistribute routing table */
+  if (redist_conf)
+    {
+      ospf6_route_add (p, &info, rt);
+      rn = route_node_get (rt, (struct prefix *)p);
+
+      /* LSA construction */
+      if (rt == ospf6->table_external)
+        new = ospf6_make_as_external_lsa (rn);
+      else if (rt == ospf6->table_connected)
+        {
+          o6if = ospf6_if_lookup_by_index (ifindex);
+          assert (o6if);
+          new = ospf6_make_link_lsa (o6if);
+        }
+      else
+        new = (struct ospf6_lsa *) NULL;
+
+      /* if new LSA was constructed, flood and install db */
+      if (new)
+        {
+          ospf6_lsa_flood (new);
+          ospf6_lsdb_install (new);
+          ospf6_lsa_unlock (new);
+        }
+    }
+
+  for (i = listhead (nhlist_dummy); i; nextnode (i))
+    {
+      nh = (struct ospf6_nexthop *) getdata (i);
+      nexthop_delete (nh);
+    }
+  list_delete_all (nhlist_dummy);
+}
+
+void
+ospf6_redist_route_delete (int type, int ifindex, struct prefix_ipv6 *p)
+{
+  char *type_str = NULL, p_str[128];
+  struct route_table *rt;
+  struct route_node *rn;
+  struct ospf6_route_node_info *info;
+  unsigned char dest_type;
+  struct ospf6_lsa *lsa, *new;
+  struct ospf6_if *o6if;
+
+  prefix2str ((struct prefix *)p, p_str, sizeof (p_str));
+  dest_type = DTYPE_NONE;
+  rt = NULL;
+
+  switch (type)
+    {
+      case ZEBRA_ROUTE_CONNECT:
+        type_str = "connected";
+        rt = ospf6->table_connected;
+        break;
+
+      case ZEBRA_ROUTE_STATIC:
+        type_str = "static";
+        rt = ospf6->table_external;
+        break;
+
+      case ZEBRA_ROUTE_RIPNG:
+        type_str = "ripng";
+        rt = ospf6->table_external;
+        break;
+
+      case ZEBRA_ROUTE_BGP:
+        type_str = "bgp";
+        rt = ospf6->table_external;
+        break;
+
+      default:
+        type_str = "unknown";
+        break;
+    }
+
+  /* log */
+  o6log.zebra ("redist_add: %d %s %s", ifindex, type_str, p_str);
+
+  /* check route existence of current routing table */
+  rn = route_node_get (rt, (struct prefix *)p);
+  if (!rn->info)
+    {
+      o6log.zebra ("!don't know route about to delete");
+      return;
+    }
+  info = (struct ospf6_route_node_info *) rn->info;
+  lsa = info->ls_origin;
+  if (!lsa)
+    o6log.zebra ("!can't find as-external lsa");
+
+  /* if AS-external route deleted, do premature aging LSA
+     advertising the route */
+  if (rt == ospf6->table_external)
+    if (lsa)
+      ospf6_premature_aging (lsa);
+
+  /* if connected routes changed, simply reconstruct Link-LSA */
+  if (rt == ospf6->table_connected)
+    {
+      o6if = ospf6_if_lookup_by_index (ifindex);
+      assert (o6if);
+      new = ospf6_make_link_lsa (o6if);
+      /* if new LSA was constructed, flood and install db */
+      if (new)
+        {
+          ospf6_lsa_flood (new);
+          ospf6_lsdb_install (new);
+          ospf6_lsa_unlock (new);
+        }
+      else if (lsa)
+        ospf6_premature_aging (lsa);
+    }
+
+  /* delete from redistribute routing table */
+  ospf6_route_add (p, info, rt);
+}
+
+
 int
 ospf6_zebra_read_ipv6 (int command, struct zebra *zebra,
                        zebra_size_t length)

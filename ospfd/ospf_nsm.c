@@ -257,6 +257,9 @@ nsm_bad_ls_req (struct ospf_neighbor *nbr)
   /* Reset flags. */
   nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
 
+  /* Send initial DD packet. */
+  ospf_db_desc_send (nbr);
+
   return 0;
 }
 
@@ -296,7 +299,7 @@ nsm_adj_ok (struct ospf_neighbor *nbr)
       else
 	nbr->dd_seqnum++;
 
-      /* Send Initial DD packet. */
+      /* Send initial DD packet. */
       ospf_db_desc_send (nbr);
     }
   else if (nbr->status >= NSM_ExStart && flag == 0)
@@ -316,6 +319,9 @@ nsm_seq_number_mismatch (struct ospf_neighbor *nbr)
 {
   /* Reset flags. */
   nbr->dd_flags = OSPF_DD_FLAG_I|OSPF_DD_FLAG_M|OSPF_DD_FLAG_MS;
+
+  /* Send initial DD packet. */
+  ospf_db_desc_send (nbr);
 
   return 0;
 }

@@ -66,5 +66,19 @@ char *print_lsahdr (struct ospf6_lsa_hdr *);
 char *inet4str(unsigned long);
 void ospf6_log_init ();
 
+/* new */
+extern unsigned char ospf6_message_dump;
+extern unsigned char ospf6_neighbor_dump;
+extern unsigned char ospf6_interface_dump;
+extern unsigned char ospf6_area_dump;
+extern unsigned char ospf6_lsa_dump;
+extern unsigned char ospf6_zebra_dump;
+
+#define OSPF6_DUMP_HELLO (ospf6_message_dump & MSGT_HELLO)
+#define OSPF6_DUMP_DBDESC (ospf6_message_dump & MSGT_DATABASE_DESCRIPTION)
+#define OSPF6_DUMP_LSREQ (ospf6_message_dump & MSGT_LINKSTATE_REQUEST)
+#define OSPF6_DUMP_LSUPDATE (ospf6_message_dump & MSGT_LINKSTATE_UPDATE)
+#define OSPF6_DUMP_LSACK (ospf6_message_dump & MSGT_LINKSTATE_ACK)
+
 #endif /* OSPF6_DUMP_H */
 

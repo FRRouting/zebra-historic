@@ -2816,8 +2816,8 @@ fi
 
 
 
-old_c_flags="${CFLAGS}"
-CFLAGS="-L/usr/local/lib"
+old_c_flags="${LIBS}"
+LIBS="-L/usr/local/lib"
 echo $ac_n "checking for acl_scanInit in -lsnmp""... $ac_c" 1>&6
 echo "configure:2823: checking for acl_scanInit in -lsnmp" >&5
 ac_lib_var=`echo snmp'_'acl_scanInit | sed 'y%./+-%__p_%'`
@@ -2858,7 +2858,7 @@ else
   echo "$ac_t""no" 1>&6
 fi
 
-CFLAGS="${old_c_flags}"
+LIBS="${old_c_flags}"
 
 if test "${HAVE_SNMP}" = "yes"; then
   cat >> confdefs.h <<\EOF
@@ -2866,7 +2866,7 @@ if test "${HAVE_SNMP}" = "yes"; then
 EOF
 
   CFLAGS="$CFLAGS -I/usr/local/include/ucd-snmp"
-  LIBS="${LIBS} -lsnmp"
+  LIBS="${LIBS} -L/usr/local/lib -lsnmp"
 fi
 
 echo $ac_n "checking whether struct sockaddr_in has a sin_len field""... $ac_c" 1>&6

@@ -50,8 +50,6 @@ void ospf6_prefix_free (struct ospf6_prefix *);
 void ospf6_prefix_add (list, struct ospf6_prefix *);
 void ospf6_prefix_in6_addr (struct ospf6_prefix *, struct in6_addr *);
 void ospf6_prefix_str (struct ospf6_prefix *, char *, size_t);
-void ospf6_redist_route_add (int, int, struct prefix_ipv6 *);
-void ospf6_redist_route_delete (int, int, struct prefix_ipv6 *);
 void ospf6_prefix_copy (struct ospf6_prefix *, struct ospf6_prefix *,
                         size_t);
 

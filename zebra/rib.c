@@ -478,14 +478,12 @@ rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 
 	  if (IS_RIB_INTERNAL (rib))
 	    {
-	      if (rib->i.ifindex == ifindex &&
-		  IPV4_ADDR_SAME (&rib->i.gate4, gate))
+	      if (IPV4_ADDR_SAME (&rib->i.gate4, gate))
 		break;
 	    }
 	  else
 	    {
-	      if (rib->u.ifindex == ifindex &&
-		  IPV4_ADDR_SAME (&rib->u.gate4, gate))
+	      if (IPV4_ADDR_SAME (&rib->u.gate4, gate))
 		break;
 	    }
 	}

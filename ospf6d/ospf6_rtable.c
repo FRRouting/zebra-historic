@@ -697,16 +697,17 @@ ospf6_route_withdraw_area (struct area *area)
   struct route_node *rn;
   struct ospf6_route_node_info *info;
 
-
   for (rn = route_top (ospf6->table); rn; rn = route_next (rn))
     {
       info = (struct ospf6_route_node_info *) rn->info;
       if (!info)
         continue;
 
+#if 0
       if (info->path_type == PTYPE_TYPE1_EXTERNAL ||
           info->path_type == PTYPE_TYPE2_EXTERNAL)
         continue;
+#endif
 
       assert (info->area);
 

@@ -262,3 +262,12 @@ ospf6_log_init ()
   return;
 }
 
+
+/* new */
+unsigned char ospf6_message_dump;
+unsigned char ospf6_neighbor_dump;
+unsigned char ospf6_interface_dump;
+unsigned char ospf6_area_dump;
+unsigned char ospf6_lsa_dump;
+unsigned char ospf6_zebra_dump;
+

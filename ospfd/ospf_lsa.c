@@ -100,6 +100,29 @@ ospf_lsa_new ()
   return new;
 }
 
+/* Duplicate OSPF LSA. */
+struct ospf_lsa *
+ospf_lsa_dup (struct ospf_lsa *lsa)
+{
+  struct ospf_lsa *new;
+
+  if (lsa == NULL)
+    return NULL;
+
+  new = XMALLOC (MTYPE_OSPF_LSA, sizeof (struct ospf_lsa));
+  bzero (new, sizeof (struct ospf_lsa));
+
+  new->flag = lsa->flag;
+  new->ts = lsa->ts;
+  new->v_age = lsa->v_age;
+  new->t_age = lsa->t_age;
+
+  new->data = ospf_lsa_data_new (ntohs (lsa->data->length));
+  memcpy (new->data, lsa->data, ntohs (lsa->data->length));
+
+  return new;
+}
+
 /* Free OSPF LSA. */
 void
 ospf_lsa_free (struct ospf_lsa *lsa)
@@ -314,6 +337,9 @@ ospf_router_lsa (struct ospf_interface *oi)
   memcpy (new->data, lsah, length);
   stream_free (s);
 
+  zlog_info ("Originate router-LSA sequence number 0x%x",
+	     ntohl (lsah->ls_seqnum));
+
   return new;
 }
 
@@ -388,6 +414,9 @@ ospf_network_lsa (struct ospf_interface *oi)
   new->data = ospf_lsa_data_new (length);
   memcpy (new->data, lsah, length);
   stream_free (s);
+
+  zlog_info ("Originate network-LSA sequence number 0x%x",
+	     ntohl (lsah->ls_seqnum));
 
   return new;
 }

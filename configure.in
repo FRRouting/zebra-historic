@@ -478,15 +478,15 @@ dnl AC_SUBST(LIB_REGEX)
 dnl ------------------
 dnl check SNMP library
 dnl ------------------
-old_c_flags="${CFLAGS}"
-CFLAGS="-L/usr/local/lib"
+old_c_flags="${LIBS}"
+LIBS="-L/usr/local/lib"
 AC_CHECK_LIB(snmp, acl_scanInit, HAVE_SNMP=yes)
-CFLAGS="${old_c_flags}"
+LIBS="${old_c_flags}"
 
 if test "${HAVE_SNMP}" = "yes"; then
   AC_DEFINE(HAVE_SNMP)
   CFLAGS="$CFLAGS -I/usr/local/include/ucd-snmp"
-  LIBS="${LIBS} -lsnmp"
+  LIBS="${LIBS} -L/usr/local/lib -lsnmp"
 fi
 
 dnl ----------------------------

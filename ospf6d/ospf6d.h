@@ -63,9 +63,9 @@
 #include "ospf6_lsa.h"
 #include "ospf6_lsdb.h"
 #include "ospf6_dbex.h"
-#include "ospf6_dump.h"
 #include "ospf6_network.h"
 #include "ospf6_zebra.h"
+#include "ospf6_dump.h"
 
 /* global variables */
 extern char *progname;

@@ -206,9 +206,12 @@ interface_config_write (struct vty *vty)
 		 oi->v_wait, VTY_NEWLINE);
 
       /* Router Priority print. */
-      if (PRIORITY (oi) != OSPF_ROUTER_PRIORITY_DEFAULT)
-	vty_out (vty, " ospf priority %u%s",
-		 PRIORITY (oi), VTY_NEWLINE);
+      if (oi->nbr_self)
+	{
+	  if (PRIORITY (oi) != OSPF_ROUTER_PRIORITY_DEFAULT)
+	    vty_out (vty, " ospf priority %u%s",
+		     PRIORITY (oi), VTY_NEWLINE);
+	}
 
       /* Retransmit Interval print. */
       if (oi->retransmit_interval != OSPF_RETRANSMIT_INTERVAL_DEFAULT)
