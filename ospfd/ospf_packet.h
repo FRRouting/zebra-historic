@@ -26,8 +26,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
 #define OSPF_HELLO_MIN_SIZE	 20
 #define OSPF_DB_DESC_MIN_SIZE     8
-#define OSPF_LS_REQ_MIN_SIZE      8
-#define OSPF_LS_UPD_MIN_SIZE      0
+#define OSPF_LS_REQ_MIN_SIZE      0
+#define OSPF_LS_UPD_MIN_SIZE      4
 #define OSPF_LS_ACK_MIN_SIZE      0
 
 #define OSPF_MSG_HELLO	       1  /* OSPF Hello Message. */
@@ -35,6 +35,29 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_MSG_LS_REQ	       3  /* OSPF Link State Request Message. */
 #define OSPF_MSG_LS_UPD	       4  /* OSPF Link State Update Message. */
 #define OSPF_MSG_LS_ACK	       5  /* OSPF Link State Acknoledgement Message. */
+
+struct ospf_packet
+{
+  struct ospf_packet *next;
+
+  /* Pointer to data stream. */
+  struct stream *s;
+
+  /* IP destination address. */
+  struct in_addr dst;
+
+  /* OSPF packet length. */
+  u_int16_t length;
+};
+
+/* OSPF packet queue structure. */
+struct ospf_fifo
+{
+  unsigned long count;
+
+  struct ospf_packet *head;
+  struct ospf_packet *tail;
+};
 
 /* OSPF packet header structure. */
 struct ospf_header
@@ -74,7 +97,7 @@ struct ospf_db_desc
 
 /* Macros. */
 #define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
-#define OSPF_OUTPUT_LENGTH(S)	((S)->putp)
+#define OSPF_OUTPUT_LENGTH(S)	((S)->endp)
 
 #define IS_SET_DD_MS(X)		((X) & OSPF_DD_FLAG_MS)
 #define IS_SET_DD_M(X)		((X) & OSPF_DD_FLAG_M)
@@ -82,11 +105,25 @@ struct ospf_db_desc
 
 /* Prototypes. */
 void ospf_output_forward (struct stream *, int);
+struct ospf_packet *ospf_packet_new (size_t);
+void ospf_packet_free (struct ospf_packet *);
+struct ospf_fifo *ospf_fifo_new ();
+void ospf_fifo_push (struct ospf_fifo *, struct ospf_packet *);
+struct ospf_packet *ospf_fifo_pop (struct ospf_fifo *);
+struct ospf_packet *ospf_fifo_head (struct ospf_fifo *);
+void ospf_fifo_flush (struct ospf_fifo *);
+void ospf_fifo_free (struct ospf_fifo *);
+void ospf_packet_add (struct ospf_interface *, struct ospf_packet *);
+void ospf_packet_delete (struct ospf_interface *);
+struct stream * ospf_stream_dup (struct stream *);
+struct ospf_packet *ospf_packet_dup (struct ospf_packet *);
+
 int ospf_read (struct thread *);
-int ospf_hello_send (struct thread *);
-int ospf_db_desc_send (struct thread *);
-int ospf_ls_req_send (struct thread *);
-int ospf_ls_upd_send (struct thread *);
-int ospf_ls_ack_send (struct thread *);
+void ospf_hello_send (struct ospf_interface *);
+void ospf_db_desc_send (struct ospf_neighbor *);
+void ospf_db_desc_resend (struct ospf_neighbor *);
+void ospf_ls_req_send (struct ospf_neighbor *);
+void ospf_ls_upd_send (struct ospf_neighbor *, list);
+void ospf_ls_ack_send_direct (struct ospf_neighbor *, struct ospf_lsa *);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

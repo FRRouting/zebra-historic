@@ -221,9 +221,9 @@ ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
   char dd_flags[8];
   char options[24];
 
-  u_int32_t sp;
+  u_int32_t gp;
 
-  sp = stream_get_getp (s);
+  gp = stream_get_getp (s);
   dd = (struct ospf_db_desc *) STREAM_PNT (s);
 
   zlog (NULL, LOG_INFO, "DD Interface MTU %d", ntohs (dd->mtu));
@@ -238,14 +238,16 @@ ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
   stream_forward (s, OSPF_DB_DESC_MIN_SIZE);
 
   /* LSA Headers. */
-  for (; length > 0; length -= OSPF_LSA_HEADER_SIZE)
+  while (length > 0)
     {
       lsa = (struct ospf_lsa *) STREAM_PNT (s);
       ospf_lsa_header_dump (lsa);
       stream_forward (s, OSPF_LSA_HEADER_SIZE);
+
+      length -= OSPF_LSA_HEADER_SIZE;
     }
 
-  stream_set_getp (s, sp);
+  stream_set_getp (s, gp);
 }
 
 void
@@ -291,7 +293,7 @@ ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
 
   zlog (NULL, LOG_INFO, "# LSAs %d", count);
 
-  while (length > 0)
+  while (length > 0 && count > 0)
     {
       lsa = (struct ospf_lsa *) STREAM_PNT (s);
       lsa_len = ntohs (lsa->length);
@@ -315,6 +317,7 @@ ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
 
       stream_forward (s, lsa_len);
       length -= lsa_len;
+      count--;
     }
 
   stream_set_getp (s, sp);
@@ -370,10 +373,10 @@ void
 ospf_packet_dump (struct stream *s)
 {
   struct ospf_header *ospfh;
-  unsigned long sp;
+  unsigned long gp;
 
   /* Preserve pointer. */
-  sp = stream_get_getp (s);
+  gp = stream_get_getp (s);
 
   /* OSPF Header dump. */
   ospfh = (struct ospf_header *) STREAM_PNT (s);
@@ -406,7 +409,7 @@ ospf_packet_dump (struct stream *s)
       break;
     }
 
-  stream_set_getp (s, sp);
+  stream_set_getp (s, gp);
 }
 
 

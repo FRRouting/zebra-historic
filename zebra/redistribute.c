@@ -70,7 +70,7 @@ zebra_redistribute (struct zebra_client *client, int type)
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
       if (IS_RIB_FIB (rib) && rib->type == type && zebra_check_addr (&np->p))
-	zebra_ipv4_add (client->fd, type, (struct prefix_ipv4 *)&np->p,
+	zebra_ipv4_add (client->fd, type, 0, (struct prefix_ipv4 *)&np->p,
 			&rib->u.gate4, 0);
 
 #ifdef HAVE_IPV6
@@ -94,7 +94,7 @@ redistribute_add_ipv4 (struct route_node *np, struct rib *rib)
     {
       client = getdata (node);
       if (client->redist[rib->type])
-	zebra_ipv4_add (client->fd, rib->type, (struct prefix_ipv4 *)&np->p,
+	zebra_ipv4_add (client->fd, rib->type, 0, (struct prefix_ipv4 *)&np->p,
 			&rib->u.gate4, 0);
     }
 }
@@ -109,8 +109,8 @@ redistribute_delete_ipv4 (struct route_node *np, struct rib *rib)
     {
       client = getdata (node);
       if (client->redist[rib->type])
-	zebra_ipv4_delete (client->fd, rib->type, (struct prefix_ipv4 *)&np->p,
-			   &rib->u.gate4, 0);
+	zebra_ipv4_delete (client->fd, rib->type, 0, 
+			   (struct prefix_ipv4 *)&np->p, &rib->u.gate4, 0);
     }
 }
 

@@ -53,10 +53,10 @@ rip_zebra (int command, struct prefix_ipv4 *p, struct in_addr *nexthop)
   switch (command)
     {
     case ZEBRA_IPV4_ROUTE_ADD:
-      zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_RIP, p, nexthop, 0);
+      zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, 0);
       break;
     case ZEBRA_IPV4_ROUTE_DELETE:
-      zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_RIP, p, nexthop, 0);
+      zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, 0);
       break;
     }
 }

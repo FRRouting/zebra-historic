@@ -34,10 +34,10 @@ int zebra_redistribute_send (int command, int sock, int type);
 
 /* IPv4 prefix add and delete function prototype. */
 int
-zebra_ipv4_add (int sock, int type, struct prefix_ipv4 *p,
+zebra_ipv4_add (int sock, int type, int flags, struct prefix_ipv4 *p,
 		struct in_addr *nexthop, unsigned int ifindex);
 int
-zebra_ipv4_delete (int sock, int type, struct prefix_ipv4 *p,
+zebra_ipv4_delete (int sock, int type, int flags, struct prefix_ipv4 *p,
 		   struct in_addr *nexthop, unsigned int ifindex);
 
 #ifdef HAVE_IPV6

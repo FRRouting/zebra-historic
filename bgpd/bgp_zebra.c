@@ -146,6 +146,7 @@ int
 zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
 {
   u_char type;
+  u_char flags;
   struct in_addr nexthop;
   u_char *pnt;
   u_char *lim;
@@ -158,6 +159,7 @@ zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
 
   /* Fetch type and nexthop first. */
   type = *pnt++;
+  flags = *pnt++;
   memcpy(&nexthop, pnt, 4);
   pnt += 4;
 
@@ -266,15 +268,22 @@ bgp_zebra_no_redistribute (int type)
 void
 bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 {
+  int flags;
+
   if (zebra->sock < 0)
     return;
 
   if (! zebra->redist[ZEBRA_ROUTE_BGP])
     return;
 
+  if (bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
+    flags = ZEBRA_ROUTE_INTERNAL;
+  else
+    flags = ZEBRA_ROUTE_EXTERNAL;
+
   if (p->family == AF_INET)
-    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv4 *)p,
-		    &info->attr->nexthop, 0);
+    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_BGP, flags,
+		    (struct prefix_ipv4 *)p, &info->attr->nexthop, 0);
 #ifdef HAVE_IPV6
   /* We have to think about a IPv6 link-local address curse. */
   if (p->family == AF_INET6)
@@ -316,15 +325,22 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 void
 bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
 {
+  int flags;
+
   if (zebra->sock < 0)
     return;
 
   if (! zebra->redist[ZEBRA_ROUTE_BGP])
     return;
 
+  if (bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
+    flags = ZEBRA_ROUTE_INTERNAL;
+  else
+    flags = ZEBRA_ROUTE_EXTERNAL;
+
   if (p->family == AF_INET)
-    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv4 *)p,
-		       &info->attr->nexthop, 0);
+    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_BGP, flags,
+		       (struct prefix_ipv4 *)p, &info->attr->nexthop, 0);
 #ifdef HAVE_IPV6
   if (p->family == AF_INET6)
     zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,

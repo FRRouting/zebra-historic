@@ -1680,6 +1680,13 @@ DEFUN (neighbor_interface,
   return CMD_SUCCESS;
 }
 
+ALIAS (neighbor_interface,
+       neighbor_update_source_cmd,
+       "neighbor A.B.C.D update-source IFNAME",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Update source\n"
+       "Interface name\n")
 
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
@@ -2412,6 +2419,7 @@ bgp_init ()
   install_element (BGP_NODE, &neighbor_route_reflector_client_cmd);
   install_element (BGP_NODE, &no_neighbor_route_reflector_client_cmd);
   install_element (BGP_NODE, &neighbor_interface_cmd);
+  install_element (BGP_NODE, &neighbor_update_source_cmd);
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &neighbor_send_community_cmd);

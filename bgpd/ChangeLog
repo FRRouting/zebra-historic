@@ -1,3 +1,8 @@
+1999-06-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c: Add neighbor update-source command as ALIAS to
+	neighbor_interface.
+
 1999-06-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_attr.c (bgp_packet_attribute): Send community attribute when

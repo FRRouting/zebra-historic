@@ -48,9 +48,6 @@ ospf_nbr_new (struct ospf_interface *oi)
   nbr = XMALLOC (MTYPE_OSPF_NEIGHBOR, sizeof (struct ospf_neighbor));
   bzero (nbr, sizeof (struct ospf_neighbor));
 
-  /* file descriptor reset. */
-  nbr->fd = -1;
-
   /* Relate Neighbor to Interface. */
   nbr->oi = oi;
 
@@ -63,12 +60,9 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   /* DD flags. */
   nbr->dd_flags = OSPF_DD_FLAG_MS|OSPF_DD_FLAG_M|OSPF_DD_FLAG_I;
-  nbr->dd_init = OSPF_DD_INITIALIZE;
 
-  /* Reset Last Received Database Description. */
-  nbr->last_options = (char) 0;
-  nbr->last_flags = (char) 0;
-  nbr->last_dd_seqnum = 0;
+  /* Last received and sent DD. */
+  nbr->last_send = NULL;
 
   /* Initialize lists. */
   nbr->ls_retransmit = list_init ();

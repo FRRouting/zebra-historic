@@ -23,8 +23,9 @@
 #ifndef _ZEBRA_RIB_H
 #define _ZEBRA_RIB_H
 
-#define RIB_FIB    0x01
-#define RIB_LINK   0x02
+#define RIB_FIB       0x01
+#define RIB_LINK      0x02
+#define RIB_INTERNAL  0x04
 
 #define RIB_FIB_SET(RIB) (((RIB)->flag) |= RIB_FIB)
 #define RIB_FIB_UNSET(RIB) (((RIB)->flag) &= ~RIB_FIB)
@@ -33,6 +34,10 @@
 #define RIB_LINK_SET(RIB) (((RIB)->flag) |= RIB_LINK)
 #define RIB_LINK_UNSET(RIB) (((RIB)->flag) &= ~RIB_LINK)
 #define IS_RIB_LINK(RIB) (((RIB)->flag) & RIB_LINK)
+
+#define RIB_INTERNAL_SET(RIB) (((RIB)->flag) |= RIB_INTERNAL)
+#define RIB_INTERNAL_UNSET(RIB) (((RIB)->flag) &= ~RIB_INTERNAL)
+#define IS_RIB_INTERNAL(RIB) (((RIB)->flag) & RIB_INTERNAL)
 
 /* Structure for routing information base. */
 struct rib
@@ -50,6 +55,14 @@ struct rib
 #endif
     char *ifname;
   } u;
+  union
+  {
+    struct in_addr gate4;
+#ifdef HAVE_IPV6
+    struct in6_addr gate6;
+#endif
+    char *ifname;
+  } i;
 
   struct rib *next;
   struct rib *prev;
@@ -67,10 +80,10 @@ void rib_init ();
 struct rt *rib_search_rt (int, struct rt *);
 
 int
-rib_add_ipv4 (int type, struct prefix_ipv4 *p, 
+rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p, 
 	      struct in_addr *gate, unsigned int ifindex, int table);
 int
-rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
+rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 		 struct in_addr *gate, unsigned int ifindex, int table);
 
 #ifdef HAVE_IPV6

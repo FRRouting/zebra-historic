@@ -1,5 +1,26 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.70
+
+* Changes in zebra
+
+** Critical routing information base calculation bug check is fixed.
+
+** zebra ipv4 message is extended to support external/internal route
+flavor.
+
+** Now if internal route doesn't has direct connected nexthop, then
+nexthop is calculated by looking up IGP routing table.
+
+* Changes in bgpd
+
+** `neighbor PEER update-source IFNAME' command added as ALIAS to
+`neighbor PEER interface IFNAME'.
+
+* Changes in ospfd
+
+** DD null pointer bug is fixed.
+
 * Changes in zebra-0.69
 
 * Changes in zebra

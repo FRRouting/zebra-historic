@@ -211,7 +211,7 @@ route_read ()
 	  p.prefix = dest.sin.sin_addr;
 	  p.prefixlen = ip_masklen (mask.sin.sin_addr);
 
-	  rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, &gate.sin.sin_addr, 0, 0);
+	  rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, &gate.sin.sin_addr, 0, 0);
 	}
 #ifdef HAVE_IPV6
       if (dest.sa.sa_family == AF_INET6)

@@ -50,10 +50,21 @@ zebra_redistribute_send (int command, int sock, int type)
   return ret;
 }
 
+struct zmsg_ipv4
+{
+  int commnad;
+  int type;
+  int flags;
+  struct prefix_ipv4 *p;
+  struct in_addr *nexthop;
+  unsigned int ifindex;
+};
+
 /* Make a IPv4 route add/delete packet and send it to zebra. */
 static int
-zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p, 
-		  struct in_addr *nexthop, unsigned int ifindex)
+zebra_ipv4_route (int sock, int command, int type, int flags,
+		  struct prefix_ipv4 *p, struct in_addr *nexthop, 
+		  unsigned int ifindex)
 {
   int ret;
   struct stream *s;
@@ -67,6 +78,7 @@ zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p,
   /* Put command, type and nexthop. */
   stream_putc (s, command);
   stream_putc (s, type);
+  stream_putc (s, flags);
   stream_write (s, (u_char *)nexthop, 4);
 
   /* Put prefix information. */
@@ -86,18 +98,18 @@ zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p,
 }
 
 int
-zebra_ipv4_add (int sock, int type, struct prefix_ipv4 *p,
+zebra_ipv4_add (int sock, int type, int flags, struct prefix_ipv4 *p,
 		struct in_addr *nexthop, unsigned int ifindex)
 {
-  return zebra_ipv4_route (ZEBRA_IPV4_ROUTE_ADD, sock, type, p, 
+  return zebra_ipv4_route (sock, ZEBRA_IPV4_ROUTE_ADD, type, flags, p, 
 			   nexthop, ifindex);
 }
 
 int
-zebra_ipv4_delete (int sock, int type, struct prefix_ipv4 *p,
+zebra_ipv4_delete (int sock, int type, int flags, struct prefix_ipv4 *p,
 		struct in_addr *nexthop, unsigned int ifindex)
 {
-  return zebra_ipv4_route (ZEBRA_IPV4_ROUTE_DELETE, sock, type, p,
+  return zebra_ipv4_route (sock, ZEBRA_IPV4_ROUTE_DELETE, type, flags, p,
 			   nexthop, ifindex);
 }
 

@@ -44,7 +44,9 @@ struct ospf_interface
 
   /* Packet receive and send buffer. */
   struct stream *ibuf;			/* input buffer */
-  struct stream *obuf;			/* output buffer */
+
+  /*  struct stream *obuf; */
+  struct ospf_fifo *obuf;		/* output queue. */
 
   /* Interface data from zebra. */
   struct interface *ifp;

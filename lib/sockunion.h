@@ -77,6 +77,7 @@ int sockunion_sameprefix (union sockunion *, union sockunion *);
 int sockunion_accept (int sock, union sockunion *);
 int sockunion_stream_socket (union sockunion *);
 int sockopt_reuseaddr (int);
+int sockopt_reuseport (int);
 int sockunion_bind (int sock, union sockunion *, unsigned short, union sockunion *);
 int sockopt_ttl (int family, int sock, int ttl);
 int sockunion_socket (union sockunion *su);

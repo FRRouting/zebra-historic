@@ -44,10 +44,10 @@ zebra_test_ipv4 (int command, int type, char *prefix, char *gateway)
   switch (command)
     {
     case ZEBRA_IPV4_ROUTE_ADD:
-      zebra_ipv4_add (sock, type, &p, &gate, 0);
+      zebra_ipv4_add (sock, type, 0, &p, &gate, 0);
       break;
     case ZEBRA_IPV4_ROUTE_DELETE:
-      zebra_ipv4_delete (sock, type, &p, &gate, 0);
+      zebra_ipv4_delete (sock, type, 0, &p, &gate, 0);
       break;
     }
 }
@@ -150,10 +150,8 @@ main (int argc, char **argv)
 {
   FILE *fp;
 
-  /*
   if (argc == 1)
       usage_exit ();
-  */
 
   /* Establish connection to zebra. */
   sock = zebra_connect ();
@@ -162,11 +160,6 @@ main (int argc, char **argv)
       fprintf (stderr, "Can't connect to zebra daemon\n");
       exit (1);
     }
-
-#ifdef HAVE_IPV6
-  zebra_test_v6 (sock);
-  exit (0);
-#endif /* HAVE_IPV6 */
 
   /* Open simulation file. */
   fp = fopen (argv[1], "r");

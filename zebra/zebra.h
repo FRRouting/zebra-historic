@@ -52,6 +52,10 @@
 #define ZEBRA_ROUTE_BGP            8
 #define ZEBRA_ROUTE_MAX            9
 
+/* Zebra message flags */
+#define ZEBRA_ROUTE_EXTERNAL       0
+#define ZEBRA_ROUTE_INTERNAL       1
+
 /* Default port information. */
 #define ZEBRA_PORT           2600
 #define ZEBRA_VTY_PORT       2601
@@ -88,6 +92,10 @@ struct zebra_client
 
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
+
+#ifndef INADDR_LOOPBACK
+#define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */
+#endif
 
 /* zebra types. */
 typedef u_int16_t zebra_size_t;

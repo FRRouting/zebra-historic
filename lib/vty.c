@@ -1420,10 +1420,24 @@ vty_read_config (char *config_file,
 		 char *config_default_dir)
 {
   FILE *confp;
+  char path[MAXPATHLEN];
+  char *cwd;
+  char *file;
 
   /* If -f flag specified. */
   if (config_file != NULL)
     {
+      if (*config_file != '/')
+	{
+	  cwd = getcwd (NULL, MAXPATHLEN);
+	  file = strrchr (config_file, '/');
+	  if (file != NULL)
+	    sprintf (path, "%s/%s", cwd, file + 1);
+	  else 
+	    sprintf (path, "%s/%s", cwd, config_file);
+	  config_file = path;
+	}
+
       confp = fopen (config_file, "r");
 
       if (confp == NULL)
@@ -1435,8 +1449,10 @@ vty_read_config (char *config_file,
     }
   else
     {
+      /* Relative path configuration file open. */
       confp = fopen (config_current_dir, "r");
 
+      /* If there is no relative path exists, open system default file. */
       if (confp == NULL)
 	{
 	  confp = fopen (config_default_dir, "r");
@@ -1450,7 +1466,12 @@ vty_read_config (char *config_file,
 	    config_file = config_default_dir;
 	}
       else
-	config_file = config_current_dir;
+	{
+	  /* Rleative path configuration file. */
+	  cwd = getcwd (NULL, MAXPATHLEN);
+	  sprintf (path, "%s/%s", cwd, config_current_dir);
+	  config_file = path;
+	}  
     }  
   vty_read_file (confp);
 

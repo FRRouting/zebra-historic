@@ -90,7 +90,7 @@ proc_route_read ()
       p.prefixlen = ip_masklen (tmpmask);
       sscanf (gate, "%lX", (unsigned long *)&gateway);
 
-      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0, 0);
+      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, &gateway, 0, 0);
     }
 
   return 0;

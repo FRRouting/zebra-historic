@@ -188,11 +188,55 @@ rib_if_set (struct rib *rib, unsigned int ifindex)
     rib->u.ifname = "unknown";
 }
 
+int
+rib_add_ipv4_internal (struct prefix_ipv4 *p, struct rib *rib, int table)
+{
+  int ret;
+  struct route_node *np;
+  struct prefix_ipv4 tmp;
+  struct rib *fib;
+
+  /* Lookup rib */
+  tmp.family = AF_INET;
+  tmp.prefixlen = 32;
+  tmp.prefix = rib->u.gate4;
+
+  np = route_node_match (ipv4_rib_table, (struct prefix *)&tmp);
+
+  if (!np)
+    return ZEBRA_ERR_RTUNREACH;
+
+  for (fib = np->info; fib; fib = fib->next)
+    if (IS_RIB_FIB (fib))
+      break;
+
+  if (! fib)
+    {
+      route_unlock_node (np);
+      return ZEBRA_ERR_RTUNREACH;
+    }
+
+  if (fib && ! IS_RIB_LINK (fib))
+    {
+      ret = kernel_add_ipv4 (p, &fib->u.gate4, fib->ifindex, 0, table);
+      if (ret != 0)
+	{
+	  route_unlock_node (np);
+	  return ret;
+	}
+      
+      rib->i.gate4 = fib->u.gate4;
+      RIB_INTERNAL_SET (rib);
+    }
+  route_unlock_node (np);
+  return 0;
+}
+
 /* Add prefix into rib. If there is a same type prefix, then we assume
    it as implicit replacement of the route. */
 int
-rib_add_ipv4 (int type, struct prefix_ipv4 *p, struct in_addr *gate, 
-	      unsigned int ifindex, int table)
+rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p, 
+	      struct in_addr *gate, unsigned int ifindex, int table)
 {
   int ret;
   int distance;
@@ -245,9 +289,6 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p, struct in_addr *gate,
       return ZEBRA_ERR_RTEXIST;
     }
 
-  /* OK rib is setup.  Now logging it. */
-  rib_log ("add", (struct prefix *)p, rib);
-
   /* If there is FIB route and it's preference is higher than self
      replace FIB route.*/
   if (fib)
@@ -269,11 +310,22 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p, struct in_addr *gate,
 	      ret = kernel_add_ipv4 (p, &rib->u.gate4, ifindex, 0, table);
 	      if (ret != 0)
 		{
+		  /* Internal route... */
+
+		  /* Restore old route. */
 		  kernel_add_ipv4 (p, &fib->u.gate4, ifindex, 0, fib->table);
+
 		  route_unlock_node (np);
 		  rib_free (rib);
 		  return ZEBRA_ERR_RTUNREACH;
 		}
+	      RIB_FIB_UNSET (fib);
+	      RIB_FIB_SET (rib);
+	      redistribute_delete_ipv4 (np, fib);
+	      redistribute_add_ipv4 (np, rib);
+	    }
+	  else
+	    {
 	      RIB_FIB_UNSET (fib);
 	      RIB_FIB_SET (rib);
 	      redistribute_delete_ipv4 (np, fib);
@@ -294,14 +346,31 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p, struct in_addr *gate,
 	  ret = kernel_add_ipv4 (p, gate, ifindex, 0, table);
 	  if (ret != 0)
 	    {
-	      route_unlock_node (np);
-	      rib_free (rib);
-	      return ZEBRA_ERR_RTUNREACH;
+	      /* If internal route... */
+	      if (gate && flags == ZEBRA_ROUTE_INTERNAL)
+		{
+		  ret = rib_add_ipv4_internal (p, rib, table);
+		  if (ret != 0)
+		    {
+		      route_unlock_node (np);
+		      rib_free (rib);
+		      return ZEBRA_ERR_RTUNREACH;
+		    }
+		}
+	      else
+		{
+		  route_unlock_node (np);
+		  rib_free (rib);
+		  return ZEBRA_ERR_RTUNREACH;
+		}
 	    }
 	  RIB_FIB_SET (rib);
 	  redistribute_add_ipv4 (np, rib);
 	}
     }
+
+  /* OK rib is setup.  Now logging it. */
+  rib_log ("add", (struct prefix *)p, rib);
 
   /* Then next add new route to rib. */
   rib_add_rib ((struct rib **) &np->info, rib);
@@ -319,7 +388,7 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p, struct in_addr *gate,
 
 /* Delete prefix from the rib. */
 int
-rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
+rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 		 struct in_addr *gate, unsigned int ifindex, int table)
 {
   int ret = 0;
@@ -340,7 +409,7 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
       if (rib->type == type &&
 	  rib->ifindex == ifindex &&
 	  (!table || rib->table == table))
-	if (! gate ||(IPV4_ADDR_CMP(&rib->u.gate4, gate) == 0))
+	if (! gate || (IPV4_ADDR_CMP(&rib->u.gate4, gate) == 0))
 	  break;
     }
   
@@ -373,7 +442,12 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
   if (IS_RIB_FIB (rib))
     {
       if (! rib_system_route (type))
-	ret = kernel_delete_ipv4 (p, gate, ifindex, 0, rib->table);
+	{
+	  if (IS_RIB_INTERNAL (rib))
+	    ret = kernel_delete_ipv4 (p, &rib->i.gate4, ifindex, 0, rib->table);
+	  else
+	    ret = kernel_delete_ipv4 (p, gate, ifindex, 0, rib->table);
+	}
 
       /* Redistribute it. */
       redistribute_delete_ipv4 (np, rib);
@@ -610,6 +684,13 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
 		  rib_free (rib);
 		  return ZEBRA_ERR_RTUNREACH;
 		}
+	      RIB_FIB_UNSET (fib);
+	      RIB_FIB_SET (rib);
+	      redistribute_delete_ipv6 (np, fib);
+	      redistribute_add_ipv6 (np, rib);
+	    }
+	  else
+	    {
 	      RIB_FIB_UNSET (fib);
 	      RIB_FIB_SET (rib);
 	      redistribute_delete_ipv6 (np, fib);

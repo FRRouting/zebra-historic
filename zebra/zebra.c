@@ -89,6 +89,7 @@ void
 zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
 {
   u_char type;
+  u_char flags;
   struct in_addr nexthop;
   u_char *pnt;
   u_char *lim;
@@ -98,6 +99,7 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
 
   /* Fetch type and nexthop first. */
   type = *pnt++;
+  flags = *pnt++;
   memcpy(&nexthop, pnt, 4);
   pnt += 4;
 
@@ -115,9 +117,9 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
       pnt += size;
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rib_add_ipv4 (type, &p, &nexthop, 0, client->rtm_table);
+	rib_add_ipv4 (type, flags, &p, &nexthop, 0, client->rtm_table);
       else
-	rib_delete_ipv4 (type, &p, &nexthop, 0, client->rtm_table);
+	rib_delete_ipv4 (type, flags, &p, &nexthop, 0, client->rtm_table);
     }
 }
 
@@ -475,10 +477,14 @@ zebra_serv ()
     }
 
   sockopt_reuseaddr (accept_sock);
+  sockopt_reuseport (accept_sock);
 
+  memset (&me, 0, sizeof (struct sockaddr_in));
   me.sin_family = AF_INET;
   me.sin_port = htons (ZEBRA_PORT);
-  me.sin_addr.s_addr = htonl (INADDR_ANY);
+
+  /* Loopback address only. */
+  me.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
 
   if (bind (accept_sock, (struct sockaddr *)&me, sizeof (me)) < 0) 
     {
@@ -639,9 +645,9 @@ DEFUN (ip_route,
 
   /* We need rib error treatment here. */
   if (ifindex)
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
   else
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
 
   /* Error checking and display meesage. */
   if (ret)
@@ -720,9 +726,9 @@ DEFUN (ip_route_mask,
 
   /* We need rib error treatment here. */
   if (ifindex)
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
   else
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
 
   /* Error checking and display meesage. */
   if (ret)
@@ -791,9 +797,9 @@ DEFUN (no_ip_route,
   apply_mask (&p);
 
   if (ifindex)
-    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
   else
-    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
 
   if (ret)
     {
@@ -870,9 +876,9 @@ DEFUN (no_ip_route_mask,
   apply_mask (&p);
 
   if (ifindex)
-    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, NULL, ifindex, table);
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
   else
-    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
 
   if (ret)
     {

@@ -261,7 +261,8 @@ ospf_hello_timer (struct thread *thread)
 	oi->ifp->name);
 
   /* Sending hello packet. */
-  OSPF_ISM_WRITE_ON (oi->t_write, ospf_hello_send, oi->fd);
+  ospf_hello_send (oi);
+  /*  OSPF_ISM_WRITE_ON (oi->t_write, ospf_hello_send, oi->fd); */
 
   /* Hello timer set. */
   OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);

@@ -357,6 +357,30 @@ ripng_info_free (struct ripng_info *rinfo)
   XFREE (MTYPE_RIPNG_ROUTE, rinfo);
 }
 
+/* If prefix is permitted return 1. */
+int
+ripng_distribute_in (struct interface *ifp, struct prefix *p)
+{
+  int ret;
+
+  /* Apply distribute-list in. */
+  if (ifp->distribute_in)
+    {
+      ret = access_list_apply (ifp->distribute_in, p);
+      if (!ret)
+	{
+	  char buf[BUFSIZ];
+	  
+	  if (IS_RIPNG_DEBUG_PACKET)
+	    zlog (NULL, LOG_INFO, "  %s/%d filtered by distribute-list",
+		  inet_ntop (AF_INET6, &p->u.prefix6, buf, BUFSIZ), 
+		  p->prefixlen);
+	  return ret;
+	}
+    }
+  return 1;
+}
+
 /* RIP packet adding routine. */
 void
 ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
@@ -431,13 +455,20 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
       return;
     }
 
-  /* Lookup routing table of RIPng, if there is no prefix in the table
-     this function create it.  The node is locked by
-     route_node_lokup function. */
   p.family = AF_INET6;
   p.u.prefix6 = rte->addr;
   p.prefixlen = rte->masklen;
 
+  if (ripng_distribute_in (ifp, &p) == 0)
+    {
+      if (IS_RIPNG_DEBUG_EVENT)
+	zlog (NULL, LOG_INFO, "[Event] RIPng route is filtered by distribute in.");
+      return;
+    }
+
+  /* Lookup routing table of RIPng, if there is no prefix in the table
+     this function create it.  The node is locked by
+     route_node_lokup function. */
   node = route_node_get (ripng_table, &p);
 
   if (!node->info)
@@ -726,6 +757,7 @@ ripng_write_rte (int index, struct stream *s, struct prefix_ipv6 *p,
 
   return index;
 }
+
 
 /* If prefix is permitted return 1. */
 int

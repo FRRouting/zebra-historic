@@ -93,6 +93,9 @@ ospf_if_stream_set (int sock, struct ospf_interface *oi)
   /* set input buffer. */
   oi->ibuf = stream_new (oi->ifp->mtu);
   OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
+
+  /* set output fifo queue. */
+  oi->obuf = ospf_fifo_new ();
 }
 
 void

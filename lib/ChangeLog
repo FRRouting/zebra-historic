@@ -1,3 +1,12 @@
+1999-06-26  NOGUCHI kay <kay@dti.ad.jp>
+
+	* vty.c (vty_read_config): Fix bug of configuration file path
+	detection.
+
+1999-06-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Bump up to 0.70.
+
 1999-06-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* buffer.h (GETL): Remove GETL macro.

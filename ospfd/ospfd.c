@@ -37,6 +37,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
+#include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
 

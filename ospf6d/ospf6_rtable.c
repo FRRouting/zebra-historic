@@ -21,6 +21,98 @@
 
 #include "ospf6d.h"
 
+list pathlist;
+
+void path_init ()
+{
+  pathlist = list_init ();;
+}
+
+static struct ospf6_path *
+path_new ()
+{
+  struct ospf6_path *p;
+  p = XMALLOC (MTYPE_OSPF6_ROUTE, sizeof (struct ospf6_path));
+  if (!p)
+    {
+      zvlog_warn ("can't alloc for path");
+      return NULL;
+    }
+  return p;
+}
+
+static void
+path_free (struct ospf6_path *p)
+{
+  assert (p);
+  XFREE (MTYPE_OSPF6_ROUTE, p);
+  return;
+}
+
+static void
+path_lock (struct ospf6_path *p)
+{
+  assert (p);
+  p->lock++;
+  return;
+}
+
+static void
+path_unlock (struct ospf6_path *p)
+{
+  assert (p);
+  assert (p->lock > 0);
+  p->lock--;
+  if (p->lock == 0)
+    path_free (p);
+  return;
+}
+
+static struct ospf6_path *
+path_lookup (unsigned long ifindex, struct in6_addr *ipaddr,
+             unsigned long advrtr)
+{
+  struct ospf6_path *p;
+  listnode n;
+
+  for (n = listhead (pathlist); n; nextnode (n))
+    {
+      p = getdata (n);
+      if (p->ifindex == ifindex &&
+          IN6_ARE_ADDR_EQUAL (&p->ipaddr, ipaddr) &&
+          p->advrtr == advrtr)
+        return p;
+    }
+  return NULL;
+}
+
+static struct ospf6_path *
+path_make (unsigned long ifindex, struct in6_addr *ipaddr,
+             unsigned long advrtr)
+{
+  struct ospf6_path *p;
+
+  p = path_lookup (ifindex, ipaddr, advrtr);
+  if (p)
+    {
+      path_lock (p);
+      return p;
+    }
+
+  p = path_new ();
+  p->ifindex = ifindex;
+  memcpy (&p->ipaddr, ipaddr, sizeof (p->ipaddr));
+  p->advrtr = advrtr;
+  path_lock (p);
+  return p;
+}
+
+static void path_delete (struct ospf6_path *p)
+{
+  path_unlock (p);
+  return;
+}
+
 static struct ospf6_rtentry *
 rtentry_new ()
 {
@@ -46,16 +138,24 @@ rtentry_free (struct ospf6_rtentry *p)
 static void
 rtable_delete_all (struct ospf6_rtentry *rtable)
 {
-  struct ospf6_rtentry *p = NULL, *n = NULL;
+  struct ospf6_rtentry *p = NULL, *next = NULL;
+  struct ospf6_path *q;
+  listnode n;
 
   assert (rtable);
   p = rtable;
   while (p)
     {
+      for (n = listhead (p->paths); n; nextnode (n))
+        {
+          q = getdata (n);
+          path_unlock (q);
+        }
+      list_delete_all (p->paths);
       if (p->next)
-        n = p->next;
+        next = p->next;
       rtentry_free (p);
-      p = n;
+      p = next;
     }
   return;
 }
@@ -106,6 +206,85 @@ rtable_init (struct ospf6_rtable *rtable)
     }
   rtable->previous_top = rtable->current_top;
   rtable->current_top = NULL;
+  return;
+}
+
+static void
+rtable_add (struct ospf6_rtentry *p, struct ospf6_rtable *rtable)
+{
+  p->next = rtable->current_top;
+  p->prev = NULL;
+  if (rtable->current_top)
+    rtable->current_top->prev = p;
+  rtable->current_top = p;
+  return;
+}
+
+static void
+rtable_delete (struct ospf6_rtentry *p, struct ospf6_rtable *rtable)
+{
+  struct ospf6_rtentry *q;
+
+  for (q = rtable->current_top; q; q = q->next)
+    if (q == p)
+      break;
+
+  if (!q)
+    {
+      zvlog_warn ("Can't find entry %#x", p);
+      return;
+    }
+
+  p->prev->next = p->next;
+  p->next->prev = p->prev;
+  return;
+}
+
+void rtable_install (unsigned char dest_type, union dest_id *dest_id,
+                     cost_t cost, unsigned char path_type,
+                     struct in6_addr *nexthop, unsigned long ifindex,
+                     unsigned long advrtr,
+                     struct ospf6_rtable *rtable)
+{
+  struct ospf6_rtentry *r = rtentry_new();
+  struct ospf6_path *p;
+
+  r->dest_type = dest_type;
+  memcpy (&r->dest_id, dest_id, sizeof (union dest_id));
+  r->path_type = path_type;
+  r->cost = cost;
+
+  r->paths = list_init ();
+  p = path_make (ifindex, nexthop, advrtr);
+  list_add_node (r->paths, p);
+
+  rtable_add (r, rtable);
+  return;
+}
+
+void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
+                       struct ospf6_rtable *rtable)
+{
+  struct ospf6_rtentry *r;
+  listnode n;
+  struct ospf6_path *p;
+
+  r = rtable_lookup (dest_type, dest_id, rtable->current_top);
+  if (!r)
+    {
+      zvlog_warn ("No such route!");
+      return;
+    }
+
+  rtable_delete (r, rtable);
+  for (n = listhead (r->paths); n; nextnode (n))
+    {
+      p = getdata (n);
+      path_unlock (p);
+    }
+  list_delete_all (r->paths);
+
+  rtentry_free (r);
   return;
 }
 

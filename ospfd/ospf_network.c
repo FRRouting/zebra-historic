@@ -28,11 +28,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "log.h"
 
 #include "ospfd/ospfd.h"
+#include "ospfd/ospf_network.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_packet.h"
-#include "ospfd/ospf_network.h"
 
 
 /* Make ospfd's server socket. */

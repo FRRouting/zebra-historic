@@ -74,7 +74,7 @@ ospf_db_desc_timer (struct thread *thread)
 	nbr->host);
 
   /* Sending DD packet. */
-  OSPF_NSM_WRITE_ON (nbr->t_write, ospf_db_desc_send, oi->fd);
+  ospf_db_desc_resend (nbr);
 
   /* DD Retransmit timer set. */
   OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
@@ -105,7 +105,7 @@ nsm_timer_set (struct ospf_neighbor *nbr)
       OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
       break;
     case NSM_Exchange:
-      OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
+      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
       break;
     case NSM_Loading:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
@@ -181,7 +181,7 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
 	nbr->dd_seqnum++;
 
       /* Send Initial DD packet. */
-      OSPF_NSM_WRITE_ON (nbr->t_write, ospf_db_desc_send, oi->fd);
+      ospf_db_desc_send (nbr);
     }
 
   /* Schedule DR Election. */
@@ -239,8 +239,10 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
     return NSM_Full;
 
   /* Send Link State Request. */
+  ospf_ls_req_send (nbr);
+    /*
   OSPF_NSM_WRITE_ON (nbr->t_write, ospf_ls_req_send, oi->fd);
-
+    */
   return NSM_Loading;
 }
 

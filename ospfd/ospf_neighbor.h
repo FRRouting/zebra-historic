@@ -29,17 +29,9 @@ struct ospf_neighbor
   /* This neighbor's parent ospf interface. */
   struct ospf_interface *oi;
 
-  /* Packet receive and send buffer. */
-  struct stream *ibuf;
-  struct stream *obuf;
-
-  /* Neighbor related socket fd. */
-  int fd;
-
   /* OSPF neighbor Information */
   char *host;				/* Printable address of the neighbor.*/
   u_char status;			/* NSM status. */
-  u_char dd_init;			/* DD Initial flags. */
   u_char dd_flags;			/* DD bit flags. */
   u_int32_t dd_seqnum;			/* DD Sequence Number. */
 
@@ -52,10 +44,16 @@ struct ospf_neighbor
   struct in_addr d_router;		/* Designated Router. */
   struct in_addr bd_router;		/* Backup Designated Router. */
 
-  /* Last Received Databse Description packet. */
-  u_char last_flags;
-  u_char last_options;
-  u_int32_t last_dd_seqnum;
+  /* Last sent Database Description packet. */
+  struct ospf_packet *last_send;
+
+  /* Last received Databse Description packet. */
+  struct
+  {
+    u_char options;
+    u_char flags;
+    u_int32_t dd_seqnum;
+  } last_recv;
 
   /* LSA data. */
   list ls_retransmit;

@@ -40,6 +40,7 @@ struct ospf6_path
   unsigned long   ifindex;
   struct in6_addr ipaddr;    /* if any */
   unsigned long   advrtr;    /* for inter-area and AS external path */
+  unsigned int    lock;      /* reference count of this path(nexthop) */
 };
 
 union dest_id
@@ -72,10 +73,17 @@ struct ospf6_rtable
 };
 
 void rtable_init (struct ospf6_rtable *);
+
 struct ospf6_rtentry *rtable_lookup (unsigned char, union dest_id *,
                                      struct ospf6_rtentry *);
-void rtable_add (struct ospf6_rtentry *, struct ospf6_rtable *);
-void rtable_delete (unsigned char, union dest_id *, struct ospf6_rtable *);
+void rtable_install (unsigned char, union dest_id *, cost_t,
+                     unsigned char,
+                     struct in6_addr *, unsigned long,
+                     unsigned long,
+                     struct ospf6_rtable *);
+void rtable_uninstall (unsigned char, union dest_id *,
+                       struct ospf6_rtable *);
+
 void rtable_update_zebra (struct ospf6_rtable *);
 void rtable_vty_entry (struct vty *, struct ospf6_rtentry *);
 

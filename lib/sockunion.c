@@ -419,6 +419,30 @@ sockopt_reuseaddr (int sock)
   return 0;
 }
 
+#ifdef SO_REUSEPORT
+int
+sockopt_reuseport (int sock)
+{
+  int ret;
+  int on = 1;
+
+  ret = setsockopt (sock, SOL_SOCKET, SO_REUSEPORT, 
+		    (void *) &on, sizeof (on));
+  if (ret < 0)
+    {
+      zlog (NULL, LOG_WARNING, "can't set sockopt SO_REUSEADDR to socket %d", sock);
+      return -1;
+    }
+  return 0;
+}
+#else
+int
+sockopt_reuseport (int sock)
+{
+  return 0;
+}
+#endif /* 0 */
+
 int
 sockopt_ttl (int family, int sock, int ttl)
 {
