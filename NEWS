@@ -1,6 +1,49 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
-* Changes in zebra-19990414 snapshot
+* Changes in zebra-19990420 snapshot
+
+** `make dist' at top directory works now.
+
+* Changes in lib
+
+** VTY has now access-class to restrict remote connection.
+Implemented by Alex Bligh <amb@gxn.net>.
+
+!
+line vty
+  access-class ACCESS-LIST-NAME
+!
+
+** `show version' command added.  Implemented by Carlos Alberto
+Barcenilla <barce@frlp.utn.edu.ar>
+
+* Changes in zebra
+
+** `ip address' command on *BSD bug is fixed.
+
+** `no ip address' works now for IPv4 address.
+
+** Now `write terminal' display `ip address' configuration.
+
+* Changes in bgpd
+
+** Redistribute static works now.  Please run both zebra and bgpd.
+bgpd.conf should be like this:
+
+!
+router zebra
+!
+router bgp ASN
+  redisitribute static
+!
+
+* Changes in guile
+
+** configure --enable-guile turns on zebra-guile build.
+
+** (router-bgp ASN) allocates real bgp structre.
+
+* Changes in zebra-19990416 snapshot
 
 ** Set version to 0.60 for preparation of beta release.
 
@@ -30,7 +73,7 @@ Bligh <amb@gxn.net>.
 * Changes in ospfd
 
 ** DR and BDR information is shown by `show ip ospf interface' command.
-
+
 * Changes in zebra-19990408 snapshot
 
 * Changes in bgpd

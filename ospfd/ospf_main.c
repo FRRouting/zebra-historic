@@ -29,6 +29,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "command.h"
 #include "thread.h"
 #include "log.h"
+#include "filter.h"
 
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospfd.h"
@@ -197,6 +198,7 @@ main (int argc, char **argv)
   signal_init ();
   cmd_init ();
   vty_init ();
+  access_list_init ();
   /* memory_init (); */
 
   /* OSPFd inits. */

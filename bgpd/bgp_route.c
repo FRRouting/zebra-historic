@@ -52,10 +52,12 @@ void bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info);
 /* BGP Routing Information Base. */
 struct route_table *bgp_table_ipv4;
 struct route_table *bgp_static_ipv4;
+struct route_table *bgp_aggregate_ipv4;
 
 #ifdef HAVE_IPV6
 struct route_table *bgp_table_ipv6;
 struct route_table *bgp_static_ipv6;
+struct route_table *bgp_aggregate_ipv6;
 #endif /* HAVE_IPV6 */
 
 /* Static annoucement peer. */
@@ -1078,7 +1080,64 @@ DEFUN (no_bgp_network,
   return CMD_SUCCESS;
 }
 
-/* Configuration of static route announcement. */
+/* Aggreagete address:
+
+  advertise-map  Set condition to advertise attribute
+  as-set         Generate AS set path information
+  attribute-map  Set attributes of aggregate
+  route-map      Set parameters of aggregate
+  summary-only   Filter more specific routes from updates
+  suppress-map   Conditionally filter more specific routes from updates
+  <cr>
+
+ */
+DEFUN (aggregate_address,
+       aggregate_address_cmd,
+       "aggregate-address PREFIX NETMASK ",
+       "Aggreagete network\n"
+       "Network\n"
+       "Mask\n")
+{
+  int ret;
+  struct prefix p;
+  struct route_node *node;
+
+  ret = str2prefix (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Prefix is invalid\r\n");
+      return CMD_WARNING;
+    }
+  
+  /* IPv4 aggregate address support test. */
+  if (p.family == AF_INET)
+    {
+      apply_mask ((struct prefix_ipv4 *) &p);
+
+      node = route_node_get (bgp_aggregate_ipv4, &p);
+      if (node->info)
+	{
+	  vty_out (vty, "There is already same aggregate network.\r\n");
+	  route_unlock_node (node);
+	  return CMD_WARNING;
+	}
+
+#if 0
+      bgp_info = bgp_info_new ();
+      bgp_info->type = ZEBRA_ROUTE_BGP;
+      bgp_info->peer = peer_self;
+      bgp_info->attr = bgp_attr_make_default ();
+#endif /* 0 */
+      node->info = (void *)1;
+      
+      return CMD_SUCCESS;
+    }
+
+  return CMD_SUCCESS;
+}
+
+/* Configuration of static route announcement and aggregate
+   information. */
 int
 config_write_network (struct vty *vty, struct bgp *bgp)
 {
@@ -1098,6 +1157,18 @@ config_write_network (struct vty *vty, struct bgp *bgp)
 	       node->p.prefixlen, VTY_NEWLINE);
 #endif /* HAVE_IPV6 */
 
+  for (node = route_top (bgp_aggregate_ipv4); node; node = route_next (node))
+    if ((route = node->info) != NULL)
+      vty_out (vty, " aggregate-address %s/%d%s",
+	       inet_ntoa (node->p.u.prefix4), node->p.prefixlen, VTY_NEWLINE);
+#ifdef HAVE_IPV6
+  for (node = route_top (bgp_aggregate_ipv6); node; node = route_next (node))
+    if ((route = node->info) != NULL)
+      vty_out (vty, " aggregate-address %s/%d%s",
+	       inet_ntop (AF_INET6, &node->p.u.prefix6, buf, BUFSIZ),
+	       node->p.prefixlen, VTY_NEWLINE);
+#endif /* HAVE_IPV6 */  
+
   return 0;
 }
 
@@ -1112,6 +1183,7 @@ bgp_route_init ()
   /* IPv4 related table and commands. */
   bgp_table_ipv4 = route_table_init ();
   bgp_static_ipv4 = route_table_init ();
+  bgp_aggregate_ipv4 = route_table_init ();
 
   install_element (VIEW_NODE, &show_ip_bgp_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_regexp_cmd);
@@ -1119,11 +1191,13 @@ bgp_route_init ()
   install_element (BGP_NODE, &bgp_network_cmd);
   install_element (BGP_NODE, &no_bgp_network_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_regexp_cmd);
+  install_element (BGP_NODE, &aggregate_address_cmd);
 
 #ifdef HAVE_IPV6
   /* IPv6 related table and commands. */
   bgp_table_ipv6 = route_table_init ();
   bgp_static_ipv6 = route_table_init ();
+  bgp_aggregate_ipv6 = route_table_init ();
 
   install_element (VIEW_NODE, &show_ipv6_bgp_cmd);
   install_element (ENABLE_NODE, &show_ipv6_bgp_cmd);

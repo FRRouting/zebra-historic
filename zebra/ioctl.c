@@ -143,15 +143,58 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
   bzero (&addreq, sizeof addreq);
   strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
 
+  bzero (&addr, sizeof (struct sockaddr_in));
   addr.sin_addr = p->prefix;
   addr.sin_family = p->family;
+#ifdef HAVE_SIN_LEN
+  addr.sin_len = sizeof (struct sockaddr_in);
+#endif
   memcpy (&addreq.ifra_addr, &addr, sizeof (struct sockaddr_in));
 
+  bzero (&mask, sizeof (struct sockaddr_in));
   masklen2ip (p->prefixlen, &mask.sin_addr);
   mask.sin_family = p->family;
+#ifdef HAVE_SIN_LEN
+  mask.sin_len = sizeof (struct sockaddr_in);
+#endif
   memcpy (&addreq.ifra_mask, &mask, sizeof (struct sockaddr_in));
   
   ret = if_ioctl (SIOCAIFADDR, (caddr_t) &addreq);
+  if (ret < 0)
+    return ret;
+  return 0;
+}
+
+/* Set up interface's IP address, netmask (and broadcas? ).  *BSD may
+   has ifaliasreq structure.  */
+int
+if_unset_prefix (struct interface *ifp, struct prefix_ipv4 *p)
+{
+  int ret;
+  struct ifaliasreq addreq;
+  struct sockaddr_in addr;
+  struct sockaddr_in mask;
+
+  bzero (&addreq, sizeof addreq);
+  strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
+
+  bzero (&addr, sizeof (struct sockaddr_in));
+  addr.sin_addr = p->prefix;
+  addr.sin_family = p->family;
+#ifdef HAVE_SIN_LEN
+  addr.sin_len = sizeof (struct sockaddr_in);
+#endif
+  memcpy (&addreq.ifra_addr, &addr, sizeof (struct sockaddr_in));
+
+  bzero (&mask, sizeof (struct sockaddr_in));
+  masklen2ip (p->prefixlen, &mask.sin_addr);
+  mask.sin_family = p->family;
+#ifdef HAVE_SIN_LEN
+  mask.sin_len = sizeof (struct sockaddr_in);
+#endif
+  memcpy (&addreq.ifra_mask, &mask, sizeof (struct sockaddr_in));
+  
+  ret = if_ioctl (SIOCDIFADDR, (caddr_t) &addreq);
   if (ret < 0)
     return ret;
   return 0;
@@ -197,6 +240,27 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
     kernel_add_ipv4 (&ifroute, NULL, ifp->index, 0);
   }
 #endif /* LINUX_VERSION_CODE */
+
+  return 0;
+}
+
+/* Set up interface's address, netmask (and broadcas? ).  Linux or
+   Solaris uses ifname:number semantics to set IP address aliases. */
+int
+if_unset_prefix (struct interface *ifp, struct prefix_ipv4 *p)
+{
+  int ret;
+  struct ifreq ifreq;
+  struct sockaddr_in addr;
+
+  ifreq_set_name (&ifreq, ifp);
+
+  bzero (&addr, sizeof (struct sockaddr_in));
+  addr.sin_family = p->family;
+  memcpy (&ifreq.ifr_addr, &addr, sizeof (struct sockaddr_in));
+  ret = if_ioctl (SIOCSIFADDR, (caddr_t) &ifreq);
+  if (ret < 0)
+    return ret;
 
   return 0;
 }

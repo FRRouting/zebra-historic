@@ -128,6 +128,7 @@ prefix_ipv4_new ()
 
   p = XMALLOC (MTYPE_PREFIX_IPV4, sizeof *p);
   bzero (p, sizeof (struct prefix_ipv4));
+  p->family = AF_INET;
   return p;
 }
 
@@ -143,6 +144,7 @@ int
 str2prefix_ipv4 (char *str, struct prefix_ipv4 *p)
 {
   int ret;
+  int plen;
   char *pnt;
   char *cp;
 
@@ -160,7 +162,10 @@ str2prefix_ipv4 (char *str, struct prefix_ipv4 *p)
   XFREE (MTYPE_TMP, cp);
 
   /* Get prefix length. */
-  p->prefixlen = (u_char) atoi (++pnt);
+  plen = (u_char) atoi (++pnt);
+  if (plen >= 32)
+    return 0;
+  p->prefixlen = plen;
   p->family = AF_INET;
 
   return ret;
@@ -259,6 +264,7 @@ prefix_ipv6_new ()
 
   p = XMALLOC (MTYPE_PREFIX_IPV6, sizeof (struct prefix_ipv6));
   bzero (p, sizeof (struct prefix_ipv6));
+  p->family = AF_INET6;
   return p;
 }
 
@@ -289,6 +295,8 @@ str2prefix_ipv6 (char *str, struct prefix_ipv6 *p)
     }
   else 
     {
+      int plen;
+
       cp = XMALLOC (0, (pnt - str) + 1);
       strncpy (cp, str, pnt - str);
       *(cp + (pnt - str)) = '\0';
@@ -296,7 +304,10 @@ str2prefix_ipv6 (char *str, struct prefix_ipv6 *p)
       free (cp);
       if (ret < 0)
 	return 0;
-      p->prefixlen = (u_char) atoi (++pnt);
+      plen = (u_char) atoi (++pnt);
+      if (plen >= 128)
+	return 0;
+      p->prefixlen = plen;
     }
   p->family = AF_INET6;
 
@@ -398,6 +409,7 @@ sockunion2prefix (union sockunion *dest,
       struct prefix_ipv4 *p;
 
       p = prefix_ipv4_new ();
+      p->family = AF_INET;
       p->prefix = dest->sin.sin_addr;
       p->prefixlen = ip_masklen (mask->sin.sin_addr);
       return (struct prefix *) p;
@@ -408,8 +420,38 @@ sockunion2prefix (union sockunion *dest,
       struct prefix_ipv6 *p;
 
       p = prefix_ipv6_new ();
+      p->family = AF_INET6;
       p->prefixlen = ip6_masklen (mask->sin6.sin6_addr);
       memcpy (&p->prefix, &dest->sin6.sin6_addr, sizeof (struct in6_addr));
+      return (struct prefix *) p;
+    }
+#endif /* HAVE_IPV6 */
+  return NULL;
+}
+
+/* Utility function of convert between struct prefix <=> union sockunion */
+struct prefix *
+sockunion2hostprefix (union sockunion *su)
+{
+  if (su->sa.sa_family == AF_INET)
+    {
+      struct prefix_ipv4 *p;
+
+      p = prefix_ipv4_new ();
+      p->family = AF_INET;
+      p->prefix = su->sin.sin_addr;
+      p->prefixlen = IPV4_MAX_BITLEN;
+      return (struct prefix *) p;
+    }
+#ifdef HAVE_IPV6
+  if (su->sa.sa_family == AF_INET6)
+    {
+      struct prefix_ipv6 *p;
+
+      p = prefix_ipv6_new ();
+      p->family = AF_INET6;
+      p->prefixlen = IPV6_MAX_BITLEN;
+      memcpy (&p->prefix, &su->sin6.sin6_addr, sizeof (struct in6_addr));
       return (struct prefix *) p;
     }
 #endif /* HAVE_IPV6 */

@@ -105,53 +105,53 @@ enum
 
 #ifdef MEMORY_LOG
 #define XMALLOC(mtype, size) \
-  mtype_xmalloc (__FILE__, __LINE__, (mtype), (size))
+  mtype_zmalloc (__FILE__, __LINE__, (mtype), (size))
 #define XCALLOC(mtype, num, size) \
-  mtype_xcalloc (__FILE__, __LINE__, (mtype), (num), (size))
+  mtype_zcalloc (__FILE__, __LINE__, (mtype), (num), (size))
 #define XREALLOC(mtype, ptr, size)  \
-  mtype_xrealloc (__FILE__, __LINE__, (mtype), (ptr), (size))
+  mtype_zrealloc (__FILE__, __LINE__, (mtype), (ptr), (size))
 #define XFREE(mtype, ptr) \
-  mtype_xfree (__FILE__, __LINE__, (mtype), (ptr))
+  mtype_zfree (__FILE__, __LINE__, (mtype), (ptr))
 #define XSTRDUP(mtype, str) \
-  mtype_xstrdup (__FILE__, __LINE__, (mtype), (str))
+  mtype_zstrdup (__FILE__, __LINE__, (mtype), (str))
 #else
-#define XMALLOC(mtype, size)       xmalloc ((mtype), (size))
-#define XCALLOC(mtype, num, size)  xcalloc ((mtype), (num), (size))
-#define XREALLOC(mtype, ptr, size) xrealloc ((mtype), (ptr), (size))
-#define XFREE(mtype, ptr)          xfree ((mtype), (ptr))
-#define XSTRDUP(mtype, str)        xstrdup ((mtype), (str))
+#define XMALLOC(mtype, size)       zmalloc ((mtype), (size))
+#define XCALLOC(mtype, num, size)  zcalloc ((mtype), (num), (size))
+#define XREALLOC(mtype, ptr, size) zrealloc ((mtype), (ptr), (size))
+#define XFREE(mtype, ptr)          zfree ((mtype), (ptr))
+#define XSTRDUP(mtype, str)        zstrdup ((mtype), (str))
 #endif /* MEMORY_LOG */
 
 /* Prototypes of memory function. */
-void *xmalloc (int type, size_t size);
-void *xcalloc (int type, size_t num, size_t size);
-void *xrealloc (int type, void *ptr, size_t size);
-void  xfree (int type, void *ptr);
-char *xstrdup (int type, char *str);
+void *zmalloc (int type, size_t size);
+void *zcalloc (int type, size_t num, size_t size);
+void *zrealloc (int type, void *ptr, size_t size);
+void  zfree (int type, void *ptr);
+char *zstrdup (int type, char *str);
 
-void *mtype_xmalloc (const char *file,
+void *mtype_zmalloc (const char *file,
 		     int line,
 		     int type,
 		     size_t size);
 
-void *mtype_xcalloc (const char *file,
+void *mtype_zcalloc (const char *file,
 		     int line,
 		     int type,
 		     size_t num,
 		     size_t size);
 
-void *mtype_xrealloc (const char *file,
+void *mtype_zrealloc (const char *file,
 		     int line,
 		     int type, 
 		     void *ptr,
 		     size_t size);
 
-void mtype_xfree (const char *file,
+void mtype_zfree (const char *file,
 		  int line,
 		  int type,
 		  void *ptr);
 
-char *mtype_xstrdup (const char *file,
+char *mtype_zstrdup (const char *file,
 		     int line,
 		     int type,
 		     char *str);

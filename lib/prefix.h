@@ -101,6 +101,7 @@ void masklen2ip (int, struct in_addr *);
 
 char *prefix_family_str (struct prefix *p);
 struct prefix *sockunion2prefix ();
+struct prefix *sockunion2hostprefix ();
 
 #ifdef HAVE_IPV6
 struct prefix_ipv6 *prefix_ipv6_new ();

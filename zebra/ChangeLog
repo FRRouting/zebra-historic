@@ -1,3 +1,7 @@
+1999-04-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* interface.c: Add `no ip address' command.
+
 1999-04-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rt_netlink.c (kernel_read): Function added for asynchronous

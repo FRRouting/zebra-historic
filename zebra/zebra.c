@@ -137,6 +137,7 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
       int size;
       struct prefix_ipv4 p;
 
+      bzero (&p, sizeof (struct prefix_ipv4));
       p.family = AF_INET;
       p.prefixlen = *pnt++;
       size = PSIZE (p.prefixlen);
@@ -318,10 +319,25 @@ zebra_request_hostinfo (int sock)
   writen (sock, buf, 10);
 }
 
+extern struct route_table *ipv4_rib_table;
+#ifdef HAVE_IPV6
+extern struct route_table *ipv6_rib_table;
+#endif /* HAVE_IPV6 */
+
+#include "table.h"
+#include "client.h"
+
 void
-zebra_static_redistribute (struct zebra_client *client)
+zebra_redistribute (struct zebra_client *client, int type)
 {
-  ;
+  struct route_node *np;
+  struct rib *rib;
+
+  for (np = route_top (ipv4_rib_table); np; np = route_next (np))
+    for (rib = np->info; rib; rib = rib->next)
+      if (rib->type == type)
+	zebra_ipv4_add (client->fd, type, (struct prefix_ipv4 *)&np->p,
+			&rib->u.gate4, 0);
 }
 
 void
@@ -330,14 +346,13 @@ zebra_redistribute_add (int command, struct zebra_client *client, int length)
   int type;
 
   type = stream_getc (client->ibuf);
-  printf ("redistrubte add message %d\n", type);
 
   if (! client->static_flag)
     {
       client->static_flag = 1;
 
       /* Send current static route to the client. */
-      zebra_static_redistribute (client);
+      zebra_redistribute (client, ZEBRA_ROUTE_STATIC);
     }
 }     
 
@@ -975,11 +990,6 @@ DEFUN (no_ipv6_route,
 int
 config_write_ip (struct vty *vty)
 {
-  extern struct route_table *ipv4_rib_table;
-#ifdef HAVE_IPV6
-  extern struct route_table *ipv6_rib_table;
-#endif /* HAVE_IPV6 */
-
   extern void rib_static_list (struct vty *, struct route_table *);
 
   rib_static_list (vty, ipv4_rib_table);

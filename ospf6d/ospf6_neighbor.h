@@ -22,35 +22,28 @@
 #ifndef OSPF6_NEIGHBOR_H
 #define OSPF6_NEIGHBOR_H
 
-/* Identifier of last received DD packet */
-struct dd_ident
-{
-  u_char options[3];
-  ddbits_t bits;
-  ddseqnum_t sequence_number;
-};
-
 struct neighbor
 {
-  struct ospf6_if *ospf6_if;
-  state_t          state;
-  struct thread   *inactivity_timer;
-  struct thread   *send_dd;          /* Retransmit DD */
-  struct thread   *send_lsreq;       /* Retransmit LSReq */
-  struct thread   *send_update;      /* Retransmit LSUpdate */
-  ddbits_t         dd_bits;          /* including MASTER bit */
-  ddseqnum_t       dd_seqnum;        /* DD sequence number */
-  struct dd_ident  last_dd;          /* last received DD */
-  rtr_id_t         rtr_id;           /* Router ID of this neighbor */
-  rtr_pri_t        rtr_pri;          /* Router Priority of this neighbor */
-  u_char           nboptions[3];     /* OSPF capability of this neighbor */
-  ifid_t           ifid;
-  ifid_t           prevdr;
-  ifid_t           dr;
-  ifid_t           prevbdr;
-  ifid_t           bdr;
-  list             addrs;            /* IPaddrs of IF on our side link */
-    /* note that the data of "addrs" member is struct prefix */
+  struct ospf6_if     *ospf6_if;
+  state_t              state;
+  struct thread       *inactivity_timer;
+  struct thread       *send_dd;          /* Retransmit DD */
+  struct thread       *send_lsreq;       /* Retransmit LSReq */
+  struct thread       *send_update;      /* Retransmit LSUpdate */
+  ddbits_t             dd_bits;          /* including MASTER bit */
+  ddseqnum_t           dd_seqnum;        /* DD sequence number */
+  char                 str[16];          /* Router ID String */
+  rtr_id_t             rtr_id;           /* Router ID of this neighbor */
+  rtr_pri_t            rtr_pri;          /* Router Priority of this neighbor */
+  ifid_t               ifid;
+  ifid_t               prevdr;
+  ifid_t               dr;
+  ifid_t               prevbdr;
+  ifid_t               bdr;
+  struct sockaddr_in6  hisaddr;        /* IPaddrs of IF on our side link */
+                                       /* Probably LinkLocal address     */
+  struct database_description last_dd; /* last received DD , including     */
+                                       /* OSPF capability of this neighbor */
 
   /* LSAs to retransmit to this neighbor */
   list dd_retrans;

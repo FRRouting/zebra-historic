@@ -30,5 +30,5 @@ void
 print_version ()
 {
   printf ("%s version %s (%s)\n", progname, ZEBRA_VERSION, host_name);
-  printf ("Copyright 1996-1998, Kunihiro Ishiguro\n");
+  printf ("Copyright 1996-1999, Kunihiro Ishiguro\n");
 }

@@ -32,6 +32,7 @@ int if_unset_flags (struct interface *, unsigned long);
 void if_get_flags (struct interface *);
 
 int if_set_prefix (struct interface *, struct prefix_ipv4 *);
+int if_unset_prefix (struct interface *, struct prefix_ipv4 *);
 
 void if_get_metric (struct interface *);
 void if_get_mtu (struct interface *);

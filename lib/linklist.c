@@ -119,7 +119,7 @@ list_delete_all_node (list list)
   for (n = list->head; n; n = next)
     {
       next = n->next;
-      listnode_free (n);
+      list_delete_node (list, n);
     }
 }
 

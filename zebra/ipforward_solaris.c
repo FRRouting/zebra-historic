@@ -22,6 +22,8 @@
 
 #include <zebra.h>
 
+#include "memory.h"
+
 int
 ipforward ()
 {
@@ -31,7 +33,7 @@ ipforward ()
   char *buf;
   struct strioctl si;
 
-  buf = (char *) xmalloc (sizeof forward + 1);
+  buf = (char *) zmalloc (sizeof forward + 1);
   strcpy (buf, forward);
 
   fd = open ("/dev/ip", O_RDWR);

@@ -57,7 +57,7 @@ lookup (struct messages *mes, int index)
 
 /* Fatal memory allocation error occured. */
 static void
-xerror (const char *fname, int type, size_t size)
+zerror (const char *fname, int type, size_t size)
 {
   fprintf (stderr, "%s : can't allocate memory for `%s' size %d\n", 
 	   fname, lookup (mstr, type), size);
@@ -66,14 +66,14 @@ xerror (const char *fname, int type, size_t size)
 
 /* Memory allocation. */
 void *
-xmalloc (int type, size_t size)
+zmalloc (int type, size_t size)
 {
   void *memory;
 
   memory = malloc (size);
 
   if (memory == NULL)
-    xerror ("malloc", type, size);
+    zerror ("malloc", type, size);
 
   alloc_inc (type);
 
@@ -82,14 +82,14 @@ xmalloc (int type, size_t size)
 
 /* Memory allocation with num * size with cleared. */
 void *
-xcalloc (int type, size_t num, size_t size)
+zcalloc (int type, size_t num, size_t size)
 {
   void *memory;
 
   memory = calloc (num, size);
 
   if (memory == NULL)
-    xerror ("calloc", type, size);
+    zerror ("calloc", type, size);
 
   alloc_inc (type);
 
@@ -98,19 +98,19 @@ xcalloc (int type, size_t num, size_t size)
 
 /* Memory reallocation. */
 void *
-xrealloc (int type, void *ptr, size_t size)
+zrealloc (int type, void *ptr, size_t size)
 {
   void *memory;
 
   memory = realloc (ptr, size);
   if (memory == NULL)
-    xerror ("realloc", type, size);
+    zerror ("realloc", type, size);
   return memory;
 }
 
 /* Memory free. */
 void
-xfree (int type, void *ptr)
+zfree (int type, void *ptr)
 {
   alloc_dec (type);
   free (ptr);
@@ -118,13 +118,13 @@ xfree (int type, void *ptr)
 
 /* String duplication. */
 char *
-xstrdup (int type, char *str)
+zstrdup (int type, char *str)
 {
   void *dup;
 
   dup = strdup (str);
   if (dup == NULL)
-    xerror ("strdup", type, strlen (str));
+    zerror ("strdup", type, strlen (str));
   alloc_inc (type);
   return dup;
 }
@@ -138,42 +138,42 @@ mtype_log (char *func, void *memory, const char *file, int line, int type)
 }
 
 void *
-mtype_xmalloc (const char *file, int line, int type, size_t size)
+mtype_zmalloc (const char *file, int line, int type, size_t size)
 {
   void *memory;
 
   mstat[type].c_malloc++;
   mstat[type].t_malloc++;
 
-  memory = xmalloc (type, size);
-  mtype_log ("xmalloc", memory, file, line, type);
+  memory = zmalloc (type, size);
+  mtype_log ("zmalloc", memory, file, line, type);
 
   return memory;
 }
 
 void *
-mtype_xcalloc (const char *file, int line, int type, size_t num, size_t size)
+mtype_zcalloc (const char *file, int line, int type, size_t num, size_t size)
 {
   void *memory;
 
   mstat[type].c_calloc++;
   mstat[type].t_calloc++;
 
-  memory = xcalloc (type, num, size);
+  memory = zcalloc (type, num, size);
   mtype_log ("xcalloc", memory, file, line, type);
 
   return memory;
 }
 
 void *
-mtype_xrealloc (const char *file, int line, int type, void *ptr, size_t size)
+mtype_zrealloc (const char *file, int line, int type, void *ptr, size_t size)
 {
   void *memory;
 
   /* Realloc need before allocated pointer. */
   mstat[type].t_realloc++;
 
-  memory = xrealloc (type, ptr, size);
+  memory = zrealloc (type, ptr, size);
 
   mtype_log ("xrealloc", memory, file, line, type);
 
@@ -182,7 +182,7 @@ mtype_xrealloc (const char *file, int line, int type, void *ptr, size_t size)
 
 /* Important function. */
 void 
-mtype_xfree (const char *file, int line, int type, void *ptr)
+mtype_zfree (const char *file, int line, int type, void *ptr)
 {
   mstat[type].t_free++;
 
@@ -192,13 +192,13 @@ mtype_xfree (const char *file, int line, int type, void *ptr)
 }
 
 char *
-mtype_xstrdup (const char *file, int line, int type, char *str)
+mtype_zstrdup (const char *file, int line, int type, char *str)
 {
   char *memory;
 
   mstat[type].c_strdup++;
 
-  memory = xstrdup (type, str);
+  memory = zstrdup (type, str);
   
   mtype_log ("xstrdup", memory, file, line, type);
 

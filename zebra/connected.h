@@ -23,6 +23,9 @@
 #ifndef _ZEBRA_CONNECTED_H
 #define _ZEBRA_CONNECTED_H
 
+int
+connected_check_ipv4 (struct interface *ifp, struct prefix *p);
+
 void
 connected_add_ipv4 (struct interface *ifp, struct in_addr *addr, 
 		    int prefixlen, struct in_addr *broad);

@@ -114,4 +114,10 @@ thread_fetch (struct thread_master *m,
 void
 thread_call (struct thread *thread);
 
+struct thread *
+thread_execute (struct thread_master *m,
+		  int (*func)(struct thread *), 
+		  void *arg,
+		  int val);
+
 #endif /* _ZEBRA_THREAD_H */

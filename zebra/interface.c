@@ -1,6 +1,6 @@
 /*
  * Interface function.
- * Copyright (C) 1997 Kunihiro Ishiguro
+ * Copyright (C) 1997, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -48,6 +48,9 @@ struct if_zebra
 {
   int shutdown;
   int multicast;
+
+  /* Interface's address. */
+  list address;
 };
 
 int
@@ -60,6 +63,7 @@ if_zebra_new_hook (struct interface *ifp)
 
   if_data->multicast = IF_ZEBRA_MULTICAST_UNSPEC;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_UNSPEC;
+  if_data->address = list_init ();
 
   ifp->if_data = if_data;
   return 0;
@@ -70,6 +74,64 @@ if_zebra_delete_hook (struct interface *ifp)
 {
   if (ifp->if_data)
     XFREE (MTYPE_TMP, ifp->if_data);
+  return 0;
+}
+
+int
+if_addr_add (struct interface *ifp, struct prefix *p)
+{
+  int ret;
+  struct prefix *addr;
+  struct if_zebra *if_data;
+
+  ret = if_set_prefix (ifp, (struct prefix_ipv4 *) p);
+  if (ret < 0)
+    return ret;
+
+  addr = prefix_new ();
+  *addr = *p;
+
+  if_data = (struct if_zebra *) ifp->if_data;
+  list_add_node (if_data->address, addr);
+
+  /* Address check. */
+  if (connected_check_ipv4 (ifp, p))
+    return 0;
+
+  if (addr->family == AF_INET)
+    connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
+#ifdef HAVE_IPV6
+  if (addr->family == AF_INET6)
+    connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
+#endif /* HAVE_IPV6 */
+
+  return 0;
+}
+
+int
+if_addr_delete (struct interface *ifp, struct prefix *p)
+{
+  int ret;
+  struct if_zebra *if_data;
+  listnode node;
+  struct prefix *addr = NULL;
+
+  ret = if_unset_prefix (ifp, (struct prefix_ipv4 *) p);
+  if (ret < 0)
+    return ret;
+
+  if_data = (struct if_zebra *) ifp->if_data;
+
+  for (node = listhead (if_data->address); node; node = nextnode (node))
+    {
+      addr = getdata (node);
+
+      if (IPV4_ADDR_CMP (&addr->u.prefix, &p->u.prefix))
+	addr = NULL;
+    }	 
+  if (addr)
+    list_delete_by_val (if_data->address, addr);
+
   return 0;
 }
 
@@ -330,11 +392,11 @@ DEFUN (ip_address, ip_address_cmd,
 {
   int ret;
   struct interface *ifp;
-  struct prefix_ipv4 p;
+  struct prefix p;
 
   ifp = (struct interface *) vty->index;
 
-  ret = str2prefix_ipv4 (argv[0], &p);
+  ret = str2prefix (argv[0], &p);
   if (!ret)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
@@ -351,24 +413,44 @@ DEFUN (ip_address, ip_address_cmd,
   if_get_flags (ifp);
 
   /* Make sure mask is applied and set type to static route*/
-  ret = if_set_prefix (ifp, &p);
+  ret = if_addr_add (ifp, &p);
   if (ret < 0)
     {
-      vty_out (vty, "Can't set interface's address.\r\n");
+      vty_out (vty, "Can't set interface's address: %s.\r\n", strerror(errno));
       return CMD_WARNING;
     }
-
 
   return CMD_SUCCESS;
 }
 
 DEFUN (no_ip_address, no_ip_address_cmd,
-       "no ip address IPV4_ADDRESS IPV4_ADDRESS",
+       "no ip address IPV4_ADDRESS",
        "Negate a command or set its defaults\n"
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
        "IP Address")
 {
+  int ret;
+  struct interface *ifp;
+  struct prefix p;
+
+  ifp = (struct interface *) vty->index;
+
+  ret = str2prefix (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
+
+  ret = if_addr_delete (ifp, &p);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't delete interface's address: %s.\r\n", 
+	       strerror(errno));
+      return CMD_WARNING;
+    }
+
   return CMD_SUCCESS;
 }
 
@@ -377,10 +459,13 @@ if_config_write (struct vty *vty)
 {
   listnode node;
   struct interface *ifp;
+  char buf[BUFSIZ];
 
   for (node = listhead (iflist); node; nextnode (node))
     {
       struct if_zebra *if_data;
+      listnode addrnode;
+      struct prefix *p;
 
       ifp = getdata (node);
       if_data = ifp->if_data;
@@ -389,6 +474,16 @@ if_config_write (struct vty *vty)
 
       if (ifp->desc)
 	vty_out (vty, " description %s%s", ifp->desc, VTY_NEWLINE);
+
+      if (if_data && if_data->address)
+	for (addrnode = listhead (if_data->address); addrnode; 
+	     nextnode (addrnode))
+	  {
+	    p = getdata (addrnode);
+	    vty_out (vty, " ip address %s/%d%s",
+		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+		     p->prefixlen, VTY_NEWLINE);
+	  }
 
       if (if_data)
 	{
@@ -431,4 +526,5 @@ zebra_if_init ()
   install_element (INTERFACE_NODE, &shutdown_if_cmd);
   install_element (INTERFACE_NODE, &no_shutdown_if_cmd);
   install_element (INTERFACE_NODE, &ip_address_cmd);
+  install_element (INTERFACE_NODE, &no_ip_address_cmd);
 }

@@ -9,7 +9,7 @@ sbin_PROGRAMS = ospf6d
 
 libospf6_a_SOURCES = \
 	ospf6_dump.c ospf6d.c ospf6_interface.c ospf6_network.c \
-	ospf6_neighbor.c ospf6_mesg.c ospf6_lsa.c ospf6_spf.c
+	ospf6_neighbor.c ospf6_mesg.c ospf6_lsa.c ospf6_spf.c ospf6_zebra.c
 
 noinst_HEADERS = \
 	ospf6_area.h ospf6_dump.h ospf6_interface.h ospf6_lsa.h \

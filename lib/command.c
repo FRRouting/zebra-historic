@@ -27,7 +27,8 @@
 #include "command.h"
 #include "memory.h"
 #include "log.h"
-
+#include "version.h"
+
 /* Command vector which includes some level of command lists. Normally
    each daemon maintains each own cmdvec. */
 vector cmdvec;
@@ -1143,6 +1144,19 @@ DEFUN (config_end,
   return CMD_SUCCESS;
 }
 
+/* Show version. */
+DEFUN (show_version,
+       show_version_cmd,
+       "show version",
+       SHOW_STR
+       "Displays zebra version\n")
+{
+  vty_out (vty, "Zebra %s (%s).\r\n", ZEBRA_VERSION, host_name);
+  vty_out (vty, "Copyright 1996-1998, Kunihiro Ishiguro.\r\n");
+
+  return CMD_SUCCESS;
+}
+
 /* Help display function for all node. */
 DEFUN (config_help,
        config_help_cmd,
@@ -1273,6 +1287,7 @@ DEFUN (config_hostname,
   return CMD_SUCCESS;
 }
 
+
 /* VTY interface password set. */
 DEFUN (config_password, password_cmd,
        "password PASSWORD",
@@ -1391,6 +1406,7 @@ cmd_init ()
   install_element (VIEW_NODE, &config_exit_cmd);
   install_element (VIEW_NODE, &config_help_cmd);
   install_element (VIEW_NODE, &config_list_cmd);
+  install_element (VIEW_NODE, &show_version_cmd);
   install_element (ENABLE_NODE, &config_terminal_cmd);
   install_element (ENABLE_NODE, &config_exit_cmd);
   install_element (ENABLE_NODE, &config_help_cmd);
@@ -1398,6 +1414,7 @@ cmd_init ()
   install_element (ENABLE_NODE, &config_write_terminal_cmd);
   install_element (ENABLE_NODE, &show_running_config_cmd);
   install_element (ENABLE_NODE, &config_write_file_cmd);
+  install_element (ENABLE_NODE, &show_version_cmd);
   install_element (CONFIG_NODE, &config_end_cmd);
   install_element (CONFIG_NODE, &config_exit_cmd);
   install_element (CONFIG_NODE, &config_help_cmd);

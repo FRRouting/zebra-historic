@@ -1,3 +1,8 @@
+1999-04-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_main.c (main): access_list_init () is added for vty
+	connection filtering.
+
 1999-04-16  Toshiaki Takada  <takada@zebra.org>
 	* ospfd.c: DEFUN (show_ip_ospf_interface) Added.
 	* ospf_neighbor.c: ospf_nbr_count () Added.

@@ -333,6 +333,9 @@ void bgp_route_map_init ();
 int bgp_peer_sort (struct peer *peer);
 void bgp_filter_init ();
 
+struct bgp *bgp_new (as_t);
+struct bgp *bgp_lookup_by_as (as_t);
+
 struct peer *peer_lookup_by_su (union sockunion *);
 struct peer *peer_lookup_from_bgp (struct bgp *bgp, char *addr);
 struct peer *peer_lookup_by_host (char *host);

@@ -31,6 +31,7 @@
 #include "memory.h"
 #include "prefix.h"
 #include "log.h"
+#include "filter.h"
 
 #include "zebra/zebra.h"
 #include "ripd/ripd.h"
@@ -188,6 +189,7 @@ main (int argc, char **argv)
   cmd_init ();
   vty_init ();
   memory_init ();
+  access_list_init ();
 
   /* RIP related initialization. */
   rip_init ();

@@ -175,4 +175,8 @@ int construct_network_lsa (struct ospf6_if *);
 int construct_intra_prefix_lsa (struct ospf6_if *);
 int construct_link_lsa (struct ospf6_if *);
 
+/* Function Prototypes */
+int list_clear_all (list);
+int lsa_list_clear_all (list);
+
 #endif /* OSPF_LSA_H */

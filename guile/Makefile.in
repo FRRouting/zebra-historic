@@ -81,11 +81,12 @@ RT_METHOD = @RT_METHOD@
 VERSION = @VERSION@
 ZEBRA = @ZEBRA@
 
-INCLUDES = @GUILE_CFLAGS@
-DEFS = @DEFS@ -DPACKAGE=\"zebra-guile\" -DVERSION=\"@VERSION@\" -DHAVE_LIBDL=1  -I. -I$(srcdir)
+INCLUDES = @GUILE_CFLAGS@ -I.. -I$(top_srcdir)
+DEFS = @DEFS@ -I. -I$(srcdir)
 
 bin_PROGRAMS = zebra-guile
-zebra_guile_SOURCES = zebra-guile.c
+zebra_guile_SOURCES = zebra-guile.c zebra-support.c guile-bgp.c
+noinst_HEADERS = zebra-guile.h
 zebra_guile_LDADD = @GUILE_LDFLAGS@ ../bgpd/libbgp.a ../lib/libzebra.a
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
@@ -95,13 +96,15 @@ PROGRAMS =  $(bin_PROGRAMS)
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-zebra_guile_OBJECTS =  zebra-guile.o
+zebra_guile_OBJECTS =  zebra-guile.o zebra-support.o guile-bgp.o
 zebra_guile_DEPENDENCIES =  ../bgpd/libbgp.a ../lib/libzebra.a
 zebra_guile_LDFLAGS = 
 CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
+HEADERS =  $(noinst_HEADERS)
+
 DIST_COMMON =  README ChangeLog Makefile.am Makefile.in
 
 
@@ -234,7 +237,7 @@ install-am: all-am
 install: install-am
 uninstall-am: uninstall-binPROGRAMS
 uninstall: uninstall-am
-all-am: Makefile $(PROGRAMS)
+all-am: Makefile $(PROGRAMS) $(HEADERS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install

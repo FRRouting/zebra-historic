@@ -93,7 +93,7 @@ free_last_dd (struct thread *thread)
 
   nbr = (struct neighbor *)THREAD_ARG (thread);
   assert (nbr);
-  memset (&nbr->last_dd, 0, sizeof (struct dd_ident));
+  memset (&nbr->last_dd, 0, sizeof (struct database_description));
   return 0;
 }
 
@@ -474,7 +474,7 @@ dr_election (struct ospf6_if *ospf6_if)
   myself.ifid = ospf6_if->ifid;
   myself.rtr_id = ospf6_if->area->ospf6->router_id;
 
-step_one:
+/* step_one: */
 
   ospf6_if->prevdr = prevdr = ospf6_if->dr;
   ospf6_if->prevbdr = prevbdr = ospf6_if->bdr;
@@ -571,7 +571,7 @@ step_two:
   else
     bdr = 0;
 
-step_three:
+/* step_three: */
 
   /* Calculate Designated Router. */
   /* Make Candidate list */
@@ -594,7 +594,7 @@ step_three:
     }
   if (myself.rtr_pri)
     {
-      if (myself.dr == id_val (myself.rtr_id))
+      if (myself.dr == myself.rtr_id)
         {
           declare++;
           list_add_node (candidate_list, &myself);
@@ -669,7 +669,7 @@ step_three:
         assert (0);
     }
 
- step_four:
+/* step_four: */
 
   if (gofive)
     goto step_five;

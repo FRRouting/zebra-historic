@@ -164,6 +164,51 @@ bgp_zebra_get_interface (struct stream *s)
     }
 }
 
+extern struct peer *peer_self;
+
+/* Zebra route add and delete treatment. */
+void
+zebra_read_ipv4 (int command, struct stream *s, u_short length)
+{
+  u_char type;
+  struct in_addr nexthop;
+  u_char *pnt;
+  u_char *lim;
+
+  pnt = stream_pnt (s);
+  lim = pnt + length;
+
+  /* Fetch type and nexthop first. */
+  type = *pnt++;
+  memcpy(&nexthop, pnt, 4);
+  pnt += 4;
+
+  /* Then fetch IPv4 prefixes. */
+  while (pnt < lim)
+    {
+      int size;
+      struct prefix_ipv4 p;
+      struct bgp_info *bgp_info;
+
+      bzero (&p, sizeof (struct prefix_ipv4));
+      p.family = AF_INET;
+      p.prefixlen = *pnt++;
+      size = PSIZE (p.prefixlen);
+      memcpy (&p.prefix, pnt, size);
+      pnt += size;
+
+      bgp_info = bgp_info_new ();
+      bgp_info->type = ZEBRA_ROUTE_STATIC;
+      bgp_info->peer = peer_self;
+      bgp_info->attr = bgp_attr_make_default ();
+
+      if (command == ZEBRA_IPV4_ROUTE_ADD)
+	nlri_process ((struct prefix *)&p, bgp_info);
+      else
+	;
+    }
+}
+
 /* Read packet from zebra. */
 int
 zebra_read (struct thread *t)
@@ -175,13 +220,16 @@ zebra_read (struct thread *t)
 
   sock = THREAD_FD(t);
 
+  /* Clear input buffer. */
+  stream_reset (zebra.ibuf);
+
   /* Read zebra header. */
   nbytes = stream_read (zebra.ibuf, sock, ZEBRA_HEADER_SIZE);
 
   /* zebra socket is closed. */
   if (nbytes == 0) 
     {
-      log ("connection closed socket [%d]\n", sock);
+      zlog (NULL, LOG_ERR, "connection closed socket [%d]", sock);
       zebra_close ();
       return -1;
     }
@@ -189,7 +237,7 @@ zebra_read (struct thread *t)
   /* zebra read error. */
   if (nbytes < 0)
     {
-      log ("cant read all packet\n");
+      zlog (NULL, LOG_ERR, "cant read all packet");
       zebra_close ();
       return -1;
     }
@@ -198,16 +246,16 @@ zebra_read (struct thread *t)
   length = stream_getw (zebra.ibuf);
   command = stream_getc (zebra.ibuf);
 
+  length -= ZEBRA_HEADER_SIZE;
+
   /* Read rest of zebra packet. */
-  stream_read (zebra.ibuf, sock, length - ZEBRA_HEADER_SIZE);
+  stream_read (zebra.ibuf, sock, length);
 
   switch (command)
     {
     case ZEBRA_IPV4_ROUTE_ADD:
-      printf ("IPv4 route is added from zebra\n");
-      break;
     case ZEBRA_IPV4_ROUTE_DELETE:
-      printf ("IPv4 route is deleted from zebra\n");
+      zebra_read_ipv4 (command, zebra.ibuf, length);
       break;
     case ZEBRA_IPV6_ROUTE_ADD:
       printf ("IPv6 route is added from zebra\n");
@@ -221,6 +269,8 @@ zebra_read (struct thread *t)
     default:
       break;
     }
+
+  
 
   /* Re-register myself. */
   zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);

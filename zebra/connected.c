@@ -28,6 +28,23 @@
 #include "if.h"
 #include "rib.h"
 
+/* If same interface address is already exist... */
+int
+connected_check_ipv4 (struct interface *ifp, struct prefix *p)
+{
+  struct connected *connected;
+  listnode node;
+
+  for (node = listhead (ifp->connected); node; node = nextnode (node))
+    {
+      connected = getdata (node);
+
+      if (prefix_same (connected->address, p))
+	return 1;
+    }
+  return 0;
+}
+
 /* Add connected IPv4 route to the interface. */
 void
 connected_add_ipv4 (struct interface *ifp, struct in_addr *addr, 

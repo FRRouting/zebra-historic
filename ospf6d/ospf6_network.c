@@ -242,7 +242,7 @@ int
 ospf6_recv (struct thread *thread)
 {
   struct iovec iov[MAXIOVLIST];
-  int sockfd, i, j, msgend, ret, num;
+  int sockfd, i, j, msgend, num;
   struct msghdr rmsghdr;
   struct cmsghdr *rcmsgp = NULL;
   u_char cmsgbuf[CMSG_SPACE(sizeof (struct in6_pktinfo))];
@@ -464,33 +464,33 @@ rvmsg_ok:
   }
 #endif
 
-  if ((ret = proc_ospf6_hdr(iov, ospf6_if)) < 0)
+  if (proc_ospf6_hdr(iov, ospf6_if) < 0)
     goto prmsg_bad;
 
   switch (ospf6_hdr->type)
     {
     case MSGT_HELLO:
-      if ((ret = proc_hello (src, iov, ospf6_if)) < 0)
+      if (proc_hello (src, iov, ospf6_if) < 0)
         goto prmsg_bad;
       goto prmsg_ok;
 
     case MSGT_DATABASE_DESCRIPTION:
-      if ((ret = proc_database_description (src, iov, ospf6_if)) < 0)
+      if (proc_database_description (src, iov, ospf6_if) < 0)
         goto prmsg_bad;
       goto prmsg_ok;
 
     case MSGT_LINKSTATE_REQUEST:
-      if ((ret = proc_linkstate_request (src, iov, ospf6_if)) < 0)
+      if (proc_linkstate_request (src, iov, ospf6_if) < 0)
         goto prmsg_bad;
       goto prmsg_ok;
 
     case MSGT_LINKSTATE_UPDATE:
-      if ((ret = proc_linkstate_update (src, iov, ospf6_if)) < 0)
+      if (proc_linkstate_update (src, iov, ospf6_if) < 0)
         goto prmsg_bad;
       goto prmsg_ok;
 
     case MSGT_LINKSTATE_ACK:
-      if ((ret = proc_linkstate_ack (src, iov, ospf6_if)) < 0)
+      if (proc_linkstate_ack (src, iov, ospf6_if) < 0)
         goto prmsg_bad;
       goto prmsg_ok;
 

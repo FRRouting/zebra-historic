@@ -19,16 +19,16 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF_TYPES_H
-#define OSPF_TYPES_H
+#ifndef OSPF6_TYPES_H
+#define OSPF6_TYPES_H
 
-typedef u_char         instance_id_t;
-typedef u_char         state_t;
-typedef u_char         vers_t;
-typedef u_char         opt_t;
-typedef u_char         rtr_pri_t;
-typedef u_char         prefixlen_t;
-typedef u_char         ddbits_t;
+typedef unsigned char  instance_id_t;
+typedef unsigned char  state_t;
+typedef unsigned char  vers_t;
+typedef unsigned char  opt_t;
+typedef unsigned char  rtr_pri_t;
+typedef unsigned char  prefixlen_t;
+typedef unsigned char  ddbits_t;
 typedef unsigned long  ddseqnum_t;
 typedef unsigned long  rtr_id_t;
 typedef unsigned long  ifid_t;
@@ -41,4 +41,5 @@ typedef unsigned long  area_id_t;
 #define ALLSPFROUTERS6 "ff02::5"
 #define ALLDROUTERS6   "ff02::6"
 
-#endif /* OSPF_TYPES_H */
+#endif /* OSPF6_TYPES_H */
+

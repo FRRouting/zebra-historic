@@ -31,6 +31,8 @@
 #include "memory.h"
 #include "str.h"
 #include "log.h"
+#include "prefix.h"
+#include "filter.h"
 
 /* Extern host structure from command.c */
 extern struct host host;
@@ -40,6 +42,9 @@ static vector vtyvec;
 
 /* Vtye timeout value. */
 static unsigned long vty_timeout_val = VTY_TIMEOUT_DEFAULT;
+
+/* Vty access-class command */
+static char *vty_accesslist_name = NULL;
 
 /* Vty events */
 enum event {VTY_SERV, VTY_READ, VTY_WRITE};
@@ -1166,6 +1171,33 @@ vty_accept (struct thread *thread)
       exit (1);
     }
 
+  /* VTY's accesslist apply. */
+  if (vty_accesslist_name)
+    {
+      struct prefix *p = NULL;
+      struct access_list *acl = NULL;
+      
+      p = sockunion2hostprefix (&su);
+
+      if (! (acl = access_list_lookup (vty_accesslist_name)) ||
+	  (access_list_apply (acl, p) != FILTER_PERMIT))
+	{
+	  char * buf;
+	  zlog (NULL, LOG_INFO, "Vty connection refused from %s",
+		(buf = sockunion_su2str (&su)));
+	  free (buf);
+	  close (vty_sock);
+	  
+	  /* continue accepting connections */
+	  vty_event (VTY_SERV, accept_sock, NULL);
+	  
+	  prefix_free (p);
+
+	  return 0;
+	}
+      prefix_free (p);
+    }
+
   on = 1;
   ret = setsockopt (vty_sock, IPPROTO_TCP, TCP_NODELAY, 
 		    (char *) &on, sizeof (on));
@@ -1436,14 +1468,55 @@ DEFUN (exec_timeout,
   return CMD_SUCCESS;
 }
 
+/* Set vty access class. */
+DEFUN (vty_access_class,
+       vty_access_class_cmd,
+       "access-class ACCESS-LIST",
+       "Apply access list to vty\n"
+       "Access list name\n")
+{
+  if (vty_accesslist_name)
+    XFREE(MTYPE_VTY, vty_accesslist_name);
+
+  vty_accesslist_name = XSTRDUP(MTYPE_VTY, argv[0]);
+
+  return CMD_SUCCESS;
+}
+
+/* Clear vty access class. */
+DEFUN (no_vty_access_class,
+       no_vty_access_class_cmd,
+       "no access-class [ACCESS-LIST]",
+       NO_STR
+       "Access list to remove from vty\n"
+       "Access list name\n")
+{
+  if (!vty_accesslist_name || (argc && strcmp(vty_accesslist_name, argv[0])))
+    {
+      vty_out (vty, "Access-class not currently applied to vty%s",
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  XFREE(MTYPE_VTY, vty_accesslist_name);
+
+  vty_accesslist_name = NULL;
+
+  return CMD_SUCCESS;
+}
+
 /* Display current configuration. */
 int
 vty_config_write (struct vty *vty)
 {
-  if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
+  if ((vty_timeout_val != VTY_TIMEOUT_DEFAULT) || vty_accesslist_name)
     {
       vty_out (vty, "line vty%s", VTY_NEWLINE);
-      vty_out (vty, " exec-timeout %d%s", vty_timeout_val, VTY_NEWLINE);
+
+      if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
+	vty_out (vty, " exec-timeout %d%s", vty_timeout_val, VTY_NEWLINE);
+      if (vty_accesslist_name)
+	vty_out (vty, " access-class %s%s", vty_accesslist_name, VTY_NEWLINE);
     }
   return 0;
 }
@@ -1470,4 +1543,6 @@ vty_init ()
   install_element (VTY_NODE, &config_exit_cmd);
   install_element (VTY_NODE, &config_help_cmd);
   install_element (VTY_NODE, &exec_timeout_cmd);
+  install_element (VTY_NODE, &vty_access_class_cmd);
+  install_element (VTY_NODE, &no_vty_access_class_cmd);
 }

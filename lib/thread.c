@@ -690,3 +690,29 @@ thread_call (struct thread *thread)
   (*thread->func) (thread);
 #endif /* HAVE_PTHREAD */
 }
+
+/* Execute thread */
+struct thread *
+thread_execute (struct thread_master *m,
+                int (*func)(struct thread *), 
+                void *arg,
+                int val)
+{
+  struct thread dummy; 
+
+  memset (&dummy, 0, sizeof (struct thread));
+
+#ifdef DEBUG
+  printf ("execute event\n");
+#endif /* DEBUG */  
+
+  dummy.type = THREAD_EVENT;
+  dummy.id = 0;
+  dummy.master = (struct thread_master *)NULL;
+  dummy.func = func;
+  dummy.arg = arg;
+  dummy.u.val = val;
+  thread_call (&dummy);     /* execute immediately */
+
+  return (struct thread *)NULL;
+}

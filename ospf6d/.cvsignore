@@ -1,6 +1,0 @@
-Makefile
-*.o
-ospfd
-ospfd.conf
-tags
-TAGS

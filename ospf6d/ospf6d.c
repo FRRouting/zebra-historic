@@ -225,6 +225,7 @@ make_neighbor (rtr_id_t rtr_id, struct ospf6_if *ospf6_if)
   nbr->state = NBS_DOWN;
   nbr->ospf6_if = ospf6_if;
   nbr->rtr_id = rtr_id;
+  inet_ntop (AF_INET, &rtr_id, &nbr->str, sizeof (nbr->str));
   nbr->inactivity_timer = (struct thread *)NULL;
   nbr->dd_retrans = list_init ();
   nbr->summarylist = list_init ();
