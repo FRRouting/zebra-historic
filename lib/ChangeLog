@@ -1,3 +1,45 @@
+2000-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_init): Install
+	copy_runningconfig_startupconfig_cmd only in terminal mode.
+
+	* linklist.c (list_delete_node): Simplify the function.
+	(listnode_lookup): Renamed from list_lookup_node.
+
+2000-10-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* stream.h: Undef stream_read and stream_write without
+	parenthesis.
+
+	* newlist.c: File removed.
+
+	* newlist.h: Likewise.
+
+	* linklist.c (list_new): Remove list_init().  To allocate new
+	linked list, please use list_new().
+	(listnode_add): Remove list_add_node().  To add new node to linked
+	list, please use listnode_add().
+	(list_delete_by_val): Revemove fucntion.
+
+2000-10-16  Nobuaki Tanaka <nobby@po.ntts.co.jp>
+
+	* table.c (route_table_free): Reimplement route_table_free().
+
+2000-10-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* keychain.c (keychain_get): Register key_delete_func to key
+	list's delete function.  Use linklist.c instead of newlist.c.
+
+2000-10-04  Akihiro Mizutani <mizutani@dml.com>
+
+	* filter.c (access_list_remark): Add access-list's remark command.
+	(no_access_list): "no access-list 100 permit any" error message
+	bug is fixed.
+
+2000-10-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_SOCKUNION.
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.89 is released.

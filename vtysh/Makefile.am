@@ -26,7 +26,9 @@ vtysh.o: vtysh.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../vtysh/vtysh.h
 vtysh_cmd.o: vtysh_cmd.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  vtysh.h
+vtysh_config.o: vtysh_config.c ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/linklist.h ../lib/memory.h ../vtysh/vtysh.h
 vtysh_main.o: vtysh_main.c ../lib/version.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../vtysh/vtysh.h
-vtysh_user.o: vtysh_user.c ../lib/memory.h ../lib/newlist.h \
+ ../lib/vector.h ../lib/vty.h ../vtysh/vtysh.h ../vtysh/vtysh_user.h
+vtysh_user.o: vtysh_user.c ../lib/memory.h ../lib/linklist.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h

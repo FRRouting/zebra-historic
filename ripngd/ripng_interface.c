@@ -579,7 +579,7 @@ void
 ripng_if_init ()
 {
   /* Interface initialize. */
-  iflist = list_init ();
+  iflist = list_new ();
   if_add_hook (IF_NEW_HOOK, ripng_if_new_hook);
 
   /* RIPng enable network init. */

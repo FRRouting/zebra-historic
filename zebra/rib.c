@@ -388,6 +388,7 @@ rib_add_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p,
   
 }
 #endif /* HAVE_IF_PSEUDO */
+
 /* Add prefix into rib. If there is a same type prefix, then we assume
    it as implicit replacement of the route. */
 int
@@ -468,8 +469,7 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
     {
       if (IS_RIB_FIB (rp))
 	fib = rp;
-      if ((rp->type == type) &&
-	  (IPV4_ADDR_SAME (&rp->u.gate4, &rib->u.gate4)))
+      if (rp->type == type)
 	same = rp;
     }
 
@@ -2005,22 +2005,32 @@ rib_if_up (struct interface *ifp)
     }
 }
 
+/* Interface is down. */
 void
 rib_if_down (struct interface *ifp)
 {
   struct route_node *rn;
   struct rib *rib;
+  struct rib *next;
 
   /* Walk down all routes. */
   for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
     {
-      for (rib = rn->info; rib; rib = rib->next)
+      for (rib = rn->info; rib; rib = next)
 	{
+	  next = rib->next;
+
 	  if (ifp->ifindex == rib->u.ifindex)
 	    {
 	      if (rib->type == ZEBRA_ROUTE_STATIC && IS_RIB_FIB (rib))
 		{
 		  RIB_FIB_UNSET (rib);
+		}
+	      if (rib->type == ZEBRA_ROUTE_KERNEL && IS_RIB_FIB (rib))
+		{
+		  rib_delete_ipv4 (rib->type, rib->flags, 
+				   (struct prefix_ipv4 *)&rn->p,
+				   &rib->u.gate4, rib->u.ifindex, 0);
 		}
 	    }
 	}

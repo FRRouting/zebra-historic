@@ -54,10 +54,10 @@ rip_main.o: rip_main.c ../lib/version.h ../lib/thread.h \
  ../lib/keychain.h ../lib/log.h ../ripd/ripd.h
 rip_offset.o: rip_offset.c ../lib/if.h ../lib/linklist.h \
  ../lib/prefix.h ../lib/filter.h ../lib/command.h ../lib/vector.h \
- ../lib/vty.h ../lib/newlist.h ../lib/memory.h
+ ../lib/vty.h ../lib/memory.h
 rip_peer.o: rip_peer.c ../lib/if.h ../lib/linklist.h ../lib/prefix.h \
- ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/newlist.h \
- ../lib/thread.h ../lib/memory.h ../ripd/ripd.h
+ ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/thread.h \
+ ../lib/memory.h ../ripd/ripd.h
 rip_routemap.o: rip_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/routemap.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/log.h \

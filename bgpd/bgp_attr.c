@@ -30,7 +30,6 @@
 #include "stream.h"
 #include "log.h"
 #include "hash.h"
-#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -510,7 +509,7 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
 {
   struct bgp *bgp;
   struct peer_conf *conf;
-  struct newnode *nn;
+  struct listnode *nn;
 
   /* Attribute already has as path then send notify to the peer. */
   if (attr->aspath)
@@ -537,7 +536,7 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
   bgp = NULL;
   if (peer->conf)
     {
-      NEWLIST_LOOP (peer->conf, conf, nn)
+      LIST_LOOP (peer->conf, conf, nn)
 	{
 	  bgp = conf->bgp;
 	}

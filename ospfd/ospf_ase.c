@@ -66,7 +66,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 
   route_unlock_node (rn);
 
-  chosen = list_init ();
+  chosen = list_new ();
 
   /* First try to find intra-area non-bb paths. */
   if (ospf_top->RFC1583Compat == 0)
@@ -75,7 +75,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 	if (or->cost < OSPF_LS_INFINITY)
 	  if (!OSPF_IS_AREA_ID_BACKBONE (or->u.std.area_id) &&
 	      or->path_type == OSPF_PATH_INTRA_AREA)
-	    list_add_node (chosen, or);
+	    listnode_add (chosen, or);
 
   /* If none is found -- look through all. */
   if (listcount (chosen) == 0)
@@ -100,7 +100,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 	}
 
   if (chosen != rn->info)
-    list_delete_all (chosen);
+    list_delete (chosen);
 
   return best;
 }
@@ -274,7 +274,7 @@ ospf_ase_calculate_new_route (struct ospf_lsa *lsa,
     }
 
   new->type = OSPF_DESTINATION_NETWORK;
-  new->path = list_init ();
+  new->path = list_new ();
   new->u.ext.origin = lsa;
   new->u.ext.tag = ntohl (al->e[0].route_tag);
   new->u.ext.asbr = asbr_route;
@@ -626,12 +626,12 @@ ospf_ase_register_external_lsa (struct ospf_lsa *lsa, struct ospf *top)
 
   rn = route_node_get (top->external_lsas, (struct prefix *) &p);
   if ((lst = rn->info) == NULL)
-    rn->info = lst = list_init();
+    rn->info = lst = list_new();
 
   /* We assume that if LSA is deleted from DB
      is is also deleted from this RT */
 
-  list_add_node (lst, ospf_lsa_lock (lsa));
+  listnode_add (lst, ospf_lsa_lock (lsa));
 }
 
 void
@@ -652,7 +652,7 @@ ospf_ase_unregister_external_lsa (struct ospf_lsa *lsa, struct ospf *top)
   lst = rn->info;
   assert (lst);
 
-  list_delete_by_val (lst, lsa);
+  listnode_delete (lst, lsa);
   ospf_lsa_unlock (lsa);
 }
 
@@ -670,7 +670,7 @@ ospf_ase_external_lsas_finish (struct route_table *rt)
 	for (node = listhead (lst); node; node = nextnode (node))
 	  if ((lsa = getdata (node)) != NULL)
 	    ospf_lsa_unlock (lsa);
-	list_delete_all (lst);
+	list_delete (lst);
       }
   
   route_table_finish (rt);

@@ -473,7 +473,7 @@ rtadv_prefix_get (list rplist, struct prefix *p)
 
   rprefix = rtadv_prefix_new ();
   memcpy (&rprefix->prefix, p, sizeof (struct prefix));
-  list_add_node (rplist, rprefix);
+  listnode_add (rplist, rprefix);
   
   return rprefix;
 }

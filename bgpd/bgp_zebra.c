@@ -29,7 +29,6 @@
 #include "sockunion.h"
 #include "zclient.h"
 #include "routemap.h"
-#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_route.h"
@@ -50,8 +49,8 @@ bgp_if_update (struct interface *ifp)
 {
   struct bgp *bgp;
   listnode cn;
-  struct newnode *nn;
-  struct newnode *nm;
+  struct listnode *nn;
+  struct listnode *nm;
   struct peer_conf *conf;
 
   for (cn = listhead (ifp->connected); cn; nextnode (cn))
@@ -69,14 +68,14 @@ bgp_if_update (struct interface *ifp)
 	  if (IPV4_NET127 (ntohl (addr.s_addr)))
 	    continue;
 
-	  NEWLIST_LOOP (bgp_list, bgp, nn)
+	  LIST_LOOP (bgp_list, bgp, nn)
 	    {
 	      /* Respect configured router id */
 	      if (! (bgp->config & BGP_CONFIG_ROUTER_ID))
 		if (ntohl (bgp->id.s_addr) < ntohl (addr.s_addr))
 		  {
 		    bgp->id = addr;
-		    NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+		    LIST_LOOP (bgp->peer_conf, conf, nm)
 		      {
 			conf->peer->local_id = addr;
 		      }
@@ -262,7 +261,7 @@ zebra_read_ipv4 (int command, struct zclient *zclient, zebra_size_t length)
     api.metric = stream_getl (s);
 
   if (command == ZEBRA_IPV4_ROUTE_ADD)
-    bgp_redistribute_add ((struct prefix *)&p, api.type);
+    bgp_redistribute_add ((struct prefix *)&p, &nexthop, api.type);
   else
     bgp_redistribute_delete ((struct prefix *)&p, api.type);
 
@@ -316,7 +315,7 @@ zebra_read_ipv6 (int command, struct zclient *zclient, zebra_size_t length)
     api.metric = 0;
 
   if (command == ZEBRA_IPV6_ROUTE_ADD)
-    bgp_redistribute_add ((struct prefix *) &p, api.type);
+    bgp_redistribute_add ((struct prefix *)&p, NULL, api.type);
   else
     bgp_redistribute_delete ((struct prefix *) &p, api.type);
   

@@ -137,7 +137,7 @@ ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
    
   if (rn->info == NULL)
     /* This is a new route */
-    rn->info = list_init ();
+    rn->info = list_new ();
   else
     {
       struct ospf_area *or_area;
@@ -155,7 +155,7 @@ ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
       /* New route is better */
       if ((ret = ospf_route_cmp (new_or, or)) < 0)
 	{
-	  list_delete_by_val (rn->info, or);
+	  listnode_delete (rn->info, or);
 	  ospf_route_free (or);
 	  /* proceed down */
 	}
@@ -181,7 +181,7 @@ ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
 
   zlog_info ("ospf_ia_router_route(): adding the new route"); 
 
-  list_add_node (rn->info, new_or);
+  listnode_add (rn->info, new_or);
 }
 
 

@@ -28,7 +28,6 @@
 #include "log.h"
 #include "if.h"
 #include "prefix.h"
-#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"

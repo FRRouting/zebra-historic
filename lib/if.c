@@ -67,8 +67,8 @@ if_create ()
 
   ifp = if_new ();
   
-  list_add_node (iflist, ifp);
-  ifp->connected = list_init ();
+  listnode_add (iflist, ifp);
+  ifp->connected = list_new ();
 
   if (if_master.if_new_hook)
     (*if_master.if_new_hook) (ifp);
@@ -80,7 +80,7 @@ if_create ()
 void
 if_delete (struct interface *ifp)
 {
-  list_delete_by_val (iflist, ifp);
+  listnode_delete (iflist, ifp);
 
   if (if_master.if_delete_hook)
     (*if_master.if_delete_hook) (ifp);
@@ -561,7 +561,7 @@ connected_add (struct interface *ifp, struct connected *connected)
 
   /* Link connected address to interface. */
   connected->ifp = ifp;
-  list_add_node (ifp->connected, connected);
+  listnode_add (ifp->connected, connected);
 }
 
 struct connected *
@@ -832,7 +832,7 @@ ifaddr_ipv4_lookup (struct in_addr *addr, unsigned int ifindex)
 void
 if_init ()
 {
-  iflist = list_init ();
+  iflist = list_new ();
   ifaddr_ipv4_table = route_table_init ();
 
   if (iflist)

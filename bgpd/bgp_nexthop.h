@@ -28,6 +28,7 @@ void bgp_scan_init ();
 u_int32_t bgp_nexthop_lookup (struct peer *peer, struct in_addr);
 void bgp_connected_add (struct connected *c);
 void bgp_connected_delete (struct connected *c);
+u_int32_t bgp_multiaccess_check_v4 (struct in_addr, char *);
 int bgp_config_write_scan_time (struct vty *);
 
 #endif /* _ZEBRA_BGP_NEXTHOP_H */

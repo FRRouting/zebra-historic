@@ -345,7 +345,8 @@ struct ospf_network
 {
   /* Area ID. */
   struct in_addr area_id;
-
+  int format;
+  
   /* Interface associated with network. */
   struct interface *ifp;
 };

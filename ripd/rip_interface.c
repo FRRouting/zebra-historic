@@ -1261,9 +1261,10 @@ rip_passive_interface_clean ()
 /* RIP enable network or interface configuration. */
 DEFUN (rip_network,
        rip_network_cmd,
-       "network IPV4_ADDR",
-       "Enable RIP\n"
-       "IP prefix or interface name\n")
+       "network (A.B.C.D/M|WORD)",
+       "Enable routing on an IP network\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Interface name\n")
 {
   int ret;
   struct prefix_ipv4 p;
@@ -1290,10 +1291,11 @@ DEFUN (rip_network,
 /* RIP enable network or interface configuration. */
 DEFUN (no_rip_network,
        no_rip_network_cmd,
-       "no network IPV4_ADDR",
+       "no network (A.B.C.D/M|WORD)",
        NO_STR
-       "Disable RIP\n"
-       "IP prefix or interface name\n")
+       "Enable routing on an IP network\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Interface name\n")
 {
   int ret;
   struct prefix_ipv4 p;
@@ -1321,8 +1323,8 @@ DEFUN (no_rip_network,
 DEFUN (rip_neighbor,
        rip_neighbor_cmd,
        "neighbor A.B.C.D",
-       "RIP neighbor router address specification\n"
-       "Address of the neighbor router\n")
+       "Specify a neighbor router\n"
+       "Neighbor address\n")
 {
   int ret;
   struct prefix_ipv4 p;
@@ -1345,8 +1347,8 @@ DEFUN (no_rip_neighbor,
        no_rip_neighbor_cmd,
        "no neighbor A.B.C.D",
        NO_STR
-       "RIP neighbor router address specification\n"
-       "Address of the neighbor router\n")
+       "Specify a neighbor router\n"
+       "Neighbor address\n")
 {
   int ret;
   struct prefix_ipv4 p;
@@ -1367,10 +1369,10 @@ DEFUN (no_rip_neighbor,
 DEFUN (ip_rip_receive_version,
        ip_rip_receive_version_cmd,
        "ip rip receive version (1|2)",
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1397,10 +1399,10 @@ DEFUN (ip_rip_receive_version,
 DEFUN (ip_rip_receive_version_1,
        ip_rip_receive_version_1_cmd,
        "ip rip receive version 1 2",
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1418,10 +1420,10 @@ DEFUN (ip_rip_receive_version_1,
 DEFUN (ip_rip_receive_version_2,
        ip_rip_receive_version_2_cmd,
        "ip rip receive version 2 1",
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n"
        "RIP version 2\n"
        "RIP version 1\n")
 {
@@ -1441,9 +1443,9 @@ DEFUN (no_ip_rip_receive_version,
        "no ip rip receive version",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n")
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1458,10 +1460,10 @@ DEFUN (no_ip_rip_receive_version,
 DEFUN (ip_rip_send_version,
        ip_rip_send_version_cmd,
        "ip rip send version (1|2)",
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1488,10 +1490,10 @@ DEFUN (ip_rip_send_version,
 DEFUN (ip_rip_send_version_1,
        ip_rip_send_version_1_cmd,
        "ip rip send version 1 2",
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 {
@@ -1509,10 +1511,10 @@ DEFUN (ip_rip_send_version_1,
 DEFUN (ip_rip_send_version_2,
        ip_rip_send_version_2_cmd,
        "ip rip send version 2 1",
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n"
        "RIP version 2\n"
        "RIP version 1\n")
 {
@@ -1532,9 +1534,9 @@ DEFUN (no_ip_rip_send_version,
        "no ip rip send version",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n")
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1550,11 +1552,11 @@ DEFUN (ip_rip_authentication_mode,
        ip_rip_authentication_mode_cmd,
        "ip rip authentication mode (md5|text)",
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication mode\n"
-       "MD5 authentication\n"
-       "Simple text authentication\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication mode\n"
+       "Keyed message digest\n"
+       "Clear text authentication\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1580,9 +1582,9 @@ DEFUN (no_ip_rip_authentication_mode,
        "no ip rip authentication mode",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication mode\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication mode\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1601,20 +1603,20 @@ ALIAS (no_ip_rip_authentication_mode,
        "no ip rip authentication mode (md5|text)",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication mode\n"
-       "MD5 authentication\n"
-       "Simple text authentication\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication mode\n"
+       "Keyed message digest\n"
+       "Clear text authentication\n")
 
 DEFUN (ip_rip_authentication_string,
        ip_rip_authentication_string_cmd,
-       "ip rip authentication string STRING",
+       "ip rip authentication string LINE",
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication string setting\n"
-       "RIP authentication string\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication string\n"
+       "Authentication string\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1645,13 +1647,12 @@ DEFUN (ip_rip_authentication_string,
 
 DEFUN (no_ip_rip_authentication_string,
        no_ip_rip_authentication_string_cmd,
-       "no ip rip authentication string STRING",
+       "no ip rip authentication string",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication string setting\n"
-       "RIP authentication string\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication string\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1669,21 +1670,22 @@ DEFUN (no_ip_rip_authentication_string,
 
 ALIAS (no_ip_rip_authentication_string,
        no_ip_rip_authentication_string2_cmd,
-       "no ip rip authentication string",
+       "no ip rip authentication string LINE",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication string setting\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication string\n"
+       "Authentication string\n")
 
 DEFUN (ip_rip_authentication_key_chain,
        ip_rip_authentication_key_chain_cmd,
-       "ip rip authentication key-chain KEY-CHAIN",
+       "ip rip authentication key-chain LINE",
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "Key chain configuration\n"
-       "Key chain name\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication key-chain\n"
+       "name of key-chain\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1708,13 +1710,12 @@ DEFUN (ip_rip_authentication_key_chain,
 
 DEFUN (no_ip_rip_authentication_key_chain,
        no_ip_rip_authentication_key_chain_cmd,
-       "no ip rip authentication key-chain KEY-CHAIN",
+       "no ip rip authentication key-chain",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "Key chain configuration\n"
-       "Key chain name\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication key-chain\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1732,12 +1733,13 @@ DEFUN (no_ip_rip_authentication_key_chain,
 
 ALIAS (no_ip_rip_authentication_key_chain,
        no_ip_rip_authentication_key_chain2_cmd,
-       "no ip rip authentication key-chain",
+       "no ip rip authentication key-chain LINE",
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "Key chain configuration\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication key-chain\n"
+       "name of key-chain\n")
 
 DEFUN (rip_split_horizon,
        rip_split_horizon_cmd,
@@ -1760,7 +1762,7 @@ DEFUN (no_rip_split_horizon,
        "no ip split-horizon",
        NO_STR
        IP_STR
-       "Do not perform split horizon\n")
+       "Perform split horizon\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;

@@ -401,7 +401,7 @@ rt_ioctl.o: rt_ioctl.c ../lib/prefix.h ../lib/log.h
 rt_netlink.o: rt_netlink.c ../lib/linklist.h ../lib/if.h ../lib/log.h \
  ../lib/prefix.h connected.h rib.h ../zebra/zserv.h \
  ../zebra/redistribute.h ../lib/table.h ../zebra/interface.h \
- ../lib/thread.h
+ ../zebra/debug.h ../lib/thread.h
 rt_socket.o: rt_socket.c ../lib/if.h ../lib/linklist.h ../lib/prefix.h \
  ../lib/sockunion.h ../lib/log.h ../lib/str.h
 rtadv.o: rtadv.c ../lib/memory.h ../lib/sockopt.h ../lib/thread.h \

@@ -278,7 +278,7 @@ interface_down (struct thread *thread)
 int
 dr_election (struct ospf6_interface *ospf6_interface)
 {
-  list candidate_list = list_init ();
+  list candidate_list = list_new ();
   listnode i, j, n;
   ifid_t prevdr, prevbdr, dr = 0, bdr;
   struct ospf6_neighbor *nbpi, *nbpj, myself, *nbr;
@@ -320,7 +320,7 @@ step_two:
         continue;
       if (nbpi->bdr == nbpi->rtr_id)
         declare++;
-      list_add_node (candidate_list, nbpi);
+      listnode_add (candidate_list, nbpi);
     }
 
   if (myself.rtr_pri)
@@ -329,7 +329,7 @@ step_two:
         {
           if (myself.bdr == myself.rtr_id)
             declare++;
-          list_add_node (candidate_list, &myself);
+          listnode_add (candidate_list, &myself);
         }
     }
 
@@ -348,12 +348,12 @@ step_two:
           int deleted = 0;
           if (nbpi->bdr != nbpi->rtr_id)
             {
-              list_delete_by_val (candidate_list, nbpi);
+              listnode_delete (candidate_list, nbpi);
               deleted++;
             }
           if (nbpj->bdr != nbpj->rtr_id)
             {
-              list_delete_by_val (candidate_list, nbpj);
+              listnode_delete (candidate_list, nbpj);
               deleted++;
             }
           if (deleted)
@@ -361,24 +361,24 @@ step_two:
         }
       if (nbpi->rtr_pri > nbpj->rtr_pri)
         {
-          list_delete_by_val (candidate_list, nbpj);
+          listnode_delete (candidate_list, nbpj);
           continue;
         }
       else if (nbpi->rtr_pri < nbpj->rtr_pri)
         {
-          list_delete_by_val (candidate_list, nbpi);
+          listnode_delete (candidate_list, nbpi);
           continue;
         }
       else /* equal, case of tie */
         {
           if (nbpi->rtr_id > nbpj->rtr_id)
             {
-              list_delete_by_val (candidate_list, nbpj);
+              listnode_delete (candidate_list, nbpj);
               continue;
             }
           else if (nbpi->rtr_id < nbpj->rtr_id)
             {
-              list_delete_by_val (candidate_list, nbpi);
+              listnode_delete (candidate_list, nbpi);
               continue;
             }
           else
@@ -413,7 +413,7 @@ step_two:
       if (nbpi->dr == nbpi->rtr_id)
         {
           declare++;
-          list_add_node (candidate_list, nbpi);
+          listnode_add (candidate_list, nbpi);
         }
     }
   if (myself.rtr_pri)
@@ -421,7 +421,7 @@ step_two:
       if (myself.dr == myself.rtr_id)
         {
           declare++;
-          list_add_node (candidate_list, &myself);
+          listnode_add (candidate_list, &myself);
         }
     }
 

@@ -2812,9 +2812,9 @@ cmd_init (int terminal)
       install_element (ENABLE_NODE, &config_disable_cmd);
       install_element (ENABLE_NODE, &config_terminal_cmd);
       install_element (ENABLE_NODE, &show_running_config_cmd);
+      install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
     }
   install_element (ENABLE_NODE, &show_startup_config_cmd);
-  install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
   install_element (ENABLE_NODE, &config_terminal_length_cmd);
   install_element (ENABLE_NODE, &config_terminal_no_length_cmd);

@@ -92,7 +92,7 @@ ospf6_prefix_add (list l, struct ospf6_prefix *add)
   if (already)
     return;
 
-  list_add_node (l, add);
+  listnode_add (l, add);
 }
 
 #if 0

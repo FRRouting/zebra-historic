@@ -53,10 +53,10 @@ make_vertex (struct ospf6_lsa *lsa)
             (unsigned long) ntohl (v->vtx_id[1]));
 
   v->vtx_lsa = lsa;
-  v->vtx_nexthops = list_init ();
+  v->vtx_nexthops = list_new ();
   v->vtx_distance = 0;
-  v->vtx_path = list_init ();
-  v->vtx_parent = list_init ();
+  v->vtx_path = list_new ();
+  v->vtx_parent = list_new ();
   v->vtx_depth = 0;
 
   return v;
@@ -66,9 +66,9 @@ static int
 vertex_free (struct vertex *v)
 {
 
-  list_delete_all (v->vtx_nexthops);
-  list_delete_all (v->vtx_path);
-  list_delete_all (v->vtx_parent);
+  list_delete (v->vtx_nexthops);
+  list_delete (v->vtx_path);
+  list_delete (v->vtx_parent);
 
   XFREE (MTYPE_OSPF6_ROUTE, v);
   return 0;
@@ -150,13 +150,13 @@ spf_install (struct vertex *v, struct ospf6_area *area)
   for (n = listhead (v->vtx_parent); n; nextnode (n))
     {
       parent = getdata (n);
-      list_add_node (parent->vtx_path, v);
+      listnode_add (parent->vtx_path, v);
       nexthop_add_from_vertex (v, parent, v->vtx_nexthops);
     }
 
-  list_add_node (area->spftree.searchlist[hash (v->vtx_id[0])]
+  listnode_add (area->spftree.searchlist[hash (v->vtx_id[0])]
                                          [hash (v->vtx_id[1])], v);
-  list_add_node (area->spftree.depthlist [v->vtx_depth], v);
+  listnode_add (area->spftree.depthlist [v->vtx_depth], v);
 
   if (v->vtx_depth != 0) /* don't install root to routing table */
     transit_vertex_rtable_install (v, area);
@@ -180,7 +180,7 @@ spf_init (struct ospf6_area *area)
       for (j = 0; j < HASHVAL; j++)
         {
           if (area->spftree.searchlist[i][j] == NULL)
-            area->spftree.searchlist[i][j] = list_init();
+            area->spftree.searchlist[i][j] = list_new ();
 
           while (listcount (area->spftree.searchlist[i][j]))
             {
@@ -196,7 +196,7 @@ spf_init (struct ospf6_area *area)
   for (i = 0; i < MAXDEPTH; i++)
     {
       if (area->spftree.depthlist[i] == NULL)
-        area->spftree.depthlist[i] = list_init();
+        area->spftree.depthlist[i] = list_new ();
 
       while (listcount (area->spftree.depthlist[i]))
         {
@@ -288,7 +288,7 @@ router_link (struct vertex *V)
       W = make_vertex(w_lsa);
       assert (W);
       W->vtx_distance = V->vtx_distance + ntohs (currentlink->rlsd_metric);
-      list_add_node (W->vtx_parent, V);
+      listnode_add (W->vtx_parent, V);
       W->vtx_depth = V->vtx_depth + 1;
 
       currentlink++;
@@ -330,7 +330,7 @@ router_link (struct vertex *V)
       W = make_vertex(w_lsa);
       assert (W);
       W->vtx_distance = V->vtx_distance + ntohs (currentlink->rlsd_metric);
-      list_add_node (W->vtx_parent, V);
+      listnode_add (W->vtx_parent, V);
       W->vtx_depth = V->vtx_depth + 1;
 
       currentlink++;
@@ -404,7 +404,7 @@ network_link (struct vertex *V)
   W = make_vertex(w_lsa);
   assert (W);
   W->vtx_distance = V->vtx_distance + 0;
-  list_add_node (W->vtx_parent, V);
+  listnode_add (W->vtx_parent, V);
   W->vtx_depth = V->vtx_depth + 1;
 
   currentlink++;
@@ -434,7 +434,7 @@ spf_list_add_list (list l, list m)
   listnode n;
 
   for (n = listhead (m); n; nextnode (n))
-    list_add_node (l, getdata (n));
+    listnode_add (l, getdata (n));
 
   return;
 }
@@ -462,7 +462,7 @@ spf_calculation (struct thread *thread)
   /* (1) */
   if (spf_init (area) < 0)
     return -1;
-  candidatelist = list_init ();
+  candidatelist = list_new ();
   V = area->spftree.root;             /* Myself */
 
   /* (2) */
@@ -512,7 +512,7 @@ spf_calculation (struct thread *thread)
                     }
                   if (p->vtx_distance > W->vtx_distance)
                     {
-                      list_delete_by_val (candidatelist, p);
+                      listnode_delete (candidatelist, p);
                       break;
                     }
                   if (p->vtx_distance == W->vtx_distance)
@@ -529,7 +529,7 @@ spf_calculation (struct thread *thread)
                     }
                 }
             }
-          list_add_node (candidatelist, W);
+          listnode_add (candidatelist, W);
 
         not_candidate:
         }
@@ -550,7 +550,7 @@ spf_calculation (struct thread *thread)
                    IS_VTX_ROUTER_TYPE (closest))
             closest = p;
         }
-      list_delete_by_val (candidatelist, closest);
+      listnode_delete (candidatelist, closest);
       spf_install (closest, area);
       V = closest;
     }
@@ -593,7 +593,7 @@ ospf6_spf_calculation (u_int32_t area_id)
   /* (1) */
   if (spf_init (o6a) < 0)
     return -1;
-  candidatelist = list_init ();
+  candidatelist = list_new ();
   V = o6a->spftree.root;             /* Myself */
 
   /* (2) */
@@ -643,7 +643,7 @@ ospf6_spf_calculation (u_int32_t area_id)
                     }
                   if (p->vtx_distance > W->vtx_distance)
                     {
-                      list_delete_by_val (candidatelist, p);
+                      listnode_delete (candidatelist, p);
                       break;
                     }
                   if (p->vtx_distance == W->vtx_distance)
@@ -660,7 +660,7 @@ ospf6_spf_calculation (u_int32_t area_id)
                     }
                 }
             }
-          list_add_node (candidatelist, W);
+          listnode_add (candidatelist, W);
 
         not_candidate:
         }
@@ -681,7 +681,7 @@ ospf6_spf_calculation (u_int32_t area_id)
                    IS_VTX_ROUTER_TYPE (closest))
             closest = p;
         }
-      list_delete_by_val (candidatelist, closest);
+      listnode_delete (candidatelist, closest);
       spf_install (closest, o6a);
       V = closest;
     }

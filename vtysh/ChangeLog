@@ -1,3 +1,7 @@
+2000-10-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh_user.c: Change to use linklist.c.
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am (noinst_HEADERS): Add vtysh_user.h.

@@ -54,10 +54,10 @@ struct ospf6_lsa *
 ospf6_neighbor_dbdesc_lsa_lookup (struct ospf6_lsa *lsa,
                                   struct ospf6_neighbor *o6n)
 {
-  if (list_lookup_node (o6n->dbdesc_lsa, lsa))
+  if (listnode_lookup (o6n->dbdesc_lsa, lsa))
     {
 #ifndef NDEBUG
-      if (!list_lookup_node (lsa->dbdesc_neighbor, o6n))
+      if (!listnode_lookup (lsa->dbdesc_neighbor, o6n))
         assert (0);
 #endif /* NDEBUG */
       return lsa;
@@ -73,8 +73,8 @@ ospf6_neighbor_dbdesc_lsa_add (struct ospf6_lsa *lsa,
   if (ospf6_neighbor_summary_lookup (lsa, o6n))
     return;
 
-  list_add_node (o6n->dbdesc_lsa, lsa);
-  list_add_node (lsa->dbdesc_neighbor, o6n);
+  listnode_add (o6n->dbdesc_lsa, lsa);
+  listnode_add (lsa->dbdesc_neighbor, o6n);
   ospf6_lsa_lock (lsa);
 
 #if 0
@@ -94,8 +94,8 @@ ospf6_neighbor_dbdesc_lsa_remove (struct ospf6_lsa *lsa,
   if (! ospf6_neighbor_dbdesc_lsa_lookup (lsa, o6n))
     return;
 
-  list_delete_by_val (o6n->dbdesc_lsa, lsa);
-  list_delete_by_val (lsa->dbdesc_neighbor, o6n);
+  listnode_delete (o6n->dbdesc_lsa, lsa);
+  listnode_delete (lsa->dbdesc_neighbor, o6n);
   ospf6_lsa_unlock (lsa);
 
 #if 0
@@ -127,10 +127,10 @@ struct ospf6_lsa *
 ospf6_neighbor_summary_lookup (struct ospf6_lsa *lsa,
                                struct ospf6_neighbor *o6n)
 {
-  if (list_lookup_node (o6n->summarylist, lsa))
+  if (listnode_lookup (o6n->summarylist, lsa))
     {
 #ifndef NDEBUG
-      if (!list_lookup_node (lsa->summary_nbr, o6n))
+      if (! listnode_lookup (lsa->summary_nbr, o6n))
         assert (0);
 #endif /* NDEBUG */
       return lsa;
@@ -146,8 +146,8 @@ ospf6_neighbor_summary_add (struct ospf6_lsa *lsa,
   if (ospf6_neighbor_summary_lookup (lsa, o6n))
     return;
 
-  list_add_node (o6n->summarylist, lsa);
-  list_add_node (lsa->summary_nbr, o6n);
+  listnode_add (o6n->summarylist, lsa);
+  listnode_add (lsa->summary_nbr, o6n);
   ospf6_lsa_lock (lsa);
 
 #if 0
@@ -167,8 +167,8 @@ ospf6_neighbor_summary_remove (struct ospf6_lsa *lsa,
   if (! ospf6_neighbor_summary_lookup (lsa, o6n))
     return;
 
-  list_delete_by_val (o6n->summarylist, lsa);
-  list_delete_by_val (lsa->summary_nbr, o6n);
+  listnode_delete (o6n->summarylist, lsa);
+  listnode_delete (lsa->summary_nbr, o6n);
   ospf6_lsa_unlock (lsa);
 
 #if 0
@@ -212,7 +212,7 @@ ospf6_neighbor_request_lookup (struct ospf6_lsa *lsa,
                             (struct ospf6_lsa_header *)lsa->lsa_hdr))
         {
 #ifndef NDEBUG
-          if (! list_lookup_node (p->request_nbr, o6n))
+          if (! listnode_lookup (p->request_nbr, o6n))
           assert (0);
 #endif /* NDEBUG */
           return p;
@@ -229,8 +229,8 @@ ospf6_neighbor_request_add (struct ospf6_lsa *lsa,
   if (ospf6_neighbor_request_lookup (lsa, o6n))
     return;
 
-  list_add_node (o6n->requestlist, lsa);
-  list_add_node (lsa->request_nbr, o6n);
+  listnode_add (o6n->requestlist, lsa);
+  listnode_add (lsa->request_nbr, o6n);
   ospf6_lsa_lock (lsa);
 
 #if 0
@@ -250,8 +250,8 @@ ospf6_neighbor_request_remove (struct ospf6_lsa *lsa,
   if (! ospf6_neighbor_request_lookup (lsa, o6n))
     return;
 
-  list_delete_by_val (o6n->requestlist, lsa);
-  list_delete_by_val (lsa->request_nbr, o6n);
+  listnode_delete (o6n->requestlist, lsa);
+  listnode_delete (lsa->request_nbr, o6n);
   ospf6_lsa_unlock (lsa);
 
 #if 0
@@ -283,10 +283,10 @@ struct ospf6_lsa *
 ospf6_neighbor_retrans_lookup (struct ospf6_lsa *lsa,
                                struct ospf6_neighbor *o6n)
 {
-  if (list_lookup_node (o6n->retranslist, lsa))
+  if (listnode_lookup (o6n->retranslist, lsa))
     {
 #ifndef NDEBUG
-      if (!list_lookup_node (lsa->retrans_nbr, o6n))
+      if (! listnode_lookup (lsa->retrans_nbr, o6n))
         assert (0);
 #endif /* NDEBUG */
       return lsa;
@@ -302,8 +302,8 @@ ospf6_neighbor_retrans_add (struct ospf6_lsa *lsa,
   if (ospf6_neighbor_retrans_lookup (lsa, o6n))
     return;
 
-  list_add_node (o6n->retranslist, lsa);
-  list_add_node (lsa->retrans_nbr, o6n);
+  listnode_add (o6n->retranslist, lsa);
+  listnode_add (lsa->retrans_nbr, o6n);
   ospf6_lsa_lock (lsa);
 
 #if 0
@@ -325,8 +325,8 @@ ospf6_neighbor_retrans_remove (struct ospf6_lsa *lsa,
     return;
 
   /* remove from retrans list */
-  list_delete_by_val (o6n->retranslist, lsa);
-  list_delete_by_val (lsa->retrans_nbr, o6n);
+  listnode_delete (o6n->retranslist, lsa);
+  listnode_delete (lsa->retrans_nbr, o6n);
   ospf6_lsa_unlock (lsa);
 
 #if 0
@@ -418,11 +418,11 @@ ospf6_neighbor_create (u_int32_t router_id)
   inet_ntop (AF_INET, &router_id, new->str, sizeof (new->str));
   new->inactivity_timer = (struct thread *)NULL;
 
-  new->summarylist = list_init ();
-  new->retranslist = list_init ();
-  new->requestlist = list_init ();
+  new->summarylist = list_new ();
+  new->retranslist = list_new ();
+  new->requestlist = list_new ();
 
-  new->dbdesc_lsa = list_init ();
+  new->dbdesc_lsa = list_new ();
 
   return new;
 }

@@ -27,6 +27,7 @@
 /* For debug statement. */
 unsigned long zebra_debug_event;
 unsigned long zebra_debug_packet;
+unsigned long zebra_debug_kernel;
 
 DEFUN (show_debugging_zebra,
        show_debugging_zebra_cmd,
@@ -60,6 +61,9 @@ DEFUN (show_debugging_zebra,
 		     VTY_NEWLINE);
 	}
     }
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    vty_out (vty, "  Zebra kernel debugging is on%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -125,6 +129,17 @@ DEFUN (debug_zebra_packet_detail,
   return CMD_SUCCESS;
 }
 
+DEFUN (debug_zebra_kernel,
+       debug_zebra_kernel_cmd,
+       "debug zebra kernel",
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra between kernel interface\n")
+{
+  zebra_debug_kernel = ZEBRA_DEBUG_KERNEL;
+  return CMD_SUCCESS;
+}
+
 DEFUN (no_debug_zebra_events,
        no_debug_zebra_events_cmd,
        "no debug zebra events",
@@ -163,6 +178,18 @@ DEFUN (no_debug_zebra_packet_direct,
     zebra_debug_packet &= ~ZEBRA_DEBUG_SEND;
   if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
     zebra_debug_packet &= ~ZEBRA_DEBUG_RECV;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_zebra_kernel,
+       no_debug_zebra_kernel_cmd,
+       "no debug zebra kernel",
+       NO_STR
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra between kernel interface\n")
+{
+  zebra_debug_kernel = 0;
   return CMD_SUCCESS;
 }
 
@@ -206,6 +233,11 @@ config_write_debug (struct vty *vty)
 	  write++;
 	}
     }
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    {
+      vty_out (vty, "debug zebra kernel%s", VTY_NEWLINE);
+      write++;
+    }
   return write;
 }
 
@@ -224,13 +256,17 @@ zebra_debug_init ()
   install_element (ENABLE_NODE, &debug_zebra_packet_cmd);
   install_element (ENABLE_NODE, &debug_zebra_packet_direct_cmd);
   install_element (ENABLE_NODE, &debug_zebra_packet_detail_cmd);
+  install_element (ENABLE_NODE, &debug_zebra_kernel_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_events_cmd);
   install_element (ENABLE_NODE, &no_debug_zebra_packet_cmd);
+  install_element (ENABLE_NODE, &no_debug_zebra_kernel_cmd);
 
   install_element (CONFIG_NODE, &debug_zebra_events_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_direct_cmd);
   install_element (CONFIG_NODE, &debug_zebra_packet_detail_cmd);
+  install_element (CONFIG_NODE, &debug_zebra_kernel_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_events_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_packet_cmd);
+  install_element (CONFIG_NODE, &no_debug_zebra_kernel_cmd);
 }

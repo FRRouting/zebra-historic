@@ -23,7 +23,6 @@
 
 #include "command.h"
 #include "prefix.h"
-#include "newlist.h"
 #include "table.h"
 #include "log.h"
 #include "memory.h"

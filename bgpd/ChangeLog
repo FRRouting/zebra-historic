@@ -1,3 +1,54 @@
+2000-10-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_announce_check): attr->nexthop empty check
+	should be done by attr->nexthop.s_addr instead of strcmp.
+
+2000-10-18  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_zebra.c (zebra_read_ipv4): Pass nexthop value to
+	bgp_redistribute_add().
+
+	* bgp_nexthop.c (bgp_multiaccess_check_v4): New function for
+	checking IPv4 multiaccess nexthop.
+
+	* bgp_route.c (bgp_announce_check): In case of the nexthop is
+	reachable on multiaccess media, do not change nexthop.
+	(bgp_redistribute_add): Set nexthop when the value is passed.
+
+2000-10-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c (bgp_timer_set): If peer is passive mode, do not set
+	connect timer.
+	(bgp_start): If the peer is passive mode, force to move to Active
+	mode.
+
+2000-10-17  Horms <horms@vergenet.net>
+
+	* bgp_debug.c (debug_bgp_fsm): Fix typo.
+
+2000-10-17  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c: "show ipv6 bgp" route display improvement.
+
+2000-10-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (neighbor_routes): Allocate sockunion for callback
+	function.
+	(bgp_show_neighbor_route): Remove static declaration for union
+	sockunion.
+
+	* bgpd.c (peer_update_source_set): Clean previously allocated
+	memory before allocate new one.
+
+2000-10-03  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (neighbor_routes): Add show neighbor's routes
+	command.
+	"show ip bgp neighbors (A.B.C.D|X:X::X:X) routes"
+	"show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X) routes"
+	"show ipv6 bgp neighbors (A.B.C.D|X:X::X:X) routes"
+	"show ipv6 mbgp neighbors (A.B.C.D|X:X::X:X) routes"
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.89 is released.

@@ -28,29 +28,17 @@
 
 #include "if.h"
 #include "log.h"
-#include "newlist.h"
 #include "prefix.h"
 #include "command.h"
 #include "smux.h"
 
 #include "bgpd/bgpd.h"
 
-#define BGP4MIB 1,3,6,1,2,1,15
-/* #define BGPDMIB 1,3,6,1,4,1,4,3,1,4 */
-#define BGPDMIB 1,3,6,1,4,1,3317,1,2,2
-
 /* BGP4-MIB. */
-oid bgp_oid [] = { BGP4MIB };
-oid bgpd_oid [] = { BGPDMIB };
+#define BGP4MIB 1,3,6,1,2,1,15
 
-/* Hook functions. */
-u_char * bgpVersion ();
-u_char * bgpLocalAs ();
-u_char * bgpPeerTable ();
-u_char * bgpRcvdPathAttrTable ();
-u_char * bgpIdentifier ();
-u_char * bgp4PathAttrTable ();
-u_char * bgpTraps ();
+/* Zebra enterprise BGP MIB. */
+#define BGPDMIB 1,3,6,1,4,1,3317,1,2,2
 
 /* bgpPeerTable */
 #define BGPPEERIDENTIFIER                     1
@@ -107,39 +95,81 @@ u_char * bgpTraps ();
 #define OCTET_STRING ASN_OCTET_STR
 #define IPADDRESS ASN_IPADDRESS
 #define GAUGE32 ASN_UNSIGNED
+
+/* Declare static local variables for convenience. */
+SNMP_LOCAL_VARIABLES
+
+/* Hook functions. */
+u_char *bgpVersion ();
+u_char *bgpLocalAs ();
+u_char *bgpPeerTable ();
+u_char *bgpRcvdPathAttrTable ();
+u_char *bgpIdentifier ();
+u_char *bgp4PathAttrTable ();
+u_char *bgpTraps ();
 
 struct variable bgp_variables[] = 
 {
-  {0, OCTET_STRING, RONLY, bgpVersion, 1, {1}},
-  {0, INTEGER, RONLY, bgpLocalAs, 1, {2}},
-  {BGPPEERIDENTIFIER, IPADDRESS, RONLY, bgpPeerTable, 3, {3, 1, 1}},
-  {BGPPEERSTATE, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 2}},
-  {BGPPEERADMINSTATUS, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 3}},
-  {BGPPEERNEGOTIATEDVERSION, INTEGER32, RONLY, bgpPeerTable, 3, {3, 1, 4}},
-  {BGPPEERLOCALADDR, IPADDRESS, RONLY, bgpPeerTable, 3, {3, 1, 5}},
-  {BGPPEERLOCALPORT, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 6}},
-  {BGPPEERREMOTEADDR, IPADDRESS, RONLY, bgpPeerTable, 3, {3, 1, 7}},
-  {BGPPEERREMOTEPORT, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 8}},
-  {BGPPEERREMOTEAS, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 9}},
-  {BGPPEERINUPDATES, COUNTER32, RONLY, bgpPeerTable, 3, {3, 1, 10}},
-  {BGPPEEROUTUPDATES, COUNTER32, RONLY, bgpPeerTable, 3, {3, 1, 11}},
-  {BGPPEERINTOTALMESSAGES, COUNTER32, RONLY, bgpPeerTable, 3, {3, 1, 12}},
-  {BGPPEEROUTTOTALMESSAGES, COUNTER32, RONLY, bgpPeerTable, 3, {3, 1, 13}},
-  {BGPPEERLASTERROR, OCTET_STRING, RONLY, bgpPeerTable, 3, {3, 1, 14}},
-  {BGPPEERFSMESTABLISHEDTRANSITIONS, COUNTER32, RONLY, bgpPeerTable, 3, {3, 1, 15}},
-  {BGPPEERFSMESTABLISHEDTIME, GAUGE32, RONLY, bgpPeerTable, 3, {3, 1, 16}},
-  {BGPPEERCONNECTRETRYINTERVAL, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 17}},
-  {BGPPEERHOLDTIME, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 18}},
-  {BGPPEERKEEPALIVE, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 19}},
-  {BGPPEERHOLDTIMECONFIGURED, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 20}},
-  {BGPPEERKEEPALIVECONFIGURED, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 21}},
-  {BGPPEERMINASORIGINATIONINTERVAL, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 22}},
-  {BGPPEERMINROUTEADVERTISEMENTINTERVAL, INTEGER, RONLY, bgpPeerTable, 3, {3, 1, 23}},
-  {BGPPEERINUPDATEELAPSEDTIME, GAUGE32, RONLY, bgpPeerTable, 3, {3, 1, 24}},
-  {0, IPADDRESS, RONLY, bgpIdentifier, 1, {4}},
-  {BGPPATHATTRPEER, IPADDRESS, RONLY, bgpRcvdPathAttrTable, 3, {5, 1, 1}},
-  {BGPPATHATTRDESTNETWORK, IPADDRESS, RONLY, bgpRcvdPathAttrTable, 3, {5, 1, 2}},
-  {BGPPATHATTRORIGIN, INTEGER, RONLY, bgpRcvdPathAttrTable, 3, {5, 1, 3}},
+  {BGPVERSION,                OCTET_STRING, RONLY, bgpVersion,
+   1, {1}},
+  {BGPLOCALAS,                INTEGER, RONLY, bgpLocalAs,
+   1, {2}},
+  {BGPPEERIDENTIFIER,         IPADDRESS, RONLY, bgpPeerTable,
+   3, {3, 1, 1}},
+  {BGPPEERSTATE,              INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 2}},
+  {BGPPEERADMINSTATUS,        INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 3}},
+  {BGPPEERNEGOTIATEDVERSION,  INTEGER32, RONLY, bgpPeerTable,
+   3, {3, 1, 4}},
+  {BGPPEERLOCALADDR,          IPADDRESS, RONLY, bgpPeerTable,
+   3, {3, 1, 5}},
+  {BGPPEERLOCALPORT,          INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 6}},
+  {BGPPEERREMOTEADDR,         IPADDRESS, RONLY, bgpPeerTable,
+   3, {3, 1, 7}},
+  {BGPPEERREMOTEPORT,         INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 8}},
+  {BGPPEERREMOTEAS,           INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 9}},
+  {BGPPEERINUPDATES,          COUNTER32, RONLY, bgpPeerTable,
+   3, {3, 1, 10}},
+  {BGPPEEROUTUPDATES,         COUNTER32, RONLY, bgpPeerTable,
+   3, {3, 1, 11}},
+  {BGPPEERINTOTALMESSAGES,    COUNTER32, RONLY, bgpPeerTable,
+   3, {3, 1, 12}},
+  {BGPPEEROUTTOTALMESSAGES,   COUNTER32, RONLY, bgpPeerTable,
+   3, {3, 1, 13}},
+  {BGPPEERLASTERROR,          OCTET_STRING, RONLY, bgpPeerTable,
+   3, {3, 1, 14}},
+  {BGPPEERFSMESTABLISHEDTRANSITIONS, COUNTER32, RONLY, bgpPeerTable,
+   3, {3, 1, 15}},
+  {BGPPEERFSMESTABLISHEDTIME, GAUGE32, RONLY, bgpPeerTable,
+   3, {3, 1, 16}},
+  {BGPPEERCONNECTRETRYINTERVAL, INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 17}},
+  {BGPPEERHOLDTIME,           INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 18}},
+  {BGPPEERKEEPALIVE,          INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 19}},
+  {BGPPEERHOLDTIMECONFIGURED, INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 20}},
+  {BGPPEERKEEPALIVECONFIGURED, INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 21}},
+  {BGPPEERMINASORIGINATIONINTERVAL, INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 22}},
+  {BGPPEERMINROUTEADVERTISEMENTINTERVAL, INTEGER, RONLY, bgpPeerTable,
+   3, {3, 1, 23}},
+  {BGPPEERINUPDATEELAPSEDTIME, GAUGE32, RONLY, bgpPeerTable,
+   3, {3, 1, 24}},
+  {0, IPADDRESS, RONLY, bgpIdentifier,
+   1, {4}},
+  {BGPPATHATTRPEER, IPADDRESS, RONLY, bgpRcvdPathAttrTable,
+   3, {5, 1, 1}},
+  {BGPPATHATTRDESTNETWORK, IPADDRESS, RONLY, bgpRcvdPathAttrTable,
+   3, {5, 1, 2}},
+  {BGPPATHATTRORIGIN, INTEGER, RONLY, bgpRcvdPathAttrTable,
+   3, {5, 1, 3}},
   {BGPPATHATTRASPATH, OCTET_STRING, RONLY, bgpRcvdPathAttrTable, 3, {5, 1, 4}},
   {BGPPATHATTRNEXTHOP, IPADDRESS, RONLY, bgpRcvdPathAttrTable, 3, {5, 1, 5}},
   {BGPPATHATTRINTERASMETRIC, INTEGER32, RONLY, bgpRcvdPathAttrTable, 3, {5, 1, 6}},
@@ -465,6 +495,9 @@ bgpTraps (struct variable *v, oid objid[], size_t *objid_len,
 void
 bgp_snmp_init ()
 {
+  oid bgp_oid [] = { BGP4MIB };
+  oid bgpd_oid [] = { BGPDMIB };
+
   smux_init (bgpd_oid, sizeof (bgpd_oid) / sizeof (oid));
   REGISTER_MIB("mibII/bgp", bgp_variables, variable, bgp_oid);
   smux_start ();

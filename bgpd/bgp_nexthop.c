@@ -318,6 +318,48 @@ zlookup_connect (struct thread *t)
   return 0;
 }
 
+/* Check specified multiaccess next-hop. */
+u_int32_t
+bgp_multiaccess_check_v4 (struct in_addr nexthop, char *peer)
+{
+  struct route_node *rn1;
+  struct route_node *rn2;
+  struct prefix p1;
+  struct prefix p2;
+  struct in_addr addr;
+  int ret;
+
+  ret = inet_aton (peer, &addr);
+  if (! ret)
+    return 0;
+
+  memset (&p1, 0, sizeof (struct prefix));
+  p1.family = AF_INET;
+  p1.prefixlen = IPV4_MAX_BITLEN;
+  p1.u.prefix4 = nexthop;
+  memset (&p2, 0, sizeof (struct prefix));
+  p2.family = AF_INET;
+  p2.prefixlen = IPV4_MAX_BITLEN;
+  p2.u.prefix4 = addr;
+
+  /* If bgp scan is not enabled, return invalid. */
+  if (zlookup->sock < 0)
+    return 0;
+
+  rn1 = route_node_match (bgp_connected, &p1);
+  if (! rn1)
+    return 0;
+  
+  rn2 = route_node_match (bgp_connected, &p2);
+  if (! rn2)
+    return 0;
+
+  if (rn1 == rn2)
+    return 1;
+
+  return 0;
+}
+
 DEFUN (bgp_scan_time,
        bgp_scan_time_cmd,
        "bgp scan-time <5-60>",

@@ -256,13 +256,6 @@ vtysh_execute (char *line)
   cmd_free_strvec (vline);
 }
 
-void
-vtysh_completion_display_matches_hook (char **matches, int num_matches,
-				       int max_length)
-{
-  printf ("hogehoge\n");
-}
-
 /* We don't care about the point of the cursor when '?' is typed. */
 int
 vtysh_rl_describe ()

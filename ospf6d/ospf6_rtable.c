@@ -85,7 +85,7 @@ nexthop_unlock (struct ospf6_nexthop *p)
   p->lock--;
   if (p->lock == 0)
     {
-      list_delete_by_val (nexthoplist, p);
+      listnode_delete (nexthoplist, p);
       nexthop_free (p);
     }
   return;
@@ -126,7 +126,7 @@ nexthop_make (unsigned long ifindex, struct in6_addr *ipaddr,
   memcpy (&p->ipaddr, ipaddr, sizeof (p->ipaddr));
   p->advrtr = advrtr;
   nexthop_lock (p);
-  list_add_node (nexthoplist, p);
+  listnode_add (nexthoplist, p);
   return p;
 }
 
@@ -139,7 +139,7 @@ void nexthop_delete (struct ospf6_nexthop *p)
 void nexthop_init ()
 {
   if (!nexthoplist)
-    nexthoplist = list_init ();
+    nexthoplist = list_new ();
   else
     zlog_warn ("*** !nexthoplist already exists");
 }
@@ -150,7 +150,7 @@ void nexthop_finish ()
     zlog_warn ("*** !nexthop memory leak");
   else
     {
-      list_delete_all (nexthoplist);
+      list_delete (nexthoplist);
       nexthoplist = NULL;
     }
 }
@@ -183,7 +183,7 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
               continue;
 
           nexthop_lock (p);
-          list_add_node (l, p);
+          listnode_add (l, p);
         }
       return;
     }
@@ -212,7 +212,7 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
         }
 
       p = nexthop_make (ifindex, &ipaddr, 0);
-      list_add_node (l, p);
+      listnode_add (l, p);
       return;
     }
   else if (dst->vtx_depth == 2)
@@ -260,7 +260,7 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
         }
 
       p = nexthop_make (ifindex, &ipaddr, 0);
-      list_add_node (l, p);
+      listnode_add (l, p);
       return;
     }
   else
@@ -350,7 +350,7 @@ ospf6_route_node_info_make ()
 {
   struct ospf6_route_node_info *new;
   new = ospf6_route_node_info_new ();
-  new->nhlist = list_init ();
+  new->nhlist = list_new ();
   return new;
 }
 
@@ -366,7 +366,7 @@ ospf6_route_node_info_delete (struct ospf6_route_node_info *info)
       nh = (struct ospf6_nexthop *) getdata (n);
       nexthop_unlock (nh);
     }
-  list_delete_all (info->nhlist);
+  list_delete (info->nhlist);
 
   /* free */
   ospf6_route_node_info_free (info);
@@ -411,7 +411,7 @@ ospf6_route_add (struct prefix_ipv6 *dst,
     {
       nh = (struct ospf6_nexthop *) getdata (n);
       nexthop_lock (nh);
-      list_add_node (info_new->nhlist, nh);
+      listnode_add (info_new->nhlist, nh);
     }
 
   if (!info_current)
@@ -458,10 +458,10 @@ ospf6_route_add (struct prefix_ipv6 *dst,
   for (n = listhead (info_new->nhlist); n; nextnode (n))
     {
       nh = (struct ospf6_nexthop *) getdata (n);
-      if (list_lookup_node (info_current->nhlist, nh))
+      if (listnode_lookup (info_current->nhlist, nh))
         continue;
       nexthop_lock (nh);
-      list_add_node (info_current->nhlist, nh);
+      listnode_add (info_current->nhlist, nh);
     }
   ospf6_route_node_info_delete (info_new);
 
@@ -493,10 +493,10 @@ ospf6_route_delete (struct prefix_ipv6 *dst,
           nh = (struct ospf6_nexthop *) getdata (n);
           nexthop_str (nh, nhstr, sizeof (nhstr));
 
-          if (list_lookup_node (info_current->nhlist, nh))
+          if (listnode_lookup (info_current->nhlist, nh))
             {
               o6log.rtable ("delete nexthop %s from %s", nhstr, routestr);
-              list_delete_by_val (info_current->nhlist, nh);
+              listnode_delete (info_current->nhlist, nh);
               nexthop_unlock (nh);
             }
           else
@@ -540,7 +540,7 @@ ospf6_route_delete_node (struct route_node *node)
           nh = (struct ospf6_nexthop *) getdata (n);
           nexthop_unlock (nh);
         }
-      list_delete_all (info->nhlist);
+      list_delete (info->nhlist);
       ospf6_route_node_info_free (info);
       node->info = NULL;
     }
@@ -1583,12 +1583,12 @@ ospf6_route_update_zebra ()
       /* diff nexthop */
       info1 = (struct ospf6_route_node_info *) rn1->info;
       info2 = (struct ospf6_route_node_info *) rn2->info;
-      nhdiff = list_init ();
+      nhdiff = list_new ();
       for (n = listhead (info1->nhlist); n; nextnode (n))
         {
           nh = (struct ospf6_nexthop *) getdata (n);
-          if (!list_lookup_node (info2->nhlist, nh))
-            list_add_node (nhdiff, nh);
+          if (! listnode_lookup (info2->nhlist, nh))
+            listnode_add (nhdiff, nh);
         }
 
       if (listcount (nhdiff))
@@ -1602,7 +1602,7 @@ ospf6_route_update_zebra ()
           ospf6_zebra_route_delete ((struct prefix_ipv6 *)&rn1->p, &infoq);
         }
 
-      list_delete_all (nhdiff);
+      list_delete (nhdiff);
     }
 
   /* added routes update */
@@ -1625,12 +1625,12 @@ ospf6_route_update_zebra ()
       /* diff nexthop */
       info1 = (struct ospf6_route_node_info *) rn1->info;
       info2 = (struct ospf6_route_node_info *) rn2->info;
-      nhdiff = list_init ();
+      nhdiff = list_new ();
       for (n = listhead (info1->nhlist); n; nextnode (n))
         {
           nh = (struct ospf6_nexthop *) getdata (n);
-          if (!list_lookup_node (info2->nhlist, nh))
-            list_add_node (nhdiff, nh);
+          if (! listnode_lookup (info2->nhlist, nh))
+            listnode_add (nhdiff, nh);
         }
 
       if (listcount (nhdiff))
@@ -1644,7 +1644,7 @@ ospf6_route_update_zebra ()
           ospf6_zebra_route_add ((struct prefix_ipv6 *)&rn1->p, &infoq);
         }
 
-      list_delete_all (nhdiff);
+      list_delete (nhdiff);
     }
 }
 

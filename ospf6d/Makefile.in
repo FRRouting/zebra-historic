@@ -466,7 +466,7 @@ ospf6_neighbor.o: ospf6_neighbor.c ospf6d.h ../lib/version.h \
  ospf6_redistribute.h ospf6_top.h ../lib/routemap.h ospf6_area.h \
  ospf6_interface.h ospf6_neighbor.h ospf6_ism.h ospf6_nsm.h \
  ospf6_lsa.h ospf6_lsdb.h ospf6_dbex.h ospf6_network.h ospf6_zebra.h \
- ospf6_dump.h ospf6_routemap.h
+ ospf6_dump.h ospf6_routemap.h ospf6_list.h
 ospf6_network.o: ospf6_network.c ../lib/memory.h ../lib/log.h \
  ../lib/sockunion.h ospf6d.h ../lib/version.h ../lib/linklist.h \
  ../lib/thread.h ../lib/command.h ../lib/vector.h ../lib/vty.h \

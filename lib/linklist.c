@@ -23,10 +23,10 @@
 
 #include "linklist.h"
 #include "memory.h"
-
-/* Initialize linked list : allocate memory and return list */
+
+/* Allocate new list. */
 struct list *
-list_init ()
+list_new ()
 {
   struct list *new;
 
@@ -35,44 +35,43 @@ list_init ()
   return new;
 }
 
-/* Free given list and decrement allocation counter. */
+/* Free list. */
 void
 list_free (struct list *list)
 {
   XFREE (MTYPE_LINK_LIST, list);
 }
 
-/* Internal function to create new listnode structure. */
-static listnode
+/* Allocate new listnode.  Internal use only. */
+static struct listnode *
 listnode_new ()
 {
-  listnode node;
+  struct listnode *node;
 
   node = XMALLOC (MTYPE_LINK_NODE, sizeof (struct listnode));
   memset (node, 0, sizeof (struct listnode));
   return node;
 }
 
-/* Free given listnode and decrement allocation counter. */
-static
-void
-listnode_free (listnode n)
+/* Free listnode. */
+static void
+listnode_free (struct listnode *node)
 {
-  XFREE (MTYPE_LINK_NODE, n);
+  XFREE (MTYPE_LINK_NODE, node);
 }
 
 /* Add new data to the list. */
 void
-list_add_node (struct list *list, void *val)
+listnode_add (struct list *list, void *val)
 {
   struct listnode *node;
 
   node = listnode_new ();
-  /* node->next = NULL;  This is set in listnode_new(). */
+
   node->prev = list->tail;
   node->data = val;
 
-  if (list_isempty (list))
+  if (list->head == NULL)
     list->head = node;
   else
     list->tail->next = node;
@@ -81,8 +80,9 @@ list_add_node (struct list *list, void *val)
   list->count++;
 }
 
+/* Add new node with sort function. */
 void
-list_add_sort_node (struct list *list, void *val)
+listnode_add_sort (struct list *list, void *val)
 {
   struct listnode *n;
   struct listnode *new;
@@ -109,62 +109,20 @@ list_add_sort_node (struct list *list, void *val)
 	    }
 	}
     }
+
   new->prev = list->tail;
+
   if (list->tail)
     list->tail->next = new;
   else
     list->head = new;
+
   list->tail = new;
   list->count++;
 }
 
-/* Delete all listnode from the list. */
+/* Delete specific date pointer from the list. */
 void
-list_delete_all_node (list list)
-{
-  listnode n;
-
-  for (n = listhead (list); n; n = listhead (list))
-    {
-      list_delete_node (list, n);
-    }
-}
-
-/* Delete all node from the list. */
-void
-list_delete_all (list list)
-{
-  list_delete_all_node (list);
-  list_free (list);
-}
-
-/* Delete the node which has the val argument from list. */
-void
-list_delete_by_val (list list, void *val)
-{
-  listnode n;
-
-  for (n = list->head; n; n = n->next)
-    if (n->data == val)
-      {
-	if (n->prev)
-	  n->prev->next = n->next;
-	else
-	  list->head = n->next;
-
-	if (n->next)
-	  n->next->prev = n->prev;
-	else
-	  list->tail = n->prev;
-
-	list->count--;
-	listnode_free (n);
-
-	return;
-      }
-}
-
-void *
 listnode_delete (struct list *list, void *val)
 {
   struct listnode *node;
@@ -185,12 +143,28 @@ listnode_delete (struct list *list, void *val)
 
 	  list->count--;
 	  listnode_free (node);
-	  return val;
+	  return;
 	}
     }
-  return NULL;
 }
 
+/* Delete all listnode from the list. */
+void
+list_delete_all_node (struct list *list)
+{
+  struct listnode *node;
+  struct listnode *next;
+
+  for (node = list->head; node; node = next)
+    {
+      next = node->next;
+      listnode_free (node);
+    }
+  list->head = list->tail = NULL;
+  list->count = 0;
+}
+
+/* Delete all listnode then free list itself. */
 void
 list_delete (struct list *list)
 {
@@ -206,8 +180,36 @@ list_delete (struct list *list)
     }
   list_free (list);
 }
+
+/* Lookup the node which has given data. */
+struct listnode *
+listnode_lookup (struct list *list, void *data)
+{
+  listnode node;
+
+  for (node = list->head; node; nextnode (node))
+    if (data == getdata (node))
+      return node;
+  return NULL;
+}
 
-/* Below three functions are only used in ospfd. */
+/* Delete the node from list.  For ospfd and ospf6d. */
+void
+list_delete_node (list list, listnode node)
+{
+  if (node->prev)
+    node->prev->next = node->next;
+  else
+    list->head = node->next;
+  if (node->next)
+    node->next->prev = node->prev;
+  else
+    list->tail = node->prev;
+  list->count--;
+  listnode_free (node);
+}
+
+/* ospf_spf.c */
 void
 list_add_node_prev (list list, listnode current, void *val)
 {
@@ -228,6 +230,7 @@ list_add_node_prev (list list, listnode current, void *val)
   list->count++;
 }
 
+/* ospf_spf.c */
 void
 list_add_node_next (list list, listnode current, void *val)
 {
@@ -248,53 +251,12 @@ list_add_node_next (list list, listnode current, void *val)
   list->count++;
 }
 
+/* ospf_spf.c */
 void
 list_add_list (struct list *l, struct list *m)
 {
   struct listnode *n;
 
   for (n = listhead (m); n; nextnode (n))
-    list_add_node (l, n->data);
+    listnode_add (l, n->data);
 }
-
-/* Lookup the node which has given data.  For ospfd and ospf6d. */
-listnode
-list_lookup_node (list list, void *data)
-{
-  listnode n;
-
-  for (n = list->head; n; nextnode (n))
-    if (data == getdata (n))
-      return n;
-  return NULL;
-}
-
-/* Delete the node from list. */
-void
-list_delete_node (list list, listnode node)
-{
-  listnode n;
-
-  for (n = list->head; n; n = n->next)
-    if (n == node)
-      {
-	if (n->prev)
-	  n->prev->next = n->next;
-	else
-	  list->head = n->next;
-	if (n->next)
-	  n->next->prev = n->prev;
-	else
-	  list->tail = n->prev;
-	list->count--;
-	listnode_free (n);
-	return;
-      }
-}
-
-#ifdef TEST
-main ()
-{
-  ;
-}
-#endif /* TEST */

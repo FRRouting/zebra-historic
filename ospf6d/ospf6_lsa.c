@@ -694,12 +694,12 @@ ospf6_lsa_create (struct ospf6_lsa_header *source)
             (unsigned long) ntohl (lsa_header->ls_id));
 
   lsa->lsa_hdr = (struct ospf6_lsa_hdr *) lsa_header;
-  lsa->summary_nbr = list_init ();
-  lsa->request_nbr = list_init ();
-  lsa->retrans_nbr = list_init ();
+  lsa->summary_nbr = list_new ();
+  lsa->request_nbr = list_new ();
+  lsa->retrans_nbr = list_new ();
 
-  lsa->delayed_ack_if = list_init ();
-  lsa->dbdesc_neighbor = list_init ();
+  lsa->delayed_ack_if = list_new ();
+  lsa->dbdesc_neighbor = list_new ();
 
   lsa->summary = 0; /* this is not LSA summary */
 
@@ -747,12 +747,12 @@ ospf6_lsa_summary_create (struct ospf6_lsa_header *source)
 
   lsa->lsa_hdr = (struct ospf6_lsa_hdr *) lsa_header;
 
-  lsa->summary_nbr = list_init ();
-  lsa->request_nbr = list_init ();
-  lsa->retrans_nbr = list_init ();
+  lsa->summary_nbr = list_new ();
+  lsa->request_nbr = list_new ();
+  lsa->retrans_nbr = list_new ();
 
-  lsa->delayed_ack_if = list_init ();
-  lsa->dbdesc_neighbor = list_init ();
+  lsa->delayed_ack_if = list_new ();
+  lsa->dbdesc_neighbor = list_new ();
 
   lsa->summary = 1; /* this is LSA summary */
 
@@ -1630,7 +1630,7 @@ ospf6_lsa_update_link (struct ospf6_interface *o6i)
     zlog_info ("LSA Update Link: Interface %s", o6i->interface->name);
 
   /* check connected prefix */
-  prefix_connected = list_init ();
+  prefix_connected = list_new ();
   for (n = listhead (o6i->interface->connected); n; nextnode (n))
     {
       c = (struct connected *) getdata (n);

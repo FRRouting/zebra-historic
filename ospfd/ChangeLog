@@ -1,3 +1,17 @@
+2000-10-18  K N Sridhar <sridhar@euler.ece.iisc.ernet.in>
+
+	* ospfd.c: Add area_default_cost_decimal_cmd and
+	no_area_default_cost_decimal_cmd alias.
+
+2000-10-05  Gleb Natapov <gleb@nbase.co.il>
+
+	* ospfd.c (ospf_network_new): Fix setting area format.
+	(no_router_ospf): Check area existance when calling
+	ospf_interface_down().
+
+	* ospf_flood.c (ospf_external_info_check): Fix bug of refreshing
+	default route.
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.89 is released.

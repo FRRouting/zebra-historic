@@ -1,3 +1,18 @@
+2000-10-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_add_ipv4): Same check bug is fixed.
+
+2000-10-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_if_down): Remove kernel route when the interface goes
+	down.
+
+	* debug.c: New command "debug zebra kernel" is added.
+
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.89 is released.
+
 2000-09-24  Harald Welte <laforge@gnumonks.org>
 
 	* rt_netlink.c (netlink_interface_addr): Fix pont-to-point address

@@ -377,7 +377,7 @@ DEFUN (interface_area,
     {
       o6a = ospf6_area_create (area_id);
       o6a->ospf6 = o6;
-      list_add_node (o6->area_list, o6a);
+      listnode_add (o6->area_list, o6a);
     }
 
   if (o6i && o6i->area)
@@ -388,7 +388,7 @@ DEFUN (interface_area,
       return CMD_ERR_NOTHING_TODO;
     }
 
-  list_add_node (o6a->if_list, o6i);
+  listnode_add (o6a->if_list, o6i);
   o6i->area = o6a;
 
   /* must check if got already interface info from zebra */
@@ -426,7 +426,7 @@ DEFUN (no_interface,
   if (o6i->area)
     thread_execute (master, interface_down, o6i, 0);
 
-  list_delete_by_val (o6i->area->if_list, o6i);
+  listnode_delete (o6i->area->if_list, o6i);
   o6i->area = (struct ospf6_area *) NULL;
 
   for (n = listhead (o6i->neighbor_list); n; nextnode (n))

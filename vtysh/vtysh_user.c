@@ -29,7 +29,7 @@
 #endif /* USE_PAM */
 
 #include "memory.h"
-#include "newlist.h"
+#include "linklist.h"
 #include "command.h"
 
 #ifdef USE_PAM
@@ -90,7 +90,7 @@ struct user
   u_char nopassword;
 };
 
-struct newlist *userlist;
+struct list *userlist;
 
 struct user *
 user_new ()
@@ -110,10 +110,10 @@ user_free (struct user *user)
 struct user *
 user_lookup (char *name)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct user *user;
 
-  NEWLIST_LOOP (userlist, user, nn)
+  LIST_LOOP (userlist, user, nn)
     {
       if (strcmp (user->name, name) == 0)
 	return user;
@@ -124,10 +124,10 @@ user_lookup (char *name)
 void
 user_config_write ()
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct user *user;
 
-  NEWLIST_LOOP (userlist, user, nn)
+  LIST_LOOP (userlist, user, nn)
     {
       if (user->nopassword)
 	printf (" username %s nopassword\n", user->name);
@@ -144,7 +144,7 @@ user_get (char *name)
 
   user = user_new ();
   user->name = strdup (name);
-  newnode_add (userlist, user);
+  listnode_add (userlist, user);
 
   return user;
 }
@@ -186,6 +186,6 @@ vtysh_auth ()
 void
 vtysh_user_init ()
 {
-  userlist = newlist_new ();
+  userlist = list_new ();
   install_element (CONFIG_NODE, &username_nopassword_cmd);
 }

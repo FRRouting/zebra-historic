@@ -51,9 +51,9 @@ ospf6_area_create (u_int32_t area_id)
   memset (o6a, 0, sizeof (struct ospf6_area));
   inet_ntop (AF_INET, &area_id, o6a->str, sizeof (o6a->str));
   o6a->area_id = area_id;
-  o6a->if_list = list_init ();
+  o6a->if_list = list_new ();
   o6a->table = ospf6_route_table_init ();
-  o6a->lsdb = list_init ();
+  o6a->lsdb = list_new ();
 
   /* xxx, set options */
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_V6);
@@ -75,7 +75,7 @@ ospf6_area_delete (struct ospf6_area *o6a)
       o6i = (struct ospf6_interface *) getdata (n);
       /* ospf6_interface_delete (o6i); */
     }
-  list_delete_all (o6a->if_list);
+  list_delete (o6a->if_list);
 
   /* terminate LSDB */
   ospf6_lsdb_remove_all (o6a->lsdb);

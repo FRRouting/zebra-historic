@@ -31,6 +31,8 @@
 #define ZEBRA_DEBUG_RECV    0x40
 #define ZEBRA_DEBUG_DETAIL  0x80
 
+#define ZEBRA_DEBUG_KERNEL  0x01
+
 /* Debug related macro. */
 #define IS_ZEBRA_DEBUG_EVENT  (zebra_debug_event & ZEBRA_DEBUG_EVENT)
 
@@ -39,8 +41,11 @@
 #define IS_ZEBRA_DEBUG_RECV   (zebra_debug_packet & ZEBRA_DEBUG_RECV)
 #define IS_ZEBRA_DEBUG_DETAIL (zebra_debug_packet & ZEBRA_DEBUG_DETAIL)
 
+#define IS_ZEBRA_DEBUG_KERNEL (zebra_debug_kernel & ZEBRA_DEBUG_KERNEL)
+
 extern unsigned long zebra_debug_event;
 extern unsigned long zebra_debug_packet;
+extern unsigned long zebra_debug_kernel;
 
 void zebra_debug_init ();
 

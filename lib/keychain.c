@@ -23,11 +23,11 @@
 
 #include "command.h"
 #include "memory.h"
-#include "newlist.h"
+#include "linklist.h"
 #include "keychain.h"
 
 /* Master list of key chain. */
-struct newlist *keychain_list;
+struct list *keychain_list;
 
 struct keychain *
 keychain_new ()
@@ -62,18 +62,26 @@ key_free (struct key *key)
 struct keychain *
 keychain_lookup (char *name)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct keychain *keychain;
 
   if (name == NULL)
     return NULL;
 
-  NEWLIST_LOOP (keychain_list, keychain, nn)
+  LIST_LOOP (keychain_list, keychain, nn)
     {
       if (strcmp (keychain->name, name) == 0)
 	return keychain;
     }
   return NULL;
+}
+
+void
+key_delete_func (struct key *key)
+{
+  if (key->string)
+    free (key->string);
+  key_free (key);
 }
 
 struct keychain *
@@ -88,18 +96,11 @@ keychain_get (char *name)
 
   keychain = keychain_new ();
   keychain->name = strdup (name);
-  keychain->key = newlist_new ();
-  newnode_add (keychain_list, keychain);
+  keychain->key = list_new ();
+  keychain->key->del = (void (*)(void *)) key_delete_func;
+  listnode_add (keychain_list, keychain);
 
   return keychain;
-}
-
-void
-key_delete_func (struct key *key)
-{
-  if (key->string)
-    free (key->string);
-  key_free (key);
 }
 
 void
@@ -108,18 +109,18 @@ keychain_delete (struct keychain *keychain)
   if (keychain->name)
     free (keychain->name);
 
-  newlist_delete (keychain->key);
-  newnode_delete (keychain_list, keychain);
+  list_delete (keychain->key);
+  listnode_delete (keychain_list, keychain);
   keychain_free (keychain);
 }
 
 struct key *
 key_lookup (struct keychain *keychain, u_int32_t index)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct key *key;
 
-  NEWLIST_LOOP (keychain->key, key, nn)
+  LIST_LOOP (keychain->key, key, nn)
     {
       if (key->index == index)
 	return key;
@@ -130,13 +131,13 @@ key_lookup (struct keychain *keychain, u_int32_t index)
 struct key *
 key_lookup_for_accept (struct keychain *keychain, u_int32_t index)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct key *key;
   time_t now;
 
   now = time (NULL);
 
-  NEWLIST_LOOP (keychain->key, key, nn)
+  LIST_LOOP (keychain->key, key, nn)
     {
       if (key->index == index)
 	{
@@ -154,13 +155,13 @@ key_lookup_for_accept (struct keychain *keychain, u_int32_t index)
 struct key *
 key_match_for_accept (struct keychain *keychain, char *auth_str)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct key *key;
   time_t now;
 
   now = time (NULL);
 
-  NEWLIST_LOOP (keychain->key, key, nn)
+  LIST_LOOP (keychain->key, key, nn)
     {
       if (key->accept.start == 0 ||
 	  (key->accept.start <= now &&
@@ -174,13 +175,13 @@ key_match_for_accept (struct keychain *keychain, char *auth_str)
 struct key *
 key_lookup_for_send (struct keychain *keychain)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct key *key;
   time_t now;
 
   now = time (NULL);
 
-  NEWLIST_LOOP (keychain->key, key, nn)
+  LIST_LOOP (keychain->key, key, nn)
     {
       if (key->send.start == 0)
 	return key;
@@ -204,7 +205,7 @@ key_get (struct keychain *keychain, u_int32_t index)
 
   key = key_new ();
   key->index = index;
-  newnode_add (keychain->key, key);
+  listnode_add (keychain->key, key);
 
   return key;
 }
@@ -212,7 +213,7 @@ key_get (struct keychain *keychain, u_int32_t index)
 void
 key_delete (struct keychain *keychain, struct key *key)
 {
-  newnode_delete (keychain->key, key);
+  listnode_delete (keychain->key, key);
 
   if (key->string)
     free (key->string);
@@ -886,15 +887,15 @@ keychain_config_write (struct vty *vty)
 {
   struct keychain *keychain;
   struct key *key;
-  struct newnode *nn;
-  struct newnode *nm;
+  struct listnode *nn;
+  struct listnode *nm;
   char buf[BUFSIZ];
 
-  NEWLIST_LOOP (keychain_list, keychain, nn)
+  LIST_LOOP (keychain_list, keychain, nn)
     {
       vty_out (vty, "key chain %s%s", keychain->name, VTY_NEWLINE);
       
-      NEWLIST_LOOP (keychain->key, key, nm)
+      LIST_LOOP (keychain->key, key, nm)
 	{
 	  vty_out (vty, " key %d%s", key->index, VTY_NEWLINE);
 
@@ -945,8 +946,7 @@ keychain_config_write (struct vty *vty)
 void
 keychain_init ()
 {
-  keychain_list = newlist_new ();
-  keychain_list->del = (void (*)(void *)) key_delete_func;
+  keychain_list = list_new ();
 
   install_node (&keychain_node, keychain_config_write);
   install_node (&keychain_key_node, NULL);

@@ -85,8 +85,8 @@ DEFSH (VTYSH_ZEBRA,
 DEFSH (VTYSH_RIPD, 
        rip_neighbor_cmd, 
        "neighbor A.B.C.D", 
-       "RIP neighbor router address specification\n"
-       "Address of the neighbor router\n")
+       "Specify a neighbor router\n"
+       "Neighbor address\n")
 
 DEFSH (VTYSH_BGPD,  
        match_ipv6_prefix_list_cmd, 
@@ -101,7 +101,7 @@ DEFSH (VTYSH_RIPD,
        "no ip split-horizon", 
        NO_STR
        IP_STR
-       "Do not perform split horizon\n")
+       "Perform split horizon\n")
 
 DEFSH (VTYSH_BGPD, 
        show_ipv6_bgp_cmd, 
@@ -339,12 +339,12 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_RIPD, 
        ip_rip_authentication_string_cmd, 
-       "ip rip authentication string STRING", 
+       "ip rip authentication string LINE", 
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication string setting\n"
-       "RIP authentication string\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication string\n"
+       "Authentication string\n")
 
 DEFSH (VTYSH_OSPF6D, 
        show_debugging_ospf6_cmd, 
@@ -532,9 +532,10 @@ DEFSH (VTYSH_OSPFD,
 
 DEFSH (VTYSH_RIPD, 
        rip_network_cmd, 
-       "network IPV4_ADDR", 
-       "Enable RIP\n"
-       "IP prefix or interface name\n")
+       "network (A.B.C.D/M|WORD)", 
+       "Enable routing on an IP network\n"
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
+       "Interface name\n")
 
 DEFSH (VTYSH_BGPD, 
        clear_ip_bgp_peer_ipv4_soft_in_cmd, 
@@ -1009,6 +1010,15 @@ DEFSH (VTYSH_RIPD,
        "RIP receive packet\n"
        "RIP send packet\n")
 
+DEFSH (VTYSH_OSPFD, 
+       area_default_cost_decimal_cmd, 
+       "area <0-4294967295> default-cost NAME", 
+       NO_STR
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Set the summary-default cost of a NSSA or stub area\n"
+       "Stub's advertised default summary cost\n")
+
 DEFSH (VTYSH_BGPD, 
        clear_ip_bgp_all_in_cmd, 
        "clear ip bgp * in", 
@@ -1064,9 +1074,9 @@ DEFSH (VTYSH_RIPD,
        "no ip rip send version", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n")
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n")
 
 DEFSH (VTYSH_BGPD, 
        show_ipv6_mbgp_community_cmd, 
@@ -1269,6 +1279,15 @@ DEFSH (VTYSH_BGPD,
        "Administrative distance\n"
        "IP source prefix\n"
        "Access list name\n")
+
+DEFSH (VTYSH_OSPFD, 
+       no_area_default_cost_decimal_cmd, 
+       "no area <0-4294967295> default-cost NAME", 
+       NO_STR
+       "OSPF area parameters\n"
+       "OSPF area ID as a decimal value\n"
+       "Set the summary-default cost of a NSSA or stub area\n"
+       "Stub's advertised default summary cost\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_ospf_retransmit_interval_cmd, 
@@ -1757,6 +1776,20 @@ DEFSH (VTYSH_BGPD,
        "BGP specific commands\n"
        "Configure BGP defaults\n"
        "Activate ipv4-unicast for a peer by default\n")
+
+DEFSH (VTYSH_BGPD, 
+       ipv4_neighbor_routes_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X) routes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display routes learned from neighbor\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_transparent_as_cmd, 
@@ -2680,6 +2713,17 @@ DEFSH (VTYSH_OSPFD,
        "OSPF metric\n")
 
 DEFSH (VTYSH_BGPD, 
+       ipv6_mbgp_neighbor_routes_cmd, 
+       "show ipv6 mbgp neighbors (A.B.C.D|X:X::X:X) routes", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display routes learned from neighbor\n")
+
+DEFSH (VTYSH_BGPD, 
        no_ipv6_aggregate_address_summary_only_cmd, 
        "no ipv6 bgp aggregate-address X:X::X:X/M summary-only", 
        NO_STR
@@ -2776,11 +2820,11 @@ DEFSH (VTYSH_RIPD,
        "no ip rip authentication mode (md5|text)", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication mode\n"
-       "MD5 authentication\n"
-       "Simple text authentication\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication mode\n"
+       "Keyed message digest\n"
+       "Clear text authentication\n")
 
 DEFSH (VTYSH_RIPD, 
        debug_rip_zebra_cmd, 
@@ -2807,6 +2851,12 @@ DEFSH (VTYSH_BGPD,
        "Display routes matching the AS path regular expression\n"
        "A regular-expression to match the BGP AS paths\n")
 
+DEFSH (VTYSH_OSPFD, 
+       ospf_redistribute_kernel_cmd, 
+       "redistribute kernel", 
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n")
+
 DEFSH (VTYSH_ZEBRA, 
        no_debug_zebra_packet_cmd, 
        "no debug zebra packet", 
@@ -2822,12 +2872,6 @@ DEFSH (VTYSH_OSPFD,
        "IP Information\n"
        "OSPF interface commands\n"
        "Router priority\n")
-
-DEFSH (VTYSH_OSPFD, 
-       ospf_redistribute_kernel_cmd, 
-       "redistribute kernel", 
-       "Redistribute information from another routing protocol\n"
-       "Kernel routes\n")
 
 DEFSH (VTYSH_BGPD, 
        show_ipv6_bgp_community2_cmd, 
@@ -2944,7 +2988,7 @@ DEFSH (VTYSH_BGPD,
        "debug bgp fsm", 
        DEBUG_STR
        BGP_STR
-       "BGP Finite Stete Machine\n")
+       "BGP Finite State Machine\n")
 
 DEFSH (VTYSH_BGPD, 
        ipv6_bgp_neighbor_route_refresh_cmd, 
@@ -2961,9 +3005,9 @@ DEFSH (VTYSH_RIPD,
        "no ip rip receive version", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n")
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n")
 
 DEFSH (VTYSH_OSPF6D, 
        show_ipv6_ospf6_database_type_cmd, 
@@ -3056,10 +3100,10 @@ DEFSH (VTYSH_OSPFD,
 DEFSH (VTYSH_RIPD, 
        ip_rip_send_version_cmd, 
        "ip rip send version (1|2)", 
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 
@@ -3726,12 +3770,13 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_RIPD, 
        no_ip_rip_authentication_key_chain2_cmd, 
-       "no ip rip authentication key-chain", 
+       "no ip rip authentication key-chain LINE", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "Key chain configuration\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication key-chain\n"
+       "name of key-chain\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_send_community_cmd, 
@@ -4214,6 +4259,13 @@ DEFSH (VTYSH_BGPD,
        "Compare MED among confederation paths\n"
        "Treat missing MED as the least preferred one\n")
 
+DEFSH (VTYSH_BGPD, 
+       no_bgp_deterministic_med_cmd, 
+       "no bgp deterministic-med", 
+       NO_STR
+       "BGP specific commands\n"
+       "Pick the best-MED path among paths advertised from the neighboring AS\n")
+
 DEFSH (VTYSH_BGPD,  
        show_ipv6_bgp_filter_list_cmd, 
        "show ipv6 bgp filter-list WORD", 
@@ -4597,10 +4649,10 @@ DEFSH (VTYSH_ZEBRA,  show_ip_route_addr_cmd,
 DEFSH (VTYSH_RIPD, 
        ip_rip_send_version_1_cmd, 
        "ip rip send version 1 2", 
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 
@@ -4620,9 +4672,9 @@ DEFSH (VTYSH_RIPD,
        "no ip rip authentication mode", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication mode\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication mode\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_default_information_originate_always_type_metric_routemap_cmd, 
@@ -5297,12 +5349,12 @@ DEFSH (VTYSH_RIPD|VTYSH_OSPFD,
 
 DEFSH (VTYSH_RIPD, 
        ip_rip_authentication_key_chain_cmd, 
-       "ip rip authentication key-chain KEY-CHAIN", 
+       "ip rip authentication key-chain LINE", 
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "Key chain configuration\n"
-       "Key chain name\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication key-chain\n"
+       "name of key-chain\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ip_as_path_all_cmd, 
@@ -5573,20 +5625,21 @@ DEFSH (VTYSH_RIPD,
        ip_rip_authentication_mode_cmd, 
        "ip rip authentication mode (md5|text)", 
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication mode\n"
-       "MD5 authentication\n"
-       "Simple text authentication\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication mode\n"
+       "Keyed message digest\n"
+       "Clear text authentication\n")
 
 DEFSH (VTYSH_RIPD, 
        no_ip_rip_authentication_string2_cmd, 
-       "no ip rip authentication string", 
+       "no ip rip authentication string LINE", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication string setting\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication string\n"
+       "Authentication string\n")
 
 DEFSH (VTYSH_OSPF6D, 
        ipv6_ospf6_instance_cmd, 
@@ -5867,10 +5920,10 @@ DEFSH (VTYSH_BGPD,
 DEFSH (VTYSH_RIPD, 
        ip_rip_send_version_2_cmd, 
        "ip rip send version 2 1", 
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's send RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement transmission\n"
+       "version control\n"
        "RIP version 2\n"
        "RIP version 1\n")
 
@@ -6044,8 +6097,8 @@ DEFSH (VTYSH_RIPD,
        no_rip_neighbor_cmd, 
        "no neighbor A.B.C.D", 
        NO_STR
-       "RIP neighbor router address specification\n"
-       "Address of the neighbor router\n")
+       "Specify a neighbor router\n"
+       "Neighbor address\n")
 
 DEFSH (VTYSH_BGPD, 
        no_match_ipv6_address_prefix_list_cmd, 
@@ -6060,10 +6113,10 @@ DEFSH (VTYSH_BGPD,
 DEFSH (VTYSH_RIPD, 
        ip_rip_receive_version_1_cmd, 
        "ip rip receive version 1 2", 
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 
@@ -6244,13 +6297,12 @@ DEFSH (VTYSH_OSPF6D,
 
 DEFSH (VTYSH_RIPD, 
        no_ip_rip_authentication_string_cmd, 
-       "no ip rip authentication string STRING", 
+       "no ip rip authentication string", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "RIP authentication string setting\n"
-       "RIP authentication string\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication string\n")
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_send_community_cmd, 
@@ -6486,6 +6538,17 @@ DEFSH (VTYSH_ZEBRA,
        DEBUG_STR
        "Zebra configuration\n"
        "Debug option set for zebra events\n")
+
+DEFSH (VTYSH_BGPD, 
+       ipv6_bgp_neighbor_routes_cmd, 
+       "show ipv6 bgp neighbors (A.B.C.D|X:X::X:X) routes", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display routes learned from neighbor\n")
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_port_cmd, 
@@ -6912,6 +6975,14 @@ DEFSH (VTYSH_OSPFD,
        "OSPF Administrative distance\n"
        "OSPF Distance\n")
 
+DEFSH (VTYSH_ZEBRA, 
+       no_debug_zebra_kernel_cmd, 
+       "no debug zebra kernel", 
+       NO_STR
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra between kernel interface\n")
+
 DEFSH (VTYSH_BGPD, 
        ipv4_neighbor_received_routes_cmd, 
        "show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X) received-routes", 
@@ -7327,10 +7398,10 @@ DEFSH (VTYSH_ZEBRA,  no_ip_address_cmd,
 DEFSH (VTYSH_RIPD, 
        ip_rip_receive_version_2_cmd, 
        "ip rip receive version 2 1", 
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n"
        "RIP version 2\n"
        "RIP version 1\n")
 
@@ -7774,10 +7845,11 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_RIPD, 
        no_rip_network_cmd, 
-       "no network IPV4_ADDR", 
+       "no network (A.B.C.D/M|WORD)", 
        NO_STR
-       "Disable RIP\n"
-       "IP prefix or interface name\n")
+       "Enable routing on an IP network\n"
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
+       "Interface name\n")
 
 DEFSH (VTYSH_ZEBRA, 
        show_zebra_client_cmd, 
@@ -7901,6 +7973,13 @@ DEFSH (VTYSH_OSPFD,
        "Intra-area routes\n"
        "Distance for intra-area routes\n")
 
+DEFSH (VTYSH_ZEBRA, 
+       debug_zebra_kernel_cmd, 
+       "debug zebra kernel", 
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra between kernel interface\n")
+
 DEFSH (VTYSH_BGPD, 
        show_ipv6_mbgp_community2_cmd, 
        "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
@@ -7931,7 +8010,7 @@ DEFSH (VTYSH_BGPD,
        NO_STR
        DEBUG_STR
        BGP_STR
-       "Finite Stete Machine\n")
+       "Finite State Machine\n")
 
 DEFSH (VTYSH_RIPNGD, 
        no_ripng_timeout_timer_cmd, 
@@ -8023,13 +8102,12 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_RIPD, 
        no_ip_rip_authentication_key_chain_cmd, 
-       "no ip rip authentication key-chain KEY-CHAIN", 
+       "no ip rip authentication key-chain", 
        NO_STR
        IP_STR
-       "RIP configuration\n"
-       "RIP authentication\n"
-       "Key chain configuration\n"
-       "Key chain name\n")
+       "Routing Information Protocol\n"
+       "Authentication control\n"
+       "Authentication key-chain\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_router_id_cmd, 
@@ -8346,6 +8424,17 @@ DEFSH (VTYSH_BGPD,
        "Network Layer Reachable Information\n"
        "multicast information\n")
 
+DEFSH (VTYSH_BGPD, 
+       neighbor_routes_cmd, 
+       "show ip bgp neighbors (A.B.C.D|X:X::X:X) routes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display routes learned from neighbor\n")
+
 DEFSH (VTYSH_OSPFD, 
        neighbor_priority_cmd, 
        "neighbor A.B.C.D priority <0-255>", 
@@ -8570,10 +8659,10 @@ DEFSH (VTYSH_RIPNGD,  show_ipv6_protocols_cmd,
 DEFSH (VTYSH_RIPD, 
        ip_rip_receive_version_cmd, 
        "ip rip receive version (1|2)", 
-       "IP Information\n"
-       "RIP configuration\n"
-       "Set interface's receive RIP version control\n"
-       "RIP version\n"
+       IP_STR
+       "Routing Information Protocol\n"
+       "advertisement reception\n"
+       "version control\n"
        "RIP version 1\n"
        "RIP version 2\n")
 
@@ -8727,6 +8816,12 @@ DEFSH (VTYSH_OSPF6D,
        ROUTE_STR
        OSPF6_STR
        )
+
+DEFSH (VTYSH_BGPD, 
+       bgp_deterministic_med_cmd, 
+       "bgp deterministic-med", 
+       "BGP specific commands\n"
+       "Pick the best-MED path among paths advertised from the neighboring AS\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_redistribute_source_metric_type_cmd, 
@@ -9060,14 +9155,18 @@ install_element (ENABLE_NODE, &debug_zebra_events_cmd);
 install_element (ENABLE_NODE, &debug_zebra_packet_cmd);
 install_element (ENABLE_NODE, &debug_zebra_packet_direct_cmd);
 install_element (ENABLE_NODE, &debug_zebra_packet_detail_cmd);
+install_element (ENABLE_NODE, &debug_zebra_kernel_cmd);
 install_element (ENABLE_NODE, &no_debug_zebra_events_cmd);
 install_element (ENABLE_NODE, &no_debug_zebra_packet_cmd);
+install_element (ENABLE_NODE, &no_debug_zebra_kernel_cmd);
 install_element (CONFIG_NODE, &debug_zebra_events_cmd);
 install_element (CONFIG_NODE, &debug_zebra_packet_cmd);
 install_element (CONFIG_NODE, &debug_zebra_packet_direct_cmd);
 install_element (CONFIG_NODE, &debug_zebra_packet_detail_cmd);
+install_element (CONFIG_NODE, &debug_zebra_kernel_cmd);
 install_element (CONFIG_NODE, &no_debug_zebra_events_cmd);
 install_element (CONFIG_NODE, &no_debug_zebra_packet_cmd);
+install_element (CONFIG_NODE, &no_debug_zebra_kernel_cmd);
 install_element (VIEW_NODE, &show_interface_cmd);
 install_element (ENABLE_NODE, &show_interface_cmd);
 install_element (INTERFACE_NODE, &multicast_cmd);
@@ -9477,7 +9576,9 @@ install_element (OSPF_NODE, &no_area_stub_nosum_decimal_cmd);
 install_element (OSPF_NODE, &no_area_stub_cmd);
 install_element (OSPF_NODE, &no_area_stub_decimal_cmd);
 install_element (OSPF_NODE, &area_default_cost_cmd);
+install_element (OSPF_NODE, &area_default_cost_decimal_cmd);
 install_element (OSPF_NODE, &no_area_default_cost_cmd);
+install_element (OSPF_NODE, &no_area_default_cost_decimal_cmd);
 install_element (OSPF_NODE, &area_shortcut_decimal_cmd);
 install_element (OSPF_NODE, &area_shortcut_cmd);
 install_element (OSPF_NODE, &no_area_shortcut_decimal_cmd);
@@ -9721,6 +9822,10 @@ install_element (VIEW_NODE, &neighbor_received_routes_cmd);
 install_element (VIEW_NODE, &ipv4_neighbor_received_routes_cmd);
 install_element (ENABLE_NODE, &neighbor_received_routes_cmd);
 install_element (ENABLE_NODE, &ipv4_neighbor_received_routes_cmd);
+install_element (VIEW_NODE, &neighbor_routes_cmd);
+install_element (VIEW_NODE, &ipv4_neighbor_routes_cmd);
+install_element (ENABLE_NODE, &neighbor_routes_cmd);
+install_element (ENABLE_NODE, &ipv4_neighbor_routes_cmd);
 install_element (BGP_NODE, &ipv6_bgp_network_cmd);
 install_element (BGP_NODE, &ipv6_bgp_network_multicast_cmd);
 install_element (BGP_NODE, &ipv6_bgp_network_unicast_multicast_cmd);
@@ -9807,6 +9912,10 @@ install_element (VIEW_NODE, &ipv6_bgp_neighbor_received_routes_cmd);
 install_element (ENABLE_NODE, &ipv6_bgp_neighbor_received_routes_cmd);
 install_element (VIEW_NODE, &ipv6_mbgp_neighbor_received_routes_cmd);
 install_element (ENABLE_NODE, &ipv6_mbgp_neighbor_received_routes_cmd);
+install_element (VIEW_NODE, &ipv6_bgp_neighbor_routes_cmd);
+install_element (ENABLE_NODE, &ipv6_bgp_neighbor_routes_cmd);
+install_element (VIEW_NODE, &ipv6_mbgp_neighbor_routes_cmd);
+install_element (ENABLE_NODE, &ipv6_mbgp_neighbor_routes_cmd);
 install_element (BGP_NODE, &bgp_distance_cmd);
 install_element (BGP_NODE, &no_bgp_distance_cmd);
 install_element (BGP_NODE, &no_bgp_distance2_cmd);
@@ -9945,6 +10054,8 @@ install_element (BGP_NODE, &no_bgp_client_to_client_reflection_cmd);
 install_element (BGP_NODE, &bgp_client_to_client_reflection_cmd);
 install_element (BGP_NODE, &bgp_always_compare_med_cmd);
 install_element (BGP_NODE, &no_bgp_always_compare_med_cmd);
+install_element (BGP_NODE, &bgp_deterministic_med_cmd);
+install_element (BGP_NODE, &no_bgp_deterministic_med_cmd);
 install_element (BGP_NODE, &bgp_bestpath_med_cmd);
 install_element (BGP_NODE, &bgp_bestpath_med2_cmd);
 install_element (BGP_NODE, &bgp_bestpath_med3_cmd);

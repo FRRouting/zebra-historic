@@ -94,8 +94,8 @@ ospf_vertex_new (struct ospf_lsa *lsa)
   new->id = lsa->data->id;
   new->lsa = lsa->data;
   new->distance = 0;
-  new->child = list_init ();
-  new->nexthop = list_init ();
+  new->child = list_new ();
+  new->nexthop = list_new ();
 
   return new;
 }
@@ -105,13 +105,13 @@ ospf_vertex_free (struct vertex *v)
 {
   listnode node;
 
-  list_delete_all (v->child);
+  list_delete (v->child);
 
   if (listcount (v->nexthop) > 0)
     for (node = listhead (v->nexthop); node; nextnode (node))
       vertex_nexthop_free (node->data);
 
-  list_delete_all (v->nexthop);
+  list_delete (v->nexthop);
 
   XFREE (MTYPE_OSPF_VERTEX, v);
 }
@@ -125,7 +125,7 @@ ospf_vertex_add_parent (struct vertex *v)
   for (node = listhead (v->nexthop); node; nextnode (node))
     {
       nh = (struct vertex_nexthop *) getdata (node);
-      list_add_node (nh->parent->child, v);
+      listnode_add (nh->parent->child, v);
     }
 }
 
@@ -344,7 +344,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
       zlog_info ("resolved next hop: int: %s, next hop: %s",
 		 nh->ifp->name, inet_ntoa (nh->router));
 
-      list_add_node (w->nexthop, nh);
+      listnode_add (w->nexthop, nh);
 
       return;
     }
@@ -363,7 +363,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
               nh->ifp = x->ifp;
               nh->router = addr;
 
-              list_add_node (w->nexthop, nh);
+              listnode_add (w->nexthop, nh);
               return;
             }
         }
@@ -374,7 +374,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
     {
       nh = vertex_nexthop_dup (node->data);
       nh->parent = v;
-      list_add_node (w->nexthop, nh);
+      listnode_add (w->nexthop, nh);
     }
 }
 
@@ -386,7 +386,7 @@ ospf_install_candidate (list candidate, struct vertex *w)
 
   if (list_isempty (candidate))
     {
-      list_add_node (candidate, w);
+      listnode_add (candidate, w);
       return;
     }
 
@@ -563,7 +563,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 
               /* Remove old vertex from candidate list. */
               ospf_vertex_free (cw);
-              list_delete_by_val (candidate, cw);
+              listnode_delete (candidate, cw);
 
               /* Install new to candidate. */
               ospf_install_candidate (candidate, w);
@@ -716,7 +716,7 @@ ospf_rtrs_free (struct route_table *rtrs)
 	for (node = listhead (or_list); node; nextnode (node))
 	  ospf_route_free (node->data);
 
-	list_delete_all (or_list);
+	list_delete (or_list);
 
 	/* Unlock the node. */
 	rn->info = NULL;
@@ -808,7 +808,7 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
   nv = route_table_init ();
 
   /* Clear the list of candidate vertices. */ 
-  candidate = list_init ();
+  candidate = list_new ();
 
   /* Initialize the shortest-path tree to only the root (which is the
      router doing the calculation). */
@@ -841,7 +841,7 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
       ospf_vertex_add_parent (v);
 
       /* Reveve from the candidate list. */
-      list_delete_by_val (candidate, v);
+      listnode_delete (candidate, v);
 
       /* Add to SPF tree. */
       ospf_spf_register (v, rv, nv);

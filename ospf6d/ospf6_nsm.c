@@ -376,7 +376,7 @@ inactivity_timer (struct thread *thread)
 
   thread_add_event (master, neighbor_change, o6n->ospf6_interface, 0);
 
-  list_delete_by_val (o6n->ospf6_interface->neighbor_list, o6n);
+  listnode_delete (o6n->ospf6_interface->neighbor_list, o6n);
   ospf6_neighbor_delete (o6n);
 
   return 0;

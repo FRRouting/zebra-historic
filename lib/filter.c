@@ -27,6 +27,7 @@
 #include "memory.h"
 #include "command.h"
 #include "sockunion.h"
+#include "buffer.h"
 
 /* Filter element of access list */
 struct filter
@@ -255,6 +256,9 @@ access_list_delete (struct access_list *access)
     access->prev->next = access->next;
   else
     list->head = access->next;
+
+  if (access->remark)
+    XFREE (MTYPE_TMP, access->remark);
 
   access_list_free (access);
 }
@@ -540,6 +544,31 @@ access_list_dup_check (struct access_list *access, struct filter *new)
   return 0;
 }
 
+int
+vty_access_list_remark_unset (struct vty *vty, int family, char *name)
+{
+  struct access_list *access;
+
+  access = access_list_lookup (family, name);
+  if (! access)
+    {
+      vty_out (vty, "%% access-list %s doesn't exist%s", name,
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (access->remark)
+    {
+      XFREE (MTYPE_TMP, access->remark);
+      access->remark = NULL;
+    }
+
+  if (access->head == NULL && access->tail == NULL && access->remark == NULL)
+    access_list_delete (access);
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (access_list, access_list_cmd,
        "access-list WORD (deny|permit) (A.B.C.D/M|any)",
        "Add an access list entry\n"
@@ -556,9 +585,9 @@ DEFUN (access_list, access_list_cmd,
   struct prefix p;
 
   /* Check of filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = FILTER_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = FILTER_DENY;
   else
     {
@@ -567,7 +596,7 @@ DEFUN (access_list, access_list_cmd,
     }
 
   /* "any" is special token of matching IP addresses.  */
-  if (strcmp (argv[2], "any") == 0)
+  if (strncmp (argv[2], "a", 1) == 0)
     filter = filter_make (NULL, type);
   else
     {
@@ -605,7 +634,7 @@ ALIAS (access_list, access_list_exact_cmd,
        "Specify packets to reject\n"
        "Specify packets to forward\n"
        "Prefix to match. e.g. 10.0.0.0/8\n"
-       "Do exact matching of prefixes\n")
+       "Exact match of the prefixes\n")
 
 DEFUN (no_access_list,
        no_access_list_cmd,
@@ -626,9 +655,9 @@ DEFUN (no_access_list,
   int exact = 0;
 
   /* Check of filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = FILTER_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = FILTER_DENY;
   else
     {
@@ -640,7 +669,7 @@ DEFUN (no_access_list,
   access = access_list_lookup (AF_INET, argv[0]);
   if (access == NULL)
     {
-      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+      vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -649,7 +678,7 @@ DEFUN (no_access_list,
     exact = 1;
 
   /* Check string format of prefix and prefixlen. */
-  if (strcmp (argv[2], "any") == 0)
+  if (strncmp (argv[2], "a", 1) == 0)
     filter = filter_lookup (access, NULL, type, exact);
   else
     {
@@ -665,13 +694,10 @@ DEFUN (no_access_list,
   /* Looking up filter from access_list. */
   if (filter == NULL)
     {
-      char buf[BUFSIZ];
-
-      vty_out (vty, "access-list %s %s %s/%d doesn't exist%s", 
+      vty_out (vty, "%% access-list %s %s %s doesn't exist%s", 
 	       argv[0],
-	       argv[1],
-	       inet_ntop (p.family, &p.u.prefix, buf, BUFSIZ),
-	       p.prefixlen,
+	       strncmp (argv[1], "p", 1) == 0 ? "permit" : "deny",
+	       strncmp (argv[2], "a", 1) == 0 ? "any" : argv[2],
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -691,7 +717,7 @@ ALIAS (no_access_list,
        "Specify packets to reject\n"
        "Specify packets to forward\n"
        "Prefix to match. e.g. 10.0.0.0/8\n"
-       "Do exact matching of prefixes\n")
+       "Exact match of the prefixes\n")
 
 DEFUN (no_access_list_all,
        no_access_list_all_cmd,
@@ -706,7 +732,7 @@ DEFUN (no_access_list_all,
   access = access_list_lookup (AF_INET, argv[0]);
   if (access == NULL)
     {
-      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+      vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -716,6 +742,62 @@ DEFUN (no_access_list_all,
  
   return CMD_SUCCESS;
 }
+
+DEFUN (access_list_remark,
+       access_list_remark_cmd,
+       "access-list WORD remark .LINE",
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Access list entry comment\n"
+       "Comment up to 100 characters\n")
+{
+  struct access_list *access;
+  struct buffer *b;
+  int i;
+
+  access = access_list_get (AF_INET, argv[0]);
+
+  if (access->remark)
+    {
+      XFREE (MTYPE_TMP, access->remark);
+      access->remark = NULL;
+    }
+
+  /* Below is remark get codes. */
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 1; i < argc; i++)
+    {
+      buffer_putstr (b, (u_char *)argv[i]);
+      buffer_putc (b, ' ');
+    }
+  buffer_putc (b, '\0');
+
+  access->remark = buffer_getstr (b);
+
+  buffer_free (b);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_access_list_remark,
+       no_access_list_remark_cmd,
+       "no access-list WORD remark",
+       NO_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Access list entry comment\n")
+{
+  return vty_access_list_remark_unset (vty, AF_INET, argv[0]);
+}
+	
+ALIAS (no_access_list_remark,
+       no_access_list_remark_arg_cmd,
+       "no access-list WORD remark .LINE",
+       NO_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Access list entry comment\n"
+       "Comment up to 100 characters\n")
 
 #ifdef HAVE_IPV6
 DEFUN (ipv6_access_list, ipv6_access_list_cmd,
@@ -735,9 +817,9 @@ DEFUN (ipv6_access_list, ipv6_access_list_cmd,
   struct prefix p;
 
   /* Check of filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = FILTER_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = FILTER_DENY;
   else
     {
@@ -746,7 +828,7 @@ DEFUN (ipv6_access_list, ipv6_access_list_cmd,
     }
 
   /* "any" is special token of matching IP addresses.  */
-  if (strcmp (argv[2], "any") == 0)
+  if (strncmp (argv[2], "a", 1) == 0)
     filter = filter_make (NULL, type);
   else
     {
@@ -780,7 +862,7 @@ ALIAS (ipv6_access_list, ipv6_access_list_exact_cmd,
        "Specify packets to reject\n"
        "Specify packets to forward\n"
        "Prefix to match. e.g. 3ffe:506::/32\n"
-       "Do exact matching of prefixes\n")
+       "Exact match of the prefixes\n")
 
 DEFUN (no_ipv6_access_list,
        no_ipv6_access_list_cmd,
@@ -802,9 +884,9 @@ DEFUN (no_ipv6_access_list,
   int exact = 0;
 
   /* Check of filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "p", 1) == 0)
     type = FILTER_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "d", 1) == 0)
     type = FILTER_DENY;
   else
     {
@@ -816,7 +898,7 @@ DEFUN (no_ipv6_access_list,
   access = access_list_lookup (AF_INET6, argv[0]);
   if (access == NULL)
     {
-      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+      vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -825,7 +907,7 @@ DEFUN (no_ipv6_access_list,
     exact = 1;
 
   /* Check string format of prefix and prefixlen. */
-  if (strcmp (argv[2], "any") == 0)
+  if (strncmp (argv[2], "a", 1) == 0)
     filter = filter_lookup (access, NULL, type, exact);
   else
     {
@@ -842,13 +924,10 @@ DEFUN (no_ipv6_access_list,
   /* Looking up filter from access_list. */
   if (filter == NULL)
     {
-      char buf[BUFSIZ];
-
-      vty_out (vty, "access-list %s %s %s/%d doesn't exist%s", 
+      vty_out (vty, "%% access-list %s %s %s doesn't exist%s", 
 	       argv[0],
-	       argv[1],
-	       inet_ntop (p.family, &p.u.prefix, buf, BUFSIZ),
-	       p.prefixlen,
+	       strncmp (argv[1], "p", 1) == 0 ? "permit" : "deny",
+	       strncmp (argv[2], "a", 1) == 0 ? "any" : argv[2],
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -869,7 +948,7 @@ ALIAS (no_ipv6_access_list,
        "Specify packets to reject\n"
        "Specify packets to forward\n"
        "Prefix to match. e.g. 3ffe:506::/32\n"
-       "Do exact mathing of prefixes\n")
+       "Exact match of the prefixes\n")
 
 DEFUN (no_ipv6_access_list_all,
        no_ipv6_access_list_all_cmd,
@@ -885,7 +964,7 @@ DEFUN (no_ipv6_access_list_all,
   access = access_list_lookup (AF_INET6, argv[0]);
   if (access == NULL)
     {
-      vty_out (vty, "access-list %s doesn't exist%s", argv[0],
+      vty_out (vty, "%% access-list %s doesn't exist%s", argv[0],
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -895,6 +974,65 @@ DEFUN (no_ipv6_access_list_all,
 
   return CMD_SUCCESS;
 }
+
+DEFUN (ipv6_access_list_remark,
+       ipv6_access_list_remark_cmd,
+       "ipv6 access-list WORD remark .LINE",
+       IPV6_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Access list entry comment\n"
+       "Comment up to 100 characters\n")
+{
+  struct access_list *access;
+  struct buffer *b;
+  int i;
+
+  access = access_list_get (AF_INET6, argv[0]);
+
+  if (access->remark)
+    {
+      XFREE (MTYPE_TMP, access->remark);
+      access->remark = NULL;
+    }
+
+  /* Below is remark get codes. */
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 1; i < argc; i++)
+    {
+      buffer_putstr (b, (u_char *)argv[i]);
+      buffer_putc (b, ' ');
+    }
+  buffer_putc (b, '\0');
+
+  access->remark = buffer_getstr (b);
+
+  buffer_free (b);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_access_list_remark,
+       no_ipv6_access_list_remark_cmd,
+       "no ipv6 access-list WORD remark",
+       NO_STR
+       IPV6_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Access list entry comment\n")
+{
+  return vty_access_list_remark_unset (vty, AF_INET6, argv[0]);
+}
+	
+ALIAS (no_ipv6_access_list_remark,
+       no_ipv6_access_list_remark_arg_cmd,
+       "no ipv6 access-list WORD remark .LINE",
+       NO_STR
+       IPV6_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Access list entry comment\n"
+       "Comment up to 100 characters\n")
 #endif /* HAVE_IPV6 */
 
 /* Configuration write function. */
@@ -913,54 +1051,76 @@ config_write_access_family (int family, struct vty *vty)
     return 0;
 
   for (access = master->num.head; access; access = access->next)
-    for (filter = access->head; filter; filter = filter->next)
-      {
-	p = &filter->prefix;
+    {
+      if (access->remark)
+	{
+	  vty_out (vty, "%saccess-list %s remark %s%s",
+		   family == AF_INET ? "" : "ipv6 ",
+		   access->name, access->remark,
+		   VTY_NEWLINE);
+	  write++;
+	}
 
-	if (filter->any)
-	  vty_out (vty,
-		   "%saccess-list %s %s any%s", 
-		   family == AF_INET ? "" : "ipv6 ",
-		   access->name,
-		   filter_type_str (filter),
-		   VTY_NEWLINE);
-	else
-	  vty_out (vty,
-		   "%saccess-list %s %s %s/%d%s%s", 
-		   family == AF_INET ? "" : "ipv6 ",
-		   access->name,
-		   filter_type_str (filter),
-		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-		   p->prefixlen,
-		   filter->exact ? " exact-match" : "",
-		   VTY_NEWLINE);
-	write++;
-      }
+      for (filter = access->head; filter; filter = filter->next)
+	{
+	  p = &filter->prefix;
+
+	  if (filter->any)
+	    vty_out (vty,
+	  	     "%saccess-list %s %s any%s", 
+		     family == AF_INET ? "" : "ipv6 ",
+		     access->name,
+		     filter_type_str (filter),
+		     VTY_NEWLINE);
+	  else
+	    vty_out (vty,
+		     "%saccess-list %s %s %s/%d%s%s", 
+		     family == AF_INET ? "" : "ipv6 ",
+		     access->name,
+		     filter_type_str (filter),
+		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+		     p->prefixlen,
+		     filter->exact ? " exact-match" : "",
+		     VTY_NEWLINE);
+	  write++;
+	}
+    }
 
   for (access = master->str.head; access; access = access->next)
-    for (filter = access->head; filter; filter = filter->next)
-      {
-	p = &filter->prefix;
+    {
+      if (access->remark)
+	{
+	  vty_out (vty, "%saccess-list %s remark %s%s",
+	  	   family == AF_INET ? "" : "ipv6 ",
+		   access->name, access->remark,
+		   VTY_NEWLINE);
+	  write++;
+	}
 
-	if (filter->any)
-	  vty_out (vty,
-		   "%saccess-list %s %s any%s", 
-		   family == AF_INET ? "" : "ipv6 ",
-		   access->name,
-		   filter_type_str (filter),
-		   VTY_NEWLINE);
-	else
-	  vty_out (vty, 
-		   "%saccess-list %s %s %s/%d%s%s", 
-		   family == AF_INET ? "" : "ipv6 ",
-		   access->name,
-		   filter_type_str (filter),
-		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-		   p->prefixlen,
-		   filter->exact ? " exact-match" : "",
-		   VTY_NEWLINE);
-	write++;
-      }
+      for (filter = access->head; filter; filter = filter->next)
+	{
+	  p = &filter->prefix;
+
+	  if (filter->any)
+	    vty_out (vty,
+	  	     "%saccess-list %s %s any%s", 
+		     family == AF_INET ? "" : "ipv6 ",
+		     access->name,
+		     filter_type_str (filter),
+		     VTY_NEWLINE);
+	  else
+	    vty_out (vty, 
+	  	     "%saccess-list %s %s %s/%d%s%s", 
+		     family == AF_INET ? "" : "ipv6 ",
+		     access->name,
+		     filter_type_str (filter),
+		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+		     p->prefixlen,
+		     filter->exact ? " exact-match" : "",
+		     VTY_NEWLINE);
+	  write++;
+        }
+    }
   return write;
 }
 
@@ -1015,9 +1175,12 @@ access_list_init_ipv4 ()
 
   install_element (CONFIG_NODE, &access_list_exact_cmd);
   install_element (CONFIG_NODE, &access_list_cmd);
+  install_element (CONFIG_NODE, &access_list_remark_cmd);
   install_element (CONFIG_NODE, &no_access_list_exact_cmd);
   install_element (CONFIG_NODE, &no_access_list_cmd);
   install_element (CONFIG_NODE, &no_access_list_all_cmd);
+  install_element (CONFIG_NODE, &no_access_list_remark_cmd);
+  install_element (CONFIG_NODE, &no_access_list_remark_arg_cmd);
 }
 
 #ifdef HAVE_IPV6
@@ -1070,9 +1233,12 @@ access_list_init_ipv6 ()
 
   install_element (CONFIG_NODE, &ipv6_access_list_exact_cmd);
   install_element (CONFIG_NODE, &ipv6_access_list_cmd);
+  install_element (CONFIG_NODE, &ipv6_access_list_remark_cmd);
   install_element (CONFIG_NODE, &no_ipv6_access_list_exact_cmd);
   install_element (CONFIG_NODE, &no_ipv6_access_list_cmd);
   install_element (CONFIG_NODE, &no_ipv6_access_list_all_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_access_list_remark_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_access_list_remark_arg_cmd);
 }
 #endif /* HAVE_IPV6 */
 

@@ -112,7 +112,15 @@ bgp_timer_set (struct peer *peer)
       /* Active is waiting connection from remote peer.  And if
          connect timer is expired, change status to Connect. */
       BGP_TIMER_OFF (peer->t_start);
-      BGP_TIMER_ON (peer->t_connect, bgp_connect_timer, peer->v_connect);
+      /* If peer is passive mode, do not set connect timer. */
+      if (CHECK_FLAG (peer->flags, PEER_FLAG_PASSIVE))
+	{
+	  BGP_TIMER_OFF (peer->t_connect);
+	}
+      else
+	{
+	  BGP_TIMER_ON (peer->t_connect, bgp_connect_timer, peer->v_connect);
+	}
       BGP_TIMER_OFF (peer->t_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);
       BGP_TIMER_OFF (peer->t_asorig);
@@ -216,8 +224,7 @@ bgp_connect_timer (struct thread *thread)
   peer->t_connect = NULL;
 
   if (BGP_DEBUG (fsm, FSM))
-    zlog (peer->log, LOG_DEBUG,
-	  "%s [FSM] Timer (connect timer expire)",
+    zlog (peer->log, LOG_DEBUG, "%s [FSM] Timer (connect timer expire)",
 	  peer->host);
 
   THREAD_VAL (thread) = ConnectRetry_timer_expired;
@@ -382,6 +389,13 @@ int
 bgp_start (struct peer *peer)
 {
   int status;
+
+  /* If the peer is passive mode, force to move to Active mode. */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_PASSIVE))
+    {
+      BGP_EVENT_ADD (peer, TCP_connection_open_failed);
+      return 0;
+    }
 
   status = bgp_connect (peer);
 

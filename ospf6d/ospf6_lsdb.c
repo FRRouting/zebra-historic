@@ -46,10 +46,10 @@ attach_lsa_hdr_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
 struct ospf6_lsa *
 ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
 {
-  if (list_lookup_node (o6i->lsa_delayed_ack, lsa))
+  if (listnode_lookup (o6i->lsa_delayed_ack, lsa))
     {
 #ifndef NDEBUG
-      if (!list_lookup_node (lsa->delayed_ack_if, o6i))
+      if (! listnode_lookup (lsa->delayed_ack_if, o6i))
         assert (0);
 #endif /* NDEBUG */
       return lsa;
@@ -64,8 +64,8 @@ ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
   if (ospf6_lookup_delayed_ack (lsa, o6i))
     return;
 
-  list_add_node (o6i->lsa_delayed_ack, lsa);
-  list_add_node (lsa->delayed_ack_if, o6i);
+  listnode_add (o6i->lsa_delayed_ack, lsa);
+  listnode_add (lsa->delayed_ack_if, o6i);
   ospf6_lsa_lock (lsa);
 
 #if 0
@@ -82,8 +82,8 @@ ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
   if (!ospf6_lookup_delayed_ack (lsa, o6i))
     return;
 
-  list_delete_by_val (o6i->lsa_delayed_ack, lsa);
-  list_delete_by_val (lsa->delayed_ack_if, o6i);
+  listnode_delete (o6i->lsa_delayed_ack, lsa);
+  listnode_delete (lsa->delayed_ack_if, o6i);
   ospf6_lsa_unlock (lsa);
 
 #if 0
@@ -133,7 +133,7 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
             lsa = (struct ospf6_lsa *) getdata (n);
             if (lsa->lsa_hdr->lsh_type == type &&
                 lsa->lsa_hdr->lsh_advrtr == advrtr)
-              list_add_node (l, lsa);
+              listnode_add (l, lsa);
           }
         break;
 
@@ -144,7 +144,7 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
             lsa = (struct ospf6_lsa *) getdata (n);
             if (lsa->lsa_hdr->lsh_type == type &&
                 lsa->lsa_hdr->lsh_advrtr == advrtr)
-              list_add_node (l, lsa);
+              listnode_add (l, lsa);
           }
         break;
 
@@ -155,7 +155,7 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
             lsa = (struct ospf6_lsa *) getdata (n);
             if (lsa->lsa_hdr->lsh_type == type &&
                 lsa->lsa_hdr->lsh_advrtr == advrtr)
-              list_add_node (l, lsa);
+              listnode_add (l, lsa);
           }
         break;
 
@@ -308,7 +308,7 @@ ospf6_lsdb_add (struct ospf6_lsa *lsa, list lsdb)
                strerror (errno));
   lsa->installed = now.tv_sec;
 
-  list_add_node (lsdb, lsa);
+  listnode_add (lsdb, lsa);
   ospf6_lsa_lock (lsa);
 
   if (IS_OSPF6_DUMP_LSDB)
@@ -332,7 +332,7 @@ ospf6_lsdb_remove (struct ospf6_lsa *lsa, list lsdb)
   if (IS_OSPF6_DUMP_LSDB)
     zlog_info ("lsdb: removed %s (%#x lock:%d)", lsa->str, lsa, lsa->lock);
 
-  list_delete_by_val (lsdb, lsa);
+  listnode_delete (lsdb, lsa);
   ospf6_lsa_unlock (lsa);
 }
 
@@ -476,13 +476,13 @@ ospf6_lsdb_check_maxage_lsdb (list lsdb)
 {
   listnode n;
   struct ospf6_lsa *lsa;
-  list l = list_init ();
+  list l = list_new ();
 
   for (n = listhead (lsdb); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
       if (ospf6_lsa_is_maxage (lsa) && listcount (lsa->retrans_nbr) == 0)
-        list_add_node (l, lsa);
+        listnode_add (l, lsa);
     }
 
   for (n = listhead (l); n; nextnode (n))
@@ -491,7 +491,7 @@ ospf6_lsdb_check_maxage_lsdb (list lsdb)
       ospf6_lsdb_remove_maxage_lsa (lsa);
     }
 
-  list_delete_all (l);
+  list_delete (l);
 }
 
 void

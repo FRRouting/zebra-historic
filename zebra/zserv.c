@@ -802,7 +802,7 @@ zebra_client_close (struct zserv *client)
   ;
 
   /* Free client structure. */
-  list_delete_by_val (client_list, client);
+  listnode_delete (client_list, client);
   XFREE (0, client);
 }
 
@@ -824,7 +824,7 @@ zebra_client_create (int sock)
   client->rtm_table = rtm_table_default;
 
   /* Add this client to linked list. */
-  list_add_node (client_list, client);
+  listnode_add (client_list, client);
   
   /* Make new read thread. */
   zebra_event (ZEBRA_READ, sock, client);
@@ -1889,7 +1889,7 @@ void
 zebra_init ()
 {
   /* Client list init. */
-  client_list = list_init ();
+  client_list = list_new ();
 
   /* Forwarding on. */
   ipforward_on ();

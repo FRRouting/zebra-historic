@@ -76,9 +76,9 @@ ospf6_interface_create (struct interface *ifp, struct ospf6 *o6)
   o6i->area = (struct ospf6_area *) NULL;
   o6i->state = IFS_DOWN;
   o6i->is_passive = 0;
-  o6i->neighbor_list = list_init ();
-  o6i->lsa_delayed_ack = list_init ();
-  o6i->lsdb = list_init ();
+  o6i->neighbor_list = list_new ();
+  o6i->lsa_delayed_ack = list_new ();
+  o6i->lsdb = list_new ();
   o6i->transdelay = 1;
   o6i->priority = 1;
   o6i->hello_interval = 10;
@@ -129,7 +129,7 @@ ospf6_interface_if_del (struct interface *ifp, struct ospf6 *o6)
   if (o6i->area)
     thread_execute (master, interface_down, o6i, 0);
 
-  list_delete_by_val (o6i->area->if_list, o6i);
+  listnode_delete (o6i->area->if_list, o6i);
   o6i->area = (struct ospf6_area *) NULL;
 
   ospf6_interface_delete (o6i);
@@ -186,7 +186,7 @@ ospf6_interface_delete (struct ospf6_interface *o6i)
       o6n = (struct ospf6_neighbor *) getdata (n);
       ospf6_neighbor_delete (o6n);
     }
-  list_delete_all (o6i->neighbor_list);
+  list_delete (o6i->neighbor_list);
 
   if (o6i->thread_send_hello)
     {

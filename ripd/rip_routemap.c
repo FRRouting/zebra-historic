@@ -254,49 +254,43 @@ struct route_map_rule_cmd route_match_interface_cmd =
   route_match_interface_free
 };
 
-/* `match ip next-hop IP_ADDRESS' */
+/* `match ip next-hop IP_ACCESS_LIST' */
 
 /* Match function return 1 if match is success else return zero. */
 route_map_result_t
 route_match_ip_nexthop (void *rule, struct prefix *prefix,
 			route_map_object_t type, void *object)
 {
-  struct in_addr *addr;
+  struct access_list *alist;
   struct rip_info *rinfo;
+  struct prefix_ipv4 p;
 
   if (type == RMAP_RIP)
     {
-      addr = rule;
       rinfo = object;
-    
-      if (IPV4_ADDR_SAME (&rinfo->nexthop, addr))
-	return RMAP_MATCH;
-    }
+      p.family = AF_INET;
+      p.prefix = rinfo->nexthop;
+      p.prefixlen = IPV4_MAX_BITLEN;
 
+      alist = access_list_lookup (AF_INET, (char *) rule);
+      if (alist == NULL)
+	return RMAP_NOMATCH;
+
+      return (access_list_apply (alist, &p) == FILTER_DENY ?
+	      RMAP_NOMATCH : RMAP_MATCH);
+    }
   return RMAP_NOMATCH;
 }
 
-/* Route map `ip next-hop' match statement. `arg' is IP address
-   string. */
+/* Route map `ip next-hop' match statement.  `arg' should be
+   access-list name. */
 void *
 route_match_ip_nexthop_compile (char *arg)
 {
-  struct in_addr *addr;
-  int ret;
-
-  addr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in_addr));
-
-  ret = inet_aton (arg, addr);
-  if (!ret)
-    {
-      XFREE (MTYPE_ROUTE_MAP_COMPILED, addr);
-      return NULL;
-    }
-
-  return addr;
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
 }
 
-/* Free route map's compiled `ip address' value. */
+/* Free route map's compiled `. */
 void
 route_match_ip_nexthop_free (void *rule)
 {
@@ -521,33 +515,23 @@ DEFUN (no_match_interface,
 
 DEFUN (match_ip_nexthop,
        match_ip_nexthop_cmd,
-       "match ip next-hop A.B.C.D",
+       "match ip next-hop WORD",
        MATCH_STR
        IP_STR
        "Next hop address\n"
-       "IP address of next hop\n")
+       "IP access-list name\n")
 {
-  union sockunion su;
-  int ret;
-
-  ret = str2sockunion (argv[0], &su);
-  if (ret < 0)
-    {
-      vty_out (vty, "%% Malformed next-hop address%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
   return rip_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_match_ip_nexthop,
        no_match_ip_nexthop_cmd,
-       "no match ip next-hop A.B.C.D",
+       "no match ip next-hop WORD",
        NO_STR
        MATCH_STR
        IP_STR
        "Next hop address\n"
-       "IP address of next hop\n")
+       "IP access-list name\n")
 {
   return rip_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
 }

@@ -36,6 +36,7 @@
 #include "zebra/zserv.h"
 #include "zebra/redistribute.h"
 #include "zebra/interface.h"
+#include "zebra/debug.h"
 
 /* #define DEBUG */ 
 
@@ -142,10 +143,6 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
   int status;
   int ret;
   int seq = 0;
-
-#ifdef DEBUG
-  printf ("netlink_parse_info() called\n");
-#endif /* DEBUG */
 
   while (1)
     {
@@ -557,9 +554,6 @@ struct message rtproto_str [] =
 int
 netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
-#ifdef DEBUG
-  char buf[BUFSIZ];
-#endif /* DEBUG */
   int len;
   struct rtmsg *rtm;
   struct rtattr *tb [RTA_MAX + 1];
@@ -581,14 +575,12 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
     }
 
   /* Connected route. */
-#ifdef DEBUG
-  printf ("%s ", rtm->rtm_family == AF_INET ? "ipv4" : "ipv6");
-  printf ("proto %s ", lookup (rtproto_str, rtm->rtm_protocol));
-#endif /* DEBUG */
-
-#ifdef DEBUG
-  printf ("%s", rtm->rtm_type == RTN_UNICAST ? "unicast " : "multicast\n");
-#endif /* DEBUG */
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("%s %s %s proto %s",
+	       h->nlmsg_type == RTM_NEWROUTE ? "RTM_NEWROUTE" : "RTM_DELROUTE",
+	       rtm->rtm_family == AF_INET ? "ipv4" : "ipv6",
+	       rtm->rtm_type == RTN_UNICAST ? "unicast" : "multicast",
+	       lookup (rtproto_str, rtm->rtm_protocol));
 
   if (rtm->rtm_type != RTN_UNICAST)
     {
@@ -633,7 +625,7 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 
   if (rtm->rtm_src_len != 0)
     {
-      zlog_warn ("no src len");
+      zlog_warn ("netlink_route_change(): no src len");
       return 0;
     }
   
@@ -667,7 +659,6 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	  else
 	    rib_delete_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table);
 #endif /* 0 */
-
 	}
 #ifdef HAVE_IPV6
       if (rtm->rtm_family == AF_INET6)
@@ -677,7 +668,6 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	  memcpy (&p.prefix, dest, 16);
 	  p.prefixlen = rtm->rtm_dst_len;
 	  printf ("Network %s\n", inet_ntop (AF_INET6, &p.prefix, buf, BUFSIZ));
-	  
 #if 0
 	  if (h->nlmsg_type == RTM_NEWROUTE)
 	    rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, 0);
@@ -686,7 +676,7 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 #endif /* 0 */
 	}
 #endif /* HAVE_IPV6 */
-#endif
+#endif /* DEBUG */
       return 0;
     }
 
@@ -697,30 +687,43 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       memcpy (&p.prefix, dest, 4);
       p.prefixlen = rtm->rtm_dst_len;
 
-#ifdef DEBUG
-      printf ("Network %s\n", inet_ntoa (p.prefix));
-#endif /* DEBUG */
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	{
+	  if (h->nlmsg_type == RTM_NEWROUTE)
+	    zlog_info ("RTM_NEWROUTE %s/%d",
+		       inet_ntoa (p.prefix), p.prefixlen);
+	  else
+	    zlog_info ("RTM_DELROUTE %s/%d",
+		       inet_ntoa (p.prefix), p.prefixlen);
+	}
 
       if (h->nlmsg_type == RTM_NEWROUTE)
 	rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table, 0, 0);
       else
 	rib_delete_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table);
     }
+
 #ifdef HAVE_IPV6
   if (rtm->rtm_family == AF_INET6)
     {
       struct prefix_ipv6 p;
-
-      /* Hmmm.  I still can't find the reason. */
-      /* return 0; */
+      char buf[BUFSIZ];
 
       p.family = AF_INET6;
       memcpy (&p.prefix, dest, 16);
       p.prefixlen = rtm->rtm_dst_len;
 
-#ifdef DEBUG
-      printf ("Network %s\n", inet_ntop (AF_INET6, &p.prefix, buf, BUFSIZ));
-#endif /* DEBUG */
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	{
+	  if (h->nlmsg_type == RTM_NEWROUTE)
+	    zlog_info ("RTM_NEWROUTE %s/%d",
+		       inet_ntop (AF_INET6, &p.prefix, buf, BUFSIZ),
+		       p.prefixlen);
+	  else
+	    zlog_info ("RTM_DELROUTE %s/%d",
+		       inet_ntop (AF_INET6, &p.prefix, buf, BUFSIZ),
+		       p.prefixlen);
+	}
 
       if (h->nlmsg_type == RTM_NEWROUTE)
 	rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, 0);
@@ -728,10 +731,6 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	rib_delete_ipv6 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, 0);
     }
 #endif /* HAVE_IPV6 */
-
-#ifdef DEBUG
-  fflush (stdout);
-#endif
 
   return 0;
 }
@@ -916,9 +915,9 @@ struct message nlmsg_str[] =
 int
 netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
-#ifdef DEBUG
-  printf ("DEBGU: %s\n", lookup(nlmsg_str, h->nlmsg_type));
-#endif /* DEBUG */
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("%s netlink message is received",
+	       lookup(nlmsg_str, h->nlmsg_type));
 
   switch (h->nlmsg_type)
     {

@@ -35,7 +35,7 @@
 #include "str.h"
 #include "log.h"
 #include "plist.h"
-#include "newlist.h"
+#include "linklist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
@@ -55,10 +55,10 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 /* All BGP instance. */
-struct newlist *bgp_list;
+struct list *bgp_list;
 
 /* All peer instance. */
-struct newlist *peer_list;
+struct list *peer_list;
 
 /* BGP multiple instance flag. */
 int bgp_multiple_instance;
@@ -110,12 +110,12 @@ peer_group_free (struct peer_group *group)
 }
 
 struct peer_group *
-peer_group_lookup (struct newlist *list, char *name)
+peer_group_lookup (struct list *list, char *name)
 {
   struct peer_group *group;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (list, group, nn)
+  LIST_LOOP (list, group, nn)
     {
       if (strcmp(group->name, name) == 0)
 	return group;
@@ -140,8 +140,8 @@ peer_group_get (struct vty *vty, char *name, int afi, int safi)
 
   group = peer_group_new ();
   group->name = strdup (name);
-  group->peer_conf = newlist_new ();
-  newnode_add (bgp->peer_group, group);
+  group->peer_conf = list_new ();
+  listnode_add (bgp->peer_group, group);
 
   return CMD_SUCCESS;
 }
@@ -229,7 +229,7 @@ bgp_router_id_set (struct vty *vty, char *id_str)
   struct in_addr id;
   int ret;
   struct peer_conf *conf;
-  struct newnode *nn;
+  struct listnode *nn;
 
   ret = inet_aton (id_str, &id);
   if (!ret)
@@ -244,7 +244,7 @@ bgp_router_id_set (struct vty *vty, char *id_str)
   SET_FLAG (bgp->config, BGP_CONFIG_ROUTER_ID);
 
   /* Set all peer's local identifier with this value. */
-  NEWLIST_LOOP (bgp->peer_conf, conf, nn)
+  LIST_LOOP (bgp->peer_conf, conf, nn)
     {
       conf->peer->local_id = id;
     }
@@ -260,7 +260,7 @@ bgp_router_id_unset (struct vty *vty, char *id_str)
   struct bgp *bgp;
   struct in_addr id;
   struct peer_conf *conf;
-  struct newnode *nn;
+  struct listnode *nn;
 
   bgp = vty->index;
   
@@ -282,7 +282,7 @@ bgp_router_id_unset (struct vty *vty, char *id_str)
   bgp->id.s_addr = 0;
   UNSET_FLAG (bgp->config, BGP_CONFIG_ROUTER_ID);
 
-  NEWLIST_LOOP (bgp->peer_conf, conf, nn)
+  LIST_LOOP (bgp->peer_conf, conf, nn)
     {
       conf->peer->local_id.s_addr = 0;
     }
@@ -412,7 +412,7 @@ bgp_confederation_id_set (struct vty *vty, char *id_str)
   as_t as = 0;
   char *endptr = NULL;
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
   int old_confed_flag;  /* Old Confederations status */
 
   bgp = vty->index;
@@ -439,7 +439,7 @@ bgp_confederation_id_set (struct vty *vty, char *id_str)
        *          If we were not doing CONFEDs before
        *               - Reset all EBGP sessions
        */
-      NEWLIST_LOOP (peer_list, peer, nn)
+      LIST_LOOP (peer_list, peer, nn)
 	{
 	  /* We're looking for peers who's AS is not local or part of
              our CONFED*/
@@ -482,7 +482,7 @@ bgp_confederation_id_unset (struct vty *vty, char *id_str)
   as_t as;
   char *endptr = NULL;
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
   bgp = vty->index;
 
@@ -509,7 +509,7 @@ bgp_confederation_id_unset (struct vty *vty, char *id_str)
        * Assumption - No Confed ID == no CONFEDERATIONS, so
        * clear all EBGP *AND* CONFED peers and bring up with no spoofing.
        */
-      NEWLIST_LOOP (peer_list, peer, nn)
+      LIST_LOOP (peer_list, peer, nn)
 	{
 	  /* We're looking for peers who's AS is not local */
 	  if (peer->as != bgp->as)
@@ -615,14 +615,14 @@ bgp_confederation_peers_set (struct vty *vty, int argc, char *argv[])
 	  if (! bgp_confederation_peers_check (bgp, as))
 	    {
 	      struct peer *peer;
-	      struct newnode *nn;
+	      struct listnode *nn;
 
 	      /* Its not there already, so add it */
 	      bgp_confederation_peers_add (bgp, as);
 
 	      /* Now reset any peer who's remote AS has just joined
 		 the CONFED unless its an iBGP peer */
-	      NEWLIST_LOOP (peer_list, peer, nn)
+	      LIST_LOOP (peer_list, peer, nn)
 		{
 		  if (peer->as == as && peer->local_as != as)
 		    {
@@ -673,14 +673,14 @@ bgp_confederation_peers_unset (struct vty *vty, int argc, char *argv[])
 	  else
 	    {
 	      struct peer *peer;
-	      struct newnode *nn;
+	      struct listnode *nn;
 
 	      /* Its there - we need to remove it */
 	      bgp_confederation_peers_remove (bgp, as);
 
 	      /* Now reset any peer who's remote AS has just been
                  removed from the CONFED */
-	      NEWLIST_LOOP (peer_list, peer, nn)
+	      LIST_LOOP (peer_list, peer, nn)
 		{
 		  if (peer->as == as && peer->local_as != as)
 		    {
@@ -1036,7 +1036,7 @@ peer_new ()
 
   peer->ibuf = stream_new (BGP_MAX_PACKET_SIZE);
   peer->obuf = stream_fifo_new ();
-  peer->conf = newlist_new ();
+  peer->conf = list_new ();
 
   peer->adj_in[AFI_IP][SAFI_UNICAST] = route_table_init ();
   peer->adj_in[AFI_IP][SAFI_MULTICAST] = route_table_init ();
@@ -1063,12 +1063,12 @@ peer_sort (struct peer *peer)
   /* Find the relevant BGP structure */
   struct bgp *bgp;
   struct peer_conf *conf;
-  struct newnode *nn;
+  struct listnode *nn;
 
   /* This becomes slightly more complicated as we have to find the
      CONFEDERATION list, so we can see if this is a BGP_PEER_CONFED */
   bgp = NULL;
-  NEWLIST_LOOP (peer->conf, conf, nn)
+  LIST_LOOP (peer->conf, conf, nn)
     {
       bgp = conf->bgp;
     }
@@ -1158,8 +1158,8 @@ bgp_create ()
   bgp = XMALLOC (MTYPE_BGP, sizeof (struct bgp));
   memset (bgp, 0, sizeof (struct bgp));
 
-  bgp->peer_group = newlist_new ();
-  bgp->peer_conf = newlist_new ();
+  bgp->peer_group = list_new ();
+  bgp->peer_conf = list_new ();
   bgp->peer_conf->cmp = (int (*)(void *, void *)) peer_conf_cmp;
 
   bgp->route[AFI_IP] = route_table_init ();
@@ -1193,9 +1193,9 @@ struct bgp *
 bgp_lookup (as_t as, char *name)
 {
   struct bgp *bgp;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     if (bgp->as == as
 	&& ((bgp->name == NULL && name == NULL) 
 	    || (bgp->name && name && strcmp (bgp->name, name) == 0)))
@@ -1208,9 +1208,9 @@ struct bgp *
 bgp_lookup_by_name (char *name)
 {
   struct bgp *bgp;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     if ((bgp->name == NULL && name == NULL)
 	|| (bgp->name && name && strcmp (bgp->name, name) == 0))
       return bgp;
@@ -1251,7 +1251,7 @@ bgp_get (struct vty *vty, as_t as, char *name)
 
       bgp = bgp_create ();
       bgp->as = as;
-      newnode_add (bgp_list, bgp);
+      listnode_add (bgp_list, bgp);
       bgp_if_update_all ();
       vty->node = BGP_NODE;
       vty->index = bgp;
@@ -1272,7 +1272,7 @@ bgp_get (struct vty *vty, as_t as, char *name)
       bgp->as = as;
       if (name)
 	bgp->name = strdup (name);
-      newnode_add (bgp_list, bgp);
+      listnode_add (bgp_list, bgp);
       bgp_if_update_all ();
       vty->node = BGP_NODE;
       vty->index = bgp;
@@ -1303,15 +1303,15 @@ void
 bgp_delete (struct bgp *bgp)
 {
   struct peer_conf *conf;
-  struct newnode *nn;
-  struct newnode *next;
+  struct listnode *nn;
+  struct listnode *next;
 
   /* Delete static route. */
   bgp_static_delete (bgp);
 
   bgp->peer_group->del = (void (*)(void *)) peer_group_free;
 
-  newlist_delete (bgp->peer_group);
+  list_delete (bgp->peer_group);
 
   for (nn = bgp->peer_conf->head; nn; nn = next)
     {
@@ -1321,9 +1321,9 @@ bgp_delete (struct bgp *bgp)
     }
 
   /* Clear peer_conf */
-  newlist_delete (bgp->peer_conf);
+  list_delete (bgp->peer_conf);
 
-  newnode_delete (bgp_list, bgp);
+  listnode_delete (bgp_list, bgp);
 
   if (bgp->name)
     free (bgp->name);
@@ -1441,9 +1441,9 @@ struct peer *
 peer_lookup_with_local_as (union sockunion *su, as_t local_as)
 {
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if (sockunion_same (&peer->su, su) 
 	  && peer->local_as == local_as)
@@ -1460,9 +1460,9 @@ struct peer *
 peer_lookup_by_su (union sockunion *su)
 {
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if (sockunion_same (&peer->su, su))
 	return peer;
@@ -1480,16 +1480,16 @@ peer_lookup_with_open (union sockunion *su, as_t remote_as,
 		       struct in_addr *remote_id)
 {
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if (sockunion_same (&peer->su, su)
 	  && (peer->as == remote_as) 
 	  && (peer->remote_id.s_addr == remote_id->s_addr))
 	return peer;
     }
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if (sockunion_same (&peer->su, su)
 	  && (peer->as == remote_as) 
@@ -1502,10 +1502,10 @@ peer_lookup_with_open (union sockunion *su, as_t remote_as,
 struct peer_conf *
 peer_conf_lookup (struct bgp *bgp, union sockunion *su, int afi)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct peer_conf *conf;
 
-  NEWLIST_LOOP (bgp->peer_conf, conf, nn)
+  LIST_LOOP (bgp->peer_conf, conf, nn)
     {
       if (sockunion_same (&conf->peer->su, su))
 	{
@@ -1552,10 +1552,10 @@ peer_conf_lookup_vty (struct vty *vty, char *ip_str, int afi)
 struct peer_conf *
 peer_conf_lookup_existing (struct bgp *bgp, union sockunion *su)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct peer_conf *conf;
 
-  NEWLIST_LOOP (bgp->peer_conf, conf, nn)
+  LIST_LOOP (bgp->peer_conf, conf, nn)
     {
       if (sockunion_same (&conf->peer->su, su))
 	return conf;
@@ -1632,7 +1632,7 @@ peer_create (union sockunion *su, as_t local_as, struct in_addr id,
   peer->local_as = local_as;
   peer->as = remote_as;
   peer->local_id = id;
-  newnode_add (peer_list, peer);
+  listnode_add_sort (peer_list, peer);
 
   /* Default TTL set. */
   peer->ttl = (peer_sort (peer) == BGP_PEER_IBGP ? 255 : 1);
@@ -1654,7 +1654,7 @@ peer_create_accept ()
   struct peer *peer;
 
   peer = peer_new ();
-  newnode_add (peer_list, peer);
+  listnode_add_sort (peer_list, peer);
 
   return peer;
 }
@@ -1682,7 +1682,7 @@ peer_conf_create (int afi, int safi, struct peer *peer)
   /* Make new peer configuration then link it to the peer. */
   conf = peer_conf_new ();
   conf->peer = peer;
-  newnode_add (peer->conf, conf);
+  listnode_add_sort (peer->conf, conf);
 
   /* Store peer's active status. */
   active = peer_active (peer);
@@ -1817,7 +1817,7 @@ peer_remote_as (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
 	  /* New peer configuration. */
 	  conf = peer_conf_create (afi, safi, peer);
 	  conf->bgp = bgp;
-	  newnode_add (bgp->peer_conf, conf);
+	  listnode_add_sort (bgp->peer_conf, conf);
 	}
 
       /* Existing peer's AS number change. */
@@ -1853,7 +1853,7 @@ peer_remote_as (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
 	conf = peer_conf_create (afi, safi, peer);
 
       conf->bgp = bgp;
-      newnode_add (bgp->peer_conf, conf);
+      listnode_add_sort (bgp->peer_conf, conf);
     }
 
   /* Passive flag set. */
@@ -1934,7 +1934,7 @@ void
 peer_delete (struct peer *peer)
 {
   struct peer_conf *conf;
-  struct newnode *nn;
+  struct listnode *nn;
 
   /* Withdraw all information from routing table.  We can not use
      BGP_EVENT_ADD (peer, BGP_Stop) at here.  Because the event is
@@ -1943,14 +1943,14 @@ peer_delete (struct peer *peer)
   fsm_change_status (peer, Idle);
 
   /* Delete peer_conf link from BGP structure. */
-  NEWLIST_LOOP (peer->conf, conf, nn)
+  LIST_LOOP (peer->conf, conf, nn)
     {
-      newnode_delete (conf->bgp->peer_conf, conf);
+      listnode_delete (conf->bgp->peer_conf, conf);
     }
 
   /* Free peer_conf structure. */
   peer->conf->del = (void (*) (void *)) peer_conf_delete;
-  newlist_delete (peer->conf);
+  list_delete (peer->conf);
   peer->conf = NULL;
 
   /* Stop all timers. */
@@ -1962,7 +1962,7 @@ peer_delete (struct peer *peer)
   BGP_TIMER_OFF (peer->t_routeadv);
 
   /* Delete from all peer list. */
-  newnode_delete (peer_list, peer);
+  listnode_delete (peer_list, peer);
 
   if (peer->ibuf)
     stream_free (peer->ibuf);
@@ -2791,24 +2791,21 @@ peer_update_source_set (struct vty *vty, char *ip_str, int afi,
     return CMD_WARNING;
   peer = conf->peer;
 
-  peer->update_source = sockunion_str2su (source_str);
-
-  if (peer->update_source == NULL)
+  if (peer->update_source)
     {
-      peer->update_if = strdup (source_str);
-      if (peer->update_source)
-	{
-	  free (peer->update_source);
-	  peer->update_source = NULL;
-	}
-      return CMD_SUCCESS;
+      XFREE (MTYPE_SOCKUNION, peer->update_source);
+      peer->update_source = NULL;
     }
-
   if (peer->update_if)
     {
       free (peer->update_if);
       peer->update_if = NULL;
     }
+
+  peer->update_source = sockunion_str2su (source_str);
+
+  if (peer->update_source == NULL)
+    peer->update_if = strdup (source_str);
 
   return CMD_SUCCESS;
 }
@@ -2826,7 +2823,7 @@ peer_update_source_unset (struct vty *vty, char *ip_str, int afi)
 
   if (peer->update_source)
     {
-      free (peer->update_source);
+      XFREE (MTYPE_SOCKUNION, peer->update_source);
       peer->update_source = NULL;
     }
   if (peer->update_if)
@@ -4516,14 +4513,14 @@ bgp_distribute_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 void
 bgp_distribute_update (struct access_list *access)
 {
-  struct newnode *nn, *nm;
+  struct listnode *nn, *nm;
   struct bgp *bgp;
   struct peer_conf *conf;
   struct bgp_filter *filter;
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
-      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+      LIST_LOOP (bgp->peer_conf, conf, nm)
 	{
 	  filter = &conf->filter;
 
@@ -4709,14 +4706,14 @@ bgp_prefix_list_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 void
 bgp_prefix_list_update ()
 {
-  struct newnode *nn, *nm;
+  struct listnode *nn, *nm;
   struct bgp *bgp;
   struct peer_conf *conf;
   struct bgp_filter *filter;
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
-      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+      LIST_LOOP (bgp->peer_conf, conf, nm)
 	{
 	  filter = &conf->filter;
 
@@ -4898,15 +4895,15 @@ bgp_aslist_unset (struct vty *vty, char *ip_str, int afi, char *name_str,
 void
 bgp_aslist_update ()
 {
-  struct newnode *nn, *nm;
+  struct listnode *nn, *nm;
   struct bgp *bgp;
   struct peer_conf *conf;
   struct bgp_filter *filter;
   struct as_list *as_list_lookup (char *name);
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
-      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+      LIST_LOOP (bgp->peer_conf, conf, nm)
 	{
 	  filter = &conf->filter;
 
@@ -5243,7 +5240,7 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 {
   int cleared;
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
   as_t as;
   unsigned long as_ul;
   char *endptr = NULL;
@@ -5253,7 +5250,7 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
   /* Clear all bgp neighbors. */
   if (type == clear_all)
     {
-      NEWLIST_LOOP (peer_list, peer, nn)
+      LIST_LOOP (peer_list, peer, nn)
 	{
 	  if (peer_have_afi (peer, afi))
 	    {
@@ -5282,7 +5279,7 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 	  return CMD_WARNING;
 	}
 
-      NEWLIST_LOOP (peer_list, peer, nn)
+      LIST_LOOP (peer_list, peer, nn)
 	{
 	  if (peer_have_afi (peer, afi) && sockunion_same (&peer->su, &su))
 	    {
@@ -5319,7 +5316,7 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 
       as = (as_t) as_ul;
 
-      NEWLIST_LOOP (peer_list, peer, nn)
+      LIST_LOOP (peer_list, peer, nn)
 	{
 	  if (peer_have_afi (peer, afi) && peer->as == as)
 	    {
@@ -5447,7 +5444,7 @@ clear_bgp_soft_in (struct vty *vty, afi_t afi, safi_t safi, enum clear_type type
   int ret;
   union sockunion su;
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
   as_t as = 0;
   unsigned long as_ul;
   char *endptr = NULL;
@@ -5475,7 +5472,7 @@ clear_bgp_soft_in (struct vty *vty, afi_t afi, safi_t safi, enum clear_type type
 	as = (as_t) as_ul;
     }  
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if ((type == clear_peer && sockunion_same (&peer->su, &su))
     || (type == clear_as && peer->as == as)
@@ -5784,7 +5781,7 @@ clear_bgp_soft_out (struct vty *vty, afi_t afi, safi_t safi, enum clear_type typ
   int ret;
   union sockunion su;
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
   as_t as = 0;
   unsigned long as_ul;
   char *endptr = NULL;
@@ -5812,7 +5809,7 @@ clear_bgp_soft_out (struct vty *vty, afi_t afi, safi_t safi, enum clear_type typ
       as = (as_t) as_ul;
     }
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if ((type == clear_peer && sockunion_same (&peer->su, &su))
     || (type == clear_as && peer->as == as)
@@ -6448,8 +6445,8 @@ bgp_show_summary (struct vty *vty, int afi, int safi)
   struct bgp *bgp;
   struct peer *peer;
   struct peer_conf *conf;
-  struct newnode *nn;
-  struct newnode *nm;
+  struct listnode *nn;
+  struct listnode *nm;
   int count = 0;
   char timebuf[BGP_UPTIME_LEN];
 
@@ -6457,9 +6454,9 @@ bgp_show_summary (struct vty *vty, int afi, int safi)
   static char header_v4[] = " Neighbor        V     AS MsgRcvd MsgSent   TblVer InQ OutQ Up/Down  State/PfxRcd";
   static char header_v6[] = " Neighbor                          AS      MsgRcvd MsgSent  Up/Down  State/PfxRcd";
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
-      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+      LIST_LOOP (bgp->peer_conf, conf, nm)
 	{
 	  peer = conf->peer;
 
@@ -6925,7 +6922,7 @@ int
 bgp_show_neighbor (struct vty *vty, int afi, int safi, enum show_type type,
 		   char *ip_str)
 {
-  struct newnode *nn, *nm;
+  struct listnode *nn, *nm;
   struct bgp *bgp;
   struct peer_conf *conf;
   union sockunion su;
@@ -6942,9 +6939,9 @@ bgp_show_neighbor (struct vty *vty, int afi, int safi, enum show_type type,
 	}
     }
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
-      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+      LIST_LOOP (bgp->peer_conf, conf, nm)
 	{
 	  switch (type)
 	    {
@@ -7387,7 +7384,7 @@ bgp_config_write (struct vty *vty)
   struct bgp *bgp;
   struct peer_group *group;
   struct peer_conf *conf;
-  struct newnode *nn, *nm, *no;
+  struct listnode *nn, *nm, *no;
 
   /* BGP Multiple instance. */
   if (bgp_multiple_instance)
@@ -7397,7 +7394,7 @@ bgp_config_write (struct vty *vty)
     }
 
   /* BGP configuration. */
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
       if (write)
 	vty_out (vty, "!%s", VTY_NEWLINE);
@@ -7489,7 +7486,7 @@ bgp_config_write (struct vty *vty)
       bgp_config_write_redistribute (vty, bgp, AFI_IP);
 
       /* peer-group */
-      NEWLIST_LOOP (bgp->peer_group, group, nm)
+      LIST_LOOP (bgp->peer_group, group, nm)
 	{
 	  vty_out (vty, " neighbor %s peer-group", group->name);
 	  if (group->safi == SAFI_MULTICAST)
@@ -7504,7 +7501,7 @@ bgp_config_write (struct vty *vty)
 	}
 
       /* Normal neighbor configuration. */
-      NEWLIST_LOOP (bgp->peer_conf, conf, no)
+      LIST_LOOP (bgp->peer_conf, conf, no)
 	{
 	  if (conf->afc[AFI_IP][SAFI_UNICAST] 
 	      || conf->afc[AFI_IP][SAFI_MULTICAST]
@@ -7522,7 +7519,7 @@ bgp_config_write (struct vty *vty)
       /* IPv6 BGP static route configuration. */
       bgp_config_write_network (vty, bgp, AFI_IP6);
 
-      NEWLIST_LOOP (bgp->peer_conf, conf, no)
+      LIST_LOOP (bgp->peer_conf, conf, no)
 	{
 	  if (conf->afc[AFI_IP6][SAFI_UNICAST]
 	      || conf->afc[AFI_IP6][SAFI_MULTICAST])
@@ -7535,7 +7532,7 @@ bgp_config_write (struct vty *vty)
       {
 	int first = 1;
 
-	NEWLIST_LOOP (bgp->peer_conf, conf, no)
+	LIST_LOOP (bgp->peer_conf, conf, no)
 	  {
 	    if (conf->afc[AFI_IP][SAFI_MPLS_VPN])
 	      {
@@ -8011,8 +8008,8 @@ bgp_init ()
 #endif /* HAVE_IPV6 */
 
   /* Make global lists. */
-  bgp_list = newlist_new ();
-  peer_list = newlist_new ();
+  bgp_list = list_new ();
+  peer_list = list_new ();
   peer_list->cmp = (int (*)(void *, void *)) peer_list_cmp;
 
   /* BGP multiple instance. */

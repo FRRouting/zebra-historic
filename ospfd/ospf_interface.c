@@ -97,7 +97,7 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   if (oi->auth_crypt != NULL)
     list_delete_all_node (oi->auth_crypt);
   else
-    oi->auth_crypt = list_init ();
+    oi->auth_crypt = list_new ();
 
   oi->crypt_seqnum = 0;
 
@@ -140,11 +140,11 @@ ospf_if_new (struct interface *ifp)
   oi->nbrs = route_table_init ();
 
   /* Initialize static neighbor list. */
-  oi->nbr_static = list_init ();
+  oi->nbr_static = list_new ();
 
   /* Initialize Link State Acknowledgment list. */
-  oi->ls_ack = list_init ();
-  oi->ls_ack_direct.ls_ack = list_init ();
+  oi->ls_ack = list_new ();
+  oi->ls_ack_direct.ls_ack = list_new ();
 
   /* Set default values. */
   ospf_if_reset_variables (oi);
@@ -182,7 +182,7 @@ ospf_if_free (struct ospf_interface *oi)
 
   /*
   if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-    list_delete_by_val (oi->area->iflist, oi->ifp);
+    listnode_delete (oi->area->iflist, oi->ifp);
   else
   */
   if(oi->area != NULL)
@@ -222,7 +222,7 @@ ospf_if_free (struct ospf_interface *oi)
 	}
       nbr_static->oi = NULL;
     }
-  list_delete_all (oi->nbr_static);
+  list_delete (oi->nbr_static);
 
   /* Delete all related neighbors. */
   for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
@@ -239,10 +239,10 @@ ospf_if_free (struct ospf_interface *oi)
   /* Cleanup Link State Acknowlegdment list. */
   for (node = listhead (oi->ls_ack); node; nextnode (node))
     ospf_lsa_unlock (node->data);
-  list_delete_all (oi->ls_ack);
+  list_delete (oi->ls_ack);
 
   /* Cleanup crypt key list. */
-  list_delete_all (oi->auth_crypt);
+  list_delete (oi->auth_crypt);
 
   XFREE (MTYPE_OSPF_IF, oi);
 }
@@ -556,7 +556,7 @@ ospf_vl_shutdown (struct ospf_vl_data *vl_data)
 void
 ospf_vl_add (struct ospf_vl_data *vl_data)
 {
-  list_add_node (ospf_top->vlinks, vl_data);
+  listnode_add (ospf_top->vlinks, vl_data);
 }
 
 void
@@ -565,7 +565,7 @@ ospf_vl_delete (struct ospf_vl_data *vl_data)
   ospf_vl_shutdown (vl_data);
   ospf_vl_if_delete (vl_data);
 
-  list_delete_by_val (ospf_top->vlinks, vl_data);
+  listnode_delete (ospf_top->vlinks, vl_data);
 
   ospf_vl_data_free (vl_data);
 }
@@ -732,7 +732,7 @@ ospf_crypt_key_new ()
 void
 ospf_crypt_key_add (list crypt, struct crypt_key *ck)
 {
-  list_add_node (crypt, ck);
+  listnode_add (crypt, ck);
 }
 
 struct crypt_key *
@@ -762,7 +762,7 @@ ospf_crypt_key_delete (struct ospf_interface *oi, u_char key_id)
       ck = getdata (node);
       if (ck->key_id == key_id)
         {
-          list_delete_by_val (oi->auth_crypt, ck);
+          listnode_delete (oi->auth_crypt, ck);
           return 1;
         }
     }

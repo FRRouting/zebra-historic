@@ -49,7 +49,7 @@ if_zebra_new_hook (struct interface *ifp)
 
   zebra_if->multicast = IF_ZEBRA_MULTICAST_UNSPEC;
   zebra_if->shutdown = IF_ZEBRA_SHUTDOWN_UNSPEC;
-  zebra_if->address = list_init ();
+  zebra_if->address = list_new ();
 
 #ifdef RTADV
   {
@@ -69,7 +69,7 @@ if_zebra_new_hook (struct interface *ifp)
     rtadv->AdvCurHopLimit = 0;
     rtadv->AdvDefaultLifetime = 3 * rtadv->MaxRtrAdvInterval;
 
-    rtadv->AdvPrefixList = list_init ();
+    rtadv->AdvPrefixList = list_new ();
   }    
 #endif /* RTADV */
 
@@ -193,7 +193,7 @@ if_addr_add (struct interface *ifp, struct prefix *p)
   *addr = *p;
 
   if_data = (struct zebra_if *) ifp->info;
-  list_add_node (if_data->address, addr);
+  listnode_add (if_data->address, addr);
 
   /* Address check. */
   if (addr->family == AF_INET)
@@ -232,7 +232,7 @@ if_addr_delete (struct interface *ifp, struct prefix *p)
 	  {
 	    connected_delete_ipv4 (ifp, &addr->u.prefix4, 
 				   addr->prefixlen, NULL);
-	    list_delete_by_val (if_data->address, addr);
+	    listnode_delete (if_data->address, addr);
 	    return 0;
 	  }
 	
@@ -242,7 +242,7 @@ if_addr_delete (struct interface *ifp, struct prefix *p)
 	  {
 	    connected_delete_ipv6 (ifp, &addr->u.prefix6, 
 				   addr->prefixlen, NULL);
-	    list_delete_by_val (if_data->address, addr);
+	    listnode_delete (if_data->address, addr);
 	    return 0;
 	  }
 #endif /* HAVE_IPV6 */
@@ -273,9 +273,9 @@ if_tun_add (struct interface *ifsp, struct interface *ifdp,
   *daddr = *dp;
     
   if_sdata = (struct zebra_if *) ifsp->if_data;
-  list_add_node (if_sdata->address, saddr);
+  listnode_add (if_sdata->address, saddr);
   if_ddata = (struct zebra_if *) ifdp->if_data;
-  list_add_node (if_ddata->address, daddr);
+  listnode_add (if_ddata->address, daddr);
     
   /* Address check. */
   if (addr->family == AF_INET)

@@ -38,7 +38,6 @@
 #include "buffer.h"
 #include "table.h"
 #include "sockunion.h"
-#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -1750,14 +1749,14 @@ void
 bgp_route_map_update ()
 {
   int i;
-  struct newnode *nn, *nm;
+  struct listnode *nn, *nm;
   struct bgp *bgp;
   struct peer_conf *conf;
   struct bgp_filter *filter;
 
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
-      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+      LIST_LOOP (bgp->peer_conf, conf, nm)
 	{
 	  filter = &conf->filter;
 	  
@@ -1778,7 +1777,7 @@ bgp_route_map_update ()
     }
 
   /* For redistribute route-map updates. */
-  NEWLIST_LOOP (bgp_list, bgp, nn)
+  LIST_LOOP (bgp_list, bgp, nn)
     {
       for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
 	{

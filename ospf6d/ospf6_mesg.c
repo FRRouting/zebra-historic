@@ -250,7 +250,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_interface *o6i,
   if (!o6n)
     {
       o6n = ospf6_neighbor_create (router_id);
-      list_add_node (o6i->neighbor_list, o6n);
+      listnode_add (o6i->neighbor_list, o6n);
       o6n->ospf6_interface = o6i;
       o6n->ifid = ntohl (hello->interface_id);
       o6n->prevdr = o6n->dr = hello->dr;

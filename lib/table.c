@@ -88,16 +88,49 @@ route_node_free (struct route_node *node)
 void
 route_table_free (struct route_table *rt)
 {
-  struct route_node *rn;
-  struct route_node *next;
+  struct route_node *tmp_node;
+  struct route_node *node;
+ 
+  if (rt == NULL)
+    return;
 
-  for (rn = route_top (rt); rn; rn = next)
+  node = rt->top;
+
+  while (node)
     {
-      next = route_next (rn);
-      route_node_free (rn);
-    }
+      if (node->l_left)
+	{
+	  node = node->l_left;
+	  continue;
+	}
 
+      if (node->l_right)
+	{
+	  node = node->l_right;
+	  continue;
+	}
+
+      tmp_node = node;
+      node = node->parent;
+
+      if (node != NULL)
+	{
+	  if (node->l_left == tmp_node)
+	    node->l_left = NULL;
+	  else
+	    node->l_right = NULL;
+
+	  route_node_free (tmp_node);
+	}
+      else
+	{
+	  route_node_free (tmp_node);
+	  break;
+	}
+    }
+ 
   XFREE (MTYPE_ROUTE_TABLE, rt);
+  return;
 }
 
 /* Utility mask array. */

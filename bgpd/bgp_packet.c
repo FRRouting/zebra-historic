@@ -29,7 +29,7 @@
 #include "log.h"
 #include "memory.h"
 #include "sockunion.h"		/* for inet_ntop () */
-#include "newlist.h"
+#include "linklist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_dump.h"
@@ -604,7 +604,7 @@ int
 bgp_collision_detect (struct peer *new)
 {
   struct peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
   /* Upon receipt of an OPEN message, the local system must examine
      all of its connections that are in the OpenConfirm state.  A BGP
@@ -615,7 +615,7 @@ bgp_collision_detect (struct peer *new)
      OPEN message, then the local system performs the following
      collision resolution procedure: */
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       /* Under OpenConfirm status, local peer structure already hold
          remote router ID. */

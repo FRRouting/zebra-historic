@@ -72,7 +72,7 @@ ospf_flood_delayed_lsa_ack (struct ospf_neighbor *inbr, struct ospf_lsa *lsa)
     return;
 
   /* Schedule a delayed LSA Ack to be sent */ 
-  list_add_node (inbr->oi->ls_ack, ospf_lsa_lock (lsa));
+  listnode_add (inbr->oi->ls_ack, ospf_lsa_lock (lsa));
 }
 
 /* Check LSA is related to external info. */
@@ -91,17 +91,21 @@ ospf_external_info_check (struct ospf_lsa *lsa)
   p.prefixlen = ip_masklen (al->mask);
 
   for (type = 0; type <= ZEBRA_ROUTE_MAX; type++)
-    if (ospf_is_type_redistributed (type))
-      if (EXTERNAL_INFO (type))
-	{
-	  rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) &p);
-	  if (rn != NULL)
-	    {
-	      route_unlock_node (rn);
-	      if (rn->info != NULL)
-		return (struct external_info *) rn->info;
-	    }
-	}
+    {
+      int redist_type = is_prefix_default (&p) ? DEFAULT_ROUTE : type;
+      if (ospf_is_type_redistributed (redist_type))
+	if (EXTERNAL_INFO (type))
+	  {
+	    rn = route_node_lookup (EXTERNAL_INFO (type),
+				    (struct prefix *) &p);
+	    if (rn != NULL)
+	      {
+		route_unlock_node (rn);
+		if (rn->info != NULL)
+		  return (struct external_info *) rn->info;
+	      }
+	  }
+    }
 
   return NULL;
 }

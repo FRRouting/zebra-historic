@@ -25,7 +25,7 @@
 #include "prefix.h"
 #include "filter.h"
 #include "command.h"
-#include "newlist.h"
+#include "linklist.h"
 #include "memory.h"
 
 #define RIP_OFFSET_LIST_IN  0
@@ -44,7 +44,7 @@ struct rip_offset_list
   } direct[RIP_OFFSET_LIST_MAX];
 };
 
-static struct newlist *rip_offset_list_master;
+static struct list *rip_offset_list_master;
 
 int
 strcmp_safe (char *s1, char *s2)
@@ -78,9 +78,9 @@ struct rip_offset_list *
 rip_offset_list_lookup (char *ifname)
 {
   struct rip_offset_list *offset;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (rip_offset_list_master, offset, nn)
+  LIST_LOOP (rip_offset_list_master, offset, nn)
     {
       if (strcmp_safe (offset->ifname, ifname) == 0)
 	return offset;
@@ -100,7 +100,7 @@ rip_offset_list_get (char *ifname)
   offset = rip_offset_list_new ();
   if (ifname)
     offset->ifname = strdup (ifname);
-  newnode_add (rip_offset_list_master, offset);
+  listnode_add_sort (rip_offset_list_master, offset);
 
   return offset;
 }
@@ -182,7 +182,7 @@ rip_offset_list_unset (struct vty *vty, char *alist, char *direct_str,
       if (offset->direct[RIP_OFFSET_LIST_IN].alist_name == NULL &&
 	  offset->direct[RIP_OFFSET_LIST_OUT].alist_name == NULL)
 	{
-	  newnode_delete (rip_offset_list_master, offset);
+	  listnode_delete (rip_offset_list_master, offset);
 	  if (offset->ifname)
 	    free (offset->ifname);
 	  rip_offset_list_free (offset);
@@ -354,7 +354,7 @@ offset_list_del (struct rip_offset_list *offset)
 void
 rip_offset_init ()
 {
-  rip_offset_list_master = newlist_new ();
+  rip_offset_list_master = list_new ();
   rip_offset_list_master->cmp = (int (*)(void *, void *)) offset_list_cmp;
   rip_offset_list_master->del = (void (*)(void *)) offset_list_del;
 
@@ -367,9 +367,9 @@ rip_offset_init ()
 void
 rip_offset_clean ()
 {
-  newlist_delete (rip_offset_list_master);
+  list_delete (rip_offset_list_master);
 
-  rip_offset_list_master = newlist_new ();
+  rip_offset_list_master = list_new ();
   rip_offset_list_master->cmp = (int (*)(void *, void *)) offset_list_cmp;
   rip_offset_list_master->del = (void (*)(void *)) offset_list_del;
 }
@@ -377,10 +377,10 @@ rip_offset_clean ()
 int
 config_write_rip_offset_list (struct vty *vty)
 {
-  struct newnode *nn;
+  struct listnode *nn;
   struct rip_offset_list *offset;
 
-  NEWLIST_LOOP (rip_offset_list_master, offset, nn)
+  LIST_LOOP (rip_offset_list_master, offset, nn)
     {
       if (! offset->ifname)
 	{

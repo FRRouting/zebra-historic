@@ -26,7 +26,7 @@ struct keychain
 {
   char *name;
 
-  struct newlist *key;
+  struct list *key;
 };
 
 struct key_range

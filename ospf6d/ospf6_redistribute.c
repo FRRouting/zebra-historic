@@ -519,7 +519,7 @@ ospf6_redistribute_finish (struct ospf6 *o6)
           ospf6_redistribute_route_remove (info->type, info->ifindex,
                                            (struct prefix_ipv6 *) &rn->p);
         }
-      list_delete_all (l);
+      list_delete (l);
       rn->info = NULL;
     }
   route_table_finish (o6->redistribute_map);

@@ -124,7 +124,7 @@ int bgp_notify_update_msg_max = BGP_NOTIFY_UPDATE_MAX;
 
 /* Origin strings. */
 char *bgp_origin_str[] = {"i","e","?"};
-char *bgp_origin_long_str[] = {"IGP","EGP","Incomplete"};
+char *bgp_origin_long_str[] = {"IGP","EGP","incomplete"};
 
 #if 0
 /* Dump bgp header information. */
@@ -430,7 +430,7 @@ DEFUN (debug_bgp_fsm,
        "debug bgp fsm",
        DEBUG_STR
        BGP_STR
-       "BGP Finite Stete Machine\n")
+       "BGP Finite State Machine\n")
 {
   if (vty->node == CONFIG_NODE)
     DEBUG_ON (fsm, FSM);
@@ -445,7 +445,7 @@ DEFUN (no_debug_bgp_fsm,
        NO_STR
        DEBUG_STR
        BGP_STR
-       "Finite Stete Machine\n")
+       "Finite State Machine\n")
 {
   if (vty->node == CONFIG_NODE)
     DEBUG_OFF (fsm, FSM);

@@ -82,7 +82,7 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
   listnode node;
   struct ospf_neighbor *nbr, *dr = NULL, *bdr = NULL;
 
-  dr_list = list_init ();
+  dr_list = list_new ();
 
   /* Add neighbors to the list. */
   for (node = listhead (el_list); node; nextnode (node))
@@ -91,7 +91,7 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
 
       /* neighbor declared to be DR. */
       if (NBR_IS_DR (nbr))
-	list_add_node (dr_list, nbr);
+	listnode_add (dr_list, nbr);
 
       /* Preserve neighbor BDR. */
       if (IPV4_ADDR_SAME (&BDR (oi), &nbr->address.u.prefix4))
@@ -113,7 +113,7 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
   else
       DR (oi).s_addr = 0;
 
-  list_delete_all (dr_list);
+  list_delete (dr_list);
 
   return dr;
 }
@@ -125,8 +125,8 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
   listnode node;
   struct ospf_neighbor *nbr, *bdr = NULL;
 
-  bdr_list = list_init ();
-  no_dr_list = list_init ();
+  bdr_list = list_new ();
+  no_dr_list = list_new ();
 
   /* Add neighbors to the list. */
   for (node = listhead (el_list); node; nextnode (node))
@@ -139,9 +139,9 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
 
       /* neighbor declared to be BDR. */
       if (NBR_IS_BDR (nbr))
-	list_add_node (bdr_list, nbr);
+	listnode_add (bdr_list, nbr);
 
-      list_add_node (no_dr_list, nbr);
+      listnode_add (no_dr_list, nbr);
     }
 
   /* Elect Backup Designated Router. */
@@ -159,8 +159,8 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
   else
     BDR (oi).s_addr = 0;
 
-  list_delete_all (bdr_list);
-  list_delete_all (no_dr_list);
+  list_delete (bdr_list);
+  list_delete (no_dr_list);
 
   return bdr;
 }
@@ -190,7 +190,7 @@ ospf_dr_eligible_routers (struct route_table *nbrs, list el_list)
 	if (nbr->priority != 0)
 	  /* Is neighbor upper 2-Way? */
 	  if (nbr->status >= NSM_TwoWay)
-	    list_add_node (el_list, nbr);
+	    listnode_add (el_list, nbr);
 }
 
 /* Generate AdjOK? NSM event. */
@@ -224,7 +224,7 @@ ospf_dr_election (struct ospf_interface *oi)
   old_bdr = BDR (oi);
   old_status = oi->status;
 
-  el_list = list_init ();
+  el_list = list_new ();
 
   /* List eligible routers. */
   ospf_dr_eligible_routers (oi->nbrs, el_list);
@@ -250,7 +250,7 @@ ospf_dr_election (struct ospf_interface *oi)
       zlog_info ("DR-Election[2nd]: DR     %s", inet_ntoa (DR (oi)));
     }
 
-  list_delete_all (el_list);
+  list_delete (el_list);
 
   /* if DR or BDR changes, cause AdjOK? neighbor event. */
   if (!IPV4_ADDR_SAME (&old_dr, &DR (oi)) ||
@@ -454,7 +454,7 @@ ism_interface_down (struct ospf_interface *oi)
 
       nbr_static->oi = NULL;
 
-      list_delete_by_val (oi->nbr_static, nbr_static);
+      listnode_delete (oi->nbr_static, nbr_static);
     }
 
   /* send Neighbor event KillNbr to all associated neighbors. */

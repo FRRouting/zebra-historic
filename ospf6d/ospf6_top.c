@@ -143,8 +143,8 @@ ospf6_create (unsigned long process_id)
   gettimeofday (&ospf6->starttime, (struct timezone *)NULL);
   ospf6->process_id = process_id;
   ospf6->version = OSPF6_VERSION;
-  ospf6->area_list = list_init ();
-  ospf6->lsdb = list_init ();
+  ospf6->area_list = list_new ();
+  ospf6->lsdb = list_new ();
   ospf6->ase_ls_id = 0;
 
   /* route table init */
@@ -178,7 +178,7 @@ ospf6_delete (struct ospf6 *ospf6)
     {
       o6a = (struct ospf6_area *) getdata (n);
       ospf6_area_delete (o6a);
-      list_delete_by_val (ospf6->ospf6_area_list, o6a);
+      listnode_delete (ospf6->ospf6_area_list, o6a);
     }
   list_delete_all (ospf6->ospf6_area_list);
 

@@ -24,14 +24,14 @@
 #include "if.h"
 #include "prefix.h"
 #include "command.h"
-#include "newlist.h"
+#include "linklist.h"
 #include "thread.h"
 #include "memory.h"
 
 #include "ripd/ripd.h"
 
 /* Linked list of RIP peer. */
-struct newlist *peer_list;
+struct list *peer_list;
 
 struct rip_peer *
 rip_peer_new ()
@@ -53,9 +53,9 @@ struct rip_peer *
 rip_peer_lookup (struct in_addr *addr)
 {
   struct rip_peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if (IPV4_ADDR_SAME (&peer->addr, addr))
 	return peer;
@@ -67,9 +67,9 @@ struct rip_peer *
 rip_peer_lookup_next (struct in_addr *addr)
 {
   struct rip_peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       if (htonl (peer->addr.s_addr) > htonl (addr->s_addr))
 	return peer;
@@ -84,7 +84,7 @@ rip_peer_timeout (struct thread *t)
   struct rip_peer *peer;
 
   peer = THREAD_ARG (t);
-  newnode_delete (peer_list, peer);
+  listnode_delete (peer_list, peer);
   rip_peer_free (peer);
 
   return 0;
@@ -107,7 +107,7 @@ rip_peer_get (struct in_addr *addr)
     {
       peer = rip_peer_new ();
       peer->addr = *addr;
-      newnode_add (peer_list, peer);
+      listnode_add_sort (peer_list, peer);
     }
 
   /* Update timeout thread. */
@@ -183,11 +183,11 @@ void
 rip_peer_display (struct vty *vty)
 {
   struct rip_peer *peer;
-  struct newnode *nn;
+  struct listnode *nn;
 #define RIP_UPTIME_LEN 25
   char timebuf[RIP_UPTIME_LEN];
 
-  NEWLIST_LOOP (peer_list, peer, nn)
+  LIST_LOOP (peer_list, peer, nn)
     {
       vty_out (vty, "    %-16s %9d %9d %9d   %s%s", inet_ntoa (peer->addr),
 	       peer->recv_badpackets, peer->recv_badroutes,
@@ -206,6 +206,6 @@ rip_peer_list_cmp (struct rip_peer *p1, struct rip_peer *p2)
 void
 rip_peer_init ()
 {
-  peer_list = newlist_new ();
+  peer_list = list_new ();
   peer_list->cmp = (int (*)(void *, void *)) rip_peer_list_cmp;
 }

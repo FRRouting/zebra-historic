@@ -109,10 +109,10 @@ struct bgp
   as_t *confederation_peers;
 
   /* BGP peer */
-  struct newlist *peer_group;
+  struct list *peer_group;
 
   /* BGP peer-conf. */
-  struct newlist *peer_conf;
+  struct list *peer_conf;
 
   /* Static route configuration.  This configuration includes both
      unicast and multicast.  */
@@ -159,7 +159,7 @@ struct peer_group
   as_t as;
 
   /* Peer-group client list. */
-  struct newlist *peer_conf;
+  struct list *peer_conf;
 };
 
 /* BGP peer configuration. */
@@ -356,7 +356,7 @@ struct peer
   struct route_table *adj_out[AFI_MAX][SAFI_MAX];
 
   /* Linked peer configuration. */
-  struct newlist *conf;
+  struct list *conf;
 
   /* Notify data. */
   struct bgp_notify notify;
@@ -573,10 +573,10 @@ extern char *progname;
 extern struct thread_master *master;
 
 /* All BGP instance. */
-extern struct newlist *bgp_list;
+extern struct list *bgp_list;
 
 /* All peer instance.  This linked list is rarely used.  Usually
    bgp_list is used to walk down peer's list.  */
-extern struct newlist *peer_list;
+extern struct list *peer_list;
 
 #endif /* _ZEBRA_BGPD_H */

@@ -64,7 +64,7 @@ ospf_route_free (struct ospf_route *or)
       for (node = listhead (or->path); node; nextnode (node))
 	ospf_path_free (node->data);
 
-      list_delete_all (or->path);
+      list_delete (or->path);
     }
 
   XFREE (MTYPE_OSPF_ROUTE, or);
@@ -332,14 +332,14 @@ ospf_intra_route_add (struct route_table *rt, struct vertex *v,
   if (v->type == OSPF_VERTEX_NETWORK)
     {
       or->type = OSPF_DESTINATION_NETWORK;
-      or->path = list_init ();
+      or->path = list_new ();
 
       for (nnode = listhead (v->nexthop); nnode; nextnode (nnode))
 	{
 	  nexthop = getdata (nnode);
 	  path = ospf_path_new ();
 	  path->nexthop = nexthop->router;
-	  list_add_node (or->path, path);
+	  listnode_add (or->path, path);
 	}
     }
   else
@@ -427,13 +427,13 @@ ospf_intra_add_router (struct route_table *rt, struct vertex *v,
 
   /* Note that we keep all routes to ABRs and ASBRs, not only the best */
   if (rn->info == NULL)
-    rn->info = list_init ();
+    rn->info = list_new ();
   else
     route_unlock_node (rn);
 
   ospf_route_copy_nexthops_from_vertex (or, v);
 
-  list_add_node (rn->info, or);
+  listnode_add (rn->info, or);
 
   zlog_info ("ospf_intra_add_router: Start");
 }
@@ -594,7 +594,7 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 
 	  cur_or->cost = cost;
 
-	  list_delete_all (cur_or->path);
+	  list_delete (cur_or->path);
 	  cur_or->path = NULL;
 
 	  ospf_route_copy_nexthops_from_vertex (cur_or, v);
@@ -614,7 +614,7 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
   or->cost = cost;
   or->type = OSPF_DESTINATION_NETWORK;
   or->u.std.origin = (struct lsa_header *) lsa;
-  or->path = list_init ();
+  or->path = list_new ();
 
   /* Nexthop is depend on connection type. */
   if (v != area->spf)
@@ -634,7 +634,7 @@ ospf_intra_add_stub (struct route_table *rt, struct router_lsa_link *link,
 	  path = ospf_path_new ();
 	  path->nexthop.s_addr = 0;
 	  path->ifp = oi->ifp;
-	  list_add_node (or->path, path);
+	  listnode_add (or->path, path);
 	}
       else
 	zlog_info ("ospf_intra_add_stub(): where's the interface ?");
@@ -957,7 +957,7 @@ ospf_route_copy_nexthops_from_vertex (struct ospf_route *to,
   struct vertex_nexthop *nexthop;
 
   if (to->path == NULL)
-    to->path = list_init ();
+    to->path = list_new ();
 
   for (nnode = listhead (v->nexthop); nnode; nextnode (nnode))
     {
@@ -968,7 +968,7 @@ ospf_route_copy_nexthops_from_vertex (struct ospf_route *to,
 	  path = ospf_path_new ();
 	  path->nexthop = nexthop->router;
 	  path->ifp = nexthop->ifp;
-	  list_add_node (to->path, path);
+	  listnode_add (to->path, path);
 	}
     }
 }
@@ -996,12 +996,12 @@ ospf_route_copy_nexthops (struct ospf_route *to, list from)
   listnode node;
 
   if (to->path == NULL)
-    to->path = list_init ();
+    to->path = list_new ();
 
   for (node = listhead (from); node; nextnode (node))
     /* The same routes are just discarded. */
     if (!ospf_path_lookup (to->path, node->data))
-      list_add_node (to->path, ospf_path_dup (node->data));
+      listnode_add (to->path, ospf_path_dup (node->data));
 }
 
 void
@@ -1110,7 +1110,7 @@ ospf_prune_unreachable_routers (struct route_table *rtrs)
 	      zlog_info ("               via area %s",
 			 inet_ntoa (or->u.std.area_id));
 
-	      list_delete_by_val (paths, or);
+	      listnode_delete (paths, or);
 	      ospf_route_free (or);
 	    }
 	}
@@ -1119,7 +1119,7 @@ ospf_prune_unreachable_routers (struct route_table *rtrs)
 	{
 	  zlog_info ("Pruning router node %s", inet_ntoa (rn->p.u.prefix4));
 
-	  list_delete_all (paths);
+	  list_delete (paths);
 	  rn->info = NULL;
 	  route_unlock_node (rn);
 	}

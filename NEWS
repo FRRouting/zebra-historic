@@ -1,5 +1,20 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.90
+
+* Changes in lib
+
+** newlist.[ch] is merged with linklist.[ch].
+
+* Changes in bgpd
+
+** BGP passive peer support problem is fixed.
+
+** Redistributed IGP nexthop is passed to BGP nexthop.
+
+** On multiaccess media, if the nexthop is reachable nexthop is passed
+as it is.
+
 * Changes in zebra-0.89
 
 * Changes in lib

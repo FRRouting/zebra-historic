@@ -181,7 +181,7 @@ sockunion_str2su (char *str)
   int ret;
   union sockunion *su;
 
-  su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
+  su = XMALLOC (MTYPE_SOCKUNION, sizeof (union sockunion));
   memset (su, 0, sizeof (union sockunion));
 
   ret = inet_pton (AF_INET, str, &su->sin.sin_addr);
@@ -205,7 +205,7 @@ sockunion_str2su (char *str)
     }
 #endif /* HAVE_IPV6 */
 
-  XFREE (0, su);
+  XFREE (MTYPE_SOCKUNION, su);
   return NULL;
 }
 

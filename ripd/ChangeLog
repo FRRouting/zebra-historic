@@ -1,3 +1,16 @@
+2000-10-17  Akihiro Mizutani <mizutani@dml.com>
+
+	* rip_routemap.c (route_set_ip_nexthop_compile): Change "match ip
+	next-hop" from IP address to access-list name.
+
+2000-10-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_peer.c: Change ot use linklist.c instaed of newlist.c.
+
+2000-10-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_offset.c: Change to use linklist.c instead of newlist.c.
+
 2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.89 is released.

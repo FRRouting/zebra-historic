@@ -409,7 +409,7 @@ ospf_ls_upd_timer (struct thread *thread)
       retransmit_interval = nbr->oi->retransmit_interval;
 
       lsdb = &nbr->ls_rxmt;
-      update = list_init ();
+      update = list_new ();
 
       for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
 	{
@@ -429,12 +429,12 @@ ospf_ls_upd_timer (struct thread *thread)
 		  out a lot of retransmit traffic - MAG */
 	       if (tv_cmp (tv_sub (now, lsa->tv_recv), 
 			   int2tv (retransmit_interval)) >= 0)
-		 list_add_node (update, rn->info);
+		 listnode_add (update, rn->info);
 	   }
 	}
 
       ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
-      list_delete_all (update);
+      list_delete (update);
     }
 
   /* Set LS Update retransmission timer. */
@@ -1086,7 +1086,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
     }
 
   /* Send Link State Update for ALL requested LSAs. */
-  ls_upd = list_init ();
+  ls_upd = list_new ();
   length = OSPF_HEADER_SIZE + OSPF_LS_UPD_MIN_SIZE;
   while (size > 0)
     {
@@ -1122,7 +1122,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
 	}
 
       /* Append LSA to update list. */
-      list_add_node (ls_upd, find);
+      listnode_add (ls_upd, find);
       length += ntohs (find->data->length);
 
       size -= 12;
@@ -1135,7 +1135,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
 	ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_DIRECT);
       else
       ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_INDIRECT);
-      list_delete_all (ls_upd);
+      list_delete (ls_upd);
     }
 }
 
@@ -1150,7 +1150,7 @@ ospf_ls_upd_list_lsa (struct stream *s, struct ospf_interface *oi, size_t size)
   struct ospf_lsa *lsa;
   list lsas;
 
-  lsas = list_init ();
+  lsas = list_new ();
 
   count = stream_getl (s);
   size -= 4;
@@ -1191,7 +1191,7 @@ ospf_ls_upd_list_lsa (struct stream *s, struct ospf_interface *oi, size_t size)
       /*      if (IS_DEBUG_OSPF (lsa, LSA_FLOODING)) */
 	zlog_info("LSA[Type%d:%s]: %x new LSA created with Link State Update",
 		  lsa->data->type, inet_ntoa (lsa->data->id), lsa);
-      list_add_node (lsas, lsa);
+      listnode_add (lsas, lsa);
     }
 
   return lsas;
@@ -1208,7 +1208,7 @@ ospf_upd_list_clean (list lsas)
     if ((lsa = getdata (node)) != NULL)
       ospf_lsa_discard (lsa);
 
-  list_delete_all (lsas);
+  list_delete (lsas);
 }
 
 /* OSPF Link State Update message read -- RFC2328 Section 13. */
@@ -1263,7 +1263,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 
       lsa = getdata (node);
 
-      list_delete_by_val (lsas, lsa); /* We don't need it anymore */
+      listnode_delete (lsas, lsa); /* We don't need it anymore */
 
       /* Validate Checksum - Done above by ospf_ls_upd_list_lsa() */
 
@@ -1351,7 +1351,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 		 from Designated Router, otherwise do nothing. */
 	      if (oi->status == ISM_Backup)
 		if (NBR_IS_DR (nbr))
-		  list_add_node (oi->ls_ack, ospf_lsa_lock (lsa));
+		  listnode_add (oi->ls_ack, ospf_lsa_lock (lsa));
 
               DISCARD_LSA (lsa);
 	    }
@@ -1402,7 +1402,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
     }
   
   assert (listcount (lsas) == 0);
-  list_delete_all (lsas);
+  list_delete (lsas);
 }
 
 /* OSPF Link State Acknowledgment message read -- RFC2328 Section 13.7. */
@@ -2148,8 +2148,7 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
   pp = stream_get_putp (s);
   ospf_output_forward (s, 4);
 
-  /*  for (node = listhead (update); node; node = next) */
-  while ((node = listhead (update)))
+  while ((node = listhead (update)) != NULL)
     {
       struct lsa_header *lsah;
       u_int16_t ls_age;
@@ -2202,7 +2201,7 @@ ospf_make_ls_ack (struct ospf_interface *oi, list ack, struct stream *s)
   unsigned long delta = stream_get_putp(s) + 24;
   struct ospf_lsa *lsa;
 
-  rm_list = list_init ();
+  rm_list = list_new ();
   
   for (node = listhead (ack); node; nextnode (node))
     {
@@ -2215,7 +2214,7 @@ ospf_make_ls_ack (struct ospf_interface *oi, list ack, struct stream *s)
       stream_put (s, lsa->data, OSPF_LSA_HEADER_SIZE);
       length += OSPF_LSA_HEADER_SIZE;
       
-      list_add_node (rm_list, lsa);
+      listnode_add (rm_list, lsa);
     }
   
   /* Remove LSA from LS-Ack list. */
@@ -2223,11 +2222,11 @@ ospf_make_ls_ack (struct ospf_interface *oi, list ack, struct stream *s)
     {
       lsa = (struct ospf_lsa *) getdata (node);
       
-      list_delete_by_val (ack, lsa);
+      listnode_delete (ack, lsa);
       ospf_lsa_unlock (lsa);
     }
   
-  list_delete_all (rm_list);
+  list_delete (rm_list);
   
   return length;
 }
@@ -2524,12 +2523,12 @@ ospf_ls_upd_send_lsa (struct ospf_neighbor *nbr, struct ospf_lsa *lsa,
 {
   list update;
 
-  update = list_init ();
+  update = list_new ();
 
-  list_add_node (update, lsa);
+  listnode_add (update, lsa);
   ospf_ls_upd_send (nbr, update, flag);
 
-  list_delete_all (update);
+  list_delete (update);
 }
 
 #if 0
@@ -2628,7 +2627,7 @@ ospf_ls_upd_send_queue_event (struct thread *thread)
       while (!list_isempty ((list)rn->info))
 	ospf_ls_upd_send_list (oi, rn->info, rn->p.u.prefix4);
 
-      list_delete_all (rn->info);
+      list_delete (rn->info);
       rn->info = NULL;
       
       route_unlock_node (rn);
@@ -2675,10 +2674,10 @@ ospf_ls_upd_send (struct ospf_neighbor *nbr, list update, int flag)
   rn = route_node_get (oi->ls_upd_queue, (struct prefix *) &p);
 
   if (rn->info == NULL)
-    rn->info = list_init ();
+    rn->info = list_new ();
 
   for (n = listhead (update); n; nextnode (n))
-    list_add_node (rn->info, ospf_lsa_lock (getdata (n)));
+    listnode_add (rn->info, ospf_lsa_lock (getdata (n)));
 
   if (oi->t_ls_upd_event == NULL)
     oi->t_ls_upd_event =
@@ -2813,7 +2812,7 @@ ospf_ls_ack_send (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
   if (listcount (oi->ls_ack_direct.ls_ack) == 0)
     oi->ls_ack_direct.dst = nbr->address.u.prefix4;
   
-  list_add_node (oi->ls_ack_direct.ls_ack, ospf_lsa_lock (lsa));
+  listnode_add (oi->ls_ack_direct.ls_ack, ospf_lsa_lock (lsa));
   
   if (oi->t_ls_ack_direct == NULL)
     oi->t_ls_ack_direct =

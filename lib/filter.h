@@ -43,6 +43,7 @@ enum access_type
 struct access_list
 {
   char *name;
+  char *remark;
 
   struct access_master *master;
 

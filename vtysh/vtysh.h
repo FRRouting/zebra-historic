@@ -46,7 +46,11 @@
 #define OSPF6_PATH "/tmp/ospf6d"
 #define BGP_PATH "/tmp/bgpd"
 
+/* vtysh local configuration file. */
 #define VTYSH_DEFAULT_CONFIG "vtysh.conf"
+
+/* Integrated configuration file. */
+#define ZEBRA_DEFAULT_CONFIG "Zebra.conf"
 
 void vtysh_init_vty ();
 void vtysh_init_cmd ();
