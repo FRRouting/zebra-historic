@@ -272,33 +272,34 @@ aspath_parse (caddr_t pnt, int length)
   return aspath;
 }
 
-/* Merge two as for aggregation. */
+/* Merge two AS for aggregation. */
 struct aspath *
 aspath_aggregate (struct aspath *as1, struct aspath *as2)
 {
-  caddr_t pnt1;
-  caddr_t pnt2;
+  caddr_t cp1;
+  caddr_t cp2;
   caddr_t end1;
   caddr_t end2;
   int match;
 
   match = 0;
-  pnt1 = as1->data;
+  cp1 = as1->data;
   end1 = as1->data + as1->length;
-  pnt2 = as2->data;
+  cp2 = as2->data;
   end2 = as2->data + as2->length;
 
   /* First of all common element search. */
-  while ((pnt1 < end1) && (pnt2 < end2))
+  while ((cp1 < end1) && (cp2 < end2))
     {
       int i;
       int min_len;
-      struct assegment *seg1 = (struct assegment *) pnt1;
-      struct assegment *seg2 = (struct assegment *) pnt2;
+      struct assegment *seg1 = (struct assegment *) cp1;
+      struct assegment *seg2 = (struct assegment *) cp2;
 
       if (seg1->type != seg2->type)
 	break;
 
+      /* Minimum segment length. */
       min_len = seg1->length;
       if (min_len > seg2->length)
 	min_len = seg2->length;
@@ -311,8 +312,8 @@ aspath_aggregate (struct aspath *as1, struct aspath *as2)
 	      break;
 	    }
 	}
-      pnt1 += ((seg1->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
-      pnt2 += ((seg2->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
+      cp1 += ((seg1->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
+      cp2 += ((seg2->length * AS_VALUE_SIZE) + AS_HEADER_SIZE);
     }
   
 
@@ -459,9 +460,9 @@ aspath_empty_aspath (int gated_dont_eat_flag)
 {
   if (gated_dont_eat_flag)
     {
-      /* This is not acceptable with gated. */
       struct assegment segment;
 
+      /* This is not acceptable with gated. */
       segment.type = AS_SEQUENCE;
       segment.length = 0;
 
@@ -709,47 +710,11 @@ aspath_test ()
   struct aspath *as1;
   struct aspath *as2;
 
-  as1 = aspath_empty_aspath (0);
-  printf("%s\n", aspath_print (as1));
-
-  as2 = aspath_val2as (2519);
-  printf("%s\n", aspath_print (as2));
-
-  printf ("hash check %p %p\n", as1, as2);
-
-
-  {
-    int ret;
-    regex_t regex;
-    ret = regcomp (&regex, "1", REG_EXTENDED);
-    if (ret != 0)
-      fprintf (stderr, "comple error\n");
-
-    ret = regexec (&regex, as1->str, 0, NULL, 0);
-    if (ret != REG_NOMATCH)
-      printf ("match\n");
-    else
-      printf ("not match\n");
-
-    regfree (&regex);
-
-    exit (0);
-  }
-
-  as1 = aspath_str2aspath ("2519 2561");
-  as2 = aspath_str2aspath ("2519 (2561) {1}");
+  as1 = aspath_str2aspath ("7675 1");
+  as2 = aspath_str2aspath ("7675 1 2 3");
   printf("%s\n", aspath_print (as1));
   printf("%s\n", aspath_print (as2));
 
-  aspath_add_left (as2, 7675);
-  printf ("test: %s\n", aspath_print (as2));
-
-  as1 = aspath_empty_aspath (0);
-  printf ("empty aspath : %s\n", aspath_print (as1));
-
-  aspath_add_left (as1, 65502);
-  printf ("test: %s\n", aspath_print (as1));
-
-  printf ("same %d\n", aspath_cmp (as1, as2));
+  printf("%s\n", aspath_print (aspath_aggregate (as1, as2)));
 }
 #endif /* ASPATH_TEST */

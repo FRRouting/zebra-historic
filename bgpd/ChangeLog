@@ -1,3 +1,31 @@
+1999-05-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c: Add some commands to bgp route-map.
+	match ip next-hop: New command.
+	match metric: New command.
+	set metric: Doc fix.
+	set local-preference: Add DEFUN.
+
+1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
+
+	* bgp_main.c (signal_init): SIGTERM call sigint.
+	(sigint): Loggging more better message.
+
+1999-05-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_packet_attribute): AS path attribute extended
+	length bit check is added.
+
+1999-05-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c (bgp_route_map_init): Call route_map_install_set
+	function with route_set_local_pref_cmd argument.
+	(no_match_aspath): Function added.
+	(route_set_metric): Set attribute flag bit.
+
+	* bgp_attr.c (bgp_packet_attribute): MULTI_EXIT_DISC is now in BGP
+	packet.
+
 1999-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgpd.c (no_neighbor_timers_holdtime): `no neighbor PEER timers

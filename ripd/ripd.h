@@ -71,10 +71,12 @@
 struct rip 
 {
   int sock;			/* RIP socket. */
+  int enable;			/* RIP is enabled or not. */
   u_char version;		/* Default version of rip instance. */
   u_char multicast;		/* Do multicast treatment. */
-  struct thread *read;		/* Update timer. */
-  struct thread *timer;		/* Update timer. */
+
+  struct thread *t_read;		/* Update timer. */
+  struct thread *t_timer;		/* Update timer. */
 };
 
 /* RIP routing table entry which belong to rip_packet. */
@@ -170,7 +172,7 @@ struct message
 #define LOOKUP(X, Y)  (X)[(Y)].str
 
 /* There is only one rip strucutre. */
-extern struct rip *rip;
+extern struct rip rip;
 
 /* Prototypes. */
 void rip_start ();

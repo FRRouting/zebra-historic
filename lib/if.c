@@ -370,7 +370,7 @@ connected_log (struct connected *connected)
   ifp = connected->ifp;
   p = connected->address;
 
-  snprintf (logbuf, BUFSIZ, "interface %s %s %s/%d", 
+  snprintf (logbuf, BUFSIZ, "interface %s %s %s/%d ", 
        ifp->name, 
        prefix_family_str (p),
        inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),

@@ -1,3 +1,40 @@
+1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_process_route): Set interface pointer to rinfo.
+
+1999-05-15  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
+
+	* ripd.c (rip_check_address): Unicast and not net 0 or 127 check
+	added.
+
+1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
+
+	* rip_main.c (signal_init): SIGTERM call sigint.
+	(sigint): Loggging more better message.
+
+1999-05-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_add_route): Fix previous route_unlock_node() chenge.
+
+	* rip_main.c (main): Change default zlog output to ZLOG_STDOUT for
+	debugging.
+
+1999-05-09  Patrick Koppen <koppen@rhrk.uni-kl.de>
+
+	* rip_interface.c (rip_request): Fix old semantics for fetching
+	connected address.
+
+	* ripd.c (rip_add_route): Update timer when the route is updated.
+
+1999-05-09  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
+
+	* rip_zebra.c (struct zebra): Add ridist_static, ridist_connect,
+	redist_rip, redist_ripng.  
+
+	* rip_zebra.c (zebra_create): Updated for current zebra method.
+
+	* ripd.c (rip_add_route): Add missing route_unlock_node().
+
 1999-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (rip_add_route): Add metric check.  Reported by Carlos

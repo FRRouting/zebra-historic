@@ -16,7 +16,7 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for zebra-0.64.1.
+   This is the Zebra Manual for zebra-0.65.
 
    This manual describes `zebra' and some other beasts.
 
@@ -97,6 +97,10 @@ is for you
 `RFC1771'
      A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March
      1995.
+
+`RFC1996'
+     BGP Route Reflection An alternative to full mesh IBGP. T. Bates &
+     R. Chandrasekeran. June 1996.
 
 `RFC1997'
      BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August
@@ -385,6 +389,10 @@ Basic configuration
 
  - Command: enable password PASSWORD
      Set enable password.
+
+ - Command: lines NROFLINES
+     Override no. of terminal lines for vty interface.  Set it to zero
+     to avoid pagination.
 
  - Command: log stdout
  - Command: log file FILENAME
@@ -698,6 +706,11 @@ File: zebra.info,  Node: Static route,  Next: zebra terminal mode commands,  Pre
 
 Static route
 ============
+
+ - Command: table TABLENO
+     Select the primary kernel routing table to be used.  This only
+     works for kernels supporting multiple routing tables (like Linux
+     2.2.x).
 
  - Command: ip route NETWORK GATEWAY
 
@@ -1679,6 +1692,7 @@ Command Index
 * ip route NETWORK GATEWAY:              Static route.
 * ipv6 route NETWORK GATEWAY:            Static route.
 * line vty:                              Basic configuration.
+* lines NROFLINES:                       Basic configuration.
 * list:                                  Basic configuration.
 * log file FILENAME:                     Basic configuration.
 * log stdout:                            Basic configuration.
@@ -1728,6 +1742,7 @@ Command Index
 * show ipv6forward:                      zebra terminal mode commands.
 * show version:                          Basic configuration.
 * shutdown:                              Interface.
+* table TABLENO:                         Static route.
 * who:                                   Basic configuration.
 * write file:                            Basic configuration.
 * write terminal:                        Basic configuration.
@@ -1769,70 +1784,70 @@ VTY Key Index
 
 Tag Table:
 Node: Top231
-Node: Overview1723
-Node: What is Zebra2330
-Node: System architecture4034
-Node: Mailing list5882
-Node: Bug report6500
-Node: Installation7367
-Node: GNU/Linux configuration7917
-Node: Configure options9473
-Node: VTY port setup11081
-Node: Configuration File11849
-Node: Basic configuration12424
-Node: Sample Configuration13593
-Node: VTY14292
-Node: What is VTY14778
-Node: How to use VTY14996
-Node: View mode and Enable mode15546
-Node: Other modes15763
-Node: Command line editing15901
-Node: Advanced command line editing16496
-Node: Command line history17013
-Node: Command line completion17275
-Node: Command line help17498
-Node: zebra17778
-Node: Common invoking options18161
-Node: Invoking zebra18673
-Node: Interface19108
-Node: Static route19652
-Node: zebra terminal mode commands19865
-Node: ripd20766
-Node: Invoking ripd21027
-Node: ripd configuration21327
-Node: ripd terminal mode commands21482
-Node: ripngd21633
-Node: Invoking ripngd21954
-Node: ripngd configuration22209
-Node: ripngd terminal mode commands22873
-Node: ripngd filtering commands23095
-Node: ospfd23560
-Node: Invoking ospfd23853
-Node: ospfd configuration24103
-Node: ospfd terminal mode commands24433
-Node: ospf6d24589
-Node: Invoking ospf6d24706
-Node: bgpd24811
-Node: Invoking bgpd25368
-Node: bgpd configuration25744
-Node: bgpd terminal mode commands28641
-Node: bgpd sample session29280
-Node: bgpd log format29480
-Node: How to set up 6bone connection29970
-Node: Filtering31201
-Node: IP access list31511
-Node: IP prefix list31735
-Node: AS path access list31876
-Node: Route map32004
-Node: Route map command32487
-Node: IP address match command32691
-Node: BGP set command32913
-Node: IPv6 supports33278
-Node: Kernel interface33489
-Node: Linux netlink34619
-Node: Zebra protocol35402
-Node: Copying36069
-Node: Command Index55270
-Node: VTY Key Index59972
+Node: Overview1721
+Node: What is Zebra2328
+Node: System architecture4149
+Node: Mailing list5997
+Node: Bug report6615
+Node: Installation7482
+Node: GNU/Linux configuration8032
+Node: Configure options9588
+Node: VTY port setup11196
+Node: Configuration File11964
+Node: Basic configuration12539
+Node: Sample Configuration13834
+Node: VTY14533
+Node: What is VTY15019
+Node: How to use VTY15237
+Node: View mode and Enable mode15787
+Node: Other modes16004
+Node: Command line editing16142
+Node: Advanced command line editing16737
+Node: Command line history17254
+Node: Command line completion17516
+Node: Command line help17739
+Node: zebra18019
+Node: Common invoking options18402
+Node: Invoking zebra18914
+Node: Interface19349
+Node: Static route19893
+Node: zebra terminal mode commands20284
+Node: ripd21185
+Node: Invoking ripd21446
+Node: ripd configuration21746
+Node: ripd terminal mode commands21901
+Node: ripngd22052
+Node: Invoking ripngd22373
+Node: ripngd configuration22628
+Node: ripngd terminal mode commands23292
+Node: ripngd filtering commands23514
+Node: ospfd23979
+Node: Invoking ospfd24272
+Node: ospfd configuration24522
+Node: ospfd terminal mode commands24852
+Node: ospf6d25008
+Node: Invoking ospf6d25125
+Node: bgpd25230
+Node: Invoking bgpd25787
+Node: bgpd configuration26163
+Node: bgpd terminal mode commands29060
+Node: bgpd sample session29699
+Node: bgpd log format29899
+Node: How to set up 6bone connection30389
+Node: Filtering31620
+Node: IP access list31930
+Node: IP prefix list32154
+Node: AS path access list32295
+Node: Route map32423
+Node: Route map command32906
+Node: IP address match command33110
+Node: BGP set command33332
+Node: IPv6 supports33697
+Node: Kernel interface33908
+Node: Linux netlink35038
+Node: Zebra protocol35821
+Node: Copying36488
+Node: Command Index55689
+Node: VTY Key Index60508
 
 End Tag Table

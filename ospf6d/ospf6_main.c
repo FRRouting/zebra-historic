@@ -85,7 +85,7 @@ sighup (int sig)
 void
 sigint (int sig)
 {
-  zlog (NULL, LOG_INFO, "SIGINT received");
+  zlog (NULL, LOG_INFO, "Terminating on signal");
 
   /* Close all ospf peer and free all of resources. */
   terminate (0);
@@ -120,7 +120,7 @@ signal_init ()
 {
   signal_set (SIGHUP, sighup);
   signal_set (SIGINT, sigint);
-  signal_set (SIGTERM, SIG_IGN);
+  signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
 #ifdef SIGTSTP
   signal_set (SIGTSTP, SIG_IGN);

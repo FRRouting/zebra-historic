@@ -57,6 +57,7 @@
 #include <syslog.h>
 #include <time.h>
 #include <sys/uio.h>
+#include <sys/utsname.h>
 
 /* machine dependent includes */
 #ifdef HAVE_LINUX_VERSION_H
@@ -105,6 +106,13 @@
 #endif /* HAVE_NET_IF_VAR_H */
 
 #include <net/route.h>
+
+#ifdef HAVE_LINUX_RTNETLINK_H
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#else
+#define RT_TABLE_MAIN		0
+#endif /* HAVE_LINUX_RTNETLINK_H */
 
 #ifdef HAVE_NETDB_H
 #include <netdb.h>

@@ -237,7 +237,7 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
 
     ifroute = *p;
     apply_mask (&ifroute);
-    kernel_add_ipv4 (&ifroute, NULL, ifp->index, 0);
+    kernel_add_ipv4 (&ifroute, NULL, ifp->index, 0, 0);
   }
 #endif /* LINUX_VERSION_CODE */
 

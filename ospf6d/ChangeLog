@@ -1,3 +1,12 @@
+1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
+
+	* ospf6_main.c (signal_init): SIGTERM call sigint.
+	(sigint): Loggging more better message.
+
+1999-05-13  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	*ospf6_spf.c (get_prefix_lsa_of_vertex): bug fix about network vertex.
+
 1999-05-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf6_network.c (send_linkstate_ack): Check HAVE_SIN6_SCOPE_ID

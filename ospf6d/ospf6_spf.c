@@ -199,7 +199,11 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
 
   if_indextoname (ifindex, ifname);
   ospf6_if = ospf6_if_lookup (ifname);
-  zvlog_err ("can't find ospf6_if for ifid %lu, name %s", ifindex, ifname);
+  if (!ospf6_if)
+    {
+      zvlog_err ("can't find ospf6_if for ifid %lu, name %s",
+                 ifindex, ifname);
+    }
 
   if (id_one && !id_two)        /* Router */
     {
@@ -209,7 +213,11 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
           if (lsi->lsh->lsh_advrtr == id_one)
             break;
         }
-      assert (lsi && lsi->lsh);
+      if (!lsi || !lsi->lsh)
+        {
+          zvlog_err ("Can't find Link-LSA for %s", inet4str (id_one));
+          return NULL;
+        }
       linklsa = (struct link_lsa *)(lsi->lsh + 1);
       memcpy (&nexthopinfo->nexthop_addr, &linklsa->llsa_linklocal,
               sizeof (struct in6_addr));
@@ -608,8 +616,18 @@ route_install_internal (struct ospf6_prefix *dst, cost_t cost,
   zvlog_debug ("ifindex: %lu", ifindex);
   area->rt_table[area->tablesize].ifindex
     = ifindex;
-  memcpy (&area->rt_table[area->tablesize].next_hop,
-          nexthop, sizeof (struct in6_addr));
+  if (nexthop)
+    memcpy (&area->rt_table[area->tablesize].next_hop,
+            nexthop, sizeof (struct in6_addr));
+  else
+    {
+      char str[64];
+      inet_ntop (AF_INET6, &area->rt_table[area->tablesize].destination,
+                 str, sizeof (str));
+      zvlog_err ("nexthop not found for destination %s", str);
+      memset (&area->rt_table[area->tablesize].next_hop, 0,
+              sizeof (struct in6_addr));
+    }
   area->tablesize++;
   return;
 }
@@ -627,12 +645,15 @@ get_prefix_lsa_of_vertex (struct vertex *v, struct area *area)
                                       v->vtx_lsa->lsh->lsh_advrtr, area);
       break;
     case LST_NETWORK_LSA:
-      retlist = list_init ();
       lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
                         v->vtx_lsa->lsh->lsh_id,
                         v->vtx_lsa->lsh->lsh_advrtr,
                         area, (struct ospf6_if *)NULL);
-      list_add_node (retlist, lsi);
+      if (lsi)
+        {
+          retlist = list_init ();
+          list_add_node (retlist, lsi);
+        }
       break;
     default:
       assert (0);
@@ -657,12 +678,12 @@ add_route_internal_table (struct vertex *v, struct area *area)
                print_lsahdr (v->vtx_lsa->lsh));
 
   lsalist = get_prefix_lsa_of_vertex (v, area);
-  assert (lsalist);
-  if (list_isempty (lsalist))
+  if (!lsalist)
     {
       zvlog_debug ("ROUTECALC: Intra-Area-Prefix-LSA Not"
                    " Found for %s",
                    print_lsahdr (v->vtx_lsa->lsh));
+      return;
     }
 
   for (n = listhead (lsalist); n; nextnode (n))
@@ -686,7 +707,7 @@ add_route_internal_table (struct vertex *v, struct area *area)
           tmplsh.lsh_advrtr = intra_prefix_lsa->intra_prefix_refer_advrtr;
           zvlog_debug ("ROUTECALC:    no back pointer(%s)",
                        print_lsahdr (&tmplsh));
-          return;
+          continue;
         }
 
       prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
@@ -701,9 +722,9 @@ add_route_internal_table (struct vertex *v, struct area *area)
         }
       else
         {
-          /* This vertex is root. I can't find any other way to
-             calculate route which is in Intra-Area-Prefix-LSA
-             of myself */
+          /* This vertex is root, use LS-ID. I can't find any
+             other way to calculate route which is in 
+             Intra-Area-Prefix-LSA of myself */
           nhinfo = make_nexthop (ntohl (lsi->lsh->lsh_id), 0, 0);
         }
 
@@ -730,10 +751,9 @@ add_route_internal_table (struct vertex *v, struct area *area)
                                   area);
           prefix = OSPF6_NEXT_PREFIX (prefix);
         }
-
-      if (v->vtx_depth == 0)
-        free_nexthop (nhinfo);
     }
+
+  list_delete_all (lsalist);
   return;
 }
 

@@ -40,17 +40,9 @@
 
 #include "zebra/zebra.h"
 
-struct ospf_interface *
-ospf_if_new (struct interface *ifp)
+void
+ospf_if_reset_variables (struct ospf_interface *oi)
 {
-  struct ospf_interface *oi;
-
-  oi = XMALLOC (MTYPE_IF, sizeof (struct ospf_interface));
-  bzero (oi, sizeof (struct ospf_interface));
-
-  /* Set zebra interface pointer. */
-  oi->ifp = ifp;
-
   /* file descriptor reset. */
   oi->fd = -1;
 
@@ -61,7 +53,7 @@ ospf_if_new (struct interface *ifp)
 
   /* Interface configurable values. */
   oi->priority = OSPF_ROUTER_PRIORITY_DEFAULT;
-  oi->options = 2;
+  oi->options = OSPF_OPTION_E;
 
   bzero (oi->auth_data, OSPF_AUTH_SIZE);
 
@@ -72,6 +64,21 @@ ospf_if_new (struct interface *ifp)
   /* Timer values. */
   oi->v_hello = OSPF_HELLO_INTERVAL_DEFAULT;
   oi->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
+}
+
+struct ospf_interface *
+ospf_if_new (struct interface *ifp)
+{
+  struct ospf_interface *oi;
+
+  oi = XMALLOC (MTYPE_OSPF_IF, sizeof (struct ospf_interface));
+  bzero (oi, sizeof (struct ospf_interface));
+
+  /* Set zebra interface pointer. */
+  oi->ifp = ifp;
+
+  /* set default values. */
+  ospf_if_reset_variables (oi);
 
   /* Initialize neighbor list. */
   oi->nbrs = route_table_init ();
@@ -84,13 +91,26 @@ ospf_if_stream_set (int sock, struct ospf_interface *oi)
 {
   oi->fd = sock;
 
-  /* set buffer. */
+  /* set input buffer. */
   oi->ibuf = stream_new (oi->ifp->mtu);
   OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
 
   /*
   oi->obuf = stream_new (oi->ifp->mtu);
   OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd);
+  */
+}
+
+void
+ospf_if_stream_unset (struct ospf_interface *oi)
+{
+  /* unset input buffer. */
+  stream_free (oi->ibuf);
+  OSPF_ISM_READ_OFF (oi->t_read);
+
+  /*
+  stream_free (oi->obuf);
+  OSPF_ISM_WRITE_OFF (oi->t_write);
   */
 }
 

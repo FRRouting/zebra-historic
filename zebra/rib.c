@@ -66,7 +66,7 @@ struct
 
 /* New routing information base. */
 struct rib *
-rib_create (int type, int pref, int ifindex)
+rib_create (int type, int pref, int ifindex, int table)
 {
   struct rib *new;
 
@@ -75,6 +75,7 @@ rib_create (int type, int pref, int ifindex)
   new->type = type;
   new->pref = pref;
   new->ifindex = ifindex;
+  new->table = table;
 
   return new;
 }
@@ -99,15 +100,15 @@ rib_log (char *message, int type, struct prefix *p,
     {
       struct interface *ifp;
       ifp = if_lookup_by_index (ifindex);
-      snprintf (logbuf, BUFSIZ, " directly connected to %s\n", ifp->name);
+      snprintf (logbuf, BUFSIZ, " directly connected to %s", ifp->name);
     }
   else
     {
-      snprintf (logbuf, BUFSIZ, " via %s\n",
+      snprintf (logbuf, BUFSIZ, " via %s",
 		inet_ntop (p->family, gate, buf, BUFSIZ));
     }
 
-  zlog (NULL, LOG_INFO, "%s route %s %s/%d %s", 
+  zlog (NULL, LOG_INFO, "%s route %s %s/%d %s",
 	  route_info[type].str_long, message,
 	  inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ), p->prefixlen,
 	  logbuf);
@@ -173,7 +174,7 @@ rib_delete_rib (struct rib **rp, struct rib *rib)
    it as implicit replacement of the route. */
 int
 rib_add_ipv4 (int type, struct prefix_ipv4 *p, 
-	      struct in_addr *gate, unsigned int ifindex)
+	      struct in_addr *gate, unsigned int ifindex, int table)
 {
   int pref;
   struct route_node *np;
@@ -190,7 +191,9 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p,
   rib_log ("add", type, (struct prefix *)p, gate, ifindex);
 
   /* Make new rib. */
-  rib = rib_create (type, pref, ifindex);
+  if (!table)
+    table = RT_TABLE_MAIN;
+  rib = rib_create (type, pref, ifindex, table);
   if (gate)
     rib->u.gate4 = *gate;
 
@@ -230,8 +233,8 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p,
 	      !rib_system_route (rib->type))
 	    {
 	      /* Route change. */
-	      kernel_delete_ipv4 (p, &fib->u.gate4, ifindex, 0);
-	      kernel_add_ipv4 (p, &rib->u.gate4, ifindex, 0);
+	      kernel_delete_ipv4 (p, &fib->u.gate4, ifindex, 0, fib->table);
+	      kernel_add_ipv4 (p, &rib->u.gate4, ifindex, 0, table);
 	    }
 	}
     }
@@ -240,7 +243,7 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p,
       rib->fib = 1;
 
       if (!rib_system_route (rib->type))
-	kernel_add_ipv4 (p, gate, ifindex, 0);
+	kernel_add_ipv4 (p, gate, ifindex, 0, table);
     }
 
   /* If same type of route exists, replace it with new one. */
@@ -257,7 +260,7 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p,
 /* Delete prefix from the rib. */
 int
 rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
-		 struct in_addr *gate, unsigned int ifindex)
+		 struct in_addr *gate, unsigned int ifindex, int table)
 {
   int ret;
   struct route_node *np;
@@ -275,7 +278,8 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
     {
       if (rib->type == type &&
 	  IPV4_ADDR_CMP(&rib->u.gate4, gate) == 0 &&
-	  rib->ifindex == ifindex)
+	  rib->ifindex == ifindex &&
+	  (!table || rib->table == table))
 	break;
     }
 
@@ -297,7 +301,7 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
   if (rib->fib)
     {
       if (!rib_system_route (type))
-	  ret = kernel_delete_ipv4 (p, gate, ifindex, 0);
+	  ret = kernel_delete_ipv4 (p, gate, ifindex, 0, rib->table);
 
       /* We should reparse rib and check if new fib appear or not. */
       fib = np->info;
@@ -306,7 +310,7 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
 	  fib->fib = 1;
 	  if (IPV4_ADDR_CMP(&fib->u.gate4, &rib->u.gate4) != 0 &&
 	      !rib_system_route (fib->type))
-	    kernel_add_ipv4 (p, &fib->u.gate4, ifindex, 0);
+	    kernel_add_ipv4 (p, &fib->u.gate4, ifindex, 0, fib->table);
 	}
     }
 
@@ -347,7 +351,7 @@ rib_close_ipv4 ()
     for (rib = np->info; rib; rib = rib->next)
       if (!rib_system_route (rib->type) && rib->fib)
 	kernel_delete_ipv4 ((struct prefix_ipv4 *)&np->p, 
-			    &rib->u.gate4, rib->ifindex, 0);
+			    &rib->u.gate4, rib->ifindex, 0, rib->table);
 }
 
 
@@ -380,10 +384,13 @@ DEFUN (show_ip, show_ip_cmd,
 	len = vty_out (vty, "%s%c %s/%d", 
 		       route_info[rib->type].str,
 		       rib->fib ? '*' : ' ',
+#if 0
+		       rib->table,
+#endif /* 0 */
 		       inet_ntop (AF_INET, &np->p.u.prefix, buf, BUFSIZ),
 		       np->p.prefixlen);
 
-	len = 25 - len;
+	len = 26 - len;
 	if (len < 0)
 	  len = 0;
 
@@ -405,7 +412,7 @@ DEFUN (show_ip, show_ip_cmd,
 /* Add route to the routing table. */
 int
 rib_add_ipv6 (int type, struct prefix_ipv6 *p,
-	      struct in6_addr *gate, unsigned int ifindex)
+	      struct in6_addr *gate, unsigned int ifindex, int table)
 {
   int pref;
   struct route_node *np;
@@ -423,7 +430,9 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
   rib_log ("add", type, (struct prefix *)p, gate, ifindex);
 
   /* Make new rib. */
-  rib = rib_create (type, pref, ifindex);
+  if (!table)
+    table = RT_TABLE_MAIN;
+  rib = rib_create (type, pref, ifindex, table);
   if (gate)
     rib->u.gate6 = *gate;
 
@@ -463,8 +472,8 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
 	      !rib_system_route (rib->type))
 	    {
 	      /* Route change. */
-	      kernel_delete_ipv6 (p, &fib->u.gate6, ifindex, 0);
-	      kernel_add_ipv6 (p, &rib->u.gate6, ifindex, 0);
+	      kernel_delete_ipv6 (p, &fib->u.gate6, ifindex, 0, fib->table);
+	      kernel_add_ipv6 (p, &rib->u.gate6, ifindex, 0, table);
 	    }
 	}
     }
@@ -473,7 +482,7 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
       rib->fib = 1;
 
       if (!rib_system_route (rib->type))
-	kernel_add_ipv6 (p, gate, ifindex, 0);
+	kernel_add_ipv6 (p, gate, ifindex, 0, table);
     }
 
   /* If same type of route exists, replace it with new one. */
@@ -489,7 +498,7 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
 /* IPv6 route treatment. */
 int
 rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
-		 struct in6_addr *gate, unsigned int ifindex)
+		 struct in6_addr *gate, unsigned int ifindex, int table)
 {
   int ret;
   struct route_node *np;
@@ -507,7 +516,8 @@ rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
     {
       if (rib->type == type &&
 	  IPV6_ADDR_CMP(&rib->u.gate6, gate) == 0 &&
-	  rib->ifindex == ifindex)
+	  rib->ifindex == ifindex &&
+	  (!table || rib->table == table))
 	break;
     }
 
@@ -528,7 +538,7 @@ rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
 
   if (rib->fib)
     {
-      ret = kernel_delete_ipv6 (p, gate, ifindex, 0);
+      ret = kernel_delete_ipv6 (p, gate, ifindex, 0, rib->table);
 
       /* We should reparse rib and check if new fib appear or not. */
       fib = np->info;
@@ -537,7 +547,7 @@ rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
 	  fib->fib = 1;
 	  if (IPV6_ADDR_CMP(&fib->u.gate6, &rib->u.gate6) != 0 &&
 	      !rib_system_route (fib->type))
-	    kernel_add_ipv6 (p, &fib->u.gate6, ifindex, 0);
+	    kernel_add_ipv6 (p, &fib->u.gate6, ifindex, 0, fib->table);
 	}
     }
 
@@ -558,7 +568,7 @@ rib_close_ipv6 ()
     for (rib = np->info; rib; rib = rib->next)
       if (! rib_system_route (rib->type) && rib->fib)
 	kernel_delete_ipv6 ((struct prefix_ipv6 *)&np->p, &rib->u.gate6, 
-			    rib->ifindex, 0);
+			    rib->ifindex, 0, rib->table);
 }
 
 /* show ip6 command*/
@@ -608,6 +618,35 @@ DEFUN (show_ipv6, show_ipv6_cmd,
   return CMD_SUCCESS;
 }
 #endif /* HAVE_IPV6 */
+
+static void
+rib_weed_table (struct route_table *rib_table)
+{
+  struct route_node *np;
+  struct rib *rib;
+  extern int rtm_table_default;
+
+  for (np = route_top (rib_table); np; np = route_next (np))
+    for (rib = np->info; rib; rib = rib->next)
+      {
+        if (rib->table != rtm_table_default &&
+	    rib->table != RT_TABLE_MAIN)
+          {
+            rib_delete_rib ((struct rib **)&np->info, rib);
+            rib_free (rib);
+          }
+      }
+}
+
+/* Delete all routes from unmanaged tables. */
+void
+rib_weed_tables ()
+{
+  rib_weed_table (ipv4_rib_table);
+#ifdef HAVE_IPV6
+  rib_weed_table (ipv6_rib_table);
+#endif /* HAVE_IPV6 */
+}
 
 /* Close rib when zebra terminates. */
 void

@@ -31,6 +31,7 @@
 #include "buffer.h"
 #include "network.h"
 #include "client.h"
+#include "stream.h"
 #include "log.h"
 
 #include "zebra/zebra.h"
@@ -40,14 +41,18 @@ extern struct thread_master *master;
 /* Zebra configuration structure. */
 struct zebra
 {
-  /* Flag for router zebra is enabled or not. */
-  int enable;			
+  int enable;
+  int sock;
 
-  /* Socket of zebra. */
-  int sock;			
+  u_char redist_static;		/* Redistribute static route. */
+  u_char redist_connect;	/* Redistribute connected route. */
+  u_char redist_rip;		/* Redistribute rip route. */
+  u_char redist_ripng;		/* Redistribute ripng route. */
 
   struct thread *t_read;
   struct thread *t_write;
+
+  struct stream *ibuf;
 } zebra;
 
 /* RIPd to zebra command interface. */
@@ -68,82 +73,119 @@ rip_zebra (int command, struct prefix_ipv4 *p, struct in_addr *nexthop)
     }
 }
 
-/* Here, zebra may send interface information or redistributed route. */
+/* Read packet from zebra. */
 int
-zebra_read (struct thread *thread)
+zebra_read (struct thread *t)
 {
-  int ret;
-  u_char buf [512];
-  u_int16_t length;
-  u_int8_t command;
   int nbytes;
   int sock;
-  u_char *pnt = buf;
+  zebra_size_t length;
+  zebra_command_t command;
 
-  sock = thread->u.fd;
-  nbytes = readn (sock, buf, 3);
+  sock = THREAD_FD(t);
+
+  /* Clear input buffer. */
+  stream_reset (zebra.ibuf);
+
+  /* Read zebra header. */
+  nbytes = stream_read (zebra.ibuf, sock, ZEBRA_HEADER_SIZE);
 
   /* zebra socket is closed. */
   if (nbytes == 0) 
     {
-      zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
-      close (sock);
-      zebra.sock = -1;
-      return nbytes;
+      zlog (NULL, LOG_ERR, "connection closed socket [%d]", sock);
+      /* zebra_close (); */
+      return -1;
     }
 
-  GETW (length, pnt);
-  GETC (command, pnt);
-
-  if (command != ZEBRA_GET_ALL_INTERFACE)
-    return -1;
-
-  ret = zebra_get_interface (sock, length);
-
-  /* zebra socket is closed. */
-  if (ret == 0)
+  /* zebra read error. */
+  if (nbytes < 0)
     {
-      zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
-      close (sock);
-      zebra.sock = -1;
-      return ret;
+      zlog (NULL, LOG_ERR, "cant read all packet");
+      /* zebra_close (); */
+      return -1;
     }
 
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, 
-				   zebra.sock);
+  /* Fetch length and command. */
+  length = stream_getw (zebra.ibuf);
+  command = stream_getc (zebra.ibuf);
+
+  length -= ZEBRA_HEADER_SIZE;
+
+  /* Read rest of zebra packet. */
+  stream_read (zebra.ibuf, sock, length);
+
+  switch (command)
+    {
+    case ZEBRA_IPV4_ROUTE_ADD:
+      printf ("IPv4 route is added from zebra\n");
+      break;
+    case ZEBRA_IPV4_ROUTE_DELETE:
+      printf ("IPv4 route is deleted from zebra\n");
+      break;
+    case ZEBRA_IPV6_ROUTE_ADD:
+      printf ("IPv6 route is added from zebra\n");
+      break;
+    case ZEBRA_IPV6_ROUTE_DELETE:
+      printf ("IPv6 route is deleted from zebra\n");
+      break;
+    case ZEBRA_GET_ALL_INTERFACE:
+      rip_zebra_get_interface (zebra.ibuf);
+      break;
+    default:
+      break;
+    }
+
+  /* Re-register myself. */
+  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
 
   return 0;
 }
 
-/* Create new zebra connection. */
-void
+/* Make zebra connection. */
+int
 zebra_create ()
 {
-  struct thread t;
-
-  zebra.enable = 0;
-  zebra.sock = zebra_connect ();
   if (zebra.sock < 0)
     {
-      zlog (NULL, LOG_INFO, "can't make socket to zebra");
-      exit (1);
+      zebra.sock = zebra_connect ();
+
+      if (zebra.sock < 0)
+	return zebra.sock;
+  
+      zebra.ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
+      zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
+      zebra_get_all_interface (zebra.sock);
     }
-
-  zebra_get_all_interface (zebra.sock);
-
-  t.u.fd = zebra.sock;
-  zebra_read (&t);
+  return 0;
 }
-
+
 DEFUN (router_zebra,
        router_zebra_cmd,
        "router zebra",
        "Make connection to zebra daemon\n"
        "\n")
 {
-  vty->node = ZEBRA_NODE;
+  int ret;
+
+  /* Set router zebra is enabled. */
   zebra.enable = 1;
 
+  /* If already has socket then return. */
+  if (zebra.sock >= 0)
+    {
+      vty_out (vty, "already connected to zebra\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Connect to zebra. */
+  ret = zebra_create ();
+
+  if (ret < 0)
+    {
+      vty_out (vty, "can't connect to zebra\r\n");
+      return CMD_WARNING;
+    }
   return CMD_SUCCESS;
 }
 
@@ -166,8 +208,8 @@ struct cmd_node zebra_node =
 void
 zebra_init ()
 {
-  /* Connect to zebra and get interface information. */
-  zebra_create ();
+  bzero (&zebra, sizeof (struct zebra));
+  zebra.sock = -1;
 
   /* Install zebra node. */
   install_node (&zebra_node, config_write_zebra);

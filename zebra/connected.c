@@ -87,7 +87,7 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   if (prefix_ipv4_any (&rib))
     return;
 
-  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, &rib, NULL, ifp->index);
+  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, &rib, NULL, ifp->index, 0);
 }
 
 #ifdef HAVE_IPV6
@@ -120,6 +120,6 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   connected_add (ifp, connected);
 
-  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, &rib, NULL, ifp->index);
+  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, &rib, NULL, ifp->index, 0);
 }
 #endif /* HAVE_IPV6 */

@@ -41,10 +41,7 @@
 extern struct thread_master *master;
 
 /* RIP Structure. */
-struct rip rip_master;
-
-/* Pointer to RIP structure. */
-struct rip *rip;
+struct rip rip;
 
 /* RIP routing table radix tree. */
 struct route_table *rip_table;
@@ -86,7 +83,6 @@ struct message route_sort_msg[] =
   { ZEBRA_ROUTE_RIPNG,   "R"},
   { ZEBRA_ROUTE_BGP,     "B"},
 };
-
 
 /* Add rip information to rip list. */
 void
@@ -208,6 +204,7 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
 	  /* This is update of existing rip route. */
 	  zlog (NULL, LOG_INFO, "rip update route %s/%d", inet_ntoa (p->prefix), 
 		  p->prefixlen);
+	  rip->timer = rinfo->timer;
 	}
       else
 	{
@@ -240,6 +237,8 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
     {
       /* This is new rip route. */
       zlog (NULL, LOG_INFO, "rip add route %s/%d", inet_ntoa (p->prefix), p->prefixlen);
+
+
       rip_add_rinfo ((struct rip_info **) &np->info, rinfo);
       if (!connected)
 	{
@@ -269,8 +268,6 @@ rip_delete_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
     {
       ;
     }
-
-  /* rip_zebra (ZEBRA_IPV4_ROUTE_DELETE, pin, 0); */
 
   return 0;
 }
@@ -304,25 +301,20 @@ rip_packet_dump (struct rip_packet *packet, int size)
   rte = packet->route;
   end = ((caddr_t) packet) + size;
   
-  zlog (NULL, LOG_INFO, "------------- Routing information -----------");
   while ((caddr_t) rte < end) 
     {
-      zlog (NULL, LOG_INFO, "family [%d] tag [%d] metric [%d]",
-	      ntohs (rte->family), ntohs (rte->tag), ntohl (rte->metric));
-
+      zlog (NULL, LOG_INFO, "  family: %d tag: %d metric: %d",
+	    ntohs (rte->family), ntohs (rte->tag), ntohl (rte->metric));
       addr.s_addr = rte->prefix;
       strncpy (pbuf, inet_ntoa (addr), BUFSIZ);
       addr.s_addr = rte->netmask;
       strncpy (nbuf, inet_ntoa (addr), BUFSIZ);
       addr.s_addr = rte->nexthop;
       strncpy (hbuf, inet_ntoa (addr), BUFSIZ);
-
-      zlog (NULL, LOG_INFO, "prefix  [%s] netmask [%s] nexthop [%s]",
-	      pbuf, nbuf, hbuf);
-
+      zlog (NULL, LOG_INFO, "  prefix: %s netmask: %s nexthop: %s",
+	    pbuf, nbuf, hbuf);
       rte ++;
     }
-  zlog (NULL, LOG_INFO, "------------- Routing information -----------");
 }
 
 struct rip_info *
@@ -333,6 +325,38 @@ rip_info_new ()
   new = XMALLOC (MTYPE_RIP_INFO, sizeof (struct rip_info));
   bzero (new, sizeof (struct rip_info));
   return new;
+}
+
+void
+rip_info_free (struct rip_info *rinfo)
+{
+  XFREE (MTYPE_RIP_INFO, rinfo);
+}
+
+/* Check if the destination address is valid (unicast; not net 0
+   or 127) (RFC2453 Section 3.9.2 - Page 26).  But we don't
+   check net 0 because we accept default route. */
+int
+rip_check_address (u_int32_t addr)
+{
+  addr = ntohl (addr);
+
+  if (IPV4_NET127 (addr))
+    return 0;
+
+  /* Net 0 may match to the default route.
+  if (IPV4_NET0 (addr))
+    return 0;
+  */
+
+  if (IN_CLASSA (addr))
+    return 1;
+  if (IN_CLASSB (addr))
+    return 1;
+  if (IN_CLASSC (addr))
+    return 1;
+
+  return 0;
 }
 
 /* RIP routing information. */
@@ -350,7 +374,7 @@ rip_process_route (struct rip_packet *packet, int size,
   if (ntohs (from->sin_port) != RIP_PORT_DEFAULT) 
     {
       zlog (NULL, LOG_INFO, "This packet doesn't come from rip port : %d",
-	      from->sin_port);
+	    from->sin_port);
       return;
     }
 
@@ -363,15 +387,32 @@ rip_process_route (struct rip_packet *packet, int size,
     {
       struct prefix_ipv4 p;
       struct in_addr mask;
-
+      
       /* Address family check. ripd only supports AF_INET. */
       if (ntohs (rte->family) != AF_INET)
 	{
 	  zlog (NULL, LOG_INFO, "unsupported family %d from %s.",
-		  ntohs (rte->family), inet_ntoa (from->sin_addr));
+		ntohs (rte->family), inet_ntoa (from->sin_addr));
 	  rte++;
 	  continue;
 	}
+
+      /* Network 127 and Class A, B, C check. */
+      if (! rip_check_address (rte->prefix))
+        {
+	  zlog (NULL, LOG_INFO, 
+		"Network is net 127 or it is not unicast network");
+	  rte++;
+	  continue;
+	} 
+
+      /* Check if the metric is valid  (STD-56 Section 3.9.2 - Page 27) */
+      if (ntohl (rte->metric) > RIP_METRIC_INFINITY)
+        {
+	  zlog (NULL, LOG_INFO, "route's metric is not in the 1-16 range.");
+          rte++;
+          continue;
+        }
 
       /* Allocate new rt_in. */
       p.family = AF_INET;
@@ -384,20 +425,23 @@ rip_process_route (struct rip_packet *packet, int size,
       rinfo->type = ZEBRA_ROUTE_RIP;
       rinfo->pref = 10;
       rinfo->metric = ntohl (rte->metric);
-      rinfo->from.s_addr = from->sin_addr.s_addr;
+      rinfo->from = from->sin_addr;
       rinfo->tag = ntohl (rte->tag);
+      rinfo->ifp = ifp;
       if (ntohl (rte->nexthop) == 0)
 	rinfo->nexthop.s_addr = from->sin_addr.s_addr;
       else
 	rinfo->nexthop.s_addr = rte->nexthop;
       rinfo->timer = gettime;
-
+      
       /* Check nexthop address. */
       ret = if_check_address (rinfo->nexthop);
       if (ret)
 	{
-	  zlog (NULL, LOG_INFO, "route's nexthop set to myself! So ignore this route.");
+	  zlog (NULL, LOG_INFO, 
+		"Route's nexthop set to myself! So ignore this route.");
 	  rte++;
+	  rip_info_free (rinfo);
 	  continue;
 	}
 
@@ -416,11 +460,10 @@ void
 rip_send_init ()
 {
   struct rip_packet *rip_packet;
-  extern struct rip *rip;
 
   rip_packet = &rip_send_buf.rip_buf.rip_packet;
   rip_packet->command = RIP_RESPONSE;
-  rip_packet->version = rip->version;
+  rip_packet->version = rip.version;
   rip_packet->pad1 = 0;
   rip_packet->pad2 = 0;
 
@@ -469,15 +512,13 @@ rip_send_announce ()
   struct sockaddr_in *sin = rip_send_buf.dest;
   struct rip_packet *rip_packet;
 
-  extern struct rip *rip;
-
   /* Reset pointer. */
   rip_packet = &rip_send_buf.rip_buf.rip_packet;
 
   size = end - start;
 
   if (rip_send_buf.type == RIP_REQUEST || rip_send_buf.type == RIP_POLL)
-    rip_udp_send (rip->sock, start, size, sin);
+    rip_udp_send (rip.sock, start, size, sin);
   
   rip_send_buf.rte = rip_packet->route;
 }
@@ -623,11 +664,10 @@ rip_read (struct thread *thread)
   ifp = (struct interface *) if_lookup_address (from.sin_addr);
 
   /* Dump packet header. */
-  zlog (NULL, LOG_INFO, "RIP version %d packet size [%d] command [%s] "
-	  "host [%s] port [%d] if [%s]\n",
-	  packet->version, len, LOOKUP (rip_msg, packet->command),
-	  inet_ntoa(from.sin_addr), ntohs (from.sin_port),
-	  ifp ? ifp->name : "unknown");
+  zlog (NULL, LOG_INFO, "%s from: %s:%d version: %d len: %d if: %s",
+	LOOKUP (rip_msg, packet->command), inet_ntoa(from.sin_addr), 
+	ntohs (from.sin_port), packet->version, len, 
+	ifp ? ifp->name : "unknown");
 
   /* Dump packet rte. */
   rip_packet_dump (packet, len);
@@ -650,7 +690,7 @@ rip_read (struct thread *thread)
   if (packet->version > RIPv2)
     packet->version = RIPv2;
 
-  if (packet->version != rip->version) 
+  if (packet->version != rip.version) 
     {
       zlog (NULL, LOG_INFO, "This packet's version[%d] doesn't fit to my version.", 
 	   packet->version);
@@ -821,7 +861,6 @@ rip_announce ()
 	continue;
 
       rip_send_buf.ifp = ifp;
-      /* radix_apply_func (rip_radix, rip_announce_func, &rip_send_buf); */
     }
 
   rip_send_announce ();
@@ -835,7 +874,7 @@ rip_timer (struct thread *thread)
   rip_age_route ();
   rip_announce ();
 
-  rip->timer = thread_add_timer (master, rip_timer, NULL, RIP_FLASH_TIMER);
+  rip.t_timer = thread_add_timer (master, rip_timer, NULL, RIP_FLASH_TIMER);
   return 0;
 }
 
@@ -844,20 +883,20 @@ void
 rip_start ()
 {
   /* Make rip socket. */
-  rip->sock = rip_create_socket ();
-  if (rip->sock < 0)
+  rip.sock = rip_create_socket ();
+  if (rip.sock < 0)
     {
       zlog (NULL, LOG_INFO, "Can't make RIP socket");
       return;
     }
 
   /* Set multicast if it needs. */
-  if (rip->multicast == RIP_MULTICAST)
-    rip_multicast_enable (rip->sock);
+  if (rip.multicast == RIP_MULTICAST)
+    rip_multicast_enable (rip.sock);
 
   /* Create read and timer thread. */
-  rip->read = thread_add_read (master, rip_read, NULL, rip->sock);
-  rip->timer = thread_add_timer (master, rip_timer, NULL, RIP_FLASH_TIMER);
+  rip.t_read = thread_add_read (master, rip_read, NULL, rip.sock);
+  rip.t_timer = thread_add_timer (master, rip_timer, NULL, RIP_FLASH_TIMER);
 
   rip_request_all ();
 }
@@ -891,6 +930,8 @@ DEFUN (router_rip,
        "Start RIP configuration\n")
 {
   vty->node = RIP_NODE;
+
+  rip.enable = 1;
   return CMD_SUCCESS;
 }
 
@@ -907,7 +948,7 @@ DEFUN (rip_version, rip_version_cmd,
       vty_out (vty, "invalid rip version %d\r\n", version);
       return CMD_WARNING;
     }
-  rip->version = version;
+  rip.version = version;
   return CMD_SUCCESS;
 } 
 
@@ -916,7 +957,7 @@ DEFUN (rip_multicast,
        "multicast",
        "RIP send multicast packet.")
 {
-  rip->multicast = RIP_MULTICAST;
+  rip.multicast = RIP_MULTICAST;
   return CMD_SUCCESS;
 }
 
@@ -925,7 +966,7 @@ DEFUN (rip_broadcast,
        "broadcast",
        "RIP send broadcast packet.")
 {
-  rip->multicast = RIP_BROADCAST;
+  rip.multicast = RIP_BROADCAST;
   return CMD_SUCCESS;
 }
 
@@ -1014,9 +1055,9 @@ config_write_rip (struct vty *vty)
 {
   vty_out (vty, "router rip%s", VTY_NEWLINE);
   
-  if (rip->version != RIPv2)
-    vty_out (vty, " version %d%s", rip->version, VTY_NEWLINE);
-  if (rip->multicast == RIP_BROADCAST)
+  if (rip.version != RIPv2)
+    vty_out (vty, " version %d%s", rip.version, VTY_NEWLINE);
+  if (rip.multicast == RIP_BROADCAST)
     vty_out (vty, " broadcast%s", VTY_NEWLINE);
   return 0;
 }
@@ -1033,10 +1074,12 @@ void
 rip_init ()
 {
   /* Make rip instance and set default value.*/
-  rip = &rip_master;
-  rip->sock = -1;
-  rip->version = RIPv2;
-  rip->multicast = RIP_MULTICAST;
+  bzero (&rip, sizeof (struct rip));
+
+  /* Set initial value. */
+  rip.sock = -1;
+  rip.version = RIPv2;
+  rip.multicast = RIP_MULTICAST;
 
   /* RIP routig table. */
   rip_table = route_table_init ();

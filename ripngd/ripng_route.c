@@ -43,6 +43,19 @@ ripng_slot_delete (struct route_node *node)
   node->info = NULL;
 }
 
+void
+ripng_slot_check (struct route_node *node)
+{
+  struct ripng_slot *slot;
+
+  slot = node->info;
+
+  if (RIPNG_SLOT_RTE(slot) == NULL &&
+      RIPNG_SLOT_STATIC(slot) == NULL &&
+      RIPNG_SLOT_AGGREGATE(slot) == NULL)
+    ripng_slot_delete (node);
+}
+
 /* RIPng routes treatment. */
 int
 ripng_static_add (struct route_node *node, u_char metric)
@@ -67,6 +80,7 @@ ripng_static_add (struct route_node *node, u_char metric)
   rinfo->timer = 0;
   rinfo->fib = 0;
   RIPNG_SLOT_STATIC(slot) = rinfo;
+  ripng_slot_check (node);
 
   return 0;
 }
@@ -87,6 +101,8 @@ ripng_static_delete (struct route_node *node)
 
   ripng_info_free (RIPNG_SLOT_STATIC(slot));
   RIPNG_SLOT_STATIC(slot) = NULL;
+  
+  route_unlock_node (node);
 
   return 0;
 }
@@ -135,6 +151,9 @@ ripng_aggregate_delete (struct route_node *node)
 
   ripng_info_free (RIPNG_SLOT_AGGREGATE(slot));
   RIPNG_SLOT_AGGREGATE(slot) = NULL;
+  ripng_slot_check (node);
+
+  route_unlock_node (node);
 
   return 0;
 }

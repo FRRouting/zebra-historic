@@ -30,6 +30,7 @@ struct rib
   int fib;			/* Have this route goes to fib. */
   int pref;			/* Preference of this route. */
   int ifindex;			/* Interface index. */
+  int table;			/* Which routing table */
   union
   {
     struct in_addr gate4;
@@ -42,26 +43,33 @@ struct rib
   struct rib *prev;
 };
 
+/* RIB table. */
+extern struct route_table *ipv4_rib_table;
+#ifdef HAVE_IPV6
+extern struct route_table *ipv6_rib_table;
+#endif /* HAVE_IPV6 */
+
 /* Prototypes. */
 void rib_close ();
 void rib_init ();
+void rib_weed_tables ();
 struct rt *rib_search_rt (int, struct rt *);
 
 int
 rib_add_ipv4 (int type, struct prefix_ipv4 *p, 
-	      struct in_addr *gate, unsigned int ifindex);
+	      struct in_addr *gate, unsigned int ifindex, int table);
 int
 rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
-		 struct in_addr *gate, unsigned int ifindex);
+		 struct in_addr *gate, unsigned int ifindex, int table);
 
 #ifdef HAVE_IPV6
 int
 rib_add_ipv6 (int type, struct prefix_ipv6 *p,
-	      struct in6_addr *gate, unsigned int ifindex);
+	      struct in6_addr *gate, unsigned int ifindex, int table);
 
 int
 rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
-		 struct in6_addr *gate, unsigned int ifindex);
+		 struct in6_addr *gate, unsigned int ifindex, int table);
 #endif /* HAVE_IPV6 */
 
 #endif /*_ZEBRA_RIB_H */

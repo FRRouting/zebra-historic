@@ -25,119 +25,134 @@
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
+#include "prefix.h"
+#include "table.h"
+#include "stream.h"
+#include "client.h"
 
-struct rip_config
-{
-  int router_rip;
-  int redistribute_bgp;
+#include "zebra/zebra.h"
+#include "zebra/rib.h"
+#include "zebra/redistribute.h"
 
-  struct access_list *in;
-  struct access_list *out;
-} rip_config;
-
-/* Redistribute function generates a thread for each protocol
-   redistribution */
+/* Redistribute routes. */
 void
-redistribute ()
+zebra_redistribute (struct zebra_client *client, int type)
 {
-  return;
-}
-
-/* Change to rip interface node. */
-DEFUN (router_rip, router_rip_cmd,
-       "router rip", "RIP interface")
-{
-  vty->node = RIP_NODE;
-  return CMD_SUCCESS;
+  struct route_node *np;
+  struct rib *rib;
+
+  for (np = route_top (ipv4_rib_table); np; np = route_next (np))
+    for (rib = np->info; rib; rib = rib->next)
+      if (rib->type == type)
+	zebra_ipv4_add (client->fd, type, (struct prefix_ipv4 *)&np->p,
+			&rib->u.gate4, 0);
+
+#ifdef HAVE_IPV6
+  for (np = route_top (ipv6_rib_table); np; np = route_next (np))
+    for (rib = np->info; rib; rib = rib->next)
+      if (rib->type == type)
+	zebra_ipv6_add (client->fd, type, (struct prefix_ipv6 *)&np->p,
+			&rib->u.gate6, 0);
+#endif /* HAVE_IPV6 */
 }
 
-/* Redistribution from bgp to rip. */
-DEFUN (redistribute_bgp, redistribute_bgp_cmd,
-       "redistribute bgp", "Redistribute bgp route to rip.")
-{
-  rip_config.redistribute_bgp = 1;
-  return CMD_SUCCESS;
-}
-
-/* Redistribution from bgp to rip. */
-DEFUN (no_redistribute_bgp, no_redistribute_bgp_cmd,
-       "no redistribute bgp", "Delete redistribution of bgp route to rip.")
-{
-  rip_config.redistribute_bgp = 0;
-  return CMD_SUCCESS;
-}
-
-/**/
-DEFUN (filter_list, filter_list_cmd,
-       "filter-list NAME DIRECTION",
-       "Apply filter to the rip connection.")
-{
-  return CMD_SUCCESS;
-}
-
-/**/
-int
-rip_config_write (struct vty *vty)
-{
-  if (rip_config.redistribute_bgp)
-    vty_out (vty, " redistribute bgp%s", VTY_NEWLINE);
-  return 0;
-}
-
-/* RIP node structure. */
-struct cmd_node rip_node =
-{
-  RIP_NODE,
-  "%s(config-router)# ",
-};
-
-/* Change to rip interface node. */
-DEFUN (router_bgp, router_bgp_cmd,
-       "router bgp", "RIP interface")
-{
-  vty->node = BGP_NODE;
-  return CMD_SUCCESS;
-}
-
-/* Redistribution from rip to bgp. */
-DEFUN (redistribute_rip, redistribute_rip_cmd,
-       "redistribute rip", "Redistribute rip route to bgp.")
-{
-  return CMD_SUCCESS;
-}
-
-/**/
-int
-bgp_config_write (struct vty *vty)
-{
-  return 0;
-}
-
-/* BGP node structure. */
-struct cmd_node bgp_node =
-{
-  BGP_NODE,
-  "%s(config-router)# ",
-};
-
 void
-redistribute_init ()
+zebra_redistribute_add (int command, struct zebra_client *client, int length)
 {
-  bzero (&rip_config, sizeof rip_config);
+  int type;
 
-  install_node (&rip_node, rip_config_write);
-  install_node (&bgp_node, bgp_config_write);
+  type = stream_getc (client->ibuf);
 
-  install_element (CONFIG_NODE, &router_rip_cmd);
-  install_element (CONFIG_NODE, &router_bgp_cmd);
+  switch (type)
+    {
+    case ZEBRA_ROUTE_CONNECT:
+      if (! client->redist_connect)
+	{
+	  client->redist_connect = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_CONNECT);
+	}
+      break;
+    case ZEBRA_ROUTE_STATIC:
+      if (! client->redist_static)
+	{
+	  client->redist_static = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_STATIC);
+	}
+      break;
+    case ZEBRA_ROUTE_RIP:
+      if (! client->redist_rip)
+	{
+	  client->redist_rip = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_RIP);
+	}
+      break;
+    case ZEBRA_ROUTE_RIPNG:
+      if (! client->redist_ripng)
+	{
+	  client->redist_ripng = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_RIPNG);
+	}
+      break;
 
-  install_element (RIP_NODE, &config_help_cmd);
-  install_element (RIP_NODE, &config_exit_cmd);
-  install_element (RIP_NODE, &redistribute_bgp_cmd);
-  install_element (RIP_NODE, &no_redistribute_bgp_cmd);
-  install_element (RIP_NODE, &filter_list_cmd);
+    case ZEBRA_ROUTE_OSPF:
+      if (! client->redist_ospf)
+	{
+	  client->redist_ospf = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_OSPF);
+	}
+      break;
 
-  install_element (BGP_NODE, &config_help_cmd);
-  install_element (BGP_NODE, &config_exit_cmd);
-  install_element (RIP_NODE, &redistribute_rip_cmd);
-}
+    case ZEBRA_ROUTE_OSPF6:
+      if (! client->redist_ospf6)
+	{
+	  client->redist_ospf6 = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_OSPF6);
+	}
+      break;
+
+    case ZEBRA_ROUTE_BGP:
+      if (! client->redist_bgp)
+	{
+	  client->redist_bgp = 1;
+	  zebra_redistribute (client, ZEBRA_ROUTE_BGP);
+	}
+      break;
+
+    default:
+      break;
+    }
+}     
+
+void
+zebra_redistribute_delete (int command, struct zebra_client *client, 
+			   int length)
+{
+  int type;
+
+  type = stream_getc (client->ibuf);
+
+  switch (type)
+    {
+    case ZEBRA_ROUTE_CONNECT:
+      client->redist_connect = 0;
+      break;
+    case ZEBRA_ROUTE_STATIC:
+      client->redist_static = 0;
+      break;
+    case ZEBRA_ROUTE_RIP:
+      client->redist_rip = 0;
+      break;
+    case ZEBRA_ROUTE_RIPNG:
+      client->redist_ripng = 0;
+      break;
+    case ZEBRA_ROUTE_OSPF:
+      client->redist_ospf = 0;
+      break;
+    case ZEBRA_ROUTE_OSPF6:
+      client->redist_ospf6 = 0;
+      break;
+    case ZEBRA_ROUTE_BGP:
+      client->redist_bgp = 0;
+      break;
+    }
+}     

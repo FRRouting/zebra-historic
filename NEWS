@@ -1,5 +1,57 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.65
+
+* Changes in lib
+
+** `C-c' changes current node to ENABLE_NODE.  Previously it doesn't.
+
+** In ENABLE_NODE, `exit' command close vty connection.
+
+** `service advanced-vty' enable advanced vty function.  If this
+service is specified one can directly connect to ENABLE_NODE when
+enable password is not set.
+
+** `lines LINES' command is added by Stephen R. van den Berg
+<srb@cuci.nl>.
+
+* Changes in zebra
+
+** Basic Linux policy based routing table support is added by Stephen
+R. van den Berg <srb@cuci.nl>.
+
+* Changes in bgpd
+
+** route-map command is improved:
+  `match ip next-hop': New command.
+  `match metric': New command.
+  `set metric': Doc fixed.
+  `set local-preference': DEFUN added.
+
+* Changes in ripd
+
+** Check of announced network is added.  Now multicast address is
+filtered.  Reported by Carlos Alberto Barcenilla
+<barce@frlp.utn.edu.ar>
+
+** Check of network 127 is added.  Reported by Carlos Alberto
+Barcenilla <barce@frlp.utn.edu.ar>
+
+* Changes in ripngd
+
+** Aging route bug is fixed.
+
+** `router zebra' semantics changed.  ripngd automatically connect to
+zebra.
+
+* Changes in ospfd
+
+** `no router ospf' works.
+
+* Changes in ospf6d
+
+** Bug fix about network vertex.
+
 * Changes in zebra-0.64.1.
 
 This is bug fix release.

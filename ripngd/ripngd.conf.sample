@@ -14,7 +14,7 @@ router zebra
 !
 router ripng
 ! network sit1
-! network 3ffe:506::0/32
+! route 3ffe:506::0/32
 !
 ! access-list local-only permit 3ffe:506::0/32
 ! access-list local-only deny any

@@ -64,8 +64,6 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 GUILE = @GUILE@
-GUILE_CFLAGS = @GUILE_CFLAGS@
-GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 MAKEINFO = @MAKEINFO@
@@ -98,7 +96,7 @@ sbin_PROGRAMS = zebra client
 zebra_SOURCES =  	zebra.c main.c interface.c connected.c ioctl.c rib.c redistribute.c
 
 
-noinst_HEADERS =  	connected.h ioctl.h rib.h rt.h zebra.h
+noinst_HEADERS =  	connected.h ioctl.h rib.h rt.h zebra.h redistribute.h
 
 
 zebra_LDADD = ../lib/libzebra.a $(otherobj)

@@ -40,7 +40,7 @@ extern struct host host;
 /* Vector which store each vty structure. */
 static vector vtyvec;
 
-/* Vtye timeout value. */
+/* Vty timeout value. */
 static unsigned long vty_timeout_val = VTY_TIMEOUT_DEFAULT;
 
 /* Vty access-class command */
@@ -113,7 +113,15 @@ vty_hello (struct vty *vty)
 static void
 vty_prompt (struct vty *vty)
 {
-  vty_out (vty, cmd_prompt (vty->node), host.name ? host.name : "Router");
+  struct utsname names;
+  const char*hostname;
+  hostname = host.name;
+  if (!hostname)
+  {
+    uname (&names);
+    hostname = names.nodename;
+  }
+  vty_out (vty, cmd_prompt (vty->node), hostname);
 }
 
 /* Send WILL TELOPT_ECHO to remote server. */
@@ -181,7 +189,10 @@ vty_auth (struct vty *vty, char *buf)
     {
     case AUTH_NODE:
       passwd = host.password;
-      next_node = VIEW_NODE;
+      if (host.advanced)
+	next_node = host.enable ? VIEW_NODE : ENABLE_NODE;
+      else
+	next_node = VIEW_NODE;
       break;
     case AUTH_ENABLE_NODE:
       passwd = host.enable;
@@ -201,14 +212,14 @@ vty_auth (struct vty *vty, char *buf)
 	{
 	  if (vty->node == AUTH_NODE)
 	    {
-	      vty_out (vty, "%% Bad passwords, too many failer!\r\n");
+	      vty_out (vty, "%% Bad passwords, too many failures!\r\n");
 	      vty->status = VTY_CLOSE;
 	    }
 	  else			
 	    {
 	      /* AUTH_ENABLE_NODE */
 	      vty->fail = 0;
-	      vty_out (vty, "%% Bad passwords, too many failer!\r\n");
+	      vty_out (vty, "%% Bad enable passwords, too many failures!\r\n");
 	      vty->node = VIEW_NODE;
 	    }
 	}
@@ -477,6 +488,7 @@ vty_end_config (struct vty *vty)
       break;
     case CONFIG_NODE:
     case INTERFACE_NODE:
+    case ZEBRA_NODE:
     case RIP_NODE:
     case RIPNG_NODE:
     case BGP_NODE:
@@ -751,6 +763,29 @@ vty_stop_input (struct vty *vty)
   vty->cp = vty->length = 0;
   bzero (vty->buf, sizeof (vty->buf));
   vty_out (vty, "\r\n");
+
+  switch (vty->node)
+    {
+    case VIEW_NODE:
+    case ENABLE_NODE:
+      /* Nothing to do. */
+      break;
+    case CONFIG_NODE:
+    case INTERFACE_NODE:
+    case ZEBRA_NODE:
+    case RIP_NODE:
+    case RIPNG_NODE:
+    case BGP_NODE:
+    case RMAP_NODE:
+    case OSPF_NODE:
+    case OSPF6_NODE:
+    case VTY_NODE:
+      vty->node = ENABLE_NODE;
+      break;
+    default:
+      /* Unknown node, we have to ignore it. */
+      break;
+    }
   vty_prompt (vty);
 }
 
@@ -832,7 +867,7 @@ vty_telnet_option (struct vty *vty, unsigned char *buf, int nbytes)
       if (buf[2] == TELOPT_NAWS)
 	{
 	  vty->width = buf[4];
-	  vty->height = buf[6];
+	  vty->height = host.lines >=0 ? host.lines : buf[6];
 	  return 8;
 	}
       break;
@@ -1505,6 +1540,27 @@ DEFUN (no_vty_access_class,
   return CMD_SUCCESS;
 }
 
+DEFUN (service_advanced_vty,
+       service_advanced_vty_cmd,
+       "service advanced-vty",
+       "Set up miscellaneous service\n"
+       "Enable advanced mode vty interface\n")
+{
+  host.advanced = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_service_advanced_vty,
+       no_service_advanced_vty_cmd,
+       "no service advanced-vty",
+       NO_STR
+       "Set up miscellaneous service\n"
+       "Enable advanced mode vty interface\n")
+{
+  host.advanced = 0;
+  return CMD_SUCCESS;
+}
+
 /* Display current configuration. */
 int
 vty_config_write (struct vty *vty)
@@ -1539,6 +1595,8 @@ vty_init ()
   install_element (VIEW_NODE, &config_who_cmd);
   install_element (ENABLE_NODE, &config_who_cmd);
   install_element (CONFIG_NODE, &line_vty_cmd);
+  install_element (CONFIG_NODE, &service_advanced_vty_cmd);
+  install_element (CONFIG_NODE, &no_service_advanced_vty_cmd);
   install_element (VTY_NODE, &config_end_cmd);
   install_element (VTY_NODE, &config_exit_cmd);
   install_element (VTY_NODE, &config_help_cmd);

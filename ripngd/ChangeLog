@@ -1,3 +1,19 @@
+1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_interface.c (if_add_multicast): Change log to zlog.
+
+1999-05-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_interface.c (ripng_zebra_get_interface): Add function.
+
+	* ripng_zebra.c (redistribute_ripng): Delete function because
+	redistirbute the routes to the zebra daemon is now default
+	behavior.
+
+1999-05-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.conf.sample: Change network to route statement.
+
 1999-03-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripngd.c: Old non Advanced API version ripng_send_packet and

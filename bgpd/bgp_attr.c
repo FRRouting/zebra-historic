@@ -912,26 +912,32 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
   stream_putc (s, attr->origin);
 
   /* AS path attribute. */
-  stream_putc (s, ATTR_FLAG_TRANS);
-  stream_putc (s, BGP_ATTR_AS_PATH);
-
-  /* If remote-peer is EBGP */
   if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
     {    
+      /* If remote-peer is EBGP */
       aspath = aspath_dup (attr->aspath);
       aspath_add_left (aspath, peer->bgp->as);
+    }
+  else
+    aspath = attr->aspath;
 
-      stream_putc (s, aspath->length);
-      stream_memcpy (s, aspath->data, aspath->length);
-
-      aspath_free (aspath);
+  /* AS path attribute extended length bit check. */
+  if (aspath->length > 255)
+    {
+      stream_putc (s, ATTR_FLAG_TRANS|ATTR_FLAG_EXTLEN);
+      stream_putc (s, BGP_ATTR_AS_PATH);
+      stream_putw (s, aspath->length);
     }
   else
     {
-      aspath = attr->aspath;
+      stream_putc (s, ATTR_FLAG_TRANS);
+      stream_putc(s, BGP_ATTR_AS_PATH);
       stream_putc (s, aspath->length);
-      stream_memcpy (s, aspath->data, aspath->length);
     }
+  stream_memcpy (s, aspath->data, aspath->length);
+
+  if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
+    aspath_free (aspath);
 
   /* Nexthop attribute. */
   stream_putc (s, ATTR_FLAG_TRANS);
@@ -942,7 +948,13 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
   /* MED attribute. */
   if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
     {
-      ;
+      if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL);
+	  stream_putc (s, BGP_ATTR_MULTI_EXIT_DISC);
+	  stream_putc (s, 4);
+	  stream_putl (s, attr->med);
+	}
     }
 
   /* Local preference. */

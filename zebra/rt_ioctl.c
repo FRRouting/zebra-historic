@@ -129,7 +129,7 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
 /* Add a route to the kernel routing table. */
 int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 int index, int metric)
+		 int index, int metric, int table)
 {
   return kernel_ioctl_ipv4 (SIOCADDRT, dest, gate, index, metric);
 }
@@ -138,7 +138,7 @@ kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 /* Delete a route from the kernel routing table. */
 int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    int index, int metric)
+		    int index, int metric, int table)
 {
   return kernel_ioctl_ipv4 (SIOCDELRT, dest, gate, index, metric);
 }
@@ -212,7 +212,7 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
 /* Add IPv6 route to the kernel. */
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 int index, int metric)
+		 int index, int metric, int table)
 {
   return kernel_ioctl_ipv6 (SIOCADDRT, dest, gate, index, metric);
 }
@@ -220,7 +220,7 @@ kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
 /* Delete IPv6 route from the kernel. */
 int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int metric)
+		    int index, int metric, int table)
 {
   return kernel_ioctl_ipv6 (SIOCDELRT, dest, gate, index, metric);
 }

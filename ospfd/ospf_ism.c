@@ -162,8 +162,6 @@ ospf_dr_election (struct ospf_interface *oi)
   struct route_node *rn;
   struct ospf_neighbor *nbr, *myself;
 
-zlog (NULL, LOG_INFO, "ospf_dr_election");
-
   /* backup current values. */
   old_dr = oi->d_router;
   old_bdr = oi->bd_router;
@@ -368,18 +366,43 @@ ism_interface_up (struct ospf_interface *oi)
 }
 
 int
-ism_loop_ind ()
+ism_loop_ind (struct ospf_interface *oi)
 {
-  /* send Neighbor event KillNbr to all associated neighbors. */
+  int ret = 0;
 
   /* call ism_interface_down. */
+  /*  ret = ism_interface_down (oi); */
 
-  return 0;
+  return ret;
 }
 
 int
-ism_interface_down ()
+ism_interface_down (struct ospf_interface *oi)
 {
+  struct route_node *rn;
+
+  /* send Neighbor event KillNbr to all associated neighbors. */
+  for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+    {
+      struct ospf_neighbor *nbr;
+
+      if (!rn->info)
+	continue;
+      nbr = rn->info;
+
+      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+	continue;
+
+      OSPF_NSM_EVENT_ADD (nbr, NSM_KillNbr);
+    }
+
+  /* Reset interface variables. */
+  ospf_if_reset_variables (oi);
+
+  /* Cancel Timers. */
+  OSPF_ISM_TIMER_OFF (oi->t_hello);
+  OSPF_ISM_TIMER_OFF (oi->t_wait);
+
   return 0;
 }
 

@@ -1,6 +1,6 @@
 /*
  * Zebra daemon core routine.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -22,7 +22,6 @@
 
 #include <zebra.h>
 
-#include "zebra/zebra.h"
 #include "prefix.h"
 #include "vector.h"
 #include "linklist.h"
@@ -38,6 +37,10 @@
 #include "network.h"
 #include "sockunion.h"
 #include "log.h"
+#include "table.h"
+
+#include "zebra/zebra.h"
+#include "zebra/redistribute.h"
 
 /* This host's information. */
 struct
@@ -67,24 +70,8 @@ char *zebra_command_str [] =
   "ZEBRA_GET_ALL_INTERFACE",
   "ZEBRA_GET_ONE_INTERFACE",
   "ZEBRA_GET_HOSTINFO",
-};
-
-/* Client structure. */
-struct zebra_client
-{
-  /* Client file descriptor. */
-  int fd;
-
-  /* Input/output buffer to the client. */
-  struct stream *ibuf;
-  struct stream *obuf;
-
-  /* Threads for read/write. */
-  struct thread *t_read;
-  struct thread *t_write;
-
-  /* This client's redistribute flag. */
-  int static_flag;
+  "ZEBRA_REDISTRIBUTE_ADD",
+  "ZEBRA_REDISTRIBUTE_DELETE"
 };
 
 void zebra_event (enum event event, int sock, struct zebra_client *client);
@@ -145,9 +132,9 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
       pnt += size;
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rib_add_ipv4 (type, &p, &nexthop, 0);
+	rib_add_ipv4 (type, &p, &nexthop, 0, client->rtm_table);
       else
-	rib_delete_ipv4 (type, &p, &nexthop, 0);
+	rib_delete_ipv4 (type, &p, &nexthop, 0, client->rtm_table);
     }
 }
 
@@ -164,7 +151,7 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
   pnt = stream_pnt (client->ibuf);
   lim = pnt + length;
 
-  GETC (type, pnt);
+  type = *pnt++;
   memcpy (&nexthop, pnt, sizeof (struct in6_addr));
   pnt += sizeof (struct in6_addr);
   
@@ -174,15 +161,15 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
       struct prefix_ipv6 p;
       
       GETL(ifindex, pnt);
-      GETC(p.prefixlen, pnt);
+      p.prefixlen = *pnt++;
       size = PSIZE(p.prefixlen);
       memcpy (&p.prefix, pnt, size);
       pnt += size;
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
-	rib_add_ipv6 (type, &p, &nexthop, ifindex);
+	rib_add_ipv6 (type, &p, &nexthop, ifindex, 0);
       else
-	rib_delete_ipv6 (type, &p, &nexthop, ifindex);
+	rib_delete_ipv6 (type, &p, &nexthop, ifindex, 0);
     }
 }
 #endif /* HAVE_IPV6 */
@@ -319,52 +306,9 @@ zebra_request_hostinfo (int sock)
   writen (sock, buf, 10);
 }
 
-extern struct route_table *ipv4_rib_table;
-#ifdef HAVE_IPV6
-extern struct route_table *ipv6_rib_table;
-#endif /* HAVE_IPV6 */
+/* Default rtm_table for all clients */
+int rtm_table_default;
 
-#include "table.h"
-#include "client.h"
-
-void
-zebra_redistribute (struct zebra_client *client, int type)
-{
-  struct route_node *np;
-  struct rib *rib;
-
-  for (np = route_top (ipv4_rib_table); np; np = route_next (np))
-    for (rib = np->info; rib; rib = rib->next)
-      if (rib->type == type)
-	zebra_ipv4_add (client->fd, type, (struct prefix_ipv4 *)&np->p,
-			&rib->u.gate4, 0);
-}
-
-void
-zebra_redistribute_add (int command, struct zebra_client *client, int length)
-{
-  int type;
-
-  type = stream_getc (client->ibuf);
-
-  if (! client->static_flag)
-    {
-      client->static_flag = 1;
-
-      /* Send current static route to the client. */
-      zebra_redistribute (client, ZEBRA_ROUTE_STATIC);
-    }
-}     
-
-void
-zebra_redistribute_delete (int command, struct zebra_client *client, 
-			   int length)
-{
-  int type;
-
-  type = stream_getc (client->ibuf);
-  printf ("redistrubte delete message %d\n", type);
-}     
 
 /* Handler of zebra service request. */
 int
@@ -483,6 +427,8 @@ client_new (int client_sock)
   client->fd = client_sock;
   client->ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
   client->obuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  client->rtm_table = rtm_table_default;
 
   list_add_node (client_list, client);
   
@@ -604,6 +550,43 @@ zebra_event (enum event event, int sock, struct zebra_client *client)
     }
 }
 
+/* Display default rtm_table for all clients. */
+DEFUN (show_table,
+       show_table_cmd,
+       "show table",
+       SHOW_STR
+       "default routing table to use for all clients\n")
+{
+  vty_out (vty, "table %d\r\n", rtm_table_default);
+  return CMD_SUCCESS;
+}
+
+DEFUN (config_table, 
+       config_table_cmd,
+       "table TABLENO",
+       "TABLE integer\n")
+{
+  rtm_table_default = strtol (argv[0], (char**)0, 10);
+  return CMD_SUCCESS;
+}
+
+/* Table configuration write function. */
+int
+config_write_table (struct vty *vty)
+{
+  if (rtm_table_default)
+    vty_out (vty, "table %d%s", rtm_table_default,
+      VTY_NEWLINE);
+  return 0;
+}
+
+/* table node for routing tables. */
+struct cmd_node table_node =
+{
+  TABLE_NODE,
+  "",				/* This node has no interface. */
+};
+
 /* Radix treee for IP version 4 RIB */
 struct radix_top *ipv4_static_radix;
 #ifdef HAVE_IPV6
@@ -634,6 +617,7 @@ DEFUN (ip_route,
   int ret;
   struct prefix_ipv4 p;
   struct in_addr gate;
+  int table = rtm_table_default;
 
   /* a.b.c.d/mask gateway format. */
   if (argc == 2)
@@ -690,7 +674,7 @@ DEFUN (ip_route,
   apply_mask (&p);
 
   /* We need rib error treatment here. */
-  ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0);
+  ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
 
   /* Error checking and display meesage. */
   if (ret)
@@ -730,6 +714,7 @@ DEFUN (no_ip_route,
   int ret;
   struct prefix_ipv4 p;
   struct in_addr gate;
+  int table = rtm_table_default;
 
   if (argc <= 1 || argc >= 4)
     {
@@ -788,7 +773,7 @@ DEFUN (no_ip_route,
   /* Make sure mask is applied. */
   apply_mask (&p);
 
-  ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0);
+  ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, table);
 
   if (ret)
     {
@@ -916,7 +901,7 @@ DEFUN (ipv6_route, ipv6_route_cmd,
   apply_mask_ipv6 (&p);
 
   /* We need rib error treatment here. */
-  ret = rib_add_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, 0);
+  ret = rib_add_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, 0);
   
   if (ret)
     {
@@ -972,7 +957,7 @@ DEFUN (no_ipv6_route,
   /* Make sure mask is applied and set type to static route*/
   apply_mask_ipv6 (&p);
 
-  ret = rib_delete_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gateway, 0);
+  ret = rib_delete_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gateway, 0, 0);
 
   switch (ret)
     {
@@ -1007,7 +992,7 @@ struct cmd_node ip_node =
   "",				/* This node has no interface. */
 };
 
-/* Initializetion of zebra and installation of commands. */
+/* Initialisation of zebra and installation of commands. */
 void
 zebra_init ()
 {
@@ -1019,6 +1004,7 @@ zebra_init ()
 
   /* Install configuration write function. */
   install_node (&ip_node, config_write_ip);
+  install_node (&table_node, config_write_table);
 
   install_element (VIEW_NODE, &show_ipforward_cmd);
   install_element (VIEW_NODE, &show_debug_zebra_cmd);
@@ -1030,6 +1016,10 @@ zebra_init ()
   install_element (CONFIG_NODE, &no_ip_route_cmd);
   install_element (CONFIG_NODE, &debug_zebra_cmd);
   install_element (CONFIG_NODE, &no_debug_zebra_cmd);
+#ifdef HAVE_LINUX_RTNETLINK_H
+  install_element (VIEW_NODE, &show_table_cmd);
+  install_element (CONFIG_NODE, &config_table_cmd);
+#endif
 #ifdef HAVE_IPV6
   install_element (VIEW_NODE, &show_ipv6forward_cmd);
   install_element (ENABLE_NODE, &show_ipv6forward_cmd);

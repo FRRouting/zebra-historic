@@ -89,7 +89,7 @@ proc_route_read ()
       p.prefixlen = ip_masklen (tmpmask);
       sscanf (gate, "%lX", (unsigned long *)&gateway);
 
-      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0);
+      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0, 0);
     }
 
   return 0;
@@ -144,7 +144,7 @@ proc_ipv6_route_read ()
       str2in6_addr (gate, &gateway);
       p.prefixlen = dest_plen;
 
-      rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0);
+      rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, &p, &gateway, 0, 0);
     }
 
   return 0;

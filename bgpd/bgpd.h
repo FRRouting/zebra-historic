@@ -49,6 +49,8 @@ struct bgp
   u_char redist_connect;	/* Redistribute connected route. */
   u_char redist_rip;		/* Redistribute rip route. */
   u_char redist_ripng;		/* Redistribute ripng route. */
+  u_char redist_ospf;		/* Redistribute ospf route. */
+  u_char redist_ospf6;		/* Redistribute ospf6 route. */
 
   struct _list *peer;		/* BGP neighbor list */
 };

@@ -270,8 +270,6 @@ zebra_read (struct thread *t)
       break;
     }
 
-  
-
   /* Re-register myself. */
   zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
 
@@ -299,6 +297,7 @@ zebra_create ()
   return 0;
 }
 
+/* Redistribute static */
 void
 bgp_zebra_redistribute (int type)
 {
@@ -308,10 +307,7 @@ bgp_zebra_redistribute (int type)
   zebra.redist_static = 1;
 
   if (zebra.sock > 0)
-    {
-      zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra.sock,
-			       ZEBRA_ROUTE_STATIC);
-    }
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra.sock, type);
 }
 
 void
@@ -323,10 +319,7 @@ bgp_zebra_no_redistribute (int type)
   zebra.redist_static = 0;
 
   if (zebra.sock > 0)
-    {
-      zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra.sock,
-			       ZEBRA_ROUTE_STATIC);
-    }
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra.sock, type);
 }
 
 void

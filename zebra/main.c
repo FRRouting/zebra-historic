@@ -93,7 +93,7 @@ sigint (int sig)
   /* Decrared in rib.c */
   void rib_close ();
 
-  zlog (NULL, LOG_INFO, "SIGINT received");
+  zlog (NULL, LOG_INFO, "Terminating on signal");
 
   if (!retain_mode)
     rib_close ();
@@ -129,7 +129,7 @@ void
 signal_init ()
 {
   signal_set (SIGINT, sigint);
-  signal_set (SIGTERM, SIG_IGN);
+  signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
 }
 
@@ -147,7 +147,7 @@ main (int argc, char **argv)
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_ZEBRA,
+  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_ZEBRA,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -220,6 +220,9 @@ main (int argc, char **argv)
 
   /* Configuration file read*/
   vty_read_config (config_file, config_current, config_default);
+
+  /* Clean up rib. */
+  rib_weed_tables();
 
   /* Exit when zebra is working in batch mode. */
   if (batch_mode)

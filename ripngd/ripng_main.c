@@ -95,7 +95,7 @@ main (int argc, char **argv)
   /* get program name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog(progname, ZLOG_SYSLOG, ZLOG_RIPNG,
+  zlog_default = openzlog(progname, ZLOG_STDOUT, ZLOG_RIPNG,
 			  LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -163,6 +163,9 @@ main (int argc, char **argv)
 
   /* Process id file create. */
   pid_output (PATH_RIPNGD_PID);
+
+  /* Connect to zebra. */
+  zebra_create ();
 
   /* Fetch next active thread. */
   while (thread_fetch (master, &thread))

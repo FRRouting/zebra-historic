@@ -177,9 +177,6 @@ expire_lsa_age (struct thread *thread)
   struct lsa_internal *lsi;
 
   lsi = (struct lsa_internal *)THREAD_ARG  (thread);
-#ifdef DEBUG_LSAPTR
-  zvlog_debug ("LSAPTR: Expire lsi[%#x]", lsi);
-#endif /*DEBUG_LSAPTR*/
   assert (lsi && lsi->lsh && lsi->area);
 
   lsi->expire = (struct thread *)NULL;
@@ -477,7 +474,7 @@ lsa_lookup_by_advrtr (unsigned short lsa_type, unsigned long advrtr,
   int i;
   struct lsa_internal *lsi;
   listnode n;
-  list returnlist;
+  list returnlist = NULL;
 
   returnlist = list_init ();
   for (i = 0; i < HASHVAL; i++)
@@ -486,9 +483,20 @@ lsa_lookup_by_advrtr (unsigned short lsa_type, unsigned long advrtr,
         {
           lsi = (struct lsa_internal *)getdata (n);
           if (lsi->lsh->lsh_advrtr == advrtr)
-            list_add_node (returnlist, lsi);
+            {
+              list_add_node (returnlist, lsi);
+              zvlog_debug ("%s found in lookup by advrtr",
+                           print_lsahdr (lsi->lsh));
+            }
         }
     }
+
+  if (list_isempty (returnlist))
+    {
+      list_delete_all (returnlist);
+      returnlist = NULL;
+    }
+
   return returnlist;
 }
 

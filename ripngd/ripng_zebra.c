@@ -1,6 +1,6 @@
 /*
  * RIPngd and zebra interface.
- * Copyright (C) 1998 Kunihiro Ishiguro
+ * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -34,6 +34,7 @@
 #include "client.h"
 
 #include "ripngd/ripngd.h"
+
 #include "zebra/zebra.h"
 
 extern struct thread_master *master;
@@ -43,46 +44,92 @@ struct zebra
 {
   int enable;			/* Flag for router zebra is enabled or not. */
   int sock;			/* Socket to zebra. */
-  int r_ripng;			/* Redistribute ripng. */
 
-  struct thread *t_read;
-  struct thread *t_write;
+  u_char redist_static;		/* Redistribute static route. */
+  u_char redist_connect;	/* Redistribute connected route. */
+  u_char redist_ospf;		/* Redistribute ospf route. */
+  u_char redist_bgp;		/* Redistribute bgp route. */
+  u_char redist_ripng;		/* Redistribute ripng route. Default is on. */
+
+  struct thread *t_read;	/* Read thead of zebra connection. */
+  struct thread *t_write;	/* Write thread of zebra connection. */
+
+  struct stream *ibuf;
 } zebra;
 
-/* Here, zebra may send interface information or redistributed route. */
+/* Read packet from zebra. */
 int
-zebra_read (struct thread *thread)
+zebra_read (struct thread *t)
 {
-  u_char buf [512];
-  u_int16_t length;
-  u_int8_t command;
-  int nbyte;
+  int nbytes;
   int sock;
-  u_char *pnt = buf;
-  void zebra_get_interface (int, u_int16_t);
+  zebra_size_t length;
+  zebra_command_t command;
 
-  sock = thread->u.fd;
-  nbyte = readn (sock, buf, 3);
+  sock = THREAD_FD(t);
+
+  /* Clear input buffer. */
+  stream_reset (zebra.ibuf);
+
+  /* Read zebra header. */
+  nbytes = stream_read (zebra.ibuf, sock, ZEBRA_HEADER_SIZE);
 
   /* zebra socket is closed. */
-  if (nbyte == 0) 
+  if (nbytes == 0) 
     {
-      zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
-      close (sock);
-      zebra.sock = -1;
+      zlog (NULL, LOG_ERR, "connection closed socket [%d]", sock);
+      /* zebra_close (); */
       return -1;
     }
 
-  GETW (length, pnt);
-  GETC (command, pnt);
+  /* zebra read error. */
+  if (nbytes < 0)
+    {
+      zlog (NULL, LOG_ERR, "cant read all packet");
+      /* zebra_close (); */
+      return -1;
+    }
 
-  if (command != ZEBRA_GET_ALL_INTERFACE)
-    return -1;
+  /* Fetch length and command. */
+  length = stream_getw (zebra.ibuf);
+  command = stream_getc (zebra.ibuf);
 
-  zebra_get_interface (sock, length);
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, 
-				   zebra.sock);
+  length -= ZEBRA_HEADER_SIZE;
+
+  /* Read rest of zebra packet. */
+  stream_read (zebra.ibuf, sock, length);
+
+  switch (command)
+    {
+    case ZEBRA_IPV4_ROUTE_ADD:
+      printf ("IPv4 route is added from zebra\n");
+      break;
+    case ZEBRA_IPV4_ROUTE_DELETE:
+      printf ("IPv4 route is deleted from zebra\n");
+      break;
+    case ZEBRA_IPV6_ROUTE_ADD:
+      printf ("IPv6 route is added from zebra\n");
+      break;
+    case ZEBRA_IPV6_ROUTE_DELETE:
+      printf ("IPv6 route is deleted from zebra\n");
+      break;
+    case ZEBRA_GET_ALL_INTERFACE:
+      ripng_zebra_get_interface (zebra.ibuf);
+      break;
+    default:
+      break;
+    }
+
+  /* Re-register myself. */
+  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
+
   return 0;
+}
+
+int
+zebra_sock ()
+{
+  return zebra.sock;
 }
 
 /* Write buffer to zebra socket. */
@@ -112,66 +159,67 @@ zebra_write (struct stream *s)
   return nbytes;
 }
 
-/* RIP configuration write function. */
-int
-zebra_config_write (struct vty *vty)
-{
-  if (zebra.enable)
-    vty_out (vty, "router zebra%s", VTY_NEWLINE);
-  if (zebra.r_ripng)
-    vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
-  return 0;
-}
-
-DEFUN (redistribute_ripng,
-       redistribute_ripng_cmd,
-       "redistribute ripng",
-       "Redistribute ripng route to zebra daemon\n"
-       "RIPng configuration\n")
-{
-  return CMD_SUCCESS;
-}
-
 /* Make zebra connection. */
 int
 zebra_create ()
 {
-  zebra.sock = zebra_connect ();
-
   if (zebra.sock < 0)
-    return zebra.sock;
-  
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
-  zebra_get_all_interface (zebra.sock);
+    {
+      zebra.sock = zebra_connect ();
 
+      if (zebra.sock < 0)
+	return zebra.sock;
+  
+      zebra.ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
+      zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
+      zebra_get_all_interface (zebra.sock);
+    }
   return 0;
 }
-
+
 DEFUN (router_zebra,
        router_zebra_cmd,
        "router zebra",
        "Enable a routing process\n"
        "Make connection to zebra daemon\n")
 {
-  int ret;
-
-  /* Set router zebra is enabled. */
+  vty->node = ZEBRA_NODE;
   zebra.enable = 1;
 
   /* If already has socket then return. */
   if (zebra.sock >= 0)
-    {
-      vty_out (vty, "already connected to zebra\r\n");
-      return CMD_WARNING;
-    }
+    return CMD_SUCCESS;
 
-  ret = zebra_create ();
-  if (ret < 0)
+  /* Try to create zebra connection. */
+  if (zebra_create () < 0)
     {
-      vty_out (vty, "can't connect to zebra\r\n");
+      vty_out (vty, "Can't connect to zebra.\r\n");
       return CMD_WARNING;
     }
   return CMD_SUCCESS;
+}
+
+DEFUN (no_redistribute_ripng,
+       no_redistribute_ripng_cmd,
+       "no redistribute ripng",
+       NO_STR
+       "Redistribute control\n"
+       "RIPng route\n")
+{
+  zebra.redist_ripng = 0;
+  return CMD_SUCCESS;
+}
+
+/* RIPng configuration write function. */
+int
+zebra_config_write (struct vty *vty)
+{
+  if (! zebra.redist_ripng)
+    {
+      vty_out (vty, "router zebra%s", VTY_NEWLINE);
+      vty_out (vty, " no redistribute ripng%s", VTY_NEWLINE);
+    }
+  return 0;
 }
 
 /* Zebra node structure. */
@@ -181,18 +229,27 @@ struct cmd_node zebra_node =
   "%s(config-router)# ",
 };
 
+/* Initialize zebra structure and it's commands. */
 void
 zebra_init ()
 {
-  /* Set default value to zebra structure. */
-  zebra.enable = 0;
+  /* Clear all variables. */
+  bzero (&zebra, sizeof (struct zebra));
+
+  /* Set default value to the zebra structure. */
+  zebra.enable = 1;
+  zebra.redist_ripng = 1;
+
+  /* Socket is not active at this point. */
   zebra.sock = -1;
-  zebra.r_ripng = 0;
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
 
   /* Install command element for zebra node. */ 
   install_element (CONFIG_NODE, &router_zebra_cmd);
-  install_element (ZEBRA_NODE, &redistribute_ripng_cmd);
+  install_element (ZEBRA_NODE, &config_end_cmd);
+  install_element (ZEBRA_NODE, &config_exit_cmd);
+  install_element (ZEBRA_NODE, &config_help_cmd);
+  install_element (ZEBRA_NODE, &no_redistribute_ripng_cmd);
 }

@@ -1897,6 +1897,7 @@ DEFUN (bgp_redistribute_static,
   struct bgp *bgp;
 
   bgp = (struct bgp *) vty->index;
+
   bgp->redist_static = 1;
   bgp_zebra_redistribute (ZEBRA_ROUTE_STATIC);
 
@@ -1913,8 +1914,174 @@ DEFUN (no_bgp_redistribute_static,
   struct bgp *bgp;
 
   bgp = (struct bgp *) vty->index;
+
   bgp->redist_static = 0;
   bgp_zebra_no_redistribute (ZEBRA_ROUTE_STATIC);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_connected,
+       bgp_redistribute_connected_cmd,
+       "redistribute connected",
+       "Redistribute\n"
+       "Connected route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_connect = 1;
+  bgp_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_connected,
+       no_bgp_redistribute_connected_cmd,
+       "no redistribute connected",
+       NO_STR
+       "Redistribute\n"
+       "Connected route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_connect = 0;
+  bgp_zebra_no_redistribute (ZEBRA_ROUTE_CONNECT);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_rip,
+       bgp_redistribute_rip_cmd,
+       "redistribute rip",
+       "Redistribute\n"
+       "RIP route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_rip = 1;
+  bgp_zebra_redistribute (ZEBRA_ROUTE_RIP);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_rip,
+       no_bgp_redistribute_rip_cmd,
+       "no redistribute rip",
+       NO_STR
+       "Redistribute\n"
+       "RIP route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_rip = 0;
+  bgp_zebra_no_redistribute (ZEBRA_ROUTE_RIP);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_ripng,
+       bgp_redistribute_ripng_cmd,
+       "redistribute ripng",
+       "Redistribute\n"
+       "RIPng route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_ripng = 1;
+  bgp_zebra_redistribute (ZEBRA_ROUTE_RIPNG);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_ripng,
+       no_bgp_redistribute_ripng_cmd,
+       "no redistribute ripng",
+       NO_STR
+       "Redistribute\n"
+       "RIPng route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_ripng = 0;
+  bgp_zebra_no_redistribute (ZEBRA_ROUTE_RIPNG);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_ospf,
+       bgp_redistribute_ospf_cmd,
+       "redistribute ospf",
+       "Redistribute\n"
+       "OSPF route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_ospf = 1;
+  bgp_zebra_redistribute (ZEBRA_ROUTE_OSPF);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_ospf,
+       no_bgp_redistribute_ospf_cmd,
+       "no redistribute ospf",
+       NO_STR
+       "Redistribute\n"
+       "OSPF route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_ospf = 0;
+  bgp_zebra_no_redistribute (ZEBRA_ROUTE_OSPF);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_ospf6,
+       bgp_redistribute_ospf6_cmd,
+       "redistribute ospf6",
+       "Redistribute\n"
+       "OSPF for IPv6 route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_ospf6 = 1;
+  bgp_zebra_redistribute (ZEBRA_ROUTE_OSPF6);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_ospf6,
+       no_bgp_redistribute_ospf6_cmd,
+       "no redistribute ospf6",
+       NO_STR
+       "Redistribute\n"
+       "OSPF for IPv6 route\n")
+{
+  struct bgp *bgp;
+
+  bgp = (struct bgp *) vty->index;
+
+  bgp->redist_ospf6 = 0;
+  bgp_zebra_no_redistribute (ZEBRA_ROUTE_OSPF6);
 
   return CMD_SUCCESS;
 }
@@ -2095,8 +2262,19 @@ bgp_config_write (struct vty *vty)
 	}
 
       config_write_network (vty, bgp);
+
       if (bgp->redist_static)
 	vty_out (vty, " redistribute static%s", VTY_NEWLINE);
+      if (bgp->redist_connect)
+	vty_out (vty, " redistribute connected%s", VTY_NEWLINE);
+      if (bgp->redist_rip)
+	vty_out (vty, " redistribute rip%s", VTY_NEWLINE);
+      if (bgp->redist_ripng)
+	vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
+      if (bgp->redist_ospf)
+	vty_out (vty, " redistribute ospf%s", VTY_NEWLINE);
+      if (bgp->redist_ospf6)
+	vty_out (vty, " redistribute ospf6%s", VTY_NEWLINE);
 
       bgp_peer_config_write (vty, bgp->peer);
       vty_out (vty, "!%s", VTY_NEWLINE);
@@ -2140,6 +2318,16 @@ bgp_init ()
   install_element (BGP_NODE, &config_help_cmd);
   install_element (BGP_NODE, &bgp_redistribute_static_cmd);
   install_element (BGP_NODE, &no_bgp_redistribute_static_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_connected_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_connected_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_rip_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_rip_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_ripng_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ripng_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_ospf_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ospf_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_ospf6_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ospf6_cmd);
   install_element (BGP_NODE, &neighbor_cmd);
   install_element (BGP_NODE, &no_neighbor_cmd);
   install_element (BGP_NODE, &neighbor_ebgp_multihop_cmd);

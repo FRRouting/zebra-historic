@@ -67,10 +67,19 @@ ospf_nbr_new ()
 void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
+  list_delete_all (nbr->link_state_retransmission);
+  list_delete_all (nbr->database_summary);
+  list_delete_all (nbr->link_state_request);
+
+  /* Cancel threads. */
+  OSPF_NSM_READ_OFF (nbr->t_read);
+  OSPF_NSM_WRITE_OFF (nbr->t_write);
+  OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
+
   XFREE (MTYPE_OSPF_NEIGHBOR, nbr);
 }
 
-/* check myself is in the neighbor list. */
+/* Check myself is in the neighbor list. */
 int
 ospf_nbr_bidirectional (struct in_addr *router_id,
 			struct in_addr *neighbors, int size)
@@ -99,7 +108,19 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
   p.prefixlen = 32;
   p.u.prefix4 = ospf_top->router_id;
 
-  nbr = ospf_nbr_new ();
+  rn = route_node_get (oi->nbrs, &p);
+  if (rn->info)
+    {
+      /* There is already pseudo neighbor. */
+      nbr = rn->info;
+      route_unlock_node (rn);
+    }
+  else
+    {
+      nbr = ospf_nbr_new ();
+      rn->info = nbr;
+    }
+
   nbr->oi = oi;
   nbr->status = NSM_TwoWay;
   nbr->router_id = ospf_top->router_id;
@@ -107,15 +128,6 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
   nbr->bd_router = oi->bd_router;
   nbr->priority = oi->priority;
   nbr->address = p;
-
-  rn = route_node_get (oi->nbrs, &p);
-  if (rn->info)
-    {
-      zlog (NULL, LOG_INFO, "There is already pseudo neighbor. */");
-      route_unlock_node (rn);
-    }
-  else
-    rn->info = nbr;
 }
 
 /* get neighbor count. */

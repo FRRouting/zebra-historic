@@ -1,6 +1,6 @@
 /*
- * kernel routing table update prototype.
- * Copyright (C) 1998 Kunihiro Ishiguro
+ * Redistribution Handler
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -20,25 +20,5 @@
  * 02111-1307, USA.  
  */
 
-#ifndef _ZEBRA_RT_H
-#define _ZEBRA_RT_H
-
-int
-kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 unsigned int index, int metric, int table);
-
-int
-kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    unsigned int index, int metric, int table);
-
-#ifdef HAVE_IPV6
-int
-kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 unsigned int index, int metric, int table);
-
-int
-kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    unsigned int index, int metric, int table);
-#endif /* HAVE_IPV6 */
-
-#endif /* _ZEBRA_RT_H */
+void zebra_redistribute_add (int, struct zebra_client *, int);
+void zebra_redistribute_delete (int, struct zebra_client *, int);

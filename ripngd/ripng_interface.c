@@ -30,6 +30,7 @@
 #include "network.h"
 #include "filter.h"
 #include "log.h"
+#include "stream.h"
 
 #include "ripngd/ripngd.h"
 #include "zebra/zebra.h"
@@ -60,7 +61,8 @@ if_add_multicast (struct interface *ifp)
 		    (char *) &mreq, sizeof (mreq));
 
   if (ret < 0)
-    log ("can't setsockopt IPV6_JOIN_MEMBERSHIP:%s\n", strerror (errno));
+    zlog (NULL, LOG_ERR, 
+	  "can't setsockopt IPV6_JOIN_MEMBERSHIP:%s\n", strerror (errno));
 
   return ret;
 }
@@ -110,49 +112,39 @@ ripng_check_max_mtu ()
   return mtu;
 }
 
-/* Get interface information from zebra daemon. */
+/* Get all interface information. */
 void
-zebra_get_interface (int sock, u_int16_t length)
+ripng_zebra_get_interface (struct stream *s)
 {
-  u_char *pnt;
-  u_char *start, *lim;
-  int nbyte;
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
+  unsigned long endp;
 
-  /* Allocate read buffer. */
-  pnt = start = XMALLOC (0, length + 1);
-  nbyte = readn (sock, pnt, length - 3);
+  endp = stream_get_endp (s);
 
-  if (nbyte == 0) 
+  while (stream_get_getp(s) < endp)
     {
-      fprintf (stderr, "connection closed\n");
-      return;
-    }
-  if (nbyte < 0)
-    return;
+      u_char tmpnam[INTERFACE_NAMSIZ + 1];
 
-  lim = pnt + length - 3;
-  while (pnt < lim) 
-    {
-      char tmpnam[INTERFACE_NAMSIZ];
+      bzero (tmpnam, sizeof (tmpnam));
 
-      /* Get interface's name. */
-      strncpy (tmpnam, pnt, INTERFACE_NAMSIZ);
-      pnt += INTERFACE_NAMSIZ;
+      /* Get interface's name */
+      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
 
+      /* create interface structure */
       ifp = if_get_by_name (tmpnam);
 
-      /* Get interface's index and value. */
-      GETC (ifp->index, pnt);
-      GETL (ifp->flags, pnt);
-      GETL (ifp->metric, pnt);
-      GETL (ifp->mtu, pnt);
+      /* Get interface's index and values. */
+      ifp->index = stream_getc (s);
+      ifp->flags = stream_getl (s);
+      ifp->metric = stream_getl (s);
+      ifp->mtu = stream_getl (s);
 
       /* Get interface's address. */
-      GETL (connected_count, pnt);
-      while (connected_count--) 
+      connected_count = stream_getl (s);
+
+      while (connected_count--)
 	{
 	  struct prefix *p;
 	  int plen;
@@ -160,31 +152,29 @@ zebra_get_interface (int sock, u_int16_t length)
 	  connected = connected_new ();
 
 	  p = prefix_new ();
-	  GETC (p->family, pnt);
+	  p->family = stream_getc (s);
+
 	  plen = prefix_blen (p);
-	  memcpy (&p->u.prefix, pnt, plen);
-	  pnt += plen;
-	  p->prefixlen = *pnt++;
+	  memcpy (&p->u.prefix, stream_pnt (s), plen);
+	  stream_forward (s, plen);
+	  p->prefixlen = stream_getc (s);
 	  connected->address = p;
 
 	  p = prefix_new ();
-	  memcpy (&p->u.prefix, pnt, plen);
-	  pnt += plen;
+	  memcpy (&p->u.prefix, stream_pnt (s), plen);
+	  stream_forward (s, plen);
+
 	  connected->destination = p;
-	  
-	  p = connected->address;
 
 	  connected_add (ifp, connected);
 	}
     }
 
+  /* RIPng enable interface. */
   ripng_enable_apply_all ();
 
   /* Apply distribute-list to the all interface. */
   distribute_apply_all ();
-
-  XFREE (0, start);
-  if_dump_all ();
 
   /* Add ripng getinterface hook at here. */
   if (ripng)

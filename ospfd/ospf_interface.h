@@ -100,9 +100,11 @@ struct ospf_interface
 
 
 /* Prototypes. */
+void ospf_if_reset_variables (struct ospf_interface *oi);
 struct ospf_interface *ospf_if_new ();
 int ospf_if_new_hook (struct interface *);
 void ospf_if_init ();
 void ospf_if_stream_set (int, struct ospf_interface *);
+void ospf_if_stream_unset (struct ospf_interface *);
 
 #endif /* _ZEBRA_OSPF_INTERFACE_H */

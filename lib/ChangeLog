@@ -1,3 +1,66 @@
+1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* buffer.h (GETC,GETW): Macro deleted.
+
+1999-05-15  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
+
+	* prefix.h (IPV4_NET0, IPV4_NET127): Macro added.
+
+1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (service_advanced_vty): New command added.
+	(no_service_advanced_vty): Likewise.
+
+1999-05-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_auth): If advanced flag is set and enable password is
+	not set, directly login to the ENABLE_NODE.  This feature is
+	originally designed and implemented by Stephen R. van den Berg
+	<srb@cuci.nl>.
+
+	* command.h (host): Add advanced flag to struct host for advanced
+	vty terminal interface.
+
+	* version.h (ZEBRA_VERSION): Update to 0.65 for next beta release.
+
+1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
+
+	* command.h (node_type ): Add TABLE_NODE.
+	
+	* vty.c (vty_telnet_option): Check host.lines value.
+
+	* command.c (config_lines): DEFUN for 'lines LINES' command.
+
+	* zebra.h: Include <sys/utsname.h> for uname().
+	(RT_TABLE_MAIN): Defined as 0 if OS does not support multiple
+	routing table.
+
+	* vty.c (vty_auth): Directly login to the ENABLE_NODE when enable
+	password is not set.
+	(vty_prompt): Get machine's hostname when hostname is not set.
+
+1999-05-11  James Willard <james@whispering.org>
+
+	* command.c (config_exit): Close connection when `exit' command is
+	executed at ENABLE_NODE.
+
+1999-05-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_stop_input): `C-c' key change node to ENABLE_NODE.
+
+	* command.c (cmd_execute_command_strict): Matched command size
+	check added.
+	(cmd_make_desc_line): New function for DEFUN2.
+
+	* command.h (struct cmd_element ): Add descsize.
+
+1999-05-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (struct cmd_element ): Remame descvec to docvec.
+	(struct cmd_element ): Add descvec for new description system.
+
+	* command.c (desc_make): Check cmd->descvec.
+
 1999-05-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* memory.h (enum): Add MTYPE_CLUSTER, MTYPE_CLUSTER_VAL.

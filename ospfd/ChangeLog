@@ -1,3 +1,22 @@
+1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
+
+	* ospf_main.c (signal_init): SIGTERM call sigint.
+	(sigint): Loggging more better message.
+
+1999-05-12  Toshiaki Takada  <takada@zebra.org>
+	* ospfd.c: Fix bug of `no router ospf' statement, it will work.
+	
+1999-05-11  Toshiaki Takada  <takada@zebra.org>
+	* ospf_neighbor.c: ospf_nbr_free () Added.
+	
+1999-05-10  Toshiaki Takada  <takada@zebra.org>
+	* ospfd.h: struct ospf_area { }, struct ospf_network { } Changed.
+	* Fix bug of `no network' statement, it will work.
+
+1999-05-07  Toshiaki Takada  <takada@zebra.org>
+	* ospf_interface.c, ospf_zebra.c: Fix bug of last interface is not
+	updated by ospf_if_update ().
+	
 1999-04-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am (noinst_HEADERS): Add ospf_lsa.h for distribution.

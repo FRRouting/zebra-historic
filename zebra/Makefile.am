@@ -19,7 +19,7 @@ zebra_SOURCES = \
 	zebra.c main.c interface.c connected.c ioctl.c rib.c redistribute.c
 
 noinst_HEADERS = \
-	connected.h ioctl.h rib.h rt.h zebra.h
+	connected.h ioctl.h rib.h rt.h zebra.h redistribute.h
 
 zebra_LDADD = ../lib/libzebra.a $(otherobj)
 

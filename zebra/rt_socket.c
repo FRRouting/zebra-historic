@@ -207,7 +207,7 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
 /* Add IPv4 prefix to kernel routing table. */
 int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 unsigned int index, int metric)
+		 unsigned int index, int metric, int table)
 {
   return kernel_rtm_ipv4 (RTM_ADD, dest, gate, index, metric);
 }
@@ -215,7 +215,7 @@ kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 /* Delete IPv4 prefix from kernel routing table. */
 int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    unsigned int index, int metric)
+		    unsigned int index, int metric, int table)
 {
   return kernel_rtm_ipv4 (RTM_DELETE, dest, gate, index, metric);
 }
@@ -304,7 +304,7 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
 /* Add IPv6 route to the kernel. */
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 int index, int metric)
+		 int index, int metric, int table)
 {
   return kernel_rtm_ipv6 (RTM_ADD, dest, gate, index, metric);
 }
@@ -312,7 +312,7 @@ kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
 /* Delete IPv6 route from the kernel. */
 int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int metric)
+		    int index, int metric, int table)
 {
   return kernel_rtm_ipv6 (RTM_DELETE, dest, gate, index, metric);
 }

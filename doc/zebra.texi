@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.64.1
+@subtitle for zebra-0.65
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.64.1.
+This is the Zebra Manual for zebra-0.65.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -106,6 +106,9 @@ is for you
 @table @samp
 @item RFC1771
 A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.
+@item RFC1996
+BGP Route Reflection An alternative to full mesh IBGP. T. Bates &
+R. Chandrasekeran. June 1996.
 @item RFC1997
 BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.
 @item RFC2080
@@ -391,6 +394,11 @@ accept connection.
 
 @deffn Command {enable password @var{password}} {}
 Set enable password.
+@end deffn
+
+@deffn Command {lines @var{nroflines}} {}
+Override no. of terminal lines for vty interface.  Set it to zero to
+avoid pagination.
 @end deffn
 
 @deffn Command {log stdout} {}
@@ -721,6 +729,11 @@ Enable or disable multicast flag of the interface.
 @node Static route, zebra terminal mode commands, Interface, zebra
 @comment  node-name,  next,  previous,  up
 @section Static route
+
+@deffn Command {table @var{tableno}} {}
+Select the primary kernel routing table to be used.  This only works for
+kernels supporting multiple routing tables (like Linux 2.2.x).
+@end deffn
 
 @deffn Command {ip route @var{network} @var{gateway}} {}
 @end deffn

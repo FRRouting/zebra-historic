@@ -488,6 +488,27 @@ main ()
 #include "vty.h"
 #include "command.h"
 
+/*
+  deny    Specify packets to reject
+  permit  Specify packets to forward
+  dynamic ?
+*/
+
+/*
+  Hostname or A.B.C.D  Address to match
+  any                  Any source host
+  host                 A single host address
+*/
+DESC (access_list) =
+{
+  {DESC_STR, "Set access list definition"},
+  {DESC_STR, "Access list name"},
+  {DESC_LINE, "deny	Specify packets to reject\n"
+              "         one More line\n"
+              "permit	Specify packets to forward\n"},
+  {DESC_LINE, ""}
+};
+
 DEFUN (access_list, access_list_cmd,
        "access-list NAME TYPE IP_ADDR",
        "Set access list definition\n"

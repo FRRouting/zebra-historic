@@ -32,6 +32,7 @@
 #include "stream.h"
 #include "table.h"
 #include "roken.h"
+#include "client.h"
 
 #include "ripngd/ripngd.h"
 #include "ripngd/ripng_route.h"
@@ -687,8 +688,15 @@ ripng_age ()
       if (rinfo)
 	if (rinfo->timer < (current_time - ripng->timeout_time))
 	  {
-	    ;
-	    /* route_unlock_node () */
+	    zebra_ipv6_delete (zebra_sock() , ZEBRA_ROUTE_RIPNG, 
+			       (struct prefix_ipv6 *) &node->p,
+			       &rinfo->nexthop, rinfo->ifindex);
+
+	    ripng_info_free (rinfo);
+	    RIPNG_SLOT_RTE (slot) = NULL;
+	    ripng_slot_check (node);
+	    
+	    route_unlock_node (node);
 	  }
     }
 }

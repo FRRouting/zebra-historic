@@ -70,7 +70,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
         (T) = thread_add_write (master, (F), nbr, (V))
 
 /* Macro for OSPF NSM write turn off. */
-#define OSPF_NSM_WRITE_OFF (X) \
+#define OSPF_NSM_WRITE_OFF(X) \
       if (X) \
         { \
           thread_cancel (X); \

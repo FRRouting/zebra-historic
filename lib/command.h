@@ -38,6 +38,9 @@ struct host
   /* Enable password */
   char *enable;
 
+  /* Override for no. of terminal lines */
+  int lines;
+
 #ifdef HAVE_PTHREAD
   /*   pthread_mutex_t mutex_lock; */
 #endif /* HAVE_PTHREAD */  
@@ -50,6 +53,8 @@ struct host
 
   /* config file name of this host */
   char *config;
+
+  int advanced;
 };
 
 /* There are some command levels which called from command node. */
@@ -63,6 +68,7 @@ enum node_type
   DEBUG_NODE,			/* Debug node. */
   INTERFACE_NODE,		/* Interface mode node. */
   ZEBRA_NODE,			/* zebra connection node. */
+  TABLE_NODE,			/* rtm_table selection node. */
   RIP_NODE,			/* RIP protocol mode node. */ 
   RIPNG_NODE,			/* RIPng protocol mode node. */
   BGP_NODE,			/* BGP protocol mode which includes BGP4+ */
@@ -98,12 +104,18 @@ struct cmd_node
   vector desc_vector;
 };
 
-enum cmd_desc_type {DESC_STR, DESC_FUNC};
+enum cmd_desc_type {DESC_END = 0, DESC_STR, DESC_LINE, DESC_FUNC};
 
 struct cmd_desc
 {
+  /* Description type. */
   enum cmd_desc_type type;
+
+  /* Actual data. */
   void *data;
+
+  /* Vector for multiline description. */
+  vector line;
 };
 
 /* Structure of command element. */
@@ -114,8 +126,10 @@ struct cmd_element
   char *doc;			/* Documentation of this command */
   struct cmd_desc *desc;	/* Command description. */
   vector strvec;		/* Pointing out each command index */
-  vector descvec;		/* Pointing out each command index */
+  vector docvec;		/* Vector of simple document of command. */
+  vector descvec;		/* Vector of description of command. */
   int cmdsize;			/* Command index count. */
+  int descsize;			/* Description index count. */
   char *config;			/* Configuration string */
   vector subconfig;		/* Sub configuration string */
 };
@@ -159,7 +173,7 @@ struct desc
 
 /* New DEFUN for vty command interafce. */
 #define DESC(funcname) \
-struct cmd_desc funcname ## _desc[] =
+struct cmd_desc funcname ## _desc[]
 
 #define DEFUN2(funcname, cmdname, cmdstr) \
   int funcname (struct cmd_element *, struct vty *, int, char **); \
@@ -198,7 +212,7 @@ struct cmd_desc funcname ## _desc[] =
 void install_node (struct cmd_node *, int (*) (struct vty *));
 void install_element (enum node_type, struct cmd_element *);
 void sort_node ();
-void desc_vector_free (vector descvec);
+void desc_vector_free (vector docvec);
 
 vector cmd_make_strvec (char *);
 void cmd_free_strvec (vector);

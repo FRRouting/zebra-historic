@@ -88,7 +88,7 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
 void
 sigint (int sig)
 {
-  zlog (NULL, LOG_INFO, "SIGINT received");
+  zlog (NULL, LOG_INFO, "Terminating on signal");
   if (!retain_mode)
     rip_rib_close ();
 
@@ -123,7 +123,7 @@ void
 signal_init ()
 {
   signal_set (SIGINT, sigint);
-  signal_set (SIGTERM, SIG_IGN);
+  signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
 }
 
@@ -141,7 +141,7 @@ main (int argc, char **argv)
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
   /* First of all we need logging init. */
-  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_RIP,
+  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_RIP,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -210,8 +210,8 @@ main (int argc, char **argv)
   /* Pid file create. */
   pid_output (PATH_RIPD_PID);
 
-  /* Start rip. */
-  rip_start ();
+  /* Connect to zebra. */
+  zebra_create ();
 
   /* Execute each thread. */
   while (thread_fetch (master, &thread))

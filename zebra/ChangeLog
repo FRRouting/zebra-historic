@@ -1,3 +1,29 @@
+1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c (netlink_route_change): Tempolary bypass ipv6 route
+	change treatment.
+
+	* Makefile.am (noinst_HEADERS): redistribute.h added.
+
+	* redistribute.h: New file.
+
+1999-05-14  Stephen R. van den Berg <srb@cuci.nl>
+
+	* zebra.c (show_table): Show all table configuration DEFUN.
+	(config_table): Config table number DEFUN.
+
+	* rt_netlink.c: Add support for multiple routing table.
+
+	* rib.c (rib_weed_table): New function added for delete all
+	routes from specified routing table.
+
+	* main.c (signal_init): SIGTERM call sigint.
+	(sigint): Loggging more better message.
+
+1999-05-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_netlink.c: Change log () to zlog ().
+
 1999-05-07    <kunihiro@zebra.org>
 
 	* zebra.h (ZEBRA_ROUTE_OSPF6): Added for ospf6d route.

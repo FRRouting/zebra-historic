@@ -35,13 +35,14 @@
 #include "table.h"
 #include "roken.h"
 #include "log.h"
+#include "stream.h"
+#include "thread.h"
 
 #include "zebra/zebra.h"
 #include "zebra/connected.h"
 #include "ripd/ripd.h"
 
-/* Global rip structure. */
-extern struct rip *rip;
+extern struct thread_master *master;
 
 static struct message ri_version_msg[] = 
 {
@@ -86,7 +87,7 @@ rip_request (struct interface *ifp, int sock)
   char buf[REQUEST_BUF];
   struct sockaddr_in sin;
 
-  size = rip_make_request (buf, rip->version);
+  size = rip_make_request (buf, rip.version);
   if (size > REQUEST_BUF)
     {
       zlog (NULL, LOG_WARNING, "RIP request packet size overflow");
@@ -100,7 +101,7 @@ rip_request (struct interface *ifp, int sock)
   if (if_is_loopback (ifp))
     return;
 
-  if ((rip->multicast == RIP_MULTICAST) && if_is_multicast (ifp)) 
+  if ((rip.multicast == RIP_MULTICAST) && if_is_multicast (ifp)) 
     {
       listnode node;
       
@@ -113,7 +114,7 @@ rip_request (struct interface *ifp, int sock)
 	  struct in_addr addr;
 
 	  connected = getdata (node);
-	  p = (struct prefix_ipv4 *) &connected->address;
+	  p = (struct prefix_ipv4 *) connected->address;
 
 	  if (p->family != AF_INET)
 	    continue;
@@ -147,7 +148,7 @@ rip_request (struct interface *ifp, int sock)
 	  struct connected *connected;
 
 	  connected = getdata (cnode);
-	  p = (struct prefix_ipv4 *) &connected->destination;
+	  p = (struct prefix_ipv4 *) connected->destination;
 
 	  bzero (&sin, sizeof (struct sockaddr_in));
 	  sin.sin_port = htons (RIP_PORT_DEFAULT);
@@ -164,8 +165,10 @@ rip_request_all ()
 {
   listnode node;
 
+  zlog (NULL, LOG_INFO, "rip request to the all interface");
+
   for (node = listhead (iflist); node; nextnode (node))
-    rip_request (getdata (node), rip->sock);
+    rip_request (getdata (node), rip.sock);
 }
 
 /* Join to the rip version 2 multicast group. */
@@ -211,7 +214,7 @@ rip_multicast_enable (int sock)
 	      struct in_addr any;
 	      
 	      connected = getdata (cnode);
-	      p = (struct prefix_ipv4 *) &connected->address;
+	      p = (struct prefix_ipv4 *) connected->address;
       
 	      if (p->family != AF_INET)
 		continue;
@@ -241,7 +244,7 @@ if_check_address (struct in_addr addr)
 	  struct prefix_ipv4 *p;
 
 	  connected = getdata (cnode);
-	  p = (struct prefix_ipv4 *) &connected->address;
+	  p = (struct prefix_ipv4 *) connected->address;
 
 	  if (p->family != AF_INET)
 	    continue;
@@ -311,45 +314,39 @@ rip_connected_add (struct interface *ifp,
   rip_add_route (p, rinfo, NULL, ifp);
 }
 
-/* Get interface information from zebra daemon. */
-int
-zebra_get_interface (int sock, u_int16_t length)
+/* Get all interface information. */
+void
+rip_zebra_get_interface (struct stream *s)
 {
-  u_char *pnt;
-  u_char *start;
-  u_char *lim;
-  int nbytes;
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
+  unsigned long endp;
 
-  /* Allocate read buffer. */
-  pnt = start = XMALLOC (0, length + 1);
-  nbytes = readn (sock, pnt, length - 3);
+  endp = stream_get_endp (s);
 
-  if (nbytes <= 0) 
-    return nbytes;
-
-  lim = (caddr_t)pnt + length - 3;
-  while (pnt < lim) 
+  while (stream_get_getp(s) < endp)
     {
-      char tmpnam[INTERFACE_NAMSIZ];
+      u_char tmpnam[INTERFACE_NAMSIZ + 1];
 
-      /* Get interface's name. */
-      strncpy (tmpnam, pnt, INTERFACE_NAMSIZ);
-      pnt += INTERFACE_NAMSIZ;
+      bzero (tmpnam, sizeof (tmpnam));
 
+      /* Get interface's name */
+      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
+
+      /* create interface structure */
       ifp = if_get_by_name (tmpnam);
 
-      /* Get interface's index. */
-      GETC (ifp->index, pnt);
-      GETL (ifp->flags, pnt);
-      GETL (ifp->metric, pnt);
-      GETL (ifp->mtu, pnt);
+      /* Get interface's index and values. */
+      ifp->index = stream_getc (s);
+      ifp->flags = stream_getl (s);
+      ifp->metric = stream_getl (s);
+      ifp->mtu = stream_getl (s);
 
-      /* Get interface's address count. */
-      GETL (connected_count, pnt);
-      while (connected_count--) 
+      /* Get interface's address. */
+      connected_count = stream_getl (s);
+
+      while (connected_count--)
 	{
 	  struct prefix *p;
 	  int plen;
@@ -357,29 +354,30 @@ zebra_get_interface (int sock, u_int16_t length)
 	  connected = connected_new ();
 
 	  p = prefix_new ();
-	  GETC (p->family, pnt);
+	  p->family = stream_getc (s);
+
 	  plen = prefix_blen (p);
-	  memcpy (&p->u.prefix, pnt, plen);
-	  pnt += plen;
-	  p->prefixlen = *pnt++;
+	  memcpy (&p->u.prefix, stream_pnt (s), plen);
+	  stream_forward (s, plen);
+	  p->prefixlen = stream_getc (s);
 	  connected->address = p;
 
 	  p = prefix_new ();
-	  memcpy (&p->u.prefix, pnt, plen);
-	  pnt += plen;
+	  memcpy (&p->u.prefix, stream_pnt (s), plen);
+	  stream_forward (s, plen);
+
 	  connected->destination = p;
 
-	  p = connected->address;
 	  connected_add (ifp, connected);
-	  
+
+	  p = connected->address;
 	  if (p->family == AF_INET)
 	    rip_connected_add (ifp, connected);
 	}
     }
-  XFREE (0, start);
 
-  /* Return read packet size. */
-  return pnt - start;
+  if (rip.enable)
+    thread_add_event (master, rip_start, NULL, 0);
 }
 
 DEFUN (ip_rip_receive,

@@ -78,6 +78,8 @@ ospf_area_new (struct in_addr area_id)
   new = XMALLOC (MTYPE_OSPF_AREA, sizeof (struct ospf_area));
   bzero (new, sizeof (struct ospf_area));
 
+  new->count = 0;
+
   new->area_id = area_id;
   new->router_lsa = list_init ();
   new->network_lsa = list_init ();
@@ -127,11 +129,13 @@ ospf_network_new (struct in_addr area_id, int format)
   if (!area)
     {
       area = ospf_area_new (area_id);
+      /* sort should be applied. */
       list_add_node (ospf_top->areas, area);
     }
 
-  new->area = area;
-  new->area_id_format = format;
+  new->area_id = area_id;
+  area->format = format;
+  area->count++;
 
   return new;
 }
@@ -139,6 +143,21 @@ ospf_network_new (struct in_addr area_id, int format)
 void
 ospf_network_free (struct ospf_network *network)
 {
+  struct ospf_area *area;
+
+  area = ospf_area_lookup_by_area_id (network->area_id);
+  if (area)
+    {
+      area->count--;
+
+      if (area->count == 0)
+	if (area->auth_type == OSPF_AUTH_NULL)
+	  {
+	    ospf_area_free (area);
+	    list_delete_by_val (ospf_top->areas, area);
+	  }
+    }
+
   XFREE (MTYPE_OSPF_NETWORK, network);
 }
 
@@ -161,6 +180,7 @@ ospf_loopback_run (struct ospf *ospf)
 	    if (oi->flag == OSPF_IF_DISABLE)
 	      {	      
 		oi->flag = OSPF_IF_ENABLE;
+		zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
 		OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_LoopInd);
 	      }
 	}
@@ -184,7 +204,6 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
       ifp = getdata (node);
       oi = ifp->if_data;
 
-      /*      zlog (NULL, LOG_INFO, "hogehoge %d %s", ifp->index, ifp->name); */
       /* is interface up? */
       if (! if_is_up (ifp))
 	continue;
@@ -245,6 +264,41 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
     }
 }
 
+void
+ospf_interface_down (struct ospf *ospf, struct prefix *p,
+		     struct ospf_area *area)
+{
+  struct interface *ifp;
+  listnode node;
+
+  for (node = listhead (ospf->iflist); node; nextnode (node))
+    {
+      struct ospf_interface *oi;
+      u_char flag = OSPF_IF_ENABLE;
+
+      ifp = getdata (node);
+      oi = ifp->if_data;
+
+      if (oi->flag == OSPF_IF_DISABLE)
+	continue;
+
+      if (oi->area == area)
+	{
+	  /* close socket. */
+	  close (oi->fd);
+
+	  /* clear input/output buffer stream. */
+	  ospf_if_stream_unset (oi);
+
+	  /* Remember this interface is not running. */
+	  flag = OSPF_IF_DISABLE;
+
+	  /* This interface goes down. */
+	  OSPF_ISM_EVENT_ADD (oi, ISM_InterfaceDown);
+	}
+    }
+}
+
 struct in_addr
 ospf_get_router_id (list if_list)
 {
@@ -287,6 +341,7 @@ ospf_if_update ()
 {
   struct route_node *rn;
   struct ospf_network *network;
+  struct ospf_area *area;
 
   if (ospf_top != NULL)
     {
@@ -295,7 +350,9 @@ ospf_if_update ()
       for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
 	{
 	  network = (struct ospf_network *) rn->info;
-	  ospf_interface_run (ospf_top, &rn->p, network->area);
+	  area = ospf_area_lookup_by_area_id (network->area_id);
+
+	  ospf_interface_run (ospf_top, &rn->p, area);
 	}
     }
 
@@ -367,11 +424,63 @@ DEFUN (no_router_ospf,
        "Enable a routing process\n"
        "Start OSPF configuration\n")
 {
+  struct route_node *rn;
+  listnode node;
+
   if (ospf_top == NULL)
     {
       vty_out (vty, "There isn't active ospf instance.\r\n");
       return CMD_WARNING;
     }
+
+  /* Clear networks and Areas. */
+  for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
+    {
+      struct ospf_network *network;
+      struct ospf_area *area;
+
+      if (rn->info == NULL)
+	continue;
+
+      network = rn->info;
+      area = ospf_area_lookup_by_area_id (network->area_id);
+
+      /* Add InterfaceDown event to appropriate interface. */
+      ospf_interface_down (ospf_top, &rn->p, area);
+
+      ospf_network_free (network);
+      rn->info = NULL;
+      route_unlock_node (rn);
+    }
+
+  /* reset interface. */
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      struct interface *ifp;
+      struct ospf_interface *oi;
+      struct route_node *rn;      
+
+      ifp = getdata (node);
+      oi = ifp->if_data;
+
+      /* Clear neighbors. */
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	{
+	  struct ospf_neighbor *nbr;
+
+	  if (!rn->info)
+	    continue;
+
+	  nbr = rn->info;
+	  ospf_nbr_free (nbr);
+	}
+      /* Reset interface variables. */
+      ospf_if_reset_variables (oi);
+    }
+
+  XFREE (MTYPE_OSPF_TOP, ospf_top);
+
+  ospf_top = NULL;
 
   return CMD_SUCCESS;
 }
@@ -389,6 +498,7 @@ DEFUN (network_area,
   struct in_addr area_id;
   struct ospf *ospf;
   struct ospf_network *network;
+  struct ospf_area *area;
   struct route_node *rn;
 
   ospf = vty->index;
@@ -423,8 +533,16 @@ DEFUN (network_area,
     }
   rn->info = network;
 
+  /* get area data structure. */
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      vty_out (vty, "There is no area data structure.\r\n");
+      return CMD_WARNING;
+    }
+
   /* Run Interface config now. */
-  ospf_interface_run (ospf, &p, network->area);
+  ospf_interface_run (ospf, &p, area);
 
   return CMD_SUCCESS;
 }
@@ -443,6 +561,8 @@ DEFUN (no_network_area,
   struct prefix_ipv4 p;
   struct in_addr area_id;
   struct route_node *rn;
+  struct ospf_network *network;
+  struct ospf_area *area;
 
   ospf = (struct ospf *) vty->index;
 
@@ -469,37 +589,15 @@ DEFUN (no_network_area,
       return CMD_WARNING;
     }
 
+  network = rn->info;
+  area = ospf_area_lookup_by_area_id (network->area_id);
+
+  /* Add InterfaceDown event to appropriate interface. */
+  ospf_interface_down (ospf, &rn->p, area);
+
   ospf_network_free (rn->info);
   rn->info = NULL;
   route_unlock_node (rn);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (area_authentication,
-       area_authentication_cmd,
-       "area AREA_ID authentication",
-       "OSPF area parameters\n"
-       "OSPF area ID\n"
-       "Enable authentication\n")
-{
-  struct ospf_area *area;
-  struct in_addr area_id;
-
-  if (!ospf_str2area_id (argv[0], &area_id))
-    {
-      vty_out (vty, "OSPF Area ID is invalid\r\n");
-      return CMD_WARNING;
-    }
-
-  area = ospf_area_lookup_by_area_id (area_id);
-  if (!area)
-    {
-      vty_out (vty, "Area ID %s is not declared", inet_ntoa (area_id));
-      return CMD_WARNING;
-    }
-
-  area->auth_type = OSPF_AUTH_SIMPLE;
 
   return CMD_SUCCESS;
 }
@@ -514,8 +612,10 @@ DEFUN (area_authentication_message_digest,
 {
   struct ospf_area *area;
   struct in_addr area_id;
+  int ret;
 
-  if (!ospf_str2area_id (argv[0], &area_id))
+  ret = ospf_str2area_id (argv[0], &area_id);
+  if (!ret)
     {
       vty_out (vty, "OSPF Area ID is invalid\r\n");
       return CMD_WARNING;
@@ -524,11 +624,43 @@ DEFUN (area_authentication_message_digest,
   area = ospf_area_lookup_by_area_id (area_id);
   if (!area)
     {
-      vty_out (vty, "Area ID %s is not declared\r\n", inet_ntoa (area_id));
-      return CMD_WARNING;
+      area = ospf_area_new (area_id);
+      area->format = ret;
+      list_add_node (ospf_top->areas, area);
     }
 
   area->auth_type = OSPF_AUTH_CRYPTOGRAPHIC;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (area_authentication,
+       area_authentication_cmd,
+       "area AREA_ID authentication",
+       "OSPF area parameters\n"
+       "OSPF area ID\n"
+       "Enable authentication\n")
+{
+  struct ospf_area *area;
+  struct in_addr area_id;
+  int ret;
+
+  ret = ospf_str2area_id (argv[0], &area_id);
+  if (!ret)
+    {
+      vty_out (vty, "OSPF Area ID is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  area = ospf_area_lookup_by_area_id (area_id);
+  if (!area)
+    {
+      area = ospf_area_new (area_id);
+      area->format = ret;
+      list_add_node (ospf_top->areas, area);
+    }
+
+  area->auth_type = OSPF_AUTH_SIMPLE;
 
   return CMD_SUCCESS;
 }
@@ -544,7 +676,7 @@ DEFUN (no_area_authentication,
   struct ospf_area *area;
   struct in_addr area_id;
 
-  if (ospf_str2area_id (argv[0], &area_id))
+  if (!ospf_str2area_id (argv[0], &area_id))
     {
       vty_out (vty, "OSPF Area ID is invalid\r\n");
       return CMD_WARNING;
@@ -774,6 +906,8 @@ int
 ospf_config_write (struct vty *vty)
 {
   struct route_node *rn;
+  listnode node;
+  u_char buf[INET_ADDRSTRLEN];
 
   if (ospf_top != NULL)
     {
@@ -787,27 +921,52 @@ ospf_config_write (struct vty *vty)
       for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
 	{
 	  struct ospf_network *n;
-	  u_char buf[INET_ADDRSTRLEN];
+	  struct ospf_area *a;
 
 	  if (rn->info == NULL)
 	    continue;
 
 	  n = rn->info;
+	  a = ospf_area_lookup_by_area_id (n->area_id);
 
-	  /* print nework statement as specified Area ID format. */
-	  if (n->area_id_format == OSPF_AREA_ID_FORMAT_ADDRESS)
+	  bzero (&buf, INET_ADDRSTRLEN);
+
+	  /* Create Area ID string by specified Area ID format. */
+	  /* No Area Structure, is it error? */
+	  if (!a)
+	    strncpy (buf, inet_ntoa (n->area_id), INET_ADDRSTRLEN);
+	  else if (a->format == OSPF_AREA_ID_FORMAT_ADDRESS)
+	    strncpy (buf, inet_ntoa (n->area_id), INET_ADDRSTRLEN);
+	  else
+	    sprintf (buf, "%lu", ntohl (n->area_id.s_addr));
+
+	  /* print network. */
+	  vty_out (vty, " network %s/%d area %s%s",
+		   inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
+		   buf, VTY_NEWLINE);
+	}
+
+      /* area configuration print. */
+      for (node = listhead (ospf_top->areas); node; nextnode (node))
+	{
+	  struct ospf_area *a;
+	  
+	  a = getdata (node);
+	  if (a->auth_type != OSPF_AUTH_NULL)
 	    {
 	      bzero (&buf, INET_ADDRSTRLEN);
-	      strncpy (buf, inet_ntoa (n->area->area_id), INET_ADDRSTRLEN);
-	      vty_out (vty, " network %s/%d area %s%s",
-		       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
-		       buf, VTY_NEWLINE);
-	    }
-	  else
-	    {
-	      vty_out (vty, " network %s/%d area %u%s",
-		       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
-		       n->area->area_id.s_addr, VTY_NEWLINE);
+
+	      if (a->format == OSPF_AREA_ID_FORMAT_ADDRESS)
+		strncpy (buf, inet_ntoa (a->area_id), INET_ADDRSTRLEN);
+	      else
+		sprintf (buf, "%lu", ntohl (a->area_id.s_addr));
+
+	      if (a->auth_type == OSPF_AUTH_SIMPLE)
+		vty_out (vty, " area %s authentication%s",
+			 buf, VTY_NEWLINE);
+	      else
+		vty_out (vty, " area %s authentication message-digest%s",
+			 buf, VTY_NEWLINE);
 	    }
 	}
     }

@@ -29,37 +29,52 @@
 #include "command.h"
 #include "linklist.h"
 #include "log.h"
+#include "regex-gnu.h"
+#include "buffer.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"
+#include "bgpd/bgp_regex.h"
 
 /* Memo of cisco's route-map
 
- match [as-path|
-        community|
-        interface|
-        ip [address|next-hop|route-source]|
-        length|
-        metric|
-        route-type|
-        tag]
+ match as-path          :  Done
+       community        :  Not yet
+       interface        :  Not yet
+       ip address       :  Done
+       ip next-hop      :  Done
+       ip route-source  :  (This will be not implemented by bgpd)
+       length           :  (This will be not implemented by bgpd)
+       metric           :  Done
+       route-type       :  (This will be not implemented by bgpd)
+       tag              :  (This will be not implemented by bgpd)
 
- set [as-path|
-      automatic-tag|
-      community|
-      dampning|
-      default|
-      interface|
-      ip [default|next-hop|precedence|tos]|
-      level|
-      local-preference|
-      metric|
-      metric-type|
-      origin|
-      tag|
-      weight] 
+ set  as-path           :  Not yet
+      automatic-tag     :  (This will be not implemented by bgpd)
+      community         :  Not yet
+      dampning          :  Not yet
+      default           :  (This will be not implemented by bgpd)
+      interface         :  (This will be not implemented by bgpd)
+      ip default        :  (This will be not implemented by bgpd)
+      ip next-hop       :  Done
+      ip precedence     :  (This will be not implemented by bgpd)
+      ip tos            :  (This will be not implemented by bgpd)
+      level             :  (This will be not implemented by bgpd)
+      local-preference  :  Done
+      metric            :  Done
+      metric-type       :  (This will be not implemented by bgpd)
+      origin            :  Not yet
+      tag               :  (This will be not implemented by bgpd)
+      weight            :  Not yet
+
+  Local extention
+
+  set ipv6 nexthop global: Done
+  set ipv6 nexthop local : Done
+
+
 */ 
 
 /* `match ip address IP_ACCESS_LIST' */
@@ -102,38 +117,143 @@ struct route_map_rule_cmd route_match_ip_address_cmd =
   route_match_ip_address_free
 };
 
+/* `match ip next-hop IP_ADDRESS' */
+
+/* Match function return 1 if match is success else return zero. */
+int
+route_match_ip_next_hop (void *rule, struct prefix *prefix, void *object)
+{
+  struct in_addr *addr;
+  struct bgp_info *bgp_info;
+
+  addr = rule;
+  bgp_info = object;
+
+  if (IPV4_ADDR_CMP (&bgp_info->attr->nexthop, rule) == 0)
+    return 1;
+  else
+    return 0;
+}
+
+/* Route map `ip next-hop' match statement. `arg' is IP address
+   string. */
+void *
+route_match_ip_next_hop_compile (char *arg)
+{
+  struct in_addr *addr;
+  int ret;
+
+  addr = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct in_addr));
+
+  ret = inet_aton (arg, addr);
+  if (!ret)
+    {
+      XFREE (MTYPE_ROUTE_MAP_COMPILED, addr);
+      return NULL;
+    }
+
+  return addr;
+}
+
+/* Free route map's compiled `ip address' value. */
+void
+route_match_ip_next_hop_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for ip next-hop matching. */
+struct route_map_rule_cmd route_match_ip_next_hop_cmd =
+{
+  "ip next-hop",
+  route_match_ip_next_hop,
+  route_match_ip_next_hop_compile,
+  route_match_ip_next_hop_free
+};
+
+/* `match metric METRIC' */
+
+/* Match function return 1 if match is success else return zero. */
+int
+route_match_metric (void *rule, struct prefix *prefix, void *object)
+{
+  u_int32_t *med;
+  struct bgp_info *bgp_info;
+
+  med = rule;
+  bgp_info = object;
+
+  if (bgp_info->attr->med == *med)
+    return 1;
+  else
+    return 0;
+}
+
+/* Route map `match metric' match statement. `arg' is MED value */
+void *
+route_match_metric_compile (char *arg)
+{
+  u_int32_t *med;
+
+  med = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
+  *med = atoi (arg);
+
+  return med;
+}
+
+/* Free route map's compiled `match metric' value. */
+void
+route_match_metric_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for metric matching. */
+struct route_map_rule_cmd route_match_metric_cmd =
+{
+  "metric",
+  route_match_metric,
+  route_match_metric_compile,
+  route_match_metric_free
+};
+
 /* Match function for as-path match.  I assume given object is */
 int
 route_match_aspath (void *rule, struct prefix *prefix, void *object)
 {
-  /* perform match. */
-  ;
+  regex_t *regex;
+  struct bgp_info *bgp_info;
 
-  return 0;
+  regex = rule;
+  bgp_info = object;
+  
+  /* Perform match. */
+  return bgp_regexec (regex, bgp_info->attr->aspath);
 }
 
 /* Compile function for as-path match. */
 void *
 route_match_aspath_compile (char *arg)
 {
-  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
-  /*
   regex_t *regex;
 
   regex = bgp_regcomp (arg);
+  if (! regex)
+    return NULL;
+
   return regex;
-  */
 }
 
 /* Compile function for as-path match. */
 void
 route_match_aspath_free (void *rule)
 {
-  /*  aspath_regex_free (rule); */
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+  regex_t *regex = rule;
+
+  bgp_regex_free (regex);
 }
 
-/**/
+/* Route map commands for aspath matching. */
 struct route_map_rule_cmd route_match_aspath_cmd = 
 {
   "as-path",
@@ -318,22 +438,20 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
   route_set_ipv6_nexthop_local_free
 };
 #endif /* HAVE_IPV6 */
-
 
 /* Set local preference. */
-/* Set metric to attribute. */
 int
 route_set_local_pref (void *rule, struct prefix *prefix, void *object)
 {
-  char *metric;
+  char *pref;
   struct bgp_info *bgp_info;
 
   /* Fetch routemap's rule information. */
-  metric = rule;
+  pref = rule;
   bgp_info = object;
 
   /* Set next hop value. */ 
-  bgp_info->attr->local_pref = atoi (metric);
+  bgp_info->attr->local_pref = atoi (pref);
 
   return 0;
 }
@@ -353,10 +471,10 @@ route_set_local_pref_free (void *rule)
   XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
 }
 
-/* Set metric rule structure. */
+/* Set local preference rule structure. */
 struct route_map_rule_cmd route_set_local_pref_cmd = 
 {
-  "metric",
+  "local-preference",
   route_set_local_pref,
   route_set_local_pref_compile,
   route_set_local_pref_free,
@@ -374,6 +492,7 @@ route_set_metric (void *rule, struct prefix *prefix, void *object)
   bgp_info = object;
 
   /* Set next hop value. */ 
+  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC);
   bgp_info->attr->med = atoi (metric);
 
   return 0;
@@ -387,7 +506,7 @@ route_set_metric_compile (char *arg)
   return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
 }
 
-/* Free route map's compiled `ip address' value. */
+/* Free route map's compiled `set metric' value. */
 void
 route_set_metric_free (void *rule)
 {
@@ -428,6 +547,31 @@ bgp_route_match_add (struct vty *vty, struct route_map_index *index,
   return CMD_SUCCESS;
 }
 
+/* Delete bgp route map rule. */
+int
+bgp_route_match_delete (struct vty *vty, struct route_map_index *index,
+			char *command, char *arg)
+{
+  int ret;
+
+  ret = route_map_delete_match (index, command, arg);
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ROUTE_MAP_RULE_MISSING:
+	  vty_out (vty, "Can't find rule.\r\n");
+	  return CMD_WARNING;
+	  break;
+	case ROUTE_MAP_COMPILE_ERROR:
+	  vty_out (vty, "Can't compile argument.\r\n");
+	  return CMD_WARNING;
+	  break;
+	}
+    }
+  return CMD_SUCCESS;
+}
+
 /* Add bgp route map rule. */
 int
 bgp_route_set_add (struct vty *vty, struct route_map_index *index,
@@ -449,6 +593,22 @@ bgp_route_set_add (struct vty *vty, struct route_map_index *index,
 	  return CMD_WARNING;
 	  break;
 	}
+    }
+  return CMD_SUCCESS;
+}
+
+/* Delete bgp route map rule. */
+int
+bgp_route_set_delete (struct vty *vty, struct route_map_index *index,
+		      char *command, char *arg)
+{
+  int ret;
+
+  ret = route_map_delete_set (index, command, arg);
+  if (ret)
+    {
+      vty_out (vty, "Can't find rule %s %s.\r\n", command, arg);
+      return CMD_WARNING;
     }
   return CMD_SUCCESS;
 }
@@ -497,29 +657,115 @@ DEFUN (no_match_ip_address,
        "IP address\n"
        "Delete IP Address access-list match command\n")
 {
-  int ret;
-  struct route_map_index *index;
-
-  /* Get route-map index structure. */
-  index = vty->index;
-
-  ret = route_map_delete_match (index, "ip address", argv[0]);
-  if (ret)
-    {
-      vty_out (vty, "Can't find rule match ip address %s.\r\n", argv[0]);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
+  return bgp_route_match_delete (vty, vty->index, "ip address", argv[0]);
 }
+
+DEFUN (match_ip_next_hop, 
+       match_ip_next_hop_cmd,
+       "match ip next-hop IP_ADDR",
+       MATCH_STR
+       IP_STR
+       "Next hop of the route\n"
+       "IP Address of the next hop\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+DEFUN (no_match_ip_next_hop,
+       no_match_ip_next_hop_cmd,
+       "no match ip next-hop IP_ADDR",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Next hop of the route\n"
+       "IP Address of the next hop\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+DEFUN (match_metric, 
+       match_metric_cmd,
+       "match metric MED",
+       MATCH_STR
+       "Metric\n"
+       "MED value\n")
+{
+  return bgp_route_match_add (vty, vty->index, "metric", argv[0]);
+}
+
+DEFUN (no_match_metric,
+       no_match_metric_cmd,
+       "no match metric MED",
+       NO_STR
+       MATCH_STR
+       "Metric\n"
+       "MED value\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "metric", argv[0]);
+}
+
 
 DEFUN (match_aspath,
        match_aspath_cmd,
-       "match as-path AS_PATH",
+       "match as-path ...",
        MATCH_STR
        "AS Path\n"
        "AS Path\n")
 {
-  return bgp_route_match_add (vty, vty->index, "as-path", argv[0]);
+  int i;
+  struct buffer *b;
+  char *regstr;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  regstr = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_match_add (vty, vty->index, "as-path", regstr);
+}
+
+DEFUN (no_match_aspath,
+       no_match_aspath_cmd,
+       "no match as-path ...",
+       NO_STR
+       MATCH_STR
+       "AS Path\n"
+       "AS Path\n")
+{
+  int i;
+  struct buffer *b;
+  char *regstr;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  regstr = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_match_delete (vty, vty->index, "as-path", regstr);
 }
 
 DEFUN (set_ip_nexthop,
@@ -542,19 +788,49 @@ DEFUN (no_set_ip_nexthop,
        "Next hop\n"
        "IP Address\n")
 {
-  int ret;
-  struct route_map_index *index;
+  return bgp_route_set_delete (vty, vty->index, "ip nexthop", argv[0]);
+}
 
-  /* Get route-map index structure. */
-  index = vty->index;
+DEFUN (set_metric,
+       set_metric_cmd,
+       "set metric METRIC",
+       "Set value\n"
+       "Metric\n"
+       "MED value\n")
+{
+  return bgp_route_set_add (vty, vty->index, "metric", argv[0]);
+}
 
-  ret = route_map_delete_set (index, "ip nexthop", argv[0]);
-  if (ret)
-    {
-      vty_out (vty, "Can't find rule set ip nexthop %s.\r\n", argv[0]);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
+DEFUN (no_set_metric,
+       no_set_metric_cmd,
+       "no set metric METRIC",
+       NO_STR
+       "Set value\n"
+       "Metric\n"
+       "MED value\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "metric", argv[0]);
+}
+
+DEFUN (set_local_pref,
+       set_local_pref_cmd,
+       "set local-preference LOCAL_PREF",
+       "Set value\n"
+       "Local preference\n"
+       "Local preference value\n")
+{
+  return bgp_route_set_add (vty, vty->index, "local-preference", argv[0]);
+}
+
+DEFUN (no_set_local_pref,
+       no_set_local_pref_cmd,
+       "no set local-preference LOCAL_PREF",
+       NO_STR
+       "Set value\n"
+       "Local preference\n"
+       "Local preference value\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "local-preference", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_global,
@@ -579,19 +855,7 @@ DEFUN (no_set_ipv6_nexthop_global,
        "Global\n"
        "IP Address\n")
 {
-  int ret;
-  struct route_map_index *index;
-
-  /* Get route-map index structure. */
-  index = vty->index;
-
-  ret = route_map_delete_set (index, "ipv6 nexthop global", argv[0]);
-  if (ret)
-    {
-      vty_out (vty, "Can't find rule set ipv6 nexthop global %s.\r\n", argv[0]);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
+  return bgp_route_set_delete (vty, vty->index, "ipv6 nexthop global", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_local,
@@ -616,19 +880,7 @@ DEFUN (no_set_ipv6_nexthop_local,
        "Local\n"
        "IP Address\n")
 {
-  int ret;
-  struct route_map_index *index;
-
-  /* Get route-map index structure. */
-  index = vty->index;
-
-  ret = route_map_delete_set (index, "ipv6 nexthop local", argv[0]);
-  if (ret)
-    {
-      vty_out (vty, "Can't find rule set ipv6 nexthop local %s.\r\n", argv[0]);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
+  return bgp_route_set_delete (vty, vty->index, "ipv6 nexthop local", argv[0]);
 }
 
 /* Initialization of route map. */
@@ -640,15 +892,35 @@ bgp_route_map_init ()
   route_map_add_hook (bgp_route_map_update);
 
   route_map_install_match (&route_match_ip_address_cmd);
+  route_map_install_match (&route_match_ip_next_hop_cmd);
   route_map_install_match (&route_match_aspath_cmd);
+  route_map_install_match (&route_match_metric_cmd);
+
   route_map_install_set (&route_set_ip_nexthop_cmd);
   route_map_install_set (&route_set_metric_cmd);
+  route_map_install_set (&route_set_local_pref_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
+
+  install_element (RMAP_NODE, &match_ip_next_hop_cmd);
+  install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
+
   install_element (RMAP_NODE, &match_aspath_cmd);
+  install_element (RMAP_NODE, &no_match_aspath_cmd);
+
+  install_element (RMAP_NODE, &match_metric_cmd);
+  install_element (RMAP_NODE, &no_match_metric_cmd);
+
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
+
+  install_element (RMAP_NODE, &set_metric_cmd);
+  install_element (RMAP_NODE, &no_set_metric_cmd);
+
+  install_element (RMAP_NODE, &set_local_pref_cmd);
+  install_element (RMAP_NODE, &no_set_local_pref_cmd);
+  
 
 #ifdef HAVE_IPV6
   route_map_install_set (&route_set_ipv6_nexthop_global_cmd);

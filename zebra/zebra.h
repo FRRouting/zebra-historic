@@ -64,6 +64,33 @@
 /* Zebra header size. */
 #define ZEBRA_HEADER_SIZE       3
 
+/* Client structure. */
+struct zebra_client
+{
+  /* Client file descriptor. */
+  int fd;
+
+  /* Input/output buffer to the client. */
+  struct stream *ibuf;
+  struct stream *obuf;
+
+  /* Threads for read/write. */
+  struct thread *t_read;
+  struct thread *t_write;
+
+  /* default routing table this client munges */
+  int rtm_table;
+
+  /* This client's redistribute flag. */
+  u_char redist_static;		/* Redistribute static route. */
+  u_char redist_connect;	/* Redistribute connected route. */
+  u_char redist_rip;		/* Redistribute rip route. */
+  u_char redist_ripng;		/* Redistribute ripng route. */
+  u_char redist_ospf;		/* Redistribute ospf route. */
+  u_char redist_ospf6;		/* Redistribute ospf6 route. */
+  u_char redist_bgp;		/* Redistribute bgp route. */
+};
+
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 

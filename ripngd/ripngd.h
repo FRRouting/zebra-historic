@@ -39,9 +39,15 @@
 #define RIPNG_GROUP              "ff02::9"
 
 /* RIPng timers. */
+#ifdef RIPNG_TEST
+#define RIPNG_FLUSH_TIMER               10
+#define RIPNG_TIMEOUT_TIMER             10
+#define RIPNG_GARBAGE_TIMER             30
+#else
 #define RIPNG_FLUSH_TIMER               30
 #define RIPNG_TIMEOUT_TIMER            180
 #define RIPNG_GARBAGE_TIMER            120
+#endif /* RIPNG_TEST */
 
 /* Default config file name. */
 #define RIPNG_DEFAULT_CONFIG "ripngd.conf"

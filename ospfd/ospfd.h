@@ -73,6 +73,12 @@ enum
 #define OSPF_AREA_ID_FORMAT_ADDRESS         1
 #define OSPF_AREA_ID_FORMAT_DECIMAL         2
 
+#define OSPF_OPTION_E			 0x02
+#define OSPF_OPTION_MC			 0x04
+#define OSPF_OPTION_NP			 0x08
+#define OSPF_OPTION_EA			 0x10
+#define OSPF_OPTION_DC			 0x20
+
 /* OSPF instance structure. */
 struct ospf
 {
@@ -80,15 +86,22 @@ struct ospf
 
   list iflist;				/* Zebra interface list. */
 
-  list areas;				/* OSPF area. */
+  list areas;				/* OSPF areas. */
   struct route_table *networks;		/* OSPF config networks. */
 };
 
 /* OSPF area structure. */
 struct ospf_area
 {
-  struct in_addr area_id;
+  int count;				/* Reference count by ospf_network. */
+
+  struct in_addr area_id;		/* Area ID. */
+  char format;				/* Area ID format. */
   list address_range;
+
+  /* Configuration variables. */
+  int default_cost;			/* StubDefaultCost. */
+  int auth_type;			/* Authentication type. */
 
   /* LSAs. */
   list router_lsa;
@@ -98,16 +111,15 @@ struct ospf_area
   /* shortest path tree. */
   /* TransitCapability. */
   /* ExternalRoutingCapability. */
-  int default_cost;	/* StubDefaultCost. */
-
-  int auth_type;	/* Authentication type. */
 };
 
 /* OSPF config network structure. */
 struct ospf_network
 {
-  struct ospf_area *area;
-  int area_id_format;
+  struct in_addr area_id;			/* Area ID. */
+
+  /* interface associated with network. */
+  struct interface *ifp;
 };
 
 /* To convert index into message structure. */
