@@ -64,6 +64,8 @@ ospf_new ()
   new->areas = list_init ();
   new->networks = (struct route_table *) route_table_init ();
 
+  new->ls_seqnum = OSPF_INITIAL_SEQUENCE_NUMBER;
+
   return new;
 }
 
@@ -81,11 +83,14 @@ ospf_area_new (struct in_addr area_id)
   new->count = 0;
 
   new->area_id = area_id;
+
+  new->external_routing = OSPF_AREA_DEFAULT;
+  new->default_cost = 1;
+  new->auth_type = OSPF_AUTH_NULL;
+
   new->router_lsa = list_init ();
   new->network_lsa = list_init ();
   new->summary_lsa = list_init ();
-
-  new->auth_type = OSPF_AUTH_NULL;
 
   return new;
 }
@@ -161,6 +166,42 @@ ospf_network_free (struct ospf_network *network)
   XFREE (MTYPE_OSPF_NETWORK, network);
 }
 
+struct in_addr
+ospf_get_router_id (list if_list)
+{
+  listnode node;
+  struct in_addr router_id;
+  struct interface *ifp;
+
+  bzero (&router_id, sizeof (struct in_addr));
+
+  for (node = listhead (if_list); node; nextnode (node))
+    {
+      listnode cn;
+
+      ifp = getdata (node);
+
+      for (cn = listhead (ifp->connected); cn; nextnode (cn))
+	{
+	  struct connected *co;
+
+	  co = getdata (cn);
+
+	  if (co->address->family != AF_INET)
+	    continue;
+
+	  /* ignore loopback network. */
+	  if (if_is_loopback (ifp))
+	    continue;
+
+	  if (IPV4_ADDR_LT (router_id, co->address->u.prefix4))
+	    router_id = co->address->u.prefix4;
+	}
+    }
+
+  return router_id;
+}
+
 void
 ospf_loopback_run (struct ospf *ospf)
 {
@@ -181,7 +222,7 @@ ospf_loopback_run (struct ospf *ospf)
 	      {	      
 		oi->flag = OSPF_IF_ENABLE;
 		zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
-		OSPF_ISM_EVENT_ADD (ifp->if_data, ISM_LoopInd);
+		OSPF_ISM_EVENT_SCHEDULE (ifp->if_data, ISM_LoopInd);
 	      }
 	}
     }
@@ -193,6 +234,10 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 {
   struct interface *ifp;
   listnode node;
+
+  /* Update router_id. */
+  if (ospf_top != NULL)
+    ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
 
   /* get target interface. */
   for (node = listhead (ospf->iflist); node; nextnode (node))
@@ -217,7 +262,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 	{
 	  struct connected *co;
 	  struct in_addr addr;
-	  int sock;
+	  int ret;
 
 	  co = getdata (cn);
 
@@ -229,29 +274,15 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 
 	      addr = co->address->u.prefix4;
 
-	      /* create raw socket. */
-	      sock = ospf_serv_sock (ifp, AF_INET);
-	      if (sock < 0)
-		{
-		  zlog (NULL, LOG_WARNING,
-			"interface %s can't create raw socket", ifp->name);
-		  continue;
-		}
-
-	      /* join mcast group. */
-	      ospf_if_add_allspfrouters (sock, co->address);
-
-	      /* select interface. */
-	      ospf_if_ipmulticast (sock, co->address);
-
-	      /* create input/output buffer stream. */
-	      ospf_if_stream_set (sock, oi);
+	      ret = ospf_serv_sock_init (ifp, co->address);
+	      if (ret < 0)
+		continue;
 
 	      /* Remember this interface is running. */
 	      flag = OSPF_IF_ENABLE;
 
 	      /* entry point of ISM. */
-	      OSPF_ISM_EVENT_ADD (oi, ISM_InterfaceUp);
+	      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceUp);
 	      zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
 
 	      /* Add Pseudo Neighbor. */
@@ -294,45 +325,9 @@ ospf_interface_down (struct ospf *ospf, struct prefix *p,
 	  flag = OSPF_IF_DISABLE;
 
 	  /* This interface goes down. */
-	  OSPF_ISM_EVENT_ADD (oi, ISM_InterfaceDown);
+	  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceDown);
 	}
     }
-}
-
-struct in_addr
-ospf_get_router_id (list if_list)
-{
-  listnode node;
-  struct in_addr router_id;
-  struct interface *ifp;
-
-  bzero (&router_id, sizeof (struct in_addr));
-
-  for (node = listhead (if_list); node; nextnode (node))
-    {
-      listnode cn;
-
-      ifp = getdata (node);
-
-      for (cn = listhead (ifp->connected); cn; nextnode (cn))
-	{
-	  struct connected *co;
-
-	  co = getdata (cn);
-
-	  if (co->address->family != AF_INET)
-	    continue;
-
-	  /* ignore loopback network. */
-	  if (if_is_loopback (ifp))
-	    continue;
-
-	  if (ntohl (router_id.s_addr) < ntohl (co->address->u.prefix4.s_addr))
-	    router_id = co->address->u.prefix4;
-	}
-    }
-
-  return router_id;
 }
 
 
@@ -355,10 +350,6 @@ ospf_if_update ()
 	  ospf_interface_run (ospf_top, &rn->p, area);
 	}
     }
-
-  /* Update router_id. */
-  if (ospf_top != NULL)
-    ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
 }
 
 int

@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.67
+@subtitle for zebra-0.68
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.67.
+This is the Zebra Manual for zebra-0.68.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -1197,6 +1197,7 @@ it can be applied to any direction.
 @menu
 * IP access list::              
 * IP prefix list::              
+* IP community list::           
 * AS path access list::         
 @end menu
 
@@ -1215,14 +1216,21 @@ ip access-list deny 10.0.0.0/9
 ip access-list permit 10.0.0.0/8
 @end example
 
-@node IP prefix list, AS path access list, IP access list, Filtering
+@node IP prefix list, IP community list, IP access list, Filtering
 @comment  node-name,  next,  previous,  up
 @section IP prefix list
 
 @deffn {Command} {ip prefix-list @var{name} seq @var{seq} permit|deny [le @var{prefixlen}] [ge @var{prefixlen}]} {}
 @end deffn
 
-@node AS path access list,  , IP prefix list, Filtering
+@node IP community list, AS path access list, IP prefix list, Filtering
+@comment  node-name,  next,  previous,  up
+@section IP community list
+
+@deffn {Command} {ip community-list @var{name} @var{type} @var{community}} {}
+@end deffn
+
+@node AS path access list,  , IP community list, Filtering
 @comment  node-name,  next,  previous,  up
 @section AS path access list
 
@@ -1278,6 +1286,10 @@ Match specified @var{as_path} regular expression.
 Match specified @var{metric}
 @end deffn
 
+@deffn {Route-map Command} {match community @var{community_list}} {}
+Match specified @var{community_list}
+@end deffn
+
 @node Route map set command,  , Route map match command, Route map
 @comment  node-name,  next,  previous,  up
 @section Route map set command
@@ -1300,6 +1312,10 @@ Set BGP attribute MED.
 
 @deffn {Route-map Command} {set as-path prepend @var{as_path}} {}
 Set BGP AS path to prepend.
+@end deffn
+
+@deffn {Route-map Command} {set community @var{community}} {}
+Set BGP Community attribute.
 @end deffn
 
 @deffn {Route-map Command} {set ipv6 nexthop global @var{ipv6_address}} {}

@@ -1,6 +1,6 @@
 /*
- * Zebra version
- * Copyright (c) 1997, 1999 Kunihiro Ishiguro
+ * BGP Community list.
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -19,22 +19,25 @@
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.  
  */
+enum community_list_sort
+{
+  COMMUNITY_LIST_STRING,
+  COMMUNITY_LIST_NUMBER
+};
 
-#ifndef _ZEBRA_VERSION_H
-#define _ZEBRA_VERSION_H
+struct community_list
+{
+  char *name;
 
-#define ZEBRA_VERSION     "0.68"
+  enum community_list_sort sort;
 
-#define ZEBRA_BUG_ADDRESS "bug-zebra@gnu.org"
+  struct community_list *next;
+  struct community_list *prev;
 
-extern char *host_name;
+  struct community_entry *head;
+  struct community_entry *tail;
+};
 
-void print_version();
-pid_t pid_output (char *);
-pid_t pid_output_lock (char *);
-
-#ifndef HAVE_DAEMON
-int daemon(int, int);
-#endif
-
-#endif /* _ZEBRA_VERSION_H */
+struct community_list *community_list_lookup (char *);
+int community_list_match (struct community *, struct community_list *);
+void community_list_init ();

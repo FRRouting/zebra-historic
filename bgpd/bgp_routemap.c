@@ -37,11 +37,15 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_regex.h"
+#include "bgpd/bgp_community.h"
+#include "bgpd/bgp_clist.h"
 
-/* Memo of cisco's route-map
+/* Memo of route-map commands.
+
+o Cisco route-map
 
  match as-path          :  Done
-       community        :  Not yet
+       community        :  Done
        interface        :  Not yet
        ip address       :  Done
        ip next-hop      :  Done
@@ -54,7 +58,8 @@
  set  as-path prepend   :  Done
       as-path tag       :  Not yet
       automatic-tag     :  (This will not be implemented by bgpd)
-      community         :  Not yet
+      community         :  Done
+      comm-list         :  Not yet
       dampning          :  Not yet
       default           :  (This will not be implemented by bgpd)
       interface         :  (This will not be implemented by bgpd)
@@ -66,11 +71,17 @@
       local-preference  :  Done
       metric            :  Done
       metric-type       :  (This will not be implemented by bgpd)
-      origin            :  Not yet
+      origin            :  Done
       tag               :  (This will not be implemented by bgpd)
       weight            :  Done
 
-  Local extention
+o mrt extension
+
+  set dpa as %d %d      :  Not yet
+      atomic-aggregate  :  Not yet
+      aggregator as %d %M :  Not yet
+
+o Local extention
 
   set ipv6 nexthop global: Done
   set ipv6 nexthop local : Done
@@ -262,6 +273,48 @@ struct route_map_rule_cmd route_match_aspath_cmd =
   route_match_aspath,
   route_match_aspath_compile,
   route_match_aspath_free
+};
+
+/* `match community COMMUNIY' */
+
+/* Match function for community match. */
+int
+route_match_community (void *rule, struct prefix *prefix, void *object)
+{
+  struct community_list *list;
+  struct bgp_info *bgp_info;
+
+  list = community_list_lookup ((char *) rule);
+  bgp_info = object;
+
+  if (list == NULL || bgp_info->attr->community == NULL)
+    return 0;
+  
+  /* Perform match. */
+  return community_list_match (bgp_info->attr->community, list);
+}
+
+/* Compile function for community match. */
+void *
+route_match_community_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+/* Compile function for community match. */
+void
+route_match_community_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for community matching. */
+struct route_map_rule_cmd route_match_community_cmd = 
+{
+  "community",
+  route_match_community,
+  route_match_community_compile,
+  route_match_community_free
 };
 
 /* `set ip nexthop IP_ADDRESS' */
@@ -644,6 +697,119 @@ struct route_map_rule_cmd route_set_aspath_prepend_cmd =
   route_set_aspath_prepend_free,
 };
 
+/* `set community COMMUNITY' */
+
+/* For community set mechanism. */
+int
+route_set_community (void *rule, struct prefix *prefix, void *object)
+{
+  struct community *com;
+  struct bgp_info *bgp_info;
+
+  com = rule;
+  bgp_info = object;
+  
+  if (!com)
+    return 0;
+
+  if (bgp_info->attr->community)
+    community_free (bgp_info->attr->community);
+
+  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
+  bgp_info->attr->community = community_dup (com);
+
+  return 0;
+}
+
+/* Compile function for set community. */
+void *
+route_set_community_compile (char *arg)
+{
+  struct community *com;
+
+  com = community_str2com (arg);
+  if (! com)
+    return NULL;
+  return com;
+}
+
+/* Free function for set community. */
+void
+route_set_community_free (void *rule)
+{
+  struct community *com = rule;
+  community_free (com);
+}
+
+/* Set community rule structure. */
+struct route_map_rule_cmd route_set_community_cmd = 
+{
+  "community",
+  route_set_community,
+  route_set_community_compile,
+  route_set_community_free,
+};
+
+/* `set origin ORIGIN' */
+
+/* For origin set. */
+int
+route_set_origin (void *rule, struct prefix *prefix, void *object)
+{
+  u_char *origin;
+  struct bgp_info *bgp_info;
+
+  origin = rule;
+  bgp_info = object;
+
+  bgp_info->attr->origin = *origin;
+
+  return 0;
+}
+
+/* Compile function for origin set. */
+void *
+route_set_origin_compile (char *arg)
+{
+  u_char *origin;
+
+  if (strcmp (arg, "igp") == 0)
+    {
+      origin = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_char));
+      *origin = 0;
+      return origin;
+    }
+  else if (strcmp (arg, "egp") == 0)
+    {
+      origin = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_char));
+      *origin = 1;
+      return origin;
+    }
+  else if (strcmp (arg, "incomplete") == 0)
+    {
+      origin = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_char));
+      *origin = 2;
+      return origin;
+    }    
+  return NULL;
+}
+
+/* Compile function for origin set. */
+void
+route_set_origin_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Set metric rule structure. */
+struct route_map_rule_cmd route_set_origin_cmd = 
+{
+  "origin",
+  route_set_origin,
+  route_set_origin_compile,
+  route_set_origin_free,
+};
+
 /* Add bgp route map rule. */
 int
 bgp_route_match_add (struct vty *vty, struct route_map_index *index,
@@ -835,6 +1001,26 @@ DEFUN (no_match_metric,
   return bgp_route_match_delete (vty, vty->index, "metric", argv[0]);
 }
 
+DEFUN (match_community, 
+       match_community_cmd,
+       "match community COMMUNITY",
+       MATCH_STR
+       "Community\n"
+       "Community value\n")
+{
+  return bgp_route_match_add (vty, vty->index, "community", argv[0]);
+}
+
+DEFUN (no_match_community,
+       no_match_community_cmd,
+       "no match community COMMUNITY",
+       NO_STR
+       MATCH_STR
+       "Community\n"
+       "Community value\n")
+{
+  return bgp_route_match_delete (vty, vty->index, "community", argv[0]);
+}
 
 DEFUN (match_aspath,
        match_aspath_cmd,
@@ -1051,6 +1237,90 @@ DEFUN (no_set_aspath_prepend,
   return bgp_route_set_delete (vty, vty->index, "as-path prepend", asstr);
 }
 
+DEFUN (set_community,
+       set_community_cmd,
+       "set community ...",
+       "Set value\n"
+       "Community\n"
+       "Community value")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_add (vty, vty->index, "community", str);
+}
+
+DEFUN (no_set_community,
+       no_set_community_cmd,
+       "no set community ...",
+       NO_STR
+       "Set value\n"
+       "Community\n"
+       "Community value")
+{
+  int i;
+  struct buffer *b;
+  char *str;
+  int first;
+
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  str = buffer_getstr (b);
+  buffer_free (b);
+
+  return bgp_route_set_delete (vty, vty->index, "community", str);
+}
+
+DEFUN (set_origin,
+       set_origin_cmd,
+       "set origin ORIGIN",
+       "Set value\n"
+       "Origin attribute\n"
+       "Origin attribute value\n")
+{
+  return bgp_route_set_add (vty, vty->index, "origin", argv[0]);
+}
+
+DEFUN (no_set_origin,
+       no_set_origin_cmd,
+       "set origin ORIGIN",
+       NO_STR
+       "Set value\n"
+       "Origin attribute\n"
+       "Origin attribute value\n")
+{
+  return bgp_route_set_delete (vty, vty->index, "origin", argv[0]);
+}
+
 DEFUN (set_ipv6_nexthop_global,
        set_ipv6_nexthop_global_cmd,
        "set ipv6 nexthop global IP_ADDR",
@@ -1113,12 +1383,15 @@ bgp_route_map_init ()
   route_map_install_match (&route_match_ip_next_hop_cmd);
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_metric_cmd);
+  route_map_install_match (&route_match_community_cmd);
 
   route_map_install_set (&route_set_ip_nexthop_cmd);
   route_map_install_set (&route_set_local_pref_cmd);
   route_map_install_set (&route_set_weight_cmd);
   route_map_install_set (&route_set_metric_cmd);
   route_map_install_set (&route_set_aspath_prepend_cmd);
+  route_map_install_set (&route_set_community_cmd);
+  route_map_install_set (&route_set_origin_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -1131,6 +1404,9 @@ bgp_route_map_init ()
 
   install_element (RMAP_NODE, &match_metric_cmd);
   install_element (RMAP_NODE, &no_match_metric_cmd);
+
+  install_element (RMAP_NODE, &match_community_cmd);
+  install_element (RMAP_NODE, &no_match_community_cmd);
 
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
@@ -1146,6 +1422,12 @@ bgp_route_map_init ()
 
   install_element (RMAP_NODE, &set_aspath_prepend_cmd);
   install_element (RMAP_NODE, &no_set_aspath_prepend_cmd);
+
+  install_element (RMAP_NODE, &set_community_cmd);
+  install_element (RMAP_NODE, &no_set_community_cmd);
+
+  install_element (RMAP_NODE, &set_origin_cmd);
+  install_element (RMAP_NODE, &no_set_origin_cmd);
 
 #ifdef HAVE_IPV6
   route_map_install_set (&route_set_ipv6_nexthop_global_cmd);

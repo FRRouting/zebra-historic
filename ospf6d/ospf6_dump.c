@@ -105,6 +105,7 @@ ospf6_log_init ()
 
   if (!daemon_mode)
     flag |= ZLOG_STDOUT;
+
   zlog_default = openzlog (progname, flag, ZLOG_OSPF6,
                  LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
                  LOG_DAEMON);

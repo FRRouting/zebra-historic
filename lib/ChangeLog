@@ -1,3 +1,53 @@
+1999-06-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (struct cmd_element ): strvec and descvec is combined
+	into newstrvec.
+
+	* command.c (desc_make): Function removed.
+	(desc_next): Function removed.
+
+	* command.h (struct cmd_element ): docvec is removed from struct
+	cmd_element.
+
+1999-06-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_execute_command): Remove command NULL check.
+
+	* command.h (struct cmd_element ): Add newstrvec entry to struct
+	cmd_element.
+	(DEFUN2): DEFUN2 macro is removed.  DEFUN is extended to support
+	(a|b|c) statement.
+	(DESC): DESC macro is removed.
+
+	* vty.c (vty_complete_command): When return value is
+	CMD_ERR_NO_MATCH, don't display error message.
+
+1999-06-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* table.c (route_next_until): New function.
+
+	* version.h: Bump up to 0.68.
+
+1999-06-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_close): Free vty->buf when vty is closed.
+
+	* memory.h (enum): Add MTYPE_COMMUNITY_ENTRY and
+	MTYPE_COMMUNITY_LIST.
+
+	* vty.h (struct vty ): Change buf from static length buffer to
+	variable length buffer.
+
+	* vty.c (vty_ensure): New function added.
+	
+1999-06-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add COMMUNITY_LIST_NODE.
+
+	* command.c (config_enable_password): Freeing host.enable bug is
+	fixed.
+	(config_enable_password): Add argc count check.
+
 1999-05-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* version.h: Bump up to 0.67.

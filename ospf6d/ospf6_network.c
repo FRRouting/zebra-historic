@@ -210,7 +210,7 @@ iov_free (int mtype, struct iovec *iov, u_int begin, u_int end)
 }
 
 int
-sockunion_ospf_socket (union sockunion *su)
+sockunion_ospf6_socket (union sockunion *su)
 {
   int sock;
 
@@ -525,17 +525,14 @@ ospf6_serv_sock ()
   memset (&su, 0, sizeof (union sockunion));
 
   su.sa.sa_family = AF_INET6;
-  socket = sockunion_ospf_socket (&su);
-  if (socket > 0)
-    {
-      sockopt_reuseaddr (socket);
-      thread_add_read (master, ospf6_recv, NULL, socket);
-    }
-  else
+  socket = sockunion_ospf6_socket (&su);
+  if (socket < 0)
     {
       zlog (NULL, LOG_WARNING,"Can't Create OSPF6 Socket.");
     }
 
+  sockopt_reuseaddr (socket);
+  thread_add_read (master, ospf6_recv, NULL, socket);
   ospf6_sock = socket;
 
   /* setup global sockaddr_in6, allspf6 & alldr6 for later use */

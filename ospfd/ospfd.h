@@ -70,14 +70,31 @@ enum
 #define OSPF_RETRANSMIT_INTERVAL_DEFAULT   30
 #define OSPF_TRANSMIT_DELAY_DEFAULT         1
 
+/* Area ID Format type. */
 #define OSPF_AREA_ID_FORMAT_ADDRESS         1
 #define OSPF_AREA_ID_FORMAT_DECIMAL         2
 
+/* Area External Routing Capability. */
+#define OSPF_AREA_DEFAULT		    0
+#define OSPF_AREA_STUB			    1
+#define OSPF_AREA_NSSA			    2
+
+/* OSPF options. */
+#define OSPF_OPTION_T			 0x01  /* TOS. */
 #define OSPF_OPTION_E			 0x02
 #define OSPF_OPTION_MC			 0x04
 #define OSPF_OPTION_NP			 0x08
 #define OSPF_OPTION_EA			 0x10
 #define OSPF_OPTION_DC			 0x20
+
+/* OSPF Database Description flags. */
+#define OSPF_DD_FLAG_MS			 0x01
+#define OSPF_DD_FLAG_M			 0x02
+#define OSPF_DD_FLAG_I			 0x04
+
+/* OSPF Master/Slave. */
+#define OSPF_DD_SLAVE		 	 0x00
+#define OSPF_DD_MASTER		 	 0x01
 
 /* OSPF instance structure. */
 struct ospf
@@ -88,6 +105,8 @@ struct ospf
 
   list areas;				/* OSPF areas. */
   struct route_table *networks;		/* OSPF config networks. */
+
+  int ls_seqnum;			/* LS Sequence Number. */
 };
 
 /* OSPF area structure. */
@@ -100,6 +119,7 @@ struct ospf_area
   list address_range;
 
   /* Configuration variables. */
+  int external_routing;			/* ExternalRoutingCapability. */
   int default_cost;			/* StubDefaultCost. */
   int auth_type;			/* Authentication type. */
 
@@ -110,7 +130,6 @@ struct ospf_area
 
   /* shortest path tree. */
   /* TransitCapability. */
-  /* ExternalRoutingCapability. */
 };
 
 /* OSPF config network structure. */

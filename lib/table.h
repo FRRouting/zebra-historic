@@ -53,9 +53,11 @@ struct route_node
 struct route_table *route_table_init (void);
 struct route_node *route_top (struct route_table *);
 struct route_node *route_next (struct route_node *);
+struct route_node *route_next_until (struct route_node *, struct route_node *);
 struct route_node *route_node_get (struct route_table *, struct prefix *);
 struct route_node *route_node_match (struct route_table *, struct prefix *);
 struct route_node *route_node_lookup (struct route_table *, struct prefix *);
+struct route_node * route_lock_node (struct route_node *node);
 void route_unlock_node (struct route_node *node);
 
 #endif

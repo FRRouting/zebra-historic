@@ -42,6 +42,10 @@ community_parse (char *pnt, u_short length)
   struct community *find;
   struct community *new;
 
+  /* If length is malformed return NULL. */
+  if (length % 4)
+    return NULL;
+
   /* Make temporary community for hash look up. */
   comtmp.size = length / 4;
   comtmp.val = (u_int32_t *) pnt;
@@ -50,10 +54,7 @@ community_parse (char *pnt, u_short length)
   /* Looking up hash of community attribute. */
   find = (struct community *) hash_search (comhash, &comtmp);
   if (find)
-    {
-      /* find->refcnt++; */
-      return find;
-    }
+    return find;
 
   /* Make new community attribute and intern it into hash. */
   new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
@@ -69,9 +70,46 @@ community_parse (char *pnt, u_short length)
   return new;
 }
 
-/* Free community attribute. */
+struct community *
+community_new ()
+{
+  struct community *new;
+
+  new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
+  bzero (new, sizeof (struct community));
+  return new;
+}
+
 void
 community_free (struct community *com)
+{
+  if (com->val)
+    XFREE (MTYPE_COMMUNITY_VAL, com->val);
+  XFREE (MTYPE_COMMUNITY, com);
+}
+
+struct community *
+community_dup (struct community *com)
+{
+  struct community *new;
+
+  new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
+  bzero (new, sizeof (struct community));
+  new->size = com->size;
+  if (new->size)
+    {
+      new->val = XMALLOC (MTYPE_COMMUNITY_VAL, com->size * 4);
+      memcpy (new->val, com->val, com->size * 4);
+    }
+  else
+    new->val = NULL;
+
+  return new;
+}
+
+/* Free community attribute. */
+void
+community_unintern (struct community *com)
 {
   if (com->refcnt)
     com->refcnt--;
@@ -84,9 +122,7 @@ community_free (struct community *com)
       ret = (struct community *) hash_pull (comhash, com);
       assert (ret != NULL);
 
-      if (com->val)
-	XFREE (MTYPE_COMMUNITY_VAL, com->val);
-      XFREE (MTYPE_COMMUNITY, com);
+      community_free (com);
     }
 }
 
@@ -103,25 +139,28 @@ community_print (struct community *com)
 
   bzero(buf, BUFSIZ);
 
-  for (i = 0; i < com->size; i++) {
-    comval = ntohl (com_nthval (com, i));
-    switch (comval) {
-    case COMMUNITY_NO_EXPORT:
-      strlcat (buf, " no_export", BUFSIZ);
-      break;
-    case COMMUNITY_NO_ADVERTIZE:
-      strlcat (buf, " no_advertize", BUFSIZ);
-      break;
-    case COMMUNITY_NO_EXPORT_SUBCONFED:
-      strlcat (buf, " no_export_subconfed", BUFSIZ);
-      break;
-    default:
-      as = (comval >> 16) & 0xFFFF ;
-      val = comval & 0xFFFF;
-      snprintf (buf + strlen (buf), BUFSIZ - strlen (buf), " %d:%d", as, val);
-      break;
+  for (i = 0; i < com->size; i++) 
+    {
+      comval = ntohl (com_nthval (com, i));
+      switch (comval) 
+	{
+	case COMMUNITY_NO_EXPORT:
+	  strlcat (buf, " no-export", BUFSIZ);
+	  break;
+	case COMMUNITY_NO_ADVERTISE:
+	  strlcat (buf, " no-advertise", BUFSIZ);
+	  break;
+	case COMMUNITY_LOCAL_AS:
+	  strlcat (buf, " local-AS", BUFSIZ);
+	  break;
+	default:
+	  as = (comval >> 16) & 0xFFFF;
+	  val = comval & 0xFFFF;
+	  snprintf (buf + strlen (buf), BUFSIZ - strlen (buf), 
+		    " %d:%d", as, val);
+	  break;
+	}
     }
-  }
   return buf;
 }
 
@@ -143,6 +182,20 @@ community_hash_make (struct community *com)
   return key %= HASHTABSIZE;
 }
 
+int
+community_match (struct community *com1, struct community *com2)
+{
+  int i;
+
+  if (com1->size < com2->size)
+    return 0;
+
+  for (i = 0; i <= com1->size - com2->size; i++)
+    if (memcmp (com1->val + i, com2->val, com2->size * 4) == 0)
+      return 1;
+  return 0;
+}
+
 /* If two aspath have same value then return 1 else return 0. This
    function is used by hash package. */
 int
@@ -154,6 +207,22 @@ community_cmp (struct community *com1, struct community *com2)
   return 0;
 }
 
+/* Add com2 to the end of com1. */
+struct community *
+community_merge (struct community *com1, struct community *com2)
+{
+  if (com1->val)
+    com1->val = XREALLOC (MTYPE_COMMUNITY_VAL, com1->val, 
+			  (com1->size + com2->size) * 4);
+  else
+    com1->val = XMALLOC (MTYPE_COMMUNITY, (com1->size + com2->size) * 4);
+
+  memcpy (com1->val + com1->size, com2->val, com2->size * 4);
+  com1->size += com2->size;
+
+  return com1;
+}
+
 /* Initialize comminity related hash. */
 void
 community_init ()
@@ -162,112 +231,6 @@ community_init ()
   comhash->hash_key = community_hash_make;
   comhash->hash_cmp = community_cmp;
 }
-
-/* Below functions are not used current point. */
-
-#if 0
-/* Get next community token from string. */
-u_char *
-community_gettoken (u_char *pnt, u_int32_t *val)
-{
-  u_char *p;
-#define COMBUFSIZ 256
-  char buf[COMBUFSIZ];
-  int i;
-  
-  p = pnt;
-  while (isspace (*p)) {
-    p++;
-  }
-  if (*p == '\0') {
-    return NULL;
-  }
-  /* well known communities */
-  if (isalpha (*p)) {
-    i = 0;
-    buf[i++] = *p++;
-    while ((isalpha (*p) || *p == '_') && i < (COMBUFSIZ - 2)) {
-      buf[i++] = *p++;
-    }
-    buf[i] = '\0';
-    *val = 0;
-    if (strcmp (buf, "no_export") == 0)
-      *val = COMMUNITY_NO_EXPORT;
-    if (strcmp (buf, "no_advertize") == 0)
-      *val = COMMUNITY_NO_ADVERTIZE;
-    if (strcmp (buf, "no_export_subconfed") == 0)
-      *val = COMMUNITY_NO_EXPORT_SUBCONFED;
-    return p;
-  }
-  /* community val */
-  if (isdigit (*p)) {
-    int separator = 0;
-    u_int32_t asval = 0;
-
-    *val = (*p++ - '0');
-    while (isdigit (*p) || *p == ':') {
-      if (*p == ':') {
-	separator = 1;
-	asval = *val;
-	*val = 0;
-      } else {
-	*val *= 10;
-	*val += (*p - '0');
-      }
-      p++;
-    }
-    if (separator) {
-      *val = (asval << 16) + *val;
-    }
-    return p;
-  }
-  p++;
-  return p;
-}
-
-/* Add one community value to the community. */
-void
-community_add_val (struct community *com, u_int32_t val)
-{
-  com->size++;
-  com->val = (u_int32_t *) xrealloc (com->val, com_length (com));
-  com_lastval (com) = htonl (val);
-}
-
-
-/* convert string to community structure */
-struct community *
-community_str2com (char *str)
-{
-  struct community *new;
-  u_int32_t val;
-  u_char *pnt = str;
-
-  new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
-
-  while ((pnt = community_gettoken (pnt, &val))) {
-    if (val != 0) {
-      community_add_val (new, val);
-    }
-  }
-  return new;
-}
-
-/* If community com include value of val return 1 else return 0. */
-int
-community_contain (struct community *com, u_int32_t val)
-{
-  int i;
-  u_int32_t *pos = com->val;
-
-  for (i = 0; i < com->size; i++) {
-    if (pos[i] == val) {
-      return 1;
-    }
-  }
-  return 0;
-}
-#endif /* 0 */
 
 /* Below is vty related function which needs some header include. */
 
@@ -286,13 +249,13 @@ community_print_vty (struct vty *vty, struct community *com)
       switch (comval) 
 	{
 	case COMMUNITY_NO_EXPORT:
-	  vty_out (vty, " no_export");
+	  vty_out (vty, " no-export");
 	  break;
-	case COMMUNITY_NO_ADVERTIZE:
-	  vty_out (vty, " no_advertize");
+	case COMMUNITY_NO_ADVERTISE:
+	  vty_out (vty, " no-advertise");
 	  break;
-	case COMMUNITY_NO_EXPORT_SUBCONFED:
-	  vty_out (vty, " no_export_subconfed");
+	case COMMUNITY_LOCAL_AS:
+	  vty_out (vty, " local-AS");
 	  break;
 	default:
 	  as = (comval >> 16) & 0xFFFF ;
@@ -323,4 +286,151 @@ community_print_all_vty (struct vty *vty)
 	  vty_out (vty, "\r\n");
 	  mp = mp->next;
 	}
+}
+
+/* Community token enum. */
+enum community_token
+{
+  community_token_val,
+  community_token_no_export,
+  community_token_no_advertise,
+  community_token_local_as,
+  community_token_unknown
+};
+
+/* Get next community token from string. */
+u_char *
+community_gettoken (char *buf, enum community_token *token, u_int32_t *val)
+{
+  char *p = buf;
+
+  /* Skip white space. */
+  while (isspace (*p))
+    p++;
+
+  /* Check the end of the line. */
+  if (*p == '\0')
+    return NULL;
+
+  /* Well known community string check. */
+  if (isalpha (*p)) 
+    {
+      if (strncmp (p, "no-export", strlen ("no-export")) == 0)
+	{
+	  *val = COMMUNITY_NO_EXPORT;
+	  *token = community_token_no_export;
+	  p += strlen ("no-export");
+	  return p;
+	}
+      if (strncmp (p, "no-advertise", strlen ("no-advertise")) == 0)
+	{
+	  *val = COMMUNITY_NO_ADVERTISE;
+	  *token = community_token_no_advertise;
+	  p += strlen ("no-advertise");
+	  return p;
+	}
+      if (strncmp (p, "local-AS", strlen ("local-AS")) == 0)
+	{
+	  *val = COMMUNITY_LOCAL_AS;
+	  *token = community_token_local_as;
+	  p += strlen ("local-AS");
+	  return p;
+	}
+
+      /* Unknown string. */
+      *token = community_token_unknown;
+      return p;
+    }
+
+  /* Community value. */
+  if (isdigit (*p)) 
+    {
+      int separator = 0;
+      u_int32_t community_low = 0;
+      u_int32_t community_high = 0;
+
+      while (isdigit (*p) || *p == ':') 
+	{
+	  if (*p == ':') 
+	    {
+	      if (separator)
+		{
+		  *token = community_token_unknown;
+		  return p;
+		}
+	      else
+		{
+		  separator = 1;
+		  community_high = community_low << 16;
+		  community_low = 0;
+		}
+	    }
+	  else 
+	    {
+	      community_low *= 10;
+	      community_low += (*p - '0');
+	    }
+	  p++;
+	}
+      *val = community_high + community_low;
+      *token = community_token_val;
+      return p;
+    }
+  *token = community_token_unknown;
+  return p;
+}
+
+/* Add one community value to the community. */
+void
+community_add_val (struct community *com, u_int32_t val)
+{
+  com->size++;
+  if (com->val)
+    com->val = XREALLOC (MTYPE_COMMUNITY, com->val, com_length (com));
+  else
+    com->val = XMALLOC (MTYPE_COMMUNITY, com_length (com));
+  com_lastval (com) = htonl (val);
+}
+
+/* convert string to community structure */
+struct community *
+community_str2com (char *str)
+{
+  struct community *com = NULL;
+  u_int32_t val;
+  enum community_token token;
+
+  while ((str = community_gettoken (str, &token, &val))) 
+    {
+      switch (token)
+	{
+	case community_token_val:
+	case community_token_no_export:
+	case community_token_no_advertise:
+	case community_token_local_as:
+	  if (com == NULL)
+	    com = community_new();
+	  community_add_val (com, val);
+	  break;
+	case community_token_unknown:
+	default:
+	  if (com)
+	    community_free (com);
+	  return NULL;
+	  break;
+	}
+    }
+  return com;
+}
+
+void
+community_test ()
+{
+  struct community *com1;
+  struct community *com2;
+
+  com1 = community_str2com ("no-export local-AS 7675:1");
+  com2 = community_str2com ("3651:1 2");
+  community_merge (com1, com2);
+  printf ("%s\n", community_print (com1));
 }

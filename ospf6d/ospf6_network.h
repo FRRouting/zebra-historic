@@ -55,7 +55,7 @@ void *iov_attach_last (struct iovec *iov, void *base, size_t len);
 void *iov_attach_first (struct iovec *iov, void *base, size_t len);
 int iov_free (int mtype, struct iovec *iov, u_int begin, u_int end);
 
-int sockunion_ospf_socket (union sockunion *);
+int sockunion_ospf6_socket (union sockunion *);
 int sockfd_to_family (int);
 int ospf6_recv (struct thread *);
 int ospf6_serv_sock ();

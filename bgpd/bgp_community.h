@@ -33,8 +33,9 @@ struct community
 
 /* Community pre-defined values definition. */
 #define COMMUNITY_NO_EXPORT             0xFFFFFF01
-#define COMMUNITY_NO_ADVERTIZE          0xFFFFFF02
+#define COMMUNITY_NO_ADVERTISE          0xFFFFFF02
 #define COMMUNITY_NO_EXPORT_SUBCONFED   0xFFFFFF03
+#define COMMUNITY_LOCAL_AS              0xFFFFFF03
 
 /* Macros of community attribute. */
 #define com_length(X)    ((X)->size * 4)
@@ -43,10 +44,16 @@ struct community
 
 /* Prototypes of community attribute functions. */
 void community_init ();
-struct community *community_parse (char *, u_short);
 void community_free (struct community *);
+struct community *community_parse (char *, u_short);
+void community_unintern (struct community *);
 const char *community_print (struct community *);
 void community_print_vty (struct vty *, struct community *);
 void community_print_all_vty (struct vty *);
 unsigned int community_hash_make (struct community *);
+struct community *community_str2com (char *);
+int community_match (struct community *, struct community *);
+int community_cmp (struct community *, struct community *);
+struct community *community_merge (struct community *, struct community *);
+struct community *community_dup (struct community *);
 #endif /* _ZEBRA_BGP_COMMUNITY_H */

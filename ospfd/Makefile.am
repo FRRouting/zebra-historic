@@ -9,12 +9,13 @@ sbin_PROGRAMS = ospfd
 
 libospf_a_SOURCES = \
 	ospfd.c ospf_zebra.c ospf_interface.c ospf_ism.c ospf_neighbor.c \
-	ospf_nsm.c ospf_dump.c ospf_network.c ospf_packet.c
+	ospf_nsm.c ospf_dump.c ospf_network.c ospf_packet.c ospf_lsa.c \
+	ospf_spf.c
 
 noinst_HEADERS = \
 	ospf_dump.h ospf_interface.h ospf_ism.h ospf_neighbor.h \
 	ospf_network.h ospf_nsm.h ospf_packet.h ospf_zebra.h ospfd.h \
-	ospf_lsa.h
+	ospf_lsa.h ospf_spf.h
 
 ospfd_SOURCES = \
 	ospf_main.c $(libospf_a_SOURCES)

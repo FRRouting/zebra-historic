@@ -130,7 +130,7 @@ ospf_timer_dump (struct thread *t, char *buf, size_t size)
       s -= m * 60;
     }
 
-  snprintf (buf, size, "%02d:%02d:%02d", h, m, s);
+  snprintf (buf, size, "%02ld:%02ld:%02ld", h, m, s);
 
   return buf;
 }
@@ -154,30 +154,75 @@ ospf_packet_hello_dump (struct stream *s, u_int16_t length)
   zlog (NULL, LOG_INFO, "Hello DRouter %s", inet_ntoa (hello->d_router));
   zlog (NULL, LOG_INFO, "Hello BDRouter %s", inet_ntoa (hello->bd_router));
 
-  length -= 44;
-  for (i = 0; length; i++, length -= sizeof (struct in_addr))
-    zlog (NULL, LOG_INFO, "Hello neighbor %s", inet_ntoa (hello->neighbors[i]));
+  length -= OSPF_HEADER_SIZE + OSPF_HELLO_MIN_SIZE;
+  for (i = 0; length > 0; i++, length -= sizeof (struct in_addr))
+    zlog (NULL, LOG_INFO, "Hello Neighbor %s", inet_ntoa (hello->neighbors[i]));
 }
 
 void
 ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
 {
   struct ospf_db_desc *dd;
+  struct ospf_lsa *lsa;
+  u_int32_t getp;
 
   dd = (struct ospf_db_desc *) STREAM_PNT (s);
 
   zlog (NULL, LOG_INFO, "DD Interface MTU %d", ntohs (dd->mtu));
   zlog (NULL, LOG_INFO, "DD Options %d", dd->options);
   zlog (NULL, LOG_INFO, "DD Flags %d", dd->flags);
-  zlog (NULL, LOG_INFO, "DD Sequence Number %d", ntohl (dd->seq_number));
+  zlog (NULL, LOG_INFO, "DD Sequence Number 0x%08x", ntohl (dd->dd_seqnum));
 
-  /* LSA */
+  length -= OSPF_HEADER_SIZE + OSPF_DB_DESC_MIN_SIZE;
+
+  getp = stream_get_getp (s);
+  stream_forward (s, OSPF_DB_DESC_MIN_SIZE);
+
+  /* LSA Headers. */
+  for (; length > 0; length -= OSPF_LSA_HEADER_SIZE)
+    {
+      lsa = (struct ospf_lsa *) STREAM_PNT (s);
+
+      zlog (NULL, LOG_INFO, "LS age %d", ntohs (lsa->ls_age));
+      zlog (NULL, LOG_INFO, "Options %d", lsa->options);
+      zlog (NULL, LOG_INFO, "LS type %d", lsa->type);
+      zlog (NULL, LOG_INFO, "Link State ID %s", inet_ntoa (lsa->id));
+      zlog (NULL, LOG_INFO, "Advertising Router %s",
+	    inet_ntoa (lsa->adv_router));
+      zlog (NULL, LOG_INFO, "LS sequence number %x", ntohl (lsa->ls_seqnum));
+      zlog (NULL, LOG_INFO, "LS checksum %x", ntohs (lsa->checksum));
+      zlog (NULL, LOG_INFO, "length %d", ntohs (lsa->length));
+
+      stream_forward (s, OSPF_LSA_HEADER_SIZE);
+    }
+
+  stream_set_getp (s, getp);
 }
 
 void
 ospf_packet_ls_req_dump (struct stream *s, u_int16_t length)
 {
+  u_int32_t getp;
+  u_int32_t ls_type;
+  struct in_addr ls_id;
+  struct in_addr adv_router;
 
+  getp = stream_get_getp (s);
+
+  for (; length > 0; length -= 12)
+    {
+      ls_type = stream_getl (s);
+      ls_id.s_addr = stream_get_ipv4 (s);
+      adv_router.s_addr = stream_get_ipv4 (s);
+
+      zlog (NULL, LOG_INFO, "Link State Request LS type %d", ls_type);
+      zlog (NULL, LOG_INFO, "Link State Request Link State ID %s",
+	    inet_ntoa (ls_id));
+      zlog (NULL, LOG_INFO, "Link State Request Advertising Router %s",
+	    inet_ntoa (adv_router));
+    }
+
+  stream_set_getp (s, getp);
 }
 
 void
@@ -198,6 +243,7 @@ ospf_packet_dump (struct stream *s)
   struct ip *iph;
   struct ospf_header *ospfh;
   unsigned long sp;
+  u_int16_t length;
 
   /* Preserve pointer. */
   sp = stream_get_getp (s);
@@ -205,11 +251,17 @@ ospf_packet_dump (struct stream *s)
 
   iph = (struct ip *) STREAM_DATA (s);
 
+#ifdef GNU_LINUX
+  length = ntohs (iph->ip_len);
+#else /* GNU_LINUX */
+  length = iph->ip_len;
+#endif /* GNU_LINUX */
+
   /* IP Header dump. */
   zlog (NULL, LOG_INFO, "ip_v %d", iph->ip_v);
   zlog (NULL, LOG_INFO, "ip_hl %d", iph->ip_hl);
   zlog (NULL, LOG_INFO, "ip_tos %d", iph->ip_tos);
-  zlog (NULL, LOG_INFO, "ip_len %d", iph->ip_len);
+  zlog (NULL, LOG_INFO, "ip_len %d", length);
   zlog (NULL, LOG_INFO, "ip_id %u", (u_int32_t) iph->ip_id);
   zlog (NULL, LOG_INFO, "ip_off %u", (u_int32_t) iph->ip_off);
   zlog (NULL, LOG_INFO, "ip_ttl %d", iph->ip_ttl);

@@ -34,6 +34,7 @@
 
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospfd.h"
@@ -89,16 +90,9 @@ ospf_if_new (struct interface *ifp)
 void
 ospf_if_stream_set (int sock, struct ospf_interface *oi)
 {
-  oi->fd = sock;
-
   /* set input buffer. */
   oi->ibuf = stream_new (oi->ifp->mtu);
   OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
-
-  /*
-  oi->obuf = stream_new (oi->ifp->mtu);
-  OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd);
-  */
 }
 
 void

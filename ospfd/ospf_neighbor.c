@@ -55,11 +55,17 @@ ospf_nbr_new ()
   nbr->status = NSM_Down;
 
   nbr->v_inactivity = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
+  nbr->priority = -1;
+
+  /* Reset Last Received Database Description. */
+  nbr->last_options = (char) 0;
+  nbr->last_flags = (char) 0;
+  nbr->last_dd_seqnum = 0;
 
   /* Initialize lists. */
-  nbr->link_state_retransmission = list_init ();
-  nbr->database_summary = list_init ();
-  nbr->link_state_request = list_init ();
+  nbr->ls_retransmission = list_init ();
+  nbr->db_summary = list_init ();
+  nbr->ls_request = list_init ();
 
   return nbr;
 }
@@ -67,9 +73,9 @@ ospf_nbr_new ()
 void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
-  list_delete_all (nbr->link_state_retransmission);
-  list_delete_all (nbr->database_summary);
-  list_delete_all (nbr->link_state_request);
+  list_delete_all (nbr->ls_retransmission);
+  list_delete_all (nbr->db_summary);
+  list_delete_all (nbr->ls_request);
 
   /* Cancel threads. */
   OSPF_NSM_READ_OFF (nbr->t_read);
@@ -157,8 +163,56 @@ ospf_nbr_count (struct route_table *nbrs)
   return count;
 }
 
+struct ospf_neighbor *
+ospf_nbr_lookup_by_router_id (struct route_table *nbrs,
+			      struct in_addr *router_id)
+{
+  struct route_node *rn;
+  struct ospf_neighbor *nbr;
+
+  for (rn = route_top (nbrs); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+
+      nbr = rn->info;
+
+      if (!IPV4_ADDR_CMP (&nbr->router_id, router_id))
+	return nbr;
+    }
+
+  return NULL;
+}
+
 int
 ospf_adjacent_count (struct route_table *nbrs)
 {
   return 0;
+}
+
+int
+ospf_fully_adjacent_count (struct route_table *nbrs)
+{
+  struct route_node *rn;
+  struct ospf_neighbor *nbr;
+  int count = 0;
+
+  if (nbrs == NULL)
+    return 0;
+
+  for (rn = route_top (nbrs); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+      nbr = rn->info;
+
+      /* this is myself. */
+      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+	continue;
+
+      if (nbr->status == NSM_Full)
+	count++;
+    }
+
+  return count;
 }

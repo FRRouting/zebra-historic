@@ -1,5 +1,38 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.68
+
+* Changes in lib
+
+** DEFUN() is extended to support (a|b|c) statement.
+
+** Input buffer overflow bug is fixed.
+
+* Changes in bgpd
+
+** `ip community-list' is added.
+
+** set community and match community is added to route-map statement.
+
+** aggregate-address A.B.C.D/M partly works.  Now it works only
+summary-only mode.
+
+* Changes in zebra
+
+** IPv6 network address delete bug is fixed.
+
+* Changes in ospfd
+
+** DR election bug fixed.
+
+** Now Database Description can be send or received.
+
+** Neighbor State Machine goes to Full state.
+
+* Changes in ospf6d
+
+** router zebra related bug is fixed.
+
 * Changes in zebra-0.67
 
 * Changes in lib

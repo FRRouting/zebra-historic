@@ -713,77 +713,6 @@ DEFUN (no_router_ospf6_instance,
   return CMD_SUCCESS;
 }
 
-/* make ospf ospf_if */
-DEFUN (ospf6_interface_state,
-       ospf6_interface_state_cmd,
-       "ospf6 interface IFNAME area AREA_ID IFSTATE",
-       "ospf6\n"
-       INTERFACE_STR
-       IFNAME_STR
-       "Specify AREA\n"
-       V4NOTATION_STR
-       "up or down\n")
-{
-  char *ifname;
-  area_id_t area_id;
-  struct area *area;
-  struct ospf6_if *ospf6_if;
-  struct interface *ifp;
-  struct ospf6 *ospf6 = (struct ospf6 *)vty->index;
-
-  ifname = argv[0];
-  inet_pton (AF_INET, argv[1], &area_id);
-
-  if (area_id != 0)
-    {
-      vty_out (vty, "Area ID other than Backbone(0.0.0.0), not yet implimented\r\n");
-      return CMD_WARNING;
-    }
-
-  ifp = if_lookup_by_name (ifname);
-  if (!ifp)
-    {
-      vty_out (vty, "No such interface: %s\r\n", ifname);
-      return CMD_WARNING;
-    }
-
-  area = area_lookup (area_id, ospf6);
-  if (!area)
-    area = make_area (area_id, ospf6);
-
-  ospf6_if = ospf6_if_lookup (ifname);
-  if (!ospf6_if)
-    {
-      ospf6_if = make_ospf6_if (ifname);
-    }
-
-  list_add_node (area->ospf6_if_list, ospf6_if);
-  ospf6_if->area = area;
-
-  if (argc == 3)
-    {
-      if (strcmp (argv[2], "up") == 0)
-        thread_add_event (master, interface_up, ospf6_if, 0);
-      else if (strcmp (argv[2], "down") == 0)
-        thread_add_event (master, interface_down, ospf6_if, 0);
-      else
-        vty_out (vty, "Invalid argument: %s\r\n", argv[2]);
-      vty_out (vty, "\r\n");
-    }
-
-  return CMD_SUCCESS;
-}
-
-ALIAS (ospf6_interface_state,
-       ospf6_interface_cmd,
-       "ospf6 interface IFNAME area AREA_ID",
-       "ospf6\n"
-       INTERFACE_STR
-       IFNAME_STR
-       "Specify AREA\n"
-       V4NOTATION_STR
-       )
-
 DEFUN (no_interface,
        no_interface_cmd,
        "no interface IFNAME [area AREA_ID]",
@@ -1387,7 +1316,7 @@ DEFUN (interface_area,
   ospf6 = (struct ospf6 *) vty->index;
   assert (ospf6);
 
-  area_id = strtol (argv[1], NULL, 10);
+  inet_pton (AF_INET, argv[1], &area_id);
   area = area_lookup (area_id, ospf6);
   if (!area)
     area = make_area (area_id, ospf6);
@@ -1403,13 +1332,11 @@ DEFUN (interface_area,
         {
           vty_out (vty, "Already attached to area %s\n", 
                    inet4str (ospf6_if->area->area_id));
-          vty_out (vty, "Multiple OSPF Instance Not yet\n");
           return CMD_ERR_NO_MATCH;
         }
     }
   ospf6_if->area = area;
   list_add_node (area->ospf6_if_list, ospf6_if);
-  thread_add_event (master, interface_up, ospf6_if, 0);
   return CMD_SUCCESS;
 }
 
@@ -1497,7 +1424,7 @@ ospf6_config_write (struct vty *vty)
 struct cmd_node ospf6_node =
 {
   OSPF6_NODE,
-  "%s(config-router)# ",
+  "%s(config-ospf6)# ",
 };
 
 int
@@ -1505,10 +1432,8 @@ ospf6_if_config_write (struct vty *vty)
 {
   listnode i,j,k;
   struct ospf6 *ospf6;
-  struct ospf6_if *ospf6_if, dummy;
+  struct ospf6_if *ospf6_if;
   struct area *area;
-
-  set_ospf6_if_default_val (&dummy);
 
   for (i = listhead (ospf6_list); i; nextnode (i))
     {
@@ -1610,6 +1535,9 @@ ospf6_init ()
 
   /* Make empty list of top list. */
   ospf6_list = list_init ();
-  iflist = list_init ();
+  if_init ();
 
+  ospf6_zebra_init ();
+  access_list_init ();
 }
+

@@ -88,11 +88,15 @@ int
 config_write_zebra (struct vty *vty)
 {
   if (! zebra->enable)
-    vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+    {
+      vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+      return 1;
+    }
   else if (! zebra->redist[ZEBRA_ROUTE_RIP])
     {
       vty_out (vty, "router zebra%s", VTY_NEWLINE);
       vty_out (vty, " no redistribute rip%s", VTY_NEWLINE);
+      return 1;
     }
   return 0;
 }

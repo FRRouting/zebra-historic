@@ -38,24 +38,28 @@ struct ospf_neighbor
 
   /* OSPF neighbor Information */
   char *host;				/* Printable address of the neighbor.*/
-  u_char status;
-  u_char master_slave;
-  u_int32_t dd_sequence_number;
-  u_int32_t last_received_db_desc;
+  u_char status;			/* NSM status. */
+  u_char ms_flag;			/* Master/Slave bit flag. */
+  u_int32_t dd_seqnum;			/* DD Sequence Number. */
 
   /* Neighbor Information from Hello. */
-  struct prefix address;
+  struct prefix address;		/* Neighbor Interface Address. */
 
-  struct in_addr router_id;
-  u_char options;
-  u_char priority;
-  struct in_addr d_router;
-  struct in_addr bd_router;
+  struct in_addr router_id;		/* Router ID. */
+  u_char options;			/* Options. */
+  int priority;				/* Router Priority. */
+  struct in_addr d_router;		/* Designated Router. */
+  struct in_addr bd_router;		/* Backup Designated Router. */
+
+  /* Last Received Databse Description packet. */
+  u_char last_flags;
+  u_char last_options;
+  u_int32_t last_dd_seqnum;
 
   /* LSA data. */
-  struct _list *link_state_retransmission;
-  struct _list *database_summary;
-  struct _list *link_state_request;
+  list ls_retransmission;
+  list db_summary;
+  list ls_request;
 
   /* Timer values. */
   u_int32_t v_inactivity;
@@ -72,8 +76,10 @@ struct ospf_neighbor
 struct ospf_neighbor *ospf_nbr_new ();
 void ospf_nbr_free (struct ospf_neighbor *);
 int ospf_nbr_bidirectional (struct in_addr *, struct in_addr *, int);
-void ospf_nbr_add_myself (struct ospf_interface *oi);
-int ospf_nbr_count (struct route_table *nbrs);
-int ospf_adjacent_count (struct route_table *nbrs);
+void ospf_nbr_add_myself (struct ospf_interface *);
+int ospf_nbr_count (struct route_table *);
+struct ospf_neighbor *ospf_nbr_lookup_by_router_id (struct route_table *, struct in_addr *);
+int ospf_adjacent_count (struct route_table *);
+int ospf_fully_adjacent_count (struct route_table *);
 
 #endif /* _ZEBRA_OSPF_NEIGHBOR_H */

@@ -83,6 +83,7 @@ enum node_type
   ACCESS_NODE,			/* Access list node. */
   PREFIX_NODE,			/* Prefix list node. */
   AS_LIST_NODE,			/* AS list node. */
+  COMMUNITY_LIST_NODE,		/* Community list node. */
   DISTRIBUTE_NODE,		/* Distribute list node. */
   RMAP_NODE,			/* Route map node. */
   VTY_NODE			/* Vty node. */
@@ -103,23 +104,6 @@ struct cmd_node
 
   /* Vector of this node's command list. */
   vector cmd_vector;	
-
-  /* Description vector of this node. */
-  vector desc_vector;
-};
-
-enum cmd_desc_type {DESC_END = 0, DESC_STR, DESC_LINE, DESC_FUNC};
-
-struct cmd_desc
-{
-  /* Description type. */
-  enum cmd_desc_type type;
-
-  /* Actual data. */
-  void *data;
-
-  /* Vector for multiline description. */
-  vector line;
 };
 
 /* Structure of command element. */
@@ -127,13 +111,9 @@ struct cmd_element
 {
   char *string;			/* Command specification by string. */
   int (*func) (struct cmd_element *, struct vty *, int, char **);
-  char *doc;			/* Documentation of this command */
-  struct cmd_desc *desc;	/* Command description. */
-  vector strvec;		/* Pointing out each command index */
-  vector docvec;		/* Vector of simple document of command. */
-  vector descvec;		/* Vector of description of command. */
+  char *doc;			/* Documentation of this command. */
+  vector strvec;		/* Pointing out each description vector. */
   int cmdsize;			/* Command index count. */
-  int descsize;			/* Description index count. */
   char *config;			/* Configuration string */
   vector subconfig;		/* Sub configuration string */
 };
@@ -141,11 +121,8 @@ struct cmd_element
 /* Command description structure. */
 struct desc
 {
-  /* Command string. */
-  char *cmd;
-
-  /* Command's description. */
-  char *str;
+  char *cmd;			/* Command string. */
+  char *str;			/* Command's description. */
 };
 
 /* Return value of the commands. */
@@ -175,22 +152,6 @@ struct desc
   int funcname \
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)
 
-/* New DEFUN for vty command interafce. */
-#define DESC(funcname) \
-struct cmd_desc funcname ## _desc[]
-
-#define DEFUN2(funcname, cmdname, cmdstr) \
-  int funcname (struct cmd_element *, struct vty *, int, char **); \
-  struct cmd_element cmdname = \
-  { \
-    cmdstr, \
-    funcname, \
-    NULL, \
-    funcname ## _desc \
-  }; \
-  int funcname \
-  (struct cmd_element *self, struct vty *vty, int argc, char **argv)
-
 /* ALIAS macro for define alias of existing command. */
 #define ALIAS(funcname, cmdname, cmdstr, helpstr) \
   struct cmd_element cmdname = \
@@ -201,8 +162,12 @@ struct cmd_desc funcname ## _desc[]
   };
 
 /* Some macroes */
-#define CMD_OPT(X)  ((X) == '[')
-#define CMD_EXT(X)  (((X) >= 'A' && (X) <= 'Z') || ((X) == '<'))
+#define CMD_OPT(X)      ((X) == '[')
+#define CMD_EXT(X)      (((X) >= 'A' && (X) <= 'Z') || ((X) == '<'))
+
+#define CMD_OPTION(S) ((S[0]) == '[')
+#define CMD_VARIABLE(S) (((S[0]) >= 'A' && (S[0]) <= 'Z') || ((S[0]) == '<'))
+#define CMD_VARARG(S) (strcmp ((S), "...") == 0)
 
 /* Description. */
 #define SHOW_STR "Show running system information\n"
@@ -216,7 +181,6 @@ struct cmd_desc funcname ## _desc[]
 void install_node (struct cmd_node *, int (*) (struct vty *));
 void install_element (enum node_type, struct cmd_element *);
 void sort_node ();
-void desc_vector_free (vector docvec);
 
 vector cmd_make_strvec (char *);
 void cmd_free_strvec (vector);

@@ -10,12 +10,12 @@ sbin_PROGRAMS = bgpd
 libbgp_a_SOURCES = \
 	bgpd.c bgp_fsm.c bgp_aspath.c bgp_community.c bgp_attr.c \
 	bgp_dump.c bgp_route.c bgp_zebra.c bgp_open.c bgp_routemap.c \
-	bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c
+	bgp_packet.c bgp_network.c bgp_filter.c bgp_regex.c bgp_clist.c
 
 noinst_HEADERS = \
 	bgp_aspath.h bgp_attr.h bgp_community.h bgp_dump.h bgp_fsm.h \
 	bgp_network.h bgp_open.h bgp_packet.h bgp_regex.h bgp_route.h \
-	bgpd.h bgp_filter.h
+	bgpd.h bgp_filter.h bgp_clist.h
 
 bgpd_SOURCES = \
 	bgp_main.c $(libbgp_a_SOURCES)
@@ -52,6 +52,9 @@ bgp_attr.o: bgp_attr.c ../lib/linklist.h ../lib/prefix.h \
  ../bgpd/bgp_attr.h ../bgpd/bgp_route.h ../bgpd/bgp_aspath.h \
  ../bgpd/bgp_community.h ../bgpd/bgp_dump.h ../bgpd/bgp_packet.h \
  ../zebra/zebra.h
+bgp_clist.o: bgp_clist.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../lib/memory.h ../lib/log.h ../lib/buffer.h ../bgpd/bgpd.h \
+ ../bgpd/bgp_community.h ../bgpd/bgp_clist.h
 bgp_community.o: bgp_community.c ../lib/hash.h ../lib/memory.h \
  ../lib/vector.h ../lib/vty.h ../lib/roken.h ../lib/str.h \
  ../bgpd/bgp_community.h
@@ -61,8 +64,8 @@ bgpd.o: bgpd.c ../lib/prefix.h ../lib/thread.h ../lib/buffer.h \
  ../lib/memory.h ../lib/roken.h ../lib/filter.h ../lib/routemap.h \
  ../lib/str.h ../lib/log.h ../lib/plist.h ../bgpd/bgpd.h \
  ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_dump.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_community.h ../bgpd/bgp_fsm.h \
- ../bgpd/bgp_packet.h ../zebra/zebra.h
+ ../bgpd/bgp_attr.h ../bgpd/bgp_community.h ../bgpd/bgp_clist.h \
+ ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h ../zebra/zebra.h
 bgp_dump.o: bgp_dump.c ../lib/version.h ../lib/prefix.h \
  ../lib/linklist.h ../lib/stream.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/str.h ../lib/log.h ../lib/sockunion.h \
@@ -105,7 +108,8 @@ bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/routemap.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/linklist.h ../lib/log.h ../lib/regex-gnu.h \
  ../lib/buffer.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h \
- ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_regex.h
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_regex.h \
+ ../bgpd/bgp_community.h ../bgpd/bgp_clist.h
 bgp_zebra.o: bgp_zebra.c ../zebra/zebra.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/network.h \
  ../lib/prefix.h ../lib/client.h ../lib/roken.h ../lib/log.h \

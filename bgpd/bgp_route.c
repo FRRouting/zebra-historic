@@ -112,6 +112,16 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (exist->type == ZEBRA_ROUTE_STATIC)
     return 0;
 
+  if (new->sub_type == BGP_ROUTE_STATIC)
+    return 1;
+  if (exist->sub_type == BGP_ROUTE_STATIC)
+    return 0;
+
+  if (new->sub_type == BGP_ROUTE_AGGREGATE)
+    return 1;
+  if (exist->sub_type == BGP_ROUTE_AGGREGATE)
+    return 0;
+
   /* Weight check. */
   if (new->attr->weight > exist->attr->weight)
     return 1;
@@ -130,9 +140,11 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (new->attr->aspath->count > exist->attr->aspath->count)
     return 0;
 
-  /* Origin check. */
-
   /* MED check. */
+  if (new->attr->med < exist->attr->med)
+    return 1;
+  if (new->attr->med > exist->attr->med)
+    return 0;
 
   return 1;
 }
@@ -217,12 +229,41 @@ bgp_output_filter (struct peer *peer, struct prefix *p, struct bgp_info *info)
   return FILTER_PERMIT;
 }
 
+/* Utility function for looking up route node from prefix specific
+   address family tree. */
+static struct route_node *
+nlri_node_get (struct prefix *p)
+{
+  if (p->family == AF_INET)
+    return route_node_get (bgp_table_ipv4, p);
+#ifdef HAVE_IPV6
+  if (p->family == AF_INET6)
+    return route_node_get (bgp_table_ipv6, p);
+#endif /* HAVE_IPV6 */
+  return NULL;
+}
+
+/* Aggreagete address:
+
+  advertise-map  Set condition to advertise attribute
+  as-set         Generate AS set path information
+  attribute-map  Set attributes of aggregate
+  route-map      Set parameters of aggregate
+  summary-only   Filter more specific routes from updates
+  suppress-map   Conditionally filter more specific routes from updates
+  <cr>
+
+ */
+
 /* Announce the prefix and information. */
 void
 bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 {
   struct attr attr;
   struct bgp_info bgp_info;
+
+  if (info->suppress_count)
+    return;
 
   /* Apply output filter. */
   if (bgp_output_filter (peer, p, info) == FILTER_DENY)
@@ -264,7 +305,10 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
   attr = *info->attr;
 
   /* When route is static then set nexthop to self. */
-  if (info->type == ZEBRA_ROUTE_STATIC)
+  if (info->type == ZEBRA_ROUTE_STATIC || 
+      info->type == ZEBRA_ROUTE_CONNECT ||
+      info->sub_type == BGP_ROUTE_STATIC || 
+      info->sub_type == BGP_ROUTE_AGGREGATE)
     {
       if (p->family == AF_INET && peer->su_local &&
 	  peer->su_local->sa.sa_family == AF_INET)
@@ -292,6 +336,8 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
          attribute to new one. */
       if (attr.aspath)
 	attr.aspath = aspath_dup (attr.aspath);
+      if (attr.community)
+	attr.community = community_dup (attr.community);
 
       /* Make routemap object. */
       bgp_info.peer = peer;
@@ -306,6 +352,8 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
       /* Free tempolary aspath. */
       if (attr.aspath)
 	aspath_free (attr.aspath);
+      if (attr.community)
+	community_free (attr.community);
     }
   else
     bgp_update_send (peer, p, &attr);
@@ -340,31 +388,21 @@ bgp_terminate ()
 
   for (node = route_top (bgp_table_ipv4); node; node = route_next (node))
     if ((info = node->info) != NULL)
-      if (info->selected && info->type == ZEBRA_ROUTE_BGP)
+      if (info->selected && 
+	  info->type == ZEBRA_ROUTE_BGP && 
+	  info->sub_type == BGP_ROUTE_NORMAL)
 	bgp_zebra_withdraw (&node->p, info);
 
 #ifdef HAVE_IPV6
   for (node = route_top (bgp_table_ipv6); node; node = route_next (node))
     if ((info = node->info) != NULL)
-      if (info->selected && info->type == ZEBRA_ROUTE_BGP)
+      if (info->selected &&
+	  info->type == ZEBRA_ROUTE_BGP &&
+	  info->sub_type == BGP_ROUTE_NORMAL)
 	bgp_zebra_withdraw (&node->p, info);
 #endif /* HAVE_IPV6 */
 }
 
-/* Utility function for looking up route node from prefix specific
-   address family tree. */
-static struct route_node *
-nlri_node_lookup (struct prefix *p)
-{
-  if (p->family == AF_INET)
-    return route_node_get (bgp_table_ipv4, p);
-#ifdef HAVE_IPV6
-  if (p->family == AF_INET6)
-    return route_node_get (bgp_table_ipv6, p);
-#endif /* HAVE_IPV6 */
-  return NULL;
-}
-
 /* Update routing information of each peer.  Yes we need attribute
    information here. */
 void
@@ -379,7 +417,7 @@ nlri_update (struct prefix *p, struct bgp_info *info)
 	bgp_announce (peer, p, info);
 
   /* Kernel routing update. */
-  if (info->type == ZEBRA_ROUTE_BGP)
+  if (info->type == ZEBRA_ROUTE_BGP && info->sub_type == BGP_ROUTE_NORMAL)
     bgp_zebra_announce (p, info);
 }
 
@@ -416,6 +454,31 @@ nlri_reselect (struct prefix *p, struct bgp_info *info, struct bgp_info *del)
     nlri_withdraw (p, del);
 }
 
+void
+bgp_aggregate_route (struct prefix *p, struct bgp_info *bgp_info)
+{
+  struct route_node *node = NULL;
+  struct bgp_info *aggregate_info;
+
+  if (bgp_info->sub_type == BGP_ROUTE_AGGREGATE)
+    return;
+
+  if (p->family == AF_INET)
+    node = route_node_match (bgp_aggregate_ipv4, p);
+#ifdef HAVE_IPV6
+  if (p->family == AF_INET6)
+    node = route_node_match (bgp_aggregate_ipv6, p);
+#endif /* HAVE_IPV6 */
+
+  if (! node)
+    return;
+
+  aggregate_info = node->info;
+
+  aggregate_info->aggregate_count++;
+  bgp_info->suppress_count++;
+}
+
 /* Process NLRI information. */
 void
 nlri_process (struct prefix *p, struct bgp_info *info)
@@ -430,7 +493,7 @@ nlri_process (struct prefix *p, struct bgp_info *info)
   repflag = 0;
 
   /* Lookup node. */
-  node = nlri_node_lookup (p);
+  node = nlri_node_get (p);
   if (!node)
     return;
 
@@ -453,6 +516,9 @@ nlri_process (struct prefix *p, struct bgp_info *info)
   /* If there is no replace route. */
   if (!replace)
     info->peer->prefix_count++;
+
+  /* Aggregate check. */
+  bgp_aggregate_route (p, info);
 
   /* Add route to the node. */
   bgp_info_add ((struct bgp_info **)&node->info, info);
@@ -514,8 +580,11 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
   if (ROUTE_MAP_IN (peer))
     {
       newattr = *attr;
+
       if (attr->aspath)
 	newattr.aspath = aspath_dup (attr->aspath);
+      if (attr->community)
+	newattr.community = community_dup (attr->community);
       
       /* Make routemap object. */
       bgp_info.peer = peer;
@@ -531,6 +600,17 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
       aspath_free (newattr.aspath);
       newattr.aspath = aspath;
 
+      /* The same thing about community attribute. */
+      if (newattr.community)
+	{
+	  struct community *com;
+
+	  com = community_parse ((char *) newattr.community->val,
+				 newattr.community->size * 4);
+	  community_free (newattr.community);
+	  newattr.community = com;
+	}
+
       return bgp_attr_intern (&newattr);
     }
 
@@ -540,8 +620,8 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
 
 /* Parse route and add route into radix tree. */
 void
-nlri_parse (struct peer *peer, struct attr *attr, 
-	    u_char *pnt, int len, int family)
+nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len, 
+	    int family)
 {
   int psize;
   struct prefix p;
@@ -609,6 +689,7 @@ nlri_parse (struct peer *peer, struct attr *attr,
 
       br = bgp_info_new ();
       br->type = ZEBRA_ROUTE_BGP;
+      br->sub_type = BGP_ROUTE_NORMAL;
       br->peer = peer;
       br->attr = attrnew;
 
@@ -626,7 +707,7 @@ nlri_delete (struct peer *peer, struct prefix *p)
   char buf[BUFSIZ];
 
   /* First look up routing table node. */
-  node = nlri_node_lookup (p);
+  node = nlri_node_get (p);
   if (!node)
     return 0;
 
@@ -685,15 +766,42 @@ nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
       psize = PSIZE (p.prefixlen);
       memcpy (&p.u.prefix4, pnt, psize);
 
-      /* Input filter. */
-      
-
       nlri_delete (peer, &p);
 
       pnt += psize;
     }
 
   stream_forward (peer->ibuf, unfeasible_len);
+}
+
+void
+bgp_aggregate_update (struct prefix *p, struct bgp_info *aggregate_info)
+{
+  struct route_node *aggregate;
+  struct route_node *node;
+  struct bgp_info *info;
+
+  /* First of all get routing table node. */
+  aggregate = nlri_node_get (p);
+  /* aggregate->info = aggregate_info; */
+
+  /* We assume summary-only behavior. */
+  for (node = route_lock_node (aggregate); node; 
+       node = route_next_until (node, aggregate))
+    for (info = node->info; info; info = info->next)
+      {
+	if (info->selected && info->suppress_count == 0)
+	  {
+	    /* Withdraw the route. */
+	    nlri_withdraw (&node->p, info);
+	    /* info->selected = 0; */
+	  }
+	info->suppress_count++;
+	aggregate_info->aggregate_count++;
+      }
+
+  /* if (aggregate_info->aggregate_count) */
+  nlri_process (p, aggregate_info);
 }
   
 /* Delete peer's all route. */
@@ -763,7 +871,7 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
   struct attr *attr;
 
   /* Selected tag display. */
-  vty_out (vty, "%s  ", binfo->selected ? "*" : " ");
+  vty_out (vty, "%s%s ", binfo->selected ? "*" : " ", binfo->suppress_count ? "s" : " ");
 
   /* print prefix and mask */
   route_vty_out_route (p, vty);
@@ -1079,7 +1187,8 @@ bgp_network_config_ipv6 (struct vty *vty, char *address_str)
     }
 
   bgp_info = bgp_info_new ();
-  bgp_info->type = ZEBRA_ROUTE_STATIC;
+  bgp_info->type = ZEBRA_ROUTE_BGP;
+  bgp_info->sub_type = BGP_ROUTE_STATIC;
   bgp_info->peer = peer_self;
   bgp_info->attr = bgp_attr_make_default ();
   node->info = bgp_info;
@@ -1162,7 +1271,8 @@ DEFUN (bgp_network,
     }
 
   bgp_info = bgp_info_new ();
-  bgp_info->type = ZEBRA_ROUTE_STATIC;
+  bgp_info->type = ZEBRA_ROUTE_BGP;
+  bgp_info->sub_type = BGP_ROUTE_STATIC;
   bgp_info->peer = peer_self;
   bgp_info->attr = bgp_attr_make_default ();
   node->info = bgp_info;
@@ -1218,20 +1328,9 @@ DEFUN (no_bgp_network,
   return CMD_SUCCESS;
 }
 
-/* Aggreagete address:
-
-  advertise-map  Set condition to advertise attribute
-  as-set         Generate AS set path information
-  attribute-map  Set attributes of aggregate
-  route-map      Set parameters of aggregate
-  summary-only   Filter more specific routes from updates
-  suppress-map   Conditionally filter more specific routes from updates
-  <cr>
-
- */
 DEFUN (aggregate_address,
        aggregate_address_cmd,
-       "aggregate-address PREFIX NETMASK ",
+       "aggregate-address PREFIX summary-only",
        "Aggreagete network\n"
        "Network\n"
        "Mask\n")
@@ -1239,6 +1338,7 @@ DEFUN (aggregate_address,
   int ret;
   struct prefix p;
   struct route_node *node;
+  struct bgp_info *bgp_info;
 
   ret = str2prefix (argv[0], &p);
   if (!ret)
@@ -1247,7 +1347,7 @@ DEFUN (aggregate_address,
       return CMD_WARNING;
     }
   
-  /* IPv4 aggregate address support test. */
+  /* IPv4 aggregate address support. */
   if (p.family == AF_INET)
     {
       apply_mask ((struct prefix_ipv4 *) &p);
@@ -1259,17 +1359,22 @@ DEFUN (aggregate_address,
 	  route_unlock_node (node);
 	  return CMD_WARNING;
 	}
-
-#if 0
       bgp_info = bgp_info_new ();
       bgp_info->type = ZEBRA_ROUTE_BGP;
+      bgp_info->sub_type = BGP_ROUTE_AGGREGATE;
       bgp_info->peer = peer_self;
       bgp_info->attr = bgp_attr_make_default ();
-#endif /* 0 */
-      node->info = (void *)1;
-      
+
+      node->info = bgp_info;
+
+      /* Aggregate address insert into BGP routing table. */
+      bgp_aggregate_update (&p, bgp_info);
+
       return CMD_SUCCESS;
     }
+
+  /* IPv6 aggregate addess support. */
+  vty_out (vty, "Sorry not yet supported.\r\n");
 
   return CMD_SUCCESS;
 }
@@ -1297,12 +1402,12 @@ config_write_network (struct vty *vty, struct bgp *bgp)
 
   for (node = route_top (bgp_aggregate_ipv4); node; node = route_next (node))
     if ((route = node->info) != NULL)
-      vty_out (vty, " aggregate-address %s/%d%s",
+      vty_out (vty, " aggregate-address %s/%d summary-only%s",
 	       inet_ntoa (node->p.u.prefix4), node->p.prefixlen, VTY_NEWLINE);
 #ifdef HAVE_IPV6
   for (node = route_top (bgp_aggregate_ipv6); node; node = route_next (node))
     if ((route = node->info) != NULL)
-      vty_out (vty, " aggregate-address %s/%d%s",
+      vty_out (vty, " aggregate-address %s/%d summary-only%s",
 	       inet_ntop (AF_INET6, &node->p.u.prefix6, buf, BUFSIZ),
 	       node->p.prefixlen, VTY_NEWLINE);
 #endif /* HAVE_IPV6 */  
@@ -1316,7 +1421,7 @@ bgp_route_init ()
 {
   /* Make static announcement peer. */
   peer_self = peer_new ();
-  peer_self->host = "Static annucement";
+  peer_self->host = "Static announcement";
 
   /* IPv4 related table and commands. */
   bgp_table_ipv4 = route_table_init ();

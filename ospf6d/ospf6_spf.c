@@ -491,7 +491,8 @@ spf_calculation (struct thread *thread)
 
   area->spf_calc = (struct thread *)NULL;
 
-  zvlog_info ("SPFCALC: Doing SPF Calculation ...");
+  /* Commented out due to compilation error. */
+  /* zvlog_info ("Doing SPF Calculation for %s...", area->str); */
 
   /* (1) */
   spf_init (area);

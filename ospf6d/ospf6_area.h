@@ -30,9 +30,9 @@
 
 struct area
 {
-  struct ospf6   *ospf6;        /* back pointer */
+  struct ospf6   *ospf6;         /* back pointer */
   unsigned long   area_id;
-  u_char          options[3]; /* OSPF Option including external capability */
+  unsigned char   options[3];    /* OSPF Option including external capability */
   list            ospf6_if_list; /* OSPF interface to this area */
   list            lsdb[AREALSTYPESIZE][HASHVAL];
   unsigned long   stub_default_cost;

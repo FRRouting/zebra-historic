@@ -73,6 +73,7 @@ struct peer
   int ttl;			/* TTL of TCP connection to the peer. */
   char *desc;			/* Description of the peer. */
   int shutdown;			/* Shutdown flag. */
+  int passive;			/* Passive flag. */
   char *ifname;			/* bind interface name. */
   ZLOG *log;			/* ZLOG stream to use for this peer -
 				   NULL means use main log */

@@ -23,7 +23,7 @@
 enum as_filter_type
 {
   AS_FILTER_DENY,
-  AS_FILTER_PERMIT,
+  AS_FILTER_PERMIT
 };
 
 enum as_filter_type

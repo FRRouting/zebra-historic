@@ -21,11 +21,12 @@
 
 #include "ospf6d.h"
 
-/* Information about zebra. */
-struct zebra *zebra; 
+/* information about zebra. */
+struct zebra *zebra = NULL;
 
 int
-ospf6_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
+ospf6_zebra_get_interface (int command, struct zebra *zebra,
+                           zebra_size_t length)
 {
   struct interface *ifp;
   struct connected *connected;
@@ -94,6 +95,17 @@ ospf6_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
 
           connected_add (ifp, connected);
         }
+
+      /* Daemon specific process. should be replaced by hook. */
+      {
+        struct ospf6_if *o6if = (struct ospf6_if *)ifp->if_data;
+        if (o6if && o6if->area)
+          {
+            /* Already attached to area. start OSPF6 */
+            thread_add_event (master, interface_up, o6if, 0);
+          }
+      }
+
     }
   return 0;
 }
@@ -120,7 +132,6 @@ DEFUN (router_zebra,
 
   /* Connect to zebra. */
   ret = zebra_create (zebra);
-
   if (ret < 0)
     {
       vty_out (vty, "Can't connect to zebra\r\n");
@@ -130,16 +141,52 @@ DEFUN (router_zebra,
   return CMD_SUCCESS;
 }
 
+DEFUN (redistribute_ospf6,
+       redistribute_ospf6_cmd,
+       "redistribute ospf6",
+       "Redistribute control\n"
+       "OSPF6 route\n")
+{
+  zebra->redist[ZEBRA_ROUTE_OSPF6] = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_redistribute_ospf6,
+       no_redistribute_ospf6_cmd,
+       "no redistribute ospf6",
+       NO_STR
+       "Redistribute control\n"
+       "OSPF6 route\n")
+{
+  zebra->redist[ZEBRA_ROUTE_OSPF6] = 0;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_router_zebra,
+       no_router_zebra_cmd,
+       "no router zebra",
+       NO_STR
+       "Configure routing process\n"
+       "Disable connection to zebra daemon\n")
+{
+  zebra->enable = 0;
+  return CMD_SUCCESS;
+}
+
 /* Zebra configuration write function. */
 int
-zebra_config_write (struct vty *vty)
+ospf6_zebra_config_write (struct vty *vty)
 {
   if (! zebra->enable)
-    vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+    {
+      vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+      return 1;
+    }
   else if (! zebra->redist[ZEBRA_ROUTE_OSPF6])
     {
       vty_out (vty, "router zebra%s", VTY_NEWLINE);
       vty_out (vty, " no redistribute ospf6%s", VTY_NEWLINE);
+      return 1;
     }
   return 0;
 }
@@ -148,7 +195,7 @@ zebra_config_write (struct vty *vty)
 struct cmd_node zebra_node =
 {
   ZEBRA_NODE,
-  "%s(config-router)#",
+  "%s(config-zebra)# ",
 };
 
 void
@@ -158,7 +205,7 @@ zebra_start ()
 }
 
 void
-zebra_init ()
+ospf6_zebra_init ()
 {
   /* Allocate zebra structure. */
   zebra = zebra_new ();
@@ -169,11 +216,22 @@ zebra_init ()
   zebra->redist_default = ZEBRA_ROUTE_OSPF6;
   zebra->redist[ZEBRA_ROUTE_OSPF6] = 1;
 
+  /* Set call back functions. */
+  zebra->ipv4_route_add = NULL;
+  zebra->ipv4_route_delete = NULL;
+  zebra->ipv6_route_add = NULL;
+  zebra->ipv6_route_delete = NULL;
   zebra->get_all_interface = ospf6_zebra_get_interface;
 
   /* Install zebra node. */
-  install_node (&zebra_node, zebra_config_write);
+  install_node (&zebra_node, ospf6_zebra_config_write);
 
   /* Install command element for zebra node. */
   install_element (CONFIG_NODE, &router_zebra_cmd);
+  install_element (CONFIG_NODE, &no_router_zebra_cmd);
+  install_element (ZEBRA_NODE, &redistribute_ospf6_cmd);
+  install_element (ZEBRA_NODE, &no_redistribute_ospf6_cmd);
+
+  return;
 }
+

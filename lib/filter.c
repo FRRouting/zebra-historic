@@ -25,6 +25,7 @@
 #include "prefix.h"
 #include "filter.h"
 #include "memory.h"
+#include "command.h"
 
 /* Filter element of access list */
 struct filter
@@ -483,11 +484,6 @@ main ()
 #endif /* TEST */
 
 
-/* Below is vty related part. */
-#include "vector.h"
-#include "vty.h"
-#include "command.h"
-
 /*
   deny    Specify packets to reject
   permit  Specify packets to forward
@@ -499,21 +495,13 @@ main ()
   any                  Any source host
   host                 A single host address
 */
-DESC (access_list) =
-{
-  {DESC_STR, "Set access list definition"},
-  {DESC_STR, "Access list name"},
-  {DESC_LINE, "deny	Specify packets to reject\n"
-              "         one More line\n"
-              "permit	Specify packets to forward\n"},
-  {DESC_LINE, ""}
-};
 
 DEFUN (access_list, access_list_cmd,
-       "access-list NAME TYPE IP_ADDR",
+       "access-list NAME (deny|permit) IP_ADDR",
        "Set access list definition\n"
        "Access list name\n"
-       "Access list type\n"
+       "Access list for denies\n"
+       "Access list for permits\n"
        "Access list address\n")
 {
   int ret;
@@ -556,11 +544,12 @@ DEFUN (access_list, access_list_cmd,
 }
 
 DEFUN (no_access_list, no_access_list_cmd,
-       "no access-list NAME TYPE IP_ADDR",
+       "no access-list NAME (deny|permit) IP_ADDR",
        "Unset access list\n"
        "Set access list definition\n"
        "Access list name\n"
-       "Access list type\n"
+       "Access list for denies\n"
+       "Access list for permits\n"
        "Access list address\n")
 {
   int ret;
@@ -636,6 +625,7 @@ config_write_access (struct vty *vty)
   struct filter *filter;
   char buf[BUFSIZ];
   struct prefix *p;
+  int write = 0;
 
   for (access = access_master.num.head; access; access = access->next)
     for (filter = access->head; filter; filter = filter->next)
@@ -656,6 +646,7 @@ config_write_access (struct vty *vty)
 		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		   p->prefixlen,
 		   VTY_NEWLINE);
+	write++;
       }
 
   for (access = access_master.str.head; access; access = access->next)
@@ -677,8 +668,9 @@ config_write_access (struct vty *vty)
 		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		   p->prefixlen,
 		   VTY_NEWLINE);
+	write++;
       }
-  return 0;
+  return write;
 }
 
 /* Install vty related command. */

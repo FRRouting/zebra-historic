@@ -94,7 +94,7 @@ static struct as_list_master as_list_master =
   {NULL, NULL},
   {NULL, NULL},
   NULL,
-  NULL,
+  NULL
 };
 
 /* Allocate new AS filter. */
@@ -432,13 +432,14 @@ as_list_delete_hook (void (*func) ())
 }
 
 DEFUN (ip_as_path, ip_as_path_cmd,
-       "ip as-path access-list NAME TYPE ...",
+       "ip as-path access-list NAME (deny|permit) ...",
        "Set AS path access list definition\n"
        IP_STR
        "AS path\n"
        "Access list\n"
        "Access list name\n"
-       "Access list type\n"
+       "Access list for denies\n"
+       "Access list for permits\n"
        "AS path regexp\n")
 {
   enum as_filter_type type;
@@ -497,14 +498,15 @@ DEFUN (ip_as_path, ip_as_path_cmd,
 }
 
 DEFUN (no_ip_as_path, no_ip_as_path_cmd,
-       "no ip as-path access-list NAME TYPE ...",
+       "no ip as-path access-list NAME (deny|permit) ...",
        "Set AS path access list definition\n"
        NO_STR
        IP_STR
        "AS path\n"
        "Access list\n"
        "Access list name\n"
-       "Access list type\n"
+       "Access list for denies\n"
+       "Access list for permits\n"
        "AS path regexp\n")
 {
   enum as_filter_type type;
@@ -581,6 +583,7 @@ config_write_as_list (struct vty *vty)
 {
   struct as_list *aslist;
   struct as_filter *asfilter;
+  int write = 0;
 
   for (aslist = as_list_master.num.head; aslist; aslist = aslist->next)
     for (asfilter = aslist->head; asfilter; asfilter = asfilter->next)
@@ -588,6 +591,7 @@ config_write_as_list (struct vty *vty)
 	vty_out (vty, "ip as-path access-list %s %s %s%s",
 		 aslist->name, filter_type_str (asfilter->type), 
 		 asfilter->reg_str, VTY_NEWLINE);
+	write++;
       }
 
   for (aslist = as_list_master.str.head; aslist; aslist = aslist->next)
@@ -596,8 +600,9 @@ config_write_as_list (struct vty *vty)
 	vty_out (vty, "ip as-path access-list %s %s %s%s",
 		 aslist->name, filter_type_str (asfilter->type), 
 		 asfilter->reg_str, VTY_NEWLINE);
+	write++;
       }
-  return 0;
+  return write;
 }
 
 struct cmd_node as_list_node =

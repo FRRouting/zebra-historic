@@ -160,6 +160,9 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
       struct prefix_ipv6 p;
       
       GETL(ifindex, pnt);
+
+      bzero (&p, sizeof (struct prefix_ipv6));
+      p.family = AF_INET6;
       p.prefixlen = *pnt++;
       size = PSIZE(p.prefixlen);
       memcpy (&p.prefix, pnt, size);
@@ -976,13 +979,14 @@ int
 config_write_ip (struct vty *vty)
 {
   extern void rib_static_list (struct vty *, struct route_table *);
+  int write = 0;
 
   rib_static_list (vty, ipv4_rib_table);
 #ifdef HAVE_IPV6
   rib_static_list (vty, ipv6_rib_table);
 #endif /* HAVE_IPV6 */
 
-  return 0;
+  return write;
 }
 
 /* IP node for static routes. */

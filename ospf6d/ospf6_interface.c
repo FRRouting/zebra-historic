@@ -173,6 +173,7 @@ interface_up (struct thread *thread)
   zvlog_info ("IFEVENT: InterfaceUp on %s", ospf6_if->interface->name);
 #endif
 
+  assert (ospf6_if->interface);
   if (!if_is_up (ospf6_if->interface))
     {
       zvlog_err ("Interface %s is down, can't execute InterfaceUp event",

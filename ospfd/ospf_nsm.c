@@ -29,9 +29,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_network.h"
+#include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
 
 /* OSPF NSM functions. */
@@ -43,7 +46,7 @@ ospf_inactivity_timer (struct thread *thread)
 
   nbr = THREAD_ARG (thread);
 
-  OSPF_NSM_EVENT_ADD (nbr, NSM_InactivityTimer);
+  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_InactivityTimer);
 
   zlog (NULL, LOG_DEBUG, "NSM [%s]: Timer (Inactivity timer expire)",
 	inet_ntoa (nbr->router_id));
@@ -83,6 +86,7 @@ int
 nsm_twoway_received (struct ospf_neighbor *nbr)
 {
   struct ospf_interface *oi;
+  int next_state = NSM_TwoWay;
 
   oi = nbr->oi;
 
@@ -90,19 +94,34 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
   if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
       oi->type == OSPF_IFTYPE_POINTOMULTIPOINT ||
       oi->type == OSPF_IFTYPE_VIRTUALLINK)
-      return NSM_ExStart;
+    next_state = NSM_ExStart;
 
   /* Router itself is the DRouter or the BDRouter. */
   if (!IPV4_ADDR_CMP (&ospf_top->router_id, &oi->d_router) ||
       !IPV4_ADDR_CMP (&ospf_top->router_id, &oi->bd_router))
-    return NSM_ExStart;
+    next_state = NSM_ExStart;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
   if (!IPV4_ADDR_CMP (&nbr->router_id, &nbr->d_router) ||
       !IPV4_ADDR_CMP (&nbr->router_id, &nbr->bd_router))
-    return NSM_ExStart;
+    next_state = NSM_ExStart;
 
-  return NSM_TwoWay;
+  if (next_state == NSM_ExStart)
+    {
+      /* Get initial sequence number from time (). */
+      if (nbr->dd_seqnum == 0)
+	nbr->dd_seqnum = time (NULL);
+      else
+	nbr->dd_seqnum++;
+
+      OSPF_NSM_WRITE_ON (nbr->t_write, ospf_db_desc_send, oi->fd);
+      /* DD packet retransmitsion timer set. */
+    }
+
+  /* Schedule DR Election. */
+  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+
+  return next_state;
 }
 
 int
@@ -114,7 +133,12 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
 int
 nsm_exchange_done (struct ospf_neighbor *nbr)
 {
-  return 0;
+  if (list_isempty (nbr->ls_request))
+    return NSM_Full;
+
+  /* Send Link State Request. */
+
+  return NSM_Loading;
 }
 
 int

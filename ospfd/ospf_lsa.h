@@ -22,53 +22,39 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_LSA_H
 
 /* OSPF LSA Type definition. */
+#define OSPF_MIN_LSA		0
 #define OSPF_ROUTER_LSA         1
 #define OSPF_NETWORK_LSA        2
 #define OSPF_SUMMARY_LSA        3
 #define OSPF_SUMMARY_LSA_ASBR   4
 #define OSPF_AS_EXTERNAL_LSA    5
+#define OSPF_MAX_LSA		6
 
 #define OSPF_LSA_HEADER_SIZE	20
 
-/* OSPF LSA header structure. */
-struct lsa_header
+/* OSPF LSA structure. */
+struct ospf_lsa
 {
   u_int16_t ls_age;
   u_char options;
   u_char type;
   struct in_addr id;
   struct in_addr adv_router;
-  u_int32_t seq_number;
+  int ls_seqnum;
   u_int16_t checksum;
   u_int16_t length;
 };
 
+/* OSPF LSA Link Type. */
 #define LSA_LINK_TYPE_POINTOPOINT      1
 #define LSA_LINK_TYPE_TRANSIT          2
 #define LSA_LINK_TYPE_STUB             3
 #define LSA_LINK_TYPE_VIRTUALLINK      4
 
-/* OSPF Router-LSAs structure. */
-struct router_lsa
-{
-  u_char flags;
-  u_char zero;
-  u_int16_t number_links;
-  struct _lsa_link
-  {
-    struct in_addr link_id;
-    struct in_addr link_data;
-    u_char type;
-    u_char number_tos;
-    u_int16_t metric;
-    struct /* _tos_metric */
-    {
-      u_char tos;
-      u_char zero;
-      u_int16_t metric;
-    } *tos_metric;
-  } lsa_link[1];
-};
+/* OSPF Router LSA Flag. */
+#define ROUTER_LSA_VIRTUAL	       0x04
+#define ROUTER_LSA_EXTERNAL	       0x02
+#define ROUTER_LSA_BORDER	       0x01
 
 /* OSPF Network-LSAs structure. */
 struct network_lsa
@@ -101,5 +87,7 @@ struct as_external_lsa
   } lsa_metric[1];
 };
 
+/* Prototypes. */
+struct ospf_lsa *ospf_router_lsa (struct ospf_interface *);
 
 #endif /* _ZEBRA_OSPF_LSA_H */

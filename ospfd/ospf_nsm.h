@@ -90,9 +90,13 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
           (X) = NULL; \
         }
 
-/* Macro for OSPF NSM event add. */
-#define OSPF_NSM_EVENT_ADD(N,E) \
+/* Macro for OSPF NSM schedule event. */
+#define OSPF_NSM_EVENT_SCHEDULE(N,E) \
       thread_add_event (master, ospf_nsm_event, (N), (E))
+
+/* Macro for OSPF NSM execute event. */
+#define OSPF_NSM_EVENT_EXECUTE(N,E) \
+      thread_execute (master, ospf_nsm_event, (N), (E))
 
 #define LOOKUP(x, y)	mes_lookup(x, x ## _max, y)
 

@@ -126,12 +126,19 @@ struct cmd_node debug_node =
 int
 config_write_debug (struct vty *vty)
 {
-  if (debug (DEBUG_EVENT))
-    vty_out (vty, "debug ripng event%s", VTY_NEWLINE);
-  if (debug (DEBUG_PACKET))
-    vty_out (vty, "debug ripng packet%s", VTY_NEWLINE);
+  int write = 0;
 
-  return 0;
+  if (debug (DEBUG_EVENT))
+    {
+      vty_out (vty, "debug ripng event%s", VTY_NEWLINE);
+      write++;
+    }
+  if (debug (DEBUG_PACKET))
+    {
+      vty_out (vty, "debug ripng packet%s", VTY_NEWLINE);
+      write++;
+    }
+  return write;
 }
 
 void

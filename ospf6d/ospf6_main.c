@@ -70,6 +70,7 @@ void
 terminate (int i)
 {
   ospf6_terminate();
+  unlink (PATH_OSPF6D_PID);
   exit (i);
 }
 
@@ -133,8 +134,8 @@ signal_init ()
 #endif
 }
 
-/* Main routine of ospfd. Treatment of argument and start ospf finite
-   state machine is handled at here. */
+/* Main routine of ospf6d. Treatment of argument and start ospf finite
+   state machine is handled here. */
 int
 main (int argc, char **argv)
 {
@@ -182,37 +183,32 @@ main (int argc, char **argv)
         }
     }
 
-  /* print bannar */
-  ospf6_log_init ();
+  /* pid file create */
+  pid_output_lock (PATH_OSPF6D_PID);
 
-  /* Initializations. */
+  /* thread master */
   master = thread_make_master ();
 
+  /* Initializations. */
+  ospf6_log_init ();
   signal_init ();
   cmd_init ();
   vty_init ();
-
-  /* Make ospf protocol socket. */
-  ospf6_serv_sock ();
-
   ospf6_init ();
-  zebra_init ();
-
-  access_list_init ();
   memory_init ();
   sort_node ();
+
+  /* Connect to zebra. */
+  zebra_start ();
 
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
 
-  /* Print start message */
-  zvlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);
-
   if (daemon_mode)
     daemon (0, 0);
 
-  /* pid file create */
-  pid_output (PATH_OSPFD_PID);
+  /* Make ospf protocol socket. */
+  ospf6_serv_sock ();
 
   /* Make ospf vty socket. */
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET);
@@ -220,8 +216,8 @@ main (int argc, char **argv)
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET6);
 #endif /* KAME */
 
-  /* Connect to zebra. */
-  zebra_start ();
+  /* Print start message */
+  zvlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

@@ -1,3 +1,9 @@
+1999-06-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (if_get_index): Interface index set bug is fixed by
+	adding #else at the middle of function.  Suggested by David Luyer
+	<luyer@ucs.uwa.edu.au>.
+
 1999-05-29    <kunihiro@zebra.org>
 
 	* rt_ioctl.c: Comment out #include <linux/ipv6_route.h>.

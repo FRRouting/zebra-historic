@@ -178,6 +178,10 @@ ospf_dr_election (struct ospf_interface *oi)
 
       nbr = rn->info;
 
+      /* ignore 0.0.0.0 node*/
+      if (nbr->router_id.s_addr == 0)
+	continue;
+
       /* Is neighbor eligible? */
       if (nbr->priority == 0)
 	continue;
@@ -197,7 +201,6 @@ ospf_dr_election (struct ospf_interface *oi)
   ospf_elect_dr (oi, el_list);
 
   new_status = ospf_ism_status (oi);
-
 #ifdef DEBUG
   zlog (NULL, LOG_INFO, "d_router = %s", inet_ntoa (oi->d_router));
   zlog (NULL, LOG_INFO, "bd_router = %s", inet_ntoa (oi->bd_router));
@@ -231,6 +234,14 @@ ospf_dr_election (struct ospf_interface *oi)
 
   list_delete_all (el_list);
 
+  /* Multicast group change. */
+  if ((old_status != ISM_DR || old_status != ISM_Backup) &&
+      (new_status == ISM_DR || new_status == ISM_Backup))
+    ospf_if_add_alldrouters (oi->ifp, oi->fd, oi->address);
+  else if ((old_status == ISM_DR || old_status == ISM_Backup) &&
+	   (new_status != ISM_DR || new_status == ISM_Backup))
+    ospf_if_drop_alldrouters (oi->ifp, oi->fd, oi->address);
+
   return new_status;
 }
 
@@ -246,10 +257,10 @@ ospf_hello_timer (struct thread *thread)
   zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Hello timer expire)",
 	oi->ifp->name);
 
-  /* sending hello packet. */
-  /* add write thread and fire. */
-  ospf_hello_send (oi);
+  /* Sending hello packet. */
+  OSPF_ISM_WRITE_ON (oi->t_write, ospf_hello_send, oi->fd);
 
+  /* Hello timer set. */
   OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
 
   return 0;
@@ -266,7 +277,7 @@ ospf_wait_timer (struct thread *thread)
   zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Wait timer expire)",
 	oi->ifp->name);
 
-  OSPF_ISM_EVENT_ADD (oi, ISM_WaitTimer);
+  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_WaitTimer);
 
   return 0;
 }
@@ -347,6 +358,8 @@ ism_stop (struct ospf_interface *oi)
 int
 ism_interface_up (struct ospf_interface *oi)
 {
+  struct ospf_lsa *lsa;
+
   /* if network type is point-to-point, Point-to-MultiPoint or virtual link,
      the state transitions to Point-to-Point. */
   if (oi->type == OSPF_IFTYPE_POINTOPOINT ||
@@ -360,6 +373,10 @@ ism_interface_up (struct ospf_interface *oi)
   else
     /* Otherwise, the state transitions to Waiting. */
     return ISM_Waiting;
+
+  /* Originate router-LSA. */
+  lsa = ospf_router_lsa (oi);
+  list_add_node (oi->area->router_lsa, lsa);
 
   /*  ospf_ism_event (t); */
   return 0;
@@ -393,7 +410,7 @@ ism_interface_down (struct ospf_interface *oi)
       if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
-      OSPF_NSM_EVENT_ADD (nbr, NSM_KillNbr);
+      OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_KillNbr);
     }
 
   /* Reset interface variables. */
@@ -491,7 +508,7 @@ struct {
     { ism_ignore,          ISM_Waiting },       /* InterfaceUp    */
     { ism_wait_timer,	   ISM_DependUpon },    /* WaitTimer      */
     { ism_backup_seen,     ISM_DependUpon },    /* BackupSeen     */
-    { ism_ignore,          ISM_Waiting },       /* NeighborChange */
+    { ism_neighbor_change, ISM_Waiting },       /* NeighborChange */
     { ism_loop_ind,	   ISM_Loopback },      /* LoopInd        */
     { ism_ignore,          ISM_Waiting },       /* UnloopInd      */
     { ism_interface_down,  ISM_Down },          /* InterfaceDown  */

@@ -61,7 +61,6 @@ struct cmd_node enable_node =
   "%s# ",
 };
 
-/* Configuration node structure. */
 struct cmd_node config_node =
 {
   CONFIG_NODE,
@@ -76,10 +75,9 @@ install_node (struct cmd_node *node,
   vector_set_index (cmdvec, node->node, node);
   node->func = func;
   node->cmd_vector = vector_init (VECTOR_MIN_SIZE);
-  node->desc_vector = vector_init (VECTOR_MIN_SIZE);
 }
 
-/* Compare two command's string. Sort sort_node (). */
+/* Compare two command's string.  Used in sort_node (). */
 int
 cmp_node (const void *p, const void *q)
 {
@@ -94,22 +92,14 @@ void
 sort_node ()
 {
   int i;
+  struct cmd_node *cnode;
   
   for (i = 0; i < vector_max (cmdvec); i++) 
-    {
-      struct cmd_node *cnode;
-
-      cnode = vector_slot (cmdvec, i);
-
-      if (cnode)
-	{	
-	  vector cmd_vector;
-
-	  cmd_vector = cnode->cmd_vector;
-	  qsort (cmd_vector->index, cmd_vector->max, 
-		 sizeof (void *), cmp_node);
-	}
-    }
+    if ((cnode = vector_slot (cmdvec, i)) != NULL)
+      {	
+	vector cmd_vector = cnode->cmd_vector;
+	qsort (cmd_vector->index, cmd_vector->max, sizeof (void *), cmp_node);
+      }
 }
 
 /* Breaking up string into each command piece. I assume given
@@ -161,165 +151,6 @@ cmd_make_strvec (char *string)
     }
 }
 
-/* Breaking up string into each document. */
-vector
-cmd_make_docvec (char *string)
-{
-  char *cp, *start, *token;
-  int strlen;
-  vector docvec;
-  
-  if (string == NULL)
-    return NULL;
-  
-  cp = string;
-
-  /* Skip white spaces. */
-  while (isspace (*cp) && *cp != '\0')
-    cp++;
-
-  /* Return if there is only white spaces */
-  if (*cp == '\0')
-    return NULL;
-
-  if (*cp == '!' || *cp == '#')
-    return NULL;
-
-  /* Prepare return vector. */
-  docvec = vector_init (VECTOR_MIN_SIZE);
-
-  /* Copy each command piece and set into vector. */
-  while (1) 
-    {
-      start = cp;
-      while (!(*cp == '\r' || *cp == '\n') && *cp != '\0')
-	cp++;
-      strlen = cp - start;
-      token = XMALLOC (MTYPE_STRVEC, strlen + 1);
-      bcopy (start, token, strlen);
-      *(token + strlen) = '\0';
-      vector_set (docvec, token);
-
-      if ((*cp == '\n' || *cp == '\r') && *cp != '\0')
-	cp++;
-
-      if (*cp == '\0' || *cp == '!' || *cp == '#') 
-	return docvec;
-    }
-}
-
-/* Parse line string. */
-vector
-cmd_make_desc_line (char *string)
-{
-  vector linevec;
-  char *cp;
-  char *start;
-  char *token;
-  int strlen;
-  struct desc *desc;
-
-  if (string == NULL)
-    return NULL;
-
-  cp = string;
-  linevec = vector_init (VECTOR_MIN_SIZE);
-
-  while (1)
-    {
-      /* Skip white space. */
-      while ((*cp == '\r' || *cp == '\n' || *cp == '\t' || *cp == ' ') &&
-	     *cp != '\0')
-	cp++;
-      
-      /* Return if current pointer is the end of the string. */
-      if (*cp == '\0')
-	return linevec;
-
-      /* Set start pointer. */
-      start = cp;
-
-      /* Fetch command word. */
-      while (*cp != '\r' && *cp != '\n' && *cp != '\t' && *cp != ' ' &&
-	     *cp != '\0')
-	cp++;
-
-      /* Allocate memory then copy command word. */
-      strlen = cp - start;
-      token = XMALLOC (MTYPE_STRVEC, strlen + 1);
-      memcpy (token, start, strlen);
-      token[strlen] = '\0';
-
-      /* Allocate desc strucutre. */
-      desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
-      desc->cmd = token;
-
-      vector_set (linevec, desc);
-
-      /* Skip white space. */
-      while ((*cp == '\r' || *cp == '\n' || *cp == '\t' || *cp == ' ') &&
-	     *cp != '\0')
-	cp++;
-
-      /* Return if current pointer is the end of the string. */
-      if (*cp == '\0')
-	return linevec;
-
-      /* Reset start pointer. */
-      start = cp;
-
-      /* Fetch command word. */
-      while (*cp != '\r' && *cp != '\n' && *cp != '\0')
-	cp++;
-
-      /* Allocate memory then copy command word. */
-      strlen = cp - start;
-      token = XMALLOC (MTYPE_STRVEC, strlen + 1);
-      memcpy (token, start, strlen);
-      token[strlen] = '\0';
-      
-      desc->str = token;
-    }
-
-  return linevec;
-}
-
-/* Breaking up string into each description. */
-vector
-cmd_make_descvec (struct cmd_element *cmd)
-{
-  int i;
-  vector descvec;
-  struct cmd_desc *desc = cmd->desc;
-
-  if (desc == NULL)
-    {
-      cmd->descsize = 0;
-      return NULL;
-    }
-
-  descvec = vector_init (VECTOR_MIN_SIZE);
-
-  for (i = 0; desc[i].type != DESC_END; i++)
-    {
-      switch (desc[i].type)
-	{
-	case DESC_STR:
-	  break;
-	case DESC_LINE:
-	  desc[i].line = cmd_make_desc_line ((char *) desc[i].data);
-	  break;
-	case DESC_FUNC:
-	  break;
-	case DESC_END:
-	  break;
-	}
-    }
-  cmd->descsize = i;
-
-  return descvec;
-}
-
 /* Free allocated string vector. */
 void
 cmd_free_strvec (vector v)
@@ -337,21 +168,154 @@ cmd_free_strvec (vector v)
   vector_free (v);
 }
 
+/* Fetch next description.  Used in cmd_make_descvec(). */
+char *
+cmd_desc_str (char **string)
+{
+  char *cp, *start, *token;
+  int strlen;
+  
+  cp = *string;
+
+  if (cp == NULL)
+    return NULL;
+
+  /* Skip white spaces. */
+  while (isspace (*cp) && *cp != '\0')
+    cp++;
+
+  /* Return if there is only white spaces */
+  if (*cp == '\0')
+    return NULL;
+
+  start = cp;
+
+  while (!(*cp == '\r' || *cp == '\n') && *cp != '\0')
+    cp++;
+
+  strlen = cp - start;
+  token = XMALLOC (MTYPE_STRVEC, strlen + 1);
+  bcopy (start, token, strlen);
+  *(token + strlen) = '\0';
+
+  *string = cp;
+
+  return token;
+}
+
+/* New string vector. */
+vector
+cmd_make_descvec (char *string, char *descstr)
+{
+  int multiple = 0;
+  char *sp;
+  char *token;
+  int len;
+  char *cp;
+  char *dp;
+  vector allvec;
+  vector strvec = NULL;
+  struct desc *desc;
+
+  cp = string;
+  dp = descstr;
+
+  if (cp == NULL)
+    return NULL;
+
+  allvec = vector_init (VECTOR_MIN_SIZE);
+
+  while (1)
+    {
+      while (isspace (*cp) && *cp != '\0')
+	cp++;
+
+      if (*cp == '(')
+	{
+	  multiple = 1;
+	  cp++;
+	}
+      if (*cp == ')')
+	{
+	  multiple = 0;
+	  cp++;
+	}
+      if (*cp == '|')
+	{
+	  if (!multiple)
+	    {
+	      fprintf (stderr, "Command parse error!: %s\n", string);
+	      exit (1);
+	    }
+	  cp++;
+	}
+      
+      while (isspace (*cp) && *cp != '\0')
+	cp++;
+
+      if (*cp == '\0') 
+	return allvec;
+
+      sp = cp;
+
+      while (! (isspace (*cp) || *cp == '\r' || *cp == '\n' || *cp == ')' || *cp == '|') && *cp != '\0')
+	cp++;
+
+      len = cp - sp;
+
+      token = XMALLOC (MTYPE_STRVEC, len + 1);
+      memcpy (token, sp, len);
+      *(token + len) = '\0';
+
+      desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
+      desc->cmd = token;
+      desc->str = cmd_desc_str (&dp);
+
+      if (multiple)
+	{
+	  if (multiple == 1)
+	    {
+	      strvec = vector_init (VECTOR_MIN_SIZE);
+	      vector_set (allvec, strvec);
+	    }
+	  multiple++;
+	}
+      else
+	{
+	  strvec = vector_init (VECTOR_MIN_SIZE);
+	  vector_set (allvec, strvec);
+	}
+      vector_set (strvec, desc);
+    }
+}
+
 /* Count mandantory string vector size.  This is to determine inputed
    command has enough command length. */
 int
-cmd_cmdsize (vector v)
+cmd_cmdsize (vector strvec)
 {
   int i;
   char *str;
   int size = 0;
+  vector descvec;
 
-  for (i = 0; i < vector_max (v); i++)
+  for (i = 0; i < vector_max (strvec); i++)
     {
-      str = vector_slot (v, i);
-      if (str == NULL || str[0] == '[')
-	return size;
-      size++;
+      descvec = vector_slot (strvec, i);
+
+      if (vector_max (descvec) == 1)
+	{
+	  struct desc *desc = vector_slot (descvec, 0);
+
+	  str = desc->cmd;
+	  
+	  if (str == NULL || str[0] == '[')
+	    return size;
+	  else
+	    size++;
+	}
+      else
+	size++;
     }
   return size;
 }
@@ -364,95 +328,6 @@ cmd_prompt (enum node_type node)
 
   cnode = vector_slot (cmdvec, node);
   return cnode->prompt;
-}
-
-/* Lookup description structure. */
-void
-desc_make (struct cmd_element *cmd, char *str, int index, vector matchvec)
-{
-  int i;
-  struct desc *desc;
-  struct desc *pnt;
-
-  if (cmd->docvec)
-    {
-      desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
-      desc->cmd = str;
-
-      if (index >= vector_max (cmd->docvec))
-	desc->str = NULL;
-      else
-	desc->str = vector_slot (cmd->docvec, index);
-
-      vector_set (matchvec, desc);
-    }
-  else
-    {
-      if (index >= cmd->descsize)
-	{
-	  desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
-	  desc->cmd = str;
-	  desc->str = NULL;
-	  vector_set (matchvec, desc);
-	}
-      else
-	{
-	  if (cmd->desc[index].type == DESC_STR)
-	    {
-	      desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
-	      desc->cmd = str;
-	      desc->str = (char *) cmd->desc[index].data;
-	      vector_set (matchvec, desc);
-	    }
-	  else if (cmd->desc[index].type == DESC_LINE)
-	    {
-	      for (i = 0; i < vector_max (cmd->desc[index].line); i++)
-		if ((pnt = vector_slot (cmd->desc[index].line, i)) != NULL)
-		  {
-		    desc = XMALLOC (MTYPE_DESC, sizeof (struct desc));
-		    desc->cmd = pnt->cmd;
-		    desc->str = pnt->str;
-		    vector_set (matchvec, desc);
-		  }
-	    }
-	}
-    }
-  return;
-}
-
-/* Free description vector. */
-void
-desc_vector_free (vector docvec)
-{
-  int i;
-  struct desc *desc;
-
-  for (i = 0; i < vector_max (docvec); i++)
-    if ((desc = vector_slot (docvec, i)) != NULL)
-      XFREE (MTYPE_DESC, desc);
-
-  vector_free (docvec);
-}
-
-/* Return next string pointer. */
-char *
-desc_next (char *str, char *pnt)
-{
-  int i;
-  int len; 
-  int term;
-
-  len = strlen (str);
-  term = 0;
-  
-  for (i = (pnt - str); i < len; i++)
-    {
-      if (term)
-	return str + i;
-      if (str[i] == '\0')
-	term = 1;
-    }
-  return pnt;
 }
 
 /* Install a command into a node. */
@@ -470,26 +345,9 @@ install_element (enum node_type ntype, struct cmd_element *cmd)
     }
 
   vector_set (cnode->cmd_vector, cmd);
-  cmd->strvec = cmd_make_strvec (cmd->string);
+
+  cmd->strvec = cmd_make_descvec (cmd->string, cmd->doc);
   cmd->cmdsize = cmd_cmdsize (cmd->strvec);
-
-  if (cmd->doc)
-    {
-      cmd->docvec = cmd_make_docvec (cmd->doc);
-
-      if (vector_max (cmd->docvec) < vector_max (cmd->strvec))
-	{
-	  zlog (NULL, LOG_INFO, 
-		"Warning : No documentation exists for %s: %d %d",
-		cmd->string, vector_max (cmd->docvec),
-		vector_max (cmd->strvec));
-	}
-    }
-  else
-    {
-      /* In case of DEFUN2. */
-      cmd->descvec = cmd_make_descvec (cmd);
-    }
 }
 
 static unsigned char itoa64[] =	
@@ -564,7 +422,7 @@ config_write_host (struct vty *vty)
   if (host.encrypt)
     vty_out (vty, "service password-encryption%s", VTY_NEWLINE);
 
-  return 0;
+  return 1;
 }
 
 /* Utility function for getting command vector. */
@@ -637,129 +495,115 @@ cmd_filter_by_completion (char *command, vector v, int index)
   int i;
   char *str;
   struct cmd_element *cmd_element;
-  enum match_type match;
+  enum match_type match_type;
+  vector descvec;
+  struct desc *desc;
   
-  match = no_match;
+  match_type = no_match;
+
   /* If command and cmd_element string does not match set NULL to vector */
   for (i = 0; i < vector_max (v); i++) 
     if ((cmd_element = vector_slot (v, i)) != NULL)
-      {
-	/* If given index is bigger than max string vector of command,
-           set NULL*/
-	if (index >= vector_max (cmd_element->strvec))
+      if (index < vector_max (cmd_element->strvec))
+	{
+	  int j;
+	  int matched = 0;
+
+	  descvec = vector_slot (cmd_element->strvec, index);
+	  
+	  for (j = 0; j < vector_max (descvec); j++)
+	    {
+	      desc = vector_slot (descvec, j);
+	      str = desc->cmd;
+
+	      if (CMD_VARARG (str))
+		return vararg_match;
+
+	      /* Check is this point's argument optional ? */
+	      if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
+		{
+		  if (match_type < extend_match)
+		    match_type = extend_match;
+		  matched++;
+		}
+	      else if (strncmp (command, str, strlen (command)) == 0)
+		{
+		  if (strcmp (command, str) == 0) 
+		    match_type = exact_match;
+		  else
+		    {
+		      if (match_type < partly_match)
+			match_type = partly_match;
+		    }
+		  matched++;
+		}
+	    }
+	  if (! matched)
+	    vector_slot (v, i) = NULL;
+	}
+      else
+	{
 	  vector_slot (v, i) = NULL;
-	else 
-	  {
-	    str = vector_slot (cmd_element->strvec, index);
+	}
 
-	    /* Check is this point's argument optional ? */
-	    if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
-	      {
-		if (match < extend_match)
-		  match = extend_match;
-		continue;
-	      }
-
-	    /* There is vararg. */
-	    if (strcmp (str, "...") == 0)
-	      return vararg_match;
-
-	    /* If completion match fail set it NULL. */
-	    if (strncmp (command, str, strlen (command)) != 0)
-	      {
-		vector_slot (v, i) = NULL;
-		continue;
-	      }
-
-	    /* OK, there is a match, set match type flag. */
-	    if (strcmp (command, str) == 0) 
-	      match = exact_match;
-	    else
-	      {
-		if (match < partly_match)
-		  match = partly_match;
-	      }
-	  }
-      }
-  return match;
+  return match_type;
 }
 
 /* Check ambiguous match */
 int
-cmd_filter_ambiguous (char *command, vector v, int index, enum match_type type)
+is_cmd_ambiguous (char *command, vector v, int index, enum match_type type)
 {
   int i;
-  char *str;
+  int j;
+  char *str = NULL;
   struct cmd_element *cmd_element;
   char *matched = NULL;
+  vector descvec;
+  struct desc *desc;
   
   for (i = 0; i < vector_max (v); i++) 
     if ((cmd_element = vector_slot (v, i)) != NULL)
       {
-	str = vector_slot (cmd_element->strvec, index);
+	int match = 0;
 
-	/* If there is exact mach filter not exact match. */
-	if (type == exact_match)
-	  {
-	    if (CMD_OPT (str[0]) || CMD_EXT (str[0])
-		|| strcmp (command, str) != 0)
-	      vector_slot (v, i) = NULL;
-	  }
+	descvec = vector_slot (cmd_element->strvec, index);
 
-	/* If there is patly matched string filter option and extend match. */
-	if (type == partly_match)
+	for (j = 0; j < vector_max (descvec); j++)
 	  {
-	    if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
+	    desc = vector_slot (descvec, j);
+	    str = desc->cmd;
+
+	    switch (type)
 	      {
-		vector_slot (v, i) = NULL;
-		continue;
-	      }
-
-	    if (strncmp (command, str, strlen (command)) == 0)
-	      {
-		if (matched && strcmp (matched, str) != 0)
-		  return 1;	/* There is ambiguous match. */
-		else
-		  matched = str;
+	      case exact_match:
+		if (! (CMD_OPT (str[0]) || CMD_EXT (str[0]))
+		    && strcmp (command, str) == 0)
+		  match++;
+		break;
+	      case partly_match:
+		if (! (CMD_OPT (str[0]) || CMD_EXT (str[0]))
+		    && strncmp (command, str, strlen (command)) == 0)
+		  {
+		    if (matched && strcmp (matched, str) != 0)
+		      return 1;	/* There is ambiguous match. */
+		    else
+		      matched = str;
+		    match++;
+		  }
+		break;
+	      case extend_match:
+		if (CMD_OPT(str[0]) || CMD_EXT (str[0]))
+		  match++;
+		break;
+	      case no_match:
+	      default:
+		break;
 	      }
 	  }
-
-	/* If there is only extend match. */
-	if (type == extend_match)
-	  {
-	    if (CMD_OPT(str[0]) || CMD_EXT (str[0]))
-	      ;
-	    else
-	      vector_slot (v, i) = NULL;
-	  }
+	if (! match)
+	  vector_slot (v, i) = NULL;
       }
   return 0;
-}
-
-/* Yet another filter function for describe command. */
-void
-cmd_filter_describe (char *command, vector v, int index)
-{
-  int i;
-  struct cmd_element *cmd;
-  char *str;
-
-  if (command == NULL)
-    return;
-
-  for (i = 0; i < vector_max (v); i++)
-    if ((cmd = vector_slot (v, i)) != NULL)
-      {
-	if (index >= vector_max (cmd->strvec))
-	  vector_slot (v, i) = NULL;
-	else
-	  {
-	    str = vector_slot (cmd->strvec, index);
-
-	    if (strncmp (command, str, strlen (command)) != 0)
-	      vector_slot (v, i) = NULL;
-	  }
-      }
 }
 
 /* If src matches dst return dst string, otherwise return NULL */
@@ -801,7 +645,6 @@ cmd_entry_function_desc (char *src, char *dst)
     return NULL;
 }
 
-
 /* Check same string element existence.  If it isn't there return
     1. */
 int
@@ -842,6 +685,7 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
   vector matchvec;
   struct cmd_element *cmd_element;
   int index;
+  static struct desc desc_cr = { "<cr>", "" };
 
   /* Set index. */
   index = vector_max (vline) - 1;
@@ -853,15 +697,13 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
   for (i = 0; i < index; i++)
     {
       enum match_type match;
-      int ambiguous;
       char *command;
 
       command = vector_slot (vline, i);
 
       match = cmd_filter_by_completion (command, cmd_vector, i);
 
-      ambiguous = cmd_filter_ambiguous (command, cmd_vector, i, match);
-      if (ambiguous) 
+      if (is_cmd_ambiguous (command, cmd_vector, i, match))
 	{
 	  vector_free (cmd_vector);
 	  *status = CMD_ERR_AMBIGUOUS;
@@ -876,7 +718,7 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
   for (i = 0; i < vector_max (cmd_vector); i++)
     if ((cmd_element = vector_slot (cmd_vector, i)) != NULL)
       {
-	char *string;
+	char *string = NULL;
 	vector strvec = cmd_element->strvec;
 
 	if (index > vector_max (strvec))
@@ -885,16 +727,28 @@ cmd_describe_command (vector vline, struct vty *vty, int *status)
 	  {
 	    /* Check is command is completed. */
 	    if (index == vector_max (strvec))
-	      string = "<cr>";
-	    else
-	      string = cmd_entry_function_desc (vector_slot (vline, index),
-						vector_slot (strvec, index));
-
-	    if (string)
 	      {
-		/* Uniqueness check */
+		string = "<cr>";
 		if (! desc_unique_string (matchvec, string))
-		  desc_make (cmd_element, string, index, matchvec);
+		  vector_set (matchvec, &desc_cr);
+	      }
+	    else
+	      {
+		int j;
+		vector descvec = vector_slot (strvec, index);
+		struct desc *desc;
+
+		for (j = 0; j < vector_max (descvec); j++)
+		  {
+		    desc = vector_slot (descvec, j);
+		    string = cmd_entry_function_desc (vector_slot (vline, index), desc->cmd);
+		    if (string)
+		      {
+			/* Uniqueness check */
+			if (! desc_unique_string (matchvec, string))
+			  vector_set (matchvec, desc);
+		      }
+		  }
 	      }
 	  }
       }
@@ -922,12 +776,13 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
   struct cmd_element *cmd_element;
   int index = vector_max (vline) - 1;
   char **match_str;
+  struct desc *desc;
+  vector descvec;
 
   /* First, filter by preceeding command string */
   for (i = 0; i < index; i++)
     {
       enum match_type match;
-      int ambiguous;
       char *command = vector_slot (vline, i);
 
       /* First try completion match, if there is exactly match return 1 */
@@ -935,8 +790,7 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 
       /* If there is exact match then filter ambiguous match else chech
 	 ambiguousness. */
-      ambiguous = cmd_filter_ambiguous (command, cmd_vector, i, match);
-      if (ambiguous) 
+      if (is_cmd_ambiguous (command, cmd_vector, i, match))
 	{
 	  vector_free (cmd_vector);
 	  *status = CMD_ERR_AMBIGUOUS;
@@ -953,17 +807,24 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
       {
 	char *string;
 	vector strvec = cmd_element->strvec;
-
+	
 	/* Check field length */
 	if (index >= vector_max (strvec))
 	  vector_slot (cmd_vector, i) = NULL;
 	else 
 	  {
-	    if ((string = cmd_entry_function (vector_slot (vline, index),
-					      vector_slot (strvec, index))))
-	      /* Uniqueness check */
-	      if (cmd_unique_string (matchvec, string))
-		vector_set (matchvec, string);
+	    int j;
+
+	    descvec = vector_slot (strvec, index);
+	    for (j = 0; j < vector_max (descvec); j++)
+	      {
+		desc = vector_slot (descvec, j);
+
+		if ((string = cmd_entry_function (vector_slot (vline, index),
+						  desc->cmd)))
+		  if (cmd_unique_string (matchvec, string))
+		    vector_set (matchvec, string);
+	      }
 	  }
       }
 
@@ -1021,6 +882,13 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
   return match_str;
 }
 
+/* Command line parser. */
+void
+cmd_parse ()
+{
+  ;
+}
+
 /* Execute command by argument vline vector. */
 int
 cmd_execute_command (vector vline, struct vty *vty)
@@ -1036,29 +904,19 @@ cmd_execute_command (vector vline, struct vty *vty)
   enum match_type match = 0;
   int varflag;
 
-  /* Make copy of command element */
+  /* Make copy of command elements. */
   cmd_vector = vector_copy (cmd_node_vector (cmdvec, vty->node));
 
   for (index = 0; index < vector_max (vline); index++) 
     {
-      int ambiguous;
       char *command = vector_slot (vline, index);
 
-      if (command == NULL)
-	break;
-
-      /* First try completion match, if there is exactly match return 1 */
       match = cmd_filter_by_completion (command, cmd_vector, index);
 
-      /* If there is vararg match there shoud be only one match at
-         this point. */
       if (match == vararg_match)
 	break;
 
-      /* If there is exact match then filter ambiguous match else check
-         ambiguousness. */
-      ambiguous = cmd_filter_ambiguous (command, cmd_vector, index, match);
-      if (ambiguous) 
+      if (is_cmd_ambiguous (command, cmd_vector, index, match))
 	{
 	  vector_free (cmd_vector);
 	  return CMD_ERR_AMBIGUOUS;
@@ -1069,6 +927,7 @@ cmd_execute_command (vector vline, struct vty *vty)
   matched_element = NULL;
   matched_count = 0;
   incomplete_count = 0;
+
   for (i = 0; i < vector_max (cmd_vector); i++) 
     if (vector_slot (cmd_vector,i) != NULL)
       {
@@ -1103,22 +962,36 @@ cmd_execute_command (vector vline, struct vty *vty)
   /* Argument treatment */
   varflag = 0;
   argc = 0;
+
   for (i = 0; i < vector_max (vline); i++)
     {
-      char *str = vector_slot (matched_element->strvec, i);
-
-      if (!varflag && strcmp (str, "...") == 0)
-	varflag = 1;
-
-      if (varflag || (str[0] >= 'A' && str[0] <= 'Z') || (str[0] == '['))
+      if (varflag)
 	argv[argc++] = vector_slot (vline, i);
+      else
+	{	  
+	  vector descvec = vector_slot (matched_element->strvec, i);
+
+	  if (vector_max (descvec) == 1)
+	    {
+	      struct desc *desc = vector_slot (descvec, 0);
+	      char *str = desc->cmd;
+
+	      if (CMD_VARARG (str))
+		varflag = 1;
+
+	      if (varflag || CMD_VARIABLE (str) || CMD_OPTION (str))
+		argv[argc++] = vector_slot (vline, i);
+	    }
+	  else
+	    argv[argc++] = vector_slot (vline, i);
+	}
 
       if (argc >= CMD_ARGC_MAX)
 	return CMD_ERR_EXEED_ARGC_MAX;
     }
 
-  /* Now execute matched command */
-  return (*matched_element->func)(matched_element, vty, argc, argv);
+  /* Execute matched command. */
+  return (*matched_element->func) (matched_element, vty, argc, argv);
 }
 
 /* Filter vector by command character with index. */
@@ -1139,21 +1012,40 @@ cmd_filter_by_string (char *command, vector v, int index)
 	  vector_slot (v, i) = NULL;
 	else 
 	  {
-	    str = vector_slot (cmd_element->strvec, index);
-	    /* Check is this point's argument is optional */
-	    if (str[0] == '[')
-	      continue; /* return; */
-	    if (str[0] >= 'A' && str[0] <= 'Z')
+	    int j;
+	    int match;
+	    vector descvec;
+	    struct desc *desc;
+
+	    descvec = vector_slot (cmd_element->strvec, index);
+	    match = 0;
+
+	    for (j = 0; j < vector_max (descvec); j++)
 	      {
-		if (cmd_filter_by_symbol (command, str))
-		  vector_slot (v, i) = NULL;
-		continue; /* return ; */
+		desc = vector_slot (descvec, j);
+
+		str = desc->cmd;
+
+		/* Check is this point's argument is optional */
+		if (CMD_OPT (str[0]))
+		  match++;
+		else if (CMD_EXT (str[0]))
+		  {
+		    /*
+		    if (cmd_filter_by_symbol (command, str))
+		      vector_slot (v, i) = NULL;
+		    */
+		    match++;
+		  }
+		else if (CMD_VARARG (str))
+		  return CMD_VARARG_MATCH;
+		else
+		  {		  
+		    if (strcmp (command, str) == 0)
+		      match++;
+		  }
 	      }
-
-	    if (strcmp (str, "...") == 0)
-	      return CMD_VARARG_MATCH;
-
-	    if (strcmp (command, str) != 0)
+	    if (! match)
 	      vector_slot (v, i) = NULL;
 	  }
       }
@@ -1203,9 +1095,7 @@ cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
 	    matched_count++;
 	  }
 	else
-	  {
-	    incomplete_count++;
-	  }
+	  incomplete_count++;
       }
   
   /* Finish of using cmd_vector. */
@@ -1226,22 +1116,36 @@ cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
   /* Argument treatment */
   varflag = 0;
   argc = 0;
+
   for (i = 0; i < vector_max (vline); i++)
     {
-      char *str = vector_slot (matched_element->strvec, i);
-
-      if (!varflag && strcmp (str, "...") == 0)
-	varflag = 1;
-	  
-      if (varflag || (str[0] >= 'A' && str[0] <= 'Z') || (str[0] == '['))
+      if (varflag)
 	argv[argc++] = vector_slot (vline, i);
+      else
+	{	  
+	  vector descvec = vector_slot (matched_element->strvec, i);
+
+	  if (vector_max (descvec) == 1)
+	    {
+	      struct desc *desc = vector_slot (descvec, 0);
+	      char *str = desc->cmd;
+
+	      if (CMD_VARARG (str))
+		varflag = 1;
+	  
+	      if (varflag || CMD_VARIABLE (str) || CMD_OPTION (str))
+		argv[argc++] = vector_slot (vline, i);
+	    }
+	  else
+	    argv[argc++] = vector_slot (vline, i);
+	}
 
       if (argc >= CMD_ARGC_MAX)
 	return CMD_ERR_EXEED_ARGC_MAX;
     }
 
   /* Now execute matched command */
-  return (*matched_element->func)(matched_element, vty, argc, argv);
+  return (*matched_element->func) (matched_element, vty, argc, argv);
 }
 
 /* Configration make from file. */
@@ -1384,17 +1288,18 @@ DEFUN (config_help,
        "Description of the interactive help system\n")
 {
   vty_out (vty, 
-	   "Help may be requested at any point in a command by entering\r\n"
-	   "a question mark '?'.  If nothing matches, the help list will\r\n"
-	   "be empty and you must backup until entering a '?' shows the\r\n"
-	   "available options.\r\n"
-	   "Two styles of help are provided:\r\n"
-	   "1. Full help is available when you are ready to enter a\r\n"
-	   "command argument (e.g. 'show ?') and describes each possible\r\n"
-	   "argument.\r\n"
-	   "2. Partial help is provided when an abbreviated argument is entered\r\n"
-	   "   and you want to know what arguments match the input\r\n"
-	   "   (e.g. 'show me?'.)\r\n\r\n");
+	   "Zebra VTY provides advanced help feature.  When you need help,\r\n\
+anytime at the command line please press '?'.\r\n\
+\r\n\
+If nothing matches, the help list will be empty and you must backup\r\n\
+ until entering a '?' shows the available options.\r\n\
+Two styles of help are provided:\r\n\
+1. Full help is available when you are ready to enter a\r\n\
+command argument (e.g. 'show ?') and describes each possible\r\n\
+argument.\r\n\
+2. Partial help is provided when an abbreviated argument is entered\r\n\
+   and you want to know what arguments match the input\r\n\
+   (e.g. 'show me?'.)\r\n\r\n");
   return CMD_SUCCESS;
 }
 
@@ -1446,12 +1351,13 @@ DEFUN (config_write_file,
   /* Config file header print. */
   vty_out (file_vty, "!\n! Zebra configuration saved from vty\n!   ");
   vty_time_print (file_vty);
+  vty_out (file_vty, "!\n");
 
   for (i = 0; i < vector_max (cmdvec); i++)
     if ((node = vector_slot (cmdvec, i)) && node->func)
       {
-	vty_out (file_vty, "!\n");
-	(*node->func) (file_vty);
+	if ((*node->func) (file_vty))
+	  vty_out (file_vty, "!\n");
       }
   vty_out (vty, "Configuration saved to %s\r\n", config_file);
 
@@ -1483,12 +1389,13 @@ DEFUN (config_write_terminal,
   struct cmd_node *node;
 
   vty_out (vty, "\r\nCurrrent Configuration:\r\n");
+  vty_out (vty, "!\r\n");
 
   for (i = 0; i < vector_max (cmdvec); i++)
     if ((node = vector_slot (cmdvec, i)) && node->func)
       {
-	vty_out (vty, "!\r\n");
-	(*node->func) (vty);
+	if ((*node->func) (vty))
+	  vty_out (vty, "!\r\n");
       }
   return CMD_SUCCESS;
 }
@@ -1539,6 +1446,13 @@ DEFUN (config_password, password_cmd,
        "Crypt: 8 for crypt, password string for cleartext\n"
        "Password string\n")
 {
+  /* Argument check. */
+  if (argc == 0)
+    {
+      vty_out (vty, "Please specify password.\r\n");
+      return CMD_WARNING;
+    }
+
   if (argc == 2)
     {
       if (*argv[0] == '8')
@@ -1563,15 +1477,20 @@ DEFUN (config_password, password_cmd,
 	       "Please specify string starting with alphanumeric\r\n");
       return CMD_WARNING;
     }
+
   if (host.password)
     XFREE (0, host.password);
-  if (host.password_encrypt)
-    XFREE (0, host.password_encrypt);
+  host.password = NULL;
 
   if (host.encrypt)
-    host.password_encrypt = XSTRDUP (0, zencrypt (argv[0]));
+    {
+      if (host.password_encrypt)
+	XFREE (0, host.password_encrypt);
+      host.password_encrypt = XSTRDUP (0, zencrypt (argv[0]));
+    }
   else
     host.password = XSTRDUP (0, argv[0]);
+
   return CMD_SUCCESS;
 }
 
@@ -1583,15 +1502,26 @@ DEFUN (config_enable_password, enable_password_cmd,
        "Crypt: 8 for crypt, password string for cleartext\n"
        "Password string\n")
 {
+  /* Argument check. */
+  if (argc == 0)
+    {
+      vty_out (vty, "Please specify password.\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Crypt type is specified. */
   if (argc == 2)
     {
       if (*argv[0] == '8')
 	{
 	  if (host.enable)
 	    XFREE (0, host.enable);
+	  host.enable = NULL;
+
 	  if (host.enable_encrypt)
 	    XFREE (0, host.enable_encrypt);
 	  host.enable_encrypt = XSTRDUP (0, argv[1]);
+
 	  return CMD_SUCCESS;
 	}
       else
@@ -1607,13 +1537,21 @@ DEFUN (config_enable_password, enable_password_cmd,
 	       "Please specify string starting with alphanumeric\r\n");
       return CMD_WARNING;
     }
+
   if (host.enable)
     XFREE (0, host.enable);
+  host.enable = NULL;
 
+  /* Plain password input. */
   if (host.encrypt)
-    host.enable_encrypt = XSTRDUP (0, zencrypt (argv[0]));
+    {
+      if (host.enable_encrypt)
+	XFREE (0, host.enable_encrypt);
+      host.enable_encrypt = XSTRDUP (0, zencrypt (argv[0]));
+    }
   else
     host.enable = XSTRDUP (0, argv[0]);
+
   return CMD_SUCCESS;
 }
 
@@ -1655,6 +1593,14 @@ DEFUN (no_service_password_encrypt,
     return CMD_SUCCESS;
 
   host.encrypt = 0;
+
+  if (host.password_encrypt)
+    XFREE (0, host.password_encrypt);
+  host.password_encrypt = NULL;
+
+  if (host.enable_encrypt)
+    XFREE (0, host.enable_encrypt);
+  host.enable_encrypt = NULL;
 
   return CMD_SUCCESS;
 }
@@ -1701,23 +1647,6 @@ DEFUN (config_log_file,
     XFREE (MTYPE_TMP, host.logfile);
 
   host.logfile = strdup (argv[0]);
-
-  return CMD_SUCCESS;
-}
-
-/* New DEFUN testing. */
-DESC (test) =
-{
-  {DESC_STR  ,"Log filename specify command"},
-  {DESC_LINE, "log	hogehoge\n"
-              "test	hogahoga\n"},
-  {DESC_STR, "command is help"},
-  {DESC_END, NULL}
-};
-
-DEFUN2 (test, test_cmd, "defun2 SORT command")
-{
-  vty_out (vty, "DEFUN next generation DEFUN2 test command.\r\n");
 
   return CMD_SUCCESS;
 }
@@ -1780,11 +1709,6 @@ cmd_init ()
   install_element (CONFIG_NODE, &config_log_file_cmd);
   install_element (CONFIG_NODE, &service_password_encrypt_cmd);
   install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
-
-  /* Only for testing. */
-#ifdef TEST
-  install_element (VIEW_NODE, &test_cmd);
-#endif /* TEST */
 
   srand(time(NULL));
 }

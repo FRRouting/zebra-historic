@@ -19,9 +19,15 @@
  * Boston, MA 02111-1307, USA.  
  */
 
+#ifndef OSPF6_ZEBRA_H
+#define OSPF6_ZEBRA_H
+
 extern struct zebra *zebra;
 
-void zebra_get_interface (int, u_int16_t);
+int ospf6_zebra_get_interface (int, struct zebra *, zebra_size_t);
 int ospf6_zebra_read (struct thread *); 
-void zebra_init ();
+void ospf6_zebra_init ();
 void zebra_start ();
+
+#endif /*OSPF6_ZEBRA_H*/
+

@@ -39,10 +39,10 @@
 #include "sockunion.h"
 #include "if.h"
 #include "prefix.h"
-#include "client.h"
 #include "stream.h"
 #include "thread.h"
 #include "filter.h"
+#include "client.h"
 #include "zclient.h"
 
 #define HASHVAL 64

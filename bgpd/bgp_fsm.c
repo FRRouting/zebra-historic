@@ -105,7 +105,10 @@ bgp_timer_set (struct peer *peer)
       BGP_TIMER_OFF (peer->t_start);
       BGP_TIMER_OFF (peer->t_connect);
       if (peer->v_holdtime != 0)
-	BGP_TIMER_ON (peer->t_holdtime, bgp_holdtime_timer, peer->v_holdtime);
+	{
+	  BGP_TIMER_ON (peer->t_holdtime, bgp_holdtime_timer, 
+			peer->v_holdtime);
+	}
       else
 	{
 	  BGP_TIMER_OFF (peer->t_holdtime);

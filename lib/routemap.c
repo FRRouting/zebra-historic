@@ -603,11 +603,12 @@ route_map_init ()
 #include "command.h"
 
 DEFUN (route_map, route_map_cmd,
-       "route-map NAME PERMIT PREF",
+       "route-map WORD (deny|permit) <0-65535>",
        "Create route-map or enter route-map command mode\n"
-       "Route map tag\n"
-       "Route map set operations\n"
-       "Route map preference\n")
+       "Route map tag name\n"
+       "Route map denies set operations\n"
+       "Route map permits set operations\n"
+       "Route map sequence number\n")
 {
   int permit;
   int pref;
@@ -704,10 +705,17 @@ route_map_config_write (struct vty *vty)
   struct route_map *map;
   struct route_map_index *index;
   struct route_map_rule *rule;
+  int first = 1;
+  int write = 0;
 
   for (map = route_map_master.head; map; map = map->next)
     for (index = map->head; index; index = index->next)
       {
+	if (!first)
+	  vty_out (vty, "!%s", VTY_NEWLINE);
+	else
+	  first = 0;
+
 	vty_out (vty, "route-map %s %s %d%s", 
 		 map->name,
 		 route_map_type_str (index->type),
@@ -718,8 +726,9 @@ route_map_config_write (struct vty *vty)
 	for (rule = index->set_list.head; rule; rule = rule->next)
 	  vty_out (vty, " set %s %s%s", rule->cmd->str, rule->rule_str,
 		   VTY_NEWLINE);
+	write++;
       }
-  return 0;
+  return write;
 }
 
 /* Route map node structure. */

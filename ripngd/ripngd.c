@@ -1337,6 +1337,7 @@ int
 ripng_config_write (struct vty *vty)
 {
   int ripng_network_write (struct vty *);
+  int write = 0;
 
   if (ripng)
     {
@@ -1358,10 +1359,10 @@ ripng_config_write (struct vty *vty)
       /* Flush timer configuration print out. */
       if (ripng->flush_time != RIPNG_FLUSH_TIMER)
 	vty_out (vty, " flush-timer %d%s", ripng->flush_time, VTY_NEWLINE);
-    }
 
-  /* Normal exit. */
-  return 0;
+      write++;
+    }
+  return write;
 }
 
 /* RIPng node structure. */

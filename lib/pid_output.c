@@ -39,3 +39,39 @@ pid_output (char *path)
 
   return pid;
 }
+
+pid_t
+pid_output_lock (char *path)
+{
+  int tmp;
+  int fd;
+  pid_t pid;
+  char buf[16], *p;
+
+  pid = getpid ();
+
+  fd = open (path, O_RDWR | O_CREAT | O_EXCL, 0644);
+  if (fd < 0)
+    {
+      fd = open (path, O_RDONLY);
+      if (fd < 0)
+        fprintf (stderr, "Can't creat pid lock file, exit\n");
+      else
+        {
+          read (fd, buf, sizeof (buf));
+          if ((p = index (buf, '\n')) != NULL)
+            *p = 0;
+          fprintf (stderr, "Another process(%s) running, exit\n", buf);
+        }
+      exit (-1);
+    }
+  else
+    {
+      sprintf (buf, "%d\n", pid);
+      tmp = write (fd, buf, strlen (buf));
+      close (fd);
+    }
+
+  return pid;
+}
+

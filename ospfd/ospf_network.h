@@ -21,10 +21,17 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _ZEBRA_OSPF_NETWORK_H
 #define _ZEBRA_OSPF_NETWORK_H
 
+/* Macros. */
+#define IPV4_ADDR_GT(X,Y)	(ntohl ((X).s_addr) > ntohl ((Y).s_addr))
+#define IPV4_ADDR_LT(X,Y)	(ntohl ((X).s_addr) < ntohl ((Y).s_addr))
+
 /* Prototypes. */
 int ospf_serv_sock (struct interface *, int);
-int ospf_if_add_allspfrouters (int, struct prefix *);
-int ospf_if_add_alldrouters (int, struct prefix *);
+int ospf_serv_sock_init (struct interface *, struct prefix *);
+int ospf_if_add_allspfrouters (struct interface *, int, struct prefix *);
+int ospf_if_drop_allspfrouters (struct interface *, int, struct prefix *);
+int ospf_if_add_alldrouters (struct interface *, int, struct prefix *);
+int ospf_if_drop_alldrouters (struct interface *, int, struct prefix *);
 int ospf_if_ipmulticast (int, struct prefix *);
 
 #endif /* _ZEBRA_OSPF_NETWORK_H */

@@ -211,9 +211,9 @@ main (int argc, char **argv)
   sort_node ();
 
 #if 0
-  aspath_test ();
+  community_test ();
   exit (0);
-#endif
+#endif /* 0 */
 
   /* Parse config file. */
   vty_read_config (config_file, config_current, config_default);

@@ -174,6 +174,8 @@ vty_new ()
   bzero (new, sizeof (struct vty));
 
   new->obuf = (struct buffer *) buffer_new (BUFFER_VTY, 100);
+  new->buf = XMALLOC (MTYPE_VTY, VTY_BUFSIZ);
+  new->max = VTY_BUFSIZ;
 
   return new;
 }
@@ -208,10 +210,15 @@ vty_auth (struct vty *vty, char *buf)
       break;
     }
 
-  if (host.encrypt)
-    fail = strcmp (crypt(buf, passwd), passwd);
+  if (passwd)
+    {
+      if (host.encrypt)
+	fail = strcmp (crypt(buf, passwd), passwd);
+      else
+	fail = strcmp (buf, passwd);
+    }
   else
-    fail = strcmp (buf, passwd);
+    fail = 1;
 
   if (! fail)
     {
@@ -289,6 +296,17 @@ vty_write (struct vty *vty, char *buf, size_t nbytes)
   buffer_write (vty->obuf, (u_char *)buf, nbytes);
 }
 
+/* Ensure length of input buffer.  Is buffer is short, double it. */
+static void
+vty_ensure (struct vty *vty, int length)
+{
+  if (vty->max <= length)
+    {
+      vty->max *= 2;
+      vty->buf = XREALLOC (MTYPE_VTY, vty->buf, vty->max);
+    }
+}
+
 /* Basic function to insert character into vty. */
 static void
 vty_self_insert (struct vty *vty, char c)
@@ -296,6 +314,7 @@ vty_self_insert (struct vty *vty, char c)
   int i;
   int length;
 
+  vty_ensure (vty, vty->length + 1);
   length = vty->length - vty->cp;
   memmove (&vty->buf[vty->cp + 1], &vty->buf[vty->cp], length);
   vty->buf[vty->cp] = c;
@@ -312,6 +331,7 @@ vty_self_insert (struct vty *vty, char c)
 static void
 vty_self_insert_overwrite (struct vty *vty, char c)
 {
+  vty_ensure (vty, vty->length + 1);
   vty->buf[vty->cp++] = c;
 
   if (vty->cp > vty->length)
@@ -678,7 +698,7 @@ vty_complete_command (struct vty *vty)
       vty_redraw_line (vty);
       break;
     case CMD_ERR_NO_MATCH:
-      vty_out (vty, "%% There is no matched command.\r\n");
+      /* vty_out (vty, "%% There is no matched command.\r\n"); */
       vty_prompt (vty);
       vty_redraw_line (vty);
       break;
@@ -763,10 +783,16 @@ vty_describe_command (struct vty *vty)
       vty_out (vty, "  %-17s %s\r\n", desc->cmd, desc->str ? desc->str : "");
 
   cmd_free_strvec (vline);
-  desc_vector_free (describe);
+  vector_free (describe);
 
   vty_prompt (vty);
   vty_redraw_line (vty);
+}
+
+void
+vty_clear_buf (struct vty *vty)
+{
+  bzero (vty->buf, vty->max);
 }
 
 /* ^C stop current input and do not add command line to the history. */
@@ -774,7 +800,7 @@ static void
 vty_stop_input (struct vty *vty)
 {
   vty->cp = vty->length = 0;
-  bzero (vty->buf, sizeof (vty->buf));
+  vty_clear_buf (vty);
   vty_out (vty, "\r\n");
 
   switch (vty->node)
@@ -908,7 +934,7 @@ vty_execute (struct vty *vty)
 
   /* Clear command line buffer. */
   vty->cp = vty->length = 0;
-  bzero (vty->buf, sizeof (vty->buf));
+  vty_clear_buf (vty);
 
   if (vty->status != VTY_CLOSE)
     vty_prompt (vty);
@@ -960,15 +986,14 @@ vty_read (struct thread *thread)
   int i;
   int ret;
   int nbytes;
-#define VTYBUFSIZ 512
-  unsigned char buf[VTYBUFSIZ];
+  unsigned char buf[VTY_READ_BUFSIZ];
 
   int vty_sock = THREAD_FD (thread);
   struct vty *vty = THREAD_ARG (thread);
   vty->t_read = NULL;
 
   /* Read raw data from socket */
-  nbytes = read (vty->fd, buf, VTYBUFSIZ);
+  nbytes = read (vty->fd, buf, VTY_READ_BUFSIZ);
   if (nbytes <= 0)
     vty->status = VTY_CLOSE;
 
@@ -1159,7 +1184,7 @@ vty_create (int vty_sock, union sockunion *su)
   vty->node = AUTH_NODE;
   vty->fail = 0;
   vty->cp = 0;
-  bzero (vty->buf, sizeof (vty->buf));
+  vty_clear_buf (vty);
   vty->length = 0;
   bzero (vty->hist, sizeof (vty->hist));
   vty->hp = 0;
@@ -1326,6 +1351,8 @@ vty_close (struct vty *vty)
 
   if (vty->address)
     XFREE (0, vty->address);
+  if (vty->buf)
+    XFREE (MTYPE_VTY, vty->buf);
 
   /* OK free vty. */
   XFREE (MTYPE_VTY, vty);

@@ -45,6 +45,7 @@
 #include "bgpd/bgp_dump.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_community.h"
+#include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
 
@@ -390,10 +391,10 @@ DEFUN (no_bgp_multiple_instance,
   return CMD_SUCCESS;
 }
 
-/* router bgp AS_NO command.*/
+/* router bgp AS number command.*/
 DEFUN (router_bgp, 
        router_bgp_cmd, 
-       "router bgp AS_NO",
+       "router bgp <1-65535>",
        "Enable a routing process\n"
        "Start BGP configuration\n"
        "AS number\n")
@@ -415,7 +416,7 @@ DEFUN (router_bgp,
       return CMD_SUCCESS;
     }
 
-  if (!bgp_multiple_instance && !list_isempty (bgp_list))
+  if (! bgp_multiple_instance && ! list_isempty (bgp_list))
     {
       bgp = getdata (listhead (bgp_list));
       
@@ -433,10 +434,10 @@ DEFUN (router_bgp,
   return CMD_SUCCESS;
 }
 
-/* router bgp AS_NO command.*/
+/* no router bgp AS number command.*/
 DEFUN (no_router_bgp, 
        no_router_bgp_cmd, 
-       "no router bgp AS_NO",
+       "no router bgp <1-65535>",
        NO_STR
        "Disable a routing process\n"
        "Disable BGP configuration\n"
@@ -465,10 +466,10 @@ DEFUN (no_router_bgp,
 }
 
 DEFUN (bgp_router_id, bgp_router_id_cmd,
-       "bgp router-id IPV4_ADDRESS",
+       "bgp router-id A.B.C.D",
        BGP_STR
        "Set my own router identifier\n"
-       "IP Address\n")
+       "Router ID\n")
 {
   int ret;
   struct bgp *bgp;
@@ -489,11 +490,11 @@ DEFUN (bgp_router_id, bgp_router_id_cmd,
 }
 
 DEFUN (no_bgp_router_id, no_bgp_router_id_cmd,
-       "no bgp router-id IPV4_ADDRESS",
+       "no bgp router-id A.B.C.D",
        NO_STR
        BGP_STR
        "Set my own router identifier\n"
-       "IP Address\n")
+       "Router ID\n")
 {
   int ret;
   struct bgp *bgp;
@@ -520,10 +521,10 @@ DEFUN (no_bgp_router_id, no_bgp_router_id_cmd,
 }
 
 DEFUN (bgp_cluster_id, bgp_cluster_id_cmd,
-       "bgp cluster-id IPV4_ADDRESS",
+       "bgp cluster-id A.B.C.D",
        BGP_STR
        "Set cluster identifier\n"
-       "IP Address\n")
+       "Cluster identifier\n")
 {
   int ret;
   struct bgp *bgp;
@@ -545,11 +546,11 @@ DEFUN (bgp_cluster_id, bgp_cluster_id_cmd,
 }
 
 DEFUN (no_bgp_cluster_id, no_bgp_cluster_id_cmd,
-       "no bgp cluster-id IPV4_ADDRESS",
+       "no bgp cluster-id A.B.C.D",
        NO_STR
        BGP_STR
        "Set cluster identifier\n"
-       "IP Address\n")
+       "Cluster identifier\n")
 {
   int ret;
   struct bgp *bgp;
@@ -767,7 +768,7 @@ DEFUN (show_ip_bgp_community,
 
 DEFUN (neighbor_ebgp_multihop,
        neighbor_ebgp_multihop_cmd,
-       "neighbor IP_ADDR ebgp-multihop [TTL]",
+       "neighbor A.B.C.D ebgp-multihop [TTL]",
        NEIGHBOR_STR
        "IP address\n"
        "Change TTL value of BGP connection\n"
@@ -805,7 +806,7 @@ DEFUN (neighbor_ebgp_multihop,
 /* Set specified peer's BGP version.  This is */
 DEFUN (neighbor_version,
        neighbor_version_cmd,
-       "neighbor IP_ADDR version BGP_VERSION",
+       "neighbor A.B.C.D version BGP_VERSION",
        NEIGHBOR_STR
        "IP address\n"
        "Neighbor's BGP version\n"
@@ -838,7 +839,7 @@ DEFUN (neighbor_version,
 
 DEFUN (no_neighbor_version,
        no_neighbor_version_cmd,
-       "no neighbor IP_ADDR version [BGP_VERSION]",
+       "no neighbor A.B.C.D version [BGP_VERSION]",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -863,7 +864,7 @@ DEFUN (no_neighbor_version,
 
 DEFUN (neighbor_router_id,
        neighbor_router_id_cmd,
-       "neighbor IP_ADDR router-id IP_ADDR",
+       "neighbor A.B.C.D router-id IP_ADDR",
        NEIGHBOR_STR
        "IP address\n"
        "Set neighbor's special router-id value\n"
@@ -895,7 +896,7 @@ DEFUN (neighbor_router_id,
 
 DEFUN (neighbor_route_reflector_client,
        neighbor_route_reflector_client_cmd,
-       "neighbor IP_ADDR route-reflector-client",
+       "neighbor A.B.C.D route-reflector-client",
        NEIGHBOR_STR
        "IP address\n"
        "Configure this neighbor as route reflector client\n")
@@ -925,7 +926,7 @@ DEFUN (neighbor_route_reflector_client,
 
 DEFUN (no_neighbor_route_reflector_client,
        no_neighbor_route_reflector_client_cmd,
-       "no neighbor IP_ADDR route-reflector-client",
+       "no neighbor A.B.C.D route-reflector-client",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1149,7 +1150,7 @@ bgp_distribute_update ()
 
 DEFUN (neighbor_filter_list,
        neighbor_filter_list_cmd,
-       "neighbor IP_ADDR filter-list FLIST_NAME TYPE",
+       "neighbor A.B.C.D filter-list FLIST_NAME TYPE",
        NEIGHBOR_STR
        "IP address\n"
        "Filter list\n"
@@ -1189,7 +1190,7 @@ DEFUN (neighbor_filter_list,
 
 DEFUN (no_neighbor_filter_list,
        no_neighbor_filter_list_cmd,
-       "no neighbor IP_ADDR filter-list FLIST_NAME TYPE",
+       "no neighbor A.B.C.D filter-list FLIST_NAME TYPE",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1230,7 +1231,7 @@ DEFUN (no_neighbor_filter_list,
 
 DEFUN (neighbor_prefix_list,
        neighbor_prefix_list_cmd,
-       "neighbor IP_ADDR prefix-list PLIST_NAME TYPE",
+       "neighbor A.B.C.D prefix-list PLIST_NAME TYPE",
        NEIGHBOR_STR
        "IP address\n"
        "Prefix list\n"
@@ -1270,7 +1271,7 @@ DEFUN (neighbor_prefix_list,
 
 DEFUN (no_neighbor_prefix_list,
        no_neighbor_prefix_list_cmd,
-       "no neighbor IP_ADDR prefix-list FLIST_NAME TYPE",
+       "no neighbor A.B.C.D prefix-list FLIST_NAME TYPE",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1311,7 +1312,7 @@ DEFUN (no_neighbor_prefix_list,
 
 DEFUN (neighbor_distribute_list,
        neighbor_distribute_list_cmd,
-       "neighbor IP_ADDR distribute-list ALIST_NAME TYPE",
+       "neighbor A.B.C.D distribute-list ALIST_NAME TYPE",
        NEIGHBOR_STR
        "IP address\n"
        "Distribute list\n"
@@ -1351,7 +1352,7 @@ DEFUN (neighbor_distribute_list,
 
 DEFUN (no_neighbor_distribute_list,
        no_neighbor_distribute_list_cmd,
-       "no neighbor IP_ADDR distribute-list ALIST_NAME TYPE",
+       "no neighbor A.B.C.D distribute-list ALIST_NAME TYPE",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1398,7 +1399,7 @@ DEFUN (no_neighbor_distribute_list,
 
 DEFUN (neighbor_route_map,
        neighbor_route_map_cmd,
-       "neighbor IP_ADDR route-map ROUTE_MAP_NAME DIRECT",
+       "neighbor A.B.C.D route-map ROUTE_MAP_NAME DIRECT",
        NEIGHBOR_STR
        "IP address\n"
        "Route map\n"
@@ -1438,7 +1439,7 @@ DEFUN (neighbor_route_map,
 
 DEFUN (no_neighbor_route_map,
        no_neighbor_route_map_cmd,
-       "no neighbor IP_ADDR route-map ROUTE_MAP_NAME DIRECT",
+       "no neighbor A.B.C.D route-map ROUTE_MAP_NAME DIRECT",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1479,7 +1480,7 @@ DEFUN (no_neighbor_route_map,
 
 DEFUN (neighbor_desc,
        neighbor_desc_cmd,
-       "neighbor IP_ADDR description ...",
+       "neighbor A.B.C.D description ...",
        NEIGHBOR_STR
        "IP address\n"
        "Description\n"
@@ -1522,7 +1523,7 @@ DEFUN (neighbor_desc,
 
 DEFUN (no_neighbor_desc,
        no_neighbor_desc_cmd,
-       "no neighbor IP_ADDR description ...",
+       "no neighbor A.B.C.D description ...",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1551,7 +1552,7 @@ DEFUN (no_neighbor_desc,
 
 DEFUN (neighbor_shutdown,
        neighbor_shutdown_cmd,
-       "neighbor IP_ADDR shutdown",
+       "neighbor A.B.C.D shutdown",
        NEIGHBOR_STR
        "IP address\n"
        "Shutdown\n")
@@ -1579,7 +1580,7 @@ DEFUN (neighbor_shutdown,
 
 DEFUN (no_neighbor_shutdown,
        no_neighbor_shutdown_cmd,
-       "no neighbor IP_ADDR shutdown",
+       "no neighbor A.B.C.D shutdown",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1606,7 +1607,7 @@ DEFUN (no_neighbor_shutdown,
 
 DEFUN (neighbor_interface,
        neighbor_interface_cmd,
-       "neighbor IP_ADDR interface IFNAME",
+       "neighbor A.B.C.D interface IFNAME",
        NEIGHBOR_STR
        "IP address\n"
        "Interface\n"
@@ -1633,7 +1634,7 @@ DEFUN (neighbor_interface,
 
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
-       "neighbor IP_ADDR timers holdtime TIMER",
+       "neighbor A.B.C.D timers holdtime TIMER",
        NEIGHBOR_STR
        "IP address\n"
        "BGP timers\n"
@@ -1666,7 +1667,7 @@ DEFUN (neighbor_timers_holdtime,
 
 DEFUN (no_neighbor_timers_holdtime,
        no_neighbor_timers_holdtime_cmd,
-       "no neighbor IP_ADDR timers holdtime [TIMER]",
+       "no neighbor A.B.C.D timers holdtime [TIMER]",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1710,7 +1711,7 @@ DEFUN (no_neighbor_timers_holdtime,
 /* Make peer and enable further neighbor configuration. */
 DEFUN (neighbor, 
        neighbor_cmd, 
-       "neighbor IP_ADDR remote-as AS_NO [passive]",
+       "neighbor A.B.C.D remote-as <1-65535> [passive]",
        NEIGHBOR_STR
        "IP address\n"
        "Remote AS\n"
@@ -1770,9 +1771,15 @@ DEFUN (neighbor,
 
   /* If this peer is in passive mode star it in Active mode. */
   if (argc == 3 && (strcmp (argv[2], "passive") == 0))
-    peer->status = Active;
+    {
+      peer->passive = 1;
+      peer->status = Active;
+    }
   else
-    peer->status = Idle;
+    {
+      peer->passive = 0;
+      peer->status = Idle;
+    }
 
   /* Setup timer. */
   bgp_timer_set (peer);
@@ -1782,7 +1789,7 @@ DEFUN (neighbor,
 
 DEFUN (no_neighbor,
        no_neighbor_cmd,
-       "no neighbor IP_ADDR remote-as AS_NO",
+       "no neighbor A.B.C.D remote-as <1-65535>",
        NO_STR
        NEIGHBOR_STR
        "IP Address\n"
@@ -2091,7 +2098,10 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
       /* remote-as print. */
       vty_out (vty, " neighbor ");
       sockunion_vty_out (vty, peer->su);
-      vty_out (vty, " remote-as %d%s", peer->as, VTY_NEWLINE);
+      if (peer->passive)
+	vty_out (vty, " remote-as %d passive%s", peer->as, VTY_NEWLINE);
+      else
+	vty_out (vty, " remote-as %d%s", peer->as, VTY_NEWLINE);
 
       /* Shutdown or not. */
       if (peer->shutdown)
@@ -2222,6 +2232,7 @@ bgp_config_write (struct vty *vty)
   listnode node;
   struct bgp *bgp; 
   int config_write_network (struct vty *vty, struct bgp *bgp);
+  int write = 0;
 
   /* BGP Multiple instance. */
   if (bgp_multiple_instance)
@@ -2267,9 +2278,10 @@ bgp_config_write (struct vty *vty)
 	vty_out (vty, " redistribute ospf6%s", VTY_NEWLINE);
 
       bgp_peer_config_write (vty, bgp->peer);
-      vty_out (vty, "!%s", VTY_NEWLINE);
+
+      write++;
     }
-  return 0;
+  return write;
 }
 
 /* BGP node structure. */
@@ -2375,4 +2387,7 @@ bgp_init ()
   prefix_list_init ();
   prefix_list_add_hook (bgp_prefix_list_update);
   prefix_list_delete_hook (bgp_prefix_list_update);
+
+  /* Community list initialize. */
+  community_list_init ();
 }

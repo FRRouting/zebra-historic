@@ -3,7 +3,7 @@
 				   
 			  Kunihiro Ishiguro
 
-			       May 1999
+			      June 1999
 
 1. Introduction
 
@@ -73,7 +73,6 @@ configure terminal password.
   !
   ! zebra configuration sample
   !
-  hostname Router
   password zebra
   !
 
@@ -99,9 +98,9 @@ Next run daemon, and connect from each daemon's vty port will show like below.
     show              Show running system information
     who               Display who is on vty
 
-`?' is very usefull for user.
+`?' is very usefull for looking up commands.
 
-6. Daemons and it's options.
+6. Daemons and it's invoking options.
 
 6.1 zebra
 

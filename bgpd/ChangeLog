@@ -1,3 +1,25 @@
+1999-06-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (router_bgp): router bgp's argument changed from AS_NO to
+	<1-65535>.
+
+1999-06-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.h (struct bgp_info): Add subtype for BGP route type.
+
+1999-06-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_community.c (community_merge): Function added.
+
+1999-06-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_clist.c: New file.
+	* bgp_clist.h: New file.
+
+	* bgp_community.h (COMMUNITY_LOCAL_AS): Added for Cisco
+	compatibility.
+	(COMMUNITY_NO_ADVERTISE): Fix typo.
+
 1999-05-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_routemap.c: Add `set weight WEIGHT' command.

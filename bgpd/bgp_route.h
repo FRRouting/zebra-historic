@@ -23,6 +23,10 @@
 #ifndef _ZEBRA_BGP_ROUTE_H
 #define _ZEBRA_BGP_ROUTE_H
 
+#define BGP_ROUTE_NORMAL    0
+#define BGP_ROUTE_STATIC    1
+#define BGP_ROUTE_AGGREGATE 2
+
 /* I want to change structure name from bgp_route to bgp_info. */
 struct bgp_info
 {
@@ -33,6 +37,9 @@ struct bgp_info
   /* Type of this prefix */
   u_char type;
 
+  /* Type of bgp prefix. */
+  u_char sub_type;
+
   /* Selected route flag. */
   u_char selected;
 
@@ -41,6 +48,10 @@ struct bgp_info
 
   /* Pointer to attributes structure. */
   struct attr *attr;
+
+  /* Aggregate related information. */
+  int aggregate_count;
+  int suppress_count;
 };
 
 /* Prototypes. */

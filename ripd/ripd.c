@@ -438,6 +438,44 @@ rip_process_route (struct rip_packet *packet, int size,
       mask.s_addr = rte->netmask;
       p.prefixlen = ip_masklen (mask);
 
+
+     /* For rip v1, there won't be a valid netmask.
+      *
+      * This is a best guess at the masks.  If everyone was using old Ciscos
+      * before the 'ip subnet zero' option, it would be almost right too :-)
+      *
+      * Ciscos summarize ripv1 advertisments to the classful boundary (/16 for
+      * class B's) except when the RIP packet does to inside the classful
+      * network in question.
+      */
+
+      if(p.prefixlen == 0 && (u_int32_t) (p.prefix.s_addr) 
+	 && packet->version == 1) 
+	{
+	  if(ntohl ((u_int32_t) (p.prefix.s_addr)) & 0xff) 
+	    {
+	      mask.s_addr = 0xffffffff;
+	      p.prefixlen = 32;
+	    }
+	  else if((ntohl ((u_int32_t) (p.prefix.s_addr)) & 0xff00) ||
+		  IN_CLASSC(p.prefix.s_addr)) 
+	    {
+	      mask.s_addr = 0xffffff00;
+	      p.prefixlen = 24;
+	    }
+	  else if((ntohl ((u_int32_t) (p.prefix.s_addr)) & 0xff0000) ||
+		  IN_CLASSB(p.prefix.s_addr)) 
+	    {
+	      mask.s_addr = 0xffff0000;
+	      p.prefixlen = 16;
+	    }
+	  else 
+	    {
+	      mask.s_addr = 0xff000000;
+	      p.prefixlen = 8;
+	    }
+	}
+
       /* Fetch information into rip_info structure */
       rinfo = rip_info_new ();
       rinfo->type = ZEBRA_ROUTE_RIP;

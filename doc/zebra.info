@@ -16,7 +16,7 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for zebra-0.67.
+   This is the Zebra Manual for zebra-0.68.
 
    This manual describes `zebra' and some other beasts.
 
@@ -1155,6 +1155,7 @@ defined, it can be applied to any direction.
 
 * IP access list::
 * IP prefix list::
+* IP community list::
 * AS path access list::
 
 
@@ -1172,7 +1173,7 @@ IP access-list
      ip access-list permit 10.0.0.0/8
 
 
-File: zebra.info,  Node: IP prefix list,  Next: AS path access list,  Prev: IP access list,  Up: Filtering
+File: zebra.info,  Node: IP prefix list,  Next: IP community list,  Prev: IP access list,  Up: Filtering
 
 IP prefix list
 ==============
@@ -1181,7 +1182,15 @@ IP prefix list
 PREFIXLEN]
 
 
-File: zebra.info,  Node: AS path access list,  Prev: IP prefix list,  Up: Filtering
+File: zebra.info,  Node: IP community list,  Next: AS path access list,  Prev: IP prefix list,  Up: Filtering
+
+IP community list
+=================
+
+ - Command: ip community-list NAME TYPE COMMUNITY
+
+
+File: zebra.info,  Node: AS path access list,  Prev: IP community list,  Up: Filtering
 
 AS path access list
 ===================
@@ -1236,6 +1245,9 @@ Route map match command
  - Route-map Command: match metric METRIC
      Match specified METRIC
 
+ - Route-map Command: match community COMMUNITY_LIST
+     Match specified COMMUNITY_LIST
+
 
 File: zebra.info,  Node: Route map set command,  Prev: Route map match command,  Up: Route map
 
@@ -1256,6 +1268,9 @@ Route map set command
 
  - Route-map Command: set as-path prepend AS_PATH
      Set BGP AS path to prepend.
+
+ - Route-map Command: set community COMMUNITY
+     Set BGP Community attribute.
 
  - Route-map Command: set ipv6 nexthop global IPV6_ADDRESS
      Set BGP-4+ global IPv6 nexthop address.
@@ -1738,6 +1753,7 @@ Command Index
 * ip access-list permit IPV4-NETWORK:    IP access list.
 * ip address ADDRESS:                    Interface.
 * ip as-path access-list NAME TYPE AS_PATH: AS path access list.
+* ip community-list NAME TYPE COMMUNITY: IP community list.
 * ip prefix-list NAME seq SEQ permit|deny [le PREFIXLEN] [ge PREFIXLEN]: IP prefix list.
 * ip route NETWORK GATEWAY:              Static route.
 * ipv6 route NETWORK GATEWAY:            Static route.
@@ -1747,6 +1763,7 @@ Command Index
 * log file FILENAME:                     Basic configuration.
 * log stdout:                            Basic configuration.
 * match aspath AS_PATH:                  Route map match command.
+* match community COMMUNITY_LIST:        Route map match command.
 * match ip address ACCESS_LIST:          Route map match command.
 * match ip next-hop IPV4_ADDR:           Route map match command.
 * match metric METRIC:                   Route map match command.
@@ -1781,6 +1798,7 @@ Command Index
 * service advanced-vty:                  Basic configuration.
 * service password-encryption:           Basic configuration.
 * set as-path prepend AS_PATH:           Route map set command.
+* set community COMMUNITY:               Route map set command.
 * set ip nexthop IPV4_ADDRESS:           Route map set command.
 * set ipv6 nexthop global IPV6_ADDRESS:  Route map set command.
 * set ipv6 nexthop local IPV6_ADDRESS:   Route map set command.
@@ -1893,19 +1911,20 @@ Node: bgpd sample session30253
 Node: bgpd log format30453
 Node: How to set up 6bone connection30943
 Node: Filtering32174
-Node: IP access list32530
-Node: IP prefix list32892
-Node: AS path access list33116
-Node: Route map33298
-Node: Route map command33786
-Node: Route map match command33989
-Node: Route map set command34510
-Node: IPv6 supports35252
-Node: Kernel interface35463
-Node: Linux netlink36593
-Node: Zebra protocol37376
-Node: Copying38102
-Node: Command Index57303
-Node: VTY Key Index62813
+Node: IP access list32552
+Node: IP prefix list32914
+Node: IP community list33136
+Node: AS path access list33337
+Node: Route map33522
+Node: Route map command34010
+Node: Route map match command34213
+Node: Route map set command34824
+Node: IPv6 supports35647
+Node: Kernel interface35858
+Node: Linux netlink36988
+Node: Zebra protocol37771
+Node: Copying38497
+Node: Command Index57698
+Node: VTY Key Index63398
 
 End Tag Table

@@ -50,7 +50,7 @@ struct ospf_interface
   struct interface *ifp;
 
   /* Interface related socket fd. */
-  int fd;
+  int fd;				/* Unicast socket fd. */
 
   /* OSPF Specific interface data. */
   u_char flag;			        /* OSPF is enabled on this. */

@@ -341,7 +341,7 @@ bgp_attr_free (struct attr *attr)
     aspath_unintern (aspath);
 
   if (community)
-    community_free (community);
+    community_unintern (community);
 
   if (cluster)
     cluster_unintern (cluster);
@@ -964,6 +964,24 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putc (s, BGP_ATTR_LOCAL_PREF);
       stream_putc (s, 4);
       stream_putl (s, attr->local_pref);
+    }
+
+  /* Community attribute. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES))
+    {
+      if (attr->community->size * 4 > 255)
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS|ATTR_FLAG_EXTLEN);
+	  stream_putc (s, BGP_ATTR_COMMUNITIES);
+	  stream_putw (s, attr->community->size * 4);
+	}
+      else
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS);
+	  stream_putc (s, BGP_ATTR_COMMUNITIES);
+	  stream_putc (s, attr->community->size * 4);
+	}
+      stream_memcpy (s, attr->community->val, attr->community->size * 4);
     }
 
   /* Route Reflector. */

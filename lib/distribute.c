@@ -266,10 +266,11 @@ distribute_unset (char *ifname, enum distribute_type type, char *alist_name)
 }
 
 DEFUN (districute_list, distribute_list_cmd,
-       "distribute-list ALIST_NAME TYPE IFNAME",
+       "distribute-list ALIST_NAME (in|out) IFNAME",
        "Distirbute list set\n"
        "Distirbute list access-list name\n"
-       "Distribute list set [in|out]\n"
+       "Distribute list set to in\n"
+       "Distribute list set to out\n"
        "Distribute list interface name\n")
 {
   enum distribute_type type;
@@ -293,11 +294,12 @@ DEFUN (districute_list, distribute_list_cmd,
 }       
 
 DEFUN (no_districute_list, no_distribute_list_cmd,
-       "no distribute-list ALIST_NAME TYPE IFNAME",
+       "no distribute-list ALIST_NAME (in|out) IFNAME",
        NO_STR
        "Distirbute list unset\n"
        "Distirbute list access-list name\n"
-       "Distribute list [in|out]\n"
+       "Distribute list to in\n"
+       "Distribute list to out\n"
        "Distribute list interface name\n")
 {
   int ret;
@@ -336,6 +338,7 @@ config_write_distribute (struct vty *vty)
 {
   int i;
   HashBacket *mp;
+  int write = 0;
 
   for (i = 0; i < HASHTABSIZE; i++)
     for (mp = hash_head (disthash, i); mp; mp = mp->next)
@@ -345,16 +348,22 @@ config_write_distribute (struct vty *vty)
 	dist = mp->data;
 
 	if (dist->slot[DISTRIBUTE_IN])
-	  vty_out (vty, "distribute-list %s in %s%s", 
-		   dist->slot[DISTRIBUTE_IN],
-		   dist->ifname, VTY_NEWLINE);
+	  {
+	    vty_out (vty, "distribute-list %s in %s%s", 
+		     dist->slot[DISTRIBUTE_IN],
+		     dist->ifname, VTY_NEWLINE);
+	    write++;
+	  }
 
 	if (dist->slot[DISTRIBUTE_OUT])
-	  vty_out (vty, "distribute-list %s out %s%s", 
-		   dist->slot[DISTRIBUTE_OUT],
-		   dist->ifname, VTY_NEWLINE);
+	  {
+	    vty_out (vty, "distribute-list %s out %s%s", 
+		     dist->slot[DISTRIBUTE_OUT],
+		     dist->ifname, VTY_NEWLINE);
+	    write++;
+	  }
       }
-  return 0;
+  return write;
 }
 
 /* Initialize distribute list related hash. */

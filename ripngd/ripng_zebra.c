@@ -107,10 +107,16 @@ DEFUN (no_redistribute_ripng,
 int
 zebra_config_write (struct vty *vty)
 {
-  if (! zebra->redist[ZEBRA_ROUTE_RIPNG])
+  if (! zebra->enable)
+    {
+      vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+      return 1;
+    }
+  else if (! zebra->redist[ZEBRA_ROUTE_RIPNG])
     {
       vty_out (vty, "router zebra%s", VTY_NEWLINE);
       vty_out (vty, " no redistribute ripng%s", VTY_NEWLINE);
+      return 1;
     }
   return 0;
 }

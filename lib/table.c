@@ -387,6 +387,47 @@ route_next (struct route_node *node)
   return NULL;
 }
 
+/* Unlock current node and lock next node until limit. */
+struct route_node *
+route_next_until (struct route_node *node, struct route_node *limit)
+{
+  struct route_node *next;
+  struct route_node *start;
+
+  /* Node may be deleted from route_unlock_node so we have to preserve
+     next node's pointer. */
+
+  if (node->l_left)
+    {
+      next = node->l_left;
+      route_lock_node (next);
+      route_unlock_node (node);
+      return next;
+    }
+  if (node->l_right)
+    {
+      next = node->l_right;
+      route_lock_node (next);
+      route_unlock_node (node);
+      return next;
+    }
+
+  start = node;
+  while (node->parent && node != limit)
+    {
+      if (node->parent->l_left == node && node->parent->l_right)
+	{
+	  next = node->parent->l_right;
+	  route_lock_node (next);
+	  route_unlock_node (start);
+	  return next;
+	}
+      node = node->parent;
+    }
+  route_unlock_node (start);
+  return NULL;
+}
+
 #ifdef TEST2
 main ()
 {

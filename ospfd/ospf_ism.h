@@ -63,7 +63,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
         (T) = thread_add_write (master, (F), oi, (V))
 
 /* Macro for OSPF ISM write turn off. */
-#define OSPF_ISM_WRITE_OFF (X) \
+#define OSPF_ISM_WRITE_OFF(X) \
       if (X) \
         { \
           thread_cancel (X); \
@@ -83,9 +83,13 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
           (X) = NULL; \
         }
 
-/* Macro for OSPF event add. */
-#define OSPF_ISM_EVENT_ADD(I,E) \
+/* Macro for OSPF schedule event. */
+#define OSPF_ISM_EVENT_SCHEDULE(I,E) \
       thread_add_event (master, ospf_ism_event, (I), (E))
+
+/* Macro for OSPF execute event. */
+#define OSPF_ISM_EVENT_EXECUTE(I,E) \
+      thread_execute (master, ospf_ism_event, (I), (E))
 
 #define LOOKUP(x, y)	mes_lookup(x, x ## _max, y)
 

@@ -25,6 +25,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_AUTH_SIZE	          8
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
 #define OSPF_HELLO_MIN_SIZE	 20
+#define OSPF_DB_DESC_MIN_SIZE     8
+#define OSPF_LS_REQ_MIN_SIZE      8
+#define OSPF_LS_UPD_MIN_SIZE      0
+#define OSPF_LS_ACK_MIN_SIZE      0
 
 #define OSPF_MSG_HELLO	       1  /* OSPF Hello Message. */
 #define OSPF_MSG_DB_DESC       2  /* OSPF Database Descriptoin Message. */
@@ -64,37 +68,24 @@ struct ospf_db_desc
   u_int16_t mtu;
   u_char options;
   u_char flags;
-  u_int32_t seq_number;
-  /* struct ospf_lsa lsa[1]; */
+  u_int32_t dd_seqnum;
 };
 
-/* OSPF Link State Request body format. */
-struct ospf_ls_req
-{
-  u_int32_t ls_type;
-  struct in_addr ls_id;
-  struct in_addr adv_router;
-};
-
-/* OSPF Link State Update body format. */
-struct ospf_ls_upd
-{
-  u_int32_t number_lsa;
-  /*  struct ospf_lsa lsa[1]; */
-};
-
-/* OSPF Link State Ack body format. */
-struct ospf_ls_ack
-{
-  struct lsa_header header[1];
-};
 
 /* Macros. */
 #define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
 #define OSPF_OUTPUT_LENGTH(S)	((S)->putp)
 
+#define IS_SET_DD_MS(X)		((X) & OSPF_DD_FLAG_MS)
+#define IS_SET_DD_M(X)		((X) & OSPF_DD_FLAG_M)
+#define IS_SET_DD_I(X)		((X) & OSPF_DD_FLAG_I)
+
 /* Prototypes. */
 int ospf_read (struct thread *);
-void ospf_hello_send (struct ospf_interface *);
+int ospf_hello_send (struct thread *);
+int ospf_db_desc_send (struct thread *);
+int ospf_ls_req_send (struct thread *);
+int ospf_ls_upd_send (struct thread *);
+int ospf_ls_ack_send (struct thread *);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

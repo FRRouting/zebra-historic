@@ -51,13 +51,16 @@ struct vty
   struct buffer *obuf;
 
   /* Command input buffer */
-  char buf[VTY_BUFSIZ];
+  char *buf;
 
   /* Command cursor point */
   int cp;
 
   /* Command length */
   int length;
+
+  /* Command max length. */
+  int max;
 
   /* Histry of command */
   char *hist[VTY_MAXHIST];
@@ -100,6 +103,9 @@ struct vty
 /* Default time out value */
 /* #define VTY_TIMEOUT_DEFAULT 10 */
 #define VTY_TIMEOUT_DEFAULT 300
+
+/* Vty read buffer size. */
+#define VTY_READ_BUFSIZ 512
 
 /* Prototypes. */
 struct vty *vty_new ();
