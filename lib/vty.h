@@ -155,7 +155,7 @@ void vty_finish (void);
 struct vty *vty_new (void);
 int vty_out (struct vty *, const char *, ...);
 void vty_read_config (char *, char *, char *);
-void vty_time_print (struct vty *);
+void vty_time_print (struct vty *, int);
 void vty_serv_sock (unsigned short, char *);
 void vty_close (struct vty *);
 char *vty_get_cwd (void);

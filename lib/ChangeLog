@@ -1,3 +1,60 @@
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.91 is released.
+
+2001-01-31  Akihiro Mizutani <mizutani@dml.com>
+
+	* vty.c (vty_login): Add vty login command.
+
+2001-01-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_reset): Close accept socket.
+
+2001-01-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): MTYPE_ATTR_TRANSIT is added for unknown transit
+	attribute.
+
+2001-01-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.c (zebra_interface_address_add_read): Fetch interface
+	address flag.
+	(zebra_interface_address_delete_read): Likewise.
+
+2001-01-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* table.c (route_node_match_ipv4): Utility function for IPv4
+	address lookup.
+	(route_node_match_ipv6): Utility function for IPv4 address lookup.
+
+2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.c: Delete RIP_API part until new implementation comes out.
+
+2001-01-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* hash.h (struct Hash): Rename alloc to count.  Change type to
+	unsigned long.
+
+	* stream.c (stream_getc_from): New function.
+	(stream_getw_from): Likewise.
+
+	* zebra.h (ZEBRA_FLAG_STATIC): Add new flag for persistent route.
+
+2001-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* flap.c: File is removed.
+
+	* flap.c: Likewise.
+
+	* roken.h: Likewise.
+
+	* buffer.c (buffer_new): Remove type option to buffer_new().
+
+2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.c (zapi_ipv4_delete): Remove OLD_RIB part.
+
 2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.90 is released.

@@ -22,28 +22,23 @@
 #ifndef OSPF6_NEIGHBOR_H
 #define OSPF6_NEIGHBOR_H
 
+/* Neighbor structure */
 struct ospf6_neighbor
 {
+  /* Neighbor Router ID String */
+  char str[32];
+
   /* OSPFv3 Interface this neighbor belongs to */
   struct ospf6_interface *ospf6_interface;
 
   /* Neighbor state */
   u_char state;
 
-  /* including MASTER bit */
-  u_char dd_bits;
-
-  /* DD sequence number */
-  u_int32_t seqnum;
-
-  /* Neighbor Router ID String */
-  char str[16];
-
   /* Neighbor Router ID */
-  u_int32_t rtr_id;
+  u_int32_t router_id;
 
   /* Router Priority of this neighbor */
-  u_char rtr_pri;
+  u_char priority;
 
   u_int32_t ifid;
   u_int32_t dr;
@@ -57,32 +52,41 @@ struct ospf6_neighbor
   /* IPaddr of I/F on our side link */
   struct in6_addr hisaddr;
 
+  /* LSA lists for this neighbor */
+  list summarylist;
+  list requestlist;
+  list retranslist;
+
+  /* For Database Exchange */
+  u_char dbdesc_bits;
+  u_int32_t dbdesc_seqnum;
+  struct ospf6_dbdesc *dbdesc_previous;
+
   /* last received DD , including OSPF capability of this neighbor */
   struct ospf6_dbdesc last_dd;
 
   /* LSAs to retransmit to this neighbor */
   list dbdesc_lsa;
 
-  /* LSA lists for this neighbor */
-  list summarylist;
-  list requestlist;
-  list retranslist;
-
   /* placeholder for DbDesc */
   struct iovec dbdesc_last_send[1024];
 
-  struct thread          *inactivity_timer;
-  /* new member for dbdesc */
-  /* retransmission thread */
+  struct thread *inactivity_timer;
 
-  /* Retransmit LSUpdate */
-  struct thread *send_update;
-
-  /* Retransmit DbDesc */
+  /* DbDesc */
   struct thread *thread_dbdesc;
+  struct thread *thread_send_dbdesc;
+  struct thread *thread_rxmt_dbdesc;
+  list dbdesclist;
 
-  /* Retransmit LsReq */
+  /* LSReq */
+  struct thread *thread_send_lsreq;
   struct thread *thread_rxmt_lsreq;
+
+  /* LSUpdate */
+  struct thread *send_update;
+  struct thread *thread_send_update;
+  struct thread *thread_rxmt_update;
 
   /* statistics */
   u_int ospf6_stat_state_changed;
@@ -99,6 +103,8 @@ struct ospf6_neighbor
 
   struct timeval tv_last_hello_received;
 };
+
+extern char *ospf6_neighbor_state_string[];
 
 
 /* Function Prototypes */
@@ -147,17 +153,13 @@ void
 ospf6_neighbor_list_remove_all (struct ospf6_neighbor *);
 
 struct ospf6_neighbor *
-ospf6_neighbor_create (u_int32_t);
-
+ospf6_neighbor_create (u_int32_t, struct ospf6_interface *);
 void
 ospf6_neighbor_delete (struct ospf6_neighbor *);
-
 struct ospf6_neighbor *
 ospf6_neighbor_lookup (u_int32_t, struct ospf6_interface *);
 
-void ospf6_neighbor_show_summary (struct vty *, struct ospf6_neighbor *);
-void ospf6_neighbor_show (struct vty *, struct ospf6_neighbor *);
-void ospf6_neighbor_show_detail (struct vty *, struct ospf6_neighbor *);
+void ospf6_neighbor_init ();
 
 #endif /* OSPF6_NEIGHBOR_H */
 

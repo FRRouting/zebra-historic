@@ -39,14 +39,16 @@ struct bgp_info
   u_char sub_type;
 
   /* Selected route flag. */
-  u_char selected;
   u_char as_selected;
 
   /* BGP info status. */
   u_char flags;
-#define BGP_INFO_CHANGED   (1 << 0)
-#define BGP_INFO_DAMPED    (1 << 1)
-#define BGP_INFO_HISTORY   (1 << 2)
+#define BGP_INFO_IGP_CHANGED    (1 << 0)
+#define BGP_INFO_DAMPED         (1 << 1)
+#define BGP_INFO_HISTORY        (1 << 2)
+#define BGP_INFO_SELECTED       (1 << 3)
+#define BGP_INFO_VALID          (1 << 4)
+#define BGP_INFO_ATTR_CHANGED   (1 << 5)
 
   /* Pointer to peer structure. */
   struct peer *peer;
@@ -58,44 +60,7 @@ struct bgp_info
   int suppress;
   
   /* Nexthop reachability check. */
-  u_int32_t valid;
-
-  /* Time */
-  time_t uptime;
-
-  /* Pointer to dampening structure */
-  struct bgp_damp_info *bgp_damp_info;
-};
-
-/* I want to change structure name from bgp_route to bgp_info. */
-struct bgp_info_tag
-{
-  /* For linked list. */
-  struct bgp_info_tag *next;
-  struct bgp_info_tag *prev;
-
-  /* Type of this prefix */
-  u_char type;
-
-  /* Type of bgp prefix. */
-  u_char sub_type;
-
-  /* Selected route flag. */
-  u_char selected;
-  u_char as_selected;
-  u_char flags;
-
-  /* Pointer to peer structure. */
-  struct peer *peer;
-
-  /* Pointer to attributes structure. */
-  struct attr *attr;
-
-  /* Aggregate related information. */
-  int suppress;
-  
-  /* Nexthop reachability check. */
-  u_int32_t valid;
+  u_int32_t igpmetric;
 
   /* Time */
   time_t uptime;
@@ -105,6 +70,15 @@ struct bgp_info_tag
 
   /* Tag */
   u_char tag[3];
+};
+
+/* BGP static route configuration. */
+struct bgp_static
+{
+  safi_t safi;
+  int backdoor;
+  u_char valid;
+  u_int32_t igpmetric;
 };
 
 /* Prototypes. */

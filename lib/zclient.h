@@ -108,6 +108,7 @@ zapi_ipv4_delete (struct zclient *, struct prefix_ipv4 *, struct zapi_ipv4 *);
 
 /* Prototypes of zebra client service functions. */
 struct zclient *zclient_new (void);
+void zclient_free (struct zclient *);
 void zclient_init (struct zclient *, int);
 int zclient_start (struct zclient *);
 void zclient_stop (struct zclient *);

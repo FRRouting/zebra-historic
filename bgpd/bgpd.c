@@ -847,7 +847,7 @@ DEFUN (no_bgp_deterministic_med,
 DEFUN (bgp_enforce_first_as,
        bgp_enforce_first_as_cmd,
        "bgp enforce-first-as",
-       "BGP specific commands\n"
+       BGP_STR
        "Enforce the first AS for EBGP routes\n")
 {
   struct bgp *bgp;
@@ -860,8 +860,8 @@ DEFUN (bgp_enforce_first_as,
 DEFUN (no_bgp_enforce_first_as,
        no_bgp_enforce_first_as_cmd,
        "no bgp enforce-first-as",
-       NO_STR
-       "BGP specific commands\n"
+       BGP_STR
+       BGP_STR
        "Enforce the first AS for EBGP routes\n")
 {
   struct bgp *bgp;
@@ -932,6 +932,7 @@ DEFUN (no_bgp_bestpath_aspath_ignore,
   UNSET_FLAG (bgp->config, BGP_CONFIG_ASPATH_IGNORE);
   return CMD_SUCCESS;
 }
+
 
 /* "bgp bestpath med" configuration. */
 DEFUN (bgp_bestpath_med,
@@ -1060,6 +1061,36 @@ DEFUN (bgp_default_ipv4_unicast,
   return CMD_SUCCESS;
 }
 
+/* "bgp import-check" configuration.  */
+DEFUN (bgp_network_import_check,
+       bgp_network_import_check_cmd,
+       "bgp network import-check",
+       "BGP specific commands\n"
+       "BGP network command\n"
+       "Check BGP network route exists in IGP\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  SET_FLAG (bgp->config, BGP_CONFIG_IMPORT_CHECK);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_network_import_check,
+       no_bgp_network_import_check_cmd,
+       "no bgp network import-check",
+       NO_STR
+       "BGP specific commands\n"
+       "BGP network command\n"
+       "Check BGP network route exists in IGP\n")
+{
+  struct bgp *bgp;
+
+  bgp = vty->index;
+  UNSET_FLAG (bgp->config, BGP_CONFIG_IMPORT_CHECK);
+  return CMD_SUCCESS;
+}
+
 DEFUN (bgp_default_local_preference,
        bgp_default_local_preference_cmd,
        "bgp default local-preference <0-4294967295>",
@@ -1108,7 +1139,7 @@ peer_new ()
 
   /* Allocate new peer. */
   peer = XMALLOC (MTYPE_BGP_PEER, sizeof (struct peer));
-  bzero (peer, sizeof (struct peer));
+  memset (peer, 0, sizeof (struct peer));
 
   /* Set default value. */
   peer->fd = -1;
@@ -1570,24 +1601,32 @@ peer_lookup_by_su (union sockunion *su)
 
 struct peer *
 peer_lookup_with_open (union sockunion *su, as_t remote_as,
-		       struct in_addr *remote_id)
+		       struct in_addr *remote_id, int *as)
 {
   struct peer *peer;
   struct listnode *nn;
 
   LIST_LOOP (peer_list, peer, nn)
     {
-      if (sockunion_same (&peer->su, su)
-	  && (peer->as == remote_as) 
-	  && (peer->remote_id.s_addr == remote_id->s_addr))
-	return peer;
+      if (sockunion_same (&peer->su, su))
+	{
+	  if (peer->as == remote_as
+	      && peer->remote_id.s_addr == remote_id->s_addr)
+	    return peer;
+	  if (peer->as == remote_as)
+	    *as = 1;
+	}
     }
   LIST_LOOP (peer_list, peer, nn)
     {
-      if (sockunion_same (&peer->su, su)
-	  && (peer->as == remote_as) 
-	  && (peer->remote_id.s_addr == 0))
-	return peer;
+      if (sockunion_same (&peer->su, su))
+	{
+	  if (peer->as == remote_as
+	      && peer->remote_id.s_addr == 0)
+	    return peer;
+	  if (peer->as == remote_as)
+	    *as = 1;
+	}
     }
   return NULL;
 }
@@ -1660,9 +1699,9 @@ peer_conf_lookup_existing (struct bgp *bgp, union sockunion *su)
 
 /* Display peer uptime. */
 char *
-peer_uptime (struct peer *peer, char *buf, size_t len)
+peer_uptime (time_t uptime2, char *buf, size_t len)
 {
-  time_t uptime;
+  time_t uptime1;
   struct tm *tm;
 
   /* Check buffer length. */
@@ -1673,25 +1712,25 @@ peer_uptime (struct peer *peer, char *buf, size_t len)
     }
 
   /* If there is no connection has been done before print `never'. */
-  if (peer->uptime == 0)
+  if (uptime2 == 0)
     {
       snprintf (buf, len, "never   ");
       return buf;
     }
 
   /* Get current time. */
-  uptime = time (NULL);
-  uptime -= peer->uptime;
-  tm = gmtime (&uptime);
+  uptime1 = time (NULL);
+  uptime1 -= uptime2;
+  tm = gmtime (&uptime1);
 
   /* Making formatted timer strings. */
 #define ONE_DAY_SECOND 60*60*24
 #define ONE_WEEK_SECOND 60*60*24*7
 
-  if (uptime < ONE_DAY_SECOND)
+  if (uptime1 < ONE_DAY_SECOND)
     snprintf (buf, len, "%02d:%02d:%02d", 
 	      tm->tm_hour, tm->tm_min, tm->tm_sec);
-  else if (uptime < ONE_WEEK_SECOND)
+  else if (uptime1 < ONE_WEEK_SECOND)
     snprintf (buf, len, "%dd%02dh%02dm", 
 	      tm->tm_yday, tm->tm_hour, tm->tm_min);
   else
@@ -1726,6 +1765,9 @@ peer_create (union sockunion *su, as_t local_as, struct in_addr id,
   peer->as = remote_as;
   peer->local_id = id;
   listnode_add_sort (peer_list, peer);
+
+  /* Last read time set */
+  peer->readtime = time(NULL);
 
   /* Default TTL set. */
   peer->ttl = (peer_sort (peer) == BGP_PEER_IBGP ? 255 : 1);
@@ -2732,7 +2774,7 @@ DEFUN (neighbor_description,
 
   /* Make string from buffer.  This function should be provided by
      buffer.c. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 1; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);
@@ -2783,7 +2825,7 @@ DEFUN (ipv6_bgp_neighbor_description,
   if (argc == 1)
     return CMD_SUCCESS;
 
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 1; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);
@@ -4278,8 +4320,6 @@ peer_version (struct vty *vty, char *ip_str, int afi, char *str)
     {
       if (strcmp (str, "4") == 0)
 	peer->version = BGP_VERSION_4;
-      else if (strcmp (str, "4+") == 0)
-	peer->version = BGP_VERSION_MP_4;
       else if (strcmp (str, "4-") == 0)
 	peer->version = BGP_VERSION_MP_4_DRAFT_00;
       else
@@ -5253,6 +5293,9 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 		{
 		  UNSET_FLAG (peer->sflags, PEER_STATUS_PREFIX_OVERFLOW);
 		  peer->v_start = BGP_INIT_START_TIMER;
+#ifdef SEND_CEASE
+		  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+#endif /* SEND_CEASE */
 		  BGP_EVENT_ADD (peer, BGP_Stop);
 		}
 	    }
@@ -5282,6 +5325,9 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 		{
 		  UNSET_FLAG (peer->sflags, PEER_STATUS_PREFIX_OVERFLOW);
 		  peer->v_start = BGP_INIT_START_TIMER;
+#ifdef SEND_CEASE
+		  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+#endif /* SEND_CEASE */
 		  BGP_EVENT_ADD (peer, BGP_Stop);
 		}
 	      cleared = 1;
@@ -5319,6 +5365,9 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 		{
 		  UNSET_FLAG (peer->sflags, PEER_STATUS_PREFIX_OVERFLOW);
 		  peer->v_start = BGP_INIT_START_TIMER;
+#ifdef SEND_CEASE
+		  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+#endif /* SEND_CEASE */
 		  BGP_EVENT_ADD (peer, BGP_Stop);
 		}
 	      cleared = 1;
@@ -6533,8 +6582,19 @@ bgp_show_summary (struct vty *vty, int afi, int safi)
 	    {
 	      if (! count)
 		{
-		  vty_out (vty, "BGP router identifier %s, local AS number %d%s%s",
-                           inet_ntoa (bgp->id), bgp->as, VTY_NEWLINE, VTY_NEWLINE);
+		  vty_out (vty,
+			   "BGP router identifier %s, local AS number %d%s",
+                           inet_ntoa (bgp->id), bgp->as, VTY_NEWLINE);
+		  vty_out (vty, 
+			   "%ld BGP AS-PATH entries%s", aspath_count (),
+			   VTY_NEWLINE);
+		  vty_out (vty, 
+			   "%ld BGP community entries%s", community_count (),
+			   VTY_NEWLINE);
+
+		  if (CHECK_FLAG(bgp->config, BGP_CONFIG_DAMPENING))
+		    vty_out (vty, "Dampening enabled.%s", VTY_NEWLINE);
+		  vty_out (vty, "%s", VTY_NEWLINE);
 		  vty_out (vty, "%s%s", afi == AFI_IP ? header_v4 : header_v6,
 			   VTY_NEWLINE);
 		}
@@ -6550,7 +6610,6 @@ bgp_show_summary (struct vty *vty, int afi, int safi)
 		  switch (peer->version) 
 		    {
 		    case BGP_VERSION_4:
-		    case BGP_VERSION_MP_4:
 		      vty_out (vty, "4 ");
 		      break;
 		    case BGP_VERSION_MP_4_DRAFT_00:
@@ -6576,7 +6635,7 @@ bgp_show_summary (struct vty *vty, int afi, int safi)
 			 peer->keepalive_out + peer->notify_out + peer->refresh_out);
 
 	      vty_out (vty, "%8s", 
-		       peer_uptime (peer, timebuf, BGP_UPTIME_LEN));
+		       peer_uptime (peer->uptime, timebuf, BGP_UPTIME_LEN));
 
 	      if (peer->status == Established)
 		{
@@ -6735,11 +6794,14 @@ bgp_show_peer (struct vty *vty, struct peer_conf *conf, afi_t afi, safi_t safi)
 	   ? "Idle" : LOOKUP(bgp_status_msg, p->status));
   if (p->status == Established) 
     vty_out (vty, ", up for %8s", 
-	     peer_uptime (p, timebuf, BGP_UPTIME_LEN));
+	     peer_uptime (p->uptime, timebuf, BGP_UPTIME_LEN));
   vty_out (vty, "%s", VTY_NEWLINE);
   
+  /* read timer */
+  vty_out (vty, "  Last read %s", peer_uptime (p->readtime, timebuf, BGP_UPTIME_LEN));
+
   /* Configured timer values. */
-  vty_out (vty, "  hold time is %d, keepalive interval is %d seconds%s",
+  vty_out (vty, ", hold time is %d, keepalive interval is %d seconds%s",
 	   p->v_holdtime, p->v_keepalive, VTY_NEWLINE);
   if (p->config & PEER_CONFIG_TIMER)
     {
@@ -7556,7 +7618,6 @@ DEFUN (show_ip_bgp_attr_info,
   attrhash_dump (vty);
   return CMD_SUCCESS;
 }
-
 
 /* BGP peer configuration display function. */
 void
@@ -7895,6 +7956,10 @@ bgp_config_write (struct vty *vty)
 	  vty_out (vty, "%s", VTY_NEWLINE);
 	}
 
+      /* BGP network import check. */
+      if (CHECK_FLAG (bgp->config, BGP_CONFIG_IMPORT_CHECK))
+	vty_out (vty, " bgp network import-check%s", VTY_NEWLINE);
+
       /* BGP scan interval. */
       bgp_config_write_scan_time (vty);
 
@@ -8040,6 +8105,10 @@ bgp_init ()
   install_element (BGP_NODE, &no_bgp_bestpath_med_cmd);
   install_element (BGP_NODE, &no_bgp_bestpath_med2_cmd);
   install_element (BGP_NODE, &no_bgp_bestpath_med3_cmd);
+
+  /* "bgp network import-check" commands. */
+  install_element (BGP_NODE, &bgp_network_import_check_cmd);
+  install_element (BGP_NODE, &no_bgp_network_import_check_cmd);
 
   /* "no bgp default ipv4-unicast" commands. */
   install_element (BGP_NODE, &no_bgp_default_ipv4_unicast_cmd);

@@ -179,7 +179,7 @@ main (int argc, char **argv)
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_ZEBRA,
+  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_ZEBRA,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -245,6 +245,9 @@ main (int argc, char **argv)
   access_list_init ();
   rtadv_init ();
 
+  /* For debug purpose. */
+  /* SET_FLAG (zebra_debug_event, ZEBRA_DEBUG_EVENT); */
+
   /* Make kernel routing socket. */
   kernel_init ();
   interface_list ();
@@ -259,7 +262,7 @@ main (int argc, char **argv)
 
   /* Clean up self inserted route. */
   if (! keep_kernel_mode)
-    zebra_sweep_route ();
+    rib_sweep_route ();
 
   /* Configuration file read*/
   vty_read_config (config_file, config_current, config_default);

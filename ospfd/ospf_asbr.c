@@ -50,7 +50,6 @@ ospf_external_route_remove (struct prefix_ipv4 *p)
 {
   struct route_node *rn;
   struct ospf_route *or;
-  listnode node;
 
   rn = route_node_lookup (ospf_top->old_external_route, (struct prefix *) p);
   if (rn)
@@ -61,15 +60,7 @@ ospf_external_route_remove (struct prefix_ipv4 *p)
 
 	/* Remove route from zebra. */
         if (or->type == OSPF_DESTINATION_NETWORK)
-	  {
-	    for (node = listhead (or->path); node; nextnode (node))
-	      {
-		struct ospf_path *path = getdata (node);
-		if (path->nexthop.s_addr != INADDR_ANY)
-		  ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p,
-				     &path->nexthop);
-	      }
-	  }
+	  ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, or);
 
 	ospf_route_free (or);
 	rn->info = NULL;

@@ -31,6 +31,12 @@
 #include "ospf6_area.h"
 #include "ospf6_interface.h"
 
+char *ospf6_interface_state_string[] =
+{
+  "None", "Down", "Loopback", "Waiting", "PointToPoint",
+  "DROther", "BDR", "DR", NULL
+};
+
 static struct in6_addr *
 ospf6_interface_update_linklocal_address (struct interface *ifp)
 {
@@ -172,7 +178,7 @@ ospf6_interface_address_update (struct interface *ifp)
     return;
 
   /* create new Link-LSA */
-  ospf6_lsa_update_link (o6i);
+  ospf6_lsa_update_link (o6i->interface->name);
 }
 
 void
@@ -370,7 +376,7 @@ ospf6_interface_show (struct vty *vty, struct interface *iface)
     vty_out (vty, "  Not Attached to Area%s", VTY_NEWLINE);
 
   vty_out (vty, "  State %s, Transmit Delay %lu sec, Priority %d%s",
-           ifs_name[ospf6_interface->state],
+           ospf6_interface_state_string[ospf6_interface->state],
            ospf6_interface->transdelay,
            ospf6_interface->priority,
 	   VTY_NEWLINE);
@@ -407,7 +413,7 @@ ospf6_interface_statistics_show (struct vty *vty, struct ospf6_interface *o6i)
   ospf6_timeval_sub (&now, &ospf6->starttime, &uptime);
 
   recv_total = send_total = 0;
-  for (i = 0; i < MSGT_MAX; i++)
+  for (i = 0; i < OSPF6_MESSAGE_TYPE_MAX; i++)
     {
       recv_total += o6i->message_stat[i].recv_octet;
       send_total += o6i->message_stat[i].send_octet;
@@ -423,7 +429,7 @@ ospf6_interface_statistics_show (struct vty *vty, struct ospf6_interface *o6i)
 
   vty_out (vty, "    %-8s %4s %4s %7s %7s%s",
            "Type", "tx", "rx", "tx-byte", "rx-byte", VTY_NEWLINE);
-  for (i = 0; i < MSGT_MAX; i++)
+  for (i = 0; i < OSPF6_MESSAGE_TYPE_MAX; i++)
     {
       vty_out (vty, "    %-8s %4d %4d %7d %7d%s",
                ospf6_message_type_string[i],
@@ -512,9 +518,9 @@ DEFUN (ipv6_ospf6_cost,
   if (o6i->area)
     {
       if (ospf6_interface_count_full_neighbor (o6i) == 0)
-        ospf6_lsa_update_intra_prefix_stub (o6i->area);
+        ospf6_lsa_update_intra_prefix_stub (o6i->area->area_id);
       else
-        ospf6_lsa_update_router (o6i->area);
+        ospf6_lsa_update_router (o6i->area->area_id);
     }
 
   return CMD_SUCCESS;

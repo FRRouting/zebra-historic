@@ -27,9 +27,6 @@
 #include "routemap.h"
 #include "zclient.h"
 #include "log.h"
-#ifdef RIP_API
-#include "ripd/ripd_api.h"
-#endif /* RIP_API */
 #include "ripd/ripd.h"
 #include "ripd/rip_debug.h"
 
@@ -43,14 +40,6 @@ int rip_interface_address_add (int, struct zclient *, zebra_size_t);
 int rip_interface_address_delete (int, struct zclient *, zebra_size_t);
 int rip_interface_up (int, struct zclient *, zebra_size_t);
 int rip_interface_down (int, struct zclient *, zebra_size_t);
-
-#ifdef RIP_API
-struct zclient *
-get_zebra_client (void)
-{
-  return zclient;
-}
-#endif /* RIP_API */
 
 /* RIPd to zebra command interface. */
 void
@@ -673,7 +662,6 @@ rip_zclient_init ()
   zclient->interface_up = rip_interface_up;
   zclient->interface_down = rip_interface_down;
   
-
   /* Install zebra node. */
   install_node (&zebra_node, config_write_zebra);
 
@@ -695,186 +683,3 @@ rip_zclient_init ()
   install_element (RIP_NODE, &rip_default_information_originate_cmd);
   install_element (RIP_NODE, &no_rip_default_information_originate_cmd);
 }
-
-#ifdef RIP_API
-/****** API ****/
-
-/*************************
- Function:ripd_api_set_redist_mode
- PURPOSE: Set/Unset the RIP route Redistribute control
- PARAMETERS:
-   IN newMode : 1- set. 0- unset
-**************************/
-int
-ripd_api_set_redist_mode (u_char newMode)
-{
-  struct zclient *zc;
-
-  zc = get_zebra_client();
-
-  if (zc)
-    zc->redist[ZEBRA_ROUTE_RIP] = newMode;
-  else
-    return CMD_ERR_NOTHING_TODO;
-
-  return CMD_SUCCESS;
-}
-
-
-/*************************
- Function:ripd_api_get_redist_mode
- PURPOSE: Get the RIP route Redistribute control mode
- PARAMETERS:
-   OUT *currentMode : pointer for the result
-**************************/
-int
-ripd_api_get_redist_mode (u_char* currentMode)
-{
-  struct zclient *zc;
-
-  zc = get_zebra_client();
-
-  if (zc)
-    *currentMode = zc->redist[ZEBRA_ROUTE_RIP];
-  else
-    return CMD_ERR_NOTHING_TODO;
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_redist_type_mode
- PURPOSE: Set/Unset the type RIP route Redistribute control
- PARAMETERS:
-   IN type (from {ZEBRA_ROUTE_KERNEL,ZEBRA_ROUTE_CONNECT,
-                  ZEBRA_ROUTE_STATIC, ZEBRA_ROUTE_OSPF,
-                  ZEBRA_ROUTE_BGP}
-   IN newMode : 1- set. 0- unset
-   IN char* route_map_name
-**************************/
-int
-ripd_api_set_redist_type_mode (int type,
-                               u_char newMode,
-                               char* route_map_name)
-{
-  struct zclient *zc;
-
-  zc = get_zebra_client();
-
-  if (! zc)
-    return CMD_ERR_NOTHING_TODO;
-
-  if (ZEBRA_ROUTE_KERNEL  != type &&
-      ZEBRA_ROUTE_CONNECT != type &&
-      ZEBRA_ROUTE_STATIC  != type &&
-      ZEBRA_ROUTE_OSPF    != type &&
-      ZEBRA_ROUTE_BGP     != type) {
-    return CMD_ERR_AMBIGUOUS;
-  }
-
-  if (newMode)
-    {
-      if (route_map_name)
-        {
-          rip_routemap_set (type, route_map_name);
-        }
-      zclient_redistribute_set (zc, type);
-    }
-  else
-    {
-      rip_routemap_unset (type, route_map_name);
-      rip_redistribute_unset (type);
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_redist_type_metric
- PURPOSE: Set/Unset redistribute information from another routing protocol
- PARAMETERS:
-   IN type (from {ZEBRA_ROUTE_KERNEL,ZEBRA_ROUTE_CONNECT,
-                  ZEBRA_ROUTE_STATIC, ZEBRA_ROUTE_OSPF,
-                  ZEBRA_ROUTE_BGP}
-   IN newMode : 1- set. 0- unset
-   IN metric
-**************************/
-int
-ripd_api_set_redist_type_metric (int type,
-                                 u_char newMode,
-                                 int metric)
-{
-  struct zclient *zc;
-
-  zc = get_zebra_client();
-
-  if (! zc)
-    return CMD_ERR_NOTHING_TODO;
-
-  if (newMode)
-    {
-      rip_redistribute_metric_set (type, metric);
-      zclient_redistribute_set (zc, type);
-    }
-  else
-    {
-      rip_metric_unset (type, metric);
-      rip_redistribute_unset (type);
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_default_information_originate
- PURPOSE: Set/Unset Control distribution of default route
- PARAMETERS:
-   IN newMode : 1- set. 0- unset
-**************************/
-int
-ripd_api_set_default_information_originate (u_char newMode)
-{
-  prefix_ipv4_t p;
-
-  if (rip && rip->default_information)
-    {
-      memset (&p, 0, sizeof (prefix_ipv4_t));
-      p.family = AF_INET;
-
-      rip->default_information = newMode;
-
-      if (newMode)
-        rip_redistribute_add (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0, NULL);
-      else
-        rip_redistribute_delete (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0);
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_start_stop
- PURPOSE: Start/Stop routing process
- PARAMETERS:
-   IN u_char is_started : 0 - for stop, else for start
-**************************/
-int
-ripd_api_start_stop (u_char is_started)
-{
-  struct zclient *zc;
-
-  zc = get_zebra_client();
-
-  if (! zc)
-    return CMD_ERR_NOTHING_TODO;
-
-  zc->enable = is_started;
-
-  if (is_started)
-    zclient_start (zc);
-  else
-    zclient_stop (zc);
-
-  return CMD_SUCCESS;
-}
-#endif /* RIP_API */

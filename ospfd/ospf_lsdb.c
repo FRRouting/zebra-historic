@@ -139,57 +139,6 @@ new_lsdb_add (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
   tmp_log ("add", lsa);
 }
 
-#if 0
-/* Insert an LSA to lsdb. */
-struct ospf_lsa *
-new_lsdb_insert (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
-{
-  struct route_table *table;
-  struct prefix_ls lp;
-  struct route_node *rn;
-
-  table = lsdb->type[lsa->data->type].db;
-  lsdb_prefix_set (&lp, lsa);
-  rn = route_node_get (table, (struct prefix *)&lp);
-
-  /* Newly install LSA. */
-  if (!rn->info)
-    {
-      zlog_info ("new_lsdb_insert: Newly install");
-      if (IS_LSA_SELF (lsa))
-	lsdb->type[lsa->data->type].count_self++;
-      lsdb->type[lsa->data->type].count++;
-      lsdb->total++;
-    }
-  /* Replace old LSA with new one. */
-  else
-    {
-      struct ospf_lsa *old = rn->info;
-      zlog_info ("new_lsdb_insert: Replace");
-
-      /* Preserve old value. */
-      if (old->refresh_list)
-	ospf_refresher_unregister_lsa (old);
-      /* */
-      if (old->data->type == OSPF_AS_EXTERNAL_LSA)
-	ospf_rtrs_external_remove (old->data->id, old->data->adv_router);
-
-      ospf_ls_retransmit_delete_nbr_all (old->area, old);
-      /* */
-      ospf_lsa_maxage_delete (old);
-      /* */
-      ospf_lsa_unlock (old);
-      ospf_lsa_discard (old);
-
-      route_unlock_node (rn);
-    }
-  
-  rn->info = ospf_lsa_lock (lsa);
-  tmp_log ("insert", rn->info);
-  return rn->info;
-}
-#endif
-
 void
 new_lsdb_delete (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
 {

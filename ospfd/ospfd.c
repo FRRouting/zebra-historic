@@ -1117,16 +1117,6 @@ DEFUN (network_area,
   return CMD_SUCCESS;
 }
 
-#if 0
-ALIAS (network_area,
-       network_area_decimal_cmd,
-       "network A.B.C.D/M area <0-4294967295>",
-       "Enable routing on an IP network\n"
-       "OSPF network prefix\n"
-       "Set the OSPF area ID\n"
-       "OSPF area ID as a decimal value\n")
-#endif
-
 void
 ospf_remove_vls_through_area (struct ospf_area *area)
 {
@@ -3334,39 +3324,6 @@ ALIAS (no_ospf_compatible_rfc1583,
        "OSPF specific commands\n"
        "Disable the RFC1583Compatibility flag\n")
 
-#if 0
-DEFUN (ospf_rfc1583_flag,
-       ospf_rfc1583_flag_cmd,
-       "ospf rfc1583compatibility",
-       "OSPF specific commands\n"
-       "Enable the RFC1583Compatibility flag\n")
-{
-  if (ospf_top->RFC1583Compat == 0)
-    {
-      ospf_top->RFC1583Compat = 1;
-      ospf_spf_calculate_schedule ();
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ospf_rfc1583_flag,
-       no_ospf_rfc1583_flag_cmd,
-       "no ospf rfc1583compatibility",
-       NO_STR
-       "OSPF specific commands\n"
-       "Disable the RFC1583Compatibility flag\n")
-{
-  if (ospf_top->RFC1583Compat == 1)
-    {
-      ospf_top->RFC1583Compat = 0;
-      ospf_spf_calculate_schedule ();
-    }
-
-  return CMD_SUCCESS;
-}
-#endif
-
 char *ospf_abr_type_descr_str[] = 
 {
   "Unknown",
@@ -3424,7 +3381,19 @@ show_ip_ospf_area (struct vty *vty, struct ospf_area *area)
 
 #ifdef HAVE_NSSA
   if (area->external_routing == OSPF_AREA_NSSA)
-    vty_out (vty, "   It is an NSSA configuration. %s   Elected Translator performs type-7/type-5 LSA translation. %s", VTY_NEWLINE, VTY_NEWLINE);
+    {
+      vty_out (vty, "   It is an NSSA configuration. %s   Elected NSSA/ABR performs type-7/type-5 LSA translation. %s", VTY_NEWLINE, VTY_NEWLINE);
+      if (! OSPF_IS_ABR)
+	vty_out (vty, "   It is not ABR, therefore not Translator. %s",
+		 VTY_NEWLINE);
+      else
+	{
+	  if (area->NSSATranslator)
+	    vty_out (vty, "   We are an ABR and the NSSA Elected Translator. %s", VTY_NEWLINE);
+	  else
+	    vty_out (vty, "   We are an ABR, but not the NSSA Elected Translator. %s", VTY_NEWLINE);
+	}
+    }
 #endif /* HAVE_NSSA */
 
   /* Show number of fully adjacent neighbors. */
@@ -4605,6 +4574,193 @@ DEFUN (no_auto_cost_reference_bandwidth,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_NSSA
+DEFUN (data_injection,
+       data_injection_cmd,
+       "inject-data <1-9>",
+       "Inject Data onto line for debugging purpose\n"
+       "Declare number <1-9>\n"
+       "Then watch logs.\n")
+{
+  char gotch =  argv[0][0];
+  int source;
+  listnode node;
+  struct ospf_area *area;
+  struct interface *ifp = NULL;
+  struct ospf_interface *oi;
+  struct ospf_neighbor *nbr = NULL;
+  struct ospf_lsa *lsa = NULL;
+  struct ospf_lsa *dup = NULL;
+  struct route_node *rn;
+  int ospf_distribute_list_out_set (struct vty *vty, int type, char *name);
+  int str2distribute_source (char *str, int *source);
+  int sh_fct (int type, struct vty *vty, struct ospf_lsa *lsa);
+
+  switch (gotch)
+    {
+    case '0':
+      /* Test crash message. */
+      assert (0); 
+      break;
+
+    case '5':
+      /* Send Type-5 LSA. */
+      zlog_info ("Send Copy LSA-5 to Target");
+      dup = ospf_external_lsa_test (5);
+
+      /* lock = 1 */
+      if (dup == NULL)
+	{
+	  zlog_info ("New LSA-5 Incomplete");
+	  break;  /* We have no LSA */
+	}
+
+      sh_fct (dup->data->type, vty, dup);
+      zlog_info ("Got LSA %x, Extract 1st Neighbor from eth0 interface;", lsa);
+
+      for (node = listhead (iflist); node; nextnode (node))
+	{
+	  ifp = node->data;
+	  if (ifp->name[0] == 'e')
+	    break;
+	}
+
+      oi = ifp->info;
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	if ((nbr = rn->info))
+	  {
+	    zlog_info ("Got rn %x on %s",rn, ifp->name);
+	    /* Do not do myself. */
+	    if (nbr != oi->nbr_self)
+	      break;
+	  }
+
+      if (nbr == NULL)
+	break;
+
+      ospf_ls_upd_send_lsa (nbr, dup, OSPF_SEND_PACKET_LOOP);
+      ospf_lsa_discard(dup); 
+      break;
+
+    case '7':
+      /* Send Type-7 LSA */
+      zlog_info ("Send Copy LSA-7 to Target");
+      dup = ospf_external_lsa_test (7);
+
+      /* lock = 1 */
+
+      if (dup == NULL)
+	{
+	  zlog_info ("New LSA-7 Incomplete");
+	  break; /* we have no LSA */
+	}
+
+      sh_fct (dup->data->type, vty, dup);
+      zlog_info ("Got LSA %x, Extract 1st Neighbor from eth0 interface;", lsa);
+
+      for (node = listhead (iflist); node; nextnode (node))
+	{
+	  ifp = node->data;
+	  if (ifp->name[0] == 'e')
+	    break;
+	}
+
+      oi = ifp->info;
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	if ((nbr = rn->info))
+	  {
+	    zlog_info ("Got rn %x on %s",rn, ifp->name);
+	    /* Do not do myself. */
+	    if (nbr != oi->nbr_self)
+	      break;
+	  }
+
+      if (nbr == NULL)
+	break;
+
+      dup->data->type = OSPF_AS_NSSA_LSA;
+
+      ospf_ls_upd_send_lsa (nbr, dup, OSPF_SEND_PACKET_LOOP);
+      ospf_lsa_discard(dup); 
+      break;
+
+    case '1':  
+      /* send Type-1 LSA */
+      zlog_info ("Extract 1st Type-1 LSA: Start");
+
+      for (node = listhead (ospf_top->areas); node; nextnode (node))
+	{
+	  area = getdata (node);
+
+	  for (rn = route_top (ROUTER_LSDB(area) ); rn; rn = route_next (rn))
+	    if ((lsa = rn->info) != NULL)
+	      break; /* we Got LSA */
+
+	  if (lsa != NULL)
+	    break; /* we got LSA */
+
+	  /* else go onto next area */
+      
+	}
+      if (lsa == NULL)
+	break; /* after all that we got no LSA's */
+
+      zlog_info ("Got LSA %x, Extract 1st Neighbor from eth0 interface;", lsa);
+ 
+      /*  show_as_external_lsa_detail (vty, dup); */
+      sh_fct (lsa->data->type, vty, lsa);
+
+      for (node = listhead (iflist); node; nextnode (node))
+	{
+	  ifp = node->data;
+	  if (ifp->name[0] == 'e') break;
+	}
+
+      oi = ifp->info;
+
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	if ((nbr = rn->info))
+	  {
+	    zlog_info ("Got rn %x on %s",rn, ifp->name);
+	    /* Do not do myself. */
+	    if (nbr != oi->nbr_self)
+	      break;
+	  }
+
+      if (nbr == NULL)
+	break;
+
+      zlog_info ("Send Copy LSA-1 to Target");
+
+      /* dup = ospf_lsa_dup(lsa);  lock = 1 */
+
+      /*dup->data->type = OSPF_AS_NSSA_LSA; */
+
+      ospf_ls_upd_send_lsa (nbr, lsa, OSPF_SEND_PACKET_LOOP);
+
+      /* ospf_lsa_discard(dup); */
+      break;
+
+    case '9':
+      /* Future ospf_force_Opaque_ external (); */
+      zlog_info ("Send Type-9 Not Implemented Yet");
+      break;
+
+      /* Get distribute source. */
+      if (!str2distribute_source ("static", &source))
+	return CMD_WARNING;
+
+      zlog_info ("5-Force External Self-Origination \n");
+      ospf_distribute_list_out_set (vty, source, "eth0");
+
+      break;
+    default:
+      zlog_info ("No such Injection \n");
+      break;
+    }
+  return CMD_SUCCESS;
+}
+#endif /* HAVE NSSA */
 
 char *ospf_abr_type_str[] = 
 {
@@ -4992,6 +5148,8 @@ ospf_init ()
   install_element (OSPF_NODE, &area_range_suppress_cmd);
 #ifdef HAVE_NSSA
   install_element (OSPF_NODE, &area_range_suppress_decimal_cmd);
+  /* For debugging. */
+  /* install_element (ENABLE_NODE, &data_injection_cmd); */
 #endif /* HAVE_NSSA */
   install_element (OSPF_NODE, &no_area_range_suppress_cmd);
   install_element (OSPF_NODE, &area_range_subst_cmd);

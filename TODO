@@ -13,7 +13,6 @@ bgpd:
 
 o Peer-group functionality.
 o Route server support
-o Route flap dampening [Implementation is almost finished, will be added soon].
 o Aggregate-address support complete (as-set etc.).
 o BGP TCP MD5 authentication (on OpenBSD) by password command.
 o HUP signal support (reload configuration file).
@@ -29,7 +28,7 @@ ospfd:
 
 o Rewrite the incremental RT update code.
 o NSSA [undergoing by dick@ipinfusion.com --enable-nssa can turn on the feature].
-o Opaque LSA support and API.
+o Opaque LSA support.
 o Demand circuits.
 o Multiple instances.
 o OSPF MIB [SNMP get is amost finished].

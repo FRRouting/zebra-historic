@@ -65,72 +65,7 @@ sin_masklen (struct in_addr mask)
 
 /* Interface between zebra message and rtm message. */
 int
-kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
-		 struct in_addr *gate, unsigned int index, int flags)
-{
-  struct sockaddr_in *mask;
-  struct sockaddr_in sin_dest, sin_mask, sin_gate;
-
-  memset (&sin_dest, 0, sizeof (struct sockaddr_in));
-  sin_dest.sin_family = AF_INET;
-#ifdef HAVE_SIN_LEN
-  sin_dest.sin_len = sizeof (struct sockaddr_in);
-#endif /* HAVE_SIN_LEN */
-
-  memset (&sin_mask, 0, sizeof (struct sockaddr_in));
-
-  memset (&sin_gate, 0, sizeof (struct sockaddr_in));
-  sin_gate.sin_family = AF_INET;
-#ifdef HAVE_SIN_LEN
-  sin_gate.sin_len = sizeof (struct sockaddr_in);
-#endif /* HAVE_SIN_LEN */
-
-  sin_dest.sin_addr = dest->prefix;
-  if (gate)
-    sin_gate.sin_addr = *gate;
-
-  if (gate && dest->prefixlen == 32)
-    mask = NULL;
-  else
-    {
-      masklen2ip (dest->prefixlen, &sin_mask.sin_addr);
-#ifdef HAVE_SIN_LEN
-      sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
-#endif /* HAVE_SIN_LEN */
-      sin_mask.sin_family = AF_UNSPEC;
-      mask = &sin_mask;
-    }
-
-  return rtm_write (message,
-		    (union sockunion *)&sin_dest, 
-		    (union sockunion *)mask, 
-		    gate ? (union sockunion *)&sin_gate : NULL,
-		    index,
-		    flags,
-		    0);
-}
-
-/* Add IPv4 prefix to kernel routing table. */
-int
-kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 unsigned int index, int flags, int table)
-{
-  return kernel_rtm_ipv4 (RTM_ADD, dest, gate, index, flags);
-}
-
-/* Delete IPv4 prefix from kernel routing table. */
-int
-kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    unsigned int index, int flags, int table)
-{
-  return kernel_rtm_ipv4 (RTM_DELETE, dest, gate, index, flags);
-}
-
-#ifndef OLD_RIB
-/* Interface between zebra message and rtm message. */
-int
-kernel_rtm_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
-			   int family)
+kernel_rtm_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
 
 {
   struct sockaddr_in *mask;
@@ -145,6 +80,7 @@ kernel_rtm_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 #ifdef HAVE_SIN_LEN
   sin_dest.sin_len = sizeof (struct sockaddr_in);
 #endif /* HAVE_SIN_LEN */
+  sin_dest.sin_addr = p->u.prefix4;
 
   memset (&sin_mask, 0, sizeof (struct sockaddr_in));
 
@@ -153,8 +89,6 @@ kernel_rtm_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 #ifdef HAVE_SIN_LEN
   sin_gate.sin_len = sizeof (struct sockaddr_in);
 #endif /* HAVE_SIN_LEN */
-
-  sin_dest.sin_addr = p->u.prefix4;
 
   /* Make gateway. */
   for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
@@ -166,32 +100,28 @@ kernel_rtm_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 	{
 	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 	    {
-	      if (nexthop->rtype == NEXTHOP_TYPE_IPV4)
+	      if (nexthop->rtype == NEXTHOP_TYPE_IPV4 ||
+		  nexthop->rtype == NEXTHOP_TYPE_IPV4_IFINDEX)
 		{
-		  sin_gate.sin_family = AF_INET;
-#ifdef HAVE_SIN_LEN
-		  sin_gate.sin_len = sizeof (struct sockaddr_in);
-#endif /* HAVE_SIN_LEN */
 		  sin_gate.sin_addr = nexthop->rgate.ipv4;
 		  gate = 1;
 		}
 	      if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
-		  || nexthop->rtype == NEXTHOP_TYPE_IFNAME)
+		  || nexthop->rtype == NEXTHOP_TYPE_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV4_IFINDEX)
 		ifindex = nexthop->rifindex;
 	    }
 	  else
 	    {
-	      if (nexthop->type == NEXTHOP_TYPE_IPV4)
+	      if (nexthop->type == NEXTHOP_TYPE_IPV4 ||
+		  nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX)
 		{
-		  sin_gate.sin_family = AF_INET;
-#ifdef HAVE_SIN_LEN
-		  sin_gate.sin_len = sizeof (struct sockaddr_in);
-#endif /* HAVE_SIN_LEN */
 		  sin_gate.sin_addr = nexthop->gate.ipv4;
 		  gate = 1;
 		}
 	      if (nexthop->type == NEXTHOP_TYPE_IFINDEX
-		  || nexthop->type == NEXTHOP_TYPE_IFNAME)
+		  || nexthop->type == NEXTHOP_TYPE_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX)
 		ifindex = nexthop->ifindex;
 	    }
 
@@ -216,10 +146,10 @@ kernel_rtm_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
   else
     {
       masklen2ip (p->prefixlen, &sin_mask.sin_addr);
+      sin_mask.sin_family = AF_UNSPEC;
 #ifdef HAVE_SIN_LEN
       sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
 #endif /* HAVE_SIN_LEN */
-      sin_mask.sin_family = AF_UNSPEC;
       mask = &sin_mask;
     }
 
@@ -233,17 +163,16 @@ kernel_rtm_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 }
 
 int
-kernel_add_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+kernel_add_ipv4 (struct prefix *p, struct rib *rib)
 {
-  return kernel_rtm_ipv4_multipath (RTM_ADD, p, rib, AF_INET);
+  return kernel_rtm_ipv4 (RTM_ADD, p, rib, AF_INET);
 }
 
 int
-kernel_delete_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+kernel_delete_ipv4 (struct prefix *p, struct rib *rib)
 {
-  return kernel_rtm_ipv4_multipath (RTM_DELETE, p, rib, AF_INET);
+  return kernel_rtm_ipv4 (RTM_DELETE, p, rib, AF_INET);
 }
-#endif /* OLD_RIB */
 
 #ifdef HAVE_IPV6
 
@@ -336,17 +265,137 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
 		    0);
 }
 
-/* Add IPv6 route to the kernel. */
+/* Interface between zebra message and rtm message. */
 int
-kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 int index, int flags, int table)
+kernel_rtm_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
+			   int family)
 {
-  return kernel_rtm_ipv6 (RTM_ADD, dest, gate, index, flags);
+  struct sockaddr_in6 *mask;
+  struct sockaddr_in6 sin_dest, sin_mask, sin_gate;
+  struct nexthop *nexthop;
+  int nexthop_num = 0;
+  unsigned int ifindex = 0;
+  int gate = 0;
+
+  memset (&sin_dest, 0, sizeof (struct sockaddr_in6));
+  sin_dest.sin6_family = AF_INET6;
+#ifdef SIN6_LEN
+  sin_dest.sin6_len = sizeof (struct sockaddr_in6);
+#endif /* SIN6_LEN */
+  sin_dest.sin6_addr = p->u.prefix6;
+
+  memset (&sin_mask, 0, sizeof (struct sockaddr_in6));
+
+  memset (&sin_gate, 0, sizeof (struct sockaddr_in6));
+  sin_gate.sin6_family = AF_INET6;
+#ifdef HAVE_SIN_LEN
+  sin_gate.sin6_len = sizeof (struct sockaddr_in6);
+#endif /* HAVE_SIN_LEN */
+
+  /* Make gateway. */
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    {
+      if ((cmd == RTM_ADD
+	   && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	  || (cmd == RTM_DELETE
+	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+	{
+	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+	    {
+	      if (nexthop->rtype == NEXTHOP_TYPE_IPV6
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFINDEX)
+		{
+		  sin_gate.sin6_addr = nexthop->rgate.ipv6;
+		  gate = 1;
+		}
+	      if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
+		  || nexthop->rtype == NEXTHOP_TYPE_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFINDEX)
+		ifindex = nexthop->rifindex;
+	    }
+	  else
+	    {
+	      if (nexthop->type == NEXTHOP_TYPE_IPV6
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+		{
+		  sin_gate.sin6_addr = nexthop->gate.ipv6;
+		  gate = 1;
+		}
+	      if (nexthop->type == NEXTHOP_TYPE_IFINDEX
+		  || nexthop->type == NEXTHOP_TYPE_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+		ifindex = nexthop->ifindex;
+	    }
+
+	  if (cmd == RTM_ADD)
+	    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+	  nexthop_num++;
+	  break;
+	}
+    }
+
+  /* If there is no useful nexthop then return. */
+  if (nexthop_num == 0)
+    {
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	zlog_info ("netlink_route_multipath(): No useful nexthop.");
+      return 0;
+    }
+
+  /* Under kame set interface index to link local address. */
+#ifdef KAME
+
+#define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
+  do { \
+    (a).s6_addr[2] = ((i) >> 8) & 0xff; \
+    (a).s6_addr[3] = (i) & 0xff; \
+  } while (0)
+
+  if (gate && IN6_IS_ADDR_LINKLOCAL(&sin_gate.sin6_addr))
+    SET_IN6_LINKLOCAL_IFINDEX (sin_gate.sin6_addr, ifindex);
+#endif /* KAME */
+
+  if (gate && p->prefixlen == 128)
+    mask = NULL;
+  else
+    {
+      masklen2ip6 (p->prefixlen, &sin_mask.sin6_addr);
+      sin_mask.sin6_family = AF_UNSPEC;
+#ifdef SIN6_LEN
+      sin_mask.sin6_len = sin6_masklen (sin_mask.sin6_addr);
+#endif /* SIN6_LEN */
+      mask = &sin_mask;
+    }
+
+  return rtm_write (cmd,
+		    (union sockunion *) &sin_dest,
+		    (union sockunion *) mask,
+		    gate ? (union sockunion *)&sin_gate : NULL,
+		    ifindex,
+		    rib->flags,
+		    rib->metric);
+}
+
+int
+kernel_add_ipv6 (struct prefix *p, struct rib *rib)
+{
+  return kernel_rtm_ipv6_multipath (RTM_ADD, p, rib, AF_INET6);
+}
+
+int
+kernel_delete_ipv6 (struct prefix *p, struct rib *rib)
+{
+  return kernel_rtm_ipv6_multipath (RTM_DELETE, p, rib, AF_INET6);
 }
 
 /* Delete IPv6 route from the kernel. */
 int
-kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
+kernel_delete_ipv6_old (struct prefix_ipv6 *dest, struct in6_addr *gate,
 		    int index, int flags, int table)
 {
   return kernel_rtm_ipv6 (RTM_DELETE, dest, gate, index, flags);

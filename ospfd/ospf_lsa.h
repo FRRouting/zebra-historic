@@ -259,6 +259,12 @@ void ospf_external_lsa_flush (u_char, struct prefix_ipv4 *,
 
 struct in_addr ospf_get_ip_from_ifp (struct interface *ifp);
 
+#ifdef HAVE_NSSA
+struct ospf_lsa *ospf_external_lsa_test ();
+
+/* int show_as_external_lsa_detail (struct vty *, struct ospf_lsa *); */
+#endif /* HAVE_NSSA */
+
 struct ospf_lsa *ospf_external_lsa_originate (struct external_info *);
 int ospf_external_lsa_originate_timer (struct thread *);
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,

@@ -35,8 +35,8 @@
 
 int peer_activate (struct vty *, char *, int, int);
 int peer_deactivate (struct vty *, char *, int, int);
-int route_vty_out (struct vty *, struct prefix *, struct bgp_info *);
-int route_vty_out_tag (struct vty *, struct prefix *, struct bgp_info *);
+int route_vty_out (struct vty *, struct prefix *, struct bgp_info *, int);
+int route_vty_out_tag (struct vty *, struct prefix *, struct bgp_info *, int);
 
 u_int16_t
 decode_rd_type (u_char *pnt)
@@ -342,8 +342,8 @@ bgp_show_mpls_vpn (struct vty *vty, int tags)
   struct bgp_info *ri;
   int rd_header;
   int header = 1;
-  char v4_header[] = "   Network            Next Hop         Metric LocPrf Weight Path%s";
-  char v4_header_tag[] = "   Network            Next Hop                Tag%s";
+  char v4_header[] = "   Network          Next Hop            Metric LocPrf Weight Path%s";
+  char v4_header_tag[] = "   Network          Next Hop                Tag%s";
 
   bgp = bgp_get_default ();
   if (bgp == NULL)
@@ -397,9 +397,9 @@ bgp_show_mpls_vpn (struct vty *vty, int tags)
 		  rd_header = 0;
 		}
 	      if (tags)
-		route_vty_out_tag (vty, &rm->p, ri);
+		route_vty_out_tag (vty, &rm->p, ri, 0);
 	      else
-		route_vty_out (vty, &rm->p, ri);
+		route_vty_out (vty, &rm->p, ri, 0);
 	    }
       }
   return CMD_SUCCESS;

@@ -256,7 +256,7 @@ void ospf_prune_unreachable_routers (struct route_table *);
 int ospf_add_discard_route (struct route_table *, struct ospf_area *, 
 			    struct prefix_ipv4 *);
 void ospf_delete_discard_route (struct prefix_ipv4 *);
-int ospf_route_match_same (struct route_table *, int,
-			   struct prefix_ipv4 *, struct in_addr *);
+int ospf_route_match_same (struct route_table *, struct prefix_ipv4 *,
+			   struct ospf_route *);
 
 #endif /* _ZEBRA_OSPF_ROUTE_H */

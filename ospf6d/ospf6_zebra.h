@@ -31,6 +31,7 @@ int ospf6_zebra_is_redistribute (int);
 int ospf6_zebra_get_interface (int, struct zclient *, zebra_size_t);
 int ospf6_zebra_read (struct thread *); 
 void ospf6_zebra_init ();
+void ospf6_zebra_finish ();
 void ospf6_zebra_start ();
 
 int ospf6_zebra_read_ipv6 (int, struct zclient *, zebra_size_t);

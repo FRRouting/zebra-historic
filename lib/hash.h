@@ -47,7 +47,7 @@ struct Hash
   int (*hash_cmp)();
 
   /* Backet alloc. */
-  int alloc;
+  unsigned long count;
 };
 
 struct Hash *hash_new (int size);

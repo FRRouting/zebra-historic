@@ -23,12 +23,13 @@
 #define OSPF6D_H
 
 #include <zebra.h>
+#include "linklist.h"
 
+#ifndef HEADER_DEPENDENCY
 /* Include other stuffs */
 #include "version.h"
 #include "log.h"
 #include "getopt.h"
-#include "linklist.h"
 #include "thread.h"
 #include "command.h"
 #include "memory.h"
@@ -42,31 +43,32 @@
 #include "table.h"
 #include "plist.h"
 
-
-#define HASHVAL 64
-#define MAXIOVLIST 1024
-
 /* OSPF stuffs */
 #include "ospf6_types.h"
 #include "ospf6_prefix.h"
-#include "ospf6_mesg.h"
+#include "ospf6_lsa.h"
+#include "ospf6_lsdb.h"
+
+#include "ospf6_message.h"
 #include "ospf6_proto.h"
 #include "ospf6_spf.h"
-#include "ospf6_redistribute.h"
 #include "ospf6_top.h"
 #include "ospf6_area.h"
 #include "ospf6_interface.h"
 #include "ospf6_neighbor.h"
 #include "ospf6_ism.h"
 #include "ospf6_nsm.h"
-#include "ospf6_lsa.h"
-#include "ospf6_lsdb.h"
+#include "ospf6_redistribute.h"
 #include "ospf6_route.h"
 #include "ospf6_dbex.h"
 #include "ospf6_network.h"
 #include "ospf6_zebra.h"
 #include "ospf6_dump.h"
 #include "ospf6_routemap.h"
+#endif /*HEADER_DEPENDENCY*/
+
+#define HASHVAL 64
+#define MAXIOVLIST 1024
 
 #define OSPF6_DAEMON_VERSION    "0.8.l"
 

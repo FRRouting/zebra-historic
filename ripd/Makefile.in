@@ -64,9 +64,6 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 CURSES = @CURSES@
-GUILE = @GUILE@
-GUILE_CFLAGS = @GUILE_CFLAGS@
-GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IF_PROC = @IF_PROC@
 IPFORWARD = @IPFORWARD@
@@ -99,7 +96,7 @@ sbin_PROGRAMS = ripd
 librip_a_SOURCES =  	ripd.c rip_zebra.c rip_interface.c rip_debug.c rip_snmp.c 	rip_routemap.c rip_peer.c rip_offset.c
 
 
-noinst_HEADERS =  	ripd.h rip_debug.h ripd_api.h
+noinst_HEADERS =  	ripd.h rip_debug.h
 
 
 ripd_SOURCES =  	rip_main.c $(librip_a_SOURCES)

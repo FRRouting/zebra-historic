@@ -31,15 +31,15 @@ int if_set_flags (struct interface *, unsigned long);
 int if_unset_flags (struct interface *, unsigned long);
 void if_get_flags (struct interface *);
 
-int if_set_prefix (struct interface *, struct prefix_ipv4 *);
-int if_unset_prefix (struct interface *, struct prefix_ipv4 *);
+int if_set_prefix (struct interface *, struct connected *);
+int if_unset_prefix (struct interface *, struct connected *);
 
 void if_get_metric (struct interface *);
 void if_get_mtu (struct interface *);
 
 #ifdef HAVE_IPV6
-int if_prefix_add_ipv6 (struct interface *, struct prefix_ipv6 *);
-int if_prefix_delete_ipv6 (struct interface *, struct prefix_ipv6 *);
+int if_prefix_add_ipv6 (struct interface *, struct connected *);
+int if_prefix_delete_ipv6 (struct interface *, struct connected *);
 
 #endif /* HAVE_IPV6 */
 

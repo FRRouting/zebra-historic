@@ -150,23 +150,22 @@ void if_delete_update (struct interface *ifp);
 void if_add_update (struct interface *ifp);
 void if_up (struct interface *);
 void if_down (struct interface *);
+void if_refresh (struct interface *);
 void zebra_interface_up_update (struct interface *ifp);
 void zebra_interface_down_update (struct interface *ifp);
 
-
-
 #ifdef HAVE_PROC_NET_DEV
-void ifstat_update_proc ();
+int ifstat_update_proc ();
 #endif /* HAVE_PROC_NET_DEV */
 #ifdef HAVE_NET_RT_IFLIST
 void ifstat_update_sysctl ();
 
 #endif /* HAVE_NET_RT_IFLIST */
 #ifdef HAVE_PROC_NET_DEV
-void interface_list_proc ();
+int interface_list_proc ();
 #endif /* HAVE_PROC_NET_DEV */
 #ifdef HAVE_PROC_NET_IF_INET6
-void ifaddr_proc_ipv6 ();
+int ifaddr_proc_ipv6 ();
 #endif /* HAVE_PROC_NET_IF_INET6 */
 
 #ifdef BSDI

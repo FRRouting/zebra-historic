@@ -99,32 +99,6 @@ ospf_path_free (struct ospf_path *op)
   XFREE (MTYPE_OSPF_PATH, op);
 }
 
-#ifdef OLD_RIB
-void
-ospf_route_delete (struct route_table *rt)
-{
-  struct route_node *rn;
-  struct ospf_route *or;
-  struct ospf_path *path;
-  listnode pnode;
-
-  for (rn = route_top (rt); rn; rn = route_next (rn))
-    if ((or = rn->info) != NULL)
-      {
-	if (or->type == OSPF_DESTINATION_NETWORK)
-	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
-	    {
-	      path = getdata (pnode);
-
-	      if (path->nexthop.s_addr != INADDR_ANY)
-		ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p,
-				   &path->nexthop);
-	    }
-	else if (or->type == OSPF_DESTINATION_DISCARD)
-	  ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
-      }
-}
-#else
 void
 ospf_route_delete (struct route_table *rt)
 {
@@ -135,13 +109,12 @@ ospf_route_delete (struct route_table *rt)
     if ((or = rn->info) != NULL)
       {
 	if (or->type == OSPF_DESTINATION_NETWORK)
-	  ospf_zebra_delete_multipath ((struct prefix_ipv4 *) &rn->p,
+	  ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p,
 				       or);
 	else if (or->type == OSPF_DESTINATION_DISCARD)
 	  ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
       }
 }
-#endif /* OLD_RIB */
 
 #else
 ospf_route *
@@ -199,49 +172,8 @@ ospf_route_table_free (struct route_table *rt)
 /* If a prefix and a nexthop match any route in the routing table,
    then return 1, otherwise return 0. */
 int
-ospf_route_match_same (struct route_table *rt, int type,
-		       struct prefix_ipv4 *prefix, struct in_addr *nexthop)
-{
-  struct route_node *rn;
-  struct ospf_route *or;
-  struct ospf_path *op;
-  listnode node;
-
-  if (!rt || !prefix)
-    return 0;
-
-   rn = route_node_lookup (rt, (struct prefix *) prefix);
-   if (!rn || !rn->info)
-     return 0;
- 
-   or = rn->info;
-   if (or->type == type)
-     {
-       if (or->type == OSPF_DESTINATION_NETWORK)
-	 for (node = listhead (or->path); node; nextnode (node))
-	   { 
-	     op = getdata (node);
-
-	     if (op->nexthop.s_addr != INADDR_ANY && nexthop &&
-		 IPV4_ADDR_SAME (&op->nexthop, nexthop))
-	       {
-		 route_unlock_node (rn);
-		 return 1;
-	       }
-	   }
-       else if (prefix_same (&rn->p, (struct prefix *) prefix))
-         {
-           route_unlock_node (rn);
-           return 1;
-         }
-     }
-
-  return 0;
-}
-
-int
-ospf_route_match_same_new (struct route_table *rt, struct prefix_ipv4 *prefix,
-			   struct ospf_route *newor)
+ospf_route_match_same (struct route_table *rt, struct prefix_ipv4 *prefix,
+		       struct ospf_route *newor)
 {
   struct route_node *rn;
   struct ospf_route *or;
@@ -285,41 +217,6 @@ ospf_route_match_same_new (struct route_table *rt, struct prefix_ipv4 *prefix,
   return 0;
 }
 
-#ifdef OLD_RIB
-/* rt: Old, cmprt: New */
-void
-ospf_route_delete_uniq (struct route_table *rt, struct route_table *cmprt)
-{
-  struct route_node *rn;
-  struct ospf_route *or;
-  struct ospf_path *path;
-  listnode node;
-
-  for (rn = route_top (rt); rn; rn = route_next (rn))
-    if ((or = rn->info) != NULL) 
-      if (or->path_type == OSPF_PATH_INTRA_AREA ||
-	  or->path_type == OSPF_PATH_INTER_AREA)
-	{
-
-	if (or->type == OSPF_DESTINATION_NETWORK)
-	  for (node = listhead (or->path); node; nextnode (node)) 
-	    {
-	      path = getdata (node);
-
-	      if (path->nexthop.s_addr != INADDR_ANY &&
-		  !ospf_route_match_same (cmprt, or->type,
-					  (struct prefix_ipv4 *) &rn->p, 
-					  &path->nexthop))
-		ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, 
-				   &path->nexthop);
-	    }
-	else if (or->type == OSPF_DESTINATION_DISCARD)
-	  if (!ospf_route_match_same (cmprt, or->type,
-				      (struct prefix_ipv4 *) &rn->p, 0))
-	    ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
-	}
-}
-#else
 /* rt: Old, cmprt: New */
 void
 ospf_route_delete_uniq (struct route_table *rt, struct route_table *cmprt)
@@ -334,66 +231,17 @@ ospf_route_delete_uniq (struct route_table *rt, struct route_table *cmprt)
 	{
 	  if (or->type == OSPF_DESTINATION_NETWORK)
 	    {
-	      if (! ospf_route_match_same_new (cmprt,
-					       (struct prefix_ipv4 *) &rn->p, 
-					       or))
-		ospf_zebra_delete_multipath ((struct prefix_ipv4 *) &rn->p, 
-					     or);
+	      if (! ospf_route_match_same (cmprt, 
+					   (struct prefix_ipv4 *) &rn->p, or))
+		ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, or);
 	    }
 	  else if (or->type == OSPF_DESTINATION_DISCARD)
-	    if (! ospf_route_match_same_new (cmprt,
-					     (struct prefix_ipv4 *) &rn->p,
-					     or))
+	    if (! ospf_route_match_same (cmprt,
+					 (struct prefix_ipv4 *) &rn->p, or))
 	      ospf_zebra_delete_discard ((struct prefix_ipv4 *) &rn->p);
 	}
 }
-#endif /* OLD_RIB */
 
-#ifdef OLD_RIB
-/* Install routes to table.  Using old zebra API. */
-void
-ospf_route_install (struct route_table *rt)
-{
-  struct route_node *rn;
-  struct ospf_route *or;
-  struct ospf_path *path;
-  listnode node;
-
-  /* rt contains new routing table, new_table contains an old one.
-     updating pointers */
-  if (ospf_top->old_table)
-    ospf_route_table_free (ospf_top->old_table);
- 
-  ospf_top->old_table = ospf_top->new_table;
-  ospf_top->new_table = rt;
-
-  /* Delete old routes. */
-  if (ospf_top->old_table)
-    ospf_route_delete_uniq (ospf_top->old_table, rt);
-
-  /* Install new routes. */
-  for (rn = route_top (rt); rn; rn = route_next (rn))
-    if ((or = rn->info) != NULL)
-      {
-	if (or->type == OSPF_DESTINATION_NETWORK)
-	  for (node = listhead (or->path); node; nextnode (node))
-	    {
-	      path = getdata (node);
-
-	      if (path->nexthop.s_addr != INADDR_ANY &&
-		  ! ospf_route_match_same (ospf_top->old_table, or->type,
-					   (struct prefix_ipv4 *) &rn->p, 
-					   &path->nexthop))
-		ospf_zebra_add ((struct prefix_ipv4 *) &rn->p, &path->nexthop,
-				or->cost, or);
-	    }
-	else if (or->type == OSPF_DESTINATION_DISCARD)
-	  if (!ospf_route_match_same (ospf_top->old_table, or->type,
-				      (struct prefix_ipv4 *) &rn->p, 0))
-	    ospf_zebra_add_discard ((struct prefix_ipv4 *) &rn->p);
-      }
-}
-#else
 /* Install routes to table. */
 void
 ospf_route_install (struct route_table *rt)
@@ -419,19 +267,16 @@ ospf_route_install (struct route_table *rt)
       {
 	if (or->type == OSPF_DESTINATION_NETWORK)
 	  {
-	    if (! ospf_route_match_same_new (ospf_top->old_table,
-					     (struct prefix_ipv4 *)&rn->p, 
-					     or))
-	      ospf_zebra_add_multipath ((struct prefix_ipv4 *) &rn->p, or);
+	    if (! ospf_route_match_same (ospf_top->old_table,
+					 (struct prefix_ipv4 *)&rn->p, or))
+	      ospf_zebra_add ((struct prefix_ipv4 *) &rn->p, or);
 	  }
 	else if (or->type == OSPF_DESTINATION_DISCARD)
-	  if (! ospf_route_match_same_new (ospf_top->old_table,
-					   (struct prefix_ipv4 *) &rn->p,
-					   or))
+	  if (! ospf_route_match_same (ospf_top->old_table,
+				       (struct prefix_ipv4 *) &rn->p, or))
 	    ospf_zebra_add_discard ((struct prefix_ipv4 *) &rn->p);
       }
 }
-#endif /* OLD_RIB */
 
 void
 ospf_intra_route_add (struct route_table *rt, struct vertex *v,
@@ -1300,7 +1145,6 @@ ospf_route_add (struct route_table *rt, struct prefix_ipv4 *p,
 
   rn->info = new_or;
 }
-
 
 void
 ospf_prune_unreachable_networks (struct route_table *rt)

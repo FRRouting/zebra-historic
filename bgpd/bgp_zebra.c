@@ -181,11 +181,11 @@ int
 bgp_interface_address_add (int command, struct zclient *zclient,
 			   zebra_size_t length)
 {
-  struct connected *c;
+  struct connected *ifc;
 
-  c = zebra_interface_address_add_read (zclient->ibuf);
+  ifc = zebra_interface_address_add_read (zclient->ibuf);
 
-  if (c == NULL)
+  if (ifc == NULL)
     return 0;
 
 #if 0
@@ -202,10 +202,10 @@ bgp_interface_address_add (int command, struct zclient *zclient,
     }
 #endif /* 0 */
 
-  bgp_if_update (c->ifp);
+  bgp_if_update (ifc->ifp);
 
-  if (if_is_up (c->ifp))
-    bgp_connected_add (c);
+  if (if_is_up (ifc->ifp))
+    bgp_connected_add (ifc);
 
   return 0;
 }
@@ -214,7 +214,19 @@ int
 bgp_interface_address_delete (int command, struct zclient *zclient,
 			      zebra_size_t length)
 {
-  ;
+  struct connected *ifc;
+
+  ifc = zebra_interface_address_delete_read (zclient->ibuf);
+
+  if (ifc == NULL)
+    return 0;
+
+  bgp_if_update (ifc->ifp);
+
+  if (if_is_up (ifc->ifp))
+    bgp_connected_delete (ifc);
+
+  connected_free (ifc);
 
   return 0;
 }
@@ -313,6 +325,10 @@ zebra_read_ipv6 (int command, struct zclient *zclient, zebra_size_t length)
     api.metric = stream_getl (s);
   else
     api.metric = 0;
+
+  /* Simply ignore link-local address. */
+  if (IN6_IS_ADDR_LINKLOCAL (&p.prefix))
+    return 0;
 
   if (command == ZEBRA_IPV6_ROUTE_ADD)
     bgp_redistribute_add ((struct prefix *)&p, NULL, api.type);
@@ -1224,8 +1240,12 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info, struct bgp *bgp)
 	return;
 
       if (IN6_IS_ADDR_LINKLOCAL (nexthop) && ! ifindex)
-	if (info->peer->ifname)
-	  ifindex = if_nametoindex (info->peer->ifname);
+	{
+	  if (info->peer->ifname)
+	    ifindex = if_nametoindex (info->peer->ifname);
+	  else if (info->peer->nexthop.ifp)
+	    ifindex = info->peer->nexthop.ifp->ifindex;
+	}
 
       /* Make Zebra API structure. */
       api.flags = flags;

@@ -335,7 +335,7 @@ vtysh_exit_ripd_only ()
 void
 vtysh_execute (char *line)
 {
-  int ret;
+  int ret, cmd_stat;
   vector vline;
   struct cmd_element *cmd;
 
@@ -366,6 +366,46 @@ vtysh_execute (char *line)
       break;
     case CMD_SUCCESS_DAEMON:
       {
+	if (!strcmp(cmd->string,"configure terminal"))
+	  {
+	    cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA],
+					     line);
+	    if (cmd_stat != CMD_WARNING)
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP],
+					       line);
+	    if (cmd_stat != CMD_WARNING)
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG],
+					       line);
+	    if (cmd_stat != CMD_WARNING)
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF],
+					       line);
+	    if (cmd_stat != CMD_WARNING)
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6],
+					       line);
+	    if (cmd_stat != CMD_WARNING)
+	      cmd_stat = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP],
+					       line);
+	    if (cmd_stat)
+	      {
+                line = "end";
+                vline = cmd_make_strvec (line);
+
+                if (vline == NULL)
+                  return;
+
+                ret = cmd_execute_command (vline, vty, &cmd);
+                cmd_free_strvec (vline);
+                if (ret != CMD_SUCCESS_DAEMON)
+                  break;
+	      }
+	    else
+	      if (cmd->func)
+		{
+		  (*cmd->func) (cmd, vty, 0, NULL);
+		  break;
+                }
+	  }
+
 	if (cmd->daemon & VTYSH_ZEBRA)
 	  if (vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA], line)
 	      != CMD_SUCCESS)
@@ -584,10 +624,14 @@ vtysh_rl_describe ()
   return 0;
 }
 
+/* result of cmd_complete_command() call will be stored here
+   and used in new_completion() in order to put the space in
+   correct places only */
+int complete_status;
+
 char *
 command_generator (char *text, int state)
 {
-  int ret;
   vector vline;
   static char **matched = NULL;
   static int index = 0;
@@ -597,17 +641,17 @@ command_generator (char *text, int state)
     {
       index = 0;
 
-  if (vty->node == AUTH_NODE || vty->node == AUTH_ENABLE_NODE)
-    return NULL;
+      if (vty->node == AUTH_NODE || vty->node == AUTH_ENABLE_NODE)
+	return NULL;
 
-  vline = cmd_make_strvec (rl_line_buffer);
-  if (vline == NULL)
-    return NULL;
+      vline = cmd_make_strvec (rl_line_buffer);
+      if (vline == NULL)
+	return NULL;
 
       if (rl_end && isspace ((int) rl_line_buffer[rl_end - 1]))
 	vector_set (vline, '\0');
 
-      matched = cmd_complete_command (vline, vty, &ret);
+      matched = cmd_complete_command (vline, vty, &complete_status);
     }
 
   if (matched && matched[index])
@@ -624,7 +668,11 @@ new_completion (char *text, int start, int end)
   matches = completion_matches (text, command_generator);
 
   if (matches)
-    rl_point = rl_end;
+    {
+      rl_point = rl_end;
+      if (complete_status == CMD_COMPLETE_FULL_MATCH)
+	rl_pending_input = ' ';
+    }
 
   return matches;
 }
@@ -960,7 +1008,8 @@ DEFUN (vtysh_write_terminal,
   int ret;
   char line[] = "write terminal\n";
 
-  vty_out (vty, "%sCurrrent Configuration:%s", VTY_NEWLINE,
+  vty_out (vty, "Building configuration...%s", VTY_NEWLINE);
+  vty_out (vty, "%sCurrent configuration:%s", VTY_NEWLINE,
 	   VTY_NEWLINE);
 
   vtysh_config_write (stdout);
@@ -988,7 +1037,7 @@ DEFUN (vtysh_write_memory,
   FILE *fp;
   extern char integrate_default[];
 
-  printf ("Building Configuration...\n");
+  printf ("Building configuration...\n");
 
   fp = fopen (integrate_default, "w");
   if (fp == NULL)
@@ -1274,6 +1323,9 @@ vtysh_readline_init ()
   rl_bind_key ('?', vtysh_rl_describe);
   rl_completion_entry_function = vtysh_completion_entry_fucntion;
   rl_attempted_completion_function = (CPPFunction *)new_completion;
+  /* do not append space after completion. It will be appended
+     in new_completion() function explicitly */
+  rl_completion_append_character = '\0';
 }
 
 char *
@@ -1368,11 +1420,36 @@ vtysh_init_vty ()
   install_element (KEYCHAIN_NODE, &key_chain_cmd);
   install_element (KEYCHAIN_KEY_NODE, &key_chain_cmd);
   install_element (CONFIG_NODE, &vtysh_interface_cmd);
-  install_element (ENABLE_NODE, &vtysh_write_terminal_cmd);
   install_element (ENABLE_NODE, &vtysh_show_running_config_cmd);
-
-  install_element (ENABLE_NODE, &vtysh_write_memory_cmd);
   install_element (ENABLE_NODE, &vtysh_copy_runningconfig_startupconfig_cmd);
+
+  /* write terminal command */
+  install_element (ENABLE_NODE, &vtysh_write_terminal_cmd);
+  install_element (CONFIG_NODE, &vtysh_write_terminal_cmd);
+  install_element (BGP_NODE, &vtysh_write_terminal_cmd);
+  install_element (BGP_VPNV4_NODE, &vtysh_write_terminal_cmd);
+  install_element (RIP_NODE, &vtysh_write_terminal_cmd);
+  install_element (RIPNG_NODE, &vtysh_write_terminal_cmd);
+  install_element (OSPF_NODE, &vtysh_write_terminal_cmd);
+  install_element (OSPF6_NODE, &vtysh_write_terminal_cmd);
+  install_element (INTERFACE_NODE, &vtysh_write_terminal_cmd);
+  install_element (RMAP_NODE, &vtysh_write_terminal_cmd);
+  install_element (KEYCHAIN_NODE, &vtysh_write_terminal_cmd);
+  install_element (KEYCHAIN_KEY_NODE, &vtysh_write_terminal_cmd);
+
+  /* write memory command */
+  install_element (ENABLE_NODE, &vtysh_write_memory_cmd);
+  install_element (CONFIG_NODE, &vtysh_write_memory_cmd);
+  install_element (BGP_NODE, &vtysh_write_memory_cmd);
+  install_element (BGP_VPNV4_NODE, &vtysh_write_memory_cmd);
+  install_element (RIP_NODE, &vtysh_write_memory_cmd);
+  install_element (RIPNG_NODE, &vtysh_write_memory_cmd);
+  install_element (OSPF_NODE, &vtysh_write_memory_cmd);
+  install_element (OSPF6_NODE, &vtysh_write_memory_cmd);
+  install_element (INTERFACE_NODE, &vtysh_write_memory_cmd);
+  install_element (RMAP_NODE, &vtysh_write_memory_cmd);
+  install_element (KEYCHAIN_NODE, &vtysh_write_memory_cmd);
+  install_element (KEYCHAIN_KEY_NODE, &vtysh_write_memory_cmd);
 
   install_element (VIEW_NODE, &vtysh_ping_cmd);
   install_element (VIEW_NODE, &vtysh_traceroute_cmd);

@@ -70,6 +70,7 @@ void interface_list ();
 void kernel_init ();
 void route_read ();
 void rtadv_init ();
+void zebra_snmp_init ();
 
 int
 zsend_interface_add (struct zserv *, struct interface *);
@@ -100,15 +101,11 @@ zsend_ipv4_delete (struct zserv *client, int type, int flags,
 		   struct prefix_ipv4 *p, struct in_addr *nexthop,
 		   unsigned int ifindex);
 
-#ifndef OLD_RIB
 int
-zsend_ipv4_add_multipath (struct zserv *, struct route_node *,
-			  struct new_rib *);
+zsend_ipv4_add_multipath (struct zserv *, struct prefix *, struct rib *);
 
 int
-zsend_ipv4_delete_multipath (struct zserv *, struct route_node *,
-			     struct new_rib *);
-#endif /* OLD_RIB */
+zsend_ipv4_delete_multipath (struct zserv *, struct prefix *, struct rib *);
 
 #ifdef HAVE_IPV6
 int
@@ -120,6 +117,12 @@ int
 zsend_ipv6_delete (struct zserv *client, int type, int flags,
 		   struct prefix_ipv6 *p, struct in6_addr *nexthop,
 		   unsigned int ifindex);
+
+int
+zsend_ipv6_add_multipath (struct zserv *, struct prefix *, struct rib *);
+
+int
+zsend_ipv6_delete_multipath (struct zserv *, struct prefix *, struct rib *);
 
 #endif /* HAVE_IPV6 */
 

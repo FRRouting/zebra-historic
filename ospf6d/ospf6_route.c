@@ -411,7 +411,7 @@ ospf6_route_intra_area (struct prefix_ls *d, struct ospf6_route_info *ri,
 
   /* Find appropriate Intra-Area-Prefix-LSA */
   lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_INTRA_PREFIX),
-                           d->id.s_addr, d->adv_router.s_addr, o6);
+                           d->id.s_addr, d->adv_router.s_addr);
   if (! lsa)
     {
       if (IS_OSPF6_DUMP_ROUTE)
@@ -545,18 +545,36 @@ ospf6_route_external (struct ospf6_lsa *lsa)
   char pstring[64];
   u_char opt_capability[3];
 
-  if (ospf6_lsa_is_maxage (lsa))
-    {
-      if (IS_OSPF6_DUMP_ROUTE)
-        zlog_info ("ROUTE: %s: MaxAge", lsa->str);
-      return;
-    }
-
+  /* prepare destination prefix first */
   lsa_header = (struct ospf6_lsa_header *) lsa->lsa_hdr;
+  as_external_lsa = (struct ospf6_as_external_lsa *) (lsa_header + 1);
+  prefix.family = AF_INET6;
+  prefix.prefixlen = as_external_lsa->ospf6_prefix.prefix_length;
+  ospf6_prefix_in6_addr (&as_external_lsa->ospf6_prefix, &prefix.prefix);
+  prefix2str ((struct prefix *) &prefix, pstring, sizeof (pstring));
+  memset (opt_capability, 0, sizeof (opt_capability));
+
   if (lsa_header->advrtr == ospf6->router_id)
     {
       if (IS_OSPF6_DUMP_ROUTE)
         zlog_info ("ROUTE: LSA is Self-originated: %s", lsa->str);
+      return;
+    }
+
+  if (ospf6_lsa_is_maxage (lsa))
+    {
+      if (IS_OSPF6_DUMP_ROUTE)
+        zlog_info ("ROUTE: %s: MaxAge", lsa->str);
+
+      /* If we have the route derived from this LSA, delete the route */
+      node = route_node_lookup (ospf6->route_table, (struct prefix *) &prefix);
+      if (node && node->info)
+        {
+          ri = (struct ospf6_route_info *) node->info;
+          if (ri->origin_id == lsa_header->ls_id &&
+              ri->origin_adv_router == lsa_header->advrtr)
+            ospf6_route_delete ((struct prefix *) &prefix, ospf6->route_table);
+        }
       return;
     }
 
@@ -572,7 +590,6 @@ ospf6_route_external (struct ospf6_lsa *lsa)
   cost2 = 0;
 
   /* Forwarding Address test */
-  as_external_lsa = (struct ospf6_as_external_lsa *) (lsa_header + 1);
   if (as_external_lsa->ase_bits & ASE_LSA_BIT_F)
     {
       if (IS_OSPF6_DUMP_ROUTE)
@@ -612,12 +629,6 @@ ospf6_route_external (struct ospf6_lsa *lsa)
       cost1 += ntohs (as_external_lsa->ase_metric);
       path_type = OSPF6_ROUTE_PATH_TYPE_EXTERNAL1;
     }
-
-  prefix.family = AF_INET6;
-  prefix.prefixlen = as_external_lsa->ospf6_prefix.prefix_length;
-  ospf6_prefix_in6_addr (&as_external_lsa->ospf6_prefix, &prefix.prefix);
-  prefix2str ((struct prefix *) &prefix, pstring, sizeof (pstring));
-  memset (opt_capability, 0, sizeof (opt_capability));
 
   ospf6_route_create ((struct prefix *) &prefix, pstring,
                       opt_capability, 0, ri->area_id,

@@ -28,6 +28,9 @@ struct bgp_damp_info
 	/* Last time penalty was updated. */
 	time_t t_updated;
 
+	/* First flap time */
+	time_t start_time;
+
 	/* Reference to next damp_info in the reuse list. */
 	struct bgp_damp_info *reuse_next;
 

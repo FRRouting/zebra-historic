@@ -104,7 +104,7 @@ as_filter_new ()
   struct as_filter *new;
 
   new = XMALLOC (MTYPE_AS_FILTER, sizeof (struct as_filter));
-  bzero (new, sizeof (struct as_filter));
+  memset (new, 0, sizeof (struct as_filter));
   return new;
 }
 
@@ -184,7 +184,7 @@ as_list_new ()
   struct as_list *new;
 
   new = XMALLOC (MTYPE_AS_LIST, sizeof (struct as_list));
-  bzero (new, sizeof (struct as_list));
+  memset (new, 0, sizeof (struct as_list));
   return new;
 }
 
@@ -486,7 +486,7 @@ DEFUN (ip_as_path, ip_as_path_cmd,
     }
 
   /* Check AS path regex. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 2; i < argc; i++)
     {
       if (first)
@@ -568,7 +568,7 @@ DEFUN (no_ip_as_path,
     }
   
   /* Compile AS path. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 2; i < argc; i++)
     {
       if (first)

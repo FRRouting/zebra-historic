@@ -282,10 +282,27 @@ ospf_lsa_unlock (struct ospf_lsa *lsa)
     return;
   
   lsa->lock--;
+
+#ifdef HAVE_NSSA
+  if (lsa->lock < 0 )
+    {
+      zlog_info ("OOPS- We Would Have Crashed due to LSA-UNLOCK); Data now corrupt");
+      return;
+    }
+#endif /* HAVE_NSSA */
+
   assert (lsa->lock >= 0);
 
   if (lsa->lock == 0)
     {
+#ifdef HAVE_NSSA
+      if (! CHECK_FLAG (lsa->flags, OSPF_LSA_DISCARD))
+	{
+	  zlog_info ("OOPS- We Would Have Crashed due to NO DISCARD); Data now corrupt");
+	  return;
+	}
+#endif /* HAVE_NSSA */
+
       assert (CHECK_FLAG (lsa->flags, OSPF_LSA_DISCARD));
       ospf_lsa_free (lsa);
     }
@@ -1391,17 +1408,35 @@ ospf_get_ip_from_ifp (struct interface *ifp)
 
 	if (co->address->family == AF_INET)
 	  return (co->address->u.prefix4);
-#if 0
-#ifdef HAVE_IPV6
-	else if (co->address->family == AF_INET6)
-	  return (co->address->u.prefix6);
-#endif /* HAVE_IPV6 */
-#endif /* 0 */
+
 	else return fwd;
       }
   return fwd;
 }
 
+/* Get 1st IP connection for Forward Addr */
+struct in_addr
+ospf_get_nssa_ip (void)
+{
+  struct in_addr fwd;
+  listnode n1;
+
+  fwd.s_addr = 0;
+
+
+  for (n1 = listhead (ospf_top->iflist); n1; nextnode (n1))
+    {
+      struct interface *ifp = n1->data;
+      struct ospf_interface *oi = ifp->info;
+
+      if (if_is_up (ifp) && oi->flag == OSPF_IF_ENABLE)
+	if (oi->area->external_routing == OSPF_AREA_NSSA)
+	  if (oi->address && oi->address->family == AF_INET)
+	    return (oi->address->u.prefix4 );
+    }
+
+  return fwd;
+}
 #endif /* HAVE_NSSA */
 
 #define DEFAULT_DEFAULT_METRIC	             20
@@ -1541,28 +1576,134 @@ ospf_external_lsa_new (struct external_info *ei, struct in_addr *old_id)
 }
 
 #ifdef HAVE_NSSA
+/* Set AS-external-LSA body test. */
 void
-ospf_install_flood_nssa (struct ospf_lsa *lsa) /* As Type-7. */
+ospf_external_lsa_body_test (struct stream *s)
+{
+  struct in_addr mask, fwd_addr;
+  u_int32_t mvalue = 0;
+  /* int mtype;
+     int type; */
+
+  mask.s_addr = 0;
+  fwd_addr.s_addr = 0;
+
+  /* Put Network Mask. */
+  /* masklen2ip (p->prefixlen, &mask); */
+  stream_put_ipv4 (s, mask.s_addr);
+
+  /* If prefix is default, specify DEFAULT_ROUTE. */
+  /* type = is_prefix_default (&ei->p) ? DEFAULT_ROUTE : ei->type;
+  
+  mtype = (ROUTEMAP_METRIC_TYPE (ei) != -1) ?
+  ROUTEMAP_METRIC_TYPE (ei) : metric_type (type);
+
+  mvalue = (ROUTEMAP_METRIC (ei) != -1) ?
+  ROUTEMAP_METRIC (ei) : metric_value (type); */
+
+  /* Put type of external metric. */
+  stream_putc (s,  0);
+
+  /* Put 0 metric. TOS metric is not supported. */
+  stream_put_ospf_metric (s, mvalue);
+  
+ 
+  /*  fwd_addr = ospf_top->router_id; */
+       
+  /* OLD == ospf_external_lsa_nexthop_get (ei->nexthop); */
+
+  /* Put forwarding address. */
+  /* stream_put_ipv4 (s, fwd_addr.s_addr); */
+  stream_put_ipv4 (s, ospf_top->router_id.s_addr);
+  
+  /* Put route tag -- This value should be introduced from configuration. */
+  stream_putl (s, 0);
+}
+
+
+/* Create test external-LSA. */
+struct ospf_lsa *
+ospf_external_lsa_test (int typ)
+{
+  struct stream *s;
+  struct lsa_header *lsah;
+  struct ospf_lsa *new;
+  struct in_addr id;
+  static int saddr = 0x05050505;
+  int length;
+
+  if (IS_DEBUG_OSPF_NSSA)
+    zlog_info ("LSA[Type7]: Originate NSSA-external-LSA instance");
+
+  id.s_addr = saddr--;
+  if (id.s_addr == 0xffffffff)
+    {
+      /* Maybe Link State ID not available. */
+      if (IS_DEBUG_OSPF (lsa, LSA_GENERATE))
+	zlog_info ("LSA[Type5]: Link ID not available, can't originate");
+      return NULL;
+    }
+ 
+
+  /* Create new stream for LSA. */
+  s = stream_new (OSPF_MAX_LSA_SIZE);
+  lsah = (struct lsa_header *) STREAM_DATA (s);
+
+
+  /* Set LSA common header fields. */
+  lsa_header_set (s, OSPF_OPTION_E, OSPF_AS_EXTERNAL_LSA, id);
+
+  /* Set AS-external-LSA body fields. */
+  ospf_external_lsa_body_test (s);
+
+
+  /* Set length. */
+  length = stream_get_endp (s);
+  lsah->length = htons (length);
+
+  /* Now, create OSPF LSA instance. */
+  new = ospf_lsa_new ();
+  new->area = NULL;
+  SET_FLAG (new->flags, OSPF_LSA_SELF|OSPF_LSA_APPROVED);
+
+
+  /* Copy LSA data to store, discard stream. */
+  new->data = ospf_lsa_data_new (length);
+  memcpy (new->data, lsah, length);
+  stream_free (s);
+
+  if (typ==7)
+    new->data->type = OSPF_AS_NSSA_LSA; 
+
+  ospf_lsa_checksum(new->data);
+
+  /* return NULL; */
+
+  return new;
+}
+
+
+/* As Type-7 */
+void
+ospf_install_flood_nssa (struct ospf_lsa *lsa, struct external_info *ei)
 {
   struct ospf_lsa *new2;
+  struct as_external_lsa *extlsa;
 
   /* NSSA Originate or Refresh (If anyNSSA)
 
-     LSA is self-originated. And just installed as Type-5.
-     Additionally, install as Type-7 LSDB for every attached NSSA.
+  LSA is self-originated. And just installed as Type-5.
+  Additionally, install as Type-7 LSDB for every attached NSSA.
 
-    P-Bit controls which ABR performs translation to outside world; If
-    more than 1 NSSA is attached to this ASBR, then only 1 NSSA gets
-    the P-bit set, so only its Translating ABR will flood into the AS.
+  P-Bit controls which ABR performs translation to outside world; If
+  we are an ABR....do not set the P-bit, because we send the Type-5,
+  not as the ABR Translator, but as the ASBR owner within the AS!
 
-    If we are NOT ABR, Flood through NSSA as Type-7 w/P-bit set.  The
-    elected ABR Translator will see the P-bit, Translate, and re-flood.
+  If we are NOT ABR, Flood through NSSA as Type-7 w/P-bit set.  The
+  elected ABR Translator will see the P-bit, Translate, and re-flood.
 
-    If we are ABR, Flood First NSSA as Type-7, w/P-bit set Any
-    subsequent NSSA w/P-bit unset.
-
-    Later, ABR_TASK and P-bit will scan Type-7 LSDB and translate to
-    Type-5's to non-NSSA Areas.  (it will also attempt a re-install) */
+  Later, ABR_TASK and P-bit will scan Type-7 LSDB and translate to
+  Type-5's to non-NSSA Areas.  (it will also attempt a re-install) */
 
   /* make lsa duplicate, lock=1 */
   new2 = ospf_lsa_dup(lsa);
@@ -1570,19 +1711,52 @@ ospf_install_flood_nssa (struct ospf_lsa *lsa) /* As Type-7. */
   /* make type-7 */
   new2->data->type  = OSPF_AS_NSSA_LSA;
 
-  /* set P-bit */
-  SET_FLAG(new2->data->options, OSPF_OPTION_NP);
+  /* set P-bit if not ABR */
+  if (! OSPF_IS_ABR)
+    {
+      SET_FLAG(new2->data->options, OSPF_OPTION_NP);
+
+      /* set non-zero FWD ADDR 
+
+      draft-ietf-ospf-nssa-update-09.txt
+
+      if the network between the NSSA AS boundary router and the
+      adjacent AS is advertised into OSPF as an internal OSPF route, 
+      the forwarding address should be the next op address as is cu
+      currently done with type-5 LSAs.  If the intervening network is 
+      not adversited into OSPF as an internal OSPF route and the 
+      type-7 LSA's P-bit is set a forwarding address should be 
+      selected from one of the router's active OSPF inteface addresses
+      which belong to the NSSA.  If no such addresses exist, then
+      no type-7 LSA's with the P-bit set should originate from this
+      router.   */
+
+      extlsa = (struct as_external_lsa *)(lsa->data);
+
+      if (extlsa->e[0].fwd_addr.s_addr == 0) 
+	extlsa->e[0].fwd_addr = ospf_get_nssa_ip(); /* this NSSA area in ifp */
+
+      if (IS_DEBUG_OSPF_NSSA)
+	if (extlsa->e[0].fwd_addr.s_addr == 0) 
+	  {
+	    zlog_info ("LSA[Type-7]: Could not build FWD-ADDR");
+	    ospf_lsa_discard(new2);
+	    return;
+	  }
+    }
+
+  /* Re-calculate checksum. */
+  ospf_lsa_checksum (new2->data);
 
   /* install also as Type-7 */
-  ospf_lsa_install (NULL, new2);   /* lock = 2 */
+  ospf_lsa_install (NULL, new2);   /* Remove Old, Lock New = 2 */
 
   /* will send each copy, lock=2+n */
-  ospf_flood_through_as (NULL, new2);
+  ospf_flood_through_as (NULL, new2); /* all attached NSSA's, no AS/STUBs */
 
   /* last send, lock=2 LSA is now permanent in Type-7 LSDB */
-  
-  /* When removed, it will be down-counted in maxage_delete, and then
-    discarded (lsa_discard()) to value zero */
+  /* It has the same ID as it's Type-5 Counter-Part */
+ 
 }
 #endif /* HAVE_NSSA */
 
@@ -1606,41 +1780,38 @@ ospf_external_lsa_originate (struct external_info *ei)
 
   /* Added for NSSA project....
 
-     External LSAs are originated as usual, but for NSSA systems.
-     There is the global Type-5 LSDB and a Type-7 LSDB for every area.
+       External LSAs are originated in ASBRs as usual, but for NSSA systems.
+     there is the global Type-5 LSDB and a Type-7 LSDB installed for
+     every area.  The Type-7's are flooded to every IR and every ABR; We
+     install the Type-5 LSDB so that the normal "refresh" code operates
+     as usual, and flag them as not used during ASE calculations.  The
+     Type-7 LSDB is used for calculations.  Each Type-7 has a Forwarding
+     Address of non-zero.
 
-     LSAs are translated from Type-5's to Type-7s to Type-5's again:
-     
-     Type-5's are originated, Installed and refreshed and translated
-     as Type-7s.  Type-7's are received and re-flooded as Type-7's and
-     translated as Type-5s.
+     If an ABR is the elected NSSA translator, following SPF and during
+     the ABR task it will translate all the scanned Type-7's, with P-bit
+     ON and not-self generated, and translate to Type-5's throughout the
+     non-NSSA/STUB AS.
 
-     An NSSA originates Type-5s. installs, and translates/floods as
-     Type-7s and installs.
+     A difference in operation depends whether this ASBR is an ABR
+     or not.  If not an ABR, the P-bit is ON, to indicate that any
+     elected NSSA-ABR can perform its translation.
 
-     An NSSA refreshes the Type-5s as Type-7s throughout the NSSA.
+     If an ABR, the P-bit is OFF;  No ABR will perform translation and
+     this ASBR will flood the Type-5 LSA as usual.
 
-     A Translating NSSA-ABR translates from its Type-7 LSDB as 5's to
-     the entire AS.  As usual it also floods its Type-5 LSDB to the
-     entire AS.
+     For the case where this ASBR is not an ABR, the ASE calculations
+     are based on the Type-5 LSDB;  The Type-7 LSDB exists just to
+     demonstrate to the user that there are LSA's that belong to any
+     attached NSSA.
 
-     In general, the Type-5 LSDB contains all external connections for
-     a system.  the Type-7 LSDB contains just those external
-     connections for a connected NSSA.  For self-origination and
-     refresh, an NSSA uses the Type-5 LSDB.  An NSSA is not allowed to
-     receive Type-5 LSAs, so the LSDB contains no useful routes for
-     these.
+     Finally, it just so happens that when the ABR is translating every
+     Type-7 into Type-5, it installs it into the Type-5 LSDB as an
+     approved Type-5 (translated from Type-7);  at the end of translation
+     if any Translated Type-5's remain unapproved, then they must be
+     flushed from the AS.
 
-     For it's own area, the Type-7 LSDB keeps track of other
-     NSSA-ASBRs and it's own ASBR.
-     
-     For any normal ABR, the Type-5 LSDB keeps track of both external
-     and NSSA LSAs.  the Type-7 LSDB keeps track of just the NSSA
-     externals.
-
-     For any translating ABR, the Type-5 LSDB keeps track of both
-     external and NSSA LSAs.  all Type-7 LSDBs for which the ABR has
-     translating status must be translated to the external world. */
+     */
   
   /* Check the AS-external-LSA should be originated. */
   if (!ospf_redistribute_check (ei, NULL))
@@ -1655,20 +1826,20 @@ ospf_external_lsa_originate (struct external_info *ei)
       return NULL;
     }
 
-  /* Install newly created LSA, lock = 1. */
+  /* Install newly created LSA into Type-5 LSDB, lock = 1. */
   ospf_lsa_install (NULL, new);
 
   /* Update LSA origination count. */
   ospf_top->lsa_originate_count++;
 
+  /* Flooding new LSA. only to AS (non-NSSA/STUB) */
+  ospf_flood_through_as (NULL, new);
+
 #ifdef HAVE_NSSA
   /* If there is any attached NSSA, do special handling */
   if (ospf_top->anyNSSA)
-    ospf_install_flood_nssa (new); /* Install/Flood Type-7 per new rules */
-  else
+    ospf_install_flood_nssa (new, ei); /* Install/Flood Type-7 to all NSSAs */
 #endif /* HAVE_NSSA */
-    /* Flooding new LSA. */
-    ospf_flood_through_as (NULL, new);
 
   /* Debug logging. */
   if (IS_DEBUG_OSPF (lsa, LSA_GENERATE))
@@ -1909,14 +2080,14 @@ ospf_external_lsa_refresh (struct ospf_lsa *lsa,
 
   ospf_lsa_install (NULL, new);	/* As type-5. */
 
+  /* Flood LSA through AS. */
+  ospf_flood_through_as (NULL, new);
+
 #ifdef HAVE_NSSA
-  /* If any attached NSSA, do special handling */
+  /* If any attached NSSA, install as Type-7, flood to all NSSA Areas */
   if (ospf_top->anyNSSA)
-    ospf_install_flood_nssa (new); /* Install/Flood per new rules */
-  else
+    ospf_install_flood_nssa (new, ei); /* Install/Flood per new rules */
 #endif /* HAVE_NSSA */
-    /* Flood LSA through AS. */
-    ospf_flood_through_as (NULL, new);
 
   /* Register slef-originated LSA to refresh queue. */
   ospf_refresher_register_lsa (ospf_top, new);
@@ -2083,6 +2254,17 @@ ospf_lsa_install (struct ospf_interface *oi, struct ospf_lsa *lsa)
   /* Set LSDB. */
   lsdb = lsa->data->type != OSPF_AS_EXTERNAL_LSA ?
     lsa->area->lsdb : ospf_top->lsdb;
+
+#ifdef HAVE_NSSA
+  if (IS_DEBUG_OSPF_NSSA)
+    {
+      zlog_info ("LSA[Installing]: Type-%d ", lsa->data->type);
+
+      if  (lsa->data->type == OSPF_AS_NSSA_LSA )
+	zlog_info ("NSSA LSA AREA = %s", inet_ntoa (lsa->area->area_id));
+    }
+#endif /* HAVE_NSSA */
+
   assert (lsdb);
 
   /* discard old LSA from LSDB */
@@ -2114,7 +2296,10 @@ ospf_lsa_install (struct ospf_interface *oi, struct ospf_lsa *lsa)
     case OSPF_AS_EXTERNAL_LSA:
       new = ospf_external_lsa_install (lsa);
       break;
-    default:
+    default: /* NSSA, or type-6,8,9....nothing special */
+#ifdef HAVE_NSSA
+      new = ospf_external_lsa_install (lsa);
+#endif /* HAVE_NSSA */
       break;
     }
 
@@ -2172,6 +2357,29 @@ ospf_check_nbr_status ()
 }
 
 
+/* This function flood the maxaged LSA to DR. */
+void
+ospf_maxage_flood (struct ospf_lsa *lsa)
+{
+  switch (lsa->data->type)
+    {
+    case OSPF_ROUTER_LSA:
+    case OSPF_NETWORK_LSA:
+    case OSPF_SUMMARY_LSA:
+    case OSPF_SUMMARY_LSA_ASBR:
+#ifdef HAVE_NSSA
+    case OSPF_AS_NSSA_LSA:
+#endif /* HAVE_NSSA */
+      ospf_flood_through_area (lsa->area, NULL, lsa);
+      break;
+    case OSPF_AS_EXTERNAL_LSA:
+      ospf_flood_through_as (NULL, lsa);
+      break;
+    default:
+      break;
+    }
+}
+
 int
 ospf_maxage_lsa_remover (struct thread *thread)
 {
@@ -2208,6 +2416,10 @@ ospf_maxage_lsa_remover (struct thread *thread)
           zlog_info ("LSA[Type%d:%s]: MaxAge LSA removed from list",
                      lsa->data->type, inet_ntoa (lsa->data->id));
 
+	/* Flood max age LSA. */
+	ospf_maxage_flood (lsa);
+
+	/* Remove from lsdb. */
         ospf_discard_from_db (lsa->lsdb, lsa);
         new_lsdb_delete (lsa->lsdb, lsa);
       }
@@ -2383,6 +2595,9 @@ ospf_lsa_lookup (struct ospf_area *area, u_int32_t type,
     case OSPF_NETWORK_LSA:
     case OSPF_SUMMARY_LSA:
     case OSPF_SUMMARY_LSA_ASBR:
+#ifdef HAVE_NSSA
+    case OSPF_AS_NSSA_LSA:
+#endif /* HAVE_NSSA */
       return new_lsdb_lookup_by_id (area->lsdb, type, id, adv_router);
       break;
     case OSPF_AS_EXTERNAL_LSA:
@@ -3193,6 +3408,30 @@ show_as_external_lsa_detail (struct vty *vty, struct ospf_lsa *lsa)
 }
 
 #ifdef HAVE_NSSA
+int
+show_as_external_lsa_stdvty (struct ospf_lsa *lsa)
+{
+  struct as_external_lsa *al = (struct as_external_lsa *) lsa->data;
+
+  /* show_ip_ospf_database_header (vty, lsa); */
+
+  zlog_info( "  Network Mask: /%d%s",
+	     ip_masklen (al->mask), "\n");
+  zlog_info( "        Metric Type: %s%s",
+	     IS_EXTERNAL_METRIC (al->e[0].tos) ?
+	     "2 (Larger than any link state path)" : "1", "\n");
+  zlog_info( "        TOS: 0%s", "\n");
+  zlog_info( "        Metric: %d%s",
+	     GET_METRIC (al->e[0].metric), "\n");
+  zlog_info( "        Forward Address: %s%s",
+	     inet_ntoa (al->e[0].fwd_addr), "\n");
+
+  zlog_info( "        External Route Tag: %u%s%s",
+	     ntohl (al->e[0].route_tag), "\n", "\n");
+
+  return 0;
+}
+
 /* Show AS-NSSA-LSA detail information. */
 int
 show_as_nssa_lsa_detail (struct vty *vty, struct ospf_lsa *lsa)

@@ -139,7 +139,7 @@ ipFwNumber (struct variable *v, oid objid[], size_t *objid_len,
 
   /* Return number of routing entries. */
   result = 0;
-  for (np = route_top (ipv4_rib_table); np; np = route_next (np))
+  for (np = route_top (rib_table_ipv4); np; np = route_next (np))
     result++;
 
   return (u_char *)&result;
@@ -157,7 +157,7 @@ ipCidrNumber (struct variable *v, oid objid[], size_t *objid_len,
 
   /* Return number of routing entries. */
   result = 0;
-  for (np = route_top (ipv4_rib_table); np; np = route_next (np))
+  for (np = route_top (rib_table_ipv4); np; np = route_next (np))
     result++;
 
   return (u_char *)&result;
@@ -240,8 +240,10 @@ check_replace(struct route_node *np2, struct rib *rib2,
       return;
     }
 
+#if 0
   if (in_addr_cmp((u_char *)&(*rib)->u.gate4, (u_char *)&rib2->u.gate4) <= 0)
     return;
+#endif /* 0 */
 
   *np = np2;
   *rib = rib2;
@@ -315,14 +317,16 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
     {
       if (policy) /* Not supported (yet?) */
         return;
-      for (*np = route_top (ipv4_rib_table); *np; *np = route_next (*np))
+      for (*np = route_top (rib_table_ipv4); *np; *np = route_next (*np))
 	{
 	  if (!in_addr_cmp(&(*np)->p.u.prefix, (u_char *)&dest))
 	    {
 	      for (*rib = (*np)->info; *rib; *rib = (*rib)->next)
 	        {
+#if 0
 		  if (!in_addr_cmp((u_char *)&(*rib)->u.gate4,
 		    (u_char *)&nexthop))
+#endif
 		    if (proto == proto_trans((*rib)->type))
 		      return;
 		}
@@ -333,7 +337,7 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 
 /* Search next best entry */
 
-  for (np2 = route_top (ipv4_rib_table); np2; np2 = route_next (np2))
+  for (np2 = route_top (rib_table_ipv4); np2; np2 = route_next (np2))
     {
 
       /* Check destination first */
@@ -350,11 +354,14 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 	      proto2 = proto_trans(rib2->type);
 	      policy2 = 0;
 
-	      if (   (policy < policy2)
-	          || ((policy == policy2) && (proto < proto2))
-		  || ((policy == policy2) && (proto == proto2) &&
-		      (in_addr_cmp((u_char *)&rib2->u.gate4,
-		      (u_char *) &nexthop) >= 0)))
+	      if ((policy < policy2)
+		  || ((policy == policy2) && (proto < proto2))
+		  || ((policy == policy2) && (proto == proto2)
+#if 0
+		      && (in_addr_cmp((u_char *)&rib2->u.gate4,
+				      (u_char *) &nexthop) >= 0)
+#endif		     
+		      ))
 		check_replace(np2, rib2, np, rib);
 	    }
 	}
@@ -373,9 +380,18 @@ get_fwtable_route_node(struct variable *v, oid objid[], size_t *objid_len,
 
   objid[v->namelen + 4] = proto;
   objid[v->namelen + 5] = policy;
-  pnt = (u_char *) &(*rib)->u.gate4;
-  for (i = 0; i < 4; i++)
-    objid[i + v->namelen + 6] = *pnt++;
+
+  {
+    struct nexthop *nexthop;
+
+    nexthop = (*rib)->nexthop;
+    if (nexthop)
+      {
+	pnt = (u_char *) &nexthop->gate.ipv4;
+	for (i = 0; i < 4; i++)
+	  objid[i + v->namelen + 6] = *pnt++;
+      }
+  }
 
   return;
 }
@@ -389,9 +405,14 @@ ipFwTable (struct variable *v, oid objid[], size_t *objid_len,
   static int result;
   static int resarr[2];
   static struct in_addr netmask;
+  struct nexthop *nexthop;
 
   get_fwtable_route_node(v, objid, objid_len, exact, &np, &rib);
   if (!np)
+    return NULL;
+
+  nexthop = rib->nexthop;
+  if (! nexthop)
     return NULL;
 
   switch (v->magic)
@@ -412,14 +433,15 @@ ipFwTable (struct variable *v, oid objid[], size_t *objid_len,
       break;
     case IPFORWARDNEXTHOP:
       *val_len = 4;
-      return (u_char *)&rib->u.gate4;
+      return (u_char *)&nexthop->gate.ipv4;
       break;
     case IPFORWARDIFINDEX:
       *val_len = sizeof(int);
-      return (u_char *)&rib->u.ifindex;
+      return (u_char *)&nexthop->ifindex;
       break;
     case IPFORWARDTYPE:
-      if (IS_RIB_LINK (rib))
+      if (nexthop->type == NEXTHOP_TYPE_IFINDEX
+	  || nexthop->type == NEXTHOP_TYPE_IFNAME)
         result = 3;
       else
         result = 4;

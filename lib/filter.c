@@ -767,7 +767,7 @@ DEFUN (access_list_remark,
     }
 
   /* Below is remark get codes. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 1; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);
@@ -1000,7 +1000,7 @@ DEFUN (ipv6_access_list_remark,
     }
 
   /* Below is remark get codes. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 1; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);

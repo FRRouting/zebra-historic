@@ -25,60 +25,22 @@
 
 #include "linklist.h"
 
-/* Interface name length.
+/*
+  Interface name length.
 
- Linux 2.0.36 and Linux 2.1.131 define this value in
- /usr/include/linux/if.h and it's like this:
+   Linux define value in /usr/include/linux/if.h.
+   #define IFNAMSIZ        16
 
- #define    IFNAMSIZ        16
-
- FreeBSD 2.2.7 and 3.0 define this value in
- /usr/include/net/if.h and it's like this:
-
+   FreeBSD define value in /usr/include/net/if.h.
+   #define IFNAMSIZ        16
 */
 
 #define INTERFACE_NAMSIZ      20
 #define INTERFACE_HWADDR_MAX  20
 
-#ifdef OLD_RIB /* junk */
-
-#ifdef HAVE_IF_PSEUDO
-#define IF_PSEUDO      0x01
-#define IF_PSEUDO_SET(IF) (((IF)->status) |= IF_PSEUDO)
-#define IF_PSEUDO_UNSET(IF) (((IF)->status) &= ~IF_PSEUDO)
-#define IS_IF_PSEUDO(IF) (((IF)->status) & IF_PSEUDO)
-#endif /* HAVE_IF_PSEUDO */
-
-#ifndef INTERFACE_UNKNOWN
-#define INTERFACE_UNKNOWN 1000000
-#endif /* INTERFACE_UNKNOWN */
-
-#ifndef INTERFACE_PSEUDO
-#define INTERFACE_PSEUDO 0
-#endif  /* INTERFACE_PSEUDO */
-
-#endif /* OLD_RIB */
-
-/* Get RID of the following once the New RIB is in place... */
-
-/* Stuff for interface munging etc */
-/* Logical sub interfaces */
-#define IF_LSUB   0x01
-#define IF_LSUB_SET(IF) (((IF)->status) |= IF_LSUB)
-#define IF_LSUB_UNSET(IF) (((IF)->status) &= ~IF_LSUB)
-#define IS_IF_LSUB(IF) (((IF)->status) & IF_LSUB)
-
-/* Interface InActive  flag */
-#define IF_INACTIVE   0x02
-#define IF_INACTIVE_SET(IF) (((IF)->status) |= IF_INACTIVE)
-#define IF_INACTIVE_UNSET(IF) (((IF)->status) &= ~IF_INACTIVE)
-#define IS_IF_INACTIVE(IF) (((IF)->status) & IF_INACTIVE)
-
-/* Internal IF Index #defines */
-/* Internal If indexes start at 0xFFFFFFFF and go down to 1 greater than
-   this */
+/* Internal If indexes start at 0xFFFFFFFF and go down to 1 greater
+   than this */
 #define IFINDEX_INTERNBASE 0x80000000
-
 
 #ifdef HAVE_PROC_NET_DEV
 struct if_stats
@@ -123,6 +85,8 @@ struct interface
 
   /* Zebra internal interface status */
   u_char status;
+#define ZEBRA_INTERFACE_ACTIVE     (1 << 0)
+#define ZEBRA_INTERFACE_SUB        (1 << 1)
   
   /* Interface flags. */
   unsigned long flags;
@@ -130,7 +94,7 @@ struct interface
   /* Interface metric */
   int metric;
 
-  /* INterface MTU. */
+  /* Interface MTU. */
   int mtu;
 
   /* Hardware address. */
@@ -173,9 +137,21 @@ struct connected
   /* Attached interface. */
   struct interface *ifp;
 
+  /* Flags for configuration. */
+  u_char conf;
+#define ZEBRA_IFC_REAL         (1 << 0)
+#define ZEBRA_IFC_CONFIGURED   (1 << 1)
+
+  /* Flags for connected address. */
+  u_char flags;
+#define ZEBRA_IFA_SECONDARY   (1 << 0)
+
   /* Address of connected network. */
   struct prefix *address;
   struct prefix *destination;
+
+  /* Label for Linux 2.2.X and upper. */
+  char *label;
 };
 
 /* Interface hook sort. */

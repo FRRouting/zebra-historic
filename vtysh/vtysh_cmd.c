@@ -206,6 +206,14 @@ DEFSH (VTYSH_RIPD, no_rip_distance_source_cmd_vtysh,
        "Distance value\n"
        "IP source prefix\n")
 
+DEFSH (VTYSH_ZEBRA, no_ip_address_secondary_cmd_vtysh, 
+       NO_STR
+       "ip address A.B.C.D/M secondary", 
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Secondary IP address\n")
+
 DEFSH (VTYSH_BGPD, bgp_redistribute_rip_routemap_cmd_vtysh, 
        "redistribute rip route-map WORD", 
        "Redistribute information from another routing protocol\n"
@@ -260,8 +268,8 @@ DEFSH (VTYSH_OSPFD, ospf_hello_interval_cmd_vtysh,
 
 DEFSH (VTYSH_BGPD, no_bgp_enforce_first_as_cmd_vtysh, 
        "no bgp enforce-first-as", 
-       NO_STR
-       "BGP specific commands\n"
+       BGP_STR
+       BGP_STR
        "Enforce the first AS for EBGP routes\n")
 
 DEFSH (VTYSH_ZEBRA, show_interface_cmd_vtysh, 
@@ -407,7 +415,7 @@ DEFSH (VTYSH_ZEBRA, no_ipv6_route_pref_cmd_vtysh,
        NO_STR
        IP_STR
        "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
        "IPv6 gateway address\n"
        "IPv6 gateway interface name\n"
        "Distance value for this prefix\n")
@@ -628,6 +636,16 @@ DEFSH (VTYSH_OSPF6D, ospf6_routemap_match_address_prefixlist_cmd_vtysh,
        "Match address of route\n"
        "Match entries of prefix-lists\n"
        "IPv6 prefix-list name\n")
+
+DEFSH (VTYSH_BGPD, show_ip_bgp_ipv4_cidr_only_cmd_vtysh, 
+       "show ip bgp ipv4 (unicast|multicast) cidr-only", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display only routes with non-natural netmasks\n")
 
 DEFSH (VTYSH_BGPD, bgp_confederation_peers_cmd_vtysh, 
        "bgp confederation peers .<1-65535>", 
@@ -916,13 +934,6 @@ DEFSH (VTYSH_OSPF6D, show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd_vtysh,
        "detailed infomation\n"
        )
 
-DEFSH (VTYSH_OSPFD, network_area_decimal_cmd_vtysh, 
-       "network A.B.C.D/M area <0-4294967295>", 
-       "Enable routing on an IP network\n"
-       "OSPF network prefix\n"
-       "Set the OSPF area ID\n"
-       "OSPF area ID as a decimal value\n")
-
 DEFSH (VTYSH_BGPD, no_bgp_default_ipv4_unicast_cmd_vtysh, 
        "no bgp default ipv4-unicast", 
        NO_STR
@@ -956,11 +967,12 @@ DEFSH (VTYSH_OSPFD, ospf_distance_source_cmd_vtysh,
        "IP source prefix\n")
 
 DEFSH (VTYSH_ZEBRA, ipv6_route_cmd_vtysh, 
-       "ipv6 route X:X::X:X/M X:X::X:X", 
-       "IP information\n"
-       "IP routing set\n"
-       "IP Address\n"
-       "Destination IP Address\n")
+       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)", 
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
 
 DEFSH (VTYSH_BGPD, no_ipv6_bgp_neighbor_ebgp_multihop_cmd_vtysh, 
        "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) ebgp-multihop", 
@@ -1033,12 +1045,12 @@ DEFSH (VTYSH_BGPD, undebug_bgp_update_cmd_vtysh,
 
 DEFSH (VTYSH_BGPD, bgp_damp_set_cmd_vtysh, 
        "bgp dampening <1-45> <1-20000> <1-20000> <1-255>", 
-       "Define dampening parameters\n"
        "BGP Specific commands\n"
-       "Half-life time in minutes\n"
-       "Reuse value\n"
-       "Suppress value\n"
-	   "Maximum suppress time in minutes\n")
+       "Enable route-flap dampening\n"
+       "Half-life time for the penalty\n"
+       "Value to start reusing a route\n"
+       "Value to start suppressing a route\n"
+       "Maximum duration to suppress a stable route\n")
 
 DEFSH (VTYSH_BGPD, dump_bgp_updates_interval_cmd_vtysh, 
        "dump bgp updates PATH INTERVAL", 
@@ -1341,11 +1353,6 @@ DEFSH (VTYSH_BGPD, no_bgp_bestpath_compare_router_id_cmd_vtysh,
        "Change the default bestpath selection\n"
        "Compare router-id for identical EBGP paths\n")
 
-DEFSH (VTYSH_OSPFD, ospf_redistribute_ospf_cmd_vtysh, 
-       "redistribute ospf", 
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPF)\n")
-
 DEFSH (VTYSH_BGPD, ipv6_bgp_network_cmd_vtysh, 
        "ipv6 bgp network X:X::X:X/M", 
        IPV6_STR
@@ -1489,8 +1496,9 @@ DEFSH (VTYSH_BGPD, show_ipv6_bgp_regexp_cmd_vtysh,
 
 DEFSH (VTYSH_BGPD, bgp_damp_unset_cmd_vtysh, 
        "no bgp dampening", 
-       "Turn off dampening\n"
-       "BGP Specific commands\n")
+       NO_STR
+       "BGP Specific commands\n"
+       "Enable route-flap dampening\n")
 
 DEFSH (VTYSH_OSPF6D, show_ipv6_ospf6_spf_tree_cmd_vtysh, 
        "show ipv6 ospf6 spf tree", 
@@ -1500,19 +1508,19 @@ DEFSH (VTYSH_OSPF6D, show_ipv6_ospf6_spf_tree_cmd_vtysh,
        "Shortest Path First caculation\n"
        "Displays spf tree\n")
 
-DEFSH (VTYSH_ZEBRA, no_debug_zebra_packet_cmd_vtysh, 
-       "no debug zebra packet", 
-       NO_STR
-       DEBUG_STR
-       "Zebra configuration\n"
-       "Debug option set for zebra packet\n")
-
 DEFSH (VTYSH_OSPFD, no_ip_ospf_priority_cmd_vtysh, 
        "no ip ospf priority", 
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
        "Router priority\n")
+
+DEFSH (VTYSH_ZEBRA, no_debug_zebra_packet_cmd_vtysh, 
+       "no debug zebra packet", 
+       NO_STR
+       DEBUG_STR
+       "Zebra configuration\n"
+       "Debug option set for zebra packet\n")
 
 DEFSH (VTYSH_RIPD|VTYSH_OSPFD|VTYSH_BGPD, no_ipv6_access_list_remark_cmd_vtysh, 
        "no ipv6 access-list WORD remark", 
@@ -1986,6 +1994,13 @@ DEFSH (VTYSH_OSPF6D, show_ipv6_ospf6_database_type_advrtr_lsid_cmd_vtysh,
        "Link State ID\n"
        )
 
+DEFSH (VTYSH_ZEBRA, ip_address_secondary_cmd_vtysh, 
+       "ip address A.B.C.D/M secondary", 
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Secondary IP address\n")
+
 DEFSH (VTYSH_BGPD, show_ipv6_bgp_prefix_cmd_vtysh, 
        "show ipv6 bgp X:X::X:X/M", 
        SHOW_STR
@@ -2029,7 +2044,7 @@ DEFSH (VTYSH_BGPD, no_bgp_confederation_peers_cmd_vtysh,
 
 DEFSH (VTYSH_BGPD, bgp_enforce_first_as_cmd_vtysh, 
        "bgp enforce-first-as", 
-       "BGP specific commands\n"
+       BGP_STR
        "Enforce the first AS for EBGP routes\n")
 
 DEFSH (VTYSH_OSPFD, no_debug_ospf_zebra_sub_cmd_vtysh, 
@@ -2234,12 +2249,6 @@ DEFSH (VTYSH_OSPFD, no_area_range_suppress_cmd_vtysh,
        "deconfigure OSPF area range for route summarization\n"
        "area range prefix\n"
        "do not advertise this range\n")
-
-DEFSH (VTYSH_OSPFD, no_ospf_redistribute_kernel_cmd_vtysh, 
-       "no redistribute kernel", 
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       "Kernel routes\n")
 
 DEFSH (VTYSH_BGPD, clear_ip_bgp_all_soft_cmd_vtysh, 
        "clear ip bgp * soft", 
@@ -2457,6 +2466,19 @@ DEFSH (VTYSH_OSPF6D, show_ipv6_ospf6_interface_ifname_cmd_vtysh,
        IFNAME_STR
        )
 
+DEFSH (VTYSH_ZEBRA, show_ipv6_route_cmd_vtysh, 
+       "show ipv6 route", 
+       SHOW_STR
+       IP_STR
+       "IPv6 routing table\n")
+
+DEFSH (VTYSH_BGPD, no_bgp_network_import_check_cmd_vtysh, 
+       "no bgp network import-check", 
+       NO_STR
+       "BGP specific commands\n"
+       "BGP network command\n"
+       "Check BGP network route exists in IGP\n")
+
 DEFSH (VTYSH_BGPD, no_bgp_bestpath_med2_cmd_vtysh, 
        "no bgp bestpath med confed missing-as-worst", 
        NO_STR
@@ -2592,6 +2614,14 @@ DEFSH (VTYSH_BGPD, no_ipv6_neighbor_override_capability_cmd_vtysh,
        "IP address\n"
        "IPv6 address\n"
        "Override capability negotiation result\n")
+
+DEFSH (VTYSH_BGPD, show_ipv6_bgp_prefix_longer_cmd_vtysh, 
+       "show ipv6 bgp X:X::X:X/M longer-prefixes", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "IPv6 prefix <network>/<length>,  e.g.,  3ffe::/16\n"
+       "Display route and more specific routes\n")
 
 DEFSH (VTYSH_BGPD, clear_ipv6_bgp_all_in_cmd_vtysh, 
        "clear ipv6 bgp * in", 
@@ -3352,9 +3382,9 @@ DEFSH (VTYSH_RIPD, no_rip_neighbor_cmd_vtysh,
 
 DEFSH (VTYSH_BGPD, bgp_damp_set2_cmd_vtysh, 
        "bgp dampening <1-45>", 
-       "Define dampening parameters\n"
        "BGP Specific commands\n"
-       "Half-life time in minutes\n")
+       "Enable route-flap dampening\n"
+       "Half-life time for the penalty\n")
 
 DEFSH (VTYSH_RIPD, ip_rip_receive_version_1_cmd_vtysh, 
        "ip rip receive version 1 2", 
@@ -3502,13 +3532,13 @@ DEFSH (VTYSH_ZEBRA, ip_irdp_holdtime_cmd_vtysh,
        "Holdtime value in seconds. Default is 1800 seconds\n")
 
 DEFSH (VTYSH_ZEBRA, no_ipv6_route_ifname_cmd_vtysh, 
-       "no ipv6 route IPV6_ADDRESS IPV6_ADDRESS IFNAME", 
+       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE", 
        NO_STR
-       "IP information\n"
-       "IP routing set\n"
-       "IP Address\n"
-       "IP Address\n"
-       "Interface name\n")
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
 
 DEFSH (VTYSH_OSPFD, no_ospf_distance_cmd_vtysh, 
        "no distance <1-255>", 
@@ -3661,6 +3691,13 @@ DEFSH (VTYSH_BGPD, show_ip_bgp_neighbors_cmd_vtysh,
        IP_STR
        BGP_STR
        "Detailed information on TCP and BGP neighbor connections\n")
+
+DEFSH (VTYSH_BGPD, show_ip_bgp_cidr_only_cmd_vtysh, 
+       "show ip bgp cidr-only", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display only routes with non-natural netmasks\n")
 
 DEFSH (VTYSH_RIPD|VTYSH_BGPD, ipv6_prefix_list_seq_cmd_vtysh, 
        "ipv6 prefix-list WORD seq <1-4294967295> (deny|permit) (X:X::X:X/M|any)", 
@@ -4014,8 +4051,8 @@ DEFSH (VTYSH_OSPF6D, no_ospf6_redistribute_bgp_cmd_vtysh,
 
 DEFSH (VTYSH_BGPD, bgp_damp_set3_cmd_vtysh, 
        "bgp dampening", 
-       "Define dampening parameters\n"
-       "BGP Specific commands\n")
+       "BGP Specific commands\n"
+       "Enable route-flap dampening\n")
 
 DEFSH (VTYSH_OSPFD, ospf_distance_ospf_intra_inter_external_cmd_vtysh, 
        "distance ospf intra-area <1-255> inter-area <1-255> external <1-255>", 
@@ -4163,7 +4200,7 @@ DEFSH (VTYSH_RIPD|VTYSH_BGPD, no_ip_prefix_list_prefix_cmd_vtysh,
        "Any prefix match.  Same as \"0.0.0.0/0 le 32\"\n")
 
 DEFSH (VTYSH_ZEBRA, ipv6_address_cmd_vtysh, 
-       "ipv6 address IPV6PREFIX/M", 
+       "ipv6 address X:X::X:X/M", 
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
        "IPv6 address (e.g. 3ffe:506::1/48)\n")
@@ -4262,7 +4299,7 @@ DEFSH (VTYSH_ZEBRA, ipv6_route_pref_cmd_vtysh,
        "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>", 
        IP_STR
        "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
        "IPv6 gateway address\n"
        "IPv6 gateway interface name\n"
        "Distance value for this prefix\n")
@@ -4965,6 +5002,12 @@ DEFSH (VTYSH_BGPD, no_set_ipv6_nexthop_local_cmd_vtysh,
        "IPv6 next-hop address\n"
        "IPv6 local address\n")
 
+DEFSH (VTYSH_OSPFD, data_injection_cmd_vtysh, 
+       "inject-data <1-9>", 
+       "Inject Data onto line for debugging purpose\n"
+       "Declare number <1-9>\n"
+       "Then watch logs.\n")
+
 DEFSH (VTYSH_RIPD|VTYSH_OSPFD|VTYSH_BGPD, no_access_list_all_cmd_vtysh, 
        "no access-list WORD", 
        NO_STR
@@ -5267,7 +5310,7 @@ DEFSH (VTYSH_ZEBRA, no_ipv6_route_ifname_pref_cmd_vtysh,
        NO_STR
        IP_STR
        "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
        "IPv6 gateway address\n"
        "IPv6 gateway interface name\n"
        "Distance value for this prefix\n")
@@ -5454,13 +5497,13 @@ DEFSH (VTYSH_OSPFD, area_nssa_nosum_t_candidate_cmd_vtysh,
        "No inter-area routes into nssa,  translation election\n")
 
 DEFSH (VTYSH_ZEBRA, no_ipv6_route_cmd_vtysh, 
-       "no ipv6 route IPV6_ADDRESS IPV6_ADDRESS", 
+       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)", 
        NO_STR
-       "IP information\n"
-       "IP routing set\n"
-       "IP Address\n"
-       "IP Address\n"
-       "IP Netmask\n")
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
 
 DEFSH (VTYSH_OSPFD, show_ip_ospf_cmd_vtysh, 
        "show ip ospf", 
@@ -6356,6 +6399,14 @@ DEFSH (VTYSH_BGPD, show_ip_bgp_regexp_cmd_vtysh,
        "Display routes matching the AS path regular expression\n"
        "A regular-expression to match the BGP AS paths\n")
 
+DEFSH (VTYSH_RIPD, rip_match_ip_address_prefix_list_cmd_vtysh, 
+       "match ip address prefix-list WORD", 
+       MATCH_STR
+       IP_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
+
 DEFSH (VTYSH_OSPFD, ospf_distance_ospf_external_inter_cmd_vtysh, 
        "distance ospf external <1-255> inter-area <1-255>", 
        "Define an administrative distance\n"
@@ -6536,6 +6587,14 @@ DEFSH (VTYSH_OSPFD, ospf_redistribute_source_cmd_vtysh,
        "Routing Information Protocol (RIP)\n"
        "Border Gateway Protocol (BGP)\n")
 
+DEFSH (VTYSH_BGPD, show_ipv6_mbgp_prefix_longer_cmd_vtysh, 
+       "show ipv6 mbgp X:X::X:X/M longer-prefixes", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "IPv6 prefix <network>/<length>,  e.g.,  3ffe::/16\n"
+       "Display route and more specific routes\n")
+
 DEFSH (VTYSH_BGPD, clear_ip_bgp_as_vpnv4_in_cmd_vtysh, 
        "clear ip bgp <1-65535> vpnv4 unicast in", 
        CLEAR_STR
@@ -6611,11 +6670,6 @@ DEFSH (VTYSH_RIPD|VTYSH_BGPD, clear_ip_prefix_list_name_cmd_vtysh,
        IP_STR
        PREFIX_LIST_STR
        "Name of a prefix list\n")
-
-DEFSH (VTYSH_OSPFD, ospf_redistribute_kernel_cmd_vtysh, 
-       "redistribute kernel", 
-       "Redistribute information from another routing protocol\n"
-       "Kernel routes\n")
 
 DEFSH (VTYSH_ZEBRA, no_ip_route_pref_cmd_vtysh, 
        "no ip route A.B.C.D/M (A.B.C.D|INTERFACE) <1-255>", 
@@ -6808,6 +6862,12 @@ DEFSH (VTYSH_BGPD, no_set_ecommunity_rt_val_cmd_vtysh,
        "BGP extended community attribute\n"
        "Route Target extened communityt\n"
        "VPN extended community\n")
+
+DEFSH (VTYSH_BGPD, bgp_network_import_check_cmd_vtysh, 
+       "bgp network import-check", 
+       "BGP specific commands\n"
+       "BGP network command\n"
+       "Check BGP network route exists in IGP\n")
 
 DEFSH (VTYSH_RIPD, rip_offset_list_ifname_cmd_vtysh, 
        "offset-list WORD (in|out) <0-16> IFNAME", 
@@ -7093,14 +7153,6 @@ DEFSH (VTYSH_OSPFD, no_network_area_cmd_vtysh,
        "Set the OSPF area ID\n"
        "OSPF area ID in IP address format\n")
 
-DEFSH (VTYSH_OSPFD, no_area_stub_nosum_cmd_vtysh, 
-       "no area A.B.C.D stub no-summary", 
-       NO_STR
-       "OSPF area parameters\n"
-       "OSPF area ID in IP address format\n"
-       "Configure OSPF area as stub\n"
-       "Do not inject inter-area routes into area\n")
-
 DEFSH (VTYSH_BGPD, clear_ip_bgp_all_vpnv4_out_cmd_vtysh, 
        "clear ip bgp * vpnv4 unicast out", 
        CLEAR_STR
@@ -7110,6 +7162,14 @@ DEFSH (VTYSH_BGPD, clear_ip_bgp_all_vpnv4_out_cmd_vtysh,
        "Address family\n"
        "Address Family Modifier\n"
        "Soft reconfig outbound update\n")
+
+DEFSH (VTYSH_OSPFD, no_area_stub_nosum_cmd_vtysh, 
+       "no area A.B.C.D stub no-summary", 
+       NO_STR
+       "OSPF area parameters\n"
+       "OSPF area ID in IP address format\n"
+       "Configure OSPF area as stub\n"
+       "Do not inject inter-area routes into area\n")
 
 DEFSH (VTYSH_OSPF6D, ipv6_ospf6_deadinterval_cmd_vtysh, 
        "ipv6 ospf6 dead-interval ROUTER_DEAD_INTERVAL", 
@@ -7256,8 +7316,20 @@ DEFSH (VTYSH_BGPD, no_ipv6_bgp_neighbor_send_community_extended_cmd_vtysh,
        "Send Community attribute to this neighbor (default enable)\n"
        "Extended Community\n")
 
+DEFSH (VTYSH_ZEBRA, show_ipv6_route_protocol_cmd_vtysh, 
+       "show ipv6 route (bgp|connected|kernel|ospf6|ripng|static)", 
+       SHOW_STR
+       IP_STR
+       "IP routing table\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Connected\n"
+       "Kernel\n"
+       "Open Shortest Path First (OSPFv3)\n"
+       "Routing Information Protocol (RIPng)\n"
+       "Static routes\n")
+
 DEFSH (VTYSH_ZEBRA, no_ipv6_address_cmd_vtysh, 
-       "no ipv6 address IPV6PREFIX/M", 
+       "no ipv6 address X:X::X:X/M", 
        NO_STR
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
@@ -7594,6 +7666,17 @@ DEFSH (VTYSH_OSPF6D, ospf6_routemap_no_set_metric_type_cmd_vtysh,
        "OSPF6 external type 1 metric\n"
        "OSPF6 external type 2 metric\n")
 
+DEFSH (VTYSH_BGPD, show_ip_bgp_ipv4_prefix_longer_cmd_vtysh, 
+       "show ip bgp ipv4 (unicast|multicast) A.B.C.D/M longer-prefixes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
+       "Display route and more specific routes\n")
+
 DEFSH (VTYSH_BGPD, show_ip_bgp_ipv4_community_exact_cmd_vtysh, 
        "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) exact-match", 
        SHOW_STR
@@ -7705,14 +7788,6 @@ DEFSH (VTYSH_OSPFD, ospf_default_metric_cmd_vtysh,
        "Set metric of redistributed routes\n"
        "Default metric\n")
 
-DEFSH (VTYSH_OSPFD, ospf_message_digest_key_cmd_vtysh, 
-       "ospf message-digest-key <1-255> md5 KEY", 
-       "OSPF interface commands\n"
-       "Message digest authentication password (key)\n"
-       "Key ID\n"
-       "Use MD5 algorithm\n"
-       "The OSPF password (key)")
-
 DEFSH (VTYSH_BGPD, clear_ip_bgp_all_ipv4_soft_out_cmd_vtysh, 
        "clear ip bgp * ipv4 (unicast|multicast) soft out", 
        CLEAR_STR
@@ -7724,6 +7799,14 @@ DEFSH (VTYSH_BGPD, clear_ip_bgp_all_ipv4_soft_out_cmd_vtysh,
        "Address Family modifier\n"
        "Soft reconfig\n"
        "Soft reconfig outbound update\n")
+
+DEFSH (VTYSH_OSPFD, ospf_message_digest_key_cmd_vtysh, 
+       "ospf message-digest-key <1-255> md5 KEY", 
+       "OSPF interface commands\n"
+       "Message digest authentication password (key)\n"
+       "Key ID\n"
+       "Use MD5 algorithm\n"
+       "The OSPF password (key)")
 
 DEFSH (VTYSH_RIPD|VTYSH_BGPD, no_ipv6_prefix_list_description_arg_cmd_vtysh, 
        "no ipv6 prefix-list WORD description .LINE", 
@@ -7766,6 +7849,13 @@ DEFSH (VTYSH_OSPFD, debug_ospf_packet_send_recv_cmd_vtysh,
        "Packet sent\n"
        "Packet received\n"
        "Detail information\n")
+
+DEFSH (VTYSH_ZEBRA, show_ipv6_route_addr_cmd_vtysh, 
+       "show ipv6 route X:X::X:X", 
+       SHOW_STR
+       IP_STR
+       "IPv6 routing table\n"
+       "IPv6 Address\n")
 
 DEFSH (VTYSH_BGPD, neighbor_route_server_client_cmd_vtysh, 
        NEIGHBOR_CMD "route-server-client", 
@@ -8277,7 +8367,7 @@ DEFSH (VTYSH_ZEBRA, ipv6_route_ifname_pref_cmd_vtysh,
        "ipv6 route X:X::X:X/M X:X::X:X INTERFACE <1-255>", 
        IP_STR
        "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::1/32)\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
        "IPv6 gateway address\n"
        "IPv6 gateway interface name\n"
        "Distance value for this prefix\n")
@@ -8330,12 +8420,6 @@ DEFSH (VTYSH_RIPD|VTYSH_BGPD, ip_prefix_list_ge_le_cmd_vtysh,
        "Maximum prefix length to be matched\n"
        "Maximum prefix length\n")
 
-DEFSH (VTYSH_OSPFD, no_ospf_redistribute_ospf_cmd_vtysh, 
-       "no redistribute ospf", 
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPF)\n")
-
 DEFSH (VTYSH_BGPD, no_set_community_delete_val_cmd_vtysh, 
        "no set community-delete WORD", 
        NO_STR
@@ -8344,12 +8428,12 @@ DEFSH (VTYSH_BGPD, no_set_community_delete_val_cmd_vtysh,
        "Community list\n")
 
 DEFSH (VTYSH_ZEBRA, ipv6_route_ifname_cmd_vtysh, 
-       "ipv6 route X:X::X:X/M X:X::X:X IFNAME", 
-       "IP information\n"
-       "IP routing set\n"
-       "IP Address\n"
-       "Destination IP Address\n"
-       "Destination interface name\n")
+       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE", 
+       IP_STR
+       "Establish static routes\n"
+       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
+       "IPv6 gateway address\n"
+       "IPv6 gateway interface name\n")
 
 DEFSH (VTYSH_OSPFD, debug_ospf_lsa_sub_cmd_vtysh, 
        "debug ospf lsa (generate|flooding|refresh)", 
@@ -8435,6 +8519,14 @@ DEFSH (VTYSH_OSPFD, no_area_import_list_decimal_cmd_vtysh,
        "Unset the filter for networks announced to other areas\n"
        "Name of the access-list\n")
 
+DEFSH (VTYSH_ZEBRA, ip_address_label_cmd_vtysh, 
+       "ip address A.B.C.D/M label LINE", 
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Label of this address\n"
+       "Label\n")
+
 DEFSH (VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD, match_interface_cmd_vtysh, 
        "match interface WORD", 
        MATCH_STR
@@ -8481,6 +8573,13 @@ DEFSH (VTYSH_BGPD, show_ip_bgp_ipv4_summary_cmd_vtysh,
        "Address Family modifier\n"
        "Address Family modifier\n"
        "Summary of BGP neighbor status\n")
+
+DEFSH (VTYSH_ZEBRA, show_ipv6_route_prefix_cmd_vtysh, 
+       "show ipv6 route X:X::X:X/M", 
+       SHOW_STR
+       IP_STR
+       "IPv6 routing table\n"
+       "IPv6 prefix\n")
 
 DEFSH (VTYSH_BGPD, no_set_ecommunity_soo_cmd_vtysh, 
        "no set extcommunity soo", 
@@ -8670,14 +8769,6 @@ DEFSH (VTYSH_RIPD|VTYSH_BGPD, no_ipv6_prefix_list_ge_le_cmd_vtysh,
        "Minimum prefix length\n"
        "Maximum prefix length to be matched\n"
        "Maximum prefix length\n")
-
-DEFSH (VTYSH_ZEBRA, show_ipv6_cmd_vtysh, 
-       "show ipv6 route [IPV6_ADDRESS]", 
-       SHOW_STR
-       "IP information\n"
-       "IP routing table\n"
-       "IP Address\n"
-       "IP Netmask\n")
 
 DEFSH (VTYSH_RIPD|VTYSH_OSPFD, no_match_ip_nexthop_cmd_vtysh, 
        "no match ip next-hop WORD", 
@@ -9276,6 +9367,15 @@ DEFSH (VTYSH_BGPD, no_set_community_additive_val_cmd_vtysh,
        "BGP community attribute (Add to the existing community)\n"
        "Community number in aa:nn format or local-AS|no-advertise|no-export\n")
 
+DEFSH (VTYSH_RIPD, rip_no_match_ip_address_prefix_list_cmd_vtysh, 
+       "no match ip address prefix-list WORD", 
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
+
 DEFSH (VTYSH_OSPFD, ospf_distance_ospf_external_inter_intra_cmd_vtysh, 
        "distance ospf external <1-255> inter-area <1-255> intra-area <1-255>", 
        "Define an administrative distance\n"
@@ -9286,6 +9386,15 @@ DEFSH (VTYSH_OSPFD, ospf_distance_ospf_external_inter_intra_cmd_vtysh,
        "Distance for inter-area routes\n"
        "Intra-area routes\n"
        "Distance for intra-area routes\n")
+
+DEFSH (VTYSH_ZEBRA, no_ip_address_label_cmd_vtysh, 
+       "no ip address A.B.C.D/M label LINE", 
+       NO_STR
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Label of this address\n"
+       "Label\n")
 
 DEFSH (VTYSH_BGPD, show_ipv6_bgp_community_all_cmd_vtysh, 
        "show ipv6 bgp community", 
@@ -9313,6 +9422,22 @@ DEFSH (VTYSH_RIPNGD, no_ripng_timeout_timer_cmd_vtysh,
        "Unset RIPng timeout timer in seconds\n"
        "Seconds\n")
 
+DEFSH (VTYSH_BGPD, show_ip_bgp_prefix_longer_cmd_vtysh, 
+       "show ip bgp A.B.C.D/M longer-prefixes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
+       "Display route and more specific routes\n")
+
+DEFSH (VTYSH_BGPD, clear_ip_bgp_as_soft_cmd_vtysh, 
+       "clear ip bgp <1-65535> soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n")
+
 DEFSH (VTYSH_OSPFD|VTYSH_OSPF6D, area_range_cmd_vtysh, 
        "area A.B.C.D range X:X::X:X/M", 
        "OSPFv3 area parameters\n"
@@ -9325,14 +9450,6 @@ DEFSH (VTYSH_BGPD, bgp_bestpath_compare_router_id_cmd_vtysh,
        "BGP specific commands\n"
        "Change the default bestpath selection\n"
        "Compare router-id for identical EBGP paths\n")
-
-DEFSH (VTYSH_BGPD, clear_ip_bgp_as_soft_cmd_vtysh, 
-       "clear ip bgp <1-65535> soft", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "Clear peers with the AS number\n"
-       "Soft reconfig\n")
 
 DEFSH (VTYSH_BGPD, show_ipv6_bgp_community2_exact_cmd_vtysh, 
        "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
@@ -9917,6 +10034,10 @@ install_element (INTERFACE_NODE, &ipv6_address_cmd_vtysh);
 install_element (INTERFACE_NODE, &no_ipv6_address_cmd_vtysh);
 install_element (INTERFACE_NODE, &ip_tunnel_cmd_vtysh);
 install_element (INTERFACE_NODE, &no_ip_tunnel_cmd_vtysh);
+install_element (INTERFACE_NODE, &ip_address_secondary_cmd_vtysh);
+install_element (INTERFACE_NODE, &ip_address_label_cmd_vtysh);
+install_element (INTERFACE_NODE, &no_ip_address_secondary_cmd_vtysh);
+install_element (INTERFACE_NODE, &no_ip_address_label_cmd_vtysh);
 install_element (INTERFACE_NODE, &ip_irdp_cmd_vtysh);
 install_element (INTERFACE_NODE, &ip_irdp_multicast_cmd_vtysh);
 install_element (INTERFACE_NODE, &ip_irdp_holdtime_cmd_vtysh);
@@ -9936,6 +10057,10 @@ install_element (CONFIG_NODE, &ip_route_cmd_vtysh);
 install_element (CONFIG_NODE, &ip_route_mask_cmd_vtysh);
 install_element (CONFIG_NODE, &no_ip_route_cmd_vtysh);
 install_element (CONFIG_NODE, &no_ip_route_mask_cmd_vtysh);
+install_element (CONFIG_NODE, &ip_route_pref_cmd_vtysh);
+install_element (CONFIG_NODE, &ip_route_mask_pref_cmd_vtysh);
+install_element (CONFIG_NODE, &no_ip_route_pref_cmd_vtysh);
+install_element (CONFIG_NODE, &no_ip_route_mask_pref_cmd_vtysh);
 install_element (CONFIG_NODE, &ipv6_route_cmd_vtysh);
 install_element (CONFIG_NODE, &ipv6_route_ifname_cmd_vtysh);
 install_element (CONFIG_NODE, &no_ipv6_route_cmd_vtysh);
@@ -9944,12 +10069,14 @@ install_element (CONFIG_NODE, &ipv6_route_pref_cmd_vtysh);
 install_element (CONFIG_NODE, &ipv6_route_ifname_pref_cmd_vtysh);
 install_element (CONFIG_NODE, &no_ipv6_route_pref_cmd_vtysh);
 install_element (CONFIG_NODE, &no_ipv6_route_ifname_pref_cmd_vtysh);
-install_element (VIEW_NODE, &show_ipv6_cmd_vtysh);
-install_element (ENABLE_NODE, &show_ipv6_cmd_vtysh);
-install_element (CONFIG_NODE, &ip_route_pref_cmd_vtysh);
-install_element (CONFIG_NODE, &ip_route_mask_pref_cmd_vtysh);
-install_element (CONFIG_NODE, &no_ip_route_pref_cmd_vtysh);
-install_element (CONFIG_NODE, &no_ip_route_mask_pref_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_route_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_route_protocol_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_route_addr_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_route_prefix_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_route_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_route_protocol_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_route_addr_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_route_prefix_cmd_vtysh);
 install_element (INTERFACE_NODE, &ipv6_nd_send_ra_cmd_vtysh);
 install_element (INTERFACE_NODE, &no_ipv6_nd_send_ra_cmd_vtysh);
 install_element (INTERFACE_NODE, &ipv6_nd_prefix_advertisement_cmd_vtysh);
@@ -10019,6 +10146,8 @@ install_element (RMAP_NODE, &match_ip_nexthop_cmd_vtysh);
 install_element (RMAP_NODE, &no_match_ip_nexthop_cmd_vtysh);
 install_element (RMAP_NODE, &match_ip_address_cmd_vtysh);
 install_element (RMAP_NODE, &no_match_ip_address_cmd_vtysh);
+install_element (RMAP_NODE, &rip_match_ip_address_prefix_list_cmd_vtysh);
+install_element (RMAP_NODE, &rip_no_match_ip_address_prefix_list_cmd_vtysh);
 install_element (RMAP_NODE, &no_set_metric_cmd_vtysh);
 install_element (RMAP_NODE, &no_set_metric_val_cmd_vtysh);
 install_element (RMAP_NODE, &no_set_ip_nexthop_cmd_vtysh);
@@ -10413,6 +10542,16 @@ install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_advrtr_lsid_cmd_vty
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_database_summary_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_turnover_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_turnover_summary_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_route_ospf6_external_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_route_ospf6_external_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_route_ospf6_new_cmd_vtysh);
@@ -10437,21 +10576,11 @@ install_element (ZEBRA_NODE, &redistribute_ospf6_cmd_vtysh);
 install_element (ZEBRA_NODE, &no_redistribute_ospf6_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_ospf6_cmd_vtysh);
 install_element (VIEW_NODE, &show_version_ospf6_cmd_vtysh);
-install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd_vtysh);
-install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd_vtysh);
-install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd_vtysh);
-install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd_vtysh);
-install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_ospf6_statistics_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd_vtysh);
 install_element (ENABLE_NODE, &show_version_ospf6_cmd_vtysh);
-install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd_vtysh);
-install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd_vtysh);
-install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd_vtysh);
-install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd_vtysh);
-install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_statistics_cmd_vtysh);
 install_element (ENABLE_NODE, &reload_cmd_vtysh);
 install_element (CONFIG_NODE, &set_proctitle_cmd_vtysh);
@@ -10541,6 +10670,8 @@ install_element (VIEW_NODE, &show_ip_bgp_prefix_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_ipv4_prefix_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_filter_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_ipv4_filter_list_cmd_vtysh);
+install_element (VIEW_NODE, &show_ip_bgp_cidr_only_cmd_vtysh);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_cidr_only_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_community_all_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_all_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_community_cmd_vtysh);
@@ -10563,6 +10694,8 @@ install_element (VIEW_NODE, &show_ip_bgp_community_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_community_list_exact_cmd_vtysh);
 install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_list_exact_cmd_vtysh);
+install_element (VIEW_NODE, &show_ip_bgp_prefix_longer_cmd_vtysh);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_prefix_longer_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_ipv4_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_route_cmd_vtysh);
@@ -10578,6 +10711,8 @@ install_element (ENABLE_NODE, &show_ip_bgp_prefix_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_ipv4_prefix_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_filter_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_ipv4_filter_list_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ip_bgp_cidr_only_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_cidr_only_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_community_all_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_all_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_community_cmd_vtysh);
@@ -10600,6 +10735,8 @@ install_element (ENABLE_NODE, &show_ip_bgp_community_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_community_list_exact_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_list_exact_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ip_bgp_prefix_longer_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_prefix_longer_cmd_vtysh);
 install_element (VIEW_NODE, &neighbor_advertised_route_cmd_vtysh);
 install_element (VIEW_NODE, &ipv4_neighbor_advertised_route_cmd_vtysh);
 install_element (ENABLE_NODE, &neighbor_advertised_route_cmd_vtysh);
@@ -10639,6 +10776,7 @@ install_element (VIEW_NODE, &show_ipv6_bgp_community3_exact_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_bgp_community4_exact_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_bgp_community_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_bgp_community_list_exact_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_bgp_prefix_longer_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_mbgp_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_mbgp_route_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_mbgp_prefix_cmd_vtysh);
@@ -10656,6 +10794,7 @@ install_element (VIEW_NODE, &show_ipv6_mbgp_community3_exact_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_mbgp_community4_exact_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_mbgp_community_list_cmd_vtysh);
 install_element (VIEW_NODE, &show_ipv6_mbgp_community_list_exact_cmd_vtysh);
+install_element (VIEW_NODE, &show_ipv6_mbgp_prefix_longer_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_bgp_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_bgp_route_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_bgp_prefix_cmd_vtysh);
@@ -10673,6 +10812,7 @@ install_element (ENABLE_NODE, &show_ipv6_bgp_community3_exact_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_bgp_community4_exact_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_bgp_community_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_bgp_community_list_exact_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_bgp_prefix_longer_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_route_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_prefix_cmd_vtysh);
@@ -10690,6 +10830,7 @@ install_element (ENABLE_NODE, &show_ipv6_mbgp_community3_exact_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_community4_exact_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_community_list_cmd_vtysh);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_community_list_exact_cmd_vtysh);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_prefix_longer_cmd_vtysh);
 install_element (VIEW_NODE, &ipv6_bgp_neighbor_advertised_route_cmd_vtysh);
 install_element (ENABLE_NODE, &ipv6_bgp_neighbor_advertised_route_cmd_vtysh);
 install_element (VIEW_NODE, &ipv6_mbgp_neighbor_advertised_route_cmd_vtysh);
@@ -10847,6 +10988,8 @@ install_element (BGP_NODE, &bgp_bestpath_med3_cmd_vtysh);
 install_element (BGP_NODE, &no_bgp_bestpath_med_cmd_vtysh);
 install_element (BGP_NODE, &no_bgp_bestpath_med2_cmd_vtysh);
 install_element (BGP_NODE, &no_bgp_bestpath_med3_cmd_vtysh);
+install_element (BGP_NODE, &bgp_network_import_check_cmd_vtysh);
+install_element (BGP_NODE, &no_bgp_network_import_check_cmd_vtysh);
 install_element (BGP_NODE, &no_bgp_default_ipv4_unicast_cmd_vtysh);
 install_element (BGP_NODE, &bgp_default_ipv4_unicast_cmd_vtysh);
 install_element (BGP_NODE, &bgp_default_local_preference_cmd_vtysh);

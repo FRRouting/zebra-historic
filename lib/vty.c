@@ -72,6 +72,9 @@ char *vty_cwd = NULL;
 
 /* Configure lock. */
 static int vty_config;
+
+/* Login password check. */
+static int no_password_check = 0;
 
 /* VTY standard output function. */
 int
@@ -127,7 +130,7 @@ vvty_out (struct vty *vty, const char *format, va_list va)
 
 /* Output current time to the vty. */
 void
-vty_time_print (struct vty *vty)
+vty_time_print (struct vty *vty, int cr)
 {
   time_t clock;
   struct tm *tm;
@@ -144,7 +147,10 @@ vty_time_print (struct vty *vty)
       zlog (NULL, LOG_INFO, "strftime error");
       return;
     }
-  vty_out (vty, "%s\n", buf);
+  if (cr)
+    vty_out (vty, "%s\n", buf);
+  else
+    vty_out (vty, "%s ", buf);
 
   return;
 }
@@ -225,7 +231,7 @@ vty_new ()
   struct vty *new = XMALLOC (MTYPE_VTY, sizeof (struct vty));
   bzero (new, sizeof (struct vty));
 
-  new->obuf = (struct buffer *) buffer_new (BUFFER_VTY, 100);
+  new->obuf = (struct buffer *) buffer_new (100);
   new->buf = XMALLOC (MTYPE_VTY, VTY_BUFSIZ);
   new->max = VTY_BUFSIZ;
   new->sb_buffer = NULL;
@@ -1510,7 +1516,15 @@ vty_create (int vty_sock, union sockunion *su)
   vty->fd = vty_sock;
   vty->type = VTY_TERM;
   vty->address = sockunion_su2str (su);
-  vty->node = AUTH_NODE;
+  if (no_password_check)
+    {
+      if (host.advanced)
+	vty->node = ENABLE_NODE;
+      else
+	vty->node = VIEW_NODE;
+    }
+  else
+    vty->node = AUTH_NODE;
   vty->fail = 0;
   vty->cp = 0;
   vty_clear_buf (vty);
@@ -1527,20 +1541,24 @@ vty_create (int vty_sock, union sockunion *su)
     vty->lines = -1;
   vty->iac = 0;
   vty->iac_sb_in_progress = 0;
-  vty->sb_buffer = buffer_new(BUFFER_STRING, 1024);
+  vty->sb_buffer = buffer_new (1024);
 
-  /* Vty is not available if password isn't set. */
-  if (host.password == NULL && host.password_encrypt == NULL)
+  if (! no_password_check)
     {
-      vty_out (vty, "Vty password is not set.%s", VTY_NEWLINE);
-      vty->status = VTY_CLOSE;
-      vty_close (vty);
-      return NULL;
+      /* Vty is not available if password isn't set. */
+      if (host.password == NULL && host.password_encrypt == NULL)
+	{
+	  vty_out (vty, "Vty password is not set.%s", VTY_NEWLINE);
+	  vty->status = VTY_CLOSE;
+	  vty_close (vty);
+	  return NULL;
+	}
     }
 
   /* Say hello to the world. */
   vty_hello (vty);
-  vty_out (vty, "%sUser Access Verification%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
+  if (! no_password_check)
+    vty_out (vty, "%sUser Access Verification%s%s", VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 
   /* Setting up terminal. */
   vty_will_echo (vty);
@@ -2186,6 +2204,7 @@ vty_log (const char *proto_str, const char *format, va_list va)
     if ((vty = vector_slot (vtyvec, i)) != NULL)
       if (vty->monitor)
 	{
+	  vty_time_print (vty, 0);
 	  vty_out (vty, "%s: ", proto_str);
 	  vvty_out (vty, format, va);
 	  vty_out (vty, "\r\n");
@@ -2289,8 +2308,8 @@ DEFUN (config_who,
 DEFUN (line_vty,
        line_vty_cmd,
        "line vty",
-       "Configure vty\n"
-       "Configure vty\n")
+       "Configure a terminal line\n"
+       "Virtual terminal\n")
 {
   vty->node = VTY_NODE;
   return CMD_SUCCESS;
@@ -2332,9 +2351,9 @@ DEFUN (exec_timeout_min,
 DEFUN (exec_timeout_sec,
        exec_timeout_sec_cmd,
        "exec-timeout <0-35791> <0-2147483>",
-       "Set timeout value\n"
-       "Timeout value in minutes\n"
-       "Timeout value in seconds\n")
+       "Set the EXEC timeout\n"
+       "Timeout in minutes\n"
+       "Timeout in seconds\n")
 {
   return exec_timeout (vty, argv[0], argv[1]);
 }
@@ -2343,7 +2362,7 @@ DEFUN (no_exec_timeout,
        no_exec_timeout_cmd,
        "no exec-timeout",
        NO_STR
-       "Unset timeout\n")
+       "Set the EXEC timeout\n")
 {
   return exec_timeout (vty, NULL, NULL);
 }
@@ -2351,9 +2370,9 @@ DEFUN (no_exec_timeout,
 /* Set vty access class. */
 DEFUN (vty_access_class,
        vty_access_class_cmd,
-       "access-class ACCESS-LIST",
-       "Apply access list to vty\n"
-       "Access list name\n")
+       "access-class WORD",
+       "Filter connections based on an IP access list\n"
+       "IP access list\n")
 {
   if (vty_accesslist_name)
     XFREE(MTYPE_VTY, vty_accesslist_name);
@@ -2366,10 +2385,10 @@ DEFUN (vty_access_class,
 /* Clear vty access class. */
 DEFUN (no_vty_access_class,
        no_vty_access_class_cmd,
-       "no access-class [ACCESS-LIST]",
+       "no access-class [WORD]",
        NO_STR
-       "Access list to remove from vty\n"
-       "Access list name\n")
+       "Filter connections based on an IP access list\n"
+       "IP access list\n")
 {
   if (! vty_accesslist_name || (argc && strcmp(vty_accesslist_name, argv[0])))
     {
@@ -2389,10 +2408,10 @@ DEFUN (no_vty_access_class,
 /* Set vty access class. */
 DEFUN (vty_ipv6_access_class,
        vty_ipv6_access_class_cmd,
-       "ipv6 access-class ACCESS-LIST",
+       "ipv6 access-class WORD",
        IPV6_STR
-       "Apply access list to vty\n"
-       "Access list name\n")
+       "Filter connections based on an IP access list\n"
+       "IPv6 access list\n")
 {
   if (vty_ipv6_accesslist_name)
     XFREE(MTYPE_VTY, vty_ipv6_accesslist_name);
@@ -2405,11 +2424,11 @@ DEFUN (vty_ipv6_access_class,
 /* Clear vty access class. */
 DEFUN (no_vty_ipv6_access_class,
        no_vty_ipv6_access_class_cmd,
-       "no ipv6 access-class [ACCESS-LIST]",
+       "no ipv6 access-class [WORD]",
        NO_STR
        IPV6_STR
-       "Access list to remove from vty\n"
-       "Access list name\n")
+       "Filter connections based on an IP access list\n"
+       "IPv6 access list\n")
 {
   if (! vty_ipv6_accesslist_name ||
       (argc && strcmp(vty_ipv6_accesslist_name, argv[0])))
@@ -2426,6 +2445,26 @@ DEFUN (no_vty_ipv6_access_class,
   return CMD_SUCCESS;
 }
 #endif /* HAVE_IPV6 */
+
+/* vty login. */
+DEFUN (vty_login,
+       vty_login_cmd,
+       "login",
+       "Enable password checking\n")
+{
+  no_password_check = 0;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_vty_login,
+       no_vty_login_cmd,
+       "no login",
+       NO_STR
+       "Enable password checking\n")
+{
+  no_password_check = 1;
+  return CMD_SUCCESS;
+}
 
 DEFUN (service_advanced_vty,
        service_advanced_vty_cmd,
@@ -2498,37 +2537,35 @@ DEFUN (show_history,
 int
 vty_config_write (struct vty *vty)
 {
-  int write = 0;
+  vty_out (vty, "line vty%s", VTY_NEWLINE);
 
-  if ((vty_timeout_val != VTY_TIMEOUT_DEFAULT) || 
-      vty_accesslist_name ||
-      vty_ipv6_accesslist_name)
-    {
-      vty_out (vty, "line vty%s", VTY_NEWLINE);
+  if (vty_accesslist_name)
+    vty_out (vty, " access-class %s%s",
+	     vty_accesslist_name, VTY_NEWLINE);
 
-      /* exec-timeout */
-      if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
-	vty_out (vty, " exec-timeout %d %d%s", 
-		 vty_timeout_val / 60,
-		 vty_timeout_val % 60, VTY_NEWLINE);
+  if (vty_ipv6_accesslist_name)
+    vty_out (vty, " ipv6 access-class %s%s",
+	     vty_ipv6_accesslist_name, VTY_NEWLINE);
 
-      if (vty_accesslist_name)
-	vty_out (vty, " access-class %s%s",
-		 vty_accesslist_name, VTY_NEWLINE);
+  /* exec-timeout */
+  if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
+    vty_out (vty, " exec-timeout %d %d%s", 
+	     vty_timeout_val / 60,
+	     vty_timeout_val % 60, VTY_NEWLINE);
 
-      if (vty_ipv6_accesslist_name)
-	vty_out (vty, " ipv6 access-class %s%s",
-		 vty_ipv6_accesslist_name, VTY_NEWLINE);
+  /* login */
+  if (no_password_check)
+    vty_out (vty, " no login%s", VTY_NEWLINE);
 
-      write++;
-    }
-  return write;
+  vty_out (vty, "!%s", VTY_NEWLINE);
+
+  return CMD_SUCCESS;
 }
 
 struct cmd_node vty_node =
 {
   VTY_NODE,
-  "%s(config-vty)# ",
+  "%s(config-line)# ",
 };
 
 /* Reset all VTY status. */
@@ -2552,6 +2589,7 @@ vty_reset ()
       {
 	thread_cancel (vty_serv_thread);
 	vector_slot (Vvty_serv_thread, i) = NULL;
+        close (i);
       }
 
   vty_timeout_val = VTY_TIMEOUT_DEFAULT;
@@ -2676,6 +2714,8 @@ vty_init ()
   install_element (VTY_NODE, &no_exec_timeout_cmd);
   install_element (VTY_NODE, &vty_access_class_cmd);
   install_element (VTY_NODE, &no_vty_access_class_cmd);
+  install_element (VTY_NODE, &vty_login_cmd);
+  install_element (VTY_NODE, &no_vty_login_cmd);
 #ifdef HAVE_IPV6
   install_element (VTY_NODE, &vty_ipv6_access_class_cmd);
   install_element (VTY_NODE, &no_vty_ipv6_access_class_cmd);

@@ -22,13 +22,38 @@
 #ifndef _ZEBRA_BGP_NEXTHOP_H
 #define _ZEBRA_BGP_NEXTHOP_H
 
-#define BGP_SCAN_INTERVAL_DEFAULT 60
+#define BGP_SCAN_INTERVAL_DEFAULT   60
+#define BGP_IMPORT_INTERVAL_DEFAULT 15
+
+/* BGP nexthop cache value structure. */
+struct bgp_nexthop_cache
+{
+  /* This nexthop exists in IGP. */
+  u_char valid;
+
+  /* Nexthop is changed. */
+  u_char changed;
+
+  /* Nexthop is changed. */
+  u_char metricchanged;
+
+  /* IGP route's metric. */
+  u_int32_t metric;
+
+  /* Nexthop number and nexthop linked list.*/
+  u_char nexthop_num;
+  struct nexthop *nexthop;
+};
 
 void bgp_scan_init ();
-u_int32_t bgp_nexthop_lookup (struct peer *peer, struct in_addr, int *);
+int bgp_nexthop_lookup (afi_t, struct peer *peer, struct bgp_info *,
+			int *, int *);
 void bgp_connected_add (struct connected *c);
 void bgp_connected_delete (struct connected *c);
-u_int32_t bgp_multiaccess_check_v4 (struct in_addr, char *);
+int bgp_multiaccess_check_v4 (struct in_addr, char *);
 int bgp_config_write_scan_time (struct vty *);
+int bgp_nexthop_check_ebgp (afi_t, struct attr *);
+int bgp_import_check (struct prefix *, u_int32_t *);
+int bgp_nexthop_self (afi_t, struct attr *);
 
 #endif /* _ZEBRA_BGP_NEXTHOP_H */

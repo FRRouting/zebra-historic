@@ -32,7 +32,7 @@ buffer_data_new (size_t size)
   struct buffer_data *d;
 
   d = XMALLOC (MTYPE_BUFFER_DATA, sizeof (struct buffer_data));
-  bzero (d, sizeof (struct buffer_data));
+  memset (d, 0, sizeof (struct buffer_data));
   d->data = XMALLOC (MTYPE_BUFFER_DATA, size);
 
   return d;
@@ -48,14 +48,13 @@ buffer_data_free (struct buffer_data *d)
 
 /* Make new buffer. */
 struct buffer *
-buffer_new (int type, size_t size)
+buffer_new (size_t size)
 {
   struct buffer *b;
 
   b = XMALLOC (MTYPE_BUFFER, sizeof (struct buffer));
-  bzero (b, sizeof (struct buffer));
+  memset (b, 0, sizeof (struct buffer));
 
-  b->type = type;
   b->size = size;
 
   return b;
@@ -529,7 +528,6 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height,
   unsigned long size;
   int lp;
   int lineno;
-  int ret;
   struct buffer_data *data;
 
   if (height >= 2)
@@ -566,57 +564,5 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height,
   /* Write data to the file descriptor. */
  flush:
 
-#ifdef DEBUG
-  printf ("cp:%ld lp:%d size:%ld ineno:%d\n",
-	  cp, lp, size, lineno);
-#endif /* DEBUG */
-
-  ret = buffer_flush_vty (b, fd, size, erase, no_more);
-
-  return ret;
+  return buffer_flush_vty (b, fd, size, erase, no_more);
 }
-
-void
-buffer_dump (struct buffer *b)
-{
-  struct buffer_data *d;
-
-  printf ("buffer type %d size %ld alloc %ld\n", b->type, b->size, b->alloc);
-
-  for (d = b->head; d; d = d->next)
-    printf ("  data cp:%ld sp:%ld\n", d->cp, d->sp);
-}
-
-#ifdef TEST
-main ()
-{
-  struct buffer *b;
-  char kuni[] = "kunihiro\n";
-  char mio[] = "miomiomi\n";
-
-  b = buffer_new (BUFFER_VTY, 3);
-  buffer_write (b, kuni, sizeof kuni);
-  buffer_write (b, mio, sizeof mio);
-
-  buffer_dump (b);
-
-  buffer_flush_vty (b, 0, 20, 0);
-  buffer_flush_vty (b, 0, 5, 0);
-  /* buffer_dump (b); */
-  buffer_flush_vty (b, 0, 5, 0);
-  /* buffer_dump (b); */
-  printf ("\n");
-
-  exit (0);
-
-  printf ("cleared\n");
-  buffer_reset (b);
-  buffer_dump (b);
-
-  buffer_write (b, kuni, sizeof kuni);
-  buffer_write (b, kuni, sizeof kuni);
-
-  printf ("\n");
-  buffer_flush_all (b, 0);
-}
-#endif /* TEST */

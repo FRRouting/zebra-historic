@@ -21,95 +21,7 @@
 
 #include "ospf6d.h"
 
-struct ospf6_lsa_hdr *
-attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
-{
-  assert (lsa && lsa->lsa_hdr);
-
-  return ((struct ospf6_lsa_hdr *)
-          iov_attach_last (iov, lsa->lsa_hdr,
-                           ntohs (lsa->lsa_hdr->lsh_len)));
-}
-
-struct ospf6_lsa_hdr *
-attach_lsa_hdr_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
-{
-  assert (lsa && lsa->lsa_hdr);
-
-  return ((struct ospf6_lsa_hdr *)
-          iov_attach_last (iov, lsa->lsa_hdr,
-                           sizeof (struct ospf6_lsa_hdr)));
-}
-
 
-/* lookup delayed acknowledge list of ospf6_interface */
-struct ospf6_lsa *
-ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
-{
-  if (listnode_lookup (o6i->lsa_delayed_ack, lsa))
-    {
-#ifndef NDEBUG
-      if (! listnode_lookup (lsa->delayed_ack_if, o6i))
-        assert (0);
-#endif /* NDEBUG */
-      return lsa;
-    }
-  return NULL;
-}
-
-/* add to delayed acknowledge list of ospf6_interface */
-void
-ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
-{
-  if (ospf6_lookup_delayed_ack (lsa, o6i))
-    return;
-
-  listnode_add (o6i->lsa_delayed_ack, lsa);
-  listnode_add (lsa->delayed_ack_if, o6i);
-  ospf6_lsa_lock (lsa);
-
-#if 0
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("lsa: locked to be send in delayed acknowledgement to interface %s: %s (%#x lock:%d)",
-               o6i->interface->name, lsa->str, lsa, lsa->lock);
-#endif
-}
-
-/* remove from delayed acknowledge list of ospf6_interface */
-void
-ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_interface *o6i)
-{
-  if (!ospf6_lookup_delayed_ack (lsa, o6i))
-    return;
-
-  listnode_delete (o6i->lsa_delayed_ack, lsa);
-  listnode_delete (lsa->delayed_ack_if, o6i);
-  ospf6_lsa_unlock (lsa);
-
-#if 0
-  if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("lsa: unlocked from being send in delayed acknowledgement to interface %s: %s (%#x lock:%d)",
-               o6i->interface->name, lsa->str, lsa, lsa->lock);
-#endif
-
-}
-
-void
-ospf6_lsa_delayed_ack_remove_all (struct ospf6_lsa *lsa)
-{
-  listnode i;
-  struct ospf6_interface *o6i;
-
-  while (listcount (lsa->delayed_ack_if))
-    {
-      i = listhead (lsa->delayed_ack_if);
-      o6i = (struct ospf6_interface *) getdata (i);
-      ospf6_remove_delayed_ack (lsa, o6i);
-    }
-}
-
-
-
 /* new */
 static void
 ospf6_lsdb_changed (struct ospf6_lsa *lsa)
@@ -183,8 +95,7 @@ ospf6_lsdb_lookup_from_lsdb (u_int16_t type, u_int32_t ls_id,
 
 /* new ordinary lookup function */
 struct ospf6_lsa *
-ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id,
-                   u_int32_t advrtr, struct ospf6 *o6)
+ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id, u_int32_t advrtr)
 {
   struct ospf6_interface *o6i;
   struct ospf6_area *o6a;
@@ -195,7 +106,7 @@ ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id,
 
   if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (type)))
     {
-      for (i = listhead (o6->area_list); i; nextnode (i))
+      for (i = listhead (ospf6->area_list); i; nextnode (i))
         {
           o6a = (struct ospf6_area *) getdata (i);
           for (j = listhead (o6a->if_list); j; nextnode (j))
@@ -210,7 +121,7 @@ ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id,
     }
   else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (type)))
     {
-      for (i = listhead (o6->area_list); i; nextnode (i))
+      for (i = listhead (ospf6->area_list); i; nextnode (i))
         {
           o6a = (struct ospf6_area *) getdata (i);
           found = ospf6_lsdb_lookup_from_lsdb (type, ls_id, advrtr, o6a->lsdb);
@@ -220,7 +131,7 @@ ospf6_lsdb_lookup (u_int16_t type, u_int32_t ls_id,
     }
   else if (OSPF6_LSA_IS_SCOPE_AS (ntohs (type)))
     {
-      found = ospf6_lsdb_lookup_from_lsdb (type, ls_id, advrtr, o6->lsdb);
+      found = ospf6_lsdb_lookup_from_lsdb (type, ls_id, advrtr, ospf6->lsdb);
       if (found)
         return found;
     }
@@ -409,7 +320,7 @@ ospf6_lsdb_remove_maxage_lsa (struct ospf6_lsa *lsa)
 
   /* assert this LSA is still on database */
   assert (ospf6_lsdb_lookup (lsa_header->type, lsa_header->ls_id,
-                             lsa_header->advrtr, ospf6));
+                             lsa_header->advrtr));
 
   /* delayed acknowledge may remain... clear reference */
   ospf6_lsa_delayed_ack_remove_all (lsa);
@@ -462,10 +373,27 @@ ospf6_lsdb_check_maxage_lsdb (list lsdb)
 }
 
 void
-ospf6_lsdb_check_maxage_linklocal (struct ospf6_interface *o6i)
+ospf6_lsdb_check_maxage_linklocal (char *ifname)
 {
   listnode i;
+  struct interface *ifp;
+  struct ospf6_interface *o6i;
   struct ospf6_neighbor *o6n;
+
+  ifp = if_lookup_by_name (ifname);
+  if (! ifp)
+    {
+      zlog_warn ("LSDB: Check MaxAge Linklocal: No such Interface: %s",
+                 ifname);
+      return;
+    }
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    {
+      zlog_warn ("LSDB: Check MaxAge Linklocal: Interface not enabled: %s",
+                 ifname);
+      return;
+    }
 
   /* immediately stop when (exchange|loading) neighbor found */
   for (i = listhead (o6i->neighbor_list); i; nextnode (i))
@@ -479,11 +407,21 @@ ospf6_lsdb_check_maxage_linklocal (struct ospf6_interface *o6i)
 }
 
 void
-ospf6_lsdb_check_maxage_area (struct ospf6_area *o6a)
+ospf6_lsdb_check_maxage_area (u_int32_t area_id)
 {
   listnode i, j;
+  char buf[32];
+  struct ospf6_area *o6a;
   struct ospf6_neighbor *o6n;
   struct ospf6_interface *o6i;
+
+  o6a = ospf6_area_lookup (area_id, ospf6);
+  if (! o6a)
+    {
+      inet_ntop (AF_INET, &area_id, buf, sizeof (buf));
+      zlog_warn ("LSDB: Check MaxAge Area: No such Area: %s", buf);
+      return;
+    }
 
   /* immediately stop when (exchange|loading) neighbor found */
   for (i = listhead (o6a->if_list); i; nextnode (i))
@@ -501,7 +439,7 @@ ospf6_lsdb_check_maxage_area (struct ospf6_area *o6a)
 }
 
 void
-ospf6_lsdb_check_maxage_as (struct ospf6 *o6)
+ospf6_lsdb_check_maxage_as ()
 {
   listnode i, j, k;
   struct ospf6_neighbor *o6n;
@@ -509,7 +447,7 @@ ospf6_lsdb_check_maxage_as (struct ospf6 *o6)
   struct ospf6_area *o6a;
 
   /* immediately stop when (exchange|loading) neighbor found */
-  for (i = listhead (o6->area_list); i; nextnode (i))
+  for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
       o6a = (struct ospf6_area *) getdata (i);
       for (j = listhead (o6a->if_list); j; nextnode (j))
@@ -524,7 +462,7 @@ ospf6_lsdb_check_maxage_as (struct ospf6 *o6)
         }
     }
 
-  ospf6_lsdb_check_maxage_lsdb (o6->lsdb);
+  ospf6_lsdb_check_maxage_lsdb (ospf6->lsdb);
 }
 
 /* vty functions */

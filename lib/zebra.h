@@ -196,7 +196,9 @@
 #define ZEBRA_REDISTRIBUTE_DEFAULT_DELETE 14
 #define ZEBRA_IPV4_NEXTHOP_LOOKUP         15
 #define ZEBRA_IPV6_NEXTHOP_LOOKUP         16
-#define ZEBRA_MESSAGE_MAX                 17
+#define ZEBRA_IPV4_IMPORT_LOOKUP          17
+#define ZEBRA_IPV6_IMPORT_LOOKUP          18
+#define ZEBRA_MESSAGE_MAX                 19
 
 /* Zebra route's types. */
 #define ZEBRA_ROUTE_SYSTEM               0
@@ -226,14 +228,19 @@
 #define ZEBRA_FLAG_SELFROUTE          0x02
 #define ZEBRA_FLAG_BLACKHOLE          0x04
 #define ZEBRA_FLAG_IBGP               0x08
+#define ZEBRA_FLAG_SELECTED           0x10
+#define ZEBRA_FLAG_CHANGED            0x20
+#define ZEBRA_FLAG_STATIC             0x40
 
 /* Zebra nexthop flags. */
 #define ZEBRA_NEXTHOP_IFINDEX            1
 #define ZEBRA_NEXTHOP_IFNAME             2
 #define ZEBRA_NEXTHOP_IPV4               3
 #define ZEBRA_NEXTHOP_IPV4_IFINDEX       4
-#define ZEBRA_NEXTHOP_IPV6               5
-#define ZEBRA_NEXTHOP_IPV6_IFINDEX       6
+#define ZEBRA_NEXTHOP_IPV4_IFNAME        5
+#define ZEBRA_NEXTHOP_IPV6               6
+#define ZEBRA_NEXTHOP_IPV6_IFINDEX       7
+#define ZEBRA_NEXTHOP_IPV6_IFNAME        8
 
 #ifndef INADDR_LOOPBACK
 #define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */
@@ -274,12 +281,5 @@ typedef u_char safi_t;
 /* Zebra types. */
 typedef u_int16_t zebra_size_t;
 typedef u_int8_t zebra_command_t;
-
-#ifdef HAVE_REPAIRABLE_HTONL
-#define htonl(x) __cpu_to_be32(x)
-#define ntohl(x) __be32_to_cpu(x)
-#define htons(x) __cpu_to_be16(x)
-#define ntohs(x) __be16_to_cpu(x)
-#endif
 
 #endif /* _ZEBRA_H */

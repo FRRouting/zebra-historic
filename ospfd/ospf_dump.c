@@ -77,6 +77,10 @@ struct message ospf_lsa_type_msg[] =
   { OSPF_SUMMARY_LSA,      "summary-LSA" },
   { OSPF_SUMMARY_LSA_ASBR, "summary-LSA" },
   { OSPF_AS_EXTERNAL_LSA,  "AS-external-LSA" },
+#ifdef HAVE_NSSA
+  { OSPF_GROUP_MEMBER_LSA,  "GROUP_MEMBER_LSA" },
+  { OSPF_AS_NSSA_LSA,       "AS-NSSA-LSA" },
+#endif /* HAVE_NSSA */
 };
 int ospf_lsa_type_msg_max = OSPF_MAX_LSA;
 

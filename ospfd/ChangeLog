@@ -1,4 +1,64 @@
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.91 is released.
+
+2001-01-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_db_desc_proc): Do not continue process when
+	NSM_SeqNumberMismatch is scheduled.
+	(ospf_ls_req): Free ls_upd when return from this function.
+	(ospf_ls_upd_timer): When update list is empty do not call
+	ospf_ls_upd_send().  Suggested by: endo@suri.co.jp (Masahiko
+	Endo).
+
+2001-01-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsa.c (ospf_maxage_flood): Flood LSA when it reaches
+	MaxAge.  RFC2328 Section 14.
+	(ospf_maxage_lsa_remover): Call above function during removing
+	MaxAge LSA.
+
+2001-01-26  Dick Glasspool <dick@ipinfusion.com>
+
+	* ospf_flood.c (ospf_flood_through_as): Function is updated for
+	NSSA Translations now done at ospf_abr.c with no change in P-bit.
+
+	* ospf_lsa.c (ospf_get_nssa_ip): Get 1st IP connection for Forward
+	Addr.
+	(ospf_install_flood_nssa):  Leave Type-7 LSA at Lock Count = 2. 
+
+	* ospf_ase.c (ospf_ase_calculate_route): Add debug codes.
+
+	* ospf_abr.c (ospf_abr_translate_nssa): Recalculate LSA checksum.
+
+	* ospf_packet.h (OSPF_SEND_PACKET_LOOP): Added for test packet.
+
+	* ospf_dump.c (ospf_lsa_type_msg): Add OSPF_GROUP_MEMBER_LSA and
+	OSPF_AS_NSSA_LSA.
+
+	* ospfd.c (data_injection): Function to inject LSA.  This is
+	debugging command.
+
+2001-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_route_match_same): Remove function.
+	(ospf_route_match_same_new): Renamed to ospf_route_match_same.
+
+	* ospf_zebra.c (ospf_interface_address_delete): Add check for
+	oi->address.  Suggested by Matthew Grant
+	<grantma@anathoth.gen.nz>.
+	(ospf_zebra_add): Remove function.
+	(ospf_zebra_add_multipath): Rename to ospf_zebra_add.
+
+	* ospf_interface.c: Remove HAVE_IF_PSEUDO part.
+
+	* ospf_zebra.c: Likewise.
+
 2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_ase.c: Remove OLD_RIB part.
+
+	* ospf_route.c: Likewise.
 
 	* zebra-0.90 is released.
 

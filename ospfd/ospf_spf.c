@@ -993,11 +993,6 @@ ospf_spf_calculate_timer (struct thread *t)
   if (OSPF_IS_ABR) 
     ospf_abr_task (new_table, new_rtrs);
 
-#if 0
-  if (OSPF_IS_ASBR) 
-    ospf_asbr_check ();
-#endif
-
   if (IS_DEBUG_OSPF_EVENT)
     zlog_info ("SPF: calculation complete");
 

@@ -20,9 +20,26 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospf6d.h"
+#include <zebra.h>
 
+#include "log.h"
+#include "memory.h"
+#include "vty.h"
+#include "linklist.h"
+#include "prefix.h"
+#include "table.h"
+
+#include "ospf6_proto.h"
+#define HEADER_DEPENDENCY
+#include "ospf6d.h"
+#undef HEADER_DEPENDENCY
+#include "ospf6_prefix.h"
+#include "ospf6_lsa.h"
+#include "ospf6_area.h"
+#include "ospf6_top.h"
 #include "ospf6_redistribute.h"
+#include "ospf6_route.h"
+#include "ospf6_zebra.h"
 
 int
 ospf6_top_count_neighbor_in_state (u_char state, struct ospf6 *o6)

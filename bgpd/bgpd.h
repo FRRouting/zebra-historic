@@ -24,6 +24,9 @@
 
 #include "sockunion.h"
 
+/* New BGP announce code to store some NLRI to one BGP packet. */
+/* #define NEW_ANNOUNCE */
+
 /* Declare Some BGP specific types. */
 typedef u_int16_t as_t;
 typedef u_int16_t bgp_size_t;
@@ -95,6 +98,8 @@ struct bgp
 #define BGP_CONFIG_ENFORCE_FIRST_AS       (1 << 9)
 #define BGP_CONFIG_COMPARE_ROUTER_ID      (1 << 10)
 #define BGP_CONFIG_ASPATH_IGNORE          (1 << 11)
+#define BGP_CONFIG_DAMPENING              (1 << 12)
+#define BGP_CONFIG_IMPORT_CHECK           (1 << 13)
   u_int16_t config;
 
   /* BGP identifier. */
@@ -269,6 +274,7 @@ struct peer
   char *host;			/* Printable address of the peer. */
   union sockunion su;		/* Sockunion address of the peer. */
   time_t uptime;		/* Last Up/Down time */
+  time_t readtime;		/* Last read time */
   safi_t translate_update;       
   
   unsigned int ifindex;		/* ifindex of the BGP connection. */
@@ -392,7 +398,6 @@ struct bgp_nlri
 #define BGP_VERSION_3		  3    /* Obsoletes. */
 #define BGP_VERSION_4		  4    /* bgpd supports this version. */
 #define BGP_VERSION_MP_4_DRAFT_00 40   /* bgpd supports this version. */
-#define BGP_VERSION_MP_4	  41   /* bgpd supports this version. */
 
 /* BGP messages. */
 #define	BGP_MSG_OPEN		    1
@@ -518,6 +523,9 @@ struct bgp_nlri
 #define BGP_CLEAR_CONNECT_RETRY    20
 #define BGP_DEFAULT_CONNECT_RETRY 120
 
+/* Default local preference. */
+#define DEFAULT_LOCAL_PREF    100
+
 /* SAFI which used in open capability negotiation. */
 #define BGP_SAFI_VPNV4            128
 
@@ -574,7 +582,8 @@ int bgp_nexthop_set (union sockunion *, union sockunion *,
 int bgp_confederation_peers_check(struct bgp *, as_t);
 struct bgp *bgp_get_default ();
 struct bgp *bgp_lookup_by_name (char *);
-struct peer *peer_lookup_with_open (union sockunion *, as_t, struct in_addr *);
+struct peer *peer_lookup_with_open (union sockunion *, as_t, struct in_addr *,
+				    int *);
 struct peer *peer_create_accept ();
 
 int peer_active (struct peer *);
@@ -599,5 +608,7 @@ extern struct list *peer_list;
 extern time_t bgp_start_time;
 
 extern int no_kernel_mode;
+
+char *peer_uptime (time_t, char *, size_t);
 
 #endif /* _ZEBRA_BGPD_H */

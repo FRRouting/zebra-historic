@@ -1,3 +1,43 @@
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.91 is released.
+
+2001-01-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (show_ip_rip): Show metric infinity route's timeout.
+	(rip_rte_process): If current route is metric infinity, route is
+	replaced with received rte.
+	(rip_redistribute_delete): When redistribute route is deleted,
+	perform poisoned reverse.
+	(rip_redistribute_withdraw): Likewise.
+
+2001-01-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_response_process): RIPv2 routing table entry with
+	non directly reachable nexthop was dropped.  The code is changed
+	to treat it as 0.0.0.0 nexthop.
+	(rip_destination_check): Check net 0 address destination.
+	(rip_nexthop_check): New function for checking nexthop address
+	validity.
+
+2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_request_process): Triggered update only send changed
+	route.
+
+	* rip_interface.c: Delete RIP_API part until new implementation
+	comes out.
+
+	* rip_snmp.: Likewise.
+
+	* rip_zebra.c: Likewise.
+
+	* ripd.c: Likewise. 
+
+2001-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (rip_if_init): Remove HAVE_IF_PSEUDO part.
+
 2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.90 is released.

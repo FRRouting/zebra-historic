@@ -198,107 +198,6 @@ DEFUN (show_version_ospf6,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd,
-       "show ipv6 ospf6 neighbor IFNAME NBR_ID detail",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Neighbor list\n"
-       IFNAME_STR
-       "A.B.C.D OSPF6 neighbor Router ID in IP address format\n"
-       "detailed infomation\n"
-       )
-{
-  rtr_id_t rtr_id;
-  struct interface *ifp;
-  struct ospf6_neighbor *nbr;
-  struct ospf6_interface *ospf6_interface;
-  struct ospf6_area *area;
-  listnode i, j, k;
-
-  i = j = k = NULL;
-
-  vty_out (vty, "%-15s %-6s %-8s %-15s %-15s %s[%s]%s",
-     "RouterID", "I/F-ID", "State", "DR", "BDR", "I/F", "State", VTY_NEWLINE);
-
-  if (argc)
-    {
-      ifp = if_lookup_by_name (argv[0]);
-      if (!ifp)
-        return CMD_ERR_NO_MATCH;
-
-      ospf6_interface = (struct ospf6_interface *) ifp->info;
-      if (!ospf6_interface)
-        return CMD_ERR_NO_MATCH;
-
-      if (argc > 1)
-        {
-          inet_pton (AF_INET, argv[1], &rtr_id);
-          nbr = ospf6_neighbor_lookup (rtr_id, ospf6_interface);
-          if (!nbr)
-            return CMD_ERR_NO_MATCH;
-          if (argc == 3)
-            ospf6_neighbor_show_detail (vty, nbr);
-          else
-            ospf6_neighbor_show (vty, nbr);
-          return CMD_SUCCESS;
-        }
-
-      for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
-        {
-          nbr = (struct ospf6_neighbor *) getdata (i);
-          ospf6_neighbor_show_summary (vty, nbr);
-        }
-      return CMD_SUCCESS;
-    }
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      area = (struct ospf6_area *)getdata (i);
-      for (j = listhead (area->if_list); j; nextnode (j))
-        {
-          ospf6_interface = (struct ospf6_interface *)getdata (j);
-          for (k = listhead (ospf6_interface->neighbor_list); k; nextnode (k))
-            {
-              nbr = (struct ospf6_neighbor *)getdata (k);
-              ospf6_neighbor_show_summary (vty, nbr);
-            }
-        }
-    }
-  return CMD_SUCCESS;
-}
-
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_cmd,
-       "show ipv6 ospf6 neighbor",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Neighbor list\n"
-       )
-
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_ifname_cmd,
-       "show ipv6 ospf6 neighbor IFNAME",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Neighbor list\n"
-       IFNAME_STR
-       )
-
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
-       show_ipv6_ospf6_neighbor_ifname_nbrid_cmd,
-       "show ipv6 ospf6 neighbor IFNAME NBR_ID",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Neighbor list\n"
-       IFNAME_STR
-       "A.B.C.D OSPF6 neighbor Router ID in IP address format\n"
-       )
-
 /* start ospf6 */
 DEFUN (router_ospf6,
        router_ospf6_cmd,
@@ -359,57 +258,6 @@ DEFUN (show_ipv6_ospf6,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_ipv6_ospf6_neighborlist,
-       show_ipv6_ospf6_neighborlist_cmd,
-       "show ipv6 ospf6 (summary-list|request-list|retransmission-list)",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Link State summary list\n"
-       "Link State request list\n"
-       "Link State retransmission list\n"
-       )
-{
-  struct ospf6_area *o6a;
-  struct ospf6_interface *o6i;
-  struct ospf6_neighbor *o6n;
-  listnode i, j, k, l;
-  struct ospf6_lsa *lsa;
-  list lslist = NULL;
-
-  i = j = k = l = NULL;
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      o6a = (struct ospf6_area *) getdata (i);
-      for (j = listhead (o6a->if_list); j; nextnode (j))
-        {
-          o6i = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6i->neighbor_list); k; nextnode (k))
-            {
-              o6n = (struct ospf6_neighbor *) getdata (k);
-
-              if (strncmp (argv[0], "sum", 3) == 0)
-                lslist = o6n->summarylist;
-              else if (strncmp (argv[0], "req", 3) == 0)
-                lslist = o6n->requestlist;
-              else if (strncmp (argv[0], "ret", 3) == 0)
-                lslist = o6n->retranslist;
-
-              vty_out (vty, "neighbor %s on interface %s: %d%s", o6n->str,
-                       o6i->interface->name, listcount (lslist), VTY_NEWLINE);
-              for (l = listhead (lslist); l; nextnode (l))
-                {
-                  lsa = (struct ospf6_lsa *) getdata (l);
-                  vty_out (vty, "  %s%s", lsa->str, VTY_NEWLINE);
-                }
-            }
-        }
-    }
-
-  return CMD_SUCCESS;
-}
-
 DEFUN (show_ipv6_ospf6_nexthoplist,
        show_ipv6_ospf6_nexthoplist_cmd,
        "show ipv6 ospf6 nexthop-list",
@@ -453,7 +301,7 @@ DEFUN (router_id,
        V4NOTATION_STR)
 {
   int ret;
-  rtr_id_t router_id;
+  u_int32_t router_id;
 
   ret = inet_pton (AF_INET, argv[0], &router_id);
   if (!ret)
@@ -772,26 +620,14 @@ ospf6_init ()
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_cmd);
   install_element (VIEW_NODE, &show_version_ospf6_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
-
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_statistics_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
   install_element (ENABLE_NODE, &show_version_ospf6_cmd);
 
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
-
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_statistics_cmd);
 
@@ -817,6 +653,7 @@ ospf6_init ()
   if_init ();
 
   ospf6_interface_init ();
+  ospf6_neighbor_init ();
   ospf6_zebra_init ();
   ospf6_debug_init ();
 

@@ -315,20 +315,6 @@ zapi_ipv4_add (struct zclient *zclient, struct prefix_ipv4 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
-#ifdef OLD_RIB
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
-    {
-      stream_putc (s, api->nexthop_num);
-      for (i = 0; i < api->nexthop_num; i++)
-	stream_put_in_addr (s, api->nexthop[i]);
-    }
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_IFINDEX))
-    {
-      stream_putc (s, api->ifindex_num);
-      for (i = 0; i < api->ifindex_num; i++)
-	stream_putl (s, api->ifindex[i]);
-    }
-#else
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num + api->ifindex_num);
@@ -344,7 +330,6 @@ zapi_ipv4_add (struct zclient *zclient, struct prefix_ipv4 *p,
 	  stream_putl (s, api->ifindex[i]);
 	}
     }
-#endif /* OLD_RIB */
 
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
@@ -384,20 +369,6 @@ zapi_ipv4_delete (struct zclient *zclient, struct prefix_ipv4 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
-#ifdef OLD_RIB
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
-    {
-      stream_putc (s, api->nexthop_num);
-      for (i = 0; i < api->nexthop_num; i++)
-	stream_put_in_addr (s, api->nexthop[i]);
-    }
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_IFINDEX))
-    {
-      stream_putc (s, api->ifindex_num);
-      for (i = 0; i < api->ifindex_num; i++)
-	stream_putl (s, api->ifindex[i]);
-    }
-#else
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num + api->ifindex_num);
@@ -413,7 +384,7 @@ zapi_ipv4_delete (struct zclient *zclient, struct prefix_ipv4 *p,
 	  stream_putl (s, api->ifindex[i]);
 	}
     }
-#endif /* OLD_RIB */
+
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -453,20 +424,6 @@ zapi_ipv6_add (struct zclient *zclient, struct prefix_ipv6 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
-#ifdef OLD_RIB
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
-    {
-      stream_putc (s, api->nexthop_num);
-      for (i = 0; i < api->nexthop_num; i++)
-	stream_write (s, (u_char *)api->nexthop[i], 16);
-    }
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_IFINDEX))
-    {
-      stream_putc (s, api->ifindex_num);
-      for (i = 0; i < api->ifindex_num; i++)
-	stream_putl (s, api->ifindex[i]);
-    }
-#else
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num + api->ifindex_num);
@@ -482,7 +439,7 @@ zapi_ipv6_add (struct zclient *zclient, struct prefix_ipv6 *p,
 	  stream_putl (s, api->ifindex[i]);
 	}
     }
-#endif /* OLD_RIB */
+
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -521,20 +478,6 @@ zapi_ipv6_delete (struct zclient *zclient, struct prefix_ipv6 *p,
   stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Nexthop, ifindex, distance and metric information. */
-#ifdef OLD_RIB
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
-    {
-      stream_putc (s, api->nexthop_num);
-      for (i = 0; i < api->nexthop_num; i++)
-	stream_write (s, (u_char *)api->nexthop[i], 16);
-    }
-  if (CHECK_FLAG (api->message, ZAPI_MESSAGE_IFINDEX))
-    {
-      stream_putc (s, api->ifindex_num);
-      for (i = 0; i < api->ifindex_num; i++)
-	stream_putl (s, api->ifindex[i]);
-    }
-#else
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_NEXTHOP))
     {
       stream_putc (s, api->nexthop_num + api->ifindex_num);
@@ -550,7 +493,7 @@ zapi_ipv6_delete (struct zclient *zclient, struct prefix_ipv6 *p,
 	  stream_putl (s, api->ifindex[i]);
 	}
     }
-#endif /* OLD_RIB */
+
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_DISTANCE))
     stream_putc (s, api->distance);
   if (CHECK_FLAG (api->message, ZAPI_MESSAGE_METRIC))
@@ -617,15 +560,6 @@ zebra_interface_add_read (struct stream *s)
   ifp->hw_addr_len = stream_getl (s);
   stream_get (ifp->hw_addr, s, ifp->hw_addr_len);
 #endif /* HAVE_SOCKADDR_DL */
-
-#ifdef HAVE_IF_PSEUDO
-  if (IS_IF_PSEUDO(ifp)){
-    IF_PSEUDO_SET(ifp);
-  }
-  else{
-    IF_PSEUDO_UNSET(ifp);
-  }
-#endif /* HAVE_IF_PSEUDO */
   
   return ifp;
 }
@@ -656,15 +590,6 @@ zebra_interface_state_read (struct stream *s)
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
 
-#ifdef HAVE_IF_PSEUDO  
-  if (IS_IF_PSEUDO(ifp)){
-    IF_PSEUDO_SET(ifp);
-  }
-  else{
-    IF_PSEUDO_UNSET(ifp);
-  }
-#endif /* HAVE_IF_PSEUDO */
-  
   return ifp;
 }
 
@@ -673,7 +598,7 @@ zebra_interface_address_add_read (struct stream *s)
 {
   unsigned int ifindex;
   struct interface *ifp;
-  struct connected *connected;
+  struct connected *ifc;
   struct prefix *p;
   int family;
   int plen;
@@ -690,7 +615,11 @@ zebra_interface_address_add_read (struct stream *s)
     }
 
   /* Allocate new connected address. */
-  connected = connected_new ();
+  ifc = connected_new ();
+  ifc->ifp = ifp;
+
+  /* Fetch flag. */
+  ifc->flags = stream_getc (s);
 
   /* Fetch interface address. */
   p = prefix_new ();
@@ -699,21 +628,21 @@ zebra_interface_address_add_read (struct stream *s)
   plen = prefix_blen (p);
   stream_get (&p->u.prefix, s, plen);
   p->prefixlen = stream_getc (s);
-  connected->address = p;
+  ifc->address = p;
 
   /* Fetch destination address. */
   p = prefix_new ();
   stream_get (&p->u.prefix, s, plen);
   p->family = family;
 
-  connected->destination = p;
+  ifc->destination = p;
 
-  p = connected->address;
+  p = ifc->address;
 
   /* Add connected address to the interface. */
-  connected_add (ifp, connected);
+  listnode_add (ifp->connected, ifc);
 
-  return connected;
+  return ifc;
 }
 
 struct connected *
@@ -726,6 +655,7 @@ zebra_interface_address_delete_read (struct stream *s)
   struct prefix d;
   int family;
   int len;
+  u_char flags;
 
   /* Get interface index. */
   ifindex = stream_getl (s);
@@ -738,8 +668,8 @@ zebra_interface_address_delete_read (struct stream *s)
       return NULL;
     }
 
-  /* Allocate new connected address. */
-  ifc = connected_new ();
+  /* Fetch flag. */
+  flags = stream_getc (s);
 
   /* Fetch interface address. */
   family = p.family = stream_getc (s);

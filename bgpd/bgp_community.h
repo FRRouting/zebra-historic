@@ -61,4 +61,5 @@ struct community *community_delete (struct community *, struct community *);
 struct community *community_dup (struct community *);
 int community_include (struct community *, u_int32_t);
 void community_del_val (struct community *, u_int32_t *);
+unsigned long community_count ();
 #endif /* _ZEBRA_BGP_COMMUNITY_H */

@@ -33,13 +33,9 @@
 void zebra_init ();
 void ospf_zclient_start ();
 
-#ifndef OLD_RIB
-void ospf_zebra_add_multipath (struct prefix_ipv4 *, struct ospf_route *);
-void ospf_zebra_delete_multipath (struct prefix_ipv4 *, struct ospf_route *);
-#endif /* ! OLD_RIB */
+void ospf_zebra_add (struct prefix_ipv4 *, struct ospf_route *);
+void ospf_zebra_delete (struct prefix_ipv4 *, struct ospf_route *);
 
-void ospf_zebra_add (struct prefix_ipv4 *, struct in_addr *, u_int32_t, struct ospf_route *);
-void ospf_zebra_delete (struct prefix_ipv4 *, struct in_addr *);
 void ospf_zebra_add_discard (struct prefix_ipv4 *);
 void ospf_zebra_delete_discard (struct prefix_ipv4 *);
 

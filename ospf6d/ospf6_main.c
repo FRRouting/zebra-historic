@@ -102,6 +102,7 @@ void
 _reload ()
 {
   zlog_info ("Reload");
+  ospf6_zebra_finish ();
   vty_finish ();
   execve (_progpath, _argv, _envp);
 }

@@ -22,6 +22,8 @@
 #ifndef OSPF6_LSDB_H
 #define OSPF6_LSDB_H
 
+#include "ospf6_lsa.h"
+
 #define MAXLISTEDLSA 512
 #define MAXLSASIZE   1024
 
@@ -46,33 +48,20 @@ struct ospf6_lsdb
 };
 
 /* Function Prototypes */
-struct ospf6_lsa_hdr *
-attach_lsa_hdr_to_iov (struct ospf6_lsa *, struct iovec *);
-struct ospf6_lsa_hdr *
-attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov);
-
-void
-ospf6_add_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
-void
-ospf6_remove_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
-
-void
-ospf6_lsdb_collect_type_advrtr (list, unsigned short,
-                                unsigned long, void *);
 
 struct ospf6_lsa *
 ospf6_lsdb_lookup_from_lsdb (u_int16_t type, u_int32_t ls_id,
                              u_int32_t advrtr, list lsdb);
 
 struct ospf6_lsa*
-ospf6_lsdb_lookup (u_int16_t, u_int32_t, u_int32_t, struct ospf6 *);
+ospf6_lsdb_lookup (u_int16_t, u_int32_t, u_int32_t);
 
 void ospf6_lsdb_install (struct ospf6_lsa *);
 void ospf6_lsdb_remove_all (list);
 
-void ospf6_lsdb_check_maxage_linklocal (struct ospf6_interface *);
-void ospf6_lsdb_check_maxage_area (struct ospf6_area *);
-void ospf6_lsdb_check_maxage_as (struct ospf6 *);
+void ospf6_lsdb_check_maxage_linklocal (char *ifname);
+void ospf6_lsdb_check_maxage_area (u_int32_t area_id);
+void ospf6_lsdb_check_maxage_as ();
 
 void ospf6_lsdb_init ();
 

@@ -19,7 +19,14 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospf6d.h"
+#include <zebra.h>
+
+#include "log.h"
+#include "prefix.h"
+#include "memory.h"
+#include "linklist.h"
+
+#include "ospf6_prefix.h"
 
 static struct ospf6_prefix *
 ospf6_prefix_new (size_t size)

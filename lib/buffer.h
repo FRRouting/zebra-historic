@@ -26,9 +26,6 @@
 /* Buffer master. */
 struct buffer
 {
-  /* Type of this buffer. */
-  int type;
-
   /* Data list. */
   struct buffer_data *head;
   struct buffer_data *tail;
@@ -64,30 +61,8 @@ struct buffer_data
   unsigned long sp;
 };
 
-/* Buffer type index. */
-#define BUFFER_STRING      0
-#define BUFFER_STREAM      1
-#define BUFFER_VTY         2
-
-#define PUTC(val, pnt) \
-  (*(u_char *)(pnt)++) = (u_char)(val)
-
-#define PUTW(val, pnt) \
-do {\
-   u_int16_t t = htons((u_int16_t)(val)); \
-   memcpy ((pnt), &t, 2); \
-   (pnt) += 2;\
-} while (0)
-
-#define PUTL(val, pnt) \
-do {\
-   u_int32_t t = htonl((u_int32_t)(val)); \
-   memcpy ((pnt), &t, 4); \
-   (pnt) += 4;\
-} while (0)
-
 /* Buffer prototypes. */
-struct buffer *buffer_new (int, size_t);
+struct buffer *buffer_new (size_t);
 int buffer_write (struct buffer *, u_char *, size_t);
 void buffer_free (struct buffer *);
 char *buffer_getstr (struct buffer *);

@@ -302,9 +302,17 @@ ospf_ase_calculate_route (struct ospf_lsa * lsa, void * p_arg, int n_arg)
   al = (struct as_external_lsa *) lsa->data;
 
 #ifdef HAVE_NSSA
+  if (lsa->data->type == OSPF_AS_NSSA_LSA)
+    if (IS_DEBUG_OSPF_NSSA)
+      zlog_info ("ospf_ase_calc(): Processing Type-7");
+
   /* Stay away from any Local Translated Type-7 LSAs */
   if (CHECK_FLAG (lsa->flags, OSPF_LSA_LOCAL_XLT))
-    return 0;
+    {
+      if (IS_DEBUG_OSPF_NSSA)
+	zlog_info ("ospf_ase_calc(): Rejecting Local Xlt'd");
+      return 0;
+    }
 #endif /* HAVE_NSSA */
 
   zlog_info ("Route[External]: Calculate AS-external-LSA to %s/%d",
@@ -524,52 +532,6 @@ ospf_ase_calculate_route (struct ospf_lsa * lsa, void * p_arg, int n_arg)
   return 0;
 }
 
-#ifdef OLD_RIB
-int
-ospf_ase_compare_tables (struct route_table *new_external_route,
-			 struct route_table *old_external_route)
-{
-  struct route_node *rn;
-  struct ospf_route *or;
-  struct ospf_path *path;
-  listnode node;
-  
-  /* Remove deleted routes */
-  for (rn = route_top (old_external_route); rn; rn = route_next (rn))
-    if ((or = rn->info))
-      for (node = listhead (or->path); node; nextnode (node)) 
-	{
-	  path = getdata (node);
-	  
-	  if (path->nexthop.s_addr != INADDR_ANY &&
-	      !ospf_route_match_same (new_external_route,
-				      or->type,
-				      (struct prefix_ipv4 *) &rn->p, 
-				      &path->nexthop))
-	    ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, 
-			       &path->nexthop);
-	}
-
-  /* Install new routes */
-  for (rn = route_top (new_external_route); rn; rn = route_next (rn))
-    if ((or = rn->info) != NULL)
-      {
-	for (node = listhead (or->path); node; nextnode (node))
-	  {
-	    path = getdata (node);
-	    
-	    if (path->nexthop.s_addr != INADDR_ANY &&
-		!ospf_route_match_same (old_external_route,
-					or->type,
-					(struct prefix_ipv4 *) &rn->p, 
-					&path->nexthop))
-	      ospf_zebra_add ((struct prefix_ipv4 *) &rn->p, &path->nexthop,
-			      or->cost, or);
-	  }
-      }
-  return 0;
-}
-#else
 int
 ospf_ase_route_match_same (struct route_table *rt, struct prefix *prefix,
 			   struct ospf_route *newor)
@@ -638,7 +600,7 @@ ospf_ase_compare_tables (struct route_table *new_external_route,
     if ((or = rn->info))
       {
 	if (! (new_rn = route_node_lookup (new_external_route, &rn->p)))
-	  ospf_zebra_delete_multipath ((struct prefix_ipv4 *) &rn->p, or);
+	  ospf_zebra_delete ((struct prefix_ipv4 *) &rn->p, or);
 	else
 	  route_unlock_node (new_rn);
       }
@@ -648,12 +610,10 @@ ospf_ase_compare_tables (struct route_table *new_external_route,
   for (rn = route_top (new_external_route); rn; rn = route_next (rn))
     if ((or = rn->info) != NULL)
       if (! ospf_ase_route_match_same (old_external_route, &rn->p, or))
-	ospf_zebra_add_multipath ((struct prefix_ipv4 *) &rn->p, or);
+	ospf_zebra_add ((struct prefix_ipv4 *) &rn->p, or);
 				       
   return 0;
 }
-#endif /* OLD_RIB */
-
 
 int
 ospf_ase_calculate_timer (struct thread *t)

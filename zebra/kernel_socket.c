@@ -34,6 +34,7 @@
 
 #include "zebra/interface.h"
 #include "zebra/zserv.h"
+#include "zebra/debug.h"
 
 /* Socket length roundup function. */
 #define ROUNDUP(a) \
@@ -63,12 +64,18 @@ struct message rtm_type_str[] =
   {RTM_NEWADDR,  "RTM_NEWADDR"},
   {RTM_DELADDR,  "RTM_DELADDR"},
   {RTM_IFINFO,   "RTM_IFINFO"},
+#ifdef RTM_OIFINFO
+  {RTM_OIFINFO,   "RTM_OIFINFO"},
+#endif /* RTM_OIFINFO */
 #ifdef RTM_NEWMADDR
   {RTM_NEWMADDR, "RTM_NEWMADDR"},
 #endif /* RTM_NEWMADDR */
 #ifdef RTM_DELMADDR
   {RTM_DELMADDR, "RTM_DELMADDR"},
 #endif /* RTM_DELMADDR */
+#ifdef RTM_IFANNOUNCE
+  {RTM_IFANNOUNCE, "RTM_IFANNOUNCE"},
+#endif /* RTM_IFANNOUNCE */
   {0,            NULL}
 };
 
@@ -152,6 +159,39 @@ rtm_flag_dump (int flag)
   zlog_info ("Kernel: %s", buf);
 }
 
+#ifdef RTM_IFANNOUNCE
+/* Interface adding function */
+int
+ifan_read (struct if_announcemsghdr *ifan)
+{
+  struct interface *ifp;
+
+  ifp = if_lookup_by_index (ifan->ifan_index);
+  if (ifp == NULL && ifan->ifan_what == IFAN_ARRIVAL)
+    {
+      /* Create Interface */
+      ifp = if_get_by_name (ifan->ifan_name);
+      ifp->ifindex = ifan->ifan_index;
+
+      if_add_update (ifp);
+    }
+  else if (ifp != NULL && ifan->ifan_what == IFAN_DEPARTURE)
+    {
+      if_delete_update (ifp);
+      if_delete (ifp);
+    }
+
+  if_get_flags (ifp);
+  if_get_mtu (ifp);
+  if_get_metric (ifp);
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("interface %s index %d", ifp->name, ifp->ifindex);
+
+  return 0;
+}
+#endif /* RTM_IFANNOUNCE */
+
 /* Interface adding function called from interface_list. */
 int
 ifm_read (struct if_msghdr *ifm)
@@ -193,6 +233,8 @@ ifm_read (struct if_msghdr *ifm)
 	  return -1;
 	}
       memcpy (&ifp->sdl, sdl, sizeof (struct sockaddr_dl));
+
+      if_add_update (ifp);
     }
   else
     {
@@ -215,7 +257,8 @@ ifm_read (struct if_msghdr *ifm)
   ifp->stats = ifm->ifm_data;
 #endif /* HAVE_NET_RT_IFLIST */
 
-  zlog_info ("interface %s index %d", ifp->name, ifp->ifindex);
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("interface %s index %d", ifp->name, ifp->ifindex);
 
   return 0;
 }
@@ -287,23 +330,29 @@ ifam_read (struct ifa_msghdr *ifam)
   /* Allocate and read address information. */
   ifam_read_mesg (ifam, &addr, &mask, &gate);
 
+  /* Check interface flag for implicit up of the interface. */
+  if_refresh (ifp);
+
   /* Add connected address. */
   switch (sockunion_family (&addr))
     {
     case AF_INET:
       if (ifam->ifam_type == RTM_NEWADDR)
-	connected_add_ipv4 (ifp, 
-			    &addr.sin.sin_addr, 
+	connected_add_ipv4 (ifp, 0, &addr.sin.sin_addr, 
 			    ip_masklen (mask.sin.sin_addr),
-			    &gate.sin.sin_addr);
+			    &gate.sin.sin_addr, NULL);
       else
-	connected_delete_ipv4 (ifp, 
-			    &addr.sin.sin_addr, 
-			    ip_masklen (mask.sin.sin_addr),
-			    &gate.sin.sin_addr);
+	connected_delete_ipv4 (ifp, 0, &addr.sin.sin_addr, 
+			       ip_masklen (mask.sin.sin_addr),
+			       &gate.sin.sin_addr, NULL);
       break;
 #ifdef HAVE_IPV6
     case AF_INET6:
+      /* Unset interface index from link-local address when IPv6 stack
+	 is KAME. */
+      if (IN6_IS_ADDR_LINKLOCAL (&addr.sin6.sin6_addr))
+	SET_IN6_LINKLOCAL_IFINDEX (addr.sin6.sin6_addr, 0);
+
       if (ifam->ifam_type == RTM_NEWADDR)
 	connected_add_ipv6 (ifp,
 			    &addr.sin6.sin6_addr, 
@@ -404,22 +453,32 @@ rtm_read (struct rt_msghdr *rtm)
      structure. */
   flags = rtm_read_mesg (rtm, &dest, &mask, &gate);
 
+#ifdef RTF_CLONED	/*bsdi, netbsd 1.6*/
+  if (flags & RTF_CLONED)
+    return;
+#endif
+#ifdef RTF_WASCLONED	/*freebsd*/
+  if (flags & RTF_WASCLONED)
+    return;
+#endif
+
   if ((rtm->rtm_type == RTM_ADD) && ! (flags & RTF_UP))
     return;
 
   /* Ignore route which has both HOST and GATEWAY attribute. */
   if ((flags & RTF_GATEWAY) && (flags & RTF_HOST))
     return;
+
+  /* This is connected route. */
   if (! (flags & RTF_GATEWAY))
-    {
-#ifdef DEBUG
-      zlog_info ("This is connected route");
-#endif  /* DEBUG */
       return;
-    }
 
   if (flags & RTF_PROTO1)
-    zebra_flags |= ZEBRA_FLAG_SELFROUTE;	
+    SET_FLAG (zebra_flags, ZEBRA_FLAG_SELFROUTE);
+
+  /* This is persistent route. */
+  if (flags & RTF_STATIC)
+    SET_FLAG (zebra_flags, ZEBRA_FLAG_STATIC);
 
   if (dest.sa.sa_family == AF_INET)
     {
@@ -440,17 +499,26 @@ rtm_read (struct rt_msghdr *rtm)
   if (dest.sa.sa_family == AF_INET6)
     {
       struct prefix_ipv6 p;
+      unsigned int ifindex = 0;
 
       p.family = AF_INET6;
       p.prefix = dest.sin6.sin6_addr;
       p.prefixlen = ip6_masklen (mask.sin6.sin6_addr);
 
+#ifdef KAME
+      if (IN6_IS_ADDR_LINKLOCAL (&gate.sin6.sin6_addr))
+	{
+	  ifindex = IN6_LINKLOCAL_IFINDEX (gate.sin6.sin6_addr);
+	  SET_IN6_LINKLOCAL_IFINDEX (gate.sin6.sin6_addr, 0);
+	}
+#endif /* KAME */
+
       if (rtm->rtm_type == RTM_GET || rtm->rtm_type == RTM_ADD)
 	rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, zebra_flags,
-		      &p, &gate.sin6.sin6_addr, 0, 0);
+		      &p, &gate.sin6.sin6_addr, ifindex, 0);
       else
 	rib_delete_ipv6 (ZEBRA_ROUTE_KERNEL, zebra_flags,
-			 &p, &gate.sin6.sin6_addr, 0, 0);
+			 &p, &gate.sin6.sin6_addr, ifindex, 0);
     }
 #endif /* HAVE_IPV6 */
 }
@@ -655,6 +723,16 @@ kernel_read (struct thread *thread)
       struct ifa_msghdr ifa;
       struct sockaddr addr[RTAX_MAX];
     } ia;
+
+#ifdef RTM_IFANNOUNCE
+    /* Interface arrival/departure */
+    struct
+    {
+      struct if_announcemsghdr ifan;
+      struct sockaddr addr[RTAX_MAX];
+    } ian;
+#endif /* RTM_IFANNOUNCE */
+
   } buf;
 
   /* Fetch routing socket. */
@@ -690,6 +768,11 @@ kernel_read (struct thread *thread)
     case RTM_DELADDR:
       ifam_read (&buf.ia.ifa);
       break;
+#ifdef RTM_IFANNOUNCE
+    case RTM_IFANNOUNCE:
+      ifan_read (&buf.ian.ifan);
+      break;
+#endif /* RTM_IFANNOUNCE */
     default:
       break;
     }

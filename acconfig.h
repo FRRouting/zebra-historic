@@ -97,9 +97,6 @@
 /* Define if disable-bgp-announce option is specified. */
 #undef DISABLE_BGP_ANNOUNCE
 
-/* Define this if htnol is broken, but can be fixed with define magic */
-#undef HAVE_REPAIRABLE_HTONL
-
 /* PAM support */
 #undef USE_PAM
 
@@ -109,8 +106,8 @@
 /* OSPF NSSA option */
 #undef HAVE_NSSA
 
-/* Old RIB. */
-#undef OLD_RIB
+/* Linux netlink. */
+#undef HAVE_NETLINK
 
 /* PATHS */
 #undef PATH_ZEBRA_PID
@@ -154,8 +151,3 @@ typedef unsigned short u_int8_t;
 #ifndef HAVE_SOCKLEN_T
 typedef int socklen_t;
 #endif /* HAVE_SOCKLEN_T */
-
-/* Pseudo interfaces */
-#undef HAVE_IF_PSEUDO
-/* #define RIP_API 1 */
-#undef RIP_API

@@ -1,5 +1,57 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.91
+
+** --enable-oldrib configure option is removed.
+
+** HAVE_IF_PSEUDO part is removed.  Same feature is now supported by
+default.
+
+* Changes in ripd
+
+** When redistributed route is withdrawn, perform poisoned reverse.
+
+* Changes in zebra
+
+** When interface's address is removed, kernel route pointing out to
+the address is removed.
+
+** IPv6 RIB is now based upon new RIB code.
+
+** zebra can handle same connected route to one interface.
+
+** New command for interface address.  Currently this commands are
+only supported on GNU/Linux with netlink interface.
+
+"ip address A.B.C.D secondary"
+"ip address A.B.C.D label LABEL"
+
+* Changes in bgpd
+
+** BGP flap dampening bugs are fixed.
+
+** BGP non-blocking TCP connection bug is fixed.
+
+** "show ip bgp summary" shows AS path and community entry number.
+
+** New commands have been added.
+  "show ip bgp cidr-only"
+  "show ip bgp ipv4 (unicast|multicast) cidr-only"
+  "show ip bgp A.B.C.D/M longer-prefixes"
+  "show ip bgp ipv4 (unicast|multicast) A.B.C.D/M longer-prefixes"
+  "show ipv6 bgp X:X::X:X/M longer-prefixes"
+  "show ipv6 mbgp X:X::X:X/M longer-prefixes"
+
+** IPv6 IBGP nexthop change is monitored.
+
+** Unknown transitive attribute is passed with partial flag bit on.
+
+* Changes in ospfd
+
+** Fix bug of LSA MaxAge flood.
+
+** Fix bug of NSSA codes.
+
 * Changes in zebra-0.90
 
 ** From this beta release, --enable-unixdomain and --enable-newrib

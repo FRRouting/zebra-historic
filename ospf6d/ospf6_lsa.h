@@ -23,8 +23,6 @@
 #ifndef OSPF6_LSA_H
 #define OSPF6_LSA_H
 
-#define THIS_IS_REFRESH  ((struct thread *)0xffffffff)
-
 /* LSA definition */
 
 #define OSPF6_LSA_MAXAGE           3600    /* 1 hour */
@@ -61,46 +59,16 @@ extern char *ospf6_lsa_type_string[];
 #define OSPF6_LSA_IS_SCOPE_AS(x) \
   (((x) & OSPF6_LSA_SCOPE_MASK) == OSPF6_LSA_SCOPE_AS)
 
-#define GET_LSASCOPE(x) ((ntohs(x)) & SCOPE_MASK)
+/* NOTE that all LSAs are kept NETWORK BYTE ORDER */
 
-/* NOTE that all lsa is left NETWORK BYTE ORDER */
-
-struct router_lsa
-{
-  u_char rlsa_bits;
-  u_char rlsa_options[3];
-  /* followed by router_lsd(s) */
-};
-#define ROUTER_LSA_BIT_B     (1 << 0)
-#define ROUTER_LSA_BIT_E     (1 << 1)
-#define ROUTER_LSA_BIT_V     (1 << 2)
-#define ROUTER_LSA_BIT_W     (1 << 3)
-
-#define ROUTER_LSA_SET(x,y)    ((x)->rlsa_bits |=  (y))
-#define ROUTER_LSA_ISSET(x,y)  ((x)->rlsa_bits &   (y))
-#define ROUTER_LSA_CLEAR(x,y)  ((x)->rlsa_bits &= ~(y))
-
-struct router_lsd
-{
-  u_char    rlsd_type;
-  u_char    rlsd_reserved;
-  u_int16_t rlsd_metric;                /* output cost */
-  u_int32_t rlsd_interface_id;
-  u_int32_t rlsd_neighbor_interface_id;
-  u_int32_t rlsd_neighbor_router_id;
-};
-
-#define LSDT_POINTTOPOINT       1
-#define LSDT_TRANSIT_NETWORK    2
-#define LSDT_STUB_NETWORK       3
-#define LSDT_VIRTUAL_LINK       4
-
+/* Router-LSA */
 struct ospf6_router_lsa
 {
   u_char bits;
   u_char options[3];
   /* followed by ospf6_router_lsd(s) */
 };
+
 #define OSPF6_ROUTER_LSA_BIT_B     (1 << 0)
 #define OSPF6_ROUTER_LSA_BIT_E     (1 << 1)
 #define OSPF6_ROUTER_LSA_BIT_V     (1 << 2)
@@ -127,18 +95,12 @@ struct ospf6_router_lsd
 #define OSPF6_ROUTER_LSD_TYPE_STUB_NETWORK       3
 #define OSPF6_ROUTER_LSD_TYPE_VIRTUAL_LINK       4
 
-
-struct network_lsa
-{
-  u_char nlsa_reserved;
-  u_char nlsa_options[3];
-  /* followed by router_id(s) */
-};
+/* Network-LSA */
 struct ospf6_network_lsa
 {
   u_char reserved;
   u_char options[3];
-  /* followed by router_id(s) */
+  /* followed by ospf6_netowrk_lsd(s) */
 };
 
 /* Link State Description in Router-LSA */
@@ -147,15 +109,7 @@ struct ospf6_network_lsd
   u_int32_t adv_router;
 };
 
-
-struct link_lsa
-{
-  u_char          llsa_rtr_pri;
-  u_char          llsa_options[3];
-  struct in6_addr llsa_linklocal;
-  u_int32_t       llsa_prefix_num;
-  /* followed by prefix(es) */
-};
+/* Link-LSA */
 struct ospf6_link_lsa
 {
   u_char          llsa_rtr_pri;
@@ -165,13 +119,7 @@ struct ospf6_link_lsa
   /* followed by prefix(es) */
 };
 
-struct intra_area_prefix_lsa
-{
-  u_int16_t intra_prefix_num;
-  u_int16_t intra_prefix_refer_lstype;
-  u_int32_t intra_prefix_refer_lsid;
-  u_int32_t intra_prefix_refer_advrtr;
-};
+/* Intra-Area-Prefix-LSA */
 struct ospf6_intra_area_prefix_lsa
 {
   u_int16_t prefix_number;
@@ -192,8 +140,8 @@ struct ospf6_as_external_lsa
   u_char    ase_prefix_len;
   u_char    ase_prefix_opt;
   u_int16_t ase_refer_lstype;
-#endif
   /* followed by one address prefix */
+#endif
   /* followed by none or one forwarding address */
   /* followed by none or one external route tag */
   /* followed by none or one referenced LS-ID */
@@ -243,13 +191,6 @@ struct ospf6_lsa_header
   u_int16_t checksum;  /* LS checksum */
   u_int16_t length;    /* LSA length */
 };
-
-#define LSH_NEXT(x) ((x) + 1)
-#define LSA_NEXT(x) ((struct ospf6_lsa_hdr *) \
-                       ((char *)(x) + ntohs ((x)->lsh_len)))
-#define lsa_issame(x,y) ((x)->lsh_type == (y)->lsh_type && \
-                         (x)->lsh_id == (y)->lsh_id && \
-                         (x)->lsh_advrtr == (y)->lsh_advrtr)
 
 #define OSPF6_LSA_NEXT(x) ((struct ospf6_lsa_header *) \
                              ((char *)(x) + ntohs ((x)->length)))
@@ -333,8 +274,7 @@ void ospf6_lsa_unlock (struct ospf6_lsa *);
 
 unsigned short ospf6_lsa_age_current (struct ospf6_lsa *);
 int ospf6_lsa_is_maxage (struct ospf6_lsa *);
-void ospf6_lsa_age_update_to_send (struct ospf6_lsa *,
-                                   struct ospf6_interface *);
+void ospf6_lsa_age_update_to_send (struct ospf6_lsa *, u_int32_t);
 void ospf6_lsa_premature_aging (struct ospf6_lsa *);
 
 int ospf6_lsa_check_recent (struct ospf6_lsa *, struct ospf6_lsa *);
@@ -354,12 +294,13 @@ int ospf6_lsa_refresh (struct thread *);
 
 u_short ospf6_lsa_checksum (struct ospf6_lsa_header *);
 
-void ospf6_lsa_update_router (struct ospf6_area *);
-void ospf6_lsa_update_network (struct ospf6_interface *);
-void ospf6_lsa_update_link (struct ospf6_interface *);
-void ospf6_lsa_update_as_external (u_int32_t ls_id, struct ospf6 *);
-void ospf6_lsa_update_intra_prefix_transit (struct ospf6_interface *);
-void ospf6_lsa_update_intra_prefix_stub (struct ospf6_area *);
+void ospf6_lsa_update_router (u_int32_t area_id);
+void ospf6_lsa_update_network (char *ifname);
+void ospf6_lsa_update_link (char *ifname);
+void ospf6_lsa_update_as_external (u_int32_t ls_id);
+void ospf6_lsa_update_intra_prefix_transit (char *ifname);
+void ospf6_lsa_update_intra_prefix_stub (u_int32_t area_id);
+
 void ospf6_lsa_reoriginate (struct ospf6_lsa *);
 
 u_int16_t ospf6_lsa_get_scope_type (u_int16_t);

@@ -104,18 +104,7 @@ ospf_interface_delete (int command, struct zclient *zclient,
   ospf_snmp_if_delete (ifp);
 #endif /* HAVE_SNMP */
 
-#ifdef HAVE_IF_PSEUDO
-  if (!IS_IF_PSEUDO(ifp))
-    {
-      if_delete(ifp);
-    }
-  else
-    {
-      ifp->ifindex=INTERFACE_PSEUDO;
-    }
-#else
   if_delete(ifp);
-#endif /* HAVE_IF_PSEUDO */
 
   return 0;
 }
@@ -150,13 +139,6 @@ zebra_interface_if_set_value (struct stream *s, struct interface *ifp)
   ifp->metric = stream_getl (s);
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
-
-#ifdef IS_IF_PSEUDO
-  if (IS_IF_PSEUDO (ifp))
-    IF_PSEUDO_SET (ifp);
-  else
-    IF_PSEUDO_UNSET (ifp);
-#endif
 }
 
 int
@@ -277,7 +259,7 @@ ospf_interface_address_delete (int command, struct zclient *zclient,
   oi = ifp->info;
 
   /* Clean up if address was our primary */
-  if (prefix_match (c->address, oi->address))
+  if (oi->address && prefix_match (c->address, oi->address))
     {
       /* Call interface hook functions to clean up */
       ospf_if_cleanup(oi, 0);
@@ -294,51 +276,9 @@ ospf_interface_address_delete (int command, struct zclient *zclient,
 
   return 0;
 }
-
 
 void
-ospf_zebra_add (struct prefix_ipv4 *p, struct in_addr *nexthop,
-		u_int32_t metric, struct ospf_route *or)
-{
-  u_char distance;
-  struct zapi_ipv4 api;
-
-  if (zclient->redist[ZEBRA_ROUTE_OSPF])
-    {
-      api.type = ZEBRA_ROUTE_OSPF;
-      api.flags = 0;
-      api.message = 0;
-      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
-      api.nexthop_num = 1;
-      api.nexthop = &nexthop;
-      api.ifindex_num = 0;
-      SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
-      api.metric = metric;
-
-      distance = ospf_distance_apply (p, or);
-      if (distance)
-	{
-	  SET_FLAG (api.message, ZAPI_MESSAGE_DISTANCE);
-	  api.distance = distance;
-	}
-
-      zapi_ipv4_add (zclient, p, &api);
-
-      if (IS_DEBUG_OSPF (zebra, ZEBRA_REDISTRIBUTE))
-	{
-	  char *nexthop_str;
-
-	  nexthop_str = strdup (inet_ntoa (*nexthop));
-	  zlog_info ("Zebra: Route add %s/%d nexthop %s metric %d",
-		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str,
-		     metric);
-	  free (nexthop_str);
-	}
-    }
-}
-
-void
-ospf_zebra_add_multipath (struct prefix_ipv4 *p, struct ospf_route *or)
+ospf_zebra_add (struct prefix_ipv4 *p, struct ospf_route *or)
 {
   u_char message;
   u_char distance;
@@ -428,40 +368,7 @@ ospf_zebra_add_multipath (struct prefix_ipv4 *p, struct ospf_route *or)
 }
 
 void
-ospf_zebra_delete (struct prefix_ipv4 *p, struct in_addr *nexthop)
-{
-  struct zapi_ipv4 api;
-
-  if (zclient->redist[ZEBRA_ROUTE_OSPF])
-    {
-      api.type = ZEBRA_ROUTE_OSPF;
-      api.flags = 0;
-      api.message = 0;
-      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
-      api.nexthop_num = 1;
-      api.nexthop = &nexthop;
-      api.ifindex_num = 0;
-      /* Do not pass metric when delete route. 
-	SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
-	api.metric = metric;
-      */
-
-      zapi_ipv4_delete (zclient, p, &api);
-
-      if (IS_DEBUG_OSPF (zebra, ZEBRA_REDISTRIBUTE))
-	{
-	  char *nexthop_str;
-
-	  nexthop_str = strdup (inet_ntoa (*nexthop));
-	  zlog_info ("Zebra: Route delete %s/%d nexthop %s",
-		     inet_ntoa (p->prefix), p->prefixlen, nexthop_str);
-	  free (nexthop_str);
-	}
-    }
-}
-
-void
-ospf_zebra_delete_multipath (struct prefix_ipv4 *p, struct ospf_route *or)
+ospf_zebra_delete (struct prefix_ipv4 *p, struct ospf_route *or)
 {
   struct zapi_ipv4 api;
 
@@ -913,49 +820,6 @@ DEFUN (no_router_zebra,
   zclient_stop (zclient);
   return CMD_SUCCESS;
 }
-
-#if 0
-DEFUN (ospf_redistribute_ospf,
-       ospf_redistribute_ospf_cmd,
-       "redistribute ospf",
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPF)\n")
-{
-  zclient->redist[ZEBRA_ROUTE_OSPF] = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ospf_redistribute_ospf,
-       no_ospf_redistribute_ospf_cmd,
-       "no redistribute ospf",
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       "Open Shortest Path First (OSPF)\n")
-{
-  zclient->redist[ZEBRA_ROUTE_OSPF] = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (ospf_redistribute_kernel,
-       ospf_redistribute_kernel_cmd,
-       "redistribute kernel",
-       "Redistribute information from another routing protocol\n"
-       "Kernel routes\n")
-{
-  return ospf_redistribute_set (ZEBRA_ROUTE_KERNEL, EXTERNAL_METRIC_TYPE_2,
-				OSPF_EXT_METRIC_AUTO, 0);
-}
-
-DEFUN (no_ospf_redistribute_kernel,
-       no_ospf_redistribute_kernel_cmd,
-       "no redistribute kernel",
-       NO_STR
-       "Redistribute information from another routing protocol\n"
-       "Kernel routes\n")
-{
-  return ospf_redistribute_unset (ZEBRA_ROUTE_KERNEL);
-}
-#endif
 
 int
 str2distribute_source (char *str, int *source)

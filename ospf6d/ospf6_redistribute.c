@@ -24,12 +24,12 @@
 
 #include <zebra.h>
 
+#include "log.h"
+#include "memory.h"
+#include "vty.h"
 #include "prefix.h"
 #include "table.h"
 #include "linklist.h"
-#include "vty.h"
-#include "memory.h"
-#include "log.h"
 #include "routemap.h"
 
 #include "ospf6_top.h"
@@ -88,7 +88,7 @@ ospf6_redistribute_get_id (struct prefix_ipv6 *p)
   while (1)
     {
       lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
-                               htonl (id), ospf6->router_id, ospf6);
+                               htonl (id), ospf6->router_id);
       if (! lsa)
         break;
 
@@ -173,7 +173,7 @@ ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
   rn->info = ri;
 
   /* update AS-external LSA */
-  ospf6_lsa_update_as_external (ri->id, ospf6);
+  ospf6_lsa_update_as_external (ri->id);
 }
 
 void
@@ -216,7 +216,7 @@ ospf6_redistribute_route_remove (int type, int ifindex, struct prefix_ipv6 *p)
                type, ifindex, buf, p->prefixlen);
 
   lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
-                           htonl (ri->id), ospf6->router_id, ospf6);
+                           htonl (ri->id), ospf6->router_id);
   if (lsa)
     ospf6_lsa_premature_aging (lsa);
 

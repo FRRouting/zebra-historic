@@ -122,6 +122,9 @@ struct prefix_rd
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 
+/* Prefix's family member. */
+#define PREFIX_FAMILY(p)  ((p)->family)
+
 /* Prototypes. */
 int afi2family (int);
 int family2afi (int);

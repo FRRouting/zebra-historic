@@ -247,14 +247,6 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
   return 0;
 }
 
-#if 0  /* Probably, this functions is not used. */
-void
-ospf_db_summary_delete_all (struct ospf_neighbor *nbr)
-{
-  new_lsdb_delete_all (&nbr->db_sum);
-}
-#endif
-
 void
 ospf_db_summary_clear (struct ospf_neighbor *nbr)
 {

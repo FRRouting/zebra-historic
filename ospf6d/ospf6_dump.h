@@ -23,35 +23,16 @@
 #ifndef OSPF6_DUMP_H
 #define OSPF6_DUMP_H
 
-#include "ospf6_lsa.h"
-#include "ospf6_mesg.h"
-
 /* Strings for logging */
 extern char   *ifs_name[];
 extern char   *nbs_name[];
-extern char   *mesg_name[];
-extern char   *lstype_name[];
-extern char   *rlsatype_name[];
-
-#define typeindex(x)     (((ntohs (x)) & 0x000f) - 1)
 
 /* Function Prototypes */
-char *print_lsreq (struct ospf6_lsreq *);
-char *print_lsahdr (struct ospf6_lsa_hdr *);
 void ospf6_log_init ();
 
 /* new */
 
-char *ospf6_message_name (unsigned char);
-void ospf6_dump_message (struct iovec *);
-void ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *);
-void ospf6_dump_lsa (struct ospf6_lsa *);
 void ospf6_debug_init ();
-int is_ospf6_message_dump(char);
-void ospf6_dump_ddbit (unsigned char, char *, size_t);
-
-void
-ospf6_dump_lsa_header_print (char *, int , struct ospf6_lsa_header *);
 
 enum ospf6_dump_type
 {
@@ -99,7 +80,5 @@ extern struct _ospf6_dump ospf6_dump[];
 #define IS_OSPF6_DUMP_LSDB         (ospf6_dump[OSPF6_DUMP_LSDB].dump)
 #define IS_OSPF6_DUMP_REDISTRIBUTE (ospf6_dump[OSPF6_DUMP_REDISTRIBUTE].dump)
 
-/* Backward campatibility 2000/12/29 */
-#define IS_OSPF6_DUMP_MESSAGE(x) (is_ospf6_message_dump(x))
-
 #endif /* OSPF6_DUMP_H */
+

@@ -33,7 +33,8 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interf
   if (IS_OSPF6_DUMP_INTERFACE)
     zlog_info ("I/F [%s] %s -> %s (%s)",
                ospf6_interface->interface->name,
-               ifs_name[ifs_prev], ifs_name[ifs_next], reason);
+               ospf6_interface_state_string[ifs_prev],
+               ospf6_interface_state_string[ifs_next], reason);
 
   switch (ifs_prev)
     {
@@ -65,7 +66,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interf
   ospf6_interface->state = ifs_next;
 
   /* construct Router-LSA */
-  ospf6_lsa_update_router ((struct ospf6_area *) ospf6_interface->area);
+  ospf6_lsa_update_router (ospf6_interface->area->area_id);
 
   dr_change (ospf6_interface);
 
@@ -91,13 +92,13 @@ dr_change (struct ospf6_interface *ospf6_interface)
     }
 
   /* construct LSAs */
-  ospf6_lsa_update_router ((struct ospf6_area *) ospf6_interface->area);
+  ospf6_lsa_update_router (ospf6_interface->area->area_id);
   if (ospf6_interface->state == IFS_DR)
     {
-      ospf6_lsa_update_network (ospf6_interface);
-      ospf6_lsa_update_intra_prefix_transit (ospf6_interface);
+      ospf6_lsa_update_network (ospf6_interface->interface->name);
+      ospf6_lsa_update_intra_prefix_transit (ospf6_interface->interface->name);
     }
-  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area);
+  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area->area_id);
 
   return 0;
 }
@@ -163,7 +164,7 @@ interface_up (struct thread *thread)
 
   /* Schedule Hello */
   if (! ospf6_interface->is_passive)
-    thread_add_event (master, ospf6_send_hello, ospf6_interface, 0);
+    thread_add_event (master, ospf6_send_hello_new, ospf6_interface, 0);
 
   /* decide next interface state */
   if (if_is_pointopoint (ospf6_interface->interface))
@@ -178,10 +179,10 @@ interface_up (struct thread *thread)
     }
 
   /* construct LSAs */
-  ospf6_lsa_update_link (ospf6_interface);
+  ospf6_lsa_update_link (ospf6_interface->interface->name);
   if (ospf6_interface->state == IFS_DR)
-    ospf6_lsa_update_intra_prefix_transit (ospf6_interface);
-  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area);
+    ospf6_lsa_update_intra_prefix_transit (ospf6_interface->interface->name);
+  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area->area_id);
 
   return 0;
 }
@@ -293,9 +294,9 @@ dr_election (struct ospf6_interface *ospf6_interface)
   myself.state = NBS_TWOWAY;
   myself.dr = ospf6_interface->dr;
   myself.bdr = ospf6_interface->bdr;
-  myself.rtr_pri = ospf6_interface->priority;
+  myself.priority = ospf6_interface->priority;
   myself.ifid = ospf6_interface->if_id;
-  myself.rtr_id = ospf6_interface->area->ospf6->router_id;
+  myself.router_id = ospf6_interface->area->ospf6->router_id;
 
 /* step_one: */
 
@@ -312,22 +313,22 @@ step_two:
   for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
     {
       nbpi = (struct ospf6_neighbor *)getdata (i);
-      if (nbpi->rtr_pri == 0)
+      if (nbpi->priority == 0)
         continue;
       if (nbpi->state < NBS_TWOWAY)
         continue;
-      if (nbpi->dr == nbpi->rtr_id)
+      if (nbpi->dr == nbpi->router_id)
         continue;
-      if (nbpi->bdr == nbpi->rtr_id)
+      if (nbpi->bdr == nbpi->router_id)
         declare++;
       listnode_add (candidate_list, nbpi);
     }
 
-  if (myself.rtr_pri)
+  if (myself.priority)
     {
-      if (myself.dr != myself.rtr_id)
+      if (myself.dr != myself.router_id)
         {
-          if (myself.bdr == myself.rtr_id)
+          if (myself.bdr == myself.router_id)
             declare++;
           listnode_add (candidate_list, &myself);
         }
@@ -346,12 +347,12 @@ step_two:
       if (declare)
         {
           int deleted = 0;
-          if (nbpi->bdr != nbpi->rtr_id)
+          if (nbpi->bdr != nbpi->router_id)
             {
               listnode_delete (candidate_list, nbpi);
               deleted++;
             }
-          if (nbpj->bdr != nbpj->rtr_id)
+          if (nbpj->bdr != nbpj->router_id)
             {
               listnode_delete (candidate_list, nbpj);
               deleted++;
@@ -359,24 +360,24 @@ step_two:
           if (deleted)
             continue;
         }
-      if (nbpi->rtr_pri > nbpj->rtr_pri)
+      if (nbpi->priority > nbpj->priority)
         {
           listnode_delete (candidate_list, nbpj);
           continue;
         }
-      else if (nbpi->rtr_pri < nbpj->rtr_pri)
+      else if (nbpi->priority < nbpj->priority)
         {
           listnode_delete (candidate_list, nbpi);
           continue;
         }
       else /* equal, case of tie */
         {
-          if (nbpi->rtr_id > nbpj->rtr_id)
+          if (nbpi->router_id > nbpj->router_id)
             {
               listnode_delete (candidate_list, nbpj);
               continue;
             }
-          else if (nbpi->rtr_id < nbpj->rtr_id)
+          else if (nbpi->router_id < nbpj->router_id)
             {
               listnode_delete (candidate_list, nbpi);
               continue;
@@ -391,7 +392,7 @@ step_two:
       assert (candidate_list->count == 1);
       n = listhead (candidate_list);
       nbr = (struct ospf6_neighbor *)getdata (n);
-      bdr = nbr->rtr_id;
+      bdr = nbr->router_id;
     }
   else
     bdr = 0;
@@ -406,19 +407,19 @@ step_two:
   for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
     {
       nbpi = (struct ospf6_neighbor *)getdata (i);
-      if (nbpi->rtr_pri == 0)
+      if (nbpi->priority == 0)
         continue;
       if (nbpi->state < NBS_TWOWAY)
         continue;
-      if (nbpi->dr == nbpi->rtr_id)
+      if (nbpi->dr == nbpi->router_id)
         {
           declare++;
           listnode_add (candidate_list, nbpi);
         }
     }
-  if (myself.rtr_pri)
+  if (myself.priority)
     {
-      if (myself.dr == myself.rtr_id)
+      if (myself.dr == myself.router_id)
         {
           declare++;
           listnode_add (candidate_list, &myself);
@@ -445,35 +446,35 @@ step_two:
           nbpi = (struct ospf6_neighbor *)getdata (i);
           nbpj = (struct ospf6_neighbor *)getdata (j);
 
-          if (nbpi->dr != nbpi->rtr_id)
+          if (nbpi->dr != nbpi->router_id)
             {
               list_delete_node (candidate_list, i);
               continue;
             }
-          if (nbpj->dr != nbpj->rtr_id)
+          if (nbpj->dr != nbpj->router_id)
             {
               list_delete_node (candidate_list, j);
               continue;
             }
 
-          if (nbpi->rtr_pri > nbpj->rtr_pri)
+          if (nbpi->priority > nbpj->priority)
             {
               list_delete_node (candidate_list, j);
               continue;
             }
-          else if (nbpi->rtr_pri < nbpj->rtr_pri)
+          else if (nbpi->priority < nbpj->priority)
             {
               list_delete_node (candidate_list, i);
               continue;
             }
           else /* equal, case of tie */
             {
-              if (nbpi->rtr_id > nbpj->rtr_id)
+              if (nbpi->router_id > nbpj->router_id)
                 {
                   list_delete_node (candidate_list, j);
                   continue;
                 }
-              else if (nbpi->rtr_id < nbpj->rtr_id)
+              else if (nbpi->router_id < nbpj->router_id)
                 {
                   list_delete_node (candidate_list, i);
                   continue;
@@ -492,7 +493,7 @@ step_two:
           assert (candidate_list->count == 1);
           n = listhead (candidate_list);
           nbr = (struct ospf6_neighbor *)getdata (n);
-          dr = nbr->rtr_id;
+          dr = nbr->router_id;
         }
       else
         assert (0);
@@ -505,8 +506,8 @@ step_two:
 
   if (dr != prevdr)
     {
-      if ((dr == myself.rtr_id || prevdr == myself.rtr_id)
-          && !(dr == myself.rtr_id && prevdr == myself.rtr_id))
+      if ((dr == myself.router_id || prevdr == myself.router_id)
+          && !(dr == myself.router_id && prevdr == myself.router_id))
         {
           myself.dr = dr;
           myself.bdr = bdr;
@@ -516,8 +517,8 @@ step_two:
     }
   if (bdr != prevbdr)
     {
-      if ((bdr == myself.rtr_id || prevbdr == myself.rtr_id)
-          && !(bdr == myself.rtr_id && prevbdr == myself.rtr_id))
+      if ((bdr == myself.router_id || prevbdr == myself.router_id)
+          && !(bdr == myself.router_id && prevbdr == myself.router_id))
         {
           myself.dr = dr;
           myself.bdr = bdr;
@@ -543,14 +544,14 @@ step_five:
         }
     }
 
-  if (dr == myself.rtr_id)
+  if (dr == myself.router_id)
     {
-      assert (bdr != myself.rtr_id);
+      assert (bdr != myself.router_id);
       return IFS_DR;
     }
-  else if (bdr == myself.rtr_id)
+  else if (bdr == myself.router_id)
     {
-      assert (dr != myself.rtr_id);
+      assert (dr != myself.router_id);
       return IFS_BDR;
     }
   else

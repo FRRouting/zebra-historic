@@ -37,8 +37,8 @@ struct host host;
 /* Default motd string. */
 char *default_motd = 
 "\r\n\
-Hello, this is zebra (version " ZEBRA_VERSION ")\r\n\
-Copyright 1996-2001 Kunihiro Ishiguro\r\n\
+Hello, this is zebra (version " ZEBRA_VERSION ").\r\n\
+Copyright 1996-2001 Kunihiro Ishiguro.\r\n\
 \r\n";
 
 /* Standard command node structures. */
@@ -2101,7 +2101,7 @@ DEFUN (show_version,
   vty_out (vty, "Zebra %s (%s).%s", ZEBRA_VERSION,
 	   host_name,
 	   VTY_NEWLINE);
-  vty_out (vty, "Copyright 1996-2000, Kunihiro Ishiguro.%s", VTY_NEWLINE);
+  vty_out (vty, "Copyright 1996-2001, Kunihiro Ishiguro.%s", VTY_NEWLINE);
 
   return CMD_SUCCESS;
 }
@@ -2191,7 +2191,7 @@ DEFUN (config_write_file,
 
   /* Config file header print. */
   vty_out (file_vty, "!\n! Zebra configuration saved from vty\n!   ");
-  vty_time_print (file_vty);
+  vty_time_print (file_vty, 1);
   vty_out (file_vty, "!\n");
 
   for (i = 0; i < vector_max (cmdvec); i++)
@@ -2284,7 +2284,7 @@ DEFUN (config_write_terminal,
     }
   else
     {
-      vty_out (vty, "%sCurrrent Configuration:%s", VTY_NEWLINE,
+      vty_out (vty, "%sCurrent configuration:%s", VTY_NEWLINE,
 	       VTY_NEWLINE);
       vty_out (vty, "!%s", VTY_NEWLINE);
 

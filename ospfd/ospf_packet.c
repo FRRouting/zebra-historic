@@ -169,24 +169,6 @@ ospf_fifo_free (struct ospf_fifo *fifo)
   XFREE (MTYPE_OSPF_FIFO, fifo);
 }
 
-#if 0
-void
-ospf_fifo_debug (struct ospf_fifo *fifo)
-{
-  int i = 0;
-  struct ospf_packet *op;
-
-  printf ("OSPF fifo count %ld\n", fifo->count);
-
-  for (op = fifo->head; op; op = op->next)
-    {
-      printf (" fifo %d: stream: size %d putp %ld getp %ld\n", i, op->s->size,
-	      op->s->getp, op->s->putp);
-      i++;
-    }
-}
-#endif
-
 void
 ospf_packet_add (struct ospf_interface *oi, struct ospf_packet *op)
 {
@@ -219,24 +201,6 @@ ospf_stream_copy (struct stream *new, struct stream *s)
 
   return new;
 }
-
-#if 0
-struct stream *
-ospf_stream_dup (struct stream *s)
-{
-  struct stream *new;
-
-  new = stream_new (stream_get_endp (s));
-
-  new->endp = s->endp;
-  new->putp = s->putp;
-  new->getp = s->getp;
-
-  memcpy (new->data, s->data, stream_get_endp (s));
-
-  return new;
-}
-#endif
 
 struct ospf_packet *
 ospf_packet_dup (struct ospf_packet *op)
@@ -437,7 +401,8 @@ ospf_ls_upd_timer (struct thread *thread)
 	    }
 	}
 
-      ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
+      if (listcount (update) > 0)
+	ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
       list_delete (update);
     }
 
@@ -830,7 +795,7 @@ ospf_db_desc_save_current (struct ospf_neighbor *nbr,
 }
 
 /* Process rest of DD packet */
-void
+static void
 ospf_db_desc_proc (struct stream *s, struct ospf_interface *oi,
 		   struct ospf_neighbor *nbr, struct ospf_db_desc *dd,
 		   u_int16_t size)
@@ -849,7 +814,7 @@ ospf_db_desc_proc (struct stream *s, struct ospf_interface *oi,
 	{
 	  zlog_warn ("Pakcet [DD:RECV]: Unknown LS type %d.", lsah->type);
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
-	  continue;
+	  return;
 	}
 
 #ifdef HAVE_NSSA
@@ -865,7 +830,7 @@ ospf_db_desc_proc (struct stream *s, struct ospf_interface *oi,
 	  zlog_warn ("Pakcet [DD:RECV]: AS-external-LSA from stub area, "
 		     "ID: %s.", inet_ntoa (lsah->id));
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
-	  continue;
+	  return;
 	}
 
       /* Create LS-request object. */
@@ -1150,6 +1115,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
       if (ls_type < OSPF_MIN_LSA || ls_type >= OSPF_MAX_LSA)
 	{
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_BadLSReq);
+	  list_delete (ls_upd);
 	  return;
 	}
 
@@ -1158,6 +1124,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
       if (find == NULL)
 	{
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_BadLSReq);
+	  list_delete (ls_upd);
 	  return;
 	}
 
@@ -1167,8 +1134,11 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
 	  if (oi->type == OSPF_IFTYPE_NBMA)
 	    ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_DIRECT);
 	  else
-	  ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_INDIRECT);
+	    ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_INDIRECT);
+
+	  /* Only remove list contents.  Keep ls_upd. */
 	  list_delete_all_node (ls_upd);
+
 	  length = OSPF_HEADER_SIZE + OSPF_LS_UPD_MIN_SIZE;
 	}
 
@@ -1185,9 +1155,12 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
       if (oi->type == OSPF_IFTYPE_NBMA)
 	ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_DIRECT);
       else
-      ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_INDIRECT);
+	ospf_ls_upd_send (nbr, ls_upd, OSPF_SEND_PACKET_INDIRECT);
+
       list_delete (ls_upd);
     }
+  else
+    list_free (ls_upd);
 }
 
 /* Get the list of LSAs from Link State Update packet.
@@ -1307,9 +1280,9 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
   lsas = ospf_ls_upd_list_lsa (s, oi, size);
 
 #define DISCARD_LSA(L,N) {\
-        ospf_lsa_discard (L);\
         if (IS_DEBUG_OSPF_EVENT) \
-          zlog_info("ospf_lsa_discard() in ospf_ls_upd() point %d: lsa %x Type-%d", N, lsa, lsa->data->type);\
+          zlog_info ("ospf_lsa_discard() in ospf_ls_upd() point %d: lsa %x Type-%d", N, lsa, (int) lsa->data->type); \
+        ospf_lsa_discard (L); \
 	continue; }
 
   /* Process each LSA received in the one packet. */
@@ -1324,7 +1297,20 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 
 #ifdef HAVE_NSSA
       if (IS_DEBUG_OSPF_NSSA)
-	zlog_info("LSA Type-%d from %s", lsa->data->type, inet_ntoa(lsa->data->id));
+	{
+	  char buf1[INET_ADDRSTRLEN];
+	  char buf2[INET_ADDRSTRLEN];
+	  char buf3[INET_ADDRSTRLEN];
+
+	  zlog_info("LSA Type-%d from %s, ID: %s, ADV: %s",
+		  lsa->data->type,
+		  inet_ntop (AF_INET, &ospfh->router_id,
+			     buf1, INET_ADDRSTRLEN),
+		  inet_ntop (AF_INET, &lsa->data->id,
+			     buf2, INET_ADDRSTRLEN),
+		  inet_ntop (AF_INET, &lsa->data->adv_router,
+			     buf3, INET_ADDRSTRLEN));
+	}
 #endif /* HAVE_NSSA */
 
       listnode_delete (lsas, lsa); /* We don't need it in list anymore */
@@ -1347,12 +1333,22 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
       if (lsa->data->type == OSPF_AS_EXTERNAL_LSA ) 
         /* Reject from STUB or NSSA */
         if (nbr->oi->area->external_routing != OSPF_AREA_DEFAULT) 
-	  DISCARD_LSA (lsa, 1);
-
+	  {
+	    DISCARD_LSA (lsa, 1);
 #ifdef HAVE_NSSA
-      if (lsa->data->type == OSPF_AS_NSSA_LSA )
+	    if (IS_DEBUG_OSPF_NSSA)
+	      zlog_info("Incoming External LSA Discarded: We are NSSA/STUB Area");
+#endif /* HAVE_NSSA */
+	  }
+
+#ifdef  HAVE_NSSA 
+      if (lsa->data->type == OSPF_AS_NSSA_LSA)
 	if (nbr->oi->area->external_routing != OSPF_AREA_NSSA)
-	  DISCARD_LSA (lsa, 2);
+	  {
+	    DISCARD_LSA (lsa,2);
+	    if (IS_DEBUG_OSPF_NSSA)
+	      zlog_info("Incoming NSSA LSA Discarded:  Not NSSA Area");
+	  }
 #endif /* HAVE_NSSA */
 
       /* Find the LSA in the current database. */

@@ -285,6 +285,9 @@ struct memory_list memory_list_bgp[] =
   { MTYPE_CLUSTER,            "Cluster list    : %ld\r\n" },
   { MTYPE_CLUSTER_VAL,        "Cluster list val: %ld\r\n" },
   { 0,                        "---------------------\r\n" },
+  { MTYPE_TRANSIT,            "BGP transit attr: %ld\r\n" },
+  { MTYPE_TRANSIT_VAL,        "BGP transit val : %ld\r\n" },
+  { 0,                        "---------------------\r\n" },
   { MTYPE_BGP_DISTANCE,       "BGP distance    : %ld\r\n" },
   { MTYPE_BGP_NEXTHOP_CACHE,  "BGP nexthop cache:%ld\r\n" },
   { -1, NULL }

@@ -43,6 +43,9 @@ int wait_timer (struct thread *);
 int backup_seen (struct thread *);
 int neighbor_change (struct thread *);
 
+
+#include "ospf6_types.h"
+
 int dr_change (struct ospf6_interface *);
 int ifs_change (state_t, char *, struct ospf6_interface *);
 

@@ -83,7 +83,7 @@ community_entry_new ()
   struct community_entry *new;
 
   new = XMALLOC (MTYPE_COMMUNITY_ENTRY, sizeof (struct community_entry));
-  bzero (new, sizeof (struct community_entry));
+  memset (new, 0, sizeof (struct community_entry));
   return new;
 }
 
@@ -119,7 +119,7 @@ community_list_new ()
   struct community_list *new;
 
   new = XMALLOC (MTYPE_COMMUNITY_LIST, sizeof (struct community_list));
-  bzero (new, sizeof (struct community_list));
+  memset (new, 0, sizeof (struct community_list));
   return new;
 }
 
@@ -531,7 +531,7 @@ DEFUN (ip_community_list, ip_community_list_cmd,
       return CMD_WARNING;
     }
 
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 2; i < argc; i++)
     {
       if (first)
@@ -625,7 +625,7 @@ DEFUN (no_ip_community_list,
       return CMD_WARNING;
     }
 
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 2; i < argc; i++)
     {
       if (first)

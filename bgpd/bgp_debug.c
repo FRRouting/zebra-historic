@@ -359,7 +359,7 @@ bgp_update_dump (struct stream *s)
       printf ("flag: %d\n", flag);
       printf ("type: %d\n", type);
   
-      if (flag & ATTR_FLAG_EXTLEN)
+      if (flag & BGP_ATTR_FLAG_EXTLEN)
 	length = stream_getw (s);
       else
 	length = stream_getc (s);

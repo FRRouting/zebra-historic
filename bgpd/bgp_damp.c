@@ -99,7 +99,8 @@ bgp_damp_init(struct vty *vty, int hlife, int reuse, int sup, int maxsup)
 
   /* Decay-array computations */
   bdc->decay_array_size = ceil ((double)bdc->max_suppress_time/DELTA_T);
-  bdc->decay_array = (double *) malloc (sizeof(double) * (bdc->decay_array_size));
+  bdc->decay_array = XMALLOC (MTYPE_BGP_DAMP_ARRAY,
+			      sizeof(double) * (bdc->decay_array_size));
   bdc->decay_array[0] = 1.0;
   bdc->decay_array[1] = exp ((1.0/(bdc->half_life/DELTA_T)) * log(0.5));
 	
@@ -111,7 +112,7 @@ bgp_damp_init(struct vty *vty, int hlife, int reuse, int sup, int maxsup)
   d2 = log(2.0) / (double)bdc->half_life;
   d1 = log ((double)bdc->ceiling / bdc->reuse_limit) / d2;
   bdc->reuse_list_size = ceil (d1/DELTA_REUSE);
-  bdc->reuse_list_array = (struct bgp_damp_info **) malloc (bdc->reuse_list_size * sizeof(struct bgp_reuse_list *));
+  bdc->reuse_list_array = XMALLOC (MTYPE_BGP_DAMP_ARRAY, bdc->reuse_list_size * sizeof (struct bgp_reuse_list *));
   memset (bdc->reuse_list_array, 0x00, bdc->reuse_list_size * sizeof (struct bgp_reuse_list*));
 
   /* Reuse-array computations */
@@ -120,7 +121,8 @@ bgp_damp_init(struct vty *vty, int hlife, int reuse, int sup, int maxsup)
     exp (-d2 * (double)bdc->reuse_list_size * DELTA_REUSE);
   bdc->reuse_index_array_size = ceil ((bdc->ceiling/bdc->reuse_limit - 1.0) /
 				      bdc->reuse_max_ratio);
-  bdc->reuse_index_array = (int *)malloc(sizeof(int) * bdc->reuse_index_array_size);
+  bdc->reuse_index_array = XMALLOC (MTYPE_BGP_DAMP_ARRAY,
+				    sizeof(int) * bdc->reuse_index_array_size);
 
   for (i = 0; i < bdc->reuse_index_array_size; i++)
     {
@@ -262,15 +264,17 @@ bgp_damp_withdraw(struct bgp_info *bgp_info)
 
   if (bdi == NULL)
     {
-      bdi = (struct bgp_damp_info *)malloc(sizeof(struct bgp_damp_info));
+      bdi = XMALLOC (MTYPE_BGP_DAMP_INFO, sizeof (struct bgp_damp_info));
+      memset (bdi, 0, sizeof (struct bgp_damp_info));
       bgp_info->bgp_damp_info = bdi;
       bdi->penalty = DEFAULT_PENALTY;
       bdi->flap = 1;
+      bdi->start_time = t_now;
       bdi->bgp_info = bgp_info;
     }
   else
     {
-      bdi->penalty = (int)(bdi->penalty * bgp_damp_get_decay(t_now - bdi->t_updated)) + DEFAULT_PENALTY;
+      bdi->penalty = (int) (bdi->penalty * bgp_damp_get_decay (t_now - bdi->t_updated)) + DEFAULT_PENALTY;
       bdi->flap++;
       if (bdi->penalty > bdc->ceiling)
 	bdi->penalty = bdc->ceiling;
@@ -285,6 +289,7 @@ bgp_damp_withdraw(struct bgp_info *bgp_info)
     {
       bgp_reuse_list_insert(bdi);
       SET_FLAG (bdi->bgp_info->flags, BGP_INFO_DAMPED);
+      status = BGP_DAMP_DISCONTINUE; 
     }
   bdi->t_updated = t_now;
 
@@ -378,9 +383,9 @@ bgp_damp_disable( struct vty *vty )
   /* Clear the reuse list entries */
   bgp_damp_clear_reuse_list();
 
-  /* Configuration is not cleared at this point
-   * since it may later be used, avoiding recomputations
-   */
+  /* Clear configuration */
+  bgp_damp_clear_config(&bgp_damp_cfg);
+
   return CMD_SUCCESS;
 }
 
@@ -445,6 +450,13 @@ bgp_config_write_damp (struct vty *vty)
 	  && bgp_damp_cfg.suppress_value == DEFAULT_SUPPRESS
 	  && bgp_damp_cfg.max_suppress_time == bgp_damp_cfg.half_life*4)
 	vty_out (vty, " bgp dampening%s", VTY_NEWLINE);
+      else if (bgp_damp_cfg.half_life != DEFAULT_HARF_LIFE*60
+	       && bgp_damp_cfg.reuse_limit == DEFAULT_REUSE
+	       && bgp_damp_cfg.suppress_value == DEFAULT_SUPPRESS
+	       && bgp_damp_cfg.max_suppress_time == bgp_damp_cfg.half_life*4)
+	vty_out (vty, " bgp dampening %d%s",
+		 bgp_damp_cfg.half_life/60,
+		 VTY_NEWLINE);
       else
 	vty_out (vty, " bgp dampening %d %d %d %d%s",
 		 bgp_damp_cfg.half_life/60,
@@ -457,18 +469,26 @@ bgp_config_write_damp (struct vty *vty)
   return 0;
 }
 
+#define BGP_UPTIME_LEN 25
+
 int
 bgp_damp_info_print (struct vty *vty, struct bgp_info *bgp_info)
 {
   struct bgp_damp_info *bdi;
   time_t t_now;
+  char timebuf[BGP_UPTIME_LEN];
 
   if ((bdi = bgp_info->bgp_damp_info) == NULL) 
-    return 0;
+    return CMD_WARNING;
   t_now = time (NULL);
-  vty_out (vty, "      Dampinfo: penalty %d, flapped %d times in 00:00:00%s",
+  vty_out (vty, "      Dampinfo: penalty %d, flapped %d times in %s",
 	   (int)(bdi->penalty * bgp_damp_get_decay(t_now - bdi->t_updated)),
-	   bdi->flap, VTY_NEWLINE);
+	   bdi->flap, peer_uptime (bdi->start_time, timebuf, BGP_UPTIME_LEN),
+	   VTY_NEWLINE);
+  if (CHECK_FLAG (bdi->bgp_info->flags, BGP_INFO_DAMPED)
+      && ! CHECK_FLAG (bdi->bgp_info->flags, BGP_INFO_HISTORY))
+    vty_out (vty, ", reuse in 00:00:00"); 
+  vty_out (vty, "%s", VTY_NEWLINE);
 
-  return 1;
+  return CMD_SUCCESS;
 }

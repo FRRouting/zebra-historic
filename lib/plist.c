@@ -1630,7 +1630,7 @@ DEFUN (ip_prefix_list_description,
     }
 
   /* Below is description get codes. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 1; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);
@@ -2240,7 +2240,7 @@ DEFUN (ipv6_prefix_list_description,
     }
 
   /* Below is description get codes. */
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 1; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);

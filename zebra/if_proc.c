@@ -23,9 +23,11 @@
 
 #include "if.h"
 #include "prefix.h"
-#include "ioctl.h"
-#include "connected.h"
 #include "log.h"
+
+#include "zebra/ioctl.h"
+#include "zebra/connected.h"
+#include "zebra/interface.h"
 
 /* Proc filesystem one line buffer. */
 #define PROCBUFSIZ                  1024
@@ -191,6 +193,7 @@ interface_list_proc ()
     {
       interface_name_cut (buf, &name);
       ifp = if_get_by_name (name);
+      if_add_update (ifp);
     }
   return 0;
 }

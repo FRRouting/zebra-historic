@@ -36,9 +36,6 @@
 
 #include "zebra/connected.h"
 
-#ifdef RIP_API
-#include "ripd/ripd_api.h"
-#endif /* RIP_API */
 #include "ripd/ripd.h"
 #include "ripd/rip_debug.h"
 
@@ -363,7 +360,7 @@ rip_multicast_leave (struct interface *ifp, int sock)
     }
 }
 
-/* Does this address belong to me ? */
+/* Does this address belongs to me ? */
 int
 if_check_address (struct in_addr addr)
 {
@@ -555,16 +552,8 @@ rip_interface_delete (int command, struct zclient *zclient,
   zlog_info("interface delete %s index %d flags %d metric %d mtu %d",
 	    ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);  
   
-#ifdef HAVE_IF_PSEUDO
-  if (!IS_IF_PSEUDO(ifp)){
-     if_delete(ifp);
-   }
-   else{
-     ifp->ifindex=INTERFACE_PSEUDO;
-   }
-#else
   if_delete(ifp);
-#endif /* HAVE_IF_PSEUDO */
+
   return 0;
 }
 
@@ -654,47 +643,6 @@ rip_if_down(struct interface *ifp)
   struct route_node *rp;
   struct rip_info *rinfo;
   struct rip_interface *ri = NULL;
-#ifdef NEW_RIP_TABLE
-  struct rip_route *route;
-  struct rip_info *next;
-
-  /* Clear RIP dynamic routes on the interface*/
-  if (rip)
-    {
-      for (rp = route_top (rip->table); rp; rp = route_next (rp))
-	if ((route = rp->info) != NULL)
-	  for (rinfo = route->head; rinfo; rinfo = next)
-	    {
-	      next = rinfo->next;
-
-	      /* Routes got through this interface. */
-	      if (rinfo->ifindex == ifp->ifindex &&
-		  rinfo->type == ZEBRA_ROUTE_RIP &&
-		  rinfo->sub_type == RIP_ROUTE_RTE)
-		{
-		  rip_zebra_ipv4_delete ((struct prefix_ipv4 *) &rp->p,
-					 &rinfo->nexthop,
-					 rinfo->ifindex);
-
-		  RIP_TIMER_OFF (rinfo->t_timeout);
-		  RIP_TIMER_OFF (rinfo->t_garbage_collect);
-	      
-		  route_unlock_node (rp);
-		  rip_info_free (rinfo);
-		}
-	      else
-		{
-		  /* All redistributed routes but static and system */
-		  if ((rinfo->ifindex == ifp->ifindex) &&
-		      (rinfo->type != ZEBRA_ROUTE_STATIC) &&
-		      (rinfo->type != ZEBRA_ROUTE_SYSTEM))
-		    rip_redistribute_delete (rinfo->type,rinfo->sub_type,
-					     (struct prefix_ipv4 *)&rp->p,
-					     rinfo->ifindex);
-		}
-	    }
-    }
-#else
   if (rip)
     {
       for (rp = route_top (rip->table); rp; rp = route_next (rp))
@@ -729,7 +677,6 @@ rip_if_down(struct interface *ifp)
 	      }
 	  }
     }
-#endif /* NEW_RIP_TABLE */
 	    
   ri = ifp->info;
   
@@ -978,41 +925,6 @@ rip_interface_wakeup (struct thread *t)
   return 0;
 }
 
-#ifdef NEW_RIP_TABLE
-void
-rip_interface_route_add (struct interface *ifp)
-{
-  listnode nn;
-  struct connected *connected;
-  struct prefix *p; 
-  struct route_node *node;
-  struct rip_info *rinfo;
-
-  for (nn = listhead (ifp->connected); nn; nextnode (nn))
-    if ((connected = getdata (nn)) != NULL)
-      {
-	p = connected->address;
-
-	if (p->family == AF_INET)
-	  {
-	    rinfo = rip_info_new ();
-	    rinfo->type = ZEBRA_ROUTE_CONNECT;
-	    rinfo->sub_type = RIP_ROUTE_INTERFACE;
-	    rinfo->ifindex = ifp->ifindex;
-	    rinfo->metric = 1;
-	    rip_route_add (p, rinfo);
-	    rip_route_process ();
-	  }
-      }
-}
-
-void
-rip_interface_route_delete (struct interface *ifp)
-{
-  ;
-}
-#endif /* NEW_RIP_TABLE */
-
 /* Update interface status. */
 void
 rip_enable_apply (struct interface *ifp)
@@ -1057,9 +969,6 @@ rip_enable_apply (struct interface *ifp)
 	  if (! ri->t_wakeup)
 	    ri->t_wakeup = thread_add_timer (master, rip_interface_wakeup,
 					     ifp, 1);
-#ifdef NEW_RIP_TABLE
-	  rip_interface_route_add (ifp);
-#endif /* NEW_RIP_TABLE */
 	}
     }
   else
@@ -1073,10 +982,6 @@ rip_enable_apply (struct interface *ifp)
 	  rip_multicast_leave (ifp, rip->sock);
 
 	  ri->running = 0;
-
-#ifdef NEW_RIP_TABLE
-	  rip_interface_route_delete (ifp);
-#endif /* NEW_RIP_TABLE */
 	}
     }
 }
@@ -1847,11 +1752,6 @@ rip_interface_config_write (struct vty *vty)
 	vty_out (vty, " description %s%s", ifp->desc,
 		 VTY_NEWLINE);
 
-#ifdef HAVE_IF_PSEUDO
-      if (IS_IF_PSEUDO (ifp))
-	 vty_out (vty, " pseudo %s", VTY_NEWLINE);
-#endif /* HAVE_IF_PSEUDO */
-      
       /* Split horizon. */
       if (ri->split_horizon != ri->split_horizon_default)
 	{
@@ -1982,10 +1882,6 @@ rip_if_init ()
   install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
-#ifdef HAVE_IF_PSEUDO  
-  install_element (INTERFACE_NODE, &interface_pseudo_cmd);
-  install_element (INTERFACE_NODE, &no_interface_pseudo_cmd);
-#endif /* HAVE_IF_PSEUDO */
   install_element (RIP_NODE, &rip_network_cmd);
   install_element (RIP_NODE, &no_rip_network_cmd);
   install_element (RIP_NODE, &rip_neighbor_cmd);
@@ -2021,437 +1917,3 @@ rip_if_init ()
   install_element (INTERFACE_NODE, &rip_split_horizon_cmd);
   install_element (INTERFACE_NODE, &no_rip_split_horizon_cmd);
 }
-
-#ifdef RIP_API
-/****** API ****/
-
-/*************************
- Function:ripd_api_enable_ip_if
- PURPOSE: Enable RIP network
- PARAMETERS:
-    IN    struct prefix* prefx : IP prefix
-    IN    u_char enable_it : 0 - disable, else - enable
-**************************/
-int
-ripd_api_enable_ip_if (struct prefix* prefx, u_char enable_it)
-{
-  int ret;
-
-  if (enable_it)
-    ret = rip_enable_network_add (prefx);
-  else
-    ret = rip_enable_network_delete (prefx);
-
-  if (ret < 0)
-    {
-      return CMD_WARNING;
-    }
-
-  rip_enable_apply_all ();
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_enable_network
- PURPOSE: Enable RIP network
- PARAMETERS:
-    IN    char* if_name : IP prefix or interface name
-    IN    u_char enable_it : 0 - disable, else - enable
-**************************/
-int
-ripd_api_enable_network (char* if_name, u_char enable_it)
-{
-  int ret;
-  prefix_ipv4_t p;
-
-  ret = str2prefix_ipv4 (if_name, &p);
-  if (ret)
-    return ripd_api_enable_ip_if ((struct prefix *) &p, enable_it);
-
-  if (enable_it)
-    {
-      ret = rip_enable_if_add (if_name);
-    }
-  else
-    {
-      ret = rip_enable_if_delete (if_name);
-    }
-
-  if (ret < 0)
-    {
-      return CMD_WARNING;
-    }
-
-  rip_enable_apply_all ();
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_enable_neighbor
- PURPOSE: Enable/Disable RIP neighbor router
- PARAMETERS:
-    IN    struct prefix* prefx : IP prefix
-    IN    u_char enable_it : 0 - disable, else - enable
-**************************/
-int
-ripd_api_enable_neighbor (prefix_ipv4_t* prefx, u_char enable_it)
-{
-  if (enable_it)
-    rip_neighbor_add (prefx);
-  else
-    rip_neighbor_delete (prefx);
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_get_if_running
- PURPOSE: Return the flag : is RIP running on this interface.
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be checked
-    OUT   int *running - pointer to result
-**************************/
-int
-ripd_api_get_if_running (interface_t *ifp, int *running)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-  *running = ri->running;
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_if_rx_version
- PURPOSE: Set interface's receive RIP version control
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    int ri_version - RIP accepet/announce method
-**************************/
-int
-ripd_api_set_if_rx_version (interface_t *ifp, int ri_version)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-  ri->ri_receive = ri_version;
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_get_if_rx_version
- PURPOSE: Get interface's receive RIP version control
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    OUT   int* ri_version - pointer for result
-**************************/
-int
-ripd_api_get_if_rx_version (interface_t *ifp, int *ri_version)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-
-  if (! ri->running || !rip || !(ri->enable_network || ri->enable_interface))
-    {
-      *ri_version = 0;
-      return CMD_WARNING;
-    }
-
-  if (ri->ri_receive == RI_RIP_UNSPEC)
-    *ri_version=rip->version;
-  else
-    *ri_version=ri->ri_receive;
-    
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_if_tx_version
- PURPOSE: Set interface's send RIP version control
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    int ri_version - RIP accepet/announce method
-**************************/
-int
-ripd_api_set_if_tx_version (interface_t *ifp, int ri_version)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-  ri->ri_send = ri_version;
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_get_if_tx_version
- PURPOSE: Get interface's send RIP version control
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    OUT   int* ri_version - pointer for result
-**************************/
-int
-ripd_api_get_if_tx_version (interface_t *ifp, int *ri_version)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-
-  if (! ri->running || !rip || !(ri->enable_network || ri->enable_interface)){    
-    *ri_version = 0;
-    return CMD_WARNING;
-  }
-
-  if (ri->ri_send == RI_RIP_UNSPEC)
-    *ri_version=rip->version;
-  else
-    *ri_version=ri->ri_send;
-    
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_if_authentication_type
- PURPOSE: Set RIP authentication type
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    int  auth_type - RIPv2 authentication type
-                            (from {RIP_NO_AUTH,
-                                   RIP_AUTH_SIMPLE_PASSWORD,
-                                   RIP_AUTH_MD5})
-**************************/
-int
-ripd_api_set_if_authentication_type (interface_t *ifp, int auth_type)
-{
-  rip_interface_t *ri;
-
-  if (RIP_NO_AUTH != auth_type &&
-      RIP_AUTH_SIMPLE_PASSWORD != auth_type &&
-      RIP_AUTH_MD5 != auth_type)
-    {
-      fprintf (stderr, "invalid auth.type %d\n", auth_type);
-      return CMD_ERR_AMBIGUOUS;
-    }
-
-  ri = ifp->info;
-
-  ri->auth_type = auth_type;
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_if_authentication_string
- PURPOSE: RIP authentication string setting
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    char* auth_str - RIP authentication string;
-                           if auth_str==NULL, authentication string is disabled
-**************************/
-int
-ripd_api_set_if_authentication_string (interface_t* ifp, char* auth_str)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-
-  if (auth_str && *auth_str)
-    {
-      if (strlen (auth_str) > 16)
-        {
-          zlog_err ("api_set:auth_str is too long (%d)", (int) strlen (auth_str));
-          return CMD_WARNING;
-        }
-
-      if (ri->auth_str)
-        free (ri->auth_str);
-
-      ri->auth_str = strdup (auth_str);
-    }
-  else
-    {
-      if (ri->auth_str)
-        free (ri->auth_str);
-
-      ri->auth_type = RIP_NO_AUTH;
-      ri->auth_str = NULL;
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_get_if_authentication_string
- PURPOSE: GET RIP authentication string
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    int buffer_size - size of the buffer for the result
-    OUT   char* auth_str - pointer to buffer for result (actual length
-                           may be counted as its 'strlen')
-    OUT   int*  auth_type - RIPv2 authentication type
-                            (from {RIP_NO_AUTH,
-                                   RIP_AUTH_SIMPLE_PASSWORD,
-                                   RIP_AUTH_MD5})
-**************************/
-int
-ripd_api_get_if_authentication_string (interface_t* ifp,
-                                       int buffer_size,
-                                       char* auth_str,
-                                       int* auth_type)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-
-  if (! ri)
-    return CMD_WARNING;
-
-  if (auth_type)
-    *auth_type = ri->auth_type;
-
-  if (! auth_str)
-    return CMD_SUCCESS;
-
-  if (ri->auth_str)
-    {
-      strncpy (auth_str, ri->auth_str, buffer_size);
-      if (strlen (ri->auth_str) >= buffer_size)
-        { /* it is too long => cut it ! */
-          zlog_err ("api_get:auth_str is too long, cut it");
-          auth_str[buffer_size - 1] = '\0';
-          return CMD_WARNING; /* the buffer has been cut */
-        }
-    }
-  else
-    {/* build the empty string */
-      //zlog_warn ("api_get:auth_str is empty");
-      auth_str[0] = '\0';
-      if (RIP_NO_AUTH != ri->auth_type)
-        return CMD_WARNING; /* unconsistent */
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_if_split_horizon
- PURPOSE: Set interface's send RIP version control
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    int new_split_mode_value
-**************************/
-int
-ripd_api_set_if_split_horizon (interface_t *ifp, int new_split_mode_value)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-  ri->split_horizon = new_split_mode_value;
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_get_if_split_horizon
- PURPOSE: Set interface's send RIP version control
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    OUT   int* current_split_mode_value
-**************************/
-int
-ripd_api_get_if_split_horizon (interface_t *ifp, int* current_split_mode_value)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-  *current_split_mode_value = ri->split_horizon;
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_set_if_description
- PURPOSE: Set/Delete interface description
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    char *description (if NULL => delete)
-**************************/
-int
-ripd_api_set_if_description (interface_t *ifp, char *description)
-{
-  if (ifp->desc) /* anyway, delete old one */
-    XFREE (0, ifp->desc);
-
-  if (description && *description)
-    { /* set non-empty description */
-      ifp->desc = XMALLOC (MTYPE_BUFFER,  1 + strlen (description));
-      strcpy (ifp->desc, description);
-    }
-  else
-    { /* delete description */
-      ifp->desc = NULL;
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ripd_api_get_if_description
- PURPOSE: Get interface description
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    IN    int buffer_size
-    OUT   char *description
-**************************/
-int
-ripd_api_get_if_description (interface_t *ifp, int buffer_size,
-			     char *description)
-{
-  if (! description || buffer_size < 2)
-    return CMD_WARNING; /* unconsistent */
-
-  if (ifp->desc)
-    {
-      strncpy (description, ifp->desc, buffer_size);
-      description[buffer_size - 1] = '\0';
-    }
-
-  return CMD_SUCCESS;
-}
-
-/*************************
- Function:ipd_api_get_if_statistics
- PURPOSE: Get RIPD interface statistics
- PARAMETERS:
-    IN    interface_t* ifp - inteface to be configured
-    OUT   u_long *recv_badpackets
-    OUT   u_long *recv_badroutes
-    OUT   u_long *sent_updates
-**************************/
-int
-ripd_api_get_if_statistics (interface_t *ifp,
-                            u_long *recv_badpackets,
-                            u_long *recv_badroutes,
-                            u_long *sent_updates)
-{
-  rip_interface_t *ri;
-
-  ri = ifp->info;
-  if (! ri)
-    return CMD_WARNING; /* unconsistent */
-
-  if (recv_badpackets)
-    *recv_badpackets = ri->recv_badpackets;
-
-  if (recv_badroutes)
-    *recv_badroutes = ri->recv_badroutes;
-
-  if (sent_updates)
-    *sent_updates = ri->sent_updates;
-
-  return CMD_SUCCESS;
-}
-#endif /* RIP_API */

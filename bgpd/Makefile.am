@@ -31,7 +31,7 @@ bgpd_LDADD = ../lib/libzebra.a
 
 #bgp_btoa_LDADD = libbgp.a ../lib/libzebra.a
 
-sysconf_DATA = bgpd.conf.sample bgpd.conf.sample2 README.mbgp
+sysconf_DATA = bgpd.conf.sample bgpd.conf.sample2
 
 EXTRA_DIST = $(sysconf_DATA) BGP4-MIB.txt
 

@@ -1980,7 +1980,7 @@ DEFUN (match_aspath,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2012,7 +2012,7 @@ DEFUN (no_match_aspath,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2237,7 +2237,7 @@ DEFUN (set_aspath_prepend,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2272,7 +2272,7 @@ DEFUN (no_set_aspath_prepend,
     return bgp_route_set_delete (vty, vty->index, "as-path prepend", NULL);
   
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2312,7 +2312,7 @@ DEFUN (set_community,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2346,7 +2346,7 @@ DEFUN (no_set_community,
     return bgp_route_set_delete (vty, vty->index, "community", NULL);
   
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2385,7 +2385,7 @@ DEFUN (set_community_additive,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2419,7 +2419,7 @@ DEFUN (no_set_community_additive,
     return bgp_route_set_delete (vty, vty->index, "community-additive", NULL);
   
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2511,7 +2511,7 @@ DEFUN (set_ecommunity_rt,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2546,7 +2546,7 @@ DEFUN (no_set_ecommunity_rt,
     return bgp_route_set_delete (vty, vty->index, "extcommunity rt", NULL);
   
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2587,7 +2587,7 @@ DEFUN (set_ecommunity_soo,
   int first;
 
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)
@@ -2622,7 +2622,7 @@ DEFUN (no_set_ecommunity_soo,
     return bgp_route_set_delete (vty, vty->index, "extcommunity soo", NULL);
   
   first = 0;
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       if (first)

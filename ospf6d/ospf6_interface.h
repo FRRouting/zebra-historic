@@ -22,6 +22,8 @@
 #ifndef OSPF6_INTERFACE_H
 #define OSPF6_INTERFACE_H
 
+#include "ospf6_message.h"
+
 /* This file defines interface data structure. */
 
 struct ospf6_interface
@@ -87,8 +89,10 @@ struct ospf6_interface
   u_int ospf6_stat_dr_election;
   u_int ospf6_stat_delayed_lsack;
 
-  struct ospf6_message_stat message_stat[MSGT_MAX];
+  struct ospf6_message_stat message_stat[OSPF6_MESSAGE_TYPE_MAX];
 };
+
+extern char *ospf6_interface_state_string[];
 
 
 /* Function Prototypes */

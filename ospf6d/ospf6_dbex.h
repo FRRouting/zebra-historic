@@ -28,6 +28,12 @@
 #define DIRECT_ACK   2
 
 /* Function Prototypes */
+void
+ospf6_add_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
+void
+ospf6_remove_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
+void ospf6_lsa_delayed_ack_remove_all (struct ospf6_lsa *lsa);
+
 void ospf6_dbex_prepare_summary (struct ospf6_neighbor *);
 
 int

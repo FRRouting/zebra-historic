@@ -22,8 +22,6 @@
 #ifndef _ZEBRA_RIP_H
 #define _ZEBRA_RIP_H
 
-/* #define NEW_RIP_TABLE */
-
 /* RIP version number. */
 #define RIPv1                            1
 #define RIPv2                            2
@@ -166,19 +164,6 @@ union rip_buf
   struct rip_packet rip_packet;
   char buf[RIP_PACKET_MAXSIZ];
 };
-
-#ifdef NEW_RIP_TABLE
-#define ROUTE_MULTIPATH_NUM 1
-
-struct rip_route
-{
-  int selected_count;
-  struct rip_info *selected[ROUTE_MULTIPATH_NUM];
-
-  struct rip_info *head;
-  struct rip_info *tail;
-};
-#endif /* NEW_RIP_TABLE */
 
 /* RIP route information. */
 struct rip_info

@@ -70,8 +70,6 @@ AC_ARG_ENABLE(ospfd,
 [  --disable-ospfd         do not build ospfd])
 AC_ARG_ENABLE(ospf6d,
 [  --disable-ospf6d        do not build ospf6d])
-AC_ARG_ENABLE(guile,
-[  --enable-guile          build zebra-guile])
 AC_ARG_ENABLE(bgp-announce,
 [  --disable-bgp-announce, turn off BGP route announcement])
 AC_ARG_ENABLE(netlink,
@@ -87,8 +85,6 @@ AC_ARG_ENABLE(tcpsock,
 dnl Temporary option until OSPF NSSA implementation complete
 AC_ARG_ENABLE(nssa,
 [  --enable-nssa           enable OSPF NSSA option])
-AC_ARG_ENABLE(oldrib,
-[  --enable-oldrib         enable old RIB code.  This option will be removed in zebra-0.91.])
 AC_ARG_ENABLE(multipath,
 [  --enable-multipath=ARG  enable multipath function, ARG must be digit])
 
@@ -108,10 +104,6 @@ fi
 
 if test "${enable_nssa}" = "yes"; then
   AC_DEFINE(HAVE_NSSA)
-fi
-
-if test "${enable_oldrib}" = "yes"; then
-  AC_DEFINE(OLD_RIB)
 fi
 
 changequote(, )dnl
@@ -207,14 +199,6 @@ case "${enable_vtysh}" in
   *    ) ;;
 esac
 
-dnl -----------------------------
-dnl   Pseudo interfaces option
-dnl ____________________________
-if test "${enable_if_pseudo}" = "yes"; then
-   AC_MSG_RESULT(pseudo interfaces)
-   AC_DEFINE(HAVE_IF_PSEUDO)
-fi
-
 dnl ----------
 dnl PAM module
 dnl ----------
@@ -262,6 +246,7 @@ if test x"$opsys" = x"gnu-linux"; then
   if test "${enable_netlink}" = "yes";then
     AC_MSG_RESULT(netlink)
     RT_METHOD=rt_netlink.o
+    AC_DEFINE(HAVE_NETLINK)
     netlink=yes
   elif test "${enable_netlink}" = "no"; then
     AC_MSG_RESULT(ioctl)
@@ -279,6 +264,7 @@ if test x"$opsys" = x"gnu-linux"; then
     ],
    [AC_MSG_RESULT(netlink)
     RT_METHOD=rt_netlink.o
+    AC_DEFINE(HAVE_NETLINK)
     netlink=yes],
    [AC_MSG_RESULT(ioctl)
     RT_METHOD=rt_ioctl.o])
@@ -541,14 +527,6 @@ case "${enable_ospf6d}" in
   *    ) ;;
 esac
 
-case "${enable_guile}" in
-  "yes") GUILE="guile";
-         GUILE_FLAGS;;
-  "no" ) GUILE="";;
-  *    ) ;;
-esac
-
-
 if test "${enable_bgp_announce}" = "no";then
   AC_DEFINE(DISABLE_BGP_ANNOUNCE)
 fi
@@ -559,7 +537,6 @@ AC_SUBST(RIPD)
 AC_SUBST(RIPNGD)
 AC_SUBST(OSPFD)
 AC_SUBST(OSPF6D)
-AC_SUBST(GUILE)
 AC_SUBST(VTYSH)
 AC_SUBST(INCLUDES)
 AC_SUBST(CURSES)
@@ -789,34 +766,6 @@ AC_TRY_LINK([#ifdef HAVE_SYS_TYPES_H
 ac_cv_htonl_works=yes,
 ac_cv_htonl_works=no)])
 AC_MSG_RESULT($ac_cv_htonl_works)
-
-dnl -----------------
-dnl htnl repaire hack
-dnl -----------------
-if test "$ac_cv_htonl_works" = "no"; then
-  AC_MSG_CHECKING(if htonl is repairable)
-  AC_CACHE_VAL(ac_cv_htonl_hack_works, [
-  AC_TRY_LINK([#ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
-#endif
-#ifdef HAVE_NETDB_H
-#include <netdb.h>
-#endif
-#ifdef HAVE_NETINET_IN_H
-#include <netinet/in.h>
-#endif
-#define htonl(x) __cpu_to_be32(x)],
-  [htonl(0);],
-  ac_cv_htonl_hack_works=yes,
-  ac_cv_htonl_hack_works=no)])
-  AC_MSG_RESULT($ac_cv_htonl_hack_works)
-
-  if test "$ac_cv_htonl_hack_works" = "no"; then
-    AC_MSG_ERROR([Cannot repair htonl])
-  else
-    AC_DEFINE(HAVE_REPAIRABLE_HTONL)
-  fi
-fi
 
 AC_OUTPUT(Makefile lib/Makefile zebra/Makefile ripd/Makefile ripngd/Makefile bgpd/Makefile ospfd/Makefile ospf6d/Makefile vtysh/Makefile doc/Makefile)
 

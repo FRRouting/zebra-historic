@@ -64,9 +64,6 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 CURSES = @CURSES@
-GUILE = @GUILE@
-GUILE_CFLAGS = @GUILE_CFLAGS@
-GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IF_PROC = @IF_PROC@
 INCLUDES = @INCLUDES@
@@ -90,9 +87,9 @@ VERSION = @VERSION@
 VTYSH = @VTYSH@
 ZEBRA = @ZEBRA@
 
-SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ @OSPF6D@ @GUILE@ @VTYSH@ doc
+SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ @OSPF6D@ @VTYSH@ doc
 
-EXTRA_DIST = aczebra.m4 guile.m4 SERVICES TODO REPORTING-BUGS 	vtysh/Makefile.in vtysh/Makefile.am
+EXTRA_DIST = aczebra.m4 SERVICES TODO REPORTING-BUGS vtysh/Makefile.in 	vtysh/Makefile.am
 
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs

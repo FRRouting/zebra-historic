@@ -51,7 +51,7 @@ ecommunity_new ()
   struct ecommunity *new;
 
   new = XMALLOC (MTYPE_ECOMMUNITY, sizeof (struct ecommunity));
-  bzero (new, sizeof (struct ecommunity));
+  memset (new, 0, sizeof (struct ecommunity));
   return new;
 }
 
@@ -101,7 +101,7 @@ ecommunity_dup (struct ecommunity *ecom)
   struct ecommunity *new;
 
   new = XMALLOC (MTYPE_ECOMMUNITY, sizeof (struct ecommunity));
-  bzero (new, sizeof (struct ecommunity));
+  memset (new, 0, sizeof (struct ecommunity));
   new->size = ecom->size;
   if (new->size)
     {

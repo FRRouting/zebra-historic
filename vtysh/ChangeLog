@@ -1,3 +1,21 @@
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.91 is released.
+
+2001-01-31  Michael Rozhavsky <mrozhavsky@opticalaccess.com>
+
+	* vtysh.c (new_completion): Fix problem of appending space when
+	completion is executed.
+
+2001-01-23  Akihiro Mizutani <mizutani@dml.com>
+
+	* vtysh.c (vtysh_write_terminal): "write terminal" to all node.
+
+2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (vtysh_execute): Fix unconditional lock by other VTY.
+	Suggested by Hideto Yamakawa <yamakawa@dml.com>.
+
 2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.90 is released.

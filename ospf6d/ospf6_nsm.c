@@ -41,12 +41,14 @@ nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
       if (reason)
         zlog_info ("Neighbor status change %s: [%s]->[%s](%s)",
                    o6n->str,
-                   nbs_name[nbs_previous], nbs_name[nbs_next],
+                   ospf6_neighbor_state_string[nbs_previous],
+                   ospf6_neighbor_state_string[nbs_next],
                    reason);
       else
         zlog_info ("Neighbor status change %s: [%s]->[%s]",
                    o6n->str,
-                   nbs_name[nbs_previous], nbs_name[nbs_next]);
+                   ospf6_neighbor_state_string[nbs_previous],
+                   ospf6_neighbor_state_string[nbs_next]);
     }
 
   if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
@@ -56,13 +58,13 @@ nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
   if (nbs_previous == NBS_EXCHANGE || nbs_previous == NBS_LOADING)
     {
       /* for Linklocal scope LSA */
-      ospf6_lsdb_check_maxage_linklocal (o6n->ospf6_interface);
+      ospf6_lsdb_check_maxage_linklocal (o6n->ospf6_interface->interface->name);
 
       /* for Area scope LSA */
-      ospf6_lsdb_check_maxage_area (o6n->ospf6_interface->area);
+      ospf6_lsdb_check_maxage_area (o6n->ospf6_interface->area->area_id);
 
       /* for AS scope LSA */
-      ospf6_lsdb_check_maxage_as (o6n->ospf6_interface->area->ospf6);
+      ospf6_lsdb_check_maxage_as ();
     }
 
   return 0;
@@ -72,13 +74,13 @@ int
 nbs_full_change (struct ospf6_interface *ospf6_interface)
 {
   /* construct LSAs */
-  ospf6_lsa_update_router (ospf6_interface->area);
+  ospf6_lsa_update_router (ospf6_interface->area->area_id);
   if (ospf6_interface->state == IFS_DR)
     {
-      ospf6_lsa_update_network (ospf6_interface);
-      ospf6_lsa_update_intra_prefix_transit (ospf6_interface);
+      ospf6_lsa_update_network (ospf6_interface->interface->name);
+      ospf6_lsa_update_intra_prefix_transit (ospf6_interface->interface->name);
     }
-  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area);
+  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area->area_id);
   return 0;
 }
 
@@ -93,9 +95,9 @@ need_adjacency (struct ospf6_neighbor *o6n)
     return 1;
   if (o6n->ospf6_interface->state == IFS_BDR)
     return 1;
-  if (o6n->rtr_id == o6n->ospf6_interface->dr)
+  if (o6n->router_id == o6n->ospf6_interface->dr)
     return 1;
-  if (o6n->rtr_id == o6n->ospf6_interface->bdr)
+  if (o6n->router_id == o6n->ospf6_interface->bdr)
     return 1;
 
   return 0;
@@ -146,9 +148,9 @@ twoway_received (struct thread *thread)
   else
     nbs_change (NBS_EXSTART, "Need Adjacency", o6n);
 
-  DD_MSBIT_SET (o6n->dd_bits);
-  DD_MBIT_SET (o6n->dd_bits);
-  DD_IBIT_SET (o6n->dd_bits);
+  DD_MSBIT_SET (o6n->dbdesc_bits);
+  DD_MBIT_SET (o6n->dbdesc_bits);
+  DD_IBIT_SET (o6n->dbdesc_bits);
 
   if (o6n->thread_dbdesc)
     thread_cancel (o6n->thread_dbdesc);
@@ -172,7 +174,7 @@ negotiation_done (struct thread *thread)
     zlog_info ("Neighbor Event %s: *NegotiationDone*", o6n->str);
 
   nbs_change (NBS_EXCHANGE, "NegotiationDone", o6n);
-  DD_IBIT_CLEAR (o6n->dd_bits);
+  DD_IBIT_CLEAR (o6n->dbdesc_bits);
 
   return 0;
 }
@@ -252,9 +254,9 @@ adj_ok (struct thread *thread)
       else
         nbs_change (NBS_EXSTART, "Need Adjacency", o6n);
 
-      DD_MSBIT_SET (o6n->dd_bits);
-      DD_MBIT_SET (o6n->dd_bits);
-      DD_IBIT_SET (o6n->dd_bits);
+      DD_MSBIT_SET (o6n->dbdesc_bits);
+      DD_MBIT_SET (o6n->dbdesc_bits);
+      DD_IBIT_SET (o6n->dbdesc_bits);
 
       if (o6n->thread_dbdesc)
         thread_cancel (o6n->thread_dbdesc);
@@ -295,9 +297,9 @@ seqnumber_mismatch (struct thread *thread)
 
   nbs_change (NBS_EXSTART, "SeqNumberMismatch", o6n);
 
-  DD_MSBIT_SET (o6n->dd_bits);
-  DD_MBIT_SET (o6n->dd_bits);
-  DD_IBIT_SET (o6n->dd_bits);
+  DD_MSBIT_SET (o6n->dbdesc_bits);
+  DD_MBIT_SET (o6n->dbdesc_bits);
+  DD_IBIT_SET (o6n->dbdesc_bits);
   ospf6_neighbor_list_remove_all (o6n);
 
   if (o6n->thread_dbdesc)
@@ -326,9 +328,9 @@ bad_lsreq (struct thread *thread)
 
   nbs_change (NBS_EXSTART, "BadLSReq", o6n);
 
-  DD_MSBIT_SET (o6n->dd_bits);
-  DD_MBIT_SET (o6n->dd_bits);
-  DD_IBIT_SET (o6n->dd_bits);
+  DD_MSBIT_SET (o6n->dbdesc_bits);
+  DD_MBIT_SET (o6n->dbdesc_bits);
+  DD_IBIT_SET (o6n->dbdesc_bits);
   ospf6_neighbor_list_remove_all (o6n);
 
   if (o6n->thread_dbdesc)

@@ -294,7 +294,7 @@ bgp_serv_sock_family (unsigned short port, int family)
   int bgp_sock;
   union sockunion su;
 
-  bzero (&su, sizeof (union sockunion));
+  memset (&su, 0, sizeof (union sockunion));
 
   /* Specify address family. */
   su.sa.sa_family = family;

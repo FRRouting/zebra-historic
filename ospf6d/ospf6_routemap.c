@@ -22,15 +22,16 @@
 
 #include <zebra.h>
 
+#include "log.h"
+#include "memory.h"
 #include "linklist.h"
 #include "prefix.h"
 #include "command.h"
 #include "vty.h"
 #include "routemap.h"
 #include "plist.h"
-#include "memory.h"
-#include "log.h"
 
+#include "ospf6_top.h"
 #include "ospf6_redistribute.h"
 
 route_map_result_t

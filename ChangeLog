@@ -1,4 +1,21 @@
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.91 is released.
+
+2001-01-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Remove guile related definition.
+
+2001-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (ac_cv_htonl_works): HAVE_REPAIRABLE_HTONL is
+	removed.  htonl should work fine on any platform.
+
 2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Remove --enable-oldrib option.
+
+	* acconfig.h: OLD_RIB definition is removed.
 
 	* zebra-0.90 is released.
 

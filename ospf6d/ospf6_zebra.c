@@ -623,3 +623,11 @@ ospf6_zebra_init ()
   return;
 }
 
+void
+ospf6_zebra_finish ()
+{
+  zclient_stop (zclient);
+  zclient_free (zclient);
+  zclient = (struct zclient *) NULL;
+}
+

@@ -59,7 +59,7 @@ aspath_new ()
   struct aspath *aspath;
 
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
-  bzero (aspath, sizeof (struct aspath));
+  memset (aspath, 0, sizeof (struct aspath));
   return aspath;
 }
 
@@ -440,8 +440,7 @@ aspath_loop_check (struct aspath *aspath, as_t asno)
   return 0;
 }
 
-/* AS path first as check.  If aspath starts with asno then return 1.
-   NOTE - Only to be used for EBGP Paths */
+/* Command for enforce-first-as. */
 int
 aspath_firstas_check (struct aspath *aspath, as_t asno)
 {
@@ -454,13 +453,9 @@ aspath_firstas_check (struct aspath *aspath, as_t asno)
   pnt = aspath->data;
   assegment = (struct assegment *) pnt;
 
-  if (assegment == NULL)
-    return 0;
-
-  if (assegment->type != AS_SEQUENCE)
-    return 0;
-
-  if (assegment->asval[0] == htons(asno))
+  if (assegment
+      && assegment->type == AS_SEQUENCE
+      && assegment->asval[0] == htons (asno))
     return 1;
 
   return 0;
@@ -886,6 +881,12 @@ aspath_empty ()
 {
   return aspath_parse (NULL, 0);
 }
+
+unsigned long
+aspath_count ()
+{
+  return ashash->count;
+}     
 
 /* 
    Theoretically, one as path can have:
@@ -1084,6 +1085,7 @@ aspath_print_all_vty (struct vty *vty)
 {
   int i;
   HashBacket *mp;
+  struct aspath *as;
 
   for (i = 0; i < HASHTABSIZE; i++)
     if ((mp = hash_head (ashash, i)) != NULL)
@@ -1091,32 +1093,8 @@ aspath_print_all_vty (struct vty *vty)
 	{
 	  vty_out (vty, "[%x:%d] (%d) ", 
 		   mp, i, ((struct aspath *)mp->data)->refcnt);
-	  aspath_print_vty (vty, mp->data);
-	  vty_out (vty, "%s", VTY_NEWLINE);
+	  as = mp->data;
+	  vty_out (vty, "%s%s", as->str, VTY_NEWLINE);
 	  mp = mp->next;
 	}
 }
-
-#ifdef ASPATH_TEST
-
-#include "regex-gnu.h"
-
-/* For test aspath functions. */
-void
-aspath_test ()
-{
-  struct aspath *as1;
-  struct aspath *as2;
-  int ret;
-
-  /* as1 = aspath_empty (); */
-  as1 = aspath_str2aspath ("");
-  as2 = aspath_str2aspath ("7675 1 2 3");
-
-  printf("%s (%d)\n", aspath_print (as1), as1->count);
-  printf("%s (%d)\n", aspath_print (as2), as2->count);
-
-  ret =  aspath_cmp_left (as1, as2);
-  printf ("result: %d\n", ret);
-}
-#endif /* ASPATH_TEST */

@@ -28,6 +28,7 @@
 #include "filter.h"
 #include "log.h"
 #include "sockunion.h"		/* for inet_aton () */
+#include "plist.h"
 
 #include "ripd/ripd.h"
 
@@ -315,7 +316,6 @@ route_match_ip_address (void *rule, struct prefix *prefix,
 			route_map_object_t type, void *object)
 {
   struct access_list *alist;
-  /* struct prefix_ipv4 match; */
 
   if (type == RMAP_RIP)
     {
@@ -351,6 +351,46 @@ struct route_map_rule_cmd route_match_ip_address_cmd =
   route_match_ip_address,
   route_match_ip_address_compile,
   route_match_ip_address_free
+};
+
+/* `match ip address prefix-list PREFIX_LIST' */
+
+route_map_result_t
+route_match_ip_address_prefix_list (void *rule, struct prefix *prefix, 
+				    route_map_object_t type, void *object)
+{
+  struct prefix_list *plist;
+
+  if (type == RMAP_RIP)
+    {
+      plist = prefix_list_lookup (AF_INET, (char *) rule);
+      if (plist == NULL)
+	return RMAP_NOMATCH;
+    
+      return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
+	      RMAP_NOMATCH : RMAP_MATCH);
+    }
+  return RMAP_NOMATCH;
+}
+
+void *
+route_match_ip_address_prefix_list_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+route_match_ip_address_prefix_list_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd route_match_ip_address_prefix_list_cmd =
+{
+  "ip address prefix-list",
+  route_match_ip_address_prefix_list,
+  route_match_ip_address_prefix_list_compile,
+  route_match_ip_address_prefix_list_free
 };
 
 /* `set metric METRIC' */
@@ -565,6 +605,31 @@ DEFUN (no_match_ip_address,
   return rip_route_match_delete (vty, vty->index, "ip address", argv[0]);
 }
 
+DEFUN (rip_match_ip_address_prefix_list, 
+       rip_match_ip_address_prefix_list_cmd,
+       "match ip address prefix-list WORD",
+       MATCH_STR
+       IP_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
+{
+  return rip_route_match_add (vty, vty->index, "ip address prefix-list", argv[0]);
+}
+
+DEFUN (rip_no_match_ip_address_prefix_list,
+       rip_no_match_ip_address_prefix_list_cmd,
+       "no match ip address prefix-list WORD",
+       NO_STR
+       MATCH_STR
+       IP_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
+{
+  return rip_route_match_delete (vty, vty->index, "ip address prefix-list", argv[0]);
+}
+
 /* set functions */
 
 DEFUN (set_metric,
@@ -661,6 +726,7 @@ rip_route_map_init ()
   route_map_install_match (&route_match_interface_cmd);
   route_map_install_match (&route_match_ip_nexthop_cmd);
   route_map_install_match (&route_match_ip_address_cmd);
+  route_map_install_match (&route_match_ip_address_prefix_list_cmd);
 
   route_map_install_set (&route_set_metric_cmd);
   route_map_install_set (&route_set_ip_nexthop_cmd);
@@ -673,7 +739,9 @@ rip_route_map_init ()
   install_element (RMAP_NODE, &no_match_ip_nexthop_cmd);
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
-  
+  install_element (RMAP_NODE, &rip_match_ip_address_prefix_list_cmd);
+  install_element (RMAP_NODE, &rip_no_match_ip_address_prefix_list_cmd);
+
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_val_cmd);

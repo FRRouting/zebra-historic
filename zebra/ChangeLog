@@ -1,3 +1,175 @@
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (nexthop_active_ipv4): When nexthop type is
+	NEXTHOP_TYPE_IPV4_IFINDEX, propery set the ifindex to rifindex.
+
+	* zserv.c: Initialize rtm_table_default with 0.
+
+	* zebra-0.91 is released.
+
+2001-01-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* kernel_socket.c (rtm_read): Filter cloned route.  Suggested by:
+	Jun-ichiro itojun Hagino <itojun@iijlab.net>
+
+2001-01-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* connected.c (connected_up_ipv6): When point-to-point destination
+	address is ::, use local address for connected network.
+	(connected_down_ipv6): Likewise.
+
+2001-01-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.c (zebra_serv): Add missing close() call.  Reported by:
+	David Waitzman <djw@vineyard.net>.
+
+2001-01-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_lookup_ipv4): New function for checking exact match
+	IGP route.
+
+2001-01-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (show_ipv6_route_protocol): Fix bug of "show ip route
+	route-type".
+
+2001-01-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* interface.c (zebra_interface): Do not call
+	zebra_interface_add_update for inactive interface.
+
+	* zserv.c (zsend_interface_address_add): Send interface address
+	flag.
+	(zsend_interface_address_delete): Likewise.
+
+2001-01-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* interface.c (if_addr_add):  Add flags.
+
+	* connected.c (ifa_add_ipv4): Add new function for interface
+	address handling.
+	(ifa_delete_ipv4): Likewise.
+
+2001-01-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_update): Update IPv6 RIB.
+
+	* kernel_socket.c (ifam_read): Call if_refresh() for update
+	interface flag status.  This is for implicit interface up on *BSD.
+
+	* interface.c (if_refresh): Add interface flag refresh function.
+
+	* kernel_socket.c (rtm_read): Fetch link-local address interface
+	index.
+	(ifan_read): We need to fetch interface information.  Suggested
+	by: Yasuhiro Ohara <yasu@sfc.wide.ad.jp>.
+
+	* rib.c (static_ipv6_nexthop_same): Add check for
+	NEXTHOP_TYPE_IPV6_IFNAME.
+
+2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.h (NEW_RIB): Turn on NEW_RIB flag.  IPv6 new RIB code are
+	taken into place.
+
+2001-01-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (static_ipv6_write): Display STATIC_IPV6_GATEWAY_IFNAME
+	configuration.
+	(rib_delete_ipv6): Handle same route conter for IPv6 connected
+	route.
+	(show_ipv6_route_protocol): New command.
+	(show_ipv6_route_addr): Likewise.
+	(show_ipv6_route_prefix): Likewise.
+	(rib_update): Sweep kernel route when it is cleaned up.
+
+	* rt_socket.c (kernel_add_ipv6): Add NEXTHOP_IPV6_IFNAME
+	treatmenet.
+
+	* rt_netlink.c (kernel_init): Likewise.
+
+	* rt_ioctl.c (kernel_ioctl_ipv6_multipath): Likewise.
+
+	* rib.c (rib_add_ipv4): Cope with same connected route on a
+	interface.  Suggested by: Matthew Grant <grantma@anathoth.gen.nz>.
+	(nexthop_ipv6_ifname_add): Add NEXTHOP_IPV6_IFNAME treatmenet.
+
+	* rib.h (struct new_rib): Add refcnt to keep track on the
+	reference of same connected route.
+
+	* ioctl.c (if_set_prefix): Add check for GNU_LINUX.
+
+2001-01-13  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* kernel_socket.c (ifan_read, rtm_type_str): Add RTM_OIFINFO check.
+	(rtm_type_str): Add RTM_IFANNOUNCE check.
+	(ifan_read): New function.
+	(kernel_read): Add case for RTM_IFANNOUNCE.
+
+2001-01-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_ioctl.c (kernel_ioctl_ipv6_multipath): New function.
+
+	* rt_netlink.c (netlink_route_multipath): IPv6 address ifindex
+	treatment.
+
+	* connected.c (connected_up_ipv6): Add dest value check.
+
+	* rib.c (nexthop_active_ipv6): Do not touch IPv6 nexthop's
+	ifindex.
+	(rib_add_ipv4): Import rib_add_ipv6() same route check code.
+	(nexthop_active_check): NEXTHOP_TYPE_IPV6_IFINDEX activity is only
+	checked by ifindex.
+
+	* rt_socket.c (kernel_rtm_ipv6_multipath): New function.
+
+	* redistribute.c (redistribute_add): Use
+	zsend_ipv6_add_multipath().
+	(redistribute_delete_multipath): Use
+	zsend_ipv6_delete_multipath().
+
+	* interface.c (ip_address): Check current IP address to avoid
+	duplicate.
+
+	* rib.c (rib_delete_ipv4): When deleted route is connected route,
+	check ifindex.
+	(rib_add_ipv4): When connected route is added do not perform
+	implicit withdraw.
+	(rib_delete_ipv4): Check ifindex for connected route.
+
+	* kernel_socket.c (rtm_read): When route has RTF_STATIC, set
+	ZEBRA_FLAG_STATIC for indicate as persistent route.
+	(ifam_read): Unset interface index from link-local address when
+	IPv6 stack is KAME.
+
+	* rib.c (rib_update): Do not delete persistent kernel route.
+
+	* rib.h (struct new_rib): Integrate RIB_FLAG_* to ZEBRA_FLAG_*.
+
+	* rt_socket.c (kernel_add_ipv6_multipath): Add placeholder.
+	(kernel_delete_ipv6_multipath): Likewise.
+
+	* rt_netlink.c (netlink_talk): Give struct nlsock to netlink_talk.
+
+2001-01-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_update): Revert Matthew Grant's patch
+	zebra_cvs_newribfix.patch.  Use struct rib->ifindex for kernel
+	interface index.  Introduce NEXTHOP_TYPE_IPV4_IFINDEX to support
+	that.  Add support for address deletion situation.
+
+2001-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* interface.c: Remove HAVE_IF_PSEUDO part.
+
+	* rib.h: Likewise.
+
+	* rt_netlink.c (netlink_link_change): Likewise.
+
+2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.c: Remove OLD_RIB codes.
+
 2001-01-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.90 is released.

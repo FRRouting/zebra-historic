@@ -28,6 +28,9 @@
 #define OSPF6_AREA_RANGE_ADVERTISE     0
 #define OSPF6_AREA_RANGE_NOT_ADVERTISE 1
 
+#include "ospf6_spf.h"
+#include "ospf6_top.h"
+
 struct area
 {
   char            str[16];

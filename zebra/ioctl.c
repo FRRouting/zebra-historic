@@ -26,8 +26,10 @@
 #include "if.h"
 #include "prefix.h"
 #include "ioctl.h"
-#include "rt.h"
 #include "log.h"
+
+#include "zebra/rib.h"
+#include "zebra/rt.h"
 
 /* clear and set interface name string */
 void
@@ -147,16 +149,34 @@ if_get_mtu (struct interface *ifp)
 #endif
 }
 
+#ifdef HAVE_NETLINK
+/* Interface address setting via netlink interface. */
+int
+if_set_prefix (struct interface *ifp, struct connected *ifc)
+{
+  return kernel_address_add_ipv4 (ifp, ifc);
+}
+
+/* Interface address is removed using netlink interface. */
+int
+if_unset_prefix (struct interface *ifp, struct connected *ifc)
+{
+  return kernel_address_delete_ipv4 (ifp, ifc);
+}
+#else /* ! HAVE_NETLINK */
 #ifdef HAVE_IFALIASREQ
 /* Set up interface's IP address, netmask (and broadcas? ).  *BSD may
    has ifaliasreq structure.  */
 int
-if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
+if_set_prefix (struct interface *ifp, struct connected *ifc)
 {
   int ret;
   struct ifaliasreq addreq;
   struct sockaddr_in addr;
   struct sockaddr_in mask;
+  struct prefix_ipv4 *p;
+
+  p = (struct prefix_ipv4 *) ifc->address;
 
   bzero (&addreq, sizeof addreq);
   strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
@@ -186,12 +206,15 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
 /* Set up interface's IP address, netmask (and broadcas? ).  *BSD may
    has ifaliasreq structure.  */
 int
-if_unset_prefix (struct interface *ifp, struct prefix_ipv4 *p)
+if_unset_prefix (struct interface *ifp, struct connected *ifc)
 {
   int ret;
   struct ifaliasreq addreq;
   struct sockaddr_in addr;
   struct sockaddr_in mask;
+  struct prefix_ipv4 *p;
+
+  p = (struct prefix_ipv4 *)ifc->address;
 
   bzero (&addreq, sizeof addreq);
   strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
@@ -221,7 +244,7 @@ if_unset_prefix (struct interface *ifp, struct prefix_ipv4 *p)
 /* Set up interface's address, netmask (and broadcas? ).  Linux or
    Solaris uses ifname:number semantics to set IP address aliases. */
 int
-if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
+if_set_prefix (struct interface *ifp, struct connected *ifc)
 {
   int ret;
   struct ifreq ifreq;
@@ -229,6 +252,9 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
   struct sockaddr_in broad;
   struct sockaddr_in mask;
   struct prefix_ipv4 ifaddr;
+  struct prefix_ipv4 *p;
+
+  p = (struct prefix_ipv4 *) ifc->address;
 
   ifaddr = *p;
 
@@ -269,12 +295,12 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
     return ret;
 
   /* Linux version before 2.1.0 need to interface route setup. */
-#if LINUX_VERSION_CODE < 131328
+#if defined(GNU_LINUX) && LINUX_VERSION_CODE < 131328
   {
     apply_mask_ipv4 (&ifaddr);
-    kernel_add_ipv4 (&ifaddr, NULL, ifp->ifindex, 0, 0);
+    kernel_add_route (&ifaddr, NULL, ifp->ifindex, 0, 0);
   }
-#endif /* LINUX_VERSION_CODE */
+#endif /* ! (GNU_LINUX && LINUX_VERSION_CODE) */
 
   return 0;
 }
@@ -282,11 +308,14 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
 /* Set up interface's address, netmask (and broadcas? ).  Linux or
    Solaris uses ifname:number semantics to set IP address aliases. */
 int
-if_unset_prefix (struct interface *ifp, struct prefix_ipv4 *p)
+if_unset_prefix (struct interface *ifp, struct connected *ifc)
 {
   int ret;
   struct ifreq ifreq;
   struct sockaddr_in addr;
+  struct prefix_ipv4 *p;
+
+  p = (struct prefix_ipv4 *) ifc->address;
 
   ifreq_set_name (&ifreq, ifp);
 
@@ -300,6 +329,7 @@ if_unset_prefix (struct interface *ifp, struct prefix_ipv4 *p)
   return 0;
 }
 #endif /* HAVE_IFALIASREQ */
+#endif /* HAVE_NETLINK */
 
 /* get interface flags */
 void
@@ -383,10 +413,13 @@ struct in6_ifreq
 
 /* Interface's address add/delete functions. */
 int
-if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+if_prefix_add_ipv6 (struct interface *ifp, struct connected *ifc)
 {
   int ret;
+  struct prefix_ipv6 *p;
   struct in6_ifreq ifreq;
+
+  p = (struct prefix_ipv6 *) ifc->address;
 
   memset (&ifreq, 0, sizeof (struct in6_ifreq));
 
@@ -400,10 +433,13 @@ if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
 }
 
 int
-if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+if_prefix_delete_ipv6 (struct interface *ifp, struct connected *ifc)
 {
   int ret;
+  struct prefix_ipv6 *p;
   struct in6_ifreq ifreq;
+
+  p = (struct prefix_ipv6 *) ifc->address;
 
   memset (&ifreq, 0, sizeof (struct in6_ifreq));
 
@@ -418,12 +454,15 @@ if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
 #else /* LINUX_IPV6 */
 #ifdef HAVE_IN6_ALIASREQ
 int
-if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+if_prefix_add_ipv6 (struct interface *ifp, struct connected *ifc)
 {
   int ret;
   struct in6_aliasreq addreq;
   struct sockaddr_in6 addr;
   struct sockaddr_in6 mask;
+  struct prefix_ipv6 *p;
+
+  p = (struct prefix_ipv6 * ) ifc->address;
 
   bzero (&addreq, sizeof addreq);
   strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);
@@ -451,12 +490,15 @@ if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
 }
 
 int
-if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
+if_prefix_delete_ipv6 (struct interface *ifp, struct connected *ifc)
 {
   int ret;
   struct in6_aliasreq addreq;
   struct sockaddr_in6 addr;
   struct sockaddr_in6 mask;
+  struct prefix_ipv6 *p;
+
+  p = (struct prefix_ipv6 *) ifc->address;
 
   bzero (&addreq, sizeof addreq);
   strncpy ((char *)&addreq.ifra_name, ifp->name, sizeof addreq.ifra_name);

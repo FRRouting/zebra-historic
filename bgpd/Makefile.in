@@ -64,9 +64,6 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 CURSES = @CURSES@
-GUILE = @GUILE@
-GUILE_CFLAGS = @GUILE_CFLAGS@
-GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IF_PROC = @IF_PROC@
 IPFORWARD = @IPFORWARD@
@@ -113,7 +110,7 @@ bgpd_LDADD = ../lib/libzebra.a
 
 #bgp_btoa_LDADD = libbgp.a ../lib/libzebra.a
 
-sysconf_DATA = bgpd.conf.sample bgpd.conf.sample2 README.mbgp
+sysconf_DATA = bgpd.conf.sample bgpd.conf.sample2
 
 EXTRA_DIST = $(sysconf_DATA) BGP4-MIB.txt
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs

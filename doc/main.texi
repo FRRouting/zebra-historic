@@ -3,8 +3,8 @@
 @chapter zebra
 
 @c SYNOPSIS
-@command{zebra} is an IP routing manager.  It provides kernel routing table
-updates, interface lookups, and redistribution of routes between
+@command{zebra} is an IP routing manager.  It provides kernel routing
+table updates, interface lookups, and redistribution of routes between
 different routing protocols.
 
 @menu
@@ -77,15 +77,73 @@ cost.  This command does not set actual device configuration.
 @comment  node-name,  next,  previous,  up
 @section Static Route Commands
 
-@deffn Command {table @var{tableno}} {}
-Select the primary kernel routing table to be used.  This only works for
-kernels supporting multiple routing tables (like Linux 2.2.x).
-@end deffn
+Static routing is very fundamental feature of routing technology.  It
+defines static prefix and gateway.
 
 @deffn Command {ip route @var{network} @var{gateway}} {}
+@var{network} is destination prefix with format of A.B.C.D/M.
+@var{gateway} is gateway for the prefix.  When @var{gateway} is
+A.B.C.D format.  It is taken as a IPv4 address gateway.  Otherwise it
+is treated as an interface name.
+
+@example
+ip route 10.0.0.0/8 10.0.0.2
+ip route 10.0.0.0/8 ppp0
+@end example
+
+First example define 10.0.0.0/8 static route with gateway 10.0.0.2.
+Second one define same preifx but with gateway to interface ppp0.
 @end deffn
 
+@deffn Command {ip route @var{network} @var{netmask} @var{gateway}} {}
+This is alternate version of above command.  When @var{network} is
+A.B.C.D format, user must define @var{netmask} value with A.B.C.D
+format.  @var{gateway} is same option as above command
+
+@example
+ip route 10.0.0.0 255.255.255.0 10.0.0.2
+ip route 10.0.0.0 255.255.255.0 ppp0
+@end example
+
+This is a same setting using this statement.
+@end deffn
+
+@deffn Command {ip route @var{network} @var{gateway} @var{distance}} {}
+
+@end deffn
+
+Multiple nexthop static route
+
+@example
+ip route 10.0.0.1/32 10.0.0.2
+ip route 10.0.0.1/32 10.0.0.3
+ip route 10.0.0.1/32 eth0
+
+If there is no route to 10.0.0.2 and 10.0.0.3.  And interface eth0
+is reachable, then the last route is installed into the kernel.
+
+zebra> show ip route
+S>  10.0.0.1/32 [1/0] via 10.0.0.2 inactive
+                      via 10.0.0.3 inactive
+  *                   is directly connected, eth0
+@end example
+
+Floating static route
+
 @deffn Command {ipv6 route @var{network} @var{gateway}} {}
+
+@end deffn
+
+@deffn Command {ipv6 route @var{network} @var{gateway} @var{distance}} {}
+
+@end deffn
+
+
+@deffn Command {table @var{tableno}} {}
+Select the primary kernel routing table to be used.  This only works
+for kernels supporting multiple routing tables (like GNU/Linux 2.2.x
+and later).  After setting @var{tableno} with this command, further
+static route goes to specified table.
 @end deffn
 
 @node zebra Terminal Mode Commands,  , Static Route Commands, zebra

@@ -729,13 +729,17 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
   struct peer *realpeer;
   struct in_addr remote_id;
   int capability;
+  char notify_data_remote_as[2];
+  char notify_data_remote_id[4];
 
   realpeer = NULL;
   
   /* Parse open packet. */
   version = stream_getc (peer->ibuf);
+  memcpy (notify_data_remote_as, stream_pnt (peer->ibuf), 2);
   remote_as  = stream_getw (peer->ibuf);
   holdtime = stream_getw (peer->ibuf);
+  memcpy (notify_data_remote_id, stream_pnt (peer->ibuf), 4);
   remote_id.s_addr = stream_get_ipv4 (peer->ibuf);
 
   /* Receive OPEN message log  */
@@ -747,13 +751,33 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
   /* Lookup peer from Open packet. */
   if (CHECK_FLAG (peer->sflags, PEER_STATUS_ACCEPT_PEER))
     {
-      realpeer = peer_lookup_with_open (&peer->su, remote_as, &remote_id);
+      int as = 0;
 
-      /* Peer's source IP address is check in bgp_accept(), so this
-	 must be AS number mismatch or remote-id configuration
-	 mismatch. */
+      realpeer = peer_lookup_with_open (&peer->su, remote_as, &remote_id, &as);
+
       if (! realpeer)
-	return -1;
+	{
+	  /* Peer's source IP address is check in bgp_accept(), so this
+	     must be AS number mismatch or remote-id configuration
+	     mismatch. */
+	  if (as)
+	    {
+	      if (BGP_DEBUG (normal, NORMAL))
+		zlog_info ("%s bad OPEN, remote AS is %d, expected %d",
+			   peer->host, remote_as, peer->as);
+	      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR,
+			       BGP_NOTIFY_OPEN_BAD_BGP_IDENT);
+	    }
+	  else
+	    {
+	      if (BGP_DEBUG (normal, NORMAL))
+		zlog_info ("%s bad OPEN, wrong router identifier %s",
+			   peer->host, inet_ntoa (remote_id));
+	      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR,
+			       BGP_NOTIFY_OPEN_BAD_PEER_AS);
+	    }
+	  return -1;
+	}
     }
 
   /* When collision is detected and this peer is closed.  Retrun
@@ -797,6 +821,19 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
     }
 
+  /* remote router-id check. */
+  if (remote_id.s_addr == 0 || ntohl (remote_id.s_addr) >= 0xe0000000)
+    {
+      if (BGP_DEBUG (normal, NORMAL))
+	zlog_info ("%s bad OPEN, wrong router identifier %s",
+		   peer->host, inet_ntoa (remote_id));
+      bgp_notify_send_with_data (peer, 
+				 BGP_NOTIFY_OPEN_ERR, 
+				 BGP_NOTIFY_OPEN_BAD_BGP_IDENT,
+				 notify_data_remote_id, 4);
+      return -1;
+    }
+
   /* Set remote router-id */
   peer->remote_id = remote_id;
 
@@ -819,9 +856,10 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       if (BGP_DEBUG (normal, NORMAL))
 	zlog_info ("%s bad OPEN, remote AS is %d, expected %d",
 		   peer->host, remote_as, peer->as);
-      bgp_notify_send (peer,
-		       BGP_NOTIFY_OPEN_ERR, 
-		       BGP_NOTIFY_OPEN_BAD_PEER_AS);
+      bgp_notify_send_with_data (peer, 
+				 BGP_NOTIFY_OPEN_ERR, 
+				 BGP_NOTIFY_OPEN_BAD_PEER_AS,
+				 notify_data_remote_as, 2);
       return -1;
     }
 
@@ -1006,7 +1044,9 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	return -1;
     }
 
+  /* Logging the attribute. */
   bgp_dump_attr (peer, &attr, attrstr, BUFSIZ);
+
   if (BGP_DEBUG (update, UPDATE))
     {
       zlog (peer->log, LOG_INFO, "%s rcvd UPDATE w/ attr: %s",
@@ -1037,8 +1077,17 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
     {
       if (withdraw.length)
 	nlri_parse (peer, NULL, &withdraw);
+
       if (update.length)
-	nlri_parse (peer, &attr, &update);
+	{
+	  /* We check well-known attribute only for IPv4 unicast
+	     update. */
+	  ret = bgp_attr_check (peer, &attr);
+	  if (ret < 0)
+	    return -1;
+
+	  nlri_parse (peer, &attr, &update);
+	}
     }
   if (peer->afc[AFI_IP][SAFI_MULTICAST])
     {
@@ -1097,6 +1146,8 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
     community_unintern (attr.community);
   if (attr.cluster)
     cluster_unintern (attr.cluster);
+  if (attr.transit)
+    transit_unintern (attr.transit);
 
   /* If peering is stopped due to some reason, do not generate BGP
      event.  */
@@ -1310,6 +1361,19 @@ bgp_read_packet (struct peer *peer)
   return 0;
 }
 
+/* Marker check. */
+int
+bgp_marker_all_one (struct stream *s, int length)
+{
+  int i;
+
+  for (i = 0; i < length; i++)
+    if (s->data[i] != 0xff)
+      return 0;
+
+  return 1;
+}
+
 /* Starting point of packet process function. */
 int
 bgp_read (struct thread *thread)
@@ -1318,7 +1382,7 @@ bgp_read (struct thread *thread)
   u_char type = 0;
   struct peer *peer;
   bgp_size_t size;
-  char packet_length[3];
+  char notify_data_length[2];
 
   /* Yes first of all get peer pointer. */
   peer = THREAD_ARG (thread);
@@ -1347,13 +1411,26 @@ bgp_read (struct thread *thread)
 
       /* Get size and type. */
       stream_forward (peer->ibuf, BGP_MARKER_SIZE);
-      memcpy (packet_length, stream_pnt (peer->ibuf), 2);
+      memcpy (notify_data_length, stream_pnt (peer->ibuf), 2);
       size = stream_getw (peer->ibuf);
       type = stream_getc (peer->ibuf);
+
+      /* Last read timer set */
+      peer->readtime = time(NULL);
 
       if (BGP_DEBUG (normal, NORMAL) && type != 2 && type != 0)
 	zlog_info ("%s rcv message type %d, length (excl. header) %d",
 		   peer->host, type, size - BGP_HEADER_SIZE);
+
+      /* Marker check */
+      if (type == BGP_MSG_OPEN
+	  && ! bgp_marker_all_one (peer->ibuf, BGP_MARKER_SIZE))
+	{
+	  bgp_notify_send (peer,
+			   BGP_NOTIFY_HEADER_ERR, 
+			   BGP_NOTIFY_HEADER_NOT_SYNC);
+	  goto done;
+	}
 
       /* BGP type check. */
       if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE 
@@ -1389,7 +1466,7 @@ bgp_read (struct thread *thread)
 	  bgp_notify_send_with_data (peer,
 				     BGP_NOTIFY_HEADER_ERR,
 			  	     BGP_NOTIFY_HEADER_BAD_MESLEN,
-				     packet_length, 2);
+				     notify_data_length, 2);
 	  goto done;
 	}
 

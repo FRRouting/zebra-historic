@@ -38,7 +38,8 @@
 #include "zebra/rib.h"
 #include "zebra/zserv.h"
 #include "zebra/redistribute.h"
-
+#include "zebra/debug.h"
+
 /* Allocate a new internal interface index 
  * This works done from the top so that %d macros
  * print a - sign! 
@@ -71,7 +72,6 @@ if_zebra_new_hook (struct interface *ifp)
 
   zebra_if->multicast = IF_ZEBRA_MULTICAST_UNSPEC;
   zebra_if->shutdown = IF_ZEBRA_SHUTDOWN_UNSPEC;
-  zebra_if->address = list_new ();
 
 #ifdef RTADV
   {
@@ -108,62 +108,72 @@ if_zebra_delete_hook (struct interface *ifp)
   return 0;
 }
 
-/* Work out whether an interface is volatile */
-/* Currently a place holder - MAG */
-int
-if_is_volatile(struct interface *ifp)
-{
-  return 0;
-}
- 
-/* fix up ip addresses configured via zebra */
+/* Wake up configured address if it is not in current kernel
+   address. */
 void
-if_addr_refresh(struct interface *ifp)
+if_addr_wakeup (struct interface *ifp)
 {
   struct listnode *node;
-  struct prefix *addr;
-  struct zebra_if *if_data;
+  struct connected *ifc;
+  struct prefix *p;
   int ret;
 
-  if_data = (struct zebra_if *) ifp->info;
-  
-  for (node = listhead(if_data->address); node; nextnode(node) )
+  for (node = listhead (ifp->connected); node; nextnode (node))
     {
-      addr = getdata (node);
+      ifc = getdata (node);
+      p = ifc->address;
 	
-      /* Address check. */
-      if (addr->family == AF_INET)
-      {
-	if (connected_check_ipv4 (ifp, addr))
-	  continue;
+      if (CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED)
+	  && ! CHECK_FLAG (ifc->conf, ZEBRA_IFC_REAL))
+	{
+	  /* Address check. */
+	  if (p->family == AF_INET)
+	    {
+	      if (! if_is_up (ifp))
+		{
+		  if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+		  if_refresh (ifp);
+		}
 
-	ret = if_set_prefix (ifp, (struct prefix_ipv4 *) addr);
-	if (ret < 0)
-	  {
-	    zlog_warn ("Can't set interface's address: %s", 
-			 strerror(errno));
-	    continue;
-	  }
+	      ret = if_set_prefix (ifp, ifc);
+	      if (ret < 0)
+		{
+		  zlog_warn ("Can't set interface's address: %s", 
+			     strerror(errno));
+		  continue;
+		}
+	      SET_FLAG (ifc->conf, ZEBRA_IFC_REAL);
 
-	connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
-      }
+	      zebra_interface_address_add_update (ifp, ifc);
+
+	      if (if_is_up(ifp))
+		connected_up_ipv4 (ifp, ifc);
+	    }
 #ifdef HAVE_IPV6
-      if (addr->family == AF_INET6)
-      {
-	if (connected_check_ipv6 (ifp, addr))
-	  continue;
-	
-	ret = if_prefix_add_ipv6 (ifp, (struct prefix_ipv6 *)addr);
-	if (ret < 0)
-	  {
-	    zlog_warn ("Can't set interface's address: %s", 
-			 strerror(errno));
-	    continue;
-	  }
-	
-	connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
-      }
+	  if (p->family == AF_INET6)
+	    {
+	      if (! if_is_up (ifp))
+		{
+		  if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+		  if_refresh (ifp);
+		}
+
+	      ret = if_prefix_add_ipv6 (ifp, ifc);
+	      if (ret < 0)
+		{
+		  zlog_warn ("Can't set interface's address: %s", 
+			     strerror(errno));
+		  continue;
+		}
+	      SET_FLAG (ifc->conf, ZEBRA_IFC_REAL);
+
+	      zebra_interface_address_add_update (ifp, ifc);
+
+	      if (if_is_up(ifp))
+		connected_up_ipv6 (ifp, ifc);
+	    }
 #endif /* HAVE_IPV6 */
+	}
     }
 }
 
@@ -171,24 +181,23 @@ if_addr_refresh(struct interface *ifp)
 void
 if_add_update (struct interface *ifp)
 {
+  zebra_interface_add_update (ifp);
 
-  if (IS_IF_INACTIVE(ifp))
+  if (! CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
     {
-      IF_INACTIVE_UNSET(ifp);
+      SET_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE);
 
-      /* Readd any statically configured address */
-      if_addr_refresh(ifp);
+      if_addr_wakeup (ifp);
 
-      zlog_info ("interface %s index %d is now active.", 
-		 ifp->name, ifp->ifindex);
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	zlog_info ("interface %s index %d becomes active.", 
+		   ifp->name, ifp->ifindex);
     }
   else
     {
-      zlog_info ("interface %s index %d is added.", 
-		 ifp->name, ifp->ifindex);
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	zlog_info ("interface %s index %d is added.", ifp->name, ifp->ifindex);
     }
-
-  zebra_interface_add_update(ifp);
 }
 
 /* Handle an interface delete event */
@@ -198,6 +207,7 @@ if_delete_update (struct interface *ifp)
   struct listnode *node;
   struct listnode *next;
   struct connected *ifc;
+  struct prefix *p;
 
   if (if_is_up(ifp))
     {
@@ -206,53 +216,41 @@ if_delete_update (struct interface *ifp)
       return;
     }
 
-  /* Handle 'volatile' interfaces */
-  if (if_is_volatile(ifp))
-    {
-      zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
-	    ifp->name, ifp->ifindex);
-
-      zebra_interface_delete_update (ifp);
-      if_delete (ifp);
-      return;
-    }
-
-  /* Handle ordinary interfaces */
-
   /* Mark interface as inactive */
-  IF_INACTIVE_SET(ifp);
+  UNSET_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE);
   
-  zlog (NULL, LOG_INFO, "interface %s index %d is now inactive.",
-	ifp->name, ifp->ifindex);
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    zlog_info ("interface %s index %d is now inactive.",
+	       ifp->name, ifp->ifindex);
 
-  /* Clear address list, telling each Protocol Daemon about event */
-  if (!ifp->connected)
-    return;
-      
-  for (node = listhead (ifp->connected); node; node = next)
+  /* Delete connected routes from the kernel. */
+  if (ifp->connected)
     {
-      next = node->next;
-      ifc = getdata (node);
-      
-      listnode_delete (ifp->connected, ifc);
-      
-      zebra_interface_address_delete_update (ifp, ifc);
-      
-      connected_free (ifc);
+      for (node = listhead (ifp->connected); node; node = next)
+	{
+	  next = node->next;
+	  ifc = getdata (node);
+	  p = ifc->address;
+
+	  if (p->family == AF_INET)
+	    connected_down_ipv4 (ifp, ifc);
+#ifdef HAVE_IPV6
+	  else if (p->family == AF_INET6)
+	    connected_down_ipv6 (ifp, ifc);
+#endif /* HAVE_IPV6 */
+
+	  zebra_interface_address_delete_update (ifp, ifc);
+
+	  UNSET_FLAG (ifc->conf, ZEBRA_IFC_REAL);
+	  
+	  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED))
+	    {      
+	      listnode_delete (ifp->connected, ifc);
+	      connected_free (ifc);
+	    }
+	}
     }
-}
-
-extern list client_list;
-
-void
-zebra_interface_up_update (struct interface *ifp)
-{
-  listnode node;
-  struct zserv *client;
-
-  for (node = listhead (client_list); node; nextnode (node))
-    if ((client = getdata (node)) != NULL)
-      zsend_interface_up (client, ifp);
+  zebra_interface_delete_update (ifp);
 }
 
 /* Interface is up. */
@@ -263,8 +261,6 @@ if_up (struct interface *ifp)
   listnode next;
   struct connected *ifc;
   struct prefix *p;
-
-  zlog_info ("Interface %s is up", ifp->name);
 
   /* Notify the protocol daemons. */
   zebra_interface_up_update (ifp);
@@ -282,24 +278,13 @@ if_up (struct interface *ifp)
 	    connected_up_ipv4 (ifp, ifc);
 #ifdef HAVE_IPV6
 	  else if (p->family == AF_INET6)
-	    connected_up_ipv6 (ifp, &p->u.prefix6, p->prefixlen);
+	    connected_up_ipv6 (ifp, ifc);
 #endif /* HAVE_IPV6 */
 	}
     }
 
   /* Examine all static routes. */
-  rib_if_up (ifp);
-}
-
-void
-zebra_interface_down_update (struct interface *ifp)
-{
-  listnode node;
-  struct zserv *client;
-
-  for (node = listhead (client_list); node; nextnode (node))
-    if ((client = getdata (node)) != NULL)
-      zsend_interface_down (client, ifp);
+  rib_update ();
 }
 
 /* Interface goes down.  We have to manage different behavior of based
@@ -311,8 +296,6 @@ if_down (struct interface *ifp)
   listnode next;
   struct connected *ifc;
   struct prefix *p;
-
-  zlog_info ("Interface %s is down", ifp->name);
 
   /* Notify to the protocol daemons. */
   zebra_interface_down_update (ifp);
@@ -330,134 +313,31 @@ if_down (struct interface *ifp)
 	    connected_down_ipv4 (ifp, ifc);
 #ifdef HAVE_IPV6
 	  else if (p->family == AF_INET6)
-	    connected_down_ipv6 (ifp, &p->u.prefix6, p->prefixlen);
+	    connected_down_ipv6 (ifp, ifc);
 #endif /* HAVE_IPV6 */
 	}
     }
 
   /* Examine all static routes which direct to the interface. */
-  rib_if_down (ifp);
+  rib_update ();
 }
 
-int
-if_addr_add (struct interface *ifp, struct prefix *p)
+void
+if_refresh (struct interface *ifp)
 {
-  struct prefix *addr;
-  struct zebra_if *if_data;
-
-  addr = prefix_new ();
-  *addr = *p;
-
-  if_data = (struct zebra_if *) ifp->info;
-  listnode_add (if_data->address, addr);
-
-  /* If interface is inactive, go no further */
-  if (IS_IF_INACTIVE(ifp))
-    return 0;
-
-  /* Address check. */
-  if (addr->family == AF_INET)
+  if (if_is_up (ifp))
     {
-      if (connected_check_ipv4 (ifp, p))
-	return 0;
-      connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
+      if_get_flags (ifp);
+      if (! if_is_up (ifp))
+	if_down (ifp);
     }
-#ifdef HAVE_IPV6
-  if (addr->family == AF_INET6)
+  else
     {
-      if (connected_check_ipv6 (ifp, p))
-	return 0;
-      connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
+      if_get_flags (ifp);
+      if (if_is_up (ifp))
+	if_up (ifp);
     }
-#endif /* HAVE_IPV6 */
-
-  return 0;
 }
-
-int
-if_addr_delete (struct interface *ifp, struct prefix *p)
-{
-  struct zebra_if *if_data;
-  listnode node;
-  struct prefix *addr = NULL;
-
-  if_data = (struct zebra_if *) ifp->info;
-
-  for (node = listhead (if_data->address); node; node = nextnode (node))
-    {
-      addr = getdata (node);
-
-      if (addr->family == AF_INET)
-	if (IPV4_ADDR_SAME (&addr->u.prefix, &p->u.prefix))
-	  {
-	    if (! IS_IF_INACTIVE(ifp))
-	      connected_delete_ipv4 (ifp, &addr->u.prefix4, 
-				     addr->prefixlen, NULL);
-	    listnode_delete (if_data->address, addr);
-	    return 0;
-	  }
-	
-#ifdef HAVE_IPV6
-      if (addr->family == AF_INET6)
-	if (IPV6_ADDR_SAME (&addr->u.prefix, &p->u.prefix))
-	  {
-	    if (! IS_IF_INACTIVE(ifp))
-	      connected_delete_ipv6 (ifp, &addr->u.prefix6, 
-				     addr->prefixlen, NULL);
-	    listnode_delete (if_data->address, addr);
-	    return 0;
-	  }
-#endif /* HAVE_IPV6 */
-    }	 
-  return -1;
-}
-
-#ifdef KAME
-int
-if_tun_add (struct interface *ifsp, struct interface *ifdp, 
-	    struct prefix *sp, struct prefix *dp)
-{
-#if 0				/* Commented out by Kunihiro. */
-  int ret;
-  struct prefix *saddr, daddr;
-  struct zebra_if *if_sdata, *if_ddata;
-    
-  ret = if_set_prefix (ifsp, (struct prefix_ipv4 *) sp);
-  if (ret < 0)
-    return ret;
-  ret = if_set_prefix (ifdp, (struct prefix_ipv4 *) dp);
-  if (ret < 0)
-    return ret;
-    
-  saddr = prefix_new ();
-  daddr = prefix_new ();
-  *saddr = *sp;
-  *daddr = *dp;
-    
-  if_sdata = (struct zebra_if *) ifsp->if_data;
-  listnode_add (if_sdata->address, saddr);
-  if_ddata = (struct zebra_if *) ifdp->if_data;
-  listnode_add (if_ddata->address, daddr);
-    
-  /* Address check. */
-  if (addr->family == AF_INET)
-    connected_add_ipv4 (ifp, &addr->u.prefix4, addr->prefixlen, NULL);
-#ifdef HAVE_IPV6
-  if (addr->family == AF_INET6)
-    connected_add_ipv6 (ifp, &addr->u.prefix6, addr->prefixlen, NULL);
-#endif /* HAVE_IPV6 */
-    
-#endif /* 0 */
-  return 0;
-}
-
-int
-if_tun_delete (struct interface *ifsp, struct interface *ifdp,
-	       struct prefix *sp, struct prefix *dp)
-{
-  return 0;
-}
-#endif KAME
 
 /* Printout flag information into vty */
 void
@@ -505,6 +385,7 @@ prefix_vty_out (struct vty *vty, struct prefix *p)
   vty_out (vty, "%s", str);
   return strlen (str);
 }
+
 /* Dump if address information to vty. */
 void
 connected_dump_vty (struct vty *vty, struct connected *connected)
@@ -538,9 +419,15 @@ connected_dump_vty (struct vty *vty, struct connected *connected)
 	  prefix_vty_out (vty, p);
 	}
     }
+
+  if (CHECK_FLAG (connected->flags, ZEBRA_IFA_SECONDARY))
+    vty_out (vty, " secondary");
+
+  if (connected->label)
+    vty_out (vty, " %s", connected->label);
+
   vty_out (vty, "%s", VTY_NEWLINE);
 }
-
 
 /* Interface's information print out to vty interface. */
 void
@@ -559,7 +446,7 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
       vty_out(vty, "  index %d pseudo interface%s", ifp->ifindex, VTY_NEWLINE);
       return;
     }
-  else if (IS_IF_INACTIVE(ifp))
+  else if (! CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
     {
       vty_out(vty, "  index %d inactive interface%s", 
 	      ifp->ifindex, 
@@ -596,7 +483,8 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
   for (node = listhead (ifp->connected); node; nextnode (node))
     {
       connected = getdata (node);
-      connected_dump_vty (vty, connected);
+      if (CHECK_FLAG (connected->conf, ZEBRA_IFC_REAL))
+	connected_dump_vty (vty, connected);
     }
 
 #ifdef HAVE_PROC_NET_DEV
@@ -685,7 +573,6 @@ if_supported_family (int family)
   return 0;
 }
 
-
 /* Wrapper hook point for zebra daemon so that ifindex can be set 
  * DEFUN macro not used as extract.pl HAS to ignore this
  * See also interface_cmd in lib/if.c
@@ -700,7 +587,7 @@ DEFUN_NOSH (zebra_interface,
   struct interface * ifp;
   
   /* Call lib interface() */
-  ret = interface_cmd.func(self, vty, argc, argv);
+  ret = interface_cmd.func (self, vty, argc, argv);
 
   ifp = vty->index;  
 
@@ -709,11 +596,7 @@ DEFUN_NOSH (zebra_interface,
   if (ifp->ifindex == 0)
     {
       ifp->ifindex = if_new_intern_ifindex ();
-      IF_INACTIVE_SET(ifp);
-      
-      /* Make interface available to protocol daemons for
-        configuration purposes */
-      zebra_interface_add_update(ifp);
+      UNSET_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE);
     }
 
   return ret;
@@ -737,14 +620,13 @@ DEFUN (no_zebra_interface,
       return CMD_WARNING;
     }
 
-  if (! IS_IF_INACTIVE(ifp))
+  if (! CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
     {
       vty_out(vty, "Only inactive interfaces can be deleted%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
   /* Delete interface */
-  zebra_interface_delete_update(ifp);
   if_delete(ifp);
 
   return CMD_SUCCESS;
@@ -782,7 +664,7 @@ DEFUN (show_interface, show_interface_cmd,
       ifp = if_lookup_by_name (argv[0]);
       if (ifp == NULL) 
 	{
-	  vty_out (vty, "Can't find interface [%s]%s", argv[0],
+	  vty_out (vty, "%% Can't find interface %s%s", argv[0],
 		   VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
@@ -947,6 +829,152 @@ ALIAS (no_bandwidth_if,
        NO_STR
        "Set bandwidth informational parameter\n"
        "Bandwidth in kilobits\n")
+
+int
+ip_address_install (struct vty *vty, struct interface *ifp, char *addr_str,
+		    char *peer_str, char *label, int secondary)
+{
+  struct prefix_ipv4 cp;
+  struct connected *ifc;
+  struct prefix_ipv4 *p;
+  struct in_addr mask;
+  int ret;
+
+  ret = str2prefix_ipv4 (addr_str, &cp);
+  if (ret <= 0)
+    {
+      vty_out (vty, "%% Malformed address %s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ifc = connected_check_ipv4 (ifp, (struct prefix *) &cp);
+  if (! ifc)
+    {
+      ifc = connected_new ();
+      ifc->ifp = ifp;
+
+      /* Address. */
+      p = prefix_ipv4_new ();
+      *p = cp;
+      ifc->address = (struct prefix *) p;
+
+      /* Broadcast. */
+      if (p->prefixlen <= 30)
+	{
+	  p = prefix_ipv4_new ();
+	  *p = cp;
+	  masklen2ip (p->prefixlen, &mask);
+	  p->prefix.s_addr |= ~mask.s_addr;
+	  ifc->destination = (struct prefix *) p;
+	}
+
+      /* Secondary. */
+      if (secondary)
+	SET_FLAG (ifc->flags, ZEBRA_IFA_SECONDARY);
+
+      /* Label. */
+      if (label)
+	ifc->label = strdup (label);
+
+      /* Add to linked list. */
+      listnode_add (ifp->connected, ifc);
+    }
+
+  /* This address is configured from zebra. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED))
+    SET_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED);
+
+  /* In case of this route need to install kernel. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_REAL)
+      && CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
+    {
+      /* Some system need to up the interface to set IP address. */
+      if (! if_is_up (ifp))
+	{
+	  if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+	  if_refresh (ifp);
+	}
+
+      ret = if_set_prefix (ifp, ifc);
+      if (ret < 0)
+	{
+	  vty_out (vty, "%% Can't set interface IP address: %s.%s", 
+		   strerror(errno), VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+
+      /* IP address propery set. */
+      SET_FLAG (ifc->conf, ZEBRA_IFC_REAL);
+
+      /* Update interface address information to protocol daemon. */
+      zebra_interface_address_add_update (ifp, ifc);
+
+      /* If interface is up register connected route. */
+      if (if_is_up(ifp))
+	connected_up_ipv4 (ifp, ifc);
+    }
+
+  return CMD_SUCCESS;
+}
+
+int
+ip_address_uninstall (struct vty *vty, struct interface *ifp, char *addr_str,
+		      char *peer_str, char *label, int secondry)
+{
+  struct prefix_ipv4 cp;
+  struct connected *ifc;
+  int ret;
+
+  /* Convert to prefix structure. */
+  ret = str2prefix_ipv4 (addr_str, &cp);
+  if (ret <= 0)
+    {
+      vty_out (vty, "%% Malformed address %s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Check current interface address. */
+  ifc = connected_check_ipv4 (ifp, (struct prefix *) &cp);
+  if (! ifc)
+    {
+      vty_out (vty, "%% Can't find address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* This is not configured address. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED))
+    return CMD_WARNING;
+
+  /* This is not real address or interface is not active. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_REAL)
+      || ! CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
+    {
+      listnode_delete (ifp->connected, ifc);
+      connected_free (ifc);
+      return CMD_WARNING;
+    }
+
+  /* This is real route. */
+  ret = if_unset_prefix (ifp, ifc);
+  if (ret < 0)
+    {
+      vty_out (vty, "%% Can't unset interface IP address: %s.%s", 
+	       strerror(errno), VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Redistribute this information. */
+  zebra_interface_address_delete_update (ifp, ifc);
+
+  /* Remove connected route. */
+  connected_down_ipv4 (ifp, ifc);
+
+  /* Free address information. */
+  listnode_delete (ifp->connected, ifc);
+  connected_free (ifc);
+
+  return CMD_SUCCESS;
+}
 
 DEFUN (ip_address,
        ip_address_cmd,
@@ -955,53 +983,7 @@ DEFUN (ip_address,
        "Set the IP address of an interface\n"
        "IP address (e.g. 10.0.0.1/8)\n")
 {
-  int ret;
-  struct interface *ifp;
-  struct prefix p;
-
-  ifp = (struct interface *) vty->index;
-
-  ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
-  if (ret <= 0)
-    {
-      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  if (! IS_IF_INACTIVE(ifp) )
-    {
-      /* Set interface's flag.  Ignore result for Linux's interface
-	 alias which can't up. */
-      ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
-#if 0
-      if (ret < 0)
-	{
-	  vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
-#endif /* 0 */
-      if_get_flags (ifp);
-
-      ret = if_set_prefix (ifp, (struct prefix_ipv4 *) &p);
-      if (ret < 0)
-	{
-	  vty_out (vty, "Can't set interface's address: %s.%s", 
-		   strerror(errno),
-		   VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
-    }
-
-  /* Make sure mask is applied and set type to static route. */
-  ret = if_addr_add (ifp, &p);
-  if (ret < 0)
-    {
-      vty_out (vty, "Can't set interface's address: %s.%s", strerror(errno),
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  return CMD_SUCCESS;
+  return ip_address_install (vty, vty->index, argv[0], NULL, NULL, 0);
 }
 
 DEFUN (no_ip_address,
@@ -1012,131 +994,215 @@ DEFUN (no_ip_address,
        "Set the IP address of an interface\n"
        "IP Address (e.g. 10.0.0.1/8)")
 {
+  return ip_address_uninstall (vty, vty->index, argv[0], NULL, NULL, 0);
+}
+
+#ifdef HAVE_NETLINK
+DEFUN (ip_address_secondary,
+       ip_address_secondary_cmd,
+       "ip address A.B.C.D/M secondary",
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Secondary IP address\n")
+{
+  return ip_address_install (vty, vty->index, argv[0], NULL, NULL, 1);
+}
+
+DEFUN (ip_address_label,
+       ip_address_label_cmd,
+       "ip address A.B.C.D/M label LINE",
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Label of this address\n"
+       "Label\n")
+{
+  return ip_address_install (vty, vty->index, argv[0], NULL, argv[1], 1);
+}
+
+DEFUN (no_ip_address_secondary,
+       no_ip_address_secondary_cmd,
+       NO_STR
+       "ip address A.B.C.D/M secondary",
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Secondary IP address\n")
+{
+  return ip_address_uninstall (vty, vty->index, argv[0], NULL, NULL, 1);
+}
+
+DEFUN (no_ip_address_label,
+       no_ip_address_label_cmd,
+       "no ip address A.B.C.D/M label LINE",
+       NO_STR
+       "Interface Internet Protocol config commands\n"
+       "Set the IP address of an interface\n"
+       "IP address (e.g. 10.0.0.1/8)\n"
+       "Label of this address\n"
+       "Label\n")
+{
+  return ip_address_uninstall (vty, vty->index, argv[0], NULL, argv[1], 1);
+}
+#endif /* HAVE_NETLINK */
+
+#ifdef HAVE_IPV6
+int
+ipv6_address_install (struct vty *vty, struct interface *ifp, char *addr_str,
+		      char *peer_str, char *label, int secondary)
+{
+  struct prefix_ipv6 cp;
+  struct connected *ifc;
+  struct prefix_ipv6 *p;
   int ret;
-  struct interface *ifp;
-  struct prefix p;
 
-  ifp = (struct interface *) vty->index;
-
-  ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
+  ret = str2prefix_ipv6 (addr_str, &cp);
   if (ret <= 0)
     {
-      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
+      vty_out (vty, "%% Malformed address %s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
-  if (! IS_IF_INACTIVE(ifp))
+  ifc = connected_check_ipv6 (ifp, (struct prefix *) &cp);
+  if (! ifc)
     {
-      ret = if_unset_prefix (ifp, (struct prefix_ipv4 *) &p);
+      ifc = connected_new ();
+      ifc->ifp = ifp;
+
+      /* Address. */
+      p = prefix_ipv6_new ();
+      *p = cp;
+      ifc->address = (struct prefix *) p;
+
+      /* Secondary. */
+      if (secondary)
+	SET_FLAG (ifc->flags, ZEBRA_IFA_SECONDARY);
+
+      /* Label. */
+      if (label)
+	ifc->label = strdup (label);
+
+      /* Add to linked list. */
+      listnode_add (ifp->connected, ifc);
+    }
+
+  /* This address is configured from zebra. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED))
+    SET_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED);
+
+  /* In case of this route need to install kernel. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_REAL)
+      && CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
+    {
+      /* Some system need to up the interface to set IP address. */
+      if (! if_is_up (ifp))
+	{
+	  if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+	  if_refresh (ifp);
+	}
+
+      ret = if_prefix_add_ipv6 (ifp, ifc);
+
       if (ret < 0)
 	{
-	  vty_out (vty, "Can't delete interface's address: %s.%s", 
-		   strerror(errno),
-		   VTY_NEWLINE);
+	  vty_out (vty, "%% Can't set interface IP address: %s.%s", 
+		   strerror(errno), VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
-    }
 
-  ret = if_addr_delete (ifp, &p);
-  if (ret < 0)
-    {
-      vty_out (vty, "Can't delete interface's address: %s.%s", 
-	       strerror(errno),
-	       VTY_NEWLINE);
-      return CMD_WARNING;
+      /* IP address propery set. */
+      SET_FLAG (ifc->conf, ZEBRA_IFC_REAL);
+
+      /* Update interface address information to protocol daemon. */
+      zebra_interface_address_add_update (ifp, ifc);
+
+      /* If interface is up register connected route. */
+      if (if_is_up(ifp))
+	connected_up_ipv6 (ifp, ifc);
     }
 
   return CMD_SUCCESS;
 }
 
-#ifdef HAVE_IPV6
+int
+ipv6_address_uninstall (struct vty *vty, struct interface *ifp, char *addr_str,
+			char *peer_str, char *label, int secondry)
+{
+  struct prefix_ipv6 cp;
+  struct connected *ifc;
+  int ret;
+
+  /* Convert to prefix structure. */
+  ret = str2prefix_ipv6 (addr_str, &cp);
+  if (ret <= 0)
+    {
+      vty_out (vty, "%% Malformed address %s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Check current interface address. */
+  ifc = connected_check_ipv6 (ifp, (struct prefix *) &cp);
+  if (! ifc)
+    {
+      vty_out (vty, "%% Can't find address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* This is not configured address. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED))
+    return CMD_WARNING;
+
+  /* This is not real address or interface is not active. */
+  if (! CHECK_FLAG (ifc->conf, ZEBRA_IFC_REAL)
+      || ! CHECK_FLAG (ifp->status, ZEBRA_INTERFACE_ACTIVE))
+    {
+      listnode_delete (ifp->connected, ifc);
+      connected_free (ifc);
+      return CMD_WARNING;
+    }
+
+  /* This is real route. */
+  ret = if_prefix_delete_ipv6 (ifp, ifc);
+  if (ret < 0)
+    {
+      vty_out (vty, "%% Can't unset interface IP address: %s.%s", 
+	       strerror(errno), VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Redistribute this information. */
+  zebra_interface_address_delete_update (ifp, ifc);
+
+  /* Remove connected route. */
+  connected_down_ipv6 (ifp, ifc);
+
+  /* Free address information. */
+  listnode_delete (ifp->connected, ifc);
+  connected_free (ifc);
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (ipv6_address,
        ipv6_address_cmd,
-       "ipv6 address IPV6PREFIX/M",
+       "ipv6 address X:X::X:X/M",
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
        "IPv6 address (e.g. 3ffe:506::1/48)\n")
 {
-  int ret;
-  struct interface *ifp;
-  struct prefix p;
-
-  ifp = (struct interface *) vty->index;
-
-  ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
-  if (ret <= 0)
-    {
-      vty_out (vty, "Please specify IPv6 prefix with prefixlen%s", 
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  if (! IS_IF_INACTIVE(ifp))
-    {
-      /* Set interface's flag. */
-      ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
-#if 0
-      if (ret < 0)
-	{
-	  vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
-#endif /* 0 */
-      if_get_flags (ifp);
-
-      /* Make sure mask is applied and set type to static route*/
-      ret = if_prefix_add_ipv6 (ifp, (struct prefix_ipv6 *)&p);
-      if (ret < 0)
-	{
-	  vty_out (vty, "Can't set interface's address: %s.%s", 
-		   strerror(errno),
-		   VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
-    }
-
-  if_addr_add (ifp, &p);
-
-  return CMD_SUCCESS;
+  return ipv6_address_install (vty, vty->index, argv[0], NULL, NULL, 0);
 }
 
 DEFUN (no_ipv6_address,
        no_ipv6_address_cmd,
-       "no ipv6 address IPV6PREFIX/M",
+       "no ipv6 address X:X::X:X/M",
        NO_STR
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
        "IPv6 address (e.g. 3ffe:506::1/48)\n")
 {
-  int ret;
-  struct interface *ifp;
-  struct prefix p;
-
-  ifp = (struct interface *) vty->index;
-
-  ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
-  if (ret <= 0)
-    {
-      vty_out (vty, "Please specify IPv6 prefix with prefixlen%s", 
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  if (! IS_IF_INACTIVE(ifp) )
-    {
-      ret = if_prefix_delete_ipv6 (ifp, (struct prefix_ipv6 *)&p);
-      if (ret < 0)
-	{
-	  vty_out (vty, "Can't delete interface's address: %s.%s",
-		   strerror(errno),
-		   VTY_NEWLINE);
-	  return CMD_WARNING;
-	}
-    }
-
-  if_addr_delete (ifp, &p);
-
-  return CMD_SUCCESS;
+  return ipv6_address_uninstall (vty, vty->index, argv[0], NULL, NULL, 0);
 }
 #endif /* HAVE_IPV6 */
 
@@ -1147,36 +1213,6 @@ DEFUN (ip_tunnel,
        "KAME ip tunneling configuration commands\n"
        "Set FROM IP address and TO IP address\n")
 {
-  /* variable define */
-  int ret;
-  struct interface *ifsp, *ifdp;
-  struct prefix sp, dp;
-
-  ifsp = (struct interface *) vty->index;
-  ifdp = (struct interface *) vty->index;
-  ret = str2prefix (argv[0], &sp);
-  if (!ret)
-    {
-      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ret = str2prefix (argv[1], &dp);
-  if (!ret)
-    {
-      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ret = if_tun_add (ifsp, ifdp, &sp, &dp);
-  if (ret < 0)
-    {
-      vty_out (vty, "Can't set tunnel address: %s.%s", 
-	       strerror(errno),
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
   return CMD_SUCCESS;
 }
 
@@ -1185,36 +1221,6 @@ DEFUN (no_ip_tunnel, no_ip_tunnel_cmd,
        NO_STR
        "Set FROM IP address and TO IP address\n")
 {
-  /* variable define */
-  int ret;
-  struct interface *ifp;
-  struct interface *ifsp = NULL;
-  struct prefix sp, dp;
-
-  ifp = (struct interface *) vty->index;
-  ret = str2prefix (argv[0], &sp);
-  if (!ret)
-    {
-      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ret = str2prefix (argv[1], &dp);
-  if (!ret)
-    {
-      vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-
-  ret = if_tun_delete (ifsp, ifp, &sp, &dp);
-  if (ret < 0)
-    {
-      vty_out (vty, "Can't set tunnel address: %s.%s", 
-	       strerror(errno),
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-    
   return CMD_SUCCESS;
 }
 #endif /* KAME */
@@ -1230,6 +1236,7 @@ if_config_write (struct vty *vty)
     {
       struct zebra_if *if_data;
       listnode addrnode;
+      struct connected *ifc;
       struct prefix *p;
 
       ifp = getdata (node);
@@ -1242,28 +1249,30 @@ if_config_write (struct vty *vty)
 	vty_out (vty, " description %s%s", ifp->desc,
 		 VTY_NEWLINE);
 
-#ifdef HAVE_IF_PSEUDO
-      if (IS_IF_PSEUDO(ifp)){
-	vty_out (vty, " pseudo %s",
-		 VTY_NEWLINE);
-      }
-#endif /* HAVE_IF_PSEUDO */      
-
       /* Assign bandwidth here to avoid unnecessary interface flap
 	 while processing config script */
       if (ifp->bandwidth != 0)
 	vty_out(vty, " bandwidth %u%s", ifp->bandwidth, VTY_NEWLINE); 
 
-      if (if_data && if_data->address)
-	for (addrnode = listhead (if_data->address); addrnode; 
-	     nextnode (addrnode))
+      for (addrnode = listhead (ifp->connected); addrnode; nextnode (addrnode))
 	  {
-	    p = getdata (addrnode);
-	    vty_out (vty, " ip%s address %s/%d%s",
-		     p->family == AF_INET ? "" : "v6",
-		     inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-		     p->prefixlen,
-		     VTY_NEWLINE);
+	    ifc = getdata (addrnode);
+	    if (CHECK_FLAG (ifc->conf, ZEBRA_IFC_CONFIGURED))
+	      {
+		p = ifc->address;
+		vty_out (vty, " ip%s address %s/%d",
+			 p->family == AF_INET ? "" : "v6",
+			 inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+			 p->prefixlen);
+
+		if (CHECK_FLAG (ifc->flags, ZEBRA_IFA_SECONDARY))
+		  vty_out (vty, " secondary");
+		  
+		if (ifc->label)
+		  vty_out (vty, " label %s", ifc->label);
+
+		vty_out (vty, "%s", VTY_NEWLINE);
+	      }
 	  }
 
       if (if_data)
@@ -1309,10 +1318,6 @@ zebra_if_init ()
   install_element (INTERFACE_NODE, &no_multicast_cmd);
   install_element (INTERFACE_NODE, &shutdown_if_cmd);
   install_element (INTERFACE_NODE, &no_shutdown_if_cmd);
-#ifdef HAVE_IF_PSEUDO
-  install_element (INTERFACE_NODE, &interface_pseudo_cmd);
-  install_element (INTERFACE_NODE, &no_interface_pseudo_cmd);
-#endif /* HAVE_IF_PSEUDO */  
   install_element (INTERFACE_NODE, &bandwidth_if_cmd);
   install_element (INTERFACE_NODE, &no_bandwidth_if_cmd);
   install_element (INTERFACE_NODE, &no_bandwidth_if_val_cmd);
@@ -1326,4 +1331,10 @@ zebra_if_init ()
   install_element (INTERFACE_NODE, &ip_tunnel_cmd);
   install_element (INTERFACE_NODE, &no_ip_tunnel_cmd);
 #endif /* KAME */
+#ifdef HAVE_NETLINK
+  install_element (INTERFACE_NODE, &ip_address_secondary_cmd);
+  install_element (INTERFACE_NODE, &ip_address_label_cmd);
+  install_element (INTERFACE_NODE, &no_ip_address_secondary_cmd);
+  install_element (INTERFACE_NODE, &no_ip_address_label_cmd);
+#endif /* HAVE_NETLINK */
 }

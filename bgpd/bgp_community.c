@@ -148,6 +148,22 @@ community_include (struct community *com, u_int32_t val)
   return 0;
 }
 
+#ifdef SUNOS_5
+u_int32_t
+community_val_get (struct community *com, int i)
+{
+  u_char *p;
+  u_int32_t val;
+
+  p = (u_char *) com->val;
+  p += (i * 4);
+
+  memcpy (&val, p, sizeof (u_int32_t));
+
+  return ntohl (val);
+}
+#endif /* SUNOS_5 */
+
 /* Sort and uniq given community. */
 struct community *
 community_uniq_sort (struct community *com)
@@ -160,8 +176,12 @@ community_uniq_sort (struct community *com)
   
   for (i = 0; i < com->size; i++)
     {
+#ifdef SUNOS_5
+      val = community_val_get (com, i);
+#else /* SUNOS_5 */
       memcpy (&val, com_nthval (com, i), sizeof (u_int32_t));
       val = ntohl (val);
+#endif /* SUNOS_5 */
 
       if (! community_include (new, val))
 	community_add_val (new, val);
@@ -215,7 +235,7 @@ community_dup (struct community *com)
   struct community *new;
 
   new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
-  bzero (new, sizeof (struct community));
+  memset (new, 0, sizeof (struct community));
   new->size = com->size;
   if (new->size)
     {
@@ -280,7 +300,7 @@ community_print (struct community *com)
   u_int16_t as;
   u_int16_t val;
 
-  bzero(buf, BUFSIZ);
+  memset (buf, 0, BUFSIZ);
 
   for (i = 0; i < com->size; i++) 
     {
@@ -570,18 +590,8 @@ community_str2com (char *str)
   return com_sort;
 }
 
-void
-community_test ()
+unsigned long
+community_count ()
 {
-  struct community *com1;
-  struct community *com2;
-  struct community *com3;
-
-  com1 = community_str2com ("no-export local-AS 7675:1");
-  com2 = community_str2com ("1:3 1:2 1:1 1:3 1:1 1:2 1:3");
-  /* community_merge (com1, com2); */
-
-  printf ("%d %s\n", com2->size, community_print (com2));
-  com3 = community_uniq_sort (com2);
-  printf ("%d %s\n", com3->size, community_print (com3));
+  return comhash->count;
 }

@@ -34,9 +34,6 @@
 #include "smux.h"
 
 #include "ripd/ripd.h"
-#ifdef RIP_API
-#include "ripd/ripd_api.h" /* RIPD_API */
-#endif /* RIP_API */
 
 /* RIPv2-MIB. */
 #define RIPV2MIB 1,3,6,1,2,1,23
@@ -63,28 +60,9 @@
 #define RIP2IFCONFADDRESS       1
 #define RIP2IFCONFDOMAIN        2
 #define RIP2IFCONFAUTHTYPE      3
-#ifdef RIP_API
-#  define Leaf_rip2IfConfAuthType_noAuthentication       1
-#  define Leaf_rip2IfConfAuthType_simplePassword         2
-#  define Leaf_rip2IfConfAuthType_md5                    3
-#endif /* RIP_API */
 #define RIP2IFCONFAUTHKEY       4
 #define RIP2IFCONFSEND          5
-#ifdef RIP_API
-#  define Leaf_rip2IfConfSend_doNotSend                  1
-#  define Leaf_rip2IfConfSend_ripVersion1                2
-#  define Leaf_rip2IfConfSend_rip1Compatible             3
-#  define Leaf_rip2IfConfSend_ripVersion2                4
-#  define Leaf_rip2IfConfSend_ripV1Demand                5
-#  define Leaf_rip2IfConfSend_ripV2Demand                6
-#endif /* RIP_API */
 #define RIP2IFCONFRECEIVE       6
-#ifdef RIP_API 
-#  define Leaf_rip2IfConfReceive_rip1                    1
-#  define Leaf_rip2IfConfReceive_rip2                    2
-#  define Leaf_rip2IfConfReceive_rip1OrRip2              3
-#  define Leaf_rip2IfConfReceive_doNotRecieve            4
-#endif /* RIP_API */
 #define RIP2IFCONFDEFAULTMETRIC 7
 #define RIP2IFCONFSTATUS        8
 #define RIP2IFCONFSRCADDRESS    9
@@ -103,11 +81,6 @@
 #define TIMETICKS   ASN_TIMETICKS
 #define IPADDRESS   ASN_IPADDRESS
 #define STRING      ASN_OCTET_STR
-
-/* RIP Autentication string max. */
-#ifdef RIP_API
-#define MAX_AUTH_STRING 18  /* XXX */
-#endif /* RIP_API */
 
 /* Define SNMP local variables. */
 SNMP_LOCAL_VARIABLES
@@ -181,34 +154,18 @@ static u_char *
 rip2Globals (struct variable *v, oid name[], size_t *length,
 	     int exact, size_t *var_len, WriteMethod **write_method)
 {
-#ifdef RIP_API
-  static rip_globals_t info;
-#endif /* RIP_API */
-
   if (smux_header_generic(v, name, length, exact, var_len, write_method)
       == MATCH_FAILED)
     return NULL;
-
-#ifdef RIP_API
-  ripd_api_get_globals (&info);
-#endif /* RIP_API */
 
   /* Retrun global counter. */
   switch (v->magic)
     {
     case RIP2GLOBALROUTECHANGES:
-#ifdef RIP_API
-      return SNMP_INTEGER (info.rip_global_route_changes);
-#else
       return SNMP_INTEGER (rip_global_route_changes);
-#endif /* RIP_API */
       break;
     case RIP2GLOBALQUERIES:
-#ifdef RIP_API
-      return SNMP_INTEGER (info.rip_global_queries);
-#else
       return SNMP_INTEGER (rip_global_queries);
-#endif /* RIP_API */
       break;
     default:
       return NULL;
@@ -387,9 +344,6 @@ rip2IfStatEntry (struct variable *v, oid name[], size_t *length,
   static long valid = SNMP_VALID;
 
   memset (&addr, 0, sizeof (struct in_addr));
-#ifdef RIP_API
-  *write_method = NULL;
-#endif /* RIP_API */
   
   /* Lookup interface. */
   ifp = rip2IfLookup (v, name, length, &addr, exact);
@@ -428,328 +382,6 @@ rip2IfStatEntry (struct variable *v, oid name[], size_t *length,
   return NULL;
 }
 
-#ifdef RIP_API
-long
-rip2IfConf_SendVersion_2_SNMP (int version)
-{
-  long res;
-
-  switch (version){
-  case RI_RIP_VERSION_1_AND_2:
-    res=Leaf_rip2IfConfSend_rip1Compatible;
-    break;
-  case RI_RIP_VERSION_2:
-    res=Leaf_rip2IfConfSend_ripVersion2;
-    break;
-  case RI_RIP_VERSION_1:
-    res=Leaf_rip2IfConfSend_ripVersion1;
-    break;
-  default:
-    res=Leaf_rip2IfConfSend_doNotSend;
-    break;
-  }
-  return res;
-}
-
-int
-rip2IfConf_SNMP_2_SendVersion (long value)
-{
-  switch (value)
-    {
-    case Leaf_rip2IfConfSend_doNotSend:
-      return RI_RIP_UNSPEC;
-    case Leaf_rip2IfConfSend_ripVersion1:
-      return RI_RIP_VERSION_1;
-    case Leaf_rip2IfConfSend_ripVersion2:
-      return RI_RIP_VERSION_2;
-
-#if 1 /* XXX */
-    case Leaf_rip2IfConfSend_ripV1Demand:
-    case Leaf_rip2IfConfSend_ripV2Demand:
-#endif
-    default:
-    case Leaf_rip2IfConfSend_rip1Compatible:
-      return RI_RIP_VERSION_1_AND_2;
-    }
-}
-
-long
-rip2IfConf_ReceiveVersion_2_SNMP (int version)
-{
-  long res;
-  
-  switch(version){
-  case RI_RIP_VERSION_1_AND_2:
-    res=Leaf_rip2IfConfReceive_rip1OrRip2;
-    break;
-  case RI_RIP_VERSION_2:  
-    res=Leaf_rip2IfConfReceive_rip2;
-    break;
-  case RI_RIP_VERSION_1:
-    res=Leaf_rip2IfConfReceive_rip1;
-    break;
-  default:
-    res=Leaf_rip2IfConfReceive_doNotRecieve;
-    break;
-  }
-  return res;
-}
-
-int
-rip2IfReceive_SNMP_2_SendVersion (long value)
-{
-  switch (value)
-    {
-    case Leaf_rip2IfConfReceive_rip1OrRip2:
-      return RI_RIP_VERSION_1_AND_2;
-    case Leaf_rip2IfConfReceive_rip2:
-      return RI_RIP_VERSION_2;
-    case Leaf_rip2IfConfReceive_rip1:
-      return RI_RIP_VERSION_1;
-    case Leaf_rip2IfConfReceive_doNotRecieve:
-    default:
-      return RI_RIP_UNSPEC;
-    }
-}
-
-int
-get_and_check_int (u_char *var_val,
-                   u_char var_val_type,
-                   size_t var_val_len,
-                   long min_val,
-                   long max_val,
-                   long *intval)
-{
-  int     bigsize = SNMP_MAX_LEN;
-  static char fun_name[] = "get_and_check_int";
-
-  *intval = min_val;
-
-  /* check type */
-  if (var_val_type != ASN_INTEGER)
-    {
-      zlog_err ("%s: invalid type: %d", (char*) fun_name, (int) var_val_type);
-      return SNMP_ERR_WRONGTYPE;
-    }
-
-  /* check size */
-  if (var_val_len != sizeof (long))
-    {
-      zlog_err ("%s: invalid length: %d", (char*) fun_name, (int) var_val_len);
-      return SNMP_ERR_WRONGLENGTH;
-    }
-
-  if (! asn_parse_int(var_val, &bigsize, &var_val_type,
-                      intval, sizeof(long)))
-    {
-      zlog_err ("%s: wrong encoding", (char*) fun_name);
-      return SNMP_ERR_WRONGENCODING;
-    }
-
-  if (max_val > min_val) 
-    {/* check limits */
-      if (*intval < min_val)
-        {
-          zlog_err ("%s: invalid value (small): %ld < %ld",
-                    (char*) fun_name, (long) *intval, (long) min_val);
-          return SNMP_ERR_BADVALUE;
-        }
-
-      if (*intval > max_val)
-        {
-          zlog_err ("%s: invalid value (big): %ld > %ld",
-                    (char*) fun_name, (long) *intval, (long) max_val);
-          return SNMP_ERR_BADVALUE;
-        }
-    }
-
-  return SNMP_ERR_NOERROR;
-}
-
-int
-get_and_check_string (u_char *var_val,
-		      u_char var_val_type,
-		      size_t var_val_len,
-		      size_t buffer_max_size,
-		      u_char should_zero_limited,
-		      size_t *buffer_actual_size,
-		      char *buffer)
-{
-  int     bigsize = SNMP_MAX_LEN;
-
-  if (var_val_type != ASN_OCTET_STR)
-    return SNMP_ERR_WRONGTYPE;
-
-  
-  if (should_zero_limited)
-    buffer_max_size--;
-
-  if (! asn_parse_string(var_val, &bigsize, &var_val_type, buffer, &buffer_max_size))
-    {
-      zlog_err ("get_string: asn_parse_string failed");
-      return SNMP_ERR_WRONGENCODING;
-    }
-
-  if (buffer_actual_size)
-    *buffer_actual_size = buffer_max_size;
-
-  if (should_zero_limited)
-    {
-      buffer[buffer_max_size] = 0;
-      if (buffer_actual_size)
-        *buffer_actual_size += 1;
-    }
-
-  return SNMP_ERR_NOERROR;
-}
-
-int
-act_rip2IfConfAddress (int action,
-                       u_char  *var_val,
-                       u_char      var_val_type,
-                       size_t      var_val_len,
-                       u_char      *statP,
-                       struct interface *ifp,
-                       int         leaf_id)
-{
-  long intval;
-  int ret;
-  int version;
-  char auth_str[MAX_AUTH_STRING];
-
-  ret = SNMP_ERR_NOERROR; /* default: we are optimists */
-
-  switch (leaf_id)
-    {
-    case RIP2IFCONFDOMAIN:
-      zlog_err ("Cannot write rip2IfConfDomain");
-      ret = SNMP_ERR_GENERR;
-      break;
-
-    case RIP2IFCONFAUTHTYPE:
-      ret = get_and_check_int (var_val, var_val_type, var_val_len,
-			       Leaf_rip2IfConfAuthType_noAuthentication,
-			       Leaf_rip2IfConfAuthType_md5,
-			       &intval);
-      if (SNMP_ERR_NOERROR == ret && COMMIT == action &&
-	  CMD_SUCCESS != ripd_api_set_if_authentication_type (ifp, intval))
-	{
-	  ret = SNMP_ERR_GENERR;
-	}
-      break;
-
-    case RIP2IFCONFAUTHKEY:
-      ret = get_and_check_string (var_val, var_val_type, var_val_len,
-				  MAX_AUTH_STRING - 1, 1, NULL,
-				  auth_str);
-      if (SNMP_ERR_NOERROR == ret && COMMIT == action &&
-	  CMD_SUCCESS != ripd_api_set_if_authentication_string (ifp, auth_str))
-	{
-	  ret = SNMP_ERR_GENERR;
-	}
-      break;
-
-    case RIP2IFCONFSEND:
-      ret = get_and_check_int (var_val, var_val_type, var_val_len,
-			       Leaf_rip2IfConfSend_doNotSend,
-			       Leaf_rip2IfConfSend_ripV2Demand,
-			       &intval);
-      if (SNMP_ERR_NOERROR == ret && COMMIT == action)
-	{
-	  version = rip2IfConf_SNMP_2_SendVersion (intval);
-	  if (CMD_SUCCESS != ripd_api_set_if_tx_version (ifp, version)) 
-	    {
-	      zlog_err ("ripd_api_set_if_tx_version failed\n");
-	      ret = SNMP_ERR_GENERR;
-	    } 
-	}
-      break;
-
-    case RIP2IFCONFRECEIVE:
-      ret = get_and_check_int (var_val, var_val_type, var_val_len,
-			       Leaf_rip2IfConfReceive_rip1,
-			       Leaf_rip2IfConfReceive_doNotRecieve,
-			       &intval);
-      if (SNMP_ERR_NOERROR == ret && COMMIT == action)
-	{
-	  version = rip2IfReceive_SNMP_2_SendVersion (intval);
-	  if (CMD_SUCCESS != ripd_api_set_if_rx_version (ifp, version)) 
-	    {
-	      ret = SNMP_ERR_GENERR;
-	    } 
-	}
-      break;
-
-    case RIP2IFCONFDEFAULTMETRIC:
-      ret = get_and_check_int (var_val, var_val_type, var_val_len,
-			       0,
-			       0,
-			       &intval);
-      zlog_err ("Cannot write rip2IfConfDefaultMetric");
-      ret = SNMP_ERR_GENERR;
-      break;
-
-    case RIP2IFCONFSTATUS:
-      zlog_err ("Cannot write rip2IfConfStatus");
-      ret = SNMP_ERR_GENERR;
-      break;
-
-    case RIP2IFCONFSRCADDRESS:
-      zlog_err ("Cannot write rip2IfConfSrcAddress");
-      ret = SNMP_ERR_GENERR;
-      break;
-
-    default:
-      zlog_err ("Unknown leaf=%d", (int) leaf_id);
-      ret = SNMP_ERR_GENERR;
-    }
-
-  return ret;
-}
-
-int
-write_rip2IfConfAddress (int action,
-			 u_char  *var_val,
-			 u_char   var_val_type,
-			 size_t   var_val_len,
-			 u_char  *statP,
-			 oid     *name,
-			 size_t   length)
-{
-  int              leaf_id;
-  int              ret;
-  struct in_addr   addr;
-  struct interface      *ifp;
-
-  oid2in_addr (name + length - sizeof (struct in_addr), sizeof (struct in_addr), &addr);
-  leaf_id = (int) name[length - sizeof (struct in_addr) - 1];
-  ifp = if_lookup_exact_address (addr);
-  if (! ifp)
-    return SNMP_ERR_NOSUCHNAME;
-
-  ret = SNMP_ERR_NOERROR;
-
-  switch (action)
-    {
-    case RESERVE1:
-    case COMMIT:
-      ret = act_rip2IfConfAddress (action, var_val, var_val_type,
-				   var_val_len, statP, ifp,
-				   leaf_id);
-      break;
-
-    case FREE:
-      /* undo it */
-      break;
-
-    default:
-      ret = SNMP_ERR_GENERR;
-    } /* of switch by 'action' */
-
-  return ret;
-}
-
-#else
 static long
 rip2IfConfSend (struct rip_interface *ri)
 {
@@ -797,7 +429,6 @@ rip2IfConfReceive (struct rip_interface *ri)
   else
     return doNotReceive;
 }
-#endif /* RIP_API */
 
 static u_char *
 rip2IfConfAddress (struct variable *v, oid name[], size_t *length,
@@ -808,19 +439,10 @@ rip2IfConfAddress (struct variable *v, oid name[], size_t *length,
   static long domain = 0;
   static long config = 0;
   static u_int auth = 0;
-#ifdef RIP_API  
-  static char auth_str[MAX_AUTH_STRING];
-#endif /* RIP_API */
   struct interface *ifp;
   struct rip_interface *ri;
-#ifdef RIP_API
-  int version, running;
-#endif /* RIP_API */  
 
   memset (&addr, 0, sizeof (struct in_addr));
-#ifdef RIP_API
-  *write_method = write_rip2IfConfAddress;
-#endif /* RIP_API */  
   
   /* Lookup interface. */
   ifp = rip2IfLookup (v, name, length, &addr, exact);
@@ -841,59 +463,21 @@ rip2IfConfAddress (struct variable *v, oid name[], size_t *length,
       return (u_char *) &domain;
 
     case RIP2IFCONFAUTHTYPE:
-#ifdef RIP_API
-      switch (ri->auth_type)
-	{
-	case RIP_NO_AUTH:
-	  auth=Leaf_rip2IfConfAuthType_noAuthentication;
-	  break;
-	case RIP_AUTH_SIMPLE_PASSWORD:
-	  auth=Leaf_rip2IfConfAuthType_simplePassword;
-	  break;
-	case RIP_AUTH_MD5:
-	  auth=Leaf_rip2IfConfAuthType_md5;
-	  break;
-	default:
-	  auth=Leaf_rip2IfConfAuthType_noAuthentication;
-	  break;
-	}
-#else
       auth = ri->auth_type;
-#endif /* RIP_API */
       *val_len = sizeof (long);
       v->type = ASN_INTEGER;
       return (u_char *)&auth;
 
     case RIP2IFCONFAUTHKEY:
-#ifdef RIP_API
-      ripd_api_get_if_authentication_string (ifp, MAX_AUTH_STRING,
-                                             auth_str, NULL);
-      *val_len = strlen (auth_str);
-      return (u_char *) auth_str;
-      break;
-#else	
       *val_len = 0;
       return (u_char *) &domain;
-#endif /* RIP_API */
-
     case RIP2IFCONFSEND:
-#ifdef RIP_API
-      ripd_api_get_if_tx_version (ifp, &version);
-      config = rip2IfConf_SendVersion_2_SNMP (version);
-#else
       config = rip2IfConfSend (ri);
-#endif /* RIP_API */
       *val_len = sizeof (long);
       v->type = ASN_INTEGER;
       return (u_char *) &config;
-
     case RIP2IFCONFRECEIVE:
-#ifdef RIP_API
-      ripd_api_get_if_rx_version (ifp, &version);
-      config = rip2IfConf_ReceiveVersion_2_SNMP (version);
-#else
       config = rip2IfConfReceive (ri);
-#endif /* RIP_API */
       *val_len = sizeof (long);
       v->type = ASN_INTEGER;
       return (u_char *) &config;
@@ -901,19 +485,11 @@ rip2IfConfAddress (struct variable *v, oid name[], size_t *length,
     case RIP2IFCONFDEFAULTMETRIC:
       *val_len = sizeof (long);
       v->type = ASN_INTEGER;
-      /* RIPv2-MIB speaks of metric for default route.  that's not
-	 what we do here.*/
       return (u_char *) &ifp->metric;
-
     case RIP2IFCONFSTATUS:
-#ifdef RIP_API      
-      ripd_api_get_if_running (ifp, &running);
-      valid = running ? SNMP_VALID : SNMP_INVALID;
-#endif /* RIP_API */
       *val_len = sizeof (long);
       v->type = ASN_INTEGER;
       return (u_char *) &valid;
-
     case RIP2IFCONFSRCADDRESS:
       *val_len = sizeof (struct in_addr);
       return (u_char *) &addr;

@@ -31,19 +31,19 @@ void zebra_redistribute_delete (int, struct zserv *, int);
 void zebra_redistribute_default_add (int, struct zserv *, int);
 void zebra_redistribute_default_delete (int, struct zserv *, int);
 
-#ifndef OLD_RIB
-void redistribute_add_multipath (struct route_node *, struct new_rib *);
-void redistribute_delete_multipath (struct route_node *, struct new_rib *);
-#endif /* ! OLD_RIB */
+void redistribute_add (struct prefix *, struct rib *);
+void redistribute_delete (struct prefix *, struct rib *);
 
-void redistribute_add (struct route_node *np, struct rib *rib);
-void redistribute_delete (struct route_node *np, struct rib *rib);
+void zebra_interface_up_update (struct interface *);
+void zebra_interface_down_update (struct interface *);
 
-void zebra_interface_add_update (struct interface *ifp);
-void zebra_interface_delete_update (struct interface *ifp);
-void zebra_interface_address_add_update (struct interface *ifp, 
-					 struct connected *c);
-void zebra_interface_address_delete_update (struct interface *ifp, 
+void zebra_interface_add_update (struct interface *);
+void zebra_interface_delete_update (struct interface *);
+
+void zebra_interface_address_add_update (struct interface *,
+					 struct connected *);
+void zebra_interface_address_delete_update (struct interface *,
 					    struct connected *c);
 
 #endif /* _ZEBRA_REDISTRIBUTE_H */
+

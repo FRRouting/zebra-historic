@@ -51,7 +51,6 @@ thread_make_master ()
   return new;
 }
 
-
 /* Add a new thread to the list. */
 static void
 thread_list_add (struct thread_list *list, struct thread *thread)
@@ -67,7 +66,7 @@ thread_list_add (struct thread_list *list, struct thread *thread)
 }
 
 /* Add a new thread to the list. */
-static void
+void
 thread_list_add_before (struct thread_list *list, 
 			struct thread *point, 
 			struct thread *thread)
@@ -238,10 +237,6 @@ thread_add_read (struct thread_master *m,
 {
   struct thread *thread;
 
-#ifdef DEBUG
-  printf ("add read\n");
-#endif /* DEBUG */  
-
   assert (m != NULL);
 
   if (FD_ISSET (fd, &m->readfd))
@@ -256,9 +251,6 @@ thread_add_read (struct thread_master *m,
   thread->master = m;
   thread->func = func;
   thread->arg = arg;
-#ifdef DEBUG
-  printf ("fd added [%d]\n", fd);
-#endif /* DEBUG */
   FD_SET (fd, &m->readfd);
   thread->u.fd = fd;
   thread_list_add (&m->read, thread);
@@ -274,10 +266,6 @@ thread_add_write (struct thread_master *m,
 		 int fd)
 {
   struct thread *thread;
-
-#ifdef DEBUG
-  printf ("add write\n");
-#endif /* DEBUG */  
 
   assert (m != NULL);
 
@@ -324,11 +312,9 @@ thread_add_timer (struct thread_master *m,
 {
   struct timeval timer_now;
   struct thread *thread;
+#ifndef TIMER_NO_SORT
   struct thread *tt;
-
-#ifdef DEBUG
-  printf ("add timer\n");
-#endif /* DEBUG */  
+#endif /* TIMER_NO_SORT */
 
   assert (m != NULL);
 
@@ -345,6 +331,9 @@ thread_add_timer (struct thread_master *m,
   thread->u.sands = timer_now;
 
   /* Sort by timeval. */
+#ifdef TIMER_NO_SORT
+  thread_list_add (&m->timer, thread);
+#else
   for (tt = m->timer.head; tt; tt = tt->next)
     if (thread_timer_cmp (thread->u.sands, tt->u.sands) <= 0)
       break;
@@ -353,6 +342,7 @@ thread_add_timer (struct thread_master *m,
     thread_list_add_before (&m->timer, tt, thread);
   else
     thread_list_add (&m->timer, thread);
+#endif /* TIMER_NO_SORT */
 
   return thread;
 }
@@ -365,10 +355,6 @@ thread_add_event (struct thread_master *m,
 		  int val)
 {
   struct thread *thread;
-
-#ifdef DEBUG
-  printf ("add event\n");
-#endif /* DEBUG */  
 
   assert (m != NULL);
 
@@ -392,37 +378,22 @@ thread_cancel (struct thread *thread)
   switch (thread->type)
     {
     case THREAD_READ:
-#ifdef DEBUG
-      printf ("cancel read\n");
-#endif /* DEBUG */  
       assert (FD_ISSET (thread->u.fd, &thread->master->readfd));
       FD_CLR (thread->u.fd, &thread->master->readfd);
       thread_list_delete (&thread->master->read, thread);
       break;
     case THREAD_WRITE:
-#ifdef DEBUG
-      printf ("cancel write\n");
-#endif /* DEBUG */  
       assert (FD_ISSET (thread->u.fd, &thread->master->writefd));
       FD_CLR (thread->u.fd, &thread->master->writefd);
       thread_list_delete (&thread->master->write, thread);
       break;
     case THREAD_TIMER:
-#ifdef DEBUG
-      printf ("cancel timer\n");
-#endif /* DEBUG */  
       thread_list_delete (&thread->master->timer, thread);
       break;
     case THREAD_EVENT:
-#ifdef DEBUG
-      printf ("cancel event\n");
-#endif /* DEBUG */  
       thread_list_delete (&thread->master->event, thread);
       break;
     case THREAD_READY:
-#ifdef DEBUG
-      printf ("cancel ready\n");
-#endif /* DEBUG */  
       thread_list_delete (&thread->master->ready, thread);
       break;
     default:
@@ -488,8 +459,7 @@ thread_timer_dump (struct timeval tv)
 
 /* Fetch next ready thread. */
 struct thread *
-thread_fetch (struct thread_master *m, 
-	      struct thread *fetch)
+thread_fetch (struct thread_master *m, struct thread *fetch)
 {
   int ret;
   struct thread *thread;
@@ -523,6 +493,34 @@ thread_fetch (struct thread_master *m,
     }
 
   /* Calculate select wait timer. */
+#ifdef TIMER_NO_SORT
+  gettimeofday (&timer_now, NULL);
+
+  timer_wait = NULL;
+  for (thread = m->timer.head; thread; thread = thread->next)
+    {
+      if (! timer_wait)
+	timer_wait = &thread->u.sands;
+      else if (thread_timer_cmp (thread->u.sands, *timer_wait) < 0)
+	timer_wait = &thread->u.sands;
+    }
+
+  if (m->timer.head)
+    {
+      timer_min = *timer_wait;
+      timer_min = thread_timer_sub (timer_min, timer_now);
+      if (timer_min.tv_sec < 0)
+	{
+	  timer_min.tv_sec = 0;
+	  timer_min.tv_usec = 10;
+	}
+      timer_wait = &timer_min;
+    }
+  else
+    {
+      timer_wait = NULL;
+    }
+#else
   if (m->timer.head)
     {
       gettimeofday (&timer_now, NULL);
@@ -534,17 +532,12 @@ thread_fetch (struct thread_master *m,
 	  timer_min.tv_usec = 10;
 	}
       timer_wait = &timer_min;
-#ifdef DEBUG
-      thread_timer_dump (timer_min);
-#endif /* DEBUG */
     }
   else
     {
-#ifdef DEBUG
-      printf ("timer_wait is NULL\n");
-#endif /* DEBUG */
       timer_wait = NULL;
     }
+#endif /* TIMER_NO_SORT */
 
   /* Call select function. */
   readfd = m->readfd;
@@ -658,11 +651,11 @@ thread_fetch (struct thread_master *m,
       thread = t->next;
 
       if (thread_timer_cmp (timer_now, t->u.sands) >= 0)
-      {
-	thread_list_delete (&m->timer, t);
-	thread_list_add (&m->ready, t);
-	t->type = THREAD_READY;
-      }
+	{
+	  thread_list_delete (&m->timer, t);
+	  thread_list_add (&m->ready, t);
+	  t->type = THREAD_READY;
+	}
     }
 
   /* Return one event. */
@@ -745,10 +738,6 @@ thread_execute (struct thread_master *m,
   struct thread dummy; 
 
   memset (&dummy, 0, sizeof (struct thread));
-
-#ifdef DEBUG
-  printf ("execute event\n");
-#endif /* DEBUG */  
 
   dummy.type = THREAD_EVENT;
   dummy.id = 0;

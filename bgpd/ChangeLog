@@ -1,17 +1,219 @@
-2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+2001-02-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
-	* zebra-0.90a is released.
+	* bgp_attr.c (bgp_attr_check): When peer is IBGP peer, local
+	preference is well-known attribute.
+
+2001-01-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.91 is released.
+
+	* bgp_attr.h (struct attr): Comment out DPA value.
+	(struct attr): Change refcnt type from int to unsinged long.
+
+	* bgp_attr.c (attrhash_key_make): Likewise.
+	(attrhash_cmp): Likewise.
+	(bgp_attr_dpa): Likewise.
+
+2001-01-30  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (bgp_info_cmp): Make route selection completely same
+	as Cisco's.
+
+2001-01-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.h (BGP_ATTR_FLAG_OPTIONAL): Rename old ATTR_FLAG_* to
+	BGP_ATTR_FLAG_* to clarify meenings.
+
+2001-01-30  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (route_vty_out): Display argument to suppress same
+	prefix information display.
+	(route_vty_out_route): Don't display mask information for
+	classfull network.
+
+2001-01-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.h (SET_BITMAP): Simple bitmapping macros.
+
+	* bgp_attr.c (bgp_attr_parse): Use bitmap for attribute type
+	check.
+
+2001-01-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_mp_reach_parse): Enclose loggin with BGP_DEBUG.
+	(bgp_attr_parse): Comment out well-known attribute check.
+
+2001-01-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_static_unset): Link-local IPv6 address can't be
+	used for network advertisement.
+	(nlri_parse): When link-local IPv6 address NLRI comes from
+	remote-peer, log the information then simply ignore it.
+
+	* bgp_zebra.c (zebra_read_ipv6): Link-local IPv6 address is not
+	redistributed.
+
+	* bgp_route.c (bgp_update): Check IPv6 global nexthop
+	reachability.
+
+2001-01-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_update): Check nexthop points local address or
+	not.
+	(bgp_static_update_vpnv4): Set valid flag.
+
+	* bgp_attr.c (bgp_attr_parse): Duplicate attribute check.
+	(bgp_attr_parse): Well-known attribute check.
+
+	* bgp_open.c (bgp_auth_parse): Authentication is not yet supported.
+
+	* bgp_packet.c (bgp_valid_marker): Check marker is synchronized.
+
+	* bgpd.c (clear_bgp): Send NOTIFICATION Cease when SEND_CEASE is
+	defined.
+
+	* bgp_snmp.c (bgp4PathAttrTable): Fix compile error.
+
+2001-01-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_network_import_check): New command for IGP network
+	check.
+
+2001-01-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (bgp_scan): Run bgp_process when IGP metric is
+	changed.  Call bgp_process once for each node.
+
+2001-01-23  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (bgp_info_cmp): Add IGP metric comparison.
+
+2001-01-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_info_cmp): Add IGP metric comparison.
+
+	* bgp_nexthop.c (bgp_nexthop_lookup): Set IGP metric for valid
+	IBGP route.
+
+2001-01-23  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (show_ip_bgp_prefix_longer): Add new commands.
+	"show ip bgp A.B.C.D/M longer-prefixes"
+	"show ip bgp ipv4 (unicast|multicast) A.B.C.D/M longer-prefixes"
+	"show ipv6 bgp X:X::X:X/M longer-prefixes"
+	"show ipv6 mbgp X:X::X:X/M longer-prefixes"
+	
+2001-01-20  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (show_ip_bgp_cidr_only): Add new commands.
+	"show ip bgp cidr-only"
+	"show ip bgp ipv4 (unicast|multicast) cidr-only"
+	
+2001-01-18  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (bgp_update): AS path lookup check is done in
+	bgp_update() not in attr_parse().
+
+2001-01-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_update): Call bgp_aggregate_decrement() just
+	before bgp_attr_unintern().
+
+2001-01-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_update): Now intern is performed very last part
+	of the BGP packet update procedure.
+
+2001-01-17  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (bgp_update): When implicit withdraw occur, reuse
+	existing bgp_info structure.
+
+2001-01-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_aggregate_decrement): Fix bug of aggregate
+	address matching method.
+	(bgp_update): 
+
+	* bgp_nexthop.c (bgp_nexthop_onlink): Separate EBGP nexthop onlink
+	check and IBGP nexthop route check.
+
+2001-01-16  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.h (BGP_INFO_ATRR_CHANGED): Added for track attribute
+	change.
+
+2001-01-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.h (struct bgp_info): Remove selected flag.  Use
+	BGP_INFO_SELECTED for flags instead.
+	(struct bgp_info): Remove valid flag.  Use BGP_INFO_VALID for
+	flags instead.
+	(struct bgp_info): Add igpmetric for IBGP route nexthop IGP
+	metric.
+	(struct bgp_info_tab): Struct bgp_info_tag is integrated into
+	struct bgp_info.
+	(BGP_INFO_ATRR_CHANGED): Added for track attribute change.
+
+	* bgp_community.c (community_val_get): gcc-2.95 on
+	sparc-sun-solaris cause crush.  This function is for avoid the
+	crush.
+
+2001-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_packet.c (bgp_open_receive): Translated peer's packet_size
 	clear bug is fixed.
 
+2001-01-14  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_packet.c (bgp_open_receive): Return notification with
+	supported version number.
+
 2001-01-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_show_summary): Display AS path and community
+	entries.  Suggested by: "Matt Ranney" <mjr@ranney.com>.
 
 	* bgp_packet.c (bgp_read_packet): Fix bug of unblocking BGP socket
 	read.  When BGP packet read is partial, we must get size and type
 	from packet again.
 
+2001-01-12  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_route.c (bgp_update): Do not unset BGP_INFO_HISTORY flag.
+	(bgp_update): When there is a history entry increment route count.
+	(bgp_damp_set): Check BGP_CONFIG_DAMPENING flag.
+
+	* bgp_damp.c (bgp_damp_withdraw): Set status to
+	BGP_DAMP_DISCONTINUE.
+
+2001-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c (bgp_mp_reach_parse): Fix warning code when second
+	IPv6 nexthop is not link-local addresss.
+
+2001-01-11  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* bgp_damp.c (bgp_config_write_damp): Smart flap dampening
+	configuration display.
+	(bgp_damp_info_print): Display elapsed time from flap started.
+
+	* bgp_damp.h (struct bgp_damp_info): Add flap start time.
+
+	* bgpd.c (peer_create): Set last read time.
+	(bgp_show_peer): Display last read time.
+	(bgp_show_summary): Use BGP_CONFIG_DAMPENING flag to check
+	configuration.
+	
+	* bgpd.h (BGP_CONFIG_DAMPENING): Add new configuration option.
+	(struct peer): Add last read time member.
+	(BGP_VERSION_MP_4): Remove obsolete definition.
+
 2001-01-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c: Remove OLD_RIB codes.
+
+	* bgp_route.c (bgp_process): Likewise.
 
 	* zebra-0.90 is released.
 

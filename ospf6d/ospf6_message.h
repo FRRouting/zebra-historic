@@ -19,8 +19,11 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPF6_MESG_H
-#define OSPF6_MESG_H
+#ifndef OSPF6_MESSAGE_H
+#define OSPF6_MESSAGE_H
+
+#include "ospf6_prefix.h"
+#include "ospf6_lsa.h"
 
 /* Message Definition */
 
@@ -29,18 +32,14 @@
             (mtu)-sizeof(struct ospf6_header))
 
 /* Type */
-#define MSGT_NONE                 0x0  /* Unknown message */
-#define MSGT_UNKNOWN              0x0
-#define MSGT_HELLO                0x1  /* Discover/maintain neighbors */
-#define MSGT_DATABASE_DESCRIPTION 0x2  /* Summarize database contents */
-#define MSGT_DBDESC               0x2  /* Summarize database contents */
-#define MSGT_LINKSTATE_REQUEST    0x3  /* Database download */
-#define MSGT_LSREQ                0x3  /* Database download */
-#define MSGT_LINKSTATE_UPDATE     0x4  /* Database update */
-#define MSGT_LSUPDATE             0x4  /* Database update */
-#define MSGT_LINKSTATE_ACK        0x5  /* Flooding acknowledgment */
-#define MSGT_LSACK                0x5  /* Flooding acknowledgment */
-#define MSGT_MAX                  0x6
+#define OSPF6_MESSAGE_TYPE_NONE     0x0
+#define OSPF6_MESSAGE_TYPE_UNKNOWN  0x0
+#define OSPF6_MESSAGE_TYPE_HELLO    0x1  /* Discover/maintain neighbors */
+#define OSPF6_MESSAGE_TYPE_DBDESC   0x2  /* Summarize database contents */
+#define OSPF6_MESSAGE_TYPE_LSREQ    0x3  /* Database download */
+#define OSPF6_MESSAGE_TYPE_LSUPDATE 0x4  /* Database update */
+#define OSPF6_MESSAGE_TYPE_LSACK    0x5  /* Flooding acknowledgment */
+#define OSPF6_MESSAGE_TYPE_MAX      0x6
 
 /* OSPFv3 packet header */
 struct ospf6_header
@@ -55,7 +54,7 @@ struct ospf6_header
   u_char    reserved;
 };
 
-/* HELLO */
+/* Hello */
 #define MAXLISTEDNBR     64
 struct ospf6_hello
 {
@@ -68,7 +67,7 @@ struct ospf6_hello
   u_int32_t bdr;
 };
 
-/* new Database Description (name changed) */
+/* Database Description */
 struct ospf6_dbdesc
 {
   u_char    mbz1;
@@ -117,6 +116,11 @@ struct ospf6_lsupdate
   u_int32_t lsupdate_num;
 };
 
+/* Link State Acknowledgement */
+  /* no need for structure,
+     it will include only LSA header in the packet body.*/
+
+/* Statistics */
 struct ospf6_message_stat
 {
   u_int32_t send;
@@ -125,15 +129,19 @@ struct ospf6_message_stat
   u_int32_t recv_octet;
 };
 
-/* Link State Acknowledgement will include only LSA header.*/
-
 /* Type string */
 extern char *ospf6_message_type_string[];
 
 /* Function Prototypes */
+struct ospf6_lsa_hdr *
+attach_lsa_hdr_to_iov (struct ospf6_lsa *, struct iovec *);
+struct ospf6_lsa_hdr *
+attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov);
+
 int ospf6_receive (struct thread *);
 
 int ospf6_send_hello (struct thread *);
+int ospf6_send_hello_new (struct thread *);
 int ospf6_send_dbdesc_retrans (struct thread *);
 int ospf6_send_dbdesc (struct thread *);
 int ospf6_send_lsreq (struct thread *);
@@ -142,5 +150,5 @@ int ospf6_send_lsack_delayed (struct thread *);
 
 void ospf6_message_send (u_char, struct iovec *, struct in6_addr *, u_int);
 
-#endif /* OSPF6_MESG_H */
+#endif /* OSPF6_MESSAGE_H */
 

@@ -35,9 +35,6 @@
 #include "buffer.h"
 #include "str.h"
 #include "log.h"
-#ifdef RIP_API
-#include "ripd/ripd_api.h"
-#endif /* RIP_API */
 
 /* Master list of interfaces. */
 struct list *iflist;
@@ -355,14 +352,6 @@ if_dump_all ()
     if_dump (getdata (node));
 }
 
-#ifdef HAVE_IPV6
-void
-if_index_address (struct in6_addr *addr)
-{
-  ;
-}
-#endif /* HAVE_IPV6 */
-
 DEFUN (interface_desc, 
        interface_desc_cmd,
        "description .LINE",
@@ -380,7 +369,7 @@ DEFUN (interface_desc,
   if (ifp->desc)
     XFREE (0, ifp->desc);
 
-  b = buffer_new (BUFFER_STRING, 1024);
+  b = buffer_new (1024);
   for (i = 0; i < argc; i++)
     {
       buffer_putstr (b, (u_char *)argv[i]);
@@ -433,48 +422,35 @@ DEFUN (interface,
   return CMD_SUCCESS;
 }
 
-#ifdef HAVE_IF_PSEUDO
-DEFUN (interface_pseudo,
-       interface_pseudo_cmd,
-       "pseudo",
-       "Specify pseudo interface\n")
+/* For debug purpose. */
+DEFUN (show_address,
+       show_address_cmd,
+       "show address",
+       SHOW_STR
+       "address\n")
 {
+  listnode node;
+  listnode node2;
   struct interface *ifp;
+  struct connected *ifc;
+  struct prefix *p;
 
-  ifp = vty->index;
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
 
-  /* real interface could become pseudo real */    
-  if (!IS_IF_PSEUDO(ifp) && (ifp->ifindex != INTERFACE_PSEUDO)){
-    IF_PSEUDO_SET(ifp);
-  }
+      for (node2 = listhead (ifp->connected); node2; nextnode (node2))
+	{
+	  ifc = getdata (node2);
+	  p = ifc->address;
 
-  /* new interface could become pseudo */
-  if (!IS_IF_PSEUDO(ifp) && (ifp->ifindex == INTERFACE_PSEUDO)){
-    IF_PSEUDO_SET(ifp);
-  }
-  
+	  if (p->family == AF_INET)
+	    vty_out (vty, "%s/%d%s", inet_ntoa (p->u.prefix4), p->prefixlen,
+		     VTY_NEWLINE);
+	}
+    }
   return CMD_SUCCESS;
 }
-
-DEFUN (no_interface_pseudo,
-       no_interface_pseudo_cmd,
-       "no pseudo",
-       NO_STR
-       "Specify pseudo interface\n")
-{
-  struct interface *ifp;
-
-  ifp = vty->index;
-
-  /* pseudo real interface become real */
-  if (IS_IF_PSEUDO(ifp) && (ifp->ifindex != INTERFACE_PSEUDO)){
-     IF_PSEUDO_UNSET(ifp);
-  }
-
-
-  return CMD_SUCCESS;
-}
-#endif /* HAVE_IF_PSEUDO */
 
 /* Allocate connected structure. */
 struct connected *
@@ -494,6 +470,9 @@ connected_free (struct connected *connected)
 
   if (connected->destination)
     prefix_free (connected->destination);
+
+  if (connected->label)
+    free (connected->label);
 
   XFREE (MTYPE_CONNECTED, connected);
 }
@@ -542,49 +521,6 @@ connected_same_prefix (struct prefix *p1, struct prefix *p2)
   return 0;
 }
 
-/* Add interface's address information. */
-void
-connected_add (struct interface *ifp, struct connected *connected)
-{
-  struct listnode *node;
-  struct listnode *next;
-  struct listnode *prev;
-  struct connected *ifc;
-  int found;
-
-#ifdef CONNECTED_DEBUG
-  connected_log (connected, "add");
-#endif /* CONNECTED_DEBUG */
-
-  /* Check existing prefix information. 
-     Keep list in order if old info found, essential for repeatable
-     operation in some daemons */
-  prev = NULL;
-  found = 0;
-  for (node = listhead (ifp->connected); node; node = next)
-    {
-      ifc = getdata (node);
-      prev = node->prev;
-      next = node->next;
-
-      if (connected_same_prefix (ifc->address, connected->address))
-	{
-	  /* zlog_info ("same prefix %s", inet_ntoa (ifc->address->u.prefix4)); */
-	  found = 1;
-	  listnode_delete (ifp->connected, ifc);
-	  connected_free (ifc);
-	  break;
-	}
-    }
-
-  /* Link connected address to interface. */
-  connected->ifp = ifp;
-  if (!found)
-    listnode_add (ifp->connected, connected);
-  else
-    listnode_add_after (ifp->connected, prev, connected);
-}
-
 struct connected *
 connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
 {
@@ -600,9 +536,6 @@ connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
 
       if (connected_same_prefix (ifc->address, p))
 	{
-#ifdef CONNECTED_DEBUG
-	  connected_log (ifc, "delete");
-#endif /* CONNECTED_DEBUG */
 	  listnode_delete (ifp->connected, ifc);
 	  return ifc;
 	}
@@ -646,121 +579,6 @@ if_indextoname (unsigned int ifindex, char *name)
   return NULL;
 }
 #endif
-
-#ifdef RIP_API
-/*************************
- Function:if_get_next_node
- PURPOSE: Get the node after the current one ('prev_node') in the
-          'iflist' linked list.
-          If the 'prev_node' is NULL, get the fist node.
-          If "End of table" is a case, returns NULL
- PARAMETERS:
-    IN    prev_node
-**************************/
-listnode
-if_get_next_node (listnode prev_node)
-{   
-  if (prev_node)
-    return nextnode(prev_node);
-  else if (iflist)
-    return listhead (iflist);
-  else
-    return NULL;
-}
-
-/*************************
- Function:if_get_next_connected
- PURPOSE: Lookup next interface/connected
- PARAMETERS:
-    IN    listnode prev_connected_node
-    IN    listnode prev_ifp_node
-    OUT   listnode* next_ifp_node
-    RETURNS: listnode 'next_connected_node' (of NULL in "End of table" case)
-**************************/
-listnode
-if_get_next_connected (listnode prev_connected_node,
-                       listnode prev_ifp_node,
-                       listnode* next_ifp_node)
-{
-  interface_t*  ifp;
-  listnode      node = NULL;
-
-  if (prev_connected_node) {
-    prev_connected_node = if_get_next_node (prev_connected_node);
-    if (prev_connected_node) {
-      *next_ifp_node = prev_ifp_node;
-      return prev_connected_node;
-    }
-    node = prev_ifp_node;
-  }
-
-  for (node = if_get_next_node (node); node; node = if_get_next_node (node)) {
-    ifp = getdata (node);
-    prev_connected_node = listhead (ifp->connected);
-    if (prev_connected_node) {
-      *next_ifp_node = node;
-      return prev_connected_node;
-    }
-  }
-
-  return NULL;
-}
-
-/*************************
- Function:if_lookup_next (was rip_if_lookup_next in rip_snmp.c)
- PURPOSE: Lookup next interface by IPv4 address.
- PARAMETERS:
-    INOUT    in_addr *src
-    OUT      in_addr *dst (Point-to-point link)
-    RETURNS: interface *ifp (of NULL in "End of table" case)
- NOTE: it was moved from rip_snmp.c, old name was rip_if_lookup_next
-**************************/
-interface_t *
-if_lookup_next (struct in_addr *src, struct in_addr *dst)
-{
-  listnode node;
-  listnode cnode;
-  interface_t *ifp;
-  struct prefix *p;
-  connected_t *c;
-  struct in_addr *min_addr;
-  struct interface *min_ifp;
-  
-  min_addr=NULL;
-  min_ifp=NULL;
-
-  for (node = listhead (iflist); node; nextnode (node))
-    {
-      ifp = getdata (node);
-
-      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
-        {
-          c = getdata (cnode);
-
-          p = c->address;
-
-          if (p && p->family == AF_INET)
-            {
- 	      if (ntohl (p->u.prefix4.s_addr) > ntohl (src->s_addr))
-		if ((min_addr && (ntohl(min_addr->s_addr) > ntohl (p->u.prefix4.s_addr)))
-		    || (!min_addr))		   
-		  {
-		    min_addr = &(p->u.prefix4);
-		    min_ifp = ifp;
-		  }	       
-	    	      
-	    }
-        }
-    }
-  if (min_addr){
-    src->s_addr=min_addr->s_addr;
-    return min_ifp;
-  }
-  else
-    return NULL;    
-  
-}
-#endif /* RIP_API */
 
 /* Interface looking up by interface's address. */
 
@@ -839,8 +657,6 @@ ifaddr_ipv4_lookup (struct in_addr *addr, unsigned int ifindex)
       for (node = listhead (iflist); node; nextnode (node))
 	{
 	  ifp = getdata (node);
-
-	  ;
 
 	  if (ifp->ifindex == ifindex)
 	    return ifp;

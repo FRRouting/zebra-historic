@@ -94,7 +94,7 @@ hash_push (struct Hash *hash, void *data)
   key = (*hash->hash_key) (data);
   backet = hash_backet_new (data);
 
-  hash->alloc++;
+  hash->count++;
 
   if (hash->index[key] == NULL)
     hash->index[key] = backet;
@@ -146,7 +146,7 @@ hash_pull (struct Hash *hash, void *data)
 
 	  ret = mp->data;
 	  XFREE (MTYPE_HASH_BACKET, mp);
-	  hash->alloc--;
+	  hash->count--;
 	  return ret;
 	}
       mpp = mp;

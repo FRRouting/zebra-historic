@@ -62,18 +62,18 @@ static struct sockaddr_in sin_proto =
 
 /* Interface to ioctl route message. */
 int
-kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
-		 int index, int flags)
+kernel_add_route (struct prefix_ipv4 *dest, struct in_addr *gate,
+		  int index, int flags)
 {
   int ret;
   int sock;
   struct rtentry rtentry;
   struct sockaddr_in sin_dest, sin_mask, sin_gate;
 
-  bzero (&rtentry, sizeof (struct rtentry));
+  memset (&rtentry, 0, sizeof (struct rtentry));
 
   /* Make destination. */
-  bzero (&sin_dest, sizeof (struct sockaddr_in));
+  memset (&sin_dest, 0, sizeof (struct sockaddr_in));
   sin_dest.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
   sin_dest.sin_len = sizeof (struct sockaddr_in);
@@ -131,7 +131,7 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
     }
 
   /* Send message by ioctl(). */
-  ret = ioctl (sock, type, &rtentry);
+  ret = ioctl (sock, SIOCADDRT, &rtentry);
   if (ret < 0)
     {
       switch (errno) 
@@ -159,28 +159,9 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
   return ret;
 }
 
-/* Add a route to the kernel routing table. */
-int
-kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 int index, int flags, int table)
-{
-  return kernel_ioctl_ipv4 (SIOCADDRT, dest, gate, index, flags);
-}
-
-
-/* Delete a route from the kernel routing table. */
-int
-kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    int index, int flags, int table)
-{
-  return kernel_ioctl_ipv4 (SIOCDELRT, dest, gate, index, flags);
-}
-
-#ifndef OLD_RIB
 /* Interface to ioctl route message. */
 int
-kernel_ioctl_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
-			     int family)
+kernel_ioctl_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
 {
   int ret;
   int sock;
@@ -212,7 +193,8 @@ kernel_ioctl_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 	{
 	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
 	    {
-	      if (nexthop->rtype == NEXTHOP_TYPE_IPV4)
+	      if (nexthop->rtype == NEXTHOP_TYPE_IPV4 ||
+		  nexthop->rtype == NEXTHOP_TYPE_IPV4_IFINDEX)
 		{
 		  sin_gate.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
@@ -233,7 +215,8 @@ kernel_ioctl_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 	    }
 	  else
 	    {
-	      if (nexthop->type == NEXTHOP_TYPE_IPV4)
+	      if (nexthop->type == NEXTHOP_TYPE_IPV4 ||
+		  nexthop->type == NEXTHOP_TYPE_IPV4_IFINDEX)
 		{
 		  sin_gate.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
@@ -339,17 +322,16 @@ kernel_ioctl_ipv4_multipath (int cmd, struct prefix *p, struct new_rib *rib,
 }
 
 int
-kernel_add_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+kernel_add_ipv4 (struct prefix *p, struct rib *rib)
 {
-  return kernel_ioctl_ipv4_multipath (SIOCADDRT, p, rib, AF_INET);
+  return kernel_ioctl_ipv4 (SIOCADDRT, p, rib, AF_INET);
 }
 
 int
-kernel_delete_ipv4_multipath (struct prefix *p, struct new_rib *rib)
+kernel_delete_ipv4 (struct prefix *p, struct rib *rib)
 {
-  return kernel_ioctl_ipv4_multipath (SIOCDELRT, p, rib, AF_INET);
+  return kernel_ioctl_ipv4 (SIOCDELRT, p, rib, AF_INET);
 }
-#endif /* OLD_RIB */
 
 #ifdef HAVE_IPV6
 
@@ -426,20 +408,138 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
   return ret;
 }
 
-/* Add IPv6 route to the kernel. */
 int
-kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 int index, int flags, int table)
+kernel_ioctl_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
+			     int family)
 {
-  return kernel_ioctl_ipv6 (SIOCADDRT, dest, gate, index, flags);
+  int ret;
+  int sock;
+  struct in6_rtmsg rtm;
+  struct nexthop *nexthop;
+  int nexthop_num = 0;
+    
+  memset (&rtm, 0, sizeof (struct in6_rtmsg));
+
+  rtm.rtmsg_flags |= RTF_UP;
+  rtm.rtmsg_metric = rib->metric;
+  memcpy (&rtm.rtmsg_dst, &p->u.prefix, sizeof (struct in6_addr));
+  rtm.rtmsg_dst_len = p->prefixlen;
+
+  /* We need link local index. But this should be done caller...
+  if (IN6_IS_ADDR_LINKLOCAL(&rtm.rtmsg_gateway))
+    {
+      index = if_index_address (&rtm.rtmsg_gateway);
+      rtm.rtmsg_ifindex = index;
+    }
+  else
+    rtm.rtmsg_ifindex = 0;
+  */
+
+  rtm.rtmsg_flags |= RTF_GATEWAY;
+
+  /* For tagging route. */
+  /* rtm.rtmsg_flags |= RTF_DYNAMIC; */
+
+  /* Make gateway. */
+  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
+    {
+      if ((cmd == SIOCADDRT 
+	   && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+	  || (cmd == SIOCDELRT
+	      && CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)))
+	{
+	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+	    {
+	      if (nexthop->rtype == NEXTHOP_TYPE_IPV6
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFINDEX)
+		{
+		  memcpy (&rtm.rtmsg_gateway, &nexthop->rgate.ipv6,
+			  sizeof (struct in6_addr));
+		}
+	      if (nexthop->rtype == NEXTHOP_TYPE_IFINDEX
+		  || nexthop->rtype == NEXTHOP_TYPE_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->rtype == NEXTHOP_TYPE_IPV6_IFINDEX)
+		rtm.rtmsg_ifindex = nexthop->rifindex;
+	      else
+		rtm.rtmsg_ifindex = 0;
+	      
+	    }
+	  else
+	    {
+	      if (nexthop->type == NEXTHOP_TYPE_IPV6
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+		{
+		  memcpy (&rtm.rtmsg_gateway, &nexthop->gate.ipv6,
+			  sizeof (struct in6_addr));
+		}
+	      if (nexthop->type == NEXTHOP_TYPE_IFINDEX
+		  || nexthop->type == NEXTHOP_TYPE_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFNAME
+		  || nexthop->type == NEXTHOP_TYPE_IPV6_IFINDEX)
+		rtm.rtmsg_ifindex = nexthop->ifindex;
+	      else
+		rtm.rtmsg_ifindex = 0;
+	    }
+
+	  if (cmd == SIOCADDRT)
+	    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB);
+
+	  nexthop_num++;
+	  break;
+	}
+    }
+
+  /* If there is no useful nexthop then return. */
+  if (nexthop_num == 0)
+    {
+      if (IS_ZEBRA_DEBUG_KERNEL)
+	zlog_info ("netlink_route_multipath(): No useful nexthop.");
+      return 0;
+    }
+
+  sock = socket (AF_INET6, SOCK_DGRAM, 0);
+  if (sock < 0)
+    {
+      zlog_warn ("can't make socket\n");
+      return -1;
+    }
+
+  /* Send message via ioctl. */
+  ret = ioctl (sock, cmd, &rtm);
+  if (ret < 0)
+    {
+      zlog_warn ("can't %s ipv6 route: %s\n",
+		 cmd == SIOCADDRT ? "add" : "delete", 
+	   strerror(errno));
+      ret = errno;
+      close (sock);
+      return ret;
+    }
+  close (sock);
+
+  return ret;
+}
+
+int
+kernel_add_ipv6 (struct prefix *p, struct rib *rib)
+{
+  return kernel_ioctl_ipv6_multipath (SIOCADDRT, p, rib, AF_INET6);
+}
+
+int
+kernel_delete_ipv6 (struct prefix *p, struct rib *rib)
+{
+  return kernel_ioctl_ipv6_multipath (SIOCDELRT, p, rib, AF_INET6);
 }
 
 /* Delete IPv6 route from the kernel. */
 int
-kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
+kernel_delete_ipv6_old (struct prefix_ipv6 *dest, struct in6_addr *gate,
 		    int index, int flags, int table)
 {
   return kernel_ioctl_ipv6 (SIOCDELRT, dest, gate, index, flags);
 }
-
 #endif /* HAVE_IPV6 */

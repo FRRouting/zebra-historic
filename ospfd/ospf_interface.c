@@ -942,10 +942,6 @@ interface_config_write (struct vty *vty)
         vty_out (vty, " description %s%s", ifp->desc,
                VTY_NEWLINE);
 
-#ifdef HAVE_IF_PSEUDO
-      if (IS_IF_PSEUDO (ifp))
-	 vty_out (vty, " pseudo %s", VTY_NEWLINE);
-#endif /* HAVE_IF_PSEUDO */
       write++;
 
       /* Interface Network print. */
@@ -1579,10 +1575,6 @@ ospf_if_init ()
   install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
-#ifdef HAVE_IF_PSEUDO  
-  install_element (INTERFACE_NODE, &interface_pseudo_cmd);
-  install_element (INTERFACE_NODE, &no_interface_pseudo_cmd);
-#endif /* HAVE_IF_PSEUDO */
   install_element (INTERFACE_NODE, &ip_ospf_authentication_key_cmd);
   install_element (INTERFACE_NODE, &no_ip_ospf_authentication_key_cmd);
   install_element (INTERFACE_NODE, &ip_ospf_message_digest_key_cmd);

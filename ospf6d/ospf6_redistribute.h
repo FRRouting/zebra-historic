@@ -23,10 +23,6 @@
 #ifndef OSPF6_REDISTRIBUTE_H
 #define OSPF6_REDISTRIBUTE_H
 
-#include "prefix.h"
-#include "vty.h"
-
-#include "ospf6_top.h"
 
 #define OSPF6_REDISTRIBUTE_DEFAULT_TYPE    1
 #define OSPF6_REDISTRIBUTE_DEFAULT_METRIC  100

@@ -298,10 +298,17 @@ ospf_abr_translate_nssa (struct ospf_lsa *lsa, void *p_arg, int int_arg)
   struct ospf_lsa *dup;
 
   if (! CHECK_FLAG (lsa->data->options, OSPF_OPTION_NP))
-    return 0;
+    {
+      if (IS_DEBUG_OSPF_NSSA)
+	zlog_info ("ospf_abr_nssa(): P-bit off, NO Translation");
+      return 0; 
+    }
+
+  if (IS_DEBUG_OSPF_NSSA)
+    zlog_info ("ospf_abr_nssa(): TRANSLATING 7 to 5");
 
   /* No more P-bit. */
-  UNSET_FLAG (lsa->data->options, OSPF_OPTION_NP);
+  /* UNSET_FLAG (lsa->data->options, OSPF_OPTION_NP); */
 
   /* Area where Aggregate testing will be inserted, just like summary
      advertisements */
@@ -315,10 +322,11 @@ ospf_abr_translate_nssa (struct ospf_lsa *lsa, void *p_arg, int int_arg)
 
   dup->data->type = OSPF_AS_EXTERNAL_LSA;  /* make Type-5 */
 
+  ospf_lsa_checksum (dup->data);
+
   ospf_lsa_install (NULL, dup); /* Install this Type-5 into LSDB, Lock = 2. */
 
-  /* will LOCK it at value 2 */
-  ospf_flood_through_as (NULL, dup); /* flood non-NSSA areas */
+  ospf_flood_through_as (NULL, dup); /* flood non-NSSA/STUB areas */
   
   /* This translated Type-5 will go to all non-NSSA areas connected to
      this ABR; The Type-5 could come from any of the NSSA's connected
@@ -550,6 +558,9 @@ ospf_abr_process_nssa_translates ()
       if (! area->NSSATranslator)
 	continue; /* skip if not translator */
       
+      if (area->external_routing != OSPF_AREA_NSSA)
+	continue;  /* skip if not Nssa Area */
+
       if (IS_DEBUG_OSPF_NSSA)
 	zlog_info ("ospf_abr_process_nssa_translates(): "
 		   "looking at area %s", inet_ntoa (area->area_id));
@@ -925,13 +936,6 @@ ospf_abr_unapprove_summaries ()
 		   ospf_abr_unapprove_summaries_apply);
       foreach_lsa (SUMMARY_ASBR_LSDB (area), NULL, 0,
 		   ospf_abr_unapprove_summaries_apply);
-#if 0
-      ospf_lsdb_iterator (SUMMARY_LSA (area), NULL, 0,
-			  ospf_abr_unapprove_summaries_apply);
-      
-      ospf_lsdb_iterator (SUMMARY_LSA_ASBR (area), NULL, 0,
-			  ospf_abr_unapprove_summaries_apply);
-#endif
     }
 
   if (IS_DEBUG_OSPF_EVENT)
@@ -1186,7 +1190,7 @@ ospf_abr_announce_stub_defaults ()
 
 #ifdef HAVE_NSSA
       if (area->external_routing != OSPF_AREA_STUB)
-#else
+#else /* ! HAVE_NSSA */
       if (area->external_routing == OSPF_AREA_DEFAULT)
 #endif /* HAVE_NSSA */
 	continue;
@@ -1338,6 +1342,9 @@ ospf_abr_manage_discard_routes ()
 void
 ospf_abr_nssa_task () /* called only if any_nssa */
 {
+  if (IS_DEBUG_OSPF_NSSA)
+    zlog_info ("Check for NSSA-ABR Tasks():");
+
   if (! OSPF_IS_ABR)
     return;
 
@@ -1357,6 +1364,7 @@ ospf_abr_nssa_task () /* called only if any_nssa */
   /* RESET all Ranges in every Area, same as summaries */
   if (IS_DEBUG_OSPF_NSSA)
     zlog_info ("ospf_abr_nssa_task(): NSSA initialize aggregates");
+
   /*    ospf_abr_prepare_aggregates ();  TURNED OFF just for now */
 
   /* For all NSSAs, Type-7s, translate to 5's, INSTALL/FLOOD, or
