@@ -78,13 +78,44 @@ ospf_if_new (struct interface *ifp)
   /* Set zebra interface pointer. */
   oi->ifp = ifp;
 
-  /* set default values. */
+  /* Set default values. */
   ospf_if_reset_variables (oi);
+
+  /* Clear self-originated network-LSA. */
+  oi->network_lsa_self = NULL;
 
   /* Initialize neighbor list. */
   oi->nbrs = route_table_init ();
 
   return oi;
+}
+
+struct ospf_interface *
+ospf_if_lookup_by_addr (struct in_addr *address)
+{
+  listnode node;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      oi = ifp->if_data;
+
+      if (if_is_loopback (ifp))
+	continue;
+
+      if (!if_is_up (ifp))
+	continue;
+
+      if (oi->flag != OSPF_IF_ENABLE)
+	continue;
+
+      if (IPV4_ADDR_SAME (address, &oi->address->u.prefix4))
+	return oi;
+    }
+
+  return NULL;
 }
 
 void

@@ -1,3 +1,19 @@
+1999-07-18  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* rt_socket.c (rtm_write): forgot closing socket bug fixed.
+
+1999-07-17  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* rib.c (show_ipv6_cmd): if rib is link show interface name.
+
+1999-07-17  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* rt_socket.c (rtm_write): use sockaddr_dl when null gateway.
+
+1999-07-16  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* rt_socket.c (rtm_write): ipv6 route table bug fixed.
+
 1999-07-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
 
 	* zebra.c (zebra_read_ipv6): read link prefix from ospf6 support

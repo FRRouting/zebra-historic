@@ -1,6 +1,6 @@
 /*
- * Zebra connect library for OSPFd
- * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro, Toshiaki Takada
+ * RIPng routemap.
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -15,19 +15,22 @@
  * General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with GNU Zebra; see the file COPYING.  If not, write to the
- * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
- * Boston, MA 02111-1307, USA. 
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
  */
 
-#ifndef _ZEBRA_OSPF_ZEBRA_H
-#define _ZEBRA_OSPF_ZEBRA_H
+/* We need modifier of next hop or tags. */
 
-/* Prototypes */
-void zebra_init ();
-void zebra_start ();
+#include <zebra.h>
 
-void ospf_zebra_add (struct prefix_ipv4 *, struct in_addr *);
-void ospf_zebra_delete (struct prefix_ipv4 *, struct in_addr *);
+#include "memory.h"
+#include "prefix.h"
+#include "routemap.h"
 
-#endif /* _ZEBRA_OSPF_ZEBRA_H */
+void
+ripng_route_map_init ()
+{
+  route_map_init ();
+  route_map_init_vty ();
+}

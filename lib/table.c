@@ -73,6 +73,18 @@ route_node_free (struct route_node *node)
   XFREE (MTYPE_ROUTE_NODE, node);
 }
 
+/* Free route table. */
+void
+route_table_free (struct route_table *rt)
+{
+  struct route_node *rn;
+
+  for (rn = route_top (rt); rn; rn = route_next (rn))
+    route_node_free (rn);
+
+  XFREE (MTYPE_ROUTE_TABLE, rt);
+}
+
 /* Utility mask array. */
 static u_char maskbit[] = 
 {

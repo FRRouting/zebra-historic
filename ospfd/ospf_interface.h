@@ -76,6 +76,8 @@ struct ospf_interface
 
   struct route_table *nbrs;             /* OSPF Neighbor List */
 
+  struct ospf_lsa *network_lsa_self;	/* self-originated network-LSA */
+
   /* Timer values. */
   u_int32_t v_hello;			/* Hello Interval */
   u_int32_t v_wait;			/* Router Dead Interval */
@@ -104,6 +106,7 @@ struct ospf_interface
 /* Prototypes. */
 void ospf_if_reset_variables (struct ospf_interface *oi);
 struct ospf_interface *ospf_if_new ();
+struct ospf_interface *ospf_if_lookup_by_addr ();
 int ospf_if_new_hook (struct interface *);
 void ospf_if_init ();
 void ospf_if_stream_set (int, struct ospf_interface *);

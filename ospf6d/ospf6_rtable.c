@@ -123,8 +123,9 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
   struct in6_addr ipaddr;
   char ifname[16];
   struct ospf6_if *o6if;
-  struct lsa_internal *lsa;
+  struct ospf6_lsa *lsa;
   struct link_lsa *linklsa;
+  list m;
 
   if (dst->vtx_depth > 2 ||
       (dst->vtx_depth == 2 && IS_VTX_ROUTER_TYPE (parent)))
@@ -170,21 +171,25 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
       if_indextoname (ifindex, ifname);
       o6if = ospf6_if_lookup (ifname);
       assert (o6if);
-      lsa = get_linklocal_lsa (dst->vtx_rtrid, o6if);
-      if (!lsa)
+      m = list_init ();
+      ospf6_lsdb_collect_type_advrtr (m, htons (LST_LINK_LSA),
+                                      dst->vtx_rtrid, (void *)o6if);
+      if (list_isempty (m))
         {
-          zvlog_err ("Can't find Link-LSA for %s, null nexthop",
-                     inet4str (dst->vtx_rtrid));
+          o6log.rtable ("Can't find Link-LSA for %s, null nexthop",
+                        inet4str (dst->vtx_rtrid));
           memset (&ipaddr, 0, sizeof (struct in6_addr));
         }
       else
         {
+          lsa = (struct ospf6_lsa *) getdata (listhead (m));
           linklsa = (struct link_lsa *)(lsa + 1);
           memcpy (&ipaddr, &linklsa->llsa_linklocal,
                   sizeof (struct in6_addr));
         }
       p = nexthop_make (ifindex, &ipaddr, 0);
       list_add_node (l, p);
+      list_delete_all (m);
       return;
     }
   else
@@ -324,7 +329,7 @@ rtable_delete (struct ospf6_rtentry *p, struct ospf6_rtable *rtable)
 
 void rtable_install (unsigned char dest_type, union dest_id *dest_id,
                      cost_t cost, unsigned char path_type, list nexthops,
-                     struct lsa_internal *origin,
+                     struct ospf6_lsa *origin,
                      struct ospf6_rtable *rtable)
 {
   struct ospf6_rtentry *r = rtentry_new();
@@ -384,28 +389,28 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
 static void
 area_entry_install (struct ospf6_rtentry *r, struct ospf6 *ospf6)
 {
-  list lsalist = NULL;
+  list l = list_init ();
   listnode n;
   struct intra_area_prefix_lsa *intra_prefix_lsa;
-  struct lsa_internal *lsi;
+  struct ospf6_lsa *lsa;
   struct ospf6_prefix *prefix;
   int j;
   union dest_id dest_id;
-  cost_t cost;
+  cost_t cost = 0;
 
-  lsalist = get_referencing_lsa (r->ls_origin);
-  if (!lsalist)
+  get_referencing_lsa (l, r->ls_origin);
+  if (list_isempty (l))
     {
       o6log.rtable ("No reference to %s",
-                    print_lsahdr (r->ls_origin->lsh));
+                    print_lsahdr (r->ls_origin->lsa_hdr));
       return;
     }
 
-  for (n = listhead (lsalist); n; nextnode (n))
+  for (n = listhead (l); n; nextnode (n))
     {
-      lsi = (struct lsa_internal *) getdata (n);
-      intra_prefix_lsa = (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
-      o6log.rtable ("checking: %s", print_lsahdr (lsi->lsh));
+      lsa = (struct ospf6_lsa *) getdata (n);
+      intra_prefix_lsa = (struct intra_area_prefix_lsa *)(lsa->lsa_hdr + 1);
+      o6log.rtable ("checking: %s", print_lsahdr (lsa->lsa_hdr));
 
       prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
 
@@ -424,11 +429,11 @@ area_entry_install (struct ospf6_rtentry *r, struct ospf6 *ospf6)
           dest_id.prefix.prefixlen = prefix->o6p_prefix_len;
           ospf6_prefix_in6_addr (prefix, &dest_id.prefix.prefix);
           rtable_install (DTYPE_PREFIX, &dest_id, cost, PTYPE_INTRA,
-                          r->nexthops, lsi, &ospf6->rtable);
+                          r->nexthops, lsa, &ospf6->rtable);
           prefix = OSPF6_NEXT_PREFIX (prefix);
         }
     }
-  list_delete_all (lsalist);
+  list_delete_all (l);
   return;
 }
 
@@ -555,7 +560,7 @@ ptype_str (struct ospf6_rtentry *p, char *buf, int bufsize)
 void
 rtable_vty_entry (struct vty *vty, struct ospf6_rtentry *p)
 {
-  char destination[64], gateway[32];
+  char destination[64], gateway[64];
   char path_type[16], netif[32], cost[32];
   listnode n;
   struct ospf6_nexthop *q;

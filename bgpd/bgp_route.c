@@ -301,6 +301,15 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
       return;
     }
 
+  /* Default route check. */
+  if (p->family == AF_INET &&
+      p->u.prefix4.s_addr == INADDR_ANY &&
+      ! (peer->config & PEER_DEFAULT_ORIGINATE))
+    {
+      /* Yes! I want logging at here. */
+      return;
+    }
+
   /* AS path loop check */
   if (aspath_loop_check (info->attr->aspath, peer->as))
     {
@@ -349,13 +358,23 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 	{
 	  if (peer->su_local->sa.sa_family == AF_INET)
 	    attr.nexthop = peer->su_local->sin.sin_addr;
+
 	  if (peer->su_local->sa.sa_family == AF_INET6)
-	    if (! IN6_IS_ADDR_LINKLOCAL(&peer->su_local->sin6.sin6_addr))
-	      {
-		attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
-		if (attr.mp_nexthop_len < 16)
-		  attr.mp_nexthop_len = 16;
-	      }
+	    {
+	      if (! IN6_IS_ADDR_LINKLOCAL(&peer->su_local->sin6.sin6_addr))
+		{
+		  attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
+		  if (attr.mp_nexthop_len < 16)
+		    attr.mp_nexthop_len = 16;
+		}
+	      else
+		/* This is not RFC compliant. */
+		{
+		  attr.mp_nexthop_global = peer->su_local->sin6.sin6_addr;
+		  if (attr.mp_nexthop_len < 16)
+		    attr.mp_nexthop_len = 16;
+		}
+	    }
 	}
 #endif /* HAVE_IPV6 */
     }
@@ -615,15 +634,25 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
   struct bgp_info bgp_info;
   struct aspath *aspath;
 
+  /* Apply default weight value. */
+  if (peer->config & PEER_CONFIG_WEIGHT)
+    attr->weight = peer->weight;
+
   /* Route map apply. */
   if (ROUTE_MAP_IN (peer))
     {
       newattr = *attr;
 
       if (attr->aspath)
-	newattr.aspath = aspath_dup (attr->aspath);
+	{
+	  newattr.aspath = aspath_dup (attr->aspath);
+	  aspath_unintern (attr->aspath);
+	}
       if (attr->community)
-	newattr.community = community_dup (attr->community);
+	{
+	  newattr.community = community_dup (attr->community);
+	  community_unintern (attr->community);
+	}
       
       /* Make routemap object. */
       bgp_info.peer = peer;

@@ -265,6 +265,42 @@ bgp_zebra_no_redistribute (int type)
     zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
 }
 
+#ifdef HAVE_IPV6
+unsigned int
+bgp_ifindex_by_nexthop (struct in6_addr *addr)
+{
+  listnode ifnode;
+  listnode cnode;
+  struct interface *ifp;
+  struct connected *connected;
+  struct prefix_ipv6 p;
+  
+  p.family = AF_INET6;
+  p.prefix = *addr;
+  p.prefixlen = IPV6_MAX_BITLEN;
+
+  for (ifnode = listhead (iflist); ifnode; nextnode (ifnode))
+    {
+      ifp = getdata (ifnode);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct prefix *cp; 
+
+	  connected = getdata (cnode);
+	  cp = connected->address;
+	    
+	  if (cp->family == AF_INET6)
+	    {
+	      if (prefix_match (cp, (struct prefix *)&p))
+		return ifp->index;
+	    }
+	}
+    }
+  return 0;
+}
+#endif /* HAVE_IPV6 */
+
 void
 bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 {
@@ -300,24 +336,20 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
       /* Only global address nexthop exists. */
       if (info->attr->mp_nexthop_len == 16)
 	nexthop = &info->attr->mp_nexthop_global;
-
+      
       /* If both global and link-local address present. */
       if (info->attr->mp_nexthop_len == 32)
 	{
-	  /* If peering address is link-local set nexthp as link-local
-             address.*/
-	  if (info->peer->su->sa.sa_family == AF_INET6 &&
-	      IN6_IS_ADDR_LINKLOCAL (&info->peer->su->sin6.sin6_addr))
-	    nexthop = &info->attr->mp_nexthop_local;
-	  else
-	    nexthop = &info->attr->mp_nexthop_global;
+	  nexthop = &info->attr->mp_nexthop_local;
+	  ifindex = bgp_ifindex_by_nexthop (&info->attr->mp_nexthop_global);
 	}
 
       if (nexthop == NULL)
 	return;
 
-      if (IN6_IS_ADDR_LINKLOCAL (nexthop) && info->peer->ifname)
-	ifindex = if_nametoindex (info->peer->ifname);
+      if (IN6_IS_ADDR_LINKLOCAL (nexthop) && ! ifindex)
+	if (info->peer->ifname)
+	  ifindex = if_nametoindex (info->peer->ifname);
 
       zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
 		      nexthop, ifindex);
@@ -361,23 +393,19 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
       /* If both global and link-local address present. */
       if (info->attr->mp_nexthop_len == 32)
 	{
-	  /* If peering address is link-local set nexthp as link-local
-             address.*/
-	  if (info->peer->su->sa.sa_family == AF_INET6 &&
-	      IN6_IS_ADDR_LINKLOCAL (&info->peer->su->sin6.sin6_addr))
-	    nexthop = &info->attr->mp_nexthop_local;
-	  else
-	    nexthop = &info->attr->mp_nexthop_global;
+	  nexthop = &info->attr->mp_nexthop_local;
+	  ifindex = bgp_ifindex_by_nexthop (&info->attr->mp_nexthop_global);
 	}
 
       if (nexthop == NULL)
 	return;
 
-      if (IN6_IS_ADDR_LINKLOCAL (nexthop) && info->peer->ifname)
-	ifindex = if_nametoindex (info->peer->ifname);
+      if (IN6_IS_ADDR_LINKLOCAL (nexthop) && ! ifindex)
+	if (info->peer->ifname)
+	  ifindex = if_nametoindex (info->peer->ifname);
 
       zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
-			 &info->attr->mp_nexthop_global, ifindex);
+			 nexthop, ifindex);
     }
 #endif /* HAVE_IPV6 */
 }

@@ -432,6 +432,7 @@ bgp_open (struct peer *peer, bgp_size_t size)
 {
   u_char version;
   u_char optlen;
+  u_int16_t holdtime;
   as_t asno;
   
   /* Increment packet count. */
@@ -440,9 +441,11 @@ bgp_open (struct peer *peer, bgp_size_t size)
   /* Parse open packet. */
   version = stream_getc (peer->ibuf);
   asno  = stream_getw (peer->ibuf);
-  if (peer->v_holdtime == BGP_DEFAULT_HOLDTIME)
-    peer->v_holdtime = stream_getw (peer->ibuf);
+  holdtime = stream_getw (peer->ibuf);
   peer->ident = stream_get_ipv4 (peer->ibuf);
+
+  if (peer->v_holdtime == BGP_DEFAULT_HOLDTIME)
+    peer->v_holdtime = holdtime;
 
   optlen = stream_getc (peer->ibuf);
 

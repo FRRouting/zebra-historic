@@ -40,7 +40,7 @@ struct host
   char *enable;
   char *enable_encrypt;
 
-  /* Override for no. of terminal lines */
+  /* System wide terminal lines. */
   int lines;
 
 #ifdef HAVE_PTHREAD
@@ -170,6 +170,7 @@ struct desc
 /* Some macroes */
 #define CMD_OPT(X)      ((X) == '[')
 #define CMD_EXT(X)      (((X) >= 'A' && (X) <= 'Z') || ((X) == '<'))
+#define CMD_IPV4(X)	((strcmp ((X), "A.B.C.D") == 0))
 
 #define CMD_OPTION(S)   ((S[0]) == '[')
 #define CMD_VARIABLE(S) (((S[0]) >= 'A' && (S[0]) <= 'Z') || ((S[0]) == '<'))

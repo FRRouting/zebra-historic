@@ -1,3 +1,27 @@
+1999-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.c (bgp_stop): Very serious bug of bgp_stop () is fixed.
+	When multiple route to the same destination exist, bgpd try to
+	announce the information to stopped peer.  Then add orphan write
+	thread is added.  This cause many strange behavior of bgpd.
+	Reported by Georg Hitsch <georg@atnet.at>.
+
+1999-07-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c: Change peer's A.B.C.D to PEER.
+
+1999-07-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_announce): Add hack for link-local nexthop.
+
+	* bgp_zebra.c (bgp_zebra_announce): Fill in nexthop address from
+	local address.
+
+1999-07-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_open): Holdtime fetch bug is fixed.  Reported
+	by Yuji SEKIYA <sekiya@sfc.wide.ad.jp>.
+
 1999-07-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_fsm.c (fsm_holdtime): Don't close file descriptor in

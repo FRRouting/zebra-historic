@@ -21,12 +21,26 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_VERTEX_ROUTER  1
 #define OSPF_VERTEX_NETWORK 2
 
+#define OSPF_SPF_FALSE	    0
+#define OSPF_SPF_TRUE	    1
+
 struct vertex
 {
+  u_char flag;
   u_char type;
   struct in_addr id;
   struct ospf_lsa *lsa;
-  list nexthop;
   u_int16_t distance;
+  list child;
+  list nexthop;
+};
+
+struct ospf_nexthop
+{
+  struct interface *ifp;
+  struct in_addr router;
   struct vertex *parent;
 };
+
+void ospf_spf_calculate_schedule ();
+void ospf_spf_calculate_timer_add ();

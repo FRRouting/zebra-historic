@@ -51,6 +51,9 @@ list list_init();
 
 listnode list_lookup_node (list, void *);
 void list_add_node (list, void *);
+void list_add_node_prev (list, listnode, void *);
+void list_add_node_next (list, listnode, void *);
+void list_add_list (list, list);
 void list_delete_by_val (list, void *);
 void list_delete_all_node (list);
 void list_delete_all (list);

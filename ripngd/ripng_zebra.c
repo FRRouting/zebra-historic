@@ -95,9 +95,9 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
       stream_forward (s, size);
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
-	ripng_redistribute_add (type, &p);
+	ripng_redistribute_add (type, 0, &p, ifindex);
       else
-	ripng_redistribute_delete (type, &p);
+	ripng_redistribute_delete (type, 0, &p, ifindex);
     }
   return 0;
 }

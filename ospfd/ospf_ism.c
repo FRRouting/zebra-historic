@@ -598,7 +598,7 @@ void
 ism_change_status (struct ospf_interface *oi, int status)
 {
   struct ospf_lsa *lsa;
-  int o_status;
+  int old_status;
 
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (ism, ISM_STATUS))
@@ -606,33 +606,29 @@ ism_change_status (struct ospf_interface *oi, int status)
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  LOOKUP (ospf_ism_status_msg, status));
 
-  o_status = oi->status;
+  old_status = oi->status;
   oi->status = status;
 
   /* Originate router-LSA. */
   if (oi->area)
     {
-      if (ROUTER_LSA_SELF (oi->area) != NULL)
-	ospf_lsa_free (ROUTER_LSA_SELF (oi->area));
-
       lsa = ospf_router_lsa (oi);
       ospf_add_router_lsa (oi->area, lsa);
-      ROUTER_LSA_SELF (oi->area) = lsa;
+      oi->area->router_lsa_self = lsa;
     }
 
   /* Originate network-LSA. */
-  if (o_status != ISM_DR && status == ISM_DR)
+  if (old_status != ISM_DR && status == ISM_DR)
     {
       lsa = ospf_network_lsa (oi);
       ospf_add_network_lsa (oi->area, lsa);
-      NETWORK_LSA_SELF (oi->area) = lsa;
+      oi->network_lsa_self = lsa;
     }
-
-  if (o_status == ISM_DR && status != ISM_DR)
+  else if (old_status == ISM_DR && status != ISM_DR)
     {
-      if (NETWORK_LSA_SELF (oi->area) != NULL)
-	ospf_lsa_free (NETWORK_LSA_SELF (oi->area));
-      NETWORK_LSA_SELF (oi->area) = NULL;
+      if (oi->network_lsa_self != NULL)
+	ospf_lsa_free (oi->network_lsa_self);
+      oi->network_lsa_self = NULL;
     }
 
   /* Preserve old status? */

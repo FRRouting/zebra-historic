@@ -1,3 +1,35 @@
+1999-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Release zebra-0.74
+
+1999-07-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (struct host): Delete lines from struct host.  Add
+	lines to struct vty.
+
+	* command.c: Delete `lines LINES'.  Terminal display line settings
+	should be done by `terminal length' command.
+
+1999-07-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): MTYPE_OSPF_PATH are added.
+
+1999-07-22  Toshiaki Takada  <takada@zebra.org>
+
+	* memory.h (enum): MTYPE_OSPF_NEXTHOP is added.
+
+1999-07-21  Toshiaki Takada  <takada@zebra.org>
+
+	* linklist.c (list_add_node_prev), (list_add_node_next),
+	(list_add_list): New function added.
+
+	* table.c (route_table_free): New function added.
+	
+1999-07-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* plist.c (config_write_prefix): Set write flag when configuration
+	is written.
+
 1999-07-15  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp> 
 
 	* prefix.c : prefix_cmp() added. change apply_mask() to

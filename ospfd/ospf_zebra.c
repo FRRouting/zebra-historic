@@ -109,6 +109,20 @@ ospf_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
   ospf_if_update ();
   return 0;
 }
+
+void
+ospf_zebra_add (struct prefix_ipv4 *p, struct in_addr *nexthop)
+{
+  if (zebra->redist[ZEBRA_ROUTE_OSPF])
+    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_OSPF, 0, p, nexthop, 0);
+}
+
+void
+ospf_zebra_delete (struct prefix_ipv4 *p, struct in_addr *nexthop)
+{
+  if (zebra->redist[ZEBRA_ROUTE_OSPF])
+    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_OSPF, 0, p, nexthop, 0);
+}
 
 DEFUN (router_zebra,
        router_zebra_cmd,

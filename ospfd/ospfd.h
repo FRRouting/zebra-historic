@@ -105,15 +105,20 @@ enum
 struct ospf
 {
   struct in_addr router_id;		/* OSPF Router ID. */
+  struct in_addr router_id_static;	/* OSPF static Router ID. */
 
   list iflist;				/* Zebra interface list. */
 
   list areas;				/* OSPF areas. */
   struct route_table *networks;		/* OSPF config networks. */
 
-  int ls_seqnum;			/* LS Sequence Number. */
-
   struct route_table *external_lsa;	/* AS-External-LSAs. */
+
+  struct route_table *old_table;        /* Old routing table. */
+  struct route_table *new_table;        /* Current routing table. */
+
+  int spf_calc;		                /* SPF calculation flag. */
+  struct thread *t_spf_calc;	        /* SPF calculation timer. */
 };
 
 /* OSPF area structure. */
@@ -130,17 +135,13 @@ struct ospf_area
   int default_cost;			/* StubDefaultCost. */
   int auth_type;			/* Authentication type. */
 
-#if (0)
-  struct route_table *router_lsa;	/* Router-LSAs. */
-  struct route_table *network_lsa;	/* Network-LSAs. */
-  struct route_table *summary_lsa;	/* Summary-LSAs. */
-#endif
-
   /* Area related LSAs. */
   struct route_table *lsa[4];
 
   /* self originated LSAs. */
-  void *lsa_self[4];
+  struct ospf_lsa *router_lsa_self;
+  struct ospf_lsa *summary_lsa_self;
+  struct ospf_lsa *summary_lsa_asbr_self;
 
   /* Shortest Path Tree. */
   struct vertex *spf;
@@ -153,11 +154,6 @@ struct ospf_area
 #define NETWORK_LSA(a)			(a)->lsa[1]
 #define SUMMARY_LSA(a)			(a)->lsa[2]
 #define SUMMARY_LSA_ASBR(a)		(a)->lsa[3]
-
-#define ROUTER_LSA_SELF(a)		(a)->lsa_self[0]
-#define NETWORK_LSA_SELF(a)		(a)->lsa_self[1]
-#define SUMMARY_LSA_SELF(a)		(a)->lsa_self[2]
-#define SUMMARY_LSA_ASBR_SELF(a)	(a)->lsa_self[3]
 
 /* OSPF config network structure. */
 struct ospf_network
@@ -186,6 +182,8 @@ extern char *progname;
 /* Prototypes. */
 void ospf_init (void);
 void ospf_if_update (void);
+void ospf_terminate (void);
+void ospf_route_init (void);
 
 extern struct thread_master *master;
 extern struct ospf *ospf_top;

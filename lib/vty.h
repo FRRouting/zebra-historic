@@ -85,6 +85,9 @@ struct vty
   int width;
   int height;
 
+  /* Configure lines. */
+  int lines;
+
   /* Current executing function pointer. */
   int (*func) (struct vty *, void *arg);
 

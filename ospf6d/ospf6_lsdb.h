@@ -26,32 +26,59 @@
 #define MAXLSASIZE   1024
 
 #define AREALSTYPESIZE              0x0009
-#define typeindex(x)     (((ntohs (x)) & 0x000f) - 1)
 
 #define HASHVAL   64
 #define hash(x)  ((x) % HASHVAL)
 
-/* for LSA list in Neighbor Data Structure */
-#define lsdb_size(x)     (sizeof (x) / sizeof (struct lsa_internal *))
-
 #define MY_ROUTER_LSA_ID    0
 
 /* Function Prototypes */
-int lsa_delete_from_list (struct lsa_internal *, list l);
-int lsa_delete_all_list (list);
-int lsa_delete (struct lsa_internal *);
-int lsa_change (struct lsa_internal *);
-int lsa_install (struct lsa_internal *);
-list lsa_lookup_by_advrtr (unsigned short, unsigned long, struct area *);
-struct lsa_internal *lsa_lookup (unsigned short, unsigned long,
-                                 unsigned long, struct area *,
-                                 struct ospf6_if *);
-struct lsa_hdr *attach_lsa_to_iov (struct lsa_internal *, struct iovec *);
-struct lsa_hdr *attach_lsa_hdr_to_iov (struct lsa_internal *, struct iovec *);
-struct lsa_internal *get_linklocal_lsa (rtr_id_t, struct ospf6_if *);
-void attach_lsa_to_retranslist (struct lsa_internal *, struct neighbor *);
-void detach_lsa_from_retranslist (struct lsa_internal *, struct neighbor *);
-struct lsa_internal *lslist_lookup (struct lsa_internal *, list);
+int lsa_change (struct ospf6_lsa *);
+struct ospf6_lsa_hdr *
+attach_lsa_hdr_to_iov (struct ospf6_lsa *, struct iovec *);
+struct ospf6_lsa_hdr *
+attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov);
+
+struct ospf6_lsa *
+ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *nbr);
+void ospf6_add_summary (struct ospf6_lsa *, struct neighbor *);
+void ospf6_remove_summary (struct ospf6_lsa *, struct neighbor *);
+void ospf6_remove_summary_all (struct neighbor *);
+
+struct ospf6_lsa *
+ospf6_lookup_request (struct ospf6_lsa *lsa, struct neighbor *nbr);
+void ospf6_add_request (struct ospf6_lsa *, struct neighbor *);
+void ospf6_remove_request (struct ospf6_lsa *, struct neighbor *);
+void ospf6_remove_request_all (struct neighbor *);
+
+struct ospf6_lsa *
+ospf6_lookup_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr);
+void ospf6_add_retrans (struct ospf6_lsa *, struct neighbor *);
+void ospf6_remove_retrans (struct ospf6_lsa *, struct neighbor *);
+void ospf6_remove_retrans_all (struct neighbor *);
+
+void
+ospf6_add_delayed_ack (struct ospf6_lsa *, struct ospf6_if *);
+void
+ospf6_remove_delayed_ack (struct ospf6_lsa *, struct ospf6_if *);
+
+void ospf6_lsdb_collect_type_advrtr (list, unsigned short,
+                                     unsigned long, void *);
+void ospf6_lsdb_collect_type (list, unsigned short, void *);
+
+struct ospf6_lsa*
+ospf6_lsdb_lookup (unsigned short, unsigned long, unsigned long, void *);
+void ospf6_lsdb_add (struct ospf6_lsa *);
+void ospf6_lsdb_remove (struct ospf6_lsa *);
+
+void ospf6_lsdb_init_neighbor (struct neighbor *);
+void ospf6_lsdb_finish_neighbor (struct neighbor *);
+void ospf6_lsdb_init_interface (struct ospf6_if *);
+void ospf6_lsdb_finish_interface (struct ospf6_if *);
+void ospf6_lsdb_init_area (struct area *);
+void ospf6_lsdb_finish_area (struct area *);
+
+void ospf6_lsdb_install (struct ospf6_lsa *);
 
 #endif /* OSPF6_LSDB_H */
 

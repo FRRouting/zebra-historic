@@ -64,11 +64,9 @@ ospf_if_add_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
 	      (char *) &m, sizeof (struct ip_mreq));
 
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_ADD_MEMBERSHIP: %s",
-	  strerror (errno));
+    zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));
 
-  zlog (NULL, LOG_INFO, "interface %s join AllSPFRouters Multicast group.",
-	ifp->name);
+  zlog_info ("interface %s join AllSPFRouters Multicast group.", ifp->name);
 
   return ret;
 }
@@ -88,11 +86,9 @@ ospf_if_drop_allspfrouters (struct interface *ifp, int sock, struct prefix *p)
 		    (char *) &m, sizeof (struct ip_mreq));
 
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_DROP_MEMBERSHIP: %s",
-	  strerror (errno));
+    zlog_warn("can't setsockopt IP_DROP_MEMBERSHIP: %s", strerror (errno));
 
-  zlog (NULL, LOG_INFO, "interface %s leave AllSPFRouters Multicast group.",
-	ifp->name);
+  zlog_info ("interface %s leave AllSPFRouters Multicast group.", ifp->name);
 
   return ret;
 }
@@ -112,11 +108,9 @@ ospf_if_add_alldrouters (struct interface *ifp, int sock, struct prefix *p)
   ret = setsockopt (sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 		    (char *) &m, sizeof (struct ip_mreq));
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_ADD_MEMBERSHIP: %s",
-	  strerror (errno));
+    zlog_warn ("can't setsockopt IP_ADD_MEMBERSHIP: %s", strerror (errno));
 
-  zlog (NULL, LOG_INFO, "interface %s join AllDRouters Multicast group.",
-	ifp->name);
+  zlog_info ("interface %s join AllDRouters Multicast group.", ifp->name);
 
   return ret;
 }
@@ -135,11 +129,9 @@ ospf_if_drop_alldrouters (struct interface *ifp, int sock, struct prefix *p)
   ret = setsockopt (sock, IPPROTO_IP, IP_DROP_MEMBERSHIP,
 		    (char *) &m, sizeof (struct ip_mreq));
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_DROP_MEMBERSHIP: %s",
-	  strerror (errno));
+    zlog_warn ("can't setsockopt IP_DROP_MEMBERSHIP: %s", strerror (errno));
 
-  zlog (NULL, LOG_INFO, "interface %s leave AllDRouters Multicast group.",
-	ifp->name);
+  zlog_info ("interface %s leave AllDRouters Multicast group.", ifp->name);
 
   return ret;
 }
@@ -154,8 +146,7 @@ ospf_if_ipmulticast (int sock, struct prefix *p)
 
   ret = setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof (addr));
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't setsockopt IP_MULTICAST_IF: %s",
-	  strerror (errno));
+    zlog_warn ("can't setsockopt IP_MULTICAST_IF: %s", strerror (errno));
 
   return ret;
 }
@@ -174,8 +165,7 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
   sock = ospf_serv_sock (ifp, AF_INET);
   if (sock < 0)
     {
-      zlog (NULL, LOG_WARNING,
-	    "interface %s can't create raw socket", ifp->name);
+      zlog_warn ("interface %s can't create raw socket", ifp->name);
       return -1;
     }
 

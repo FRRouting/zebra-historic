@@ -32,6 +32,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "filter.h"
 #include "stream.h"
 #include "log.h"
+#include "memory.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
@@ -90,7 +91,6 @@ void
 sighup (int sig)
 {
   zlog (NULL, LOG_INFO, "SIGHUP received");
-  log_rotate ();
 }
 
 /* SIGINT handler. */
@@ -98,6 +98,9 @@ void
 sigint (int sig)
 {
   zlog (NULL, LOG_INFO, "Terminating on signal");
+
+  ospf_terminate ();
+
   exit (0);
 }
 
@@ -205,7 +208,7 @@ main (int argc, char **argv)
   cmd_init ();
   debug_init ();
   vty_init ();
-  /* memory_init (); */
+  memory_init ();
 
   access_list_init ();
 
@@ -213,6 +216,7 @@ main (int argc, char **argv)
   ospf_init ();
   ospf_if_init ();
   ospf_lsa_init ();
+  ospf_route_init ();
 
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);

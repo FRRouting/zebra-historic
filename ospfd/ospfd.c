@@ -38,6 +38,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_spf.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
@@ -63,11 +64,12 @@ ospf_new ()
   struct ospf *new = XMALLOC (MTYPE_OSPF_TOP, sizeof (struct ospf));
   bzero (new, sizeof (struct ospf));
 
+  new->router_id.s_addr = htonl (0);
+  new->router_id_static.s_addr = htonl (0);
+
   new->iflist = iflist;
   new->areas = list_init ();
   new->networks = (struct route_table *) route_table_init ();
-
-  new->ls_seqnum = OSPF_INITIAL_SEQUENCE_NUMBER;
 
   return new;
 }
@@ -97,11 +99,9 @@ ospf_area_new (struct in_addr area_id)
     new->lsa[i] = route_table_init ();
 
   /* Self-originated LSAs initialize. */
-  for (i = 0; i < 2; i++)
-    new->lsa_self[i] = NULL;
-
-  for (i = 2; i < 4; i++)
-    new->lsa_self[i] = list_init ();
+  new->router_lsa_self = NULL;
+  new->summary_lsa_self = NULL;
+  new->summary_lsa_asbr_self = NULL;
 
   return new;
 }
@@ -246,7 +246,8 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 
   /* Update router_id. */
   if (ospf_top != NULL)
-    ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+    if (ospf_top->router_id_static.s_addr == 0)
+      ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
 
   /* get target interface. */
   for (node = listhead (ospf->iflist); node; nextnode (node))
@@ -275,7 +276,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 
 	  co = getdata (cn);
 
-	  if (prefix_match (co->address, p))
+	  if (prefix_match (p, co->address))
 	    {
 	      /* get pointer of interface prefix. */
 	      oi->address = co->address;
@@ -418,7 +419,11 @@ DEFUN (router_ospf,
 
   ospf_loopback_run (ospf_top);
 
-  ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+  if (ospf_top->router_id_static.s_addr == 0)
+    ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+
+  /* I'm not sure where is proper to start SPF calc timer. -- Kunihiro */
+  ospf_spf_calculate_timer_add ();
 
   return CMD_SUCCESS;
 }
@@ -491,9 +496,46 @@ DEFUN (no_router_ospf,
   return CMD_SUCCESS;
 }
 
+DEFUN (ospf_router_id,
+       ospf_router_id_cmd,
+       "ospf router-id A.B.C.D",
+       "OSPF specific commands\n"
+       "Set the OSPF Router ID\n"
+       "OSPF Router ID\n")
+{
+  int ret;
+  struct in_addr router_id;
+
+  ret = inet_aton (argv[0], &router_id);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify Router ID by A.B.C.D\r\n");
+      return CMD_WARNING;
+    }
+
+  ospf_top->router_id = router_id;
+  ospf_top->router_id_static = router_id;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf_router_id,
+       no_ospf_router_id_cmd,
+       "no ospf router-id",
+       NO_STR
+       "OSPF specific commands\n"
+       "Set the OSPF Router ID\n")
+{
+  ospf_top->router_id_static.s_addr = 0;
+  ospf_top->router_id = ospf_get_router_id (ospf_top->iflist);
+
+  return CMD_SUCCESS;
+}
+
+
 DEFUN (network_area,
        network_area_cmd,
-       "network IPV4_PREFIX area AREA_ID",
+       "network IPV4_PREFIX area A.B.C.D",
        "Enable routing on an IP network\n"
        "OSPF network prefix\n"
        "Set the OSPF area ID\n"
@@ -552,6 +594,14 @@ DEFUN (network_area,
 
   return CMD_SUCCESS;
 }
+
+ALIAS (network_area,
+       network_area_decimal_cmd,
+       "network IPV4_PREFIX area <0-4294967295>",
+       "Enable routing on an IP network\n"
+       "OSPF network prefix\n"
+       "Set the OSPF area ID\n"
+       "OSPF Area ID as a decimal value\n")
 
 DEFUN (no_network_area,
        no_network_area_cmd,
@@ -932,6 +982,11 @@ ospf_config_write (struct vty *vty)
       if (! ospf_top->networks)
 	return write;
 
+      /* Router ID print. */
+      if (ospf_top->router_id_static.s_addr != 0)
+	vty_out (vty, " ospf router-id %s%s",
+		 inet_ntoa (ospf_top->router_id_static), VTY_NEWLINE);
+
       /* network area print. */
       for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
 	{
@@ -1013,9 +1068,16 @@ ospf_init ()
   install_element (CONFIG_NODE, &no_router_ospf_cmd);
 
   install_default (OSPF_NODE);
+  install_element (OSPF_NODE, &ospf_router_id_cmd);
+  install_element (OSPF_NODE, &no_ospf_router_id_cmd);
+#if 0	/* Temporary commented out -- kunihiro */
+  install_element (OSPF_NODE, &network_area_decimal_cmd);
+#endif /**/
   install_element (OSPF_NODE, &network_area_cmd);
   install_element (OSPF_NODE, &no_network_area_cmd);
+  /*
   install_element (OSPF_NODE, &area_authentication_message_digest_cmd);
+  */
   install_element (OSPF_NODE, &area_authentication_cmd);
   install_element (OSPF_NODE, &no_area_authentication_cmd);
   /*

@@ -22,76 +22,41 @@
 #include "ospf6d.h"
 
 int
-lsa_delete_from_list (struct lsa_internal *lsi, list l)
+lsa_change (struct ospf6_lsa *lsa)
 {
-  assert (lsi->lsh);
-  free_lsa (lsi->lsh);
-  free_lsa_internal_hdr (lsi);
-  list_delete_by_val (l, lsi);
-  return 0;
-}
+  struct area *area;
+  struct ospf6_if *o6if;
 
-int
-lsa_delete_all_list (list l)
-{
-  listnode n;
-  struct lsa_internal *lsi;
-
-  for (n = listhead (l); n; n = listhead (l))
-    {
-      lsi = (struct lsa_internal *) getdata (n);
-      lsa_delete_from_list (lsi, l);
-    }
-  assert (list_isempty (l));
-  return 0;
-}
-
-int
-lsa_delete (struct lsa_internal *lsi)
-{
-  assert (lsi && lsi->lsh);
-  switch (GET_LSASCOPE (lsi->lsh->lsh_type))
-    {
-    case SCOPE_LINKLOCAL:
-      assert (lsi->ospf6_if);
-      lsa_delete_from_list (lsi, lsi->ospf6_if->linklocal_lsa);
-      break;
-
-    case SCOPE_AREA:
-      assert (lsi->area);
-      lsa_delete_from_list (lsi, lsi->area->lsdb
-               [typeindex(lsi->lsh->lsh_type)][hash(lsi->lsh->lsh_id)]);
-      break;
-
-    case SCOPE_AS:
-      break;
-
-    case SCOPE_RESERVED:
-    default:
-      zvlog_debug ("Not Reached!?");
-      break;
-    }
-  return 0;
-}
-
-int
-lsa_change (struct lsa_internal *newp)
-{
-  switch (ntohs (newp->lsh->lsh_type))
+  switch (ntohs (lsa->lsa_hdr->lsh_type))
     {
     case LST_ROUTER_LSA:
     case LST_NETWORK_LSA:
+      area = (struct area *)lsa->scope;
+      if (area->spf_calc == (struct thread *)NULL)
+        area->spf_calc = thread_add_event (master, spf_calculation,
+                                           area, 0);
+      if (area->route_calc == (struct thread *)NULL)
+        area->route_calc = thread_add_event (master,
+                                             routing_table_calculation,
+                                             area, 0);
+      break;
     case LST_LINK_LSA:
-      if (newp->area->spf_calc == (struct thread *)NULL)
-        newp->area->spf_calc = thread_add_event (master,
-                                                 spf_calculation,
-                                                 newp->area, 0);
-      /* Fall through, not break */
+      o6if = (struct ospf6_if *)lsa->scope;
+      area = (struct area *) o6if->area;
+      if (area->spf_calc == (struct thread *)NULL)
+        area->spf_calc = thread_add_event (master, spf_calculation,
+                                           area, 0);
+      if (area->route_calc == (struct thread *)NULL)
+        area->route_calc = thread_add_event (master,
+                                             routing_table_calculation,
+                                             area, 0);
+      break;
     case LST_INTRA_AREA_PREFIX_LSA:
-      if (newp->area->route_calc == (struct thread *)NULL)
-        newp->area->route_calc = thread_add_event (master,
-                                                   routing_table_calculation,
-                                                   newp->area, 0);
+      area = (struct area *)lsa->scope;
+      if (area->route_calc == (struct thread *)NULL)
+        area->route_calc = thread_add_event (master,
+                                             routing_table_calculation,
+                                             area, 0);
       break;
     default:
       break;
@@ -100,220 +65,622 @@ lsa_change (struct lsa_internal *newp)
   return 0;
 }
 
-int
-lsa_install (struct lsa_internal *newp)
+struct ospf6_lsa_hdr *
+attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
 {
-  struct lsa_internal *oldp;
-  struct lsa_hdr *newlsh;
-  struct timeval now;
-  listnode n;
-  struct neighbor *nbr;
+  assert (lsa && lsa->lsa_hdr);
 
-  assert (newp);
-
-  newlsh = newp->lsh;
-
-  gettimeofday (&now, (struct timezone *)NULL);
-
-  oldp = lsa_lookup (newlsh->lsh_type, newlsh->lsh_id, newlsh->lsh_advrtr,
-                     newp->area, newp->ospf6_if);
-  if (oldp)
-    {
-      assert (oldp->lsh);
-      log_pointer ("Find Old One[%#x] in lsa_install()", oldp);
-
-      /* XXX Do I have to put on the neighbor's retranslist ?
-         I think so */
-      for (n = listhead (oldp->retransing_nbr);
-           !list_isempty (oldp->retransing_nbr);
-           n = listhead (oldp->retransing_nbr))
-        {
-          nbr = (struct neighbor *) getdata (n);
-          attach_lsa_to_retranslist (newp, nbr);
-          detach_lsa_from_retranslist (oldp, nbr);
-        }
-
-      lsa_delete (oldp);
-    }
-
-  switch (GET_LSASCOPE (newp->lsh->lsh_type))
-    {
-      case SCOPE_LINKLOCAL:
-        assert (newp->ospf6_if);
-        list_add_node (newp->ospf6_if->linklocal_lsa, newp);
-        break;
-      case SCOPE_AREA:
-        assert (newp->area);
-        list_add_node (newp->area->lsdb[typeindex (newp->lsh->lsh_type)]
-                                       [hash (newp->lsh->lsh_id)], newp);
-        break;
-      case SCOPE_AS:
-        zvlog_warn ("Not yet");
-        break;
-      case SCOPE_RESERVED:
-      default:
-        zvlog_warn ("Not Reached!?");
-        break;
-    }
-
-  log_pointer ("new LSA[ihdr:%#x][body:%#x] Installed!",
-               newp, newp->lsh);
-
-  newp->installed = now.tv_sec;
-
-  lsa_change (newp);
-  return 0;
+  return ((struct ospf6_lsa_hdr *)
+          iov_attach_last (iov, lsa->lsa_hdr,
+                           ntohs (lsa->lsa_hdr->lsh_len)));
 }
 
-list
-lsa_lookup_by_advrtr (unsigned short lsa_type, unsigned long advrtr,
-                      struct area *area)
+struct ospf6_lsa_hdr *
+attach_lsa_hdr_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
 {
-  int i;
-  struct lsa_internal *lsi;
-  listnode n;
-  list returnlist = NULL;
+  assert (lsa && lsa->lsa_hdr);
 
-  returnlist = list_init ();
-  for (i = 0; i < HASHVAL; i++)
-    {
-      for (n = listhead (area->lsdb[typeindex (lsa_type)][i]); n; nextnode (n))
-        {
-          lsi = (struct lsa_internal *)getdata (n);
-          if (lsi->lsh->lsh_advrtr == advrtr)
-            {
-              list_add_node (returnlist, lsi);
-              zvlog_debug ("%s found in lookup by advrtr",
-                           print_lsahdr (lsi->lsh));
-            }
-        }
-    }
-
-  if (list_isempty (returnlist))
-    {
-      list_delete_all (returnlist);
-      returnlist = NULL;
-    }
-
-  return returnlist;
+  return ((struct ospf6_lsa_hdr *)
+          iov_attach_last (iov, lsa->lsa_hdr,
+                           sizeof (struct ospf6_lsa_hdr)));
 }
 
-/* LSA lookup (Argument's byte order is Network Byte order) */
-struct lsa_internal *
-lsa_lookup (unsigned short lsa_type, unsigned long lsid,
-            unsigned long advrtr, struct area *area,
-            struct ospf6_if *ospf6_if)
+
+/* lookup lsa on summary list of neighbor */
+struct ospf6_lsa *
+ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
+{
+  if (list_lookup_node (nbr->summarylist, lsa))
+    {
+#ifndef NDEBUG
+      if (!list_lookup_node (lsa->summary_nbr, nbr))
+        assert (0);
+#endif /* NDEBUG */
+      return lsa;
+    }
+  return NULL;
+}
+
+/* add lsa to summary list of neighbor */
+void
+ospf6_add_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
+{
+  list_add_node (nbr->summarylist, lsa);
+  list_add_node (lsa->summary_nbr, nbr);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("add %s to %s summary", print_lsahdr (lsa->lsa_hdr),
+              nbr->str);
+  return;
+}
+
+/* remove lsa from summary list of neighbor */
+void
+ospf6_remove_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
+{
+  list_delete_by_val (nbr->summarylist, lsa);
+  list_delete_by_val (lsa->summary_nbr, nbr);
+  o6log.lsdb ("remove %s from %s summary", print_lsahdr (lsa->lsa_hdr),
+              nbr->str);
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
+/* remove all lsa from summary list of neighbor */
+void
+ospf6_remove_summary_all (struct neighbor *nbr)
+{
+  struct ospf6_lsa *lsa;
+  listnode n;
+  while (listcount (nbr->summarylist))
+    {
+      n = listhead (nbr->summarylist);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_remove_summary (lsa, nbr);
+    }
+  return;
+}
+
+/* lookup lsa on request list of neighbor */
+  /* this lookup is different from others, because this lookup is to find
+     the same LSA instance of different memory space */
+struct ospf6_lsa *
+ospf6_lookup_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
   listnode n;
-  struct lsa_internal *lsi;
+  struct ospf6_lsa *p;
 
-  switch (GET_LSASCOPE (lsa_type))
+  for (n = listhead (nbr->requestlist); n; nextnode (n))
     {
-    case SCOPE_LINKLOCAL:
-      assert (ospf6_if);
-      for (n = listhead (ospf6_if->linklocal_lsa); n; nextnode (n))
+      p = (struct ospf6_lsa *) getdata (n);
+      if (ospf6_lsa_issame (p->lsa_hdr, lsa->lsa_hdr))
         {
-          lsi = getdata (n);
-          if (lsi->lsh->lsh_type == lsa_type &&
-              lsi->lsh->lsh_id == lsid &&
-              lsi->lsh->lsh_advrtr == advrtr)
-            return lsi;
+#ifndef NDEBUG
+          if (!list_lookup_node (p->request_nbr, nbr))
+          assert (0);
+#endif /* NDEBUG */
+          return p;
         }
-      return (struct lsa_internal *)NULL;
-    case SCOPE_AREA:
-      for (n = listhead (area->lsdb[typeindex(lsa_type)][hash(lsid)]);
-           n; nextnode (n))
-        {
-          lsi = getdata (n);
-          if (lsi->lsh->lsh_type == lsa_type &&
-              lsi->lsh->lsh_id == lsid &&
-              lsi->lsh->lsh_advrtr == advrtr)
-            return lsi;
-        }
-      return (struct lsa_internal *)NULL;
-    case SCOPE_AS:
-      break;
-    case SCOPE_RESERVED:
-    default:
-      zvlog_warn ("Not Reached!?");
-      break;
     }
-  return (struct lsa_internal *)NULL;
+  return NULL;
 }
 
-struct lsa_hdr *
-attach_lsa_to_iov (struct lsa_internal *lsi, struct iovec *iov)
+/* add lsa to request list of neighbor */
+void
+ospf6_add_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
-  assert (lsi && lsi->lsh);
-
-  return ((struct lsa_hdr *)
-          iov_attach_last (iov, lsi->lsh, ntohs (lsi->lsh->lsh_len)));
+  list_add_node (nbr->requestlist, lsa);
+  list_add_node (lsa->request_nbr, nbr);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("add %s to %s request", print_lsahdr (lsa->lsa_hdr),
+              nbr->str);
+  return;
 }
 
-struct lsa_hdr *
-attach_lsa_hdr_to_iov (struct lsa_internal *lsi, struct iovec *iov)
+/* remove lsa from request list of neighbor */
+void
+ospf6_remove_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
-  assert (lsi && lsi->lsh);
-
-  return ((struct lsa_hdr *)
-          iov_attach_last (iov, lsi->lsh, sizeof (struct lsa_hdr)));
+  list_delete_by_val (nbr->requestlist, lsa);
+  list_delete_by_val (lsa->request_nbr, nbr);
+  o6log.lsdb ("remove %s from %s request", print_lsahdr (lsa->lsa_hdr),
+              nbr->str);
+  ospf6_lsa_unlock (lsa);
+  return;
 }
 
-struct lsa_internal *
-get_linklocal_lsa (rtr_id_t rtrid, struct ospf6_if *o6if)
+/* remove all lsa from request list of neighbor */
+void
+ospf6_remove_request_all (struct neighbor *nbr)
 {
   listnode n;
-  struct lsa_internal *lsa;
+  struct ospf6_lsa *lsa;
+  while (listcount (nbr->requestlist))
+    {
+      n = listhead (nbr->requestlist);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_remove_request (lsa, nbr);
+    }
+  return;
+}
 
-  assert (rtrid && o6if);
+/* lookup lsa on retrans list of neighbor */
+struct ospf6_lsa *
+ospf6_lookup_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
+{
+  if (list_lookup_node (nbr->retranslist, lsa))
+    {
+#ifndef NDEBUG
+      if (!list_lookup_node (lsa->retrans_nbr, nbr))
+        assert (0);
+#endif /* NDEBUG */
+      return lsa;
+    }
+  return NULL;
+}
+
+/* add lsa to retrans list of neighbor */
+void
+ospf6_add_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
+{
+  list_add_node (nbr->retranslist, lsa);
+  list_add_node (lsa->retrans_nbr, nbr);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("add %s to %s retrans", print_lsahdr (lsa->lsa_hdr),
+              nbr->str);
+  return;
+}
+
+/* remove lsa from retrans list of neighbor */
+void
+ospf6_remove_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
+{
+  list_delete_by_val (nbr->retranslist, lsa);
+  list_delete_by_val (lsa->retrans_nbr, nbr);
+  o6log.lsdb ("remove %s from %s retrans", print_lsahdr (lsa->lsa_hdr),
+              nbr->str);
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
+/* remove all lsa from retrans list of neighbor */
+void
+ospf6_remove_retrans_all (struct neighbor *nbr)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+  while (listcount (nbr->retranslist))
+    {
+      n = listhead (nbr->retranslist);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_remove_retrans (lsa, nbr);
+    }
+  return;
+}
+
+
+/* add to delayed acknowledge list of ospf6_if */
+void
+ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+{
+  list_add_node (o6if->delayed_ack, lsa);
+  ospf6_lsa_lock (lsa);
+  return;
+}
+
+/* remove from delayed acknowledge list of ospf6_if */
+void
+ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+{
+  list_delete_by_val (o6if->delayed_ack, lsa);
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
+
+/* lsdb functions */
+
+/* interface scope */
+/* lookup from interface lsdb */
+static struct ospf6_lsa *
+ospf6_lsdb_lookup_interface (unsigned short type, unsigned long id,
+                             unsigned long advrtr, struct ospf6_if *o6if)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+  assert (ospf6_lsa_get_scope_type (type) == SCOPE_LINKLOCAL);
   for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
     {
-      lsa = getdata (n);
-      if (lsa->lsh->lsh_advrtr == rtrid)
+      lsa = (struct ospf6_lsa *) getdata (n);
+      if (lsa->lsa_hdr->lsh_advrtr != advrtr)
+        continue;
+      if (lsa->lsa_hdr->lsh_id != id)
+        continue;
+      return lsa;
+    }
+  return NULL;
+}
+
+/* add to interface lsdb */
+static void
+ospf6_lsdb_add_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+{
+  assert (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type)
+          == SCOPE_LINKLOCAL);
+  list_add_node (o6if->linklocal_lsa, lsa);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("lsdb_add %s to %s", print_lsahdr (lsa->lsa_hdr),
+              o6if->interface->name);
+  return;
+}
+
+/* remove from interface lsdb */
+static void
+ospf6_lsdb_remove_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+{
+  assert (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type)
+          == SCOPE_LINKLOCAL);
+  o6log.lsdb ("lsdb_remove %s from %s", print_lsahdr (lsa->lsa_hdr),
+              o6if->interface->name);
+  list_delete_by_val (o6if->linklocal_lsa, lsa);
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
+/* area scope */
+  /* I wanna know the effection of database algorithm to the performance,
+     so the algorithm of these functions is so poor, should be rewrited
+     near future. */
+/* lookup from area lsdb */
+static struct ospf6_lsa *
+ospf6_lsdb_lookup_area (unsigned short type, unsigned long id,
+                        unsigned long advrtr, struct area *area)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+
+  assert (area);
+  for (n = listhead (area->lsdb); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      if (lsa->lsa_hdr->lsh_type == type &&
+          lsa->lsa_hdr->lsh_id == id &&
+          lsa->lsa_hdr->lsh_advrtr == advrtr)
         return lsa;
     }
   return NULL;
 }
 
-struct lsa_internal *
-lslist_lookup (struct lsa_internal *lsi, list l)
+/* add to area lsdb */
+static void
+ospf6_lsdb_add_area (struct ospf6_lsa *lsa, struct area *area)
+{
+  assert (area);
+  list_add_node (area->lsdb, lsa);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("lsdb_add %s to area %s", print_lsahdr (lsa->lsa_hdr),
+              area->str);
+  return;
+}
+
+/* remove from area lsdb */
+static void
+ospf6_lsdb_remove_area (struct ospf6_lsa *lsa, struct area *area)
+{
+  assert (area);
+  o6log.lsdb ("lsdb_remove %s from area %s", print_lsahdr (lsa->lsa_hdr),
+              area->str);
+  list_delete_by_val (area->lsdb, lsa);
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
+/* lsdb lookup */
+  /* It is better to specify scope when lookup lsdb, because there may
+     be the same LSAs in different scoped structure. this will happen
+     when duplicate router id is mis-configured over a different scope. */
+
+  /* need two particular function for lookup */
+  /* to treat multiple router-lsa as one */
+void
+ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
+                                unsigned long advrtr, void *scope)
+{
+  struct area *area;
+  struct ospf6_if *o6if;
+  listnode n;
+  struct ospf6_lsa *lsa;
+
+  assert (l && scope);
+  switch (ospf6_lsa_get_scope_type (type))
+    {
+      case SCOPE_AREA:
+        area = (struct area *) scope;
+        for (n = listhead (area->lsdb); n; nextnode (n))
+          {
+            lsa = (struct ospf6_lsa *) getdata (n);
+            o6log.debug ("area lsdb %s", print_lsahdr (lsa->lsa_hdr));
+            if (lsa->lsa_hdr->lsh_type == type &&
+                lsa->lsa_hdr->lsh_advrtr == advrtr)
+              list_add_node (l, lsa);
+          }
+        break;
+
+      case SCOPE_LINKLOCAL:
+        o6if = (struct ospf6_if *)scope;
+        for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+          {
+            lsa = (struct ospf6_lsa *) getdata (n);
+            o6log.debug ("interface lsdb %s", print_lsahdr (lsa->lsa_hdr));
+            if (lsa->lsa_hdr->lsh_type == type &&
+                lsa->lsa_hdr->lsh_advrtr == advrtr)
+              list_add_node (l, lsa);
+          }
+        break;
+
+      case SCOPE_AS:
+      case SCOPE_RESERVED:
+      default:
+        o6log.lsdb ("unsupported scope, can't collect advrtr from lsdb");
+        break;
+    }
+  return;
+}
+
+  /* to process all as-external-lsa, *-area-prefix-lsa */
+void
+ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
+{
+  struct ospf6_if *o6if;
+  struct area *area;
+  listnode n;
+  struct ospf6_lsa *lsa;
+
+  assert (l && scope);
+  switch (ospf6_lsa_get_scope_type (type))
+    {
+      case SCOPE_AREA:
+        area = (struct area *) scope;
+        for (n = listhead (area->lsdb); n; nextnode (n))
+          {
+            lsa = (struct ospf6_lsa *) getdata (n);
+            o6log.debug ("area lsdb %s", print_lsahdr (lsa->lsa_hdr));
+            if (lsa->lsa_hdr->lsh_type == type)
+              list_add_node (l, lsa);
+          }
+        break;
+
+      case SCOPE_LINKLOCAL:
+        /* used by show_ipv6_ospf6_database_link_cmd */
+        o6if = (struct ospf6_if *) scope;
+        for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+          {
+            lsa = (struct ospf6_lsa *) getdata (n);
+            o6log.debug ("interface lsdb %s", print_lsahdr (lsa->lsa_hdr));
+            if (lsa->lsa_hdr->lsh_type == type)
+              list_add_node (l, lsa);
+          }
+        break;
+
+      case SCOPE_AS:
+      case SCOPE_RESERVED:
+      default:
+        o6log.lsdb ("unsupported scope, can't collect advrtr from lsdb");
+        break;
+    }
+  return;
+}
+
+  /* ordinary lookup function */
+struct ospf6_lsa *
+ospf6_lsdb_lookup (unsigned short type, unsigned long id,
+                   unsigned long advrtr, void *scope)
+{
+  struct ospf6_if *o6if;
+  struct area *area;
+  struct ospf6_lsa *found;
+
+  switch (ospf6_lsa_get_scope_type (type))
+    {
+      case SCOPE_LINKLOCAL:
+        o6if = (struct ospf6_if *) scope;
+        found = ospf6_lsdb_lookup_interface (type, id, advrtr, o6if);
+        return found;
+      case SCOPE_AREA:
+        area = (struct area *) scope;
+        found = ospf6_lsdb_lookup_area (type, id, advrtr, area);
+        return found;
+      case SCOPE_AS:
+      case SCOPE_RESERVED:
+      default:
+        o6log.lsdb ("unsupported scope, can't lookup lsdb");
+        break;
+    }
+  return NULL;
+}
+
+void
+ospf6_lsdb_add (struct ospf6_lsa *lsa)
+{
+  struct ospf6_if *o6if;
+  struct area *area;
+  struct timeval now;
+
+  assert (lsa && lsa->lsa_hdr);
+
+  /* set installed time */
+  if (gettimeofday (&now, (struct timezone *)NULL) < 0)
+    o6log.lsa ("gettimeofday () failed, can't set installed: %s",
+               strerror (errno));
+  lsa->installed = now.tv_sec;
+
+  /* add appropriate scope */
+  switch (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type))
+    {
+      case SCOPE_LINKLOCAL:
+        o6if = (struct ospf6_if *) lsa->scope;
+        ospf6_lsdb_add_interface (lsa, o6if);
+        break;
+      case SCOPE_AREA:
+        area = (struct area *) lsa->scope;
+        ospf6_lsdb_add_area (lsa, area);
+        break;
+      case SCOPE_AS:
+      case SCOPE_RESERVED:
+      default:
+        o6log.lsdb ("unsupported scope, can't add lsdb");
+        return;
+    }
+  lsa_change (lsa);
+  return;
+}
+
+void
+ospf6_lsdb_remove (struct ospf6_lsa *lsa)
+{
+  struct ospf6_if *o6if;
+  struct area *area;
+
+  switch (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type))
+    {
+      case SCOPE_LINKLOCAL:
+        o6if = (struct ospf6_if *) lsa->scope;
+        ospf6_lsdb_remove_interface (lsa, o6if);
+        break;
+      case SCOPE_AREA:
+        area = (struct area *) lsa->scope;
+        ospf6_lsdb_remove_area (lsa, area);
+        break;
+      case SCOPE_AS:
+      case SCOPE_RESERVED:
+      default:
+        o6log.lsdb ("unsupported scope, can't add lsdb");
+        return;
+    }
+  return;
+}
+
+/* initialize and finish function */
+/* neighbor lsdb */
+void
+ospf6_lsdb_init_neighbor (struct neighbor *nbr)
+{
+  nbr->summarylist = list_init ();
+  nbr->requestlist = list_init ();
+  nbr->retranslist = list_init ();
+  return;
+}
+
+void
+ospf6_lsdb_finish_neighbor (struct neighbor *nbr)
+{
+  ospf6_remove_summary_all (nbr);
+  list_delete_all (nbr->summarylist);
+  ospf6_remove_request_all (nbr);
+  list_delete_all (nbr->requestlist);
+  ospf6_remove_retrans_all (nbr);
+  list_delete_all (nbr->retranslist);
+  return;
+}
+
+/* interface lsdb */
+void
+ospf6_lsdb_init_interface (struct ospf6_if *o6if)
+{
+  o6if->linklocal_lsa = list_init ();
+  o6if->delayed_ack = list_init ();
+  return;
+}
+
+void
+ospf6_lsdb_finish_interface (struct ospf6_if *o6if)
 {
   listnode n;
-  struct lsa_internal *p, *retlsa;
-  int count = 0;
+  struct ospf6_lsa *lsa;
 
-  retlsa = NULL;
-  for (n = listhead (l); n; nextnode (n))
+  /* delayed ack list */
+  while (listcount (o6if->delayed_ack))
     {
-      p = getdata (n);
-      if (lsa_issame (lsi->lsh, p->lsh))
-        {
-          count++;
-          retlsa = p;
-        }
+      n = listhead (o6if->delayed_ack);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_remove_delayed_ack (lsa, o6if);
     }
+  list_delete_all (o6if->delayed_ack);
 
-  if (count != 0 && count != 1)
-    o6log.lsdb ("!list includes duplicate lsa");
+  /* interface lsdb */
+  while (listcount (o6if->linklocal_lsa))
+    {
+      n = listhead (o6if->linklocal_lsa);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_lsdb_remove_interface (lsa, o6if);
+    }
+  list_delete_all (o6if->linklocal_lsa);
 
-  return retlsa;
+  return;
+}
+
+/* area lsdb */
+void
+ospf6_lsdb_init_area (struct area *area)
+{
+  area->lsdb = list_init ();
+  return;
 }
 
 void
-attach_lsa_to_retranslist (struct lsa_internal *lsi, struct neighbor *nbr)
+ospf6_lsdb_finish_area (struct area *area)
 {
-  list_add_node (lsi->retransing_nbr, nbr);
-  list_add_node (nbr->retranslist, lsi);
-  o6log.dbex ("attach %s to %s's retranslist", print_lsahdr (lsi->lsh),
-              nbr->str);
+  listnode n;
+  struct ospf6_lsa *lsa;
+  while (listcount (area->lsdb))
+    {
+      n = listhead (area->lsdb);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_lsdb_remove_area (lsa, area);
+    }
+  list_delete_all (area->lsdb);
+  return;
 }
 
-void
-detach_lsa_from_retranslist (struct lsa_internal *lsi, struct neighbor *nbr)
+/* when installing more recent LSA, must detach less recent database copy
+   from LS-lists of neighbors, and attach new one. */
+void ospf6_lsdb_install (struct ospf6_lsa *new)
 {
-  list_delete_by_val (lsi->retransing_nbr, nbr);
-  list_delete_by_val (nbr->retranslist, lsi);
-  o6log.dbex ("detach %s from %s's retranslist", print_lsahdr (lsi->lsh),
-              nbr->str);
-}
+  listnode n;
+  struct neighbor *nbr;
+  struct ospf6_lsa *old;
 
+  old = ospf6_lsdb_lookup (new->lsa_hdr->lsh_type,
+                           new->lsa_hdr->lsh_id,
+                           new->lsa_hdr->lsh_advrtr, new->scope);
+
+  if (old)
+    {
+      while (listcount (old->summary_nbr))
+        {
+          n = listhead (old->summary_nbr);
+          nbr = (struct neighbor *) getdata (n);
+          ospf6_remove_summary (old, nbr);
+          ospf6_add_summary (new, nbr);
+        }
+    
+      /* xxx, request list should not be done this way, i think.
+         because self-originated LSA will not appear on request list,
+         and receiving new LSA (via flood) deletes the one
+         on request list. */
+    
+      while (listcount (old->retrans_nbr))
+        {
+          n = listhead (old->retrans_nbr);
+          nbr = (struct neighbor *) getdata (n);
+          ospf6_remove_retrans (old, nbr);
+          ospf6_add_retrans (new, nbr);
+        }
+    
+      ospf6_lsdb_remove (old);
+      ospf6_lsdb_add (new);
+    }
+  else
+    ospf6_lsdb_add (new);
+
+  return;
+}

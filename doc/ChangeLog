@@ -1,3 +1,7 @@
+1999-07-27  Gerhard Poul <gpoul@gnu.org>
+
+	* zebra.texi: Update zebra.texi.
+
 1999-07-02  Gerhard Poul <gpoul@gnu.org>
 
 	* draft-zebra-00.ms: New file added.  This is groff version of

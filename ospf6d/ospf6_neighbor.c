@@ -86,9 +86,8 @@ int
 list_cleared_of_lsa (struct neighbor *nbr)
 {
   list_delete_all_node (nbr->dd_retrans);
-  list_delete_all_node (nbr->summarylist);
-  list_delete_all_node (nbr->retranslist);
-  lsa_delete_all_list (nbr->requestlist);
+  ospf6_lsdb_finish_neighbor (nbr);
+  ospf6_lsdb_init_neighbor (nbr);
   return 0;
 }
 

@@ -8,7 +8,8 @@ noinst_LIBRARIES = libripng.a
 sbin_PROGRAMS = ripngd
 
 libripng_a_SOURCES = \
-	ripng_interface.c ripngd.c ripng_zebra.c ripng_route.c ripng_debug.c
+	ripng_interface.c ripngd.c ripng_zebra.c ripng_route.c ripng_debug.c \
+	ripng_routemap.c
 
 noinst_HEADERS = \
 	ripng_debug.h ripng_route.h ripngd.h
@@ -39,23 +40,25 @@ depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
 ## File dependency.
-ripngd.o: ripngd.c ../lib/prefix.h ../lib/filter.h ../lib/log.h \
- ../lib/thread.h ../lib/memory.h ../lib/linklist.h ../lib/if.h \
+ripngd.o: ripngd.c ../lib/prefix.h ../lib/filter.h ../lib/if.h \
+ ../lib/linklist.h ../lib/log.h ../lib/thread.h ../lib/memory.h \
  ../lib/stream.h ../lib/table.h ../lib/roken.h ../lib/client.h \
- ../ripngd/ripngd.h ../ripngd/ripng_route.h ../ripngd/ripng_debug.h \
- ../zebra/zebra.h ../lib/vector.h ../lib/vty.h ../lib/command.h
-ripng_debug.o: ripng_debug.c ../ripngd/ripng_debug.h ../lib/vector.h \
- ../lib/vty.h ../lib/command.h
+ ../lib/command.h ../lib/vector.h ../lib/vty.h ../ripngd/ripngd.h \
+ ../ripngd/ripng_route.h ../ripngd/ripng_debug.h ../zebra/zebra.h
+ripng_debug.o: ripng_debug.c ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../ripngd/ripng_debug.h
 ripng_interface.o: ripng_interface.c ../zebra/zebra.h \
  ../lib/linklist.h ../lib/if.h ../lib/prefix.h ../lib/memory.h \
- ../lib/buffer.h ../lib/network.h ../lib/filter.h ../lib/log.h \
- ../lib/stream.h ../lib/zclient.h ../ripngd/ripngd.h ../lib/vector.h \
- ../lib/vty.h ../lib/command.h ../lib/table.h
-ripng_main.o: ripng_main.c ../lib/version.h ../lib/getopt.h \
- ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/thread.h \
- ../lib/log.h ../lib/prefix.h ../ripngd/ripngd.h ../zebra/zebra.h
+ ../lib/network.h ../lib/filter.h ../lib/log.h ../lib/stream.h \
+ ../lib/zclient.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../lib/table.h ../ripngd/ripngd.h
+ripng_main.o: ripng_main.c ../lib/version.h ../lib/vector.h \
+ ../lib/vty.h ../lib/command.h ../lib/thread.h ../lib/log.h \
+ ../lib/prefix.h ../ripngd/ripngd.h ../zebra/zebra.h
 ripng_route.o: ripng_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/memory.h ../ripngd/ripngd.h ../ripngd/ripng_route.h
+ripng_routemap.o: ripng_routemap.c ../lib/memory.h ../lib/prefix.h \
+ ../lib/routemap.h
 ripng_zebra.o: ripng_zebra.c ../zebra/zebra.h ../lib/thread.h \
  ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/prefix.h \
  ../lib/stream.h ../lib/buffer.h ../lib/log.h ../lib/network.h \

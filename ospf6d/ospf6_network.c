@@ -46,19 +46,6 @@ iov_count (struct iovec *iov)
 }
 
 int
-iov_index (struct iovec *iov, void *base)
-{
-  int i;
-  for (i = 0; iov[i].iov_base; i++)
-    {
-      if (iov[i].iov_base == base)
-      return i;
-    }
-  zlog (NULL, LOG_WARNING,"illegal iov_index() use!");
-  return -1;
-}
-
-int
 iov_totallen (struct iovec *iov)
 {
   int i;
@@ -189,6 +176,24 @@ iov_attach_first (struct iovec *iov, void *base, size_t len)
   return base;
 }
 
+void *
+iov_detach_first (struct iovec *iov)
+{
+  int i, iovlen;
+  void *base;
+  size_t len;
+
+  base = iov[0].iov_base;
+  len = iov[0].iov_len;
+  iovlen = iov_count (iov);
+  for (i = 0; i < iovlen; i++)
+    {
+      iov[i].iov_base = iov[i + 1].iov_base;
+      iov[i].iov_len = iov[i + 1].iov_len;
+    }
+  return base;
+}
+
 int
 iov_free (int mtype, struct iovec *iov, u_int begin, u_int end)
 {
@@ -204,6 +209,30 @@ iov_free (int mtype, struct iovec *iov, u_int begin, u_int end)
     }
 
   return 0;
+}
+
+void
+iov_trim_head (int mtype, struct iovec *iov)
+{
+  iov_free (mtype, iov, 0, 1);
+  iov_detach (iov, 1);
+  return;
+}
+
+void
+iov_free_all (int mtype, struct iovec *iov)
+{
+  int i, end = iov_count (iov);
+
+  for (i = 0; i < end; i++)
+    {
+      if (mtype == MTYPE_OSPF6_LSA)
+        o6log.pointer ("free %#x in iov_free()", iov[i].iov_base);
+      XFREE (mtype, iov[i].iov_base);
+      iov[i].iov_base = NULL;
+      iov[i].iov_len = 0;
+    }
+  return;
 }
 
 int
@@ -237,11 +266,13 @@ sockfd_to_family (int sockfd)
   return (un.sa.sa_family);
 }
 
+/* XXX consider whole construction of this function!
+   the mtype statistics is broken */
 int
 ospf6_recv (struct thread *thread)
 {
   struct iovec iov[MAXIOVLIST];
-  int sockfd, i, j, msgend, num;
+  int sockfd, i, hdrnum, num;
   struct msghdr rmsghdr;
   struct cmsghdr *rcmsgp = NULL;
   u_char cmsgbuf[CMSG_SPACE(sizeof (struct in6_pktinfo))];
@@ -253,8 +284,8 @@ ospf6_recv (struct thread *thread)
   struct sockaddr_in6 *src;
   struct ospf6_hdr *ospf6_hdr;
   struct ospf6_if *ospf6_if = NULL;
-  char ifnamebuf[16];
-  unsigned short msglen;
+  char ifnamebuf[INTERFACE_NAMSIZ];
+  unsigned short msglen = 0;
 
   memset (ifnamebuf, 0, sizeof (ifnamebuf));
   memset (&rmsghdr, 0, sizeof (struct msghdr));
@@ -263,23 +294,20 @@ ospf6_recv (struct thread *thread)
 
   sockfd = THREAD_FD (thread);
 
-  switch (sockfd_to_family (sockfd))
-    {
-    case AF_INET6:
-      rcmsgp = (struct cmsghdr *)&cmsgbuf;
-      rcmsgp->cmsg_level = IPPROTO_IPV6;
-      rcmsgp->cmsg_type = IPV6_PKTINFO;
-      rcmsgp->cmsg_len = CMSG_LEN(sizeof (struct in6_pktinfo));
-      pktinfo = (struct in6_pktinfo *)(CMSG_DATA(rcmsgp));
-      break;
-    default:
-      break;
-    }
+  /* ancillary data set up */
+  rcmsgp = (struct cmsghdr *)&cmsgbuf;
+  rcmsgp->cmsg_level = IPPROTO_IPV6;
+  rcmsgp->cmsg_type = IPV6_PKTINFO;
+  rcmsgp->cmsg_len = CMSG_LEN(sizeof (struct in6_pktinfo));
+  pktinfo = (struct in6_pktinfo *)(CMSG_DATA(rcmsgp));
 
+  /* clear message field */
   iov_clear (iov, MAXIOVLIST);
-  iov_append (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_hdr));
-  msgend = 1;
 
+  /* prepare ospf6 message header buffer */
+  iov_append (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_hdr));
+
+  /* set buffer, ancillary data field to msghdr for sendmsg */
   rmsghdr.msg_name = (caddr_t)src;
   rmsghdr.msg_namelen = sizeof (struct sockaddr_in6);
   rmsghdr.msg_iov = iov;
@@ -287,159 +315,184 @@ ospf6_recv (struct thread *thread)
   rmsghdr.msg_control = (caddr_t)rcmsgp;
   rmsghdr.msg_controllen = sizeof (cmsgbuf);
 
+  /* peek message type */
   num = recvmsg (sockfd, &rmsghdr, MSG_PEEK);
   if (num < 0)
     {
-      zlog (NULL, LOG_WARNING,"recvmsg() failed in ospf6_recv(): %s", strerror (errno));
+      /* if failed, log and read packet then return */
+      zlog (NULL, LOG_WARNING, "recvmsg() failed in ospf6_recv(): %s",
+            strerror (errno));
       recvmsg (sockfd, &rmsghdr, 0);
-      iov_free (MTYPE_OSPF_MESSAGE, iov, 0, msgend);
+      thread_add_read (master, ospf6_recv, NULL, sockfd);
+      iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
       return -1;
     }
 
-  switch (sockfd_to_family (sockfd))
+  /* get received interface */
+  if (pktinfo->ipi6_ifindex > 0)
+    if_indextoname (pktinfo->ipi6_ifindex, ifnamebuf);
+  else
     {
-    case AF_INET6:
-      if (pktinfo->ipi6_ifindex > 0)
-        if_indextoname (pktinfo->ipi6_ifindex, ifnamebuf);
-      else 
-        {
-          zlog (NULL, LOG_WARNING,"Received Interface not found in ospf6_recv()");
-          num = recvmsg (sockfd, &rmsghdr, 0);
-          thread_add_read (master, ospf6_recv, NULL, sockfd);
-          iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
-          return -1;
-        }
-      ospf6_if = ospf6_if_lookup (ifnamebuf);
-      break;
-    default:
-      break;
+      /* if failed, log and read packet then return */
+      zlog (NULL, LOG_WARNING,
+            "Received Interface not found in ospf6_recv()");
+      recvmsg (sockfd, &rmsghdr, 0);
+      thread_add_read (master, ospf6_recv, NULL, sockfd);
+      iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+      return -1;
     }
+  ospf6_if = ospf6_if_lookup (ifnamebuf);
 
   if (!ospf6_if)
     {
       zlog (NULL, LOG_ERR, "BUG! Received Interface Structure not found");
       num = recvmsg (sockfd, &rmsghdr, 0);
       thread_add_read (master, ospf6_recv, NULL, sockfd);
-      iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
+      iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
       return -1;
     }
   if (!ospf6_if->area)
     {
-      zlog (NULL, LOG_WARNING,"Interface %s not atached to AREA",
-                   ospf6_if->interface->name);
+      zlog (NULL, LOG_WARNING, "Interface %s not atached to AREA",
+            ospf6_if->interface->name);
       thread_add_read (master, ospf6_recv, NULL, sockfd);
       num = recvmsg (sockfd, &rmsghdr, 0);
-      iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
+      iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
       return -1;
     }
 
+  /* for each message type, set appropriate buffer */
   ospf6_hdr = (struct ospf6_hdr *)iov[0].iov_base;
   msglen = ntohs (ospf6_hdr->len);
   switch (ospf6_hdr->type)
     {
-    case MSGT_HELLO:
-      if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
+      case MSGT_HELLO:
+        /* one buffer for hello */
+        if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
                        msglen - sizeof (struct ospf6_hdr)))
-        {
-          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
-          goto rvmsg_bad;
-        }
-      msgend++;
-      goto rvmsg_ok;
+          {
+            zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            recvmsg (sockfd, &rmsghdr, 0);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
 
-    case MSGT_DATABASE_DESCRIPTION:
-      if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
+      case MSGT_DATABASE_DESCRIPTION:
+        if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
                        sizeof (struct database_description)))
-        {
-          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
-          goto rvmsg_bad;
-        }
-      msgend++;
-      j = (msglen - sizeof (struct ospf6_hdr)
-           - sizeof (struct database_description))
-          / sizeof (struct lsa_hdr);
-      for (i = 0; i < j; i++)
-        {
-          if (!iov_append (MTYPE_OSPF6_LSA, iov, sizeof (struct lsa_hdr )))
-            {
-              zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
-              goto rvmsg_bad;
-            }
-        }
-      goto rvmsg_ok;
+          {
+            zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            recvmsg (sockfd, &rmsghdr, 0);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        /* calculate ospf6_lsa_hdr number */
+        hdrnum = (msglen - sizeof (struct ospf6_hdr)
+                         - sizeof (struct database_description))
+                  / sizeof (struct ospf6_lsa_hdr);
+        for (i = 0; i < hdrnum; i++)
+          {
+            /* LSA hdr in DatabaseDescription will treat as LSA
+               as attached to request list */
+            if (!iov_append (MTYPE_OSPF6_LSA, iov,
+                             sizeof (struct ospf6_lsa_hdr )))
+              {
+                zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
+                thread_add_read (master, ospf6_recv, NULL, sockfd);
+                recvmsg (sockfd, &rmsghdr, 0);
+                iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+                iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+                iov_free_all (MTYPE_OSPF6_LSA, iov);
+                return -1;
+              }
+          }
+        break;
 
-    case MSGT_LINKSTATE_REQUEST:
-      j = (msglen - sizeof (struct ospf6_hdr))
-          / sizeof (struct linkstate_request);
-      for (i = 0; i < j; i++)
-        {
-          if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
-               sizeof (struct linkstate_request)))
-            {
-               zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
-               goto rvmsg_bad;
-            }
-          msgend++;
-        }
-      goto rvmsg_ok;
+      case MSGT_LINKSTATE_REQUEST:
+        /* calculate LSRequest header number */
+        hdrnum = (msglen - sizeof (struct ospf6_hdr))
+                  / sizeof (struct linkstate_request);
+        for (i = 0; i < hdrnum; i++)
+          {
+            if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
+                             sizeof (struct linkstate_request)))
+              {
+                zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
+                thread_add_read (master, ospf6_recv, NULL, sockfd);
+                recvmsg (sockfd, &rmsghdr, 0);
+                iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+                return -1;
+              }
+          }
+        break;
 
-    case MSGT_LINKSTATE_UPDATE:
-      if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
-           sizeof (struct linkstate_update)))
-        {
-          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
-          goto rvmsg_bad;
-        }
-      msgend++;
-      j = msglen - sizeof (struct ospf6_hdr)
-          - sizeof (struct linkstate_update);
-      if (!j)
-        {
-          zlog (NULL, LOG_WARNING,"received lsupdate contains no data.");
-        }
-      else if (!iov_append (MTYPE_OSPF6_LSA, iov, j))
-        {
-          zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
-          goto rvmsg_bad;
-        }
-      goto rvmsg_ok;
+      case MSGT_LINKSTATE_UPDATE:
+        if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
+             sizeof (struct linkstate_update)))
+          {
+            zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            recvmsg (sockfd, &rmsghdr, 0);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        /* count header size */
+        hdrnum = msglen - sizeof (struct ospf6_hdr)
+                 - sizeof (struct linkstate_update);
+        if (!hdrnum)
+          {
+            zlog (NULL, LOG_WARNING, "received LSUpdate contains no data.");
+          }
+        else if (!iov_append (MTYPE_OSPF6_MESSAGE, iov, hdrnum))
+          {
+            /* why mtype is MESSAGE is because this is temporary
+               buffer for LSA */
+            zlog (NULL, LOG_ERR, "iov_append() failed in ospf6_recv()");
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            recvmsg (sockfd, &rmsghdr, 0);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
 
-    case MSGT_LINKSTATE_ACK:
-      j = (msglen - sizeof (struct ospf6_hdr)) / sizeof (struct lsa_hdr);
-      for (i = 0; i < j; i++)
-        {
-          if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
-               sizeof (struct lsa_hdr)))
-            {
-              zvlog_err ("iov_append() failed in ospf6_recv()");
-              goto rvmsg_bad;
-            }
-        }
-      goto rvmsg_ok;
+      case MSGT_LINKSTATE_ACK:
+        /* calculate number of ospf6_lsa_hdr */
+        hdrnum = (msglen - sizeof (struct ospf6_hdr))
+                  / sizeof (struct ospf6_lsa_hdr);
+        for (i = 0; i < hdrnum; i++)
+          {
+            /* this will treated like LSA on delayed ack list */
+            if (!iov_append (MTYPE_OSPF6_LSA, iov,
+                             sizeof (struct ospf6_lsa_hdr)))
+              {
+                zvlog_err ("iov_append() failed in ospf6_recv()");
+                thread_add_read (master, ospf6_recv, NULL, sockfd);
+                recvmsg (sockfd, &rmsghdr, 0);
+                iov_free_all (MTYPE_OSPF6_LSA, iov);
+                return -1;
+              }
+          }
+        break;
 
-    default:
-      goto rvmsg_nosupport;
+      default:
+        zlog (NULL, LOG_WARNING,"OSPFv%d %#x: Can't recv",
+              ospf6_hdr->version, ospf6_hdr->type);
+        thread_add_read (master, ospf6_recv, NULL, sockfd);
+        recvmsg (sockfd, &rmsghdr, 0);
+        iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
+        return -1;
     }
 
-rvmsg_nosupport:
-  zlog (NULL, LOG_WARNING,"not supported "); /* fall through */
-rvmsg_bad:
-  zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't recv", ospf6_hdr->version,
-              mesg_name[ospf6_hdr->type]);
-
-  num = recvmsg (sockfd, &rmsghdr, 0);
-  thread_add_read (master, ospf6_recv, NULL, sockfd);
-  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, msgend);
-  return -1;
-
-rvmsg_ok:
   rmsghdr.msg_iovlen = iov_count (iov);
   num = recvmsg (sockfd, &rmsghdr, 0);
   if (num < 0)
     {
-      zlog (NULL, LOG_WARNING,"recvmsg() failed: %s", strerror (errno));
+      zlog (NULL, LOG_WARNING, "recvmsg() failed: %s", strerror (errno));
       thread_add_read (master, ospf6_recv, NULL, sockfd);
-      iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
+      iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
       return -1;
     }
 
@@ -447,64 +500,93 @@ rvmsg_ok:
     {
       zvlog_debug ("Interface %s Not UP");
       thread_add_read (master, ospf6_recv, NULL, sockfd);
-      iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
+      iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
       return -1;
     }
 
   {
     char ntopbuf[32];
-    zvlog_debug ("receive %s from %s on %s",
-                  mesg_name[ospf6_hdr->type],
-                  inet_ntop (src->sin6_family, (char *)&src->sin6_addr,
-                             ntopbuf, sizeof (ntopbuf)),
-                  ospf6_if->interface->name);
+    o6log.network ("receive %s from %s on %s",
+                   mesg_name[ospf6_hdr->type],
+                   inet_ntop (src->sin6_family, (char *)&src->sin6_addr,
+                              ntopbuf, sizeof (ntopbuf)),
+                   ospf6_if->interface->name);
   }
 
   if (proc_ospf6_hdr(iov, ospf6_if) < 0)
-    goto prmsg_bad;
+    {
+      zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+            ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+      thread_add_read (master, ospf6_recv, NULL, sockfd);
+      iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+      return -1;
+    }
 
   switch (ospf6_hdr->type)
     {
-    case MSGT_HELLO:
-      if (proc_hello (src, iov, ospf6_if) < 0)
-        goto prmsg_bad;
-      goto prmsg_ok;
+      case MSGT_HELLO:
+        if (proc_hello (src, iov, ospf6_if) < 0)
+          {
+            zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+                  ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
 
-    case MSGT_DATABASE_DESCRIPTION:
-      if (proc_database_description (src, iov, ospf6_if) < 0)
-        goto prmsg_bad;
-      goto prmsg_ok;
+      case MSGT_DATABASE_DESCRIPTION:
+        if (proc_database_description (src, iov, ospf6_if) < 0)
+          {
+            zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+                  ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
 
-    case MSGT_LINKSTATE_REQUEST:
-      if (proc_linkstate_request (src, iov, ospf6_if) < 0)
-        goto prmsg_bad;
-      goto prmsg_ok;
+      case MSGT_LINKSTATE_REQUEST:
+        if (proc_linkstate_request (src, iov, ospf6_if) < 0)
+          {
+            zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+                  ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
 
-    case MSGT_LINKSTATE_UPDATE:
-      if (proc_linkstate_update (src, iov, ospf6_if) < 0)
-        goto prmsg_bad;
-      goto prmsg_ok;
+      case MSGT_LINKSTATE_UPDATE:
+        if (proc_linkstate_update (src, iov, ospf6_if) < 0)
+          {
+            zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+                  ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
 
-    case MSGT_LINKSTATE_ACK:
-      if (proc_linkstate_ack (src, iov, ospf6_if) < 0)
-        goto prmsg_bad;
-      goto prmsg_ok;
-
+      case MSGT_LINKSTATE_ACK:
+        if (proc_linkstate_ack (src, iov, ospf6_if) < 0)
+          {
+            zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+                  ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+            thread_add_read (master, ospf6_recv, NULL, sockfd);
+            iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+            return -1;
+          }
+        break;
     default:
-      goto prmsg_nosupport;
+        zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
+              ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
+        thread_add_read (master, ospf6_recv, NULL, sockfd);
+        iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
+        return -1;
     }
 
-prmsg_nosupport:
-  zlog (NULL, LOG_WARNING,"not support"); /* Fall through */
-prmsg_bad:
-  zlog (NULL, LOG_WARNING,"OSPFv%d %s: Can't proc",
-               ospf6_hdr->version, mesg_name[ospf6_hdr->type]);
-  thread_add_read (master, ospf6_recv, NULL, sockfd);
-  iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
-  return -1;
-
-prmsg_ok:
-  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, msgend);
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
   thread_add_read (master, ospf6_recv, NULL, sockfd);
   return 0;
 }
@@ -656,11 +738,12 @@ mcast_leave (int sockfd, struct sockaddr *sa, char *ifname, u_int ifindex)
               strncpy (ifreq.ifr_name, ifname, IFNAMSIZ);
 doioctl:
               if (ioctl (sockfd, SIOCGIFADDR, &ifreq) < 0)
-    {
-      log_warn ("Can't Get Address for %s, Can't Join Multicast Group\n",
-          ifname);
-      return -1;
-    }
+                {
+                  log_warn ("Can't Get Address for %s, "
+                            "Can't Join Multicast Group\n",
+                            ifname);
+                  return -1;
+                }
               memcpy (&mreq.imr_interface,
                       &((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr,
                       sizeof (struct in_addr));
@@ -684,15 +767,15 @@ doioctl:
           if (ifindex > 0)
             mreq6.ipv6mr_interface = ifindex;
           else if (ifname != NULL)
-      {
-        if ((mreq6.ipv6mr_interface = if_nametoindex (ifname)) == 0)
-    {
-      errno = ENXIO;  /* i/f name not found */
-      return -1;
-    }
-      }
-    else
-      mreq6.ipv6mr_interface = 0;
+            {
+              if ((mreq6.ipv6mr_interface = if_nametoindex (ifname)) == 0)
+                {
+                  errno = ENXIO;  /* i/f name not found */
+                  return -1;
+                }
+            }
+          else
+            mreq6.ipv6mr_interface = 0;
           return (setsockopt (sockfd, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP,
                               &mreq6, sizeof (mreq6)));
         }
@@ -701,7 +784,7 @@ doioctl:
       default:
         errno = EPROTONOSUPPORT;
         return -1;
-  }
+    }
 }
 
 int
@@ -763,8 +846,7 @@ ospf6_send (u_char msgtype, struct iovec *iov,
                   num, iov_totallen (iov), strerror(errno));
     }
 
-  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
-  iov_detach (iov, 0);
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
 
   return 0;
 }
@@ -786,7 +868,7 @@ send_hello (struct thread *thread)
   ospf6_if->send_hello = thread_add_timer
     (master, send_hello, ospf6_if, ospf6_if->hello_interval);
 
-  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
+  iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
 
   return 0;
 }
@@ -825,7 +907,7 @@ send_database_description (struct thread *thread)
       make_database_description (iov, &dst, nbr);
       ospf6_send (MSGT_DATABASE_DESCRIPTION, iov,
                   (struct sockaddr *)&dst, nbr->ospf6_if);
-      iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
+      iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
       iov_clear (iov, MAXIOVLIST);
       break;
     default:
@@ -845,6 +927,7 @@ send_linkstate_request (struct thread *thread)
   nbr = THREAD_ARG (thread);
   assert (nbr);
   nbr->send_lsreq = (struct thread *)NULL;
+  iov_clear (iov, MAXIOVLIST);
 
   switch (nbr->state)
     {
@@ -868,7 +951,6 @@ send_linkstate_request (struct thread *thread)
 
       ospf6_send (MSGT_LINKSTATE_REQUEST, iov,
                   (struct sockaddr *)&dst, nbr->ospf6_if);
-      iov_clear (iov, MAXIOVLIST);
       
       nbr->send_lsreq = thread_add_timer (master, send_linkstate_request,
                                           nbr, nbr->ospf6_if->rxmt_interval);
@@ -903,7 +985,7 @@ send_linkstate_update (struct thread *thread)
 
   ospf6_send (MSGT_LINKSTATE_UPDATE, iov, (struct sockaddr *)&dst,
               nbr->ospf6_if);
-  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
+  iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
   iov_clear (iov, MAXIOVLIST);
 
   nbr->send_update = thread_add_timer (master, send_linkstate_update, nbr,
@@ -918,7 +1000,7 @@ send_linkstate_ack (struct thread *thread)
   struct sockaddr_in6 dst;
   struct iovec iov[MAXIOVLIST];
   listnode i;
-  struct lsa_internal *p;
+  struct ospf6_lsa *p;
 
   ospf6_if = THREAD_ARG (thread);
   assert (ospf6_if);
@@ -932,10 +1014,10 @@ send_linkstate_ack (struct thread *thread)
 
   for (i = listhead (ospf6_if->delayed_ack); i; nextnode (i))
     {
-      p = (struct lsa_internal *) getdata (i);
+      p = (struct ospf6_lsa *) getdata (i);
       attach_lsa_hdr_to_iov (p, iov);
 
-      zvlog_debug ("LSACK(delayed): %s", print_lsahdr (p->lsh));
+      o6log.network ("LSAck(delayed): %s", print_lsahdr (p->lsa_hdr));
     }
 
   dst.sin6_family = AF_INET6;
@@ -960,10 +1042,11 @@ send_linkstate_ack (struct thread *thread)
   ospf6_send (MSGT_LINKSTATE_ACK, iov, (struct sockaddr *)&dst, ospf6_if);
   iov_clear (iov, MAXIOVLIST);
 
-  for (i = listhead (ospf6_if->delayed_ack); i;
-       i = listhead (ospf6_if->delayed_ack))
+  while (listcount (ospf6_if->delayed_ack))
     {
-      list_delete_by_val (ospf6_if->delayed_ack, getdata (i));
+      i = listhead (ospf6_if->delayed_ack);
+      p = getdata (i);
+      ospf6_remove_delayed_ack (p, ospf6_if);
     }
 
   return 0;

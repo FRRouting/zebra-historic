@@ -89,19 +89,30 @@ char *rlsatype_name[] =
   NULL
 };
 
-char *print_lsahdr (struct lsa_hdr *lsh)
+char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
 {
-  static char buf[256], tmp[64], tmp2[64];
+  static char buf[256];
+  char advrtr[64], id[64];
+  char *type, unknown[64];
 
-  inet_ntop (AF_INET, &lsh->lsh_advrtr, tmp, sizeof (tmp));
-#if 0
-  inet_ntop (AF_INET, &lsh->lsh_id, tmp2, sizeof (tmp2));
-#else
-  sprintf (tmp2, "%lu", ntohl (lsh->lsh_id));
-#endif
+  inet_ntop (AF_INET, &lsh->lsh_advrtr, advrtr, sizeof (advrtr));
+  snprintf (id, sizeof (id), "%lu", ntohl (lsh->lsh_id));
+  switch (ntohs (lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+      case LST_NETWORK_LSA:
+      case LST_LINK_LSA:
+      case LST_INTRA_AREA_PREFIX_LSA:
+        type = lstype_name[typeindex(lsh->lsh_type)];
+        break;
+      default:
+        snprintf (unknown, sizeof (unknown),
+                  "Unknown(%#x)", ntohs (lsh->lsh_type));
+        type = unknown;
+        break;
+    }
 
-  sprintf (buf, "[%s,id:%s,Adv:%s]",
-           lstype_name[typeindex(lsh->lsh_type)], tmp2, tmp);
+  snprintf (buf, sizeof (buf), "[%s,id:%s,Adv:%s]", type, id, advrtr);
   return buf;
 }
 

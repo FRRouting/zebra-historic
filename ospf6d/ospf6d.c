@@ -86,7 +86,6 @@ area_new ()
 struct area *
 make_area (area_id_t area_id, struct ospf6 *ospf6)
 {
-  int i, j;
   struct area *area = area_new ();
 
   if (!area)
@@ -105,14 +104,8 @@ make_area (area_id_t area_id, struct ospf6 *ospf6)
                           = area->intra_prefix_seqnum
                           = INITIAL_SEQUENCE_NUMBER;
 
-  /* XXX Initialize LSDB */
-  for (i = 0; i < AREALSTYPESIZE; i++)
-    {
-      for (j = 0; j < HASHVAL; j++)
-        {
-          area->lsdb[i][j] = list_init ();
-        }
-    }
+  /* Initialize LSDB */
+  ospf6_lsdb_init_area (area);
 
   assert (ospf6->version == OSPF_V3);
 
@@ -544,7 +537,7 @@ DEFUN (show_ipv6_ospf6_requestlist,
   struct ospf6 *ospf6;
   struct neighbor *nbr = NULL;
   listnode n;
-  struct lsa_internal *lsi;
+  struct ospf6_lsa *lsa;
 
   inet_pton (AF_INET, argv[0], &rtr_id);
   for (n = listhead (ospf6_list); n; nextnode (n))
@@ -562,8 +555,8 @@ DEFUN (show_ipv6_ospf6_requestlist,
            nbr->ospf6_if->interface->name);
   for (n = listhead (nbr->requestlist); n; nextnode (n))
     {
-      lsi = (struct lsa_internal *) getdata (n);
-      vty_out (vty, "%s\r\n", print_lsahdr (lsi->lsh));
+      lsa = (struct ospf6_lsa *) getdata (n);
+      vty_out (vty, "%s\r\n", print_lsahdr (lsa->lsa_hdr));
     }
   return CMD_SUCCESS;
 }
@@ -622,7 +615,6 @@ DEFUN (show_ipv6_ospf6_database_router,
        "Router-LSA\n"
        )
 {
-  int x;
   listnode i, j, k;
   struct ospf6 *ospf6;
   struct area *area;
@@ -636,14 +628,13 @@ DEFUN (show_ipv6_ospf6_database_router,
         {
           area = (struct area *) getdata (j);
           vty_out (vty, "Area %s\r\n", inet4str (area->area_id));
-          for (x = 0; x < HASHVAL; x++)
+          l = list_init ();
+          ospf6_lsdb_collect_type (l, htons (LST_ROUTER_LSA), area);
+          for (k = listhead (l); k; nextnode (k))
             {
-              l = area->lsdb[typeindex (htons (LST_ROUTER_LSA))][x];
-              for (k = listhead (l); k; nextnode (k))
-                {
-                  vty_lsa (vty, (struct lsa_internal *) getdata (k));
-                }
+              vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
             }
+          list_delete_all (l);
         }
     }
 
@@ -660,7 +651,6 @@ DEFUN (show_ipv6_ospf6_database_network,
        "Network-LSA\n"
        )
 {
-  int x;
   listnode i, j, k;
   struct ospf6 *ospf6;
   struct area *area;
@@ -674,14 +664,13 @@ DEFUN (show_ipv6_ospf6_database_network,
         {
           area = (struct area *) getdata (j);
           vty_out (vty, "Area %s\r\n", inet4str (area->area_id));
-          for (x = 0; x < HASHVAL; x++)
+          l = list_init ();
+          ospf6_lsdb_collect_type (l, htons (LST_NETWORK_LSA), area);
+          for (k = listhead (l); k; nextnode (k))
             {
-              l = area->lsdb[typeindex (htons (LST_NETWORK_LSA))][x];
-              for (k = listhead (l); k; nextnode (k))
-                {
-                  vty_lsa (vty, (struct lsa_internal *) getdata (k));
-               }
+              vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
             }
+          list_delete_all (l);
         }
     }
 
@@ -698,7 +687,8 @@ DEFUN (show_ipv6_ospf6_database_link,
        "Link-LSA\n"
        )
 {
-  listnode i, j, k, l;
+  listnode i, j, k, n;
+  list l;
   struct ospf6 *ospf6;
   struct area *area;
   struct ospf6_if *ospf6_if;
@@ -715,10 +705,13 @@ DEFUN (show_ipv6_ospf6_database_link,
             {
               ospf6_if = (struct ospf6_if *) getdata (k);
               vty_out (vty, "Interface %s\r\n", ospf6_if->interface->name);
-              for (l = listhead (ospf6_if->linklocal_lsa); l; nextnode (l))
+              l = list_init ();
+              ospf6_lsdb_collect_type (l, htons (LST_LINK_LSA), ospf6_if);
+              for (n = listhead (l); n; nextnode (n))
                 {
-                  vty_lsa (vty, (struct lsa_internal *) getdata (l));
+                  vty_lsa (vty, (struct ospf6_lsa *) getdata (n));
                 }
+              list_delete_all (l);
             }
         }
     }
@@ -735,7 +728,6 @@ DEFUN (show_ipv6_ospf6_database_intraprefix,
        "Intra-Area-Prefix-LSA\n"
        )
 {
-  int x;
   listnode i, j, k;
   struct ospf6 *ospf6;
   struct area *area;
@@ -749,14 +741,13 @@ DEFUN (show_ipv6_ospf6_database_intraprefix,
         {
           area = (struct area *) getdata (j);
           vty_out (vty, "Area %s\r\n", inet4str (area->area_id));
-          for (x = 0; x < HASHVAL; x++)
+          l = list_init ();
+          ospf6_lsdb_collect_type (l, htons (LST_INTRA_AREA_PREFIX_LSA), area);
+          for (k = listhead (l); k; nextnode (k))
             {
-              l = area->lsdb[typeindex (htons (LST_INTRA_AREA_PREFIX_LSA))][x];
-              for (k = listhead (l); k; nextnode (k))
-                {
-                  vty_lsa (vty, (struct lsa_internal *) getdata (k));
-                }
+              vty_lsa (vty, (struct ospf6_lsa *) getdata (k));
             }
+          list_delete_all (l);
         }
     }
 

@@ -1000,6 +1000,7 @@ zebra_init ()
 
 #ifdef HAVE_LINUX_RTNETLINK_H
   install_element (VIEW_NODE, &show_table_cmd);
+  install_element (ENABLE_NODE, &show_table_cmd);
   install_element (CONFIG_NODE, &config_table_cmd);
 #endif
 

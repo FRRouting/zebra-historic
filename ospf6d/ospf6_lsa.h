@@ -43,42 +43,15 @@
 #define LST_LINK_LSA                0x0008
 #define LST_INTRA_AREA_PREFIX_LSA   0x2009
 
-#define GET_LSASCOPE(x)  ((ntohs (x)) & 0x6000)
+/* lsa scope */
+#define SCOPE_MASK       0x6000
 #define SCOPE_LINKLOCAL  0x0000
 #define SCOPE_AREA       0x2000
 #define SCOPE_AS         0x4000
 #define SCOPE_RESERVED   0x6000
+#define GET_LSASCOPE(x) ((ntohs(x)) & SCOPE_MASK)
 
 /* NOTE that all lsa is left NETWORK BYTE ORDER */
-struct lsa_hdr
-{
-  unsigned short lsh_age;      /* LS age */
-  unsigned short lsh_type;     /* LS type */
-  unsigned long  lsh_id;       /* Link State ID */
-  unsigned long  lsh_advrtr;   /* Advertising Router */
-  unsigned long  lsh_seqnum;   /* LS sequence number */
-  unsigned short lsh_cksum;    /* LS checksum */
-  unsigned short lsh_len;      /* length */
-};
-
-#define LSH_NEXT(x) ((x) + 1)
-#define LSA_NEXT(x) ((struct lsa_hdr *)((char *)(x) + ntohs ((x)->lsh_len)))
-#define lsa_issame(x,y) ((x)->lsh_type == (y)->lsh_type && \
-                         (x)->lsh_id == (y)->lsh_id && \
-                         (x)->lsh_advrtr == (y)->lsh_advrtr)
-
-struct lsa_internal
-{
-  struct lsa_hdr   *lsh;
-  unsigned long     birth;     /* tv_sec when LS age 0 */
-  unsigned long     installed; /* tv_sec when installed */
-  struct thread    *expire;
-  struct thread    *refresh;   /* For self-originated LSA */
-  struct neighbor  *from;
-  struct area      *area;
-  struct ospf6_if  *ospf6_if;
-  list              retransing_nbr;
-};
 
 struct router_lsa
 {
@@ -134,39 +107,80 @@ struct intra_area_prefix_lsa
   unsigned long  intra_prefix_refer_advrtr;
 };
 
+/* new */
+struct ospf6_lsa_hdr
+{
+  unsigned short lsh_age;      /* LS age */
+  unsigned short lsh_type;     /* LS type */
+  unsigned long  lsh_id;       /* Link State ID */
+  unsigned long  lsh_advrtr;   /* Advertising Router */
+  unsigned long  lsh_seqnum;   /* LS sequence number */
+  unsigned short lsh_cksum;    /* LS checksum */
+  unsigned short lsh_len;      /* length */
+};
+
+#define LSH_NEXT(x) ((x) + 1)
+#define LSA_NEXT(x) ((struct ospf6_lsa_hdr *) \
+                       ((char *)(x) + ntohs ((x)->lsh_len)))
+#define lsa_issame(x,y) ((x)->lsh_type == (y)->lsh_type && \
+                         (x)->lsh_id == (y)->lsh_id && \
+                         (x)->lsh_advrtr == (y)->lsh_advrtr)
+
+struct ospf6_lsa
+{
+  unsigned long          lock;      /* reference counter */
+  struct ospf6_lsa_hdr  *lsa_hdr;
+  void                  *scope;     /* pointer of scoped data structure */
+  unsigned char          flags;     /* use this to decide ack type */
+  unsigned long          birth;     /* tv_sec when LS age 0 */
+  unsigned long          installed; /* tv_sec when installed */
+  struct thread         *expire;
+  struct thread         *refresh;   /* For self-originated LSA */
+  struct neighbor       *from;      /* from which neighbor */
+  list                  summary_nbr;
+  list                  request_nbr;
+  list                  retrans_nbr;
+};
+#define OSPF6_LSA_FLOODBACK   (1 << 0)
+#define OSPF6_LSA_DUPLICATE   (1 << 1)
+#define OSPF6_LSA_IMPLIEDACK  (1 << 2)
+
 /* Function Prototypes */
-void lsa_expire_cancel (struct lsa_internal *);
-void lsa_refresh_cancel (struct lsa_internal *);
-void free_lsa (struct lsa_hdr *);
-void free_lsa_internal_hdr (struct lsa_internal *);
-int expire_lsa_age (struct thread *);
-int calc_lsa_age_internal (struct lsa_internal *);
-unsigned short calc_lsa_age_external (struct lsa_internal *);
-int past_min_ls_interval (struct lsa_internal *);
-struct lsa_internal *make_lsa_hdr_internal (struct lsa_hdr *,
-                                            struct neighbor *);
-struct lsa_internal *make_lsa_internal (struct lsa_hdr *, struct neighbor *);
-int which_is_more_recent (struct lsa_internal *, struct lsa_internal *);
-int lsatype_ok (struct lsa_hdr *);
-int lsa_refresh (struct thread *);
-int originating_lsa (struct lsa_internal *);
-int construct_router_lsa (struct area *);
-int construct_network_lsa (struct ospf6_if *);
-int construct_link_lsa (struct ospf6_if *);
-int construct_intra_prefix_lsa (struct ospf6_if *);
+int past_min_ls_interval (struct ospf6_lsa *);
+int which_is_more_recent (struct ospf6_lsa *, struct ospf6_lsa *);
+void originating_lsa (struct ospf6_lsa *);
+void construct_router_lsa (struct area *);
+void construct_network_lsa (struct ospf6_if *);
+void construct_link_lsa (struct ospf6_if *);
+void construct_intra_prefix_lsa (struct ospf6_if *);
 int show_router_lsa (struct vty *, void *);
 int show_network_lsa (struct vty *, void *);
 int show_link_lsa (struct vty *, void *);
 int show_intra_prefix_lsa (struct vty *, void *);
-int vty_lsa (struct vty *, struct lsa_internal *);
+int vty_lsa (struct vty *, struct ospf6_lsa *);
 
-struct router_lsd *get_router_lsd (rtr_id_t, struct lsa_internal *);
-unsigned long get_ifindex_to_router (rtr_id_t, struct lsa_internal *);
-list get_referencing_lsa (struct lsa_internal *);
+struct router_lsd *
+get_router_lsd (rtr_id_t, struct ospf6_lsa *);
+unsigned long get_ifindex_to_router (rtr_id_t, struct ospf6_lsa *);
+void get_referencing_lsa (list, struct ospf6_lsa *);
+int is_self_originated (struct ospf6_lsa *);
+void update_ls_seqnum (struct ospf6_lsa *);
+void reconstruct_lsa (struct ospf6_lsa *);
 
-int is_self_originated (struct lsa_internal *);
-void update_ls_seqnum (struct lsa_internal *);
-void construct_lsa (struct lsa_internal *);
+void ospf6_lsa_lock (struct ospf6_lsa *);
+void ospf6_lsa_unlock (struct ospf6_lsa *);
+int ospf6_lsa_expire (struct thread *);
+int ospf6_lsa_refresh (struct thread *);
+unsigned short ospf6_age_current (struct ospf6_lsa *);
+void ospf6_age_update_to_send (struct ospf6_lsa *, struct ospf6_if *);
+struct ospf6_lsa_hdr *make_ospf6_lsa_data (struct ospf6_lsa_hdr *, int);
+struct ospf6_lsa *make_ospf6_lsa (struct ospf6_lsa_hdr *);
+unsigned short ospf6_lsa_get_type (struct ospf6_lsa *);
+unsigned short ospf6_lsa_get_scope_type (unsigned short);
+void ospf6_lsa_clear_flag (struct ospf6_lsa *);
+void ospf6_lsa_set_flag (struct ospf6_lsa *, unsigned char);
+int ospf6_lsa_test_flag (struct ospf6_lsa *, unsigned char);
+int ospf6_lsa_issame (struct ospf6_lsa_hdr *, struct ospf6_lsa_hdr *);
 
 #endif /* OSPF6_LSA_H */
 

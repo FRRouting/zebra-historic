@@ -25,6 +25,7 @@
 /* Message Definition */
 
 /* Type */
+#define MSGT_NONE                 0  /* Unknown message */
 #define MSGT_HELLO                1  /* Discover/maintain neighbors */
 #define MSGT_DATABASE_DESCRIPTION 2  /* Summarize database contents */
 #define MSGT_LINKSTATE_REQUEST    3  /* Database download */
@@ -118,6 +119,8 @@ int make_linkstate_request (struct iovec *, struct sockaddr_in6 *,
                             struct neighbor *);
 int make_linkstate_update (struct iovec *, struct sockaddr_in6 *,
                            struct neighbor *);
+
+int ospf6_receive (struct thread *);
 
 #endif /* OSPF6_MESG_H */
 

@@ -43,7 +43,7 @@ struct bgp
 
 #define BGP_CONFIG_ROUTER_ID  1
 #define BGP_CONFIG_CLUSTER_ID 2
-  unsigned int config;		/* BGP configuration. */
+  u_int16_t config;		/* BGP configuration. */
 
   u_char redist_static;		/* Redistribute static route. */
   u_char redist_connect;	/* Redistribute connected route. */
@@ -75,6 +75,7 @@ struct peer
   int nexthop_self;		/* Nexthop self. */
   int shutdown;			/* Shutdown flag. */
   int passive;			/* Passive flag. */
+  unsigned int ifindex;		/* ifindex of the BGP connection. */
   char *ifname;			/* bind interface name. */
   char *update_if;
   union sockunion *update_source;
@@ -91,8 +92,11 @@ struct peer
   int ostatus;			/* Old peer status. */
 
   /* Default attribute value for this peer. */
-  unsigned int def;		/* Option set flag. */
-  long localpref;		/* default local preference. */
+#define PEER_CONFIG_WEIGHT     1
+#define PEER_DEFAULT_ORIGINATE 2
+  u_int32_t config;		/* Option set flag. */
+  long localpref;		/* Default local preference. */
+  u_int32_t weight;		/* Default weight.  */
   int send_community;		/* Community attribute send flag. */
   int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */

@@ -60,6 +60,18 @@ struct ospf_lsa
 #define IS_ROUTER_LSA_EXTERNAL(x)      ((x)->flags & ROUTER_LSA_EXTERNAL)
 #define IS_ROUTER_LSA_BORDER(x)	       ((x)->flags & ROUTER_LSA_BORDER)
 
+/* OSPF Router-LSA Link information. */
+struct router_lsa_link
+{
+  struct in_addr link_id;
+  struct in_addr link_data;
+  struct {
+    u_char type;
+    u_char tos_count;
+    u_int16_t metric;
+  } m[1];
+};
+
 /* OSPF Router-LSAs structure. */
 struct router_lsa
 {
@@ -113,6 +125,7 @@ struct as_external_lsa
 struct ospf_lsa *ospf_router_lsa (struct ospf_interface *);
 struct ospf_lsa *ospf_network_lsa (struct ospf_interface *);
 u_int16_t ospf_lsa_checksum (struct ospf_lsa *);
+void ospf_lsa_free (struct ospf_lsa *);
 void ospf_add_router_lsa (struct ospf_area *, struct ospf_lsa *);
 void ospf_add_network_lsa (struct ospf_area *, struct ospf_lsa *);
 void ospf_add_summary_lsa (struct ospf_area *, struct ospf_lsa *);
@@ -123,6 +136,8 @@ struct ospf_lsa *ospf_lsa_lookup_by_header (struct ospf_area *,
 listnode ospf_lsa_lookup_from_list (list, u_char, struct in_addr,
 				    struct in_addr);
 int ospf_lsa_more_recent (struct ospf_lsa *, struct ospf_lsa *);
+struct ospf_lsa  *ospf_lsa_is_self_originated (struct ospf_interface *oi,
+					       struct ospf_lsa *);
 int ospf_lsa_count (struct ospf_area *);
 void ospf_lsa_init ();
 

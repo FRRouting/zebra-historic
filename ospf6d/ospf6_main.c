@@ -79,7 +79,6 @@ void
 sighup (int sig)
 {
   zlog (NULL, LOG_INFO, "SIGHUP received");
-  log_rotate ();
 }
 
 /* SIGINT handler. */

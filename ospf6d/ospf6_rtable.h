@@ -63,7 +63,7 @@ struct ospf6_rtentry
   unsigned char path_type;           /* Path-type */
   cost_t        cost;
   cost_t        cost_type2;
-  struct lsa_internal *ls_origin;    /* Link State Origin, for MOSPF */
+  struct ospf6_lsa *ls_origin;    /* Link State Origin, for MOSPF */
   list          nexthops;               /* list of struct ospf6_nexthop */
 };
 
@@ -81,7 +81,7 @@ void rtable_init (struct ospf6_rtable *);
 struct ospf6_rtentry *rtable_lookup (unsigned char, union dest_id *,
                                      struct ospf6_rtentry *);
 void rtable_install (unsigned char, union dest_id *, cost_t,
-                     unsigned char, list, struct lsa_internal *,
+                     unsigned char, list, struct ospf6_lsa *,
                      struct ospf6_rtable *);
 void rtable_uninstall (unsigned char, union dest_id *,
                        struct ospf6_rtable *);

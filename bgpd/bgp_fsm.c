@@ -247,12 +247,13 @@ bgp_uptime_reset (struct peer *peer)
 void
 bgp_stop (struct peer *peer)
 {
+  /* Need of clear of peer. */
+  bgp_peer_delete (peer);
+  bgp_uptime_reset (peer);
+
   /* Clear read and write thread if exist. */
   BGP_READ_OFF (peer->t_read);
   BGP_WRITE_OFF (peer->t_write);
-
-  /* Clear output buffer. */
-  stream_fifo_free (peer->obuf);
 
   /* Stop all timers. */
   BGP_TIMER_OFF (peer->t_start);
@@ -262,9 +263,8 @@ bgp_stop (struct peer *peer)
   BGP_TIMER_OFF (peer->t_asorig);
   BGP_TIMER_OFF (peer->t_routeadv);
 
-  /* Need of clear of peer. */
-  bgp_peer_delete (peer);
-  bgp_uptime_reset (peer);
+  /* Clear output buffer. */
+  stream_fifo_free (peer->obuf);
 
   /* Close of file descriptor. */
   if (peer->fd >= 0)

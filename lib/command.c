@@ -420,9 +420,6 @@ config_write_host (struct vty *vty)
 	}
     }      
 
-  if (host.lines >= 0)
-    vty_out (vty, "lines %d%s", host.lines, VTY_NEWLINE);
-
   if (host.logfile)
     vty_out (vty, "log file %s%s", host.logfile, VTY_NEWLINE);
 
@@ -438,6 +435,9 @@ config_write_host (struct vty *vty)
   if (host.encrypt)
     vty_out (vty, "service password-encryption%s", VTY_NEWLINE);
 
+  if (host.lines >= 0)
+    vty_out (vty, "service terminal-length %d%s", host.lines, VTY_NEWLINE);
+
   if (! host.motd)
     vty_out (vty, "no banner motd%s", VTY_NEWLINE);
 
@@ -450,6 +450,45 @@ cmd_node_vector (vector v, enum node_type ntype)
 {
   struct cmd_node *cnode = vector_slot (v, ntype);
   return cnode->cmd_vector;
+}
+
+int
+cmd_ipv4_match (char *str)
+{
+  char *sp;
+  int dots = 0;
+  char buf[4];
+
+  while (*str != '\0')
+    {
+      bzero (buf, sizeof (buf));
+      sp = str;
+      while (*str != '\0')
+	{
+	  if (*str == '.')
+	    {
+	      dots++;
+	      break;
+	    }
+	  if (*str < '0' || *str > '9')
+	    return 0;
+	  str++;
+	}
+      if (dots > 3)
+	return 0;
+      if (str - sp > 3)
+	return 0;
+
+      strncpy (buf, sp, str - sp);
+      if (atoi (buf) > 255)
+	return 0;
+
+      if (*str == '\0')
+	break;
+      str++;
+    }
+
+  return 1;
 }
 
 /* Filter command vector by symbol */
@@ -502,6 +541,7 @@ enum match_type
 {
   no_match,
   extend_match,
+  ipv4_match,
   vararg_match,
   partly_match,
   exact_match 
@@ -540,6 +580,12 @@ cmd_filter_by_completion (char *command, vector v, int index)
 		if (CMD_VARARG (str))
 		  return vararg_match;
 
+		if (CMD_IPV4 (str))
+		  {
+		    if (cmd_ipv4_match (command))
+		      return ipv4_match;
+		  }
+		else
 		/* Check is this point's argument optional ? */
 		if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
 		  {
@@ -611,6 +657,10 @@ is_cmd_ambiguous (char *command, vector v, int index, enum match_type type)
 		      matched = str;
 		    match++;
 		  }
+		break;
+	      case ipv4_match:
+		if (CMD_IPV4 (str) && cmd_ipv4_match (command))
+		  match++;
 		break;
 	      case extend_match:
 		if (CMD_OPT(str[0]) || CMD_EXT (str[0]))
@@ -1049,6 +1099,8 @@ cmd_filter_by_string (char *command, vector v, int index)
 
 		/* Check is this point's argument is optional */
 		if (CMD_OPT (str[0]))
+		  match++;
+		else if (CMD_IPV4 (str))
 		  match++;
 		else if (CMD_EXT (str[0]))
 		  {
@@ -1643,24 +1695,55 @@ DEFUN (config_terminal_length, config_terminal_length_cmd,
   char *endptr = NULL;
 
   lines = strtol (argv[0], &endptr, 10);
-  if (lines > 512 || *endptr != '\0')
+  if (lines < 0 || lines > 512 || *endptr != '\0')
+    {
+      vty_out (vty, "length is malformed\r\n");
+      return CMD_WARNING;
+    }
+  vty->lines = lines;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_config_terminal_length, no_config_terminal_length_cmd,
+       "no terminal length [<0-512>]",
+       NO_STR
+       "Terminal configuration setup\n"
+       "Terminal length setup\n"
+       "Number of lines of VTY (0 means no line control)\n")
+{
+  vty->lines = -1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (service_terminal_length, service_terminal_length_cmd,
+       "service terminal-length <0-512>",
+       "Set up miscellaneous service\n"
+       "System wide terminal length configuration\n"
+       "Number of lines of VTY (0 means no line control)\n")
+{
+  int lines;
+  char *endptr = NULL;
+
+  lines = strtol (argv[0], &endptr, 10);
+  if (lines < 0 || lines > 512 || *endptr != '\0')
     {
       vty_out (vty, "length is malformed\r\n");
       return CMD_WARNING;
     }
   host.lines = lines;
-  vty->height = lines;
 
   return CMD_SUCCESS;
 }
 
-/* VTY interface override no. of terminal lines. */
-DEFUN (config_lines, config_lines_cmd,
-       "lines LINES",
-       "Override no. of terminal lines\n"
-       "lines integer\n")
+DEFUN (no_service_terminal_length, no_service_terminal_length_cmd,
+       "no service terminal-length [<0-512>]",
+       NO_STR
+       "Set up miscellaneous service\n"
+       "System wide terminal length configuration\n"
+       "Number of lines of VTY (0 means no line control)\n")
 {
-  host.lines = strtol(argv[0], (char**)0, 10);
+  host.lines = -1;
   return CMD_SUCCESS;
 }
 
@@ -1803,9 +1886,9 @@ cmd_init ()
   host.name = NULL;
   host.password = NULL;
   host.enable = NULL;
-  host.lines = -1;
   host.logfile = NULL;
   host.config = NULL;
+  host.lines = -1;
   host.motd = default_motd;
 
   /* Install top nodes. */
@@ -1823,6 +1906,7 @@ cmd_init ()
   install_element (VIEW_NODE, &config_enable_cmd);
   install_element (VIEW_NODE, &show_version_cmd);
   install_element (VIEW_NODE, &config_terminal_length_cmd);
+  install_element (VIEW_NODE, &no_config_terminal_length_cmd);
 
   install_default (ENABLE_NODE);
   install_element (ENABLE_NODE, &config_terminal_cmd);
@@ -1833,13 +1917,15 @@ cmd_init ()
   install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
   install_element (ENABLE_NODE, &config_terminal_length_cmd);
+  install_element (ENABLE_NODE, &no_config_terminal_length_cmd);
+  install_element (ENABLE_NODE, &service_terminal_length_cmd);
+  install_element (ENABLE_NODE, &no_service_terminal_length_cmd);
 
   install_default (CONFIG_NODE);
   install_element (CONFIG_NODE, &hostname_cmd);
   install_element (CONFIG_NODE, &no_hostname_cmd);
   install_element (CONFIG_NODE, &password_cmd);
   install_element (CONFIG_NODE, &enable_password_cmd);
-  install_element (CONFIG_NODE, &config_lines_cmd);
   install_element (CONFIG_NODE, &config_log_stdout_cmd);
   install_element (CONFIG_NODE, &no_config_log_stdout_cmd);
   install_element (CONFIG_NODE, &config_log_file_cmd);
@@ -1850,6 +1936,8 @@ cmd_init ()
   install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
   install_element (CONFIG_NODE, &banner_motd_default_cmd);
   install_element (CONFIG_NODE, &no_banner_motd_cmd);
+  install_element (CONFIG_NODE, &service_terminal_length_cmd);
+  install_element (CONFIG_NODE, &no_service_terminal_length_cmd);
 
   srand(time(NULL));
 }

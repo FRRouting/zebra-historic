@@ -27,20 +27,17 @@
 #define DELAYED_ACK  1
 #define DIRECT_ACK   2
 
-#define NONE       0
-#define FLOODBACK  1
-#define IMPLIEDACK 2
-#define DUPLICATE  4
-
 /* Function Prototypes */
-int prepare_neighbor_lsdb (struct neighbor *);
+void prepare_neighbor_lsdb (struct neighbor *);
 int check_neighbor_lsdb (struct iovec *, struct neighbor *);
-int proceed_summarylist (struct neighbor *);
-void direct_acknowledge (struct lsa_internal *);
-void delayed_acknowledge (struct lsa_internal *);
-int lsa_receive (struct lsa_hdr *, struct neighbor *);
-int ack_type (struct lsa_internal *, int, int);
-int lsa_flood (struct lsa_internal *);
+void proceed_summarylist (struct neighbor *);
+void direct_acknowledge (struct ospf6_lsa *);
+void delayed_acknowledge (struct ospf6_lsa *);
+void lsa_receive (struct ospf6_lsa_hdr *, struct neighbor *);
+int ack_type (struct ospf6_lsa *, int);
+void ospf6_lsa_flood_area (struct ospf6_lsa *, struct area *);
+void ospf6_lsa_flood_interface (struct ospf6_lsa *, struct ospf6_if *);
+void ospf6_lsa_flood (struct ospf6_lsa *);
 
 #endif /* OSPF6_DBEX_H */
 

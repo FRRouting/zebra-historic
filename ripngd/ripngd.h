@@ -39,15 +39,9 @@
 #define RIPNG_GROUP              "ff02::9"
 
 /* RIPng timers. */
-#ifdef RIPNG_TEST
-#define RIPNG_FLUSH_TIMER               10
-#define RIPNG_TIMEOUT_TIMER             10
-#define RIPNG_GARBAGE_TIMER             30
-#else
 #define RIPNG_FLUSH_TIMER               30
 #define RIPNG_TIMEOUT_TIMER            180
 #define RIPNG_GARBAGE_TIMER            120
-#endif /* RIPNG_TEST */
 
 /* Default config file name. */
 #define RIPNG_DEFAULT_CONFIG "ripngd.conf"
@@ -87,10 +81,11 @@ struct ripng
   /* RIPng Parameters.*/
   unsigned char command;
   unsigned char version;
-  unsigned int flush_time;
+  unsigned int update_time;
   unsigned int timeout_time;
   unsigned int garbage_time;
   int max_mtu;
+  int default_information;
 
   /* Input/output buffer of RIPng. */
   struct stream *ibuf;
@@ -99,9 +94,14 @@ struct ripng
   /* Threads. */
   struct thread *t_read;
   struct thread *t_write;
-  struct thread *t_flush;
+  struct thread *t_update;
   struct thread *t_garbage;
   struct thread *t_zebra;
+
+  /* Triggered update trick. */
+  int trigger;
+  struct thread *t_triggered_update;
+  struct thread *t_triggered_interval;
 };
 
 /* Routing table entry. */
@@ -109,7 +109,7 @@ struct rte
 {
   struct in6_addr addr;
   u_short tag;
-  u_char masklen;
+  u_char prefixlen;
   u_char metric;
 };
 
@@ -118,7 +118,7 @@ struct ripng_packet
 {
   u_char command;
   u_char version;
-  u_char padding[2]; 
+  u_int16_t zero; 
   struct rte rte[1];
 };
 
@@ -133,7 +133,7 @@ struct ripng_info
 
   /* RIPng specific information */
   struct in6_addr nexthop;	
-  struct in6_addr gateway;
+  struct in6_addr from;
 
   /* Which interface this route comes from. */
   unsigned int ifindex;		
@@ -142,13 +142,18 @@ struct ripng_info
   u_char metric;		
 
   /* Tag field of RIPng packet.*/
-  u_short rip_tag;		
+  u_short tag;		
 
-  /* Update timer of this route. */
-  time_t timer;			
+  /* Flags of RIPng route. */
+#define RIPNG_RTF_FIB      1
+#define RIPNG_RTF_CHANGED  2
+  u_char flags;
 
-  /* Whether send to zebra or not. */
-  int fib;			
+  /* Garbage collect timer. */
+  struct thread *t_timeout;
+  struct thread *t_garbage_collect;
+
+  struct route_node *rp;
 };
 
 /* RIPng specific interface configuration. */
@@ -167,22 +172,13 @@ struct ripng_interface
   int ri_split_horizon;
 };
 
-struct ripng_slot
-{
-  struct ripng_info *rinfo[3];
-};
-
-#define RIPNG_SLOT_RTE(R)           ((R)->rinfo[0])
-#define RIPNG_SLOT_STATIC(R)        ((R)->rinfo[1])
-#define RIPNG_SLOT_AGGREGATE(R)     ((R)->rinfo[2])
-#define RIPNG_SLOT_MAX              3
-
 enum event
 {
-  RIPNG_REQUEST_EVENT,
-  RIPNG_FLUSH_EVENT,
-  RIPNG_ZEBRA,
   RIPNG_READ,
+  RIPNG_ZEBRA,
+  RIPNG_REQUEST_EVENT,
+  RIPNG_UPDATE_EVENT,
+  RIPNG_TRIGGERED_UPDATE,
 };
 
 /* Count prefix size from mask length */
@@ -207,6 +203,7 @@ extern struct ripng *ripng;
 void ripng_init ();
 void ripng_if_init ();
 void ripng_terminate ();
+void zebra_start ();
 
 struct ripng_info *ripng_info_new ();
 void ripng_info_free (struct ripng_info *rinfo);
@@ -214,21 +211,12 @@ void ripng_info_free (struct ripng_info *rinfo);
 /* Function prototype for RIPngd event routine. */
 void ripng_event (enum event, int);
 
-void
-ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
-		      unsigned int ifindex);
+void ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
+			   unsigned int ifindex);
+void ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
+			      unsigned int ifindex);
 
-void
-ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
-			 unsigned int ifindex);
-
-void
-zebra_start ();
-
-void
-ripng_redistribute_add (int type, struct prefix_ipv6 *p);
-
-void
-ripng_redistribute_delete (int type, struct prefix_ipv6 *p);
+void ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
+void ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

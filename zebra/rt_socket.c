@@ -56,6 +56,15 @@ static struct sockaddr_in sin_proto =
 #endif /* HAVE_SIN_LEN */
   AF_INET, 0, {0}, {0}
 };
+#ifdef HAVE_IPV6
+static struct sockaddr_in6 sin6_proto = 
+{
+#ifdef SIN6_LEN
+  sizeof (struct sockaddr_in6),
+#endif /* SIN6_LEN */
+  AF_INET6, 0, 0, {{{ 0 }}}
+};
+#endif /* HAVE_IPV6 */
 
 #include "linklist.h"
 #include "if.h"
@@ -72,6 +81,9 @@ rtm_write (int message,
   int ret;
   caddr_t pnt;
   struct sockaddr_in tmp_gate = sin_proto;
+#ifdef HAVE_IPV6
+  struct sockaddr_in6 tmp_gate6 = sin6_proto;
+#endif /* HAVE_IPV6 */
 
   /* Sequencial number of routing message. */
   static int msg_seq = 0;
@@ -105,7 +117,58 @@ rtm_write (int message,
     msg.rtm.rtm_flags |= RTF_HOST;
 
   /* Route to the interface test. */
-  if (! gate)
+  if (!gate)
+    {
+      #define MAX_IFACES 400
+      int sock;
+      struct ifreq iflist[MAX_IFACES];
+      struct ifconf ifconf;
+      struct ifreq *ifr, *ifr_end;
+      struct sockaddr_dl *dl, *sdl = NULL;
+      struct interface *ifp;
+      char *s; /* ifname */
+
+      ifp = if_lookup_by_index (index);      
+      if (!ifp)
+        zlog (NULL, LOG_WARNING, "can't find interface of index %s", index);
+      s = ifp->name;
+
+      if ((sock = socket (AF_INET, SOCK_DGRAM, 0)) < 0)
+        zlog (NULL, LOG_WARNING, "can't open socket for iflist: %s (%d)",
+              strerror (errno), errno);
+
+      /* get interface list of this host */
+      ifconf.ifc_req = iflist;
+      ifconf.ifc_len = sizeof (iflist);
+      if (ioctl (sock, SIOCGIFCONF, &ifconf) < 0)
+        zlog (NULL, LOG_WARNING, "can't get iflist: %s (%d)",
+              strerror (errno), errno);
+
+      /* close sock */
+      close (sock);
+
+      /* get ifr that matches ifindex */
+      ifr_end = (struct ifreq *)(ifconf.ifc_buf + ifconf.ifc_len);
+      for (ifr = ifconf.ifc_req; ifr < ifr_end;
+           ifr = (struct ifreq *) ((char *)&ifr->ifr_addr
+                                   + ifr->ifr_addr.sa_len))
+        {
+          dl = (struct sockaddr_dl *)&ifr->ifr_addr;
+          if (ifr->ifr_addr.sa_family != AF_LINK)
+            continue;
+          if (strncmp(s, dl->sdl_data, dl->sdl_nlen) || s[dl->sdl_nlen] != 0)
+            continue;
+          sdl = dl;
+          break;
+        }
+
+      if (sdl)
+        gate = (union sockunion *)sdl;
+      else
+        zlog (NULL, LOG_WARNING, "can't find interface: %s", s);
+    }
+  /* if still we don't have gate to specify, use previous way */
+  if (! gate )
     {
       struct interface *ifp;
       listnode node;
@@ -120,11 +183,22 @@ rtm_write (int message,
 	    connected = getdata (node);
 	    p = connected->address;
 
-	    if (p->family == dest->sa.sa_family)
-	      {
+	    if (p->family != dest->sa.sa_family)
+              continue;
+
+	    if (p->family == AF_INET)
+              {
 		tmp_gate.sin_addr = p->u.prefix4;
-		gate = (struct sockaddr *)&tmp_gate;
+		gate = (union sockunion *)&tmp_gate;
 	      }
+#ifdef HAVE_IPV6
+            if (p->family == AF_INET6)
+              {
+                memcpy (&tmp_gate6.sin6_addr, &p->u.prefix6,
+                         sizeof (struct in6_addr));
+                gate = (union sockunion *)&tmp_gate6;
+              }
+#endif /* HAVE_IPV6 */
 	  }
     }
 
@@ -253,15 +327,6 @@ kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 
 #ifdef HAVE_IPV6
 
-/* Initializing prototype of struct sockaddr_in6. */
-static struct sockaddr_in6 sin6_proto = 
-{
-#ifdef SIN6_LEN
-  sizeof (struct sockaddr_in6),
-#endif /* SIN6_LEN */
-  AF_INET6, 0, 0, {{{ 0 }}}
-};
-
 /* Calculate sin6_len value for netmask socket value. */
 int
 sin6_masklen (struct in6_addr mask)
@@ -316,7 +381,6 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
   if (gate)
     memcpy (&sin_gate.sin6_addr, gate, sizeof (struct in6_addr));
 
-  /* Now we install /128 route as network route. */
   if (dest->prefixlen != 128)
     {
       masklen2ip6 (dest->prefixlen, &sin_mask.sin6_addr);

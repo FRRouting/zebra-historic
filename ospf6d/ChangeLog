@@ -1,3 +1,21 @@
+1999-07-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6_main.c (sighup): Call of log_rotate() removed.
+
+1999-07-24  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	ospf6_dbex.{c,h}: variable "acknowledge" has been deleted.
+
+1999-07-22  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* *.{c,h}: lsa data structure has been drastically
+	changed.
+
+1999-07-16  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* *.{c,h}: bug of updating LSA's which is self
+	originated has been fixed.
+
 1999-07-14  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
 
 	* *.{c,h} : log clean up.

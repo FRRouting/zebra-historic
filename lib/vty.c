@@ -913,7 +913,7 @@ vty_telnet_option (struct vty *vty, unsigned char *buf, int nbytes)
       if (buf[2] == TELOPT_NAWS)
 	{
 	  vty->width = buf[4];
-	  vty->height = host.lines >= 0 ? host.lines : buf[6];
+	  vty->height = vty->lines >= 0 ? vty->lines : buf[6];
 	  return 8;
 	}
       break;
@@ -1162,7 +1162,12 @@ vty_flush (struct thread *thread)
   else
     erase = 0;
 
-  buffer_flush_window (vty->obuf, vty->fd, vty->width, vty->height, erase);
+  if (vty->lines == 0)
+    buffer_flush_all (vty->obuf, vty->fd);
+  else
+    buffer_flush_window (vty->obuf, vty->fd, vty->width, 
+			 vty->lines >= 0 ? vty->lines : vty->height, erase);
+  
 
   if (buffer_empty (vty->obuf))
     {
@@ -1199,6 +1204,10 @@ vty_create (int vty_sock, union sockunion *su)
   vector_set_index (vtyvec, vty_sock, vty);
   vty->status = VTY_NORMAL;
   vty->v_timeout = vty_timeout_val;
+  if (host.lines >= 0)
+    vty->lines = host.lines;
+  else
+    vty->lines = -1;
 
   /* Vty is not available if password isn't set. */
   if (host.password == NULL && host.password_encrypt == NULL)

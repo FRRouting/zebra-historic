@@ -1,3 +1,95 @@
+1999-07-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (noinst_HEADERS): Add ospf_route.h.
+
+	* ospf_route.c (show_ip_ospf_route): Add `show ip ospf route'
+	command.
+
+1999-07-25  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (ospf_router_lsa): Fix bug of LS sequence number
+	assignement.
+
+1999-07-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_route_table_free): New function added.
+
+	* ospf_spf.c (ospf_spf_next): Free vertex w when cw's and w's
+	distance is same.
+
+	* ospfd.h (struct ospf): Add old_table.
+
+	* ospf_main.c (sighup): Call of log_rotate () removed.
+
+	* ospf_lsa.c (ospf_lsa_is_self_originated): Fix bug of checking
+	area->lsa as self LSA.  This should be area->lsa_self.
+
+1999-07-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c (ospf_zebra_add): ospf_zebra_add
+	(),ospf_zebra_delete () added.
+
+	* ospf_spf.c (ospf_spf_calculate): Call ospf_intra_route_add ().
+
+1999-07-24  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c: Change LS sequence number treatment.
+	(ospf_lsa_is_self_originated): New function added.
+	(show_ip_ospf_database_self_originated): New DEFUN added.
+	
+1999-07-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_interface.c (ospf_if_lookup_by_addr): Add loopback check.
+
+1999-07-22  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_spf.c (ospf_nexthop_new), (ospf_nexthop_free),
+	(ospf_nexthop_dup): function added.
+	(ospf_nexthop_calculation): function changed.
+
+	* ospf_interface.c (ospf_if_lookup_by_addr): function added.
+	
+1999-07-21  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_spf.c (ospf_spf_closest_vertex): function removed.
+	
+1999-07-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_spf.c (ospf_spf_next): Apply ntohs for fetching metric.
+
+1999-07-21  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_neighbor.c (ospf_nbr_lookup_by_router_id): fundtion removed.
+
+	* ospf_lsa.c (show_ip_ospf_database_router): describe each
+	connected link.
+
+1999-07-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_spf.c (ospf_spf_next): V is router LSA or network LSA so
+	change behavior according to LSA type.
+	(ospf_lsa_has_link): Link check function is added.
+
+1999-07-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_spf.c (ospf_spf_calculate_schedule): Add new function for
+	SPF calcultion schedule addtition.
+	(ospf_spf_calculate_timer_add): Rough 30 sec interval SPF calc
+	timer is added.
+	(ospf_spf_next_router): Delete ospf_spf_next_network ().
+
+	* ospf_lsa.c (show_ip_ospf_database_all): Network-LSA display
+	header typo correction.  Display of router LSA's #link added.
+
+1999-07-19  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_packet.c (ospf_check_network_mask): Added new function for
+	receiving Raw IP packet on an appropriate interface.
+
+1999-07-16  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (ospf_router_id): new DEFUN added.
+
 1999-07-15  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_spf.c (ospf_spf_init), (ospf_spf_free),

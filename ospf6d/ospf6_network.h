@@ -54,6 +54,9 @@ void *iov_realloc (int mtype, struct iovec *iov, u_int index, size_t len);
 void *iov_attach_last (struct iovec *iov, void *base, size_t len);
 void *iov_attach_first (struct iovec *iov, void *base, size_t len);
 int iov_free (int mtype, struct iovec *iov, u_int begin, u_int end);
+void iov_trim_head (int, struct iovec *);
+void iov_free_all (int, struct iovec *);
+void *iov_detach_first (struct iovec *);
 
 int sockunion_ospf6_socket (union sockunion *);
 int sockfd_to_family (int);

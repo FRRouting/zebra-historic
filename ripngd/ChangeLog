@@ -1,3 +1,26 @@
+1999-07-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (default_information_originate): Add
+	default-information command.
+
+1999-07-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_route_process): rip_add_route() and
+	rip_delete_route() are deleted.  Both functions are integrated
+	into ripng_route_process().
+	(ripng_request_process): Proper reply for request message.
+
+	* ripng_routemap.c: New file added.
+
+1999-07-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_nexthop_rte): RIPng next hop routine is
+	rewritten.
+	(show_ipv6_ripng): Change `show ip ripng' to `show ipv6 ripng'.
+	(ripng_response_process): RIPng incoming packet's hop count check
+	added.
+	(ripng_response_process): Add strict RTE checking.
+
 1999-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripngd.c (ripng_add_route): Fix metric compare bug.

@@ -814,6 +814,7 @@ config_write_prefix (struct vty *vty)
 {
   struct prefix_list *plist;
   struct prefix_list_entry *pentry;
+  int write = 0;
 
   for (plist = prefix_master.num.head; plist; plist = plist->next)
     for (pentry = plist->head; pentry; pentry = pentry->next)
@@ -838,6 +839,7 @@ config_write_prefix (struct vty *vty)
 	if (pentry->ge >= 0)
 	  vty_out (vty, " ge %d", pentry->ge);
 	vty_out (vty, "%s", VTY_NEWLINE);
+	write++;
       }
 
   for (plist = prefix_master.str.head; plist; plist = plist->next)
@@ -863,9 +865,10 @@ config_write_prefix (struct vty *vty)
 	if (pentry->ge >= 0)
 	  vty_out (vty, " ge %d", pentry->ge);
 	vty_out (vty, "%s", VTY_NEWLINE);
+	write++;
       }
   
-  return 0;
+  return write;
 }
 
 /* Install vty related command.*/

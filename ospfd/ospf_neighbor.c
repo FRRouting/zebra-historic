@@ -173,7 +173,7 @@ ospf_nbr_lookup_by_addr (struct route_table *nbrs,
   struct ospf_neighbor *nbr;
 
   p.family = AF_INET;
-  p.prefixlen = 32;
+  p.prefixlen = IPV4_MAX_BITLEN;
   p.u.prefix4 = *addr;
 
   rn = route_node_get (nbrs, &p);
@@ -186,26 +186,5 @@ ospf_nbr_lookup_by_addr (struct route_table *nbrs,
   route_unlock_node (rn);
 
   return nbr;
-}
-
-struct ospf_neighbor *
-ospf_nbr_lookup_by_router_id (struct route_table *nbrs,
-			      struct in_addr *router_id)
-{
-  struct route_node *rn;
-  struct ospf_neighbor *nbr;
-
-  for (rn = route_top (nbrs); rn; rn = route_next (rn))
-    {
-      if (rn->info == NULL)
-	continue;
-
-      nbr = rn->info;
-
-      if (IPV4_ADDR_SAME (&nbr->router_id, router_id))
-	return nbr;
-    }
-
-  return NULL;
 }
 

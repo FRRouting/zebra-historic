@@ -68,6 +68,10 @@ struct prefix_ipv6
 #define INET6_ADDRSTRLEN 46
 #endif /* INET6_ADDRSTRLEN */
 
+#ifndef INET6_BUFSIZ
+#define INET6_BUFSIZ 51
+#endif /* INET6_BUFSIZ */
+
 /* Max bit/byte length of IPv4 address. */
 #define IPV4_MAX_BYTELEN   4
 #define IPV4_MAX_BITLEN   32

@@ -102,6 +102,51 @@ list_add_node_tail (list list, void *val)
   list->count++;
 }
 
+void
+list_add_node_prev (list list, listnode current, void *val)
+{
+  listnode node = listnode_new ();
+
+  node->next = current;
+  node->data = val;
+
+  if (current->prev == NULL)
+    list->head = node;
+  else
+    current->prev->next = node;
+
+  node->prev = current->prev;
+  current->prev = node;
+  list->count++;
+}
+
+void
+list_add_node_next (list list, listnode current, void *val)
+{
+  listnode node = listnode_new ();
+
+  node->prev = current;
+  node->data = val;
+
+  if (current->next == NULL)
+    list->tail = node;
+  else
+    current->next->prev = node;
+
+  node->next = current->next;
+  current->next = node;
+  list->count++;
+}
+
+void
+list_add_list (list l, list m)
+{
+  listnode n;
+
+  for (n = listhead (m); n; nextnode (n))
+    list_add_node (l, n->data);
+}
+
 /* Add new data to the list. */
 void
 list_add_node (list list, void *val)

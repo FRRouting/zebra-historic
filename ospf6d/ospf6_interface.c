@@ -97,8 +97,7 @@ make_ospf6_if (char *ifname)
   ospf6_if->area = (struct area *)NULL; /* not yet attached to Area. */
   ospf6_if->state = IFS_DOWN;
   ospf6_if->nbr_list = list_init ();
-  ospf6_if->linklocal_lsa = list_init ();
-  ospf6_if->delayed_ack = list_init ();
+  ospf6_lsdb_init_interface (ospf6_if);
   interface->if_data = ospf6_if;
 
   set_ospf6_if_default_val (ospf6_if);
@@ -118,10 +117,7 @@ delete_ospf6_if (struct ospf6_if *o6if)
   thread_cancel (o6if->send_hello);
   thread_cancel (o6if->send_ack);
 
-  list_delete_all (o6if->delayed_ack);
-
-  lsa_delete_all_list (o6if->linklocal_lsa);
-  list_delete_all (o6if->delayed_ack);
+  ospf6_lsdb_finish_interface (o6if);
 
   list_delete_by_val (o6if->area->ospf6_if_list, o6if);
   ospf6_if_free (o6if);

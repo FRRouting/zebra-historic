@@ -1,5 +1,66 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.74
+
+* Changes in lib
+
+** Now `terminal length 0' means no line output control.
+
+** `line LINES' command deleted.  Instead of this please use `terminal
+length <0-512>'.
+
+** `terminal length <0-512>' is each vty specific configuration so it
+can not be configured in the configuration file.  If you want to
+configure system wide line control, please use `service
+terminal-length <0-512>'.  This configuration affects to the all vty
+interface.
+
+* Changes in zebra
+
+** Installation of IPv6 route bug is fixed.
+
+* Changes in bgpd
+
+** Very serious bug of bgp_stop () is fixed. When multiple route to
+the same destination exist, bgpd try to announce the information to
+stopped peer.  Then add orphan write thread is added.  This cause
+many strange behavior of bgpd.
+
+** Router-id parsing bug is fixed.
+
+** With BGP-4+ nexthop installation was done with global address but
+it should be link-local address.  This bug is fixed now.
+
+** When incoming route-map prepend AS, old AS path remained.  Now bgpd
+free old AS path.
+
+** `neighbor PEER weight <0-65535>' command added.
+
+* Changes in ripngd
+
+** Almost codes are rewritten to conform to RFC2080.
+
+* Changes in ospfd
+
+** SPF calculation timer is added.  Currently it is set to 30 seconds.
+
+** SPF calculation works now.
+
+** OSPF routing table codes are added.
+
+** OSPF's internal routes installed into the kernel routing table.
+
+** Now `ospfd' works as non-area, non-external route support OSPF
+router.
+
+** Call of log_rotate() is removed.
+
+* Changes in ospf6d
+
+** LSA data structure is changed.
+
+** Call of log_rotate() is removed.
+
 * Changes in zebra-0.73
 
 * Changes in lib

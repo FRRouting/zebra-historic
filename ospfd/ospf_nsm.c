@@ -541,13 +541,32 @@ static char *ospf_nsm_event_str[] =
 void
 nsm_change_status (struct ospf_neighbor *nbr, int status)
 {
+  int old_status;
+  struct ospf_interface *oi;
+  struct ospf_lsa *lsa;
+
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
     zlog (NULL, LOG_INFO, "NSM Status change [%s] %s -> %s", nbr->host,
 	  LOOKUP (ospf_nsm_status_msg, nbr->status),
 	  LOOKUP (ospf_nsm_status_msg, status));
 
+  /* Preserve old status. */
+  old_status = nbr->status;
+
+  /* Change to new status. */
   nbr->status = status;
+
+  oi = nbr->oi;
+  /* One of the neighboring routers changes to/from the FULL state. */
+  if ((old_status != NSM_Full && status == NSM_Full) ||
+      (old_status == NSM_Full && status != NSM_Full))
+    {
+      lsa = ospf_router_lsa (oi);
+      ospf_add_router_lsa (oi->area, lsa);
+      oi->area->router_lsa_self = lsa;
+    }
+    
   /* Preserve old status? */
 }
 

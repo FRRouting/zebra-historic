@@ -35,7 +35,7 @@ struct area
   char            str[16];       /* Area ID string */
   unsigned char   options[3];    /* OSPF Option including external capability */
   list            ospf6_if_list; /* OSPF interface to this area */
-  list            lsdb[AREALSTYPESIZE][HASHVAL];
+  list            lsdb;
   unsigned long   stub_default_cost;
 
   signed long     router_lsa_seqnum;    /* Signed 32bit integer */

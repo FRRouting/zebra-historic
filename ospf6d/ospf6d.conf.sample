@@ -1,11 +1,10 @@
 !
 ! Zebra configuration saved from vty
-!   1999/05/07 01:42:09
+!   1999/07/24 08:09:08
 !
-hostname ospf6d
+hostname fireball.ospf6d
 password zebra
-enable password zebra
-log file /var/log/ospf6d.log
+log file /home/yasu/develop/zebra/ospf6d/ospf6d.log
 log stdout
 !
 interface ep0
@@ -16,28 +15,10 @@ interface ep0
  ip6 ospf6 priority 1
  ip6 ospf6 transmit-delay 1
 !
-interface gif0
- ip6 ospf6 cost 1000
- ip6 ospf6 hello-interval 10
- ip6 ospf6 dead-interval 40
- ip6 ospf6 retransmit-interval 5
- ip6 ospf6 priority 1
- ip6 ospf6 transmit-delay 1
-!
-interface gif1
- ip6 ospf6 cost 30000
- ip6 ospf6 hello-interval 10
- ip6 ospf6 dead-interval 40
- ip6 ospf6 retransmit-interval 5
- ip6 ospf6 priority 1
- ip6 ospf6 transmit-delay 1
-!
+router zebra
+ no redistribute ospf6
 !
 router ospf6 instance 1
  router-id 203.178.139.179
  interface ep0 area 0.0.0.0
- interface gif0 area 0.0.0.0
- interface gif1 area 0.0.0.0
-!
-!
 !

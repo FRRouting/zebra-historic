@@ -139,8 +139,9 @@ rib_log (char *message, struct prefix *p, struct rib *rib)
       if (IS_RIB_LINK (rib))
 	snprintf (logbuf, BUFSIZ, "via %s", rib->u.ifname);
       else
-	snprintf (logbuf, BUFSIZ, "via %s",
-		  inet_ntop (p->family, &rib->u, buf, BUFSIZ));
+	snprintf (logbuf, BUFSIZ, "via %s ifindex %d",
+		  inet_ntop (p->family, &rib->u, buf, BUFSIZ),
+		  rib->ifindex);
     }
 
   zlog (NULL, LOG_INFO, "%s route %s %s/%d %s",
@@ -568,7 +569,7 @@ DEFUN (show_ip, show_ip_cmd,
 
   /* Print header. */
   vty_out (vty, "\r\nCodes: K - kernel route, C - connected, S - static,"
-	   " R - RIP, B - BGP\r\n       * - FIB route.\r\n\r\n");
+	   " R - RIP, O - OSPF,\r\n        B - BGP, * - FIB route.\r\n\r\n");
 
   /* Show all IPv4 routes. */
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
@@ -654,7 +655,8 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
   rib = rib_create (type, distance, ifindex, table);
 
   if (gate)
-    rib->u.gate6 = *gate;
+    memcpy (&rib->u.gate6, gate, sizeof (struct in6_addr));
+    /* rib->u.gate6 = *gate; */
   else
     rib_if_set (rib, ifindex);
 
@@ -1177,7 +1179,8 @@ DEFUN (no_ipv6_route_ifname,
 }
 
 /* show ip6 command*/
-DEFUN (show_ipv6, show_ipv6_cmd,
+DEFUN (show_ipv6,
+       show_ipv6_cmd,
        "show ipv6 route [IPV6_ADDRESS]",
        SHOW_STR
        "IP information\n"
@@ -1209,7 +1212,7 @@ DEFUN (show_ipv6, show_ipv6_cmd,
 	if (len < 0)
 	  len = 0;
 
-	if (rib->type == ZEBRA_ROUTE_CONNECT)
+        if (IS_RIB_LINK (rib))
 	  {
 	    struct interface *ifp;
 	    ifp = if_lookup_by_index (rib->ifindex);

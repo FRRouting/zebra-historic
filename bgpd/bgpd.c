@@ -778,7 +778,7 @@ DEFUN (show_ip_bgp_community,
 
 DEFUN (neighbor_ebgp_multihop,
        neighbor_ebgp_multihop_cmd,
-       "neighbor A.B.C.D ebgp-multihop [TTL]",
+       "neighbor PEER ebgp-multihop [TTL]",
        NEIGHBOR_STR
        "IP address\n"
        "Change TTL value of BGP connection\n"
@@ -816,7 +816,7 @@ DEFUN (neighbor_ebgp_multihop,
 /* Set specified peer's BGP version.  This is */
 DEFUN (neighbor_version,
        neighbor_version_cmd,
-       "neighbor A.B.C.D version BGP_VERSION",
+       "neighbor PEER version BGP_VERSION",
        NEIGHBOR_STR
        "IP address\n"
        "Neighbor's BGP version\n"
@@ -849,7 +849,7 @@ DEFUN (neighbor_version,
 
 DEFUN (no_neighbor_version,
        no_neighbor_version_cmd,
-       "no neighbor A.B.C.D version [BGP_VERSION]",
+       "no neighbor PEER version [BGP_VERSION]",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -874,7 +874,7 @@ DEFUN (no_neighbor_version,
 
 DEFUN (neighbor_router_id,
        neighbor_router_id_cmd,
-       "neighbor A.B.C.D router-id IP_ADDR",
+       "neighbor PEER router-id A.B.C.D",
        NEIGHBOR_STR
        "IP address\n"
        "Set neighbor's special router-id value\n"
@@ -906,7 +906,7 @@ DEFUN (neighbor_router_id,
 
 DEFUN (neighbor_route_reflector_client,
        neighbor_route_reflector_client_cmd,
-       "neighbor A.B.C.D route-reflector-client",
+       "neighbor PEER route-reflector-client",
        NEIGHBOR_STR
        "IP address\n"
        "Configure this neighbor as route reflector client\n")
@@ -936,7 +936,7 @@ DEFUN (neighbor_route_reflector_client,
 
 DEFUN (no_neighbor_route_reflector_client,
        no_neighbor_route_reflector_client_cmd,
-       "no neighbor A.B.C.D route-reflector-client",
+       "no neighbor PEER route-reflector-client",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -967,7 +967,7 @@ DEFUN (no_neighbor_route_reflector_client,
 
 DEFUN (neighbor_send_community,
        neighbor_send_community_cmd,
-       "neighbor A.B.C.D send-community",
+       "neighbor PEER send-community",
        NEIGHBOR_STR
        "IP address\n"
        "Configure send community attribute to this neighbor\n")
@@ -991,7 +991,7 @@ DEFUN (neighbor_send_community,
 
 DEFUN (no_neighbor_send_community,
        no_neighbor_send_community_cmd,
-       "no neighbor A.B.C.D send-community",
+       "no neighbor PEER send-community",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1209,7 +1209,7 @@ bgp_distribute_update ()
 
 DEFUN (neighbor_filter_list,
        neighbor_filter_list_cmd,
-       "neighbor A.B.C.D filter-list FLIST_NAME TYPE",
+       "neighbor PEER filter-list FLIST_NAME TYPE",
        NEIGHBOR_STR
        "IP address\n"
        "Filter list\n"
@@ -1249,7 +1249,7 @@ DEFUN (neighbor_filter_list,
 
 DEFUN (no_neighbor_filter_list,
        no_neighbor_filter_list_cmd,
-       "no neighbor A.B.C.D filter-list FLIST_NAME TYPE",
+       "no neighbor PEER filter-list FLIST_NAME TYPE",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1290,7 +1290,7 @@ DEFUN (no_neighbor_filter_list,
 
 DEFUN (neighbor_prefix_list,
        neighbor_prefix_list_cmd,
-       "neighbor A.B.C.D prefix-list PLIST_NAME TYPE",
+       "neighbor PEER prefix-list PLIST_NAME TYPE",
        NEIGHBOR_STR
        "IP address\n"
        "Prefix list\n"
@@ -1330,7 +1330,7 @@ DEFUN (neighbor_prefix_list,
 
 DEFUN (no_neighbor_prefix_list,
        no_neighbor_prefix_list_cmd,
-       "no neighbor A.B.C.D prefix-list FLIST_NAME TYPE",
+       "no neighbor PEER prefix-list FLIST_NAME TYPE",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1371,7 +1371,7 @@ DEFUN (no_neighbor_prefix_list,
 
 DEFUN (neighbor_distribute_list,
        neighbor_distribute_list_cmd,
-       "neighbor A.B.C.D distribute-list ALIST_NAME TYPE",
+       "neighbor PEER distribute-list ALIST_NAME TYPE",
        NEIGHBOR_STR
        "IP address\n"
        "Distribute list\n"
@@ -1411,7 +1411,7 @@ DEFUN (neighbor_distribute_list,
 
 DEFUN (no_neighbor_distribute_list,
        no_neighbor_distribute_list_cmd,
-       "no neighbor A.B.C.D distribute-list ALIST_NAME TYPE",
+       "no neighbor PEER distribute-list ALIST_NAME TYPE",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1458,7 +1458,7 @@ DEFUN (no_neighbor_distribute_list,
 
 DEFUN (neighbor_route_map,
        neighbor_route_map_cmd,
-       "neighbor A.B.C.D route-map ROUTE_MAP_NAME DIRECT",
+       "neighbor PEER route-map ROUTE_MAP_NAME DIRECT",
        NEIGHBOR_STR
        "IP address\n"
        "Route map\n"
@@ -1498,7 +1498,7 @@ DEFUN (neighbor_route_map,
 
 DEFUN (no_neighbor_route_map,
        no_neighbor_route_map_cmd,
-       "no neighbor A.B.C.D route-map ROUTE_MAP_NAME DIRECT",
+       "no neighbor PEER route-map ROUTE_MAP_NAME DIRECT",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1539,7 +1539,7 @@ DEFUN (no_neighbor_route_map,
 
 DEFUN (neighbor_desc,
        neighbor_desc_cmd,
-       "neighbor A.B.C.D description .DESCRIPTION",
+       "neighbor PEER description .DESCRIPTION",
        NEIGHBOR_STR
        "IP address\n"
        "Description\n"
@@ -1582,7 +1582,7 @@ DEFUN (neighbor_desc,
 
 DEFUN (no_neighbor_desc,
        no_neighbor_desc_cmd,
-       "no neighbor A.B.C.D description .DESCRIPTION",
+       "no neighbor PEER description .DESCRIPTION",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1611,7 +1611,7 @@ DEFUN (no_neighbor_desc,
 
 DEFUN (neighbor_shutdown,
        neighbor_shutdown_cmd,
-       "neighbor A.B.C.D shutdown",
+       "neighbor PEER shutdown",
        NEIGHBOR_STR
        "IP address\n"
        "Shutdown\n")
@@ -1639,7 +1639,7 @@ DEFUN (neighbor_shutdown,
 
 DEFUN (no_neighbor_shutdown,
        no_neighbor_shutdown_cmd,
-       "no neighbor A.B.C.D shutdown",
+       "no neighbor PEER shutdown",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1666,7 +1666,7 @@ DEFUN (no_neighbor_shutdown,
 
 DEFUN (neighbor_interface,
        neighbor_interface_cmd,
-       "neighbor A.B.C.D interface IFNAME",
+       "neighbor PEER interface IFNAME",
        NEIGHBOR_STR
        "IP address\n"
        "Interface\n"
@@ -1694,7 +1694,7 @@ DEFUN (neighbor_interface,
 
 DEFUN (neighbor_update_source,
        neighbor_update_source_cmd,
-       "neighbor A.B.C.D update-source IFNAME",
+       "neighbor PEER update-source IFNAME",
        NEIGHBOR_STR
        "IP address\n"
        "Update source\n"
@@ -1737,7 +1737,7 @@ DEFUN (neighbor_update_source,
 
 DEFUN (no_neighbor_update_source,
        no_neighbor_update_source_cmd,
-       "no neighbor A.B.C.D update-source",
+       "no neighbor PEER update-source",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1772,7 +1772,7 @@ DEFUN (no_neighbor_update_source,
 
 DEFUN (neighbor_nexthop_self,
        neighbor_nexthop_self_cmd,
-       "neighbor A.B.C.D next-hop-self",
+       "neighbor PEER next-hop-self",
        NEIGHBOR_STR
        "IP address\n"
        "Set nexthop value to self\n")
@@ -1797,7 +1797,7 @@ DEFUN (neighbor_nexthop_self,
 
 DEFUN (no_neighbor_nexthop_self,
        no_neighbor_nexthop_self_cmd,
-       "no neighbor A.B.C.D next-hop-self",
+       "no neighbor PEER next-hop-self",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1821,9 +1821,126 @@ DEFUN (no_neighbor_nexthop_self,
   return CMD_SUCCESS;
 }
 
+DEFUN (neighbor_weight,
+       neighbor_weight_cmd,
+       "neighbor PEER weight <0-65535>",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Default weight value\n"
+       "Weight value\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  unsigned long weight;
+  char *endptr = NULL;
+  
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  weight = strtoul (argv[1], &endptr, 10);
+  if (weight == ULONG_MAX || *endptr != '\0')
+    {
+      vty_out (vty, "weight value error\r\n");
+      return CMD_WARNING;
+    }
+  if (weight > 65535)
+    {
+      vty_out (vty, "weight value error\r\n");
+      return CMD_WARNING;
+    }
+  
+  /* Set weight flag to peer configure. */
+  peer->config |= PEER_CONFIG_WEIGHT;
+  peer->weight = weight;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_weight,
+       no_neighbor_weight_cmd,
+       "no neighbor PEER weight [<0-65535>]",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Default weight value\n"
+       "Weight value\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Unset weight flag from the peer configuration. */
+  peer->config &= ~PEER_CONFIG_WEIGHT;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_default_originate,
+       neighbor_default_originate_cmd,
+       "neighbor PEER default-originate",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Permit announcement of default route to the neighbor\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->config |= PEER_DEFAULT_ORIGINATE;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_default_originate,
+       no_neighbor_default_originate_cmd,
+       "no neighbor PEER default-originate",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Permit announcement of default route to the neighbor\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  peer->config &= ~PEER_DEFAULT_ORIGINATE;
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
-       "neighbor A.B.C.D timers holdtime TIMER",
+       "neighbor PEER timers holdtime TIMER",
        NEIGHBOR_STR
        "IP address\n"
        "BGP timers\n"
@@ -1856,7 +1973,7 @@ DEFUN (neighbor_timers_holdtime,
 
 DEFUN (no_neighbor_timers_holdtime,
        no_neighbor_timers_holdtime_cmd,
-       "no neighbor A.B.C.D timers holdtime [TIMER]",
+       "no neighbor PEER timers holdtime [TIMER]",
        NO_STR
        NEIGHBOR_STR
        "IP address\n"
@@ -1900,7 +2017,7 @@ DEFUN (no_neighbor_timers_holdtime,
 /* Make peer and enable further neighbor configuration. */
 DEFUN (neighbor, 
        neighbor_cmd, 
-       "neighbor A.B.C.D remote-as <1-65535> [passive]",
+       "neighbor PEER remote-as <1-65535> [passive]",
        NEIGHBOR_STR
        "IP address\n"
        "Remote AS\n"
@@ -1979,7 +2096,7 @@ DEFUN (neighbor,
 
 DEFUN (no_neighbor,
        no_neighbor_cmd,
-       "no neighbor A.B.C.D remote-as <1-65535>",
+       "no neighbor PEER remote-as <1-65535>",
        NO_STR
        NEIGHBOR_STR
        "IP Address\n"
@@ -2345,6 +2462,14 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	    vty_out (vty, " version %s%s", "4-", VTY_NEWLINE);
 	}
 
+      /* Default information */
+      if (peer->config & PEER_DEFAULT_ORIGINATE)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " default-originate%s", VTY_NEWLINE);
+	}
+
       /* Nexthop self. */
       if (peer->nexthop_self)
 	{
@@ -2380,6 +2505,15 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	  sockunion_vty_out (vty, peer->su);
 
 	  vty_out (vty, " send-community%s", VTY_NEWLINE);
+	}
+
+      /* weight print. */
+      if (peer->config & PEER_CONFIG_WEIGHT)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+
+	  vty_out (vty, " weight %d%s", peer->weight, VTY_NEWLINE);
 	}
 
       /* distribute-list print. */
@@ -2594,6 +2728,10 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_timers_holdtime_cmd);
   install_element (BGP_NODE, &neighbor_send_community_cmd);
   install_element (BGP_NODE, &no_neighbor_send_community_cmd);
+  install_element (BGP_NODE, &neighbor_weight_cmd);
+  install_element (BGP_NODE, &no_neighbor_weight_cmd);
+  install_element (BGP_NODE, &neighbor_default_originate_cmd);
+  install_element (BGP_NODE, &no_neighbor_default_originate_cmd);
 
   /* Make empty list of bgp and peer list. */
   bgp_list = list_init ();

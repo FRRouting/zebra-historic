@@ -79,7 +79,6 @@ void ospf_nbr_free (struct ospf_neighbor *);
 int ospf_nbr_bidirectional (struct in_addr *, struct in_addr *, int);
 void ospf_nbr_add_myself (struct ospf_interface *);
 int ospf_nbr_count (struct route_table *, int);
-struct ospf_neighbor *ospf_nbr_lookup_by_router_id (struct route_table *, struct in_addr *);
 struct ospf_neighbor *ospf_nbr_lookup_by_addr (struct route_table *, struct in_addr *);
 
 #endif /* _ZEBRA_OSPF_NEIGHBOR_H */
