@@ -1,9 +1,9 @@
 
-		       GNU Zebra alpha version
+		       GNU Zebra beta version
 				   
 			  Kunihiro Ishiguro
 
-			    December 1998
+			    March 1999
 
 1. Introduction
 
@@ -21,7 +21,7 @@ WWW page is located at:
 
   http://www.zebra.org/
 
-And alpha version source file can be found at:
+And beta version snapshot can be found at:
 
   ftp://ftp.zebra.org/pub/zebra/
 
@@ -33,18 +33,20 @@ to get the latest version of zebra.
 Now GNU Zebra is testing on 
 
   o GNU/Linux 2.0.36
-    GNU/Linux 2.1.131
+    GNU/Linux 2.2.3
       -- with Linux IPv6
 
-  o FreeBSD 2.2.7
+  o FreeBSD 2.2.8
       -- without IPv6 ;-)
       -- with INRIA IPv6
       -- with Kame
+  o FreeBSD 3.1
+  o FreeBSD 4.X
 
 I'm planning to support
 
   o GNU/Hurd 0.2
-  o Solaris 2.6
+  o Solaris 7
 
 4. Install
 

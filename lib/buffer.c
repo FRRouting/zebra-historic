@@ -1,199 +1,33 @@
-/* Buffering to output and input. 
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: buffer.c,v 1.45 1999/02/19 17:01:47 developer Exp $
+ *
+ * Buffering of output and input. 
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ * 
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA. 
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/uio.h>
-#include <string.h>
-#include <errno.h>
-#include <assert.h>
+#include <zebra.h>
 
 #include "memory.h"
 #include "buffer.h"
 #include "roken.h"
 
-/* Stream is fixed length buffer for network output/input. */
-
-/* Make stream buffer. */
-struct stream *
-stream_new (size_t size)
-{
-  struct stream *s;
-
-  s = XMALLOC (MTYPE_BUFFER_DATA, sizeof (struct stream));
-  bzero (s, sizeof (struct stream));
-
-  s->data = XMALLOC (MTYPE_BUFFER_DATA, size);
-  s->size = size;
-  return s;
-}
-
-/* Free it now. */
-void
-stream_free (struct stream *s)
-{
-  XFREE (MTYPE_BUFFER_DATA, s->data);
-  XFREE (MTYPE_BUFFER_DATA, s);
-}
-
-/* Return current read pointer. */
-u_char *
-stream_pnt (struct stream *s)
-{
-  return s->data + s->sp;
-}
-
-/* Read size from fd. */
-int
-stream_read (struct stream *s, int fd, size_t size)
-{
-  int nbytes;
-
-  nbytes = read (fd, s->data + s->ep, size);
-
-  s->cp += size;
-  s->ep += size;
-  return nbytes;
-}
-
-int
-stream_empty (struct stream *s)
-{
-  if (s->cp == 0 && s->ep == 0 && s->sp == 0)
-    return 1;
-  else
-    return 0;
-}
-
-/* Reset stream. */
-void
-stream_reset (struct stream *s)
-{
-  s->cp = 0;
-  s->ep = 0;
-  s->sp = 0;
-}
-
-/* Get next character from the stream. */
-u_char
-stream_getc (struct stream *s)
-{
-  u_char c;
-
-  c = s->data[s->sp];
-  s->sp++;
-  return c;
-}
-
-/* Get next word from the stream. */
-u_short
-stream_getw (struct stream *s)
-{
-  u_short w;
-
-  w = s->data[s->sp++] << 8;
-  w |= s->data[s->sp++];
-  return w;
-}
-
-int
-stream_putc (struct stream *s, u_char c)
-{
-  s->data[s->cp] = c;
-  s->cp++;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
-  return 1;
-}
-
-int
-stream_putw (struct stream *s, u_int16_t w)
-{
-  u_int16_t t;
-
-  t = htons(w);
-  memcpy (s->data + s->cp, &t, 2);
-
-  s->cp += 2;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
-  return 2;
-}
-
-int
-stream_putl (struct stream *s, u_int32_t l)
-{
-  s->data[s->cp++] = (u_char)(l >> 24);
-  s->data[s->cp++] = (u_char)(l >> 16);
-  s->data[s->cp++] = (u_char)(l >>  8);
-  s->data[s->cp++] = (u_char)l;
-
-  if (s->cp > s->ep)
-    s->ep = s->cp;
-  return 4;
-}
-
-/* Write data to buffer. */
-int
-stream_write (struct stream *s, u_char *ptr, size_t size)
-{
-  memcpy (s->data + s->cp, ptr, size);
-  s->cp += size;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
-  return size;
-}
-
-void
-stream_set_cursor (struct stream *s, unsigned long pos)
-{
-  s->cp = pos;
-}
-
-/* Write stream contens to the file discriptor. */
-int
-stream_flush (struct stream *s, int fd)
-{
-  int nbytes;
-
-  nbytes = write (fd, s->data + s->sp, s->ep - s->sp);
-
-  return nbytes;
-}
-
-u_char *
-stream_data (struct stream *s)
-{
-  return s->data;
-}
-
-unsigned long
-stream_size (struct stream *s)
-{
-  return s->size;
-}
-
 /* Make buffer data. */
 struct buffer_data *
 buffer_data_new (size_t size)
@@ -404,6 +238,7 @@ buffer_putstr (struct buffer *b, u_char *c)
 }
 
 #define DATA_SIZE(D)  ((D)->ep - (D)->sp)
+#define DATA_PNT(D)   ((D)->data + (D)->sp)
 
 /* Flush specified size to the fd. */
 void
@@ -418,7 +253,7 @@ buffer_flush (struct buffer *b, int fd, size_t size)
 
   for (d = b->head; d; d = d->next)
     {
-      iovec[iov_index].iov_base = (char *)d->data + d->sp;
+      iovec[iov_index].iov_base = (char *)DATA_PNT(d);
       if (size <= DATA_SIZE (d))
 	{
 	  iovec[iov_index].iov_len = size;
@@ -439,7 +274,7 @@ buffer_flush (struct buffer *b, int fd, size_t size)
 }
 
 /* Flush all buffer to the fd. */
-void
+int
 buffer_flush_all (struct buffer *b, int fd)
 {
   int ret;
@@ -448,7 +283,7 @@ buffer_flush_all (struct buffer *b, int fd)
   struct iovec *iovec;
 
   if (buffer_empty (b))
-    return;
+    return 0;
 
   iovec = malloc (sizeof (struct iovec) * b->alloc);
   iov_index = 0;
@@ -460,14 +295,14 @@ buffer_flush_all (struct buffer *b, int fd)
       iov_index++;
     }
   ret = writev (fd, iovec, iov_index);
-  if (ret < 0)
-    perror ("writev");
 
   free (iovec);
   buffer_reset (b);
+
+  return ret;
 }
 
-/* Flush buffer to the file descriptor.  Mainly used for vty
+/* Flush buffer to the file descriptor.  Mainly used from vty
    interface. */
 int
 buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
@@ -486,7 +321,7 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
   if (b->alloc == 1)
     iov = small_iov;
   else
-    iov = XMALLOC (0, sizeof (struct iovec) * (b->alloc + 2));
+    iov = XMALLOC (MTYPE_TMP, sizeof (struct iovec) * (b->alloc + 2));
 
   d = b->rhead;
   iov_index = 0;
@@ -502,9 +337,9 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
   /* Real data. */
   while (length && d)
     {
-      if (length <= d->ep - d->sp)
+      if (length <= DATA_SIZE (d))
 	{
-	  iov[iov_index].iov_base = (char *)d->data + d->sp;
+	  iov[iov_index].iov_base = (char *) DATA_PNT (d);
 	  iov[iov_index].iov_len = length;
 	  iov_index++;
 
@@ -513,12 +348,12 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
 	}
       else
 	{
-	  iov[iov_index].iov_base = (char *)d->data + d->sp;
-	  iov[iov_index].iov_len = d->ep - d->sp;
+	  iov[iov_index].iov_base = (char *) DATA_PNT (d);
+	  iov[iov_index].iov_len = DATA_SIZE(d);
 	  iov_index++;
 
-	  length -= (d->ep - d->sp);
-	  d->sp += (d->ep - d->sp);
+	  length -= DATA_SIZE (d);
+	  d->sp += DATA_SIZE (d);
 	}
       
       if (d->sp == d->ep)
@@ -556,7 +391,7 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
 	;
     }
   if (b->alloc != 1)
-    XFREE (0, iov);
+    XFREE (MTYPE_TMP, iov);
 
   return nbytes;
 }
@@ -564,7 +399,8 @@ buffer_flush_vty (struct buffer *b, int fd, int length, int erase_flag)
 /* Calculate size of outputs then flush buffer to the file
    descriptor. */
 int
-buffer_flush_window (struct buffer *b, int fd, int width, int height, int erase)
+buffer_flush_window (struct buffer *b, int fd, int width, int height, 
+		     int erase)
 {
   unsigned long cp;
   unsigned long length;
@@ -573,17 +409,21 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height, int erase)
   int ret;
   struct buffer_data *d = b->rhead;
 
+  if (height >= 2)
+    height--;
+
   /* We have to calculate how many bytes should be written. */
   lp = 0;
   lineno = 0;
   length = 0;
   
-  while (d)
+  while (d && d->ep)
     {
       cp = d->sp;
+
       while (cp <= d->ep)
 	{
-	  if (d->data[cp] == '\n' || lp == width)
+	  if (d->data[cp] == '\n')
 	    {
 	      lineno++;
 	      if (lineno == height)
@@ -594,15 +434,41 @@ buffer_flush_window (struct buffer *b, int fd, int width, int height, int erase)
 		}
 	      lp = 0;
 	    }
-	  cp++;
+	  else if (lp == width)
+	    {
+	      lineno++;
+	      if (lineno == height)
+		{
+		  cp++;
+		  length++;
+		  goto flush;
+		}
+	      lp = 0;
+	    }
 	  lp++;
 	  length++;
+	  cp++;
+	}
+#ifdef DEBUG
+      printf ("(cp:%ld ep:%ld lp:%d length:%ld lineno:%d)\n", 
+	      cp, d->ep, lp, length, lineno);
+#endif /* DEBUG */
+
+      if (d->ep == b->size)
+	{
+	  length--;
+	  lp--;
 	}
       d = d->next;
     }
 
   /* Write data to the file descriptor. */
  flush:
+#ifdef DEBUG
+  printf ("cp:%ld lp:%d length:%ld ineno:%d\n",
+	  cp, lp, length, lineno);
+#endif /* DEBUG */
+
   ret = buffer_flush_vty (b, fd, length, erase);
 
   return ret;

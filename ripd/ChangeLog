@@ -1,3 +1,7 @@
+1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* syslog support added
+
 1998-12-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (rip_announce_func): Apply new lib functions.

@@ -13,12 +13,6 @@
 /* Define as the return type of signal handlers (int or void).  */
 #undef RETSIGTYPE
 
-/* Version of GNU Zebra */
-#undef VERSION
-
-/* Package name of GNU Zebra */
-#undef PACKAGE
-
 /* Define if you have the AF_ROUTE socket.  */
 #undef HAVE_AF_ROUTE
 
@@ -30,6 +24,9 @@
 
 /* Define if you have ipv6 stack.  */
 #undef HAVE_IPV6
+
+/* define if libc_r exists */
+#undef HAVE_LIBC_R
 
 /* Define if you have pthread.h and pthread library */
 #undef HAVE_LIBPTHREAD
@@ -64,6 +61,7 @@
 #undef PATH_RIPNGD_PID
 #undef PATH_BGPD_PID
 #undef PATH_OSPFD_PID
+#undef PATH_OSPF6D_PID
 
 /* Define if Solaris */
 #undef SUNOS_5
@@ -88,14 +86,38 @@ typedef unsigned short u_int8_t;
 /* Define if you have the bzero function.  */
 #undef HAVE_BZERO
 
+/* Define if you have the daemon function.  */
+#undef HAVE_DAEMON
+
 /* Define if you have the inet_aton function.  */
 #undef HAVE_INET_ATON
+
+/* Define if you have the snprintf function.  */
+#undef HAVE_SNPRINTF
 
 /* Define if you have the strerror function.  */
 #undef HAVE_STRERROR
 
+/* Define if you have the strlcat function.  */
+#undef HAVE_STRLCAT
+
+/* Define if you have the strlcpy function.  */
+#undef HAVE_STRLCPY
+
+/* Define if you have the vsnprintf function.  */
+#undef HAVE_VSNPRINTF
+
+/* Define if you have the <asm/types.h> header file.  */
+#undef HAVE_ASM_TYPES_H
+
+/* Define if you have the <inet/nd.h> header file.  */
+#undef HAVE_INET_ND_H
+
 /* Define if you have the <kvm.h> header file.  */
 #undef HAVE_KVM_H
+
+/* Define if you have the <linux/rtnetlink.h> header file.  */
+#undef HAVE_LINUX_RTNETLINK_H
 
 /* Define if you have the <linux/version.h> header file.  */
 #undef HAVE_LINUX_VERSION_H
@@ -103,14 +125,41 @@ typedef unsigned short u_int8_t;
 /* Define if you have the <net/if_dl.h> header file.  */
 #undef HAVE_NET_IF_DL_H
 
+/* Define if you have the <net/if_var.h> header file.  */
+#undef HAVE_NET_IF_VAR_H
+
+/* Define if you have the <net/netopt.h> header file.  */
+#undef HAVE_NET_NETOPT_H
+
 /* Define if you have the <netdb.h> header file.  */
 #undef HAVE_NETDB_H
 
 /* Define if you have the <netinet/in.h> header file.  */
 #undef HAVE_NETINET_IN_H
 
+/* Define if you have the <netinet/in6.h> header file.  */
+#undef HAVE_NETINET_IN6_H
+
+/* Define if you have the <netinet/in6_var.h> header file.  */
+#undef HAVE_NETINET_IN6_VAR_H
+
+/* Define if you have the <netinet/in_var.h> header file.  */
+#undef HAVE_NETINET_IN_VAR_H
+
+/* Define if you have the <netinet/ip6.h> header file.  */
+#undef HAVE_NETINET_IP6_H
+
 /* Define if you have the <string.h> header file.  */
 #undef HAVE_STRING_H
+
+/* Define if you have the <stropts.h> header file.  */
+#undef HAVE_STROPTS_H
+
+/* Define if you have the <sys/conf.h> header file.  */
+#undef HAVE_SYS_CONF_H
+
+/* Define if you have the <sys/ksym.h> header file.  */
+#undef HAVE_SYS_KSYM_H
 
 /* Define if you have the <sys/select.h> header file.  */
 #undef HAVE_SYS_SELECT_H
@@ -141,3 +190,10 @@ typedef unsigned short u_int8_t;
 
 /* Define if you have the xnet library (-lxnet).  */
 #undef HAVE_LIBXNET
+
+/* Name of package */
+#undef PACKAGE
+
+/* Version number of package */
+#undef VERSION
+

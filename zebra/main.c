@@ -1,42 +1,39 @@
-/* zebra daemon main routine.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: main.c,v 1.65 1999/02/22 12:15:40 developer Exp $
+ *
+ * zebra daemon main routine.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <signal.h>
-
-#include "zebra.h"
+#include "zebra/zebra.h"
 #include "version.h"
 #include "getopt.h"
-#include "log.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "thread.h"
 #include "filter.h"
 #include "memory.h"
+#include "log.h"
 
 /* Master of threads. */
 struct thread_master *master;
@@ -79,13 +76,13 @@ redistribution between different routing protocols.\n\n\
 -b, --batch        Runs in batch mode\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
--l. --log_mode     Set verbose log mode flag\n\
+-l, --log_mode     Set verbose log mode flag\n\
 -P, --vty_port     Set vty's port number\n\
 -r, --retain       When program terminates, retain added route by zebra.\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
-Report bugs to zebra@zebra.org\n", progname);
+Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
     }
 
   exit (status);
@@ -98,7 +95,7 @@ sigint (int sig)
   /* Decrared in rib.c */
   void rib_close ();
 
-  log ("SIGINT received\n");
+  zlog (NULL, LOG_INFO, "SIGINT received");
 
   if (!retain_mode)
     rib_close ();
@@ -152,6 +149,9 @@ main (int argc, char **argv)
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
+  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_ZEBRA,
+			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
+
   while (1) 
     {
       int opt;
@@ -171,7 +171,7 @@ main (int argc, char **argv)
 	  daemon_mode = 1;
 	  break;
 	case 'l':
-	  log_mode = 1;
+	  /* log_mode = 1; */
 	  break;
 	case 'f':
 	  config_file = optarg;
@@ -195,7 +195,6 @@ main (int argc, char **argv)
 	}
     }
 
-  /* First of all we need logging init. */
   log_init ();
 
   /* Make master thread emulator. */
@@ -227,12 +226,12 @@ main (int argc, char **argv)
   if (batch_mode)
     exit (0);
 
-  /* Make vty server socket. */
-  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
-
   /* Daemonize. */
   if (daemon_mode)
-    daemon_me ();
+    daemon (0, 0);
+
+  /* Make vty server socket. */
+  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
 
   /* Output pid of zebra. */
   pid_output (PATH_ZEBRA_PID);

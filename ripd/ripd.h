@@ -1,22 +1,29 @@
-/* RIP related values and structures.
-   Copyright (C) 1997, 1998 Kunihiro Ishiguro
+/*
+ * $Id: ripd.h,v 1.46 1999/02/19 17:28:42 developer Exp $
+ *
+ * RIP related values and structures.
+ * Copyright (C) 1997, 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+#ifndef _ZEBRA_RIP_H
+#define _ZEBRA_RIP_H
 
 /* RIP version number. */
 #define RIPv1                1
@@ -189,3 +196,5 @@ int zebra_get_interface (int sock, u_int16_t length);
 int
 rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo, 
 	       struct sockaddr_in *from, struct interface *ifp);
+
+#endif /* _ZEBRA_RIP_H */

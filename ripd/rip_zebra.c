@@ -1,33 +1,30 @@
-/* RIPd and zebra interface.
-   Copyright (C) 1997 Kunihiro Ishiguro
+/*
+ * $Id: rip_zebra.c,v 1.35 1999/02/22 17:24:56 developer Exp $
+ *
+ * RIPd and zebra interface.
+ * Copyright (C) 1997 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <unistd.h>		/* for close () */
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <netinet/in.h>
+#include <zebra.h>
 
 #include "thread.h"
-#include "zebra.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
@@ -35,8 +32,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ripd.h"
 #include "buffer.h"
 #include "network.h"
-#include "log.h"
 #include "client.h"
+#include "log.h"
+
+#include "zebra/zebra.h"
 
 extern struct thread_master *master;
 
@@ -89,7 +88,7 @@ zebra_read (struct thread *thread)
   /* zebra socket is closed. */
   if (nbytes == 0) 
     {
-      log ("connection closed socket [%d]\n", sock);
+      zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
       close (sock);
       zebra.sock = -1;
       return nbytes;
@@ -104,9 +103,9 @@ zebra_read (struct thread *thread)
   ret = zebra_get_interface (sock, length);
 
   /* zebra socket is closed. */
-  if (ret == 0)   if (ret == 0) 
+  if (ret == 0)
     {
-      log ("connection closed socket [%d]\n", sock);
+      zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
       close (sock);
       zebra.sock = -1;
       return ret;
@@ -128,7 +127,7 @@ zebra_create ()
   zebra.sock = zebra_connect ();
   if (zebra.sock < 0)
     {
-      log ("can't make socket to zebra.\n");
+      zlog (NULL, LOG_INFO, "can't make socket to zebra");
       exit (1);
     }
 

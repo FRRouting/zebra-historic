@@ -1,32 +1,28 @@
-/* Interface functions.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/* 
+ * $Id: if.c,v 1.41 1999/02/22 12:15:38 developer Exp $
+ *
+ * Interface functions.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ * 
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <arpa/inet.h>
+#include <zebra.h>
 
 #include "linklist.h"
 #include "vector.h"
@@ -35,11 +31,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "if.h"
 #include "sockunion.h"
 #include "prefix.h"
-#include "connected.h"
+#include "zebra/connected.h"
 #include "memory.h"
 #include "buffer.h"
+#include "str.h"
 #include "log.h"
-
 /* One for each program.  This structure is needed to store hooks. */
 struct if_master
 {
@@ -189,22 +185,23 @@ if_is_multicast (struct interface *ifp)
 }
 
 /* Printout flag information into log */
-void
+const char *
 if_flag_dump (unsigned long flag)
 {
   int separator = 0;
+  static char logbuf[BUFSIZ];
 
 #define IFF_OUT_LOG(X,STR) \
   if ((X) && (flag & (X))) \
     { \
       if (separator) \
-	log2 (","); \
+	strlcat (logbuf, ",", BUFSIZ); \
       else \
 	separator = 1; \
-      log2 (STR); \
+      strlcat (logbuf, STR, BUFSIZ); \
     }
 
-  log ("  <");
+  strlcpy (logbuf, "  <", BUFSIZ);
   IFF_OUT_LOG (IFF_UP, "UP");
   IFF_OUT_LOG (IFF_BROADCAST, "BROADCAST");
   IFF_OUT_LOG (IFF_DEBUG, "DEBUG");
@@ -221,7 +218,10 @@ if_flag_dump (unsigned long flag)
   IFF_OUT_LOG (IFF_LINK1, "LINK1");
   IFF_OUT_LOG (IFF_LINK2, "LINK2");
   IFF_OUT_LOG (IFF_MULTICAST, "MULTICAST");
-  log2 (">\n");
+
+  strlcat (logbuf, ">", BUFSIZ);
+
+  return logbuf;
 }
 
 /* For debugging */
@@ -230,10 +230,8 @@ if_dump (struct interface *ifp)
 {
   listnode node;
 
-  log ("Interface %s index %d metric %d mtu %d\n",
-       ifp->name, ifp->index, ifp->metric, ifp->mtu);
-
-  if_flag_dump (ifp->flags);
+  zlog (NULL, LOG_INFO, "Interface %s index %d metric %d mtu %d %s",
+       ifp->name, ifp->index, ifp->metric, ifp->mtu, if_flag_dump (ifp->flags));
   
   for (node = listhead (ifp->connected); node; nextnode (node))
     ;
@@ -368,12 +366,13 @@ connected_log (struct connected *connected)
 {
   struct prefix *p;
   struct interface *ifp;
+  char logbuf[BUFSIZ];
   char buf[BUFSIZ];
   
   ifp = connected->ifp;
   p = connected->address;
 
-  log ("interface %s %s %s/%d", 
+  snprintf (logbuf, BUFSIZ, "interface %s %s %s/%d", 
        ifp->name, 
        prefix_family_str (p),
        inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
@@ -383,9 +382,10 @@ connected_log (struct connected *connected)
   if (p)
     {
       if (p->family == AF_INET)
-	log2 (" %s", inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ));
+	strncat (logbuf, inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+		 BUFSIZ - strlen(logbuf));
     }
-  log2 ("\n");
+  zlog (NULL, LOG_INFO, logbuf);
 }
 
 void
@@ -395,7 +395,5 @@ connected_add (struct interface *ifp, struct connected *connected)
   list_add_node (ifp->connected, connected);
   connected->ifp = ifp;
 
-  /* If log mode logging it. */
-  if (log_mode)
-    connected_log (connected);
+  connected_log (connected);
 }

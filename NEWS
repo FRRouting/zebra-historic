@@ -1,1 +1,97 @@
-GNU Zebra is not yet released, so there is no `NEW'.
+GNU Zebra is not yet released, so this NEWS is about snapshot.
+
+Changes from previous snapshot
+
+* Changes in configuration and libraries
+
+** User can disable IPv6 feature and/or pthread feature by configure
+   option.
+
+  To disable IPv6:    configure --disable-ipv6
+  To disable pthread: configure --disable-pthread
+
+** User can disable specified daemon by configure option.
+
+  Don't make zebra:  configure --disable-zebra
+  Don't make bgpd:   configure --disable-bgpd
+  Don't make ripd:   configure --disable-ripd
+  Don't make ripngd: configure --disable-ripngd
+  Don't make ospfd:  configure --disable-ospfd
+  Don't make ospf6d: configure --disable-ospf6d
+
+** Sample configuration files are installed as 600 file flag.
+   Suggested by Jeroen Ruigrok/Asmodai <asmodai@wxs.nl>.
+
+** syslog logging feature is added by Peter Galbavy
+   <Peter.Galbavy@knowledge.com>
+
+** Inclusion of standard header files is reworked by Peter Galbavy
+   <Peter.Galbavy@knowledge.com>
+
+** Change description from GNU/Linux 2.1.X to GNU/Linux 2.2.X
+
+** If daemon function exists in standard C library use it.
+
+** To generate configure script we upgrade autoconf to 2.13.  To
+generate Makefile.in we upgrade automake to 1.4.
+
+** doc/texinfo.tex is added to distribution.
+
+** Update ports/pkg/DESCR description.
+
+** Update doc/zebra.texi.
+
+** logfile FILENAME statement deleted.  Instead of that please use log
+file FILENAME.
+
+* Changes in zebra
+
+* Changes in bgpd
+
+** Communication between zebra and bgpd works now.  So if there is
+   `router zebra' line in bgpd.conf, selected route is installed
+   into kernel routing table.
+
+** Delete all routes which inserted by bgpd when bgpd dies.  If you
+want to retain routes even bgpd dies please specify [-r|--retain]
+option to bgpd.
+
+** BGP announcement code is reworked.  Now bgpd announce selected
+   routes to other peer.
+
+** All output bgp packet is buffered.  It's written to the socket when
+   it gets ready.
+
+** Output route-map works now.  You can specify output route-map by:
+
+   neighbor IP_ADDR route-map ROUTE_MAP_NAME out
+
+** New route-map command added.
+
+   set ip nexthop IP_ADDR
+   set ipv6 nexthop global IP_ADDR
+
+** Fix bug about unlock of the route_node structure.
+
+** BGP-4+ support is added.  bgpd can listen and speak BGP-4+ packet
+specified in RFC2283. You can view IPv6 bgp table by: `show ipv6 bgp'.
+
+** Meny packet overflow check is added.
+
+* Changes in ripd
+
+* Changes in ripngd
+
+* Changes in ospfd
+
+** ospfd work is started by Toshiaki Takada <takada@zebra.org>.  Now
+several files are included in ospfd directory.
+
+** ospf6d codes are merged from Yasuhiro Ohara <yasu@sfc.wide.ad.jp>'s
+ospfd work.  Now codes are located in ospf6d directory.
+
+
+Local variables:
+mode: outline
+paragraph-separate: "[ 	]*$"
+end:

@@ -1,3 +1,55 @@
+1999-03-19  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_packet.c: New file.
+	* ospf_packet.h: New file.
+	* ospf_network.c: New file.
+	* ospf_network.h: New file.
+	* ospfd.h: move OSPF message structure has moved to ospf_packet.h.
+
+1999-03-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c (ospf_zebra_get_interface): Fix for IPv6 interface
+	address.
+
+	* Makefile.am (install-sysconfDATA): Overwrite install-sysconfDATA
+	for install ospfd.conf.sample as owner read only file.
+
+	* ospf_main.c (usage): Change to use ZEBRA_BUG_ADDRESS.
+
+1999-03-15  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_ism.c: New file.
+	* ospf_ism.h: New file.
+	* ospf_dump.c: New file.
+	* ospf_dump.h: New file.
+
+	* ospfd.h: Add (struct ospf), (struct config_network),
+	(struct	message) structure.
+
+	* ospf_interface.c: Add ospf_if_match_network ().
+	* ospf_interface.h (struct ospf_interface): Change struct members.
+	
+	* ospfd.c: ospf_lookup_by_process_id (), ospf_network_new (),
+	DEFUN (network_area): Added.
+
+	* ospfd.conf.sample: Change sample configuration.
+
+1999-03-05  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_interface.c: New file.
+	* ospf_interface.h: New file.
+	* ospf_zebra.h: New file.
+	* ospf_zebra.c: Add interface function for zebra daemon.
+	* ospfd.c: New file.
+
+1999-02-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Move IPv6 codes and files to ospf6d directory.
+
+1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* syslog support added
+
 1998-12-22  Toshiaki Takada  <takada@zebra.org>
 
 	* ospfd.h: New file.

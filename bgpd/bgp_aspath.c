@@ -1,47 +1,58 @@
-/* AS path management routines.
-   Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+/*
+ * $Id: bgp_aspath.c,v 1.67 1999/02/23 23:16:06 developer Exp $ 
+ *
+ * AS path management routines.
+ * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <errno.h>
-#include <assert.h>
-#include <netinet/in.h>
+#include <zebra.h>
 
 #include "hash.h"
-#include "log.h"
 #include "memory.h"
 #include "roken.h"
 #include "vector.h"
 #include "vty.h"
+#include "str.h"
+#include "log.h"
 
-#include "bgpd.h"
-#include "bgp_aspath.h"
+#include "bgpd/bgpd.h"
+#include "bgpd/bgp_aspath.h"
 
+/* for aspath_gettoken() and aspath_str2as() */
+#define AS_TOKEN_ASVAL        1
+#define AS_TOKEN_SET_START    2
+#define AS_TOKEN_SET_END      3
+#define AS_TOKEN_CONFED_START 4
+#define AS_TOKEN_CONFED_END   5
+#define AS_TOKEN_UNKNOWN      6
+
+/* Minimum size of aspath header and as value. */
+#define AS_HEADER_SIZE        2
+#define AS_VALUE_SIZE         2
+
 /* To fetch and store as segment value. */
 struct assegment
 {
   u_char type;
   u_char length;
-  u_short asval[1];
+  as_t asval[1];
 };
 
 /* Delimiter character of each AS type. */
@@ -59,14 +70,6 @@ struct
   { AS_CONFED_SEQUENCE, "(", ")" }
 };
 
-/* for aspath_gettoken() and aspath_str2as() */
-#define AS_TOKEN_ASVAL        1
-#define AS_TOKEN_SET_START    2
-#define AS_TOKEN_SET_END      3
-#define AS_TOKEN_CONFED_START 4
-#define AS_TOKEN_CONFED_END   5
-#define AS_TOKEN_UNKNOWN      6
-
 /* Hash for aspath.  This is top level structure of AS path. */
 struct Hash *ashash;
 
@@ -76,9 +79,7 @@ aspath_new ()
   struct aspath *aspath;
 
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
-  aspath->length = 0;
-  aspath->data = NULL;
-  aspath->refcnt = 0;
+  bzero (aspath, sizeof (struct aspath));
   
   return aspath;
 }
@@ -87,7 +88,8 @@ aspath_new ()
 void
 aspath_free (struct aspath *aspath)
 {
-  aspath->refcnt--;
+  if (aspath->refcnt)
+    aspath->refcnt--;
 
   if (aspath->refcnt == 0)
     {
@@ -109,7 +111,47 @@ aspath_free (struct aspath *aspath)
     }
 }
 
-/* AS path parse and return aspath structure. */
+/* Duplicate aspath structure.  Created same aspath structure but
+   reference count is cleared. */
+struct aspath *
+aspath_dup (struct aspath *aspath)
+{
+  struct aspath *new;
+
+  new = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
+  bzero (new, sizeof (struct aspath));
+  new->length = aspath->length;
+
+  if (new->length)
+    {
+      new->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
+      memcpy (new->data, aspath->data, aspath->length);
+    }
+  else
+    new->data = NULL;
+
+  return new;
+}
+
+/* Free uninterned aspath structure. */
+void
+aspath_undup (struct aspath *aspath)
+{
+  if (aspath)
+    {
+      if (aspath->data)
+	XFREE (MTYPE_AS_SEG, aspath->data);
+#ifdef RADIX_REGEXP
+      if (aspath->pasn)
+	XFREE (MTYPE_AS_PASN, aspath->pasn);
+#endif /* RADIX_REGEXP */
+      XFREE (MTYPE_AS_PATH, aspath);
+    }
+}
+
+/* AS path parse function.  pnt is a pointer to byte stream and length
+   is length of byte stream.  If there is same aspath in the aspath
+   hash then return it else make new aspath structure. */
 struct aspath *
 aspath_parse (caddr_t pnt, int length)
 {
@@ -117,24 +159,24 @@ aspath_parse (caddr_t pnt, int length)
   struct aspath *find;
   struct aspath *aspath;
 
-  /* First of all lookup hash entry. */
-  astmp.refcnt = 0;
-  astmp.length = length;
+  /* Looking up aspath hash entry. */
   astmp.data = pnt;
+  astmp.length = length;
 
-  /* If already same aspath exists return it. */
   find = hash_search (ashash, &astmp);
+
+  /* If already same aspath exists is ashash then return it. */
   if (find)
     {
-      find->refcnt++;
+      /* find->refcnt++; */
       return find;
     }
 
-  /* OK new one is needed. */
+  /* New aspath strucutre is needed. */
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
   aspath->length = length;
 
-  /* In case of IBGP connection aspath's length will be zero. */
+  /* In case of IBGP connection aspath's length can be zero. */
   if (length)
     {
       aspath->data = XMALLOC (MTYPE_AS_SEG, length);
@@ -143,7 +185,8 @@ aspath_parse (caddr_t pnt, int length)
   else
     aspath->data = NULL;
 
-  aspath->refcnt = 1;
+  /* aspath->refcnt = 1; */
+  aspath->refcnt = 0;
   hash_push (ashash, aspath);
 
   /* Make variable for aspath regexp. */
@@ -168,7 +211,7 @@ aspath_parse (caddr_t pnt, int length)
       case AS_CONFED_SEQUENCE:
 	break;
       default:
-	log ("%d : unknown segment type\n", *p);
+	zlog (NULL, LOG_INFO, "%d : unknown segment type", *p);
 	return NULL;
       }
 
@@ -184,7 +227,7 @@ aspath_parse (caddr_t pnt, int length)
 
       /* check the length */
       if (num * 2 > len) {
-	log ("num=%d too big\n", num);
+	zlog (NULL, LOG_INFO, "num=%d too big", num);
 	return NULL;
       }
 
@@ -194,13 +237,13 @@ aspath_parse (caddr_t pnt, int length)
     }
     if (len)
       {
-	log ("len = %d remains\n", len);
+	zlog (NULL, LOG_INFO, "len = %d remains", len);
 	return NULL;
       }
     aspath->hop_count = i;
 
     /* for simply as-path array */
-    pasn = XMALLOC (0, sizeof(*pasn) * (i + 1));
+    pasn = XMALLOC (MTYPE_AS_PASN, sizeof(*pasn) * (i + 1));
 
     len = length;
     p = pnt;
@@ -238,123 +281,64 @@ aspath_parse (caddr_t pnt, int length)
   return aspath;
 }
 
-/* Print out as path value to stdout. */
-void
-aspath_log (struct aspath *as)
+/* Add specified as to the leftmost of aspath. */
+struct aspath *
+aspath_add_left (struct aspath *aspath, as_t asno)
 {
-  int space;
-  u_char type;
-  caddr_t pnt;
-  caddr_t end;
   struct assegment *assegment;
 
-  space = 0;
-  type = AS_SEQUENCE;
-  pnt = as->data;
-  end = as->data + as->length;
-  assegment = (struct assegment *) pnt;
+  assegment = (struct assegment *) aspath->data;
 
-  if (as->length == 0)
-    return;
-
-  while (pnt < end)
+  /* In case of empty aspath. */
+  if (assegment->length == 0)
     {
-      int i;
+      aspath->length = AS_HEADER_SIZE + AS_VALUE_SIZE;
+      aspath->data = XREALLOC (MTYPE_AS_SEG, aspath->data, aspath->length);
 
-      assegment = (struct assegment *) pnt;
+      assegment = (struct assegment *) aspath->data;
+      assegment->type = AS_SEQUENCE;
+      assegment->length = 1;
+      assegment->asval[0] = htons (asno);
 
-      /* If assegment type is changed, print previous type's end
-         character. */
-      if (assegment->type != type)
-	{
-	  log2 ("%s", aspath_delimiter[type].end);
-	  type = assegment->type;
-	}
-
-      if (space)
-	log2 (" ");
-
-      log2 ("%s", aspath_delimiter[assegment->type].start);
-      space = 0;
-
-      for (i = 0; i < assegment->length; i++)
-	{
-	  if (space)
-	    log2 (" ");
-	  else
-	    space = 1;
-	  log2 ("%d", ntohs (assegment->asval[i]));
-	}
-
-      pnt += (assegment->length * 2) + 2;
+      return aspath;
     }
 
-  log2 ("%s", aspath_delimiter[assegment->type].end);
-}
-
-/* Print out as path value to stdout. */
-void
-aspath_print (struct aspath *as)
-{
-  int space;
-  u_char type;
-  caddr_t pnt;
-  caddr_t end;
-  struct assegment *assegment;
-
-  space = 0;
-  type = AS_SEQUENCE;
-  pnt = as->data;
-  end = as->data + as->length;
-  assegment = (struct assegment *) pnt;
-
-  if (as->length == 0)
-    return;
-
-  while (pnt < end)
+  /* First segment is AS_SEQUENCE*/
+  if (assegment->type == AS_SEQUENCE)
     {
-      int i;
-      assegment = (struct assegment *) pnt;
+      caddr_t newdata;
+      struct assegment *newsegment;
 
-      /* If assegment type is changed, print previous type's end
-         character. */
-      if (assegment->type != type)
-	{
-	  printf ("%s", aspath_delimiter[type].end);
-	  type = assegment->type;
-	}
+      newdata = XMALLOC (MTYPE_AS_SEG, aspath->length + AS_VALUE_SIZE);
+      newsegment = (struct assegment *) newdata;
 
-      if (space)
-	printf (" ");
+      newsegment->type = AS_SEQUENCE;
+      newsegment->length = assegment->length + 1;
+      newsegment->asval[0] = htons (asno);
 
-      printf ("%s", aspath_delimiter[assegment->type].start);
-      space = 0;
+      memcpy (newdata + AS_HEADER_SIZE + AS_VALUE_SIZE,
+	      aspath->data + AS_HEADER_SIZE, 
+	      aspath->length - AS_HEADER_SIZE);
 
-      for (i = 0; i < assegment->length; i++)
-	{
-	  if (space)
-	    printf (" ");
-	  else
-	    space = 1;
-	  printf ("%d", ntohs (assegment->asval[i]));
-	}
+      XFREE (MTYPE_AS_SEG, aspath->data);
 
-      pnt += (assegment->length * 2) + 2;
+      aspath->data = newdata;
+      aspath->length += AS_VALUE_SIZE;
     }
 
-  printf ("%s", aspath_delimiter[assegment->type].end);
+  return aspath;
 }
 
 /* Add new as value to as path structure. */
 void
-aspath_as_add (struct aspath *as, u_short asno)
+aspath_as_add (struct aspath *as, as_t asno)
 {
   caddr_t pnt;
   caddr_t end;
   struct assegment *assegment;
 
   /* Increase as->data for new as value. */
-  as->data = (caddr_t) XREALLOC (MTYPE_AS_SEG, as->data, as->length + 2);
+  as->data = XREALLOC (MTYPE_AS_SEG, as->data, as->length + 2);
   as->length += 2;
 
   pnt = as->data;
@@ -368,7 +352,7 @@ aspath_as_add (struct aspath *as, u_short asno)
 
       /* We add 2 for segment_type and segment_length and segment
          value assegment->length * 2. */
-      pnt += (2 + (assegment->length * 2));
+      pnt += (AS_HEADER_SIZE + (assegment->length * AS_VALUE_SIZE));
     }
 
   assegment->asval[assegment->length] = htons (asno);
@@ -389,13 +373,39 @@ aspath_segment_add (struct aspath *as, int type)
     }
   else
     {
-      as->data = (caddr_t) XREALLOC (MTYPE_AS_SEG, as->data, as->length + 2);
+      as->data = XREALLOC (MTYPE_AS_SEG, as->data, as->length + 2);
       assegment = (struct assegment *) (as->data + as->length);
       as->length += 2;
     }
 
   assegment->type = type;
   assegment->length = 0;
+}
+
+/* Make empty aspath structure. */
+struct aspath *
+aspath_empty_aspath ()
+{
+  struct assegment segment;
+
+  segment.type = AS_SEQUENCE;
+  segment.length = 0;
+
+  return aspath_parse ((caddr_t) &segment, AS_HEADER_SIZE);
+}
+
+/* Special purpose function. */
+struct aspath *
+aspath_val2as (as_t asno)
+{
+  struct assegment segment;
+
+  segment.type = AS_SEQUENCE;
+  segment.length = 1; 
+  segment.asval[0] = htons (asno);
+
+  return aspath_parse ((caddr_t) &segment,
+		       AS_HEADER_SIZE + (segment.length * AS_VALUE_SIZE));
 }
 
 /* Return next token and point for string parse. */
@@ -460,19 +470,6 @@ aspath_gettoken (char *buf, int *token, u_short *asno)
   /* There is no match then return unknown token. */
   *token = AS_TOKEN_UNKNOWN;
   return  p++;
-}
-
-/* Special purpose function. */
-struct aspath *
-aspath_val2as (u_short asno)
-{
-  struct assegment segment;
-
-  segment.type = AS_SEQUENCE;
-  segment.length = 1; 
-  segment.asval[0] = htons (asno);
-
-  return aspath_parse ((caddr_t) &segment, 4);
 }
 
 struct aspath *
@@ -562,6 +559,65 @@ aspath_init ()
   ashash->hash_cmp = aspath_cmp;
 }
 
+/* return and as path value */
+const char *
+aspath_print (struct aspath *as)
+{
+  static char buf[BUFSIZ];
+  int space;
+  u_char type;
+  caddr_t pnt;
+  caddr_t end;
+  struct assegment *assegment;
+
+  space = 0;
+  type = AS_SEQUENCE;
+  pnt = as->data;
+  end = as->data + as->length;
+  assegment = (struct assegment *) pnt;
+
+  bzero(buf, BUFSIZ);
+
+  if (as->length == 0)
+    return "";
+
+  while (pnt < end)
+    {
+      int i;
+      assegment = (struct assegment *) pnt;
+
+      /* If assegment type is changed, print previous type's end
+         character. */
+      if (assegment->type != type)
+	{
+	  strlcat (buf, aspath_delimiter[type].end, BUFSIZ);
+	  type = assegment->type;
+	}
+
+      if (space)
+	strlcat (buf, " ", BUFSIZ);
+
+      strlcat (buf, aspath_delimiter[assegment->type].start, BUFSIZ);
+      space = 0;
+
+      for (i = 0; i < assegment->length; i++)
+	{
+	  if (space)
+	    strlcat (buf, " ", BUFSIZ);
+	  else
+	    space = 1;
+	  snprintf (buf + strlen (buf), BUFSIZ - strlen (buf), "%d",
+		    ntohs (assegment->asval[i]));
+	}
+
+      pnt += (assegment->length * 2) + 2;
+    }
+
+  strlcat(buf, aspath_delimiter[assegment->type].end, BUFSIZ);
+
+  return buf;
+}
+
 /* Printing functions */
 void
 aspath_print_vty (struct vty *vty, struct aspath *as)
@@ -635,28 +691,37 @@ aspath_print_all_vty (struct vty *vty)
 	}
 }
 
-#ifdef TEST
+#define ASPATH_TEST
+#ifdef ASPATH_TEST
 /* For test aspath functions. */
-char *progname;
-
-main ()
+void
+aspath_test ()
 {
   struct aspath *as1;
   struct aspath *as2;
 
-  aspath_init ();
-
   as1 = aspath_val2as (2519);
-  aspath_print (as1);
+  printf("%s\n", aspath_print (as1));
 
   as2 = aspath_val2as (2519);
-  aspath_print (as2);
+  printf("%s\n", aspath_print (as2));
+
+  printf ("hash check %p %p\n", as1, as2);
 
   as1 = aspath_str2aspath ("2519 2561");
   as2 = aspath_str2aspath ("2519 (2561) {1}");
-  aspath_print (as1);
-  aspath_print (as2);
+  printf("%s\n", aspath_print (as1));
+  printf("%s\n", aspath_print (as2));
+
+  aspath_add_left (as2, 7675);
+  printf ("test: %s\n", aspath_print (as2));
+
+  as1 = aspath_empty_aspath ();
+  printf ("empty aspath : %s\n", aspath_print (as1));
+
+  aspath_add_left (as1, 65502);
+  printf ("test: %s\n", aspath_print (as1));
 
   printf ("same %d\n", aspath_cmp (as1, as2));
 }
-#endif /* TEST */
+#endif /* ASPATH_TEST */

@@ -1,43 +1,40 @@
-/* Main routine of bgpd.
-   Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+/*
+ * $Id: bgp_main.c,v 1.65 1999/02/23 23:16:06 developer Exp $
+ *
+ * Main routine of bgpd.
+ * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <signal.h>
-#include <config.h>
-#include <sys/time.h>
-
-#include "log.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "getopt.h"
 #include "thread.h"
 #include "version.h"
-#include "filter.h"
 #include "memory.h"
+#include "log.h"
 
-#include "bgpd.h"
+#include "bgpd/bgpd.h"
+#include "bgpd/bgp_network.h"
 
 /* bgpd options, we use GNU getopt library. */
 struct option longopts[] = 
@@ -46,6 +43,7 @@ struct option longopts[] =
   { "config_file", required_argument, NULL, 'f'},
   { "bgp_port",    required_argument, NULL, 'p'},
   { "vty_port",    required_argument, NULL, 'P'},
+  { "retain",      no_argument,       NULL, 'r'},
   { "version",     no_argument,       NULL, 'v'},
   { "help",        no_argument,       NULL, 'h'},
   { 0 }
@@ -57,6 +55,9 @@ char config_default[] = SYSCONFDIR BGP_DEFAULT_CONFIG;
 
 /* bgpd program name. */
 char *progname;
+
+/* Route retain mode flag. */
+int retain_mode = 0;
 
 /* Master of threads. */
 struct thread_master *master;
@@ -76,10 +77,11 @@ redistribution between different routing protocols.\n\n\
 -f, --config_file  Set configuration file name\n\
 -p, --bgp_port     Set bgp protocol's port number\n\
 -P, --vty_port     Set vty's port number\n\
+-r, --retain       When program terminates, retain added route by bgpd.\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
-Report bugs to zebra@zebra.org\n", progname);
+Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
     }
 
   exit (status);
@@ -89,15 +91,19 @@ Report bugs to zebra@zebra.org\n", progname);
 void 
 sighup (int sig)
 {
-  log ("SIGHUP received\n");
-  log_rotate ();
+  zlog (NULL, LOG_INFO, "SIGHUP received");
+  /*  log_rotate (); */
 }
 
 /* SIGINT handler. */
 void
 sigint (int sig)
 {
-  log ("SIGINT received\n");
+  zlog (NULL, LOG_INFO, "SIGINT received");
+
+  if (!retain_mode)
+    bgp_terminate ();
+
   exit (0);
 }
 
@@ -134,12 +140,6 @@ signal_init ()
   signal_set (SIGPIPE, SIG_IGN);
 }
 
-/* Print BGPd start messages. */
-void
-bgp_start_msg ()
-{
-  log ("BGPd (%s) starts\n", ZEBRA_VERSION);
-}
 
 /* Main routine of bgpd. Treatment of argument and start bgp finite
    state machine is handled at here. */
@@ -158,10 +158,13 @@ main (int argc, char **argv)
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
+  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_BGP,
+			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
+
   /* Command line argument treatment. */
   while (1) 
     {
-      opt = getopt_long (argc, argv, "df:hp:P:v", longopts, 0);
+      opt = getopt_long (argc, argv, "df:hp:P:rv", longopts, 0);
     
       if (opt == EOF)
 	break;
@@ -182,6 +185,9 @@ main (int argc, char **argv)
 	case 'P':
 	  vty_port = atoi (optarg);
 	  break;
+	case 'r':
+	  retain_mode = 1;
+	  break;
 	case 'v':
 	  print_version ();
 	  exit (0);
@@ -198,7 +204,6 @@ main (int argc, char **argv)
   /* Initializations. */
   master = thread_make_master ();
 
-  log_init ();
   signal_init ();
   cmd_init ();
   vty_init ();
@@ -206,7 +211,6 @@ main (int argc, char **argv)
 
   bgp_init ();
 
-  access_list_init ();
   sort_node ();
 
   /* Parse config file. */
@@ -214,11 +218,17 @@ main (int argc, char **argv)
 
   /* Turn into daemon if daemon_mode is set. */
   if (daemon_mode)
-    daemon_me ();
+    daemon (0, 0);
 
   /* pid file create */
   pid_output (PATH_BGPD_PID);
 
+#if 0
+  /* Test */
+  aspath_test ();
+  exit (0);
+#endif /* 0 */
+  
   /* Make bgp vty socket. */
   vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
 
@@ -229,7 +239,7 @@ main (int argc, char **argv)
 #endif /* KAME */
 
   /* Print banner. */
-  bgp_start_msg ();
+  zlog (NULL, LOG_INFO, "BGPd (%s) starts", ZEBRA_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

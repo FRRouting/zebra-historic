@@ -1,31 +1,28 @@
-/* Route filtering function.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: filter.c,v 1.39 1999/02/19 17:01:47 developer Exp $
+ *
+ * Route filtering function.
+ * Copyright (C) 1998, 1999 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <zebra.h>
 
 #include "prefix.h"
 #include "filter.h"
@@ -63,13 +60,21 @@ struct access_master
 
   /* List of access_list which name is string. */
   struct access_list_list str;
+
+  /* Hook function which is executed when new access_list is added. */
+  void (*add_hook) ();
+
+  /* Hook function which is executed when access_list is deleted. */
+  void (*delete_hook) ();
 };
 
 /* Static structure of all access_list's master. */
 static struct access_master access_master = 
 { 
   {NULL, NULL},
-  {NULL, NULL} 
+  {NULL, NULL},
+  NULL,
+  NULL,
 };
 
 /* Allocate new filter structure. */
@@ -375,17 +380,36 @@ access_list_apply (struct access_list *access, void *object)
   return FILTER_DENY;
 }
 
+/* Add hook function. */
+void
+access_list_add_hook (void (*func) ())
+{
+  access_master.add_hook = func;
+}
+
+/* Delete hook function. */
+void
+access_list_delete_hook (void (*func) ())
+{
+  access_master.delete_hook = func;
+}
+
 /* Add new filter to the end of specified access_list. */
 void
 access_list_filter_add (struct access_list *access, struct filter *filter)
 {
   filter->next = NULL;
   filter->prev = access->tail;
+
   if (access->tail)
     access->tail->next = filter;
   else
     access->head = filter;
   access->tail = filter;
+
+  /* Run hook function. */
+  if (access_master.add_hook)
+    (*access_master.add_hook) ();
 }
 
 /* If access_list has no filter then return 1. */
@@ -398,7 +422,8 @@ access_list_empty (struct access_list *access)
     return 0;
 }
 
-/* Delete filter from specified access_list. */
+/* Delete filter from specified access_list.  If there is hook
+   function execute it. */
 void
 access_list_filter_delete (struct access_list *access, struct filter *filter)
 {
@@ -417,6 +442,10 @@ access_list_filter_delete (struct access_list *access, struct filter *filter)
   /* If access_list becomes empty delete it from access_master. */
   if (access_list_empty (access))
     access_list_delete (access);
+
+  /* Run hook function. */
+  if (access_master.delete_hook)
+    (*access_master.delete_hook) ();
 }
 
 #ifdef TEST

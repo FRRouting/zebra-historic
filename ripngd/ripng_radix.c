@@ -1,7 +1,8 @@
-#include <config.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <netinet/in.h>
+/*
+ * $Id: ripng_radix.c,v 1.6 1999/02/19 17:35:39 developer Exp $
+ */
+
+#include <zebra.h>
 
 #include "prefix.h"
 #include "radix.h"

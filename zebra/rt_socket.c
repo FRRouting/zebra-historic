@@ -1,39 +1,30 @@
-/* Kernel routing table updates by routing socket.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: rt_socket.c,v 1.48 1999/02/22 12:15:40 developer Exp $
+ *
+ * Kernel routing table updates by routing socket.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>		/* for bzero */
-#include <unistd.h>		/* for write */
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/route.h>
-#include <netinet/in.h>
-#ifndef SUNOS_5
-/* #include <sys/sysctl.h> */
-#endif /* ! SUNOS_5 */
-#include <sys/time.h>
-#include <errno.h>
-
-#include "zebra.h"
+#include "zebra/zebra.h"
 #include "thread.h"
 #include "prefix.h"
 #include "sockunion.h"
@@ -147,7 +138,7 @@ rtm_write (int message,
       if (errno == ENETUNREACH)
 	return ZEBRA_ERR_RTUNREACH;
       
-      log_warn ("write : %s (%d)\n", strerror (errno), errno);
+      zlog (NULL, LOG_WARNING, "write : %m (%d)", errno);
       return -1;
     }
   return 0;
@@ -356,10 +347,9 @@ char *rtm_str [] =
 void
 rtmsg_log (struct rt_msghdr *rtm)
 {
-  log ("Kernel: Len: %d ", rtm->rtm_msglen);
-  log2 ("Type: %s ", rtm_str[rtm->rtm_type]);
+  zlog (NULL, LOG_INFO, "Kernel: Len: %d Type: %s", rtm->rtm_msglen,
+	  rtm_str[rtm->rtm_type]);
   rtm_flag_dump (rtm->rtm_flags);
-  log2 ("\n");
 }
 
 /* Prototype from rtread_sysctl.c */
@@ -386,7 +376,7 @@ kernel_read (struct thread *thread)
   } rtmbuf;
   int sock;
 
-  sock = thread_fd (thread);
+  sock = THREAD_FD (thread);
 
   /* I'm not sure KRT_BUFLEN is enough... */
   nbytes= read (sock, &rtmbuf.buf, KRT_BUFLEN);
@@ -401,11 +391,8 @@ kernel_read (struct thread *thread)
 
       rtm_read (&rtmbuf.rtm, &dest, &mask, &gate);
 
-      log ("Kernel: route added by seq[%d] ", rtmbuf.rtm.rtm_seq);
-      sockunion_log (&dest);
-      sockunion_log (&mask);
-      sockunion_log (&gate);
-      log2 ("\n");
+      /* XXX non-reentrant calls - BROKEN */
+      zlog (NULL, LOG_INFO, "Kernel: route added by seq[%d] %s %s %s", rtmbuf.rtm.rtm_seq, sockunion_log (&dest), sockunion_log (&mask), sockunion_log (&gate));
 
       /* New prefix structure allocated. */
       pin = sockunion2prefix (&dest, &mask);
@@ -449,12 +436,12 @@ routing_socket ()
 
   if (routing.sock < 0) 
     {
-      log_warn ("can't init kernel routing socket\n");
+      zlog (NULL, LOG_WARNING, "can't init kernel routing socket");
       return;
     }
 
   if (fcntl (routing.sock, F_SETFL, O_NONBLOCK) < 0) 
-    log_warn ("fcntl() to routing socket  O_NONBLOCK can't set.\n");
+    zlog (NULL, LOG_WARNING, "fcntl() to routing socket  O_NONBLOCK can't set");
 
   /* kernel_read needs rewrite. */
   /* thread_add_read (master, kernel_read, NULL, routing.sock); */

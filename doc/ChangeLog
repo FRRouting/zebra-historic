@@ -1,0 +1,9 @@
+1999-03-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* archfig.tex, zebra.sty, zebra.tex: Temporary removed due to the
+	description is out of date.
+
+1999-02-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* texinfo.tex: New file added.  Automake complains the absence of
+	texinfo.tex.

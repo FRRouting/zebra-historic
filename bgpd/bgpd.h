@@ -1,46 +1,140 @@
-/* BGP message definition header.
-   Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+/*
+ * $Id: bgpd.h,v 1.52 1999/02/22 12:15:38 developer Exp $
+ *
+ * BGP message definition header.
+ * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#ifndef _ZEBRA_BGPD_H
+#define _ZEBRA_BGPD_H
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-/* BGP message header. */
+/* BGP message header and packet size. */
 #define BGP_MARKER_SIZE		16
 #define BGP_HEADER_SIZE		19
 #define BGP_MAX_PACKET_SIZE   4096
 
-/* BGP message header structure. */
-struct bgp_header 
+/* Declare Some BGP specific types. */
+typedef u_int16_t as_t;
+typedef u_int32_t ident_t;
+typedef u_int16_t bgp_size_t;
+
+/* BGP instance structure. bgpd can handle multiple BGP instance. */
+struct bgp 
 {
-  u_char marker[BGP_MARKER_SIZE];
-  u_int16_t length;
-  u_char type;
+  as_t as;			/* BGP instance's AS. */
+  ident_t ident;		/* BGP identifier. */
+  unsigned int config;
+  struct _list *peer;		/* BGP neighbor list */
 };
 
-/* BGP Open message format. */
-struct bgp_open 
+/* BGP neighbor structure. */
+struct peer
 {
-  u_char version;
-  u_int16_t asno;
-  u_int16_t holdtime;
-  u_int32_t ident;
-  u_char optlen;
-  u_char *optparam;
-};  
+  /* This peer's parent bgp. */
+  struct bgp *bgp;		
+
+  /* Packet receive and send buffer. */
+  struct stream *ibuf;
+  struct stream_fifo *obuf;
+
+  /* Peer information */
+  char *host;			/* Printable address of this peer. */
+  union sockunion *su;		/* Sockunion address of this peer. */
+  int fd;			/* File descriptor */
+  int ttl;			/* TTL of TCP connection to this peer. */
+  ZLOG *log;			/* ZLOG stream to use for this peer -
+				   NULL means use main log */
+
+  u_char version;		/* Peer BGP version. */
+  as_t as;			/* Peer AS number. */
+  ident_t ident;		/* Peer BGP identifier. */
+  ident_t myident;		/* My BGP identifier. */
+
+  /* Status of the peer. */
+  int status;			/* peer finite state machine status */
+  int ostatus;			/* Old peer status. */
+
+  /* Default attribute value for this peer. */
+  unsigned int def;		/* Option set flag. */
+  long localpref;		/* default local preference. */
+  time_t uptime;		/* Last Up/Down time */
+
+  /* Timer values. */
+  u_int32_t v_start;
+  u_int32_t v_connect;
+  u_int32_t v_holdtime;
+  u_int32_t v_keepalive;
+  u_int32_t v_asorig;
+  u_int32_t v_routeadv;
+
+  /* Threads. */
+  struct thread *t_read;
+  struct thread *t_write;
+  struct thread *t_start;
+  struct thread *t_connect;
+  struct thread *t_holdtime;
+  struct thread *t_keepalive;
+  struct thread *t_asorig;
+  struct thread *t_routeadv;
+
+  /* Statistics field */
+  u_int32_t open_in;		/* Open message input count */
+  u_int32_t open_out;		/* Open message output count */
+  u_int32_t update_in;		/* Update with nlri message input count */
+  u_int32_t update_out;		/* Update with nlri message ouput count */
+  u_int32_t withdrow_in;	/* Update with withdrow message input count */
+  u_int32_t withdrow_out;	/* Update with withdrow message output count */
+  u_int32_t keepalive_in;	/* Keepalive input count */
+  u_int32_t keepalive_out;	/* Keepalive output count */
+  u_int32_t notify_in;		/* Notify input count */
+  u_int32_t notify_out;		/* Notify output count */
+
+  /* For filter type slot. */
+#define BGP_FILTER_IN  0
+#define BGP_FILTER_OUT 1
+#define BGP_FILTER_MAX 2
+
+  /* Access list based filter. */
+  struct 
+  {
+    char *name;
+    struct access_list *list;
+  } distribute[BGP_FILTER_MAX];
+
+  /* AS list based filter. */
+  struct
+  {
+    char *name;
+    struct filter *filter;
+  } filter[BGP_FILTER_MAX];
+
+  /* Route map based filer. */
+  struct
+  {
+    char *name;
+    struct route_map *map;
+  } route_map[BGP_FILTER_MAX];
+
+  /* prefix_in/out will be need. */
+  unsigned int prefix_count;	/* Prefix count of this peer. */
+};
 
 /* BGP Notify message format. */
 struct bgp_notify 
@@ -48,29 +142,6 @@ struct bgp_notify
   u_char err_code;
   u_char err_subcode;
   char *data;
-};
-
-/* BGP instance structure.  `BGPd' can handle multiple BGP
-   instance. */
-struct bgp 
-{
-  /* BGP instance's AS. */
-  u_int16_t as;
-
-  /* BGP identifier. */
-  u_int32_t ident;
-  
-  /* Default value setting flag */
-#define VAL_LOCAL_PREF 0x01
-#define VAL_MED        0x02
-#define VAL_NEXT_HOP   0x04
-  unsigned int def;
-
-  /* Default localpreference value. */
-  long localpref;
-  
-  /* BGP neighbor list */
-  struct _list *peer;
 };
 
 /* BGP Versions. */
@@ -117,7 +188,7 @@ struct bgp
 /* BGP Notify message format */
 #define BGP_NOTIFY_HEADER_ERR 1
 #define BGP_NOTIFY_OPEN_ERR   2
-#define BGP_NOTIFY_UPDATE     3
+#define BGP_NOTIFY_UPDATE_ERR 3
 #define BGP_NOTIFY_HOLD_ERR   4
 #define BGP_NOTIFY_FSM_ERR    5
 #define BGP_NOTIFY_CEASE      6
@@ -192,10 +263,7 @@ struct bgp
 #define BGP_DEFAULT_HOLDTIME      180
 #define BGP_DEFAULT_KEEPALIVE      30
 #define BGP_CLEAR_CONNECT_RETRY    20
-#if 0
 #define BGP_DEFAULT_CONNECT_RETRY 120
-#endif 
-#define BGP_DEFAULT_CONNECT_RETRY  10
 
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
@@ -229,10 +297,37 @@ enum
   DEBUG_BGP_FSM = 0x01,
 };
 
+/* IBGP/EBGP identifier */
+enum
+{
+  BGP_PEER_IBGP,
+  BGP_PEER_EBGP
+};
+
+#define PACKET_SEND 1
+#define PACKET_RECV 2
+
+/* Default max TTL. */
+#define TTL_MAX 255
+
 /* Prototypes. */
 void bgp_init ();
-int bgp_serv_sock (unsigned short port, int family);
-void view_init ();
+void zebra_init ();
+void bgp_terminate ();
 void bgp_route_map_init ();
+int bgp_peer_sort (struct peer *peer);
+
+struct peer *peer_lookup_by_su (union sockunion *);
+struct peer *peer_lookup_from_bgp (struct bgp *bgp, char *addr);
+struct peer *peer_lookup_by_host (char *host);
+struct peer *peer_new (void);
+void event_add (struct peer *peer, int event);
+void bgp_clear(struct peer *peer, int error);
+void peer_delete_all ();
+void peer_delete (struct peer *peer);
+void bgp_open_recv (struct peer *peer, u_int16_t size);
+void bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify);
 
 extern struct thread_master *master;
+
+#endif /* _ZEBRA_BGPD_H */

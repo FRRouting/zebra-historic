@@ -1,93 +1,91 @@
-/* Kernel routing table read by sysctl function.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: rtread_sysctl.c,v 1.26 1999/02/22 12:15:40 developer Exp $
+ *
+ * Kernel routing table read by sysctl function.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/route.h>
-#include <netinet/in.h>
-#include <sys/sysctl.h>
-#include <errno.h>
+#include <zebra.h>
 
 #include "prefix.h"
 #include "sockunion.h"
 #include "memory.h"
-#include "log.h"
-
-#include "zebra.h"
+#include "str.h"
+#include "zebra/zebra.h"
 #include "rib.h"
+#include "log.h"
 
 /* Socket length roundup function. */
 #define ROUNDUP(a) \
   ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
 /* Dump routing table flag for debug purpose. */
-void
+char *
 rtm_flag_dump (int flag)
 {
+  static char buf[BUFSIZ];
+
   if (flag & RTF_PROTO1)
-    log2 ("PROTO1 ");
+    strlcat (buf, "PROTO1 ", BUFSIZ);
   if (flag & RTF_PROTO2)
-    log2 ("PROTO2 ");
+    strlcat (buf, "PROTO2 ", BUFSIZ);
 #ifdef RTF_PROTO3
   if (flag & RTF_PROTO3)
-    log2 ("PROTO3 ");
+    strlcat (buf, "PROTO3 ", BUFSIZ);
 #endif /* RTF_PROTO3 */
   if (flag & RTF_BLACKHOLE)
-    log2 ("BLACKHOLE ");
+    strlcat (buf, "BLACKHOLE ", BUFSIZ);
 #ifdef RTF_BROADCAST
   if (flag & RTF_BROADCAST)
-    log2 ("BROADCAST ");
+    strlcat (buf, "BROADCAST ", BUFSIZ);
 #endif /* RTF_BROADCAST */
   if (flag & RTF_CLONING)
-    log2 ("CLONING ");
+    strlcat (buf, "CLONING ", BUFSIZ);
 #ifdef RTF_PRCLONING
   if (flag & RTF_PRCLONING)
-    log2 ("PRCLONING ");
+    strlcat (buf, "PRCLONING ", BUFSIZ);
 #endif /* RTF_PRCLONING */
   if (flag & RTF_DYNAMIC)
-    log2 ("DYNAMIC ");
+    strlcat (buf, "DYNAMIC ", BUFSIZ);
   if (flag & RTF_GATEWAY)
-    log2 ("GATEWAY ");
+    strlcat (buf, "GATEWAY ", BUFSIZ);
   if (flag & RTF_HOST)
-    log2 ("HOST ");
+    strlcat (buf, "HOST ", BUFSIZ);
   if (flag & RTF_LLINFO)
-    log2 ("LLINFO ");
+    strlcat (buf, "LLINFO ", BUFSIZ);
   if (flag & RTF_MODIFIED)
-    log2 ("MODIFIED ");
+    strlcat (buf, "MODIFIED ", BUFSIZ);
   if (flag & RTF_REJECT)
-    log2 ("REJECT ");
+    strlcat (buf, "REJECT ", BUFSIZ);
   if (flag & RTF_STATIC)
-    log2 ("STATIC ");
+    strlcat (buf, "STATIC ", BUFSIZ);
   if (flag & RTF_UP)
-    log2 ("UP ");
+    strlcat (buf, "UP ", BUFSIZ);
 #ifdef RTF_WASCLONED
   if (flag & RTF_WASCLONED)
-    log2 ("WASCLONED ");
+    strlcat (buf, "WASCLONED ", BUFSIZ);
 #endif /* RTF_WASCLONED */
   if (flag & RTF_XRESOLVE)
-    log2 ("XRESOLVE ");
-  /* log2 ("\n"); */
+    strlcat (buf, "XRESOLVE ", BUFSIZ);
+
+  return buf;
 }
 
 /* Interface function for reading kernel routing table information. */
@@ -105,8 +103,9 @@ rtm_read (struct rt_msghdr *rtm,
 
   /* rt_msghdr version check. */
   if (rtm->rtm_version != RTM_VERSION) 
-      log_warn ("Routing message version different %d should be %d."
-		"This may cause problem\n", rtm->rtm_version, RTM_VERSION);
+      zlog (NULL, LOG_WARNING,
+	      "Routing message version different %d should be %d."
+	      "This may cause problem\n", rtm->rtm_version, RTM_VERSION);
 
 #define SOCKADDRGET(X,R) \
     if (rtm->rtm_addrs & (R)) \
@@ -139,7 +138,7 @@ rtm_read (struct rt_msghdr *rtm,
 
   /* Assert read up to the end of pointer. */
   if (pnt != end) 
-      log_warn ("rtm_read() does't read all socket data.");
+      zlog (NULL, LOG_WARNING, "rtm_read() does't read all socket data.");
 
   return rtm->rtm_flags;
 }
@@ -164,7 +163,7 @@ route_read ()
 		      
   if (sysctl (mib, MIBSIZ, NULL, &bufsiz, NULL, 0) < 0) 
     {
-      log_warn ("sysctl() fail by %s", strerror (errno));
+      zlog (NULL, LOG_WARNING, "sysctl() fail by %m");
       return;
     }
 
@@ -173,7 +172,7 @@ route_read ()
   /* Read routing table information by calling sysctl(). */
   if (sysctl (mib, MIBSIZ, buf, &bufsiz, NULL, 0) < 0) 
     {
-      log_warn ("sysctl() fail by %s", strerror (errno));
+      zlog (NULL, LOG_WARNING, "sysctl() fail by %m");
       return;
     }
 

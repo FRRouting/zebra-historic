@@ -1,41 +1,42 @@
-/* BGP open message handling
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: bgp_open.c,v 1.24 1999/02/22 12:15:37 developer Exp $
+ *
+ * BGP open message handling
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/time.h>
+#include <zebra.h>
 
 #include "vty.h"
 #include "linklist.h"
 #include "prefix.h"
-#include "log.h"
 #include "roken.h"
-#include "buffer.h"
+#include "stream.h"
 #include "thread.h"
+#include "log.h"
 
-#include "bgpd.h"
-#include "bgp_attr.h"
-#include "bgp_peer.h"
-#include "bgp_dump.h"
-#include "bgp_fsm.h"
+#include "bgpd/bgpd.h"
+#include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_fsm.h"
+#include "bgpd/bgp_packet.h"
 
 /* draft-marques-bgp4-cap-mp-01.txt
 
@@ -154,18 +155,22 @@ capability_parse (u_char *pnt, u_char length)
       break;
     default:
       /* Unknown capability. */
-      log_warn ("");
+      zlog (NULL, LOG_WARNING, "Unknown capability");
       break;
     }
 }
 
 /* Parse open option */
 void
-bgp_open_option_parse (u_char *pnt, u_char length)
+bgp_open_option_parse (struct peer *peer, u_char length)
 {
   u_char *lim;
   u_char opt_type;
   u_char opt_length;
+
+  u_char *pnt;
+
+  pnt = stream_pnt (peer->ibuf);
 
   lim = pnt + length;
   while (pnt < lim) {
@@ -188,75 +193,3 @@ bgp_open_option_parse (u_char *pnt, u_char length)
   }
 }
 
-#define PACKET_SEND 1
-#define PACKET_RECV 2
-
-/* Open packet dump */
-void
-bgp_open_dump (struct bgp_open *bgp_open, struct peer *peer, int direct)
-{
-  /* decide whether dump or not */
-  if (direct == PACKET_RECV &&
-      IS_SET(dump_open, DUMP_SEND)) {
-
-    if (IS_SET(dump_open, DUMP_DETAIL)) {
-      /* detail */
-      log ( "Open: peer(%s) version(%d) AS(%d) holdtime(%d)\n"
-	       "      ident(%lu) optlen(%d)\n",
-	       peer->host,
-	       bgp_open->version, bgp_open->asno, bgp_open->holdtime,
-	       bgp_open->ident, bgp_open->optlen);
-    } else {
-      /* normal */
-      log ( "Open: peer(%s)\n",
-	       peer->host);
-    }
-    log_flush ();
-  }
-}
-
-/* BGP open message read. Should be called from finite state machine. */
-void
-bgp_open_recv (struct peer *peer)
-{
-  struct bgp_open open;
-  u_char *pnt = peer->read_buf;
-  
-  peer->open_in++;
-
-  /* Parse open packet. */
-  GETC (open.version, pnt);
-  GETW (open.asno, pnt);
-  GETW (open.holdtime, pnt);
-  GETL (open.ident, pnt);
-  GETC (open.optlen, pnt);
-
-  peer->ident = open.ident;
-  peer->v_holdtime = open.holdtime;
-
-  if (open.optlen != 0) 
-    bgp_open_option_parse (pnt, open.optlen);
-
-  if (dump_open)
-    bgp_open_dump(&open, peer, PACKET_RECV);
-
-  /* Peer BGP version check. */
-  if (open.version != BGP_VERSION_4 && open.version != BGP_VERSION_5)
-    {
-      /* If BGP version doesn't match... */
-      bgp_notify_send (peer, 
-		       BGP_NOTIFY_OPEN_ERR, 
-		       BGP_NOTIFY_OPEN_UNSUP_VERSION);
-      return;
-    }
-  
-  /* Check neighbor as number. */
-  if (open.asno != peer->as)
-    {
-      bgp_notify_send (peer, BGP_NOTIFY_OPEN_ERR, BGP_NOTIFY_OPEN_BAD_PEER_AS);
-      bgp_clear (peer, 1);
-      return ;
-    }
-
-  BGP_EVENT_ADD (peer, Receive_OPEN_message);
-}

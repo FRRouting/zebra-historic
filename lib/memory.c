@@ -1,30 +1,31 @@
-/* Memory management routine
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: memory.c,v 1.28 1999/02/22 12:15:38 developer Exp $
+ *
+ * Memory management routine
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-
-#include "memory.h"
 #include "log.h"
+#include "memory.h"
 
 void alloc_inc (int);
 void alloc_dec (int);
@@ -134,7 +135,8 @@ xstrdup (int type, char *str)
 void
 mtype_log (char *func, void *memory, const char *file, int line, int type)
 {
-  log ("%s: %s %p %s %d\n", func, lookup (mstr, type), memory, file, line);
+  zlog (NULL, LOG_INFO, "%s: %s %p %s %d",
+	  func, lookup (mstr, type), memory, file, line);
 }
 
 void *
@@ -244,10 +246,19 @@ struct memory_list
   { MTYPE_FILTER,          "Filter Entry    : %ld\r\n", },
   { MTYPE_ACCESS_LIST,     "Access List     : %ld\r\n", },
   { MTYPE_ROUTE_MAP,       "Route map       : %ld\r\n", },
+  { MTYPE_ROUTE_MAP_NAME,  "Route map name  : %ld\r\n", },
   { MTYPE_ROUTE_MAP_INDEX, "Route map index : %ld\r\n", },
   { MTYPE_ROUTE_MAP_RULE,  "Route map rule  : %ld\r\n", },
+  { MTYPE_ROUTE_MAP_RULE_STR, "Route map rule str: %ld\r\n", },
+  { 0,                     "---------------------\r\n" },
+  { MTYPE_ATTR,            "BGP attribute   : %ld\r\n", },
+  { MTYPE_AS_PATH,         "BGP aspath      : %ld\r\n", },
+  { MTYPE_AS_SEG,          "BGP aspath seg  : %ld\r\n", },
+  { MTYPE_AS_PASN,         "BGP aspath pasn : %ld\r\n", },
   { 0,                     "---------------------\r\n" },
   { MTYPE_DESC,            "Command desc    : %ld\r\n", },
+  { 0,                     "---------------------\r\n" },
+  { MTYPE_STREAM,          "Stream          : %ld\r\n", },
   { -1, NULL },
 };
 

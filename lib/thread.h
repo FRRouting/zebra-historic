@@ -1,26 +1,33 @@
-/* Thread management routine header.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: thread.h,v 1.4 1999/02/19 17:01:49 developer Exp $
+ *
+ * Thread management routine header.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#ifndef _ZEBRA_THREAD_H
+#define _ZEBRA_THREAD_H
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#ifndef PTHREAD
+#ifndef HAVE_PTHREAD
 typedef unsigned long int pthread_t;
-#endif /* PTHREAD */
+#endif /* HAVE_PTHREAD */
 
 /* Linked list of thread. */
 struct thread_list
@@ -28,9 +35,9 @@ struct thread_list
   struct thread *head;
   struct thread *tail;
   int count;
-#ifdef PTHREAD
+#ifdef HAVE_PTHREAD
   pthread_mutex_t lock;
-#endif /* PTHREAD */
+#endif /* HAVE_PTHREAD */
 };
 
 /* Master of the theads. */
@@ -45,9 +52,9 @@ struct thread_master
   fd_set writefd;
   fd_set exceptfd;
   unsigned long alloc;
-#ifdef PTHREAD
+#ifdef HAVE_PTHREAD
   pthread_mutex_t lock;
-#endif /* PTHREAD */
+#endif /* HAVE_PTHREAD */
 };
 
 /* Thread itself. */
@@ -68,9 +75,9 @@ struct thread
 };
 
 /* Macros. */
-#define thread_arg(X) thread->arg
-#define thread_fd(X)  thread->u.fd
-#define thread_val(X) thread->u.val
+#define THREAD_ARG(X) ((X)->arg)
+#define THREAD_FD(X)  ((X)->u.fd)
+#define THREAD_VAL(X) ((X)->u.val)
 
 /* Prototypes. */
 struct thread_master *thread_make_master ();
@@ -108,3 +115,5 @@ thread_fetch (struct thread_master *m,
 
 void
 thread_call (struct thread *thread);
+
+#endif /* _ZEBRA_THREAD_H */

@@ -1,43 +1,36 @@
-/* Socket union related function.
-   Copyright (c) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: sockunion.c,v 1.49 1999/02/22 12:15:39 developer Exp $
+ *
+ * Socket union related function.
+ * Copyright (c) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#ifdef HAVE_NET_IF_DL_H
-#include <net/if_dl.h>
-#endif /* HAVE_NET_IF_DL_H */
-#include <arpa/inet.h>
-#include <sys/time.h>
-#include <fcntl.h>
-#include <errno.h>
+#include <zebra.h>
 
 #include "prefix.h"
 #include "vty.h"
 #include "sockunion.h"
 #include "memory.h"
-#include "log.h"
 #include "roken.h"
+#include "str.h"
+#include "log.h"
 
 #ifndef HAVE_INET_ATON
 int
@@ -110,11 +103,8 @@ inet_ntop (int family, const void *addrptr, char *strptr, size_t len)
     {
       char temp[INET_ADDRSTRLEN];
 
-#ifdef SUNOS_5
-      sprintf(temp, "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
-#else
       snprintf(temp, sizeof(temp), "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
-#endif /* SUNOS_5 */
+
       if (strlen(temp) >= len) 
 	{
 	  errno = ENOSPC;
@@ -202,7 +192,7 @@ sockunion_socket (union sockunion *su)
   sock = socket (su->sa.sa_family, SOCK_STREAM, 0);
   if (sock < 0)
     {
-      log ("Can't make socket : %s\n", strerror (errno));
+      zlog (NULL, LOG_WARNING, "Can't make socket : %s", strerror (errno));
       return -1;
     }
 
@@ -266,21 +256,25 @@ sockunion_sizeof (union sockunion *su)
   return ret;
 }
 
-/* Print sockunion structure : this function should be revised. */
-void
+/* return sockunion structure : this function should be revised. */
+char *
 sockunion_log (union sockunion *su)
 {
+  /* XXX Not re-entrant - temporary hack */
+  static char buf[BUFSIZ];
+
   switch (su->sa.sa_family) 
     {
     case AF_INET:
-      log2 ("%s", inet_ntoa (su->sin.sin_addr));
+      snprintf (buf, BUFSIZ, "%s", inet_ntoa (su->sin.sin_addr));
       break;
 #ifdef HAVE_IPV6
     case AF_INET6:
       {
 	char buf [64];
-	log2 ("%s", inet_ntop (AF_INET6, &(su->sin6.sin6_addr),
-			       buf, sizeof (buf)));
+	snprintf (buf, BUFSIZ, "%s",
+		  inet_ntop (AF_INET6, &(su->sin6.sin6_addr), buf,
+			     sizeof (buf)));
       }
       break;
 #endif /* HAVE_IPV6 */
@@ -291,15 +285,16 @@ sockunion_log (union sockunion *su)
 	struct sockaddr_dl *sdl;
 
 	sdl = (struct sockaddr_dl *)&(su->sa);
-	log2 ("link#%d ", sdl->sdl_index);
+	snprintf (buf, BUFSIZ, "link#%d ", sdl->sdl_index);
       }
       break;
 #endif /* AF_LINK */
 
     default:
-      log2 ("af_unknown %d ", su->sa.sa_family);
+      snprintf (buf, BUFSIZ, "af_unknown %d ", su->sa.sa_family);
       break;
     }
+  return buf;
 }
 
 /* sockunion_connect returns
@@ -343,9 +338,8 @@ sockunion_connect (int fd, union sockunion *su, unsigned short port)
     {
       if (errno != EINPROGRESS)
 	{
-	  log ("can't connect to ");
-	  sockunion_log (su);
-	  log2 (" fd %d : %s\n", fd, strerror (errno));
+	  zlog (NULL, LOG_INFO, "can't connect to %s fd %d : %m",
+		  sockunion_log (su), fd);
 	  return connect_error;
 	}
     }
@@ -367,7 +361,7 @@ sockunion_stream_socket (union sockunion *su)
   sock = socket (su->sa.sa_family, SOCK_STREAM, 0);
 
   if (sock < 0)
-    log_warn ("can't make socket sockunion_stream_socket\n");
+    zlog (NULL, LOG_WARNING, "can't make socket sockunion_stream_socket");
 
   return sock;
 }
@@ -406,7 +400,7 @@ sockunion_bind (int sock, union sockunion *su, unsigned short port,
 
   ret = bind (sock, (struct sockaddr *)su, size);
   if (ret < 0)
-    log_warn ("can't bind socket : %s\n", strerror (errno));
+    zlog (NULL, LOG_WARNING, "can't bind socket : %m");
 
   return ret;
 }
@@ -421,7 +415,7 @@ sockopt_reuseaddr (int sock)
 		    (void *) &on, sizeof (on));
   if (ret < 0)
     {
-      log_warn ("can't set sockopt SO_REUSEADDR to socket %d\n", sock);
+      zlog (NULL, LOG_WARNING, "can't set sockopt SO_REUSEADDR to socket %d", sock);
       return -1;
     }
   return 0;
@@ -439,7 +433,7 @@ sockopt_ttl (int family, int sock, int ttl)
 			(void *) &ttl, sizeof (int));
       if (ret < 0)
 	{
-	  log_warn ("can't set sockopt IP_TTL %d to socket %d\n", ttl, sock);
+	  zlog (NULL, LOG_WARNING, "can't set sockopt IP_TTL %d to socket %d", ttl, sock);
 	  return -1;
 	}
       return 0;
@@ -452,7 +446,7 @@ sockopt_ttl (int family, int sock, int ttl)
 			(void *) &ttl, sizeof (int));
       if (ret < 0)
 	{
-	  log_warn ("can't set sockopt IPV6_UNICAST_HOPS %d to socket %d\n",
+	  zlog (NULL, LOG_WARNING, "can't set sockopt IPV6_UNICAST_HOPS %d to socket %d",
 		    ttl, sock);
 	  return -1;
 	}

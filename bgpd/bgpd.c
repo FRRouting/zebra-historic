@@ -1,632 +1,89 @@
-/* BGP-4, BGP-4+, BGP-5 daemon program
-   Copyright (C) 1996, 97 Kunihiro Ishiguro
+/*
+ * BGP-4, BGP-4+, BGP-5 daemon program
+ * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/inet.h>
+#include <zebra.h>
 
 #include "prefix.h"
 #include "thread.h"
 #include "buffer.h"
+#include "stream.h"
 #include "table.h"
 #include "linklist.h"
-#include "vector.h"
-#include "vty.h"
 #include "command.h"
 #include "sockunion.h"
 #include "network.h"
 #include "memory.h"
 #include "roken.h"
+#include "filter.h"
+#include "routemap.h"
+#include "str.h"
 #include "log.h"
 
-#include "bgpd.h"
-#include "bgp_aspath.h"
-#include "bgp_route.h"
-#include "bgp_peer.h"
-#include "bgp_dump.h"
-#include "bgp_attr.h"
-#include "bgp_community.h"
-#include "bgp_fsm.h"
+#include "bgpd/bgpd.h"
+#include "bgpd/bgp_aspath.h"
+#include "bgpd/bgp_route.h"
+#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_attr.h"
+#include "bgpd/bgp_community.h"
+#include "bgpd/bgp_fsm.h"
+#include "bgpd/bgp_packet.h"
 
 /* List head of bgp instance list. */
 list bgp_list;
 
 /* List of all bgp peer. */
-extern list peer_list;
+list peer_list;
 
 /* BGP multiple instance option. */
 char bgp_multiple_instance;
+
+#define BGP_CONFIG_ROUTER_ID 1
 
 /* Top node of bgpd's routing table. */
 extern struct route_table *bgp_table_ipv4;
 #ifdef HAVE_IPV6
 extern struct route_table *bgp_table_ipv6;
 #endif /* HAVE_IPV6 */
-
-u_char *bgp_make_packet (int *packet_size, int type, char *data);
-
-/* BGP try to connect to peer.  */
-int
-bgp_connect (struct peer *peer)
-{
-  struct servent *sp;
-  unsigned short port;
-
-  /* Make socket for the peer. */
-  peer->fd = sockunion_socket (peer->su);
-
-  /* If we can get socket for the peer, adjest TTL and make connection. */
-  if (peer->fd < 0)
-    return -1;
-
-  if (peer_sort (peer) == BGP_PEER_EBGP)
-    sockopt_ttl (peer->su->sa.sa_family, peer->fd, peer->ttl);
-
-  /* Get service port number. */
-  sp = getservbyname ("bgp", "tcp");
-  if (sp != NULL) 
-    port = sp->s_port;
-  else
-    port = htons (BGP_PORT_DEFAULT);
-
-  /* Connect to remote peer. */
-  return sockunion_connect (peer->fd, peer->su, port);
-}
-
-/* Utility function. */
-int
-bgp_read (int fd, char *ptr, int nbytes)
-{
-  int ret = readn (fd, ptr, nbytes);
-  
-  if (ret < 0) {
-    log ("bgp_read errno  : %s\n", strerror (errno));
-    /* XXX need event here.*/
-  }
-
-  return ret;
-}
-
-/* Reset bgp update timer */
-void
-bgp_uptime_reset (struct peer *peer)
-{
-  time (&peer->uptime);
-}
-
-/* Clear bgp peer. */
-void
-bgp_clear(struct peer *peer, int error)
-{
-  /* This function delete all routing information which coming from
-     the peer. */
-  bgp_peer_delete (peer);
-
-  /* If this function is executed outside of bgp_read_packet. Cancel
-     next read. */
-  if (peer->t_read)
-    {
-      thread_cancel (peer->t_read);
-      peer->t_read = NULL;
-    }
-  
-  /* If this peer has active fd. */
-  if (peer->fd != -1)
-    {
-      close (peer->fd);
-      peer->fd = -1;
-    }
-
-  bgp_uptime_reset (peer);
-
-  if (error)
-    BGP_EVENT_ADD (peer, TCP_connection_closed);
-}
-
-/* BGP header read */
-int
-bgp_read_header (struct peer *peer, struct bgp_header *h)
-{
-  int nbyte;
-  u_char *pnt = peer->header_buf;
-
-  nbyte = bgp_read (peer->fd, pnt, BGP_HEADER_SIZE);
-
-  /* when read byte is zero : clear bgp peer and return */
-  if (nbyte <= 0) 
-    {
-      log ("bgp connection closed at [%d]. try again.\n", peer->fd);
-      bgp_clear (peer, 0);
-      return -1;
-    }
-
-  /* if header size is defferent print warning and return */
-  if (nbyte != BGP_HEADER_SIZE) 
-    {
-      log ("bgp header size can't read\n");
-      close (peer->fd);
-      peer->fd = -1;
-      return -1;
-    }
-
-  /* get all header packet */
-  memcpy (h->marker, pnt, BGP_MARKER_SIZE);
-  pnt += BGP_MARKER_SIZE;
-  GETW (h->length, pnt);
-  GETC (h->type, pnt);
-
-  /* call dump function */
-  bgp_dump_header (h);
-
-  return 1;
-}
-
-/* Read bgp packet from peer. */
-int
-bgp_get_message (struct peer *peer, struct bgp_header *h)
-{
-  int nbyte;
-  int len;
-
-  /* message length count */
-  len = h->length - BGP_HEADER_SIZE;
-
-  /* check buffer overflow */
-  if (len > BGP_MAX_PACKET_SIZE) 
-    {
-      log ("bgp_get_message packet buffer over flow\n");
-      return 0;
-    }
-
-  /* read message into buffer */
-  nbyte = bgp_read (peer->fd, peer->read_buf, len);
-  if (nbyte != len) 
-    {
-      log ("bgp_read can't read all of packet %d/%d : %s\n",
-	   len, nbyte,strerror (errno));
-      bgp_clear (peer, 0);
-      return 0;
-    }
-
-  return nbyte;
-}
-
-/* Accept bgp connection. */
-int
-bgp_accept (struct thread *thread)
-{
-  int bgp_sock;
-  int accept_sock;
-  union sockunion su;
-  struct peer *peer;
-  char buf[BUFSIZ];
-
-  accept_sock = thread_fd (thread);
-
-  bgp_sock = sockunion_accept (accept_sock, &su);
-
-  log ( "OK I got BGP connection from host %s\n", inet_sutop (&su, buf));
-  
-  thread_add_read (master, bgp_accept, NULL, accept_sock);
-
-  /* this router is not neighbor router */
-  peer = peer_lookup_by_su (&su);
-  if (!peer) 
-    {
-      log ( "This peer is not neighbor connection closed : %s\n",
-	    inet_sutop (&su, buf));
-      close (bgp_sock);
-      return -1;
-    }
-
-  /* Check status of the peer. */
-  if (peer->status != Active) 
-    {
-      log ( "But I'm not Active status so connection is closed : %s\n",
-	    inet_sutop (&su, buf));
-      close (bgp_sock);
-      return -1;
-    }
-
-  peer->fd = bgp_sock;
-  BGP_EVENT_ADD (peer, TCP_connection_open);
-
-  return 0;
-}
-
-/* Make bgpd's server socket. */
-int
-bgp_serv_sock (unsigned short port, int family)
-{
-  int ret;
-  int bgp_sock;
-  union sockunion su;
-
-  bzero (&su, sizeof (union sockunion));
-
-  /* Specify address family. */
-  su.sa.sa_family = family;
-  bgp_sock = sockunion_stream_socket (&su);
-
-  sockopt_reuseaddr (bgp_sock);
-
-  ret = sockunion_bind (bgp_sock, &su, port, NULL);
-
-  ret = listen (bgp_sock, 3);
-  if (ret < 0) 
-    {
-      log ("can't listen bgp server socket : %s\n", strerror (errno));
-      return ret;
-    }
-
-  thread_add_read (master, bgp_accept, NULL, bgp_sock);
-
-  return bgp_sock;
-}
-
-/* Make open packet and send it to remote peer. */
-void
-bgp_open_send (struct peer *peer)
-{
-  struct bgp_open bgp_open;
-  u_char *packet;
-  int nbytes;
-  int nwritten;
-
-  bgp_open.version = BGP_VERSION_4;
-  bgp_open.asno = peer->bgp->as;
-  bgp_open.holdtime = BGP_DEFAULT_HOLDTIME;
-  /* bgp_open.holdtime = peer->v_holdtime; */
-  bgp_open.ident = peer->bgp->ident;
-  bgp_open.optlen = 0;
-
-  packet = (u_char *) bgp_make_packet (&nbytes, BGP_MSG_OPEN, (u_char *)&bgp_open);
-
-  nwritten = writen (peer->fd, packet, nbytes);
-
-  peer->open_out++;
-
-  XFREE (0, packet);
-}
-
-/* Notify send function. */
-void
-bgp_notify_send (struct peer *peer, u_char err_code, u_char err_subcode)
-{
-  int nbytes;
-  u_char *packet;
-  struct bgp_notify bgp_notify;
-
-  bgp_notify.err_code = err_code;
-  bgp_notify.err_subcode = err_subcode;
-
-  packet = (u_char *) bgp_make_packet (&nbytes, BGP_MSG_NOTIFY, 
-				       (u_char *)&bgp_notify);
-  writen (peer->fd, packet, nbytes);
-  XFREE (0, packet);
-}
-
-void
-dump_update_size (int length, int size)
-{
-  if (IS_SET (dump_update, DUMP_DETAIL))
-    printf ("Update headerlength(%d) reachstart(%d)\n", length, size);
-}
-
-/* Parse BGP_UPDATE packet and make ATTRIBUTE object. */
-void
-bgp_update (struct peer *peer, int size)
-{
-  struct attr *attr;
-  u_int16_t unfeasible_len;
-  u_int16_t attr_total_len;
-  u_char *pnt;
-
-  /* Status check. */
-  if (peer->status != Established) 
-    {
-      bgp_notify_send (peer, BGP_NOTIFY_FSM_ERR, 0);
-      log ("FSM error: update message when status is not Established\n");
-      bgp_clear (peer, 1);
-      return;
-    }
-
-  /* BGP update size. */
-  if (size == 0)
-    {
-      log ("empty bgp update message\n");
-      return;
-    }
-
-  /* Size and point check. */
-  size -= BGP_HEADER_SIZE;
-  pnt = peer->read_buf;
-
-  /* Unfeasible treatment */
-  GETW (unfeasible_len, pnt);
-
-  if (unfeasible_len > 0) 
-    {
-      peer->withdrow_in++;
-      nlri_withdraw (pnt, unfeasible_len, peer);
-    }
-  else 
-    peer->update_in++;
-
-  pnt += unfeasible_len;
-
-  /* attribute total length */
-  GETW (attr_total_len, pnt);
-
-  /* Parse attribute. */
-  attr = bgp_attr_parse (pnt, attr_total_len, peer);
-
-  /* If attribute is malformed, stop parsing packet. */
-  if (attr == NULL)
-    return;
-
-  pnt += attr_total_len;
-
-  /* Attribute check. */
-  attr = bgp_attr_check (attr);
-
-  /* If attribute is missing, stop parsing packet. */
-  if (attr == NULL)
-    return;
-
-  /* Network Layer Reachability Information. */
-  dump_update_size (size, (pnt - peer->read_buf));
-  nlri_parse (pnt, size - (pnt - peer->read_buf), attr, peer);
-  BGP_EVENT_ADD (peer, Receive_UPDATE_message);
-}
-
-/* Notify message treatment function. */
-void
-bgp_notify(struct peer *peer, int length)
-{
-  struct bgp_notify bgp_notify;
-  u_char *pnt = peer->read_buf;
-
-  GETC (bgp_notify.err_code, pnt);
-  GETC (bgp_notify.err_subcode, pnt);
-
-  bgp_notify_print(peer, &bgp_notify);
-
-  /* Next this peer goes to Idle state. Below should be move to
-     bgp_fsm.c */
-  bgp_clear (peer, 1);
-}
-
-/* Keepalive treatment function -- get keepalive send keepalive */
-void
-bgp_keepalive(struct peer *peer, int length)
-{
-  if (length != BGP_HEADER_SIZE) 
-    {
-      log ("keepalive header error\n");
-      return;
-    }
-
-  BGP_EVENT_ADD (peer, Receive_KEEPALIVE_message);
-}
-
-/* Starting point of packet process function. */
-int
-bgp_read_packet (struct peer *peer)
-{
-  int ret;
-  struct bgp_header h;
-
-  /* read packet header to determin type of the packet */
-  ret = bgp_read_header (peer, &h);
-  if (ret <= 0) 
-    {
-      BGP_EVENT_ADD (peer, TCP_connection_closed);
-      return ret;
-    }
-
-  /* read rest of the packet and call each sort of packet routine */
-  switch (h.type) 
-    {
-    case BGP_MSG_OPEN:
-      if (bgp_get_message (peer, &h))
-	bgp_open_recv (peer);
-      break;
-    case BGP_MSG_UPDATE:
-      if (bgp_get_message (peer, &h))
-	bgp_update (peer, h.length);
-      break;
-    case BGP_MSG_NOTIFY:
-      if (bgp_get_message (peer, &h))
-	bgp_notify (peer, h.length);
-      break;
-    case BGP_MSG_KEEPALIVE:
-      bgp_keepalive (peer, h.length);
-      break;
-    default:
-      log_warn ("Header type is illegal\n");
-      /* Notify and clear bgp peer. */
-      break;
-    }
-  return 0;
-}
-
-/* Keep alive send function. */
-void
-bgp_keepalive_send(struct peer *peer)
-{
-  int nbytes;
-  int nwritten;
-  u_char *packet;
-  
-  /* make keepalive packet and send to peer */
-  packet = (u_char *)bgp_make_packet(&nbytes, BGP_MSG_KEEPALIVE, NULL);
-
-  nwritten = writen (peer->fd, packet, nbytes);
-
-  peer->keepalive_out++;
-  XFREE (0, packet);
-
-  /* peer count update */
-  peer->keepalive_in++;
-}
-
-/* Should rethink about this function. */
-#if 0
-int
-bgp_make_update ()
-{
-  char *start = pnt;
-  char *total_len;
-  int attr_len;
-
-  /* make Unfeasible Routes Length */
-  PUTW(0, pnt);		/* in case of no Unfeasible Routes */
-
-  /* make Total Path Attribute Length */
-  total_len = pnt;		/* remind this point for later write */
-  PUTW(0, pnt);		/* for reserve space */
-
-  attr_len = attr_make (pnt, attr);
-  PUTW (attr_len, total_len);
-  pnt += attr_len;
-
-  /* If prefix is zero then this route is IPv6 route */
-  {
-    int len = PSIZE (pin->prefixlen);
-
-    /* Network Layer Reachability Information */
-    PUTC (pin->prefixlen, pnt);
-    memcpy (pnt, &pin->prefix, len);
-    pnt += len;
-  }
-  return pnt - start;
-}
-#endif /**/
-
-/* Make notify packet */
-int
-bgp_make_notify (struct bgp_notify *bgp_notify, u_char *pnt)
-{
-  u_char *start = pnt;
-
-  PUTC (bgp_notify->err_code, pnt);
-  PUTC (bgp_notify->err_subcode, pnt);
-
-  return pnt - start;
-}
-
-/* make open message */
-int
-bgp_make_open (struct bgp_open *bgp_open, u_char *pnt)
-{
-  u_char *start = pnt;
-
-  PUTC (bgp_open->version, pnt);
-  PUTW (bgp_open->asno, pnt);
-  PUTW (bgp_open->holdtime, pnt);
-  PUTL (bgp_open->ident, pnt);
-
-  if (bgp_open->optlen != 0) 
-    ;				/* Option parse need at here. */
-  else 
-    PUTC (bgp_open->optlen, pnt);
-
-  return pnt - start;
-}
-
-/* Make a bgp packet, return start ponter of packet and set whole size
-   of packet into packet_size */
-u_char *
-bgp_make_packet (int *packet_size, int type, char *data)
-{
-  int i;
-  int dsize;
-  char buffer[BGP_MAX_PACKET_SIZE];
-  char *pnt = buffer;
-  char *begin = buffer;
-  char *ret;
-
-  dsize = 0;
-  
-  /* First of all make marker */
-  for (i = 0; i < BGP_MARKER_SIZE; i++)
-    PUTC(0xff, pnt);
-
-  /* Dummy total length, filled in after */
-  PUTW(0, pnt);
-
-  /* BGP Packet type */
-  PUTC(type, pnt);
-
-  /* Each data type routine call */
-  switch (type) 
-    {
-    case BGP_MSG_OPEN:
-      dsize = bgp_make_open ((struct bgp_open *)data, pnt);
-      break;
-    case BGP_MSG_UPDATE:
-      /* dsize = bgp_make_update (); */
-      break;
-    case BGP_MSG_KEEPALIVE:
-      /* Keepalive contains no data. */
-      dsize = 0;
-      break;
-    case BGP_MSG_NOTIFY:
-      dsize = bgp_make_notify ((struct bgp_notify *)data, pnt);
-      break;
-    default:
-      break;
-    }
-
-  /* set total length of the message */
-  pnt = begin + BGP_MARKER_SIZE;
-  dsize += BGP_HEADER_SIZE;
-  PUTW (dsize, pnt);
-  
-  /* set packet size */
-  *packet_size = dsize;
-
-  /* Return new allocated pointer */
-  ret = XMALLOC (0, dsize);
-  memcpy (ret, buffer, dsize);
-
-  return ret;
-}
-
+
 /* Allocate new bgp structure. */
 struct bgp *
-bgp_new ()
+bgp_new (u_int16_t as)
 {
-  struct bgp *new = (struct bgp *) malloc (sizeof (struct bgp));
-  bzero (new, sizeof (struct bgp));
-  return new;
+  struct bgp *bgp = (struct bgp *) malloc (sizeof (struct bgp));
+  bzero (bgp, sizeof (struct bgp));
+
+  bgp->as = as;
+  bgp->ident = 0;
+  bgp->peer = list_init ();
+  list_add_node (bgp_list, bgp);
+
+  return bgp;
+}
+
+/* Check peer's AS number and determin is this peer IBPG or EBGP */
+int
+bgp_peer_sort (struct peer *peer)
+{
+  return (peer->as == peer->bgp->as) ? BGP_PEER_IBGP : BGP_PEER_EBGP;
 }
 
 /* BGP structure specify by asno. */
@@ -647,6 +104,236 @@ bgp_lookup_by_as (u_int16_t as)
   return NULL;
 }
 
+/* allocate new peer object */
+struct peer *
+peer_new ()
+{
+  struct peer *peer;
+
+  /* Allocate new peer. */
+  peer = XMALLOC (MTYPE_BGP_PEER, sizeof (struct peer));
+  bzero (peer, sizeof (struct peer));
+
+  /* Set default value. */
+  peer->fd = -1;
+  peer->v_start = BGP_INIT_START_TIMER;
+  peer->v_connect = BGP_DEFAULT_CONNECT_RETRY;
+  peer->v_holdtime = BGP_DEFAULT_HOLDTIME_BIG;
+  peer->v_keepalive = BGP_DEFAULT_KEEPALIVE;
+  peer->status = Idle;
+  peer->ostatus = Idle;
+  peer->version = BGP_VERSION_4;
+  peer->prefix_count = 0;
+  peer->ibuf = stream_new (BGP_MAX_PACKET_SIZE);
+
+  /* Set output buffer. */
+  peer->obuf = stream_fifo_new ();
+
+  return peer;
+}
+
+void
+peer_free (struct peer *peer)
+{
+  XFREE (MTYPE_BGP_PEER, peer);
+}
+
+void
+peer_clear (struct peer *peer)
+{
+  if (peer->fd >= 0)
+    {
+      close (peer->fd);
+      peer->fd = -1;
+    }
+}
+
+/* Delete all peer.  Called from bgp_terminate(). */
+void
+peer_delete_all ()
+{
+  listnode node;
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      struct peer *peer;
+
+      peer = getdata (node);
+      peer_clear (peer);
+      peer_free (peer);
+    }
+}
+
+/* Delete peer from confguration. */
+void
+peer_delete (struct peer *peer)
+{
+  /* Free allocated host character. */
+  if (peer->host)
+    XFREE (0, peer->host);
+
+  /* Free software timers. */
+#define timer_off(X) \
+  if (X) \
+    { \
+      thread_cancel (X); \
+      (X) = NULL; \
+    }
+
+  timer_off (peer->t_start);
+  timer_off (peer->t_keepalive);
+  timer_off (peer->t_holdtime);
+  timer_off (peer->t_connect);
+  timer_off (peer->t_asorig);
+  timer_off (peer->t_routeadv);
+
+  /* Free peer structure. */
+  XFREE (MTYPE_BGP_PEER, peer);
+}
+
+/* Peer lookup by ip address character. */
+struct peer *
+peer_lookup_by_su (union sockunion *su)
+{
+  struct peer *peer;
+  listnode node;
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      peer = getdata (node);
+      if (sockunion_sameprefix (peer->su, su))
+	return peer;
+    }
+  return NULL;
+}
+
+/* Neighbor lookup by ip address character. */
+struct peer *
+peer_lookup_from_bgp (struct bgp *bgp, char *addr)
+{
+  struct peer *peer;
+  listnode node;
+  union sockunion *su;
+
+  su = sockunion_str2su (addr);
+  if (su == NULL)
+    return NULL;
+
+  for (node = listhead (bgp->peer); node; nextnode (node))
+    {
+      peer = getdata (node);
+      if (sockunion_sameprefix (peer->su, su))
+	return peer;
+    }
+  return NULL;
+}
+
+/* Neighbor lookup by host name. */
+struct peer *
+peer_lookup_by_host (char *host)
+{
+  struct peer *peer;
+  listnode node;
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      peer = getdata (node);
+      if (strcmp (peer->host, host) == 0)
+	return peer;
+    }
+  return NULL;
+}
+
+struct peer *
+peer_lookup_by_logformat (char *str)
+{
+  char *start;
+  char *end;
+  char peernamebuf[256];
+  struct peer *peer;
+  extern list peer_list;
+
+  start = strrchr (str, '[');
+  end = strrchr (str, ']');
+
+  if (start == NULL || end == NULL)
+    return NULL;
+  
+  memcpy (peernamebuf, start + 1, end - start - 1);
+  peernamebuf[end - start - 1] = '\0';
+
+  peer = (struct peer *) peer_lookup_by_host (peernamebuf);
+  if (peer == NULL)
+    {
+      peer = peer_new();
+      peer->host = strdup (peernamebuf);
+      list_add_node (peer_list, peer);
+    }
+
+  return peer;
+}
+
+/* Sockunion union output to vty interface. Return printed strings
+   length. */
+int
+sockunion_vty_out (struct vty *vty, union sockunion *su)
+{
+  char str[BUFSIZ];
+
+  switch (su->sa.sa_family)
+    {
+    case AF_INET:
+      inet_ntop (AF_INET, &su->sin.sin_addr, str, sizeof (str));
+      break;
+#ifdef HAVE_IPV6
+    case AF_INET6:
+      inet_ntop (AF_INET6, &su->sin6.sin6_addr, str, sizeof (str));
+      break;
+#endif /* HAVE_IPV6 */
+    }
+
+  vty_out (vty, "%s", str);
+
+  return strlen (str);
+}
+
+void
+peer_uptime_vty (struct vty *vty, struct peer *peer)
+{
+
+#define TIME_BUF 25
+#define ONE_DAY_SECOND 60*60*24
+#define ONE_WEEK_SECOND 60*60*24*7
+
+  time_t uptime;
+  struct tm *tm;
+  char timebuf [TIME_BUF];
+
+  /* If there is no connection has been done before print `never'. */
+  if (peer->uptime == 0)
+    {
+      vty_out (vty, "never   ");
+      return;
+    }
+
+  /* Get current time. */
+  time (&uptime);
+  uptime -= peer->uptime;
+  tm = gmtime (&uptime);
+
+  /* Making formatted timer strings. */
+  if (uptime < ONE_DAY_SECOND)
+    snprintf (timebuf, TIME_BUF, "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
+  else if (uptime < ONE_WEEK_SECOND)
+    snprintf (timebuf, TIME_BUF, "%dd%02dh%02dm", tm->tm_yday, tm->tm_hour, tm->tm_min);
+  else
+    snprintf (timebuf, TIME_BUF, "%02dw%dd%02dh", 
+	      tm->tm_yday/7, tm->tm_yday - ((tm->tm_yday/7) * 7), tm->tm_hour);
+
+  /* Out puts to vty. */
+  vty_out (vty, "%8s", timebuf);
+}
+
 /* Enable BGP mutliple instance configuration. */
 DEFUN (bgp_multiple_instance_func,
        bgp_multiple_instance_cmd,
@@ -704,20 +391,17 @@ DEFUN (router_bgp,
     {
       bgp = getdata (listhead (bgp_list));
       
-      vty_out (vty, "bgp is already active at %d.\r\n", bgp->as);
+      vty_out (vty, "bgp is already running: AS is %d.\r\n", bgp->as);
       return CMD_WARNING;
     }
   
   /* Make new bgp instance. */
-  bgp = bgp_new ();
-  bgp->as = as;
-  bgp->ident = 0;
-  bgp->peer = list_init ();
-  list_add_node (bgp_list, bgp);
+  bgp = bgp_new (as);
 
   /* Set current bgp point. */
   vty->node = BGP_NODE;
   vty->index = bgp;
+
   return CMD_SUCCESS;
 }
 
@@ -741,6 +425,7 @@ DEFUN (bgp_router_id,
       vty_out (vty, "malformed bgp router identifier\r\n");
       return CMD_WARNING;
     }
+  bgp->config |= BGP_CONFIG_ROUTER_ID;
   return CMD_SUCCESS;
 }
 
@@ -796,7 +481,7 @@ DEFUN (show_ip_bgp_neighbors,
       vty_out (vty, "%-15s ", p->host);
       switch (p->version) {
       case BGP_VERSION_4:
-	vty_out (vty, "%d ", p->version);
+	vty_out (vty, "4  ");
 	break;
       case BGP_VERSION_MP_4:
 	vty_out (vty, "4- ");
@@ -830,7 +515,28 @@ DEFUN (show_ip_bgp_neighbors,
 	       p->update_out, p->withdrow_out,
 	       p->keepalive_in, p->keepalive_out
 	       );
-      vty_out (vty, "read %s\r\n", p->t_read ? "on" : "off");
+      vty_out (vty, "  read thread: %s  write thread: %s\r\n", 
+	       p->t_read ? "on" : "off",
+	       p->t_write ? "on" : "off");
+
+      if (p->distribute[BGP_FILTER_IN].name)
+	vty_out (vty, "  distribute-list in: %s%s\r\n",
+		 p->distribute[BGP_FILTER_IN].list ? "*" : "",
+		 p->distribute[BGP_FILTER_IN].name);
+      if (p->distribute[BGP_FILTER_OUT].name)
+	vty_out (vty, "  distribute-list out: %s%s\r\n",
+		 p->distribute[BGP_FILTER_OUT].list ? "*" : "",
+		 p->distribute[BGP_FILTER_OUT].name);
+
+      if (p->route_map[BGP_FILTER_IN].name)
+	vty_out (vty, "  route-map in: %s%s\r\n",
+		 p->route_map[BGP_FILTER_IN].map ? "*" : "",
+		 p->route_map[BGP_FILTER_IN].name);
+      if (p->route_map[BGP_FILTER_OUT].name)
+	vty_out (vty, "  route-map out: %s%s\r\n",
+		 p->route_map[BGP_FILTER_OUT].map ? "*" : "",
+		 p->route_map[BGP_FILTER_OUT].name);
+
     }
 
   return CMD_SUCCESS;
@@ -879,12 +585,12 @@ DEFUN (show_ip_bgp_summary,
 	       peer->withdrow_in + peer->keepalive_in,
 	       peer->open_out + peer->update_out +
 	       peer->withdrow_out + peer->keepalive_out,
-	       0, 0, 0);
+	       0, 0, peer->obuf->count);
       peer_uptime_vty (vty, peer);
       if (peer->status == Established)
-	vty_out (vty, " %6d\r\n", peer->prefix_count);
+	vty_out (vty, " %9d\r\n", peer->prefix_count);
       else
-	vty_out (vty, " %-12s\r\n", LOOKUP(bgp_status_msg, peer->status));
+	vty_out (vty, " %-11s\r\n", LOOKUP(bgp_status_msg, peer->status));
     }
   return CMD_SUCCESS;
 
@@ -921,10 +627,10 @@ DEFUN (show_ip_bgp_community,
 void
 bgp_regexp (struct prefix_ipv4 *pin, struct vty *vty, ASPATH_regex *rp)
 {
-  struct bgp_route *br;
+  struct bgp_info *br;
   struct aspath *aspath;
 
-  br = (struct bgp_route *) pin;
+  br = (struct bgp_info *) pin;
   if (br->attr && (aspath = br->attr->aspath))
     {
       if (aspath_regex_exec (rp, aspath) >= 0)
@@ -1004,36 +710,6 @@ DEFUN (neighbor_ebgp_multihop,
   if (peer->fd >= 0)
     sockopt_ttl (peer->su->sa.sa_family, peer->fd, peer->ttl);
 
-  return CMD_SUCCESS;
-}
-
-DEFUN (neighbor_next_hop,
-       neighbor_next_hop_cmd,
-       "neighbor IP_ADDR next-hop IP_ADDR",
-       NEIGHBOR_STR
-       "IP address\n"
-       "Set neighbor's announce next-hop value\n"
-       "IP address\n")
-{
-  int ret;
-  struct bgp *bgp;
-  struct peer *peer;
-
-  bgp = (struct bgp *) vty->index;
-  peer = peer_lookup_from_bgp (bgp, argv[0]);
-
-  if (! peer)
-    {
-      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
-      return CMD_WARNING;
-    }
-
-  ret = inet_aton (argv[1], &peer->next_hop);
-  if (!ret)
-    {
-      vty_out (vty, "malformed bgp nexthop address\r\n");
-      return CMD_WARNING;
-    }
   return CMD_SUCCESS;
 }
 
@@ -1126,6 +802,258 @@ DEFUN (neighbor_router_id,
   return CMD_SUCCESS;
 }
 
+/* Set route-map to the peer. */
+static void
+bgp_route_map_set (struct peer *peer, int direct, char *route_map)
+{
+  if (peer->route_map[direct].name)
+    free (peer->route_map[direct].name);
+  
+  peer->route_map[direct].name = strdup (route_map);
+  peer->route_map[direct].map = route_map_lookup_by_name (route_map);
+}
+
+/* Unset route-map from the peer. */
+static int
+bgp_route_map_unset (struct peer *peer, int direct, char *route_map)
+{
+  if (! peer->route_map[direct].name)
+    return 1;
+
+  if (strcmp (peer->route_map[direct].name, route_map) != 0)
+    return 2;
+
+  free (peer->route_map[direct].name);
+  peer->route_map[direct].name = NULL;
+  peer->route_map[direct].map = NULL;
+
+  return 0;
+}
+
+/* Set distribute list to the peer. */
+static void
+bgp_distribute_set (struct peer *peer, int direct, char *alist)
+{
+  if (peer->distribute[direct].name)
+    free (peer->distribute[direct].name);
+
+  peer->distribute[direct].name = strdup (alist);
+  peer->distribute[direct].list = access_list_lookup (alist);
+}
+
+/* When success return zero. */
+static int
+bgp_distribute_unset (struct peer *peer, int direct, char *alist)
+{
+  if (! peer->distribute[direct].name)
+    return 1;
+
+  if (strcmp (peer->distribute[direct].name, alist) != 0)
+    return 2;
+
+  free (peer->distribute[direct].name);
+  peer->distribute[direct].name = NULL;
+  peer->distribute[direct].list = NULL;
+
+  return 0;
+}
+
+/* Update distribute list. */
+void
+bgp_distribute_update ()
+{
+  listnode node;
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      struct peer *peer;
+
+      peer = getdata (node);
+
+      /* Input filter update. */
+      if (peer->distribute[BGP_FILTER_IN].name)
+	peer->distribute[BGP_FILTER_IN].list = 
+	  access_list_lookup (peer->distribute[BGP_FILTER_IN].name);
+      else
+	peer->distribute[BGP_FILTER_IN].list = NULL;
+
+      /* Output filter update. */
+      if (peer->distribute[BGP_FILTER_OUT].name)
+	peer->distribute[BGP_FILTER_OUT].list = 
+	  access_list_lookup (peer->distribute[BGP_FILTER_OUT].name);
+      else
+	peer->distribute[BGP_FILTER_OUT].list = NULL;
+    }
+}
+
+DEFUN (neighbor_distribute_list,
+       neighbor_distribute_list_cmd,
+       "neighbor IP_ADDR distribute-list ALIST_NAME TYPE",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Distribute list\n"
+       "Accesslist name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* Check argument. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "distribute direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  bgp_distribute_set (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_distribute_list,
+       no_neighbor_distribute_list_cmd,
+       "no neighbor IP_ADDR distribute-list ALIST_NAME TYPE",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Distribute list\n"
+       "Accesslist name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  int ret;
+  
+  /* Check argument. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "distribute direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  ret = bgp_distribute_unset (peer, direct, argv[1]);
+  if (ret)
+    {
+      vty_out (vty, "");
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_route_map,
+       neighbor_route_map_cmd,
+       "neighbor IP_ADDR route-map ROUTE_MAP_NAME DIRECT",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Route map\n"
+       "Route map name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "distribute direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  bgp_route_map_set (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_route_map,
+       no_neighbor_route_map_cmd,
+       "no neighbor IP_ADDR route-map ROUTE_MAP_NAME DIRECT",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Route map\n"
+       "Route map name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "distribute direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  bgp_route_map_unset (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
+}
+
 /* Make peer and enable further neighbor configuration. */
 DEFUN (neighbor, 
        neighbor_cmd, 
@@ -1181,7 +1109,7 @@ DEFUN (neighbor,
   peer->as = as;
   peer->su = su;
   peer->host = sockunion_su2str (su);
-  if (peer_sort (peer) == BGP_PEER_IBGP)
+  if (bgp_peer_sort (peer) == BGP_PEER_IBGP)
     peer->ttl = 255;
   else
     peer->ttl = 1;
@@ -1234,8 +1162,9 @@ DEFUN (no_neighbor,
   list_delete_by_val (peer_list, peer);
 
   /* Clear routes and deallocate peer structure. */
-  bgp_clear (peer, 1);
+  bgp_stop (peer);
   peer_delete (peer);
+
   return CMD_SUCCESS;
 }
 
@@ -1270,7 +1199,6 @@ DEFUN (clear_ip_bgp,
 	    {
 	      peer = getdata (peer_node);
 	      BGP_EVENT_ADD (peer, BGP_Stop);
-	      /* bgp_clear (peer, 0); */
 	    }
 	}
       vty_out (vty, "All bgp neighbor cleared.\r\n");
@@ -1299,6 +1227,80 @@ DEFUN (clear_ip_bgp,
   return CMD_SUCCESS;
 }
 
+/* BGP peer configuration output function. */
+void
+bgp_peer_config_write (struct vty *vty, list bgp_peer)
+{
+  listnode node;
+  struct peer *peer;
+
+  for (node = listhead (bgp_peer); node; nextnode (node))
+    {
+      peer = getdata (node);
+
+      /* remote-as print. */
+      vty_out (vty, " neighbor ");
+      sockunion_vty_out (vty, peer->su);
+      vty_out (vty, " remote-as %d%s", peer->as, VTY_NEWLINE);
+
+      /* BGP version print. */
+      if (peer->version != BGP_VERSION_4)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  if (peer->version == BGP_VERSION_MP_4)
+	    vty_out (vty, " version %s%s", "bgp4+", VTY_NEWLINE);
+	  else if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
+	    vty_out (vty, " version %s%s", "bgp4+-draft-00", VTY_NEWLINE);
+	  else
+	    vty_out (vty, " unknown version%s", VTY_NEWLINE);
+	}
+
+      /* ebgp-multihop print. */
+      if (bgp_peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+
+	  if (peer->ttl == TTL_MAX)
+	    vty_out (vty, " ebgp-multihop%s", VTY_NEWLINE);
+	  else
+	    vty_out (vty, " ebgp-multihop %d%s", peer->ttl, VTY_NEWLINE);
+	}
+
+      /* distribute-list print. */
+      if (peer->distribute[BGP_FILTER_IN].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " distribute-list %s in%s", 
+		   peer->distribute[BGP_FILTER_IN].name, VTY_NEWLINE);
+	}
+      if (peer->distribute[BGP_FILTER_OUT].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " distribute-list %s out%s", 
+		   peer->distribute[BGP_FILTER_OUT].name, VTY_NEWLINE);
+	}
+
+      /* route-map print. */
+      if (peer->route_map[BGP_FILTER_IN].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " route-map %s in%s", 
+		   peer->route_map[BGP_FILTER_IN].name, VTY_NEWLINE);
+	}
+      if (peer->route_map[BGP_FILTER_OUT].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " route-map %s out%s", 
+		   peer->route_map[BGP_FILTER_OUT].name, VTY_NEWLINE);
+	}
+    }
+}
 
 /* BGP configuration write function. */
 int
@@ -1321,8 +1323,15 @@ bgp_config_write (struct vty *vty)
       bgp = getdata (node);
 
       vty_out (vty, "router bgp %d%s", bgp->as, VTY_NEWLINE);
+      if (bgp->config & BGP_CONFIG_ROUTER_ID)
+	{
+	  struct in_addr ident;
+	  ident.s_addr = bgp->ident;
+	  vty_out (vty, " bgp router-id %s%s", inet_ntoa (ident), 
+		   VTY_NEWLINE);
+	}
       config_write_network (vty, bgp);
-      peer_config_write (vty, bgp->peer);
+      bgp_peer_config_write (vty, bgp->peer);
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
   return 0;
@@ -1363,11 +1372,14 @@ bgp_init ()
   install_element (BGP_NODE, &config_help_cmd);
   install_element (BGP_NODE, &neighbor_cmd);
   install_element (BGP_NODE, &no_neighbor_cmd);
-  install_element (BGP_NODE, &neighbor_next_hop_cmd);
   install_element (BGP_NODE, &neighbor_ebgp_multihop_cmd);
   install_element (BGP_NODE, &bgp_router_id_cmd);
   install_element (BGP_NODE, &neighbor_version_cmd);
   install_element (BGP_NODE, &no_neighbor_version_cmd);
+  install_element (BGP_NODE, &neighbor_distribute_list_cmd);
+  install_element (BGP_NODE, &no_neighbor_distribute_list_cmd);
+  install_element (BGP_NODE, &neighbor_route_map_cmd);
+  install_element (BGP_NODE, &no_neighbor_route_map_cmd);
 
   /* Make empty list of bgp and peer list. */
   bgp_list = list_init ();
@@ -1376,11 +1388,15 @@ bgp_init ()
   /* BGP multiple instance. */
   bgp_multiple_instance = 0;
 
-  /* BGP inits. */
-  attr_init ();
-  view_init ();
+  zebra_init ();
 
+  /* BGP inits. */
+  bgp_attr_init ();
   bgp_dump_init ();
   bgp_route_init ();
   bgp_route_map_init ();
+
+  access_list_init ();
+  access_list_add_hook (bgp_distribute_update);
+  access_list_delete_hook (bgp_distribute_update);
 }

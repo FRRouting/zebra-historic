@@ -1,43 +1,40 @@
-/* RIPngd and zebra interface.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * RIPngd and zebra interface.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <netinet/in.h>
+#include <zebra.h>
 
 #include "thread.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "prefix.h"
+#include "stream.h"
 #include "buffer.h"
 #include "log.h"
 #include "network.h"
 #include "client.h"
 
-#include "zebra.h"
-#include "ripngd.h"
+#include "ripngd/ripngd.h"
+#include "zebra/zebra.h"
 
 extern struct thread_master *master;
 
@@ -50,10 +47,7 @@ struct zebra
 
   struct thread *t_read;
   struct thread *t_write;
-} _zebra;
-
-/* Zebra structure to hold current status. */
-struct zebra *zebra = &_zebra;
+} zebra;
 
 /* Here, zebra may send interface information or redistributed route. */
 int
@@ -73,9 +67,9 @@ zebra_read (struct thread *thread)
   /* zebra socket is closed. */
   if (nbyte == 0) 
     {
-      log ("connection closed socket [%d]\n", sock);
+      zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
       close (sock);
-      zebra->sock = -1;
+      zebra.sock = -1;
       return -1;
     }
 
@@ -86,8 +80,8 @@ zebra_read (struct thread *thread)
     return -1;
 
   zebra_get_interface (sock, length);
-  zebra->t_read = thread_add_read (master, zebra_read, NULL, 
-				   zebra->sock);
+  zebra.t_read = thread_add_read (master, zebra_read, NULL, 
+				   zebra.sock);
   return 0;
 }
 
@@ -99,19 +93,19 @@ zebra_write (struct stream *s)
 
   nbytes = 0;
 
-  if (zebra->sock >= 0)
+  if (zebra.sock >= 0)
     {
-      nbytes = writen (zebra->sock, s->data, s->ep);
+      nbytes = writen (zebra.sock, s->data, s->ep);
       if (nbytes != s->ep)
 	{
-	  log ("can't write enough packet\n");
+	  zlog (NULL, LOG_ERR, "can't write enough packet");
 	  return nbytes;
 	}
 
       if (nbytes < 0)
 	{
-	  close (zebra->sock);
-	  zebra->sock = -1;
+	  close (zebra.sock);
+	  zebra.sock = -1;
 	  return nbytes;
 	}
     }
@@ -122,9 +116,9 @@ zebra_write (struct stream *s)
 int
 zebra_config_write (struct vty *vty)
 {
-  if (zebra->enable)
+  if (zebra.enable)
     vty_out (vty, "router zebra%s", VTY_NEWLINE);
-  if (zebra->r_ripng)
+  if (zebra.r_ripng)
     vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
   return 0;
 }
@@ -142,14 +136,13 @@ DEFUN (redistribute_ripng,
 int
 zebra_create ()
 {
-  zebra->sock = zebra_connect ();
+  zebra.sock = zebra_connect ();
 
-  if (zebra->sock < 0)
-    return zebra->sock;
+  if (zebra.sock < 0)
+    return zebra.sock;
   
-  zebra->t_read = thread_add_read (master, zebra_read, NULL, 
-				   zebra->sock);
-  zebra_get_all_interface (zebra->sock);
+  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
+  zebra_get_all_interface (zebra.sock);
 
   return 0;
 }
@@ -163,10 +156,10 @@ DEFUN (router_zebra,
   int ret;
 
   /* Set router zebra is enabled. */
-  zebra->enable = 1;
+  zebra.enable = 1;
 
   /* If already has socket then return. */
-  if (zebra->sock >= 0)
+  if (zebra.sock >= 0)
     {
       vty_out (vty, "already connected to zebra\r\n");
       return CMD_WARNING;
@@ -192,9 +185,9 @@ void
 zebra_init ()
 {
   /* Set default value to zebra structure. */
-  zebra->enable = 0;
-  zebra->sock = -1;
-  zebra->r_ripng = 0;
+  zebra.enable = 0;
+  zebra.sock = -1;
+  zebra.r_ripng = 0;
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);

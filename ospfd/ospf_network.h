@@ -1,5 +1,5 @@
-/* Remote shell interface for zebra.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/* OSPF network related functions.
+   Copyright (C) 1999 Toshiaki Takada
 
 This file is part of GNU Zebra.
 
@@ -18,3 +18,12 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#ifndef _ZEBRA_OSPF_NETWORK_H
+#define _ZEBRA_OSPF_NETWORK_H
+
+/* Prototypes. */
+int ospf_serv_sock (struct interface *, int);
+int ospf_if_add_allspfrouters (int, struct prefix *);
+int ospf_if_add_alldrouters (int, struct prefix *);
+
+#endif /* _ZEBRA_OSPF_NETWORK_H */

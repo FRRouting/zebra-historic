@@ -1,4 +1,6 @@
 /*
+ * $Id: checksum.c,v 1.2 1999/02/19 17:01:47 developer Exp $
+ *
  * Checksum routine for Internet Protocol family headers (C Version).
  *
  * Refer to "Computing the Internet Checksum" by R. Braden, D. Borman and
@@ -6,7 +8,7 @@
  * pp. 86-101, for additional details on computing this checksum.
  */
 
-#include <sys/types.h>
+#include <zebra.h>
 
 int				/* return checksum in low-order 16 bits */
 in_cksum(ptr, nbytes)

@@ -1,49 +1,35 @@
-/* Common ioctl functions.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: ioctl.c,v 1.26 1999/02/22 12:15:40 developer Exp $
+ *
+ * Common ioctl functions.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <unistd.h>		/* for close() */
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <errno.h>
-
-#ifdef HAVE_SYS_SOCKIO_H
-#include <sys/sockio.h>
-#endif /* HAVE_SYS_SOCKIO_H */
-
-#ifdef HAVE_LINUX_VERSION_H
-#include <linux/version.h>
-#endif /* HAVE_LINUX_VERSION_H */
+#include <zebra.h>
 
 #include "linklist.h"
 #include "if.h"
 #include "prefix.h"
 #include "ioctl.h"
-#include "log.h"
 #include "rt.h"
+#include "log.h"
 
 /* clear and set interface name string */
 void
@@ -115,10 +101,22 @@ if_get_mtu (struct interface *ifp)
 
   ifreq_set_name (&ifreq, ifp);
 
+#if defined(SIOCGIFDATA)
+  if (if_ioctl (SIOCGIFDATA, (caddr_t) & ifreq) < 0) 
+    {
+      zlog (NULL, LOG_INFO, "Can't lookup mtu by ioctl(SIOCGIFDATA)");
+      ifp->mtu = -1;
+      return;
+    }
+
+  ifp->mtu = ((struct if_data *)ifreq.ifr_data)->ifi_mtu;
+
+#elif defined(SIOCGIFMTU)
   if (if_ioctl (SIOCGIFMTU, (caddr_t) & ifreq) < 0) 
     {
-      log ("Can't lookup mtu by ioctl(SIOCGIFMTU).\n");
+      zlog (NULL, LOG_INFO, "Can't lookup mtu by ioctl(SIOCGIFMTU)");
       ifp->mtu = -1;
+      return;
     }
 
 #ifdef SUNOS_5
@@ -126,6 +124,11 @@ if_get_mtu (struct interface *ifp)
 #else
   ifp->mtu = ifreq.ifr_mtu;
 #endif /* SUNOS_5 */
+
+#else
+  zlog (NULL, LOG_INFO, "Can't lookup mtu on this system");
+  ifp->mtu = -1;
+#endif
 }
 
 #ifdef HAVE_IFALIASREQ
@@ -239,7 +242,7 @@ if_set_flags (struct interface *ifp, unsigned long flag)
 
   if (ret < 0)
     {
-      log ("can't set interface flags\n");
+      zlog (NULL, LOG_INFO, "can't set interface flags");
       return ret;
     }
   return 0;
@@ -263,7 +266,7 @@ if_unset_flags (struct interface *ifp, unsigned long flag)
 
   if (ret < 0)
     {
-      log ("can't unset interface flags\n");
+      zlog (NULL, LOG_INFO, "can't unset interface flags");
       return ret;
     }
   return 0;

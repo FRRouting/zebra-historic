@@ -1,22 +1,29 @@
-/* Socket union header.
-   Copyright (c) 1997 Kunihiro Ishiguro
+/*
+ * $Id: sockunion.h,v 1.21 1999/02/19 17:01:49 developer Exp $
+ *
+ * Socket union header.
+ * Copyright (c) 1997 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+#ifndef _ZEBRA_SOCKUNION_H
+#define _ZEBRA_SOCKUNION_H
 
 #if 0
 union sockunion {
@@ -76,7 +83,7 @@ int sockunion_bind (int sock, union sockunion *, unsigned short, union sockunion
 int sockopt_ttl (int family, int sock, int ttl);
 int sockunion_socket (union sockunion *su);
 const char *inet_sutop (union sockunion *su, char *str);
-void sockunion_log (union sockunion *su);
+char *sockunion_log (union sockunion *su);
 enum connect_result
 sockunion_connect (int fd, union sockunion *su, unsigned short port);
 
@@ -95,3 +102,4 @@ int
 inet_aton (const char *cp, struct in_addr *inaddr);
 #endif
 
+#endif /* _ZEBRA_SOCKUNION_H */

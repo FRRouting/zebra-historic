@@ -1,55 +1,47 @@
-/* Virtual terminal [aka TeletYpe] interface routine.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: vty.c,v 1.80 1999/02/22 12:15:39 developer Exp $
+ *
+ * Virtual terminal [aka TeletYpe] interface routine.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/uio.h>
-#include <arpa/inet.h>
-#include <arpa/telnet.h>
-
-#include "log.h"
-#include "vector.h"
 #include "linklist.h"
 #include "buffer.h"
 #include "version.h"
-#include "vty.h"
 #include "command.h"
 #include "sockunion.h"
 #include "thread.h"
 #include "memory.h"
+#include "str.h"
+#include "log.h"
 
 /* Extern host structure from command.c */
 extern struct host host;
 
 /* Vector which store each vty structure. */
 static vector vtyvec;
+
+/* Vtye timeout value. */
+static unsigned long vty_timeout_val = VTY_TIMEOUT_DEFAULT;
 
 /* Vty events */
 enum event {VTY_SERV, VTY_READ, VTY_WRITE};
@@ -68,16 +60,13 @@ vty_out (struct vty *vty, char *format, ...)
   /* vararg print */
   va_start (args, format);
 
-#ifdef SUNOS_5
-  vsprintf (buf, format, args);
-#else
-  vsnprintf (buf, sizeof buf, format, args);
-#endif /* SUNOS_5 */
+  len = vsnprintf (buf, sizeof buf, format, args);
 
-  len = strlen(buf);
-
-  if (len == sizeof (buf) - 1)
-    log ("vty output buffer shortage, hope no problem!\n");
+  if (len < 0)
+    {    
+      zlog (NULL, LOG_INFO, "Vty closed due to vty output buffer shortage.");
+      return -1;
+    }
 
   buffer_write (vty->obuf, (u_char *)buf, len);
 
@@ -101,7 +90,7 @@ vty_time_print (struct vty *vty)
   ret = strftime (buf, TIME_BUF, "%Y/%m/%d %H:%M:%S", tm);
   if (ret == 0)
     {
-      log ("strftime error");
+      zlog (NULL, LOG_INFO, "strftime error");
       return;
     }
   vty_out (vty, "%s\n", buf);
@@ -114,7 +103,7 @@ static void
 vty_hello (struct vty *vty)
 {
   vty_out (vty, "\r\nHello, this is zebra (version %s)\r\n", ZEBRA_VERSION);
-  vty_out (vty, "Copyright 1996, 97, 98 Kunihiro Ishiguro\r\n\r\n");
+  vty_out (vty, "Copyright 1996, 97, 98, 99 Kunihiro Ishiguro\r\n\r\n");
 }
 
 /* Put out prompt and wait input from user. */
@@ -173,7 +162,7 @@ vty_new ()
   struct vty *new = XMALLOC (MTYPE_VTY, sizeof (struct vty));
   bzero (new, sizeof (struct vty));
 
-  new->obuf = (struct buffer *) buffer_new (BUFFER_VTY, 4096);
+  new->obuf = (struct buffer *) buffer_new (BUFFER_VTY, 100);
 
   return new;
 }
@@ -489,6 +478,9 @@ vty_end_config (struct vty *vty)
     case RIPNG_NODE:
     case BGP_NODE:
     case RMAP_NODE:
+    case OSPF_NODE:
+    case OSPF6_NODE:
+    case VTY_NODE:
       vty->node = ENABLE_NODE;
       break;
     default:
@@ -570,6 +562,16 @@ vty_kill_line_from_beginning (struct vty *vty)
 {
   vty_beginning_of_line (vty);
   vty_kill_line (vty);
+}
+
+/* Delete a word before the point. */
+static void
+vty_forward_kill_word (struct vty *vty)
+{
+  while (vty->cp != vty->length && vty->buf[vty->cp] == ' ')
+    vty_delete_char (vty);
+  while (vty->cp != vty->length && vty->buf[vty->cp] != ' ')
+    vty_delete_char (vty);
 }
 
 /* Delete a word before the point. */
@@ -857,10 +859,11 @@ vty_execute (struct vty *vty)
   vty->cp = vty->length = 0;
   bzero (vty->buf, sizeof (vty->buf));
 
-  vty_prompt (vty);
+  if (vty->status != VTY_CLOSE)
+    vty_prompt (vty);
 }
 
-#define CTRL(X)  ((X) - '@')
+#define CONTROL(X)  ((X) - '@')
 #define VTY_NORMAL     0
 #define VTY_PRE_ESCAPE 1
 #define VTY_ESCAPE     2
@@ -909,8 +912,9 @@ vty_read (struct thread *thread)
 #define VTYBUFSIZ 512
   unsigned char buf[VTYBUFSIZ];
 
-  int vty_sock = thread_fd (thread);
-  struct vty *vty = thread_arg (thread);
+  int vty_sock = THREAD_FD (thread);
+  struct vty *vty = THREAD_ARG (thread);
+  vty->t_read = NULL;
 
   /* Read raw data from socket */
   nbytes = read (vty->fd, buf, VTYBUFSIZ);
@@ -956,7 +960,11 @@ vty_read (struct thread *thread)
 	      vty_forward_word (vty);
 	      vty->escape = VTY_NORMAL;
 	      break;
-	    case CTRL('H'):
+	    case 'd':
+	      vty_forward_kill_word (vty);
+	      vty->escape = VTY_NORMAL;
+	      break;
+	    case CONTROL('H'):
 	      vty_backward_kill_word (vty);
 	      vty->escape = VTY_NORMAL;
 	      break;
@@ -974,47 +982,47 @@ vty_read (struct thread *thread)
 	  ret = vty_telnet_option (vty, buf + i, nbytes - i);
 	  i += ret;
 	  break;
-	case CTRL('A'):
+	case CONTROL('A'):
 	  vty_beginning_of_line (vty);
 	  break;
-	case CTRL('B'):
+	case CONTROL('B'):
 	  vty_backward_char (vty);
 	  break;
-	case CTRL('C'):
+	case CONTROL('C'):
 	  vty_stop_input (vty);
 	  break;
-	case CTRL('D'):
+	case CONTROL('D'):
 	  vty_delete_char (vty);
 	  break;
-	case CTRL('E'):
+	case CONTROL('E'):
 	  vty_end_of_line (vty);
 	  break;
-	case CTRL('F'):
+	case CONTROL('F'):
 	  vty_forward_char (vty);
 	  break;
-	case CTRL('H'):
+	case CONTROL('H'):
 	case 0x7f:
 	  vty_delete_backward_char (vty);
 	  break;
-	case CTRL('K'):
+	case CONTROL('K'):
 	  vty_kill_line (vty);
 	  break;
-	case CTRL('N'):
+	case CONTROL('N'):
 	  vty_next_line (vty);
 	  break;
-	case CTRL('P'):
+	case CONTROL('P'):
 	  vty_previous_line (vty);
 	  break;
-	case CTRL('T'):
+	case CONTROL('T'):
 	  vty_transpose_chars (vty);
 	  break;
-	case CTRL('U'):
+	case CONTROL('U'):
 	  vty_kill_line_from_beginning (vty);
 	  break;
-	case CTRL('W'):
+	case CONTROL('W'):
 	  vty_backward_kill_word (vty);
 	  break;
-	case CTRL('Z'):
+	case CONTROL('Z'):
 	  vty_end_config (vty);
 	  break;
 	case '\n':
@@ -1058,18 +1066,13 @@ vty_read (struct thread *thread)
   return 0;
 }
 
-void
-vty_flush_all (struct vty *vty)
-{
-  buffer_flush_all (vty->obuf, vty->fd);
-}
-
 /* Flush buffer to the vty. */
 static int
 vty_flush (struct thread *thread)
 {
   int erase;
-  struct vty *vty = thread_arg (thread);
+  struct vty *vty = THREAD_ARG (thread);
+  vty->t_write = NULL;
 
   if (vty->status == VTY_MORE)
     erase = 1;
@@ -1112,20 +1115,20 @@ vty_create (int vty_sock, union sockunion *su)
   vty->hindex = 0;
   vector_set_index (vtyvec, vty_sock, vty);
   vty->status = VTY_NORMAL;
+  vty->v_timeout = vty_timeout_val;
 
-  /* Say hello to the world. */
-  vty_hello (vty);
-  
   /* Vty is not available if password isn't set. */
   if (host.password == NULL)
     {
       vty_out (vty, "Vty password is not set.\r\n");
-      vty_event (VTY_WRITE, vty_sock, vty);
       vty->status = VTY_CLOSE;
-      return vty;
+      vty_close (vty);
+      return NULL;
     }
-  else
-    vty_out (vty, "\r\nUser Access Verification\r\n\r\n");
+
+  /* Say hello to the world. */
+  vty_hello (vty);
+  vty_out (vty, "\r\nUser Access Verification\r\n\r\n");
 
   /* Setting up terminal. */
   vty_will_echo (vty);
@@ -1155,13 +1158,13 @@ vty_accept (struct thread *thread)
   unsigned int on;
   int accept_sock;
 
-  accept_sock = thread_fd (thread);
+  accept_sock = THREAD_FD (thread);
 
   /* We can handle IPv4 or IPv6 socket. */
   vty_sock = sockunion_accept (accept_sock, &su);
   if (vty_sock < 0)
     {
-      log ("can't accept vty socket : %s\n", strerror (errno));
+      zlog (NULL, LOG_INFO, "can't accept vty socket : %m");
       exit (1);
     }
 
@@ -1169,7 +1172,7 @@ vty_accept (struct thread *thread)
   ret = setsockopt (vty_sock, IPPROTO_TCP, TCP_NODELAY, 
 		    (char *) &on, sizeof (on));
   if (ret < 0)
-    log ("can't set sockopt to vty_sock : %s\n", strerror (errno));
+    zlog (NULL, LOG_INFO, "can't set sockopt to vty_sock : %m");
 
   vty = vty_create (vty_sock, &su);
 
@@ -1202,7 +1205,7 @@ vty_serv_sock (unsigned short port)
   ret = listen (accept_sock, 3);
   if (ret < 0) 
     {
-      log_warn ("can't listen socket\n");
+      zlog (NULL, LOG_WARNING, "can't listen socket");
       return;
     }
 
@@ -1215,6 +1218,21 @@ void
 vty_close (struct vty *vty)
 {
   int i;
+
+  /* Cancel threads.*/
+  if (vty->t_read)
+    thread_cancel (vty->t_read);
+  if (vty->t_write)
+    thread_cancel (vty->t_write);
+  if (vty->t_timeout)
+    thread_cancel (vty->t_timeout);
+
+  /* Flush buffer. */
+  if (! buffer_empty (vty->obuf))
+    buffer_flush_all (vty->obuf, vty->fd);
+
+  /* Free input buffer. */
+  buffer_free (vty->obuf);
 
   /* Free command history. */
   for (i = 0; i < VTY_MAXHIST; i++)
@@ -1230,10 +1248,29 @@ vty_close (struct vty *vty)
   if (vty->address)
     XFREE (0, vty->address);
 
-  buffer_free (vty->obuf);
-
   /* OK free vty. */
   XFREE (MTYPE_VTY, vty);
+}
+
+/* When time out occur output message then close connection. */
+static int
+vty_timeout (struct thread *thread)
+{
+  struct vty *vty;
+
+  vty = THREAD_ARG (thread);
+  vty->t_timeout = NULL;
+  vty->v_timeout = 0;
+
+  /* Clear buffer*/
+  buffer_reset (vty->obuf);
+  vty_out (vty, "\r\nVty connection is timed out.\r\n");
+
+  /* Close connection. */
+  vty->status = VTY_CLOSE;
+  vty_close (vty);
+
+  return 0;
 }
 
 /* Read up configuration file from file_name. */
@@ -1251,7 +1288,6 @@ vty_read_file (FILE *confp)
   /* Execute configuration file */
   ret = config_from_file (vty, confp);
 
-  vty_flush_all (vty);
   vty_close (vty);
 
   if (ret != CMD_SUCCESS) 
@@ -1330,11 +1366,19 @@ vty_event (enum event event, int sock, struct vty *vty)
       thread_add_read (master, vty_accept, vty, sock);
       break;
     case VTY_READ:
-      thread_add_read (master, vty_read, vty, sock);
-      /* Timeout treatment here? */
+      vty->t_read = thread_add_read (master, vty_read, vty, sock);
+
+      /* Time out treatment. */
+      if (vty->v_timeout)
+	{
+	  if (vty->t_timeout)
+	    thread_cancel (vty->t_timeout);
+	  vty->t_timeout = 
+	    thread_add_timer (master, vty_timeout, vty, vty->v_timeout);
+	}
       break;
     case VTY_WRITE:
-      thread_add_write (master, vty_flush, vty, sock);
+      vty->t_write = thread_add_write (master, vty_flush, vty, sock);
       break;
     }
 }
@@ -1354,12 +1398,77 @@ DEFUN (config_who,
   return CMD_SUCCESS;
 }
 
+/* Move to vty configuration mode. */
+DEFUN (line_vty,
+       line_vty_cmd,
+       "line vty",
+       "Configure vty\n"
+       "Configure vty\n")
+{
+  vty->node = VTY_NODE;
+  return CMD_SUCCESS;
+}
+
+/* Check the string only contains digit character. */
+int
+all_digit_check (char *str)
+{
+  int i;
+  for (i = 0; i < strlen (str); i++)
+    if (!isdigit (str[i]))
+      return 0;
+  return 1;
+}
+
+/* Set time out value. */
+DEFUN (exec_timeout,
+       exec_timeout_cmd,
+       "exec-timeout VAL",
+       "Set timeout value\n"
+       "Timeout value\n")
+{
+  if (all_digit_check (argv[0]))
+    vty_timeout_val = strtol (argv[0], NULL, 10);
+  else
+    {
+      vty_out (vty, "Invalid timeout value\r\n");
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+/* Display current configuration. */
+int
+vty_config_write (struct vty *vty)
+{
+  if (vty_timeout_val != VTY_TIMEOUT_DEFAULT)
+    {
+      vty_out (vty, "line vty%s", VTY_NEWLINE);
+      vty_out (vty, " exec-timeout %d%s", vty_timeout_val, VTY_NEWLINE);
+    }
+  return 0;
+}
+
+struct cmd_node vty_node =
+{
+  VTY_NODE,
+  "%s(config-vty)# ",
+};
+
 /* Install vty's own commands like `who' command. */
 void
 vty_init ()
 {
   vtyvec = vector_init (VECTOR_MIN_SIZE);
 
+  /* Install bgp top node. */
+  install_node (&vty_node, vty_config_write);
+
   install_element (VIEW_NODE, &config_who_cmd);
   install_element (ENABLE_NODE, &config_who_cmd);
+  install_element (CONFIG_NODE, &line_vty_cmd);
+  install_element (VTY_NODE, &config_end_cmd);
+  install_element (VTY_NODE, &config_exit_cmd);
+  install_element (VTY_NODE, &config_help_cmd);
+  install_element (VTY_NODE, &exec_timeout_cmd);
 }

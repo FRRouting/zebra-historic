@@ -1,6 +1,8 @@
 /*
+ * $Id: aspath_regex.c,v 1.12 1999/02/22 12:15:36 developer Exp $
+ *
  * Copyright (c) 1997, 1998
- *	Ikuo Nakagawa. All rights reserved.
+ * 	Ikuo Nakagawa. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,9 +29,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * $Id: aspath_regex.c,v 1.8 1998/12/13 16:04:35 kunihiro Exp $
  */
+
 #define ZEBRA
 #define RADIX_REGEXP
 
@@ -37,11 +38,7 @@
 #include "defines.h"
 #endif /* ! ZEBRA */
 
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <zebra.h>
 
 #ifndef ZEBRA
 
@@ -51,12 +48,13 @@
 #define ASPATH_PRIVATE
 #include "aspath.h"
 #else  /* if defined ZEBRA */
-#include <config.h>
-#include <sys/types.h>
+
 #include "vector.h"
 #include "vty.h"
-#include "bgp_aspath.h"
+#include "log.h"
 
+#include "bgpd/bgpd.h"
+#include "bgpd/bgp_aspath.h"
 
 FILE *dp = NULL;
 int loglevel = 7;
@@ -1446,7 +1444,7 @@ aspath_regex_exec(const ASPATH_regex *rp, const ASPATH *info)
 
 	/* for debug purpose only */
 #ifdef DEBUG
-	/* aspath_print(info, tmp, sizeof(tmp)); XXX temporary commented out 
+	/* printf("%s", aspath_print(info, tmp, sizeof(tmp))); XXX temporary commented out 
 	   -- Kunihiro Ishiguro <kunihiro@zebra.org> */
 #endif
 

@@ -1,22 +1,32 @@
-/* Zebra configuration command interface routine
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: command.h,v 1.33 1999/02/19 17:01:47 developer Exp $
+ *
+ * Zebra configuration command interface routine
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ * 
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 
-This file is part of GNU Zebra.
+#ifndef _ZEBRA_COMMAND_H
+#define _ZEBRA_COMMAND_H
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+#include "vector.h"
+#include "vty.h"
 
 /* Host configuration variable */
 struct host
@@ -37,6 +47,9 @@ struct host
   /* Log filename. */
   char *logfile;
 
+  /* New zlog output. */
+  char *log;
+
   /* config file name of this host */
   char *config;
 };
@@ -56,12 +69,13 @@ enum node_type
   RIPNG_NODE,			/* RIPng protocol mode node. */
   BGP_NODE,			/* BGP protocol mode which includes BGP4+ */
   OSPF_NODE,			/* OSPF protocol mode */
-  RADIX_NODE,			/* Communication channel to radix program. */
+  OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
   RDISC_NODE,			/* ICMP Router Discovery Protocol mode. */ 
   IP_NODE,			/* Static ip route node. */
   ACCESS_NODE,			/* Access list node. */
   DISTRIBUTE_NODE,		/* Distribute list node. */
-  RMAP_NODE			/* Route map node. */
+  RMAP_NODE,			/* Route map node. */
+  VTY_NODE			/* Vty node. */
 };
 
 /* Node which has some commands and prompt string and configuration
@@ -191,3 +205,5 @@ int config_exit (struct cmd_element *, struct vty *, int, char **);
 int config_help (struct cmd_element *, struct vty *, int, char **);
 char *host_config_file ();
 void host_config_set (char *);
+
+#endif /* _ZEBRA_COMMAND_H */

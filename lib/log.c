@@ -1,28 +1,29 @@
-/* Logging of zebra
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * Logging of zebra
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <stdio.h>
-#include <stdarg.h>
-#include <time.h>
+#include <zebra.h>
 
 #include "log.h"
+#include "memory.h"
 
 /* If this mode is on then, log is output. */
 int log_mode = 0;
@@ -167,4 +168,105 @@ log_rotate ()
 
   if (logfp == NULL)
     fprintf (stderr, "Can't open logfile %s\n", log_filename);
+}
+
+const char *zlog_proto_names[] = {
+  "NONE",
+  "DEFAULT",
+  "ZEBRA",
+  "RIP",
+  "BGP",
+  "OSPF",
+  "RIPNG",
+  NULL,
+};
+
+ZLOG *zlog_default = NULL;
+
+/* Wrapper routines until the real new log system works. */
+void
+zlog(ZLOG *zl, int priority, const char *format, ...)
+{
+  va_list args;
+  
+  va_start(args, format);
+
+  if (zl == NULL)
+    zl = zlog_default;
+  
+  if (zl->flags == ZLOG_SYSLOG)
+    vsyslog(priority, format, args);
+
+  if (zl->flags == ZLOG_STDOUT)
+    {
+      time_print (stdout);
+      vfprintf (stdout, format, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+    }
+ 
+  if (zl->flags == ZLOG_FILE)
+    {
+      time_print (zl->file);
+      vfprintf (zl->file, format, args);
+      fprintf (zl->file, "\n");
+      fflush (zl->file);
+    }
+}
+
+/*
+ * open log stream
+ */
+ZLOG *
+openzlog(const char *progname, int flags, zlog_proto_t protocol,
+	 int syslog_flags, int syslog_facility)
+{
+  ZLOG *zl;
+
+  zl = XMALLOC(MTYPE_ZLOG, sizeof (ZLOG));
+
+  zl->ident = progname;
+  zl->flags = flags;
+  zl->protocol = protocol;
+  zl->facility = syslog_facility;
+
+  openlog (progname, syslog_flags, zl->facility);
+  
+  return zl;
+}
+
+void
+closezlog(ZLOG *zl)
+{
+  closelog();
+
+  XFREE(MTYPE_ZLOG, zl);
+}
+
+/* Called from command.c. */
+void
+zlog_set_flag (ZLOG *zl, int flags)
+{
+  if (zl == NULL)
+    zl = zlog_default;
+
+  zl->flags = flags;
+}
+
+int
+zlog_set_file (ZLOG *zl, int flags, char *filename)
+{
+  FILE *fp;
+
+  if (zl == NULL)
+    zl = zlog_default;
+
+  fp = fopen (filename, "a");
+  if (fp == NULL)
+    return 0;
+
+  zl->flags = ZLOG_FILE;
+  zl->file = fp;
+
+  return 1;
 }

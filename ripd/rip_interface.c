@@ -1,32 +1,28 @@
-/* Interface related function for RIP.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: rip_interface.c,v 1.85 1999/02/22 12:15:39 developer Exp $
+ *
+ * Interface related function for RIP.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>		/* bzero () */
-#include <stdlib.h>		/* atio () */
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <zebra.h>
 
 #include "linklist.h"
 #include "vector.h"
@@ -35,7 +31,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "sockunion.h"
 #include "if.h"
 #include "prefix.h"
-#include "connected.h"
 #include "memory.h"
 #include "buffer.h"
 #include "network.h"
@@ -43,8 +38,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "roken.h"
 #include "log.h"
 
-#include "ripd.h"
-#include "zebra.h"
+#include "zebra/zebra.h"
+#include "zebra/connected.h"
+#include "ripd/ripd.h"
 
 /* Global rip structure. */
 extern struct rip *rip;
@@ -95,7 +91,7 @@ rip_request (struct interface *ifp, int sock)
   size = rip_make_request (buf, rip->version);
   if (size > REQUEST_BUF)
     {
-      log_warn ("RIP request packet size overflow.\n");
+      zlog (NULL, LOG_WARNING, "RIP request packet size overflow");
       exit (1);
     }
 
@@ -110,7 +106,7 @@ rip_request (struct interface *ifp, int sock)
     {
       listnode node;
       
-      log ("multicast RIP request at %s\n", ifp->name);
+      zlog (NULL, LOG_INFO, "multicast RIP request at %s", ifp->name);
 
       for (node = listhead (ifp->connected); node; nextnode (node))
 	{
@@ -144,7 +140,7 @@ rip_request (struct interface *ifp, int sock)
     {
       listnode cnode;
 
-      log ("broadcast RIP request at %s\n", ifp->name);
+      zlog (NULL, LOG_INFO, "broadcast RIP request at %s", ifp->name);
 
       for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	{
@@ -187,7 +183,7 @@ ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
 		    (char *)&mreq, sizeof (mreq));
 
   if (ret < 0) 
-    log_warn ("can't setsockopt IP_ADD_MEMBERSHIP\n");
+    zlog (NULL, LOG_INFO, "can't setsockopt IP_ADD_MEMBERSHIP");
 
   return ret;
 }
@@ -207,7 +203,7 @@ rip_multicast_enable (int sock)
 	{
 	  listnode cnode;
 
-	  log ("Multicast enabled at %s\n", ifp->name);
+	  zlog (NULL, LOG_INFO, "Multicast enabled at %s", ifp->name);
 
 	  for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	    {
@@ -303,8 +299,8 @@ rip_connected_add (struct interface *ifp,
 
   p = (struct prefix_ipv4 *) connected->address;
 
-  log ("connected route %s/%d directly connect to %s\n",
-       inet_ntoa (p->prefix), p->prefixlen, ifp->name);
+  zlog (NULL, LOG_INFO, "connected route %s/%d directly connect to %s",
+	  inet_ntoa (p->prefix), p->prefixlen, ifp->name);
 
   rinfo = (struct rip_info *) rip_info_new ();
   rinfo->pref = -10;

@@ -1,48 +1,41 @@
-/* RIPd main routine.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: rip_main.c,v 1.45 1999/02/22 12:15:39 developer Exp $
+ *
+ * RIPd main routine.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif /* HAVE_CONFIG_H */
-
-#include <stdio.h>
-#include <stdlib.h>		/* for atoi () */
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/time.h>
-#include <signal.h>
-
-#include "zebra.h"
 #include "version.h"
 #include "getopt.h"
-#include "log.h"
 #include "thread.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "memory.h"
 #include "prefix.h"
+#include "log.h"
 
-#include "ripd.h"
+#include "zebra/zebra.h"
+#include "ripd/ripd.h"
 
 /* ripd options. */
 static struct option longopts[] = 
@@ -86,7 +79,7 @@ Daemon which manages RIP version 1 and 2.\n\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
-Report bugs to zebra@zebra.org\n", progname);
+Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
     }
 
   exit (status);
@@ -96,7 +89,7 @@ Report bugs to zebra@zebra.org\n", progname);
 void
 sigint (int sig)
 {
-  log ("SIGINT received\n");
+  zlog (NULL, LOG_INFO, "SIGINT received");
   if (!retain_mode)
     rip_rib_close ();
 
@@ -148,6 +141,10 @@ main (int argc, char **argv)
   /* Get program name. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
+  /* First of all we need logging init. */
+  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_RIP,
+			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
+
   while (1) 
     {
       int opt;
@@ -186,9 +183,6 @@ main (int argc, char **argv)
 	}
     }
 
-  /* First of all we need logging init. */
-  log_init ();
-
   /* Initializations. */
   master = thread_make_master ();
 
@@ -206,12 +200,12 @@ main (int argc, char **argv)
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);
 
-  /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
-
   /* Change to the daemon program. */
   if (daemon_mode)
-    daemon_me ();
+    daemon (0, 0);
+
+  /* Create VTY's socket */
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
 
   /* Pid file create. */
   pid_output (PATH_RIPD_PID);

@@ -1,43 +1,42 @@
-/* Routing Information Base.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: rib.c,v 1.106 1999/02/22 12:15:40 developer Exp $
+ *
+ * Routing Information Base.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <zebra.h>
 
 #include "prefix.h"
 #include "table.h"
-#include "zebra.h"
+#include "zebra/zebra.h"
 #include "memory.h"
 #include "vector.h"
 #include "vty.h"
+#include "str.h"
 #include "command.h"
 #include "linklist.h"
 #include "if.h"
 #include "rib.h"
-#include "log.h"
 #include "rt.h"
+#include "log.h"
 
 /* Routing table for IP version 4 RIB */
 struct route_table *ipv4_rib_table;
@@ -93,20 +92,27 @@ rib_log (char *message, int type, struct prefix *p,
 	 void *gate, unsigned int ifindex)
 {
   char buf[BUFSIZ];
-
-  log ("%s route %s %s/%d", 
-       route_info[type].str_long, message,
-       inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ), p->prefixlen);
+  char logbuf[BUFSIZ];
 
   /* If the route is connected route print interface name. */
   if (type == ZEBRA_ROUTE_CONNECT)
     {
       struct interface *ifp;
       ifp = if_lookup_by_index (ifindex);
-      log2 (" directly connected to %s\n", ifp->name);
+      snprintf (logbuf, BUFSIZ, " directly connected to %s\n", ifp->name);
     }
   else
-    log2 (" via %s\n", inet_ntop (p->family, gate, buf, BUFSIZ));
+    {
+      snprintf (logbuf, BUFSIZ, " via %s\n",
+		inet_ntop (p->family, gate, buf, BUFSIZ));
+    }
+
+  zlog (NULL, LOG_INFO, "%s route %s %s/%d %s", 
+	  route_info[type].str_long, message,
+	  inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ), p->prefixlen,
+	  logbuf);
+
+
 }
 
 /* If type is system route's type then return 1. */
@@ -181,8 +187,7 @@ rib_add_ipv4 (int type, struct prefix_ipv4 *p,
 
   pref = route_info[type].pref;
 
-  if (log_mode)
-    rib_log ("add", type, (struct prefix *)p, gate, ifindex);
+  rib_log ("add", type, (struct prefix *)p, gate, ifindex);
 
   /* Make new rib. */
   rib = rib_create (type, pref, ifindex);
@@ -262,8 +267,7 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
   ret = 0;
   apply_mask (p);
 
-  if (log_mode)
-    rib_log ("delete", type, (struct prefix *)p, gate, ifindex);
+  rib_log ("delete", type, (struct prefix *)p, gate, ifindex);
 
   np = route_node_get (ipv4_rib_table, (struct prefix *) p);
 
@@ -280,7 +284,7 @@ rib_delete_ipv4 (int type, struct prefix_ipv4 *p,
       char buf1[BUFSIZ];
       char buf2[BUFSIZ];
 
-      log ("route %s/%d via %s doesn't exist in rib\n",
+      zlog (NULL, LOG_INFO, "route %s/%d via %s doesn't exist in rib",
 	   inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ), p->prefixlen,
 	   inet_ntop (AF_INET, gate, buf2, BUFSIZ));
       route_unlock_node (np);
@@ -419,8 +423,7 @@ rib_add_ipv6 (int type, struct prefix_ipv6 *p,
 
   pref = route_info[type].pref;
 
-  if (log_mode)
-    rib_log ("add", type, (struct prefix *)p, gate, ifindex);
+  rib_log ("add", type, (struct prefix *)p, gate, ifindex);
 
   /* Make new rib. */
   rib = rib_create (type, pref, ifindex);
@@ -499,8 +502,7 @@ rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
   ret = 0;
   apply_mask_ipv6 (p);
 
-  if (log_mode)
-    rib_log ("delete", type, (struct prefix *)p, gate, ifindex);
+  rib_log ("delete", type, (struct prefix *)p, gate, ifindex);
 
   np = route_node_get (ipv6_rib_table, (struct prefix *) p);
 
@@ -517,7 +519,7 @@ rib_delete_ipv6 (int type, struct prefix_ipv6 *p,
       char buf1[BUFSIZ];
       char buf2[BUFSIZ];
 
-      log ("route %s/%d via %s doesn't exist in rib\n",
+      zlog (NULL, LOG_INFO, "route %s/%d via %s doesn't exist in rib",
 	   inet_ntop (AF_INET6, &p->prefix, buf1, BUFSIZ), p->prefixlen,
 	   inet_ntop (AF_INET6, gate, buf2, BUFSIZ));
       route_unlock_node (np);

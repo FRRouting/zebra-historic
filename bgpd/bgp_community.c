@@ -1,37 +1,37 @@
-/* Community attribute related functions.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: bgp_community.c,v 1.12 1999/02/19 17:17:26 developer Exp $
+ *
+ * Community attribute related functions.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <assert.h>
-#include <netinet/in.h>
+#include <zebra.h>
 
 #include "hash.h"
 #include "memory.h"
 #include "vector.h"
 #include "vty.h"
 #include "roken.h"
+#include "str.h"
 
-#include "bgp_community.h"
+#include "bgpd/bgp_community.h"
 
 /* Hash of community attribute. */
 struct Hash *comhash;
@@ -53,14 +53,15 @@ community_parse (char *pnt, u_short length)
   find = (struct community *) hash_search (comhash, &comtmp);
   if (find)
     {
-      find->refcnt++;
+      /* find->refcnt++; */
       return find;
     }
 
   /* Make new community attribute and intern it into hash. */
   new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
 
-  new->refcnt = 1;
+  /* new->refcnt = 1; */
+  new->refcnt = 0;
   new->size = length / 4;
   new->val = (u_int32_t *) XMALLOC (MTYPE_COMMUNITY_VAL, length);
   memcpy (new->val, pnt, length);
@@ -74,7 +75,8 @@ community_parse (char *pnt, u_short length)
 void
 community_free (struct community *com)
 {
-  com->refcnt--;
+  if (com->refcnt)
+    com->refcnt--;
 
   if (com->refcnt == 0)
     {
@@ -91,33 +93,38 @@ community_free (struct community *com)
 }
 
 /* Pretty printing of community.  For debug and logging purpose. */
-void
-community_print (FILE *fp, struct community *com)
+const char *
+community_print (struct community *com)
 {
+  /* XXX non-re-entrant warning */
+  static char buf[BUFSIZ];
   int i;
   u_int32_t comval;
   u_int16_t as;
   u_int16_t val;
 
+  bzero(buf, BUFSIZ);
+
   for (i = 0; i < com->size; i++) {
     comval = ntohl (com_nthval (com, i));
     switch (comval) {
     case COMMUNITY_NO_EXPORT:
-      fprintf (fp, " no_export");
+      strlcat (buf, " no_export", BUFSIZ);
       break;
     case COMMUNITY_NO_ADVERTIZE:
-      fprintf (fp, " no_advertize");
+      strlcat (buf, " no_advertize", BUFSIZ);
       break;
     case COMMUNITY_NO_EXPORT_SUBCONFED:
-      fprintf (fp, " no_export_subconfed");
+      strlcat (buf, " no_export_subconfed", BUFSIZ);
       break;
     default:
       as = (comval >> 16) & 0xFFFF ;
       val = comval & 0xFFFF;
-      fprintf (fp, " %d:%d", as, val);
+      snprintf (buf + strlen (buf), BUFSIZ - strlen (buf), " %d:%d", as, val);
       break;
     }
   }
+  return buf;
 }
 
 /* Make hash value of community attribute. This function is used by

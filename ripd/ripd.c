@@ -1,40 +1,29 @@
-/* RIP version 1 and 2.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: ripd.c,v 1.123 1999/02/22 12:15:39 developer Exp $
+ *
+ * RIP version 1 and 2.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>		/* for atoi () */
-#include <string.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/param.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <time.h>
-#include <net/route.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
-#include <errno.h>
-
-#include "log.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
@@ -46,9 +35,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "memory.h"
 #include "buffer.h"
 #include "roken.h"
+#include "log.h"
 
-#include "ripd.h"
-#include "zebra.h"
+#include "zebra/zebra.h"
+#include "ripd/ripd.h"
 
 extern struct thread_master *master;
 
@@ -180,7 +170,8 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
   ret = ri_check (p, ifp);
   if (!ret)
     {
-      log ("rip filtered route %s/%d\n", inet_ntoa (p->prefix), p->prefixlen);
+      zlog (NULL, LOG_INFO, "rip filtered route %s/%d",
+	      inet_ntoa (p->prefix), p->prefixlen);
       return ret;
     }
 
@@ -198,8 +189,8 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
   /* If given route is connected route. */
   if (rinfo->type == ZEBRA_ROUTE_CONNECT)
     {
-      log ("rip connected add %s/%d\n", inet_ntoa (p->prefix),
-	   p->prefixlen);
+      zlog (NULL, LOG_INFO, "rip connected add %s/%d", inet_ntoa (p->prefix),
+	      p->prefixlen);
 
       if (connected)
 	{
@@ -217,14 +208,14 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
       if (IPV4_ADDR_CMP (&rip->from, &from->sin_addr) == 0)
 	{
 	  /* This is update of existing rip route. */
-	  log ("rip update route %s/%d\n", inet_ntoa (p->prefix), 
-	       p->prefixlen);
+	  zlog (NULL, LOG_INFO, "rip update route %s/%d", inet_ntoa (p->prefix), 
+		  p->prefixlen);
 	}
       else
 	{
 	  /* This is replacement of rip route. */
-	  log ("rip replace route %s/%d\n", inet_ntoa (p->prefix), 
-	       p->prefixlen);
+	  zlog (NULL, LOG_INFO, "rip replace route %s/%d", inet_ntoa (p->prefix), 
+		  p->prefixlen);
 	}
       rip->tag = rinfo->tag;
       rip->metric = rinfo->metric;
@@ -242,7 +233,7 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
   else
     {
       /* This is new rip route. */
-      log ("rip add route %s/%d\n", inet_ntoa (p->prefix), p->prefixlen);
+      zlog (NULL, LOG_INFO, "rip add route %s/%d", inet_ntoa (p->prefix), p->prefixlen);
       rip_add_rinfo ((struct rip_info **) &np->info, rinfo);
       if (!connected)
 	{
@@ -262,7 +253,8 @@ rip_delete_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
   struct rip_info *rp;
 
   /* If route is alread exist update timer. */
-  log ("rip delete route %s/%d\n", inet_ntoa (p->prefix), p->prefixlen);
+  zlog (NULL, LOG_INFO, "rip delete route %s/%d", inet_ntoa (p->prefix),
+	  p->prefixlen);
 
   /* Get index for the prefix. */
   np = route_node_get (rip_table, (struct prefix *) p);
@@ -287,7 +279,8 @@ sockopt_broadcast (int sock)
   ret = setsockopt (sock, SOL_SOCKET, SO_BROADCAST, (char *) &on, sizeof on);
   if (ret < 0)
     {
-      log_warn ("can't set sockopt SO_BROADCAST to socket %d\n", sock);
+      zlog (NULL, LOG_WARNING, "can't set sockopt SO_BROADCAST to socket %d",
+	      sock);
       return -1;
     }
   return 0;
@@ -300,26 +293,30 @@ rip_packet_dump (struct rip_packet *packet, int size)
   caddr_t end;
   struct rte *rte;
   struct in_addr addr;
+  char pbuf[BUFSIZ], nbuf[BUFSIZ], hbuf[BUFSIZ];
 
   rte = packet->route;
   end = ((caddr_t) packet) + size;
   
-  log ("------------- Routing information -----------\n");
+  zlog (NULL, LOG_INFO, "------------- Routing information -----------");
   while ((caddr_t) rte < end) 
     {
-      log ("family [%d]", ntohs (rte->family));
-      log2 (" tag [%d]", ntohs (rte->tag));
-      log2 (" metric [%ld]\n", ntohl (rte->metric));
+      zlog (NULL, LOG_INFO, "family [%d] tag [%d] metric [%d]",
+	      ntohs (rte->family), ntohs (rte->tag), ntohl (rte->metric));
 
       addr.s_addr = rte->prefix;
-      log ("prefix  [%s]", inet_ntoa (addr));
+      strncpy (pbuf, inet_ntoa (addr), BUFSIZ);
       addr.s_addr = rte->netmask;
-      log2 (" netmask [%s]", inet_ntoa (addr));
+      strncpy (nbuf, inet_ntoa (addr), BUFSIZ);
       addr.s_addr = rte->nexthop;
-      log2 (" nexthop [%s]\n", inet_ntoa (addr));
+      strncpy (hbuf, inet_ntoa (addr), BUFSIZ);
+
+      zlog (NULL, LOG_INFO, "prefix  [%s] netmask [%s] nexthop [%s]",
+	      pbuf, nbuf, hbuf);
+
       rte ++;
     }
-  log ("------------- Routing information -----------\n");
+  zlog (NULL, LOG_INFO, "------------- Routing information -----------");
 }
 
 struct rip_info *
@@ -346,7 +343,8 @@ rip_process_route (struct rip_packet *packet, int size,
   /* Check port number of incoming packet. */
   if (ntohs (from->sin_port) != RIP_PORT_DEFAULT) 
     {
-      log ("This packet doesn't come from rip port : %d\n", from->sin_port);
+      zlog (NULL, LOG_INFO, "This packet doesn't come from rip port : %d",
+	      from->sin_port);
       return;
     }
 
@@ -363,8 +361,8 @@ rip_process_route (struct rip_packet *packet, int size,
       /* Address family check. ripd only supports AF_INET. */
       if (ntohs (rte->family) != AF_INET)
 	{
-	  log ("unsupported family %d from %s.", ntohs (rte->family),
-	       inet_ntoa (from->sin_addr));
+	  zlog (NULL, LOG_INFO, "unsupported family %d from %s.",
+		  ntohs (rte->family), inet_ntoa (from->sin_addr));
 	  rte++;
 	  continue;
 	}
@@ -392,7 +390,7 @@ rip_process_route (struct rip_packet *packet, int size,
       ret = if_check_address (rinfo->nexthop);
       if (ret)
 	{
-	  log ("route's nexthop set to myself! So ignore this route.\n");
+	  zlog (NULL, LOG_INFO, "route's nexthop set to myself! So ignore this route.");
 	  rte++;
 	  continue;
 	}
@@ -450,7 +448,7 @@ rip_udp_send (int sock, u_char *pnt, int size, struct sockaddr_in *dest)
 		sizeof(struct sockaddr_in));
 
   if (ret < 0)
-    log ("can't send packet : %s\n", strerror (errno));
+    zlog (NULL, LOG_INFO, "can't send packet : %m");
 
   return ret;
 }
@@ -554,20 +552,20 @@ rip_process_query (struct rip_packet *packet, int size,
   /* Check address family. */
   if (ntohs (rte->family) != AF_UNSPEC)
     {
-      log ("rip query packet with not AF_UNSPEC family\n");
+      zlog (NULL, LOG_INFO, "rip query packet with not AF_UNSPEC family");
       return;
     }
   /* Check tag command. */
   if (rte->tag != 0)
     {
-      log ("rip query packet with non zero tag value\n");
+      zlog (NULL, LOG_INFO, "rip query packet with non zero tag value");
       return;
     }
 
   /* If metric is not inifinity, it's error. */
   if (ntohl (rte->metric) != RIP_METRIC_INFINITY)
     {
-      log ("RIP query packet with not metric 16.\n");
+      zlog (NULL, LOG_INFO, "RIP query packet with not metric 16");
       return;
     }
 
@@ -599,7 +597,7 @@ rip_read (struct thread *thread)
   int sock;
 
   /* Fetch thread argument. */
-  sock = thread_fd (thread);
+  sock = THREAD_FD (thread);
 
   /* Register myself to thread. */
   thread_add_read (master, rip_read, NULL, sock);
@@ -610,7 +608,7 @@ rip_read (struct thread *thread)
 		  (struct sockaddr *) &from, &fromlen);
   if (len < 0) 
     {
-      log ("recvfrom failed : %s\n", strerror (errno));
+      zlog (NULL, LOG_INFO, "recvfrom failed : %m");
       return len;
     }
 
@@ -619,11 +617,11 @@ rip_read (struct thread *thread)
   ifp = (struct interface *) if_lookup_address (from.sin_addr);
 
   /* Dump packet header. */
-  log ("RIP version %d packet size [%d] command [%s] "
-       "host [%s] port [%d] if [%s]\n",
-       packet->version, len, LOOKUP (rip_msg, packet->command),
-       inet_ntoa(from.sin_addr), ntohs (from.sin_port),
-       ifp ? ifp->name : "unknown");
+  zlog (NULL, LOG_INFO, "RIP version %d packet size [%d] command [%s] "
+	  "host [%s] port [%d] if [%s]\n",
+	  packet->version, len, LOOKUP (rip_msg, packet->command),
+	  inet_ntoa(from.sin_addr), ntohs (from.sin_port),
+	  ifp ? ifp->name : "unknown");
 
   /* Dump packet rte. */
   rip_packet_dump (packet, len);
@@ -631,14 +629,15 @@ rip_read (struct thread *thread)
   /* If this packet come from unknown inteface, ignore it. */
   if (ifp == NULL)
     {
-      log ("RIP packet come from unknown inteface.\n");
+      zlog (NULL, LOG_INFO, "RIP packet come from unknown inteface.");
       return 0;
     }
 
   /* RIP version check. */
   if (packet->version == 0)
     {
-      log ("RIP version 0 which has command %d received.\n", packet->command);
+      zlog (NULL, LOG_INFO, "RIP version 0 which has command %d received.",
+	      packet->command);
       return 0;
     }
 
@@ -647,7 +646,7 @@ rip_read (struct thread *thread)
 
   if (packet->version != rip->version) 
     {
-      log ("This packet's version[%d] doesn't fit to my version.\n", 
+      zlog (NULL, LOG_INFO, "This packet's version[%d] doesn't fit to my version.", 
 	   packet->version);
       return 0;
     }
@@ -655,7 +654,7 @@ rip_read (struct thread *thread)
   /* check is this packet comming from myself? */
   if (if_check_address (from.sin_addr) && packet->command != RIP_POLL) 
     {
-      log ("This packet comes from myself\n");
+      zlog (NULL, LOG_INFO, "This packet comes from myself");
       return 0;
     }
   
@@ -670,7 +669,7 @@ rip_read (struct thread *thread)
       break;
     case RIP_TRACEON:
     case RIP_TRACEOFF:
-      log ("Obsolete command %s received, please sent it to routed.\n", 
+      zlog (NULL, LOG_INFO, "Obsolete command %s received, please sent it to routed", 
 	   LOOKUP (rip_msg, packet->command));
       break;
     case RIP_POLL_ENTRY:
@@ -782,7 +781,7 @@ rip_age_route ()
 
 	if (rinfo->timer < (current_time - RIP_TIMEOUT))
 	  {
-	    log ("route expired %s/%d\n", inet_ntoa (p->prefix), 
+	    zlog (NULL, LOG_INFO, "route expired %s/%d", inet_ntoa (p->prefix), 
 		 p->prefixlen);
 
 	    rip_delete_rinfo ((struct rip_info **) &np->info, rinfo);
@@ -842,7 +841,7 @@ rip_start ()
   rip->sock = rip_create_socket ();
   if (rip->sock < 0)
     {
-      log ("Can't make RIP socket\n");
+      zlog (NULL, LOG_INFO, "Can't make RIP socket");
       return;
     }
 

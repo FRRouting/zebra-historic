@@ -55,6 +55,7 @@
 #undef PATH_RIPNGD_PID
 #undef PATH_BGPD_PID
 #undef PATH_OSPFD_PID
+#undef PATH_OSPF6D_PID
 
 /* Define if Solaris */
 #undef SUNOS_5

@@ -1,35 +1,28 @@
-/* Get interface's address and mask information by sysctl() function.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: if_sysctl.c,v 1.26 1999/02/22 12:15:40 developer Exp $
+ *
+ * Get interface's address and mask information by sysctl() function.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/sysctl.h>
-#include <net/route.h>
-#include <net/if.h>
-#include <net/if_dl.h>
-#include <netinet/in.h>
+#include <zebra.h>
 
 #include "linklist.h"
 #include "sockunion.h"
@@ -37,8 +30,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "prefix.h"
 #include "connected.h"
 #include "memory.h"
-#include "log.h"
 #include "ioctl.h"
+#include "log.h"
 
 /* Interface adding function called from interface_list. */
 void
@@ -64,8 +57,7 @@ ifm_interface_add (struct if_msghdr *ifm)
   if_get_mtu (ifp);
   if_get_metric (ifp);
 
-  if (log_mode)
-    log ("interface %s index %d.\n", ifp->name, ifp->index);
+  zlog (NULL, LOG_DEBUG, "interface %s index %d", ifp->name, ifp->index);
 }
 
 
@@ -104,7 +96,7 @@ ifm_read (struct ifa_msghdr *ifm,
 
   /* Assert read up end point matches to end point */
   if (pnt != end)
-    log_warn ("ifm_read() does't read all socket data.");
+    zlog (NULL, LOG_WARNING, "ifm_read() does't read all socket data");
 }
 
 /* Interface's address information get. */
@@ -118,7 +110,7 @@ ifm_address_add (struct ifa_msghdr *ifm)
   ifp = if_lookup_by_index (ifm->ifam_index);
   if (ifp == NULL) 
     {
-      log_warn ("no interface for index %d\n", ifm->ifam_index); 
+      zlog (NULL, LOG_WARNING, "no interface for index %d", ifm->ifam_index); 
       return -1;
     }
 
@@ -171,7 +163,7 @@ interface_list ()
   /* Query buffer size. */
   if (sysctl (mib, MIBSIZ, NULL, &bufsiz, NULL, 0) < 0) 
     {
-      log_warn ("sysctl() error by %s", strerror (errno));
+      zlog (NULL, LOG_WARNING, "sysctl() error by %m");
       return;
     }
 
@@ -181,7 +173,7 @@ interface_list ()
   /* Fetch interface informations into allocated buffer. */
   if (sysctl (mib, MIBSIZ, buf, &bufsiz, NULL, 0) < 0) 
     {
-      log_warn ("sysctl error by %s", strerror (errno));
+      zlog (NULL, LOG_WARNING, "sysctl error by %m");
       return;
     }
 
@@ -199,6 +191,9 @@ interface_list ()
 	  ifm_address_add ((struct ifa_msghdr *) ifm);
 	  break;
 	default:
+	  zlog (NULL, LOG_INFO, "interfaces_list(): unexpected message type");
+	  XFREE (MTYPE_TMP, ref);
+	  return;
 	  break;
 	}
     }
@@ -219,11 +214,11 @@ ifm_read_ifinfo (struct if_msghdr *ifm)
     {
       ifp = if_new();
       ifp->index = ifm->ifm_index;
-      log ("New interface from routing socket.\n");
+      zlog (NULL, LOG_INFO, "New interface from routing socket");
     }
   else
-    log ("Interface %s's information change from routing socket.\n", 
-	 ifp->name);
+    zlog (NULL, LOG_INFO, "Interface %s's information change from routing socket", 
+	    ifp->name);
 
   pnt = (caddr_t)(ifm + 1);
   end = ((caddr_t)(ifm)) + ifm->ifm_msglen;

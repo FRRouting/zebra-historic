@@ -1,52 +1,45 @@
-/* Zebra daemon core routine.
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: zebra.c,v 1.130 1999/02/22 12:15:40 developer Exp $
+ *
+ * Zebra daemon core routine.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the 
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330, 
+ * Boston, MA 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
+#include <zebra.h>
 
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the 
-Free Software Foundation, Inc., 59 Temple Place - Suite 330, 
-Boston, MA 02111-1307, USA.  */
-
-#include "config.h"
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <net/route.h>
-#include <errno.h>
-#include <sys/time.h>
-#include <string.h>
-#include <assert.h>
-
-#include "zebra.h"
+#include "zebra/zebra.h"
 #include "prefix.h"
 #include "vector.h"
 #include "linklist.h"
 #include "vty.h"
 #include "command.h"
-#include "log.h"
 #include "if.h"
 #include "thread.h"
+#include "stream.h"
 #include "buffer.h"
 #include "memory.h"
 #include "rib.h"
 #include "roken.h"
 #include "network.h"
 #include "sockunion.h"
+#include "log.h"
 
 /* This host's information. */
 struct
@@ -334,8 +327,8 @@ zebra_read (struct thread *thread)
   u_char command;
 
   /* Get thread data.  Reset reading thread because I'm running. */
-  sock = thread_fd (thread);
-  client = thread_arg (thread);
+  sock = THREAD_FD (thread);
+  client = THREAD_ARG (thread);
   client->t_read = NULL;
 
   /* Read length and command. */
@@ -343,7 +336,7 @@ zebra_read (struct thread *thread)
   if (nbyte <= 0) 
     {
       if (debug_is_set (DEBUG_EVENT))
-	log ("connection closed socket [%d]\n", sock);
+	zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
       zebra_close (client);
       return -1;
     }
@@ -360,7 +353,7 @@ zebra_read (struct thread *thread)
       if (nbyte <= 0) 
 	{
 	  if (debug_is_set (DEBUG_EVENT))
-	    log ("connection closed [%d] when reading zebra data\n", sock);
+	    zlog (NULL, LOG_INFO, "connection closed [%d] when reading zebra data", sock);
 	  zebra_close (client);
 	  return -1;
 	}
@@ -368,10 +361,10 @@ zebra_read (struct thread *thread)
 
   /* Debug packet information. */
   if (debug_is_set (DEBUG_EVENT))
-    log ("connection from socket [%d]\n", sock);
+    zlog (NULL, LOG_INFO, "connection from socket [%d]", sock);
 
   if (debug_is_set (DEBUG_PACKET))
-    log ("zebra message received [%s] %d\n", 
+    zlog (NULL, LOG_INFO, "zebra message received [%s] %d", 
 	 zebra_command_str[command], length);
 
   switch (command) 
@@ -396,7 +389,7 @@ zebra_read (struct thread *thread)
       zebra_request_hostinfo (sock);
       break;
     default:
-      log ("Zebra received unknown command %d\n", command);
+      zlog (NULL, LOG_INFO, "Zebra received unknown command %d", command);
       break;
     }
 
@@ -414,8 +407,8 @@ zebra_write (struct thread *thread)
   struct zebra_client *client;
 
   /* Thread treatment. */
-  sock = thread_fd (thread);
-  client = thread_arg (thread);
+  sock = THREAD_FD (thread);
+  client = THREAD_ARG (thread);
   client->t_write = NULL;
 
   stream_flush (client->obuf, sock);
@@ -447,7 +440,7 @@ zebra_accept (struct thread *thread)
   int accept_sock;
   int client_sock;
 
-  accept_sock = thread_fd (thread);
+  accept_sock = THREAD_FD (thread);
 
   size = sizeof (client);
   client_sock = accept (accept_sock, (struct sockaddr *) &client, &size);
@@ -472,7 +465,7 @@ zebra_serv ()
 
   if (accept_sock < 0) 
     {
-      log_warn ("can't init client routing socket\n");
+      zlog (NULL, LOG_WARNING, "can't init client routing socket");
       return;
     }
 
@@ -484,13 +477,13 @@ zebra_serv ()
 
   if (bind (accept_sock, (struct sockaddr *)&me, sizeof (me)) < 0) 
     {
-      log_warn ("can't bind socket\n");
+      zlog (NULL, LOG_WARNING, "can't bind socket");
       exit (1);
     }
 
   if (listen (accept_sock, 1) < 0)
     {
-      log_warn ("can't listen socket\n");
+      zlog (NULL, LOG_WARNING, "can't listen socket");
       exit (1);
     }
 

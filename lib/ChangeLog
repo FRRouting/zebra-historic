@@ -1,3 +1,96 @@
+1999-03-19  Toshiaki Takada  <takada@zebra.org>
+
+	* stream.c (stream_strncpy): Added for getting any length bytes
+	from stream.
+
+1999-03-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h (ZEBRA_BUG_ADDRESS): New macro added.
+
+1999-03-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* buffer.c (buffer_flush_window): If ep is same as buffer's size
+	length and lp is overrun one octet.
+
+1999-03-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.h: add VTY's timeout function.
+
+1999-03-05    <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add OSPF6_node.
+
+1999-03-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h: Check HAVE_SYS_SELECT_H when include <sys/select.h>
+
+1999-03-03  Jeroen Ruigrok/Asmodai <asmodai@wxs.nl>
+
+	* zebra.h: Include <net/if_var.h> if it exists.
+
+1999-03-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* getopt.[ch],getopt1.c: Sync with glibc-2.1.
+
+	* log.c (zlog): Tempolary ZLOG_STDOUT feature added.
+
+	* command.h: Include vector.h and vty.h
+
+1999-02-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.h (struct route_map_rule_cmd): Add prefix arguemnt.
+
+	* routemap.c (route_map_apply_index): Add prefix argument.
+	(route_map_apply): Likewise.
+
+	* memory.h (enum): Add MTYPE_ROUTE_MAP_COMPILED.
+
+	* stream.c: Add stream_fifo related functions.
+
+1999-02-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* daemon.c: Return integer value.  File descriptor close is added.
+
+	* memory.h (enum): add MTYPE_OSPF_LSA.
+
+1999-02-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rsh.c: Remove empty file.
+
+1999-02-22    <kunihiro@zebra.org>
+
+	* routemap.c: Add add/delete hook to route_map_master.
+
+1999-02-19  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* str.[ch] added to supply wrappers for snprintf(), strlcat() and
+	strlcpy on system without these.
+
+1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* syslog support added
+
+1999-02-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c (access_list_add_hook): added for hook function management.
+	* filter.c (access_list_delete_hook): Likewise.
+
+1999-01-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* stream.c: New file.
+	* stream.h: New file.
+	* Divide stream related fucntions from buffer.[ch] into stream.[ch].
+	
+1999-01-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): add MTYPE_STREAM, MTYPE_STREAM_DATA
+
+	* buffer.c (stream_new): Set MTYPE_STREAM to XMALLOC argument.
+
+1998-12-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* routemap.c: route_map_index_delete() added.
+
 1998-12-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* buffer.c (buffer_empty): check cp instead of sp.

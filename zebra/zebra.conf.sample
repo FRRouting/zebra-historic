@@ -2,6 +2,8 @@
 !
 ! zebra sample configuration file
 !
+! $Id: zebra.conf.sample,v 1.14 1999/02/19 17:26:38 developer Exp $
+!
 hostname Router
 password zebra
 enable password zebra
@@ -20,4 +22,4 @@ enable password zebra
 !ip route 0.0.0.0/0 203.181.89.241
 !
 
-!logfile zebra.log
+!log file zebra.log

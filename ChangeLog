@@ -1,3 +1,64 @@
+1999-03-02  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* reworked include file structure, and configure so that all
+ 	source files get all system-dependent include files by including
+ 	<zebra.h> which is really lib/zebra.h. This means that the
+ 	different programs include files are now available as #include
+ 	"zebra/zebra.h" - note the use of quotes, not <> as delimiters.
+
+	In practical terms, if I haven't really screwed up, the main file
+ 	that maintainers for other OSes have to change is lib/zebra.h for
+ 	all the conditional includes etc.
+
+	* added --disable-pthread for those systems that seem to have
+ 	POSIX threads, but do not work. OpenBSD 2.4+ is like that just
+ 	now. Changed all occurance of #ifdef PTHREAD to use HAVE_PTHREAD
+ 	instead.
+
+1999-02-24    <kunihiro@zebra.org>
+
+	* configure.in: update to AC_PREREQ(1.13).
+	Change message from Linux 2.1.x to Linux 2.2.x.
+	* Added ospf6d directory support.
+
+1999-02-22  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* added a "log" element to the BGPd peer structure, enabling us to
+ 	start thinging about a log stream per peer. This is currently
+ 	ignored by the wrapper code, but developers should try to use the
+ 	"appropriate" ZLOG stream. Documentation will follow, when the
+ 	real routines start to exist.
+
+	The current plan is to use a copy of the BSD syslog() routines and
+ 	replace the syslog library function with our own. I will need
+ 	feedback from users of other platforms as this work is done to see
+ 	if all is well elsewhere.
+	
+	* preliminary work on zlog() library. directly replaces syslog()
+ 	currently with zlog(ZLOG *, ...) where the new first argument
+	is a pointer to a ZLOG structure (defined in lib/log.h) and will
+	encapsulate all the information necessary to maintain multiple
+	logging streams.
+
+1999-02-19  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* added vsnprintf() macro to lib/str.h if required and removed
+	#ifdef SUNOS_5 dependency on it
+
+1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* syslog support added
+
+1999-02-18  Peter Galbavy <Peter.Galbavy@knowledge.com>
+
+	* configure.in: Add daemon function check.
+
+1999-01-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --disable-ipv6, --disable-zebra,
+	--disable-bgpd, --disable-ripd, --disable-ripngd, --disable-ospfd
+	options to configure.
+
 1998-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: Check /usr/inet6/lib/libinet6.a exists or not.

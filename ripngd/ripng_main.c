@@ -1,31 +1,28 @@
-/* RIPngd main routine.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: ripng_main.c,v 1.32 1999/02/23 22:26:21 developer Exp $
+ *
+ * RIPngd main routine.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/time.h>
+#include <zebra.h>
 
 #include "version.h"
 #include "getopt.h"
@@ -35,8 +32,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "thread.h"
 #include "log.h"
 
-#include "ripngd.h"
-#include "zebra.h"
+#include "ripngd/ripngd.h"
+#include "zebra/zebra.h"
 
 /* Configuration filename and directory. */
 char config_current[] = RIPNG_DEFAULT_CONFIG;
@@ -77,7 +74,7 @@ Daemon which manages RIPng.\n\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
-Report bugs to zebra@zebra.org\n", progname);
+Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
     }
   exit (status);
 }
@@ -94,6 +91,9 @@ main (int argc, char **argv)
 
   /* get program name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
+
+  zlog_default = openzlog(progname, ZLOG_SYSLOG, ZLOG_RIPNG,
+			  LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
     {
@@ -136,7 +136,7 @@ main (int argc, char **argv)
   master = thread_make_master ();
 
   /* Library inits. */
-  log_init ();
+  /* log_init (); */
   cmd_init ();
   vty_init ();
 
@@ -148,12 +148,12 @@ main (int argc, char **argv)
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);
 
-  /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : RIPNG_VTY_PORT);
-
   /* Change to the daemon program. */
   if (daemon_mode)
-    daemon_me ();
+    daemon (0, 0);
+
+  /* Create VTY socket */
+  vty_serv_sock (vty_port ? vty_port : RIPNG_VTY_PORT);
 
   /* Process id file create. */
   pid_output (PATH_RIPNGD_PID);

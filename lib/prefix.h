@@ -1,22 +1,29 @@
-/* Prefix structure.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: prefix.h,v 1.19 1999/02/19 17:01:48 developer Exp $
+ *
+ * Prefix structure.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+#ifndef _ZEBRA_PREFIX_H
+#define _ZEBRA_PREFIX_H
 
 /* IPv4 and IPv6 unified prefix structure. */
 struct prefix
@@ -75,6 +82,9 @@ struct prefix_ipv6
 #define IPV6_ADDR_CMP(D,S)   memcmp ((D), (S), IPV6_MAX_BYTELEN)
 #define IPV6_ADDR_COPY(D,S)  memcpy ((D), (S), IPV6_MAX_BYTELEN)
 
+/* Count prefix size from mask length */
+#define PSIZE(a) (((a) + 7) / (8))
+
 /* Prototypes. */
 int str2prefix (char *, struct prefix *);
 struct prefix *prefix_new ();
@@ -106,3 +116,5 @@ int ip6_masklen (struct in6_addr netmask);
 
 int prefix_same (struct prefix *, struct prefix *);
 void prefix_copy (struct prefix *, struct prefix *);
+
+#endif /* _ZEBRA_PREFIX_H */

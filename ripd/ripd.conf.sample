@@ -2,6 +2,8 @@
 !
 ! RIPd sample configuration file
 !
+! $Id: ripd.conf.sample,v 1.11 1999/02/19 17:28:42 developer Exp $
+!
 hostname ripd
 password zebra
 !
@@ -12,4 +14,4 @@ router zebra
 !
 router rip
 !
-!logfile ripd.log
+!log file ripd.log

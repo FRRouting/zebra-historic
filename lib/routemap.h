@@ -1,22 +1,29 @@
-/* Route map function.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: routemap.h,v 1.13 1999/02/21 17:12:27 developer Exp $
+ *
+ * Route map function.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+#ifndef _ZEBRA_ROUTEMAP_H
+#define _ZEBRA_ROUTEMAP_H
 
 /* Route map rule structure for matching and setting. */
 struct route_map_rule_cmd
@@ -25,7 +32,7 @@ struct route_map_rule_cmd
   char *str;
 
   /* Function for value set or match. */
-  int (*func_apply)(void *, void *);
+  int (*func_apply)(void *, struct prefix *, void *);
 
   /* Compile argument and return result as void *. */
   void *(*func_compile)(char *);
@@ -61,6 +68,8 @@ struct route_map_rule_list
 /* Route map index structure. */
 struct route_map_index
 {
+  struct route_map *map;
+
   /* Preference of this route map rule. */
   int pref;
 
@@ -74,6 +83,21 @@ struct route_map_index
   /* Make linked list. */
   struct route_map_index *next;
   struct route_map_index *prev;
+};
+
+/* Route map list structure. */
+struct route_map
+{
+  /* Name of route map. */
+  char *name;
+
+  /* Route map's rule. */
+  struct route_map_index *head;
+  struct route_map_index *tail;
+
+  /* Make linked list. */
+  struct route_map *next;
+  struct route_map *prev;
 };
 
 /* Prototypes. */
@@ -92,6 +116,34 @@ route_map_delete_match (struct route_map_index *index,
 			char *match_name,
 			char *match_arg);
 
+/* Add route-map set statement to the route map. */
+int
+route_map_add_set (struct route_map_index *index, 
+		   char *set_name,
+		   char *set_arg);
+
+/* Delete route map set rule. */
+int
+route_map_delete_set (struct route_map_index *index, char *set_name,
+                      char *set_arg);
+
 /* Install rule command to the match list. */
 void
 route_map_install_match (struct route_map_rule_cmd *cmd);
+
+/* Install rule command to the set list. */
+void
+route_map_install_set (struct route_map_rule_cmd *cmd);
+
+/* Lookup route map by name. */
+struct route_map *
+route_map_lookup_by_name (char *name);
+
+/* Apply route map to the object. */
+int
+route_map_apply (struct route_map *map, struct prefix *, void *object);
+
+void
+route_map_add_hook (void (*func) ());
+
+#endif /* _ZEBRA_ROUTEMAP_H */

@@ -1,3 +1,80 @@
+1999-03-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c: Delete obsolete default attribute DEFUN.
+
+1999-03-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_attr.c: Make attribute structure put into attribute hash.
+
+1999-03-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_view.c : Delete file.
+
+1999-02-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c (bgp_apply_route_map): Add prefix argument. 
+
+	* bgp_route.h (struct bgp_info): Add bgp_info structre.  I'll
+	replace bgp_route with this.
+
+	* bgp_routemap.c (route_match_ip_address): Fix bug of passing non
+	prefix value to access_list_apply(). 
+
+	* bgpd.conf.sample: Add route-map sample.
+	Delete obsolete default-attr statements.
+
+	* bgp_packet.c: Use stream_fifo for packet queueing.
+
+1999-02-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_add_left): add non empty aspath treatment.
+
+	* bgp_main.c: include unistd.h for daemon().
+
+	* bgp_route.c (nlri_process): add IPv6 table lookup.
+
+	* bgp_attr.c (route_parse_ipv6): call nlri_process().
+	(attr_make): Obsolete function attr_make deleted.
+
+1999-02-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c (aspath_add_left): change function name from
+	aspath_add_leftmost_as().
+
+1999-02-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_aspath.c: add aspath_add_leftmost_as ().
+
+1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* syslog support added
+
+1999-01-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c: DEFUN (neighbor_nexthop): deleted.
+	DEFUN (neighbor_distribute_list): added.
+
+1999-01-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h (struct peer ): header_buf and read_buf is removed.
+
+	* bgp_peer.[ch]: Deleted.  Peer related functions are merged to
+	bgpd.c
+
+	* bgp_network.c: New file.
+	* bgp_network.h: New file.
+
+	* bgp_packet.h: New file.
+	
+1999-01-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_keepalive_send): Now BGP keepalive packet is
+	buffered.
+
+1999-01-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c: New file.
+
 1998-12-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_zebra.c (zebra_client): Use zebra_connect() in lib/client.c. 

@@ -1,34 +1,29 @@
-/* Buffering to output and input. 
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: buffer.h,v 1.24 1999/02/19 17:01:47 developer Exp $
+ *
+ * Buffering to output and input. 
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-/* Stream buffer. */
-struct stream
-{
-  unsigned char *data;
-  
-  unsigned long cp;
-  unsigned long sp;
-  unsigned long ep;
-
-  unsigned long size;
-};
+#ifndef _ZEBRA_BUFFER_H
+#define _ZEBRA_BUFFER_H
 
 /* Buffer master. */
 struct buffer
@@ -75,9 +70,6 @@ struct buffer_data
 #define BUFFER_STREAM      1
 #define BUFFER_VTY         2
 
-/* Utility macros. */
-#define STREAM_SIZE(S)  ((S)->size)
-
 #define GETC(val, pnt) \
   (val) = (u_char)(*(pnt)++)
 
@@ -112,24 +104,6 @@ do {\
    (pnt) += 4;\
 } while (0)
 
-/* Stream prototypes. */
-struct stream *stream_new (size_t);
-int stream_read (struct stream *, int, size_t);
-int stream_putc (struct stream *, u_char);
-int stream_putw (struct stream *, u_int16_t);
-int stream_putl (struct stream *, u_int32_t);
-int stream_write (struct stream *, u_char *, size_t);
-u_char *stream_pnt (struct stream *);
-u_char *stream_data (struct stream *);
-void stream_set_cursor (struct stream *, unsigned long);
-void stream_free (struct stream *);
-u_char stream_getc (struct stream *);
-u_short stream_getw (struct stream *);
-void stream_reset (struct stream *);
-int stream_flush (struct stream *, int);
-unsigned long stream_size (struct stream *);
-int stream_empty (struct stream *);
-
 /* Buffer prototypes. */
 struct buffer *buffer_new (int, size_t);
 int buffer_write (struct buffer *, u_char *, size_t);
@@ -138,6 +112,8 @@ char *buffer_getstr (struct buffer *);
 int buffer_putc (struct buffer *, u_char);
 int buffer_putstr (struct buffer *, u_char *);
 void buffer_reset (struct buffer *);
-void buffer_flush_all (struct buffer *, int);
+int buffer_flush_all (struct buffer *, int);
 int buffer_flush_window (struct buffer *, int, int, int, int);
 int buffer_empty (struct buffer *);
+
+#endif /* _ZEBRA_BUFFER_H */

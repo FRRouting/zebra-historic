@@ -1,3 +1,22 @@
+1999-03-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: Install configuration sample with 600 permission.
+
+1999-03-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: Add -I.. to INCLUDES.
+
+1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
+
+	* syslog support added
+
+1999-02-17 Peter Galbavy <Peter.Galbavy@knowledge.com>
+
+	* if_sysctl.c (interface_list): allocated memory free when unknown
+	ifm_type is returned.
+
+	* ioctl.c (if_get_mtu): added SIOCGIFDATA treatment.
+	
 1998-12-15  Magnus Ahltorp <map@stacken.kth.se>
 
 	* interface.c: Header include added.

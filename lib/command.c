@@ -1,36 +1,35 @@
-/* Command interpret routine for virtual terminal [aka TeletYpe] interface 
-   Copyright (C) 1997, 98 Kunihiro Ishiguro
+/*
+ * $Id: command.c,v 1.59 1999/02/22 12:15:38 developer Exp $
+ *
+ * Command interpret routine for virtual terminal [aka TeletYpe]
+ * sinterface Copyright (C) 1997, 98 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *  
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ * 
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdarg.h>
-#include <fcntl.h>
+#include <zebra.h>
 
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "memory.h"
 #include "log.h"
+
 
 /* Command vector which includes some level of command lists. Normally
    each daemon maintains each own cmdvec. */
@@ -332,8 +331,8 @@ install_element (enum node_type ntype, struct cmd_element *cmd)
   /* Make check. */
   if (vector_max (cmd->descvec) < vector_max (cmd->strvec))
     {
-      log ("Warning : No description exists. %s\n", cmd->string);
-      log ("%d %d\n", vector_max (cmd->descvec),vector_max (cmd->strvec));
+      zlog (NULL, LOG_INFO, "Warning : No description exists. %s", cmd->string);
+      zlog (NULL, LOG_INFO, "%d %d", vector_max (cmd->descvec),vector_max (cmd->strvec));
     }
 }
 
@@ -355,7 +354,10 @@ config_write_host (struct vty *vty)
     }      
 
   if (host.logfile)
-    vty_out (vty, "logfile %s%s", host.logfile, VTY_NEWLINE);
+    vty_out (vty, "log file %s%s", host.logfile, VTY_NEWLINE);
+
+  if (host.log)
+    vty_out (vty, "log %s%s", host.log, VTY_NEWLINE);
 
   return 0;
 }
@@ -1082,7 +1084,10 @@ DEFUN (config_exit,
     case BGP_NODE:
     case RIP_NODE:
     case RIPNG_NODE:
+    case OSPF_NODE:
+    case OSPF6_NODE:
     case RMAP_NODE:
+    case VTY_NODE:
       vty->node = CONFIG_NODE;
       break;
     default:
@@ -1109,6 +1114,9 @@ DEFUN (config_end,
     case RIPNG_NODE:
     case BGP_NODE:
     case RMAP_NODE:
+    case OSPF_NODE:
+    case OSPF6_NODE:
+    case VTY_NODE:
       vty->node = ENABLE_NODE;
       break;
     default:
@@ -1195,7 +1203,6 @@ DEFUN (config_write_file,
       }
   vty_out (vty, "Configuration saved to %s\r\n", config_file);
 
-  vty_flush_all (file_vty);
   vty_close (file_vty);
   return CMD_SUCCESS;
 }
@@ -1287,6 +1294,7 @@ DEFUN (config_logfile,
        "Log filename specify command\n"
        "Pathname of logfile\n")
 {
+#if 0
   char *str;
 
   str = log_open (argv[0]);
@@ -1295,10 +1303,48 @@ DEFUN (config_logfile,
       vty_out (vty, "can't open logfile %s\n", argv[0]);
       return CMD_WARNING;
     }
+#endif
+
   if (host.logfile)
     XFREE (0, host.logfile);
 
   host.logfile = strdup (argv[0]);
+  return CMD_SUCCESS;
+}
+
+DEFUN (config_log,
+       config_log_cmd,
+       "log stdout",
+       "Logging control\n"
+       "Logging goes to stdout\n")
+{
+  zlog_set_flag (NULL, ZLOG_STDOUT);
+  host.log = "stdout";
+  return CMD_SUCCESS;
+}
+
+DEFUN (config_log_file,
+       config_log_file_cmd,
+       "log file FILENAME",
+       "Logging control\n"
+       "Logging to file\n"
+       "Loggin filename\n")
+{
+  int ret;
+
+  ret = zlog_set_file (NULL, ZLOG_FILE, argv[0]);
+
+  if (!ret)
+    {
+      vty_out (vty, "can't open logfile %s\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (host.logfile)
+    XFREE (MTYPE_TMP, host.logfile);
+
+  host.logfile = strdup (argv[0]);
+
   return CMD_SUCCESS;
 }
 
@@ -1360,5 +1406,6 @@ cmd_init ()
   install_element (CONFIG_NODE, &hostname_cmd);
   install_element (CONFIG_NODE, &password_cmd);
   install_element (CONFIG_NODE, &enable_password_cmd);
-  install_element (CONFIG_NODE, &config_logfile_cmd);
+  install_element (CONFIG_NODE, &config_log_cmd);
+  install_element (CONFIG_NODE, &config_log_file_cmd);
 }

@@ -1,22 +1,29 @@
-/* Route filtering function.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: filter.h,v 1.14 1999/02/19 17:01:47 developer Exp $
+ *
+ * Route filtering function.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA. 
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+#ifndef _ZEBRA_FILTER_H
+#define _ZEBRA_FILTER_H
 
 /* Filter type is made by `permit', `deny' and `dynamic'. */
 enum filter_type 
@@ -48,9 +55,13 @@ struct access_list
 
 /* Prototypes for access-list. */
 void access_list_init ();
+void access_list_add_hook (void (*func)());
+void access_list_delete_hook (void (*func)());
 struct access_list *access_list_lookup (char *);
 enum filter_type access_list_apply (struct access_list *, void *);
 
 /* Prototypes for distribute-list. */
 void distribute_init ();
 void distribute_apply_all ();
+
+#endif /* _ZEBRA_FILTER_H */

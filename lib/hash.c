@@ -1,26 +1,28 @@
-/* Hash routine.
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * $Id: hash.c,v 1.6 1999/02/22 12:15:38 developer Exp $
+ *
+ * Hash routine.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2, or (at your
+ * option) any later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <string.h>
+#include <zebra.h>
 
 #include "hash.h"
 #include "memory.h"
@@ -103,14 +105,14 @@ hash_push (struct Hash *hash, void *data)
       for (mp = hash->index[key]; mp->next != NULL; mp = mp->next) 
 	if ((*hash->hash_cmp) (data, mp->data) == 1) 
 	  {
-	    log ("hash data [%x] was duplicated!\n", data);
+	    zlog (NULL, LOG_INFO, "hash data [%p] was duplicated!", data);
 	    XFREE (MTYPE_HASH_BACKET, backet);
 	    return NULL;
 	  }
       
       if ((*hash->hash_cmp) (data, mp->data) == 1) 
 	{
-	  log ("hash account name [%x] was duplicated!\n", data);
+	  zlog (NULL, LOG_INFO, "hash account name [%p] was duplicated!", data);
 	  XFREE (MTYPE_HASH_BACKET, backet);
 	  return NULL;
 	}

@@ -1,40 +1,26 @@
-/* RIPng daemon
-   Copyright (C) 1998 Kunihiro Ishiguro
+/*
+ * RIPng daemon
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
-
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/param.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <net/route.h>
-#include <sys/time.h>
-#include <sys/uio.h>
-#include <errno.h>
-#include <assert.h>
-#include <arpa/inet.h>
+#include <zebra.h>
 
 #include "prefix.h"
 #include "filter.h"
@@ -43,14 +29,14 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "memory.h"
 #include "linklist.h"
 #include "if.h"
-#include "buffer.h"
+#include "stream.h"
 #include "table.h"
 #include "roken.h"
 
-#include "zebra.h"
-#include "ripngd.h"
-#include "ripng_route.h"
-#include "ripng_debug.h"
+#include "ripngd/ripngd.h"
+#include "ripngd/ripng_route.h"
+#include "ripngd/ripng_debug.h"
+#include "zebra/zebra.h"
 
 /* RIPng structure which includes many parameters related to RIPng
    protocol. If ripng couldn't active or ripng doesn't configured,
@@ -75,7 +61,7 @@ setsockopt_ipv6_multicast_hops (int sock)
 
   ret = setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &val, sizeof(val));
   if (ret < 0)
-    log ("can't setsockopt IPV6_MULTICAST_HOPS\n");
+    zlog (NULL, LOG_ERR, "can't setsockopt IPV6_MULTICAST_HOPS");
   return ret;
 }
 
@@ -88,7 +74,7 @@ setsockopt_ipv6_multicast_loop (int sock)
     
   ret = setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &val, sizeof(val));
   if (ret < 0)
-      log ("can't setsockopt IPV6_MULTICAST_LOOP\n");
+      zlog (NULL, LOG_ERR, "can't setsockopt IPV6_MULTICAST_LOOP");
   return ret;
 }
 
@@ -99,7 +85,7 @@ setsockopt_so_recvbuf (int sock, int size)
 
   ret = setsockopt (sock, SOL_SOCKET, SO_RCVBUF, (char *) &size, sizeof (int));
   if (ret < 0)
-    log ("can't setsockopt SO_RCVBUF\n");
+    zlog (NULL, LOG_ERR, "can't setsockopt SO_RCVBUF");
   return ret;
 }
 
@@ -116,7 +102,8 @@ setsockopt_ipv6_pktinfo (int sock)
   ret = setsockopt(sock, IPPROTO_IPV6, IPV6_PKTINFO, &val, sizeof(val));
 #endif /* INIA_IPV6 */
   if (ret < 0)
-      log ("can't setsockopt IPV6_PKTINFO : %s\n", strerror (errno));
+    zlog (NULL, LOG_ERR, 
+	  "can't setsockopt IPV6_PKTINFO : %s", strerror (errno));
   return ret;
 }
 
@@ -131,7 +118,7 @@ ripng_make_socket ()
   sock = socket (AF_INET6, SOCK_DGRAM, 0);
   if (sock < 0) 
     {
-      log ("Can't make ripng socket\n");
+      zlog (NULL, LOG_ERR, "Can't make ripng socket");
       return sock;
     }
 
@@ -158,7 +145,7 @@ ripng_make_socket ()
   ret = bind (sock, (struct sockaddr *) &ripaddr, sizeof (ripaddr));
   if (ret < 0)
     {
-      log ("Can't bind ripng socket: %s.\n", strerror (errno));
+      zlog (NULL, LOG_ERR, "Can't bind ripng socket: %s.", strerror (errno));
       return ret;
     }
   return sock;
@@ -188,7 +175,7 @@ ripng_send_packet (caddr_t pnt,
   SET_IN6_LINKLOCAL_IFINDEX (addr.sin6_addr, ifindex);
 
   if (debug (DEBUG_EVENT))
-    log ("[Event] RIPng send packet\n");
+    zlog (NULL, LOG_INFO, "[Event] RIPng send packet");
 
   ret = sendto (ripng->sock, pnt, size, 0,
 		(struct sockaddr *)&addr, sizeof (struct sockaddr_in6));
@@ -197,8 +184,8 @@ ripng_send_packet (caddr_t pnt,
       struct interface *ifp;
 
       ifp = if_lookup_by_index (ifindex);
-      log ("*Error* RIPng send fail on %s : %s\n", 
-	   ifp->name, strerror (errno));
+      zlog (NULL, LOG_ERR, "*Error* RIPng send fail on %s : %s", 
+	    ifp->name, strerror (errno));
     }
 
   return ret;
@@ -254,8 +241,8 @@ ripng_send_packet (caddr_t buf,
       struct interface *ifp;
 
       ifp = if_lookup_by_index (ifindex);
-      log ("*Error* RIPng send fail on %s : %s\n", 
-	   ifp->name, strerror (errno));
+      zlog (NULL, LOG_ERR, "*Error* RIPng send fail on %s : %s", 
+	    ifp->name, strerror (errno));
     }
 
   return ret;
@@ -336,8 +323,8 @@ ripng_packet_dump (struct ripng_packet *rp, int size)
   char *cmd_str[] = {"NULL", "RIP_REQUEST", "RIP_RESPONSE"};
 
   /* Dump packet header. */
-  log ("[Packet] RIPng version %d %s packet size %d\n",
-       rp->version, cmd_str[rp->command], size);
+  zlog (NULL, LOG_INFO, "[Packet] RIPng version %d %s packet size %d",
+	rp->version, cmd_str[rp->command], size);
 
   rte = rp->rte;
   lim = (caddr_t) rp + size;
@@ -345,11 +332,11 @@ ripng_packet_dump (struct ripng_packet *rp, int size)
   while ((u_char *) rte < lim)
     {
       if (rte->metric == RIPNG_METRIC_NEXTHOP)
-	log ("  nexthop %s/%d\n",
+	zlog (NULL, LOG_INFO, "  nexthop %s/%d",
 	     inet_ntop (AF_INET6, &rte->addr, buf, BUFSIZ), 
 	     rte->masklen);
       else
-	log ("  %s/%d metric %d tag %d\n",
+	zlog (NULL, LOG_INFO, "  %s/%d metric %d tag %d",
 	     inet_ntop (AF_INET6, &rte->addr, buf, BUFSIZ), 
 	     rte->masklen, rte->metric, ntohs (rte->tag));
       rte++;
@@ -365,16 +352,18 @@ ripng_check_packet (struct ripng_packet *rp, struct sockaddr_in6 *sin6)
   /* Check version number of incoming packet. */
   if (rp->version != ripng->version) 
     {
-      log ("This packet's version[%d] doesn't fit to my version.\n", 
-	   rp->version);
+      zlog (NULL, LOG_INFO, 
+	    "This packet's version[%d] doesn't fit to my version.", 
+	    rp->version);
       return -1;
     }
 
   /* Check port number of incoming packet. */
   if (ntohs (sin6->sin6_port) != RIPNG_PORT_DEFAULT) 
     {
-      log ("This packet doesn't come from ripng port : %d\n", 
-	   ntohs (sin6->sin6_port));
+      zlog (NULL, LOG_INFO, 
+	    "This packet doesn't come from ripng port : %d", 
+	    ntohs (sin6->sin6_port));
       return -1;
     }
   
@@ -382,7 +371,8 @@ ripng_check_packet (struct ripng_packet *rp, struct sockaddr_in6 *sin6)
   ret = IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr);
   if (!ret)
     {
-      log ("This packet is coming from not link local address\n");
+      zlog (NULL, LOG_INFO,
+	    "This packet is coming from not link local address");
       return -1;
     }
   
@@ -443,7 +433,8 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   ifp = if_lookup_by_index (ifindex);
   if (ifp == NULL)
     {
-      log_warn ("Can't lookup interface by index [%d]\n", ifindex);
+      zlog (NULL, LOG_WARNING, 
+	    "Can't lookup interface by index [%d]", ifindex);
       return;
     }
   ri = ifp->if_data;
@@ -451,20 +442,22 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   /* Multicast address check. */
   if (IN6_IS_ADDR_MULTICAST (&rte->addr))
     {
-      log_warn ("Destination prefix is a multicast address %s/%d. "
-		"Ignore this routing entry.\n",
-		inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
-		rte->masklen);
+      zlog (NULL, LOG_WARNING ,
+	    "Destination prefix is a multicast address %s/%d. "
+	    "Ignore this routing entry.",
+	    inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
+	    rte->masklen);
       return;
     }
 
   /* Link local address check. */
   if (IN6_IS_ADDR_LINKLOCAL (&rte->addr))
     {
-      log_warn ("Destination prefix is a link-local address %s/%d. "
-		"Ignore this routing entry.\n",
-		inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
-		rte->masklen);
+      zlog (NULL, LOG_WARNING, 
+	    "Destination prefix is a link-local address %s/%d. "
+	    "Ignore this routing entry.",
+	    inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
+	    rte->masklen);
       return;
     }
 
@@ -472,9 +465,10 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
      because masklen is define as u_char. */
   if (rte->masklen > 128)
     {
-      log_warn ("Invalid prefix length %s/%d. Ignore this routing entry.\n",
-		inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
-		rte->masklen);
+      zlog (NULL, LOG_WARNING,
+	    "Invalid prefix length %s/%d. Ignore this routing entry.",
+	    inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
+	    rte->masklen);
       return;
     }
 
@@ -484,7 +478,7 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
       if (ri->ri_default_receive != RIPNG_DEFAULT_ACCEPT)
 	{
 	  if (debug (DEBUG_PACKET))
-	    log ("Filtered default route\n");
+	    zlog (NULL, LOG_INFO, "Filtered default route");
 	  return;
 	}
     }
@@ -492,7 +486,7 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   if (ri->ri_receive == RIPNG_RECEIVE_OFF)
     {
       if (debug (DEBUG_EVENT))
-	log ("[Event] RIPng route is filtered by configuration.\n");
+	zlog (NULL, LOG_INFO, "[Event] RIPng route is filtered by configuration.");
       return;
     }
 
@@ -516,9 +510,9 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
       /* If route already exist in routing table then update timer of
          the route. */
       if (debug (DEBUG_ZEBRA))
-	log ("ripng update route %s/%d\n",
-	     inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN), 
-	     rte->masklen);
+	zlog (NULL, LOG_INFO, "ripng update route %s/%d",
+	      inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN), 
+	      rte->masklen);
 
       /* XXX Maybe we need nexthop and incoming address check here. */
 
@@ -551,7 +545,8 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   RIPNG_SLOT_RTE(slot) = rinfo;
   
   if (debug (DEBUG_ZEBRA))
-    log ("ripng add route %s/%d\n", 
+    zlog (NULL, LOG_INFO, 
+	  "ripng add route %s/%d", 
 	 inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN),
 	 rte->masklen);
 
@@ -569,9 +564,10 @@ ripng_delete_route (struct rte *rte,
   struct route_node *find;
 
   /* If route is alread exist update timer. */
-  log ("rip delete route %s/%d\n", 
-       inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN), 
-       rte->masklen);
+  zlog (NULL, LOG_INFO,
+	"rip delete route %s/%d", 
+	inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN), 
+	rte->masklen);
 
   p.family = AF_INET6;
   p.u.prefix6 = rte->addr;
@@ -581,7 +577,7 @@ ripng_delete_route (struct rte *rte,
 
   if (find->info == NULL)
     {
-      log_warn ("route is already deleted\n");
+      zlog (NULL, LOG_WARNING, "route is already deleted");
       return;
     }
 
@@ -639,7 +635,8 @@ ripng_request_process (struct ripng_packet *rp,int size,
   ifp = if_lookup_by_index (ifindex);
 
   if (debug (DEBUG_EVENT))
-    log ("[Event] RIPng REQUEST recieved from %s\n", ifp->name);
+    zlog (NULL, LOG_INFO,
+	  "[Event] RIPng REQUEST recieved from %s", ifp->name);
 
   if (ifp)
     ripng_supply (ifp);
@@ -662,23 +659,23 @@ ripng_read (struct thread *thread)
 
   /* Fetch thread data and set read pointer to empty for event
      managing.  `sock' sould be same as ripng->sock. */
-  sock = thread_fd (thread);
+  sock = THREAD_FD (thread);
   ripng->t_read = NULL;
 
   len = ripng_recv_packet (sock, 
-			   stream_data (ripng->ibuf),
-			   stream_size (ripng->ibuf), 
+			   stream_get_data (ripng->ibuf),
+			   stream_get_size (ripng->ibuf), 
 			   &from, &ifindex);
 
   /* If we can't read RIPng packet, logging it and cancel to add new
      read thread. */
   if (len < 0) 
     {
-      log_warn ("recvfrom failed by %s.\n", strerror (errno));
+      zlog (NULL, LOG_WARNING, "recvfrom failed by %s.", strerror (errno));
       return len;
     }
 
-  packet = (struct ripng_packet *) stream_data (ripng->ibuf);
+  packet = (struct ripng_packet *) stream_get_data (ripng->ibuf);
 
   /* OK I'm called so if debug option is set tell it to the user. */
   if (debug (DEBUG_EVENT))
@@ -688,9 +685,10 @@ ripng_read (struct thread *thread)
 
       ifp = if_lookup_by_index (ifindex);
 
-      log ("[Event] RIPng received on %s %s port %d \n", ifp->name,
-	   inet_ntop (AF_INET6, &from.sin6_addr, buf, BUFSIZ), 
-	   ntohs (from.sin6_port));
+      zlog (NULL, LOG_INFO, 
+	    "[Event] RIPng received on %s %s port %d", ifp->name,
+	    inet_ntop (AF_INET6, &from.sin6_addr, buf, BUFSIZ), 
+	    ntohs (from.sin6_port));
     }
 
   /* Dump packet rte. */
@@ -711,7 +709,7 @@ ripng_read (struct thread *thread)
       ripng_response_process (packet, len, &from, ifindex);
       break;
     default:
-      log_warn ("Invalid RIPng command %d\n", packet->command);
+      zlog (NULL, LOG_WARNING, "Invalid RIPng command %d", packet->command);
       break;
     }
   
@@ -800,9 +798,9 @@ ripng_distribute_out (struct interface *ifp, struct prefix *p)
 	  char buf[BUFSIZ];
 	  
 	  if (debug (DEBUG_PACKET))
-	    log ("  %s/%d filtered by distribute-list\n",
-		 inet_ntop (AF_INET6, &p->u.prefix6, buf, BUFSIZ), 
-		 p->prefixlen);
+	    zlog (NULL, LOG_INFO, "  %s/%d filtered by distribute-list",
+		  inet_ntop (AF_INET6, &p->u.prefix6, buf, BUFSIZ), 
+		  p->prefixlen);
 	  return ret;
 	}
     }
@@ -830,7 +828,8 @@ ripng_supply (struct interface *ifp)
   maxrte = (STREAM_SIZE(s) - 4) / 20;
 
   if (debug (DEBUG_EVENT))
-    log ("[Event] RIPng supply routes to interface %s\n", ifp->name);
+    zlog (NULL, LOG_INFO,
+	  "[Event] RIPng supply routes to interface %s", ifp->name);
 
   /* Write each routing information. */
   for (node = route_top (ripng_table); node; node = route_next (node))
@@ -927,7 +926,7 @@ ripng_flush ()
 
   /* Log flush event. */
   if (debug (DEBUG_EVENT))
-    log ("[Event] RIPng flush timer expired!\n");
+    zlog (NULL, LOG_INFO, "[Event] RIPng flush timer expired!");
 
   /* Age of rte routes. */
   ripng_age ();
@@ -944,7 +943,8 @@ ripng_flush ()
       if (ri->ri_send == RIPNG_SEND_OFF)
 	{
 	  if (debug (DEBUG_EVENT))
-	    log ("[Event] RIPng send to if %d is suppressed by config\n",
+	    zlog (NULL, LOG_INFO, 
+		  "[Event] RIPng send to if %d is suppressed by config",
 		 ifp->index);
 	  continue;
 	}
@@ -1003,7 +1003,7 @@ ripng_request (struct interface *ifp)
   struct ripng_packet ripng_packet;
 
   if (debug (DEBUG_EVENT))
-    log ("[Event] RIPng send request to %s\n", ifp->name);
+    zlog (NULL, LOG_INFO, "[Event] RIPng send request to %s", ifp->name);
 
   bzero (&ripng_packet, sizeof (ripng_packet));
   ripng_packet.command = RIPNG_REQUEST;
@@ -1219,7 +1219,7 @@ DEFUN (router_ripng,
 
       /* Notice to user we couldn't create RIPng. */
       if (ret < 0)
-	log_warn ("can't create RIPng\n");
+	zlog (NULL, LOG_WARNING, "can't create RIPng");
     }
 
   return CMD_SUCCESS;

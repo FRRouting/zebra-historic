@@ -1,43 +1,32 @@
-/* Thread management routine
-   Inspired by Ikuo Nakagawa's em.[ch] event manager.
-   Copyright (C) 1998 Kunihiro Ishiguro
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+/*
+ * $Id: thread.c,v 1.21 1999/02/22 12:15:39 developer Exp $
+ *
+ * Thread management routine
+ * Inspired by Ikuo Nakagawa's em.[ch] event manager.
+ * Copyright (C) 1998 Kunihiro Ishiguro
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.  
+ */
 
 /* #define PTHREAD */
 /* #define DEBUG */
 
-#include "config.h"
-
-#ifdef PTHREAD
-#include <pthread.h>
-#endif /* PTHREAD */
-
-#include <stdio.h>
-#include <string.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#ifdef HAVE_SYS_SELECT_H
-#include <sys/select.h>
-#endif /* HAVE_SYS_SELECT_H */
-#include <errno.h>
-#include <assert.h>
+#include <zebra.h>
 
 #include "thread.h"
 #include "memory.h"
@@ -244,7 +233,7 @@ thread_add_read (struct thread_master *m,
 
   if (FD_ISSET (fd, &m->readfd))
     {
-      log_warn ("There is already read fd [%d]\n", fd);
+      zlog (NULL, LOG_WARNING, "There is already read fd [%d]", fd);
       return NULL;
     }
 
@@ -281,7 +270,7 @@ thread_add_write (struct thread_master *m,
 
   if (FD_ISSET (fd, &m->writefd))
     {
-      log_warn ("There is already write fd [%d]\n", fd);
+      zlog (NULL, LOG_WARNING, "There is already write fd [%d]", fd);
       return NULL;
     }
 
@@ -427,12 +416,12 @@ thread_cancel (struct thread *thread)
   thread_master_debug (thread->master);
 #endif /* DEBUG */
 
-#ifdef PTHREAD
+#ifdef HAVE_PTHREAD
   if (thread->id)
     {
       pthread_cancel (thread->id);
     }
-#endif /* PTHREAD */
+#endif /* HAVE_PTHREAD */
 }
 
 /* for struct timeval */
@@ -634,12 +623,7 @@ thread_fetch (struct thread_master *m,
 
   /* There is no events. */
   if (!thread)
-    {
-#ifdef DEBUG
-      log ("thread.c : there is no event found, try again\n");
-#endif /* DEBUG */
-      goto retry;
-    }
+    goto retry;
 
   *fetch = *thread;
   thread->type = THREAD_UNUSED;
@@ -700,13 +684,11 @@ thread_get_id ()
 void
 thread_call (struct thread *thread)
 {
-#ifdef PTHREAD
-  pthread_detach (pthread_create (&thread->id,
-				  NULL,
-				  (void *(*)(void *))thread->func,
-				  thread));
+#ifdef HAVE_PTHREAD
+  pthread_create (&thread->id, NULL, (void *(*)(void *))thread->func, thread);
+  pthread_detach (thread->id);
 #else
   thread->id = thread_get_id ();
   (*thread->func) (thread);
-#endif /* PTHREAD*/
+#endif /* HAVE_PTHREAD */
 }

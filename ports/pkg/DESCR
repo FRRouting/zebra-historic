@@ -18,20 +18,21 @@ SUPPORTED Protocols
 		RIPv2 supports both Multicast and Broadcast
 	BGP (only support BGP4)
 
-  For supporting IPv4 Routing protocols is here
-	RIPng (only supports listening. announce is still not supported)
-	BGP4+ (only supports listening. announce is still not supported)
+  For supporting IPv6 Routing protocols is here
+	RIPng
+	BGP4+
 
 ===================
 Supported plat-home
 ===================
   Now zebra is testing on 
-  o FreeBSD 2.2.5
+  o FreeBSD 2.2.8
       -- without IPv6 ;-)
-      -- with Hydrangea
+      -- with KAME
       -- with INRIA IPv6 protocol stack.
-  o Linux 2.0.33
 
+  o GNU/Linux 2.2.2
+  o GNU/Linux 2.0.36
 
 ===========
 ZEBRA Ports

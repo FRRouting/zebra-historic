@@ -1,5 +1,5 @@
 /* OSPFd main routine.
-   Copyright (C) 1998 Kunihiro Ishiguro
+   Copyright (C) 1998, 99 Kunihiro Ishiguro, Toshiaki Takada
 
 This file is part of GNU Zebra.
 
@@ -18,27 +18,21 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
-#include <config.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/time.h>
-#include <signal.h>
+#include <zebra.h>
 
 #include "version.h"
 #include "getopt.h"
+#include "linklist.h"
+#include "if.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "thread.h"
 #include "log.h"
 
-#include "ospf_lsa.h"
-#include "ospfd.h"
-#include "zebra.h"
+#include "ospfd/ospf_interface.h"
+#include "ospfd/ospfd.h"
+#include "zebra/zebra.h"
 
 /* Configuration filename and directory. */
 char config_current[] = OSPF_DEFAULT_CONFIG;
@@ -79,7 +73,7 @@ Daemon which manages OSPF.\n\n\
 -v, --version      Print program version\n\
 -h, --help         Display this help and exit\n\
 \n\
-Report bugs to zebra@zebra.org\n", progname);
+Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
     }
   exit (status);
 }
@@ -88,7 +82,7 @@ Report bugs to zebra@zebra.org\n", progname);
 void 
 sighup (int sig)
 {
-  log ("SIGHUP received\n");
+  zlog (NULL, LOG_INFO, "SIGHUP received");
   log_rotate ();
 }
 
@@ -96,10 +90,8 @@ sighup (int sig)
 void
 sigint (int sig)
 {
-  log ("SIGINT received\n");
-
-  /* Close all ospf peer and free all of resources. */
-  ospf_terminate ();
+  zlog (NULL, LOG_INFO, "SIGINT received");
+  exit (0);
 }
 
 /* Signale wrapper. */
@@ -133,6 +125,15 @@ signal_init ()
   signal_set (SIGINT, sigint);
   signal_set (SIGTERM, SIG_IGN);
   signal_set (SIGPIPE, SIG_IGN);
+#ifdef SIGTSTP
+  signal_set (SIGTSTP, SIG_IGN);
+#endif
+#ifdef SIGTTIN
+  signal_set (SIGTTIN, SIG_IGN);
+#endif
+#ifdef SIGTTOU
+  signal_set (SIGTTOU, SIG_IGN);
+#endif
 }
 
 /* OSPFd main routine. */
@@ -147,6 +148,9 @@ main (int argc, char **argv)
 
   /* get program name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
+
+  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_OSPF,
+			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
     {
@@ -165,7 +169,7 @@ main (int argc, char **argv)
 	  daemon_mode = 1;
 	  break;
 	case 'l':
-	  log_mode = 1;
+	  /*	  log_mode = 1; */
 	  break;
 	case 'f':
 	  config_file = optarg;
@@ -186,33 +190,44 @@ main (int argc, char **argv)
 	}
     }
 
+  /* Initializations. */
   master = thread_make_master ();
 
   /* Library inits. */
-  log_init ();
+  signal_init ();
   cmd_init ();
   vty_init ();
+  /* memory_init (); */
 
   /* OSPFd inits. */
-  /* To be written. */
+  ospf_init ();
+  ospf_if_init ();
 
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);
 
-  /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT);
-
   /* Change to the daemon program. */
   if (daemon_mode)
-    daemon_me ();
+    daemon (0, 0);
 
   /* Process id file create. */
   pid_output (PATH_OSPFD_PID);
 
+  /* Create VTY socket */
+  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT);
+
+  /* Print banner. */
+  zlog (NULL, LOG_INFO, "OSPFd (%s) starts", ZEBRA_VERSION);
+
   /* Fetch next active thread. */
   while (thread_fetch (master, &thread))
-    thread_call (&thread);
-
+    {
+      thread_call (&thread);
+#ifdef DEBUG
+      thread_master_debug (master);
+#endif /* DEBUG */
+    }
   /* Not reached. */
   exit (0);
 }
+
