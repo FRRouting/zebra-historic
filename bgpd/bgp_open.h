@@ -29,6 +29,7 @@
 
 /* Route refresh capabilities. */
 #define CAPABILITY_CODE_REFRESH     128
+#define CAPABILITY_CODE_REFRESH_01    2
 #define CAPABILITY_CODE_REFRESH_LEN   0
 
 int bgp_open_option_parse (struct peer *, u_char, int *);

@@ -51,6 +51,7 @@
 #include "bgpd/bgp_zebra.h"
 #include "bgpd/bgp_open.h"
 #include "bgpd/bgp_filter.h"
+#include "bgpd/bgp_nexthop.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
@@ -303,14 +304,23 @@ DEFUN (bgp_router_id, bgp_router_id_cmd,
 }
 
 DEFUN (no_bgp_router_id, no_bgp_router_id_cmd,
+       "no bgp router-id",
+       NO_STR
+       BGP_STR
+       "Override configured router identifier\n")
+{
+  if (argc == 0)
+    return bgp_router_id_unset (vty, NULL);
+  
+  return bgp_router_id_unset (vty, argv[0]);
+}
+
+ALIAS (no_bgp_router_id, no_bgp_router_id_val_cmd,
        "no bgp router-id A.B.C.D",
        NO_STR
        BGP_STR
        "Override configured router identifier\n"
        "Manually configured router identifier\n")
-{
-  return bgp_router_id_unset (vty, argv[0]);
-}
 
 /* BGP's cluster-id control. */
 int
@@ -371,15 +381,30 @@ DEFUN (bgp_cluster_id, bgp_cluster_id_cmd,
   return bgp_cluster_id_set (vty, argv[0]);
 }
 
+ALIAS (bgp_cluster_id, bgp_cluster_id32_cmd,
+       "bgp cluster-id <1-4294967295>",
+       BGP_STR
+       "Configure Route-Reflector Cluster-id\n"
+       "Route-Reflector Cluster-id as 32 bit quantity\n")
+
 DEFUN (no_bgp_cluster_id, no_bgp_cluster_id_cmd,
+       "no bgp cluster-id",
+       NO_STR
+       BGP_STR
+       "Configure Route-Reflector Cluster-id\n")
+{
+  if (argc == 0)
+    return bgp_cluster_id_unset (vty, NULL);
+  
+  return bgp_cluster_id_unset (vty, argv[0]);
+}
+
+ALIAS (no_bgp_cluster_id, no_bgp_cluster_id_val_cmd,
        "no bgp cluster-id A.B.C.D",
        NO_STR
        BGP_STR
        "Configure Route-Reflector Cluster-id\n"
        "Route-Reflector Cluster-id in IP address format\n")
-{
-  return bgp_cluster_id_unset (vty, argv[0]);
-}
 
 int
 bgp_confederation_id_set (struct vty *vty, char *id_str)
@@ -698,7 +723,7 @@ DEFUN (bgp_confederation_identifier, bgp_confederation_identifier_cmd,
        "bgp confederation identifier <1-65535>",
        BGP_STR
        "AS confederation parameters\n"
-       "as number\n"
+       "AS number\n"
        "Set routing domain confederation AS\n")
 {
   return bgp_confederation_id_set(vty, argv[0]);
@@ -720,7 +745,7 @@ DEFUN (no_bgp_confederation_identifier, no_bgp_confederation_identifier_cmd,
        NO_STR
        BGP_STR
        "AS confederation parameters\n"
-       "as number\n"
+       "AS number\n"
        "Set routing domain confederation AS\n")
 {
   return bgp_confederation_id_unset(vty, argv[0]);
@@ -836,6 +861,7 @@ peer_new ()
   peer->translate_update  = 0;
   SET_FLAG (peer->flags, PEER_FLAG_SEND_COMMUNITY);
   SET_FLAG (peer->flags, PEER_FLAG_SEND_EXT_COMMUNITY);
+  SET_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH);
   SET_FLAG (peer->sflags, PEER_STATUS_CAPABILITY_OPEN);
 
   peer->ibuf = stream_new (BGP_MAX_PACKET_SIZE);
@@ -1052,6 +1078,7 @@ bgp_get (struct vty *vty, as_t as, char *name)
       bgp = bgp_create ();
       bgp->as = as;
       newnode_add (bgp_list, bgp);
+      bgp_if_update_all ();
       vty->node = BGP_NODE;
       vty->index = bgp;
       return CMD_SUCCESS;
@@ -1072,6 +1099,7 @@ bgp_get (struct vty *vty, as_t as, char *name)
       if (name)
 	bgp->name = strdup (name);
       newnode_add (bgp_list, bgp);
+      bgp_if_update_all ();
       vty->node = BGP_NODE;
       vty->index = bgp;
 
@@ -1104,6 +1132,9 @@ bgp_delete (struct bgp *bgp)
   struct newnode *nn;
   struct newnode *next;
 
+  /* Delete static route. */
+  bgp_static_delete (bgp);
+
   bgp->peer_group->del = (void (*)(void *)) peer_group_free;
 
   newlist_delete (bgp->peer_group);
@@ -1117,9 +1148,6 @@ bgp_delete (struct bgp *bgp)
 
   /* Clear peer_conf */
   newlist_delete (bgp->peer_conf);
-
-  /* Delete static route. */
-  bgp_static_delete (bgp);
 
   newnode_delete (bgp_list, bgp);
 
@@ -4959,9 +4987,11 @@ int
 peer_have_afi (struct peer *peer, int afi)
 {
   return ((afi == AFI_IP && (peer->afc[AFI_IP][SAFI_UNICAST]
-			     || peer->afc[AFI_IP][SAFI_MULTICAST])) 
+			     || peer->afc[AFI_IP][SAFI_MULTICAST]
+			     || peer->afc[AFI_IP][SAFI_MPLS_VPN]))
 	  || (afi == AFI_IP6 && (peer->afc[AFI_IP6][SAFI_UNICAST] 
-				 || peer->afc[AFI_IP6][SAFI_MULTICAST])));
+				 || peer->afc[AFI_IP6][SAFI_MULTICAST]
+				 || peer->afc[AFI_IP6][SAFI_MPLS_VPN])));
 }
 
 /* `clear ip bgp' functions. */
@@ -5024,9 +5054,9 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 	}
 
       if (cleared)
-	vty_out (vty, "Peer %s cleared%s", arg, VTY_NEWLINE);
+	vty_out (vty, "neighbor %s is cleared%s", arg, VTY_NEWLINE);
       else
-	vty_out (vty, "Can't find peer %s%s", arg, VTY_NEWLINE);
+	vty_out (vty, "%BGP: Unknown neighbor - \"%s\"%s", arg, VTY_NEWLINE);
 
       return CMD_SUCCESS;
     }
@@ -5063,7 +5093,7 @@ clear_bgp (struct vty *vty, int afi, enum clear_type type, char *arg)
 	vty_out (vty, "All neighbors which AS is %s cleared%s", arg, 
 		 VTY_NEWLINE);
       else
-	vty_out (vty, "No neighbor with AS %s cleared%s", arg, VTY_NEWLINE);
+	vty_out (vty, "%BGP: No peer is configured with AS %s%s", arg, VTY_NEWLINE);
            
       return CMD_SUCCESS;
     }
@@ -5078,7 +5108,7 @@ DEFUN (clear_ip_bgp_all,
        CLEAR_STR
        IP_STR
        BGP_STR
-       "Clear all connections\n")
+       "Clear all peers\n")
 {
   return clear_bgp (vty, AFI_IP, clear_all, NULL);
 }
@@ -5113,7 +5143,7 @@ DEFUN (clear_ip_bgp_as,
        CLEAR_STR
        IP_STR
        BGP_STR
-       "AS number of the peers\n")
+       "Clear peers with the AS number\n")
 {
   return clear_bgp (vty, AFI_IP, clear_as, argv[0]);
 }       
@@ -5125,7 +5155,7 @@ DEFUN (clear_ipv6_bgp_all,
        CLEAR_STR
        IPV6_STR
        BGP_STR
-       "Clear all connections\n")
+       "Clear all peers\n")
 {
   return clear_bgp (vty, AFI_IP6, clear_all, NULL);
 }
@@ -5160,7 +5190,7 @@ DEFUN (clear_ipv6_bgp_as,
        CLEAR_STR
        IPV6_STR
        BGP_STR
-       "AS number of the peers\n")
+       "Clear peers with the AS number\n")
 {
   return clear_bgp (vty, AFI_IP6, clear_as, argv[0]);
 }       
@@ -5168,51 +5198,70 @@ DEFUN (clear_ipv6_bgp_as,
 
 /* Clear ip bgp neighbor soft in. */
 int
-clear_bgp_soft_in (struct vty *vty, afi_t afi, char *ip_str)
+clear_bgp_soft_in (struct vty *vty, afi_t afi, safi_t safi, char *ip_str)
 {
   int ret;
   union sockunion su;
   struct peer *peer;
   struct newnode *nn;
-  int cleared = 0;
+  int find = 0;
 
-  /* Looking up peer with IP address string. */
-  ret = str2sockunion (ip_str, &su);
-  if (ret < 0)
+  if (ip_str != NULL)
     {
-      vty_out (vty, "Malformed address: %s%s", ip_str, VTY_NEWLINE);
-      return CMD_WARNING;
+      /* Looking up peer with IP address string. */
+      ret = str2sockunion (ip_str, &su);
+      if (ret < 0)
+        {
+          vty_out (vty, "Malformed address: %s%s", ip_str, VTY_NEWLINE);
+          return CMD_WARNING;
+        }
     }
 
   NEWLIST_LOOP (peer_list, peer, nn)
     {
-      if (peer_have_afi (peer, afi) && sockunion_same (&peer->su, &su))
+      if (peer->afc[afi][safi]
+	  && (sockunion_same (&peer->su, &su) || ip_str == NULL))
 	{
-	  /* If neighbor has route refresh capability, send route refresh
-	     message to the peer. */
-	  if (peer->refresh && peer->status == Established)
+	  find = 1;
+	  if (peer->status == Established)
 	    {
-	      bgp_route_refresh_send (peer, afi, SAFI_UNICAST);
-	      bgp_route_refresh_send (peer, afi, SAFI_MULTICAST);
-	      cleared = 1;
-	    }
-	  else
-	    {
-	      /* If neighbor has soft reconfiguration inbound flag.
-                 Use Adj-RIB-In database. */
-	      if (CHECK_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG))
-		{
-		  bgp_soft_reconfig_in (peer);
-		  cleared = 1;
-		}
+	      /* If neighbor has route refresh capability, send route refresh
+	         message to the peer. */
+	      if (peer->refresh_nego)
+	        {
+	          bgp_route_refresh_send (peer, afi, safi);
+	          vty_out (vty, "neighbor %s is inbound cleared%s",
+			   peer->host, VTY_NEWLINE);
+	        }
+	      else
+	        {
+	          /* If neighbor has soft reconfiguration inbound flag.
+                     Use Adj-RIB-In database. */
+	          if (CHECK_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG))
+		    {
+		      if (safi == SAFI_MPLS_VPN)
+			{
+			  vty_out (vty, "%BGP: Soft-reconfiguration inbound is not supported for vpnv4%s", VTY_NEWLINE);
+			  return CMD_WARNING;
+			}
+		      bgp_soft_reconfig_in (peer, afi, safi);
+		      vty_out (vty, "neighbor %s is inbound cleared%s",
+			       peer->host, VTY_NEWLINE);
+		    }
+	          else
+		    {
+		      vty_out (vty, "%BGP: Inbound soft reconfig for %s not possible as it%s      has neither refresh capability, nor inbound soft reconfig%s", peer->host, VTY_NEWLINE, VTY_NEWLINE);
+		    }
+	        }
 	    }
 	}
     }
 
-  if (cleared)
-    vty_out (vty, "Peer %s is cleared%s", ip_str, VTY_NEWLINE);
-  else
-    vty_out (vty, "Can't soft clear peer %s%s", ip_str, VTY_NEWLINE);
+  if (! find && ip_str != NULL)
+    {
+      vty_out (vty, "%BGP: Unknown neighbor - \"%s\"%s", ip_str, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
 
   return CMD_SUCCESS;
 }
@@ -5223,26 +5272,417 @@ DEFUN (clear_ip_bgp_peer_soft_in,
        CLEAR_STR
        IP_STR
        BGP_STR
-       "IP address\n"
-       "Soft reconfiguration\n"
-       "soft reconfigure inbound update\n")
+       "BGP neighbor address to clear\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
 {
-  return clear_bgp_soft_in (vty, AFI_IP, argv[0]);
+  return clear_bgp_soft_in (vty, AFI_IP, SAFI_UNICAST, argv[0]);
 }
 
+ALIAS (clear_ip_bgp_peer_soft_in,
+       clear_ip_bgp_peer_in_cmd,
+       "clear ip bgp A.B.C.D in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Soft reconfig inbound update\n")
+
+DEFUN (clear_ip_bgp_all_soft_in,
+       clear_ip_bgp_all_soft_in_cmd,
+       "clear ip bgp * soft in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+{
+  return clear_bgp_soft_in (vty, AFI_IP, SAFI_UNICAST, NULL);
+}
+
+ALIAS (clear_ip_bgp_all_soft_in,
+       clear_ip_bgp_all_in_cmd,
+       "clear ip bgp * in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig inbound update\n")
+
+
+DEFUN (clear_ip_bgp_vpnv4_peer_soft_in,
+       clear_ip_bgp_vpnv4_peer_soft_in_cmd,
+       "clear ip bgp vpnv4 A.B.C.D soft in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "BGP neighbor address to clear\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+{
+  return clear_bgp_soft_in (vty, AFI_IP, SAFI_MPLS_VPN, argv[0]);
+}
+
+ALIAS (clear_ip_bgp_vpnv4_peer_soft_in,
+       clear_ip_bgp_vpnv4_peer_in_cmd,
+       "clear ip bgp vpnv4 A.B.C.D in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "BGP neighbor address to clear\n"
+       "Soft reconfig inbound update\n")
+
+DEFUN (clear_ip_bgp_vpnv4_all_soft_in,
+       clear_ip_bgp_vpnv4_all_soft_in_cmd,
+       "clear ip bgp vpnv4 * soft in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "Clear all peers\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+{
+  return clear_bgp_soft_in (vty, AFI_IP, SAFI_MPLS_VPN, NULL);
+}
+
+ALIAS (clear_ip_bgp_vpnv4_all_soft_in,
+       clear_ip_bgp_vpnv4_all_in_cmd,
+       "clear ip bgp vpnv4 * in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "Clear all peers\n"
+       "Soft reconfig inbound update\n")
+
+/* Clear ip bgp neighbor soft out. */
+int
+clear_bgp_soft_out (struct vty *vty, afi_t afi, safi_t safi, char *ip_str)
+{
+  int ret;
+  union sockunion su;
+  struct peer *peer;
+  struct newnode *nn;
+  int find = 0;
+
+  if (ip_str != NULL)
+    {
+      /* Looking up peer with IP address string. */
+      ret = str2sockunion (ip_str, &su);
+      if (ret < 0)
+        {
+          vty_out (vty, "Malformed address: %s%s", ip_str, VTY_NEWLINE);
+          return CMD_WARNING;
+        }
+    }
+
+  NEWLIST_LOOP (peer_list, peer, nn)
+    {
+      if (peer->afc[afi][safi]
+	  && (sockunion_same (&peer->su, &su) || ip_str == NULL))
+	{
+	  find = 1;
+	  if (peer->status == Established)
+	    {
+	      /* Performing soft out is same as receiving route
+                 refresh. */
+	      bgp_refresh_table (peer, afi, safi);
+	      vty_out (vty, "neighbor %s is outbound cleared%s",
+		       peer->host, VTY_NEWLINE);
+	    }
+	}
+    }
+
+  if (! find && ip_str != NULL)
+    {
+      vty_out (vty, "%BGP: Unknown neighbor - \"%s\"%s", ip_str, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (clear_ip_bgp_peer_soft_out,
+       clear_ip_bgp_peer_soft_out_cmd,
+       "clear ip bgp A.B.C.D soft out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+{
+  return clear_bgp_soft_out (vty, AFI_IP, SAFI_UNICAST, argv[0]);
+}
+
+ALIAS (clear_ip_bgp_peer_soft_out,
+       clear_ip_bgp_peer_out_cmd,
+       "clear ip bgp A.B.C.D out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Soft reconfig outbound update\n")
+
+DEFUN (clear_ip_bgp_all_soft_out,
+       clear_ip_bgp_all_soft_out_cmd,
+       "clear ip bgp * soft out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+{
+  return clear_bgp_soft_out (vty, AFI_IP, SAFI_UNICAST, NULL);
+}
+
+ALIAS (clear_ip_bgp_all_soft_out,
+       clear_ip_bgp_all_out_cmd,
+       "clear ip bgp * out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig outbound update\n")
+
+DEFUN (clear_ip_bgp_peer_soft,
+       clear_ip_bgp_peer_soft_cmd,
+       "clear ip bgp A.B.C.D soft",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Soft reconfig\n")
+{
+  if (clear_bgp_soft_out (vty, AFI_IP, SAFI_UNICAST, argv[0]) == CMD_SUCCESS)
+    clear_bgp_soft_in (vty, AFI_IP, SAFI_UNICAST, argv[0]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (clear_ip_bgp_all_soft,
+       clear_ip_bgp_all_soft_cmd,
+       "clear ip bgp * soft",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig\n")
+{
+  if (clear_bgp_soft_out (vty, AFI_IP, SAFI_UNICAST, NULL) == CMD_SUCCESS)
+    clear_bgp_soft_in (vty, AFI_IP, SAFI_UNICAST, NULL);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (clear_ip_bgp_vpnv4_peer_soft_out,
+       clear_ip_bgp_vpnv4_peer_soft_out_cmd,
+       "clear ip bgp vpnv4 A.B.C.D soft out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "BGP neighbor address to clear\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+{
+  return clear_bgp_soft_out (vty, AFI_IP, SAFI_MPLS_VPN, argv[0]);
+}
+
+ALIAS (clear_ip_bgp_vpnv4_peer_soft_out,
+       clear_ip_bgp_vpnv4_peer_out_cmd,
+       "clear ip bgp vpnv4 A.B.C.D out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "BGP neighbor address to clear\n"
+       "Soft reconfig outbound update\n")
+
+DEFUN (clear_ip_bgp_vpnv4_all_soft_out,
+       clear_ip_bgp_vpnv4_all_soft_out_cmd,
+       "clear ip bgp vpnv4 * soft out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "Clear all peers\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+{
+  return clear_bgp_soft_out (vty, AFI_IP, SAFI_MPLS_VPN, NULL);
+}
+
+ALIAS (clear_ip_bgp_vpnv4_all_soft_out,
+       clear_ip_bgp_vpnv4_all_out_cmd,
+       "clear ip bgp vpnv4 * out",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "Clear all peers\n"
+       "Soft reconfig outbound update\n")
+
+DEFUN (clear_ip_bgp_vpnv4_peer_soft,
+       clear_ip_bgp_vpnv4_peer_soft_cmd,
+       "clear ip bgp vpnv4 A.B.C.D soft",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "BGP neighbor address to clear\n"
+       "Soft reconfig\n")
+{
+  if (clear_bgp_soft_out (vty, AFI_IP, SAFI_MPLS_VPN, argv[0]) == CMD_SUCCESS)
+    clear_bgp_soft_in (vty, AFI_IP, SAFI_MPLS_VPN, argv[0]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (clear_ip_bgp_vpnv4_all_soft,
+       clear_ip_bgp_vpnv4_all_soft_cmd,
+       "clear ip bgp vpnv4 * soft",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "VPNv4 peer\n"
+       "Clear all peers\n"
+       "Soft reconfig\n")
+{
+  if (clear_bgp_soft_out (vty, AFI_IP, SAFI_MPLS_VPN, NULL) == CMD_SUCCESS)
+    clear_bgp_soft_in (vty, AFI_IP, SAFI_MPLS_VPN, NULL);
+
+  return CMD_SUCCESS;
+}
+#ifdef HAVE_IPV6
 DEFUN (clear_ipv6_bgp_peer_soft_in,
        clear_ipv6_bgp_peer_soft_in_cmd,
        "clear ipv6 bgp (A.B.C.D|X:X::X:X) soft in",
        CLEAR_STR
        IPV6_STR
        BGP_STR
-       "IP address\n"
-       "IPv6 address\n"
-       "Soft reconfiguration\n"
-       "soft reconfigure inbound update\n")
+       "BGP neighbor address to clear\n"
+       "BGP IPv6 neighbor address to clear\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
 {
-  return clear_bgp_soft_in (vty, AFI_IP6, argv[0]);
+  return clear_bgp_soft_in (vty, AFI_IP6, SAFI_UNICAST, argv[0]);
 }
+
+ALIAS (clear_ipv6_bgp_peer_soft_in,
+       clear_ipv6_bgp_peer_in_cmd,
+       "clear ipv6 bgp (A.B.C.D|X:X::X:X) in",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "BGP IPv6 neighbor address to clear\n"
+       "Soft reconfig inbound update\n")
+
+DEFUN (clear_ipv6_bgp_all_soft_in,
+       clear_ipv6_bgp_all_soft_in_cmd,
+       "clear ipv6 bgp * soft in",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+{
+  return clear_bgp_soft_in (vty, AFI_IP6, SAFI_UNICAST, NULL);
+}
+
+ALIAS (clear_ipv6_bgp_all_soft_in,
+       clear_ipv6_bgp_all_in_cmd,
+       "clear ipv6 bgp * in",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig inbound update\n")
+
+DEFUN (clear_ipv6_bgp_peer_soft_out,
+       clear_ipv6_bgp_peer_soft_out_cmd,
+       "clear ipv6 bgp (A.B.C.D|X:X::X:X) soft out",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "BGP IPv6 neighbor address to clear\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+{
+  return clear_bgp_soft_out (vty, AFI_IP6, SAFI_UNICAST, argv[0]);
+}
+
+ALIAS (clear_ipv6_bgp_peer_soft_out,
+       clear_ipv6_bgp_peer_out_cmd,
+       "clear ipv6 bgp (A.B.C.D|X:X::X:X) out",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "BGP IPv6 neighbor address to clear\n"
+       "Soft reconfig outbound update\n")
+
+DEFUN (clear_ipv6_bgp_all_soft_out,
+       clear_ipv6_bgp_all_soft_out_cmd,
+       "clear ipv6 bgp * soft out",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+{
+  return clear_bgp_soft_out (vty, AFI_IP6, SAFI_UNICAST, NULL);
+}
+
+ALIAS (clear_ipv6_bgp_all_soft_out,
+       clear_ipv6_bgp_all_out_cmd,
+       "clear ipv6 bgp * out",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig outbound update\n")
+
+DEFUN (clear_ipv6_bgp_peer_soft,
+       clear_ipv6_bgp_peer_soft_cmd,
+       "clear ipv6 bgp (A.B.C.D|X:X::X:X) soft",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "BGP IPv6 neighbor address to clear\n"
+       "Soft reconfig\n")
+{
+  if (clear_bgp_soft_out (vty, AFI_IP6, SAFI_UNICAST, argv[0]) == CMD_SUCCESS)
+    clear_bgp_soft_in (vty, AFI_IP6, SAFI_UNICAST, argv[0]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (clear_ipv6_bgp_all_soft,
+       clear_ipv6_bgp_all_soft_cmd,
+       "clear ipv6 bgp * soft",
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Soft reconfig\n")
+{
+  if (clear_bgp_soft_out (vty, AFI_IP6, SAFI_UNICAST, NULL) == CMD_SUCCESS)
+    clear_bgp_soft_in (vty, AFI_IP6, SAFI_UNICAST, NULL);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_IPV6 */
 
 /* Show BGP peer's summary information. */
 int
@@ -5257,8 +5697,8 @@ bgp_show_summary (struct vty *vty, int afi, int safi, int all)
   char timebuf[BGP_UPTIME_LEN];
 
   /* Header string for each address family. */
-  static char header_v4[] = " Neighbor        V     AS MsgRcvd MsgSent   TblVer InQ OutQ Up/Down  State/Pref";
-  static char header_v6[] = " Neighbor                          AS      MsgRcvd MsgSent  Up/Down  State/Pref";
+  static char header_v4[] = " Neighbor        V     AS MsgRcvd MsgSent   TblVer InQ OutQ Up/Down  State/PfxRcd";
+  static char header_v6[] = " Neighbor                          AS      MsgRcvd MsgSent  Up/Down  State/PfxRcd";
 
   NEWLIST_LOOP (bgp_list, bgp, nn)
     {
@@ -5270,6 +5710,8 @@ bgp_show_summary (struct vty *vty, int afi, int safi, int all)
 	    {
 	      if (! write)
 		{
+		  vty_out (vty, "BGP router identifier %s, local AS number %d%s%s",
+                           inet_ntoa (bgp->id), bgp->as, VTY_NEWLINE, VTY_NEWLINE);
 		  vty_out (vty, "%s%s", afi == AFI_IP ? header_v4 : header_v6,
 			   VTY_NEWLINE);
 		  write++;
@@ -5317,14 +5759,14 @@ bgp_show_summary (struct vty *vty, int afi, int safi, int all)
 
 	      if (peer->status == Established)
 		{
-		  vty_out (vty, " %9d", conf->pcount[afi][safi]);
+		  vty_out (vty, " %8d", conf->pcount[afi][safi]);
 		}
 	      else
 		{
 		  if (CHECK_FLAG (peer->flags, PEER_FLAG_SHUTDOWN))
-		    vty_out (vty, " Shutdown");
+		    vty_out (vty, " Idle (Admin)");
 		  else if (CHECK_FLAG (peer->sflags, PEER_STATUS_PREFIX_OVERFLOW))
-		    vty_out (vty, " PrefixOvflw");
+		    vty_out (vty, " Idle (PfxCt)");
 		  else
 		    vty_out (vty, " %-11s", LOOKUP(bgp_status_msg, peer->status));
 		}
@@ -5629,9 +6071,21 @@ bgp_show_peer (struct vty *vty, struct peer_conf *conf, afi_t afi, safi_t safi)
 	     VTY_NEWLINE);
 
   /* Address family configuration. */
-  vty_out (vty, "  Neighbor NLRI negotiation:%s", VTY_NEWLINE);
+  vty_out (vty, "  Neighbor capabilities:%s", VTY_NEWLINE);
 
-  vty_out (vty, "   Configured for");
+  /* Capability. */
+  if (CHECK_FLAG (p->flags, PEER_FLAG_ROUTE_REFRESH))
+    {
+      if (p->refresh_nego)
+	vty_out (vty, "    Route refresh: advertised and received%s",
+		 VTY_NEWLINE);
+      else if (p->refresh)
+	vty_out (vty, "    Route refresh: advertised%s", VTY_NEWLINE);
+      else
+	vty_out (vty, "    Route refresh:%s", VTY_NEWLINE);
+    }
+
+  vty_out (vty, "    Address family");
 
   /* IPv4 */
   if (p->afc[AFI_IP][SAFI_UNICAST]) 
@@ -5671,14 +6125,14 @@ bgp_show_peer (struct vty *vty, struct peer_conf *conf, afi_t afi, safi_t safi)
       || p->afc_nego[AFI_IP6][SAFI_UNICAST]
       || p->afc_nego[AFI_IP6][SAFI_MULTICAST])
     {
-      vty_out (vty, "   Negotiated for");
+      vty_out (vty, "    Negotiated for");
 
       /* IPv4 */
       if (p->afc_nego[AFI_IP][SAFI_UNICAST])
 	{
 	  vty_out (vty, " IPv4 unicast");
 	  if (p->afc_nego[AFI_IP][SAFI_MULTICAST]) 
-	    vty_out (vty, "and multicast");
+	    vty_out (vty, " and multicast");
 	}
       else
 	{
@@ -6038,20 +6492,14 @@ bgp_config_write_peer (struct vty *vty, struct bgp *bgp,
 	     VTY_NEWLINE);
 
   /* Route refresh. */
-  if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
-    vty_out (vty, "%s neighbor %s route-refresh%s", v6str, addr,
+  if (! CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+    vty_out (vty, " no%s neighbor %s route-refresh%s", v6str, addr,
 	     VTY_NEWLINE);
 
   /* ebgp-multihop print. */
   if (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
-    {
-      vty_out (vty, "%s neighbor %s", v6str, addr);
-
-      if (peer->ttl == TTL_MAX)
-	vty_out (vty, " ebgp-multihop%s", VTY_NEWLINE);
-      else
-	vty_out (vty, " ebgp-multihop %d%s", peer->ttl, VTY_NEWLINE);
-    }
+    vty_out (vty, "%s neighbor %s ebgp-multihop %d%s", v6str, addr, peer->ttl,
+             VTY_NEWLINE);
 
   /* send-community print. */
   if (! (CHECK_FLAG (peer->flags, PEER_FLAG_SEND_COMMUNITY)))
@@ -6290,6 +6738,9 @@ bgp_config_write (struct vty *vty)
 	    bgp_config_write_peer (vty, bgp, conf, AFI_IP6, 0);
 	}
 
+      /* Distance configuration. */
+      bgp_config_write_distance (vty, bgp);
+      
       {
 	int first = 1;
 
@@ -6322,6 +6773,7 @@ struct cmd_node bgp_node =
 {
   BGP_NODE,
   "%s(config-router)# ",
+  1,
 };
 
 /* Install bgp related commands. */
@@ -6339,10 +6791,13 @@ bgp_init ()
   /* "bgp router-id" commands. */
   install_element (BGP_NODE, &bgp_router_id_cmd);
   install_element (BGP_NODE, &no_bgp_router_id_cmd);
+  install_element (BGP_NODE, &no_bgp_router_id_val_cmd);
 
   /* "bgp cluster-id" commands. */
   install_element (BGP_NODE, &bgp_cluster_id_cmd);
+  install_element (BGP_NODE, &bgp_cluster_id32_cmd);
   install_element (BGP_NODE, &no_bgp_cluster_id_cmd);
+  install_element (BGP_NODE, &no_bgp_cluster_id_val_cmd);
 
   /* "bgp always-compare-med" commands */
   install_element (BGP_NODE, &bgp_always_compare_med_cmd);
@@ -6549,11 +7004,40 @@ bgp_init ()
 #endif /* 0 */
   install_element (ENABLE_NODE, &clear_ip_bgp_as_cmd);
 
-  /* "clear ip bgp neighbor soft in "*/
+  /* "clear ip bgp neighbor soft in" */
   install_element (ENABLE_NODE, &clear_ip_bgp_peer_soft_in_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_peer_in_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_all_soft_in_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_all_in_cmd);
 
+  /* "clear ip bgp neighbor soft out" */
+  install_element (ENABLE_NODE, &clear_ip_bgp_peer_soft_out_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_peer_out_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_all_soft_out_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_all_out_cmd);
+
+  /* "clear ip bgp neighbor soft" */
+  install_element (ENABLE_NODE, &clear_ip_bgp_peer_soft_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_all_soft_cmd);
+  
   install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_summary_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_summary_cmd);
+
+  /* "clear ip bgp vpnv4 soft in" */
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_soft_in_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_in_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_soft_in_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_in_cmd);
+
+  /* "clear ip bgp vpnv4 soft out" */
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_soft_out_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_out_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_soft_out_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_out_cmd);
+
+  /* "clear ip bgp vpnv4 soft" */
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_soft_cmd);
+  install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_soft_cmd);
 
 #ifdef HAVE_IPV6
   install_element (BGP_NODE, &ipv6_bgp_neighbor_cmd);
@@ -6672,6 +7156,18 @@ bgp_init ()
   install_element (ENABLE_NODE, &clear_ipv6_bgp_as_cmd);
 
   install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_soft_in_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_in_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_all_soft_in_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_all_in_cmd);
+
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_soft_out_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_out_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_all_soft_out_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_all_out_cmd);
+
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_soft_cmd);
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_all_soft_cmd);
+  
 #endif /* HAVE_IPV6 */
 
   /* Make global lists. */
@@ -6691,6 +7187,7 @@ bgp_init ()
   bgp_dump_init ();
   bgp_route_init ();
   bgp_route_map_init ();
+  bgp_scan_init ();
 
   /* Access list initialize. */
   access_list_init ();

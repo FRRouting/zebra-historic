@@ -102,8 +102,9 @@ struct message ospf_redistributed_proto[] =
   { ZEBRA_ROUTE_OSPF,     "OSPF" },
   { ZEBRA_ROUTE_OSPF6,    "OSPFv3" },
   { ZEBRA_ROUTE_BGP,      "BGP" },
+  { ZEBRA_ROUTE_MAX,	  "Default" },
 };
-int ospf_redistributed_proto_max = ZEBRA_ROUTE_MAX;
+int ospf_redistributed_proto_max = ZEBRA_ROUTE_MAX + 1;
 
 struct message ospf_network_type_msg[] =
 {
@@ -157,7 +158,7 @@ char *
 ospf_timer_dump (struct thread *t, char *buf, size_t size)
 {
   struct timeval now;
-  time_t h, m, s;
+  unsigned long h, m, s;
 
   if (!t)
     return "inactive";
@@ -1067,6 +1068,8 @@ DEFUN (debug_ospf_lsa,
 	TERM_DEBUG_ON (lsa, LSA_GENERATE);
       else if (strncmp (argv[0], "f", 1) == 0)
 	TERM_DEBUG_ON (lsa, LSA_FLOODING);
+      else if (strncmp (argv[0], "r", 1) == 0)
+	TERM_DEBUG_ON (lsa, LSA_REFRESH);
     }
 
   return CMD_SUCCESS;
@@ -1074,12 +1077,13 @@ DEFUN (debug_ospf_lsa,
 
 ALIAS (debug_ospf_lsa,
        debug_ospf_lsa_sub_cmd,
-       "debug ospf lsa (generate|flooding)",
+       "debug ospf lsa (generate|flooding|refresh)",
        DEBUG_STR
        OSPF_STR
        "OSPF Link State Advertisement\n"
        "LSA Generation\n"
-       "LSA Flooding\n")
+       "LSA Flooding\n"
+       "LSA Refresh\n")
 
 DEFUN (no_debug_ospf_lsa,
        no_debug_ospf_lsa_cmd,
@@ -1113,6 +1117,8 @@ DEFUN (no_debug_ospf_lsa,
 	TERM_DEBUG_OFF (lsa, LSA_GENERATE);
       else if (strncmp (argv[0], "f", 1) == 0)
 	TERM_DEBUG_OFF (lsa, LSA_FLOODING);
+      else if (strncmp (argv[0], "r", 1) == 0)
+	TERM_DEBUG_OFF (lsa, LSA_REFRESH);
     }
 
   return CMD_SUCCESS;
@@ -1120,13 +1126,14 @@ DEFUN (no_debug_ospf_lsa,
 
 ALIAS (no_debug_ospf_lsa,
        no_debug_ospf_lsa_sub_cmd,
-       "no debug ospf lsa (generate|flooding)",
+       "no debug ospf lsa (generate|flooding|refresh)",
        NO_STR
        DEBUG_STR
        OSPF_STR
        "OSPF Link State Advertisement\n"
        "LSA Generation\n"
-       "LSA Flooding\n")
+       "LSA Flooding\n"
+       "LSA Refres\n")
 
 
 DEFUN (debug_ospf_zebra,
@@ -1359,6 +1366,8 @@ config_write_debug (struct vty *vty)
 	vty_out (vty, "debug ospf lsa generate%s", VTY_NEWLINE);
       else if (IS_CONF_DEBUG_OSPF (lsa, LSA_FLOODING))
 	vty_out (vty, "debug ospf lsa flooding%s", VTY_NEWLINE);
+      else if (IS_CONF_DEBUG_OSPF (lsa, LSA_REFRESH))
+	vty_out (vty, "debug ospf lsa refresh%s", VTY_NEWLINE);
 
       write = 1;
     }
@@ -1422,8 +1431,6 @@ void
 debug_init ()
 {
   install_node (&debug_node, config_write_debug);
-
-  install_element (VIEW_NODE, &show_debugging_ospf_cmd);
 
   install_element (ENABLE_NODE, &show_debugging_ospf_cmd);
   install_element (ENABLE_NODE, &debug_ospf_packet_send_recv_detail_cmd);

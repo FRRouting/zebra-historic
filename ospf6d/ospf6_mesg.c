@@ -190,7 +190,7 @@ ospf6_message_set_buffer (unsigned char msgtype, unsigned short msglen,
 int
 ospf6_opt_is_mismatch (unsigned char opt, char *options1, char *options2)
 {
-  return (V3OPT_ISSET (options1, opt) ^ V3OPT_ISSET (options2, opt));
+  return (OSPF6_OPT_ISSET (options1, opt) ^ OSPF6_OPT_ISSET (options2, opt));
 }
 
 
@@ -240,7 +240,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_interface *o6if,
   /* check options */
   /* Ebit */
   my_options = o6if->area->options;
-  if (ospf6_opt_is_mismatch (V3OPT_E, hello->options, my_options))
+  if (ospf6_opt_is_mismatch (OSPF6_OPT_E, hello->options, my_options))
     {
       zlog_warn ("Ebit mismatch with %s", rtrid_str);
       ospf6_message_clear_buffer (MSGT_HELLO, iov);
@@ -785,16 +785,16 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_interface *o6if,
       /* get scope from request type */
       switch (ospf6_lsa_get_scope_type (lsreq->lsreq_type))
         {
-          case SCOPE_LINKLOCAL:
+          case OSPF6_LSA_SCOPE_LINKLOCAL:
             scope = (void *) nbr->ospf6_interface;
             break;
-          case SCOPE_AREA:
+          case OSPF6_LSA_SCOPE_AREA:
             scope = (void *) nbr->ospf6_interface->area;
             break;
-          case SCOPE_AS:
+          case OSPF6_LSA_SCOPE_AS:
             scope = (void *) nbr->ospf6_interface->area->ospf6;
             break;
-          case SCOPE_RESERVED:
+          case OSPF6_LSA_SCOPE_RESERVED:
           default:
             zlog_warn ("unsupported type requested, ignore");
             XFREE (MTYPE_OSPF6_MESSAGE, lsreq);
@@ -938,7 +938,8 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_interface *o6if,
     {
       /* make each LSA header treated as LSA */
       lsa_hdr = (struct ospf6_lsa_hdr *) iov[0].iov_base;
-      lsa = make_ospf6_lsa (lsa_hdr);
+      lsa_hdr->lsh_len = htons (sizeof (struct ospf6_lsa_header));
+      lsa = ospf6_lsa_create ((struct ospf6_lsa_header *) lsa_hdr);
       lsa->from = nbr;
 
       /* detach from message */
@@ -947,19 +948,19 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_interface *o6if,
       /* set scope for this LSA */
       switch (ospf6_lsa_get_scope_type (lsa_hdr->lsh_type))
         {
-          case SCOPE_LINKLOCAL:
+          case OSPF6_LSA_SCOPE_LINKLOCAL:
             scope = (void *) nbr->ospf6_interface;
             break;
-          case SCOPE_AREA:
+          case OSPF6_LSA_SCOPE_AREA:
             scope = (void *) nbr->ospf6_interface->area;
             break;
-          case SCOPE_AS:
+          case OSPF6_LSA_SCOPE_AS:
             scope = (void *) nbr->ospf6_interface->area->ospf6;
             break;
-          case SCOPE_RESERVED:
+          case OSPF6_LSA_SCOPE_RESERVED:
           default:
             zlog_warn ("unsupported scope acknowledge, ignore");
-            ospf6_lsa_unlock (lsa);
+            ospf6_lsa_delete (lsa);
             continue;
         }
 
@@ -976,7 +977,7 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_interface *o6if,
         {
           if (IS_OSPF6_DUMP_LSACK)
             zlog_info ("no database copy, ignore");
-          ospf6_lsa_unlock (lsa);
+          ospf6_lsa_delete (lsa);
           continue;
         }
 
@@ -985,7 +986,7 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_interface *o6if,
         {
           if (IS_OSPF6_DUMP_LSACK)
             zlog_info ("not on %s's retranslist, ignore", nbr->str);
-          ospf6_lsa_unlock (lsa);
+          ospf6_lsa_delete (lsa);
           continue;
         }
 
@@ -1003,7 +1004,7 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_interface *o6if,
         }
 
       /* release temporary LSA from Ack message */
-      ospf6_lsa_unlock (lsa);
+      ospf6_lsa_delete (lsa);
     }
 
   return;
@@ -1095,184 +1096,6 @@ ospf6_message_process (struct iovec *iov, struct ospf6_interface *o6if,
   assert (iov_count (iov) == 0);
 
   return;
-}
-
-/* peek only ospf6_header to get message type, message len,
-   received interface and sending neighbor */
-static void
-ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
-                unsigned char *msgtype, unsigned short *msglen,
-                struct ospf6_interface **o6if)
-{
-  struct ospf6_header *ospf6_hdr = NULL;
-  struct sockaddr_in6 *src = NULL;
-  struct in6_pktinfo *pktinfo = NULL;
-  struct interface *ifp;
-  unsigned long router_id;
-
-  /* set default to fail */
-  *msgtype = MSGT_NONE;
-  *msglen = 0;
-  *o6if = NULL;
-
-  /* set pointer to get ifindex and source ip address */
-  pktinfo = (struct in6_pktinfo *)
-    (CMSG_DATA ((struct cmsghdr *)rmsghdrp->msg_control));
-  src = (struct sockaddr_in6 *)rmsghdrp->msg_name;
-
-  /* prepare buffer for ospf6 header */
-  iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
-               sizeof (struct ospf6_header));
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* peek ospf6 header */
-  if (recvmsg (sockfd, rmsghdrp, MSG_PEEK) < 0)
-    {
-      zlog_warn ("can't peek ospf6_hdr: %s", strerror (errno));
-      return;
-    }
-
-  /* set ospf6_hdr pointer to head of buffer */
-  ospf6_hdr = (struct ospf6_header *) rmsghdrp->msg_iov[0].iov_base;
-
-  /* set message type and len */
-  *msgtype = ospf6_hdr->type;
-  *msglen = ntohs (ospf6_hdr->len);
-
-  /* save router id */
-  router_id = ospf6_hdr->router_id;
-
-  /* clear buffer for ospf6 header */
-  iov_trim_head (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov);
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* find received ospf6 interface */
-  ifp = if_lookup_by_index (pktinfo->ipi6_ifindex);
-  if (!ifp || !ifp->info)
-    return;
-  *o6if = (struct ospf6_interface *)ifp->info;
-  if (!(*o6if)->area)
-    {
-      zlog_info ("received interface %s not attached to area",
-                 ifp->name);
-      return;
-    }
-
-  return;
-}
-
-/* failed before allocate buffer, before really read packet. */
-static void
-ospf6_receive_fail (int sockfd, struct msghdr *rmsghdrp)
-{
-  assert (iov_count (rmsghdrp->msg_iov) == 0);
-
-  /* prepare buffer for ospf6 packet */
-  iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
-               sizeof (struct ospf6_header));
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* read ospf6 packet to drop */
-  recvmsg (sockfd, rmsghdrp, 0);
-
-  /* clear buffer for ospf6 packet */
-  iov_trim_head (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov);
-  rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
-
-  /* add thread next read */
-  thread_add_read (master, ospf6_receive, NULL, sockfd);
-
-  return;
-}
-
-
-int
-ospf6_receive (struct thread *thread)
-{
-  struct iovec iov[MAXIOVLIST];
-  int sockfd;
-  struct msghdr rmsghdr;
-  struct cmsghdr *rcmsgp = NULL;
-  struct in6_pktinfo *dst_pktinfo;
-  u_char cmsgbuf[CMSG_SPACE (sizeof (struct in6_pktinfo))];
-  union {
-    struct sockaddr sa;
-    char data[sizeof (struct sockaddr_in6)];
-  } unsa;
-  struct sockaddr_in6 *src;
-  unsigned char msgtype = MSGT_NONE;
-  unsigned short msglen = 0;
-  struct ospf6_interface *o6if = NULL;
-
-  /* get socket */
-  sockfd = THREAD_FD (thread);
-
-  /* clear buffers */
-  iov_clear (iov, MAXIOVLIST);
-  memset (&rmsghdr, 0, sizeof (struct msghdr));
-  memset (&cmsgbuf, 0, sizeof (cmsgbuf));
-  memset (&unsa.data, 0, sizeof (unsa.data));
-
-  /* ancillary data set up */
-  rcmsgp = (struct cmsghdr *)&cmsgbuf;
-  rcmsgp->cmsg_level = IPPROTO_IPV6;
-  rcmsgp->cmsg_type = IPV6_PKTINFO;
-  rcmsgp->cmsg_len = CMSG_LEN (sizeof (struct in6_pktinfo));
-
-  /* set src/dst pointer */
-  src = (struct sockaddr_in6 *)&unsa.sa;
-  dst_pktinfo = (struct in6_pktinfo *)(CMSG_DATA(rcmsgp));
-
-  /* msghdr for receive set up */
-  rmsghdr.msg_name = (caddr_t) src;
-  rmsghdr.msg_namelen = sizeof (struct sockaddr_in6);
-  rmsghdr.msg_iov = iov;
-  rmsghdr.msg_iovlen = iov_count (iov); /* will be update later */
-  rmsghdr.msg_control = (caddr_t) rcmsgp;
-  rmsghdr.msg_controllen = sizeof (cmsgbuf);
-
-  /* peek ospf6_header to get message type, sending neighbor
-     and  received ospf6 interface */
-  ospf6_peek_hdr (sockfd, &rmsghdr, &msgtype, &msglen, &o6if);
-  if (msgtype == MSGT_NONE || msglen == 0 || o6if == NULL)
-    {
-      zlog_warn ("ospf6_header peek failed, drop");
-      ospf6_receive_fail (sockfd, &rmsghdr);
-      return -1;
-    }
-
-  /* prepare buffer for each type */
-  if (ospf6_message_set_buffer (msgtype, msglen, iov) < 0)
-    {
-      zlog_warn ("set buffer failed, drop %s len %hu",
-                 mesg_name[msgtype], msglen);
-      ospf6_receive_fail (sockfd, &rmsghdr);
-      return -1;
-    }
-
-  /* update iovlen */
-  rmsghdr.msg_iovlen = iov_count (iov);
-
-  /* receive message */
-  if (recvmsg (sockfd, &rmsghdr, 0) != msglen)
-    {
-      zlog_warn ("recvmsg () failed: %s", strerror (errno));
-      /* add thread next read */
-      thread_add_read (master, ospf6_receive, NULL, sockfd);
-      /* clear buffer for ospf6_header */
-      iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
-      /* clear buffer for each message type */
-      ospf6_message_clear_buffer (msgtype, iov);
-      return -1;
-    }
-
-  /* process message received */
-  ospf6_message_process (iov, o6if, src);
-
-  /* add thread next read */
-  thread_add_read (master, ospf6_receive, NULL, sockfd);
-
-  return 0;
 }
 
 int
@@ -1580,7 +1403,7 @@ ospf6_send_dbdesc (struct thread *thread)
       ospf6_remove_summary (lsa, nbr);
 
       /* set age and add InfTransDelay */
-      ospf6_age_update_to_send (lsa, nbr->ospf6_interface);
+      ospf6_lsa_age_update_to_send (lsa, nbr->ospf6_interface);
 
       /* copy LSA header */
       memcpy (lsa_hdr, lsa->lsa_hdr, sizeof (struct ospf6_lsa_hdr));

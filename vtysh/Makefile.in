@@ -63,6 +63,7 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+CURSES = @CURSES@
 GUILE = @GUILE@
 GUILE_CFLAGS = @GUILE_CFLAGS@
 GUILE_LDFLAGS = @GUILE_LDFLAGS@
@@ -73,7 +74,6 @@ KERNEL_METHOD = @KERNEL_METHOD@
 LIB_IPV6 = @LIB_IPV6@
 LIB_REGEX = @LIB_REGEX@
 MAKEINFO = @MAKEINFO@
-MPLS_VPN = @MPLS_VPN@
 OSPF6D = @OSPF6D@
 OSPFD = @OSPFD@
 OTHER_METHOD = @OTHER_METHOD@
@@ -90,11 +90,15 @@ ZEBRA = @ZEBRA@
 INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -I. -I$(srcdir)
 
+LIBS = @LIBS@ @CURSES@
+
 bin_PROGRAMS = vtysh
 
-vtysh_SOURCES = vtysh.c
+vtysh_SOURCES = vtysh.c vtysh_cmd.c
 noinst_HEADERS = vtysh.h
-vtysh_LDADD = ../lib/libzebra.a -lreadline -lncurses
+vtysh_LDADD = ../lib/libzebra.a
+
+EXTRA_DIST = extract.pl
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
@@ -102,8 +106,7 @@ PROGRAMS =  $(bin_PROGRAMS)
 
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
-LIBS = @LIBS@
-vtysh_OBJECTS =  vtysh.o
+vtysh_OBJECTS =  vtysh.o vtysh_cmd.o
 vtysh_DEPENDENCIES =  ../lib/libzebra.a
 vtysh_LDFLAGS = 
 CFLAGS = @CFLAGS@
@@ -112,7 +115,7 @@ CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
 HEADERS =  $(noinst_HEADERS)
 
-DIST_COMMON =  Makefile.am Makefile.in
+DIST_COMMON =  ChangeLog Makefile.am Makefile.in
 
 
 DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
@@ -295,6 +298,17 @@ all-redirect all-am all installdirs mostlyclean-generic \
 distclean-generic clean-generic maintainer-clean-generic clean \
 mostlyclean distclean maintainer-clean
 
+
+rebuild:
+	./extract.pl ../zebra/*.c ../ripd/*.c ../ripngd/*.c ../ospfd/*.c ../ospf6d/*.c ../bgpd/*.c >vtysh_cmd.c
+
+depend:
+	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
+
+vtysh.o: vtysh.c ../lib/version.h ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../vtysh/vtysh.h
+vtysh_cmd.o: vtysh_cmd.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ vtysh.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

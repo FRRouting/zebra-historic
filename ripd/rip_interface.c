@@ -1,6 +1,5 @@
-/*
- * Interface related function for RIP.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+/* Interface related function for RIP.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -42,6 +41,7 @@
 #include "ripd/rip_debug.h"
 
 void rip_enable_apply (struct interface *);
+void rip_passive_interface_apply (struct interface *);
 int rip_if_down(struct interface *ifp);
 
 struct message ri_version_msg[] = 
@@ -49,9 +49,17 @@ struct message ri_version_msg[] =
   {RI_RIP_VERSION_1,       "1"},
   {RI_RIP_VERSION_2,       "2"},
   {RI_RIP_VERSION_1_AND_2, "1 2"},
-  {RI_RIP_NONE,            "none"},
   {0,                      NULL}
 };
+
+/* RIP enabled network vector. */
+vector rip_enable_interface;
+
+/* RIP enabled interface table. */
+struct route_table *rip_enable_network;
+
+/* Vector to store passive-interface name. */
+vector Vrip_passive_interface;
 
 /* Join to the RIP version 2 multicast group. */
 int
@@ -97,10 +105,18 @@ rip_interface_new ()
 {
   struct rip_interface *ri;
 
-  ri = XMALLOC (MTYPE_IF, sizeof (struct rip_interface));
-  bzero (ri, sizeof (struct rip_interface));
+  ri = XMALLOC (MTYPE_RIP_INTERFACE, sizeof (struct rip_interface));
+  memset (ri, 0, sizeof (struct rip_interface));
 
+  /* Default authentication type is no auth. */
   ri->auth_type = RIP_NO_AUTH;
+
+  /* Set default split-horizon behavior.  If the interface is Frame
+     Relay or SMDS is enabled, the default value for split-horizon is
+     off.  But currently Zebra does detect Frame Relay or SMDS
+     interface.  So all interface is set to split horizon.  */
+  ri->split_horizon_default = 1;
+  ri->split_horizon = ri->split_horizon_default;
 
   return ri;
 }
@@ -134,7 +150,7 @@ rip_interface_multicast_set (int sock, struct interface *ifp)
 	    }
 
 	  /* Bind myself. */
-	  bzero (&from, sizeof (struct sockaddr_in));
+	  memset (&from, 0, sizeof (struct sockaddr_in));
 
 	  /* Set RIP port. */
 	  sp = getservbyname ("router", "udp");
@@ -199,7 +215,7 @@ rip_request_interface_send (struct interface *ifp, u_char version)
 
 	  if (p->family == AF_INET)
 	    {
-	      bzero (&to, sizeof (struct sockaddr_in));
+	      memset (&to, 0, sizeof (struct sockaddr_in));
 	      to.sin_port = htons (RIP_PORT_DEFAULT);
 	      to.sin_addr = p->prefix;
 
@@ -257,7 +273,7 @@ rip_request_neighbor (struct in_addr addr)
 {
   struct sockaddr_in to;
 
-  bzero (&to, sizeof (struct sockaddr_in));
+  memset (&to, 0, sizeof (struct sockaddr_in));
   to.sin_port = htons (RIP_PORT_DEFAULT);
   to.sin_addr = addr;
 
@@ -438,13 +454,15 @@ if_valid_neighbor (struct in_addr addr)
 
 /* Inteface link down message processing. */
 int
-rip_interface_down (int command, struct zebra *zebra, zebra_size_t length)
+rip_interface_down (int command, struct zclient *zclient, zebra_size_t length)
 {
   struct interface *ifp;
   struct stream *s;
 
-  s = zebra->ibuf;  
-  /* zebra_interface_state_read() updates interface structure in iflist */
+  s = zclient->ibuf;  
+
+  /* zebra_interface_state_read() updates interface structure in
+     iflist. */
   ifp = zebra_interface_state_read(s);
 
   if (ifp == NULL)
@@ -457,11 +475,13 @@ rip_interface_down (int command, struct zebra *zebra, zebra_size_t length)
 
 /* Inteface link up message processing */
 int
-rip_interface_up (int command, struct zebra *zebra, zebra_size_t length)
+rip_interface_up (int command, struct zclient *zclient, zebra_size_t length)
 {
   struct interface *ifp;
-  /* zebra_interface_state_read() updates interface structure in iflist */
-  ifp = zebra_interface_state_read(zebra->ibuf);
+
+  /* zebra_interface_state_read () updates interface structure in
+     iflist. */
+  ifp = zebra_interface_state_read (zclient->ibuf);
 
   if (ifp == NULL)
     return 0;
@@ -481,11 +501,11 @@ rip_interface_up (int command, struct zebra *zebra, zebra_size_t length)
 
 /* Inteface addition message from zebra. */
 int
-rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
+rip_interface_add (int command, struct zclient *zclient, zebra_size_t length)
 {
   struct interface *ifp;
 
-  ifp = zebra_interface_add_read (zebra->ibuf);
+  ifp = zebra_interface_add_read (zclient->ibuf);
 
   if (IS_RIP_DEBUG_ZEBRA)
     zlog_info ("interface add %s index %d flags %d metric %d mtu %d",
@@ -503,13 +523,14 @@ rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 }
 
 int
-rip_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
+rip_interface_delete (int command, struct zclient *zclient,
+		      zebra_size_t length)
 {
   struct interface *ifp;
   struct stream *s;
 
 
-  s = zebra->ibuf;  
+  s = zclient->ibuf;  
   /* zebra_interface_state_read() updates interface structure in iflist */
   ifp = zebra_interface_state_read(s);
 
@@ -523,9 +544,89 @@ rip_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
   zlog_info("interface delete %s index %d flags %d metric %d mtu %d",
 	    ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);  
   
-  if_delete(ifp);
+   if (!IS_IF_PSEUDO(ifp)){
+     if_delete(ifp);
+   }
+   else{
+     ifp->ifindex=INTERFACE_PSEUDO;
+   }
 
   return 0;
+}
+
+void
+rip_interface_clean ()
+{
+  listnode node;
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      ri = ifp->info;
+
+      if (ri->t_wakeup)
+	{
+	  thread_cancel (ri->t_wakeup);
+	  ri->t_wakeup = NULL;
+	}
+    }
+}
+
+void
+rip_interface_reset ()
+{
+  listnode node;
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      ri = ifp->info;
+
+      ri->enable_network = 0;
+      ri->enable_interface = 0;
+      ri->running = 0;
+
+      ri->ri_send = RI_RIP_UNSPEC;
+      ri->ri_receive = RI_RIP_UNSPEC;
+
+      ri->auth_type = RIP_NO_AUTH;
+
+      if (ri->auth_str)
+	{
+	  free (ri->auth_str);
+	  ri->auth_str = NULL;
+	}
+      if (ri->key_chain)
+	{
+	  free (ri->key_chain);
+	  ri->key_chain = NULL;
+	}
+
+      ri->split_horizon = 0;
+      ri->split_horizon_default = 0;
+
+      ri->list[RIP_FILTER_IN] = NULL;
+      ri->list[RIP_FILTER_OUT] = NULL;
+
+      ri->prefix[RIP_FILTER_IN] = NULL;
+      ri->prefix[RIP_FILTER_OUT] = NULL;
+      
+      if (ri->t_wakeup)
+	{
+	  thread_cancel (ri->t_wakeup);
+	  ri->t_wakeup = NULL;
+	}
+
+      ri->recv_badpackets = 0;
+      ri->recv_badroutes = 0;
+      ri->sent_updates = 0;
+
+      ri->passive = 0;
+    }
 }
 
 int
@@ -534,42 +635,82 @@ rip_if_down(struct interface *ifp)
   struct route_node *rp;
   struct rip_info *rinfo;
   struct rip_interface *ri = NULL;
+#ifdef NEW_RIP_TABLE
+  struct rip_route *route;
+  struct rip_info *next;
 
-    /* Clear RIP dynamic routes on the interface*/
+  /* Clear RIP dynamic routes on the interface*/
+  if (rip)
+    {
+      for (rp = route_top (rip->table); rp; rp = route_next (rp))
+	if ((route = rp->info) != NULL)
+	  for (rinfo = route->head; rinfo; rinfo = next)
+	    {
+	      next = rinfo->next;
+
+	      /* Routes got through this interface. */
+	      if (rinfo->ifindex == ifp->ifindex &&
+		  rinfo->type == ZEBRA_ROUTE_RIP &&
+		  rinfo->sub_type == RIP_ROUTE_RTE)
+		{
+		  rip_zebra_ipv4_delete ((struct prefix_ipv4 *) &rp->p,
+					 &rinfo->nexthop,
+					 rinfo->ifindex);
+
+		  RIP_TIMER_OFF (rinfo->t_timeout);
+		  RIP_TIMER_OFF (rinfo->t_garbage_collect);
+	      
+		  route_unlock_node (rp);
+		  rip_info_free (rinfo);
+		}
+	      else
+		{
+		  /* All redistributed routes but static and system */
+		  if ((rinfo->ifindex == ifp->ifindex) &&
+		      (rinfo->type != ZEBRA_ROUTE_STATIC) &&
+		      (rinfo->type != ZEBRA_ROUTE_SYSTEM))
+		    rip_redistribute_delete (rinfo->type,rinfo->sub_type,
+					     (struct prefix_ipv4 *)&rp->p,
+					     rinfo->ifindex);
+		}
+	    }
+    }
+#else
   if (rip)
     {
       for (rp = route_top (rip->table); rp; rp = route_next (rp))
 	if ((rinfo = rp->info) != NULL)
 	  {
-	    /* routes got through RIP */
+	    /* Routes got through this interface. */
 	    if (rinfo->ifindex == ifp->ifindex &&
 		rinfo->type == ZEBRA_ROUTE_RIP &&
-		rinfo->sub_type == RIP_ROUTE_RTE){
+		rinfo->sub_type == RIP_ROUTE_RTE)
+	      {
+		rip_zebra_ipv4_delete ((struct prefix_ipv4 *) &rp->p,
+				       &rinfo->nexthop,
+				       rinfo->ifindex);
 
-	      rip_zebra_ipv4_delete ( (struct prefix_ipv4 *)&rp->p,
-				      &rinfo->nexthop,rinfo->ifindex);
-
-	      RIP_TIMER_OFF (rinfo->t_timeout);
-	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+		RIP_TIMER_OFF (rinfo->t_timeout);
+		RIP_TIMER_OFF (rinfo->t_garbage_collect);
 	      
-	      rp->info = NULL;
-	      route_unlock_node (rp);
+		rp->info = NULL;
+		route_unlock_node (rp);
 	      
-	      rip_info_free (rinfo);
-	    }
+		rip_info_free (rinfo);
+	      }
 	    else
-	      /* all redistributed routes but kernel and static and system */
-	      if ((rinfo->ifindex == ifp->ifindex) &&
-		  (rinfo->type != ZEBRA_ROUTE_STATIC) &&
-		  (rinfo->type != ZEBRA_ROUTE_KERNEL) &&
-		  (rinfo->type != ZEBRA_ROUTE_SYSTEM)){
-
-		rip_redistribute_delete(rinfo->type,rinfo->sub_type,
-					(struct prefix_ipv4 *)&rp->p,
-					rinfo->ifindex);
+	      {
+		/* All redistributed routes but static and system */
+		if ((rinfo->ifindex == ifp->ifindex) &&
+		    (rinfo->type != ZEBRA_ROUTE_STATIC) &&
+		    (rinfo->type != ZEBRA_ROUTE_SYSTEM))
+		  rip_redistribute_delete (rinfo->type,rinfo->sub_type,
+					   (struct prefix_ipv4 *)&rp->p,
+					   rinfo->ifindex);
 	      }
 	  }
     }
+#endif /* NEW_RIP_TABLE */
 	    
   ri = ifp->info;
   
@@ -591,14 +732,28 @@ rip_if_down(struct interface *ifp)
   return 0;
 }
 
+/* Needed for stop RIP process. */
+void
+rip_if_down_all ()
+{
+  struct interface *ifp;
+  listnode node;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      rip_if_down (ifp);
+    }
+}
+
 int
-rip_interface_address_add (int command, struct zebra *zebra,
+rip_interface_address_add (int command, struct zclient *zclient,
 			   zebra_size_t length)
 {
   struct connected *c;
   struct prefix *p;
 
-  c = zebra_interface_address_add_read (zebra->ibuf);
+  c = zebra_interface_address_add_read (zclient->ibuf);
 
   if (c == NULL)
     return 0;
@@ -618,18 +773,12 @@ rip_interface_address_add (int command, struct zebra *zebra,
 }
 
 int
-rip_interface_address_delete (int command, struct zebra *zebra,
+rip_interface_address_delete (int command, struct zclient *zclient,
 			      zebra_size_t length)
 {
   return 0;
 }
 
-/* RIP enabled network vector. */
-vector rip_enable_if;
-
-/* RIP enabled interface table. */
-struct route_table *rip_enable_network;
-
 /* Check interface is enabled by network statement. */
 int
 rip_enable_network_lookup (struct interface *ifp)
@@ -706,8 +855,8 @@ rip_enable_if_lookup (char *ifname)
   int i;
   char *str;
 
-  for (i = 0; i < vector_max (rip_enable_if); i++)
-    if ((str = vector_slot (rip_enable_if, i)) != NULL)
+  for (i = 0; i < vector_max (rip_enable_interface); i++)
+    if ((str = vector_slot (rip_enable_interface, i)) != NULL)
       if (strcmp (str, ifname) == 0)
 	return i;
   return -1;
@@ -723,7 +872,7 @@ rip_enable_if_add (char *ifname)
   if (ret >= 0)
     return -1;
 
-  vector_set (rip_enable_if, strdup (ifname));
+  vector_set (rip_enable_interface, strdup (ifname));
 
   return 1;
 }
@@ -739,9 +888,9 @@ rip_enable_if_delete (char *ifname)
   if (index < 0)
     return -1;
 
-  str = vector_slot (rip_enable_if, index);
+  str = vector_slot (rip_enable_interface, index);
   free (str);
-  vector_unset (rip_enable_if, index);
+  vector_unset (rip_enable_interface, index);
 
   return 1;
 }
@@ -918,12 +1067,112 @@ rip_clean_network ()
 {
   int i;
   char *str;
+  struct route_node *rn;
 
-  for (i = 0; i < vector_max (rip_enable_if); i++)
-    if ((str = vector_slot (rip_enable_if, i)) != NULL)
+  /* rip_enable_network. */
+  for (rn = route_top (rip_enable_network); rn; rn = route_next (rn))
+    if (rn->info)
+      {
+	rn->info = NULL;
+	route_unlock_node (rn);
+      }
+
+  /* rip_enable_interface. */
+  for (i = 0; i < vector_max (rip_enable_interface); i++)
+    if ((str = vector_slot (rip_enable_interface, i)) != NULL)
       {
 	free (str);
-	vector_slot (rip_enable_if, i) = NULL;
+	vector_slot (rip_enable_interface, i) = NULL;
+      }
+}
+
+/* Utility function for looking up passive interface settings. */
+int
+rip_passive_interface_lookup (char *ifname)
+{
+  int i;
+  char *str;
+
+  for (i = 0; i < vector_max (Vrip_passive_interface); i++)
+    if ((str = vector_slot (Vrip_passive_interface, i)) != NULL)
+      if (strcmp (str, ifname) == 0)
+	return i;
+  return -1;
+}
+
+void
+rip_passive_interface_apply (struct interface *ifp)
+{
+  int ret;
+  struct rip_interface *ri;
+
+  ri = ifp->info;
+
+  ret = rip_passive_interface_lookup (ifp->name);
+  if (ret < 0)
+    ri->passive = 0;
+  else
+    ri->passive = 1;
+}
+
+void
+rip_passive_interface_apply_all ()
+{
+  struct interface *ifp;
+  listnode node;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      rip_passive_interface_apply (ifp);
+    }
+}
+
+/* Passive interface. */
+int
+rip_passive_interface_set (struct vty *vty, char *ifname)
+{
+  if (rip_passive_interface_lookup (ifname) >= 0)
+    return CMD_WARNING;
+
+  vector_set (Vrip_passive_interface, strdup (ifname));
+
+  rip_passive_interface_apply_all ();
+
+  return CMD_SUCCESS;
+}
+
+int
+rip_passive_interface_unset (struct vty *vty, char *ifname)
+{
+  int i;
+  char *str;
+
+  i = rip_passive_interface_lookup (ifname);
+  if (i < 0)
+    return CMD_WARNING;
+
+  str = vector_slot (Vrip_passive_interface, i);
+  free (str);
+  vector_unset (Vrip_passive_interface, i);
+
+  rip_passive_interface_apply_all ();
+
+  return CMD_SUCCESS;
+}
+
+/* Free all configured RIP passive-interface settings. */
+void
+rip_passive_interface_clean ()
+{
+  int i;
+  char *str;
+
+  for (i = 0; i < vector_max (Vrip_passive_interface); i++)
+    if ((str = vector_slot (Vrip_passive_interface, i)) != NULL)
+      {
+	free (str);
+	vector_slot (Vrip_passive_interface, i) = NULL;
       }
 }
 
@@ -1215,6 +1464,66 @@ DEFUN (no_ip_rip_send_version,
   return CMD_SUCCESS;
 }
 
+DEFUN (ip_rip_authentication_mode,
+       ip_rip_authentication_mode_cmd,
+       "ip rip authentication mode (md5|text)",
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "RIP authentication mode\n"
+       "MD5 authentication\n"
+       "Simple text authentication\n")
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  ifp = (struct interface *)vty->index;
+  ri = ifp->info;
+
+  if (strncmp ("md5", argv[0], strlen (argv[0])) == 0)
+    ri->auth_type = RIP_AUTH_MD5;
+  else if (strncmp ("text", argv[0], strlen (argv[0])) == 0)
+    ri->auth_type = RIP_AUTH_SIMPLE_PASSWORD;
+  else
+    {
+      vty_out (vty, "mode should be md5 or text%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_rip_authentication_mode,
+       no_ip_rip_authentication_mode_cmd,
+       "no ip rip authentication mode",
+       NO_STR
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "RIP authentication mode\n")
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  ifp = (struct interface *)vty->index;
+  ri = ifp->info;
+
+  ri->auth_type = RIP_NO_AUTH;
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_ip_rip_authentication_mode,
+       no_ip_rip_authentication_mode_type_cmd,
+       "no ip rip authentication mode (md5|text)",
+       NO_STR
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "RIP authentication mode\n"
+       "MD5 authentication\n"
+       "Simple text authentication\n")
+
 DEFUN (ip_rip_authentication_string,
        ip_rip_authentication_string_cmd,
        "ip rip authentication string STRING",
@@ -1222,7 +1531,7 @@ DEFUN (ip_rip_authentication_string,
        "RIP configuration\n"
        "RIP authentication\n"
        "RIP authentication string setting\n"
-       "RIP authentication string")
+       "RIP authentication string\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1237,9 +1546,16 @@ DEFUN (ip_rip_authentication_string,
       return CMD_WARNING;
     }
 
+  if (ri->key_chain)
+    {
+      vty_out (vty, "key-chain configuration exists%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
   if (ri->auth_str)
     free (ri->auth_str);
 
+  /* For compatibility before zebra-0.88. */
   ri->auth_type = RIP_AUTH_SIMPLE_PASSWORD;
   ri->auth_str = strdup (argv[0]);
 
@@ -1254,7 +1570,7 @@ DEFUN (no_ip_rip_authentication_string,
        "RIP configuration\n"
        "RIP authentication\n"
        "RIP authentication string setting\n"
-       "RIP authentication string")
+       "RIP authentication string\n")
 {
   struct interface *ifp;
   struct rip_interface *ri;
@@ -1265,15 +1581,131 @@ DEFUN (no_ip_rip_authentication_string,
   if (ri->auth_str)
     free (ri->auth_str);
 
-  ri->auth_type = RIP_NO_AUTH;
+  /* ri->auth_type = RIP_NO_AUTH; */
   ri->auth_str = NULL;
 
   return CMD_SUCCESS;
 }
 
+ALIAS (no_ip_rip_authentication_string,
+       no_ip_rip_authentication_string2_cmd,
+       "no ip rip authentication string",
+       NO_STR
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "RIP authentication string setting\n")
+
+DEFUN (ip_rip_authentication_key_chain,
+       ip_rip_authentication_key_chain_cmd,
+       "ip rip authentication key-chain KEY-CHAIN",
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "Key chain configuration\n"
+       "Key chain name\n")
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  ifp = (struct interface *) vty->index;
+  ri = ifp->info;
+
+  if (ri->key_chain)
+    free (ri->key_chain);
+
+  ri->key_chain = strdup (argv[0]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_rip_authentication_key_chain,
+       no_ip_rip_authentication_key_chain_cmd,
+       "no ip rip authentication key-chain KEY-CHAIN",
+       NO_STR
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "Key chain configuration\n"
+       "Key chain name\n")
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  ifp = (struct interface *) vty->index;
+  ri = ifp->info;
+
+  if (ri->key_chain)
+    free (ri->key_chain);
+
+  ri->key_chain = NULL;
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_ip_rip_authentication_key_chain,
+       no_ip_rip_authentication_key_chain2_cmd,
+       "no ip rip authentication key-chain",
+       NO_STR
+       IP_STR
+       "RIP configuration\n"
+       "RIP authentication\n"
+       "Key chain configuration\n")
+
+DEFUN (rip_split_horizon,
+       rip_split_horizon_cmd,
+       "ip split-horizon",
+       IP_STR
+       "Perform split horizon\n")
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  ifp = vty->index;
+  ri = ifp->info;
+
+  ri->split_horizon = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_rip_split_horizon,
+       no_rip_split_horizon_cmd,
+       "no ip split-horizon",
+       NO_STR
+       IP_STR
+       "Do not perform split horizon\n")
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  ifp = vty->index;
+  ri = ifp->info;
+
+  ri->split_horizon = 0;
+  return CMD_SUCCESS;
+}
+
+DEFUN (rip_passive_interface,
+       rip_passive_interface_cmd,
+       "passive-interface IFNAME",
+       "Suppress routing updates on an interface\n"
+       "Interface name\n")
+{
+  return rip_passive_interface_set (vty, argv[0]);
+}
+
+DEFUN (no_rip_passive_interface,
+       no_rip_passive_interface_cmd,
+       "no passive-interface IFNAME",
+       "Suppress routing updates on an interface\n"
+       "Interface name\n")
+{
+  return rip_passive_interface_unset (vty, argv[0]);
+}
+
 /* Write rip configuration of each interface. */
 int
-interface_config_write (struct vty *vty)
+rip_interface_config_write (struct vty *vty)
 {
   listnode node;
   struct interface *ifp;
@@ -1292,6 +1724,19 @@ interface_config_write (struct vty *vty)
 	vty_out (vty, " description %s%s", ifp->desc,
 		 VTY_NEWLINE);
 
+       if (IS_IF_PSEUDO (ifp))
+	 vty_out (vty, " pseudo %s", VTY_NEWLINE);
+
+      /* Split horizon. */
+      if (ri->split_horizon != ri->split_horizon_default)
+	{
+	  if (ri->split_horizon)
+	    vty_out (vty, " ip split-horizon%s", VTY_NEWLINE);
+	  else
+	    vty_out (vty, " no ip split-horizon%s", VTY_NEWLINE);
+	}
+
+      /* RIP version setting. */
       if (ri->ri_send != RI_RIP_UNSPEC)
 	vty_out (vty, " ip rip send version %s%s",
 		 lookup (ri_version_msg, ri->ri_send),
@@ -1302,10 +1747,19 @@ interface_config_write (struct vty *vty)
 		 lookup (ri_version_msg, ri->ri_receive),
 		 VTY_NEWLINE);
 
+      /* RIP authentication. */
+      if (ri->auth_type == RIP_AUTH_SIMPLE_PASSWORD)
+	vty_out (vty, " ip rip authentication mode text%s", VTY_NEWLINE);
+      if (ri->auth_type == RIP_AUTH_MD5)
+	vty_out (vty, " ip rip authentication mode md5%s", VTY_NEWLINE);
+
       if (ri->auth_str)
 	vty_out (vty, " ip rip authentication string %s%s",
-		 ri->auth_str,
-		 VTY_NEWLINE);
+		 ri->auth_str, VTY_NEWLINE);
+
+      if (ri->key_chain)
+	vty_out (vty, " ip rip authentication key-chain %s%s",
+		 ri->key_chain, VTY_NEWLINE);
 
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
@@ -1329,8 +1783,8 @@ config_write_rip_network (struct vty *vty, int config_mode)
 	       VTY_NEWLINE);
 
   /* Interface name RIP enable statement. */
-  for (i = 0; i < vector_max (rip_enable_if); i++)
-    if ((ifname = vector_slot (rip_enable_if, i)) != NULL)
+  for (i = 0; i < vector_max (rip_enable_interface); i++)
+    if ((ifname = vector_slot (rip_enable_interface, i)) != NULL)
       vty_out (vty, "%s%s%s",
 	       config_mode ? " network " : "    ",
 	       ifname,
@@ -1343,6 +1797,12 @@ config_write_rip_network (struct vty *vty, int config_mode)
 	       config_mode ? " neighbor " : "    ",
 	       inet_ntoa (node->p.u.prefix4),
 	       VTY_NEWLINE);
+
+  /* RIP passive interface listing. */
+  if (config_mode)
+    for (i = 0; i < vector_max (Vrip_passive_interface); i++)
+      if ((ifname = vector_slot (Vrip_passive_interface, i)) != NULL)
+	vty_out (vty, " passive-interface %s%s", ifname, VTY_NEWLINE);
 
   return 0;
 }
@@ -1361,6 +1821,14 @@ rip_interface_new_hook (struct interface *ifp)
   return 0;
 }
 
+/* Called when interface structure deleted. */
+int
+rip_interface_delete_hook (struct interface *ifp)
+{
+  XFREE (MTYPE_RIP_INTERFACE, ifp->info);
+  return 0;
+}
+
 /* Allocate and initialize interface vector. */
 void
 rip_if_init ()
@@ -1368,24 +1836,33 @@ rip_if_init ()
   /* Default initial size of interface vector. */
   if_init();
   if_add_hook (IF_NEW_HOOK, rip_interface_new_hook);
-
+  if_add_hook (IF_DELETE_HOOK, rip_interface_delete_hook);
+  
   /* RIP network init. */
-  rip_enable_if = vector_init (1);
+  rip_enable_interface = vector_init (1);
   rip_enable_network = route_table_init ();
 
-  /* Install interface node. */
-  install_node (&interface_node, interface_config_write);
+  /* RIP passive interface. */
+  Vrip_passive_interface = vector_init (1);
 
-  /* Install interface's commands. */
+  /* Install interface node. */
+  install_node (&interface_node, rip_interface_config_write);
+
+  /* Install commands. */
   install_element (CONFIG_NODE, &interface_cmd);
-  install_element (INTERFACE_NODE, &config_end_cmd);
-  install_element (INTERFACE_NODE, &config_exit_cmd);
-  install_element (INTERFACE_NODE, &config_help_cmd);
+  install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
+  install_element (INTERFACE_NODE, &interface_pseudo_cmd);
+  install_element (INTERFACE_NODE, &no_interface_pseudo_cmd);
 
+  install_element (RIP_NODE, &rip_network_cmd);
+  install_element (RIP_NODE, &no_rip_network_cmd);
   install_element (RIP_NODE, &rip_neighbor_cmd);
   install_element (RIP_NODE, &no_rip_neighbor_cmd);
+
+  install_element (RIP_NODE, &rip_passive_interface_cmd);
+  install_element (RIP_NODE, &no_rip_passive_interface_cmd);
 
   install_element (INTERFACE_NODE, &ip_rip_send_version_cmd);
   install_element (INTERFACE_NODE, &ip_rip_send_version_1_cmd);
@@ -1397,9 +1874,18 @@ rip_if_init ()
   install_element (INTERFACE_NODE, &ip_rip_receive_version_2_cmd);
   install_element (INTERFACE_NODE, &no_ip_rip_receive_version_cmd);
 
+  install_element (INTERFACE_NODE, &ip_rip_authentication_mode_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_authentication_mode_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_authentication_mode_type_cmd);
+
+  install_element (INTERFACE_NODE, &ip_rip_authentication_key_chain_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_authentication_key_chain_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_authentication_key_chain2_cmd);
+
   install_element (INTERFACE_NODE, &ip_rip_authentication_string_cmd);
   install_element (INTERFACE_NODE, &no_ip_rip_authentication_string_cmd);
+  install_element (INTERFACE_NODE, &no_ip_rip_authentication_string2_cmd);
 
-  install_element (RIP_NODE, &rip_network_cmd);
-  install_element (RIP_NODE, &no_rip_network_cmd);
+  install_element (INTERFACE_NODE, &rip_split_horizon_cmd);
+  install_element (INTERFACE_NODE, &no_rip_split_horizon_cmd);
 }

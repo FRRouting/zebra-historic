@@ -72,11 +72,10 @@ new_lsdb_new ()
 void
 new_lsdb_init (struct new_lsdb *lsdb)
 {
-  lsdb->type[1].db = route_table_init ();
-  lsdb->type[2].db = route_table_init ();
-  lsdb->type[3].db = route_table_init ();
-  lsdb->type[4].db = route_table_init ();
-  lsdb->type[5].db = route_table_init ();
+  int i;
+  
+  for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
+    lsdb->type[i].db = route_table_init ();
 }
 
 void
@@ -89,14 +88,14 @@ new_lsdb_free (struct new_lsdb *lsdb)
 void
 new_lsdb_cleanup (struct new_lsdb *lsdb)
 {
+  int i;
   assert (lsdb);
   assert (lsdb->total == 0);
+
+  new_lsdb_delete_all (lsdb);
   
-  route_table_finish (lsdb->type[1].db);
-  route_table_finish (lsdb->type[2].db);
-  route_table_finish (lsdb->type[3].db);
-  route_table_finish (lsdb->type[4].db);
-  route_table_finish (lsdb->type[5].db);
+  for (i = OSPF_MIN_LSA; i < OSPF_MAX_LSA; i++)
+    route_table_finish (lsdb->type[i].db);
 }
 
 void
@@ -120,21 +119,27 @@ new_lsdb_add (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
   table = lsdb->type[lsa->data->type].db;
   lsdb_prefix_set (&lp, lsa);
   rn = route_node_get (table, (struct prefix *)&lp);
-  if (! rn->info)
+  if (!rn->info)
     {
+      if (IS_LSA_SELF (lsa))
+	lsdb->type[lsa->data->type].count_self++;
       lsdb->type[lsa->data->type].count++;
       lsdb->total++;
     }
   else
     {
-      ((struct ospf_lsa *)rn->info)->ref--;
+      if (rn->info == lsa)
+	return;
+      
+      ospf_lsa_unlock (rn->info);
       route_unlock_node (rn);
     }
 
-  rn->info = lsa;
+  rn->info = ospf_lsa_lock (lsa);
   tmp_log ("add", lsa);
 }
 
+#if 0
 /* Insert an LSA to lsdb. */
 struct ospf_lsa *
 new_lsdb_insert (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
@@ -146,11 +151,13 @@ new_lsdb_insert (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
   table = lsdb->type[lsa->data->type].db;
   lsdb_prefix_set (&lp, lsa);
   rn = route_node_get (table, (struct prefix *)&lp);
+
   /* Newly install LSA. */
   if (!rn->info)
     {
       zlog_info ("new_lsdb_insert: Newly install");
-
+      if (IS_LSA_SELF (lsa))
+	lsdb->type[lsa->data->type].count_self++;
       lsdb->type[lsa->data->type].count++;
       lsdb->total++;
     }
@@ -158,30 +165,30 @@ new_lsdb_insert (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
   else
     {
       struct ospf_lsa *old = rn->info;
-
       zlog_info ("new_lsdb_insert: Replace");
 
       /* Preserve old value. */
-      /* lsa->flags = old->flags; */
-
-      /* Make sure registering MaxAge LSA to delete. */
-      /* ospf_lsa_maxage (old); */
       if (old->refresh_list)
 	ospf_refresher_unregister_lsa (old);
+      /* */
+      if (old->data->type == OSPF_AS_EXTERNAL_LSA)
+	ospf_rtrs_external_remove (old->data->id, old->data->adv_router);
 
       ospf_ls_retransmit_delete_nbr_all (old->area, old);
-      
-      list_delete_by_val (ospf_top->maxage_lsa, old);
-
-      ospf_lsa_free (old);
+      /* */
+      ospf_lsa_maxage_delete (old);
+      /* */
+      ospf_lsa_unlock (old);
+      ospf_lsa_discard (old);
 
       route_unlock_node (rn);
     }
   
-  rn->info = lsa;
+  rn->info = ospf_lsa_lock (lsa);
   tmp_log ("insert", rn->info);
   return rn->info;
 }
+#endif
 
 void
 new_lsdb_delete (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
@@ -196,11 +203,14 @@ new_lsdb_delete (struct new_lsdb *lsdb, struct ospf_lsa *lsa)
   if (rn)
     if (rn->info == lsa)
       {
+	if (IS_LSA_SELF (lsa))
+	  lsdb->type[lsa->data->type].count_self--;
+	lsdb->type[lsa->data->type].count--;
+	lsdb->total--;
 	rn->info = NULL;
 	route_unlock_node (rn);
 	route_unlock_node (rn);
-	lsdb->type[lsa->data->type].count--;
-	lsdb->total--;
+	ospf_lsa_unlock (lsa);
 	tmp_log ("delete", lsa);
 	return;
       }
@@ -221,11 +231,13 @@ new_lsdb_delete_all (struct new_lsdb *lsdb)
       for (rn = route_top (table); rn; rn = route_next (rn))
 	if ((lsa = (rn->info)) != NULL)
 	  {
-	    rn->info = NULL;
-	    route_unlock_node (rn);
-	    ospf_lsa_free (lsa);
+	    if (IS_LSA_SELF (lsa))
+	      lsdb->type[i].count_self--;
 	    lsdb->type[i].count--;
 	    lsdb->total--;
+	    rn->info = NULL;
+	    route_unlock_node (rn);
+	    ospf_lsa_unlock (lsa);
 	  }
     }
 }
@@ -280,9 +292,21 @@ new_lsdb_lookup_by_id (struct new_lsdb *lsdb, u_char type,
 }
 
 unsigned long
-new_lsdb_count (struct new_lsdb *lsdb)
+new_lsdb_count_all (struct new_lsdb *lsdb)
 {
   return lsdb->total;
+}
+
+unsigned long
+new_lsdb_count (struct new_lsdb *lsdb, int type)
+{
+  return lsdb->type[type].count;
+}
+
+unsigned long
+new_lsdb_count_self (struct new_lsdb *lsdb, int type)
+{
+  return lsdb->type[type].count_self;
 }
 
 unsigned long
@@ -300,8 +324,9 @@ foreach_lsa (struct route_table *table, void *p_arg, int int_arg,
 
   for (rn = route_top (table); rn; rn = route_next (rn))
     if ((lsa = rn->info) != NULL)
-      if (callback (lsa, p_arg, int_arg))
-	return lsa;
+      /*      if (!CHECK_FLAG (lsa->flags, OSPF_LSA_DISCARD)) */
+	if (callback (lsa, p_arg, int_arg))
+	  return lsa;
 
   return NULL;
 }

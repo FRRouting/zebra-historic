@@ -92,18 +92,37 @@ cmp_node (const void *p, const void *q)
   return strcmp (a->string, b->string);
 }
 
+int
+cmp_desc (const void *p, const void *q)
+{
+  struct desc *a = *(struct desc **)p;
+  struct desc *b = *(struct desc **)q;
+
+  return strcmp (a->cmd, b->cmd);
+}
+
 /* Sort each node's command element according to command string. */
 void
 sort_node ()
 {
-  int i;
+  int i, j;
   struct cmd_node *cnode;
-  
+  vector descvec;
+  struct cmd_element *cmd_element;
+
   for (i = 0; i < vector_max (cmdvec); i++) 
     if ((cnode = vector_slot (cmdvec, i)) != NULL)
       {	
 	vector cmd_vector = cnode->cmd_vector;
 	qsort (cmd_vector->index, cmd_vector->max, sizeof (void *), cmp_node);
+
+	for (j = 0; j < vector_max (cmd_vector); j++)
+	  if ((cmd_element = vector_slot (cmd_vector, j)) != NULL)
+	    {
+	      descvec = vector_slot (cmd_element->strvec,
+				     vector_max (cmd_element->strvec) - 1);
+	      qsort (descvec->index, descvec->max, sizeof (void *), cmp_desc);
+	    }
       }
 }
 
@@ -353,7 +372,8 @@ install_element (enum node_type ntype, struct cmd_element *cmd)
 
   if (cnode == NULL) 
     {
-      fprintf (stderr, "Command node doesn't exist, please check it\n");
+      fprintf (stderr, "Command node %d doesn't exist, please check it\n",
+	       ntype);
       exit (1);
     }
 
@@ -396,38 +416,25 @@ int
 config_write_host (struct vty *vty)
 {
   if (host.name)
-    vty_out (vty, "hostname %s%s", host.name,
-	     VTY_NEWLINE);
+    vty_out (vty, "hostname %s%s", host.name, VTY_NEWLINE);
 
-  /* For security reason, only output password configuration to
-     file. */
-  if (vty->type == VTY_FILE)
+  if (host.encrypt)
     {
-      if (host.encrypt)
-	{
-	  if (host.password_encrypt)
-	    vty_out (vty, "password 8 %s%s", 
-		     host.password_encrypt,
-		     VTY_NEWLINE);
-	  if (host.enable_encrypt)
-	    vty_out (vty, "enable password 8 %s%s", 
-		     host.enable_encrypt,
-		     VTY_NEWLINE);
-	}
-      else
-	{
-	  if (host.password)
-	    vty_out (vty, "password %s%s", host.password,
-		     VTY_NEWLINE);
-	  if (host.enable)
-	    vty_out (vty, "enable password %s%s", host.enable,
-		     VTY_NEWLINE);
-	}
-    }      
+      if (host.password_encrypt)
+        vty_out (vty, "password 8 %s%s", host.password_encrypt, VTY_NEWLINE); 
+      if (host.enable_encrypt)
+        vty_out (vty, "enable password 8 %s%s", host.enable_encrypt, VTY_NEWLINE); 
+    }
+  else
+    {
+      if (host.password)
+        vty_out (vty, "password %s%s", host.password, VTY_NEWLINE);
+      if (host.enable)
+        vty_out (vty, "enable password %s%s", host.enable, VTY_NEWLINE);
+    }
 
   if (host.logfile)
-    vty_out (vty, "log file %s%s", host.logfile,
-	     VTY_NEWLINE);
+    vty_out (vty, "log file %s%s", host.logfile, VTY_NEWLINE);
 
   if (host.log_stdout)
     vty_out (vty, "log stdout%s", VTY_NEWLINE);
@@ -691,8 +698,7 @@ cmd_ipv6_match (char *str)
 	    {
 	      if (*(str + 1) != ':' && *(str + 1) != '\0')
 		return no_match;
-	      
-	      colons--;
+     	      colons--;
 	      state = STATE_COLON;
 	    }
 	  else
@@ -720,15 +726,14 @@ cmd_ipv6_match (char *str)
 	    return no_match;
 	  else
 	    {
-	      colons++;
-	      sp = str + 1;
 	      if (*(str + 1) != '\0')
 		colons++;
+	      sp = str + 1;
 	      state = STATE_ADDR;
 	    }
 
 	  double_colon++;
-	  nums += 2;
+	  nums++;
 	  break;
 	case STATE_ADDR:
 	  if (*(str + 1) == ':' || *(str + 1) == '\0')
@@ -785,7 +790,6 @@ cmd_ipv6_prefix_match (char *str)
 	    {
 	      if (*(str + 1) != ':' && *(str + 1) != '\0')
 		return no_match;
-	      
 	      colons--;
 	      state = STATE_COLON;
 	    }
@@ -816,10 +820,9 @@ cmd_ipv6_prefix_match (char *str)
 	    return no_match;
 	  else
 	    {
-	      colons++;
-	      sp = str + 1;
 	      if (*(str + 1) != '\0' && *(str + 1) != '/')
 		colons++;
+	      sp = str + 1;
 
 	      if (*(str + 1) == '/')
 		state = STATE_SLASH;
@@ -828,7 +831,7 @@ cmd_ipv6_prefix_match (char *str)
 	    }
 
 	  double_colon++;
-	  nums += 2;
+	  nums += 1;
 	  break;
 	case STATE_ADDR:
 	  if (*(str + 1) == ':' || *(str + 1) == '\0' || *(str + 1) == '/')
@@ -1587,7 +1590,7 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 		if ((string = cmd_entry_function (vector_slot (vline, index),
 						  desc->cmd)))
 		  if (cmd_unique_string (matchvec, string))
-		    vector_set (matchvec, string);
+		    vector_set (matchvec, XSTRDUP (MTYPE_TMP, string));
 	      }
 	  }
       }
@@ -1613,7 +1616,6 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
   if (vector_slot (matchvec, 1) == NULL)
     {
       match_str = (char **) matchvec->index;
-
       vector_only_wrapper_free (matchvec);
       *status = CMD_COMPLETE_FULL_MATCH;
       return match_str;
@@ -1638,8 +1640,22 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 	      memcpy (lcdstr, matchvec->index[0], lcd);
 	      lcdstr[lcd] = '\0';
 
-	      match_str = (char **) &lcdstr;
+	      /* match_str = (char **) &lcdstr; */
+
+	      /* Free matchvec. */
+	      for (i = 0; i < vector_max (matchvec); i++)
+		{
+		  if (vector_slot (matchvec, i))
+		    XFREE (MTYPE_TMP, vector_slot (matchvec, i));
+		}
 	      vector_free (matchvec);
+
+      	      /* Make new matchvec. */
+	      matchvec = vector_init (INIT_MATCHVEC_SIZE);
+	      vector_set (matchvec, lcdstr);
+	      match_str = (char **) matchvec->index;
+	      vector_only_wrapper_free (matchvec);
+
 	      *status = CMD_COMPLETE_MATCH;
 	      return match_str;
 	    }
@@ -1654,7 +1670,7 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
 
 /* Execute command by argument vline vector. */
 int
-cmd_execute_command (vector vline, struct vty *vty)
+cmd_execute_command (vector vline, struct vty *vty, struct cmd_element **cmd)
 {
   int i;
   int index;
@@ -1760,6 +1776,13 @@ cmd_execute_command (vector vline, struct vty *vty)
       if (argc >= CMD_ARGC_MAX)
 	return CMD_ERR_EXEED_ARGC_MAX;
     }
+
+  /* For vtysh execution. */
+  if (cmd)
+    *cmd = matched_element;
+
+  if (matched_element->daemon)
+    return CMD_SUCCESS_DAEMON;
 
   /* Execute matched command. */
   return (*matched_element->func) (matched_element, vty, argc, argv);
@@ -1898,8 +1921,23 @@ config_from_file (struct vty *vty, FILE *fp)
       /* Try again with setting node to CONFIG_NODE */
       if (ret != CMD_SUCCESS && ret != CMD_WARNING)
 	{
-	  vty->node = CONFIG_NODE;
-	  ret = cmd_execute_command_strict (cmdvec, vline, vty);
+	  if (vty->node == KEYCHAIN_KEY_NODE)
+	    {
+	      vty->node = KEYCHAIN_NODE;
+
+	      ret = cmd_execute_command_strict (cmdvec, vline, vty);
+
+	      if (ret != CMD_SUCCESS && ret != CMD_WARNING)
+		{
+		  vty->node = CONFIG_NODE;
+		  ret = cmd_execute_command_strict (cmdvec, vline, vty);
+		}
+	    }
+	  else
+	    {
+	      vty->node = CONFIG_NODE;
+	      ret = cmd_execute_command_strict (cmdvec, vline, vty);
+	    }
 	}	  
 
       cmd_free_strvec (vline);
@@ -1934,7 +1972,8 @@ DEFUN (enable,
        "Turn on privileged mode command\n")
 {
   /* If enable password is NULL, change to ENABLE_NODE */
-  if (host.enable == NULL && host.enable_encrypt == NULL)
+  if ((host.enable == NULL && host.enable_encrypt == NULL) ||
+      vty->type == VTY_SHELL_SERV)
     vty->node = ENABLE_NODE;
   else
     vty->node = AUTH_ENABLE_NODE;
@@ -1963,7 +2002,10 @@ DEFUN (config_exit,
     {
     case VIEW_NODE:
     case ENABLE_NODE:
-      vty->status = VTY_CLOSE;
+      if (vty_shell (vty))
+	exit (0);
+      else
+	vty->status = VTY_CLOSE;
       break;
     case CONFIG_NODE:
       vty->node = ENABLE_NODE;
@@ -1976,6 +2018,7 @@ DEFUN (config_exit,
     case RIPNG_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case KEYCHAIN_NODE:
     case MASC_NODE:
     case RMAP_NODE:
     case VTY_NODE:
@@ -1983,6 +2026,8 @@ DEFUN (config_exit,
       break;
     case BGP_VPNV4_NODE:
       vty->node = BGP_NODE;
+    case KEYCHAIN_KEY_NODE:
+      vty->node = KEYCHAIN_NODE;
     default:
       break;
     }
@@ -2020,6 +2065,8 @@ DEFUN (config_end,
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case KEYCHAIN_NODE:
+    case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case VTY_NODE:
       vty->node = ENABLE_NODE;
@@ -2167,16 +2214,28 @@ DEFUN (config_write_terminal,
   int i;
   struct cmd_node *node;
 
-  vty_out (vty, "%sCurrrent Configuration:%s", VTY_NEWLINE,
-	   VTY_NEWLINE);
-  vty_out (vty, "!%s", VTY_NEWLINE);
+  if (vty->type == VTY_SHELL_SERV)
+    {
+      for (i = 0; i < vector_max (cmdvec); i++)
+	if ((node = vector_slot (cmdvec, i)) && node->func && node->vtysh)
+	  {
+	    if ((*node->func) (vty))
+	      vty_out (vty, "!%s", VTY_NEWLINE);
+	  }
+    }
+  else
+    {
+      vty_out (vty, "%sCurrrent Configuration:%s", VTY_NEWLINE,
+	       VTY_NEWLINE);
+      vty_out (vty, "!%s", VTY_NEWLINE);
 
-  for (i = 0; i < vector_max (cmdvec); i++)
-    if ((node = vector_slot (cmdvec, i)) && node->func)
-      {
-	if ((*node->func) (vty))
-	  vty_out (vty, "!%s", VTY_NEWLINE);
-      }
+      for (i = 0; i < vector_max (cmdvec); i++)
+	if ((node = vector_slot (cmdvec, i)) && node->func)
+	  {
+	    if ((*node->func) (vty))
+	      vty_out (vty, "!%s", VTY_NEWLINE);
+	  }
+    }
   return CMD_SUCCESS;
 }
 
@@ -2256,10 +2315,11 @@ DEFUN (config_no_hostname,
 
 /* VTY interface password set. */
 DEFUN (config_password, password_cmd,
-       "password [CRYPT] PASSWORD",
+       "password (8|) WORD",
        "Assign the terminal connection password\n"
-       "Crypt: 8 for crypt, password string for cleartext\n"
-       "Password string\n")
+       "Specifies a HIDDEN password will follow\n"
+       "dummy string \n"
+       "The HIDDEN line password string\n")
 {
   /* Argument check. */
   if (argc == 0)
@@ -2309,13 +2369,19 @@ DEFUN (config_password, password_cmd,
   return CMD_SUCCESS;
 }
 
+ALIAS (config_password, password_text_cmd,
+       "password LINE",
+       "Assign the terminal connection password\n"
+       "The UNENCRYPTED (cleartext) line password\n")
+
 /* VTY enable password set. */
 DEFUN (config_enable_password, enable_password_cmd,
-       "enable password [CRYPT] PASSWORD",
+       "enable password (8|) WORD",
        "Modify enable password parameters\n"
        "Assign the privileged level password\n"
-       "Crypt: 8 for crypt, password string for cleartext\n"
-       "Password string\n")
+       "Specifies a HIDDEN password will follow\n"
+       "dummy string \n"
+       "The HIDDEN 'enable' password string\n")
 {
   /* Argument check. */
   if (argc == 0)
@@ -2370,6 +2436,31 @@ DEFUN (config_enable_password, enable_password_cmd,
   return CMD_SUCCESS;
 }
 
+ALIAS (config_enable_password,
+       enable_password_text_cmd,
+       "enable password LINE",
+       "Modify enable password parameters\n"
+       "Assign the privileged level password\n"
+       "The UNENCRYPTED (cleartext) 'enable' password\n")
+
+/* VTY enable password delete. */
+DEFUN (no_config_enable_password, no_enable_password_cmd,
+       "no enable password",
+       NO_STR
+       "Modify enable password parameters\n"
+       "Assign the privileged level password\n")
+{
+  if (host.enable)
+    XFREE (0, host.enable);
+  host.enable = NULL;
+
+  if (host.enable_encrypt)
+    XFREE (0, host.enable_encrypt);
+  host.enable_encrypt = NULL;
+
+  return CMD_SUCCESS;
+}
+	
 DEFUN (service_password_encrypt,
        service_password_encrypt_cmd,
        "service password-encryption",
@@ -2682,7 +2773,7 @@ install_default (enum node_type node)
 
 /* Initialize command interface. Install basic nodes and commands. */
 void
-cmd_init ()
+cmd_init (int terminal)
 {
   /* Allocate initial top vector of commands. */
   cmdvec = vector_init (VECTOR_MIN_SIZE);
@@ -2704,19 +2795,25 @@ cmd_init ()
   install_node (&config_node, config_write_host);
 
   /* Each node's basic commands. */
-  install_element (VIEW_NODE, &config_exit_cmd);
-  install_element (VIEW_NODE, &config_quit_cmd);
-  install_element (VIEW_NODE, &config_help_cmd);
-  install_element (VIEW_NODE, &config_list_cmd);
-  install_element (VIEW_NODE, &config_enable_cmd);
   install_element (VIEW_NODE, &show_version_cmd);
-  install_element (VIEW_NODE, &config_terminal_length_cmd);
-  install_element (VIEW_NODE, &no_config_terminal_length_cmd);
+  if (terminal)
+    {
+      install_element (VIEW_NODE, &config_list_cmd);
+      install_element (VIEW_NODE, &config_exit_cmd);
+      install_element (VIEW_NODE, &config_quit_cmd);
+      install_element (VIEW_NODE, &config_help_cmd);
+      install_element (VIEW_NODE, &config_enable_cmd);
+      install_element (VIEW_NODE, &config_terminal_length_cmd);
+      install_element (VIEW_NODE, &no_config_terminal_length_cmd);
+    }
 
-  install_default (ENABLE_NODE);
-  install_element (ENABLE_NODE, &config_disable_cmd);
-  install_element (ENABLE_NODE, &config_terminal_cmd);
-  install_element (ENABLE_NODE, &show_running_config_cmd);
+  if (terminal)
+    {
+      install_default (ENABLE_NODE);
+      install_element (ENABLE_NODE, &config_disable_cmd);
+      install_element (ENABLE_NODE, &config_terminal_cmd);
+      install_element (ENABLE_NODE, &show_running_config_cmd);
+    }
   install_element (ENABLE_NODE, &show_startup_config_cmd);
   install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
@@ -2725,11 +2822,15 @@ cmd_init ()
   install_element (ENABLE_NODE, &service_terminal_length_cmd);
   install_element (ENABLE_NODE, &no_service_terminal_length_cmd);
 
-  install_default (CONFIG_NODE);
+  if (terminal)
+    install_default (CONFIG_NODE);
   install_element (CONFIG_NODE, &hostname_cmd);
   install_element (CONFIG_NODE, &no_hostname_cmd);
   install_element (CONFIG_NODE, &password_cmd);
+  install_element (CONFIG_NODE, &password_text_cmd);
   install_element (CONFIG_NODE, &enable_password_cmd);
+  install_element (CONFIG_NODE, &enable_password_text_cmd);
+  install_element (CONFIG_NODE, &no_enable_password_cmd);
   install_element (CONFIG_NODE, &config_log_stdout_cmd);
   install_element (CONFIG_NODE, &no_config_log_stdout_cmd);
   install_element (CONFIG_NODE, &config_log_file_cmd);

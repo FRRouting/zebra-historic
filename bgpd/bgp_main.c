@@ -230,7 +230,7 @@ main (int argc, char **argv)
   /* Initializations. */
   srand (time (NULL));
   signal_init ();
-  cmd_init ();
+  cmd_init (1);
   vty_init ();
   memory_init ();
   bgp_init ();

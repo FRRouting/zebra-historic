@@ -216,7 +216,7 @@ main (int argc, char **argv)
 
   /* Library inits. */
   signal_init ();
-  cmd_init ();
+  cmd_init (1);
   debug_init ();
   vty_init ();
   memory_init ();
@@ -228,8 +228,9 @@ main (int argc, char **argv)
   ospf_if_init ();
   ospf_lsa_init ();
   ospf_route_init ();
-
-  ospf_init_end ();
+  ospf_route_map_init ();
+  
+  sort_node ();
 
   /* Get configuration file. */
   vty_read_config (config_file, config_current, config_default);

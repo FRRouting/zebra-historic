@@ -1,5 +1,5 @@
 /* RIP peer support
- * Copyright (C) 2000 Kunihiro Ishiguro
+ * Copyright (C) 2000 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -190,7 +190,8 @@ rip_peer_display (struct vty *vty)
   NEWLIST_LOOP (peer_list, peer, nn)
     {
       vty_out (vty, "    %-16s %9d %9d %9d   %s%s", inet_ntoa (peer->addr),
-	       peer->recv_badpackets, peer->recv_badroutes, 0, 
+	       peer->recv_badpackets, peer->recv_badroutes,
+	       ZEBRA_RIP_DISTANCE_DEFAULT,
 	       rip_peer_uptime (peer, timebuf, RIP_UPTIME_LEN),
 	       VTY_NEWLINE);
     }

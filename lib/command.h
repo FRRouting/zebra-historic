@@ -76,6 +76,8 @@ enum node_type
   ENABLE_NODE,			/* Enable node. */
   CONFIG_NODE,			/* Config node. Default mode of config file. */
   DEBUG_NODE,			/* Debug node. */
+  KEYCHAIN_NODE,		/* Key-chain node. */
+  KEYCHAIN_KEY_NODE,		/* Key-chain key node. */
   INTERFACE_NODE,		/* Interface mode node. */
   ZEBRA_NODE,			/* zebra connection node. */
   TABLE_NODE,			/* rtm_table selection node. */
@@ -96,6 +98,7 @@ enum node_type
   AS_LIST_NODE,			/* AS list node. */
   COMMUNITY_LIST_NODE,		/* Community list node. */
   RMAP_NODE,			/* Route map node. */
+  SMUX_NODE,			/* SNMP configuration node. */
   DUMP_NODE,			/* Packet dump node. */
   VTY_NODE			/* Vty node. */
 };
@@ -110,6 +113,9 @@ struct cmd_node
   /* Prompt character at vty interface. */
   char *prompt;			
 
+  /* Is this node's configuration goes to vtysh ? */
+  int vtysh;
+  
   /* Node's configuration write function */
   int (*func) (struct vty *);
 
@@ -123,6 +129,7 @@ struct cmd_element
   char *string;			/* Command specification by string. */
   int (*func) (struct cmd_element *, struct vty *, int, char **);
   char *doc;			/* Documentation of this command. */
+  int daemon;                   /* Daemon to which this command belong. */
   vector strvec;		/* Pointing out each description vector. */
   int cmdsize;			/* Command index count. */
   char *config;			/* Configuration string */
@@ -147,6 +154,7 @@ struct desc
 #define CMD_COMPLETE_FULL_MATCH  7
 #define CMD_COMPLETE_MATCH       8
 #define CMD_COMPLETE_LIST_MATCH  9
+#define CMD_SUCCESS_DAEMON      10
 
 /* Argc max counts. */
 #define CMD_ARGC_MAX   25
@@ -159,6 +167,29 @@ struct desc
     cmdstr, \
     funcname, \
     helpstr \
+  }; \
+  int funcname \
+  (struct cmd_element *self, struct vty *vty, int argc, char **argv)
+
+/* DEFSH for vtysh. */
+#define DEFSH(daemon, cmdname, cmdstr, helpstr) \
+  struct cmd_element cmdname = \
+  { \
+    cmdstr, \
+    NULL, \
+    helpstr, \
+    daemon \
+  }; \
+
+/* DEFUN + DEFSH */
+#define DEFUNSH(daemon, funcname, cmdname, cmdstr, helpstr) \
+  int funcname (struct cmd_element *, struct vty *, int, char **); \
+  struct cmd_element cmdname = \
+  { \
+    cmdstr, \
+    funcname, \
+    helpstr, \
+    daemon \
   }; \
   int funcname \
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)
@@ -183,7 +214,7 @@ struct desc
 #define CMD_IPV6(S)        ((strcmp ((S), "X:X::X:X") == 0))
 #define CMD_IPV6_PREFIX(S) ((strcmp ((S), "X:X::X:X/M") == 0))
 
-/* Description. */
+/* Common descriptions. */
 #define SHOW_STR "Show running system information\n"
 #define IP_STR "IP information\n"
 #define IPV6_STR "IPv6 information\n"
@@ -194,6 +225,35 @@ struct desc
 #define OSPF_STR "OSPF information\n"
 #define NEIGHBOR_STR "Specify neighbor router\n"
 #define DEBUG_STR "Debugging functions\n"
+#define ROUTER_STR "Enable a routing process\n"
+#define AS_STR "AS number\n"
+#define MBGP_STR "MBGP information\n"
+#define MATCH_STR "Match values from routing table\n"
+#define SET_STR "Set values in destination routing protocol\n"
+#define OUT_STR "Filter outgoing routing updates\n"
+#define IN_STR  "Filter incoming routing updates\n"
+#define V4NOTATION_STR "specify by IPv4 address notation(e.g. 0.0.0.0)\n"
+#define OSPF6_NUMBER_STR "Specify by number\n"
+#define INTERFACE_STR "Interface infomation\n"
+#define IFNAME_STR "Interface name(e.g. ep0)\n"
+#define IP6_STR "IPv6 Information\n"
+#define OSPF6_STR "Open Shortest Path First (OSPF) for IPv6\n"
+#define OSPF6_ROUTER_STR "Enable a routing process\n"
+#define OSPF6_INSTANCE_STR "<1-65535> Instance ID\n"
+#define SECONDS_STR "<1-65535> Seconds\n"
+#define ROUTE_STR "Routing Table\n"
+
+/* IPv4 only machine should not accept IPv6 address for peer's IP
+   address.  So we replace VTY command string like below. */
+#ifdef HAVE_IPV6
+#define NEIGHBOR_CMD       "neighbor (A.B.C.D|X:X::X:X) "
+#define NO_NEIGHBOR_CMD    "no neighbor (A.B.C.D|X:X::X:X) "
+#define NEIGHBOR_ADDR_STR  "IP address\nIPv6 address\n"
+#else
+#define NEIGHBOR_CMD       "neighbor A.B.C.D "
+#define NO_NEIGHBOR_CMD    "no neighbor A.B.C.D "
+#define NEIGHBOR_ADDR_STR  "IP address\n"
+#endif /* HAVE_IPV6 */
 
 /* Prototypes. */
 void install_node (struct cmd_node *, int (*) (struct vty *));
@@ -207,15 +267,16 @@ vector cmd_describe_command ();
 char **cmd_complete_command ();
 char *cmd_prompt (enum node_type);
 int config_from_file (struct vty *, FILE *);
-int cmd_execute_command (vector, struct vty *);
+int cmd_execute_command (vector, struct vty *, struct cmd_element **);
 void config_replace_string (struct cmd_element *, char *, ...);
-void cmd_init ();
+void cmd_init (int);
 
 /* Export typical functions. */
 extern struct cmd_element config_end_cmd;
 extern struct cmd_element config_exit_cmd;
 extern struct cmd_element config_quit_cmd;
 extern struct cmd_element config_help_cmd;
+extern struct cmd_element config_list_cmd;
 int config_exit (struct cmd_element *, struct vty *, int, char **);
 int config_help (struct cmd_element *, struct vty *, int, char **);
 char *host_config_file ();

@@ -119,7 +119,9 @@ nsm_timer_set (struct ospf_neighbor *nbr)
       OSPF_NSM_TIMER_ON (nbr->t_db_desc, ospf_db_desc_timer, nbr->v_db_desc);
       break;
     case NSM_Exchange:
-      OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+      OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
+      if (!IS_SET_DD_MS (nbr->dd_flags))      
+	OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
       break;
     case NSM_Loading:
       OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
@@ -208,7 +210,7 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
 int
 ospf_db_summary_count (struct ospf_neighbor *nbr)
 {
-  return new_lsdb_count (&nbr->db_sum);
+  return new_lsdb_count_all (&nbr->db_sum);
 }
 
 int
@@ -220,15 +222,12 @@ ospf_db_summary_isempty (struct ospf_neighbor *nbr)
 int
 ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 {
-  struct ospf_neighbor *nbr;
-
-  if ((nbr = (struct ospf_neighbor *) v) == NULL)
-    return 0;
+  struct ospf_neighbor *nbr = (struct ospf_neighbor *) v;
 
   if (lsa == NULL)
     return 0;
 
-  if (LS_AGE (lsa) == OSPF_LSA_MAX_AGE)
+  if (IS_LSA_MAXAGE (lsa))
     {
       zlog_info ("LSA[Type%d:%s]: LSA is MaxAge, add retransmit list",
 		 lsa->data->id, inet_ntoa (lsa->data->id));
@@ -240,11 +239,13 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
   return 0;
 }
 
+#if 0  /* Probably, this functions is not used. */
 void
 ospf_db_summary_delete_all (struct ospf_neighbor *nbr)
 {
   new_lsdb_delete_all (&nbr->db_sum);
 }
+#endif
 
 void
 ospf_db_summary_clear (struct ospf_neighbor *nbr)
@@ -284,18 +285,12 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
   foreach_lsa (NETWORK_LSDB (area), nbr, 0, ospf_db_summary_add);
   foreach_lsa (SUMMARY_LSDB (area), nbr, 0, ospf_db_summary_add);
   foreach_lsa (SUMMARY_ASBR_LSDB (area), nbr, 0, ospf_db_summary_add);
-#if 0
-  ospf_lsdb_iterator (ROUTER_LSA (area), nbr, 0, ospf_db_summary_add);
-  ospf_lsdb_iterator (NETWORK_LSA (area), nbr, 0, ospf_db_summary_add);
-  ospf_lsdb_iterator (SUMMARY_LSA (area), nbr, 0, ospf_db_summary_add);
-  ospf_lsdb_iterator (SUMMARY_LSA_ASBR (area), nbr, 0, ospf_db_summary_add);
-#endif
   
   if (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK &&
       area->external_routing == OSPF_AREA_DEFAULT)
     foreach_lsa (EXTERNAL_LSDB (ospf_top), nbr, 0, ospf_db_summary_add);
 
-  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+  /* OSPF_NSM_TIMER_OFF (nbr->t_db_desc); */
 
   return 0;
 }
@@ -311,7 +306,7 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
     return NSM_Full;
 
   /* Cancel dd retransmit timer. */
-  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+  /* OSPF_NSM_TIMER_OFF (nbr->t_db_desc); */
 
   /* Send Link State Request. */
   ospf_ls_req_send (nbr);
@@ -434,7 +429,6 @@ nsm_reset_nbr (struct ospf_neighbor *nbr)
     ospf_ls_retransmit_clear (nbr);
 
   /* Cancel thread. */
-  OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
   OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
   OSPF_NSM_TIMER_OFF (nbr->t_ls_req);
   OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
@@ -711,10 +705,10 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
       zlog_info ("Z: nsm_change_status(): "
 		 "scheduling new router-LSA origination");
 
-      ospf_schedule_router_lsa_originate (oi->area);
+      ospf_router_lsa_timer_add (oi->area);
 
       if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-	ospf_schedule_router_lsa_originate (oi->vl_data->vl_area);
+	ospf_router_lsa_timer_add (oi->vl_data->vl_area);
 
       /* Originate network-LSA. */
       if (oi->status == ISM_DR)
@@ -722,11 +716,12 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 	  if (oi->network_lsa_self && oi->full_nbrs == 0)
 	    {
 	      ospf_lsa_flush_area (oi->network_lsa_self, oi->area);
+	      ospf_lsa_unlock (oi->network_lsa_self);
 	      oi->network_lsa_self = NULL;
 	      OSPF_TIMER_OFF (oi->t_network_lsa_self);
 	    }
 	  else
-	    ospf_schedule_network_lsa_originate (oi);
+	    ospf_network_lsa_timer_add (oi);
 	}
     }
     

@@ -94,5 +94,8 @@ void ospf6_vty (struct vty *);
 struct ospf6 *ospf6_start ();
 void ospf6_stop ();
 
+void ospf6_delete (struct ospf6 *);
+int ospf6_is_asbr (struct ospf6 *);
+
 #endif /* OSPF6_TOP_H */
 

@@ -37,7 +37,7 @@ struct vertex
   list nexthop;
 };
 
-struct ospf_nexthop
+struct vertex_nexthop
 {
   struct interface *ifp;
   struct in_addr router;
@@ -45,4 +45,6 @@ struct ospf_nexthop
 };
 
 void ospf_spf_calculate_schedule ();
+void ospf_rtrs_free (struct route_table *);
+
 /* void ospf_spf_calculate_timer_add (); */

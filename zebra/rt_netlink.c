@@ -499,7 +499,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
       p.family = AF_INET;
       memcpy (&p.prefix, dest, 4);
       p.prefixlen = rtm->rtm_dst_len;
-      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, flags, &p, gate, index, table);
+      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, flags, &p, gate, index, table, 0, 0);
     }
 #ifdef HAVE_IPV6
   if (rtm->rtm_family == AF_INET6)
@@ -680,7 +680,7 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 #endif /* DEBUG */
 
       if (h->nlmsg_type == RTM_NEWROUTE)
-	rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table);
+	rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table, 0, 0);
       else
 	rib_delete_ipv4 (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table);
     }

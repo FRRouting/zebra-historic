@@ -216,7 +216,7 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
   if (metric == OSPF_LS_INFINITY)
     return 0;
 
-  if (LS_AGE (l) == OSPF_LSA_MAX_AGE)
+  if (IS_LSA_MAXAGE (l))
     return 0;
 
   if (ospf_lsa_is_self_originated (l))
@@ -535,7 +535,7 @@ process_transit_summary_lsa (struct ospf_lsa *l, void *v, int i)
       return 0;
     }
 
-  if (LS_AGE (l) == OSPF_LSA_MAX_AGE)
+  if (IS_LSA_MAXAGE (l))
     {
       zlog_info ("Z: process_transit_summaries(): This LSA is too old");
       return 0;

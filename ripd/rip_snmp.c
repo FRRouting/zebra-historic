@@ -1,5 +1,5 @@
 /* RIP SNMP support
- * Copyright (C) 1999 Kunihiro Ishiguro
+ * Copyright (C) 1999 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -43,10 +43,10 @@ oid rip_oid [] = { RIPV2MIB };
 oid ripd_oid [] = { RIPDOID };
 
 /* Hook functions. */
-u_char * rip2Globals ();
-u_char * rip2IfStatEntry ();
-u_char * rip2IfConfAddress ();
-u_char * rip2PeerTable ();
+static u_char * rip2Globals ();
+static u_char * rip2IfStatEntry ();
+static u_char * rip2IfConfAddress ();
+static u_char * rip2PeerTable ();
 
 /* RIPv2-MIB rip2Globals values. */
 #define RIP2GLOBALROUTECHANGES  1
@@ -81,7 +81,9 @@ u_char * rip2PeerTable ();
 #define RIP2PEERRCVBADPACKETS   5
 #define RIP2PEERRCVBADROUTES    6
 
-#define COUNTER ASN_INTEGER
+#define COUNTER ASN_COUNTER
+#define INTEGER ASN_INTEGER
+#define TIMETICKS ASN_TIMETICKS
 #define IPADDRESS ASN_IPADDRESS
 #define STRING ASN_OCTET_STR
 
@@ -103,15 +105,15 @@ struct variable rip_variables[] =
   {RIP2IFCONFDEFAULTMETRIC, COUNTER, RONLY, rip2IfConfAddress, 3, {3, 1, 7}},
   {RIP2IFCONFSTATUS, COUNTER, RONLY, rip2IfConfAddress, 3, {3, 1, 8}},
   {RIP2IFCONFSRCADDRESS, IPADDRESS, RONLY, rip2IfConfAddress, 3, {3, 1, 9}},
-  {RIP2PEERADDRESS, COUNTER, RONLY, rip2PeerTable, 3, {4, 1, 1}},
-  {RIP2PEERDOMAIN, COUNTER, RONLY, rip2PeerTable, 3, {4, 1, 2}},
-  {RIP2PEERLASTUPDATE, COUNTER, RONLY, rip2PeerTable, 3, {4, 1, 3}},
-  {RIP2PEERVERSION, COUNTER, RONLY, rip2PeerTable, 3, {4, 1, 4}},
+  {RIP2PEERADDRESS, IPADDRESS, RONLY, rip2PeerTable, 3, {4, 1, 1}},
+  {RIP2PEERDOMAIN, INTEGER, RONLY, rip2PeerTable, 3, {4, 1, 2}},
+  {RIP2PEERLASTUPDATE, TIMETICKS, RONLY, rip2PeerTable, 3, {4, 1, 3}},
+  {RIP2PEERVERSION, INTEGER, RONLY, rip2PeerTable, 3, {4, 1, 4}},
   {RIP2PEERRCVBADPACKETS, COUNTER, RONLY, rip2PeerTable, 3, {4, 1, 5}},
   {RIP2PEERRCVBADROUTES, COUNTER, RONLY, rip2PeerTable, 3, {4, 1, 6}}
 };
 
-u_char *
+static u_char *
 rip2Globals (struct variable *v, oid objid[], size_t *objid_len,
 	     int exact, size_t *val_len, WriteMethod **write_method)
 {
@@ -124,19 +126,19 @@ rip2Globals (struct variable *v, oid objid[], size_t *objid_len,
     case RIP2GLOBALROUTECHANGES:
       *val_len  = sizeof (rip_global_route_changes);
       return (u_char *) &rip_global_route_changes;
-      break;
+
     case RIP2GLOBALQUERIES:
       *val_len  = sizeof (rip_global_queries);
       return (u_char *) &rip_global_queries;
-      break;
+
     default:
       return NULL;
-      break;
+
     }
   return NULL;
 }
 
-struct interface *
+static struct interface *
 rip_if_lookup_next (struct in_addr *src)
 {
   listnode node;
@@ -168,7 +170,7 @@ rip_if_lookup_next (struct in_addr *src)
   return NULL;
 }
 
-struct interface *
+static struct interface *
 rip2IfLookup (struct variable *v, oid objid[], size_t *objid_len, 
 	      struct in_addr *addr, int exact)
 {
@@ -189,6 +191,8 @@ rip2IfLookup (struct variable *v, oid objid[], size_t *objid_len,
   else
     {
       len = *objid_len - v->namelen;
+      if (len > 4) len = 4;
+
       oid2in_addr (objid + v->namelen, len, addr);
 
       ifp = rip_if_lookup_next (addr);
@@ -204,7 +208,7 @@ rip2IfLookup (struct variable *v, oid objid[], size_t *objid_len,
   return NULL;
 }
 
-struct rip_peer *
+static struct rip_peer *
 rip2PeerLookup (struct variable *v, oid objid[], size_t *objid_len, 
 		struct in_addr *addr, int exact)
 {
@@ -214,18 +218,36 @@ rip2PeerLookup (struct variable *v, oid objid[], size_t *objid_len,
   if (exact)
     {
       /* Check the length. */
-      if (*objid_len - v->namelen != sizeof (struct in_addr))
+      if (*objid_len - v->namelen != sizeof (struct in_addr) + 1)
 	return NULL;
 
       oid2in_addr (objid + v->namelen, sizeof (struct in_addr), addr);
 
-      return rip_peer_lookup (addr);
+      peer = rip_peer_lookup (addr);
+      if (peer->domain == objid[v->namelen + sizeof (struct in_addr)])
+	return peer;
+      return NULL;
     }
   else
     {
       len = *objid_len - v->namelen;
+      if (len > 4) len = 4;
       oid2in_addr (objid + v->namelen, len, addr);
 
+      len = *objid_len - v->namelen;
+      peer = rip_peer_lookup (addr);
+      if (peer)
+	{
+	  if ((len < sizeof (struct in_addr) + 1) ||
+             (peer->domain > objid[v->namelen + sizeof (struct in_addr)]))
+	    {
+	      oid_copy_addr (objid + v->namelen, &peer->addr,
+			     sizeof (struct in_addr));
+	      objid[v->namelen + sizeof (struct in_addr)] = peer->domain;
+	      *objid_len = sizeof (struct in_addr) + v->namelen + 1;
+	      return peer;
+	    }
+        } 
       peer = rip_peer_lookup_next (addr);
 
       if (! peer)
@@ -233,14 +255,15 @@ rip2PeerLookup (struct variable *v, oid objid[], size_t *objid_len,
 
       oid_copy_addr (objid + v->namelen, &peer->addr,
 		     sizeof (struct in_addr));
-      *objid_len = sizeof (struct in_addr) + v->namelen;
+      objid[v->namelen + sizeof (struct in_addr)] = peer->domain;
+      *objid_len = sizeof (struct in_addr) + v->namelen + 1;
 
       return peer;
     }
   return NULL;
 }
 
-u_char *
+static u_char *
 rip2IfStatEntry (struct variable *v, oid objid[], size_t *objid_len,
 	         int exact, size_t *val_len, WriteMethod **write_method)
 {
@@ -264,31 +287,31 @@ rip2IfStatEntry (struct variable *v, oid objid[], size_t *objid_len,
     case RIP2IFSTATADDRESS:
       *val_len = sizeof (struct in_addr);
       return (u_char *) &addr;
-      break;
+
     case RIP2IFSTATRCVBADPACKETS:
       *val_len = sizeof (long);
       return (u_char *) &ri->recv_badpackets;
-      break;
+
     case RIP2IFSTATRCVBADROUTES:
       *val_len = sizeof (long);
       return (u_char *) &ri->recv_badroutes;
-      break;
+
     case RIP2IFSTATSENTUPDATES:
       *val_len = sizeof (long);
       return (u_char *) &ri->sent_updates;
-      break;
+
     case RIP2IFSTATSTATUS:
       *val_len = sizeof (long);
       return (u_char *) &valid;
-      break;
+
     default:
       return NULL;
-      break;
+
     }
   return NULL;
 }
 
-long
+static long
 rip2IfConfSend (struct rip_interface *ri)
 {
 #define doNotSend       1
@@ -315,7 +338,7 @@ rip2IfConfSend (struct rip_interface *ri)
   return doNotSend;
 }
 
-long
+static long
 rip2IfConfReceive (struct rip_interface *ri)
 {
 #define rip1            1
@@ -336,7 +359,7 @@ rip2IfConfReceive (struct rip_interface *ri)
     return doNotReceive;
 }
 
-u_char *
+static u_char *
 rip2IfConfAddress (struct variable *v, oid objid[], size_t *objid_len,
 	           int exact, size_t *val_len, WriteMethod **write_method)
 {
@@ -363,53 +386,56 @@ rip2IfConfAddress (struct variable *v, oid objid[], size_t *objid_len,
     case RIP2IFCONFADDRESS:
       *val_len = sizeof (struct in_addr);
       return (u_char *) &addr;
-      break;
+
     case RIP2IFCONFDOMAIN:
       *val_len = 2;
       return (u_char *) &domain;
-      break;
+
     case RIP2IFCONFAUTHTYPE:
       *val_len = sizeof (long);
       return (u_char *) &ri->auth_type;
-      break;
+
     case RIP2IFCONFAUTHKEY:
       *val_len = 0;
       return (u_char *) &domain;
-      break;
+
     case RIP2IFCONFSEND:
       config = rip2IfConfSend (ri);
       *val_len = sizeof (long);
       return (u_char *) &config;
-      break;
+
     case RIP2IFCONFRECEIVE:
       config = rip2IfConfReceive (ri);
       *val_len = sizeof (long);
       return (u_char *) &config;
-      break;
+
     case RIP2IFCONFDEFAULTMETRIC:
       *val_len = sizeof (long);
       return (u_char *) &ifp->metric;
-      break;
+
     case RIP2IFCONFSTATUS:
       *val_len = sizeof (long);
       return (u_char *) &valid;
-      break;
+
     case RIP2IFCONFSRCADDRESS:
       *val_len = sizeof (struct in_addr);
       return (u_char *) &addr;
-      break;
+
     default:
       return NULL;
-      break;
+
     }
   return NULL;
 }
 
-u_char *
+static u_char *
 rip2PeerTable (struct variable *v, oid objid[], size_t *objid_len,
 	       int exact, size_t *val_len, WriteMethod **write_method)
 {
   static struct in_addr addr;
+  static int version;
+  static time_t uptime;
+
   struct rip_peer *peer;
 
   memset (&addr, 0, sizeof (struct in_addr));
@@ -423,31 +449,42 @@ rip2PeerTable (struct variable *v, oid objid[], size_t *objid_len,
     {
     case RIP2PEERADDRESS:
       *val_len = sizeof (struct in_addr);
-      return (u_char *) &addr;
-      break;
+      return (u_char *) &peer->addr;
+
     case RIP2PEERDOMAIN:
-      *val_len = sizeof (struct in_addr);
-      return (u_char *) &addr;
-      break;
+      *val_len = sizeof (int);
+      return (u_char *) &peer->domain;
+
     case RIP2PEERLASTUPDATE:
-      *val_len = sizeof (struct in_addr);
-      return (u_char *) &addr;
-      break;
+#if 0 
+/* We don't know the SNMP agent startup time. We have two choices here:
+ * - assume ripd startup time equals SNMP agent startup time
+ * - don't support this variable, at all
+ * Currently, we do the latter...
+ */
+      *val_len = sizeof (time_t);
+      uptime = peer->uptime; /* now - snmp_agent_startup - peer->uptime */
+      return (u_char *) &uptime;
+#else
+      return (u_char *) NULL;
+#endif
+
     case RIP2PEERVERSION:
-      *val_len = sizeof (struct in_addr);
-      return (u_char *) &addr;
-      break;
+      *val_len = sizeof (int);
+      version = peer->version;
+      return (u_char *) &version;
+
     case RIP2PEERRCVBADPACKETS:
-      *val_len = sizeof (struct in_addr);
-      return (u_char *) &addr;
-      break;
+      *val_len = sizeof (int);
+      return (u_char *) &peer->recv_badpackets;
+
     case RIP2PEERRCVBADROUTES:
-      *val_len = sizeof (struct in_addr);
-      return (u_char *) &addr;
-      break;
+      *val_len = sizeof (int);
+      return (u_char *) &peer->recv_badroutes;
+
     default:
       return NULL;
-      break;
+
     }
   return NULL;
 }

@@ -51,8 +51,8 @@ ospf6_interface_free (struct ospf6_interface *o6i)
   return;
 }
 
-struct in6_addr *
-ospf6_interface_linklocal_addr (struct interface *ifp)
+static struct in6_addr *
+ospf6_interface_update_linklocal_address (struct interface *ifp)
 {
   listnode n;
   struct connected *c;
@@ -103,17 +103,11 @@ ospf6_interface_create (struct interface *ifp, struct ospf6 *o6)
   o6i->cost = 1;
   o6i->ifmtu = 1500;
 
-  o6i->network_prefixes = list_init ();
-  /*o6i->connected_prefixes = list_init ();*/
-
-  o6i->lsa_seqnum_link = o6i->lsa_seqnum_network
-                       = o6i->lsa_seqnum_intra_prefix
-                       = INITIAL_SEQUENCE_NUMBER;
-
   /* register interface list */
   if (!o6)
     o6 = ospf6_start ();
   list_add_node (ospf6->ospf6_interface_list, o6i);
+  o6i->ospf6 = o6;
 
   /* link both */
   o6i->interface = ifp;
@@ -161,6 +155,25 @@ ospf6_interface_if_del (struct interface *ifp, struct ospf6 *o6)
 }
 
 void
+ospf6_interface_state_update (struct interface *ifp)
+{
+  struct ospf6_interface *o6i;
+
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (! o6i)
+    return;
+  if (! o6i->area)
+    return;
+
+  if (if_is_up (ifp))
+    thread_add_event (master, interface_up, o6i, 0);
+  else
+    thread_add_event (master, interface_down, o6i, 0);
+
+  return;
+}
+
+void
 ospf6_interface_address_update (struct interface *ifp)
 {
   struct ospf6_interface *o6i;
@@ -171,27 +184,14 @@ ospf6_interface_address_update (struct interface *ifp)
   o6i = (struct ospf6_interface *) ifp->info;
 
   /* reset linklocal pointer */
-  o6i->lladdr = ospf6_interface_linklocal_addr (ifp);
+  o6i->lladdr = ospf6_interface_update_linklocal_address (ifp);
 
   /* if area is null, can't make link-lsa */
-  if (!o6i->area)
+  if (! o6i->area)
     return;
 
   /* create new Link-LSA */
-#if 1
   ospf6_lsa_update_link (o6i);
-#else
-  {
-    struct ospf6_lsa *lsa = NULL;
-    lsa = ospf6_make_link_lsax (o6i);
-    if (!lsa)
-      return;
-
-    ospf6_lsa_flood (lsa);
-    ospf6_lsdb_install (lsa);
-    ospf6_lsa_unlock (lsa);
-  }
-#endif
 }
 
 void
@@ -297,7 +297,7 @@ show_if (struct vty *vty, struct interface *iface)
   char *updown[3] = {"down", "up", NULL};
   char *type;
 
-  /* check interface type */
+  /* check physical interface type */
   if (if_is_loopback (iface))
     type = "LOOPBACK";
   else if (if_is_broadcast (iface))
@@ -317,7 +317,7 @@ show_if (struct vty *vty, struct interface *iface)
       return 0;
     }
   else
-    ospf6_interface = (struct ospf6_interface *)iface->info;
+    ospf6_interface = (struct ospf6_interface *) iface->info;
 
   vty_out (vty, "  Internet Address:%s", VTY_NEWLINE);
   for (i = listhead (iface->connected); i; nextnode (i))
@@ -574,6 +574,11 @@ DEFUN (ipv6_ospf6_priority,
   assert (ospf6_interface);
 
   ospf6_interface->priority = strtol (argv[0], NULL, 10);
+
+  if (ospf6_interface->area)
+    ifs_change (dr_election (ospf6_interface), "Priority reconfigured",
+                ospf6_interface);
+
   return CMD_SUCCESS;
 }
 

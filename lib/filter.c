@@ -41,6 +41,9 @@ struct filter
   /* If this filter is "any" match then this flag is set. */
   int any;
 
+  /* If this filter is "exact" match then this flag is set. */
+  int exact;
+
   /* Prefix information. */
   struct prefix prefix;
 };
@@ -162,7 +165,7 @@ filter_make (struct prefix *prefix, enum filter_type type)
 
 struct filter *
 filter_lookup (struct access_list *access, struct prefix *prefix,
-	       enum filter_type type)
+	       enum filter_type type, int exact)
 {
   struct filter *filter;
 
@@ -175,7 +178,8 @@ filter_lookup (struct access_list *access, struct prefix *prefix,
 	}
       else
 	{
-	  if (prefix_same (&filter->prefix, prefix) && filter->type == type)
+	  if (prefix_same (&filter->prefix, prefix) &&
+	      filter->type == type && filter->exact == exact)
 	    return filter;
 	}
     }
@@ -187,7 +191,17 @@ static int
 filter_match (struct filter *filter, struct prefix *p)
 {
   if (filter->prefix.family == p->family)
-    return prefix_match (&filter->prefix, p);
+    {
+      if (filter->exact)
+	{
+	  if (filter->prefix.prefixlen == p->prefixlen)
+	    return prefix_match (&filter->prefix, p);
+	  else
+	    return 0;
+	}
+      else
+	return prefix_match (&filter->prefix, p);
+    }
   else
     return 0;
 }
@@ -518,6 +532,7 @@ access_list_dup_check (struct access_list *access, struct filter *new)
   for (filter = access->head; filter; filter = filter->next)
     {
       if (filter->any == new->any
+	  && filter->exact == new->exact
 	  && filter->type == new->type
 	  && prefix_same (&filter->prefix, &new->prefix))
 	return 1;
@@ -553,7 +568,7 @@ DEFUN (access_list, access_list_cmd,
 
   /* "any" is special token of matching IP addresses.  */
   if (strcmp (argv[2], "any") == 0)
-      filter = filter_make (NULL, type);
+    filter = filter_make (NULL, type);
   else
     {
       /* Check string format of prefix and prefixlen. */
@@ -567,6 +582,10 @@ DEFUN (access_list, access_list_cmd,
       filter = filter_make (&p, type);
     }
 
+  /* "exact-match" */
+  if (argc == 4)
+    filter->exact = 1;
+
   /* Install new filter to the access_list. */
   access = access_list_get (AF_INET, argv[0]);
 
@@ -578,6 +597,15 @@ DEFUN (access_list, access_list_cmd,
 
   return CMD_SUCCESS;
 }
+
+ALIAS (access_list, access_list_exact_cmd,
+       "access-list WORD (deny|permit) A.B.C.D/M (exact-match|)",
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 10.0.0.0/8\n"
+       "Do exact matching of prefixes\n")
 
 DEFUN (no_access_list,
        no_access_list_cmd,
@@ -595,6 +623,7 @@ DEFUN (no_access_list,
   struct filter *filter;
   struct access_list *access;
   struct prefix p;
+  int exact = 0;
 
   /* Check of filter type. */
   if (strcmp (argv[1], "permit") == 0)
@@ -616,9 +645,12 @@ DEFUN (no_access_list,
       return CMD_WARNING;
     }
 
+  if (argc == 4)
+    exact = 1;
+
   /* Check string format of prefix and prefixlen. */
   if (strcmp (argv[2], "any") == 0)
-    filter = filter_lookup (access, NULL, type);
+    filter = filter_lookup (access, NULL, type, exact);
   else
     {
       ret = str2prefix_ipv4 (argv[2], (struct prefix_ipv4 *) &p);
@@ -627,7 +659,7 @@ DEFUN (no_access_list,
 	  vty_out (vty, "IP address prefix/prefixlen is malformed%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
-      filter = filter_lookup (access, &p, type);
+      filter = filter_lookup (access, &p, type, exact);
     }
 
   /* Looking up filter from access_list. */
@@ -649,6 +681,17 @@ DEFUN (no_access_list,
 
   return CMD_SUCCESS;
 }
+
+ALIAS (no_access_list,
+       no_access_list_exact_cmd,
+       "no access-list WORD (deny|permit) A.B.C.D/M (exact-match|)",
+       NO_STR 
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 10.0.0.0/8\n"
+       "Do exact matching of prefixes\n")
 
 DEFUN (no_access_list_all,
        no_access_list_all_cmd,
@@ -704,7 +747,7 @@ DEFUN (ipv6_access_list, ipv6_access_list_cmd,
 
   /* "any" is special token of matching IP addresses.  */
   if (strcmp (argv[2], "any") == 0)
-      filter = filter_make (NULL, type);
+    filter = filter_make (NULL, type);
   else
     {
       /* Check string format of prefix and prefixlen. */
@@ -718,12 +761,26 @@ DEFUN (ipv6_access_list, ipv6_access_list_cmd,
       filter = filter_make (&p, type);
     }
 
+  /* "exact-match" */
+  if (argc == 4)
+    filter->exact = 1;
+
   /* Install new filter to the access_list. */
   access = access_list_get (AF_INET6, argv[0]);
   access_list_filter_add (access, filter);
 
   return CMD_SUCCESS;
 }
+
+ALIAS (ipv6_access_list, ipv6_access_list_exact_cmd,
+       "ipv6 access-list WORD (deny|permit) X:X::X:X/M (exact-match|)",
+       IPV6_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 3ffe:506::/32\n"
+       "Do exact matching of prefixes\n")
 
 DEFUN (no_ipv6_access_list,
        no_ipv6_access_list_cmd,
@@ -742,6 +799,7 @@ DEFUN (no_ipv6_access_list,
   struct filter *filter;
   struct access_list *access;
   struct prefix p;
+  int exact = 0;
 
   /* Check of filter type. */
   if (strcmp (argv[1], "permit") == 0)
@@ -763,9 +821,12 @@ DEFUN (no_ipv6_access_list,
       return CMD_WARNING;
     }
 
+  if (argc == 4)
+    exact = 1;
+
   /* Check string format of prefix and prefixlen. */
   if (strcmp (argv[2], "any") == 0)
-      filter = filter_lookup (access, NULL, type);
+    filter = filter_lookup (access, NULL, type, exact);
   else
     {
       ret = str2prefix_ipv6 (argv[2], (struct prefix_ipv6 *) &p);
@@ -775,7 +836,7 @@ DEFUN (no_ipv6_access_list,
 		   VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
-      filter = filter_lookup (access, &p, type);
+      filter = filter_lookup (access, &p, type, exact);
     }
 
   /* Looking up filter from access_list. */
@@ -797,6 +858,18 @@ DEFUN (no_ipv6_access_list,
 
   return CMD_SUCCESS;
 }
+
+ALIAS (no_ipv6_access_list,
+       no_ipv6_access_list_exact_cmd,
+       "no ipv6 access-list WORD (deny|permit) X:X::X:X/M (exact-match|)",
+       NO_STR
+       IPV6_STR
+       "Add an access list entry\n"
+       "Access-list name\n"
+       "Specify packets to reject\n"
+       "Specify packets to forward\n"
+       "Prefix to match. e.g. 3ffe:506::/32\n"
+       "Do exact mathing of prefixes\n")
 
 DEFUN (no_ipv6_access_list_all,
        no_ipv6_access_list_all_cmd,
@@ -853,12 +926,13 @@ config_write_access_family (int family, struct vty *vty)
 		   VTY_NEWLINE);
 	else
 	  vty_out (vty,
-		   "%saccess-list %s %s %s/%d%s", 
+		   "%saccess-list %s %s %s/%d%s%s", 
 		   family == AF_INET ? "" : "ipv6 ",
 		   access->name,
 		   filter_type_str (filter),
 		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		   p->prefixlen,
+		   filter->exact ? " exact-match" : "",
 		   VTY_NEWLINE);
 	write++;
       }
@@ -877,12 +951,13 @@ config_write_access_family (int family, struct vty *vty)
 		   VTY_NEWLINE);
 	else
 	  vty_out (vty, 
-		   "%saccess-list %s %s %s/%d%s", 
+		   "%saccess-list %s %s %s/%d%s%s", 
 		   family == AF_INET ? "" : "ipv6 ",
 		   access->name,
 		   filter_type_str (filter),
 		   inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		   p->prefixlen,
+		   filter->exact ? " exact-match" : "",
 		   VTY_NEWLINE);
 	write++;
       }
@@ -893,7 +968,8 @@ config_write_access_family (int family, struct vty *vty)
 struct cmd_node access_node =
 {
   ACCESS_NODE,
-  ""				/* Access list has no interface. */
+  "",				/* Access list has no interface. */
+  1
 };
 
 int
@@ -937,7 +1013,9 @@ access_list_init_ipv4 ()
 {
   install_node (&access_node, config_write_access_ipv4);
 
+  install_element (CONFIG_NODE, &access_list_exact_cmd);
   install_element (CONFIG_NODE, &access_list_cmd);
+  install_element (CONFIG_NODE, &no_access_list_exact_cmd);
   install_element (CONFIG_NODE, &no_access_list_cmd);
   install_element (CONFIG_NODE, &no_access_list_all_cmd);
 }
@@ -946,7 +1024,8 @@ access_list_init_ipv4 ()
 struct cmd_node access_ipv6_node =
 {
   ACCESS_IPV6_NODE,
-  ""
+  "",
+  1
 };
 
 int
@@ -989,7 +1068,9 @@ access_list_init_ipv6 ()
 {
   install_node (&access_ipv6_node, config_write_access_ipv6);
 
+  install_element (CONFIG_NODE, &ipv6_access_list_exact_cmd);
   install_element (CONFIG_NODE, &ipv6_access_list_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_access_list_exact_cmd);
   install_element (CONFIG_NODE, &no_ipv6_access_list_cmd);
   install_element (CONFIG_NODE, &no_ipv6_access_list_all_cmd);
 }

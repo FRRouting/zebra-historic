@@ -229,9 +229,9 @@ rtadv_send_packet (int sock, struct interface *ifp)
       int i;
 
       buf[len++] = ND_OPT_SOURCE_LINKADDR;
-      buf[len++] = (((ifp->hw_addr_len * 8) + 16 + 63) >> 6);
+      buf[len++] = (((ifp->hw_addr_len * 8) + 16 ) >> 6);
 
-      i = (ifp->hw_addr_len * 8 + 7) >> 3;
+      i = (ifp->hw_addr_len * 8 ) >> 3;
       memcpy (buf + len, ifp->hw_addr, i);
       len += i;
     }

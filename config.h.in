@@ -107,6 +107,9 @@
 /* Define if one-vty option is specified. */
 #undef VTYSH
 
+/* Define if interface aliases don't have distinct indeces */
+#undef HAVE_BROKEN_ALIASES
+
 /* Define if disable-bgp-announce option is specified. */
 #undef DISABLE_BGP_ANNOUNCE
 
@@ -126,6 +129,9 @@
 
 /* Define if FreeBSD 3.2 */
 #undef FREEBSD_32
+
+/* Define if OpenBSD */
+#undef OPEN_BSD
 
 #ifdef HAVE_IPV6
 #ifdef KAME
@@ -259,8 +265,14 @@ typedef int socklen_t;
 /* Define if you have the kvm library (-lkvm).  */
 #undef HAVE_LIBKVM
 
+/* Define if you have the ncurses library (-lncurses).  */
+#undef HAVE_LIBNCURSES
+
 /* Define if you have the nsl library (-lnsl).  */
 #undef HAVE_LIBNSL
+
+/* Define if you have the readline library (-lreadline).  */
+#undef HAVE_LIBREADLINE
 
 /* Define if you have the resolv library (-lresolv).  */
 #undef HAVE_LIBRESOLV

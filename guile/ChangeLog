@@ -1,3 +1,7 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
 1999-04-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* guile-bgp.c (scm_router_bgp): Allocate real struct bgp object.

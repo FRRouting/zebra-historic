@@ -1,6 +1,6 @@
 /*
  * Zebra connect library for OSPFd
- * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro, Toshiaki Takada
+ * Copyright (C) 1997, 98, 99, 2000 Kunihiro Ishiguro, Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  *
@@ -26,18 +26,31 @@
 #define EXTERNAL_METRIC_TYPE_1      0
 #define EXTERNAL_METRIC_TYPE_2      1
 
+#define DEFAULT_ROUTE		    ZEBRA_ROUTE_MAX
+#define DEFAULT_ROUTE_TYPE(T) ((T) == DEFAULT_ROUTE)
+
 /* Prototypes */
 void zebra_init ();
 void ospf_zclient_start ();
 
-void ospf_zebra_add (struct prefix_ipv4 *, struct in_addr *);
+void ospf_zebra_add (struct prefix_ipv4 *, struct in_addr *, u_int32_t, struct ospf_route *);
 void ospf_zebra_delete (struct prefix_ipv4 *, struct in_addr *);
 void ospf_zebra_add_discard (struct prefix_ipv4 *);
 void ospf_zebra_delete_discard (struct prefix_ipv4 *);
 
-int ospf_distribute_check (int, struct prefix_ipv4 *);
+int ospf_default_originate_timer (struct thread *);
+
+int ospf_redistribute_check (struct external_info *, int *);
+int ospf_distribute_check_connected (struct external_info *);
 void ospf_distribute_list_update (int);
+int ospf_is_type_redistributed (int type);
 
 int config_write_ospf_redistribute (struct vty *);
+int config_write_ospf_distribute (struct vty *);
+int ospf_is_type_redistributed (int);
+
+void ospf_distance_reset ();
+u_char ospf_distance_apply (struct prefix_ipv4 *, struct ospf_route *);
+int config_write_ospf_distance (struct vty *);
 
 #endif /* _ZEBRA_OSPF_ZEBRA_H */

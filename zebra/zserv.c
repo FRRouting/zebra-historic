@@ -49,7 +49,7 @@ list client_list;
 /* Default rtm_table for all clients */
 int rtm_table_default;
 
-void zebra_event (enum event event, int sock, struct zebra_client *client);
+void zebra_event (enum event event, int sock, struct zserv *client);
 
 /* For logging of zebra meesages. */
 char *zebra_command_str [] =
@@ -59,66 +59,679 @@ char *zebra_command_str [] =
   "ZEBRA_INTERFACE_DELETE",
   "ZEBRA_INTERFACE_ADDRESS_ADD",
   "ZEBRA_INTERFACE_ADDRESS_DELETE",
+  "ZEBRA_INTERFACE_UP",
+  "ZEBRA_INTERFACE_DOWN",
   "ZEBRA_IPV4_ROUTE_ADD",
   "ZEBRA_IPV4_ROUTE_DELETE",
   "ZEBRA_IPV6_ROUTE_ADD",
   "ZEBRA_IPV6_ROUTE_DELETE",
   "ZEBRA_REDISTRIBUTE_ADD",
-  "ZEBRA_REDISTRIBUTE_DELETE"
+  "ZEBRA_REDISTRIBUTE_DELETE",
+  "ZEBRA_REDISTRIBUTE_DEFAULT_ADD",
+  "ZEBRA_REDISTRIBUTE_DEFAULT_DELETE",
+  "ZEBRA_IPV4_NEXTHOP_LOOKUP",
+  "ZEBRA_IPV6_NEXTHOP_LOOKUP"
 };
 
-void
-zebra_forward_on ()
+/* Interface is added. Send ZEBRA_INTERFACE_ADD to client. */
+int
+zsend_interface_add (struct zserv *client, struct interface *ifp)
 {
-  ipforward_on ();
-#ifdef HAVE_IPV6
-  ipforward_ipv6_on ();
-#endif /* HAVE_IPV6 */
+  struct stream *s;
+
+  /* Check this client need interface information. */
+  if (! client->ifinfo)
+    return -1;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Message type. */
+  stream_putc (s, ZEBRA_INTERFACE_ADD);
+
+  /* Interface information. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+  stream_putl (s, ifp->ifindex);
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+  stream_putl (s, ifp->bandwidth);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
 }
 
-/* Zebra route add and delete treatment. */
-void
-zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
+/* Interface deletion from zebra daemon. */
+int
+zsend_interface_delete (struct zserv *client, struct interface *ifp)
 {
-  u_char type;
-  u_char flags;
-  struct in_addr nexthop;
   struct stream *s;
-  u_char *lim;
-  unsigned int ifindex;
 
-  s = client->ibuf;
-  lim = stream_pnt (s) + length;
+  /* Check this client need interface information. */
+  if (! client->ifinfo)
+    return -1;
 
-  /* Fetch type and nexthop first. */
-  type = stream_getc (s);
-  flags = stream_getc (s);
-  stream_get (&nexthop, s, sizeof (struct in_addr));
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+  stream_reset (s);
 
-  /* Then fetch IPv4 prefixes. */
-  while (stream_pnt (s) < lim)
+  /* Packet length placeholder. */
+  stream_putw (s, 0);
+
+  /* Interface information. */
+  stream_putc (s, ZEBRA_INTERFACE_DELETE);
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+  stream_putl (s, ifp->ifindex);
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+  stream_putl (s, ifp->bandwidth);
+
+  /* Write packet length. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+/* Interface address is added. Send ZEBRA_INTERFACE_ADDRESS_ADD to the
+   client. */
+int
+zsend_interface_address_add (struct zserv *client, struct interface *ifp, 
+			     struct connected *c)
+{
+  int blen;
+  struct stream *s;
+  struct prefix *p;
+
+  /* Check this client need interface information. */
+  if (! client->ifinfo)
+    return -1;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  stream_putc (s, ZEBRA_INTERFACE_ADDRESS_ADD);
+  stream_putl (s, ifp->ifindex);
+
+  /* Prefix information. */
+  p = c->address;
+  stream_putc (s, p->family);
+  blen = prefix_blen (p);
+  stream_put (s, &p->u.prefix, blen);
+  stream_putc (s, p->prefixlen);
+
+  /* Destination. */
+  p = c->destination;
+  if (p)
+    stream_put (s, &p->u.prefix, blen);
+  else
+    stream_put (s, NULL, blen);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+/* Interface address is deleted. Send ZEBRA_INTERFACE_ADDRESS_DELETE
+   to the client. */
+int
+zsend_interface_address_delete (struct zserv *client, struct interface *ifp,
+				struct connected *c)
+{
+  int blen;
+  struct stream *s;
+  struct prefix *p;
+
+  /* Check this client need interface information. */
+  if (! client->ifinfo)
+    return -1;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  stream_putc (s, ZEBRA_INTERFACE_ADDRESS_DELETE);
+  stream_putl (s, ifp->ifindex);
+
+  /* Prefix information. */
+  p = c->address;
+  stream_putc (s, p->family);
+  blen = prefix_blen (p);
+  stream_put (s, &p->u.prefix, blen);
+
+  p = c->destination;
+  if (p)
+    stream_put (s, &p->u.prefix, blen);
+  else
+    stream_put (s, NULL, blen);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+int
+zsend_interface_up (struct zserv *client, struct interface *ifp)
+{
+  struct stream *s;
+
+  /* Check this client need interface information. */
+  if (! client->ifinfo)
+    return -1;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_UP);
+
+  /* Interface information. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+  stream_putl (s, ifp->ifindex);
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+  stream_putl (s, ifp->bandwidth);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+int
+zsend_interface_down (struct zserv *client, struct interface *ifp)
+{
+  struct stream *s;
+
+  /* Check this client need interface information. */
+  if (! client->ifinfo)
+    return -1;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_DOWN);
+
+  /* Interface information. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+  stream_putl (s, ifp->ifindex);
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+  stream_putl (s, ifp->bandwidth);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+int
+zsend_ipv4_add (struct zserv *client, int type, int flags,
+		struct prefix_ipv4 *p, struct in_addr *nexthop,
+		unsigned int ifindex)
+{
+  int psize;
+  struct stream *s;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Put command, type and nexthop. */
+  stream_putc (s, ZEBRA_IPV4_ROUTE_ADD);
+  stream_putc (s, type);
+  stream_putc (s, flags);
+  stream_putc (s, ZAPI_MESSAGE_NEXTHOP|ZAPI_MESSAGE_IFINDEX);
+
+  /* Prefix. */
+  psize = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, (u_char *)&p->prefix, psize);
+
+  /* Nexthop */
+  stream_putc (s, 1);
+  stream_put_in_addr (s, nexthop);
+
+  /* Interface index. */
+  stream_putc (s, 1);
+  stream_putl (s, ifindex);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+int
+zsend_ipv4_delete (struct zserv *client, int type, int flags,
+		   struct prefix_ipv4 *p, struct in_addr *nexthop,
+		   unsigned int ifindex)
+{
+  int psize;
+  struct stream *s;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Put command, type and nexthop. */
+  stream_putc (s, ZEBRA_IPV4_ROUTE_DELETE);
+  stream_putc (s, type);
+  stream_putc (s, flags);
+  stream_putc (s, ZAPI_MESSAGE_NEXTHOP|ZAPI_MESSAGE_IFINDEX);
+
+  /* Prefix. */
+  psize = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, (u_char *)&p->prefix, psize);
+
+  /* Nexthop */
+  stream_putc (s, 1);
+  stream_put_in_addr (s, nexthop);
+
+  /* Interface index. */
+  stream_putc (s, 1);
+  stream_putl (s, ifindex);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+#ifdef HAVE_IPV6
+int
+zsend_ipv6_add (struct zserv *client, int type, int flags,
+		struct prefix_ipv6 *p, struct in6_addr *nexthop,
+		unsigned int ifindex)
+{
+  int psize;
+  struct stream *s;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Put command, type and nexthop. */
+  stream_putc (s, ZEBRA_IPV6_ROUTE_ADD);
+  stream_putc (s, type);
+  stream_putc (s, flags);
+  stream_putc (s, ZAPI_MESSAGE_NEXTHOP|ZAPI_MESSAGE_IFINDEX);
+
+  /* Prefix. */
+  psize = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, (u_char *)&p->prefix, psize);
+
+  /* Nexthop */
+  stream_putc (s, 1);
+  stream_write (s, (u_char *)nexthop, 16);
+
+  /* Interface index. */
+  stream_putc (s, 1);
+  stream_putl (s, ifindex);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+int
+zsend_ipv6_delete (struct zserv *client, int type, int flags,
+		   struct prefix_ipv6 *p, struct in6_addr *nexthop,
+		   unsigned int ifindex)
+{
+  int psize;
+  struct stream *s;
+
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Put command, type and nexthop. */
+  stream_putc (s, ZEBRA_IPV6_ROUTE_DELETE);
+  stream_putc (s, type);
+  stream_putc (s, flags);
+  stream_putc (s, ZAPI_MESSAGE_NEXTHOP|ZAPI_MESSAGE_IFINDEX);
+
+  /* Prefix. */
+  psize = PSIZE (p->prefixlen);
+  stream_putc (s, p->prefixlen);
+  stream_write (s, (u_char *)&p->prefix, psize);
+
+  /* Nexthop */
+  stream_putc (s, 1);
+  stream_write (s, (u_char *)nexthop, 16);
+
+  /* Interface index. */
+  stream_putc (s, 1);
+  stream_putl (s, ifindex);
+
+  /* Write packet size. */
+  stream_putw_at (s, 0, stream_get_endp (s));
+
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+#endif /* HAVE_IPV6 */
+
+int
+zsend_ipv4_nexthop_lookup (struct zserv *client, struct in_addr addr)
+{
+  struct stream *s;
+  u_int32_t metric;
+
+  /* Lookup nexthop. */
+  metric = rib_lookup_ipv4_nexthop (addr);
+
+  /* Get output stream. */
+  s = client->obuf;
+  stream_reset (s);
+
+  /* Fill in result. */
+  stream_putw (s, 0);
+  stream_putc (s, ZEBRA_IPV4_NEXTHOP_LOOKUP);
+  stream_put_in_addr (s, &addr);
+  stream_putl (s, metric);
+  stream_putw_at (s, 0, stream_get_endp (s));
+  
+  return writen (client->sock, s->data, stream_get_endp (s));
+}
+
+/* Register zebra server interface information.  Send current all
+   interface and address information. */
+void
+zread_interface_add (struct zserv *client, u_short length)
+{
+  listnode ifnode;
+  listnode cnode;
+  struct interface *ifp;
+  struct connected *c;
+
+  /* Interface information is needed. */
+  client->ifinfo = 1;
+
+  for (ifnode = listhead (iflist); ifnode; ifnode = nextnode (ifnode))
     {
-      int size;
-      struct prefix_ipv4 p;
+      ifp = getdata (ifnode);
 
-      ifindex = stream_getl (client->ibuf);
+      /* Skip pseudo interface. */
+      if (ifp->ifindex == 0)
+	continue;
 
-      bzero (&p, sizeof (struct prefix_ipv4));
-      p.family = AF_INET;
-      p.prefixlen = stream_getc (s);
-      size = PSIZE (p.prefixlen);
-      stream_get (&p.prefix, s, size);
+      zsend_interface_add (client, ifp);
 
-      if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rib_add_ipv4 (type, flags, &p, &nexthop, ifindex, client->rtm_table);
-      else
-	rib_delete_ipv4 (type, flags, &p, &nexthop, ifindex, client->rtm_table);
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  c = getdata (cnode);
+	  zsend_interface_address_add (client, ifp, c);
+	}
     }
 }
 
-#ifdef HAVE_IPV6
+/* Unregister zebra server interface information. */
 void
-zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
+zread_interface_delete (struct zserv *client, u_short length)
+{
+  client->ifinfo = 0;
+}
+
+/* Zebra server IPv4 prefix add function. */
+void
+zread_ipv4_add (struct zserv *client, u_short length)
+{
+  int i;
+  struct stream *s;
+  struct zapi_ipv4 api;
+  struct in_addr nexthop;
+  unsigned long ifindex;
+  struct prefix_ipv4 p;
+  
+  s = client->ibuf;
+  ifindex = 0;
+  nexthop.s_addr = 0;
+
+  /* Type, flags, message. */
+  api.type = stream_getc (s);
+  api.flags = stream_getc (s);
+  api.message = stream_getc (s);
+
+  /* IPv4 prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = stream_getc (s);
+  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+
+  /* Nexthop, ifindex, distance, metric. */
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      api.nexthop_num = stream_getc (s);
+      for (i = 0; i < api.nexthop_num; i++)
+	nexthop.s_addr = stream_get_ipv4 (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_IFINDEX))
+    {
+      api.ifindex_num = stream_getc (s);
+      for (i = 0; i < api.ifindex_num; i++)
+	ifindex = stream_getl (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
+    api.distance = stream_getc (s);
+  else
+    api.distance = 0;
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
+    api.metric = stream_getl (s);
+  else
+    api.metric = 0;
+    
+  rib_add_ipv4 (api.type, api.flags, &p, &nexthop, ifindex, client->rtm_table,
+		api.metric, api.distance);
+}
+
+/* Zebra server IPv4 prefix delete function. */
+void
+zread_ipv4_delete (struct zserv *client, u_short length)
+{
+  int i;
+  struct stream *s;
+  struct zapi_ipv4 api;
+  struct in_addr nexthop;
+  unsigned long ifindex;
+  struct prefix_ipv4 p;
+  
+  s = client->ibuf;
+  ifindex = 0;
+  nexthop.s_addr = 0;
+
+  /* Type, flags, message. */
+  api.type = stream_getc (s);
+  api.flags = stream_getc (s);
+  api.message = stream_getc (s);
+
+  /* IPv4 prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = stream_getc (s);
+  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+
+  /* Nexthop, ifindex, distance, metric. */
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      api.nexthop_num = stream_getc (s);
+      for (i = 0; i < api.nexthop_num; i++)
+	nexthop.s_addr = stream_get_ipv4 (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_IFINDEX))
+    {
+      api.ifindex_num = stream_getc (s);
+      for (i = 0; i < api.ifindex_num; i++)
+	ifindex = stream_getl (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
+    api.distance = stream_getc (s);
+  else
+    api.distance = 0;
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
+    api.metric = stream_getl (s);
+  else
+    api.metric = 0;
+    
+  rib_delete_ipv4 (api.type, api.flags, &p, &nexthop, ifindex,
+		   client->rtm_table);
+}
+
+/* Nexthop lookup for IPv4. */
+void
+zread_ipv4_nexthop_lookup (struct zserv *client, u_short length)
+{
+  struct in_addr addr;
+
+  addr.s_addr = stream_get_ipv4 (client->ibuf);
+  zsend_ipv4_nexthop_lookup (client, addr);
+}
+
+#ifdef HAVE_IPV6
+/* Zebra server IPv6 prefix add function. */
+void
+zread_ipv6_add (struct zserv *client, u_short length)
+{
+  int i;
+  struct stream *s;
+  struct zapi_ipv6 api;
+  struct in6_addr nexthop;
+  unsigned long ifindex;
+  struct prefix_ipv6 p;
+  
+  s = client->ibuf;
+  ifindex = 0;
+  memset (&nexthop, 0, sizeof (struct in6_addr));
+
+  /* Type, flags, message. */
+  api.type = stream_getc (s);
+  api.flags = stream_getc (s);
+  api.message = stream_getc (s);
+
+  /* IPv4 prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv6));
+  p.family = AF_INET6;
+  p.prefixlen = stream_getc (s);
+  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+
+  /* Nexthop, ifindex, distance, metric. */
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      api.nexthop_num = stream_getc (s);
+      for (i = 0; i < api.nexthop_num; i++)
+	stream_get (&nexthop, s, 16);
+    }
+
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_IFINDEX))
+    {
+      api.ifindex_num = stream_getc (s);
+      for (i = 0; i < api.ifindex_num; i++)
+	ifindex = stream_getl (s);
+    }
+
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
+    api.distance = stream_getc (s);
+  else
+    api.distance = 0;
+
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
+    api.metric = stream_getl (s);
+  else
+    api.metric = 0;
+    
+  if (IN6_IS_ADDR_UNSPECIFIED (&nexthop))
+    rib_add_ipv6 (api.type, api.flags, &p, NULL, ifindex, 0);
+  else
+    rib_add_ipv6 (api.type, api.flags, &p, &nexthop, ifindex, 0);
+}
+
+/* Zebra server IPv6 prefix delete function. */
+void
+zread_ipv6_delete (struct zserv *client, u_short length)
+{
+  int i;
+  struct stream *s;
+  struct zapi_ipv6 api;
+  struct in6_addr nexthop;
+  unsigned long ifindex;
+  struct prefix_ipv6 p;
+  
+  s = client->ibuf;
+  ifindex = 0;
+  memset (&nexthop, 0, sizeof (struct in6_addr));
+
+  /* Type, flags, message. */
+  api.type = stream_getc (s);
+  api.flags = stream_getc (s);
+  api.message = stream_getc (s);
+
+  /* IPv4 prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv6));
+  p.family = AF_INET6;
+  p.prefixlen = stream_getc (s);
+  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+
+  /* Nexthop, ifindex, distance, metric. */
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      api.nexthop_num = stream_getc (s);
+      for (i = 0; i < api.nexthop_num; i++)
+	stream_get (&nexthop, s, 16);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_IFINDEX))
+    {
+      api.ifindex_num = stream_getc (s);
+      for (i = 0; i < api.ifindex_num; i++)
+	ifindex = stream_getl (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
+    api.distance = stream_getc (s);
+  else
+    api.distance = 0;
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
+    api.metric = stream_getl (s);
+  else
+    api.metric = 0;
+    
+  if (IN6_IS_ADDR_UNSPECIFIED (&nexthop))
+    rib_delete_ipv6 (api.type, api.flags, &p, NULL, ifindex, 0);
+  else
+    rib_delete_ipv6 (api.type, api.flags, &p, &nexthop, ifindex, 0);
+}
+
+void
+zebra_read_ipv6 (int command, struct zserv *client, u_short length)
 {
   u_char type;
   u_char flags;
@@ -158,15 +771,21 @@ zebra_read_ipv6 (int command, struct zebra_client *client, u_short length)
 	rib_delete_ipv6 (type, flags, &p, gate, ifindex, 0);
     }
 }
+
+void
+zread_ipv6_nexthop_lookup (struct zserv *client, u_short length)
+{
+  ;
+}
 #endif /* HAVE_IPV6 */
 
 /* Close zebra client. */
 void
-zebra_client_close (struct zebra_client *client)
+zebra_client_close (struct zserv *client)
 {
   /* Close file descriptor. */
-  if (client->fd)
-    close (client->fd);
+  if (client->sock)
+    close (client->sock);
 
   /* Free stream buffers. */
   if (client->ibuf)
@@ -188,136 +807,17 @@ zebra_client_close (struct zebra_client *client)
   XFREE (0, client);
 }
 
-#if 0
-/* Interface infomation send routine. */
-void
-zebra_request_all_interface (int sock)
-{
-  int size;
-  struct interface *ifp;
-  struct connected *connected;
-  listnode ifnode;
-  listnode node;
-  char *pnt, *start;
-
-  /* Calculate storage size. */
-  size = 0;
-  for (ifnode = listhead (iflist); ifnode; nextnode (ifnode))
-    {
-      ifp = getdata (ifnode);
-      size += sizeof (struct interface);
-      for (node = listhead (ifp->connected); node; nextnode (node))
-	size += (sizeof (struct prefix) * 2);
-    }
-
-  /* Allocate buffer for make interface information. */
-  start = pnt = XMALLOC (0, size);
-
-  /* This is place holder of packet size. */
-  PUTW (size, pnt);
-  PUTC (ZEBRA_GET_ALL_INTERFACE, pnt);
-
-  /* Put each interface's information. */
-  for (ifnode = listhead (iflist); ifnode; nextnode (ifnode))
-    {
-      ifp = getdata (ifnode);
-
-      /* Skip pseudo interface. */
-      if (ifp->ifindex <= 0)
-	continue;
-
-      /* Set interface's name. */
-      memcpy (pnt, ifp->name, INTERFACE_NAMSIZ);
-      pnt += INTERFACE_NAMSIZ;
-
-      /* Set interface's index. */
-      PUTC (ifp->ifindex ,pnt);
-
-      /* Set interface's value. */
-      PUTL (ifp->flags, pnt);
-      PUTL (ifp->metric, pnt);
-      PUTL (ifp->mtu, pnt);
-
-      /* Set interface's address count. */
-      PUTL (ifp->connected->count, pnt);
-
-      /* Set interface's address. */
-      for (node = listhead (ifp->connected); node; nextnode (node))
-	{
-	  struct prefix *p;
-	  int plen;
-
-	  connected = getdata (node);
-
-	  /* Interface's address */
-	  p = connected->address;
-	  *pnt++ = p->family;
-	  plen = prefix_blen (p);
-	  memcpy (pnt, &p->u.prefix, plen);
-	  pnt += plen;
-	  *pnt++ = p->prefixlen;
-
-	  /* Interface's address destination. */
-	  p = connected->destination;
-	  if (p)
-	    memcpy (pnt, &p->u.prefix, plen);
-	  else
-	    memset (pnt, 0, plen);
-	  pnt += plen;
-	}
-    }
-
-  /* Calculate packet size. */
-  size = pnt - start;
-  pnt = start;
-  PUTW (size, pnt);
-
-  /* Write information to socket. */
-  writen (sock, start, size);
-
-  /* Free storage buffer. */
-  XFREE (0, start);
-}
-#endif /* 0 */
-
-/* Send all of the interface information to the client. */
-void
-zebra_send_all_interface (int sock)
-{
-  listnode ifnode;
-  struct interface *ifp;
-  listnode cnode;
-  struct connected *c;
-
-  for (ifnode = listhead (iflist); ifnode; ifnode = nextnode (ifnode))
-    {
-      ifp = getdata (ifnode);
-
-      /* Skip pseudo interface. */
-      if (ifp->ifindex == 0)
-	continue;
-
-      zebra_interface_add (sock, ifp);
-
-      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
-	{
-	  c = getdata (cnode);
-	  zebra_interface_address_add (sock, ifp, c);
-	}
-    }
-}
-
 /* Make new client. */
 void
 zebra_client_create (int sock)
 {
-  struct zebra_client *client;
+  struct zserv *client;
 
-  client = XMALLOC (0, sizeof (struct zebra_client));
-  bzero (client, sizeof (struct zebra_client));
+  client = XMALLOC (0, sizeof (struct zserv));
+  bzero (client, sizeof (struct zserv));
 
   /* Make client input/output buffer. */
-  client->fd = sock;
+  client->sock = sock;
   client->ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
   client->obuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
 
@@ -329,9 +829,6 @@ zebra_client_create (int sock)
   
   /* Make new read thread. */
   zebra_event (ZEBRA_READ, sock, client);
-
-  /* Send interface information to the client. */
-  zebra_send_all_interface (sock);
 }
 
 /* Handler of zebra service request. */
@@ -339,7 +836,7 @@ int
 zebra_client_read (struct thread *thread)
 {
   int sock;
-  struct zebra_client *client;
+  struct zserv *client;
   int nbyte;
   u_short length;
   u_char command;
@@ -387,28 +884,46 @@ zebra_client_read (struct thread *thread)
 
   switch (command) 
     {
+    case ZEBRA_INTERFACE_ADD:
+      zread_interface_add (client, length);
+      break;
+    case ZEBRA_INTERFACE_DELETE:
+      zread_interface_delete (client, length);
+      break;
     case ZEBRA_IPV4_ROUTE_ADD:
+      zread_ipv4_add (client, length);
+      break;
     case ZEBRA_IPV4_ROUTE_DELETE:
-      zebra_read_ipv4 (command, client, length);
+      zread_ipv4_delete (client, length);
       break;
 #ifdef HAVE_IPV6
     case ZEBRA_IPV6_ROUTE_ADD:
+      zread_ipv6_add (client, length);
+      break;
     case ZEBRA_IPV6_ROUTE_DELETE:
-      zebra_read_ipv6 (command, client, length);
+      zread_ipv6_delete (client, length);
       break;
 #endif /* HAVE_IPV6 */
-#if 0
-    case ZEBRA_GET_ALL_INTERFACE:
-      /* This message is obsolete now. */
-      /* zebra_request_all_interface (sock); */
-      break;
-#endif /* 0 */
     case ZEBRA_REDISTRIBUTE_ADD:
       zebra_redistribute_add (command, client, length);
       break;
     case ZEBRA_REDISTRIBUTE_DELETE:
       zebra_redistribute_delete (command, client, length);
       break;
+    case ZEBRA_REDISTRIBUTE_DEFAULT_ADD:
+      zebra_redistribute_default_add (command, client, length);
+      break;
+    case ZEBRA_REDISTRIBUTE_DEFAULT_DELETE:
+      zebra_redistribute_default_delete (command, client, length);
+      break;
+    case ZEBRA_IPV4_NEXTHOP_LOOKUP:
+      zread_ipv4_nexthop_lookup (client, length);
+      break;
+#ifdef HAVE_IPV6
+    case ZEBRA_IPV6_NEXTHOP_LOOKUP:
+      zread_ipv6_nexthop_lookup (client, length);
+      break;
+#endif /* HAVE_IPV6 */
     default:
       zlog_info ("Zebra received unknown command %d", command);
       break;
@@ -425,7 +940,7 @@ void
 zebra_write (struct thread *thread)
 {
   int sock;
-  struct zebra_client *client;
+  struct zserv *client;
 
   /* Thread treatment. */
   sock = THREAD_FD (thread);
@@ -433,21 +948,6 @@ zebra_write (struct thread *thread)
   client->t_write = NULL;
 
   stream_flush (client->obuf, sock);
-}
-
-struct zebra_client *
-client_lookup (int sock)
-{
-  struct zebra_client *client;
-  listnode node;
-  
-  for (node = listhead (client_list); node; nextnode (node))
-    {
-      client = getdata (node);
-      if (client->fd == sock)
-	return client;
-    }
-  return NULL;
 }
 
 /* Accept code of zebra server socket. */
@@ -531,7 +1031,7 @@ zebra_serv ()
 extern struct thread_master *master;
 
 void
-zebra_event (enum event event, int sock, struct zebra_client *client)
+zebra_event (enum event event, int sock, struct zserv *client)
 {
   switch (event)
     {
@@ -539,7 +1039,8 @@ zebra_event (enum event event, int sock, struct zebra_client *client)
       thread_add_read (master, zebra_accept, client, sock);
       break;
     case ZEBRA_READ:
-      client->t_read = thread_add_read (master, zebra_client_read, client, sock);
+      client->t_read = 
+	thread_add_read (master, zebra_client_read, client, sock);
       break;
     case ZEBRA_WRITE:
       /**/
@@ -605,12 +1106,12 @@ DEFUN (show_zebra_client,
        "Client information")
 {
   listnode node;
-  struct zebra_client *client;
+  struct zserv *client;
 
   for (node = listhead (client_list); node; nextnode (node))
     {
       client = getdata (node);
-      vty_out (vty, "Client fd %d%s", client->fd, VTY_NEWLINE);
+      vty_out (vty, "Client fd %d%s", client->sock, VTY_NEWLINE);
     }
   return CMD_SUCCESS;
 }
@@ -630,14 +1131,9 @@ struct cmd_node table_node =
 {
   TABLE_NODE,
   "",				/* This node has no interface. */
+  1
 };
 
-/* Radix treee for IP version 4 RIB */
-struct radix_top *ipv4_static_radix;
-#ifdef HAVE_IPV6
-struct radix_top *ipv6_static_radix;
-#endif /* HAVE_IPV6 */
-
 /* Only display ip forwarding is enabled or not. */
 DEFUN (show_ip_forwarding,
        show_ip_forwarding_cmd,
@@ -701,9 +1197,9 @@ DEFUN (ip_route,
 
   /* We need rib error treatment here. */
   if (ifindex)
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table, 0, 0);
   else
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
 
   /* Error checking and display message. */
   if (ret)
@@ -784,9 +1280,9 @@ DEFUN (ip_route_mask,
 
   /* We need rib error treatment here. */
   if (ifindex)
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table, 0, 0);
   else
-    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
 
   /* Error checking and display meesage. */
   if (ret)
@@ -817,13 +1313,14 @@ DEFUN (ip_route_mask,
 
 DEFUN (no_ip_route, 
        no_ip_route_cmd,
-       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE|unknown)",
        NO_STR
        "IP information\n"
        "IP routing set\n"
        "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "IP gateway\n"
-       "IP gateway interface name\n")
+       "IP gateway interface name\n"
+       "unknown interface\n")
 {
   int ret;
   struct prefix_ipv4 p;
@@ -840,27 +1337,38 @@ DEFUN (no_ip_route,
 	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
+
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
   /* Gateway. */
   ret = inet_aton (argv[1], &gate);
+
+  /* direct route */
   if (!ret)	
     {
-      ifp = if_lookup_by_name (argv[1]);
-      if (! ifp)
+      /* route on "unknown" interface */
+      if (!strcmp(argv[1],"unknown")){
+	ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, INTERFACE_UNKNOWN, table);
+      }
+
+      /* route on known interface */
+      else{
+	ifp = if_lookup_by_name (argv[1]);
+	if (! ifp)
 	{
 	  vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
       ifindex = ifp->ifindex;
+      ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+      }
     }
-
-  /* Make sure mask is applied. */
-  apply_mask_ipv4 (&p);
-
-  if (ifindex)
-    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
-  else
+  /* route with gateway */
+  else {
     ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
-
+  }
+  
   if (ret)
     {
       switch (ret)
@@ -1024,30 +1532,24 @@ DEFUN (no_ipv6_forwarding,
 
 #endif /* HAVE_IPV6 */
        
-/* IP node for static routes. */
-struct cmd_node ip_node =
-{
-  IP_NODE,
-  "",				/* This node has no interface. */
-};
 
 /* Initialisation of zebra and installation of commands. */
 void
 zebra_init ()
 {
-  int config_write_ip (struct vty *vty);
-
   /* Client list init. */
   client_list = list_init ();
 
   /* Forwarding on. */
-  zebra_forward_on ();
+  ipforward_on ();
+#ifdef HAVE_IPV6
+  ipforward_ipv6_on ();
+#endif /* HAVE_IPV6 */
 
   /* Make zebra server socket. */
   zebra_serv ();
 
   /* Install configuration write function. */
-  install_node (&ip_node, config_write_ip);
   install_node (&table_node, config_write_table);
 
   install_element (VIEW_NODE, &show_ip_forwarding_cmd);

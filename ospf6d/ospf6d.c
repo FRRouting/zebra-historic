@@ -29,20 +29,21 @@ list nexthoplist = NULL;
 struct sockaddr_in6 allspfrouters6;
 struct sockaddr_in6 alldrouters6;
 char *recent_reason; /* set by ospf6_lsa_check_recent () */
-char rcsid[] = "$Id: ospf6d.c,v 1.85 2000/05/10 16:58:20 yasu Exp $";
+
+char ospf6_daemon_version[] = OSPF6_DAEMON_VERSION;
 
 
 /* vty commands */
-DEFUN (show_ipv6_ospf6_version,
-       show_ipv6_ospf6_version_cmd,
-       "show ipv6 ospf6 version",
+/* Show version. */
+DEFUN (show_version_ospf6,
+       show_version_ospf6_cmd,
+       "show version ospf6",
        SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "version information\n"
-       )
+       "Displays ospf6d version\n")
 {
-  vty_out (vty, "%s%s", rcsid, VTY_NEWLINE);
+  vty_out (vty, "Zebra OSPF6d Version: %s%s",
+           ospf6_daemon_version, VTY_NEWLINE);
+
   return CMD_SUCCESS;
 }
 
@@ -207,84 +208,49 @@ DEFUN (show_ipv6_ospf6,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_ipv6_ospf6_requestlist,
-       show_ipv6_ospf6_requestlist_cmd,
-       "show ipv6 ospf6 request-list",
+DEFUN (show_ipv6_ospf6_neighborlist,
+       show_ipv6_ospf6_neighborlist_cmd,
+       "show ipv6 ospf6 (summary-list|request-list|retransmission-list)",
        SHOW_STR
        IP6_STR
        OSPF6_STR
+       "Link State summary list\n"
        "Link State request list\n"
+       "Link State retransmission list\n"
        )
 {
-  struct area *area;
-  struct ospf6_interface *o6if;
-  struct neighbor *nbr;
+  struct area *o6a;
+  struct ospf6_interface *o6i;
+  struct neighbor *o6n;
   listnode i, j, k, l;
   struct ospf6_lsa *lsa;
-  char buf[256];
+  list lslist = NULL;
 
   i = j = k = l = NULL;
 
   for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
-      area = (struct area *) getdata (i);
-      for (j = listhead (area->if_list); j; nextnode (j))
+      o6a = (struct area *) getdata (i);
+      for (j = listhead (o6a->if_list); j; nextnode (j))
         {
-          o6if = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6if->neighbor_list); k; nextnode (k))
+          o6i = (struct ospf6_interface *) getdata (j);
+          for (k = listhead (o6i->neighbor_list); k; nextnode (k))
             {
-              nbr = (struct neighbor *) getdata (k);
-              vty_out (vty, "neighbor %s, interface %s%s", nbr->str,
-                       nbr->ospf6_interface->interface->name,
-		       VTY_NEWLINE);
-              for (l = listhead (nbr->requestlist); l; nextnode (l))
+              o6n = (struct neighbor *) getdata (k);
+
+              if (strncmp (argv[0], "sum", 3) == 0)
+                lslist = o6n->summarylist;
+              else if (strncmp (argv[0], "req", 3) == 0)
+                lslist = o6n->requestlist;
+              else if (strncmp (argv[0], "ret", 3) == 0)
+                lslist = o6n->retranslist;
+
+              vty_out (vty, "neighbor %s on interface %s: %d%s", o6n->str,
+                       o6i->interface->name, listcount (lslist), VTY_NEWLINE);
+              for (l = listhead (lslist); l; nextnode (l))
                 {
                   lsa = (struct ospf6_lsa *) getdata (l);
-                  ospf6_lsa_str (lsa, buf, sizeof (buf));
-                  vty_out (vty, "  %s%s", buf,
-			   VTY_NEWLINE);
-                }
-            }
-        }
-    }
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (show_ipv6_ospf6_retranslist,
-       show_ipv6_ospf6_retranslist_cmd,
-       "show ipv6 ospf6 retransmission-list",
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Link State retransmission list\n"
-       )
-{
-  struct area *area;
-  struct ospf6_interface *o6if;
-  struct neighbor *nbr;
-  listnode i, j, k, l;
-  struct ospf6_lsa *lsa;
-  char buf[256];
-
-  for (i = listhead (ospf6->area_list); i; nextnode (i))
-    {
-      area = (struct area *) getdata (i);
-      for (j = listhead (area->if_list); j; nextnode (j))
-        {
-          o6if = (struct ospf6_interface *) getdata (j);
-          for (k = listhead (o6if->neighbor_list); k; nextnode (k))
-            {
-              nbr = (struct neighbor *) getdata (k);
-              vty_out (vty, "neighbor %s, interface %s%s", nbr->str,
-                       nbr->ospf6_interface->interface->name,
-		       VTY_NEWLINE);
-              for (l = listhead (nbr->retranslist); l; nextnode (l))
-                {
-                  lsa = (struct ospf6_lsa *) getdata (l);
-                  ospf6_lsa_str (lsa, buf, sizeof (buf));
-                  vty_out (vty, "  %s%s", buf,
-			   VTY_NEWLINE);
+                  vty_out (vty, "  %s%s", lsa->str, VTY_NEWLINE);
                 }
             }
         }
@@ -524,9 +490,8 @@ ospf6_init ()
   install_node (&ospf6_node, ospf6_config_write);
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_version_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_requestlist_cmd);
-  install_element (VIEW_NODE, &show_ipv6_ospf6_retranslist_cmd);
+  install_element (VIEW_NODE, &show_version_ospf6_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_interface_cmd);
@@ -537,9 +502,9 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_version_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_requestlist_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_retranslist_cmd);
+  install_element (ENABLE_NODE, &show_version_ospf6_cmd);
+
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighborlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_cmd);

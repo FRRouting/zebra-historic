@@ -59,13 +59,20 @@ void bgp_packet_dump (struct stream *);
 
 int debug (unsigned int option);
 
-unsigned long bgp_debug_fsm;
-unsigned long bgp_debug_events;
-unsigned long bgp_debug_packet;
+unsigned long conf_bgp_debug_fsm;
+unsigned long conf_bgp_debug_events;
+unsigned long conf_bgp_debug_packet;
+unsigned long conf_bgp_debug_filter;
+
+unsigned long term_bgp_debug_fsm;
+unsigned long term_bgp_debug_events;
+unsigned long term_bgp_debug_packet;
+unsigned long term_bgp_debug_filter;
 
 #define BGP_DEBUG_FSM                 0x01
 #define BGP_DEBUG_EVENTS              0x01
 #define BGP_DEBUG_PACKET              0x01
+#define BGP_DEBUG_FILTER              0x01
 
 #define BGP_DEBUG_PACKET_SEND         0x01
 #define BGP_DEBUG_PACKET_SEND_DETAIL  0x02
@@ -73,10 +80,25 @@ unsigned long bgp_debug_packet;
 #define BGP_DEBUG_PACKET_RECV         0x01
 #define BGP_DEBUG_PACKET_RECV_DETAIL  0x02
 
-#define DEBUG_ON(a, b)		(bgp_debug_ ## a |= (BGP_DEBUG_ ## b))
-#define DEBUG_OFF(a, b)		(bgp_debug_ ## a &= ~(BGP_DEBUG_ ## b))
+#define CONF_DEBUG_ON(a, b)	(conf_bgp_debug_ ## a |= (BGP_DEBUG_ ## b))
+#define CONF_DEBUG_OFF(a, b)	(conf_bgp_debug_ ## a &= ~(BGP_DEBUG_ ## b))
 
-#define BGP_DEBUG(a, b)		(bgp_debug_ ## a & BGP_DEBUG_ ## b)
+#define TERM_DEBUG_ON(a, b)	(term_bgp_debug_ ## a |= (BGP_DEBUG_ ## b))
+#define TERM_DEBUG_OFF(a, b)	(term_bgp_debug_ ## a &= ~(BGP_DEBUG_ ## b))
+
+#define DEBUG_ON(a, b) \
+    do { \
+	CONF_DEBUG_ON(a, b); \
+	TERM_DEBUG_ON(a, b); \
+    } while (0)
+#define DEBUG_OFF(a, b) \
+    do { \
+	CONF_DEBUG_OFF(a, b); \
+	TERM_DEBUG_OFF(a, b); \
+    } while (0)
+
+#define BGP_DEBUG(a, b)		(term_bgp_debug_ ## a & BGP_DEBUG_ ## b)
+#define CONF_BGP_DEBUG(a, b)    (conf_bgp_debug_ ## a & BGP_DEBUG_ ## b)
 
 extern char *bgp_type_str[];
 

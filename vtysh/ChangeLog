@@ -1,0 +1,45 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+2000-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (vtysh_LDADD): Remove -lreadline and -lncurses.
+
+	* vtysh.c (vtysh_connect): Use AF_UNIX instead of AF_LOCAL for
+	backward compatibility.
+
+2000-07-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* extract.pl: Change regexp to match DEFUN and ALIAS at the same
+	time.
+
+2000-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (signal_init): Ignore SIGPIPE signal.
+
+2000-07-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* extract.pl: ALIAS command can be extracted by extract.pl.
+
+2000-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* extract.pl: Fix scalar and array semantics.
+
+	* vtysh.c (vtysh_telnet): Add "telnet" client command.
+
+2000-07-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (main): Add -e flag for passing command from arugment.
+	(vtysh_ping): Add "ping" command for test of command execution.
+	(init_node): Add "traceroute" command.
+	(vtysh_start_shell): Add "start-shell", "start-shell bash",
+	"start-shell zsh".
+	(sigint): Add check for execute_flag for avoid duplicate prompt.
+
+2000-06-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c: New file for vty shell.
+	* vtysh.h: Likewise.
+	* extract.pl: Likewise.
+	* vtysh_cmd.c: Generate by extract.pl.

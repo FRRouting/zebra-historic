@@ -95,7 +95,7 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
     return;
 
   if (if_is_up(ifp)){
-    rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0);
+    rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0, 0, 0);
   }
 }
 
@@ -143,7 +143,7 @@ connected_up_ipv4 (struct interface *ifp, struct in_addr *addr,
   if (prefix_ipv4_any (&p))
     return;
 
-  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
+  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0, 0, 0);
 }
 
 void

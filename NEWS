@@ -1,5 +1,126 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.88
+
+* Changes in lib
+
+** "exact-match" option is added to "access-list" and "ipv6
+access-list" command.  If this option is specified, the prefix and
+prefix length is compared as exact match mode.
+
+* Changes in zebra
+
+** New Zebra message ZEBRA_REDISTRIBUTE_DEFAULT_ADD and
+ZEBRA_REDISTRIBUTE_DEFAULT_DELTE are added.
+
+** Default administrative distance value is changed.
+
+            Old         New
+------------------------------------------
+system      10           0
+kernel      20           0
+connected   30           0
+static      40           1
+rip         50         120
+ripng       50         120
+ospf        60         110
+ospf6       49         110
+bgp         70         200(iBGP)  20(eBGP)
+------------------------------------------
+
+** Distance value can be passed from protocol daemon to zebra.
+
+** "show ip route" shows [metric/distance] value pair.
+
+** Zebra Protocol is changed to support multi-path route and distance
+value.
+
+* Changes in ospfd
+
+** "default-information originate [always]" command is added.
+
+** "default-metric <0-16777214>" command is added.
+
+** "show ip ospf database" command is integrated.  LS-ID and AdvRouter can
+   be specifed.  The commands are
+
+   show ip ospf database TYPE LS-ID
+   show ip ospf database TYPE LS-ID ADV-ROUTER
+   show ip ospf database TYPE LS-ID self-originate
+   show ip ospf database TYPE self-originate
+
+** route-map support for `redistribute' command are added.
+   Supported `match' statements are
+
+   match interface
+   match ip address
+   match next-hop
+
+   Supported `set' statements are
+
+   set metric
+   set metric-type
+
+** Pass OSPF metric value to zebra daemon.
+
+* Changes in ripd
+
+** When specified route-map does not exist, it means all deny.
+
+** "default-metric <1-16>" command is added.
+
+** "offset-list ACCESS-LIST-NAME <0-16>" and "offset-list
+ACCESS-LIST-NAME <0-16> IFNAME" commands are added.
+
+** "redistribute ROUTE-TYPE metric <0-16>" command is added.
+
+** "default-information originate" command is added.
+
+** "ip split-horizon" and "no ip split-horizon" is added to interface
+configuration.
+
+** "no router rip" command is added.
+
+** "ip rip authentication mode (md5|text)" is added to interface
+configuration.
+
+** "ip rip authentication key-chain KEY-CHAIN" is added to interface
+configuration.
+
+** Pass RIP metric value to zebra daemon.
+
+** Distance manipulation functions are added.
+
+* Changes in bgpd
+
+** Fix bug of next hop treatment for MPLS-VPN route exchange.
+
+** BGP peer MIB is updated.
+
+** Aggregated route has origin IGP, atomic-aggregate and proper
+aggregator attribute.
+
+** Suppressed route now installed into BGP table.  It is only
+suppressed from announcement.
+
+** BGP router-id is properly set after "no router bgp ASN" and "router
+bgp ASN".
+
+** Add check for nexthop is accessible or not for IBGP routes.
+
+** Add cehck for nexthop is on connected or not for EBGP routes.
+
+** "dump bgp route" command is changed to "dump bgp route-mrt" for
+generating MRT compatible dump output.
+
+** Soft reconfiguration inbound and outbound is supported.
+
+** Route refresh feature is supported.
+
+* Changes in vtysh
+
+** VTY shell is now included into the distribution.
+
 * Changes in zebra-0.87
 
 * Changes in lib
@@ -37,8 +158,6 @@ are added to every node in default.
 
 ** LCD completion is added.  For example both "ip" and "ipv6" command
 are exist, "i" then press TAB will be expanded to "ip".
-
-** "show history" command is added.
 
 * Changes in bgpd
 

@@ -1,6 +1,6 @@
 /*
  * OSPFv3 Route-Map
- * Copyright (C) 2000 Kunihro Ishiguro
+ * Copyright (C) 2000 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *

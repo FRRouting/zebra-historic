@@ -92,11 +92,27 @@ interface_list_ioctl ()
 
   /* Allocate interface. */
   ifreq = ifconf.ifc_req;
+
+#ifdef OPEN_BSD
+  for (n = 0; n < ifconf.ifc_len; )
+    {
+      int size;
+
+      ifreq = (struct ifreq *)((caddr_t) ifconf.ifc_req + n);
+      ifp = if_get_by_name (ifreq->ifr_name);
+      size = ifreq->ifr_addr.sa_len;
+      if (size < sizeof (ifreq->ifr_addr))
+	size = sizeof (ifreq->ifr_addr);
+      size += sizeof (ifreq->ifr_name);
+      n += size;
+    }
+#else
   for (n = 0; n < ifconf.ifc_len; n += sizeof(struct ifreq))
     {
       ifp = if_get_by_name (ifreq->ifr_name);
       ifreq++;
     }
+#endif /* OPEN_BSD */
 
  end:
   close (sock);
@@ -109,10 +125,15 @@ interface_list_ioctl ()
 int
 if_get_index (struct interface *ifp)
 {
-  int ret;
   static int if_fake_index = 1;
 
+#ifdef HAVE_BROKEN_ALIASES
+  /* Linux 2.2.X does not provide individual interface index for aliases. */
+  ifp->ifindex = if_fake_index++;
+  return ifp->ifindex;
+#else
 #ifdef SIOCGIFINDEX
+  int ret;
   struct ifreq ifreq;
 
   ifreq_set_name (&ifreq, ifp);
@@ -137,6 +158,7 @@ if_get_index (struct interface *ifp)
   ifp->ifindex = if_fake_index++;
   return ifp->ifindex;
 #endif /* SIOCGIFINDEX */
+#endif /* HAVE_BROKEN_ALIASES */
 }
 
 #ifdef SIOCGIFHWADDR
@@ -156,16 +178,16 @@ if_get_hwaddr (struct interface *ifp)
     ifp->hw_addr_len = 0;
   else
     {
-      memcpy (ifp->hw_addr, ifreq.ifr_hwaddr.sa_data, 8);
+      memcpy (ifp->hw_addr, ifreq.ifr_hwaddr.sa_data, 6);
 
-      for (i = 0; i < 8; i++)
+      for (i = 0; i < 6; i++)
 	if (ifp->hw_addr[i] != 0)
 	  break;
 
-      if (i == 8)
+      if (i == 6)
 	ifp->hw_addr_len = 0;
       else
-	ifp->hw_addr_len = 8;
+	ifp->hw_addr_len = 6;
     }
   return 0;
 }

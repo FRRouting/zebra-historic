@@ -1,3 +1,175 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+2000-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_distance_apply): Unlock node when there is matched
+	node.
+
+2000-08-13  Akihiro Mizutani <mizutani@dml.com>
+
+	* rip_routemap.c (match_ip_nexthop): Add check for IP address
+	validness.
+	(no_set_metric): Add new ALIAS.
+
+2000-08-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.h (struct rip ): Add distance.
+
+2000-08-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_zebra.c (rip_zebra_ipv4_add): Use new Zebra api to register
+	routes.  Pass RIP metric value to zebra.
+
+2000-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_main.c (main): Make struct thread thread from global
+	variable to local variable in main.
+
+2000-08-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_packet_dump): Add MD5 authentication dump function.
+	(rip_auth_md5): RIP MD5 authentication packet receive works.
+
+2000-08-02  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_interface.c (rip_if_init): Install interface "pseudo"
+	commands.
+	(rip_interface_delete): Do not call if_delete() when interface is
+	pseudo interface.
+
+2000-07-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (ip_rip_authentication_mode): "ip rip
+	authentication mode (md5|text)" is added.
+	(ip_rip_authentication_key_chain): "ip rip authentication
+	key-chain KEY-CHAIN" is added.
+	(rip_interface_clean): Clean all interface configuration.
+	(rip_interface_reset): Reset all interface configuration.
+	(rip_clean_network): Clean rip_enable_network.
+
+	* ripd.h (struct rip_interface): Add key_chain member.
+
+	* ripd.c: Include md5-gnu.h.
+
+2000-07-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.h (RIP_NO_AUTH): Change RIP_NO_AUTH value from 1 to 0.
+
+	* ripd.c (rip_authentication): Use RIP_AUTH_SIMPLE_PASSWORD
+	instead of raw value 2.
+	(rip_write_rte): Likewise.
+	(rip_write_rte): Check ri->auth_type instead of ri->auth_str.
+
+2000-07-30  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_interface.c (rip_if_down): Do not delete ZEBRA_ROUTE_KERNEL
+	route.
+
+2000-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_update_process): Add "passive-interface" command.
+
+	* ripd.h (struct rip_interface): Add passive member to struct
+	rip_interface.
+
+2000-07-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_interface.c (rip_if_init): Multiple RIP routes for one
+	prefix change.  The codes are enclosed by #ifdef NEW_RIP_TABLE.
+
+2000-07-24  Akihiro Mizutani <mizutani@dml.com>
+
+	* rip_interface.c (rip_if_init): Use install_default() for
+	INTERFACE_NODE.
+
+2000-07-24  Kunihiro Ishiguro <kunihiro@zebra.org>
+
+	* ripd.c: First update timer will be invoked in two seconds.
+
+2000-07-09  Jochen Friedrich <jochen@scram.de>
+
+	* rip_snmp.c: Local function definitions to static.  Add INTEGER
+	ASN_INTEGER and TIMETICKS ASN_TIMETICKS definition.
+	(rip2PeerLookup): Peer with domain lookup implemented.
+	(rip2PeerTable): Temporary disable RIP2PEERLASTUPDATE value
+	support due to unknown SNMP agent startup time.
+
+2000-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.h: Sweep obsolete definitions.
+
+	* rip_interface.c (rip_split_horizon): Add "ip split-horizon"
+	command.
+
+	* ripd.c (rip_output_process): Remove split_horizon argument.
+	(rip_update_process): Likewise.
+
+	* ripd.h (struct rip_interface): Add split_horizon flag to struct
+	rip_interface.
+
+2000-07-04  Akihiro Mizutani <mizutani@dml.com>
+
+	* ripd.c (rip_version): Change VERSION to <1-2>.
+	Add "no version" command.
+
+2000-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_zebra.c (rip_redistribute_type_metric): "redistribute TYPE
+	metric <0-16>" command is added.
+
+	* rip_routemap.c (route_set_metric): Set metric_set when metric is
+	modified.
+
+	* ripd.h (struct rip_info): To check route-map set metric or not,
+	new member metric_set is added to struct rip_info.
+
+	* ripd.c (rip_route_process): Move metric handling code from
+	rip_response_process() to rip_route_process().
+	(rip_output_process): Set output offset-list metric.
+
+2000-07-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_offset.c (rip_offset_list): New file for offset-list.
+
+2000-07-02  Akihiro Mizutani <mizutani@dml.com>
+
+	* ripd.h (struct rip ): Add default_metric.
+
+	* ripd.c (rip_default_metric): "default-metric <1-16>" command is
+	added.
+	(config_write_rip): Change configuration order.
+	
+	* rip_zebra.c: Fix help strings.
+
+2000-07-02  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_interface.c (rip_if_init): Add IF_DELETE_HOOK.
+
+2000-07-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_output_process): If specified route-map does not
+	exist, it treated as deny all.
+
+2000-06-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_routemap.c (rip_route_map_init): Call rip_route_map_update
+	when route-map is deleted.
+
+2000-06-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_routemap.c (set_metric): For consistency with bgpd's set
+	metric, value range is set to <0-4294967295>.
+	
+2000-06-28  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_routemap.c (rip_route_map_update): Add check for rip is
+	enabled or not for avoid core dump.
+
+	* rip_debug.c (debug_rip_packet_direct): Fix bug of setting
+	rip_debug_packet flag.
+
 2000-06-13  David Lipovkov <davidl@nbase.co.il>
 
 	* rip_interface.c (rip_interface_delete): All work is done in

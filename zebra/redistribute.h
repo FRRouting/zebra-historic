@@ -25,8 +25,11 @@
 
 #include "table.h"
 
-void zebra_redistribute_add (int, struct zebra_client *, int);
-void zebra_redistribute_delete (int, struct zebra_client *, int);
+void zebra_redistribute_add (int, struct zserv *, int);
+void zebra_redistribute_delete (int, struct zserv *, int);
+
+void zebra_redistribute_default_add (int, struct zserv *, int);
+void zebra_redistribute_default_delete (int, struct zserv *, int);
 
 void redistribute_add (struct route_node *np, struct rib *rib);
 void redistribute_delete (struct route_node *np, struct rib *rib);

@@ -44,6 +44,12 @@ struct ospf6_redistribute_info
 
   /* ASE Metric */
   u_int32_t metric;
+
+  /* PrefixOptions */
+  u_char prefix_options;
+
+  /* Forwarding Address */
+  struct in6_addr forward;
 };
 
 /* prototypes */

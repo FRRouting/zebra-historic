@@ -1,3 +1,157 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+2000-08-15  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* rib.c (show_ip_route_protocol): Help string correction.
+	(show_ip_route_prefix): Check prefix mask.
+	(show_ip_route_vty_detail): Display distance and metric.
+
+2000-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.c (zsend_interface_add): Change ifindex store size from
+	two octet to four.
+	(zsend_interface_delete): Likewise.
+	(zsend_interface_address_add): Likewise.
+	(zsend_interface_address_delete): Likewise.
+	(zsend_interface_up): Likewise.
+	(zsend_interface_down): Likewise.
+
+2000-08-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_add_ipv4): Do not install distance 255 route.
+
+2000-08-10  Toshiaki Takada  <takada@zebra.org>
+
+	* interface.c (bandwidth_if), (no_bandwidth_if):  Call
+	zebra_interface_up_update () instead of using if_up() and if_down().
+
+2000-08-07  "Akihiro Mizutani" <mizutani@dml.com>
+
+	* interface.c (bandwidth_if): Fix help string.
+
+2000-08-07  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* interface.c (if_dump_vty): Display bandwidth value.
+	(bandwidth_if): New command "bandwidth <1-10000000>" is added.
+	When interface is up, force protocol daemons to recalculate routes
+	due to cost change.
+	(no_bandwidth_if): Likewise.
+	(if_config_write): Output bandwidth configuration.
+
+	* zserv.c (zsend_interface_add): Send bandwidth value.
+	(zsend_interface_up): Likewise.
+	(zsend_interface_down): Likewise.
+
+
+2000-08-07  Michael Rozhavsky <mike@nbase.co.il>
+
+	* rib.c (show_ip_route_protocol): "show ip route
+	(bgp|connected|kernel|ospf|rip|static)" is added.
+
+2000-08-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_lookup_ipv4_nexthop): Check parent node until IGP
+	nexthop is found.
+	(rib_add_ipv4_internal): Set fib ifindex to rib ifindex.
+
+2000-08-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* redistribute.c (redistribute_delete): Fix bug of default route
+	redistribute treatment.
+
+2000-08-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (rib_init): Install ip_node in rib.c instead of zserv.c.
+	Change default distance value.
+
+                    Old         New
+	------------------------------------------
+	system      10           0
+	kernel      20           0
+	connected   30           0
+	static      40           1
+	rip         50         120
+	ripng       50         120
+	ospf        60         110
+	ospf6       49         110
+	bgp         70         200(iBGP)  20(eBGP)
+	------------------------------------------
+
+	* zserv.c (client_lookup): Function removed.
+	(zsend_interface_add): Use client's output buffer.  Check ifinfo
+	flag.
+	(zsend_interface_delete): Likewise.
+	Delete ipv4_static_radix and ipv6_static_radix.
+
+2000-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.h (struct zebra_client): When client request interface
+	information, ifinfo is set.
+
+	* rib.c: Temporary Revert changes for pseudo interface.
+
+	* rib.h: Likewise.
+
+	* zserv.c: Likewise.
+
+	* interface.c: Likewise.
+	
+2000-08-02  David Lipovkov <davidl@nbase.co.il>
+
+	* interface.c (zebra_if_init): Install interface "pseudo"
+	commands.
+
+	* rib.c (rib_create): ifname argument is added.
+	(rib_add_ipv4_pseudo): New function is added.
+	(rib_delete_ipv4_pseudo): Likewise.
+
+	* rib.h : Delete INTERFACE_UNKNOWN definition.  Add prototype for
+	pseudo interface functions.
+
+	* rt_netlink.c (netlink_link_change): Check for pseudo interface.
+
+	* zserv.c (ip_route): When destination is pseudo interface, call
+	rib_add_ipv4_pseudo().
+
+	* zserv.c (no_ip_route): Trim "unknown" argument.
+
+2000-07-26  kunitake@dti.ad.jp
+
+	* if_ioctl.c (if_get_hwaddr): Fix hardware address length from 8
+	to 6.
+
+	* rtadv.c (rtadv_send_packet): Fix shift bug for hardware address.
+
+2000-07-24  Akihiro Mizutani <mizutani@dml.com>
+
+	* interface.c: Use install_default() for common VTY commands.
+
+2000-07-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (interface_list_ioctl): A interface list size is
+	calculated from ifreq->if_addr.sa_len.  This is for OpenBSD.
+
+	* ioctl.c (if_get_mtu): Remove codes for SIOCGIFDATA.
+
+2000-07-09  Chris Dunlop <chris@onthe.net.au>
+
+	* if_ioctl.c (if_get_index): Add check for HAVE_BROKEN_ALIASES.
+
+2000-07-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zserv.c (zebra_client_read): Add ZEBRA_REDISTRIBUTE_{ADD,DELETE}
+	message handling.
+
+2000-07-02  David Lipovkov <davidl@nbase.co.il>
+
+	* zserv.c: "ip route A.B.C.D/M unknown" command is added.
+
+2000-06-28  Michael Rozhavsky <mike@nbase.co.il>
+
+	* rib.c: Remove old kernel route when new route comes in.
+
 2000-06-13  David Lipovkov <davidl@nbase.co.il>
 
 	* rib.c (rib_if_up): Add check for unknown interface.

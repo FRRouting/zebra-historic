@@ -422,7 +422,10 @@ DEFUN (debug_bgp_fsm,
        BGP_STR
        "BGP Finite Stete Machine\n")
 {
-  DEBUG_ON (fsm, FSM);
+  if (vty->node == CONFIG_NODE)
+    DEBUG_ON (fsm, FSM);
+  else
+    TERM_DEBUG_ON (fsm, FSM);
   return CMD_SUCCESS;
 }
 
@@ -434,7 +437,10 @@ DEFUN (no_debug_bgp_fsm,
        BGP_STR
        "Finite Stete Machine\n")
 {
-  DEBUG_OFF (fsm, FSM);
+  if (vty->node == CONFIG_NODE)
+    DEBUG_OFF (fsm, FSM);
+  else
+    TERM_DEBUG_OFF (fsm, FSM);
   return CMD_SUCCESS;
 }
 
@@ -445,7 +451,10 @@ DEFUN (debug_bgp_events,
        BGP_STR
        "BGP events\n")
 {
-  DEBUG_ON (events, EVENTS);
+  if (vty->node == CONFIG_NODE)
+    DEBUG_ON (events, EVENTS);
+  else
+    TERM_DEBUG_ON (events, EVENTS);
   return CMD_SUCCESS;
 }
 
@@ -457,7 +466,39 @@ DEFUN (no_debug_bgp_events,
        BGP_STR
        "BGP events\n")
 {
-  DEBUG_OFF (events, EVENTS);
+  if (vty->node == CONFIG_NODE)
+    DEBUG_OFF (events, EVENTS);
+  else
+    TERM_DEBUG_OFF (events, EVENTS);
+  return CMD_SUCCESS;
+}
+
+DEFUN (debug_bgp_filter,
+       debug_bgp_filter_cmd,
+       "debug bgp filter",
+       DEBUG_STR
+       BGP_STR
+       "BGP filters\n")
+{
+  if (vty->node == CONFIG_NODE)
+    DEBUG_ON (filter, FILTER);
+  else
+    TERM_DEBUG_ON (filter, FILTER);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_bgp_filter,
+       no_debug_bgp_filter_cmd,
+       "no debug bgp filter",
+       NO_STR
+       DEBUG_STR
+       BGP_STR
+       "BGP filters\n")
+{
+  if (vty->node == CONFIG_NODE)
+    DEBUG_OFF (filter, FILTER);
+  else
+    TERM_DEBUG_OFF (filter, FILTER);
   return CMD_SUCCESS;
 }
 
@@ -474,21 +515,61 @@ DEFUN (show_debugging_bgp,
     vty_out (vty, "  BGP events debugging is on%s", VTY_NEWLINE);
   if (BGP_DEBUG (fsm, FSM))
     vty_out (vty, "  BGP fsm debugging is on%s", VTY_NEWLINE);
+  if (BGP_DEBUG (filter, FILTER))
+    vty_out (vty, "  BGP filter debugging is on%s", VTY_NEWLINE);
   return CMD_SUCCESS;
 }
+
+int
+config_write_debug (struct vty *vty)
+{
+  int write = 0;
+
+  if (CONF_BGP_DEBUG (events, EVENTS))
+    {
+      vty_out (vty, "debug bgp events%s", VTY_NEWLINE);
+      write++;
+    }
+
+  if (CONF_BGP_DEBUG (fsm, FSM))
+    {
+      vty_out (vty, "debug bgp fsm%s", VTY_NEWLINE);
+      write++;
+    }
+
+  if (CONF_BGP_DEBUG (filter, FILTER))
+    {
+      vty_out (vty, "debug bgp filter%s", VTY_NEWLINE);
+      write++;
+    }
+
+  return write;
+}
+
+struct cmd_node debug_node =
+{
+  DEBUG_NODE,
+  ""
+};
 
 void
 bgp_debug_init ()
 {
+  install_node (&debug_node, config_write_debug);
+
   install_element (ENABLE_NODE, &show_debugging_bgp_cmd);
 
   install_element (ENABLE_NODE, &debug_bgp_fsm_cmd);
   install_element (CONFIG_NODE, &debug_bgp_fsm_cmd);
   install_element (ENABLE_NODE, &debug_bgp_events_cmd);
   install_element (CONFIG_NODE, &debug_bgp_events_cmd);
+  install_element (ENABLE_NODE, &debug_bgp_filter_cmd);
+  install_element (CONFIG_NODE, &debug_bgp_filter_cmd);
 
   install_element (ENABLE_NODE, &no_debug_bgp_fsm_cmd);
   install_element (CONFIG_NODE, &no_debug_bgp_fsm_cmd);
   install_element (ENABLE_NODE, &no_debug_bgp_events_cmd);
   install_element (CONFIG_NODE, &no_debug_bgp_events_cmd);
+  install_element (ENABLE_NODE, &no_debug_bgp_filter_cmd);
+  install_element (CONFIG_NODE, &no_debug_bgp_filter_cmd);
 }

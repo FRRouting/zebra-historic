@@ -251,7 +251,8 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 		}
 	    }
 	}
-      else if (cap.code == CAPABILITY_CODE_REFRESH)
+      else if (cap.code == CAPABILITY_CODE_REFRESH ||
+	       cap.code == CAPABILITY_CODE_REFRESH_01)
 	{
 	  zlog_info ("%s [Open:RECV] Route Refresh Capability", peer->host);
 
@@ -266,7 +267,7 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 
 	  /* BGP refresh capability */
 	  if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
-	    peer->refresh = 1;
+	    peer->refresh_nego = 1;
 	  else
 	    zlog_warn ("Ignore route refresh capability");
 	}
@@ -517,6 +518,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
   /* Route refresh. */
   if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
     {
+      peer->refresh = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_REFRESH_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_REFRESH);

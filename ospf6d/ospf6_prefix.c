@@ -40,7 +40,7 @@ ospf6_prefix_free (struct ospf6_prefix *p)
 }
 
 struct ospf6_prefix *
-ospf6_prefix_make (u_int8_t opt, u_int16_t metric, struct prefix_ipv6 *p)
+ospf6_prefix_make (u_int8_t options, u_int16_t metric, struct prefix_ipv6 *p)
 {
   struct prefix_ipv6 netp;
   struct ospf6_prefix *o6p;
@@ -53,21 +53,21 @@ ospf6_prefix_make (u_int8_t opt, u_int16_t metric, struct prefix_ipv6 *p)
   o6psize = OSPF6_PREFIX_SPACE (netp.prefixlen) + sizeof (struct ospf6_prefix);
   o6p = ospf6_prefix_new (o6psize);
 
-  o6p->o6p_prefix_len = netp.prefixlen;
-  o6p->o6p_prefix_opt = opt;
-  o6p->o6p_prefix_metric = htons (metric);
+  o6p->prefix_length = netp.prefixlen;
+  o6p->prefix_options = options;
+  o6p->prefix_metric = htons (metric);
 
   memcpy (o6p + 1, &netp.prefix, OSPF6_PREFIX_SPACE (netp.prefixlen));
 
   return o6p;
 }
 
-static int
+int
 ospf6_prefix_issame (struct ospf6_prefix *p1, struct ospf6_prefix *p2)
 {
-  if (p1->o6p_prefix_len != p2->o6p_prefix_len)
+  if (p1->prefix_length != p2->prefix_length)
     return 0;
-  if (memcmp (p1 + 1, p2 + 1, OSPF6_PREFIX_SPACE (p1->o6p_prefix_len)))
+  if (memcmp (p1 + 1, p2 + 1, OSPF6_PREFIX_SPACE (p1->prefix_length)))
     return 0;
   return 1;
 }
@@ -124,24 +124,35 @@ void
 ospf6_prefix_in6_addr (struct ospf6_prefix *o6p, struct in6_addr *in6)
 {
   memset (in6, 0, sizeof (struct in6_addr));
-  memcpy (in6, o6p + 1, OSPF6_PREFIX_SPACE (o6p->o6p_prefix_len));
+  memcpy (in6, o6p + 1, OSPF6_PREFIX_SPACE (o6p->prefix_length));
   return;
 }
 
 void
-ospf6_prefix_str (struct ospf6_prefix *p, char *buf, size_t bufsize)
+ospf6_prefix_options_str (struct ospf6_prefix *p, char *buf, size_t bufsize)
 {
-  struct in6_addr in6;
-  char tmpbuf[128];
+  char buffer[16], *c;
+  c = buffer;
 
-  ospf6_prefix_in6_addr (p, &in6);
-  memset (tmpbuf, 0, sizeof (tmpbuf));
-  inet_ntop (AF_INET6, &in6, tmpbuf, sizeof (tmpbuf));
+  if (p->prefix_options & OSPF6_PREFIX_OPTION_P)
+    {
+      *c++ = 'P'; *c++ = ',';
+    }
+  if (p->prefix_options & OSPF6_PREFIX_OPTION_MC)
+    {
+      *c++ = 'M'; *c++ = 'C'; *c++ = ',';
+    }
+  if (p->prefix_options & OSPF6_PREFIX_OPTION_LA)
+    {
+      *c++ = 'L'; *c++ = 'A'; *c++ = ',';
+    }
+  if (p->prefix_options & OSPF6_PREFIX_OPTION_NU)
+    {
+      *c++ = 'N'; *c++ = 'U'; *c++ = ',';
+    }
+  *c++ = '\0';
 
-  snprintf (buf, bufsize, "opt:%s metric:%d %s/%d",
-            "xxx", ntohs (p->o6p_prefix_metric),
-            tmpbuf, p->o6p_prefix_len);
-  return;
+  snprintf (buf, bufsize, "%s", buffer);
 }
 
 void
@@ -162,9 +173,32 @@ ospf6_prefix_copy (struct ospf6_prefix *dst, struct ospf6_prefix *src,
 }
 
 void
-ospf6_prefix_list_add (struct in6_addr *prefix, u_int8_t prefix_len,
-                       u_int8_t prefix_opt, u_int16_t prefix_metric)
+ospf6_prefix_apply_mask (struct ospf6_prefix *o6p)
 {
+  u_char *pnt, mask;
+  int index, offset;
+
+  char buf[128];
+  struct in6_addr in6;
+  ospf6_prefix_in6_addr (o6p, &in6);
+  inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
+
+  pnt = (u_char *)(o6p + 1);
+  index = o6p->prefix_length / 8;
+  offset = o6p->prefix_length % 8;
+  mask = 0xff << (8 - offset);
+
+  if (index >= 16)
+    return;
+
+  pnt[index] &= mask;
+  index ++;
+
+  while (index < OSPF6_PREFIX_SPACE (o6p->prefix_length))
+    pnt[index++] = 0;
+
+  ospf6_prefix_in6_addr (o6p, &in6);
+  inet_ntop (AF_INET6, &in6, buf, sizeof (buf));
 }
 
 

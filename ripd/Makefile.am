@@ -9,7 +9,7 @@ sbin_PROGRAMS = ripd
 
 librip_a_SOURCES = \
 	ripd.c rip_zebra.c rip_interface.c rip_debug.c rip_snmp.c \
-	rip_routemap.c rip_peer.c
+	rip_routemap.c rip_peer.c rip_offset.c
 
 noinst_HEADERS = \
 	ripd.h rip_debug.h
@@ -49,9 +49,12 @@ rip_interface.o: rip_interface.c ../lib/command.h ../lib/vector.h \
  ../lib/zclient.h ../lib/filter.h ../zebra/connected.h ../ripd/ripd.h \
  ../ripd/rip_debug.h
 rip_main.o: rip_main.c ../lib/version.h ../lib/thread.h \
- ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/memory.h \
- ../lib/prefix.h ../lib/log.h ../lib/filter.h ../lib/if.h \
- ../lib/linklist.h ../ripd/ripd.h
+ ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/memory.h \
+ ../lib/prefix.h ../lib/filter.h ../lib/if.h ../lib/linklist.h \
+ ../lib/keychain.h ../lib/log.h ../ripd/ripd.h
+rip_offset.o: rip_offset.c ../lib/if.h ../lib/linklist.h \
+ ../lib/prefix.h ../lib/filter.h ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/newlist.h ../lib/memory.h
 rip_peer.o: rip_peer.c ../lib/if.h ../lib/linklist.h ../lib/prefix.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/newlist.h \
  ../lib/thread.h ../lib/memory.h ../ripd/ripd.h
@@ -68,4 +71,5 @@ ripd.o: ripd.c ../lib/if.h ../lib/linklist.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/table.h \
  ../lib/thread.h ../lib/memory.h ../lib/roken.h ../lib/log.h \
  ../lib/stream.h ../lib/filter.h ../lib/sockunion.h ../lib/routemap.h \
- ../lib/plist.h ../lib/distribute.h ../ripd/ripd.h ../ripd/rip_debug.h
+ ../lib/plist.h ../lib/distribute.h ../lib/md5-gnu.h ../lib/keychain.h \
+ ../ripd/ripd.h ../ripd/rip_debug.h

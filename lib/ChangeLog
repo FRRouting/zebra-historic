@@ -1,3 +1,187 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+2000-08-17  Magnus Ahltorp <ahltorp@nada.kth.se>
+
+	* vty.h (struct vty ): Add iac_sb_in_progress and sb_buffer for
+	better IAC handling.
+
+	* vty.c (vty_telnet_option): Change telnet option handling.
+
+2000-08-15  Gleb Natapov <gleb@nbase.co.il>
+
+	* zclient.c (zclient_redistribute_unset):  New function added.
+
+2000-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.c (zebra_interface_add_read): Change ifindex restore
+	size from two octet to four.
+	(zebra_interface_state_read): Likewise.
+	(zebra_interface_address_add_read): Likewise.
+
+2000-08-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_event): Use vector_set_index() instead of
+	vector_set().
+
+2000-08-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_XXX_DISTANCE_DEFAULT): Define Default
+	Administrative Distance of each protocol.
+
+2000-08-07  Matthew Grant <grantma@anathoth.gen.nz>
+
+	* if.h (struct interface ): Add new member bandwidth to struct
+	interface.
+
+	* zclient.c (zebra_interface_add_read): Fetch bandwidth value.
+	(zebra_interface_state_read): Likewise.
+
+2000-08-07  Gleb Natapov <gleb@nbase.co.il>
+
+	* routemap.c (route_map_event_hook): New hook route_map_event_hook
+	is added.  This hook is called when route-map is changed. The
+	parameters passed to the hook are 'event' and 'route-map name'
+
+	* routemap.h: Add prototype for route_map_event_hook().
+
+2000-08-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.c (zebra_ipv4_route): zebra_ipv4_route(),
+	zebra_ipv4_add(), zebra_ipv4_delete() are removed.
+
+	* routemap.c (route_map_empty): Add new function.
+	(route_map_delete): Use route_map_index_delete() instead of
+	route_map_index_free().
+	(route_map_index_free): Function removed.
+
+2000-08-06  Gleb Natapov <gleb@nbase.co.il>
+
+	* routemap.c (route_map_index_delete): Add check for route-map is
+	empty or not.
+
+2000-08-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.c (zebra_ipv4_add): Change socket arguemnt with struct
+	zclient.
+
+2000-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.h (struct zebra): Add obuf for output buffer.
+
+	* if.c: Remove #ifdef NRL enclosing if_nametoindex() and
+	if_indextoname().
+
+2000-08-02  David Lipovkov <davidl@nbase.co.il>
+
+	* if.h (IF_PSEUDO_UNSET): IF_PSEUDO related macro added.
+	(IF_UNKNOWN_SET): IF_UNKNOWN related macro deleted.
+
+	* if.c (interface_pseudo): Add "pseudo" command to interface node.
+	(no_interface_pseudo): Add "no pseudo" command to interface node.
+
+	* zclient.c (zebra_interface_add_read): Set pseudo flag when it is
+	send from zebra.
+
+2000-08-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_IPV4_NEXTHOP_LOOKUP): Add new message.
+	(ZEBRA_IPV6_NEXTHOP_LOOKUP): Likewise.
+
+	* vty.c (vty_serv_un): Use AF_UNIX for backward compatibility.
+
+2000-07-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c: Use vector for VTY server thread listing instead of
+	single value.
+
+2000-07-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* keychain.c (no_key_chain): "no key chain WORD" command is added.
+
+2000-07-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (config_from_file): If command fail in
+	KEYCHAIN_KEY_NODE, down to KEYCHAIN_NODE.
+
+	* vty.h (struct vty ): Add index_sub member.
+
+2000-07-27  Akihiro Mizutani <mizutani@dml.com>
+
+	* if.c: Help strings updates.
+
+2000-07-11  Akihiro Mizutani <mizutani@dml.com>
+
+	* command.c (no_config_enable_password): Add "no enable password"
+	command.
+	(config_write_host): Display password string.
+
+	* routemap.c (route_map_delete_match): Add support for delete
+	match without argument.
+	(route_map_delete_set): Likewise.
+
+2000-07-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Change KEYCHAIN_NODE and
+	KEYCHAIN_KEY_NODE place just before INTERFACE_NODE.
+
+2000-07-09  Jochen Friedrich <jochen@scram.de>
+
+	* smux.c (config_write_smux): Fixes the option to override OID and
+	password for SMUX.
+
+2000-07-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add SMUX_NODE for SMUX configuration.
+
+2000-07-09  Toshiaki Takada  <takada@zebra.org>
+
+	* command.c: Sort descvec command's help.
+
+	* vty.c (vty_describe_command): Display '<cr>' at the end of
+	descriptions.
+
+2000-07-05  Toshiaki Takada  <takada@zebra.org>
+
+	* command.c (cmd_ipv6_match), (cmd_ipv6_prefix_match):  Fix bug
+	treatment of double colon.
+
+2000-07-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zclient.h: Add zclient_redistribute_default_{set,unset}().
+
+	* keychain.c: New file for authentication key management.
+	* keychain.h: Likewise.
+	
+	* tcpfilter.c: New file for TCP/UDP base filtering using ipfw or
+	ipchains.
+	* tcpfilter.h: Likewise.
+	
+	* flap.h: New file for route flap dampening.
+	* flap.c: Likewise.
+
+2000-07-04  Toshiaki Takada <takada@zebra.org>
+
+	* filter.c (struct filter): Add exact flag.
+	(access_list): Add exact-match command.
+	(ipv6_access_list): Add exact-match command.
+	
+2000-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_REDISTRIBUTE_DEFAULT_ADD): New message for
+	request default route.
+
+2000-07-01  Hideaki YOSHIFUJI (吉藤英明) <yoshfuji@ecei.tohoku.ac.jp>
+
+	* smux.c: Add IPv6 smux connection code.
+
+2000-06-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_complete_command): To cooperate readline library,
+	returned string is newly allocated.  So some match function case
+	need, free of memory.
+
 2000-06-12  Akihiro Mizutani <mizutani@dml.com>
 
 	* distribute.c: Fix help strings.

@@ -170,7 +170,8 @@ DEFUN (no_debug_zebra_packet_direct,
 struct cmd_node debug_node =
 {
   DEBUG_NODE,
-  ""				/* Debug node has no interface. */
+  "",				/* Debug node has no interface. */
+  1
 };
 
 int

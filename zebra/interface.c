@@ -93,11 +93,11 @@ void
 zebra_interface_up_update (struct interface *ifp)
 {
   listnode node;
-  struct zebra_client *client;
+  struct zserv *client;
 
   for (node = listhead (client_list); node; nextnode (node))
     if ((client = getdata (node)) != NULL)
-      zebra_interface_up (client->fd, ifp);
+      zsend_interface_up (client, ifp);
 }
 
 /* Interface is up. */
@@ -140,11 +140,11 @@ void
 zebra_interface_down_update (struct interface *ifp)
 {
   listnode node;
-  struct zebra_client *client;
+  struct zserv *client;
 
   for (node = listhead (client_list); node; nextnode (node))
     if ((client = getdata (node)) != NULL)
-      zebra_interface_down (client->fd, ifp);
+      zsend_interface_down (client, ifp);
 }
 
 
@@ -419,6 +419,13 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
     }
 #endif /* HAVE_SOCKADDR_DL */
   
+  /* Bandwidth in kbps */
+  if (ifp->bandwidth != 0)
+    {
+      vty_out(vty, "  bandwidth %u kbps", ifp->bandwidth);
+      vty_out(vty, "%s", VTY_NEWLINE);
+    }
+
   for (node = listhead (ifp->connected); node; nextnode (node))
     {
       connected = getdata (node);
@@ -515,6 +522,7 @@ struct cmd_node interface_node =
 {
   INTERFACE_NODE,
   "%s(config-if)# ",
+  1
 };
 
 /* Show all or specified interface to vty. */
@@ -631,7 +639,7 @@ DEFUN (shutdown_if,
 DEFUN (no_shutdown_if,
        no_shutdown_if_cmd,
        "no shutdown",
-       "Negate a command or set its defaults\n"
+       NO_STR
        "Shutdown the selected interface\n")
 {
   int ret;
@@ -652,6 +660,59 @@ DEFUN (no_shutdown_if,
 
   return CMD_SUCCESS;
 }
+
+
+DEFUN (bandwidth_if, bandwidth_if_cmd,
+       "bandwidth <1-10000000>",
+       "Set bandwidth informational parameter\n"
+       "Bandwidth in kilobits\n")
+{
+  struct interface *ifp;   
+  unsigned int bandwidth;
+  
+  ifp = (struct interface *) vty->index;
+  bandwidth = strtol(argv[0], NULL, 10);
+
+  /* bandwidth range is <1-10000000> */
+  if (bandwidth < 1 || bandwidth > 10000000)
+    {
+      vty_out (vty, "Bandwidth is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  
+  ifp->bandwidth = bandwidth;
+
+  /* force protocols to recalculate routes due to cost change */
+  if (if_is_up (ifp))
+    zebra_interface_up_update (ifp);
+  
+  return CMD_SUCCESS;
+}
+
+
+DEFUN (no_bandwidth_if, no_bandwidth_if_cmd,
+       "no bandwidth",
+       NO_STR
+       "Set bandwidth informational parameter\n")
+{
+  struct interface *ifp;   
+  
+  ifp = (struct interface *) vty->index;
+
+  ifp->bandwidth = 0;
+  
+  /* force protocols to recalculate routes due to cost change */
+  if (if_is_up (ifp))
+    zebra_interface_up_update (ifp);
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_bandwidth_if, no_bandwidth_if_val_cmd,
+       "no bandwidth <1-10000000>",
+       NO_STR
+       "Set bandwidth informational parameter\n"
+       "Bandwidth in kilobits\n")
 
 DEFUN (ip_address, ip_address_cmd,
        "ip address A.B.C.D/M",
@@ -706,7 +767,7 @@ DEFUN (ip_address, ip_address_cmd,
 
 DEFUN (no_ip_address, no_ip_address_cmd,
        "no ip address A.B.C.D/M",
-       "Negate a command or set its defaults\n"
+       NO_STR
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
        "IP Address (e.g. 10.0.0.1/8)")
@@ -866,7 +927,7 @@ DEFUN (ip_tunnel, ip_tunnel_cmd,
 
 DEFUN (no_ip_tunnel, no_ip_tunnel_cmd,
        "no ip tunnel",
-       "Negate KAME ip tunneling configuration commands\n"
+       NO_STR
        "Set FROM IP address and TO IP address\n")
 {
   /* variable define */
@@ -926,6 +987,11 @@ if_config_write (struct vty *vty)
 	vty_out (vty, " description %s%s", ifp->desc,
 		 VTY_NEWLINE);
 
+      /* Assign bandwidth here to avoid unnecessary interface flap
+	 while processing config script */
+      if (ifp->bandwidth != 0)
+	vty_out(vty, " bandwidth %u%s", ifp->bandwidth, VTY_NEWLINE); 
+
       if (if_data && if_data->address)
 	for (addrnode = listhead (if_data->address); addrnode; 
 	     nextnode (addrnode))
@@ -973,15 +1039,16 @@ zebra_if_init ()
   install_element (VIEW_NODE, &show_interface_cmd);
   install_element (ENABLE_NODE, &show_interface_cmd);
   install_element (CONFIG_NODE, &interface_cmd);
-  install_element (INTERFACE_NODE, &config_end_cmd);
-  install_element (INTERFACE_NODE, &config_exit_cmd);
-  install_element (INTERFACE_NODE, &config_help_cmd);
+  install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
   install_element (INTERFACE_NODE, &multicast_cmd);
   install_element (INTERFACE_NODE, &no_multicast_cmd);
   install_element (INTERFACE_NODE, &shutdown_if_cmd);
   install_element (INTERFACE_NODE, &no_shutdown_if_cmd);
+  install_element (INTERFACE_NODE, &bandwidth_if_cmd);
+  install_element (INTERFACE_NODE, &no_bandwidth_if_cmd);
+  install_element (INTERFACE_NODE, &no_bandwidth_if_val_cmd);
   install_element (INTERFACE_NODE, &ip_address_cmd);
   install_element (INTERFACE_NODE, &no_ip_address_cmd);
 #ifdef HAVE_IPV6

@@ -35,7 +35,6 @@ void ospf6_init ();
 void ospf6_terminate ();
 void ospf6_log_init ();
 void nexthop_init ();
-int ospf6_receive (struct thread *);
 int ospf6_receive_new (struct thread *);
 
 extern int ospf6_sock;
@@ -112,7 +111,10 @@ sigint (int sig)
   zlog (NULL, LOG_INFO, "Terminating on signal");
 
   /* Close all ospf peer and free all of resources. */
-  terminate (0);
+  ospf6_delete (ospf6);
+
+  unlink (PATH_OSPF6D_PID);
+  exit (0);
 }
 
 /* SIGUSR1 handler. */
@@ -215,7 +217,7 @@ main (int argc, char **argv)
     }
 
   if (daemon_mode)
-    daemon (0, 0);
+    daemon (1, 0);
 
   /* pid file create */
 #if 0
@@ -230,7 +232,7 @@ main (int argc, char **argv)
   /* Initializations. */
   ospf6_log_init ();
   signal_init ();
-  cmd_init ();
+  cmd_init (1);
   vty_init ();
   ospf6_init ();
   memory_init ();

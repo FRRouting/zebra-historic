@@ -65,7 +65,7 @@ static char *vty_accesslist_name = NULL;
 static char *vty_ipv6_accesslist_name = NULL;
 
 /* VTY server thread. */
-struct thread *vty_serv_thread;
+vector Vvty_serv_thread;
 
 /* Current directory. */
 char *vty_cwd = NULL;
@@ -78,22 +78,29 @@ int
 vty_out (struct vty *vty, const char *format, ...)
 {
   va_list args;
-  int len;
+  int len = 0;
   /* XXX need overflow check */
   char buf[1024];
 
   /* vararg print */
   va_start (args, format);
 
-  len = vsnprintf (buf, sizeof buf, format, args);
+  if (vty_shell (vty))
+    vprintf (format, args);
+  else
+    {
+      len = vsnprintf (buf, sizeof buf, format, args);
 
-  if (len < 0)
-    {    
-      zlog (NULL, LOG_INFO, "Vty closed due to vty output buffer shortage.");
-      return -1;
+      if (len < 0)
+	{    
+	  zlog_info ("Vty closed due to vty output buffer shortage.");
+	  return -1;
+	}
+      if (vty_shell_serv (vty))
+	write (vty->fd, (u_char *)buf, len);
+      else
+	buffer_write (vty->obuf, (u_char *)buf, len);
     }
-
-  buffer_write (vty->obuf, (u_char *)buf, len);
 
   va_end (args);
   return len;
@@ -143,7 +150,7 @@ vty_time_print (struct vty *vty)
 }
 
 /* Say hello to vty interface. */
-static void
+void
 vty_hello (struct vty *vty)
 {
   if (host.motd)
@@ -156,13 +163,17 @@ vty_prompt (struct vty *vty)
 {
   struct utsname names;
   const char*hostname;
-  hostname = host.name;
-  if (!hostname)
+
+  if (vty->type == VTY_TERM)
     {
-      uname (&names);
-      hostname = names.nodename;
+      hostname = host.name;
+      if (!hostname)
+	{
+	  uname (&names);
+	  hostname = names.nodename;
+	}
+      vty_out (vty, cmd_prompt (vty->node), hostname);
     }
-  vty_out (vty, cmd_prompt (vty->node), hostname);
 }
 
 /* Send WILL TELOPT_ECHO to remote server. */
@@ -288,7 +299,7 @@ vty_auth (struct vty *vty, char *buf)
 }
 
 /* Command execution over the vty interface. */
-static void
+int
 vty_command (struct vty *vty, char *buf)
 {
   int ret;
@@ -298,9 +309,9 @@ vty_command (struct vty *vty, char *buf)
   vline = cmd_make_strvec (buf);
 
   if (vline == NULL)
-    return;
+    return CMD_SUCCESS;
 
-  ret = cmd_execute_command (vline, vty);
+  ret = cmd_execute_command (vline, vty, NULL);
 
   if (ret != CMD_SUCCESS)
     switch (ret)
@@ -319,8 +330,9 @@ vty_command (struct vty *vty, char *buf)
 	vty_out (vty, "%% Command incomplete.%s", VTY_NEWLINE);
 	break;
       }
-
   cmd_free_strvec (vline);
+
+  return ret;
 }
 
 char telnet_backward_char = 0x08;
@@ -549,7 +561,7 @@ vty_down_level (struct vty *vty)
 }
 
 /* When '^Z' is received from vty, move down to the enable mode. */
-static void
+void
 vty_end_config (struct vty *vty)
 {
   vty_out (vty, "%s", VTY_NEWLINE);
@@ -573,6 +585,8 @@ vty_end_config (struct vty *vty)
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case KEYCHAIN_NODE:
+    case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case VTY_NODE:
       vty->node = ENABLE_NODE;
@@ -754,6 +768,7 @@ vty_complete_command (struct vty *vty)
       vty_backward_pure_word (vty);
       vty_insert_word_overwrite (vty, matched[0]);
       vty_self_insert (vty, ' ');
+      XFREE (MTYPE_TMP, matched[0]);
       break;
     case CMD_COMPLETE_MATCH:
       vty_prompt (vty);
@@ -761,6 +776,7 @@ vty_complete_command (struct vty *vty)
       vty_backward_pure_word (vty);
       vty_insert_word_overwrite (vty, matched[0]);
       XFREE (MTYPE_TMP, matched[0]);
+      vector_only_index_free (matched);
       return;
       break;
     case CMD_COMPLETE_LIST_MATCH:
@@ -769,6 +785,7 @@ vty_complete_command (struct vty *vty)
 	  if (i != 0 && ((i % 6) == 0))
 	    vty_out (vty, "%s", VTY_NEWLINE);
 	  vty_out (vty, "%-10s ", matched[i]);
+	  XFREE (MTYPE_TMP, matched[i]);
 	}
       vty_out (vty, "%s", VTY_NEWLINE);
 
@@ -832,7 +849,7 @@ vty_describe_command (struct vty *vty)
   vector vline;
   vector describe;
   int i, width, desc_width;
-  struct desc *desc;
+  struct desc *desc, *desc_cr = NULL;
 
   vline = cmd_make_strvec (vty->buf);
 
@@ -897,6 +914,12 @@ vty_describe_command (struct vty *vty)
 	if (desc->cmd[0] == '\0')
 	  continue;
 	
+	if (strcmp (desc->cmd, "<cr>") == 0)
+	  {
+	    desc_cr = desc;
+	    continue;
+	  }
+
 	if (!desc->str)
 	  vty_out (vty, "  %-s%s",
 		   desc->cmd[0] == '.' ? desc->cmd + 1 : desc->cmd,
@@ -914,6 +937,20 @@ vty_describe_command (struct vty *vty)
 		 desc->str ? desc->str : "", VTY_NEWLINE);
 #endif /* 0 */
       }
+
+  if ((desc = desc_cr))
+    {
+      if (!desc->str)
+	vty_out (vty, "  %-s%s",
+		 desc->cmd[0] == '.' ? desc->cmd + 1 : desc->cmd,
+		 VTY_NEWLINE);
+      else if (desc_width >= strlen (desc->str))
+	vty_out (vty, "  %-*s  %s%s", width,
+		 desc->cmd[0] == '.' ? desc->cmd + 1 : desc->cmd,
+		 desc->str, VTY_NEWLINE);
+      else
+	vty_describe_fold (vty, width, desc_width, desc);
+    }
 
   cmd_free_strvec (vline);
   vector_free (describe);
@@ -954,6 +991,8 @@ vty_stop_input (struct vty *vty)
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case KEYCHAIN_NODE:
+    case KEYCHAIN_KEY_NODE:
     case MASC_NODE:
     case VTY_NODE:
       vty->node = ENABLE_NODE;
@@ -1052,26 +1091,56 @@ vty_telnet_option (struct vty *vty, unsigned char *buf, int nbytes)
 
 #endif /* TELNET_OPTION_DEBUG */
 
-  switch (buf[1])
+  switch (buf[0])
     {
     case SB:
-      if (buf[2] == TELOPT_NAWS)
-	{
-	  vty->width = buf[4];
-	  vty->height = vty->lines >= 0 ? vty->lines : buf[6];
-	  return 8;
-	}
+      buffer_reset(vty->sb_buffer);
+      vty->iac_sb_in_progress = 1;
+      return 0;
       break;
+    case SE: 
+      {
+	char *buffer = (char *)vty->sb_buffer->head->data;
+	int length = vty->sb_buffer->length;
+
+	if (buffer == NULL)
+	  return 0;
+
+	if (!vty->iac_sb_in_progress)
+	  return 0;
+
+	if (buffer[0] == '\0')
+	  {
+	    vty->iac_sb_in_progress = 0;
+	    return 0;
+	  }
+	switch (buffer[0])
+	  {
+	  case TELOPT_NAWS:
+	    if (length < 5)
+	      break;
+	    vty->width = buffer[2];
+	    vty->height = vty->lines >= 0 ? vty->lines : buffer[4];
+	    break;
+	  }
+	vty->iac_sb_in_progress = 0;
+	return 0;
+	break;
+      }
     default:
       break;
     }
-  return 2;
+  return 1;
 }
 
 /* Execute current command line. */
-static void
+static int
 vty_execute (struct vty *vty)
 {
+  int ret;
+
+  ret = CMD_SUCCESS;
+
   switch (vty->node)
     {
     case AUTH_NODE:
@@ -1079,8 +1148,9 @@ vty_execute (struct vty *vty)
       vty_auth (vty, vty->buf);
       break;
     default:
-      vty_command (vty, vty->buf);
-      vty_hist_add (vty);
+      ret = vty_command (vty, vty->buf);
+      if (vty->type == VTY_TERM)
+	vty_hist_add (vty);
       break;
     }
 
@@ -1092,6 +1162,8 @@ vty_execute (struct vty *vty)
       && vty->status != VTY_START
       && vty->status != VTY_CONTINUE)
     vty_prompt (vty);
+
+  return ret;
 }
 
 #define CONTROL(X)  ((X) - '@')
@@ -1154,6 +1226,34 @@ vty_read (struct thread *thread)
 
   for (i = 0; i < nbytes; i++) 
     {
+      if (buf[i] == IAC)
+	{
+	  if (!vty->iac)
+	    {
+	      vty->iac = 1;
+	      continue;
+	    }
+	  else
+	    {
+	      vty->iac = 0;
+	    }
+	}
+      
+      if (vty->iac_sb_in_progress && !vty->iac)
+	{
+	    buffer_putc(vty->sb_buffer, buf[i]);
+	    continue;
+	}
+
+      if (vty->iac)
+	{
+	  /* In case of telnet command */
+	  ret = vty_telnet_option (vty, buf + i, nbytes - i);
+	  vty->iac = 0;
+	  i += ret;
+	  continue;
+	}
+
       if (vty->status == VTY_MORE)
 	{
 	  switch (buf[i])
@@ -1214,11 +1314,6 @@ vty_read (struct thread *thread)
 
       switch (buf[i])
 	{
-	case 0xff:
-	  /* In case of telnet command */
-	  ret = vty_telnet_option (vty, buf + i, nbytes - i);
-	  i += ret;
-	  break;
 	case CONTROL('A'):
 	  vty_beginning_of_line (vty);
 	  break;
@@ -1431,6 +1526,9 @@ vty_create (int vty_sock, union sockunion *su)
     vty->lines = host.lines;
   else
     vty->lines = -1;
+  vty->iac = 0;
+  vty->iac_sb_in_progress = 0;
+  vty->sb_buffer = buffer_new(BUFFER_STRING, 1024);
 
   /* Vty is not available if password isn't set. */
   if (host.password == NULL && host.password_encrypt == NULL)
@@ -1646,9 +1744,13 @@ vty_serv_un (char *path)
   int ret;
   int sock;
   struct sockaddr_un serv;
+  mode_t old_mask;
 
   /* First of all, unlink existing socket */
   unlink (path);
+
+  /* Set umask */
+  old_mask = umask (0);
 
   /* Make UNIX domain socket. */
   sock = socket (AF_UNIX, SOCK_STREAM, 0);
@@ -1660,7 +1762,7 @@ vty_serv_un (char *path)
 
   /* Make server socket. */
   memset (&serv, 0, sizeof (struct sockaddr_un));
-  serv.sun_family = AF_LOCAL;
+  serv.sun_family = AF_UNIX;
   strncpy (serv.sun_path, path, strlen (path));
 
   ret = bind (sock, (struct sockaddr *) &serv, sizeof (struct sockaddr_un));
@@ -1673,8 +1775,12 @@ vty_serv_un (char *path)
 
   listen (sock, 5);
 
+  umask (old_mask);
+
   vty_event (VTYSH_SERV, sock, NULL);
 }
+
+/* #define VTYSH_DEBUG 1 */
 
 static int
 vtysh_accept (struct thread *thread)
@@ -1687,13 +1793,29 @@ vtysh_accept (struct thread *thread)
   
   accept_sock = THREAD_FD (thread);
 
+  vty_event (VTYSH_SERV, accept_sock, NULL);
+
+  memset (&client, 0, sizeof (struct sockaddr_un));
+  client_len = sizeof (struct sockaddr_un);
+
   sock = accept (accept_sock, (struct sockaddr *) &client, &client_len);
 
+  if (sock < 0)
+    {
+      zlog_warn ("can't accept vty socket : %s", strerror (errno));
+      return -1;
+    }
+
+#ifdef VTYSH_DEBUG
   printf ("VTY shell accept\n");
+#endif /* VTYSH_DEBUG */
 
   vty = vty_new ();
+  vty->fd = sock;
+  vty->type = VTY_SHELL_SERV;
+  vty->node = VIEW_NODE;
 
-  vty_event (VTYSH_READ, sock, NULL);
+  vty_event (VTYSH_READ, sock, vty);
 
   return 0;
 }
@@ -1701,12 +1823,46 @@ vtysh_accept (struct thread *thread)
 static int
 vtysh_read (struct thread *thread)
 {
+  int ret;
   int sock;
+  int nbytes;
   struct vty *vty;
+  unsigned char buf[VTY_READ_BUFSIZ];
+  u_char header[4] = {0, 0, 0, 0};
 
   sock = THREAD_FD (thread);
   vty = THREAD_ARG (thread);
   vty->t_read = NULL;
+
+  nbytes = read (sock, buf, VTY_READ_BUFSIZ);
+  if (nbytes <= 0)
+    {
+
+      vty_close (vty);
+#ifdef VTYSH_DEBUG
+      printf ("close vtysh\n");
+#endif /* VTYSH_DEBUG */
+      return 0;
+    }
+
+#ifdef VTYSH_DEBUG
+  printf ("line: %s\n", buf);
+#endif /* VTYSH_DEBUG */
+
+  /* Pass this line to parser. */
+  vty->buf = buf;
+  ret = vty_execute (vty);
+  vty->buf = NULL;
+
+  /* Return result. */
+#ifdef VTYSH_DEBUG
+  printf ("result: %d\n", ret);
+#endif /* VTYSH_DEBUG */
+
+  header[3] = ret;
+  write (vty->fd, header, 4);
+
+  vty_event (VTYSH_READ, sock, vty);
 
   return 0;
 }
@@ -1744,6 +1900,8 @@ vty_close (struct vty *vty)
     thread_cancel (vty->t_write);
   if (vty->t_timeout)
     thread_cancel (vty->t_timeout);
+  if (vty->t_output)
+    thread_cancel (vty->t_output);
 
   /* Flush buffer. */
   if (! buffer_empty (vty->obuf))
@@ -1943,10 +2101,13 @@ struct thread_master *master;
 static void
 vty_event (enum event event, int sock, struct vty *vty)
 {
+  struct thread *vty_serv_thread;
+
   switch (event)
     {
     case VTY_SERV:
       vty_serv_thread = thread_add_read (master, vty_accept, vty, sock);
+      vector_set_index (Vvty_serv_thread, sock, vty_serv_thread);
       break;
 #ifdef VTYSH
     case VTYSH_SERV:
@@ -2255,6 +2416,7 @@ vty_reset ()
 {
   int i;
   struct vty *vty;
+  struct thread *vty_serv_thread;
 
   for (i = 0; i < vector_max (vtyvec); i++)
     if ((vty = vector_slot (vtyvec, i)) != NULL)
@@ -2264,7 +2426,12 @@ vty_reset ()
 	vty_close (vty);
       }
 
-  thread_cancel (vty_serv_thread);
+  for (i = 0; i < vector_max (Vvty_serv_thread); i++)
+    if ((vty_serv_thread = vector_slot (Vvty_serv_thread, i)) != NULL)
+      {
+	thread_cancel (vty_serv_thread);
+	vector_slot (Vvty_serv_thread, i) = NULL;
+      }
 
   vty_timeout_val = VTY_TIMEOUT_DEFAULT;
 
@@ -2298,6 +2465,18 @@ vty_get_cwd ()
   return vty_cwd;
 }
 
+int
+vty_shell (struct vty *vty)
+{
+  return vty->type == VTY_SHELL ? 1 : 0;
+}
+
+int
+vty_shell_serv (struct vty *vty)
+{
+  return vty->type == VTY_SHELL_SERV ? 1 : 0;
+}
+
 /* Install vty's own commands like `who' command. */
 void
 vty_init ()
@@ -2306,6 +2485,9 @@ vty_init ()
   vty_save_cwd ();
 
   vtyvec = vector_init (VECTOR_MIN_SIZE);
+
+  /* Initilize server thread vector. */
+  Vvty_serv_thread = vector_init (VECTOR_MIN_SIZE);
 
   /* Install bgp top node. */
   install_node (&vty_node, vty_config_write);

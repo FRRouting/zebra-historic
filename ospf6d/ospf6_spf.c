@@ -21,12 +21,6 @@
 
 #include "ospf6d.h"
 
-static void
-print_vertex (struct vertex *W)
-{
-  o6log.spf (" vtx %s[%lu]", inet4str (W->vtx_id[0]), W->vtx_id[1]);
-}
-
 static struct vertex *
 make_vertex (struct ospf6_lsa *lsa)
 {
@@ -41,11 +35,11 @@ make_vertex (struct ospf6_lsa *lsa)
 
   switch (ntohs (lsa->lsa_hdr->lsh_type))
     {
-    case LST_ROUTER_LSA:
+    case OSPF6_LSA_TYPE_ROUTER:
       v->vtx_id[0] = lsa->lsa_hdr->lsh_advrtr;
       v->vtx_id[1] = 0;
       break;
-    case LST_NETWORK_LSA:
+    case OSPF6_LSA_TYPE_NETWORK:
       v->vtx_id[0] = lsa->lsa_hdr->lsh_advrtr;
       v->vtx_id[1] = lsa->lsa_hdr->lsh_id;
       break;
@@ -146,9 +140,8 @@ spf_install (struct vertex *v, struct area *area)
 
   if (IS_OSPF6_DUMP_SPF)
     {
-      zlog_info ("SPF Install: Depth:%lu Distance%lu",
-                 v->vtx_depth, v->vtx_distance);
-      zlog_info ("  %s[%lu]", inet4str (v->vtx_id[0]), ntohl (v->vtx_id[1]));
+      zlog_info ("SPF Install: Depth:%lu Distance:%lu %s",
+                 v->vtx_depth, v->vtx_distance, v->str);
     }
 
   if (v->vtx_depth == 0)
@@ -213,7 +206,7 @@ spf_init (struct area *area)
     }
 
   /* Install myself as root */
-  myself = ospf6_lsdb_lookup (htons (LST_ROUTER_LSA), htonl (MY_ROUTER_LSA_ID),
+  myself = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER), htonl (MY_ROUTER_LSA_ID),
                               area->ospf6->router_id, (void *) area);
   if (!myself)
     {
@@ -265,11 +258,11 @@ router_link (struct vertex *V)
   switch (currentlink->rlsd_type)
     {
     case LSDT_TRANSIT_NETWORK:
-      w_lsa = ospf6_lsdb_lookup (htons (LST_NETWORK_LSA),
+      w_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_NETWORK),
                                  currentlink->rlsd_neighbor_interface_id,
                                  currentlink->rlsd_neighbor_router_id,
                                  (void *)lsa->scope);
-      if (!w_lsa || !w_lsa->lsa_hdr || ospf6_age_current (w_lsa) == MAXAGE)
+      if (!w_lsa || !w_lsa->lsa_hdr || ospf6_lsa_is_maxage (w_lsa))
         {
           currentlink++;
           goto nextlink;
@@ -302,12 +295,12 @@ router_link (struct vertex *V)
 
     case LSDT_POINTTOPOINT:
       /* XXX multiple RouterLSA not yet */
-      w_lsa = ospf6_lsdb_lookup (htons (LST_ROUTER_LSA),
+      w_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
                                  htonl (MY_ROUTER_LSA_ID),
                                  currentlink->rlsd_neighbor_router_id,
                                  (void *)lsa->scope);
       if (!w_lsa || !w_lsa->lsa_hdr
-          || ospf6_age_current (w_lsa) == MAXAGE)
+          || ospf6_lsa_is_maxage (w_lsa))
         {
           currentlink++;
           goto nextlink;
@@ -379,10 +372,10 @@ network_link (struct vertex *V)
     }
 
   linkback = 0;
-  w_lsa = ospf6_lsdb_lookup (htons (LST_ROUTER_LSA),
+  w_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
                              htonl (MY_ROUTER_LSA_ID),
                              *currentlink, lsa->scope);
-  if (!w_lsa || !w_lsa->lsa_hdr || ospf6_age_current (w_lsa) == MAXAGE)
+  if (!w_lsa || !w_lsa->lsa_hdr || ospf6_lsa_is_maxage (w_lsa))
     {
       currentlink++;
       goto nextlink_of_this_network;
@@ -423,9 +416,9 @@ linktovertex (struct vertex *V)
   assert (V);
   switch (ntohs (V->vtx_lsa->lsa_hdr->lsh_type))
     {
-    case LST_ROUTER_LSA:
+    case OSPF6_LSA_TYPE_ROUTER:
       return router_link (V);
-    case LST_NETWORK_LSA:
+    case OSPF6_LSA_TYPE_NETWORK:
       return network_link (V);
     default:
       break;
@@ -476,7 +469,11 @@ spf_calculation (struct thread *thread)
     {
       for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
         {
-          print_vertex (W);
+
+          if (IS_OSPF6_DUMP_SPF)
+            {
+              zlog_info ("SPF Examining Vertex: %s", W->str);
+            }
 
           already = 0;
           /* (c) */

@@ -280,7 +280,7 @@ ripng_route_set_delete (struct vty *vty, struct route_map_index *index,
 #if 0
 DEFUN (match_interface,
        match_interface_cmd,
-       "match interface IFNAME",
+       "match interface WORD",
        "Match value\n"
        "Interface\n"
        "Interface name\n")
@@ -290,7 +290,7 @@ DEFUN (match_interface,
 
 DEFUN (no_match_interface,
        no_match_interface_cmd,
-       "no match interface IFNAME",
+       "no match interface WORD",
        NO_STR
        "Match value\n"
        "Interface\n"
@@ -302,7 +302,7 @@ DEFUN (no_match_interface,
 
 DEFUN (set_metric,
        set_metric_cmd,
-       "set metric METRIC",
+       "set metric <0-4294967295>",
        "Set value\n"
        "Metric\n"
        "METRIC value\n")
@@ -312,7 +312,7 @@ DEFUN (set_metric,
 
 DEFUN (no_set_metric,
        no_set_metric_cmd,
-       "no set metric METRIC",
+       "no set metric <0-4294967295>",
        NO_STR
        "Set value\n"
        "Metric\n"

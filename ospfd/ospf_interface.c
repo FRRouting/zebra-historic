@@ -1,6 +1,6 @@
 /*
  * OSPF Interface functions.
- * Copyright (C) 1999 Toshiaki Takada
+ * Copyright (C) 1999, 2000 Toshiaki Takada
  *
  * This file is part of GNU Zebra.
  * 
@@ -45,9 +45,39 @@
 #include "ospfd/ospf_abr.h"
 #include "ospfd/ospfd.h"
 
+
+int
+ospf_if_get_output_cost (struct ospf_interface *oi)
+{
+  /* If all else fails, use default OSPF cost */
+  u_int32_t cost;
+  u_int32_t bw, refbw;
+
+  bw = oi->ifp->bandwidth ? oi->ifp->bandwidth : OSPF_DEFAULT_BANDWIDTH;
+  refbw = ospf_top ? ospf_top->ref_bandwidth : OSPF_DEFAULT_REF_BANDWIDTH;
+
+  /* A specifed ip ospf cost overrides a calculated one. */
+  if (oi->output_cost_cmd != OSPF_IF_NO_IP_OSPF_COST)
+    cost = oi->output_cost_cmd;
+  /* See if a cost can be calculated from the zebra processes
+     interface bandwidth field. */
+  else
+    {
+      cost = (u_int32_t) ((double)refbw / (double)bw + (double)0.5);
+      if (cost < 1)
+	cost = 1;
+      else if (cost > 65535)
+	cost = 65535;
+    }
+
+  return cost;
+}
+
 void
 ospf_if_reset_variables (struct ospf_interface *oi)
 {
+  listnode node;
+
   /* file descriptor reset. */
   oi->fd = -1;
 
@@ -70,13 +100,24 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   oi->crypt_seqnum = 0;
 
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
-  oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
+  /* The following affects the line after! */
+  oi->output_cost_cmd = OSPF_IF_NO_IP_OSPF_COST; 
+  oi->output_cost = ospf_if_get_output_cost (oi);
   oi->retransmit_interval = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
+  oi->passive_interface = OSPF_IF_ACTIVE;
 
   /* Timer values. */
   oi->v_hello = OSPF_HELLO_INTERVAL_DEFAULT;
   oi->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
-  oi->v_ls_ack = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
+  /* This must be short, (less than RxmtInterval) 
+     - RFC 2328 Section 13.5 para 3.  Set to 1 second to avoid Acks being
+       held back for too long - MAG */
+  oi->v_ls_ack = 1;  
+
+  /* Cleanup Link State Acknowlegdment list. */
+  for (node = listhead (oi->ls_ack); node; nextnode (node))
+    ospf_lsa_unlock (node->data);
+  list_delete_all_node (oi->ls_ack);
 }
 
 struct ospf_interface *
@@ -90,9 +131,6 @@ ospf_if_new (struct interface *ifp)
   /* Set zebra interface pointer. */
   oi->ifp = ifp;
 
-  /* Set default values. */
-  ospf_if_reset_variables (oi);
-
   /* Clear self-originated network-LSA. */
   oi->network_lsa_self = NULL;
 
@@ -101,6 +139,10 @@ ospf_if_new (struct interface *ifp)
 
   /* Initialize Link State Acknowledgment list. */
   oi->ls_ack = list_init ();
+  oi->ls_ack_direct.ls_ack = list_init ();
+
+  /* Set default values. */
+  ospf_if_reset_variables (oi);
 
   /* Add pseudo neighbor. */
   oi->nbr_self = ospf_nbr_new (oi);
@@ -116,8 +158,12 @@ ospf_if_new (struct interface *ifp)
   else
     oi->nbr_self->options = OSPF_OPTION_E;
 
+  oi->ls_upd_queue = route_table_init ();
+  oi->t_ls_upd_event = NULL;
+  oi->t_ls_ack_direct = NULL;
+
   /* Set Link State Acknowledgment timer. */
-  OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
+  /* OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack); */
 
   return oi;
 }
@@ -127,16 +173,26 @@ ospf_if_free (struct ospf_interface *oi)
 {
   struct route_node *rn;
   struct prefix p;
+  listnode node;
 
+  /*
   if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
     list_delete_by_val (oi->area->iflist, oi->ifp);
   else
-    {
-      p.family = AF_INET;
-      p.u.prefix4 = oi->address->u.prefix4;
-      p.prefixlen = IPV4_MAX_BITLEN;
+  */
+  if(oi->area != NULL)
+    list_delete_by_val (oi->area->iflist, oi->ifp);
 
-      ospf_interface_down (ospf_top, &p, oi->area);
+  if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
+    {
+      if (oi->flag == OSPF_IF_ENABLE)
+	{
+	  p.family = AF_INET;
+	  p.u.prefix4 = oi->address->u.prefix4;
+	  p.prefixlen = IPV4_MAX_BITLEN;
+
+	  ospf_interface_down (ospf_top, &p, oi->area);
+	}
     }
 
   OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceDown);
@@ -151,8 +207,12 @@ ospf_if_free (struct ospf_interface *oi)
       ospf_nbr_free ((struct ospf_neighbor *) rn->info);
 
   route_table_finish (oi->nbrs);
-
+  route_table_finish (oi->ls_upd_queue);
+  list_free (oi->ls_ack_direct.ls_ack);
+  
   /* Cleanup Link State Acknowlegdment list. */
+  for (node = listhead (oi->ls_ack); node; nextnode (node))
+    ospf_lsa_unlock (node->data);
   list_delete_all (oi->ls_ack);
 
   /* Cleanup crypt key list. */
@@ -214,10 +274,6 @@ ospf_if_lookup_by_prefix (struct prefix_ipv4 *p)
 	      if (co->address->family == AF_INET)
 		{
 		  prefix_copy ((struct prefix *) &ip, co->address);
-
-		  zlog_info ("Z: ospf_if_lookup_by_prefix(): prefix is %s/%d",
-			     inet_ntoa (ip.prefix), ip.prefixlen);
-
 		  apply_mask_ipv4 (&ip);
 
 		  if (prefix_same ((struct prefix *) &ip, (struct prefix *) p))
@@ -284,16 +340,12 @@ ospf_if_is_enable (struct interface *ifp)
 {
   struct ospf_interface *oi = ifp->info;
 
-  if (if_is_loopback (ifp))
-    return 0;
+  if (!if_is_loopback (ifp))
+    if (if_is_up (ifp))
+      if (oi->flag == OSPF_IF_ENABLE)
+	return 1;
 
-  if (!if_is_up (ifp))
-    return 0;
-
-  if (oi->flag != OSPF_IF_ENABLE)
-    return 0;
-
-  return 1;
+  return 0;
 }
 
 int
@@ -305,6 +357,8 @@ ospf_if_up (struct interface *ifp)
   if (oi == NULL)
     return 0;
 
+  oi->output_cost = ospf_if_get_output_cost (oi);
+
   if (oi->flag == OSPF_IF_DISABLE)
     return 0;
 
@@ -313,7 +367,7 @@ ospf_if_up (struct interface *ifp)
       ret = ospf_serv_sock_init (ifp, oi->address);
       if (ret < 0)
         {
-          zlog_info ("Z: ospf_if_up(): Problem with socket !!!");
+	  zlog_info ("Interface[%s]: Fail to setup socket", ifp->name);
           return 0;
         }
     }
@@ -332,6 +386,8 @@ ospf_if_down (struct interface *ifp)
 
   if (oi == NULL)
     return 0;
+
+  oi->output_cost = ospf_if_get_output_cost (oi);
 
   if (oi->flag == OSPF_IF_DISABLE)
     return 0;
@@ -454,15 +510,11 @@ ospf_vl_lookup (struct ospf_area *area, struct in_addr vl_peer)
   struct ospf_vl_data *vl_data;
   listnode node;
 
-  LIST_ITERATOR (ospf_top->vlinks, node)
-    {
-      if ((vl_data = getdata (node)) == NULL)
-        continue;
-
+  for (node = listhead (ospf_top->vlinks); node; nextnode (node))
+    if ((vl_data = getdata (node)) != NULL)
       if (vl_data->vl_peer.s_addr == vl_peer.s_addr &&
           vl_data->vl_area == area)
         return vl_data;
-    }
 
   return NULL;
 }
@@ -488,7 +540,7 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
   int changed = 0;
   struct ospf_interface *voi;
   listnode node;
-  struct ospf_nexthop *nh;
+  struct vertex_nexthop *nh;
   int ret;
   int i;
   struct router_lsa *rl;
@@ -504,18 +556,16 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
   /* Associate the VL with a physical interface. */
   ospf_vl_set_variables (voi);
 
-  LIST_ITERATOR (v->nexthop, node)
-    {
-      if ((nh = getdata (node)) == NULL)
-        continue;
+  for (node = listhead (v->nexthop); node; nextnode (node))
+    if ((nh = getdata (node)) != NULL)
+      {
+	vl_data->out_oi = (struct ospf_interface *) nh->ifp->info;
 
-      vl_data->out_oi = (struct ospf_interface *) nh->ifp->info;
+	voi->address->u.prefix4 = vl_data->out_oi->address->u.prefix4;
+	voi->address->prefixlen = vl_data->out_oi->address->prefixlen;
 
-      voi->address->u.prefix4 = vl_data->out_oi->address->u.prefix4;
-      voi->address->prefixlen = vl_data->out_oi->address->prefixlen;
-
-      break; /* We take the first interface. */
-    }
+	break; /* We take the first interface. */
+      }
 
   if (voi->fd == -1)
     ret = ospf_serv_sock_init (voi->ifp, voi->address);
@@ -565,8 +615,7 @@ ospf_vl_up_check (struct ospf_area * area, struct in_addr rid,
 
       /*
       if (vl_data->vl_peer.s_addr == rid.s_addr &&
-          vl_data->vl_area == area)
-      */
+          vl_data->vl_area == area)      */
 
       if (IPV4_ADDR_SAME (&vl_data->vl_peer, &rid) &&
           vl_data->vl_area == area)
@@ -609,13 +658,9 @@ ospf_vl_unapprove ()
   listnode node;
   struct ospf_vl_data *vl_data;
 
-  LIST_ITERATOR (ospf_top->vlinks, node)
-    {
-      if ((vl_data = getdata (node)) == NULL)
-        continue;
-
+  for (node = listhead (ospf_top->vlinks); node; nextnode (node))
+    if ((vl_data = getdata (node)) != NULL)
       UNSET_FLAG (vl_data->flags, OSPF_VL_FLAG_APPROVED);
-    }
 }
 
 void
@@ -624,14 +669,10 @@ ospf_vl_shut_unapproved ()
   listnode node;
   struct ospf_vl_data *vl_data;
 
-  LIST_ITERATOR (ospf_top->vlinks, node)
-    {
-      if ((vl_data = getdata (node)) == NULL)
-        continue;
-
+  for (node = listhead (ospf_top->vlinks); node; nextnode (node))
+    if ((vl_data = getdata (node)) != NULL)
       if (!CHECK_FLAG (vl_data->flags, OSPF_VL_FLAG_APPROVED))
         ospf_vl_shutdown (vl_data);
-    }
 }
 
 int
@@ -651,14 +692,10 @@ ospf_vls_in_area (struct ospf_area *area)
   struct ospf_vl_data *vl_data;
   int c = 0;
 
-  LIST_ITERATOR (ospf_top->vlinks, node)
-    {
-      if ((vl_data = getdata (node)) == NULL)
-        continue;
-
+  for (node = listhead (ospf_top->vlinks); node; nextnode (node))
+    if ((vl_data = getdata (node)) != NULL)
       if (vl_data->vl_area == area)
         c++;
-    }
 
   return c;
 }
@@ -742,14 +779,14 @@ interface_config_write (struct vty *vty)
       ifp = getdata (n1);
       oi = ifp->info;
 
-      if (!if_is_up (ifp))
-        continue;
-
       if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
         continue;
 
       vty_out (vty, "!%s", VTY_NEWLINE);
       vty_out (vty, "interface %s%s", ifp->name,
+               VTY_NEWLINE);
+      if (ifp->desc)
+        vty_out (vty, " description %s%s", ifp->desc,
                VTY_NEWLINE);
 
       write++;
@@ -773,8 +810,8 @@ interface_config_write (struct vty *vty)
         }
 
       /* Interface Output Cost print. */
-      if (oi->output_cost != OSPF_OUTPUT_COST_DEFAULT)
-        vty_out (vty, " ip ospf cost %u%s", oi->output_cost, VTY_NEWLINE);
+      if (oi->output_cost_cmd != OSPF_IF_NO_IP_OSPF_COST)
+        vty_out (vty, " ip ospf cost %u%s", oi->output_cost_cmd, VTY_NEWLINE);
 
       /* Hello Interval print. */
       if (oi->v_hello != OSPF_HELLO_INTERVAL_DEFAULT)
@@ -947,12 +984,9 @@ DEFUN (ip_ospf_cost,
        "Interface cost\n"
        "Cost")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-  u_int32_t cost;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
+  u_int32_t cost, newcost;
 
   cost = strtol (argv[0], NULL, 10);
 
@@ -963,11 +997,14 @@ DEFUN (ip_ospf_cost,
       return CMD_WARNING;
     }
 
-  if (oi->output_cost != cost)
+  /* Is actual output cost changed? */
+  oi->output_cost_cmd = cost;
+  newcost = ospf_if_get_output_cost (oi);
+  if (oi->output_cost != newcost)
     {
-      oi->output_cost = cost;
+      oi->output_cost = newcost;
       if (oi->area)
-	ospf_schedule_router_lsa_originate (oi->area);
+	ospf_router_lsa_timer_add (oi->area);
     }
 
   return CMD_SUCCESS;
@@ -986,19 +1023,19 @@ DEFUN (no_ip_ospf_cost,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Interface cost")
+       "Interface cost\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
+  u_int32_t newcost;
 
-  ifp = vty->index;
-  oi = ifp->info;
-
-  if (oi->output_cost != OSPF_OUTPUT_COST_DEFAULT)
+  oi->output_cost_cmd = OSPF_IF_NO_IP_OSPF_COST;
+  newcost = ospf_if_get_output_cost (oi);
+  if (oi->output_cost != newcost)
     {
-      oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
+      oi->output_cost = newcost;
       if (oi->area)
-	ospf_schedule_router_lsa_originate (oi->area);
+	ospf_router_lsa_timer_add (oi->area);
     }
 
   return CMD_SUCCESS;
@@ -1009,7 +1046,7 @@ ALIAS (no_ip_ospf_cost,
        "no ospf cost",
        NO_STR
        "OSPF interface commands\n"
-       "Interface cost")
+       "Interface cost\n")
 
 DEFUN (ip_ospf_dead_interval,
        ip_ospf_dead_interval_cmd,
@@ -1017,14 +1054,11 @@ DEFUN (ip_ospf_dead_interval,
        "IP Information\n"
        "OSPF interface commands\n"
        "Interval after which a neighbor is declared dead\n"
-       "Seconds")
+       "Seconds\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
   u_int32_t seconds;
-
-  ifp = vty->index;
-  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -1045,7 +1079,7 @@ ALIAS (ip_ospf_dead_interval,
        "ospf dead-interval <1-65535>",
        "OSPF interface commands\n"
        "Interval after which a neighbor is declared dead\n"
-       "Seconds")
+       "Seconds\n")
 
 DEFUN (no_ip_ospf_dead_interval,
        no_ip_ospf_dead_interval_cmd,
@@ -1053,13 +1087,10 @@ DEFUN (no_ip_ospf_dead_interval,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Interval after which a neighbor is declared dead")
+       "Interval after which a neighbor is declared dead\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   oi->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
 
@@ -1071,7 +1102,7 @@ ALIAS (no_ip_ospf_dead_interval,
        "no ospf dead-interval",
        NO_STR
        "OSPF interface commands\n"
-       "Interval after which a neighbor is declared dead")
+       "Interval after which a neighbor is declared dead\n")
 
 DEFUN (ip_ospf_hello_interval,
        ip_ospf_hello_interval_cmd,
@@ -1079,14 +1110,11 @@ DEFUN (ip_ospf_hello_interval,
        "IP Information\n"
        "OSPF interface commands\n"
        "Time between HELLO packets\n"
-       "Seconds")
+       "Seconds\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
   u_int32_t seconds;
-
-  ifp = vty->index;
-  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -1107,7 +1135,7 @@ ALIAS (ip_ospf_hello_interval,
        "ospf hello-interval <1-65535>",
        "OSPF interface commands\n"
        "Time between HELLO packets\n"
-       "Seconds")
+       "Seconds\n")
 
 DEFUN (no_ip_ospf_hello_interval,
        no_ip_ospf_hello_interval_cmd,
@@ -1115,13 +1143,10 @@ DEFUN (no_ip_ospf_hello_interval,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Time between HELLO packets")
+       "Time between HELLO packets\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   oi->v_hello = OSPF_HELLO_INTERVAL_DEFAULT;
 
@@ -1133,7 +1158,7 @@ ALIAS (no_ip_ospf_hello_interval,
        "no ospf hello-interval",
        NO_STR
        "OSPF interface commands\n"
-       "Time between HELLO packets")
+       "Time between HELLO packets\n")
 
 DEFUN (ip_ospf_network,
        ip_ospf_network_cmd,
@@ -1146,11 +1171,8 @@ DEFUN (ip_ospf_network,
        "Specify OSPF point-to-multipoint network\n"
        "Specify OSPF point-to-point network\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   if (strncmp (argv[0], "b", 1) == 0)
     oi->type = OSPF_IFTYPE_BROADCAST;
@@ -1180,13 +1202,10 @@ DEFUN (no_ip_ospf_network,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Network type")
+       "Network type\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   oi->type = OSPF_IFTYPE_BROADCAST;
 
@@ -1198,7 +1217,7 @@ ALIAS (no_ip_ospf_network,
        "no ospf network",
        NO_STR
        "OSPF interface commands\n"
-       "Network type")
+       "Network type\n")
 
 DEFUN (ip_ospf_priority,
        ip_ospf_priority_cmd,
@@ -1206,14 +1225,11 @@ DEFUN (ip_ospf_priority,
        "IP Information\n"
        "OSPF interface commands\n"
        "Router priority\n"
-       "Priority")
+       "Priority\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
   u_int32_t priority;
-
-  ifp = vty->index;
-  oi = ifp->info;
 
   priority = strtol (argv[0], NULL, 10);
 
@@ -1234,7 +1250,7 @@ ALIAS (ip_ospf_priority,
        "ospf priority <0-255>",
        "OSPF interface commands\n"
        "Router priority\n"
-       "Priority")
+       "Priority\n")
 
 DEFUN (no_ip_ospf_priority,
        no_ip_ospf_priority_cmd,
@@ -1242,13 +1258,10 @@ DEFUN (no_ip_ospf_priority,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Router priority")
+       "Router priority\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   PRIORITY (oi) = OSPF_ROUTER_PRIORITY_DEFAULT;
 
@@ -1260,27 +1273,24 @@ ALIAS (no_ip_ospf_priority,
        "no ospf priority",
        NO_STR
        "OSPF interface commands\n"
-       "Router priority")
+       "Router priority\n")
 
 DEFUN (ip_ospf_retransmit_interval,
        ip_ospf_retransmit_interval_cmd,
-       "ip ospf retransmit-interval <1-65535>",
+       "ip ospf retransmit-interval <3-65535>",
        "IP Information\n"
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements\n"
-       "Seconds")
+       "Seconds\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
   u_int32_t seconds;
-
-  ifp = vty->index;
-  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
-  /* Retransmit Interval range is <1-65535>. */
-  if (seconds < 1 || seconds > 65535)
+  /* Retransmit Interval range is <3-65535>. */
+  if (seconds < 3 || seconds > 65535)
     {
       vty_out (vty, "Retransmit Interval is invalid%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1293,10 +1303,10 @@ DEFUN (ip_ospf_retransmit_interval,
 
 ALIAS (ip_ospf_retransmit_interval,
        ospf_retransmit_interval_cmd,
-       "ospf retransmit-interval <1-65535>",
+       "ospf retransmit-interval <3-65535>",
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements\n"
-       "Seconds")
+       "Seconds\n")
 
 DEFUN (no_ip_ospf_retransmit_interval,
        no_ip_ospf_retransmit_interval_cmd,
@@ -1304,13 +1314,10 @@ DEFUN (no_ip_ospf_retransmit_interval,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Time between retransmitting lost link state advertisements")
+       "Time between retransmitting lost link state advertisements\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   oi->retransmit_interval = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
 
@@ -1322,7 +1329,7 @@ ALIAS (no_ip_ospf_retransmit_interval,
        "no ospf retransmit-interval",
        NO_STR
        "OSPF interface commands\n"
-       "Time between retransmitting lost link state advertisements")
+       "Time between retransmitting lost link state advertisements\n")
 
 DEFUN (ip_ospf_transmit_delay,
        ip_ospf_transmit_delay_cmd,
@@ -1330,14 +1337,11 @@ DEFUN (ip_ospf_transmit_delay,
        "IP Information\n"
        "OSPF interface commands\n"
        "Link state transmit delay\n"
-       "Seconds")
+       "Seconds\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
   u_int32_t seconds;
-
-  ifp = vty->index;
-  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -1358,7 +1362,7 @@ ALIAS (ip_ospf_transmit_delay,
        "ospf transmit-delay <1-65535>",
        "OSPF interface commands\n"
        "Link state transmit delay\n"
-       "Seconds")
+       "Seconds\n")
 
 DEFUN (no_ip_ospf_transmit_delay,
        no_ip_ospf_transmit_delay_cmd,
@@ -1366,13 +1370,10 @@ DEFUN (no_ip_ospf_transmit_delay,
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Link state transmit delay")
+       "Link state transmit delay\n")
 {
-  struct interface *ifp;
-  struct ospf_interface *oi;
-
-  ifp = vty->index;
-  oi = ifp->info;
+  struct interface *ifp = vty->index;
+  struct ospf_interface *oi = ifp->info;
 
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
 
@@ -1384,7 +1385,7 @@ ALIAS (no_ip_ospf_transmit_delay,
        "no ospf transmit-delay",
        NO_STR
        "OSPF interface commands\n"
-       "Link state transmit delay")
+       "Link state transmit delay\n")
 
 
 /* ospfd's interface node. */
@@ -1407,9 +1408,7 @@ ospf_if_init ()
   install_node (&interface_node, interface_config_write);
 
   install_element (CONFIG_NODE, &interface_cmd);
-  install_element (INTERFACE_NODE, &config_end_cmd);
-  install_element (INTERFACE_NODE, &config_exit_cmd);
-  install_element (INTERFACE_NODE, &config_help_cmd);
+  install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
   install_element (INTERFACE_NODE, &ip_ospf_authentication_key_cmd);

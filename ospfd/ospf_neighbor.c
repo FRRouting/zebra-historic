@@ -79,7 +79,8 @@ ospf_nbr_new (struct ospf_interface *oi)
   new_lsdb_init (&nbr->ls_req);
 
   /* Start periodic timer thread ospf_ls_upd_timer (). */
-  OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
+  /* Will be starter on NSM_Exchange event */
+  /*OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);*/
 
   return nbr;
 }
@@ -87,30 +88,23 @@ ospf_nbr_new (struct ospf_interface *oi)
 void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
-  /* Free retransmit list. */
-  if (ospf_ls_retransmit_count (nbr))
-    ospf_ls_retransmit_clear (nbr);
-
-#if 0
-  if (nbr->ls_retransmit != NULL && listcount (nbr->ls_retransmit))
-    {
-      ospf_ls_retransmit_clear (nbr);
-      list_delete_all (nbr->ls_retransmit);
-    }
-  /* Free DB summary list. */
-  if (nbr->db_summary != NULL && listcount (nbr->db_summary))
-    list_delete_all (nbr->db_summary);
-#endif
-
   /* Free DB summary list. */
   if (ospf_db_summary_count (nbr))
-    ospf_db_summary_delete_all (nbr);
+    ospf_db_summary_clear (nbr);
+    /* ospf_db_summary_delete_all (nbr); */
 
   /* Free ls request list. */
   if (ospf_ls_request_count (nbr))
     ospf_ls_request_delete_all (nbr);
 
+  /* Free retransmit list. */
+  if (ospf_ls_retransmit_count (nbr))
+    ospf_ls_retransmit_clear (nbr);
+
+  /* Cleanup LSDBs. */
+  new_lsdb_cleanup (&nbr->db_sum);
   new_lsdb_cleanup (&nbr->ls_req);
+  new_lsdb_cleanup (&nbr->ls_rxmt);
   
   /* Clear last send packet. */
   if (nbr->last_send)

@@ -58,8 +58,9 @@ struct route_map_list
   struct route_map *head;
   struct route_map *tail;
 
-  void (*add_hook) ();
-  void (*delete_hook) ();
+  void (*add_hook) (char *);
+  void (*delete_hook) (char *);
+  void (*event_hook) (route_map_event_t, char *); 
 };
 
 /* Master list of route map. */
@@ -68,6 +69,9 @@ static struct route_map_list route_map_master = { NULL, NULL, NULL, NULL };
 static void
 route_map_rule_delete (struct route_map_rule_list *,
 		       struct route_map_rule *);
+
+static void
+route_map_index_delete (struct route_map_index *, int);
 
 /* New route map allocation. Please note route map's name must be
    specified. */
@@ -102,26 +106,9 @@ route_map_add (char *name)
 
   /* Execute hook. */
   if (route_map_master.add_hook)
-    (*route_map_master.add_hook) ();
+    (*route_map_master.add_hook) (name);
 
   return map;
-}
-
-/* Free route map index. */
-static void
-route_map_index_free (struct route_map_index *index)
-{
-  struct route_map_rule *rule;
-
-  /* Free route match. */
-  while ((rule = index->match_list.head) != NULL)
-    route_map_rule_delete (&index->match_list, rule);
-
-  /* Free route set. */
-  while ((rule = index->set_list.head) != NULL)
-    route_map_rule_delete (&index->set_list, rule);
-
-  XFREE (MTYPE_ROUTE_MAP_INDEX, index);
 }
 
 /* Route map delete from list. */
@@ -130,21 +117,12 @@ route_map_delete (struct route_map *map)
 {
   struct route_map_list *list;
   struct route_map_index *index;
-  struct route_map_index *next;
+  char *name;
+  
+  while ((index = map->head) != NULL)
+    route_map_index_delete (index, 0);
 
-  for (index = map->head; index; index = next)
-    {
-      next = index->next;
-      route_map_index_free (index);
-    }
-  /* Return if route map doesn't exist. */
-  /*
-  if (map->head != NULL || map->tail != NULL)
-    return;
-  */
-
-  if (map->name)
-    XFREE (MTYPE_ROUTE_MAP_NAME, map->name);
+  name = map->name;
 
   list = &route_map_master;
 
@@ -162,7 +140,11 @@ route_map_delete (struct route_map *map)
 
   /* Execute deletion hook. */
   if (route_map_master.delete_hook)
-    (*route_map_master.delete_hook) ();
+    (*route_map_master.delete_hook) (name);
+
+  if (name)
+    XFREE (MTYPE_ROUTE_MAP_NAME, name);
+
 }
 
 /* Lookup route map by route map name string. */
@@ -208,6 +190,15 @@ route_map_type_str (enum route_map_type type)
     }
 }
 
+int
+route_map_empty (struct route_map *map)
+{
+  if (map->head == NULL && map->tail == NULL)
+    return 1;
+  else
+    return 0;
+}
+
 /* For debug. */
 void
 route_map_print ()
@@ -248,8 +239,8 @@ route_map_index_new ()
 }
 
 /* Free route map index. */
-void
-route_map_index_delete (struct route_map_index *index)
+static void
+route_map_index_delete (struct route_map_index *index, int notify)
 {
   struct route_map_rule *rule;
 
@@ -271,9 +262,11 @@ route_map_index_delete (struct route_map_index *index)
     index->prev->next = index->next;
   else
     index->map->head = index->next;
-  
-  /* If this route rule is the last one, delete route map itself. */
-  route_map_delete (index->map);
+
+    /* Execute event hook. */
+  if (route_map_master.event_hook && notify)
+    (*route_map_master.event_hook) (RMAP_EVENT_INDEX_DELETED,
+				    index->map->name);
 
   XFREE (MTYPE_ROUTE_MAP_INDEX, index);
 }
@@ -314,30 +307,32 @@ route_map_index_add (struct route_map *map, enum route_map_type type,
   if (map->head == NULL)
     {
       map->head = map->tail = index;
-      return index;
     }
-
-  if (point == NULL)
+  else if (point == NULL)
     {
       index->prev = map->tail;
       map->tail->next = index;
       map->tail = index;
-      return index;
     }
-  
-  if (point == map->head)
+  else if (point == map->head)
     {
       index->next = map->head;
       map->head->prev = index;
       map->head = index;
-      return index;
+    }
+  else
+    {
+      index->next = point;
+      index->prev = point->prev;
+      if (point->prev)
+	point->prev->next = index;
+      point->prev = index;
     }
 
-  index->next = point;
-  index->prev = point->prev;
-  if (point->prev)
-    point->prev->next = index;
-  point->prev = index;
+  /* Execute event hook. */
+  if (route_map_master.event_hook)
+    (*route_map_master.event_hook) (RMAP_EVENT_INDEX_ADDED,
+				    map->name);
 
   return index;
 }
@@ -506,6 +501,11 @@ route_map_add_match (struct route_map_index *index, char *match_name,
   /* Add new route match rule to linked list. */
   route_map_rule_add (&index->match_list, rule);
 
+  /* Execute event hook. */
+  if (route_map_master.event_hook)
+    (*route_map_master.event_hook) (RMAP_EVENT_MATCH_ADDED,
+				    index->map->name);
+
   return 0;
 }
 
@@ -522,9 +522,14 @@ route_map_delete_match (struct route_map_index *index, char *match_name,
     return 1;
   
   for (rule = index->match_list.head; rule; rule = rule->next)
-    if (rule->cmd == cmd && rulecmp (rule->rule_str, match_arg) == 0)
+    if (rule->cmd == cmd && 
+	(rulecmp (rule->rule_str, match_arg) == 0 || match_arg == NULL))
       {
 	route_map_rule_delete (&index->match_list, rule);
+	/* Execute event hook. */
+	if (route_map_master.event_hook)
+	  (*route_map_master.event_hook) (RMAP_EVENT_MATCH_DELETED,
+					  index->map->name);
 	return 0;
       }
   /* Can't find matched rule. */
@@ -540,6 +545,7 @@ route_map_add_set (struct route_map_index *index, char *set_name,
   struct route_map_rule *next;
   struct route_map_rule_cmd *cmd;
   void *compile;
+  int replaced = 0;
 
   cmd = route_map_lookup_set (set_name);
   if (cmd == NULL)
@@ -561,8 +567,11 @@ route_map_add_set (struct route_map_index *index, char *set_name,
   for (rule = index->set_list.head; rule; rule = next)
     {
       next = rule->next;
-      if (rule->cmd == cmd) 
-	route_map_rule_delete (&index->set_list, rule);
+      if (rule->cmd == cmd)
+	{
+	  route_map_rule_delete (&index->set_list, rule);
+	  replaced = 1;
+	}
     }
 
   /* Add new route map match rule. */
@@ -577,6 +586,12 @@ route_map_add_set (struct route_map_index *index, char *set_name,
   /* Add new route match rule to linked list. */
   route_map_rule_add (&index->set_list, rule);
 
+  /* Execute event hook. */
+  if (route_map_master.event_hook)
+    (*route_map_master.event_hook) (replaced ?
+				    RMAP_EVENT_SET_REPLACED:
+				    RMAP_EVENT_SET_ADDED,
+				    index->map->name);
   return 0;
 }
 
@@ -593,10 +608,15 @@ route_map_delete_set (struct route_map_index *index, char *set_name,
     return 1;
   
   for (rule = index->set_list.head; rule; rule = rule->next)
-    if (rule->cmd == cmd && rulecmp (rule->rule_str, set_arg) == 0)
+    if ((rule->cmd == cmd) &&
+         (rulecmp (rule->rule_str, set_arg) == 0 || set_arg == NULL))
       {
-	route_map_rule_delete (&index->set_list, rule);
-	return 0;
+        route_map_rule_delete (&index->set_list, rule);
+	/* Execute event hook. */
+	if (route_map_master.event_hook)
+	  (*route_map_master.event_hook) (RMAP_EVENT_SET_DELETED,
+					  index->map->name);
+        return 0;
       }
   /* Can't find matched rule. */
   return 1;
@@ -705,7 +725,7 @@ route_map_apply (struct route_map *map, struct prefix *prefix,
 	      struct route_map_index *next;
 
 	      next = index->next;
-	      while(next && next->pref < index->nextpref)
+	      while (next && next->pref < index->nextpref)
 		{
 		  index = next;
 		  next = next->next;
@@ -724,15 +744,21 @@ route_map_apply (struct route_map *map, struct prefix *prefix,
 }
 
 void
-route_map_add_hook (void (*func) ())
+route_map_add_hook (void (*func) (char *))
 {
   route_map_master.add_hook = func;
 }
 
 void
-route_map_delete_hook (void (*func) ())
+route_map_delete_hook (void (*func) (char *))
 {
   route_map_master.delete_hook = func;
+}
+
+void
+route_map_event_hook (void (*func) (route_map_event_t, char *))
+{
+  route_map_master.event_hook = func;
 }
 
 void
@@ -773,7 +799,8 @@ DEFUN (route_map, route_map_cmd,
   pref = strtoul (argv[2], &endptr, 10);
   if (pref == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "the fourth field must be positive integer%s", VTY_NEWLINE);
+      vty_out (vty, "the fourth field must be positive integer%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
   if (pref == 0 || pref > 65535)
@@ -842,7 +869,8 @@ DEFUN (no_route_map, no_route_map_cmd,
   pref = strtoul (argv[2], &endptr, 10);
   if (pref == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "the fourth field must be positive integer%s", VTY_NEWLINE);
+      vty_out (vty, "the fourth field must be positive integer%s",
+	       VTY_NEWLINE);
       return CMD_WARNING;
     }
   if (pref == 0 || pref > 65535)
@@ -870,7 +898,11 @@ DEFUN (no_route_map, no_route_map_cmd,
     }
 
   /* Delete index from route map. */
-  route_map_index_delete (index);
+  route_map_index_delete (index, 1);
+
+  /* If this route rule is the last one, delete route map itself. */
+  if (route_map_empty (map))
+    route_map_delete (map);
 
   return CMD_SUCCESS;
 }
@@ -884,10 +916,10 @@ DEFUN (rmap_onmatch_next,
   struct route_map_index *index;
 
   index = vty->index;
-  if(index)
-    {
-      index->exitpolicy = RMAP_NEXT;
-    }
+
+  if (index)
+    index->exitpolicy = RMAP_NEXT;
+
   return CMD_SUCCESS;
 }
 
@@ -901,10 +933,10 @@ DEFUN (no_rmap_onmatch_next,
   struct route_map_index *index;
 
   index = vty->index;
-  if(index)
-    {
-      index->exitpolicy = RMAP_EXIT;
-    }
+  
+  if (index)
+    index->exitpolicy = RMAP_EXIT;
+
   return CMD_SUCCESS;
 }
 
@@ -915,18 +947,16 @@ DEFUN (rmap_onmatch_goto,
        "Goto Clause number\n"
        "Number\n")
 {
-  int d=0;
   struct route_map_index *index;
+  int d = 0;
 
-  if(argv[0])
-    {
-      d = atoi(argv[0]);
-    }
+  if (argv[0])
+    d = atoi(argv[0]);
 
   index = vty->index;
-  if(index)
+  if (index)
     {
-      if(d <= index->pref)
+      if (d <= index->pref)
 	{
 	  /* Can't allow you to do that, Dave */
 	  vty_out (vty, "can't jump backwards in route-maps%s", 
@@ -952,13 +982,12 @@ DEFUN (no_rmap_onmatch_goto,
   struct route_map_index *index;
 
   index = vty->index;
-  if(index)
-    {
-      index->exitpolicy = RMAP_EXIT;
-    }
+
+  if (index)
+    index->exitpolicy = RMAP_EXIT;
+  
   return CMD_SUCCESS;
 }
-
 
 /* Configuration write function. */
 int
@@ -1008,6 +1037,7 @@ struct cmd_node rmap_node =
 {
   RMAP_NODE,
   "%s(config-route-map)# ",
+  1
 };
 
 /* Initialization of route map vector. */

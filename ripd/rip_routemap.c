@@ -1,6 +1,5 @@
-/*
- * RIPv2 routemap.
- * Copyright (C) 1999 Kunihiro Ishiguro
+/* RIPv2 routemap.
+ * Copyright (C) 1999 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -138,11 +137,14 @@ rip_route_map_update ()
 {
   int i;
 
-  for (i = 0; i < ZEBRA_ROUTE_MAX; i++) 
+  if (rip) 
     {
-      if (rip->route_map[i].name)
-	rip->route_map[i].map = 
-	  route_map_lookup_by_name (rip->route_map[i].name);
+      for (i = 0; i < ZEBRA_ROUTE_MAX; i++) 
+	{
+	  if (rip->route_map[i].name)
+	    rip->route_map[i].map = 
+	      route_map_lookup_by_name (rip->route_map[i].name);
+	}
     }
 }
 
@@ -375,6 +377,7 @@ route_set_metric (void *rule, struct prefix *prefix,
     
       /* Set metric out value. */
       rinfo->metric_out = *metric;
+      rinfo->metric_set = 1;
     }
   return RMAP_OKAY;
 }
@@ -388,7 +391,7 @@ route_set_metric_compile (char *arg)
   metric = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
   *metric = atoi (arg);
 
-  if (*metric > 0)
+  if (*metric >= 0 && *metric <= 16)
     return metric;
 
   XFREE (MTYPE_ROUTE_MAP_COMPILED, metric);
@@ -476,7 +479,7 @@ struct route_map_rule_cmd route_set_ip_nexthop_cmd =
 
 DEFUN (match_metric, 
        match_metric_cmd,
-       "match metric <0-16>",
+       "match metric <0-4294967295>",
        MATCH_STR
        "Match metric of route\n"
        "Metric value\n")
@@ -486,7 +489,7 @@ DEFUN (match_metric,
 
 DEFUN (no_match_metric,
        no_match_metric_cmd,
-       "no match metric <0-16>",
+       "no match metric <0-4294967295>",
        NO_STR
        MATCH_STR
        "Match metric of route\n"
@@ -524,7 +527,19 @@ DEFUN (match_ip_nexthop,
        "Next hop address\n"
        "IP address of next hop\n")
 {
-  return rip_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
+  struct in_addr id;
+  char *id_str;
+  int ret;
+
+  id_str = argv[0];
+  ret = inet_aton (id_str, &id);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed Next-hop address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return rip_route_match_add (vty, vty->index, "ip next-hop", inet_ntoa(id));
 }
 
 DEFUN (no_match_ip_nexthop,
@@ -566,7 +581,7 @@ DEFUN (no_match_ip_address,
 
 DEFUN (set_metric,
        set_metric_cmd,
-       "set metric <0-16>",
+       "set metric <0-4294967295>",
        SET_STR
        "Metric value for destination routing protocol\n"
        "Metric value\n")
@@ -576,14 +591,24 @@ DEFUN (set_metric,
 
 DEFUN (no_set_metric,
        no_set_metric_cmd,
-       "no set metric <0-16>",
+       "no set metric",
+       NO_STR
+       SET_STR
+       "Metric value for destination routing protocol\n")
+{
+  if (argc == 0)
+    return rip_route_set_delete (vty, vty->index, "metric", NULL);
+
+  return rip_route_set_delete (vty, vty->index, "metric", argv[0]);
+}
+
+ALIAS (no_set_metric,
+       no_set_metric_val_cmd,
+       "no set metric <0-4294967295>",
        NO_STR
        SET_STR
        "Metric value for destination routing protocol\n"
        "Metric value\n")
-{
-  return rip_route_set_delete (vty, vty->index, "metric", argv[0]);
-}
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
@@ -593,20 +618,43 @@ DEFUN (set_ip_nexthop,
        "Next hop address\n"
        "IP address of next hop\n")
 {
-  return rip_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
+  struct in_addr id;
+  char *id_str;
+  int ret;
+
+  id_str = argv[0];
+  ret = inet_aton (id_str, &id);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed Next-hop address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  return rip_route_set_add (vty, vty->index, "ip next-hop", inet_ntoa(id));
 }
 
 DEFUN (no_set_ip_nexthop,
        no_set_ip_nexthop_cmd,
+       "no set ip next-hop",
+       NO_STR
+       SET_STR
+       IP_STR
+       "Next hop address\n")
+{
+  if (argc == 0)
+    return rip_route_set_delete (vty, vty->index, "ip next-hop", NULL);
+  
+  return rip_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
+}
+
+ALIAS (no_set_ip_nexthop,
+       no_set_ip_nexthop_val_cmd,
        "no set ip next-hop A.B.C.D",
        NO_STR
        SET_STR
        IP_STR
        "Next hop address\n"
        "IP address of next hop\n")
-{
-  return rip_route_set_delete (vty, vty->index, "ip next-hop", argv[0]);
-}
 
 void
 rip_route_map_reset ()
@@ -621,6 +669,7 @@ rip_route_map_init ()
   route_map_init ();
   route_map_init_vty ();
   route_map_add_hook (rip_route_map_update);
+  route_map_delete_hook (rip_route_map_update);
 
   route_map_install_match (&route_match_metric_cmd);
   route_map_install_match (&route_match_interface_cmd);
@@ -641,6 +690,8 @@ rip_route_map_init ()
   
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);
+  install_element (RMAP_NODE, &no_set_metric_val_cmd);
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
+  install_element (RMAP_NODE, &no_set_ip_nexthop_val_cmd);
 }

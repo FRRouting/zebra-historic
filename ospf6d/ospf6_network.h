@@ -38,7 +38,7 @@ void iov_free_all (int, struct iovec *);
 void iov_copy_all (struct iovec *, struct iovec *, size_t);
 
 int ospf6_serv_sock ();
-void ospf6_join_allspfrouters (u_int);
+int ospf6_join_allspfrouters (u_int);
 void ospf6_leave_allspfrouters (u_int);
 void ospf6_join_alldrouters (u_int);
 void ospf6_leave_alldrouters (u_int);

@@ -34,6 +34,7 @@
 #define OSPF_PATH_TYPE2_EXTERNAL	4
 #define OSPF_PATH_MAX			5
 
+#ifndef NEW_OSPF_ROUTE
 /* OSPF Path. */
 struct ospf_path
 {
@@ -60,7 +61,6 @@ struct ospf_router_route
    nr->info is a (struct ospf_router_route *) for OSPF_DESTINATION_ROUTER
 */
 
-#if 1
 struct route_standard
 {
   /* Link Sate Origin. */
@@ -129,6 +129,11 @@ struct ospf_route
 /* OSPF netxhop. */
 struct ospf_nexthop
 {
+  /* Type of NextHop. */
+  u_char type;
+#define OSPF_NEXTHOP_ADDRESS;
+#define OSPF_NEXTHOP_INTERFACE;
+
   /* Nexthop Address or Interface. */
   union
   {
@@ -160,7 +165,8 @@ struct ospf_path
   } u;
 
   /* Nexthops. */
-  list nexthop;
+  struct ospf_nexthop *nexthop;
+  /* list nexthop; */
 #if 0
   /* Link State Origin. */
   struct ospf_lsa *origin;
@@ -184,6 +190,8 @@ struct network_route
   /* Store each type of paths. */
   struct ospf_path *path[OSPF_PATH_MAX];
 };
+
+typedef struct network_route ospf_route;
 
 struct router_route
 {

@@ -115,5 +115,8 @@ void ospf6_debug_init ();
 int is_ospf6_message_dump(char);
 void ospf6_dump_ddbit (unsigned char, char *, size_t);
 
+void
+ospf6_dump_lsa_header_print (char *, int , struct ospf6_lsa_header *);
+
 #endif /* OSPF6_DUMP_H */
 

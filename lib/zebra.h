@@ -182,21 +182,23 @@
 #endif /* IN6_ARE_ADDR_EQUAL */
 
 /* Zebra message types. */
-#define ZEBRA_INTERFACE_ADD              1
-#define ZEBRA_INTERFACE_DELETE           2
-#define ZEBRA_INTERFACE_ADDRESS_ADD      3
-#define ZEBRA_INTERFACE_ADDRESS_DELETE   4
-#define ZEBRA_IPV4_ROUTE_ADD             5
-#define ZEBRA_IPV4_ROUTE_DELETE          6
-#define ZEBRA_IPV6_ROUTE_ADD             7
-#define ZEBRA_IPV6_ROUTE_DELETE          8
-#define ZEBRA_REDISTRIBUTE_ADD           9
-#define ZEBRA_REDISTRIBUTE_DELETE       10
-
-#define ZEBRA_INTERFACE_UP              11
-#define ZEBRA_INTERFACE_DOWN            12
-
-#define ZEBRA_MESSAGE_MAX               13
+#define ZEBRA_INTERFACE_ADD                1
+#define ZEBRA_INTERFACE_DELETE             2
+#define ZEBRA_INTERFACE_ADDRESS_ADD        3
+#define ZEBRA_INTERFACE_ADDRESS_DELETE     4
+#define ZEBRA_INTERFACE_UP                 5
+#define ZEBRA_INTERFACE_DOWN               6
+#define ZEBRA_IPV4_ROUTE_ADD               7
+#define ZEBRA_IPV4_ROUTE_DELETE            8
+#define ZEBRA_IPV6_ROUTE_ADD               9
+#define ZEBRA_IPV6_ROUTE_DELETE           10
+#define ZEBRA_REDISTRIBUTE_ADD            11
+#define ZEBRA_REDISTRIBUTE_DELETE         12
+#define ZEBRA_REDISTRIBUTE_DEFAULT_ADD    13
+#define ZEBRA_REDISTRIBUTE_DEFAULT_DELETE 14
+#define ZEBRA_IPV4_NEXTHOP_LOOKUP         15
+#define ZEBRA_IPV6_NEXTHOP_LOOKUP         16
+#define ZEBRA_MESSAGE_MAX                 17
 
 /* Zebra route's types. */
 #define ZEBRA_ROUTE_SYSTEM               0
@@ -241,6 +243,22 @@
 #define SAFI_UNICAST_MULTICAST    3
 #define SAFI_MPLS_VPN             4
 #define SAFI_MAX                  5
+
+/* Default Administrative Distance of each protocol. */
+#define ZEBRA_KERNEL_DISTANCE_DEFAULT      0
+#define ZEBRA_CONNECT_DISTANCE_DEFAULT     0
+#define ZEBRA_STATIC_DISTANCE_DEFAULT      1
+#define ZEBRA_RIP_DISTANCE_DEFAULT       120
+#define ZEBRA_RIPNG_DISTANCE_DEFAULT     120
+#define ZEBRA_OSPF_DISTANCE_DEFAULT      110
+#define ZEBRA_OSPF6_DISTANCE_DEFAULT     110
+#define ZEBRA_IBGP_DISTANCE_DEFAULT      200
+#define ZEBRA_EBGP_DISTANCE_DEFAULT       20
+
+/* Flag manipulation macros. */
+#define CHECK_FLAG(V,F)      ((V) & (F))
+#define SET_FLAG(V,F)        (V) = (V) | (F)
+#define UNSET_FLAG(V,F)      (V) = (V) & ~(F)
 
 /* AFI and SAFI type. */
 typedef u_int16_t afi_t;

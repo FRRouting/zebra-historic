@@ -8,8 +8,8 @@ END-INFO-DIR-ENTRY
    This file documents the GNU Zebra software which manages common
 TCP/IP routing protocols.
 
-   This is Edition 0.1, last updated 3 January 2000 of `The GNU Zebra
-Manual', for Zebra Version 0.85.
+   This is Edition 0.1, last updated 5 July 2000 of `The GNU Zebra
+Manual', for Zebra Version 0.88.
 
    Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
@@ -26,6 +26,281 @@ permission notice identical to this one.
 manual into another language, under the above conditions for modified
 versions, except that this permission notice may be stated in a
 translation approved by Kunihiro Ishiguro.
+
+
+File: zebra.info,  Node: RIP Timers,  Next: Show RIP Information,  Prev: RIP Authentication,  Up: ripd
+
+RIP Timers
+==========
+
+ - RIP command: timers basic UPDATE TIMEOUT GARBAGE
+     RIP protocol has several timers.  User can configure those timer's
+     value by `timers basic' command.
+
+     The default settings for the timers are as follows:
+
+        * The update timer is 30 seconds. Every update timer seconds,
+          the RIP process is awakened to send an unsolicited Response
+          message containing the complete routing table to all
+          neighboring RIP routers.
+
+        * The timeout timer is 180 seconds. Upon expiration of the
+          timeout, the route is no longer valid; however, it is
+          retained in the routing table for a short time so that
+          neighbors can be notified that the route has been dropped.
+
+        * The garbage collect timer is 120 seconds.  Upon expiration of
+          the garbage-collection timer, the route is finally removed
+          from the routing table.
+
+
+     The `timers basic' command allows the the default values of the
+     timers listed above to be changed.
+
+ - RIP command: no timers basic
+     The `no timers basic' command will reset the timers to the default
+     settings listed above.
+
+
+File: zebra.info,  Node: Show RIP Information,  Next: RIP Debug Commands,  Prev: RIP Timers,  Up: ripd
+
+Show RIP Information
+====================
+
+   To display RIP routes.
+
+ - Command: show ip rip
+     Show RIP routes.
+
+   The command will display all RIP routes. For routes that are received
+through RIP, this command will display the time the packet was sent and
+the tag information.  This command will also display this information
+for routes redistributed into RIP.
+
+ - Command: show ip protocols
+     The command display current RIP status.  It includes RIP timer,
+     filtering, version, RIP enabled interface and RIP peer inforation.
+
+     ripd> show ip protocols
+     Routing Protocol is "rip"
+       Sending updates every 30 seconds with +/-50%, next due in 35 seconds
+       Timeout after 180 seconds, garbage collect after 120 seconds
+       Outgoing update filter list for all interface is not set
+       Incoming update filter list for all interface is not set
+       Default redistribution metric is 1
+       Redistributing: kernel connected
+       Default version control: send version 2, receive version 2
+         Interface        Send  Recv
+       Routing for Networks:
+         eth0
+         eth1
+         1.1.1.1
+         203.181.89.241
+       Routing Information Sources:
+         Gateway          BadPackets BadRoutes  Distance Last Update
+
+
+File: zebra.info,  Node: RIP Debug Commands,  Prev: Show RIP Information,  Up: ripd
+
+RIP Debug Commands
+==================
+
+   Debug for RIP protocol.
+
+ - Command: debug rip events
+     Debug rip events.
+
+   `debug rip' will show RIP events.  Sending and receiving packets,
+timers, and changes in interfaces are events shown with ripd.
+
+ - Command: debug rip packet
+     Debug rip packet.
+
+   `debug rip packet' will display detailed information about the RIP
+packets.  The origin and port number of the packet as well as a packet
+dump is shown.
+
+ - Command: debug rip zebra
+     Debug rip between zebra communication.
+
+   This command will show the communication between ripd and zebra.  The
+main information will include addition and deletion of paths to the
+kernel and the sending and receiving of interface information.
+
+ - Command: show debugging rip
+     Display ripd's debugging option.
+
+   `show debugging rip' will show all information currently set for ripd
+debug.
+
+
+File: zebra.info,  Node: ripngd,  Next: ospfd,  Prev: ripd,  Up: Top
+
+ripngd
+******
+
+   `ripngd' supports the RIPng protocol as described in RFC2080.  It's
+an IPv6 reincarnation of the RIP protocol.
+
+* Menu:
+
+* Invoking ripngd::
+* ripngd Configuration::
+* ripngd Terminal Mode Commands::
+* ripngd Filtering Commands::
+
+
+File: zebra.info,  Node: Invoking ripngd,  Next: ripngd Configuration,  Prev: ripngd,  Up: ripngd
+
+Invoking ripngd
+===============
+
+   There are no `ripngd' specific invocation options.  Common options
+can be specified (*note Common Invocation Options::).
+
+
+File: zebra.info,  Node: ripngd Configuration,  Next: ripngd Terminal Mode Commands,  Prev: Invoking ripngd,  Up: ripngd
+
+ripngd Configuration
+====================
+
+   Currently ripngd supports the following commands:
+
+ - Command: router ripng
+     Enable RIPng.
+
+ - RIPng Command: flush_timer TIME
+     Set flush timer.
+
+ - RIPng Command: network NETWORK
+     Set RIPng enable interface by NETWORK
+
+ - RIPng Command: network IFNAME
+     Set RIPng enable interface by IFNAME
+
+ - RIPng Command: route NETWORK
+     Set RIPng static routing announcement of NETWORK.
+
+ - Command: router zebra
+     This command is the default and does not appear in the
+     configuration.  With this statement, RIPng routes go to the
+     `zebra' daemon.
+
+
+File: zebra.info,  Node: ripngd Terminal Mode Commands,  Next: ripngd Filtering Commands,  Prev: ripngd Configuration,  Up: ripngd
+
+ripngd Terminal Mode Commands
+=============================
+
+ - Command: show ip ripng
+
+ - Command: show debugging ripng
+
+ - Command: debug ripng events
+
+ - Command: debug ripng packet
+
+ - Command: debug ripng zebra
+
+
+File: zebra.info,  Node: ripngd Filtering Commands,  Prev: ripngd Terminal Mode Commands,  Up: ripngd
+
+ripngd Filtering Commands
+=========================
+
+ - Command: distribute-list ACCESS_LIST (in|out) IFNAME
+     You can apply an access-list to the interface using the
+     `distribute-list' command.  ACCESS_LIST is an access-list name.
+     DIRECT is `in' or `out'.  If DIRECT is `in', the access-list is
+     applied only to incoming packets.
+
+          distribute-list local-only out sit1
+
+
+File: zebra.info,  Node: ospfd,  Next: ospf6d,  Prev: ripngd,  Up: Top
+
+ospfd
+*****
+
+   `ospfd' provides an OSPF version 2 routing protocol as described in
+RFC2328.  OSPF is one of IGPs (Interior Gateway Protocols).  Compared
+with RIP, OSPF can serve much more networks and priod of convergence is
+very short.  OSPF is widely used in large networks such as ISP backbone
+and enterprise network.
+
+* Menu:
+
+* Configuring ospfd::
+* OSPF router::
+* OSPF area::
+* OSPF interface::
+* Redistribute routes to OSPF::
+* Showing OSPF information::
+* Debugging OSPF::
+
+
+File: zebra.info,  Node: Configuring ospfd,  Next: OSPF router,  Prev: ospfd,  Up: ospfd
+
+Configuring ospfd
+=================
+
+   There is no `ospfd' specific options.  Common options can be
+specified (*note Common Invocation Options::) to `ospfd'.  `ospfd'
+needs interface information from `zebra'.  So please make it sure
+`zebra' is running before invoking `ospfd'.
+
+   Like other daemons `ospfd' configuration is done in OSPF specific
+configuration file `ospfd.conf'.
+
+
+File: zebra.info,  Node: OSPF router,  Next: OSPF area,  Prev: Configuring ospfd,  Up: ospfd
+
+OSPF router
+===========
+
+   To start OSPF process you have to specify OSPF router.  As of this
+writing `ospfd' does not support multiple OSPF process.
+
+ - Command: router ospf
+ - Command: no router ospf
+     Enable or disable the OSPF process.  `ospfd' does not yet support
+     multiple OSPF processes.  So you can not specify an OSPF process
+     number.
+
+ - OSPF Command: ospf router-id A.B.C.D
+ - OSPF Command: no ospf router-id
+
+ - OSPF Command: ospf abr-type TYPE
+ - OSPF Command: no ospf abr-type TYPE
+     TYPE can be cisco|ibm|shortcut|standard
+
+ - OSPF Command: ospf rfc1583compatibility
+ - OSPF Command: no ospf rfc1583compatibility
+
+ - OSPF Command: passive interface INTERFACE
+ - OSPF Command: no passive interface INTERFACE
+
+ - OSPF Command: timers spf <0-4294967295> <0-4294967295>
+ - OSPF Command: no timers spf
+
+ - OSPF Command: refresh group-limit <0-10000>
+ - OSPF Command: refresh per-slice <0-10000>
+ - OSPF Command: refresh age-diff <0-10000>
+
+ - OSPF Command: auto-cost refrence-bandwidth <1-4294967>
+ - OSPF Command: no auto-cost refrence-bandwidth
+
+ - OSPF Command: network A.B.C.D/M area A.B.C.D
+ - OSPF Command: network A.B.C.D/M area <0-4294967295>
+ - OSPF Command: no network A.B.C.D/M area A.B.C.D
+ - OSPF Command: no network A.B.C.D/M area <0-4294967295>
+     This command specifies the OSPF enabled interface.  If the
+     interface has an address of 10.0.0.1/8 then the command below
+     provides network information to the ospf beasties
+          router ospf
+           network 10.0.0.0/8 area 0
+     the network command's mask length should be the same as the
+     interface address's mask.
 
 
 File: zebra.info,  Node: OSPF area,  Next: OSPF interface,  Prev: OSPF router,  Up: ospfd
@@ -155,29 +430,49 @@ Redistribute routes to OSPF
 
  - OSPF Command: redistribute (kernel|connected|static|rip|bgp)
  - OSPF Command: redistribute (kernel|connected|static|rip|bgp)
+ROUTE-MAP
+ - OSPF Command: redistribute (kernel|connected|static|rip|bgp)
 metric-type (1|2)
+ - OSPF Command: redistribute (kernel|connected|static|rip|bgp)
+metric-type (1|2) route-map WORD
  - OSPF Command: redistribute (kernel|connected|static|rip|bgp) metric
 <0-16777214>
+ - OSPF Command: redistribute (kernel|connected|static|rip|bgp) metric
+<0-16777214> route-map WORD
  - OSPF Command: redistribute (kernel|connected|static|rip|bgp)
 metric-type (1|2) metric <0-16777214>
+ - OSPF Command: redistribute (kernel|connected|static|rip|bgp)
+metric-type (1|2) metric <0-16777214> route-map WORD
  - OSPF Command: no redistribute (kernel|connected|static|rip|bgp)
- - OSPF Command: no redistribute (kernel|connected|static|rip|bgp)
-metric-type (1|2)
- - OSPF Command: no redistribute (kernel|connected|static|rip|bgp)
-metric <0-16777214>
- - OSPF Command: no redistribute (kernel|connected|static|rip|bgp)
-metric-type (1|2) metric <0-16777214>
 
- - OSPF Command: distribute-list NAME out kernel
- - OSPF Command: no distribute-list NAME out kernel
- - OSPF Command: distribute-list NAME out connected
- - OSPF Command: no distribute-list NAME out connected
- - OSPF Command: distribute-list NAME out static
- - OSPF Command: no distribute-list NAME out static
- - OSPF Command: distribute-list NAME out rip
- - OSPF Command: no distribute-list NAME out rip
- - OSPF Command: distribute-list NAME out bgp
- - OSPF Command: no distribute-list NAME out bgp
+ - OSPF Command: default-information originate
+ - OSPF Command: default-information originate metric <0-16777214>
+ - OSPF Command: default-information originate metric <0-16777214>
+metric-type (1|2)
+ - OSPF Command: default-information originate metric <0-16777214>
+metric-type (1|2) route-map WORD
+ - OSPF Command: default-information originate always
+ - OSPF Command: default-information originate always metric
+<0-16777214>
+ - OSPF Command: default-information originate always metric
+<0-16777214> metric-type (1|2)
+ - OSPF Command: default-information originate always metric
+<0-16777214> metric-type (1|2) route-map WORD
+ - OSPF Command: no default-information originate
+
+ - OSPF Command: distribute-list NAME out
+(kernel|connected|static|rip|ospf
+ - OSPF Command: no distribute-list NAME out
+(kernel|connected|static|rip|ospf
+
+ - OSPF Command: default-metric <0-16777214>
+ - OSPF Command: no default-metric
+
+ - OSPF Command: distance <1-255>
+ - OSPF Command: no distance <1-255>
+
+ - OSPF Command: distance ospf (intra-area|inter-area|external) <1-255>
+ - OSPF Command: no distance ospf
 
  - Command: router zebra
  - Command: no router zebra
@@ -199,19 +494,24 @@ Showing OSPF information
 
  - Command: show ip ospf database
 
- - Command: show ip ospf database adbr-summary
-
- - Command: show ip ospf database external
+ - Command: show ip ospf database
+(asbr-summary|external|network|router|summary)
+ - Command: show ip ospf database
+(asbr-summary|external|network|router|summary) LINK-STATE-ID
+ - Command: show ip ospf database
+(asbr-summary|external|network|router|summary) LINK-STATE-ID adv-router
+ADV-ROUTER
+ - Command: show ip ospf database
+(asbr-summary|external|network|router|summary) adv-router ADV-ROUTER
+ - Command: show ip ospf database
+(asbr-summary|external|network|router|summary) LINK-STATE-ID
+self-originate
+ - Command: show ip ospf database
+(asbr-summary|external|network|router|summary) self-originate
 
  - Command: show ip ospf database max-age
 
- - Command: show ip ospf database network
-
- - Command: show ip ospf database router
-
  - Command: show ip ospf database self-originate
-
- - Command: show ip ospf database summary
 
  - Command: show ip ospf refresher
 
@@ -237,6 +537,16 @@ Debugging OSPF
  - Command: debug ospf nsm (status|events|timers)
  - Command: no debug ospf nsm
  - Command: no debug ospf nsm (status|events|timers)
+
+ - Command: debug ospf lsa
+ - Command: debug ospf lsa (generate|flooding|refresh)
+ - Command: no debug ospf lsa
+ - Command: no debug ospf lsa (generate|flooding|refresh)
+
+ - Command: debug ospf zebra
+ - Command: debug ospf zebra (interface|redistribute)
+ - Command: no debug ospf zebra
+ - Command: no debug ospf zebra (interface|redistribute)
 
  - Command: show debugging ospf
 
@@ -341,7 +651,7 @@ Showing OSPF6 information
      This command shows internal routing table.
 
 
-File: zebra.info,  Node: bgpd,  Next: Filtering,  Prev: ospf6d,  Up: Top
+File: zebra.info,  Node: bgpd,  Next: vtysh,  Prev: ospf6d,  Up: Top
 
 bgpd
 ****
@@ -586,7 +896,10 @@ BGP terminal mode commands
  - Command: show ip bgp neighbor [PEER]
 
  - Command: clear ip bgp PEER
-     Clears peers which have addresses of X.X.X.X
+     Clear peers which have addresses of X.X.X.X
+
+ - Command: clear ip bgp PEER soft in
+     Clear peer using soft reconfiguration.
 
  - Command: show debug
 
@@ -869,8 +1182,28 @@ File: zebra.info,  Node: Dump BGP packet and table,  Prev: How to set up a 6-Bon
 Dump BGP packet and table
 =========================
 
+ - Command: dump bgp all PATH
+ - Command: dump bgp all PATH INTERVAL
+     Dump all BGP packet and events to PATH file.
+
+ - Command: dump bgp updates PATH
+ - Command: dump bgp updates PATH INTERVAL
+     Dump BGP updates to PATH file.
+
+ - Command: dump bgp routes PATH
+ - Command: dump bgp routes PATH
+     Dump whole BGP routing table to PATH.  This is heavy process.
+
 
-File: zebra.info,  Node: Filtering,  Next: Route Map,  Prev: bgpd,  Up: Top
+File: zebra.info,  Node: vtysh,  Next: Filtering,  Prev: bgpd,  Up: Top
+
+vtysh
+*****
+
+   `vtysh' is integrated shell of Zebra software.
+
+
+File: zebra.info,  Node: Filtering,  Next: Route Map,  Prev: vtysh,  Up: Top
 
 Filtering
 *********
@@ -1189,131 +1522,4 @@ Router Advertisement
      interface eth0
       ipv6 nd send-ra
       ipv6 nd prefix-advertisement 3ffe:506:5009::/64
-
-
-File: zebra.info,  Node: Kernel Interface,  Next: SNMP Support,  Prev: IPv6 Supports,  Up: Top
-
-Kernel Interface
-****************
-
-   There are several different methods for reading kernel routing table
-information, updating kernel routing tables, and for looking up
-interfaces.
-
-`ioctl'
-     The `ioctl' method is a very traditional way for reading or writing
-     kernel information.  `ioctl' can be used for looking up interfaces
-     and for modifying interface addresses, flags, mtu settings and
-     other types of information.  Also, `ioctl' can insert and delete
-     kernel routing table entries.  It will soon be available on almost
-     any platform which zebra supports, but it is a little bit ugly
-     thus far, so if a better method is supported by the kernel zebra
-     will use that.
-
-`sysctl'
-     `sysctl' can lookup kernel information using MIB (Management
-     Information Base) syntax.  Normally, it only provides a way of
-     getting information from the kernel.  So one would usually want to
-     change kernel information using another method such as `ioctl'.
-
-`proc filesystem'
-     `proc filesystem' provides an easy way of getting kernel
-     information.
-
-`routing socket'
-
-`netlink'
-
-File: zebra.info,  Node: SNMP Support,  Next: Linux Netlink,  Prev: Kernel Interface,  Up: Top
-
-SNMP Support
-************
-
-   SNMP (Simple Network Managing Protocol) is widely implemented feature
-for collecting network information from router and/or host.  Zebra
-itself does not support SNMP agent functionality.  But conjuction with
-SNMP agent, Zebra provides routing protocol MIBs.
-
-   Zebra uses SMUX protocol (RFC1227) for making communication with SNMP
-agent.  There are several SNMP agent which support SMUX.  We recommend
-to use the latest `ucd-snmp' software.
-
-* Menu:
-
-* How to get ucd-snmp::
-* SMUX configuration::
-
-
-File: zebra.info,  Node: How to get ucd-snmp,  Next: SMUX configuration,  Prev: SNMP Support,  Up: SNMP Support
-
-How to get ucd-snmp
-===================
-
-   ucd-snmp is a free software which distributed so called "as is"
-software license.  Please check the license which comes with
-distribution of `ucd-snmp'.  The authors of ucd-snmp are the University
-of California, the University of California at Davis, and the Electrical
-Engineering department at the University of California at Davis.
-
-   You can get ucd-snmp from <ftp://ucd-smp.ucdavis.edu/>.  As of this
-writing we are testing with `ucd-snmp-4.1.pre1.tar.gz'.
-
-   To enable SMUX protocol support, please configure `ucd-snmp' like
-below.
-
-     % configure --with-mib-modules=smux
-
-   After compile and install `ucd-snmp', you will need to configure
-smuxpeer.  I'm now using below configuration.  This means SMUX client
-connect under MIB 1.3.6.1.6.3.1 with password test.
-
-     /usr/local/share/snmp/snmpd.conf
-     ================================
-     smuxpeer 1.3.6.1.6.3.1 test
-
-
-File: zebra.info,  Node: SMUX configuration,  Prev: How to get ucd-snmp,  Up: SNMP Support
-
-SMUX configuration
-==================
-
-   To enable SNMP support of Zebra, you have to configure Zebra with
-`--enable-snmp' (*note Configure the Software::).
-
- - Command: smux peer OID
- - Command: no smux peer OID
-
- - Command: smux peer OID PASSWORD
- - Command: no smux peer OID PASSWORD
-
-     !
-     smux peer .1.3.6.1.6.3.1 test
-     !
-
-
-File: zebra.info,  Node: Linux Netlink,  Next: Zebra Protocol,  Prev: SNMP Support,  Up: Top
-
-Linux Netlink
-*************
-
-   On recent Linux kernels (2.0.x and 2.2.x), there is a kernel/user
-communication support called `netlink'.  It makes asynchronous
-communication between kernel and Zebra possible, similar to a routing
-socket on BSD systems.
-
-   Before you use this feature, be sure to select the kernel/netlink
-support option 'Kernel/User network link driver' and 'Routing messages'.
-
-   Today, the /dev/route special device file is obsolete.  Netlink
-communication is done by reading/writing over netlink socket.
-
-   After the kernel configuration, please reconfigure and rebuild Zebra.
-You can use netlink as a dynamic routing update channel between Zebra
-and the kernel.
-
-
-File: zebra.info,  Node: Zebra Protocol,  Next: Packet Binary Dump Format,  Prev: Linux Netlink,  Up: Top
-
-Zebra Protocol
-**************
 

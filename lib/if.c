@@ -353,9 +353,9 @@ if_index_address (struct in6_addr *addr)
 
 DEFUN (interface_desc, 
        interface_desc_cmd,
-       "description ...",
-       "Set interface description\n"
-       "Description\n")
+       "description .LINE",
+       "Interface specific description\n"
+       "Characters describing this interface\n")
 {
   int i;
   struct interface *ifp;
@@ -384,10 +384,9 @@ DEFUN (interface_desc,
 
 DEFUN (no_interface_desc, 
        no_interface_desc_cmd,
-       "no description [description]",
+       "no description",
        NO_STR
-       "Delete interface description\n"
-       "Description\n")
+       "Interface specific description\n")
 {
   struct interface *ifp;
 
@@ -413,12 +412,50 @@ DEFUN (interface,
     {
       ifp = if_create ();
       strncpy (ifp->name, argv[0], INTERFACE_NAMSIZ);
-
-      /* Pseudo interface. */
-      ifp->ifindex = 0;
     }
   vty->index = ifp;
   vty->node = INTERFACE_NODE;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (interface_pseudo,
+       interface_pseudo_cmd,
+       "pseudo",
+       "Specify pseudo interface\n")
+{
+  struct interface *ifp;
+
+  ifp = vty->index;
+
+  /* real interface could become pseudo real */    
+  if (!IS_IF_PSEUDO(ifp) && (ifp->ifindex != INTERFACE_PSEUDO)){
+    IF_PSEUDO_SET(ifp);
+  }
+
+  /* new interface could become pseudo */
+  if (!IS_IF_PSEUDO(ifp) && (ifp->ifindex == INTERFACE_PSEUDO)){
+    IF_PSEUDO_SET(ifp);
+  }
+  
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_interface_pseudo,
+       no_interface_pseudo_cmd,
+       "no pseudo",
+       NO_STR
+       "Specify pseudo interface\n")
+{
+  struct interface *ifp;
+
+  ifp = vty->index;
+
+  /* pseudo real interface become real */
+  if (IS_IF_PSEUDO(ifp) && (ifp->ifindex != INTERFACE_PSEUDO)){
+     IF_PSEUDO_UNSET(ifp);
+  }
+
 
   return CMD_SUCCESS;
 }
@@ -547,10 +584,9 @@ connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
     }
 }
 
-#ifdef NRL
 #ifndef HAVE_IF_NAMETOINDEX
 unsigned int
-if_nametoindex (char *name)
+if_nametoindex (const char *name)
 {
   listnode node;
   struct interface *ifp;
@@ -584,4 +620,3 @@ if_indextoname (unsigned int ifindex, char *name)
   return NULL;
 }
 #endif
-#endif /* NRL */

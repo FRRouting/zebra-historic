@@ -204,7 +204,7 @@ main (int argc, char **argv)
 
   /* Library inits. */
   signal_init ();
-  cmd_init ();
+  cmd_init (1);
   vty_init ();
 
   /* RIPngd inits. */

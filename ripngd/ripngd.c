@@ -2200,6 +2200,7 @@ struct cmd_node cmd_ripng_node =
 {
   RIPNG_NODE,
   "%s(config-router)# ",
+  1,
 };
 
 void

@@ -40,26 +40,14 @@ ospf6_routemap_rule_match_address_prefixlist (void *rule,
                                               void *object)
 {
   struct prefix_list *plist;
-  char buf[128];
 
   if (type != RMAP_OSPF6)
     return RMAP_NOMATCH;
 
   plist = prefix_list_lookup (AF_INET6, (char *) rule);
 
-  zlog_info ("DEBUG: apply prefix-list %s", rule);
-
   if (plist == NULL)
     return RMAP_NOMATCH;
-
-  if (prefix_list_apply (plist, prefix) == PREFIX_DENY)
-    zlog_info ("DEBUG: apply prefix-list %s against %s/%d NOT MATCH", rule,
-	       inet_ntop (AF_INET6, &prefix->u.prefix6, buf, sizeof (buf)),
-	       prefix->prefixlen);
-  else
-    zlog_info ("DEBUG: apply prefix-list %s against %s/%d MATCH", rule,
-	       inet_ntop (AF_INET6, &prefix->u.prefix6, buf, sizeof (buf)),
-	       prefix->prefixlen);
 
   return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
           RMAP_NOMATCH : RMAP_MATCH);
@@ -168,6 +156,48 @@ struct route_map_rule_cmd ospf6_routemap_rule_set_metric_cmd =
   ospf6_routemap_rule_set_metric_free,
 };
 
+route_map_result_t
+ospf6_routemap_rule_set_forwarding (void *rule, struct prefix *prefix,
+                                    route_map_object_t type, void *object)
+{
+  char *forwarding;
+  struct ospf6_redistribute_info *info;
+
+  if (type != RMAP_OSPF6)
+    return RMAP_OKAY;
+
+  forwarding = rule;
+  info = object;
+
+  if (inet_pton (AF_INET6, forwarding, &info->forward) != 1)
+    {
+      memset (&info->forward, 0, sizeof (struct in6_addr));
+      return RMAP_ERROR;
+    }
+
+  return RMAP_OKAY;
+}
+
+void *
+ospf6_routemap_rule_set_forwarding_compile (char *arg)
+{
+  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+}
+
+void
+ospf6_routemap_rule_set_forwarding_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+struct route_map_rule_cmd ospf6_routemap_rule_set_forwarding_cmd =
+{
+  "forwarding-address",
+  ospf6_routemap_rule_set_forwarding,
+  ospf6_routemap_rule_set_forwarding_compile,
+  ospf6_routemap_rule_set_forwarding_free,
+};
+
 int
 route_map_command_status (struct vty *vty, int ret)
 {
@@ -252,10 +282,10 @@ DEFUN (ospf6_routemap_no_set_metric_type,
 /* add "set metric" */
 DEFUN (ospf6_routemap_set_metric,
        ospf6_routemap_set_metric_cmd,
-       "set metric METRIC",
+       "set metric <0-4294967295>",
        "Set value\n"
        "Metric value\n"
-       "<0-65535>\n")
+       "Metric value\n")
 {
   int ret = route_map_add_set ((struct route_map_index *) vty->index,
                                "metric", argv[0]);
@@ -265,7 +295,7 @@ DEFUN (ospf6_routemap_set_metric,
 /* delete "set metric" */
 DEFUN (ospf6_routemap_no_set_metric,
        ospf6_routemap_no_set_metric_cmd,
-       "no set metric METRIC",
+       "no set metric <0-4294967295>",
        NO_STR
        "Set value\n"
        "Metric\n"
@@ -273,6 +303,33 @@ DEFUN (ospf6_routemap_no_set_metric,
 {
   int ret = route_map_delete_set ((struct route_map_index *) vty->index,
                                   "metric", argv[0]);
+  return route_map_command_status (vty, ret);
+}
+
+/* add "set forwarding-address" */
+DEFUN (ospf6_routemap_set_forwarding,
+       ospf6_routemap_set_forwarding_cmd,
+       "set forwarding-address X:X::X:X",
+       "Set value\n"
+       "Forwarding Address\n"
+       "IPv6 Address\n")
+{
+  int ret = route_map_add_set ((struct route_map_index *) vty->index,
+                               "forwarding-address", argv[0]);
+  return route_map_command_status (vty, ret);
+}
+
+/* delete "set forwarding-address" */
+DEFUN (ospf6_routemap_no_set_forwarding,
+       ospf6_routemap_no_set_forwarding_cmd,
+       "no set forwarding-address X:X::X:X",
+       NO_STR
+       "Set value\n"
+       "Forwarding Address\n"
+       "IPv6 Address\n")
+{
+  int ret = route_map_delete_set ((struct route_map_index *) vty->index,
+                                  "forwarding-address", argv[0]);
   return route_map_command_status (vty, ret);
 }
 
@@ -287,6 +344,7 @@ ospf6_routemap_init ()
   route_map_install_match (&ospf6_routemap_rule_match_address_prefixlist_cmd);
   route_map_install_set (&ospf6_routemap_rule_set_metric_type_cmd);
   route_map_install_set (&ospf6_routemap_rule_set_metric_cmd);
+  route_map_install_set (&ospf6_routemap_rule_set_forwarding_cmd);
 
   /* Match address prefix-list */
   install_element (RMAP_NODE, &ospf6_routemap_match_address_prefixlist_cmd);
@@ -299,5 +357,9 @@ ospf6_routemap_init ()
   /* ASE Metric */
   install_element (RMAP_NODE, &ospf6_routemap_set_metric_cmd);
   install_element (RMAP_NODE, &ospf6_routemap_no_set_metric_cmd);
+
+  /* ASE Metric */
+  install_element (RMAP_NODE, &ospf6_routemap_set_forwarding_cmd);
+  install_element (RMAP_NODE, &ospf6_routemap_no_set_forwarding_cmd);
 }
 

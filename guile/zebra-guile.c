@@ -28,7 +28,7 @@ init_libzebra ()
   void vty_init();
   void memory_init();
 
-  cmd_init ();
+  cmd_init (1);
   vty_init ();
   memory_init ();
 }

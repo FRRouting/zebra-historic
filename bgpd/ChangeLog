@@ -1,3 +1,158 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+	* bgp_dump.c (dump_bgp_routes): Change "dump bgp routes" to "dump
+	bgp route-mrt" to support MRT specific dump format.
+
+	* bgpd.c (bgp_init): "clear ip bgp vpnv4 soft {in,out}" command is
+	added.
+
+	* bgp_route.c (bgp_update): Currently nexthop check is only works
+	for IPv4.
+
+2000-08-17  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd. (clear_ip_bgp_all_soft): Add "clear ip bgp * soft" for
+	both inbound and outbound soft reconfiguration.
+
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (clear_ip_bgp_peer_soft_out): Add soft-reconfiguration
+	outbound.
+	(peer_new): Set route-refresh flag.
+
+2000-08-16  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.c: "no bgp router-id A.B.C.D" alias is added.  "no bgp
+	cluster-id A.B.C.D" alias is added.  " bgp cluster-id
+	<1-4294967295>" alias is added.  "clear ip bgp * soft in" command
+	is added.  "clear ip bgp A.B.C.D in" alias is added.  "clear ip
+	bgp * in" alias is added.
+
+2000-08-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_update): Add soft_reconfig flag.  When the flag
+	is set do not install the route into Adj-RIBs-In.
+	(bgp_update): Perform implicit withdraw before filtering of the
+	route.
+
+	* bgp_packet.c (bgp_read): draft-ietf-idr-bgp-route-refresh-01.txt
+	capability code and BGP message can be accepted.
+
+	* bgp_open.c (bgp_capability_parse): Likewise.
+
+	* bgp_route.c (bgp_refresh_table): New function for route refresh.
+	(bgp_refresh_rib): Likewise.
+
+	* bgpd.c (bgp_show_peer): Display route refresh status.
+
+	* bgp_route.c (bgp_aggregate_add): Add check for the route
+	validness.
+	(bgp_aggregate_delete): Likewise.
+
+2000-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_nexthop.c (bgp_scan): Care for aggregate route when the
+	route become inaccessible.
+
+2000-08-15  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (show_ip_bgp_prefix): "show ip bgp A.B.C.D/M"
+	command is added.
+
+2000-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_zebra.c (bgp_interface_up): Register connected route.
+	(bgp_interface_down): Unregister connected route.
+
+2000-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.h (struct bgp_info): Add distance to the structure.
+
+	* bgp_route.c (bgp_aggregate_increment): Aggregate route only
+	match to smaller prefixlen route not match same prefixlen route.
+	(bgp_aggregate_decrement): Likewise.
+	(bgp_aggregate_add): Likewise.
+	(bgp_aggregate_delete): Likewise.
+	(bgp_network_backdoor): Add backdoor network configuration.
+
+	* bgpd.h (struct bgp ): Add distance_{ebgp,ibgp,local} for store
+	configuration distance value.
+
+	* bgp_route.c (bgp_update): Filter EBGP route which has non
+	connected nexthop.
+
+	* bgp_attr.c (bgp_attr_aggregate_intern): New function for
+	aggregate route.  Set origin to IGP.  Set atomic aggregate flag.
+	Set aggregator AS and address.
+	(bgp_attr_aggregate_intern): Check BGP_CONFIG_CONFEDERATION when
+	filling aggregator_as.
+
+	* bgp_route.c (bgp_process): Delete suppress check for install
+	suppressed route into local routing table.
+	(bgp_aggregate_increment): Use bgp_attr_aggregate_intern() instead
+	of bgp_attr_default_intern ().
+	(bgp_aggregate_add): Likewise.
+
+	* bgpd.c (bgp_get): Call bgp_if_update_all() after BGP instance is
+	created.  This is for avoid 0.0.0.0 router-id.
+
+2000-08-13  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (route_vty_out_detail): Display "valid" when the
+	route is valied.  Display "aggregated" when the route is
+	aggregated.  "Advertisements suppressed by an aggregate" is
+	displayed when the route is suppressed.
+	(bgp_info_cmp): Prefer EBGP than Confed-EBGP.
+
+2000-08-10  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_route.c (route_vty_out_detail): Display format change.
+
+2000-08-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_update): Only AFI_IP nexthop check is enabled.
+
+	* bgpd.c (bgp_delete): Delete static route before delete peer
+	configuration.
+
+2000-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c: Include bgpd/bgp_nexthop.h.
+
+2000-07-31  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.c (bgp_show_summary): "show ip bgp summary" shows own BGP
+	identifier.  And status is changed like below.
+
+	State/Pref   -> State/PfxRcd
+	Shutdown     -> Idle (Admin)
+	PrefixOvflw  -> Idle (PfxCt)
+
+	* bgp_route.c (route_vty_out): Show internal route as "i".
+
+2000-07-13  Jim Bowen <jimb@zereau.net>
+
+	* bgp_snmp.c: Add BGP peer MIB implementation.
+
+2000-07-12  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgpd.c (bgp_show_peer): Fix typo.
+
+2000-07-11  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_routemap.c: Add commands for deleting set without argument.
+
+2000-07-03  Akihiro Mizutani <mizutani@dml.com>
+
+	* bgp_zebra.c: Fix redistribute help strings.
+
+2000-07-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_show): When bgpd works as vtysh server send all
+	output to vty at once.
+
 2000-06-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_mplsvpn.c (no_vpnv4_network): "no network A.B.C.D/M rd WORD

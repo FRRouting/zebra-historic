@@ -1,6 +1,5 @@
-/*
- * RIP debug routines
- * Copyright (C) 1999 Kunihiro Ishiguro
+/* RIP debug routines
+ * Copyright (C) 1999 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *

@@ -94,6 +94,9 @@
 /* Define if one-vty option is specified. */
 #undef VTYSH
 
+/* Define if interface aliases don't have distinct indeces */
+#undef HAVE_BROKEN_ALIASES
+
 /* Define if disable-bgp-announce option is specified. */
 #undef DISABLE_BGP_ANNOUNCE
 
@@ -113,6 +116,9 @@
 
 /* Define if FreeBSD 3.2 */
 #undef FREEBSD_32
+
+/* Define if OpenBSD */
+#undef OPEN_BSD
 
 #ifndef HAVE_BCOPY
 # define bcopy(s,d,n) memcpy((d),(s),(n))

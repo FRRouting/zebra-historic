@@ -567,7 +567,8 @@ config_write_community (struct vty *vty)
 struct cmd_node community_list_node =
 {
   COMMUNITY_LIST_NODE,
-  ""
+  "",
+  1
 };
 
 void

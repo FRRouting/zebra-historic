@@ -31,10 +31,10 @@
 #define DEFAULT_CONFIG_FILE "zebra.conf"
 
 /* Client structure. */
-struct zebra_client
+struct zserv
 {
   /* Client file descriptor. */
-  int fd;
+  int sock;
 
   /* Input/output buffer to the client. */
   struct stream *ibuf;
@@ -49,6 +49,12 @@ struct zebra_client
 
   /* This client's redistribute flag. */
   u_char redist[ZEBRA_ROUTE_MAX];
+
+  /* Redistribute default route flag. */
+  u_char redist_default;
+
+  /* Interface information. */
+  u_char ifinfo;
 };
 
 /* Count prefix size from mask length */
@@ -63,6 +69,48 @@ void interface_list ();
 void kernel_init ();
 void route_read ();
 void rtadv_init ();
+
+int
+zsend_interface_add (struct zserv *, struct interface *);
+int
+zsend_interface_delete (struct zserv *, struct interface *);
+
+int
+zsend_interface_address_add (struct zserv *, struct interface *,
+			     struct connected *);
+
+int
+zsend_interface_address_delete (struct zserv *, struct interface *,
+				struct connected *);
+
+int
+zsend_interface_up (struct zserv *, struct interface *);
+
+int
+zsend_interface_down (struct zserv *, struct interface *);
+
+int
+zsend_ipv4_add (struct zserv *client, int type, int flags,
+		struct prefix_ipv4 *p, struct in_addr *nexthop,
+		unsigned int ifindex);
+
+int
+zsend_ipv4_delete (struct zserv *client, int type, int flags,
+		   struct prefix_ipv4 *p, struct in_addr *nexthop,
+		   unsigned int ifindex);
+
+#ifdef HAVE_IPV6
+int
+zsend_ipv6_add (struct zserv *client, int type, int flags,
+		struct prefix_ipv6 *p, struct in6_addr *nexthop,
+		unsigned int ifindex);
+
+int
+zsend_ipv6_delete (struct zserv *client, int type, int flags,
+		   struct prefix_ipv6 *p, struct in6_addr *nexthop,
+		   unsigned int ifindex);
+
+#endif /* HAVE_IPV6 */
 
 extern pid_t pid;
 extern pid_t old_pid;

@@ -40,6 +40,26 @@
 #define INTERFACE_NAMSIZ      20
 #define INTERFACE_HWADDR_MAX  20
 
+#define IF_PSEUDO      0x01
+#define IF_PSEUDO_SET(IF) (((IF)->status) |= IF_PSEUDO)
+#define IF_PSEUDO_UNSET(IF) (((IF)->status) &= ~IF_PSEUDO)
+#define IS_IF_PSEUDO(IF) (((IF)->status) & IF_PSEUDO)
+
+#if 0
+#define IF_UNKOWN      0x02
+#define IF_UNKNOWN_SET(IF) (((IF)->status) |= IF_UNKNOWN)
+#define IF_UNKNOWN_UNSET(IF) (((IF)->status) &= ~IF_UNKNOWN)
+#define IS_IF_UNKNOWN(IF) (((IF)->status) & IF_UNKNOWN)
+#endif 
+
+#ifndef INTERFACE_UNKNOWN
+#define INTERFACE_UNKNOWN 1000000
+#endif /* INTERFACE_UNKNOWN */
+
+#ifndef INTERFACE_PSEUDO
+#define INTERFACE_PSEUDO 0
+#endif  /* INTERFACE_PSEUDO */
+
 #ifdef HAVE_PROC_NET_DEV
 struct if_stats
 {
@@ -81,6 +101,9 @@ struct interface
   /* Interface index. */
   unsigned int ifindex;
 
+  /* Zebra internal interface status */
+  u_char status;
+  
   /* Interface flags. */
   unsigned long flags;
 
@@ -99,6 +122,9 @@ struct interface
   int hw_addr_len;
 #endif /* HAVE_SOCKADDR_DL */
 
+  /* interface bandwidth, kbits */
+  unsigned int bandwidth;
+  
   /* description of the interface. */
   char *desc;			
 
@@ -183,19 +209,19 @@ void connected_add (struct interface *, struct connected *);
 void connected_delete_by_prefix (struct interface *, struct prefix *);
 void connected_log (struct connected *);
 
-#ifdef NRL
 #ifndef HAVE_IF_NAMETOINDEX
-unsigned int if_nametoindex (char *);
+unsigned int if_nametoindex (const char *);
 #endif
 #ifndef HAVE_IF_INDEXTONAME
 char *if_indextoname (unsigned int, char *);
 #endif
-#endif /* NRL */
 
 /* Exported variables. */
 extern list iflist;
 extern struct cmd_element interface_desc_cmd;
 extern struct cmd_element no_interface_desc_cmd;
 extern struct cmd_element interface_cmd;
+extern struct cmd_element interface_pseudo_cmd;
+extern struct cmd_element no_interface_pseudo_cmd;
 
 #endif /* _ZEBRA_IF_H */

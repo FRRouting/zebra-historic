@@ -98,6 +98,7 @@ ospf6_ism.o: ospf6_ism.c ospf6d.h ../lib/version.h ../lib/log.h \
  ospf6_interface.h ospf6_neighbor.h ospf6_ism.h ospf6_nsm.h \
  ospf6_lsa.h ospf6_lsdb.h ospf6_dbex.h ospf6_network.h ospf6_zebra.h \
  ospf6_dump.h ospf6_routemap.h
+ospf6_list.o: ospf6_list.c ../lib/memory.h ../lib/log.h ospf6_list.h
 ospf6_lsa.o: ospf6_lsa.c ospf6d.h ../lib/version.h ../lib/log.h \
  ../lib/linklist.h ../lib/thread.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/memory.h ../lib/sockunion.h ../lib/if.h \
@@ -242,4 +243,3 @@ ospf6d.o: ospf6d.c ospf6d.h ../lib/version.h ../lib/log.h \
  ospf6_interface.h ospf6_neighbor.h ospf6_ism.h ospf6_nsm.h \
  ospf6_lsa.h ospf6_lsdb.h ospf6_dbex.h ospf6_network.h ospf6_zebra.h \
  ospf6_dump.h ospf6_routemap.h
-ospf6_list.o: ospf6_list.c ospf6_list.h ../lib/memory.h ../lib/log.h

@@ -42,6 +42,7 @@
 #include "table.h"
 #include "plist.h"
 
+
 #define HASHVAL 64
 #define MAXIOVLIST 1024
 
@@ -66,6 +67,9 @@
 #include "ospf6_zebra.h"
 #include "ospf6_dump.h"
 #include "ospf6_routemap.h"
+
+
+#define OSPF6_DAEMON_VERSION    "0.6"
 
 /* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
 /* #define DISABLE_IPV6_CHECKSUM */
@@ -111,21 +115,6 @@ extern char *recent_reason;
 #define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP
 #endif
 #endif
-
-
-/* Command Description */
-#define V4NOTATION_STR     "specify by IPv4 address notation(e.g. 0.0.0.0)\n"
-#define OSPF6_NUMBER_STR    "Specify by number\n"
-
-#define INTERFACE_STR       "Interface infomation\n"
-#define IFNAME_STR          "Interface name(e.g. ep0)\n"
-#define IP6_STR             "IPv6 Information\n"
-#define OSPF6_STR           "Open Shortest Path First (OSPF) for IPv6\n"
-#define OSPF6_ROUTER_STR    "Enable a routing process\n"
-#define OSPF6_INSTANCE_STR  "<1-65535> Instance ID\n"
-#define SECONDS_STR         "<1-65535> Seconds\n"
-#define ROUTE_STR           "Routing Table\n"
-
 
 /* Function Prototypes */
 void ospf6_init ();

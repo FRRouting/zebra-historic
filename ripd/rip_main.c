@@ -1,6 +1,5 @@
-/*
- * RIPd main routine.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+/* RIPd main routine.
+ * Copyright (C) 1997, 98 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -25,13 +24,12 @@
 #include "version.h"
 #include "getopt.h"
 #include "thread.h"
-#include "vector.h"
-#include "vty.h"
 #include "command.h"
 #include "memory.h"
 #include "prefix.h"
-#include "log.h"
 #include "filter.h"
+#include "keychain.h"
+#include "log.h"
 
 #include "ripd/ripd.h"
 
@@ -58,11 +56,11 @@ char *progname;
 /* Route retain mode flag. */
 int retain_mode = 0;
 
-int vty_port = 0;
+/* RIP VTY connection port. */
+int vty_port = RIP_VTY_PORT;
 
 /* Master of threads. */
 struct thread_master *master;
-struct thread thread;
 
 /* Help information display. */
 static void
@@ -123,7 +121,7 @@ sighup (int sig)
   vty_read_config (config_file, config_current, config_default);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT, RIP_VTYSH_PATH);
+  vty_serv_sock (vty_port, RIP_VTYSH_PATH);
 
   /* Try to return to normal operation. */
 }
@@ -164,6 +162,7 @@ main (int argc, char **argv)
 {
   char *p;
   int daemon_mode = 0;
+  struct thread thread;
 
   /* Get program name. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
@@ -172,6 +171,7 @@ main (int argc, char **argv)
   zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_RIP,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
+  /* Command line option parse. */
   while (1) 
     {
       int opt;
@@ -210,19 +210,23 @@ main (int argc, char **argv)
 	}
     }
 
-  /* Initializations. */
+  /* Prepare master thread. */
   master = thread_make_master ();
 
+  /* Library initialization. */
   signal_init ();
-  cmd_init ();
+  cmd_init (1);
   vty_init ();
   memory_init ();
+  keychain_init ();
 
   /* RIP related initialization. */
   rip_init ();
   rip_if_init ();
   rip_zclient_init ();
   rip_peer_init ();
+
+  /* Sort all installed commands. */
   sort_node ();
 
   /* Get configuration file. */
@@ -236,7 +240,7 @@ main (int argc, char **argv)
   pid_output (PATH_RIPD_PID);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT, RIP_VTYSH_PATH);
+  vty_serv_sock (vty_port, RIP_VTYSH_PATH);
 
   /* Execute each thread. */
   while (thread_fetch (master, &thread))

@@ -237,6 +237,7 @@ attrhash_key_make (struct attr *attr)
   }
 #endif /* HAVE_IPV6 */
 
+  key += attr->mp_nexthop_global_in.s_addr;
   if (attr->aspath)
     key += aspath_key_make (attr->aspath);
   if (attr->community)
@@ -264,6 +265,7 @@ attrhash_cmp (struct attr *attr1, struct attr *attr2)
 #ifdef HAVE_IPV6
       attr1->mp_nexthop_len == attr2->mp_nexthop_len &&
 #endif /* HAVE_IPV6 */
+      IPV4_ADDR_SAME (&attr1->mp_nexthop_global_in, &attr2->mp_nexthop_global_in) &&
       attr1->aspath == attr2->aspath &&
       attr1->community == attr2->community &&
       attr1->ecommunity == attr2->ecommunity &&
@@ -368,6 +370,35 @@ bgp_attr_default_intern (u_char origin)
 #ifdef HAVE_IPV6
   attr.mp_nexthop_len = 16;
 #endif
+
+  new = bgp_attr_intern (&attr);
+  aspath_unintern (new->aspath);
+  return new;
+}
+
+struct attr *
+bgp_attr_aggregate_intern (struct bgp *bgp)
+{
+  struct attr attr;
+  struct attr *new;
+
+  memset (&attr, 0, sizeof (struct attr));
+
+  attr.origin = BGP_ORIGIN_IGP;
+  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGIN);
+  attr.aspath = aspath_empty ();
+  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_AS_PATH);
+  attr.weight = 32768;
+#ifdef HAVE_IPV6
+  attr.mp_nexthop_len = 16;
+#endif
+  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE);
+  attr.flag |= ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR);
+  if (CHECK_FLAG (bgp->config, BGP_CONFIG_CONFEDERATION))
+    attr.aggregator_as = bgp->confederation_id;
+  else
+    attr.aggregator_as = bgp->as;
+  attr.aggregator_addr = bgp->id;
 
   new = bgp_attr_intern (&attr);
   aspath_unintern (new->aspath);
@@ -751,10 +782,8 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr,
 	rd_low = stream_getl (s);
 	/* stream_forward (s, 8); */
 	stream_get (&attr->mp_nexthop_global_in, s, 4);
-#if 0
-	zlog_info ("VPNv4 nexthop %ld:%ld:%s",
+	zlog_info ("VPNv4 nexthop recv %ld:%ld:%s",
 		   rd_high, rd_low, inet_ntoa (attr->mp_nexthop_global_in));
-#endif /* 0 */
       }
       break;
 #ifdef HAVE_IPV6
@@ -1147,7 +1176,15 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
   stream_putc (s, ATTR_FLAG_TRANS);
   stream_putc (s, BGP_ATTR_NEXT_HOP);
   stream_putc (s, 4);
-  stream_put_ipv4 (s, attr->nexthop.s_addr);
+  if (safi == SAFI_MPLS_VPN)
+    {
+      if (attr->nexthop.s_addr == 0)
+	stream_put_ipv4 (s, peer->nexthop.v4.s_addr);
+      else
+	stream_put_ipv4 (s, attr->nexthop.s_addr);
+    }
+  else
+    stream_put_ipv4 (s, attr->nexthop.s_addr);
 
   /* MED attribute. */
   if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
@@ -1344,6 +1381,8 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
       stream_putl (s, 0);
       stream_putl (s, 0);
       stream_put (s, &attr->mp_nexthop_global_in, 4);
+      zlog_info ("VPNv4 nexthop send %s",
+		 inet_ntoa (attr->mp_nexthop_global_in));
 
       /* SNPA */
       stream_putc (s, 0);
@@ -1449,4 +1488,167 @@ bgp_attr_init ()
   community_init ();
   ecommunity_init ();
   cluster_init ();
+}
+
+/* Make attribute packet. */
+void
+bgp_dump_routes_attr (struct stream *s, struct attr *attr)
+{
+  unsigned long cp;
+  unsigned long len;
+  struct aspath *aspath;
+
+  /* Remember current pointer. */
+  cp = stream_get_putp (s);
+
+  /* Place holder of length. */
+  stream_putw (s, 0);
+
+  /* Origin attribute. */
+  stream_putc (s, ATTR_FLAG_TRANS);
+  stream_putc (s, BGP_ATTR_ORIGIN);
+  stream_putc (s, 1);
+  stream_putc (s, attr->origin);
+
+  aspath = attr->aspath;
+
+  if (aspath->length > 255)
+    {
+      stream_putc (s, ATTR_FLAG_TRANS|ATTR_FLAG_EXTLEN);
+      stream_putc (s, BGP_ATTR_AS_PATH);
+      stream_putw (s, aspath->length);
+    }
+  else
+    {
+      stream_putc (s, ATTR_FLAG_TRANS);
+      stream_putc(s, BGP_ATTR_AS_PATH);
+      stream_putc (s, aspath->length);
+    }
+  stream_put (s, aspath->data, aspath->length);
+
+  /* Nexthop attribute. */
+  stream_putc (s, ATTR_FLAG_TRANS);
+  stream_putc (s, BGP_ATTR_NEXT_HOP);
+  stream_putc (s, 4);
+  stream_put_ipv4 (s, attr->nexthop.s_addr);
+
+  /* MED attribute. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC))
+    {
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_MULTI_EXIT_DISC);
+      stream_putc (s, 4);
+      stream_putl (s, attr->med);
+    }
+
+  /* Local preference. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
+    {
+      stream_putc (s, ATTR_FLAG_TRANS);
+      stream_putc (s, BGP_ATTR_LOCAL_PREF);
+      stream_putc (s, 4);
+      stream_putl (s, attr->local_pref);
+    }
+
+  /* Atomic aggregate. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE))
+    {
+      stream_putc (s, ATTR_FLAG_TRANS);
+      stream_putc (s, BGP_ATTR_ATOMIC_AGGREGATE);
+      stream_putc (s, 0);
+    }
+
+  /* Aggregator. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR))
+    {
+      stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS);
+      stream_putc (s, BGP_ATTR_AGGREGATOR);
+      stream_putc (s, 6);
+      stream_putw (s, attr->aggregator_as);
+      stream_put_ipv4 (s, attr->aggregator_addr.s_addr);
+    }
+
+  /* Community attribute. */
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES))
+    {
+      if (attr->community->size * 4 > 255)
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS|ATTR_FLAG_EXTLEN);
+	  stream_putc (s, BGP_ATTR_COMMUNITIES);
+	  stream_putw (s, attr->community->size * 4);
+	}
+      else
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS);
+	  stream_putc (s, BGP_ATTR_COMMUNITIES);
+	  stream_putc (s, attr->community->size * 4);
+	}
+      stream_put (s, attr->community->val, attr->community->size * 4);
+    }
+
+#if 0
+  /* Route Reflector. */
+  if (peer_sort (peer) == BGP_PEER_IBGP &&
+      conf->bgp->reflector_cnt)
+    {
+      /* Originator ID. */
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_ORIGINATOR_ID);
+      stream_putc (s, 4);
+
+      /* If this route is other peer's route. */
+      if (from != peer_self)
+	{
+	  stream_put_in_addr (s, &from->remote_id);
+	}
+      else
+	{
+	  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
+	    stream_put_in_addr (s, &attr->originator_id);
+	  else
+	    stream_put_in_addr (s, &conf->bgp->id);
+	}
+
+      /* Cluster list. */
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_CLUSTER_LIST);
+      
+      if (attr->cluster)
+	{
+	  stream_putc (s, attr->cluster->length + 4);
+	  stream_put (s, attr->cluster->list, attr->cluster->length);
+	}
+      else
+	stream_putc (s, 4);
+
+      /* If this peer configuration's parent BGP has cluster_id. */
+      if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	stream_put_in_addr (s, &conf->bgp->cluster);
+      else
+	stream_put_in_addr (s, &conf->bgp->id);
+    }
+
+  /* Extended Communities attribute. */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_SEND_EXT_COMMUNITY) 
+      && (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_EXT_COMMUNITIES)))
+    {
+      if (attr->ecommunity->size * 8 > 255)
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS|ATTR_FLAG_EXTLEN);
+	  stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
+	  stream_putw (s, attr->ecommunity->size * 8);
+	}
+      else
+	{
+	  stream_putc (s, ATTR_FLAG_OPTIONAL|ATTR_FLAG_TRANS);
+	  stream_putc (s, BGP_ATTR_EXT_COMMUNITIES);
+	  stream_putc (s, attr->ecommunity->size * 8);
+	}
+      stream_put (s, attr->ecommunity->val, attr->ecommunity->size * 8);
+    }
+#endif /* 0 */
+
+  /* Return total size of attribute. */
+  len = stream_get_putp (s) - cp - 2;
+  stream_putw_at (s, cp, len);
 }

@@ -83,22 +83,20 @@ ospf6_redistribute_lsid_get (struct prefix_ipv6 *p)
   u_int32_t lsid = 1;
   struct ospf6_lsa *lsa;
   struct prefix_ipv6 prefix6;
-  struct as_external_lsa *aselsa;
-  struct ospf6_prefix *o6_prefix;
+  struct ospf6_as_external_lsa *aselsa;
 
   prefix6.family = AF_INET6;
 
   while (1)
     {
-      lsa = ospf6_lsdb_lookup (htons (LST_AS_EXTERNAL_LSA), htonl (lsid),
+      lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL), htonl (lsid),
                                ospf6->router_id, ospf6);
       if (! lsa)
         break;
 
-      aselsa = (struct as_external_lsa *) (lsa->lsa_hdr + 1);
-      o6_prefix = (struct ospf6_prefix *) (&aselsa->ase_prefix_len);
-      prefix6.prefixlen = o6_prefix->o6p_prefix_len;
-      ospf6_prefix_in6_addr (o6_prefix, &prefix6.prefix);
+      aselsa = (struct ospf6_as_external_lsa *) (lsa->lsa_hdr + 1);
+      prefix6.prefixlen = aselsa->ospf6_prefix.prefix_length;
+      ospf6_prefix_in6_addr (&aselsa->ospf6_prefix, &prefix6.prefix);
 
       if (prefix_same ((struct prefix *) &prefix6, (struct prefix *) p))
         break;
@@ -114,7 +112,6 @@ ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
 {
   char buf[128];
   struct ospf6_redistribute_info *info;
-  struct ospf6_lsa *lsa = NULL;
   int ret;
   struct route_node *rn;
 
@@ -152,13 +149,7 @@ ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
                  p->prefixlen, info->ls_id);
     }
 
-  lsa = ospf6_lsa_create_as_external (info, p);
-  if (!lsa)
-    return;
-
-  ospf6_lsa_flood (lsa);
-  ospf6_lsdb_install (lsa);
-  ospf6_lsa_unlock (lsa);
+  ospf6_lsa_update_as_external (info->ls_id, ospf6);
 }
 
 void
@@ -188,10 +179,11 @@ ospf6_redistribute_route_remove (int type, int ifindex, struct prefix_ipv6 *p)
                  p->prefixlen);
     }
 
-  lsa = ospf6_lsdb_lookup (htons (LST_AS_EXTERNAL_LSA), htonl (info->ls_id),
+  lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_AS_EXTERNAL),
+                           htonl (info->ls_id),
                            ospf6->router_id, (void *) ospf6);
   if (lsa)
-    ospf6_premature_aging (lsa);
+    ospf6_lsa_premature_aging (lsa);
 
   XFREE (MTYPE_OSPF6_OTHER, info);
   rn->info = NULL;
@@ -523,6 +515,4 @@ ospf6_redistribute_finish (struct ospf6 *o6)
     }
   route_table_finish (o6->redistribute_map);
 }
-
-
 

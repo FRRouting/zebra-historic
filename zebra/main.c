@@ -232,7 +232,7 @@ main (int argc, char **argv)
 
   /* Vty related initialize. */
   signal_init ();
-  cmd_init ();
+  cmd_init (1);
   vty_init ();
   memory_init ();
 

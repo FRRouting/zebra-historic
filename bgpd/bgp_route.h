@@ -50,6 +50,9 @@ struct bgp_info
   /* Aggregate related information. */
   int suppress;
   
+  /* Nexthop reachability check. */
+  u_int32_t valid;
+
   /* Time */
   time_t uptime;
 };
@@ -89,8 +92,9 @@ struct bgp_info_tag
 /* Prototypes. */
 void bgp_route_init ();
 void bgp_announce_table (struct peer *);
+void bgp_refresh_table (struct peer *, afi_t, safi_t);
 void bgp_route_clear (struct peer *);
-void bgp_soft_reconfig_in (struct peer *);
+void bgp_soft_reconfig_in (struct peer *, afi_t, safi_t);
 
 int nlri_sanity_check (struct peer *, int, u_char *, bgp_size_t);
 int nlri_parse (struct peer *, struct attr *, struct bgp_nlri *);
@@ -105,7 +109,15 @@ int bgp_static_set_vpnv4 (struct vty *vty, char *, char *, char *);
 int bgp_static_unset_vpnv4 (struct vty *, char *, char *, char *);
 
 int bgp_config_write_network (struct vty *, struct bgp *, afi_t);
+int bgp_config_write_distance (struct vty *, struct bgp *);
 
 void route_vty_out_detail (struct vty *, struct prefix *, struct bgp_info *);
+
+void bgp_aggregate_increment (struct bgp *, struct prefix *, struct bgp_info *,
+			      afi_t, safi_t);
+void bgp_aggregate_decrement (struct bgp *, struct prefix *, struct bgp_info *,
+			      afi_t, safi_t);
+
+u_char bgp_distance_apply (struct prefix *, struct bgp_info *, struct bgp *);
 
 #endif /* _ZEBRA_BGP_ROUTE_H */

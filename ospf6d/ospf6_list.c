@@ -364,7 +364,7 @@ int main ()
                  LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
                  LOG_DAEMON);
 
-  cmd_init ();
+  cmd_init (1);
   memory_init ();
 
   list = ospf6_list_create ();

@@ -39,9 +39,6 @@ struct ospf6_interface
   /* linklocal address of this I/F */
   struct in6_addr *lladdr;
 
-  /* list of network prefixes: used by DR only */
-  list network_prefixes;
-
   /* Interface ID; same as ifindex */
   u_int32_t if_id;
 
@@ -87,11 +84,6 @@ struct ospf6_interface
   /* Linklocal LSA Database: includes Link-LSA */
   list lsdb;
 
-  /* Sequence number place holder */
-  int32_t       lsa_seqnum_link;
-  int32_t       lsa_seqnum_network;
-  int32_t       lsa_seqnum_intra_prefix;
-
   /* statistics */
   unsigned int ospf6_stat_dr_election;
   unsigned int ospf6_stat_delayed_lsack;
@@ -111,6 +103,7 @@ struct in6_addr *
 
 void ospf6_interface_if_add (struct interface *, struct ospf6 *);
 void ospf6_interface_if_del (struct interface *, struct ospf6 *);
+void ospf6_interface_state_update (struct interface *);
 void ospf6_interface_address_update (struct interface *);
 
 void ospf6_interface_init ();

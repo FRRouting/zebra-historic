@@ -22,11 +22,21 @@
 #ifndef OSPF6_PREFIX_H
 #define OSPF6_PREFIX_H
 
+#define OSPF6_PREFIX_OPTION_NU (1 << 0)  /* No Unicast */
+#define OSPF6_PREFIX_OPTION_LA (1 << 1)  /* Local Address */
+#define OSPF6_PREFIX_OPTION_MC (1 << 2)  /* MultiCast */
+#define OSPF6_PREFIX_OPTION_P  (1 << 3)  /* Propagate (NSSA) */
+
 struct ospf6_prefix
 {
-  u_int8_t o6p_prefix_len;
-  u_int8_t o6p_prefix_opt;
-  u_int16_t o6p_prefix_metric;
+  u_int8_t prefix_length;
+  u_int8_t prefix_options;
+  union {
+    u_int16_t _prefix_metric;
+    u_int16_t _prefix_referenced_lstype;
+  } u;
+#define prefix_metric u._prefix_metric
+#define prefix_refer_lstype u._prefix_referenced_lstype
   /* followed by one address_prefix */
 };
 
@@ -35,7 +45,7 @@ struct ospf6_prefix
 
 /* size_t OSPF6_PREFIX_SIZE (struct ospf6_prefix *); */
 #define OSPF6_PREFIX_SIZE(x) \
-   (OSPF6_PREFIX_SPACE ((x)->o6p_prefix_len) + sizeof (struct ospf6_prefix))
+   (OSPF6_PREFIX_SPACE ((x)->prefix_length) + sizeof (struct ospf6_prefix))
 
 /* struct ospf6_prefix *OSPF6_NEXT_PREFIX (struct ospf6_prefix *); */
 #define OSPF6_NEXT_PREFIX(x) \
@@ -52,6 +62,10 @@ void ospf6_prefix_in6_addr (struct ospf6_prefix *, struct in6_addr *);
 void ospf6_prefix_str (struct ospf6_prefix *, char *, size_t);
 void ospf6_prefix_copy (struct ospf6_prefix *, struct ospf6_prefix *,
                         size_t);
+
+void ospf6_prefix_apply_mask (struct ospf6_prefix *);
+void ospf6_prefix_options_str (struct ospf6_prefix *, char *, size_t);
+int ospf6_prefix_issame (struct ospf6_prefix *, struct ospf6_prefix *);
 
 #endif /* OSPF6_PREFIX_H */
 

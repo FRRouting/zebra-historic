@@ -1,6 +1,5 @@
-/*
- * RIP debug routines
- * Copyright (C) 1999 Kunihiro Ishiguro
+/* RIP debug routines
+ * Copyright (C) 1999 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -101,7 +100,7 @@ DEFUN (debug_rip_packet_direct,
        "RIP receive packet\n"
        "RIP send packet\n")
 {
-  rip_debug_packet = RIP_DEBUG_PACKET;
+  rip_debug_packet |= RIP_DEBUG_PACKET;
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
     rip_debug_packet |= RIP_DEBUG_SEND;
   if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)
@@ -120,7 +119,7 @@ DEFUN (debug_rip_packet_detail,
        "RIP send packet\n"
        "Detailed information display\n")
 {
-  rip_debug_packet = RIP_DEBUG_PACKET;
+  rip_debug_packet |= RIP_DEBUG_PACKET;
   if (strncmp ("send", argv[0], strlen (argv[0])) == 0)
     rip_debug_packet |= RIP_DEBUG_SEND;
   if (strncmp ("recv", argv[0], strlen (argv[0])) == 0)

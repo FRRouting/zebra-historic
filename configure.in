@@ -78,8 +78,20 @@ AC_ARG_ENABLE(bgp-announce,
 [  --disable-bgp-announce, turn off BGP route announcement])
 AC_ARG_ENABLE(netlink,
 [  --enable-netlink        force to use Linux netlink interface])
+AC_ARG_ENABLE(broken-aliases,
+[  --enable-broken-aliases enable aliases as distinct interfaces for Linux 2.2.X])
 AC_ARG_ENABLE(snmp,
 [  --enable-snmp           enable SNMP support])
+
+if test "${enable_broken_aliases}" = "yes"; then
+  if test "${enable_netlink}" = "yes"
+  then
+    echo "Sorry, you can't use netlink with broken aliases"
+    exit 1
+  fi
+  AC_DEFINE(HAVE_BROKEN_ALIASES)
+  enable_netlink=no
+fi
 
 dnl -------------------
 dnl Check header files.
@@ -98,11 +110,13 @@ case "$host" in
       opsys=sol2-6
       AC_DEFINE(SUNOS_5)
       AC_CHECK_LIB(xnet, main)
+      CURSES=-lcurses
   ;;
   *-sunos5* | *-solaris2*)
       AC_DEFINE(SUNOS_5)
       AC_CHECK_LIB(socket, main)
       AC_CHECK_LIB(nsl, main)
+      CURSES=-lcurses
   ;;
   *-linux-*)
       opsys=gnu-linux
@@ -117,12 +131,29 @@ case "$host" in
   ;;
   *-openbsd*)
       opsys=openbsd
+      AC_DEFINE(OPEN_BSD)
   ;;
   *-bsdi*)
       opsys=bsdi
       OTHER_METHOD="mtu_kvm.o"
       AC_CHECK_LIB(kvm, main)
   ;;
+esac
+
+dnl ---------------------
+dnl Integrated VTY option
+dnl ---------------------
+case "${enable_vtysh}" in
+  "yes") VTYSH="vtysh";
+         AC_DEFINE(VTYSH)
+         AC_CHECK_LIB(readline, main)
+         if test $ac_cv_lib_readline_main = no; then
+           AC_MSG_ERROR([vtysh need libreadline but was not found on your system.])
+         fi
+         AC_CHECK_LIB(ncurses, tputs)
+         ;;
+  "no" ) VTYSH="";;
+  *    ) ;;
 esac
 
 if test "${enable_pthread}" = "yes"; then
@@ -193,6 +224,10 @@ if test x"$opsys" = x"gnu-linux"; then
     AC_MSG_RESULT(netlink)
     RT_METHOD=rt_netlink.o
     netlink=yes
+  elif test "${enable_netlink}" = "no"; then
+    AC_MSG_RESULT(ioctl)
+    RT_METHOD=rt_ioctl.o
+    netlink=no
   else
     AC_EGREP_CPP(yes,
     [#include <linux/autoconf.h>
@@ -277,15 +312,16 @@ else
   if test "$opsys" = "sol2-6";then
     AC_MSG_RESULT(solaris)
     IF_METHOD=if_ioctl.o
+  elif test "$opsys" = "openbsd";then
+    AC_MSG_RESULT(openbsd)
+    IF_METHOD=if_ioctl.o
+  elif grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
+    AC_MSG_RESULT(sysctl)
+    IF_METHOD=if_sysctl.o
+    AC_DEFINE(HAVE_NET_RT_IFLIST)
   else
-    if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
-      AC_MSG_RESULT(sysctl)
-      IF_METHOD=if_sysctl.o
-      AC_DEFINE(HAVE_NET_RT_IFLIST)
-    else
-      AC_MSG_RESULT(ioctl)
-      IF_METHOD=if_ioctl.o
-    fi
+    AC_MSG_RESULT(ioctl)
+    IF_METHOD=if_ioctl.o
   fi
 fi
 AC_SUBST(IF_METHOD)
@@ -473,15 +509,6 @@ case "${enable_guile}" in
   *    ) ;;
 esac
 
-dnl ---------------------
-dnl Integrated VTY option
-dnl ---------------------
-case "${enable_vtysh}" in
-  "yes") VTYSH="vtysh";
-         AC_DEFINE(VTYSH);;
-  "no" ) VTYSH="";;
-  *    ) ;;
-esac
 
 if test "${enable_bgp_announce}" = "no";then
   AC_DEFINE(DISABLE_BGP_ANNOUNCE)
@@ -496,6 +523,7 @@ AC_SUBST(OSPF6D)
 AC_SUBST(GUILE)
 AC_SUBST(VTYSH)
 AC_SUBST(INCLUDES)
+AC_SUBST(CURSES)
 AC_CHECK_LIB(c, inet_ntop, [AC_DEFINE(HAVE_INET_NTOP)])
 AC_CHECK_LIB(c, inet_pton, [AC_DEFINE(HAVE_INET_PTON)])
 AC_CHECK_LIB(crypt, crypt)

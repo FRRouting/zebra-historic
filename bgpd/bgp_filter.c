@@ -665,7 +665,8 @@ config_write_as_list (struct vty *vty)
 struct cmd_node as_list_node =
 {
   AS_LIST_NODE,
-  ""
+  "",
+  1
 };
 
 /* Register functions. */

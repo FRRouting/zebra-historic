@@ -215,21 +215,28 @@ ospf6_serv_sock ()
   return 0;
 }
 
-void
+/* returns 0 if succeed, else returns -1 */
+int
 ospf6_join_allspfrouters (u_int ifindex)
 {
   struct ipv6_mreq mreq6;
+  int retval;
 
   assert (ifindex);
   mreq6.ipv6mr_interface = ifindex;
   memcpy (&mreq6.ipv6mr_multiaddr, &allspfrouters6.sin6_addr,
           sizeof (struct in6_addr));
 
-  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
-                  &mreq6, sizeof (mreq6)) < 0)
-    zlog_warn ("*** Join AllSPFRouters on ifindex %d failed", ifindex);
+  retval = setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+                       &mreq6, sizeof (mreq6));
+
+  if (retval < 0)
+    zlog_warn ("*** Join AllSPFRouters on ifindex %d failed: %s",
+               ifindex, strerror (errno));
   else
     zlog_info ("Join AllSPFRouters on ifindex %d", ifindex);
+
+  return retval;
 }
 
 void

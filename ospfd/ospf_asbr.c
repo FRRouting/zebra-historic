@@ -55,7 +55,7 @@ ospf_external_route_remove (struct prefix_ipv4 *p)
   struct ospf_route *or;
   listnode node;
 
-  rn = route_node_lookup (ospf_top->external_route, (struct prefix *) p);
+  rn = route_node_lookup (ospf_top->old_external_route, (struct prefix *) p);
   if (rn)
     if ((or = rn->info))
       {
@@ -92,7 +92,7 @@ ospf_external_route_lookup (struct prefix_ipv4 *p)
 {
   struct route_node *rn;
 
-  rn = route_node_lookup (ospf_top->external_route, (struct prefix *) p);
+  rn = route_node_lookup (ospf_top->old_external_route, (struct prefix *) p);
   if (rn)
     {
       route_unlock_node (rn);
@@ -107,7 +107,43 @@ ospf_external_route_lookup (struct prefix_ipv4 *p)
 }
 
 
-/* Create an External info for AS-external-LSA. */
+/* Add an External info for AS-external-LSA. */
+struct external_info *
+ospf_external_info_new (u_char type)
+{
+  struct external_info *new;
+
+  new = (struct external_info *)
+    XMALLOC (MTYPE_OSPF_EXTERNAL_INFO, sizeof (struct external_info));
+  memset (new, 0, sizeof (struct external_info));
+  new->type = type;
+
+  ospf_reset_route_map_set_values (&new->route_map_set);
+  return new;
+}
+
+void
+ospf_external_info_free (struct external_info *ei)
+{
+  XFREE (MTYPE_OSPF_EXTERNAL_INFO, ei);
+}
+
+void
+ospf_reset_route_map_set_values (struct route_map_set_values *values)
+{
+  values->metric = -1;
+  values->metric_type = -1;
+}
+
+int
+ospf_route_map_set_compare (struct route_map_set_values *values1,
+			    struct route_map_set_values *values2)
+{
+  return values1->metric == values2->metric &&
+    values1->metric_type == values2->metric_type;
+}
+
+/* Add an External info for AS-external-LSA. */
 struct external_info *
 ospf_external_info_add (u_char type, struct prefix_ipv4 p,
 			unsigned int ifindex, struct in_addr nexthop)
@@ -129,12 +165,11 @@ ospf_external_info_add (u_char type, struct prefix_ipv4 p,
 		   LOOKUP (ospf_redistributed_proto, type),
 		   inet_ntoa (p.prefix), p.prefixlen);
 	/* XFREE (MTYPE_OSPF_TMP, rn->info); */
-	return NULL;
+	return rn->info;
       }
 
-  new = (struct external_info *)
-    XMALLOC (MTYPE_OSPF_EXTERNAL_INFO, sizeof (struct external_info));
-  new->flags = EXTERNAL_INITIAL;
+  /* Create new External info instance. */
+  new = ospf_external_info_new (type);
   new->p = p;
   new->ifindex = ifindex;
   new->nexthop = nexthop;
@@ -155,13 +190,13 @@ ospf_external_info_delete (u_char type, struct prefix_ipv4 p)
   struct route_node *rn;
 
   rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) &p);
-  if (rn == NULL)
-    return;
-
-  XFREE (MTYPE_OSPF_EXTERNAL_INFO, rn->info);
-  rn->info = NULL;
-  route_unlock_node (rn);
-  route_unlock_node (rn);
+  if (rn != NULL)
+    {
+      ospf_external_info_free (rn->info);
+      rn->info = NULL;
+      route_unlock_node (rn);
+      route_unlock_node (rn);
+    }
 }
 
 struct external_info *
@@ -171,16 +206,41 @@ ospf_external_info_lookup (u_char type, struct prefix_ipv4 *p)
   rn = route_node_lookup (EXTERNAL_INFO (type), (struct prefix *) p);
   if (rn)
     {
+      route_unlock_node (rn);
       if (rn->info)
-	{
-	  route_unlock_node (rn);
-	  return rn->info;
-	}
-      else
-	route_unlock_node (rn);
+	return rn->info;
     }
 
   return NULL;
+}
+
+struct ospf_lsa *
+ospf_external_info_find_lsa (struct prefix_ipv4 *p)
+{
+  struct ospf_lsa *lsa;
+  struct as_external_lsa *al;
+  struct in_addr mask, id;
+
+  lsa = new_lsdb_lookup_by_id (ospf_top->lsdb, OSPF_AS_EXTERNAL_LSA,
+			       p->prefix, ospf_top->router_id);
+
+  if (!lsa)
+    return NULL;
+
+  al = (struct as_external_lsa *) lsa->data;
+
+  masklen2ip (p->prefixlen, &mask);
+
+  if (mask.s_addr != al->mask.s_addr)
+    {
+      id.s_addr = p->prefix.s_addr | (~mask.s_addr);
+      lsa = new_lsdb_lookup_by_id (ospf_top->lsdb, OSPF_AS_EXTERNAL_LSA,
+				   id, ospf_top->router_id);
+      if (!lsa)
+	return NULL;
+    }
+
+  return lsa;
 }
 
 
@@ -206,7 +266,7 @@ ospf_asbr_status_update (u_char status)
       /* Already non ASBR. */
       if (! OSPF_IS_ASBR)
 	{
-	  zlog_info ("ASBR[Status:%d]: Already noo ASBR", status);
+	  zlog_info ("ASBR[Status:%d]: Already non ASBR", status);
 	  return;
 	}
       UNSET_FLAG (ospf_top->flags, OSPF_FLAG_ASBR);
@@ -214,8 +274,8 @@ ospf_asbr_status_update (u_char status)
 
   /* Transition from/to status ASBR, schedule timer. */
   ospf_spf_calculate_schedule ();
-  OSPF_LSA_UPDATE_TIMER_ON (ospf_top->t_rlsa_update,
-			    ospf_router_lsa_update_timer);
+  OSPF_TIMER_ON (ospf_top->t_router_lsa_update,
+		 ospf_router_lsa_update_timer, OSPF_LSA_UPDATE_DELAY);
 }
 
 void
@@ -228,157 +288,12 @@ ospf_redistribute_withdraw (u_char type)
   if (EXTERNAL_INFO (type))
     for (rn = route_top (EXTERNAL_INFO (type)); rn; rn = route_next (rn))
       if ((ei = rn->info))
-	if (ei->flags == EXTERNAL_ORIGINATED)
+	if (ospf_external_info_find_lsa (&ei->p))
 	  {
+	    if (is_prefix_default (&ei->p) &&
+		ospf_top->default_originate != DEFAULT_ORIGINATE_NONE)
+	      continue;
 	    ospf_external_lsa_flush (type, &ei->p, ei->ifindex, ei->nexthop);
 	    ospf_external_info_delete (type, ei->p);
 	  }
 }
-
-#if 0
-int
-unapprove_lsa (struct ospf_lsa *lsa, void *v, int i)
-{
-  if (ospf_lsa_is_self_originated (lsa))
-    UNSET_FLAG (lsa->flags, OSPF_LSA_APPROVED);
-
-  return 0;
-}
-
-void
-ospf_asbr_unapprove_lsas ()
-{
-  foreach_lsa (EXTERNAL_LSDB (ospf_top), NULL, 0, unapprove_lsa);
-  /* ospf_lsdb_iterator (ospf_top->external_lsa, NULL, 0, unapprove_lsa); */
-}
-
-/* Check all AS external route. */
-void
-ospf_asbr_check_lsas ()
-{
-  struct route_node *rn;
-  struct ospf_route *er;
-  struct ospf_lsa *lsa = NULL;
-  struct as_external_lsa *old_lsa;
-  struct in_addr fwd_addr;
-
-  RT_ITERATOR (ospf_top->external_self, rn)
-    if ((er = rn->info) != NULL)
-      {
-	if (! ospf_asbr_should_announce ((struct prefix_ipv4 *) &rn->p, er))
-	  {
-	    if (er->u.ext.origin)
-	      er->u.ext.origin = NULL; 
-	    /* It remains in the LSDB and will be flushed*/
-	    continue;
-	  }
-
-	/* We didn't announce it, but now we want to */
-	if (er->u.ext.origin == NULL)
-	  {
-	    /* XXX: Temporarily comment out.
-	    lsa = ospf_external_lsa ((struct prefix_ipv4 *) &rn->p,
-				     er->metric_type, er->metric,
-				     er->tag, er->nexthop, er->lsa);
-	    lsa = ospf_external_lsa_install (lsa);
-	    */
-	    ospf_flood_through_as (NULL, lsa);
-	    er->u.ext.origin = lsa;
-	    SET_FLAG (er->u.ext.origin->flags, OSPF_LSA_APPROVED);
-	  }
-	else
-	  {
-	    /* er hold old lsa. */
-	    old_lsa = (struct as_external_lsa *) er->u.ext.origin->data;
-
-	    /*
-	      ospf_forward_address_get (er->nexthop, &fwd_addr); */
-
-	    /* Check the fwd_addr, as it may change since the last time
-	       the LSA was originated. */
-	    if (old_lsa->e[0].fwd_addr.s_addr != fwd_addr.s_addr)
-	      {
-		/* XXX: Temprarily comment out.
-		lsa = ospf_external_lsa ((struct prefix_ipv4 *) &rn->p,
-					 er->metric_type, er->metric,
-					 er->tag, er->nexthop, er->lsa);
-
-		zlog_info ("Z: ospf_asbr_check_lsas(): "
-			   "fwd_addr changed for LSA ID: %s"
-			   "originating the new one", inet_ntoa (lsa->data->id));
-		if (lsa->refresh_list)
-		  ospf_refresher_unregister_lsa (lsa);
-
-		lsa = ospf_external_lsa_install (lsa);
-		ospf_flood_through_as (NULL, lsa);
-		*/
-		er->u.ext.origin = lsa;
-	      }
-	    else /* LSA hasn't changed */
-	      { 
-		if (ospf_zlog)
-		  zlog_info ("Z: ospf_asbr_check_lsas(): "
-			     "fwd_addr is ok for LSA ID: %s",
-			     inet_ntoa (er->u.ext.origin->data->id));
-	      }
-	    SET_FLAG (er->u.ext.origin->flags, OSPF_LSA_APPROVED);
-	  }
-      }
-}
-#endif
-
-#if 0
-int
-flush_unapproved (struct ospf_lsa *lsa, void * v, int i)
-{
-  if (ospf_lsa_is_self_originated (lsa))
-    if (! CHECK_FLAG (lsa->flags, OSPF_LSA_APPROVED))
-      {
-	zlog_info ("Z: ospf_asbr_flush_unapproved(): Flushing LSA, ID: %s",
-		   inet_ntoa (lsa->data->id));
-	ospf_lsa_flush_as (lsa);
-      }
-
-  return 0;
-}
-
-void
-ospf_asbr_flush_unapproved_lsas ()
-{
-  foreach_lsa (EXTERNAL_LSDB (ospf_top), NULL, 0, flush_unapproved);
-  /*
-  ospf_lsdb_iterator (ospf_top->external_lsa, NULL, 0, flush_unapproved);
-  */
-}
-#endif
-
-/* This function performs checking of self-originated LSAs
-   unapproved LSAs are flushed from the domain */
-
-#if 0
-void 
-ospf_asbr_check ()
-{
-  /* ospf_asbr_unapprove_lsas (); */
-  /* ospf_asbr_check_lsas (); */
-  /* ospf_asbr_flush_unapproved_lsas (); */
-}
-
-int 
-ospf_asbr_check_timer (struct thread *thread)
-{
-  ospf_top->t_asbr_check = 0;
-  ospf_asbr_check ();
-
-  return 0;
-}
-
-void
-ospf_schedule_asbr_check ()
-{
-  if (! ospf_top->t_asbr_check)
-    ospf_top->t_asbr_check =
-      thread_add_timer (master, ospf_asbr_check_timer,
-			0, OSPF_ASBR_CHECK_DELAY);
-}
-#endif

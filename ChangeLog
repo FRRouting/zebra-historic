@@ -1,3 +1,29 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+	* configure.in: Add Solaris -lcurses for vtysh.
+
+2000-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add check for ncurses for compiling on Solaris.
+
+2000-07-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add check for libreadline when --enable-vtysh is
+	specified.
+
+2000-07-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add AC_DEFINE(OPEN_BSD). When OS is OpenBSD
+	interface method is if_ioctl.o
+
+2000-07-09  Chris Dunlop <chris@onthe.net.au>
+
+	* acconfig.h: Add HAVE_BROKEN_ALIASES.
+	
+	* configure.in: Add --enable-broken-aliases.
+
 2000-06-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Set version to zebra-0.87.

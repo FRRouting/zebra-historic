@@ -542,6 +542,8 @@ safi2str (safi_t safi)
     return "SAFI_UNICAST";
   else if (safi == SAFI_MULTICAST)
     return "SAFI_MULTICAST";
+  else if (safi == SAFI_MPLS_VPN || safi == BGP_SAFI_VPNV4)
+    return "SAFI_MPLS_VPN";
   else
     return "Unknown SAFI";
 }
@@ -556,6 +558,10 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi)
 #ifdef DISABLE_BGP_ANNOUNCE
   return;
 #endif /* DISABLE_BGP_ANNOUNCE */
+
+  /* Adjust safi code. */
+  if (safi == SAFI_MPLS_VPN)
+    safi = BGP_SAFI_VPNV4;
 
   zlog (peer->log, LOG_INFO, "%s [Refresh:SEND] %s %s", 
 	peer->host, afi2str (afi), safi2str (safi));
@@ -1074,7 +1080,7 @@ bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
   u_char reserved;
 
   /* If peer does not have the capability, send notification. */
-  if (! peer->refresh)
+  if (! peer->refresh_nego)
     {
       plog_err (peer->log, "%s [Error] BGP route refresh is not enabled",
 		peer->host);
@@ -1110,16 +1116,23 @@ bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
       bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
       return;
     }
-  if (safi != SAFI_UNICAST && safi != SAFI_MULTICAST)
+  if (safi != SAFI_UNICAST && safi != SAFI_MULTICAST && safi != BGP_SAFI_VPNV4)
     {
       plog_err (peer->log,
-		"%s [Error] Unknown SAFI %d route refresh", safi);
+		"%s [Error] Unknown SAFI %d route refresh",
+		peer->host, safi);
       bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
       return;
     }
+  /* Logging. */
+  zlog_info ("%s [Refresh:RECV] AFI: %d SAFI: %d", peer->host, afi, safi);
+
+  /* Adjust safi code. */
+  if (safi == BGP_SAFI_VPNV4)
+    safi = SAFI_MPLS_VPN;
 
   /* Perform route refreshment to the peer */
-  bgp_announce_table (peer);
+  bgp_refresh_table (peer, afi, safi);
 }
 
 /* BGP read utility function. */
@@ -1205,7 +1218,7 @@ bgp_read (struct thread *thread)
   /* BGP type check. */
   if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE 
       && type != BGP_MSG_NOTIFY && type != BGP_MSG_KEEPALIVE 
-      && type != BGP_MSG_ROUTE_REFRESH)
+      && type != BGP_MSG_ROUTE_REFRESH && type != BGP_MSG_ROUTE_REFRESH_01)
     {
       plog_err (peer->log,
 		"%s [Error] Unknown BGP packet type %d received",
@@ -1222,7 +1235,8 @@ bgp_read (struct thread *thread)
       || (type == BGP_MSG_UPDATE && size < BGP_MSG_UPDATE_MIN_SIZE)
       || (type == BGP_MSG_NOTIFY && size < BGP_MSG_NOTIFY_MIN_SIZE)
       || (type == BGP_MSG_KEEPALIVE && size != BGP_MSG_KEEPALIVE_MIN_SIZE)
-      || (type == BGP_MSG_ROUTE_REFRESH && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE))
+      || (type == BGP_MSG_ROUTE_REFRESH && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE)
+      || (type == BGP_MSG_ROUTE_REFRESH_01 && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE))
     {
       plog_err (peer->log,
 		"%s [Error] Bad BGP message length %d for BGP type %s",
@@ -1259,6 +1273,7 @@ bgp_read (struct thread *thread)
       bgp_keepalive_receive (peer, size);
       break;
     case BGP_MSG_ROUTE_REFRESH:
+    case BGP_MSG_ROUTE_REFRESH_01:
       bgp_route_refresh_receive (peer, size);
       break;
     }

@@ -1,3 +1,332 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+2000-08-17  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospfd.c (ospf_area_free):  Remove virtual link configuration only
+	when Area is removed.
+
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (network_area): Revert check for EXTERNAL_INFO
+	(ZEBRA_ROUTE_CONNECT).
+	(no_network_area): Likewise.
+
+2000-08-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.h (struct ospf): Add distance_table and
+	distance_{all,intra,inter,external}.
+
+	* ospf_zebra.c: Add OSPF distance related functions.
+
+2000-08-15  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_asbr.c (ospf_external_info_find_lsa):  New function added.
+
+	* ospf_lsa.c (ospf_default_external_info),
+	(ospf_default_originate_timer), (ospf_external_lsa_refresh_default):
+	New function added.
+
+	* ospf_zebra.c
+	(ospf_default_information_originate_metric_type_routemap),
+	(ospf_default_information_originate_always_metric_type_routemap):
+	Change name and add route-map function.
+	(ospf_default_information_originate_metric_routemap),
+	(ospf_default_information_originate_routemap),
+	(ospf_default_information_originate_type_metric_routemap):
+	New DEFUN added.
+
+2000-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c (zebra_interface_if_set_value): Change ifindex
+	restore size from two octet to four.
+
+2000-08-14  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_ase.c (ospf_ase_incremental_update):  Implement incremental
+	AS-external-LSA in 16.6 of RFC2328.
+
+2000-08-14  Matthew Grant  <grantma@anathoth.gen.nz>
+
+	* ospf_interface.c (ospf_if_get_output_cost):  Change cost
+	calculation algorithm.
+
+	* ospf_packet (ospf_ls_upd):  Fix problem of LSA retransmitting.
+
+2000-08-11  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_lsa.c (ospf_maxage_lsa_remover):  Fix maxage remover for
+	AS-external-LSAs.
+
+2000-08-10  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (auto_cost_reference_bandwidth):  New DEFUN added.
+	`auto-cost reference-bandwidth' OSPF router command added.
+
+2000-08-08  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_routemap.c (ospf_route_map_update):  New function added.
+	Add route-map event hook.
+
+2000-08-08  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_zebra.c (ospf_distribute_check_connected):  If redistribute
+	prefix is connected route on OSPF enabled interface, suppress to
+	announce it.
+
+2000-08-08  Matthew Grant  <grantma@anathoth.gen.nz>
+
+	* ospf_interface.c (ospf_if_get_output_cost):
+	New function added.  Handle bandwidth parameter for cost
+	calculation.
+
+2000-08-08  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_interface.c (interface_config_write):  Show interface
+	configuration regardless interface is down.
+
+	* ospf_ase.c (ospf_ase_caocluate_route):  Whole rewritten external
+	route calculate function.
+
+2000-08-08  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_routemap.c:  New file added.
+
+	* ospf_asbr.c (ospf_reset_route_map_set_values),
+	(ospf_route_map_set_compare):  New function added.
+
+	* ospf_lsa.c (ospf_external_lsa_body_set):  Set routemap metric
+	with AS-external-LSA.
+
+2000-08-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_ase.c (ospf_ase_calculate_route_add): Pass new->cost to
+	ospf_zebra_add as metric.
+	(ospf_ase_calculate_route_add): Likewise.
+
+	* ospf_route.c (ospf_route_install): Pass or->cost to
+	ospf_zebra_add as metric.
+
+	* ospf_zebra.c (ospf_zebra_add): Add metric arguemnt.
+	(ospf_zebra_delete): Likewise.
+
+2000-08-03  Matthew Grant  <grantma@anathoth.gen.nz>
+
+	* ospf_flood.c (ospf_flood_delayed_lsa_ack):  New function added.
+	Dispatch delayed-ACK with flooding AS-external-LSA across virtual
+	link.
+
+2000-07-31  Matthew Grant  <grantma@anathoth.gen.nz>
+
+	* ospfd.c (show_ip_ospf_area):  Fix lack of VTY_NEWLINE when
+	`show ip ospf'.
+
+	* ospf_interface.c (ospf_if_free):  Fix bug of crash with
+	Point-to-Point interface.
+
+2000-07-27  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_flood.c (ospf_process_self_originated_lsa):
+	Make sure to clear LSA->param (redistributed external information)
+	before refreshment.
+
+2000-07-27  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospfd.c (refresh_group_limit), (refresh_per_slice),
+	(refresh_age_diff):  New defun added.  Refresher related parameter
+	can be configurable.
+
+2000-07-27  Akihiro Mizutani  <mizutani@dml.com>
+
+	* ospf_interface.c (interface_config_write):  Print `description'
+	config directive to work.
+
+2000-07-24  Akihiro Mizutani  <mizutani@dml.com>
+
+	* ospf_interface.c (ospf_if_init): Use install_default for
+	INTERFACE_NODE.
+
+2000-07-24  Gleb Natapov  <gleb@nbase.co.il>
+	
+	* ospf_packet.c (ospf_ls_upd_send_list), (ospf_ls_upd_send_event),
+	(ospf_ls_ack_send_list), (ospf_ls_ack_send_event): New function added.
+	This make sending always as many LS update/Ack combined in one ospf
+	packet.
+
+2000-07-24  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_packet.c (ospf_ls_upd_list_lsa):  Set NULL to lsa->area if 
+	LSA is AS-external-LSA.
+
+	* ospf_nsm.c (nsm_reset_nbr):  Do not cancel Inactivity timer.
+
+2000-07-21  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_zebra.c (ospf_default_originate_timer):  Set timer for
+	`default-information originate'.  Fix some default originate
+	related functions.
+
+2000-07-12  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (stream_put_ospf_metric):  New function added.
+
+2000-07-12  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (show_ip_ospf_database_router),
+	(show_ip_ospf_database_network), (show_ip_ospf_database_summary),
+	(show_ip_ospf_database_summary_asbr), (show_ip_ospf_database_externel),
+	(show_router_lsa), (show_any_lsa), (show_router_lsa_self),
+	(show_any_lsa_self):  Functions removed.
+
+	(show_lsa_prefix_set), (show_lsa_detail_proc), (show_lsa_detail),
+	(show_lsa_detail_adv_router_proc), (show_lsa_detail_adv_router):
+	New functions added.  Replace above functions.
+
+	(show_ip_ospf_database_all), (show_ip_ospf_database_self_originated):
+	Functions removed.
+	(show_ip_ospf_database_summary):  New functions added.  Replace
+	above functions.
+
+	(show_ip_ospf_database_cmd):  DEFUN rearranged.
+	(show_ip_ospf_database_type_id_cmd),
+	(show_ip_ospf_database_type_id_adv_router_cmd),
+	(show_ip_ospf_database_type_is_self_cmd):  New ALIASes added.
+	(show_ip_ospf_database_type_adv_rotuer_cmd):  New DEFUN added.
+	(show_ip_ospf_database_type_self_cmd):  New ALIAS added.
+
+2000-07-11  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_asbr.c (ospf_external_info_new),
+	(ospf_external_info_free):  New functions added.
+
+	* ospf_lsa.h (ospf_lsa):  Add new member `void *param' to set
+	origination parameter for external-LSA.
+	Remove member `redistribute'.
+
+	* ospf_zebra.c (ospf_redistirbute_set):  When `redistribute'
+	command executed, metric and metric-type values are overridden.
+	If one of those is changed refresh AS-external-LSAs for appropriate
+	type.
+
+2000-07-11  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_lsa.c (ospf_summary_lsa_refresh),
+	(ospf_summary_asbr_lsa_refresh):  Make sure to refresh summary-LSAs.
+
+	* ospf_abr.c (set_metric):  New function added.
+
+2000-07-07  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_zebra.c (ospf_default_information_originate_metric_type),
+	(ospf_default_information_originate_type_metric):  New defun added.
+	Metic and Metric type can be set to default route.
+	(ospf_default_information_originate_always_metric_type):
+	(ospf_default_information_originate_always_type_metric):
+	New defun added.  Metric and Metric type can be set to default
+	always route.
+	
+	* ospf_zebra.c (ospf_default_metric), (no_ospf_default_metric):
+	New defun added.
+
+2000-07-06  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_flood.c (ospf_flood_through_area):  Fix bug of considering
+	on the same interface the LSA was received from.
+
+2000-07-06  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospfd.c (ospf_config_write):  Fix bug of printing `area stub'
+	command with `write mem'.
+
+	* ospfd.c (no_router_ospf):  Remove installed routes from zebra.
+
+	* ospf_zebra.c (ospf_interface_delete):  Fix function to handle
+	zebra interface delete event.
+
+2000-07-06  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_zebra.c (ospf_default_information_originate),
+	(ospf_default_information_originate_always):  New DEFUN added.
+
+2000-07-05  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_route.c (ospf_terminate):  Make sure to remove external route
+	when SIGINT received.
+
+2000-07-03  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_flood.c, ospf_ism.c, ospf_lsa,c, ospfd.c:  Make sure to free
+	many structure with `no router ospf'.
+
+2000-06-30  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_neighbor.c (ospf_nbr_new),
+	ospf_nsm.c (nsm_timer_set):  Start LS update timer only
+	when neighbor enters Exchange state.
+
+2000-06-29  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_nsm.c (nsm_timer_set), (nsm_exchange_done),
+	ospf_packet.c (ospf_db_desc_proc):
+	Do not cancel DD retransmit timer when Master.
+
+2000-06-29  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_abr.c (ospf_abr_announce_network_to_area),
+	(ospf_abr_announce_rtr_to_area)
+	ospf_ase.c (ospf_ase_rtrs_register_lsa),
+	ospf_flood.c (ospf_process_self_originated_lsa),
+	(ospf_flood_through_area), (ospf_ls_request_delete),
+	ospf_interface.c (ospf_if_free),
+	ospf_ism.c (ism_change_status),
+	ospf_lsa.c (ospf_router_lsa_update_timer),
+	(ospf_router_lsa_install), (ospf_network_lsa_install),
+	(ospf_lsa_maxage_delete), (ospf_lsa_action),
+	(ospf_schedule_lsa_flood_area),
+	ospf_nsm.c (nsm_change_status),
+	ospf_packet.c (ospf_make_ls_req_func), (ospf_make_ls_ack):
+	Use ospf_lsa_{lock,unlock} for all looking-up of LSA.
+
+	* ospf_flood.c (ospf_ls_request_free):  Function deleted.
+
+	* ospf_lsa.c (ospf_discard_from_db):  New function added.
+
+2000-06-26  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.h (ospf): struct member `external_lsa' name changed to
+	`lsdb'.
+
+2000-06-26  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (ospf_lsa_install), (ospf_router_lsa_install),
+	(ospf_network_lsa_install), (ospf_summary_lsa_install),
+	(ospf_summary_asbr_lsa_install), (ospf_external_lsa_install):
+	Functions re-arranged.
+
+	* ospf_lsa.c (IS_LSA_MAXAGE), (IS_LSA_SELF):  Macro added.
+	
+2000-06-20  Michael Rozhavsky <mike@nbase.co.il>
+
+	* ospf_packet.c (ospf_ls_req), (ospf_ls_upd), (ospf_ls_ack):  Add
+	verification of LS type.
+
+2000-06-20  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_ase.c (ospf_ase_calculate_timer):  Add more sanity check
+	whether rn->info is NULL.
+
+2000-06-20  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (show_ip_ospf_interface_sub):  Show Router-ID of both
+	DR and Backup correctly with `show ip ospf interface' command.
+
+2000-06-20  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (ospf_lsa_lock), (ospf_lsa_unlock),
+	(ospf_lsa_discard):  These functions are used for avoiding
+	unexpected reference to freed LSAs.
+
 2000-06-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf_packet.c (ospf_ls_upd): Initialize lsa by NULL to avoid

@@ -72,36 +72,14 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
 int
 nbs_full_change (struct ospf6_interface *ospf6_interface)
 {
-  struct ospf6_lsa *lsa;
-
-  /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_interface->area);
-  if (lsa)
-    {
-      ospf6_lsa_flood (lsa);
-      ospf6_lsdb_install (lsa);
-      ospf6_lsa_unlock (lsa);
-    }
-
+  /* construct LSAs */
+  ospf6_lsa_update_router (ospf6_interface->area);
   if (ospf6_interface->state == IFS_DR)
     {
-      /* construct Network-LSA */
-      lsa = ospf6_make_network_lsa (ospf6_interface);
-      if (lsa)
-        {
-          ospf6_lsa_flood (lsa);
-          ospf6_lsdb_install (lsa);
-          ospf6_lsa_unlock (lsa);
-        }
-      /* construct Intra-Area-Prefix-LSA */
-      lsa = ospf6_make_intra_prefix_lsa (ospf6_interface);
-      if (lsa)
-        {
-          ospf6_lsa_flood (lsa);
-          ospf6_lsdb_install (lsa);
-          ospf6_lsa_unlock (lsa);
-        }
+      ospf6_lsa_update_network (ospf6_interface);
+      ospf6_lsa_update_intra_prefix_transit (ospf6_interface);
     }
+  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area);
   return 0;
 }
 

@@ -33,7 +33,7 @@ struct vty
   int fd;
 
   /* Is this vty connect to file or not */
-  enum {VTY_TERM, VTY_FILE} type;
+  enum {VTY_TERM, VTY_FILE, VTY_SHELL, VTY_SHELL_SERV} type;
 
   /* Node status of this vty */
   int node;
@@ -75,11 +75,21 @@ struct vty
      access-list etc... */
   void *index;
 
+  /* For multiple level index treatment such as key chain and key. */
+  void *index_sub;
+
   /* For escape character. */
   unsigned char escape;
 
   /* Current vty status. */
   enum {VTY_NORMAL, VTY_CLOSE, VTY_MORE, VTY_START, VTY_CONTINUE} status;
+
+  /* IAC handling */
+  unsigned char iac;
+
+  /* IAC SB handling */
+  unsigned char iac_sb_in_progress;
+  struct buffer *sb_buffer;
 
   /* Window width/height. */
   int width;
@@ -120,7 +130,7 @@ struct vty
 };
 
 /* Small macro to determine newline is newline only or linefeed needed. */
-#define VTY_NEWLINE  ((vty->type == VTY_FILE) ? "\n" : "\r\n")
+#define VTY_NEWLINE  ((vty->type == VTY_TERM) ? "\r\n" : "\n")
 
 /* Default time out value */
 #define VTY_TIMEOUT_DEFAULT 600
@@ -150,5 +160,8 @@ char *vty_get_cwd (void);
 void vty_log (const char *, const char *, va_list);
 int vty_config_lock (struct vty *);
 int vty_config_unlock (struct vty *);
+int vty_shell (struct vty *);
+int vty_shell_serv (struct vty *);
+void vty_hello (struct vty *);
 
 #endif /* _ZEBRA_VTY_H */

@@ -31,69 +31,109 @@
 #include "ripngd/ripngd.h"
 
 /* int ripng_zebra_get_interface (int, struct zebra *, zebra_size_t); */
-int ripng_interface_add (int, struct zebra *, zebra_size_t);
-int ripng_interface_delete (int, struct zebra *, zebra_size_t);
-int ripng_interface_address_add (int, struct zebra *, zebra_size_t);
-int ripng_interface_address_delete (int, struct zebra *, zebra_size_t);
+int ripng_interface_add (int, struct zclient *, zebra_size_t);
+int ripng_interface_delete (int, struct zclient *, zebra_size_t);
+int ripng_interface_address_add (int, struct zclient *, zebra_size_t);
+int ripng_interface_address_delete (int, struct zclient *, zebra_size_t);
 
 /* All information about zebra. */
-struct zebra *zclient = NULL;
+struct zclient *zclient = NULL;
 
 void
 ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 		      unsigned int ifindex)
 {
+  struct zapi_ipv6 api;
+
   if (zclient->redist[ZEBRA_ROUTE_RIPNG])
-    zebra_ipv6_add (zclient->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
+    {
+      api.type = ZEBRA_ROUTE_RIPNG;
+      api.flags = 0;
+      api.message = 0;
+      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
+      api.nexthop_num = 1;
+      api.nexthop = &nexthop;
+      SET_FLAG (api.message, ZAPI_MESSAGE_IFINDEX);
+      api.ifindex_num = 1;
+      api.ifindex = &ifindex;
+
+      zapi_ipv6_add (zclient, p, &api);
+    }
 }
 
 void
 ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 			 unsigned int ifindex)
 {
+  struct zapi_ipv6 api;
+
   if (zclient->redist[ZEBRA_ROUTE_RIPNG])
-    zebra_ipv6_delete (zclient->sock, ZEBRA_ROUTE_RIPNG, 0, p, nexthop, ifindex);
+    {
+      api.type = ZEBRA_ROUTE_RIPNG;
+      api.flags = 0;
+      api.message = 0;
+      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
+      api.nexthop_num = 1;
+      api.nexthop = &nexthop;
+      SET_FLAG (api.message, ZAPI_MESSAGE_IFINDEX);
+      api.ifindex_num = 1;
+      api.ifindex = &ifindex;
+
+      zapi_ipv6_delete (zclient, p, &api);
+    }
 }
 
 /* Zebra route add and delete treatment. */
 int
-ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
+ripng_zebra_read_ipv6 (int command, struct zclient *zclient,
+		       zebra_size_t length)
 {
-  u_char type;
-  u_char flags;
-  struct in6_addr nexthop;
-  u_char *lim;
   struct stream *s;
+  struct zapi_ipv6 api;
+  unsigned long ifindex;
+  struct in6_addr nexthop;
+  struct prefix_ipv6 p;
 
   s = zclient->ibuf;
+  ifindex = 0;
+  memset (&nexthop, 0, sizeof (struct in6_addr));
 
-  lim = stream_pnt (s) + length;
+  /* Type, flags, message. */
+  api.type = stream_getc (s);
+  api.flags = stream_getc (s);
+  api.message = stream_getc (s);
 
-  /* Fetch type and nexthop first. */
-  type = stream_getc (s);
-  flags = stream_getc (s);
-  stream_get (&nexthop, s, sizeof (struct in6_addr));
+  /* IPv6 prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv6));
+  p.family = AF_INET6;
+  p.prefixlen = stream_getc (s);
+  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
 
-  /* Then fetch IPv6 prefixes. */
-  while (stream_pnt (s) < lim)
+  /* Nexthop, ifindex, distance, metric. */
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
     {
-      int size;
-      struct prefix_ipv6 p;
-      unsigned int ifindex;
-
-      ifindex = stream_getl (s);
-
-      memset (&p, 0, sizeof (struct prefix_ipv6));
-      p.family = AF_INET6;
-      p.prefixlen = stream_getc (s);
-      size = PSIZE (p.prefixlen);
-      stream_get (&p.prefix, s, size);
-
-      if (command == ZEBRA_IPV6_ROUTE_ADD)
-	ripng_redistribute_add (type, 0, &p, ifindex);
-      else
-	ripng_redistribute_delete (type, 0, &p, ifindex);
+      api.nexthop_num = stream_getc (s);
+      stream_get (&nexthop, s, 16);
     }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_IFINDEX))
+    {
+      api.ifindex_num = stream_getc (s);
+      ifindex = stream_getl (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
+    api.distance = stream_getc (s);
+  else
+    api.distance = 0;
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
+    api.metric = stream_getl (s);
+  else
+    api.metric = 0;
+
+  if (command == ZEBRA_IPV6_ROUTE_ADD)
+    ripng_redistribute_add (api.type, 0, &p, ifindex);
+  else
+    ripng_redistribute_delete (api.type, 0, &p, ifindex);
+
   return 0;
 }
 

@@ -157,6 +157,9 @@ ospf6_create (unsigned long process_id)
 void
 ospf6_delete (struct ospf6 *ospf6)
 {
+#if 1
+  return;
+#else
   listnode n;
   struct area *area;
 
@@ -180,6 +183,7 @@ ospf6_delete (struct ospf6 *ospf6)
   ospf6_redistribute_finish (ospf6);
 
   ospf6_free (ospf6);
+#endif
 }
 
 struct ospf6 *
@@ -200,5 +204,12 @@ ospf6_stop ()
 
   ospf6_delete (ospf6);
   ospf6 = NULL;
+}
+
+int
+ospf6_is_asbr (struct ospf6 *o6)
+{
+  return (o6->redist_static || o6->redist_kernel
+          || o6->redist_ripng  || o6->redist_bgp);
 }
 

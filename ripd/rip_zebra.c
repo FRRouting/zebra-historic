@@ -1,5 +1,5 @@
 /* RIPd and zebra interface.
- * Copyright (C) 1997, 1999 Kunihiro Ishiguro
+ * Copyright (C) 1997, 1999 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -32,79 +32,116 @@
 #include "ripd/rip_debug.h"
 
 /* All information about zebra. */
-struct zebra *zclient = NULL;
+struct zclient *zclient = NULL;
 
 /* Callback prototypes for zebra client service. */
-int rip_interface_add (int, struct zebra *, zebra_size_t);
-int rip_interface_delete (int, struct zebra *, zebra_size_t);
-int rip_interface_address_add (int, struct zebra *, zebra_size_t);
-int rip_interface_address_delete (int, struct zebra *, zebra_size_t);
-int rip_interface_up (int, struct zebra *, zebra_size_t);
-int rip_interface_down (int, struct zebra *, zebra_size_t);
+int rip_interface_add (int, struct zclient *, zebra_size_t);
+int rip_interface_delete (int, struct zclient *, zebra_size_t);
+int rip_interface_address_add (int, struct zclient *, zebra_size_t);
+int rip_interface_address_delete (int, struct zclient *, zebra_size_t);
+int rip_interface_up (int, struct zclient *, zebra_size_t);
+int rip_interface_down (int, struct zclient *, zebra_size_t);
 
 /* RIPd to zebra command interface. */
 void
 rip_zebra_ipv4_add (struct prefix_ipv4 *p, struct in_addr *nexthop, 
-		    unsigned int ifindex)
+		    u_int32_t metric, u_char distance)
 {
+  struct zapi_ipv4 api;
+
   if (zclient->redist[ZEBRA_ROUTE_RIP])
     {
-      zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_RIP, 0, 
-		      p, nexthop, ifindex);
+      api.type = ZEBRA_ROUTE_RIP;
+      api.flags = 0;
+      api.message = 0;
+      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
+      api.nexthop_num = 1;
+      api.nexthop = &nexthop;
+      SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
+      api.metric = metric;
+
+      if (distance && distance != ZEBRA_RIP_DISTANCE_DEFAULT)
+	{
+	  SET_FLAG (api.message, ZAPI_MESSAGE_DISTANCE);
+	  api.distance = distance;
+	}
+
+      zapi_ipv4_add (zclient, p, &api);
+
       rip_global_route_changes++;
     }
 }
 
 void
 rip_zebra_ipv4_delete (struct prefix_ipv4 *p, struct in_addr *nexthop, 
-		       unsigned int ifindex)
+		       u_int32_t metric)
 {
+  struct zapi_ipv4 api;
+
   if (zclient->redist[ZEBRA_ROUTE_RIP])
     {
-      zebra_ipv4_delete (zclient->sock, ZEBRA_ROUTE_RIP, 0, 
-			 p, nexthop, ifindex);
+      api.type = ZEBRA_ROUTE_RIP;
+      api.flags = 0;
+      api.message = 0;
+      SET_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP);
+      api.nexthop_num = 1;
+      api.nexthop = &nexthop;
+      SET_FLAG (api.message, ZAPI_MESSAGE_METRIC);
+      api.metric = metric;
+
+      zapi_ipv4_delete (zclient, p, &api);
+
       rip_global_route_changes++;
     }
 }
 
 /* Zebra route add and delete treatment. */
 int
-rip_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
+rip_zebra_read_ipv4 (int command, struct zclient *zclient, zebra_size_t length)
 {
-  u_char type;
-  u_char flags;
-  struct in_addr nexthop;
-  u_char *lim;
   struct stream *s;
-  unsigned int ifindex;
+  struct zapi_ipv4 api;
+  unsigned long ifindex;
+  struct in_addr nexthop;
+  struct prefix_ipv4 p;
+  
+  s = zclient->ibuf;
+  ifindex = 0;
+  nexthop.s_addr = 0;
 
-  s = zebra->ibuf;
-  lim = stream_pnt (s) + length;
+  /* Type, flags, message. */
+  api.type = stream_getc (s);
+  api.flags = stream_getc (s);
+  api.message = stream_getc (s);
 
-  /* Fetch type and nexthop first. */
-  type = stream_getc (s);
-  flags = stream_getc (s);
-  stream_get (&nexthop, s, sizeof (struct in_addr));
+  /* IPv4 prefix. */
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefixlen = stream_getc (s);
+  stream_get (&p.prefix, s, PSIZE (p.prefixlen));
+
+  /* Nexthop, ifindex, distance, metric. */
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_NEXTHOP))
+    {
+      api.nexthop_num = stream_getc (s);
+      nexthop.s_addr = stream_get_ipv4 (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_IFINDEX))
+    {
+      api.ifindex_num = stream_getc (s);
+      ifindex = stream_getl (s);
+    }
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_DISTANCE))
+    api.distance = stream_getc (s);
+  if (CHECK_FLAG (api.message, ZAPI_MESSAGE_METRIC))
+    api.metric = stream_getl (s);
 
   /* Then fetch IPv4 prefixes. */
-  while (stream_pnt (s) < lim)
-    {
-      int size;
-      struct prefix_ipv4 p;
+  if (command == ZEBRA_IPV4_ROUTE_ADD)
+    rip_redistribute_add (api.type, 0, &p, ifindex, &nexthop);
+  else 
+    rip_redistribute_delete (api.type, 0, &p, ifindex);
 
-      ifindex = stream_getl (s);
-
-      bzero (&p, sizeof (struct prefix_ipv4));
-      p.family = AF_INET;
-      p.prefixlen = stream_getc (s);
-      size = PSIZE (p.prefixlen);
-      stream_get (&p.prefix, s, size);
-
-      if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rip_redistribute_add (type, 0, &p, ifindex, &nexthop);
-      else 
-	rip_redistribute_delete (type, 0, &p, ifindex);
-    }
   return 0;
 }
 
@@ -125,6 +162,13 @@ rip_routemap_set (int type, char *name)
   rip->route_map[type].map = route_map_lookup_by_name (name);
 }
 
+void
+rip_redistribute_metric_set (int type, int metric)
+{
+  rip->route_map[type].metric_config = 1;
+  rip->route_map[type].metric = metric;
+}
+
 /* RIP route-map unset for redistribution */
 void
 rip_routemap_unset (int type)
@@ -135,13 +179,12 @@ rip_routemap_unset (int type)
   free (rip->route_map[type].name);
   rip->route_map[type].name = NULL;
   rip->route_map[type].map = NULL;
+  rip->route_map[type].metric_config = 0;
+  rip->route_map[type].metric = 0;
 
   return;
 }
 
-/* VTY help string. */
-#define REDIST_STR "[kernel|connected|static|ospf|bgp] route"
-
 /* Redistribution types */
 static struct {
   int type;
@@ -160,7 +203,7 @@ DEFUN (router_zebra,
        router_zebra_cmd,
        "router zebra",
        "Enable a routing process\n"
-       "zebra client connection\n")
+       "Make connection to zebra daemon\n")
 {
   vty->node = ZEBRA_NODE;
   zclient->enable = 1;
@@ -172,8 +215,8 @@ DEFUN (no_router_zebra,
        no_router_zebra_cmd,
        "no router zebra",
        NO_STR
-       "Disable a routing process\n"
-       "zebra client connection\n")
+       "Enable a routing process\n"
+       "Make connection to zebra daemon\n")
 {
   zclient->enable = 0;
   zclient_stop (zclient);
@@ -214,8 +257,8 @@ rip_redistribute_unset (int type)
 DEFUN (rip_redistribute_rip,
        rip_redistribute_rip_cmd,
        "redistribute rip",
-       "Redistribute control\n"
-       "RIP route\n")
+       "Redistribute information from another routing protocol\n"
+       "Routing Information Protocol (RIP)\n")
 {
   zclient->redist[ZEBRA_ROUTE_RIP] = 1;
   return CMD_SUCCESS;
@@ -225,8 +268,8 @@ DEFUN (no_rip_redistribute_rip,
        no_rip_redistribute_rip_cmd,
        "no redistribute rip",
        NO_STR
-       "Redistribute control\n"
-       "RIP route\n")
+       "Redistribute information from another routing protocol\n"
+       "Routing Information Protocol (RIP)\n")
 {
   zclient->redist[ZEBRA_ROUTE_RIP] = 0;
   return CMD_SUCCESS;
@@ -235,12 +278,12 @@ DEFUN (no_rip_redistribute_rip,
 DEFUN (rip_redistribute_type,
        rip_redistribute_type_cmd,
        "redistribute (kernel|connected|static|ospf|bgp)",
-       "Redistribute control\n"
+       "Redistribute information from another routing protocol\n"
        "Kernel routes\n"
-       "Connected routes\n"
+       "Connected\n"
        "Static routes\n"
-       "OSPF routes\n"
-       "BGP routes\n")
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n")
 {
   int i;
 
@@ -264,12 +307,12 @@ DEFUN (no_rip_redistribute_type,
        no_rip_redistribute_type_cmd,
        "no redistribute (kernel|connected|static|ospf|bgp)",
        NO_STR
-       "Redistribute control\n"
+       "Redistribute information from another routing protocol\n"
        "Kernel routes\n"
-       "Connected routes\n"
+       "Connected\n"
        "Static routes\n"
-       "OSPF routes\n"
-       "BGP routes\n")
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n")
 {
   int i;
 
@@ -292,15 +335,15 @@ DEFUN (no_rip_redistribute_type,
 
 DEFUN (rip_redistribute_type_routemap,
        rip_redistribute_type_routemap_cmd,
-       "redistribute (kernel|connected|static|ospf|bgp) route-map ROUTE_MAP_NAME",
-       "Redistribute control\n"
+       "redistribute (kernel|connected|static|ospf|bgp) route-map WORD",
+       "Redistribute information from another routing protocol\n"
        "Kernel routes\n"
-       "Connected routes\n"
+       "Connected\n"
        "Static routes\n"
-       "OSPF routes\n"
-       "BGP routes\n"
-       "Route map\n"
-       "Route map name\n")
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
 {
   int i;
 
@@ -318,6 +361,182 @@ DEFUN (rip_redistribute_type_routemap,
 	  VTY_NEWLINE);
 
   return CMD_WARNING;
+}
+
+DEFUN (no_rip_redistribute_type_routemap,
+       no_rip_redistribute_type_routemap_cmd,
+       "no redistribute (kernel|connected|static|ospf|bgp) route-map WORD",
+       NO_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n"
+       "Connected\n"
+       "Static routes\n"
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+{
+  int i;
+
+  for (i = 0; redist_type[i].str; i++) 
+    {
+      if (strncmp(redist_type[i].str, argv[0], 
+		  redist_type[i].str_min_len) == 0) 
+	{
+	  rip_routemap_unset (redist_type[i].type);
+	  rip_redistribute_unset (redist_type[i].type);
+	  return CMD_SUCCESS;
+        }
+    }
+
+  vty_out(vty, "Invalid type %s%s", argv[0],
+	  VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+DEFUN (rip_redistribute_type_metric,
+       rip_redistribute_type_metric_cmd,
+       "redistribute (kernel|connected|static|ospf|bgp) metric <0-16>",
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n"
+       "Connected\n"
+       "Static routes\n"
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Metric\n"
+       "Metric value\n")
+{
+  int i;
+  int metric;
+
+  metric = atoi (argv[1]);
+
+  for (i = 0; redist_type[i].str; i++) {
+    if (strncmp(redist_type[i].str, argv[0],
+		redist_type[i].str_min_len) == 0) 
+      {
+	rip_redistribute_metric_set (redist_type[i].type, metric);
+	zclient_redistribute_set (zclient, redist_type[i].type);
+	return CMD_SUCCESS;
+      }
+  }
+
+  vty_out(vty, "Invalid type %s%s", argv[0],
+	  VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+DEFUN (no_rip_redistribute_type_metric,
+       no_rip_redistribute_type_metric_cmd,
+       "no redistribute (kernel|connected|static|ospf|bgp) metric <0-16>",
+       NO_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n"
+       "Connected\n"
+       "Static routes\n"
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Metric\n"
+       "Metric value\n")
+{
+  int i;
+
+  for (i = 0; redist_type[i].str; i++) 
+    {
+      if (strncmp(redist_type[i].str, argv[0], 
+		  redist_type[i].str_min_len) == 0) 
+	{
+	  rip_routemap_unset (redist_type[i].type);
+	  rip_redistribute_unset (redist_type[i].type);
+	  return CMD_SUCCESS;
+        }
+    }
+
+  vty_out(vty, "Invalid type %s%s", argv[0],
+	  VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+DEFUN (no_rip_redistribute_type_metric_routemap,
+       no_rip_redistribute_type_metric_routemap_cmd,
+       "no redistribute (kernel|connected|static|ospf|bgp) metric <0-16> route-map WORD",
+       NO_STR
+       "Redistribute information from another routing protocol\n"
+       "Kernel routes\n"
+       "Connected\n"
+       "Static routes\n"
+       "Open Shortest Path First (OSPF)\n"
+       "Border Gateway Protocol (BGP)\n"
+       "Metric\n"
+       "Metric value\n"
+       "Route map reference\n"
+       "Pointer to route-map entries\n")
+{
+  int i;
+
+  for (i = 0; redist_type[i].str; i++) 
+    {
+      if (strncmp(redist_type[i].str, argv[0], 
+		  redist_type[i].str_min_len) == 0) 
+	{
+	  rip_routemap_unset (redist_type[i].type);
+	  rip_redistribute_unset (redist_type[i].type);
+	  return CMD_SUCCESS;
+        }
+    }
+
+  vty_out(vty, "Invalid type %s%s", argv[0],
+	  VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+/* Default information originate. */
+
+DEFUN (rip_default_information_originate,
+       rip_default_information_originate_cmd,
+       "default-information originate",
+       "Control distribution of default route\n"
+       "Distribute a default route\n")
+{
+  struct prefix_ipv4 p;
+
+  if (! rip->default_information)
+    {
+      memset (&p, 0, sizeof (struct prefix_ipv4));
+      p.family = AF_INET;
+
+      rip->default_information = 1;
+  
+      rip_redistribute_add (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0, NULL);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_rip_default_information_originate,
+       no_rip_default_information_originate_cmd,
+       "no default-information originate",
+       NO_STR
+       "Control distribution of default route\n"
+       "Distribute a default route\n")
+{
+  struct prefix_ipv4 p;
+
+  if (rip->default_information)
+    {
+      memset (&p, 0, sizeof (struct prefix_ipv4));
+      p.family = AF_INET;
+
+      rip->default_information = 0;
+  
+      rip_redistribute_delete (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0);
+    }
+
+  return CMD_SUCCESS;
 }
 
 /* RIP configuration write function. */
@@ -350,13 +569,28 @@ config_write_rip_redistribute (struct vty *vty, int config_mode)
       {
 	if (config_mode)
 	  {
-	    if (rip->route_map[i].name)
-	      vty_out (vty, " redistribute %s route-map %s%s",
-		       str[i], rip->route_map[i].name,
-		       VTY_NEWLINE);
+	    if (rip->route_map[i].metric_config)
+	      {
+		if (rip->route_map[i].name)
+		  vty_out (vty, " redistribute %s metric %d route-map %s%s",
+			   str[i], rip->route_map[i].metric,
+			   rip->route_map[i].name,
+			   VTY_NEWLINE);
+		else
+		  vty_out (vty, " redistribute %s metric %d%s",
+			   str[i], rip->route_map[i].metric,
+			   VTY_NEWLINE);
+	      }
 	    else
-	      vty_out (vty, " redistribute %s%s", str[i],
-		       VTY_NEWLINE);
+	      {
+		if (rip->route_map[i].name)
+		  vty_out (vty, " redistribute %s route-map %s%s",
+			   str[i], rip->route_map[i].name,
+			   VTY_NEWLINE);
+		else
+		  vty_out (vty, " redistribute %s%s", str[i],
+			   VTY_NEWLINE);
+	      }
 	  }
 	else
 	  vty_out (vty, " %s", str[i]);
@@ -400,5 +634,11 @@ rip_zclient_init ()
   /* Install command elements to rip node. */
   install_element (RIP_NODE, &rip_redistribute_type_cmd);
   install_element (RIP_NODE, &rip_redistribute_type_routemap_cmd);
+  install_element (RIP_NODE, &rip_redistribute_type_metric_cmd);
   install_element (RIP_NODE, &no_rip_redistribute_type_cmd);
+  install_element (RIP_NODE, &no_rip_redistribute_type_routemap_cmd);
+  install_element (RIP_NODE, &no_rip_redistribute_type_metric_cmd);
+  install_element (RIP_NODE, &no_rip_redistribute_type_metric_routemap_cmd);
+  install_element (RIP_NODE, &rip_default_information_originate_cmd);
+  install_element (RIP_NODE, &no_rip_default_information_originate_cmd);
 }

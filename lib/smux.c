@@ -72,6 +72,13 @@ int debug_smux = 1;
 
 /* SMUX failure count. */
 int fail = 0;
+
+/* SMUX node. */
+struct cmd_node smux_node =
+{
+  SMUX_NODE,
+  ""                            /* SMUX has no interface. */
+};
 
 void *
 oid_copy (void *dest, void *src, size_t size)
@@ -168,9 +175,50 @@ int
 smux_sock ()
 {
   int ret;
+#ifdef HAVE_IPV6
+  struct addrinfo hints, *res0, *res;
+  int gai;
+#else
   struct sockaddr_in serv;
   struct servent *sp;
-  
+#endif
+
+#ifdef HAVE_IPV6
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = PF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  gai = getaddrinfo(NULL, "smux", &hints, &res0);
+  if (gai == EAI_SERVICE)
+    {
+      char servbuf[NI_MAXSERV];
+      sprintf(servbuf,"%d",SMUX_PORT_DEFAULT);
+      gai = getaddrinfo(NULL, servbuf, &hints, &res0);
+    }
+  if (gai)
+    {
+      zlog_warn("Cannot locate loopback service smux");
+      return -1;
+    }
+  for(res=res0; res; res=res->ai_next)
+    {
+      sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+      if (sock < 0)
+	continue;
+      sockopt_reuseaddr (sock);
+      sockopt_reuseport (sock);
+      ret = connect (sock, res->ai_addr, res->ai_addrlen);
+      if (ret < 0)
+	{
+	  close(sock);
+	  sock = -1;
+	  continue;
+	}
+      break;
+    }
+  freeaddrinfo(res0);
+  if (sock < 0)
+    zlog_warn ("Can't connect to SNMP agent with SMUX");
+#else
   sock = socket (AF_INET, SOCK_STREAM, 0);
   if (sock < 0)
     {
@@ -202,6 +250,7 @@ smux_sock ()
       zlog_warn ("Can't connect to SNMP agent with SMUX");
       return -1;
     }
+#endif
   return sock;
 }
 
@@ -601,17 +650,17 @@ smux_parse (char *ptr, int len)
       return -1;
       break;
     case SMUX_RREQ:
-      /* SMUX_RREQ message is invalied for us. */
+      /* SMUX_RREQ message is invalid for us. */
       zlog_warn ("SMUX_RREQ received: resetting connection.");
       return -1;
       break;
     case SMUX_SOUT:
-      /* SMUX_SOOUT message is invalied for us. */
+      /* SMUX_SOUT message is invalid for us. */
       zlog_warn ("SMUX_SOUT received: resetting connection.");
       return -1;
       break;
     case SMUX_GETRSP:
-      /* SMUX_GETRSP message is invalied for us. */
+      /* SMUX_GETRSP message is invalid for us. */
       zlog_warn ("SMUX_GETRSP received: resetting connection.");
       return -1;
       break;
@@ -623,19 +672,19 @@ smux_parse (char *ptr, int len)
       return -1;
       break;
     case SMUX_RRSP:
-      /* This is responce for register message. */
+      /* This is response for register message. */
       if (debug_smux)
 	zlog_info ("SMUX_RRSP");
       smux_parse_rrsp (ptr, len);
       break;
     case SMUX_GET:
-      /* Exaxt request for object id. */
+      /* Exact request for object id. */
       if (debug_smux)
 	zlog_info ("SMUX_GET");
       smux_parse_get (ptr, len, 1);
       break;
     case SMUX_GETNEXT:
-      /* NExt request for object id. */
+      /* Next request for object id. */
       if (debug_smux)
 	zlog_info ("SMUX_GETNEXT");
       smux_parse_get (ptr, len, 0);
@@ -1072,10 +1121,18 @@ DEFUN (no_smux_peer_password,
 int
 config_write_smux (struct vty *vty)
 {
+  int first = 1;
+  int i;
+
   if (smux_oid != smux_default_oid || smux_passwd != smux_default_passwd)
     {
-      vty_out (vty, "smux peer %s %s%s", smux_oid, smux_passwd, VTY_NEWLINE);
-      return 1;
+      vty_out (vty, "smux peer ");
+      for (i = 0; i < smux_oid_len; i++)
+	{
+	  vty_out (vty, "%s%d", first ? "" : ".", (int) smux_oid[i]);
+	  first = 0;
+	}
+      vty_out (vty, " %s%s", smux_passwd, VTY_NEWLINE);
     }
   return 0;
 }
@@ -1120,6 +1177,8 @@ smux_init (oid defoid[], size_t defoid_len)
   treevec = vector_init (VECTOR_MIN_SIZE);
 
   /* Install commands. */
+  install_node (&smux_node, config_write_smux);
+
   install_element (CONFIG_NODE, &smux_peer_cmd);
   install_element (CONFIG_NODE, &smux_peer_password_cmd);
   install_element (CONFIG_NODE, &no_smux_peer_cmd);

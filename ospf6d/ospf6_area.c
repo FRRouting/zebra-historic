@@ -48,9 +48,9 @@ ospf6_area_init (unsigned long area_id)
   ospf6_lsdb_init_area (o6a);
 
   /* xxx, set options */
-  V3OPT_SET (o6a->options, V3OPT_V6);
-  V3OPT_SET (o6a->options, V3OPT_E);
-  V3OPT_SET (o6a->options, V3OPT_R);
+  OSPF6_OPT_SET (o6a->options, OSPF6_OPT_V6);
+  OSPF6_OPT_SET (o6a->options, OSPF6_OPT_E);
+  OSPF6_OPT_SET (o6a->options, OSPF6_OPT_R);
 
   /* add area list */
   list_add_node (ospf6->area_list, o6a);

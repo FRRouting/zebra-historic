@@ -42,7 +42,7 @@
 /* Next Hop */
 struct ospf6_nexthop
 {
-  unsigned long   ifindex;
+  unsigned int   ifindex;
   struct in6_addr ipaddr;    /* if any */
   unsigned long   advrtr;    /* for inter-area and AS external nexthop */
                              /* 0 for intra-area routes */

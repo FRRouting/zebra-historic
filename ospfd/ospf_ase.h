@@ -30,12 +30,13 @@ struct ospf_route *ospf_find_asbr_route_through_area(struct route_table *,
 						     struct prefix_ipv4 *, 
 						     struct ospf_area *);
 
-int ospf_ase_calculate (struct ospf_lsa *, struct route_table *,
-			struct route_table *);
-
+int ospf_ase_calculate_route (struct ospf_lsa *, void *, int);
 void ospf_ase_calculate_schedule ();
 void ospf_ase_calculate_timer_add ();
 
-void ospf_ase_rtrs_register_lsa (struct ospf_lsa *);
+void ospf_ase_external_lsas_finish (struct route_table *);
+void ospf_ase_incremental_update (struct ospf_lsa *, struct ospf *);
+void ospf_ase_register_external_lsa (struct ospf_lsa *, struct ospf *);
+void ospf_ase_unregister_external_lsa (struct ospf_lsa *, struct ospf *);
 
 #endif /* _ZEBRA_OSPF_ASE_H */

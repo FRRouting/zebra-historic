@@ -132,6 +132,11 @@ struct bgp
     char *name;
     struct route_map *map;
   } rmap[AFI_MAX][ZEBRA_ROUTE_MAX];
+
+  /* BGP distance configuration. */
+  u_char distance_ebgp;
+  u_char distance_ibgp;
+  u_char distance_local;
 };
 
 /* BGP peer-group support. */
@@ -275,6 +280,7 @@ struct peer
 
   /* Route refresh capability. */
   u_char refresh;
+  u_char refresh_nego;
 
   /* User configuration flags. */
   u_int16_t flags;
@@ -372,6 +378,7 @@ struct bgp_nlri
 #define	BGP_MSG_UPDATE		    2
 #define	BGP_MSG_NOTIFY		    3
 #define	BGP_MSG_KEEPALIVE	    4
+#define BGP_MSG_ROUTE_REFRESH_01    5
 #define BGP_MSG_ROUTE_REFRESH	  128
 
 /* BGP message minimum size. */
@@ -498,11 +505,6 @@ struct bgp_nlri
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 
-/* Flag manipulation macros. */
-#define CHECK_FLAG(V,F)      ((V) & (F))
-#define SET_FLAG(V,F)        (V) = (V) | (F)
-#define UNSET_FLAG(V,F)      (V) = (V) & ~(F)
-
 /* IBGP/EBGP identifier */
 /* We also have a CONFED peer, which is to say, a peer who's
    AS is part of our Confederation */
@@ -513,23 +515,6 @@ enum
   BGP_PEER_INTERNAL,
   BGP_PEER_CONFED
 };
-
-/* IPv4 only machine should not accept IPv6 address for peer's IP
-   address.  So we replace VTY command string like below. */
-#ifdef HAVE_IPV6
-#define NEIGHBOR_CMD       "neighbor (A.B.C.D|X:X::X:X) "
-#define NO_NEIGHBOR_CMD    "no neighbor (A.B.C.D|X:X::X:X) "
-#define NEIGHBOR_ADDR_STR  "IP address\nIPv6 address\n"
-#else
-#define NEIGHBOR_CMD       "neighbor A.B.C.D "
-#define NO_NEIGHBOR_CMD    "no neighbor A.B.C.D "
-#define NEIGHBOR_ADDR_STR  "IP address\n"
-#endif /* HAVE_IPV6 */
-
-/* Description of the command. */
-#define ROUTER_STR  "Enable a routing process\n"
-#define AS_STR      "AS number\n"
-#define MBGP_STR    "MBGP information\n"
 
 /* Default max TTL. */
 #define TTL_MAX 255

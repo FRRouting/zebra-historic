@@ -48,13 +48,13 @@
 
 #define DEBUG
 
-struct ospf_nexthop *
-ospf_nexthop_new (struct vertex *parent)
+struct vertex_nexthop *
+vertex_nexthop_new (struct vertex *parent)
 {
-  struct ospf_nexthop *new;
+  struct vertex_nexthop *new;
 
-  new = XMALLOC (MTYPE_OSPF_NEXTHOP, sizeof (struct ospf_nexthop));
-  bzero (new, sizeof (struct ospf_nexthop));
+  new = XMALLOC (MTYPE_OSPF_NEXTHOP, sizeof (struct vertex_nexthop));
+  bzero (new, sizeof (struct vertex_nexthop));
 
   new->parent = parent;
 
@@ -62,17 +62,17 @@ ospf_nexthop_new (struct vertex *parent)
 }
 
 void
-ospf_nexthop_free (struct ospf_nexthop *nh)
+vertex_nexthop_free (struct vertex_nexthop *nh)
 {
   XFREE (MTYPE_OSPF_NEXTHOP, nh);
 }
 
-struct ospf_nexthop *
-ospf_nexthop_dup (struct ospf_nexthop *nh)
+struct vertex_nexthop *
+vertex_nexthop_dup (struct vertex_nexthop *nh)
 {
-  struct ospf_nexthop *new;
+  struct vertex_nexthop *new;
 
-  new = ospf_nexthop_new (nh->parent);
+  new = vertex_nexthop_new (nh->parent);
 
   new->ifp = nh->ifp;
   new->router = nh->router;
@@ -109,7 +109,7 @@ ospf_vertex_free (struct vertex *v)
 
   if (listcount (v->nexthop) > 0)
     for (node = listhead (v->nexthop); node; nextnode (node))
-      ospf_nexthop_free (node->data);
+      vertex_nexthop_free (node->data);
 
   list_delete_all (v->nexthop);
 
@@ -119,12 +119,12 @@ ospf_vertex_free (struct vertex *v)
 void
 ospf_vertex_add_parent (struct vertex *v)
 {
-  struct ospf_nexthop *nh;
+  struct vertex_nexthop *nh;
   listnode node;
 
   for (node = listhead (v->nexthop); node; nextnode (node))
     {
-      nh = (struct ospf_nexthop *) getdata (node);
+      nh = (struct vertex_nexthop *) getdata (node);
       list_add_node (nh->parent->child, v);
     }
 }
@@ -294,7 +294,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
                           struct vertex *v, struct vertex *w)
 {
   listnode node;
-  struct ospf_nexthop *nh, *x;
+  struct vertex_nexthop *nh, *x;
   struct ospf_interface *oi = NULL;
   struct ospf_neighbor * nbr;
   struct in_addr addr;
@@ -304,7 +304,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
   /* W's parent is root. */
   if (v == area->spf)
     {
-      nh = ospf_nexthop_new (v);
+      nh = vertex_nexthop_new (v);
 
       zlog_info ("Z: ospf_nexthop_calculation(): 1");
 
@@ -355,10 +355,10 @@ ospf_nexthop_calculation (struct ospf_area *area,
     {
       for (node = listhead (v->nexthop); node; nextnode (node))
         {
-          x = (struct ospf_nexthop *) getdata (node);
+          x = (struct vertex_nexthop *) getdata (node);
           if (x->parent == area->spf)
             {
-              nh = ospf_nexthop_new (v);
+              nh = vertex_nexthop_new (v);
 
               ospf_nexthop_out_if_addr (w, v, &addr);
 
@@ -374,7 +374,7 @@ ospf_nexthop_calculation (struct ospf_area *area,
   /* Inherit V's nexthop. */
   for (node = listhead (v->nexthop); node; nextnode (node))
     {
-      nh = ospf_nexthop_dup (node->data);
+      nh = vertex_nexthop_dup (node->data);
       nh->parent = v;
       list_add_node (w->nexthop, nh);
     }
@@ -497,7 +497,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
       if (w_lsa == NULL)
         continue;
 
-      if (LS_AGE (w_lsa) == OSPF_LSA_MAX_AGE)
+      if (IS_LSA_MAXAGE (w_lsa))
         continue;
 
       if (! ospf_lsa_has_link (w_lsa->data, v->lsa))
@@ -619,7 +619,7 @@ ospf_spf_dump (struct vertex *v, int i)
 {
   listnode cnode;
   listnode nnode;
-  struct ospf_nexthop *nexthop;
+  struct vertex_nexthop *nexthop;
 
   if (v->type == OSPF_VERTEX_ROUTER)
     zlog_info ("SPF Result: %d [R] %s", i, inet_ntoa (v->lsa->id));

@@ -127,7 +127,7 @@ aspath_delimiter_char (u_char type, u_char which)
 }
 
 /* Convert aspath structure to string expression. */
-static char *
+char *
 aspath_make_str_count (struct aspath *as)
 {
   int space;

@@ -2481,7 +2481,8 @@ config_write_prefix_family (int family, struct vty *vty)
 struct cmd_node prefix_node =
 {
   PREFIX_NODE,
-  ""				/* Prefix list has no interface. */
+  "",				/* Prefix list has no interface. */
+  1
 };
 
 int
@@ -2589,7 +2590,8 @@ prefix_list_init_ipv4 ()
 struct cmd_node prefix_ipv6_node =
 {
   PREFIX_IPV6_NODE,
-  ""				/* Prefix list has no interface. */
+  "",				/* Prefix list has no interface. */
+  1
 };
 
 int

@@ -1,3 +1,22 @@
+2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.88 is released.
+
+	* ospfd.texi (Redistribute routes to OSPF): distance <1-255>
+	@var{source} command is temporary disabled.  So it is removed from
+	document.
+
+2000-07-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.1: Add man entry for vtysh.
+
+	* bgpd.1: Change section to 8.
+	* ospfd.1: Likewise.
+	* ospf6d.1: Likewise.
+	* ripd.1: Likewise.
+	* ripngd.1: Likewise.
+	* zebra.1: Likewise.
+
 1999-09-01  "A.Waddington" <waddington@usa.net>
 
 	* zebra.texi: Replace @command with @code until it gets ready.

@@ -26,7 +26,6 @@
 int
 ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interface)
 {
-  struct ospf6_lsa *lsa;
   state_t ifs_prev;
 
   ifs_prev = ospf6_interface->state;
@@ -66,13 +65,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interf
   ospf6_interface->state = ifs_next;
 
   /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_interface->area);
-  if (lsa)
-    {
-      ospf6_lsa_flood (lsa);
-      ospf6_lsdb_install (lsa);
-      ospf6_lsa_unlock (lsa);
-    }
+  ospf6_lsa_update_router (ospf6_interface->area);
 
   dr_change (ospf6_interface);
 
@@ -82,8 +75,6 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interf
 int
 dr_change (struct ospf6_interface *ospf6_interface)
 {
-  struct ospf6_lsa *lsa;
-
   if (ospf6_interface->prevdr == ospf6_interface->dr
       && ospf6_interface->prevbdr == ospf6_interface->bdr)
     return 0; /* Nothing has been changed */
@@ -99,35 +90,14 @@ dr_change (struct ospf6_interface *ospf6_interface)
                  ospf6_interface->interface->name, prevdr, prevbdr, dr, bdr);
     }
 
-  /* construct Router-LSA */
-  lsa = ospf6_make_router_lsa (ospf6_interface->area);
-  if (lsa)
-    {
-      ospf6_lsa_flood (lsa);
-      ospf6_lsdb_install (lsa);
-      ospf6_lsa_unlock (lsa);
-    }
-
+  /* construct LSAs */
+  ospf6_lsa_update_router (ospf6_interface->area);
   if (ospf6_interface->state == IFS_DR)
     {
-      /* construct Network-LSA */
-      lsa = ospf6_make_network_lsa (ospf6_interface);
-      if (lsa)
-        {
-          ospf6_lsa_flood (lsa);
-          ospf6_lsdb_install (lsa);
-          ospf6_lsa_unlock (lsa);
-        }
-
-      /* construct Intra-Area-Prefix-LSA */
-      lsa = ospf6_make_intra_prefix_lsa (ospf6_interface);
-      if (lsa)
-        {
-          ospf6_lsa_flood (lsa);
-          ospf6_lsdb_install (lsa);
-          ospf6_lsa_unlock (lsa);
-        }
+      ospf6_lsa_update_network (ospf6_interface);
+      ospf6_lsa_update_intra_prefix_transit (ospf6_interface);
     }
+  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area);
 
   return 0;
 }
@@ -183,7 +153,13 @@ interface_up (struct thread *thread)
 #endif /*FREEBSD_32*/
 
   /* Join AllSPFRouters */
-  ospf6_join_allspfrouters (ospf6_interface->interface->ifindex);
+  if (ospf6_join_allspfrouters (ospf6_interface->interface->ifindex) < 0)
+    {
+      zlog_warn ("ISM %s retry interface_up after 2 seconds",
+                 ospf6_interface->interface->name);
+      thread_add_timer (master, interface_up, ospf6_interface, 2);
+      return -1;
+    }
 
   /* set socket options */
   ospf6_reset_mcastloop ();
@@ -208,7 +184,9 @@ interface_up (struct thread *thread)
 
   /* construct LSAs */
   ospf6_lsa_update_link (ospf6_interface);
-  ospf6_lsa_originate_intraprefix (ospf6_interface);
+  if (ospf6_interface->state == IFS_DR)
+    ospf6_lsa_update_intra_prefix_transit (ospf6_interface);
+  ospf6_lsa_update_intra_prefix_stub (ospf6_interface->area);
 
   return 0;
 }

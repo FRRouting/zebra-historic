@@ -180,8 +180,8 @@ ospf_check_abr_status ()
       zlog_info ("Z: ospf_check_abr_status(): new router flags: %x",new_flags);
 
       ospf_top->flags = new_flags;
-      OSPF_LSA_UPDATE_TIMER_ON (ospf_top->t_rlsa_update,
-				ospf_router_lsa_update_timer);
+      OSPF_TIMER_ON (ospf_top->t_router_lsa_update,
+		     ospf_router_lsa_update_timer, OSPF_LSA_UPDATE_DELAY);
     }
 }
 
@@ -200,12 +200,24 @@ ospf_abr_update_aggregate (struct ospf_area_range *range,
     }
 }
 
+static void
+set_metric (struct ospf_lsa *lsa, u_int32_t metric)
+{
+  struct summary_lsa *header;
+  u_char *mp;
+  metric = htonl (metric);
+  mp = (char *) &metric;
+  mp++;
+  header = (struct summary_lsa *) lsa->data;
+  memcpy(header->metric, mp, 3);
+}
+
 void
 ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 				   struct ospf_area *area)
 {
   struct ospf_lsa *lsa, *old = NULL;
-  struct summary_lsa *slsa = NULL;
+  struct summary_lsa *sl = NULL;
 
   zlog_info ("Z: ospf_abr_announce_network_to_area(): Start");
 
@@ -215,15 +227,14 @@ ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
     {
       zlog_info ("Z: ospf_abr_announce_network_to_area(): old summary found");
 
-      slsa = (struct summary_lsa *) old->data;
+      sl = (struct summary_lsa *) old->data;
 
       zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		 "old metric: %d, new metric: %d",
-		 GET_METRIC (slsa->metric), cost);
+		 GET_METRIC (sl->metric), cost);
     }
 
-
-  if (old && (GET_METRIC (slsa->metric) == cost))
+  if (old && (GET_METRIC (sl->metric) == cost))
     {
       zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		 "old summary approved"); 
@@ -231,39 +242,42 @@ ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
     }
   else
     {
-      zlog_info("Z: ospf_abr_announce_network_to_area(): "
-		"creating new summary");
-      lsa = ospf_summary_lsa (p, cost, area, old);
-      SET_FLAG (lsa->flags, OSPF_LSA_APPROVED);
-
-      /* Z: check later: Just copy the new body ??? or better remove old and install new ??*/
-       
+      zlog_info ("Z: ospf_abr_announce_network_to_area(): "
+		 "creating new summary");
       if (old)
 	{
 	  zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		     "copying new summary to the old body");
+
+	  set_metric (old, cost);
+	  ospf_summary_lsa_refresh (old);
+	  lsa = old;
+#if 0
 	  memcpy (old->data, lsa->data, sizeof (struct summary_lsa));
           old->tv_recv = lsa->tv_recv;
           old->tv_orig = lsa->tv_orig;
 	  old->flags = lsa->flags;
-	  ospf_lsa_free (lsa);
-          zlog_info ("Z: ospf_lsa_free() in ospf_abr_announce_network_to_area(): %x", lsa);
+	  ospf_lsa_discard (lsa);
+          zlog_info ("Z: ospf_lsa_discard() in ospf_abr_announce_network_to_area(): %x", lsa);
 	  lsa = old;
 	  if (lsa->refresh_list)
 	    ospf_refresher_unregister_lsa (lsa);
 	  ospf_refresher_register_lsa (area->top, lsa);
+#endif
 	}
       else
 	{
+	  lsa = ospf_summary_lsa_originate (p, cost, area);
 	  zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		     "installing new summary");
-	  ospf_summary_lsa_install (area, lsa);
+	  /* ospf_summary_lsa_install (area, lsa); */
 	}
 
+      SET_FLAG (lsa->flags, OSPF_LSA_APPROVED);
+      /*
       zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		 "flooding new version of summary");
-
-      ospf_flood_through_area (area, NULL, lsa);
+      ospf_flood_through_area (area, NULL, lsa); */
     }
 
   zlog_info ("Z: ospf_abr_announce_network_to_area(): Stop");
@@ -452,7 +466,6 @@ ospf_abr_process_network_rt (struct route_table *rt)
 	       continue;
 	     }
 
-
       zlog_info ("Z: ospf_abr_process_network_rt(): announcing");
       ospf_abr_announce_network (rn, or);
     }
@@ -489,11 +502,6 @@ ospf_abr_announce_rtr_to_area (struct prefix_ipv4 *p, u_int32_t cost,
     }
   else
     {
-      zlog_info ("Z: ospf_abr_announce_rtr_to_area(): creating new summary");
-      lsa = ospf_summary_asbr_lsa (p, cost, area, old);
-
-      SET_FLAG (lsa->flags, OSPF_LSA_APPROVED);
-
       zlog_info ("Z: ospf_abr_announce_rtr_to_area(): 2.2");
 
       /* Z: check later: Just copy the new body ??? or better remove old and install new ??*/
@@ -502,27 +510,37 @@ ospf_abr_announce_rtr_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 	{ 
 	  zlog_info ("Z: ospf_abr_announce_rtr_to_area(): "
 		     "copying new summary to the old body");
+	  set_metric (old, cost);
+	  ospf_summary_asbr_lsa_refresh (old);
+	  lsa = old;
+#if 0
 	  memcpy (old->data, lsa->data, sizeof (struct summary_lsa));
           old->tv_recv = lsa->tv_recv;
           old->tv_orig = lsa->tv_orig;
-	  ospf_lsa_free (lsa);
-          zlog_info ("Z: ospf_lsa_free() in ospf_abr_announce_rtr_to_area(): %x", lsa);
+	  ospf_lsa_discard (lsa);
+          zlog_info ("Z: ospf_lsa_discard() in ospf_abr_announce_rtr_to_area(): %x", lsa);
 	  lsa = old;
 	  if (lsa->refresh_list)
 	    ospf_refresher_unregister_lsa (lsa);
           ospf_refresher_register_lsa (area->top, lsa);
+#endif
 	}
       else
 	{
+	  lsa = ospf_summary_asbr_lsa_originate (p, cost, area);
 	  zlog_info ("Z: ospf_abr_announce_rtr_to_area(): "
 		     "installing new summary");
-	  ospf_summary_asbr_lsa_install (area, lsa);
+	  /*	  ospf_summary_asbr_lsa_install (area, lsa); */
 	}
 
       zlog_info ("Z: ospf_abr_announce_rtr_to_area(): "
 		 "flooding new version of summary");
+      /*
+      zlog_info ("Z: ospf_abr_announce_rtr_to_area(): creating new summary");
+      lsa = ospf_summary_asbr_lsa (p, cost, area, old);  */
 
-      ospf_flood_through_area (area, NULL, lsa);
+      SET_FLAG (lsa->flags, OSPF_LSA_APPROVED);
+      /* ospf_flood_through_area (area, NULL, lsa);*/
     }
 
   zlog_info ("Z: ospf_abr_announce_rtr_to_area(): Stop");
@@ -644,7 +662,6 @@ ospf_abr_process_router_rt (struct route_table *rt)
 		       "This route has LS_INFINITY metric, skipping");
 	    continue;
 	  }
-
 
         if (ospf_top->abr_type == OSPF_ABR_CISCO ||
             ospf_top->abr_type == OSPF_ABR_IBM)
@@ -781,12 +798,10 @@ ospf_abr_announce_aggregates ()
 
                   /* We do not check nexthops here, because
                      intra-area routes can be associated with
-		     one area only
-		   */
+		     one area only */
 
 		  /* backbone routes are not summarized
-		     when announced into transit areas
-                   */                  
+		     when announced into transit areas */
 
                   if (ospf_area_is_transit (ar) &&
 		      OSPF_IS_AREA_BACKBONE (area))

@@ -28,6 +28,7 @@
 
 #include "if.h"
 #include "log.h"
+#include "newlist.h"
 #include "prefix.h"
 #include "command.h"
 #include "smux.h"
@@ -195,11 +196,81 @@ bgpLocalAs (struct variable *v, oid objid[], size_t *objid_len,
   return (u_char *)&localas;
 }
 
+
+struct peer *
+peer_lookup_addr_ipv4 (struct in_addr src)
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  struct peer_conf *conf;
+  struct newnode *nn;
+  struct newnode *nm;
+  struct in_addr *p;
+  union sockunion su;
+  int ret;
+
+  memset (&su, 0, sizeof (union sockunion));
+
+  NEWLIST_LOOP (bgp_list, bgp, nn)
+    {
+      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+	{
+	  peer = conf->peer;
+          ret = inet_pton (AF_INET, peer->host, &su.sin.sin_addr);
+          if (ret > 0)
+            {
+	      p = &su.sin.sin_addr;
+
+	      if (IPV4_ADDR_SAME (&p, &src))
+	        return peer;
+	    }
+	}
+    }
+   
+  return NULL;
+}
+
+struct peer *
+bgp_peer_lookup_next (struct in_addr *src)
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  struct peer_conf *conf;
+  struct newnode *nn;
+  struct newnode *nm;
+  struct in_addr *p;
+  union sockunion su;
+  int ret;
+
+  memset (&su, 0, sizeof (union sockunion));
+
+  NEWLIST_LOOP (bgp_list, bgp, nn)
+    {
+      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+	{
+	  peer = conf->peer;
+          ret = inet_pton (AF_INET, peer->host, &su.sin.sin_addr);
+          if (ret > 0)
+            {
+	      p = &su.sin.sin_addr;
+
+	      if (ntohl (p->s_addr) > ntohl (src->s_addr))
+		{
+		  src->s_addr = p->s_addr;
+		  return peer;
+		}
+	    }
+	}
+    }
+  return NULL;
+}
+
 struct peer *
 bgpPeerTable_lookup (struct variable *v, oid objid[], size_t *objid_len, 
 		     struct in_addr *addr, int exact)
 {
   struct peer *peer = NULL;
+  int len;
 
   if (exact)
     {
@@ -209,9 +280,27 @@ bgpPeerTable_lookup (struct variable *v, oid objid[], size_t *objid_len,
 
       oid2in_addr (objid, sizeof (struct in_addr), addr);
 
-      /* peer =  peer_lookup_addr_ipv4 (*addr); */
+      peer = peer_lookup_addr_ipv4 (*addr);
       return peer;
     }
+  else
+    {
+      len = *objid_len - v->namelen;
+      if (len > 4) len = 4;
+      
+      oid2in_addr (objid + v->namelen, len, addr);
+      
+      peer = bgp_peer_lookup_next (addr);
+
+      if (peer == NULL)
+	return NULL;
+
+      oid_copy_addr (objid + v->namelen, addr, sizeof (struct in_addr));
+      *objid_len = sizeof (struct in_addr) + v->namelen;
+
+      return peer;
+    }
+
 
   return NULL;
 }
@@ -222,6 +311,10 @@ bgpPeerTable (struct variable *v, oid objid[], size_t *objid_len,
 {
   static struct in_addr addr;
   struct peer *peer;
+  static int int_answer;
+  static long long_answer;
+
+  memset (&addr, 0, sizeof (struct in_addr));
 
   peer = bgpPeerTable_lookup (v, objid, objid_len, &addr, exact);
   if (! peer)
@@ -230,37 +323,79 @@ bgpPeerTable (struct variable *v, oid objid[], size_t *objid_len,
   switch (v->magic)
     {
     case BGPPEERIDENTIFIER:
-      break;
+      *val_len = sizeof (struct in_addr);
+      return (u_char *)&addr;
     case BGPPEERSTATE:
-      break;
+      *val_len = sizeof (int);
+      return (u_char *)&peer->status;
     case BGPPEERADMINSTATUS:
-      break;
+      int_answer = 2 - ((peer->flags & PEER_FLAG_SHUTDOWN) / PEER_FLAG_SHUTDOWN);
+      *val_len = sizeof (int);
+      return (u_char *)&int_answer;
     case BGPPEERNEGOTIATEDVERSION:
-      break;
+      *val_len = sizeof (int);
+      int_answer = (0x80 >> (peer->version - 1));
+      return (u_char *)&int_answer;
     case BGPPEERLOCALADDR:
-      break;
+      if (peer->su_local)
+	  addr = peer->su_local->sin.sin_addr;
+      else
+          memset(&addr, 0, sizeof (struct in_addr));
+      *val_len = sizeof (struct in_addr);
+      return (u_char *)&addr;
     case BGPPEERLOCALPORT:
-      break;
+      if (peer->su_local)
+	  int_answer = peer->su_local->sin.sin_port;
+      else
+	  int_answer = 0;
+      *val_len = sizeof (int);
+      return (u_char *)&int_answer;
     case BGPPEERREMOTEADDR:
-      break;
+      if (peer->su_remote)
+	  addr = peer->su_remote->sin.sin_addr;
+      else
+          memset(&addr, 0, sizeof (struct in_addr));
+      *val_len = sizeof (struct in_addr);
+      return (u_char *)&addr;
     case BGPPEERREMOTEPORT:
-      break;
+      if (peer->su_remote)
+	  int_answer = peer->su_remote->sin.sin_port;
+      else
+	  int_answer = 0;
+      *val_len = sizeof (int);
+      return (u_char *)&int_answer;
     case BGPPEERREMOTEAS:
-      break;
+      *val_len = sizeof (long);
+      long_answer = peer->as;
+      return (u_char *)&long_answer;
     case BGPPEERINUPDATES:
-      break;
+      *val_len = sizeof (long);
+      long_answer = peer->update_in;
+      return (u_char *)&long_answer;
     case BGPPEEROUTUPDATES:
-      break;
+      *val_len = sizeof (long);
+      long_answer = peer->update_out;
+      return (u_char *)&long_answer;
     case BGPPEERINTOTALMESSAGES:
-      break;
+      *val_len = sizeof (long);
+      long_answer = peer->open_in + peer->update_in + peer->keepalive_in + peer->notify_in;
+      return (u_char *)&long_answer;
     case BGPPEEROUTTOTALMESSAGES:
-      break;
+      *val_len = sizeof (long);
+      long_answer = peer->open_out + peer->update_out + peer->keepalive_out + peer->notify_out;
+      return (u_char *)&long_answer;
     case BGPPEERLASTERROR:
-      break;
+      *val_len = sizeof (int);
+      int_answer=0;
+      return (u_char *)&int_answer;
     case BGPPEERFSMESTABLISHEDTRANSITIONS:
-      break;
+      *val_len = sizeof (int);
+      int_answer=0;
+      return (u_char *)&int_answer;
     case BGPPEERFSMESTABLISHEDTIME:
-      break;
+      *val_len = sizeof (long);
+      long_answer = time(NULL) - peer->uptime;
+      return (u_char *)&long_answer;
     case BGPPEERCONNECTRETRYINTERVAL:
       break;
     case BGPPEERHOLDTIME:
@@ -296,7 +431,21 @@ u_char *
 bgpIdentifier (struct variable *v, oid objid[], size_t *objid_len,
 	       int exact, size_t *val_len, WriteMethod **write_method)
 {
-  return NULL;
+  static struct in_addr id;
+  struct bgp *bgp;
+
+  if (smux_header_generic(v, objid, objid_len, exact, val_len, write_method) == MATCH_FAILED)
+    return NULL;
+
+  /* Get first bgp structure. */
+  bgp = bgp_get_default ();
+  if (!bgp)
+    return NULL;
+
+  id = bgp->id;
+
+  *val_len = sizeof (id);
+  return (u_char *)&id;
 }
 
 u_char *

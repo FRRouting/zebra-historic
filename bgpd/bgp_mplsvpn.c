@@ -533,6 +533,7 @@ struct cmd_node bgp_vpnv4_node =
 {
   BGP_VPNV4_NODE,
   "%s(config-router-af)# ",
+  1
 };
 
 void

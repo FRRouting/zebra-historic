@@ -54,6 +54,17 @@ typedef enum
   RMAP_NEXT
 } route_map_end_t;
 
+typedef enum
+{
+  RMAP_EVENT_SET_ADDED,
+  RMAP_EVENT_SET_DELETED,
+  RMAP_EVENT_SET_REPLACED,
+  RMAP_EVENT_MATCH_ADDED,
+  RMAP_EVENT_MATCH_DELETED,
+  RMAP_EVENT_INDEX_ADDED,
+  RMAP_EVENT_INDEX_DELETED
+} route_map_event_t;
+
 /* Route map rule structure for matching and setting. */
 struct route_map_rule_cmd
 {
@@ -173,7 +184,9 @@ route_map_result_t
 route_map_apply (struct route_map *map, struct prefix *, 
 		 route_map_object_t object_type, void *object);
 
-void route_map_add_hook (void (*func) ());
-void route_map_delete_hook (void (*func) ());
+void route_map_add_hook (void (*func) (char *));
+void route_map_delete_hook (void (*func) (char *));
+void route_map_event_hook (void (*func) (route_map_event_t, char *));
+
 
 #endif /* _ZEBRA_ROUTEMAP_H */

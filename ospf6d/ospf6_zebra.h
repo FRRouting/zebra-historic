@@ -22,12 +22,12 @@
 #ifndef OSPF6_ZEBRA_H
 #define OSPF6_ZEBRA_H
 
-extern struct zebra *zebra;
+extern struct zclient *zclient;
 
 void ospf6_zebra_redistribute (int);
 void ospf6_zebra_no_redistribute (int);
 
-int ospf6_zebra_get_interface (int, struct zebra *, zebra_size_t);
+int ospf6_zebra_get_interface (int, struct zclient *, zebra_size_t);
 int ospf6_zebra_read (struct thread *); 
 void ospf6_zebra_init ();
 void ospf6_zebra_start ();
@@ -42,7 +42,7 @@ void ospf6_redist_route_delete (int, int, struct prefix_ipv6 *);
 
 void ospf6_redist_connected_route_add (int, int, struct prefix_ipv6 *);
 
-int ospf6_zebra_read_ipv6 (int, struct zebra *, zebra_size_t);
+int ospf6_zebra_read_ipv6 (int, struct zclient *, zebra_size_t);
 
 #endif /*OSPF6_ZEBRA_H*/
 

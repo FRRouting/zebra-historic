@@ -86,7 +86,9 @@ struct ospf_interface
 
   /* Configured varables. */
   u_int32_t transmit_delay;		/* Interface Transmisson Delay */
-  u_int32_t output_cost;		/* Interface Output Cost */
+  u_int32_t output_cost;		/* Acutual Interface Output Cost */
+  u_int32_t output_cost_cmd;	        /* Command Interface Output Cost */
+#define OSPF_IF_NO_IP_OSPF_COST         0
   u_int32_t retransmit_interval;	/* Retransmission Interval */
   u_char passive_interface;             /* OSPF Interface is passive */
 #define OSPF_IF_ACTIVE                  0
@@ -109,7 +111,15 @@ struct ospf_interface
   struct ospf_lsa *network_lsa_self;	/* network-LSA. */
   struct ospf_lsa *summary_lsa_self;	/* summary-LSA. */
 
+  struct route_table *ls_upd_queue;
+
   list ls_ack;				/* Link State Acknowledgment list. */
+  
+  struct
+  {
+    list ls_ack;
+    struct in_addr dst;
+  } ls_ack_direct;
 
   /* Timer values. */
   u_int32_t v_hello;			/* Hello Interval */
@@ -122,6 +132,8 @@ struct ospf_interface
   struct thread *t_hello;
   struct thread *t_wait;
   struct thread *t_ls_ack;
+  struct thread *t_ls_ack_direct;
+  struct thread *t_ls_upd_event;
   struct thread *t_network_lsa_self;    /* self-originated network-LSA
                                            reflesh thread. */
 
@@ -154,6 +166,7 @@ void ospf_if_stream_set (struct ospf_interface *);
 void ospf_if_stream_unset (struct ospf_interface *);
 void ospf_if_reset_variables (struct ospf_interface *oi);
 int ospf_if_is_enable (struct interface *);
+int ospf_if_get_output_cost (struct ospf_interface *);
 
 struct ospf_interface *ospf_vl_new (struct ospf_vl_data *);
 struct ospf_vl_data *ospf_vl_data_new (struct ospf_area *, struct in_addr);

@@ -49,8 +49,9 @@ struct rib
   int type;			/* Type of this route */
   u_char flags;			/*  */
   unsigned int status;		/* Have this route goes to fib. */
-  int distance;			/* Distance of this route. */
+  u_char distance;		/* Distance of this route. */
   int table;			/* Which routing table */
+  u_int32_t metric;		/* Metric of this route. */
   struct
   {
     struct in_addr gate4;
@@ -86,7 +87,8 @@ struct rt *rib_search_rt (int, struct rt *);
 
 int
 rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p, 
-	      struct in_addr *gate, unsigned int ifindex, int table);
+	      struct in_addr *gate, unsigned int ifindex, int table,
+	      u_int32_t, u_char);
 int
 rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 		 struct in_addr *gate, unsigned int ifindex, int table);
@@ -105,5 +107,6 @@ void rib_if_up (struct interface *);
 void rib_if_down (struct interface *);
 void rib_if_delete (struct interface *);
 
+u_int32_t rib_lookup_ipv4_nexthop (struct in_addr);
 
 #endif /*_ZEBRA_RIB_H */

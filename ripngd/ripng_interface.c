@@ -114,11 +114,11 @@ ripng_check_max_mtu ()
 
 /* Inteface addition message from zebra. */
 int
-ripng_interface_add (int command, struct zebra *zebra, zebra_size_t length)
+ripng_interface_add (int command, struct zclient *zclient, zebra_size_t length)
 {
   struct interface *ifp;
 
-  ifp = zebra_interface_add_read (zebra->ibuf);
+  ifp = zebra_interface_add_read (zclient->ibuf);
 
   if (IS_RIPNG_DEBUG_ZEBRA)
     zlog_info ("RIPng interface add %s index %d flags %d metric %d mtu %d",
@@ -137,20 +137,21 @@ ripng_interface_add (int command, struct zebra *zebra, zebra_size_t length)
 }
 
 int
-ripng_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
+ripng_interface_delete (int command, struct zclient *zclient,
+			zebra_size_t length)
 {
   return 0;
 }
 
 int
-ripng_interface_address_add (int command, struct zebra *zebra,
+ripng_interface_address_add (int command, struct zclient *zclient,
 			     zebra_size_t length)
 {
   struct connected *c;
   struct prefix *p;
   char buf[INET6_ADDRSTRLEN];
 
-  c = zebra_interface_address_add_read (zebra->ibuf);
+  c = zebra_interface_address_add_read (zclient->ibuf);
 
   if (c == NULL)
     return 0;
@@ -171,7 +172,7 @@ ripng_interface_address_add (int command, struct zebra *zebra,
 }
 
 int
-ripng_interface_address_delete (int command, struct zebra *zebra,
+ripng_interface_address_delete (int command, struct zclient *zclient,
 				zebra_size_t length)
 {
   return 0;

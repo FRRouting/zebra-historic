@@ -127,17 +127,7 @@ if_get_mtu (struct interface *ifp)
 
   ifreq_set_name (&ifreq, ifp);
 
-#if defined(SIOCGIFDATA)
-  if (if_ioctl (SIOCGIFDATA, (caddr_t) & ifreq) < 0) 
-    {
-      zlog (NULL, LOG_INFO, "Can't lookup mtu by ioctl(SIOCGIFDATA)");
-      ifp->mtu = -1;
-      return;
-    }
-
-  ifp->mtu = ((struct if_data *)ifreq.ifr_data)->ifi_mtu;
-
-#elif defined(SIOCGIFMTU)
+#if defined(SIOCGIFMTU)
   if (if_ioctl (SIOCGIFMTU, (caddr_t) & ifreq) < 0) 
     {
       zlog_info ("Can't lookup mtu by ioctl(SIOCGIFMTU)");

@@ -83,10 +83,10 @@ char *lstype_name[] =
 
 char *rlsatype_name[] =
 {
-  "PtoP",
+  "PoinToPoint",
   "Transit",
   "Stub",
-  "virtual",
+  "Virtual Link",
   NULL
 };
 
@@ -100,11 +100,11 @@ char *print_lsreq (struct ospf6_lsreq *lsreq)
   snprintf (id, sizeof (id), "%u", (u_int32_t)ntohl (lsreq->lsreq_id));
   switch (ntohs (lsreq->lsreq_type))
     {
-      case LST_ROUTER_LSA:
-      case LST_NETWORK_LSA:
-      case LST_LINK_LSA:
-      case LST_INTRA_AREA_PREFIX_LSA:
-      case LST_AS_EXTERNAL_LSA:
+      case OSPF6_LSA_TYPE_ROUTER:
+      case OSPF6_LSA_TYPE_NETWORK:
+      case OSPF6_LSA_TYPE_LINK:
+      case OSPF6_LSA_TYPE_INTRA_PREFIX:
+      case OSPF6_LSA_TYPE_AS_EXTERNAL:
         type = lstype_name[typeindex(lsreq->lsreq_type)];
         break;
       default:
@@ -129,11 +129,11 @@ char *print_ls_reference (struct ospf6_lsa_hdr *lsh)
   snprintf (id, sizeof (id), "%u", (u_int32_t)ntohl (lsh->lsh_id));
   switch (ntohs (lsh->lsh_type))
     {
-      case LST_ROUTER_LSA:
-      case LST_NETWORK_LSA:
-      case LST_LINK_LSA:
-      case LST_INTRA_AREA_PREFIX_LSA:
-      case LST_AS_EXTERNAL_LSA:
+      case OSPF6_LSA_TYPE_ROUTER:
+      case OSPF6_LSA_TYPE_NETWORK:
+      case OSPF6_LSA_TYPE_LINK:
+      case OSPF6_LSA_TYPE_INTRA_PREFIX:
+      case OSPF6_LSA_TYPE_AS_EXTERNAL:
         type = lstype_name[typeindex(lsh->lsh_type)];
         break;
       default:
@@ -159,11 +159,11 @@ char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
   snprintf (seqnum, sizeof (seqnum), "%x", (u_int32_t)ntohl (lsh->lsh_seqnum));
   switch (ntohs (lsh->lsh_type))
     {
-      case LST_ROUTER_LSA:
-      case LST_NETWORK_LSA:
-      case LST_LINK_LSA:
-      case LST_INTRA_AREA_PREFIX_LSA:
-      case LST_AS_EXTERNAL_LSA:
+      case OSPF6_LSA_TYPE_ROUTER:
+      case OSPF6_LSA_TYPE_NETWORK:
+      case OSPF6_LSA_TYPE_LINK:
+      case OSPF6_LSA_TYPE_INTRA_PREFIX:
+      case OSPF6_LSA_TYPE_AS_EXTERNAL:
         type = lstype_name[typeindex(lsh->lsh_type)];
         break;
       default:
@@ -311,8 +311,10 @@ ospf6_dump_dbdesc (struct iovec *message)
 {
   struct ospf6_dbdesc *dbdesc;
   char dbdesc_bit[4], *p;
+  int i;
+  char buffer[1024];
 
-  dbdesc = (struct ospf6_dbdesc *) (*message).iov_base;
+  dbdesc = (struct ospf6_dbdesc *) message[0].iov_base;
   p = dbdesc_bit;
 
   /* Initialize bit */
@@ -328,9 +330,16 @@ ospf6_dump_dbdesc (struct iovec *message)
     *p++ = 's';
   *p = '\0';
 
-  zlog_info ("  DbDesc: Option:%s IFMTU:%hu Bit:%s",
-             "xxx", ntohs (dbdesc->ifmtu), dbdesc_bit);
-  zlog_info ("          SequeceNum:%lu", ntohl (dbdesc->seqnum));
+  zlog_info ("DbDesc: Option:%s IFMTU:%hu Bit:%s SeqNum:%lu",
+             "xxx", ntohs (dbdesc->ifmtu),
+             dbdesc_bit, ntohl (dbdesc->seqnum));
+
+  for (i = 1; message[i].iov_base; i++)
+    {
+      ospf6_dump_lsa_header_print (buffer, sizeof (buffer),
+        (struct ospf6_lsa_header *)message[i].iov_base);
+      zlog_info ("DbDesc: %s", buffer);
+    }
 }
 
 static void
@@ -404,6 +413,21 @@ ospf6_dump_message (struct iovec *message)
 }
 
 void
+ospf6_dump_lsa_header_print (char *buffer, int bufsize,
+                             struct ospf6_lsa_header *lsa_header)
+{
+  char advrtr[64];
+
+  inet_ntop (AF_INET, &lsa_header->advrtr, advrtr, sizeof (advrtr));
+  snprintf (buffer, bufsize,
+            "%s AdvRtr:%s Id:%lu Age:%d SeqNum:%#x Cksum:%#hx",
+            ospf6_lsa_type_string (lsa_header->type),
+            advrtr, (unsigned long) ntohl (lsa_header->ls_id),
+            ntohs (lsa_header->age),
+            ntohl (lsa_header->seqnum), lsa_header->checksum);
+}
+
+void
 ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *lsa_hdr)
 {
   char advrtr[64];
@@ -420,7 +444,7 @@ ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *lsa_hdr)
 void
 ospf6_dump_lsa (struct ospf6_lsa *lsa)
 {
-  ospf6_age_current (lsa);
+  ospf6_lsa_age_current (lsa);
   ospf6_dump_lsa_hdr (lsa->lsa_hdr);
 }
 
@@ -528,194 +552,94 @@ DEFUN (no_debug_ospf6_message,
   return CMD_SUCCESS;
 }
 
-DEFUN (debug_ospf6_spf,
-       debug_ospf6_spf_cmd,
-       "debug ospf6 spf",
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Calculation event\n"
-       )
-{
-  ospf6_spf_dump = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_spf,
-       no_debug_ospf6_spf_cmd,
-       "no debug ospf6 spf",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Calculation event\n"
-       )
-{
-  ospf6_spf_dump = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_ospf6_neighbor,
-       debug_ospf6_neighbor_cmd,
-       "debug ospf6 neighbor",
+DEFUN (debug_ospf6,
+       debug_ospf6_cmd,
+       "debug ospf6 (neighbor|interface|area|lsdb|dbex|spf|route|zebra|config|all)",
        "Debugging infomation\n"
        OSPF6_STR
        "OSPF6 Neighbor event\n"
-       )
-{
-  ospf6_neighbor_dump = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_neighbor,
-       no_debug_ospf6_neighbor_cmd,
-       "no debug ospf6 neighbor",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Neighbor event\n"
-       )
-{
-  ospf6_neighbor_dump = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_ospf6_interface,
-       debug_ospf6_interface_cmd,
-       "debug ospf6 interface",
-       "Debugging infomation\n"
-       OSPF6_STR
        "OSPF6 Interface event\n"
-       )
-{
-  ospf6_interface_dump = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_interface,
-       no_debug_ospf6_interface_cmd,
-       "no debug ospf6 interface",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Interface event\n"
-       )
-{
-  ospf6_interface_dump = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_ospf6_area,
-       debug_ospf6_area_cmd,
-       "debug ospf6 area",
-       "Debugging infomation\n"
-       OSPF6_STR
        "OSPF6 Area event\n"
-       )
-{
-  ospf6_area_dump = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_area,
-       no_debug_ospf6_area_cmd,
-       "no debug ospf6 area",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Area event\n"
-       )
-{
-  ospf6_area_dump = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_ospf6_lsa,
-       debug_ospf6_lsa_cmd,
-       "debug ospf6 lsa",
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 LSA event\n"
-       )
-{
-  ospf6_lsa_dump = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_lsa,
-       no_debug_ospf6_lsa_cmd,
-       "no debug ospf6 lsa",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 LSA event\n"
-       )
-{
-  ospf6_lsa_dump = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_ospf6_zebra,
-       debug_ospf6_zebra_cmd,
-       "debug ospf6 zebra",
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Zebra event\n"
-       )
-{
-  ospf6_zebra_dump = 1;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_debug_ospf6_zebra,
-       no_debug_ospf6_zebra_cmd,
-       "no debug ospf6 zebra",
-       NO_STR
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Zebra event\n"
-       )
-{
-  ospf6_zebra_dump = 0;
-  return CMD_SUCCESS;
-}
-
-DEFUN (debug_ospf6_config,
-       debug_ospf6_config_cmd,
-       "debug ospf6 (config|dbex|route)",
-       "Debugging infomation\n"
-       OSPF6_STR
-       "OSPF6 Config event\n"
+       "OSPF6 LSA Database event\n"
        "OSPF6 LSA Database exchange event\n"
-       "OSPF6 route trace\n"
+       "OSPF6 Calculation event\n"
+       "OSPF6 Route trace\n"
+       "OSPF6 Zebra event\n"
+       "OSPF6 Config event\n"
+       "all OSPF6 event\n"
        )
 {
-  if (!strcmp ("config", argv[0]))
-    ospf6_config_dump = 1;
+  if (!strcmp ("neighbor", argv[0]))
+    ospf6_neighbor_dump = 1;
+  else if (!strcmp ("interface", argv[0]))
+    ospf6_interface_dump = 1;
+  else if (!strcmp ("area", argv[0]))
+    ospf6_area_dump = 1;
+  else if (!strcmp ("lsdb", argv[0]))
+    ospf6_lsa_dump = 1;
   else if (!strcmp ("dbex", argv[0]))
     ospf6_dbex_dump = 1;
+  else if (!strcmp ("spf", argv[0]))
+    ospf6_spf_dump = 1;
   else if (!strcmp ("route", argv[0]))
     ospf6_route_dump = 1;
+  else if (!strcmp ("zebra", argv[0]))
+    ospf6_zebra_dump = 1;
+  else if (!strcmp ("config", argv[0]))
+    ospf6_config_dump = 1;
+  else if (!strcmp ("all", argv[0]))
+    ospf6_neighbor_dump = ospf6_interface_dump
+    = ospf6_area_dump = ospf6_lsa_dump
+    = ospf6_dbex_dump = ospf6_spf_dump
+    = ospf6_route_dump = ospf6_zebra_dump
+    = ospf6_config_dump = 1;
   else
     return CMD_ERR_NO_MATCH;
   return CMD_SUCCESS;
 }
 
-DEFUN (no_debug_ospf6_config,
-       no_debug_ospf6_config_cmd,
-       "no debug ospf6 (config|dbex|route)",
+DEFUN (no_debug_ospf6,
+       no_debug_ospf6_cmd,
+       "no debug ospf6 (neighbor|interface|area|lsdb|dbex|spf|route|zebra|config|all)",
        NO_STR
        "Debugging infomation\n"
        OSPF6_STR
-       "OSPF6 Configuration event\n"
+       "OSPF6 Neighbor event\n"
+       "OSPF6 Interface event\n"
+       "OSPF6 Area event\n"
+       "OSPF6 LSA Database event\n"
        "OSPF6 LSA Database exchange event\n"
-       "OSPF6 route trace\n"
+       "OSPF6 Calculation event\n"
+       "OSPF6 Route trace\n"
+       "OSPF6 Zebra event\n"
+       "OSPF6 Config event\n"
+       "all OSPF6 event\n"
        )
 {
-  if (!strcmp ("config", argv[0]))
-    ospf6_config_dump = 0;
+  if (!strcmp ("neighbor", argv[0]))
+    ospf6_neighbor_dump = 0;
+  else if (!strcmp ("interface", argv[0]))
+    ospf6_interface_dump = 0;
+  else if (!strcmp ("area", argv[0]))
+    ospf6_area_dump = 0;
+  else if (!strcmp ("lsdb", argv[0]))
+    ospf6_lsa_dump = 0;
   else if (!strcmp ("dbex", argv[0]))
     ospf6_dbex_dump = 0;
+  else if (!strcmp ("spf", argv[0]))
+    ospf6_spf_dump = 0;
   else if (!strcmp ("route", argv[0]))
     ospf6_route_dump = 0;
+  else if (!strcmp ("zebra", argv[0]))
+    ospf6_zebra_dump = 0;
+  else if (!strcmp ("config", argv[0]))
+    ospf6_config_dump = 0;
+  else if (!strcmp ("all", argv[0]))
+    ospf6_neighbor_dump = ospf6_interface_dump
+    = ospf6_area_dump = ospf6_lsa_dump
+    = ospf6_dbex_dump = ospf6_spf_dump
+    = ospf6_route_dump = ospf6_zebra_dump
+    = ospf6_config_dump = 0;
   else
     return CMD_ERR_NO_MATCH;
   return CMD_SUCCESS;
@@ -842,7 +766,7 @@ ospf6_config_write_debug (struct vty *vty)
   if (IS_OSPF6_DUMP_AREA)
     vty_out (vty, "debug ospf6 area%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_LSA)
-    vty_out (vty, "debug ospf6 lsa%s", VTY_NEWLINE);
+    vty_out (vty, "debug ospf6 lsdb%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_ZEBRA)
     vty_out (vty, "debug ospf6 zebra%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_CONFIG)
@@ -866,21 +790,9 @@ ospf6_debug_init ()
   install_element (ENABLE_NODE, &show_debugging_ospf6_cmd);
 
   install_element (CONFIG_NODE, &debug_ospf6_message_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_neighbor_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_spf_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_interface_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_area_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_lsa_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_zebra_cmd);
-  install_element (CONFIG_NODE, &debug_ospf6_config_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_message_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_neighbor_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_spf_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_interface_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_area_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_lsa_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_zebra_cmd);
-  install_element (CONFIG_NODE, &no_debug_ospf6_config_cmd);
+  install_element (CONFIG_NODE, &debug_ospf6_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf6_cmd);
 }
 
 void

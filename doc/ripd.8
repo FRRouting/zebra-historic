@@ -1,4 +1,4 @@
-.TH RIPD 1 "August 1999" "Zebra" "Version 0.77"
+.TH RIPD 8 "July 2000" "Zebra" "Version 0.88"
 
 .SH NAME
 ripd \- a RIP routing engine for use with Zebra
@@ -55,43 +55,104 @@ Print the version and exit.
 .SH COMMANDS
 
 \fB router rip \fR
-\fB rip version [1|2] \fR
+\fB no router rip \fR
 
-\fB network [NETWORK] \fR
-\fB no network [NETWORK] \fR
+\fB rip version [1|2] \fR
+\fB no rip version [1|2] \fR
+
+\fB network [A.B.C.D/M] \fR
+\fB no network [A.B.C.D/M] \fR
 
 \fB network [IFNAME] \fR
 \fB no network [IFNAME] \fR
 
-\fB neighbor [IPADDRESS] \fR
-\fB no neighbor [IPADDRESS] \fR
+\fB neighbor [A.B.C.D] \fR
+\fB no neighbor [A.B.C.D] \fR
+
+\fB redistribute kernel \fR
+\fB redistribute kernel metric [METRIC]\fR
+\fB redistribute kernel route-map [ROUTE-MAP]\fR
+\fB no redistribute kernel \fR
 
 \fB redistribute static \fR
+\fB redistribute static metric [METRIC]\fR
+\fB redistribute static route-map [ROUTE-MAP]\fR
 \fB no redistribute static \fR
 
 \fB redistribute connected \fR
+\fB redistribute connected metric [METRIC]\fR
+\fB redistribute connected route-map [ROUTE-MAP]\fR
 \fB no redistribute connected \fR
 
-\fB route [NETWORK] \fR
-\fB no route [NETWORK] \fR
+\fB redistribute ospf \fR
+\fB redistribute ospf metric [METRIC]\fR
+\fB redistribute ospf route-map [ROUTE-MAP]\fR
+\fB no redistribute ospf \fR
 
-\fB timers basic [UPDATE-INTERVAL] [INVALID] [HOLDDOWN] [FLUSH] \fR
+\fB redistribute bgp \fR
+\fB redistribute bgp metric [METRIC]\fR
+\fB redistribute bgp route-map [ROUTE-MAP]\fR
+\fB no redistribute bgp \fR
+
+\fB route [A.B.C.D/M] \fR
+\fB no route [A.B.C.D/M] \fR
+
+\fB default-information originate \fR
+\fB no default-information originate \fR
+
+\fB default-metric [METRIC] \fR
+\fB no default-metric [METRIC] \fR
+
+\fB passive-interface [IFNAME] \fR
+\fB no passive-interface [IFNAME] \fR
+
+\fB offset-list [ACCESS-LIST] [in|out]\fR
+\fB offset-list [ACCESS-LIST] [in|out] [IFNAME]\fR
+\fB no offset-list [ACCESS-LIST] [in|out]\fR
+
+\fB timers basic [UPDATE-INTERVAL] [INVALID] [TIMEOUT] [GARBAGE-COLLECT] \fR
 \fB no timers basic \fR
 
-\fB ip rip send version [VERSION] \fR
-\fB ip rip receive version [VERSION] \fR
-
 \fB distribute-list [ACCESS-LIST] [in|out] [IFNAME] \fR
+\fB no distribute-list [ACCESS-LIST] [in|out] [IFNAME] \fR
+
+\fB distribute-list prefix [PREFIX-LIST] [in|out] [IFNAME] \fR
+\fB no distribute-list prefix [PREFIX-LIST] [in|out] [IFNAME] \fR
+
+\fB distance [DISTANCE] \fR
+\fB no distance [DISTANCE] \fR
+
+\fB distance [DISTANCE] [A.B.C.D/M] \fR
+\fB no distance [DISTANCE] [A.B.C.D/M] \fR
+
+\fB distance [DISTANCE] [A.B.C.D/M] [ACCESS-LIST]\fR
+\fB no distance [DISTANCE] [A.B.C.D/M] [ACCESS-LIST]\fR
+
+\fB ip rip send version [VERSION] \fR
+\fB no ip rip send version [VERSION] \fR
+\fB ip rip receive version [VERSION] \fR
+\fB no ip rip receive version [VERSION] \fR
+
+\fB ip rip authentication mode [md5|text]\fR
+\fB no ip rip authentication mode [md5|text]\fR
+
+\fB ip rip authentication key-chain [KEY-CHAIN]\fR
+\fB no ip rip authentication key-chain [KEY-CHAIN]\fR
+
+\fB ip rip authentication string [STRING]\fR
+\fB no ip rip authentication string [STRING]\fR
+
+\fB ip spli-horizon\fR
+\fB no ip spli-horizon\fR
 
 \fB show ip rip \fR
+\fB show ip protocols \fR
 \fB show debugging rip \fR
 
 \fB debug rip \fR
 \fB debug rip events \fR
 \fB debug rip packet \fR
 \fB debug rip zebra \fR
-
-
 
 .SH FILES
 
@@ -128,7 +189,7 @@ supports many debugging options, see the Info file, or the source for details.
 .SH "SEE ALSO"
 References to other related man pages:
 
-ripngd(1), ospfd(1), ospf6d(1), bgpd(1), zebra(1)
+ripngd(8), ospfd(8), ospf6d(8), bgpd(8), zebra(8)
 
 
 
@@ -140,4 +201,3 @@ eats bugs for breakfast. If you have food for the maintainers try
 
 .SH AUTHOR[S]
 See <\fBwww.zebra.org\fR>, or the Info file for an accurate list of authors.
-

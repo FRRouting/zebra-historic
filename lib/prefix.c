@@ -663,6 +663,3 @@ void apply_classful_mask_ipv4 (struct prefix_ipv4 *p)
       apply_mask_ipv4(p);
     }
 }
-
-  
-

@@ -243,6 +243,8 @@ struct memory_list memory_list_lib[] =
   { MTYPE_RIB,                "RIB             : %ld\r\n" },
   { MTYPE_LINK_LIST,          "Link List       : %ld\r\n" },
   { MTYPE_LINK_NODE,          "Link Node       : %ld\r\n" },
+  { MTYPE_NEWLIST,            "New  List       : %ld\r\n" },
+  { MTYPE_NEWNODE,            "New  Node       : %ld\r\n" },
   { MTYPE_HASH,               "Hash            : %ld\r\n" },
   { MTYPE_HASH_BACKET,        "Hash Bucket     : %ld\r\n" },
   { MTYPE_ACCESS_LIST,        "Access List     : %ld\r\n" },
@@ -258,6 +260,8 @@ struct memory_list memory_list_lib[] =
   { MTYPE_BUFFER,             "Buffer          : %ld\r\n" },
   { MTYPE_BUFFER_DATA,        "Buffer data     : %ld\r\n" },
   { MTYPE_STREAM,             "Stream          : %ld\r\n" },
+  { MTYPE_KEYCHAIN,           "Key chain       : %ld\r\n" },
+  { MTYPE_KEY,                "Key             : %ld\r\n" },
   { -1, NULL }
 };
 
@@ -273,12 +277,19 @@ struct memory_list memory_list_bgp[] =
   { 0,                        "---------------------\r\n" },
   { MTYPE_CLUSTER,            "Cluster list    : %ld\r\n" },
   { MTYPE_CLUSTER_VAL,        "Cluster list val: %ld\r\n" },
+  { 0,                        "---------------------\r\n" },
+  { MTYPE_BGP_DISTANCE,       "BGP distance    : %ld\r\n" },
   { -1, NULL }
 };
 
 struct memory_list memory_list_rip[] =
 {
-  { MTYPE_RIP_INFO,           "RIP info        : %ld\r\n" },
+  { MTYPE_RIP,                "RIP structure   : %ld\r\n" },
+  { MTYPE_RIP_INFO,           "RIP route info  : %ld\r\n" },
+  { MTYPE_RIP_INTERFACE,      "RIP interface   : %ld\r\n" },
+  { MTYPE_RIP_PEER,           "RIP peer        : %ld\r\n" },
+  { MTYPE_RIP_OFFSET_LIST,    "RIP offset list : %ld\r\n" },
+  { MTYPE_RIP_DISTANCE,       "RIP distance    : %ld\r\n" },
   { -1, NULL }
 };
 
@@ -305,6 +316,7 @@ struct memory_list memory_list_ospf[] =
   { MTYPE_OSPF_VL_DATA,       "OSPF VL data    : %ld\r\n" },
   { MTYPE_OSPF_CRYPT_KEY,     "OSPF crypt key  : %ld\r\n" },
   { MTYPE_OSPF_EXTERNAL_INFO, "OSPF ext. info  : %ld\r\n" },
+  { MTYPE_OSPF_DISTANCE,      "OSPF distance   : %ld\r\n" },
   { -1, NULL },
 };
 

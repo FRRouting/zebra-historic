@@ -31,6 +31,7 @@
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_route.h"
+#include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_dump.h"
 
 enum bgp_dump_type
@@ -38,6 +39,22 @@ enum bgp_dump_type
   BGP_DUMP_ALL,
   BGP_DUMP_UPDATES,
   BGP_DUMP_ROUTES
+};
+
+enum MRT_MSG_TYPES {
+   MSG_NULL,
+   MSG_START,                   /* sender is starting up */
+   MSG_DIE,                     /* receiver should shut down */
+   MSG_I_AM_DEAD,               /* sender is shutting down */
+   MSG_PEER_DOWN,               /* sender's peer is down */
+   MSG_PROTOCOL_BGP,            /* msg is a BGP packet */
+   MSG_PROTOCOL_RIP,            /* msg is a RIP packet */
+   MSG_PROTOCOL_IDRP,           /* msg is an IDRP packet */
+   MSG_PROTOCOL_RIPNG,          /* msg is a RIPNG packet */
+   MSG_PROTOCOL_BGP4PLUS,       /* msg is a BGP4+ packet */
+   MSG_PROTOCOL_BGP4PLUS_01,    /* msg is a BGP4+ (draft 01) packet */
+   MSG_PROTOCOL_OSPF,           /* msg is an OSPF packet */
+   MSG_TABLE_DUMP               /* routing table dump */
 };
 
 struct bgp_dump
@@ -66,6 +83,9 @@ struct bgp_dump bgp_dump_updates;
 
 /* BGP dump structure for 'dump bgp routes' */
 struct bgp_dump bgp_dump_routes;
+
+/* Dump whole BGP table is very heavy process.  */
+struct thread *t_bgp_dump_routes;
 
 /* Some define for BGP packet dump. */
 FILE *
@@ -118,7 +138,7 @@ bgp_dump_interval_add (struct bgp_dump *bgp_dump, int interval)
 
 /* Dump common header. */
 void
-bgp_dump_header (struct stream *obuf, int subtype)
+bgp_dump_header (struct stream *obuf, int type, int subtype)
 {
   time_t now;
 
@@ -127,100 +147,150 @@ bgp_dump_header (struct stream *obuf, int subtype)
 
   /* Put dump packet header. */
   stream_putl (obuf, now);	
-  stream_putw (obuf, MSG_PROTOCOL_BGP4MP);
+  stream_putw (obuf, type);
   stream_putw (obuf, subtype);
 
-  /* Placeholder for length. */
-  stream_putl (obuf, 0);
+  stream_putl (obuf, 0);	/* len */
 }
 
 void
-bgp_dump_routes_entry (struct bgp_info *info, int afi)
+bgp_dump_set_size (struct stream *s, int type)
+{
+  stream_putl_at (s, 8, stream_get_putp (s) - BGP_DUMP_HEADER_SIZE);
+}
+
+void
+bgp_dump_routes_entry (struct prefix *p, struct bgp_info *info, int afi,
+		       int type, unsigned int seq)
 {
   struct stream *obuf;
+  struct attr *attr;
+  struct peer *peer;
+  int plen;
   int safi = 0;
 
   /* Make dump stream. */
   obuf = bgp_dump_obuf;
   stream_reset (obuf);
 
-  bgp_dump_header (obuf, BGP4MP_ENTRY);
+  attr = info->attr;
+  peer = info->peer;
 
-  stream_putw (obuf, 0);	/* View # */
-  stream_putw (obuf, 0);	/* Status */
-  stream_putl (obuf, info->uptime); /* Time Last Change */
-  stream_putw (obuf, afi);	/* Address Family */
-  stream_putc (obuf, safi);	/* SAFI */
+  /* We support MRT's old format. */
+  if (type == MSG_TABLE_DUMP)
+    {
+      bgp_dump_header (obuf, MSG_TABLE_DUMP, afi);
+      stream_putw (obuf, 0);	/* View # */
+      stream_putw (obuf, seq);	/* Sequence number. */
+    }
+  else
+    {
+      bgp_dump_header (obuf, MSG_PROTOCOL_BGP4MP, BGP4MP_ENTRY);
+      
+      stream_putl (obuf, info->uptime); /* Time Last Change */
+      stream_putw (obuf, afi);	/* Address Family */
+      stream_putc (obuf, safi);	/* SAFI */
+    }
 
   if (afi == AFI_IP)
     {
-      stream_putc (obuf, IPV4_MAX_BYTELEN);
-      /* info->attr->; */
+      if (type == MSG_TABLE_DUMP)
+	{
+	  /* Prefix */
+	  stream_put_in_addr (obuf, &p->u.prefix4);
+	  stream_putc (obuf, p->prefixlen);
+
+	  /* Status */
+	  stream_putc (obuf, 1);
+
+	  /* Originated */
+	  stream_putl (obuf, info->uptime);
+
+	  /* Peer's IP address */
+	  stream_put_in_addr (obuf, &peer->su.sin.sin_addr);
+
+	  /* Peer's AS number. */
+	  stream_putw (obuf, peer->as);
+
+	  /* Dump attribute. */
+	  bgp_dump_routes_attr (obuf, attr);
+	}
+      else
+	{
+	  /* Next-Hop-Len */
+	  stream_putc (obuf, IPV4_MAX_BYTELEN);
+	  stream_put_in_addr (obuf, &attr->nexthop);
+	  stream_putc (obuf, p->prefixlen);
+	  plen = PSIZE (p->prefixlen);
+	  stream_put (obuf, &p->u.prefix4, plen);
+	  bgp_dump_routes_attr (obuf, attr);
+	}
     }
 #ifdef HAVE_IPV6
   else if (afi == AFI_IP6)
     {
-      stream_putc (obuf, 0);
-      ;
+      if (type == MSG_TABLE_DUMP)
+	{
+	  /* Prefix */
+	  stream_write (obuf, (u_char *)&p->u.prefix6, IPV6_MAX_BYTELEN);
+	  stream_putc (obuf, p->prefixlen);
+
+	  /* Status */
+	  stream_putc (obuf, 1);
+
+	  /* Originated */
+	  stream_putl (obuf, info->uptime);
+
+	  /* Peer's IP address */
+	  stream_write (obuf, (u_char *)&peer->su.sin6.sin6_addr,
+			IPV6_MAX_BYTELEN);
+
+	  /* Peer's AS number. */
+	  stream_putw (obuf, peer->as);
+
+	  /* Dump attribute. */
+	  bgp_dump_routes_attr (obuf, attr);
+	}
+      else
+	{
+	  ;
+	}
     }
 #endif /* HAVE_IPV6 */
+
+  /* Set length. */
+  bgp_dump_set_size (obuf, type);
+
+  fwrite (STREAM_DATA (obuf), stream_get_putp (obuf), 1, bgp_dump_routes.fp);
+  fflush (bgp_dump_routes.fp);
 }
 
 /* Runs under child process. */
 void
-bgp_dump_routes_func ()
+bgp_dump_routes_func (int afi)
 {
+  struct stream *obuf;
   struct route_node *rn;
   struct bgp_info *info;
   struct bgp *bgp;
   struct route_table *table;
+  unsigned int seq = 0;
+
+  obuf = bgp_dump_obuf;
 
   bgp = bgp_get_default ();
   if (!bgp)
     return;
 
-  table = bgp->rib[AFI_IP][SAFI_UNICAST];
+  if (bgp_dump_routes.fp == NULL)
+    return;
+
+  /* Walk down each BGP route. */
+  table = bgp->rib[afi][SAFI_UNICAST];
 
   for (rn = route_top (table); rn; rn = route_next (rn))
     for (info = rn->info; info; info = info->next)
-      bgp_dump_routes_entry (info, AFI_IP);
-
-#ifdef HAVE_IPV6
-  table = bgp->rib[AFI_IP6][SAFI_UNICAST];
-  
-  for (rn = route_top (table); rn; rn = route_next (rn))
-    for (info = rn->info; info; info = info->next)
-      bgp_dump_routes_entry (info, AFI_IP6);
-#endif /* HAVE_IPV6 */
-
-  /*  Close file pointer ?*/
-}
-
-/* Dump all routing table to the file. */
-void
-bgp_dump_routes_fork ()
-{
-  pid_t pid;
-
-  pid = fork ();
-
-  if (pid < 0)
-    {
-      zlog_info ("bgp_dump_routes_fork: fork error %s", strerror (errno));
-      return;
-    }
-  else if (pid > 0)
-    {
-      /* Parent. */
-      /* waidpid ? */
-      /* close fd ? */
-      return;
-    }
-
-  /* Real job. */
-  bgp_dump_routes_func ();
-
-  exit (0);
+      bgp_dump_routes_entry (&rn->p, info, afi, MSG_TABLE_DUMP, seq++);
 }
 
 int
@@ -236,19 +306,14 @@ bgp_dump_interval_func (struct thread *t)
 
   /* In case of bgp_dump_routes, we need special route dump function. */
   if (bgp_dump->type == BGP_DUMP_ROUTES)
-    bgp_dump_routes_fork ();
+    {
+      bgp_dump_routes_func (AFI_IP);
+      bgp_dump_routes_func (AFI_IP6);
+    }
 
   bgp_dump_interval_add (bgp_dump, bgp_dump->interval);
   
   return 0;
-}
-
-void
-bgp_dump_set_size (struct stream *s)
-{
-  /* If size is specifed use it. */
-  stream_putl_at (s, 8, stream_get_putp (s) - BGP_DUMP_HEADER_SIZE);
-  return;
 }
 
 /* Dump common information. */
@@ -305,14 +370,14 @@ bgp_dump_state (struct peer *peer, int status_old, int status_new)
   obuf = bgp_dump_obuf;
   stream_reset (obuf);
 
-  bgp_dump_header (obuf, BGP4MP_STATE_CHANGE);
+  bgp_dump_header (obuf, MSG_PROTOCOL_BGP4MP, BGP4MP_STATE_CHANGE);
   bgp_dump_common (obuf, peer);
 
   stream_putw (obuf, status_old);
   stream_putw (obuf, status_new);
 
   /* Set length. */
-  bgp_dump_set_size (obuf);
+  bgp_dump_set_size (obuf, MSG_PROTOCOL_BGP4MP);
 
   /* Write to the stream. */
   fwrite (STREAM_DATA (obuf), stream_get_putp (obuf), 1, bgp_dump_all.fp);
@@ -334,20 +399,21 @@ bgp_dump_packet_func (struct bgp_dump *bgp_dump, struct peer *peer,
   stream_reset (obuf);
 
   /* Dump header and common part. */
-  bgp_dump_header (obuf, BGP4MP_MESSAGE);
+  bgp_dump_header (obuf, MSG_PROTOCOL_BGP4MP, BGP4MP_MESSAGE);
   bgp_dump_common (obuf, peer);
 
   /* Packet contents. */
   stream_put (obuf, STREAM_DATA (packet), stream_get_endp (packet));
   
   /* Set length. */
-  bgp_dump_set_size (obuf);
+  bgp_dump_set_size (obuf, MSG_PROTOCOL_BGP4MP);
 
   /* Write to the stream. */
   fwrite (STREAM_DATA (obuf), stream_get_putp (obuf), 1, bgp_dump->fp);
   fflush (bgp_dump->fp);
 }
 
+/* Called from bgp_packet.c when BGP packet is received. */
 void
 bgp_dump_packet (struct peer *peer, int type, struct stream *packet)
 {
@@ -551,7 +617,7 @@ DEFUN (no_dump_bgp_updates,
 
 DEFUN (dump_bgp_routes,
        dump_bgp_routes_cmd,
-       "dump bgp routes PATH",
+       "dump bgp routes-mrt PATH",
        "Dump packet\n"
        "BGP packet dump\n"
        "Dump whole BGP routing table\n"
@@ -562,7 +628,7 @@ DEFUN (dump_bgp_routes,
 
 DEFUN (dump_bgp_routes_interval,
        dump_bgp_routes_interval_cmd,
-       "dump bgp routes PATH INTERVAL",
+       "dump bgp routes-mrt PATH INTERVAL",
        "Dump packet\n"
        "BGP packet dump\n"
        "Dump whole BGP routing table\n"
@@ -574,7 +640,7 @@ DEFUN (dump_bgp_routes_interval,
 
 DEFUN (no_dump_bgp_routes,
        no_dump_bgp_routes_cmd,
-       "no dump bgp routes [PATH] [INTERVAL]",
+       "no dump bgp routes-mrt [PATH] [INTERVAL]",
        NO_STR
        "Dump packet\n"
        "BGP packet dump\n"
@@ -642,11 +708,11 @@ config_write_bgp_dump (struct vty *vty)
   if (bgp_dump_routes.filename)
     {
       if (bgp_dump_routes.interval_str)
-	vty_out (vty, "dump bgp routes %s %s%s", 
+	vty_out (vty, "dump bgp routes-mrt %s %s%s", 
 		 bgp_dump_routes.filename, bgp_dump_routes.interval_str,
 		 VTY_NEWLINE);
       else
-	vty_out (vty, "dump bgp routes %s%s", 
+	vty_out (vty, "dump bgp routes-mrt %s%s", 
 		 bgp_dump_routes.filename, VTY_NEWLINE);
     }
   return 0;

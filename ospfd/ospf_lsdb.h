@@ -35,6 +35,7 @@ struct new_lsdb
   struct
   {
     unsigned long count;
+    unsigned long count_self;
     struct route_table *db;
   } type[OSPF_MAX_LSA];
   unsigned long total;
@@ -59,8 +60,8 @@ struct ospf_lsdb
 #define NETWORK_LSDB(A)	     ((A)->lsdb->type[OSPF_NETWORK_LSA].db)
 #define SUMMARY_LSDB(A)      ((A)->lsdb->type[OSPF_SUMMARY_LSA].db)
 #define SUMMARY_ASBR_LSDB(A) ((A)->lsdb->type[OSPF_SUMMARY_LSA_ASBR].db)
-#define EXTERNAL_LSDB(O) \
-        ((O)->external_lsa->type[OSPF_AS_EXTERNAL_LSA].db)
+#define EXTERNAL_LSDB(O)     ((O)->lsdb->type[OSPF_AS_EXTERNAL_LSA].db)
+#define AREA_LSDB(A,T)       ((A)->lsdb->type[(T)].db)
 
 /* Prototypes. */
 struct ospf_lsa *foreach_lsa (struct route_table *, void *, int,
@@ -78,7 +79,9 @@ void new_lsdb_delete_all (struct new_lsdb *);
 struct ospf_lsa *new_lsdb_lookup (struct new_lsdb *, struct ospf_lsa *);
 struct ospf_lsa *new_lsdb_lookup_by_id (struct new_lsdb *, u_char,
 					struct in_addr, struct in_addr);
-unsigned long new_lsdb_count (struct new_lsdb *);
+unsigned long new_lsdb_count_all (struct new_lsdb *);
+unsigned long new_lsdb_count (struct new_lsdb *, int);
+unsigned long new_lsdb_count_self (struct new_lsdb *, int);
 unsigned long new_lsdb_isempty (struct new_lsdb *);
 
 #endif /* _ZEBRA_OSPF_LSDB_H */

@@ -234,7 +234,7 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
 
       /* get LinkLSA of destination router */
       m = list_init ();
-      ospf6_lsdb_collect_type_advrtr (m, htons (LST_LINK_LSA),
+      ospf6_lsdb_collect_type_advrtr (m, htons (OSPF6_LSA_TYPE_LINK),
                                       dst->vtx_rtrid, (void *)o6if);
       /* set nexthop address */
       if (list_isempty (m))
@@ -284,7 +284,7 @@ nexthop_str (struct ospf6_nexthop *nh, char *buf, size_t bufsize)
     ifname = ifp->name;
 
   if (IN6_IS_ADDR_UNSPECIFIED (&nh->ipaddr))
-    snprintf (ipaddr, sizeof (ipaddr), "Link#%lu", nh->ifindex);
+    snprintf (ipaddr, sizeof (ipaddr), "Link#%d", nh->ifindex);
   else
     inet_ntop (AF_INET6, &nh->ipaddr, ipaddr, sizeof (ipaddr));
   if (nh->advrtr)
@@ -633,7 +633,7 @@ ospf6_route_str (struct route_node *node, char *buf, size_t bufsize)
         rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
         ifid = ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&node->p),
         inet_ntop (AF_INET, &rtrid, tmp, sizeof (tmp));
-        snprintf (dstr, sizeof (dstr), "%s[%ld]", tmp, 
+        snprintf (dstr, sizeof (dstr), "%s[%lu]", tmp, 
 		  (unsigned long) ntohl (ifid));
         break;
 
@@ -727,7 +727,7 @@ ospf6_route_intra_vty (struct vty *vty, struct route_node *rn, int detail)
       nh = (struct ospf6_nexthop *) getdata (n);
       nexthop_str (nh, nexthop, sizeof (nexthop));
       if (info->dest_type == DTYPE_INTRA_LINK)
-        vty_out (vty, "%-11s %-15s[%3lu] %-25s%s",
+        vty_out (vty, "%-11s %15s[%-3lu] %-25s%s",
                  dtype_string[info->dest_type],
                  destination, ifid, nexthop, VTY_NEWLINE);
       else
@@ -801,7 +801,7 @@ ospf6_route_calc (struct thread *thread)
   unsigned long lsadvrtr, lsid;
   struct ospf6_lsa *lsa;
   struct intra_area_prefix_lsa *iaplsa;
-  struct as_external_lsa *aselsa;
+  struct ospf6_as_external_lsa *aselsa;
   struct ospf6_prefix *o6p;
   int prefix_count, i;
   list pll; /* prefix LSA list */
@@ -836,7 +836,7 @@ ospf6_route_calc (struct thread *thread)
 #endif /*0*/
 
       /* get prefix LSA */
-      lstype = htons (LST_INTRA_AREA_PREFIX_LSA);
+      lstype = htons (OSPF6_LSA_TYPE_INTRA_PREFIX);
       lsid = ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&rn->p);
       lsadvrtr = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&rn->p);
       lsa = ospf6_lsdb_lookup (lstype, lsid, lsadvrtr, area);
@@ -869,14 +869,14 @@ ospf6_route_calc (struct thread *thread)
           memset (&prefix, 0, sizeof (prefix));
           prefix.family = AF_INET6;
           ospf6_prefix_in6_addr (o6p, &prefix.prefix);
-          prefix.prefixlen = o6p->o6p_prefix_len;
+          prefix.prefixlen = o6p->prefix_length;
 
           /* set newinfo */
           memset (&newinfo, 0, sizeof (newinfo));
           newinfo.dest_type = DTYPE_PREFIX;
           newinfo.area = area;
           newinfo.path_type = PTYPE_INTRA;
-          newinfo.cost = info->cost + ntohs (o6p->o6p_prefix_metric);
+          newinfo.cost = info->cost + ntohs (o6p->prefix_metric);
           newinfo.nhlist = info->nhlist;
 
           /* log */
@@ -922,7 +922,7 @@ ospf6_route_calc (struct thread *thread)
 
       /* get prefix LSA */
       pll = list_init ();
-      lstype = htons (LST_INTRA_AREA_PREFIX_LSA);
+      lstype = htons (OSPF6_LSA_TYPE_INTRA_PREFIX);
       lsadvrtr = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&rn->p);
       ospf6_lsdb_collect_type_advrtr (pll, lstype, lsadvrtr, area);
       if (list_isempty (pll))
@@ -958,14 +958,14 @@ ospf6_route_calc (struct thread *thread)
               memset (&prefix, 0, sizeof (prefix));
               prefix.family = AF_INET6;
               ospf6_prefix_in6_addr (o6p, &prefix.prefix);
-              prefix.prefixlen = o6p->o6p_prefix_len;
+              prefix.prefixlen = o6p->prefix_length;
 
               /* set newinfo */
               memset (&newinfo, 0, sizeof (newinfo));
               newinfo.dest_type = DTYPE_PREFIX;
               newinfo.area = area;
               newinfo.path_type = PTYPE_INTRA;
-              newinfo.cost = info->cost + ntohs (o6p->o6p_prefix_metric);
+              newinfo.cost = info->cost + ntohs (o6p->prefix_metric);
               newinfo.nhlist = info->nhlist;
 
               /* log */
@@ -1007,21 +1007,14 @@ ospf6_route_calc (struct thread *thread)
 
       /* log */
       ospf6_route_str (rn, rn_str, sizeof (rn_str));
-#if 0
-      if (IS_OSPF6_DUMP_ROUTE)
-        zlog_info ("  Check %s's route", rn_str);
-#endif /*0*/
 
       /* get external LSAs */
       pll = list_init ();
-      lstype = htons (LST_AS_EXTERNAL_LSA);
+      lstype = htons (OSPF6_LSA_TYPE_AS_EXTERNAL);
       lsadvrtr = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&rn->p);
       ospf6_lsdb_collect_type_advrtr (pll, lstype, lsadvrtr, ospf6);
       if (list_isempty (pll))
         {
-#if 0
-          zlog_warn ("  *** can't find external LSA for %s", rn_str);
-#endif /*0*/
           list_delete_all (pll);
           continue;
         }
@@ -1030,16 +1023,13 @@ ospf6_route_calc (struct thread *thread)
       for (ln = listhead (pll); ln; nextnode (ln))
         {
           lsa = (struct ospf6_lsa *) getdata (ln);
-          aselsa = (struct as_external_lsa *) (lsa->lsa_hdr + 1);
-
-          /* point OSPF6 prefix */
-          o6p = (struct ospf6_prefix *) (&aselsa->ase_prefix_len);
+          aselsa = (struct ospf6_as_external_lsa *) (lsa->lsa_hdr + 1);
 
           /* set prefix destination */
           memset (&prefix, 0, sizeof (prefix));
           prefix.family = AF_INET6;
-          ospf6_prefix_in6_addr (o6p, &prefix.prefix);
-          prefix.prefixlen = o6p->o6p_prefix_len;
+          ospf6_prefix_in6_addr (&aselsa->ospf6_prefix, &prefix.prefix);
+          prefix.prefixlen = aselsa->ospf6_prefix.prefix_length;
 
           /* XXX must be reviewed XXX */
           rn2 = route_node_lookup (ospf6->redistribute_map,

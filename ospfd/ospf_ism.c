@@ -106,9 +106,10 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
 
   /* Set DR to interface. */
   if (dr)
+    /* DR (oi) = dr->router_id; */
     DR (oi) = dr->address.u.prefix4;
   else 
-    DR(oi).s_addr = 0;
+    DR (oi).s_addr = 0;
 
   list_delete_all (dr_list);
 
@@ -149,6 +150,7 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
 
   /* Set BDR to interface. */
   if (bdr)
+    /* BDR (oi) = bdr->router_id; */
     BDR (oi) = bdr->address.u.prefix4;
   else
     BDR (oi).s_addr = 0;
@@ -316,18 +318,21 @@ ism_timer_set (struct ospf_interface *oi)
 	 reset also. */
       OSPF_ISM_TIMER_OFF (oi->t_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
       break;
     case ISM_Loopback:
       /* In this state, the interface may be looped back and will be
 	 unavailable for regular data traffic. */
       OSPF_ISM_TIMER_OFF (oi->t_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
       break;
     case ISM_Waiting:
       /* The router is trying to determine the identity of DRouter and
 	 BDRouter. The router begin to receive and send Hello Packets. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_ON (oi->t_wait, ospf_wait_timer, oi->v_wait);
+      OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
       break;
     case ISM_PointToPoint:
       /* The interface connects to a physical Point-to-point network or
@@ -335,6 +340,7 @@ ism_timer_set (struct ospf_interface *oi)
 	 neighboring router. Hello packets are also sent. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
     case ISM_DROther:
       /* The network type of the interface is broadcast or NBMA network,
@@ -342,18 +348,21 @@ ism_timer_set (struct ospf_interface *oi)
 	 Backup Designated Router. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
     case ISM_Backup:
       /* The network type of the interface is broadcast os NBMA network,
 	 and the router is Backup Designated Router. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
     case ISM_DR:
       /* The network type of the interface is broadcast or NBMA network,
 	 and the router is Designated Router. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
+      OSPF_ISM_TIMER_ON (oi->t_ls_ack, ospf_ls_ack_timer, oi->v_ls_ack);
       break;
     }
 }
@@ -442,6 +451,7 @@ ism_interface_down (struct ospf_interface *oi)
   OSPF_ISM_TIMER_OFF (oi->t_wait);
   OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
 
+  ospf_lsa_unlock (oi->network_lsa_self);
   return 0;
 }
 
@@ -611,12 +621,12 @@ ism_change_status (struct ospf_interface *oi, int status)
 	oi->area->act_ints++;
 
       /* schedule router-LSA originate. */
-      ospf_schedule_router_lsa_originate (oi->area);
+      ospf_router_lsa_timer_add (oi->area);
     }
 
   /* Originate network-LSA. */
   if (old_status != ISM_DR && status == ISM_DR)
-    ospf_schedule_network_lsa_originate (oi);
+    ospf_network_lsa_timer_add (oi);
   else if (old_status == ISM_DR && status != ISM_DR)
     {
       /* Free self originated network LSA. */
@@ -628,6 +638,8 @@ ism_change_status (struct ospf_interface *oi, int status)
 	  ospf_lsa_flush_area (lsa, oi->area);
 	  OSPF_TIMER_OFF (oi->t_network_lsa_self);
 	}
+
+      ospf_lsa_unlock (oi->network_lsa_self);
       oi->network_lsa_self = NULL;
     }
 

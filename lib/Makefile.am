@@ -10,7 +10,8 @@ libzebra_a_SOURCES = \
 	print_version.c checksum.c vector.c linklist.c vty.c command.c \
 	sockunion.c prefix.c thread.c if.c memory.c buffer.c buffer.c \
 	table.c hash.c filter.c routemap.c distribute.c stream.c str.c \
-	log.c plist.c zclient.c sockopt.c smux.c md5.c if_rmap.c newlist.c
+	log.c plist.c zclient.c sockopt.c smux.c md5.c if_rmap.c newlist.c \
+	flap.c keychain.c
 
 libzebra_a_DEPENDENCIES = @LIB_REGEX@
 
@@ -21,7 +22,7 @@ noinst_HEADERS = \
 	memory.h network.h prefix.h roken.h routemap.h distribute.h \
 	sockunion.h str.h stream.h table.h thread.h vector.h version.h \
 	vty.h zebra.h plist.h zclient.h sockopt.h smux.h md5-gnu.h if_rmap.h \
-	newlist.h
+	newlist.h flap.h keychain.h
 
 EXTRA_DIST = regex.c regex-gnu.h
 
@@ -41,6 +42,7 @@ distribute.o: distribute.c hash.h if.h linklist.h filter.h command.h \
  vector.h vty.h distribute.h memory.h
 filter.o: filter.c prefix.h filter.h if.h linklist.h memory.h \
  command.h vector.h vty.h sockunion.h
+flap.o: flap.c
 getopt.o: getopt.c
 getopt1.o: getopt1.c getopt.h
 hash.o: hash.c hash.h memory.h log.h
@@ -48,6 +50,8 @@ if.o: if.c linklist.h vector.h vty.h command.h if.h sockunion.h \
  prefix.h ../zebra/connected.h memory.h buffer.h str.h log.h
 if_rmap.o: if_rmap.c hash.h command.h vector.h vty.h memory.h if.h \
  linklist.h if_rmap.h
+keychain.o: keychain.c command.h vector.h vty.h memory.h newlist.h \
+ keychain.h
 linklist.o: linklist.c linklist.h memory.h
 log.o: log.c log.h memory.h command.h vector.h vty.h
 md5.o: md5.c md5-gnu.h
@@ -69,6 +73,7 @@ sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h roken.h \
 str.o: str.c str.h
 stream.o: stream.c stream.h memory.h network.h prefix.h
 table.o: table.c prefix.h table.h memory.h sockunion.h
+tcpfilter.o: tcpfilter.c command.h vector.h vty.h prefix.h
 thread.o: thread.c thread.h memory.h log.h
 vector.o: vector.c vector.h memory.h
 version.o: version.c

@@ -63,6 +63,7 @@ AR = @AR@
 BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
+CURSES = @CURSES@
 GUILE = @GUILE@
 GUILE_CFLAGS = @GUILE_CFLAGS@
 GUILE_LDFLAGS = @GUILE_LDFLAGS@
@@ -88,8 +89,13 @@ VTYSH = @VTYSH@
 ZEBRA = @ZEBRA@
 
 info_TEXINFOS = zebra.texi
-EXTRA_DIST = BGP-TypeCode draft-zebra-00.txt bgpd.1 ospf6d.1 ospfd.1 	ripd.1 ripngd.1 zebra.1
 
+info_INCLUDES = appendix.texi basic.texi bgpd.texi filter.texi install.texi 	ipv6.texi kernel.texi main.texi ospf6d.texi ospfd.texi overview.texi 	protocol.texi ripd.texi ripngd.texi routemap.texi snmp.texi vtysh.texi
+
+
+man_MANS = vtysh.1 bgpd.8 ospf6d.8 ospfd.8 ripd.8 ripngd.8 zebra.8
+
+EXTRA_DIST = BGP-TypeCode draft-zebra-00.txt $(man_MANS) $(info_INCLUDES)
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
@@ -97,6 +103,11 @@ TEXI2DVI = texi2dvi
 INFO_DEPS = zebra.info
 DVIS = zebra.dvi
 TEXINFOS = zebra.texi
+man1dir = $(mandir)/man1
+man8dir = $(mandir)/man8
+MANS = $(man_MANS)
+
+NROFF = nroff
 DIST_COMMON =  ChangeLog Makefile.am Makefile.in texinfo.tex
 
 
@@ -231,6 +242,78 @@ maintainer-clean-aminfo:
 	    rm -f $$i-[0-9]*; \
 	  fi; \
 	done
+
+install-man1:
+	$(mkinstalldirs) $(DESTDIR)$(man1dir)
+	@list='$(man1_MANS)'; \
+	l2='$(man_MANS)'; for i in $$l2; do \
+	  case "$$i" in \
+	    *.1*) list="$$list $$i" ;; \
+	  esac; \
+	done; \
+	for i in $$list; do \
+	  if test -f $(srcdir)/$$i; then file=$(srcdir)/$$i; \
+	  else file=$$i; fi; \
+	  ext=`echo $$i | sed -e 's/^.*\\.//'`; \
+	  inst=`echo $$i | sed -e 's/\\.[0-9a-z]*$$//'`; \
+	  inst=`echo $$inst | sed '$(transform)'`.$$ext; \
+	  echo " $(INSTALL_DATA) $$file $(DESTDIR)$(man1dir)/$$inst"; \
+	  $(INSTALL_DATA) $$file $(DESTDIR)$(man1dir)/$$inst; \
+	done
+
+uninstall-man1:
+	@list='$(man1_MANS)'; \
+	l2='$(man_MANS)'; for i in $$l2; do \
+	  case "$$i" in \
+	    *.1*) list="$$list $$i" ;; \
+	  esac; \
+	done; \
+	for i in $$list; do \
+	  ext=`echo $$i | sed -e 's/^.*\\.//'`; \
+	  inst=`echo $$i | sed -e 's/\\.[0-9a-z]*$$//'`; \
+	  inst=`echo $$inst | sed '$(transform)'`.$$ext; \
+	  echo " rm -f $(DESTDIR)$(man1dir)/$$inst"; \
+	  rm -f $(DESTDIR)$(man1dir)/$$inst; \
+	done
+
+install-man8:
+	$(mkinstalldirs) $(DESTDIR)$(man8dir)
+	@list='$(man8_MANS)'; \
+	l2='$(man_MANS)'; for i in $$l2; do \
+	  case "$$i" in \
+	    *.8*) list="$$list $$i" ;; \
+	  esac; \
+	done; \
+	for i in $$list; do \
+	  if test -f $(srcdir)/$$i; then file=$(srcdir)/$$i; \
+	  else file=$$i; fi; \
+	  ext=`echo $$i | sed -e 's/^.*\\.//'`; \
+	  inst=`echo $$i | sed -e 's/\\.[0-9a-z]*$$//'`; \
+	  inst=`echo $$inst | sed '$(transform)'`.$$ext; \
+	  echo " $(INSTALL_DATA) $$file $(DESTDIR)$(man8dir)/$$inst"; \
+	  $(INSTALL_DATA) $$file $(DESTDIR)$(man8dir)/$$inst; \
+	done
+
+uninstall-man8:
+	@list='$(man8_MANS)'; \
+	l2='$(man_MANS)'; for i in $$l2; do \
+	  case "$$i" in \
+	    *.8*) list="$$list $$i" ;; \
+	  esac; \
+	done; \
+	for i in $$list; do \
+	  ext=`echo $$i | sed -e 's/^.*\\.//'`; \
+	  inst=`echo $$i | sed -e 's/\\.[0-9a-z]*$$//'`; \
+	  inst=`echo $$inst | sed '$(transform)'`.$$ext; \
+	  echo " rm -f $(DESTDIR)$(man8dir)/$$inst"; \
+	  rm -f $(DESTDIR)$(man8dir)/$$inst; \
+	done
+install-man: $(MANS)
+	@$(NORMAL_INSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) install-man1 install-man8
+uninstall-man:
+	@$(NORMAL_UNINSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) uninstall-man1 uninstall-man8
 tags: TAGS
 TAGS:
 
@@ -262,20 +345,21 @@ installcheck: installcheck-am
 install-exec-am:
 install-exec: install-exec-am
 
-install-data-am: install-info-am
+install-data-am: install-info-am install-man
 install-data: install-data-am
 
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 install: install-am
-uninstall-am: uninstall-info
+uninstall-am: uninstall-info uninstall-man
 uninstall: uninstall-am
-all-am: Makefile $(INFO_DEPS)
+all-am: Makefile $(INFO_DEPS) $(MANS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install
 installdirs:
-	$(mkinstalldirs)  $(DESTDIR)$(infodir)
+	$(mkinstalldirs)  $(DESTDIR)$(infodir) $(DESTDIR)$(mandir)/man1 \
+		$(DESTDIR)$(mandir)/man8
 
 
 mostlyclean-generic:
@@ -307,16 +391,21 @@ maintainer-clean-am:  maintainer-clean-aminfo maintainer-clean-generic \
 maintainer-clean: maintainer-clean-am
 
 .PHONY: install-info-am uninstall-info mostlyclean-aminfo \
-distclean-aminfo clean-aminfo maintainer-clean-aminfo tags distdir \
-info-am info dvi-am dvi check check-am installcheck-am installcheck \
-install-exec-am install-exec install-data-am install-data install-am \
-install uninstall-am uninstall all-redirect all-am all installdirs \
-mostlyclean-generic distclean-generic clean-generic \
+distclean-aminfo clean-aminfo maintainer-clean-aminfo install-man1 \
+uninstall-man1 install-man8 uninstall-man8 install-man uninstall-man \
+tags distdir info-am info dvi-am dvi check check-am installcheck-am \
+installcheck install-exec-am install-exec install-data-am install-data \
+install-am install uninstall-am uninstall all-redirect all-am all \
+installdirs mostlyclean-generic distclean-generic clean-generic \
 maintainer-clean-generic clean mostlyclean distclean maintainer-clean
 
 
 draft-zebra-00.txt:
 	groff -T ascii -ms draft-zebra-00.ms > draft-zebra-00.txt
+
+zebra.info: $(info_TEXINFOS) $(info_INCLUDES)
+
+zebra.dvi: $(info_TEXINFOS) $(info_INCLUDES)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

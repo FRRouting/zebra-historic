@@ -39,6 +39,7 @@ struct neighbor
   unsigned long        dr;
   unsigned long        prevbdr;
   unsigned long        bdr;
+  char                 options[3];     /* Link-LSA's options field */
   struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link */
                                        /* Probably LinkLocal address     */
   struct ospf6_dbdesc last_dd; /* last received DD , including     */
