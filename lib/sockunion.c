@@ -139,6 +139,8 @@ str2sockunion (char *str, union sockunion *su)
 {
   int ret;
 
+  memset (su, 0, sizeof (union sockunion));
+
   ret = inet_pton (AF_INET, str, &su->sin.sin_addr);
   if (ret > 0)			/* Valid IPv4 address format. */
     {
@@ -307,12 +309,8 @@ sockunion_log (union sockunion *su)
       break;
 #ifdef HAVE_IPV6
     case AF_INET6:
-      {
-	char buf [64];
-	snprintf (buf, BUFSIZ, "%s",
-		  inet_ntop (AF_INET6, &(su->sin6.sin6_addr), buf,
-			     sizeof (buf)));
-      }
+      snprintf (buf, BUFSIZ, "%s",
+		inet_ntop (AF_INET6, &(su->sin6.sin6_addr), buf, BUFSIZ));
       break;
 #endif /* HAVE_IPV6 */
 
@@ -359,6 +357,9 @@ sockunion_connect (int fd, union sockunion *peersu, unsigned short port,
 #ifdef KAME
       if (IN6_IS_ADDR_LINKLOCAL(&su.sin6.sin6_addr) && ifindex)
 	{
+#ifdef HAVE_SIN6_SCOPE_ID
+	  /* su.sin6.sin6_scope_id = ifindex; */
+#endif /* HAVE_SIN6_SCOPE_ID */
 	  SET_IN6_LINKLOCAL_IFINDEX (su.sin6.sin6_addr, ifindex);
 	}
 #endif /* KAME */

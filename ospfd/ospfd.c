@@ -1,22 +1,23 @@
 /* OSPF version 2 daemon program
-   Copyright (C) 1999 Toshiaki Takada
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+ * Copyright (C) 1999 Toshiaki Takada
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
 
 #include <zebra.h>
 
@@ -398,7 +399,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 	      addr = co->address->u.prefix4;
 
 	      /* Remember this interface is running. */
-	      flag = OSPF_IF_ENABLE;
+              flag = OSPF_IF_ENABLE;
               oi->flag = flag;
 
 	      /* Add pseudo neighbor. */
@@ -670,6 +671,49 @@ DEFUN (no_ospf_router_id,
   ospf_top->router_id_static.s_addr = 0;
 
   ospf_update_router_id ();
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (passive_interface,
+	passive_interface_cmd,
+	"passive-interface IFNAME",
+	"Suppress routing updates on an interface\n"
+	"Interface's name\n")
+{
+  struct ospf_interface *oi;
+
+  oi = ospf_if_lookup_by_name (argv[0]);
+
+  if (oi == NULL)
+    {
+      vty_out (vty, "Please specify an existing interface%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  oi->passive_interface = OSPF_IF_PASSIVE;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_passive_interface,
+	no_passive_interface_cmd,
+	"no passive-interface IFNAME",
+	NO_STR
+	"Allow routing updates on an interface\n"
+	"Interface's name\n")
+{
+  struct ospf_interface *oi;
+
+  oi = ospf_if_lookup_by_name (argv[0]);
+
+  if (oi == NULL)
+    {
+      vty_out (vty, "Please specify an existing interface%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  oi->passive_interface = OSPF_IF_ACTIVE;
 
   return CMD_SUCCESS;
 }
@@ -2438,9 +2482,17 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
 	   oi->v_wait, oi->retransmit_interval,
 	   VTY_NEWLINE);
 
-  vty_out (vty, "    Hello due in %s%s",
-	   ospf_timer_dump (oi->t_hello, buf, 9),
-	   VTY_NEWLINE);
+  if (oi->passive_interface == OSPF_IF_ACTIVE)
+    {
+      vty_out (vty, "    Hello due in %s%s",
+		 ospf_timer_dump (oi->t_hello, buf, 9),
+		 VTY_NEWLINE);
+    }
+  else /* OSPF_IF_PASSIVE is set */
+    {
+      vty_out (vty, "    No Hellos (Passive interface)%s",
+                 VTY_NEWLINE);
+    }
 
   vty_out (vty, "  Neighbor Count is %d, Adjacent neighbor count is %d%s",
 	   ospf_nbr_count (oi->nbrs, 0),
@@ -2694,6 +2746,23 @@ ospf_config_write (struct vty *vty)
       /* Redistribute information print. */
       config_write_ospf_redistribute (vty);
 
+      /* passive-interface print. */
+      for (node = listhead (ospf_top->iflist); node; nextnode (node))
+        {
+          struct interface *ifp;
+          struct ospf_interface *oi;
+
+          if ((ifp = getdata (node)) == NULL)
+            continue;
+
+          if ((oi = ifp->info) == NULL)
+            continue;
+
+          if (oi->passive_interface == OSPF_IF_PASSIVE)
+              vty_out (vty, " passive-interface %s%s", ifp->name,
+                       VTY_NEWLINE);
+        }
+
       /* network area print. */
       for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
 	{
@@ -2858,6 +2927,9 @@ ospf_init ()
   install_default (OSPF_NODE);
   install_element (OSPF_NODE, &ospf_router_id_cmd);
   install_element (OSPF_NODE, &no_ospf_router_id_cmd);
+  install_element (OSPF_NODE, &passive_interface_cmd);
+  install_element (OSPF_NODE, &no_passive_interface_cmd);
+
   install_element (OSPF_NODE, &ospf_abr_type_cmd);
   install_element (OSPF_NODE, &no_ospf_abr_type_cmd);
   install_element (OSPF_NODE, &ospf_rfc1583_flag_cmd);

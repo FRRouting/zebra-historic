@@ -9,7 +9,7 @@ END-INFO-DIR-ENTRY
 TCP/IP routing protocols.
 
    This is Edition 0.1, last updated 3 January 2000 of `The GNU Zebra
-Manual', for Zebra Version 0.84.
+Manual', for Zebra Version 0.85.
 
    Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
@@ -91,33 +91,61 @@ File: zebra.info,  Node: OSPF interface,  Next: Redistribute routes to OSPF,  Pr
 OSPF interface
 ==============
 
- - Interface Command: ospf authentication-key AUTH_KEY
- - Interface Command: no ospf authentication-key
+ - Interface Command: ip ospf authentication-key AUTH_KEY
+ - Interface Command: no ip ospf authentication-key
+     Set OSPF authentication key for simple password.  With setting
+     AUTH_KEY, all OSPF pakcets are authenticated. AUTH_KEY has length
+     up to 8 chars.
 
- - Interface Command: ospf message-digest-key KEYID md5 KEY
- - Interface Command: no ospf message-digest-key
+ - Interface Command: ip ospf message-digest-key KEYID md5 KEY
+ - Interface Command: no ip ospf message-digest-key
+     Set OSPF authentication key for cryptographic password.  The
+     cryptographic algorithm is MD5.  KEYID identifies secret key used
+     to create the message digest.  KEY is the actual message digest
+     key up to 16 chars.
 
- - Interface Command: ospf cost <1-65535>
- - Interface Command: no ospf cost
+ - Interface Command: ip ospf cost <1-65535>
+ - Interface Command: no ip ospf cost
+     Set link cost for specified interface.  The cost value is set to
+     router-LSA's metric field and used for SPF calculation.
 
- - Interface Command: ospf dead-interval <1-65535>
- - Interface Command: no ospf dead-interval
+ - Interface Command: ip ospf dead-interval <1-65535>
+ - Interface Command: no ip ospf dead-interval
+     Set number of seconds for RouterDeadInterval timer value used for
+     Wait Timer and Inactivity Timer.  This value must be the same for
+     all routers attached to a common network.  The default value is 40
+     seconds.
 
- - Interface Command: ospf hello-interval <1-65535>
- - Interface Command: no ospf hello-interval
+ - Interface Command: ip ospf hello-interval <1-65535>
+ - Interface Command: no ip ospf hello-interval
+     Set number of seconds for HelloInterval timer value.  Setting this
+     value, Hello packet will be sent every timer value seconds on
+     specified interface.  This value must be the same for all routers
+     attached to a common network.  The default value is 10 seconds.
 
- - Interface Command: ospf network
+ - Interface Command: ip ospf network
 (broadcast|non-broadcast|point-to-multipoint|point-to-point)
- - Interface Command: no ospf network
+ - Interface Command: no ip ospf network
+     Set explicitly network type for specifed interface.
 
- - Interface Command: ospf priority <0-255>
- - Interface Command: no ospf priority
+ - Interface Command: ip ospf priority <0-255>
+ - Interface Command: no ip ospf priority
+     Set RouterPriority integer value.  Setting higher value, router
+     will be more eligible to become Designated Router.  Setting the
+     value to 0, router is no longer eligible to Designated Router.
+     The default value is 1.
 
- - Interface Command: ospf retransmit-interval <1-65535>
- - Interface Command: no ospf retransmit interval
+ - Interface Command: ip ospf retransmit-interval <1-65535>
+ - Interface Command: no ip ospf retransmit interval
+     Set number of seconds for RxmtInterval timer value.  This value is
+     used when retransmitting Database Description and Link State
+     Request packets.  The default value is 5 seconds.
 
- - Interface Command: ospf transmit-delay
- - Interface Command: no ospf transmit-delay
+ - Interface Command: ip ospf transmit-delay
+ - Interface Command: no ip ospf transmit-delay
+     Set nubmer of seconds for InfTransDelay value.  LSAs' age should be
+     incremented by this value when transmitting.  The default value is
+     1 seconds.
 
 
 File: zebra.info,  Node: Redistribute routes to OSPF,  Next: Showing OSPF information,  Prev: OSPF interface,  Up: ospfd
@@ -341,6 +369,7 @@ inter-domain routing.
 * Route Reflector::
 * Route Server::
 * How to set up a 6-Bone connection::
+* Dump BGP packet and table::
 
 
 File: zebra.info,  Node: Configuring bgpd,  Next: BGP router,  Prev: bgpd,  Up: bgpd
@@ -608,7 +637,8 @@ packet.
 capability of both sides.  For example, local router have capability of
 unicast and multicast and remote router have capability of unicast.  In
 this case, local router will establish the connection with unicast only
-capability.
+capability.  When there is no common capability Zebra send Unsupported
+Capability error then reset connection.
 
    If you want to completely match capability with remote peer.  Please
 use `strict-capability-match' command.
@@ -781,7 +811,7 @@ Viewing the view
      Display routing table of BGP view NAME.
 
 
-File: zebra.info,  Node: How to set up a 6-Bone connection,  Prev: Route Server,  Up: bgpd
+File: zebra.info,  Node: How to set up a 6-Bone connection,  Next: Dump BGP packet and table,  Prev: Route Server,  Up: bgpd
 
 How to set up a 6-Bone connection
 =================================
@@ -823,6 +853,12 @@ How to set up a 6-Bone connection
      !
      log file bgpd.log
      !
+
+
+File: zebra.info,  Node: Dump BGP packet and table,  Prev: How to set up a 6-Bone connection,  Up: bgpd
+
+Dump BGP packet and table
+=========================
 
 
 File: zebra.info,  Node: Filtering,  Next: Route Map,  Prev: bgpd,  Up: Top
@@ -1085,7 +1121,7 @@ Router Advertisement
       ipv6 nd prefix-advertisement 3ffe:506:5009::/64
 
 
-File: zebra.info,  Node: Kernel Interface,  Next: SNMP support,  Prev: IPv6 Supports,  Up: Top
+File: zebra.info,  Node: Kernel Interface,  Next: SNMP Support,  Prev: IPv6 Supports,  Up: Top
 
 Kernel Interface
 ****************
@@ -1118,9 +1154,9 @@ interfaces.
 
 `netlink'
 
-File: zebra.info,  Node: SNMP support,  Next: Linux Netlink,  Prev: Kernel Interface,  Up: Top
+File: zebra.info,  Node: SNMP Support,  Next: Linux Netlink,  Prev: Kernel Interface,  Up: Top
 
-SNMP support
+SNMP Support
 ************
 
    SNMP (Simple Network Managing Protocol) is widely implemented feature
@@ -1138,7 +1174,7 @@ to use the latest `ucd-snmp' software.
 * SMUX configuration::
 
 
-File: zebra.info,  Node: How to get ucd-snmp,  Next: SMUX configuration,  Prev: SNMP support,  Up: SNMP support
+File: zebra.info,  Node: How to get ucd-snmp,  Next: SMUX configuration,  Prev: SNMP Support,  Up: SNMP Support
 
 How to get ucd-snmp
 ===================
@@ -1166,7 +1202,7 @@ connect under MIB 1.3.6.1.6.3.1 with password test.
      smuxpeer 1.3.6.1.6.3.1 test
 
 
-File: zebra.info,  Node: SMUX configuration,  Prev: How to get ucd-snmp,  Up: SNMP support
+File: zebra.info,  Node: SMUX configuration,  Prev: How to get ucd-snmp,  Up: SNMP Support
 
 SMUX configuration
 ==================
@@ -1185,7 +1221,7 @@ SMUX configuration
      !
 
 
-File: zebra.info,  Node: Linux Netlink,  Next: Command Index,  Prev: SNMP support,  Up: Top
+File: zebra.info,  Node: Linux Netlink,  Next: Zebra Protocol,  Prev: SNMP Support,  Up: Top
 
 Linux Netlink
 *************
@@ -1204,4 +1240,10 @@ communication is done by reading/writing over netlink socket.
    After the kernel configuration, please reconfigure and rebuild Zebra.
 You can use netlink as a dynamic routing update channel between Zebra
 and the kernel.
+
+
+File: zebra.info,  Node: Zebra Protocol,  Next: Packet Binary Dump Format,  Prev: Linux Netlink,  Up: Top
+
+Zebra Protocol
+**************
 

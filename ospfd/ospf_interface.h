@@ -37,6 +37,9 @@
 #define OSPF_AUTH_SIMPLE_SIZE           8
 #define OSPF_AUTH_MD5_SIZE             16
 
+#define OSPF_IF_ACTIVE                  0
+#define OSPF_IF_PASSIVE		        1
+
 struct ospf_interface;
 
 struct ospf_vl_data
@@ -55,17 +58,20 @@ struct ospf_vl_data
 
 #define OSPF_VL_FLAG_APPROVED 0x01
 
+struct crypt_key
+{
+  u_char key_id;
+  u_char auth_key[OSPF_AUTH_MD5_SIZE + 1];
+};
 
 /* OSPF interface structure */
 struct ospf_interface
 {
-  /* This interface's parent ospf. */
+  /* This interface's parent ospf instance. */
   struct ospf *ospf;
 
   /* Packet receive and send buffer. */
   struct stream *ibuf;			/* Input buffer */
-
-  /*  struct stream *obuf; */
   struct ospf_fifo *obuf;		/* Output queue */
 
   /* Interface data from zebra. */
@@ -77,28 +83,24 @@ struct ospf_interface
   /* OSPF Specific interface data. */
   u_char flag;			        /* OSPF is enabled on this */
   u_char type;				/* OSPF Network Type */
+  u_char passive_interface;             /* OSPF Interface is passive */
   int status;				/* OSPF Interface State */
 
   struct prefix *address;		/* Interface prefix */
-
   struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
-
-  /*  u_char options;	*/		/* Options */
-  /*  u_char priority;	*/		/* Router Priority */
-  /* struct in_addr d_router;	*/	/* Designated Router */
-  /* struct in_addr bd_router;	*/	/* Backup Designated Router */
-
   struct ospf_area *area;		/* OSPF Area */
 
-  u_char auth_data[OSPF_AUTH_MD5_SIZE + 1]; /* Authentication Key */
-  u_int8_t auth_key_id;			/* MD5 Key ID */
-  u_int8_t auth_md5;			/* 1 or 0 */
-  u_int32_t auth_seq;			/* cryptographic sequence # */ 
+  /* Authentication data. */
+  u_char auth_simple[OSPF_AUTH_SIMPLE_SIZE + 1];       /* Simple password. */
+  list auth_crypt;			/* List of Auth cryptographic data. */
+  u_int32_t crypt_seqnum;		/* Cryptographic Sequence Number */ 
 
+  /* */
   u_int32_t transmit_delay;		/* Interface Transmisson Delay */
   u_int32_t output_cost;		/* Interface Output Cost */
   u_int32_t retransmit_interval;	/* Retransmission Interval */
 
+  /* Neighbor information. */
   struct route_table *nbrs;             /* OSPF Neighbor List */
   struct ospf_neighbor *nbr_self;	/* Neighbor Self */
 
@@ -147,6 +149,7 @@ struct ospf_interface
 struct ospf_interface *ospf_if_new ();
 int ospf_if_up (struct interface *ifp);
 int ospf_if_down (struct interface *ifp);
+struct ospf_interface *ospf_if_lookup_by_name (char *);
 struct ospf_interface *ospf_if_lookup_by_addr (struct in_addr *);
 struct ospf_interface *ospf_if_lookup_by_prefix (struct prefix_ipv4 *);
 int ospf_if_new_hook (struct interface *);
@@ -167,5 +170,7 @@ void ospf_vl_unapprove ();
 void ospf_vl_shut_unapproved ();
 int ospf_full_virtual_nbrs (struct ospf_area *);
 int ospf_vls_in_area (struct ospf_area *);
+
+struct crypt_key *ospf_crypt_key_lookup (struct ospf_interface *, int);
 
 #endif /* _ZEBRA_OSPF_INTERFACE_H */

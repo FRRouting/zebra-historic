@@ -1,22 +1,24 @@
-/* OSPF Sending and Receiving OSPF Packets
-   Copyright (C) 1999 Toshiaki Takada
-
-This file is part of GNU Zebra.
-
-GNU Zebra is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
-
-GNU Zebra is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with GNU Zebra; see the file COPYING.  If not, write to the Free
-Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+/*
+ * OSPF Sending and Receiving OSPF Packets
+ * Copyright (C) 1999 Toshiaki Takada
+ *
+ * This file is part of GNU Zebra.
+ *
+ * GNU Zebra is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2, or (at your option) any
+ * later version.
+ *
+ * GNU Zebra is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with GNU Zebra; see the file COPYING.  If not, write to the Free
+ * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ */
 
 #include <zebra.h>
 
@@ -236,6 +238,23 @@ ospf_packet_dup (struct ospf_packet *op)
 }
 
 int
+ospf_packet_max (struct ospf_interface *oi)
+{
+  struct ospf_area *area;
+  int max;
+
+  area = oi->area;
+
+  if (area->auth_type == OSPF_AUTH_CRYPTOGRAPHIC)
+    max = oi->ifp->mtu - OSPF_AUTH_MD5_SIZE - 88;
+  else
+    max = oi->ifp->mtu - 88;
+
+  return max;
+}
+
+
+int
 ospf_ls_req_timer (struct thread *thread)
 {
   struct ospf_neighbor *nbr;
@@ -246,8 +265,9 @@ ospf_ls_req_timer (struct thread *thread)
 
   oi = nbr->oi;
 
+  if (oi->passive_interface != OSPF_IF_PASSIVE)
   /* Send Link State Request. */
-  ospf_ls_req_send (nbr);
+    ospf_ls_req_send (nbr);
 
   /* Set LS Request retransmission timer. */
   OSPF_NSM_TIMER_ON (nbr->t_ls_req, ospf_ls_req_timer, nbr->v_ls_req);
@@ -348,7 +368,7 @@ ospf_write (struct thread *thread)
     }
 
   /* rewrite the md5 signature & update the seq */
-  ospf_make_md5_digest(oi, op);
+  ospf_make_md5_digest (oi, op);
 
   bzero (&sa_dst, sizeof (sa_dst));
   sa_dst.sin_family = AF_INET;
@@ -850,6 +870,7 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
       size -= 12;
     }
 
+  if (oi->passive_interface != OSPF_IF_PASSIVE)
   /* Now send LSAs requested. */
   ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
 
@@ -1273,6 +1294,7 @@ int
 ospf_check_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
 {
   int ret = 0;
+  struct crypt_key *ck;
 
   switch (ntohs (ospfh->auth_type))
     {
@@ -1280,7 +1302,7 @@ ospf_check_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
       ret = 1;
       break;
     case OSPF_AUTH_SIMPLE:
-      if (!memcmp (oi->auth_data, ospfh->auth.auth_data, OSPF_AUTH_SIMPLE_SIZE))
+      if (!memcmp (oi->auth_simple, ospfh->u.auth_data, OSPF_AUTH_SIMPLE_SIZE))
 	ret = 1;
       else
 	ret = 0;
@@ -1288,10 +1310,12 @@ ospf_check_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
     case OSPF_AUTH_CRYPTOGRAPHIC:
       /* XXX - we are supposed to save the sequence & do a check */
 
+      ck = getdata (oi->auth_crypt->tail);
+
       /* This is very basic, the digest processing is elsewhere */
-      if (ospfh->auth.auth_md5.md5_key_len == OSPF_AUTH_MD5_SIZE && 
-          ospfh->auth.auth_md5.md5_key_id == oi->auth_key_id &&
-          ntohs(ospfh->length) + OSPF_AUTH_SIMPLE_SIZE <= stream_get_size(oi->ibuf))
+      if (ospfh->u.crypt.auth_data_len == OSPF_AUTH_MD5_SIZE && 
+          ospfh->u.crypt.key_id == ck->key_id &&
+          ntohs (ospfh->length) + OSPF_AUTH_SIMPLE_SIZE <= stream_get_size (oi->ibuf))
         ret = 1;
       else
         ret = 0;
@@ -1312,7 +1336,7 @@ ospf_check_sum (struct ospf_header *ospfh)
   int in_cksum (void *ptr, int nbytes);
 
   /* clear auth_data for checksum. */
-  bzero (ospfh->auth.auth_data, OSPF_AUTH_SIMPLE_SIZE);
+  bzero (ospfh->u.auth_data, OSPF_AUTH_SIMPLE_SIZE);
 
   /* keep checksum and clear. */
   sum = ospfh->checksum;
@@ -1498,9 +1522,9 @@ ospf_read (struct thread *thread)
     }
 
   /* if check sum is invalid, packet is discarded. */
-  if (ntohs(ospfh->auth_type) == OSPF_AUTH_CRYPTOGRAPHIC)
+  if (ntohs (ospfh->auth_type) == OSPF_AUTH_CRYPTOGRAPHIC)
     {
-      if (ospf_check_md5_digest(oi, oi->ibuf, ntohs(ospfh->length)) == 0)
+      if (ospf_check_md5_digest (oi, oi->ibuf, ntohs (ospfh->length)) == 0)
 	{
 	  zlog_warn ("interface %s: ospf_read md5 authentication failed.",
 		     oi->ifp->name);
@@ -1564,8 +1588,10 @@ ospf_make_header (int type, struct ospf_interface *oi, struct stream *s)
   ospfh->area_id = oi->area->area_id;
   ospfh->auth_type = htons (oi->area->auth_type);
 
-  if (ntohs(ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
-    bzero (ospfh->auth.auth_data, OSPF_AUTH_MD5_SIZE);
+  /*
+  if (ntohs (ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
+  */
+  bzero (ospfh->u.auth_data, OSPF_AUTH_SIMPLE_SIZE);
 
   ospf_output_forward (s, OSPF_HEADER_SIZE);
 }
@@ -1574,22 +1600,43 @@ ospf_make_header (int type, struct ospf_interface *oi, struct stream *s)
 int
 ospf_make_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
 {
+  struct crypt_key *ck;
+
   switch (oi->area->auth_type)
     {
     case OSPF_AUTH_NULL:
-      bzero (ospfh->auth.auth_data, sizeof (ospfh->auth.auth_data));
+      /*
+      bzero (ospfh->u.auth_data, sizeof (ospfh->u.auth_data));
+      */
       break;
     case OSPF_AUTH_SIMPLE:
-      memcpy (ospfh->auth.auth_data, oi->auth_data, OSPF_AUTH_SIMPLE_SIZE);
+      memcpy (ospfh->u.auth_data, oi->auth_simple, OSPF_AUTH_SIMPLE_SIZE);
       break;
     case OSPF_AUTH_CRYPTOGRAPHIC:
+      if (list_isempty (oi->auth_crypt))
+	{
+	  ospfh->u.crypt.zero = 0;
+	  ospfh->u.crypt.key_id = 0;
+	  ospfh->u.crypt.auth_data_len = OSPF_AUTH_MD5_SIZE;
+	}
+      else
+	{
+	  ck = getdata (oi->auth_crypt->tail);
+	  ospfh->u.crypt.zero = 0;
+	  ospfh->u.crypt.key_id = ck->key_id;
+	  ospfh->u.crypt.auth_data_len = OSPF_AUTH_MD5_SIZE;
+	}
       /* note: the seq is done in ospf_make_md5_digest() */
-      ospfh->auth.auth_md5.md5_null = 0;
-      ospfh->auth.auth_md5.md5_key_id = oi->auth_key_id;
-      ospfh->auth.auth_md5.md5_key_len = OSPF_AUTH_MD5_SIZE;
+      /*
+      ospfh->u.crypt.zero = 0;
+      ospfh->u.crypt.key_id = oi->auth_key_id;
+      ospfh->u.crypt.auth_data_len = OSPF_AUTH_MD5_SIZE;
+      */
       break;
     default:
-      bzero (ospfh->auth.auth_data, sizeof (ospfh->auth.auth_data));
+      /*
+      bzero (ospfh->u.auth_data, sizeof (ospfh->u.auth_data));
+      */
       break;
     }
 
@@ -1604,16 +1651,24 @@ ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
   struct md5_ctx ctx;
   unsigned char digest[OSPF_AUTH_MD5_SIZE];
   unsigned char *pdigest;
+  struct crypt_key *ck;
+  struct ospf_header *ospfh;
 
   ibuf = STREAM_PNT (s);
+  ospfh = (struct ospf_header *) ibuf;
 
   /* Get pointer to the end of the packet */
   pdigest = ibuf + length;
 
+  /* Get secret key. */
+  ck = ospf_crypt_key_lookup (oi, ospfh->u.crypt.key_id);
+  if (ck == NULL)
+    return 0;
+
   /* generate a digest for the ospf packet - their digest + our digest */
   md5_init_ctx (&ctx);
   md5_process_bytes (ibuf, length, &ctx);
-  md5_process_bytes (oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
+  md5_process_bytes (ck->auth_key, OSPF_AUTH_MD5_SIZE, &ctx);
   md5_finish_ctx (&ctx, digest);
 
   /* compare the two */
@@ -1635,6 +1690,7 @@ ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *op)
   struct md5_ctx ctx;
   void *ibuf;
   unsigned long oldputp;
+  struct crypt_key *ck;
 
   ibuf = STREAM_DATA (op->s);
   ospfh = (struct ospf_header *) ibuf;
@@ -1644,21 +1700,27 @@ ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *op)
 
   /* we do this here so when we dup a packet, we don't have to
      waste CPU rewriting other headers */
-  ospfh->auth.auth_md5.md5_seq = htonl (oi->auth_seq++);
+  ospfh->u.crypt.crypt_seqnum = htonl (oi->crypt_seqnum++);
 
-  /* generate a digest for the entire packet + our secret key */
+  /* Get MD5 Authentication key from auth_key list. */
+  ck = getdata (oi->auth_crypt->tail);
+
+  /* Generate a digest for the entire packet + our secret key */
   md5_init_ctx (&ctx);
-  md5_process_bytes (ibuf, ntohs(ospfh->length), &ctx);
+  md5_process_bytes (ibuf, ntohs (ospfh->length), &ctx);
+  /*
   md5_process_bytes (oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
+  */
+  md5_process_bytes (ck->auth_key, OSPF_AUTH_MD5_SIZE, &ctx);
   md5_finish_ctx (&ctx, digest);
 
-  /* append md5 digest to the end of the stream */
+  /* Append md5 digest to the end of the stream */
   oldputp = stream_get_putp (op->s);
-  stream_set_putp (op->s, ntohs(ospfh->length));
+  stream_set_putp (op->s, ntohs (ospfh->length));
   stream_put (op->s, digest, OSPF_AUTH_MD5_SIZE);
   stream_set_putp (op->s, oldputp);
 
-  /* we do *NOT* increment the OSPF header length */
+  /* We do *NOT* increment the OSPF header length */
   op->length += OSPF_AUTH_MD5_SIZE;
 
   return OSPF_AUTH_MD5_SIZE;
@@ -1804,7 +1866,7 @@ ospf_make_db_desc (struct ospf_interface *oi, struct ospf_neighbor *nbr,
       u_int16_t ls_age;
 
       /* DD packet overflows interface MTU. */
-      if (length + OSPF_LSA_HEADER_SIZE > OSPF_PACKET_MAX(oi))
+      if (length + OSPF_LSA_HEADER_SIZE > OSPF_PACKET_MAX (oi))
 	break;
 
       /* Append LSA header to the packet. */
@@ -2006,6 +2068,9 @@ ospf_hello_send (struct ospf_interface *oi)
 {
   struct ospf_packet *op;
   u_int16_t length = OSPF_HEADER_SIZE;
+
+  if (oi->passive_interface == OSPF_IF_PASSIVE)
+    return;
 
   op = ospf_packet_new (oi->ifp->mtu);
 

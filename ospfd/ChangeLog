@@ -1,4 +1,25 @@
-2000-01-14  Toshiaki Takada <takada@zebra.org>
+2000-01-16  Kai Bankett <kai.bankett@vew-telnet.net>
+
+	* ospf_interface.h (OSPF_IF_PASSIVE): Add passive flag.
+	* ospf_interface.c (ospf_if_lookup_by_name): Add new function.
+	* ospf_lsa.c (ospf_router_lsa): Skip passive interface.
+	* ospfd.c (passive_interface): New command passive-interface is
+	added.
+	(ospf_config_write): Print passive interface.
+
+2000-01-15  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_interface.h (crypt_key): New struct added to store
+	multiple cryptographic autheitication keys.
+	(ospf_interface): struct changed.
+
+	* ospf_interface.c: ospf_crypt_key_new, ospf_crypt_key_add,
+	ospf_crypt_key_lookup, ospf_crypt_key_delete: new functions added.
+
+	* ospf_packet.c (ip_ospf_message_digest_key): Changed to store
+	multiple cryptographic authentication keys.
+
+2000-01-14  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_interface.c: DEFUN (if_ospf_*) commands changed name to
 	ip_ospf_* ().

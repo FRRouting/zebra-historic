@@ -14,24 +14,18 @@ o multipath support.
 bgpd:
 
 o peer-group functionality.
-o route server support -- should support received-routes and
-  advertised-routes command
+o route server support
 o route flap dampening.
 o MRT compatible packet dump code merge.
-o BGP capability negotiation code merge.
 o aggregate-address support complete (as-set etc.).
-o no aggreagate-address command.
-o BGP peer should be sorted by address. 
 o BGP TCP MD5 authentication (on OpenBSD) by password command.
-o BGP multiple instance support.
 o BGP confederation.
-o BGP connection collision detection.
 o HUP signal support (reload configuration file).
 o BGP4-MIB support (and extention such as SNMP traps for route-withdrawls)
 o BGP multi-path extension ("load balancing")
-o maximum-prefix command - Maximum number of prefix accept from this peer
 o Dynamic query to the Routing Registry.
 o Softreconfiguration.
+o route-refresh support.
 
 ripd:
 

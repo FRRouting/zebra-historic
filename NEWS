@@ -1,5 +1,12 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.84a
+
+* Changes in bgpd
+
+** Fix serious bug of BGP-4+ peering under IPv6 link-local address.
+   Due to the bug BGP-4+ peering may not be established.
+
 * Changes in zebra-0.84
 
 * Changes in lib

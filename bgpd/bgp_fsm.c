@@ -317,6 +317,9 @@ bgp_stop (struct peer *peer)
   peer->afc_nego[AFI_IP6][SAFI_UNICAST] = 0;
   peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = 0;
 
+  /* Reset route refresh flag. */
+  peer->refresh = 0;
+
   return 0;
 }
 

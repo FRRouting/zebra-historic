@@ -2558,6 +2558,85 @@ DEFUN (no_ipv6_bgp_neighbor_route_server_client,
   return peer_route_server (vty, argv[0], AFI_IP6, 0);
 }
 
+/* neighbor route-refresh. */
+int
+peer_route_refresh (struct vty *vty, char *ip_str, int afi, int set)
+{
+  struct peer *peer;
+  struct peer_conf *conf;
+
+  conf = peer_conf_lookup_vty (vty, ip_str, afi);
+  if (! conf)
+    return CMD_WARNING;
+  peer = conf->peer;
+
+  if (set)
+    {
+      if (! CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+	{
+	  SET_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH);
+	  BGP_EVENT_ADD (peer, BGP_Stop);
+	}
+    }
+  else
+    {
+      if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+	{
+	  UNSET_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH);
+	  BGP_EVENT_ADD (peer, BGP_Stop);
+	}
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_route_refresh,
+       neighbor_route_refresh_cmd,
+       NEIGHBOR_CMD "route-refresh",
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Configure this neighbor as route refresh enable\n")
+{
+  return peer_route_refresh (vty, argv[0], AFI_IP, 1);
+}
+
+DEFUN (no_neighbor_route_refresh,
+       no_neighbor_route_refresh_cmd,
+       NO_NEIGHBOR_CMD "route-refresh",
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Configure this neighbor as route refresh enable\n")
+{
+  return peer_route_refresh (vty, argv[0], AFI_IP, 0);
+}
+
+DEFUN (ipv6_bgp_neighbor_route_refresh,
+       ipv6_bgp_neighbor_route_refresh_cmd,
+       "ipv6 bgp neighbor (A.B.C.D|X:X::X:X) route-refresh",
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Configure this neighbor as route refresh enable\n")
+{
+  return peer_route_refresh (vty, argv[0], AFI_IP6, 1);
+}
+
+DEFUN (no_ipv6_bgp_neighbor_route_refresh,
+       no_ipv6_bgp_neighbor_route_refresh_cmd,
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) route-refresh",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Configure this neighbor as route refresh enable\n")
+{
+  return peer_route_refresh (vty, argv[0], AFI_IP6, 0);
+}
+
 /* neighbor translate-update. */
 int
 peer_translate_update (struct vty *vty, char *ip_str, int afi, int safi)
@@ -4371,6 +4450,27 @@ DEFUN (clear_ipv6_bgp_as,
 }       
 #endif /* HAVE_IPV6 */
 
+/* Clear ip bgp neighbor soft in. */
+int
+clear_bgp_soft_in (struct vty *vty, char *ip_str)
+{
+  return CMD_SUCCESS;
+}
+
+DEFUN (clear_ip_bgp_neighbor_soft_in,
+       clear_ip_bgp_neighbor_soft_in_cmd,
+       "clear ip bgp neighbor A.B.C.D soft in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor\n"
+       "IP address\n"
+       "soft reconfiguration"
+       "inbound\n")
+{
+  return clear_bgp_soft_in (vty, argv[0]);
+}
+
 /* Show BGP peer's summary information. */
 int
 bgp_show_summary (struct vty *vty, int afi, int safi, int all)
@@ -5110,6 +5210,11 @@ bgp_config_write_peer (struct vty *vty, struct bgp *bgp,
     vty_out (vty, "%s neighbor %s route-server-client%s", v6str, addr,
 	     VTY_NEWLINE);
 
+  /* Route refresh. */
+  if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+    vty_out (vty, "%s neighbor %s route-refresh%s", v6str, addr,
+	     VTY_NEWLINE);
+
   /* ebgp-multihop print. */
   if (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
     {
@@ -5411,6 +5516,10 @@ bgp_init ()
   install_element (BGP_NODE, &neighbor_route_server_client_cmd);
   install_element (BGP_NODE, &no_neighbor_route_server_client_cmd);
 
+  /* "neighbor route-refresh" commands.*/
+  install_element (BGP_NODE, &neighbor_route_refresh_cmd);
+  install_element (BGP_NODE, &no_neighbor_route_refresh_cmd);
+
   /* "neighbor translate-update" commands. */
   install_element (BGP_NODE, &neighbor_translate_update_multicast_cmd);
   install_element (BGP_NODE, &neighbor_translate_update_unimulti_cmd);
@@ -5549,6 +5658,9 @@ bgp_init ()
 
   install_element (BGP_NODE, &ipv6_bgp_neighbor_route_server_client_cmd);
   install_element (BGP_NODE, &no_ipv6_bgp_neighbor_route_server_client_cmd);
+
+  install_element (BGP_NODE, &ipv6_bgp_neighbor_route_refresh_cmd);
+  install_element (BGP_NODE, &no_ipv6_bgp_neighbor_route_refresh_cmd);
 
   install_element (BGP_NODE, &ipv6_neighbor_dont_capability_negotiate_cmd);
   install_element (BGP_NODE, &no_ipv6_neighbor_dont_capability_negotiate_cmd);

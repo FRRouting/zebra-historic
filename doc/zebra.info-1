@@ -9,7 +9,7 @@ END-INFO-DIR-ENTRY
 TCP/IP routing protocols.
 
    This is Edition 0.1, last updated 3 January 2000 of `The GNU Zebra
-Manual', for Zebra Version 0.84.
+Manual', for Zebra Version 0.85.
 
    Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
@@ -37,7 +37,7 @@ GNU Zebra
 protocols.  Adding to routing protocol support, Zebra provides interface
 address configuration and advanced filtering.
 
-   This is the GNU Zebra Manual for zebra-0.84.
+   This is the GNU Zebra Manual for zebra-0.85.
 
 * Menu:
 
@@ -58,10 +58,12 @@ Additional Features
 * Route Map::                   Route map description.
 * IPv6 Supports::               IP version 6 supports.
 * Kernel Interface::            Zebra between kernel interface.
-* SNMP support::
+* SNMP Support::
 * Linux Netlink::               Netlink mechanism on a Linux box.
 
-Indices
+Appendix
+* Zebra Protocol::
+* Packet Binary Dump Format::
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
 
@@ -77,7 +79,7 @@ RIPng, OSPFv2, OSPFv3, BGP-4, and BGP-4+ (*note Supported RFC::).
 Zebra also supports special BGP behavior Route Reflector and Route
 Server.  Adding to traditional IPv4 routing protocols, Zebra also
 supports IPv6 routing protocols.  With SNMP daemon which support SMUX
-protocol, Zebra provides routing protocol MIBs (*note SNMP support::).
+protocol, Zebra provides routing protocol MIBs (*note SNMP Support::).
 
    Zebra uses an advanced software architecture to provide you with a
 high quality, multi server routing engine.  Zebra has an interactive
@@ -792,7 +794,7 @@ all.
      Connected to localhost.
      Escape character is '^]'.
      
-     Hello, this is zebra (version 0.84)
+     Hello, this is zebra (version 0.85)
      Copyright 1997-2000 Kunihiro Ishiguro
      
      

@@ -222,6 +222,9 @@ ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,
       if (!ospf_if_is_enable (ifp))
 	continue;
 
+      if (oi->passive_interface == OSPF_IF_PASSIVE)
+        continue;
+
       /* Remember if new LSA is flooded out back. */
       flag = 0;
 

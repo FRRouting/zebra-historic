@@ -264,6 +264,9 @@ struct peer
   u_char afc[AFI_MAX][SAFI_MAX];
   u_char afc_nego[AFI_MAX][SAFI_MAX];
 
+  /* Route refresh capability. */
+  u_char refresh;
+
   /* User configuration flags. */
   u_int16_t flags;
 #define PEER_FLAG_PASSIVE             0x0001 /* passive mode */
@@ -353,17 +356,18 @@ struct bgp_nlri
 #define BGP_VERSION_MP_4	  41   /* bgpd supports this version. */
 
 /* BGP messages. */
-#define	BGP_MSG_OPEN		1
-#define	BGP_MSG_UPDATE		2
-#define	BGP_MSG_NOTIFY		3
-#define	BGP_MSG_KEEPALIVE	4
-#define BGP_MSG_MAX		5
+#define	BGP_MSG_OPEN		    1
+#define	BGP_MSG_UPDATE		    2
+#define	BGP_MSG_NOTIFY		    3
+#define	BGP_MSG_KEEPALIVE	    4
+#define BGP_MSG_ROUTE_REFRESH	  128
 
 /* BGP message minimum size. */
-#define BGP_MSG_OPEN_MIN_SIZE        (BGP_HEADER_SIZE + 10)
-#define BGP_MSG_UPDATE_MIN_SIZE      (BGP_HEADER_SIZE + 4)
-#define BGP_MSG_NOTIFY_MIN_SIZE      (BGP_HEADER_SIZE + 2)
-#define BGP_MSG_KEEPALIVE_MIN_SIZE   (BGP_HEADER_SIZE + 0)
+#define BGP_MSG_OPEN_MIN_SIZE           (BGP_HEADER_SIZE + 10)
+#define BGP_MSG_UPDATE_MIN_SIZE         (BGP_HEADER_SIZE + 4)
+#define BGP_MSG_NOTIFY_MIN_SIZE         (BGP_HEADER_SIZE + 2)
+#define BGP_MSG_KEEPALIVE_MIN_SIZE      (BGP_HEADER_SIZE + 0)
+#define BGP_MSG_ROUTE_REFRESH_MIN_SIZE  (BGP_HEADER_SIZE + 4)
 
 /* BGP open option message. */
 #define BGP_OPEN_OPT_AUTH       1

@@ -7,7 +7,7 @@
 
 @c Set variables
 @set EDITION 0.1
-@set VERSION 0.84
+@set VERSION 0.85
 @set UPDATED 3 January 2000
 @set UPDATED-MONTH January 2000
 
@@ -109,10 +109,12 @@ Additional Features
 * Route Map::                   Route map description.
 * IPv6 Supports::               IP version 6 supports.
 * Kernel Interface::            Zebra between kernel interface.
-* SNMP support::                
+* SNMP Support::                
 * Linux Netlink::               Netlink mechanism on a Linux box.
 
-Indices
+Appendix
+* Zebra Protocol::              
+* Packet Binary Dump Format::   
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
 @end menu
@@ -128,7 +130,7 @@ OSPFv2, OSPFv3, BGP-4, and BGP-4+ (@pxref{Supported RFC}).  Zebra also
 supports special BGP behavior Route Reflector and Route Server.  Adding
 to traditional IPv4 routing protocols, Zebra also supports IPv6 routing
 protocols.  With SNMP daemon which support SMUX protocol, Zebra provides
-routing protocol MIBs (@pxref{SNMP support}).
+routing protocol MIBs (@pxref{SNMP Support}).
 
   Zebra uses an advanced software architecture to provide you with a
 high quality, multi server routing engine.  Zebra has an interactive
@@ -1872,40 +1874,65 @@ address's mask.
 @comment  node-name,  next,  previous,  up
 @section OSPF interface
 
-@deffn {Interface Command} {ospf authentication-key AUTH_KEY} {}
-@deffnx {Interface Command} {no ospf authentication-key} {}
+@deffn {Interface Command} {ip ospf authentication-key AUTH_KEY} {}
+@deffnx {Interface Command} {no ip ospf authentication-key} {}
+Set OSPF authentication key for simple password.  With setting @var{AUTH_KEY},
+all OSPF pakcets are authenticated. @var{AUTH_KEY} has length up to 8 chars.
 @end deffn
 
-@deffn {Interface Command} {ospf message-digest-key KEYID md5 KEY} {}
-@deffnx {Interface Command} {no ospf message-digest-key} {}
+@deffn {Interface Command} {ip ospf message-digest-key KEYID md5 KEY} {}
+@deffnx {Interface Command} {no ip ospf message-digest-key} {}
+Set OSPF authentication key for cryptographic password.  The cryptographic
+algorithm is MD5.  KEYID identifies secret key used to create the message
+digest.  KEY is the actual message digest key up to 16 chars.
 @end deffn
 
-@deffn {Interface Command} {ospf cost <1-65535>} {}
-@deffnx {Interface Command} {no ospf cost} {}
+@deffn {Interface Command} {ip ospf cost <1-65535>} {}
+@deffnx {Interface Command} {no ip ospf cost} {}
+Set link cost for specified interface.  The cost value is set to router-LSA's
+metric field and used for SPF calculation.
 @end deffn
 
-@deffn {Interface Command} {ospf dead-interval <1-65535>} {}
-@deffnx {Interface Command} {no ospf dead-interval} {}
+@deffn {Interface Command} {ip ospf dead-interval <1-65535>} {}
+@deffnx {Interface Command} {no ip ospf dead-interval} {}
+Set number of seconds for RouterDeadInterval timer value used for Wait Timer
+and Inactivity Timer.  This value must be the same for all routers attached
+to a common network.  The default value is 40 seconds.
 @end deffn
 
-@deffn {Interface Command} {ospf hello-interval <1-65535>} {}
-@deffnx {Interface Command} {no ospf hello-interval} {}
+@deffn {Interface Command} {ip ospf hello-interval <1-65535>} {}
+@deffnx {Interface Command} {no ip ospf hello-interval} {}
+Set number of seconds for HelloInterval timer value.  Setting this value,
+Hello packet will be sent every timer value seconds on specified interface.
+This value must be the same for all routers attached to a common network.
+The default value is 10 seconds.
 @end deffn
 
-@deffn {Interface Command} {ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point)} {}
-@deffnx {Interface Command} {no ospf network} {}
+@deffn {Interface Command} {ip ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point)} {}
+@deffnx {Interface Command} {no ip ospf network} {}
+Set explicitly network type for specifed interface.
 @end deffn
 
-@deffn {Interface Command} {ospf priority <0-255>} {}
-@deffnx {Interface Command} {no ospf priority} {}
+@deffn {Interface Command} {ip ospf priority <0-255>} {}
+@deffnx {Interface Command} {no ip ospf priority} {}
+Set RouterPriority integer value.  Setting higher value, router will be more
+eligible to become Designated Router.  Setting the value to 0, router is no
+longer eligible to Designated Router.
+The default value is 1.
 @end deffn
 
-@deffn {Interface Command} {ospf retransmit-interval <1-65535>} {}
-@deffnx {Interface Command} {no ospf retransmit interval} {}
+@deffn {Interface Command} {ip ospf retransmit-interval <1-65535>} {}
+@deffnx {Interface Command} {no ip ospf retransmit interval} {}
+Set number of seconds for RxmtInterval timer value.  This value is used
+when retransmitting Database Description and Link State Request packets.
+The default value is 5 seconds.
 @end deffn
 
-@deffn {Interface Command} {ospf transmit-delay} {}
-@deffnx {Interface Command} {no ospf transmit-delay} {}
+@deffn {Interface Command} {ip ospf transmit-delay} {}
+@deffnx {Interface Command} {no ip ospf transmit-delay} {}
+Set nubmer of seconds for InfTransDelay value.  LSAs' age should be 
+incremented by this value when transmitting.
+The default value is 1 seconds.
 @end deffn
 
 @node Redistribute routes to OSPF, Showing OSPF information, OSPF interface, ospfd
@@ -2136,6 +2163,7 @@ inter-domain routing.
 * Route Reflector::             
 * Route Server::                
 * How to set up a 6-Bone connection::  
+* Dump BGP packet and table::   
 @end menu
 
 @node Configuring bgpd, BGP router, bgpd, bgpd
@@ -2436,6 +2464,8 @@ Negotiation packet.
 of both sides.  For example, local router have capability of unicast and
 multicast and remote router have capability of unicast.  In this case,
 local router will establish the connection with unicast only capability.
+When there is no common capability Zebra send Unsupported Capability
+error then reset connection.
 
   If you want to completely match capability with remote peer.  Please
 use @command{strict-capability-match} command.
@@ -2615,7 +2645,7 @@ To display routing table of BGP view, you must specify view name.
 Display routing table of BGP view @var{name}.
 @end deffn
 
-@node How to set up a 6-Bone connection,  , Route Server, bgpd
+@node How to set up a 6-Bone connection, Dump BGP packet and table, Route Server, bgpd
 @comment  node-name,  next,  previous,  up
 @section How to set up a 6-Bone connection
 
@@ -2660,6 +2690,11 @@ log file bgpd.log
 !
 @end group
 @end example
+
+@node Dump BGP packet and table,  , How to set up a 6-Bone connection, bgpd
+@comment  node-name,  next,  previous,  up
+@section Dump BGP packet and table
+
 
 @node Filtering, Route Map, bgpd, Top
 @comment  node-name,  next,  previous,  up
@@ -2937,7 +2972,7 @@ interface eth0
 @end group
 @end example
 
-@node Kernel Interface, SNMP support, IPv6 Supports, Top
+@node Kernel Interface, SNMP Support, IPv6 Supports, Top
 @comment  node-name,  next,  previous,  up
 @chapter Kernel Interface
 
@@ -2972,9 +3007,9 @@ information.
 
 @end table
 
-@node SNMP support, Linux Netlink, Kernel Interface, Top
+@node SNMP Support, Linux Netlink, Kernel Interface, Top
 @comment  node-name,  next,  previous,  up
-@chapter SNMP support
+@chapter SNMP Support
 
 SNMP (Simple Network Managing Protocol) is widely implemented feature
 for collecting network information from router and/or host.  Zebra
@@ -2990,7 +3025,7 @@ to use the latest @command{ucd-snmp} software.
 * SMUX configuration::          
 @end menu
 
-@node How to get ucd-snmp, SMUX configuration, SNMP support, SNMP support
+@node How to get ucd-snmp, SMUX configuration, SNMP Support, SNMP Support
 @comment  node-name,  next,  previous,  up
 @section How to get ucd-snmp
 
@@ -3020,7 +3055,7 @@ connect under MIB 1.3.6.1.6.3.1 with password test.
 smuxpeer 1.3.6.1.6.3.1 test
 @end example
 
-@node SMUX configuration,  , How to get ucd-snmp, SNMP support
+@node SMUX configuration,  , How to get ucd-snmp, SNMP Support
 @comment  node-name,  next,  previous,  up
 @section SMUX configuration
 
@@ -3041,7 +3076,7 @@ smux peer .1.3.6.1.6.3.1 test
 !
 @end example
 
-@node Linux Netlink, Command Index, SNMP support, Top
+@node Linux Netlink, Zebra Protocol, SNMP Support, Top
 @comment  node-name,  next,  previous,  up
 @chapter Linux Netlink
 
@@ -3060,7 +3095,250 @@ After the kernel configuration, please reconfigure and rebuild Zebra.
 You can use netlink as a dynamic routing update channel between Zebra
 and the kernel.
 
-@node Command Index, VTY Key Index, Linux Netlink, Top
+@node  Zebra Protocol, Packet Binary Dump Format, Linux Netlink, Top
+@comment  node-name,  next,  previous,  up
+@appendix Zebra Protocol
+
+@node  Packet Binary Dump Format, Command Index, Zebra Protocol, Top
+@comment  node-name,  next,  previous,  up
+@appendix Packet Binary Dump Format
+
+  Zebra can dump routing protocol packet into file with binary format
+(@pxref{Dump BGP packet and table}).
+
+  It seems to be better that we share the MRT's header format for
+backward compatibility of the MRT's dump logs. We should also define the
+binary format excluding the header, because we must support both of IP
+v4/v6 addresses as socket addresses and / or routing entries.
+
+  In the last meeting, we discussed to have a version field in the
+header. But, Masaki told us that we can define new `type' value rather
+than having a `version' field, and it seems to be better because we
+don't need to change header format.
+
+  Here is the common header format. This is same as that of MRT.
+
+@example
+@group
+0                   1                   2                   3
+0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                              Time                             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|             Type              |            Subtype            |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                             Length                            |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+  If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_STATE_CHANGE, and
+Address Family == IP (version 4)
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Source AS number       |     Destination AS number     |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Interface Index        |      Address Family           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address                      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address                    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|            Old State          |           New State           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+Where State is the value defined in RFC1771.
+
+If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_STATE_CHANGE,
+and Address Family == IP version 6
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Source AS number       |     Destination AS number     |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Interface Index        |      Address Family           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address                      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address (Cont'd)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address (Cont'd)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address (Cont'd)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address                    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address (Cont'd)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address (Cont'd)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address (Cont'd)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|            Old State          |           New State           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_MESSAGE,
+and Address Family == IP (version 4)
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Source AS number       |     Destination AS number     |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Interface Index        |      Address Family           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address                      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address                    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                       BGP Message Packet                      |
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+Where BGP Message Packet is the whole contents of the
+BGP4 message including header portion.
+
+If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_MESSAGE,
+and Address Family == IP version 6
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Source AS number       |     Destination AS number     |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Interface Index        |      Address Family           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address                      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address (Cont'd)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address (Cont'd)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Source IP address (Cont'd)             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address                    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address (Cont'd)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address (Cont'd)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                     Destination IP address (Cont'd)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                       BGP Message Packet                      |
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_ENTRY,
+and Address Family == IP (version 4)
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|            View #             |            Status             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Time Last Change                       |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       Address Family          |    SAFI       | Next-Hop-Len  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Next Hop Address                       |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| Prefix Length |             Address Prefix [variable]         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       Attribute Length        |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|      BGP Attribute [variable length]    			    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_ENTRY,
+and Address Family == IP version 6
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|            View #             |            Status             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Time Last Change                       |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       Address Family          |    SAFI       | Next-Hop-Len  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Next Hop Address                       |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Next Hop Address (Cont'd)              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Next Hop Address (Cont'd)              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Next Hop Address (Cont'd)              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| Prefix Length |             Address Prefix [variable]         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     Address Prefix (cont'd) [variable]        |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       Attribute Length        |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|      BGP Attribute [variable length]    			    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+	BGP4 Attribute must not contains MP_UNREACH_NLRI.
+	If BGP Attribute has MP_REACH_NLRI field, it must has
+	zero length NLRI, e.g., MP_REACH_NLRI has only Address
+	Family, SAFI and next-hop values.
+
+If `type' is PROTOCOL_BGP4MP and `subtype' is BGP4MP_SNAPSHOT,
+
+@example
+@group
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|           View #              |       File Name [variable]    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+@end group
+@end example
+
+    The file specified in "File Name" contains all routing entries,
+    which are in the format of ``subtype == BGP4MP_ENTRY''.
+
+@example
+@group
+Constants:
+  /* type value */
+  #define MSG_PROTOCOL_BGP4MP 16
+  /* subtype value */
+  #define BGP4MP_STATE_CHANGE 0
+  #define BGP4MP_MESSAGE 1
+  #define BGP4MP_ENTRY 2
+  #define BGP4MP_SNAPSHOT 3
+@end group
+@end example
+
+@node Command Index, VTY Key Index, Packet Binary Dump Format, Top
 @comment  node-name,  next,  previous,  up
 @unnumbered Command Index
 

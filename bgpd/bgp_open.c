@@ -93,7 +93,7 @@ bgp_capability_vty_out (struct vty *vty, struct peer *peer)
 
       if (cap->code == CAPABILITY_CODE_MP)
 	{
-	  vty_out (vty, "  Capability error: Multi protocol ");
+	  vty_out (vty, "  Capability error for: Multi protocol ");
 
 	  switch (ntohs (cap->mpc.afi))
 	    {
@@ -241,7 +241,23 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 		}
 	    }
 	}
-      else if (cap->code >= 128)
+      else if (cap->code == CAPABILITY_CODE_REFRESH)
+	{
+	  /* Check length. */
+	  if (cap->length != 0)
+	    {
+	      zlog_info ("Capability route refresh length error");
+	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+	      return -1;
+	    }
+
+	  /* BGP refresh capability */
+	  if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
+	    peer->refresh = 1;
+	  else
+	    zlog_warn ("Ignore route refresh capability");
+	}
+      else if (cap->code > 128)
 	{
 	  /* We ignore sending Nofify's for vendor specific
 	     capabilities. Seems reasonable for now...  */
@@ -373,6 +389,30 @@ bgp_open_option_parse (struct peer *peer, u_char length, int *capability)
 	}
     }
 
+  /* Check there is no common capability send Unsupported Capability
+     error. */
+  if (*capability && ! CHECK_FLAG (peer->flags, PEER_FLAG_OVERRIDE_CAPABILITY))
+    {
+      if (! peer->afc_nego[AFI_IP][SAFI_UNICAST] 
+	  && ! peer->afc_nego[AFI_IP][SAFI_MULTICAST]
+	  && ! peer->afc_nego[AFI_IP6][SAFI_UNICAST]
+	  && ! peer->afc_nego[AFI_IP6][SAFI_MULTICAST])
+	{
+	  plog_err (peer->log, "%s [Error] No common capability", peer->host);
+
+	  if (error != error_data)
+
+	    bgp_notify_send_with_data (peer, 
+				       BGP_NOTIFY_OPEN_ERR, 
+				       BGP_NOTIFY_OPEN_UNSUP_CAPBL, 
+				       error_data, error - error_data);
+	  else
+	    bgp_notify_send (peer, 
+			     BGP_NOTIFY_OPEN_ERR, 
+			     BGP_NOTIFY_OPEN_UNSUP_CAPBL);
+	  return -1;
+	}
+    }
   return 0;
 }
 

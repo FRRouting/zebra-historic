@@ -49,7 +49,7 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   oi->fd = -1;
 
   /* Set default values. */
-  /*Z: don't clear this flag.  oi->flag = OSPF_IF_DISABLE; */ 
+  /*Z: don't clear this flag.  oi->flag = OSPF_IF_DISABLE; */
 
   if (oi->vl_data)
     oi->type = OSPF_IFTYPE_VIRTUALLINK;
@@ -58,9 +58,16 @@ ospf_if_reset_variables (struct ospf_interface *oi)
 
   oi->status = ISM_Down;
 
-  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
+  bzero (oi->auth_simple, OSPF_AUTH_SIMPLE_SIZE);
+  if (oi->auth_crypt != NULL)
+    list_delete_all (oi->auth_crypt);
+  else
+    oi->auth_crypt = list_init ();
+
+  oi->crypt_seqnum = 0;
+  /*
   oi->auth_md5 = 0;
-  oi->auth_seq = 0;
+  */
 
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
   oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
@@ -154,6 +161,28 @@ ospf_if_free (struct ospf_interface *oi)
 }
 
 struct ospf_interface *
+ospf_if_lookup_by_name (char *name)
+{
+  listnode node;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      if ((ifp = getdata (node)) == NULL)
+        continue;
+
+      if ((oi = ifp->info) == NULL)
+        continue;
+
+      if (strncmp(name, ifp->name, sizeof ifp->name) == 0)
+        return oi;
+    }
+
+  return NULL;
+}
+
+struct ospf_interface *
 ospf_if_lookup_by_addr (struct in_addr *address)
 {
   listnode node;
@@ -223,10 +252,11 @@ ospf_if_stream_set (struct ospf_interface *oi)
 
   if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
     {
-      if (oi->ibuf == NULL) {
-         oi->ibuf = stream_new (oi->ifp->mtu * 2);
-         OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
-      }
+      if (oi->ibuf == NULL)
+	{
+	  oi->ibuf = stream_new (oi->ifp->mtu * 2);
+	  OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
+	}
     }
 
   /* set output fifo queue. */
@@ -269,7 +299,6 @@ ospf_if_delete_hook (struct interface *ifp)
   return 0;
 }
 
-
 int
 ospf_if_is_enable (struct interface *ifp)
 {
@@ -287,7 +316,6 @@ ospf_if_is_enable (struct interface *ifp)
   return 1;
 }
 
-
 int
 ospf_if_up (struct interface *ifp)
 {
@@ -303,10 +331,11 @@ ospf_if_up (struct interface *ifp)
   if (oi->fd == -1)
     {
       ret = ospf_serv_sock_init (ifp, oi->address);
-      if (ret < 0) {
-         zlog_info ("Z: ospf_if_up(): Problem with socket !!!");
-         return 0;
-      }
+      if (ret < 0)
+	{
+	  zlog_info ("Z: ospf_if_up(): Problem with socket !!!");
+	  return 0;
+	}
     }
   ospf_if_stream_set (oi);
 
@@ -595,35 +624,11 @@ ospf_vl_shut_unapproved ()
 int
 ospf_full_virtual_nbrs (struct ospf_area *area)
 {
-#if 0
-  listnode node;
-  struct ospf_vl_data *vl_data;
-  int c;
-#endif /* 0 */
-
   zlog_info ("Z: counting fully adjacent virtual neighbors in area %s",
 	     inet_ntoa (area->area_id));
   zlog_info ("Z: there are %d of them", area->full_vls);
 
   return area->full_vls;
-
-#if 0
-  LIST_ITERATOR (ospf_top->vlinks, node)
-    {
-      if ((vl_data = getdata (node)) == NULL)
-	continue;
-
-      if (vl_data->vl_area != area)
-	continue;
-
-      c = ospf_nbr_count (vl_data->vl_oi->nbrs, NSM_Full);
- 
-      zlog_info ("Z: the number is %d", c);
-      return c;
-
-    }
-  return 0;
-#endif
 }
 
 int
@@ -645,6 +650,59 @@ ospf_vls_in_area (struct ospf_area *area)
 }
 
 
+struct crypt_key *
+ospf_crypt_key_new ()
+{
+  struct crypt_key *ck;
+
+  ck = XMALLOC (MTYPE_OSPF_CRYPT_KEY, sizeof (struct crypt_key));
+  bzero (ck, sizeof (struct crypt_key));
+
+  return ck;
+}
+
+void
+ospf_crypt_key_add (list crypt, struct crypt_key *ck)
+{
+  list_add_node (crypt, ck);
+}
+
+struct crypt_key *
+ospf_crypt_key_lookup (struct ospf_interface *oi, int key_id)
+{
+  listnode node;
+  struct crypt_key *ck;
+
+  for (node = listhead (oi->auth_crypt); node; nextnode (node))
+    {
+      ck = getdata (node);
+      if ((int) ck->key_id == key_id)
+	return ck;
+    }
+
+  return NULL;
+}
+
+int
+ospf_crypt_key_delete (struct ospf_interface *oi, int key_id)
+{
+  listnode node;
+  struct crypt_key *ck;
+
+  for (node = listhead (oi->auth_crypt); node; nextnode (node))
+    {
+      ck = getdata (node);
+      if ((int) ck->key_id == key_id)
+	{
+	  list_delete_by_val (oi->auth_crypt, ck);
+	  return 1;
+	}
+    }
+
+  return 0;
+}
+
+
 char *ospf_int_type_str[] = 
 {
   "unknown",               /*should never be used*/
@@ -659,14 +717,15 @@ char *ospf_int_type_str[] =
 int
 interface_config_write (struct vty *vty)
 {
-  listnode node;
+  listnode n1, n2;
   struct interface *ifp;
   struct ospf_interface *oi;
+  struct crypt_key *ck;
   int write = 0;
 
-  for (node = listhead (iflist); node; nextnode (node))
+  for (n1 = listhead (iflist); n1; nextnode (n1))
     {
-      ifp = getdata (node);
+      ifp = getdata (n1);
       oi = ifp->info;
 
       if (!if_is_up (ifp))
@@ -686,14 +745,18 @@ interface_config_write (struct vty *vty)
 	vty_out (vty, " ip ospf network %s%s", ospf_int_type_str[oi->type], 
                  VTY_NEWLINE);
 
-      /* Authentication Key print. */
-      if (strlen (oi->auth_data) && oi->auth_md5 == 0)
-	vty_out (vty, " ip ospf authentication-key %s%s", oi->auth_data,
+      /* Simple Authentication Password print. */
+      if (oi->auth_simple[0] != '\0')
+	vty_out (vty, " ip ospf authentication-key %s%s", oi->auth_simple,
 		 VTY_NEWLINE);
 
-      if (strlen (oi->auth_data) && oi->auth_md5 == 1)
-	vty_out (vty, " ip ospf message-digest-key %d md5 %s%s",
-                 oi->auth_key_id, oi->auth_data, VTY_NEWLINE);
+      /* Cryptographic Authentication Key print. */
+      for (n2 = listhead (oi->auth_crypt); n2; nextnode (n2))
+	{
+	  ck = getdata (n2);
+	  vty_out (vty, " ip ospf message-digest-key %d md5 %s%s",
+		   ck->key_id, ck->auth_key, VTY_NEWLINE);
+	}
 
       /* Interface Output Cost print. */
       if (oi->output_cost != OSPF_OUTPUT_COST_DEFAULT)
@@ -741,9 +804,9 @@ DEFUN (ip_ospf_authentication_key,
   ifp = vty->index;
   oi = ifp->info;
 
-  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
-  strncpy (oi->auth_data, argv[0], OSPF_AUTH_SIMPLE_SIZE);
-  oi->auth_md5 = 0;
+  bzero (oi->auth_simple, OSPF_AUTH_SIMPLE_SIZE + 1);
+  strncpy (oi->auth_simple, argv[0], OSPF_AUTH_SIMPLE_SIZE);
+  /*  oi->auth_md5 = 0; */
 
   return CMD_SUCCESS;
 }
@@ -769,7 +832,7 @@ DEFUN (no_ip_ospf_authentication_key,
   ifp = vty->index;
   oi = ifp->info;
 
-  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
+  bzero (oi->auth_simple, OSPF_AUTH_SIMPLE_SIZE);
 
   return CMD_SUCCESS;
 }
@@ -783,7 +846,7 @@ ALIAS (no_ip_ospf_authentication_key,
 
 DEFUN (ip_ospf_message_digest_key,
        ip_ospf_message_digest_key_cmd,
-       "ip ospf message-digest-key KEYID md5 KEY",
+       "ip ospf message-digest-key <1-255> md5 KEY",
        "IP Information\n"
        "OSPF interface commands\n"
        "Message digest authentication password (key)\n"
@@ -793,24 +856,31 @@ DEFUN (ip_ospf_message_digest_key,
 {
   struct interface *ifp;
   struct ospf_interface *oi;
-  u_int8_t keyid;
+  struct crypt_key *ck;
+  u_char key_id;
 
   ifp = vty->index;
   oi = ifp->info;
 
-  keyid = strtol (argv[0], NULL, 10);
-  oi->auth_key_id = keyid;
+  key_id = strtol (argv[0], NULL, 10);
+  if (ospf_crypt_key_lookup (oi, key_id) != NULL)
+    {
+      vty_out (vty, "OSPF: Key %d already exists%s", key_id, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
 
-  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
-  strncpy (oi->auth_data, argv[1], OSPF_AUTH_SIMPLE_SIZE);
-  oi->auth_md5 = 1;
+  ck = ospf_crypt_key_new ();
+  ck->key_id = (u_char) key_id;
+  strncpy (ck->auth_key, argv[1], OSPF_AUTH_MD5_SIZE);
+
+  ospf_crypt_key_add (oi->auth_crypt, ck);
 
   return CMD_SUCCESS;
 }
 
 ALIAS (ip_ospf_message_digest_key,
        ospf_message_digest_key_cmd,
-       "ospf message-digest-key KEYID md5 KEY",
+       "ospf message-digest-key <1-255> md5 KEY",
        "OSPF interface commands\n"
        "Message digest authentication password (key)\n"
        "Key ID\n"
@@ -819,30 +889,41 @@ ALIAS (ip_ospf_message_digest_key,
 
 DEFUN (no_ip_ospf_message_digest_key,
        no_ip_ospf_message_digest_key_cmd,
-       "no ip ospf message-digest-key",
+       "no ip ospf message-digest-key <1-255>",
        NO_STR
        "IP Information\n"
        "OSPF interface commands\n"
-       "Message digest authentication password (key)\n")
+       "Message digest authentication password (key)\n"
+       "Key ID\n")
 {
   struct interface *ifp;
   struct ospf_interface *oi;
+  struct crypt_key *ck;
+  int key_id;
 
   ifp = vty->index;
   oi = ifp->info;
 
-  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
-  oi->auth_md5 = 0;
+  key_id = strtol (argv[0], NULL, 10);
+  ck = ospf_crypt_key_lookup (oi, key_id);
+  if (ck == NULL)
+    {
+      vty_out (vty, "OSPF: Key %d does not exist%s", key_id, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ospf_crypt_key_delete (oi, key_id);
 
   return CMD_SUCCESS;
 }
 
 ALIAS (no_ip_ospf_message_digest_key,
        no_ospf_message_digest_key_cmd,
-       "no ospf message-digest-key",
+       "no ospf message-digest-key <1-255>",
        NO_STR
        "OSPF interface commands\n"
-       "Message digest authentication password (key)\n")
+       "Message digest authentication password (key)\n"
+       "Key ID\n")
 
 DEFUN (ip_ospf_cost,
        ip_ospf_cost_cmd,

@@ -22,8 +22,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define _ZEBRA_OSPF_PACKET_H
 
 #define OSPF_HEADER_SIZE         24
-#define OSPF_AUTH_MD5_SIZE       16
 #define OSPF_AUTH_SIMPLE_SIZE     8
+#define OSPF_AUTH_MD5_SIZE       16
 
 #define OSPF_MAX_PACKET_SIZE  65535   /* includes IP Header size. */
 #define OSPF_HELLO_MIN_SIZE	 20   /* not including neighbors */
@@ -75,15 +75,18 @@ struct ospf_header
   struct in_addr area_id;		/* Area ID. */
   u_int16_t checksum;			/* Check Sum. */
   u_int16_t auth_type;			/* Authentication Type. */
+  /* Authentication Data. */
   union {
-    u_char auth_data [OSPF_AUTH_SIMPLE_SIZE];	/* Authentication Data. */
-    struct {
-      u_int16_t md5_null;		/* 0 */
-      u_int8_t md5_key_id;		/* key id */
-      u_int8_t md5_key_len;		/* key length */
-      u_int32_t md5_seq;		/* sequence */    
-    } auth_md5;
-  } auth;
+    /* Simple Authentication. */
+    u_char auth_data [OSPF_AUTH_SIMPLE_SIZE];
+    /* Cryptographic Authentication. */
+    struct {				
+      u_int16_t zero;			/* Should be 0. */
+      u_int8_t key_id;			/* Key ID. */
+      u_int8_t auth_data_len;		/* Auth Data Length. */
+      u_int32_t crypt_seqnum;		/* Cryptographic Sequence Number. */
+    } crypt;
+  } u;
 };
 
 /* OSPF Hello body format. */
@@ -110,7 +113,10 @@ struct ospf_db_desc
 
 
 /* Macros. */
+#define OSPF_PACKET_MAX(oi)	ospf_packet_max (oi)
+/*
 #define OSPF_PACKET_MAX(oi)	(((oi)->ifp->mtu - ((oi)->auth_md5 ? OSPF_AUTH_MD5_SIZE : 0)) - 88)
+*/
 
 #define OSPF_OUTPUT_PNT(S)	((S)->data + (S)->putp)
 #define OSPF_OUTPUT_LENGTH(S)	((S)->endp)

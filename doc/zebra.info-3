@@ -9,7 +9,7 @@ END-INFO-DIR-ENTRY
 TCP/IP routing protocols.
 
    This is Edition 0.1, last updated 3 January 2000 of `The GNU Zebra
-Manual', for Zebra Version 0.84.
+Manual', for Zebra Version 0.85.
 
    Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
@@ -28,7 +28,211 @@ versions, except that this permission notice may be stated in a
 translation approved by Kunihiro Ishiguro.
 
 
-File: zebra.info,  Node: Command Index,  Next: VTY Key Index,  Prev: Linux Netlink,  Up: Top
+File: zebra.info,  Node: Packet Binary Dump Format,  Next: Command Index,  Prev: Zebra Protocol,  Up: Top
+
+Packet Binary Dump Format
+*************************
+
+   Zebra can dump routing protocol packet into file with binary format
+(*note Dump BGP packet and table::).
+
+   It seems to be better that we share the MRT's header format for
+backward compatibility of the MRT's dump logs. We should also define the
+binary format excluding the header, because we must support both of IP
+v4/v6 addresses as socket addresses and / or routing entries.
+
+   In the last meeting, we discussed to have a version field in the
+header. But, Masaki told us that we can define new `type' value rather
+than having a `version' field, and it seems to be better because we
+don't need to change header format.
+
+   Here is the common header format. This is same as that of MRT.
+
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                              Time                             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |             Type              |            Subtype            |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                             Length                            |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_STATE_CHANGE, and
+Address Family == IP (version 4)
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Source AS number       |     Destination AS number     |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Interface Index        |      Address Family           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address                      |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address                    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |            Old State          |           New State           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   Where State is the value defined in RFC1771.
+
+   If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_STATE_CHANGE, and
+Address Family == IP version 6
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Source AS number       |     Destination AS number     |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Interface Index        |      Address Family           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address                      |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address (Cont'd)             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address (Cont'd)             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address (Cont'd)             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address                    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address (Cont'd)           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address (Cont'd)           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address (Cont'd)           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |            Old State          |           New State           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_MESSAGE, and
+Address Family == IP (version 4)
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Source AS number       |     Destination AS number     |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Interface Index        |      Address Family           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address                      |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address                    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                       BGP Message Packet                      |
+     |                                                               |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   Where BGP Message Packet is the whole contents of the BGP4 message
+including header portion.
+
+   If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_MESSAGE, and
+Address Family == IP version 6
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Source AS number       |     Destination AS number     |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |        Interface Index        |      Address Family           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address                      |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address (Cont'd)             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address (Cont'd)             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Source IP address (Cont'd)             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address                    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address (Cont'd)           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address (Cont'd)           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                     Destination IP address (Cont'd)           |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                       BGP Message Packet                      |
+     |                                                               |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_ENTRY, and Address
+Family == IP (version 4)
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |            View #             |            Status             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Time Last Change                       |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |       Address Family          |    SAFI       | Next-Hop-Len  |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Next Hop Address                       |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     | Prefix Length |             Address Prefix [variable]         |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |       Attribute Length        |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |      BGP Attribute [variable length]    			    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   If `type' is PROTOCOL_BGP4MP, `subtype' is BGP4MP_ENTRY, and Address
+Family == IP version 6
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |            View #             |            Status             |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Time Last Change                       |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |       Address Family          |    SAFI       | Next-Hop-Len  |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Next Hop Address                       |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Next Hop Address (Cont'd)              |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Next Hop Address (Cont'd)              |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                        Next Hop Address (Cont'd)              |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     | Prefix Length |             Address Prefix [variable]         |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |     Address Prefix (cont'd) [variable]        |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |       Attribute Length        |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |      BGP Attribute [variable length]    			    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   	BGP4 Attribute must not contains MP_UNREACH_NLRI.  	If BGP Attribute
+has MP_REACH_NLRI field, it must has 	zero length NLRI, e.g.,
+MP_REACH_NLRI has only Address 	Family, SAFI and next-hop values.
+
+   If `type' is PROTOCOL_BGP4MP and `subtype' is BGP4MP_SNAPSHOT,
+
+      0                   1                   2                   3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |           View #              |       File Name [variable]    |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   The file specified in "File Name" contains all routing entries,
+which are in the format of "subtype == BGP4MP_ENTRY".
+
+     Constants:
+       /* type value */
+       #define MSG_PROTOCOL_BGP4MP 16
+       /* subtype value */
+       #define BGP4MP_STATE_CHANGE 0
+       #define BGP4MP_MESSAGE 1
+       #define BGP4MP_ENTRY 2
+       #define BGP4MP_SNAPSHOT 3
+
+
+File: zebra.info,  Node: Command Index,  Next: VTY Key Index,  Prev: Packet Binary Dump Format,  Up: Top
 
 Command Index
 *************
@@ -100,6 +304,15 @@ Command Index
 * ip address ADDRESS:                    Interface Commands.
 * ip as-path access-list NAME TYPE AS_PATH: AS Path Access List.
 * ip community-list NAME TYPE COMMUNITY: IP Community List.
+* ip ospf authentication-key AUTH_KEY:   OSPF interface.
+* ip ospf cost <1-65535>:                OSPF interface.
+* ip ospf dead-interval <1-65535>:       OSPF interface.
+* ip ospf hello-interval <1-65535>:      OSPF interface.
+* ip ospf message-digest-key KEYID md5 KEY: OSPF interface.
+* ip ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point): OSPF interface.
+* ip ospf priority <0-255>:              OSPF interface.
+* ip ospf retransmit-interval <1-65535>: OSPF interface.
+* ip ospf transmit-delay:                OSPF interface.
 * ip prefix-list NAME (permit|deny) PREFIX [le LEN] [ge LEN]: IP Prefix List.
 * ip prefix-list NAME description DESC:  ip prefix-list description.
 * ip prefix-list NAME seq NUMBER (permit|deny) PREFIX [le LEN] [ge LEN]: IP Prefix List.
@@ -193,6 +406,15 @@ Command Index
 * no distribute-list NAME out kernel:    Redistribute routes to OSPF.
 * no distribute-list NAME out rip:       Redistribute routes to OSPF.
 * no distribute-list NAME out static:    Redistribute routes to OSPF.
+* no ip ospf authentication-key:         OSPF interface.
+* no ip ospf cost:                       OSPF interface.
+* no ip ospf dead-interval:              OSPF interface.
+* no ip ospf hello-interval:             OSPF interface.
+* no ip ospf message-digest-key:         OSPF interface.
+* no ip ospf network:                    OSPF interface.
+* no ip ospf priority:                   OSPF interface.
+* no ip ospf retransmit interval:        OSPF interface.
+* no ip ospf transmit-delay:             OSPF interface.
 * no ip prefix-list NAME:                IP Prefix List.
 * no ip prefix-list NAME description [DESC]: ip prefix-list description.
 * no ip prefix-list sequence-number:     ip prefix-list sequential number control.
@@ -218,17 +440,8 @@ Command Index
 * no network NETWORK <1>:                BGP network.
 * no network NETWORK:                    ripd Configuration.
 * no ospf abr-type TYPE:                 OSPF router.
-* no ospf authentication-key:            OSPF interface.
-* no ospf cost:                          OSPF interface.
-* no ospf dead-interval:                 OSPF interface.
-* no ospf hello-interval:                OSPF interface.
-* no ospf message-digest-key:            OSPF interface.
-* no ospf network:                       OSPF interface.
-* no ospf priority:                      OSPF interface.
-* no ospf retransmit interval:           OSPF interface.
 * no ospf rfc1583compatibility:          OSPF router.
 * no ospf router-id:                     OSPF router.
-* no ospf transmit-delay:                OSPF interface.
 * no redistribute (kernel|connected|static|rip|bgp): Redistribute routes to OSPF.
 * no redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>: Redistribute routes to OSPF.
 * no redistribute (kernel|connected|static|rip|bgp) metric-type (1|2): Redistribute routes to OSPF.
@@ -244,17 +457,8 @@ Command Index
 * no smux peer OID PASSWORD:             SMUX configuration.
 * no timers basic:                       ripd Configuration.
 * ospf abr-type TYPE:                    OSPF router.
-* ospf authentication-key AUTH_KEY:      OSPF interface.
-* ospf cost <1-65535>:                   OSPF interface.
-* ospf dead-interval <1-65535>:          OSPF interface.
-* ospf hello-interval <1-65535>:         OSPF interface.
-* ospf message-digest-key KEYID md5 KEY: OSPF interface.
-* ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point): OSPF interface.
-* ospf priority <0-255>:                 OSPF interface.
-* ospf retransmit-interval <1-65535>:    OSPF interface.
 * ospf rfc1583compatibility:             OSPF router.
 * ospf router-id A.B.C.D:                OSPF router.
-* ospf transmit-delay:                   OSPF interface.
 * password PASSWORD:                     Basic Config Commands.
 * redistribute (kernel|connected|static|rip|bgp): Redistribute routes to OSPF.
 * redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>: Redistribute routes to OSPF.

@@ -513,53 +513,6 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
   BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
 }
 
-/* Notify message treatment function. */
-void
-bgp_notify_receive (struct peer *peer, bgp_size_t size)
-{
-  struct bgp_notify bgp_notify;
-
-  if (peer->notify.data)
-    {
-      XFREE (MTYPE_TMP, peer->notify.data);
-      peer->notify.data = NULL;
-      peer->notify.length = 0;
-    }
-
-  bgp_notify.code = stream_getc (peer->ibuf);
-  bgp_notify.subcode = stream_getc (peer->ibuf);
-
-  bgp_notify_print(peer, &bgp_notify, "RECV");
-
-  /* We have to check for Notify with Unsupported Optional Parameter.
-     in that case we fallback to open without the capability option.
-     But this done in bgp_stop. We just mark it here to avoid changing
-     the fsm tables.  */
-  if (bgp_notify.code == BGP_NOTIFY_OPEN_ERR &&
-      bgp_notify.subcode == BGP_NOTIFY_OPEN_UNSUP_PARAM )
-    UNSET_FLAG (peer->sflags, PEER_STATUS_CAPABILITY_OPEN);
-
-  /* Also apply to Unsupported Capability until remote router support
-     capability. */
-  if (bgp_notify.code == BGP_NOTIFY_OPEN_ERR &&
-      bgp_notify.subcode == BGP_NOTIFY_OPEN_UNSUP_CAPBL)
-    {
-      UNSET_FLAG (peer->sflags, PEER_STATUS_CAPABILITY_OPEN);
-
-      /* For further diagnostic record returned Data. */
-      if (size > 2)
-	{
-	  peer->notify.code = bgp_notify.code;
-	  peer->notify.subcode = bgp_notify.subcode;
-	  peer->notify.length = size - 2;
-	  peer->notify.data = XMALLOC (MTYPE_TMP, size - 2);
-	  memcpy (peer->notify.data, stream_pnt (peer->ibuf), size - 2);
-	}
-    }
-
-  BGP_EVENT_ADD (peer, Receive_NOTIFICATION_message);
-}
-
 /* RFC1771 6.8 Connection collision detection. */
 int
 bgp_collision_detect (struct peer *new)
@@ -775,13 +728,6 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
   return 0;
 }
 
-/* Keepalive treatment function -- get keepalive send keepalive */
-void
-bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
-{
-  BGP_EVENT_ADD (peer, Receive_KEEPALIVE_message);
-}
-
 /* Parse BGP Update packet and make attribute object. */
 int
 bgp_update_receive (struct peer *peer, bgp_size_t size)
@@ -983,6 +929,89 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
   return 0;
 }
 
+/* Notify message treatment function. */
+void
+bgp_notify_receive (struct peer *peer, bgp_size_t size)
+{
+  struct bgp_notify bgp_notify;
+
+  if (peer->notify.data)
+    {
+      XFREE (MTYPE_TMP, peer->notify.data);
+      peer->notify.data = NULL;
+      peer->notify.length = 0;
+    }
+
+  bgp_notify.code = stream_getc (peer->ibuf);
+  bgp_notify.subcode = stream_getc (peer->ibuf);
+
+  bgp_notify_print(peer, &bgp_notify, "RECV");
+
+  /* We have to check for Notify with Unsupported Optional Parameter.
+     in that case we fallback to open without the capability option.
+     But this done in bgp_stop. We just mark it here to avoid changing
+     the fsm tables.  */
+  if (bgp_notify.code == BGP_NOTIFY_OPEN_ERR &&
+      bgp_notify.subcode == BGP_NOTIFY_OPEN_UNSUP_PARAM )
+    UNSET_FLAG (peer->sflags, PEER_STATUS_CAPABILITY_OPEN);
+
+  /* Also apply to Unsupported Capability until remote router support
+     capability. */
+  if (bgp_notify.code == BGP_NOTIFY_OPEN_ERR &&
+      bgp_notify.subcode == BGP_NOTIFY_OPEN_UNSUP_CAPBL)
+    {
+      UNSET_FLAG (peer->sflags, PEER_STATUS_CAPABILITY_OPEN);
+
+      /* For further diagnostic record returned Data. */
+      if (size > 2)
+	{
+	  peer->notify.code = bgp_notify.code;
+	  peer->notify.subcode = bgp_notify.subcode;
+	  peer->notify.length = size - 2;
+	  peer->notify.data = XMALLOC (MTYPE_TMP, size - 2);
+	  memcpy (peer->notify.data, stream_pnt (peer->ibuf), size - 2);
+	}
+    }
+
+  BGP_EVENT_ADD (peer, Receive_NOTIFICATION_message);
+}
+
+/* Keepalive treatment function -- get keepalive send keepalive */
+void
+bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
+{
+  BGP_EVENT_ADD (peer, Receive_KEEPALIVE_message);
+}
+
+/* Route refresh message is received. */
+void
+bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
+{
+  /* If peer does not have the capability, send notification. */
+  if (! peer->refresh)
+    {
+      plog_err (peer->log, "%s [Error] BGP route refresh is not enabled",
+		peer->host);
+      bgp_notify_send (peer,
+		       BGP_NOTIFY_HEADER_ERR,
+		       BGP_NOTIFY_HEADER_BAD_MESTYPE);
+      return;
+    }
+
+  /* Status must be Established. */
+  if (peer->status != Established) 
+    {
+      plog_err (peer->log,
+		"%s [FSM] Route refresh packet received under status %s",
+		peer->host, LOOKUP (bgp_status_msg, peer->status));
+      bgp_notify_send (peer, BGP_NOTIFY_FSM_ERR, 0);
+      return;
+    }
+
+  /* Check message length */
+  ;
+}
+
 /* BGP read utility function. */
 int
 bgp_read_packet (struct peer *peer, bgp_size_t size)
@@ -1064,7 +1093,9 @@ bgp_read (struct thread *thread)
   type = stream_getc (peer->ibuf);
 
   /* BGP type check. */
-  if (type < BGP_MSG_OPEN || type > BGP_MSG_KEEPALIVE)
+  if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE 
+      && type != BGP_MSG_NOTIFY && type != BGP_MSG_KEEPALIVE 
+      && type != BGP_MSG_ROUTE_REFRESH)
     {
       plog_err (peer->log,
 		"%s [Error] Unknown BGP packet type %d received",
@@ -1080,7 +1111,8 @@ bgp_read (struct thread *thread)
       || (type == BGP_MSG_OPEN && size < BGP_MSG_OPEN_MIN_SIZE)
       || (type == BGP_MSG_UPDATE && size < BGP_MSG_UPDATE_MIN_SIZE)
       || (type == BGP_MSG_NOTIFY && size < BGP_MSG_NOTIFY_MIN_SIZE)
-      || (type == BGP_MSG_KEEPALIVE && size != BGP_MSG_KEEPALIVE_MIN_SIZE))
+      || (type == BGP_MSG_KEEPALIVE && size != BGP_MSG_KEEPALIVE_MIN_SIZE)
+      || (type == BGP_MSG_ROUTE_REFRESH && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE))
     {
       plog_err (peer->log,
 		"%s [Error] Bad BGP message length %d for BGP type %s",
@@ -1115,6 +1147,9 @@ bgp_read (struct thread *thread)
       break;
     case BGP_MSG_KEEPALIVE:
       bgp_keepalive_receive (peer, size);
+      break;
+    case BGP_MSG_ROUTE_REFRESH:
+      bgp_route_refresh_receive (peer, size);
       break;
     }
 

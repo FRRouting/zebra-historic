@@ -476,6 +476,27 @@ ospf_header_dump (struct ospf_header *ospfh)
   zlog_info ("OSPF Router ID %s", inet_ntoa (ospfh->router_id));
   zlog_info ("OSPF Area ID %s", inet_ntoa (ospfh->area_id));
   zlog_info ("OSPF Checksum 0x%x", ntohs (ospfh->checksum));
+  zlog_info ("OSPF AuType %d", ntohs (ospfh->auth_type));
+
+  switch (ntohs (ospfh->auth_type))
+    {
+    case 0:
+      break;
+    case 1:
+      zlog_info ("OSPF Simple Password %s", ospfh->u.auth_data);
+      break;
+    case 2:
+      zlog_info ("OSPF Cryptographic Authentication");
+      zlog_info ("OSPF Key ID %d", ospfh->u.crypt.key_id);
+      zlog_info ("OSPF Auth Data Len %d", ospfh->u.crypt.auth_data_len);
+      zlog_info ("OSPF Sequence number %d",
+		 ntohl (ospfh->u.crypt.crypt_seqnum));
+      break;
+    default:
+      zlog_info ("OSPF This is not supported authentication type");
+      break;
+    }
+    
 }
 
 void
