@@ -192,7 +192,11 @@
 #define ZEBRA_IPV6_ROUTE_DELETE          8
 #define ZEBRA_REDISTRIBUTE_ADD           9
 #define ZEBRA_REDISTRIBUTE_DELETE       10
-#define ZEBRA_MESSAGE_MAX               11
+
+#define ZEBRA_INTERFACE_UP              11
+#define ZEBRA_INTERFACE_DOWN            12
+
+#define ZEBRA_MESSAGE_MAX               13
 
 /* Zebra route's types. */
 #define ZEBRA_ROUTE_SYSTEM               0
@@ -235,7 +239,11 @@
 #define SAFI_UNICAST             1
 #define SAFI_MULTICAST           2
 #define SAFI_UNICAST_MULTICAST   3
-#define SAFI_MAX                 4
+#define SAFI_MAX                 3
+
+/* AFI and SAFI type. */
+typedef u_int16_t afi_t;
+typedef u_char safi_t;
 
 /* Zebra types. */
 typedef u_int16_t zebra_size_t;

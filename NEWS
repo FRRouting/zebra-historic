@@ -1,5 +1,84 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.84
+
+* Changes in lib
+
+** IPv6 address and prefix parser is added to VTY by Toshiaki Takada
+   <takada@zebra.org>.  DEFUN string is "X:X::X:X" for IPv6 address,
+   "X:X::X:X/M" for IPv6 prefix.  You can use it like this.
+
+   DEFUN (func, cmd, "neighbor (A.B.C.D|X:X::X:X) remote-as <1-65535>")
+
+** VTY configuration is locked during configuration.  This is for
+   avoiding unconditional crush from two terminals modify the
+   configuration at the same time.  "who" command shows which termnal
+   lock the configuration.  VTY which has '*' character at the head of
+   line is locking the configuration.
+
+** Old logging functions are removed.  Functions like
+   log_open,log_close,openlog are deleted.  Instead of that please use
+   zlog_* functions.  zvlog_* used in ospf6d are deleted also.
+
+** "terminal monitor" command is added.  "no terminal monitor" is for
+   disabling.  This command simply display logging information to the
+   VTY.
+
+** dropline.[ch] files are deleted.
+
+* Changes in bgpd
+
+** BGP neighbor configuration are sorted by it's IP address.
+
+** BGP peer configuration and actual peer is separated.  This is
+   preparation for Route Server support.
+
+** "no neighbor PEER" command is added. You can delete neighbor
+   without specifying AS number.
+
+** "no neighbor ebgp-multihop" command is added.
+
+** "no neighbor port PORT" command is added.
+
+** To conform RFC1771, "neighbor PEER send-community" is default
+   behavior.  If you want to disable sending community attribute,
+   please specify "no neighbor PEER send-community" to the peer.
+
+** "neighbor maximum-prefix NUMBER" command is added.
+
+** Multi-protocol extention NLRI is proceeded only when the peer is
+   configured proper Address Family and Subsequent Address Family.  If
+   not, those NLRI are simply ignored.
+
+** Aggregate-address support is improved.  Currently below commands
+   works.
+
+  "aggregate-address"
+  "aggregate-address summary-only"
+  "no aggregate-address"
+  "no aggregate-address summary-only"
+
+  "ipv6 bgp aggregate-address"
+  "ipv6 bgp aggregate-address summary-only"
+  "no ipv6 bgp aggregate-address"
+  "no ipv6 bgp aggregate-address summary-only"
+
+** redistribute route-map bug is fixed.
+
+** MBGP support becomes default.  "configure" option --enable-mbgp is
+   removed.
+
+** New command "neighbor PEER timers connect <1-65535>" is added.
+
+** New command "neighbor PEER override-capability" is added.
+
+** New command "show ip bgp neighbor A.B.C.D advertised-route" is added.
+
+** New command "show ip bgp neighbor A.B.C.D routes" is added.  To use
+   this command, you have to configure neighbor with
+   "neighbor A.B.C.D soft-reconfiguration inbound" beforehand.
+   
+
 * Changes in zebra-0.83
 
 * bgpd

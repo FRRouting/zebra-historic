@@ -392,6 +392,12 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	broad = NULL;
     }
 
+  /* Address label treatment. */
+#if 0
+  if (tb[IFA_LABEL])
+    printf ("This address is for label %s\n", (char *) RTA_DATA (tb[IFA_LABEL]));
+#endif /* 0 */
+
   /* Register interface address to the interface. */
   if (ifa->ifa_family == AF_INET)
     {

@@ -27,9 +27,7 @@
 struct prefix
 {
   u_char family;
-#ifdef HAVE_MBGPV4
   u_char safi;
-#endif /* HAVE_MBGPV4 */
   u_char prefixlen;
   union 
   {
@@ -45,9 +43,7 @@ struct prefix
 struct prefix_ipv4
 {
   u_char family;
-#ifdef HAVE_MBGPV4
   u_char safi;
-#endif /* HAVE_MBGPV4 */
   u_char prefixlen;
   struct in_addr prefix;
 };
@@ -57,6 +53,7 @@ struct prefix_ipv4
 struct prefix_ipv6
 {
   u_char family;
+  u_char safi;
   u_char prefixlen;
   struct in6_addr prefix;
 };
@@ -99,6 +96,9 @@ struct prefix_ipv6
 #define PSIZE(a) (((a) + 7) / (8))
 
 /* Prototypes. */
+int afi2family (int);
+int family2afi (int);
+
 int prefix2str (struct prefix *, char *, int);
 int str2prefix (char *, struct prefix *);
 struct prefix *prefix_new ();

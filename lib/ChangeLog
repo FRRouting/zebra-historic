@@ -1,6 +1,81 @@
+2000-01-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add MASC_NODE for masc.
+
+2000-01-09  Wang Jianliang <wangjl@soim.net>
+
+	* routemap.c (route_map_index_add): When route_map_index is not
+	empty and insert new item at the head, it can cause core dump.
+	Fix "if (index == map->head)" to "if (point == map->head).
+	(route_map_add_set): If there is an old set command, override old
+	set command with new one.
+	(route_map_index_delete): Use while() instead of for for() for
+	logical correctness.
+
+1999-12-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_BGP_STATIC.
+
+1999-12-23  Alex Zinin <zinin@amt.ru>
+	* zebra.h, zclient.*: dynamic int up/down message
+	support
+
+1999-12-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* thread.c (thread_cancel_event): Add a function for clean up
+	events.
+
+1999-12-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* dropline.c: Delete file.
+	dropline.h: Linewise.	
+
+1999-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* filter.c (access_list_filter_delete): Wrong pointer
+	access->master was pointed out after access is freed.  I store
+	master value at the beginning of the function.
+
 1999-12-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
-	* vty.c (vty_accept): Instead of immediate exit() return -1.
+	* vty.c (exec_timeout): Change of VTY timeout affect to current
+	VTY connection.
+	(vty_accept): Instead of immediate exit() return -1.
+
+1999-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_configure_lock): Configuration lock function added.
+	Only one VTY can use CONFI_NODE at the same time.
+
+	* log.c: Delete zvlog_* functions.  Now zlog_* does the same
+	thing.
+
+	* log.c (log_init): Function removed.
+	(log_close): Likewise.
+	(log_flush): Likewise.
+	(log_open): Likewise.
+
+	* vty.c (terminal_monitor): Add new command.
+	(no_terminal_monitor): Likewise.
+
+	* log.c (old_log): Function removed.
+	(old_log2): Likewise.
+	(old_log_warn): Likewise.
+
+1999-12-04  Toshiaki Takada  <takada@zebra.org>
+
+	* command.c (cmd_ipv6_match): New function added.
+	(cmd_ipv6_prefix_match): Likewise.
+	
+1999-12-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (cmd_ipv6_match): 
+
+	* table.c: Delete #ifdef HAVE_MBGPV4.
+
+	* prefix.h (struct prefix): Add safi member.
+	(struct prefix_ipv4): Likewise.
+	(struct prefix_ipv6): Likewise.
 
 1999-12-04  Rumen Svobodnikov <rumen@linux.tu-varna.acad.bg>
 

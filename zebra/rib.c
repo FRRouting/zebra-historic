@@ -161,7 +161,7 @@ rib_log (char *message, struct prefix *p, struct rib *rib)
 		  rib->u.ifindex);
     }
 
-  zlog (NULL, LOG_INFO, "%s route %s %s/%d %s",
+  zlog_info ("%s route %s %s/%d %s",
 	route_info[rib->type].str_long, message,
 	inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ), p->prefixlen,
 	logbuf);

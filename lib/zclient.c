@@ -270,6 +270,111 @@ zebra_interface_delete (int sock, struct interface *ifp)
 }
 
 int
+zebra_interface_up (int sock, struct interface *ifp)
+{
+  int ret;
+  struct stream *s;
+
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_UP);
+
+  /* Interface name. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+
+  /* Set interface's index. */
+  stream_putw (s, ifp->ifindex);
+
+  /* Set interface's value. */
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+
+  /* Write packet size. */
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
+
+  ret = writen (sock, s->data, stream_get_endp (s));
+
+  stream_free (s);
+
+  return ret;
+}
+
+
+int
+zebra_interface_down (int sock, struct interface *ifp)
+{
+  int ret;
+  struct stream *s;
+
+  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
+
+  /* Place holder for size. */
+  stream_putw (s, 0);
+
+  /* Zebra command. */
+  stream_putc (s, ZEBRA_INTERFACE_DOWN);
+
+  /* Interface name. */
+  stream_put (s, ifp->name, INTERFACE_NAMSIZ);
+
+  /* Set interface's index. */
+  stream_putw (s, ifp->ifindex);
+
+  /* Set interface's value. */
+  stream_putl (s, ifp->flags);
+  stream_putl (s, ifp->metric);
+  stream_putl (s, ifp->mtu);
+
+  /* Write packet size. */
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
+
+  ret = writen (sock, s->data, stream_get_endp (s));
+
+  stream_free (s);
+
+  return ret;
+}
+
+
+/* Read interface up/down msg from zebra daemon. */
+struct interface *
+zebra_interface_state_read (struct stream *s)
+{
+  struct interface *ifp;
+  u_char ifname_tmp[INTERFACE_NAMSIZ];
+
+  /* Read interface name. */
+  stream_get (ifname_tmp, s, INTERFACE_NAMSIZ);
+
+  /* Lookup this by interface index. */
+  ifp = if_lookup_by_name (ifname_tmp);
+
+  /* If such interface does not exist, indicate an error */
+  if (! ifp)
+     return NULL;
+
+  /* Read interface's index. */
+  ifp->ifindex = stream_getw (s);
+
+  /* Read interface's value. */
+  ifp->flags = stream_getl (s);
+  ifp->metric = stream_getl (s);
+  ifp->mtu = stream_getl (s);
+
+  return ifp;
+}
+
+
+
+
+int
 zebra_interface_address_add (int sock, struct interface *ifp, 
 			     struct connected *c)
 {
@@ -652,6 +757,14 @@ zclient_read (struct thread *thread)
     case ZEBRA_INTERFACE_DELETE:
       if (zebra->interface_delete)
 	ret = (*zebra->interface_delete) (command, zebra, length);
+      break;
+    case ZEBRA_INTERFACE_UP:
+      if (zebra->interface_up)
+	ret = (*zebra->interface_up) (command, zebra, length);
+      break;
+    case ZEBRA_INTERFACE_DOWN:
+      if (zebra->interface_down)
+	ret = (*zebra->interface_down) (command, zebra, length);
       break;
     case ZEBRA_INTERFACE_ADDRESS_ADD:
       if (zebra->interface_address_add)

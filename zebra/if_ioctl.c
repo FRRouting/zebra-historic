@@ -297,9 +297,9 @@ interface_list ()
      interface's information. */
   interface_info_ioctl ();
 
-#ifdef HAVE_PROC_NET_IF_INET6
+#if defined(HAVE_IPV6) && defined(HAVE_PROC_NET_IF_INET6)
   /* Linux provides interface's IPv6 address via
      /proc/net/if_inet6. */
   ifaddr_proc_ipv6 ();
-#endif /* HAVE_PROC_NET_IF_INET6 */
+#endif /* HAVE_IPV6 && HAVE_PROC_NET_IF_INET6 */
 }

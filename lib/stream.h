@@ -80,6 +80,7 @@ int stream_putw_at (struct stream *, unsigned long, u_int16_t);
 int stream_putl (struct stream *, u_int32_t);
 int stream_putl_at (struct stream *, unsigned long, u_int32_t);
 int stream_put_ipv4 (struct stream *, u_int32_t);
+int stream_put_in_addr (struct stream *, struct in_addr *);
 
 void stream_get (void *, struct stream *, size_t);
 u_char stream_getc (struct stream *);

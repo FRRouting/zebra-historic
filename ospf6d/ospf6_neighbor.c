@@ -101,7 +101,7 @@ neighbor_new ()
   if (new)
     memset (new, 0, sizeof (struct neighbor));
   else
-    zvlog_warn ("Can't malloc neighbor");
+    zlog_warn ("Can't malloc neighbor");
   return new;
 }
 

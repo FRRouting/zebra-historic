@@ -109,10 +109,8 @@ enum
 
 /* OSPF ABR/ASBR internal flags */
 
-#define OSPF_FLAG_ABR 		0x0001
-#define OSPF_FLAG_ASBR		0x0002
-#define OSPF_FLAG_VIRTUAL_LINK  0x0004
-#define OSPF_FLAG_SHORTCUT      0x0010
+#define OSPF_FLAG_ABR 		0x0001	/* The router is an ABR  */
+#define OSPF_FLAG_ASBR		0x0002  /* The router is an ASBR */
 
 #define OSPF_IS_ABR \
 	(ospf_top->flags & OSPF_FLAG_ABR)
@@ -138,6 +136,7 @@ struct ospf
 
   u_char    flags;			/* ABR/ASBR internal flags */
   u_char    abr_type;			/* ABR type */
+  u_char    RFC1583Compat;		/* RFC1583Compatibility flag */
 
   list iflist;				/* Zebra interface list. */
   list vlinks;				/* List of configured VLs */
@@ -179,6 +178,19 @@ struct ospf
 #define LIST_NAME(T) ospf_top->dist_lists_proto[T].name
 #define LIST_PTR(T)  ospf_top->dist_lists_proto[T].list
 
+  struct 
+  {
+    u_char  metric_type;			/* Ext. metric type (E1 or E2)  */
+    u_char  metric_method;		/* How ext. metric is specified */
+
+#define OSPF_EXT_METRIC_AUTO 	0
+#define OSPF_EXT_METRIC_STATIC  1
+
+    u_int32_t metric_value;		/* Value for static metric (24-bit) */
+  } dist_info [ZEBRA_ROUTE_MAX];
+
+
+
 
   list            refresh_queue;	  /* LSA Refreshment Queue */
   struct thread * t_lsa_refresher;	  /* Refreshment Queue Server */
@@ -186,17 +198,18 @@ struct ospf
   int		  refresh_queue_limit;    /* How many LSAs per interval*/
   int		  refresh_queue_count;	  /* How many updated */
 
-#define OSPF_DEF_REFRESH_QUEUE_INTERVAL 1
-#define OSPF_DEF_REFRESH_QUEUE_LIMIT    70
-#define OSPF_DEF_REFRESH_PER_SLICE      5
+#define OSPF_REFRESH_QUEUE_INTERVAL 1
+#define OSPF_REFRESH_QUEUE_RATE     70
+#define OSPF_REFRESH_PER_SLICE      5
 
-#define OSPF_LS_REFRESH_SHIFT		60
+#define OSPF_LS_REFRESH_SHIFT	    60
+#define OSPF_LS_REFRESH_JITTER	    10
 
   list		  refresh_group;	/* LSA Refresh Group */
   struct thread * t_refresh_group;	/* Refresh Group Checker*/
   u_int16_t       group_age;		/* Min AGE in the LSA Group */
 
-#define OSPF_REFRESH_GROUP_SLICE   1
+#define OSPF_REFRESH_GROUP_TIME    1
 #define OSPF_REFRESH_GROUP_AGE_DIF 3    /* We don't care if age is +-1 sec */
 #define OSPF_REFRESH_GROUP_LIMIT   10   
 
@@ -300,10 +313,10 @@ struct ospf_network
 	(V & F)
 
 #define SET_FLAG(V,F)\
-	V = V | F
+	V = V | (F)
 
 #define UNSET_FLAG(V,F)\
-	V = V & ~F
+	V = V & ~(F)
 
 
 #define LIST_ITERATOR(L, N) \

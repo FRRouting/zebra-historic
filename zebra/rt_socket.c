@@ -85,21 +85,17 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
   if (gate)
     sin_gate.sin_addr = *gate;
 
-#ifdef USE_HOST_BIT
-  if (dest->prefixlen != 32)
+  if (gate && dest->prefixlen == 32)
+    mask = NULL;
+  else
     {
-#endif /* USE_HOST_BIT */
       masklen2ip (dest->prefixlen, &sin_mask.sin_addr);
 #ifdef HAVE_SIN_LEN
       sin_mask.sin_len = sin_masklen (sin_mask.sin_addr);
 #endif /* HAVE_SIN_LEN */
       sin_mask.sin_family = AF_UNSPEC;
       mask = &sin_mask;
-#ifdef USE_HOST_BIT
     }
-  else 
-    mask = NULL;
-#endif /* USE_HOST_BIT */
 
   return rtm_write (message,
 		    (union sockunion *)&sin_dest, 
@@ -195,21 +191,17 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
     SET_IN6_LINKLOCAL_IFINDEX (sin_gate.sin6_addr, index);
 #endif /* KAME */
 
-#ifdef USE_HOST_BIT
-  if (dest->prefixlen != 128)
+  if (gate && dest->prefixlen == 128)
+    mask = NULL;
+  else
     {
-#endif /* USE_HOST_BIT */
       masklen2ip6 (dest->prefixlen, &sin_mask.sin6_addr);
       sin_mask.sin6_family = AF_UNSPEC;
 #ifdef SIN6_LEN
       sin_mask.sin6_len = sin6_masklen (sin_mask.sin6_addr);
 #endif /* SIN6_LEN */
       mask = &sin_mask;
-#ifdef USE_HOST_BIT
     }
-  else
-    mask = NULL;
-#endif /* USE_HOST_BIT */
 
   return rtm_write (message, 
 		    (union sockunion *) &sin_dest,

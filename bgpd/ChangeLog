@@ -1,3 +1,45 @@
+2000-01-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_open.c (bgp_capability_mp): Fix bug of mis-negotiation about
+	IPv6 unicast.
+
+	* bgpd.c (bgp_init): Add "soft-reconfiguration inbound" command.
+	
+2000-01-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (neighbor_strict_capability): Add
+	"strict-capability-match" command.
+
+	* bgp_zebra.c (bgp_if_update): Ignore NET127 determining
+	router-id.
+
+	* bgpd.c (peer_override_capability): Add "override-capability"
+	command.
+
+1999-12-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_packet.c (bgp_write): Change status to Idle and set timer
+	after write failed.
+
+1999-12-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_zebra.c (bgp_zebra_announce): Add info->selected check.
+
+1999-12-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (nlri_unfeasible): nlri_unfeasible() is merged with
+	nlri_parse().
+
+1999-12-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_fsm.h (BGP_EVENT_DELETE): Macro added.
+
+	* bgp_fsm.c (bgp_stop): Clear all event threads of the peer when
+	the peer is cleared.
+
+	* bgp_zebra.c (bgp_nexthop_set): Clear interface index of
+	link-local address.  This is KAME specific problem.
+
 1999-12-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_attr.c (bgp_mp_reach_parse): Comment out previous code for a
@@ -10,13 +52,43 @@
 	* bgp_attr.c (bgp_mp_reach_parse): Fix serious bug when getting
 	global and link-local address.
 
+1999-12-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (no_neighbor_port): New command added.
+	(peer_new): Set send_community.
+
+1999-12-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (show_ip_bgp_summary): Changed to use bgp_show_summary().
+	(show_ip_mbgp_summary): Likewise.
+	(show_ipv6_bgp_summary): Likewise.
+	(show_ipv6_mbgp_summary): Add new command.
+	(peer_free): Free peer->host.
+	(peer_lookup_by_su): Delete function.
+	(ipv6_bgp_neighbor): Changed to use peer_remote_as().
+	(sockunion_vty_out): Function deleted.
+	(vty_clear_bgp): Use afi instead of family.
+	Delete old list bgp_list.  Use struct newlist *bgplist.
+	(peer_lookup_by_host): Function deleted.
+
 1999-12-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h (struct peer_group): New structure added.
+	(struct peer_conf): New structure added.
+	(struct	peer): Change all prefix_count to unsigned long.
+	
+	* bgpd.c: Reconstruct all of VTY commands reflect internal
+	structure change.
+	Use bgplist instead of bgp_list.
+	Use peerlist intstead of peer_list.
 
 	* bgp_attr.c (bgp_mp_reach_parse): If nlri_parse return -1, stop
 	parsing then return immediately.
 
 	* bgp_route.c (nlri_parse): When NLRI parse error occured, return
 	-1.
+	(nlri_process): Use pcount_v4_{unicast,multicast}.
+	(nlri_delete): Likewise.
 
 1999-11-25  Robert Olsson <Robert.Olsson@data.slu.se>
 

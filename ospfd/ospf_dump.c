@@ -95,19 +95,6 @@ unsigned long ospf_debug_event = 0;
 unsigned long ospf_debug_ism = 0;
 unsigned long ospf_debug_nsm = 0;
 
-/* message lookup function */
-char *
-mes_lookup (struct message *meslist, int max, int index)
-{
-  if (index < 0 || index >= max)
-    {
-      zlog_info ("message index out of bound: %d", max);
-      return NULL;
-    }
-
-  return meslist[index].str;
-}
-
 void
 ospf_nbr_state_message (struct ospf_neighbor *nbr, char *buf, size_t size)
 {

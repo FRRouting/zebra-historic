@@ -29,12 +29,26 @@ list nexthoplist = NULL;
 struct sockaddr_in6 allspfrouters6;
 struct sockaddr_in6 alldrouters6;
 char *recent_reason; /* set by ospf6_lsa_check_recent () */
+char rcsid[] = "$Id: ospf6d.c,v 1.77 1999/12/25 18:31:27 yasu Exp $";
 
 
 /* vty commands */
+DEFUN (show_ipv6_ospf6_version,
+       show_ipv6_ospf6_version_cmd,
+       "show ipv6 ospf6 version",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "version information\n"
+       )
+{
+  vty_out (vty, "%s%s", rcsid, VTY_NEWLINE);
+  return CMD_SUCCESS;
+}
+
 DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
        show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd,
-       "show ipv6 ospf6 neighbor IFNAME NBR_ID (detail|)",
+       "show ipv6 ospf6 neighbor IFNAME NBR_ID detail",
        SHOW_STR
        IP6_STR
        OSPF6_STR
@@ -513,15 +527,16 @@ DEFUN (show_ipv6_ospf6_database,
   return CMD_SUCCESS;
 }
 
-DEFUN (show_ipv6_route_ospf6_area,
-       show_ipv6_route_ospf6_area_cmd,
-       "show ipv6 route ospf6 area A.B.C.D",
+DEFUN (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_area_detail_cmd,
+       "show ipv6 route ospf6 area A.B.C.D (detail|)",
        SHOW_STR
        IP6_STR
        ROUTE_STR
        OSPF6_STR
        "show route table in area structure\n"
        "OSPF6 area ID\n"
+       "detailed infomation\n"
        )
 {
   struct area *area;
@@ -534,7 +549,7 @@ DEFUN (show_ipv6_route_ospf6_area,
       return CMD_WARNING;
     }
 
-  if (argc)
+  if (argc && strncmp (argv[0], "d", 1) != 0)
     inet_pton (AF_INET, argv[0], &area_id);
   else
     area_id = 0;
@@ -550,15 +565,42 @@ DEFUN (show_ipv6_route_ospf6_area,
   for (rn = route_top (area->table); rn; rn = route_next (rn))
     {
       if (rn->info)
-        ospf6_route_vty (vty, rn);
+        {
+          if (strncmp (argv[argc-1], "detail", 7) == 0)
+            ospf6_route_vty_new (vty, rn, 1);
+          else
+            ospf6_route_vty_new (vty, rn, 0);
+        }
     }
 
   return CMD_SUCCESS;
 }
 
-ALIAS (show_ipv6_route_ospf6_area,
+ALIAS (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_area_cmd,
+       "show ipv6 route ospf6 area A.B.C.D",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "show route table in area structure\n"
+       "OSPF6 area ID\n"
+       )
+
+ALIAS (show_ipv6_route_ospf6_area_detail,
+       show_ipv6_route_ospf6_backbone_detail_cmd,
+       "show ipv6 route ospf6 backbone (detail|)",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       "show route table in area structure\n"
+       "detailed infomation\n"
+       )
+
+ALIAS (show_ipv6_route_ospf6_area_detail,
        show_ipv6_route_ospf6_backbone_cmd,
-       "show ipv6 route ospf6 area",
+       "show ipv6 route ospf6 backbone",
        SHOW_STR
        IP6_STR
        ROUTE_STR
@@ -566,13 +608,14 @@ ALIAS (show_ipv6_route_ospf6_area,
        "show route table in area structure\n"
        )
 
-DEFUN (show_ipv6_route_ospf6,
-       show_ipv6_route_ospf6_cmd,
-       "show ipv6 route ospf6",
+DEFUN (show_ipv6_route_ospf6_detail,
+       show_ipv6_route_ospf6_detail_cmd,
+       "show ipv6 route ospf6 (detail|)",
        SHOW_STR
        IP6_STR
        ROUTE_STR
        OSPF6_STR
+       "detailed infomation\n"
        )
 {
   struct route_node *rn;
@@ -586,11 +629,27 @@ DEFUN (show_ipv6_route_ospf6,
   for (rn = route_top (ospf6->table); rn; rn = route_next (rn))
     {
       if (rn->info)
+#if 0
         ospf6_route_vty (vty, rn);
+#else
+        if (strncmp (argv[argc-1], "detail", 7) == 0)
+          ospf6_route_vty_new (vty, rn, 1);
+        else
+          ospf6_route_vty_new (vty, rn, 0);
+#endif
     }
 
   return CMD_SUCCESS;
 }
+
+ALIAS (show_ipv6_route_ospf6_detail,
+       show_ipv6_route_ospf6_cmd,
+       "show ipv6 route ospf6",
+       SHOW_STR
+       IP6_STR
+       ROUTE_STR
+       OSPF6_STR
+       )
 
 DEFUN (show_ipv6_route_connected,
        show_ipv6_route_connected_cmd,
@@ -836,6 +895,7 @@ ospf6_init ()
   install_node (&ospf6_node, ospf6_config_write);
 
   install_element (VIEW_NODE, &show_ipv6_ospf6_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_version_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_requestlist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_retranslist_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
@@ -852,12 +912,16 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_detail_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_detail_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_cmd);
+  install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_detail_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_connected_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_redistribute_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_version_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_requestlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_retranslist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_nexthoplist_cmd);
@@ -875,8 +939,11 @@ ospf6_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_route_ospf6_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_detail_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_detail_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_ospf6_backbone_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_route_ospf6_backbone_detail_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_connected_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_redistribute_cmd);
 

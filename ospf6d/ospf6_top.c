@@ -123,6 +123,7 @@ ospf6_make (void)
   /* route table init */
   ospf6->table = ospf6_route_table_init ();
   ospf6->table_zebra = ospf6_route_table_init ();
+  ospf6->table_redistribute = ospf6_route_table_init ();
   ospf6->table_connected = ospf6_route_table_init ();
   ospf6->table_external = ospf6_route_table_init ();
 

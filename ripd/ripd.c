@@ -69,13 +69,13 @@ enum
 /* RIP command strings. */
 struct message rip_msg[] = 
 {
-  { 0,             "NULL"},
   {RIP_REQUEST,    "request"},
   {RIP_RESPONSE,   "response"},
   {RIP_TRACEON,    "traceon"},
   {RIP_TRACEOFF,   "traceoff"},
   {RIP_POLL,       "poll"},
   {RIP_POLL_ENTRY, "poll entry"},
+  {0,              NULL}
 };
 
 /* Each route type's strings and default preference. */
@@ -497,7 +497,7 @@ rip_authentication (struct rte *rte, struct sockaddr_in *from,
 	{
 	  auth_str = (char *) &rte->prefix;
 
-	  if (strncmp (auth_str, ri->auth_str, 20) == 0)
+	  if (strncmp (auth_str, ri->auth_str, 16) == 0)
 	    return 1;
 	}
     }
@@ -509,7 +509,7 @@ void
 rip_response_process (struct rip_packet *packet, int size, 
 		      struct sockaddr_in *from, struct interface *ifp)
 {
-  int ret;
+  
   caddr_t lim;
   struct rte *rte;
       
@@ -546,20 +546,14 @@ rip_response_process (struct rip_packet *packet, int size,
       /* If the Address Family Identifier of the first (and only the
 	 first) entry in the message is 0xFFFF, then the remainder of
 	 the entry contains the authentication. */
+      /* If the packet gets here it means authentication enabled */
+      /* Check is done in rip_read(). So, just skipping it */
       if (packet->version == RIPv2 &&
 	  rte == packet->rte &&
 	  rte->family == 0xffff)
-	{
-	  ret = rip_authentication (rte, from, ifp);
-	  if (! ret)
-	    {
-	      if (IS_RIP_DEBUG_EVENT)
-		zlog_info ("RIP authentication failed");
-	      return;
-	    }
-	  continue;
-	}
-      else if (ntohs (rte->family) != AF_INET)
+	continue;
+
+      if (ntohs (rte->family) != AF_INET)
 	{
 	  /* Address family check.  RIP only supports AF_INET. */
 	  zlog_info ("Unsupported family %d from %s.",
@@ -943,6 +937,8 @@ int
 rip_read (struct thread *t)
 {
   int sock;
+  int ret;
+  int rtenum;
   union rip_buf rip_buf;
   struct rip_packet *packet;
   struct sockaddr_in from;
@@ -970,6 +966,12 @@ rip_read (struct thread *t)
     }
 
   /* Packet length check. */
+  if (len < RIP_PACKET_MINSIZ)
+    {
+      zlog_warn ("RIP packet size %d is smaller than minimum size %d",
+		 len, RIP_PACKET_MINSIZ);
+      return len;
+    }
   if (len > RIP_PACKET_MAXSIZ)
     {
       zlog_warn ("RIP packet size %d is larger than max size %d",
@@ -977,12 +979,14 @@ rip_read (struct thread *t)
       return len;
     }
 
-  /* Packet align check. */
-  if ((len - 4) % 20)
+  /* Packet alignment check. */
+  if ((len - RIP_PACKET_MINSIZ) % 20)
     {
-      zlog_warn ("RIP packet size %d is wrong", len);
+      zlog_warn ("RIP packet size %d is wrong for RIP packet alignment", len);
       return len;
     }
+
+  rtenum = ((len - RIP_PACKET_MINSIZ) / 20);
 
   /* For easy to handle. */
   packet = &rip_buf.rip_packet;
@@ -1070,6 +1074,61 @@ rip_read (struct thread *t)
 	      }
 	}
     }
+
+  /* RFC2453 5.2 If the router is not configured to authenticate RIP-2
+     messages, then RIP-1 and unauthenticated RIP-2 messages will be
+     accepted; authenticated RIP-2 messages shall be discarded.  */
+
+  if ((ri->auth_type == RIP_NO_AUTH) 
+      && rtenum 
+      && (packet->version == RIPv2) && (packet->rte->family == 0xffff))
+    {
+      if (IS_RIP_DEBUG_EVENT)
+	zlog_warn ("packet RIPv%d is dropped because authentication disabled", 
+		   packet->version);
+      return -1;
+    }
+
+  /* If the router is configured to authenticate RIP-2 messages, then
+     RIP-1 messages and RIP-2 messages which pass authentication
+     testing shall be accepted; unauthenticated and failed
+     authentication RIP-2 messages shall be discarded.  For maximum
+     security, RIP-1 messages should be ignored when authentication is
+     in use (see section 4.1); otherwise, the routing information from
+     authenticated messages will be propagated by RIP-1 routers in an
+     unauthenticated manner. */
+
+  if (ri->auth_type == RIP_AUTH_SIMPLE_PASSWORD)
+    {
+      /* We follow maximum security. */
+      if (packet->version == RIPv1)
+	{
+	  if (IS_RIP_DEBUG_PACKET)
+	    zlog_warn ("packet RIPv%d is dropped because authentication enabled", packet->version);
+	  return -1;
+	}
+      
+      /* Check RIPv2 authentication. */
+      if (packet->version == RIPv2)
+	{
+	  if (rtenum && packet->rte->family == 0xffff)
+	    {
+	      ret = rip_authentication (packet->rte, &from, ifp);
+	      if (! ret)
+		{
+		  if (IS_RIP_DEBUG_EVENT)
+		    zlog_warn ("RIP authentication failed");
+		  return -1;
+		}
+	    }
+	  else 
+	    {
+	      if (IS_RIP_DEBUG_EVENT)
+		zlog_warn ("RIP authentication failed: no authentication in packet");
+	      return -1;
+	    }	
+	}
+    }
   
   /* Process each command. */
   switch (packet->command)
@@ -1084,11 +1143,11 @@ rip_read (struct thread *t)
     case RIP_TRACEON:
     case RIP_TRACEOFF:
       zlog_info ("Obsolete command %s received, please sent it to routed", 
-		 LOOKUP (rip_msg, packet->command));
+		 lookup (rip_msg, packet->command));
       break;
     case RIP_POLL_ENTRY:
       zlog_info ("Obsolete command %s received", 
-		 LOOKUP (rip_msg, packet->command));
+		 lookup (rip_msg, packet->command));
       break;
     default:
       zlog_info ("Unknown RIP command %d received", packet->command);
@@ -1295,9 +1354,9 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 	  if (rip->route_map[rinfo->type].map) 
 	    {
 	      ret = route_map_apply (rip->route_map[rinfo->type].map,
-				     (struct prefix *)p, ROUTE_MAP_RIP, rinfo);
+				     (struct prefix *)p, RMAP_RIP, rinfo);
 
-	      if (ret == RM_DENYMATCH) 
+	      if (ret == RMAP_DENYMATCH) 
 		{
 		  if (IS_RIP_DEBUG_PACKET)
 		    zlog_info ("RIP %s/%d is filtered by route-map",

@@ -38,7 +38,7 @@ struct Hash *comhash;
 struct community *
 community_parse (char *pnt, u_short length)
 {
-  struct community comtmp;
+  struct community tmp;
   struct community *find;
   struct community *new;
 
@@ -47,20 +47,22 @@ community_parse (char *pnt, u_short length)
     return NULL;
 
   /* Make temporary community for hash look up. */
-  comtmp.size = length / 4;
-  comtmp.val = (u_int32_t *) pnt;
-  comtmp.refcnt = 0;
+  tmp.size = length / 4;
+  tmp.val = (u_int32_t *) pnt;
 
   /* Looking up hash of community attribute. */
-  find = (struct community *) hash_search (comhash, &comtmp);
+  find = (struct community *) hash_search (comhash, &tmp);
   if (find)
-    return find;
+    {
+      find->refcnt++;
+      return find;
+    }
 
   /* Make new community attribute and intern it into hash. */
   new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
 
   /* new->refcnt = 1; */
-  new->refcnt = 0;
+  new->refcnt = 1;
   new->size = length / 4;
   new->val = (u_int32_t *) XMALLOC (MTYPE_COMMUNITY_VAL, length);
   memcpy (new->val, pnt, length);
@@ -103,14 +105,30 @@ community_dup (struct community *com)
     }
   else
     new->val = NULL;
-
   return new;
 }
 
-void
+struct community *
 community_intern (struct community *com)
 {
-  com->refcnt++;
+  struct community *find;
+
+  /* Assert this community structure is not interned. */
+  assert (com->refcnt == 0);
+
+  /* Lookup community hash. */
+  find = (struct community *) hash_search (comhash, com);
+  if (find)
+    {
+      community_free (com);
+      find->refcnt++;
+      return find;
+    }
+
+  /* Push new community to hash bucket. */
+  com->refcnt = 1;
+  hash_push (comhash, com);
+  return com;
 }
 
 /* Free community attribute. */

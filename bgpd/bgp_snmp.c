@@ -221,7 +221,6 @@ bgpLocalAs (struct variable *v, oid objid[], size_t *objid_len,
   int ret;
   static long localas;
   struct bgp *bgp;
-  struct bgp *bgp_top_get ();
 
   ret = smux_single_instance_check (v, objid, objid_len, exact);
 
@@ -230,7 +229,7 @@ bgpLocalAs (struct variable *v, oid objid[], size_t *objid_len,
     return -1;
 
   /* Get first bgp structure. */
-  bgp = bgp_top_get ();
+  bgp = bgp_get_default ();
   if (!bgp)
     return -1;
 
@@ -246,7 +245,7 @@ struct peer *
 bgpPeerTable_lookup (struct variable *v, oid objid[], size_t *objid_len, 
 		     struct in_addr *addr, int exact)
 {
-  struct peer *peer;
+  struct peer *peer = NULL;
 
   if (exact)
     {

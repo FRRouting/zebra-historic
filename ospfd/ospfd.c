@@ -84,8 +84,8 @@ ospf_new ()
 					   NULL, OSPF_LSA_MAX_AGE_CHECK_INTERVAL);
 
   new->refresh_queue = list_init ();
-  new->refresh_queue_interval = OSPF_DEF_REFRESH_QUEUE_INTERVAL;
-  new->refresh_queue_limit = OSPF_DEF_REFRESH_QUEUE_LIMIT;
+  new->refresh_queue_interval = OSPF_REFRESH_QUEUE_INTERVAL;
+  new->refresh_queue_limit = OSPF_REFRESH_QUEUE_RATE;
   new->refresh_group = list_init ();
   return new;
 }
@@ -361,9 +361,10 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
       ifp = getdata (node);
       oi = ifp->info;
 
-      /* is interface up? */
+      /* is interface up? ---Z: don't check it, just set the flag
       if (!if_is_up (ifp))
 	continue;
+      */
 
       if (oi->flag == OSPF_IF_ENABLE)
 	continue;
@@ -377,7 +378,6 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 	{
 	  struct connected *co;
 	  struct in_addr addr;
-	  int ret;
 
 	  co = getdata (cn);
 
@@ -397,16 +397,9 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 
 	      addr = co->address->u.prefix4;
 
-	      ret = ospf_serv_sock_init (ifp, co->address);
-	      if (ret < 0)
-		continue;
-
 	      /* Remember this interface is running. */
 	      flag = OSPF_IF_ENABLE;
-
-	      /* entry point of ISM. */
-	      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceUp);
-	      zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
+              oi->flag = flag;
 
 	      /* Add pseudo neighbor. */
 	      ospf_nbr_add_self (oi);
@@ -425,6 +418,9 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
 		oi->type = OSPF_IFTYPE_POINTOPOINT;
 
 	      list_add_node (oi->area->iflist, ifp);
+
+              if (if_is_up (ifp)) 
+		 ospf_if_up (ifp);
 
 	      break;
 	    }
@@ -2180,6 +2176,37 @@ DEFUN (no_ospf_abr_type,
   return CMD_SUCCESS;
 }
 
+DEFUN (ospf_rfc1583_flag,
+       ospf_rfc1583_flag_cmd,
+       "ospf rfc1583compatibility",
+       "OSPF specific commands\n"
+       "Enable the RFC1583Compatibility flag\n")
+{
+  if (ospf_top->RFC1583Compat == 0)
+    {
+      ospf_top->RFC1583Compat = 1;
+      ospf_spf_calculate_schedule ();
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf_rfc1583_flag,
+       no_ospf_rfc1583_flag_cmd,
+       "no ospf rfc1583compatibility",
+       NO_STR
+       "OSPF specific commands\n"
+       "Disable the RFC1583Compatibility flag\n")
+{
+  if (ospf_top->RFC1583Compat == 1)
+    {
+      ospf_top->RFC1583Compat = 0;
+      ospf_spf_calculate_schedule ();
+    }
+
+  return CMD_SUCCESS;
+}
+
 char *ospf_abr_type_descr_str[] = 
 {
   "Unknown",
@@ -2212,6 +2239,13 @@ DEFUN (show_ip_ospf,
 	   inet_ntoa (ospf_top->router_id),
 	   VTY_NEWLINE);
   vty_out (vty, " Supports only single TOS (TOS0) routes%s", VTY_NEWLINE);
+  vty_out (vty, " This implementation conforms to RFC2328%s", VTY_NEWLINE);
+  vty_out (vty, " RFC1583Compatibility flag is ");
+
+  if (ospf_top->RFC1583Compat)
+    vty_out (vty, "enabled%s", VTY_NEWLINE);
+  else
+    vty_out (vty, "disabled%s", VTY_NEWLINE);
 
   /* Am I ABR, ASBR? */
   if (CHECK_FLAG (ospf_top->flags, OSPF_FLAG_ABR))
@@ -2291,7 +2325,7 @@ DEFUN (show_ip_ospf,
 void
 show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
 {
-  struct ospf_interface *oi;
+  struct ospf_interface *oi = ifp->info;
   struct route_node *rn;
   struct prefix key;
   struct ospf_neighbor *nbr;
@@ -2300,22 +2334,27 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   /* is interface up? */
   if (if_is_up (ifp))
     vty_out (vty, "%s is up, line protocol is up%s", ifp->name, VTY_NEWLINE);
-  else
+  else {
     vty_out (vty, "%s is down, line protocol is down%s", ifp->name,
 	     VTY_NEWLINE);
 
+    if ((oi == NULL) ||
+	(oi->flag == OSPF_IF_DISABLE))
+      vty_out (vty, "  OSPF not enabled on this interface%s", VTY_NEWLINE);
+    else
+      vty_out (vty, "  OSPF is enabled, but not running on this interface%s",
+	       VTY_NEWLINE);
+    return;
+  }
+
   /* is interface OSPF enabled? */
-  if ((oi = ifp->info) == NULL)
+  if ((oi == NULL) || (oi->flag == OSPF_IF_DISABLE) || 
+      (oi->address == NULL))
     {
       vty_out (vty, "  OSPF not enabled on this interface%s", VTY_NEWLINE);
       return;
     }
 
-  if (oi->flag == OSPF_IF_DISABLE || oi->address == NULL)
-    {
-      vty_out (vty, "  OSPF not enabled on this interface%s", VTY_NEWLINE);
-      return;
-    }
       
   /* show OSPF interface information. */
   vty_out (vty, "  Internet Address %s/%d,",
@@ -2421,7 +2460,7 @@ DEFUN (show_ip_ospf_interface,
   struct interface *ifp;
   listnode node;
 
-  /* show All Interfaces. */
+  /* Show All Interfaces. */
   if (argc == 0)
     for (node = listhead (iflist); node; nextnode (node))
       show_ip_ospf_interface_sub (vty, node->data);
@@ -2517,47 +2556,6 @@ DEFUN (show_ip_ospf_neighbor_int,
   return CMD_SUCCESS;
 }
 
-#if 0
-DEFUN (show_ip_ospf_neighbor,
-       show_ip_ospf_neighbor_cmd,
-       "show ip ospf neighbor [INTERFACE]",
-       SHOW_STR
-       IP_STR
-       "OSPF information\n"
-       "Neighbor list\n"
-       "Interface name\n")
-{
-  listnode node;
-  struct interface *ifp;
-
-  /* show All neighbors. */
-  if (argc == 0)
-    {
-      vty_out (vty, "%sNeighbor ID     Pri   State           Dead "
-                    "Time   Address         Interface           RXmtL "
-                    "RqstL DBsmL%s", VTY_NEWLINE, VTY_NEWLINE);
-      for (node = listhead (iflist); node; nextnode (node))
-	show_ip_ospf_neighbor_sub (vty, node->data);
-    }
-  else
-    {
-      ifp = if_lookup_by_name (argv[0]);
-      if (ifp == NULL)
-	vty_out (vty, "No such interface name%s", VTY_NEWLINE);
-      else
-	{
-	  vty_out (vty, "%sNeighbor ID     Pri   State           Dead "
-                        "Time   Address         Interface           RXmtL "
-                        "RqstL DBsmL%s", VTY_NEWLINE,
-		   VTY_NEWLINE);
-	  show_ip_ospf_neighbor_sub (vty, ifp);
-	}
-    }
-
-  return CMD_SUCCESS;
-}
-#endif
-
 void
 show_ip_ospf_neighbor_detail_sub (struct vty *vty, struct interface *ifp)
 {
@@ -2618,6 +2616,9 @@ DEFUN (show_ip_ospf_neighbor_detail,
        "detail of all neighbors\n")
 {
   listnode node;
+
+  if (!ospf_top)
+    return CMD_SUCCESS;
 
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
     show_ip_ospf_neighbor_detail_sub (vty, node->data);
@@ -2684,6 +2685,11 @@ ospf_config_write (struct vty *vty)
         vty_out (vty, " ospf abr-type %s%s", 
 		 ospf_abr_type_str[ospf_top->abr_type],
 		 VTY_NEWLINE);
+
+      if (ospf_top->RFC1583Compat)
+         vty_out (vty, " ospf rfc1583compatibility%s", VTY_NEWLINE);
+      else 
+         vty_out (vty, " no ospf rfc1583compatibility%s", VTY_NEWLINE);
 
       /* Redistribute information print. */
       config_write_ospf_redistribute (vty);
@@ -2835,6 +2841,9 @@ ospf_init ()
 
   /* Install ospf commands. */
   install_element (VIEW_NODE, &show_ip_ospf_interface_cmd);
+  install_element (VIEW_NODE, &show_ip_ospf_neighbor_int_detail_cmd);
+  install_element (VIEW_NODE, &show_ip_ospf_neighbor_int_cmd);
+  install_element (VIEW_NODE, &show_ip_ospf_neighbor_detail_cmd);
   install_element (VIEW_NODE, &show_ip_ospf_neighbor_cmd);
   /* install_element (VIEW_NODE, &show_ip_ospf_cmd); */
   install_element (ENABLE_NODE, &show_ip_ospf_interface_cmd);
@@ -2851,6 +2860,8 @@ ospf_init ()
   install_element (OSPF_NODE, &no_ospf_router_id_cmd);
   install_element (OSPF_NODE, &ospf_abr_type_cmd);
   install_element (OSPF_NODE, &no_ospf_abr_type_cmd);
+  install_element (OSPF_NODE, &ospf_rfc1583_flag_cmd);
+  install_element (OSPF_NODE, &no_ospf_rfc1583_flag_cmd);
 
   install_element (OSPF_NODE, &network_area_decimal_cmd);
   install_element (OSPF_NODE, &network_area_cmd);

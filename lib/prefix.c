@@ -39,6 +39,31 @@ static u_char maskbit[] = {0x00, 0x80, 0xc0, 0xe0, 0xf0,
 
 #define MASKBIT(offset)  ((0xff << (PNBBY - (offset))) & 0xff)
 
+/* Address Famiy Identifier to Address Family converter. */
+int
+afi2family (int afi)
+{
+  if (afi == AFI_IP)
+    return AF_INET;
+#ifdef HAVE_IPV6
+  else if (afi == AFI_IP6)
+    return AF_INET6;
+#endif /* HAVE_IPV6 */
+  return 0;
+}
+
+int
+family2afi (int family)
+{
+  if (family == AF_INET)
+    return AFI_IP;
+#ifdef HAVE_IPV6
+  else if (family == AF_INET6)
+    return AFI_IP6;
+#endif /* HAVE_IPV6 */
+  return 0;
+}
+
 /* If n includes p prefix then return 1 else return 0. */
 int
 prefix_match (struct prefix *n, struct prefix *p)
@@ -72,9 +97,7 @@ void
 prefix_copy (struct prefix *dest, struct prefix *src)
 {
   dest->family = src->family;
-#ifdef HAVE_MBGPV4
   dest->safi = src->safi;
-#endif /* HAVE_MBGPV4 */
   dest->prefixlen = src->prefixlen;
 
   if (src->family == AF_INET)

@@ -22,85 +22,149 @@
 #ifndef _ZEBRA_BGPD_H
 #define _ZEBRA_BGPD_H
 
+#include "sockunion.h"
+
+/* Declare Some BGP specific types. */
+typedef u_int16_t as_t;
+typedef u_int16_t bgp_size_t;
+
 /* BGP message header and packet size. */
 #define BGP_MARKER_SIZE		16
 #define BGP_HEADER_SIZE		19
 #define BGP_MAX_PACKET_SIZE   4096
 
-/* Declare Some BGP specific types. */
-typedef u_int16_t as_t;
-typedef u_int32_t ident_t;
-typedef u_int16_t bgp_size_t;
+/* BGP filter direction. */
+#define BGP_FILTER_IN  0
+#define BGP_FILTER_OUT 1
+#define BGP_FILTER_MAX 2
 
-/* For redistribute. */
-struct redistribute
+/* BGP filter structure. */
+struct bgp_filter
 {
-  int enable;
-  char *map_name;
-  struct route_map *map;
-};
+  /* distribute-list */
+  struct 
+  {
+    char *name;
+    struct access_list *v4;
+    struct access_list *v6;
+  } dlist[BGP_FILTER_MAX];
 
-/* BGP instance structure. bgpd can handle multiple BGP instance. */
-struct bgp 
-{
-  /* BGP instance's AS. */
-  as_t as;
+  /* prefix-list */
+  struct
+  {
+    char *name;
+    struct prefix_list *v4;
+    struct prefix_list *v6;
+  } plist[BGP_FILTER_MAX];
 
-  /* BGP identifier. */
-  ident_t ident;
+  /* filter-list */
+  struct
+  {
+    char *name;
+    struct as_list *aslist;
+  } aslist[BGP_FILTER_MAX];
 
-  /* BGP route reflector cluster ID. */
-  ident_t cluster;
-
-  /* BGP route reflector neighbor count. */
-  int reflector_cnt;
-
-  /* BGP configuration. */
-#define BGP_CONFIG_ROUTER_ID  1
-#define BGP_CONFIG_CLUSTER_ID 2
-  u_int16_t config;
-
-  /* BGP redistribute configuration. */
-  u_char redist[ZEBRA_FAMILY_MAX][ZEBRA_ROUTE_MAX];
-
-  /* BGP neighbor list. */
-  struct _list *peer;
-
-  /* Redistribute route-map. */
+  /* route-map */
   struct
   {
     char *name;
     struct route_map *map;
-  } rmap[ZEBRA_FAMILY_MAX][ZEBRA_ROUTE_MAX];
+  } map[BGP_FILTER_MAX];
+};
 
-#ifdef NEW_CODE
-/* New linked-list. */
-#include "newlist.h"
+/* Route server enabled new bgp structure.  Full IPv4/IPv6
+   unicast/multicast configuration are supported. */
+struct bgp 
+{
+  /* AS number of this BGP instance. */
+  as_t as;
 
-  /* Route server enabled new bgp structure.  Full IPv4/IPv6
-     unicast/multicast support. */
+  /* Name of this BGP instance. */
+  char *name;
+
+  /* BGP configuration. */
+#define BGP_CONFIG_ROUTER_ID   0x01
+#define BGP_CONFIG_CLUSTER_ID  0x02
+  u_int16_t config;
+
+  /* BGP identifier. */
+  struct in_addr id;
+
+  /* BGP route reflector cluster ID. */
+  struct in_addr cluster;
+
+  /* BGP route reflector neighbor count. */
+  int reflector_cnt;
 
   /* BGP peer */
-  struct newlist *peer_all;
-  struct newlist *peer_v4;
-  struct newlist *peer_v6;
+  struct newlist *peer_group;
 
-  /* Static and aggregate route configuration. */
-  struct route_table *static_v4;
-  struct route_table *aggregate_v4;
-  struct route_table *static_v6;
-  struct route_table *aggregate_v6;
+  /* BGP peer-conf. */
+  struct newlist *peer_conf;
 
-  /* Loc-RIB -- Default view.  Peer may have it's own view. */
-  struct route_table *unicast_v4;
-  struct route_table *multicast_v4;
-  struct route_table *unicast_v6;
-  struct route_table *multicast_v6;
+  /* Static route configuration.  This configuration includes both
+     unicast and multicast.  */
+  struct route_table *route[AFI_MAX];
 
-  /* Redistribute route configuration. */
-  struct redistribute redist_v4[ZEBRA_ROUTE_MAX];
-  struct redistribute redist_v6[ZEBRA_ROUTE_MAX];
-#endif /* NEW_CODE */
+  /* Aggregate address configuration.  As same as static route
+     configuration, both unicast and multicast configuration are
+     included.  */
+  struct route_table *aggregate[AFI_MAX];
+
+  /* Loc-RIB of this BGP */
+  struct route_table *rib[AFI_MAX][SAFI_MAX];
+
+  /* BGP redistribute configuration. */
+  u_char redist[AFI_MAX][ZEBRA_ROUTE_MAX];
+
+  /* BGP redistribute route-map. */
+  struct
+  {
+    char *name;
+    struct route_map *map;
+  } rmap[AFI_MAX][ZEBRA_ROUTE_MAX];
+};
+
+/* BGP peer-group support. */
+struct peer_group
+{
+  /* Name of the peer-group. */
+  char *name;
+  
+  /* Address family configuration. */
+  int afi;
+  int safi;
+
+  /* AS configuration. */
+  as_t as;
+
+  /* Peer-group client list. */
+  struct newlist *peer_conf;
+};
+
+/* BGP peer configuration. */
+struct peer_conf
+{
+  /* Pointer to BGP structure. */
+  struct bgp *bgp;
+
+  /* Pointer to peer. */
+  struct peer *peer;
+
+  /* Pointer to peer-group. */
+  struct peer_group *group;
+
+  /* Address Family Configuration. */
+  u_char afc[AFI_MAX][SAFI_MAX];
+
+  /* Prefix count. */
+  unsigned long pcount[AFI_MAX][SAFI_MAX];
+
+  /* Max prefix count. */
+  unsigned long pmax[AFI_MAX][SAFI_MAX];
+
+  /* Filter structure. */
+  struct bgp_filter filter;
 };
 
 /* Next hop self address. */
@@ -114,94 +178,123 @@ struct bgp_nexthop
 #endif /* HAVE_IPV6 */  
 };
 
+/* Store connection information. */
+struct peer_connection
+{
+  /* Peer is on the connected link. */
+  int shared;
+
+  /* Socket's remote and local address. */
+  union sockunion remote;
+  union sockunion local;
+
+  /* For next-hop-self detemination. */
+  struct interface *ifp;
+  struct in_addr v4;
+#ifdef HAVE_IPV6
+  struct in6_addr v6_global;
+  struct in6_addr v6_local;
+#endif /* HAVE_IPV6 */  
+};
+
+/* Update source configuration. */
+struct peer_source
+{
+  unsigned int ifindex;
+  char *ifname;
+  char *update_if;
+  union sockunion *update_source;
+};
+
+/* BGP Notify message format. */
+struct bgp_notify 
+{
+  u_char code;
+  u_char subcode;
+  char *data;
+  bgp_size_t length;
+};
+
 /* BGP neighbor structure. */
 struct peer
 {
-  /* This peer's parent bgp. */
-  struct bgp *bgp;		
+  /* Peer's remote AS number. */
+  as_t as;			
+
+  /* Peer's local AS number. */
+  as_t local_as;
+
+  /* Remote router ID. */
+  struct in_addr remote_id;
+
+  /* Local router ID. */
+  struct in_addr local_id;
 
   /* Packet receive and send buffer. */
   struct stream *ibuf;
   struct stream_fifo *obuf;
 
+  /* Status of the peer. */
+  int status;
+  int ostatus;
+
   /* Peer information */
-  unsigned short port;          /* Destination port for peer */
-  char *host;			/* Printable address of the peer. */
-  union sockunion *su;		/* Sockunion address of the peer. */
-  union sockunion *su_local;	/* Sockunion of local address.  */
-  union sockunion *su_remote;	/* Sockunion of remote address.  */
-  int shared_network;		/* Is this peer shared same network. */
   int fd;			/* File descriptor */
   int ttl;			/* TTL of TCP connection to the peer. */
   char *desc;			/* Description of the peer. */
-  struct bgp_nexthop nexthop;	/* Nexthop */
-
-  /* User configuration flags. */
-  u_char nexthop_self;		/* Nexthop self. */
-  u_char shutdown;		/* Shutdown flag. */
-  u_char passive;		/* Passive flag. */
-  u_char dont_capability;	/* Don't perform capability negotiation. */
-  u_char override_capability;	/* Override capability negotiation. */
-
-  u_char capability_open;	/* Capability negotiation. */
-
-  /* Peer address family configuration. */
-  u_char ipv4_unicast_conf;
-  u_char ipv4_multicast_conf;
-  u_char ipv6_unicast_conf;
-  u_char ipv6_multicast_conf;
-  u_char route_refresh_conf;
-
-  /* After capability negotiation. */
-  u_char ipv4_unicast;
-  u_char ipv4_multicast;
-  u_char ipv6_unicast;
-  u_char ipv6_multicast;
-  u_char route_refresh;
-
-#ifdef HAVE_MBGPV4
-/* Not enabled by default */
-#define TRANSLATE_UPDATE_OFF 0
-/* Default if on turns incoming ipv4 update to both unicast multicast */
-#define TRANSLATE_UPDATE_UNICAST_MULTICAST 1 
-/* Turns incoming ipv4 update into multicast only */
-#define TRANSLATE_UPDATE_MULTICAST 2
-
-  u_char translate_update;       /* Manipulate incoming updates */
-#endif /* HAVE_MBGPV4 */
+  unsigned short port;          /* Destination port for peer */
+  char *host;			/* Printable address of the peer. */
+  union sockunion su;		/* Sockunion address of the peer. */
+  time_t uptime;		/* Last Up/Down time */
+  safi_t translate_update;       
   
   unsigned int ifindex;		/* ifindex of the BGP connection. */
   char *ifname;			/* bind interface name. */
   char *update_if;
   union sockunion *update_source;
-  ZLOG *log;			/* ZLOG stream to use for this peer -
-				   NULL means use main log */
-
+  struct zlog *log;
   u_char version;		/* Peer BGP version. */
-  as_t as;			/* Peer AS number. */
-  ident_t ident;		/* Peer BGP identifier. */
-  ident_t myident;		/* My BGP identifier. */
 
-  /* Status of the peer. */
-  int status;			/* peer finite state machine status */
-  int ostatus;			/* Old peer status. */
+  union sockunion *su_local;	/* Sockunion of local address.  */
+  union sockunion *su_remote;	/* Sockunion of remote address.  */
+  int shared_network;		/* Is this peer shared same network. */
+  struct bgp_nexthop nexthop;	/* Nexthop */
 
-  /* Default attribute value for this peer. */
-#define PEER_CONFIG_WEIGHT       0x1
-#define PEER_DEFAULT_ORIGINATE   0x2
-#define PEER_CONFIG_HOLDTIME     0x4
-#define PEER_CONFIG_KEEPALIVE    0x8
-  u_int32_t config;		/* Option set flag. */
-  u_int32_t weight;		/* Default weight.  */
-  u_int32_t holdtime;		/* Holdtime configuration. */
-  u_int32_t keepalive;          /* Keepalive config */
-  int send_community;		/* Community attribute send flag. */
-  int reflector_client;		/* Route reflector client. */
-  time_t uptime;		/* Last Up/Down time */
+  /* Peer address family configuration. */
+  u_char afc[AFI_MAX][SAFI_MAX];
+  u_char afc_nego[AFI_MAX][SAFI_MAX];
 
+  /* User configuration flags. */
+  u_int16_t flags;
+#define PEER_FLAG_PASSIVE             0x0001 /* passive mode */
+#define PEER_FLAG_SHUTDOWN            0x0002 /* shutdown */
+#define PEER_FLAG_NEXTHOP_SELF        0x0004 /* next-hop-self */
+#define PEER_FLAG_SOFT_RECONFIG       0x0008 /* soft-reconfiguration */
+#define PEER_FLAG_SEND_COMMUNITY      0x0010 /* send-community */
+#define PEER_FLAG_REFLECTOR_CLIENT    0x0020 /* reflector-client */
+#define PEER_FLAG_RSERVER_CLIENT      0x0040 /* route-server-client */
+#define PEER_FLAG_DEFAULT_ORIGINATE   0x0080 /* default-originate */
+#define PEER_FLAG_DONT_CAPABILITY     0x0100 /* dont-capability */
+#define PEER_FLAG_OVERRIDE_CAPABILITY 0x0200 /* override-capability */
+#define PEER_FLAG_STRICT_CAP_MATCH    0x0400 /* strict-capability-match */
+#define PEER_FLAG_ROUTE_REFRESH       0x0800 /* route-refresh */
 
-  /* IPv4/IPv6 peer configuration. */
-  u_char family;
+  /* Peer status flags. */
+  u_int16_t sflags;
+#define PEER_STATUS_ACCEPT_PEER	      0x0001 /* accept peer */
+#define PEER_STATUS_PREFIX_OVERFLOW   0x0002 /* prefix-overflow */
+#define PEER_STATUS_CAPABILITY_OPEN   0x0004 /* capability open send */
+
+  /* Default attribute value for the peer. */
+  u_int32_t config;
+#define PEER_CONFIG_WEIGHT            0x0001 /* Default weight. */
+#define PEER_CONFIG_HOLDTIME          0x0002 /* holdtime */
+#define PEER_CONFIG_KEEPALIVE         0x0004 /* keepalive */
+#define PEER_CONFIG_CONNECT           0x0008 /* connect */
+  u_int32_t weight;
+  u_int32_t holdtime;
+  u_int32_t keepalive;
+  u_int32_t connect;
 
   /* Timer values. */
   u_int32_t v_start;
@@ -224,77 +317,32 @@ struct peer
   /* Statistics field */
   u_int32_t open_in;		/* Open message input count */
   u_int32_t open_out;		/* Open message output count */
-  u_int32_t update_in;		/* Update with nlri message input count */
-  u_int32_t update_out;		/* Update with nlri message ouput count */
-  u_int32_t withdrow_in;	/* Update with withdrow message input count */
-  u_int32_t withdrow_out;	/* Update with withdrow message output count */
+  u_int32_t update_in;		/* Update message input count */
+  u_int32_t update_out;		/* Update message ouput count */
   u_int32_t keepalive_in;	/* Keepalive input count */
   u_int32_t keepalive_out;	/* Keepalive output count */
   u_int32_t notify_in;		/* Notify input count */
   u_int32_t notify_out;		/* Notify output count */
 
-  /* For filter type slot. */
-#define BGP_FILTER_IN  0
-#define BGP_FILTER_OUT 1
-#define BGP_FILTER_MAX 2
+  /* Adj-RIBs-In.  */
+  struct route_table *adj_in[AFI_MAX][SAFI_MAX];
+  struct route_table *adj_out[AFI_MAX][SAFI_MAX];
 
-  /* Access list based filter. */
-  struct 
-  {
-    char *name;
-    struct access_list *list;
-  } distribute[BGP_FILTER_MAX];
-
-  /* Prefix list based filter. */
-  struct
-  {
-    char *name;
-    struct prefix_list *plist;
-  } plist[BGP_FILTER_MAX];
-
-  /* AS list based filter. */
-  struct
-  {
-    char *name;
-    struct as_list *filter;
-  } filter[BGP_FILTER_MAX];
-
-  /* Route map based filer. */
-  struct
-  {
-    char *name;
-    struct route_map *map;
-  } route_map[BGP_FILTER_MAX];
-
-  /* prefix_in/out will be need. */
-  unsigned int prefix_count;	/* Prefix count of this peer. */
-  unsigned int prefix_count_multicastv4;  /* Same for multicast. */
-
-  /* Prefix count. */
-  unsigned long pcount[AFI_MAX][SAFI_MAX];
-
-  /* Maximum prefix count. */
-  unsigned long pmax[AFI_MAX][SAFI_MAX];
+  /* Linked peer configuration. */
+  struct newlist *conf;
 
   /* Notify data. */
-  u_char *notify_data;
-  size_t notify_len;
-
-#ifdef NEW_CODE
-  /* Adj-RIBs-In.  */
-  struct route_table *in[AFI_MAX][SAFI_MAX];
-  struct route_table *loc[AFI_MAX][SAFI_MAX];
-  struct route_table *out[AFI_MAX][SAFI_MAX];
-
-#endif /* NEW_CODE */
+  struct bgp_notify notify;
 };
 
-/* BGP Notify message format. */
-struct bgp_notify 
+/* This structure's member directly points incoming packet data
+   stream. */
+struct bgp_nlri
 {
-  u_char err_code;
-  u_char err_subcode;
-  char *data;
+  afi_t afi;
+  safi_t safi;
+  u_char *nlri;
+  bgp_size_t length;
 };
 
 /* BGP Versions. */
@@ -303,7 +351,6 @@ struct bgp_notify
 #define BGP_VERSION_4		  4    /* bgpd supports this version. */
 #define BGP_VERSION_MP_4_DRAFT_00 40   /* bgpd supports this version. */
 #define BGP_VERSION_MP_4	  41   /* bgpd supports this version. */
-#define BGP_VERSION_5		  5    /* Not yet. */
 
 /* BGP messages. */
 #define	BGP_MSG_OPEN		1
@@ -311,6 +358,12 @@ struct bgp_notify
 #define	BGP_MSG_NOTIFY		3
 #define	BGP_MSG_KEEPALIVE	4
 #define BGP_MSG_MAX		5
+
+/* BGP message minimum size. */
+#define BGP_MSG_OPEN_MIN_SIZE        (BGP_HEADER_SIZE + 10)
+#define BGP_MSG_UPDATE_MIN_SIZE      (BGP_HEADER_SIZE + 4)
+#define BGP_MSG_NOTIFY_MIN_SIZE      (BGP_HEADER_SIZE + 2)
+#define BGP_MSG_KEEPALIVE_MIN_SIZE   (BGP_HEADER_SIZE + 0)
 
 /* BGP open option message. */
 #define BGP_OPEN_OPT_AUTH       1
@@ -339,13 +392,13 @@ struct bgp_notify
 #define BGP_ORIGIN_INCOMPLETE       2
 
 /* BGP Notify message format */
-#define BGP_NOTIFY_HEADER_ERR 1
-#define BGP_NOTIFY_OPEN_ERR   2
-#define BGP_NOTIFY_UPDATE_ERR 3
-#define BGP_NOTIFY_HOLD_ERR   4
-#define BGP_NOTIFY_FSM_ERR    5
-#define BGP_NOTIFY_CEASE      6
-#define BGP_NOTIFY_MAX	      7
+#define BGP_NOTIFY_HEADER_ERR         1
+#define BGP_NOTIFY_OPEN_ERR           2
+#define BGP_NOTIFY_UPDATE_ERR         3
+#define BGP_NOTIFY_HOLD_ERR           4
+#define BGP_NOTIFY_FSM_ERR            5
+#define BGP_NOTIFY_CEASE              6
+#define BGP_NOTIFY_MAX	              7
 
 /* BGP_NOTIFY_HEADER_ERR sub code */
 #define BGP_NOTIFY_HEADER_NOT_SYNC    1
@@ -424,27 +477,10 @@ struct bgp_notify
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 
-/* For massage lookup and check */
-#define LOOKUP(x, y) mes_lookup(x, x ## _max, y)
-#define CHECKMES(x) mes_check(x, x ## _max)
-
-/* Debug option : should be bgp_dump.h. */
-extern int dump_open;
-extern int dump_update;
-extern int dump_keepalive;
-extern int dump_notify;
-
-/* Messages */
-extern struct message bgp_status_msg[];
-extern int bgp_status_msg_max;
-
-extern char *progname;
-
-enum
-{
-  /* Debug option. */
-  DEBUG_BGP_FSM = 0x01,
-};
+/* Flag manipulation macros. */
+#define CHECK_FLAG(V,F)      ((V) & (F))
+#define SET_FLAG(V,F)        (V) = (V) | (F)
+#define UNSET_FLAG(V,F)      (V) = (V) & ~(F)
 
 /* IBGP/EBGP identifier */
 enum
@@ -454,8 +490,22 @@ enum
   BGP_PEER_INTERNAL
 };
 
-#define PACKET_SEND 1
-#define PACKET_RECV 2
+/* IPv4 only machine should not accept IPv6 address for peer's IP
+   address.  So we replace VTY command string like below. */
+#ifdef HAVE_IPV6
+#define NEIGHBOR_CMD       "neighbor (A.B.C.D|X:X::X:X) "
+#define NO_NEIGHBOR_CMD    "no neighbor (A.B.C.D|X:X::X:X) "
+#define NEIGHBOR_ADDR_STR  "IP address\nIPv6address\n"
+#else
+#define NEIGHBOR_CMD       "neighbor A.B.C.D "
+#define NO_NEIGHBOR_CMD    "no neighbor A.B.C.D "
+#define NEIGHBOR_ADDR_STR  "IP address\n"
+#endif /* HAVE_IPV6 */
+
+/* Description of the command. */
+#define ROUTER_STR  "Enable a routing process\n"
+#define AS_STR      "AS number\n"
+#define MBGP_STR    "MBGP information\n"
 
 /* Default max TTL. */
 #define TTL_MAX 255
@@ -466,7 +516,7 @@ void zebra_init ();
 void bgp_terminate (void);
 void bgp_reset (void);
 void bgp_route_map_init ();
-int bgp_peer_sort (struct peer *peer);
+int peer_sort (struct peer *peer);
 void bgp_filter_init ();
 void bgp_zclient_start ();
 void bgp_zclient_reset ();
@@ -485,11 +535,28 @@ void bgp_clear(struct peer *peer, int error);
 void peer_delete_all ();
 void peer_delete (struct peer *peer);
 void bgp_open_recv (struct peer *peer, u_int16_t size);
-void bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify);
+void bgp_notify_print (struct peer *, struct bgp_notify *, char *);
 
 int bgp_nexthop_set (union sockunion *, union sockunion *, 
-		 struct bgp_nexthop *, struct peer *);
+		     struct bgp_nexthop *, struct peer *);
+
+struct bgp *bgp_get_default ();
+struct bgp *bgp_lookup_by_name (char *);
+struct peer *peer_lookup_with_open (union sockunion *, as_t, struct in_addr *);
+struct peer *peer_create_accept ();
+
+extern struct message bgp_status_msg[];
+extern int bgp_status_msg_max;
+
+extern char *progname;
 
 extern struct thread_master *master;
+
+/* All BGP instance. */
+extern struct newlist *bgp_list;
+
+/* All peer instance.  This linked list is rarely used.  Usually
+   bgp_list is used to walk down peer's list.  */
+extern struct newlist *peer_list;
 
 #endif /* _ZEBRA_BGPD_H */

@@ -38,7 +38,8 @@
 /* RIP metric infinity value.*/
 #define RIP_METRIC_INFINITY             16
 
-/* Normal RIP packet max size. */
+/* Normal RIP packet min and max size. */
+#define RIP_PACKET_MINSIZ                4
 #define RIP_PACKET_MAXSIZ              512
 
 /* Max count of routing table entry in one rip packet. */
@@ -287,8 +288,6 @@ enum rip_event
 	  thread_cancel (X); \
 	  (X) = NULL; \
 	}
-
-#define LOOKUP(X, Y)  (X)[(Y)].str
 
 /* Prototypes. */
 void rip_init ();

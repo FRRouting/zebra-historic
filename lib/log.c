@@ -1,6 +1,5 @@
-/*
- * Logging of zebra
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+/* Logging of zebra
+ * Copyright (C) 1997, 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -24,15 +23,23 @@
 
 #include "log.h"
 #include "memory.h"
+#include "command.h"
 
-/* If this mode is on then, log is output. */
-int log_mode = 0;
+struct zlog *zlog_default = NULL;
 
-/* Log filename. */
-char *log_filename;
-
-/* File pointer of logfile. */
-FILE *logfp;
+const char *zlog_proto_names[] = 
+{
+  "NONE",
+  "DEFAULT",
+  "ZEBRA",
+  "RIP",
+  "BGP",
+  "OSPF",
+  "RIPNG",
+  "OSPF6",
+  "MASC",
+  NULL,
+};
 
 /* For time string format. */
 #define TIME_BUF 27
@@ -57,323 +64,173 @@ time_print (FILE *fp)
   fprintf (fp, "%s ", buf);
 }
 
-/* Initialization of logfp. */
+/* va_list version of zlog. */
 void
-log_init ()
+vzlog (struct zlog *zl, int priority, const char *format, va_list args)
 {
-  logfp = stdout;
-}
-
-/* Flush output buffer of log file pointer. */
-void
-log_flush ()
-{
-  fflush (logfp);
-}
-
-/* Logging main routine. */
-void
-old_log (char *format, ...)
-{
-  va_list args;
-
-  /* Current time print. */
-  time_print (logfp);
-
-  /* Print varargs. */
-  va_start (args, format);
-  vfprintf (logfp, format, args);
-  va_end (args);
-
-  /* Flush output. */
-  log_flush (logfp);
-}
-
-/* This function is same with log function without not printing time
-   string. */
-void
-old_log2 (char *format, ...)
-{
-  va_list args;
-
-  /* Print varargs. */
-  va_start (args, format);
-  vfprintf (logfp, format, args);
-  va_end (args);
-
-  /* Flush output. */
-  log_flush (logfp);
-}
-
-/* Print warning. */
-void
-old_log_warn (char *format, ...)
-{
-  va_list args;
-
-  /* Current time print. */
-  time_print (logfp);
-
-  /* Print varargs. */
-  va_start (args, format);
-  vfprintf (logfp, format, args);
-  va_end (args);
-
-  /* Flush output. */
-  log_flush (logfp);
-}
-
-/* Open logfile and return logfilename. */
-char *
-log_open (char *filename)
-{
-  FILE *fp;
-
-  /* Open new file. */
-  fp = fopen (filename, "a");
-  if (fp == NULL)
-    return NULL;
-
-  /* Close old opened file. */
-  if (logfp != stdout)
-    log_close ();
-    
-  /* Set new file point to logfp. */
-  logfp = fp;
-
-  return filename;
-}
-
-/* Close logfile. */
-void
-log_close ()
-{
-  if (logfp == stdout)
-    return;
-
-  fflush (logfp);
-  fclose (logfp);
-}
-
-const char *zlog_proto_names[] = {
-  "NONE",
-  "DEFAULT",
-  "ZEBRA",
-  "RIP",
-  "BGP",
-  "OSPF",
-  "RIPNG",
-  "OSPF6",
-  NULL,
-};
-
-ZLOG *zlog_default = NULL;
-
-/* Wrapper routines until the real new log system works. */
-void
-zlog(ZLOG *zl, int priority, const char *format, ...)
-{
-  va_list args;
-
-  va_start(args, format);
-
+  /* If zlog is not specified, use default one. */
   if (zl == NULL)
     zl = zlog_default;
-  
+
+  /* When zlog_default is also NULL, use stderr for logging. */
   if (zl == NULL)
     {
-      time_print (stdout);
-      vfprintf (stdout, format, args);
-      fprintf (stdout, "\n");
-      fflush (stdout);
+      time_print (stderr);
+      fprintf (stderr, "%s: ", zlog_proto_names[zl->protocol]);
+      vfprintf (stderr, format, args);
+      fprintf (stderr, "\n");
+      fflush (stderr);
+
+      /* In this case we return at here. */
       return;
     }
 
+  /* Syslog output */
   if (zl->flags & ZLOG_SYSLOG)
-    vsyslog(priority, format, args);
+    vsyslog (priority, format, args);
 
-  if (zl->flags & ZLOG_STDOUT)
-    {
-      time_print (stdout);
-      vfprintf (stdout, format, args);
-      fprintf (stdout, "\n");
-      fflush (stdout);
-    }
-
+  /* File output. */
   if (zl->flags & ZLOG_FILE)
     {
       time_print (zl->fp);
+      fprintf (zl->fp, "%s: ", zlog_proto_names[zl->protocol]);
       vfprintf (zl->fp, format, args);
       fprintf (zl->fp, "\n");
       fflush (zl->fp);
     }
+
+  /* stdout output. */
+  if (zl->flags & ZLOG_STDOUT)
+    {
+      time_print (stdout);
+      fprintf (stdout, "%s: ", zlog_proto_names[zl->protocol]);
+      vfprintf (stdout, format, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+    }
+
+  /* stderr output. */
+  if (zl->flags & ZLOG_STDERR)
+    {
+      time_print (stderr);
+      fprintf (stderr, "%s: ", zlog_proto_names[zl->protocol]);
+      vfprintf (stderr, format, args);
+      fprintf (stderr, "\n");
+      fflush (stderr);
+    }
+
+  /* Terminal monitor. */
+  vty_log (zlog_proto_names[zl->protocol], format, args);
 }
 
 void
-zlog_info (const char *format, ...)
+zlog (struct zlog *zl, int priority, const char *format, ...)
 {
   va_list args;
-  int priority;
-  ZLOG *zl;
-
   va_start(args, format);
+  vzlog (zl, priority, format, args);
+  va_end (args);
+}
 
-  zl = zlog_default;
-  priority = LOG_INFO;
-  
-  if (zl == NULL)
-    {
-      time_print (stdout);
-      vfprintf (stdout, format, args);
-      fprintf (stdout, "\n");
-      fflush (stdout);
-      return;
-    }
-
-  if (zl->flags & ZLOG_SYSLOG)
-    vsyslog(priority, format, args);
-
-  if (zl->flags & ZLOG_STDOUT)
-    {
-      time_print (stdout);
-      vfprintf (stdout, format, args);
-      fprintf (stdout, "\n");
-      fflush (stdout);
-    }
-
-  if (zl->flags & ZLOG_FILE)
-    {
-      time_print (zl->fp);
-      vfprintf (zl->fp, format, args);
-      fprintf (zl->fp, "\n");
-      fflush (zl->fp);
-    }
+void
+zlog_err (const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  vzlog (NULL, LOG_ERR, format, args);
+  va_end (args);
 }
 
 void
 zlog_warn (const char *format, ...)
 {
   va_list args;
-  int priority;
-  ZLOG *zl;
-
   va_start(args, format);
-
-  zl = zlog_default;
-  priority = LOG_WARNING;
-  
-  if (zl->flags & ZLOG_SYSLOG)
-    vsyslog(priority, format, args);
-
-  if (zl->flags & ZLOG_STDOUT)
-    {
-      time_print (stdout);
-      vfprintf (stdout, format, args);
-      fprintf (stdout, "\n");
-      fflush (stdout);
-    }
-
-  if (zl->flags & ZLOG_FILE)
-    {
-      time_print (zl->fp);
-      vfprintf (zl->fp, format, args);
-      fprintf (zl->fp, "\n");
-      fflush (zl->fp);
-    }
+  vzlog (NULL, LOG_WARNING, format, args);
+  va_end (args);
 }
 
 void
-zvlog(ZLOG *zl, int priority, const char *format, va_list args)
-{
-  char zvformat[1024];
-
-  if (zl == NULL)
-    zl = zlog_default;
-  
-  snprintf (zvformat, sizeof (zvformat), "%s: %s",
-            zlog_proto_names[zl->protocol], format);
-
-  if (zl->flags & ZLOG_SYSLOG)
-    vsyslog(priority, zvformat, args);
-
-  if (zl->flags & ZLOG_STDOUT)
-    {
-      time_print (stdout);
-      vfprintf (stdout, zvformat, args);
-      fprintf (stdout, "\n");
-      fflush (stdout);
-    }
-
-  if (zl->flags & ZLOG_FILE)
-    {
-      time_print (zl->fp);
-      vfprintf (zl->fp, zvformat, args);
-      fprintf (zl->fp, "\n");
-      fflush (zl->fp);
-    }
-}
-
-void
-zvlog_err (const char *format, ...)
+zlog_info (const char *format, ...)
 {
   va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_ERR, format, args);
-  return;
+  va_start(args, format);
+  vzlog (NULL, LOG_INFO, format, args);
+  va_end (args);
 }
 
 void
-zvlog_warn (const char *format, ...)
+zlog_notice (const char *format, ...)
 {
   va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_WARNING, format, args);
-  return;
+  va_start(args, format);
+  vzlog (NULL, LOG_NOTICE, format, args);
+  va_end (args);
 }
 
 void
-zvlog_notice (const char *format, ...)
+zlog_debug (const char *format, ...)
 {
   va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_NOTICE, format, args);
-  return;
+  va_start(args, format);
+  vzlog (NULL, LOG_DEBUG, format, args);
+  va_end (args);
 }
 
 void
-zvlog_info (const char *format, ...)
+plog_err (struct zlog *zl, const char *format, ...)
 {
   va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_INFO, format, args);
-  return;
+  va_start(args, format);
+  vzlog (zl, LOG_ERR, format, args);
+  va_end (args);
 }
 
 void
-zvlog_debug (const char *format, ...)
+plog_warn (struct zlog *zl, const char *format, ...)
 {
   va_list args;
-
-  va_start (args, format);
-  zvlog (NULL, LOG_DEBUG, format, args);
-  return;
+  va_start(args, format);
+  vzlog (zl, LOG_WARNING, format, args);
+  va_end (args);
 }
 
-/*
- * open log stream
- */
-ZLOG *
-openzlog(const char *progname, int flags, zlog_proto_t protocol,
-	 int syslog_flags, int syslog_facility)
+void
+plog_info (struct zlog *zl, const char *format, ...)
 {
-  ZLOG *zl;
+  va_list args;
+  va_start(args, format);
+  vzlog (zl, LOG_INFO, format, args);
+  va_end (args);
+}
 
-  zl = XMALLOC(MTYPE_ZLOG, sizeof (ZLOG));
-  memset (zl, 0, sizeof (ZLOG));
+void
+plog_notice (struct zlog *zl, const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  vzlog (zl, LOG_NOTICE, format, args);
+  va_end (args);
+}
+
+void
+plog_debug (struct zlog *zl, const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  vzlog (zl, LOG_DEBUG, format, args);
+  va_end (args);
+}
+
+/* Open log stream */
+struct zlog *
+openzlog (const char *progname, int flags, zlog_proto_t protocol,
+	  int syslog_flags, int syslog_facility)
+{
+  struct zlog *zl;
+
+  zl = XMALLOC(MTYPE_ZLOG, sizeof (struct zlog));
+  memset (zl, 0, sizeof (struct zlog));
 
   zl->ident = progname;
   zl->flags = flags;
@@ -386,17 +243,17 @@ openzlog(const char *progname, int flags, zlog_proto_t protocol,
 }
 
 void
-closezlog(ZLOG *zl)
+closezlog (struct zlog *zl)
 {
   closelog();
   fclose (zl->fp);
 
-  XFREE(MTYPE_ZLOG, zl);
+  XFREE (MTYPE_ZLOG, zl);
 }
 
 /* Called from command.c. */
 void
-zlog_set_flag (ZLOG *zl, int flags)
+zlog_set_flag (struct zlog *zl, int flags)
 {
   if (zl == NULL)
     zl = zlog_default;
@@ -405,7 +262,7 @@ zlog_set_flag (ZLOG *zl, int flags)
 }
 
 void
-zlog_reset_flag (ZLOG *zl, int flags)
+zlog_reset_flag (struct zlog *zl, int flags)
 {
   if (zl == NULL)
     zl = zlog_default;
@@ -414,7 +271,7 @@ zlog_reset_flag (ZLOG *zl, int flags)
 }
 
 int
-zlog_set_file (ZLOG *zl, int flags, char *filename)
+zlog_set_file (struct zlog *zl, int flags, char *filename)
 {
   FILE *fp;
 
@@ -440,7 +297,7 @@ zlog_set_file (ZLOG *zl, int flags, char *filename)
 
 /* Reset opend file. */
 int
-zlog_reset_file (ZLOG *zl)
+zlog_reset_file (struct zlog *zl)
 {
   if (zl == NULL)
     zl = zlog_default;
@@ -460,7 +317,7 @@ zlog_reset_file (ZLOG *zl)
 
 /* Reopen log file. */
 int
-zlog_rotate (ZLOG *zl)
+zlog_rotate (struct zlog *zl)
 {
   FILE *fp;
 
@@ -481,7 +338,34 @@ zlog_rotate (ZLOG *zl)
 
   return 1;
 }
+
+static char *zlog_cwd = NULL;
 
+void
+zlog_save_cwd ()
+{
+  char *cwd;
+
+  cwd = getcwd (NULL, MAXPATHLEN);
+
+  zlog_cwd = XMALLOC (MTYPE_TMP, strlen (cwd) + 1);
+  strcpy (zlog_cwd, cwd);
+}
+
+char *
+zlog_get_cwd ()
+{
+  return zlog_cwd;
+}
+
+void
+zlog_free_cwd ()
+{
+  if (zlog_cwd)
+    XFREE (MTYPE_TMP, zlog_cwd);
+}
+
+/* Message lookup function. */
 char *
 lookup (struct message *mes, int key)
 {
@@ -492,4 +376,17 @@ lookup (struct message *mes, int key)
       return pnt->str;
 
   return "";
+}
+
+/* Very old hacky version of message lookup function.  Still partly
+   used in bgpd and ospfd. */
+char *
+mes_lookup (struct message *meslist, int max, int index)
+{
+  if (index < 0 || index >= max) 
+    {
+      zlog_err ("message index out of bound: %d", max);
+      return NULL;
+    }
+  return meslist[index].str;
 }

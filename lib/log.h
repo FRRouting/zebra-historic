@@ -1,6 +1,5 @@
-/*
- * Zebra logging funcions.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+/* Zebra logging funcions.
+ * Copyright (C) 1997, 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -25,19 +24,11 @@
 
 #include <syslog.h>
 
-/* Prototypes. */
-void log_init ();
-void log_flush ();
-
-void old_log (char *format, ...);
-void old_log2 (char *format, ...);
-void log_warn (char *format, ...);
-
-char *log_open (char *);
-void log_close ();
-
-/* Logging flag. */
-extern int log_mode;
+#define ZLOG_NOLOG              0x00
+#define ZLOG_FILE		0x01
+#define ZLOG_SYSLOG		0x02
+#define ZLOG_STDOUT             0x04
+#define ZLOG_STDERR             0x08
 
 typedef enum 
 {
@@ -49,20 +40,11 @@ typedef enum
   ZLOG_OSPF,
   ZLOG_RIPNG,  
   ZLOG_OSPF6,
+  ZLOG_MASC
 } zlog_proto_t;
 
-#define ZLOG_NOLOG              0
-#define ZLOG_FILE		1
-#define ZLOG_SYSLOG		2
-#define ZLOG_STDOUT             4
-
-#define ZLOG_PATH		"/var/log"
-
-typedef struct _zlog 
+struct zlog 
 {
-  struct _zlog *next;
-  struct _zlog *last;
-
   const char *ident;
   zlog_proto_t protocol;
   int flags;
@@ -74,46 +56,56 @@ typedef struct _zlog
   int maskpri;		/* as per syslog setlogmask */
   int priority;		/* as per syslog priority */
   int facility;		/* as per syslog facility */
-} ZLOG;
+};
 
-/* Small macro to determine newline is newline only or linefeed needed. */
-#define LOG_NEWLINE  vty->type == VTY_FILE ? "\n" : "\r\n"
-
-/* Messages. */
+/* Message structure. */
 struct message
 {
   int key;
   char *str;
 };
 
-extern const char *zlog_proto_names[];
+/* Default logging strucutre. */
+extern struct zlog *zlog_default;
 
-/* where to log if stream is NULL */
-extern ZLOG *zlog_default;
+/* Open zlog function */
+struct zlog *openzlog (const char *, int, zlog_proto_t, int, int);
 
+/* Close zlog function. */
+void closezlog (struct zlog *zl);
 
-ZLOG *openzlog(const char *progname, int flags, zlog_proto_t protocol,
-	       int syslog_flags, int syslog_facility);
+/* Generic function for zlog. */
+void zlog (struct zlog *zl, int priority, const char *format, ...);
 
-void zlog(ZLOG *zl, int priority, const char *format, ...);
-void zlog_info(const char *format, ...);
-void zlog_warn(const char *format, ...);
+/* Handy zlog functions. */
+void zlog_err (const char *format, ...);
+void zlog_warn (const char *format, ...);
+void zlog_info (const char *format, ...);
+void zlog_notice (const char *format, ...);
+void zlog_debug (const char *format, ...);
 
-void zvlog(ZLOG *zl, int priority, const char *format, va_list args);
+/* For bgpd's peer oriented log. */
+void plog_err (struct zlog *, const char *format, ...);
+void plog_warn (struct zlog *, const char *format, ...);
+void plog_info (struct zlog *, const char *format, ...);
+void plog_notice (struct zlog *, const char *format, ...);
+void plog_debug (struct zlog *, const char *format, ...);
 
-void zlog_set_flag (ZLOG *zl, int flags);
-void zlog_reset_flag (ZLOG *zl, int flags);
+/* Set zlog flags. */
+void zlog_set_flag (struct zlog *zl, int flags);
+void zlog_reset_flag (struct zlog *zl, int flags);
 
-int zlog_set_file (ZLOG *zl, int flags, char *filename);
-int zlog_reset_file (ZLOG *zl);
+/* Set zlog filename. */
+int zlog_set_file (struct zlog *zl, int flags, char *filename);
+int zlog_reset_file (struct zlog *zl);
 
-void zvlog_err (const char *format, ...);
-void zvlog_warn (const char *format, ...);
-void zvlog_notice (const char *format, ...);
-void zvlog_info (const char *format, ...);
-void zvlog_debug (const char *format, ...);
+/* Rotate log. */
 int zlog_rotate ();
 
+/* For hackey massage lookup and check */
+#define LOOKUP(x, y) mes_lookup(x, x ## _max, y)
+
 char *lookup (struct message *, int);
+char *mes_lookup (struct message *meslist, int max, int index);
 
 #endif /* _ZEBRA_LOG_H */

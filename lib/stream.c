@@ -250,9 +250,25 @@ stream_putl_at (struct stream *s, unsigned long putp, u_int32_t l)
 int
 stream_put_ipv4 (struct stream *s, u_int32_t l)
 {
-  if ((s->size - s->putp) < 4) return 0;
+  if ((s->size - s->putp) < 4)
+    return 0;
 
   memcpy (s->data + s->putp, &l, 4);
+  s->putp += 4;
+
+  if (s->putp > s->endp)
+    s->endp = s->putp;
+  return 4;
+}
+
+/* Put long word to the stream. */
+int
+stream_put_in_addr (struct stream *s, struct in_addr *addr)
+{
+  if ((s->size - s->putp) < 4)
+    return 0;
+
+  memcpy (s->data + s->putp, addr, 4);
   s->putp += 4;
 
   if (s->putp > s->endp)

@@ -176,7 +176,7 @@ main (int argc, char **argv)
 	  daemon_mode = 1;
 	  break;
 	case 'l':
-	  log_mode = 1;
+	  /* log_mode = 1; */
 	  break;
 	case 'f':
 	  config_file = optarg;

@@ -22,9 +22,16 @@
 
 #include <zebra.h>
 
-#include "dropline.h"
-
 char proc_net_snmp[] = "/proc/net/snmp";
+
+static void
+dropline (FILE *fp)
+{
+  int c;
+
+  while ((c = getc (fp)) != '\n')
+    ;
+}
 
 int
 ipforward ()

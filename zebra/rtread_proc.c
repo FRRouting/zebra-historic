@@ -50,7 +50,6 @@ proc_route_read ()
   char buf[RT_BUFSIZ];
   char iface[INTERFACE_NAMSIZ], dest[9], gate[9], mask[9];
   int flags, refcnt, use, metric, mtu, window, rtt;
-  void dropline (FILE *);
 
   /* Open /proc filesystem */
   fp = fopen (_PATH_PROCNET_ROUTE, "r");
@@ -61,7 +60,7 @@ proc_route_read ()
     }
   
   /* Drop first label line. */
-  dropline (fp);
+  fgets (buf, RT_BUFSIZ, fp);
 
   while (fgets (buf, RT_BUFSIZ, fp) != NULL)
     {
@@ -116,7 +115,6 @@ proc_ipv6_route_read ()
     }
   
   /* There is no title line, so we don't drop first line.  */
-  /* dropline (fp); */
   while (fgets (buf, RT_BUFSIZ, fp) != NULL)
     {
       int n;

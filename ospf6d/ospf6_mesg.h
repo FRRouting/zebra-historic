@@ -42,63 +42,41 @@
 #define MSGT_LSACK                0x5  /* Flooding acknowledgment */
 #define MSGT_MAX                  0x6
 
-/* OSPF packet header */
-struct ospf6_hdr
-{
-  vers_t         version;
-  u_char         type;
-  unsigned short len;
-  rtr_id_t       router_id;
-  area_id_t      area_id;
-  unsigned short cksum;
-  u_char         instance_id;
-  u_char         reserved;
-};
+/* OSPFv3 packet header */
 struct ospf6_header
 {
-  unsigned char  version;
-  unsigned char  type;
-  unsigned short len;
-  unsigned long  router_id;
-  unsigned long  area_id;
-  unsigned short cksum;
-  unsigned char  instance_id;
-  unsigned char  reserved;
+  u_char    version;
+  u_char    type;
+  u_int16_t len;
+  u_int32_t router_id;
+  u_int32_t area_id;
+  u_int16_t cksum;
+  u_char    instance_id;
+  u_char    reserved;
 };
 
 /* HELLO */
 #define MAXLISTEDNBR     64
-struct hello
-{
-  ifid_t         interface_id;
-  rtr_pri_t      rtr_pri;
-  u_char         options[3];
-  hello_int_t    hello_interval;
-  rtr_dead_int_t router_dead_interval;
-  rtr_id_t       dr;
-  rtr_id_t       bdr;
-  /* Followed by Router-IDs */
-};
 struct ospf6_hello
 {
-  unsigned long  interface_id;
-  unsigned char  rtr_pri;
-  u_char         options[3];
-  unsigned short hello_interval;
-  unsigned short router_dead_interval;
-  unsigned long  dr;
-  unsigned long  bdr;
+  u_int32_t interface_id;
+  u_char    rtr_pri;
+  u_char    options[3];
+  u_int16_t hello_interval;
+  u_int16_t router_dead_interval;
+  u_int32_t dr;
+  u_int32_t bdr;
 };
 
 /* new Database Description (name changed) */
 struct ospf6_dbdesc
 {
-  unsigned char  mbz1;
-  unsigned char  options[3];
-  unsigned short ifmtu;
-  unsigned char  mbz2;
-  unsigned char  bits;
-  unsigned long  seqnum;
+  u_char    mbz1;
+  u_char    options[3];
+  u_int16_t ifmtu;
+  u_char    mbz2;
+  u_char    bits;
+  u_int32_t seqnum;
   /* Followed by LSAs */
 };
 #define DEFAULT_INTERFACE_MTU 1500
@@ -125,30 +103,18 @@ struct ospf6_dbdesc
 #define DDBIT_CLR_INITIAL(x) ((x) |= ~(1 << 2))
 
 /* Link State Request */
-struct linkstate_request
-{
-  unsigned short lsreq_age_zero;     /* MBZ */
-  unsigned short lsreq_type;         /* LS type */
-  unsigned long  lsreq_id;           /* Link State ID */
-  unsigned long  lsreq_advrtr;       /* Advertising Router */
-};
 struct ospf6_lsreq
 {
-  unsigned short lsreq_age_zero;     /* MBZ */
-  unsigned short lsreq_type;         /* LS type */
-  unsigned long  lsreq_id;           /* Link State ID */
-  unsigned long  lsreq_advrtr;       /* Advertising Router */
+  u_int16_t lsreq_age_zero;     /* MBZ */
+  u_int16_t lsreq_type;         /* LS type */
+  u_int32_t lsreq_id;           /* Link State ID */
+  u_int32_t lsreq_advrtr;       /* Advertising Router */
 };
 
 /* Link State Update */
-struct linkstate_update
-{
-  unsigned long  lsupdate_num;
-  /* Followed by LSAs */
-};
 struct ospf6_lsupdate
 {
-  unsigned long lsupdate_num;
+  u_int32_t lsupdate_num;
 };
 
 /* Link State Acknowledgement will include only LSA header.*/

@@ -31,9 +31,11 @@
 #include "ioctl.h"
 #include "connected.h"
 #include "log.h"
+#include "zclient.h"
 
 #include "zebra/interface.h"
 #include "zebra/rtadv.h"
+#include "zebra/zserv.h"
 
 /* Called when new interface is added. */
 int
@@ -83,6 +85,20 @@ if_zebra_delete_hook (struct interface *ifp)
   return 0;
 }
 
+extern list client_list;
+
+void
+zebra_interface_up_update (struct interface *ifp)
+{
+  listnode node;
+  struct zebra_client *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    if ((client = getdata (node)) != NULL)
+      zebra_interface_up (client->fd, ifp);
+}
+
+
 void
 if_up (struct interface *ifp)
 {
@@ -93,7 +109,8 @@ if_up (struct interface *ifp)
 
   zlog_info ("Interface %s is up", ifp->name);
 
-  /* Notify to protocol daemons. */
+  /* Notify the protocol daemons. */
+  zebra_interface_up_update (ifp);
 
   /* Install connected routes to the kernel. */
   if (ifp->connected)
@@ -117,6 +134,19 @@ if_up (struct interface *ifp)
   ;
 }
 
+
+void
+zebra_interface_down_update (struct interface *ifp)
+{
+  listnode node;
+  struct zebra_client *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    if ((client = getdata (node)) != NULL)
+      zebra_interface_down (client->fd, ifp);
+}
+
+
 /* Interface goes down.  We have to manage different behavior of based
    OS. */
 void
@@ -128,6 +158,10 @@ if_down (struct interface *ifp)
   struct prefix *p;
 
   zlog_info ("Interface %s is down", ifp->name);
+
+  /* Notify the protocol daemons. */
+  zebra_interface_down_update (ifp);
+
 
   /* Delete connected routes from the kernel. */
   if (ifp->connected)
@@ -362,7 +396,7 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 	     VTY_NEWLINE);
   if (ifp->ifindex <= 0)
     {
-      vty_out(vty, "  index %d pseudo interface%s", ifp->ifindex);
+      vty_out(vty, "  index %d pseudo interface%s", ifp->ifindex, VTY_NEWLINE);
       return;
     }
 
@@ -589,6 +623,7 @@ DEFUN (shutdown_if,
   if_get_flags (ifp);
   if_data = ifp->info;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_ON;
+  if_down (ifp);
 
   return CMD_SUCCESS;
 }
@@ -613,6 +648,7 @@ DEFUN (no_shutdown_if,
   if_get_flags (ifp);
   if_data = ifp->info;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_OFF;
+  if (if_is_up (ifp)) if_up (ifp);
 
   return CMD_SUCCESS;
 }
@@ -636,13 +672,16 @@ DEFUN (ip_address, ip_address_cmd,
       return CMD_WARNING;
     }
 
-  /* Set interface's flag. */
+  /* Set interface's flag.  Ignore result for Linux's interface
+     alias which can't up. */
   ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+#if 0
   if (ret < 0)
     {
       vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
+#endif /* 0 */
   if_get_flags (ifp);
 
   ret = if_set_prefix (ifp, (struct prefix_ipv4 *) &p);
@@ -728,11 +767,13 @@ DEFUN (ipv6_address, ipv6_address_cmd,
 
   /* Set interface's flag. */
   ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
+#if 0
   if (ret < 0)
     {
       vty_out (vty, "Can't up interface%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
+#endif /* 0 */
   if_get_flags (ifp);
 
   /* Make sure mask is applied and set type to static route*/

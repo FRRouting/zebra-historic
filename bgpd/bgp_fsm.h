@@ -27,61 +27,64 @@
 /* Macro for BGP read add */
 #define BGP_READ_ON(T,F,V) \
 do { \
-      if (!(T)) \
-        (T) = thread_add_read (master, (F), peer, (V)); \
+  if (!(T)) \
+    (T) = thread_add_read (master, (F), peer, (V)); \
 } while (0)
 
 /* Macro for BGP read off. */
 #define BGP_READ_OFF(X) \
 do { \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	} \
+  if (X) \
+    { \
+      thread_cancel (X); \
+      (X) = NULL; \
+    } \
 } while (0)
 
 /* Macro for BGP write add */
 #define BGP_WRITE_ON(T,F,V) \
-do \
-      if (!(T)) \
-        (T) = thread_add_write (master, (F), peer, (V)); \
-while (0)
+do { \
+  if (!(T)) \
+    (T) = thread_add_write (master, (F), peer, (V)); \
+} while (0)
 
 /* Macro for BGP write turn off. */
 #define BGP_WRITE_OFF(X) \
 do { \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	} \
+  if (X) \
+    { \
+      thread_cancel (X); \
+      (X) = NULL; \
+    } \
 } while (0)
 
 /* Macro for timer turn on. */
 #define BGP_TIMER_ON(T,F,V) \
 do { \
-      if (!(T)) \
-        (T) = thread_add_timer (master, (F), peer, (V)); \
+  if (!(T)) \
+    (T) = thread_add_timer (master, (F), peer, (V)); \
 } while (0)
 
 /* Macro for timer turn off. */
 #define BGP_TIMER_OFF(X) \
 do { \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	} \
+  if (X) \
+    { \
+      thread_cancel (X); \
+      (X) = NULL; \
+    } \
 } while (0)
 
 #define BGP_EVENT_ADD(P,E) \
-      thread_add_event (master, bgp_event, (P), (E))
+    thread_add_event (master, bgp_event, (P), (E))
+
+#define BGP_EVENT_DELETE(P) \
+    thread_cancel_event (master, (P))
 
 /* Prototypes. */
 int bgp_event (struct thread *);
 void bgp_timer_set (struct peer *);
-void bgp_stop (struct peer *peer);
+int bgp_stop (struct peer *peer);
 void fsm_change_status (struct peer *peer, int status);
 
 #endif /* _ZEBRA_BGP_FSM_H */

@@ -470,6 +470,10 @@ access_list_empty (struct access_list *access)
 void
 access_list_filter_delete (struct access_list *access, struct filter *filter)
 {
+  struct access_master *master;
+
+  master = access->master;
+
   if (filter->next)
     filter->next->prev = filter->prev;
   else
@@ -487,8 +491,8 @@ access_list_filter_delete (struct access_list *access, struct filter *filter)
     access_list_delete (access);
 
   /* Run hook function. */
-  if (access->master->delete_hook)
-    (*access->master->delete_hook) ();
+  if (master->delete_hook)
+    (*master->delete_hook) ();
 }
 
 /*

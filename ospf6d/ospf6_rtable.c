@@ -22,6 +22,32 @@
 
 #include "ospf6d.h"
 
+#include "if.h"
+#include "table.h"
+#include "vty.h"
+
+#include "ospf6_rtable.h"
+
+char *dtype_string[] =
+{
+  "None",
+  "Prefix",
+  "ASBR",
+  "IntraRouter",
+  "IntraLink",
+  NULL
+};
+
+char *ptype_string[] =
+{
+  "Unknown",
+  "IntraArea",
+  "InterArea",
+  "T1External",
+  "T2External",
+  NULL
+};
+
 static struct ospf6_nexthop *
 nexthop_new ()
 {
@@ -29,7 +55,7 @@ nexthop_new ()
   p = XMALLOC (MTYPE_OSPF6_ROUTE, sizeof (struct ospf6_nexthop));
   if (!p)
     {
-      zvlog_warn ("can't alloc for nexthop");
+      zlog_warn ("can't alloc for nexthop");
       return NULL;
     }
   return p;
@@ -244,11 +270,13 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
   return;
 }
 
-char *nexthop_str (struct ospf6_nexthop *nh, char *buf, size_t bufsize)
+char *
+nexthop_str (struct ospf6_nexthop *nh, char *buf, size_t bufsize)
 {
   struct interface *ifp;
   char *ifname, ipaddr[64], advrtr[24];
 
+  memset (advrtr, 0, sizeof(advrtr));
   ifp = if_lookup_by_index (nh->ifindex);
   if (!ifp)
     ifname = "???";
@@ -260,8 +288,13 @@ char *nexthop_str (struct ospf6_nexthop *nh, char *buf, size_t bufsize)
   else
     inet_ntop (AF_INET6, &nh->ipaddr, ipaddr, sizeof (ipaddr));
   if (nh->advrtr)
-    inet_ntop (AF_INET, &nh->advrtr, advrtr, sizeof (advrtr));
-  snprintf (buf, bufsize, "%s %s %s", ipaddr, ifname, advrtr);
+    {
+      inet_ntop (AF_INET, &nh->advrtr, advrtr, sizeof (advrtr));
+      snprintf (buf, bufsize, "%s %s %s", ipaddr, ifname, advrtr);
+    }
+  else
+      snprintf (buf, bufsize, "%s %s", ipaddr, ifname);
+     
   return buf;
 }
 
@@ -353,7 +386,6 @@ ospf6_route_add (struct prefix_ipv6 *dst,
   struct ospf6_route_node_info *info_new, *info_current;
   struct ospf6_nexthop *nh;
   listnode n;
-  char buf[128];
 
   info_new = (struct ospf6_route_node_info *) NULL;
   info_current = (struct ospf6_route_node_info *) NULL;
@@ -385,8 +417,6 @@ ospf6_route_add (struct prefix_ipv6 *dst,
     {
       /* if not installed, simply set info */
       node->info = info_new;
-      o6log.rtable ("route_add: %s",
-                    ospf6_route_str (node, buf, sizeof (buf)));
       return;
     }
 
@@ -398,16 +428,12 @@ ospf6_route_add (struct prefix_ipv6 *dst,
       /* replace */
       node->info = info_new;
       ospf6_route_node_info_delete (info_current);
-      o6log.rtable ("route_add: replace %s by path type",
-                    ospf6_route_str (node, buf, sizeof (buf)));
       return;
     }
   else if (info_new->path_type > info_current->path_type)
     {
       /* preferable entry already exists, don't add */
       ospf6_route_node_info_delete (info_new);
-      o6log.rtable ("route_add: ignore %s by path type",
-                    ospf6_route_str (node, buf, sizeof (buf)));
       return;
     }
 
@@ -417,16 +443,12 @@ ospf6_route_add (struct prefix_ipv6 *dst,
       /* replace */
       node->info = info_new;
       ospf6_route_node_info_delete (info_current);
-      o6log.rtable ("route_add: replace %s by cost",
-                    ospf6_route_str (node, buf, sizeof (buf)));
       return;
     }
   else if (info_new->cost > info_current->cost)
     {
       /* preferable entry already exists, don't add */
       ospf6_route_node_info_delete (info_new);
-      o6log.rtable ("route_add: ignore %s by cost",
-                    ospf6_route_str (node, buf, sizeof (buf)));
       return;
     }
 
@@ -438,8 +460,6 @@ ospf6_route_add (struct prefix_ipv6 *dst,
         continue;
       nexthop_lock (nh);
       list_add_node (info_current->nhlist, nh);
-      o6log.rtable ("route_add: new path to %s",
-                    ospf6_route_str (node, buf, sizeof (buf)));
     }
   ospf6_route_node_info_delete (info_new);
 
@@ -643,79 +663,12 @@ ospf6_route_str (struct route_node *node, char *buf, size_t bufsize)
 
   if (info->path_type != PTYPE_TYPE1_EXTERNAL &&
       info->path_type != PTYPE_TYPE2_EXTERNAL)
-    snprintf (buf, bufsize, "%s %-22s opt:xxx %s %s cost:%lu",
-              dtype, dstr, info->area->str, pstr, info->cost);
+    snprintf (buf, bufsize, "%-38s%s %s:%s %lu",
+              dstr, dtype, pstr, info->area->str, info->cost);
   else
-    snprintf (buf, bufsize, "%s %-22s opt:xxx %s cost:%lu",
-              dtype, dstr, pstr, info->cost);
+    snprintf (buf, bufsize, "%-38s %s %s %lu",
+              dstr, dtype, pstr, info->cost);
 
-  return buf;
-}
-
-char *
-ospf6_route_dest_str (struct route_node *node, char *buf, size_t bufsize)
-{
-  struct ospf6_route_node_info *info;
-  char *dtype, dstr[64];
-  unsigned long rtrid, ifid;
-
-  assert (node);
-  info = (struct ospf6_route_node_info *)node->info;
-  assert (info);
-
-  /* destination type, id */
-  switch (info->dest_type)
-    {
-      case DTYPE_PREFIX:
-        prefix2str (&node->p, buf, bufsize);
-        return buf;
-
-      case DTYPE_ASBR:
-        dtype = "ASBR";
-        rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
-        inet_ntop (AF_INET, &rtrid, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%20s %s", dstr, dtype);
-        break;
-
-      case DTYPE_INTRA_ROUTER:
-        dtype = "Router";
-        rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
-        inet_ntop (AF_INET, &rtrid, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%20s %s", dstr, dtype);
-        break;
-
-      case DTYPE_INTRA_LINK:
-        dtype = "Link";
-        rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
-        ifid = ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&node->p),
-        inet_ntop (AF_INET, &rtrid, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%15s[%lu] %s", dstr, (u_long) ntohl (ifid), dtype);
-        break;
-
-      case DTYPE_STATIC_REDISTRIBUTE:
-        dtype = "Static";
-        prefix2str (&node->p, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%s %s", dtype, dstr);
-        break;
-
-      case DTYPE_RIPNG_REDISTRIBUTE:
-        dtype = "RIPng";
-        prefix2str (&node->p, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%s %s", dtype, dstr);
-        break;
-
-      case DTYPE_BGP_REDISTRIBUTE:
-        dtype = "BGP";
-        prefix2str (&node->p, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%s %s", dtype, dstr);
-        break;
-
-      default:
-        dtype = "unknown";
-        prefix2str (&node->p, dstr, sizeof (dstr));
-        snprintf (buf, bufsize, "%s %s", dtype, dstr);
-        break;
-    }
   return buf;
 }
 
@@ -740,9 +693,89 @@ ospf6_route_vty (struct vty *vty, struct route_node *node)
     {
       nh = (struct ospf6_nexthop *) getdata (n);
       nexthop_str (nh, nhbuf, sizeof (nhbuf));
-      vty_out (vty, "%s %s%s", rnbuf,
-	       nhbuf,
-	       VTY_NEWLINE);
+      vty_out (vty, "%s %s%s", rnbuf, nhbuf, VTY_NEWLINE);
+    }
+}
+
+void
+ospf6_route_table_vty (struct vty *vty, struct route_node *rn, int detail)
+{
+  char destination[128], nexthop[128];
+  listnode n;
+  struct ospf6_nexthop *nh;
+  struct ospf6_route_node_info *info;
+
+  info = (struct ospf6_route_node_info *)rn->info;
+  prefix2str (&rn->p, destination, sizeof (destination));
+
+  for (n = listhead (info->nhlist); n; nextnode (n))
+    {
+      nh = (struct ospf6_nexthop *) getdata (n);
+      nexthop_str (nh, nexthop, sizeof (nexthop));
+      vty_out (vty, "%-38s %-25s%s", destination, nexthop, VTY_NEWLINE);
+      if (detail)
+        vty_out (vty, "    %s %s %s %s %lu%s",
+                 dtype_string[info->dest_type], "xxx",
+                 info->area->str, ptype_string[info->path_type],
+                 info->cost, VTY_NEWLINE);
+    }
+}
+
+void
+ospf6_route_intra_vty (struct vty *vty, struct route_node *rn, int detail)
+{
+  char destination[64], nexthop[128];
+  unsigned long rtrid, ifid;
+  listnode n;
+  struct ospf6_nexthop *nh;
+  struct ospf6_route_node_info *info;
+
+  info = (struct ospf6_route_node_info *)rn->info;
+  rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&rn->p);
+  ifid = ntohl (ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&rn->p));
+
+  inet_ntop (AF_INET, &rtrid, destination, sizeof (destination));
+
+  for (n = listhead (info->nhlist); n; nextnode (n))
+    {
+      nh = (struct ospf6_nexthop *) getdata (n);
+      nexthop_str (nh, nexthop, sizeof (nexthop));
+      if (info->dest_type == DTYPE_INTRA_LINK)
+        vty_out (vty, "%-11s %-15s[%3lu] %-25s%s",
+                 dtype_string[info->dest_type],
+                 destination, ifid, nexthop, VTY_NEWLINE);
+      else
+        vty_out (vty, "%-11s %-20s %25s%s", dtype_string[info->dest_type],
+                 destination, nexthop, VTY_NEWLINE);
+      if (detail)
+        vty_out (vty, "    %s %s %s %lu%s",
+                 "xxx",
+                 info->area->str, ptype_string[info->path_type],
+                 info->cost, VTY_NEWLINE);
+    }
+}
+
+void
+ospf6_route_vty_new (struct vty *vty, struct route_node *rn, int detail)
+{
+  struct ospf6_route_node_info *info;
+
+  info = (struct ospf6_route_node_info *)rn->info;
+  assert (info);
+
+  switch (info->dest_type)
+    {
+      case DTYPE_PREFIX:
+        ospf6_route_table_vty (vty, rn, detail);
+        break;
+      case DTYPE_ASBR:
+      case DTYPE_INTRA_ROUTER:
+      case DTYPE_INTRA_LINK:
+        ospf6_route_intra_vty (vty, rn, detail);
+        break;
+      default:
+        zlog_warn ("*** unknown destination type");
+        break;
     }
 }
 

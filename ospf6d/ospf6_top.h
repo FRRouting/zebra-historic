@@ -53,6 +53,9 @@ struct ospf6
   /* zebra/system routing table */
   struct route_table *table_zebra;
 
+  /* redistribute routing table */
+  struct route_table *table_redistribute;
+
   /* redistribute configuration */
   int redist_connected;
   int redist_static;

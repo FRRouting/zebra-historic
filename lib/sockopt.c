@@ -29,13 +29,15 @@ setsockopt_ipv6_pktinfo (int sock, int val)
 {
   int ret;
     
-#ifdef INRIA_IPV6
+#ifdef IPV6_RECVPKTINFO		/*2292bis-01*/
   ret = setsockopt(sock, IPPROTO_IPV6, IPV6_RECVPKTINFO, &val, sizeof(val));
-#else
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IPV6_RECVPKTINFO : %s", strerror (errno));
+#else	/*RFC2292*/
   ret = setsockopt(sock, IPPROTO_IPV6, IPV6_PKTINFO, &val, sizeof(val));
-#endif /* INIA_IPV6 */
   if (ret < 0)
     zlog_warn ("can't setsockopt IPV6_PKTINFO : %s", strerror (errno));
+#endif /* INIA_IPV6 */
   return ret;
 }
 
@@ -84,9 +86,15 @@ setsockopt_ipv6_hoplimit (int sock, int val)
 {
   int ret;
 
+#ifdef IPV6_RECVHOPLIMIT	/*2292bis-01*/
+  ret = setsockopt (sock, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &val, sizeof(val));
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IPV6_RECVHOPLIMIT");
+#else	/*RFC2292*/
   ret = setsockopt (sock, IPPROTO_IPV6, IPV6_HOPLIMIT, &val, sizeof(val));
   if (ret < 0)
     zlog_warn ("can't setsockopt IPV6_HOPLIMIT");
+#endif
   return ret;
 }
 

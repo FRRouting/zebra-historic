@@ -101,7 +101,7 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
 void 
 sighup (int sig)
 {
-  zlog (NULL, LOG_INFO, "SIGHUP received");
+  zlog_info ("SIGHUP received");
 
   /* Reload of config file. */
   ;
@@ -114,7 +114,7 @@ sigint (int sig)
   /* Decrared in rib.c */
   void rib_close ();
 
-  zlog (NULL, LOG_INFO, "Terminating on signal");
+  zlog_info ("Terminating on signal");
 
   if (!retain_mode)
     rib_close ();
@@ -178,7 +178,7 @@ main (int argc, char **argv)
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_ZEBRA,
+  zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_ZEBRA,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -226,8 +226,6 @@ main (int argc, char **argv)
 	  break;
 	}
     }
-
-  log_init ();
 
   /* Make master thread emulator. */
   master = thread_make_master ();

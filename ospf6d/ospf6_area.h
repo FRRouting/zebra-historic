@@ -33,9 +33,8 @@ struct area
   char            str[16];
 
   struct ospf6   *ospf6;      /* back pointer */
-  unsigned long   area_id;
-  unsigned char   options[3]; /* OSPF Option including ExternalCapability */
-  unsigned long   stub_default_cost;
+  u_int32_t       area_id;
+  u_char          options[3]; /* OSPF Option including ExternalCapability */
 
   list            if_list; /* OSPF interface to this area */
   list            lsdb;

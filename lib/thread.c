@@ -426,6 +426,29 @@ thread_cancel (struct thread *thread)
 #endif /* HAVE_PTHREAD */
 }
 
+/* Delete all events which has argument value arg. */
+void
+thread_cancel_event (struct thread_master *m, void *arg)
+{
+  struct thread *thread;
+
+  thread = m->event.head;
+  while (thread)
+    {
+      struct thread *t;
+
+      t = thread;
+      thread = t->next;
+
+      if (t->arg == arg)
+	{
+	  thread_list_delete (&m->event, t);
+	  t->type = THREAD_UNUSED;
+	  thread_add_unuse (m, t);
+	}
+    }
+}
+
 /* for struct timeval */
 #define TIMER_SEC_MICRO 1000000
 
@@ -536,7 +559,7 @@ thread_fetch (struct thread_master *m,
 	{
 	  /* Real error. */
 	  zlog_warn ("select error: %s", strerror (errno));
-	  return NULL;
+	  assert (0);
 	}
       /* Signal is coming. */
       goto retry;

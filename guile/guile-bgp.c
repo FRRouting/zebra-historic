@@ -81,9 +81,7 @@ scm_router_bgp (SCM as_number)
   num = gh_scm2long (as_number);
 
   /* Make new bgp object. */
-  bgp = bgp_lookup_by_as (num);
-  if (!bgp) 
-    bgp = bgp_new (num);
+  bgp = bgp_get (num, NULL);
 
   SCM_NEWCELL (cell);
   SCM_SETCAR (cell, scm_tag_bgp);

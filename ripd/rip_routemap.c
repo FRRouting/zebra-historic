@@ -44,11 +44,11 @@ rip_route_match_add (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -69,11 +69,11 @@ rip_route_match_delete (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -94,11 +94,11 @@ rip_route_set_add (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -119,11 +119,11 @@ rip_route_set_delete (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -155,17 +155,17 @@ route_match_metric (void *rule, struct prefix *prefix,
   u_int32_t *metric;
   struct rip_info *rinfo;
 
-  if (type == ROUTE_MAP_RIP)
+  if (type == RMAP_RIP)
     {
       metric = rule;
       rinfo = object;
     
       if (rinfo->metric == *metric)
-	return RM_MATCH;
+	return RMAP_MATCH;
       else
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `match metric' match statement. `arg' is METRIC value */
@@ -210,22 +210,22 @@ route_match_interface (void *rule, struct prefix *prefix,
   struct interface *ifp;
   char *ifname;
 
-  if (type == ROUTE_MAP_RIP)
+  if (type == RMAP_RIP)
     {
       ifname = rule;
       ifp = if_lookup_by_name(ifname);
 
       if (!ifp)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
 
       rinfo = object;
 
       if (rinfo->ifindex_out == ifp->ifindex)
-	return RM_MATCH;
+	return RMAP_MATCH;
       else
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `match interface' match statement. `arg' is IFNAME value */
@@ -262,16 +262,16 @@ route_match_ip_nexthop (void *rule, struct prefix *prefix,
   struct in_addr *addr;
   struct rip_info *rinfo;
 
-  if (type == ROUTE_MAP_RIP)
+  if (type == RMAP_RIP)
     {
       addr = rule;
       rinfo = object;
     
       if (IPV4_ADDR_SAME (&rinfo->nexthop, addr))
-	return RM_MATCH;
+	return RMAP_MATCH;
     }
 
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `ip next-hop' match statement. `arg' is IP address
@@ -321,16 +321,16 @@ route_match_ip_address (void *rule, struct prefix *prefix,
   struct access_list *alist;
   /* struct prefix_ipv4 match; */
 
-  if (type == ROUTE_MAP_RIP)
+  if (type == RMAP_RIP)
     {
       alist = access_list_lookup (AF_INET, (char *) rule);
       if (alist == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       return (access_list_apply (alist, prefix) == FILTER_DENY ?
-	      RM_NOMATCH : RM_MATCH);
+	      RMAP_NOMATCH : RMAP_MATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `ip address' match statement.  `arg' should be
@@ -367,7 +367,7 @@ route_set_metric (void *rule, struct prefix *prefix,
   u_int32_t *metric;
   struct rip_info *rinfo;
 
-  if (type == ROUTE_MAP_RIP)
+  if (type == RMAP_RIP)
     {
       /* Fetch routemap's rule information. */
       metric = rule;
@@ -376,7 +376,7 @@ route_set_metric (void *rule, struct prefix *prefix,
       /* Set metric out value. */
       rinfo->metric_out = *metric;
     }
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* set metric compilation. */
@@ -421,7 +421,7 @@ route_set_ip_nexthop (void *rule, struct prefix *prefix,
   struct in_addr *address;
   struct rip_info *rinfo;
 
-  if(type == ROUTE_MAP_RIP)
+  if(type == RMAP_RIP)
     {
       /* Fetch routemap's rule information. */
       address = rule;
@@ -431,7 +431,7 @@ route_set_ip_nexthop (void *rule, struct prefix *prefix,
       rinfo->nexthop_out = *address;
     }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Route map `ip nexthop' compile function.  Given string is converted

@@ -33,7 +33,10 @@ make_vertex (struct ospf6_lsa *lsa)
   struct vertex *v;
 
   assert (lsa && lsa->lsa_hdr);
-  v = (struct vertex *)XMALLOC (MTYPE_OSPF6_ROUTE, sizeof (struct vertex));
+
+  v = (struct vertex *) XMALLOC (MTYPE_OSPF6_VERTEX,
+                                 sizeof (struct vertex));
+  assert (v);
 
   switch (ntohs (lsa->lsa_hdr->lsh_type))
     {
@@ -164,6 +167,7 @@ spf_init (struct area *area)
   int i, j;
   listnode n;
   struct vertex *v;
+  struct ospf6_lsa *myself;
 
   area->table = ospf6_route_table_clear (area->table);
 
@@ -199,10 +203,16 @@ spf_init (struct area *area)
     }
 
   /* Install myself as root */
-  v = make_vertex (ospf6_lsdb_lookup (htons (LST_ROUTER_LSA),
-                                      htonl (MY_ROUTER_LSA_ID),
-                                      area->ospf6->router_id,
-                                      (void *)area));
+  myself = ospf6_lsdb_lookup (htons (LST_ROUTER_LSA), htonl (MY_ROUTER_LSA_ID),
+                              area->ospf6->router_id, (void *) area);
+  if (!myself)
+    {
+      if (IS_OSPF6_DUMP_SPF)
+        zlog_warn (" *** Router-LSA of myself not found");
+      return -1;
+    }
+
+  v = make_vertex (myself);
   v->vtx_distance = 0;
   v->vtx_depth = 0;
 
@@ -446,7 +456,8 @@ spf_calculation (struct thread *thread)
     zlog_info ("SPF Calculation for area %s", area->str);
 
   /* (1) */
-  spf_init (area);
+  if (spf_init (area) < 0)
+    return -1;
   candidatelist = list_init ();
   V = area->spftree.root;             /* Myself */
 

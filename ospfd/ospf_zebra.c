@@ -36,6 +36,7 @@
 #include "ospfd/ospf_zebra.h"
 #include "ospfd/ospf_asbr.h"
 #include "ospfd/ospf_abr.h"
+#include "ospfd/ospf_lsa.h"
 
 /* Zebra structure to hold current status. */
 struct zebra *zclient = NULL;
@@ -67,6 +68,41 @@ ospf_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
 {
   return 0;
 }
+
+int
+ospf_interface_state_up (int command, struct zebra *zebra, zebra_size_t length)
+{
+  struct interface *ifp;
+
+  ifp = zebra_interface_state_read (zclient->ibuf);
+
+  if (ifp == NULL) return 0;
+
+  zlog_info ("Z: Interface state change to up: %s", ifp->name);
+
+  ospf_if_up (ifp);
+
+  return 0;
+}
+
+
+int
+ospf_interface_state_down (int command, struct zebra *zebra, zebra_size_t length)
+{
+  struct interface *ifp;
+
+  ifp = zebra_interface_state_read (zclient->ibuf);
+
+  if (ifp == NULL) return 0;
+
+  zlog_info ("Z: Interface state change to down: %s", ifp->name);
+
+  ospf_if_down (ifp);
+
+  return 0;
+}
+
+
 
 int
 ospf_interface_address_add (int command, struct zebra *zebra,
@@ -143,12 +179,16 @@ ospf_zebra_delete_discard (struct prefix_ipv4 *p)
 }
 
 int
-ospf_redistribute_set (int type)
+ospf_redistribute_set (int type, u_char metric_type, u_char metric_method,
+		       u_char metric_value)
 {
   if (zclient->redist[type])
     return CMD_SUCCESS;
 
   zclient->redist[type] = 1;
+  ospf_top->dist_info[type].metric_type = metric_type;
+  ospf_top->dist_info[type].metric_method = metric_method;
+  ospf_top->dist_info[type].metric_value  = metric_value;
 
   if (zclient->sock > 0)
     zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zclient->sock, type);
@@ -269,7 +309,8 @@ DEFUN (ospf_redistribute_kernel,
        "Redistribute control\n"
        "Kernel route\n")
 {
-  return ospf_redistribute_set (ZEBRA_ROUTE_KERNEL);
+  return ospf_redistribute_set (ZEBRA_ROUTE_KERNEL, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_AUTO, 0);
 }
 
 DEFUN (no_ospf_redistribute_kernel,
@@ -282,24 +323,330 @@ DEFUN (no_ospf_redistribute_kernel,
   return ospf_redistribute_unset (ZEBRA_ROUTE_KERNEL);
 }
 
-DEFUN (ospf_redistribute_static,
-       ospf_redistribute_static_cmd,
-       "redistribute static",
+DEFUN (ospf_redistribute_source,
+       ospf_redistribute_source_cmd,
+       "redistribute (kernel|connected|static|rip|bgp)",
        "Redistribute control\n"
-       "Static route\n")
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n")
 {
-  return ospf_redistribute_set (ZEBRA_ROUTE_STATIC);
+  int source;
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+
+  return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_AUTO, 0);
 }
 
-DEFUN (no_ospf_redistribute_static,
-       no_ospf_redistribute_static_cmd,
-       "no redistribute static",
+
+DEFUN (ospf_redistribute_source_type,
+       ospf_redistribute_source_type_cmd,
+       "redistribute (kernel|connected|static|rip|bgp) metric-type (1|2) ",
+       "Redistribute control\n"
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n"
+       "Set OSPF external metric type\n"
+       "External type-1\n"
+       "External type-2\n")
+{
+  u_char type = EXTERNAL_METRIC_TYPE_2;
+  int source;
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+
+  if (strncmp (argv[1], "1", 1) == 0)
+    type = EXTERNAL_METRIC_TYPE_1;
+  else if (strncmp (argv[1], "2", 1) == 0)
+    type = EXTERNAL_METRIC_TYPE_2;
+  else
+    return CMD_WARNING;
+
+
+  return ospf_redistribute_set (source, type,
+				OSPF_EXT_METRIC_AUTO, 0);
+}
+
+
+
+DEFUN (ospf_redistribute_source_metric,
+       ospf_redistribute_source_metric_cmd,
+       "redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>",
+       "Redistribute control\n"
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n"
+       "Set OSPF external metric type\n"
+       "Set external metric\n"
+       "Metric value\n")
+{
+  int source;
+  u_int32_t metric = 0;
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+  metric = strtol(argv[1], NULL, 10);
+  if ((metric < 0) && (metric > 16777214)) {
+      vty_out (vty, "OSPF metric value is invalid %s", VTY_NEWLINE);
+      return CMD_WARNING;
+  }
+
+
+  return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_STATIC, metric);
+}
+
+
+
+DEFUN (ospf_redistribute_source_type_metric,
+       ospf_redistribute_source_type_metric_cmd,
+       "redistribute (kernel|connected|static|rip|bgp) metric-type (1|2) metric <0-16777214>",
+       "Redistribute control\n"
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n"
+       "Set OSPF external metric type\n"
+       "External type-1\n"
+       "External type-2\n"
+       "Set external metric value\n"
+       "Metric value"
+)
+{
+  int source;
+  u_char type = EXTERNAL_METRIC_TYPE_2;
+  u_int32_t metric = 0;
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+  if (strncmp (argv[1], "1", 1) == 0)
+    type = EXTERNAL_METRIC_TYPE_1;
+  else if (strncmp (argv[1], "2", 1) == 0)
+    type = EXTERNAL_METRIC_TYPE_2;
+  else
+    return CMD_WARNING;
+
+  metric = strtol(argv[2], NULL, 10);
+  if ((metric < 0) && (metric > 16777214)) {
+      vty_out (vty, "OSPF metric value is invalid %s", VTY_NEWLINE);
+      return CMD_WARNING;
+  }
+
+  return ospf_redistribute_set (source, type,
+				OSPF_EXT_METRIC_STATIC, metric);
+}
+
+
+DEFUN (no_ospf_redistribute_source,
+       no_ospf_redistribute_source_cmd,
+       "no redistribute (kernel|connected|static|rip|bgp)",
        NO_STR
        "Redistribute control\n"
-       "Static route\n")
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n")
 {
-  return ospf_redistribute_unset (ZEBRA_ROUTE_STATIC);
+  int source;
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+
+  return ospf_redistribute_unset (source);
 }
+
+DEFUN (no_ospf_redistribute_source_type,
+       no_ospf_redistribute_source_type_cmd,
+       "no redistribute (kernel|connected|static|rip|bgp) metric-type (1|2)",
+       NO_STR
+       "Redistribute control\n"
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n"
+       "Set OSPF external metric type\n"
+       "External type-1\n"
+       "External type-2\n"
+)
+{
+  int source;
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+  ospf_redistribute_unset (source);
+  return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
+				ospf_top->dist_info[source].metric_method,
+				ospf_top->dist_info[source].metric_value);
+}
+
+
+
+DEFUN (no_ospf_redistribute_source_metric,
+       no_ospf_redistribute_source_metric_cmd,
+       "no redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>",
+       NO_STR
+       "Redistribute control\n"
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n"
+       "Set external metric"
+       "Metric value"
+)
+{
+  int source;
+  u_int32_t metric = 0;
+
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+  metric = strtol(argv[1], NULL, 10);
+  if ((metric < 0) && (metric > 16777214)) {
+      vty_out (vty, "OSPF metric value is invalid %s", VTY_NEWLINE);
+      return CMD_WARNING;
+  }
+
+
+  ospf_redistribute_unset (source);
+  return ospf_redistribute_set (source, ospf_top->dist_info[source].metric_type,
+				OSPF_EXT_METRIC_AUTO, 0);
+}
+
+
+
+DEFUN (no_ospf_redistribute_source_type_metric,
+       no_ospf_redistribute_source_type_metric_cmd,
+       "no redistribute (kernel|connected|static|rip|bgp) metric-type (1|2) metric <0-16777214>",
+       NO_STR
+       "Redistribute control\n"
+       "Kernel FIB routes\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "RIP routes\n"
+       "BGP routes\n"
+       "Set OSPF external metric type\n"
+       "External type-1\n"
+       "External type-2\n"
+       "Set external metric value\n"
+       "Metric value\n"
+)
+{
+  int source;
+
+  if (strncmp (argv[0], "k", 1) == 0)
+    source = ZEBRA_ROUTE_KERNEL;
+  else if (strncmp (argv[0], "c", 1) == 0)
+    source = ZEBRA_ROUTE_CONNECT;
+  else if (strncmp (argv[0], "s", 1) == 0)
+    source = ZEBRA_ROUTE_STATIC;
+  else if (strncmp (argv[0], "r", 1) == 0)
+    source = ZEBRA_ROUTE_RIP;
+  else if (strncmp (argv[0], "b", 1) == 0)
+    source = ZEBRA_ROUTE_BGP;
+  else
+    return CMD_WARNING;
+
+  ospf_redistribute_unset (source);
+  return ospf_redistribute_set (source, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_AUTO, 0);
+}
+
+
+
+
+#if 0
+
+Zinin: multic-choice added above
+
 
 DEFUN (ospf_redistribute_connected,
        ospf_redistribute_connected_cmd,
@@ -307,7 +654,8 @@ DEFUN (ospf_redistribute_connected,
        "Redistribute control\n"
        "Connected route\n")
 {
-  return ospf_redistribute_set (ZEBRA_ROUTE_CONNECT);
+  return ospf_redistribute_set (ZEBRA_ROUTE_CONNECT, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_AUTO, 0);
 }
 
 DEFUN (no_ospf_redistribute_connected,
@@ -326,7 +674,8 @@ DEFUN (ospf_redistribute_rip,
        "Redistribute control\n"
        "RIP route\n")
 {
-  return ospf_redistribute_set (ZEBRA_ROUTE_RIP);
+  return ospf_redistribute_set (ZEBRA_ROUTE_RIP, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_AUTO, 0);
 }
 
 DEFUN (no_ospf_redistribute_rip,
@@ -345,7 +694,8 @@ DEFUN (ospf_redistribute_bgp,
        "Redistribute control\n"
        "BGP route\n")
 {
-  return ospf_redistribute_set (ZEBRA_ROUTE_BGP);
+  return ospf_redistribute_set (ZEBRA_ROUTE_BGP, EXTERNAL_METRIC_TYPE_2,
+				OSPF_EXT_METRIC_AUTO, 0);
 }
 
 DEFUN (no_ospf_redistribute_bgp,
@@ -357,6 +707,9 @@ DEFUN (no_ospf_redistribute_bgp,
 {
   return ospf_redistribute_unset (ZEBRA_ROUTE_BGP);
 }
+
+#endif
+
 
 int
 ospf_set_distribute_list_out (struct vty *vty, int type, char * list_name)
@@ -577,8 +930,18 @@ config_write_ospf_redistribute (struct vty *vty)
 
   for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
     if (i != zclient->redist_default && zclient->redist[i])
-      vty_out (vty, " redistribute %s%s", str[i],
-	       VTY_NEWLINE);
+      {
+        vty_out (vty, " redistribute %s", str[i]);
+
+        if (ospf_top->dist_info[i].metric_type != EXTERNAL_METRIC_TYPE_2)
+           vty_out (vty, " metric-type 1");
+
+        if (ospf_top->dist_info[i].metric_method != OSPF_EXT_METRIC_AUTO)
+           vty_out (vty, " metric %d", ospf_top->dist_info[i].metric_value);
+
+        vty_out (vty, "%s", VTY_NEWLINE);
+
+      }
 
 
   if (ospf_top)
@@ -606,6 +969,8 @@ zebra_init ()
   zclient_init (zclient, ZEBRA_ROUTE_OSPF);
   zclient->interface_add = ospf_interface_add;
   zclient->interface_delete = ospf_interface_delete;
+  zclient->interface_up = ospf_interface_state_up;
+  zclient->interface_down = ospf_interface_state_down;
   zclient->interface_address_add = ospf_interface_address_add;
   zclient->interface_address_delete = ospf_interface_address_delete;
   zclient->ipv4_route_add = ospf_zebra_read_ipv4;
@@ -618,18 +983,17 @@ zebra_init ()
   install_element (CONFIG_NODE, &router_zebra_cmd);
   install_element (CONFIG_NODE, &no_router_zebra_cmd);
   install_default (ZEBRA_NODE);
-  install_element (ZEBRA_NODE, &ospf_redistribute_rip_cmd);
-  install_element (ZEBRA_NODE, &no_ospf_redistribute_rip_cmd);
-  install_element (OSPF_NODE, &ospf_redistribute_connected_cmd);
-  install_element (OSPF_NODE, &no_ospf_redistribute_connected_cmd);
-  install_element (OSPF_NODE, &ospf_redistribute_static_cmd);
-  install_element (OSPF_NODE, &no_ospf_redistribute_static_cmd);
-  install_element (OSPF_NODE, &ospf_redistribute_kernel_cmd);
-  install_element (OSPF_NODE, &no_ospf_redistribute_kernel_cmd);
-  install_element (OSPF_NODE, &ospf_redistribute_rip_cmd);
-  install_element (OSPF_NODE, &no_ospf_redistribute_rip_cmd);
-  install_element (OSPF_NODE, &ospf_redistribute_bgp_cmd);
-  install_element (OSPF_NODE, &no_ospf_redistribute_bgp_cmd);
+  install_element (OSPF_NODE, &ospf_redistribute_source_cmd);
+  install_element (OSPF_NODE, &ospf_redistribute_source_type_cmd);
+  install_element (OSPF_NODE, &ospf_redistribute_source_metric_cmd);
+  install_element (OSPF_NODE, &ospf_redistribute_source_type_metric_cmd);
+
+  install_element (OSPF_NODE, &no_ospf_redistribute_source_cmd);
+  install_element (OSPF_NODE, &no_ospf_redistribute_source_type_cmd);
+  install_element (OSPF_NODE, &no_ospf_redistribute_source_metric_cmd);
+  install_element (OSPF_NODE, &no_ospf_redistribute_source_type_metric_cmd);
+
+
   install_element (OSPF_NODE, &ospf_distribute_list_out_kernel_cmd);
   install_element (OSPF_NODE, &no_ospf_distribute_list_out_kernel_cmd);
   install_element (OSPF_NODE, &ospf_distribute_list_out_connected_cmd);

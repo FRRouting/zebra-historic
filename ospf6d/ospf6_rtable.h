@@ -60,7 +60,9 @@ struct ospf6_route_node_info
   struct ospf6_lsa *ls_origin;       /* Link State Origin, for MOSPF */
   list              nhlist;          /* nexthop list */
 
-  unsigned long     ase_lsid;        /* for ASE LSA origination */
+  /* For External LSA */
+  unsigned long     ase_lsid;        /* mapped LS ID */
+  int               ase_protocol;    /* source protocol */
 };
 
 
@@ -101,5 +103,6 @@ void ospf6_route_vty (struct vty *, struct route_node *);
 int ospf6_route_calc (struct thread *);
 void ospf6_route_update_zebra ();
 
+void ospf6_route_vty_new (struct vty *, struct route_node *, int);
 #endif /* OSPF6_RTABLE_H */
 

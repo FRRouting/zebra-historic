@@ -121,8 +121,8 @@ ospf6_message_set_buffer (unsigned char msgtype, unsigned short msglen,
 {
   unsigned short left;
 
-  /* substract ospf6_hdr size from left space to allocate */
-  left = msglen - sizeof (struct ospf6_hdr);
+  /* substract ospf6_header size from left space to allocate */
+  left = msglen - sizeof (struct ospf6_header);
 
   switch (msgtype)
     {
@@ -144,25 +144,25 @@ ospf6_message_set_buffer (unsigned char msgtype, unsigned short msglen,
         break;
 
       case MSGT_LINKSTATE_REQUEST:
-        assert (left % sizeof (struct linkstate_request) == 0);
+        assert (left % sizeof (struct ospf6_lsreq) == 0);
         while (left)
           {
             if (!iov_prepend (MTYPE_OSPF6_MESSAGE, iov,
-                              sizeof (struct linkstate_request)))
+                              sizeof (struct ospf6_lsreq)))
               {
                 iov_free_all (MTYPE_OSPF6_MESSAGE, iov);
                 return -1;
               }
-            left -= sizeof (struct linkstate_request);
+            left -= sizeof (struct ospf6_lsreq);
           }
         break;
 
       case MSGT_LINKSTATE_UPDATE:
-        left -= sizeof (struct linkstate_update);
+        left -= sizeof (struct ospf6_lsupdate);
         if (ospf6_message_lsa_set_buffer (iov, left) < 0)
           return -1;
         if (!iov_prepend (MTYPE_OSPF6_MESSAGE, iov,
-                          sizeof (struct linkstate_update)))
+                          sizeof (struct ospf6_lsupdate)))
           {
             ospf6_message_lsa_clear_buffer (iov);
             return -1;
@@ -178,7 +178,7 @@ ospf6_message_set_buffer (unsigned char msgtype, unsigned short msglen,
         return -1;
     }
 
-  if (!iov_prepend (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_hdr)))
+  if (!iov_prepend (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_header)))
     {
       ospf6_message_clear_buffer (msgtype, iov);
       return -1;
@@ -198,7 +198,7 @@ static void
 ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
-  struct hello *hello;
+  struct ospf6_hello *hello;
   char *my_options;
   char changes = 0;
 #define CHANGE_RTRPRI (1 << 0)
@@ -217,7 +217,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
   inet_ntop (AF_INET, &router_id, rtrid_str, sizeof (rtrid_str));
 
   /* set hello pointer */
-  hello = (struct hello *) iov[0].iov_base;
+  hello = (struct ospf6_hello *) iov[0].iov_base;
 
   /* HelloInterval check */
   if (ntohs (hello->hello_interval)
@@ -291,7 +291,7 @@ ospf6_process_hello (struct iovec *iov, struct ospf6_if *o6if,
     }
 
   /* TwoWay check */
-  router_id_space = iov[0].iov_len - sizeof (struct hello);
+  router_id_space = iov[0].iov_len - sizeof (struct ospf6_hello);
   assert (router_id_space % sizeof (unsigned long) == 0);
   seenrtrnum = router_id_space / sizeof (unsigned long);
   my_router_id = nbr->ospf6_if->area->ospf6->router_id;
@@ -746,12 +746,12 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
                      struct sockaddr_in6 *src, unsigned long router_id)
 {
   struct neighbor *nbr;
-  struct linkstate_request *lsreq;
+  struct ospf6_lsreq *lsreq;
   struct iovec response[MAXIOVLIST];
   struct ospf6_lsa *lsa;
   void *scope;
   unsigned long lsanum = 0;
-  struct linkstate_update *lsupdate;
+  struct ospf6_lsupdate *lsupdate;
 
   /* assert interface */
   assert (o6if);
@@ -779,7 +779,7 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
   iov_clear (response, MAXIOVLIST);
 
   /* process each request */
-  lsreq = (struct linkstate_request *) iov_detach_first (iov);
+  lsreq = (struct ospf6_lsreq *) iov_detach_first (iov);
   while (lsreq)
     {
       /* get scope from request type */
@@ -798,7 +798,7 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
           default:
             zlog_warn ("unsupported type requested, ignore");
             XFREE (MTYPE_OSPF6_MESSAGE, lsreq);
-            lsreq = (struct linkstate_request *) iov_detach_first (iov);
+            lsreq = (struct ospf6_lsreq *) iov_detach_first (iov);
             continue;
         }
 
@@ -821,16 +821,16 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
 
       attach_lsa_to_iov (lsa, response);
       lsanum++;
-      lsreq = (struct linkstate_request *) iov_detach_first (iov);
+      lsreq = (struct ospf6_lsreq *) iov_detach_first (iov);
     }
 
   /* send response LSUpdate to this request */
   assert (lsanum == iov_count (response));
   if (iov_count (response))
     {
-      lsupdate = (struct linkstate_update *)
+      lsupdate = (struct ospf6_lsupdate *)
                  iov_prepend (MTYPE_OSPF6_MESSAGE, response,
-                              sizeof (struct linkstate_update));
+                              sizeof (struct ospf6_lsupdate));
       assert (lsupdate);
       lsupdate->lsupdate_num = htonl (lsanum);
 
@@ -847,7 +847,7 @@ static void
 ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
                         struct sockaddr_in6 *src, unsigned long router_id)
 {
-  struct linkstate_update *lsupdate;
+  struct ospf6_lsupdate *lsupdate;
   struct neighbor *nbr;
   unsigned long lsanum;
   struct ospf6_lsa_hdr *lsa_hdr;
@@ -875,7 +875,7 @@ ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
     }
 
   /* set linkstate update pointer */
-  lsupdate = (struct linkstate_update *) iov[0].iov_base;
+  lsupdate = (struct ospf6_lsupdate *) iov[0].iov_base;
 
   /* save linkstate update info */
   lsanum = ntohl (lsupdate->lsupdate_num);
@@ -885,7 +885,7 @@ ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
   nbr->ospf6_stat_received_lsupdate++;
 
   /* decapsulation */
-  lsupdate = (struct linkstate_update *) NULL;
+  lsupdate = (struct ospf6_lsupdate *) NULL;
   iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
 
   /* process LSAs */
@@ -1015,7 +1015,7 @@ static void
 ospf6_message_process (struct iovec *iov, struct ospf6_if *o6if,
                        struct sockaddr_in6 *src)
 {
-  struct ospf6_hdr *ospf6_hdr = NULL;
+  struct ospf6_header *ospf6_hdr = NULL;
   unsigned char type;
   unsigned long router_id;
 
@@ -1024,7 +1024,7 @@ ospf6_message_process (struct iovec *iov, struct ospf6_if *o6if,
   assert (src);
 
   /* set ospf6_hdr pointer to head of buffer */
-  ospf6_hdr = (struct ospf6_hdr *) iov[0].iov_base;
+  ospf6_hdr = (struct ospf6_header *) iov[0].iov_base;
 
   /* version check */
   if (ospf6_hdr->version != OSPF_V3)
@@ -1097,14 +1097,14 @@ ospf6_message_process (struct iovec *iov, struct ospf6_if *o6if,
   return;
 }
 
-/* peek only ospf6_hdr to get message type, message len,
+/* peek only ospf6_header to get message type, message len,
    received interface and sending neighbor */
 static void
 ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
                 unsigned char *msgtype, unsigned short *msglen,
                 struct ospf6_if **o6if)
 {
-  struct ospf6_hdr *ospf6_hdr = NULL;
+  struct ospf6_header *ospf6_hdr = NULL;
   struct sockaddr_in6 *src = NULL;
   struct in6_pktinfo *pktinfo = NULL;
   struct interface *ifp;
@@ -1122,7 +1122,7 @@ ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
 
   /* prepare buffer for ospf6 header */
   iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
-               sizeof (struct ospf6_hdr));
+               sizeof (struct ospf6_header));
   rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
 
   /* peek ospf6 header */
@@ -1133,7 +1133,7 @@ ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
     }
 
   /* set ospf6_hdr pointer to head of buffer */
-  ospf6_hdr = (struct ospf6_hdr *) rmsghdrp->msg_iov[0].iov_base;
+  ospf6_hdr = (struct ospf6_header *) rmsghdrp->msg_iov[0].iov_base;
 
   /* set message type and len */
   *msgtype = ospf6_hdr->type;
@@ -1169,7 +1169,7 @@ ospf6_receive_fail (int sockfd, struct msghdr *rmsghdrp)
 
   /* prepare buffer for ospf6 packet */
   iov_prepend (MTYPE_OSPF6_MESSAGE, rmsghdrp->msg_iov,
-               sizeof (struct ospf6_hdr));
+               sizeof (struct ospf6_header));
   rmsghdrp->msg_iovlen = iov_count (rmsghdrp->msg_iov);
 
   /* read ospf6 packet to drop */
@@ -1231,12 +1231,12 @@ ospf6_receive (struct thread *thread)
   rmsghdr.msg_control = (caddr_t) rcmsgp;
   rmsghdr.msg_controllen = sizeof (cmsgbuf);
 
-  /* peek ospf6_hdr to get message type, sending neighbor
+  /* peek ospf6_header to get message type, sending neighbor
      and  received ospf6 interface */
   ospf6_peek_hdr (sockfd, &rmsghdr, &msgtype, &msglen, &o6if);
   if (msgtype == MSGT_NONE || msglen == 0 || o6if == NULL)
     {
-      zlog_warn ("ospf6_hdr peek failed, drop");
+      zlog_warn ("ospf6_header peek failed, drop");
       ospf6_receive_fail (sockfd, &rmsghdr);
       return -1;
     }
@@ -1259,7 +1259,7 @@ ospf6_receive (struct thread *thread)
       zlog_warn ("recvmsg () failed: %s", strerror (errno));
       /* add thread next read */
       thread_add_read (master, ospf6_receive, NULL, sockfd);
-      /* clear buffer for ospf6_hdr */
+      /* clear buffer for ospf6_header */
       iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
       /* clear buffer for each message type */
       ospf6_message_clear_buffer (msgtype, iov);
@@ -1283,7 +1283,7 @@ ospf6_receive_new (struct thread *thread)
   struct sockaddr_in6 src_sin6;
   unsigned int ifindex;
   struct iovec message[MAXIOVLIST];
-  struct ospf6_hdr *o6h;
+  struct ospf6_header *o6h;
   struct ospf6_if *o6i;
   char srcname[64], dstname[64];
   unsigned char type;
@@ -1295,8 +1295,8 @@ ospf6_receive_new (struct thread *thread)
   iov_clear (message, MAXIOVLIST);
 
   /* peek ospf6 header */
-  o6h = (struct ospf6_hdr *) iov_append (MTYPE_OSPF6_MESSAGE, message,
-                                         sizeof (struct ospf6_hdr));
+  o6h = (struct ospf6_header *) iov_append (MTYPE_OSPF6_MESSAGE, message,
+                                         sizeof (struct ospf6_header));
   ospf6_recvmsg_peek (&src, &dst, &ifindex, message);
   type = o6h->type;
   len = ntohs (o6h->len);
@@ -1344,7 +1344,7 @@ void
 ospf6_message_send (unsigned char type, struct iovec *message,
                     struct in6_addr *dst, u_int ifindex)
 {
-  struct ospf6_hdr *ospf6_hdr;
+  struct ospf6_header *ospf6_hdr;
   struct ospf6_if *o6i;
   char dstname[64], srcname[64];
 
@@ -1353,9 +1353,9 @@ ospf6_message_send (unsigned char type, struct iovec *message,
   assert (o6i);
 
   /* memory allocate for protocol header */
-  ospf6_hdr = (struct ospf6_hdr *)
+  ospf6_hdr = (struct ospf6_header *)
               iov_prepend (MTYPE_OSPF6_MESSAGE, message,
-                           sizeof (struct ospf6_hdr));
+                           sizeof (struct ospf6_header));
   if (!ospf6_hdr)
     {
       zlog_warn ("*** protocol header alloc failed: %s",
@@ -1536,7 +1536,7 @@ ospf6_send_dbdesc (struct thread *thread)
   if (DD_IS_IBIT_SET (nbr->dd_bits))
     leftlen = 0;
   else
-    leftlen = DEFAULT_INTERFACE_MTU - sizeof (struct ospf6_hdr)
+    leftlen = DEFAULT_INTERFACE_MTU - sizeof (struct ospf6_header)
               - sizeof (struct ospf6_dbdesc);
 
   /* move LSA from summary list to message buffer */
@@ -1639,7 +1639,7 @@ ospf6_send_lsreq_retrans (struct thread *thread)
 {
   struct neighbor *nbr;
   struct iovec message[MAXIOVLIST];
-  struct linkstate_request *lsreq;
+  struct ospf6_lsreq *lsreq;
   struct ospf6_lsa *lsa;
   listnode n;
 
@@ -1670,9 +1670,9 @@ ospf6_send_lsreq_retrans (struct thread *thread)
     {
       lsa = (struct ospf6_lsa *) getdata (n);
       assert (lsa->lsa_hdr);
-      lsreq = (struct linkstate_request *) iov_append
+      lsreq = (struct ospf6_lsreq *) iov_append
                   (MTYPE_OSPF6_MESSAGE, message,
-                   sizeof (struct linkstate_request));
+                   sizeof (struct ospf6_lsreq));
       lsreq->lsreq_age_zero = 0;
       lsreq->lsreq_type = lsa->lsa_hdr->lsh_type;
       lsreq->lsreq_id = lsa->lsa_hdr->lsh_id;
@@ -1696,7 +1696,7 @@ ospf6_send_lsreq (struct thread *thread)
 {
   struct neighbor *nbr;
   struct iovec message[MAXIOVLIST];
-  struct linkstate_request *lsreq;
+  struct ospf6_lsreq *lsreq;
   struct ospf6_lsa *lsa;
   listnode n;
 
@@ -1717,8 +1717,8 @@ ospf6_send_lsreq (struct thread *thread)
     {
       lsa = (struct ospf6_lsa *) getdata (n);
       assert (lsa->lsa_hdr);
-      lsreq = (struct linkstate_request *) iov_append
-              (MTYPE_OSPF6_MESSAGE, message, sizeof (struct linkstate_request));
+      lsreq = (struct ospf6_lsreq *) iov_append
+              (MTYPE_OSPF6_MESSAGE, message, sizeof (struct ospf6_lsreq));
       lsreq->lsreq_age_zero = 0;
       lsreq->lsreq_type = lsa->lsa_hdr->lsh_type;
       lsreq->lsreq_id = lsa->lsa_hdr->lsh_id;
@@ -1744,7 +1744,7 @@ ospf6_send_lsupdate_retrans (struct thread *thread)
 {
   struct neighbor *o6n;
   struct iovec message[MAXIOVLIST];
-  struct linkstate_update *lsupdate;
+  struct ospf6_lsupdate *lsupdate;
   int lsanum = 0;
   listnode n;
   struct ospf6_lsa *lsa;
@@ -1771,9 +1771,9 @@ ospf6_send_lsupdate_retrans (struct thread *thread)
   if (lsanum == 0)
     return 0;
 
-  lsupdate = (struct linkstate_update *)
+  lsupdate = (struct ospf6_lsupdate *)
                iov_prepend (MTYPE_OSPF6_MESSAGE, message,
-                           sizeof (struct linkstate_update));
+                           sizeof (struct ospf6_lsupdate));
   if (!lsupdate)
     {
       zlog_warn ("*** iov_append () failed in lsupdate_retrans");

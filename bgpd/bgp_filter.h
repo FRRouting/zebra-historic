@@ -27,4 +27,8 @@ enum as_filter_type
 };
 
 enum as_filter_type as_list_apply (struct as_list *, void *);
+
 struct as_list *as_list_lookup (char *);
+void as_list_add_hook (void (*func) ());
+void as_list_delete_hook (void (*func) ());
+

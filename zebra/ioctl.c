@@ -140,7 +140,7 @@ if_get_mtu (struct interface *ifp)
 #elif defined(SIOCGIFMTU)
   if (if_ioctl (SIOCGIFMTU, (caddr_t) & ifreq) < 0) 
     {
-      zlog (NULL, LOG_INFO, "Can't lookup mtu by ioctl(SIOCGIFMTU)");
+      zlog_info ("Can't lookup mtu by ioctl(SIOCGIFMTU)");
       ifp->mtu = -1;
       return;
     }
@@ -348,7 +348,7 @@ if_set_flags (struct interface *ifp, unsigned long flag)
 
   if (ret < 0)
     {
-      zlog (NULL, LOG_INFO, "can't set interface flags");
+      zlog_info ("can't set interface flags");
       return ret;
     }
   return 0;
@@ -372,7 +372,7 @@ if_unset_flags (struct interface *ifp, unsigned long flag)
 
   if (ret < 0)
     {
-      zlog (NULL, LOG_INFO, "can't unset interface flags");
+      zlog_info ("can't unset interface flags");
       return ret;
     }
   return 0;

@@ -357,8 +357,6 @@ ospf_intra_add_router (struct route_table *rt, struct vertex *v,
      shortest- path tree; equivalently, this is the interface that
      points back to Router X's parent vertex on the shortest-path tree
      (similar to the calculation in Section 16.1.1). */
-  /* Ohh..  We don't support virtual link yet.  This should be added
-     later on -- kunihiro. */
 
   p.family = AF_INET;
   p.prefix = v->id;
@@ -822,30 +820,39 @@ DEFUN (show_ip_ospf_route,
 int
 ospf_cmp_asbr_routes (struct ospf_route *r1, struct ospf_route *r2)
 {
-  if (r1->path_type == OSPF_PATH_INTRA_AREA &&
-      r2->path_type == OSPF_PATH_INTRA_AREA)
-    {
-      if (r1->area->area_id.s_addr != OSPF_AREA_BACKBONE)
-	return 1;
+  u_char r1_type, r2_type;
 
-      if (r2->area->area_id.s_addr != OSPF_AREA_BACKBONE)
-	return -1;
-    }
-  else if (r1->path_type == OSPF_PATH_INTRA_AREA &&
-	   r1->area->area_id.s_addr == OSPF_AREA_BACKBONE &&
-	   r2->path_type == OSPF_PATH_INTER_AREA)
-    return 0;
+/* 16.4.1:
 
-  else if (r2->path_type == OSPF_PATH_INTRA_AREA &&
-	   r2->area->area_id.s_addr == OSPF_AREA_BACKBONE &&
-	   r1->path_type == OSPF_PATH_INTER_AREA)
-    return 0;
+   o   Intra-area paths using non-backbone areas are always the
+       most preferred.
 
-  else if (r1->path_type < r2->path_type)
-    return 1;
+   o   The other paths, intra-area backbone paths and inter-
+       area paths, are of equal preference.
+*/
 
-  else if (r1->path_type > r2->path_type)
-    return -1;
+  r1_type = r1->path_type;
+  r2_type = r2->path_type;
+
+  assert (r1->area->top);
+  assert (r2->area->top);
+  assert (r1->area->top == r2->area->top);
+
+  if (r1->area->top->RFC1583Compat == 0)
+     {
+       if (r1->area->area_id.s_addr == OSPF_AREA_BACKBONE)
+          r1_type = OSPF_PATH_INTER_AREA;
+
+       if (r2->area->area_id.s_addr == OSPF_AREA_BACKBONE)
+          r2_type = OSPF_PATH_INTER_AREA;
+     }
+  else return 0; /* If RFC1583 is on---all paths are equal */
+
+  if (r1_type < r2_type)
+     return 1;
+
+  if (r1_type > r2_type)
+     return -1;
 
   return 0;
 }

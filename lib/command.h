@@ -82,10 +82,10 @@ enum node_type
   RIP_NODE,			/* RIP protocol mode node. */ 
   RIPNG_NODE,			/* RIPng protocol mode node. */
   BGP_NODE,			/* BGP protocol mode which includes BGP4+ */
-  BGP_IPV4_NODE,		/* BGP IPv4 address family */
   BGP_IPV6_NODE,		/* BGP IPv6 address family */
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
+  MASC_NODE,			/* MASC for multicast.  */
   RDISC_NODE,			/* ICMP Router Discovery Protocol mode. */ 
   IP_NODE,			/* Static ip route node. */
   ACCESS_NODE,			/* Access list node. */
@@ -162,7 +162,7 @@ struct desc
   int funcname \
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)
 
-/* ALIAS macro for define alias of existing command. */
+/* ALIAS macro which define existing command's alias. */
 #define ALIAS(funcname, cmdname, cmdstr, helpstr) \
   struct cmd_element cmdname = \
   { \
@@ -177,8 +177,10 @@ struct desc
 #define CMD_VARARG(S)   ((S[0]) == '.')
 #define CMD_RANGE(S)	((S[0] == '<'))
 
-#define CMD_IPV4(S)	((strcmp ((S), "A.B.C.D") == 0))
+#define CMD_IPV4(S)	   ((strcmp ((S), "A.B.C.D") == 0))
 #define CMD_IPV4_PREFIX(S) ((strcmp ((S), "A.B.C.D/M") == 0))
+#define CMD_IPV6(S)        ((strcmp ((S), "X:X::X:X") == 0))
+#define CMD_IPV6_PREFIX(S) ((strcmp ((S), "X:X::X:X/M") == 0))
 
 /* Description. */
 #define SHOW_STR "Show running system information\n"

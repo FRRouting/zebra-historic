@@ -9,6 +9,7 @@ o IPv6 router advertisement code finish.
 o Pointopoint address configuration.
 o Multiple (alias) address configuration for the interface when kernel
   support it.
+o multipath support.
 
 bgpd:
 

@@ -91,6 +91,12 @@ struct vty
   /* Current executing function pointer. */
   int (*func) (struct vty *, void *arg);
 
+  /* Terminal monitor. */
+  int monitor;
+
+  /* In configure mode. */
+  int config;
+
   /* Read and write thread. */
   struct thread *t_read;
   struct thread *t_write;
@@ -101,7 +107,7 @@ struct vty
 };
 
 /* Small macro to determine newline is newline only or linefeed needed. */
-#define VTY_NEWLINE  vty->type == VTY_FILE ? "\n" : "\r\n"
+#define VTY_NEWLINE  ((vty->type == VTY_FILE) ? "\n" : "\r\n")
 
 /* Default time out value */
 /* #define VTY_TIMEOUT_DEFAULT 10 */
@@ -123,11 +129,14 @@ struct vty
 void vty_init (void);
 void vty_reset (void);
 struct vty *vty_new (void);
-int vty_out (struct vty *, char *, ...);
+int vty_out (struct vty *, const char *, ...);
 void vty_read_config (char *, char *, char *);
 void vty_time_print (struct vty *);
 void vty_serv_sock (unsigned short);
 void vty_close (struct vty *);
 char *vty_get_cwd (void);
+void vty_log (const char *, const char *, va_list);
+int vty_config_lock (struct vty *);
+int vty_config_unlock (struct vty *);
 
 #endif /* _ZEBRA_VTY_H */

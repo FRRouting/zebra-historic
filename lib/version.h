@@ -23,7 +23,7 @@
 #ifndef _ZEBRA_VERSION_H
 #define _ZEBRA_VERSION_H
 
-#define ZEBRA_VERSION     "0.83a"
+#define ZEBRA_VERSION     "0.84"
 
 #define ZEBRA_BUG_ADDRESS "bug-zebra@gnu.org"
 

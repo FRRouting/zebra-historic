@@ -69,36 +69,37 @@ struct ospf6_interface
 {
   struct interface *interface;       /* IF info from zebra */
   struct area      *area;            /* back pointer to area */
-  list              neighbor_list;   /* list of neighbor found in this I/F */
+  list              neighbor_list;   /* list of struct neighbor */
 
-  struct in6_addr   *myaddr;          /* linklocal address of this I/F */
-  list              prefix;
+  struct in6_addr  *lladdr;          /* linklocal address of this I/F */
+  list              prefix_list;     /* list of struct in6_addr */
 
-  unsigned long     if_id;
-  unsigned char     instance_id;
-  unsigned long     transdelay;      /* I/F transmission delay */
-  unsigned char     priority;
-  unsigned short    hello_interval;
-  unsigned short    dead_interval;
-  unsigned long     cost;
-  unsigned long     rxmt_interval;
-  unsigned long     ifmtu;
+  u_int32_t     if_id;
+  u_char     instance_id;
+  u_int32_t     transdelay;      /* I/F transmission delay */
+  u_char     priority;
+  u_int16_t    hello_interval;
+  u_int16_t    dead_interval;
+  u_int32_t     cost;
+  u_int32_t     rxmt_interval;
+  u_int32_t     ifmtu;
 
   unsigned char     state;
-  unsigned long     dr;
-  unsigned long     bdr;
-  unsigned long     prevdr;
-  unsigned long     prevbdr;
+  u_int32_t     dr;
+  u_int32_t     bdr;
+  u_int32_t     prevdr;
+  u_int32_t     prevbdr;
 
   struct thread    *thread_send_hello;
   struct thread    *thread_send_lsack_delayed; /* Timer for delayed Ack */
 
   list              lsa_delayed_ack;
-  list              lsdb;               /* includes Link-LSA */
+  list              lsdb;                      /* includes Link-LSA */
 
-  signed long lsa_seqnum_link;
-  signed long lsa_seqnum_network;
-  signed long lsa_seqnum_intra_prefix;
+  /* Sequence number place holder */
+  int32_t       lsa_seqnum_link;
+  int32_t       lsa_seqnum_network;
+  int32_t       lsa_seqnum_intra_prefix;
 
   /* statistics */
   unsigned int ospf6_stat_dr_election;

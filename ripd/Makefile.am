@@ -40,11 +40,6 @@ depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
 ## File dependency.
-ripd.o: ripd.c ../lib/if.h ../lib/linklist.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/table.h \
- ../lib/thread.h ../lib/memory.h ../lib/roken.h ../lib/log.h \
- ../lib/stream.h ../lib/filter.h ../lib/sockunion.h ../lib/routemap.h \
- ../lib/plist.h ../lib/distribute.h ../ripd/ripd.h ../ripd/rip_debug.h
 rip_debug.o: rip_debug.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../ripd/rip_debug.h
 rip_interface.o: rip_interface.c ../lib/command.h ../lib/vector.h \
@@ -66,3 +61,8 @@ rip_zebra.o: rip_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/prefix.h ../lib/stream.h ../lib/routemap.h ../lib/zclient.h \
  ../lib/if.h ../lib/linklist.h ../lib/log.h ../ripd/ripd.h \
  ../ripd/rip_debug.h
+ripd.o: ripd.c ../lib/if.h ../lib/linklist.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/table.h \
+ ../lib/thread.h ../lib/memory.h ../lib/roken.h ../lib/log.h \
+ ../lib/stream.h ../lib/filter.h ../lib/sockunion.h ../lib/routemap.h \
+ ../lib/plist.h ../lib/distribute.h ../ripd/ripd.h ../ripd/rip_debug.h

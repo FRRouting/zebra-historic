@@ -63,18 +63,20 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 
   /* First try to find intra-area non-bb paths */
 
-  for (nnode = listhead ((list) rn->info); nnode; nextnode (nnode)) 
-    {
-      if ((or = getdata (nnode)) == NULL)
-	continue;
+  if (ospf_top->RFC1583Compat == 0)
 
-      if (or->cost >= OSPF_LS_INFINITY)
-	continue;
+     for (nnode = listhead ((list) rn->info); nnode; nextnode (nnode)) 
+       {
+         if ((or = getdata (nnode)) == NULL)
+    	   continue;
 
-      if (or->area->area_id.s_addr != OSPF_AREA_BACKBONE &&
-	  or->path_type == OSPF_PATH_INTRA_AREA)
-	list_add_node (chosen, or);
-    }
+         if (or->cost >= OSPF_LS_INFINITY)
+	   continue;
+
+         if (or->area->area_id.s_addr != OSPF_AREA_BACKBONE &&
+	     or->path_type == OSPF_PATH_INTRA_AREA)
+   	   list_add_node (chosen, or);
+       }
 
   /* if none is found--look through all */
   if (listcount (chosen) == 0)
@@ -177,6 +179,9 @@ ospf_ase_check_fwd_addr (struct in_addr fwd_addr)
     {
       if ((ifp = getdata (if_node)) == NULL)
 	continue;
+
+      if (! if_is_up (ifp))
+         continue;
 
       if ((oi = ifp->info) == NULL)
 	continue;

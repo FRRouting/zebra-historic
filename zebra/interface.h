@@ -148,6 +148,10 @@ struct zebra_if
 
 void if_up (struct interface *);
 void if_down (struct interface *);
+void zebra_interface_up_update (struct interface *ifp);
+void zebra_interface_down_update (struct interface *ifp);
+
+
 
 #ifdef HAVE_PROC_NET_DEV
 void ifstat_update_proc ();

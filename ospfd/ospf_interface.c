@@ -49,7 +49,7 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   oi->fd = -1;
 
   /* Set default values. */
-  oi->flag = OSPF_IF_DISABLE;
+  /*Z: don't clear this flag.  oi->flag = OSPF_IF_DISABLE; */ 
 
   if (oi->vl_data)
     oi->type = OSPF_IFTYPE_VIRTUALLINK;
@@ -223,25 +223,34 @@ ospf_if_stream_set (struct ospf_interface *oi)
 
   if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
     {
-      oi->ibuf = stream_new (oi->ifp->mtu * 2);
-      OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
+      if (oi->ibuf == NULL) {
+         oi->ibuf = stream_new (oi->ifp->mtu * 2);
+         OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
+      }
     }
 
   /* set output fifo queue. */
-  oi->obuf = ospf_fifo_new ();
+  if (oi->obuf == NULL) 
+     oi->obuf = ospf_fifo_new ();
 }
 
 void
 ospf_if_stream_unset (struct ospf_interface *oi)
 {
   /* unset input buffer. */
-  stream_free (oi->ibuf);
-  OSPF_ISM_READ_OFF (oi->t_read);
+  if (oi->ibuf)
+    {
+      stream_free (oi->ibuf);
+      oi->ibuf = NULL;
+      OSPF_ISM_READ_OFF (oi->t_read);
+    }
 
-  /*
-  stream_free (oi->obuf);
-  OSPF_ISM_WRITE_OFF (oi->t_write);
-  */
+  if (oi->obuf)
+    {
+     ospf_fifo_free (oi->obuf);
+     oi->obuf = NULL;
+     OSPF_ISM_WRITE_OFF (oi->t_write);
+    }
 }
 
 int
@@ -274,6 +283,51 @@ ospf_if_is_enable (struct interface *ifp)
 
   if (oi->flag != OSPF_IF_ENABLE)
     return 0;
+
+  return 1;
+}
+
+
+int
+ospf_if_up (struct interface *ifp)
+{
+  int ret;
+  struct ospf_interface *oi = ifp->info;
+
+  if (oi == NULL)
+    return 0;
+
+  if (oi->flag == OSPF_IF_DISABLE)
+    return 0;
+
+  if (oi->fd == -1)
+    {
+      ret = ospf_serv_sock_init (ifp, oi->address);
+      if (ret < 0) {
+         zlog_info ("Z: ospf_if_up(): Problem with socket !!!");
+         return 0;
+      }
+    }
+  ospf_if_stream_set (oi);
+
+  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceUp);
+
+  return 1;
+}
+
+int
+ospf_if_down (struct interface *ifp)
+{
+  struct ospf_interface *oi = ifp->info;
+
+  if (oi == NULL)
+    return 0;
+
+  if (oi->flag == OSPF_IF_DISABLE)
+    return 0;
+
+  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceDown);
+  ospf_if_stream_unset (oi);
 
   return 1;
 }
@@ -596,7 +650,7 @@ char *ospf_int_type_str[] =
   "unknown",               /*should never be used*/
   "point-to-point",
   "broadcast",
-  "nbma",
+  "non-broadcast",
   "point-to-multipoint",
   "virtual-link"           /*should never be used*/
 };
@@ -627,45 +681,45 @@ interface_config_write (struct vty *vty)
 
       write++;
 
-      /* Interface Output Cost print. */
+      /* Interface Network print. */
       if (oi->type != OSPF_IFTYPE_BROADCAST)
-	vty_out (vty, " ospf network %s%s", ospf_int_type_str[oi->type], 
+	vty_out (vty, " ip ospf network %s%s", ospf_int_type_str[oi->type], 
                  VTY_NEWLINE);
 
       /* Authentication Key print. */
       if (strlen (oi->auth_data) && oi->auth_md5 == 0)
-	vty_out (vty, " ospf authentication-key %s%s", oi->auth_data,
+	vty_out (vty, " ip ospf authentication-key %s%s", oi->auth_data,
 		 VTY_NEWLINE);
 
       if (strlen (oi->auth_data) && oi->auth_md5 == 1)
-	vty_out (vty, " ospf message-digest-key %d md5 %s%s",
+	vty_out (vty, " ip ospf message-digest-key %d md5 %s%s",
                  oi->auth_key_id, oi->auth_data, VTY_NEWLINE);
 
       /* Interface Output Cost print. */
       if (oi->output_cost != OSPF_OUTPUT_COST_DEFAULT)
-	vty_out (vty, " ospf cost %u%s", oi->output_cost, VTY_NEWLINE);
+	vty_out (vty, " ip ospf cost %u%s", oi->output_cost, VTY_NEWLINE);
 
       /* Hello Interval print. */
       if (oi->v_hello != OSPF_HELLO_INTERVAL_DEFAULT)
-	vty_out (vty, " ospf hello-interval %u%s", oi->v_hello, VTY_NEWLINE);
+	vty_out (vty, " ip ospf hello-interval %u%s", oi->v_hello, VTY_NEWLINE);
 
       /* Router Dead Interval print. */
       if (oi->v_wait != OSPF_ROUTER_DEAD_INTERVAL_DEFAULT)
-	vty_out (vty, " ospf dead-interval %u%s", oi->v_wait, VTY_NEWLINE);
+	vty_out (vty, " ip ospf dead-interval %u%s", oi->v_wait, VTY_NEWLINE);
 
       /* Router Priority print. */
       if (oi->nbr_self)
 	if (PRIORITY (oi) != OSPF_ROUTER_PRIORITY_DEFAULT)
-	  vty_out (vty, " ospf priority %u%s", PRIORITY (oi), VTY_NEWLINE);
+	  vty_out (vty, " ip ospf priority %u%s", PRIORITY (oi), VTY_NEWLINE);
 
       /* Retransmit Interval print. */
       if (oi->retransmit_interval != OSPF_RETRANSMIT_INTERVAL_DEFAULT)
-	vty_out (vty, " ospf retransmit-interval %u%s",
+	vty_out (vty, " ip ospf retransmit-interval %u%s",
 		 oi->retransmit_interval, VTY_NEWLINE);
 
       /* Transmit Delay print. */
       if (oi->transmit_delay != OSPF_TRANSMIT_DELAY_DEFAULT)
-	vty_out (vty, " ospf transmit-delay %u%s", oi->transmit_delay,
+	vty_out (vty, " ip ospf transmit-delay %u%s", oi->transmit_delay,
 		 VTY_NEWLINE);
     }
 
@@ -673,11 +727,13 @@ interface_config_write (struct vty *vty)
 }
 
 
-DEFUN (if_ospf_authentication_key,
-       if_ospf_authentication_key_cmd,
-       "ospf authentication-key AUTH_KEY",
+DEFUN (ip_ospf_authentication_key,
+       ip_ospf_authentication_key_cmd,
+       "ip ospf authentication-key AUTH_KEY",
+       "IP Information\n"
        "OSPF interface commands\n"
-       "Authentication password (key)")
+       "Authentication password (key)\n"
+       "The OSPF password (key)")
 {
   struct interface *ifp;
   struct ospf_interface *oi;
@@ -692,11 +748,20 @@ DEFUN (if_ospf_authentication_key,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_authentication_key,
-       no_if_ospf_authentication_key_cmd,
-       "ospf authentication-key",
+ALIAS (ip_ospf_authentication_key,
+       ospf_authentication_key_cmd,
+       "ospf authentication-key AUTH_KEY",
+       "OSPF interface commands\n"
+       "Authentication password (key)\n"
+       "The OSPF password (key)")
+
+DEFUN (no_ip_ospf_authentication_key,
+       no_ip_ospf_authentication_key_cmd,
+       "no ip ospf authentication-key",
        NO_STR
-       "OSPF interface commands\n")
+       "IP Information\n"
+       "OSPF interface commands\n"
+       "Authentication password (key)\n")
 {
   struct interface *ifp;
   struct ospf_interface *oi;
@@ -709,27 +774,18 @@ DEFUN (no_if_ospf_authentication_key,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_message_digest_key,
-       no_if_ospf_message_digest_key_cmd,
-       "ospf message-digest-key",
+ALIAS (no_ip_ospf_authentication_key,
+       no_ospf_authentication_key_cmd,
+       "no ospf authentication-key",
        NO_STR
-       "OSPF interface commands\n")
-{
-  struct interface *ifp;
-  struct ospf_interface *oi;
+       "OSPF interface commands\n"
+       "Authentication password (key)\n")
 
-  ifp = vty->index;
-  oi = ifp->info;
-
-  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
-  oi->auth_md5 = 0;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (if_ospf_message_digest_key,
-       if_ospf_message_digest_key_cmd,
-       "ospf message-digest-key KEYID md5 KEY",
+DEFUN (ip_ospf_message_digest_key,
+       ip_ospf_message_digest_key_cmd,
+       "ip ospf message-digest-key KEYID md5 KEY",
+       "IP Information\n"
+       "OSPF interface commands\n"
        "Message digest authentication password (key)\n"
        "Key ID\n"
        "Use MD5 algorithm\n"
@@ -752,9 +808,46 @@ DEFUN (if_ospf_message_digest_key,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_cost,
-       if_ospf_cost_cmd,
-       "ospf cost <1-65535>",
+ALIAS (ip_ospf_message_digest_key,
+       ospf_message_digest_key_cmd,
+       "ospf message-digest-key KEYID md5 KEY",
+       "OSPF interface commands\n"
+       "Message digest authentication password (key)\n"
+       "Key ID\n"
+       "Use MD5 algorithm\n"
+       "The OSPF password (key)")
+
+DEFUN (no_ip_ospf_message_digest_key,
+       no_ip_ospf_message_digest_key_cmd,
+       "no ip ospf message-digest-key",
+       NO_STR
+       "IP Information\n"
+       "OSPF interface commands\n"
+       "Message digest authentication password (key)\n")
+{
+  struct interface *ifp;
+  struct ospf_interface *oi;
+
+  ifp = vty->index;
+  oi = ifp->info;
+
+  bzero (oi->auth_data, OSPF_AUTH_MD5_SIZE);
+  oi->auth_md5 = 0;
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_ip_ospf_message_digest_key,
+       no_ospf_message_digest_key_cmd,
+       "no ospf message-digest-key",
+       NO_STR
+       "OSPF interface commands\n"
+       "Message digest authentication password (key)\n")
+
+DEFUN (ip_ospf_cost,
+       ip_ospf_cost_cmd,
+       "ip ospf cost <1-65535>",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Interface cost\n"
        "Cost")
@@ -780,10 +873,18 @@ DEFUN (if_ospf_cost,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_cost,
-       no_if_ospf_cost_cmd,
-       "no ospf cost",
+ALIAS (ip_ospf_cost,
+       ospf_cost_cmd,
+       "ospf cost <1-65535>",
+       "OSPF interface commands\n"
+       "Interface cost\n"
+       "Cost")
+
+DEFUN (no_ip_ospf_cost,
+       no_ip_ospf_cost_cmd,
+       "no ip ospf cost",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Interface cost")
 {
@@ -798,9 +899,17 @@ DEFUN (no_if_ospf_cost,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_dead_interval,
-       if_ospf_dead_interval_cmd,
-       "ospf dead-interval <1-65535>",
+ALIAS (no_ip_ospf_cost,
+       no_ospf_cost_cmd,
+       "no ospf cost",
+       NO_STR
+       "OSPF interface commands\n"
+       "Interface cost")
+
+DEFUN (ip_ospf_dead_interval,
+       ip_ospf_dead_interval_cmd,
+       "ip ospf dead-interval <1-65535>",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Interval after which a neighbor is declared dead\n"
        "Seconds")
@@ -826,10 +935,18 @@ DEFUN (if_ospf_dead_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_dead_interval,
-       no_if_ospf_dead_interval_cmd,
-       "no ospf dead-interval",
+ALIAS (ip_ospf_dead_interval,
+       ospf_dead_interval_cmd,
+       "ospf dead-interval <1-65535>",
+       "OSPF interface commands\n"
+       "Interval after which a neighbor is declared dead\n"
+       "Seconds")
+
+DEFUN (no_ip_ospf_dead_interval,
+       no_ip_ospf_dead_interval_cmd,
+       "no ip ospf dead-interval",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Interval after which a neighbor is declared dead")
 {
@@ -844,9 +961,17 @@ DEFUN (no_if_ospf_dead_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_hello_interval,
-       if_ospf_hello_interval_cmd,
-       "ospf hello-interval <1-65535>",
+ALIAS (no_ip_ospf_dead_interval,
+       no_ospf_dead_interval_cmd,
+       "no ospf dead-interval",
+       NO_STR
+       "OSPF interface commands\n"
+       "Interval after which a neighbor is declared dead")
+
+DEFUN (ip_ospf_hello_interval,
+       ip_ospf_hello_interval_cmd,
+       "ip ospf hello-interval <1-65535>",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Time between HELLO packets\n"
        "Seconds")
@@ -872,10 +997,18 @@ DEFUN (if_ospf_hello_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_hello_interval,
-       no_if_ospf_hello_interval_cmd,
-       "no ospf hello-interval",
+ALIAS (ip_ospf_hello_interval,
+       ospf_hello_interval_cmd,
+       "ospf hello-interval <1-65535>",
+       "OSPF interface commands\n"
+       "Time between HELLO packets\n"
+       "Seconds")
+
+DEFUN (no_ip_ospf_hello_interval,
+       no_ip_ospf_hello_interval_cmd,
+       "no ip ospf hello-interval",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Time between HELLO packets")
 {
@@ -890,9 +1023,17 @@ DEFUN (no_if_ospf_hello_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_network,
-       if_ospf_network_cmd,
-       "ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point",
+ALIAS (no_ip_ospf_hello_interval,
+       no_ospf_hello_interval_cmd,
+       "no ospf hello-interval",
+       NO_STR
+       "OSPF interface commands\n"
+       "Time between HELLO packets")
+
+DEFUN (ip_ospf_network,
+       ip_ospf_network_cmd,
+       "ip ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point)",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Network type\n"
        "Specify OSPF broadcast multi-access network\n"
@@ -918,10 +1059,21 @@ DEFUN (if_ospf_network,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_network,
-       no_if_ospf_network_cmd,
-       "no ospf network",
+ALIAS (ip_ospf_network,
+       ospf_network_cmd,
+       "ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point)",
+       "OSPF interface commands\n"
+       "Network type\n"
+       "Specify OSPF broadcast multi-access network\n"
+       "Specify OSPF NBMA network\n"
+       "Specify OSPF point-to-multipoint network\n"
+       "Specify OSPF point-to-point network\n")
+
+DEFUN (no_ip_ospf_network,
+       no_ip_ospf_network_cmd,
+       "no ip ospf network",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Network type")
 {
@@ -936,9 +1088,17 @@ DEFUN (no_if_ospf_network,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_priority,
-       if_ospf_priority_cmd,
-       "ospf priority <0-255>",
+ALIAS (no_ip_ospf_network,
+       no_ospf_network_cmd,
+       "no ospf network",
+       NO_STR
+       "OSPF interface commands\n"
+       "Network type")
+
+DEFUN (ip_ospf_priority,
+       ip_ospf_priority_cmd,
+       "ip ospf priority <0-255>",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Router priority\n"
        "Priority")
@@ -964,10 +1124,18 @@ DEFUN (if_ospf_priority,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_priority,
-       no_if_ospf_priority_cmd,
-       "no ospf priority",
+ALIAS (ip_ospf_priority,
+       ospf_priority_cmd,
+       "ospf priority <0-255>",
+       "OSPF interface commands\n"
+       "Router priority\n"
+       "Priority")
+
+DEFUN (no_ip_ospf_priority,
+       no_ip_ospf_priority_cmd,
+       "no ip ospf priority",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Router priority")
 {
@@ -982,9 +1150,17 @@ DEFUN (no_if_ospf_priority,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_retransmit_interval,
-       if_ospf_retransmit_interval_cmd,
-       "ospf retransmit-interval <1-65535>",
+ALIAS (no_ip_ospf_priority,
+       no_ospf_priority_cmd,
+       "no ospf priority",
+       NO_STR
+       "OSPF interface commands\n"
+       "Router priority")
+
+DEFUN (ip_ospf_retransmit_interval,
+       ip_ospf_retransmit_interval_cmd,
+       "ip ospf retransmit-interval <1-65535>",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements\n"
        "Seconds")
@@ -1010,10 +1186,18 @@ DEFUN (if_ospf_retransmit_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_retransmit_interval,
-       no_if_ospf_retransmit_interval_cmd,
-       "no ospf retransmit-interval",
+ALIAS (ip_ospf_retransmit_interval,
+       ospf_retransmit_interval_cmd,
+       "ospf retransmit-interval <1-65535>",
+       "OSPF interface commands\n"
+       "Time between retransmitting lost link state advertisements\n"
+       "Seconds")
+
+DEFUN (no_ip_ospf_retransmit_interval,
+       no_ip_ospf_retransmit_interval_cmd,
+       "no ip ospf retransmit-interval",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements")
 {
@@ -1028,9 +1212,17 @@ DEFUN (no_if_ospf_retransmit_interval,
   return CMD_SUCCESS;
 }
 
-DEFUN (if_ospf_transmit_delay,
-       if_ospf_transmit_delay_cmd,
-       "ospf transmit-delay <1-65535>",
+ALIAS (no_ip_ospf_retransmit_interval,
+       no_ospf_retransmit_interval_cmd,
+       "no ospf retransmit-interval",
+       NO_STR
+       "OSPF interface commands\n"
+       "Time between retransmitting lost link state advertisements")
+
+DEFUN (ip_ospf_transmit_delay,
+       ip_ospf_transmit_delay_cmd,
+       "ip ospf transmit-delay <1-65535>",
+       "IP Information\n"
        "OSPF interface commands\n"
        "Link state transmit delay\n"
        "Seconds")
@@ -1056,10 +1248,18 @@ DEFUN (if_ospf_transmit_delay,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_if_ospf_transmit_delay,
-       no_if_ospf_transmit_delay_cmd,
-       "no ospf transmit-delay",
+ALIAS (ip_ospf_transmit_delay,
+       ospf_transmit_delay_cmd,
+       "ospf transmit-delay <1-65535>",
+       "OSPF interface commands\n"
+       "Link state transmit delay\n"
+       "Seconds")
+
+DEFUN (no_ip_ospf_transmit_delay,
+       no_ip_ospf_transmit_delay_cmd,
+       "no ip ospf transmit-delay",
        NO_STR
+       "IP Information\n"
        "OSPF interface commands\n"
        "Link state transmit delay")
 {
@@ -1073,6 +1273,13 @@ DEFUN (no_if_ospf_transmit_delay,
 
   return CMD_SUCCESS;
 }
+
+ALIAS (no_ip_ospf_transmit_delay,
+       no_ospf_transmit_delay_cmd,
+       "no ospf transmit-delay",
+       NO_STR
+       "OSPF interface commands\n"
+       "Link state transmit delay")
 
 
 /* ospfd's interface node. */
@@ -1100,22 +1307,41 @@ ospf_if_init ()
   install_element (INTERFACE_NODE, &config_help_cmd);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_authentication_key_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_authentication_key_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_message_digest_key_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_message_digest_key_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_cost_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_cost_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_dead_interval_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_dead_interval_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_hello_interval_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_hello_interval_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_network_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_network_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_priority_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_priority_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_retransmit_interval_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_retransmit_interval_cmd);
-  install_element (INTERFACE_NODE, &if_ospf_transmit_delay_cmd);
-  install_element (INTERFACE_NODE, &no_if_ospf_transmit_delay_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_authentication_key_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_authentication_key_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_message_digest_key_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_message_digest_key_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_cost_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_cost_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_dead_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_dead_interval_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_hello_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_hello_interval_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_network_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_network_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_priority_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_priority_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_retransmit_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_retransmit_interval_cmd);
+  install_element (INTERFACE_NODE, &ip_ospf_transmit_delay_cmd);
+  install_element (INTERFACE_NODE, &no_ip_ospf_transmit_delay_cmd);
+  /* These commands are compatibitliy for previous version. */
+  install_element (INTERFACE_NODE, &ospf_authentication_key_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_authentication_key_cmd);
+  install_element (INTERFACE_NODE, &ospf_message_digest_key_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_message_digest_key_cmd);
+  install_element (INTERFACE_NODE, &ospf_cost_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_cost_cmd);
+  install_element (INTERFACE_NODE, &ospf_dead_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_dead_interval_cmd);
+  install_element (INTERFACE_NODE, &ospf_hello_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_hello_interval_cmd);
+  install_element (INTERFACE_NODE, &ospf_network_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_network_cmd);
+  install_element (INTERFACE_NODE, &ospf_priority_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_priority_cmd);
+  install_element (INTERFACE_NODE, &ospf_retransmit_interval_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_retransmit_interval_cmd);
+  install_element (INTERFACE_NODE, &ospf_transmit_delay_cmd);
+  install_element (INTERFACE_NODE, &no_ospf_transmit_delay_cmd);
 }

@@ -28,7 +28,7 @@ struct newlist
   struct newnode *tail;
   unsigned long count;
   int (*cmp) (void *val1, void *val2);
-  int (*del) (void *val);
+  void (*del) (void *val);
 };
 
 struct newnode
@@ -42,6 +42,7 @@ struct newlist *newlist_new ();
 void newlist_delete (struct newlist *);
 void newnode_add (struct newlist *, void *);
 void *newnode_delete (struct newlist *, void *);
+void *newlist_first (struct newlist *);
 
 #define NEWLIST_LOOP(L,V,N) \
   for ((N) = (L)->head; (N); (N) = (N)->next) \

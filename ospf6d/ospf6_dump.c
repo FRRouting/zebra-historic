@@ -90,7 +90,7 @@ char *rlsatype_name[] =
   NULL
 };
 
-char *print_lsreq (struct linkstate_request *lsreq)
+char *print_lsreq (struct ospf6_lsreq *lsreq)
 {
   static char buf[256];
   char advrtr[64], id[64];
@@ -191,7 +191,7 @@ o6log_err (const char *format, ...)
   va_list args;
 
   va_start (args, format);
-  zvlog (NULL, LOG_ERR, format, args);
+  zlog (NULL, LOG_ERR, format, args);
   return;
 }
 
@@ -201,7 +201,7 @@ o6log_warn (const char *format, ...)
   va_list args;
 
   va_start (args, format);
-  zvlog (NULL, LOG_WARNING, format, args);
+  zlog (NULL, LOG_WARNING, format, args);
   return;
 }
 
@@ -211,7 +211,7 @@ o6log_notice (const char *format, ...)
   va_list args;
 
   va_start (args, format);
-  zvlog (NULL, LOG_NOTICE, format, args);
+  zlog (NULL, LOG_NOTICE, format, args);
   return;
 }
 
@@ -227,7 +227,7 @@ o6log_on (const char *format, ...)
   va_list args;
 
   va_start (args, format);
-  zvlog (NULL, LOG_INFO, format, args);
+  zlog (NULL, LOG_INFO, format, args);
   return;
 }
 
@@ -343,9 +343,9 @@ static void
 ospf6_dump_lsupdate (struct iovec *message)
 {
   int i;
-  struct linkstate_update *lsupdate;
+  struct ospf6_lsupdate *lsupdate;
 
-  lsupdate = (struct linkstate_update *) (*message).iov_base;
+  lsupdate = (struct ospf6_lsupdate *) (*message).iov_base;
   zlog_info ("  LSUpdate: #%lu", ntohl (lsupdate->lsupdate_num));
   for (i = 1; message[i].iov_base; i++)
     ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *)message[i].iov_base);
@@ -363,11 +363,11 @@ ospf6_dump_lsack (struct iovec *message)
 void
 ospf6_dump_message (struct iovec *message)
 {
-  struct ospf6_hdr *o6hdr;
+  struct ospf6_header *o6hdr;
   char rtrid_str[16], areaid_str[16];
 
-  assert (message[0].iov_len == sizeof (struct ospf6_hdr));
-  o6hdr = (struct ospf6_hdr *) message[0].iov_base;
+  assert (message[0].iov_len == sizeof (struct ospf6_header));
+  o6hdr = (struct ospf6_header *) message[0].iov_base;
 
   inet_ntop (AF_INET, &o6hdr->router_id, rtrid_str, sizeof (rtrid_str));
   inet_ntop (AF_INET, &o6hdr->area_id, areaid_str, sizeof (areaid_str));

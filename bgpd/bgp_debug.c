@@ -37,13 +37,6 @@
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_community.h"
 
-extern FILE *logfp;
-
-int dump_open;
-int dump_update;
-int dump_keepalive;
-int dump_notify;
-
 /* messages for BGP-4 status */
 struct message bgp_status_msg[] = 
 {
@@ -121,30 +114,7 @@ int bgp_notify_update_msg_max = BGP_NOTIFY_UPDATE_MAX;
 
 /* Origin strings. */
 char *bgp_origin_str[] = {"i","e","?"};
-
-char *
-lookupmes (struct message *array, int key)
-{
-  struct message *pnt;
-
-  for (pnt = array; pnt->key != 0; pnt++) 
-    if (pnt->key == key) 
-      return pnt->str;
-
-  return NULL;
-}
-
-/* message lookup function */
-char *
-mes_lookup (struct message *meslist, int max, int index)
-{
-  if (index < 0 || index >= max) 
-    {
-      zlog (NULL, LOG_INFO, "message index out of bound: %d", max);
-      return NULL;
-    }
-  return meslist[index].str;
-}
+char *bgp_origin_long_str[] = {"IGP","EGP","Incomplete"};
 
 #if 0
 /* Dump bgp header information. */
@@ -204,7 +174,7 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
   }
 #endif /* HAVE_IPV6 */
 
-  if (bgp_peer_sort (peer) == BGP_PEER_IBGP)
+  if (peer_sort (peer) == BGP_PEER_IBGP)
     {
       snprintf (buf + strlen (buf), size - strlen (buf), " lpref: %d",
 		attr->local_pref);
@@ -258,22 +228,22 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
 
 /* dump notify packet */
 void
-bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify)
+bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify, char *direct)
 {
   char *subcode_str;
 
   subcode_str = "";
 
-  switch (bgp_notify->err_code) 
+  switch (bgp_notify->code) 
     {
     case BGP_NOTIFY_HEADER_ERR:
-      subcode_str = LOOKUP (bgp_notify_head_msg, bgp_notify->err_subcode);
+      subcode_str = LOOKUP (bgp_notify_head_msg, bgp_notify->subcode);
       break;
     case BGP_NOTIFY_OPEN_ERR:
-      subcode_str = LOOKUP (bgp_notify_open_msg, bgp_notify->err_subcode);
+      subcode_str = LOOKUP (bgp_notify_open_msg, bgp_notify->subcode);
       break;
     case BGP_NOTIFY_UPDATE_ERR:
-      subcode_str = LOOKUP (bgp_notify_update_msg, bgp_notify->err_subcode);
+      subcode_str = LOOKUP (bgp_notify_update_msg, bgp_notify->subcode);
       break;
     case BGP_NOTIFY_HOLD_ERR:
       subcode_str = "";
@@ -285,10 +255,11 @@ bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify)
       subcode_str = "";
       break;
     }
-  zlog (peer->log, LOG_INFO, "Notify:[%s] %s (%s)",
-	peer ? peer->host : "",
-	LOOKUP (bgp_notify_msg, bgp_notify->err_code),
-	subcode_str);
+  plog_info (peer->log, "%s [Notify:%s] %s (%s)",
+	     peer ? peer->host : "",
+	     direct,
+	     LOOKUP (bgp_notify_msg, bgp_notify->code),
+	     subcode_str);
 }
 
 #if 0
@@ -334,9 +305,9 @@ bgp_packet_notify_dump (struct stream *s)
 {
   struct bgp_notify bgp_notify;
 
-  bgp_notify.err_code = stream_getc (s);
-  bgp_notify.err_subcode = stream_getc (s);
-  bgp_notify_print(NULL, &bgp_notify);
+  bgp_notify.code = stream_getc (s);
+  bgp_notify.subcode = stream_getc (s);
+  bgp_notify_print (NULL, &bgp_notify, "RECV");
 }
 
 /* Dump bgp update packet. */
@@ -438,42 +409,55 @@ bgp_packet_dump (struct stream *s)
 /* Debug option setting interface. */
 unsigned long bgp_debug_option = 0;
 
-void debug_on  (unsigned int option) { bgp_debug_option |= option; }
-void debug_off (unsigned int option) { bgp_debug_option &= ~option; }
-int  debug     (unsigned int option) { return bgp_debug_option & option; }
+int  
+debug (unsigned int option)
+{
+  return bgp_debug_option & option; 
+}
 
-DEFUN (debug_bgp, debug_bgp_cmd,
-       "debug bgp DEBUG_OPT",
+DEFUN (debug_bgp_fsm,
+       debug_bgp_fsm_cmd,
+       "debug bgp fsm",
        DEBUG_STR
        BGP_STR
-       "Debug option set for bgpd\n")
+       "Finite Stete Machine\n")
 {
-  if (strcmp (argv[0], "fsm") == 0)
-    debug_on (DEBUG_BGP_FSM);
-  else
-    {
-      vty_out (vty, "debug option %s doesn't supported%s", argv[0],
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+  DEBUG_ON (fsm, FSM);
   return CMD_SUCCESS;
 }
 
-DEFUN (no_debug_bgp, no_debug_bgp_cmd,
-       "no debug bgp DEBUG_OPT",
+DEFUN (no_debug_bgp_fsm,
+       no_debug_bgp_fsm_cmd,
+       "no debug bgp fsm",
        NO_STR
        DEBUG_STR
        BGP_STR
-       "Debug option unset for bgpd\n")
+       "Finite Stete Machine\n")
 {
-  if (strcmp (argv[0], "fsm") == 0)
-    debug_off (DEBUG_BGP_FSM);
-  else
-    {
-      vty_out (vty, "debug option %s doesn't supported%s", argv[0],
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
+  DEBUG_OFF (fsm, FSM);
+  return CMD_SUCCESS;
+}
+
+DEFUN (debug_bgp_events,
+       debug_bgp_events_cmd,
+       "debug bgp events",
+       DEBUG_STR
+       BGP_STR
+       "BGP events\n")
+{
+  DEBUG_ON (events, EVENTS);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_debug_bgp_events,
+       no_debug_bgp_events_cmd,
+       "no debug bgp events",
+       NO_STR
+       DEBUG_STR
+       BGP_STR
+       "BGP events\n")
+{
+  DEBUG_OFF (events, EVENTS);
   return CMD_SUCCESS;
 }
 
@@ -483,42 +467,10 @@ DEFUN (show_debug_bgp, show_debug_bgp_cmd,
        DEBUG_STR
        BGP_STR)
 {
-  vty_out (vty, "Debug option%s", VTY_NEWLINE);
-  vty_out (vty, "============%s", VTY_NEWLINE);
-
-  vty_out (vty, "debug bgp fsm : ");
-  if (debug (DEBUG_BGP_FSM))
-    vty_out (vty, "on%s", VTY_NEWLINE);
-  else
-    vty_out (vty, "off%s", VTY_NEWLINE);
-
-  return CMD_SUCCESS;
-}
-
-/* debgp ip bgp [events|keepalives|updates] [recv|send] [detail] */
-DEFUN (debug_ip_bgp, debug_ip_bgp_cmd,
-       "debug ip bgp [DEBUG_OPTION]",
-       "Debug option\n"
-       "IP debug\n"
-       "BGP debug\n"
-       "BGP debug option\n"
-       "BGP debug option\n")
-{
-  /* All BGP option are set to normal level. */
-  if (argc == 0)
-    {
-      ;
-    }
-  if (argc == 1)
-    vty_out (vty, "option1 %s%s", argv[0],
-	     VTY_NEWLINE);
-  else if (argc == 2)
-    vty_out (vty, "option2 %s%s", argv[1],
-	     VTY_NEWLINE);
-  else
-    vty_out (vty, "no option%s",
-	     VTY_NEWLINE);
-
+  if (BGP_DEBUG (fsm, FSM))
+    vty_out (vty, "debug bgp fsm%s", VTY_NEWLINE);
+  if (BGP_DEBUG (events, EVENTS))
+    vty_out (vty, "debug bgp events%s", VTY_NEWLINE);
   return CMD_SUCCESS;
 }
 
@@ -527,8 +479,14 @@ bgp_debug_init ()
 {
   install_element (VIEW_NODE, &show_debug_bgp_cmd);
   install_element (ENABLE_NODE, &show_debug_bgp_cmd);
-  install_element (ENABLE_NODE, &debug_bgp_cmd);
-  install_element (CONFIG_NODE, &debug_bgp_cmd);
-  install_element (ENABLE_NODE, &no_debug_bgp_cmd);
-  install_element (ENABLE_NODE, &debug_ip_bgp_cmd);
+
+  install_element (ENABLE_NODE, &debug_bgp_fsm_cmd);
+  install_element (CONFIG_NODE, &debug_bgp_fsm_cmd);
+  install_element (ENABLE_NODE, &debug_bgp_events_cmd);
+  install_element (CONFIG_NODE, &debug_bgp_events_cmd);
+
+  install_element (ENABLE_NODE, &no_debug_bgp_fsm_cmd);
+  install_element (CONFIG_NODE, &no_debug_bgp_fsm_cmd);
+  install_element (ENABLE_NODE, &no_debug_bgp_events_cmd);
+  install_element (CONFIG_NODE, &no_debug_bgp_events_cmd);
 }

@@ -1,5 +1,4 @@
-/*
- * AS path management routines.
+/* AS path management routines.
  * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -73,12 +72,6 @@ aspath_free (struct aspath *aspath)
   if (aspath->str)
     XFREE (MTYPE_AS_STR, aspath->str);
   XFREE (MTYPE_AS_PATH, aspath);
-}
-
-void
-aspath_intern (struct aspath *aspath)
-{
-  aspath->refcnt++;
 }
 
 /* Unintern aspath from AS path bucket. */
@@ -227,15 +220,43 @@ aspath_make_str_count (struct aspath *as)
   return str_buf;
 }
 
+/* Intern allocated AS path. */
+struct aspath *
+aspath_intern (struct aspath *aspath)
+{
+  struct aspath *find;
+  
+  /* Assert this AS path structure is not interned. */
+  assert (aspath->refcnt == 0);
+  assert (aspath->str == NULL);
+
+  /* Check AS path hash. */
+  find = hash_search (ashash, aspath);
+  if (find)
+    {
+      aspath_free (aspath);
+      find->refcnt++;
+      return find;
+    }
+
+  /* Push new AS path to AS path hash. */
+  aspath->refcnt = 1;
+  aspath->str = aspath_make_str_count (aspath);
+  hash_push (ashash, aspath);
+
+  return aspath;
+}
+
 /* Duplicate aspath structure.  Created same aspath structure but
-   reference count is cleared. */
+   reference count and AS path string is cleared. */
 struct aspath *
 aspath_dup (struct aspath *aspath)
 {
   struct aspath *new;
 
   new = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
-  bzero (new, sizeof (struct aspath));
+  memset (new, 0, sizeof (struct aspath));
+
   new->length = aspath->length;
 
   if (new->length)
@@ -246,14 +267,14 @@ aspath_dup (struct aspath *aspath)
   else
     new->data = NULL;
 
-  new->str = aspath_make_str_count (aspath);
+  /* new->str = aspath_make_str_count (aspath); */
 
   return new;
 }
 
 /* AS path parse function.  pnt is a pointer to byte stream and length
-   is length of byte stream.  If there is same aspath in the aspath
-   hash then return it else make new aspath structure. */
+   is length of byte stream.  If there is same AS path in the the AS
+   path hash then return it else make new AS path structure. */
 struct aspath *
 aspath_parse (caddr_t pnt, int length)
 {
@@ -272,11 +293,14 @@ aspath_parse (caddr_t pnt, int length)
   /* If already same aspath exist then return it. */
   find = hash_search (ashash, &as);
   if (find)
-    return find;
+    {
+      find->refcnt++;
+      return find;
+    }
 
   /* New aspath strucutre is needed. */
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
-  bzero((void *)aspath, sizeof(struct aspath));
+  memset ((void *)aspath, 0, sizeof (struct aspath));
   aspath->length = length;
 
   /* In case of IBGP connection aspath's length can be zero. */
@@ -288,9 +312,6 @@ aspath_parse (caddr_t pnt, int length)
   else
     aspath->data = NULL;
 
-  aspath->refcnt = 0;
-  hash_push (ashash, aspath);
-
   /* Make AS path string. */
   aspath->str = aspath_make_str_count (aspath);
 
@@ -300,6 +321,12 @@ aspath_parse (caddr_t pnt, int length)
       aspath_free (aspath);
       return NULL;
     }
+
+  /* Reference count set to 1. */
+  aspath->refcnt = 1;
+
+  /* Everyting OK, push this AS path to the AS path hash backet. */
+  hash_push (ashash, aspath);
 
   return aspath;
 }
@@ -584,38 +611,10 @@ aspath_segment_add (struct aspath *as, int type)
   assegment->length = 0;
 }
 
-/* Make empty aspath structure. */
 struct aspath *
-aspath_empty_aspath (int gated_dont_eat_flag)
+aspath_empty ()
 {
-  gated_dont_eat_flag = 0;
-
-  if (gated_dont_eat_flag)
-    {
-      struct assegment segment;
-
-      /* This is not acceptable with gated. */
-      segment.type = AS_SEQUENCE;
-      segment.length = 0;
-
-      return aspath_parse ((caddr_t) &segment, AS_HEADER_SIZE);
-    }
-  else
-    return aspath_parse (NULL, 0);
-}
-
-/* Special purpose function. */
-struct aspath *
-aspath_val2as (as_t asno)
-{
-  struct assegment segment;
-
-  segment.type = AS_SEQUENCE;
-  segment.length = 1; 
-  segment.asval[0] = htons (asno);
-
-  return aspath_parse ((caddr_t) &segment,
-		       AS_HEADER_SIZE + (segment.length * AS_VALUE_SIZE));
+  return aspath_parse (NULL, 0);
 }
 
 /* 
@@ -840,8 +839,7 @@ aspath_test ()
   struct aspath *as1;
   struct aspath *as2;
 
-  /* as1 = aspath_val2as (100); */
-  /* as1 = aspath_empty_aspath (0); */
+  /* as1 = aspath_empty (); */
   as1 = aspath_str2aspath ("{1 3 5 3} 12");
   as2 = aspath_str2aspath ("7675 1 2 3");
   printf("%s (%d)\n", aspath_print (as1), as1->count);

@@ -45,11 +45,11 @@ void rip_enable_apply (struct interface *);
 
 struct message ri_version_msg[] = 
 {
-  {RI_RIP_UNSPEC,          ""},
   {RI_RIP_VERSION_1,       "1"},
   {RI_RIP_VERSION_2,       "2"},
   {RI_RIP_VERSION_1_AND_2, "1 2"},
   {RI_RIP_NONE,            "none"},
+  {0,                      NULL}
 };
 
 /* Join to the RIP version 2 multicast group. */
@@ -1167,12 +1167,12 @@ interface_config_write (struct vty *vty)
 
       if (ri->ri_send != RI_RIP_UNSPEC)
 	vty_out (vty, " ip rip send version %s%s",
-		 LOOKUP (ri_version_msg, ri->ri_send),
+		 lookup (ri_version_msg, ri->ri_send),
 		 VTY_NEWLINE);
 
       if (ri->ri_receive != RI_RIP_UNSPEC)
 	vty_out (vty, " ip rip receive version %s%s",
-		 LOOKUP (ri_version_msg, ri->ri_receive),
+		 lookup (ri_version_msg, ri->ri_receive),
 		 VTY_NEWLINE);
 
       if (ri->auth_str)

@@ -558,9 +558,9 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
       newinfo.metric = rte->metric;
 
       ret = route_map_apply (ri->routemap[RIPNG_FILTER_IN], 
-			     (struct prefix *)&p, ROUTE_MAP_RIPNG, &newinfo);
+			     (struct prefix *)&p, RMAP_RIPNG, &newinfo);
 
-      if (ret == RM_DENYMATCH)
+      if (ret == RMAP_DENYMATCH)
 	{
 	  if (IS_RIPNG_DEBUG_PACKET)
 	    zlog_info ("RIPng %s/%d is filtered by route-map in",
@@ -1352,10 +1352,10 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 	      newinfo.metric = metric;
 
 	      ret = route_map_apply (ri->routemap[RIPNG_FILTER_OUT], 
-				     (struct prefix *) p, ROUTE_MAP_RIPNG, 
+				     (struct prefix *) p, RMAP_RIPNG, 
 				     &newinfo);
 
-	      if (ret == RM_DENYMATCH)
+	      if (ret == RMAP_DENYMATCH)
 		{
 		  if (IS_RIPNG_DEBUG_PACKET)
 		    zlog_info ("RIPng %s/%d is filtered by route-map out",
@@ -1421,10 +1421,10 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 	      newinfo.metric = metric;
 
 	      ret = route_map_apply (ri->routemap[RIPNG_FILTER_OUT], 
-				     (struct prefix *) p, ROUTE_MAP_RIPNG, 
+				     (struct prefix *) p, RMAP_RIPNG, 
 				     &newinfo);
 
-	      if (ret == RM_DENYMATCH)
+	      if (ret == RMAP_DENYMATCH)
 		{
 		  if (IS_RIPNG_DEBUG_PACKET)
 		    zlog_info ("RIPng %s/%d is filtered by route-map out",

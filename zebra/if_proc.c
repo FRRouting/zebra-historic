@@ -195,7 +195,7 @@ interface_list_proc ()
   return 0;
 }
 
-#ifdef HAVE_PROC_NET_IF_INET6
+#if defined(HAVE_IPV6) && defined(HAVE_PROC_NET_IF_INET6)
 
 #ifndef _PATH_PROC_NET_IF_INET6
 #define _PATH_PROC_NET_IF_INET6          "/proc/net/if_inet6"
@@ -240,4 +240,4 @@ ifaddr_proc_ipv6 ()
     }
   return 0;
 }
-#endif /* HAVE_PROC_NET_IF_INET6 */
+#endif /* HAVE_IPV6 && HAVE_PROC_NET_IF_INET6 */

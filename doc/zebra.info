@@ -2,16 +2,16 @@ This is zebra.info, produced by makeinfo version 4.0 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software
 START-INFO-DIR-ENTRY
-* Zebra: (zebra).		The GNU Zebra routing software package.
+* Zebra: (zebra).		The GNU Zebra routing software.
 END-INFO-DIR-ENTRY
 
    This file documents the GNU Zebra software which manages common
 TCP/IP routing protocols.
 
-   This is Edition 0.1, last updated 6 November 1999 of `The GNU Zebra
-Manual', for Zebra Version 0.81.
+   This is Edition 0.1, last updated 3 January 2000 of `The GNU Zebra
+Manual', for Zebra Version 0.84.
 
-   Copyright (C) 1999 Kunihiro Ishiguro
+   Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
    Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -29,88 +29,111 @@ translation approved by Kunihiro Ishiguro.
 
 
 Indirect:
-zebra.info-1: 1108
-zebra.info-2: 50842
+zebra.info-1: 1105
+zebra.info-2: 50121
+zebra.info-3: 87742
 
 Tag Table:
 (Indirect)
-Node: Top1108
-Node: Overview2430
-Node: About Zebra3669
-Node: System Architecture4887
-Node: Supported Platforms7024
-Node: Supported RFC7444
-Node: Mailing List8575
-Node: Bug Reports9237
-Node: Zebra web page10106
-Node: Installation10304
-Node: Configure the Software10747
-Ref: Configure the Software-Footnote-112646
-Node: Build the Software14281
-Node: Install the Software14823
-Node: Overview of the Herd16200
-Node: Config Commands16931
-Node: Basic Config Commands17825
-Node: Sample Config File19798
-Node: Common Invocation Options20558
-Node: Virtual Terminal Interfaces21059
-Node: VTY Overview21570
-Node: VTY Modes22853
-Node: VTY View Mode23293
-Node: VTY Enable Mode23547
-Node: VTY Other Modes23811
-Node: VTY CLI Commands23973
-Node: CLI Movement Commands24420
-Node: CLI Editing Commands24953
-Node: CLI Advanced Commands25526
-Node: zebra26277
-Node: Invoking zebra26791
-Node: Interface Commands27377
-Node: Static Route Commands27961
-Node: zebra Terminal Mode Commands28388
-Node: ripd29349
-Node: Invoking ripd30207
-Node: ripd Configuration31703
-Node: Filtering RIP Routes36995
-Node: ripd route-map38113
-Node: ripd Terminal Mode Commands40135
-Node: ripd Debug Commands40635
-Node: ripngd41619
-Node: Invoking ripngd41940
-Node: ripngd Configuration42199
-Node: ripngd Terminal Mode Commands42937
-Node: ripngd Filtering Commands43288
-Node: ospfd43786
-Node: Invoking ospfd44079
-Node: ospfd Configuration44331
-Node: ospfd Terminal Mode Commands45111
-Node: ospf6d45558
-Node: Invoking ospf6d45675
-Node: bgpd45780
-Node: Invoking bgpd46356
-Node: bgpd Configuration46744
-Node: bgpd Terminal Mode Commands50842
-Node: bgpd Sample Session51474
-Node: bgpd Log Format51634
-Node: How to Set Up A 6-Bone Connection52167
-Node: Filtering53440
-Node: IP Access List53829
-Node: IP Prefix List54220
-Node: ip prefix-list description55531
-Node: ip prefix-list sequential number control55839
-Node: Showing ip prefix-list56169
-Node: Clear counter of ip prefix-list56829
-Node: IP Community List57128
-Node: AS Path Access List57329
-Node: Route Map57514
-Node: Route Map Command58016
-Node: Route Map Match Command58219
-Node: Route Map Set Command58827
-Node: IPv6 Supports59685
-Node: Router Advertisement60253
-Node: Kernel Interface60586
-Node: Linux Netlink61803
-Node: Command Index62590
-Node: VTY Key Index73181
+Node: Top1105
+Node: Overview2401
+Node: About Zebra3812
+Node: System Architecture6070
+Node: Supported Platforms9042
+Node: Supported RFC10023
+Node: How to get Zebra11575
+Node: Mailing List12292
+Node: Bug Reports12957
+Node: Installation13803
+Node: Configure the Software14234
+Ref: Configure the Software-Footnote-116699
+Node: Build the Software18334
+Node: Install the Software18876
+Node: Basic commands20252
+Node: Config Commands20965
+Node: Basic Config Commands21847
+Node: Sample Config File23820
+Node: Common Invocation Options24580
+Node: Virtual Terminal Interfaces25075
+Node: VTY Overview25580
+Node: VTY Modes26863
+Node: VTY View Mode27303
+Node: VTY Enable Mode27557
+Node: VTY Other Modes27821
+Node: VTY CLI Commands27983
+Node: CLI Movement Commands28430
+Node: CLI Editing Commands28963
+Node: CLI Advanced Commands29536
+Node: zebra30287
+Node: Invoking zebra30795
+Node: Interface Commands31381
+Node: Static Route Commands31965
+Node: zebra Terminal Mode Commands32392
+Node: ripd33353
+Node: Invoking ripd34211
+Node: ripd Configuration35707
+Node: Filtering RIP Routes40999
+Node: ripd route-map42117
+Node: ripd Terminal Mode Commands44139
+Node: ripd Debug Commands44639
+Node: ripngd45627
+Node: Invoking ripngd45948
+Node: ripngd Configuration46207
+Node: ripngd Terminal Mode Commands46945
+Node: ripngd Filtering Commands47296
+Node: ospfd47794
+Node: Configuring ospfd48352
+Node: OSPF router48826
+Node: OSPF area50121
+Node: OSPF interface52334
+Node: Redistribute routes to OSPF53376
+Node: Showing OSPF information54788
+Node: Debugging OSPF55624
+Node: ospf6d56290
+Node: OSPF6 router56608
+Node: OSPF6 area56957
+Node: OSPF6 interface57129
+Node: Redistribute routes to OSPF657999
+Node: Showing OSPF6 information58303
+Node: bgpd59104
+Node: Configuring bgpd59812
+Node: BGP router60413
+Node: BGP peer61830
+Node: BGP network62441
+Node: Redistribute to BGP63144
+Node: Peer configuration63707
+Node: Peer filtering66000
+Node: BGP terminal mode commands66539
+Node: BGP Log Format67159
+Node: Multiple Protocol Extension for BGP67698
+Node: Route Reflector70889
+Node: Route Server71192
+Node: Multiple instance72243
+Node: BGP instance and view72835
+Node: Routing policy74208
+Node: Viewing the view74951
+Node: How to set up a 6-Bone connection75223
+Node: Filtering76493
+Node: IP Access List76882
+Node: IP Prefix List77273
+Node: ip prefix-list description78584
+Node: ip prefix-list sequential number control78892
+Node: Showing ip prefix-list79222
+Node: Clear counter of ip prefix-list79882
+Node: IP Community List80181
+Node: AS Path Access List80382
+Node: Route Map80567
+Node: Route Map Command81069
+Node: Route Map Match Command81272
+Node: Route Map Set Command81880
+Node: IPv6 Supports82738
+Node: Router Advertisement83306
+Node: Kernel Interface83639
+Node: SNMP support84855
+Node: How to get ucd-snmp85483
+Node: SMUX configuration86526
+Node: Linux Netlink86959
+Node: Command Index87742
+Node: VTY Key Index108212
 
 End Tag Table

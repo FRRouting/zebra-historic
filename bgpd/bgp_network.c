@@ -28,9 +28,11 @@
 #include "log.h"
 #include "if.h"
 #include "prefix.h"
+#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
+#include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_debug.h"
 
 /* BGP socket bind. */
@@ -129,13 +131,13 @@ bgp_connect (struct peer *peer)
   unsigned int ifindex = 0;
 
   /* Make socket for the peer. */
-  peer->fd = sockunion_socket (peer->su);
+  peer->fd = sockunion_socket (&peer->su);
   if (peer->fd < 0)
     return -1;
 
   /* If we can get socket for the peer, adjest TTL and make connection. */
-  if (bgp_peer_sort (peer) == BGP_PEER_EBGP)
-    sockopt_ttl (peer->su->sa.sa_family, peer->fd, peer->ttl);
+  if (peer_sort (peer) == BGP_PEER_EBGP)
+    sockopt_ttl (peer->su.sa.sa_family, peer->fd, peer->ttl);
 
   sockopt_reuseaddr (peer->fd);
   sockopt_reuseport (peer->fd);
@@ -151,11 +153,12 @@ bgp_connect (struct peer *peer)
     ifindex = if_nametoindex (peer->ifname);
 #endif /* HAVE_IPV6 */
 
-  zlog (peer->log, LOG_INFO, "neighbor %s:%d: Attempting connect",
-	peer->host, peer->port);
+  if (BGP_DEBUG (events, EVENTS))
+    plog_info (peer->log, "%s [Event] Connect start to %s fd %d",
+	       peer->host, peer->host, peer->fd);
 
   /* Connect to the remote peer. */
-  return sockunion_connect (peer->fd, peer->su, htons (peer->port), ifindex);
+  return sockunion_connect (peer->fd, &peer->su, htons (peer->port), ifindex);
 }
 
 /* Accept bgp connection. */
@@ -166,60 +169,50 @@ bgp_accept (struct thread *thread)
   int accept_sock;
   union sockunion su;
   struct peer *peer;
-  char buf[BUFSIZ];
+  char buf[SU_ADDRSTRLEN];
 
+  /* Regiser accept thread. */
   accept_sock = THREAD_FD (thread);
-
-  bgp_sock = sockunion_accept (accept_sock, &su);
-
   thread_add_read (master, bgp_accept, NULL, accept_sock);
 
-  /* Convert IPv4 compatible IPv6 address to IPv4 address. */
-#ifdef HAVE_IPV6
-  if (su.sa.sa_family == AF_INET6)
+  /* Accept client connection. */
+  bgp_sock = sockunion_accept (accept_sock, &su);
+  if (bgp_sock < 0)
     {
-      if (IN6_IS_ADDR_V4MAPPED (&su.sin6.sin6_addr))
-	{
-	  struct sockaddr_in sin;
-
-	  sin.sin_family = AF_INET;
-	  memcpy (&sin.sin_addr, ((char *)&su.sin6.sin6_addr) + 12, 4);
-	  memcpy (&su, &sin, sizeof (struct sockaddr_in));
-	}
+      zlog_err ("[Error] BGP socket accept failed (%s)", strerror (errno));
+      return -1;
     }
-#endif /* HAVE_IPV6 */
 
-  zlog_info ("Got BGP connection from host %s", inet_sutop (&su, buf));
+  if (BGP_DEBUG (events, EVENTS))
+    zlog_info ("[Event] BGP connection from host %s", inet_sutop (&su, buf));
   
-  /* This router is not neighbor router. */
-  peer = peer_lookup_by_su (&su);
-  if (!peer) 
+  /* Check remote IP address */
+  if (! peer_lookup_by_su (&su))
     {
-      zlog (NULL, LOG_INFO, "This peer is not neighbor connection closed : %s",
-	      inet_sutop (&su, buf));
-      close (bgp_sock);
-      return -1;
-    }
-
-  /* Peer status check .*/
-  if (peer->status != Active && peer->status != Connect)
-    {
-      if (debug (DEBUG_BGP_FSM))
-	zlog_info ("But peer is neither Active nor Connect status: %s", 
+      if (BGP_DEBUG (events, EVENTS))
+	zlog_info ("[Event] BGP connection IP address %s is not configured",
 		   inet_sutop (&su, buf));
-
       close (bgp_sock);
       return -1;
     }
 
-  if (peer->fd >= 0)
-    {
-      close (peer->fd);
-      BGP_READ_OFF (peer->t_read);
-      BGP_WRITE_OFF (peer->t_write);
-    }
+  /* Make dummy peer until read Open packet. */
+  if (BGP_DEBUG (events, EVENTS))
+    zlog_info ("[Event] Make dummy peer structure until read Open packet");
 
-  peer->fd = bgp_sock;
+  {
+    char buf[SU_ADDRSTRLEN + 1];
+
+    peer = peer_create_accept ();
+    SET_FLAG (peer->sflags, PEER_STATUS_ACCEPT_PEER);
+    peer->su = su;
+    peer->fd = bgp_sock;
+    peer->status = Active;
+
+    /* Make peer's address string. */
+    sockunion2str (&su, buf, SU_ADDRSTRLEN);
+    peer->host = strdup (buf);
+  }
 
   BGP_EVENT_ADD (peer, TCP_connection_open);
 

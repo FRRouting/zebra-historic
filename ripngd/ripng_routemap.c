@@ -94,7 +94,7 @@ route_map_result_t
 route_set_metric (void *rule, struct prefix *prefix, 
 		  route_map_object_t type, void *object)
 {
-  if (type == ROUTE_MAP_RIPNG)
+  if (type == RMAP_RIPNG)
     {
       struct rip_metric_modifier *mod;
       struct ripng_info *rinfo;
@@ -114,7 +114,7 @@ route_set_metric (void *rule, struct prefix *prefix,
       if (rinfo->metric > RIPNG_METRIC_INFINITY)
 	rinfo->metric = RIPNG_METRIC_INFINITY;
     }
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 void *
@@ -192,11 +192,11 @@ ripng_route_match_add (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -216,11 +216,11 @@ ripng_route_match_delete (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -240,11 +240,11 @@ ripng_route_set_add (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -264,11 +264,11 @@ ripng_route_set_delete (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;

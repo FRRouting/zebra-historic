@@ -22,15 +22,6 @@
 #ifndef _ZEBRA_BGP_DEBUG_H
 #define _ZEBRA_BGP_DEBUG_H
 
-/*
- Sort of event:
-  o open
-  o update  NLRI
-            Withdraw
-  o notify
-  o keepalive
-*/
-
 #define IS_SET(x, y)  ((x) & (y))
 
 /* sort of packet direction */
@@ -66,8 +57,29 @@ extern int Debug_Radix;
 void bgp_debug_init ();
 void bgp_packet_dump (struct stream *);
 
-char *mes_lookup (struct message *meslist, int max, int index);
-
 int debug (unsigned int option);
+
+unsigned long bgp_debug_fsm;
+unsigned long bgp_debug_events;
+unsigned long bgp_debug_packet;
+
+#define BGP_DEBUG_FSM                 0x01
+#define BGP_DEBUG_EVENTS              0x01
+#define BGP_DEBUG_PACKET              0x01
+
+#define BGP_DEBUG_PACKET_SEND         0x01
+#define BGP_DEBUG_PACKET_SEND_DETAIL  0x02
+
+#define BGP_DEBUG_PACKET_RECV         0x01
+#define BGP_DEBUG_PACKET_RECV_DETAIL  0x02
+
+#define DEBUG_ON(a, b)		(bgp_debug_ ## a |= (BGP_DEBUG_ ## b))
+#define DEBUG_OFF(a, b)		(bgp_debug_ ## a &= ~(BGP_DEBUG_ ## b))
+
+#define BGP_DEBUG(a, b)		(bgp_debug_ ## a & BGP_DEBUG_ ## b)
+
+extern char *bgp_type_str[];
+
+void bgp_dump_attr (struct peer *, struct attr *, char *, size_t);
 
 #endif /* _ZEBRA_BGP_DEBUG_H */

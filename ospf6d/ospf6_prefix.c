@@ -27,7 +27,7 @@ ospf6_prefix_new (size_t size)
   struct ospf6_prefix *new;
   new = (struct ospf6_prefix *) XMALLOC (MTYPE_OSPF6_PREFIX, size);
   if (!new)
-    zvlog_warn ("prefix_new failed, size:%d", size);
+    zlog_warn ("prefix_new failed, size:%d", size);
   else
     memset (new, 0, size);
   return new;
@@ -106,7 +106,7 @@ ospf6_prefix_delete (list l, struct ospf6_prefix *del)
 
   if (!n)
     {
-      zvlog_err ("no such prefix");
+      zlog_err ("no such prefix");
       assert (0);
     }
 

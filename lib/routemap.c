@@ -170,10 +170,10 @@ route_map_type_str (enum route_map_type type)
 {
   switch (type)
     {
-    case ROUTE_MAP_PERMIT:
+    case RMAP_PERMIT:
       return "permit";
       break;
-    case ROUTE_MAP_DENY:
+    case RMAP_DENY:
       return "deny";
       break;
     default:
@@ -221,21 +221,14 @@ void
 route_map_index_delete (struct route_map_index *index)
 {
   struct route_map_rule *rule;
-  struct route_map_rule *next;
 
   /* Free route match. */
-  for (rule = index->match_list.head; rule; rule = next)
-    {
-      next = rule->next;
-      route_map_rule_delete (&index->match_list, rule);
-    }
+  while ((rule = index->match_list.head) != NULL)
+    route_map_rule_delete (&index->match_list, rule);
 
   /* Free route set. */
-  for (rule = index->set_list.head; rule; rule = rule->next)
-    {
-      next = rule->next;
-      route_map_rule_delete (&index->set_list, rule);
-    }
+  while ((rule = index->set_list.head) != NULL)
+    route_map_rule_delete (&index->set_list, rule);
 
   /* Remove index from route map list. */
   if (index->next)
@@ -301,7 +294,7 @@ route_map_index_add (struct route_map *map, enum route_map_type type,
       return index;
     }
   
-  if (index == map->head)
+  if (point == map->head)
     {
       index->next = map->head;
       map->head->prev = index;
@@ -451,14 +444,14 @@ route_map_add_match (struct route_map_index *index, char *match_name,
   /* First lookup rule for add match statement. */
   cmd = route_map_lookup_match (match_name);
   if (cmd == NULL)
-    return ROUTE_MAP_RULE_MISSING;
+    return RMAP_RULE_MISSING;
 
   /* Next call compile function for this match statement. */
   if (cmd->func_compile)
     {
       compile= (*cmd->func_compile)(match_arg);
       if (compile == NULL)
-	return ROUTE_MAP_COMPILE_ERROR;
+	return RMAP_COMPILE_ERROR;
     }
   else
     compile = NULL;
@@ -511,17 +504,24 @@ route_map_add_set (struct route_map_index *index, char *set_name,
 
   cmd = route_map_lookup_set (set_name);
   if (cmd == NULL)
-    return ROUTE_MAP_RULE_MISSING;
+    return RMAP_RULE_MISSING;
 
   /* Next call compile function for this match statement. */
   if (cmd->func_compile)
     {
       compile= (*cmd->func_compile)(set_arg);
       if (compile == NULL)
-	return ROUTE_MAP_COMPILE_ERROR;
+	return RMAP_COMPILE_ERROR;
     }
   else
     compile = NULL;
+
+ /* Add by WJL. if old set command of same kind exist, delete it first
+    to ensure only one set command of same kind exist under a
+    route_map_index. */
+  for (rule = index->set_list.head; rule; rule = rule->next)
+    if (rule->cmd == cmd) 
+      route_map_rule_delete (&index->set_list, rule);
 
   /* Add new route map match rule. */
   rule = route_map_rule_new ();
@@ -597,7 +597,7 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
        other than RM_MATCH then we don't need to check anymore and can
        return */
       ret = (*match->cmd->func_apply)(match->value, prefix, type, object);
-      if (ret != RM_MATCH)
+      if (ret != RMAP_MATCH)
 	return ret;
     }
 
@@ -606,7 +606,7 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
    we're deny, we return indicating we matched a deny */
 
   /* Apply set statement to the object. */
-  if (index->type == ROUTE_MAP_PERMIT)
+  if (index->type == RMAP_PERMIT)
     {
       for (set = index->set_list.head; set; set = set->next)
 	{
@@ -618,14 +618,14 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
 	/* if (ret != RM_OKAY) */
 	/*  return ret; */
 	}
-      return RM_MATCH;
+      return RMAP_MATCH;
     }
   else 
     {
-      return RM_DENYMATCH;
+      return RMAP_DENYMATCH;
     }
   /* Should not get here! */
-  return RM_MATCH;
+  return RMAP_MATCH;
 }
 
 /* Apply route map to the object. */
@@ -641,11 +641,11 @@ route_map_apply (struct route_map *map, struct prefix *prefix,
       /* Apply this index. End here if we get a RM_NOMATCH */
       ret = route_map_apply_index (index, prefix, type, object);
 
-      if (ret != RM_NOMATCH)
+      if (ret != RMAP_NOMATCH)
 	return ret;
     }
   /* Finally route-map does not match at all. */
-  return RM_DENYMATCH;
+  return RMAP_DENYMATCH;
 }
 
 void
@@ -685,9 +685,9 @@ DEFUN (route_map, route_map_cmd,
 
   /* Permit check. */
   if (strncmp (argv[1], "permit", strlen (argv[1])) == 0)
-    permit = ROUTE_MAP_PERMIT;
+    permit = RMAP_PERMIT;
   else if (strncmp (argv[1], "deny", strlen (argv[1])) == 0)
-    permit = ROUTE_MAP_DENY;
+    permit = RMAP_DENY;
   else
     {
       vty_out (vty, "the third field must be [permit|deny]%s", VTY_NEWLINE);
@@ -732,9 +732,9 @@ DEFUN (no_route_map, no_route_map_cmd,
 
   /* Permit check. */
   if (strncmp (argv[1], "permit", strlen (argv[1])) == 0)
-    permit = ROUTE_MAP_PERMIT;
+    permit = RMAP_PERMIT;
   else if (strncmp (argv[1], "deny", strlen (argv[1])) == 0)
-    permit = ROUTE_MAP_DENY;
+    permit = RMAP_DENY;
   else
     {
       vty_out (vty, "the third field must be [permit|deny]%s", VTY_NEWLINE);
@@ -758,7 +758,8 @@ DEFUN (no_route_map, no_route_map_cmd,
   map = route_map_lookup_by_name (argv[0]);
   if (map == NULL)
     {
-      vty_out (vty, "can't find route-map with name %s", argv[0], VTY_NEWLINE);
+      vty_out (vty, "can't find route-map with name %s%s",
+	       argv[0], VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -766,7 +767,7 @@ DEFUN (no_route_map, no_route_map_cmd,
   index = route_map_index_lookup (map, permit, pref);
   if (index == NULL)
     {
-      vty_out (vty, "can't find route-map %s %s %s", 
+      vty_out (vty, "can't find route-map %s %s %s%s", 
 	       argv[0], argv[1], argv[2], VTY_NEWLINE);
       return CMD_WARNING;
     }

@@ -19,7 +19,8 @@
  * 02111-1307, USA.
  */
 
-static char rcsid[] = "$Id: newlist.c,v 1.4 1999/12/05 12:48:10 kunihiro Exp $";
+static char rcsid[] = "$Id: newlist.c,v 1.5 2000/01/11 07:11:48 kunihiro Exp $";
+
 #include <zebra.h>
 
 #include "newlist.h"
@@ -70,7 +71,7 @@ newnode_add (struct newlist *list, void *val)
     {
       for (n = list->head; n; n = n->next)
 	{
-	  if (list->cmp (val, n->data) < 0)
+	  if ((*list->cmp) (val, n->data) < 0)
 	    {	    
 	      new->next = n;
 	      new->prev = n->prev;
@@ -79,6 +80,7 @@ newnode_add (struct newlist *list, void *val)
 		n->prev->next = new;
 	      else
 		list->head = new;
+	      n->prev = new;
 	      list->count++;
 	      return;
 	    }
@@ -124,9 +126,11 @@ void
 newlist_delete (struct newlist *list)
 {
   struct newnode *n;
+  struct newnode *next;
 
-  for (n = list->head; n; n = n->next)
+  for (n = list->head; n; n = next)
     {
+      next = n->next;
       if (list->del)
 	(list->del) (n->data);
       newnode_free (n);
@@ -134,3 +138,10 @@ newlist_delete (struct newlist *list)
   newlist_free (list);
 }
 
+void *
+newlist_first (struct newlist *list)
+{
+  if (list->head)
+    return list->head->data;
+  return NULL;
+}

@@ -390,7 +390,7 @@ nsm_kill_nbr (struct ospf_neighbor *nbr)
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
 
   /* Delete neighbor from interface. */
-  /* ospf_nbr_delete (nbr); */
+  ospf_nbr_delete (nbr);
 
   return 0;
 }

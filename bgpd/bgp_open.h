@@ -31,7 +31,7 @@
 #define CAPABILITY_CODE_REFRESH     128
 #define CAPABILITY_CODE_REFRESH_LEN   0
 
-int bgp_open_option_parse (struct peer *, u_char);
+int bgp_open_option_parse (struct peer *, u_char, int *);
 void bgp_open_capability (struct stream *, struct peer *);
 void bgp_capability_vty_out (struct vty *, struct peer *);
 

@@ -97,6 +97,9 @@ thread_add_event (struct thread_master *m,
 void
 thread_cancel (struct thread *thread);
 
+void
+thread_cancel_event (struct thread_master *m, void *arg);
+
 struct thread *
 thread_fetch (struct thread_master *m, 
 	      struct thread *fetch);

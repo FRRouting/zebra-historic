@@ -2,16 +2,16 @@ This is zebra.info, produced by makeinfo version 4.0 from zebra.texi.
 
 INFO-DIR-SECTION Routing Software
 START-INFO-DIR-ENTRY
-* Zebra: (zebra).		The GNU Zebra routing software package.
+* Zebra: (zebra).		The GNU Zebra routing software.
 END-INFO-DIR-ENTRY
 
    This file documents the GNU Zebra software which manages common
 TCP/IP routing protocols.
 
-   This is Edition 0.1, last updated 6 November 1999 of `The GNU Zebra
-Manual', for Zebra Version 0.81.
+   This is Edition 0.1, last updated 3 January 2000 of `The GNU Zebra
+Manual', for Zebra Version 0.84.
 
-   Copyright (C) 1999 Kunihiro Ishiguro
+   Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
    Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -37,34 +37,31 @@ GNU Zebra
 protocols.  Adding to routing protocol support, Zebra provides interface
 address configuration and advanced filtering.
 
-   This is the GNU Zebra Manual for zebra-0.81.
+   This is the GNU Zebra Manual for zebra-0.84.
 
 * Menu:
 
-* Overview::                    Overview of the Zebra suite.
-* Installation::                How to install the Zebra suite.
+* Overview::                    Overview of the Zebra.
+* Installation::                How to install the Zebra.
 
 The Zebra Suite
-
-* Overview of the Herd::        Common to all beasts
-
+* Basic commands::
 * zebra::                       The routing manager
 * ripd::                        A RIP protocol daemon
 * ripngd::                      A RIPng protocol daemon
 * ospfd::                       An OSPF protocol daemon
-* ospf6d::                      An OSPFv6 protocol daemon
+* ospf6d::                      An OSPF for IPv6 protocol daemon
 * bgpd::                        A BGP protocol daemon
 
 Additional Features
-
 * Filtering::                   How to filter routes.
 * Route Map::                   Route map description.
 * IPv6 Supports::               IP version 6 supports.
 * Kernel Interface::            Zebra between kernel interface.
+* SNMP support::
 * Linux Netlink::               Netlink mechanism on a Linux box.
 
 Indices
-
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
 
@@ -78,25 +75,19 @@ Overview
 routing services with routing protocols support such as RIPv1, RIPv2,
 RIPng, OSPFv2, OSPFv3, BGP-4, and BGP-4+ (*note Supported RFC::).
 Zebra also supports special BGP behavior Route Reflector and Route
-Server.  Route Server functionality is under development as of Zebra
-version 0.81.
+Server.  Adding to traditional IPv4 routing protocols, Zebra also
+supports IPv6 routing protocols.  With SNMP daemon which support SMUX
+protocol, Zebra provides routing protocol MIBs (*note SNMP support::).
 
    Zebra uses an advanced software architecture to provide you with a
-high-quality, multi-server routing engine.  Zebra has an interactive
-user interface for each routing protocol and supports common client user
-interface commands.
+high quality, multi server routing engine.  Zebra has an interactive
+user interface for each routing protocol and supports common client
+commands.  Due to this design, you can add new protocol daemon to Zebra
+easily.  You can use Zebra library as your program's client user
+interface.
 
-   IPv6
-
-   SNMP
-
-   Address configuration
-
-   Licence
-
-   Zebra is distributed under the GNU General Public License.
-
-   Additional info.
+   Zebra is an official GNU software and distributed under the GNU
+General Public License.
 
 * Menu:
 
@@ -104,9 +95,9 @@ interface commands.
 * System Architecture::         The Zebra system architecture
 * Supported Platforms::         Supported platforms and future plans
 * Supported RFC::               Supported RFCs.
+* How to get Zebra::
 * Mailing List::                Mailing list information
 * Bug Reports::                 Mail address for bug data
-* Zebra web page::              Zebra web page.
 
 
 File: zebra.info,  Node: About Zebra,  Next: System Architecture,  Prev: Overview,  Up: Overview
@@ -114,25 +105,43 @@ File: zebra.info,  Node: About Zebra,  Next: System Architecture,  Prev: Overvie
 About Zebra
 ===========
 
-   Today, TCP/IP networks are covering all of the world. The Internet
-has been deployed in many countries, companies, and at home. If you
-connect to the Internet you use TCP/IP routing functions. Zebra is a
-free TCP/IP routing software package.
+   Today, TCP/IP networks are covering all of the world.  The Internet
+has been deployed in many countries, companies, and to the home.  When
+you connect to the Internet your packet will pass many routers which
+have TCP/IP routing functionality.
 
-   A system with Zebra installed acts as a dedicated router. With Zebra,
-your machine exchanges routing information with other routers using
-routing protocols. Zebra uses this information to update the kernel
-routing table so that the right data goes to the right place. You can
-dynamically change the configuration and you may view routing table
-information from the Zebra terminal interface.
+   A system with Zebra installed acts as a dedicated router.  With
+Zebra, your machine exchanges routing information with other routers
+using routing protocols.  Zebra uses this information to update the
+kernel routing table so that the right data goes to the right place.
+You can dynamically change the configuration and you may view routing
+table information from the Zebra terminal interface.
 
-   If you have a small network, or a stub network, configuring the Zebra
-routing software is very easy: The only thing you have to do is to set
+   Adding to routing protocol support, Zebra can setup interface's flag,
+interface's address, static routes and so on.  If you have a small
+network, or a stub network, or xDSL connection, configuring the Zebra
+routing software is very easy.  The only thing you have to do is to set
 up the interfaces and put a few commands about static routes and/or
-default routes. If the network is rather large, however, or if the
-network structure changes frequently, you will want to take advantage of
-Zebra's dynamic routing protocol support for protocols such as RIP, OSPF
-or BGP: Zebra is for you.
+default routes.  If the network is rather large, or if the network
+structure changes frequently, you will want to take advantage of Zebra's
+dynamic routing protocol support for protocols such as RIP, OSPF or BGP.
+Zebra is with you.
+
+   Traditionally, UNIX based router configuration is done by `ifconfig'
+and `route' commands.  Status of routing table is displayed by
+`netstsat' utility.  Almost of these commands work only the user has
+root privilege.  Zebra has different system administration method.
+There are two user mode in Zebra.  One is normal mode, the other is
+enable mode.  Normal mode user can only view system status, enable mode
+user can change system configuration.  This UNIX account independent
+feature will be great help to the router administrator.
+
+   Currently, Zebra supports common unicast routing protocols.
+Multicast routing protocols such as BGMP, PIM-SM, PIM-DM will be
+supported in Zebra 2.0.  MPLS support is going on.  In the future,
+TCP/IP filtering control, QoS control, diffserv configuration will be
+added to Zebra.  Zebra project's final goal is making productive
+quality free TCP/IP routing software.
 
 
 File: zebra.info,  Node: System Architecture,  Next: Supported Platforms,  Prev: About Zebra,  Up: Overview
@@ -142,20 +151,23 @@ System Architecture
 
    Traditional routing software is made as a one process program which
 provides all of the routing protocol functionalities.  Zebra takes a
-different approach; it is made from a collection of several daemons that
-work together to build a routing table.  There may be several
-protocol-specific routing daemons and Zebra, the kernel routing manager.
+different approach.  It is made from a collection of several daemons
+that work together to build a routing table.  There may be several
+protocol-specific routing daemons and zebra the kernel routing manager.
 
    The `ripd' daemon handles the RIP protocol, while `ospfd' is a
 daemon which supports OSPF version 2.  `bgpd' supports the BGP-4
 protocol.  For changing the kernel routing table and for redistribution
-of routes between different routing protocols, there is the `zebra'
-daemon.  There is no need for these daemons to be running on the same
-machine.  This architecture creates new possibilities for the routing
-system.  It is easy to add new routing protocol daemons to a network,
-and servers in stubs need run only the protocol daemon in use. Thus,
-remote networks may run a specific daemon and send routing reports to a
-central routing console.
+of routes between different routing protocols, there is a kernel
+routing table manager `zebra' daemon.  It is easy to add a new routing
+protocol daemons to the entire routing system without affecting any
+other software.  You need run only the protocol daemon associated with
+routing protocols in use.  Thus, user may run a specific daemon and
+send routing reports to a central routing console.
+
+   There is no need for these daemons to be running on the same machine.
+You can even run several same protocol daemon on the same machine.  This
+architecture creates new possibilities for the routing system.
 
      +----+  +----+  +-----+  +-----+
      |bgpd|  |ripd|  |ospfd|  |zebra|
@@ -169,17 +181,28 @@ central routing console.
      
          Zebra System Architecture
 
-   Zebra uses a multi-threaded mechanism when it runs with a kernel that
-supports multi-threads.  At this moment, the thread library which comes
-with GNU/Linux or FreeBSD has some problems for running Zebra, so we
-don't use threads on those OSes, instead we use the select system call
-for multiplexing.
+   Multi process architecture bring us extensibility, modularity and
+maintainability.  At the same time it also bring us many configuration
+files and terminal interface.  Each daemon has it's own configuration
+file and terminal interface.  When you configure static route, it must
+be done in `zebra' configuration file.  When you configure BGP network
+it must be done in `bgpd' configuration file.  It is very annoying
+thing.  To resolve the problem, Zebra provides integrated user
+interface shell called `vsh'.  `vsh' connect to each daemon with UNIX
+domain socket then work as proxy of user input.
 
-   When zebra runs under a GNU Hurd kernel it will act as a kernel
+   Zebra was planned to use multi-threaded mechanism when it runs with a
+kernel that supports multi-threads.  But at this moment, the thread
+library which comes with GNU/Linux or FreeBSD has some problems for
+running reliable services such as routing software, so we don't use
+threads at all, instead we use the `select(2)' system call for
+multiplexing the events.
+
+   When `zebra' runs under a GNU Hurd kernel it will act as a kernel
 routing table itself.  Under GNU Hurd, all TCP/IP services are provided
 by user processes called `pfinet'.  Zebra will provide all the routing
 selection mechanisms for the process.  This feature will be implemented
-in the near future.
+when GNU Hurd becomes stable.
 
 
 File: zebra.info,  Node: Supported Platforms,  Next: Supported RFC,  Prev: System Architecture,  Up: Overview
@@ -187,7 +210,12 @@ File: zebra.info,  Node: Supported Platforms,  Next: Supported RFC,  Prev: Syste
 Supported Platforms
 ===================
 
-   GNU Zebra is now testing on:
+   Currently Zebra supports GNU/Linux, BSD and Solaris.  Below is a list
+of OS version on which Zebra runs.  Porting Zebra to other platform is
+not so hard work.  Platform dependent codes are only exists in `zebra'
+daemon.  Protocol daemons are platform independent.  Please let us know
+when you find Zebra runs on platform which does not listed below.
+
 
    * GNU/Linux 2.0.37
 
@@ -197,24 +225,40 @@ Supported Platforms
 
    * FreeBSD 2.2.8
 
-   * FreeBSD 3.1
+   * FreeBSD 3.x
 
    * FreeBSD 4.x
 
-   We are planning to support the following platforms in the near
-future:
+   * NetBSD 1.4
 
-   * GNU/Hurd 0.2
+   * OpenBSD 2.5
+
+   * Solaris 2.6
 
    * Solaris 7
 
+
+   Some IPv6 stacks are in development.  Zebra supports following IPv6
+stack.  For BSD, we recommend KAME IPv6 stack.  Solaris IPv6 stack is
+not yet supported.
+
+
+   * Linux IPv6 stack for GNU/Linux 2.2.x and upper.
+
+   * KAME IPv6 stack for BSD.
+
+   * INRIA IPv6 stack for BSD.
+
 
-File: zebra.info,  Node: Supported RFC,  Next: Mailing List,  Prev: Supported Platforms,  Up: Overview
+File: zebra.info,  Node: Supported RFC,  Next: How to get Zebra,  Prev: Supported Platforms,  Up: Overview
 
 Supported RFC
 =============
 
-   Below is the list of currently supported routing protocol RFC.
+   Below is the list of currently supported RFC.
+
+RFC1058
+     `Routing Information Protocol. C.L. Hedrick. Jun-01-1988.'
 
 RFC1771
      `A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March
@@ -245,16 +289,53 @@ RFC2545
      `Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain
      Routing. P. Marques, F. Dupont. March 1999.'
 
+RFC2740
+     `OSPF for IPv6. R. Coltun, D. Ferguson, J. Moy. December 1999.'
+
    When SNMP support is enabled, below RFC is also supported.
 
 RFC1227
      `SNMP MUX protocol and MIB. M.T. Rose. May-01-1991.'
 
+RFC1657
+     `Definitions of Managed Objects for the Fourth Version of the
+     Border Gateway Protocol (BGP-4) using SMIv2. S. Willis, J. Burruss,
+     J. Chu, Editor. July 1994.'
+
 RFC1724
      `RIP Version 2 MIB Extension. G. Malkin & F. Baker. November 1994.'
 
+RFC1850
+     `OSPF Version 2 Management Information Base. F. Baker, R. Coltun.
+     November 1995.'
+
 
-File: zebra.info,  Node: Mailing List,  Next: Bug Reports,  Prev: Supported RFC,  Up: Overview
+File: zebra.info,  Node: How to get Zebra,  Next: Mailing List,  Prev: Supported RFC,  Up: Overview
+
+How to get Zebra
+================
+
+   Zebra is still beta version software and there is no officially
+released version.  So currently Zebra is distributed from Zebra beta ftp
+site located at:
+
+   <ftp://ftp.zebra.org/pub/zebra>
+
+   Once Zebra is released you can get it from GNU FTP site and many it's
+mirror sites.  We are planning Zebra-1.0 as a first released version.
+
+   Zebra's official web page is located at:
+
+   <http://www.gnu.org/software/zebra/zebra.html>.
+
+   There is a Zebra beta tester web page at:
+
+   <http://www.zebra.org/>.
+
+   You can get the latest beta software information from this page.
+
+
+File: zebra.info,  Node: Mailing List,  Next: Bug Reports,  Prev: How to get Zebra,  Up: Overview
 
 Mailing List
 ============
@@ -276,7 +357,7 @@ only:
      unsubscribe zebra
 
 
-File: zebra.info,  Node: Bug Reports,  Next: Zebra web page,  Prev: Mailing List,  Up: Overview
+File: zebra.info,  Node: Bug Reports,  Prev: Mailing List,  Up: Overview
 
 Bug Reports
 ===========
@@ -300,16 +381,7 @@ Zebra.  Zebra is still in the development stage, but please don't
 hesitate to send a bug report to <bug-zebra@gnu.org>.
 
 
-File: zebra.info,  Node: Zebra web page,  Prev: Bug Reports,  Up: Overview
-
-Zebra web page
-==============
-
-   You can get the latest information from the Zebra web page:
-<http://www.zebra.org/>.
-
-
-File: zebra.info,  Node: Installation,  Next: Overview of the Herd,  Prev: Overview,  Up: Top
+File: zebra.info,  Node: Installation,  Next: Basic commands,  Prev: Overview,  Up: Top
 
 Installation
 ************
@@ -326,9 +398,9 @@ compilation, and installation.
    The easiest way to get Zebra running is to issue the following
 commands:
 
-     % ./configure
-     % ./make
-     % ./make install
+     % configure
+     % make
+     % make install
 
 
 File: zebra.info,  Node: Configure the Software,  Next: Build the Software,  Prev: Installation,  Up: Installation
@@ -339,15 +411,18 @@ Configure the Software
    Zebra has an excellent configure script, the configure script
 automatically detects most host configurations.  There are several
 additional configure options you can use to turn off IPv6 support, to
-disable the compilation of specific daemons, and to modify the use of
-threads.
+disable the compilation of specific daemons, and to enable SNMP support.
 
 `--enable-guile'
      Turn on compilation of the zebra-guile interpreter.  You will need
-     the guile library to make this.
+     the guile library to make this.  zebra-guile implementation is not
+     yet finished.  So this option is only useful for zebra-guile
+     developer.
 
 `--disable-ipv6'
-     Turn off IPv6 related features and daemons.
+     Turn off IPv6 related features and daemons.  Zebra configure script
+     automatically detect IPv6 stack.  But sometimes you might want to
+     disable IPv6 support of Zebra.
 
 `--disable-zebra'
      Do not build zebra daemon.
@@ -368,11 +443,17 @@ threads.
      Do not build bgpd.
 
 `--disable-bgp-announce'
-     Do not make bgp announcements.
+     Make `bgpd' which does not make bgp announcements at all.  This
+     feature is good for using `bgpd' as BGP announcement listener.
 
-`--disable-pthread'
-     Do not use pthread features.  The default is to disable this
-     feature so you don't need to specify it.
+`--enable-netlink'
+     Force to enable GNU/Linux netlink interface.  Zebra configure
+     script detects netlink interface by checking header file.  When
+     header file does not match to the current running kernel configure
+     script will not turn on netlink support.
+
+`--enable-snmp'
+     Enable SNMP support.  In default, SNMP support is disabled.
 
    You may specify any combination of the above options to the configure
 script.  As well, you may find it useful to change the installation
@@ -489,13 +570,13 @@ added to `/etc/services' so there is no need to add it. If you specify
 a port number when starting the daemon, these entries may not be needed.
 
    You may need to make changes to the config files in
-`/usr/local/etc//*.conf'. *Note Config Commands::.
+`/usr/local/etc/*.conf'. *Note Config Commands::.
 
 
-File: zebra.info,  Node: Overview of the Herd,  Next: zebra,  Prev: Installation,  Up: Top
+File: zebra.info,  Node: Basic commands,  Next: zebra,  Prev: Installation,  Up: Top
 
-Overview of the Herd
-********************
+Basic commands
+**************
 
    There are five routing daemons in use, and there is one manager
 daemon.  These daemons may be located on separate machines from the
@@ -516,7 +597,7 @@ daemons.
 * Virtual Terminal Interfaces::  Interacting with the daemons
 
 
-File: zebra.info,  Node: Config Commands,  Next: Common Invocation Options,  Prev: Overview of the Herd,  Up: Overview of the Herd
+File: zebra.info,  Node: Config Commands,  Next: Common Invocation Options,  Prev: Basic commands,  Up: Basic commands
 
 Config Commands
 ===============
@@ -651,7 +732,7 @@ normal character. So in the above example '!' will not be regarded as a
 comment and the password is set to 'zebra!password'.
 
 
-File: zebra.info,  Node: Common Invocation Options,  Next: Virtual Terminal Interfaces,  Prev: Config Commands,  Up: Overview of the Herd
+File: zebra.info,  Node: Common Invocation Options,  Next: Virtual Terminal Interfaces,  Prev: Config Commands,  Up: Basic commands
 
 Common Invocation Options
 =========================
@@ -679,7 +760,7 @@ Common Invocation Options
      Print program version.
 
 
-File: zebra.info,  Node: Virtual Terminal Interfaces,  Prev: Common Invocation Options,  Up: Overview of the Herd
+File: zebra.info,  Node: Virtual Terminal Interfaces,  Prev: Common Invocation Options,  Up: Basic commands
 
 Virtual Terminal Interfaces
 ===========================
@@ -711,8 +792,8 @@ all.
      Connected to localhost.
      Escape character is '^]'.
      
-     Hello, this is zebra (version 0.81)
-     Copyright 1997-1999 Kunihiro Ishiguro
+     Hello, this is zebra (version 0.84)
+     Copyright 1997-2000 Kunihiro Ishiguro
      
      
      User Access Verification
@@ -884,7 +965,7 @@ completions, insta-help, and VTY session management.
      completions.
 
 
-File: zebra.info,  Node: zebra,  Next: ripd,  Prev: Overview of the Herd,  Up: Top
+File: zebra.info,  Node: zebra,  Next: ripd,  Prev: Basic commands,  Up: Top
 
 zebra
 *****
@@ -1157,14 +1238,14 @@ set explicitly as the version of RIP being used.
      The `no timers basic' command will reset the timers to the default
      settings listed above.
 
- - Interface command: ip rip send version VARSION
-     VARSION can be `1', `2', `1 2'.  This configuration command
+ - Interface command: ip rip send version VERSION
+     VERSION can be `1', `2', `1 2'.  This configuration command
      overrides the router's rip version setting.  The command will
      enable the selected interface to send packets with RIP Version 1,
      RIP Version 2, or both.  In the case of '1 2', packets will be
      both broadcast and multicast.
 
- - Interface command: ip rip receive version VARSION
+ - Interface command: ip rip receive version VERSION
      Version setting for incoming RIP packets.  This command will
      enable the selected interface to receive packets in RIP Version 1,
      RIP Version 2, or both.
@@ -1297,7 +1378,7 @@ packets.  The origin and port number of the packet as well as a packet
 dump is shown.
 
  - Command: debug rip zebra
-     Debug rip <-> zebra communication.
+     Debug rip between zebra communication.
 
    This command will show the communication between ripd and zebra.  The
 main information will include addition and deletion of paths to the
@@ -1399,221 +1480,69 @@ ospfd
 *****
 
    `ospfd' provides an OSPF version 2 routing protocol as described in
-RFC2178.  Currently OSPFd is under development.
+RFC2328.  OSPF is one of IGPs (Interior Gateway Protocols).  Compared
+with RIP, OSPF can serve much more networks and priod of convergence is
+very short.  OSPF is widely used in large networks such as ISP backbone
+and enterprise network.
 
 * Menu:
 
-* Invoking ospfd::
-* ospfd Configuration::
-* ospfd Terminal Mode Commands::
+* Configuring ospfd::
+* OSPF router::
+* OSPF area::
+* OSPF interface::
+* Redistribute routes to OSPF::
+* Showing OSPF information::
+* Debugging OSPF::
 
 
-File: zebra.info,  Node: Invoking ospfd,  Next: ospfd Configuration,  Prev: ospfd,  Up: ospfd
+File: zebra.info,  Node: Configuring ospfd,  Next: OSPF router,  Prev: ospfd,  Up: ospfd
 
-Invoking ospfd
-==============
+Configuring ospfd
+=================
 
-   There are no `ospfd' specific options.  Common options can be
-specified (*note Common Invocation Options::) to `ospfd'.
+   There is no `ospfd' specific options.  Common options can be
+specified (*note Common Invocation Options::) to `ospfd'.  `ospfd'
+needs interface information from `zebra'.  So please make it sure
+`zebra' is running before invoking `ospfd'.
+
+   Like other daemons `ospfd' configuration is done in OSPF specific
+configuration file `ospfd.conf'.
 
 
-File: zebra.info,  Node: ospfd Configuration,  Next: ospfd Terminal Mode Commands,  Prev: Invoking ospfd,  Up: ospfd
+File: zebra.info,  Node: OSPF router,  Next: OSPF area,  Prev: Configuring ospfd,  Up: ospfd
 
-ospfd Configuration
-===================
+OSPF router
+===========
+
+   To start OSPF process you have to specify OSPF router.  As of this
+writing `ospfd' does not support multiple OSPF process.
 
  - Command: router ospf
  - Command: no router ospf
-     Enable/disable the OSPF process.  Please do not specify an OSPF
-     process number.  `ospfd' does not yet support multiple OSPF
-     processes.
+     Enable or disable the OSPF process.  `ospfd' does not yet support
+     multiple OSPF processes.  So you can not specify an OSPF process
+     number.
 
- - OSPF Command: network IPV4-NETWORK area AREA-ID
+ - OSPF Command: ospf router-id A.B.C.D
+ - OSPF Command: no ospf router-id
+
+ - OSPF Command: ospf abr-type TYPE
+ - OSPF Command: no ospf abr-type TYPE
+     TYPE can be cisco|ibm|shortcut|standard
+
+ - OSPF Command: ospf rfc1583compatibility
+ - OSPF Command: no ospf rfc1583compatibility
+
+ - OSPF Command: network A.B.C.D/M area A.B.C.D
+ - OSPF Command: network A.B.C.D/M area <0-4294967295>
+ - OSPF Command: no network A.B.C.D/M area A.B.C.D
+ - OSPF Command: no network A.B.C.D/M area <0-4294967295>
      This command specifies the OSPF enabled interface.  If the
      interface has an address of 10.0.0.1/8 then the command below
      provides network information to the ospf beasties
-          !
           router ospf
            network 10.0.0.0/8 area 0
-          !
      the network command's mask length should be the same as the
      interface address's mask.
-
-
-File: zebra.info,  Node: ospfd Terminal Mode Commands,  Prev: ospfd Configuration,  Up: ospfd
-
-ospfd Terminal Mode Commands
-============================
-
- - Command: debug ospf packet
-     `debug ospf packet all detail' output all packets in detail.
-
- - Command: debug ospf ism
-
- - Command: debug ospf nsm
-
- - Command: show ip ospf interface
-
- - Command: show ip ospf neighbor
-
- - Command: show ip ospf database
-
- - Command: show ip ospf route
-
-
-File: zebra.info,  Node: ospf6d,  Next: bgpd,  Prev: ospfd,  Up: Top
-
-ospf6d
-******
-
-* Menu:
-
-* Invoking ospf6d::
-
-
-File: zebra.info,  Node: Invoking ospf6d,  Prev: ospf6d,  Up: ospf6d
-
-Invoking ospf6d
-===============
-
-
-File: zebra.info,  Node: bgpd,  Next: Filtering,  Prev: ospf6d,  Up: Top
-
-bgpd
-****
-
-   bgpd is a Border Gateway Protocol 4 (BGP-4) protocol daemon.  BGP-4
-is described in RFC1771.  bgpd also supports Multi Protocol Extension
-for BGP-4 (sometimes known as BGP-4+ or MBGP) which is described in
-RFC2283.
-
-   BGP-4 is one of the EGPs (Exterior Gateway Protocols) and is used for
-inter-domain routing messages.
-
-* Menu:
-
-* Invoking bgpd::
-* bgpd Configuration::
-* bgpd Terminal Mode Commands::
-* bgpd Sample Session::
-* bgpd Log Format::
-* How to Set Up A 6-Bone Connection::
-
-
-File: zebra.info,  Node: Invoking bgpd,  Next: bgpd Configuration,  Prev: bgpd,  Up: bgpd
-
-Invoking bgpd
-=============
-
-   `bgpd' specific invocation options.  Common options may also be
-specified (*note Common Invocation Options::).
-
-`-p PORT'
-`--bgp_port=PORT'
-     Set the bgp protocol's port number.
-
-`-r'
-`--retain'
-     When program terminates, retain BGP routes added by zebra.
-
-
-File: zebra.info,  Node: bgpd Configuration,  Next: bgpd Terminal Mode Commands,  Prev: Invoking bgpd,  Up: bgpd
-
-bgpd Configuration
-==================
-
-   There are several commands used to configure bgpd.  The default
-configuration file is `bgpd.conf'.
-
- - Command: router zebra
-     With this statement, BGP routes go to the `zebra' daemon.  If you
-     want to install BGP routes into the kernel you will have to use
-     this command.
-
- - Command: router bgp AS-NUMBER
-     Enable a BGP protocol process with the specified AS-NUMBER.  After
-     this statement you can input any `BGP Command' listed below.
-
-   In a `router bgp' clause there are neighbor specific configurations
-required.
-
- - BGP Command: bgp router-id ROUTER-ID
-     This command specifies the router-ID.  If bgpd connects to zebra
-     it gets interface and address information.  In that case default
-     router ID value is selected as the largest IP Address of the
-     interfaces.  When `router zebra' is not enabled bgpd can't get
-     interface information so `router-id' is set to 0.0.0.0.  So please
-     set router-id by yourself.
-
- - BGP Command: network NETWORK
-     This command adds the announcement network.
-          router bgp 1
-           network 10.0.0.0/8
-     This configuration example says that network 10.0.0.0/8 will
-     be announced to all neighbors.  Some vendor's routers don't
-     advertise routes if they aren't present in its IGP routing tables;
-     `bgp' doesn't care about IGP routes when announcing its routes.
-
- - BGP Command: aggregate-address NETWORK
-     This command specifies an aggregate address.
-
- - BGP Command: neighbor PEER remote-as AS-NUMBER
-     Creates a new neighbor whose remote-as is AS-NUMBER.  PEER can be
-     an IPv4 address or an IPv6 address.
-          router bgp 1
-           neighbor 10.0.0.1 remote-as 2
-     In this case my router, in AS-1, is trying to peer with AS-2
-     at 10.0.0.1.
-
-     This command must be the first command used when configuring a
-     neighbor.  If the remote-as is not specified, bgpd will complain
-     like this:
-          can't find neighbor 10.0.0.1
-
- - BGP Command: neighbor PEER next-hop-self
-     This command specifies an announced route's nexthop as being
-     equivalent to the address of the bgp beast.
-
- - BGP Command: neighbor PEER weight WEIGHT
-     This command specifies a default WEIGHT value for the neighbor's
-     routes.
-
- - BGP Command: neighbor PEER default-originate
-     bgpd's default is to not announce the default route (0.0.0.0/0)
-     even it is in routing table.  When you want to announce default
-     routes to the peer, use this command.
-
- - BGP Command: neighbor PEER shutdown
- - BGP Command: no neighbor PEER shutdown
-     Shutdown the peer.  We can delete the neighbor's configuration by
-     `no neighbor PEER remote-as AS-NUMBER' but all configuration of
-     the neighbor will be deleted.  When you want to preserve the
-     configuration, but want to drop the BGP peer, use this syntax.
-
- - BGP Command: neighbor PEER description ...
- - BGP Command: no neighbor PEER description ...
-     Set description of the peer.
-
- - BGP Command: neighbor PEER distribute-list DIRECT
-     This command specifies a distribute-list for the peer.  DIRECT is
-     `in' or `out'.
-
- - BGP Command: neighbor PEER route-map DIRECT
-     Apply a route-map on the neighbor.  DIRECT must be `in' or `out'.
-
- - BGP Command: neighbor PEER version VERSION
-     Set up the neighbor's BGP version.  VERSION can be 4, 4+ or 4-.
-     BGP version 4 is the default value used for BGP peering.  BGP
-     version 4+ means that the neighbor supports Multiprotocol
-     Extensions for BGP-4.  BGP version 4- is similar but the neighbor
-     speaks the old Internet-Draft revision 00's Multiprotocol
-     Extensions for BGP-4.  Some routing software is still using this
-     version.
-
- - BGP Command: neighbor PEER ebgp-multihop
-
- - BGP Command: neighbor PEER interface IFNAME
-     When you connect to a BGP peer over an IPv6 link-local address,
-     you have to specify the ifname of the interface used for the
-     connection.
 

@@ -145,6 +145,8 @@ struct ospf_interface
 
 /* Prototypes. */
 struct ospf_interface *ospf_if_new ();
+int ospf_if_up (struct interface *ifp);
+int ospf_if_down (struct interface *ifp);
 struct ospf_interface *ospf_if_lookup_by_addr (struct in_addr *);
 struct ospf_interface *ospf_if_lookup_by_prefix (struct prefix_ipv4 *);
 int ospf_if_new_hook (struct interface *);

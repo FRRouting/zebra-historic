@@ -57,15 +57,11 @@
                                          OSPF_DEBUG_ ## b)
 #define IS_OSPF_DEBUG(a, b)		(ospf_debug_ ## a & OSPF_DEBUG_ ## b)
 
-/* Message Lookup */
-#define LOOKUP(x, y)		mes_lookup(x, x ## _max, y)
-
 /* Message Strings. */
 extern char *ospf_packet_type_str[];
 extern char *ospf_lsa_type_str[];
 
 /* Prototypes. */
-char *mes_lookup (struct message *, int, int);
 void ospf_nbr_state_message (struct ospf_neighbor *, char *, size_t);
 char *ospf_option_dump (u_char, char *, size_t);
 char *ospf_timer_dump (struct thread *, char *, size_t);

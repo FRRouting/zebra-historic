@@ -22,22 +22,29 @@
 #ifndef _ZEBRA_ROUTEMAP_H
 #define _ZEBRA_ROUTEMAP_H
 
+/* Route map's type. */
+enum route_map_type
+{
+  RMAP_PERMIT,
+  RMAP_DENY
+};
+
 typedef enum 
 {
-  RM_MATCH,
-  RM_DENYMATCH,
-  RM_NOMATCH,
-  RM_ERROR,
-  RM_OKAY
+  RMAP_MATCH,
+  RMAP_DENYMATCH,
+  RMAP_NOMATCH,
+  RMAP_ERROR,
+  RMAP_OKAY
 } route_map_result_t;
 
 typedef enum
 {
-  ROUTE_MAP_RIP,
-  ROUTE_MAP_RIPNG,
-  ROUTE_MAP_OSPF,
-  ROUTE_MAP_OSPF6,
-  ROUTE_MAP_BGP
+  RMAP_RIP,
+  RMAP_RIPNG,
+  RMAP_OSPF,
+  RMAP_OSPF6,
+  RMAP_BGP
 } route_map_object_t;
 
 /* Route map rule structure for matching and setting. */
@@ -61,19 +68,11 @@ struct route_map_rule_cmd
 enum
 {
   /* Route map rule is missing. */
-  ROUTE_MAP_RULE_MISSING = 1,
+  RMAP_RULE_MISSING = 1,
 
   /* Route map rule can't compile */
-  ROUTE_MAP_COMPILE_ERROR
+  RMAP_COMPILE_ERROR
 };
-
-/* Route map's type. */
-enum route_map_type
-{
-  ROUTE_MAP_PERMIT,
-  ROUTE_MAP_DENY
-};
-
 
 /* Route map rule list. */
 struct route_map_rule_list

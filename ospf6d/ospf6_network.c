@@ -299,9 +299,15 @@ void
 ospf6_set_pktinfo ()
 {
   u_int on = 1;
+#ifdef IPV6_RECVPKTINFO		/*2292bis-01*/
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_RECVPKTINFO,
+                  &on, sizeof (u_int)) < 0)
+    zlog_warn ("*** set IPV6_RECVPKTINFO failed: %s", strerror (errno));
+#else	/*RFC2292*/
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_PKTINFO,
                   &on, sizeof (u_int)) < 0)
     zlog_warn ("*** set IPV6_PKTINFO failed: %s", strerror (errno));
+#endif
 }
 
 void

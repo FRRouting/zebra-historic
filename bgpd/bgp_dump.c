@@ -172,17 +172,18 @@ bgp_dump_routes_func ()
 {
   struct route_node *node;
   struct bgp_info *info;
-  extern struct route_table *bgp_table_ipv4;
-#ifdef HAVE_IPV6
-  extern struct route_table *bgp_table_ipv6;
-#endif /* HAVE_IPV6 */
+  struct bgp *bgp;
 
-  for (node = route_top (bgp_table_ipv4); node; node = route_next (node))
+  bgp = bgp_get_default ();
+  if (!bgp)
+    return;
+
+  for (node = route_top (bgp->rib[AFI_IP][SAFI_UNICAST]); node; node = route_next (node))
     for (info = node->info; info; info = info->next)
       bgp_dump_routes_entry (info, AFI_IP);
 
 #ifdef HAVE_IPV6
-  for (node = route_top (bgp_table_ipv6); node; node = route_next (node))
+  for (node = route_top (bgp->rib[AFI_IP6][SAFI_UNICAST]); node; node = route_next (node))
     for (info = node->info; info; info = info->next)
       bgp_dump_routes_entry (info, AFI_IP6);
 #endif /* HAVE_IPV6 */
@@ -253,17 +254,14 @@ bgp_dump_common (struct stream *obuf, struct peer *peer)
 
   /* Source AS number and Destination AS number. */
   stream_putw (obuf, peer->as);
-  stream_putw (obuf, peer->bgp->as);
+  stream_putw (obuf, peer->local_as);
 
-  if (peer->family == AF_INET)
+  if (peer->afc[AFI_IP][SAFI_UNICAST])
     {
       stream_putw (obuf, peer->ifindex);
       stream_putw (obuf, AFI_IP);
 
-      if (peer->su)
-	stream_put (obuf, &peer->su->sin.sin_addr, IPV4_MAX_BYTELEN);
-      else
-	stream_put (obuf, empty, IPV4_MAX_BYTELEN);
+      stream_put (obuf, &peer->su.sin.sin_addr, IPV4_MAX_BYTELEN);
 
       if (peer->su_local)
 	stream_put (obuf, &peer->su_local->sin.sin_addr, IPV4_MAX_BYTELEN);
@@ -271,17 +269,14 @@ bgp_dump_common (struct stream *obuf, struct peer *peer)
 	stream_put (obuf, empty, IPV4_MAX_BYTELEN);
     }
 #ifdef HAVE_IPV6
-  else if (peer->family == AF_INET6)
+  else if (peer->afc[AFI_IP6][SAFI_UNICAST])
     {
       /* Interface Index and Address family. */
       stream_putw (obuf, peer->ifindex);
       stream_putw (obuf, AFI_IP6);
 
       /* Source IP Address and Destination IP Address. */
-      if (peer->su)
-	stream_put (obuf, &peer->su->sin6.sin6_addr, IPV6_MAX_BYTELEN);
-      else
-	stream_put (obuf, empty, IPV6_MAX_BYTELEN);
+      stream_put (obuf, &peer->su.sin6.sin6_addr, IPV6_MAX_BYTELEN);
 
       if (peer->su_local)
 	stream_put (obuf, &peer->su_local->sin6.sin6_addr, IPV6_MAX_BYTELEN);

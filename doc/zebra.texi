@@ -7,18 +7,18 @@
 
 @c Set variables
 @set EDITION 0.1
-@set VERSION 0.81
-@set UPDATED 6 November 1999
-@set UPDATED-MONTH November 1999
+@set VERSION 0.84
+@set UPDATED 3 January 2000
+@set UPDATED-MONTH January 2000
 
 @c These may vary with installation environment.
-@set INSTALL_PREFIX_ETC /usr/local/etc/
-@set INSTALL_PREFIX_SBIN /usr/local/sbin/
+@set INSTALL_PREFIX_ETC /usr/local/etc
+@set INSTALL_PREFIX_SBIN /usr/local/sbin
 
 @c Info entry
 @dircategory Routing Software
 @direntry
-* Zebra: (zebra).		The GNU Zebra routing software package.
+* Zebra: (zebra).		The GNU Zebra routing software.
 @end direntry
 
 @ifinfo
@@ -28,7 +28,7 @@ routing protocols.
 This is Edition @value{EDITION}, last updated @value{UPDATED} of
 @cite{The GNU Zebra Manual}, for Zebra Version @value{VERSION}.
 
-Copyright (C) 1999 Kunihiro Ishiguro
+Copyright (C) 1999, 2000 Kunihiro Ishiguro
 
 Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -52,9 +52,6 @@ except that this permission notice may be stated in a translation
 approved by Kunihiro Ishiguro.
 @end ifinfo
 
-@c @iftex
-@c @shorttitlepage GNU Zebra
-@c @end iftex
 @titlepage
 @title GNU Zebra
 @subtitle A routing software package for TCP/IP networks
@@ -64,7 +61,7 @@ approved by Kunihiro Ishiguro.
 
 @page
 @vskip 0pt plus 1filll
-Copyright @copyright{} 1999 Kunihiro Ishiguro
+Copyright @copyright{} 1999, 2000 Kunihiro Ishiguro
 
 Permission is granted to make and distribute verbatim copies of
 this manual provided the copyright notice and this permission notice
@@ -82,7 +79,7 @@ by Kunihiro Ishiguro.
 @end titlepage
 @page
 
-@ifinfo
+@ifnottex
 @node Top, Overview, (dir), (dir)
 @comment  node-name,  next,  previous,  up
 @top GNU Zebra
@@ -92,33 +89,30 @@ protocols.  Adding to routing protocol support, Zebra provides interface
 address configuration and advanced filtering.
 
 This is the GNU Zebra Manual for zebra-@value{VERSION}.
-@end ifinfo
+@end ifnottex
 
 @menu
-* Overview::                    Overview of the Zebra suite.
-* Installation::                How to install the Zebra suite.
+* Overview::                    Overview of the Zebra.
+* Installation::                How to install the Zebra.
 
 The Zebra Suite
-
-* Overview of the Herd::        Common to all beasts
-
+* Basic commands::              
 * zebra::                       The routing manager
 * ripd::                        A RIP protocol daemon
 * ripngd::                      A RIPng protocol daemon
 * ospfd::                       An OSPF protocol daemon
-* ospf6d::                      An OSPFv6 protocol daemon
+* ospf6d::                      An OSPF for IPv6 protocol daemon
 * bgpd::                        A BGP protocol daemon
 
 Additional Features
-
 * Filtering::                   How to filter routes.
 * Route Map::                   Route map description.
 * IPv6 Supports::               IP version 6 supports.
 * Kernel Interface::            Zebra between kernel interface.
+* SNMP support::                
 * Linux Netlink::               Netlink mechanism on a Linux box.
 
 Indices
-
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
 @end menu
@@ -128,67 +122,78 @@ Indices
 @chapter Overview
 @cindex Overview
 
-Zebra is a routing software package that provides TCP/IP based routing
+  Zebra is a routing software package that provides TCP/IP based routing
 services with routing protocols support such as RIPv1, RIPv2, RIPng,
 OSPFv2, OSPFv3, BGP-4, and BGP-4+ (@pxref{Supported RFC}).  Zebra also
-supports special BGP behavior Route Reflector and Route Server.  Route
-Server functionality is under development as of Zebra version 0.81.
+supports special BGP behavior Route Reflector and Route Server.  Adding
+to traditional IPv4 routing protocols, Zebra also supports IPv6 routing
+protocols.  With SNMP daemon which support SMUX protocol, Zebra provides
+routing protocol MIBs (@pxref{SNMP support}).
 
-Zebra uses an advanced software architecture to provide you with a
-high-quality, multi-server routing engine.  Zebra has an interactive
-user interface for each routing protocol and supports common client user
-interface commands.
+  Zebra uses an advanced software architecture to provide you with a
+high quality, multi server routing engine.  Zebra has an interactive
+user interface for each routing protocol and supports common client
+commands.  Due to this design, you can add new protocol daemon to Zebra
+easily.  You can use Zebra library as your program's client user
+interface.
 
-IPv6
-
-SNMP
-
-Address configuration
-
-Licence
-
-Zebra is distributed under the GNU General Public License.
-
-Additional info.
-
+  Zebra is an official GNU software and distributed under the GNU
+General Public License.
 
 @menu
 * About Zebra::                 Basic information about Zebra
 * System Architecture::         The Zebra system architecture
 * Supported Platforms::         Supported platforms and future plans
 * Supported RFC::               Supported RFCs.
+* How to get Zebra::            
 * Mailing List::                Mailing list information
 * Bug Reports::                 Mail address for bug data
-* Zebra web page::              Zebra web page.
 @end menu
 
 @node About Zebra, System Architecture, Overview, Overview
 @comment  node-name,  next,  previous,  up
 @section About Zebra
 @cindex About Zebra
-@cindex Huh?
 
-Today, TCP/IP networks are covering all of the world. The Internet has
-been deployed in many countries, companies, and at home. If you connect
-to the Internet you use TCP/IP routing functions. Zebra is a free TCP/IP
-routing software package. 
+  Today, TCP/IP networks are covering all of the world.  The Internet
+has been deployed in many countries, companies, and to the home.  When
+you connect to the Internet your packet will pass many routers which
+have TCP/IP routing functionality.
 
-A system with Zebra installed acts as a dedicated router. With Zebra,
+  A system with Zebra installed acts as a dedicated router.  With Zebra,
 your machine exchanges routing information with other routers using
-routing protocols. Zebra uses this information to update the kernel
-routing table so that the right data goes to the right place. You can
+routing protocols.  Zebra uses this information to update the kernel
+routing table so that the right data goes to the right place.  You can
 dynamically change the configuration and you may view routing table
 information from the Zebra terminal interface.
 
-If you have a small network, or a stub network, configuring the Zebra
-routing software is very easy: The only thing you have to do is to set
+  Adding to routing protocol support, Zebra can setup interface's flag,
+interface's address, static routes and so on.  If you have a small
+network, or a stub network, or xDSL connection, configuring the Zebra
+routing software is very easy.  The only thing you have to do is to set
 up the interfaces and put a few commands about static routes and/or
-default routes. If the network is rather large, however, or if the
-network structure changes frequently, you will want to take advantage of
-Zebra's dynamic routing protocol support for protocols such as RIP, OSPF
-or BGP: Zebra is for you.
+default routes.  If the network is rather large, or if the network
+structure changes frequently, you will want to take advantage of Zebra's
+dynamic routing protocol support for protocols such as RIP, OSPF or BGP.
+Zebra is with you.
 
-@page
+  Traditionally, UNIX based router configuration is done by
+@command{ifconfig} and @command{route} commands.  Status of routing
+table is displayed by @command{netstsat} utility.  Almost of these
+commands work only the user has root privilege.  Zebra has different
+system administration method.  There are two user mode in Zebra.  One is
+normal mode, the other is enable mode.  Normal mode user can only view
+system status, enable mode user can change system configuration.  This
+UNIX account independent feature will be great help to the router
+administrator.
+
+  Currently, Zebra supports common unicast routing protocols.  Multicast
+routing protocols such as BGMP, PIM-SM, PIM-DM will be supported in
+Zebra 2.0.  MPLS support is going on.  In the future, TCP/IP filtering
+control, QoS control, diffserv configuration will be added to Zebra.
+Zebra project's final goal is making productive quality free TCP/IP
+routing software.
+
 @node System Architecture, Supported Platforms, About Zebra, Overview
 @comment  node-name,  next,  previous,  up
 @section System Architecture
@@ -196,22 +201,26 @@ or BGP: Zebra is for you.
 @cindex Software architecture
 @cindex Software internals
 
-Traditional routing software is made as a one process program which
+  Traditional routing software is made as a one process program which
 provides all of the routing protocol functionalities.  Zebra takes a
-different approach; it is made from a collection of several daemons that
-work together to build a routing table.  There may be several
-protocol-specific routing daemons and Zebra, the kernel routing manager.
+different approach.  It is made from a collection of several daemons
+that work together to build a routing table.  There may be several
+protocol-specific routing daemons and zebra the kernel routing manager.
 
-The @command{ripd} daemon handles the RIP protocol, while
+  The @command{ripd} daemon handles the RIP protocol, while
 @command{ospfd} is a daemon which supports OSPF version 2.
 @command{bgpd} supports the BGP-4 protocol.  For changing the kernel
 routing table and for redistribution of routes between different routing
-protocols, there is the @command{zebra} daemon.  There is no need for
-these daemons to be running on the same machine.  This architecture
-creates new possibilities for the routing system.  It is easy to add new
-routing protocol daemons to a network, and servers in stubs need run
-only the protocol daemon in use. Thus, remote networks may run a
-specific daemon and send routing reports to a central routing console.
+protocols, there is a kernel routing table manager @command{zebra}
+daemon.  It is easy to add a new routing protocol daemons to the entire
+routing system without affecting any other software.  You need run only
+the protocol daemon associated with routing protocols in use.  Thus,
+user may run a specific daemon and send routing reports to a central
+routing console.
+
+  There is no need for these daemons to be running on the same machine.
+You can even run several same protocol daemon on the same machine.  This
+architecture creates new possibilities for the routing system.
 
 @example
 @group
@@ -229,17 +238,28 @@ specific daemon and send routing reports to a central routing console.
 @end group
 @end example
 
-Zebra uses a multi-threaded mechanism when it runs with a kernel that
-supports multi-threads.  At this moment, the thread library which
-comes with GNU/Linux or FreeBSD has some problems for running Zebra, so
-we don't use threads on those OSes, instead we use the select system
-call for multiplexing.
+  Multi process architecture bring us extensibility, modularity and
+maintainability.  At the same time it also bring us many configuration
+files and terminal interface.  Each daemon has it's own configuration
+file and terminal interface.  When you configure static route, it must
+be done in @command{zebra} configuration file.  When you configure BGP
+network it must be done in @command{bgpd} configuration file.  It is
+very annoying thing.  To resolve the problem, Zebra provides integrated
+user interface shell called @command{vsh}.  @command{vsh} connect to
+each daemon with UNIX domain socket then work as proxy of user input.
 
-When zebra runs under a GNU Hurd kernel it will act as a kernel routing
-table itself.  Under GNU Hurd, all TCP/IP services are provided by user
-processes called @command{pfinet}.  Zebra will provide all the routing
-selection mechanisms for the process.  This feature will be implemented
-in the near future.
+  Zebra was planned to use multi-threaded mechanism when it runs with a
+kernel that supports multi-threads.  But at this moment, the thread
+library which comes with GNU/Linux or FreeBSD has some problems for
+running reliable services such as routing software, so we don't use
+threads at all, instead we use the @command{select(2)} system call for
+multiplexing the events.
+
+  When @command{zebra} runs under a GNU Hurd kernel it will act as a
+kernel routing table itself.  Under GNU Hurd, all TCP/IP services are
+provided by user processes called @command{pfinet}.  Zebra will provide
+all the routing selection mechanisms for the process.  This feature will
+be implemented when GNU Hurd becomes stable.
 
 @node Supported Platforms, Supported RFC, System Architecture, Overview
 @comment  node-name,  next,  previous,  up
@@ -250,9 +270,14 @@ in the near future.
 @cindex Compatibility with other systems
 @cindex Operating systems that support Zebra
 
+  Currently Zebra supports GNU/Linux, BSD and Solaris.  Below is a list
+of OS version on which Zebra runs.  Porting Zebra to other platform is
+not so hard work.  Platform dependent codes are only exists in
+@command{zebra} daemon.  Protocol daemons are platform independent.
+Please let us know when you find Zebra runs on platform which does not
+listed below.
 
-GNU Zebra is now testing on:
-
+@sp 1
 @itemize @bullet
 @item
 GNU/Linux 2.0.37
@@ -263,27 +288,43 @@ GNU/Linux 2.3.x
 @item
 FreeBSD 2.2.8
 @item
-FreeBSD 3.1
+FreeBSD 3.x
 @item
 FreeBSD 4.x
-@end itemize
-
-We are planning to support the following platforms in the near future:
-
-@itemize @bullet
 @item
-GNU/Hurd 0.2
+NetBSD 1.4
+@item
+OpenBSD 2.5
+@item
+Solaris 2.6
 @item
 Solaris 7
 @end itemize
 
-@node Supported RFC, Mailing List, Supported Platforms, Overview
+@sp 1
+  Some IPv6 stacks are in development.  Zebra supports following IPv6
+stack.  For BSD, we recommend KAME IPv6 stack.  Solaris IPv6 stack is
+not yet supported.
+@sp 1
+@itemize @bullet
+@item
+Linux IPv6 stack for GNU/Linux 2.2.x and upper.
+@item
+KAME IPv6 stack for BSD.
+@item
+INRIA IPv6 stack for BSD.
+@end itemize
+
+@node Supported RFC, How to get Zebra, Supported Platforms, Overview
 @comment  node-name,  next,  previous,  up
 @section Supported RFC
 
-Below is the list of currently supported routing protocol RFC.
+  Below is the list of currently supported RFC.
 
 @table @asis
+@item @asis{RFC1058}
+@cite{Routing Information Protocol. C.L. Hedrick. Jun-01-1988.}
+
 @item @asis{RFC1771} 
 @cite{A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.}
 
@@ -307,21 +348,56 @@ Below is the list of currently supported routing protocol RFC.
 
 @item @asis{RFC2545}
 @cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
+
+@item @asis{RFC2740}
+@cite{OSPF for IPv6. R. Coltun, D. Ferguson, J. Moy. December 1999.}
 @end table
 
-When SNMP support is enabled, below RFC is also supported.
+  When SNMP support is enabled, below RFC is also supported.
 
 @table @asis
 
 @item @asis{RFC1227}
 @cite{SNMP MUX protocol and MIB. M.T. Rose. May-01-1991.}
 
+@item @asis{RFC1657}
+@cite{Definitions of Managed Objects for the Fourth Version of the
+Border Gateway Protocol (BGP-4) using SMIv2. S. Willis, J. Burruss,
+J. Chu, Editor. July 1994.}
+
 @item @asis{RFC1724}
 @cite{RIP Version 2 MIB Extension. G. Malkin & F. Baker. November 1994.}
 
+@item @asis{RFC1850}
+@cite{OSPF Version 2 Management Information Base. F. Baker, R. Coltun.
+November 1995.}
+
 @end table
 
-@node Mailing List, Bug Reports, Supported RFC, Overview
+@node How to get Zebra, Mailing List, Supported RFC, Overview
+@comment  node-name,  next,  previous,  up
+@section How to get Zebra
+
+  Zebra is still beta version software and there is no officially
+released version.  So currently Zebra is distributed from Zebra beta ftp
+site located at:
+
+@url{ftp://ftp.zebra.org/pub/zebra}
+
+  Once Zebra is released you can get it from GNU FTP site and many it's
+mirror sites.  We are planning Zebra-1.0 as a first released version.
+
+  Zebra's official web page is located at:
+
+@url{http://www.gnu.org/software/zebra/zebra.html}.
+
+  There is a Zebra beta tester web page at: 
+
+@url{http://www.zebra.org/}.
+
+  You can get the latest beta software information from this page.
+
+@node Mailing List, Bug Reports, How to get Zebra, Overview
 @comment  node-name,  next,  previous,  up
 @section Mailing List
 @cindex How to get in touch with Zebra
@@ -329,30 +405,27 @@ When SNMP support is enabled, below RFC is also supported.
 @cindex Contact information
 @cindex Mailing lists
 
-There is a mailing list for discussions about Zebra.  If you have any
+  There is a mailing list for discussions about Zebra.  If you have any
 comments or suggestions to Zebra please send mail to
 @email{zebra@@zebra.org}.  New snapshot announcements, improvement
 notes, and patches are sent to the list.
 
-To subscribe to the @email{zebra@@zebra.org, Zebra mailing list}, please
-send a mail to @email{majordomo@@zebra.org} with a message body that
-includes only:
+  To subscribe to the @email{zebra@@zebra.org, Zebra mailing list},
+please send a mail to @email{majordomo@@zebra.org} with a message body
+that includes only:
 
 @quotation
 subscribe zebra
 @end quotation
 
-
-To unsubscribe from the list, please send a mail to
+  To unsubscribe from the list, please send a mail to
 @email{majordomo@@zebra.org} with a message body that includes only:
 
 @quotation
 unsubscribe zebra
 @end quotation
 
-
-
-@node Bug Reports, Zebra web page, Mailing List, Overview
+@node Bug Reports,  , Mailing List, Overview
 @comment  node-name,  next,  previous,  up
 @section Bug Reports
 
@@ -363,7 +436,7 @@ unsubscribe zebra
 @cindex Reporting software errors
 @cindex Errors in the software
 
-If you think you have found a bug, please send a bug report to
+  If you think you have found a bug, please send a bug report to
 @email{bug-zebra@@gnu.org}.  When you send a bug report, please be
 careful about the points below.
 
@@ -380,19 +453,11 @@ Please send your configuration file with the report.  If you specify
 arguments to the configure script please note that too.
 @end itemize
 
-Bug reports are very important for us to improve the quality of Zebra.
+  Bug reports are very important for us to improve the quality of Zebra.
 Zebra is still in the development stage, but please don't hesitate to
 send a bug report to @email{bug-zebra@@gnu.org}.
 
-@node Zebra web page,  , Bug Reports, Overview
-@comment  node-name,  next,  previous,  up
-@section Zebra web page
-
-  You can get the latest information from the Zebra web page:
-@url{http://www.zebra.org/}.
-
-
-@node  Installation, Overview of the Herd, Overview, Top
+@node  Installation, Basic commands, Overview, Top
 @comment  node-name,  next,  previous,  up
 @chapter Installation
 
@@ -402,9 +467,8 @@ send a bug report to @email{bug-zebra@@gnu.org}.
 @cindex Building the system
 @cindex Making Zebra
 
-There are three steps for installing the software: configuration,
+  There are three steps for installing the software: configuration,
 compilation, and installation.
-
 
 @menu
 * Configure the Software::      
@@ -412,18 +476,15 @@ compilation, and installation.
 * Install the Software::        
 @end menu
 
-
-The easiest way to get Zebra running is to issue the following commands:
+  The easiest way to get Zebra running is to issue the following
+commands:
 
 @example
-% ./configure
-% ./make
-% ./make install
+% configure
+% make
+% make install
 @end example
-@c A - end of node Installation
 
-
- 
 @node Configure the Software, Build the Software, Installation, Installation
 @comment  node-name,  next,  previous,  up
 @section Configure the Software
@@ -434,19 +495,20 @@ The easiest way to get Zebra running is to issue the following commands:
 @cindex Distribution configuration
 @cindex Options to @code{./configure}
  
-
-Zebra has an excellent configure script, the configure script
+  Zebra has an excellent configure script, the configure script
 automatically detects most host configurations.  There are several
 additional configure options you can use to turn off IPv6 support, to
-disable the compilation of specific daemons, and to modify the use of
-threads.
+disable the compilation of specific daemons, and to enable SNMP support.
 
 @table @option
 @item --enable-guile
 Turn on compilation of the zebra-guile interpreter.  You will need the
-guile library to make this.
+guile library to make this.  zebra-guile implementation is not yet
+finished.  So this option is only useful for zebra-guile developer.
 @item --disable-ipv6
-Turn off IPv6 related features and daemons.
+Turn off IPv6 related features and daemons.  Zebra configure script
+automatically detect IPv6 stack.  But sometimes you might want to
+disable IPv6 support of Zebra.
 @item --disable-zebra
 Do not build zebra daemon.
 @item --disable-ripd
@@ -460,10 +522,15 @@ Do not build ospf6d.
 @item --disable-bgpd
 Do not build bgpd.
 @item --disable-bgp-announce
-Do not make bgp announcements.
-@item --disable-pthread
-Do not use pthread features.  The default is to disable this feature so
-you don't need to specify it.
+Make @command{bgpd} which does not make bgp announcements at all.  This
+feature is good for using @command{bgpd} as BGP announcement listener.
+@item --enable-netlink
+Force to enable GNU/Linux netlink interface.  Zebra configure script
+detects netlink interface by checking header file.  When header file
+does not match to the current running kernel configure script will not
+turn on netlink support.
+@item --enable-snmp
+Enable SNMP support.  In default, SNMP support is disabled.
 @end table
 
 You may specify any combination of the above options to the configure
@@ -488,10 +555,6 @@ Read-only sample configuration file in @var{dir} [@var{prefix}/etc].
 
 This command will configure zebra and the routing daemons.
 
-@comment Changed this to a footnote, Linux is not yet a de facto standard
-@comment GNU/Linux Configuration, Additional Notes, Configure Options, Installation
-@comment  node-name,  next,  previous,  up
-@comment GNU/Linux Configuration
 @cindex Configuring Zebra
 @cindex Configuration the software build
 @cindex Building on Linux boxes
@@ -616,9 +679,9 @@ needed.
 You may need to make changes to the config files in
 @file{@value{INSTALL_PREFIX_ETC}/*.conf}. @xref{Config Commands}.
 
-@node Overview of the Herd, zebra, Installation, Top
+@node Basic commands, zebra, Installation, Top
 @comment  node-name,  next,  previous,  up
-@chapter Overview of the Herd
+@chapter Basic commands
 
 There are five routing daemons in use, and there is one manager daemon.
 These daemons may be located on separate machines from the manager
@@ -641,7 +704,7 @@ daemons.
 
 
 
-@node Config Commands, Common Invocation Options, Overview of the Herd, Overview of the Herd
+@node Config Commands, Common Invocation Options, Basic commands, Basic commands
 @comment  node-name,  next,  previous,  up
 @section Config Commands
 
@@ -666,14 +729,14 @@ starting.
 Config files are generally found in:
 
 @itemize @asis
-@item @file{@value{INSTALL_PREFIX_ETC}*.conf}
+@item @file{@value{INSTALL_PREFIX_ETC}/*.conf}
 @end itemize
 
 Each of the daemons has its own
 config file.  For example, zebra's default config file name is:
 
 @itemize @asis
-@item @file{@value{INSTALL_PREFIX_ETC}zebra.conf}
+@item @file{@value{INSTALL_PREFIX_ETC}/zebra.conf}
 @end itemize
 
 The daemon name plus @file{.conf} is the default config file name. You
@@ -817,7 +880,7 @@ comment and the password is set to 'zebra!password'.
 
 
 
-@node Common Invocation Options, Virtual Terminal Interfaces, Config Commands, Overview of the Herd
+@node Common Invocation Options, Virtual Terminal Interfaces, Config Commands, Basic commands
 @comment  node-name,  next,  previous,  up
 @section Common Invocation Options
 @c COMMON_OPTIONS
@@ -851,7 +914,7 @@ Print program version.
 
 
 
-@node  Virtual Terminal Interfaces,  , Common Invocation Options, Overview of the Herd
+@node  Virtual Terminal Interfaces,  , Common Invocation Options, Basic commands
 @comment  node-name,  next,  previous,  up
 @section Virtual Terminal Interfaces
 
@@ -885,7 +948,7 @@ Connected to localhost.
 Escape character is '^]'.
 
 Hello, this is zebra (version @value{VERSION})
-Copyright 1997-1999 Kunihiro Ishiguro
+Copyright 1997-2000 Kunihiro Ishiguro
 
 
 User Access Verification
@@ -1105,7 +1168,7 @@ completions.
 
 
 @c A - End of the Chapter Overview
-@node zebra, ripd, Overview of the Herd, Top
+@node zebra, ripd, Basic commands, Top
 @comment  node-name,  next,  previous,  up
 @chapter zebra
 
@@ -1410,15 +1473,15 @@ settings listed above.
 @end deffn
 
 
-@deffn {Interface command} {ip rip send version @var{varsion}} {}
-@var{varsion} can be `1', `2', `1 2'.  This configuration command
+@deffn {Interface command} {ip rip send version @var{version}} {}
+@var{version} can be `1', `2', `1 2'.  This configuration command
 overrides the router's rip version setting.  The command will enable the
 selected interface to send packets with RIP Version 1, RIP Version 2, or
 both.  In the case of '1 2', packets will be both broadcast and
 multicast.
 @end deffn
 
-@deffn {Interface command} {ip rip receive version @var{varsion}} {}
+@deffn {Interface command} {ip rip receive version @var{version}} {}
 Version setting for incoming RIP packets.  This command will enable the
 selected interface to receive packets in RIP Version 1, RIP Version 2,
 or both.
@@ -1562,7 +1625,7 @@ packets.  The origin and port number of the packet as well as a packet
 dump is shown.
 
 @deffn Command {debug rip zebra} {}
-Debug rip <--> zebra communication.
+Debug rip between zebra communication.
 @end deffn
 
 This command will show the communication between ripd and zebra.  The
@@ -1662,120 +1725,432 @@ distribute-list local-only out sit1
 @end example
 @end deffn
 
-
 @node ospfd, ospf6d, ripngd, Top
 @comment  node-name,  next,  previous,  up
 @chapter ospfd
 
-@command{ospfd} provides an OSPF version 2 routing protocol as described in
-RFC2178.  Currently OSPFd is under development.
+@command{ospfd} provides an OSPF version 2 routing protocol as described
+in RFC2328.  OSPF is one of IGPs (Interior Gateway Protocols).  Compared
+with RIP, OSPF can serve much more networks and priod of convergence is
+very short.  OSPF is widely used in large networks such as ISP backbone
+and enterprise network.
 
 @menu
-* Invoking ospfd::              
-* ospfd Configuration::         
-* ospfd Terminal Mode Commands::  
+* Configuring ospfd::           
+* OSPF router::                 
+* OSPF area::                   
+* OSPF interface::              
+* Redistribute routes to OSPF::  
+* Showing OSPF information::    
+* Debugging OSPF::              
 @end menu
 
-@node Invoking ospfd, ospfd Configuration, ospfd, ospfd
+@node Configuring ospfd, OSPF router, ospfd, ospfd
 @comment  node-name,  next,  previous,  up
-@section Invoking ospfd
+@section Configuring ospfd
 
-There are no @command{ospfd} specific options.  Common options can be
+There is no @command{ospfd} specific options.  Common options can be
 specified (@pxref{Common Invocation Options}) to @command{ospfd}.
+@command{ospfd} needs interface information from @command{zebra}.  So
+please make it sure @command{zebra} is running before invoking
+@command{ospfd}.
 
-@node ospfd Configuration, ospfd Terminal Mode Commands, Invoking ospfd, ospfd
+Like other daemons @command{ospfd} configuration is done in OSPF
+specific configuration file @file{ospfd.conf}.
+
+@node OSPF router, OSPF area, Configuring ospfd, ospfd
 @comment  node-name,  next,  previous,  up
-@section ospfd Configuration
+@section OSPF router
+
+To start OSPF process you have to specify OSPF router.  As of this
+writing @command{ospfd} does not support multiple OSPF process.
 
 @deffn Command {router ospf} {}
 @deffnx Command {no router ospf} {}
-Enable/disable the OSPF process.  Please do not specify an OSPF process number.
-@command{ospfd} does not yet support multiple OSPF processes.
+Enable or disable the OSPF process.  @command{ospfd} does not yet
+support multiple OSPF processes.  So you can not specify an OSPF process
+number.
 @end deffn
 
-@deffn {OSPF Command} {network @var{ipv4-network} area @var{area-id}} {}
+@deffn {OSPF Command} {ospf router-id @var{a.b.c.d}} {}
+@deffnx {OSPF Command} {no ospf router-id} {}
+@end deffn
+
+@deffn {OSPF Command} {ospf abr-type @var{type}} {}
+@deffnx {OSPF Command} {no ospf abr-type @var{type}} {}
+@var{type} can be cisco|ibm|shortcut|standard
+@end deffn
+
+@deffn {OSPF Command} {ospf rfc1583compatibility} {}
+@deffnx {OSPF Command} {no ospf rfc1583compatibility} {}
+@end deffn
+
+@deffn {OSPF Command} {network @var{a.b.c.d/m} area @var{a.b.c.d}} {}
+@deffnx {OSPF Command} {network @var{a.b.c.d/m} area @var{<0-4294967295>}} {}
+@deffnx {OSPF Command} {no network @var{a.b.c.d/m} area @var{a.b.c.d}} {}
+@deffnx {OSPF Command} {no network @var{a.b.c.d/m} area @var{<0-4294967295>}} {}
 This command specifies the OSPF enabled interface.  If the interface has
 an address of 10.0.0.1/8 then the command below provides network
 information to the ospf beasties
 @example
 @group
-!
 router ospf
  network 10.0.0.0/8 area 0
-!
 @end group
 @end example
 the network command's mask length should be the same as the interface
 address's mask.
 @end deffn
 
-@node ospfd Terminal Mode Commands,  , ospfd Configuration, ospfd
+@node OSPF area, OSPF interface, OSPF router, ospfd
 @comment  node-name,  next,  previous,  up
-@section ospfd Terminal Mode Commands
+@section OSPF area
 
-@deffn Command {debug ospf packet} {}
-@code{debug ospf packet all detail} output all packets in detail.
+@deffn {OSPF Command} {area @var{a.b.c.d} range @var{a.b.c.d/m}} {}
+@deffnx {OSPF Command} {area <0-4294967295> range @var{a.b.c.d/m}} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} range @var{a.b.c.d/m}} {}
+@deffnx {OSPF Command} {no area <0-4294967295> range @var{a.b.c.d/m}} {}
 @end deffn
 
-@deffn Command {debug ospf ism} {}
+@deffn {OSPF Command} {area @var{a.b.c.d} range IPV4_PREFIX suppress} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} range IPV4_PREFIX suppress} {}
+@deffnx {OSPF Command} {area @var{a.b.c.d} range IPV4_PREFIX substitute IPV4_PREFIX} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} range IPV4_PREFIX substitute IPV4_PREFIX} {}
 @end deffn
 
-@deffn Command {debug ospf nsm} {}
+@deffn {OSPF Command} {area @var{a.b.c.d} virtual-link @var{a.b.c.d}} {}
+@deffnx {OSPF Command} {area <0-4294967295> virtual-link @var{a.b.c.d}} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} virtual-link @var{a.b.c.d}} {}
+@deffnx {OSPF Command} {no area <0-4294967295> virtual-link @var{a.b.c.d}} {}
 @end deffn
 
-@deffn Command {show ip ospf interface} {}
+@deffn {OSPF Command} {area @var{a.b.c.d} shortcut} {}
+@deffnx {OSPF Command} {area <0-4294967295> shortcut} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} shortcut} {}
+@deffnx {OSPF Command} {no area <0-4294967295> shortcut} {}
 @end deffn
 
-@deffn Command {show ip ospf neighbor} {}
+@deffn {OSPF Command} {area @var{a.b.c.d} stub} {}
+@deffnx {OSPF Command} {area <0-4294967295> stub} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} stub} {}
+@deffnx {OSPF Command} {no area <0-4294967295> stub} {}
 @end deffn
 
-@deffn Command {show ip ospf database} {}
+@deffn {OSPF Command} {area @var{a.b.c.d} stub no-summary} {}
+@deffnx {OSPF Command} {area <0-4294967295> stub no-summary} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} stub no-summary} {}
+@deffnx {OSPF Command} {no area <0-4294967295> stub no-summary} {}
 @end deffn
 
-@deffn Command {show ip ospf route} {}
+@deffn {OSPF Command} {area @var{a.b.c.d} default-cost <0-16777215>} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} default-cost <0-16777215>} {}
+@end deffn
+
+@deffn {OSPF Command} {area @var{a.b.c.d} export-list NAME} {}
+@deffnx {OSPF Command} {area <0-4294967295> export-list NAME} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} export-list NAME} {}
+@deffnx {OSPF Command} {no area <0-4294967295> export-list NAME} {}
+@end deffn
+
+@deffn {OSPF Command} {area @var{a.b.c.d} import-list NAME} {}
+@deffnx {OSPF Command} {area <0-4294967295> import-list NAME} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} import-list NAME} {}
+@deffnx {OSPF Command} {no area <0-4294967295> import-list NAME} {}
+@end deffn
+
+@deffn {OSPF Command} {area @var{a.b.c.d} authentication} {}
+@deffnx {OSPF Command} {area <0-4294967295> authentication} {}
+@deffnx {OSPF Command} {no area @var{a.b.c.d} authentication} {}
+@deffnx {OSPF Command} {no area <0-4294967295> authentication} {}
+@end deffn
+
+@deffn {OSPF Command} {area @var{a.b.c.d} authentication message-digest} {}
+@deffnx {OSPF Command} {area <0-4294967295> authentication message-digest} {}
+@end deffn
+
+@node OSPF interface, Redistribute routes to OSPF, OSPF area, ospfd
+@comment  node-name,  next,  previous,  up
+@section OSPF interface
+
+@deffn {Interface Command} {ospf authentication-key AUTH_KEY} {}
+@deffnx {Interface Command} {no ospf authentication-key} {}
+@end deffn
+
+@deffn {Interface Command} {ospf message-digest-key KEYID md5 KEY} {}
+@deffnx {Interface Command} {no ospf message-digest-key} {}
+@end deffn
+
+@deffn {Interface Command} {ospf cost <1-65535>} {}
+@deffnx {Interface Command} {no ospf cost} {}
+@end deffn
+
+@deffn {Interface Command} {ospf dead-interval <1-65535>} {}
+@deffnx {Interface Command} {no ospf dead-interval} {}
+@end deffn
+
+@deffn {Interface Command} {ospf hello-interval <1-65535>} {}
+@deffnx {Interface Command} {no ospf hello-interval} {}
+@end deffn
+
+@deffn {Interface Command} {ospf network (broadcast|non-broadcast|point-to-multipoint|point-to-point)} {}
+@deffnx {Interface Command} {no ospf network} {}
+@end deffn
+
+@deffn {Interface Command} {ospf priority <0-255>} {}
+@deffnx {Interface Command} {no ospf priority} {}
+@end deffn
+
+@deffn {Interface Command} {ospf retransmit-interval <1-65535>} {}
+@deffnx {Interface Command} {no ospf retransmit interval} {}
+@end deffn
+
+@deffn {Interface Command} {ospf transmit-delay} {}
+@deffnx {Interface Command} {no ospf transmit-delay} {}
+@end deffn
+
+@node Redistribute routes to OSPF, Showing OSPF information, OSPF interface, ospfd
+@comment  node-name,  next,  previous,  up
+@section Redistribute routes to OSPF
+
+@deffn {OSPF Command} {redistribute (kernel|connected|static|rip|bgp)} {}
+@deffnx {OSPF Command} {redistribute (kernel|connected|static|rip|bgp) metric-type (1|2)} {}
+@deffnx {OSPF Command} {redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>} {}
+@deffnx {OSPF Command} {redistribute (kernel|connected|static|rip|bgp) metric-type (1|2) metric <0-16777214>} {}
+@deffnx {OSPF Command} {no redistribute (kernel|connected|static|rip|bgp)} {}
+@deffnx {OSPF Command} {no redistribute (kernel|connected|static|rip|bgp) metric-type (1|2)} {}
+@deffnx {OSPF Command} {no redistribute (kernel|connected|static|rip|bgp) metric <0-16777214>} {}
+@deffnx {OSPF Command} {no redistribute (kernel|connected|static|rip|bgp) metric-type (1|2) metric <0-16777214>} {}
+@end deffn
+
+@deffn {OSPF Command} {distribute-list NAME out kernel} {}
+@deffnx {OSPF Command} {no distribute-list NAME out kernel} {}
+@deffnx {OSPF Command} {distribute-list NAME out connected} {}
+@deffnx {OSPF Command} {no distribute-list NAME out connected} {}
+@deffnx {OSPF Command} {distribute-list NAME out static} {}
+@deffnx {OSPF Command} {no distribute-list NAME out static} {}
+@deffnx {OSPF Command} {distribute-list NAME out rip} {}
+@deffnx {OSPF Command} {no distribute-list NAME out rip} {}
+@deffnx {OSPF Command} {distribute-list NAME out bgp} {}
+@deffnx {OSPF Command} {no distribute-list NAME out bgp} {}
+@end deffn
+
+@deffn {Command} {router zebra} {}
+@deffnx {Command} {no router zebra} {}
+@end deffn
+
+@node Showing OSPF information, Debugging OSPF, Redistribute routes to OSPF, ospfd
+@comment  node-name,  next,  previous,  up
+@section Showing OSPF information
+
+@deffn {Command} {show ip ospf} {}
+@end deffn
+
+@deffn {Command} {show ip ospf interface [INTERFACE]} {}
+@end deffn
+
+@deffn {Command} {show ip ospf neighbor} {}
+@deffnx {Command} {show ip ospf neighbor INTERFACE} {}
+@deffnx {Command} {show ip ospf neighbor detail} {}
+@deffnx {Command} {show ip ospf neighbor INTERFACE detail} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database adbr-summary} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database external} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database max-age} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database network} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database router} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database self-originate} {}
+@end deffn
+
+@deffn {Command} {show ip ospf database summary} {}
+@end deffn
+
+@deffn {Command} {show ip ospf refresher} {}
+@end deffn
+
+@deffn {Command} {show ip ospf route} {}
+@end deffn
+
+@node Debugging OSPF,  , Showing OSPF information, ospfd
+@comment  node-name,  next,  previous,  up
+@section Debugging OSPF
+
+@deffn {Command} {debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) [detail]} {}
+@deffnx {Command} {no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) [detail]} {}
+@end deffn
+
+@deffn {Command} {debug ospf ism} {}
+@deffnx {Command} {debug ospf ism (status|events|timers)} {}
+@deffnx {Command} {no debug ospf ism} {}
+@deffnx {Command} {no debug ospf ism (status|events|timers)} {}
+@end deffn
+
+@deffn {Command} {debug ospf nsm} {}
+@deffnx {Command} {debug ospf nsm (status|events|timers)} {}
+@deffnx {Command} {no debug ospf nsm} {}
+@deffnx {Command} {no debug ospf nsm (status|events|timers)} {}
+@end deffn
+
+@deffn {Command} {show debugging ospf} {}
 @end deffn
 
 @node ospf6d, bgpd, ospfd, Top
 @comment  node-name,  next,  previous,  up
 @chapter ospf6d
 
+@command{ospf6d} is a daemon support OSPF version 3 for IPv6 network.
+OSPF for IPv6 is described in RFC2740.
+
 @menu
-* Invoking ospf6d::             
+* OSPF6 router::                
+* OSPF6 area::                  
+* OSPF6 interface::             
+* Redistribute routes to OSPF6::  
+* Showing OSPF6 information::   
 @end menu
 
-@node Invoking ospf6d,  , ospf6d, ospf6d
+@node OSPF6 router, OSPF6 area, ospf6d, ospf6d
 @comment  node-name,  next,  previous,  up
-@section Invoking ospf6d
+@section OSPF6 router
+
+@deffn {Command} {router ospf6} {}
+@end deffn
+
+@deffn {OSPF6 Command} {router-id @var{a.b.c.d}} {}
+Set router's Router-ID.
+@end deffn
+
+@deffn {OSPF6 Command} {interface @var{ifname} area @var{area}} {}
+Bind interface to specified area, and start OSPF packet.  @var{area} can
+be specified as 0.
+@end deffn
+
+@node OSPF6 area, OSPF6 interface, OSPF6 router, ospf6d
+@comment  node-name,  next,  previous,  up
+@section OSPF6 area
+
+Area support for OSPFv3 is not yet implemented.
+
+@node OSPF6 interface, Redistribute routes to OSPF6, OSPF6 area, ospf6d
+@comment  node-name,  next,  previous,  up
+@section OSPF6 interface
+
+@deffn {Interface Command} {ipv6 ospf6 cost COST} {}
+Setting interface's output cost.  Default value is 1.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 hello-interval HELLOINTERVAL} {}
+Setting interface's Hello Interval.  Default 40
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 dead-interval DEADINTERVAL} {}
+Setting interface's Router Dead Interval.  Default value is 40.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 retransmit-interval RETRANSMITINTERVAL} {}
+Setting interface's Rxmt Interval.  Default value is 5.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 priority PRIORITY} {}
+Setting interface's Router Priority.  Default value is 1.
+@end deffn
+
+@deffn {Interface Command} {ipv6 ospf6 transmit-delay TRANSMITDELAY} {}
+Setting interface's Inf-Trans-Delay.  Default value is 1.
+@end deffn
+
+@node Redistribute routes to OSPF6, Showing OSPF6 information, OSPF6 interface, ospf6d
+@comment  node-name,  next,  previous,  up
+@section Redistribute routes to OSPF6
+
+@deffn {OSPF6 Command} {redistribute static} {}
+@deffnx {OSPF6 Command} {redistribute connected} {}
+@deffnx {OSPF6 Command} {redistribute ripng} {}
+@end deffn
+
+@node Showing OSPF6 information,  , Redistribute routes to OSPF6, ospf6d
+@comment  node-name,  next,  previous,  up
+@section Showing OSPF6 information
+
+@deffn {Command} {show ipv6 ospf6 [INSTANCE_ID]} {}
+INSTANCE_ID is a optional OSPF instance ID. To see router ID and OSPF
+instance ID, simply type "show ipv6 ospf6 <cr>".
+@end deffn
+
+@deffn {Command} {show ipv6 ospf6 database} {}
+This command shows LSA database summary.  You can specify type of LSA.
+@end deffn
+
+@deffn {Command} {show ipv6 ospf6 interface} {}
+To see OSPF interface configuration like costs.
+@end deffn
+
+@deffn {Command} {show ipv6 ospf6 neighbor} {}
+Shows state and choosed (Backup) DR of neighbor.
+@end deffn
+
+@deffn {Command} {show ipv6 ospf6 request-list A.B.C.D} {}
+Shows requestlist of neighbor.
+@end deffn
+
+@deffn {Command} {show ipv6 route ospf6} {}
+This command shows internal routing table.
+@end deffn
 
 @node bgpd, Filtering, ospf6d, Top
 @comment  node-name,  next,  previous,  up
 @chapter bgpd
 
-bgpd is a Border Gateway Protocol 4 (BGP-4) protocol daemon.  BGP-4 is
-described in RFC1771.  bgpd also supports Multi Protocol Extension for
-BGP-4 (sometimes known as BGP-4+ or MBGP) which is described in RFC2283.
+@code{bgpd} is a Border Gateway Protocol 4 (BGP-4) protocol daemon.
+BGP-4 is described in RFC1771.  bgpd also supports Multiprotocol
+Extension for BGP-4 (sometimes known as BGP-4+ or MBGP) which is
+described in RFC2283.
 
 BGP-4 is one of the EGPs (Exterior Gateway Protocols) and is used for
-inter-domain routing messages.
+inter-domain routing.
 
 @menu
-* Invoking bgpd::               
-* bgpd Configuration::          
-* bgpd Terminal Mode Commands::  
-* bgpd Sample Session::         
-* bgpd Log Format::             
-* How to Set Up A 6-Bone Connection::  
+* Configuring bgpd::            
+* BGP router::                  
+* BGP peer::                    
+* BGP network::                 
+* Redistribute to BGP::         
+* Peer configuration::          
+* Peer filtering::              
+* BGP terminal mode commands::  
+* BGP Log Format::              
+* Multiple Protocol Extension for BGP::  
+* Route Reflector::             
+* Route Server::                
+* How to set up a 6-Bone connection::  
 @end menu
 
-@node Invoking bgpd, bgpd Configuration, bgpd, bgpd
+@node Configuring bgpd, BGP router, bgpd, bgpd
 @comment  node-name,  next,  previous,  up
-@section Invoking bgpd
+@section Configuring bgpd
 
-@command{bgpd} specific invocation options.  Common options may also be
-specified (@pxref{Common Invocation Options}).
+Default configuration file of @command{bgpd} is @file{bgpd.conf}.
+@command{bgpd} search current directory first then search
+@value{INSTALL_PREFIX_ETC}/bgpd.conf.  All of bgpd's command must be
+configured in @file{bgpd.conf}.
+
+@command{bgpd} specific invocation options are described below.  Common
+options may also be specified (@pxref{Common Invocation Options}).
 
 @table @samp
-
 @item -p @var{PORT}
 @itemx --bgp_port=@var{PORT}
 Set the bgp protocol's port number.
@@ -1783,56 +2158,44 @@ Set the bgp protocol's port number.
 @item -r
 @itemx --retain
 When program terminates, retain BGP routes added by zebra.
-
 @end table
 
-@node bgpd Configuration, bgpd Terminal Mode Commands, Invoking bgpd, bgpd
+@node BGP router, BGP peer, Configuring bgpd, bgpd
 @comment  node-name,  next,  previous,  up
-@section bgpd Configuration
+@section BGP router
 
-There are several commands used to configure bgpd.  The default
-configuration file is @file{bgpd.conf}.
+First of all you must configure BGP router with @command{router bgp}
+command.  To configure BGP router, you need AS number.  AS number is an
+identification of autonomous system.  BGP protocol uses the AS number
+for detecting the BGP connection is internal one or external one.
 
-@deffn Command {router zebra} {}
-With this statement, BGP routes go to the @command{zebra} daemon.  If you
-want to install BGP routes into the kernel you will have to use this
-command.
-@end deffn
+AS number is a digit between 1 and 65535.  How to use AS number is
+described in RFC1930.  AS number 64512 through 65535 are defined as
+private AS number.  Private AS number must not to be advertised on the
+global Internet.
 
 @deffn Command {router bgp @var{as-number}} {}
 Enable a BGP protocol process with the specified @var{as-number}.  After
-this statement you can input any @code{BGP Command} listed below.
+this statement you can input any @code{BGP Commands}.  You can not
+create different BGP process under different @var{as-number} without
+specifying @xref{Multiple instance}.
 @end deffn
 
-In a @code{router bgp} clause there are neighbor specific
-configurations required.
+@deffn Command {no router bgp @var{as-number}} {}
+Destroy a BGP protocol process with the specified @var{as-number}.
+@end deffn
 
 @deffn {BGP Command} {bgp router-id @var{router-id}} {}
 This command specifies the router-ID.  If bgpd connects to zebra it gets
 interface and address information.  In that case default router ID value
 is selected as the largest IP Address of the interfaces.  When
 @code{router zebra} is not enabled bgpd can't get interface information
-so @code{router-id} is set to 0.0.0.0.  So please set router-id by
-yourself.
+so @code{router-id} is set to 0.0.0.0.  So please set router-id by hand.
 @end deffn
 
-@deffn {BGP Command} {network @var{network}} {}
-This command adds the announcement network.
-@example
-@group
-router bgp 1
- network 10.0.0.0/8
-@end group
-@end example
-This configuration example says that network 10.0.0.0/8 will be
-announced to all neighbors.  Some vendor's routers don't advertise
-routes if they aren't present in its IGP routing tables; @code{bgp}
-doesn't care about IGP routes when announcing its routes.
-@end deffn
-
-@deffn {BGP Command} {aggregate-address @var{network}} {}
-This command specifies an aggregate address.
-@end deffn
+@node BGP peer, BGP network, BGP router, bgpd
+@comment  node-name,  next,  previous,  up
+@section BGP peer
 
 @deffn {BGP Command} {neighbor @var{peer} remote-as @var{as-number}} {}
 Creates a new neighbor whose remote-as is @var{as-number}.  @var{peer}
@@ -1853,17 +2216,83 @@ can't find neighbor 10.0.0.1
 @end example
 @end deffn
 
+@node BGP network, Redistribute to BGP, BGP peer, bgpd
+@comment  node-name,  next,  previous,  up
+@section BGP network
+
+@deffn {BGP Command} {network @var{network}} {}
+This command adds the announcement network.
+@example
+@group
+router bgp 1
+ network 10.0.0.0/8
+@end group
+@end example
+This configuration example says that network 10.0.0.0/8 will be
+announced to all neighbors.  Some vendor's routers don't advertise
+routes if they aren't present in its IGP routing tables; @code{bgp}
+doesn't care about IGP routes when announcing its routes.
+@end deffn
+
+@deffn {BGP Command} {no network @var{network}} {}
+@end deffn
+
+@deffn {BGP Command} {aggregate-address @var{network}} {}
+This command specifies an aggregate address.
+@end deffn
+
+@deffn {BGP Command} {no aggregate-address @var{network}} {}
+@end deffn
+
+@node Redistribute to BGP, Peer configuration, BGP network, bgpd
+@comment  node-name,  next,  previous,  up
+@section Redistribute to BGP
+
+@deffn {BGP Command} {redistribute kernel} {}
+Redistribute kernel route to BGP process.
+@end deffn
+
+@deffn {BGP Command} {redistribute static} {}
+Redistribute static route to BGP process.
+@end deffn
+
+@deffn {BGP Command} {redistribute connected} {}
+Redistribute connected route to BGP process.
+@end deffn
+
+@deffn {BGP Command} {redistribute rip} {}
+Redistribute RIP route to BGP process.
+@end deffn
+
+@deffn {BGP Command} {redistribute ospf} {}
+Redistribute OSPF route to BGP process.
+@end deffn
+
+@node Peer configuration, Peer filtering, Redistribute to BGP, bgpd
+@comment  node-name,  next,  previous,  up
+@section Peer configuration
+
+In a @code{router bgp} clause there are neighbor specific configurations
+required.
+
 @deffn {BGP Command} {neighbor @var{peer} next-hop-self} {}
+@deffnx {BGP Command} {no neighbor @var{peer} next-hop-self} {}
 This command specifies an announced route's nexthop as being equivalent
 to the address of the bgp beast.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} weight @var{weight}} {}
+@deffnx {BGP Command} {no neighbor @var{peer} weight @var{weight}} {}
 This command specifies a default @var{weight} value for the neighbor's
 routes.
 @end deffn
 
+@deffn {BGP Command} {neighbor @var{peer} maximum-prefix @var{number}} {}
+@deffnx {BGP Command} {no neighbor @var{peer} maximum-prefix @var{number}} {}
+@end deffn
+
 @deffn {BGP Command} {neighbor @var{peer} default-originate} {}
+@deffnx {BGP Command} {no neighbor @var{peer} default-originate} {}
 bgpd's default is to not announce the default route (0.0.0.0/0) even it
 is in routing table.  When you want to announce default routes to the
 peer, use this command.
@@ -1883,16 +2312,6 @@ syntax.
 Set description of the peer.
 @end deffn
 
-@deffn {BGP Command} {neighbor @var{peer} distribute-list @var{direct}} {}
-This command specifies a distribute-list for the peer.  @var{direct} is
-@samp{in} or @samp{out}.
-@end deffn
-
-@deffn {BGP Command} {neighbor @var{peer} route-map @var{direct}} {}
-Apply a route-map on the neighbor.  @var{direct} must be @code{in} or
-@code{out}.
-@end deffn
-
 @deffn {BGP Command} {neighbor @var{peer} version @var{version}} {}
 Set up the neighbor's BGP version.  @var{version} can be @var{4},
 @var{4+} or @var{4-}.  BGP version @var{4} is the default value used for
@@ -1904,16 +2323,38 @@ version.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} ebgp-multihop} {}
+@deffnx {BGP Command} {no neighbor @var{peer} ebgp-multihop} {}
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} interface @var{ifname}} {}
+@deffnx {BGP Command} {no neighbor @var{peer} interface @var{ifname}} {}
 When you connect to a BGP peer over an IPv6 link-local address, you have
 to specify the ifname of the interface used for the connection.
 @end deffn
 
-@node bgpd Terminal Mode Commands, bgpd Sample Session, bgpd Configuration, bgpd
+@node Peer filtering, BGP terminal mode commands, Peer configuration, bgpd
 @comment  node-name,  next,  previous,  up
-@section bgpd Terminal Mode Commands
+@section Peer filtering
+
+@deffn {BGP Command} {neighbor @var{peer} distribute-list @var{name} [in|out]} {}
+This command specifies a distribute-list for the peer.  @var{direct} is
+@samp{in} or @samp{out}.
+@end deffn
+
+@deffn {BGP command} {neighbor @var{peer} prefix-list @var{name} [in|out]} {}
+@end deffn
+
+@deffn {BGP command} {neighbor @var{peer} filter-list @var{name} [in|out]} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} route-map @var{name} [in|out]} {}
+Apply a route-map on the neighbor.  @var{direct} must be @code{in} or
+@code{out}.
+@end deffn
+
+@node BGP terminal mode commands, BGP Log Format, Peer filtering, bgpd
+@comment  node-name,  next,  previous,  up
+@section BGP terminal mode commands
 
 @deffn {Command} {show ip bgp [@var{network}]} {}
 Lists all BGPd routes.
@@ -1953,15 +2394,9 @@ Clears peers which have addresses of X.X.X.X
 @deffn {Command} {no debug keepalive} {}
 @end deffn
 
-@node bgpd Sample Session, bgpd Log Format, bgpd Terminal Mode Commands, bgpd
+@node BGP Log Format, Multiple Protocol Extension for BGP, BGP terminal mode commands, bgpd
 @comment  node-name,  next,  previous,  up
-@section bgpd Sample Session
-
-@c to be written
-
-@node bgpd Log Format, How to Set Up A 6-Bone Connection, bgpd Sample Session, bgpd
-@comment  node-name,  next,  previous,  up
-@section bgpd Log Format
+@section BGP Log Format
 
 BGPd outputs logging information to a terminal or to the specified file.
 It includes routing updates and peer status change information.  It also
@@ -1972,16 +2407,224 @@ routing information.
 1999/03/29 17:42:18 Update:[202.216.226.1] 130.58.0.0/16 med: 0 lpref: 0 nexthop: 202.216.226.1 aspath: 4691 3561 5119 3576 3782 i
 @end example
 
-@node How to Set Up A 6-Bone Connection,  , bgpd Log Format, bgpd
+@node Multiple Protocol Extension for BGP, Route Reflector, BGP Log Format, bgpd
 @comment  node-name,  next,  previous,  up
-@section How to Set Up A 6-Bone Connection
+@section Multiprotocol Extension for BGP
+
+  When adding IPv6 routing information exchange feature to BGP.  There
+was some proposals.  @acronym{IETF} @acronym{IDR} working group finally
+take a proposal called Multiprotocol Extension for BGP.  The
+specification is described in RFC2283.  The protocol does not define new
+protocol.  It defines new attribute to existing BGP.  When it is used
+exchanging IPv6 routing information it is called BGP-4+.  When it is
+used exchanging multicast routing information it is called MBGP.
+
+  bgpd supports Multiprotocol Extension for BGP.  So if remote peer
+support the protocol, bgpd can exchange IPv6 and/or multicast routing
+information.
+
+  Traditional BGP does not have a feature to detect remote peer's
+capability whether it can handle other than IPv4 unicast routes.  This
+is a big problem using Multiprotocol Extension for BGP to operational
+network.  @cite{draft-ietf-idr-bgp4-cap-neg-04.txt} is proposing a
+feature called Capability Negotiation.  bgpd use this Capability
+Negotiation to detect remote peer's capability.  If the peer is only
+configured as IPv4 unicast neighbor.  bgpd does not send this Capability
+Negotiation packet.
+
+  By default, Zebra will bring up peering with minimal common capability
+of both sides.  For example, local router have capability of unicast and
+multicast and remote router have capability of unicast.  In this case,
+local router will establish the connection with unicast only capability.
+
+  If you want to completely match capability with remote peer.  Please
+use @command{strict-capability-match} command.
+  
+@deffn {BGP Command} {neighbor @var{peer} strict-capability-match} {}
+@deffnx {BGP Command} {no neighbor @var{peer} strict-capability-match} {}
+Strictly compare remote capability and local capability.  If capability
+is different, send Unsupported Capability error then reset connection.
+@end deffn
+
+  You may want to disable sending Capability Negotiation OPEN message
+optional parameter to the peer when remote peer does not implement
+Capability Negotiation.  Please use @command{dont-capability-negotiate}
+command to disable the feature.
+
+@deffn {BGP Command} {neighbor @var{peer} dont-capability-negotiate} {}
+@deffnx {BGP Command} {no neighbor @var{peer} dont-capability-negotiate} {}
+Suppress sending Capability Negotiation as OPEN message optional
+parameter to the peer.  This command only affects the peer is configured
+other than IPv4 unicast configuration.
+@end deffn
+
+  When remote peer does not have capability negotiation feature, remote
+peer will not send any capability at all.  In that case, bgp configure
+the peer with configured capability.
+
+  You may prefer locally configured capability more than negotiated
+capability even though remote peer send capability.  If the peer is
+congiured by @command{override-capability}, bgpd ignore received
+capability then override negotiated capability with configured value.
+
+@deffn {BGP Command} {neighbor @var{peer} override-capability} {}
+@deffnx {BGP Command} {no neighbor @var{peer} override-capability} {}
+Override the result of Capability Negotiation with local configuration.
+Ignore remote peer's capability value.
+@end deffn
+
+@node Route Reflector, Route Server, Multiple Protocol Extension for BGP, bgpd
+@comment  node-name,  next,  previous,  up
+@section Route Reflector
+
+@deffn {BGP Command} {bgp cluster-id @var{a.b.c.d}} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} route-reflector-client} {}
+@deffnx {BGP Command} {no neighbor @var{peer} route-reflector-client} {}
+@end deffn
+
+@node Route Server, How to set up a 6-Bone connection, Route Reflector, bgpd
+@comment  node-name,  next,  previous,  up
+@section Route Server
+
+At the Internet Exchange point many ISPs are connected each other by
+external BGP peering.  Normally these external BGP connection is done by
+@code{full mesh} method.  As same as internal BGP full mesh formation,
+this method has a scaling problem.
+
+This scaling problem is well known.  Route Server is a method to resolve
+the problem.  Each ISP's BGP router only peer to Route Server.  Route
+Server serves BGP information exchange to other BGP routers.  By
+applying this method, numbers of BGP connections is reduced from
+O(n*(n-1)/2) to O(n).
+
+Unlike normal BGP router, Route Server must have several routing table
+for managing different routing policy of each BGP speaker.  We call the
+routing tables as different @code{view}.  @command{bgpd} can work as
+normal BGP router or Route Server or both at the same time.
+
+@menu
+* Multiple instance::           
+* BGP instance and view::       
+* Routing policy::              
+* Viewing the view::            
+@end menu
+
+@node Multiple instance, BGP instance and view, Route Server, Route Server
+@comment  node-name,  next,  previous,  up
+@subsection Multiple instance
+
+To enable multiple view function of @code{bgpd}, you must turn on
+multiple instance feature beforehand.
+
+@deffn {Command} {bgp multiple-instance} {}
+Enable BGP multiple instance feature.  After this feature is enabled,
+you can make multiple BGP instance or multiple BGP view.
+@end deffn
+
+@deffn {Command} {no bgp multiple-instance} {}
+Disable BGP multiple instance feature.  You can not disable this feature
+when BGP multiple instance or view exists.
+@end deffn
+
+@node BGP instance and view, Routing policy, Multiple instance, Route Server
+@comment  node-name,  next,  previous,  up
+@subsection BGP instance and view
+
+BGP instance is a normal BGP process.  The result of route selection
+goes to the kernel routing table.  You can setup different AS at the
+same time when BGP multiple instance feature is enabled.
+
+@deffn {Command} {router bgp @var{as-number}} {}
+Make a new BGP instance.  You can use arbitrary word for the @var{name}.
+@end deffn
 
 @example
 @group
-zebra configuration
-===================
+bgp multiple-instance
 !
-! Actually there is no need to configure zebra
+router bgp 1
+ neighbor 10.0.0.1 remote-as 2
+ neighbor 10.0.0.2 remote-as 3
+!
+router bgp 2
+ neighbor 10.0.0.3 remote-as 4
+ neighbor 10.0.0.4 remote-as 5
+@end group
+@end example
+
+BGP view is almost same as normal BGP process without the result of
+route selection does not go to the kernel routing table.  BGP view is
+only for exchanging BGP routing information.
+
+@deffn {Command} {router bgp @var{as-number} view @var{name}} {}
+Make a new BGP view.  You can use arbitrary word for the @var{name}.  This
+view's route selection result does not go to the kernel routing table.
+@end deffn
+
+With this command, you can setup Route Server like below.
+
+@example
+@group
+bgp multiple-instance
+!
+router bgp 1 view 1
+ neighbor 10.0.0.1 remote-as 2
+ neighbor 10.0.0.2 remote-as 3
+!
+router bgp 2 view 2
+ neighbor 10.0.0.3 remote-as 4
+ neighbor 10.0.0.4 remote-as 5
+@end group
+@end example
+
+@node Routing policy, Viewing the view, BGP instance and view, Route Server
+@comment  node-name,  next,  previous,  up
+@subsection Routing policy
+
+You can set different routing policy for a peer.  For example, you can
+set different filter for a peer.
+
+@example
+@group
+bgp multiple-instance
+!
+router bgp 1 view 1
+ neighbor 10.0.0.1 remote-as 2
+ neighbor 10.0.0.1 distribute-list 1 in
+!
+router bgp 1 view 2
+ neighbor 10.0.0.1 remote-as 2
+ neighbor 10.0.0.1 distribute-list 2 in
+@end group
+@end example
+
+This means BGP update from a peer 10.0.0.1 goes both BGP view 1 and view
+2.  When the update is inserted into view 1 distribute-list 1 is
+applied.  The other hand, the update is inserted into view 2
+distribute-list 2 is applied.
+
+@node Viewing the view,  , Routing policy, Route Server
+@comment  node-name,  next,  previous,  up
+@subsection Viewing the view
+
+To display routing table of BGP view, you must specify view name.
+
+@deffn {Command} {show ip bgp view @var{name}} {}
+Display routing table of BGP view @var{name}.
+@end deffn
+
+@node How to set up a 6-Bone connection,  , Route Server, bgpd
+@comment  node-name,  next,  previous,  up
+@section How to set up a 6-Bone connection
+
+@example
+@group
+zebra configuration 
+=================== 
+!  
+! Actually there is no need to configure zebra 
 !
 
 bgpd configuration
@@ -2294,7 +2937,7 @@ interface eth0
 @end group
 @end example
 
-@node Kernel Interface, Linux Netlink, IPv6 Supports, Top
+@node Kernel Interface, SNMP support, IPv6 Supports, Top
 @comment  node-name,  next,  previous,  up
 @chapter Kernel Interface
 
@@ -2329,7 +2972,76 @@ information.
 
 @end table
 
-@node Linux Netlink, Command Index, Kernel Interface, Top
+@node SNMP support, Linux Netlink, Kernel Interface, Top
+@comment  node-name,  next,  previous,  up
+@chapter SNMP support
+
+SNMP (Simple Network Managing Protocol) is widely implemented feature
+for collecting network information from router and/or host.  Zebra
+itself does not support SNMP agent functionality.  But conjuction with
+SNMP agent, Zebra provides routing protocol MIBs.
+
+Zebra uses SMUX protocol (RFC1227) for making communication with SNMP
+agent.  There are several SNMP agent which support SMUX.  We recommend
+to use the latest @command{ucd-snmp} software.  
+
+@menu
+* How to get ucd-snmp::         
+* SMUX configuration::          
+@end menu
+
+@node How to get ucd-snmp, SMUX configuration, SNMP support, SNMP support
+@comment  node-name,  next,  previous,  up
+@section How to get ucd-snmp
+
+ucd-snmp is a free software which distributed so called "as is" software
+license.  Please check the license which comes with distribution of
+@command{ucd-snmp}.  The authors of ucd-snmp are the University of
+California, the University of California at Davis, and the Electrical
+Engineering department at the University of California at Davis.
+
+You can get ucd-snmp from @url{ftp://ucd-smp.ucdavis.edu/}.  As of this
+writing we are testing with @command{ucd-snmp-4.1.pre1.tar.gz}.
+
+To enable SMUX protocol support, please configure @command{ucd-snmp}
+like below.
+
+@example
+% configure --with-mib-modules=smux
+@end example
+
+After compile and install @command{ucd-snmp}, you will need to configure
+smuxpeer.  I'm now using below configuration.  This means SMUX client
+connect under MIB 1.3.6.1.6.3.1 with password test.
+  
+@example
+/usr/local/share/snmp/snmpd.conf
+================================
+smuxpeer 1.3.6.1.6.3.1 test
+@end example
+
+@node SMUX configuration,  , How to get ucd-snmp, SNMP support
+@comment  node-name,  next,  previous,  up
+@section SMUX configuration
+
+To enable SNMP support of Zebra, you have to configure Zebra with
+@command{--enable-snmp} (@pxref{Configure the Software}).
+
+@deffn {Command} {smux peer @var{oid}} {}
+@deffnx {Command} {no smux peer @var{oid}} {}
+@end deffn
+
+@deffn {Command} {smux peer @var{oid} @var{password}} {}
+@deffnx {Command} {no smux peer @var{oid} @var{password}} {}
+@end deffn
+
+@example
+!
+smux peer .1.3.6.1.6.3.1 test
+!
+@end example
+
+@node Linux Netlink, Command Index, SNMP support, Top
 @comment  node-name,  next,  previous,  up
 @chapter Linux Netlink
 

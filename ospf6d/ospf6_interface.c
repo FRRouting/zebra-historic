@@ -21,7 +21,8 @@
 
 #include "ospf6d.h"
 
-/* OSPF6 Interface section */
+#include "if.h"
+
 /* Allocate new interface structure */
 static struct ospf6_if *
 ospf6_if_new ()
@@ -31,7 +32,22 @@ ospf6_if_new ()
   if (new)
     memset (new, 0, sizeof (struct ospf6_if));
   else
-    zvlog_warn ("Can't malloc ospf6_if");
+    zlog_warn ("Can't malloc ospf6_if");
+
+  return new;
+}
+
+static struct ospf6_interface *
+ospf6_interface_new ()
+{
+  struct ospf6_interface *new;
+
+  new = (struct ospf6_interface *)
+    XMALLOC (MTYPE_OSPF6_IF, sizeof (struct ospf6_interface));
+  if (!new)
+    zlog_warn ("*** can't malloc interface");
+  else
+    memset (new, 0, sizeof (struct ospf6_interface));
 
   return new;
 }
@@ -43,38 +59,18 @@ ospf6_if_free (struct ospf6_if *o6if)
   return;
 }
 
-#if 0
 static void
-set_ospf6_if_default_val (struct ospf6_if *ospf6_if)
+ospf6_interface_free (struct ospf6_interface *o6i)
 {
-  ospf6_if->inf_trans_delay = 1;
-  ospf6_if->rtr_pri = 1;
-  ospf6_if->hello_interval = 10;
-  ospf6_if->rtr_dead_interval = 40;
-  ospf6_if->rxmt_interval = 5;
-  ospf6_if->cost = 1;
-  return;
+  XFREE (MTYPE_OSPF6_IF, o6i);
 }
-#else
-#define set_ospf6_if_default_val(X) \
-{ \
-  (X)->inf_trans_delay = 1; \
-  (X)->rtr_pri = 1; \
-  (X)->hello_interval = 10; \
-  (X)->rtr_dead_interval = 40; \
-  (X)->rxmt_interval = 5; \
-  (X)->ifmtu = DEFAULT_INTERFACE_MTU; \
-  (X)->cost = 1; \
-} 
-#endif
-
 
 struct in6_addr *
 ospf6_if_linklocal_addr (struct interface *ifp)
 {
   listnode n;
   struct connected *c;
-  struct in6_addr *linklocal = (struct in6_addr *) NULL;
+  struct in6_addr *l = (struct in6_addr *) NULL;
 
   /* for each connected address */
   for (n = listhead (ifp->connected); n; nextnode (n))
@@ -87,9 +83,9 @@ ospf6_if_linklocal_addr (struct interface *ifp)
 
       /* linklocal scope check */
       if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
-        linklocal = &c->address->u.prefix6;
+        l = &c->address->u.prefix6;
     }
-  return linklocal;
+  return l;
 }
 
 /* Make new ospf6 interface structure */
@@ -103,17 +99,23 @@ make_ospf6_if (struct interface *ifp)
   ospf6_if = ospf6_if_new ();
   if (!ospf6_if)
     {
-      zvlog_err ("Can't allocate ospf6_if for %s", ifp->name);
+      zlog_err ("Can't allocate ospf6_if for %s", ifp->name);
       return (struct ospf6_if *)NULL;
     }
 
-  ospf6_if->instance_id = 1; /* XXX multiple instance not yet */
+  ospf6_if->instance_id = 0; /* XXX multiple instance not yet */
   ospf6_if->ifid =  ifp->ifindex;
   ospf6_if->myaddr = ospf6_if_linklocal_addr (ifp);
   ospf6_if->area = (struct area *)NULL; /* not yet attached to Area. */
   ospf6_if->state = IFS_DOWN;
   ospf6_if->nbr_list = list_init ();
   ospf6_lsdb_init_interface (ospf6_if);
+  ospf6_if->inf_trans_delay = 1;
+  ospf6_if->rtr_pri = 1;
+  ospf6_if->hello_interval = 10;
+  ospf6_if->rtr_dead_interval = 40;
+  ospf6_if->rxmt_interval = 5;
+  ospf6_if->cost = 1;
 
   ospf6_if->prefix_connected = list_init ();
 
@@ -125,9 +127,86 @@ make_ospf6_if (struct interface *ifp)
   ospf6_if->interface = ifp;
   ifp->info = ospf6_if;
 
-  set_ospf6_if_default_val (ospf6_if);
-
   return ospf6_if;
+}
+
+void
+ospf6_interface_lladdr_update (struct ospf6_interface *o6i)
+{
+  o6i->lladdr = ospf6_if_linklocal_addr (o6i->interface);
+}
+
+void
+ospf6_interface_prefix_update (struct ospf6_interface *o6i)
+{
+  listnode n;
+  struct connected *c;
+
+  if (o6i->prefix_list)
+    list_delete_all (o6i->prefix_list);
+
+  o6i->prefix_list = list_init ();
+
+  /* for each connected address */
+  for (n = listhead (o6i->interface->connected); n; nextnode (n))
+    {
+      c = (struct connected *) getdata (n);
+
+      /* if family not AF_INET6, ignore */
+      if (c->address->family != AF_INET6)
+        continue;
+
+      /* linklocal scope check */
+      if (!IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
+        list_add_node (o6i->prefix_list, &c->address->u.prefix6);
+    }
+}
+
+struct ospf6_interface *
+ospf6_interface_create (struct interface *ifp)
+{
+  struct ospf6_interface *o6i;
+
+  assert (ifp);
+
+  if (ifp->info)
+    {
+      zlog_warn (" *** already have link to interface");
+      return (struct ospf6_interface *) NULL;
+    }
+
+  o6i = ospf6_interface_new ();
+  if (!o6i)
+    return (struct ospf6_interface *) NULL;
+
+  /* link */
+  o6i->interface = ifp;
+  ifp->info = o6i;
+
+  /* initialization */
+  o6i->area = (struct area *) NULL;
+  o6i->neighbor_list = list_init ();
+  ospf6_interface_lladdr_update (o6i);
+  ospf6_interface_prefix_update (o6i);
+  o6i->if_id = ifp->ifindex;
+  o6i->instance_id = 0;
+  o6i->transdelay = 1;
+  o6i->priority = 1;
+  o6i->hello_interval = 10;
+  o6i->dead_interval = 40;
+  o6i->cost = 1;
+  o6i->rxmt_interval = 5;
+  o6i->ifmtu = 1500;
+
+  o6i->state = IFS_DOWN;
+  o6i->lsa_delayed_ack = list_init ();
+  o6i->lsdb = list_init ();
+
+  o6i->lsa_seqnum_link = INITIAL_SEQUENCE_NUMBER;
+  o6i->lsa_seqnum_network = INITIAL_SEQUENCE_NUMBER;
+  o6i->lsa_seqnum_intra_prefix = INITIAL_SEQUENCE_NUMBER;
+
+  return o6i;
 }
 
 void
@@ -148,6 +227,27 @@ delete_ospf6_if (struct ospf6_if *o6if)
   ospf6_if_free (o6if);
 
   return;
+}
+
+void
+ospf6_interface_delete (struct ospf6_interface *o6i)
+{
+  listnode n;
+
+  for (n = listhead (o6i->neighbor_list); n; nextnode (n))
+    delete_ospf6_nbr (getdata (n));
+  list_delete_all (o6i->neighbor_list);
+
+  if (o6i->thread_send_hello)
+    thread_cancel (o6i->thread_send_hello);
+  if (o6i->thread_send_lsack_delayed)
+    thread_cancel (o6i->thread_send_lsack_delayed);
+
+/*
+  ospf6_lsdb_finish_interface (o6if);
+  list_delete_by_val (o6if->area->if_list, o6if);
+  ospf6_if_free (o6if);
+*/
 }
 
 struct ospf6_if *

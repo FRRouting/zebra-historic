@@ -61,6 +61,9 @@ enum connect_result
 #define AF_INET_UNION AF_INET
 #endif
 
+/* Sockunion address string length.  Same as INET6_ADDRSTRLEN. */
+#define SU_ADDRSTRLEN 46
+
 /* Macro to set link local index to the IPv6 address.  For KAME IPv6
    stack. */
 #ifdef KAME
@@ -84,10 +87,14 @@ enum connect_result
 #define sockunion_family(X)  (X)->sa.sa_family
 
 /* Prototypes. */
+int str2sockunion (char *, union sockunion *);
+const char *sockunion2str (union sockunion *, char *, size_t);
+int sockunion_cmp (union sockunion *, union sockunion *);
+int sockunion_same (union sockunion *, union sockunion *);
+
 char *sockunion_su2str (union sockunion *su);
 union sockunion *sockunion_str2su (char *str);
 struct in_addr sockunion_get_in_addr (union sockunion *su);
-int sockunion_sameprefix (union sockunion *, union sockunion *);
 int sockunion_accept (int sock, union sockunion *);
 int sockunion_stream_socket (union sockunion *);
 int sockopt_reuseaddr (int);

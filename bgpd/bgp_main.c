@@ -225,6 +225,7 @@ main (int argc, char **argv)
   master = thread_make_master ();
 
   /* Initializations. */
+  srand (time (NULL));
   signal_init ();
   cmd_init ();
   vty_init ();
@@ -249,8 +250,8 @@ main (int argc, char **argv)
   bgp_serv_sock (bgp_port);
 
   /* Print banner. */
-  zlog (NULL, LOG_INFO, "BGPd (%s) starting: vty@%d, bgp@%d",
-	ZEBRA_VERSION, vty_port, bgp_port);
+  zlog_info ("BGPd %s starting: vty@%d, bgp@%d",
+	     ZEBRA_VERSION, vty_port, bgp_port);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

@@ -188,8 +188,13 @@ ospf_asbr_route_add (u_char type, struct prefix_ipv4 *p,
   /* Make new ospf external route. */
   er = ospf_external_route_new ();
   er->type = type;
-  er->metric_type = EXTERNAL_METRIC_TYPE_2;
-  er->metric = 1;
+  er->metric_type = ospf_top->dist_info[type].metric_type;
+
+  if (ospf_top->dist_info[type].metric_method == OSPF_EXT_METRIC_STATIC)
+      er->metric = ospf_top->dist_info[type].metric_value;
+  else
+      er->metric = 1;
+
   er->tag = 0;
   er->nexthop = nexthop;
   er->ifindex = ifindex;

@@ -285,9 +285,7 @@ route_node_get (struct route_table *table, struct prefix *p)
       new = route_node_new ();
       route_common (&node->p, p, &new->p);
       new->p.family = p->family;
-#ifdef HAVE_MBGPV4
       new->p.safi = p->safi;
-#endif /* HAVE_MBGPV4 */
       new->table = table;
       set_link (new, node);
 

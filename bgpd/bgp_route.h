@@ -1,6 +1,5 @@
-/*
- * Route object related header for route server.
- * Copyright (C) 1996, 97, 98 Kunihiro Ishiguro
+/* Route object related header for route server.
+ * Copyright (C) 1996, 97, 98, 2000 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -23,10 +22,6 @@
 #ifndef _ZEBRA_BGP_ROUTE_H
 #define _ZEBRA_BGP_ROUTE_H
 
-#define BGP_ROUTE_NORMAL    0
-#define BGP_ROUTE_STATIC    1
-#define BGP_ROUTE_AGGREGATE 2
-
 /* I want to change structure name from bgp_route to bgp_info. */
 struct bgp_info
 {
@@ -38,6 +33,9 @@ struct bgp_info
   u_char type;
 
   /* Type of bgp prefix. */
+#define BGP_ROUTE_NORMAL    0
+#define BGP_ROUTE_STATIC    1
+#define BGP_ROUTE_AGGREGATE 2
   u_char sub_type;
 
   /* Selected route flag. */
@@ -50,28 +48,24 @@ struct bgp_info
   struct attr *attr;
 
   /* Aggregate related information. */
-  int aggregate_count;
-  int suppress_count;
+  int suppress;
   
   /* Time */
   time_t uptime;
 };
 
 /* Prototypes. */
-struct bgp_info *bgp_info_new ();
-void bgp_info_free (struct bgp_info *);
-
 void bgp_route_init ();
-void bgp_peer_delete (struct peer *peer);
-void bgp_announce_table (struct peer *peer);
+void bgp_announce_table (struct peer *);
+void bgp_route_clear (struct peer *);
 
-void nlri_process (struct prefix *p, struct bgp_info *br);
-int nlri_parse (struct peer *, struct attr *, u_char *, int, int, int);
-void nlri_unfeasible (struct peer *, bgp_size_t);
-int nlri_delete (struct peer *, struct prefix *, int);
+int nlri_sanity_check (struct peer *, int, u_char *, bgp_size_t);
+int nlri_parse (struct peer *, struct attr *, struct bgp_nlri *);
 
-void bgp_dump_attr (struct peer *, struct attr *, char *, size_t);
-void bgp_peer_delete (struct peer *peer);
-void bgp_redistribute_withdraw (struct bgp *, int, int);
+void bgp_redistribute_add (struct prefix *, u_char);
+void bgp_redistribute_delete (struct prefix *, u_char);
+void bgp_redistribute_withdraw (struct bgp *, afi_t, int);
+
+int bgp_config_write_network (struct vty *, struct bgp *, afi_t);
 
 #endif /* _ZEBRA_BGP_ROUTE_H */

@@ -309,8 +309,9 @@ if_dump (struct interface *ifp)
 {
   listnode node;
 
-  zlog (NULL, LOG_INFO, "Interface %s index %d metric %d mtu %d %s",
-       ifp->name, ifp->ifindex, ifp->metric, ifp->mtu, if_flag_dump (ifp->flags));
+  zlog_info ("Interface %s index %d metric %d mtu %d %s",
+	     ifp->name, ifp->ifindex, ifp->metric, ifp->mtu, 
+	     if_flag_dump (ifp->flags));
   
   for (node = listhead (ifp->connected); node; nextnode (node))
     ;

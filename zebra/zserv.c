@@ -348,7 +348,7 @@ zebra_client_read (struct thread *thread)
   if (nbyte <= 0) 
     {
       if (IS_ZEBRA_DEBUG_EVENT)
-	zlog (NULL, LOG_INFO, "connection closed socket [%d]", sock);
+	zlog_info ("connection closed socket [%d]", sock);
       zebra_client_close (client);
       return -1;
     }
@@ -365,7 +365,7 @@ zebra_client_read (struct thread *thread)
       if (nbyte <= 0) 
 	{
 	  if (IS_ZEBRA_DEBUG_EVENT)
-	    zlog (NULL, LOG_INFO, "connection closed [%d] when reading zebra data", sock);
+	    zlog_info ("connection closed [%d] when reading zebra data", sock);
 	  zebra_client_close (client);
 	  return -1;
 	}
@@ -373,11 +373,11 @@ zebra_client_read (struct thread *thread)
 
   /* Debug packet information. */
   if (IS_ZEBRA_DEBUG_EVENT)
-    zlog (NULL, LOG_INFO, "connection from socket [%d]", sock);
+    zlog_info ("connection from socket [%d]", sock);
 
   if (IS_ZEBRA_DEBUG_PACKET && IS_ZEBRA_DEBUG_RECV)
-    zlog (NULL, LOG_INFO, "zebra message received [%s] %d", 
-	 zebra_command_str[command], length);
+    zlog_info ("zebra message received [%s] %d", 
+	       zebra_command_str[command], length);
 
   switch (command) 
     {
@@ -404,7 +404,7 @@ zebra_client_read (struct thread *thread)
       zebra_redistribute_delete (command, client, length);
       break;
     default:
-      zlog (NULL, LOG_INFO, "Zebra received unknown command %d", command);
+      zlog_info ("Zebra received unknown command %d", command);
       break;
     }
 

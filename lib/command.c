@@ -38,7 +38,7 @@ struct host host;
 char *default_motd = 
 "\r\n\
 Hello, this is zebra (version " ZEBRA_VERSION ")\r\n\
-Copyright 1996-1999 Kunihiro Ishiguro\r\n\
+Copyright 1996-2000 Kunihiro Ishiguro\r\n\
 \r\n";
 
 /* Standard command node structures. */
@@ -511,6 +511,8 @@ enum match_type
   extend_match,
   ipv4_prefix_match,
   ipv4_match,
+  ipv6_prefix_match,
+  ipv6_match,
   range_match,
   vararg_match,
   partly_match,
@@ -652,6 +654,232 @@ cmd_ipv4_prefix_match (char *str)
 
   return exact_match;
 }
+#define IPV6_ADDR_STR		"0123456789abcdefABCDEF:"
+#define IPV6_PREFIX_STR		"0123456789abcdefABCDEF:/"
+#define STATE_START		1
+#define STATE_COLON		2
+#define STATE_DOUBLE		3
+#define STATE_ADDR		4
+#define STATE_SLASH		5
+#define STATE_MASK		6
+
+enum match_type
+cmd_ipv6_match (char *str)
+{
+  int state = STATE_START;
+  int colons = 0, nums = 0, double_colon = 0;
+  char *sp = NULL;
+
+  if (str == NULL)
+    return partly_match;
+
+  if (strspn (str, IPV6_ADDR_STR) != strlen (str))
+    return no_match;
+
+  while (*str != '\0')
+    {
+      switch (state)
+	{
+	case STATE_START:
+	  if (*str == ':')
+	    {
+	      if (*(str + 1) != ':' && *(str + 1) != '\0')
+		return no_match;
+	      
+	      colons--;
+	      state = STATE_COLON;
+	    }
+	  else
+	    {
+	      sp = str;
+	      state = STATE_ADDR;
+	    }
+
+	  continue;
+	case STATE_COLON:
+	  colons++;
+	  if (*(str + 1) == ':')
+	    state = STATE_DOUBLE;
+	  else
+	    {
+	      sp = str + 1;
+	      state = STATE_ADDR;
+	    }
+	  break;
+	case STATE_DOUBLE:
+	  if (double_colon)
+	    return no_match;
+
+	  if (*(str + 1) == ':')
+	    return no_match;
+	  else
+	    {
+	      colons++;
+	      sp = str + 1;
+	      if (*(str + 1) != '\0')
+		colons++;
+	      state = STATE_ADDR;
+	    }
+
+	  double_colon++;
+	  nums += 2;
+	  break;
+	case STATE_ADDR:
+	  if (*(str + 1) == ':' || *(str + 1) == '\0')
+	    {
+	      if (str - sp > 3)
+		return no_match;
+
+	      nums++;
+	      state = STATE_COLON;
+	    }
+	  break;
+	default:
+	  break;
+	}
+
+      if (nums > 8)
+	return no_match;
+
+      if (colons > 7)
+	return no_match;
+
+      str++;
+    }
+
+#if 0
+  if (nums < 8)
+    return partly_match;
+#endif /* 0 */
+
+  return exact_match;
+}
+
+enum match_type
+cmd_ipv6_prefix_match (char *str)
+{
+  int state = STATE_START;
+  int colons = 0, nums = 0, double_colon = 0;
+  int mask;
+  char *sp = NULL;
+  char *endptr = NULL;
+
+  if (str == NULL)
+    return partly_match;
+
+  if (strspn (str, IPV6_PREFIX_STR) != strlen (str))
+    return no_match;
+
+  while (*str != '\0' && state != STATE_MASK)
+    {
+      switch (state)
+	{
+	case STATE_START:
+	  if (*str == ':')
+	    {
+	      if (*(str + 1) != ':' && *(str + 1) != '\0')
+		return no_match;
+	      
+	      colons--;
+	      state = STATE_COLON;
+	    }
+	  else
+	    {
+	      sp = str;
+	      state = STATE_ADDR;
+	    }
+
+	  continue;
+	case STATE_COLON:
+	  colons++;
+	  if (*(str + 1) == '/')
+	    return no_match;
+	  else if (*(str + 1) == ':')
+	    state = STATE_DOUBLE;
+	  else
+	    {
+	      sp = str + 1;
+	      state = STATE_ADDR;
+	    }
+	  break;
+	case STATE_DOUBLE:
+	  if (double_colon)
+	    return no_match;
+
+	  if (*(str + 1) == ':')
+	    return no_match;
+	  else
+	    {
+	      colons++;
+	      sp = str + 1;
+	      if (*(str + 1) != '\0' && *(str + 1) != '/')
+		colons++;
+
+	      if (*(str + 1) == '/')
+		state = STATE_SLASH;
+	      else
+		state = STATE_ADDR;
+	    }
+
+	  double_colon++;
+	  nums += 2;
+	  break;
+	case STATE_ADDR:
+	  if (*(str + 1) == ':' || *(str + 1) == '\0' || *(str + 1) == '/')
+	    {
+	      if (str - sp > 3)
+		return no_match;
+
+	      for (; sp <= str; sp++)
+		if (*sp == '/')
+		  return no_match;
+
+	      nums++;
+	      if (*(str + 1) == ':')
+		state = STATE_COLON;
+	      else if (*(str + 1) == '/')
+		state = STATE_SLASH;
+	    }
+	  break;
+	case STATE_SLASH:
+	  if (*(str + 1) == '\0')
+	    return partly_match;
+
+	  state = STATE_MASK;
+	  break;
+	default:
+	  break;
+	}
+
+      if (nums > 8)
+	return no_match;
+
+      if (colons > 7)
+	return no_match;
+
+      str++;
+    }
+
+#if 0
+  printf("nums=%d\n", nums);
+  printf("colons=%d\n", colons);
+#endif /* 0 */
+
+  if (state < STATE_MASK)
+    return partly_match;
+
+  mask = strtol (str, &endptr, 10);
+  if (*endptr != '\0')
+    return no_match;
+
+  if (mask < 0 || mask > 128)
+    return no_match;
+  
+  if (mask < 13)
+    return partly_match;
+
+  return exact_match;
+}
 
 #define DECIMAL_STRLEN_MAX 10
 
@@ -744,6 +972,26 @@ cmd_filter_by_completion (char *command, vector v, int index)
 			matched++;
 		      }
 		  }
+		else if (CMD_IPV6 (str))
+		  {
+		    if (cmd_ipv6_match (command))
+		      {
+			if (match_type < ipv6_match)
+			  match_type = ipv6_match;
+
+			matched++;
+		      }
+		  }
+		else if (CMD_IPV6_PREFIX (str))
+		  {
+		    if (cmd_ipv6_prefix_match (command))
+		      {
+			if (match_type < ipv6_prefix_match)
+			  match_type = ipv6_prefix_match;
+
+			matched++;
+		      }
+		  }
 		else if (CMD_IPV4 (str))
 		  {
 		    if (cmd_ipv4_match (command))
@@ -832,6 +1080,24 @@ cmd_filter_by_string (char *command, vector v, int index)
 		      {
 			if (match_type < range_match)
 			  match_type = range_match;
+			matched++;
+		      }
+		  }
+		else if (CMD_IPV6 (str))
+		  {
+		    if (cmd_ipv6_match (command) == exact_match)
+		      {
+			if (match_type < ipv6_match)
+			  match_type = ipv6_match;
+			matched++;
+		      }
+		  }
+		else if (CMD_IPV6_PREFIX (str))
+		  {
+		    if (cmd_ipv6_prefix_match (command) == exact_match)
+		      {
+			if (match_type < ipv6_prefix_match)
+			  match_type = ipv6_prefix_match;
 			matched++;
 		      }
 		  }
@@ -929,14 +1195,39 @@ is_cmd_ambiguous (char *command, vector v, int index, enum match_type type)
 		    match++;
 		  }
 		break;
-	      case ipv4_match:
-		if ((ret = cmd_ipv4_match (command)) != no_match)
+ 	      case ipv6_match:
+		if (CMD_IPV6 (str))
+		  match++;
+#if 0
+		if ((ret = cmd_ipv6_match (command)) != no_match)
 		  {
 		    if (ret == partly_match)
 		      return 2; /* There is incomplete match. */
 
 		    match++;
 		  }
+#endif /* 0*/
+		break;
+	      case ipv6_prefix_match:
+		if ((ret = cmd_ipv6_prefix_match (command)) != no_match)
+		  {
+		    if (ret == partly_match)
+		      return 2; /* There is incomplete match. */
+
+		    match++;
+		  }
+		break;
+	      case ipv4_match:
+#if 0
+		if ((ret = cmd_ipv4_match (command)) != no_match)
+		  {
+		    if (ret == partly_match)
+		      return 2; /* There is incomplete match. */
+		    match++;
+		  }
+#endif /* 0 */
+		if (CMD_IPV4 (str))
+		  match++;
 		break;
 	      case ipv4_prefix_match:
 		if ((ret = cmd_ipv4_prefix_match (command)) != no_match)
@@ -994,6 +1285,22 @@ cmd_entry_function_desc (char *src, char *dst)
   if (CMD_RANGE (dst))
     {
       if (cmd_range_match (dst, src))
+	return dst;
+      else
+	return NULL;
+    }
+
+  if (CMD_IPV6 (dst))
+    {
+      if (cmd_ipv6_match (src))
+	return dst;
+      else
+	return NULL;
+    }
+
+  if (CMD_IPV6_PREFIX (dst))
+    {
+      if (cmd_ipv6_prefix_match (src))
 	return dst;
       else
 	return NULL;
@@ -1197,13 +1504,15 @@ cmd_complete_command (vector vline, struct vty *vty, int *status)
   char **match_str;
   struct desc *desc;
   vector descvec;
+  char *command;
 
   /* First, filter by preceeding command string */
   for (i = 0; i < index; i++)
     {
       enum match_type match;
-      char *command = vector_slot (vline, i);
       int ret;
+
+      command = vector_slot (vline, i);
 
       /* First try completion match, if there is exactly match return 1 */
       match = cmd_filter_by_completion (command, cmd_vector, i);
@@ -1331,14 +1640,16 @@ cmd_execute_command (vector vline, struct vty *vty)
   char *argv[CMD_ARGC_MAX];
   enum match_type match = 0;
   int varflag;
+  char *command;
 
   /* Make copy of command elements. */
   cmd_vector = vector_copy (cmd_node_vector (cmdvec, vty->node));
 
   for (index = 0; index < vector_max (vline); index++) 
     {
-      char *command = vector_slot (vline, index);
       int ret;
+
+      command = vector_slot (vline, index);
 
       match = cmd_filter_by_completion (command, cmd_vector, index);
 
@@ -1371,6 +1682,10 @@ cmd_execute_command (vector vline, struct vty *vty)
 	  {
 	    matched_element = cmd_element;
 	    matched_count++;
+#ifdef DEBUG
+	vty_out (vty, "DEBUG: match type %d%s", match, VTY_NEWLINE);
+	vty_out (vty, "DEBUG: %s%s", cmd_element->string, VTY_NEWLINE);
+#endif /* DEBUG */
 	  }
 	else
 	  {
@@ -1442,14 +1757,16 @@ cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
   char *argv[CMD_ARGC_MAX];
   int varflag;
   enum match_type match = 0;
+  char *command;
 
   /* Make copy of command element */
   cmd_vector = vector_copy (cmd_node_vector (v, vty->node));
 
   for (index = 0; index < vector_max (vline); index++) 
     {
-      char *command = vector_slot (vline, index);
       int ret;
+
+      command = vector_slot (vline, index);
 
       match = cmd_filter_by_string (vector_slot (vline, index), 
 				    cmd_vector, index);
@@ -1458,7 +1775,7 @@ cmd_execute_command_strict (vector v, vector vline, struct vty *vty)
       if (match == vararg_match)
 	break;
 
-      ret = is_cmd_ambiguous (command, cmd_vector, index, match );
+      ret = is_cmd_ambiguous (command, cmd_vector, index, match);
       if (ret == 1)
 	{
 	  vector_free (cmd_vector);
@@ -1578,7 +1895,13 @@ DEFUN (config_terminal,
        "Configuration from vty interface\n"
        "Configuration terminal\n")
 {
-  vty->node = CONFIG_NODE;
+  if (vty_config_lock (vty))
+    vty->node = CONFIG_NODE;
+  else
+    {
+      vty_out (vty, "VTY configuration is locked by other VTY%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
   return CMD_SUCCESS;
 }
 
@@ -1622,6 +1945,7 @@ DEFUN (config_exit,
       break;
     case CONFIG_NODE:
       vty->node = ENABLE_NODE;
+      vty_config_unlock (vty);
       break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
@@ -1630,6 +1954,7 @@ DEFUN (config_exit,
     case RIPNG_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case MASC_NODE:
     case RMAP_NODE:
     case VTY_NODE:
       vty->node = CONFIG_NODE;
@@ -1659,6 +1984,9 @@ DEFUN (config_end,
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
+      vty_config_unlock (vty);
+      vty->node = ENABLE_NODE;
+      break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -1667,6 +1995,7 @@ DEFUN (config_end,
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case MASC_NODE:
     case VTY_NODE:
       vty->node = ENABLE_NODE;
       break;

@@ -40,9 +40,6 @@
 /* whether system has SNMP library */
 #undef HAVE_SNMP
 
-/* MBGP support. */
-#undef HAVE_MBGPV4
-
 /* whether sockaddr has a sa_len field */
 #undef HAVE_SA_LEN
 

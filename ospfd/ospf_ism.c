@@ -451,15 +451,12 @@ ism_interface_down (struct ospf_interface *oi)
     }
 
   /* Reset interface variables. */
-  ospf_if_reset_variables (oi);
+  /* ospf_if_reset_variables (oi); */
 
   /* Cancel Threads. */
   OSPF_ISM_TIMER_OFF (oi->t_hello);
   OSPF_ISM_TIMER_OFF (oi->t_wait);
-
-  /*
-  OSPF_ISM_READ_OFF (oi->t_read);
-  OSPF_ISM_WRITE_OFF (oi->t_write); */
+  OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
 
   return 0;
 }

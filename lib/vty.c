@@ -35,7 +35,7 @@
 #include "filter.h"
 
 /* Vty events */
-enum event {VTY_SERV, VTY_READ, VTY_WRITE};
+enum event {VTY_SERV, VTY_READ, VTY_WRITE, VTY_TIMEOUT_RESET};
 
 static void vty_event (enum event, int, struct vty *);
 
@@ -59,10 +59,13 @@ struct thread *vty_serv_thread;
 
 /* Current directory. */
 char *vty_cwd = NULL;
+
+/* Configure lock. */
+static int vty_config;
 
 /* VTY standard output function. */
 int
-vty_out (struct vty *vty, char *format, ...)
+vty_out (struct vty *vty, const char *format, ...)
 {
   va_list args;
   int len;
@@ -83,6 +86,25 @@ vty_out (struct vty *vty, char *format, ...)
   buffer_write (vty->obuf, (u_char *)buf, len);
 
   va_end (args);
+  return len;
+}
+
+int
+vvty_out (struct vty *vty, const char *format, va_list va)
+{
+  int len;
+  /* XXX need overflow check */
+  char buf[1024];
+
+  len = vsnprintf (buf, sizeof buf, format, va);
+
+  if (len < 0)
+    {    
+      zlog (NULL, LOG_INFO, "Vty closed due to vty output buffer shortage.");
+      return -1;
+    }
+
+  buffer_write (vty->obuf, (u_char *)buf, len);
   return len;
 }
 
@@ -529,6 +551,9 @@ vty_end_config (struct vty *vty)
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
+      vty_config_unlock (vty);
+      vty->node = ENABLE_NODE;
+      break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -537,6 +562,7 @@ vty_end_config (struct vty *vty)
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case MASC_NODE:
     case VTY_NODE:
       vty->node = ENABLE_NODE;
       break;
@@ -898,6 +924,9 @@ vty_stop_input (struct vty *vty)
       /* Nothing to do. */
       break;
     case CONFIG_NODE:
+      vty_config_unlock (vty);
+      vty->node = ENABLE_NODE;
+      break;
     case INTERFACE_NODE:
     case ZEBRA_NODE:
     case RIP_NODE:
@@ -906,6 +935,7 @@ vty_stop_input (struct vty *vty)
     case RMAP_NODE:
     case OSPF_NODE:
     case OSPF6_NODE:
+    case MASC_NODE:
     case VTY_NODE:
       vty->node = ENABLE_NODE;
       break;
@@ -1065,6 +1095,7 @@ vty_buffer_reset (struct vty *vty)
 {
   buffer_reset (vty->obuf);
   vty_prompt (vty);
+  vty_redraw_line (vty);
 }
 
 /* Read data via vty socket. */
@@ -1367,22 +1398,6 @@ vty_accept (struct thread *thread)
       return -1;
     }
 
-  /* Convert IPv4 compatible IPv6 address to IPv4 address. */
-#ifdef HAVE_IPV6
-  if (su.sa.sa_family == AF_INET6)
-    {
-      if (IN6_IS_ADDR_V4MAPPED (&su.sin6.sin6_addr))
-	{
-	  struct sockaddr_in sin;
-
-	  memset (&sin, 0, sizeof (struct sockaddr_in));
-	  sin.sin_family = AF_INET;
-	  memcpy (&sin.sin_addr, ((char *)&su.sin6.sin6_addr) + 12, 4);
-	  memcpy (&su, &sin, sizeof (struct sockaddr_in));
-	}
-    }
-#endif /* HAVE_IPV6 */
-
   p = sockunion2hostprefix (&su);
 
   /* VTY's accesslist apply. */
@@ -1581,6 +1596,9 @@ vty_close (struct vty *vty)
   if (vty->buf)
     XFREE (MTYPE_VTY, vty->buf);
 
+  /* Check configure. */
+  vty_config_unlock (vty);
+
   /* OK free vty. */
   XFREE (MTYPE_VTY, vty);
 }
@@ -1705,6 +1723,46 @@ vty_read_config (char *config_file,
 
   host_config_set (fullpath);
 }
+
+/* Small utility function which output loggin to the VTY. */
+void
+vty_log (const char *proto_str, const char *format, va_list va)
+{
+  int i;
+  struct vty *vty;
+
+  for (i = 0; i < vector_max (vtyvec); i++)
+    if ((vty = vector_slot (vtyvec, i)) != NULL)
+      if (vty->monitor)
+	{
+	  vty_out (vty, "%s: ", proto_str);
+	  vvty_out (vty, format, va);
+	  vty_out (vty, "\r\n");
+	  vty_event (VTY_WRITE, vty->fd, vty);
+	}
+}
+
+int
+vty_config_lock (struct vty *vty)
+{
+  if (vty_config == 0)
+    {
+      vty->config = 1;
+      vty_config = 1;
+    }
+  return vty->config;
+}
+
+int
+vty_config_unlock (struct vty *vty)
+{
+  if (vty_config == 1 && vty->config == 1)
+    {
+      vty->config = 0;
+      vty_config = 0;
+    }
+  return vty->config;
+}
 
 /* Master of the threads. */
 /* extern struct thread_master *master; */
@@ -1731,7 +1789,17 @@ vty_event (enum event event, int sock, struct vty *vty)
 	}
       break;
     case VTY_WRITE:
-      vty->t_write = thread_add_write (master, vty_flush, vty, sock);
+      if (! vty->t_write)
+	vty->t_write = thread_add_write (master, vty_flush, vty, sock);
+      break;
+    case VTY_TIMEOUT_RESET:
+      if (vty->t_timeout)
+	thread_cancel (vty->t_timeout);
+      if (vty->v_timeout)
+	{
+	  vty->t_timeout = 
+	    thread_add_timer (master, vty_timeout, vty, vty->v_timeout);
+	}
       break;
     }
 }
@@ -1746,7 +1814,9 @@ DEFUN (config_who,
 
   for (i = 0; i < vector_max (vtyvec); i++)
     if ((v = vector_slot (vtyvec, i)) != NULL)
-      vty_out (vty, "vty[%d] connected from %s.%s", i, v->address, VTY_NEWLINE);
+      vty_out (vty, "%svty[%d] connected from %s.%s",
+	       v->config ? "*" : " ",
+	       i, v->address, VTY_NEWLINE);
   return CMD_SUCCESS;
 }
 
@@ -1769,7 +1839,11 @@ DEFUN (exec_timeout,
        "Timeout value\n")
 {
   if (all_digit (argv[0]))
-    vty_timeout_val = strtol (argv[0], NULL, 10);
+    {
+      vty_timeout_val = strtol (argv[0], NULL, 10);
+      vty->v_timeout = vty_timeout_val;
+      vty_event (VTY_TIMEOUT_RESET, 0, vty);
+    }
   else
     {
       vty_out (vty, "Invalid timeout value%s", VTY_NEWLINE);
@@ -1878,6 +1952,27 @@ DEFUN (no_service_advanced_vty,
   return CMD_SUCCESS;
 }
 
+DEFUN (terminal_monitor,
+       terminal_monitor_cmd,
+       "terminal monitor",
+       "Terminal configuration setup\n"
+       "Show logging information to the terminal\n")
+{
+  vty->monitor = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_terminal_monitor,
+       no_terminal_monitor_cmd,
+       "no terminal monitor",
+       NO_STR
+       "Terminal configuration setup\n"
+       "Show logging information to the terminal\n")
+{
+  vty->monitor = 0;
+  return CMD_SUCCESS;
+}
+
 /* Display current configuration. */
 int
 vty_config_write (struct vty *vty)
@@ -1978,6 +2073,8 @@ vty_init ()
   install_element (CONFIG_NODE, &line_vty_cmd);
   install_element (CONFIG_NODE, &service_advanced_vty_cmd);
   install_element (CONFIG_NODE, &no_service_advanced_vty_cmd);
+  install_element (ENABLE_NODE, &terminal_monitor_cmd);
+  install_element (ENABLE_NODE, &no_terminal_monitor_cmd);
 
   install_default (VTY_NODE);
   install_element (VTY_NODE, &exec_timeout_cmd);

@@ -91,13 +91,8 @@ OSPF6 NODE:
     setting router's Router-ID
 
   interface NAME area AREA
-    binding interface to specifyed Area, and start
+    binding interface to specified Area, and start
     sending OSPF packet.
-
-  zebra install
-  zebra noinsall
-    switching install route to zebra or not.
-    "zebra noinstall" is similar to 'gated -n'
 
 Sample configuration bellow.
 
@@ -139,7 +134,6 @@ router ospf6 instance 1
  interface ep0 area 0.0.0.0
  interface gif0 area 0.0.0.0
  interface gif1 area 0.0.0.0
- zebra install
 !
 !
 !

@@ -63,19 +63,13 @@ struct attr
   struct in_addr originator_id;
   struct cluster_list *cluster;
 
-#if defined(HAVE_IPV6) || defined(HAVE_MBGPV4)
   u_char mp_nexthop_len;
-#endif
-
 #ifdef HAVE_IPV6
   struct in6_addr mp_nexthop_global;
   struct in6_addr mp_nexthop_local;
 #endif /* HAVE_IPV6 */
-
-#ifdef HAVE_MBGPV4
   struct in_addr mp_nexthop_global_in;
   struct in_addr mp_nexthop_local_in;
-#endif /* HAVE_IPV6 */
 
   /* AS Path structure */
   struct aspath *aspath;
@@ -91,15 +85,24 @@ struct attr
 
 /* Prototypes. */
 void bgp_attr_init ();
-int bgp_attr_parse (struct peer *, struct attr *, bgp_size_t);
+int bgp_attr_parse (struct peer *, struct attr *, bgp_size_t, 
+		    struct bgp_nlri *, struct bgp_nlri *);
 int bgp_attr_check (struct peer *, struct attr *);
-struct attr *bgp_attr_make_default (u_char);
-void bgp_attr_free (struct attr *);
-bgp_size_t bgp_packet_attribute (struct peer *, struct stream *, struct attr *, struct prefix *);
-bgp_size_t bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p);
+
 struct attr *bgp_attr_intern (struct attr *attr);
+void bgp_attr_unintern (struct attr *);
+void bgp_attr_flush (struct attr *);
+
+struct attr *bgp_attr_default_set (struct attr *attr, u_char);
+struct attr *bgp_attr_default_intern (u_char);
+
+bgp_size_t bgp_packet_attribute (struct peer_conf *conf, struct peer *, struct stream *, struct attr *, struct prefix *, afi_t, safi_t);
+bgp_size_t bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p, afi_t, safi_t);
 int  cluster_loop_check (struct cluster_list *cluster, struct in_addr originator);
-void cluster_intern (struct cluster_list *);
+struct cluster_list *cluster_parse (caddr_t, int);
+struct cluster_list *cluster_intern (struct cluster_list *);
 void cluster_unintern (struct cluster_list *);
+void cluster_free (struct cluster_list *);
+struct cluster_list *cluster_dup (struct cluster_list *);
 
 #endif /* _ZEBRA_BGP_ATTR_H */

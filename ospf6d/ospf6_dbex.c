@@ -220,7 +220,7 @@ proceed_summarylist (struct neighbor *nbr)
 
   /* DD packet size must be less than InterfaceMTU.
      prepare size of packet before attaching LSA header. */
-  size = sizeof (struct ospf6_hdr) + sizeof (struct ospf6_dbdesc);
+  size = sizeof (struct ospf6_header) + sizeof (struct ospf6_dbdesc);
 
   /* XXX, invalid method to access summarylist */
   for (n = listhead (nbr->summarylist); n; nextnode (n))
@@ -541,15 +541,15 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       /* XXX, Send database copy of this LSA to this neighbor */
       {
         struct iovec iov[8];
-        struct linkstate_update *update;
+        struct ospf6_lsupdate *update;
         struct sockaddr_in6 dst;
 
         assert (have);
         memcpy (&dst, &received->from->hisaddr,
                 sizeof (struct sockaddr_in6));
         iov_clear (iov, 8);
-        update = (struct linkstate_update *) iov_append
-             (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct linkstate_update));
+        update = (struct ospf6_lsupdate *) iov_append
+             (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_lsupdate));
         if (!update)
           {
             zlog_warn ("  *** iov_append() failed in send back");
@@ -673,7 +673,7 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
   int ismore_recent, addretrans = 0;
   listnode n;
   struct sockaddr_in6 dst;
-  struct linkstate_update *lsupdate;
+  struct ospf6_lsupdate *lsupdate;
   struct iovec iov[MAXIOVLIST];
   struct ospf6_lsa *req;
 
@@ -797,8 +797,8 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
     }
 
     /* make LinkState Update header */
-  lsupdate = (struct linkstate_update *)
-    iov_prepend (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct linkstate_update));
+  lsupdate = (struct ospf6_lsupdate *)
+    iov_prepend (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct ospf6_lsupdate));
   assert (lsupdate);
   lsupdate->lsupdate_num = htonl (1);
 

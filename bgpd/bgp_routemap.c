@@ -38,6 +38,7 @@
 #include "buffer.h"
 #include "table.h"
 #include "sockunion.h"
+#include "newlist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -112,16 +113,16 @@ route_match_ip_address (void *rule, struct prefix *prefix,
   struct access_list *alist;
   /* struct prefix_ipv4 match; */
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       alist = access_list_lookup (AF_INET, (char *) rule);
       if (alist == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       return (access_list_apply (alist, prefix) == FILTER_DENY ?
-	      RM_NOMATCH : RM_MATCH);
+	      RMAP_NOMATCH : RMAP_MATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `ip address' match statement.  `arg' should be
@@ -158,17 +159,17 @@ route_match_ip_next_hop (void *rule, struct prefix *prefix,
   struct in_addr *addr;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     addr = rule;
     bgp_info = object;
     
     if (IPV4_ADDR_CMP (&bgp_info->attr->nexthop, rule) == 0)
-      return RM_MATCH;
+      return RMAP_MATCH;
     else
-      return RM_NOMATCH;
+      return RMAP_NOMATCH;
   }
 
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `ip next-hop' match statement. `arg' is IP address
@@ -215,16 +216,16 @@ route_match_ip_prefix_list (void *rule, struct prefix *prefix,
 {
   struct prefix_list *plist;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       plist = prefix_list_lookup (AF_INET, (char *) rule);
       if (plist == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
-	      RM_NOMATCH : RM_MATCH);
+	      RMAP_NOMATCH : RMAP_MATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 void *
@@ -257,17 +258,17 @@ route_match_metric (void *rule, struct prefix *prefix,
   u_int32_t *med;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       med = rule;
       bgp_info = object;
     
       if (bgp_info->attr->med == *med)
-	return RM_MATCH;
+	return RMAP_MATCH;
       else
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `match metric' match statement. `arg' is MED value */
@@ -309,18 +310,18 @@ route_match_aspath (void *rule, struct prefix *prefix,
   struct as_list *as_list;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       as_list = as_list_lookup ((char *) rule);
       if (as_list == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       bgp_info = object;
     
       /* Perform match. */
-      return ((as_list_apply (as_list, bgp_info->attr->aspath) == AS_FILTER_DENY) ? RM_NOMATCH : RM_MATCH);
+      return ((as_list_apply (as_list, bgp_info->attr->aspath) == AS_FILTER_DENY) ? RMAP_NOMATCH : RMAP_MATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Compile function for as-path match. */
@@ -405,18 +406,18 @@ route_match_community (void *rule, struct prefix *prefix,
   struct community_list *list;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP) 
+  if (type == RMAP_BGP) 
     {
       list = community_list_lookup ((char *) rule);
       bgp_info = object;
     
       if (list == NULL || bgp_info->attr->community == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       /* Perform match. */
-      return (community_list_match (bgp_info->attr->community, list) ? RM_MATCH : RM_NOMATCH);
+      return (community_list_match (bgp_info->attr->community, list) ? RMAP_MATCH : RMAP_NOMATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Compile function for community match. */
@@ -441,7 +442,6 @@ struct route_map_rule_cmd route_match_community_cmd =
   route_match_community_compile,
   route_match_community_free
 };
-#ifdef  HAVE_MBGPV4
 /* `match nlri unicast | multicast ' */
 
 /* Match function return 1 if match is success else return zero. */
@@ -452,17 +452,17 @@ route_match_nlri (void *rule, struct prefix *prefix,
   u_int32_t *safi;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       safi = rule;
       bgp_info = object;
     
       if (prefix->safi == *safi)
-	return RM_MATCH;
+	return RMAP_MATCH;
       else
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 /* Route map `match nlri' match statement. `arg' is nlri value */
@@ -504,13 +504,13 @@ route_set_nlri (void *rule, struct prefix *prefix,
   u_int32_t *safi;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       safi = rule;
       bgp_info = object;
       prefix->safi = *safi;
     }
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Route map `set nlri' aet statement. `arg' is nlri value */
@@ -544,7 +544,6 @@ struct route_map_rule_cmd route_set_nlri_cmd =
   route_set_nlri_compile,
   route_set_nlri_free
 };
-#endif /* HAVE_MBGPV4 */
 
 /* `set ip next-hop IP_ADDRESS' */
 
@@ -555,7 +554,7 @@ route_set_ip_nexthop (void *rule, struct prefix *prefix, route_map_object_t type
   struct in_addr *address;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     /* Fetch routemap's rule information. */
     address = rule;
     bgp_info = object;
@@ -564,7 +563,7 @@ route_set_ip_nexthop (void *rule, struct prefix *prefix, route_map_object_t type
     bgp_info->attr->nexthop = *address;
   }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Route map `ip nexthop' compile function.  Given string is converted
@@ -613,7 +612,7 @@ route_set_local_pref (void *rule, struct prefix *prefix, route_map_object_t type
   u_int32_t *local_pref;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     /* Fetch routemap's rule information. */
     local_pref = rule;
     bgp_info = object;
@@ -623,7 +622,7 @@ route_set_local_pref (void *rule, struct prefix *prefix, route_map_object_t type
     bgp_info->attr->local_pref = *local_pref;
   }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* set local preference compilation. */
@@ -672,7 +671,7 @@ route_set_weight (void *rule, struct prefix *prefix, route_map_object_t type, vo
   u_int32_t *weight;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     /* Fetch routemap's rule information. */
     weight = rule;
     bgp_info = object;
@@ -681,7 +680,7 @@ route_set_weight (void *rule, struct prefix *prefix, route_map_object_t type, vo
     bgp_info->attr->weight = *weight;
   }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* set local preference compilation. */
@@ -731,7 +730,7 @@ route_set_metric (void *rule, struct prefix *prefix,
   char *metric;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP)
+  if(type == RMAP_BGP)
     {
       /* Fetch routemap's rule information. */
       metric = rule;
@@ -741,7 +740,7 @@ route_set_metric (void *rule, struct prefix *prefix,
       bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC);
       bgp_info->attr->med = atoi (metric);
     }
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* set metric compilation. */
@@ -775,16 +774,21 @@ route_map_result_t
 route_set_aspath_prepend (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct aspath *aspath;
+  struct aspath *new;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
-    aspath = rule;
-    bgp_info = object;
+  if (type == RMAP_BGP)
+    {
+      aspath = rule;
+      bgp_info = object;
     
-    aspath_prepend (aspath, bgp_info->attr->aspath);
-  }
+      new = aspath_dup (bgp_info->attr->aspath);
 
-  return RM_OKAY;
+      aspath_prepend (aspath, new);
+      bgp_info->attr->aspath = new;
+    }
+
+  return RMAP_OKAY;
 }
 
 /* Compile function for as-path prepend. */
@@ -825,22 +829,24 @@ route_set_community (void *rule, struct prefix *prefix, route_map_object_t type,
   struct community *com;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP)
+  if(type == RMAP_BGP)
     {
       com = rule;
       bgp_info = object;
     
       if (!com)
-	return RM_OKAY;
+	return RMAP_OKAY;
     
+#if 0
       if (bgp_info->attr->community)
 	community_free (bgp_info->attr->community);
+#endif /* 0 */
     
       bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
       bgp_info->attr->community = community_dup (com);
     }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Compile function for set community. */
@@ -879,25 +885,31 @@ route_map_result_t
 route_set_community_additive (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct community *com;
+  struct community *old_com;
+  struct community *new_com;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP)
+  if(type == RMAP_BGP)
     {
       com = rule;
       bgp_info = object;
     
       if (!com)
-	return RM_OKAY;
-    
-      if (bgp_info->attr->community)
-	bgp_info->attr->community = community_merge (bgp_info->attr->community, com);
+	return RMAP_OKAY;
+
+      old_com = bgp_info->attr->community;
+
+      if (old_com)
+	new_com = community_merge (community_dup (old_com), com);
       else
-	bgp_info->attr->community = community_dup (com);
+	new_com = community_dup (com);
+
+      bgp_info->attr->community = new_com;
 
       bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
     }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Compile function for set community. */
@@ -937,14 +949,14 @@ route_set_origin (void *rule, struct prefix *prefix, route_map_object_t type, vo
   u_char *origin;
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     origin = rule;
     bgp_info = object;
     
     bgp_info->attr->origin = *origin;
   }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Compile function for origin set. */
@@ -998,12 +1010,12 @@ route_set_atomic_aggregate (void *rule, struct prefix *prefix, route_map_object_
 {
   struct bgp_info *bgp_info;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     bgp_info = object;
     bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE);
   }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Compile function for atomic aggregate. */
@@ -1043,7 +1055,7 @@ route_set_aggregator_as (void *rule, struct prefix *prefix,
   struct bgp_info *bgp_info;
   struct aggregator *aggregator;
 
-  if(type == ROUTE_MAP_BGP){
+  if(type == RMAP_BGP){
     bgp_info = object;
     aggregator = rule;
     
@@ -1052,7 +1064,7 @@ route_set_aggregator_as (void *rule, struct prefix *prefix,
     bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR);
   }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 void *
@@ -1096,16 +1108,16 @@ route_match_ipv6_address (void *rule, struct prefix *prefix,
 {
   struct access_list *alist;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       alist = access_list_lookup (AF_INET6, (char *) rule);
       if (alist == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       return (access_list_apply (alist, prefix) == FILTER_DENY ?
-	      RM_NOMATCH : RM_MATCH);
+	      RMAP_NOMATCH : RMAP_MATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 void *
@@ -1138,22 +1150,22 @@ route_match_ipv6_next_hop (void *rule, struct prefix *prefix,
   struct in6_addr *addr;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       addr = rule;
       bgp_info = object;
     
       if (IPV6_ADDR_SAME (&bgp_info->attr->mp_nexthop_global, rule))
-	return RM_MATCH;
+	return RMAP_MATCH;
 
       if (bgp_info->attr->mp_nexthop_len == 32 &&
 	  IPV6_ADDR_SAME (&bgp_info->attr->mp_nexthop_local, rule))
-	return RM_MATCH;
+	return RMAP_MATCH;
 
-      return RM_NOMATCH;
+      return RMAP_NOMATCH;
     }
 
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 void *
@@ -1196,16 +1208,16 @@ route_match_ipv6_prefix_list (void *rule, struct prefix *prefix,
 {
   struct prefix_list *plist;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       plist = prefix_list_lookup (AF_INET6, (char *) rule);
       if (plist == NULL)
-	return RM_NOMATCH;
+	return RMAP_NOMATCH;
     
       return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
-	      RM_NOMATCH : RM_MATCH);
+	      RMAP_NOMATCH : RMAP_MATCH);
     }
-  return RM_NOMATCH;
+  return RMAP_NOMATCH;
 }
 
 void *
@@ -1238,7 +1250,7 @@ route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix,
   struct in6_addr *address;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       /* Fetch routemap's rule information. */
       address = rule;
@@ -1252,7 +1264,7 @@ route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix,
 	bgp_info->attr->mp_nexthop_len = 16;
     }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Route map `ip next-hop' compile function.  Given string is converted
@@ -1302,7 +1314,7 @@ route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix,
   struct in6_addr *address;
   struct bgp_info *bgp_info;
 
-  if (type == ROUTE_MAP_BGP)
+  if (type == RMAP_BGP)
     {
       /* Fetch routemap's rule information. */
       address = rule;
@@ -1316,7 +1328,7 @@ route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix,
 	bgp_info->attr->mp_nexthop_len = 32;
     }
 
-  return RM_OKAY;
+  return RMAP_OKAY;
 }
 
 /* Route map `ip nexthop' compile function.  Given string is converted
@@ -1369,11 +1381,11 @@ bgp_route_match_add (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -1394,11 +1406,11 @@ bgp_route_match_delete (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -1419,11 +1431,11 @@ bgp_route_set_add (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -1444,11 +1456,11 @@ bgp_route_set_delete (struct vty *vty, struct route_map_index *index,
     {
       switch (ret)
 	{
-	case ROUTE_MAP_RULE_MISSING:
+	case RMAP_RULE_MISSING:
 	  vty_out (vty, "Can't find rule.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
-	case ROUTE_MAP_COMPILE_ERROR:
+	case RMAP_COMPILE_ERROR:
 	  vty_out (vty, "Argument is malformed.%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	  break;
@@ -1462,30 +1474,36 @@ void
 bgp_route_map_update ()
 {
   int i;
-  listnode node;
-  extern list peer_list;
-  extern list bgp_list;
-  struct peer *peer;
+  struct newnode *nn, *nm;
   struct bgp *bgp;
+  struct peer_conf *conf;
+  struct bgp_filter *filter;
 
-  for (node = listhead (peer_list); node; nextnode (node))
+  NEWLIST_LOOP (bgp_list, bgp, nn)
     {
-      peer = getdata (node);
+      NEWLIST_LOOP (bgp->peer_conf, conf, nm)
+	{
+	  filter = &conf->filter;
+	  
+	  /* Input filter update. */
+	  if (filter->map[BGP_FILTER_IN].name)
+	    filter->map[BGP_FILTER_IN].map = 
+	      route_map_lookup_by_name (filter->map[BGP_FILTER_IN].name);
+	  else
+	    filter->map[BGP_FILTER_IN].map = NULL;
 
-      if (peer->route_map[BGP_FILTER_IN].name)
-	peer->route_map[BGP_FILTER_IN].map = 
-	  route_map_lookup_by_name (peer->route_map[BGP_FILTER_IN].name);
-
-      if (peer->route_map[BGP_FILTER_OUT].name)
-	peer->route_map[BGP_FILTER_OUT].map = 
-	  route_map_lookup_by_name (peer->route_map[BGP_FILTER_OUT].name);
+	  /* Output filter update. */
+	  if (filter->map[BGP_FILTER_OUT].name)
+	    filter->map[BGP_FILTER_OUT].map = 
+	      route_map_lookup_by_name (filter->map[BGP_FILTER_OUT].name);
+	  else
+	    filter->map[BGP_FILTER_OUT].map = NULL;
+	}
     }
 
   /* For redistribute route-map updates. */
-  for (node = listhead (bgp_list); node; nextnode (node))
+  NEWLIST_LOOP (bgp_list, bgp, nn)
     {
-      bgp = getdata (node);
-
       for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
 	{
 	  if (bgp->rmap[ZEBRA_FAMILY_IPV4][i].name)
@@ -1676,7 +1694,6 @@ DEFUN (no_match_aspath,
   return bgp_route_match_delete (vty, vty->index, "as-path", regstr);
 }
 
-#ifdef HAVE_MBGPV4
 DEFUN (match_nlri, 
        match_nlri_cmd,
        "match nlri NLRI",
@@ -1733,7 +1750,6 @@ DEFUN (no_set_nlri,
   }
   return bgp_route_set_delete (vty, vty->index, "nlri", argv[0]);
 }
-#endif /* HAVE_MBGPV4 */
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
@@ -2272,9 +2288,7 @@ bgp_route_map_init ()
   route_map_install_match (&route_match_ip_prefix_list_cmd);
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_community_cmd);
-#ifdef HAVE_MBGPV4
   route_map_install_match (&route_match_nlri_cmd);
-#endif /* HAVE_MBGPV4 */
 
   route_map_install_set (&route_set_ip_nexthop_cmd);
   route_map_install_set (&route_set_local_pref_cmd);
@@ -2286,9 +2300,7 @@ bgp_route_map_init ()
   route_map_install_set (&route_set_atomic_aggregate_cmd);
   route_map_install_set (&route_set_aggregator_as_cmd);
   route_map_install_set (&route_set_community_additive_cmd);
-#ifdef HAVE_MBGPV4
   route_map_install_set (&route_set_nlri_cmd);
-#endif /* HAVE_MBGPV4 */
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -2302,11 +2314,8 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_match_metric_cmd);
   install_element (RMAP_NODE, &match_community_cmd);
   install_element (RMAP_NODE, &no_match_community_cmd);
-#ifdef HAVE_MBGPV4
   install_element (RMAP_NODE, &match_nlri_cmd);
   install_element (RMAP_NODE, &no_match_nlri_cmd);
-#endif /* HAVE_MBGPV4 */
-
 
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
@@ -2326,12 +2335,8 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_set_atomic_aggregate_cmd);
   install_element (RMAP_NODE, &set_aggregator_as_cmd);
   install_element (RMAP_NODE, &no_set_aggregator_as_cmd);
-#ifdef HAVE_MBGPV4
   install_element (RMAP_NODE, &set_nlri_cmd);
   install_element (RMAP_NODE, &no_set_nlri_cmd);
-#endif /* HAVE_MBGPV4 */
-
-
 
   /* set community-additive. */
   install_element (RMAP_NODE, &set_community_additive_cmd);

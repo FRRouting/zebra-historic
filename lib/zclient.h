@@ -52,6 +52,8 @@ struct zebra
   /* Pointer to the callback functions. */
   int (*interface_add) (int, struct zebra *, zebra_size_t);
   int (*interface_delete) (int, struct zebra *, zebra_size_t);
+  int (*interface_up) (int, struct zebra *, zebra_size_t);
+  int (*interface_down) (int, struct zebra *, zebra_size_t);
   int (*interface_address_add) (int, struct zebra *, zebra_size_t);
   int (*interface_address_delete) (int, struct zebra *, zebra_size_t);
   int (*ipv4_route_add) (int, struct zebra *, zebra_size_t);
@@ -80,10 +82,14 @@ struct zebra *zebra_new ();
 int zebra_redistribute_send (int, int, int);
 int zebra_interface_add (int, struct interface *);
 int zebra_interface_delete (int, struct interface *);
+int zebra_interface_up (int sock, struct interface *ifp);
+int zebra_interface_down (int sock, struct interface *ifp);
 int zebra_interface_address_add (int, struct interface *, struct connected *);
 int zebra_interface_address_delete (int, struct interface *, struct connected *);
 struct connected *zebra_interface_address_add_read (struct stream *);
 struct interface *zebra_interface_add_read (struct stream *);
+struct interface *zebra_interface_state_read (struct stream *s);
+
 
 /* IPv4 prefix add and delete function prototype. */
 int

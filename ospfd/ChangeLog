@@ -1,3 +1,21 @@
+2000-01-14  Toshiaki Takada <takada@zebra.org>
+
+	* ospf_interface.c: DEFUN (if_ospf_*) commands changed name to
+	ip_ospf_* ().
+	Old notation `ospf *' still remains backward compatibility.
+
+1999-12-29  Alex Zinin  <zinin@amt.ru>
+	* ospf_lsa.c: ospf_lsa_more_recent() bug fix
+	* ospf_nsm.c, ospf_packet.c: remove nbr data struct when
+	  int goes down, also check DD flags correctly (bug fix)
+
+1999-12-28  Alex Zinin  <zinin@amt.ru>
+	* "redistribute <source> metric-type (1|2) metric <XXX>" added
+
+1999-12-23  Alex Zinin  <zinin@amt.ru>
+	* added RFC1583Compatibility flag
+	* added dynamic interface up/down functionality
+
 1999-11-19  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_neighbor.h (struct ospf_neighbor): Add member state_change

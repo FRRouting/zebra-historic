@@ -50,8 +50,8 @@
 
 struct router_lsa
 {
-  unsigned char rlsa_bits;
-  unsigned char rlsa_options[3];
+  u_char rlsa_bits;
+  u_char rlsa_options[3];
   /* followed by router_lsd(s) */
 };
 #define ROUTER_LSA_BIT_B     (1 << 0)
@@ -65,12 +65,12 @@ struct router_lsa
 
 struct router_lsd
 {
-  unsigned char  rlsd_type;
-  unsigned char  rlsd_reserved;
-  unsigned short rlsd_metric;                /* output cost */
-  unsigned long  rlsd_interface_id;
-  unsigned long  rlsd_neighbor_interface_id;
-  unsigned long  rlsd_neighbor_router_id;
+  u_char    rlsd_type;
+  u_char    rlsd_reserved;
+  u_int16_t rlsd_metric;                /* output cost */
+  u_int32_t rlsd_interface_id;
+  u_int32_t rlsd_neighbor_interface_id;
+  u_int32_t rlsd_neighbor_router_id;
 };
 
 #define LSDT_POINTTOPOINT       1
@@ -80,36 +80,36 @@ struct router_lsd
 
 struct network_lsa
 {
-  unsigned char nlsa_reserved;
-  unsigned char nlsa_options[3];
+  u_char nlsa_reserved;
+  u_char nlsa_options[3];
   /* followed by router_id(s) */
 };
 
 struct link_lsa
 {
-  unsigned char   llsa_rtr_pri;
-  unsigned char   llsa_options[3];
+  u_char          llsa_rtr_pri;
+  u_char          llsa_options[3];
   struct in6_addr llsa_linklocal;
-  unsigned long   llsa_prefix_num;
+  u_int32_t       llsa_prefix_num;
   /* followed by prefix(es) */
 };
 
 struct intra_area_prefix_lsa
 {
-  unsigned short intra_prefix_num;
-  unsigned short intra_prefix_refer_lstype;
-  unsigned long  intra_prefix_refer_lsid;
-  unsigned long  intra_prefix_refer_advrtr;
+  u_int16_t intra_prefix_num;
+  u_int16_t intra_prefix_refer_lstype;
+  u_int32_t intra_prefix_refer_lsid;
+  u_int32_t intra_prefix_refer_advrtr;
 };
 
 struct as_external_lsa
 {
-  unsigned char  ase_bits;
-  unsigned char  ase_pre_metric; /* 1st byte of metric */
-  unsigned short ase_metric;     /* 2nd, 3rd byte of metric */
-  unsigned char  ase_prefix_len;
-  unsigned char  ase_prefix_opt;
-  unsigned short ase_refer_lstype;
+  u_char    ase_bits;
+  u_char    ase_pre_metric; /* 1st byte of metric */
+  u_int16_t ase_metric;     /* 2nd, 3rd byte of metric */
+  u_char    ase_prefix_len;
+  u_char    ase_prefix_opt;
+  u_int16_t ase_refer_lstype;
   /* followed by one address prefix */
   /* followed by none or one forwarding address */
   /* followed by none or one external route tag */
@@ -126,13 +126,13 @@ struct as_external_lsa
 /* new */
 struct ospf6_lsa_hdr
 {
-  unsigned short lsh_age;      /* LS age */
-  unsigned short lsh_type;     /* LS type */
-  unsigned long  lsh_id;       /* Link State ID */
-  unsigned long  lsh_advrtr;   /* Advertising Router */
-  unsigned long  lsh_seqnum;   /* LS sequence number */
-  unsigned short lsh_cksum;    /* LS checksum */
-  unsigned short lsh_len;      /* length */
+  u_int16_t lsh_age;      /* LS age */
+  u_int16_t lsh_type;     /* LS type */
+  u_int32_t lsh_id;       /* Link State ID */
+  u_int32_t lsh_advrtr;   /* Advertising Router */
+  u_int32_t lsh_seqnum;   /* LS sequence number */
+  u_int16_t lsh_cksum;    /* LS checksum */
+  u_int16_t lsh_len;      /* length */
 };
 
 #define LSH_NEXT(x) ((x) + 1)

@@ -60,7 +60,7 @@ extern char   *rlsatype_name[];
 #define typeindex(x)     (((ntohs (x)) & 0x000f) - 1)
 
 /* Function Prototypes */
-char *print_lsreq (struct linkstate_request *);
+char *print_lsreq (struct ospf6_lsreq *);
 char *print_ls_reference (struct ospf6_lsa_hdr *);
 char *print_lsahdr (struct ospf6_lsa_hdr *);
 char *inet4str(unsigned long);

@@ -694,7 +694,7 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
       break;
     case NSM_ExStart:
       /* Slave. */
-      if ((IS_SET_DD_ALL (dd->flags) == dd->flags) &&
+      if ((IS_SET_DD_ALL (dd->flags) == OSPF_DD_FLAG_ALL) &&
 	  size == OSPF_DB_DESC_MIN_SIZE &&
 	  IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id) > 0)
 	{
@@ -1910,7 +1910,7 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
   unsigned long delta = stream_get_putp (s);
 
   zlog_info("Z: ospf_make_ls_upd: Start");
-  debug_list (update);
+  /*Z: debug_list (update); */
 
   stream_putl (s, listcount (update));
 
@@ -1921,7 +1921,7 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
 
       zlog_info("Z: ospf_make_ls_upd: List Iteration");
 
-      debug_list(update);
+      /* Z: debug_list(update); */
 
       lsa = getdata (node);
       assert (lsa);

@@ -1,3 +1,16 @@
+1999-12-26  David Lipovkov <davidl@nbase.co.il>
+
+	* ripd.c (rip_authentication): RIP authantication string is 16
+	bytes long.
+
+1999-12-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_read): Add check for minimum packet length.
+	Authentication check is moved from rip_process_response() to
+	rip_read().  Patch from David Lipovkov <davidl@nbase.co.il> is
+	applied then add rte number check by Kunihiro Ishiguro
+	<kunihiro@zebra.org>.
+
 1999-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (rip_response_process): In case of packet is RIPv2 and

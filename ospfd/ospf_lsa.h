@@ -36,8 +36,9 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 /* OSPF LSA origination flag. */
 #define OSPF_LSA_SELF		0x01
-#define OSPF_LSA_RECEIVED	0x02
-#define OSPF_LSA_APPROVED	0x04
+#define OSPF_LSA_SELF_CHECKED	0x02
+#define OSPF_LSA_RECEIVED	0x04
+#define OSPF_LSA_APPROVED	0x08
 
 /* OSPF LSA header. */
 struct lsa_header
@@ -89,10 +90,11 @@ struct ospf_lsa
 #define LSA_LINK_TYPE_VIRTUALLINK      4
 
 /* OSPF Router LSA Flag. */
-#define ROUTER_LSA_VIRTUAL	       0x04
-#define ROUTER_LSA_EXTERNAL	       0x02
-#define ROUTER_LSA_BORDER	       0x01
-#define ROUTER_LSA_SHORTCUT	       0x10
+#define ROUTER_LSA_BORDER	       0x01 /* The router is an ABR */
+#define ROUTER_LSA_EXTERNAL	       0x02 /* The router is an ASBR */
+#define ROUTER_LSA_VIRTUAL	       0x04 /* The router has a VL in this area */
+#define ROUTER_LSA_NT		       0x10 /* NSSA-specific flag */
+#define ROUTER_LSA_SHORTCUT	       0x20 /* Shortcut-ABR specific flag */
 
 #define IS_ROUTER_LSA_VIRTUAL(x)       ((x)->flags & ROUTER_LSA_VIRTUAL)
 #define IS_ROUTER_LSA_EXTERNAL(x)      ((x)->flags & ROUTER_LSA_EXTERNAL)
