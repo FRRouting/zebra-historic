@@ -28,6 +28,8 @@
 int zebra_connect ();
 void zebra_get_hostinfo (int sock);
 void zebra_get_all_interface (int sock);
+
+/* Redistribute message. */
 int zebra_redistribute_send (int command, int sock, int type);
 
 /* IPv4 prefix add and delete function prototype. */

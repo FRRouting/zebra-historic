@@ -317,6 +317,10 @@ bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr)
   unsigned long pos;
   bgp_size_t total_attr_len;
 
+#ifdef DISABLE_BGP_ANNOUNCE
+  return;
+#endif /* DISABLE_BGP_ANNOUNCE */
+
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
   /* Make BGP update packet. */
@@ -363,6 +367,10 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p)
   unsigned long cp;
   bgp_size_t unfeasible_len;
   bgp_size_t total_attr_len;
+
+#ifdef DISABLE_BGP_ANNOUNCE
+  return;
+#endif /* DISABLE_BGP_ANNOUNCE */
 
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
@@ -439,7 +447,10 @@ bgp_open (struct peer *peer, bgp_size_t size)
   optlen = stream_getc (peer->ibuf);
 
   if (optlen != 0) 
-    bgp_open_option_parse (peer, optlen);
+    {
+      bgp_open_option_parse (peer, optlen);
+      stream_forward (peer->ibuf, optlen);
+    }
 
   /* Peer BGP version check. */
   if (version != BGP_VERSION_4 && version != BGP_VERSION_5)

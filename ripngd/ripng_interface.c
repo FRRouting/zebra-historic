@@ -22,6 +22,7 @@
 
 #include <zebra.h>
 
+#include "zebra/zebra.h"
 #include "linklist.h"
 #include "if.h"
 #include "prefix.h"
@@ -31,9 +32,9 @@
 #include "filter.h"
 #include "log.h"
 #include "stream.h"
+#include "zclient.h"
 
 #include "ripngd/ripngd.h"
-#include "zebra/zebra.h"
 
 /* If RFC2133 definition is used. */
 #ifndef IPV6_JOIN_GROUP
@@ -114,12 +115,15 @@ ripng_check_max_mtu ()
 
 /* Get all interface information. */
 void
-ripng_zebra_get_interface (struct stream *s)
+ripng_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
 {
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
   unsigned long endp;
+  struct stream *s;
+
+  s = zebra->ibuf;
 
   endp = stream_get_endp (s);
 

@@ -344,6 +344,7 @@ void bgp_terminate ();
 void bgp_route_map_init ();
 int bgp_peer_sort (struct peer *peer);
 void bgp_filter_init ();
+void zebra_start ();
 
 struct bgp *bgp_new (as_t);
 struct bgp *bgp_lookup_by_as (as_t);

@@ -1,5 +1,49 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.66
+
+* Changes in zebra
+
+** When other daemon such as gated install routes into the kernel then
+zebra blocks.  This is only occur with netlink socket.  Now socket is
+set as NONBLOCKING and problem is fixed.  Reported and fixed by
+Patrick Koppen <koppen@rhrk.uni-kl.de>
+
+* Changes in bgpd
+
+** Now `router zebra' is not needed to insert BGP routes into the
+kernel.  It is default behavior.  If you don't want to install the BGP
+routes to the kernel, please configure like below:
+
+!
+router zebra
+ no redistribute bgp
+!
+
+** redistribute connected works.
+
+** redistribute static now filter local loopback routes and link local
+network.
+
+* Changes in ripd
+
+** Some network check is added.  Patch is done by Carlos Alberto
+Barcenilla <barce@frlp.utn.edu.ar>
+
+* Changes in ripngd
+
+** Sometimes ripngd install wrong nexthop into the kernel.  This bug
+is fixed now.
+
+** Now `router zebra' is not needed to insert RIPng routes into the
+kernel.  It is default behavior. If you don't want to install the BGP
+routes to the kernel, please configure like below:
+
+!
+router zebra
+ no redistribute ripng
+!
+
 * Changes in zebra-0.65
 
 * Changes in lib

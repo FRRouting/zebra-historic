@@ -59,6 +59,14 @@ netlink_socket ()
       return -1;
     }
 
+  ret = fcntl (netlink.sock, F_SETFL, O_NONBLOCK);
+  if (ret < 0)
+    {
+      zlog (NULL, LOG_ERR, "Can't set netlink socket flags: %s",
+           strerror (errno));
+      return -1;
+    }
+  
   bzero (&snl, sizeof snl);
   snl.nl_family = AF_NETLINK;
   snl.nl_groups = 0;
@@ -142,6 +150,8 @@ netlink_parse_info (int (*filter) (struct sockaddr_nl *, struct nlmsghdr *))
 	{
 	  if (errno == EINTR)
 	    continue;
+	  if (errno == EWOULDBLOCK)
+            return 0;
 	  zlog (NULL, LOG_ERR, "netlink recvmsg overrun");
 	  continue;
 	}
@@ -662,6 +672,8 @@ netlink_talk (struct nlmsghdr *n)
 	{
 	  if (errno == EINTR)
 	    continue;
+	  if (errno == EWOULDBLOCK)
+            return 0;
 	  zlog (NULL, LOG_ERR, "netlink_talk recvmsg() error: %s", strerror (errno));
 	  return -1;
 	}

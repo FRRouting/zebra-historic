@@ -564,6 +564,7 @@ DEFUN (show_table,
 DEFUN (config_table, 
        config_table_cmd,
        "table TABLENO",
+       "Configure target kernel routing table\n"
        "TABLE integer\n")
 {
   rtm_table_default = strtol (argv[0], (char**)0, 10);

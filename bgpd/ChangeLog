@@ -1,3 +1,10 @@
+1999-05-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_zebra.c (redistribute_bgp): Add new DEFUN.
+	(no_redistribute_bgp): Likewise.
+	(router_zebra): Semantics changed.  Now 'router zebra' is default
+	behavior of bgpd.
+
 1999-05-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_routemap.c: Add some commands to bgp route-map.

@@ -64,6 +64,8 @@ BGPD = @BGPD@
 CC = @CC@
 CPP = @CPP@
 GUILE = @GUILE@
+GUILE_CFLAGS = @GUILE_CFLAGS@
+GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
 IPFORWARD = @IPFORWARD@
 LIB_IPV6 = @LIB_IPV6@
@@ -413,13 +415,14 @@ bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/regex-gnu.h ../bgpd/bgp_filter.h
 bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/routemap.h ../lib/command.h ../lib/vector.h \
- ../lib/vty.h ../lib/linklist.h ../lib/log.h ../bgpd/bgpd.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h
-bgp_zebra.o: bgp_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
- ../lib/stream.h ../lib/network.h ../lib/prefix.h ../lib/client.h \
- ../lib/roken.h ../lib/log.h ../lib/thread.h ../lib/sockunion.h \
- ../lib/if.h ../lib/linklist.h bgpd.h bgp_route.h bgp_attr.h \
- ../zebra/zebra.h
+ ../lib/vty.h ../lib/linklist.h ../lib/log.h ../lib/regex-gnu.h \
+ ../lib/buffer.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_regex.h
+bgp_zebra.o: bgp_zebra.c ../zebra/zebra.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/network.h \
+ ../lib/prefix.h ../lib/client.h ../lib/roken.h ../lib/log.h \
+ ../lib/thread.h ../lib/sockunion.h ../lib/if.h ../lib/linklist.h \
+ ../lib/zclient.h bgpd.h bgp_route.h bgp_attr.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

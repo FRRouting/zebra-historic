@@ -34,23 +34,48 @@
 #include "zebra/rib.h"
 #include "zebra/redistribute.h"
 
+int
+zebra_check_addr (struct prefix *p)
+{
+  if (p->family == AF_INET)
+    {
+      u_int32_t addr;
+
+      addr = p->u.prefix4.s_addr;
+      addr = ntohl (addr);
+
+      if (IPV4_NET127 (addr))
+	return 0;
+    }
+#ifdef HAVE_IPV6
+  if (p->family == AF_INET6)
+    {
+      if (IN6_IS_ADDR_LOOPBACK (&p->u.prefix6))
+	return 0;
+      if (IN6_IS_ADDR_LINKLOCAL(&p->u.prefix6))
+	return 0;
+    }
+#endif /* HAVE_IPV6 */
+  return 1;
+}
+
 /* Redistribute routes. */
 void
 zebra_redistribute (struct zebra_client *client, int type)
 {
-  struct route_node *np;
   struct rib *rib;
+  struct route_node *np;
 
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
-      if (rib->type == type)
+      if (rib->fib && rib->type == type && zebra_check_addr (&np->p))
 	zebra_ipv4_add (client->fd, type, (struct prefix_ipv4 *)&np->p,
 			&rib->u.gate4, 0);
 
 #ifdef HAVE_IPV6
   for (np = route_top (ipv6_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
-      if (rib->type == type)
+      if (rib->fib && rib->type == type && zebra_check_addr (&np->p))
 	zebra_ipv6_add (client->fd, type, (struct prefix_ipv6 *)&np->p,
 			&rib->u.gate6, 0);
 #endif /* HAVE_IPV6 */
@@ -93,7 +118,6 @@ zebra_redistribute_add (int command, struct zebra_client *client, int length)
 	  zebra_redistribute (client, ZEBRA_ROUTE_RIPNG);
 	}
       break;
-
     case ZEBRA_ROUTE_OSPF:
       if (! client->redist_ospf)
 	{
@@ -101,7 +125,6 @@ zebra_redistribute_add (int command, struct zebra_client *client, int length)
 	  zebra_redistribute (client, ZEBRA_ROUTE_OSPF);
 	}
       break;
-
     case ZEBRA_ROUTE_OSPF6:
       if (! client->redist_ospf6)
 	{
@@ -109,7 +132,6 @@ zebra_redistribute_add (int command, struct zebra_client *client, int length)
 	  zebra_redistribute (client, ZEBRA_ROUTE_OSPF6);
 	}
       break;
-
     case ZEBRA_ROUTE_BGP:
       if (! client->redist_bgp)
 	{
@@ -117,7 +139,6 @@ zebra_redistribute_add (int command, struct zebra_client *client, int length)
 	  zebra_redistribute (client, ZEBRA_ROUTE_BGP);
 	}
       break;
-
     default:
       break;
     }

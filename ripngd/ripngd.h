@@ -209,4 +209,15 @@ void ripng_info_free (struct ripng_info *rinfo);
 /* Function prototype for RIPngd event routine. */
 void ripng_event (enum event, int);
 
+void
+ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
+		      unsigned int ifindex);
+
+void
+ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
+			 unsigned int ifindex);
+
+void
+zebra_start ();
+
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

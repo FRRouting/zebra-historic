@@ -1,3 +1,8 @@
+1999-05-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_zebra): Send each ripng information by separate
+	zebra packet.
+
 1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripng_interface.c (if_add_multicast): Change log to zlog.

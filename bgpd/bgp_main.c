@@ -199,19 +199,16 @@ main (int argc, char **argv)
 	}
     }
 
-  /* Initializations. */
+  /* Make thread master. */
   master = thread_make_master ();
 
+  /* Initializations. */
   signal_init ();
   cmd_init ();
   vty_init ();
   memory_init ();
-
   bgp_init ();
-
   sort_node ();
-
-  /* aspath_test(); */
 
   /* Parse config file. */
   vty_read_config (config_file, config_current, config_default);
@@ -220,7 +217,7 @@ main (int argc, char **argv)
   if (daemon_mode)
     daemon (0, 0);
 
-  /* pid file create */
+  /* Process ID file creation. */
   pid_output (PATH_BGPD_PID);
 
   /* Make bgp vty socket. */
@@ -229,7 +226,7 @@ main (int argc, char **argv)
   vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT, AF_INET6);
 #endif
 
-  /* make BGP server fd */
+  /* Make BGP server socket. */
   bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET);
 #ifdef KAME
   bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET6);
@@ -238,14 +235,12 @@ main (int argc, char **argv)
   /* Print banner. */
   zlog (NULL, LOG_INFO, "BGPd (%s) starts", ZEBRA_VERSION);
 
+  /* Make connection with zebra daemon. */
+  zebra_start ();
+
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))
-    {
-      thread_call (&thread);
-#ifdef DEBUG
-      thread_master_debug (master);
-#endif /* DEBUG */
-    }
+    thread_call (&thread);
 
   /* Not reached. */
   exit (0);

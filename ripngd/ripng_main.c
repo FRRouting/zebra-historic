@@ -29,6 +29,7 @@
 #include "command.h"
 #include "thread.h"
 #include "log.h"
+#include "prefix.h"
 
 #include "ripngd/ripngd.h"
 #include "zebra/zebra.h"
@@ -165,7 +166,7 @@ main (int argc, char **argv)
   pid_output (PATH_RIPNGD_PID);
 
   /* Connect to zebra. */
-  zebra_create ();
+  zebra_start ();
 
   /* Fetch next active thread. */
   while (thread_fetch (master, &thread))

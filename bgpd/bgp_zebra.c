@@ -1,6 +1,6 @@
 /*
  * zebra connect library 
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -22,6 +22,7 @@
 
 #include <zebra.h>
 
+#include "zebra/zebra.h"
 #include "command.h"
 #include "stream.h"
 #include "network.h"
@@ -32,43 +33,14 @@
 #include "thread.h"
 #include "sockunion.h"
 #include "if.h"
+#include "zclient.h"
 
 #include "bgpd.h"
 #include "bgp_route.h"
 #include "bgp_attr.h"
-#include "zebra/zebra.h"
 
-/* Bgpd's zebra connection status. */
-struct zebra
-{
-  int enable;
-  int sock;
-
-  u_char redist_static;		/* Redistribute static route. */
-  u_char redist_connect;	/* Redistribute connected route. */
-  u_char redist_rip;		/* Redistribute rip route. */
-  u_char redist_ripng;		/* Redistribute ripng route. */
-
-  struct thread *t_read;
-  struct thread *t_write;
-
-  struct stream *ibuf;
-} zebra;
-
-void
-zebra_close ()
-{
-  if (zebra.sock > 0)
-    {
-      close (zebra.sock);
-      zebra.sock = -1;
-    }
-
-  stream_free (zebra.ibuf);
-
-  zebra.t_read = NULL;
-  zebra.t_write = NULL;
-}
+/* All information about zebra. */
+struct zebra *zebra = NULL;
 
 /* Update default router id. */
 int
@@ -105,13 +77,16 @@ bgp_if_update (struct interface *ifp)
 }
 
 /* Get all interface information. */
-void
-bgp_zebra_get_interface (struct stream *s)
+int
+bgp_get_all_interface (int command, struct zebra *zebra, zebra_size_t length)
 {
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
   unsigned long endp;
+  struct stream *s;
+
+  s = zebra->ibuf;
 
   endp = stream_get_endp (s);
 
@@ -162,18 +137,22 @@ bgp_zebra_get_interface (struct stream *s)
 	}
       bgp_if_update (ifp);
     }
+  return 0;
 }
 
 extern struct peer *peer_self;
 
 /* Zebra route add and delete treatment. */
-void
-zebra_read_ipv4 (int command, struct stream *s, u_short length)
+int
+zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
 {
   u_char type;
   struct in_addr nexthop;
   u_char *pnt;
   u_char *lim;
+  struct stream *s;
+
+  s = zebra->ibuf;
 
   pnt = stream_pnt (s);
   lim = pnt + length;
@@ -198,7 +177,7 @@ zebra_read_ipv4 (int command, struct stream *s, u_short length)
       pnt += size;
 
       bgp_info = bgp_info_new ();
-      bgp_info->type = ZEBRA_ROUTE_STATIC;
+      bgp_info->type = type;
       bgp_info->peer = peer_self;
       bgp_info->attr = bgp_attr_make_default ();
 
@@ -207,129 +186,99 @@ zebra_read_ipv4 (int command, struct stream *s, u_short length)
       else
 	;
     }
-}
-
-/* Read packet from zebra. */
-int
-zebra_read (struct thread *t)
-{
-  int nbytes;
-  int sock;
-  zebra_size_t length;
-  zebra_command_t command;
-
-  sock = THREAD_FD(t);
-
-  /* Clear input buffer. */
-  stream_reset (zebra.ibuf);
-
-  /* Read zebra header. */
-  nbytes = stream_read (zebra.ibuf, sock, ZEBRA_HEADER_SIZE);
-
-  /* zebra socket is closed. */
-  if (nbytes == 0) 
-    {
-      zlog (NULL, LOG_ERR, "connection closed socket [%d]", sock);
-      zebra_close ();
-      return -1;
-    }
-
-  /* zebra read error. */
-  if (nbytes < 0)
-    {
-      zlog (NULL, LOG_ERR, "cant read all packet");
-      zebra_close ();
-      return -1;
-    }
-
-  /* Fetch length and command. */
-  length = stream_getw (zebra.ibuf);
-  command = stream_getc (zebra.ibuf);
-
-  length -= ZEBRA_HEADER_SIZE;
-
-  /* Read rest of zebra packet. */
-  stream_read (zebra.ibuf, sock, length);
-
-  switch (command)
-    {
-    case ZEBRA_IPV4_ROUTE_ADD:
-    case ZEBRA_IPV4_ROUTE_DELETE:
-      zebra_read_ipv4 (command, zebra.ibuf, length);
-      break;
-    case ZEBRA_IPV6_ROUTE_ADD:
-      printf ("IPv6 route is added from zebra\n");
-      break;
-    case ZEBRA_IPV6_ROUTE_DELETE:
-      printf ("IPv6 route is deleted from zebra\n");
-      break;
-    case ZEBRA_GET_ALL_INTERFACE:
-      bgp_zebra_get_interface (zebra.ibuf);
-      break;
-    default:
-      break;
-    }
-
-  /* Re-register myself. */
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
-
   return 0;
 }
 
-/* Make zebra connection. */
+#ifdef HAVE_IPV6
+#include "buffer.h"		/* for GETL */
+
+/* Zebra route add and delete treatment. */
 int
-zebra_create ()
+zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
 {
-  /* Make socket. */
-  zebra.sock = zebra_connect ();
-  if (zebra.sock < 0)
-    return -1;
+  u_char type;
+  struct in6_addr nexthop;
+  u_char *pnt;
+  u_char *lim;
+  struct stream *s;
 
-  /* Input buffer. */
-  zebra.ibuf = stream_new (ZEBRA_MAX_PACKET_SIZ);
-  
-  /* Create read thread. */
-  zebra.t_read = thread_add_read (master, zebra_read, NULL, zebra.sock);
+  s = zebra->ibuf;
 
-  /* Get all interfaces. */
-  zebra_get_all_interface (zebra.sock);
+  pnt = stream_pnt (s);
+  lim = pnt + length;
 
+  /* Fetch type and nexthop first. */
+  type = *pnt++;
+  memcpy(&nexthop, pnt, sizeof (struct in6_addr));
+  pnt += sizeof (struct in6_addr);
+
+  /* Then fetch IPv4 prefixes. */
+  while (pnt < lim)
+    {
+      int size;
+      struct prefix_ipv6 p;
+      struct bgp_info *bgp_info;
+      unsigned int ifindex;
+
+      GETL (ifindex, pnt);
+
+      bzero (&p, sizeof (struct prefix_ipv6));
+      p.family = AF_INET6;
+      p.prefixlen = *pnt++;
+      size = PSIZE (p.prefixlen);
+      memcpy (&p.prefix, pnt, size);
+      pnt += size;
+
+      bgp_info = bgp_info_new ();
+      bgp_info->type = type;
+      bgp_info->peer = peer_self;
+      bgp_info->attr = bgp_attr_make_default ();
+
+      if (command == ZEBRA_IPV6_ROUTE_ADD)
+	nlri_process ((struct prefix *)&p, bgp_info);
+      else
+	;
+    }
   return 0;
 }
+#endif /* HAVE_IPV6 */
 
 /* Redistribute static */
 void
 bgp_zebra_redistribute (int type)
 {
-  if (zebra.redist_static)
+  if (zebra->redist[type])
     return;
 
-  zebra.redist_static = 1;
+  zebra->redist[type] = 1;
 
-  if (zebra.sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra.sock, type);
+  if (zebra->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, type);
 }
 
 void
 bgp_zebra_no_redistribute (int type)
 {
-  if (! zebra.redist_static)
+  if (! zebra->redist[type])
     return;
 
-  zebra.redist_static = 0;
+  zebra->redist[type] = 0;
 
-  if (zebra.sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra.sock, type);
+  if (zebra->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
 }
 
 void
 bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 {
-  if (zebra.sock < 0)
+  if (zebra->sock < 0)
+    return;
+
+  if (! zebra->redist[ZEBRA_ROUTE_BGP])
     return;
 
   if (p->family == AF_INET)
-    zebra_ipv4_add (zebra.sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv4 *)p,
+    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv4 *)p,
 		    &info->attr->nexthop, 0);
 #ifdef HAVE_IPV6
   /* We have to think about a IPv6 link-local address curse. */
@@ -363,7 +312,7 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
       if (IN6_IS_ADDR_LINKLOCAL (nexthop) && info->peer->ifname)
 	ifindex = if_nametoindex (info->peer->ifname);
 
-      zebra_ipv6_add (zebra.sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
+      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
 		      nexthop, ifindex);
     }
 #endif /* HAVE_IPV6 */
@@ -372,15 +321,18 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 void
 bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
 {
-  if (zebra.sock < 0)
+  if (zebra->sock < 0)
+    return;
+
+  if (! zebra->redist[ZEBRA_ROUTE_BGP])
     return;
 
   if (p->family == AF_INET)
-    zebra_ipv4_delete (zebra.sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv4 *)p,
+    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv4 *)p,
 		       &info->attr->nexthop, 0);
 #ifdef HAVE_IPV6
   if (p->family == AF_INET6)
-    zebra_ipv6_delete (zebra.sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
+    zebra_ipv6_delete (zebra->sock, ZEBRA_ROUTE_BGP, (struct prefix_ipv6 *)p,
 		       &info->attr->mp_nexthop_global, 0);
 #endif /* HAVE_IPV6 */
 }
@@ -393,18 +345,20 @@ DEFUN (router_zebra,
 {
   int ret;
 
+  vty->node = ZEBRA_NODE;
+
   /* Set router zebra is enabled. */
-  zebra.enable = 1;
+  zebra->enable = 1;
 
   /* If already has socket then return. */
-  if (zebra.sock >= 0)
+  if (zebra->sock >= 0)
     {
       vty_out (vty, "already connected to zebra\r\n");
       return CMD_WARNING;
     }
 
   /* Connect to zebra. */
-  ret = zebra_create ();
+  ret = zebra_create (zebra);
 
   if (ret < 0)
     {
@@ -414,12 +368,49 @@ DEFUN (router_zebra,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_router_zebra,
+       no_router_zebra_cmd,
+       "no router zebra",
+       NO_STR
+       "Configure routing process\n"
+       "Disable connection to zebra daemon\n")
+{
+  zebra->enable = 0;
+  return CMD_SUCCESS;
+}
+
+DEFUN (redistribute_bgp,
+       redistribute_bgp_cmd,
+       "redistribute bgp",
+       "Redistribute control\n"
+       "BGP route\n")
+{
+  zebra->redist[ZEBRA_ROUTE_BGP] = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_redistribute_bgp,
+       no_redistribute_bgp_cmd,
+       "no redistribute bgp",
+       NO_STR
+       "Redistribute control\n"
+       "BGP route\n")
+{
+  zebra->redist[ZEBRA_ROUTE_BGP] = 0;
+  return CMD_SUCCESS;
+}
+
 /* RIP configuration write function. */
 int
 zebra_config_write (struct vty *vty)
 {
-  if (zebra.enable)
-    vty_out (vty, "router zebra%s", VTY_NEWLINE);
+  if (! zebra->enable)
+    vty_out (vty, "no router zebra%s", VTY_NEWLINE);
+  else if (! zebra->redist[ZEBRA_ROUTE_BGP])
+    {
+      vty_out (vty, "router zebra%s", VTY_NEWLINE);
+      vty_out (vty, " no redistribute bgp%s", VTY_NEWLINE);
+    }
   return 0;
 }
 
@@ -430,19 +421,43 @@ struct cmd_node zebra_node =
   "%s(config-router)# ",
 };
 
+/* Start related zebra thread. */
+void
+zebra_start ()
+{
+  zebra_create (zebra);
+}
+
 void
 zebra_init (int enable)
 {
-  zebra.enable = 0;
-  zebra.sock = -1;
-  zebra.t_read = NULL;
-  zebra.t_write = NULL;
+  /* Allocate zebra structure. */
+  zebra = zebra_new ();
+
+  /* Set default values. */
+  zebra->enable = 1;
+  zebra->sock = -1;
+  zebra->redist_default = ZEBRA_ROUTE_BGP;
+  zebra->redist[ZEBRA_ROUTE_BGP] = 1;
+
+  /* Set call back functions. */
+  zebra->ipv4_route_add = zebra_read_ipv4;
+  zebra->ipv4_route_delete = zebra_read_ipv4;
+#ifdef HAVE_IPV6
+  zebra->ipv6_route_add = zebra_read_ipv6;
+  zebra->ipv6_route_delete = zebra_read_ipv6;
+#endif /* HAVE_IPV6 */
+  zebra->get_all_interface = bgp_get_all_interface;
 
   /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
 
   /* Install command element for zebra node. */ 
   install_element (CONFIG_NODE, &router_zebra_cmd);
+  install_element (CONFIG_NODE, &no_router_zebra_cmd);
+
+  install_element (ZEBRA_NODE, &redistribute_bgp_cmd);
+  install_element (ZEBRA_NODE, &no_redistribute_bgp_cmd);
 
   /* Interface related init. */
   if_init ();

@@ -148,14 +148,13 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
 	       struct sockaddr_in *from, struct interface *ifp)
 {
   int ret;
+  int same_as_exist;
   struct route_node *np;
 
   struct rip_info *rp;
   struct rip_info *rip;
   struct rip_info *connected;
 
-  /* Add interface's metric. */
-  rinfo->metric += ifp->metric;
 
   /* Get index for the prefix. */
   np = route_node_get (rip_table, (struct prefix *) p);
@@ -199,7 +198,7 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
   /* There are three cases of add|replace|update. */
   if (rip)
     {
-      if (IPV4_ADDR_CMP (&rip->from, &from->sin_addr) == 0)
+      if ((same_as_exist = (IPV4_ADDR_CMP (&rip->from, &from->sin_addr) == 0)))
 	{
 	  /* This is update of existing rip route. */
 	  zlog (NULL, LOG_INFO, "rip update route %s/%d", inet_ntoa (p->prefix), 
@@ -213,8 +212,13 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
 		  p->prefixlen);
 	}
 
-      /* Existance route's metric check. */
-      if (rinfo->metric >= rip->metric)
+      /* If the datagram is from the same router as the existing route, and
+         the new metric is different than the old one; or, if the new metric
+         is lower than the old one; do the following actions... RFC2453     */
+      if (!(   (same_as_exist && (rinfo->metric != rip->metric ))
+	    || (rinfo->metric < rip->metric)
+	   )
+	  )
 	{
 	  route_unlock_node (np);
 	  return 0;
@@ -225,13 +229,18 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
       rip->from = rinfo->from;
       rip->timer = rinfo->timer;
 
+
       /* Change nexthop address. */
       if (IPV4_ADDR_CMP (&rip->nexthop, &rinfo->nexthop) != 0)
 	{
 	  rip->nexthop = rinfo->nexthop;
 	  rip_zebra (ZEBRA_IPV4_ROUTE_ADD, p, &rinfo->nexthop);
 	}
+
+      /* Here I think an update must be triggered (Not implemented yet!)*/
+
       route_unlock_node (np);
+
     }
   else
     {
@@ -378,6 +387,17 @@ rip_process_route (struct rip_packet *packet, int size,
       return;
     }
 
+  /* "The datagram's IPv4 source address should be checked to see whether
+     the datagram is from a valid neighbor; the source of the datagram must
+     be on a directly connected network" (RFC2453 - Sec. 3.9.2)          */
+  if ( if_valid_neighbor(from->sin_addr)  ) 
+    {
+      zlog (NULL, LOG_INFO, "This datagram doesn't came from a valid neighbor: %s",
+	    inet_ntoa(from->sin_addr));
+      return;
+    }
+      
+
   time (&gettime);
 
   rte = packet->route;
@@ -424,14 +444,31 @@ rip_process_route (struct rip_packet *packet, int size,
       rinfo = rip_info_new ();
       rinfo->type = ZEBRA_ROUTE_RIP;
       rinfo->pref = 10;
+      /* Once the entry has been validated, update the metric by adding the
+         cost of the network on wich the message arrived. If the result is
+         greater than infinity, use infinity (RFC2453 Sec. 3.9.2)           */
       rinfo->metric = ntohl (rte->metric);
+      rinfo->metric += ifp->metric;
+      if (rinfo->metric > RIP_METRIC_INFINITY)
+	rinfo->metric = RIP_METRIC_INFINITY;
+
       rinfo->from = from->sin_addr;
       rinfo->tag = ntohl (rte->tag);
       rinfo->ifp = ifp;
+
+      /* Next Hop: The inmmediate next hop IP address wo which the packets to
+	 the destination specified by this route should be forwarded.
+	 Specifying a value of 0.0.0.0 in this field indicates that routing
+         should be via the originator of the RIP advertisement 
+	 (RFC2453 Sec. 4.4)*/
       if (ntohl (rte->nexthop) == 0)
 	rinfo->nexthop.s_addr = from->sin_addr.s_addr;
-      else
+      else {
+	/* An address specified as next hop must be directly reachable on
+	   the logical subnet which the advertisement is made 
+           (NOT CHECKED!!! MUST BE CHECKED)                                */
 	rinfo->nexthop.s_addr = rte->nexthop;
+      }
       rinfo->timer = gettime;
       
       /* Check nexthop address. */

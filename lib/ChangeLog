@@ -1,3 +1,16 @@
+1999-05-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (libzebra_a_SOURCES): Add zclient.c.
+	(noinst_HEADERS): Add zclient.h
+
+	* zclient.[ch]: New file for zebra client routine.
+
+	* memory.h (enum): Add MTYPE_ZEBRA.
+
+1999-05-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h (ZEBRA_VERSION): Update to 0.66.
+
 1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* buffer.h (GETC,GETW): Macro deleted.

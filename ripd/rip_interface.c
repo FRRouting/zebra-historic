@@ -190,7 +190,7 @@ ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
   return ret;
 }
 
-/* Multicast packet recieve socket. */
+/* Multicast packet receive socket. */
 void
 rip_multicast_enable (int sock)
 {
@@ -254,6 +254,54 @@ if_check_address (struct in_addr addr)
     }
   return 0;
 }
+
+/* is this address from a valid neighbor? (RFC2453 - Sec. 3.9.2) */
+int
+if_valid_neighbor (struct in_addr addr)
+{
+  listnode node;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      listnode cnode;
+      struct interface *ifp;
+
+      ifp = getdata (node);
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct connected *connected;
+	  struct prefix_ipv4 *p;
+	  struct prefix *pxn; /* Prefix of the neighbor */
+	  struct prefix *pxc; /* Prefix of the connected network */
+
+	  connected = getdata (cnode);
+	  p = (struct prefix_ipv4 *) connected->address;
+
+	  if (p->family != AF_INET)
+	    continue;
+
+
+          prefix_new(pxn);
+          pxn->family = AF_INET;
+          pxn->prefixlen = 32;
+          pxn->u.prefix4 = addr;
+          
+          prefix_new(pxc);
+          prefix_copy(pxc, (struct prefix *) p);
+          apply_mask( (struct prefix_ipv4 *) pxc);
+	  
+	  if (prefix_match(pxc, pxn)) {
+            prefix_free(pxn);
+            prefix_free(pxc);
+	    return 1;
+	  }
+          prefix_free(pxc);
+          prefix_free(pxn);
+	}
+    }
+  return 0;
+}
+
 
 /* Lookup interface by IPv4 address. */
 struct interface *

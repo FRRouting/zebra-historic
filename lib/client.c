@@ -1,6 +1,6 @@
 /*
  * zebra's client library.
- * Copyright (C) 1997, 1998 Kunihiro Ishiguro
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -29,7 +29,6 @@
 #include "network.h"
 #include "roken.h"
 
-/* Send redistribute message. */
 int
 zebra_redistribute_send (int command, int sock, int type)
 {
@@ -38,6 +37,7 @@ zebra_redistribute_send (int command, int sock, int type)
 
   s = stream_new (ZEBRA_MAX_PACKET_SIZ);
 
+  /* Total length of the messages. */
   stream_putw (s, 4);
   
   stream_putc (s, command);

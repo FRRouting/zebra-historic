@@ -64,6 +64,9 @@
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
 
+/* Define is disable-bgp-announce option is specified. */
+#undef DISABLE_BGP_ANNOUNCE
+
 /* Define this if htnol is broken, but can be fixed with define magic */
 #undef HAVE_REPAIRABLE_HTONL
 

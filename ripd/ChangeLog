@@ -1,3 +1,21 @@
+1999-05-20  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
+
+	* ripd.c (rip_add_route): Change the existance route's metric check
+          to the condition specified by RFC2453. 
+	
+1999-05-17  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
+
+	* ripd.c (rip_process_route): Add the if metric to the route metric.
+
+	* ripd.c (rip_add_route): Deleted add if metric to the route.
+
+1999-05-16  Carlos Alberto Barcenilla <barce@frlp.utn.edu.ar>
+
+	* rip_interface.c (if_valid_neighbor): New function.
+
+	* ripd.c (rip_process_route): Added check whether the datagram
+	is from a valid neighbor.
+	
 1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (rip_process_route): Set interface pointer to rinfo.

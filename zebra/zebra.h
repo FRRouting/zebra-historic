@@ -50,6 +50,7 @@
 #define ZEBRA_ROUTE_OSPF           6
 #define ZEBRA_ROUTE_OSPF6          7
 #define ZEBRA_ROUTE_BGP            8
+#define ZEBRA_ROUTE_MAX            9
 
 /* Default port information. */
 #define ZEBRA_PORT           2600

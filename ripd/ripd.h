@@ -186,6 +186,7 @@ struct rip_info *rip_info_new ();
 
 /* rip_interface.c */
 int if_check_address (struct in_addr addr);
+int if_valid_neighbor (struct in_addr addr);
 struct interface *if_lookup_address (struct in_addr addr);
 void rip_multicast_enable (int sock);
 void rip_request_all ();

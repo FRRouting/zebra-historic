@@ -10,13 +10,13 @@ libzebra_a_SOURCES = \
 	print_version.c checksum.c vector.c linklist.c dropline.c \
 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c \
 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c \
-	distribute.c stream.c str.c log.c regex.c plist.c
+	distribute.c stream.c str.c log.c regex.c plist.c zclient.c
 
 noinst_HEADERS = \
 	buffer.h client.h command.h dropline.h filter.h getopt.h hash.h \
 	if.h linklist.h log.h memory.h network.h prefix.h regex-gnu.h \
 	roken.h routemap.h sockunion.h str.h stream.h table.h thread.h \
-	vector.h version.h vty.h zebra.h plist.h
+	vector.h version.h vty.h zebra.h plist.h zclient.h
 
 version.c: Makefile
 	echo '' >version.c
@@ -62,3 +62,5 @@ vector.o: vector.c vector.h memory.h
 version.o: version.c
 vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
  sockunion.h thread.h memory.h str.h log.h prefix.h filter.h
+zclient.o: zclient.c ../zebra/zebra.h stream.h network.h thread.h \
+ memory.h prefix.h client.h zclient.h log.h

@@ -103,10 +103,11 @@ bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/regex-gnu.h ../bgpd/bgp_filter.h
 bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/routemap.h ../lib/command.h ../lib/vector.h \
- ../lib/vty.h ../lib/linklist.h ../lib/log.h ../bgpd/bgpd.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h
-bgp_zebra.o: bgp_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
- ../lib/stream.h ../lib/network.h ../lib/prefix.h ../lib/client.h \
- ../lib/roken.h ../lib/log.h ../lib/thread.h ../lib/sockunion.h \
- ../lib/if.h ../lib/linklist.h bgpd.h bgp_route.h bgp_attr.h \
- ../zebra/zebra.h
+ ../lib/vty.h ../lib/linklist.h ../lib/log.h ../lib/regex-gnu.h \
+ ../lib/buffer.h ../bgpd/bgpd.h ../bgpd/bgp_attr.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_regex.h
+bgp_zebra.o: bgp_zebra.c ../zebra/zebra.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/network.h \
+ ../lib/prefix.h ../lib/client.h ../lib/roken.h ../lib/log.h \
+ ../lib/thread.h ../lib/sockunion.h ../lib/if.h ../lib/linklist.h \
+ ../lib/zclient.h bgpd.h bgp_route.h bgp_attr.h

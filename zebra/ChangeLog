@@ -1,3 +1,20 @@
+1999-05-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h (ZEBRA_ROUTE_MAX): Add new define for the max value of
+	the sort of routes.
+
+1999-05-25  Patrick Koppen <koppen@rhrk.uni-kl.de>
+
+	* rt_netlink.c (netlink_socket): Make netlink socket non-blocking.
+	(netlink_parse_info): If errno is EWOULDBLOCK then continue to
+	parse the message.
+	(netlink_talk): Likewise
+	
+1999-05-17    <kunihiro@zebra.org>
+
+	* redistribute.c (zebra_check_addr): Added for loopback address
+	check.
+
 1999-05-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rt_netlink.c (netlink_route_change): Tempolary bypass ipv6 route

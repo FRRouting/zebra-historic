@@ -688,9 +688,8 @@ ripng_age ()
       if (rinfo)
 	if (rinfo->timer < (current_time - ripng->timeout_time))
 	  {
-	    zebra_ipv6_delete (zebra_sock() , ZEBRA_ROUTE_RIPNG, 
-			       (struct prefix_ipv6 *) &node->p,
-			       &rinfo->nexthop, rinfo->ifindex);
+	    ripng_zebra_ipv6_delete ((struct prefix_ipv6 *) &node->p,
+				     &rinfo->nexthop, rinfo->ifindex);
 
 	    ripng_info_free (rinfo);
 	    RIPNG_SLOT_RTE (slot) = NULL;
@@ -975,18 +974,13 @@ ripng_request (struct interface *ifp)
 int
 ripng_zebra (struct thread *thread)
 {
-  struct stream *s;
   struct route_node *node;
-  int zebra_write (struct stream *);
 
   /* First of all clear thread pointer. */
   ripng->t_zebra = NULL;
 
-  s = stream_new (ZEBRA_MAX_PACKET_SIZ);
-
   for (node = route_top (ripng_table); node; node = route_next (node))
     {
-      int size;
       struct ripng_slot *slot;
       struct ripng_info *rinfo;
       
@@ -998,37 +992,10 @@ ripng_zebra (struct thread *thread)
       if (rinfo == NULL)
 	continue;
 
-      /* If there is no zebra header or nexthop is different. */
-      if (stream_empty (s))
-	{
-	  /* Zebra packet length. */
-	  stream_putc (s, 0);
-	  stream_putc (s, 0);
-	  stream_putc (s, ZEBRA_IPV6_ROUTE_ADD);
-	  stream_putc (s, ZEBRA_ROUTE_RIPNG);
-	  stream_write (s, (u_char *)&rinfo->nexthop, 16);
-	}
-      stream_putl (s, rinfo->ifindex);
-      size = PSIZE (node->p.prefixlen);
-      stream_putc (s, node->p.prefixlen);
-      stream_write (s, &node->p.u.prefix, size);
-      rinfo->fib = 0;
-
-      if (stream_get_endp (s) >= ZEBRA_MAX_PACKET_SIZ - 20)
-	{
-	  stream_set_putp (s, 0);
-	  stream_putw (s, stream_get_endp (s));
-	  zebra_write (s);
-	  stream_reset (s);
-	}
+      ripng_zebra_ipv6_add ((struct prefix_ipv6 *)&node->p,
+			    &rinfo->nexthop, rinfo->ifindex);
     }
 
-  if (! stream_empty (s))
-    {
-      stream_set_putp (s, 0);
-      stream_putw (s, stream_get_endp (s));
-      zebra_write (s);
-    }
   return 0;
 }
 
