@@ -46,24 +46,40 @@ ospf6_vty (struct vty *vty)
 {
   listnode n;
   struct area *area;
-  char rid_buf[64];
-/*
-  vty_out (vty, "\tVersion: %d\tRouter-ID: %s%s",
-	   ospf6->version, 
-	   inet4str (ospf6->router_id),
-	   VTY_NEWLINE);
-*/
 
-  inet_ntop (AF_INET, &ospf6->router_id, rid_buf, sizeof (rid_buf));
+  /* process id, router id */
+  {
+    char rid_buf[64];
+    inet_ntop (AF_INET, &ospf6->router_id, rid_buf, sizeof (rid_buf));
+    vty_out (vty, " Routing Process (%lu) with ID %s%s",
+             ospf6->process_id, rid_buf, VTY_NEWLINE);
+  }
 
-  vty_out (vty, " Routing Process with ID %s%s", rid_buf, VTY_NEWLINE);
+  /* running time */
+  {
+    unsigned long day, hour, min, sec, left;
+    struct timeval now;
+
+    gettimeofday (&now, (struct timezone *)NULL);
+    left = now.tv_sec - ospf6->starttime.tv_sec;
+    day = left / 86400; left -= day * 86400;
+    hour = left / 3600; left -= hour * 3600;
+    min = left / 60;    left -= min * 60;
+    sec = left;
+    vty_out (vty, " Running %d days %d hours %d minutes %d seconds%s",
+             day, hour, min, sec, VTY_NEWLINE);
+  }
+
   vty_out (vty, " Supports only single TOS(TOS0) routes%s", VTY_NEWLINE);
 
+  /* Redistribute config */
   ospf6_vty_redistribute_config (vty, ospf6);
 
+  /* LSAs */
   vty_out (vty, " Number of AS scoped LSAs is %u%s",
            listcount (ospf6->lsdb), VTY_NEWLINE);
 
+  /* Areas */
   vty_out (vty, " Number of areas in this router is %u%s",
            listcount (ospf6->area_list), VTY_NEWLINE);
   for (n = listhead (ospf6->area_list); n; nextnode (n))
@@ -98,6 +114,7 @@ ospf6_make (void)
   ospf6 = ospf6_new ();
 
   /* initialize */
+  gettimeofday (&ospf6->starttime, (struct timezone *)NULL);
   ospf6->version = OSPF_V3;
   ospf6->ase_ls_id = 0;
   ospf6->area_list = list_init ();

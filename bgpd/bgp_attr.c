@@ -37,11 +37,11 @@
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
-#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_packet.h"
 
 /* Attribute strings for logging. */
-message attr_str [] = 
+struct message attr_str [] = 
 {
   { BGP_ATTR_ORIGIN,           "ORIGIN" }, 
   { BGP_ATTR_AS_PATH,          "AS_PATH" }, 
@@ -368,9 +368,8 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
     {
       zlog (peer->log, LOG_ERR, "Origin attribute length is not one [%d]",
 	    length);
-      bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR,
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR,
-		       NULL);
+      bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR, 
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
 
@@ -381,8 +380,7 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
 	    "Origin attribute flag isn't transitive [%d]", flag);
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_FLAG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_FLAG_ERR);
       return -1;
     }
 
@@ -398,8 +396,7 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
 	      attr->origin);
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_INVAL_ORIGIN,
-		       NULL);
+		       BGP_NOTIFY_UPDATE_INVAL_ORIGIN);
       return -1;
     }
 
@@ -429,10 +426,13 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
       zlog (peer->log, LOG_ERR, "Malformed AS path is coming", length);
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_MAL_AS_PATH,
-		       NULL);
+		       BGP_NOTIFY_UPDATE_MAL_AS_PATH);
       return -1;
     }
+
+  /* Validness check. */
+  if (aspath_loop_check (attr->aspath, peer->bgp->as))
+    attr->invalid = 1;
 
   /* Intern new AS path. */
   if (attr->aspath)
@@ -460,8 +460,7 @@ bgp_attr_nexthop (struct peer *peer, bgp_size_t length,
 
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
 
@@ -484,8 +483,7 @@ bgp_attr_med (struct peer *peer, bgp_size_t length,
       
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
 
@@ -523,8 +521,7 @@ bgp_attr_atomic (struct peer *peer, bgp_size_t length,
 
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
 
@@ -545,8 +542,7 @@ bgp_attr_aggregator (struct peer *peer, bgp_size_t length,
 
       bgp_notify_send (peer,
 		       BGP_NOTIFY_UPDATE_ERR,
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR,
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
   attr->aggregator_as = stream_getw (peer->ibuf);
@@ -590,8 +586,7 @@ bgp_attr_originator_id (struct peer *peer, bgp_size_t length,
 
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
 
@@ -614,8 +609,7 @@ bgp_attr_cluster_list (struct peer *peer, bgp_size_t length,
 
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return -1;
     }
 
@@ -631,7 +625,7 @@ bgp_attr_cluster_list (struct peer *peer, bgp_size_t length,
   return 0;
 }
 
-#ifdef HAVE_IPV6
+#if defined  HAVE_IPV6 || defined HAVE_MBGPV4
 /* Multiprotocol reachability information parse. */
 int
 bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
@@ -654,19 +648,35 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
   attr->mp_nexthop_len = stream_getc (peer->ibuf);
 
   /* Nexthop length check. */
-  if (attr->mp_nexthop_len == 16)
+  switch (attr->mp_nexthop_len)
     {
+#ifdef HAVE_MBGPV4
+    case 4:
+      stream_get (&attr->mp_nexthop_global_in, peer->ibuf, 4);
+      break;
+#endif /* HAVE_MBGPV4*/
+#ifdef HAVE_IPV6
+    case 16:
       stream_get (&attr->mp_nexthop_global, peer->ibuf, 16);
-    }
-  else if (attr->mp_nexthop_len == 32) 
-    {
+      break;
+    case 32:
       stream_get (&attr->mp_nexthop_global, peer->ibuf, 16);
-      stream_get (&attr->mp_nexthop_local, peer->ibuf, 16);
-    }
-  else
-    {
-      zlog (peer->log, LOG_INFO, "Next Hop Length is not 16 or 32");
+      /* If peer is not on shared network, ignore inbound 
+	 link-local addresses */
+      if (! peer->shared_network)
+	{
+	  attr->mp_nexthop_len = 16;
+	  memset(&attr->mp_nexthop_local, 0, IPV6_MAX_BYTELEN);
+	}
+      else
+	stream_get (&attr->mp_nexthop_local, peer->ibuf, 16);
+      break;
+#endif /* HAVE_IPV6 */
+    default:
+      zlog_info ("Wrong multiprotocol next hop length: %d", 
+		 attr->mp_nexthop_len);
       return -1;
+      break;
     }
 
   snpa_num = stream_getc (peer->ibuf);
@@ -686,7 +696,12 @@ bgp_mp_reach_parse (struct peer *peer, bgp_size_t length, struct attr *attr)
     }
 
   nlri_len = lim - stream_pnt (peer->ibuf);
-  nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET6);
+ 
+  if (afi == AFI_IP)
+    nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET, safi);
+  else if (afi == AFI_IP6)
+    nlri_parse (peer, attr, stream_pnt (peer->ibuf), nlri_len, AF_INET6, safi);
+
   stream_forward (peer->ibuf, nlri_len);
 
   return 0;
@@ -707,7 +722,10 @@ bgp_mp_unreach_parse (struct peer *peer, int length)
   afi = stream_getw (peer->ibuf);
   safi = stream_getc (peer->ibuf);
 
-  if (afi == AFI_IPV6 && safi == SAFI_UNICAST)
+
+
+#ifdef HAVE_IPV6
+  if (afi == AFI_IP6 && safi == SAFI_UNICAST)
     {
       while (stream_pnt (peer->ibuf) < lim)
 	{
@@ -718,7 +736,27 @@ bgp_mp_unreach_parse (struct peer *peer, int length)
 	  stream_get (&p.u.prefix6, peer->ibuf, psize);
 
 	  if (peer->family == AF_INET6)
-	    nlri_delete (peer, &p);
+	    nlri_delete (peer, &p, ZEBRA_ROUTE_BGP);
+	}
+    }
+  else 
+#endif /* HAVE_IPV6 */
+    if (afi == AFI_IP )
+    {
+      while (stream_pnt (peer->ibuf) < lim)
+	{
+	  bzero (&p, sizeof p);
+	  p.family = AF_INET;
+	  p.prefixlen = stream_getc (peer->ibuf);
+	  psize = PSIZE (p.prefixlen);
+	  stream_get (&p.u.prefix, peer->ibuf, psize);
+	  
+	  /* Fix here for SAFI_UNICAST_MULTICAST */
+#ifdef HAVE_MBGPV4
+	  p.safi = safi;
+#endif /* HAVE_MBGPV4 */
+
+	  nlri_delete (peer, &p, ZEBRA_ROUTE_BGP);
 	}
     }
   else
@@ -755,7 +793,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 		peer->host, endp - STREAM_PNT (BGP_INPUT (peer)));
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
-			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
 	}
 
       /* Fetch attribute flag and type. */
@@ -777,7 +815,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 		"neighbor %s: BGP type %d length %d is too large, attribute total length is %d.  attr_endp is %p.  endp is %p", peer->host, type, length, size, attr_endp, endp);
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
-			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
 	}
 
       /* OK check attribute and store it's value. */
@@ -817,14 +855,14 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	  ret = 0;
 	  stream_forward (peer->ibuf, length);
 	  break;
-#ifdef HAVE_IPV6
+#if defined  HAVE_IPV6 || defined HAVE_MBGPV4
 	case BGP_ATTR_MP_REACH_NLRI:
 	  ret = bgp_mp_reach_parse (peer, length, attr);
 	  break;
 	case BGP_ATTR_MP_UNREACH_NLRI:
 	  ret = bgp_mp_unreach_parse (peer, length);
 	  break;
-#endif /* HAVE_IPV6 */
+#endif /* HAVE_IPV6 || HAVE_MBGPV4*/
 	default:
 	  /* Unknown attribute treatment. */
 	  ret = 0;
@@ -845,7 +883,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 		"neighbor %s: BGP attribute fetch error %d.", peer->host);
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
-			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
 	}
     }
 
@@ -855,7 +893,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	    "neighbor %s: BGP attribute length mismatch.", peer->host);
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
     }
   return 0;
 }
@@ -893,7 +931,7 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
 	  /* Missing well known attribute. */
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
-			   BGP_NOTIFY_UPDATE_MISS_ATTR, NULL);
+			   BGP_NOTIFY_UPDATE_MISS_ATTR);
 	  return 1;
 	}
     }
@@ -911,7 +949,7 @@ bgp_attr_check (struct peer *peer, struct attr *attr)
 	  /* Missing well known attribute. */
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
-			   BGP_NOTIFY_UPDATE_MISS_ATTR, NULL);
+			   BGP_NOTIFY_UPDATE_MISS_ATTR);
 	  return 1;
 	}
     }
@@ -1069,7 +1107,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
       sizep = stream_get_putp (s);
       stream_putc (s, 0);	/* Length of this attribute. */
-      stream_putw (s, AFI_IPV6);	/* AFI */
+      stream_putw (s, AFI_IP6);	/* AFI */
       stream_putc (s, SAFI_UNICAST);	/* SAFI */
 
       stream_putc (s, attr->mp_nexthop_len);
@@ -1103,7 +1141,43 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
 	stream_putw_at (s, draftp, (stream_get_putp (s) - draftp) - 2);
     }
 #endif /* HAVE_IPV6 */
+#ifdef HAVE_MBGPV4 
+  if (p->family == AF_INET && p->safi == SAFI_MULTICAST)
+    {
+      unsigned long sizep;
+      unsigned long draftp = 0;
 
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
+      sizep = stream_get_putp (s);
+      stream_putc (s, 0);	/* Length of this attribute. */
+      stream_putw (s, AFI_IP);	/* AFI */
+      stream_putc (s, SAFI_MULTICAST);	/* SAFI */
+
+      stream_putc (s, 4);
+      stream_put_ipv4 (s, attr->nexthop.s_addr);
+
+      /* SNPA */
+      stream_putc (s, 0);
+
+      /* In case of old draft BGP-4+. */
+      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
+	{
+	  draftp = stream_get_putp (s);
+	  stream_putw (s, 0);
+	}
+      
+      /* Prefix write. */
+      stream_put_prefix (s, p);
+
+      /* Set MP attribute length. */
+      stream_putc_at (s, sizep, (stream_get_putp (s) - sizep) - 1);
+
+      /* In case of old draft BGP-4+. */
+      if (peer->version == BGP_VERSION_MP_4_DRAFT_00)
+	stream_putw_at (s, draftp, (stream_get_putp (s) - draftp) - 2);
+    }
+#endif /* HAVE_MBGPV4 */
   /* Return total size of attribute. */
   return stream_get_putp (s) - cp;
 }
@@ -1122,8 +1196,14 @@ bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p)
 
   attrlen_pnt = stream_get_putp (s);
   stream_putc (s, 0);		/* Length of this attribute. */
-  stream_putw (s, AFI_IPV6);	/* AFI */
+
+#ifdef HAVE_MBGPV4
+  stream_putw (s, AFI_IP);
+  stream_putc (s, p->safi);
+#else
+  stream_putw (s, AFI_IP6);	/* AFI */
   stream_putc (s, SAFI_UNICAST); /* SAFI */
+#endif /*  HAVE_MBGPV4 */
   
   /* Prefix write. */
   stream_put_prefix (s, p);

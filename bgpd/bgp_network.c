@@ -31,7 +31,7 @@
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
-#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 
 /* BGP socket bind. */
 int

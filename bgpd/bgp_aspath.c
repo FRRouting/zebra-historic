@@ -645,7 +645,7 @@ aspath_gettoken (char *buf, enum as_token *token, u_short *asno)
   char *p = buf;
 
   /* Skip space. */
-  while (isspace (*p))
+  while (isspace ((int) *p))
     p++;
 
   /* Check the end of the string and type specify characters
@@ -678,14 +678,14 @@ aspath_gettoken (char *buf, enum as_token *token, u_short *asno)
     }
 
   /* Check actual AS value. */
-  if (isdigit (*p)) 
+  if (isdigit ((int) *p)) 
     {
       u_short asval;
 
       *token = as_token_asval;
       asval = (*p - '0');
       p++;
-      while (isdigit (*p)) 
+      while (isdigit ((int) *p)) 
 	{
 	  asval *= 10;
 	  asval += (*p - '0');

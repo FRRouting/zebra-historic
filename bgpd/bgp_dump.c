@@ -1,6 +1,5 @@
-/*
- * BGP-4, BGP-4+, BGP-5 dump routine
- * Copyright (C) 1996, 97, 99 Kunihiro Ishiguro
+/* BGP-4 dump routine
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -22,624 +21,656 @@
 
 #include <zebra.h>
 
-#include "version.h"
-#include "prefix.h"
-#include "linklist.h"
-#include "stream.h"
-#include "command.h"
-#include "str.h"
 #include "log.h"
+#include "stream.h"
 #include "sockunion.h"
+#include "command.h"
+#include "prefix.h"
+#include "thread.h"
+#include "table.h"
 
 #include "bgpd/bgpd.h"
-#include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"
-#include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_dump.h"
-#include "bgpd/bgp_community.h"
-
-extern FILE *logfp;
-
-int dump_open;
-int dump_update;
-int dump_keepalive;
-int dump_notify;
-
-/* messages for BGP-4 status */
-message bgp_status_msg[] = 
-{
-  { 0, "null" },
-  { Idle, "Idle" },
-  { Connect, "Connect" },
-  { Active, "Active" },
-  { OpenSent, "OpenSent" },
-  { OpenConfirm, "OpenConfirm" },
-  { Established, "Established" },
-};
-int bgp_status_msg_max = BGP_STATUS_MAX;
-
-/* BGP message type string. */
-char *bgp_type_str[] =
-{
-  NULL,
-  "OPEN",
-  "UPDATE",
-  "NOTIFY",
-  "KEEPALIVE"
-};
-
-/* message for BGP-4 Notify */
-message bgp_notify_msg[] = 
-{
-  { 0, "null" },
-  { BGP_NOTIFY_HEADER_ERR, "Message Header Error"},
-  { BGP_NOTIFY_OPEN_ERR, "OPEN Message Error"},
-  { BGP_NOTIFY_UPDATE_ERR, "UPDATE Message Error"},
-  { BGP_NOTIFY_HOLD_ERR, "Hold Timer Expired"},
-  { BGP_NOTIFY_FSM_ERR, "Finite State Machine Error"},
-  { BGP_NOTIFY_CEASE, "Cease"},
-};
-int bgp_notify_msg_max = BGP_NOTIFY_MAX;
-
-message bgp_notify_head_msg[] = 
-{
-  { 0, "null"},
-  { BGP_NOTIFY_HEADER_NOT_SYNC, ""},
-  { BGP_NOTIFY_HEADER_BAD_MESLEN, ""},
-  { BGP_NOTIFY_HEADER_BAD_MESTYPE, ""}
-};
-int bgp_notify_head_msg_max = BGP_NOTIFY_HEADER_MAX;
-
-message bgp_notify_open_msg[] = 
-{
-  { 0, "null" },
-  { BGP_NOTIFY_OPEN_UNSUP_VERSION, "Unsupported Version Number." },
-  { BGP_NOTIFY_OPEN_BAD_PEER_AS, "Bad Peer AS."},
-  { BGP_NOTIFY_OPEN_BAD_BGP_IDENT, "Bad BGP Identifier."},
-  { BGP_NOTIFY_OPEN_UNSUP_PARAM, "Unsupported Optional Parameter."},
-  { BGP_NOTIFY_OPEN_AUTH_FAILURE, "Authentication Failure."},
-  { BGP_NOTIFY_OPEN_UNACEP_HOLDTIME, "Unacceptable Hold Time."}, 
-  { BGP_NOTIFY_OPEN_UNSUP_CAPBL, "Unsupported Capability."},
-};
-int bgp_notify_open_msg_max = BGP_NOTIFY_OPEN_MAX;
-
-message bgp_notify_update_msg[] = 
-{
-  { 0, "null"}, 
-  { BGP_NOTIFY_UPDATE_MAL_ATTR, "Malformed Attribute List."},
-  { BGP_NOTIFY_UPDATE_UNREC_ATTR, "Unrecognized Well-known Attribute."},
-  { BGP_NOTIFY_UPDATE_MISS_ATTR, "Missing Well-known Attribute."},
-  { BGP_NOTIFY_UPDATE_ATTR_FLAG_ERR, "Attribute Flags Error."},
-  { BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, "Attribute Length Error."},
-  { BGP_NOTIFY_UPDATE_INVAL_ORIGIN, "Invalid ORIGIN Attribute."},
-  { BGP_NOTIFY_UPDATE_AS_ROUTE_LOOP, "AS Routing Loop."},
-  { BGP_NOTIFY_UPDATE_INVAL_NEXT_HOP, "Invalid NEXT_HOP Attribute."},
-  { BGP_NOTIFY_UPDATE_OPT_ATTR_ERR, "Optional Attribute Error."},
-  { BGP_NOTIFY_UPDATE_INVAL_NETWORK, "Invalid Network Field."},
-  { BGP_NOTIFY_UPDATE_MAL_AS_PATH, "Malformed AS_PATH."},
-};
-int bgp_notify_update_msg_max = BGP_NOTIFY_UPDATE_MAX;
-
-/* Origin strings. */
-char *bgp_origin_str[] = {"i","e","?"};
-
-char *
-lookupmes (message *array, int key)
-{
-  message *pnt;
-
-  for (pnt = array; pnt->key != 0; pnt++) 
-    if (pnt->key == key) 
-      return pnt->str;
-
-  return NULL;
-}
-
-/* message lookup function */
-char *
-mes_lookup (message *meslist, int max, int index)
-{
-  if (index < 0 || index >= max) 
-    {
-      zlog (NULL, LOG_INFO, "message index out of bound: %d", max);
-      return NULL;
-    }
-  return meslist[index].str;
-}
-
-#if 0
-/* Dump bgp header information. */
-void
-bgp_dump_header (struct bgp_header *bgp_header)
-{
-  int flag = 0;
-
-  switch (bgp_header->type) 
-    {
-    case BGP_MSG_OPEN:
-      if (IS_SET(dump_open, DUMP_DETAIL))
-	flag = 1;
-      break;
-    case BGP_MSG_UPDATE:
-      if (IS_SET(dump_open, DUMP_DETAIL))
-	flag = 1;
-      break;
-    case BGP_MSG_KEEPALIVE:
-      if (IS_SET(dump_keepalive, DUMP_DETAIL))
-	flag = 1;
-      break;
-    default:
-      break;
-    }
-
-  if (flag) 
-    zlog (NULL, LOG_INFO, "Head: %s(%d) length(%d)",
-	    bgp_type_str[bgp_header->type], 
-	    bgp_header->type, bgp_header->length);
-}
-#endif
-
-/* Dump attribute. */
-void
-bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
-{
-  if (attr == NULL)
-    return;
-
-  snprintf (buf, size, "nexthop: %s", inet_ntoa (attr->nexthop));
-
-#ifdef HAVE_IPV6
-  {
-    char addrbuf[BUFSIZ];
-
-    /* Add MP case. */
-    if (attr->mp_nexthop_len == 16 || attr->mp_nexthop_len == 32)
-      snprintf (buf + strlen (buf), size - strlen (buf), " mp_nexthop: %s",
-		inet_ntop (AF_INET6, &attr->mp_nexthop_global, 
-			   addrbuf, BUFSIZ));
-
-    if (attr->mp_nexthop_len == 32)
-      snprintf (buf + strlen (buf), size - strlen (buf), "(%s)",
-		inet_ntop (AF_INET6, &attr->mp_nexthop_local, 
-			   addrbuf, BUFSIZ));
-  }
-#endif /* HAVE_IPV6 */
-
-  if (bgp_peer_sort (peer) == BGP_PEER_IBGP)
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " lpref: %d",
-		attr->local_pref);
-    }
-
-  if (attr->med)
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " metric: %d",
-		attr->med);
-    }
-
-  if (attr->community) 
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " comm:%s",
-		community_print (attr->community));
-    }
-
-  if (attr->aggregator_as)
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " aggregator: %s[%d]",
-		inet_ntoa (attr->aggregator_addr), attr->aggregator_as);
-    }
-
-  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " originator-id: %s ",
-		inet_ntoa (attr->originator_id));
-    }
-
-  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_CLUSTER_LIST))
-    {
-      int i;
-
-      snprintf (buf + strlen (buf), size - strlen (buf), "cluster-list: ");
-      for (i = 0; i < attr->cluster->length / 4; i++)
-	snprintf (buf + strlen (buf), size - strlen (buf), "%s ",
-		  inet_ntoa (attr->cluster->list[i]));
-    }
-
-  if (attr->aspath) 
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " aspath: %s %s",
-		aspath_print (attr->aspath), bgp_origin_str[attr->origin]);
-    }
-  else
-    {
-      snprintf (buf + strlen (buf), size - strlen (buf), " origin %s",
-		bgp_origin_str[attr->origin]);
-    }
-}
-
-/* dump notify packet */
-void
-bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify)
-{
-  char *subcode_str;
-
-  subcode_str = "";
-
-  switch (bgp_notify->err_code) 
-    {
-    case BGP_NOTIFY_HEADER_ERR:
-      subcode_str = LOOKUP (bgp_notify_head_msg, bgp_notify->err_subcode);
-      break;
-    case BGP_NOTIFY_OPEN_ERR:
-      subcode_str = LOOKUP (bgp_notify_open_msg, bgp_notify->err_subcode);
-      break;
-    case BGP_NOTIFY_UPDATE_ERR:
-      subcode_str = LOOKUP (bgp_notify_update_msg, bgp_notify->err_subcode);
-      break;
-    case BGP_NOTIFY_HOLD_ERR:
-      subcode_str = "";
-      break;
-    case BGP_NOTIFY_FSM_ERR:
-      subcode_str = "";
-      break;
-    case BGP_NOTIFY_CEASE:
-      subcode_str = "";
-      break;
-    }
-  zlog (peer->log, LOG_INFO, "Notify:[%s] %s (%s)",
-	peer ? peer->host : "",
-	LOOKUP (bgp_notify_msg, bgp_notify->err_code),
-	subcode_str);
-}
-
-#if 0
-/* Open packet dump */
-void
-bgp_open_dump (struct bgp_open *bgp_open, struct peer *peer, int direct)
-{
-  /* decide whether dump or not */
-  if (direct == PACKET_RECV &&
-      IS_SET(dump_open, DUMP_SEND)) {
-
-    if (IS_SET(dump_open, DUMP_DETAIL)) {
-      /* detail */
-      zlog (peer->log, LOG_INFO, "Open: peer(%s) version(%d) AS(%d) holdtime(%d)"
-	      "      ident(%lu) optlen(%d)",
-	      peer->host,
-	      bgp_open->version, bgp_open->asno, bgp_open->holdtime,
-	      bgp_open->ident, bgp_open->optlen);
-    } else {
-      /* normal */
-      zlog (peer->log, LOG_INFO, "Open: peer(%s)", peer->host);
-    }
-  }
-}
-#endif
-
-/* Dump BGP open packet. */
-void
-bgp_packet_open_dump (struct stream *s)
-{
-  printf ("BGP open ");
-  printf ("version: %d ", stream_getc (s));
-  printf ("as: %d ", stream_getw (s));
-  printf ("holdtime: %d ", stream_getw (s));
-  printf ("ident: %d\n", stream_getl (s));
-
-  /* Open message option. */
-  printf ("opt parm len: %d\n", stream_getc (s));
-}
-
-void
-bgp_packet_notify_dump (struct stream *s)
-{
-  struct bgp_notify bgp_notify;
-
-  bgp_notify.err_code = stream_getc (s);
-  bgp_notify.err_subcode = stream_getc (s);
-  bgp_notify_print(NULL, &bgp_notify);
-}
-
-/* Dump bgp update packet. */
-void
-bgp_update_dump (struct stream *s)
-{
-  u_char *endp;
-  bgp_size_t unfeasible_len;
-  bgp_size_t attr_total_len;
-
-  unfeasible_len = stream_getw (s);
-  printf ("Unfeasible length: %d\n", unfeasible_len);
-
-  stream_forward (s, unfeasible_len);
-
-  attr_total_len = stream_getw (s);
-  printf ("Attribute length: %d\n", attr_total_len);
-
-  endp = STREAM_PNT (s) + attr_total_len;
-
-  while (STREAM_PNT (s) < endp)
-    {
-      u_char flag;
-      u_char type;
-      bgp_size_t length;
-
-      flag = stream_getc (s);
-      type = stream_getc (s);
-
-      printf ("flag: %d\n", flag);
-      printf ("type: %d\n", type);
-  
-      if (flag & ATTR_FLAG_EXTLEN)
-	length = stream_getw (s);
-      else
-	length = stream_getc (s);
-
-      printf ("length %d\n", length);
-
-      stream_forward (s, length);
-    }
-}
-
-/* Debug dump of bgp packet. */
-void
-bgp_packet_dump (struct stream *s)
-{
-  int i;
-  u_char type;
-  u_int16_t size;
-  unsigned long sp;
-
-  /* Preserve pointer. */
-  sp = stream_get_getp (s);
-  stream_set_getp (s, 0);
-
-  /* Marker dump. */
-  printf ("BGP packet marker : ");
-  for (i = 0; i < BGP_MARKER_SIZE; i++)
-    printf ("%x ", stream_getc (s));
-  printf ("\n");
-
-  /* BGP packet size. */
-  size = stream_getw (s);
-  printf ("BGP packet size : %d\n", size);
-
-  /* BGP packet type. */
-  type = stream_getc (s);
-  printf ("BGP packet type : %s (%d)\n", bgp_type_str[type], type);
-
-  switch (type)
-    {
-    case BGP_MSG_OPEN:
-      bgp_packet_open_dump (s);
-      break;
-    case BGP_MSG_KEEPALIVE:
-      assert (size == BGP_HEADER_SIZE);
-      return;
-      break;
-    case BGP_MSG_UPDATE:
-      bgp_update_dump (s);
-      break;
-    case BGP_MSG_NOTIFY:
-      bgp_packet_notify_dump (s);
-      break;
-    }
-  stream_set_getp (s, sp);
-}
 
-/* Debug option setting interface. */
-unsigned long bgp_debug_option = 0;
-
-void debug_on  (unsigned int option) { bgp_debug_option |= option; }
-void debug_off (unsigned int option) { bgp_debug_option &= ~option; }
-int  debug     (unsigned int option) { return bgp_debug_option & option; }
-
-DEFUN (debug_bgp, debug_bgp_cmd,
-       "debug bgp DEBUG_OPT",
-       DEBUG_STR
-       BGP_STR
-       "Debug option set for bgpd\n")
+enum bgp_dump_type
 {
-  if (strcmp (argv[0], "fsm") == 0)
-    debug_on (DEBUG_BGP_FSM);
-  else
-    {
-      vty_out (vty, "debug option %s doesn't supported%s", argv[0],
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
-}
+  BGP_DUMP_ALL,
+  BGP_DUMP_UPDATES,
+  BGP_DUMP_ROUTES
+};
 
-DEFUN (no_debug_bgp, no_debug_bgp_cmd,
-       "no debug bgp DEBUG_OPT",
-       NO_STR
-       DEBUG_STR
-       BGP_STR
-       "Debug option unset for bgpd\n")
+struct bgp_dump
 {
-  if (strcmp (argv[0], "fsm") == 0)
-    debug_off (DEBUG_BGP_FSM);
-  else
-    {
-      vty_out (vty, "debug option %s doesn't supported%s", argv[0],
-	       VTY_NEWLINE);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
-}
+  enum bgp_dump_type type;
 
-DEFUN (show_debug_bgp, show_debug_bgp_cmd,
-       "show debug bgp",
-       SHOW_STR
-       DEBUG_STR
-       BGP_STR)
-{
-  vty_out (vty, "Debug option%s", VTY_NEWLINE);
-  vty_out (vty, "============%s", VTY_NEWLINE);
+  char *filename;
 
-  vty_out (vty, "debug bgp fsm : ");
-  if (debug (DEBUG_BGP_FSM))
-    vty_out (vty, "on%s", VTY_NEWLINE);
-  else
-    vty_out (vty, "off%s", VTY_NEWLINE);
+  FILE *fp;
 
-  return CMD_SUCCESS;
-}
+  unsigned int interval;
 
-/* debgp ip bgp [events|keepalives|updates] [recv|send] [detail] */
-DEFUN (debug_ip_bgp, debug_ip_bgp_cmd,
-       "debug ip bgp [DEBUG_OPTION]",
-       "Debug option\n"
-       "IP debug\n"
-       "BGP debug\n"
-       "BGP debug option\n"
-       "BGP debug option\n")
-{
-  /* All BGP option are set to normal level. */
-  if (argc == 0)
-    {
-      ;
-    }
-  if (argc == 1)
-    vty_out (vty, "option1 %s%s", argv[0],
-	     VTY_NEWLINE);
-  else if (argc == 2)
-    vty_out (vty, "option2 %s%s", argv[1],
-	     VTY_NEWLINE);
-  else
-    vty_out (vty, "no option%s",
-	     VTY_NEWLINE);
+  char *interval_str;
 
-  return CMD_SUCCESS;
-}
+  struct thread *t_interval;
+};
+
+/* BGP packet dump output buffer. */
+struct stream *bgp_dump_obuf;
+
+/* BGP dump strucuture for 'dump bgp all' */
+struct bgp_dump bgp_dump_all;
+
+/* BGP dump structure for 'dump bgp updates' */
+struct bgp_dump bgp_dump_updates;
+
+/* BGP dump structure for 'dump bgp routes' */
+struct bgp_dump bgp_dump_routes;
 
 /* Some define for BGP packet dump. */
-
-/* Type value */
-#define MSG_PROTOCOL_BGP4MP 16
-
-/* Subtype value */
-#define BGP4MP_STATE_CHANGE 0
-#define BGP4MP_MESSAGE 1
-#define BGP4MP_ENTRY 2
-#define BGP4MP_SNAPSHOT 3
-
-/* BGP packet dump file name. */
-char *bgp_dump_file;
-FILE *bgp_dump_fp;
-
 FILE *
-bgp_open_dump_file (char *filename)
+bgp_dump_open_file (struct bgp_dump *bgp_dump)
 {
-  if (bgp_dump_fp)
-    fclose (bgp_dump_fp);
-
-  bgp_dump_fp = fopen (filename, "w");
-  if (bgp_dump_fp == NULL)
-    return NULL;
-
-  bgp_dump_file = strdup (filename);
-
-  return bgp_dump_fp;
-}
-
-/* Set packet dump header. */
-void
-bgp_dump_set_header (struct stream *s)
-{
+  int ret;
   time_t clock;
+  struct tm *tm;
+  char fullpath[MAXPATHLEN];
+  char realpath[MAXPATHLEN];
 
   time (&clock);
+  tm = localtime (&clock);
 
-  stream_putl (s, clock);	/* Time */
-  stream_putw (s, MSG_PROTOCOL_BGP4MP);	/* Type */
-  stream_putw (s, BGP4MP_MESSAGE);	/* Subtype */
-  stream_putl (s, 0);		/* Length */
+  if (bgp_dump->filename[0] != DIRECTORY_SEP)
+    {
+      sprintf (fullpath, "%s/%s", vty_get_cwd (), bgp_dump->filename);
+      ret = strftime (realpath, MAXPATHLEN, fullpath, tm);
+    }
+  else
+    ret = strftime (realpath, MAXPATHLEN, bgp_dump->filename, tm);
+
+  if (ret == 0)
+    {
+      zlog_warn ("bgp_dump_open_file: strftime error");
+      return NULL;
+    }
+
+  if (bgp_dump->fp)
+    fclose (bgp_dump->fp);
+
+
+  bgp_dump->fp = fopen (realpath, "w");
+
+  if (bgp_dump->fp == NULL)
+    return NULL;
+
+  return bgp_dump->fp;
+}
+
+int
+bgp_dump_interval_add (struct bgp_dump *bgp_dump, int interval)
+{
+  int bgp_dump_interval_func (struct thread *);
+
+  bgp_dump->t_interval = thread_add_timer (master, bgp_dump_interval_func, 
+					   bgp_dump, interval);
+  return 0;
+}
+
+/* Dump common header. */
+void
+bgp_dump_header (struct stream *obuf, int subtype)
+{
+  time_t now;
+
+  /* Set header. */
+  time (&now);
+
+  /* Put dump packet header. */
+  stream_putl (obuf, now);	
+  stream_putw (obuf, MSG_PROTOCOL_BGP4MP);
+  stream_putw (obuf, subtype);
+
+  /* Placeholder for length. */
+  stream_putl (obuf, 0);
+}
+
+void
+bgp_dump_routes_entry (struct bgp_info *info, int afi)
+{
+  struct stream *obuf;
+  int safi = 0;
+
+  /* Make dump stream. */
+  obuf = bgp_dump_obuf;
+  stream_reset (obuf);
+
+  bgp_dump_header (obuf, BGP4MP_ENTRY);
+
+  stream_putw (obuf, 0);	/* View # */
+  stream_putw (obuf, 0);	/* Status */
+  stream_putl (obuf, info->uptime); /* Time Last Change */
+  stream_putw (obuf, afi);	/* Address Family */
+  stream_putc (obuf, safi);	/* SAFI */
+
+  if (afi == AFI_IP)
+    {
+      stream_putc (obuf, IPV4_MAX_BYTELEN);
+      /* info->attr->; */
+    }
+#ifdef HAVE_IPV6
+  else if (afi == AFI_IP6)
+    {
+      stream_putc (obuf, 0);
+      ;
+    }
+#endif /* HAVE_IPV6 */
+}
+
+/* Runs under child process. */
+void
+bgp_dump_routes_func ()
+{
+  struct route_node *node;
+  struct bgp_info *info;
+  extern struct route_table *bgp_table_ipv4;
+#ifdef HAVE_IPV6
+  extern struct route_table *bgp_table_ipv6;
+#endif /* HAVE_IPV6 */
+
+  for (node = route_top (bgp_table_ipv4); node; node = route_next (node))
+    for (info = node->info; info; info = info->next)
+      bgp_dump_routes_entry (info, AFI_IP);
+
+#ifdef HAVE_IPV6
+  for (node = route_top (bgp_table_ipv6); node; node = route_next (node))
+    for (info = node->info; info; info = info->next)
+      bgp_dump_routes_entry (info, AFI_IP6);
+#endif /* HAVE_IPV6 */
+
+  /*  Close file pointer ?*/
+}
+
+/* Dump all routing table to the file. */
+void
+bgp_dump_routes_fork ()
+{
+  pid_t pid;
+
+  pid = fork ();
+
+  if (pid < 0)
+    {
+      zlog_info ("bgp_dump_routes_fork: fork error %s", strerror (errno));
+      return;
+    }
+  else if (pid > 0)
+    {
+      /* Parent. */
+      /* waidpid ? */
+      /* close fd ? */
+      return;
+    }
+
+  /* Real job. */
+  bgp_dump_routes_func ();
+
+  exit (0);
+}
+
+int
+bgp_dump_interval_func (struct thread *t)
+{
+  struct bgp_dump *bgp_dump;
+
+  bgp_dump = THREAD_ARG (t);
+  bgp_dump->t_interval = NULL;
+
+  if (bgp_dump_open_file (bgp_dump) == NULL)
+    return 0;
+
+  /* In case of bgp_dump_routes, we need special route dump function. */
+  if (bgp_dump->type == BGP_DUMP_ROUTES)
+    bgp_dump_routes_fork ();
+
+  bgp_dump_interval_add (bgp_dump, bgp_dump->interval);
+  
+  return 0;
 }
 
 void
 bgp_dump_set_size (struct stream *s)
 {
   /* If size is specifed use it. */
-  stream_putl_at (s, 8, stream_get_endp (s));
-
+  stream_putl_at (s, 8, stream_get_putp (s) - BGP_DUMP_HEADER_SIZE);
   return;
 }
 
-/* Dump incoming BGP packet into the file.  */
+/* Dump common information. */
 void
-bgp_dump_incoming (struct peer *peer, struct stream *packet)
+bgp_dump_common (struct stream *obuf, struct peer *peer)
 {
-  struct stream *s;
+  char empty[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+  /* Source AS number and Destination AS number. */
+  stream_putw (obuf, peer->as);
+  stream_putw (obuf, peer->bgp->as);
+
+  if (peer->family == AF_INET)
+    {
+      stream_putw (obuf, peer->ifindex);
+      stream_putw (obuf, AFI_IP);
+
+      if (peer->su)
+	stream_put (obuf, &peer->su->sin.sin_addr, IPV4_MAX_BYTELEN);
+      else
+	stream_put (obuf, empty, IPV4_MAX_BYTELEN);
+
+      if (peer->su_local)
+	stream_put (obuf, &peer->su_local->sin.sin_addr, IPV4_MAX_BYTELEN);
+      else
+	stream_put (obuf, empty, IPV4_MAX_BYTELEN);
+    }
+#ifdef HAVE_IPV6
+  else if (peer->family == AF_INET6)
+    {
+      /* Interface Index and Address family. */
+      stream_putw (obuf, peer->ifindex);
+      stream_putw (obuf, AFI_IP6);
+
+      /* Source IP Address and Destination IP Address. */
+      if (peer->su)
+	stream_put (obuf, &peer->su->sin6.sin6_addr, IPV6_MAX_BYTELEN);
+      else
+	stream_put (obuf, empty, IPV6_MAX_BYTELEN);
+
+      if (peer->su_local)
+	stream_put (obuf, &peer->su_local->sin6.sin6_addr, IPV6_MAX_BYTELEN);
+      else
+	stream_put (obuf, empty, IPV6_MAX_BYTELEN);
+    }
+#endif /* HAVE_IPV6 */
+}
+
+/* Dump BGP status change. */
+void
+bgp_dump_state (struct peer *peer, int status_old, int status_new)
+{
+  struct stream *obuf;
 
   /* If dump file pointer is disabled return immediately. */
-  if (bgp_dump_fp == NULL)
+  if (bgp_dump_all.fp == NULL)
     return;
 
   /* Make dump stream. */
-  s = stream_new (BGP_MAX_PACKET_SIZE);
+  obuf = bgp_dump_obuf;
+  stream_reset (obuf);
 
-  /* Set header. */
-  bgp_dump_set_header (s);
+  bgp_dump_header (obuf, BGP4MP_STATE_CHANGE);
+  bgp_dump_common (obuf, peer);
 
-  /* Source AS number and Destination AS number. */
-  stream_putw (s, peer->as);
-  stream_putw (s, peer->bgp->as);
+  stream_putw (obuf, status_old);
+  stream_putw (obuf, status_new);
 
-#ifdef HAVE_IPV6
-  /* Interface Index and Address family. */
-  stream_putw (s, 0);
-  stream_putw (s, AF_INET6);
-
-  /* Source IP Address and Destination IP Address. */
-  stream_put (s, &peer->su->sin6.sin6_addr, 16);
-  stream_put (s, &peer->su->sin6.sin6_addr, 16);
-#endif /* HAVE_IPV6 */
-
-  /* Packet contents. */
-  stream_put (s, STREAM_DATA (packet), stream_get_endp (packet));
-  
   /* Set length. */
-  bgp_dump_set_size (s);
+  bgp_dump_set_size (obuf);
 
   /* Write to the stream. */
-  fwrite (STREAM_DATA (s), stream_get_putp (s), 1, bgp_dump_fp);
-  fflush (bgp_dump_fp);
-
-  /* Free dump stream. */
-  stream_free (s);
-}
-
-/* BGP packet dump file name setup. */
-DEFUN (config_dumpfile,
-       config_dumpfile_cmd,
-       "dumpfile PATH",
-       "BGP Packet dumpfile specify command\n"
-       "Path name of dumpfile\n")
-{
-  FILE *fp;
-
-  fp = bgp_open_dump_file (argv[0]);
-  if (fp == NULL)
-    {
-      vty_out (vty, "Can't open dumpfile %s\n", argv[0]);
-      return CMD_WARNING;
-    }
-  return CMD_SUCCESS;
+  fwrite (STREAM_DATA (obuf), stream_get_putp (obuf), 1, bgp_dump_all.fp);
+  fflush (bgp_dump_all.fp);
 }
 
 void
+bgp_dump_packet_func (struct bgp_dump *bgp_dump, struct peer *peer,
+		      struct stream *packet)
+{
+  struct stream *obuf;
+
+  /* If dump file pointer is disabled return immediately. */
+  if (bgp_dump->fp == NULL)
+    return;
+
+  /* Make dump stream. */
+  obuf = bgp_dump_obuf;
+  stream_reset (obuf);
+
+  /* Dump header and common part. */
+  bgp_dump_header (obuf, BGP4MP_MESSAGE);
+  bgp_dump_common (obuf, peer);
+
+  /* Packet contents. */
+  stream_put (obuf, STREAM_DATA (packet), stream_get_endp (packet));
+  
+  /* Set length. */
+  bgp_dump_set_size (obuf);
+
+  /* Write to the stream. */
+  fwrite (STREAM_DATA (obuf), stream_get_putp (obuf), 1, bgp_dump->fp);
+  fflush (bgp_dump->fp);
+}
+
+void
+bgp_dump_packet (struct peer *peer, int type, struct stream *packet)
+{
+  /* bgp_dump_all. */
+  bgp_dump_packet_func (&bgp_dump_all, peer, packet);
+
+  /* bgp_dump_updates. */
+  if (type == BGP_MSG_UPDATE)
+    bgp_dump_packet_func (&bgp_dump_updates, peer, packet);
+}
+
+unsigned int
+bgp_dump_parse_time (char *str)
+{
+  int i;
+  int len;
+  int seen_h;
+  int seen_m;
+  int time;
+  unsigned int total;
+
+  time = 0;
+  total = 0;
+  seen_h = 0;
+  seen_m = 0;
+  len = strlen (str);
+
+  for (i = 0; i < len; i++)
+    {
+      if (isdigit ((int) str[i]))
+	{
+	  time *= 10;
+	  time += str[i] - '0';
+	}
+      else if (str[i] == 'H' || str[i] == 'h')
+	{
+	  if (seen_h)
+	    return 0;
+	  if (seen_m)
+	    return 0;
+	  total += time * 60 *60;
+	  time = 0;
+	  seen_h = 1;
+	}
+      else if (str[i] == 'M' || str[i] == 'm')
+	{
+	  if (seen_m)
+	    return 0;
+	  total += time * 60;
+	  time = 0;
+	  seen_h = 1;
+	}
+      else
+	return 0;
+    }
+  return total + time;
+}
+
+int
+bgp_dump_set (struct vty *vty, struct bgp_dump *bgp_dump, int type,
+	      char *path, char *interval_str)
+{
+  if (interval_str)
+    {
+      unsigned int interval;
+
+      /* Check interval string. */
+      interval = bgp_dump_parse_time (interval_str);
+      if (interval == 0)
+	{
+	  vty_out (vty, "Malformed interval string%s", VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      /* Set interval. */
+      bgp_dump->interval = interval;
+      if (bgp_dump->interval_str)
+	free (bgp_dump->interval_str);
+      bgp_dump->interval_str = strdup (interval_str);
+
+      /* Create interval thread. */
+      bgp_dump_interval_add (bgp_dump, interval);
+    }
+
+  /* Set type. */
+  bgp_dump->type = type;
+
+  /* Set file name. */
+  if (bgp_dump->filename)
+    free (bgp_dump->filename);
+  bgp_dump->filename = strdup (path);
+
+  /* This should be called when interval is expired. */
+  bgp_dump_open_file (bgp_dump);
+
+  return CMD_SUCCESS;
+}
+
+int
+bgp_dump_unset (struct vty *vty, struct bgp_dump *bgp_dump)
+{
+  /* Set file name. */
+  if (bgp_dump->filename)
+    {
+      free (bgp_dump->filename);
+      bgp_dump->filename = NULL;
+    }
+
+  /* This should be called when interval is expired. */
+  if (bgp_dump->fp)
+    {
+      fclose (bgp_dump->fp);
+      bgp_dump->fp = NULL;
+    }
+
+  /* Create interval thread. */
+  if (bgp_dump->t_interval)
+    {
+      thread_cancel (bgp_dump->t_interval);
+      bgp_dump->t_interval = NULL;
+    }
+
+  bgp_dump->interval = 0;
+
+  if (bgp_dump->interval_str)
+    {
+      free (bgp_dump->interval_str);
+      bgp_dump->interval_str = NULL;
+    }
+  
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (dump_bgp_all,
+       dump_bgp_all_cmd,
+       "dump bgp all PATH",
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump all BGP packets\n"
+       "Output filename\n")
+{
+  return bgp_dump_set (vty, &bgp_dump_all, BGP_DUMP_ALL, argv[0], NULL);
+}
+
+DEFUN (dump_bgp_all_interval,
+       dump_bgp_all_interval_cmd,
+       "dump bgp all PATH INTERVAL",
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump all BGP packets\n"
+       "Output filename\n"
+       "Interval of output\n")
+{
+  return bgp_dump_set (vty, &bgp_dump_all, BGP_DUMP_ALL, argv[0], argv[1]);
+}
+
+DEFUN (no_dump_bgp_all,
+       no_dump_bgp_all_cmd,
+       "no dump bgp all [PATH] [INTERVAL]",
+       NO_STR
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump all BGP packets\n")
+{
+  return bgp_dump_unset (vty, &bgp_dump_all);
+}
+
+DEFUN (dump_bgp_updates,
+       dump_bgp_updates_cmd,
+       "dump bgp updates PATH",
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump BGP updates only\n"
+       "Output filename\n")
+{
+  return bgp_dump_set (vty, &bgp_dump_updates, BGP_DUMP_UPDATES, argv[0], NULL);
+}
+
+DEFUN (dump_bgp_updates_interval,
+       dump_bgp_updates_interval_cmd,
+       "dump bgp updates PATH INTERVAL",
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump BGP updates only\n"
+       "Output filename\n"
+       "Interval of output\n")
+{
+  return bgp_dump_set (vty, &bgp_dump_updates, BGP_DUMP_UPDATES, argv[0], argv[1]);
+}
+
+DEFUN (no_dump_bgp_updates,
+       no_dump_bgp_updates_cmd,
+       "no dump bgp updates [PATH] [INTERVAL]",
+       NO_STR
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump BGP updates only\n")
+{
+  return bgp_dump_unset (vty, &bgp_dump_updates);
+}
+
+DEFUN (dump_bgp_routes,
+       dump_bgp_routes_cmd,
+       "dump bgp routes PATH",
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump whole BGP routing table\n"
+       "Output filename\n")
+{
+  return bgp_dump_set (vty, &bgp_dump_routes, BGP_DUMP_ROUTES, argv[0], NULL);
+}
+
+DEFUN (dump_bgp_routes_interval,
+       dump_bgp_routes_interval_cmd,
+       "dump bgp routes PATH INTERVAL",
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump whole BGP routing table\n"
+       "Output filename\n"
+       "Interval of output\n")
+{
+  return bgp_dump_set (vty, &bgp_dump_routes, BGP_DUMP_ROUTES, argv[0], argv[1]);
+}
+
+DEFUN (no_dump_bgp_routes,
+       no_dump_bgp_routes_cmd,
+       "no dump bgp routes [PATH] [INTERVAL]",
+       NO_STR
+       "Dump packet\n"
+       "BGP packet dump\n"
+       "Dump whole BGP routing table\n")
+{
+  return bgp_dump_unset (vty, &bgp_dump_routes);
+}
+
+/* BGP node structure. */
+struct cmd_node bgp_dump_node =
+{
+  DUMP_NODE,
+  "",
+};
+
+#if 0
+char *
+config_time2str (unsigned int interval)
+{
+  static char buf[BUFSIZ];
+
+  buf[0] = '\0';
+
+  if (interval / 3600)
+    {
+      sprintf (buf, "%dh", interval / 3600);
+      interval %= 3600;
+    }
+  if (interval / 60)
+    {
+      sprintf (buf + strlen (buf), "%dm", interval /60);
+      interval %= 60;
+    }
+  if (interval)
+    {
+      sprintf (buf + strlen (buf), "%d", interval);
+    }
+  return buf;
+}
+#endif
+
+int
+config_write_bgp_dump (struct vty *vty)
+{
+  if (bgp_dump_all.filename)
+    {
+      if (bgp_dump_all.interval_str)
+	vty_out (vty, "dump bgp all %s %s%s", 
+		 bgp_dump_all.filename, bgp_dump_all.interval_str,
+		 VTY_NEWLINE);
+      else
+	vty_out (vty, "dump bgp all %s%s", 
+		 bgp_dump_all.filename, VTY_NEWLINE);
+    }
+  if (bgp_dump_updates.filename)
+    {
+      if (bgp_dump_updates.interval_str)
+	vty_out (vty, "dump bgp updates %s %s%s", 
+		 bgp_dump_updates.filename, bgp_dump_updates.interval_str,
+		 VTY_NEWLINE);
+      else
+	vty_out (vty, "dump bgp updates %s%s", 
+		 bgp_dump_updates.filename, VTY_NEWLINE);
+    }
+  if (bgp_dump_routes.filename)
+    {
+      if (bgp_dump_routes.interval_str)
+	vty_out (vty, "dump bgp routes %s %s%s", 
+		 bgp_dump_routes.filename, bgp_dump_routes.interval_str,
+		 VTY_NEWLINE);
+      else
+	vty_out (vty, "dump bgp routes %s%s", 
+		 bgp_dump_routes.filename, VTY_NEWLINE);
+    }
+  return 0;
+}
+
+/* Initialize BGP packet dump functionality. */
+void
 bgp_dump_init ()
 {
-  bgp_dump_fp = NULL;
+  memset (&bgp_dump_all, 0, sizeof (struct bgp_dump));
+  memset (&bgp_dump_updates, 0, sizeof (struct bgp_dump));
+  memset (&bgp_dump_routes, 0, sizeof (struct bgp_dump));
 
-  install_element (VIEW_NODE, &show_debug_bgp_cmd);
-  install_element (ENABLE_NODE, &show_debug_bgp_cmd);
-  install_element (ENABLE_NODE, &debug_bgp_cmd);
-  install_element (CONFIG_NODE, &debug_bgp_cmd);
-  install_element (ENABLE_NODE, &no_debug_bgp_cmd);
-  install_element (CONFIG_NODE, &config_dumpfile_cmd);
+  bgp_dump_obuf = stream_new (BGP_MAX_PACKET_SIZE + BGP_DUMP_HEADER_SIZE);
 
-  install_element (ENABLE_NODE, &debug_ip_bgp_cmd);
+  install_node (&bgp_dump_node, config_write_bgp_dump);
+
+  install_element (CONFIG_NODE, &dump_bgp_all_cmd);
+  install_element (CONFIG_NODE, &dump_bgp_all_interval_cmd);
+  install_element (CONFIG_NODE, &no_dump_bgp_all_cmd);
+  install_element (CONFIG_NODE, &dump_bgp_updates_cmd);
+  install_element (CONFIG_NODE, &dump_bgp_updates_interval_cmd);
+  install_element (CONFIG_NODE, &no_dump_bgp_updates_cmd);
+  install_element (CONFIG_NODE, &dump_bgp_routes_cmd);
+  install_element (CONFIG_NODE, &dump_bgp_routes_interval_cmd);
+  install_element (CONFIG_NODE, &no_dump_bgp_routes_cmd);
 }

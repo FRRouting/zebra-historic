@@ -20,4 +20,19 @@
  * 02111-1307, USA.  
  */
 
-void bgp_open_option_parse (struct peer *peer, u_char length);
+#ifndef _ZEBRA_BGP_OPEN_H
+#define _ZEBRA_BGP_OPEN_H
+
+/* Multiprotocol Extensions capabilities. */
+#define CAPABILITY_CODE_MP            1
+#define CAPABILITY_CODE_MP_LEN        4
+
+/* Route refresh capabilities. */
+#define CAPABILITY_CODE_REFRESH     128
+#define CAPABILITY_CODE_REFRESH_LEN   0
+
+int bgp_open_option_parse (struct peer *, u_char);
+void bgp_open_capability (struct stream *, struct peer *);
+void bgp_capability_vty_out (struct vty *, struct peer *);
+
+#endif /* _ZEBRA_BGP_OPEN_H */

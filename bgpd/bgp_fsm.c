@@ -34,12 +34,12 @@
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
-#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_route.h"
-
+#include "bgpd/bgp_dump.h"
 
 /* BGP FSM (finite state machine) has three types of functions.  Type
    one is thread functions.  Type two is event functions.  Type three
@@ -384,7 +384,7 @@ void
 fsm_holdtime (struct peer *peer)
 {
   /* Send notify to remote peer. */
-  bgp_notify_send (peer, BGP_NOTIFY_HOLD_ERR, 0, NULL);
+  bgp_notify_send (peer, BGP_NOTIFY_HOLD_ERR, 0);
 }
 
 /* Called after event occured, this function change status and reset
@@ -398,6 +398,8 @@ fsm_change_status (struct peer *peer, int status)
 	  peer->host,
 	  LOOKUP (bgp_status_msg, peer->status),
 	  LOOKUP (bgp_status_msg, status));
+
+  bgp_dump_state (peer, peer->status, status);
 
   /* Preserve old status and change into new status. */
   peer->ostatus = peer->status;
@@ -425,6 +427,16 @@ fsm_holdtime_expire (struct peer *peer)
 void
 bgp_establish (struct peer *peer)
 {
+  if (! peer->capability_open)
+    peer->capability_open = 1;
+
+  if (peer->notify_data)
+    {
+      XFREE (MTYPE_TMP, peer->notify_data);
+      peer->notify_data = NULL;
+      peer->notify_len = 0;
+    }
+
   bgp_uptime_reset (peer);
   bgp_keepalive_send (peer);
   bgp_announce_table (peer);

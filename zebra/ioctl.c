@@ -110,10 +110,7 @@ if_get_metric (struct interface *ifp)
   ifreq_set_name (&ifreq, ifp);
 
   if (if_ioctl (SIOCGIFMETRIC, (caddr_t) &ifreq) < 0) 
-    {
-      perror ("ioctl (SIOCGIFMETRIC");
-      exit (1);
-    }
+    return;
   ifp->metric = ifreq.ifr_metric;
   if (ifp->metric == 0)
     ifp->metric = 1;
@@ -326,9 +323,8 @@ if_get_flags (struct interface *ifp)
   ret = if_ioctl (SIOCGIFFLAGS, (caddr_t) &ifreq);
   if (ret < 0) 
     {
-      /* XXX */
       perror ("ioctl");
-      exit (1);
+      return;
     }
 
   ifp->flags = ifreq.ifr_flags & 0x0000ffff;

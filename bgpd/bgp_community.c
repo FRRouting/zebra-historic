@@ -322,7 +322,7 @@ community_gettoken (char *buf, enum community_token *token, u_int32_t *val)
   char *p = buf;
 
   /* Skip white space. */
-  while (isspace (*p))
+  while (isspace ((int) *p))
     p++;
 
   /* Check the end of the line. */
@@ -330,7 +330,7 @@ community_gettoken (char *buf, enum community_token *token, u_int32_t *val)
     return NULL;
 
   /* Well known community string check. */
-  if (isalpha (*p)) 
+  if (isalpha ((int) *p)) 
     {
       if (strncmp (p, "no-export", strlen ("no-export")) == 0)
 	{
@@ -360,13 +360,13 @@ community_gettoken (char *buf, enum community_token *token, u_int32_t *val)
     }
 
   /* Community value. */
-  if (isdigit (*p)) 
+  if (isdigit ((int) *p)) 
     {
       int separator = 0;
       u_int32_t community_low = 0;
       u_int32_t community_high = 0;
 
-      while (isdigit (*p) || *p == ':') 
+      while (isdigit ((int) *p) || *p == ':') 
 	{
 	  if (*p == ':') 
 	    {

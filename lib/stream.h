@@ -87,6 +87,8 @@ u_int16_t stream_getw (struct stream *);
 u_int32_t stream_getl (struct stream *);
 u_int32_t stream_get_ipv4 (struct stream *);
 
+#undef stream_read()
+#undef stream_write()
 int stream_read (struct stream *, int, size_t);
 int stream_write (struct stream *, u_char *, size_t);
 

@@ -1,4 +1,4 @@
-n##
+##
 ## Configure template file for zebra.
 ## autoconf will generate configure script.
 ##
@@ -8,6 +8,9 @@ AC_PREREQ(2.13)
 
 AC_INIT(lib/zebra.h)
 AM_INIT_AUTOMAKE(zebra, 0.1)
+
+# Get macros
+builtin(include, aczebra.m4)
 
 AM_CONFIG_HEADER(config.h)
 
@@ -77,6 +80,8 @@ AC_ARG_ENABLE(netlink,
 [  --enable-netlink        force to use Linux netlink interface])
 AC_ARG_ENABLE(snmp,
 [  --enable-snmp           enable SNMP support])
+AC_ARG_ENABLE(mbgp,
+[  --enable-mbgp           enable MBGP support])
 
 dnl -------------------
 dnl Check header files.
@@ -92,6 +97,7 @@ AC_TYPE_SIGNAL
 dnl Some systems (Solaris 2.x) require libnsl (Network Services Library)
 case "$host" in
   *-sunos5.6* | *-solaris2.6*)
+      opsys=sol2-6
       AC_DEFINE(SUNOS_5)
       AC_CHECK_LIB(xnet, main)
   ;;
@@ -116,6 +122,8 @@ case "$host" in
   ;;
   *-bsdi*)
       opsys=bsdi
+      OTHER_METHOD="mtu_kvm.o"
+      AC_CHECK_LIB(kvm, main)
   ;;
 esac
 
@@ -199,7 +207,12 @@ if test x"$opsys" = x"gnu-linux"; then
     RT_METHOD=rt_ioctl.o])
   fi
 else
- AC_TRY_RUN([#include <errno.h>
+  if test "$opsys" = "sol2-6";then
+    AC_MSG_RESULT(solaris)
+    KERNEL_METHOD="kernel_socket.o"
+    RT_METHOD="rt_socket.o"
+  else
+    AC_TRY_RUN([#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -212,16 +225,20 @@ main ()
     exit (1);
   exit (0);
 }],
- [AC_DEFINE(HAVE_AF_ROUTE)
-  RT_METHOD=rt_socket.o
-  AC_MSG_RESULT(socket)],
- [RT_METHOD=rt_ioctl.o
-  AC_MSG_RESULT(ioctl)],
- [RT_METHOD=rt_socket.o
-  AC_MSG_RESULT(socket)])
+  [AC_DEFINE(HAVE_AF_ROUTE)
+   KERNEL_METHOD=kernel_socket.o
+   RT_METHOD=rt_socket.o
+   AC_MSG_RESULT(socket)],
+  [RT_METHOD=rt_ioctl.o
+   AC_MSG_RESULT(ioctl)],
+  [KERNEL_METHOD=kernel_socket.o
+   RT_METHOD=rt_socket.o
+   AC_MSG_RESULT(socket)])
+  fi
 fi
-
 AC_SUBST(RT_METHOD)
+AC_SUBST(KERNEL_METHOD)
+AC_SUBST(OTHER_METHOD)
 
 dnl ------------------------------
 dnl check kernel route read method
@@ -254,15 +271,33 @@ if test "$netlink" = yes; then
   AC_MSG_RESULT(netlink)
   IF_METHOD=if_netlink.o
 else
-  if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
-    AC_MSG_RESULT(sysctl)
-    IF_METHOD=if_sysctl.o
-  else
-    AC_MSG_RESULT(ioctl)
+  if test "$opsys" = "sol2-6";then
+    AC_MSG_RESULT(solaris)
     IF_METHOD=if_ioctl.o
+  else
+    if grep NET_RT_IFLIST /usr/include/sys/socket.h >/dev/null 2>&1; then
+      AC_MSG_RESULT(sysctl)
+      IF_METHOD=if_sysctl.o
+      AC_DEFINE(HAVE_NET_RT_IFLIST)
+    else
+      AC_MSG_RESULT(ioctl)
+      IF_METHOD=if_ioctl.o
+    fi
   fi
 fi
 AC_SUBST(IF_METHOD)
+
+dnl -----------------------
+dnl check proc file system.
+dnl -----------------------
+AC_CHECK_FILE(/proc/net/dev,
+ [AC_DEFINE(HAVE_PROC_NET_DEV)
+  IF_PROC=if_proc.o])
+
+AC_CHECK_FILE(/proc/net/if_inet6,
+ [AC_DEFINE(HAVE_PROC_NET_IF_INET6)
+  IF_PROC=if_proc.o])
+AC_SUBST(IF_PROC)
 
 dnl -----------------------------
 dnl check ipforward detect method
@@ -446,6 +481,10 @@ if test "${enable_bgp_announce}" = "no";then
   AC_DEFINE(DISABLE_BGP_ANNOUNCE)
 fi
 
+if test "${enable_mbgp}" = "yes";then
+  AC_DEFINE(HAVE_MBGPV4)
+fi
+
 AC_SUBST(ZEBRA)
 AC_SUBST(BGPD)
 AC_SUBST(RIPD)
@@ -512,6 +551,17 @@ if test "${enable_snmp}" = "yes";then
 fi
 
 dnl ----------------------------
+dnl check sa_len of sockaddr
+dnl ----------------------------
+AC_MSG_CHECKING(whether struct sockaddr has a sa_len field)
+AC_TRY_COMPILE([#include <sys/types.h>
+#include <sys/socket.h>
+],[static struct sockaddr ac_i;int ac_j = sizeof (ac_i.sa_len);],
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SA_LEN)],
+ AC_MSG_RESULT(no))
+
+dnl ----------------------------
 dnl check sin_len of sockaddr_in
 dnl ----------------------------
 AC_MSG_CHECKING(whether struct sockaddr_in has a sin_len field)
@@ -545,6 +595,16 @@ AC_TRY_COMPILE([#include <sys/types.h>
 ],[socklen_t ac_x;],
 [AC_MSG_RESULT(yes)
  AC_DEFINE(HAVE_SOCKLEN_T)],
+ AC_MSG_RESULT(no))
+
+dnl ------------------------
+dnl check struct sockaddr_dl
+dnl ------------------------
+AC_MSG_CHECKING(whether struct sockaddr_dl exist)
+AC_EGREP_HEADER(sockaddr_dl,
+net/if_dl.h,
+[AC_MSG_RESULT(yes)
+ AC_DEFINE(HAVE_SOCKADDR_DL)],
  AC_MSG_RESULT(no))
 
 dnl --------------------------

@@ -1,5 +1,4 @@
-/*
- * BGP packet management routine.
+/* BGP packet management routine.
  * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -28,9 +27,12 @@
 #include "prefix.h"
 #include "command.h"
 #include "log.h"
+#include "memory.h"
+#include "sockunion.h"		/* for inet_ntop () */
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_attr.h"
@@ -130,7 +132,7 @@ bgp_connect_check (struct peer *peer)
 
   /* Check file descriptor. */
   slen = sizeof (status);
-  ret = getsockopt(peer->fd, SOL_SOCKET, SO_ERROR, &status, &slen);
+  ret = getsockopt(peer->fd, SOL_SOCKET, SO_ERROR, (void *) &status, &slen);
 
   /* If getsockopt is fail, this is fatal error. */
   if (ret < 0)
@@ -256,8 +258,8 @@ bgp_open_send (struct peer *peer)
   stream_putw (s, peer->v_holdtime);	 /* Hold Time */
   stream_put_ipv4 (s, peer->bgp->ident); /* BGP Identifier */
 
-  /* Opt Parm Len. */
-  stream_putc (s, 0);			 
+  /* Set capability code. */
+  bgp_open_capability (s, peer);
 
   /* Set BGP packet length. */
   bgp_packet_set_size (s, 0);
@@ -273,7 +275,46 @@ bgp_open_send (struct peer *peer)
 
 /* Send BGP notify packet. */
 void
-bgp_notify_send (struct peer *peer, u_char code, u_char sub_code, char *data)
+bgp_notify_send (struct peer *peer, u_char code, u_char sub_code)
+{
+  struct stream *s;
+
+  /* Allocate new stream. */
+  s = stream_new (BGP_MAX_PACKET_SIZE);
+
+  /* Make nitify packet. */
+  bgp_packet_set_marker (s, BGP_MSG_NOTIFY);
+
+  /* Set notify packet values. */
+  stream_putc (s, code);        /* BGP notify code */
+  stream_putc (s, sub_code);	/* BGP notify sub_code */
+
+  /* Set BGP packet length. */
+  bgp_packet_set_size (s, 0);
+
+  /* Dump packet if debug option is set. */
+  /* bgp_packet_dump (s); */
+
+  /* Add packet to the peer. */
+  bgp_packet_add (peer, s);
+
+  BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
+
+  /* For debug */
+  {
+    struct bgp_notify bgp_notify;
+
+    bgp_notify.err_code = code;
+    bgp_notify.err_subcode = sub_code;
+    bgp_notify.data = NULL;
+    bgp_notify_print (peer, &bgp_notify);
+  }
+}
+
+/* Send BGP notify packet with data potion. */
+void
+bgp_notify_send_with_data (struct peer *peer, u_char code, u_char sub_code,
+			   u_char *data, size_t datalen)
 {
   struct stream *s;
 
@@ -289,7 +330,7 @@ bgp_notify_send (struct peer *peer, u_char code, u_char sub_code, char *data)
 
   /* If notify data is present. */
   if (data)
-    stream_write (s, data, strlen (data));
+    stream_write (s, data, datalen);
   
   /* Set BGP packet length. */
   bgp_packet_set_size (s, 0);
@@ -351,6 +392,11 @@ bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr)
   /* Set Total Path Attribute Length. */
   stream_putw_at (s, pos, total_attr_len);
 
+#ifdef HAVE_MBGPV4
+   if(p->family == AF_INET && p->safi == SAFI_MULTICAST );
+    else 
+#endif /* HAVE_MBGPV4 */
+
   /* NLRI set. */
   if (p->family == AF_INET)
     stream_put_prefix (s, p);
@@ -396,7 +442,11 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p)
   stream_putw (s, 0);
 
   /* Withdrawn Routes. */
+#ifdef HAVE_MBGPV4
+  if (p->family == AF_INET && p->safi != SAFI_MULTICAST )
+#else
   if (p->family == AF_INET)
+#endif / *HAVE_MBGPV4 */
     {
       stream_put_prefix (s, p);
 
@@ -405,7 +455,12 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p)
     }
 
   /* Make attribute. */
+#ifdef HAVE_MBGPV4
+    if((p->family == AF_INET6) || 
+       (p->family == AF_INET && p->safi == SAFI_MULTICAST ))
+#else
   if (p->family == AF_INET6)
+#endif /* HAVE_MGPV4 */
     {
       pos = stream_get_putp (s);
       stream_putw (s, 0);
@@ -430,22 +485,54 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p)
 
 /* Notify message treatment function. */
 void
-bgp_notify (struct peer *peer, bgp_size_t size)
+bgp_notify_receive (struct peer *peer, bgp_size_t size)
 {
   struct bgp_notify bgp_notify;
+
+  if (peer->notify_data)
+    {
+      XFREE (MTYPE_TMP, peer->notify_data);
+      peer->notify_data = NULL;
+      peer->notify_len = 0;
+    }
 
   bgp_notify.err_code = stream_getc (peer->ibuf);
   bgp_notify.err_subcode = stream_getc (peer->ibuf);
 
   bgp_notify_print(peer, &bgp_notify);
 
+  /* We have to check for Notify with Unsupported Optional Parameter.
+     in that case we fallback to open without the capability option.
+     But this done in bgp_stop. We just mark it here to avoid changing
+     the fsm tables.  */
+  if (bgp_notify.err_code == BGP_NOTIFY_OPEN_ERR &&
+      bgp_notify.err_subcode == BGP_NOTIFY_OPEN_UNSUP_PARAM )
+    peer->capability_open = 0;
+
+  /* Also apply to Unsupported Capability until remote router support
+     capability. */
+  if (bgp_notify.err_code == BGP_NOTIFY_OPEN_ERR &&
+      bgp_notify.err_subcode == BGP_NOTIFY_OPEN_UNSUP_CAPBL)
+    {
+      peer->capability_open = 0;
+
+      /* For further diagnostic record returned Data. */
+      if (size > 2)
+	{
+	  peer->notify_len = size - 2;
+	  peer->notify_data = XMALLOC (MTYPE_TMP, size - 2);
+	  memcpy (peer->notify_data, stream_pnt (peer->ibuf), size - 2);
+	}
+    }
+
   BGP_EVENT_ADD (peer, Receive_NOTIFICATION_message);
 }
 
 /* BGP open message read. Should be called from finite state machine. */
 void
-bgp_open (struct peer *peer, bgp_size_t size)
+bgp_open_receive (struct peer *peer, bgp_size_t size)
 {
+  int ret;
   u_char version;
   u_char optlen;
   u_int16_t holdtime;
@@ -476,8 +563,7 @@ bgp_open (struct peer *peer, bgp_size_t size)
     {
       bgp_notify_send (peer,
 		       BGP_NOTIFY_OPEN_ERR, 
-		       BGP_NOTIFY_OPEN_UNACEP_HOLDTIME,
-		       NULL);
+		       BGP_NOTIFY_OPEN_UNACEP_HOLDTIME);
       return;
     }
     
@@ -507,7 +593,10 @@ bgp_open (struct peer *peer, bgp_size_t size)
 
   if (optlen != 0) 
     {
-      bgp_open_option_parse (peer, optlen);
+      ret = bgp_open_option_parse (peer, optlen);
+      if (ret < 0)
+	return;
+
       stream_forward (peer->ibuf, optlen);
     }
 
@@ -516,18 +605,16 @@ bgp_open (struct peer *peer, bgp_size_t size)
     {
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_OPEN_ERR, 
-		       BGP_NOTIFY_OPEN_UNSUP_VERSION, 
-		       NULL);
+		       BGP_NOTIFY_OPEN_UNSUP_VERSION);
       return;
     }
-  
+
   /* Check neighbor as number. */
   if (asno != peer->as)
     {
       bgp_notify_send (peer,
 		       BGP_NOTIFY_OPEN_ERR, 
-		       BGP_NOTIFY_OPEN_BAD_PEER_AS,
-		       NULL);
+		       BGP_NOTIFY_OPEN_BAD_PEER_AS);
       return;
     }
 
@@ -540,7 +627,7 @@ bgp_open (struct peer *peer, bgp_size_t size)
 
 /* Keepalive treatment function -- get keepalive send keepalive */
 void
-bgp_keepalive (struct peer *peer, bgp_size_t size)
+bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
 {
   if (size)
     {
@@ -554,7 +641,7 @@ bgp_keepalive (struct peer *peer, bgp_size_t size)
 
 /* Parse BGP_UPDATE packet and make ATTRIBUTE object. */
 void
-bgp_update (struct peer *peer, bgp_size_t size)
+bgp_update_receive (struct peer *peer, bgp_size_t size)
 {
   int ret;
   struct attr attr;
@@ -576,7 +663,7 @@ bgp_update (struct peer *peer, bgp_size_t size)
       zlog (peer->log, LOG_ERR,
 	    "neighbor %s: FSM error: "
 	    "update message when status is not Established", peer->host);
-      bgp_notify_send (peer, BGP_NOTIFY_FSM_ERR, 0, NULL);
+      bgp_notify_send (peer, BGP_NOTIFY_FSM_ERR, 0);
       return;
     }
 
@@ -589,8 +676,7 @@ bgp_update (struct peer *peer, bgp_size_t size)
 
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
-		       NULL);
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
       return;
     }
 
@@ -607,8 +693,9 @@ bgp_update (struct peer *peer, bgp_size_t size)
 	  zlog (peer->log, LOG_ERR, 
 		"neighbor %s: unfeasible length error %d", 
 		peer->host, unfeasible_len);
-	  bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR, 
-			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+	  bgp_notify_send (peer,
+			   BGP_NOTIFY_UPDATE_ERR, 
+			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR);
 	  return;
 	}
       peer->withdrow_in++;
@@ -640,7 +727,8 @@ bgp_update (struct peer *peer, bgp_size_t size)
 #endif /* 0 */
 
   /* Network Layer Reachability Information. */
-  nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s), AF_INET);
+  nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s), AF_INET, 
+	      SAFI_UNICAST);
 
   /* All things should be done at here.  So if unused aspath or
      community must be freed. */
@@ -729,9 +817,6 @@ bgp_read (struct thread *thread)
   if (ret < 0) 
     return ret;
 
-  /* BGP packet dump to file function. */
-  bgp_dump_incoming (peer, peer->ibuf);
-
   /* Get size and type. */
   stream_forward (peer->ibuf, BGP_MARKER_SIZE);
   size = stream_getw (peer->ibuf);
@@ -745,8 +830,7 @@ bgp_read (struct thread *thread)
 	    peer->host);
       bgp_notify_send (peer,
 		       BGP_NOTIFY_HEADER_ERR,
-		       BGP_NOTIFY_HEADER_BAD_MESLEN,
-		       NULL);
+		       BGP_NOTIFY_HEADER_BAD_MESLEN);
       return 0;
     }
 
@@ -757,29 +841,33 @@ bgp_read (struct thread *thread)
   if (ret < 0) 
     return ret;
 
+  /* BGP packet dump function. */
+  bgp_dump_packet (peer, type, peer->ibuf);
+
   /* bgp_packet_dump (peer->ibuf); */
 
   /* Read rest of the packet and call each sort of packet routine */
   switch (type) 
     {
     case BGP_MSG_OPEN:
-      bgp_open (peer, size);
+      bgp_open_receive (peer, size);
       break;
     case BGP_MSG_UPDATE:
-      bgp_update (peer, size);
+      bgp_update_receive (peer, size);
       break;
     case BGP_MSG_NOTIFY:
-      bgp_notify (peer, size);
+      bgp_notify_receive (peer, size);
       break;
     case BGP_MSG_KEEPALIVE:
-      bgp_keepalive (peer, size);
+      bgp_keepalive_receive (peer, size);
       break;
     default:
       zlog (peer->log, LOG_WARNING,
 	    "neighbor %s: BGP packet header type %d is illegal",
 	    peer->host, type);
-      bgp_notify_send (peer, BGP_NOTIFY_HEADER_ERR,
-		       BGP_NOTIFY_HEADER_BAD_MESTYPE, NULL);
+      bgp_notify_send (peer,
+		       BGP_NOTIFY_HEADER_ERR,
+		       BGP_NOTIFY_HEADER_BAD_MESTYPE);
       /* Notify and clear bgp peer. */
       break;
     }

@@ -195,7 +195,7 @@ prefix_list_insert (int family, char *name)
      number. */
   for (number = 0, i = 0; i < strlen (name); i++)
     {
-      if (isdigit (name[i]))
+      if (isdigit ((int) name[i]))
 	number = (number * 10) + (name[i] - '0');
       else
 	break;
@@ -686,7 +686,7 @@ vty_prefix_list_install (struct vty *vty, int family,
   if (ge)
     {
       genum = atoi (ge);
-      if (genum < p.prefixlen)
+      if (! any && genum < p.prefixlen)
 	{
 	  vty_out (vty, "ge value must be greater than or equal to prefix length%s", VTY_NEWLINE);
 	  return CMD_WARNING;
@@ -696,7 +696,7 @@ vty_prefix_list_install (struct vty *vty, int family,
   if (le)
     {
       lenum = atoi (le);
-      if (lenum < p.prefixlen)
+      if (! any && lenum < p.prefixlen)
 	{
 	  vty_out (vty, "le value must be lesser than or equal to prefix length%s", VTY_NEWLINE);
 	  return CMD_WARNING;

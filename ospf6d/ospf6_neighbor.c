@@ -31,20 +31,20 @@ neighbor_thread_cancel (struct neighbor *nbr)
 {
   if (nbr->inactivity_timer)
     thread_cancel (nbr->inactivity_timer);
-  if (nbr->send_dd)
-    thread_cancel (nbr->send_dd);
-  if (nbr->send_lsreq)
-    thread_cancel (nbr->send_lsreq);
   if (nbr->send_update)
     thread_cancel (nbr->send_update);
 
-  nbr->inactivity_timer = nbr->send_dd = nbr->send_lsreq = nbr->send_update
+  nbr->inactivity_timer = nbr->send_update
     = (struct thread *)NULL;
 
   /* new */
   if (nbr->thread_dbdesc_retrans)
     thread_cancel (nbr->thread_dbdesc_retrans);
   nbr->thread_dbdesc_retrans = (struct thread *) NULL;
+
+  if (nbr->thread_lsreq_retrans)
+    thread_cancel (nbr->thread_lsreq_retrans);
+  nbr->thread_lsreq_retrans = (struct thread *) NULL;
 
   return 0;
 }
@@ -89,70 +89,6 @@ count_nbr_in_state (state_t state, struct area *area)
         }
     }
   return count;
-}
-
-void
-ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *in6, struct in_addr *in4,
-                                   u_int ifindex)
-{
-  struct interface *ifp;
-  struct ospf6_if *o6if;
-  listnode n;
-  struct ospf6_lsa *lsa;
-  struct link_lsa *llsa;
-  unsigned long prefixnum;
-  struct ospf6_prefix *o6p;
-
-  memset (in4, 0, sizeof (struct in_addr));
-
-  ifp = if_lookup_by_index (ifindex);
-  if (!ifp)
-    {
-      zlog_warn ("  *** can't find interface (ifindex: %d)", ifindex);
-      return;
-    }
-  o6if = (struct ospf6_if *) ifp->info;
-  if (!o6if)
-    {
-      zlog_warn ("  *** can't find ospf6_if (ifindex: %d)", ifindex);
-      return;
-    }
-
-  /* find neighbor from linklocal address */
-  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
-    {
-      lsa = (struct ospf6_lsa *) getdata (n);
-      llsa = (struct link_lsa *) LSH_NEXT (lsa->lsa_hdr);
-      if (memcmp (&llsa->llsa_linklocal, in6, sizeof (struct in6_addr)))
-        return;
-      prefixnum = ntohl (llsa->llsa_prefix_num);
-
-      zlog_info (" Debug IPv4 prefixnum %d", prefixnum);
-
-      for (o6p = (struct ospf6_prefix *) (llsa + 1);
-           (char *) o6p < (char *) lsa->lsa_hdr
-                          + ntohs (lsa->lsa_hdr->lsh_len) && prefixnum;
-           o6p = OSPF6_NEXT_PREFIX (o6p), prefixnum--)
-        {
-          struct in6_addr tmp;
-          if (!IN6_IS_ADDR_V4MAPPED (&tmp))
-            continue;
-          if (o6p->o6p_prefix_len != 128)
-            {
-              zlog_warn ("  *** prefix length not 128!!!: %d",
-                         o6p->o6p_prefix_len);
-              continue;
-            }
-          ospf6_prefix_in6_addr (o6p, &tmp);
-          ospf6_ipv6_decode_ipv4 (&tmp, in4);
-          {
-            char buf1[64], buf2[64];
-            inet_ntop (AF_INET6, &tmp, buf1, sizeof(buf1));
-            inet_ntop (AF_INET, in4, buf2, sizeof(buf2));
-            zlog_info (" Debug IPv4 : %s %s", buf1, buf2);
-          }
-        }
-    }
 }
 
 /* Neighbor section */
@@ -279,12 +215,68 @@ ospf6_neighbor_vty_summary (struct vty *vty, struct neighbor *nbr)
 void
 ospf6_neighbor_vty (struct vty *vty, struct neighbor *o6n)
 {
-  vty_out (vty, " Neighbor %s, interface address%s",
-           o6n->str, VTY_NEWLINE);
-  vty_out (vty, "    In the area %s via interface %s%s",
-           o6n->ospf6_if->area->str, o6n->ospf6_if->interface->name,
-           VTY_NEWLINE);
+  char hisaddr[64];
+  inet_ntop (AF_INET6, &o6n->hisaddr.sin6_addr, hisaddr, sizeof (hisaddr));
+  vty_out (vty, " Neighbor %s, interface address %s%s",
+                o6n->str, hisaddr, VTY_NEWLINE);
+  vty_out (vty, "    In the area %s via interface %s(ifindex %d)%s",
+                o6n->ospf6_if->area->str,
+                o6n->ospf6_if->interface->name,
+                o6n->ospf6_if->interface->ifindex,
+                VTY_NEWLINE);
   vty_out (vty, "    Neighbor priority is %d, State is %s, %d state changes%s",
-           o6n->rtr_pri, nbs_name[o6n->state], 0, VTY_NEWLINE);
+                o6n->rtr_pri, nbs_name[o6n->state],
+                o6n->ospf6_stat_state_changed, VTY_NEWLINE);
+}
+
+void
+ospf6_neighbor_vty_detail (struct vty *vty, struct neighbor *o6n)
+{
+  char dbdesc_bit[64], hisdr[16], hisbdr[16];
+  ospf6_neighbor_vty (vty, o6n);
+
+  inet_ntop (AF_INET, &o6n->dr, hisdr, sizeof (hisdr));
+  inet_ntop (AF_INET, &o6n->bdr, hisbdr, sizeof (hisbdr));
+
+  ospf6_dump_ddbit (o6n->dd_bits, dbdesc_bit, sizeof (dbdesc_bit));
+  vty_out (vty, "    My DbDesc bit for this neighbor: %s%s",
+                dbdesc_bit, VTY_NEWLINE);
+  vty_out (vty, "    His Ifindex of myside: %lu%s",
+                o6n->ifid, VTY_NEWLINE);
+  vty_out (vty, "    His DRDecision: DR %s, BDR %s%s",
+                hisdr, hisbdr, VTY_NEWLINE);
+  ospf6_dump_ddbit (o6n->last_dd.bits, dbdesc_bit, sizeof (dbdesc_bit));
+  vty_out (vty, "    Last received DbDesc: opt:%s"
+                " ifmtu:%hu bit:%s seqnum:%lu%s",
+                "xxx", ntohs (o6n->last_dd.ifmtu), dbdesc_bit,
+                ntohl (o6n->last_dd.seqnum), VTY_NEWLINE);
+  vty_out (vty, "    Number of LSAs retransmitting: %d%s",
+                listcount (o6n->dd_retrans), VTY_NEWLINE);
+  vty_out (vty, "    Number of LSAs direct-ack'ing: %d%s",
+                listcount (o6n->direct_ack), VTY_NEWLINE);
+  vty_out (vty, "    Number of LSAs in SummaryList: %d%s",
+                listcount (o6n->summarylist), VTY_NEWLINE);
+  vty_out (vty, "    Number of LSAs in RequestList: %d%s",
+                listcount (o6n->requestlist), VTY_NEWLINE);
+  vty_out (vty, "    Number of LSAs in RetransList: %d%s",
+                listcount (o6n->retranslist), VTY_NEWLINE);
+  vty_out (vty, "    %-16s %5d times, %-16s %5d times%s",
+                "SeqnumMismatch", o6n->ospf6_stat_seqnum_mismatch,
+                "BadLSReq", o6n->ospf6_stat_bad_lsreq, VTY_NEWLINE);
+  vty_out (vty, "    %-16s %5d times, %-16s %5d times%s",
+                "OnewayReceived", o6n->ospf6_stat_oneway_received,
+                "InactivityTimer", o6n->ospf6_stat_inactivity_timer,
+                VTY_NEWLINE);
+  vty_out (vty, "    %-16s %5d times, %-16s %5d times%s",
+                "DbDescRetrans", o6n->ospf6_stat_retrans_dbdesc,
+                "LSReqRetrans", o6n->ospf6_stat_retrans_lsreq,
+                VTY_NEWLINE);
+  vty_out (vty, "    %-16s %5d times%s",
+                "LSUpdateRetrans", o6n->ospf6_stat_retrans_lsupdate,
+                VTY_NEWLINE);
+  vty_out (vty, "    %-16s %5d times, %-16s %5d times%s",
+                "LSAReceived", o6n->ospf6_stat_received_lsa,
+                "LSUpdateReceived", o6n->ospf6_stat_received_lsupdate,
+                VTY_NEWLINE);
 }
 

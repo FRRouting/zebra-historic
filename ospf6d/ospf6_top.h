@@ -26,6 +26,12 @@
 /* ospfv3 top level data structure */
 struct ospf6
 {
+  /* process id */
+  unsigned long process_id;
+
+  /* start time */
+  struct timeval starttime;
+
   /* ospf version must be 3 */
   unsigned char version;
 

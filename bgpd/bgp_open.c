@@ -1,5 +1,4 @@
-/*
- * BGP open message handling
+/* BGP open message handling
  * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -22,50 +21,21 @@
 
 #include <zebra.h>
 
-#include "vty.h"
 #include "linklist.h"
 #include "prefix.h"
 #include "roken.h"
 #include "stream.h"
 #include "thread.h"
 #include "log.h"
+#include "command.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
-#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
-
-/* draft-ietf-idr-bgp4-cap-neg-03.txt
-
-3. MP Capability Code
-
-   BGP speakers that wish to negotiate the set of (AFI, SAFI) pairs
-   availiable on a particular peering should use the MP_EXT Capability
-   Code (Type 0x01, in hexadecimal).
-
-   The Capability Value associated with the code is a 32 bit value, in
-   network byte-order, defined as:
-
-
-                     0       7      15      23      31
-                     +-------+-------+-------+-------+
-                     |      AFI      | Res.  | SAFI  |
-                     +-------+-------+-------+-------+
-
-   The use and meaning of this fields is as follows:
-
-
-         AFI  - Address Family Identifier (16 bit) as defined in [RFC-
-         1700].
-
-         Res. - Reserved (8 bit) field. Should be set to 0 by the sender
-         and ignored by the receiver.
-
-         SAFI - Subsequent Address Family Identifier (8 bit) field as
-         defined in [BGP-MP]
-*/
-
+#include "bgpd/bgp_open.h"
+
 /* BGP-4 Multiprotocol Extentions lead us to the complex world. We can
    negotiate remote peer supports extentions or not. But if
    remote-peer doesn't supports negotiation process itself.  We would
@@ -77,118 +47,434 @@
    inforation at each peer. */
 
 /* MP Capability information. */
-struct mp_capability
+struct capability_mp
 {
   u_int16_t afi;
   u_char reserved;
   u_char safi;
 };
 
-/* For debug purpose. */
-void
-mp_capability_print ()
-{
-  ;
-}
-
-/* draft-ietf-idr-bgp4-cap-neg-01.txt
-
-4. Capabilities Optional Parameter (Parameter Type 2):
-
-   This is an Optional Parameter that is used by a BGP speaker to convey
-   to its BGP peer the list of capabilities supported by the speaker.
-
-   The parameter contains one or more triples <Capability Code,
-   Capability Length, Capability Value>, where each triple is encoded as
-   shown below:
-
-
-      +------------------------------+
-      | Capability Code (1 octet)    |
-      +------------------------------+
-      | Capability Length (1 octet)  |
-      +------------------------------+
-      | Capability Value (variable)  |
-      +------------------------------+
-*/
-
 /* BGP open message capability. */
 struct capability 
 {
   u_char code;
   u_char length;
-  u_char *val;
+  struct capability_mp mpc;
 };
 
-/* Check my capability */
+/* For debug purpose. */
 void
-mp_capability_negotiation (caddr_t start, u_char length)
+bgp_capability_mp_log (struct peer *peer, struct capability *cap, char *direct)
 {
-  caddr_t pnt;
-  struct mp_capability *mpc;
+  zlog_info ("%s [%s:Open] Capability Code = %u, Capabilty Lenth = %u, "
+	     "Capabilities  afi = %u, safi = %u",
+	     peer->host, direct,
+	     cap->code, cap->length, ntohs(cap->mpc.afi) , cap->mpc.safi);
+}
 
-  for (pnt = start; pnt < start + length; pnt += 4)
+void
+bgp_capability_vty_out (struct vty *vty, struct peer *peer)
+{
+  u_char *pnt;
+  u_char *end;
+  struct capability *cap;
+
+  pnt = peer->notify_data;
+  end = pnt + peer->notify_len;
+
+  while (pnt < end)
     {
-      mpc = (struct mp_capability *) pnt;
-      if (mpc->afi)
-	;
+      cap = (struct capability *) pnt;
+
+      if (pnt + 2 > end)
+	return;
+      if (pnt + (cap->length + 2) > end)
+	return;
+
+      if (cap->code == CAPABILITY_CODE_MP)
+	{
+	  vty_out (vty, "  Capability error: Multi protocol ");
+
+	  switch (ntohs (cap->mpc.afi))
+	    {
+	    case AFI_IP:
+	      vty_out (vty, "AFI IP, ");
+	      break;
+	    case AFI_IP6:
+	      vty_out (vty, "AFI IPv6, ");
+	      break;
+	    default:
+	      vty_out (vty, "AFI Unknown %d, ", ntohs (cap->mpc.afi));
+	      break;
+	    }
+	  switch (cap->mpc.safi)
+	    {
+	    case SAFI_UNICAST:
+	      vty_out (vty, "SAFI Unicast");
+	      break;
+	    case SAFI_MULTICAST:
+	      vty_out (vty, "SAFI Multicast");
+	      break;
+	    case SAFI_UNICAST_MULTICAST:
+	      vty_out (vty, "SAFI Unicast Multicast");
+	      break;
+	    default:
+	      vty_out (vty, "SAFI Unknown %d ", cap->mpc.safi);
+	      break;
+	    }
+	  vty_out (vty, "%s", VTY_NEWLINE);
+	}
+      else if (cap->code >= 128)
+	vty_out (vty, "  Capability error: vendor specific capability code %d",
+		 cap->code);
+      else
+	vty_out (vty, "  Capability error: unknown capability code %d", 
+		 cap->code);
+
+      pnt += cap->length + 2;
     }
+}
+
+int
+bgp_capability_mp (struct peer *peer, struct capability *cap)
+{
+  if (ntohs (cap->mpc.afi) == AFI_IP)
+    {
+      if (cap->mpc.safi == SAFI_UNICAST)
+	{
+	  if (peer->ipv4_unicast_conf)
+	    peer->ipv4_unicast = 1;
+	  else
+	    return -1;
+	}
+      else if (cap->mpc.safi == SAFI_MULTICAST) 
+	{
+	  if (peer->ipv4_multicast_conf)
+	    peer->ipv4_multicast = 1;
+	  else
+	    return -1;
+	}
+#if 0
+      else if (cap->mpc.safi == SAFI_UNICAST_MULTICAST)
+	{
+	  if (peer->ipv4_unicast_conf && peer->ipv4_multicast_conf)
+	    {
+	      peer->ipv4_unicast = 1;
+	      peer->ipv4_multicast = 1;
+	    }
+	  else
+	    return -1;
+	}
+#endif /* 0 */
+      else
+	return -1;
+    }
+#ifdef HAVE_IPV6
+  else if (ntohs (cap->mpc.afi) == AFI_IP6)
+    {
+      if (cap->mpc.safi == SAFI_UNICAST)
+	{
+	  if (peer->ipv6_unicast_conf)
+	    peer->ipv6_unicast = 1;
+	  else
+	    return -1;
+	}
+      else if (cap->mpc.safi == SAFI_MULTICAST)
+	{
+	  if (peer->ipv6_multicast_conf)
+	    peer->ipv6_multicast = 1;
+	  else
+	    return -1;
+	}
+#if 0
+      else if (cap->mpc.safi == SAFI_UNICAST_MULTICAST)
+	{
+	  if (peer->ipv6_unicast_conf && peer->ipv6_multicast_conf)
+	    {
+	      peer->ipv6_unicast = 1;
+	      peer->ipv6_unicast = 1;
+	    }
+	  else
+	    return -1;
+	}
+#endif /* 0 */
+      else
+	return -1;
+    }
+#endif /* HAVE_IPV6 */
+  else
+    {
+      /* Unknown Address Family. */
+      return -1;
+    }
+
+  return 0;
 }
 
 /* Parse given capability. */
-void
-capability_parse (u_char *pnt, u_char length) 
+int
+bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
+		      u_char **error) 
 {
+  int ret;
+  u_char *end;
   struct capability *cap;
 
-  /* Fetch structure to the byte stream. */
-  cap = (struct capability *) pnt;
+  if (peer->dont_capability)
+    return 0;
 
-  /* At this point only code that we know is MP Capability Code. */
-  switch (cap->code)
+  end = pnt + length;
+
+  while (pnt < end)
     {
-    case 0x01:
-      /* MP Capability Code. */
-      mp_capability_negotiation (pnt, length);
-      break;
-    default:
-      /* Unknown capability. */
-      zlog (NULL, LOG_WARNING, "Unknown capability");
-      break;
+      /* Fetch structure to the byte stream. */
+      cap = (struct capability *) pnt;
+
+      /* We need at least capability code and capability length. */
+      if (pnt + 2 > end)
+	{
+	  zlog_info ("Capability length error");
+	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+	  return -1;
+	}
+
+      /* Capability length check. */
+      if (pnt + (cap->length + 2) > end)
+	{
+	  zlog_info ("Capability length error");
+	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+	  return -1;
+	}
+
+      /* At this point only code that we know is MP Capability Code. */
+      if (cap->code == CAPABILITY_CODE_MP)
+	{
+	  /* For debug purpose. */
+	  bgp_capability_mp_log (peer, cap, "RECEIVE");
+
+	  ret = bgp_capability_mp (peer, cap);
+
+	  /* Unsupported Capability. */
+	  if (ret < 0)
+	    {
+	      /* Store return data. */
+	      memcpy (*error, cap, cap->length + 2);
+	      *error += cap->length + 2;
+	    }
+	}
+      else if (cap->code >= 128)
+	{
+	  /* We ignore sending Nofify's for vendor specific
+	     capabilities. Seems reasonable for now...  */
+	  zlog_warn ("Vendor specific capability %d", cap->code);
+	}
+      else
+	{
+	  zlog_warn ("Unknown capability %d", cap->code);
+	  memcpy (*error, cap, cap->length + 2);
+	  *error += cap->length + 2;
+	}
+
+      pnt += cap->length + 2;
     }
+  return 0;
+}
+
+int
+bgp_auth_parse (struct peer *peer, u_char *pnt, size_t length)
+{
+  return 0;
 }
 
 /* Parse open option */
-void
+int
 bgp_open_option_parse (struct peer *peer, u_char length)
 {
-  u_char *lim;
+  int ret;
+  u_char *end;
   u_char opt_type;
   u_char opt_length;
-
   u_char *pnt;
+  u_char *error;
+#define MAX_NOTIFY_DATA 128
+  u_char error_data[MAX_NOTIFY_DATA];
 
+  /* Fetch pointer. */
   pnt = stream_pnt (peer->ibuf);
 
-  lim = pnt + length;
+  ret = 0;
+  opt_type = 0;
+  opt_length = 0;
+  end = pnt + length;
+  error = error_data;
 
-  while (pnt < lim) 
+  while (pnt < end) 
     {
+      /* Check the length. */
+      if (pnt + 2 > end)
+	{
+	  zlog_info ("Option length error");
+	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+	  return -1;
+	}
+
+      /* Fetch option type and length. */
       opt_type = *pnt++;
       opt_length = *pnt++;
+      
+      /* Option length check. */
+      if (pnt + opt_length > end)
+	{
+	  zlog_info ("Option length error");
+	  bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+	  return -1;
+	}
 
       switch (opt_type)
 	{
+#if 0
 	case BGP_OPEN_OPT_AUTH:
-	  /* auth_parse (pnt, opt_length); */
+	  ret = bgp_auth_parse (peer, pnt, opt_length);
 	  break;
+#endif /* 0 */
 	case BGP_OPEN_OPT_CAP:
-	  capability_parse (pnt, opt_length);
+	  ret = bgp_capability_parse (peer, pnt, opt_length, &error);
 	  break;
 	default:
-	  /* Unknown open option parameter */
+	  bgp_notify_send (peer, 
+			   BGP_NOTIFY_OPEN_ERR, 
+			   BGP_NOTIFY_OPEN_UNSUP_PARAM); 
+	  ret = -1;
 	  break;
 	}
+
+      /* Parse error.  To accumulate all unsupported capability codes,
+         bgp_capability_parse does not return -1 when encounter
+         unsupported capability code.  To detect that, please check
+         error and erro_data pointer, like below.  */
+      if (ret < 0)
+	return -1;
+
+      /* Forward pointer. */
       pnt += opt_length;
     }
+
+  /* If Unsupported Capability exists. */
+  if (error != error_data)
+    {
+      bgp_notify_send_with_data (peer, 
+				 BGP_NOTIFY_OPEN_ERR, 
+				 BGP_NOTIFY_OPEN_UNSUP_CAPBL, 
+				 error_data, error - error_data);
+      return -1;
+    }
+  return 0;
+}
+
+/* Fill in capability open option to the packet. */
+void
+bgp_open_capability (struct stream *s, struct peer *peer)
+{
+  u_char len;
+  unsigned long cp;
+
+  /* Remember current pointer for Opt Parm Len. */
+  cp = stream_get_putp (s);
+
+  /* Opt Parm Len. */
+  stream_putc (s, 0);
+
+  /* Do not send capability. */
+  if (! peer->capability_open || peer->dont_capability)
+    return;
+    
+  /* When the peer is IPv4 unicast only, do not send capability. */
+  if (! peer->ipv4_multicast_conf && 
+      ! peer->ipv6_unicast_conf && 
+      ! peer->ipv6_multicast_conf)
+    return;
+
+  /* IPv4 unicast. */
+  if (peer->ipv4_unicast_conf)
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_MP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN);
+      stream_putw (s, AFI_IP);
+      stream_putc (s, 0);
+      stream_putc (s, SAFI_UNICAST);
+    }
+  /* IPv4 multicast. */
+  if (peer->ipv4_multicast_conf)
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_MP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN);
+      stream_putw (s, AFI_IP);
+      stream_putc (s, 0);
+      stream_putc (s, SAFI_MULTICAST);
+    }
+
+  /* It seems that Cisco does not support SAFI 3. */
+  /* IPv4 unicast and multicast. */
+  /*
+  if (peer->ipv4_unicast_conf || peer->ipv4_multicast_conf)
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_MP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN);
+      stream_putw (s, AFI_IP);
+      stream_putc (s, 0);
+
+      if (peer->ipv4_unicast_conf && peer->ipv4_multicast_conf)
+	stream_putc (s, SAFI_UNICAST_MULTICAST);
+      else if (peer->ipv4_unicast_conf)
+	stream_putc (s, SAFI_UNICAST);
+      else
+	stream_putc (s, SAFI_MULTICAST);
+    }
+  */
+#ifdef HAVE_IPV6
+  /* IPv6 unicast. */
+  if (peer->ipv6_unicast_conf)
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_MP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN);
+      stream_putw (s, AFI_IP6);
+      stream_putc (s, 0);
+      stream_putc (s, SAFI_UNICAST);
+    }
+  /* IPv6 multicast. */
+  if (peer->ipv6_multicast_conf)
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN + 2);
+      stream_putc (s, CAPABILITY_CODE_MP);
+      stream_putc (s, CAPABILITY_CODE_MP_LEN);
+      stream_putw (s, AFI_IP6);
+      stream_putc (s, 0);
+      stream_putc (s, SAFI_MULTICAST);
+    }
+#endif /* HAVE_IPV6 */
+
+  /* Not yet supported */
+  /* Route refresh. */
+  /*
+  if (peer->route_refresh)
+    {
+      stream_putc (s, BGP_OPEN_OPT_CAP);
+      stream_putc (s, CAPABILITY_CODE_REFRESH_LEN + 2)
+      stream_putc (s, CAPABILITY_CODE_REFRESH);
+      stream_putc (s, CAPABILITY_CODE_REFRESH_LEN);
+    }
+  */
+
+  /* Total Opt Parm Len. */
+  len = stream_get_putp (s) - cp - 1;
+  stream_putc_at (s, cp, len);
 }

@@ -1,5 +1,56 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.82
+
+** Solaris 2.6 support is added by Michael Handler
+<handler@sub-rosa.com>.
+
+** MBGP support is added by Robert Olsson <Robert.Olsson@data.slu.se>.
+Please specify --enable-mbgp to configure script.  This option will be
+removed in the future and MBGP support will be default.
+
+* Changes in zebra
+
+** When interface goes down, withdraw connected routes from routing
+table.  When interface goes up, restore the routes to the routing
+table.
+
+** `show interface' show interface's statistics on Linux and BSD with
+routing socket.
+
+** Now zebra can get MTU value on BSDI/OS.
+
+* Changes in bgpd
+
+** Add capability option support based upon
+draft-ietf-idr-bgp4-cap-neg-04.txt.
+
+** Add `show ipv6 bgp prefix-list' command.
+
+** Check self AS appeared in received routes.
+
+** redistribute route-map support is added.
+
+** BGP packet dump feature compatible with MRT.
+
+* Changes in ripd
+
+** Fix bug of `timers basic' command's argument format.
+
+* Changes in ripngd
+
+** Calculate max RTE using interface's MTU value.
+
+* Changes in ospfd
+
+** Some correction to LSU processing.
+
+** Add check for lsa->refresh_list.
+
+* Changes in ospf6d
+
+** Many debug feature is added.
+
 * Changes in zebra-0.81
 
 ** SNMP support is disabled in default.--enable-snmp option is added

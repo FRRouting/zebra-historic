@@ -25,45 +25,33 @@
 
 
 /* Function Prototypes */
-int iov_clear (struct iovec *iov, size_t iovlen);
-int iov_count (struct iovec *iov);
-int iov_index (struct iovec *iov, void *base);
-int iov_totallen (struct iovec *iov);
-void *iov_prepend (int mtype, struct iovec *iov, size_t len);
-void *iov_append (int mtype, struct iovec *iov, size_t len);
-void *iov_realloc (int mtype, struct iovec *iov, u_int index, size_t len);
-void *iov_attach_last (struct iovec *iov, void *base, size_t len);
-void *iov_attach_first (struct iovec *iov, void *base, size_t len);
-int iov_free (int mtype, struct iovec *iov, u_int begin, u_int end);
+void iov_clear (struct iovec *, size_t);
+int iov_count (struct iovec *);
+int iov_totallen (struct iovec *);
+void *iov_prepend (int, struct iovec *, size_t);
+void *iov_append (int, struct iovec *, size_t);
+void *iov_attach_last (struct iovec *, void *, size_t);
+void *iov_detach_first (struct iovec *);
+int iov_free (int, struct iovec *, u_int, u_int);
 void iov_trim_head (int, struct iovec *);
 void iov_free_all (int, struct iovec *);
-void *iov_detach_first (struct iovec *);
-void iov_copy_all (struct iovec *, struct iovec *, int);
+void iov_copy_all (struct iovec *, struct iovec *, size_t);
 
-int sockunion_ospf6_socket (union sockunion *);
-int sockfd_to_family (int);
-int ospf6_recv (struct thread *);
 int ospf6_serv_sock ();
-int mcast_join (int, struct sockaddr *, char *, u_int);
-int mcast_leave (int, struct sockaddr *, char *, u_int);
-int ospf6_send (u_char, struct iovec *, struct sockaddr *, struct ospf6_if *);
-int send_hello (struct thread *);
-int send_database_description (struct thread *);
-int send_linkstate_request (struct thread *);
-int send_linkstate_update (struct thread *);
-int send_linkstate_ack (struct thread *);
-
 void ospf6_join_allspfrouters (u_int);
 void ospf6_leave_allspfrouters (u_int);
 void ospf6_join_alldrouters (u_int);
 void ospf6_leave_alldrouters (u_int);
-
-void ospf6_set_mcastloop ();
+void ospf6_reset_mcastloop ();
 void ospf6_set_pktinfo ();
 void ospf6_set_checksum ();
 
-void ospf6_ipv4_encode_ipv6 (struct in_addr *, struct in6_addr *);
-void ospf6_ipv6_decode_ipv4 (struct in6_addr *, struct in_addr *);
+void ospf6_sendmsg (struct in6_addr *, struct in6_addr *,
+                    unsigned int *, struct iovec *);
+void ospf6_recvmsg (struct in6_addr *, struct in6_addr *,
+                    unsigned int *, struct iovec *);
+void ospf6_recvmsg_peek (struct in6_addr *, struct in6_addr *,
+                         unsigned int *, struct iovec *);
 
 #endif /* OSPF6_NETWORK_H */
 

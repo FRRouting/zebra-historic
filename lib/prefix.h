@@ -27,6 +27,9 @@
 struct prefix
 {
   u_char family;
+#ifdef HAVE_MBGPV4
+  u_char safi;
+#endif /* HAVE_MBGPV4 */
   u_char prefixlen;
   union 
   {
@@ -42,6 +45,9 @@ struct prefix
 struct prefix_ipv4
 {
   u_char family;
+#ifdef HAVE_MBGPV4
+  u_char safi;
+#endif /* HAVE_MBGPV4 */
   u_char prefixlen;
   struct in_addr prefix;
 };

@@ -1,35 +1,34 @@
 \input texinfo @c -*- texinfo -*-
 @c %**start of header
 @setfilename zebra.info
-@settitle Zebra
+@settitle GNU Zebra
+@setchapternewpage odd
 @c %**end of header
 
-@c TODO:
-@c
-@c  look at every @c in the text
-@c  correct all ` and ' characters
-@c emacs-outline-regexp "@chap\\|@\\(sub\\)*section"
+@c Set variables
+@set EDITION 0.1
+@set VERSION 0.81
+@set UPDATED 6 November 1999
+@set UPDATED-MONTH November 1999
 
-@set EDITION 0
-@set VERSION 0.80
-@set UPDATED October 1999
-
-@c A - Some variables for later
+@c These may vary with installation environment.
 @set INSTALL_PREFIX_ETC /usr/local/etc/
 @set INSTALL_PREFIX_SBIN /usr/local/sbin/
 
-
-@c A - Enter the file into the top level info dir
+@c Info entry
 @dircategory Routing Software
 @direntry
 * Zebra: (zebra).		The GNU Zebra routing software package.
 @end direntry
 
-
-@c A - TODO inclined to include a file from the source tree for this 
 @ifinfo
-@copyright{
-Copyright 1999 Free Software Foundation, Inc.
+This file documents the GNU Zebra software which manages common TCP/IP
+routing protocols.
+
+This is Edition @value{EDITION}, last updated @value{UPDATED} of
+@cite{The GNU Zebra Manual}, for Zebra Version @value{VERSION}.
+
+Copyright (C) 1999 Kunihiro Ishiguro
 
 Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -50,24 +49,22 @@ permission notice identical to this one.
 Permission is granted to copy and distribute translations of this manual
 into another language, under the above conditions for modified versions,
 except that this permission notice may be stated in a translation
-approved by the Free Software Foundation.
-}
+approved by Kunihiro Ishiguro.
 @end ifinfo
 
-
-
-
+@c @iftex
+@c @shorttitlepage GNU Zebra
+@c @end iftex
 @titlepage
 @title GNU Zebra
 @subtitle A routing software package for TCP/IP networks
 @subtitle Edition @value{EDITION}, for Zebra version @value{VERSION}
-@subtitle @value{UPDATED}
+@subtitle @value{UPDATED-MONTH}
 @author Kunihiro Ishiguro
 
 @page
 @vskip 0pt plus 1filll
-@copyright{
-Copyright 1999 Free Software Foundation, Inc.
+Copyright @copyright{} 1999 Kunihiro Ishiguro
 
 Permission is granted to make and distribute verbatim copies of
 this manual provided the copyright notice and this permission notice
@@ -81,32 +78,25 @@ notice identical to this one.
 Permission is granted to copy and distribute translations of this manual
 into another language, under the above conditions for modified versions,
 except that this permission notice may be stated in a translation approved
-by the Free Software Foundation.
-}
+by Kunihiro Ishiguro.
 @end titlepage
+@page
 
-@node Top, Overview, (dir), (dir)
 @ifinfo
+@node Top, Overview, (dir), (dir)
+@comment  node-name,  next,  previous,  up
 @top GNU Zebra
 		     
-Zebra is a multi-server routing software package that provides TCP/IP
-based routing services with protocols such as: RIPv1, RIPv2, RIPng,
-OSPFv2, OSPFv3, BGP-4, and BGP-4+.  Zebra also supports a Route
-Reflector and a Route Server.
+Zebra is a routing software package that manages TCP/IP based routing
+protocols.  Adding to routing protocol support, Zebra provides interface
+address configuration and advanced filtering.
 
-Zebra uses an advanced software architecture to provide you with a
-high-quality, multi-threaded, multi-server routing engine.  Zebra has an
-IOS-like interface for each routing protocol and supports many of the
-same commands that are found with IOS.
-
-This is the Zebra Manual for zebra-@value{VERSION}.
-
+This is the GNU Zebra Manual for zebra-@value{VERSION}.
 @end ifinfo
 
 @menu
 * Overview::                    Overview of the Zebra suite.
 * Installation::                How to install the Zebra suite.
-* Additional Features::         Software contributions for Zebra.
 
 The Zebra Suite
 
@@ -131,7 +121,6 @@ Indices
 
 * Command Index::               An item for each command name.
 * VTY Key Index::               An item for each VTY key.
-
 @end menu
 
 @node Overview, Installation, Top, Top
@@ -139,19 +128,38 @@ Indices
 @chapter Overview
 @cindex Overview
 
-Zebra is free routing software that manages TCP/IP based routing
-protocols,  IPv6 routing protocols are also supported.  Zebra is
-distributed under the GNU General Public License.
+Zebra is a routing software package that provides TCP/IP based routing
+services with routing protocols support such as RIPv1, RIPv2, RIPng,
+OSPFv2, OSPFv3, BGP-4, and BGP-4+ (@pxref{Supported RFC}).  Zebra also
+supports special BGP behavior Route Reflector and Route Server.  Route
+Server functionality is under development as of Zebra version 0.81.
 
-  You can get the latest information from the Zebra web page:
-@url{http://www.zebra.org/}.
+Zebra uses an advanced software architecture to provide you with a
+high-quality, multi-server routing engine.  Zebra has an interactive
+user interface for each routing protocol and supports common client user
+interface commands.
+
+IPv6
+
+SNMP
+
+Address configuration
+
+Licence
+
+Zebra is distributed under the GNU General Public License.
+
+Additional info.
+
 
 @menu
 * About Zebra::                 Basic information about Zebra
 * System Architecture::         The Zebra system architecture
 * Supported Platforms::         Supported platforms and future plans
+* Supported RFC::               Supported RFCs.
 * Mailing List::                Mailing list information
 * Bug Reports::                 Mail address for bug data
+* Zebra web page::              Zebra web page.
 @end menu
 
 @node About Zebra, System Architecture, Overview, Overview
@@ -179,36 +187,6 @@ default routes. If the network is rather large, however, or if the
 network structure changes frequently, you will want to take advantage of
 Zebra's dynamic routing protocol support for protocols such as RIP, OSPF
 or BGP: Zebra is for you.
-
-Below is the list of currently supported routing protocol RFCs:
-
-@table @asis
-
-@item @asis{ RFC1771 } 
-@cite{A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.}
-
-@item @asis{ RFC1966 }
-@cite{BGP Route Reflection An alternative to full mesh IBGP. T. Bates & R. Chandrasekeran. June 1996.}
-
-@item @asis{ RFC1997 }
-@cite{BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.}
-
-@item @asis{ RFC2080 }
-@cite{RIPng for IPv6. G. Malkin, R. Minnear. January 1997.}
-
-@item @asis{ RFC2283 }
-@cite{Multiprotocol Extensions for BGP-4. T. Bates, R. Chandra, D.  Katz, Y. Rekhter. February 1998.}
-
-@item @asis{ RFC2328 }
-@cite{OSPF Version 2. J. Moy. April 1998.}
-
-@item @asis{ RFC2453 }
-@cite{RIP Version 2. G. Malkin. November 1998.}
-
-@item @asis{ RFC2545 }
-@cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
-
-@end table
 
 @page
 @node System Architecture, Supported Platforms, About Zebra, Overview
@@ -263,7 +241,7 @@ processes called @command{pfinet}.  Zebra will provide all the routing
 selection mechanisms for the process.  This feature will be implemented
 in the near future.
 
-@node Supported Platforms, Mailing List, System Architecture, Overview
+@node Supported Platforms, Supported RFC, System Architecture, Overview
 @comment  node-name,  next,  previous,  up
 @section Supported Platforms
 
@@ -299,7 +277,51 @@ GNU/Hurd 0.2
 Solaris 7
 @end itemize
 
-@node Mailing List, Bug Reports, Supported Platforms, Overview
+@node Supported RFC, Mailing List, Supported Platforms, Overview
+@comment  node-name,  next,  previous,  up
+@section Supported RFC
+
+Below is the list of currently supported routing protocol RFC.
+
+@table @asis
+@item @asis{RFC1771} 
+@cite{A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.}
+
+@item @asis{RFC1966}
+@cite{BGP Route Reflection An alternative to full mesh IBGP. T. Bates & R. Chandrasekeran. June 1996.}
+
+@item @asis{RFC1997}
+@cite{BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.}
+
+@item @asis{RFC2080}
+@cite{RIPng for IPv6. G. Malkin, R. Minnear. January 1997.}
+
+@item @asis{RFC2283}
+@cite{Multiprotocol Extensions for BGP-4. T. Bates, R. Chandra, D.  Katz, Y. Rekhter. February 1998.}
+
+@item @asis{RFC2328}
+@cite{OSPF Version 2. J. Moy. April 1998.}
+
+@item @asis{RFC2453}
+@cite{RIP Version 2. G. Malkin. November 1998.}
+
+@item @asis{RFC2545}
+@cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
+@end table
+
+When SNMP support is enabled, below RFC is also supported.
+
+@table @asis
+
+@item @asis{RFC1227}
+@cite{SNMP MUX protocol and MIB. M.T. Rose. May-01-1991.}
+
+@item @asis{RFC1724}
+@cite{RIP Version 2 MIB Extension. G. Malkin & F. Baker. November 1994.}
+
+@end table
+
+@node Mailing List, Bug Reports, Supported RFC, Overview
 @comment  node-name,  next,  previous,  up
 @section Mailing List
 @cindex How to get in touch with Zebra
@@ -330,7 +352,7 @@ unsubscribe zebra
 
 
 
-@node Bug Reports,  , Mailing List, Overview
+@node Bug Reports, Zebra web page, Mailing List, Overview
 @comment  node-name,  next,  previous,  up
 @section Bug Reports
 
@@ -362,8 +384,15 @@ Bug reports are very important for us to improve the quality of Zebra.
 Zebra is still in the development stage, but please don't hesitate to
 send a bug report to @email{bug-zebra@@gnu.org}.
 
+@node Zebra web page,  , Bug Reports, Overview
+@comment  node-name,  next,  previous,  up
+@section Zebra web page
 
-@node  Installation, Additional Features, Overview, Top
+  You can get the latest information from the Zebra web page:
+@url{http://www.zebra.org/}.
+
+
+@node  Installation, Overview of the Herd, Overview, Top
 @comment  node-name,  next,  previous,  up
 @chapter Installation
 
@@ -432,8 +461,6 @@ Do not build ospf6d.
 Do not build bgpd.
 @item --disable-bgp-announce
 Do not make bgp announcements.
-@item --enable-one-vty
-Consoidate all vty's into one.
 @item --disable-pthread
 Do not use pthread features.  The default is to disable this feature so
 you don't need to specify it.
@@ -589,25 +616,7 @@ needed.
 You may need to make changes to the config files in
 @file{@value{INSTALL_PREFIX_ETC}/*.conf}. @xref{Config Commands}.
 
-
-
-
-@node Additional Features, Overview of the Herd, Installation, Top
-@comment  node-name,  next,  previous,  up
-@chapter Additional Features
-
-Zebra does other neat things too. Fairly soon there will be contributed
-software to list here.
-
-
-@c A - End of part one. General Zebra stuff
-
-@c A - Part two covers the daemons in detail, hopefully these sections will be converted to man pages soon...
-
-
-
-
-@node Overview of the Herd, zebra, Additional Features, Top
+@node Overview of the Herd, zebra, Installation, Top
 @comment  node-name,  next,  previous,  up
 @chapter Overview of the Herd
 
@@ -639,7 +648,7 @@ daemons.
 @cindex Configuration files for running the software
 @c A -not configuration files for installing the software
 @cindex Files for running configurations
-@cindex Modifying the herd's behaviour
+@cindex Modifying the herd's behavior
 @cindex Getting the herd running
 
 
@@ -650,7 +659,7 @@ daemons.
 
 
 In a config file, you can write the debugging options, a vty's password,
-routing daemon configurations, a logfile name, and so forth. This
+routing daemon configurations, a log file name, and so forth. This
 information forms the initial command set for a routing beast as it is
 starting.
 
@@ -692,7 +701,7 @@ Set enable password.
 
 @deffn Command {log stdout} {}
 @deffnx Command {no log stdout} {}
-Set loggin output to stdout.
+Set logging output to stdout.
 @end deffn
 
 @deffn Command {log file @var{filename}} {}
@@ -813,7 +822,6 @@ comment and the password is set to 'zebra!password'.
 @section Common Invocation Options
 @c COMMON_OPTIONS
 @c OPTIONS section of the man page
-
 
 These options apply to all Zebra beasts.
 
@@ -950,8 +958,6 @@ leaving the system, or by escaping to view mode.
 
 @c to be written (gpoul)
 This page is for describing other modes.
-
-
 
 @node VTY CLI Commands,  , VTY Modes, Virtual Terminal Interfaces
 @comment  node-name,  next,  previous,  up
@@ -1269,13 +1275,13 @@ When the program terminates, retain routes added by ripd.
 The following points are important to consider when using ripd:
 
 The user must have the capability to bind to port 521, generally this
-means that it (the user) must have superuser priviliges.
+means that it (the user) must have superuser privileges.
 
 
-The netmask features of ripd supports both version 1 and version 2 of
-RIP.  Version 1 of RIP originally contained no netmask information.  In
+The net-mask features of ripd supports both version 1 and version 2 of
+RIP.  Version 1 of RIP originally contained no net-mask information.  In
 RIP version 1, network classes were originally used to determine the
-size of the netmask.  Class A networks use 8 bits of mask, Class B
+size of the net-mask.  Class A networks use 8 bits of mask, Class B
 networks use 16 bits of masks, while Class C networks use 24 bits of
 mask.  Today, the most widely used method of a network mask is assigned
 to the packet on the basis of the interface that received the packet.
@@ -1307,10 +1313,8 @@ beast will default to Version 2.  In the case that RIP is set to Version
 the version of RIP being used.
 
 @deffn {RIP Command} {version @var{version}} {}
-Set RIP process's version.  @var{version} can be `1' or `2'.
+Set RIP process's version.  @var{version} can be ``1'' or ``2''.
 @end deffn
-
-
 
 @deffn {RIP Command} {network @var{network}} {}
 @deffnx {RIP Command} {no network @var{network}} {}
@@ -1329,11 +1333,11 @@ network} command will disable RIP for the specified network.
 Set a RIP enabled interface by @var{ifname}.  Both the sending and
 receiving of RIP packets will be enabled on the port specified in the
 network ifname command.  The "no network ifname" command will disable
-RIP on the specified inferface.
+RIP on the specified interface.
 @end deffn
 
 @deffn {RIP Command} {neighbor @var{a.b.c.d}} {}
-@deffnx {RIP Command} {no neigbour @var{a.b.c.d}} {}
+@deffnx {RIP Command} {no neighbor @var{a.b.c.d}} {}
 Specify RIP neighbor.  When a neighbor doesn't understand multicast,
 this command is used to specify neighbors.  In some cases, not all
 routers will be able to understand multicasting, where packets are sent
@@ -1479,7 +1483,7 @@ after routes listed in the route table and before routes will announced
 to interface (something like output filter). I think it is not so clear,
 but it is draft and it may be changed at future.
 
-Route-map statement (@pxref{Route Map}) is neede to use route-map
+Route-map statement (@pxref{Route Map}) is needed to use route-map
 functionality.
 
 Route-map's match statement
@@ -1489,7 +1493,7 @@ Match if the route has this metric.
 @end deffn
 
 @deffn {Route-map Command} {match ip address <access-list>}
-Match if route destanation perrmited by access-list.
+Match if route destination permitted by access-list.
 @end deffn
 
 @deffn {Route-map Command} {match ip next-hot A.B.C.D}
@@ -1821,7 +1825,7 @@ router bgp 1
 @end group
 @end example
 This configuration example says that network 10.0.0.0/8 will be
-announced to all neighbors.  Some vendor's routers don't advertize
+announced to all neighbors.  Some vendor's routers don't advertise
 routes if they aren't present in its IGP routing tables; @code{bgp}
 doesn't care about IGP routes when announcing its routes.
 @end deffn
@@ -1831,7 +1835,7 @@ This command specifies an aggregate address.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} remote-as @var{as-number}} {}
-Creates a new neighbour whose remote-as is @var{as-number}.  @var{peer}
+Creates a new neighbor whose remote-as is @var{as-number}.  @var{peer}
 can be an IPv4 address or an IPv6 address.
 @example
 @group
@@ -1855,7 +1859,7 @@ to the address of the bgp beast.
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} weight @var{weight}} {}
-This command specifies a default @var{weight} value for the neighbour's
+This command specifies a default @var{weight} value for the neighbor's
 routes.
 @end deffn
 
@@ -1987,7 +1991,7 @@ bgpd configuration
 !
 router zebra
 !
-! BGP-4+ configuraion
+! BGP-4+ configuration
 !
 router bgp 7675
  bgp router-id 10.0.0.1
@@ -2265,7 +2269,7 @@ Zebra fully supports IPv6 routing.  As described so far, Zebra supports
 RIPng, OSPFv3 and BGP-4+.  You can give IPv6 addresses to an interface
 and configure static IPv6 routing information.  Zebra-IPv6 also provides
 automatic address configuration via a feature called @code{address
-autoconfiguration}.  To do it, the router must send router advertisement
+auto configuration}.  To do it, the router must send router advertisement
 messages to the all nodes that exist on the network.
 
 @menu
@@ -2303,7 +2307,7 @@ interfaces.
 @item ioctl
 The @samp{ioctl} method is a very traditional way for reading or writing
 kernel information.  @samp{ioctl} can be used for looking up interfaces
-and for modifying interface addresses, flags, mtu swettings and other
+and for modifying interface addresses, flags, mtu settings and other
 types of information.  Also, @samp{ioctl} can insert and delete kernel
 routing table entries.  It will soon be available on almost any platform
 which zebra supports, but it is a little bit ugly thus far, so if a
@@ -2358,5 +2362,4 @@ and the kernel.
 
 @summarycontents
 @contents
-
 @bye

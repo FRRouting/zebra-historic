@@ -146,7 +146,7 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
 	}
 
       close (sock);
-      log_warn ("write : %s (%d)\n", strerror (errno), errno);
+      zlog_warn ("write : %s (%d)", strerror (errno), errno);
       return 1;
     }
   close (sock);

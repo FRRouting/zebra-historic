@@ -39,8 +39,5 @@ typedef unsigned short hello_int_t;
 typedef unsigned short rtr_dead_int_t;
 typedef unsigned long  area_id_t;
 
-#define ALLSPFROUTERS6 "ff02::5"
-#define ALLDROUTERS6   "ff02::6"
-
 #endif /* OSPF6_TYPES_H */
 

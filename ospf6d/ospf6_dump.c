@@ -69,15 +69,15 @@ char *mesg_name[] =
 
 char *lstype_name[] =
 {
-  "RouterLSA",
-  "NetworkLSA",
-  "InterAreaPrefixLSA",
-  "InterAreaRouterLSA",
-  "ASExternalLSA",
-  "GroupMembershipLSA",
-  "Type7LSA",
-  "LinkLSA",
-  "IntraAreaPrefixLSA",
+  "Router-LSA",
+  "Network-LSA",
+  "Inter-Area-Prefix-LSA",
+  "Inter-Area-Router-LSA",
+  "AS-External-LSA",
+  "Group-Membership-LSA",
+  "Type-7-LSA",
+  "Link-LSA",
+  "Intra-Area-Prefix-LSA",
   NULL
 };
 
@@ -276,6 +276,7 @@ unsigned char ospf6_lsa_dump;
 unsigned char ospf6_zebra_dump;
 unsigned char ospf6_config_dump;
 unsigned char ospf6_dbex_dump;
+unsigned char ospf6_spf_dump;
 unsigned char ospf6_route_dump;
 
 char *
@@ -341,16 +342,22 @@ ospf6_dump_lsreq (struct iovec *message)
 static void
 ospf6_dump_lsupdate (struct iovec *message)
 {
+  int i;
   struct linkstate_update *lsupdate;
 
   lsupdate = (struct linkstate_update *) (*message).iov_base;
   zlog_info ("  LSUpdate: #%lu", ntohl (lsupdate->lsupdate_num));
+  for (i = 1; message[i].iov_base; i++)
+    ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *)message[i].iov_base);
 }
 
 static void
 ospf6_dump_lsack (struct iovec *message)
 {
+  int i;
   zlog_info ("  LSAck:");
+  for (i = 0; message[i].iov_base; i++)
+    ospf6_dump_lsa_hdr ((struct ospf6_lsa_hdr *)message[i].iov_base);
 }
 
 void
@@ -365,11 +372,10 @@ ospf6_dump_message (struct iovec *message)
   inet_ntop (AF_INET, &o6hdr->router_id, rtrid_str, sizeof (rtrid_str));
   inet_ntop (AF_INET, &o6hdr->area_id, areaid_str, sizeof (areaid_str));
 
-  zlog_info ("  OSPFv%d type:%d len:%hu"
-             " rtrid:%s areaid:%s cksum:%hx instance:%d",
-              o6hdr->version, o6hdr->type, ntohs (o6hdr->len),
-              rtrid_str, areaid_str, ntohs (o6hdr->cksum),
-              o6hdr->instance_id);
+  zlog_info ("  OSPFv%d type:%d len:%hu rtrid:%s",
+             o6hdr->version, o6hdr->type, ntohs (o6hdr->len), rtrid_str);
+  zlog_info ("      areaid:%s cksum:%hx instance:%d",
+             areaid_str, ntohs (o6hdr->cksum), o6hdr->instance_id);
 
   switch (o6hdr->type)
     {
@@ -391,6 +397,27 @@ ospf6_dump_message (struct iovec *message)
       default:
         break;
     }
+}
+
+void
+ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *lsa_hdr)
+{
+  char advrtr[64];
+
+  inet_ntop (AF_INET, &lsa_hdr->lsh_advrtr, advrtr, sizeof (advrtr));
+  zlog_info ("    %s %s[%lu] age:%hu",
+             lstype_name[typeindex (lsa_hdr->lsh_type)],
+             advrtr, ntohl (lsa_hdr->lsh_id), ntohs (lsa_hdr->lsh_age));
+  zlog_info ("      seqnum:%#x cksum:%#hx len:%hu",
+             ntohl (lsa_hdr->lsh_seqnum), ntohs (lsa_hdr->lsh_cksum),
+             ntohs (lsa_hdr->lsh_len));
+}
+
+void
+ospf6_dump_lsa (struct ospf6_lsa *lsa)
+{
+  ospf6_age_current (lsa);
+  ospf6_dump_lsa_hdr (lsa->lsa_hdr);
 }
 
 int
@@ -657,9 +684,9 @@ DEFUN (no_debug_ospf6_config,
   if (!strcmp ("config", argv[0]))
     ospf6_config_dump = 0;
   else if (!strcmp ("dbex", argv[0]))
-    ospf6_dbex_dump = 1;
+    ospf6_dbex_dump = 0;
   else if (!strcmp ("route", argv[0]))
-    ospf6_route_dump = 1;
+    ospf6_route_dump = 0;
   else
     return CMD_ERR_NO_MATCH;
   return CMD_SUCCESS;
@@ -805,22 +832,7 @@ ospf6_debug_init ()
   install_node (&debug_node, ospf6_config_write_debug);
 
   install_element (VIEW_NODE, &show_debugging_ospf6_cmd);
-
   install_element (ENABLE_NODE, &show_debugging_ospf6_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_message_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_neighbor_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_interface_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_area_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_lsa_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_zebra_cmd);
-  install_element (ENABLE_NODE, &debug_ospf6_config_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_message_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_neighbor_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_interface_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_area_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_lsa_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_zebra_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf6_config_cmd);
 
   install_element (CONFIG_NODE, &debug_ospf6_message_cmd);
   install_element (CONFIG_NODE, &debug_ospf6_neighbor_cmd);
@@ -836,5 +848,19 @@ ospf6_debug_init ()
   install_element (CONFIG_NODE, &no_debug_ospf6_lsa_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_zebra_cmd);
   install_element (CONFIG_NODE, &no_debug_ospf6_config_cmd);
+}
+
+void
+ospf6_dump_ddbit (unsigned char dd_bit, char *buf, size_t size)
+{
+  memset (buf, 0, size);
+  if (DDBIT_IS_MASTER (dd_bit))
+    strncat (buf, "Master", size - strlen (buf));
+  else
+    strncat (buf, "Slave", size - strlen (buf));
+  if (DDBIT_IS_MORE (dd_bit))
+    strncat (buf, ",More", size - strlen (buf));
+  if (DDBIT_IS_INITIAL (dd_bit))
+    strncat (buf, ",Initial", size - strlen (buf));
 }
 

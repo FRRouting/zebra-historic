@@ -76,6 +76,16 @@ typedef struct _zlog
   int facility;		/* as per syslog facility */
 } ZLOG;
 
+/* Small macro to determine newline is newline only or linefeed needed. */
+#define LOG_NEWLINE  vty->type == VTY_FILE ? "\n" : "\r\n"
+
+/* Messages. */
+struct message
+{
+  int key;
+  char *str;
+};
+
 extern const char *zlog_proto_names[];
 
 /* where to log if stream is NULL */
@@ -104,8 +114,6 @@ void zvlog_info (const char *format, ...);
 void zvlog_debug (const char *format, ...);
 int zlog_rotate ();
 
-/* Small macro to determine newline is newline only or linefeed needed. */
-#define LOG_NEWLINE  vty->type == VTY_FILE ? "\n" : "\r\n"
+char *lookup (struct message *, int);
 
 #endif /* _ZEBRA_LOG_H */
-

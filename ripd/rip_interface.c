@@ -99,6 +99,8 @@ rip_interface_new ()
   ri = XMALLOC (MTYPE_IF, sizeof (struct rip_interface));
   bzero (ri, sizeof (struct rip_interface));
 
+  ri->auth_type = RIP_NO_AUTH;
+
   return ri;
 }
 
@@ -124,7 +126,7 @@ rip_interface_multicast_set (int sock, struct interface *ifp)
 	  addr = p->prefix;
 
 	  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF,
-			  &addr, sizeof (struct in_addr)) < 0) 
+			  (void *) &addr, sizeof (struct in_addr)) < 0) 
 	    {
 	      zlog_warn ("Can't setsockopt IP_MULTICAST_IF to fd %d", sock);
 	      return;
@@ -1111,6 +1113,7 @@ DEFUN (ip_rip_authentication_string,
   if (ri->auth_str)
     free (ri->auth_str);
 
+  ri->auth_type = RIP_AUTH_SIMPLE_PASSWORD;
   ri->auth_str = strdup (argv[0]);
 
   return CMD_SUCCESS;
@@ -1135,6 +1138,7 @@ DEFUN (no_ip_rip_authentication_string,
   if (ri->auth_str)
     free (ri->auth_str);
 
+  ri->auth_type = RIP_NO_AUTH;
   ri->auth_str = NULL;
 
   return CMD_SUCCESS;

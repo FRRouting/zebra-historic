@@ -919,6 +919,25 @@ ospf_ls_upd_list_lsa (struct stream *s, struct ospf_interface *oi, size_t size)
   return lsas;
 }
 
+
+void
+ospf_upd_list_clean (list lsas)
+{
+  listnode node;
+  struct ospf_lsa * lsa;
+
+  LIST_ITERATOR (lsas, node)
+    {
+      lsa = getdata (node);
+      if (lsa == NULL)
+	continue;
+      ospf_lsa_free (lsa);
+    }
+
+  list_delete_all (lsas);
+}
+
+
 /* OSPF Link State Update message read -- RFC2328 Section 13. */
 void
 ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
@@ -926,7 +945,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 {
   struct ospf_neighbor *nbr;
   list lsas;
-  listnode n1;
+  listnode node, next;
 
   /* increment statistics. */
   oi->ls_upd_in++;
@@ -951,21 +970,45 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
   /* Get list of LSAs from Link State Update packet. */
   lsas = ospf_ls_upd_list_lsa (s, oi, size);
 
+
+#define DISCARD_LSA(L) {\
+	ospf_lsa_free (L);\
+        zlog_info("Z: ospf_lsa_free() in ospf_ls_upd(): %x", lsa);\
+	continue; }
+
   /* Process each LSA received. */
-  for (n1 = listhead (lsas); n1; nextnode (n1))
+  for (node = listhead (lsas); node; node = next)
     {
       struct ospf_lsa *lsa, *ls_ret, *current;
       struct ospf_lsa *ls_req;
       int ret = 1;
 
-      lsa = getdata (n1);
+      next = node->next;
+
+      lsa = getdata (node);
+
+      list_delete_by_val (lsas, lsa); /* We don't need it anymore */
+
+      /* Validate Checksum */
+
+      /* LSA Type */
+      if (lsa->data->type < OSPF_MIN_LSA || 
+	  lsa->data->type > OSPF_MAX_LSA)
+	DISCARD_LSA (lsa);
+
+      if (lsa->data->type == OSPF_AS_EXTERNAL_LSA &&
+	  nbr->oi->area->external_routing != OSPF_AREA_DEFAULT)
+	DISCARD_LSA (lsa);
 
       /* Find the LSA in the current database. */
+
       current = ospf_lsa_lookup_by_header (oi->area, lsa->data);
+
       /* If the LSA's LS age is equal to MaxAge, and there is currently
 	 no instance of the LSA in the router's link state database,
 	 and none of router's neighbors are in states Exchange or Loading,
 	 then take the following actions. */
+
       if (LS_AGE (lsa) == OSPF_LSA_MAX_AGE && !current &&
 	  (ospf_nbr_count (oi->nbrs, NSM_Exchange) + 
 	   ospf_nbr_count (oi->nbrs, NSM_Loading)) == 0)
@@ -975,7 +1018,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 
 	  /* Discard LSA. */	  
 	  zlog_warn ("OSPF LS Update: LS age is equal to MaxAge.");
-	  continue;
+          DISCARD_LSA (lsa);
 	}
 
       /* Find the instance of this LSA that is currently contained
@@ -991,28 +1034,32 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 	  continue;
 	}
 
-#if 0 /* This need careful treatment, we have to check an error which
+#if 0
+      /* This need careful treatment, we have to check an error which
          occurred. -- kunihiro 1999/08/30. */
+
       /* (6) Else, If there is an instance of the LSA on the sending
 	 neighbor's Link state request list, an error has occurred in
 	 the Database Exchange process.  In this case, restart the
 	 Database Exchange process by generating the neighbor event
 	 BadLSReq for the sending neighbor and stop processing the
 	 Link State Update packet. */
+
       if (ospf_ls_request_lookup (nbr, lsa))
 	{
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_BadLSReq);
 	  zlog_warn ("LSA instance exists on Link state request list");
 
 	  /* Clean list of LSAs. */
-	  list_delete_all (lsas);
+          ospf_upd_list_clean (lsas);
 	  return;
 	}
-#endif /* 0 */
+#endif
 
       /* If the received LSA is the same instance as the database copy
 	 (i.e., neither one is more recent) the following two steps
 	 should be performed: */
+
       if (ret == 0)
 	{
 	  /* If the LSA is listed in the Link state retransmission list
@@ -1021,6 +1068,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 	     received LSA as an acknowledgment by removing the LSA from
 	     the Link state retransmission list.  This is termed an
 	     "implied acknowledgment". */
+
 	  ls_ret = ospf_ls_retransmit_lookup (nbr, lsa->data);
 
 	  if (ls_ret != NULL)
@@ -1029,14 +1077,18 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 
 	      /* Delayed acknowledgment sent if advertisement received
 		 from Designated Router, otherwise do nothing. */
+
 	      if (oi->status == ISM_Backup)
 		if (NBR_IS_DR (nbr))
 		  list_add_node (oi->ls_ack, ospf_lsa_dup (lsa));
+
+              DISCARD_LSA (lsa);
 	    }
 	  else
 	    /* Acknowledge the receipt of the LSA by sending a
 	       Link State Acknowledgment packet back out the receiving
 	       interface. */
+
 	    ospf_ls_ack_send (nbr, lsa);
 	}
 
@@ -1046,11 +1098,12 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 	 acknowledging it. (In this case, the LSA's LS sequence number is
 	 wrapping, and the MaxSequenceNumber LSA must be completely
 	 flushed before any new LSA instance can be introduced). */
+
       else if (LS_AGE (current) == OSPF_LSA_MAX_AGE &&
-	       current->data->ls_seqnum == htonl (OSPF_MAX_SEQUENCE_NUMBER)){
-	ospf_lsa_free (lsa);
-        zlog_info("Z: ospf_lsa_free() in ospf_ls_upd(): %x", lsa);
-       }
+	       current->data->ls_seqnum == htonl (OSPF_MAX_SEQUENCE_NUMBER))
+	{
+	  DISCARD_LSA (lsa);
+	}
 
       /* Otherwise, as long as the database copy has not been sent in a
 	 Link State Update within the last MinLSArrival seconds, send the
@@ -1060,6 +1113,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 	 database copy of the LSA on the neighbor's link state
 	 retransmission list, and do not acknowledge the received (less
 	 recent) LSA instance. */
+
       else
 	{
 	  /* MinLSArrival Check should be performed. */
@@ -1077,6 +1131,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
   if (list_isempty (nbr->ls_request))
     OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
 
+  assert (listcount (lsas) == 0);
   list_delete_all (lsas);
 }
 
@@ -1267,7 +1322,11 @@ ospf_check_sum (struct ospf_header *ospfh)
   ret = in_cksum (ospfh, ntohs (ospfh->length));
 
   if (ret != sum)
-    return 0;
+    {
+      zlog_info ("ospf_check_sum(): checksum mismatch, my %lX, his %X",
+		 ret, sum);
+      return 0;
+    }
 
   return 1;
 }
@@ -1326,17 +1385,20 @@ ospf_verify_header (struct ospf_interface *oi,
     }
 
   /* if check sum is invalid, packet is discarded. */
-  if (ntohs(ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC) {
-    if (! ospf_check_sum (ospfh))
+  if (ntohs (ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
     {
-        zlog_warn ("interface %s: ospf_read packet checksum error %s",
-		 oi->ifp->name, inet_ntoa (ospfh->router_id));
-       return -1;
+      if (! ospf_check_sum (ospfh))
+	{
+	  zlog_warn ("interface %s: ospf_read packet checksum error %s",
+		     oi->ifp->name, inet_ntoa (ospfh->router_id));
+	  return -1;
+	}
     }
-  } else {
-    if (ospfh->checksum != 0)
-       return -1;
-  }
+  else
+    {
+      if (ospfh->checksum != 0)
+	return -1;
+    }
 
   return 0;
 }
@@ -1390,7 +1452,7 @@ ospf_read (struct thread *thread)
 
   /* Self-originated packet should be discarded silently. */
   if (IPV4_ADDR_SAME (&iph->ip_src, &oi->address->u.prefix4))
-      return 0;
+    return 0;
 
   /* XXX Check is this packet comes from the interface.  We will need
      unnumbered link treatment. -- kunihiro */
@@ -1436,13 +1498,15 @@ ospf_read (struct thread *thread)
     }
 
   /* if check sum is invalid, packet is discarded. */
-  if (ntohs(ospfh->auth_type) == OSPF_AUTH_CRYPTOGRAPHIC) {
-    if (ospf_check_md5_digest(oi, oi->ibuf, ntohs(ospfh->length)) == 0) {
-      zlog_warn ("interface %s: ospf_read md5 authentication failed.",
-                 oi->ifp->name);
-      return -1;
+  if (ntohs(ospfh->auth_type) == OSPF_AUTH_CRYPTOGRAPHIC)
+    {
+      if (ospf_check_md5_digest(oi, oi->ibuf, ntohs(ospfh->length)) == 0)
+	{
+	  zlog_warn ("interface %s: ospf_read md5 authentication failed.",
+		     oi->ifp->name);
+	  return -1;
+	}
     }
-  }
 
   /* Some header verification. */
   ret = ospf_verify_header (oi, iph, ospfh, &asoi);
@@ -1534,25 +1598,26 @@ ospf_make_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
 
 int
 ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
-                       u_int16_t length) {
+                       u_int16_t length)
+{
   void *ibuf;
   struct md5_ctx ctx;
   unsigned char digest[OSPF_AUTH_MD5_SIZE];
   unsigned char *pdigest;
 
-  ibuf = STREAM_PNT(s);
+  ibuf = STREAM_PNT (s);
 
   /* Get pointer to the end of the packet */
   pdigest = ibuf + length;
 
   /* generate a digest for the ospf packet - their digest + our digest */
-  md5_init_ctx(&ctx);
-  md5_process_bytes(ibuf, length, &ctx);
-  md5_process_bytes(oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
-  md5_finish_ctx(&ctx, digest);
+  md5_init_ctx (&ctx);
+  md5_process_bytes (ibuf, length, &ctx);
+  md5_process_bytes (oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
+  md5_finish_ctx (&ctx, digest);
 
   /* compare the two */
-  if (memcmp(pdigest, digest, OSPF_AUTH_MD5_SIZE))
+  if (memcmp (pdigest, digest, OSPF_AUTH_MD5_SIZE))
     return 0;
 
   return 1;
@@ -1563,34 +1628,35 @@ ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
    and update the MD5 digest */
 
 int
-ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *op) {
+ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *op)
+{
   struct ospf_header *ospfh;
   unsigned char digest[OSPF_AUTH_MD5_SIZE];
   struct md5_ctx ctx;
   void *ibuf;
   unsigned long oldputp;
 
-  ibuf = STREAM_DATA(op->s);
+  ibuf = STREAM_DATA (op->s);
   ospfh = (struct ospf_header *) ibuf;
 
-  if (ntohs(ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
+  if (ntohs (ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
     return 0;
 
   /* we do this here so when we dup a packet, we don't have to
      waste CPU rewriting other headers */
-  ospfh->auth.auth_md5.md5_seq = htonl(oi->auth_seq++);
+  ospfh->auth.auth_md5.md5_seq = htonl (oi->auth_seq++);
 
   /* generate a digest for the entire packet + our secret key */
-  md5_init_ctx(&ctx);
-  md5_process_bytes(ibuf, ntohs(ospfh->length), &ctx);
-  md5_process_bytes(oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
-  md5_finish_ctx(&ctx, digest);
+  md5_init_ctx (&ctx);
+  md5_process_bytes (ibuf, ntohs(ospfh->length), &ctx);
+  md5_process_bytes (oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
+  md5_finish_ctx (&ctx, digest);
 
   /* append md5 digest to the end of the stream */
-  oldputp = stream_get_putp(op->s);
-  stream_set_putp(op->s, ntohs(ospfh->length));
-  stream_put(op->s, digest, OSPF_AUTH_MD5_SIZE);
-  stream_set_putp(op->s, oldputp);
+  oldputp = stream_get_putp (op->s);
+  stream_set_putp (op->s, ntohs(ospfh->length));
+  stream_put (op->s, digest, OSPF_AUTH_MD5_SIZE);
+  stream_set_putp (op->s, oldputp);
 
   /* we do *NOT* increment the OSPF header length */
   op->length += OSPF_AUTH_MD5_SIZE;
@@ -1610,7 +1676,7 @@ ospf_fill_header (struct ospf_interface *oi,
   ospfh->length = htons (length);
 
   /* Calculate checksum. */
-  if (ntohs(ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
+  if (ntohs (ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
     ospfh->checksum = in_cksum (ospfh, length);
   else
     ospfh->checksum = 0;
@@ -1640,8 +1706,8 @@ ospf_make_hello (struct ospf_interface *oi, struct stream *s)
   /* Set Hello Interval. */
   stream_putw (s, oi->v_hello);
 
-
-  zlog_info("Z: make_hello: options: %x, int: %s", OPTIONS(oi), oi->ifp->name);
+  zlog_info ("Z: make_hello: options: %x, int: %s",
+	     OPTIONS(oi), oi->ifp->name);
 
   /* Set Options. */
   stream_putc (s, OPTIONS (oi));
@@ -1812,7 +1878,7 @@ ospf_make_ls_req (struct ospf_neighbor *nbr, struct stream *s)
 }
 
 void
-debug_list(list list)
+debug_list (list list)
 {
   listnode node;
 
@@ -1825,17 +1891,15 @@ debug_list(list list)
   zlog_info("Z: LIST DEBUG: ------ List Items ------");
 
   LIST_ITERATOR(list, node)
-  {
-    zlog_info("Z: LIST DEBUG: node: %x", node);
-    zlog_info("Z: LIST DEBUG: node->next: %x", node->next);
-    zlog_info("Z: LIST DEBUG: node->prev: %x", node->prev);
-    zlog_info("Z: LIST DEBUG: node->data: %x", node->data);
-  }
+    {
+      zlog_info("Z: LIST DEBUG: node: %x", node);
+      zlog_info("Z: LIST DEBUG: node->next: %x", node->next);
+      zlog_info("Z: LIST DEBUG: node->prev: %x", node->prev);
+      zlog_info("Z: LIST DEBUG: node->data: %x", node->data);
+    }
 
- zlog_info("Z: LIST DEBUG: ------ Stop -------");
+  zlog_info("Z: LIST DEBUG: ------ Stop -------");
 }
-
-
 
 int
 ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
@@ -1845,9 +1909,8 @@ ospf_make_ls_upd (struct ospf_interface *oi, list update, struct stream *s)
   u_int16_t length = OSPF_LS_UPD_MIN_SIZE;
   unsigned long delta = stream_get_putp (s);
 
-
   zlog_info("Z: ospf_make_ls_upd: Start");
-  debug_list(update);
+  debug_list (update);
 
   stream_putl (s, listcount (update));
 
@@ -1911,7 +1974,7 @@ ospf_make_ls_ack (struct ospf_interface *oi, struct ospf_lsa *d_lsa,
 	  lsa = getdata (node);
 	  assert (lsa);
 
-	  if (length + delta > OSPF_PACKET_MAX(oi))
+	  if (length + delta > OSPF_PACKET_MAX (oi))
 	    break;
 
 	  stream_put (s, lsa->data, OSPF_LSA_HEADER_SIZE);

@@ -175,10 +175,8 @@ ospf_dr_eligible_routers (struct route_table *nbrs, list el_list)
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
     {
-      if (rn->info == NULL)
+      if ((nbr = rn->info) == NULL)
 	continue;
-
-      nbr = rn->info;
 
       /* Ignore 0.0.0.0 node*/
       if (nbr->router_id.s_addr == 0)
@@ -204,10 +202,8 @@ ospf_dr_change (struct route_table *nbrs)
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
     {
-      if (rn->info == NULL)
+      if ((nbr = rn->info) == NULL)
 	continue;
-
-      nbr = rn->info;
 
       /* Ignore 0.0.0.0 node*/
       if (nbr->router_id.s_addr == 0)
@@ -630,14 +626,12 @@ ism_change_status (struct ospf_interface *oi, int status)
   old_status = oi->status;
   oi->status = status;
 
-  if ((old_status == ISM_Down) || (status == NSM_Down))
-     ospf_check_abr_status();
-
+  if (old_status == ISM_Down || status == NSM_Down)
+    ospf_check_abr_status();
 
   /* Originate router-LSA. */
   if (oi->area)
     {
-
      if (status == ISM_Down)
        {
 	 if (oi->area->act_ints > 0)
@@ -656,7 +650,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 	ospf_ls_retransmit_add_nbr_all (oi, lsa);
 #endif /* 0 */
 
-      ospf_schedule_router_lsa_originate(oi->area);
+      ospf_schedule_router_lsa_originate (oi->area);
     }
 
   /* Originate network-LSA. */
@@ -665,7 +659,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 /*      lsa = ospf_network_lsa (oi);
       ospf_network_lsa_install (oi, lsa); */
 
-      ospf_schedule_network_lsa_originate(oi);
+      ospf_schedule_network_lsa_originate (oi);
 
     }
   else if (old_status == ISM_DR && status != ISM_DR)
@@ -675,6 +669,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 
       if (oi->network_lsa_self != NULL)
 	ospf_lsa_free (oi->network_lsa_self);
+
       oi->network_lsa_self = NULL;
     }
 

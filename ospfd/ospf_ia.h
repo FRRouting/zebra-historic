@@ -22,6 +22,19 @@
 #ifndef _ZEBRA_OSPF_IA_H
 #define _ZEBRA_OSPF_IA_H
 
+/* Macros. */
+#define OSPF_EXAMINE_SUMMARIES_ALL(A,N,R) \
+	{ \
+	  ospf_examine_summaries ((A), SUMMARY_LSA ((A)), (N), (R)); \
+	  ospf_examine_summaries ((A), SUMMARY_LSA_ASBR ((A)), (N), (R)); \
+	}
+
+#define OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL(A,N,R) \
+	{ \
+	  ospf_examine_transit_summaries ((A), SUMMARY_LSA ((A)), (N), (R)); \
+	  ospf_examine_transit_summaries ((A), SUMMARY_LSA_ASBR ((A)), (N), (R)); \
+	}
+
 void ospf_ia_routing (struct route_table *, struct route_table *);
 int ospf_area_is_transit (struct ospf_area *);
 

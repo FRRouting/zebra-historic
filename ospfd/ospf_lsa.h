@@ -77,6 +77,9 @@ struct ospf_lsa
 
   /* Last time it was originated */
   time_t originated; 
+
+  /* Refreshement List or Queue */
+  list   refresh_list;
 };
 
 /* OSPF LSA Link Type. */
@@ -165,6 +168,18 @@ struct as_external_lsa
 #define LS_AGE(x)       (OSPF_LSA_MAX_AGE < GET_AGE(x) ? \
                                             OSPF_LSA_MAX_AGE : GET_AGE(x))
 
+#define OSPF_SUMMARY_LSA_SELF_FIND_BY_PREFIX(A,P) \
+        ospf_lsdb_iterator (SUMMARY_LSA ((A)), \
+                            (struct prefix_ipv4 *) (P), 0, find_summary)
+
+#define OSPF_SUMMARY_ASBR_LSA_SELF_FIND_BY_PREFIX(A,P) \
+        ospf_lsdb_iterator (SUMMARY_LSA_ASBR ((A)), \
+                            (struct prefix_ipv4 *) (P), 0, find_asbr_summary)
+
+#define OSPF_EXTERNAL_LSA_SELF_FIND_BY_PREFIX(P) \
+	ospf_lsdb_iterator (ospf_top->external_lsa, \
+                            ((struct prefix_ipv4 *) (P)), 0, find_external)
+
 struct ospf_route;
 
 /* Prototypes. */
@@ -205,19 +220,25 @@ int ospf_lsa_count (struct ospf_area *);
 void ospf_lsa_init ();
 
 int ospf_lsa_is_self_originated (struct ospf_lsa *);
+/*
 struct ospf_lsa *ospf_find_self_summary_lsa_by_prefix(struct ospf_area *, 
 						      struct prefix_ipv4 *);
 
 struct ospf_lsa *ospf_find_self_summary_asbr_lsa_by_prefix (struct ospf_area *, 
 							    struct prefix_ipv4 *);
-
 struct ospf_lsa *ospf_find_self_external_lsa_by_prefix (struct prefix_ipv4 *);
+*/
+
+int find_summary (struct ospf_lsa *, void *, int);
+int find_asbr_summary (struct ospf_lsa *, void *, int);
+int find_external (struct ospf_lsa *, void *, int);
+
 void ospf_lsa_maxage (struct ospf_lsa *);
-u_int32_t get_metric(u_char *);
-void ospf_update_router_lsas();
+u_int32_t get_metric (u_char *);
+void ospf_update_router_lsas ();
 
 int ospf_lsa_maxage_walker (struct thread *);
-void ospf_schedule_update_router_lsas();
+void ospf_schedule_update_router_lsas ();
 
 int ospf_network_lsa_refresh (struct thread *);
 struct in_addr ospf_get_free_id_for_prefix (struct ospf_lsdb *,
@@ -227,5 +248,8 @@ void ospf_schedule_lsa_flood_area(struct ospf_area *, struct ospf_lsa *);
 void ospf_schedule_lsa_flush_area(struct ospf_area *, struct ospf_lsa *);
 void ospf_schedule_router_lsa_originate(struct ospf_area *);
 void ospf_schedule_network_lsa_originate(struct ospf_interface *);
+
+void ospf_refresher_register_lsa (struct ospf *, struct ospf_lsa *);
+void ospf_refresher_unregister_lsa (struct ospf_lsa *);
 
 #endif /* _ZEBRA_OSPF_LSA_H */

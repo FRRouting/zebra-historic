@@ -1,3 +1,76 @@
+1999-11-25  Robert Olsson <Robert.Olsson@data.slu.se>
+
+	* bgp_routemap.c (route_match_nlri): `match nlri
+	unicast|multicast' and `set nlri unicast|multicast' command are
+	added.
+
+1999-11-22  Robert Olsson <Robert.Olsson@data.slu.se>
+
+	* bgpd.c: Add translate-update support.
+
+	* bgpd.h (TRANSLATE_UPDATE_OFF): Add translate-update definition.
+
+1999-11-19  Robert.Olsson@data.slu.se
+
+	* bgp_route.c (bgp_peer_delete): Add MBGP peer clear codes.
+
+1999-11-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_open.c (bgp_capability_mp): Temporary comment out
+	SAFI_UNICAST_MULTICAST handling until we know the meanings.
+
+1999-11-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_btoa.c: New file added.
+
+1999-11-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h (struct peer): Add dont_capability flag.
+	(struct peer): Add override_capability flag.
+
+	* bgpd.c (neighbor_dont_capability_negotiation): `neighbor PEER
+	dont-capability-negotiation' added.
+
+1999-11-12  Bill Sommerfeld <sommerfeld@orchard.arlington.ma.us>
+
+	* bgp_attr.c (bgp_mp_reach_parse): Ignore link-local addresses
+	attribute from non-shared-network peers.
+
+1999-11-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_snmp.c: New file added.
+
+	* BGP4-MIB.txt: Updated to the latest Internet-Draft
+	draft-ietf-idr-bgp4-mib-04.txt.
+
+1999-11-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_route_init): Add `show ipv6 bgp prefix-list'.
+
+	* bgp_attr.c (bgp_mp_unreach_parse): Enclose safi setup with
+	#ifdef HAVE_MBGPV4.
+
+1999-11-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_dump.c (no_dump_bgp_all): Add [PATH] and [INTERVAL] to no
+	dump bgp commands.
+	(config_write_bgp_dump): Write interval value to the
+	configuration.
+
+1999-11-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_zebra.c: Redistribute route-map support is added.
+
+	* bgp_zebra.h: New file added.
+
+1999-11-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_dump.c: BGP packet dump routine compatible with MRT.
+	* bgp_dump.h: BGP packet dump routine compatible with MRT.
+
+	* bgp_debug.c: Renamed from bgp_dump.c
+	* bgp_debug.h: Renamed from bgp_dump.h
+
 1999-10-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* BGP4-MIB.txt: New file added.  Edited version of RFC1657.

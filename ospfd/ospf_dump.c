@@ -40,7 +40,7 @@
 #include "ospfd/ospf_network.h"
 
 /* messages for OSPFv2 status */
-message ospf_ism_status_msg[] =
+struct message ospf_ism_status_msg[] =
 {
   { ISM_DependUpon,   "DependUpon" },
   { ISM_Down,         "Down" },
@@ -53,7 +53,7 @@ message ospf_ism_status_msg[] =
 };
 int ospf_ism_status_msg_max = OSPF_ISM_STATUS_MAX;
 
-message ospf_nsm_status_msg[] =
+struct message ospf_nsm_status_msg[] =
 {
   { NSM_DependUpon, "DependUpon" },
   { NSM_Down,       "Down" },
@@ -67,7 +67,7 @@ message ospf_nsm_status_msg[] =
 };
 int ospf_nsm_status_msg_max = OSPF_NSM_STATUS_MAX;
 
-message ospf_lsa_type_msg[] =
+struct message ospf_lsa_type_msg[] =
 {
   { OSPF_UNKNOWN_LSA,      "unknown" },
   { OSPF_ROUTER_LSA,       "router-LSA" },
@@ -78,7 +78,7 @@ message ospf_lsa_type_msg[] =
 };
 int ospf_lsa_type_msg_max = OSPF_MAX_LSA;
 
-message ospf_link_state_id_type_msg[] =
+struct message ospf_link_state_id_type_msg[] =
 {
   { OSPF_UNKNOWN_LSA,      "(unknown)" },
   { OSPF_ROUTER_LSA,       "" },
@@ -97,7 +97,7 @@ unsigned long ospf_debug_nsm = 0;
 
 /* message lookup function */
 char *
-mes_lookup (message *meslist, int max, int index)
+mes_lookup (struct message *meslist, int max, int index)
 {
   if (index < 0 || index >= max)
     {
@@ -472,7 +472,9 @@ ospf_ip_header_dump (struct stream *s)
   zlog_info ("ip_off %u", (u_int32_t) iph->ip_off);
   zlog_info ("ip_ttl %d", iph->ip_ttl);
   zlog_info ("ip_p %d", iph->ip_p);
-  zlog_info ("ip_sum 0x%x", (u_int32_t) ntohs (iph->ip_sum));
+  /* There is a report that Linux 2.0.37 does not have ip_sum.  But
+     I'm not sure.  Temporary commented out by kunihiro. */
+  /* zlog_info ("ip_sum 0x%x", (u_int32_t) ntohs (iph->ip_sum)); */
   zlog_info ("ip_src %s",  inet_ntoa (iph->ip_src));
   zlog_info ("ip_dst %s", inet_ntoa (iph->ip_dst));
 }

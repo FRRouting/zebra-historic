@@ -22,378 +22,284 @@
 
 #include <zebra.h>
 
-#include "linklist.h"
 #include "if.h"
 #include "sockunion.h"
 #include "prefix.h"
+#include "ioctl.h"
+#include "connected.h"
 #include "memory.h"
 #include "log.h"
-#include "ioctl.h"
-#include "dropline.h"
-#include "connected.h"
 
-/* Path to device proc file system. */
-#ifndef _PATH_PROCNET_DEV
-#define _PATH_PROCNET_DEV             "/proc/net/dev"
-#endif /* _PATH_PROCNET_DEV */
+#include "zebra/interface.h"
 
-#define IF_BUFSIZ 1024
-#define IF_NAMELEN 10
+/* Interface looking up using infamous SIOCGIFCONF. */
+int
+interface_list_ioctl ()
+{
+  int ret;
+  int sock;
+#define IFNUM_BASE 32
+  int ifnum;
+  struct ifreq *ifreq;
+  struct ifconf ifconf;
+  struct interface *ifp;
+  int n;
 
-/* For interface_list_ioctl ().  SIOCGIFCONF needs pre allocated
-   interface information buffer. This is just the base setting
-   it will grow as needed. */
-#define BASE_INTERFACE 32
+  /* Normally SIOCGIFCONF works with AF_INET socket. */
+  sock = socket (AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0) 
+    {
+      zlog_warn ("Can't make AF_INET socket stream: %s", strerror (errno));
+      return -1;
+    }
 
-/* Fake index for interface. */
-int if_fake_index = 1;
+  /* Set initial ifreq count.  This will be double when SIOCGIFCONF
+     fail.  Solaris has SIOCGIFNUM. */
+#ifdef SIOCGIFNUM
+  ret = ioctl (sock, SIOCGIFNUM, &ifnum);
+  if (ret < 0)
+    ifnum = IFNUM_BASE;
+  else
+    ifnum++;
+#else
+  ifnum = IFNUM_BASE;
+#endif /* SIOCGIFNUM */
+
+  ifconf.ifc_buf = NULL;
+
+  /* Loop until SIOCGIFCONF success. */
+  for (;;) 
+    {
+      ifconf.ifc_len = sizeof (struct ifreq) * ifnum;
+      ifconf.ifc_buf = XREALLOC(MTYPE_TMP, ifconf.ifc_buf, ifconf.ifc_len);
+
+      ret = ioctl(sock, SIOCGIFCONF, &ifconf);
+      if (ret < 0) 
+	{
+	  zlog_warn ("SIOCGIFCONF: %s", strerror(errno));
+	  goto end;
+	}
+      /* When length is same as we prepared, assume it overflowed and
+         try again */
+      if (ifconf.ifc_len == sizeof (struct ifreq) * ifnum) 
+	{
+	  ifnum += 10;
+	  continue;
+	}
+      /* Success. */
+      break;
+    }
+
+  /* Allocate interface. */
+  ifreq = ifconf.ifc_req;
+  for (n = 0; n < ifconf.ifc_len; n += sizeof(struct ifreq))
+    {
+      ifp = if_get_by_name (ifreq->ifr_name);
+      ifreq++;
+    }
+
+ end:
+  close (sock);
+  XFREE (MTYPE_TMP, ifconf.ifc_buf);
+
+  return ret;
+}
 
 /* Get interface's index by ioctl. */
-#ifdef SIOCGIFINDEX
-void
+int
 if_get_index (struct interface *ifp)
 {
-  struct ifreq ifreq;
   int ret;
+  static int if_fake_index = 1;
+
+#ifdef SIOCGIFINDEX
+  struct ifreq ifreq;
 
   ifreq_set_name (&ifreq, ifp);
-  
-  ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
 
+  ret = if_ioctl (SIOCGIFINDEX, (caddr_t) &ifreq);
   if (ret < 0)
     {
-      zlog_warn ("Can't get interface index by SIOCGIFINDEX: %s",
-		 strerror (errno));
+      /* Linux 2.0.X does not have interface index. */
       ifp->ifindex = if_fake_index++;
-      return;
+      return ifp->ifindex;
     }
 
   /* OK we got interface index. */
+#ifdef ifr_ifindex
   ifp->ifindex = ifreq.ifr_ifindex;
-}
 #else
-/* If we don't have SIOCGIFINDEX then make fake index. */
-void
-if_get_index (struct interface *ifp)
-{
+  ifp->ifindex = ifreq.ifr_index;
+#endif
+  return ifp->ifindex;
+
+#else
   ifp->ifindex = if_fake_index++;
-}
+  return ifp->ifindex;
 #endif /* SIOCGIFINDEX */
+}
+
+#ifdef SIOCGIFHWADDR
+int
+if_get_hwaddr (struct interface *ifp)
+{
+  int ret;
+  struct ifreq ifreq;
+  int i;
+
+  strncpy (ifreq.ifr_name, ifp->name, IFNAMSIZ);
+  ifreq.ifr_addr.sa_family = AF_INET;
+
+  /* Fetch Hardware address if available. */
+  ret = if_ioctl (SIOCGIFHWADDR, (caddr_t) &ifreq);
+  if (ret < 0)
+    ifp->hw_addr_len = 0;
+  else
+    {
+      memcpy (ifp->hw_addr, ifreq.ifr_hwaddr.sa_data, 8);
+
+      for (i = 0; i < 8; i++)
+	if (ifp->hw_addr[i] != 0)
+	  break;
+
+      if (i == 8)
+	ifp->hw_addr_len = 0;
+      else
+	ifp->hw_addr_len = 8;
+    }
+  return 0;
+}
+#endif /* SIOCGIFHWADDR */
 
 /* Interface address lookup by ioctl.  This function only looks up
    IPv4 address. */
 int
-if_addr_ioctl (struct interface *ifp, char *alias)
+if_get_addr (struct interface *ifp)
 {
   int ret;
   struct ifreq ifreq;
   struct sockaddr_in addr;
   struct sockaddr_in mask;
-  struct sockaddr_in sin_broad;
-  struct in_addr *broad;
+  struct sockaddr_in dest;
+  struct in_addr *dest_pnt;
   u_char prefixlen;
 
-  /* Set interface's name and address family. */
-  if (alias)
-    strncpy (ifreq.ifr_name, alias, IFNAMSIZ);
-  else
-    ifreq_set_name (&ifreq, ifp);
+  /* Interface's name and address family. */
+  strncpy (ifreq.ifr_name, ifp->name, IFNAMSIZ);
   ifreq.ifr_addr.sa_family = AF_INET;
 
-#ifdef SUNOS_5
-  ret = if_ioctl (SIOCGIFFLAGS, (caddr_t) &ifreq);
-  if (ret < 0)
-    {
-      zlog_warn ("ioctl SIOCGIFLAGS fail: %s\n", strerror (errno));
-      return 0;
-    }
-  
-  ret = if_ioctl (SIOCGIFMTU, (caddr_t) & ifreq);
-  if (ret < 0)
-    {
-      zlog_warn ("ioctl SIOCGIFMTU fail: %s\n", strerror (errno));
-      return 0;
-    }
-  memcpy (&mask, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
-#else  /* ! SUNOS_5 */
-  /* Get interface's address. */
+  /* Interface's address. */
   ret = if_ioctl (SIOCGIFADDR, (caddr_t) &ifreq);
   if (ret < 0) 
     {
-      if (errno == EADDRNOTAVAIL)
-	return 0;
-      zlog_warn ("ioctl SIOCGIFADDR fail: %s\n", strerror (errno));
-      return ret;
+      if (errno != EADDRNOTAVAIL)
+	{
+	  zlog_warn ("SIOCGIFADDR fail: %s", strerror (errno));
+	  return ret;
+	}
+      return 0;
     }
   memcpy (&addr, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
 
-  /* Get interface's mask. */
+  /* Interface's network mask. */
   ret = if_ioctl (SIOCGIFNETMASK, (caddr_t) &ifreq);
   if (ret < 0) 
     {
-      if (errno == EADDRNOTAVAIL) 
-	return 0;
-      zlog_warn ("ioctl SIOCGIFNETMASK fail: %s\n", strerror (errno));
-      return ret;
+      if (errno != EADDRNOTAVAIL) 
+	{
+	  zlog_warn ("SIOCGIFNETMASK fail: %s", strerror (errno));
+	  return ret;
+	}
+      return 0;
     }
-#ifdef OpenBSD
-  memcpy (&mask, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
-#else
+#ifdef ifr_netmask
   memcpy (&mask, &ifreq.ifr_netmask, sizeof (struct sockaddr_in));
-#endif /* OpenBSD */
+#else
+  memcpy (&mask, &ifreq.ifr_addr, sizeof (struct sockaddr_in));
+#endif /* ifr_netmask */
   prefixlen = ip_masklen (mask.sin_addr);
-#endif /* SUNOS_5 */
 
   /* Point to point or borad cast address pointer init. */
-  broad = NULL;
+  dest_pnt = NULL;
 
-  /* Point to point destination address check. */
   if (ifp->flags & IFF_POINTOPOINT) 
     {
       ret = if_ioctl (SIOCGIFDSTADDR, (caddr_t) &ifreq);
       if (ret < 0) 
 	{
-	  if (errno == EADDRNOTAVAIL) 
-	    return 0;
-	  zlog_warn ("ioctl SIOCGIFDSTADDR fail: %s\n", strerror (errno));
-	  return ret;
+	  if (errno != EADDRNOTAVAIL) 
+	    {
+	      zlog_warn ("SIOCGIFDSTADDR fail: %s", strerror (errno));
+	      return ret;
+	    }
+	  return 0;
 	}
-      memcpy (&sin_broad, &ifreq.ifr_dstaddr, sizeof (struct sockaddr_in));
-      broad = &sin_broad.sin_addr;
+      memcpy (&dest, &ifreq.ifr_dstaddr, sizeof (struct sockaddr_in));
+      dest_pnt = &dest.sin_addr;
     }
-
-  /* Broadcast address check. */
   if (ifp->flags & IFF_BROADCAST)
     {
       ret = if_ioctl (SIOCGIFBRDADDR, (caddr_t) &ifreq);
       if (ret < 0) 
 	{
-	  if (errno == EADDRNOTAVAIL) 
-	    return 0;
-	  zlog_warn ("ioctl SIOCGIFBRDADDR fail: %s\n", strerror (errno));
-	  return ret;
+	  if (errno != EADDRNOTAVAIL) 
+	    {
+	      zlog_warn ("SIOCGIFBRDADDR fail: %s", strerror (errno));
+	      return ret;
+	    }
+	  return 0;
 	}
-      memcpy (&sin_broad, &ifreq.ifr_broadaddr, sizeof (struct sockaddr_in));
-      broad = &sin_broad.sin_addr;
+      memcpy (&dest, &ifreq.ifr_broadaddr, sizeof (struct sockaddr_in));
+      dest_pnt = &dest.sin_addr;
     }
 
-  connected_add_ipv4 (ifp, &addr.sin_addr, prefixlen, broad);
+
+  /* Set address to the interface. */
+  connected_add_ipv4 (ifp, &addr.sin_addr, prefixlen, dest_pnt);
 
   return 0;
 }
 
-/* Interface lookup by /proc/net/dev. */
-void
-interface_list_proc ()
-{ 
-  FILE *fp;
-  char buf[IF_BUFSIZ];
-
-  fp = fopen (_PATH_PROCNET_DEV, "r");
-  if (fp == NULL) 
-    {
-      zlog_warn ("Can't open device %s\n", _PATH_PROCNET_DEV);
-      exit (1);
-    }
-
-  /* Drop two header line. */
-  dropline (fp);
-  dropline (fp);
-
-  /* Look up all interface from /proc/net/dev. */
-  while (fgets (buf, IF_BUFSIZ, fp) != NULL)
-    {
-      int i, j;
-      int alias;
-      char *index;
-      char name[IF_NAMELEN];
-      char ifname[IF_NAMELEN];
-      struct interface *ifp;
-
-      i = 0;
-      j = 0;
-
-      index = strrchr (buf, ':');
-      *index = '\0';
-
-      /* Skip white space. */
-      while (buf[i] == ' ')
-	i++;
-
-      /* Get interface name which may includes aliase interface. */
-      while (j < IF_NAMELEN && buf[i] != '\0')
-	name[j++] = buf[i++];
-      name[j] = '\0';
-
-
-      /* Get pure interface name. */
-      for (i = 0; i < IF_NAMELEN && name[i] != ':' && name[i] != '\0'; i++)
-	ifname[i] = name[i];
-      ifname[i] = '\0';
-
-      alias = (i == j) ? 0 : 1;
-
-      ifp = if_get_by_name (ifname);
-
-      if (!alias)
-	{
-	  if (log_mode)
-	    zlog_warn ("interface %s is added.\n", name);
-	  if_get_index (ifp);
-	  if_get_flags (ifp);
-	  if_addr_ioctl (ifp, NULL);
-	  if_get_mtu (ifp);
-	  if_get_metric (ifp);
-	}
-      else
-	{
-	  if (log_mode)
-	    zlog_warn ("interface alias %s is added.\n", name);
-	  if_addr_ioctl (ifp, name);
-	}
-    }
-}
-
-/* Interface looking up using SIOCGIFCONF and ioctl. */
-void
-interface_list_ioctl ()
+/* Fetch interface information via ioctl(). */
+static void
+interface_info_ioctl ()
 {
-  int sock;
-  struct ifconf ifconf;
-  struct ifreq *ifreq;
-  int16_t numreqs = BASE_INTERFACE;
-  int16_t n;
-
-  sock = socket (AF_INET, SOCK_DGRAM, 0);
-  if (sock < 0) {
-    log_warn ("can't make socket\n");
-    exit (1);
-  }
-
-  ifconf.ifc_buf = NULL;
-  for (;;) {
-    ifconf.ifc_len = sizeof(struct ifreq) * numreqs;
-    ifconf.ifc_buf = XREALLOC(MTYPE_TMP, ifconf.ifc_buf, ifconf.ifc_len);
-
-    if (ioctl(sock, SIOCGIFCONF, &ifconf) < 0) {
-      log_warn("ioctl(SIOCGIFCONF, ...): %s", strerror(errno));
-      exit(1);
-    }
-
-    if (ifconf.ifc_len == sizeof(struct ifreq) * numreqs) {
-      /* assume it overflowed and try again */
-      numreqs += 10;
-      continue;
-    }
-    break;
-  }
-
-  close (sock);
-
-  ifreq = ifconf.ifc_req;
-  for (n = 0; n < ifconf.ifc_len; n += sizeof(struct ifreq)) {
-    struct interface *ifp;
-
-    ifp = if_get_by_name (ifreq->ifr_name);
-
-    if_get_index (ifp);
-    if_get_flags (ifp);
-    if_addr_ioctl (ifp, NULL);
-    if_get_mtu (ifp);
-    if_get_metric (ifp);
-
-    ifreq++;
-  }
-
-  free(ifconf.ifc_buf);
-}
-
-#ifdef HAVE_IPV6
-/* This code will be only for Linux.  Proc file system for IPv6
-   interface information. */
-
-#ifndef _PATH_PROCNET_IFINET6
-#define _PATH_PROCNET_IFINET6          "/proc/net/if_inet6"
-#endif /* _PATH_PROCNET_IFINET6 */
-
-void
-interface_list_ipv6 ()
-{
-  FILE *fp;
-  char buf[IF_BUFSIZ];
-
-  /* Open /proc filesyste. */
-  fp = fopen (_PATH_PROCNET_IFINET6, "r");
-  if (fp == NULL)
-    {
-      log_warn ("Can't open %s : %s\n", _PATH_PROCNET_IFINET6, 
-		strerror (errno));
-      return;
-    }
+  listnode node;
+  struct interface *ifp;
   
-  while (fgets (buf, IF_BUFSIZ, fp) != NULL)
+  for (node = listhead (iflist); node; node = nextnode (node))
     {
-      int n;
-      char addr[33];
-      int ifindex, plen, scope, status;
-      char ifstr[100];
-      struct interface *ifp;
-      struct prefix_ipv6 p;
+      ifp = getdata (node);
 
-      n = sscanf (buf, "%32s %02x %02x %02x %02x %s", 
-		  addr, &ifindex, &plen, &scope, &status, ifstr);
-      if (n != 6)
-	{
-	  /* zlog_warn ("can't read interface information %d\n%s\n", n, buf); */
-	  continue;
-	}
-
-      ifp = if_lookup_by_name (ifstr);
-      if (ifp == NULL)
-	{
-	  ifp = if_create ();
-	  strcpy (ifp->name, ifstr);
-	}
-      ifp->ifindex = ifindex;
-      
-      str2in6_addr (addr, &p.prefix);
-      p.prefixlen = plen;
-
-      connected_add_ipv6 (ifp, &p.prefix, p.prefixlen, NULL);
+      if_get_index (ifp);
+#ifdef SIOCGIFHWADDR
+      if_get_hwaddr (ifp);
+#endif /* SIOCGIFHWADDR */
+      if_get_addr (ifp);
+      if_get_flags (ifp);
+      if_get_mtu (ifp);
+      if_get_metric (ifp);
     }
 }
-#endif /* HAVE_IPV6 */
 
-void
-interface_status ()
-{
-  /* dummy */
-}
-
-void
-interface_status_ipv6 ()
-{
-  /* dummy */
-}
-
-/* Lookup all interface and get detailed information of it. */
+/* Lookup all interface information. */
 void
 interface_list ()
 {
-#ifndef SUNOS_5
+  /* Linux can do both proc & ioctl, ioctl is the only way to get
+     interface aliases in 2.2 series kernels. */
+#ifdef HAVE_PROC_NET_DEV
   interface_list_proc ();
-#ifdef __linux__
-/* Linux can do both proc & ioctl, ioctl is the only way to get
-   interface aliases in 2.2 series kernels. */
+#endif /* HAVE_PROC_NET_DEV */
   interface_list_ioctl ();
-#endif
-#ifdef HAVE_IPV6
-  interface_list_ipv6 ();
-#endif /* HAVE_IPV6 */
-#else /* XXX: SUNOS_5 */
-  interface_status ();
-#ifdef HAVE_IPV6
-  interface_status_ipv6 ();
-#endif /* HAVE_IPV6 */
-#endif /* !SUNOS_5 */
+
+  /* After listing is done, get index, address, flags and other
+     interface's information. */
+  interface_info_ioctl ();
+
+#ifdef HAVE_PROC_NET_IF_INET6
+  /* Linux provides interface's IPv6 address via
+     /proc/net/if_inet6. */
+  ifaddr_proc_ipv6 ();
+#endif /* HAVE_PROC_NET_IF_INET6 */
 }

@@ -649,3 +649,49 @@ sockunion_print (union sockunion *su)
       break;
     }
 }
+
+#ifdef HAVE_IPV6
+int
+in6addr_cmp (struct in6_addr *addr1, struct in6_addr *addr2)
+{
+  int i;
+  u_char *p1, *p2;
+
+  p1 = (u_char *)addr1;
+  p2 = (u_char *)addr2;
+
+  for (i = 0; i < sizeof (struct in6_addr); i++)
+    {
+      if (p1[i] > p2[i])
+	return 1;
+      else if (p1[i] < p2[i])
+	return -1;
+    }
+  return 0;
+}
+#endif /* HAVE_IPV6 */
+
+int
+sockunion_compare (union sockunion *su1, union sockunion *su2)
+{
+  if (su1->sa.sa_family > su2->sa.sa_family)
+    return 1;
+
+  if (su1->sa.sa_family == AF_INET)
+    {
+      if (ntohl (su1->sin.sin_addr.s_addr) > ntohl (su2->sin.sin_addr.s_addr))
+	return 1;
+      else
+	return 0;
+    }
+#ifdef HAVE_IPV6
+  if (su1->sa.sa_family == AF_INET6)
+    {
+      if (in6addr_cmp (&su1->sin6.sin6_addr, &su2->sin6.sin6_addr))
+	return 1;
+      else
+	return 0;
+    }
+#endif /* HAVE_IPV6 */
+  return 0;
+}

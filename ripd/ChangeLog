@@ -1,3 +1,12 @@
+1999-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_timers): Fix bug of timers basic argument format.
+
+1999-11-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_snmp.c (rip2IfConfAddress): Forgot to include
+	RIP2IFCONFDOMAIN.
+
 1999-10-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.h (struct rip_peer): New structure added.

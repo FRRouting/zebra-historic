@@ -116,8 +116,6 @@ ospf_asbr_status_update (u_char status)
   zlog_info ("K: ospf_ase_status_update(): Stop");
 }
 
-
-
 int
 ospf_asbr_should_announce (struct prefix_ipv4 *p,
 			   u_char type, u_int ifindex, struct in_addr nexthop)
@@ -140,7 +138,6 @@ ospf_asbr_should_announce (struct prefix_ipv4 *p,
 	  }
     }
 
-
   if (nexthop.s_addr)
     return 1;
 
@@ -152,9 +149,7 @@ ospf_asbr_should_announce (struct prefix_ipv4 *p,
   if (ifp == NULL) 
     return 1;
 
-  oi = ifp->info;
-
-  if (oi == NULL)
+  if ((oi = ifp->info) == NULL)
     return 1;
 
   if (oi->flag == OSPF_IF_DISABLE)
@@ -177,7 +172,6 @@ ospf_asbr_should_announce (struct prefix_ipv4 *p,
 /*  return 1; */
 }
 
-
 void
 ospf_asbr_route_add (u_char type, struct prefix_ipv4 *p,
 		     unsigned int ifindex, struct in_addr nexthop)
@@ -191,24 +185,24 @@ ospf_asbr_route_add (u_char type, struct prefix_ipv4 *p,
   zlog_info ("Z: ospf_asbr_route_add(): nexthop info: ifindex:%d  addr:%s",
              ifindex, inet_ntoa (nexthop));
 
-
   /* Make new ospf external route. */
   er = ospf_external_route_new ();
   er->type = type;
-  er->metric_type= EXTERNAL_METRIC_TYPE_2;
+  er->metric_type = EXTERNAL_METRIC_TYPE_2;
   er->metric = 1;
   er->tag = 0;
   er->nexthop = nexthop;
   er->ifindex = ifindex;
 
-  rn = route_node_get (ospf_top->external_self, (struct prefix *)p);
+  rn = route_node_get (ospf_top->external_self, (struct prefix *) p);
   rn->info = er;
 
   if (! ospf_asbr_should_announce (p, type, ifindex, nexthop))
     return;
 
   /* First try to find self-originated LSA to the same prefix. */
-  lsa = ospf_find_self_external_lsa_by_prefix (p);
+  /*  lsa = ospf_find_self_external_lsa_by_prefix (p); */
+  lsa = OSPF_EXTERNAL_LSA_SELF_FIND_BY_PREFIX (p);
 
   /* Make new external LSA. */
   lsa = ospf_external_lsa (p, er->metric_type, er->metric,
@@ -250,7 +244,8 @@ ospf_asbr_route_remove (struct route_node *rn, u_char type)
     }
 
   /* Flush LSA. */
-  if (lsa) ospf_lsa_flush_as (lsa);
+  if (lsa)
+    ospf_lsa_flush_as (lsa);
 
   /* Free external route. */
   ospf_external_route_free (er);
@@ -290,23 +285,20 @@ ospf_redistribute_withdraw (u_char type)
       ospf_asbr_route_remove (rn, type);
 }
 
-
 int
 unapprove_lsa (struct ospf_lsa *lsa, void * v, int i)
 {
   if (ospf_lsa_is_self_originated (lsa))
-    UNSET_FLAG(lsa->flags, OSPF_LSA_APPROVED);
+    UNSET_FLAG (lsa->flags, OSPF_LSA_APPROVED);
 
   return 0;
 }
-
 
 void
 ospf_asbr_unapprove_lsas ()
 {
   ospf_lsdb_iterator (ospf_top->external_lsa, NULL, 0, unapprove_lsa);
 }
-
 
 void
 ospf_asbr_check_lsas ()
@@ -323,12 +315,14 @@ ospf_asbr_check_lsas ()
 
       er = (struct ospf_external_route *) rn->info;
 
-      if (!ospf_asbr_should_announce ((struct prefix_ipv4 *) &rn->p,
-				      er->type, er->ifindex, er->nexthop)){
-        if (er->lsa) er->lsa = NULL; 
-           /* It remains in the LSDB and will be flushed*/
-	continue;
-      }
+      if (! ospf_asbr_should_announce ((struct prefix_ipv4 *) &rn->p,
+				       er->type, er->ifindex, er->nexthop))
+	{
+	  if (er->lsa)
+	    er->lsa = NULL; 
+	  /* It remains in the LSDB and will be flushed*/
+	  continue;
+	}
 
       lsa = ospf_external_lsa ((struct prefix_ipv4 *) &rn->p, er->metric_type, 
 			       er->metric, er->tag, er->nexthop, er->lsa);
@@ -339,45 +333,51 @@ ospf_asbr_check_lsas ()
 	  ospf_flood_through_as (NULL, lsa);
 	  er->lsa = lsa;
 	  SET_FLAG (er->lsa->flags, OSPF_LSA_APPROVED);
-
-	  continue;
 	}
-
-      old_lsa = (struct as_external_lsa *) er->lsa->data;
-      ase_lsa = (struct as_external_lsa *) lsa->data;
-
-      /* Check the fwd_addr, as it may change since the last time
-	 the LSA was originated */
-      if (old_lsa->e[0].fwd_addr.s_addr != ase_lsa->e[0].fwd_addr.s_addr)
+      else
 	{
-	  zlog_info ("Z: ospf_asbr_check_lsas(): "
-		     "fwd_addr changed for LSA ID: %s"
-		     "originating the new one", inet_ntoa (lsa->data->id));
-	  lsa = ospf_external_lsa_install (lsa);
-	  ospf_flood_through_as (NULL, lsa);
+	  /* er hold old lsa. */
+	  old_lsa = (struct as_external_lsa *) er->lsa->data;
+	  ase_lsa = (struct as_external_lsa *) lsa->data;
 
-	  er->lsa = lsa;
-	}
-      else /* LSA hasn't changed */
-	{ 
-	  zlog_info ("Z: ospf_asbr_check_lsas(): "
-		     "fwd_addr is ok for LSA ID: %s",
-		     inet_ntoa (lsa->data->id));
-	  ospf_lsa_free (lsa);
-          zlog_info("Z: ospf_lsa_free() in ospf_asbr_check_lsas(): %x", lsa);
-	}
+	  /* Check the fwd_addr, as it may change since the last time
+	     the LSA was originated */
+	  if (old_lsa->e[0].fwd_addr.s_addr != ase_lsa->e[0].fwd_addr.s_addr)
+	    {
+	      zlog_info ("Z: ospf_asbr_check_lsas(): "
+			 "fwd_addr changed for LSA ID: %s"
+			 "originating the new one", inet_ntoa (lsa->data->id));
+	      if (lsa->refresh_list)
+		ospf_refresher_unregister_lsa (lsa);
+	      lsa = ospf_external_lsa_install (lsa);
+	      ospf_flood_through_as (NULL, lsa);
 
-      SET_FLAG (er->lsa->flags, OSPF_LSA_APPROVED);
+	      er->lsa = lsa;
+	    }
+	  else /* LSA hasn't changed */
+	    { 
+	      zlog_info ("Z: ospf_asbr_check_lsas(): "
+			 "fwd_addr is ok for LSA ID: %s",
+			 inet_ntoa (lsa->data->id));
+	      ospf_lsa_free (lsa);
+	      zlog_info("Z: ospf_lsa_free() in ospf_asbr_check_lsas(): %x",
+			lsa);
+	    }
+	  SET_FLAG (er->lsa->flags, OSPF_LSA_APPROVED);
+	}
     }
 }
-
 
 int
 flush_unapproved (struct ospf_lsa *lsa, void * v, int i)
 {
   if (ospf_lsa_is_self_originated (lsa))
-    if (!CHECK_FLAG (lsa->flags, OSPF_LSA_APPROVED))
-      ospf_lsa_flush_as (lsa);
+    if (! CHECK_FLAG (lsa->flags, OSPF_LSA_APPROVED))
+      {
+	zlog_info ("Z: ospf_asbr_flush_unapproved(): Flushing LSA, ID: %s",
+		   inet_ntoa (lsa->data->id));
+	ospf_lsa_flush_as (lsa);
+      }
 
   return 0;
 }
@@ -387,7 +387,6 @@ ospf_asbr_flush_unapproved_lsas ()
 {
   ospf_lsdb_iterator (ospf_top->external_lsa, NULL, 0, flush_unapproved);
 }
-
 
 /* This function performs checking of self-originated LSAs
    unapproved LSAs are flushed from the domain */
@@ -401,14 +400,13 @@ ospf_asbr_check ()
 }
 
 int 
-ospf_asbr_check_timer(struct thread * thread)
+ospf_asbr_check_timer (struct thread *thread)
 {
   ospf_top->t_asbr_check = 0;
   ospf_asbr_check ();
 
   return 0;
 }
-
 
 void
 ospf_schedule_asbr_check ()
@@ -418,4 +416,3 @@ ospf_schedule_asbr_check ()
       thread_add_timer (master, ospf_asbr_check_timer,
 			0, OSPF_ASBR_CHECK_DELAY);
 }
-

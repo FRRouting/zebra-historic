@@ -31,12 +31,12 @@ pid_output (char *path)
   pid = getpid();
 
   fp = fopen (path, "w");
-  if (fp != NULL) {
-    fprintf (fp, "%d\n", pid);
-    fclose (fp);
-    return -1;
-  }
-
+  if (fp != NULL) 
+    {
+      fprintf (fp, "%d\n", (int) pid);
+      fclose (fp);
+      return -1;
+    }
   return pid;
 }
 
@@ -67,7 +67,7 @@ pid_output_lock (char *path)
     }
   else
     {
-      sprintf (buf, "%d\n", pid);
+      sprintf (buf, "%d\n", (int) pid);
       tmp = write (fd, buf, strlen (buf));
       close (fd);
     }

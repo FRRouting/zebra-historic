@@ -29,7 +29,8 @@ int bgp_write (struct thread *);
 
 void bgp_keepalive_send (struct peer *);
 void bgp_open_send (struct peer *);
-void bgp_notify_send (struct peer *, u_char, u_char, char *);
+void bgp_notify_send (struct peer *, u_char, u_char);
+void bgp_notify_send_with_data (struct peer *, u_char, u_char, u_char *, size_t);
 void bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr);
 void bgp_withdraw_send (struct peer *peer, struct prefix *p);
 

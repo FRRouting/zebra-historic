@@ -63,9 +63,34 @@ set_ospf6_if_default_val (struct ospf6_if *ospf6_if)
   (X)->hello_interval = 10; \
   (X)->rtr_dead_interval = 40; \
   (X)->rxmt_interval = 5; \
+  (X)->ifmtu = DEFAULT_INTERFACE_MTU; \
   (X)->cost = 1; \
 } 
 #endif
+
+
+struct in6_addr *
+ospf6_if_linklocal_addr (struct interface *ifp)
+{
+  listnode n;
+  struct connected *c;
+  struct in6_addr *linklocal = (struct in6_addr *) NULL;
+
+  /* for each connected address */
+  for (n = listhead (ifp->connected); n; nextnode (n))
+    {
+      c = (struct connected *) getdata (n);
+
+      /* if family not AF_INET6, ignore */
+      if (c->address->family != AF_INET6)
+        continue;
+
+      /* linklocal scope check */
+      if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
+        linklocal = &c->address->u.prefix6;
+    }
+  return linklocal;
+}
 
 /* Make new ospf6 interface structure */
 struct ospf6_if *
@@ -84,15 +109,13 @@ make_ospf6_if (struct interface *ifp)
 
   ospf6_if->instance_id = 1; /* XXX multiple instance not yet */
   ospf6_if->ifid =  ifp->ifindex;
+  ospf6_if->myaddr = ospf6_if_linklocal_addr (ifp);
   ospf6_if->area = (struct area *)NULL; /* not yet attached to Area. */
   ospf6_if->state = IFS_DOWN;
   ospf6_if->nbr_list = list_init ();
   ospf6_lsdb_init_interface (ospf6_if);
 
   ospf6_if->prefix_connected = list_init ();
-  ospf6_if->prefix_static = list_init ();
-  ospf6_if->prefix_ripng = list_init ();
-  ospf6_if->prefix_bgp = list_init ();
 
   ospf6_if->link_lsa_seqnum = ospf6_if->network_lsa_seqnum
                             = ospf6_if->intra_prefix_seqnum
@@ -254,7 +277,7 @@ show_if (struct vty *vty, struct interface *iface)
   struct connected *c;
   struct prefix *p;
   listnode i;
-  char strbuf[64];
+  char strbuf[64], dr[32], bdr[32];
   char *updown[3] = {"down", "up", NULL};
   char *type;
 
@@ -320,18 +343,23 @@ show_if (struct vty *vty, struct interface *iface)
            ifs_name[ospf6_if->state],
            ospf6_if->inf_trans_delay,
 	   VTY_NEWLINE);
-  vty_out (vty, "  Timers:%s", VTY_NEWLINE);
+  vty_out (vty, "  Timer intervals configured:%s", VTY_NEWLINE);
   vty_out (vty, "   Hello %lu, Dead %lu, Retransmit %lu%s",
            ospf6_if->hello_interval,
            ospf6_if->rtr_dead_interval,
            ospf6_if->rxmt_interval,
 	   VTY_NEWLINE);
-  vty_out (vty, "  DR %s%s",
-           inet4str (ospf6_if->dr),
-	   VTY_NEWLINE);
-  vty_out (vty, "  BDR %s%s",
-           inet4str (ospf6_if->bdr),
-	   VTY_NEWLINE);
+
+  inet_ntop (AF_INET, &ospf6_if->dr, dr, sizeof (dr));
+  inet_ntop (AF_INET, &ospf6_if->bdr, bdr, sizeof (bdr));
+  vty_out (vty, "  DR:%s BDR:%s%s", dr, bdr, VTY_NEWLINE);
+
+  vty_out (vty, "  Number of I/F scoped LSAs is %u%s",
+           listcount (ospf6_if->linklocal_lsa), VTY_NEWLINE);
+  vty_out (vty, "  %-16s %5d times, %-16s %5d times%s",
+                "DRElection", ospf6_if->ospf6_stat_dr_election,
+                "DelayedLSAck", ospf6_if->ospf6_stat_delayed_lsack,
+                VTY_NEWLINE);
 
   return 0;
 }

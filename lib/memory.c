@@ -28,11 +28,7 @@
 void alloc_inc (int);
 void alloc_dec (int);
 
-struct messages
-{
-  int index;
-  char *str;
-} mstr [] =
+struct message mstr [] =
 {
   { MTYPE_COMMAND, "command" },
   { MTYPE_COMMAND_CONST, "command_const" },
@@ -43,17 +39,6 @@ struct messages
   { MTYPE_IF, "interface" },
   { 0, NULL },
 };
-
-char *
-lookup (struct messages *mes, int index)
-{
-  struct messages *pnt;
-  
-  for (pnt = mes; pnt->index != 0; pnt++)
-    if (pnt->index == index)
-      return pnt->str;
-  return "";
-}
 
 /* Fatal memory allocation error occured. */
 static void

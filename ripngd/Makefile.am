@@ -44,8 +44,8 @@ ripngd.o: ripngd.c ../lib/prefix.h ../lib/filter.h ../lib/if.h \
  ../lib/linklist.h ../lib/log.h ../lib/thread.h ../lib/memory.h \
  ../lib/stream.h ../lib/table.h ../lib/roken.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/sockopt.h ../lib/distribute.h \
- ../lib/plist.h ../ripngd/ripngd.h ../ripngd/ripng_route.h \
- ../ripngd/ripng_debug.h
+ ../lib/plist.h ../lib/routemap.h ../lib/if_rmap.h ../ripngd/ripngd.h \
+ ../ripngd/ripng_route.h ../ripngd/ripng_debug.h
 ripng_debug.o: ripng_debug.c ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../ripngd/ripng_debug.h
 ripng_interface.o: ripng_interface.c ../lib/linklist.h ../lib/if.h \
@@ -59,9 +59,9 @@ ripng_main.o: ripng_main.c ../lib/version.h ../lib/vector.h \
 ripng_route.o: ripng_route.c ../lib/prefix.h ../lib/table.h \
  ../lib/memory.h ../lib/if.h ../lib/linklist.h ../ripngd/ripngd.h \
  ../ripngd/ripng_route.h
-ripng_routemap.o: ripng_routemap.c ../lib/memory.h ../lib/prefix.h \
- ../lib/routemap.h
-ripng_zebra.o: ripng_zebra.c ../lib/thread.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/stream.h \
- ../lib/buffer.h ../lib/log.h ../lib/network.h ../lib/zclient.h \
- ../lib/if.h ../lib/linklist.h ../ripngd/ripngd.h
+ripng_routemap.o: ripng_routemap.c ../lib/if.h ../lib/linklist.h \
+ ../lib/memory.h ../lib/prefix.h ../lib/routemap.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../ripngd/ripngd.h
+ripng_zebra.o: ripng_zebra.c ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/prefix.h ../lib/stream.h ../lib/zclient.h \
+ ../lib/if.h ../lib/linklist.h ../lib/log.h ../ripngd/ripngd.h

@@ -24,8 +24,13 @@
 
 /* Message Definition */
 
+#define IS_OVER_MTU(message,mtu,addsize) \
+          (iov_totallen(message)+(addsize) >= \
+            (mtu)-sizeof(struct ospf6_header))
+
 /* Type */
 #define MSGT_NONE                 0x0  /* Unknown message */
+#define MSGT_UNKNOWN              0x0
 #define MSGT_HELLO                0x1  /* Discover/maintain neighbors */
 #define MSGT_DATABASE_DESCRIPTION 0x2  /* Summarize database contents */
 #define MSGT_DBDESC               0x2  /* Summarize database contents */
@@ -85,20 +90,6 @@ struct ospf6_hello
   unsigned long  bdr;
 };
 
-#if 0
-/* Databese Description */
-struct database_description
-{
-  u_char         mbz1;
-  u_char         options[3];
-  unsigned short interface_mtu;
-  u_char         mbz2;
-  unsigned char  bits;
-  unsigned long  sequence_number;
-  /* Followed by LSAs */
-};
-#endif /* 0 */
-
 /* new Database Description (name changed) */
 struct ospf6_dbdesc
 {
@@ -122,8 +113,26 @@ struct ospf6_dbdesc
 #define DD_IBIT_SET(x) ((x) |= (1 << 2))
 #define DD_IBIT_CLEAR(x) ((x) &= ~(1 << 2))
 
+#define DDBIT_IS_MASTER(x)   ((x) &   (1 << 0))
+#define DDBIT_IS_SLAVE(x)  (!((x) &   (1 << 0)))
+#define DDBIT_SET_MASTER(x)  ((x) |=  (1 << 0))
+#define DDBIT_SET_SLAVE(x)   ((x) |= ~(1 << 0))
+#define DDBIT_IS_MORE(x)     ((x) &   (1 << 1))
+#define DDBIT_SET_MORE(x)    ((x) |=  (1 << 1))
+#define DDBIT_CLR_MORE(x)    ((x) |= ~(1 << 1))
+#define DDBIT_IS_INITIAL(x)  ((x) &   (1 << 2))
+#define DDBIT_SET_INITIAL(x) ((x) |=  (1 << 2))
+#define DDBIT_CLR_INITIAL(x) ((x) |= ~(1 << 2))
+
 /* Link State Request */
 struct linkstate_request
+{
+  unsigned short lsreq_age_zero;     /* MBZ */
+  unsigned short lsreq_type;         /* LS type */
+  unsigned long  lsreq_id;           /* Link State ID */
+  unsigned long  lsreq_advrtr;       /* Advertising Router */
+};
+struct ospf6_lsreq
 {
   unsigned short lsreq_age_zero;     /* MBZ */
   unsigned short lsreq_type;         /* LS type */
@@ -137,32 +146,29 @@ struct linkstate_update
   unsigned long  lsupdate_num;
   /* Followed by LSAs */
 };
+struct ospf6_lsupdate
+{
+  unsigned long lsupdate_num;
+};
 
 /* Link State Acknowledgement will include only LSA header.*/
 
 /* Function Prototypes */
-#if 0
-int make_ospf6_hdr (msgtype_t, struct iovec *, struct ospf6_if *);
-int make_hello (struct iovec *, struct sockaddr_in6 *, struct ospf6_if *);
-int make_database_description (struct iovec *, struct sockaddr_in6 *,
-                               struct neighbor *);
-int make_linkstate_request (struct iovec *, struct sockaddr_in6 *,
-                            struct neighbor *);
-int make_linkstate_update (struct iovec *, struct sockaddr_in6 *,
-                           struct neighbor *);
-#endif
-
 struct ospf6_lsa_hdr *
 ospf6_message_get_lsa_hdr (struct iovec *);
 
 int ospf6_receive (struct thread *);
+int ospf6_receive_new (struct thread *);
 
 int ospf6_send_hello (struct thread *);
 int ospf6_send_dbdesc_retrans (struct thread *);
 int ospf6_send_dbdesc (struct thread *);
+int ospf6_send_lsreq (struct thread *);
+int ospf6_send_lsupdate_retrans (struct thread *);
+int ospf6_send_lsack_delayed (struct thread *);
 
-void ospf6_message_send (unsigned char, struct iovec *, struct in6_addr *,
-			 u_int);
+void ospf6_message_send (unsigned char, struct iovec *,
+                         struct in6_addr *, u_int);
 
 #endif /* OSPF6_MESG_H */
 

@@ -19,7 +19,30 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#include "ospf6d.h"
+#include <zebra.h>
+#include "getopt.h"
+#include "thread.h"
+#include "log.h"
+#include "version.h"
+#include "command.h"
+#include "vty.h"
+#include "memory.h"
+
+#include "ospf6_network.h"
+
+void ospf6_init ();
+void ospf6_terminate ();
+void ospf6_log_init ();
+void nexthop_init ();
+int ospf6_receive (struct thread *);
+int ospf6_receive_new (struct thread *);
+
+extern int ospf6_sock;
+
+/* Default configuration file name for ospfd. */
+#define OSPF6_DEFAULT_CONFIG       "ospf6d.conf"
+/* Default port values. */
+#define OSPF6_VTY_PORT             2606
 
 /* ospfd options, we use GNU getopt library. */
 struct option longopts[] = 
@@ -218,12 +241,13 @@ main (int argc, char **argv)
 
   /* Make ospf protocol socket. */
   ospf6_serv_sock ();
+  thread_add_read (master, ospf6_receive_new, NULL, ospf6_sock);
 
   /* Make ospf vty socket. */
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT);
 
   /* Print start message */
-  zlog (NULL, LOG_INFO, "OSPF6d (%s) starts", ZEBRA_VERSION);
+  zlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);
 
   /* Start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

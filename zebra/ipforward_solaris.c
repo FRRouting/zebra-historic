@@ -67,11 +67,11 @@ ipforward ()
 int
 ipforward_on ()
 {
-  ;
+  return 0;
 }
 
 int
 ipforward_off ()
 {
-  ;
+  return 0;
 }

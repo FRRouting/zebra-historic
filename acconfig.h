@@ -40,6 +40,12 @@
 /* whether system has SNMP library */
 #undef HAVE_SNMP
 
+/* MBGP support. */
+#undef HAVE_MBGPV4
+
+/* whether sockaddr has a sa_len field */
+#undef HAVE_SA_LEN
+
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
 
@@ -49,6 +55,9 @@
 /* Define if there is socklen_t. */
 #undef HAVE_SOCKLEN_T
 
+/* Define if there is sockaddr_dl structure. */
+#undef HAVE_SOCKADDR_DL
+
 /* Define if there is ifaliasreq structure. */
 #undef HAVE_IFALIASREQ
 
@@ -57,6 +66,15 @@
 
 /* Define if there is rt_addrinfo structure. */
 #undef HAVE_RT_ADDRINFO
+
+/* Define if /proc/net/dev exists. */
+#undef HAVE_PROC_NET_DEV
+
+/* Define if /proc/net/if_inet6 exists. */
+#undef HAVE_PROC_NET_IF_INET6
+
+/* Define if NET_RT_IFLIST exists in sys/socket.h. */
+#undef HAVE_NET_RT_IFLIST
 
 /* Define if you have INRIA ipv6 stack.  */
 #undef INRIA_IPV6

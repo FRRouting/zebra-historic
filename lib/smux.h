@@ -22,27 +22,72 @@
 #ifndef _ZEBRA_SNMP_H
 #define _ZEBRA_SNMP_H
 
-/* SNMP module structure. */
-struct snmp_module
+#define SMUX_PORT_DEFAULT 199
+
+#define SMUXMAXPKTSIZE    1500
+#define SMUXMAXSTRLEN      256
+
+#define SMUX_OPEN       (ASN_APPLICATION | ASN_CONSTRUCTOR | 0)
+#define SMUX_CLOSE      (ASN_APPLICATION | ASN_CONSTRUCTOR | 1)
+#define SMUX_RREQ       (ASN_APPLICATION | ASN_CONSTRUCTOR | 2)
+#define SMUX_RRSP       (ASN_APPLICATION | ASN_PRIMITIVE | 3)
+#define SMUX_SOUT       (ASN_APPLICATION | ASN_PRIMITIVE | 4)
+
+#define SMUX_GET        (ASN_CONTEXT | ASN_CONSTRUCTOR | 0)
+#define SMUX_GETNEXT    (ASN_CONTEXT | ASN_CONSTRUCTOR | 1)
+#define SMUX_GETRSP     (ASN_CONTEXT | ASN_CONSTRUCTOR | 2)
+#define SMUX_SET	(ASN_CONTEXT | ASN_CONSTRUCTOR | 3)
+
+#define SMUX_MAX_FAILURE 3
+
+/* SNMP variable */
+struct variable
 {
-  /* Module name. */
-  /* char *name; */
+  /* Index of the MIB.*/
+  u_char index;
 
-  /* Module index. */
-  int index;
+  /* Type of variable. */
+  char type;
 
-  /* Module function. */
-  int (*func) (struct snmp_module *, oid instid[], size_t,
-	       u_char *, void **, size_t *, int);
+  /* Access control list. */
+  u_short acl;
 
-  /* Link to lower module entry. */
-  struct snmp_module *entry;
+  /* Callback function. */
+  int (*func) (struct variable *, oid [], size_t *, void **, size_t *, int);
+
+  /* Suffix of the MIB. */
+  oid suffix[MAX_OID_LEN];
+  u_char suffix_len;
+
+  /* Real oid of the MIB. */
+  oid name[MAX_OID_LEN];
+  u_char name_len;
 };
 
-void smux_init (int (*func) (oid oid[], size_t, u_char *, void **, size_t *, int), oid oid[], int);
+/* SNMP tree. */
+struct subtree
+{
+  /* Tree's oid. */
+  oid name[MAX_OID_LEN];
+  u_char name_len;
 
-struct snmp_module *snmp_lookup_module (struct snmp_module *, int);
+  /* List of the variables. */
+  struct variable *variables;
 
+  /* Length of the variables list. */
+  int variables_num;
+
+  /* Width of the variables list. */
+  int variables_width;
+};
+
+void smux_init (oid oid[], size_t);
+void smux_tree_register (struct subtree *, size_t);
+int smux_single_instance_check (struct variable *, oid [], size_t *, int);
+
+int oid_compare (oid *, int, oid *, int);
 void oid2in_addr (oid [], int, struct in_addr *);
+void *oid_copy (void *, void *, size_t);
+void oid_copy_addr (oid [], struct in_addr *, int);
 
 #endif /* _ZEBRA_SNMP_H */

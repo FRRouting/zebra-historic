@@ -28,6 +28,7 @@
 #include "command.h"
 #include "filter.h"
 #include "log.h"
+#include "sockunion.h"		/* for inet_aton () */
 
 #include "ripd/ripd.h"
 

@@ -69,8 +69,8 @@ ospf_ase.o: ospf_ase.c ../lib/prefix.h ../lib/linklist.h \
 ospfd.o: ospfd.c ../lib/thread.h ../lib/vty.h ../lib/command.h \
  ../lib/vector.h ../lib/linklist.h ../lib/prefix.h ../lib/table.h \
  ../lib/if.h ../lib/memory.h ../lib/stream.h ../lib/log.h \
- ../ospfd/ospfd.h ../lib/filter.h ../ospfd/ospf_network.h \
- ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
+ ../lib/sockunion.h ../ospfd/ospfd.h ../lib/filter.h \
+ ../ospfd/ospf_network.h ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
  ../ospfd/ospf_neighbor.h ../ospfd/ospf_nsm.h ../ospfd/ospf_lsa.h \
  ../ospfd/ospf_spf.h ../ospfd/ospf_packet.h ../ospfd/ospf_dump.h \
  ../ospfd/ospf_zebra.h ../ospfd/ospf_abr.h ../ospfd/ospf_flood.h \
@@ -165,15 +165,15 @@ ospf_route.o: ospf_route.c ../lib/prefix.h ../lib/table.h \
  ../ospfd/ospf_zebra.h
 ospf_spf.o: ospf_spf.c ../lib/prefix.h ../lib/linklist.h \
  ../lib/table.h ../lib/memory.h ../lib/thread.h ../lib/log.h \
- ../lib/if.h ../lib/hash.h ../ospfd/ospfd.h ../lib/filter.h \
- ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
+ ../lib/if.h ../lib/hash.h ../lib/sockunion.h ../ospfd/ospfd.h \
+ ../lib/filter.h ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
  ../ospfd/ospf_neighbor.h ../ospfd/ospf_nsm.h ../ospfd/ospf_lsa.h \
  ../ospfd/ospf_spf.h ../ospfd/ospf_route.h ../ospfd/ospf_ia.h \
  ../ospfd/ospf_ase.h ../ospfd/ospf_abr.h ../ospfd/ospf_lsdb.h \
  ../ospfd/ospf_asbr.h
-ospf_zebra.o: ospf_zebra.c ../lib/thread.h ../lib/linklist.h \
- ../lib/buffer.h ../lib/network.h ../lib/prefix.h ../lib/if.h \
- ../lib/stream.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
- ../lib/memory.h ../lib/zclient.h ../lib/log.h ../lib/filter.h \
- ../ospfd/ospfd.h ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h \
- ../ospfd/ospf_zebra.h ../ospfd/ospf_asbr.h
+ospf_zebra.o: ospf_zebra.c ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/network.h ../lib/prefix.h ../lib/stream.h \
+ ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/memory.h \
+ ../lib/zclient.h ../lib/log.h ../ospfd/ospfd.h \
+ ../ospfd/ospf_interface.h ../ospfd/ospf_ism.h ../ospfd/ospf_zebra.h \
+ ../ospfd/ospf_asbr.h ../ospfd/ospf_abr.h

@@ -196,9 +196,12 @@ ospf6_interface_address_add (int command, struct zebra *zebra,
       o6if = make_ospf6_if (ifp);
     else if (o6if->area)
       {
-        /* interface already started. (re)make Link-LSA */
         struct ospf6_lsa *lsa = NULL;
 
+        /* reset linklocal pointer */
+        o6if->myaddr = ospf6_if_linklocal_addr (ifp);
+
+        /* interface already started. (re)make Link-LSA */
         lsa = ospf6_make_link_lsa (o6if);
         if (lsa)
           {
@@ -249,36 +252,8 @@ ospf6_zebra_route_add (struct prefix_ipv6 *dst,
                      dstprefix, nhaddr, nh->ifindex);
         }
 
-      if (!IN6_IS_ADDR_V4MAPPED (&dst->prefix))
-        zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, dst,
-                        &nh->ipaddr, nh->ifindex);
-#ifdef OSPF6_IPV4
-      else
-        {
-          struct prefix_ipv4 dst4;
-          struct in_addr nh4;
-
-          dst4.family = AF_INET;
-          dst4.prefixlen = dst->prefixlen - 96;
-          ospf6_ipv6_decode_ipv4 (&dst->prefix, &dst4.prefix);
-
-          /* find IPv4 nexthop address */
-          if (IN6_IS_ADDR_UNSPECIFIED (&nh->ipaddr))
-            memset (&nh4, 0, sizeof (struct in_addr));
-          else
-            ospf6_ipv4_nexthop_from_linklocal (&nh->ipaddr, &nh4, nh->ifindex);
-
-          inet_ntop (AF_INET, &dst4.prefix, dstprefix, sizeof (dstprefix));
-          if (!IN6_IS_ADDR_UNSPECIFIED (&nh->ipaddr) &&
-              nh4.s_addr == 0)
-            zlog_warn (" *** Can't FIND IPv4 NEXTHOP for %s/%d, IGNORE",
-                       dstprefix, dst4.prefixlen);
-          else
-            zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, &dst4,
-                            &nh4, nh->ifindex);
-        }
-#endif /* OSPF6_IPV4 */
-
+      zebra_ipv6_add (zebra->sock, ZEBRA_ROUTE_OSPF6, 0, dst,
+                      &nh->ipaddr, nh->ifindex);
     }
 
   ospf6_route_add (dst, info, ospf6->table_zebra);
@@ -491,15 +466,23 @@ ospf6_redist_route_delete (int type, int ifindex, struct prefix_ipv6 *p)
 
   /* check route existence of current routing table */
   rn = route_node_get (rt, (struct prefix *)p);
-  if (!rn->info)
+  if (!rn || !rn->info)
     {
-      zlog_warn (" !don't know route about to delete");
+      zlog_warn ("*** don't know route about to delete");
       return;
     }
   info = (struct ospf6_route_node_info *) rn->info;
+  if (!info)
+    {
+      zlog_warn ("*** info not found");
+      return;
+    }
   lsa = info->ls_origin;
   if (!lsa)
-    zlog_warn (" !can't find as-external lsa");
+    {
+      zlog_warn ("*** can't find as-external lsa");
+      return;
+    }
 
   /* if AS-external route deleted, do premature aging LSA
      advertising the route */
@@ -525,7 +508,7 @@ ospf6_redist_route_delete (int type, int ifindex, struct prefix_ipv6 *p)
     }
 
   /* delete from redistribute routing table */
-  ospf6_route_add (p, info, rt);
+  ospf6_route_delete (p, info, rt);
 }
 
 
@@ -571,62 +554,29 @@ ospf6_zebra_read_ipv6 (int command, struct zebra *zebra,
   return 0;
 }
 
-int
-ospf6_zebra_read_ipv4 (int command, struct zebra *zebra,
-                       zebra_size_t length)
+
+DEFUN (show_zebra,
+       show_zebra_cmd,
+       "show zebra",
+       SHOW_STR
+       "Zebra information\n")
 {
-  u_char type;
-  u_char flags;
-  struct in_addr nexthop;
-  u_char *lim;
-  struct stream *s;
-  unsigned int ifindex;
+  int i;
+  if (!zebra)
+    vty_out (vty, "Not connected to zebra%s", VTY_NEWLINE);
 
-  s = zebra->ibuf;
-  lim = stream_pnt (s) + length;
-
-  /* Fetch type and nexthop first. */
-  type = stream_getc (s);
-  flags = stream_getc (s);
-  stream_get (&nexthop, s, sizeof (struct in_addr));
-
-  /* Then fetch IPv4 prefixes. */
-  while (stream_pnt (s) < lim)
-    {
-      int size;
-      struct prefix_ipv4 p;
-      struct prefix_ipv6 p6;
-      char buf1[64];
-
-      ifindex = stream_getl (s);
-
-      bzero (&p, sizeof (struct prefix_ipv4));
-      p.family = AF_INET;
-      p.prefixlen = stream_getc (s);
-      size = PSIZE (p.prefixlen);
-      stream_get (&p.prefix, s, size);
-
-inet_ntop (AF_INET, &p.prefix, buf1, sizeof (buf1));
-zlog_info ("IPv4 connected Prefix %s", buf1);
-
-      /* convert address to "ipv4-mapped-address" */
-      memset (&p6, 0, sizeof (struct prefix_ipv6));
-      p6.family = AF_INET6;
-      p6.prefixlen = p.prefixlen + 96;
-      ospf6_ipv4_encode_ipv6 (&p.prefix, &p6.prefix);
-
-inet_ntop (AF_INET6, &p6.prefix, buf1, sizeof (buf1));
-zlog_info ("IPv6 converted connected Prefix %s", buf1);
-
-      if (command == ZEBRA_IPV4_ROUTE_ADD)
-        ospf6_redist_route_add (type, ifindex, &p6);
-      else
-        ospf6_redist_route_delete (type, ifindex, &p6);
-    }
-  return 0;
+  vty_out (vty, "Zebra Infomation%s", VTY_NEWLINE);
+  vty_out (vty, "  enable: %d%s", zebra->enable, VTY_NEWLINE);
+  vty_out (vty, "  fail: %d%s", zebra->fail, VTY_NEWLINE);
+  vty_out (vty, "  redistribute default: %d%s", zebra->redist_default,
+                VTY_NEWLINE);
+  for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+    vty_out (vty, "    RouteType: %d - %s%s", i,
+                  zebra->redist[i] ? "redistributed" : "not redistributed",
+                  VTY_NEWLINE);
+  return CMD_SUCCESS;
 }
 
-
 DEFUN (router_zebra,
        router_zebra_cmd,
        "router zebra",
@@ -729,13 +679,8 @@ ospf6_zebra_init ()
   zebra->interface_delete = ospf6_interface_delete;
   zebra->interface_address_add = ospf6_interface_address_add;
   zebra->interface_address_delete = ospf6_interface_address_delete;
-#ifdef OSPF6_IPV4
-  zebra->ipv4_route_add = ospf6_zebra_read_ipv4;
-  zebra->ipv4_route_delete = ospf6_zebra_read_ipv4;
-#else
   zebra->ipv4_route_add = NULL;
   zebra->ipv4_route_delete = NULL;
-#endif /* OSPF6_IPV4 */
   zebra->ipv6_route_add = ospf6_zebra_read_ipv6;
   zebra->ipv6_route_delete = ospf6_zebra_read_ipv6;
 
@@ -746,6 +691,8 @@ ospf6_zebra_init ()
   install_node (&zebra_node, ospf6_zebra_config_write);
 
   /* Install command element for zebra node. */
+  install_element (VIEW_NODE, &show_zebra_cmd);
+  install_element (ENABLE_NODE, &show_zebra_cmd);
   install_element (CONFIG_NODE, &router_zebra_cmd);
   install_element (CONFIG_NODE, &no_router_zebra_cmd);
   install_default (ZEBRA_NODE);

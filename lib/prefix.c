@@ -72,6 +72,9 @@ void
 prefix_copy (struct prefix *dest, struct prefix *src)
 {
   dest->family = src->family;
+#ifdef HAVE_MBGPV4
+  dest->safi = src->safi;
+#endif /* HAVE_MBGPV4 */
   dest->prefixlen = src->prefixlen;
 
   if (src->family == AF_INET)
@@ -600,7 +603,7 @@ int
 all_digit (char *str)
 {
   for (; *str != '\0'; str++)
-    if (!isdigit (*str))
+    if (!isdigit ((int) *str))
       return 0;
   return 1;
 }

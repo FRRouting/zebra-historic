@@ -123,6 +123,48 @@ connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr,
   rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->ifindex, 0);
 }
 
+void
+connected_up_ipv4 (struct interface *ifp, struct in_addr *addr, 
+		   int prefixlen)
+{
+  struct prefix_ipv4 p;
+
+  p.family = AF_INET;
+  p.prefix = *addr;
+  p.prefixlen = prefixlen;
+
+  /* Apply mask to the network. */
+  apply_mask_ipv4 (&p);
+
+  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
+     address. */
+  if (prefix_ipv4_any (&p))
+    return;
+
+  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
+}
+
+void
+connected_down_ipv4 (struct interface *ifp, struct in_addr *addr, 
+		     int prefixlen)
+{
+  struct prefix_ipv4 p;
+
+  p.family = AF_INET;
+  p.prefix = *addr;
+  p.prefixlen = prefixlen;
+
+  /* Apply mask to the network. */
+  apply_mask_ipv4 (&p);
+
+  /* In case of connected address is 0.0.0.0/0 we treat it tunnel
+     address. */
+  if (prefix_ipv4_any (&p))
+    return;
+
+  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
+}
+
 #ifdef HAVE_IPV6
 /* If same interface address is already exist... */
 int
@@ -176,7 +218,7 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 
 void
 connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
-		    int prefixlen, struct in6_addr *broad)
+                    int prefixlen, struct in6_addr *broad)
 {
   struct prefix_ipv6 p;
   struct prefix_ipv6 mp;
@@ -191,5 +233,35 @@ connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
   apply_mask_ipv6 (&mp);
 
   rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->ifindex, 0);
+}
+
+void
+connected_up_ipv6 (struct interface *ifp, struct in6_addr *address,
+		   int prefixlen)
+{
+  struct prefix_ipv6 p;
+
+  p.family = AF_INET6;
+  p.prefix = *address;
+  p.prefixlen = prefixlen;
+
+  apply_mask_ipv6 (&p);
+
+  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
+}
+
+void
+connected_down_ipv6 (struct interface *ifp, struct in6_addr *address,
+		     int prefixlen)
+{
+  struct prefix_ipv6 p;
+
+  p.family = AF_INET6;
+  p.prefix = *address;
+  p.prefixlen = prefixlen;
+
+  apply_mask_ipv6 (&p);
+
+  rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &p, NULL, ifp->ifindex, 0);
 }
 #endif /* HAVE_IPV6 */

@@ -27,47 +27,89 @@
 struct ospf6_if
 {
   struct interface *interface;       /* IF info from zebra */
-  unsigned char     instance_id;
-  ifid_t            ifid;
-
   struct area      *area;            /* back pointer to area */
-  state_t           state;
-  unsigned long     inf_trans_delay; /* IF transmission delay, default 1sec */
+  list              nbr_list;        /* list of neighbor found in this IF */
+
+  struct in6_addr  *myaddr;
+  list prefix_connected;
+
+  unsigned long     ifid;
+  unsigned char     instance_id;
+  unsigned long     inf_trans_delay; /* I/F transmission delay, default 1sec */
   rtr_pri_t         rtr_pri;
   hello_int_t       hello_interval;
   rtr_dead_int_t    rtr_dead_interval; /* 4 times by hello_interval */
   cost_t            cost;            /* output cost */
   rxmt_int_t        rxmt_interval;   /* default 5 sec */
-  list              nbr_list;        /* list of neighbor found in this IF */
-  rtr_id_t          dr;
-  rtr_id_t          prevdr;
-  rtr_id_t          bdr;
-  rtr_id_t          prevbdr;
+  unsigned long     ifmtu;
 
-#ifdef NBMA  /* for Non Broadcast Multiaccess Network */
-  u_int32_t         poll_interval; /* this is NOT YET */
-#endif /* NBMA */
+  state_t           state;
+  rtr_id_t          dr;
+  rtr_id_t          bdr;
+  rtr_id_t          prevdr;
+  rtr_id_t          prevbdr;
 
   struct thread    *send_hello;
   struct thread    *send_ack;        /* Timer for delayed Ack */
-  list              delayed_ack;
 
+  list              delayed_ack;
   list              linklocal_lsa;   /* include Link-LSA */
 
-  list prefix_connected;
-  list prefix_static;
-  list prefix_ripng;
-  list prefix_bgp;
 
   signed long     link_lsa_seqnum;      /* Signed 32bit integer */
   signed long     network_lsa_seqnum;   /* Signed 32bit integer */
   signed long     intra_prefix_seqnum;  /* Signed 32bit integer */
+
+  /* statistics */
+  unsigned int ospf6_stat_dr_election;
+  unsigned int ospf6_stat_delayed_lsack;
+};
+
+struct ospf6_interface
+{
+  struct interface *interface;       /* IF info from zebra */
+  struct area      *area;            /* back pointer to area */
+  list              neighbor_list;   /* list of neighbor found in this I/F */
+
+  struct in6_addr   *myaddr;          /* linklocal address of this I/F */
+  list              prefix;
+
+  unsigned long     if_id;
+  unsigned char     instance_id;
+  unsigned long     transdelay;      /* I/F transmission delay */
+  unsigned char     priority;
+  unsigned short    hello_interval;
+  unsigned short    dead_interval;
+  unsigned long     cost;
+  unsigned long     rxmt_interval;
+  unsigned long     ifmtu;
+
+  unsigned char     state;
+  unsigned long     dr;
+  unsigned long     bdr;
+  unsigned long     prevdr;
+  unsigned long     prevbdr;
+
+  struct thread    *thread_send_hello;
+  struct thread    *thread_send_lsack_delayed; /* Timer for delayed Ack */
+
+  list              lsa_delayed_ack;
+  list              lsdb;               /* includes Link-LSA */
+
+  signed long lsa_seqnum_link;
+  signed long lsa_seqnum_network;
+  signed long lsa_seqnum_intra_prefix;
+
+  /* statistics */
+  unsigned int ospf6_stat_dr_election;
+  unsigned int ospf6_stat_delayed_lsack;
 };
 
 
 
 /* Function Prototypes */
 void ospf6_if_init ();
+struct in6_addr *ospf6_if_linklocal_addr (struct interface *);
 struct ospf6_if *make_ospf6_if (struct interface *);
 void delete_ospf6_if (struct ospf6_if *);
 struct ospf6_if *ospf6_if_lookup (char *);

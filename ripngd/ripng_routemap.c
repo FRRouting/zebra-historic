@@ -29,6 +29,7 @@
 
 #include "ripngd/ripngd.h"
 
+#if 0
 /* `match interface IFNAME' */
 route_map_result_t
 route_match_interface (void *rule, struct prefix *prefix,
@@ -75,29 +76,43 @@ struct route_map_rule_cmd route_match_interface_cmd =
   route_match_interface_compile,
   route_match_interface_free
 };
+#endif /* 0 */
 
+struct rip_metric_modifier
+{
+  enum 
+  {
+    metric_increment,
+    metric_decrement,
+    metric_absolute
+  } type;
+
+  u_char metric;
+};
+
 route_map_result_t
 route_set_metric (void *rule, struct prefix *prefix, 
 		  route_map_object_t type, void *object)
 {
-  char *str;
-  int len;
-  struct ripng_info *rinfo;
-
   if (type == ROUTE_MAP_RIPNG)
     {
-      str = rule;
-      rinfo = object;
-      
-      len = strlen (str);
+      struct rip_metric_modifier *mod;
+      struct ripng_info *rinfo;
 
-      /* Check metric string. */
-      if (len > 0 && str[0] == '+')
-	rinfo->metric += atoi (str + 1);
-      else if (len > 0 && str[0] == '-')
-	rinfo->metric -= atoi (str + 1);
-      else
-	rinfo->metric = atoi (str);
+      mod = rule;
+      rinfo = object;
+
+      if (mod->type == metric_increment)
+	rinfo->metric += mod->metric;
+      else if (mod->type == metric_decrement)
+	rinfo->metric -= mod->metric;
+      else if (mod->type == metric_absolute)
+	rinfo->metric = mod->metric;
+
+      if (rinfo->metric < 1)
+	rinfo->metric = 1;
+      if (rinfo->metric > RIPNG_METRIC_INFINITY)
+	rinfo->metric = RIPNG_METRIC_INFINITY;
     }
   return RM_OKAY;
 }
@@ -105,7 +120,51 @@ route_set_metric (void *rule, struct prefix *prefix,
 void *
 route_set_metric_compile (char *arg)
 {
-  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
+  int len;
+  char *pnt;
+  int type;
+  long metric;
+  char *endptr = NULL;
+  struct rip_metric_modifier *mod;
+
+  len = strlen (arg);
+  pnt = arg;
+
+  if (len == 0)
+    return NULL;
+
+  /* Examine first character. */
+  if (arg[0] == '+')
+    {
+      type = metric_increment;
+      pnt++;
+    }
+  else if (arg[1] == '-')
+    {
+      type = metric_decrement;
+      pnt++;
+    }
+  else
+    type = metric_absolute;
+
+  /* Check beginning with digit string. */
+  if (*pnt < '0' || *pnt > '9')
+    return NULL;
+
+  /* Convert string to integer. */
+  metric = strtol (pnt, &endptr, 10);
+
+  if (metric == LONG_MAX || *endptr != '\0')
+    return NULL;
+  if (metric < 0 || metric > RIPNG_METRIC_INFINITY)
+    return NULL;
+
+  mod = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, 
+		 sizeof (struct rip_metric_modifier));
+  mod->type = type;
+  mod->metric = metric;
+
+  return mod;
 }
 
 void
@@ -218,6 +277,7 @@ ripng_route_set_delete (struct vty *vty, struct route_map_index *index,
   return CMD_SUCCESS;
 }
 
+#if 0
 DEFUN (match_interface,
        match_interface_cmd,
        "match interface IFNAME",
@@ -238,6 +298,7 @@ DEFUN (no_match_interface,
 {
   return ripng_route_match_delete (vty, vty->index, "interface", argv[0]);
 }
+#endif /* 0 */
 
 DEFUN (set_metric,
        set_metric_cmd,
@@ -266,11 +327,13 @@ ripng_route_map_init ()
   route_map_init ();
   route_map_init_vty ();
 
-  route_map_install_match (&route_match_interface_cmd);
+  /* route_map_install_match (&route_match_interface_cmd); */
   route_map_install_set (&route_set_metric_cmd);
 
+  /*
   install_element (RMAP_NODE, &match_interface_cmd);
   install_element (RMAP_NODE, &no_match_interface_cmd);
+  */
 
   install_element (RMAP_NODE, &set_metric_cmd);
   install_element (RMAP_NODE, &no_set_metric_cmd);

@@ -45,41 +45,27 @@
 
 #define DEBUG
 
-
 struct ospf_route *
 ospf_find_abr_route (struct route_table *rtrs, 
 		     struct prefix_ipv4 *abr,
-		     struct ospf_area * area)
+		     struct ospf_area *area)
 {
   struct route_node *rn;
   struct ospf_route *or;
-  listnode nnode;
+  listnode node;
 
-  rn = route_node_lookup (rtrs, (struct prefix *) abr);
- 
-  if (rn == NULL)
+  if ((rn = route_node_lookup (rtrs, (struct prefix *) abr)) == NULL)
     return NULL;
 
   route_unlock_node (rn);
 
-  for (nnode = listhead ((list) rn->info); nnode; nextnode (nnode)) 
-    {
-      or = getdata (nnode);
-      if (or == NULL)
-	continue;
-
-      if (or->area != area)
-	continue;
-
-      if (!(or->flags & ROUTER_LSA_BORDER))
-	continue;
-
-      return or;
-    }
+  for (node = listhead ((list) rn->info); node; nextnode (node))
+    if ((or = getdata (node)) != NULL)
+      if (or->area == area && (or->flags & ROUTER_LSA_BORDER))
+	return or;
 
   return NULL;
 }
-
 
 void
 ospf_ia_network_route (struct route_table *rt, struct prefix_ipv4 *p,
@@ -92,28 +78,24 @@ ospf_ia_network_route (struct route_table *rt, struct prefix_ipv4 *p,
 	     inet_ntoa (p->prefix), p->prefixlen);
 
   /* Find a route to the same dest */
-  rn1 = route_node_lookup (rt,(struct prefix *) p);
-   
-  if (rn1)
+  if ((rn1 = route_node_lookup (rt, (struct prefix *) p)))
     {
       int res;
 
       route_unlock_node (rn1);
 
-      or = rn1->info;
-
-      if (or)
+      if ((or = rn1->info))
 	{
 	  zlog_info ("Z: ospf_ia_network_route(): "
 		     "Found a route to the same network");
 
 	  /*Check the existing route*/
-	  res = ospf_cmp_routes (new_or, or);
+	  res = ospf_route_cmp (new_or, or);
 
 	  switch (res)
 	    {
 	    case 1:
-	      ospf_subst_route (rn1, new_or, abr_or);
+	      ospf_route_subst (rn1, new_or, abr_or);
 	      break;
 
 	    case -1:
@@ -137,7 +119,7 @@ ospf_ia_network_route (struct route_table *rt, struct prefix_ipv4 *p,
       zlog_info ("Z: ospf_ia_network_route(): add route to %s/%d",
 		 inet_ntoa (p->prefix), p->prefixlen);
 
-      ospf_add_route (rt, p, new_or, abr_or);
+      ospf_route_add (rt, p, new_or, abr_or);
     }
 }
 
@@ -157,10 +139,8 @@ ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
   rn = route_node_get (rt,(struct prefix *) p);
    
   if (rn->info == NULL)
-    { 
-      /* This is a new route */
-      rn->info = list_init ();
-    }
+    /* This is a new route */
+    rn->info = list_init ();
   else
     {
       /* This is an additional route */
@@ -168,13 +148,12 @@ ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
       or = ospf_find_asbr_route_through_area (rt, p, new_or->area);
     }
 
-
   if (or)
     {
       zlog_info ("Z: ospf_ia_router_route(): "
 		 "a route to the same ABR through the same area exists");
 
-    ret = ospf_cmp_routes (new_or, or);
+    ret = ospf_route_cmp (new_or, or);
     if (ret == 1)   /* New route is better */
       {
 	list_delete_by_val (rn->info, or);
@@ -204,7 +183,7 @@ ospf_ia_router_route (struct route_table *rt, struct prefix_ipv4 *p,
   list_add_node (rn->info, new_or);
 }
 
-
+
 struct ia_args
 {
   struct route_table *rt;
@@ -215,9 +194,9 @@ struct ia_args
 int
 process_summary_lsa (struct ospf_lsa *l, void *v, int i)
 {
-  struct ospf_area_range * range;
+  struct ospf_area_range *range;
   struct ospf_route *abr_or, *new_or;
-  struct summary_lsa *lsa;
+  struct summary_lsa *sl;
   struct prefix_ipv4 p, abr;
   u_int32_t metric;
   struct ia_args *args;
@@ -225,12 +204,12 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
   if (l == NULL)
     return 0;
 
-  args = (struct ia_args*) v;
-  lsa = (struct summary_lsa *) l->data;
+  args = (struct ia_args *) v;
+  sl = (struct summary_lsa *) l->data;
 
-  zlog_info("Z: process_summary_lsa(): LS ID: %s", inet_ntoa(lsa->header.id));
+  zlog_info ("Z: process_summary_lsa(): LS ID: %s", inet_ntoa (sl->header.id));
 
-  metric = GET_METRIC (lsa->metric);
+  metric = GET_METRIC (sl->metric);
    
   if (metric == OSPF_LS_INFINITY)
     return 0;
@@ -242,16 +221,16 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
     return 0;
 
   p.family = AF_INET;
-  p.prefix = lsa->header.id;
+  p.prefix = sl->header.id;
    
-  if (lsa->header.type == OSPF_SUMMARY_LSA)
-    p.prefixlen = ip_masklen (lsa->mask);
+  if (sl->header.type == OSPF_SUMMARY_LSA)
+    p.prefixlen = ip_masklen (sl->mask);
   else
     p.prefixlen = IPV4_MAX_BITLEN;
       
   apply_mask_ipv4 (&p);
 
-  if (lsa->header.type == OSPF_SUMMARY_LSA &&
+  if (sl->header.type == OSPF_SUMMARY_LSA &&
       (range = ospf_some_area_range_match (&p)) &&
       ospf_range_active (range))
     return 0;
@@ -263,7 +242,7 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
     return 0; /* Ignore summary default from a stub area */
 
   abr.family = AF_INET;
-  abr.prefix =lsa->header.adv_router;
+  abr.prefix = sl->header.adv_router;
   abr.prefixlen = IPV4_MAX_BITLEN;
   apply_mask_ipv4 (&abr);
 
@@ -274,15 +253,15 @@ process_summary_lsa (struct ospf_lsa *l, void *v, int i)
 
   new_or = ospf_route_new ();
   new_or->type = OSPF_DESTINATION_NETWORK;
-  new_or->id = lsa->header.id;
-  new_or->mask = lsa->mask;
-  new_or->options = lsa->header.options;
-  new_or->origin = (struct lsa_header *) lsa;
+  new_or->id = sl->header.id;
+  new_or->mask = sl->mask;
+  new_or->options = sl->header.options;
+  new_or->origin = (struct lsa_header *) sl;
   new_or->cost = abr_or->cost + metric;
   new_or->area = args->area;
   new_or->path_type = OSPF_PATH_INTER_AREA;
 
-  if (lsa->header.type == OSPF_SUMMARY_LSA)
+  if (sl->header.type == OSPF_SUMMARY_LSA)
     ospf_ia_network_route (args->rt, &p, new_or, abr_or);
   else 
     {
@@ -300,19 +279,14 @@ ospf_examine_summaries (struct ospf_area * area,
 			struct route_table *rt,
 			struct route_table *rtrs)
 {
-  struct ia_args args;
+  struct ia_args args = {rt, rtrs, area};
 
   zlog_info ("Z: ospf_examine_summaries(): start");
-
-  args.area = area;
-  args.rt = rt;
-  args.rtrs = rtrs;
 
   ospf_lsdb_iterator (lsdb, &args, 0, process_summary_lsa);
 
   zlog_info ("Z: ospf_examine_summaries(): stop");
 }
-
 
 int
 ospf_area_is_transit (struct ospf_area *area)
@@ -321,9 +295,8 @@ ospf_area_is_transit (struct ospf_area *area)
     ospf_full_virtual_nbrs(area); /* Cisco forgets to set the V-bit :( */
 }
 
-
 void
-ospf_update_network_route( struct route_table *rt, 
+ospf_update_network_route (struct route_table *rt, 
                            struct route_table *rtrs,
 			   struct summary_lsa *lsa,
 			   struct prefix_ipv4 *p,
@@ -371,7 +344,7 @@ ospf_update_network_route( struct route_table *rt,
       new_or->cost = cost;
       new_or->area = area;
       new_or->path_type = OSPF_PATH_INTER_AREA;
-      ospf_add_route (rt, p, new_or, abr_or);
+      ospf_route_add (rt, p, new_or, abr_or);
 
       return;
     }
@@ -476,45 +449,48 @@ ospf_update_router_route (struct route_table *rtrs,
      because standard ABR can update only BB-associated paths */
 
   if ((ospf_top->backbone == NULL) &&
-      (ospf_top->abr_type != OSPF_ABR_SHORTCUT)){
-
-     zlog_info("Z: ospf_upd_router_route(): no BB area, not Shortcut ABR, exiting");
-     return;
-  }
-
-  or = ospf_find_asbr_route_through_area (rtrs, p,ospf_top->backbone);
-
-  if (or == NULL && ospf_top->abr_type != OSPF_ABR_SHORTCUT)
+      (ospf_top->abr_type != OSPF_ABR_SHORTCUT))
     {
-      zlog_info ("Z: ospf_upd_router_route(): "
-		 "route to ASBR through the BB not found");
-      zlog_info ("Z: ospf_upd_router_route(): "
-		 "the router is not Shortcut ABR, exiting");
+      zlog_info("Z: ospf_upd_router_route(): "
+		"no BB area, not Shortcut ABR, exiting");
       return;
     }
 
+  or = ospf_find_asbr_route_through_area (rtrs, p, ospf_top->backbone);
 
-  if (or == NULL)   /* We're a Shortcut ABR*/
+  if (or == NULL)
     {
-      /* Let it either add a new router or update the route
-	 through the same (non-BB) area. */
+      if (ospf_top->abr_type != OSPF_ABR_SHORTCUT)
+	{
+	  zlog_info ("Z: ospf_upd_router_route(): "
+		     "route to ASBR through the BB not found");
+	  zlog_info ("Z: ospf_upd_router_route(): "
+		     "the router is not Shortcut ABR, exiting");
+	  return;
+	}
+      else
+	/* We're a Shortcut ABR*/
+	{
+	  /* Let it either add a new router or update the route
+	     through the same (non-BB) area. */
 
-      new_or = ospf_route_new ();
-      new_or->type = OSPF_DESTINATION_ROUTER;
-      new_or->id = lsa->header.id;
-      new_or->mask = lsa->mask;
-      new_or->options = lsa->header.options;
-      new_or->origin = (struct lsa_header *)lsa;
-      new_or->cost = cost;
-      new_or->area = area;
-      new_or->path_type = OSPF_PATH_INTER_AREA;
-      new_or->flags = ROUTER_LSA_EXTERNAL;
-      ospf_ia_router_route (rtrs, p, new_or, abr_or);
+	  new_or = ospf_route_new ();
+	  new_or->type = OSPF_DESTINATION_ROUTER;
+	  new_or->id = lsa->header.id;
+	  new_or->mask = lsa->mask;
+	  new_or->options = lsa->header.options;
+	  new_or->origin = (struct lsa_header *)lsa;
+	  new_or->cost = cost;
+	  new_or->area = area;
+	  new_or->path_type = OSPF_PATH_INTER_AREA;
+	  new_or->flags = ROUTER_LSA_EXTERNAL;
+	  ospf_ia_router_route (rtrs, p, new_or, abr_or);
 
-      return;
+	  return;
+	}
     }
 
-  /*At this point the "or" is always bb-associated */
+  /* At this point the "or" is always bb-associated */
 
   if (!(or->flags & ROUTER_LSA_EXTERNAL))
     {
@@ -526,33 +502,27 @@ ospf_update_router_route (struct route_table *rtrs,
       or->path_type != OSPF_PATH_INTER_AREA)
     return;
 
-
   if (or->cost <  cost)
     return;
 
-  if (or->cost == cost)
+  else if (or->cost == cost)
     ospf_route_copy_nexthops (or, abr_or->path);
 
-  if (or->cost >  cost)
+  else if (or->cost >  cost)
     {
       ospf_route_subst_nexthops (or, abr_or->path);
       or->cost = cost;
 
-      /* Even if the ABR runs in Shortcut mode,
-	 we can't change the path type and area,
-	 because the "or" is always bb-associated
-	 at this point and even Shortcut ABR can't
-	 change these attributes
-      */
-
+      /* Even if the ABR runs in Shortcut mode, we can't change
+	 the path type and area, because the "or" is always bb-associated
+	 at this point and even Shortcut ABR can't change these attributes */
     }
 }
-
 
 int
 process_transit_summary_lsa (struct ospf_lsa *l, void *v, int i)
 {
-  struct summary_lsa *lsa;
+  struct summary_lsa *sl;
   struct prefix_ipv4 p;
   u_int32_t metric;
   struct ia_args *args;
@@ -562,13 +532,13 @@ process_transit_summary_lsa (struct ospf_lsa *l, void *v, int i)
   if (l == NULL)
     return 0;
 
-  args = (struct ia_args*) v;
-  lsa = (struct summary_lsa *) l->data;
+  args = (struct ia_args *) v;
+  sl = (struct summary_lsa *) l->data;
 
   zlog_info ("Z: process_transit_summaries(): LS ID: %s",
 	     inet_ntoa (l->data->id));
 
-  metric = GET_METRIC (lsa->metric);
+  metric = GET_METRIC (sl->metric);
   zlog_info ("Z: summary metric: %x", metric);
    
 
@@ -595,41 +565,36 @@ process_transit_summary_lsa (struct ospf_lsa *l, void *v, int i)
   zlog_info ("Z: ospf_examine_tr_summaries(): 2.1");
 
   p.family = AF_INET;
-  p.prefix = lsa->header.id;
+  p.prefix = sl->header.id;
    
-  if (lsa->header.type == OSPF_SUMMARY_LSA)
-    p.prefixlen = ip_masklen (lsa->mask);
+  if (sl->header.type == OSPF_SUMMARY_LSA)
+    p.prefixlen = ip_masklen (sl->mask);
   else
     p.prefixlen = IPV4_MAX_BITLEN;
       
-
   apply_mask_ipv4 (&p);
 
   zlog_info ("Z: ospf_examine_tr_summaries(): 3");
 
-  if (lsa->header.type == OSPF_SUMMARY_LSA)
-    ospf_update_network_route (args->rt, args->rtrs, lsa, &p, args->area);
+  if (sl->header.type == OSPF_SUMMARY_LSA)
+    ospf_update_network_route (args->rt, args->rtrs, sl, &p, args->area);
   else
-    ospf_update_router_route (args->rtrs, lsa, &p, args->area);
+    ospf_update_router_route (args->rtrs, sl, &p, args->area);
  
-  return 0;
-
   zlog_info ("Z: process_transit_summaries(): stop");
+
+  return 0;
 }
 
 void
-ospf_examine_transit_summaries (struct ospf_area * area,
+ospf_examine_transit_summaries (struct ospf_area *area,
 			        struct ospf_lsdb *lsdb,
 			        struct route_table *rt,
 			        struct route_table *rtrs)
 {
-  struct ia_args args;
+  struct ia_args args = {rt, rtrs, area};
 
   zlog_info ("Z: ospf_examine_transit_summaries(): start");
-
-  args.area = area;
-  args.rt = rt;
-  args.rtrs = rtrs;
 
   ospf_lsdb_iterator (lsdb, &args, 0, process_transit_summary_lsa);
 
@@ -637,8 +602,8 @@ ospf_examine_transit_summaries (struct ospf_area * area,
 }
 
 void
-ospf_ia_routing (struct route_table * rt,
-		 struct route_table * rtrs)
+ospf_ia_routing (struct route_table *rt,
+		 struct route_table *rtrs)
 {
   struct ospf_area * area;
 
@@ -656,36 +621,21 @@ ospf_ia_routing (struct route_table * rt,
 	case OSPF_ABR_STAND:
 	  zlog_info ("Z: ospf_ia_routing():Standard ABR");
 
-	  area = ospf_top->backbone;
-
-	  if (area)
+	  if ((area = ospf_top->backbone))
 	    {
 	      listnode node;
 
 	      zlog_info ("Z: ospf_ia_routing():backbone area found");
 	      zlog_info ("Z: ospf_ia_routing():examining summaries");
-	      ospf_examine_summaries (area, SUMMARY_LSA (area), rt, rtrs);
-	      ospf_examine_summaries (area, SUMMARY_LSA_ASBR (area), rt, rtrs);
+	      OSPF_EXAMINE_SUMMARIES_ALL (area, rt, rtrs);
 
 	      LIST_ITERATOR (ospf_top->areas, node)
-		{
-		  area = getdata (node);
-		  if (area == NULL)
-		    continue;
-
+		if ((area = getdata (node)) != NULL)
 		  if (ospf_area_is_transit (area))
-		    {
-		      ospf_examine_transit_summaries (area, SUMMARY_LSA (area),
-						      rt, rtrs);
-		      ospf_examine_transit_summaries (area,
-						      SUMMARY_LSA_ASBR (area),
-						      rt, rtrs);
-		    }
-		}
+		    OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
 	    }
 	  else
 	    zlog_info ("Z: ospf_ia_routing():backbone area NOT found");
-
 	  break;
 	case OSPF_ABR_IBM:
 	case OSPF_ABR_CISCO:
@@ -699,24 +649,12 @@ ospf_ia_routing (struct route_table * rt,
 	      zlog_info ("Z: ospf_ia_routing(): backbone area found");
 	      zlog_info ("Z: ospf_ia_routing(): examining BB summaries");
 
-	      ospf_examine_summaries (area, SUMMARY_LSA (area), rt, rtrs);
-	      ospf_examine_summaries (area, SUMMARY_LSA_ASBR (area), rt, rtrs);
+	      OSPF_EXAMINE_SUMMARIES_ALL (area, rt, rtrs);
 
 	      LIST_ITERATOR (ospf_top->areas, node)
-		{
-		  area = getdata (node);
-		  if (area == NULL)
-		    continue;
-
+		if ((area = getdata (node)) != NULL)
 		  if (ospf_area_is_transit (area))
-		    {
-		      ospf_examine_transit_summaries (area, SUMMARY_LSA (area),
-						      rt, rtrs);
-		      ospf_examine_transit_summaries (area,
-						      SUMMARY_LSA_ASBR (area),
-						      rt, rtrs);
-		    }
-		}
+		    OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
 	    }
 	  else
 	    { /* No active BB connection--consider all areas */
@@ -724,19 +662,10 @@ ospf_ia_routing (struct route_table * rt,
 			 "Active BB connection not found");
 
 	      LIST_ITERATOR (ospf_top->areas, node)
-		{
-		  area = getdata (node);
-		  if (area == NULL)
-		    continue;	 
-
-		  ospf_examine_summaries (area, SUMMARY_LSA (area), rt, rtrs);
-		  ospf_examine_summaries (area, SUMMARY_LSA_ASBR (area),
-					  rt, rtrs);
-		} 
+		if ((area = getdata (node)) != NULL)
+		  OSPF_EXAMINE_SUMMARIES_ALL (area, rt, rtrs);
 	    }
-
 	  break;
-
 	case OSPF_ABR_SHORTCUT:
 	  zlog_info ("Z: ospf_ia_routing():Alternative Shortcut");
 
@@ -747,25 +676,13 @@ ospf_ia_routing (struct route_table * rt,
 	    {
 	      zlog_info ("Z: ospf_ia_routing(): backbone area found");
 	      zlog_info ("Z: ospf_ia_routing(): examining BB summaries");
-	      ospf_examine_summaries (area, SUMMARY_LSA (area), rt, rtrs);
-	      ospf_examine_summaries (area, SUMMARY_LSA_ASBR (area), rt, rtrs);
+	      OSPF_EXAMINE_SUMMARIES_ALL (area, rt, rtrs);
 	    }
 
 	  LIST_ITERATOR (ospf_top->areas, node)
-	    {
-	      area = getdata (node);
-	      if (area == NULL)
-		continue;
-
+	    if ((area = getdata (node)) != NULL)
 	      if (ospf_area_is_transit (area) || area->shortcut_capability)
-		{
-		  ospf_examine_transit_summaries (area, SUMMARY_LSA (area),
-						  rt, rtrs);
-		  ospf_examine_transit_summaries (area,
-						  SUMMARY_LSA_ASBR (area),
-						  rt, rtrs);
-		}
-	    }
+		OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL (area, rt, rtrs);
 	  break;
 	default:
 	  break;
@@ -778,14 +695,8 @@ ospf_ia_routing (struct route_table * rt,
       zlog_info ("Z: ospf_ia_routing():not ABR, considering all areas");
 
       LIST_ITERATOR (ospf_top->areas, node)
-	{
-	  area = getdata (node);
-	  if (area == NULL)
-	    continue;
-
-	  ospf_examine_summaries (area, SUMMARY_LSA (area), rt, rtrs);
-	  ospf_examine_summaries (area, SUMMARY_LSA_ASBR (area), rt, rtrs);
-	}
+	if ((area = getdata (node)) != NULL)
+	  OSPF_EXAMINE_SUMMARIES_ALL (area, rt, rtrs);
     }
 }
 

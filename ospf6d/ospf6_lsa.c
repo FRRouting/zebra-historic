@@ -246,13 +246,17 @@ int
 vty_lsa (struct vty *vty, struct ospf6_lsa *lsa)
 {
   struct ospf6_lsa_hdr *lsh;
+  char advrtr[64];
 
   assert (lsa);
   lsh = lsa->lsa_hdr;
   assert (lsh);
 
-  vty_out (vty, "%s%s", print_lsahdr (lsh), VTY_NEWLINE);
-  vty_out (vty, "    LS age[%d] LS SeqNum[%#x] Checksum[%#hx]%s",
+  inet_ntop (AF_INET, &lsh->lsh_advrtr, advrtr, sizeof (advrtr));
+  vty_out (vty, "%s AdvRtr:%s LS ID:%lu%s",
+           lstype_name[typeindex (lsh->lsh_type)],
+           advrtr, ntohl (lsh->lsh_id), VTY_NEWLINE);
+  vty_out (vty, "    LS age:%d LS SeqNum:%#x LS Cksum:%#hx%s",
            ospf6_age_current (lsa),
            ntohl(lsh->lsh_seqnum),
            lsh->lsh_cksum,
@@ -316,8 +320,7 @@ get_ifindex_to_router (rtr_id_t rtrid, struct ospf6_lsa *lsa)
         if (!rlsd)
           {
             inet_ntop (AF_INET, &rtrid, rtrid_str, sizeof (rtrid_str));
-            zlog_warn ("can't find ifindex from %s to %s",
-                       print_lsahdr (lsa->lsa_hdr), rtrid_str); 
+            zlog_warn ("*** can't find ifindex to %s", rtrid_str); 
             return 0;
           }
         else
@@ -336,7 +339,6 @@ get_ifindex_to_router (rtr_id_t rtrid, struct ospf6_lsa *lsa)
 void
 get_referencing_lsa (list l, struct ospf6_lsa *lsa)
 {
-  char tmpbuf[64];
   list m;
   listnode n;
   struct ospf6_lsa *x;
@@ -356,7 +358,6 @@ get_referencing_lsa (list l, struct ospf6_lsa *lsa)
             x = getdata (n);
             if (is_reference_router_ok (x, lsa))
               {
-                memcpy (tmpbuf, print_lsahdr (x->lsa_hdr), sizeof (tmpbuf));
                 list_add_node (l, x);
               }
           }
@@ -369,7 +370,6 @@ get_referencing_lsa (list l, struct ospf6_lsa *lsa)
                                lsa->lsa_hdr->lsh_advrtr, (void *)area);
         if (x && is_reference_network_ok (x, lsa))
           {
-            memcpy (tmpbuf, print_lsahdr (x->lsa_hdr), sizeof (tmpbuf));
             list_add_node (l, x);
           }
         break;
@@ -480,8 +480,7 @@ reconstruct_lsa (struct ospf6_lsa *lsa)
         info = (struct ospf6_route_node_info *) rn->info;
         if (!info)
           {
-            zlog_warn ("!node info not found for %s",
-                       print_lsahdr (lsa->lsa_hdr));
+            zlog_warn ("*** node info not found");
             new = NULL;
           }
         else
@@ -606,7 +605,10 @@ ospf6_lsa_maxage_remove (struct ospf6_lsa *lsa)
 
   /* log */
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA: Remove MaxAge %s", print_lsahdr (lsa->lsa_hdr));
+    {
+      zlog_info ("LSA: Remove MaxAge LSA:");
+      ospf6_dump_lsa (lsa);
+    }
 
   /* remove from lsdb. this will free lsa */
   ospf6_lsdb_remove (lsa);
@@ -628,7 +630,10 @@ ospf6_lsa_expire (struct thread *thread)
 
   /* log */
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA: Expire %s", print_lsahdr (lsa->lsa_hdr));
+    {
+      zlog_info ("LSA: Expire:");
+      ospf6_dump_lsa (lsa);
+    }
 
   /* reflood lsa */
   ospf6_lsa_flood (lsa);
@@ -651,7 +656,10 @@ ospf6_lsa_refresh (struct thread *thread)
 
   /* log */
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA: Refresh %s", print_lsahdr (lsa->lsa_hdr));
+    {
+      zlog_info ("LSA: Refresh:");
+      ospf6_dump_lsa (lsa);
+    }
 
   if (reconstruct_lsa (lsa) == NULL)
     zlog_warn ("*** Refresh LSA failed");
@@ -687,6 +695,8 @@ ospf6_age_current (struct ospf6_lsa *lsa)
   unsigned long ulage;
   unsigned short age;
 
+  assert (lsa && lsa->lsa_hdr);
+
   /* current time */
   if (gettimeofday (&now, (struct timezone *)NULL) < 0)
     zlog_warn ("*** gettimeofday failed, may fail ages: %s",
@@ -701,6 +711,7 @@ ospf6_age_current (struct ospf6_lsa *lsa)
   else
     age = ulage;
 
+  lsa->lsa_hdr->lsh_age = htons (age);
   return age;
 }
 
@@ -721,7 +732,10 @@ ospf6_premature_aging (struct ospf6_lsa *lsa)
 {
   /* log */
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA: Premature aging %s", print_lsahdr (lsa->lsa_hdr));
+    {
+      zlog_info ("LSA: Premature aging");
+      ospf6_dump_lsa (lsa);
+    }
 
   if (lsa->expire)
     thread_cancel (lsa->expire);

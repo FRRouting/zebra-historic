@@ -145,3 +145,24 @@ struct zebra_if
   struct rtadvconf rtadv;
 #endif /* RTADV */
 };
+
+void if_up (struct interface *);
+void if_down (struct interface *);
+
+#ifdef HAVE_PROC_NET_DEV
+void ifstat_update_proc ();
+#endif /* HAVE_PROC_NET_DEV */
+#ifdef HAVE_NET_RT_IFLIST
+void ifstat_update_sysctl ();
+
+#endif /* HAVE_NET_RT_IFLIST */
+#ifdef HAVE_PROC_NET_DEV
+void interface_list_proc ();
+#endif /* HAVE_PROC_NET_DEV */
+#ifdef HAVE_PROC_NET_IF_INET6
+void ifaddr_proc_ipv6 ();
+#endif /* HAVE_PROC_NET_IF_INET6 */
+
+#ifdef BSDI
+int if_kvm_get_mtu (struct interface *);
+#endif /* BSDI */

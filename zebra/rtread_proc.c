@@ -110,7 +110,7 @@ proc_ipv6_route_read ()
   fp = fopen (_PATH_PROCNET_ROUTE6, "r");
   if (fp == NULL)
     {
-      log_warn ("Can't open %s : %s\n", _PATH_PROCNET_ROUTE6, 
+      zlog_warn ("Can't open %s : %s", _PATH_PROCNET_ROUTE6, 
 		strerror (errno));
       return -1;
     }

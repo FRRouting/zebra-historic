@@ -168,13 +168,13 @@ hash_clean (struct Hash *hash, void (* func) (void *))
 	{
 	  next = mp->next;
 	      
-	  if (func) (*func) (mp->data);
+	  if (func)
+	    (*func) (mp->data);
 	  XFREE (MTYPE_HASH_BACKET, mp);
 	}
       hash->index[i] = NULL;
     }
 }
-
 
 void
 hash_free (struct Hash *hash)
@@ -183,4 +183,3 @@ hash_free (struct Hash *hash)
  XFREE(MTYPE_HASH, hash->index);
  XFREE(MTYPE_HASH, hash);
 }
-

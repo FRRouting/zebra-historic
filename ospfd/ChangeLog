@@ -1,3 +1,95 @@
+1999-11-19  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_neighbor.h (struct ospf_neighbor): Add member state_change
+	for NSM state change statistics.
+
+1999-11-19  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (show_ip_ospf_neighbor_detail),
+	(show_ip_ospf_neighbor_int_detail): DEFUN Added.
+
+1999-11-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_asbr.c (ospf_asbr_check_lsas): Add check of
+	lsa->refresh_list.
+
+1999-11-11  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_ia.[ch] (OSPF_EXAMINE_SUMMARIES_ALL): Macro added.
+	This macro is expanded to ospf_examine_summaries ()
+	for SUMMARY_LSA and SUMMARY_LSA_ASBR.
+	(OSPF_EXAMINE_TRANSIT_SUMMARIES_ALL): Macro added.
+	This macro is expanded to ospf_examine_transit_summaries ()
+	for SUMMARY_LSA and SUMMARY_LSA_ASBR.
+
+1999-11-11  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.[ch] (ospf_find_self_summary_lsa_by_prefix): Changed to
+	macro OSPF_SUMMARY_LSA_SELF_FIND_BY_PREFIX.
+	(ospf_find_self_summary_asbr_lsa_by_prefix): Changed to
+	macro OSPF_SUMMARY_ASBR_LSA_SELF_FIND_BY_PREFIX.
+	(ospf_find_self_external_lsa_by_prefix): Changed to
+	macro OSPF_EXTERNAL_LSA_SELF_FIND_BY_PREFIX.
+
+1999-11-11  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (ospf_abr_type): ospf_abr_type_cisco, ospf_abr_type_ibm,
+	ospf_abr_type_shortcut and ospf_abr_type_standard DEFUNs are
+	combined.
+	* ospfd.c (no_ospf_abr_type): no_ospf_abr_type_cisco,
+	no_ospf_abr_type_ibm and no_ospf_abr_type_shortcut DEFUNS are
+	combined.
+
+1999-11-10  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_route.c (ospf_lookup_int_by_prefix): Move function to
+	ospf_interface.c and change name to ospf_if_lookup_by_prefix ().
+
+1999-11-01  Alex Zinin <zinin@amt.ru>
+	* ospf_packet.c 
+	some correction to LSU processing
+
+	* ospf_lsa.c ospfd.h 
+	randomize initial LSA refreshment interval
+	and limit the size of LSA-group to 10
+	to let randomization work more effectively.
+
+1999-10-31  Alex Zinin <zinin@amt.ru>
+	* ospf_interface.c 
+	cancel t_network_lsa_self
+	when freeing int structure
+
+ 	*  ospf_abr.c ospf_asbr.c ospf_flood.c ospf_lsa.c 
+           ospf_lsa.h ospf_lsdb.h ospfd.c ospfd.h
+
+	Summary and ASE LSA refreshment functions
+	added---LSA refreshment is paced to 70 LSAs
+	per sec to avoid link overflow. Refreshment events
+	are further randomized within a 10 sec interval
+	to avoid syncing.
+	
+	Also the sigfault of memcmp() in ospf_lsa_is_different()
+	is fixed.
+
+1999-10-30  Alex Zinin <zinin@amt.ru>
+	* ospf_nsm.c 
+	Fix the bug where MAX_AGE LSAs
+	are included into the DB summary.
+
+	* ospf_interface.c 
+	allocate 2*MTU input buffer instead of just MTU
+	for the cases when the other router mistakenly
+	sends larger packets thus causing fragmentation, etc.
+
+	* ospf_nsm.c
+	in nsm_reset_nbr() lists should be freed
+	not when they are empty.
+
+1999-10-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_zebra.c (ospf_acl_hook): Move OSPF_IS_ASBR and OSPF_IS_ABR
+	check inside of if (ospf_top).
+
 1999-10-29  Alex Zinin <zinin@amt.ru>
 	* ospf_lsa.c ospf_lsdb.c :
 	add assertion in lsa and lsa->data alloc functions,

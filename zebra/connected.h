@@ -34,6 +34,13 @@ void
 connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr, 
 		       int prefixlen, struct in_addr *broad);
 
+void
+connected_up_ipv4 (struct interface *ifp, struct in_addr *addr, 
+		   int prefixlen);
+void
+connected_down_ipv4 (struct interface *ifp, struct in_addr *addr, 
+		     int prefixlen);
+
 #ifdef HAVE_IPV6
 int
 connected_check_ipv6 (struct interface *ifp, struct prefix *p);
@@ -44,6 +51,13 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 void
 connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
 		       int prefixlen, struct in6_addr *broad);
+void
+connected_up_ipv6 (struct interface *ifp, struct in6_addr *address,
+		   int prefixlen);
+void
+connected_down_ipv6 (struct interface *ifp, struct in6_addr *address,
+		     int prefixlen);
+
 #endif /* HAVE_IPV6 */
 
 #endif /*_ZEBRA_CONNECTED_H */

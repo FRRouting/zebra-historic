@@ -60,6 +60,12 @@
 #include <sys/utsname.h>
 
 /* machine dependent includes */
+#ifdef SUNOS_5
+#include <limits.h>
+#include <strings.h>
+#endif /* SUNOS_5 */
+
+/* machine dependent includes */
 #ifdef HAVE_LINUX_VERSION_H
 #include <linux/version.h>
 #endif /* HAVE_LINUX_VERSION_H */
@@ -219,6 +225,17 @@
 #ifndef INADDR_LOOPBACK
 #define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */
 #endif
+
+/* Address family numbers from RFC1700. */
+#define AFI_IP                   1
+#define AFI_IP6                  2
+#define AFI_MAX                  3
+
+/* Subsequent Address Family Identifier. */
+#define SAFI_UNICAST             1
+#define SAFI_MULTICAST           2
+#define SAFI_UNICAST_MULTICAST   3
+#define SAFI_MAX                 4
 
 /* Zebra types. */
 typedef u_int16_t zebra_size_t;

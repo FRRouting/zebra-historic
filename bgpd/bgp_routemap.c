@@ -441,6 +441,110 @@ struct route_map_rule_cmd route_match_community_cmd =
   route_match_community_compile,
   route_match_community_free
 };
+#ifdef  HAVE_MBGPV4
+/* `match nlri unicast | multicast ' */
+
+/* Match function return 1 if match is success else return zero. */
+route_map_result_t
+route_match_nlri (void *rule, struct prefix *prefix, 
+		    route_map_object_t type, void *object)
+{
+  u_int32_t *safi;
+  struct bgp_info *bgp_info;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      safi = rule;
+      bgp_info = object;
+    
+      if (prefix->safi == *safi)
+	return RM_MATCH;
+      else
+	return RM_NOMATCH;
+    }
+  return RM_NOMATCH;
+}
+
+/* Route map `match nlri' match statement. `arg' is nlri value */
+void *
+route_match_nlri_compile (char *arg)
+{
+  u_int32_t *safi;
+
+  safi = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
+
+  if( strcmp( arg, "multicast" ) == 0) *safi = SAFI_MULTICAST;
+  else if( strcmp( arg, "unicast" ) == 0) *safi = SAFI_UNICAST;
+  else *safi = 0;
+  return safi;
+}
+
+/* Free route map's compiled `match nlri' value. */
+void
+route_match_nlri_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for nlri matching. */
+struct route_map_rule_cmd route_match_nlri_cmd =
+{
+  "nlri",
+  route_match_nlri,
+  route_match_nlri_compile,
+  route_match_nlri_free
+};
+/* `set nlri unicast | multicast ' */
+
+/* Set function return 1 if match is success else return zero. */
+route_map_result_t
+route_set_nlri (void *rule, struct prefix *prefix, 
+		    route_map_object_t type, void *object)
+{
+  u_int32_t *safi;
+  struct bgp_info *bgp_info;
+
+  if (type == ROUTE_MAP_BGP)
+    {
+      safi = rule;
+      bgp_info = object;
+      prefix->safi = *safi;
+    }
+  return RM_OKAY;
+}
+
+/* Route map `set nlri' aet statement. `arg' is nlri value */
+void *
+route_set_nlri_compile (char *arg)
+{
+  u_int32_t *safi;
+  int tmp;
+
+  if( strcmp( arg, "multicast" ) == 0) tmp = SAFI_MULTICAST;
+  else if( strcmp( arg, "unicast" ) == 0) tmp = SAFI_UNICAST;
+  else return NULL;
+  
+  safi = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (u_int32_t));
+  *safi = tmp;
+  return safi;
+}
+
+/* Free route map's compiled `set nlri' value. */
+void
+route_set_nlri_free (void *rule)
+{
+  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
+}
+
+/* Route map commands for nlri matching. */
+struct route_map_rule_cmd route_set_nlri_cmd =
+{
+  "nlri",
+  route_set_nlri,
+  route_set_nlri_compile,
+  route_set_nlri_free
+};
+#endif /* HAVE_MBGPV4 */
 
 /* `set ip next-hop IP_ADDRESS' */
 
@@ -1357,9 +1461,12 @@ bgp_route_set_delete (struct vty *vty, struct route_map_index *index,
 void
 bgp_route_map_update ()
 {
+  int i;
   listnode node;
   extern list peer_list;
+  extern list bgp_list;
   struct peer *peer;
+  struct bgp *bgp;
 
   for (node = listhead (peer_list); node; nextnode (node))
     {
@@ -1372,6 +1479,24 @@ bgp_route_map_update ()
       if (peer->route_map[BGP_FILTER_OUT].name)
 	peer->route_map[BGP_FILTER_OUT].map = 
 	  route_map_lookup_by_name (peer->route_map[BGP_FILTER_OUT].name);
+    }
+
+  /* For redistribute route-map updates. */
+  for (node = listhead (bgp_list); node; nextnode (node))
+    {
+      bgp = getdata (node);
+
+      for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+	{
+	  if (bgp->rmap[ZEBRA_FAMILY_IPV4][i].name)
+	    bgp->rmap[ZEBRA_FAMILY_IPV4][i].map = 
+	      route_map_lookup_by_name (bgp->rmap[ZEBRA_FAMILY_IPV4][i].name);
+#ifdef HAVE_IPV6
+	  if (bgp->rmap[ZEBRA_FAMILY_IPV6][i].name)
+	    bgp->rmap[ZEBRA_FAMILY_IPV6][i].map =
+	      route_map_lookup_by_name (bgp->rmap[ZEBRA_FAMILY_IPV6][i].name);
+#endif /* HAVE_IPV6 */
+	}
     }
 }
 
@@ -1550,6 +1675,65 @@ DEFUN (no_match_aspath,
 
   return bgp_route_match_delete (vty, vty->index, "as-path", regstr);
 }
+
+#ifdef HAVE_MBGPV4
+DEFUN (match_nlri, 
+       match_nlri_cmd,
+       "match nlri NLRI",
+       MATCH_STR
+       "Nlri\n"
+       "Nlri NLRI\n")
+{
+  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
+    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
+    return CMD_WARNING;
+  }
+  return bgp_route_match_add (vty, vty->index, "nlri", argv[0]);
+}
+
+DEFUN (no_match_nlri,
+       no_match_nlri_cmd,
+       "no match nlri NLRI",
+       NO_STR
+       MATCH_STR
+       "Nlri\n"
+       "Nlri NLRI\n")
+{
+  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
+    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
+    return CMD_WARNING;
+  }
+  return bgp_route_match_delete (vty, vty->index, "nlri", argv[0]);
+}
+DEFUN (set_nlri, 
+       set_nlri_cmd,
+       "set nlri NLRI",
+       MATCH_STR
+       "Nlri\n"
+       "Nlri NLRI\n")
+{
+  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
+    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
+    return CMD_WARNING;
+  }
+  return bgp_route_set_add (vty, vty->index, "nlri", argv[0]);
+}
+
+DEFUN (no_set_nlri,
+       no_set_nlri_cmd,
+       "no set nlri NLRI",
+       NO_STR
+       MATCH_STR
+       "Nlri\n"
+       "Nlri NLRI\n")
+{
+  if(strcmp(argv[0], "multicast" ) &&  strcmp(argv[0], "unicast" ) ) {
+    vty_out (vty, "Use either unicast or multicast.%s", VTY_NEWLINE);
+    return CMD_WARNING;
+  }
+  return bgp_route_set_delete (vty, vty->index, "nlri", argv[0]);
+}
+#endif /* HAVE_MBGPV4 */
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
@@ -2081,13 +2265,16 @@ bgp_route_map_init ()
   route_map_init ();
   route_map_init_vty ();
   route_map_add_hook (bgp_route_map_update);
+  route_map_delete_hook (bgp_route_map_update);
 
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_ip_next_hop_cmd);
   route_map_install_match (&route_match_ip_prefix_list_cmd);
   route_map_install_match (&route_match_aspath_cmd);
-  route_map_install_match (&route_match_metric_cmd);
   route_map_install_match (&route_match_community_cmd);
+#ifdef HAVE_MBGPV4
+  route_map_install_match (&route_match_nlri_cmd);
+#endif /* HAVE_MBGPV4 */
 
   route_map_install_set (&route_set_ip_nexthop_cmd);
   route_map_install_set (&route_set_local_pref_cmd);
@@ -2099,6 +2286,9 @@ bgp_route_map_init ()
   route_map_install_set (&route_set_atomic_aggregate_cmd);
   route_map_install_set (&route_set_aggregator_as_cmd);
   route_map_install_set (&route_set_community_additive_cmd);
+#ifdef HAVE_MBGPV4
+  route_map_install_set (&route_set_nlri_cmd);
+#endif /* HAVE_MBGPV4 */
 
   install_element (RMAP_NODE, &match_ip_address_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_cmd);
@@ -2112,6 +2302,11 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_match_metric_cmd);
   install_element (RMAP_NODE, &match_community_cmd);
   install_element (RMAP_NODE, &no_match_community_cmd);
+#ifdef HAVE_MBGPV4
+  install_element (RMAP_NODE, &match_nlri_cmd);
+  install_element (RMAP_NODE, &no_match_nlri_cmd);
+#endif /* HAVE_MBGPV4 */
+
 
   install_element (RMAP_NODE, &set_ip_nexthop_cmd);
   install_element (RMAP_NODE, &no_set_ip_nexthop_cmd);
@@ -2131,6 +2326,12 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_set_atomic_aggregate_cmd);
   install_element (RMAP_NODE, &set_aggregator_as_cmd);
   install_element (RMAP_NODE, &no_set_aggregator_as_cmd);
+#ifdef HAVE_MBGPV4
+  install_element (RMAP_NODE, &set_nlri_cmd);
+  install_element (RMAP_NODE, &no_set_nlri_cmd);
+#endif /* HAVE_MBGPV4 */
+
+
 
   /* set community-additive. */
   install_element (RMAP_NODE, &set_community_additive_cmd);

@@ -88,6 +88,8 @@ ospf_lsdb_hash_cmp (struct ospf_lsa *lsa1, struct ospf_lsa *lsa2)
     return 0;
 }
 
+
+/* Allocate new lsdb object. */
 struct ospf_lsdb *
 ospf_lsdb_new (u_char lsdb_flags)
 {
@@ -106,18 +108,15 @@ ospf_lsdb_new (u_char lsdb_flags)
     }
 
   if (CHECK_FLAG (lsdb_flags, OSPF_LSDB_LIST))
-    {
-      new->list = list_init ();
-    }
+    new->list = list_init ();
 
   if (CHECK_FLAG (lsdb_flags, OSPF_LSDB_RT))
-    {
-      new->rt = route_table_init ();
-    }
+    new->rt = route_table_init ();
 
   return new;
 }
 
+/* Iterator for LSDB data structure. */
 struct ospf_lsa *
 ospf_lsdb_iterator (struct ospf_lsdb *lsdb, void *p_arg, int int_arg, 
 		    int (*callback) (struct ospf_lsa *, void *, int))
@@ -130,19 +129,35 @@ ospf_lsdb_iterator (struct ospf_lsdb *lsdb, void *p_arg, int int_arg,
       return NULL;
     }
 
+  /* Iterate as linked list. */
   if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_LIST) && lsdb->list)
     {
-      listnode nnode, next;
+      listnode node;
 
       zlog_info ("Z: LSDB: iterating the list %p, listcount: %d",
 		 lsdb->list, listcount (lsdb->list));
 
-      for (nnode = listhead (lsdb->list); nnode; nnode = next) 
+      for (node = listhead (lsdb->list); node; nextnode (node))
 	{
-	  next = nnode->next;
-	  lsa = getdata (nnode);
+	  if ((lsa = getdata (node)) == NULL)
+	    continue;
 
-	  if (lsa == NULL)
+	  zlog_info ("Z: LSDB: iterating: calling callback");
+	  if (callback (lsa, p_arg, int_arg))
+	    return lsa;
+	}
+
+      return NULL;
+    }
+
+  /* Iterate as route table. */
+  if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_RT) && lsdb->rt)
+    {
+      struct route_node *rn;
+
+      for (rn = route_top (lsdb->rt); rn; rn = route_next (rn))
+	{
+	  if ((lsa = rn->info) == NULL)
 	    continue;
 
 	  zlog_info ("Z: LSDB: iterating: calling callback");
@@ -152,23 +167,7 @@ ospf_lsdb_iterator (struct ospf_lsdb *lsdb, void *p_arg, int int_arg,
       return NULL;
     }
 
-  if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_RT) && lsdb->rt)
-    {
-      struct route_node *rn, *next;
-
-      for (rn = route_top (lsdb->rt); rn; rn = next)
-	{
-	  next = route_next (rn);
-	  if (rn->info == NULL)
-	    continue;
-
-	  lsa = rn->info;
-	  if (callback (lsa, p_arg, int_arg))
-	    return lsa;
-	}
-      return NULL;
-    }
-
+  /* Iterate as hash. */
   if (CHECK_FLAG (lsdb->flags, OSPF_LSDB_HASH) && lsdb->hash)
     {
       int i;
@@ -179,10 +178,12 @@ ospf_lsdb_iterator (struct ospf_lsdb *lsdb, void *p_arg, int int_arg,
 	  while (mp) 
 	    {
 	      next = mp->next;
-	      lsa = mp->data;
-	      if (lsa)
-		if (callback (lsa, p_arg, int_arg))
-		  return lsa;
+
+	      if ((lsa = mp->data) == NULL)
+		continue;
+
+	      if (callback (lsa, p_arg, int_arg))
+		return lsa;
 
 	      mp = next;
 	    }
@@ -192,8 +193,7 @@ ospf_lsdb_iterator (struct ospf_lsdb *lsdb, void *p_arg, int int_arg,
   return NULL;
 }
 
-void
-ospf_lsdb_delete (struct ospf_lsdb *, struct ospf_lsa *);
+void ospf_lsdb_delete (struct ospf_lsdb *, struct ospf_lsa *);
 
 int
 lsdb_free (struct ospf_lsa *lsa, void *v, int i)
@@ -208,6 +208,7 @@ lsdb_free (struct ospf_lsa *lsa, void *v, int i)
 
   ospf_lsdb_delete (lsdb, lsa);
   ospf_lsa_free (lsa);
+
   zlog_info("Z: ospf_lsa_free() in ospf_lsdb_free(): %x", lsa);
 
   return 0;
@@ -236,8 +237,7 @@ ospf_lsdb_free (struct ospf_lsdb *lsdb)
   XFREE (MTYPE_OSPF_LSDB, lsdb);
 }
 
-int
-find_lsa (struct ospf_lsa *, void *, int);
+int find_lsa (struct ospf_lsa *, void *, int);
 
 struct ospf_lsa *
 ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
@@ -278,6 +278,10 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
           ospf_ls_retransmit_delete_nbr_all(new);
 	  new->data = NULL;
           ospf_lsa_free(new);
+
+          if (lsa->refresh_list)
+             ospf_refresher_unregister_lsa (lsa);
+
           zlog_info("Z: ospf_lsa_free() in ospf_lsdb_add().1: %x", new);
 
 	  changed = 1;
@@ -315,6 +319,10 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
           ospf_ls_retransmit_delete_nbr_all(new);
 	  new->data = NULL;
           ospf_lsa_free(new);
+
+          if (lsa->refresh_list)
+             ospf_refresher_unregister_lsa (lsa);
+
           zlog_info("Z: ospf_lsa_free() in ospf_lsdb_add().2: %x", new);
 
 	  changed = 1;
@@ -370,8 +378,11 @@ ospf_lsdb_add (struct ospf_lsdb *lsdb, struct ospf_lsa *new)
           ospf_ls_retransmit_delete_nbr_all(new);
 	  new->data = NULL;
           ospf_lsa_free(new);
-          zlog_info("Z: ospf_lsa_free() in ospf_lsdb_add().3: %x", new);
 
+          if (lsa->refresh_list)
+	    ospf_refresher_unregister_lsa (lsa);
+
+          zlog_info("Z: ospf_lsa_free() in ospf_lsdb_add().3: %x", new);
 	}
       else
 	{
@@ -508,14 +519,10 @@ ospf_lsdb_lookup (struct ospf_lsdb *lsdb, struct in_addr rid,
 int
 find_by_id (struct ospf_lsa *lsa, void *v, int i)
 {
-  struct in_addr *lsid;
-
   if (lsa == NULL)
     return 0;
 
-  lsid = (struct in_addr *) v;
-
-  if (lsa->data->id.s_addr == (*lsid).s_addr)
+  if (IPV4_ADDR_SAME (&lsa->data->id, v))
     return 1;
 
   return 0;

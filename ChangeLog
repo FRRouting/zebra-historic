@@ -1,3 +1,37 @@
+1999-11-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to 0.82.
+
+1999-11-23  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* aczebra.m4: New file added.
+
+1999-11-21  Michael Handler <handler@sub-rosa.com>
+
+	* configure.in (LIBS): Add sa_len check of sockaddr.
+
+	* acconfig.h: Add HAVE_SA_LEN.
+
+1999-11-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Update version to zebra-0.81b for bgpd test.
+
+1999-11-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add --enable-mbgp.
+
+1999-11-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (EXTRA_DIST): Add TODO to the distribution.
+
+1999-11-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* TODO: New file is added.
+
+1999-11-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Update version to zebra-0.81a for ospfd test.
+
 1999-10-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: New option --enable-snmp is added.

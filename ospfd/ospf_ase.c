@@ -65,8 +65,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 
   for (nnode = listhead ((list) rn->info); nnode; nextnode (nnode)) 
     {
-      or = getdata (nnode);
-      if (or == NULL)
+      if ((or = getdata (nnode)) == NULL)
 	continue;
 
       if (or->cost >= OSPF_LS_INFINITY)
@@ -89,8 +88,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 
   for (nnode = listhead (chosen); nnode; nextnode (nnode)) 
     {
-      or = getdata (nnode);
-      if (or == NULL)
+      if ((or = getdata (nnode)) == NULL)
 	continue;
 
       if (or->cost >= OSPF_LS_INFINITY)
@@ -140,8 +138,7 @@ ospf_find_asbr_route_through_area (struct route_table *rtrs,
 
   LIST_ITERATOR ((list) rn->info, nnode)
     {
-      or = getdata (nnode);
-      if (or == NULL)
+      if ((or = getdata (nnode)) == NULL)
 	continue;
 
       if (or->area == area)
@@ -160,8 +157,7 @@ ospf_ase_complete_direct_routes (struct ospf_route *ro, struct in_addr nexthop)
 
   LIST_ITERATOR (ro->path, node)
     {
-      op = getdata (node);
-      if (op == NULL)
+      if ((op = getdata (node)) == NULL)
 	continue;
 
       if (op->nexthop.s_addr == 0)
@@ -179,12 +175,10 @@ ospf_ase_check_fwd_addr (struct in_addr fwd_addr)
 
   LIST_ITERATOR (ospf_top->iflist, if_node)
     {
-      ifp = getdata (if_node);
-      if (ifp == NULL)
+      if ((ifp = getdata (if_node)) == NULL)
 	continue;
 
-      oi = ifp->info;
-      if (oi == NULL)
+      if ((oi = ifp->info) == NULL)
 	continue;
 
       if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
@@ -195,8 +189,7 @@ ospf_ase_check_fwd_addr (struct in_addr fwd_addr)
 
       LIST_ITERATOR (ifp->connected, cn_node)
 	{
-	  co = getdata (cn_node);
-	  if (co == NULL)
+	  if ((co = getdata (cn_node)) == NULL)
 	    continue;
 
 	  if (IPV4_ADDR_SAME (&co->address->u.prefix4, &fwd_addr))
@@ -355,12 +348,12 @@ process_ase_lsa (struct ospf_lsa *l, void *v, int i)
 		     "another route to the same destination is found");
 
 	  /* Check the existing route */
-	  res = ospf_cmp_routes (new_or, or);
+	  res = ospf_route_cmp (new_or, or);
 
 	  switch (res)
 	    {
 	    case 1:
-	      ospf_subst_route (rn1, new_or, asbr_or);
+	      ospf_route_subst (rn1, new_or, asbr_or);
 	      if (lsa->e[0].fwd_addr.s_addr)
 		ospf_ase_complete_direct_routes (new_or, lsa->e[0].fwd_addr);
 
@@ -392,7 +385,7 @@ process_ase_lsa (struct ospf_lsa *l, void *v, int i)
   else
     { /* no route */
       zlog_info ("Z: ospf_ase_routing(): adding the new route");
-      ospf_add_route (args->rt, &p, new_or, asbr_or);
+      ospf_route_add (args->rt, &p, new_or, asbr_or);
 
       if (lsa->e[0].fwd_addr.s_addr)
 	ospf_ase_complete_direct_routes (new_or, lsa->e[0].fwd_addr);

@@ -1,4 +1,47 @@
+1999-11-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h: Bump up to 0.81c for testing new kernel codes.
+
+1999-11-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* thread.h (struct thread): Pthread support is disabled all
+	platform.
+
+1999-11-21  Michael Handler <handler@sub-rosa.com>
+
+	* Include <limits.h> and <strings.h> under SUNOS_5.
+
+1999-11-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* sockunion.c (in6addr_cmp): Enclosed by #define HAVE_IPV6
+1999-11-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add BGP_IPV4_NODE and BGP_IPV6_NODE.
+
+1999-11-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (disable): Add `disable' command.
+
+1999-11-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* plist.c (vty_prefix_list_install): Add any check.
+
+1999-11-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add DUMP_NODE.
+
+1999-11-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* smux.c: Change default SMUX oid to compatible with gated.
+
+1999-10-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_rmap.c: New file added.
+
+	* if_rmap.h: New file added.
+
 1999-10-29  Alex Zinin  <zinin@amt.ru>
+
 	* hash.c: add hash_free() function
 
 1999-10-25  Kunihiro Ishiguro  <kunihiro@zebra.org>

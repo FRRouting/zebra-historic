@@ -60,9 +60,9 @@ rip_main.o: rip_main.c ../lib/version.h ../lib/thread.h \
 rip_routemap.o: rip_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/routemap.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/log.h \
- ../ripd/ripd.h
+ ../lib/sockunion.h ../ripd/ripd.h
 rip_snmp.o: rip_snmp.c
-rip_zebra.o: rip_zebra.c ../lib/thread.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../lib/prefix.h ripd.h ../lib/if.h \
- ../lib/linklist.h ../lib/buffer.h ../lib/network.h ../lib/stream.h \
- ../lib/log.h ../lib/zclient.h ../lib/routemap.h ../ripd/rip_debug.h
+rip_zebra.o: rip_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../lib/prefix.h ../lib/stream.h ../lib/routemap.h ../lib/zclient.h \
+ ../lib/if.h ../lib/linklist.h ../lib/log.h ../ripd/ripd.h \
+ ../ripd/rip_debug.h

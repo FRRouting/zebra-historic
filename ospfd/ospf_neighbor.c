@@ -69,7 +69,6 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   /* Initialize lists. */
   nbr->ls_retransmit = list_init ();
-zlog_info ("LLL: ls_retransmit=%d", listcount (nbr->ls_retransmit));
   nbr->db_summary = list_init ();
   nbr->ls_request = list_init ();
 
@@ -246,16 +245,15 @@ ospf_nbr_lookup_by_routerid (struct route_table *nbrs,
 
   for (rn = route_top (nbrs); rn; rn = route_next (rn))
     {
-      if (rn->info == NULL)
+      if ((nbr = rn->info) == NULL)
 	continue;
-      nbr = rn->info;
 
-      if (IPV4_ADDR_SAME (&nbr->router_id, id)){
-        route_unlock_node(rn);
-	return nbr;
-      }
+      if (IPV4_ADDR_SAME (&nbr->router_id, id))
+	{
+	  route_unlock_node(rn);
+	  return nbr;
+	}
     }
-
 
   return NULL;
 }

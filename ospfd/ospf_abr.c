@@ -211,8 +211,8 @@ ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 
   zlog_info ("Z: ospf_abr_announce_network_to_area(): Start");
 
-
-  old = ospf_find_self_summary_lsa_by_prefix (area, p);
+  old = OSPF_SUMMARY_LSA_SELF_FIND_BY_PREFIX (area, p);
+  /* old = ospf_find_self_summary_lsa_by_prefix (area, p); */
 
   if (old)
     {
@@ -246,9 +246,14 @@ ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 	  zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		     "copying new summary to the old body");
 	  memcpy (old->data, lsa->data, sizeof (struct summary_lsa));
+          old->ts = lsa->ts;
+          old->originated = lsa->originated;
 	  ospf_lsa_free (lsa);
           zlog_info("Z: ospf_lsa_free() in ospf_abr_announce_network_to_area(): %x", lsa);
 	  lsa = old;
+	  if (lsa->refresh_list)
+	    ospf_refresher_unregister_lsa (lsa);
+	  ospf_refresher_register_lsa (area->top, lsa);
 	}
       else
 	{
@@ -259,6 +264,7 @@ ospf_abr_announce_network_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 
       zlog_info ("Z: ospf_abr_announce_network_to_area(): "
 		 "flooding new version of summary");
+
       ospf_flood_through_area (area, NULL, lsa);
     }
 
@@ -332,12 +338,13 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
       if (ospf_abr_nexthops_belong_to_area (or, area))
 	continue;
 
-      if (!ospf_abr_should_accept (&n->p, area)){
-         zlog_info ("Z: ospf_abr_announce_network(): "
-                    "prefix %s/%d was denied by import-list",
-	            inet_ntoa (p->prefix), p->prefixlen);
-         continue; 
-      }
+      if (!ospf_abr_should_accept (&n->p, area))
+	{
+	  zlog_info ("Z: ospf_abr_announce_network(): "
+		     "prefix %s/%d was denied by import-list",
+		     inet_ntoa (p->prefix), p->prefixlen);
+	  continue; 
+	}
 
       if (area->external_routing != OSPF_AREA_DEFAULT && area->no_summary)
 	{
@@ -373,7 +380,7 @@ ospf_abr_announce_network (struct route_node *n, struct ospf_route *or)
 
 
 int
-ospf_abr_should_announce(struct prefix *p, struct ospf_route *or)
+ospf_abr_should_announce (struct prefix *p, struct ospf_route *or)
 {
   struct ospf_area *a = or->area;
 
@@ -387,7 +394,7 @@ ospf_abr_should_announce(struct prefix *p, struct ospf_route *or)
            return 0;
     }
 
- return 1;
+  return 1;
 }
 
 
@@ -430,10 +437,11 @@ ospf_abr_process_network_rt (struct route_table *rt)
 	}
 
       if ((or->path_type == OSPF_PATH_INTRA_AREA) &&
-          (! ospf_abr_should_announce(&rn->p, or)) ){
-         zlog_info("Z: ospf_abr_process_network_rt(): denied by export-list");
-         continue;
-      }
+          (! ospf_abr_should_announce(&rn->p, or)) )
+	{
+	  zlog_info("Z: ospf_abr_process_network_rt(): denied by export-list");
+	  continue;
+	}
 
 
       if ((or->path_type == OSPF_PATH_INTER_AREA) &&
@@ -473,7 +481,8 @@ ospf_abr_announce_rtr_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 
   zlog_info ("Z: ospf_abr_announce_rtr_to_area(): Start");
 
-  old = ospf_find_self_summary_asbr_lsa_by_prefix (area, p);
+  old = OSPF_SUMMARY_ASBR_LSA_SELF_FIND_BY_PREFIX (area, p);
+  /* old = ospf_find_self_summary_asbr_lsa_by_prefix (area, p); */
 
   if (old)
     {
@@ -506,19 +515,25 @@ ospf_abr_announce_rtr_to_area (struct prefix_ipv4 *p, u_int32_t cost,
 	  zlog_info ("Z: ospf_abr_announce_rtr_to_area(): "
 		     "copying new summary to the old body");
 	  memcpy (old->data, lsa->data, sizeof (struct summary_lsa));
+          old->ts = lsa->ts;
+          old->originated = lsa->originated;
 	  ospf_lsa_free (lsa);
-          zlog_info("Z: ospf_lsa_free() in ospf_abr_announce_rtr_to_area(): %x", lsa);
+          zlog_info ("Z: ospf_lsa_free() in ospf_abr_announce_rtr_to_area(): %x", lsa);
 	  lsa = old;
+	  if (lsa->refresh_list)
+	    ospf_refresher_unregister_lsa (lsa);
+          ospf_refresher_register_lsa (area->top, lsa);
 	}
       else
 	{
-	  zlog_info ("Z: ospf_abr_announce_rtr_to_area():"
-		     " installing new summary");
+	  zlog_info ("Z: ospf_abr_announce_rtr_to_area(): "
+		     "installing new summary");
 	  ospf_summary_asbr_lsa_install (area, lsa);
 	}
 
-      zlog_info ("Z: ospf_abr_announce_rtr_to_area():"
-		 " flooding new version of summary");
+      zlog_info ("Z: ospf_abr_announce_rtr_to_area(): "
+		 "flooding new version of summary");
+
       ospf_flood_through_area (area, NULL, lsa);
     }
 
@@ -793,8 +808,7 @@ ospf_abr_announce_aggregates ()
 				 " a transit area");
 		      continue; 
 		    }
-		  ospf_abr_announce_network_to_area(&p, range->cost, ar);
-
+		  ospf_abr_announce_network_to_area (&p, range->cost, ar);
 		}
 
 	    } /* if (range->specifics)*/
@@ -980,20 +994,20 @@ ospf_abr_task ()
   zlog_info ("Z: ospf_abr_task(): prepare aggregates");
   ospf_abr_prepare_aggregates ();
 
-  if (OSPF_IS_ABR) {
+  if (OSPF_IS_ABR)
+    {
+      zlog_info ("Z: ospf_abr_task(): process network RT");
+      ospf_abr_process_network_rt (ospf_top->new_table);
 
-     zlog_info ("Z: ospf_abr_task(): process network RT");
-     ospf_abr_process_network_rt (ospf_top->new_table);
+      zlog_info ("Z: ospf_abr_task(): process router RT");
+      ospf_abr_process_router_rt (ospf_top->new_rtrs);
 
-     zlog_info ("Z: ospf_abr_task(): process router RT");
-     ospf_abr_process_router_rt (ospf_top->new_rtrs);
+      zlog_info ("Z: ospf_abr_task(): announce aggregates");
+      ospf_abr_announce_aggregates (ospf_top->new_table);
 
-     zlog_info ("Z: ospf_abr_task(): announce aggregates");
-     ospf_abr_announce_aggregates (ospf_top->new_table);
-
-     zlog_info ("Z: ospf_abr_task(): announce stub defaults");
-     ospf_abr_announce_stub_defaults ();
-  }
+      zlog_info ("Z: ospf_abr_task(): announce stub defaults");
+      ospf_abr_announce_stub_defaults ();
+    }
 
   zlog_info ("Z: ospf_abr_task(): remove unapproved summaries");
   ospf_abr_remove_unapproved_summaries ();

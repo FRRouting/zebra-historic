@@ -191,6 +191,12 @@ struct rip_interface
   int ri_send;
   int ri_receive;
 
+  /* RIPv2 authentication type. */
+#define RIP_NO_AUTH                1
+#define RIP_AUTH_SIMPLE_PASSWORD   2
+#define RIP_AUTH_MD5               3
+  int auth_type;
+
   /* RIPv2 authentication string. */
   char *auth_str;
 
@@ -239,7 +245,7 @@ struct rip_peer
 #define RI_RIP_VERSION_1                   1
 #define RI_RIP_VERSION_2                   2
 #define RI_RIP_VERSION_1_AND_2             3
-/* This means this interface doesn't send/recieve RIP packet.  */
+/* This means this interface doesn't send/receive RIP packet.  */
 #define RI_RIP_NONE                        4 
 
 
@@ -281,13 +287,6 @@ enum rip_event
 	  thread_cancel (X); \
 	  (X) = NULL; \
 	}
-
-/* For easy string print out. */
-struct message
-{
-  int key;
-  char *str;
-};
 
 #define LOOKUP(X, Y)  (X)[(Y)].str
 

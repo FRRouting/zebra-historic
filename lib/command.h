@@ -82,6 +82,8 @@ enum node_type
   RIP_NODE,			/* RIP protocol mode node. */ 
   RIPNG_NODE,			/* RIPng protocol mode node. */
   BGP_NODE,			/* BGP protocol mode which includes BGP4+ */
+  BGP_IPV4_NODE,		/* BGP IPv4 address family */
+  BGP_IPV6_NODE,		/* BGP IPv6 address family */
   OSPF_NODE,			/* OSPF protocol mode */
   OSPF6_NODE,			/* OSPF protocol for IPv6 mode */
   RDISC_NODE,			/* ICMP Router Discovery Protocol mode. */ 
@@ -93,6 +95,7 @@ enum node_type
   AS_LIST_NODE,			/* AS list node. */
   COMMUNITY_LIST_NODE,		/* Community list node. */
   RMAP_NODE,			/* Route map node. */
+  DUMP_NODE,			/* Packet dump node. */
   VTY_NODE			/* Vty node. */
 };
 

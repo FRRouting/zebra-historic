@@ -2,7 +2,7 @@
 
 SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ @OSPF6D@ @GUILE@ doc
 
-EXTRA_DIST = guile.m4 SERVICES
+EXTRA_DIST = aczebra.m4 guile.m4 SERVICES TODO
 
 dist-hook:
 	mkdir $(distdir)/tools

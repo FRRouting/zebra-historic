@@ -184,7 +184,7 @@ interface_up (struct thread *thread)
   ospf6_join_allspfrouters (ospf6_if->interface->ifindex);
 
   /* set socket options */
-  ospf6_set_mcastloop ();
+  ospf6_reset_mcastloop ();
   ospf6_set_pktinfo ();
   ospf6_set_checksum ();
 
@@ -290,5 +290,289 @@ interface_down (struct thread *thread)
   ifs_change (IFS_DOWN, "Configured", ospf6_if);
 
   return 0;
+}
+
+
+/* 9.4 of RFC2328 */
+int
+dr_election (struct ospf6_if *ospf6_if)
+{
+  list candidate_list = list_init ();
+  listnode i, j, n;
+  ifid_t prevdr, prevbdr, dr = 0, bdr;
+  struct neighbor *nbpi, *nbpj, myself, *nbr;
+  int declare = 0;
+  int gofive = 0;
+
+  /* statistics */
+  ospf6_if->ospf6_stat_dr_election++;
+
+  /* pseudo neighbor "myself" */
+  memset (&myself, 0, sizeof (myself));
+  myself.state = NBS_TWOWAY;
+  myself.dr = ospf6_if->dr;
+  myself.bdr = ospf6_if->bdr;
+  myself.rtr_pri = ospf6_if->rtr_pri;
+  myself.ifid = ospf6_if->ifid;
+  myself.rtr_id = ospf6_if->area->ospf6->router_id;
+
+/* step_one: */
+
+  ospf6_if->prevdr = prevdr = ospf6_if->dr;
+  ospf6_if->prevbdr = prevbdr = ospf6_if->bdr;
+
+step_two:
+
+  /* Calculate Backup Designated Router. */
+  /* Make Candidate list */
+  if (!list_isempty (candidate_list))
+    list_delete_all_node (candidate_list);
+  declare = 0;
+  for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
+    {
+      nbpi = (struct neighbor *)getdata (i);
+      if (nbpi->rtr_pri == 0)
+        continue;
+      if (nbpi->state < NBS_TWOWAY)
+        continue;
+      if (nbpi->dr == nbpi->rtr_id)
+        continue;
+      if (nbpi->bdr == nbpi->rtr_id)
+        declare++;
+      list_add_node (candidate_list, nbpi);
+    }
+
+  if (myself.rtr_pri)
+    {
+      if (myself.dr != myself.rtr_id)
+        {
+          if (myself.bdr == myself.rtr_id)
+            declare++;
+          list_add_node (candidate_list, &myself);
+        }
+    }
+
+  /* Elect BDR */
+  for (i = listhead (candidate_list);
+       candidate_list->count > 1;
+       i = listhead (candidate_list))
+    {
+      j = i;
+      nextnode(j);
+      assert (j);
+      nbpi = (struct neighbor *)getdata (i);
+      nbpj = (struct neighbor *)getdata (j);
+      if (declare)
+        {
+          int deleted = 0;
+          if (nbpi->bdr != nbpi->rtr_id)
+            {
+              list_delete_by_val (candidate_list, nbpi);
+              deleted++;
+            }
+          if (nbpj->bdr != nbpj->rtr_id)
+            {
+              list_delete_by_val (candidate_list, nbpj);
+              deleted++;
+            }
+          if (deleted)
+            continue;
+        }
+      if (nbpi->rtr_pri > nbpj->rtr_pri)
+        {
+          list_delete_by_val (candidate_list, nbpj);
+          continue;
+        }
+      else if (nbpi->rtr_pri < nbpj->rtr_pri)
+        {
+          list_delete_by_val (candidate_list, nbpi);
+          continue;
+        }
+      else /* equal, case of tie */
+        {
+          if (nbpi->rtr_id > nbpj->rtr_id)
+            {
+              list_delete_by_val (candidate_list, nbpj);
+              continue;
+            }
+          else if (nbpi->rtr_id < nbpj->rtr_id)
+            {
+              list_delete_by_val (candidate_list, nbpi);
+              continue;
+            }
+          else
+            assert (0);
+        }
+    }
+
+  if (!list_isempty (candidate_list))
+    {
+      assert (candidate_list->count == 1);
+      n = listhead (candidate_list);
+      nbr = (struct neighbor *)getdata (n);
+      bdr = nbr->rtr_id;
+    }
+  else
+    bdr = 0;
+
+/* step_three: */
+
+  /* Calculate Designated Router. */
+  /* Make Candidate list */
+  if (!list_isempty (candidate_list))
+    list_delete_all_node (candidate_list);
+  declare = 0;
+  for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
+    {
+      nbpi = (struct neighbor *)getdata (i);
+      if (nbpi->rtr_pri == 0)
+        continue;
+      if (nbpi->state < NBS_TWOWAY)
+        continue;
+      if (nbpi->dr == nbpi->rtr_id)
+        {
+          declare++;
+          list_add_node (candidate_list, nbpi);
+        }
+    }
+  if (myself.rtr_pri)
+    {
+      if (myself.dr == myself.rtr_id)
+        {
+          declare++;
+          list_add_node (candidate_list, &myself);
+        }
+    }
+
+  /* Elect DR */
+  if (declare == 0)
+    {
+      assert (list_isempty (candidate_list));
+      /* No one declare but candidate_list not empty */
+      dr = bdr;
+    }
+  else
+    {
+      assert (!list_isempty (candidate_list));
+      for (i = listhead (candidate_list);
+           candidate_list->count > 1;
+           i = listhead (candidate_list))
+        {
+          j = i;
+          nextnode (j);
+          assert (j);
+          nbpi = (struct neighbor *)getdata (i);
+          nbpj = (struct neighbor *)getdata (j);
+
+          if (nbpi->dr != nbpi->rtr_id)
+            {
+              list_delete_node (candidate_list, i);
+              continue;
+            }
+          if (nbpj->dr != nbpj->rtr_id)
+            {
+              list_delete_node (candidate_list, j);
+              continue;
+            }
+
+          if (nbpi->rtr_pri > nbpj->rtr_pri)
+            {
+              list_delete_node (candidate_list, j);
+              continue;
+            }
+          else if (nbpi->rtr_pri < nbpj->rtr_pri)
+            {
+              list_delete_node (candidate_list, i);
+              continue;
+            }
+          else /* equal, case of tie */
+            {
+              if (nbpi->rtr_id > nbpj->rtr_id)
+                {
+                  list_delete_node (candidate_list, j);
+                  continue;
+                }
+              else if (nbpi->rtr_id < nbpj->rtr_id)
+                {
+                  list_delete_node (candidate_list, i);
+                  continue;
+                }
+              else
+                {
+                  zlog_warn ("!!!THE SAME ROUTER ID FOR DIFFERENT NEIGHBOR");
+                  zlog_warn ("!!!MISCONFIGURATION?");
+                  list_delete_node (candidate_list, i);
+                  continue;
+                }
+            }
+        }
+      if (!list_isempty (candidate_list))
+        {
+          assert (candidate_list->count == 1);
+          n = listhead (candidate_list);
+          nbr = (struct neighbor *)getdata (n);
+          dr = nbr->rtr_id;
+        }
+      else
+        assert (0);
+    }
+
+/* step_four: */
+
+  if (gofive)
+    goto step_five;
+
+  if (dr != prevdr)
+    {
+      if ((dr == myself.rtr_id || prevdr == myself.rtr_id)
+          && !(dr == myself.rtr_id && prevdr == myself.rtr_id))
+        {
+          myself.dr = dr;
+          myself.bdr = bdr;
+          gofive++;
+          goto step_two;
+        }
+    }
+  if (bdr != prevbdr)
+    {
+      if ((bdr == myself.rtr_id || prevbdr == myself.rtr_id)
+          && !(bdr == myself.rtr_id && prevbdr == myself.rtr_id))
+        {
+          myself.dr = dr;
+          myself.bdr = bdr;
+          gofive++;
+          goto step_two;
+        }
+    }
+
+step_five:
+
+  ospf6_if->dr = dr;
+  ospf6_if->bdr = bdr;
+
+  if (prevdr != dr || prevbdr != bdr)
+    {
+      for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
+        {
+          nbpi = getdata (i);
+          if (nbpi->state < NBS_TWOWAY)
+            continue;
+          /* Schedule or Execute AdjOK. which does "invoke" mean? */
+          thread_add_event (master, adj_ok, nbpi, 0);
+        }
+    }
+
+  if (dr == myself.rtr_id)
+    {
+      assert (bdr != myself.rtr_id);
+      return IFS_DR;
+    }
+  else if (bdr == myself.rtr_id)
+    {
+      assert (dr != myself.rtr_id);
+      return IFS_BDR;
+    }
+  else
+    return IFS_DROTHER;
 }
 

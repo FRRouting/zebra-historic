@@ -26,6 +26,7 @@ lsa_change (struct ospf6_lsa *lsa)
 {
   struct area *area;
   struct ospf6_if *o6if;
+  struct ospf6 *ospf6;
 
   switch (ntohs (lsa->lsa_hdr->lsh_type))
     {
@@ -50,8 +51,14 @@ lsa_change (struct ospf6_lsa *lsa)
                                              area, 0);
       break;
     case LST_INTRA_AREA_PREFIX_LSA:
-    case LST_AS_EXTERNAL_LSA:
       area = (struct area *)lsa->scope;
+      if (area->route_calc == (struct thread *)NULL)
+        area->route_calc = thread_add_event (master, ospf6_route_calc,
+                                             area, 0);
+      break;
+    case LST_AS_EXTERNAL_LSA:
+      ospf6 = (struct ospf6 *)lsa->scope;
+      area = (struct area *)ospf6->area_list->head->data;
       if (area->route_calc == (struct thread *)NULL)
         area->route_calc = thread_add_event (master, ospf6_route_calc,
                                              area, 0);
@@ -104,16 +111,11 @@ void
 ospf6_add_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
   if (ospf6_lookup_summary (lsa, nbr))
-    {
-      o6log.lsdb ("%s already on %s request", print_lsahdr (lsa->lsa_hdr),
-                  nbr->str);
-      return;
-    }
+    return;
+
   list_add_node (nbr->summarylist, lsa);
   list_add_node (lsa->summary_nbr, nbr);
   ospf6_lsa_lock (lsa);
-  o6log.lsdb ("add %s to %s summary", print_lsahdr (lsa->lsa_hdr),
-              nbr->str);
   return;
 }
 
@@ -122,15 +124,10 @@ void
 ospf6_remove_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
   if (!ospf6_lookup_summary (lsa, nbr))
-    {
-      o6log.lsdb ("%s not on %s request", print_lsahdr (lsa->lsa_hdr),
-                  nbr->str);
-      return;
-    }
+    return;
+
   list_delete_by_val (nbr->summarylist, lsa);
   list_delete_by_val (lsa->summary_nbr, nbr);
-  o6log.lsdb ("remove %s from %s summary", print_lsahdr (lsa->lsa_hdr),
-              nbr->str);
   ospf6_lsa_unlock (lsa);
   return;
 }
@@ -179,16 +176,11 @@ void
 ospf6_add_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
   if (ospf6_lookup_request (lsa, nbr))
-    {
-      o6log.lsdb ("%s already on %s request", print_lsahdr (lsa->lsa_hdr),
-                  nbr->str);
-      return;
-    }
+    return;
+
   list_add_node (nbr->requestlist, lsa);
   list_add_node (lsa->request_nbr, nbr);
   ospf6_lsa_lock (lsa);
-  o6log.lsdb ("add %s to %s request", print_lsahdr (lsa->lsa_hdr),
-              nbr->str);
   return;
 }
 
@@ -197,15 +189,10 @@ void
 ospf6_remove_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
   if (!ospf6_lookup_request (lsa, nbr))
-    {
-      o6log.lsdb ("%s not on %s request", print_lsahdr (lsa->lsa_hdr),
-                  nbr->str);
-      return;
-    }
+    return;
+
   list_delete_by_val (nbr->requestlist, lsa);
   list_delete_by_val (lsa->request_nbr, nbr);
-  o6log.lsdb ("remove %s from %s request", print_lsahdr (lsa->lsa_hdr),
-              nbr->str);
   ospf6_lsa_unlock (lsa);
   return;
 }
@@ -245,17 +232,11 @@ void
 ospf6_add_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
   if (ospf6_lookup_retrans (lsa, nbr))
-    {
-      o6log.lsdb ("%s already on %s retrans",
-                  print_lsahdr (lsa->lsa_hdr), nbr->str);
-      return;
-    }
+    return;
+
   list_add_node (nbr->retranslist, lsa);
   list_add_node (lsa->retrans_nbr, nbr);
   ospf6_lsa_lock (lsa);
-  o6log.lsdb ("add %s to %s retrans", print_lsahdr (lsa->lsa_hdr),
-              nbr->str);
-  return;
 }
 
 /* remove lsa from retrans list of neighbor */
@@ -315,17 +296,11 @@ void
 ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
   if (ospf6_lookup_delayed_ack (lsa, o6if))
-    {
-      o6log.lsdb ("%s already on delayed ack of %s",
-                  print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
-      return;
-    }
+    return;
+
   list_add_node (o6if->delayed_ack, lsa);
   list_add_node (lsa->delayed_ack_if, o6if);
-  o6log.lsdb ("add %s to %s delayed_ack",
-              print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
   ospf6_lsa_lock (lsa);
-  return;
 }
 
 /* remove from delayed acknowledge list of ospf6_if */
@@ -333,17 +308,11 @@ void
 ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
   if (!ospf6_lookup_delayed_ack (lsa, o6if))
-    {
-      o6log.lsdb ("%s not on delayed ack of %s",
-                  print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
-      return;
-    }
+    return;
+
   list_delete_by_val (o6if->delayed_ack, lsa);
   list_delete_by_val (lsa->delayed_ack_if, o6if);
-  o6log.lsdb ("remove %s from %s delayed_ack",
-              print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
   ospf6_lsa_unlock (lsa);
-  return;
 }
 
 
@@ -378,9 +347,6 @@ ospf6_lsdb_add_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
           == SCOPE_LINKLOCAL);
   list_add_node (o6if->linklocal_lsa, lsa);
   ospf6_lsa_lock (lsa);
-  o6log.lsdb ("lsdb_add %s to %s", print_lsahdr (lsa->lsa_hdr),
-              o6if->interface->name);
-  return;
 }
 
 /* remove from interface lsdb */
@@ -389,11 +355,8 @@ ospf6_lsdb_remove_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
   assert (ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type)
           == SCOPE_LINKLOCAL);
-  o6log.lsdb ("lsdb_remove %s from %s", print_lsahdr (lsa->lsa_hdr),
-              o6if->interface->name);
   list_delete_by_val (o6if->linklocal_lsa, lsa);
   ospf6_lsa_unlock (lsa);
-  return;
 }
 
 /* area scope */
@@ -427,9 +390,6 @@ ospf6_lsdb_add_area (struct ospf6_lsa *lsa, struct area *area)
   assert (area);
   list_add_node (area->lsdb, lsa);
   ospf6_lsa_lock (lsa);
-  o6log.lsdb ("lsdb_add %s to area %s", print_lsahdr (lsa->lsa_hdr),
-              area->str);
-  return;
 }
 
 /* remove from area lsdb */
@@ -437,11 +397,8 @@ static void
 ospf6_lsdb_remove_area (struct ospf6_lsa *lsa, struct area *area)
 {
   assert (area);
-  o6log.lsdb ("lsdb_remove %s from area %s", print_lsahdr (lsa->lsa_hdr),
-              area->str);
   list_delete_by_val (area->lsdb, lsa);
   ospf6_lsa_unlock (lsa);
-  return;
 }
 
 /* as scope */
@@ -473,8 +430,6 @@ ospf6_lsdb_add_as (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
   assert (ospf6);
   list_add_node (ospf6->lsdb, lsa);
   ospf6_lsa_lock (lsa);
-  o6log.lsdb ("lsdb_add %s to as", print_lsahdr (lsa->lsa_hdr));
-  return;
 }
 
 /* remove from as lsdb */
@@ -482,10 +437,8 @@ static void
 ospf6_lsdb_remove_as (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
 {
   assert (ospf6);
-  o6log.lsdb ("lsdb_remove %s from as", print_lsahdr (lsa->lsa_hdr));
   list_delete_by_val (ospf6->lsdb, lsa);
   ospf6_lsa_unlock (lsa);
-  return;
 }
 
 /* lsdb lookup */
@@ -513,7 +466,6 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
         for (n = listhead (area->lsdb); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
-            o6log.debug ("area lsdb %s", print_lsahdr (lsa->lsa_hdr));
             if (lsa->lsa_hdr->lsh_type == type &&
                 lsa->lsa_hdr->lsh_advrtr == advrtr)
               list_add_node (l, lsa);
@@ -525,7 +477,6 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
         for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
-            o6log.debug ("interface lsdb %s", print_lsahdr (lsa->lsa_hdr));
             if (lsa->lsa_hdr->lsh_type == type &&
                 lsa->lsa_hdr->lsh_advrtr == advrtr)
               list_add_node (l, lsa);
@@ -537,7 +488,6 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
         for (n = listhead (ospf6->lsdb); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
-            o6log.debug ("as lsdb %s", print_lsahdr (lsa->lsa_hdr));
             if (lsa->lsa_hdr->lsh_type == type &&
                 lsa->lsa_hdr->lsh_advrtr == advrtr)
               list_add_node (l, lsa);
@@ -570,7 +520,6 @@ ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
         for (n = listhead (area->lsdb); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
-            o6log.debug ("area lsdb %s", print_lsahdr (lsa->lsa_hdr));
             if (lsa->lsa_hdr->lsh_type == type)
               list_add_node (l, lsa);
           }
@@ -582,7 +531,6 @@ ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
         for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
-            o6log.debug ("interface lsdb %s", print_lsahdr (lsa->lsa_hdr));
             if (lsa->lsa_hdr->lsh_type == type)
               list_add_node (l, lsa);
           }
@@ -594,7 +542,6 @@ ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
         for (n = listhead (ospf6->lsdb); n; nextnode (n))
           {
             lsa = (struct ospf6_lsa *) getdata (n);
-            o6log.debug ("as lsdb %s", print_lsahdr (lsa->lsa_hdr));
             if (lsa->lsa_hdr->lsh_type == type)
               list_add_node (l, lsa);
           }
@@ -833,7 +780,10 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
   struct ospf6_lsa *old;
 
   if (IS_OSPF6_DUMP_LSA)
-    zlog_info ("LSA Install %s", print_lsahdr (new->lsa_hdr));
+    {
+      zlog_info ("LSA Install:");
+      ospf6_dump_lsa (new);
+    }
 
   old = ospf6_lsdb_lookup (new->lsa_hdr->lsh_type,
                            new->lsa_hdr->lsh_id,

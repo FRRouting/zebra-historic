@@ -28,6 +28,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "log.h"
 #include "if.h"
 #include "hash.h"
+#include "sockunion.h"		/* for inet_ntop () */
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
@@ -216,7 +217,6 @@ ospf_lsa_has_link (struct lsa_header *w, struct lsa_header *v,
 	      if (v->type == OSPF_ROUTER_LSA &&
 		  IPV4_ADDR_SAME (&rl->link[i].link_id, &v->id))
 		{
-
                   if (rl->link[i].type == LSA_LINK_TYPE_VIRTUALLINK)
                      zlog_info("Z: found back link through VL");
 		  if (addr)
@@ -285,7 +285,6 @@ ospf_nexthop_out_if_addr (struct vertex *v, struct vertex *w,
 	  *addr = l->link_data;
 	  return;
 	}
-
     }
 
   return;
@@ -597,6 +596,7 @@ ospf_spf_register (struct vertex *v, struct route_table *rv,
     rn = route_node_get (rv, &p);
   else
     rn = route_node_get (nv, &p);
+
   rn->info = v;
 }
 
@@ -615,6 +615,7 @@ ospf_spf_route_free (struct route_table *table)
 	  ospf_vertex_free (v);
 	  rn->info = NULL;
 	}
+
       route_unlock_node (rn);
     }
 }
@@ -652,8 +653,8 @@ ospf_spf_dump (struct vertex *v, int i)
 
 /* Second stage of SPF calculation. */
 void
-ospf_process_stubs (struct ospf_area *area, struct vertex * v,
-		    struct route_table *rt)
+ospf_spf_process_stubs (struct ospf_area *area, struct vertex * v,
+			struct route_table *rt)
 {
   listnode cnode;
   struct vertex *child;
@@ -701,7 +702,7 @@ ospf_process_stubs (struct ospf_area *area, struct vertex * v,
   for (cnode = listhead (v->child); cnode; nextnode (cnode))
     {
       child = getdata (cnode);
-      ospf_process_stubs (area, child, rt);
+      ospf_spf_process_stubs (area, child, rt);
     }
 }
 
@@ -754,46 +755,42 @@ ospf_rtrs_print (struct route_table *rtrs)
   zlog_info ("ospf_rtrs_print() start");
 
   for (rn = route_top (rtrs); rn; rn = route_next (rn))
-    {
-      if ((or_list = rn->info) != NULL)
+    if ((or_list = rn->info) != NULL)
+      for (ln = listhead (or_list); ln; nextnode (ln))
 	{
-	  for (ln = listhead (or_list); ln; nextnode (ln))
+	  or = getdata (ln);
+
+	  switch (or->path_type)
 	    {
-	      or = getdata (ln);
+	    case OSPF_PATH_INTRA_AREA:
+	      zlog_info ("%s   [%d] area: %s", 
+			 inet_ntop (AF_INET, &or->id, buf1, BUFSIZ),
+			 or->cost,
+			 inet_ntop (AF_INET, &or->area->area_id,
+				    buf2, BUFSIZ));
+	      break;
+	    case OSPF_PATH_INTER_AREA:
+	      zlog_info ("%s IA [%d] area: %s", 
+			 inet_ntop (AF_INET, &or->id, buf1, BUFSIZ),
+			 or->cost,
+			 inet_ntop (AF_INET, &or->area->area_id,
+				    buf2, BUFSIZ));
+	      break;
+	    default:
+	      break;
+	    }
 
-	      switch (or->path_type)
-		{
-		case OSPF_PATH_INTRA_AREA:
-		  zlog_info ("%s   [%d] area: %s", 
-			     inet_ntop (AF_INET, &or->id, buf1, BUFSIZ),
-			     or->cost,
-			     inet_ntop (AF_INET, &or->area->area_id,
-					buf2, BUFSIZ));
-		  break;
-		case OSPF_PATH_INTER_AREA:
-		  zlog_info ("%s IA [%d] area: %s", 
-			     inet_ntop (AF_INET, &or->id, buf1, BUFSIZ),
-			     or->cost,
-			     inet_ntop (AF_INET, &or->area->area_id,
-					buf2, BUFSIZ));
-		  break;
-		default:
-		  break;
-		}
-
-	      for (pnode = listhead (or->path); pnode; nextnode (pnode))
-		{
-		  path = getdata (pnode);
-		  if (path->nexthop.s_addr == 0)
-		    zlog_info ("   directly attached to %s\r\n",
-			       path->ifp->name);
-		  else 
-		    zlog_info ("   via %s, %s\r\n",
-			       inet_ntoa (path->nexthop), path->ifp->name);
-		}
+	  for (pnode = listhead (or->path); pnode; nextnode (pnode))
+	    {
+	      path = getdata (pnode);
+	      if (path->nexthop.s_addr == 0)
+		zlog_info ("   directly attached to %s\r\n", path->ifp->name);
+	      else 
+		zlog_info ("   via %s, %s\r\n",
+			   inet_ntoa (path->nexthop), path->ifp->name);
 	    }
 	}
-    }
+
   zlog_info ("ospf_rtrs_print() end");
 }
 
@@ -888,7 +885,7 @@ ospf_spf_calculate (struct ospf_area *area, struct route_table *new_table,
 #endif /* DEBUG */
 
   /* Second stage of SPF calculation procedure's  */
-  ospf_process_stubs (area, area->spf, new_table);
+  ospf_spf_process_stubs (area, area->spf, new_table);
 
   /* Free all vertices which allocated for SPF calculation */
   ospf_spf_route_free (rv);
@@ -955,13 +952,13 @@ ospf_spf_calculate_timer (struct thread *t)
       ospf_ase_routing (new_table, new_rtrs);
 
       /* Update routing table. */
-      ospf_install_route (new_table);
+      ospf_route_install (new_table);
 
       /* Update ABR/ASBR routing table */
       if (ospf_top->old_rtrs)
 	{
 	  /* old_rtrs's node holds linked list of ospf_route. --kunihiro. */
-	  /* ospf_delete_route (ospf_top->old_rtrs); */
+	  /* ospf_route_delete (ospf_top->old_rtrs); */
 	  ospf_rtrs_free (ospf_top->old_rtrs);
 	}
 

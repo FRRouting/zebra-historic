@@ -132,6 +132,36 @@ if_lookup_by_name (char *name)
 
 /* Lookup interface by IPv4 address. */
 struct interface *
+if_lookup_exact_address (struct in_addr src)
+{
+  listnode node;
+  listnode cnode;
+  struct interface *ifp;
+  struct prefix *p;
+  struct connected *c;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  c = getdata (cnode);
+
+	  p = c->address;
+
+	  if (p && p->family == AF_INET)
+	    {
+	      if (IPV4_ADDR_SAME (&p->u.prefix4, &src))
+		return ifp;
+	    }	      
+	}
+    }
+  return NULL;
+}
+
+/* Lookup interface by IPv4 address. */
+struct interface *
 if_lookup_address (struct in_addr src)
 {
   listnode node;
@@ -193,23 +223,9 @@ if_get_by_name (char *name)
   if (ifp == NULL)
     {
       ifp = if_create ();
-
-
       strncpy (ifp->name, name, IFNAMSIZ);
     }
   return ifp;
-}
-
-void
-if_up (struct interface *ifp)
-{
-  ;				/* not yet implemented. */
-}
-
-void
-if_down (struct interface *ifp)
-{
-  ;				/* not yet implemented. */
 }
 
 /* Does interface up ? */

@@ -212,7 +212,14 @@ ospf_db_summary_add (struct ospf_lsa *lsa, void *v, int i)
 
   nbr = (struct ospf_neighbor *) v;
 
-  list_add_node (nbr->db_summary, lsa);
+  if (LS_AGE(lsa) == OSPF_LSA_MAX_AGE)
+    {
+      zlog_info ("Z: ospf_db_summary_add() : MaxAge LSA ID: %s", 
+		 inet_ntoa (lsa->data->id));
+      ospf_ls_retransmit_add (nbr, lsa);                      
+    }
+  else 
+    list_add_node (nbr->db_summary, lsa);
 
   return 0;
 }
@@ -228,7 +235,10 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
   ospf_lsdb_iterator (NETWORK_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (SUMMARY_LSA (area), nbr, 0, ospf_db_summary_add);
   ospf_lsdb_iterator (SUMMARY_LSA_ASBR (area), nbr, 0, ospf_db_summary_add);
-  ospf_lsdb_iterator (ospf_top->external_lsa, nbr, 0, ospf_db_summary_add);
+
+  if (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK &&
+      area->external_routing == OSPF_AREA_DEFAULT)
+    ospf_lsdb_iterator (ospf_top->external_lsa, nbr, 0, ospf_db_summary_add);
 
   OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
 
@@ -339,7 +349,7 @@ void
 nsm_reset_nbr (struct ospf_neighbor *nbr)
 {
   /* Clear Link State Retransmission list. */
-  if (list_isempty (nbr->ls_retransmit))
+  if (!list_isempty (nbr->ls_retransmit))
     {
       ospf_ls_retransmit_clear (nbr);
       list_delete_all_node (nbr->ls_retransmit);
@@ -347,14 +357,14 @@ nsm_reset_nbr (struct ospf_neighbor *nbr)
     }
 
   /* Clear Database Summary list. */
-  if (list_isempty (nbr->db_summary))
+  if (!list_isempty (nbr->db_summary))
     {
       list_delete_all_node (nbr->db_summary);
       /*      nbr->db_summary = NULL; */
     }
 
   /* Clear Link State Request list. */
-  if (list_isempty (nbr->ls_request))
+  if (!list_isempty (nbr->ls_request))
     {
       ospf_ls_request_delete_all (nbr);
       /*      nbr->ls_request = NULL; */
@@ -396,6 +406,7 @@ nsm_inactivity_timer (struct ospf_neighbor *nbr)
 
   if (nbr->last_send)
     ospf_packet_free (nbr->last_send);
+
   nbr->last_send = NULL;
 
   return 0;
@@ -596,10 +607,10 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 
   /* Logging change of status. */
   if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
-    zlog_info ("NSM Status change [%s:%s] %s -> %s", inet_ntoa (nbr->router_id),
-          nbr->oi->ifp->name,
-	  LOOKUP (ospf_nsm_status_msg, nbr->status),
-	  LOOKUP (ospf_nsm_status_msg, status));
+    zlog_info ("NSM Status change [%s:%s] %s -> %s",
+	       inet_ntoa (nbr->router_id), nbr->oi->ifp->name,
+	       LOOKUP (ospf_nsm_status_msg, nbr->status),
+	       LOOKUP (ospf_nsm_status_msg, status));
 
   /* Preserve old status. */
   old_status = nbr->status;
@@ -607,18 +618,20 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
   /* Change to new status. */
   nbr->status = status;
 
+  /* Statistics. */
+  nbr->state_change++;
+
   oi = nbr->oi;
   /* One of the neighboring routers changes to/from the FULL state. */
   if ((old_status != NSM_Full && status == NSM_Full) ||
       (old_status == NSM_Full && status != NSM_Full))
     {
-
       if (status == NSM_Full)
 	{
 	  oi->full_nbrs++;
 	  oi->area->full_nbrs++;
 
-          ospf_check_abr_status();
+          ospf_check_abr_status ();
 
 	  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
             if (++oi->vl_data->vl_area->full_vls == 1)
@@ -629,35 +642,32 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 	  oi->full_nbrs--;
 	  oi->area->full_nbrs--;
 
-          ospf_check_abr_status();
+          ospf_check_abr_status ();
 
 	  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-	    {
-	      if (oi->vl_data->vl_area->full_vls > 0)
-		if (--oi->vl_data->vl_area->full_vls == 0)
-                  ospf_schedule_abr_task ();
-	    }
+	    if (oi->vl_data->vl_area->full_vls > 0)
+	      if (--oi->vl_data->vl_area->full_vls == 0)
+		ospf_schedule_abr_task ();
 	}
 
-      zlog_info ("Z:nsm_change_status(): scheduling new router-LSA origination");
+      zlog_info ("Z:nsm_change_status(): "
+		 "scheduling new router-LSA origination");
 
-      ospf_schedule_router_lsa_originate(oi->area);
+      ospf_schedule_router_lsa_originate (oi->area);
 
       if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-	{
-          ospf_schedule_router_lsa_originate(oi->vl_data->vl_area);
-	}
+	ospf_schedule_router_lsa_originate (oi->vl_data->vl_area);
 
       /* Originate network-LSA. */
       if (oi->status == ISM_DR)
 /*	thread_execute (master, ospf_network_lsa_refresh, oi, 0);*/
-        ospf_schedule_network_lsa_originate(oi);
+        ospf_schedule_network_lsa_originate (oi);
     }
     
   /* Generete NeighborChange ISM event. */
   if ((old_status < NSM_TwoWay && status >= NSM_TwoWay) ||
       (old_status >= NSM_TwoWay && status < NSM_TwoWay))
-      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
+    OSPF_ISM_EVENT_SCHEDULE (oi, ISM_NeighborChange);
 
   /* Preserve old status? */
 }
@@ -681,8 +691,8 @@ ospf_nsm_event (struct thread *thread)
 
   if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
     zlog_info ("OSPF NSM[%s]: %s (%s)", inet_ntoa (nbr->router_id),
-	  LOOKUP (ospf_nsm_status_msg, nbr->status),
-	  ospf_nsm_event_str [event]);
+	       LOOKUP (ospf_nsm_status_msg, nbr->status),
+	       ospf_nsm_event_str [event]);
 
   /* If status is changed. */
   if (next_state != nbr->status)
@@ -694,12 +704,11 @@ ospf_nsm_event (struct thread *thread)
   return 0;
 }
 
-
 void
-ospf_check_nbr_loading(struct ospf_neighbor *nbr)
+ospf_check_nbr_loading (struct ospf_neighbor *nbr)
 {
   if (nbr->status == NSM_Loading)
-     if (list_isempty (nbr->ls_request))
-        OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
+    if (list_isempty (nbr->ls_request))
+      OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
 }
 

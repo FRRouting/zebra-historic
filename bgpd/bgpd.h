@@ -1,5 +1,4 @@
-/*
- * BGP message definition header.
+/* BGP message definition header.
  * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -33,6 +32,14 @@ typedef u_int16_t as_t;
 typedef u_int32_t ident_t;
 typedef u_int16_t bgp_size_t;
 
+/* For redistribute. */
+struct redistribute
+{
+  int enable;
+  char *map_name;
+  struct route_map *map;
+};
+
 /* BGP instance structure. bgpd can handle multiple BGP instance. */
 struct bgp 
 {
@@ -58,6 +65,42 @@ struct bgp
 
   /* BGP neighbor list. */
   struct _list *peer;
+
+  /* Redistribute route-map. */
+  struct
+  {
+    char *name;
+    struct route_map *map;
+  } rmap[ZEBRA_FAMILY_MAX][ZEBRA_ROUTE_MAX];
+
+#ifdef NEW_CODE
+/* New linked-list. */
+#include "newlist.h"
+
+  /* Route server enabled new bgp structure.  Full IPv4/IPv6
+     unicast/multicast support. */
+
+  /* BGP peer */
+  struct newlist *peer_all;
+  struct newlist *peer_v4;
+  struct newlist *peer_v6;
+
+  /* Static and aggregate route configuration. */
+  struct route_table *static_v4;
+  struct route_table *aggregate_v4;
+  struct route_table *static_v6;
+  struct route_table *aggregate_v6;
+
+  /* Loc-RIB -- Default view.  Peer may have it's own view. */
+  struct route_table *unicast_v4;
+  struct route_table *multicast_v4;
+  struct route_table *unicast_v6;
+  struct route_table *multicast_v6;
+
+  /* Redistribute route configuration. */
+  struct redistribute redist_v4[ZEBRA_ROUTE_MAX];
+  struct redistribute redist_v6[ZEBRA_ROUTE_MAX];
+#endif /* NEW_CODE */
 };
 
 /* Next hop self address. */
@@ -92,9 +135,41 @@ struct peer
   int ttl;			/* TTL of TCP connection to the peer. */
   char *desc;			/* Description of the peer. */
   struct bgp_nexthop nexthop;	/* Nexthop */
-  int nexthop_self;		/* Nexthop self. */
-  int shutdown;			/* Shutdown flag. */
-  int passive;			/* Passive flag. */
+
+  /* User configuration flags. */
+  u_char nexthop_self;		/* Nexthop self. */
+  u_char shutdown;		/* Shutdown flag. */
+  u_char passive;		/* Passive flag. */
+  u_char dont_capability;	/* Don't perform capability negotiation. */
+  u_char override_capability;	/* Override capability negotiation. */
+
+  u_char capability_open;	/* Capability negotiation. */
+
+  /* Peer address family configuration. */
+  u_char ipv4_unicast_conf;
+  u_char ipv4_multicast_conf;
+  u_char ipv6_unicast_conf;
+  u_char ipv6_multicast_conf;
+  u_char route_refresh_conf;
+
+  /* After capability negotiation. */
+  u_char ipv4_unicast;
+  u_char ipv4_multicast;
+  u_char ipv6_unicast;
+  u_char ipv6_multicast;
+  u_char route_refresh;
+
+#ifdef HAVE_MBGPV4
+/* Not enabled by default */
+#define TRANSLATE_UPDATE_OFF 0
+/* Default if on turns incoming ipv4 update to both unicast multicast */
+#define TRANSLATE_UPDATE_UNICAST_MULTICAST 1 
+/* Turns incoming ipv4 update into multicast only */
+#define TRANSLATE_UPDATE_MULTICAST 2
+
+  u_char translate_update;       /* Manipulate incoming updates */
+#endif /* HAVE_MBGPV4 */
+  
   unsigned int ifindex;		/* ifindex of the BGP connection. */
   char *ifname;			/* bind interface name. */
   char *update_if;
@@ -123,6 +198,7 @@ struct peer
   int send_community;		/* Community attribute send flag. */
   int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */
+
 
   /* IPv4/IPv6 peer configuration. */
   u_char family;
@@ -192,6 +268,25 @@ struct peer
 
   /* prefix_in/out will be need. */
   unsigned int prefix_count;	/* Prefix count of this peer. */
+  unsigned int prefix_count_multicastv4;  /* Same for multicast. */
+
+  /* Prefix count. */
+  unsigned long pcount[AFI_MAX][SAFI_MAX];
+
+  /* Maximum prefix count. */
+  unsigned long pmax[AFI_MAX][SAFI_MAX];
+
+  /* Notify data. */
+  u_char *notify_data;
+  size_t notify_len;
+
+#ifdef NEW_CODE
+  /* Adj-RIBs-In.  */
+  struct route_table *in[AFI_MAX][SAFI_MAX];
+  struct route_table *loc[AFI_MAX][SAFI_MAX];
+  struct route_table *out[AFI_MAX][SAFI_MAX];
+
+#endif /* NEW_CODE */
 };
 
 /* BGP Notify message format. */
@@ -208,7 +303,7 @@ struct bgp_notify
 #define BGP_VERSION_4		  4    /* bgpd supports this version. */
 #define BGP_VERSION_MP_4_DRAFT_00 40   /* bgpd supports this version. */
 #define BGP_VERSION_MP_4	  41   /* bgpd supports this version. */
-#define BGP_VERSION_5		  5    /* same as above ;-) */
+#define BGP_VERSION_5		  5    /* Not yet. */
 
 /* BGP messages. */
 #define	BGP_MSG_OPEN		1
@@ -333,13 +428,6 @@ struct bgp_notify
 #define LOOKUP(x, y) mes_lookup(x, x ## _max, y)
 #define CHECKMES(x) mes_check(x, x ## _max)
 
-/* To convert index into message structure. */
-typedef struct message
-{
-  int key;
-  char *str;
-} message;
-
 /* Debug option : should be bgp_dump.h. */
 extern int dump_open;
 extern int dump_update;
@@ -347,7 +435,7 @@ extern int dump_keepalive;
 extern int dump_notify;
 
 /* Messages */
-extern message bgp_status_msg[];
+extern struct message bgp_status_msg[];
 extern int bgp_status_msg_max;
 
 extern char *progname;
@@ -382,6 +470,7 @@ int bgp_peer_sort (struct peer *peer);
 void bgp_filter_init ();
 void bgp_zclient_start ();
 void bgp_zclient_reset ();
+void bgp_snmp_init ();
 
 struct bgp *bgp_new (as_t);
 struct bgp *bgp_lookup_by_as (as_t);

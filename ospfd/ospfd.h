@@ -122,6 +122,7 @@ enum
 
 
 /* OSPF ABR types */
+#define OSPF_ABR_UNKNOWN	0
 #define OSPF_ABR_STAND		1
 #define OSPF_ABR_IBM		2
 #define OSPF_ABR_CISCO		3
@@ -178,6 +179,27 @@ struct ospf
 #define LIST_NAME(T) ospf_top->dist_lists_proto[T].name
 #define LIST_PTR(T)  ospf_top->dist_lists_proto[T].list
 
+
+  list            refresh_queue;	  /* LSA Refreshment Queue */
+  struct thread * t_lsa_refresher;	  /* Refreshment Queue Server */
+  int		  refresh_queue_interval; /* How often the is served */
+  int		  refresh_queue_limit;    /* How many LSAs per interval*/
+  int		  refresh_queue_count;	  /* How many updated */
+
+#define OSPF_DEF_REFRESH_QUEUE_INTERVAL 1
+#define OSPF_DEF_REFRESH_QUEUE_LIMIT    70
+#define OSPF_DEF_REFRESH_PER_SLICE      5
+
+#define OSPF_LS_REFRESH_SHIFT		60
+
+  list		  refresh_group;	/* LSA Refresh Group */
+  struct thread * t_refresh_group;	/* Refresh Group Checker*/
+  u_int16_t       group_age;		/* Min AGE in the LSA Group */
+
+#define OSPF_REFRESH_GROUP_SLICE   1
+#define OSPF_REFRESH_GROUP_AGE_DIF 3    /* We don't care if age is +-1 sec */
+#define OSPF_REFRESH_GROUP_LIMIT   10   
+
 };
 
 
@@ -193,6 +215,8 @@ struct ospf
 /* OSPF area structure. */
 struct ospf_area
 {
+  struct ospf * top;
+
   int count;				/* Reference count by ospf_network. */
 
   list iflist;				/* list of Zebra if's belonging to
@@ -269,13 +293,6 @@ struct ospf_network
   struct interface *ifp;
 };
 
-/* To convert index into message structure. */
-typedef struct message
-{
-  int key;
-  char *str;
-} message;
-
 /* Macro. */
 #define OSPF_AREA_SAME(X,Y)   (memcmp ((X->area_id), (Y->area_id), IPV4_MAX_BYTELEN) == 0)
 
@@ -304,10 +321,10 @@ typedef struct message
          }
 
 /* Messages */
-extern message ospf_ism_status_msg[];
-extern message ospf_nsm_status_msg[];
-extern message ospf_lsa_type_msg[];
-extern message ospf_link_state_id_type_msg[];
+extern struct message ospf_ism_status_msg[];
+extern struct message ospf_nsm_status_msg[];
+extern struct message ospf_lsa_type_msg[];
+extern struct message ospf_link_state_id_type_msg[];
 extern int ospf_ism_status_msg_max;
 extern int ospf_nsm_status_msg_max;
 extern int ospf_lsa_type_msg_max;

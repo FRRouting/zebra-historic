@@ -213,7 +213,7 @@ as_list_insert (char *name)
      number. */
   for (number = 0, i = 0; i < strlen (name); i++)
     {
-      if (isdigit (name[i]))
+      if (isdigit ((int) name[i]))
 	number = (number * 10) + (name[i] - '0');
       else
 	break;

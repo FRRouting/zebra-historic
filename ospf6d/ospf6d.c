@@ -32,15 +32,16 @@ char *recent_reason; /* set by ospf6_lsa_check_recent () */
 
 
 /* vty commands */
-DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid,
-       show_ipv6_ospf6_neighbor_ifname_nbrid_cmd,
-       "show ipv6 ospf6 neighbor IFNAME NEIGHBOR_ID",
+DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
+       show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd,
+       "show ipv6 ospf6 neighbor IFNAME NBR_ID (detail|)",
        SHOW_STR
        IP6_STR
        OSPF6_STR
        "Neighbor list\n"
        IFNAME_STR
        "A.B.C.D OSPF6 neighbor Router ID in IP address format\n"
+       "detailed infomation\n"
        )
 {
   rtr_id_t rtr_id;
@@ -69,7 +70,10 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid,
           nbr = nbr_lookup (rtr_id, ospf6_if);
           if (!nbr)
             return CMD_ERR_NO_MATCH;
-          ospf6_neighbor_vty (vty, nbr);
+          if (argc == 3)
+            ospf6_neighbor_vty_detail (vty, nbr);
+          else
+            ospf6_neighbor_vty (vty, nbr);
           return CMD_SUCCESS;
         }
 
@@ -97,7 +101,7 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid,
   return CMD_SUCCESS;
 }
 
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid,
+ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
        show_ipv6_ospf6_neighbor_cmd,
        "show ipv6 ospf6 neighbor",
        SHOW_STR
@@ -106,7 +110,7 @@ ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid,
        "Neighbor list\n"
        )
 
-ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid,
+ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
        show_ipv6_ospf6_neighbor_ifname_cmd,
        "show ipv6 ospf6 neighbor IFNAME",
        SHOW_STR
@@ -114,6 +118,17 @@ ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid,
        OSPF6_STR
        "Neighbor list\n"
        IFNAME_STR
+       )
+
+ALIAS (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
+       show_ipv6_ospf6_neighbor_ifname_nbrid_cmd,
+       "show ipv6 ospf6 neighbor IFNAME NBR_ID",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Neighbor list\n"
+       IFNAME_STR
+       "A.B.C.D OSPF6 neighbor Router ID in IP address format\n"
        )
 
 /* start ospf6 */
@@ -835,6 +850,7 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_backbone_cmd);
@@ -856,6 +872,7 @@ ospf6_init ()
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_ifname_nbrid_detail_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_route_ospf6_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_ospf6_area_cmd);

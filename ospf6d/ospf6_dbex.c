@@ -261,10 +261,8 @@ direct_acknowledge (struct ospf6_lsa *lsa)
   ospf6_age_update_to_send (lsa, lsa->from->ospf6_if);
 
   /* send unicast packet to neighbor's ipaddress */
-  ospf6_send (MSGT_LINKSTATE_ACK, directack,
-              (struct sockaddr *)&lsa->from->hisaddr, lsa->from->ospf6_if);
-
-  return;
+  ospf6_message_send (MSGT_LSACK, directack, &lsa->from->hisaddr.sin6_addr,
+                      lsa->from->ospf6_if->ifid);
 }
 
 /* Delayed  acknowledgement */
@@ -283,7 +281,7 @@ delayed_acknowledge (struct ospf6_lsa *lsa)
     /* timers should be *less than* RxmtInterval
        or needless retrans will ensue */
   if (o6if->send_ack == (struct thread *)NULL)
-    o6if->send_ack = thread_add_timer (master, send_linkstate_ack,
+    o6if->send_ack = thread_add_timer (master, ospf6_send_lsack_delayed,
                                         o6if, o6if->rxmt_interval - 1);
 
   return;
@@ -299,17 +297,17 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   listnode n;
   int ismore_recent, acktype;
   void *scope;
-  char lsh_str[128];
   unsigned short cksum;
 
   received = have = (struct ospf6_lsa *)NULL;
   ismore_recent = -1;
   recent_reason = "no instance";
 
-  ospf6_lsa_hdr_str (lsh, lsh_str, sizeof (lsh_str));
   if (IS_OSPF6_DUMP_DBEX)
-    zlog_info ("LSA: Receive %s age:%hu cksum:%#hx",
-                lsh_str, ntohs (lsh->lsh_age), lsh->lsh_cksum);
+    {
+      zlog_info ("LSA Receive:");
+      ospf6_dump_lsa_hdr (lsh);
+    }
 
   /* make lsa structure for received lsa */
   received = make_ospf6_lsa (lsh);
@@ -409,6 +407,9 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   /* if no database copy or received is more recent */
   if (!have || (ismore_recent = ospf6_lsa_check_recent (received, have)) < 0) 
     {
+      if (IS_OSPF6_DUMP_DBEX)
+        zlog_info ("    FLOOD: no database copy or received is more recent");
+
       /* in case we have no database copy */
       ismore_recent = -1;
 
@@ -441,8 +442,6 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
 
       /* (d), installing lsdb, which may cause routing
               table calculation (replacing database copy) */
-        /* XXX, retrans list was processed above. what about
-           summary list? */
       ospf6_lsdb_install (received);
 
       /* (e) possibly acknowledge */
@@ -450,19 +449,19 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       if (acktype == DIRECT_ACK)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("  Aknowledge: direct");
+            zlog_info ("  Acknowledge: direct");
           direct_acknowledge (received);
         }
       else if (acktype == DELAYED_ACK)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("  Aknowledge: delayed");
+            zlog_info ("  Acknowledge: delayed");
           delayed_acknowledge (received);
         }
       else
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("  Aknowledge: none");
+            zlog_info ("  Acknowledge: none");
         }
 
       /* (f) */
@@ -495,6 +494,9 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
     }
   else if (ismore_recent == 0) /* (7) if neither is more recent */
     {
+      if (IS_OSPF6_DUMP_DBEX)
+        zlog_info ("    FLOOD: the same instance");
+
       ospf6_lsa_set_flag (received, OSPF6_LSA_DUPLICATE);
 
       /* (a) if on retranslist, Treat this LSA as an Ack: Implied Ack */
@@ -514,25 +516,25 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       if (acktype == DIRECT_ACK)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("  Aknowledge: direct");
+            zlog_info ("  Acknowledge: direct");
           direct_acknowledge (received);
         }
       else if (acktype == DELAYED_ACK)
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("  Aknowledge: delayed");
+            zlog_info ("  Acknowledge: delayed");
           delayed_acknowledge (received);
         }
       else
         {
           if (IS_OSPF6_DUMP_DBEX)
-            zlog_info ("  Aknowledge: none");
+            zlog_info ("  Acknowledge: none");
         }
     }
   else /* (8) previous database copy is more recent */
     {
       if (IS_OSPF6_DUMP_DBEX)
-        zlog_info ("already have newer copy");
+        zlog_info ("    FLOOD: already have newer copy");
 
       /* XXX, Seqnumber Wrapping */
 
@@ -557,8 +559,8 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
         update->lsupdate_num = ntohl (1);
         ospf6_age_update_to_send (have, received->from->ospf6_if);
         attach_lsa_to_iov (have, iov);
-        ospf6_send (MSGT_LINKSTATE_UPDATE, iov, (struct sockaddr *)&dst,
-                    received->from->ospf6_if);
+        ospf6_message_send (MSGT_LSUPDATE, iov, &dst.sin6_addr,
+                            received->from->ospf6_if->ifid);
         iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
 
         if (IS_OSPF6_DUMP_DBEX)
@@ -584,32 +586,53 @@ ack_type (struct ospf6_lsa *newp, int ismore_recent)
   ospf6_if = newp->from->ospf6_if;
 
   if (ospf6_lsa_test_flag (newp, OSPF6_LSA_FLOODBACK))
-    return NO_ACK;
+    {
+      zlog_info ("    : this is flood back");
+      return NO_ACK;
+    }
   else if (ismore_recent < 0
            && !(ospf6_lsa_test_flag (newp, OSPF6_LSA_FLOODBACK)))
     {
       if (ospf6_if->state == IFS_BDR)
         {
+          zlog_info ("    : I'm BDR");
           if (ospf6_if->dr == newp->from->rtr_id)
-            return DELAYED_ACK;
+            {
+              zlog_info ("    : this is from DR");
+              return DELAYED_ACK;
+            }
           else
-            return NO_ACK;
+            {
+              zlog_info ("    : this is not from DR, do nothing");
+              return NO_ACK;
+            }
         }
       else
-        return DELAYED_ACK;
+        {
+          return DELAYED_ACK;
+        }
     }
   else if (ospf6_lsa_test_flag (newp, OSPF6_LSA_DUPLICATE)
            && ospf6_lsa_test_flag (newp, OSPF6_LSA_IMPLIEDACK))
     {
+      zlog_info ("    : is duplicate && implied");
       if (ospf6_if->state == IFS_BDR)
         {
           if (ospf6_if->dr == newp->from->rtr_id)
-            return DELAYED_ACK;
+            {
+              zlog_info ("    : is from DR");
+              return DELAYED_ACK;
+            }
           else
-            return NO_ACK;
+            {
+              zlog_info ("    : is not from DR, do nothing");
+              return NO_ACK;
+            }
         }
       else
-        return NO_ACK;
+        {
+          return NO_ACK;
+        }
     }
   else if (ospf6_lsa_test_flag (newp, OSPF6_LSA_DUPLICATE) &&
            !(ospf6_lsa_test_flag (newp, OSPF6_LSA_IMPLIEDACK)))
@@ -701,8 +724,9 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
       ospf6_add_retrans (lsa, nbr);
       addretrans++;
       if (nbr->send_update == (struct thread *) NULL)
-        nbr->send_update = thread_add_timer (master, send_linkstate_update,
-                                             nbr, nbr->ospf6_if->rxmt_interval);
+        nbr->send_update = thread_add_timer (master,
+                                             ospf6_send_lsupdate_retrans, nbr,
+                                             nbr->ospf6_if->rxmt_interval);
     }
 
   /* (2) */

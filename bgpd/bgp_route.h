@@ -59,15 +59,16 @@ struct bgp_info
 
 /* Prototypes. */
 struct bgp_info *bgp_info_new ();
+void bgp_info_free (struct bgp_info *);
 
 void bgp_route_init ();
 void bgp_peer_delete (struct peer *peer);
 void bgp_announce_table (struct peer *peer);
 
 void nlri_process (struct prefix *p, struct bgp_info *br);
-void nlri_parse (struct peer *, struct attr *, u_char *, int, int);
+void nlri_parse (struct peer *, struct attr *, u_char *, int, int, int);
 void nlri_unfeasible (struct peer *, bgp_size_t);
-int nlri_delete (struct peer *, struct prefix *);
+int nlri_delete (struct peer *, struct prefix *, int);
 
 void bgp_dump_attr (struct peer *, struct attr *, char *, size_t);
 void bgp_peer_delete (struct peer *peer);

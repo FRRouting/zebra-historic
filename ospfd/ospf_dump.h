@@ -65,8 +65,9 @@ extern char *ospf_packet_type_str[];
 extern char *ospf_lsa_type_str[];
 
 /* Prototypes. */
-char *mes_lookup (message *, int, int);
+char *mes_lookup (struct message *, int, int);
 void ospf_nbr_state_message (struct ospf_neighbor *, char *, size_t);
+char *ospf_option_dump (u_char, char *, size_t);
 char *ospf_timer_dump (struct thread *, char *, size_t);
 void ospf_ip_header_dump (struct stream *);
 void ospf_packet_dump (struct stream *);

@@ -21,6 +21,9 @@
 
 #include <zebra.h>
 
+/* For struct udphdr. */
+#include <netinet/udp.h>
+
 #include "prefix.h"
 #include "filter.h"
 #include "log.h"
@@ -34,10 +37,14 @@
 #include "sockopt.h"
 #include "distribute.h"
 #include "plist.h"
+#include "routemap.h"
+#include "if_rmap.h"
 
 #include "ripngd/ripngd.h"
 #include "ripngd/ripng_route.h"
 #include "ripngd/ripng_debug.h"
+
+#define min(a, b) ((a) < (b) ? (a) : (b))
 
 /* RIPng structure which includes many parameters related to RIPng
    protocol. If ripng couldn't active or ripng doesn't configured,
@@ -188,6 +195,13 @@ ripng_send_packet (caddr_t buf, int bufsize, struct sockaddr_in6 *to,
   char adata [sizeof (struct cmsghdr) + sizeof (struct in6_pktinfo)];
   struct in6_pktinfo *pkt;
   struct sockaddr_in6 addr;
+
+#ifdef DEBUG
+  if (to)
+    zlog_info ("DEBUG RIPng: send to %s", inet6_ntop (&to->sin6_addr));
+  zlog_info ("DEBUG RIPng: send if %s", ifp->name);
+  zlog_info ("DEBUG RIPng: send packet size %d", bufsize);
+#endif /* DEBUG */
 
   memset (&addr, 0, sizeof (struct sockaddr_in6));
   addr.sin6_family = AF_INET6;
@@ -532,6 +546,29 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
 		       inet6_ntop (&p.prefix), p.prefixlen);
 	  return;
 	}
+    }
+
+  /* Modify entry. */
+  if (ri->routemap[RIPNG_FILTER_IN])
+    {
+      int ret;
+      struct ripng_info newinfo;
+
+      memset (&rinfo, 0, sizeof (struct ripng_info));
+      newinfo.metric = rte->metric;
+
+      ret = route_map_apply (ri->routemap[RIPNG_FILTER_IN], 
+			     (struct prefix *)&p, ROUTE_MAP_RIPNG, &newinfo);
+
+      if (ret == RM_DENYMATCH)
+	{
+	  if (IS_RIPNG_DEBUG_PACKET)
+	    zlog_info ("RIPng %s/%d is filtered by route-map in",
+		       inet6_ntop (&p.prefix), p.prefixlen);
+	  return;
+	}
+
+      rte->metric = newinfo.metric;
     }
 
   /* Set nexthop pointer. */
@@ -1231,7 +1268,9 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
   struct ripng_aggregate *aggregate;
   struct prefix_ipv6 *p;
   int num;
+  int mtu;
   int rtemax;
+  u_char metric;
 
   if (IS_RIPNG_DEBUG_EVENT)
     zlog_info ("RIPng update routes on interface %s", ifp->name);
@@ -1243,8 +1282,22 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
   /* Reset stream and RTE counter. */
   stream_reset (s);
   num = 0;
-  rtemax = (STREAM_SIZE(s) - 4) / 20;
 
+  mtu = ifp->mtu;
+  if (mtu < 0)
+    mtu = IFMINMTU;
+
+  rtemax = (min (mtu, RIPNG_MAX_PACKET_SIZE) -
+	    IPV6_HDRLEN - 
+	    sizeof (struct udphdr) -
+	    sizeof (struct ripng_packet) +
+	    sizeof (struct rte)) / sizeof (struct rte);
+
+#ifdef DEBUG
+  zlog_info ("DEBUG RIPng: ifmtu is %d", ifp->mtu);
+  zlog_info ("DEBUG RIPng: rtemax is %d", rtemax);
+#endif /* DEBUG */
+  
   /* Get RIPng interface. */
   ri = ifp->info;
   
@@ -1253,7 +1306,18 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
       if ((rinfo = rp->info) != NULL && rinfo->suppress == 0)
 	{
 	  p = (struct prefix_ipv6 *) &rp->p;
+	  metric = rinfo->metric;
 
+	  /* Changed route only output. */
+	  if (route_type == ripng_changed_route &&
+	      (! (rinfo->flags & RIPNG_RTF_CHANGED)))
+	    continue;
+
+	  /* Split horizon. */
+	  if (split_horizon == ripng_split_horizon &&
+	      rinfo->ifindex == ifp->ifindex)
+	    continue;
+	
 	  /* Apply output filters.*/
 	  if (ri->list[RIPNG_FILTER_OUT])
 	    {
@@ -1277,19 +1341,33 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 		  continue;
 		}
 	    }
-	  
-	  /* Changed route only output. */
-	  if (route_type == ripng_changed_route &&
-	      (! (rinfo->flags & RIPNG_RTF_CHANGED)))
-	    continue;
 
-	  /* Split horizon. */
-	  if (split_horizon == ripng_split_horizon &&
-	      rinfo->ifindex == ifp->ifindex)
-	    continue;
-	
+	  /* Route-map */
+	  if (ri->routemap[RIPNG_FILTER_OUT])
+	    {
+	      int ret;
+	      struct ripng_info newinfo;
+
+	      memset (&newinfo, 0, sizeof (struct ripng_info));
+	      newinfo.metric = metric;
+
+	      ret = route_map_apply (ri->routemap[RIPNG_FILTER_OUT], 
+				     (struct prefix *) p, ROUTE_MAP_RIPNG, 
+				     &newinfo);
+
+	      if (ret == RM_DENYMATCH)
+		{
+		  if (IS_RIPNG_DEBUG_PACKET)
+		    zlog_info ("RIPng %s/%d is filtered by route-map out",
+			       inet6_ntop (&p->prefix), p->prefixlen);
+		  return;
+		}
+
+	      metric = newinfo.metric;
+	    }
+
 	  /* Write RTE to the stream. */
-	  num = ripng_write_rte (num, s, p, rinfo->tag, rinfo->metric);
+	  num = ripng_write_rte (num, s, p, rinfo->tag, metric);
 	  if (num == rtemax)
 	    {
 	      ret = ripng_send_packet (STREAM_DATA (s), stream_get_endp (s),
@@ -1307,6 +1385,7 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 	  aggregate->suppress == 0)
 	{
 	  p = (struct prefix_ipv6 *) &rp->p;
+	  metric = aggregate->metric;
 
 	  /* Apply output filters.*/
 	  if (ri->list[RIPNG_FILTER_OUT])
@@ -1332,12 +1411,36 @@ ripng_output_process (struct interface *ifp, struct sockaddr_in6 *to,
 		}
 	    }
 
+	  /* Route-map */
+	  if (ri->routemap[RIPNG_FILTER_OUT])
+	    {
+	      int ret;
+	      struct ripng_info newinfo;
+
+	      memset (&newinfo, 0, sizeof (struct ripng_info));
+	      newinfo.metric = metric;
+
+	      ret = route_map_apply (ri->routemap[RIPNG_FILTER_OUT], 
+				     (struct prefix *) p, ROUTE_MAP_RIPNG, 
+				     &newinfo);
+
+	      if (ret == RM_DENYMATCH)
+		{
+		  if (IS_RIPNG_DEBUG_PACKET)
+		    zlog_info ("RIPng %s/%d is filtered by route-map out",
+			       inet6_ntop (&p->prefix), p->prefixlen);
+		  return;
+		}
+
+	      metric = newinfo.metric;
+	    }
+
 	  /* Changed route only output. */
 	  if (route_type == ripng_changed_route)
 	    continue;
 
 	  /* Write RTE to the stream. */
-	  num = ripng_write_rte (num, s, p, aggregate->tag, aggregate->metric);
+	  num = ripng_write_rte (num, s, p, aggregate->tag, metric);
 	  if (num == rtemax)
 	    {
 	      ret = ripng_send_packet (STREAM_DATA (s), stream_get_endp (s),
@@ -1384,9 +1487,9 @@ ripng_create ()
   ripng->timeout_time = RIPNG_TIMEOUT_TIMER_DEFAULT;
   ripng->garbage_time = RIPNG_GARBAGE_TIMER_DEFAULT;
   
-  /* XXX Make buffer.  Size should be calculated by MTU. */
-  ripng->ibuf = stream_new (1500 * 5);
-  ripng->obuf = stream_new (1500);
+  /* Make buffer.  */
+  ripng->ibuf = stream_new (RIPNG_MAX_PACKET_SIZE * 5);
+  ripng->obuf = stream_new (RIPNG_MAX_PACKET_SIZE);
 
   /* Make socket. */
   ripng->sock = ripng_make_socket ();
@@ -1501,11 +1604,7 @@ struct
 };
 
 /* For messages. */
-struct message
-{
-  int key;
-  char *str;
-} ripng_route_info[] =
+struct message ripng_route_info[] =
 {
   { RIPNG_ROUTE_RTE,       " "},
   { RIPNG_ROUTE_STATIC,    "S"},
@@ -2074,6 +2173,8 @@ ripng_config_write (struct vty *vty)
 
       write += config_write_distribute (vty);
 
+      write += config_write_if_rmap (vty);
+
       write++;
     }
   return write;
@@ -2144,7 +2245,6 @@ ripng_distribute_update (struct distribute *dist)
   else
     ri->prefix[RIPNG_FILTER_OUT] = NULL;
 }
-
 void
 ripng_distribute_update_interface (struct interface *ifp)
 {
@@ -2166,6 +2266,65 @@ ripng_distribute_update_all ()
     {
       ifp = getdata (node);
       ripng_distribute_update_interface (ifp);
+    }
+}
+
+void
+ripng_if_rmap_update (struct if_rmap *if_rmap)
+{
+  struct interface *ifp;
+  struct ripng_interface *ri;
+  struct route_map *rmap;
+
+  ifp = if_lookup_by_name (if_rmap->ifname);
+  if (ifp == NULL)
+    return;
+
+  ri = ifp->info;
+
+  if (if_rmap->routemap[IF_RMAP_IN])
+    {
+      rmap = route_map_lookup_by_name (if_rmap->routemap[IF_RMAP_IN]);
+      if (rmap)
+	ri->routemap[IF_RMAP_IN] = rmap;
+      else
+	ri->routemap[IF_RMAP_IN] = NULL;
+    }
+  else
+    ri->routemap[RIPNG_FILTER_IN] = NULL;
+
+  if (if_rmap->routemap[IF_RMAP_OUT])
+    {
+      rmap = route_map_lookup_by_name (if_rmap->routemap[IF_RMAP_OUT]);
+      if (rmap)
+	ri->routemap[IF_RMAP_OUT] = rmap;
+      else
+	ri->routemap[IF_RMAP_OUT] = NULL;
+    }
+  else
+    ri->routemap[RIPNG_FILTER_OUT] = NULL;
+}
+
+void
+ripng_if_rmap_update_interface (struct interface *ifp)
+{
+  struct if_rmap *if_rmap;
+
+  if_rmap = if_rmap_lookup (ifp->name);
+  if (if_rmap)
+    ripng_if_rmap_update (if_rmap);
+}
+
+void
+ripng_routemap_update ()
+{
+  struct interface *ifp;
+  listnode node;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      ripng_if_rmap_update_interface (ifp);
     }
 }
 
@@ -2211,7 +2370,6 @@ ripng_init ()
   install_element (RIPNG_NODE, &default_information_originate_cmd);
   install_element (RIPNG_NODE, &no_default_information_originate_cmd);
 
-  /* Interface related function init. */
   ripng_if_init ();
   ripng_debug_init ();
 
@@ -2229,4 +2387,13 @@ ripng_init ()
   distribute_list_init (RIPNG_NODE);
   distribute_list_add_hook (ripng_distribute_update);
   distribute_list_delete_hook (ripng_distribute_update);
+
+  /* Route-map for interface. */
+  ripng_route_map_init ();
+  route_map_add_hook (ripng_routemap_update);
+  route_map_delete_hook (ripng_routemap_update);
+
+  if_rmap_init (RIPNG_NODE);
+  if_rmap_hook_add (ripng_if_rmap_update);
+  if_rmap_hook_delete (ripng_if_rmap_update);
 }

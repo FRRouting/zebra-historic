@@ -27,11 +27,10 @@ struct neighbor
   struct ospf6_if     *ospf6_if;
   unsigned char        state;
   struct thread       *inactivity_timer;
-  struct thread       *send_dd;          /* Retransmit DD */
   struct thread       *send_lsreq;       /* Retransmit LSReq */
   struct thread       *send_update;      /* Retransmit LSUpdate */
   unsigned char        dd_bits;          /* including MASTER bit */
-  unsigned long        dd_seqnum;        /* DD sequence number */
+  unsigned long        seqnum;        /* DD sequence number */
   char                 str[16];          /* Router ID String */
   unsigned long        rtr_id;           /* Router ID of this neighbor */
   unsigned char        rtr_pri;          /* Router Priority of this neighbor */
@@ -51,12 +50,27 @@ struct neighbor
 
   /* LSA lists for this neighbor */
   list summarylist;
-  list retranslist;
   list requestlist;
+  list retranslist;
 
   /* new member for dbdesc */
-  struct thread *thread_dbdesc_retrans;
-  struct iovec dbdesc_last_send[MAXIOVLIST];
+  /* retransmission thread */
+  struct thread *thread_dbdesc_retrans;        /* Retransmit DbDesc */
+  struct iovec dbdesc_last_send[MAXIOVLIST];   /* placeholder for DbDesc */
+  struct thread *thread_lsreq_retrans;         /* Retransmit LsReq */
+
+  /* statistics */
+  unsigned int ospf6_stat_state_changed;
+  unsigned int ospf6_stat_seqnum_mismatch;
+  unsigned int ospf6_stat_bad_lsreq;
+  unsigned int ospf6_stat_oneway_received;
+  unsigned int ospf6_stat_inactivity_timer;
+  unsigned int ospf6_stat_dr_election;
+  unsigned int ospf6_stat_retrans_dbdesc;
+  unsigned int ospf6_stat_retrans_lsreq;
+  unsigned int ospf6_stat_retrans_lsupdate;
+  unsigned int ospf6_stat_received_lsa;
+  unsigned int ospf6_stat_received_lsupdate;
 };
 
 
@@ -77,6 +91,7 @@ int show_nbr (struct vty *, struct neighbor *);
 
 void ospf6_neighbor_vty_summary (struct vty *, struct neighbor *);
 void ospf6_neighbor_vty (struct vty *, struct neighbor *);
+void ospf6_neighbor_vty_detail (struct vty *, struct neighbor *);
 
 #endif /* OSPF6_NEIGHBOR_H */
 

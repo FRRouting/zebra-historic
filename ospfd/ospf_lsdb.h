@@ -37,6 +37,7 @@ struct ospf_lsdb
   struct route_table *rt;	/* RT version. */
   u_int	       count;
   u_int	       count_self;
+  struct ospf_area * area;	/* Associated area */
 };
 
 struct ospf_lsdb* ospf_lsdb_new (u_char);

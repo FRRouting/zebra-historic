@@ -179,6 +179,7 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
     ospf_spf_calculate_schedule ();
 
   SET_FLAG (new->flags, OSPF_LSA_RECEIVED);
+  ospf_lsa_is_self_originated (new); /* Let it set the flag */
   new = ospf_lsa_install (nbr, new);
 
   /* Acknowledge the receipt of the LSA by sending a Link State
@@ -424,16 +425,10 @@ ospf_ls_request_delete (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 void
 ospf_ls_request_delete_all (struct ospf_neighbor *nbr)
 {
-  listnode node, next;
-  struct ospf_lsa *lsa;
+  listnode node;
 
-  for (node = listhead (nbr->ls_request); node; node = next)
-    {
-      next = node->next;
-      lsa = getdata (node);
-
-      ospf_ls_request_delete (nbr, lsa);
-    }
+  for (node = listhead (nbr->ls_request); node; nextnode (node))
+    ospf_ls_request_delete (nbr, node->data);
 }
 
 /* Lookup LSA header from neighbor's ls-request list. */
@@ -503,7 +498,6 @@ ospf_ls_retransmit_delete (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
 {
 #ifdef DEBUG
   debug_ospf_ls_retransmit (nbr);
-  zlog_info ("NNN: list_delete_node nbr=%s", inet_ntoa (nbr->router_id));
 #endif /* DEBUG */
   list_delete_by_val (nbr->ls_retransmit, lsa);
   if (lsa->ref)
@@ -578,10 +572,8 @@ ospf_ls_retransmit_delete_nbr_all (struct ospf_lsa *lsa)
 
       for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
 	{
-	  if (!rn->info)
+	  if ((nbr = rn->info) == NULL)
 	    continue;
-
-	  nbr = rn->info;
 
 	  lsr = ospf_ls_retransmit_lookup (nbr, lsa->data);
 
@@ -618,17 +610,14 @@ ospf_ls_retransmit_add_nbr_all (struct ospf_interface *ospfi,
 
       for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
 	{
-	  if (rn->info == NULL)
+	  if ((nbr = rn->info) == NULL)
 	    continue;
-
-	  nbr = rn->info;
 
 	  if (nbr->status != NSM_Full)
 	    continue;
 
 	  /* If old LSA in ls-retransmit list, first remove it. */
-	  lsr = ospf_ls_retransmit_lookup (nbr, lsa->data);
-	  if (lsr)
+	  if ((lsr = ospf_ls_retransmit_lookup (nbr, lsa->data)))
 	    ospf_ls_retransmit_delete (nbr, lsr);
 
 	  /* Then add new LSA to the neighbor's ls-retransmit list. */
@@ -637,11 +626,9 @@ ospf_ls_retransmit_add_nbr_all (struct ospf_interface *ospfi,
     }
 }
 
-/* sets ls_age to MaxAge and floods throu the area.
-   when we implement ASE routing, there will be 
-   anothe function flushing an LSA from the whole
-   domain.
-*/
+/* Sets ls_age to MaxAge and floods throu the area. 
+   When we implement ASE routing, there will be anothe function
+   flushing an LSA from the whole domain. */
 void
 ospf_lsa_flush_area (struct ospf_lsa *lsa, struct ospf_area *area)
 {

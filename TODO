@@ -1,0 +1,61 @@
+
+			   Zebra TODO list
+			  (random in order)
+
+zebra:
+
+o *BGP routing socket support.
+o IPv6 router advertisement code finish.
+o Pointopoint address configuration.
+o Multiple (alias) address configuration for the interface when kernel
+  support it.
+
+bgpd:
+
+o peer-group functionality.
+o route server support -- should support received-routes and
+  advertised-routes command
+o route flap dampening.
+o MRT compatible packet dump code merge.
+o BGP capability negotiation code merge.
+o aggregate-address support complete (as-set etc.).
+o no aggreagate-address command.
+o BGP peer should be sorted by address. 
+o BGP TCP MD5 authentication (on OpenBSD) by password command.
+o BGP multiple instance support.
+o BGP confederation.
+o BGP connection collision detection.
+o HUP signal support (reload configuration file).
+o BGP4-MIB support (and extention such as SNMP traps for route-withdrawls)
+o BGP multi-path extension ("load balancing")
+o maximum-prefix command - Maximum number of prefix accept from this peer
+o Dynamic query to the Routing Registry.
+o Softreconfiguration.
+
+ripd:
+
+o RIP peer handling.
+o RIPv2 MIB finish (related with RIP peer handling).
+o Interface sort with interface's address (needed for RIPv2 MIB).
+o Display warning when zebra is not running (ripd will not useful when
+  zebra is not there).
+
+ospfd:
+
+o rewrite the incremental RT update code.
+o route-map support for redistribution.
+o NSSA.
+o Opaque LSA support and API.
+o Demand circuits.
+o Multiple instances.
+o OSPF MIB.
+o HUP signal treatment.
+o Display warning when zebra is not running (ospfd will not useful when
+  zebra is not there).
+
+Multicast protocols such as PIM-SM, PIM-DM, BGMP will be supported in
+Zebra-2.0.  Currently we are concentrating forthcoming Zebra-1.0
+release which provides common unicast routing protocols.
+
+--
+Kunihiro Ishiguro <kunihiro@zebra.org>

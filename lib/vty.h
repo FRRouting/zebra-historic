@@ -128,5 +128,6 @@ void vty_read_config (char *, char *, char *);
 void vty_time_print (struct vty *);
 void vty_serv_sock (unsigned short);
 void vty_close (struct vty *);
+char *vty_get_cwd (void);
 
 #endif /* _ZEBRA_VTY_H */

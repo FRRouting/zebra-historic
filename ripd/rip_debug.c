@@ -226,7 +226,7 @@ config_write_debug (struct vty *vty)
 		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "debug rip packet recieve%s%s",
+	    vty_out (vty, "debug rip packet receive%s%s",
 		     IS_RIP_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  write++;
@@ -251,6 +251,10 @@ rip_debug_reset ()
 void
 rip_debug_init ()
 {
+  rip_debug_event = 0;
+  rip_debug_packet = 0;
+  rip_debug_zebra = 0;
+
   install_node (&debug_node, config_write_debug);
 
   install_element (VIEW_NODE, &show_debugging_rip_cmd);

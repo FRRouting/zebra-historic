@@ -1,5 +1,4 @@
-/*
- * Zebra connect library for OSPFd
+/* Zebra connect library for OSPFd
  * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro, Toshiaki Takada
  *
  * This file is part of GNU Zebra.
@@ -71,7 +70,7 @@ ospf_interface_delete (int command, struct zebra *zebra, zebra_size_t length)
 
 int
 ospf_interface_address_add (int command, struct zebra *zebra,
-			     zebra_size_t length)
+			    zebra_size_t length)
 {
   struct connected *c;
 
@@ -123,7 +122,7 @@ ospf_zebra_add_discard (struct prefix_ipv4 *p)
 {
   struct in_addr lo_addr;
 
-  lo_addr.s_addr = htonl(INADDR_LOOPBACK);
+  lo_addr.s_addr = htonl (INADDR_LOOPBACK);
 
   if (zclient->redist[ZEBRA_ROUTE_OSPF])
     zebra_ipv4_add (zclient->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
@@ -136,14 +135,12 @@ ospf_zebra_delete_discard (struct prefix_ipv4 *p)
 {
   struct in_addr lo_addr;
 
-  lo_addr.s_addr = htonl(INADDR_LOOPBACK);
+  lo_addr.s_addr = htonl (INADDR_LOOPBACK);
 
   if (zclient->redist[ZEBRA_ROUTE_OSPF])
     zebra_ipv4_delete (zclient->sock, ZEBRA_ROUTE_OSPF, ZEBRA_FLAG_BLACKHOLE, 
 		       p, &lo_addr, 0);
 }
-
-
 
 int
 ospf_redistribute_set (int type)
@@ -361,7 +358,6 @@ DEFUN (no_ospf_redistribute_bgp,
   return ospf_redistribute_unset (ZEBRA_ROUTE_BGP);
 }
 
-
 int
 ospf_set_distribute_list_out (struct vty *vty, int type, char * list_name)
 {
@@ -393,8 +389,6 @@ ospf_unset_distribute_list_out (struct vty *vty, int type, char * list_name)
   return CMD_SUCCESS;
 }
 
-
-
 #define OUT_STR "Filter outgoing routing updates\n"
 #define IN_STR  "Filter incoming routing updates\n"
 
@@ -421,7 +415,6 @@ DEFUN (no_ospf_distribute_list_out_kernel,
   return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_KERNEL, argv[0]);
 }
 
-
 DEFUN (ospf_distribute_list_out_connected,
        ospf_distribute_list_out_connected_cmd,
        "distribute-list NAME out connected",
@@ -445,7 +438,6 @@ DEFUN (no_ospf_distribute_list_out_connected,
   return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_CONNECT, argv[0]);
 }
 
-
 DEFUN (ospf_distribute_list_out_static,
        ospf_distribute_list_out_static_cmd,
        "distribute-list NAME out static",
@@ -468,7 +460,6 @@ DEFUN (no_ospf_distribute_list_out_static,
 {
   return ospf_unset_distribute_list_out (vty, ZEBRA_ROUTE_STATIC, argv[0]);
 }
-
 
 DEFUN (ospf_distribute_list_out_rip,
        ospf_distribute_list_out_rip_cmd,
@@ -525,40 +516,38 @@ ospf_acl_hook ()
   struct ospf_area *a;
   listnode node;
 
-  if (ospf_top){
-
-    for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
-      if (ospf_top->dist_lists_proto[i].name)
-	{
-	  ospf_top->dist_lists_proto[i].list = NULL; /* Invalidate */
-	  dst_inv++;
-	}
-
-    LIST_ITERATOR (ospf_top->areas, node)
+  if (ospf_top)
     {
-      a = getdata (node);
-      if (a == NULL) continue;
+      for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
+	if (ospf_top->dist_lists_proto[i].name)
+	  {
+	    ospf_top->dist_lists_proto[i].list = NULL; /* Invalidate */
+	    dst_inv++;
+	  }
 
-      if (EXP_LIST_NAME (a))
-        {
-          EXP_LIST_PTR(a) = NULL;
-          abr_inv++;
-        }
+      LIST_ITERATOR (ospf_top->areas, node)
+	{
+	  a = getdata (node);
+	  if (a == NULL) continue;
 
-      if (IMP_LIST_NAME (a))
-        {
-          IMP_LIST_PTR(a) = NULL;
-          abr_inv++;
-        }
+	  if (EXP_LIST_NAME (a))
+	    {
+	      EXP_LIST_PTR(a) = NULL;
+	      abr_inv++;
+	    }
+
+	  if (IMP_LIST_NAME (a))
+	    {
+	      IMP_LIST_PTR(a) = NULL;
+	      abr_inv++;
+	    }
+	}
+      if (OSPF_IS_ASBR && dst_inv)
+	ospf_schedule_asbr_check ();
+
+      if (OSPF_IS_ABR && abr_inv)
+	ospf_schedule_abr_task ();
     }
-
-  }
-
-  if (OSPF_IS_ASBR && dst_inv)
-    ospf_schedule_asbr_check ();
-
-  if (OSPF_IS_ABR && abr_inv)
-    ospf_schedule_abr_task ();
 }
 
 /* Zebra configuration write function. */

@@ -20,6 +20,7 @@
  */
 
 #include <zebra.h>
+
 #include "memory.h"
 #include "sockopt.h"
 #include "thread.h"
@@ -32,20 +33,39 @@
 #include "zebra/interface.h"
 #include "zebra/rtadv.h"
 
-#ifdef RTADV
+#if defined (HAVE_IPV6) && defined (RTADV)
 
-extern struct thread_master *master;
+/* If RFC2133 definition is used. */
+#ifndef IPV6_JOIN_GROUP
+#define IPV6_JOIN_GROUP  IPV6_ADD_MEMBERSHIP 
+#endif
+#ifndef IPV6_LEAVE_GROUP
+#define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP 
+#endif
 
+#define ALLNODE   "ff02::1"
+#define ALLROUTER "ff02::2"
+
+enum rtadv_event {RTADV_START, RTADV_STOP, RTADV_TIMER, RTADV_READ};
+
+void rtadv_event (enum rtadv_event, int);
+
+int if_join_all_router (int, struct interface *);
+int if_leave_all_router (int, struct interface *);
+
+/* Structure which hold status of router advertisement. */
 struct rtadv
 {
   int sock;
+
+  int adv_if_count;
 
   struct thread *ra_read;
   struct thread *ra_timer;
 };
 
 struct rtadv *rtadv;
-
+
 struct rtadv *
 rtadv_new ()
 {
@@ -63,7 +83,8 @@ rtadv_free (struct rtadv *rtadv)
 
 int
 rtadv_recv_packet (int sock, u_char *buf, int buflen,
-		   struct sockaddr_in6 *from, unsigned int *ifindex)
+		   struct sockaddr_in6 *from, unsigned int *ifindex,
+		   int *hoplimit)
 {
   int ret;
   struct msghdr msg;
@@ -101,6 +122,11 @@ rtadv_recv_packet (int sock, u_char *buf, int buflen,
 	  *ifindex = ptr->ipi6_ifindex;
 	  dst = ptr->ipi6_addr;
         }
+
+      /* Incoming packet's hop limit. */
+      if (cmsgptr->cmsg_level == IPPROTO_IPV6 &&
+	  cmsgptr->cmsg_type == IPV6_HOPLIMIT)
+	*hoplimit = *((int *) CMSG_DATA (cmsgptr));
     }
   return ret;
 }
@@ -194,6 +220,8 @@ rtadv_send_packet (int sock, struct interface *ifp)
     }
 
   /* Hardware address. */
+#ifdef HAVE_SOCKADDR_DL
+#else
   if (ifp->hw_addr_len != 0)
     {
       int i;
@@ -205,6 +233,7 @@ rtadv_send_packet (int sock, struct interface *ifp)
       memcpy (buf + len, ifp->hw_addr, i);
       len += i;
     }
+#endif /* HAVE_SOCKADDR_DL */
 
   msg.msg_name = (void *) &addr;
   msg.msg_namelen = sizeof (struct sockaddr_in6);
@@ -235,7 +264,8 @@ rtadv_timer (struct thread *thread)
   struct interface *ifp;
   struct zebra_if *zif;
 
-  rtadv->ra_timer = thread_add_timer (master, rtadv_timer, NULL, 30);
+  rtadv->ra_timer = NULL;
+  rtadv_event (RTADV_TIMER, 30);
 
   for (node = listhead (iflist); node; nextnode (node))
     {
@@ -253,19 +283,21 @@ rtadv_timer (struct thread *thread)
 }
 
 void
-rtadv_process_solicit ()
+rtadv_process_solicit (struct interface *ifp)
 {
-  zlog_info ("Router solicitation recieved");
+  zlog_info ("Router solicitation received on %s", ifp->name);
+
+  ;
 }
 
 void
 rtadv_process_advert ()
 {
-  zlog_info ("Router advertisement recieved");
+  zlog_info ("Router advertisement received");
 }
 
 void
-rtadv_process_packet (u_char *buf, int len, unsigned int ifindex)
+rtadv_process_packet (u_char *buf, int len, unsigned int ifindex, int hoplimit)
 {
   struct icmp6_hdr *icmph;
   struct interface *ifp;
@@ -288,6 +320,14 @@ rtadv_process_packet (u_char *buf, int len, unsigned int ifindex)
       return;
     }
 
+  /* Hoplimit check. */
+  if (hoplimit != 255)
+    {
+      zlog_warn ("Invalid hoplimit %d for router advertisement ICMP packet",
+		 hoplimit);
+      return;
+    }
+
   /* Interface search. */
   ifp = if_lookup_by_index (ifindex);
   if (ifp == NULL)
@@ -303,7 +343,7 @@ rtadv_process_packet (u_char *buf, int len, unsigned int ifindex)
 
   /* Check ICMP message type. */
   if (icmph->icmp6_type == ND_ROUTER_SOLICIT)
-    rtadv_process_solicit ();
+    rtadv_process_solicit (ifp);
   else if (icmph->icmp6_type == ND_ROUTER_ADVERT)
     rtadv_process_advert ();
 
@@ -318,14 +358,15 @@ rtadv_read (struct thread *thread)
   u_char buf[RTADV_MSG_SIZE];
   struct sockaddr_in6 from;
   unsigned int ifindex;
+  int hoplimit = -1;
 
   sock = THREAD_FD (thread);
   rtadv->ra_read = NULL;
 
   /* Register myself. */
-  rtadv->ra_read = thread_add_read (master, rtadv_read, NULL, sock);
+  rtadv_event (RTADV_READ, sock);
 
-  len = rtadv_recv_packet (sock, buf, BUFSIZ, &from, &ifindex);
+  len = rtadv_recv_packet (sock, buf, BUFSIZ, &from, &ifindex, &hoplimit);
 
   if (len < 0) 
     {
@@ -333,7 +374,7 @@ rtadv_read (struct thread *thread)
       return len;
     }
 
-  rtadv_process_packet (buf, len, ifindex);
+  rtadv_process_packet (buf, len, ifindex, hoplimit);
 
   return 0;
 }
@@ -351,7 +392,7 @@ rtadv_make_socket ()
   sock = socket (AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
   if (sock < 0)
     {
-      log_warn ("can't create router advertisement socket: %s", 
+      zlog_warn ("can't create router advertisement socket: %s", 
 		strerror (errno));
       return -1;
     }
@@ -459,7 +500,16 @@ DEFUN (ipv6_nd_send_ra,
   ifp = vty->index;
   zif = ifp->info;
 
-  zif->rtadv.AdvSendAdvertisements = 1;
+  if (! zif->rtadv.AdvSendAdvertisements)
+    {
+      zif->rtadv.AdvSendAdvertisements = 1;
+      rtadv->adv_if_count++;
+
+      if_join_all_router (rtadv->sock, ifp);
+
+      if (rtadv->adv_if_count)
+	rtadv_event (RTADV_START, 0);
+    }
 
   return CMD_SUCCESS;
 }
@@ -478,7 +528,16 @@ DEFUN (no_ipv6_nd_send_ra,
   ifp = vty->index;
   zif = ifp->info;
 
-  zif->rtadv.AdvSendAdvertisements = 0;
+  if (zif->rtadv.AdvSendAdvertisements)
+    {
+      zif->rtadv.AdvSendAdvertisements = 0;
+      rtadv->adv_if_count--;
+
+      if_leave_all_router (rtadv->sock, ifp);
+
+      if (rtadv->adv_if_count == 0)
+	rtadv_event (RTADV_STOP, 0);
+    }
 
   return CMD_SUCCESS;
 }
@@ -536,18 +595,98 @@ rtadv_config_write (struct vty *vty, struct interface *ifp)
     }
 }
 
+extern struct thread_master *master;
+
+void
+rtadv_event (enum rtadv_event event, int val)
+{
+  switch (event)
+    {
+    case RTADV_START:
+      thread_add_event (master, rtadv_timer, NULL, 0);
+      break;
+    case RTADV_STOP:
+      if (rtadv->ra_timer)
+	{
+	  thread_cancel (rtadv->ra_timer);
+	  rtadv->ra_timer = NULL;
+	}
+      break;
+    case RTADV_TIMER:
+      if (! rtadv->ra_timer)
+	rtadv->ra_timer = thread_add_timer (master, rtadv_timer, NULL, val);
+      break;
+    case RTADV_READ:
+      rtadv->ra_read = thread_add_read (master, rtadv_read, NULL, val);
+      break;
+    default:
+      break;
+    }
+  return;
+}
+
 void
 rtadv_init ()
 {
-  rtadv = rtadv_new ();
-
-  rtadv->sock = rtadv_make_socket ();
-
-  rtadv->ra_read = thread_add_read (master, rtadv_read, NULL, rtadv->sock);
-  rtadv->ra_timer = thread_add_timer (master, rtadv_timer, NULL, 1);
-
   install_element (INTERFACE_NODE, &ipv6_nd_send_ra_cmd);
   install_element (INTERFACE_NODE, &no_ipv6_nd_send_ra_cmd);
   install_element (INTERFACE_NODE, &ipv6_nd_prefix_advertisement_cmd);
+
+  rtadv = rtadv_new ();
+  rtadv->sock = rtadv_make_socket ();
+  if (rtadv->sock < 0)
+    return;
+
+  /* This should be rtadv_start (). */
+  rtadv_event (RTADV_READ, rtadv->sock);
 }
-#endif /* RTADV */
+
+int
+if_join_all_router (int sock, struct interface *ifp)
+{
+  int ret;
+
+  struct ipv6_mreq mreq;
+
+  memset (&mreq, 0, sizeof (struct ipv6_mreq));
+  inet_pton (AF_INET6, ALLROUTER, &mreq.ipv6mr_multiaddr);
+  mreq.ipv6mr_interface = ifp->ifindex;
+
+  ret = setsockopt (sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, 
+		    (char *) &mreq, sizeof mreq);
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IPV6_JOIN_GROUP: %s", strerror (errno));
+
+  zlog_info ("rtadv: %s join to all-routers multicast group", ifp->name);
+
+  return 0;
+}
+
+int
+if_leave_all_router (int sock, struct interface *ifp)
+{
+  int ret;
+
+  struct ipv6_mreq mreq;
+
+  memset (&mreq, 0, sizeof (struct ipv6_mreq));
+  inet_pton (AF_INET6, ALLROUTER, &mreq.ipv6mr_multiaddr);
+  mreq.ipv6mr_interface = ifp->ifindex;
+
+  ret = setsockopt (sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP, 
+		    (char *) &mreq, sizeof mreq);
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IPV6_LEAVE_GROUP: %s", strerror (errno));
+
+  zlog_info ("rtadv: %s leave from all-routers multicast group", ifp->name);
+
+  return 0;
+}
+
+#else
+void
+rtadv_init ()
+{
+  /* Empty.*/;
+}
+#endif /* RTADV && HAVE_IPV6 */

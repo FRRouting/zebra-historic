@@ -23,19 +23,12 @@
 #ifndef _ZEBRA_THREAD_H
 #define _ZEBRA_THREAD_H
 
-#ifndef HAVE_PTHREAD
-typedef unsigned long int pthread_t;
-#endif /* HAVE_PTHREAD */
-
 /* Linked list of thread. */
 struct thread_list
 {
   struct thread *head;
   struct thread *tail;
   int count;
-#ifdef HAVE_PTHREAD
-  pthread_mutex_t lock;
-#endif /* HAVE_PTHREAD */
 };
 
 /* Master of the theads. */
@@ -50,15 +43,12 @@ struct thread_master
   fd_set writefd;
   fd_set exceptfd;
   unsigned long alloc;
-#ifdef HAVE_PTHREAD
-  pthread_mutex_t lock;
-#endif /* HAVE_PTHREAD */
 };
 
 /* Thread itself. */
 struct thread
 {
-  pthread_t id;
+  unsigned long id;
   unsigned char type;		/* thread type */
   struct thread *next;		/* next pointer of the thread */
   struct thread *prev;		/* previous pointer of the thread */

@@ -1,5 +1,4 @@
-/*
- * Redistribution Handler
+/* Redistribution Handler
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -70,8 +69,8 @@ zebra_redistribute (struct zebra_client *client, int type)
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
       if (IS_RIB_FIB (rib) && rib->type == type && zebra_check_addr (&np->p))
-	zebra_ipv4_add (client->fd, type, 0, (struct prefix_ipv4 *)&np->p,
-			&rib->u.gate4, rib->u.ifindex);
+	  zebra_ipv4_add (client->fd, type, 0, (struct prefix_ipv4 *)&np->p,
+			  &rib->u.gate4, rib->u.ifindex);
 
 #ifdef HAVE_IPV6
   for (np = route_top (ipv6_rib_table); np; np = route_next (np))
@@ -183,7 +182,7 @@ zebra_redistribute_delete (int command, struct zebra_client *client,
     }
 }     
 
-/* Send one interface to all client. */
+/* Interface information update. */
 void
 zebra_interface_add_update (struct interface *ifp)
 {
@@ -195,6 +194,7 @@ zebra_interface_add_update (struct interface *ifp)
       zebra_interface_add (client->fd, ifp);
 }
 
+/* Interface address addition. */
 void
 zebra_interface_address_add_update (struct interface *ifp, struct connected *c)
 {
@@ -204,4 +204,16 @@ zebra_interface_address_add_update (struct interface *ifp, struct connected *c)
   for (node = listhead (client_list); node; nextnode (node))
     if ((client = getdata (node)) != NULL)
       zebra_interface_address_add (client->fd, ifp, c);
+}
+
+/* Interface address deletion. */
+void
+zebra_interface_address_delete_update (struct interface *ifp, struct connected *c)
+{
+  listnode node;
+  struct zebra_client *client;
+
+  for (node = listhead (client_list); node; nextnode (node))
+    if ((client = getdata (node)) != NULL)
+      zebra_interface_address_delete (client->fd, ifp, c);
 }

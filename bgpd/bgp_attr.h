@@ -31,15 +31,6 @@
 
 #define BGP_ATTR_MIN_LEN        2       /* Attribute flag and type. */
 
-/* Address Family Identifier. */
-#define AFI_IP                   1
-#define AFI_IPV6                 2
-
-/* Subsequent Address Family Identifier */
-#define SAFI_UNICAST             1
-#define SAFI_MULTICAST           2
-#define SAFI_UNICAST_MULTICAST   3
-
 /* Default attribute value. */
 #define DEFAULT_LOCAL_PREF    100
 
@@ -72,11 +63,18 @@ struct attr
   struct in_addr originator_id;
   struct cluster_list *cluster;
 
-#ifdef HAVE_IPV6
-  /* BGP-4+ nexthop. */
+#if defined(HAVE_IPV6) || defined(HAVE_MBGPV4)
   u_char mp_nexthop_len;
+#endif
+
+#ifdef HAVE_IPV6
   struct in6_addr mp_nexthop_global;
   struct in6_addr mp_nexthop_local;
+#endif /* HAVE_IPV6 */
+
+#ifdef HAVE_MBGPV4
+  struct in_addr mp_nexthop_global_in;
+  struct in_addr mp_nexthop_local_in;
 #endif /* HAVE_IPV6 */
 
   /* AS Path structure */
@@ -84,6 +82,9 @@ struct attr
 
   /* Community structure */
   struct community *community;	
+
+  /* Invalid. */
+  u_char invalid;
 };
 
 #define ATTR_FLAG_BIT(X)  (1 << ((X) - 1))

@@ -1,5 +1,4 @@
-/*
- * BGP-4, BGP-4+ daemon program
+/* BGP-4, BGP-4+ daemon program
  * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -19,6 +18,7 @@
  * Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.  
  */
+
 
 #include <zebra.h>
 
@@ -43,11 +43,14 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
+#include "bgpd/bgp_zebra.h"
+#include "bgpd/bgp_open.h"
 
 /* List head of bgp instance list. */
 list bgp_list;
@@ -63,6 +66,9 @@ extern struct route_table *bgp_table_ipv4;
 #ifdef HAVE_IPV6
 extern struct route_table *bgp_table_ipv6;
 #endif /* HAVE_IPV6 */
+#ifdef HAVE_MBGPV4 
+extern struct route_table *mbgp_table_ipv4;
+#endif /* HAVE_MBGPV4 */
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
@@ -130,6 +136,8 @@ bgp_delete (struct bgp *bgp)
   free (bgp);
 }
 
+
+
 /* RFC1771 6.8 Connection collision detection. */
 int
 bgp_collision_detect (struct peer *newpeer)
@@ -166,7 +174,7 @@ bgp_collision_detect (struct peer *newpeer)
 		 connection that already exists (the one that is
 		 already in the OpenConfirm state), and accepts BGP
 		 connection initiated by the remote system. */
-	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0, NULL);
+	      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
 	      return 0;
 	    }
 	  else
@@ -176,7 +184,7 @@ bgp_collision_detect (struct peer *newpeer)
 		 received OPEN message), and continues to use the
 		 existing one (the one that is already in the
 		 OpenConfirm state). */
-	      bgp_notify_send (newpeer, BGP_NOTIFY_CEASE, 0, NULL);
+	      bgp_notify_send (newpeer, BGP_NOTIFY_CEASE, 0);
 	      return 1;
 	    }
 	}
@@ -184,6 +192,23 @@ bgp_collision_detect (struct peer *newpeer)
   return 0;
 }
 
+#ifdef NEW_CODE
+/* Peer creation by remote-as. */
+int
+bgp_peer_remote_as (struct bgp *bgp, char *peer_str, char *as_str, 
+		    int afi, int safi)
+{
+  return 0;
+}
+
+/* Peer address family update by activate. */
+int
+bgp_peer_activate (struct peer *peer)
+{
+  return 0;
+}
+#endif /* NEW_CODE */
+
 /* allocate new peer object */
 struct peer *
 peer_new ()
@@ -205,7 +230,12 @@ peer_new ()
   peer->ostatus = Idle;
   peer->version = BGP_VERSION_4;
   peer->prefix_count = 0;
+#ifdef HAVE_MBGPV4
+  peer->prefix_count_multicastv4 = 0;
+  peer->translate_update  = TRANSLATE_UPDATE_OFF;
+#endif  
   peer->ibuf = stream_new (BGP_MAX_PACKET_SIZE);
+  peer->capability_open = 1;
 
   /* Get service port number. */
   sp = getservbyname ("bgp", "tcp");
@@ -335,6 +365,7 @@ peer_lookup_by_host (char *host)
   return NULL;
 }
 
+#if 0
 struct peer *
 peer_lookup_by_logformat (char *str)
 {
@@ -363,6 +394,7 @@ peer_lookup_by_logformat (char *str)
 
   return peer;
 }
+#endif /* 0 */
 
 /* Sockunion union output to vty interface. Return printed strings
    length. */
@@ -561,6 +593,7 @@ DEFUN (bgp_router_id, bgp_router_id_cmd,
 
   bgp->ident = bgp_ident.s_addr;
   bgp->config |= BGP_CONFIG_ROUTER_ID;
+
   return CMD_SUCCESS;
 }
 
@@ -589,8 +622,11 @@ DEFUN (no_bgp_router_id, no_bgp_router_id_cmd,
       vty_out (vty, "bgp router ID doesn't match exist one%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
-  bgp->config = 0;
+
+  bgp->ident = 0;
   bgp->config &= ~BGP_CONFIG_ROUTER_ID;
+
+  bgp_if_update_all ();
 
   return CMD_SUCCESS;
 }
@@ -676,19 +712,18 @@ bgp_peer_display (struct vty *vty, struct peer *p)
 	  0, 0, 0);
 
   peer_uptime_vty (vty, p);
+  vty_out (vty, "%s", VTY_NEWLINE);
 
   /* Description. */
   if (p->desc)
-    vty_out (vty, "%s  Description: %s", VTY_NEWLINE, p->desc);
+    vty_out (vty, "  Description: %s%s", p->desc, VTY_NEWLINE);
 
   /* Remote router ID */
   {
     struct in_addr bgp_ident;
     bgp_ident.s_addr = p->ident;
-    vty_out (vty, "%s  Remote router ID %s%s",
-	     VTY_NEWLINE,
-	     inet_ntoa (bgp_ident),
-	     VTY_NEWLINE);
+    vty_out (vty, "  Remote router ID %s%s", 
+	     inet_ntoa (bgp_ident), VTY_NEWLINE);
   }
 
   /* Local address. */
@@ -738,6 +773,17 @@ bgp_peer_display (struct vty *vty, struct peer *p)
 	   p->keepalive_in, p->keepalive_out,
 	   VTY_NEWLINE
 	   );
+
+  /* Prefix count. */
+  if (p->status == Established) {
+#ifdef HAVE_MBGPV4
+    vty_out (vty, "  Received prefix count unicast/multicast :%9d/%d%s", 
+	     p->prefix_count,  p->prefix_count_multicastv4, VTY_NEWLINE);
+#else
+    vty_out (vty, "  Received prefix count: %d%s", p->prefix_count, 
+	     VTY_NEWLINE);
+#endif
+  }
   vty_out (vty, "  read thread: %s  write thread: %s%s", 
 	   p->t_read ? "on" : "off",
 	   p->t_write ? "on" : "off",
@@ -787,6 +833,33 @@ bgp_peer_display (struct vty *vty, struct peer *p)
 	     p->route_map[BGP_FILTER_OUT].map ? "*" : "",
 	     p->route_map[BGP_FILTER_OUT].name,
 	     VTY_NEWLINE);
+
+  if (p->ipv4_unicast_conf ||  p->ipv4_multicast_conf) {
+    
+    vty_out (vty, " Neighbor NLRI negotiation:%s", VTY_NEWLINE);
+      if(p->ipv4_unicast_conf) 
+	vty_out(vty, "  Configured for unicast ");
+    
+    if(p->ipv4_unicast_conf &&  p->ipv4_multicast_conf) 
+      vty_out(vty, "and multicast ");
+    else if( p->ipv4_multicast_conf) 
+      vty_out(vty, "  Configured for multicast ");
+    vty_out(vty, "routes%s", VTY_NEWLINE);
+  }
+
+  if(p->ipv4_unicast ||  p->ipv4_multicast) {
+      if(p->ipv4_unicast) 
+	vty_out(vty, "  Peer negotiated unicast ");
+    
+    if(p->ipv4_unicast &&  p->ipv4_multicast) 
+      vty_out(vty, "and multicast ");
+    else if( p->ipv4_multicast) 
+      vty_out(vty, "  Peer negotiated multicast ");
+    vty_out(vty, "routes%s", VTY_NEWLINE);
+  }
+
+  if (p->notify_data)
+    bgp_capability_vty_out (vty, p);
 }
 
 DEFUN (show_ip_bgp_neighbors,
@@ -827,6 +900,125 @@ DEFUN (show_ip_bgp_neighbors,
 
   return CMD_SUCCESS;
 }
+
+#ifdef HAVE_MBGPV4 
+DEFUN (show_ip_mbgp_neighbors,
+       show_ip_mbgp_neighbors_cmd,
+       "show ip mbgp neighbors [PEER]",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Detailed information on TCP and MBGP neighbor connections\n"
+       "\n")
+{
+  struct peer *p;
+  listnode node;
+
+  vty_out (vty, "Neighbor        V     AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down.\r\n");
+
+  if (argc == 1)
+    {
+      p = peer_lookup_by_host (argv[0]);
+      if (! p)
+	{
+	  vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+	  return CMD_WARNING;
+	}
+      if(p->ipv4_multicast)
+      bgp_peer_display (vty, p);
+    }
+  else
+    {
+      for (node = listhead (peer_list); node; nextnode (node))
+	{
+	  p = getdata (node);
+	  if(p->ipv4_multicast)
+	  bgp_peer_display (vty, p);
+	}
+    }
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
+
+#if 0
+newlist *
+peer_list_afi (struct bgp *bgp, int afi)
+{
+  if (afi == AFI_IP)
+    return bgp->peer_v4;
+  else if (afi == AFI_IP6)
+    return bgp->peer_v6;
+  else
+    return NULL;
+}
+
+int
+peer_config_afi (struct peer *peer, int afi, int safi)
+{
+  if (afi == AFI_IP)
+    {
+      if ((safi == SAFI_UNICAST && peer->ipv4_unicast_conf) ||
+	  (safi == SAFI_MULTICAST && peer->ipv4_multicast_conf))
+	return 1;
+      else
+	return 0;
+    }
+  else if (afi == AF_IP6)
+    {
+      if ((safi == SAFI_UNICAST && peer->ipv6_unicast_conf) ||
+	  (safi == SAFI_MULTICAST && peer->ipv6_multicast_conf))
+	return 1;
+      else
+	return 0;
+    }
+  else
+    return 0;
+}
+
+/* Show neighbor summary information.
+   Called from `show ip bgp summary'
+               `show ip mbgp summary'
+               `show ipv6 bgp summary'. */
+int
+bgp_show_summary (struct vty *vty, int afi, int safi)
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  newnode *ll, *lm;
+  int write = 0;
+
+  /* Header string for each address family. */
+  static char sum_header_ipv4[] = "Neighbor        V     AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/Pref";
+  static char sum_header_ipv6[] = "Neighbor                       AS       MsgRcvd MsgSent  Up/Down  State/Pref";
+
+  LIST_LOOP (bgp_all, ll)
+    {
+      bgp = listdata (ll);
+
+      LIST_LOOP (peer_list_afi (bgp, afi), lm)
+	{
+	  peer = listdata (lm);
+
+	  if (peer_config_afi (peer, afi, safi))
+	    {
+	      if (! write)
+		{
+		  vty_out (vty, "%s%s",
+			   afi == AFI_IP : sum_header_ipv4 ? sum_header_ipv6,
+			   VTY_NEWLINE);
+		  write++;
+		}
+	      ;
+	    }
+	}
+    }
+
+  if (! write)
+    vty_out (vty, "No %s neighbor is configured%s",
+	     afi == AFI_IP : "IPv4" ? "IPv6", VTY_NEWLINE);
+}
+#endif /* 0 */
 
 DEFUN (show_ip_bgp_summary, 
        show_ip_bgp_summary_cmd,
@@ -895,6 +1087,68 @@ DEFUN (show_ip_bgp_summary,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_MBGPV4
+DEFUN (show_ip_mbgp_summary, 
+       show_ip_mbgp_summary_cmd,
+       "show ip mbgp summary",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Summary of MBGP neighbor status\n")
+{
+  listnode node;
+  struct peer *peer;
+
+  if (! listcount (peer_list))
+    {
+      vty_out (vty, "No neighbor is configured.\r\n");
+      return CMD_SUCCESS;
+    }
+
+  vty_out (vty, "Neighbor        V     AS MsgRcvd MsgSent"
+	   "   TblVer  InQ OutQ Up/Down  State/Pref\r\n");
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      int length;
+      peer = getdata (node);
+	  
+      length = sockunion_vty_out (vty, peer->su);
+      length = 16 - length;
+      if (length < 0)
+	length = 0;
+
+      vty_out (vty, "%*s", length, " ");
+      switch (peer->version) 
+	{
+	case BGP_VERSION_4:
+	  vty_out (vty, "%d ", peer->version);
+	  break;
+	case BGP_VERSION_MP_4:
+	  vty_out (vty, "4+");
+	  break;
+	case BGP_VERSION_MP_4_DRAFT_00:
+	  vty_out (vty, "4-");
+	  break;
+	}
+      vty_out (vty, " %5d %7d %7d %8d %4d %4d ",
+	       peer->as,
+	       peer->open_in + peer->update_in +
+	       peer->withdrow_in + peer->keepalive_in,
+	       peer->open_out + peer->update_out +
+	       peer->withdrow_out + peer->keepalive_out,
+	       0, 0, peer->obuf->count);
+      peer_uptime_vty (vty, peer);
+      if (peer->status == Established)
+	vty_out (vty, " %9d\r\n", peer->prefix_count_multicastv4);
+      else
+	vty_out (vty, " %-11s\r\n", LOOKUP(bgp_status_msg, peer->status));
+    }
+  return CMD_SUCCESS;
+
+}
+#endif /* HAVE_MBGPV4 */
+
 DEFUN (show_ip_bgp_paths, 
        show_ip_bgp_paths_cmd,
        "show ip bgp paths",
@@ -909,6 +1163,22 @@ DEFUN (show_ip_bgp_paths,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_MBGPV4
+DEFUN (show_ip_mbgp_paths, 
+       show_ip_mbgp_paths_cmd,
+       "show ip mbgp paths",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "AS path statistics\n")
+{
+  vty_out (vty, "Address Refcnt Path\r\n");
+  aspath_print_all_vty (vty);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
+
 DEFUN (show_ip_bgp_community, 
        show_ip_bgp_community_cmd,
        "show ip bgp community",
@@ -922,6 +1192,22 @@ DEFUN (show_ip_bgp_community,
 
   return CMD_SUCCESS;
 }
+
+#ifdef HAVE_MBGPV4 
+DEFUN (show_ip_mbgp_community, 
+       show_ip_mbgp_community_cmd,
+       "show ip mbgp community",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "List all mbgp community information\n")
+{
+  vty_out (vty, "Address Refcnt Community\r\n");
+  community_print_all_vty (vty);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
 
 DEFUN (neighbor_ebgp_multihop,
        neighbor_ebgp_multihop_cmd,
@@ -2153,8 +2439,7 @@ DEFUN (neighbor_timers_keepalive,
 
   if (! peer)
     {
-      vty_out (vty, "can't find neighbor %s%s", argv[0],
-	       VTY_NEWLINE);
+      vty_out (vty, "can't find neighbor %s%s", argv[0], VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -2302,10 +2587,145 @@ DEFUN (no_neighbor_timers_keepalive,
   return CMD_SUCCESS;
 }
 
+/* Capability negotiation control. */
+DEFUN (neighbor_dont_capability_negotiation,
+       neighbor_dont_capability_negotiation_cmd,
+       "neighbor PEER dont-capability-negotiation",
+       NEIGHBOR_STR
+       "Peer address\n"
+       "Do not perform capability negotiation\n")
+{
+  struct bgp *bgp = (struct bgp *) vty->index;
+  struct peer *peer = peer_lookup_with_family (bgp, argv[0], AF_INET);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s%s", argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Off capability negotiation. */
+  peer->dont_capability = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_dont_capability_negotiation,
+       no_neighbor_dont_capability_negotiation_cmd,
+       "no neighbor PEER dont-capability-negotiation",
+       NO_STR
+       NEIGHBOR_STR
+       "Peer address\n"
+       "Do not perform capability negotiation\n")
+{
+  struct bgp *bgp = (struct bgp *) vty->index;
+  struct peer *peer = peer_lookup_with_family (bgp, argv[0], AF_INET);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s%s", argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Set capability negotiation. */
+  peer->dont_capability = 0;
+  return CMD_SUCCESS;
+}
+#ifdef HAVE_MBGPV4
+DEFUN (neighbor_translate_update,
+       neighbor_translate_update_cmd,
+       "neighbor PEER translate-update [nlri] [unicast] [multicast]",
+       NEIGHBOR_STR
+       "IP address\n"
+       "translate bgp updates\n"
+       "translate update\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_with_family (bgp, argv[0], AF_INET);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (argc == 1) {
+    peer->translate_update = TRANSLATE_UPDATE_UNICAST_MULTICAST;
+    return CMD_SUCCESS;
+  }
+
+  if (strcmp (argv[1], "nlri") == 0 ) {
+    if(( argc >= 2 && (strcmp (argv[2], "unicast") == 0)) && 
+      argc >= 3 && (strcmp (argv[3], "multicast") == 0)) {
+      peer->translate_update = TRANSLATE_UPDATE_UNICAST_MULTICAST;
+      return CMD_SUCCESS;
+    }
+    else if( argc >= 2 && (strcmp (argv[2], "multicast") == 0)) {
+      peer->translate_update = TRANSLATE_UPDATE_MULTICAST;
+      return CMD_SUCCESS;
+    }
+  }
+   vty_out (vty, "Illegal command%s", VTY_NEWLINE);
+  return CMD_WARNING;
+}
+DEFUN (no_neighbor_translate_update,
+       no_neighbor_translate_update_cmd,
+       "no neighbor PEER translate-update [nlri] [unicast] [multicast]",
+       NEIGHBOR_STR
+       "IP address\n"
+       "no translate bgp updates\n"
+       "no translate update\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int err=0;
+
+  /* One should be inside router bgp statement. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_with_family (bgp, argv[0], AF_INET);
+  
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s%s", argv[0],
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  if (argc == 1) {
+    peer->translate_update = TRANSLATE_UPDATE_OFF;
+    return CMD_SUCCESS;
+  }
+
+  if (strcmp (argv[1], "nlri") == 0) {
+    if(( argc >= 2 && (strcmp (argv[2], "unicast") == 0 )) && 
+      argc >= 3 &&  (strcmp (argv[3], "multicast") == 0)) 
+      peer->translate_update = TRANSLATE_UPDATE_OFF;
+    else if( argc >= 2 && (strcmp (argv[2], "multicast") == 0))
+      peer->translate_update = TRANSLATE_UPDATE_OFF;
+    else err=1;
+  }
+  else err=1;
+
+  if(err) {
+    vty_out (vty, "No such command%s %s %s %s", argv[1],argv[2],argv[3],
+	     VTY_NEWLINE);
+    return CMD_WARNING;
+  }
+  else return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
+
+
 /* Make peer and enable further neighbor configuration. */
 DEFUN (neighbor, 
        neighbor_cmd, 
-       "neighbor PEER remote-as <1-65535> [passive]",
+       "neighbor PEER remote-as <1-65535> [nlri] [unicast] [multicast]", 
+       /*       "neighbor PEER remote-as <1-65535> [passive]",*/
        NEIGHBOR_STR
        "IP address\n"
        "Remote AS\n"
@@ -2333,6 +2753,7 @@ DEFUN (neighbor,
 
       /* Change of AS_NO. If peer is established then clear it's peer
          and clear all resources and make it again. */
+      vty_out (vty, "Neighbor is already configured\r\n");
       return CMD_SUCCESS;
     }
 
@@ -2380,6 +2801,22 @@ DEFUN (neighbor,
       peer->status = Idle;
     }
 
+  /*  peer->ipv4_unicast_conf = peer->ipv4_multicast_conf = 0; */
+  if (argc >= 3 && (strcmp (argv[2], "nlri") == 0)) { 
+    if(strcmp (argv[3], "unicast") == 0) peer->ipv4_unicast_conf = 1;
+    if(strcmp (argv[4], "multicast") == 0) peer->ipv4_multicast_conf = 1;
+    if(strcmp (argv[3], "multicast") == 0 ) peer->ipv4_multicast_conf = 1;
+    if(strcmp (argv[4], "unicast") == 0) peer->ipv4_unicast_conf = 1;
+    if( peer->ipv4_unicast_conf == 0 && 
+	peer->ipv4_multicast_conf == 0) {
+      vty_out (vty, "Use either: nlri unicast multicast | nlri multicast\r\n");
+      return CMD_WARNING;
+    }
+  }
+
+  if((argc == 3 && peer->passive) ||  argc < 3 ) 
+    peer->ipv4_unicast_conf = 1;
+    
   /* Setup timer. */
   bgp_timer_set (peer);
 
@@ -2388,7 +2825,8 @@ DEFUN (neighbor,
 
 DEFUN (no_neighbor,
        no_neighbor_cmd,
-       "no neighbor PEER remote-as <1-65535> [passive]",
+       "no neighbor PEER remote-as <1-65535> [nlri] [unicast] [multicast]",
+       /*       "no neighbor PEER remote-as <1-65535> [passive]", */
        NO_STR
        NEIGHBOR_STR
        "IP Address\n"
@@ -2422,6 +2860,15 @@ DEFUN (no_neighbor,
 	       VTY_NEWLINE);
       return CMD_WARNING;
     }
+
+  if (argc > 2 && (strcmp (argv[2], "nlri") == 0)) { 
+    if(strcmp (argv[3], "unicast") == 0) peer->ipv4_unicast_conf = 0;
+    if(strcmp (argv[4], "multicast") == 0) peer->ipv4_multicast_conf = 0;
+    if(strcmp (argv[3], "multicast") == 0 ) peer->ipv4_multicast_conf = 0;
+    if(strcmp (argv[4], "unicast") == 0) peer->ipv4_unicast_conf = 0;
+  }
+
+  if(argc <= 2 )  peer->ipv4_unicast_conf = 0;
 
   /* Now delete from the neighbor from lists. */
   list_delete_by_val (bgp->peer, peer);
@@ -2765,6 +3212,7 @@ DEFUN (ipv6_bgp_neighbor,
   peer->su = su;
   peer->host = sockunion_su2str (su);
   peer->family = AF_INET6;
+  peer->ipv6_unicast_conf = 1;
 
   if (bgp_peer_sort (peer) == BGP_PEER_IBGP)
     peer->ttl = 255;
@@ -4123,8 +4571,56 @@ DEFUN (no_ipv6_bgp_neighbor_route_map,
 
   return CMD_SUCCESS;
 }
+
+/* Capability negotiation control. */
+DEFUN (ipv6_neighbor_dont_capability_negotiation,
+       ipv6_neighbor_dont_capability_negotiation_cmd,
+       "ipv6 bgp neighbor PEER dont-capability-negotiation",
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "Peer address\n"
+       "Do not perform capability negotiation\n")
+{
+  struct bgp *bgp = (struct bgp *) vty->index;
+  struct peer *peer = peer_lookup_with_family (bgp, argv[0], AF_INET6);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s%s", argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Off capability negotiation. */
+  peer->dont_capability = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_neighbor_dont_capability_negotiation,
+       no_ipv6_neighbor_dont_capability_negotiation_cmd,
+       "no ipv6 bgp neighbor PEER dont-capability-negotiation",
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "Peer address\n"
+       "Do not perform capability negotiation\n")
+{
+  struct bgp *bgp = (struct bgp *) vty->index;
+  struct peer *peer = peer_lookup_with_family (bgp, argv[0], AF_INET6);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s%s", argv[0], VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Set capability negotiation. */
+  peer->dont_capability = 0;
+  return CMD_SUCCESS;
+}
 #endif /* HAVE_IPV6 */
-
+
 /* BGP peer configuration output function. */
 void
 bgp_peer_config_write (struct vty *vty, list bgp_peer, int family)
@@ -4143,12 +4639,37 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer, int family)
       vty_out (vty, "%s neighbor ",
 	       peer->family == AF_INET ? "" :  "ipv6 bgp");
       sockunion_vty_out (vty, peer->su);
-      if (peer->passive)
-	vty_out (vty, " remote-as %d passive%s", peer->as,
-		 VTY_NEWLINE);
-      else
-	vty_out (vty, " remote-as %d%s", peer->as,
-		 VTY_NEWLINE);
+      vty_out (vty, " remote-as %d", peer->as);
+
+      if (peer->ipv4_unicast_conf && peer->ipv4_multicast_conf)
+	vty_out (vty, " nlri unicast multicast");
+	  
+      else if (peer->ipv4_multicast_conf)
+	vty_out (vty, " nlri multicast");
+	  
+      vty_out (vty, "%s",VTY_NEWLINE );
+
+      if (peer->passive) 
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " passive%s", VTY_NEWLINE);
+	}
+
+#ifdef HAVE_MBGPV4
+      if (peer->translate_update) 
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  if( peer->translate_update == TRANSLATE_UPDATE_UNICAST_MULTICAST) 
+	    vty_out (vty, " translate-update nlri unicast multicast%s", 
+		     VTY_NEWLINE);
+	  else if (peer->translate_update == TRANSLATE_UPDATE_MULTICAST) 
+	    vty_out (vty, " translate-update nlri multicast%s", 
+		     VTY_NEWLINE);
+	}
+#endif /* HAVE_MBGPV4 */
 
       /* Local port. */
       if (peer->port != BGP_PORT_DEFAULT)
@@ -4276,6 +4797,16 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer, int family)
 	  sockunion_vty_out (vty, peer->su);
 
 	  vty_out (vty, " send-community%s", VTY_NEWLINE);
+	}
+
+      /* capability negotiation. */
+      if (peer->dont_capability)
+	{
+	  vty_out (vty, "%s neighbor ",
+		   peer->family == AF_INET ? "" :  "ipv6 bgp");
+	  sockunion_vty_out (vty, peer->su);
+
+	  vty_out (vty, " dont-capability-negotiation%s", VTY_NEWLINE);
 	}
 
       /* weight print. */
@@ -4426,40 +4957,14 @@ bgp_config_write (struct vty *vty)
 	  vty_out (vty, " bgp cluster-id %s%s", inet_ntoa (cluster), 
 		   VTY_NEWLINE);
 	}
-
       config_write_network (vty, bgp, AF_INET);
-
-      /* Redistribute configuration. */
-      if (bgp->redist[ZEBRA_FAMILY_IPV4][ZEBRA_ROUTE_STATIC])
-	vty_out (vty, " redistribute static%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV4][ZEBRA_ROUTE_KERNEL])
-	vty_out (vty, " redistribute kernel%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV4][ZEBRA_ROUTE_CONNECT])
-	vty_out (vty, " redistribute connected%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV4][ZEBRA_ROUTE_RIP])
-	vty_out (vty, " redistribute rip%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV4][ZEBRA_ROUTE_OSPF])
-	vty_out (vty, " redistribute ospf%s", VTY_NEWLINE);
-
-      /* This BGP instance's peer configuration. */
+      config_write_bgp_redistribute (vty, bgp, ZEBRA_FAMILY_IPV4);
       bgp_peer_config_write (vty, bgp->peer, AF_INET);
 
 #ifdef HAVE_IPV6
       vty_out (vty, "!%s", VTY_NEWLINE);
-
       config_write_network (vty, bgp, AF_INET6);
-
-      if (bgp->redist[ZEBRA_FAMILY_IPV6][ZEBRA_ROUTE_STATIC])
-	vty_out (vty, "ipv6 bgp redistribute static%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV6][ZEBRA_ROUTE_KERNEL])
-	vty_out (vty, "ipv6 bgp redistribute kernel%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV6][ZEBRA_ROUTE_CONNECT])
-	vty_out (vty, "ipv6 bgp redistribute connected%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV6][ZEBRA_ROUTE_RIPNG])
-	vty_out (vty, "ipv6 bgp redistribute ripng%s", VTY_NEWLINE);
-      if (bgp->redist[ZEBRA_FAMILY_IPV6][ZEBRA_ROUTE_OSPF6])
-	vty_out (vty, "ipv6 bgp redistribute ospf6%s", VTY_NEWLINE);
-
+      config_write_bgp_redistribute (vty, bgp, ZEBRA_FAMILY_IPV6);
       bgp_peer_config_write (vty, bgp->peer, AF_INET6);
 #endif /* HAVE_IPV6 */
 
@@ -4545,6 +5050,23 @@ bgp_init ()
   install_element (BGP_NODE, &neighbor_default_originate_cmd);
   install_element (BGP_NODE, &no_neighbor_default_originate_cmd);
   install_element (BGP_NODE, &neighbor_port_cmd);
+  install_element (BGP_NODE, &neighbor_dont_capability_negotiation_cmd);
+  install_element (BGP_NODE, &no_neighbor_dont_capability_negotiation_cmd);
+
+#ifdef HAVE_MBGPV4  
+  install_element (BGP_NODE, &neighbor_translate_update_cmd);
+  install_element (BGP_NODE, &no_neighbor_translate_update_cmd);
+
+  install_element (VIEW_NODE, &show_ip_mbgp_summary_cmd);
+  install_element (VIEW_NODE, &show_ip_mbgp_neighbors_cmd);
+  install_element (VIEW_NODE, &show_ip_mbgp_paths_cmd);
+  install_element (VIEW_NODE, &show_ip_mbgp_community_cmd);
+  install_element (ENABLE_NODE, &show_ip_mbgp_summary_cmd);
+  install_element (ENABLE_NODE, &show_ip_mbgp_neighbors_cmd);
+  install_element (ENABLE_NODE, &show_ip_mbgp_paths_cmd);
+  install_element (ENABLE_NODE, &show_ip_mbgp_community_cmd);
+#endif /* HAVE_MBGPV4 */
+
 #ifdef HAVE_IPV6
   install_element (VIEW_NODE, &show_ipv6_bgp_summary_cmd);
   install_element (VIEW_NODE, &show_ipv6_bgp_neighbors_cmd);
@@ -4590,6 +5112,8 @@ bgp_init ()
   install_element (BGP_NODE, &no_ipv6_bgp_neighbor_weight_cmd);
   install_element (BGP_NODE, &ipv6_bgp_neighbor_default_originate_cmd);
   install_element (BGP_NODE, &no_ipv6_bgp_neighbor_default_originate_cmd);
+  install_element (BGP_NODE, &ipv6_neighbor_dont_capability_negotiation_cmd);
+  install_element (BGP_NODE, &no_ipv6_neighbor_dont_capability_negotiation_cmd);
 #endif /* HAVE_IPV6 */
 
   /* Make empty list of bgp and peer list. */
@@ -4604,6 +5128,7 @@ bgp_init ()
 
   /* BGP inits. */
   bgp_attr_init ();
+  bgp_debug_init ();
   bgp_dump_init ();
   bgp_route_init ();
   bgp_route_map_init ();
@@ -4625,4 +5150,8 @@ bgp_init ()
 
   /* Community list initialize. */
   community_list_init ();
+
+#ifdef HAVE_SNMP
+  bgp_snmp_init ();
+#endif /* HAVE_SNMP */
 }

@@ -61,5 +61,9 @@ void rib_init ();
 void interface_list ();
 void kernel_init ();
 void route_read ();
+void rtadv_init ();
+
+extern pid_t pid;
+extern pid_t old_pid;
 
 #endif /* _ZEBRA_ZEBRA_H */

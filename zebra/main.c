@@ -41,6 +41,10 @@ struct thread_master *master;
 /* zebra program name */
 char *progname;
 
+/* process id. */
+pid_t old_pid;
+pid_t pid;
+
 /* Route retain mode flag. */
 int retain_mode = 0;
 
@@ -240,6 +244,7 @@ main (int argc, char **argv)
   zebra_if_init ();
   zebra_debug_init ();
   access_list_init ();
+  rtadv_init ();
 
   /* Make kernel routing socket. */
   kernel_init ();
@@ -248,10 +253,6 @@ main (int argc, char **argv)
 
   /* Sort VTY commands. */
   sort_node ();
-
-#ifdef RTADV_TEST
-  rtadv_init ();
-#endif /* RTADV_TEST */
 
   /* Clean up self inserted route. */
   if (! keep_kernel_mode)
@@ -267,15 +268,21 @@ main (int argc, char **argv)
   if (batch_mode)
     exit (0);
 
+  /* Needed for BSD routing socket. */
+  old_pid = getpid ();
+
   /* Daemonize. */
   if (daemon_mode)
     daemon (0, 0);
 
-  /* Make vty server socket. */
-  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
-
   /* Output pid of zebra. */
   pid_output (PATH_ZEBRA_PID);
+
+  /* Needed for BSD routing socket. */
+  pid = getpid ();
+
+  /* Make vty server socket. */
+  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
 
   while (thread_fetch (master, &thread))
     thread_call (&thread);

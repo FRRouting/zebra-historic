@@ -25,9 +25,9 @@
 #include "ripngd/ripng_debug.h"
 
 /* For debug statement. */
-unsigned long ripng_debug_event;
-unsigned long ripng_debug_packet;
-unsigned long ripng_debug_zebra;
+unsigned long ripng_debug_event = 0;
+unsigned long ripng_debug_packet = 0;
+unsigned long ripng_debug_zebra = 0;
 
 DEFUN (show_debugging_ripng,
        show_debugging_ripng_cmd,
@@ -226,7 +226,7 @@ config_write_debug (struct vty *vty)
 		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  else
-	    vty_out (vty, "debug ripng packet recieve%s%s",
+	    vty_out (vty, "debug ripng packet recv%s%s",
 		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "",
 		     VTY_NEWLINE);
 	  write++;
@@ -238,6 +238,14 @@ config_write_debug (struct vty *vty)
       write++;
     }
   return write;
+}
+
+void
+ripng_debug_reset ()
+{
+  ripng_debug_event = 0;
+  ripng_debug_packet = 0;
+  ripng_debug_zebra = 0;
 }
 
 void

@@ -56,6 +56,9 @@ static char *vty_ipv6_accesslist_name = NULL;
 
 /* VTY server thread. */
 struct thread *vty_serv_thread;
+
+/* Current directory. */
+char *vty_cwd = NULL;
 
 /* VTY standard output function. */
 int
@@ -688,7 +691,7 @@ vty_complete_command (struct vty *vty)
     return;
 
   /* In case of 'help \t'. */
-  if (isspace (vty->buf[vty->length - 1]))
+  if (isspace ((int) vty->buf[vty->length - 1]))
     vector_set (vline, '\0');
 
   matched = cmd_complete_command (vline, vty, &ret);
@@ -795,7 +798,7 @@ vty_describe_command (struct vty *vty)
       vector_set (vline, '\0');
     }
   else 
-    if (isspace (vty->buf[vty->length - 1]))
+    if (isspace ((int) vty->buf[vty->length - 1]))
       vector_set (vline, '\0');
 
   describe = cmd_describe_command (vline, vty, &ret);
@@ -1940,10 +1943,30 @@ vty_reset ()
     }
 }
 
+void
+vty_save_cwd ()
+{
+  char *cwd;
+
+  cwd = getcwd (NULL, MAXPATHLEN);
+
+  vty_cwd = XMALLOC (MTYPE_TMP, strlen (cwd) + 1);
+  strcpy (vty_cwd, cwd);
+}
+
+char *
+vty_get_cwd ()
+{
+  return vty_cwd;
+}
+
 /* Install vty's own commands like `who' command. */
 void
 vty_init ()
 {
+  /* For further configuration read, preserve current directory. */
+  vty_save_cwd ();
+
   vtyvec = vector_init (VECTOR_MIN_SIZE);
 
   /* Install bgp top node. */

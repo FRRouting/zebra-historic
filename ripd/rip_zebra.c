@@ -141,7 +141,7 @@ rip_routemap_unset (int type)
 #define REDIST_STR "[kernel|connected|static|ospf|bgp] route"
 
 /* Redistribution types */
-struct {
+static struct {
   int type;
   int str_min_len;
   char *str;

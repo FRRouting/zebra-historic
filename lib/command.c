@@ -123,7 +123,7 @@ cmd_make_strvec (char *string)
   cp = string;
 
   /* Skip white spaces. */
-  while (isspace (*cp) && *cp != '\0')
+  while (isspace ((int) *cp) && *cp != '\0')
     cp++;
 
   /* Return if there is only white spaces */
@@ -140,7 +140,8 @@ cmd_make_strvec (char *string)
   while (1) 
     {
       start = cp;
-      while (!(isspace (*cp) || *cp == '\r' || *cp == '\n') && *cp != '\0')
+      while (!(isspace ((int) *cp) || *cp == '\r' || *cp == '\n') &&
+	     *cp != '\0')
 	cp++;
       strlen = cp - start;
       token = XMALLOC (MTYPE_STRVEC, strlen + 1);
@@ -148,7 +149,8 @@ cmd_make_strvec (char *string)
       *(token + strlen) = '\0';
       vector_set (strvec, token);
 
-      while ((isspace (*cp) || *cp == '\n' || *cp == '\r') && *cp != '\0')
+      while ((isspace ((int) *cp) || *cp == '\n' || *cp == '\r') &&
+	     *cp != '\0')
 	cp++;
 
       if (*cp == '\0' || *cp == '!' || *cp == '#') 
@@ -186,7 +188,7 @@ cmd_desc_str (char **string)
     return NULL;
 
   /* Skip white spaces. */
-  while (isspace (*cp) && *cp != '\0')
+  while (isspace ((int) *cp) && *cp != '\0')
     cp++;
 
   /* Return if there is only white spaces */
@@ -232,7 +234,7 @@ cmd_make_descvec (char *string, char *descstr)
 
   while (1)
     {
-      while (isspace (*cp) && *cp != '\0')
+      while (isspace ((int) *cp) && *cp != '\0')
 	cp++;
 
       if (*cp == '(')
@@ -255,7 +257,7 @@ cmd_make_descvec (char *string, char *descstr)
 	  cp++;
 	}
       
-      while (isspace (*cp) && *cp != '\0')
+      while (isspace ((int) *cp) && *cp != '\0')
 	cp++;
 
       if (*cp == '(')
@@ -269,7 +271,7 @@ cmd_make_descvec (char *string, char *descstr)
 
       sp = cp;
 
-      while (! (isspace (*cp) || *cp == '\r' || *cp == '\n' || *cp == ')' || *cp == '|') && *cp != '\0')
+      while (! (isspace ((int) *cp) || *cp == '\r' || *cp == '\n' || *cp == ')' || *cp == '|') && *cp != '\0')
 	cp++;
 
       len = cp - sp;
@@ -469,7 +471,7 @@ cmd_filter_by_symbol (char *command, char *symbol)
       lim = strlen (command);
       while (i < lim)
 	{
-	  if (! (isdigit (command[i]) || command[i] == '.' || command[i] == '/'))
+	  if (! (isdigit ((int) command[i]) || command[i] == '.' || command[i] == '/'))
 	    return 1;
 	  i++;
 	}
@@ -481,7 +483,7 @@ cmd_filter_by_symbol (char *command, char *symbol)
       lim = strlen (command);
       while (i < lim)
 	{
-	  if (! (isalpha (command[i]) || command[i] == '_' || command[i] == '-'))
+	  if (! (isalpha ((int) command[i]) || command[i] == '_' || command[i] == '-'))
 	    return 1;
 	  i++;
 	}
@@ -493,7 +495,7 @@ cmd_filter_by_symbol (char *command, char *symbol)
       lim = strlen (command);
       while (i < lim)
 	{
-	  if (! isalnum (command[i]))
+	  if (! isalnum ((int) command[i]))
 	    return 1;
 	  i++;
 	}
@@ -545,7 +547,7 @@ cmd_ipv4_match (char *str)
 	      dots++;
 	      break;
 	    }
-	  if (!isdigit (*str))
+	  if (!isdigit ((int) *str))
 	    return no_match;
 
 	  str++;
@@ -603,7 +605,7 @@ cmd_ipv4_prefix_match (char *str)
 	      break;
 	    }
 
-	  if (!isdigit (*str))
+	  if (!isdigit ((int) *str))
 	    return no_match;
 
 	  str++;
@@ -639,7 +641,7 @@ cmd_ipv4_prefix_match (char *str)
   sp = str;
   while (*str != '\0')
     {
-      if (!isdigit (*str))
+      if (!isdigit ((int) *str))
 	return no_match;
 
       str++;
@@ -1584,7 +1586,7 @@ DEFUN (config_terminal,
 DEFUN (enable, 
        config_enable_cmd,
        "enable",
-       "Turn on privileged commands\n")
+       "Turn on privileged mode command\n")
 {
   /* If enable password is NULL, change to ENABLE_NODE */
   if (host.enable == NULL && host.enable_encrypt == NULL)
@@ -1592,6 +1594,17 @@ DEFUN (enable,
   else
     vty->node = AUTH_ENABLE_NODE;
 
+  return CMD_SUCCESS;
+}
+
+/* Disable command */
+DEFUN (disable, 
+       config_disable_cmd,
+       "disable",
+       "Turn off privileged mode command\n")
+{
+  if (vty->node == ENABLE_NODE)
+    vty->node = VIEW_NODE;
   return CMD_SUCCESS;
 }
 
@@ -1827,7 +1840,7 @@ DEFUN (config_hostname,
        "Set system's network name\n"
        "This system's network name\n")
 {
-  if (!isalpha(*argv[0]))
+  if (!isalpha((int) *argv[0]))
     {
       vty_out (vty, "Please specify string starting with alphabet%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1885,7 +1898,7 @@ DEFUN (config_password, password_cmd,
 	}
     }
 
-  if (!isalnum (*argv[0]))
+  if (!isalnum ((int) *argv[0]))
     {
       vty_out (vty, 
 	       "Please specify string starting with alphanumeric%s", VTY_NEWLINE);
@@ -1945,7 +1958,7 @@ DEFUN (config_enable_password, enable_password_cmd,
 	}
     }
 
-  if (!isalnum (*argv[0]))
+  if (!isalnum ((int) *argv[0]))
     {
       vty_out (vty, 
 	       "Please specify string starting with alphanumeric%s", VTY_NEWLINE);
@@ -2256,6 +2269,7 @@ cmd_init ()
   install_element (VIEW_NODE, &no_config_terminal_length_cmd);
 
   install_default (ENABLE_NODE);
+  install_element (ENABLE_NODE, &config_disable_cmd);
   install_element (ENABLE_NODE, &config_terminal_cmd);
   install_element (ENABLE_NODE, &config_write_terminal_cmd);
   install_element (ENABLE_NODE, &show_running_config_cmd);

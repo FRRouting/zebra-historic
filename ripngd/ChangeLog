@@ -1,3 +1,13 @@
+1999-11-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_output_process): Use MINMTU when mtu value is
+	not available.
+
+1999-11-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_output_process): Calculate max RTE count from
+	interface MTU value.
+
 1999-09-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripngd.c (ripng_distribute_update): Fix bug of updating

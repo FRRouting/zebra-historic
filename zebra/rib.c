@@ -128,6 +128,7 @@ rib_log (char *message, struct prefix *p, struct rib *rib)
   char buf[BUFSIZ];
   char logbuf[BUFSIZ];
   void *addrp;
+  struct interface *ifp;
 
   switch (p->family)
     {
@@ -147,7 +148,6 @@ rib_log (char *message, struct prefix *p, struct rib *rib)
   /* If the route is connected route print interface name. */
   if (rib->type == ZEBRA_ROUTE_CONNECT)
     {
-      struct interface *ifp;
       ifp = if_lookup_by_index (rib->u.ifindex);
       snprintf (logbuf, BUFSIZ, "directly connected to %s", ifp->name);
     }

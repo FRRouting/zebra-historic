@@ -33,130 +33,123 @@
 #include "smux.h"
 
 #include "ripd/ripd.h"
+
+#define RIPV2MIB 1,3,6,1,2,1,23
 
 /* RIPv2-MIB. */
-oid rip_oid [] = { 1,3,6,1,2,1,23 };
+oid rip_oid [] = { RIPV2MIB };
 
 /* Hook functions. */
-int rip2Globals_hook ();
-int rip2IfStatEntry_hook ();
-int rip2IfConfAddress_hook ();
-int rip2PeerTable_hook ();
+int rip2Globals ();
+int rip2IfStatEntry ();
+int rip2IfConfAddress ();
+int rip2PeerTable ();
 
 /* RIPv2-MIB rip2Globals values. */
-#define rip2GlobalRouteChanges  1
-#define rip2GlobalQueries       2
+#define RIP2GLOBALROUTECHANGES  1
+#define RIP2GLOBALQUERIES       2
 
 /* RIPv2-MIB rip2IfStatEntry. */
-#define rip2IfStatEntry         1
+#define RIP2IFSTATENTRY         1
 
 /* RIPv2-MIB rip2IfStatTable. */
-#define rip2IfStatAddress       1
-#define rip2IfStatRcvBadPackets 2
-#define rip2IfStatRcvBadRoutes  3
-#define rip2IfStatSentUpdates   4
-#define rip2IfStatStatus        5
+#define RIP2IFSTATADDRESS       1
+#define RIP2IFSTATRCVBADPACKETS 2
+#define RIP2IFSTATRCVBADROUTES  3
+#define RIP2IFSTATSENTUPDATES   4
+#define RIP2IFSTATSTATUS        5
 
 /* RIPv2-MIB rip2IfConfTable. */
-#define rip2IfConfAddress       1
-#define rip2IfConfAuthType      2
-#define rip2IfConfAuthKey       3
-#define rip2IfConfSend          4
-#define rip2IfConfReceive       5
-#define rip2IfConfDefaultMetric 6
-#define rip2IfConfStatus        7
-#define rip2IfConfSrcAddress    8
+#define RIP2IFCONFADDRESS       1
+#define RIP2IFCONFDOMAIN        2
+#define RIP2IFCONFAUTHTYPE      3
+#define RIP2IFCONFAUTHKEY       4
+#define RIP2IFCONFSEND          5
+#define RIP2IFCONFRECEIVE       6
+#define RIP2IFCONFDEFAULTMETRIC 7
+#define RIP2IFCONFSTATUS        8
+#define RIP2IFCONFSRCADDRESS    9
 
 /* RIPv2-MIB rip2PeerTable. */
-#define rip2PeerAddress         1
-#define rip2PeerDomain          2
-#define rip2PeerLastUpdate      3
-#define rip2PeerVersion         4
-#define rip2PeerRcvBadPackets   5
-#define rip2PeerRcvBadRoutes    6
+#define RIP2PEERADDRESS         1
+#define RIP2PEERDOMAIN          2
+#define RIP2PEERLASTUPDATE      3
+#define RIP2PEERVERSION         4
+#define RIP2PEERRCVBADPACKETS   5
+#define RIP2PEERRCVBADROUTES    6
 
-/* RIPv2-MIB . */
-struct snmp_module rip2Globals_module[] =
+#define COUNTER ASN_INTEGER
+#define IPADDRESS ASN_IPADDRESS
+#define STRING ASN_OCTET_STR
+
+struct variable rip2Globals_variables[] = 
 {
-  {rip2GlobalRouteChanges,   rip2Globals_hook, NULL},
-  {rip2GlobalQueries,        rip2Globals_hook, NULL},
-  {0,                        NULL,             NULL}
+  {RIP2GLOBALROUTECHANGES, COUNTER, RONLY, rip2Globals, {1}, 1},
+  {RIP2GLOBALQUERIES, COUNTER, RONLY, rip2Globals, {2}, 1}
 };
 
-struct snmp_module rip2IfStatEntry_module[] =
+struct variable rip2IfStatTable_variables[] = 
 {
-  {rip2IfStatAddress,        rip2IfStatEntry_hook, NULL},
-  {rip2IfStatRcvBadPackets,  rip2IfStatEntry_hook, NULL},
-  {rip2IfStatRcvBadRoutes,   rip2IfStatEntry_hook, NULL},
-  {rip2IfStatSentUpdates,    rip2IfStatEntry_hook, NULL},
-  {rip2IfStatStatus,         rip2IfStatEntry_hook, NULL},
-  {0,                        NULL,                 NULL}
+  {RIP2IFSTATADDRESS, IPADDRESS, RONLY, rip2IfStatEntry, {1, 1}, 2},
+  {RIP2IFSTATRCVBADPACKETS, COUNTER, RONLY, rip2IfStatEntry, {1, 2}, 2},
+  {RIP2IFSTATRCVBADROUTES, COUNTER, RONLY, rip2IfStatEntry, {1, 3}, 2},
+  {RIP2IFSTATSENTUPDATES, COUNTER, RONLY, rip2IfStatEntry, {1, 4}, 2},
+  {RIP2IFSTATSTATUS, COUNTER, RWRITE, rip2IfStatEntry, {1, 5}, 2}
 };
 
-struct snmp_module rip2IfStatTable_module[] = 
+struct variable rip2IfConfTable_variables[] =
 {
-  {rip2IfStatEntry,          NULL,                 rip2IfStatEntry_module}
+  {RIP2IFCONFADDRESS, IPADDRESS, RONLY, rip2IfConfAddress, {1, 1}, 2},
+  {RIP2IFCONFDOMAIN, STRING, RONLY, rip2IfConfAddress, {1, 2}, 2},
+  {RIP2IFCONFAUTHTYPE, COUNTER, RONLY, rip2IfConfAddress, {1, 3}, 2},
+  {RIP2IFCONFAUTHKEY, STRING, RONLY, rip2IfConfAddress, {1, 4}, 2},
+  {RIP2IFCONFSEND, COUNTER, RONLY, rip2IfConfAddress, {1, 5}, 2},
+  {RIP2IFCONFRECEIVE, COUNTER, RONLY, rip2IfConfAddress, {1, 6}, 2},
+  {RIP2IFCONFDEFAULTMETRIC, COUNTER, RONLY, rip2IfConfAddress, {1, 7}, 2},
+  {RIP2IFCONFSTATUS, COUNTER, RONLY, rip2IfConfAddress, {1, 8}, 2},
+  {RIP2IFCONFSRCADDRESS, IPADDRESS, RONLY, rip2IfConfAddress, {1, 9}, 2}
 };
 
-struct snmp_module rip2IfConfTable[] =
+struct variable rip2PeerTable_variables[] =
 {
-  {rip2IfConfAddress,        rip2IfConfAddress_hook, NULL},
-  {rip2IfConfAuthType,       rip2IfConfAddress_hook, NULL},
-  {rip2IfConfAuthKey,        rip2IfConfAddress_hook, NULL},
-  {rip2IfConfSend,           rip2IfConfAddress_hook, NULL},
-  {rip2IfConfReceive,        rip2IfConfAddress_hook, NULL},
-  {rip2IfConfDefaultMetric,  rip2IfConfAddress_hook, NULL},
-  {rip2IfConfStatus,         rip2IfConfAddress_hook, NULL},
-  {rip2IfConfSrcAddress,     rip2IfConfAddress_hook, NULL},
-  {0,                        NULL,                   NULL}
+  {RIP2PEERADDRESS, COUNTER, RONLY, rip2PeerTable, {1, 1}, 2},
+  {RIP2PEERDOMAIN, COUNTER, RONLY, rip2PeerTable, {1, 2}, 2},
+  {RIP2PEERLASTUPDATE, COUNTER, RONLY, rip2PeerTable, {1, 3}, 2},
+  {RIP2PEERVERSION, COUNTER, RONLY, rip2PeerTable, {1, 4}, 2},
+  {RIP2PEERRCVBADPACKETS, COUNTER, RONLY, rip2PeerTable, {1, 5}, 2},
+  {RIP2PEERRCVBADROUTES, COUNTER, RONLY, rip2PeerTable, {1, 6}, 2}
 };
 
-struct snmp_module rip2PeerTable[] =
-{
-  {rip2PeerAddress,          rip2PeerTable_hook, NULL},
-  {rip2PeerDomain,           rip2PeerTable_hook, NULL},
-  {rip2PeerLastUpdate,       rip2PeerTable_hook, NULL},
-  {rip2PeerVersion,          rip2PeerTable_hook, NULL},
-  {rip2PeerRcvBadPackets,    rip2PeerTable_hook, NULL},
-  {rip2PeerRcvBadRoutes,     rip2PeerTable_hook, NULL},
-  {0,                        NULL,               NULL}
-};
+#define SUBTREE_ARG(V)  V, sizeof V / sizeof *V, sizeof *V
 
-struct snmp_module rip2_module[] =
+struct subtree rip_tree[] =
 {
-  {1, NULL, rip2Globals_module},
-  {2, NULL, rip2IfStatTable_module},
-  {3, NULL, rip2IfConfTable},
-  {4, NULL, rip2PeerTable},
-  {0, NULL, NULL}
+  {{RIPV2MIB, 1}, 8, SUBTREE_ARG (rip2Globals_variables)},
+  {{RIPV2MIB, 2}, 8, SUBTREE_ARG (rip2IfStatTable_variables)},
+  {{RIPV2MIB, 3}, 8, SUBTREE_ARG (rip2IfConfTable_variables)},
+  {{RIPV2MIB, 4}, 8, SUBTREE_ARG (rip2PeerTable_variables)}
 };
-
-struct snmp_module start_module[] = 
-{
-  {23, NULL, rip2_module},
-  {0,  NULL, NULL}
-};
-
+
 int
-rip2Globals_hook (struct snmp_module *module, oid instid[], size_t instid_len,
-		  u_char *val_type, void **val, size_t *val_len, int getnext)
+rip2Globals (struct variable *v, oid objid[], size_t *objid_len,
+	     void **val, size_t *val_len, int exact)
 {
-  /* Check single instance. */
-  if (instid_len != 1)
-    return -1;
-  if (instid[0] != 0)
+  int ret;
+
+  ret = smux_single_instance_check (v, objid, objid_len, exact);
+
+  /* Wrong oid request. */
+  if (ret != 0)
     return -1;
 
   /* Retrun global counter. */
-  switch (module->index)
+  switch (v->index)
     {
-    case rip2GlobalRouteChanges:
-      *val_type = ASN_INTEGER;
+    case RIP2GLOBALROUTECHANGES:
       *val_len  = sizeof (rip_global_route_changes);
       *val = &rip_global_route_changes;
       break;
-    case rip2GlobalQueries:
-      *val_type = ASN_INTEGER;
+    case RIP2GLOBALQUERIES:
       *val_len  = sizeof (rip_global_queries);
       *val = &rip_global_queries;
       break;
@@ -167,185 +160,281 @@ rip2Globals_hook (struct snmp_module *module, oid instid[], size_t instid_len,
   return 0;
 }
 
-/* 23.2.1 .1.0.0.0.0 */
-/* .rip2(23).rip2IfStatTable(2).rip2IfStatEntry(1).rip2IfStatAddress(1).A.B.C.D  */
-int
-rip2IfStatEntry_hook (struct snmp_module *module, 
-		      oid instid[], size_t instid_len,
-		      u_char *val_type, void **val, size_t *val_len, 
-		      int getnext)
+struct interface *
+rip_if_lookup_next (struct in_addr *src)
 {
-  static long tmp = 123;
-  static struct in_addr addr;
+  listnode node;
+  listnode cnode;
+  struct interface *ifp;
+  struct prefix *p;
+  struct connected *c;
 
-  zlog_info ("rip2IfStatTable_hook");
-
-  /* Instance should be rip2IfStatAddress.  */
-  if (instid_len != 4)
-    return -1;
-
-  oid2in_addr (instid, instid_len, &addr);
-
-  switch (module->index)
+  for (node = listhead (iflist); node; nextnode (node))
     {
-    case rip2IfStatAddress:
-      *val_type = ASN_IPADDRESS;
-      *val_len = sizeof (struct in_addr);
-      *val = &addr;
-      break;
-    case rip2IfStatRcvBadPackets:
-      *val_type = ASN_INTEGER;
-      *val_len = sizeof (long);
-      *val = &tmp;
-      break;
-    case rip2IfStatRcvBadRoutes:
-      *val_type = ASN_INTEGER;
-      *val_len = sizeof (long);
-      *val = &tmp;
-      break;
-    case rip2IfStatSentUpdates:
-      *val_type = ASN_INTEGER;
-      *val_len = sizeof (long);
-      *val = &tmp;
-      break;
-    case rip2IfStatStatus:
-      *val_type = ASN_INTEGER;
-      *val_len = sizeof (long);
-      *val = &tmp;
-      break;
-    default:
-      return -1;
-      break;
+      ifp = getdata (node);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  c = getdata (cnode);
+
+	  p = c->address;
+
+	  if (p && p->family == AF_INET)
+	    {
+	      if (ntohl (p->u.prefix4.s_addr) > ntohl (src->s_addr))
+		{
+		  src->s_addr = p->u.prefix4.s_addr;
+		  return ifp;
+		}
+	    }	      
+	}
     }
-  return 0;
+  return NULL;
 }
 
-int
-rip2IfConfAddress_hook (struct snmp_module *module,
-			oid instid[], size_t instid_len,
-			u_char *val_type, void **val, size_t *val_len,
-			int getnext)
+struct interface *
+rip2IfLookup (struct variable *v, oid objid[], size_t *objid_len, 
+	      struct in_addr *addr, int exact)
 {
-  zlog_info ("rip2IfConfAddress_hook");
-  zlog_info ("module index is: %d", module->index);
-
-  switch (module->index)
+  int len;
+  struct interface *ifp;
+  
+  if (exact)
     {
-    case rip2IfConfAddress:
-      break;
-    case rip2IfConfAuthType:
-      break;
-    case rip2IfConfAuthKey:
-      break;
-    case rip2IfConfSend:
-      break;
-    case rip2IfConfReceive:
-      break;
-    case rip2IfConfDefaultMetric:
-      break;
-    case rip2IfConfStatus:
-      break;
-    case rip2IfConfSrcAddress:
-      break;
-    default:
-      return -1;
-      break;
-    }
-  return 0;
-}
+      /* Check the length. */
+      if (*objid_len != v->name_len + sizeof (struct in_addr))
+	return NULL;
 
-int
-rip2PeerTable_hook (struct snmp_module *module,
-		    oid instid[], size_t instid_len,
-		    u_char *val_type, void **val, size_t *val_len,
-		    int getnext)
-{
-  zlog_info ("rip2PeerTable_hook");
-  zlog_info ("module index is: %d", module->index);
+      oid2in_addr (objid + v->name_len, sizeof (struct in_addr), addr);
 
-  switch (module->index)
-    {
-    case rip2PeerAddress:
-      break;
-    case rip2PeerDomain:
-      break;
-    case rip2PeerLastUpdate:
-      break;
-    case rip2PeerVersion:
-      break;
-    case rip2PeerRcvBadPackets:
-      break;
-    case rip2PeerRcvBadRoutes:
-      break;
-    default:
-      return -1;
-      break;
-    }
-  return 0;
-}
-
-int
-rip_snmp (oid objid[], size_t objid_len, u_char *val_type, void **arg, 
-	  size_t *arg_len, int getnext)
-{
-  int ret;
-  int index;
-  oid *instid;
-  size_t instid_len;
-  struct snmp_module *module, *newmod;
-
-  zlog_info ("RIP oid size: %d", sizeof rip_oid / sizeof (oid));
-
-  /* Check oid tree. */
-  ret = memcmp (objid, rip_oid, sizeof (rip_oid));
-
-  if (ret != 0)
-    {
-      zlog_info ("No this is not RIP tree");
-      return -1;
-    }
-
-  /* Lookup MIB tree. */
-  module = start_module;
-  index = sizeof rip_oid / sizeof (oid);
-
-  while(index < objid_len)
-    {
-      zlog_info ("Next MIB index is %d", objid[index]);
-      
-      newmod = snmp_lookup_module (module, objid[index]);
-
-      if (newmod == NULL)
-	break;
-
-      index++;
-      module = newmod;
-    }
-
-  instid = &(objid[index]);
-  instid_len = objid_len - index;
-
-  if (module)
-    {
-      /* zlog_info ("RIP module is %s", module->name); */
-
-      if (module->func)
-	return (*module->func) (module, instid, instid_len,
-				val_type, arg, arg_len, getnext);
-      else
-	return -1; /* SMUX_NOSUCHINSTANCE */
+      ifp = if_lookup_exact_address (*addr);
+      return ifp;
     }
   else
     {
-      zlog_info ("Can't find RIP module");
-      return -1;
+      if (oid_compare (objid, *objid_len, v->name, v->name_len) < 0)
+	len = 0;
+      else
+	{
+	  len = *objid_len - v->name_len;
+	  if (len < 0)
+	    len = 0;
+	}
+
+      oid2in_addr (objid + v->name_len, len, addr);
+
+      ifp = rip_if_lookup_next (addr);
+
+      if (ifp == NULL)
+	return NULL;
+
+      oid_copy (objid, v->name, v->name_len);
+      oid_copy_addr (objid + v->name_len, addr, sizeof (struct in_addr));
+      *objid_len = v->name_len + sizeof (struct in_addr);
+
+      return ifp;
     }
+  return NULL;
+}
+
+int
+rip2IfStatEntry (struct variable *v, oid objid[], size_t *objid_len,
+		 void **val, size_t *val_len, int exact)
+{
+  struct interface *ifp;
+  struct rip_interface *ri;
+  static struct in_addr addr;
+  static long valid = 1;
+
+  memset (&addr, 0, sizeof (struct in_addr));
+  
+  /* Lookup interface. */
+  ifp = rip2IfLookup (v, objid, objid_len, &addr, exact);
+  if (! ifp)
+    return -1;
+
+  /* Fetch rip_interface information. */
+  ri = ifp->info;
+
+  switch (v->index)
+    {
+    case RIP2IFSTATADDRESS:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
+      break;
+    case RIP2IFSTATRCVBADPACKETS:
+      *val_len = sizeof (long);
+      *val = &ri->recv_badpackets;
+      break;
+    case RIP2IFSTATRCVBADROUTES:
+      *val_len = sizeof (long);
+      *val = &ri->recv_badroutes;
+      break;
+    case RIP2IFSTATSENTUPDATES:
+      *val_len = sizeof (long);
+      *val = &ri->sent_updates;
+      break;
+    case RIP2IFSTATSTATUS:
+      *val_len = sizeof (long);
+      *val = &valid;
+      break;
+    default:
+      return -1;
+      break;
+    }
+  return 0;
+}
+
+long
+rip2IfConfSend (struct rip_interface *ri)
+{
+#define doNotSend       1
+#define ripVersion1     2
+#define rip1Compatible  3
+#define ripVersion2     4
+#define ripV1Demand     5
+#define ripV2Demand     6
+
+  if (! ri->running)
+    return doNotSend;
+    
+  if (ri->ri_send & RIPv2)
+    return ripVersion2;
+  else if (ri->ri_send & RIPv1)
+    return ripVersion1;
+  else if (rip)
+    {
+      if (rip->version == RIPv2)
+	return ripVersion2;
+      else if (rip->version == RIPv1)
+	return ripVersion1;
+    }
+  return doNotSend;
+}
+
+long
+rip2IfConfReceive (struct rip_interface *ri)
+{
+#define rip1            1
+#define rip2            2
+#define rip1OrRip2      3
+#define doNotReceive    4
+
+  if (! ri->running)
+    return doNotReceive;
+
+  if (ri->ri_receive == RI_RIP_VERSION_1_AND_2)
+    return rip1OrRip2;
+  else if (ri->ri_receive & RIPv2)
+    return ripVersion2;
+  else if (ri->ri_receive & RIPv1)
+    return ripVersion1;
+  else
+    return doNotReceive;
+}
+
+int
+rip2IfConfAddress (struct variable *v, oid objid[], size_t *objid_len,
+		   void **val, size_t *val_len, int exact)
+{
+  static struct in_addr addr;
+  static long valid = 1;
+  static long domain = 0;
+  static long config = 0;
+
+  struct interface *ifp;
+  struct rip_interface *ri;
+
+  memset (&addr, 0, sizeof (struct in_addr));
+  
+  /* Lookup interface. */
+  ifp = rip2IfLookup (v, objid, objid_len, &addr, exact);
+  if (! ifp)
+    return -1;
+
+  /* Fetch rip_interface information. */
+  ri = ifp->info;
+
+  switch (v->index)
+    {
+    case RIP2IFCONFADDRESS:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
+      break;
+    case RIP2IFCONFDOMAIN:
+      *val_len = 2;
+      *val = &domain;
+      break;
+    case RIP2IFCONFAUTHTYPE:
+      *val_len = sizeof (long);
+      *val = &ri->auth_type;
+      break;
+    case RIP2IFCONFAUTHKEY:
+      *val_len = 0;
+      break;
+    case RIP2IFCONFSEND:
+      config = rip2IfConfSend (ri);
+      *val_len = sizeof (long);
+      *val = &config;
+      break;
+    case RIP2IFCONFRECEIVE:
+      config = rip2IfConfReceive (ri);
+      *val_len = sizeof (long);
+      *val = &config;
+      break;
+    case RIP2IFCONFDEFAULTMETRIC:
+      *val_len = sizeof (long);
+      *val = &ifp->metric;
+      break;
+    case RIP2IFCONFSTATUS:
+      *val_len = sizeof (long);
+      *val = &valid;
+      break;
+    case RIP2IFCONFSRCADDRESS:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
+      break;
+    default:
+      return -1;
+      break;
+    }
+  return 0;
+}
+
+int
+rip2PeerTable (struct variable *v, oid objid[], size_t *objid_len,
+	       void **val, size_t *val_len, int exact)
+{
+  /* Not yet supported. */
+  return -1;
+
+  switch (v->index)
+    {
+    case RIP2PEERADDRESS:
+      break;
+    case RIP2PEERDOMAIN:
+      break;
+    case RIP2PEERLASTUPDATE:
+      break;
+    case RIP2PEERVERSION:
+      break;
+    case RIP2PEERRCVBADPACKETS:
+      break;
+    case RIP2PEERRCVBADROUTES:
+      break;
+    default:
+      return -1;
+      break;
+    }
+  return 0;
 }
 
 /* Register RIPv2-MIB. */
 void
 rip_snmp_init ()
 {
-  smux_init (rip_snmp, rip_oid, sizeof (rip_oid) / sizeof (oid));
+  smux_init (rip_oid, sizeof (rip_oid) / sizeof (oid));
+  smux_tree_register (rip_tree, sizeof (rip_tree) / sizeof (struct subtree));
 }
+
 #endif /* HAVE_SNMP */

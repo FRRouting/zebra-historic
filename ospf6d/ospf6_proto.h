@@ -47,6 +47,9 @@
 
 #define MAXOSPFMESSAGELEN         4096
 
+#define ALLSPFROUTERS6 "ff02::5"
+#define ALLDROUTERS6   "ff02::6"
+
 /* Configurable Constants */
 
 #define DEFAULT_HELLO_INTERVAL    10

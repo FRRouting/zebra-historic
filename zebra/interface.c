@@ -22,16 +22,15 @@
 
 #include <zebra.h>
 
-#include "linklist.h"
 #include "if.h"
 #include "vty.h"
 #include "sockunion.h"
 #include "prefix.h"
-#include "vector.h"
 #include "command.h"
 #include "memory.h"
 #include "ioctl.h"
 #include "connected.h"
+#include "log.h"
 
 #include "zebra/interface.h"
 #include "zebra/rtadv.h"
@@ -82,6 +81,74 @@ if_zebra_delete_hook (struct interface *ifp)
   if (ifp->info)
     XFREE (MTYPE_TMP, ifp->info);
   return 0;
+}
+
+void
+if_up (struct interface *ifp)
+{
+  listnode node;
+  listnode next;
+  struct connected *ifc;
+  struct prefix *p;
+
+  zlog_info ("Interface %s is up", ifp->name);
+
+  /* Notify to protocol daemons. */
+
+  /* Install connected routes to the kernel. */
+  if (ifp->connected)
+    {
+      for (node = listhead (ifp->connected); node; node = next)
+	{
+	  next = node->next;
+	  ifc = getdata (node);
+	  p = ifc->address;
+
+	  if (p->family == AF_INET)
+	    connected_up_ipv4 (ifp, &p->u.prefix4, p->prefixlen);
+#ifdef HAVE_IPV6
+	  else if (p->family == AF_INET6)
+	    connected_up_ipv6 (ifp, &p->u.prefix6, p->prefixlen);
+#endif /* HAVE_IPV6 */
+	}
+    }
+
+  /* Examine all routes. */
+  ;
+}
+
+/* Interface goes down.  We have to manage different behavior of based
+   OS. */
+void
+if_down (struct interface *ifp)
+{
+  listnode node;
+  listnode next;
+  struct connected *ifc;
+  struct prefix *p;
+
+  zlog_info ("Interface %s is down", ifp->name);
+
+  /* Delete connected routes from the kernel. */
+  if (ifp->connected)
+    {
+      for (node = listhead (ifp->connected); node; node = next)
+	{
+	  next = node->next;
+	  ifc = getdata (node);
+	  p = ifc->address;
+
+	  if (p->family == AF_INET)
+	    connected_down_ipv4 (ifp, &p->u.prefix4, p->prefixlen);
+#ifdef HAVE_IPV6
+	  else if (p->family == AF_INET6)
+	    connected_down_ipv6 (ifp, &p->u.prefix6, p->prefixlen);
+#endif /* HAVE_IPV6 */
+	}
+    }
+
+  /* Examine all routes which direct to the interface. */
+  ;
 }
 
 int
@@ -293,12 +360,20 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
   if (ifp->desc)
     vty_out (vty, "  Description: %s%s", ifp->desc,
 	     VTY_NEWLINE);
+  if (ifp->ifindex <= 0)
+    {
+      vty_out(vty, "  index %d pseudo interface%s", ifp->ifindex);
+      return;
+    }
+
   vty_out (vty, "  index %d metric %d mtu %d ",
 	   ifp->ifindex, ifp->metric, ifp->mtu);
   if_flag_dump_vty (vty, ifp->flags);
   vty_out (vty, "%s", VTY_NEWLINE);
 
   /* Hardware address. */
+#ifdef HAVE_SOCKADDR_DL
+#else
   if (ifp->hw_addr_len != 0)
     {
       int i;
@@ -308,12 +383,85 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
 	vty_out (vty, "%s%02x", i == 0 ? "" : ":", ifp->hw_addr[i]);
       vty_out (vty, "%s", VTY_NEWLINE);
     }
+#endif /* HAVE_SOCKADDR_DL */
   
   for (node = listhead (ifp->connected); node; nextnode (node))
     {
       connected = getdata (node);
       connected_dump_vty (vty, connected);
     }
+
+#ifdef HAVE_PROC_NET_DEV
+  /* Statistics print out using proc file system. */
+  vty_out (vty, "    input packets %lu, bytes %lu, dropped %lu,"
+	   " multicast packets %lu%s",
+	   ifp->stats.rx_packets, ifp->stats.rx_bytes, 
+	   ifp->stats.rx_dropped, ifp->stats.rx_multicast, VTY_NEWLINE);
+
+  vty_out (vty, "    input errors %lu, length %lu, overrun %lu,"
+	   " CRC %lu, frame %lu, fifo %lu, missed %lu%s",
+	   ifp->stats.rx_errors, ifp->stats.rx_length_errors,
+	   ifp->stats.rx_over_errors, ifp->stats.rx_crc_errors,
+	   ifp->stats.rx_frame_errors, ifp->stats.rx_fifo_errors,
+	   ifp->stats.rx_missed_errors, VTY_NEWLINE);
+
+  vty_out (vty, "    output packets %lu, bytes %lu, dropped %lu%s",
+	   ifp->stats.tx_packets, ifp->stats.tx_bytes,
+	   ifp->stats.tx_dropped, VTY_NEWLINE);
+
+  vty_out (vty, "    output errors %lu, aborted %lu, carrier %lu,"
+	   " fifo %lu, heartbeat %lu, window %lu%s",
+	   ifp->stats.tx_errors, ifp->stats.tx_aborted_errors,
+	   ifp->stats.tx_carrier_errors, ifp->stats.tx_fifo_errors,
+	   ifp->stats.tx_heartbeat_errors, ifp->stats.tx_window_errors,
+	   VTY_NEWLINE);
+
+  vty_out (vty, "    collisions %lu%s", ifp->stats.collisions, VTY_NEWLINE);
+#endif /* HAVE_PROC_NET_DEV */
+
+#ifdef HAVE_NET_RT_IFLIST
+#if defined (__bsdi__)
+  /* Statistics print out using sysctl (). */
+  vty_out (vty, "    input packets %qu, bytes %qu, dropped %qu,"
+	   " multicast packets %qu%s",
+	   ifp->stats.ifi_ipackets, ifp->stats.ifi_ibytes,
+	   ifp->stats.ifi_iqdrops, ifp->stats.ifi_imcasts,
+	   VTY_NEWLINE);
+
+  vty_out (vty, "    input errors %qu%s",
+	   ifp->stats.ifi_ierrors, VTY_NEWLINE);
+
+  vty_out (vty, "    output packets %qu, bytes %qu, multicast packets %qu%s",
+	   ifp->stats.ifi_opackets, ifp->stats.ifi_obytes,
+	   ifp->stats.ifi_omcasts, VTY_NEWLINE);
+
+  vty_out (vty, "    output errors %qu%s",
+	   ifp->stats.ifi_oerrors, VTY_NEWLINE);
+
+  vty_out (vty, "    collisions %qu%s",
+	   ifp->stats.ifi_collisions, VTY_NEWLINE);
+#else
+  /* Statistics print out using sysctl (). */
+  vty_out (vty, "    input packets %lu, bytes %lu, dropped %lu,"
+	   " multicast packets %lu%s",
+	   ifp->stats.ifi_ipackets, ifp->stats.ifi_ibytes,
+	   ifp->stats.ifi_iqdrops, ifp->stats.ifi_imcasts,
+	   VTY_NEWLINE);
+
+  vty_out (vty, "    input errors %lu%s",
+	   ifp->stats.ifi_ierrors, VTY_NEWLINE);
+
+  vty_out (vty, "    output packets %lu, bytes %lu, multicast packets %lu%s",
+	   ifp->stats.ifi_opackets, ifp->stats.ifi_obytes,
+	   ifp->stats.ifi_omcasts, VTY_NEWLINE);
+
+  vty_out (vty, "    output errors %lu%s",
+	   ifp->stats.ifi_oerrors, VTY_NEWLINE);
+
+  vty_out (vty, "    collisions %lu%s",
+	   ifp->stats.ifi_collisions, VTY_NEWLINE);
+#endif /* __bsdi__ */
+#endif /* HAVE_NET_RT_IFLIST */
 }
 
 /* Check supported address family. */
@@ -345,6 +493,15 @@ DEFUN (show_interface, show_interface_cmd,
   listnode node;
   struct interface *ifp;
   
+#ifdef HAVE_PROC_NET_DEV
+  /* If system has interface statistics via proc file system, update
+     statistics. */
+  ifstat_update_proc ();
+#endif /* HAVE_PROC_NET_DEV */
+#ifdef HAVE_NET_RT_IFLIST
+  ifstat_update_sysctl ();
+#endif /* HAVE_NET_RT_IFLIST */
+
   /* Specified interface print. */
   if (argc != 0)
     {

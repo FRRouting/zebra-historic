@@ -108,7 +108,7 @@ ipforward_ipv6 ()
   len = sizeof ip6forwarding;
   if (sysctl (mib_ipv6, MIB_SIZ, &ip6forwarding, &len, 0, 0) < 0) 
     {
-      log_warn ("can't get ip6forwarding value\n");
+      zlog_warn ("can't get ip6forwarding value");
       return -1;
     }
   return ip6forwarding;
@@ -123,7 +123,7 @@ ipforward_ipv6_on ()
   len = sizeof ip6forwarding;
   if (sysctl (mib_ipv6, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
     {
-      log_warn ("can't get ip6forwarding value\n");
+      zlog_warn ("can't get ip6forwarding value");
       return -1;
     }
   return ip6forwarding;
@@ -138,7 +138,7 @@ ipforward_ipv6_off ()
   len = sizeof ip6forwarding;
   if (sysctl (mib_ipv6, MIB_SIZ, NULL, NULL, &ip6forwarding, len) < 0) 
     {
-      log_warn ("can't get ip6forwarding value\n");
+      zlog_warn ("can't get ip6forwarding value");
       return -1;
     }
   return ip6forwarding;

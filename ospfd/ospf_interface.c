@@ -135,10 +135,14 @@ ospf_if_free (struct ospf_interface *oi)
   OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceDown);
   OSPF_ISM_TIMER_OFF (oi->t_ls_ack);
 
+  if (oi->t_network_lsa_self)
+     OSPF_TIMER_OFF (oi->t_network_lsa_self);
+
   RT_ITERATOR (oi->nbrs, rn)
     {
       if (rn->info == NULL)
 	continue;
+
       ospf_nbr_free ((struct ospf_neighbor *) rn->info);
     }
 
@@ -158,8 +162,11 @@ ospf_if_lookup_by_addr (struct in_addr *address)
 
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
     {
-      ifp = getdata (node);
-      oi = ifp->info;
+      if ((ifp = getdata (node)) == NULL)
+	continue;
+
+      if ((oi = ifp->info) == NULL)
+	continue;
 
       if (!ospf_if_is_enable (ifp))
 	continue;
@@ -171,6 +178,44 @@ ospf_if_lookup_by_addr (struct in_addr *address)
   return NULL;
 }
 
+struct ospf_interface *
+ospf_if_lookup_by_prefix (struct prefix_ipv4 *p)
+{
+  listnode node;
+  struct ospf_interface *oi;
+  struct interface *ifp;
+  struct prefix_ipv4 ip;
+
+  zlog_info ("Z: ospf_if_lookup_by_prefix(): Start");
+
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      if ((ifp = getdata (node)) == NULL)
+	continue;
+
+      zlog_info ("Z: ospf_if_lookup_by_prefix(): looking at %s", ifp->name);
+
+      if ((oi = ifp->info) == NULL)
+	continue;
+
+      if (oi->address == NULL)
+	continue;
+
+      prefix_copy ((struct prefix *) &ip, oi->address);
+
+      zlog_info ("Z: ospf_if_lookup_by_prefix(): its prefix is %s/%d", 
+		 inet_ntoa (ip.prefix), ip.prefixlen);
+
+      apply_mask_ipv4 (&ip);
+
+      if (prefix_same ((struct prefix *) &ip, (struct prefix *) p))
+	return oi;
+    }
+
+  zlog_info ("Z: ospf_if_lookup_by_prefix(): I didn't find it");
+  return NULL;
+}
+
 void
 ospf_if_stream_set (struct ospf_interface *oi)
 {
@@ -178,7 +223,7 @@ ospf_if_stream_set (struct ospf_interface *oi)
 
   if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
     {
-      oi->ibuf = stream_new (oi->ifp->mtu);
+      oi->ibuf = stream_new (oi->ifp->mtu * 2);
       OSPF_ISM_READ_ON (oi->t_read, ospf_read, oi->fd);
     }
 
@@ -332,8 +377,7 @@ ospf_vl_lookup (struct ospf_area *area, struct in_addr vl_peer)
 
   LIST_ITERATOR (ospf_top->vlinks, node)
     {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
+      if ((vl_data = getdata (node)) == NULL)
 	continue;
 
       if (vl_data->vl_peer.s_addr == vl_peer.s_addr &&
@@ -354,6 +398,7 @@ void
 ospf_vl_delete (struct ospf_vl_data *vl_data)
 {
   list_delete_by_val (ospf_top->vlinks, vl_data);
+
   ospf_vl_if_delete (vl_data);
   ospf_vl_data_free (vl_data);
 }
@@ -380,8 +425,7 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
 
   LIST_ITERATOR (v->nexthop, node)
     {
-      nh = getdata (node);
-      if (nh == NULL)
+      if ((nh = getdata (node)) == NULL)
 	continue;
 
       vl_data->out_oi = (struct ospf_interface *) nh->ifp->info;
@@ -400,40 +444,44 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
 
 
 void
-ospf_check_vl_up (struct ospf_area * area, struct in_addr rid,
+ospf_vl_up_check (struct ospf_area * area, struct in_addr rid,
 		  struct vertex *v)
 {
   listnode node;
   struct ospf_vl_data *vl_data;
   struct ospf_interface *oi;
 
-  zlog_info ("Z: ospf_check_vl_up(): Start");
-  zlog_info ("Z: ospf_check_vl_up(): RID is %s", inet_ntoa (rid));
-  zlog_info ("Z: ospf_check_vl_up(): area is %s", inet_ntoa (area->area_id));
+  zlog_info ("Z: ospf_vl_up_check(): Start");
+  zlog_info ("Z: ospf_vl_up_check(): Router ID is %s", inet_ntoa (rid));
+  zlog_info ("Z: ospf_vl_up_check(): Area is %s", inet_ntoa (area->area_id));
 
   LIST_ITERATOR (ospf_top->vlinks, node)
     {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
+      if ((vl_data = getdata (node)) == NULL)
 	continue;
   
-      zlog_info ("Z: ospf_check_vl_up(): considering VL, name: %s", 
+      zlog_info ("Z: ospf_vl_up_check(): considering VL, name: %s", 
 		 vl_data->vl_oi->ifp->name);
-      zlog_info ("Z: ospf_check_vl_up(): VL area: %s, peer ID: %s", 
+      zlog_info ("Z: ospf_vl_up_check(): VL area: %s, peer ID: %s", 
 		 inet_ntoa (vl_data->vl_area->area_id),
 		 inet_ntoa (vl_data->vl_peer));
 
-      if ((vl_data->vl_peer.s_addr == rid.s_addr) &&
-	  (vl_data->vl_area == area))
+      /*
+      if (vl_data->vl_peer.s_addr == rid.s_addr &&
+	  vl_data->vl_area == area)
+      */
+
+      if (IPV4_ADDR_SAME (&vl_data->vl_peer, &rid) &&
+	  vl_data->vl_area == area)
 	{
 	  oi = vl_data->vl_oi;
 	  SET_FLAG (vl_data->flags, OSPF_VL_FLAG_APPROVED);
 
-	  zlog_info ("Z: ospf_check_vl_up(): this VL matched");
+	  zlog_info ("Z: ospf_vl_up_check(): this VL matched");
 
 	  if (oi->status == ISM_Down)
 	    {
-	      zlog_info ("Z: ospf_check_vl_up(): VL is down, waking it up");
+	      zlog_info ("Z: ospf_vl_up_check(): VL is down, waking it up");
 	      SET_FLAG (oi->ifp->flags, IFF_UP);
 	      OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceUp);
 	    }
@@ -467,8 +515,7 @@ ospf_vl_unapprove ()
 
   LIST_ITERATOR (ospf_top->vlinks, node)
     {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
+      if ((vl_data = getdata (node)) == NULL)
 	continue;
 
       UNSET_FLAG (vl_data->flags, OSPF_VL_FLAG_APPROVED);
@@ -483,8 +530,7 @@ ospf_vl_shut_unapproved ()
 
   LIST_ITERATOR (ospf_top->vlinks, node)
     {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
+      if ((vl_data = getdata (node)) == NULL)
 	continue;
 
       if (!CHECK_FLAG (vl_data->flags, OSPF_VL_FLAG_APPROVED))
@@ -492,6 +538,57 @@ ospf_vl_shut_unapproved ()
     }
 }
 
+int
+ospf_full_virtual_nbrs (struct ospf_area *area)
+{
+#if 0
+  listnode node;
+  struct ospf_vl_data *vl_data;
+  int c;
+#endif /* 0 */
+
+  zlog_info ("Z: counting fully adjacent virtual neighbors in area %s",
+	     inet_ntoa (area->area_id));
+  zlog_info ("Z: there are %d of them", area->full_vls);
+
+  return area->full_vls;
+
+#if 0
+  LIST_ITERATOR (ospf_top->vlinks, node)
+    {
+      if ((vl_data = getdata (node)) == NULL)
+	continue;
+
+      if (vl_data->vl_area != area)
+	continue;
+
+      c = ospf_nbr_count (vl_data->vl_oi->nbrs, NSM_Full);
+ 
+      zlog_info ("Z: the number is %d", c);
+      return c;
+
+    }
+  return 0;
+#endif
+}
+
+int
+ospf_vls_in_area (struct ospf_area *area)
+{
+  listnode node;
+  struct ospf_vl_data *vl_data;
+  int c = 0;
+
+  LIST_ITERATOR (ospf_top->vlinks, node)
+    {
+      if ((vl_data = getdata (node)) == NULL)
+	continue;
+
+      if (vl_data->vl_area == area)
+	c++;
+    }
+  return c;
+}
 
 
 char *ospf_int_type_str[] = 
@@ -574,60 +671,6 @@ interface_config_write (struct vty *vty)
 
   return write;
 }
-
-
-int
-ospf_full_virtual_nbrs (struct ospf_area *area)
-{
-#if 0
-  listnode node;
-  struct ospf_vl_data *vl_data;
-  int c;
-#endif /* 0 */
-
-  zlog_info ("Z: counting fully adjacent virtual neighbors in area %s",
-	     inet_ntoa (area->area_id));
-  zlog_info ("Z: there are %d of them", area->full_vls);
-
-  return area->full_vls;
-
-#if 0
-  LIST_ITERATOR(ospf_top->vlinks, node)
-    {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
-	continue;
-      if (vl_data->vl_area != area)
-	continue;
-      c = ospf_nbr_count (vl_data->vl_oi->nbrs, NSM_Full);
- 
-      zlog_info ("Z: the number is %d", c);
-      return c;
-
-    }
-  return 0;
-#endif
-}
-
-
-int
-ospf_vls_in_area (struct ospf_area *area)
-{
-  listnode node;
-  struct ospf_vl_data *vl_data;
-  int c = 0;
-
-  LIST_ITERATOR (ospf_top->vlinks, node)
-    {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
-	continue;
-      if (vl_data->vl_area == area)
-	c++;
-    }
-  return c;
-}
-
 
 
 DEFUN (if_ospf_authentication_key,

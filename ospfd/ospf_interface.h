@@ -144,13 +144,14 @@ struct ospf_interface
 #define PRIORITY(I)		((I)->nbr_self->priority)
 
 /* Prototypes. */
-void ospf_if_reset_variables (struct ospf_interface *oi);
 struct ospf_interface *ospf_if_new ();
-struct ospf_interface *ospf_if_lookup_by_addr ();
+struct ospf_interface *ospf_if_lookup_by_addr (struct in_addr *);
+struct ospf_interface *ospf_if_lookup_by_prefix (struct prefix_ipv4 *);
 int ospf_if_new_hook (struct interface *);
 void ospf_if_init ();
 void ospf_if_stream_set (struct ospf_interface *);
 void ospf_if_stream_unset (struct ospf_interface *);
+void ospf_if_reset_variables (struct ospf_interface *oi);
 int ospf_if_is_enable (struct interface *);
 
 struct ospf_interface *ospf_vl_new (struct ospf_vl_data *);
@@ -159,7 +160,7 @@ struct ospf_vl_data *ospf_vl_lookup (struct ospf_area *, struct in_addr);
 void ospf_vl_data_free (struct ospf_vl_data *);
 void ospf_vl_add (struct ospf_vl_data *);
 void ospf_vl_delete (struct ospf_vl_data *);
-void ospf_check_vl_up (struct ospf_area *, struct in_addr, struct vertex *);
+void ospf_vl_up_check (struct ospf_area *, struct in_addr, struct vertex *);
 void ospf_vl_unapprove ();
 void ospf_vl_shut_unapproved ();
 int ospf_full_virtual_nbrs (struct ospf_area *);

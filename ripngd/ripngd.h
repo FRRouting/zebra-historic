@@ -27,6 +27,7 @@
 #define RIPNG_V1                         1
 #define RIPNG_PORT_DEFAULT             521
 #define RIPNG_VTY_PORT                2603
+#define RIPNG_MAX_PACKET_SIZE         1500
 #define RIPNG_PRIORITY_DEFAULT           0
 
 /* RIPng commands. */
@@ -71,6 +72,15 @@
 #define RIPNG_DEFAULT_ACCEPT_UNSPEC      0
 #define RIPNG_DEFAULT_ACCEPT_NONE        1
 #define RIPNG_DEFAULT_ACCEPT             2
+
+/* For max RTE calculation. */
+#ifndef IPV6_HDRLEN
+#define IPV6_HDRLEN 40
+#endif /* IPV6_HDRLEN */
+
+#ifndef IFMINMTU
+#define IFMINMTU    576
+#endif /* IFMINMTU */
 
 /* RIPng structure. */
 struct ripng 
@@ -205,6 +215,9 @@ struct ripng_interface
   /* Prefix-list. */
   struct prefix_list *prefix[RIPNG_FILTER_MAX];
 
+  /* Route-map. */
+  struct route_map *routemap[RIPNG_FILTER_MAX];
+
   /* RIPng tag configuration. */
   struct ripng_tag *rtag;
 
@@ -230,15 +243,19 @@ enum ripng_event
 
 /* RIPng timer on/off macro. */
 #define RIPNG_TIMER_ON(T,F,V) \
+do { \
    if (!(T)) \
-      (T) = thread_add_timer (master, (F), rinfo, (V))
+      (T) = thread_add_timer (master, (F), rinfo, (V)); \
+} while (0)
 
 #define RIPNG_TIMER_OFF(T) \
+do { \
    if (T) \
      { \
        thread_cancel(T); \
        (T) = NULL; \
-     }
+     } \
+} while (0)
 
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
@@ -261,8 +278,12 @@ int ripng_request (struct interface *ifp);
 void ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
 void ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
 void ripng_redistribute_withdraw (int type);
+
 void ripng_distribute_update_interface (struct interface *);
+void ripng_if_rmap_update_interface (struct interface *);
+
 void ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop, unsigned int ifindex);
 void ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop, unsigned int ifindex);
+void ripng_route_map_init ();
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

@@ -161,7 +161,7 @@ route_map_result_t
 route_map_apply (struct route_map *map, struct prefix *, 
 		 route_map_object_t object_type, void *object);
 
-void
-route_map_add_hook (void (*func) ());
+void route_map_add_hook (void (*func) ());
+void route_map_delete_hook (void (*func) ());
 
 #endif /* _ZEBRA_ROUTEMAP_H */

@@ -611,8 +611,8 @@ ospf6_route_str (struct route_node *node, char *buf, size_t bufsize)
       case DTYPE_INTRA_LINK:
         dtype = "Link";
         rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
-        inet_ntop (AF_INET, &rtrid, tmp, sizeof (tmp));
         ifid = ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&node->p),
+        inet_ntop (AF_INET, &rtrid, tmp, sizeof (tmp));
         snprintf (dstr, sizeof (dstr), "%s[%ld]", tmp, 
 		  (unsigned long) ntohl (ifid));
         break;
@@ -649,6 +649,73 @@ ospf6_route_str (struct route_node *node, char *buf, size_t bufsize)
     snprintf (buf, bufsize, "%s %-22s opt:xxx %s cost:%lu",
               dtype, dstr, pstr, info->cost);
 
+  return buf;
+}
+
+char *
+ospf6_route_dest_str (struct route_node *node, char *buf, size_t bufsize)
+{
+  struct ospf6_route_node_info *info;
+  char *dtype, dstr[64];
+  unsigned long rtrid, ifid;
+
+  assert (node);
+  info = (struct ospf6_route_node_info *)node->info;
+  assert (info);
+
+  /* destination type, id */
+  switch (info->dest_type)
+    {
+      case DTYPE_PREFIX:
+        prefix2str (&node->p, buf, bufsize);
+        return buf;
+
+      case DTYPE_ASBR:
+        dtype = "ASBR";
+        rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
+        inet_ntop (AF_INET, &rtrid, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%20s %s", dstr, dtype);
+        break;
+
+      case DTYPE_INTRA_ROUTER:
+        dtype = "Router";
+        rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
+        inet_ntop (AF_INET, &rtrid, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%20s %s", dstr, dtype);
+        break;
+
+      case DTYPE_INTRA_LINK:
+        dtype = "Link";
+        rtrid = ospf6_route_get_dst_rtrid ((struct prefix_ipv6 *)&node->p);
+        ifid = ospf6_route_get_dst_ifid ((struct prefix_ipv6 *)&node->p),
+        inet_ntop (AF_INET, &rtrid, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%15s[%lu] %s", dstr, (u_long) ntohl (ifid), dtype);
+        break;
+
+      case DTYPE_STATIC_REDISTRIBUTE:
+        dtype = "Static";
+        prefix2str (&node->p, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%s %s", dtype, dstr);
+        break;
+
+      case DTYPE_RIPNG_REDISTRIBUTE:
+        dtype = "RIPng";
+        prefix2str (&node->p, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%s %s", dtype, dstr);
+        break;
+
+      case DTYPE_BGP_REDISTRIBUTE:
+        dtype = "BGP";
+        prefix2str (&node->p, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%s %s", dtype, dstr);
+        break;
+
+      default:
+        dtype = "unknown";
+        prefix2str (&node->p, dstr, sizeof (dstr));
+        snprintf (buf, bufsize, "%s %s", dtype, dstr);
+        break;
+    }
   return buf;
 }
 

@@ -130,6 +130,9 @@ ripng_interface_add (int command, struct zebra *zebra, zebra_size_t length)
   /* Apply distribute list to the interface. */
   ripng_distribute_update_interface (ifp);
 
+  /* Check interface routemap. */
+  ripng_if_rmap_update_interface (ifp);
+
   return 0;
 }
 

@@ -79,6 +79,7 @@ extern unsigned char ospf6_lsa_dump;
 extern unsigned char ospf6_zebra_dump;
 extern unsigned char ospf6_config_dump;
 extern unsigned char ospf6_dbex_dump;
+extern unsigned char ospf6_spf_dump;
 extern unsigned char ospf6_route_dump;
 
 #define IS_OSPF6_DUMP_HELLO (ospf6_message_hello_dump)
@@ -100,12 +101,16 @@ extern unsigned char ospf6_route_dump;
 #define IS_OSPF6_DUMP_ZEBRA (ospf6_zebra_dump)
 #define IS_OSPF6_DUMP_CONFIG (ospf6_config_dump)
 #define IS_OSPF6_DUMP_DBEX (ospf6_dbex_dump)
+#define IS_OSPF6_DUMP_SPF (ospf6_spf_dump)
 #define IS_OSPF6_DUMP_ROUTE (ospf6_route_dump)
 
 char *ospf6_message_name (unsigned char);
 void ospf6_dump_message (struct iovec *);
+void ospf6_dump_lsa_hdr (struct ospf6_lsa_hdr *);
+void ospf6_dump_lsa (struct ospf6_lsa *);
 void ospf6_debug_init ();
 int is_ospf6_message_dump(char);
+void ospf6_dump_ddbit (unsigned char, char *, size_t);
 
 #endif /* OSPF6_DUMP_H */
 

@@ -51,7 +51,7 @@ time_print (FILE *fp)
 
   ret = strftime (buf, TIME_BUF, "%Y/%m/%d %H:%M:%S", tm);
   if (ret == 0) {
-    log_warn ("strftime error\n");
+    zlog_warn ("strftime error");
   }
 
   fprintf (fp, "%s ", buf);
@@ -107,7 +107,7 @@ old_log2 (char *format, ...)
 
 /* Print warning. */
 void
-log_warn (char *format, ...)
+old_log_warn (char *format, ...)
 {
   va_list args;
 
@@ -462,4 +462,16 @@ zlog_rotate (ZLOG *zl)
     }
 
   return 1;
+}
+
+char *
+lookup (struct message *mes, int key)
+{
+  struct message *pnt;
+
+  for (pnt = mes; pnt->key != 0; pnt++) 
+    if (pnt->key == key) 
+      return pnt->str;
+
+  return "";
 }

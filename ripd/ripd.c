@@ -927,7 +927,7 @@ rip_read_new (struct thread *t)
   ret = rip_recvmsg (sock, buf, RIP_PACKET_MAXSIZ, &from, (int *)&ifindex);
   if (ret < 0)
     {
-      log_warn ("Can't read RIP packet: %s", strerror (errno));
+      zlog_warn ("Can't read RIP packet: %s", strerror (errno));
       return ret;
     }
 
@@ -1329,6 +1329,9 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
       num = 0;
       stream_reset (s);
     }
+
+  /* Statistics updates. */
+  ri->sent_updates++;
 }
 
 /* Send RIP packet to the interface. */
@@ -1790,7 +1793,7 @@ DEFUN (no_rip_route,
 
 DEFUN (rip_timers,
        rip_timers_cmd,
-       "timers basic <update> <timeout> <garbage>",
+       "timers basic <0-4294967295> <1-4294967295> <1-4294967295>",
        "RIP timers setup\n"
        "Basic timer\n"
        "Routing table update timer value in second. Default is 30.\n"

@@ -109,7 +109,7 @@ transit_vertex_rtable_install (struct vertex *v, struct area *area)
       }
     else
       {
-        o6log.spf ("!Unkown vertex type");
+        zlog_warn ("*** unkown vertex type");
         assert (0);
       }
 
@@ -251,9 +251,6 @@ router_link (struct vertex *V)
                                  (void *)lsa->scope);
       if (!w_lsa || !w_lsa->lsa_hdr || ospf6_age_current (w_lsa) == MAXAGE)
         {
-          o6log.spf ("can't find NetworkLSA of %s[%d]",
-                     inet4str (currentlink->rlsd_neighbor_router_id),
-                     ntohl (currentlink->rlsd_neighbor_interface_id));
           currentlink++;
           goto nextlink;
         }
@@ -270,8 +267,6 @@ router_link (struct vertex *V)
         }
       if (linkback == 0)
         {
-          o6log.spf ("no link back to %s",
-                     inet4str (w_lsa->lsa_hdr->lsh_advrtr));
           currentlink++;
           goto nextlink;
         }
@@ -294,8 +289,6 @@ router_link (struct vertex *V)
       if (!w_lsa || !w_lsa->lsa_hdr
           || ospf6_age_current (w_lsa) == MAXAGE)
         {
-          o6log.spf ("can't find RouterLSA of %s",
-                     inet4str (currentlink->rlsd_neighbor_router_id));
           currentlink++;
           goto nextlink;
         }
@@ -316,8 +309,6 @@ router_link (struct vertex *V)
         }
       if (linkback == 0)
         {
-          o6log.spf ("no link back to %s",
-                     inet4str (lsa->lsa_hdr->lsh_advrtr));
           currentlink++;
           goto nextlink;
         }
@@ -332,7 +323,7 @@ router_link (struct vertex *V)
       return W;
 
     default:
-      o6log.spf ("!unknown link type, stop calculation for area %s",
+      zlog_warn ("*** unknown link type, stop calculation for area %s",
                  ((struct area *)(V->vtx_lsa->scope))->str);
       lsa = (struct ospf6_lsa *)NULL;
       return (struct vertex *)NULL;
@@ -373,8 +364,6 @@ network_link (struct vertex *V)
                              *currentlink, lsa->scope);
   if (!w_lsa || !w_lsa->lsa_hdr || ospf6_age_current (w_lsa) == MAXAGE)
     {
-      o6log.spf ("can't find RouterLSA of %s",
-                 inet4str (*currentlink));
       currentlink++;
       goto nextlink_of_this_network;
     }
@@ -394,9 +383,6 @@ network_link (struct vertex *V)
     }
   if (linkback == 0)
     {
-      o6log.spf ("no link back to %s[%lu]",
-                 inet4str (lsa->lsa_hdr->lsh_advrtr),
-                 ntohl (lsa->lsa_hdr->lsh_id));
       currentlink++;
       goto nextlink_of_this_network;
     }
@@ -456,7 +442,8 @@ spf_calculation (struct thread *thread)
   area->spf_calc = (struct thread *)NULL;
 
   area->stat_spf_execed++;
-  zlog_info ("SPF Calculation for area %s", area->str);
+  if (IS_OSPF6_DUMP_SPF)
+    zlog_info ("SPF Calculation for area %s", area->str);
 
   /* (1) */
   spf_init (area);
@@ -468,7 +455,6 @@ spf_calculation (struct thread *thread)
     {
       for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
         {
-          o6log.spf ("checking link to...");
           print_vertex (W);
 
           already = 0;
@@ -485,7 +471,6 @@ spf_calculation (struct thread *thread)
             }
           if (already)
             {
-              o6log.spf ("already on SPF tree");
               vertex_free (W);
               continue;
             }
@@ -547,7 +532,8 @@ spf_calculation (struct thread *thread)
   assert (listcount (candidatelist) == 0);
   list_free (candidatelist);
 
-  o6log.spf ("SPF Calculation for area %s done", area->str);
+  if (IS_OSPF6_DUMP_SPF)
+    zlog_info ("SPF Calculation for area %s done", area->str);
   return 0;
 }
 

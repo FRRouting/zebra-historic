@@ -1,3 +1,50 @@
+1999-11-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* kernel_socket.c (rtm_read): Check old pid for static route
+	insertion check.
+
+	* interface.c (if_dump_vty): BSDI/OS uses 64bit for interface
+	statistics counter.
+
+	* mtu_kvm.c: New file added.
+
+1999-11-27  Vladimir B. Grebenschikov <vova@express.ru>
+
+	* kernel_socket.c (rtm_write): Set RTF_CLONING flag for
+	route to the directly connected interface.
+
+1999-11-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_socket.c: Delete USE_HOST_BIT definition.
+
+1999-11-21  Michael Handler <handler@sub-rosa.com>
+
+	* rtread_getmsg.c: Undef some definition to resolve conflict.
+
+1999-11-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* kernel_socket.c (rtm_write): Change to use pre stored struct_dl
+	value for gateway specification.
+
+1999-11-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rt_socket.c (kernel_rtm_ipv4): Even mask is 32 under IPv4 or
+	128 under IPv6, don't use RTF_HOST.
+
+1999-11-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (EXTRA_DIST): Add rtread_getmsg.c.
+
+1999-11-21  Michael Handler <handler@sub-rosa.com>
+
+	* rtread_getmsg.c: Added for Solaris 2.6 support.
+
+1999-11-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rtread_sysctl.c (rtm_read_route): RTM_DELETE handling added.
+
+	* rt_socket.c (kernel_read): Better BSD routing socket support.
+
 1999-10-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* client_main.c: Disable making obsolete zebra test `client'

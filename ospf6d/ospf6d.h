@@ -41,9 +41,6 @@
 #include "zclient.h"
 #include "table.h"
 
-/* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
-/* #define DISABLE_IPV6_CHECKSUM */
-
 #define HASHVAL 64
 #define MAXIOVLIST 1024
 
@@ -66,6 +63,9 @@
 #include "ospf6_network.h"
 #include "ospf6_zebra.h"
 #include "ospf6_dump.h"
+
+/* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
+/* #define DISABLE_IPV6_CHECKSUM */
 
 /* global variables */
 extern char *progname;
@@ -94,23 +94,18 @@ extern char *recent_reason;
 #endif /* INRIA_IPV6 */
 
 /* historycal for KAME */
-#ifndef IPV6_ADD_MEMBERSHIP
-#ifdef HYDRANGEA
-#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
-#endif
-#ifdef KAME
-#ifdef IPV6_JOIN_GROUP
-#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
-#endif
-#ifdef IPV6_JOIN_MEMBERSHIP
-#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_MEMBERSHIP
-#endif
-#endif
+#ifndef IPV6_JOIN_GROUP
+#ifdef IPV6_ADD_MEMBERSHIP
+#define IPV6_JOIN_GROUP IPV6_ADD_MEMBERSHIP
+#endif /* IPV6_ADD_MEMBERSHIP. */
+#ifdef IPV6_JOIN_MEMBERSHIP  /* I'm not sure this really exist. -- kunihiro. */
+#define IPV6_JOIN_GROUP  IPV6_JOIN_MEMBERSHIP
+#endif /* IPV6_JOIN_MEMBERSHIP. */
 #endif
 
-#ifndef IPV6_DROP_MEMBERSHIP
-#ifdef  IPV6_LEAVE_GROUP
-#define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
+#ifndef IPV6_LEAVE_GROUP
+#ifdef  IPV6_DROP_MEMBERSHIP
+#define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP
 #endif
 #endif
 

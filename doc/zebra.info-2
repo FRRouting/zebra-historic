@@ -5,7 +5,13 @@ START-INFO-DIR-ENTRY
 * Zebra: (zebra).		The GNU Zebra routing software package.
 END-INFO-DIR-ENTRY
 
-   (C) Copyright 1999 Free Software Foundation, Inc.
+   This file documents the GNU Zebra software which manages common
+TCP/IP routing protocols.
+
+   This is Edition 0.1, last updated 6 November 1999 of `The GNU Zebra
+Manual', for Zebra Version 0.81.
+
+   Copyright (C) 1999 Kunihiro Ishiguro
 
    Permission is granted to make and distribute verbatim copies of this
 manual provided the copyright notice and this permission notice are
@@ -19,7 +25,39 @@ permission notice identical to this one.
    Permission is granted to copy and distribute translations of this
 manual into another language, under the above conditions for modified
 versions, except that this permission notice may be stated in a
-translation approved by the Free Software Foundation.
+translation approved by Kunihiro Ishiguro.
+
+
+File: zebra.info,  Node: bgpd Terminal Mode Commands,  Next: bgpd Sample Session,  Prev: bgpd Configuration,  Up: bgpd
+
+bgpd Terminal Mode Commands
+===========================
+
+ - Command: show ip bgp [NETWORK]
+     Lists all BGPd routes.
+
+ - Command: show ip bgp regexp AS-REGEXP
+
+ - Command: show ip bgp summary
+
+ - Command: show ip bgp neighbor [PEER]
+
+ - Command: clear ip bgp PEER
+     Clears peers which have addresses of X.X.X.X
+
+ - Command: show debug
+
+ - Command: debug event
+
+ - Command: debug update
+
+ - Command: debug keepalive
+
+ - Command: no debug event
+
+ - Command: no debug update
+
+ - Command: no debug keepalive
 
 
 File: zebra.info,  Node: bgpd Sample Session,  Next: bgpd Log Format,  Prev: bgpd Terminal Mode Commands,  Up: bgpd
@@ -59,7 +97,7 @@ How to Set Up A 6-Bone Connection
      !
      router zebra
      !
-     ! BGP-4+ configuraion
+     ! BGP-4+ configuration
      !
      router bgp 7675
       bgp router-id 10.0.0.1
@@ -323,7 +361,7 @@ IPv6 Supports
 supports RIPng, OSPFv3 and BGP-4+.  You can give IPv6 addresses to an
 interface and configure static IPv6 routing information.  Zebra-IPv6
 also provides automatic address configuration via a feature called
-`address autoconfiguration'.  To do it, the router must send router
+`address auto configuration'.  To do it, the router must send router
 advertisement messages to the all nodes that exist on the network.
 
 * Menu:
@@ -357,7 +395,7 @@ interfaces.
 `ioctl'
      The `ioctl' method is a very traditional way for reading or writing
      kernel information.  `ioctl' can be used for looking up interfaces
-     and for modifying interface addresses, flags, mtu swettings and
+     and for modifying interface addresses, flags, mtu settings and
      other types of information.  Also, `ioctl' can insert and delete
      kernel routing table entries.  It will soon be available on almost
      any platform which zebra supports, but it is a little bit ugly
@@ -494,7 +532,7 @@ Command Index
 * no log stdout:                         Basic Config Commands.
 * no log syslog:                         Basic Config Commands.
 * no multicast:                          Interface Commands.
-* no neigbour A.B.C.D:                   ripd Configuration.
+* no neighbor A.B.C.D:                   ripd Configuration.
 * no neighbor PEER description ...:      bgpd Configuration.
 * no neighbor PEER shutdown:             bgpd Configuration.
 * no network IFNAME:                     ripd Configuration.

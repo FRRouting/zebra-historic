@@ -174,7 +174,8 @@ ospf_if_ipmulticast (int sock, struct prefix *p)
 
   addr = p->u.prefix4;
 
-  ret = setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof (addr));
+  ret = setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void *)&addr,
+		    sizeof (addr));
   if (ret < 0)
     zlog_warn ("can't setsockopt IP_MULTICAST_IF: %s", strerror (errno));
 

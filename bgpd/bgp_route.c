@@ -39,7 +39,7 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgp_attr.h"
-#include "bgpd/bgp_dump.h"
+#include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_packet.h"
@@ -54,6 +54,13 @@ void bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info);
 struct route_table *bgp_table_ipv4;
 struct route_table *bgp_static_ipv4;
 struct route_table *bgp_aggregate_ipv4;
+
+#ifdef HAVE_MBGPV4
+/* MBGP Routing Information Base. */
+struct route_table *mbgp_table_ipv4;
+struct route_table *mbgp_static_ipv4;
+struct route_table *mbgp_aggregate_ipv4;
+#endif /* HAVE_MBGPV4 */
 
 #ifdef HAVE_IPV6
 struct route_table *bgp_table_ipv6;
@@ -154,9 +161,15 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (new->attr->origin > exist->attr->origin)
     return 0;
 
-  /* MED check. */
+  /* MED check. 
+     Zinin: it should only be applied when the paths have come
+            from the same AS, or when the flag is on
+   */
   if ((new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC)) &&
       (new->attr->flag & ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC)))
+
+  /* Zinin: this is a bug: the second line above should say "exist->..."*/
+
     {
       if (new->attr->med < exist->attr->med)
 	return 1;
@@ -171,6 +184,8 @@ bgp_info_cmp (struct bgp_info *new, struct bgp_info *exist)
   if (bgp_peer_sort (new->peer) == BGP_PEER_IBGP &&
       bgp_peer_sort (exist->peer) == BGP_PEER_EBGP)
     return 0;
+
+  /* Zinin: here we should have a RID-comparision */
 
   return 1;
 }
@@ -260,6 +275,10 @@ bgp_output_filter (struct peer *peer, struct prefix *p, struct bgp_info *info)
 static struct route_node *
 nlri_node_get (struct prefix *p)
 {
+#ifdef HAVE_MBGPV4
+  if (p->family == AF_INET && p->safi == SAFI_MULTICAST)
+    return route_node_get (mbgp_table_ipv4, p);
+#endif /* HAVE_MBGPV4 */
   if (p->family == AF_INET)
     return route_node_get (bgp_table_ipv4, p);
 #ifdef HAVE_IPV6
@@ -490,6 +509,14 @@ bgp_announce_table (struct peer *peer)
 	if (info->selected && info->peer != peer)
 	  bgp_announce (peer, &node->p, info);
 
+#ifdef HAVE_MBGPV4
+  if (peer->family == AF_INET)
+    for (node = route_top (mbgp_table_ipv4); node; node = route_next (node))
+      if ((info = node->info) != NULL)
+	if (info->selected && info->peer != peer)
+	  bgp_announce (peer, &node->p, info);
+#endif /* HAVE_MBGPV4 */
+
 #ifdef HAVE_IPV6
   if (peer->family == AF_INET6)
     for (node = route_top (bgp_table_ipv6); node; node = route_next (node))
@@ -639,7 +666,7 @@ nlri_process (struct prefix *p, struct bgp_info *info)
     
   /* Check is this prefix is already announced from same peer. */
   for (replace = node->info; replace; replace = replace->next)
-    if (replace->peer == info->peer)
+    if (replace->peer == info->peer && replace->type == info->type)
       {
 	bgp_info_delete ((struct bgp_info **) &node->info, replace);
 	bgp_info_free (replace);
@@ -649,8 +676,15 @@ nlri_process (struct prefix *p, struct bgp_info *info)
       }
 
   /* If there is no replace route. */
-  if (!replace)
+  if (!replace) {
+#ifdef HAVE_MBGPV4
+    if(p->safi ==  SAFI_UNICAST)  info->peer->prefix_count++;
+    else if( p->safi == SAFI_MULTICAST) 
+      info->peer->prefix_count_multicastv4++;
+#else
     info->peer->prefix_count++;
+#endif
+  }
 
   /* Aggregate check. */
   bgp_aggregate_route (p, info);
@@ -770,10 +804,63 @@ bgp_input_modifier (struct prefix *p, struct peer *peer, struct attr *attr)
   return bgp_attr_intern (attr);
 }
 
+#ifdef HAVE_MBGPV4
+/* Support function if we performing translation from unicast 
+   to multicast RIB */
+
+void
+nlri_translate_update (struct peer *peer, struct prefix *p, 
+		       struct attr *attrin )
+{
+  struct bgp_info *br;
+  struct prefix pp;
+  struct attr *attr_dup=NULL;
+
+ if( peer->translate_update == TRANSLATE_UPDATE_UNICAST_MULTICAST ) {
+
+   /* We must create an update. Save prefix and attributes.
+     So two calls to nlri_pocess can be done */
+
+   /* Also we we want think of how input filtering should be handled
+      but we leave it out for now, for the moment the update is handled 
+      as a pure unicast update in nlri_update */
+
+   bzero (&pp, sizeof pp);
+   memcpy (&pp, p, sizeof pp);
+   attr_dup = bgp_attr_intern (attrin);
+ }
+
+ /* When we are on translation we always send to multicast RIB */
+
+   br = bgp_info_new ();
+   p->safi = SAFI_MULTICAST;
+   br->type = ZEBRA_ROUTE_BGP;
+   br->sub_type = BGP_ROUTE_NORMAL;
+   br->peer = peer;
+   br->attr  = attrin;
+   br->uptime = time (NULL);
+   nlri_process (p, br);   
+
+ /* And sometimes or maybe most of the time to unicast RIB as well */
+
+   if( peer->translate_update == TRANSLATE_UPDATE_UNICAST_MULTICAST) { 
+     assert( attr_dup != NULL);
+     br = bgp_info_new ();
+     pp.safi = SAFI_UNICAST;
+     br->type = ZEBRA_ROUTE_BGP;
+     br->sub_type = BGP_ROUTE_NORMAL;
+     br->peer = peer;
+     br->attr = attr_dup;
+     br->uptime = time (NULL);
+     nlri_process (&pp, br);
+   }
+}
+#endif /* HAVE_MBGPV4 */ 
+
 /* Parse route and add route into radix tree. */
 void
 nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len, 
-	    int family)
+	    int family, int safi)
 {
   int psize;
   struct prefix p;
@@ -796,6 +883,9 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
       /* Fetch one prefix from NLRI. */
       bzero (&p, sizeof p);
       p.family = family;
+#ifdef HAVE_MBGPV4
+      p.safi = safi;
+#endif /* HAVE_MBGPV4 */
       p.prefixlen = *pnt++;
 
       /* Check prefix length of incoming route. */
@@ -831,6 +921,10 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
 	  continue;
 	}
 
+      /* Check validness of the attribute. */
+      if (attr->invalid)
+	continue;
+
       /* Incoming packet modifier by route-maps. */
       attrnew = bgp_input_modifier (&p, peer, attr);
       if (attrnew == NULL)
@@ -843,6 +937,13 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
       zlog (peer->log, LOG_INFO, "Update:[%s] %s/%d %s",
 	    peer->host, inet_ntop(family, &p.u.prefix, buf, BUFSIZ),
 	    p.prefixlen, attrstr);
+
+#ifdef HAVE_MBGPV4
+      if( peer->translate_update ) {
+	nlri_translate_update(peer, &p, attrnew);
+	return;
+      }
+#endif /* HAVE_MBGPV4 */
 
       br = bgp_info_new ();
       br->type = ZEBRA_ROUTE_BGP;
@@ -858,7 +959,7 @@ nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len,
 }
 
 int
-nlri_delete (struct peer *peer, struct prefix *p)
+nlri_delete (struct peer *peer, struct prefix *p, int type)
 {
   struct route_node *node;
   struct bgp_info *del;
@@ -870,7 +971,7 @@ nlri_delete (struct peer *peer, struct prefix *p)
     return 0;
 
   for (del = node->info; del; del = del->next)
-    if (del->peer == peer)
+    if (del->peer == peer && del->type == type)
       break;
 
   /* Withdraw route from route list. */
@@ -894,7 +995,13 @@ nlri_delete (struct peer *peer, struct prefix *p)
 
   bgp_info_free (del);
 
+#ifdef HAVE_MGBPV4
+  if(node->p.safi ==  SAFI_UNICAST) peer->prefix_count--;
+  else if( node->p.safi == SAFI_MULTICAST) 
+  peer->prefix_count_multicastv4--;
+#else
   peer->prefix_count--;
+#endif
 
   route_unlock_node (node);
 
@@ -916,6 +1023,11 @@ nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
   pnt = stream_pnt (peer->ibuf);
   endp = pnt + unfeasible_len;
   
+  /* nlri_uneasible processes only plain ipv4 withdraws. mp are directly
+     handled by bgp_mp_unreach_parse. In case we are in translate_update
+     mode with have to transform withdraws to multicast RIB. */
+
+  
   while (pnt < endp)
     {
       bzero (&p, sizeof p);
@@ -923,9 +1035,28 @@ nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
       p.prefixlen = *pnt++;
       psize = PSIZE (p.prefixlen);
       memcpy (&p.u.prefix4, pnt, psize);
+#ifdef HAVE_MBGPV4
+
+      /* First case. We just tranform the unicast withdraw to multicast... */
+
+      if( peer->translate_update == TRANSLATE_UPDATE_MULTICAST ||
+	  peer->translate_update == TRANSLATE_UPDATE_UNICAST_MULTICAST)
+	p.safi = SAFI_MULTICAST;
+	 
+      /* And we have to create a withdraw as well */
+
+      if(peer->translate_update == TRANSLATE_UPDATE_UNICAST_MULTICAST) {
+	struct prefix pp;
+	bzero (&pp, sizeof pp); 
+	memcpy (&pp, &p, sizeof pp);
+	pp.safi = SAFI_UNICAST;
+	if (peer->family == AF_INET)
+	  nlri_delete (peer, &pp, ZEBRA_ROUTE_BGP);
+      }
+#endif /*  HAVE_MBGPV4 */
 
       if (peer->family == AF_INET)
-	nlri_delete (peer, &p);
+	nlri_delete (peer, &p, ZEBRA_ROUTE_BGP);
 
       pnt += psize;
     }
@@ -990,6 +1121,27 @@ bgp_peer_delete (struct peer *peer)
 	}
     }
 
+#ifdef HAVE_MBGPV4
+  for (np = route_top (mbgp_table_ipv4); np; np = route_next (np))
+    {
+      for (br = np->info; br; br = next)
+        {
+          /* Preserve next pointer. */
+          next = br->next;
+          if (br->peer == peer)
+            {
+              bgp_info_delete ((struct bgp_info **) &np->info, br);
+
+              /* If withdraw or new announcement needed. */
+              nlri_reselect (&np->p, (struct bgp_info *)np->info, br);
+
+              bgp_info_free (br);
+              route_unlock_node (np);
+            }
+        }
+    }
+#endif /*  HAVE_MBGPV4 */
+
 #ifdef HAVE_IPV6
   for (np = route_top (bgp_table_ipv6); np; np = route_next (np))
     for (br = np->info; br; br = next)
@@ -1010,6 +1162,9 @@ bgp_peer_delete (struct peer *peer)
 #endif /* HAVE_IPV6 */
 
   peer->prefix_count = 0;
+#ifdef HAVE_MBGPV4
+  peer->prefix_count_multicastv4 = 0;
+#endif
 }
 
 /* Withdraw specified route type's route. */
@@ -1202,6 +1357,7 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 {
   char buf[INET6_ADDRSTRLEN];
   struct attr *attr;
+  int sockunion_vty_out (struct vty *, union sockunion *);
 
   /* Header of detailed BGP route information. */
   vty_out (vty, "%s%s/%d%s",
@@ -1209,6 +1365,20 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 	   inet_ntop (p->family, &p->u.prefix, buf, INET6_ADDRSTRLEN),
 	   p->prefixlen,
 	   VTY_NEWLINE);
+
+  /* peer information. */
+  if (binfo->peer == peer_self)
+    vty_out (vty, "  Local%s", VTY_NEWLINE);
+  else
+    {
+      vty_out (vty, "  Neighbor: ");
+      sockunion_vty_out (vty, binfo->peer->su);
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
+
+  /* peer description. */
+  if (binfo->peer->desc)
+    vty_out (vty, "  Description: %s%s", binfo->peer->desc, VTY_NEWLINE);
 
   /* Print attribute */
   attr = binfo->attr;
@@ -1299,7 +1469,8 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 }  
 
 /* BGP route print out function. */
-DEFUN (show_ip_bgp, show_ip_bgp_cmd,
+DEFUN (show_ip_bgp,
+       show_ip_bgp_cmd,
        "show ip bgp [IPV4_ADDR]",
        SHOW_STR
        IP_STR
@@ -1373,6 +1544,85 @@ DEFUN (show_ip_bgp, show_ip_bgp_cmd,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_MBGPV4
+
+/* BGP route print out function. */
+DEFUN (show_ip_mbgp,
+       show_ip_mbgp_cmd,
+       "show ip mbgp [IPV4_ADDR]",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "IP address\n")
+{
+  int ret;
+  struct route_node *node;
+  struct bgp_info *route;
+  struct prefix_ipv4 match;
+
+  route = NULL;
+
+  /* `show ip mbgp' command shows all of bgp routes. */
+  if (argc == 0)
+    {
+      int count;
+
+      /* Header print out. */
+      vty_out (vty, "   Network             Next Hop            Metric    LocPrf    Weight Path\r\n");
+
+      /* We try to set counter to ten. */
+      count = 10;
+
+      /* Start processing of routes. */
+      for (node = route_top (mbgp_table_ipv4); node; node = route_next (node)) 
+	for (route = node->info; route; route = route->next)
+	  {
+	    route_vty_out (vty, &node->p, route);
+
+	    /* Decrement counter. */
+	    count--;
+	    if (count == 0)
+	      {
+		/* We need to preserve function pointer and process
+                   pointer. */
+		/* vty->; */
+	      }
+	  }
+
+      return CMD_SUCCESS;
+    }
+
+  /* `show ip bgp IPV4_ADDR command shows specified route's
+     information. */
+  ret = inet_aton (argv[0], &match.prefix);
+  if (! ret)
+    {
+      vty_out (vty, "address is malformed\r\n");
+      return CMD_WARNING;
+    }
+  match.family = AF_INET;
+  match.prefixlen = IPV4_MAX_BITLEN;
+  
+  /* Lookup route node. */
+  node = route_node_match (bgp_table_ipv4, (struct prefix *) &match);
+
+  if (node == NULL) 
+    {
+      vty_out (vty, "can't find route\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Node is locked by route_node_lookup. */
+  for (route = node->info; route; route = route->next)
+    route_vty_out_detail (vty, &node->p, route);
+
+  /* Work is done, so unlock the node. */
+  route_unlock_node (node);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
+
 DEFUN (show_ip_bgp_regexp, 
        show_ip_bgp_regexp_cmd,
        "show ip bgp regexp .REGEXP",
@@ -1427,6 +1677,61 @@ DEFUN (show_ip_bgp_regexp,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_MBGPV4
+DEFUN (show_ip_mbgp_regexp, 
+       show_ip_mbgp_regexp_cmd,
+       "show ip mbgp regexp .REGEXP",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Show regular expression matched mbgp routes\n"
+       "AS path regular expression\n")
+{
+  int i;
+  int ret;
+  struct buffer *b;
+  char *regstr;
+  int first;
+  struct route_node *node;
+  struct bgp_info *route;
+  regex_t *regex;
+  
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  regstr = buffer_getstr (b);
+  buffer_free (b);
+
+  regex = bgp_regcomp (regstr);
+  if (! regex)
+    {
+      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  for (node = route_top (mbgp_table_ipv4); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      {
+	ret = bgp_regexec (regex, route->attr->aspath);
+	if (ret != REG_NOMATCH)
+	  route_vty_out (vty, &node->p, route);
+      }
+  bgp_regex_free (regex);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
+
 DEFUN (show_ip_bgp_prefix_list, 
        show_ip_bgp_prefix_list_cmd,
        "show ip bgp prefix-list PLIST_NAME",
@@ -1458,6 +1763,41 @@ DEFUN (show_ip_bgp_prefix_list,
 
   return CMD_SUCCESS;
 }
+
+#ifdef HAVE_MBGPV4 
+DEFUN (show_ip_mbgp_prefix_list, 
+       show_ip_mbgp_prefix_list_cmd,
+       "show ip mbgp prefix-list PLIST_NAME",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Show prefix-list matched mbgp routes\n"
+       "Prefix-list name\n")
+{
+  int ret;
+  struct prefix_list *plist;
+  struct route_node *node;
+  struct bgp_info *route;
+
+  plist = prefix_list_lookup (AF_INET, argv[0]);
+  if (plist == NULL)
+    {
+      vty_out (vty, "Can't find prefix-list\r\n");
+      return CMD_WARNING;
+    }
+
+  for (node = route_top (mbgp_table_ipv4); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      {
+	ret = prefix_list_apply (plist, &node->p);
+	if (ret == PREFIX_PERMIT)
+	  route_vty_out (vty, &node->p, route);
+      }
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_MBGPV4 */
+
 
 #ifdef HAVE_IPV6
 DEFUN (show_ipv6_bgp,
@@ -1564,9 +1904,43 @@ DEFUN (show_ipv6_bgp_regexp,
 
   return CMD_SUCCESS;
 }
+
+DEFUN (show_ipv6_bgp_prefix_list, 
+       show_ipv6_bgp_prefix_list_cmd,
+       "show ipv6 bgp prefix-list PLIST_NAME",
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Show prefix-list matched bgp routes\n"
+       "Prefix-list name\n")
+{
+  int ret;
+  struct prefix_list *plist;
+  struct route_node *node;
+  struct bgp_info *route;
+
+  plist = prefix_list_lookup (AF_INET6, argv[0]);
+  if (plist == NULL)
+    {
+      vty_out (vty, "Can't find prefix-list%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  for (node = route_top (bgp_table_ipv6); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      {
+	ret = prefix_list_apply (plist, &node->p);
+	if (ret == PREFIX_PERMIT)
+	  route_vty_out (vty, &node->p, route);
+      }
+
+  return CMD_SUCCESS;
+}
 #endif
 
+
 /* Configure static BGP network. */
+
 DEFUN (bgp_network,
        bgp_network_cmd,
        "network PREFIX",
@@ -1643,7 +2017,7 @@ DEFUN (no_bgp_network,
       return CMD_WARNING;
     }
 
-  nlri_delete (peer_self, (struct prefix *) &p);
+  nlri_delete (peer_self, (struct prefix *) &p, ZEBRA_ROUTE_BGP);
 
   /* bgp_attr_free (np->info); */
   np->info = NULL;
@@ -1653,6 +2027,100 @@ DEFUN (no_bgp_network,
 
   return CMD_SUCCESS;
 }
+
+#ifdef HAVE_MBGPV4
+
+DEFUN (bgp_network_nlri,
+       bgp_network_nlri_cmd,
+       "network PREFIX nlri multicast",
+       "Announce network setup\n"
+       "Static network for bgp/mbgp announcement\n")
+{
+  int ret;
+  struct bgp *bgp;
+  struct prefix p;
+  struct route_node *node;
+  struct bgp_info *bgp_info;
+
+  bgp = (struct bgp *) vty->index;
+
+  ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
+
+  p.safi = SAFI_MULTICAST;
+
+  /* Make sure mask is applied. */
+  apply_mask (&p);
+
+  node = route_node_get (mbgp_static_ipv4, &p);
+  if (node->info)
+    {
+      vty_out (vty, "There is already same static announcement.\r\n");
+      route_unlock_node (node);
+      return CMD_WARNING;
+    }
+
+  bgp_info = bgp_info_new ();
+  bgp_info->type = ZEBRA_ROUTE_BGP;
+  bgp_info->sub_type = BGP_ROUTE_STATIC;
+  bgp_info->peer = peer_self;
+  bgp_info->attr = bgp_attr_make_default (BGP_ORIGIN_IGP);
+  node->info = bgp_info;
+  node->p.safi = p.safi;
+
+  nlri_process (&p, bgp_info);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_network_nlri,
+       no_bgp_network_nlri_cmd,
+       "no network PREFIX nlri multicast",
+       NO_STR
+       "Announce network setup\n"
+       "Delete static network for bgp announcement\n")
+{
+  int ret;
+  struct bgp *bgp;
+  struct route_node *np;
+  struct prefix_ipv4 p;
+
+  bgp = (struct bgp *) vty->index;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
+
+  apply_mask_ipv4 (&p);
+
+  np = route_node_get (mbgp_static_ipv4, (struct prefix *) &p);
+  if (!np->info)
+    {
+      vty_out (vty, "Can't find specified static route configuration.\r\n");
+      route_unlock_node (np);
+      return CMD_WARNING;
+    }
+
+  p.safi = SAFI_MULTICAST;
+  nlri_delete (peer_self, (struct prefix *) &p, ZEBRA_ROUTE_BGP);
+
+  /* bgp_attr_free (np->info); */
+  np->info = NULL;
+
+  route_unlock_node (np);
+  route_unlock_node (np);
+
+  return CMD_SUCCESS;
+}
+
+#endif / HAVE_MBGV4 */
 
 DEFUN (aggregate_address,
        aggregate_address_cmd,
@@ -1788,7 +2256,7 @@ DEFUN (no_ipv6_bgp_network,
       return CMD_WARNING;
     }
 
-  nlri_delete (peer_self, (struct prefix *) &p);
+  nlri_delete (peer_self, (struct prefix *) &p, ZEBRA_ROUTE_BGP);
 
   node->info = NULL;
 
@@ -1875,6 +2343,14 @@ config_write_network (struct vty *vty, struct bgp *bgp, int family)
 		   rn->p.prefixlen,
 		   VTY_NEWLINE);
     }
+#ifdef HAVE_MBGPV4
+  if (family == AF_INET)
+    for (rn = route_top (mbgp_static_ipv4); rn; rn = route_next (rn)) 
+      if ((route = rn->info) != NULL)
+	vty_out (vty, " network %s/%d nlri multicast%s", 
+		 inet_ntop (AF_INET, &rn->p.u.prefix4, buf, BUFSIZ), 
+		 rn->p.prefixlen, VTY_NEWLINE);
+#endif /* HAVE_MBGPV4 */
 
 #ifdef HAVE_IPV6
   if (family == AF_INET6)
@@ -1921,6 +2397,24 @@ bgp_route_init ()
   install_element (BGP_NODE, &no_bgp_network_cmd);
   install_element (BGP_NODE, &aggregate_address_cmd);
 
+#ifdef HAVE_MBGPV4
+  install_element (BGP_NODE, &bgp_network_nlri_cmd);
+  install_element (BGP_NODE, &no_bgp_network_nlri_cmd);
+
+  /* IPv4 MBGP related table and commands. */
+  mbgp_table_ipv4 = route_table_init ();
+  mbgp_static_ipv4 = route_table_init ();
+  mbgp_aggregate_ipv4 = route_table_init ();
+
+  install_element (VIEW_NODE, &show_ip_mbgp_cmd);
+  install_element (VIEW_NODE, &show_ip_mbgp_regexp_cmd);
+  install_element (VIEW_NODE, &show_ip_mbgp_prefix_list_cmd);
+
+  install_element (ENABLE_NODE, &show_ip_mbgp_cmd);
+  install_element (ENABLE_NODE, &show_ip_mbgp_regexp_cmd);
+  install_element (ENABLE_NODE, &show_ip_mbgp_prefix_list_cmd);
+#endif /* HAVE_MBGPV4 */
+
 #ifdef HAVE_IPV6
   /* IPv6 related table and commands. */
   bgp_table_ipv6 = route_table_init ();
@@ -1933,7 +2427,10 @@ bgp_route_init ()
 
   install_element (VIEW_NODE, &show_ipv6_bgp_cmd);
   install_element (VIEW_NODE, &show_ipv6_bgp_regexp_cmd);
+  install_element (VIEW_NODE, &show_ipv6_bgp_prefix_list_cmd);
+
   install_element (ENABLE_NODE, &show_ipv6_bgp_cmd);
   install_element (ENABLE_NODE, &show_ipv6_bgp_regexp_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_bgp_prefix_list_cmd);
 #endif /* HAVE_IPV6 */
 }

@@ -67,12 +67,15 @@ GUILE = @GUILE@
 GUILE_CFLAGS = @GUILE_CFLAGS@
 GUILE_LDFLAGS = @GUILE_LDFLAGS@
 IF_METHOD = @IF_METHOD@
+IF_PROC = @IF_PROC@
 IPFORWARD = @IPFORWARD@
+KERNEL_METHOD = @KERNEL_METHOD@
 LIB_IPV6 = @LIB_IPV6@
 LIB_REGEX = @LIB_REGEX@
 MAKEINFO = @MAKEINFO@
 OSPF6D = @OSPF6D@
 OSPFD = @OSPFD@
+OTHER_METHOD = @OTHER_METHOD@
 PACKAGE = @PACKAGE@
 RANLIB = @RANLIB@
 RIPD = @RIPD@
@@ -374,12 +377,12 @@ rip_main.o: rip_main.c ../lib/version.h ../lib/thread.h \
 rip_routemap.o: rip_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/routemap.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/log.h \
- ../ripd/ripd.h
+ ../lib/sockunion.h ../ripd/ripd.h
 rip_snmp.o: rip_snmp.c
-rip_zebra.o: rip_zebra.c ../lib/thread.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../lib/prefix.h ripd.h ../lib/if.h \
- ../lib/linklist.h ../lib/buffer.h ../lib/network.h ../lib/stream.h \
- ../lib/log.h ../lib/zclient.h ../lib/routemap.h ../ripd/rip_debug.h
+rip_zebra.o: rip_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../lib/prefix.h ../lib/stream.h ../lib/routemap.h ../lib/zclient.h \
+ ../lib/if.h ../lib/linklist.h ../lib/log.h ../ripd/ripd.h \
+ ../ripd/rip_debug.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

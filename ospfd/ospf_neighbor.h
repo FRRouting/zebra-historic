@@ -73,6 +73,7 @@ struct ospf_neighbor
   struct thread *t_ls_upd;
 
   /* Statistics Field */
+  u_int32_t state_change;
 };
 
 /* Macros. */
