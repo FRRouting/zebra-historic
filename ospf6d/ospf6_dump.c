@@ -22,7 +22,6 @@
 #include "ospf6d.h"
 
 /* Global logging stream variable */
-ZLOG *zl;
 char strbuf[16];
 
 /* Strings for logging */
@@ -89,84 +88,30 @@ char *rlsatype_name[] =
 
 char *print_lsahdr (struct lsa_hdr *lsh)
 {
-  static char buf[256], tmp[64];
+  static char buf[256], tmp[64], tmp2[64];
 
   inet_ntop (AF_INET, &lsh->lsh_advrtr, tmp, sizeof (tmp));
-  sprintf (buf, "LS type[(%s)] LS id[%lu] AdvRtr[%s] Len[%#x]",
+  inet_ntop (AF_INET, &lsh->lsh_id, tmp2, sizeof (tmp2));
+
+  sprintf (buf, "[%s: id %s, AdvRtr %s, len %#x]",
            lstype_name[typeindex(lsh->lsh_type)],
-           ntohl (lsh->lsh_id),
-           tmp, ntohs (lsh->lsh_len));
+           tmp2, tmp, ntohs (lsh->lsh_len));
   return buf;
-}
-
-void
-ospf6_err (const char *format, ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  zlog (zl, LOG_ERR, format, args);
-  va_end (args);
-  return;
-}
-
-void
-ospf6_warn (const char *format, ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  zlog (zl, LOG_WARNING, format, args);
-  va_end (args);
-  return;
-}
-
-void
-ospf6_notice (const char *format, ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  zlog (zl, LOG_NOTICE, format, args);
-  va_end (args);
-  return;
-}
-
-void
-ospf6_info (const char *format, ...)
-{
-  va_list args;
-
-  va_start (args, format);
-  zlog (zl, LOG_INFO, format, args);
-  va_end (args);
-  return;
-}
-
-void
-ospf6_debug (const char *format, ...)
-{
-  va_list args;
-
-#ifdef DEBUG_OSPF6
-  va_start (args, format);
-  zlog (zl, LOG_DEBUG, format, args);
-  va_end (args);
-#endif
-  return;
 }
 
 void
 ospf6_log_init ()
 {
-  zl = openzlog (progname, ZLOG_STDOUT, 0,  /* xxx temporaly proto num */
+  int flag = 0;
+
+  if (!daemon_mode)
+    flag |= ZLOG_STDOUT;
+  zlog_default = openzlog (progname, flag, ZLOG_OSPF6,
                  LOG_CONS|LOG_NDELAY|LOG_PERROR|LOG_PID,
                  LOG_DAEMON);
 
-  zlog_default = zl;
-
   /* Print OSPF6d start messages. */
-  zlog (zl, LOG_INFO, "OSPF6d (%s) starts", ZEBRA_VERSION);
+  zlog (NULL, LOG_INFO, "OSPF6d (%s) starts", ZEBRA_VERSION);
   return;
 }
 

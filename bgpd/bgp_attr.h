@@ -43,6 +43,15 @@
 /* Default attribute value. */
 #define DEFAULT_LOCAL_PREF    100
 
+
+/* Router Reflector related structure. */
+struct cluster_list
+{
+  unsigned long refcnt;
+  int length;
+  struct in_addr *list;
+};
+
 struct attr
 {
   /* Reference count of this attribute. */
@@ -60,6 +69,8 @@ struct attr
   struct in_addr aggregator_addr;
   u_int32_t dpa;
   u_int32_t weight;
+  struct in_addr originator_id;
+  struct cluster_list *cluster;
 
 #ifdef HAVE_IPV6
   /* BGP-4+ nexthop. */
@@ -89,5 +100,8 @@ bgp_size_t
 bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p);
 
 struct attr *bgp_attr_intern (struct attr *attr);
+
+int 
+cluster_loop_check (struct cluster_list *cluster, struct in_addr originator);
 
 #endif /* _ZEBRA_BGP_ATTR_H */

@@ -1,3 +1,33 @@
+1999-05-07    <kunihiro@zebra.org>
+
+	* ospf6_zebra.h (struct zebra): Add hitory entry to structure.
+
+1999-05-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6_main.c (main): Add KAME check for binding vty socket.
+	(main): Delete old interface get routine garbage.
+
+	* ospf6d.c: Change all `show ip6' statement to `show ipv6'.
+	(show_ipv6_ospf6_requestlist): Add description.
+
+1999-05-04  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* ospf6_lsa.c, etc: Many bug fix, now two routers
+	on the same segment can become FULL neighbor state
+	each other.
+
+1999-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: Add file dependency.
+	(depend): Add target.
+
+1999-05-02  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* Clean up and fix have been almost done. This code
+	now testing stage of Intra area routing.
+
+	* Configuration Vty become more similar to Cisco.
+
 1999-04-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Trim training newline from zlog format arguemnt.

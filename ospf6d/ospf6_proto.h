@@ -55,6 +55,7 @@ struct ospf6
   vers_t        version;
   rtr_id_t      router_id;
   list          area_list;
+  int           isinstall;
 };
 
 /* OSPF options */

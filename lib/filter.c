@@ -371,10 +371,9 @@ access_list_apply (struct access_list *access, void *object)
   p = (struct prefix *) object;
 
   for (filter = access->head; filter; filter = filter->next)
-    {
-      if (filter->any || filter_match (filter, p))
-	return filter->type;
-    }
+    if (filter->any || filter_match (filter, p))
+      return filter->type;
+
   return FILTER_DENY;
 }
 

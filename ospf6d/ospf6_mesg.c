@@ -40,7 +40,7 @@ proc_hello (struct sockaddr_in6 *src, struct iovec *iov,
   hello = (struct hello *)(iov[1].iov_base);
 
   /* check how many router-id has been attached */
-  seenrtrnum = (ospf6_hdr->len - sizeof (struct ospf6_hdr)
+  seenrtrnum = (ntohs (ospf6_hdr->len) - sizeof (struct ospf6_hdr)
                - sizeof (struct hello)) / sizeof (rtr_id_t);
 
 #ifdef DEBUG_HELLO
@@ -49,17 +49,17 @@ proc_hello (struct sockaddr_in6 *src, struct iovec *iov,
     char dr[16], bdr[16], nb[MAXSEENNBR][16];
     inet_ntop (AF_INET, &hello->dr, dr, sizeof (dr));
     inet_ntop (AF_INET, &hello->bdr, bdr, sizeof (bdr));
-    ospf6_debug ("HELLO: Interface ID[%#x]\n", ntohl (hello->interface_id));
-    ospf6_debug ("HELLO: Rtr Pri[%#x], Options[Not yet]\n", hello->rtr_pri);
-    ospf6_debug ("HELLO: Hello Int[%d], RtrDeadInt[%d]\n",
+    zvlog_debug ("HELLO: Interface ID[%#x]", ntohl (hello->interface_id));
+    zvlog_debug ("HELLO: Rtr Pri[%#x], Options[Not yet]", hello->rtr_pri);
+    zvlog_debug ("HELLO: Hello Int[%d], RtrDeadInt[%d]",
                  ntohs (hello->hello_interval),
                  ntohs (hello->router_dead_interval));
-    ospf6_debug ("HELLO: DR [%s], BDR[%s]\n", dr, bdr);
+    zvlog_debug ("HELLO: DR [%s], BDR[%s]\n", dr, bdr);
     rtr_idp = (rtr_id_t *)(hello + 1);
     for (i = 0; i < seenrtrnum && i < MAXSEENNBR; i++)
       {
         inet_ntop (AF_INET, rtr_idp, nb[i], sizeof (nb[i]));
-        ospf6_debug ("HELLO: Seen [%s]\n", nb[i]);
+        zvlog_debug ("HELLO: Seen [%s]", nb[i]);
         rtr_idp++;
       }
   }
@@ -102,7 +102,7 @@ proc_hello (struct sockaddr_in6 *src, struct iovec *iov,
   if (!IN6_ARE_ADDR_EQUAL (&src->sin6_addr, &nbr->hisaddr.sin6_addr))
     {
       char ntopbuf[32];
-      zlog (NULL, LOG_WARNING,"*** Neighbor %s have changed his address!",
+      zvlog_warn ("*** Neighbor %s have changed his address!",
                   inet_ntop (src->sin6_family, &src->sin6_addr,
                   ntopbuf, sizeof (ntopbuf)));
       memcpy (&nbr->hisaddr, src, sizeof (struct sockaddr_in6));
@@ -207,10 +207,10 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
       *bitsp++ = 'm';
     else
       *bitsp++ = 's';
-    ospf6_debug ("DD: Options[Not Yet]\n");
-    ospf6_debug ("DD: InterfaceMTU[%lu] Bits[%s]\n",
+    zvlog_debug ("DD: Options[Not Yet]");
+    zvlog_debug ("DD: InterfaceMTU[%lu] Bits[%s]",
                  ntohs (ddp->interface_mtu), bits);
-    ospf6_debug ("DD: SequenceNumber[%lu]\n",
+    zvlog_debug ("DD: SequenceNumber[%lu]",
                  ntohl (ddp->sequence_number));
   }
 #endif
@@ -248,7 +248,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
         }
       else
         {
-          ospf6_info ("Negotiation with %s Failed\n", nbr->str);
+          zvlog_info ("Negotiation with %s Failed", nbr->str);
           return 0;
         }
 
@@ -260,7 +260,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
       /* Check if duplicate */
       if (!memcmp (ddp, &nbr->last_dd, sizeof (struct database_description)))
         {
-          ospf6_info ("Duplicate DatabaseDescription from %s\n", nbr->str);
+          zvlog_info ("Duplicate DatabaseDescription from %s", nbr->str);
           if (!DD_IS_MSBIT_SET (nbr->dd_bits))    /* Slave */
             thread_add_event (master, send_database_description, nbr, 0);
           return 0;
@@ -268,14 +268,14 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
 
       if (!(DD_IS_MSBIT_SET (nbr->dd_bits) ^ DD_IS_MSBIT_SET (ddp->bits)))
         {
-          ospf6_info ("MSBIT mismatch from %s\n", nbr->str);
+          zvlog_info ("MSBIT mismatch from %s", nbr->str);
           thread_add_event (master, seqnumber_mismatch, nbr, 0);
           return 0;
         }
 
       if (DD_IS_IBIT_SET (ddp->bits))
         {
-          ospf6_info ("Initialize bit set from %s in state Exchange\n",
+          zvlog_info ("Initialize bit set from %s in state Exchange",
                       nbr->str);
           thread_add_event (master, seqnumber_mismatch, nbr, 0);
           return 0;
@@ -283,7 +283,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
 
       if (memcmp (ddp->options, nbr->last_dd.options, sizeof (ddp->options)))
         {
-          ospf6_info ("Option field have changed in DD from %s\n",
+          zvlog_info ("Option field have changed in DD from %s",
                       nbr->str);
           thread_add_event (master, seqnumber_mismatch, nbr, 0);
           return 0;
@@ -294,8 +294,8 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
           (!DD_IS_MSBIT_SET (nbr->dd_bits) && 
            ntohl (ddp->sequence_number) != nbr->dd_seqnum + 1))
         {
-          zlog (NULL, LOG_WARNING,"Sequence Number Mismatch from %s", nbr->str);
-          zlog (NULL, LOG_WARNING,"recv[%lu] have[%lu]",
+          zvlog_warn ("Sequence Number Mismatch from %s", nbr->str);
+          zvlog_warn ("recv[%lu] have[%lu]",
                       ntohl (ddp->sequence_number),
                       nbr->dd_seqnum);
           thread_add_event (master, seqnumber_mismatch, nbr, 0);
@@ -328,7 +328,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
     {
       /* one possible situation to come here is to find as-external
       lsa found when this area is stub */
-      zlog (NULL, LOG_WARNING,"AS-External found where stub area from %s in State %s",
+      zvlog_warn ("AS-External found where stub area from %s in State %s",
                   nbr->str, nbs_name[nbr->state]);
       thread_add_event (master, seqnumber_mismatch, nbr, 0);
       return 0;
@@ -337,7 +337,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
   /* only valid packet in Exchange and ExStart state will come here */
 
   /* Master decides whether to make event ExchangeDone on reception
-     Slave decides this on sending */
+     while Slave decides this on sending */
   if (DD_IS_MSBIT_SET (nbr->dd_bits))
     {
       /* This is Master. */
@@ -345,6 +345,12 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
       if (!DD_IS_MBIT_SET (ddp->bits) && !DD_IS_MBIT_SET (nbr->dd_bits))
         {
           thread_add_event (master, exchange_done, nbr, 0);
+          if (nbr->send_dd)
+            {
+              thread_cancel (nbr->send_dd);
+              nbr->send_dd = (struct thread *)NULL;
+            }
+          return 0; /* Prevent from sending another illegal DD */
         }
       proceed_summarylist (nbr);   /* DD bits may be changed */
     }
@@ -354,10 +360,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
       nbr->dd_seqnum = ntohl (ddp->sequence_number);
       proceed_summarylist (nbr);   /* DD bits may be changed */
       if (!DD_IS_MBIT_SET (ddp->bits) && !DD_IS_MBIT_SET (nbr->dd_bits))
-        {
-          thread_add_event (master, exchange_done, nbr, 0);
-          thread_add_event (master, send_database_description, nbr, 0);
-        }
+        thread_add_event (master, exchange_done, nbr, 0);
     }
 
   /* Save Last Received DD */
@@ -369,8 +372,7 @@ proc_database_description (struct sockaddr_in6 *src, struct iovec *iov,
       thread_cancel (nbr->send_dd);
       nbr->send_dd = (struct thread *)NULL;
     }
-  if (DD_IS_MBIT_SET (nbr->dd_bits))
-    thread_add_event (master, send_database_description, nbr, 0);
+  thread_add_event (master, send_database_description, nbr, 0);
 
   return 0;
 }
@@ -397,19 +399,19 @@ proc_linkstate_request (struct sockaddr_in6 *src, struct iovec *iov,
 
   if (nbr->state < NBS_EXCHANGE)
     {
-      zlog (NULL, LOG_WARNING,"LSREQ: Ignored from %s", nbr->str);
+      zvlog_warn ("LSREQ: Ignored from %s", nbr->str);
       return 0;
     }
 
   if (iov_count (iov) == 1)
-    zlog (NULL, LOG_WARNING,"LSREQ: Null Request from %s", nbr->str);
+    zvlog_warn ("LSREQ: Null Request from %s", nbr->str);
 
   for (i = 1; iov[i].iov_base; i++)
     {
       lsreq = (struct linkstate_request *)iov[i].iov_base;
 
 #ifdef DEBUG_LINKSTATE_REQUEST
-      ospf6_debug ("LSREQ from %s: %s\n", nbr->str,
+      zvlog_debug ("LSREQ from %s: %s", nbr->str,
                    print_lsahdr ((struct lsa_hdr *)lsreq));
 #endif
       lsip = lsa_lookup (lsreq->lsreq_type, lsreq->lsreq_id,
@@ -417,12 +419,13 @@ proc_linkstate_request (struct sockaddr_in6 *src, struct iovec *iov,
                          nbr->ospf6_if);
       if (!lsip)
         {
-          zlog (NULL, LOG_WARNING,"Requested[%s] from %s not found, BadLSReq",
+          zvlog_warn ("Requested[%s] from %s not found, BadLSReq",
                       print_lsahdr((struct lsa_hdr *)lsreq), nbr->str);
           thread_add_event (master, bad_lsreq, nbr, 0);
           return 0;
         }
 
+      zvlog_debug ("LSUPDATE(response): %s", print_lsahdr (lsip->lsh));
       attach_lsa_to_iov (lsip, response);
       lsanum++;
     }
@@ -474,11 +477,11 @@ proc_linkstate_update (struct sockaddr_in6 *src, struct iovec *iov,
 
   lsupdate = (struct linkstate_update *)iov[1].iov_base;
   lsanum = ntohl (lsupdate->lsupdate_num);
-  ospf6_debug ("LSUPDATE: # LSAs[%d] from %s\n", lsanum, nbr->str);
+  zvlog_debug ("LSUPDATE: # LSAs[%d] from %s", lsanum, nbr->str);
 
   for (lsh = (struct lsa_hdr *)iov[2].iov_base; lsanum; lsanum--)
     {
-      ospf6_debug ("LSUPDATE: %s\n", print_lsahdr (lsh));
+      zvlog_debug ("LSUPDATE: %s", print_lsahdr (lsh));
 
       lsa_receive (lsh, nbr);
       lsh = LSA_NEXT (lsh);
@@ -490,17 +493,19 @@ proc_linkstate_update (struct sockaddr_in6 *src, struct iovec *iov,
   for (n = listhead (nbr->direct_ack); n; nextnode (n))
     {
       lsi = (struct lsa_internal *) getdata (n);
-      ospf6_debug ("[%s] To DIRECT ACK\n", print_lsahdr (lsi->lsh));
+      zvlog_debug ("LSACK(direct): %s", print_lsahdr (lsi->lsh));
       attach_lsa_hdr_to_iov (lsi, directack);
       lsi->lsh->lsh_age = htons (calc_lsa_age_external (lsi)
                                  + nbr->ospf6_if->inf_trans_delay);
     }
 
   if (iov_count (directack))
-    ospf6_send (MSGT_LINKSTATE_ACK, directack,
-                (struct sockaddr *)&nbr->hisaddr, ospf6_if);
+    {
+      ospf6_send (MSGT_LINKSTATE_ACK, directack,
+                  (struct sockaddr *)&nbr->hisaddr, ospf6_if);
+    }
   else
-    ospf6_debug ("Nothing to Direct ACK\n");
+    zvlog_debug ("Nothing to Direct ACK");
 
   list_delete_all_node (nbr->direct_ack);
 
@@ -527,7 +532,7 @@ proc_linkstate_ack (struct sockaddr_in6 *src, struct iovec *iov,
 
   if (nbr->state < NBS_EXCHANGE)
     {
-      ospf6_debug ("LSACK: Ignored from %s\n", nbr->str);
+      zvlog_debug ("LSACK: Ignored from %s", nbr->str);
       return 0;
     }
 
@@ -536,7 +541,7 @@ proc_linkstate_ack (struct sockaddr_in6 *src, struct iovec *iov,
       lsh = (struct lsa_hdr *)iov[i].iov_base;
       lsi = make_lsa_hdr_internal (lsh, nbr);
 
-      ospf6_debug ("LSACK[%s] from %s\n", print_lsahdr (lsh), nbr->str);
+      zvlog_debug ("LSACK[%s] from %s", print_lsahdr (lsh), nbr->str);
 
       p = lsa_lookup (lsh->lsh_type, lsh->lsh_id, lsh->lsh_advrtr,
                       nbr->ospf6_if->area, nbr->ospf6_if);
@@ -547,14 +552,17 @@ proc_linkstate_ack (struct sockaddr_in6 *src, struct iovec *iov,
         continue;
       if (which_is_more_recent (p, lsi) == 0)
         {
-          ospf6_debug ("Delete[%s] from %s's retranslist\n",
+          zvlog_debug ("Delete[%s] from %s's retranslist",
                         print_lsahdr (lsi->lsh), nbr->str);
           list_delete_by_val (nbr->retranslist, p);
         }
       else
         {
-          zlog (NULL, LOG_WARNING, "RFC said to log!!");
-          continue;
+          zvlog_warn ("RFC said to log!!");
+          /* XXX continue; */
+          zvlog_debug ("Delete[%s] from %s's retranslist",
+                        print_lsahdr (lsi->lsh), nbr->str);
+          list_delete_by_val (nbr->retranslist, p);
         }
       free_lsa (lsi->lsh);
       free_lsa_internal_hdr (lsi);
@@ -571,19 +579,9 @@ proc_ospf6_hdr (struct iovec *iov, struct ospf6_if *ospf6_if)
   assert (ospf6_if);
   ospf6_hdr = (struct ospf6_hdr *)(iov[0].iov_base);
 
-#ifdef DEBUG_OSPF6
-  {
-    char rtr_id[16], area_id[16];
-    inet_ntop (AF_INET, &ospf6_hdr->router_id, rtr_id, sizeof (rtr_id));
-    inet_ntop (AF_INET, &ospf6_hdr->area_id, area_id, sizeof (area_id));
-    ospf6_debug ("Proc OSPF Message Header from %s, area %s\n",
-                 rtr_id, area_id);
-  }
-#endif /* DEBUG_OSPF6 */
-
   if (ospf6_hdr->version != ospf6_if->area->ospf6->version)
     {
-      ospf6_info ("Version mismatch between i/f and packet(%d).\n",
+      zvlog_info ("Version mismatch between i/f and packet(%d)",
                   ospf6_hdr->version);
       return 0;
     }
@@ -593,7 +591,7 @@ proc_ospf6_hdr (struct iovec *iov, struct ospf6_if *ospf6_if)
     {
       if (ospf6_hdr->area_id == 0)
         {
-          ospf6_notice ("Virtual link, not yet\n");
+          zvlog_notice ("Virtual link, not yet");
           return 0;
         }
       else
@@ -601,7 +599,7 @@ proc_ospf6_hdr (struct iovec *iov, struct ospf6_if *ospf6_if)
           char area_id[16];
           inet_ntop (AF_INET, &ospf6_hdr->area_id,
                      area_id, sizeof (area_id));
-          ospf6_info ("Can't find Area %s\n", area_id);
+          zvlog_info ("Can't find Area %s", area_id);
           return 0;
         }
     }
@@ -612,7 +610,7 @@ proc_ospf6_hdr (struct iovec *iov, struct ospf6_if *ospf6_if)
   /* Instance ID check */
   if (ospf6_if->area->ospf6->instance_id != ospf6_hdr->instance_id)
     {
-      ospf6_info ("Instance ID[%d] mismatch with %d on %s.\n",
+      zvlog_info ("Instance ID[%d] mismatch with %d on %s",
                   ospf6_hdr->instance_id, ospf6_if->interface->name,
                   ospf6_if->area->ospf6->instance_id);
       return -1;
@@ -703,8 +701,7 @@ make_database_description (struct iovec *iov, struct sockaddr_in6 *dst,
                    sizeof (struct database_description));
   if (!dd)
     {
-      zlog (NULL, LOG_ERR,
-	    "iov_append() failed in make_database_description ()");
+      zvlog_err ("iov_append() failed in make_database_description ()");
       return -1;
     }
 
@@ -716,13 +713,13 @@ make_database_description (struct iovec *iov, struct sockaddr_in6 *dst,
     {
       if (gettimeofday (&tv, (struct timezone *)NULL) < 0)
         {
-          zlog (NULL, LOG_WARNING, "gettimeofday() failed in"
+          zvlog_warn ("gettimeofday() failed in"
                       " make_database_description (): %s",
                       strerror (errno));
           tv.tv_sec = 1;
         }
       nbr->dd_seqnum = tv.tv_sec;
-      ospf6_debug ("Neighbor[%s] SequenceNumber newly set [%lu]\n",
+      zvlog_debug ("Neighbor[%s] SequenceNumber newly set [%lu]",
                     nbr->str, nbr->dd_seqnum);
     }
 
@@ -730,8 +727,13 @@ make_database_description (struct iovec *iov, struct sockaddr_in6 *dst,
 
   if (!DD_IS_IBIT_SET (nbr->dd_bits))
     {
+      struct lsa_internal *p;
       for (n = listhead (nbr->dd_retrans); n; nextnode (n))
-        attach_lsa_hdr_to_iov ((struct lsa_internal *)getdata (n), iov);
+        {
+          p = (struct lsa_internal *) getdata (n);
+          attach_lsa_hdr_to_iov (p, iov);
+          zvlog_debug ("DD: %s", print_lsahdr (p->lsh));
+        }
     }
 
   return 0;
@@ -749,7 +751,7 @@ make_linkstate_request (struct iovec *iov, struct sockaddr_in6 *dst,
 
   if (list_isempty (nbr->requestlist))
     {
-      zlog (NULL, LOG_WARNING,"LSREQ: empty requestlist of Neighbor[%s]",
+      zvlog_warn ("LSREQ: empty requestlist of Neighbor[%s]",
                   nbr->str);
       return -1;
     }
@@ -764,13 +766,14 @@ make_linkstate_request (struct iovec *iov, struct sockaddr_in6 *dst,
       lsreq->lsreq_type = lsi->lsh->lsh_type;
       lsreq->lsreq_id = lsi->lsh->lsh_id;
       lsreq->lsreq_advrtr = lsi->lsh->lsh_advrtr;
+      zvlog_debug ("LSREQ: %s",
+                   print_lsahdr ((struct lsa_hdr *)lsreq));
       if (iov_totallen (iov) >= DEFAULT_INTERFACE_MTU
                                 - sizeof (struct ospf6_hdr))
         break;
     }
   return 0;
 }
-
 int
 make_linkstate_update (struct iovec *iov, struct sockaddr_in6 *dst,
                        struct neighbor *nbr)
@@ -804,7 +807,7 @@ make_linkstate_update (struct iovec *iov, struct sockaddr_in6 *dst,
                                 - sizeof (struct ospf6_hdr))
         break;
       attach_lsa_to_iov (lsi, iov);
-      ospf6_debug ("[%s] to Retransmit (%d/%d)\n", print_lsahdr (lsi->lsh),
+      zvlog_debug ("LSUPDATE: %s (%d/%d)", print_lsahdr (lsi->lsh),
                    i, lsanum);
       i++;
     }

@@ -98,32 +98,21 @@ struct cmd_node
   vector desc_vector;
 };
 
+enum cmd_desc_type {DESC_STR, DESC_FUNC};
+
+struct cmd_desc
+{
+  enum cmd_desc_type type;
+  void *data;
+};
+
 /* Structure of command element. */
 struct cmd_element 
 {
   char *string;			/* Command specification by string. */
   int (*func) (struct cmd_element *, struct vty *, int, char **);
   char *doc;			/* Documentation of this command */
-  vector strvec;		/* Pointing out each command index */
-  vector descvec;		/* Pointing out each command index */
-  int cmdsize;			/* Command index count. */
-  char *config;			/* Configuration string */
-  vector subconfig;		/* Sub configuration string */
-};
-
-enum cmd_doc_type {DOC_STR, DOC_FUNC};
-
-struct cmd_doc
-{
-  enum cmd_doc_type *type;
-  void *data;
-};
-
-/* Structure of command element. */
-struct cmd_element2
-{
-  char *string;			/* Command specification by string. */
-  int (*func) (struct cmd_element *, struct vty *, int, char **);
+  struct cmd_desc *desc;	/* Command description. */
   vector strvec;		/* Pointing out each command index */
   vector descvec;		/* Pointing out each command index */
   int cmdsize;			/* Command index count. */
@@ -169,16 +158,17 @@ struct desc
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)
 
 /* New DEFUN for vty command interafce. */
-#define DEFUN2(funcname, cmdname, cmdstr, helpstr) \
+#define DESC(funcname) \
+struct cmd_desc funcname ## _desc[] =
+
+#define DEFUN2(funcname, cmdname, cmdstr) \
   int funcname (struct cmd_element *, struct vty *, int, char **); \
-  struct cmd_doc hogehoge[] = \
-  { \
-    helpstr \
-  }; \
   struct cmd_element cmdname = \
   { \
     cmdstr, \
     funcname, \
+    NULL, \
+    funcname ## _desc \
   }; \
   int funcname \
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)

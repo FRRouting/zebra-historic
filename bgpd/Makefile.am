@@ -59,10 +59,10 @@ bgpd.o: bgpd.c ../lib/prefix.h ../lib/thread.h ../lib/buffer.h \
  ../lib/stream.h ../lib/table.h ../lib/linklist.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/sockunion.h ../lib/network.h \
  ../lib/memory.h ../lib/roken.h ../lib/filter.h ../lib/routemap.h \
- ../lib/str.h ../lib/log.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
- ../bgpd/bgp_route.h ../bgpd/bgp_dump.h ../bgpd/bgp_attr.h \
- ../bgpd/bgp_community.h ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h \
- ../zebra/zebra.h
+ ../lib/str.h ../lib/log.h ../lib/plist.h ../bgpd/bgpd.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h ../bgpd/bgp_dump.h \
+ ../bgpd/bgp_attr.h ../bgpd/bgp_community.h ../bgpd/bgp_fsm.h \
+ ../bgpd/bgp_packet.h ../zebra/zebra.h
 bgp_dump.o: bgp_dump.c ../lib/version.h ../lib/prefix.h \
  ../lib/linklist.h ../lib/stream.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/str.h ../lib/log.h ../lib/sockunion.h \
@@ -71,7 +71,7 @@ bgp_dump.o: bgp_dump.c ../lib/version.h ../lib/prefix.h \
 bgp_filter.o: bgp_filter.c ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/log.h ../lib/memory.h ../lib/buffer.h \
  ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_regex.h \
- ../lib/regex-gnu.h
+ ../lib/regex-gnu.h ../bgpd/bgp_filter.h
 bgp_fsm.o: bgp_fsm.c ../lib/linklist.h ../lib/prefix.h ../lib/vty.h \
  ../lib/sockunion.h ../lib/thread.h ../lib/log.h ../lib/stream.h \
  ../bgpd/bgpd.h ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h \
@@ -97,10 +97,10 @@ bgp_route.o: bgp_route.c ../lib/prefix.h ../lib/table.h \
  ../zebra/zebra.h ../lib/linklist.h ../lib/memory.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/stream.h ../lib/filter.h \
  ../lib/str.h ../lib/log.h ../lib/routemap.h ../lib/buffer.h \
- ../lib/sockunion.h ../bgpd/bgpd.h ../bgpd/bgp_route.h \
+ ../lib/sockunion.h ../lib/plist.h ../bgpd/bgpd.h ../bgpd/bgp_route.h \
  ../bgpd/bgp_attr.h ../bgpd/bgp_dump.h ../bgpd/bgp_aspath.h \
  ../bgpd/bgp_community.h ../bgpd/bgp_packet.h ../bgpd/bgp_regex.h \
- ../lib/regex-gnu.h
+ ../lib/regex-gnu.h ../bgpd/bgp_filter.h
 bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/filter.h ../lib/routemap.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/linklist.h ../lib/log.h ../bgpd/bgpd.h \

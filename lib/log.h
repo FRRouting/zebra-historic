@@ -49,6 +49,7 @@ typedef enum
   ZLOG_BGP,
   ZLOG_OSPF,
   ZLOG_RIPNG,  
+  ZLOG_OSPF6,
 } zlog_proto_t;
 
 #define ZLOG_FILE		1
@@ -85,8 +86,16 @@ ZLOG *openzlog(const char *progname, int flags, zlog_proto_t protocol,
 
 void zlog(ZLOG *zl, int priority, const char *format, ...);
 
+void zvlog(ZLOG *zl, int priority, const char *format, va_list args);
+
 void zlog_set_flag (ZLOG *zl, int flags);
 
 int zlog_set_file (ZLOG *zl, int flags, char *filename);
+
+void zvlog_err (const char *format, ...);
+void zvlog_warn (const char *format, ...);
+void zvlog_notice (const char *format, ...);
+void zvlog_info (const char *format, ...);
+void zvlog_debug (const char *format, ...);
 
 #endif /* _ZEBRA_LOG_H */

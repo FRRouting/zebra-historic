@@ -49,5 +49,4 @@ const char *community_print (struct community *);
 void community_print_vty (struct vty *, struct community *);
 void community_print_all_vty (struct vty *);
 unsigned int community_hash_make (struct community *);
-
 #endif /* _ZEBRA_BGP_COMMUNITY_H */

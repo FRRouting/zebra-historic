@@ -76,7 +76,7 @@ ioctl.o: ioctl.c ../lib/linklist.h ../lib/if.h ../lib/prefix.h ioctl.h \
 ipforward_aix.o: ipforward_aix.c
 ipforward_ews.o: ipforward_ews.c
 ipforward_proc.o: ipforward_proc.c ../lib/dropline.h
-ipforward_solaris.o: ipforward_solaris.c
+ipforward_solaris.o: ipforward_solaris.c ../lib/memory.h
 ipforward_sysctl.o: ipforward_sysctl.c ../lib/log.h
 main.o: main.c ../zebra/zebra.h ../lib/version.h ../lib/getopt.h \
  ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/thread.h \
@@ -89,7 +89,7 @@ rib.o: rib.c ../lib/prefix.h ../lib/table.h ../zebra/zebra.h \
  ../lib/log.h
 rt_ioctl.o: rt_ioctl.c ../zebra/zebra.h ../lib/prefix.h ../lib/log.h
 rt_netlink.o: rt_netlink.c ../lib/linklist.h ../lib/if.h ../lib/log.h \
- ../zebra/zebra.h ../lib/prefix.h connected.h rib.h
+ ../zebra/zebra.h ../lib/prefix.h connected.h rib.h ../lib/thread.h
 rtread_netlink.o: rtread_netlink.c
 rtread_proc.o: rtread_proc.c ../zebra/zebra.h ../lib/prefix.h \
  ../lib/log.h rib.h
@@ -100,4 +100,5 @@ rt_socket.o: rt_socket.c ../zebra/zebra.h ../lib/thread.h \
 zebra.o: zebra.c ../zebra/zebra.h ../lib/prefix.h ../lib/vector.h \
  ../lib/linklist.h ../lib/vty.h ../lib/command.h ../lib/if.h \
  ../lib/thread.h ../lib/stream.h ../lib/buffer.h ../lib/memory.h rib.h \
- ../lib/roken.h ../lib/network.h ../lib/sockunion.h ../lib/log.h
+ ../lib/roken.h ../lib/network.h ../lib/sockunion.h ../lib/log.h \
+ ../lib/table.h ../lib/client.h

@@ -1370,21 +1370,17 @@ DEFUN (config_log_file,
   return CMD_SUCCESS;
 }
 
-#if 0
-void func_name ()
+/* New DEFUN testing. */
+DESC (test)
 {
-  ;
-}
+  {DESC_STR  ,"Log filename specify command\n"},
+  {DESC_FUNC , NULL}
+};
 
-DEFUN2 (test,
-	test_cmd,
-	"test command",
-        ({DOC_STR, "Log filename specify command\n"},
-	{DOC_FUNC, func_name}))
+DEFUN2 (test, test_cmd, "test command")
 {
-  return 0;
+  return CMD_SUCCESS;
 }
-#endif /* 0 */
 
 /* Set config filename.  Called from vty.c */
 void

@@ -3,7 +3,7 @@
 				   
 			  Kunihiro Ishiguro
 
-			    April 1999
+			       May 1999
 
 1. Introduction
 
@@ -21,7 +21,7 @@ WWW page is located at:
 
   http://www.zebra.org/
 
-And beta version snapshot can be found at:
+And beta version of Zebra can be found at:
 
   ftp://ftp.zebra.org/pub/zebra/
 
@@ -33,7 +33,7 @@ to get the latest version of zebra.
 Now GNU Zebra is testing on 
 
   o GNU/Linux 2.0.36
-    GNU/Linux 2.2.3
+    GNU/Linux 2.2.7
       -- with Linux IPv6
 
   o FreeBSD 2.2.8

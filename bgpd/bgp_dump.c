@@ -128,11 +128,10 @@ lookupmes (message *array, int key)
 {
   message *pnt;
 
-  for (pnt = array; pnt->key != 0; pnt++) {
-    if (pnt->key == key) {
+  for (pnt = array; pnt->key != 0; pnt++) 
+    if (pnt->key == key) 
       return pnt->str;
-    }
-  }  
+
   return NULL;
 }
 
@@ -140,10 +139,11 @@ lookupmes (message *array, int key)
 char *
 mes_lookup (message *meslist, int max, int index)
 {
-  if (index < 0 || index >= max) {
-    zlog (NULL, LOG_INFO, "message index out of bound: %d", max);
-    return NULL;
-  }
+  if (index < 0 || index >= max) 
+    {
+      zlog (NULL, LOG_INFO, "message index out of bound: %d", max);
+      return NULL;
+    }
   return meslist[index].str;
 }
 
@@ -225,6 +225,22 @@ bgp_dump_attr (struct peer *peer, struct attr *attr, char *buf, size_t size)
 		inet_ntoa (attr->aggregator_addr), attr->aggregator_as);
     }
 
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
+    {
+      snprintf (buf + strlen (buf), size - strlen (buf), " originator-id: %s ",
+		inet_ntoa (attr->originator_id));
+    }
+
+  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_CLUSTER_LIST))
+    {
+      int i;
+
+      snprintf (buf + strlen (buf), size - strlen (buf), "cluster-list: ");
+      for (i = 0; i < attr->cluster->length / 4; i++)
+	snprintf (buf + strlen (buf), size - strlen (buf), "%s ",
+		  inet_ntoa (attr->cluster->list[i]));
+    }
+
   if (attr->aspath) 
     {
       snprintf (buf + strlen (buf), size - strlen (buf), " aspath: %s %s",
@@ -245,30 +261,31 @@ bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify)
 
   subcode_str = "";
 
-  switch (bgp_notify->err_code) {
-  case BGP_NOTIFY_HEADER_ERR:
-    subcode_str = LOOKUP (bgp_notify_head_msg, bgp_notify->err_subcode);
-    break;
-  case BGP_NOTIFY_OPEN_ERR:
-    subcode_str = LOOKUP (bgp_notify_open_msg, bgp_notify->err_subcode);
-    break;
-  case BGP_NOTIFY_UPDATE_ERR:
-    subcode_str = LOOKUP (bgp_notify_update_msg, bgp_notify->err_subcode);
-    break;
-  case BGP_NOTIFY_HOLD_ERR:
-    subcode_str = "";
-    break;
-  case BGP_NOTIFY_FSM_ERR:
-    subcode_str = "";
-    break;
-  case BGP_NOTIFY_CEASE:
-    subcode_str = "";
-    break;
-  }
+  switch (bgp_notify->err_code) 
+    {
+    case BGP_NOTIFY_HEADER_ERR:
+      subcode_str = LOOKUP (bgp_notify_head_msg, bgp_notify->err_subcode);
+      break;
+    case BGP_NOTIFY_OPEN_ERR:
+      subcode_str = LOOKUP (bgp_notify_open_msg, bgp_notify->err_subcode);
+      break;
+    case BGP_NOTIFY_UPDATE_ERR:
+      subcode_str = LOOKUP (bgp_notify_update_msg, bgp_notify->err_subcode);
+      break;
+    case BGP_NOTIFY_HOLD_ERR:
+      subcode_str = "";
+      break;
+    case BGP_NOTIFY_FSM_ERR:
+      subcode_str = "";
+      break;
+    case BGP_NOTIFY_CEASE:
+      subcode_str = "";
+      break;
+    }
   zlog (peer->log, LOG_INFO, "Notify:[%s] %s (%s)",
-	  peer ? peer->host : "",
-	  LOOKUP (bgp_notify_msg, bgp_notify->err_code),
-	  subcode_str);
+	peer ? peer->host : "",
+	LOOKUP (bgp_notify_msg, bgp_notify->err_code),
+	subcode_str);
 }
 
 #if 0

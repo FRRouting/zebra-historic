@@ -1,3 +1,41 @@
+1999-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_prefix_list_set): New function added.
+	(bgp_prefix_list_unset): Likewise.
+	(bgp_prefix_list_update): Likewise.
+	(show_ip_bgp_neighbors): prefix-list information display.
+
+1999-05-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_delete): Function added for `no router bgp'.
+
+1999-05-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_dump.c (bgp_dump_attr): Add originator_id display.
+
+	* bgpd.c (bgp_router_id): Even when address is malformed set the
+	value to configuration bug fixed.
+	(no_bgp_router_id): New function.
+	(no_bgp_cluster_id): New function.
+
+1999-05-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.h (BGP_ATTR_ORIGINATOR_ID): Changed from BGP_ATTR_ORIGINATOR.
+
+1999-05-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (bgp_announce): Add route reflector check.
+
+1999-05-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_cluster_id): Add function for route reflector.
+	(neighbor_route_reflector_client): Likewise.
+	(no_neighbor_route_reflector_client): Likewise.
+
+	* bgpd.h (struct bgp ): Add cluster for route reflector.
+
+	* bgp_route.c (show_ip_bgp_prefix_list): New command is added.
+
 1999-04-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Makefile.am (noinst_HEADERS): Add bgp_filter.h

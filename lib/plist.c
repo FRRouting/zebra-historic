@@ -27,26 +27,6 @@
 #include "memory.h"
 #include "plist.h"
 
-enum prefix_name_type
-{
-  PREFIX_TYPE_STRING,
-  PREFIX_TYPE_NUMBER
-};
-
-struct prefix_list
-{
-  char *name;
-  char *desc;
-
-  enum prefix_name_type type;
-
-  int count;
-  struct prefix_list_entry *head;
-  struct prefix_list_entry *tail;
-
-  struct prefix_list *next;
-  struct prefix_list *prev;
-};
 
 struct prefix_list_entry
 {
@@ -309,6 +289,45 @@ prefix_seq_check (struct prefix_list *plist, int seq)
   return NULL;
 }
 
+struct prefix_list_entry *
+prefix_list_entry_lookup (struct prefix_list *plist, struct prefix *prefix,
+			  enum prefix_list_type type, int seq, int le, int ge)
+{
+  struct prefix_list_entry *pentry;
+
+  for (pentry = plist->head; pentry; pentry = pentry->next)
+    {
+      if (prefix == NULL)
+	{
+	  if (pentry->any == 1 && pentry->type == type)
+	    {
+	      if (seq >= 0 && pentry->seq != seq)
+		continue;
+	      if (le >= 0 && pentry->le != le)
+		continue;
+	      if (ge >= 0 && pentry->ge != ge)
+		continue;
+	      return pentry;
+	    }
+	}
+      else
+	{
+	  if (prefix_same (&pentry->prefix, prefix) && pentry->type == type)
+	    {
+	      if (seq >= 0 && pentry->seq != seq)
+		continue;
+	      if (le >= 0 && pentry->le != le)
+		continue;
+	      if (ge >= 0 && pentry->ge != ge)
+		continue;
+	      return pentry;
+	    }
+	}
+    }
+
+  return NULL;
+}
+
 void
 prefix_list_entry_delete (struct prefix_list *plist, 
 			  struct prefix_list_entry *pentry)
@@ -327,6 +346,9 @@ prefix_list_entry_delete (struct prefix_list *plist,
   plist->count--;
 
   prefix_list_entry_free (pentry);
+
+  if (prefix_master.delete_hook)
+    (*prefix_master.delete_hook) ();
 }
 
 void
@@ -400,6 +422,44 @@ prefix_list_type_str (struct prefix_list_entry *pentry)
     }
 }
 
+int
+prefix_list_entry_match (struct prefix_list_entry *pentry, struct prefix *p)
+{
+  int ret;
+
+  ret = prefix_match (&pentry->prefix, p);
+  if (! ret)
+    return 0;
+  
+  if (pentry->le >= 0)
+    if (p->prefixlen > pentry->le)
+      return 0;
+
+  if (pentry->ge >= 0)
+    if (p->prefixlen < pentry->ge)
+      return 0;
+
+  return 1;
+}
+
+enum prefix_list_type
+prefix_list_apply (struct prefix_list *plist, void *object)
+{
+  struct prefix_list_entry *pentry;
+  struct prefix *p;
+
+  p = (struct prefix *) object;
+
+  if (plist->count == 0)
+    return PREFIX_PERMIT;
+
+  for (pentry = plist->head; pentry; pentry = pentry->next)
+    if (prefix_list_entry_match (pentry, p))
+      return pentry->type;
+
+  return PREFIX_DENY;
+}
+
 void
 prefix_list_print (struct prefix_list *plist)
 {
@@ -421,33 +481,71 @@ prefix_list_print (struct prefix_list *plist)
 	  
 	  p = &pentry->prefix;
 	  
-	  printf ("  seq %d %s %s/%d\n", 
+	  printf ("  seq %d %s %s/%d", 
 		  pentry->seq,
 		  prefix_list_type_str (pentry),
 		  inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		  p->prefixlen);
+	  if (pentry->ge >= 0)
+	    printf (" ge %d", pentry->ge);
+	  if (pentry->le >= 0)
+	    printf (" le %d", pentry->le);
+	  printf ("\n");
 	}
     }
 }
 
 DEFUN (prefix_list, prefix_list_cmd,
-       "ip prefix-list NAME TYPE IP_ADDR ...",
+       "ip prefix-list NAME ...",
        IP_STR
        "Set prefix list definition\n"
        "Prefix list name\n"
-       "Prefix list type\n"
-       "Prefix list address\n")
+       "Prefix list type\n")
 {
   int ret;
   enum prefix_list_type type;
   struct prefix_list *plist;
   struct prefix_list_entry *pentry;
   struct prefix p;
+  int optind;
+  int any = 0;
+  int seq = -1;
+  int le = -1;
+  int ge = -1;
+
+  /* Get prefix_list with name. */
+  plist = prefix_list_get (argv[0]);
+
+  /* Set option index. */
+  optind = 1;
+
+  /* Check of first argument. */
+  if (strcmp (argv[optind], "seq") == 0)
+    {
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify seq number\r\n");
+	  return CMD_WARNING;
+	}
+      if (seq != -1)
+	{
+	  vty_out (vty, "Seq number is already specified\r\n");
+	}
+      seq = atoi (argv[optind]);
+
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify type\r\n");
+	  return CMD_WARNING;
+	}
+    }
 
   /* Check of filter type. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strcmp (argv[optind], "permit") == 0)
     type = PREFIX_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strcmp (argv[optind], "deny") == 0)
     type = PREFIX_DENY;
   else
     {
@@ -455,33 +553,250 @@ DEFUN (prefix_list, prefix_list_cmd,
       return CMD_WARNING;
     }
 
+  optind++;
+  if (optind == argc)
+    {
+      vty_out (vty, "Please specify prefix\r\n");
+      return CMD_WARNING;
+    }
+  
   /* "any" is special token of matching IP addresses.  */
-  if (strcmp (argv[2], "any") == 0)
-      pentry = prefix_list_entry_make (NULL, type, -1, -1, -1);
+  if (strcmp (argv[optind], "any") == 0)
+    any = 1;
   else
     {
       /* Check string format of prefix and prefixlen. */
-      ret = str2prefix (argv[2], &p);
+      ret = str2prefix (argv[optind], &p);
       if (ret <= 0)
 	{
 	  vty_out (vty, "IP address prefix/prefixlen is malformed\r\n");
 	  return CMD_WARNING;
 	}
-      pentry = prefix_list_entry_make (&p, type, -1, -1, -1);
     }
-
-  plist = prefix_list_get (argv[0]);
+  optind++;
 
   /* seq, ge and le check. */
-  argc -= 2;
-  argv += 2;
-  while (argc > 0)
+  while (optind < argc)
     {
-      ;
+      if (strcmp (argv[optind], "seq") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify seq number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (seq != -1)
+	    {
+	      vty_out (vty, "Seq number is already specified\r\n");
+	    }
+	  seq = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "ge") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify ge number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (ge != -1)
+	    {
+	      vty_out (vty, "ge number is already specified\r\n");
+	    }
+	  ge = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "le") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify le number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (le != -1)
+	    {
+	      vty_out (vty, "le number is already specified\r\n");
+	    }
+	  le = atoi (argv[optind++]);
+	}
+      else
+	{
+	  vty_out (vty, "Unknown prefix-list option: %s\r\n", argv[optind]);
+	  return CMD_WARNING;
+	}
     }
+
+  if (any)
+    pentry = prefix_list_entry_make (NULL, type, seq, le, ge);
+  else
+    pentry = prefix_list_entry_make (&p, type, seq, le, ge);
+    
   
   /* Install new filter to the access_list. */
   prefix_list_entry_add (plist, pentry);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_prefix_list, no_prefix_list_cmd,
+       "no ip prefix-list NAME ...",
+       NO_STR
+       IP_STR
+       "Set prefix list definition\n"
+       "Prefix list name\n"
+       "Prefix list type\n")
+{
+  int ret;
+  enum prefix_list_type type;
+  struct prefix_list *plist;
+  struct prefix_list_entry *pentry;
+  struct prefix p;
+  int optind;
+  int any = 0;
+  int seq = -1;
+  int le = -1;
+  int ge = -1;
+
+  /* Check prefix list name. */
+  plist = prefix_list_lookup (argv[0]);
+  if (! plist)
+    {
+      vty_out (vty, "Can't find specified prefix-list\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set parse start option index. */
+  optind = 1;
+
+  /* Check of first argument. */
+  if (strcmp (argv[optind], "seq") == 0)
+    {
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify seq number\r\n");
+	  return CMD_WARNING;
+	}
+      if (seq != -1)
+	{
+	  vty_out (vty, "Seq number is already specified\r\n");
+	}
+      seq = atoi (argv[optind]);
+
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify type\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  /* Check of filter type. */
+  if (strcmp (argv[optind], "permit") == 0)
+    type = PREFIX_PERMIT;
+  else if (strcmp (argv[optind], "deny") == 0)
+    type = PREFIX_DENY;
+  else
+    {
+      vty_out (vty, "prefix type must be [permit|deny]\r\n");
+      return CMD_WARNING;
+    }
+
+  optind++;
+  if (optind == argc)
+    {
+      vty_out (vty, "Please specify prefix\r\n");
+      return CMD_WARNING;
+    }
+
+  /* "any" is special token of matching IP addresses.  */
+  if (strcmp (argv[optind], "any") == 0)
+    any = 1;
+  else
+    {
+      /* Check string format of prefix and prefixlen. */
+      ret = str2prefix (argv[optind], &p);
+      if (ret <= 0)
+	{
+	  vty_out (vty, "IP address prefix/prefixlen is malformed\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  optind++;
+
+  /* seq, ge and le check. */
+  while (optind < argc)
+    {
+      if (strcmp (argv[optind], "seq") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify seq number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (seq != -1)
+	    {
+	      vty_out (vty, "Seq number is already specified\r\n");
+	    }
+	  seq = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "ge") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify ge number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (ge != -1)
+	    {
+	      vty_out (vty, "ge number is already specified\r\n");
+	    }
+	  ge = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "le") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify le number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (le != -1)
+	    {
+	      vty_out (vty, "le number is already specified\r\n");
+	    }
+	  le = atoi (argv[optind++]);
+	}
+      else
+	{
+	  vty_out (vty, "Unknown option\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  if (any)
+    pentry = prefix_list_entry_lookup (plist, NULL, type, seq, le, ge);
+  else
+    pentry = prefix_list_entry_lookup (plist, &p, type, seq, le, ge);
+
+  if (pentry == NULL)
+    {
+      vty_out (vty, "Can't find specified prefix-list\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Install new filter to the access_list. */
+  prefix_list_entry_delete (plist, pentry);
 
   return CMD_SUCCESS;
 }
@@ -503,7 +818,8 @@ config_write_prefix (struct vty *vty)
   for (plist = prefix_master.num.head; plist; plist = plist->next)
     for (pentry = plist->head; pentry; pentry = pentry->next)
       {
-	vty_out (vty, "ip prefix-list seq %d %s",
+	vty_out (vty, "ip prefix-list %s seq %d %s",
+		 plist->name,
 		 pentry->seq, prefix_list_type_str (pentry));
 
 	if (pentry->any)
@@ -517,9 +833,9 @@ config_write_prefix (struct vty *vty)
 		    inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		    p->prefixlen);
 	  }
-	if (pentry->le > 0)
+	if (pentry->le >= 0)
 	  vty_out (vty, " le %d", pentry->le);
-	if (pentry->ge > 0)
+	if (pentry->ge >= 0)
 	  vty_out (vty, " ge %d", pentry->ge);
 	vty_out (vty, "%s", VTY_NEWLINE);
       }
@@ -527,7 +843,8 @@ config_write_prefix (struct vty *vty)
   for (plist = prefix_master.str.head; plist; plist = plist->next)
     for (pentry = plist->head; pentry; pentry = pentry->next)
       {
-	vty_out (vty, "ip prefix-list seq %d %s",
+	vty_out (vty, "ip prefix-list %s seq %d %s",
+		 plist->name,
 		 pentry->seq, prefix_list_type_str (pentry));
 
 	if (pentry->any)
@@ -541,9 +858,9 @@ config_write_prefix (struct vty *vty)
 		    inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
 		    p->prefixlen);
 	  }
-	if (pentry->le > 0)
+	if (pentry->le >= 0)
 	  vty_out (vty, " le %d", pentry->le);
-	if (pentry->ge > 0)
+	if (pentry->ge >= 0)
 	  vty_out (vty, " ge %d", pentry->ge);
 	vty_out (vty, "%s", VTY_NEWLINE);
       }
@@ -558,7 +875,7 @@ prefix_list_init ()
   install_node (&prefix_node, config_write_prefix);
 
   install_element (CONFIG_NODE, &prefix_list_cmd);
-  install_element (CONFIG_NODE, &prefix_list_cmd);
+  install_element (CONFIG_NODE, &no_prefix_list_cmd);
 }
 
 #ifdef TEST
@@ -572,14 +889,21 @@ main ()
   plist = prefix_list_get ("kuni");
 
   str2prefix ("10.0.0.0/8", &p);
-  pentry = prefix_list_entry_make (&p, PREFIX_PERMIT, -1, -1, -1);
+  pentry = prefix_list_entry_make (&p, PREFIX_PERMIT, -1, 0, -1);
   prefix_list_entry_add (plist, pentry);
 
-  str2prefix ("11.0.0.0/8", &p);
-  pentry = prefix_list_entry_make (&p, PREFIX_PERMIT, 5, -1, -1);
+  str2prefix ("0.0.0.0/0", &p);
+  pentry = prefix_list_entry_make (&p, PREFIX_PERMIT, 5, -1, 1);
   prefix_list_entry_add (plist, pentry);
 
   prefix_list_print (plist);
+
+  str2prefix ("0.0.0.0/0", &p);
+
+  if (prefix_list_apply (plist, &p))
+    printf ("ok\n");
+  else
+    printf ("not ok\n");
 
   exit (0);
 }

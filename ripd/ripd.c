@@ -215,6 +215,14 @@ rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
 	  zlog (NULL, LOG_INFO, "rip replace route %s/%d", inet_ntoa (p->prefix), 
 		  p->prefixlen);
 	}
+
+      /* Existance route's metric check. */
+      if (rinfo->metric >= rip->metric)
+	{
+	  route_unlock_node (np);
+	  return 0;
+	}
+
       rip->tag = rinfo->tag;
       rip->metric = rinfo->metric;
       rip->from = rinfo->from;

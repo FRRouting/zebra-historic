@@ -56,6 +56,8 @@ struct routing_table_entry
   struct in6_addr destination;
   unsigned long   prefixlength;
   struct in6_addr next_hop;
+
+  int             flag;
 };
 
 struct nexthop_info
@@ -71,6 +73,8 @@ struct nexthop_info
 /* Function Prototypes */
 int spf_calculation (struct thread *);
 int routing_table_calculation (struct thread *);
+int install_route (struct area *);
+int noinstall_route (struct area *);
 
 #endif /* OSPF6_SPF_H */
 

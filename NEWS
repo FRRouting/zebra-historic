@@ -1,5 +1,44 @@
 GNU Zebra is not yet released, so this NEWS is about snapshot.
 
+* Changes in zebra-0.64.
+
+* Changes in lib
+
+** prefix-list based filtering routine is added.  Currently used in
+bgpd but it will be in other daemons.
+
+* Changes in bgpd
+
+** `no router bgp' works.  But network statement is not cleared.  This
+should be fixed in next beta.
+
+** Route reflector related statement is added.
+
+  router bgp ASN
+    bgp cluster-id a.b.c.d
+    neighbor a.b.c.d route-reflector-client
+
+  is added.
+
+** Prefix list based filtering is added.
+
+  router bgp ASN
+    neighbor a.b.c.d prefix-list PREFIX_LIST_NAME
+
+** Prefix list based routing display works.
+
+  show ip bgp prefix-list PREFIX_LIST_NAME
+
+* Changes in ripd
+
+** Fix route metric check bug.  Reported from Mr. Carlos Alberto
+Barcenilla.
+
+* Changes in ospf6d
+
+** There are many changes.  If you have interested in ospf6d please
+visit ospf6d/README file.
+
 * Changes in zebra-0.63 first beta package.
 
 * Changes in lib

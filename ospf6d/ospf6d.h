@@ -19,8 +19,8 @@
  * Boston, MA 02111-1307, USA.  
  */
 
-#ifndef OSPFD_H
-#define OSPFD_H
+#ifndef OSPF6D_H
+#define OSPF6D_H
 
 #include <zebra.h>
 
@@ -101,6 +101,7 @@ extern list    iflist;
 extern struct  thread_master *master;
 extern list    ospf6_list;
 extern int     ospf6_sock;
+extern int     daemon_mode;
 extern struct  sockaddr_in6 allspfrouters6;
 extern struct  sockaddr_in6 alldrouters6;
 extern char   *progname;
@@ -109,7 +110,7 @@ extern char   *progname;
 #define OSPF6_DEFAULT_CONFIG       "ospf6d.conf"
 
 /* Default port values. */
-#define OSPF_VTY_PORT             2604
+#define OSPF6_VTY_PORT             2606
 
 #define DEFAULT_HELLO_INTERVAL    10
 #define DEFAULT_ROUTER_DEAD_TIMER 40
@@ -138,14 +139,21 @@ extern char   *progname;
 #endif
 #endif
 
+#define INSTALL   1
+#define NOINSTALL 0
+
 /* Command Description */
-#define OSPF6_STR           "OSPF information\n"
-#define OSPF6_INTERFACE_STR "OSPF Interface infomation\n"
-#define OSPF6_NEIGHBOR_STR  "OSPF Neighbor information\n"
 #define V4NOTATION_STR     "specify by IPv4 address notation(e.g. 0.0.0.0)\n"
-#define OSPF6_ROUTER_STR    "OSPF Router infomation\n"
-#define OSPF6_IFNAME_STR    "Interface name(e.g. ep0)\n"
 #define OSPF6_NUMBER_STR    "Specify by number\n"
+
+#define INTERFACE_STR       "Interface infomation\n"
+#define IFNAME_STR          "Interface name(e.g. ep0)\n"
+#define IP6_STR             "IP6 Information\n"
+#define OSPF6_STR           "Open Shortest Path First (OSPF) for IPv6\n"
+#define OSPF6_ROUTER_STR    "Enable a routing process\n"
+#define OSPF6_INSTANCE_STR  "<1-65535> Instance ID\n"
+#define SECONDS_STR         "<1-65535> Seconds\n"
+#define ROUTE_STR           "Routing Table\n"
 
 #define HASHVAL   64
 #define hash(x)  ((x) % HASHVAL)
@@ -168,5 +176,5 @@ int show_if (struct vty *, struct interface *);
 int show_nbr (struct vty *, struct neighbor *);
 void ospf6_init ();
 
-#endif /* OSPFD_H */
+#endif /* OSPF6D_H */
 

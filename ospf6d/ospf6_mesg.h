@@ -86,8 +86,8 @@ struct linkstate_request
 {
   unsigned short lsreq_age_zero;     /* MBZ */
   unsigned short lsreq_type;         /* LS type */
-  unsigned short lsreq_id;           /* Link State ID */
-  unsigned short lsreq_advrtr;       /* Advertising Router */
+  unsigned long  lsreq_id;           /* Link State ID */
+  unsigned long  lsreq_advrtr;       /* Advertising Router */
 };
 
 /* Link State Update */

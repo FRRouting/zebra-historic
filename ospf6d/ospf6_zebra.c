@@ -24,91 +24,8 @@
 /* Global Interface List, list of (struct interface *) */
 list iflist;
 
-struct zebra
-{
-  int sockfd;
-  struct stream *s;
+struct zebra zebra; /* information about zebra. */
 
-  struct thread *t_read;
-  struct thread *t_write;
-} zebra;
-
-void
-zebra_get_interface (int sock, u_int16_t length)
-{
-  struct stream *s;
-  int nbyte;
-  struct interface *ifp;
-  struct connected *connected;
-  u_int32_t connected_count;
-  unsigned long endp;
-
-  /* Allocate read buffer */
-  s = stream_new (length + 1);
-  nbyte = stream_read (s, sock, length - 3);
-  if (nbyte == 0)
-    {
-      zlog (NULL, LOG_INFO, "connection closed\n");
-      return;
-    }
-  if (nbyte < 0)
-    return;
-
-  endp = stream_get_endp (s);
-
-  while (stream_get_getp (s) < endp)
-    {
-      char tmpnam[INTERFACE_NAMSIZ];
-
-      /* Get interface's name */
-      stream_strncpy (tmpnam, s, INTERFACE_NAMSIZ);
-      stream_forward (s, INTERFACE_NAMSIZ);
-
-      ifp = if_get_by_name (tmpnam);
-
-      /* Get interface's index and values. */
-      ifp->index = stream_getc (s);
-      ifp->flags = stream_getl (s);
-      ifp->metric = stream_getl (s);
-      ifp->mtu = stream_getl (s);
-
-      /* Get interface's address. */
-      connected_count = stream_getl (s);
-
-      while (connected_count--)
-        {
-          struct prefix *p;
-          int plen;
-
-          connected = connected_new ();
-
-          p = prefix_new ();
-
-          p->family = stream_getc (s);
-          plen = prefix_blen (p);
-
-          memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
-          stream_forward (s, plen);
-          p->prefixlen = stream_getc (s);
-          connected->address = p;
-
-          p = prefix_new ();
-          memcpy ((void *)&(p->u.prefix), stream_pnt (s), plen);
-          stream_forward (s, plen);
-          connected->destination = p;
-
-          connected_add (ifp, connected);
-        }
-    }
-
-  stream_free (s);
-
-#ifdef DEBUG_OSPF
-  if_dump_all ();
-#endif
-}
-
-/* Get all interface information. */
 void
 ospf6_zebra_get_interface (struct stream *s)
 {
@@ -142,6 +59,9 @@ ospf6_zebra_get_interface (struct stream *s)
 
       while (connected_count--)
         {
+#ifdef DEBUG
+          char debug_str[64];
+#endif /*DEBUG*/
           struct prefix *p;
           int plen;
 
@@ -155,12 +75,22 @@ ospf6_zebra_get_interface (struct stream *s)
           stream_forward (s, plen);
           p->prefixlen = stream_getc (s);
           connected->address = p;
+#ifdef DEBUG
+          inet_ntop (AF_INET6, &connected->address->u.prefix6,
+                     debug_str, sizeof (debug_str));
+          zvlog_debug ("%s", debug_str);
+#endif /*DEBUG*/
 
           p = prefix_new ();
           memcpy (&p->u.prefix, stream_pnt (s), plen);
           stream_forward (s, plen);
 
           connected->destination = p;
+#ifdef DEBUG
+          inet_ntop (AF_INET6, &connected->destination->u.prefix6,
+                     debug_str, sizeof (debug_str));
+          zvlog_debug ("%s", debug_str);
+#endif /*DEBUG*/
 
           connected_add (ifp, connected);
         }
@@ -170,8 +100,9 @@ ospf6_zebra_get_interface (struct stream *s)
 int
 ospf6_zebra_read (struct thread *thread)
 {
-  u_int16_t length;
-  u_int8_t command;
+  unsigned long  tmpl;
+  unsigned short length;
+  unsigned char  command;
   int nbyte;
   struct stream *s = zebra.s;
 
@@ -188,21 +119,23 @@ ospf6_zebra_read (struct thread *thread)
       nbyte = stream_read (zebra.s, zebra.sockfd, length - 3);
       if (nbyte == 0)
         {
-          ospf6_info ("connection closed\n");
+          zvlog_info ("connection closed");
           return -1;
         }
       if (nbyte < 0)
         {
-          ospf6_err ("stream_read() failed\n");
+          zvlog_err ("stream_read() failed");
           return -1;
         }
 
       ospf6_zebra_get_interface (zebra.s);
       break;
     default:
-      ospf6_err ("Unknown command from zebra\n");
+      zvlog_err ("Unknown command from zebra");
       return -1;
     }
+  tmpl = command;
+  list_add_node (zebra.history, (void *)tmpl);
 
   zebra.t_read = thread_add_read (master, ospf6_zebra_read,
                                   NULL, zebra.sockfd);
@@ -214,18 +147,28 @@ int
 ospf6_zebra_init ()
 {
   int sockfd = -1;
+  struct thread thread;
 
   iflist = list_init ();
   zebra.s = stream_new(ZEBRA_MAX_PACKET_SIZ);
+  zebra.history = list_init ();
   zebra.sockfd = zebra_connect ();
   if (zebra.sockfd < 0)
     {
-      zlog (NULL, LOG_WARNING, "Can't connect zebra.\n");
+      zlog (NULL, LOG_WARNING, "Can't connect zebra.");
       return zebra.sockfd;
     }
 
   zebra_get_all_interface (zebra.sockfd);
-  zebra.t_read = thread_add_read (master, ospf6_zebra_read, NULL, zebra.sockfd);
+  zebra.t_read = thread_add_read (master, ospf6_zebra_read,
+                                  NULL, zebra.sockfd);
+
+  zvlog_notice ("Waiting for reply from zebra...");
+  while (!list_lookup_node (zebra.history, (void *)ZEBRA_GET_ALL_INTERFACE))
+    {
+      thread_fetch (master, &thread);
+      thread_call (&thread);
+    }
 
   return sockfd;
 }

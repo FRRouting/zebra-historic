@@ -25,3 +25,34 @@ enum prefix_list_type
   PREFIX_DENY,
   PREFIX_PERMIT,
 };
+
+enum prefix_name_type
+{
+  PREFIX_TYPE_STRING,
+  PREFIX_TYPE_NUMBER
+};
+
+struct prefix_list
+{
+  char *name;
+  char *desc;
+
+  enum prefix_name_type type;
+
+  int count;
+  struct prefix_list_entry *head;
+  struct prefix_list_entry *tail;
+
+  struct prefix_list *next;
+  struct prefix_list *prev;
+};
+
+void prefix_list_init ();
+struct prefix_list *prefix_list_lookup (char *);
+enum prefix_list_type
+prefix_list_apply (struct prefix_list *, void *);
+
+void
+prefix_list_add_hook (void (*func) ());
+void
+prefix_list_delete_hook (void (*func) ());

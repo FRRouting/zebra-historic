@@ -49,7 +49,9 @@ struct area
 
   /* XXX routing table fake */
   struct routing_table_entry *rt_table;
+  struct routing_table_entry *rt_table_prev;
   int                         tablesize;
+  int                         tablesize_prev;
 };
 
 #endif /* OSPF_AREA_H */

@@ -37,6 +37,7 @@
 #include "routemap.h"
 #include "str.h"
 #include "log.h"
+#include "plist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
@@ -106,6 +107,25 @@ bgp_lookup_by_as (u_int16_t as)
 	return bgp;
     }
   return NULL;
+}
+
+void
+bgp_delete (struct bgp *bgp)
+{
+  struct peer *peer;
+  listnode node;
+
+  for (node = listhead (bgp->peer); node; nextnode (node))
+    {
+      peer = getdata (node);
+
+      bgp_stop (peer);
+      peer_delete (peer);
+    }
+
+  list_delete_all (bgp->peer);
+  list_delete_by_val (bgp_list, bgp);
+  free (bgp);
 }
 
 /* allocate new peer object */
@@ -413,8 +433,39 @@ DEFUN (router_bgp,
   return CMD_SUCCESS;
 }
 
-DEFUN (bgp_router_id,
-       bgp_router_id_cmd,
+/* router bgp AS_NO command.*/
+DEFUN (no_router_bgp, 
+       no_router_bgp_cmd, 
+       "no router bgp AS_NO",
+       NO_STR
+       "Disable a routing process\n"
+       "Disable BGP configuration\n"
+       "AS number\n")
+{
+  struct bgp *bgp;
+  u_int16_t as;
+
+  /* Check duplicate instance as same AS value. */
+  as = strtol (argv[0], NULL, 10);
+
+  /* Check existing bgp. */
+  bgp = bgp_lookup_by_as (as);
+
+  /* There is already active bgp instance. */
+  if (bgp == NULL)
+    {
+      vty_out (vty, "There is no active bgp with AS number: %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Delete all peer and bgp structure itself. */
+  bgp_delete (bgp);
+
+  return CMD_SUCCESS;
+}
+
+
+DEFUN (bgp_router_id, bgp_router_id_cmd,
        "bgp router-id IPV4_ADDRESS",
        BGP_STR
        "Set my own router identifier\n"
@@ -427,44 +478,102 @@ DEFUN (bgp_router_id,
   bgp = (struct bgp *) vty->index;
   
   ret = inet_aton (argv[0], &bgp_ident);
-  bgp->ident = bgp_ident.s_addr;
   if (!ret)
     {
-      vty_out (vty, "malformed bgp router identifier\r\n");
+      vty_out (vty, "Malformed bgp router identifier\r\n");
       return CMD_WARNING;
     }
+
+  bgp->ident = bgp_ident.s_addr;
   bgp->config |= BGP_CONFIG_ROUTER_ID;
   return CMD_SUCCESS;
 }
 
-DEFUN (no_router_bgp, 
-       no_router_bgp_cmd, 
-       "no router bgp AS_NO", 
+DEFUN (no_bgp_router_id, no_bgp_router_id_cmd,
+       "no bgp router-id IPV4_ADDRESS",
        NO_STR
-       "Enable a routing process\n"
-       "Start BGP configuration\n"
-       "AS number\n")
+       BGP_STR
+       "Set my own router identifier\n"
+       "IP Address\n")
 {
+  int ret;
   struct bgp *bgp;
-  struct peer *peer;
-  listnode node;
-  u_int16_t as;
+  struct in_addr bgp_ident;
 
-  as = strtol (argv[0], NULL, 10);
-
-  bgp = bgp_lookup_by_as (as);
-
-  if (bgp == NULL)
+  bgp = (struct bgp *) vty->index;
+  
+  ret = inet_aton (argv[0], &bgp_ident);
+  if (!ret)
     {
-      vty_out (vty, "There isn't active bgp instance under as number %d.\r\n", as);
+      vty_out (vty, "Malformed bgp router identifier\r\n");
       return CMD_WARNING;
     }
 
-  for (node = listhead (bgp->peer); node; nextnode (node))
+  if (bgp->ident != bgp_ident.s_addr)
     {
-      peer = getdata (node);
-      ;
+      vty_out (vty, "bgp router ID doesn't match exist one\r\n");
+      return CMD_WARNING;
     }
+  bgp->config = 0;
+  bgp->config &= ~BGP_CONFIG_ROUTER_ID;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_cluster_id, bgp_cluster_id_cmd,
+       "bgp cluster-id IPV4_ADDRESS",
+       BGP_STR
+       "Set cluster identifier\n"
+       "IP Address\n")
+{
+  int ret;
+  struct bgp *bgp;
+  struct in_addr bgp_cluster;
+
+  bgp = (struct bgp *) vty->index;
+
+  ret = inet_aton (argv[0], &bgp_cluster);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed bgp cluster identifier\r\n");
+      return CMD_WARNING;
+    }
+
+  bgp->cluster = bgp_cluster.s_addr;
+  bgp->config |= BGP_CONFIG_CLUSTER_ID;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_cluster_id, no_bgp_cluster_id_cmd,
+       "no bgp cluster-id IPV4_ADDRESS",
+       NO_STR
+       BGP_STR
+       "Set cluster identifier\n"
+       "IP Address\n")
+{
+  int ret;
+  struct bgp *bgp;
+  struct in_addr bgp_cluster;
+
+  bgp = (struct bgp *) vty->index;
+
+  ret = inet_aton (argv[0], &bgp_cluster);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed bgp cluster identifier\r\n");
+      return CMD_WARNING;
+    }
+
+  if (bgp->cluster !=  bgp_cluster.s_addr)
+    {
+      vty_out (vty, "bgp cluster ID doesn't match exist one\r\n");
+      return CMD_WARNING;
+    }
+
+  bgp->cluster = 0;
+  bgp->config &= ~BGP_CONFIG_CLUSTER_ID;
+
   return CMD_SUCCESS;
 }
 
@@ -535,6 +644,16 @@ DEFUN (show_ip_bgp_neighbors,
 	vty_out (vty, "  distribute-list out: %s%s\r\n",
 		 p->distribute[BGP_FILTER_OUT].list ? "*" : "",
 		 p->distribute[BGP_FILTER_OUT].name);
+
+      if (p->plist[BGP_FILTER_IN].name)
+	vty_out (vty, "  prefix-list in: %s%s\r\n",
+		 p->plist[BGP_FILTER_IN].plist ? "*" : "",
+		 p->plist[BGP_FILTER_IN].name);
+      if (p->plist[BGP_FILTER_OUT].name)
+	vty_out (vty, "  prefix-list out: %s%s\r\n",
+		 p->plist[BGP_FILTER_OUT].plist ? "*" : "",
+		 p->plist[BGP_FILTER_OUT].name);
+
 
       if (p->filter[BGP_FILTER_IN].name)
 	vty_out (vty, "  filter-list in: %s%s\r\n",
@@ -773,6 +892,67 @@ DEFUN (neighbor_router_id,
   return CMD_SUCCESS;
 }
 
+DEFUN (neighbor_route_reflector_client,
+       neighbor_route_reflector_client_cmd,
+       "neighbor IP_ADDR route-reflector-client",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Configure this neighbor as route reflector client\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (! peer->reflector_client)
+    {
+      bgp->reflector_cnt++;
+      peer->reflector_client = 1;
+
+      BGP_EVENT_ADD (peer, BGP_Stop);
+    }
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_route_reflector_client,
+       no_neighbor_route_reflector_client_cmd,
+       "no neighbor IP_ADDR route-reflector-client",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Configure this neighbor as route reflector client\n")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (! peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  if (peer->reflector_client)
+    {
+      bgp->reflector_cnt--;
+      peer->reflector_client = 0;
+
+      BGP_EVENT_ADD (peer, BGP_Stop);
+    }
+
+  return CMD_SUCCESS;
+}
+
 /* Set route-map to the peer. */
 static void
 bgp_route_map_set (struct peer *peer, int direct, char *route_map)
@@ -854,6 +1034,59 @@ bgp_filter_update ()
 	  as_list_lookup (peer->filter[BGP_FILTER_OUT].name);
       else
 	peer->filter[BGP_FILTER_OUT].filter = NULL;
+    }
+}
+
+static void
+bgp_prefix_list_set (struct peer *peer, int direct, char *alist)
+{
+  if (peer->plist[direct].name)
+    free (peer->plist[direct].name);
+
+  peer->plist[direct].name = strdup (alist);
+  peer->plist[direct].plist = prefix_list_lookup (alist);
+}
+
+static int
+bgp_prefix_list_unset (struct peer *peer, int direct, char *alist)
+{
+  if (! peer->plist[direct].name)
+    return 1;
+
+  if (strcmp (peer->plist[direct].name, alist) != 0)
+    return 2;
+
+  free (peer->plist[direct].name);
+  peer->plist[direct].name = NULL;
+  peer->plist[direct].plist = NULL;
+
+  return 0;
+}
+
+void
+bgp_prefix_list_update ()
+{
+  listnode node;
+
+  for (node = listhead (peer_list); node; nextnode (node))
+    {
+      struct peer *peer;
+
+      peer = getdata (node);
+
+      /* Input filter update. */
+      if (peer->plist[BGP_FILTER_IN].name)
+	peer->plist[BGP_FILTER_IN].plist = 
+	  prefix_list_lookup (peer->plist[BGP_FILTER_IN].name);
+      else
+	peer->plist[BGP_FILTER_IN].plist = NULL;
+
+      /* Output filter update. */
+      if (peer->plist[BGP_FILTER_OUT].name)
+	peer->plist[BGP_FILTER_OUT].plist = 
+	  prefix_list_lookup (peer->plist[BGP_FILTER_OUT].name);
+      else
+	peer->plist[BGP_FILTER_OUT].plist = NULL;
     }
 }
 
@@ -990,6 +1223,87 @@ DEFUN (no_neighbor_filter_list,
 
   /* Set distribute list to the peer. */
   bgp_filter_unset (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (neighbor_prefix_list,
+       neighbor_prefix_list_cmd,
+       "neighbor IP_ADDR prefix-list PLIST_NAME TYPE",
+       NEIGHBOR_STR
+       "IP address\n"
+       "Prefix list\n"
+       "Prefix based filter name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* Check argument. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "filter direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set prefix list to the peer. */
+  bgp_prefix_list_set (peer, direct, argv[1]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_neighbor_prefix_list,
+       no_neighbor_prefix_list_cmd,
+       "no neighbor IP_ADDR prefix-list FLIST_NAME TYPE",
+       NO_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "Prefix list\n"
+       "Prefix based filter name\n"
+       "[in|out]")
+{
+  struct bgp *bgp;
+  struct peer *peer;
+  int direct;
+  
+  /* Check argument. */
+  bgp = (struct bgp *) vty->index;
+  peer = peer_lookup_from_bgp (bgp, argv[0]);
+
+  if (!peer)
+    {
+      vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  /* Check filter direction. */
+  if (strcmp (argv[2], "in") == 0)
+    direct = BGP_FILTER_IN;
+  else if (strcmp (argv[2], "out") == 0)
+    direct = BGP_FILTER_OUT;
+  else
+    {
+      vty_out (vty, "filter direction must be [in|out]\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set distribute list to the peer. */
+  bgp_prefix_list_unset (peer, direct, argv[1]);
 
   return CMD_SUCCESS;
 }
@@ -1607,6 +1921,14 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	    vty_out (vty, " unknown version%s", VTY_NEWLINE);
 	}
 
+      /* Route reflector client. */
+      if (peer->reflector_client)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " route-reflector-client%s", VTY_NEWLINE);
+	}
+
       /* ebgp-multihop print. */
       if (bgp_peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
 	{
@@ -1633,6 +1955,22 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	  sockunion_vty_out (vty, peer->su);
 	  vty_out (vty, " distribute-list %s out%s", 
 		   peer->distribute[BGP_FILTER_OUT].name, VTY_NEWLINE);
+	}
+
+      /* prefix-list print. */
+      if (peer->plist[BGP_FILTER_IN].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " prefix-list %s in%s", 
+		   peer->plist[BGP_FILTER_IN].name, VTY_NEWLINE);
+	}
+      if (peer->plist[BGP_FILTER_OUT].name)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " prefix-list %s out%s", 
+		   peer->plist[BGP_FILTER_OUT].name, VTY_NEWLINE);
 	}
 
       /* filter-list print. */
@@ -1671,7 +2009,7 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 	{
 	  vty_out (vty, " neighbor ");
 	  sockunion_vty_out (vty, peer->su);
-	  vty_out (vty, " timers holdtimer %ld%s", peer->v_holdtime,
+	  vty_out (vty, " timers holdtime %ld%s", peer->v_holdtime,
 		   VTY_NEWLINE);
 	}
     }
@@ -1705,6 +2043,14 @@ bgp_config_write (struct vty *vty)
 	  vty_out (vty, " bgp router-id %s%s", inet_ntoa (ident), 
 		   VTY_NEWLINE);
 	}
+      if (bgp->config & BGP_CONFIG_CLUSTER_ID)
+	{
+	  struct in_addr cluster;
+	  cluster.s_addr = bgp->cluster;
+	  vty_out (vty, " bgp cluster-id %s%s", inet_ntoa (cluster), 
+		   VTY_NEWLINE);
+	}
+
       config_write_network (vty, bgp);
       if (bgp->redist_static)
 	vty_out (vty, " redistribute static%s", VTY_NEWLINE);
@@ -1755,10 +2101,15 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_cmd);
   install_element (BGP_NODE, &neighbor_ebgp_multihop_cmd);
   install_element (BGP_NODE, &bgp_router_id_cmd);
+  install_element (BGP_NODE, &no_bgp_router_id_cmd);
+  install_element (BGP_NODE, &bgp_cluster_id_cmd);
+  install_element (BGP_NODE, &no_bgp_cluster_id_cmd);
   install_element (BGP_NODE, &neighbor_version_cmd);
   install_element (BGP_NODE, &no_neighbor_version_cmd);
   install_element (BGP_NODE, &neighbor_distribute_list_cmd);
   install_element (BGP_NODE, &no_neighbor_distribute_list_cmd);
+  install_element (BGP_NODE, &neighbor_prefix_list_cmd);
+  install_element (BGP_NODE, &no_neighbor_prefix_list_cmd);
   install_element (BGP_NODE, &neighbor_filter_list_cmd);
   install_element (BGP_NODE, &no_neighbor_filter_list_cmd);
   install_element (BGP_NODE, &neighbor_route_map_cmd);
@@ -1767,6 +2118,8 @@ bgp_init ()
   install_element (BGP_NODE, &no_neighbor_desc_cmd);
   install_element (BGP_NODE, &neighbor_shutdown_cmd);
   install_element (BGP_NODE, &no_neighbor_shutdown_cmd);
+  install_element (BGP_NODE, &neighbor_route_reflector_client_cmd);
+  install_element (BGP_NODE, &no_neighbor_route_reflector_client_cmd);
   install_element (BGP_NODE, &neighbor_interface_cmd);
   install_element (BGP_NODE, &neighbor_timers_holdtime_cmd);
 
@@ -1795,4 +2148,9 @@ bgp_init ()
   bgp_filter_init ();
   as_list_add_hook (bgp_filter_update);
   as_list_delete_hook (bgp_filter_update);
+
+  /* Prefix list initialize.*/
+  prefix_list_init ();
+  prefix_list_add_hook (bgp_prefix_list_update);
+  prefix_list_delete_hook (bgp_prefix_list_update);
 }

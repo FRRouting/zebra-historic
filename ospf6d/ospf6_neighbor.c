@@ -29,7 +29,7 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
   nbs_previous = nbr->state;
   nbr->state = nbs_next;
 
-  ospf6_info ("NBSCHANGE: [%s]->[%s](%s) on %s \n",
+  zvlog_info ("NBSCHANGE: [%s]->[%s](%s) on %s",
               nbs_name[nbs_previous], nbs_name[nbs_next], reason,
               inet4str (nbr->rtr_id));
 
@@ -119,7 +119,7 @@ hello_received (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  ospf6_info ("NBEVENT: HelloReceived on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: HelloReceived on %s", inet4str (nbr->rtr_id));
 
   if (nbr->inactivity_timer)
     thread_cancel (nbr->inactivity_timer);
@@ -142,7 +142,7 @@ twoway_received (struct thread *thread)
   if (nbr->state > NBS_INIT)
     return 0;
 
-  ospf6_info ("NBEVENT: 2Way-Received on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: 2Way-Received on %s\n", inet4str (nbr->rtr_id));
 
   thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
 
@@ -180,7 +180,7 @@ negotiation_done (struct thread *thread)
   if (nbr->state != NBS_EXSTART)
     return 0;
 
-  ospf6_info ("NBEVENT: NegotiationDone on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: NegotiationDone on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_EXCHANGE, "NegotiationDone", nbr);
   DD_IBIT_CLEAR (nbr->dd_bits);
@@ -199,18 +199,23 @@ exchange_done (struct thread *thread)
   if (nbr->state != NBS_EXCHANGE)
     return 0;
 
-  ospf6_info ("NBEVENT: ExchangeDone on %s\n", inet4str (nbr->rtr_id));
+  if (nbr->send_dd != (struct thread *)NULL)
+    {
+      thread_cancel (nbr->send_dd);
+      nbr->send_dd = (struct thread *)NULL;
+    }
+  zvlog_info ("NBEVENT: ExchangeDone on %s\n", inet4str (nbr->rtr_id));
 
   list_delete_all_node (nbr->dd_retrans);
 
   thread_add_timer (master, free_last_dd, nbr,
                     nbr->ospf6_if->rtr_dead_interval);
 
-  if (listcount (nbr->requestlist) == 0)
+  if (list_isempty (nbr->requestlist))
     nbs_change (NBS_FULL, "Requestlist Empty", nbr);
   else
     {
-      if (nbr->send_lsreq == NULL)
+      if (nbr->send_lsreq == (struct thread *)NULL)
         thread_add_event (master, send_linkstate_request,
                           nbr, nbr->ospf6_if->rxmt_interval);
       nbs_change (NBS_LOADING, "Requestlist Not Empty", nbr);
@@ -229,14 +234,14 @@ loading_done (struct thread *thread)
   if (nbr->state != NBS_LOADING)
     return 0;
 
-  ospf6_info ("NBEVENT: LoadingDone on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: LoadingDone on %s\n", inet4str (nbr->rtr_id));
 
-  if (listcount (nbr->requestlist) == 0)
+  if (list_isempty (nbr->requestlist))
     nbs_change (NBS_FULL, "LoadingDone", nbr);
   else
     {
 #ifdef DEBUG_OSPF6
-      zlog (NULL, LOG_ERR, "BUG: LoadingDone but Requestlist Not Empty");
+      zvlog_debug ("BUG: LoadingDone but Requestlist Not Empty");
       assert (0);
 #endif
     }
@@ -252,7 +257,7 @@ adj_ok (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  ospf6_info ("NBEVENT: AdjOK? on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: AdjOK? on %s\n", inet4str (nbr->rtr_id));
 
   if (nbr->state == NBS_TWOWAY)
     {
@@ -300,7 +305,7 @@ seqnumber_mismatch (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-  ospf6_info ("NBEVENT: SeqNumberMismatch on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: SeqNumberMismatch on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_EXSTART, "SeqNumberMismatch", nbr);
 
@@ -329,7 +334,7 @@ bad_lsreq (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-  ospf6_info ("NBEVENT: BadLSReq on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: BadLSReq on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_EXSTART, "BadLSReq", nbr);
 
@@ -358,7 +363,7 @@ oneway_received (struct thread *thread)
   if (nbr->state < NBS_TWOWAY)
     return 0;
 
-  ospf6_info ("NBEVENT: 1Way-Received on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: 1Way-Received on %s\n", inet4str (nbr->rtr_id));
 
   nbs_change (NBS_INIT, "1Way-Received", nbr);
 
@@ -376,7 +381,7 @@ inactivity_timer (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  ospf6_info ("NBEVENT: InactivityTimer on %s\n", inet4str (nbr->rtr_id));
+  zvlog_info ("NBEVENT: InactivityTimer on %s\n", inet4str (nbr->rtr_id));
 
   nbr->inactivity_timer = NULL;
   nbr->dr = nbr->bdr = nbr->prevdr = nbr->prevbdr = 0;
@@ -393,7 +398,7 @@ inactivity_timer (struct thread *thread)
 int
 dr_election (struct ospf6_if *ospf6_if)
 {
-  list candidate_list = NULL;
+  list candidate_list = list_init ();
   listnode i, j, n;
   ifid_t prevdr, prevbdr, dr = 0, bdr;
   struct neighbor *nbpi, *nbpj, myself, *nbr;
@@ -418,9 +423,8 @@ step_two:
 
   /* Calculate Backup Designated Router. */
   /* Make Candidate list */
-  if (candidate_list)
-    list_delete_all (candidate_list);
-  candidate_list = list_init();
+  if (!list_isempty (candidate_list))
+    list_delete_all_node (candidate_list);
   declare = 0;
   for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
     {
@@ -458,16 +462,19 @@ step_two:
       nbpj = (struct neighbor *)getdata (j);
       if (declare)
         {
+          int deleted = 0;
           if (nbpi->bdr != nbpi->rtr_id)
             {
               list_delete_by_val (candidate_list, nbpi);
-              continue;
+              deleted++;
             }
           if (nbpj->bdr != nbpj->rtr_id)
             {
               list_delete_by_val (candidate_list, nbpj);
-              continue;
+              deleted++;
             }
+          if (deleted)
+            continue;
         }
       if (nbpi->rtr_pri > nbpj->rtr_pri)
         {
@@ -510,9 +517,8 @@ step_two:
 
   /* Calculate Designated Router. */
   /* Make Candidate list */
-  if (candidate_list)
-    list_delete_all (candidate_list);
-  candidate_list = list_init();
+  if (!list_isempty (candidate_list))
+    list_delete_all_node (candidate_list);
   declare = 0;
   for (i = listhead (ospf6_if->nbr_list); i; nextnode (i))
     {
@@ -539,13 +545,13 @@ step_two:
   /* Elect DR */
   if (declare == 0)
     {
-      if (!list_isempty (candidate_list))
-        assert (0); /* No one declare but candidate_list not empty */
+      assert (list_isempty (candidate_list));
+      /* No one declare but candidate_list not empty */
       dr = bdr;
     }
   else
     {
-      assert (candidate_list->count > 1);
+      assert (!list_isempty (candidate_list));
       for (i = listhead (candidate_list);
            candidate_list->count > 1;
            i = listhead (candidate_list))
@@ -611,24 +617,22 @@ step_two:
 
   if (dr != prevdr)
     {
-      if (dr == myself.rtr_id || prevdr == myself.rtr_id)
+      if ((dr == myself.rtr_id || prevdr == myself.rtr_id)
+          && !(dr == myself.rtr_id && prevdr == myself.rtr_id))
         {
-#if 0
           myself.dr = dr;
           myself.bdr = bdr;
-#endif
           gofive++;
           goto step_two;
         }
     }
   if (bdr != prevbdr)
     {
-      if (bdr == myself.rtr_id || prevbdr == myself.rtr_id)
+      if ((bdr == myself.rtr_id || prevbdr == myself.rtr_id)
+          && !(bdr == myself.rtr_id && prevbdr == myself.rtr_id))
         {
-#if 0
           myself.dr = dr;
           myself.bdr = bdr;
-#endif
           gofive++;
           goto step_two;
         }
@@ -646,18 +650,8 @@ step_five:
           nbpi = getdata (i);
           if (nbpi->state < NBS_TWOWAY)
             continue;
-
-/* Schedule or Execute AdjOK. which does "invoke" mean? */
-#if 0
-          {
-            struct thread dummy;
-
-            dummy.arg = (void *)nbpi;
-            adj_ok (&dummy);
-          }
-#else
+          /* Schedule or Execute AdjOK. which does "invoke" mean? */
           thread_add_event (master, adj_ok, nbpi, 0);
-#endif
         }
     }
 

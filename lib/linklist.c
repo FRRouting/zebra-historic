@@ -114,11 +114,9 @@ void
 list_delete_all_node (list list)
 {
   listnode n;
-  listnode next;
 
-  for (n = list->head; n; n = next)
+  for (n = listhead (list); n; n = listhead (list))
     {
-      next = n->next;
       list_delete_node (list, n);
     }
 }

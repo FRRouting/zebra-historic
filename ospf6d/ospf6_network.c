@@ -196,8 +196,10 @@ iov_free (int mtype, struct iovec *iov, u_int begin, u_int end)
 
   for (i = begin; i < end; i++)
     {
-#ifdef DEBUG_LSA_PTR
-      ospf6_debug ("LSAPTR: Freeing (%#x) in iov_free()\n", iov[i].iov_base);
+#ifdef DEBUG_LSAPTR
+      if (mtype == MTYPE_OSPF6_LSA)
+        zvlog_debug ("LSAPTR: Freeing (%#x) in iov_free()",
+                     iov[i].iov_base);
 #endif
       XFREE (mtype, iov[i].iov_base);
       iov[i].iov_base = NULL;
@@ -412,7 +414,7 @@ ospf6_recv (struct thread *thread)
           if (!iov_append (MTYPE_OSPF6_MESSAGE, iov,
                sizeof (struct lsa_hdr)))
             {
-              log ("iov_append() failed in ospf6_recv()\n");
+              zvlog_err ("iov_append() failed in ospf6_recv()");
               goto rvmsg_bad;
             }
         }
@@ -446,7 +448,7 @@ rvmsg_ok:
 
   if (ospf6_if->state < IFS_WAITING)
     {
-      ospf6_debug ("Interface %s Not UP\n");
+      zvlog_debug ("Interface %s Not UP");
       thread_add_read (master, ospf6_recv, NULL, sockfd);
       iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, msgend);
       return -1;
@@ -456,7 +458,7 @@ rvmsg_ok:
   {
     char *srcname, ntopbuf[32];
     srcname = (char *)&src->sin6_addr;
-    ospf6_debug ("Recv %s from %s on %s\n",
+    zvlog_debug ("Recv %s from %s on %s",
                   mesg_name[ospf6_hdr->type],
                   inet_ntop (src->sin6_family, srcname,
                              ntopbuf, sizeof (ntopbuf)),
@@ -753,23 +755,12 @@ ospf6_send (u_char msgtype, struct iovec *iov,
 
   num = sendmsg (ospf6_sock, &smsghdr, 0);
 
-#ifdef DEBUG_OSPF
+#ifdef DEBUG_OSPF6
   {
     char *dstname, ntopbuf[32], ifnamebuf[16];
     struct ospf6_hdr *ospf6_hdr = (struct ospf6_hdr *)iov[0].iov_base;
-    switch (dst->sa_family)
-    {
-    case AF_INET:
-      dstname = (char *)&((struct sockaddr_in *)dst)->sin_addr;
-      break;
-    case AF_INET6:
-      dstname = (char *)&((struct sockaddr_in6 *)dst)->sin6_addr;
-      break;
-    default:
-      assert (0);
-      return ;
-    }
-    ospf6_debug ("Send %s to %s on %s\n",
+    dstname = (char *)&((struct sockaddr_in6 *)dst)->sin6_addr;
+    zvlog_debug ("Send %s to %s on %s",
                  mesg_name[ospf6_hdr->type],
                  inet_ntop (dst->sa_family, dstname,
                             ntopbuf, sizeof (ntopbuf)),
@@ -806,7 +797,7 @@ send_hello (struct thread *thread)
   ospf6_if->send_hello = thread_add_timer
     (master, send_hello, ospf6_if, ospf6_if->hello_interval);
 
-  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, iov_count (iov));
+  iov_free (MTYPE_OSPF_MESSAGE, iov, 0, 1);
 
   return 0;
 }
@@ -920,7 +911,7 @@ send_linkstate_update (struct thread *thread)
     return -1;
 
 #ifdef DEBUG_LINKSTATE_UPDATE
-  log ("Retransmitting LSAs\n");
+  zvlog_debug ("Retransmitting LSAs");
 #endif
 
   ospf6_send (MSGT_LINKSTATE_UPDATE, iov, (struct sockaddr *)&dst,
@@ -957,7 +948,7 @@ send_linkstate_ack (struct thread *thread)
       p = (struct lsa_internal *) getdata (i);
       attach_lsa_hdr_to_iov (p, iov);
 #ifdef DEBUG_OSPF6
-      ospf6_debug ("[%s] to DELAYED ACK\n", print_lsahdr (p->lsh));
+      zvlog_debug ("LSACK(delayed): %s", print_lsahdr (p->lsh));
 #endif
     }
 

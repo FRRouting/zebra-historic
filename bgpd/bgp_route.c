@@ -35,6 +35,7 @@
 #include "routemap.h"
 #include "buffer.h"
 #include "sockunion.h"
+#include "plist.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_route.h"
@@ -70,6 +71,8 @@ extern list peer_list;
 /* Macros which easy to access peer's filter. */
 #define DISTRIBUTE_IN(P)    ((P)->distribute[BGP_FILTER_IN].list)
 #define DISTRIBUTE_OUT(P)   ((P)->distribute[BGP_FILTER_OUT].list)
+#define PREFIX_LIST_IN(P)   ((P)->plist[BGP_FILTER_IN].plist)
+#define PREFIX_LIST_OUT(P)  ((P)->plist[BGP_FILTER_OUT].plist)
 #define FILTER_LIST_IN(P)   ((P)->filter[BGP_FILTER_IN].filter)
 #define FILTER_LIST_OUT(P)  ((P)->filter[BGP_FILTER_OUT].filter)
 #define ROUTE_MAP_IN(P)     ((P)->route_map[BGP_FILTER_IN].map)
@@ -77,6 +80,7 @@ extern list peer_list;
 
 /* Extern from bgp_dump.c */
 char *bgp_origin_long_str[] = {"IGP","EGP","Incomplete"};
+extern char *bgp_origin_str[];
 
 /* Allocate new bgp info structure. */
 struct bgp_info *
@@ -190,6 +194,11 @@ bgp_output_filter (struct peer *peer, struct prefix *p, struct bgp_info *info)
     if (access_list_apply (DISTRIBUTE_OUT (peer), p) == FILTER_DENY)
       return FILTER_DENY;
 
+  /* Prefix list apply. */
+  if (PREFIX_LIST_OUT (peer))
+    if (prefix_list_apply (PREFIX_LIST_OUT (peer), p) == PREFIX_DENY)
+      return FILTER_DENY;
+
   /* Filter list apply. */
   if (FILTER_LIST_OUT (peer))
     if (as_list_apply (FILTER_LIST_OUT(peer), 
@@ -208,7 +217,10 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
 
   /* Apply output filter. */
   if (bgp_output_filter (peer, p, info) == FILTER_DENY)
-    return;
+    {
+      /* I want logging at here. */
+      return;
+    }
 
   /* AS path loop check */
   if (aspath_loop_check (info->attr->aspath, peer->as))
@@ -223,9 +235,20 @@ bgp_announce (struct peer *peer, struct prefix *p, struct bgp_info *info)
   if (bgp_peer_sort (peer) == BGP_PEER_IBGP &&
       bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
     {
-      zlog (peer->log, LOG_INFO, 
-	    "suppress announcement due to iBGP reflection.");
-      return;
+      /* A route from a Client peer. */
+      if (info->peer->reflector_client)
+	{
+	  /* Reflect to all the Non-Client peers and also to the
+             Client peers other than the originator.  Originator check
+             is already done.  So there is noting to do. */
+	}
+      else
+	{
+	  /* A route from a Non-client peer. Reflect to all other
+	     clients. */
+	  if (! peer->reflector_client)
+	    return;
+	}
     }
 
   /* For modify attribute, copy it to temporary structure. */
@@ -433,18 +456,33 @@ nlri_process (struct prefix *p, struct bgp_info *info)
 enum filter_type
 bgp_input_filter (struct prefix *p, struct peer *peer, struct attr *attr)
 {
-  int ret;
-
   /* Distribute list apply. */
   if (DISTRIBUTE_IN (peer))
     if (access_list_apply (DISTRIBUTE_IN (peer), p) == FILTER_DENY)
       return FILTER_DENY;
 
+  /* Prefix list apply. */
+  if (PREFIX_LIST_IN (peer))
+    if (prefix_list_apply (PREFIX_LIST_IN (peer), p) == PREFIX_DENY)
+      return FILTER_DENY;
+  
   /* Filter list apply. */
   if (FILTER_LIST_IN (peer))
+    if (as_list_apply (FILTER_LIST_IN (peer), attr->aspath) == FILTER_DENY)
+      return FILTER_DENY;
+
+  /* Route reflection loop check. */
+  if (bgp_peer_sort (peer) == BGP_PEER_IBGP && attr->cluster)
     {
-      ret = as_list_apply (FILTER_LIST_IN (peer), attr->aspath);
-      if (ret == FILTER_DENY)
+      struct in_addr originator;
+
+      /* Cluster list check. */
+      if (peer->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	originator.s_addr = peer->bgp->cluster;
+      else
+	originator.s_addr = peer->bgp->ident;
+
+      if (cluster_loop_check (attr->cluster, originator))
 	return FILTER_DENY;
     }
 
@@ -744,7 +782,7 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
       aspath_print_vty (vty, attr->aspath);
 
     /* Print origin */
-    vty_out (vty, " %s", bgp_origin_long_str[attr->origin]);
+    vty_out (vty, " %s", bgp_origin_str[attr->origin]);
   }
 
   vty_out (vty, "\r\n");
@@ -797,8 +835,21 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 	    vty_out (vty, "\tAtomic Aggregate\r\n");
 
 	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_AGGREGATOR))
-	    vty_out (vty, "\tAggregator AS%d [%s]\r\n", attr->aggregator_as,
+	    vty_out (vty, "\tAggregator AS %d [%s]\r\n", attr->aggregator_as,
 		     inet_ntoa(attr->aggregator_addr));
+
+	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
+	    vty_out (vty, "\tOriginator ID: %s\r\n",
+		     inet_ntoa (attr->originator_id));
+
+	  if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_CLUSTER_LIST))
+	    {
+	      int i;
+	      vty_out (vty, "\tCluster List: ");
+	      for (i = 0; i < attr->cluster->length / 4; i++)
+		vty_out (vty, "%s ", inet_ntoa (attr->cluster->list[i]));
+	      vty_out (vty, "\r\n");
+	    }
 	}
     }
   vty_out (vty, "\r\n");
@@ -928,6 +979,38 @@ DEFUN (show_ip_bgp_regexp,
 	  route_vty_out (vty, &node->p, route);
       }
   bgp_regex_free (regex);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (show_ip_bgp_prefix_list, 
+       show_ip_bgp_prefix_list_cmd,
+       "show ip bgp prefix-list PLIST_NAME",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Show prefix-list matched bgp routes\n"
+       "Prefix-list name\n")
+{
+  int ret;
+  struct prefix_list *plist;
+  struct route_node *node;
+  struct bgp_info *route;
+
+  plist = prefix_list_lookup (argv[0]);
+  if (plist == NULL)
+    {
+      vty_out (vty, "Can't find prefix-list\r\n");
+      return CMD_WARNING;
+    }
+
+  for (node = route_top (bgp_table_ipv4); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      {
+	ret = prefix_list_apply (plist, &node->p);
+	if (ret == PREFIX_PERMIT)
+	  route_vty_out (vty, &node->p, route);
+      }
 
   return CMD_SUCCESS;
 }
@@ -1188,10 +1271,14 @@ bgp_route_init ()
 
   install_element (VIEW_NODE, &show_ip_bgp_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_regexp_cmd);
+  install_element (VIEW_NODE, &show_ip_bgp_prefix_list_cmd);
+
   install_element (ENABLE_NODE, &show_ip_bgp_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_regexp_cmd);
+  install_element (ENABLE_NODE, &show_ip_bgp_prefix_list_cmd);
+
   install_element (BGP_NODE, &bgp_network_cmd);
   install_element (BGP_NODE, &no_bgp_network_cmd);
-  install_element (ENABLE_NODE, &show_ip_bgp_regexp_cmd);
   install_element (BGP_NODE, &aggregate_address_cmd);
 
 #ifdef HAVE_IPV6

@@ -38,8 +38,11 @@ struct bgp
 {
   as_t as;			/* BGP instance's AS. */
   ident_t ident;		/* BGP identifier. */
+  ident_t cluster;		/* BGP route reflector cluster ID */
+  int reflector_cnt;		/* BGP route reflector neighbor count. */
 
-#define BGP_CONFIG_ROUTER_ID 1
+#define BGP_CONFIG_ROUTER_ID  1
+#define BGP_CONFIG_CLUSTER_ID 2
   unsigned int config;		/* BGP configuration. */
 
   u_char redist_static;		/* Redistribute static route. */
@@ -84,6 +87,7 @@ struct peer
   /* Default attribute value for this peer. */
   unsigned int def;		/* Option set flag. */
   long localpref;		/* default local preference. */
+  int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */
 
   /* Timer values. */
@@ -127,6 +131,13 @@ struct peer
     char *name;
     struct access_list *list;
   } distribute[BGP_FILTER_MAX];
+
+  /* Prefix list based filter. */
+  struct
+  {
+    char *name;
+    struct prefix_list *plist;
+  } plist[BGP_FILTER_MAX];
 
   /* AS list based filter. */
   struct
@@ -182,7 +193,7 @@ struct bgp_notify
 #define BGP_ATTR_ATOMIC_AGGREGATE   6
 #define BGP_ATTR_AGGREGATOR         7
 #define BGP_ATTR_COMMUNITIES        8
-#define BGP_ATTR_ORIGINATOR         9
+#define BGP_ATTR_ORIGINATOR_ID      9
 #define BGP_ATTR_CLUSTER_LIST      10
 #define BGP_ATTR_DPA               11
 #define BGP_ATTR_ADVERTISER        12

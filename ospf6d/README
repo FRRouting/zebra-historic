@@ -1,12 +1,79 @@
-Support only FreeBSD2.2.7 with KAME(also aka Hydrangea).
-Can't compile under GNU/Linux.
 
-Intra area routing have been almost done, but this is broken
-because I'm now cleaning up everything.
-So this can't be compiled on any platform.
+		  Zebra OSPF daemon for IPv6 network
 
-Sorry, I'm now working.
-1999 04/02.
+			     1999/05/05
 
+Zebra OSPF6d is OSPF version 3 daemon which described in
+draft-ietf-ospf-ospfv6-05.txt.
+
+Now OSPF6d supports FreeBSD2.2.8 with KAME (also aka Hydrangea) and
+Linux 2.2.7 (please set CONFIG_IPV6).  Any other platform are not yet
+tested.
+
+This file README is like memo yet, so please feel free to ask
+<yasu@sfc.wide.ad.jp> by E-mail. Patches will be appriciated.
+
+Clean up have been almost done, testing Intra area routing state.
+
+Supported only Broadcast link only. pointopoint will be soon.
+AS External and Inter Area routing not yet supported.
+OSPF6d was designed to work with zebra daemon,
+I/F Information should be installed from zebra.
+Without zebra, OSPF6d will do nothing.
+
+OSPF6d will start on "interface IFNAME area A.B.C.D" in Config Node.
+Routing Table is very poor and don't install routes to Zebra.
+
+Dynamic update of I/F information is not yet supported.
+
+To see what is happening, use commands below.
+
+  show ipv6 ospf6 [INSTANCE_ID]
+    INSTANCE_ID is a optional OSPF instance ID. To see router ID
+    and OSPF instance ID, simply type "show ipv6 ospf6 <cr>".
+
+  show ipv6 ospf6 database
+    This command shows LSA database summary.
+
+  show ipv6 ospf6 interface [IFNAME]
+    To see OSPF interface configuration like costs.
+    lack of IFNAME shows all interfaces.
+
+  show ipv6 ospf6 neighbor [IFNAME] [NBR_ID]
+    Shows state and (Backup) DR neighbor choose.
+    IFNAME and Neichbor Router ID (NBR_ID) is optional.
+
+  show ipv6 ospf6 request-list ADDR
+    Shows requestlist of neighbor ADDR. ADDR is router ID by IPv4
+    address notation, like "10.0.0.1".
+
+  show ipv6 route ospf6
+    This command shows internal routing table.
+
+Below is sample configuration of ospf6d.
+!
+! Zebra configuration saved from vty
+!   1999/05/02 14:10:52
+!
+hostname ospf6d
+password zebra
+log file /var/log/ospf6d.log
+!
+interface ep0
+ ipv6 ospf6 cost 1
+ ipv6 ospf6 hello-interval 10
+ ipv6 ospf6 dead-interval 40
+ ipv6 ospf6 retransmit-interval 5
+ ipv6 ospf6 priority 1
+ ipv6 ospf6 transmit-delay 1
+!
+!
+router ospf6 instance 1
+ router-id 203.178.139.179
+ interface ep0 area 0.0.0.0
+!
+!
+!
+--
 Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
-
+Kunihiro Ishiguro <kunihiro@zebra.org>

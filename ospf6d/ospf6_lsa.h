@@ -193,7 +193,7 @@ int show_router_lsa (struct vty *, void *);
 int show_network_lsa (struct vty *, void *);
 int show_link_lsa (struct vty *, void *);
 int show_intra_prefix_lsa (struct vty *, void *);
-int vty_lsdb (struct vty *, struct area *);
+int vty_lsa (struct vty *, struct lsa_internal *);
 
 #endif /* OSPF6_LSA_H */
 

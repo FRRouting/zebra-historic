@@ -178,6 +178,7 @@ const char *zlog_proto_names[] = {
   "BGP",
   "OSPF",
   "RIPNG",
+  "OSPF6",
   NULL,
 };
 
@@ -188,16 +189,16 @@ void
 zlog(ZLOG *zl, int priority, const char *format, ...)
 {
   va_list args;
-  
+
   va_start(args, format);
 
   if (zl == NULL)
     zl = zlog_default;
   
-  if (zl->flags == ZLOG_SYSLOG)
+  if (zl->flags & ZLOG_SYSLOG)
     vsyslog(priority, format, args);
 
-  if (zl->flags == ZLOG_STDOUT)
+  if (zl->flags & ZLOG_STDOUT)
     {
       time_print (stdout);
       vfprintf (stdout, format, args);
@@ -205,13 +206,94 @@ zlog(ZLOG *zl, int priority, const char *format, ...)
       fflush (stdout);
     }
  
-  if (zl->flags == ZLOG_FILE)
+  if (zl->flags & ZLOG_FILE)
     {
       time_print (zl->file);
       vfprintf (zl->file, format, args);
       fprintf (zl->file, "\n");
       fflush (zl->file);
     }
+}
+
+void
+zvlog(ZLOG *zl, int priority, const char *format, va_list args)
+{
+  char zvformat[1024];
+
+  if (zl == NULL)
+    zl = zlog_default;
+  
+  snprintf (zvformat, sizeof (zvformat), "%s: %s",
+            zlog_proto_names[zl->protocol], format);
+
+  if (zl->flags & ZLOG_SYSLOG)
+    vsyslog(priority, zvformat, args);
+
+  if (zl->flags & ZLOG_STDOUT)
+    {
+      time_print (stdout);
+      vfprintf (stdout, zvformat, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+    }
+ 
+  if (zl->flags & ZLOG_FILE)
+    {
+      time_print (zl->file);
+      vfprintf (zl->file, zvformat, args);
+      fprintf (zl->file, "\n");
+      fflush (zl->file);
+    }
+}
+
+void
+zvlog_err (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_ERR, format, args);
+  return;
+}
+
+void
+zvlog_warn (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_WARNING, format, args);
+  return;
+}
+
+void
+zvlog_notice (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_NOTICE, format, args);
+  return;
+}
+
+void
+zvlog_info (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_INFO, format, args);
+  return;
+}
+
+void
+zvlog_debug (const char *format, ...)
+{
+  va_list args;
+
+  va_start (args, format);
+  zvlog (NULL, LOG_DEBUG, format, args);
+  return;
 }
 
 /*
@@ -224,9 +306,10 @@ openzlog(const char *progname, int flags, zlog_proto_t protocol,
   ZLOG *zl;
 
   zl = XMALLOC(MTYPE_ZLOG, sizeof (ZLOG));
+  memset (zl, 0, sizeof (ZLOG));
 
   zl->ident = progname;
-  zl->flags = flags;
+  zl->flags |= flags;
   zl->protocol = protocol;
   zl->facility = syslog_facility;
 
@@ -239,6 +322,7 @@ void
 closezlog(ZLOG *zl)
 {
   closelog();
+  fclose (zl->file);
 
   XFREE(MTYPE_ZLOG, zl);
 }
@@ -250,7 +334,7 @@ zlog_set_flag (ZLOG *zl, int flags)
   if (zl == NULL)
     zl = zlog_default;
 
-  zl->flags = flags;
+  zl->flags |= flags;
 }
 
 int
@@ -265,7 +349,7 @@ zlog_set_file (ZLOG *zl, int flags, char *filename)
   if (fp == NULL)
     return 0;
 
-  zl->flags = ZLOG_FILE;
+  zl->flags |= ZLOG_FILE;
   zl->file = fp;
 
   return 1;

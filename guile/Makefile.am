@@ -1,6 +1,6 @@
 ## Process this file with Automake to create Makefile.in
 
-INCLUDES = @GUILE_CFLAGS@ -I.. -I$(top_srcdir)
+INCLUDES = @GUILE_CFLAGS@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
 DEFS = @DEFS@ -I. -I$(srcdir)
 
 bin_PROGRAMS = zebra-guile

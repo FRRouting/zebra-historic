@@ -23,7 +23,6 @@
 #define OSPF6_DUMP_H
 
 /* Global logging stream variable */
-extern ZLOG *zl;
 extern char strbuf[16];
 
 /* Strings for logging */
@@ -35,11 +34,6 @@ extern char   *rlsatype_name[];
 
 /* Function Prototypes */
 char *print_lsahdr (struct lsa_hdr *);
-void ospf6_err (const char *format, ...);
-void ospf6_warn (const char *format, ...);
-void ospf6_notice (const char *format, ...);
-void ospf6_info (const char *format, ...);
-void ospf6_debug (const char *format, ...);
 void ospf6_log_init ();
 char *inet4str(unsigned long);
 

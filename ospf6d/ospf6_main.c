@@ -38,7 +38,8 @@ char config_default[] = SYSCONFDIR OSPF6_DEFAULT_CONFIG;
 
 /* ospfd program name. */
 char *progname;
-
+/* is daemon? */
+int daemon_mode = 0;
 /* Master of threads. */
 struct thread_master *master;
 
@@ -131,7 +132,6 @@ signal_init ()
   signal_set (SIGTTOU, SIG_IGN);
 #endif
 }
-
 
 /* Main routine of ospfd. Treatment of argument and start ospf finite
    state machine is handled at here. */
@@ -140,7 +140,6 @@ main (int argc, char **argv)
 {
   char *p;
   int opt;
-  int daemon_mode = 0;
   int vty_port = 0;
 
   char *config_file = NULL;
@@ -199,13 +198,6 @@ main (int argc, char **argv)
   ospf6_init ();
   ospf6_zebra_init ();
 
-#ifdef OLD
-  get_interface_all();
-#else
-  /* This should be called from router zebra. */
-  /* zebra_get_interface (); */
-#endif
-
   access_list_init ();
   memory_init ();
   sort_node ();
@@ -220,7 +212,10 @@ main (int argc, char **argv)
   pid_output (PATH_OSPFD_PID);
 
   /* Make ospf vty socket. */
-  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT, AF_INET);
+  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET);
+#ifdef KAME
+  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET6);
+#endif /* KAME */
 
   /* start finite state machine, here we go! */
   while (thread_fetch (master, &thread))

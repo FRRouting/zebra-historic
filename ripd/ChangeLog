@@ -1,3 +1,8 @@
+1999-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_add_route): Add metric check.  Reported by Carlos
+	Alberto Barcenilla <barce@frlp.utn.edu.ar>.
+
 1999-02-18  Peter Galbavy  <Peter.Galbavy@knowledge.com>
 
 	* syslog support added

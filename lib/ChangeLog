@@ -1,3 +1,43 @@
+1999-05-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_CLUSTER, MTYPE_CLUSTER_VAL.
+
+1999-05-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* version.h (ZEBRA_VERSION): Bump up to 0.64 for next beta
+	release.
+
+1999-05-04  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* linklist.c (list_delete_all_node): bug fix. 
+	previous code loses current position when node
+	is deleted.
+
+1999-05-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (DESC): Macro added.
+	(struct cmd_element2): Delete struct cmd_element2.
+
+	* plist.c (prefix_list): Sequential number option check is added.
+
+1999-05-02  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* log.c (zvlog_{debug,info,notice,warn,err}): have been
+	added. now we can log both console and file, but still 
+	need some fix about config write.
+
+1999-05-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* log.c (zvlog_debug): Fix yasu's change.
+
+1999-05-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* plist.c (prefix_list): Fix typo.
+
+1999-04-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to 0.63 for first beta package.
+
 1999-04-27  Carlos Barcenilla <barce@frlp.utn.edu.ar>
 
 	* prefix.c (str2prefix_ipv4): Fix prefix length check.

@@ -362,8 +362,8 @@ rip_interface.o: rip_interface.c ../lib/linklist.h ../lib/vector.h \
  ../zebra/connected.h ../ripd/ripd.h
 rip_main.o: rip_main.c ../lib/version.h ../lib/getopt.h \
  ../lib/thread.h ../lib/vector.h ../lib/vty.h ../lib/command.h \
- ../lib/memory.h ../lib/prefix.h ../lib/log.h ../zebra/zebra.h \
- ../ripd/ripd.h
+ ../lib/memory.h ../lib/prefix.h ../lib/log.h ../lib/filter.h \
+ ../zebra/zebra.h ../ripd/ripd.h
 rip_zebra.o: rip_zebra.c ../lib/thread.h ../lib/vector.h ../lib/vty.h \
  ../lib/command.h ../lib/prefix.h ripd.h ../lib/buffer.h \
  ../lib/network.h ../lib/client.h ../lib/log.h ../zebra/zebra.h

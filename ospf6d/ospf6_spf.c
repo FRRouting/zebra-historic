@@ -24,8 +24,8 @@
 void
 print_vertex (struct vertex *W)
 {
-  ospf6_debug ("SPFCALC:    VertexID-1 = %s\n", inet4str (W->vtx_id[0]));
-  ospf6_debug ("SPFCALC:    VertexID-2 = %s\n", inet4str (W->vtx_id[1]));
+  zvlog_debug ("SPFCALC:    VertexID-1 = %s", inet4str (W->vtx_id[0]));
+  zvlog_debug ("SPFCALC:    VertexID-2 = %s", inet4str (W->vtx_id[1]));
 }
 
 struct vertex *
@@ -34,7 +34,7 @@ make_vertex (struct lsa_internal *lsa)
   struct vertex *v;
 
   assert (lsa && lsa->lsh);
-  v = (struct vertex *)XMALLOC (MTYPE_OSPF_ROUTE, sizeof (struct vertex));
+  v = (struct vertex *)XMALLOC (MTYPE_OSPF6_ROUTE, sizeof (struct vertex));
 
   switch (ntohs (lsa->lsh->lsh_type))
     {
@@ -74,7 +74,7 @@ vertex_free (struct vertex *v)
     }
   list_free (v->vtx_path);
 
-  XFREE (MTYPE_OSPF_ROUTE, v);
+  XFREE (MTYPE_OSPF6_ROUTE, v);
   return 0;
 }
 
@@ -83,7 +83,7 @@ spf_install (struct vertex *v, struct area *area)
 {
   if (v->vtx_parent == (struct vertex *)NULL)
     {
-      ospf6_debug ("SPFCALC: Installing Root...\n");
+      zvlog_debug ("SPFCALC: Installing Root...");
       print_vertex (v);
       area->spftree.root = v;
     }
@@ -147,10 +147,24 @@ spf_init (struct area *area)
   v->vtx_depth = 0;
   spf_install (v, area);
 
-  if (area->rt_table)
-    XFREE (MTYPE_OSPF_ROUTE, area->rt_table);
+  if (area->rt_table_prev)
+    XFREE (MTYPE_OSPF6_ROUTE, area->rt_table_prev);
+  if (area->ospf6->isinstall && area->rt_table)
+    {
+      area->rt_table_prev = area->rt_table;
+      area->rt_table = NULL;
+      area->tablesize_prev = area->tablesize;
+      area->tablesize = 0;
+    }
+  else if (area->rt_table)
+    {
+      XFREE (MTYPE_OSPF6_ROUTE, area->rt_table);
+      area->rt_table = NULL;
+      area->tablesize = 0;
+    }
+
   area->rt_table = (struct routing_table_entry *)
-    XMALLOC (MTYPE_OSPF_ROUTE, ROUTING_TABLE_SIZE);
+    XMALLOC (MTYPE_OSPF6_ROUTE, ROUTING_TABLE_SIZE);
   area->tablesize = 0;
   memset (area->rt_table, 0, ROUTING_TABLE_SIZE);
 
@@ -168,13 +182,13 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
   char ifname[16];
   struct ospf6_if *ospf6_if;
 
-  nexthopinfo = (struct nexthop_info *)XMALLOC (MTYPE_OSPF_ROUTE,
+  nexthopinfo = (struct nexthop_info *)XMALLOC (MTYPE_OSPF6_ROUTE,
                                                 sizeof (struct nexthop_info));
   nexthopinfo->ifindex = ifindex;
   nexthopinfo->nexthop[0] = id_one;
   nexthopinfo->nexthop[1] = id_two;
 
-  if_indextoname (ntohl(ifindex), ifname);
+  if_indextoname (ifindex, ifname);
   ospf6_if = ospf6_if_lookup (ifname);
 
   if (id_one && !id_two)        /* Router */
@@ -183,7 +197,7 @@ make_nexthop (unsigned long ifindex, unsigned long id_one,
         {
           lsi = (struct lsa_internal *) getdata (n);
           if (lsi->lsh->lsh_advrtr == id_one)
-          break;
+            break;
         }
       linklsa = (struct link_lsa *)(lsi->lsh + 1);
       memcpy (&nexthopinfo->nexthop_addr, &linklsa->llsa_linklocal,
@@ -463,7 +477,7 @@ spf_calculation (struct thread *thread)
 
   area->spf_calc = (struct thread *)NULL;
 
-  ospf6_info ("SPFCALC: Doing SPF Calculation ...\n");
+  zvlog_info ("SPFCALC: Doing SPF Calculation ...");
 
   /* (1) */
   spf_init (area);
@@ -475,7 +489,7 @@ spf_calculation (struct thread *thread)
     {
       for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
         {
-          ospf6_debug ("SPFCALC: Current Candidate:\n");
+          zvlog_debug ("SPFCALC: Current Candidate:");
           print_vertex (W);
 
           already = 0;
@@ -492,7 +506,7 @@ spf_calculation (struct thread *thread)
             }
           if (already)
             {
-              ospf6_debug ("SPFCALC:  Already on the SPF Tree\n");
+              zvlog_debug ("SPFCALC:  Already on the SPF Tree");
               vertex_free (W);
               continue;
             }
@@ -511,6 +525,7 @@ spf_calculation (struct thread *thread)
                   if (p->vtx_distance > W->vtx_distance)
                     {
                       list_delete_by_val (candidatelist, p);
+                      break;
                     }
                 }
             }
@@ -533,7 +548,7 @@ spf_calculation (struct thread *thread)
             closest = p;
         }
       list_delete_by_val (candidatelist, closest);
-      ospf6_debug ("SPFCALC: Installing ...\n");
+      zvlog_debug ("SPFCALC: Installing ...");
       print_vertex (closest);
       spf_install (closest, area);
       V = closest;
@@ -542,17 +557,17 @@ spf_calculation (struct thread *thread)
   assert (listcount (candidatelist) == 0);
   list_free (candidatelist);
 
-  ospf6_debug ("SPFCALC: SPF Calculation Done!!\n");
+  zvlog_debug ("SPFCALC: SPF Calculation Done!!");
   return 0;
 }
 
 int
 routing_table_calculation (struct thread *thread)
 {
-  int i, j;
+  int i, j, k, already;
   listnode n;
   struct vertex *v;
-  struct lsa_internal *lsi;
+  struct lsa_internal *lsi = NULL;
   struct intra_area_prefix_lsa *intra_prefix_lsa;
   struct ospf6_prefix *prefix;
   struct nexthop_info *nh;
@@ -565,70 +580,208 @@ routing_table_calculation (struct thread *thread)
 
   for (i = 0; i < MAXDEPTH; i++)
     {
-      ospf6_debug ("ROUTECALC: depth[%d]\n", i);
+      zvlog_debug ("ROUTECALC: depth[%d]", i);
+      if (list_isempty (area->spftree.depthlist[i]))
+        break;
       for (n = listhead (area->spftree.depthlist[i]); n; nextnode (n))
         {
           v = (struct vertex *) getdata (n);
-          ospf6_debug ("ROUTECALC:    V->lsa = [%s]\n",
+          zvlog_debug ("ROUTECALC:    V->lsa = [%s]",
                        print_lsahdr (v->vtx_lsa->lsh));
           switch (ntohs (v->vtx_lsa->lsh->lsh_type))
             {
+            case LST_ROUTER_LSA:
+              lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
+                                htons (MY_ROUTER_LSA_ID),
+                                v->vtx_lsa->lsh->lsh_advrtr,
+                                area, (struct ospf6_if *)NULL);
+              break;
             case LST_NETWORK_LSA:
               lsi = lsa_lookup (ntohs (LST_INTRA_AREA_PREFIX_LSA),
                                 v->vtx_lsa->lsh->lsh_id,
                                 v->vtx_lsa->lsh->lsh_advrtr,
                                 area, (struct ospf6_if *)NULL);
-              if (!lsi)
-                {
-                  ospf6_debug ("SPFCALC: Intra-Area-Prefix-LSA Not"
-                               " Found for %s\n",
-                               print_lsahdr (v->vtx_lsa->lsh));
-                  break;
-                }
-              intra_prefix_lsa =
-                  (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
-              /* XXX Back pointer check */
-              prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
-              /* XXX */
-              if (listcount (v->vtx_nexthops))
-                nh = (struct nexthop_info *)
-                    (getdata (listhead (v->vtx_nexthops)));
-              else
-                nh = (struct nexthop_info *)NULL;
-              for (j = 0; j < ntohs (intra_prefix_lsa->intra_prefix_num); j++)
-                {
-                  if (area->tablesize >= MAX_ENTRY)
-                    {
-                      zlog (NULL, LOG_WARNING,"WARN: Routing Table MAX Limit!!");
-                      return 0;
-                    }
-
-                  /* Install Internal Routing Table */
-                  memcpy (&area->rt_table[area->tablesize].destination,
-                          (prefix + 1),
-                          OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len));
-                  area->rt_table[area->tablesize].cost = v->vtx_distance;
-                  area->rt_table[area->tablesize].prefixlength
-                      = prefix->o6p_prefix_len;
-                  if (nh)
-                    {
-                      area->rt_table[area->tablesize].ifindex
-                          = ntohl (nh->ifindex);
-                      memcpy (&area->rt_table[area->tablesize].next_hop,
-                              &nh->nexthop_addr,
-                              sizeof (struct in6_addr));
-                    }
-                  area->tablesize++;
-                  prefix = OSPF6_NEXT_PREFIX (prefix);
-                }
-              break;
-            case LST_ROUTER_LSA:
               break;
             default:
-              zlog (NULL, LOG_ERR, "BUG: spf_calculation ()");
+              zvlog_err ("BUG: spf_calculation ()");
+              assert (0);
+            }
+          if (!lsi && ntohs (v->vtx_lsa->lsh->lsh_type) == LST_NETWORK_LSA)
+            {
+              zvlog_debug ("ROUTECALC: Intra-Area-Prefix-LSA Not"
+                           " Found for %s",
+                           print_lsahdr (v->vtx_lsa->lsh));
+              continue;
+            }
+          else if (!lsi)
+            continue;
+
+          intra_prefix_lsa =
+              (struct intra_area_prefix_lsa *)(lsi->lsh + 1);
+          zvlog_debug ("ROUTECALC:    Prefix-LSA: %s",
+                       print_lsahdr (lsi->lsh));
+
+          /* XXX Back pointer check */
+          if (intra_prefix_lsa->intra_prefix_refer_lstype !=
+              v->vtx_lsa->lsh->lsh_type
+              || intra_prefix_lsa->intra_prefix_refer_lsid !=
+              v->vtx_lsa->lsh->lsh_id
+              || intra_prefix_lsa->intra_prefix_refer_advrtr !=
+              v->vtx_lsa->lsh->lsh_advrtr)
+            {
+              zvlog_debug ("ROUTECALC:    no back pointer");
+              continue;
+            }
+
+          prefix = (struct ospf6_prefix *) (intra_prefix_lsa + 1);
+          /* XXX */
+          if (listcount (v->vtx_nexthops))
+            nh = (struct nexthop_info *)
+                (getdata (listhead (v->vtx_nexthops)));
+          else
+            nh = (struct nexthop_info *)NULL;
+          for (j = 0; j < ntohs (intra_prefix_lsa->intra_prefix_num); j++)
+            {
+              if (area->tablesize >= MAX_ENTRY)
+                {
+                  zvlog_warn ("Routing Table MAX Limit!!");
+                  return 0;
+                }
+
+              already = 0;
+              for (k = 0; k < area->tablesize; k++)
+                {
+                  if (!memcmp (&area->rt_table[k].destination,
+                      (prefix + 1),
+                      OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len)))
+                    {
+                      already++;
+                      break;
+                    }
+                }
+              if (already)
+                {
+                  zvlog_debug ("ROUTECALC: already installed");
+                  continue;
+                }
+
+              /* Install Internal Routing Table */
+              zvlog_debug ("    Installing %d from Prefix-LSA", j);
+              memcpy (&area->rt_table[area->tablesize].destination,
+                      (prefix + 1),
+                      OSPF6_PREFIX_SPACE (prefix->o6p_prefix_len));
+              area->rt_table[area->tablesize].cost = v->vtx_distance;
+              area->rt_table[area->tablesize].prefixlength
+                  = prefix->o6p_prefix_len;
+              if (nh)
+                {
+                  zvlog_debug ("      Nexthop not found!");
+                  area->rt_table[area->tablesize].ifindex
+                      = ntohl (nh->ifindex);
+                  memcpy (&area->rt_table[area->tablesize].next_hop,
+                          &nh->nexthop_addr,
+                          sizeof (struct in6_addr));
+                }
+              area->tablesize++;
+              prefix = OSPF6_NEXT_PREFIX (prefix);
             }
         }
     }
+  install_route (area);
+  return 0;
+}
+
+#define INSTALL     1
+#define NOT_INSTALL -1
+#define DELETE      0
+int install_route (struct area *area)
+{
+  int i, j, remain;
+  struct routing_table_entry *current;
+  struct prefix_ipv6 p;
+  char strbuf[64];
+
+  if (!area->ospf6->isinstall)
+    return 0;
+
+  /* Initialize */
+  for (i = 0; i < area->tablesize; i++)
+    area->rt_table[i].flag = DELETE;
+
+  for (i = 0; i < area->tablesize; i++)
+    {
+      current = &area->rt_table[i];
+      remain = 0;
+      for (j = 0; j < area->tablesize_prev; j++)
+        {
+          if (!memcmp (current, &area->rt_table[j],
+                       sizeof (struct routing_table_entry)))
+            {
+              current->flag = NOT_INSTALL;
+              remain++;
+              break;
+            }
+        }
+      if (remain)
+        continue;
+      else
+        current->flag = INSTALL;
+    }
+
+  p.family = AF_INET6;
+  for (i = 0; i < area->tablesize; i++)
+    {
+      current = &area->rt_table[i];
+      p.prefixlen = current->prefixlength;
+      memcpy (&p.prefix, &current->destination, sizeof (struct in6_addr));
+
+      switch (current->flag)
+        {
+        case INSTALL:
+          zebra_ipv6_add (zebra.sockfd, ZEBRA_ROUTE_OSPF, &p,
+                          &current->next_hop, current->ifindex);
+          zvlog_debug ("ROUTECALC: %s installed",
+                       inet_ntop (AF_INET6, &p.prefix, strbuf,
+                                  sizeof (strbuf)));
+          break;
+        case NOT_INSTALL:
+          break;
+        case DELETE:
+          zebra_ipv6_delete (zebra.sockfd, ZEBRA_ROUTE_OSPF, &p,
+                             &current->next_hop, current->ifindex);
+          zvlog_debug ("ROUTECALC: %s deleted",
+                       inet_ntop (AF_INET6, &p.prefix, strbuf,
+                                  sizeof (strbuf)));
+        default:
+        }
+    }
+
+  return 0;
+}
+
+int noinstall_route (struct area *area)
+{
+  int i;
+  struct routing_table_entry *current;
+  struct prefix_ipv6 p;
+
+  assert (area->ospf6->isinstall == NOINSTALL);
+
+  p.family = AF_INET6;
+  for (i = 0; i < area->tablesize; i++)
+    {
+      current = &area->rt_table[i];
+      p.prefixlen = current->prefixlength;
+      memcpy (&p.prefix, &current->destination, sizeof (struct in6_addr));
+      zebra_ipv6_delete (zebra.sockfd, ZEBRA_ROUTE_OSPF, &p,
+                         &current->next_hop, current->ifindex);
+      zvlog_debug ("ROUTECALC: %s deleted",
+                   inet_ntop (AF_INET6, &p.prefix, strbuf,
+                              sizeof (strbuf)));
+    }
+
+  XFREE (MTYPE_OSPF6_ROUTE, area->rt_table_prev);
+  area->tablesize_prev = 0;
   return 0;
 }
 

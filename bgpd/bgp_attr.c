@@ -53,7 +53,7 @@ message attr_str [] =
   { BGP_ATTR_ATOMIC_AGGREGATE, "ATOMIC_AGGREGATE" }, 
   { BGP_ATTR_AGGREGATOR,       "AGGREGATOR" }, 
   { BGP_ATTR_COMMUNITIES,      "COMMUNITY" }, 
-  { BGP_ATTR_ORIGINATOR,       "ORIGINATOR" }, 
+  { BGP_ATTR_ORIGINATOR_ID,    "ORIGINATOR_ID" },
   { BGP_ATTR_CLUSTER_LIST,     "CLUSTERLIST" }, 
   { BGP_ATTR_DPA,              "DPA" },
   { BGP_ATTR_ADVERTISER,       "ADVERTISER"} ,
@@ -62,6 +62,128 @@ message attr_str [] =
   { BGP_ATTR_MP_UNREACH_NLRI,  "MP_UNREACH_NLRI" },
   { 0, NULL }
 };
+
+struct Hash *cluster_hash;
+
+/* Cluster list related functions. */
+struct cluster_list *
+cluster_list_parse (caddr_t pnt, int length)
+{
+  struct cluster_list tmp;
+  struct cluster_list *find;
+  struct cluster_list *cluster;
+
+  tmp.length = length;
+  tmp.list = (struct in_addr *) pnt;
+
+  find = hash_search (cluster_hash, &tmp);
+  if (find)
+    return find;
+
+  cluster = XMALLOC (MTYPE_CLUSTER, sizeof (struct cluster_list));
+  cluster->length = length;
+
+  if (cluster->length)
+    {
+      cluster->list = XMALLOC (MTYPE_CLUSTER_VAL, length);
+      memcpy (cluster->list, pnt, length);
+    }
+  else
+    cluster->list = NULL;
+
+  cluster->refcnt = 0;
+
+  hash_push (cluster_hash, cluster);
+
+  return cluster;
+}
+
+int
+cluster_loop_check (struct cluster_list *cluster, struct in_addr originator)
+{
+  int i;
+    
+  for (i = 0; i < cluster->length / 4; i++)
+    if (cluster->list[i].s_addr == originator.s_addr)
+      return 1;
+  return 0;
+}
+
+unsigned int
+cluster_hash_key_make (struct cluster_list *cluster)
+{
+  unsigned int key = 0;
+  int length;
+  caddr_t pnt;
+
+  length = cluster->length;
+  pnt = (caddr_t) cluster->list;
+  
+  while (length)
+    key += pnt[--length];
+
+  return key %= HASHTABSIZE;
+}
+
+int
+cluster_hash_cmp (struct cluster_list *cluster1, struct cluster_list *cluster2)
+{
+  if (cluster1->length == cluster2->length &&
+      memcmp (cluster1->list, cluster2->list, cluster1->length) == 0)
+    return 1;
+  return 0;
+}
+
+void
+cluster_list_free (struct cluster_list *cluster)
+{
+  if (cluster->list)
+    XFREE (MTYPE_CLUSTER_VAL, cluster->list);
+  XFREE (MTYPE_CLUSTER, cluster);
+}
+
+struct cluster_list *
+cluster_dup (struct cluster_list *cluster)
+{
+  struct cluster_list *new;
+
+  new = XMALLOC (MTYPE_CLUSTER, sizeof (struct cluster_list));
+  bzero (new, sizeof (struct cluster_list));
+  new->length = cluster->length;
+
+  if (cluster->length)
+    {
+      new->list = XMALLOC (MTYPE_CLUSTER_VAL, cluster->length);
+      memcpy (new->list, cluster->list, cluster->length);
+    }
+  else
+    new->list = NULL;
+  
+  return new;
+}
+
+void
+cluster_unintern (struct cluster_list *cluster)
+{
+  struct cluster_list *ret;
+
+  if (cluster->refcnt)
+    cluster->refcnt--;
+
+  if (cluster->refcnt == 0)
+    {
+      ret = hash_pull (cluster_hash, cluster);
+      cluster_list_free (cluster);
+    }
+}
+
+void
+cluster_init ()
+{
+  cluster_hash = hash_new (HASHTABSIZE);
+  cluster_hash->hash_key = cluster_hash_key_make;
+  cluster_hash->hash_cmp = cluster_hash_cmp;
+}
 
 /* Attribute hash routines. */
 
@@ -97,6 +219,8 @@ attrhash_key_make (struct attr *attr)
     key += aspath_key_make (attr->aspath);
   if (attr->community)
     key += community_hash_make (attr->community);
+  if (attr->cluster)
+    key += cluster_hash_key_make (attr->cluster);
 
   return key %= HASHTABSIZE;
 }
@@ -117,7 +241,8 @@ attrhash_cmp (struct attr *attr1, struct attr *attr2)
       attr1->mp_nexthop_len == attr2->mp_nexthop_len &&
 #endif /* HAVE_IPV6 */
       attr1->aspath == attr2->aspath &&
-      attr1->community == attr2->community)
+      attr1->community == attr2->community &&
+      attr1->cluster == attr2->cluster)
     return 1;
   else
     return 0;
@@ -147,6 +272,9 @@ bgp_attr_intern (struct attr *attr)
 	find->aspath->refcnt++;
       if (find->community)
 	find->community->refcnt++;
+      if (find->cluster)
+	find->cluster->refcnt++;
+
       return find;
     }
 
@@ -154,10 +282,13 @@ bgp_attr_intern (struct attr *attr)
 
   *new = *attr;
   new->refcnt = 1;
+
   if (new->aspath)
     new->aspath->refcnt++;
   if (new->community)
     new->community->refcnt++;
+  if (new->cluster)
+    new->cluster->refcnt++;
 
   hash_push (attrhash, new);
 
@@ -188,11 +319,13 @@ bgp_attr_free (struct attr *attr)
   struct attr *ret;
   struct aspath *aspath;
   struct community *community;
+  struct cluster_list *cluster;
 
   /* Decrement attribute reference. */
   attr->refcnt--;
   aspath = attr->aspath;
   community = attr->community;
+  cluster = attr->cluster;
 
   /* If reference becomes zero then free attribute object. */
   if (attr->refcnt == 0)
@@ -209,6 +342,9 @@ bgp_attr_free (struct attr *attr)
 
   if (community)
     community_free (community);
+
+  if (cluster)
+    cluster_unintern (cluster);
 }
 
 /* Get origin attribute of the update message. */
@@ -425,10 +561,23 @@ bgp_attr_community (struct peer *peer, bgp_size_t length,
 
 /* Originator ID attribute. */
 int
-bgp_attr_originator (struct peer *peer, bgp_size_t length, 
-		    struct attr *attr, u_char flag)
+bgp_attr_originator_id (struct peer *peer, bgp_size_t length, 
+			struct attr *attr, u_char flag)
 {
-  attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR);
+  if (length != 4)
+    {
+      zlog (peer->log, LOG_ERR, "Bad originator ID length %d", length);
+
+      bgp_notify_send (peer, 
+		       BGP_NOTIFY_UPDATE_ERR, 
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
+		       NULL);
+      return -1;
+    }
+
+  attr->originator_id.s_addr = stream_get_ipv4 (peer->ibuf);
+
+  attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID);
 
   return 0;
 }
@@ -438,6 +587,21 @@ int
 bgp_attr_cluster_list (struct peer *peer, bgp_size_t length, 
 		    struct attr *attr, u_char flag)
 {
+  /* Check length. */
+  if (length % 4)
+    {
+      zlog (peer->log, LOG_ERR, "Bad cluster list length %d", length);
+
+      bgp_notify_send (peer, 
+		       BGP_NOTIFY_UPDATE_ERR, 
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
+		       NULL);
+      return -1;
+    }
+
+  attr->cluster = cluster_list_parse (stream_pnt (peer->ibuf), length);
+  stream_forward (peer->ibuf, length);;
+
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_CLUSTER_LIST);
 
   return 0;
@@ -617,8 +781,8 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	case BGP_ATTR_COMMUNITIES:
 	  ret = bgp_attr_community (peer, length, attr, flag);
 	  break;
-	case BGP_ATTR_ORIGINATOR:
-	  ret = bgp_attr_originator (peer, length, attr, flag);
+	case BGP_ATTR_ORIGINATOR_ID:
+	  ret = bgp_attr_originator_id (peer, length, attr, flag);
 	  break;
 	case BGP_ATTR_CLUSTER_LIST:
 	  ret = bgp_attr_cluster_list (peer, length, attr, flag);
@@ -790,6 +954,35 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_putl (s, attr->local_pref);
     }
 
+  /* Route Reflector. */
+  if (bgp_peer_sort (peer) == BGP_PEER_IBGP &&
+      peer->bgp->reflector_cnt)
+    {
+      /* Originator ID. */
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_ORIGINATOR_ID);
+      stream_putc (s, 4);
+
+      stream_put_ipv4 (s, peer->bgp->ident);
+
+      /* Cluster list. */
+      stream_putc (s, ATTR_FLAG_OPTIONAL);
+      stream_putc (s, BGP_ATTR_CLUSTER_LIST);
+      
+      if (attr->cluster)
+	{
+	  stream_putc (s, attr->cluster->length + 4);
+	  stream_memcpy (s, attr->cluster->list, attr->cluster->length);
+	}
+      else
+	stream_putc (s, 4);
+
+      if (peer->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	stream_put_ipv4 (s, peer->bgp->cluster);
+      else
+	stream_put_ipv4 (s, peer->bgp->ident);
+    }
+
 #ifdef HAVE_IPV6
   /* If p is IPv6 address put it into attribute. */
   if (p->family == AF_INET6)
@@ -876,4 +1069,5 @@ bgp_attr_init ()
   aspath_init ();
   attrhash_init ();
   community_init ();
+  cluster_init ();
 }
