@@ -1,3 +1,7 @@
+1999-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_add_route): Fix metric compare bug.
+
 1999-06-25  itojun@iijlab.net
 
 	* ripngd.c (ripng_distribute_in): "distribute in" filter in ripngd

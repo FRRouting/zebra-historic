@@ -213,7 +213,7 @@ ospf_router_lsa (struct ospf_interface *oi)
       stream_put_ipv4 (s, link_data.s_addr);	/* Link Data. */
       stream_putc (s, link_type);		/* Type. */
       stream_putc (s, (u_char) 0);		/* # TOS. */
-      stream_putw (s, htons (link_cost));	/* metric. */
+      stream_putw (s, link_cost);	/* metric. */
       /* TOS based routing is not supported. */
 
       links++;
@@ -221,7 +221,7 @@ ospf_router_lsa (struct ospf_interface *oi)
     }
 
   /* Set # links. */
-  stream_putw_at (s, putp, htonl (links));
+  stream_putw_at (s, putp, links);
 
   /* Set length. */
   lsa->length = htons (length);
@@ -283,7 +283,7 @@ ospf_network_lsa (struct ospf_interface *oi)
       nbr = rn->info;
 
       /* this is myself. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
       stream_put_ipv4 (s, nbr->router_id.s_addr);
@@ -350,7 +350,6 @@ ospf_add_network_lsa (struct ospf_area *area, struct ospf_lsa *lsa)
 #endif
       route_unlock_node (rn);
       ospf_lsa_free (rn->info);
-      return;
     }
   rn->info = lsa;
 
@@ -379,7 +378,7 @@ ospf_lsa_lookup (struct ospf_area *area, u_int32_t ls_type,
       p.prefixlen = IPV4_MAX_BITLEN;
       p.u.prefix4 = ls_id;
       rn = route_node_get (area->router_lsa, &p);
-      if (rn->info)
+      if (rn->info != NULL)
 	{
 	  route_unlock_node (rn);
 	  match = (struct ospf_lsa *) rn->info;
@@ -390,7 +389,7 @@ ospf_lsa_lookup (struct ospf_area *area, u_int32_t ls_type,
       p.prefixlen = IPV4_MAX_BITLEN;
       p.u.prefix4 = ls_id;
       rn = route_node_get (area->network_lsa, &p);
-      if (rn->info)
+      if (rn->info != NULL)
 	{
 	  route_unlock_node (rn);
 	  match = (struct ospf_lsa *) rn->info;
@@ -416,6 +415,25 @@ ospf_lsa_lookup_by_header (struct ospf_area *area, struct ospf_lsa *lsa)
   match = ospf_lsa_lookup (area, lsa->type, lsa->id, lsa->adv_router);
 
   return match;
+}
+
+listnode
+ospf_lsa_lookup_from_list (list list, u_char type,
+			   struct in_addr id, struct in_addr adv_router)
+{
+  listnode node;
+  struct ospf_lsa *lsa;
+
+  for (node = listhead (list); node; nextnode (node))
+    {
+      lsa = getdata (node);
+
+      if (lsa->type == type && IPV4_ADDR_SAME (&lsa->id, &id) &&
+	  IPV4_ADDR_SAME (&lsa->adv_router, &adv_router))
+	return node;
+    }
+
+  return NULL;
 }
 
 /* return +n, l1 is more recent.
@@ -590,8 +608,8 @@ show_ip_ospf_database_network (struct vty *vty)
 	  vty_out (vty, "  Network Mask: /%d\r\n",
 		   ip_masklen (nl->mask));
 
-	  
-	  length = lsa->length - OSPF_LSA_HEADER_SIZE;
+	  length = ntohs (lsa->length) - OSPF_LSA_HEADER_SIZE - 4;
+
 	  for (i = 0; length > 0; i++, length -= 4)
 	    vty_out (vty, "        Attached Router: %s\r\n",
 		     inet_ntoa (nl->routers[i]));
@@ -674,13 +692,15 @@ ALIAS (show_ip_ospf_database,
        IP_STR
        "OSPF information\n"
        "Database summary\n"
-       "Network link states"
-       "Router link states")
+       "Network link states\n"
+       "Router link states\n")
 
 /* Install LSA related commands. */
 void
 ospf_lsa_init ()
 {
+  install_element (VIEW_NODE, &show_ip_ospf_database_cmd);
+  install_element (VIEW_NODE, &show_ip_ospf_database_type_cmd);
   install_element (ENABLE_NODE, &show_ip_ospf_database_cmd);
   install_element (ENABLE_NODE, &show_ip_ospf_database_type_cmd);
 }

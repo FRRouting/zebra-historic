@@ -21,28 +21,28 @@
 
 #include "ospf6d.h"
 
-list pathlist;
+list nexthoplist;
 
-void path_init ()
+void nexthop_init ()
 {
-  pathlist = list_init ();;
+  nexthoplist = list_init ();;
 }
 
-static struct ospf6_path *
-path_new ()
+static struct ospf6_nexthop *
+nexthop_new ()
 {
-  struct ospf6_path *p;
-  p = XMALLOC (MTYPE_OSPF6_ROUTE, sizeof (struct ospf6_path));
+  struct ospf6_nexthop *p;
+  p = XMALLOC (MTYPE_OSPF6_ROUTE, sizeof (struct ospf6_nexthop));
   if (!p)
     {
-      zvlog_warn ("can't alloc for path");
+      zvlog_warn ("can't alloc for nexthop");
       return NULL;
     }
   return p;
 }
 
 static void
-path_free (struct ospf6_path *p)
+nexthop_free (struct ospf6_nexthop *p)
 {
   assert (p);
   XFREE (MTYPE_OSPF6_ROUTE, p);
@@ -50,7 +50,7 @@ path_free (struct ospf6_path *p)
 }
 
 static void
-path_lock (struct ospf6_path *p)
+nexthop_lock (struct ospf6_nexthop *p)
 {
   assert (p);
   p->lock++;
@@ -58,24 +58,24 @@ path_lock (struct ospf6_path *p)
 }
 
 static void
-path_unlock (struct ospf6_path *p)
+nexthop_unlock (struct ospf6_nexthop *p)
 {
   assert (p);
   assert (p->lock > 0);
   p->lock--;
   if (p->lock == 0)
-    path_free (p);
+    nexthop_free (p);
   return;
 }
 
-static struct ospf6_path *
-path_lookup (unsigned long ifindex, struct in6_addr *ipaddr,
-             unsigned long advrtr)
+static struct ospf6_nexthop *
+nexthop_lookup (unsigned long ifindex, struct in6_addr *ipaddr,
+                unsigned long advrtr)
 {
-  struct ospf6_path *p;
+  struct ospf6_nexthop *p;
   listnode n;
 
-  for (n = listhead (pathlist); n; nextnode (n))
+  for (n = listhead (nexthoplist); n; nextnode (n))
     {
       p = getdata (n);
       if (p->ifindex == ifindex &&
@@ -86,30 +86,111 @@ path_lookup (unsigned long ifindex, struct in6_addr *ipaddr,
   return NULL;
 }
 
-static struct ospf6_path *
-path_make (unsigned long ifindex, struct in6_addr *ipaddr,
-             unsigned long advrtr)
+static struct ospf6_nexthop *
+nexthop_make (unsigned long ifindex, struct in6_addr *ipaddr,
+              unsigned long advrtr)
 {
-  struct ospf6_path *p;
+  struct ospf6_nexthop *p;
 
-  p = path_lookup (ifindex, ipaddr, advrtr);
+  p = nexthop_lookup (ifindex, ipaddr, advrtr);
   if (p)
     {
-      path_lock (p);
+      nexthop_lock (p);
       return p;
     }
 
-  p = path_new ();
+  p = nexthop_new ();
   p->ifindex = ifindex;
   memcpy (&p->ipaddr, ipaddr, sizeof (p->ipaddr));
   p->advrtr = advrtr;
-  path_lock (p);
+  nexthop_lock (p);
   return p;
 }
 
-static void path_delete (struct ospf6_path *p)
+static void nexthop_delete (struct ospf6_nexthop *p)
 {
-  path_unlock (p);
+  nexthop_unlock (p);
+  return;
+}
+
+/* RFC2328 16.1.1 The next hop calculation */
+void
+nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
+{
+  listnode n, o;
+  struct ospf6_nexthop *p;
+  unsigned long ifindex;
+  struct in6_addr ipaddr;
+  char ifname[16];
+  struct ospf6_if *o6if;
+  struct lsa_internal *lsa;
+  struct link_lsa *linklsa;
+
+  if (dst->vtx_depth > 2 ||
+      (dst->vtx_depth == 2 && IS_VTX_ROUTER_TYPE (parent)))
+    {
+      /* simply inherits from the parent */
+      for (n = listhead (parent->vtx_nexthops); n; nextnode (n))
+        {
+          p = getdata (n);
+
+          /* check if this is already on the nexthop list */
+          for (o = listhead (l); o; nextnode (o))
+            if (p == getdata (o))
+              continue;
+
+          nexthop_lock (p);
+          list_add_node (l, p);
+        }
+      return;
+    }
+  else if (dst->vtx_depth == 1)
+    {
+      /* the parent is root */
+      assert (parent->vtx_depth == 0);
+
+      ifindex = get_ifindex_to_router (dst->vtx_rtrid, parent->vtx_lsa);
+      assert (ifindex);
+      memset (&ipaddr, 0, sizeof (struct in6_addr)); /* XXX P2MP not yet */
+      p = nexthop_make (ifindex, &ipaddr, 0);
+      list_add_node (l, p);
+      return;
+    }
+  else if (dst->vtx_depth == 2)
+    {
+      assert (IS_VTX_ROUTER_TYPE (dst));
+      assert (IS_VTX_NETWORK_TYPE (parent));
+
+      /* simply inherit from the parent network */
+      assert (listcount (parent->vtx_nexthops) == 1);
+      p = getdata (listhead (parent->vtx_nexthops));
+      ifindex = p->ifindex;
+      assert (ifindex);
+
+      if_indextoname (ifindex, ifname);
+      o6if = ospf6_if_lookup (ifname);
+      assert (o6if);
+      lsa = get_linklocal_lsa (dst->vtx_rtrid, o6if);
+      if (!lsa)
+        {
+          zvlog_err ("Can't find Link-LSA for %s, null nexthop",
+                     inet4str (dst->vtx_rtrid));
+          memset (&ipaddr, 0, sizeof (struct in6_addr));
+        }
+      else
+        {
+          linklsa = (struct link_lsa *)(lsa + 1);
+          memcpy (&ipaddr, &linklsa->llsa_linklocal,
+                  sizeof (struct in6_addr));
+        }
+      p = nexthop_make (ifindex, &ipaddr, 0);
+      list_add_node (l, p);
+      return;
+    }
+  else
+    {
+      assert (dst->vtx_depth == 0 && parent == NULL);
+    }
   return;
 }
 
@@ -139,19 +220,19 @@ static void
 rtable_delete_all (struct ospf6_rtentry *rtable)
 {
   struct ospf6_rtentry *p = NULL, *next = NULL;
-  struct ospf6_path *q;
+  struct ospf6_nexthop *q;
   listnode n;
 
   assert (rtable);
   p = rtable;
   while (p)
     {
-      for (n = listhead (p->paths); n; nextnode (n))
+      for (n = listhead (p->nexthops); n; nextnode (n))
         {
           q = getdata (n);
-          path_unlock (q);
+          nexthop_unlock (q);
         }
-      list_delete_all (p->paths);
+      list_delete_all (p->nexthops);
       if (p->next)
         next = p->next;
       rtentry_free (p);
@@ -197,8 +278,6 @@ rtable_lookup (unsigned char dest_type, union dest_id *dest_id,
 void
 rtable_init (struct ospf6_rtable *rtable)
 {
-  assert (rtable->current_top);
-
   if (rtable->previous_top)
     {
       rtable_delete_all (rtable->previous_top);
@@ -241,22 +320,25 @@ rtable_delete (struct ospf6_rtentry *p, struct ospf6_rtable *rtable)
 }
 
 void rtable_install (unsigned char dest_type, union dest_id *dest_id,
-                     cost_t cost, unsigned char path_type,
-                     struct in6_addr *nexthop, unsigned long ifindex,
-                     unsigned long advrtr,
+                     cost_t cost, unsigned char path_type, list nexthops,
                      struct ospf6_rtable *rtable)
 {
   struct ospf6_rtentry *r = rtentry_new();
-  struct ospf6_path *p;
+  struct ospf6_nexthop *p;
+  listnode n;
 
   r->dest_type = dest_type;
   memcpy (&r->dest_id, dest_id, sizeof (union dest_id));
   r->path_type = path_type;
   r->cost = cost;
 
-  r->paths = list_init ();
-  p = path_make (ifindex, nexthop, advrtr);
-  list_add_node (r->paths, p);
+  r->nexthops = list_init ();
+  for (n = listhead (nexthops); n; nextnode (n))
+    {
+      p = getdata (n);
+      nexthop_lock (p);
+      list_add_node (r->nexthops, p);
+    }
 
   rtable_add (r, rtable);
   return;
@@ -267,7 +349,7 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
 {
   struct ospf6_rtentry *r;
   listnode n;
-  struct ospf6_path *p;
+  struct ospf6_nexthop *p;
 
   r = rtable_lookup (dest_type, dest_id, rtable->current_top);
   if (!r)
@@ -277,12 +359,12 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
     }
 
   rtable_delete (r, rtable);
-  for (n = listhead (r->paths); n; nextnode (n))
+  for (n = listhead (r->nexthops); n; nextnode (n))
     {
       p = getdata (n);
-      path_unlock (p);
+      nexthop_unlock (p);
     }
-  list_delete_all (r->paths);
+  list_delete_all (r->nexthops);
 
   rtentry_free (r);
   return;
@@ -291,6 +373,48 @@ void rtable_uninstall (unsigned char dest_type, union dest_id *dest_id,
 void
 rtable_vty_entry (struct vty *vty, struct ospf6_rtentry *p)
 {
+  char destination[64], ifid[32], gateway[32], netif[32], cost[32];
+  listnode n;
+  struct ospf6_nexthop *q;
+
+  switch (p->dest_type)
+    {
+      case DTYPE_PREFIX:
+        inet_ntop (AF_INET6, &p->dest_id.prefix,
+                   destination, sizeof (destination));
+        break;
+
+      case DTYPE_ASBR:
+        assert (0);
+        return;        /* not yet */
+
+      case DTYPE_INTRA_ROUTER:
+        inet_ntop (AF_INET, &p->dest_id.router_id,
+                   destination, sizeof (destination));
+        strcat (destination, "(intra-router)");
+        break;
+
+      case DTYPE_INTRA_LINK:
+        inet_ntop (AF_INET, &p->dest_id.network_id[0],
+                   destination, sizeof (destination));
+        sprintf (ifid, "[ifid %lu](intra-link)", p->dest_id.network_id[1]);
+        strcat (destination, ifid);
+        break;
+
+      default:
+        assert (0);
+    }
+
+  sprintf (cost, "%lu", p->cost);
+
+  for (n = listhead (p->nexthops); n; nextnode (n))
+    {
+       q = getdata (n);
+       if_indextoname (q->ifindex, netif);
+       inet_ntop (AF_INET6, &q->ipaddr, gateway, sizeof (gateway));
+       vty_out (vty, "%-26s %-39s %-3s %5s\r\n",
+                destination, gateway, netif, cost);
+    }
   return;
 }
 

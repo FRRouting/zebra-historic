@@ -27,12 +27,13 @@
 #include "if.h"
 #include "prefix.h"
 #include "memory.h"
-#include "buffer.h"
 #include "network.h"
 #include "filter.h"
 #include "log.h"
 #include "stream.h"
 #include "zclient.h"
+#include "command.h"
+#include "table.h"
 
 #include "ripngd/ripngd.h"
 
@@ -187,11 +188,6 @@ ripng_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
     }
 }
 
-#include "vector.h"
-#include "vty.h"
-#include "command.h"
-#include "table.h"
-
 /* RIPng enable interface vector. */
 vector ripng_enable_if;
 
@@ -373,8 +369,8 @@ ripng_network_write (struct vty *vty)
 }
 
 /* RIPng enable on specified interface or matched network. */
-DEFUN (network,
-       network_cmd,
+DEFUN (ripng_network,
+       ripng_network_cmd,
        "network IF_OR_ADDR",
        "RIPng enable on specified interface or network.\n"
        "Interface or address")
@@ -384,7 +380,7 @@ DEFUN (network,
 
   ret = str2prefix (argv[0], &p);
 
-  /* Given string is interface name. */
+  /* Given string is IPv6 network or interface name. */
   if (ret)
     ripng_enable_network_add (&p);
   else
@@ -394,8 +390,8 @@ DEFUN (network,
 }
 
 /* RIPng enable on specified interface or matched network. */
-DEFUN (no_network,
-       no_network_cmd,
+DEFUN (no_ripng_network,
+       no_ripng_network_cmd,
        "no network IF_OR_ADDR",
        NO_STR
        "RIPng enable on specified interface or network.\n"
@@ -430,80 +426,16 @@ ri_new ()
   bzero (ri, sizeof (struct ripng_interface));
 
   /* Set default values. */
+#ifdef RIPNG_ADVANCE
   ri->ri_send = RIPNG_SEND_UNSPEC;
   ri->ri_receive = RIPNG_RECEIVE_UNSPEC;
-  ri->ri_split_horizon = RIPNG_SPLIT_HORIZON_UNSPEC;
   ri->ri_default_send = RIPNG_DEFAULT_ADVERTISE;
   ri->ri_default_receive = RIPNG_DEFAULT_ACCEPT;
+#endif /* RIPNG_ADVANCE */
+
+  ri->ri_split_horizon = RIPNG_SPLIT_HORIZON_UNSPEC;
 
   return ri;
-}
-
-DEFUN (ripng_receive,
-       ripng_receive_cmd,
-       "ripng receive",
-       "RIPng configuration\n"
-       "\n")
-{
-  struct interface *ifp;
-  struct ripng_interface *ri;
-
-  ifp = (struct interface *) vty->index;
-  ri = ifp->if_data;
-
-  ri->ri_receive = RIPNG_RECEIVE_UNSPEC;
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ripng_receive,
-       no_ripng_receive_cmd,
-       "no ripng receive",
-       NO_STR
-       "RIPng configuration\n"
-       "\n")
-{
-  struct interface *ifp;
-  struct ripng_interface *ri;
-
-  ifp = (struct interface *) vty->index;
-  ri = ifp->if_data;
-
-  ri->ri_receive = RIPNG_RECEIVE_OFF;
-  return CMD_SUCCESS;
-}
-
-DEFUN (ripng_send,
-       ripng_send_cmd,
-       "ripng send",
-       "RIPng configuration\n"
-       "Send\n")
-{
-  struct interface *ifp;
-  struct ripng_interface *ri;
-
-  ifp = (struct interface *) vty->index;
-  ri = ifp->if_data;
-
-  ri->ri_send = RIPNG_SEND_UNSPEC;
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ripng_send,
-       no_ripng_send_cmd,
-       "no ripng send",
-       NO_STR
-       "RIPng configuration\n"
-       "\n")
-{
-  struct interface *ifp;
-  struct ripng_interface *ri;
-
-  ifp = (struct interface *) vty->index;
-  ri = ifp->if_data;
-
-  ri->ri_send = RIPNG_SEND_OFF;
-  return CMD_SUCCESS;
 }
 
 int
@@ -520,6 +452,7 @@ interface_config_write (struct vty *vty)
   listnode node;
   struct interface *ifp;
   struct ripng_interface *ri;
+  int write = 0;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
@@ -529,13 +462,20 @@ interface_config_write (struct vty *vty)
       vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
       if (ifp->desc)
 	vty_out (vty, " description %s%s", ifp->desc, VTY_NEWLINE);
+
+#ifdef RIPNG_ADVANCE
       if (ri->ri_send != RIPNG_SEND_UNSPEC)
 	vty_out (vty, " no ripng send%s", VTY_NEWLINE);
       if (ri->ri_receive != RIPNG_RECEIVE_UNSPEC)
 	vty_out (vty, " no ripng receive%s", VTY_NEWLINE);
+#endif /* RIPNG_ADVANCE */
+
       vty_out (vty, "!%s", VTY_NEWLINE);
+
+      write++;
     }
-  return 0;
+
+  return write;
 }
 
 /* ripngd's interface node. */
@@ -568,11 +508,14 @@ ripng_if_init ()
   install_element (INTERFACE_NODE, &config_help_cmd);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
+
+#ifdef RIPNG_ADVANCE
   install_element (INTERFACE_NODE, &ripng_receive_cmd);
   install_element (INTERFACE_NODE, &no_ripng_receive_cmd);
   install_element (INTERFACE_NODE, &ripng_send_cmd);
   install_element (INTERFACE_NODE, &no_ripng_send_cmd);
+#endif /* RIPNG_ADVANCE */
 
-  install_element (RIPNG_NODE, &network_cmd);
-  install_element (RIPNG_NODE, &no_network_cmd);
+  install_element (RIPNG_NODE, &ripng_network_cmd);
+  install_element (RIPNG_NODE, &no_ripng_network_cmd);
 }

@@ -95,9 +95,9 @@ ripng_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
       stream_forward (s, size);
 
       if (command == ZEBRA_IPV6_ROUTE_ADD)
-	ripng_route_add (type, &p);
+	ripng_redistribute_add (type, &p);
       else
-	ripng_route_delete (type, &p);
+	ripng_redistribute_delete (type, &p);
     }
   return 0;
 }
@@ -297,9 +297,7 @@ zebra_init ()
 
   /* Install command element for zebra node. */ 
   install_element (CONFIG_NODE, &router_zebra_cmd);
-  install_element (ZEBRA_NODE, &config_end_cmd);
-  install_element (ZEBRA_NODE, &config_exit_cmd);
-  install_element (ZEBRA_NODE, &config_help_cmd);
+  install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &ripng_redistribute_ripng_cmd);
   install_element (ZEBRA_NODE, &no_ripng_redistribute_ripng_cmd);
   install_element (RIPNG_NODE, &ripng_redistribute_static_cmd);

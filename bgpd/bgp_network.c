@@ -24,6 +24,7 @@
 
 #include "thread.h"
 #include "sockunion.h"
+#include "memory.h"
 #include "log.h"
 
 #include "bgpd/bgpd.h"
@@ -97,11 +98,26 @@ bgp_accept (struct thread *thread)
 
   bgp_sock = sockunion_accept (accept_sock, &su);
 
-  zlog (NULL, LOG_INFO, "OK I got BGP connection from host %s",
-	  inet_sutop (&su, buf));
-  
   thread_add_read (master, bgp_accept, NULL, accept_sock);
 
+  /* Convert IPv4 compatible IPv6 address to IPv4 address. */
+#ifdef HAVE_IPV6
+  if (su.sa.sa_family == AF_INET6)
+    {
+      if (IN6_IS_ADDR_V4MAPPED (&su.sin6.sin6_addr))
+	{
+	  struct sockaddr_in sin;
+
+	  sin.sin_family = AF_INET;
+	  memcpy (&sin.sin_addr, ((char *)&su.sin6.sin6_addr) + 12, 4);
+	  memcpy (&su, &sin, sizeof (struct sockaddr_in));
+	}
+    }
+#endif /* HAVE_IPV6 */
+
+  zlog (NULL, LOG_INFO, "OK I got BGP connection from host %s",
+	inet_sutop (&su, buf));
+  
   /* This router is not neighbor router. */
   peer = peer_lookup_by_su (&su);
   if (!peer) 
@@ -127,9 +143,61 @@ bgp_accept (struct thread *thread)
   return 0;
 }
 
+#ifdef HAVE_IPV6
+void
+bgp_serv_sock_addrinfo (unsigned short port)
+{
+  int ret;
+  struct addrinfo req;
+  struct addrinfo *ainfo;
+  struct addrinfo *ainfo_save;
+  int sock;
+  char port_str[BUFSIZ];
+
+  memset (&req, 0, sizeof (struct addrinfo));
+  req.ai_flags = AI_PASSIVE;
+  req.ai_family = AF_UNSPEC;
+  req.ai_socktype = SOCK_STREAM;
+  sprintf (port_str, "%d", port);
+
+  ret = getaddrinfo (NULL, port_str, &req, &ainfo);
+
+  if (ret != 0)
+    {
+      fprintf (stderr, "getaddrinfo failed: %s\n", strerror (errno));
+      exit (1);
+    }
+
+  ainfo_save = ainfo;
+
+  do
+    {
+      sock = socket (ainfo->ai_family, ainfo->ai_socktype, ainfo->ai_protocol);
+      if (sock < 0)
+	continue;
+
+      sockopt_reuseaddr (sock);
+      sockopt_reuseport (sock);
+
+      ret = bind (sock, ainfo->ai_addr, ainfo->ai_addrlen);
+      if (ret < 0)
+	continue;
+
+      ret = listen (sock, 3);
+      if (ret < 0) 
+	continue;
+
+      thread_add_read (master, bgp_accept, NULL, sock);
+    }
+  while ((ainfo = ainfo->ai_next) != NULL);
+
+  freeaddrinfo (ainfo_save);
+}
+#endif /* HAVE_IPV6 */
+
 /* Make bgpd's server socket. */
-int
-bgp_serv_sock (unsigned short port, int family)
+void
+bgp_serv_sock_family (unsigned short port, int family)
 {
   int ret;
   int bgp_sock;
@@ -142,6 +210,7 @@ bgp_serv_sock (unsigned short port, int family)
   bgp_sock = sockunion_stream_socket (&su);
 
   sockopt_reuseaddr (bgp_sock);
+  sockopt_reuseport (bgp_sock);
 
   ret = sockunion_bind (bgp_sock, &su, port, NULL);
 
@@ -150,17 +219,27 @@ bgp_serv_sock (unsigned short port, int family)
     {
       zlog (NULL, LOG_INFO, "Can't listen bgp server socket : %s",
 	    strerror (errno));
-      return ret;
+      return;
     }
 
   thread_add_read (master, bgp_accept, NULL, bgp_sock);
+}
 
-  return bgp_sock;
+void
+bgp_serv_sock (unsigned short port)
+{
+#ifdef HAVE_IPV6
+  bgp_serv_sock_addrinfo (port);
+#else
+  bgp_serv_sock_family (port, AF_INET);
+#endif /* HAVE_IPV6 */
 }
 
 /* After TCP connection is established.  Get local address and port. */
 void
 bgp_getsockname (struct peer *peer)
 {
+  if (peer->su_local)
+    XFREE (MTYPE_TMP, peer->su_local);
   peer->su_local = sockunion_getsockname (peer->fd);
 }

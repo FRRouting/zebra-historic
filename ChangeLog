@@ -1,3 +1,14 @@
+1999-06-30  Gerhard Poul  <gpoul@gnu.org>
+
+	* README: remixed the old files and added some new parts.
+	moved some INSTALL stuff into INSTALL file.
+	moved some other stuff to doc/zebra.texi
+
+1999-06-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in (LIBS): Add libresolv check.
+	Change --enabe-all-in-one option to --enable-one-vty.
+
 1999-06-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: Add --enabe-all-in-one option.

@@ -471,6 +471,7 @@ zebra_init (int enable)
   install_element (CONFIG_NODE, &router_zebra_cmd);
   install_element (CONFIG_NODE, &no_router_zebra_cmd);
 
+  install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &redistribute_bgp_cmd);
   install_element (ZEBRA_NODE, &no_redistribute_bgp_cmd);
 

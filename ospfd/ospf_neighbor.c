@@ -56,6 +56,7 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   nbr->v_inactivity = oi->v_wait;
   nbr->v_db_desc = oi->retransmit_interval;
+  nbr->v_ls_req = oi->retransmit_interval;
   nbr->priority = -1;
 
   /* DD flags. */
@@ -80,8 +81,6 @@ ospf_nbr_free (struct ospf_neighbor *nbr)
   list_delete_all (nbr->ls_request);
 
   /* Cancel threads. */
-  OSPF_NSM_READ_OFF (nbr->t_read);
-  OSPF_NSM_WRITE_OFF (nbr->t_write);
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
 
   XFREE (MTYPE_OSPF_NEIGHBOR, nbr);
@@ -98,7 +97,7 @@ ospf_nbr_bidirectional (struct in_addr *router_id,
   max = size / sizeof (struct in_addr);
 
   for (i = 0; i < max; i ++)
-    if (!IPV4_ADDR_CMP (router_id, &neighbors[i]))
+    if (IPV4_ADDR_SAME (router_id, &neighbors[i]))
       return 1;
 
   return 0;
@@ -134,7 +133,7 @@ ospf_nbr_add_myself (struct ospf_interface *oi)
   nbr->d_router = oi->d_router;
   nbr->bd_router = oi->bd_router;
   nbr->priority = oi->priority;
-  nbr->address = p;
+  nbr->address = *oi->address;
 }
 
 /* Get neighbor count by status. */
@@ -155,7 +154,7 @@ ospf_nbr_count (struct route_table *nbrs, int status)
       nbr = rn->info;
 
       /* this is myself. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
       if (status == 0 || nbr->status == status)
@@ -179,7 +178,7 @@ ospf_nbr_lookup_by_router_id (struct route_table *nbrs,
 
       nbr = rn->info;
 
-      if (!IPV4_ADDR_CMP (&nbr->router_id, router_id))
+      if (IPV4_ADDR_SAME (&nbr->router_id, router_id))
 	return nbr;
     }
 

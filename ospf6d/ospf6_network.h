@@ -68,5 +68,7 @@ int send_linkstate_request (struct thread *);
 int send_linkstate_update (struct thread *);
 int send_linkstate_ack (struct thread *);
 
+void ospf6_prefix_in6_addr (struct ospf6_prefix *, struct in6_addr *);
+
 #endif /* OSPF6_NETWORK_H */
 

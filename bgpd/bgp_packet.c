@@ -142,8 +142,8 @@ bgp_connect_check (struct peer *peer)
       BGP_EVENT_ADD (peer, TCP_connection_open);
   else
     {
-      zlog (peer->log, LOG_INFO, "neighbor %s: Connect failed : %m",
-	    peer->host);
+      zlog (peer->log, LOG_INFO, "neighbor %s: Connect failed : %s",
+	    peer->host, strerror (errno));
       BGP_EVENT_ADD (peer, TCP_connection_open_failed);
     }
 }
@@ -601,8 +601,8 @@ bgp_read_packet (struct peer *peer, bgp_size_t size)
   /* If read byte is smaller than zero then error occured. */
   if (nbytes < 0) 
     {
-      zlog (peer->log, LOG_WARNING, "neighbor %s: bgp_read_packet error: %m",
-	    peer->host);
+      zlog (peer->log, LOG_WARNING, "neighbor %s: bgp_read_packet error: %s",
+	    peer->host, strerror (errno));
       BGP_EVENT_ADD (peer, TCP_fatal_error);
       return -1;
     }  
@@ -621,8 +621,8 @@ bgp_read_packet (struct peer *peer, bgp_size_t size)
   if (nbytes != size) 
     {
       zlog (peer->log, LOG_WARNING,
-	    "neighbor %s: bgp_read can't read all of packet %d/%d : %m",
-	    peer->host, size, nbytes);
+	    "neighbor %s: bgp_read can't read all of packet %d/%d : %s",
+	    peer->host, size, nbytes, strerror (errno));
       BGP_EVENT_ADD (peer, TCP_fatal_error);
       return -1;
     }

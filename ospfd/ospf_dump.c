@@ -26,16 +26,16 @@
 #include "thread.h"
 #include "prefix.h"
 #include "command.h"
-#include "log.h"
 #include "stream.h"
+#include "log.h"
 
 #include "ospfd/ospfd.h"
 #include "ospfd/ospf_interface.h"
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
-#include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_network.h"
 
@@ -67,20 +67,11 @@ message ospf_nsm_status_msg[] =
 };
 int ospf_nsm_status_msg_max = OSPF_NSM_STATUS_MAX;
 
-/* Debug option setting interface. */
-unsigned long ospf_debug_packet = 0;
+/* Debug option variables. */
+unsigned long ospf_debug_packet[5] = {0, 0, 0, 0, 0};
 unsigned long ospf_debug_event = 0;
 unsigned long ospf_debug_ism = 0;
 unsigned long ospf_debug_nsm = 0;
-
-#define OSPF_DEBUG_ON(a, b)	ospf_debug_ ## a |= b
-#define OSPF_DEBUG_OFF(a, b)	ospf_debug_ ## a &= ~b
-
-/*
-void debug_on  (unsigned int option) { ospf_debug_option |= option; }
-void debug_off (unsigned int option) { ospf_debug_option &= ~option; }
-int  debug     (unsigned int option) { return ospf_debug_option &option; }
-*/
 
 /* message lookup function */
 char *
@@ -98,9 +89,9 @@ ospf_nbr_state_message (struct ospf_neighbor *nbr, char *buf, size_t size)
 {
   int status;
 
-  if (!IPV4_ADDR_CMP (&nbr->d_router, &nbr->router_id))
+  if (IPV4_ADDR_SAME (&nbr->d_router, &nbr->address.u.prefix4))
     status = ISM_DR;
-  else if (!IPV4_ADDR_CMP (&nbr->bd_router, &nbr->router_id))
+  else if (IPV4_ADDR_SAME (&nbr->bd_router, &nbr->address.u.prefix4))
     status = ISM_Backup;
   else
     status = ISM_DROther;
@@ -213,11 +204,111 @@ ospf_lsa_header_dump (struct ospf_lsa *lsa)
   zlog (NULL, LOG_INFO, "length %d", ntohs (lsa->length));
 }
 
+char *
+ospf_router_lsa_flags_dump (u_char flags, char *buf, size_t size)
+{
+  bzero (buf, size);
+
+  snprintf (buf, size, "%s|%s|%s",
+	    (flags & ROUTER_LSA_VIRTUAL) ? "V" : "-",
+	    (flags & ROUTER_LSA_EXTERNAL) ? "E" : "-",
+	    (flags & ROUTER_LSA_BORDER) ? "B" : "-");
+
+  return buf;
+}
+
+void
+ospf_router_lsa_dump (struct stream *s, u_int16_t length)
+{
+  char buf[BUFSIZ];
+  struct router_lsa *rl;
+
+  rl = (struct router_lsa *) STREAM_PNT (s);
+
+  zlog (NULL, LOG_INFO, "Router-LSA flags %s", 
+	ospf_router_lsa_flags_dump (rl->flags, buf, BUFSIZ));
+  zlog (NULL, LOG_INFO, "Router-LSA # links %d", ntohs (rl->links));
+  zlog (NULL, LOG_INFO, "Router-LSA Link ID %s", inet_ntoa (rl->link_id));
+  zlog (NULL, LOG_INFO, "Router-LSA Link Data %s", inet_ntoa (rl->link_data));
+  zlog (NULL, LOG_INFO, "Router-LSA Type %d", (u_char) rl->type);
+  zlog (NULL, LOG_INFO, "Router-LSA TOS %d", (u_char) rl->tos);
+  zlog (NULL, LOG_INFO, "Router-LSA metric %d", ntohs (rl->metric));
+}
+
+void
+ospf_network_lsa_dump (struct stream *s, u_int16_t length)
+{
+  struct network_lsa *nl;
+
+  nl = (struct network_lsa *) STREAM_PNT (s);
+  
+  zlog (NULL, LOG_INFO, "LSA total size %d", ntohs (nl->header.length));
+  zlog (NULL, LOG_INFO, "Network-LSA size %d", 
+	ntohs (nl->header.length) - OSPF_LSA_HEADER_SIZE);
+  zlog (NULL, LOG_INFO, "Network-LSA %s", inet_ntoa (nl->mask));
+}
+
+void
+ospf_summary_lsa_dump (struct stream *s, u_int16_t length)
+{
+  struct summary_lsa *sl;
+  int size;
+  int i;
+
+  sl = (struct summary_lsa *) STREAM_PNT (s);
+
+  zlog (NULL, LOG_INFO, "Summary-LSA Network Mask %s", inet_ntoa (sl->mask));
+
+  size = ntohs (sl->header.length) - OSPF_LSA_HEADER_SIZE - 4;
+  for (i = 0; size > 0; size -= 4, i++)
+    zlog (NULL, LOG_INFO, "Summary-LSA TOS=%d metric %d",
+	  sl->tos, GET_METRIC (sl->metric));
+}
+
+void
+ospf_as_external_lsa_dump (struct stream *s, u_int16_t length)
+{
+  struct as_external_lsa *al;
+  int size;
+  int i;
+
+  al = (struct as_external_lsa *) STREAM_PNT (s);
+
+  zlog (NULL, LOG_INFO, "AS-external-LSA Network Mask %s",
+	inet_ntoa (al->mask));
+  size = ntohs (al->header.length) - OSPF_LSA_HEADER_SIZE -4;
+  for (i = 0; size > 0; size -= 12, i++)
+    {
+      zlog (NULL, LOG_INFO, "AS-external-LSA bit %s TOS=%d metric %d",
+	    IS_EXTERNAL_METRIC (al->e[i].tos) ? "E" : "-",
+	    al->e[i].tos & 0x7f, GET_METRIC (al->e[i].metric));
+      zlog (NULL, LOG_INFO, "AS-external-LSA Forwarding address %s",
+	    inet_ntoa (al->e[i].fwd_addr));
+      zlog (NULL, LOG_INFO, "AS-external-LSA External Route Tag %s",
+	    inet_ntoa (al->e[i].route_tag));
+    }
+}
+
+void
+ospf_lsa_header_list_dump (struct stream *s, u_int16_t length)
+{
+  struct ospf_lsa *lsa;
+
+  /* LSA Headers. */
+  while (length > 0)
+    {
+      lsa = (struct ospf_lsa *) STREAM_PNT (s);
+      ospf_lsa_header_dump (lsa);
+
+      stream_forward (s, OSPF_LSA_HEADER_SIZE);
+      length -= OSPF_LSA_HEADER_SIZE;
+    }
+}
+
 void
 ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
 {
   struct ospf_db_desc *dd;
-  struct ospf_lsa *lsa;
   char dd_flags[8];
   char options[24];
 
@@ -237,15 +328,7 @@ ospf_packet_db_desc_dump (struct stream *s, u_int16_t length)
 
   stream_forward (s, OSPF_DB_DESC_MIN_SIZE);
 
-  /* LSA Headers. */
-  while (length > 0)
-    {
-      lsa = (struct ospf_lsa *) STREAM_PNT (s);
-      ospf_lsa_header_dump (lsa);
-      stream_forward (s, OSPF_LSA_HEADER_SIZE);
-
-      length -= OSPF_LSA_HEADER_SIZE;
-    }
+  ospf_lsa_header_list_dump (s, length);
 
   stream_set_getp (s, gp);
 }
@@ -302,14 +385,17 @@ ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
       switch (lsa->type)
 	{
 	case OSPF_ROUTER_LSA:
+	  ospf_router_lsa_dump (s, length);
 	  break;
 	case OSPF_NETWORK_LSA:
+	  ospf_network_lsa_dump (s, length);
 	  break;
 	case OSPF_SUMMARY_LSA:
-	  break;
 	case OSPF_SUMMARY_LSA_ASBR:
+	  ospf_summary_lsa_dump (s, length);
 	  break;
 	case OSPF_AS_EXTERNAL_LSA:
+	  ospf_as_external_lsa_dump (s, length);
 	  break;
 	default:
 	  break;
@@ -326,7 +412,14 @@ ospf_packet_ls_upd_dump (struct stream *s, u_int16_t length)
 void
 ospf_packet_ls_ack_dump (struct stream *s, u_int16_t length)
 {
+  u_int32_t sp;
 
+  length -= OSPF_HEADER_SIZE;
+  sp = stream_get_getp (s);
+
+  ospf_lsa_header_list_dump (s, length);
+
+  stream_set_getp (s, sp);
 }
 
 void
@@ -380,30 +473,31 @@ ospf_packet_dump (struct stream *s)
 
   /* OSPF Header dump. */
   ospfh = (struct ospf_header *) STREAM_PNT (s);
+
+  /* Until detail flag is set, return. */
+  if (!(ospf_debug_packet[ospfh->type - 1] & OSPF_DEBUG_DETAIL))
+    return;
+
+  /* Show OSPF header detail. */
   ospf_header_dump (ospfh);
   stream_forward (s, OSPF_HEADER_SIZE);
 
   switch (ospfh->type)
     {
     case OSPF_MSG_HELLO:
-      if (ospf_debug_packet & OSPF_DEBUG_HELLO)
-	ospf_packet_hello_dump (s, ntohs (ospfh->length));
+      ospf_packet_hello_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_DB_DESC:
-      if (ospf_debug_packet & OSPF_DEBUG_DB_DESC)
-	ospf_packet_db_desc_dump (s, ntohs (ospfh->length));
+      ospf_packet_db_desc_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_LS_REQ:
-      if (ospf_debug_packet & OSPF_DEBUG_LS_REQ)
-	ospf_packet_ls_req_dump (s, ntohs (ospfh->length));
+      ospf_packet_ls_req_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_LS_UPD:
-      if (ospf_debug_packet & OSPF_DEBUG_LS_UPD)
-	ospf_packet_ls_upd_dump (s, ntohs (ospfh->length));
+      ospf_packet_ls_upd_dump (s, ntohs (ospfh->length));
       break;
     case OSPF_MSG_LS_ACK:
-      if (ospf_debug_packet & OSPF_DEBUG_LS_ACK)
-	ospf_packet_ls_ack_dump (s, ntohs (ospfh->length));
+      ospf_packet_ls_ack_dump (s, ntohs (ospfh->length));
       break;
     default:
       break;
@@ -414,53 +508,13 @@ ospf_packet_dump (struct stream *s)
 
 
 /*
-   debug ospf packet [hello|dd|ls-request|ls-update|ls-ack [send|recv]]
+   [no] debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all)
+                          [send|recv [detail]]
 */
 
 DEFUN (debug_ospf_packet,
-       debug_ospf_packet_cmd,
-       "debug ospf packet",
-       "Debugging functions\n"
-       "OSPF information\n"
-       "OSPF packets\n")
-{
-  if (argc == 0)
-    {
-      ospf_debug_packet |= OSPF_DEBUG_PACKET;
-      return CMD_SUCCESS;
-    }
-
-  if (argc >= 1)
-    {
-      if (strncmp (argv[0], "h", 1) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_HELLO;
-      else if (strncmp (argv[0], "d", 1) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_DB_DESC;
-      else if (strncmp (argv[0], "ls-r", 4) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_LS_REQ;
-      else if (strncmp (argv[0], "ls-u", 4) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_LS_UPD;
-      else if (strncmp (argv[0], "ls-a", 4) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_LS_ACK;
-    }
-
-  if (argc == 1)
-    ospf_debug_packet  |= (OSPF_DEBUG_SEND | OSPF_DEBUG_RECV);
-
-  else if (argc == 2)
-    {
-      if (strncmp (argv[1], "s", 1) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_SEND;
-      else if (strncmp (argv[1], "r", 1) == 0)
-	ospf_debug_packet |= OSPF_DEBUG_RECV;
-    }
-
-  return CMD_SUCCESS;
-}
-
-ALIAS (debug_ospf_packet,
        debug_ospf_packet_all_cmd,
-       "debug ospf packet (hello|dd|ls-request|ls-update|ls-ack)",
+       "debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all)",
        "Debugging functions\n"
        "OSPF information\n"
        "OSPF packets\n"
@@ -468,11 +522,68 @@ ALIAS (debug_ospf_packet,
        "OSPF Database Description\n"
        "OSPF Link State Request\n"
        "OSPF Link State Update\n"
-       "OSPF Link State Acknowledgment\n")
+       "OSPF Link State Acknowledgment\n"
+       "OSPF all packets\n")
+{
+  int type = 0;
+  int flag = 0;
+  int i;
+
+  assert (argc > 0);
+
+#ifdef DEBUG
+zlog_info ("argc=%d", argc);
+#endif /* DEBUG */
+
+  /* Check packet type. */
+  if (strncmp (argv[0], "h", 1) == 0)
+    type = OSPF_DEBUG_HELLO;
+  else if (strncmp (argv[0], "d", 1) == 0)
+    type = OSPF_DEBUG_DB_DESC;
+  else if (strncmp (argv[0], "ls-r", 4) == 0)
+    type = OSPF_DEBUG_LS_REQ;
+  else if (strncmp (argv[0], "ls-u", 4) == 0)
+    type = OSPF_DEBUG_LS_UPD;
+  else if (strncmp (argv[0], "ls-a", 4) == 0)
+    type = OSPF_DEBUG_LS_ACK;
+  else if (strncmp (argv[0], "a", 1) == 0)
+    type = OSPF_DEBUG_ALL;
+
+  /* Default, both send and recv. */
+  if (argc == 1)
+    flag = OSPF_DEBUG_SEND | OSPF_DEBUG_RECV;
+
+  /* send or recv. */
+  if (argc >= 2)
+    {
+      if (strncmp (argv[1], "s", 1) == 0)
+	flag = OSPF_DEBUG_SEND;
+      else if (strncmp (argv[1], "r", 1) == 0)
+	flag = OSPF_DEBUG_RECV;
+      else if (strncmp (argv[1], "d", 1) == 0)
+	flag = OSPF_DEBUG_SEND | OSPF_DEBUG_RECV | OSPF_DEBUG_DETAIL;
+    }
+
+  /* detail. */
+  if (argc == 3)
+    if (strncmp (argv[2], "d", 1) == 0)
+      flag |= OSPF_DEBUG_DETAIL;
+
+  for (i = 0; i < 5; i++)
+    if (type & (0x01 << i))
+      DEBUG_PACKET_ON (i, flag);
+
+#ifdef DEBUG
+  for (i = 0; i < 5; i++)
+    zlog_info ("flag[%d] = %d", i, ospf_debug_packet[i]);
+#endif /* DEBUG */
+
+  return CMD_SUCCESS;
+}
 
 ALIAS (debug_ospf_packet,
        debug_ospf_packet_send_recv_cmd,
-       "debug ospf packet (hello|dd|ls-request|ls-update|ls-ack) (send|recv)",
+       "debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv|detail)",
        "Debugging functions\n"
        "OSPF information\n"
        "OSPF packets\n"
@@ -481,65 +592,101 @@ ALIAS (debug_ospf_packet,
        "OSPF Link State Request\n"
        "OSPF Link State Update\n"
        "OSPF Link State Acknowledgment\n"
+       "OSPF all packets\n"
        "Packet sent\n"
+       "Packet received\n"
+       "Detail information\n")
+
+ALIAS (debug_ospf_packet,
+       debug_ospf_packet_send_recv_detail_cmd,
+       "debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) (detail|)",
+       "Debugging functions\n"
+       "OSPF information\n"
+       "OSPF packets\n"
+       "OSPF Hello\n"
+       "OSPF Database Description\n"
+       "OSPF Link State Request\n"
+       "OSPF Link State Update\n"
+       "OSPF Link State Acknowledgment\n"
+       "OSPF all packets\n"
+       "Packet sent\n"
+       "Packet received\n"
        "Detail Information\n")
+       
 
 DEFUN (no_debug_ospf_packet,
-       no_debug_ospf_packet_cmd,
-       "no debug ospf packet",
+       no_debug_ospf_packet_all_cmd,
+       "no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all)",
        NO_STR
        "Debugging functions\n"
        "OSPF information\n"
-       "OSPF packets\n")
+       "OSPF packets\n"
+       "OSPF Hello\n"
+       "OSPF Database Description\n"
+       "OSPF Link State Request\n"
+       "OSPF Link State Update\n"
+       "OSPF Link State Acknowledgment\n"
+       "OSPF all packets\n")
 {
-  if (argc == 0)
-    {
-      ospf_debug_packet &= ~OSPF_DEBUG_PACKET;
-      return CMD_SUCCESS;
-    }
+  int type = 0;
+  int flag = 0;
+  int i;
 
+  assert (argc > 0);
+
+#ifdef DEBUG
+  zlog_info ("argc=%d", argc);
+#endif /* DEBUG */
+
+  /* Check packet type. */
+  if (strncmp (argv[0], "h", 1) == 0)
+    type = OSPF_DEBUG_HELLO;
+  else if (strncmp (argv[0], "d", 1) == 0)
+    type = OSPF_DEBUG_DB_DESC;
+  else if (strncmp (argv[0], "ls-r", 4) == 0)
+    type = OSPF_DEBUG_LS_REQ;
+  else if (strncmp (argv[0], "ls-u", 4) == 0)
+    type = OSPF_DEBUG_LS_UPD;
+  else if (strncmp (argv[0], "ls-a", 4) == 0)
+    type = OSPF_DEBUG_LS_ACK;
+  else if (strncmp (argv[0], "a", 1) == 0)
+    type = OSPF_DEBUG_ALL;
+
+  /* Default, both send and recv. */
   if (argc == 1)
-    {
-      if (strncmp (argv[0], "h", 1) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_HELLO;
-      else if (strncmp (argv[0], "d", 1) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_DB_DESC;
-      else if (strncmp (argv[0], "ls-r", 4) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_LS_REQ;
-      else if (strncmp (argv[0], "ls-u", 4) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_LS_UPD;
-      else if (strncmp (argv[0], "ls-a", 4) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_LS_ACK;
-      ospf_debug_packet &= ~(OSPF_DEBUG_SEND | OSPF_DEBUG_RECV);
-    }
+    flag = OSPF_DEBUG_SEND | OSPF_DEBUG_RECV | OSPF_DEBUG_DETAIL ;
 
+  /* send or recv. */
   if (argc == 2)
     {
       if (strncmp (argv[1], "s", 1) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_SEND;
+	flag = OSPF_DEBUG_SEND | OSPF_DEBUG_DETAIL;
       else if (strncmp (argv[1], "r", 1) == 0)
-	ospf_debug_packet &= ~OSPF_DEBUG_RECV;
+	flag = OSPF_DEBUG_RECV | OSPF_DEBUG_DETAIL;
+      else if (strncmp (argv[1], "d", 1) == 0)
+	flag = OSPF_DEBUG_DETAIL;
     }
+
+  /* detail. */
+  if (argc == 3)
+    if (strncmp (argv[2], "d", 1) == 0)
+      flag = OSPF_DEBUG_DETAIL;
+
+  for (i = 0; i < 5; i++)
+    if (type & (0x01 << i))
+      DEBUG_PACKET_OFF (i, flag);
+
+#ifdef DEBUG
+  for (i = 0; i < 5; i++)
+    zlog_info ("flag[%d] = %d", i, ospf_debug_packet[i]);
+#endif /* DEBUG */
 
   return CMD_SUCCESS;
 }
 
 ALIAS (no_debug_ospf_packet,
-       no_debug_ospf_packet_all_cmd,
-       "no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack)",
-       NO_STR
-       "Debugging functions\n"
-       "OSPF information\n"
-       "OSPF packets\n"
-       "OSPF Hello\n"
-       "OSPF Database Description\n"
-       "OSPF Link State Request\n"
-       "OSPF Link State Update\n"
-       "OSPF Link State Acknowledgment\n")
-
-ALIAS (no_debug_ospf_packet,
        no_debug_ospf_packet_send_recv_cmd,
-       "no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack) (send|recv)",
+       "no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv|detail)",
        NO_STR
        "Debugging functions\n"
        "OSPF information\n"
@@ -549,7 +696,26 @@ ALIAS (no_debug_ospf_packet,
        "OSPF Link State Request\n"
        "OSPF Link State Update\n"
        "OSPF Link State Acknowledgment\n"
+       "OSPF all packets\n"
        "Packet sent\n"
+       "Packet received\n"
+       "Detail Information\n")
+
+ALIAS (no_debug_ospf_packet,
+       no_debug_ospf_packet_send_recv_detail_cmd,
+       "no debug ospf packet (hello|dd|ls-request|ls-update|ls-ack|all) (send|recv) (detail|)",
+       NO_STR
+       "Debugging functions\n"
+       "OSPF information\n"
+       "OSPF packets\n"
+       "OSPF Hello\n"
+       "OSPF Database Description\n"
+       "OSPF Link State Request\n"
+       "OSPF Link State Update\n"
+       "OSPF Link State Acknowledgment\n"
+       "OSPF all packets\n"
+       "Packet sent\n"
+       "Packet received\n"
        "Detail Information\n")
 
 DEFUN (debug_ospf_ism,
@@ -557,12 +723,32 @@ DEFUN (debug_ospf_ism,
        "debug ospf ism",
        "Debugging functions\n"
        "OSPF information\n"
-       "OSPF Interface State Machine")
+       "OSPF Interface State Machine\n")
 {
-  ospf_debug_ism |= OSPF_DEBUG_ISM;
+  if (argc == 0)
+    DEBUG_ON (ism, ISM);
+  else if (argc == 1)
+    {
+      if (strncmp (argv[0], "s", 1) == 0)
+	DEBUG_ON (ism, ISM_STATUS);
+      else if (strncmp (argv[0], "e", 1) == 0)
+	DEBUG_ON (ism, ISM_EVENTS);
+      else if (strncmp (argv[0], "t", 1) == 0)
+	DEBUG_ON (ism, ISM_TIMERS);
+    }
 
   return CMD_SUCCESS;
 }
+
+ALIAS (debug_ospf_ism,
+       debug_ospf_ism_sub_cmd,
+       "debug ospf ism (status|events|timers)",
+       "Debugging functions\n"
+       "OSPF information\n"
+       "OSPF Interface State Machine\n"
+       "ISM Status Information\n"
+       "ISM Event Information\n"
+       "ISM TImer Information\n")
 
 DEFUN (no_debug_ospf_ism,
        no_debug_ospf_ism_cmd,
@@ -572,22 +758,63 @@ DEFUN (no_debug_ospf_ism,
        "OSPF information\n"
        "OSPF Interface State Machine")
 {
-  ospf_debug_ism &= ~OSPF_DEBUG_ISM;
+  if (argc == 0)
+    DEBUG_OFF (ism, ISM);
+  else if (argc == 1)
+    {
+      if (strncmp (argv[0], "s", 1) == 0)
+	DEBUG_OFF (ism, ISM_STATUS);
+      else if (strncmp (argv[0], "e", 1) == 0)
+	DEBUG_OFF (ism, ISM_EVENTS);
+      else if (strncmp (argv[0], "t", 1) == 0)
+	DEBUG_OFF (ism, ISM_TIMERS);
+    }
 
   return CMD_SUCCESS;
 }
+
+ALIAS (no_debug_ospf_ism,
+       no_debug_ospf_ism_sub_cmd,
+       "no debug ospf ism (status|events|timers)",
+       NO_STR
+       "Debugging functions\n"
+       "OSPF information\n"
+       "OSPF Interface State Machine\n"
+       "ISM Status Information\n"
+       "ISM Event Information\n"
+       "ISM Timer Information\n")
 
 DEFUN (debug_ospf_nsm,
        debug_ospf_nsm_cmd,
        "debug ospf nsm",
        "Debugging functions\n"
        "OSPF information\n"
-       "OSPF Neighbor State Machine")
+       "OSPF Neighbor State Machine\n")
 {
-  ospf_debug_nsm |= OSPF_DEBUG_NSM;
+  if (argc == 0)
+    DEBUG_ON (nsm, NSM);
+  else if (argc == 1)
+    {
+      if (strncmp (argv[0], "s", 1) == 0)
+	DEBUG_ON (nsm, NSM_STATUS);
+      else if (strncmp (argv[0], "e", 1) == 0)
+	DEBUG_ON (nsm, NSM_EVENTS);
+      else if (strncmp (argv[0], "t", 1) == 0)
+	DEBUG_ON (nsm, NSM_TIMERS);
+    }
 
   return CMD_SUCCESS;
 }
+
+ALIAS (debug_ospf_nsm,
+       debug_ospf_nsm_sub_cmd,
+       "debug ospf nsm (status|events|timers)",
+       "Debugging functions\n"
+       "OSPF information\n"
+       "OSPF Neighbor State Machine\n"
+       "NSM Status Information\n"
+       "NSM Event Information\n"
+       "NSM Timer Information\n")
 
 DEFUN (no_debug_ospf_nsm,
        no_debug_ospf_nsm_cmd,
@@ -597,7 +824,90 @@ DEFUN (no_debug_ospf_nsm,
        "OSPF information\n"
        "OSPF Neighbor State Machine")
 {
-  ospf_debug_nsm &= ~OSPF_DEBUG_NSM;
+  if (argc == 0)
+    DEBUG_OFF (nsm, NSM);
+  else if (argc == 1)
+    {
+      if (strncmp (argv[0], "s", 1) == 0)
+	DEBUG_OFF (nsm, NSM_STATUS);
+      else if (strncmp (argv[0], "e", 1) == 0)
+	DEBUG_OFF (nsm, NSM_EVENTS);
+      else if (strncmp (argv[0], "t", 1) == 0)
+	DEBUG_OFF (nsm, NSM_TIMERS);
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_debug_ospf_nsm,
+       no_debug_ospf_nsm_sub_cmd,
+       "no debug ospf nsm (status|events|timers)",
+       NO_STR
+       "Debugging functions\n"
+       "OSPF information\n"
+       "OSPF Interface State Machine\n"
+       "NSM Status Information\n"
+       "NSM Event Information\n"
+       "NSM Timer Information\n")
+
+DEFUN (show_debugging_ospf,
+       show_debugging_ospf_cmd,
+       "show debugging ospf",
+       SHOW_STR
+       "OSPF configuration\n"
+       "Debugging information\n")
+{
+  int i;
+
+  vty_out (vty, "Zebra debugging status:\r\n");
+
+  /* debug ism. */
+  if (IS_OSPF_DEBUG (ism, ISM) == OSPF_DEBUG_ISM)
+    vty_out (vty, "  OSPF ISM debugging is on\r\n");
+  else
+    {
+      if (IS_OSPF_DEBUG (ism, ISM_STATUS))
+	vty_out (vty, "  OSPF ISM status debugging is on\r\n");
+      else if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
+	vty_out (vty, "  OSPF ISM event debugging is on\r\n");
+      else if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
+	vty_out (vty, "  OSPF ISM timer debugging is on\r\n");
+    }
+
+  /* debug nsm. */
+  if (IS_OSPF_DEBUG (nsm, NSM) == OSPF_DEBUG_NSM)
+    vty_out (vty, "  OSPF NSM debugging is on\r\n");
+  else
+    {
+      if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
+	vty_out (vty, "  OSPF NSM status debugging is on\r\n");
+      else if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
+	vty_out (vty, "  OSPF NSM event debugging is on\r\n");
+      else if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
+	vty_out (vty, "  OSPF NSM timer debugging is on\r\n");
+    }
+
+  /* debug packet. */
+  for (i = 0; i < 5; i++)
+    {
+      if (IS_OSPF_DEBUG_PACKET (i, SEND) && IS_OSPF_DEBUG_PACKET (i, RECV))
+	{
+	  vty_out (vty, "  OSPF packet %s%s debugging is on\r\n",
+		   ospf_packet_type_str[i + 1],
+		   IS_OSPF_DEBUG_PACKET (i, DETAIL) ? " detail" : "");
+	}
+      else
+	{
+	  if (IS_OSPF_DEBUG_PACKET (i, SEND))
+	    vty_out (vty, "  OSPF packet %s send%s debugging is on\r\n",
+		     ospf_packet_type_str[i + 1],
+		     IS_OSPF_DEBUG_PACKET (i, DETAIL) ? " detail" : "");
+	  else if (IS_OSPF_DEBUG_PACKET (i, RECV))
+	    vty_out (vty, "  OSPF packet %s receive%s debugging is on\r\n",
+		     ospf_packet_type_str[i + 1],
+		     IS_OSPF_DEBUG_PACKET (i, DETAIL) ? " detail" : "");
+	}
+    }
 
   return CMD_SUCCESS;
 }
@@ -613,8 +923,73 @@ int
 config_write_debug (struct vty *vty)
 {
   int write = 0;
+  int i, r;
 
-  vty_out (vty, "debug ospf%s", VTY_NEWLINE);
+  char *type_str[] = {"hello", "dd", "ls-request", "ls-update", "ls-ack"};
+  char *detail_str[] = {"", " send", " recv", "", " detail",
+			" send detail", " recv detail"};
+
+  /* debug ospf ism (status|events|timers). */
+  if (IS_OSPF_DEBUG (ism, ISM) == OSPF_DEBUG_ISM)
+    vty_out (vty, "debug ospf ism%s", VTY_NEWLINE);
+  else
+    {
+      if (IS_OSPF_DEBUG (ism, ISM_STATUS))
+	vty_out (vty, "debug ospf ism status%s", VTY_NEWLINE);
+      else if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
+	vty_out (vty, "debug ospf ism event%s", VTY_NEWLINE);
+      else if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
+	vty_out (vty, "debug ospf ism timer%s", VTY_NEWLINE);
+    }
+
+  /* debug ospf nsm (status|events|timers). */
+  if (IS_OSPF_DEBUG (nsm, NSM) == OSPF_DEBUG_NSM)
+    vty_out (vty, "debug ospf nsm%s", VTY_NEWLINE);
+  else
+    {
+      if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
+	vty_out (vty, "debug ospf ism status%s", VTY_NEWLINE);
+      else if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
+	vty_out (vty, "debug ospf nsm event%s", VTY_NEWLINE);
+      else if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
+	vty_out (vty, "debug ospf nsm timer%s", VTY_NEWLINE);
+    }
+
+  /* debug ospf packet all detail. */
+  r = OSPF_DEBUG_SEND_RECV|OSPF_DEBUG_DETAIL;
+  for (i = 0; i < 5; i++)
+    r &= ospf_debug_packet[i] & (OSPF_DEBUG_SEND_RECV|OSPF_DEBUG_DETAIL);
+  if (r == (OSPF_DEBUG_SEND_RECV|OSPF_DEBUG_DETAIL))
+    {
+      vty_out (vty, "debug ospf packet all detail%s", VTY_NEWLINE);
+      return 1;
+    }
+
+  /* debug ospf packet all. */
+  r = OSPF_DEBUG_SEND_RECV;
+  for (i = 0; i < 5; i++)
+    r &= ospf_debug_packet[i] & OSPF_DEBUG_SEND_RECV;
+  if (r == OSPF_DEBUG_SEND_RECV)
+    {
+      vty_out (vty, "debug ospf packet all%s", VTY_NEWLINE);
+      for (i = 0; i < 5; i++)
+	if (ospf_debug_packet[i] & OSPF_DEBUG_DETAIL)
+	  vty_out (vty, "debug ospf packet %s detail%s",
+		   type_str[i], VTY_NEWLINE);
+      return 1;
+    }
+
+  /* debug ospf packet (hello|dd|ls-request|ls-update|ls-ack)
+     (send|recv) (detail). */
+  for (i = 0; i < 5; i++)
+    {
+      if (ospf_debug_packet[i] == 0)
+	continue;
+      
+      vty_out (vty, "debug ospf packet %s%s%s",
+	       type_str[i], detail_str[ospf_debug_packet[i]], VTY_NEWLINE);
+      write = 1;
+    }
 
   return write;
 }
@@ -625,21 +1000,37 @@ debug_init ()
 {
   install_node (&debug_node, config_write_debug);
 
+  install_element (VIEW_NODE, &show_debugging_ospf_cmd);
+
+  install_element (ENABLE_NODE, &show_debugging_ospf_cmd);
+  install_element (ENABLE_NODE, &debug_ospf_packet_send_recv_detail_cmd);
   install_element (ENABLE_NODE, &debug_ospf_packet_send_recv_cmd);
   install_element (ENABLE_NODE, &debug_ospf_packet_all_cmd);
-  install_element (ENABLE_NODE, &debug_ospf_packet_cmd);
+  install_element (ENABLE_NODE, &debug_ospf_ism_sub_cmd);
   install_element (ENABLE_NODE, &debug_ospf_ism_cmd);
+  install_element (ENABLE_NODE, &debug_ospf_nsm_sub_cmd);
   install_element (ENABLE_NODE, &debug_ospf_nsm_cmd);
+  install_element (ENABLE_NODE, &no_debug_ospf_packet_send_recv_detail_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_packet_send_recv_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_packet_all_cmd);
-  install_element (ENABLE_NODE, &no_debug_ospf_packet_cmd);
+  install_element (ENABLE_NODE, &no_debug_ospf_ism_sub_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_ism_cmd);
+  install_element (ENABLE_NODE, &no_debug_ospf_nsm_sub_cmd);
   install_element (ENABLE_NODE, &no_debug_ospf_nsm_cmd);
+
+  install_element (CONFIG_NODE, &debug_ospf_packet_send_recv_detail_cmd);
   install_element (CONFIG_NODE, &debug_ospf_packet_send_recv_cmd);
   install_element (CONFIG_NODE, &debug_ospf_packet_all_cmd);
-  install_element (CONFIG_NODE, &debug_ospf_packet_cmd);
+  install_element (CONFIG_NODE, &debug_ospf_ism_sub_cmd);
   install_element (CONFIG_NODE, &debug_ospf_ism_cmd);
+  install_element (CONFIG_NODE, &debug_ospf_nsm_sub_cmd);
   install_element (CONFIG_NODE, &debug_ospf_nsm_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_packet_send_recv_detail_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_packet_send_recv_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_packet_all_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_ism_sub_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_ism_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_nsm_sub_cmd);
+  install_element (CONFIG_NODE, &no_debug_ospf_nsm_cmd);
 }
-
 

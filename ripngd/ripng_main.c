@@ -148,7 +148,7 @@ main (int argc, char **argv)
   /* get program name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog(progname, ZLOG_STDOUT, ZLOG_RIPNG,
+  zlog_default = openzlog(progname, ZLOG_NOLOG, ZLOG_RIPNG,
 			  LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -212,7 +212,7 @@ main (int argc, char **argv)
     daemon (0, 0);
 
   /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : RIPNG_VTY_PORT, AF_INET);
+  vty_serv_sock (vty_port ? vty_port : RIPNG_VTY_PORT);
 
   /* Process id file create. */
   pid_output (PATH_RIPNGD_PID);

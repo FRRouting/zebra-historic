@@ -807,6 +807,10 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	  break;
 	}
 
+      /* If error occured we should free allocated attribute. */
+      if (ret < 0)
+	  return ret;
+
       /* Check the fetched length. */
       if (BGP_INPUT_PNT (peer) != attr_endp)
 	{
@@ -816,10 +820,6 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
 	}
-
-      /* If error occured we should free allocated attribute. */
-      if (ret < 0)
-	  return ret;
     }
 
   if (BGP_INPUT_PNT (peer) != endp)

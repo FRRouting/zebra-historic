@@ -16,7 +16,7 @@ Zebra
 TCP/IP based routing protocols such as RIP, OSPF, BGP and so on.  Zebra
 turns your machine into a full powered router.
 
-   This is the Zebra Manual for zebra-0.69.
+   This is the Zebra Manual for zebra-0.71.
 
    This manual describes `zebra' and some other beasts.
 
@@ -398,10 +398,17 @@ Basic configuration
      zero to avoid pagination.
 
  - Command: log stdout
+ - Command: no log stdout
+     Set loggin output to stdout.
+
  - Command: log file FILENAME
      If you want to log into the file please specify `filename' as
      follow.
           log file /usr/local/etc/bgpd.log
+
+ - Command: log syslog
+ - Command: no log syslog
+     Set loggin output to syslog.
 
  - Command: write terminal
      Display current configuration to the vty interface.
@@ -793,17 +800,46 @@ ripd configuration
      Enable RIP process.
 
  - RIP Command: version VERSION
-     Set RIP version.  VERSION must be 1 or 2.
+     Set RIP process's version.  VERSION can be `1' or `2'.
 
- - Command: router zebra
-     This command is set default and doesn't appear configuration.
-     With this statement, RIP routes go to the `zebra' daemon.
+ - RIP Command: network NETWORK
+     Set RIP enable interface by NETWORK.  The interfaces which has
+     address matched to NETWORK is enabled.
+
+ - RIP Command: network IFNAME
+     Set RIP enable interface by IFNAME.
+
+ - RIP Command: neighbor A.B.C.D
+     Specify RIP neighbor.
+
+ - RIP commnad: redistribute static
+     Redistribute static route.
+
+ - RIP commnad: redistribute connected
+     Redistribute connected route.
+
+ - RIP command: route A.B.C.D/M
+     RIP only static route configuration.  In normal case, please set
+     static route in zebra and redistribute it by `redistribute static'.
+
+ - RIP command: timers basic UPDATE INVALID HOLDDOWN FLUSH
+     Set RIP's timer.
+
+ - Interface command: ip rip send version VARSION
+     VARSION can be `1', `2', `1 2'.  This configuration override
+     router rip's version setting.
+
+ - Interface command: ip rip receive version VARSION
+     Version setting for incoming RIP packet.
 
 
 File: zebra.info,  Node: ripd terminal mode commands,  Prev: ripd configuration,  Up: ripd
 
 ripd terminal mode commands
 ===========================
+
+ - Command: show ip rip
+     Show RIP routes.
 
 
 File: zebra.info,  Node: ripngd,  Next: ospfd,  Prev: ripd,  Up: Top
@@ -1185,13 +1221,13 @@ File: zebra.info,  Node: IP access list,  Next: IP prefix list,  Prev: Filtering
 IP access-list
 ==============
 
- - Command: ip access-list permit IPV4-NETWORK
- - Command: ip access-list deny IPV4-NETWORK
+ - Command: access-list NAME permit IPV4-NETWORK
+ - Command: access-list NAME deny IPV4-NETWORK
 
    Basic filtering is done by access-list like below example.
 
-     ip access-list deny 10.0.0.0/9
-     ip access-list permit 10.0.0.0/8
+     access-list filter deny 10.0.0.0/9
+     access-list filter permit 10.0.0.0/8
 
 
 File: zebra.info,  Node: IP prefix list,  Next: IP community list,  Prev: IP access list,  Up: Filtering
@@ -1756,6 +1792,8 @@ Command Index
 * Menu:
 
 * access-class ACCESS-LIST:              Basic configuration.
+* access-list NAME deny IPV4-NETWORK:    IP access list.
+* access-list NAME permit IPV4-NETWORK:  IP access list.
 * aggregate-address NETWORK:             bgpd configuration.
 * bgp router-id ROUTER-ID:               bgpd configuration.
 * clear ip bgp PEER:                     bgpd terminal mode commands.
@@ -1773,12 +1811,12 @@ Command Index
 * flush_timer TIME:                      ripngd configuration.
 * hostname HOSTNAME:                     Basic configuration.
 * interface IFNAME:                      Interface.
-* ip access-list deny IPV4-NETWORK:      IP access list.
-* ip access-list permit IPV4-NETWORK:    IP access list.
 * ip address ADDRESS:                    Interface.
 * ip as-path access-list NAME TYPE AS_PATH: AS path access list.
 * ip community-list NAME TYPE COMMUNITY: IP community list.
 * ip prefix-list NAME seq SEQ permit|deny [le PREFIXLEN] [ge PREFIXLEN]: IP prefix list.
+* ip rip receive version VARSION:        ripd configuration.
+* ip rip send version VARSION:           ripd configuration.
 * ip route NETWORK GATEWAY:              Static route.
 * ipv6 route NETWORK GATEWAY:            Static route.
 * line vty:                              Basic configuration.
@@ -1786,12 +1824,14 @@ Command Index
 * list:                                  Basic configuration.
 * log file FILENAME:                     Basic configuration.
 * log stdout:                            Basic configuration.
+* log syslog:                            Basic configuration.
 * match aspath AS_PATH:                  Route map match command.
 * match community COMMUNITY_LIST:        Route map match command.
 * match ip address ACCESS_LIST:          Route map match command.
 * match ip next-hop IPV4_ADDR:           Route map match command.
 * match metric METRIC:                   Route map match command.
 * multicast:                             Interface.
+* neighbor A.B.C.D:                      ripd configuration.
 * neighbor PEER description ...:         bgpd configuration.
 * neighbor PEER distribute-list DIRECT:  bgpd configuration.
 * neighbor PEER ebgp-multihop:           bgpd configuration.
@@ -1800,19 +1840,26 @@ Command Index
 * neighbor PEER route-map DIRECT:        bgpd configuration.
 * neighbor PEER shutdown:                bgpd configuration.
 * neighbor PEER version VERSION:         bgpd configuration.
-* network IFNAME:                        ripngd configuration.
+* network IFNAME <1>:                    ripngd configuration.
+* network IFNAME:                        ripd configuration.
 * network IPV4-NETWORK area AREA-ID:     ospfd configuration.
 * network NETWORK <1>:                   bgpd configuration.
-* network NETWORK:                       ripngd configuration.
+* network NETWORK <2>:                   ripngd configuration.
+* network NETWORK:                       ripd configuration.
 * no debug event:                        bgpd terminal mode commands.
 * no debug keepalive:                    bgpd terminal mode commands.
 * no debug update:                       bgpd terminal mode commands.
+* no log stdout:                         Basic configuration.
+* no log syslog:                         Basic configuration.
 * no multicast:                          Interface.
 * no neighbor PEER description ...:      bgpd configuration.
 * no neighbor PEER shutdown:             bgpd configuration.
 * no router ospf:                        ospfd configuration.
 * no shutdown:                           Interface.
 * password PASSWORD:                     Basic configuration.
+* redistribute connected:                ripd configuration.
+* redistribute static:                   ripd configuration.
+* route A.B.C.D/M:                       ripd configuration.
 * route NETWORK:                         ripngd configuration.
 * route-map ROUTE-MAP-NAME permit PRIORITY: Route map command.
 * router bgp AS-NUMBER:                  bgpd configuration.
@@ -1820,8 +1867,7 @@ Command Index
 * router rip:                            ripd configuration.
 * router ripng:                          ripngd configuration.
 * router zebra <1>:                      bgpd configuration.
-* router zebra <2>:                      ripngd configuration.
-* router zebra:                          ripd configuration.
+* router zebra:                          ripngd configuration.
 * service advanced-vty:                  Basic configuration.
 * service password-encryption:           Basic configuration.
 * set as-path prepend AS_PATH:           Route map set command.
@@ -1839,6 +1885,7 @@ Command Index
 * show ip bgp neighbor [PEER]:           bgpd terminal mode commands.
 * show ip bgp regexp AS-REGEXP:          bgpd terminal mode commands.
 * show ip bgp summary:                   bgpd terminal mode commands.
+* show ip rip:                           ripd terminal mode commands.
 * show ip ripng:                         ripngd terminal mode commands.
 * show ip route:                         zebra terminal mode commands.
 * show ipforward:                        zebra terminal mode commands.
@@ -1847,6 +1894,7 @@ Command Index
 * show version:                          Basic configuration.
 * shutdown:                              Interface.
 * table TABLENO:                         Static route.
+* timers basic UPDATE INVALID HOLDDOWN FLUSH: ripd configuration.
 * version VERSION:                       ripd configuration.
 * who:                                   Basic configuration.
 * write file:                            Basic configuration.
@@ -1900,60 +1948,60 @@ Node: Configure options9646
 Node: VTY port setup11254
 Node: Configuration File12022
 Node: Basic configuration12597
-Node: Sample Configuration14020
-Node: VTY14719
-Node: What is VTY15205
-Node: How to use VTY15423
-Node: View mode and Enable mode15973
-Node: Other modes16190
-Node: Command line editing16328
-Node: Advanced command line editing16923
-Node: Command line history17440
-Node: Command line completion17702
-Node: Command line help17925
-Node: zebra18205
-Node: Common invoking options18588
-Node: Invoking zebra19100
-Node: Interface19535
-Node: Static route20079
-Node: zebra terminal mode commands20470
-Node: ripd21371
-Node: Invoking ripd21632
-Node: ripd configuration21932
-Node: ripd terminal mode commands22372
-Node: ripngd22523
-Node: Invoking ripngd22844
-Node: ripngd configuration23099
-Node: ripngd terminal mode commands23863
-Node: ripngd filtering commands24214
-Node: ospfd24679
-Node: Invoking ospfd24972
-Node: ospfd configuration25222
-Node: ospfd terminal mode commands25521
-Node: ospf6d25677
-Node: Invoking ospf6d25794
-Node: bgpd25899
-Node: Invoking bgpd26456
-Node: bgpd configuration26832
-Node: bgpd terminal mode commands30127
-Node: bgpd sample session30766
-Node: bgpd log format30966
-Node: How to set up 6bone connection31456
-Node: Filtering32687
-Node: IP access list33065
-Node: IP prefix list33427
-Node: IP community list33649
-Node: AS path access list33850
-Node: Route map34035
-Node: Route map command34523
-Node: Route map match command34726
-Node: Route map set command35337
-Node: IPv6 supports36160
-Node: Kernel interface36371
-Node: Linux netlink37501
-Node: Zebra protocol38284
-Node: Copying39010
-Node: Command Index58211
-Node: VTY Key Index64445
+Node: Sample Configuration14165
+Node: VTY14864
+Node: What is VTY15350
+Node: How to use VTY15568
+Node: View mode and Enable mode16118
+Node: Other modes16335
+Node: Command line editing16473
+Node: Advanced command line editing17068
+Node: Command line history17585
+Node: Command line completion17847
+Node: Command line help18070
+Node: zebra18350
+Node: Common invoking options18733
+Node: Invoking zebra19245
+Node: Interface19680
+Node: Static route20224
+Node: zebra terminal mode commands20615
+Node: ripd21516
+Node: Invoking ripd21777
+Node: ripd configuration22077
+Node: ripd terminal mode commands23307
+Node: ripngd23505
+Node: Invoking ripngd23826
+Node: ripngd configuration24081
+Node: ripngd terminal mode commands24845
+Node: ripngd filtering commands25196
+Node: ospfd25661
+Node: Invoking ospfd25954
+Node: ospfd configuration26204
+Node: ospfd terminal mode commands26503
+Node: ospf6d26659
+Node: Invoking ospf6d26776
+Node: bgpd26881
+Node: Invoking bgpd27438
+Node: bgpd configuration27814
+Node: bgpd terminal mode commands31109
+Node: bgpd sample session31748
+Node: bgpd log format31948
+Node: How to set up 6bone connection32438
+Node: Filtering33669
+Node: IP access list34047
+Node: IP prefix list34421
+Node: IP community list34643
+Node: AS path access list34844
+Node: Route map35029
+Node: Route map command35517
+Node: Route map match command35720
+Node: Route map set command36331
+Node: IPv6 supports37154
+Node: Kernel interface37365
+Node: Linux netlink38495
+Node: Zebra protocol39278
+Node: Copying40004
+Node: Command Index59205
+Node: VTY Key Index66188
 
 End Tag Table

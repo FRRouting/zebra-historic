@@ -357,33 +357,8 @@ ripng_info_free (struct ripng_info *rinfo)
   XFREE (MTYPE_RIPNG_ROUTE, rinfo);
 }
 
-/* If prefix is permitted return 1. */
-int
-ripng_distribute_in (struct interface *ifp, struct prefix *p)
-{
-  int ret;
-
-  /* Apply distribute-list in. */
-  if (ifp->distribute_in)
-    {
-      ret = access_list_apply (ifp->distribute_in, p);
-      if (!ret)
-	{
-	  char buf[BUFSIZ];
-	  
-	  if (IS_RIPNG_DEBUG_PACKET)
-	    zlog (NULL, LOG_INFO, "  %s/%d filtered by distribute-list",
-		  inet_ntop (AF_INET6, &p->u.prefix6, buf, BUFSIZ), 
-		  p->prefixlen);
-	  return ret;
-	}
-    }
-  return 1;
-}
-
-/* RIP packet adding routine. */
 void
-ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
+ripng_route_add (struct rte *rte, struct sockaddr_in6 *from,
 		 struct in6_addr *nexthop, unsigned int ifindex,
 		 time_t gettime)
 {
@@ -395,13 +370,17 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   struct ripng_interface *ri;
   struct prefix p;
 
+  /* Fetch packet incoming interface. */
   ifp = if_lookup_by_index (ifindex);
+
   if (ifp == NULL)
     {
-      zlog (NULL, LOG_WARNING, 
-	    "Can't lookup interface by index [%d]", ifindex);
+      zlog_warn ("Can't lookup interface by ifindex: %d", ifindex);
       return;
     }
+
+  /* Get RIPng interface confguration for check filtering
+     information. */
   ri = ifp->if_data;
 
   /* Multicast address check. */
@@ -437,6 +416,7 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
       return;
     }
 
+#ifdef RIPNG_ADVANCE
   /* Default route check. */
   if (IN6_IS_ADDR_UNSPECIFIED (&rte->addr))
     {
@@ -447,6 +427,7 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
 	  return;
 	}
     }
+#endif /* RIPNG_ADVANCE */
 
   if (ri->ri_receive == RIPNG_RECEIVE_OFF)
     {
@@ -459,10 +440,13 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   p.u.prefix6 = rte->addr;
   p.prefixlen = rte->masklen;
 
-  if (ripng_distribute_in (ifp, &p) == 0)
+  /* Apply input distribute-list. */
+  if (distribute_apply_in (ifp, &p) == FILTER_DENY)
     {
-      if (IS_RIPNG_DEBUG_EVENT)
-	zlog (NULL, LOG_INFO, "[Event] RIPng route is filtered by distribute in.");
+      if (IS_RIPNG_DEBUG_PACKET)
+	zlog_info ("RIPng %s/%d is filtered by distribute in",
+		   inet_ntop (AF_INET6, &p.u.prefix6, buf, INET6_ADDRSTRLEN),
+		   p.prefixlen);
       return;
     }
 
@@ -477,6 +461,7 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
   slot = node->info;
   
   rinfo = RIPNG_SLOT_RTE(slot);
+
   if (rinfo)
     {
       /* If route already exist in routing table then update timer of
@@ -486,8 +471,26 @@ ripng_add_route (struct rte *rte, struct sockaddr_in6 *from,
 	      inet_ntop (AF_INET6, &rte->addr, buf, INET6_ADDRSTRLEN), 
 	      rte->masklen);
 
-      /* XXX Maybe we need nexthop and incoming address check here. */
+      /* Metric check. */
+      if (rte->metric < rinfo->metric)
+	{
+	  /* Delete old nexthop. */
+	  ripng_zebra_ipv6_delete ((struct prefix_ipv6 *)&node->p,
+				   &rinfo->nexthop, rinfo->ifindex);
 
+	  /* Route change. */
+	  rinfo->metric = rte->metric;
+	  
+	  if (!IN6_IS_ADDR_UNSPECIFIED (nexthop))
+	    IPV6_ADDR_COPY (&rinfo->nexthop, nexthop);
+	  else
+	    IPV6_ADDR_COPY (&rinfo->nexthop, &from->sin6_addr);
+
+	  IPV6_ADDR_COPY (&rinfo->gateway, &from->sin6_addr);
+	  rinfo->type = RIPNG_ROUTE_RTE;
+	  rinfo->rip_tag = ntohs (rte->tag);
+	  rinfo->ifindex = ifindex;
+	}
       rinfo->timer = gettime;
 
       /* We have to unlock route node. */
@@ -582,7 +585,7 @@ ripng_response_process (struct ripng_packet *rp, int size,
 	{
 	case 0: case 1: case 2: case 3: case 4: case 5:	case 6: case 7:
 	case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
-	  ripng_add_route (rte, from, &nexthop, ifindex, gettime);
+	  ripng_route_add (rte, from, &nexthop, ifindex, gettime);
 	  break;
 	case RIPNG_METRIC_INFINITY:
 	  ripng_delete_route (rte, from);
@@ -758,31 +761,6 @@ ripng_write_rte (int index, struct stream *s, struct prefix_ipv6 *p,
   return index;
 }
 
-
-/* If prefix is permitted return 1. */
-int
-ripng_distribute_out (struct interface *ifp, struct prefix *p)
-{
-  int ret;
-
-  /* Apply distribute-list out. */
-  if (ifp->distribute_out)
-    {
-      ret = access_list_apply (ifp->distribute_out, p);
-      if (!ret)
-	{
-	  char buf[BUFSIZ];
-	  
-	  if (IS_RIPNG_DEBUG_PACKET)
-	    zlog (NULL, LOG_INFO, "  %s/%d filtered by distribute-list",
-		  inet_ntop (AF_INET6, &p->u.prefix6, buf, BUFSIZ), 
-		  p->prefixlen);
-	  return ret;
-	}
-    }
-  return 1;
-}
-
 /* Supply route to the interface. */
 void
 ripng_supply (struct interface *ifp)
@@ -795,6 +773,7 @@ ripng_supply (struct interface *ifp)
   int maxrte;
   u_char metric;
   struct stream *s;
+  char buf[BUFSIZ];
   
   /* Number of written routing table entry */
   nrte = 0;
@@ -815,6 +794,17 @@ ripng_supply (struct interface *ifp)
       if (slot == NULL)
 	continue;
 	
+      /* Output distribute-list filter.*/
+      if (distribute_apply_out (ifp, &node->p) == FILTER_DENY)
+	{
+	  if (IS_RIPNG_DEBUG_PACKET)
+	    zlog_info ("RIPng %s%d is filtered", 
+		       inet_ntop (AF_INET6, &node->p.u.prefix6, buf, BUFSIZ),
+		       node->p.prefixlen);
+	  continue;
+	}
+  
+      /* Support for aggregation.  Not yet done. */
       rinfo = RIPNG_SLOT_AGGREGATE(slot);
       if (rinfo)
 	{
@@ -825,10 +815,6 @@ ripng_supply (struct interface *ifp)
 
       if (rinfo)
 	{
-	  ret = ripng_distribute_out (ifp, &node->p);
-	  if (!ret)
-	    continue;
-  
 	  metric = rinfo->metric + ifp->metric;
 	  if (metric > RIPNG_METRIC_INFINITY)
 	    metric = RIPNG_METRIC_INFINITY;
@@ -856,10 +842,6 @@ ripng_supply (struct interface *ifp)
 	  /* Split horizon. */
 	  if (rinfo->ifindex != ifp->index)
 	    {
-	      ret = ripng_distribute_out (ifp, &node->p);
-	      if (!ret)
-		continue;
-  
 	      metric = rinfo->metric + ifp->metric;
 	      if (metric > RIPNG_METRIC_INFINITY)
 		metric = RIPNG_METRIC_INFINITY;
@@ -952,7 +934,7 @@ ripng_create ()
   /* ripng should be NULL. */
   assert (ripng == NULL);
 
-  /* Allocaste RIP instance. */
+  /* Allocaste RIPng instance. */
   ripng = XMALLOC (0, sizeof (struct ripng));
   bzero (ripng, sizeof (struct ripng));
 
@@ -1191,8 +1173,8 @@ DEFUN (router_ripng,
   return CMD_SUCCESS;
 }
 
-DEFUN (route,
-       route_cmd,
+DEFUN (ripng_route,
+       ripng_route_cmd,
        "route IPV6ADDR",
        "Static route setup\n"
        "Set static RIPng route announcement\n")
@@ -1229,8 +1211,8 @@ DEFUN (route,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_route,
-       no_route_cmd,
+DEFUN (no_ripng_route,
+       no_ripng_route_cmd,
        "no route IPV6ADDR",
        NO_STR
        "Static route setup\n"
@@ -1441,13 +1423,12 @@ ripng_init ()
   install_element (VIEW_NODE, &show_ip_ripng_cmd);
   install_element (ENABLE_NODE, &show_ip_ripng_cmd);
   install_element (CONFIG_NODE, &router_ripng_cmd);
-  install_element (RIPNG_NODE, &config_end_cmd);
-  install_element (RIPNG_NODE, &config_exit_cmd);
-  install_element (RIPNG_NODE, &config_help_cmd);
+
+  install_default (RIPNG_NODE);
   install_element (RIPNG_NODE, &aggregate_cmd);
   install_element (RIPNG_NODE, &no_aggregate_cmd);
-  install_element (RIPNG_NODE, &route_cmd);
-  install_element (RIPNG_NODE, &no_route_cmd);
+  install_element (RIPNG_NODE, &ripng_route_cmd);
+  install_element (RIPNG_NODE, &no_ripng_route_cmd);
   install_element (RIPNG_NODE, &ripng_flush_timer_cmd);
 
   /* Interface related function init. */

@@ -1184,6 +1184,59 @@ DEFUN (show_ipv6_bgp,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_ipv6_bgp_regexp, 
+       show_ipv6_bgp_regexp_cmd,
+       "show ipv6 bgp regexp ...",
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Show regular expression matched bgp routes\n"
+       "\n")
+{
+  int i;
+  int ret;
+  struct buffer *b;
+  char *regstr;
+  int first;
+  struct route_node *node;
+  struct bgp_info *route;
+  regex_t *regex;
+  
+  first = 0;
+  b = buffer_new (BUFFER_STRING, 1024);
+  for (i = 0; i < argc; i++)
+    {
+      if (first)
+	buffer_putc (b, ' ');
+      else
+	first = 1;
+
+      buffer_putstr (b, argv[i]);
+    }
+  buffer_putc (b, '\0');
+
+  regstr = buffer_getstr (b);
+  buffer_free (b);
+
+  regex = bgp_regcomp (regstr);
+  if (! regex)
+    {
+      vty_out (vty, "can't compile regexp %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  for (node = route_top (bgp_table_ipv6); node; node = route_next (node)) 
+    for (route = node->info; route; route = route->next)
+      {
+	ret = bgp_regexec (regex, route->attr->aspath);
+	if (ret != REG_NOMATCH)
+	  route_vty_out (vty, &node->p, route);
+      }
+  bgp_regex_free (regex);
+
+  return CMD_SUCCESS;
+}
+
 /* Network configuration for IPv6. */
 int
 bgp_network_config_ipv6 (struct vty *vty, char *address_str)
@@ -1473,6 +1526,7 @@ bgp_route_init ()
   bgp_aggregate_ipv6 = route_table_init ();
 
   install_element (VIEW_NODE, &show_ipv6_bgp_cmd);
+  install_element (VIEW_NODE, &show_ipv6_bgp_regexp_cmd);
   install_element (ENABLE_NODE, &show_ipv6_bgp_cmd);
 #endif /* HAVE_IPV6 */
 }

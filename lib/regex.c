@@ -2,25 +2,22 @@
    version 0.12.
    (Implements POSIX draft P1003.2/D11.2, except for some of the
    internationalization features.)
-   Copyright (C) 1993, 94, 95, 96, 97, 98 Free Software Foundation, Inc.
+   Copyright (C) 1993, 94, 95, 96, 97, 98, 99 Free Software Foundation, Inc.
 
-   NOTE: The canonical source of this file is maintained with the GNU C Library.
-   Bugs can be reported to bug-glibc@gnu.org.
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Library General Public License as
+   published by the Free Software Foundation; either version 2 of the
+   License, or (at your option) any later version.
 
-   This program is free software; you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 2, or (at your option) any
-   later version.
-
-   This program is distributed in the hope that it will be useful,
+   The GNU C Library is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Library General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
-   USA.  */
+   You should have received a copy of the GNU Library General Public
+   License along with the GNU C Library; see the file COPYING.LIB.  If not,
+   write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /* AIX requires this to be the first thing in the file. */
 #if defined _AIX && !defined REGEX_MALLOC
@@ -45,20 +42,24 @@
 #if defined STDC_HEADERS && !defined emacs
 # include <stddef.h>
 #else
-/* We need this for `regex-gnu.h', and perhaps for the Emacs include files.  */
+/* We need this for `regex.h', and perhaps for the Emacs include files.  */
 # include <sys/types.h>
 #endif
 
+#define WIDE_CHAR_SUPPORT (HAVE_WCTYPE_H && HAVE_WCHAR_H && HAVE_BTOWC)
+
 /* For platform which support the ISO C amendement 1 functionality we
    support user defined character classes.  */
-#if defined _LIBC || (defined HAVE_WCTYPE_H && defined HAVE_WCHAR_H)
-# include <wctype.h>
+#if defined _LIBC || WIDE_CHAR_SUPPORT
+/* Solaris 2.5 has a bug: <wchar.h> must be included before <wctype.h>.  */
 # include <wchar.h>
+# include <wctype.h>
+#endif
 
+#ifdef _LIBC
 /* We have to keep the namespace clean.  */
 # define regfree(preg) __regfree (preg)
 # define regexec(pr, st, nm, pm, ef) __regexec (pr, st, nm, pm, ef)
-# define regnexec(pr, st, ln, nm, pm, ef) __regnexec (pr, st, ln, nm, pm, ef)
 # define regcomp(preg, pattern, cflags) __regcomp (preg, pattern, cflags)
 # define regerror(errcode, preg, errbuf, errbuf_size) \
 	__regerror(errcode, preg, errbuf, errbuf_size)
@@ -178,7 +179,7 @@ static void
 init_syntax_once ()
 {
    register int c;
-   static int done = 0;
+   static int done;
 
    if (done)
      return;
@@ -206,7 +207,7 @@ init_syntax_once ()
 #endif /* not emacs */
 
 /* Get the interface, including the syntax bits.  */
-#include "regex-gnu.h"
+#include <regex-gnu.h>
 
 /* isalpha etc. are used for the character classes.  */
 #include <ctype.h>
@@ -252,6 +253,12 @@ init_syntax_once ()
 #define ISSPACE(c) (ISASCII (c) && isspace (c))
 #define ISUPPER(c) (ISASCII (c) && isupper (c))
 #define ISXDIGIT(c) (ISASCII (c) && isxdigit (c))
+
+#ifdef _tolower
+# define TOLOWER(c) _tolower(c)
+#else
+# define TOLOWER(c) tolower(c)
+#endif
 
 #ifndef NULL
 # define NULL (void *)0
@@ -608,7 +615,7 @@ extract_number_and_incr (destination, source)
 /* It is useful to test things that ``must'' be true when debugging.  */
 # include <assert.h>
 
-static int debug = 0;
+static int debug;
 
 # define DEBUG_STATEMENT(e) e
 # define DEBUG_PRINT1(x) if (debug) printf (x)
@@ -980,7 +987,7 @@ reg_syntax_t re_syntax_options;
    different, incompatible syntaxes.
 
    The argument SYNTAX is a bit mask comprised of the various bits
-   defined in regex-gnu.h.  We return the old syntax.  */
+   defined in regex.h.  We return the old syntax.  */
 
 reg_syntax_t
 re_set_syntax (syntax)
@@ -1002,29 +1009,83 @@ weak_alias (__re_set_syntax, re_set_syntax)
 #endif
 
 /* This table gives an error message for each of the error codes listed
-   in regex-gnu.h.  Obviously the order here has to be same as there.
+   in regex.h.  Obviously the order here has to be same as there.
    POSIX doesn't require that we do anything for REG_NOERROR,
    but why not be nice?  */
 
-static const char *re_error_msgid[] =
+static const char re_error_msgid[] =
   {
-    gettext_noop ("Success"),	/* REG_NOERROR */
-    gettext_noop ("No match"),	/* REG_NOMATCH */
-    gettext_noop ("Invalid regular expression"), /* REG_BADPAT */
+#define REG_NOERROR_IDX	0
+    gettext_noop ("Success")	/* REG_NOERROR */
+    "\0"
+#define REG_NOMATCH_IDX (REG_NOERROR_IDX + sizeof "Success")
+    gettext_noop ("No match")	/* REG_NOMATCH */
+    "\0"
+#define REG_BADPAT_IDX	(REG_NOMATCH_IDX + sizeof "No match")
+    gettext_noop ("Invalid regular expression") /* REG_BADPAT */
+    "\0"
+#define REG_ECOLLATE_IDX (REG_BADPAT_IDX + sizeof "Invalid regular expression")
     gettext_noop ("Invalid collation character"), /* REG_ECOLLATE */
-    gettext_noop ("Invalid character class name"), /* REG_ECTYPE */
-    gettext_noop ("Trailing backslash"), /* REG_EESCAPE */
-    gettext_noop ("Invalid back reference"), /* REG_ESUBREG */
-    gettext_noop ("Unmatched [ or [^"),	/* REG_EBRACK */
-    gettext_noop ("Unmatched ( or \\("), /* REG_EPAREN */
-    gettext_noop ("Unmatched \\{"), /* REG_EBRACE */
-    gettext_noop ("Invalid content of \\{\\}"), /* REG_BADBR */
-    gettext_noop ("Invalid range end"),	/* REG_ERANGE */
-    gettext_noop ("Memory exhausted"), /* REG_ESPACE */
-    gettext_noop ("Invalid preceding regular expression"), /* REG_BADRPT */
-    gettext_noop ("Premature end of regular expression"), /* REG_EEND */
-    gettext_noop ("Regular expression too big"), /* REG_ESIZE */
+    "\0"
+#define REG_ECTYPE_IDX	(REG_ECOLLATE_IDX + sizeof "Invalid collation character")
+    gettext_noop ("Invalid character class name") /* REG_ECTYPE */
+    "\0"
+#define REG_EESCAPE_IDX	(REG_ECTYPE_IDX + sizeof "Invalid character class name")
+    gettext_noop ("Trailing backslash") /* REG_EESCAPE */
+    "\0"
+#define REG_ESUBREG_IDX	(REG_EESCAPE_IDX + sizeof "Trailing backslash")
+    gettext_noop ("Invalid back reference") /* REG_ESUBREG */
+    "\0"
+#define REG_EBRACK_IDX	(REG_ESUBREG_IDX + sizeof "Invalid back reference")
+    gettext_noop ("Unmatched [ or [^")	/* REG_EBRACK */
+    "\0"
+#define REG_EPAREN_IDX	(REG_EBRACK_IDX + sizeof "Unmatched [ or [^")
+    gettext_noop ("Unmatched ( or \\(") /* REG_EPAREN */
+    "\0"
+#define REG_EBRACE_IDX	(REG_EPAREN_IDX + sizeof "Unmatched ( or \\(")
+    gettext_noop ("Unmatched \\{") /* REG_EBRACE */
+    "\0"
+#define REG_BADBR_IDX	(REG_EBRACE_IDX + sizeof "Unmatched \\{")
+    gettext_noop ("Invalid content of \\{\\}") /* REG_BADBR */
+    "\0"
+#define REG_ERANGE_IDX	(REG_BADBR_IDX + sizeof "Invalid content of \\{\\}")
+    gettext_noop ("Invalid range end")	/* REG_ERANGE */
+    "\0"
+#define REG_ESPACE_IDX	(REG_ERANGE_IDX + sizeof "Invalid range end")
+    gettext_noop ("Memory exhausted") /* REG_ESPACE */
+    "\0"
+#define REG_BADRPT_IDX	(REG_ESPACE_IDX + sizeof "Memory exhausted")
+    gettext_noop ("Invalid preceding regular expression") /* REG_BADRPT */
+    "\0"
+#define REG_EEND_IDX	(REG_BADRPT_IDX + sizeof "Invalid preceding regular expression")
+    gettext_noop ("Premature end of regular expression") /* REG_EEND */
+    "\0"
+#define REG_ESIZE_IDX	(REG_EEND_IDX + sizeof "Premature end of regular expression")
+    gettext_noop ("Regular expression too big") /* REG_ESIZE */
+    "\0"
+#define REG_ERPAREN_IDX	(REG_ESIZE_IDX + sizeof "Regular expression too big")
     gettext_noop ("Unmatched ) or \\)"), /* REG_ERPAREN */
+  };
+
+static const size_t re_error_msgid_idx[] =
+  {
+    REG_NOERROR_IDX,
+    REG_NOMATCH_IDX,
+    REG_BADPAT_IDX,
+    REG_ECOLLATE_IDX,
+    REG_ECTYPE_IDX,
+    REG_EESCAPE_IDX,
+    REG_ESUBREG_IDX,
+    REG_EBRACK_IDX,
+    REG_EPAREN_IDX,
+    REG_EBRACE_IDX,
+    REG_BADBR_IDX,
+    REG_ERANGE_IDX,
+    REG_ESPACE_IDX,
+    REG_BADRPT_IDX,
+    REG_EEND_IDX,
+    REG_ESIZE_IDX,
+    REG_ERPAREN_IDX
   };
 
 /* Avoiding alloca during matching, to placate r_alloc.  */
@@ -1717,7 +1778,7 @@ typedef struct
        } 								\
     }
 
-#if defined _LIBC || (defined HAVE_WCTYPE_H && defined HAVE_WCHAR_H)
+#if defined _LIBC || WIDE_CHAR_SUPPORT
 /* The GNU C library provides support for user-defined character classes
    and the functions from ISO C amendement 1.  */
 # ifdef CHARCLASS_NAME_MAX
@@ -1798,7 +1859,7 @@ static boolean group_in_compile_stack _RE_ARGS ((compile_stack_type
 						 regnum_t regnum));
 
 /* `regex_compile' compiles PATTERN (of length SIZE) according to SYNTAX.
-   Returns one of error codes defined in `regex-gnu.h', or zero for success.
+   Returns one of error codes defined in `regex.h', or zero for success.
 
    Assumes the `allocated' (and perhaps `buffer') and `translate'
    fields are set in BUFP on entry.
@@ -2209,10 +2270,13 @@ regex_compile (pattern, size, syntax, bufp)
                     for (;;)
                       {
                         PATFETCH (c);
-                        if ((c == ':' && *p == ']') || p == pend
-                            || c1 == CHAR_CLASS_MAX_LENGTH)
+                        if ((c == ':' && *p == ']') || p == pend)
                           break;
-                        str[c1++] = c;
+			if (c1 < CHAR_CLASS_MAX_LENGTH)
+			  str[c1++] = c;
+			else
+			  /* This is in any case an invalid class name.  */
+			  str[0] = '\0';
                       }
                     str[c1] = '\0';
 
@@ -2221,7 +2285,7 @@ regex_compile (pattern, size, syntax, bufp)
                        the leading `:' and `[' (but set bits for them).  */
                     if (c == ':' && *p == ']')
                       {
-#if defined _LIBC || (defined HAVE_WCTYPE_H && defined HAVE_WCHAR_H)
+#if defined _LIBC || WIDE_CHAR_SUPPORT
                         boolean is_lower = STREQ (str, "lower");
                         boolean is_upper = STREQ (str, "upper");
 			wctype_t wt;
@@ -2242,10 +2306,10 @@ regex_compile (pattern, size, syntax, bufp)
 # ifdef _LIBC
 			    if (__iswctype (__btowc (ch), wt))
 			      SET_LIST_BIT (ch);
-#else
+# else
 			    if (iswctype (btowc (ch), wt))
 			      SET_LIST_BIT (ch);
-#endif
+# endif
 
 			    if (translate && (is_upper || is_lower)
 				&& (ISUPPER (ch) || ISLOWER (ch)))
@@ -3526,7 +3590,11 @@ re_search_2 (bufp, string1, size1, string2, size2, startpos, range, regs, stop)
 
   /* If the search isn't to be a backwards one, don't waste time in a
      search for a pattern that must be anchored.  */
-  if (bufp->used > 0 && (re_opcode_t) bufp->buffer[0] == begbuf && range > 0)
+  if (bufp->used > 0 && range > 0
+      && ((re_opcode_t) bufp->buffer[0] == begbuf
+	  /* `begline' is like `begbuf' if it cannot match at newlines.  */
+	  || ((re_opcode_t) bufp->buffer[0] == begline
+	      && !bufp->newline_anchor)))
     {
       if (startpos > 0)
 	return -1;
@@ -3834,7 +3902,7 @@ re_match_2_internal (bufp, string1, size1, string2, size2, pos, regs, stop)
   fail_stack_type fail_stack;
 #endif
 #ifdef DEBUG
-  static unsigned failure_id = 0;
+  static unsigned failure_id;
   unsigned nfailure_points_pushed = 0, nfailure_points_popped = 0;
 #endif
 
@@ -5475,7 +5543,7 @@ re_compile_pattern (pattern, length, bufp)
 
   if (!ret)
     return NULL;
-  return gettext (re_error_msgid[(int) ret]);
+  return gettext (re_error_msgid + re_error_msgid_idx[(int) ret]);
 }
 #ifdef _LIBC
 weak_alias (__re_compile_pattern, re_compile_pattern)
@@ -5512,12 +5580,14 @@ re_comp (s)
     {
       re_comp_buf.buffer = (unsigned char *) malloc (200);
       if (re_comp_buf.buffer == NULL)
-        return gettext (re_error_msgid[(int) REG_ESPACE]);
+        return (char *) gettext (re_error_msgid
+				 + re_error_msgid_idx[(int) REG_ESPACE]);
       re_comp_buf.allocated = 200;
 
       re_comp_buf.fastmap = (char *) malloc (1 << BYTEWIDTH);
       if (re_comp_buf.fastmap == NULL)
-	return gettext (re_error_msgid[(int) REG_ESPACE]);
+	return (char *) gettext (re_error_msgid
+				 + re_error_msgid_idx[(int) REG_ESPACE]);
     }
 
   /* Since `re_exec' always passes NULL for the `regs' argument, we
@@ -5532,7 +5602,7 @@ re_comp (s)
     return NULL;
 
   /* Yes, we're discarding `const' here if !HAVE_LIBINTL.  */
-  return (char *) gettext (re_error_msgid[(int) ret]);
+  return (char *) gettext (re_error_msgid + re_error_msgid_idx[(int) ret]);
 }
 
 
@@ -5565,7 +5635,8 @@ re_exec (s)
        REG_EXTENDED bit in CFLAGS is set; otherwise, to
        RE_SYNTAX_POSIX_BASIC;
      `newline_anchor' to REG_NEWLINE being set in CFLAGS;
-     `fastmap' and `fastmap_accurate' to zero;
+     `fastmap' to an allocated space for the fastmap;
+     `fastmap_accurate' to zero;
      `re_nsub' to the number of subexpressions in PATTERN.
 
    PATTERN is the address of the pattern string.
@@ -5585,7 +5656,7 @@ re_exec (s)
      routine will report only success or failure, and nothing about the
      registers.
 
-   It returns 0 if it succeeds, nonzero if it doesn't.  (See regex-gnu.h for
+   It returns 0 if it succeeds, nonzero if it doesn't.  (See regex.h for
    the return codes and their meanings.)  */
 
 int
@@ -5604,11 +5675,8 @@ regcomp (preg, pattern, cflags)
   preg->allocated = 0;
   preg->used = 0;
 
-  /* Don't bother to use a fastmap when searching.  This simplifies the
-     REG_NEWLINE case: if we used a fastmap, we'd have to put all the
-     characters after newlines into the fastmap.  This way, we just try
-     every character.  */
-  preg->fastmap = 0;
+  /* Try to allocate space for the fastmap.  */
+  preg->fastmap = (char *) malloc (1 << BYTEWIDTH);
 
   if (cflags & REG_ICASE)
     {
@@ -5622,7 +5690,7 @@ regcomp (preg, pattern, cflags)
 
       /* Map uppercase characters to corresponding lowercase ones.  */
       for (i = 0; i < CHAR_SET_SIZE; i++)
-        preg->translate[i] = ISUPPER (i) ? tolower (i) : i;
+        preg->translate[i] = ISUPPER (i) ? TOLOWER (i) : i;
     }
   else
     preg->translate = NULL;
@@ -5648,90 +5716,25 @@ regcomp (preg, pattern, cflags)
      unmatched close-group: both are REG_EPAREN.  */
   if (ret == REG_ERPAREN) ret = REG_EPAREN;
 
+  if (ret == REG_NOERROR && preg->fastmap)
+    {
+      /* Compute the fastmap now, since regexec cannot modify the pattern
+	 buffer.  */
+      if (re_compile_fastmap (preg) == -2)
+	{
+	  /* Some error occured while computing the fastmap, just forget
+	     about it.  */
+	  free (preg->fastmap);
+	  preg->fastmap = NULL;
+	}
+    }
+
   return (int) ret;
 }
 #ifdef _LIBC
 weak_alias (__regcomp, regcomp)
 #endif
 
-
-/* regnexec searches for a given pattern, specified by PREG, in the
-   memory buffer STRING of lengthe LEN.
-
-   If NMATCH is zero or REG_NOSUB was set in the cflags argument to
-   `regcomp', we ignore PMATCH.  Otherwise, we assume PMATCH has at
-   least NMATCH elements, and we set them to the offsets of the
-   corresponding matched substrings.
-
-   EFLAGS specifies `execution flags' which affect matching: if
-   REG_NOTBOL is set, then ^ does not match at the beginning of the
-   string; if REG_NOTEOL is set, then $ does not match at the end.
-
-   We return 0 if we find a match and REG_NOMATCH if not.  */
-
-int
-regnexec (preg, string, len, nmatch, pmatch, eflags)
-    const regex_t *preg;
-    const char *string;
-    size_t len;
-    size_t nmatch;
-    regmatch_t pmatch[];
-    int eflags;
-{
-  int ret;
-  struct re_registers regs;
-  regex_t private_preg;
-  boolean want_reg_info = !preg->no_sub && nmatch > 0;
-
-  private_preg = *preg;
-
-  private_preg.not_bol = !!(eflags & REG_NOTBOL);
-  private_preg.not_eol = !!(eflags & REG_NOTEOL);
-
-  /* The user has told us exactly how many registers to return
-     information about, via `nmatch'.  We have to pass that on to the
-     matching routines.  */
-  private_preg.regs_allocated = REGS_FIXED;
-
-  if (want_reg_info)
-    {
-      regs.num_regs = nmatch;
-      regs.start = TALLOC (nmatch, regoff_t);
-      regs.end = TALLOC (nmatch, regoff_t);
-      if (regs.start == NULL || regs.end == NULL)
-        return (int) REG_NOMATCH;
-    }
-
-  /* Perform the searching operation.  */
-  ret = re_search (&private_preg, string, len,
-                   /* start: */ 0, /* range: */ len,
-                   want_reg_info ? &regs : (struct re_registers *) 0);
-
-  /* Copy the register information to the POSIX structure.  */
-  if (want_reg_info)
-    {
-      if (ret >= 0)
-        {
-          unsigned r;
-
-          for (r = 0; r < nmatch; r++)
-            {
-              pmatch[r].rm_so = regs.start[r];
-              pmatch[r].rm_eo = regs.end[r];
-            }
-        }
-
-      /* If we needed the temporary register info, free the space now.  */
-      free (regs.start);
-      free (regs.end);
-    }
-
-  /* We want zero return to mean success, unlike `re_search'.  */
-  return ret >= 0 ? (int) REG_NOERROR : (int) REG_NOMATCH;
-}
-#ifdef _LIBC
-weak_alias (__regnexec, regnexec)
-#endif
 
 /* regexec searches for a given pattern, specified by PREG, in the
    string STRING.
@@ -5755,7 +5758,56 @@ regexec (preg, string, nmatch, pmatch, eflags)
     regmatch_t pmatch[];
     int eflags;
 {
-  return regnexec(preg, string, strlen(string), nmatch, pmatch, eflags);
+  int ret;
+  struct re_registers regs;
+  regex_t private_preg;
+  int len = strlen (string);
+  boolean want_reg_info = !preg->no_sub && nmatch > 0;
+
+  private_preg = *preg;
+
+  private_preg.not_bol = !!(eflags & REG_NOTBOL);
+  private_preg.not_eol = !!(eflags & REG_NOTEOL);
+
+  /* The user has told us exactly how many registers to return
+     information about, via `nmatch'.  We have to pass that on to the
+     matching routines.  */
+  private_preg.regs_allocated = REGS_FIXED;
+
+  if (want_reg_info)
+    {
+      regs.num_regs = nmatch;
+      regs.start = TALLOC (nmatch * 2, regoff_t);
+      if (regs.start == NULL)
+        return (int) REG_NOMATCH;
+      regs.end = regs.start + nmatch;
+    }
+
+  /* Perform the searching operation.  */
+  ret = re_search (&private_preg, string, len,
+                   /* start: */ 0, /* range: */ len,
+                   want_reg_info ? &regs : (struct re_registers *) 0);
+
+  /* Copy the register information to the POSIX structure.  */
+  if (want_reg_info)
+    {
+      if (ret >= 0)
+        {
+          unsigned r;
+
+          for (r = 0; r < nmatch; r++)
+            {
+              pmatch[r].rm_so = regs.start[r];
+              pmatch[r].rm_eo = regs.end[r];
+            }
+        }
+
+      /* If we needed the temporary register info, free the space now.  */
+      free (regs.start);
+    }
+
+  /* We want zero return to mean success, unlike `re_search'.  */
+  return ret >= 0 ? (int) REG_NOERROR : (int) REG_NOMATCH;
 }
 #ifdef _LIBC
 weak_alias (__regexec, regexec)
@@ -5776,15 +5828,15 @@ regerror (errcode, preg, errbuf, errbuf_size)
   size_t msg_size;
 
   if (errcode < 0
-      || errcode >= (int) (sizeof (re_error_msgid)
-			   / sizeof (re_error_msgid[0])))
+      || errcode >= (int) (sizeof (re_error_msgid_idx)
+			   / sizeof (re_error_msgid_idx[0])))
     /* Only error codes returned by the rest of the code should be passed
        to this routine.  If we are given anything else, or if other regex
        code generates an invalid error code, then the program has a bug.
        Dump core so we can fix it.  */
     abort ();
 
-  msg = gettext (re_error_msgid[errcode]);
+  msg = gettext (re_error_msgid + re_error_msgid_idx[errcode]);
 
   msg_size = strlen (msg) + 1; /* Includes the null.  */
 

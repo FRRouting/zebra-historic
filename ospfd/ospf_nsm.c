@@ -51,10 +51,11 @@ ospf_inactivity_timer (struct thread *thread)
   nbr = THREAD_ARG (thread);
   nbr->t_inactivity = NULL;
 
-  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_InactivityTimer);
+  if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
+    zlog (NULL, LOG_DEBUG, "NSM [%s]: Timer (Inactivity timer expire)",
+	  inet_ntoa (nbr->router_id));
 
-  zlog (NULL, LOG_DEBUG, "NSM [%s]: Timer (Inactivity timer expire)",
-	inet_ntoa (nbr->router_id));
+  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_InactivityTimer);
 
   return 0;
 }
@@ -70,8 +71,9 @@ ospf_db_desc_timer (struct thread *thread)
 
   oi = nbr->oi;
 
-  zlog (NULL, LOG_INFO, "NSM [%s]: Timer (DD Retransmit timer expire)",
-	nbr->host);
+  if (IS_OSPF_DEBUG (nsm, NSM_TIMERS))
+    zlog (NULL, LOG_INFO, "NSM [%s]: Timer (DD Retransmit timer expire)",
+	  nbr->host);
 
   /* Sending DD packet. */
   ospf_db_desc_resend (nbr);
@@ -124,7 +126,8 @@ nsm_timer_set (struct ospf_neighbor *nbr)
 int
 nsm_ignore (struct ospf_neighbor *nbr)
 {
-  zlog (NULL, LOG_INFO, "NSM [%s]: nsm_ignore called", nbr->host);
+  if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
+    zlog (NULL, LOG_INFO, "NSM [%s]: nsm_ignore called", nbr->host);
 
   return 0;
 }
@@ -163,13 +166,13 @@ nsm_twoway_received (struct ospf_neighbor *nbr)
     next_state = NSM_ExStart;
 
   /* Router itself is the DRouter or the BDRouter. */
-  if (!IPV4_ADDR_CMP (&ospf_top->router_id, &oi->d_router) ||
-      !IPV4_ADDR_CMP (&ospf_top->router_id, &oi->bd_router))
+  if (IPV4_ADDR_SAME (&ospf_top->router_id, &oi->d_router) ||
+      IPV4_ADDR_SAME (&ospf_top->router_id, &oi->bd_router))
     next_state = NSM_ExStart;
 
   /* Neighboring Router is the DRouter or the BDRouter. */
-  if (!IPV4_ADDR_CMP (&nbr->router_id, &nbr->d_router) ||
-      !IPV4_ADDR_CMP (&nbr->router_id, &nbr->bd_router))
+  if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router) ||
+      IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
     next_state = NSM_ExStart;
 
   if (next_state == NSM_ExStart)
@@ -240,9 +243,7 @@ nsm_exchange_done (struct ospf_neighbor *nbr)
 
   /* Send Link State Request. */
   ospf_ls_req_send (nbr);
-    /*
-  OSPF_NSM_WRITE_ON (nbr->t_write, ospf_ls_req_send, oi->fd);
-    */
+
   return NSM_Loading;
 }
 
@@ -285,6 +286,25 @@ nsm_kill_nbr (struct ospf_neighbor *nbr)
 int
 nsm_inactivity_timer (struct ospf_neighbor *nbr)
 {
+  /* Clear Link State Retransmission list. */
+  if (nbr->ls_retransmit)
+    list_delete_all_node (nbr->ls_retransmit);
+
+  /* Clear Database Summary list. */
+  if (nbr->db_summary)
+    list_delete_all_node (nbr->db_summary);
+
+  /* Clear Link State Request list. */
+  if (nbr->ls_request)
+    list_delete_all_node (nbr->ls_request);
+
+  /* Reset neighbor values. */
+  nbr->dd_flags = OSPF_DD_FLAG_MS|OSPF_DD_FLAG_M|OSPF_DD_FLAG_I;
+
+  if (nbr->last_send)
+    ospf_packet_free (nbr->last_send);
+  nbr->last_send = NULL;
+
   return 0;
 }
 
@@ -476,7 +496,7 @@ void
 nsm_change_status (struct ospf_neighbor *nbr, int status)
 {
   /* Logging change of status. */
-  if (ospf_debug_nsm)
+  if (IS_OSPF_DEBUG (nsm, NSM_STATUS))
     zlog (NULL, LOG_INFO, "NSM Status change [%s] %s -> %s", nbr->host,
 	  LOOKUP (ospf_nsm_status_msg, nbr->status),
 	  LOOKUP (ospf_nsm_status_msg, status));
@@ -502,7 +522,7 @@ ospf_nsm_event (struct thread *thread)
   if (! next_state)
     next_state = NSM [nbr->status][event].next_state;
 
-  if (0)
+  if (IS_OSPF_DEBUG (nsm, NSM_EVENTS))
     zlog (NULL, LOG_INFO, "OSPF NSM[%s]: %s (%s)", nbr->host,
 	  LOOKUP (ospf_nsm_status_msg, nbr->status),
 	  ospf_nsm_event_str [event]);

@@ -24,7 +24,7 @@
 #define _ZEBRA_BGP_NETWORK_H
 
 int bgp_connect (struct peer *);
-int bgp_serv_sock (unsigned short, int);
+int bgp_serv_sock (unsigned short);
 void bgp_getsockname (struct peer *);
 
 #endif /* _ZEBRA_BGP_NETWORK_H */

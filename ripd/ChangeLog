@@ -1,3 +1,17 @@
+1999-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_timer_set): Function added.
+
+1999-07-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_debug.c: New file added.
+	rip_debug.h: New file added.
+
+1999-07-01  Rick Payne <rickp@rossfell.co.uk>
+
+	* rip_zebra.c (zebra_init): Install standard commands to
+	ZEBRA_NODE.
+
 1999-06-01  David Luyer <luyer@ucs.uwa.edu.au>
 
 	* ripd.c (rip_process_route): Add support for RIP version 1.

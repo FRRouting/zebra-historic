@@ -139,6 +139,26 @@ distribute_apply_all ()
     }
 }
 
+/* Apply input distribute-list to the prefix. */
+enum filter_type
+distribute_apply_in (struct interface *ifp, struct prefix *p)
+{
+  if (ifp->distribute_in)
+    return (access_list_apply (ifp->distribute_in, p));
+
+  return FILTER_PERMIT;
+}
+
+/* Apply input distribute-list to the prefix. */
+enum filter_type
+distribute_apply_out (struct interface *ifp, struct prefix *p)
+{
+  if (ifp->distribute_out)
+    return (access_list_apply (ifp->distribute_out, p));
+
+  return FILTER_PERMIT;
+}
+
 /* Make new distribute list and push into hash. */
 struct distribute *
 distribute_get (char *ifname)

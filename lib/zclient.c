@@ -136,8 +136,16 @@ zebra_read (struct thread *thread)
 
   /* Fetch length and command. */
   length = stream_getw (zebra->ibuf);
-  length -= ZEBRA_HEADER_SIZE;
   command = stream_getc (zebra->ibuf);
+
+  /* Length check. */
+  if (length >= zebra->ibuf->size)
+    {
+      stream_free (zebra->ibuf);
+      zebra->ibuf = stream_new (length + 1);
+    }
+
+  length -= ZEBRA_HEADER_SIZE;
 
   /* Read rest of zebra packet. */
   stream_read (zebra->ibuf, sock, length);

@@ -45,7 +45,9 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/param.h>
+#ifdef HAVE_SYS_SYSCTL_H
 #include <sys/sysctl.h>
+#endif /* HAVE_SYS_SYSCTL_H */
 #include <sys/ioctl.h>
 #ifdef HAVE_SYS_CONF_H
 #include <sys/conf.h>

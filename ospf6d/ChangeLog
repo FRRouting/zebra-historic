@@ -1,3 +1,17 @@
+1999-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf6d.c (ospf6_init): Change to use install_default.
+
+1999-07-03  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
+
+	* ospf6_rtable.c (nexthop_*): added some function that handles
+	new nexthop structure.
+
+1999-07-01  Rick Payne <rickp@rossfell.co.uk>
+
+	* ospf6_zebra.c (ospf6_zebra_init): Install standard commands to
+	ZEBRA_NODE.
+
 1999-06-09  Yasuhiro Ohara <yasu@sfc.wide.ad.jp>
 
 	* ospf6_rtable.h: added for new routing table of ospf6d

@@ -63,6 +63,11 @@ struct router_lsa
   u_char flags;
   u_char zero;
   u_int16_t links;
+  struct in_addr link_id;
+  struct in_addr link_data;
+  u_char type;
+  u_char tos;
+  u_int16_t metric;
 };
 
 /* OSPF Network-LSAs structure. */
@@ -78,7 +83,8 @@ struct summary_lsa
 {
   struct ospf_lsa header;
   struct in_addr mask;
-  /* metric */
+  u_char tos;
+  u_char metric[3];
 };
 
 /* OSPF AS-external-LSAs structure. */
@@ -86,8 +92,16 @@ struct as_external_lsa
 {
   struct ospf_lsa header;
   struct in_addr mask;
-  /* metric */
+  struct {
+    u_char tos;
+    u_char metric[3];
+    struct in_addr fwd_addr;
+    struct in_addr route_tag;
+  } e[1];
 };
+
+#define GET_METRIC(x)           ((x[0] << 16) | (x[1] << 8) | x[2])
+#define IS_EXTERNAL_METRIC(x)   ((x) & 0x80)
 
 /* Prototypes. */
 struct ospf_lsa *ospf_router_lsa (struct ospf_interface *);
@@ -100,6 +114,8 @@ struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
 				  struct in_addr, struct in_addr);
 struct ospf_lsa *ospf_lsa_lookup_by_header (struct ospf_area *,
 					    struct ospf_lsa *);
+listnode ospf_lsa_lookup_from_list (list, u_char, struct in_addr,
+				    struct in_addr);
 int ospf_lsa_more_recent (struct ospf_lsa *, struct ospf_lsa *);
 int ospf_lsa_count (struct ospf_area *);
 void ospf_lsa_init ();

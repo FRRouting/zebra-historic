@@ -43,6 +43,9 @@
 /* Define if you have the <pthread.h> header file.  */
 #undef HAVE_PTHREAD_H
 
+/* whether system has GNU regex */
+#undef HAVE_GNU_REGEX
+
 /* whether sockaddr_in has a sin_len field */
 #undef HAVE_SIN_LEN
 
@@ -67,8 +70,8 @@
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
 
-/* Define if all-in-one option is specified. */
-#undef ALL_IN_ONE
+/* Define if one-vty option is specified. */
+#undef ONE_VTY
 
 /* Define if disable-bgp-announce option is specified. */
 #undef DISABLE_BGP_ANNOUNCE

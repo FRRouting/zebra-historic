@@ -28,13 +28,15 @@
 
 struct vertex                /* Transit Vertex */
 {
+#define vtx_rtrid vtx_id[0]
+#define vtx_ifid  vtx_id[1]
   unsigned long        vtx_id[2];    /* [Router-ID][Interface-ID] */
                                      /* Network vertex when Interface-ID 0 */
   struct lsa_internal *vtx_lsa;      /* Associated LSA */
   list                 vtx_nexthops; /* For ECMP */
   cost_t               vtx_distance; /* Distance from Root (Cost) */
   list                 vtx_path;     /* Lower node */
-  struct vertex       *vtx_parent;   /* for vertex on candidate list */
+  list                 vtx_parent;   /* for vertex on candidate list */
   unsigned char        vtx_depth;    /* for vertex on spf tree */
 };
 #define MAXDEPTH       256
@@ -67,14 +69,16 @@ struct nexthop_info
   struct in6_addr nexthop_addr;
 };
 
-#define IS_DST_ROUTER_TYPE(x)  (!(x)->vtx_id[1])
-#define IS_DST_NETWORK_TYPE(x) ((x)->vtx_id[1])
+#define IS_VTX_ROUTER_TYPE(x)  (!(x)->vtx_id[1])
+#define IS_VTX_NETWORK_TYPE(x) ((x)->vtx_id[1])
 
 /* Function Prototypes */
 int spf_calculation (struct thread *);
 int routing_table_calculation (struct thread *);
+#if 0
 int install_route (struct area *);
 int noinstall_route (struct area *);
+#endif
 
 #endif /* OSPF6_SPF_H */
 

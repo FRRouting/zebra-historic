@@ -161,7 +161,7 @@ interface_list ()
   /* Query buffer size. */
   if (sysctl (mib, MIBSIZ, NULL, &bufsiz, NULL, 0) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "sysctl() error by %m");
+      zlog (NULL, LOG_WARNING, "sysctl() error by %s", strerror (errno));
       return;
     }
 
@@ -171,7 +171,7 @@ interface_list ()
   /* Fetch interface informations into allocated buffer. */
   if (sysctl (mib, MIBSIZ, buf, &bufsiz, NULL, 0) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "sysctl error by %m");
+      zlog (NULL, LOG_WARNING, "sysctl error by %s", strerror (errno));
       return;
     }
 

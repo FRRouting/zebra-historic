@@ -150,7 +150,7 @@ main (int argc, char **argv)
   /* preserve my name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_ZEBRA,
+  zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_ZEBRA,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -236,7 +236,7 @@ main (int argc, char **argv)
     daemon (0, 0);
 
   /* Make vty server socket. */
-  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT, AF_INET);
+  vty_serv_sock (vty_port ? vty_port : ZEBRA_VTY_PORT);
 
   /* Output pid of zebra. */
   pid_output (PATH_ZEBRA_PID);

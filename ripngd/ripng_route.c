@@ -165,21 +165,27 @@ ripng_aggregate_delete (struct route_node *node)
 extern struct route_table *ripng_table;
 
 void
-ripng_route_add (int type, struct prefix_ipv6 *p)
+ripng_redistribute_add (int type, struct prefix_ipv6 *p)
 {
   int ret;
   int metric = 0;
   struct route_node *node;
+
+  if (IN6_IS_ADDR_LINKLOCAL (&p->prefix))
+    return;
 
   node = route_node_get (ripng_table, (struct prefix *)p);
   ret = ripng_static_add (node, metric, 0);
 }
 
 void
-ripng_route_delete (int type, struct prefix_ipv6 *p)
+ripng_redistribute_delete (int type, struct prefix_ipv6 *p)
 {
   int ret;
   struct route_node *node;
+
+  if (IN6_IS_ADDR_LINKLOCAL (&p->prefix))
+    return;
 
   node = route_node_get (ripng_table, (struct prefix *) p);
   ret = ripng_static_delete (node);

@@ -1,3 +1,22 @@
+1999-07-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_routemap.c (route_set_ip_nexthop_cmd): Change "ip nexthop"
+	to "ip next-hop".
+	
+1999-07-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_route.c (show_ipv6_bgp_regexp): `show ipv6 bgp regexp'
+	added.
+
+1999-07-01  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_zebra.c (zebra_init): Install standard commands to
+	ZEBRA_NODE.
+
+1999-06-28  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgpd.c (bgp_delete): bgp peer deletion bug is fixed.
+
 1999-06-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgpd.c: Add neighbor update-source command as ALIAS to

@@ -226,9 +226,9 @@ void
 zebra_start ();
 
 void
-ripng_route_add (int type, struct prefix_ipv6 *p);
+ripng_redistribute_add (int type, struct prefix_ipv6 *p);
 
 void
-ripng_route_delete (int type, struct prefix_ipv6 *p);
+ripng_redistribute_delete (int type, struct prefix_ipv6 *p);
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

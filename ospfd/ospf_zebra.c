@@ -192,4 +192,6 @@ zebra_init ()
 
   /* Install command element for zebra node. */
   install_element (CONFIG_NODE, &router_zebra_cmd);
+
+  install_default (ZEBRA_NODE);
 }

@@ -1907,3 +1907,62 @@ vty_lsa (struct vty *vty, struct lsa_internal *lsi)
   return 0;
 }
 
+struct router_lsd *
+get_router_lsd (rtr_id_t rtrid, struct lsa_internal *lsa)
+{
+  unsigned short lsh_len;
+  struct router_lsa *rlsa;
+  struct router_lsd *rlsd;
+
+  if (ntohs (lsa->lsh->lsh_type) != LST_ROUTER_LSA)
+    return NULL;
+
+  lsh_len = ntohs (lsa->lsh->lsh_len);
+  rlsa = (struct router_lsa *)(lsa->lsh + 1);
+  rlsd = (struct router_lsd *)(rlsa + 1);
+
+  for ( ; (char *)rlsd < (char *)lsa + lsh_len; rlsd++)
+    if (rtrid == rlsd->rlsd_neighbor_router_id)
+      return rlsd;
+
+  return NULL;
+}
+
+unsigned long
+get_ifindex_to_router (rtr_id_t rtrid, struct lsa_internal *lsa)
+{
+  struct router_lsd *rlsd;
+
+  assert (lsa);
+  switch (ntohs (lsa->lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+        rlsd = get_router_lsd (rtrid, lsa);
+        if (!rlsd)
+          return 0;
+        else
+          return (ntohl (rlsd->rlsd_interface_id));
+      case LST_NETWORK_LSA:
+        return (ntohl (lsa->lsh->lsh_id));
+      default:
+        return 0;
+    }
+  return 0;
+}
+
+struct lsa_internal *
+get_linklocal_lsa (rtr_id_t rtrid, struct ospf6_if *o6if)
+{
+  listnode n;
+  struct lsa_internal *lsa;
+
+  assert (rtrid && o6if);
+  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+    {
+      lsa = getdata (n);
+      if (lsa->lsh->lsh_advrtr == rtrid)
+        return lsa;
+    }
+  return NULL;
+}
+

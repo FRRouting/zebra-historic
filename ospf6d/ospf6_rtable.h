@@ -35,12 +35,13 @@
 #define PTYPE_TYPE2_EXTERNAL 4   /* type 2 external */
 
 /* Next Hop */
-struct ospf6_path
+struct ospf6_nexthop
 {
   unsigned long   ifindex;
   struct in6_addr ipaddr;    /* if any */
-  unsigned long   advrtr;    /* for inter-area and AS external path */
-  unsigned int    lock;      /* reference count of this path(nexthop) */
+  unsigned long   advrtr;    /* for inter-area and AS external nexthop */
+                             /* 0 for intra-area routes */
+  unsigned int    lock;      /* reference count of this nexthop(nexthop) */
 };
 
 union dest_id
@@ -63,7 +64,7 @@ struct ospf6_rtentry
   cost_t        cost;
   cost_t        cost_type2;
   struct lsa_internal *ls_origin;    /* Link State Origin, for MOSPF */
-  list          paths;               /* list of struct ospf6_path */
+  list          nexthops;               /* list of struct ospf6_nexthop */
 };
 
 struct ospf6_rtable
@@ -72,14 +73,15 @@ struct ospf6_rtable
   struct ospf6_rtentry *previous_top;
 };
 
+void nexthop_init ();
+void nexthop_add_from_vertex (struct vertex *, struct vertex *, list);
+
 void rtable_init (struct ospf6_rtable *);
 
 struct ospf6_rtentry *rtable_lookup (unsigned char, union dest_id *,
                                      struct ospf6_rtentry *);
 void rtable_install (unsigned char, union dest_id *, cost_t,
-                     unsigned char,
-                     struct in6_addr *, unsigned long,
-                     unsigned long,
+                     unsigned char, list,
                      struct ospf6_rtable *);
 void rtable_uninstall (unsigned char, union dest_id *,
                        struct ospf6_rtable *);

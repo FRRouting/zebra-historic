@@ -1,3 +1,10 @@
+1999-07-02  Gerhard Poul <gpoul@gnu.org>
+
+	* draft-zebra-00.ms: New file added.  This is groff version of
+	draft-zebra-00.txt.  This is a master file of draft-zebra-00.txt.
+
+	* draft-zebra-00.txt: Generated from draft-zebra-00.txt.
+
 1999-05-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra.texi (Top): Add ospf6d chapter.

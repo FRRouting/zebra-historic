@@ -54,7 +54,7 @@ DEFUN (show_debugging_ripng,
 	    vty_out (vty, "  RIPng packet send%s debugging is on\r\n",
 		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "");
 	  else
-	    vty_out (vty, "  RIPng packet recieve%s debugging is on\r\n",
+	    vty_out (vty, "  RIPng packet receive%s debugging is on\r\n",
 		     IS_RIPNG_DEBUG_DETAIL ? " detail" : "");
 	}
     }

@@ -121,6 +121,7 @@ bgp_delete (struct bgp *bgp)
       peer = getdata (node);
 
       bgp_stop (peer);
+      list_delete_by_val (peer_list, peer);
       peer_delete (peer);
     }
 
@@ -620,6 +621,15 @@ DEFUN (show_ip_bgp_neighbors,
 	vty_out (vty, "\r\n  Remote router ID %s\r\n",
 		 inet_ntoa (bgp_ident));
       }
+
+      vty_out (vty, "  Local address: ");
+
+      if (p->su_local)
+	sockunion_vty_out (vty, p->su_local);
+      else
+	vty_out (vty, "None");
+      vty_out (vty, "\r\n");
+
       vty_out (vty,
 	       "  Status: %-12s keepalive: %d holdtime: %d"
 	       "\r\n  open: in/out %d/%d"
@@ -1675,6 +1685,8 @@ DEFUN (neighbor_interface,
       return CMD_WARNING;
     }
 
+  if (peer->ifname)
+    free (peer->ifname);
   peer->ifname = strdup (argv[1]);
 
   return CMD_SUCCESS;
@@ -2159,6 +2171,13 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
       else
 	vty_out (vty, " remote-as %d%s", peer->as, VTY_NEWLINE);
 
+      if (peer->ifname)
+	{
+	  vty_out (vty, " neighbor ");
+	  sockunion_vty_out (vty, peer->su);
+	  vty_out (vty, " interface %s%s", peer->ifname, VTY_NEWLINE);
+	}
+
       /* Shutdown or not. */
       if (peer->shutdown)
 	{
@@ -2371,18 +2390,19 @@ bgp_init ()
   install_element (VIEW_NODE, &show_ip_bgp_neighbors_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_paths_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_community_cmd);
+
   install_element (ENABLE_NODE, &show_ip_bgp_summary_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_neighbors_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_paths_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_community_cmd);
   install_element (ENABLE_NODE, &clear_ip_bgp_cmd);
+
   install_element (CONFIG_NODE, &router_bgp_cmd);
   install_element (CONFIG_NODE, &no_router_bgp_cmd);
   install_element (CONFIG_NODE, &bgp_multiple_instance_cmd);
   install_element (CONFIG_NODE, &no_bgp_multiple_instance_cmd);
-  install_element (BGP_NODE, &config_end_cmd);
-  install_element (BGP_NODE, &config_exit_cmd);
-  install_element (BGP_NODE, &config_help_cmd);
+
+  install_default (BGP_NODE);
   install_element (BGP_NODE, &bgp_redistribute_static_cmd);
   install_element (BGP_NODE, &no_bgp_redistribute_static_cmd);
   install_element (BGP_NODE, &bgp_redistribute_connected_cmd);

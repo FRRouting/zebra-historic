@@ -1246,8 +1246,8 @@ DEFUN (show_ipv6_route_ospf6,
     }
 
   vty_out (vty, "Routing Table\r\n");
-  vty_out (vty, "%-22s/%3s %-39s %-3s %5s\r\n",
-     "DESTINATION", "LEN", "NEXTHOP", "IF", "COST");
+  vty_out (vty, "%-26s %-39s %-3s %5s\r\n",
+     "Destination", "Gateway", "Netif", "Cost");
   vty_out (vty, "----------\r\n");
   for (p = area->rtable.current_top; p; p = p->next)
     {
@@ -1329,38 +1329,6 @@ DEFUN (interface_area,
     }
   ospf6_if->area = area;
   list_add_node (area->ospf6_if_list, ospf6_if);
-  return CMD_SUCCESS;
-}
-
-DEFUN (zebra_install,
-       zebra_install_cmd,
-       "zebra install",
-       "information about zebra\n"
-       "install OSPF6 route to zebra\n"
-       )
-{
-  listnode n;
-
-  struct ospf6 *ospf6 = (struct ospf6 *)vty->index;
-  ospf6->isinstall = INSTALL;
-  for (n = listhead (ospf6->area_list); n; nextnode (n))
-    install_route ((struct area *) getdata (n));
-  return CMD_SUCCESS;
-}
-
-DEFUN (zebra_noinstall,
-       zebra_noinstall_cmd,
-       "zebra noinstall",
-       "information about zebra\n"
-       "install *NO* OSPF6 route to zebra\n"
-       )
-{
-  listnode n;
-
-  struct ospf6 *ospf6 = (struct ospf6 *)vty->index;
-  ospf6->isinstall = NOINSTALL;
-  for (n = listhead (ospf6->area_list); n; nextnode (n))
-    noinstall_route ((struct area *) getdata (n));
   return CMD_SUCCESS;
 }
 
@@ -1507,9 +1475,7 @@ ospf6_init ()
   install_element (CONFIG_NODE, &router_ospf6_instance_cmd);
   install_element (CONFIG_NODE, &interface_cmd);
 
-  install_element (INTERFACE_NODE, &config_end_cmd);
-  install_element (INTERFACE_NODE, &config_exit_cmd);
-  install_element (INTERFACE_NODE, &config_help_cmd);
+  install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &ip6_ospf6_cost_cmd);
   install_element (INTERFACE_NODE, &ip6_ospf6_deadinterval_cmd);
   install_element (INTERFACE_NODE, &ip6_ospf6_hellointerval_cmd);
@@ -1517,13 +1483,9 @@ ospf6_init ()
   install_element (INTERFACE_NODE, &ip6_ospf6_retransmitinterval_cmd);
   install_element (INTERFACE_NODE, &ip6_ospf6_transmitdelay_cmd);
 
-  install_element (OSPF6_NODE, &config_end_cmd);
-  install_element (OSPF6_NODE, &config_exit_cmd);
-  install_element (OSPF6_NODE, &config_help_cmd);
+  install_default (OSPF6_NODE);
   install_element (OSPF6_NODE, &router_id_cmd);
   install_element (OSPF6_NODE, &interface_area_cmd);
-  install_element (OSPF6_NODE, &zebra_install_cmd);
-  install_element (OSPF6_NODE, &zebra_noinstall_cmd);
 
   /* Make empty list of top list. */
   ospf6_list = list_init ();

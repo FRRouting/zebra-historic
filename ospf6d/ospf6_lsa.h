@@ -198,5 +198,9 @@ int show_link_lsa (struct vty *, void *);
 int show_intra_prefix_lsa (struct vty *, void *);
 int vty_lsa (struct vty *, struct lsa_internal *);
 
+struct router_lsd *get_router_lsd (rtr_id_t, struct lsa_internal *);
+unsigned long get_ifindex_to_router (rtr_id_t, struct lsa_internal *);
+struct lsa_internal *get_linklocal_lsa (rtr_id_t, struct ospf6_if *);
+
 #endif /* OSPF6_LSA_H */
 

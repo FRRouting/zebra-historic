@@ -20,7 +20,13 @@
  * 02111-1307, USA.  
  */
 
+#include <config.h>
+
+#ifdef HAVE_GNU_REGEX
+#include <regex.h>
+#else
 #include "regex-gnu.h"
+#endif /* HAVE_GNU_REGEX */
 
 void bgp_regex_free (regex_t *regex);
 regex_t *bgp_regcomp (char *str);

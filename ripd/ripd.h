@@ -39,7 +39,8 @@
 #define RIP_METRIC_INFINITY 16
 
 /* Normal RIP packet max size. */
-#define RIP_PACKET_MAXSIZ  512
+#define RIP_REQUEST_PACKET_SIZE   24
+#define RIP_PACKET_MAXSIZ        512
 
 /* Max count of routing table entry in one rip packet. */
 #define RIP_MAX_RTE 25
@@ -49,16 +50,17 @@
 #define INADDR_RIP_GROUP        0xe0000009    /* 224.0.0.9 */
 #endif
 
+#define RIP_TIMEOUT                   180
+
 /* RIP timers */
-#ifdef RIP_TEST
-#define RIP_FLASH_TIMER     10
-#define RIP_DELETE          30
-#define RIP_TIMEOUT         60
-#else
-#define RIP_FLASH_TIMER     30
-#define RIP_DELETE          60
-#define RIP_TIMEOUT        180
-#endif /* RIP_TEST */
+#define RIP_DEFAULT_UPDATE_TIMER       30
+#define RIP_DEFAULT_INVALID_TIMER     180
+#define RIP_DEFAULT_HOLDDOWN_TIMER    180
+#define RIP_DEFAULT_FLUSH_TIMER       240
+
+/* RIP route type */
+#define RIP_ROUTE_NORMAL              0
+#define RIP_ROUTE_STATIC              1
 
 /* RIP port number. */
 #define RIP_PORT_DEFAULT   520
@@ -75,8 +77,19 @@ struct rip
   u_char version;		/* Default version of rip instance. */
   u_char multicast;		/* Do multicast treatment. */
 
-  struct thread *t_read;		/* Update timer. */
-  struct thread *t_timer;		/* Update timer. */
+  struct thread *t_read;
+
+  /* RIP timer values. */
+  unsigned long v_update;
+  unsigned long v_invalid;
+  unsigned long v_holddown;
+  unsigned long v_flush;
+
+  /* RIP timers. */
+  struct thread *t_update;
+  struct thread *t_invalid;
+  struct thread *t_holddown;
+  struct thread *t_flush;
 };
 
 /* RIP routing table entry which belong to rip_packet. */
@@ -116,6 +129,7 @@ struct rip_info
 
   int fib;			/* Forwarding information base. */
   int type;			/* RIP|Static|Connected route type. */
+  int sub_type;			/* RIP's staic route. */
   int pref;			/* Preference of this route. */
   u_int32_t tag;		/* Tag information of this route. */
   u_int32_t metric;		/* Metric of this route. */
@@ -128,6 +142,8 @@ struct rip_info
 /* RIP specific interface configuration. */
 struct rip_interface
 {
+  int enable;
+
   int ri_send;
   int ri_receive;
   int ri_split_horizon;
@@ -169,6 +185,19 @@ struct message
   char *str;
 };
 
+/* Macro for timer turn on. */
+#define RIP_TIMER_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), NULL, (V))
+
+/* Macro for timer turn off. */
+#define RIP_TIMER_OFF(X) \
+      if (X) \
+	{ \
+	  thread_cancel (X); \
+	  (X) = NULL; \
+	}
+
 #define LOOKUP(X, Y)  (X)[(Y)].str
 
 /* There is only one rip strucutre. */
@@ -181,7 +210,6 @@ void rip_init ();
 void rip_rib_close ();
 void rip_if_init ();
 void rip_delete_rinfo (struct rip_info **rp, struct rip_info *rinfo);
-int rip_make_request (u_char *pnt, int version);
 int rip_udp_send (int sock, u_char *pnt, int size, struct sockaddr_in *dest);
 struct rip_info *rip_info_new ();
 
@@ -190,11 +218,14 @@ int if_check_address (struct in_addr addr);
 int if_valid_neighbor (struct in_addr addr);
 struct interface *if_lookup_address (struct in_addr addr);
 void rip_multicast_enable (int sock);
-void rip_request_all ();
 int zebra_get_interface (int sock, u_int16_t length);
 
 int
 rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo, 
 	       struct sockaddr_in *from, struct interface *ifp);
 
+extern struct thread_master *master;
+
+/* Extern function. */
+void rip_zebra (int, struct prefix_ipv4 *, struct in_addr *);
 #endif /* _ZEBRA_RIP_H */

@@ -174,7 +174,7 @@ route_read ()
 		      
   if (sysctl (mib, MIBSIZ, NULL, &bufsiz, NULL, 0) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "sysctl() fail by %m");
+      zlog (NULL, LOG_WARNING, "sysctl() fail by %s", strerror (errno));
       return;
     }
 
@@ -183,7 +183,7 @@ route_read ()
   /* Read routing table information by calling sysctl(). */
   if (sysctl (mib, MIBSIZ, buf, &bufsiz, NULL, 0) < 0) 
     {
-      zlog (NULL, LOG_WARNING, "sysctl() fail by %m");
+      zlog (NULL, LOG_WARNING, "sysctl() fail by %s", strerror (errno));
       return;
     }
 

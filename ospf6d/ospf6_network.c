@@ -974,3 +974,11 @@ send_linkstate_ack (struct thread *thread)
   return 0;
 }
 
+void
+ospf6_prefix_in6_addr (struct ospf6_prefix *o6p, struct in6_addr *in6)
+{
+  memset (in6, 0, sizeof (struct in6_addr));
+  memcpy (in6, o6p + 1, OSPF6_PREFIX_SPACE (o6p->o6p_prefix_len));
+  return;
+}
+

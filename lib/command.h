@@ -50,15 +50,21 @@ struct host
   /* Log filename. */
   char *logfile;
 
-  /* New zlog output. */
-  char *log;
+  /* Log stdout. */
+  u_char log_stdout;
 
+  /* Log syslog. */
+  u_char log_syslog;
+  
   /* config file name of this host */
   char *config;
 
   /* Flags for services */
   int advanced;
   int encrypt;
+
+  /* Banner configuration. */
+  char *motd;
 };
 
 /* There are some command levels which called from command node. */
@@ -179,6 +185,7 @@ struct desc
 
 /* Prototypes. */
 void install_node (struct cmd_node *, int (*) (struct vty *));
+void install_default (enum node_type);
 void install_element (enum node_type, struct cmd_element *);
 void sort_node ();
 
@@ -195,6 +202,7 @@ void cmd_init ();
 /* Export typical functions. */
 extern struct cmd_element config_end_cmd;
 extern struct cmd_element config_exit_cmd;
+extern struct cmd_element config_quit_cmd;
 extern struct cmd_element config_help_cmd;
 int config_exit (struct cmd_element *, struct vty *, int, char **);
 int config_help (struct cmd_element *, struct vty *, int, char **);

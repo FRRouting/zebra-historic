@@ -174,6 +174,23 @@ aspath_make_str_count (struct aspath *as)
       /* For fetch value. */
       assegment = (struct assegment *) pnt;
 
+      /* Check AS type validity. */
+      if ((assegment->type != AS_SET) && 
+	  (assegment->type != AS_SEQUENCE) &&
+	  (assegment->type != AS_CONFED_SET) && 
+	  (assegment->type != AS_CONFED_SEQUENCE))
+	{
+	  XFREE (MTYPE_AS_STR, str_buf);
+	  return NULL;
+	}
+
+      /* Check AS length. */
+      if ((pnt + (assegment->length * AS_VALUE_SIZE) + AS_HEADER_SIZE) > end)
+	{
+	  XFREE (MTYPE_AS_STR, str_buf);
+	  return NULL;
+	}
+
       /* Buffer length check. */
       estimate_len = ((assegment->length * 6) + 4);
       
@@ -190,6 +207,7 @@ aspath_make_str_count (struct aspath *as)
 	str_buf[str_pnt++] = aspath_delimiter_char[type].end;
       if (space)
 	str_buf[str_pnt++] = ' ';
+
       if (assegment->type != AS_SEQUENCE)
 	str_buf[str_pnt++] = aspath_delimiter_char[assegment->type].start;
 
@@ -266,6 +284,13 @@ aspath_parse (caddr_t pnt, int length)
 
   /* Make AS path string. */
   aspath->str = aspath_make_str_count (aspath);
+
+  /* Malformed AS path value. */
+  if (! aspath->str)
+    {
+      aspath_free (aspath);
+      return NULL;
+    }
 
   return aspath;
 }
@@ -554,6 +579,8 @@ aspath_segment_add (struct aspath *as, int type)
 struct aspath *
 aspath_empty_aspath (int gated_dont_eat_flag)
 {
+  gated_dont_eat_flag = 0;
+
   if (gated_dont_eat_flag)
     {
       struct assegment segment;

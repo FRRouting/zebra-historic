@@ -1,3 +1,39 @@
+1999-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.c (install_default): New function for install default
+	commands to the node.
+
+	* memory.h (enum): MTYPE_NEXTHOP is added.
+
+1999-07-01    <kunihiro@zebra.org>
+
+	* command.c (no_banner_motd): `no banner motd' command added.
+
+1999-06-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* regex.c: Update to glibc-2.1.1's posix/regex.c
+
+	* regex-gnu.h: Update to glibc-2.1.1's posix/regex.h
+
+	* prefix.h (IPV4_ADDR_SAME): Macro added.
+	(IPV6_ADDR_SAME): Likewise.
+
+1999-06-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_OSPF_VERTEX
+
+	* version.h: Bump up to 0.71.
+
+	* vty.c (vty_serv_sock_addrinfo): Use addrinfo function to bind
+	VTY socket when IPv6 is enabled.
+
+1999-06-28  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_serv_sock): Change vty_serv_sock determine which
+	address family to bind.
+
+	* command.c: Add quit command.
+
 1999-06-26  NOGUCHI kay <kay@dti.ad.jp>
 
 	* vty.c (vty_read_config): Fix bug of configuration file path

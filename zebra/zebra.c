@@ -938,107 +938,6 @@ DEFUN (show_ipv6_forwarding,
   return CMD_SUCCESS;
 }
 
-DEFUN (ipv6_route, ipv6_route_cmd,
-       "ipv6 route IPV6_ADDRESS IPV6_ADDRESS",
-       "IP information\n"
-       "IP routing set\n"
-       "IP Address\n"
-       "IP Address\n"
-       "IP Netmask\n")
-{
-  int ret;
-  struct prefix_ipv6 p;
-  struct in6_addr gate;
-
-  /* Route prefix/prefixlength format check. */
-  ret = str2prefix_ipv6 (argv[0], &p);
-  if (!ret)
-    {
-      vty_out (vty, "Malformed IPv6 address\r\n");
-      return CMD_WARNING;
-    }
-
-  /* Gateway format check. */
-  ret = inet_pton (AF_INET6, argv[1], &gate);
-  if (!ret)
-    {
-      vty_out (vty, "Gateway address is invalid\r\n");
-      return CMD_WARNING;
-    }
-
-  /* Make sure mask is applied and set type to static route*/
-  apply_mask_ipv6 (&p);
-
-  /* We need rib error treatment here. */
-  ret = rib_add_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, 0);
-  
-  if (ret)
-    {
-      switch (ret)
-	{
-	case ZEBRA_ERR_RTEXIST:
-	  vty_out (vty, "route already exist\r\n");
-	  break;
-	case ZEBRA_ERR_RTUNREACH:
-	  vty_out (vty, "network is unreachable\r\n");
-	  break;
-	case ZEBRA_ERR_EPERM:
-	  vty_out (vty, "permission denied\r\n");
-	  break;
-	default:
-	  /* Success */
-	  break;
-	}
-    }
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_ipv6_route,
-       no_ipv6_route_cmd,
-       "no ipv6 route IPV6_ADDRESS IPV6_ADDRESS",
-       NO_STR
-       "IP information\n"
-       "IP routing set\n"
-       "IP Address\n"
-       "IP Address\n"
-       "IP Netmask\n")
-{
-  int ret;
-  struct prefix_ipv6 p;
-  struct in6_addr gateway;
-  
-  /* Check ipv6 prefix. */
-  ret = str2prefix_ipv6 (argv[0], &p);
-  if (!ret)
-    {
-      vty_out (vty, "Malformed IPv6 address\r\n");
-      return CMD_WARNING;
-    }
-
-  /* Check gateway. */
-  ret = inet_pton (AF_INET6, argv[1], &gateway);
-  if (!ret)
-    {
-      vty_out (vty, "Gateway address is invalid\r\n");
-      return CMD_WARNING;
-    }
-
-  /* Make sure mask is applied and set type to static route*/
-  apply_mask_ipv6 (&p);
-
-  ret = rib_delete_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gateway, 0, 0);
-
-  switch (ret)
-    {
-    default:
-      /* Success */
-      break;
-    }
-
-  vty_out (vty, "static route deleted\r\n");
-  return CMD_SUCCESS;
-}
-
 DEFUN (no_ipv6_forwarding,
        no_ipv6_forwarding_cmd,
        "no ipv6 forwarding",
@@ -1060,21 +959,6 @@ DEFUN (no_ipv6_forwarding,
 
 #endif /* HAVE_IPV6 */
        
-/* Static ip route configuration write function. */
-int
-config_write_ip (struct vty *vty)
-{
-  extern int rib_static_list (struct vty *, struct route_table *);
-  int write = 0;
-
-  write += rib_static_list (vty, ipv4_rib_table);
-#ifdef HAVE_IPV6
-  write += rib_static_list (vty, ipv6_rib_table);
-#endif /* HAVE_IPV6 */
-
-  return write;
-}
-
 /* IP node for static routes. */
 struct cmd_node ip_node =
 {
@@ -1086,6 +970,8 @@ struct cmd_node ip_node =
 void
 zebra_init ()
 {
+  int config_write_ip (struct vty *vty);
+
   /* Client list init. */
   client_list = list_init ();
 
@@ -1115,8 +1001,6 @@ zebra_init ()
 #ifdef HAVE_IPV6
   install_element (VIEW_NODE, &show_ipv6_forwarding_cmd);
   install_element (ENABLE_NODE, &show_ipv6_forwarding_cmd);
-  install_element (CONFIG_NODE, &ipv6_route_cmd);
-  install_element (CONFIG_NODE, &no_ipv6_route_cmd);
   install_element (CONFIG_NODE, &no_ipv6_forwarding_cmd);
 #endif /* HAVE_IPV6 */
 }

@@ -1,5 +1,56 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.71
+
+* Changes in lib
+
+** `log syslog' command is added.
+
+** Use getaddrinfo function to bind IPv4/IPv6 server socket.
+
+** `no banner motd' will suppress motd output when user connect to VTY.
+
+** Bind `quit' command to major nodes.
+
+* Changes in zebra
+
+** Point-to-point link address handling bug is fixed.
+
+* Changes in bgpd
+
+** AS path validity check is added.  If malformed AS path is received
+NOTIFY Malformed AS path is send to the peer.
+
+** Use getaddrinfo function to bind IPv4/IPv6 server socket.
+
+* Changes in ripd
+
+** Connected network announcement bug is fixed.
+
+** `broadcast' command is deleted.
+
+** `network' command is added.
+
+** `neighbor' command is added.
+
+** `redistribute' command is added.
+
+** `timers basic' command is added.
+
+** `route' command is added.
+
+* Changes in ripngd
+
+** Fix metric calculation bug.
+
+* Changes in ospfd
+
+** Check sum bug is fixed.
+
+* Chanegs in ospf6d
+
+** Routing table code is rewritten.
+
 * Changes in zebra-0.70
 
 * Changes in zebra

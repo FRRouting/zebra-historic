@@ -21,7 +21,7 @@ router bgp 7675
 !
 ! route-map set-nexthop permit 10
 !  match ip address all
-!  set ip nexthop 10.0.0.2
+!  set ip next-hop 10.0.0.2
 !
 !log file bgpd.log
 !

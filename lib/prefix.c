@@ -139,7 +139,7 @@ prefix_ipv4_free (struct prefix_ipv4 *p)
   XFREE (MTYPE_PREFIX_IPV4, p);
 }
 
-/* If string format if invalid return 0. */
+/* When string format is invalid return 0. */
 int
 str2prefix_ipv4 (char *str, struct prefix_ipv4 *p)
 {
@@ -152,21 +152,35 @@ str2prefix_ipv4 (char *str, struct prefix_ipv4 *p)
   pnt = strchr (str, '/');
 
   /* String doesn't contail slash. */
-  if (pnt == NULL)
-    return 0;
+  if (pnt == NULL) 
+    {
+      /* Convert string to prefix. */
+      ret = inet_aton (str, &p->prefix);
+      if (ret == 0)
+	return 0;
 
-  cp = XMALLOC (MTYPE_TMP, (pnt - str) + 1);
-  strncpy (cp, str, pnt - str);
-  *(cp + (pnt - str)) = '\0';
-  ret = inet_aton (cp, &p->prefix);
-  XFREE (MTYPE_TMP, cp);
+      /* If address doesn't contain slash we assume it host address. */
+      p->family = AF_INET;
+      p->prefixlen = IPV4_MAX_BITLEN;
 
-  /* Get prefix length. */
-  plen = (u_char) atoi (++pnt);
-  if (plen > 32)
-    return 0;
-  p->prefixlen = plen;
-  p->family = AF_INET;
+      return ret;
+    }
+  else
+    {
+      cp = XMALLOC (MTYPE_TMP, (pnt - str) + 1);
+      strncpy (cp, str, pnt - str);
+      *(cp + (pnt - str)) = '\0';
+      ret = inet_aton (cp, &p->prefix);
+      XFREE (MTYPE_TMP, cp);
+
+      /* Get prefix length. */
+      plen = (u_char) atoi (++pnt);
+      if (plen > 32)
+	return 0;
+
+      p->family = AF_INET;
+      p->prefixlen = plen;
+    }
 
   return ret;
 }

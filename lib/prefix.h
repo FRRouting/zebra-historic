@@ -72,6 +72,7 @@ struct prefix_ipv6
 #define IPV4_MAX_BYTELEN   4
 #define IPV4_MAX_BITLEN   32
 #define IPV4_ADDR_CMP(D,S)   memcmp ((D), (S), IPV4_MAX_BYTELEN)
+#define IPV4_ADDR_SAME(D,S)  (memcmp ((D), (S), IPV4_MAX_BYTELEN) == 0)
 #define IPV4_ADDR_COPY(D,S)  memcpy ((D), (S), IPV4_MAX_BYTELEN)
 
 #define IPV4_NET0(a)    ((((u_int32_t) (a)) & 0xff000000) == 0x00000000)
@@ -81,6 +82,7 @@ struct prefix_ipv6
 #define IPV6_MAX_BYTELEN  16
 #define IPV6_MAX_BITLEN  128
 #define IPV6_ADDR_CMP(D,S)   memcmp ((D), (S), IPV6_MAX_BYTELEN)
+#define IPV6_ADDR_SAME(D,S)  (memcmp ((D), (S), IPV6_MAX_BYTELEN) == 0)
 #define IPV6_ADDR_COPY(D,S)  memcpy ((D), (S), IPV6_MAX_BYTELEN)
 
 /* Count prefix size from mask length */

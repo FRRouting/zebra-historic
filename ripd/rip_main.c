@@ -141,7 +141,7 @@ main (int argc, char **argv)
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
   /* First of all we need logging init. */
-  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_RIP,
+  zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_RIP,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -189,7 +189,6 @@ main (int argc, char **argv)
   cmd_init ();
   vty_init ();
   memory_init ();
-  access_list_init ();
 
   /* RIP related initialization. */
   rip_init ();
@@ -205,7 +204,7 @@ main (int argc, char **argv)
     daemon (0, 0);
 
   /* Create VTY's socket */
-  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT, AF_INET);
+  vty_serv_sock (vty_port ? vty_port : RIP_VTY_PORT);
 
   /* Pid file create. */
   pid_output (PATH_RIPD_PID);

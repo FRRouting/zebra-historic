@@ -289,8 +289,8 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   struct ifaddrmsg *ifa;
   struct rtattr *tb [IFA_MAX + 1];
   struct interface *ifp;
-  void *addr;
-  void *broad;
+  void *addr = NULL;
+  void *broad = NULL;
 
   ifa = NLMSG_DATA (h);
 
@@ -323,15 +323,36 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (tb[IFA_ADDRESS] == NULL)
     tb[IFA_ADDRESS] = tb[IFA_LOCAL];
 
-  if (tb[IFA_ADDRESS])
-    addr = RTA_DATA (tb[IFA_ADDRESS]);
+  if (ifp->flags & IFF_POINTOPOINT)
+    {
+      if (tb[IFA_LOCAL])
+	{
+	  addr = RTA_DATA (tb[IFA_LOCAL]);
+	  if (tb[IFA_ADDRESS])
+	    broad = RTA_DATA (tb[IFA_ADDRESS]);
+	  else
+	    broad = NULL;
+	}
+      else
+	{
+	  if (tb[IFA_ADDRESS])
+	    addr = RTA_DATA (tb[IFA_ADDRESS]);
+	  else
+	    addr = NULL;
+	}
+    }
   else
-    addr = NULL;
+    {
+      if (tb[IFA_ADDRESS])
+	addr = RTA_DATA (tb[IFA_ADDRESS]);
+      else
+	addr = NULL;
 
-  if (tb[IFA_BROADCAST])
-    broad = RTA_DATA(tb[IFA_BROADCAST]);
-  else
-    broad = NULL;
+      if (tb[IFA_BROADCAST])
+	broad = RTA_DATA(tb[IFA_BROADCAST]);
+      else
+	broad = NULL;
+    }
 
   /* Register interface address to the interface. */
   if (ifa->ifa_family == AF_INET)

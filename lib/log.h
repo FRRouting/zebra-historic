@@ -52,6 +52,7 @@ typedef enum
   ZLOG_OSPF6,
 } zlog_proto_t;
 
+#define ZLOG_NOLOG              0
 #define ZLOG_FILE		1
 #define ZLOG_SYSLOG		2
 #define ZLOG_STDOUT             4
@@ -85,12 +86,16 @@ ZLOG *openzlog(const char *progname, int flags, zlog_proto_t protocol,
 	       int syslog_flags, int syslog_facility);
 
 void zlog(ZLOG *zl, int priority, const char *format, ...);
+void zlog_info(const char *format, ...);
+void zlog_warn(const char *format, ...);
 
 void zvlog(ZLOG *zl, int priority, const char *format, va_list args);
 
 void zlog_set_flag (ZLOG *zl, int flags);
+void zlog_reset_flag (ZLOG *zl, int flags);
 
 int zlog_set_file (ZLOG *zl, int flags, char *filename);
+int zlog_reset_file (ZLOG *zl);
 
 void zvlog_err (const char *format, ...);
 void zvlog_warn (const char *format, ...);

@@ -112,7 +112,7 @@ struct vty *vty_new ();
 int vty_out (struct vty *, char *, ...);
 void vty_read_config (char *, char *, char *);
 void vty_time_print (struct vty *);
-void vty_serv_sock (unsigned short, int);
+void vty_serv_sock (unsigned short);
 void vty_close (struct vty *);
 void vty_init ();
 

@@ -156,7 +156,7 @@ main (int argc, char **argv)
   /* Preserve name of myself. */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_STDOUT, ZLOG_BGP,
+  zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_BGP,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   /* Command line argument treatment. */
@@ -226,16 +226,10 @@ main (int argc, char **argv)
   pid_output (PATH_BGPD_PID);
 
   /* Make bgp vty socket. */
-  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT, AF_INET);
-#ifdef KAME
-  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT, AF_INET6);
-#endif
+  vty_serv_sock (vty_port ? vty_port : BGP_VTY_PORT);
 
   /* Make BGP server socket. */
-  bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET);
-#ifdef KAME
-  bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT, AF_INET6);
-#endif /* KAME */
+  bgp_serv_sock (bgp_port ? bgp_port : BGP_PORT_DEFAULT);
 
   /* Print banner. */
   zlog (NULL, LOG_INFO, "BGPd (%s) starts", ZEBRA_VERSION);

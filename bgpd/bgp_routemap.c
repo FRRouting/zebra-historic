@@ -29,7 +29,11 @@
 #include "command.h"
 #include "linklist.h"
 #include "log.h"
+#ifdef HAVE_GNU_REGEX
+#include <regex.h>
+#else
 #include "regex-gnu.h"
+#endif /* HAVE_GNU_REGEX */
 #include "buffer.h"
 
 #include "bgpd/bgpd.h"
@@ -317,7 +321,7 @@ struct route_map_rule_cmd route_match_community_cmd =
   route_match_community_free
 };
 
-/* `set ip nexthop IP_ADDRESS' */
+/* `set ip next-hop IP_ADDRESS' */
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
 int
@@ -367,7 +371,7 @@ route_set_ip_nexthop_free (void *rule)
 /* Route map commands for ip nexthop set. */
 struct route_map_rule_cmd route_set_ip_nexthop_cmd =
 {
-  "ip nexthop",
+  "ip next-hop",
   route_set_ip_nexthop,
   route_set_ip_nexthop_compile,
   route_set_ip_nexthop_free
@@ -397,7 +401,7 @@ route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, void *object)
   return 0;
 }
 
-/* Route map `ip nexthop' compile function.  Given string is converted
+/* Route map `ip next-hop' compile function.  Given string is converted
    to struct in_addr structure. */
 void *
 route_set_ipv6_nexthop_global_compile (char *arg)
@@ -418,7 +422,7 @@ route_set_ipv6_nexthop_global_compile (char *arg)
   return address;
 }
 
-/* Free route map's compiled `ip nexthop' value. */
+/* Free route map's compiled `ip next-hop' value. */
 void
 route_set_ipv6_nexthop_global_free (void *rule)
 {
@@ -1087,7 +1091,7 @@ DEFUN (no_match_aspath,
 
 DEFUN (set_ip_nexthop,
        set_ip_nexthop_cmd,
-       "set ip nexthop IP_ADDR",
+       "set ip next-hop IP_ADDR",
        "Set value\n"
        "IP address\n"
        "Next hop\n"
@@ -1098,7 +1102,7 @@ DEFUN (set_ip_nexthop,
 
 DEFUN (no_set_ip_nexthop,
        no_set_ip_nexthop_cmd,
-       "no set ip nexthop IP_ADDR",
+       "no set ip next-hop IP_ADDR",
        NO_STR
        "Set value\n"
        "IP address\n"

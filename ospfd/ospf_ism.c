@@ -34,8 +34,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
 #include "ospfd/ospf_network.h"
-#include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_packet.h"
 
 extern unsigned long ospf_debug_ism;
@@ -46,11 +46,7 @@ struct in_addr
 ospf_dr_election_sub (struct _list *routers)
 {
   listnode node;
-  int max_priority = 0;
-  struct in_addr max_router_id;
-  struct ospf_neighbor *r;
-
-  bzero (&max_router_id, sizeof (struct in_addr));
+  struct ospf_neighbor *r, *max = NULL;
 
   /* Choose highest router priority. In case of tie,
      choose highest Router ID. */
@@ -58,27 +54,20 @@ ospf_dr_election_sub (struct _list *routers)
     {
       r = getdata (node);
 
-      if (max_router_id.s_addr == 0)
+      if (max == NULL)
 	{
-	  max_router_id = r->router_id;
-	  max_priority = r->priority;
+	  max = r;
 	  continue;
 	}
 
-      if (max_priority < r->priority)
-	{
-	  max_router_id = r->router_id;
-	  max_priority = r->priority;
-	}
-      else if (max_priority == r->priority)
-	if (ntohl (max_router_id.s_addr) < ntohl (r->router_id.s_addr))
-	  {
-	    max_router_id = r->router_id;
-	    max_priority = r->priority;
-	  }
+      if (max->priority < r->priority)
+	max = r;
+      else if (max->priority == r->priority)
+	if (IPV4_ADDR_CMP (&max->router_id, &r->router_id) < 0)
+	  max = r;
     }
 
-  return max_router_id;
+  return max->address.u.prefix4;
 }
 
 void
@@ -96,7 +85,7 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
       nbr = getdata (node);
 
       /* neighbor declared to be DR. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &nbr->d_router))
+      if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router))
 	list_add_node (dr_list, nbr);
     }
 
@@ -125,11 +114,11 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
       nbr = getdata (node);
 
       /* neighbor declared to be DR. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &nbr->d_router))
+      if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router))
 	continue;
 
       /* neighbor declared to be BDR. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &nbr->bd_router))
+      if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
 	list_add_node (bdr_list, nbr);
 
       list_add_node (no_dr_list , nbr);
@@ -148,9 +137,9 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
 int
 ospf_ism_status (struct ospf_interface *oi)
 {
-  if (!IPV4_ADDR_CMP (&oi->d_router, &ospf_top->router_id))
+  if (IPV4_ADDR_SAME (&oi->d_router, &oi->address->u.prefix4))
     return ISM_DR;
-  else if (!IPV4_ADDR_CMP (&oi->bd_router, &ospf_top->router_id))
+  else if (IPV4_ADDR_SAME (&oi->bd_router, &oi->address->u.prefix4))
     return ISM_Backup;
   else
     return ISM_DROther;
@@ -194,7 +183,7 @@ ospf_dr_election (struct ospf_interface *oi)
 	continue;
 
       /* keep myself. */
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
 	myself = nbr;
 
       list_add_node (el_list, nbr);
@@ -257,12 +246,12 @@ ospf_hello_timer (struct thread *thread)
   oi = THREAD_ARG (thread);
   oi->t_hello = NULL;
 
-  zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Hello timer expire)",
-	oi->ifp->name);
+  if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
+    zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Hello timer expire)",
+	  oi->ifp->name);
 
   /* Sending hello packet. */
   ospf_hello_send (oi);
-  /*  OSPF_ISM_WRITE_ON (oi->t_write, ospf_hello_send, oi->fd); */
 
   /* Hello timer set. */
   OSPF_ISM_TIMER_ON (oi->t_hello, ospf_hello_timer, oi->v_hello);
@@ -278,8 +267,9 @@ ospf_wait_timer (struct thread *thread)
   oi = THREAD_ARG (thread);
   oi->t_wait = NULL;
 
-  zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Wait timer expire)",
-	oi->ifp->name);
+  if (IS_OSPF_DEBUG (ism, ISM_TIMERS))
+    zlog (NULL, LOG_DEBUG, "ISM [%s]: Timer (Wait timer expire)",
+	  oi->ifp->name);
 
   OSPF_ISM_EVENT_SCHEDULE (oi, ISM_WaitTimer);
 
@@ -407,7 +397,7 @@ ism_interface_down (struct ospf_interface *oi)
 	continue;
       nbr = rn->info;
 
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
       OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_KillNbr);
@@ -457,7 +447,8 @@ ism_neighbor_change (struct ospf_interface *oi)
 int
 ism_ignore (struct ospf_interface *oi)
 {
-  zlog (NULL, LOG_INFO, "ISM [%s]: ism_ignore called", oi->ifp->name);
+  if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
+    zlog (NULL, LOG_INFO, "ISM [%s]: ism_ignore called", oi->ifp->name);
 
   return 0;
 }
@@ -576,7 +567,7 @@ ism_change_status (struct ospf_interface *oi, int status)
   struct ospf_lsa *lsa;
 
   /* Logging change of status. */
-  if (ospf_debug_ism)
+  if (IS_OSPF_DEBUG (ism, ISM_STATUS))
     zlog (NULL, LOG_INFO, "ISM Status change [%s] %s -> %s", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  LOOKUP (ospf_ism_status_msg, status));
@@ -617,7 +608,7 @@ ospf_ism_event (struct thread *thread)
   if (! next_state)
     next_state = ISM [oi->status][event].next_state;
 
-  if (0)
+  if (IS_OSPF_DEBUG (ism, ISM_EVENTS))
     zlog (NULL, LOG_INFO, "OSPF ISM[%s]: %s (%s)", oi->ifp->name,
 	  LOOKUP (ospf_ism_status_msg, oi->status),
 	  ospf_ism_event_str[event]);

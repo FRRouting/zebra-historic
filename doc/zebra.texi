@@ -12,7 +12,7 @@
 @titlepage
 @title Zebra
 @subtitle A routing software package for TCP/IP network
-@subtitle for zebra-0.69
+@subtitle for zebra-0.71
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
@@ -25,7 +25,7 @@ Zebra is a multi-server routing software package which provides TCP/IP
 based routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns
 your machine into a full powered router.
 
-This is the Zebra Manual for zebra-0.69.
+This is the Zebra Manual for zebra-0.71.
 
 This manual describes @code{zebra} and some other beasts.
 @end ifinfo
@@ -405,12 +405,21 @@ avoid pagination.
 @end deffn
 
 @deffn Command {log stdout} {}
-@deffnx Command {log file @var{filename}} {}
+@deffnx Command {no log stdout} {}
+Set loggin output to stdout.
+@end deffn
+
+@deffn Command {log file @var{filename}} {}
 If you want to log into the file please specify @code{filename} as
 follow.
 @example
 log file /usr/local/etc/bgpd.log
 @end example
+@end deffn
+
+@deffn Command {log syslog} {}
+@deffnx Command {no log syslog} {}
+Set loggin output to syslog.
 @end deffn
 
 @deffn Command {write terminal} {}
@@ -824,17 +833,55 @@ Enable RIP process.
 @end deffn
 
 @deffn {RIP Command} {version @var{version}} {}
-Set RIP version.  @var{version} must be 1 or 2.
+Set RIP process's version.  @var{version} can be `1' or `2'.
 @end deffn
 
-@deffn Command {router zebra} {}
-This command is set default and doesn't appear configuration.  With this
-statement, RIP routes go to the @code{zebra} daemon.
+@deffn {RIP Command} {network @var{network}} {}
+Set RIP enable interface by @var{network}.  The interfaces which has
+address matched to @var{network} is enabled.
+@end deffn
+
+@deffn {RIP Command} {network @var{ifname}} {}
+Set RIP enable interface by @var{ifname}.
+@end deffn
+
+@deffn {RIP Command} {neighbor @var{a.b.c.d}} {}
+Specify RIP neighbor.
+@end deffn
+
+@deffn {RIP commnad} {redistribute static} {}
+Redistribute static route.
+@end deffn
+
+@deffn {RIP commnad} {redistribute connected} {}
+Redistribute connected route.
+@end deffn
+
+@deffn {RIP command} {route @var{a.b.c.d/m}} {}
+RIP only static route configuration.  In normal case, please set static
+route in zebra and redistribute it by `redistribute static'.
+@end deffn
+
+@deffn {RIP command} {timers basic @var{update} @var{invalid} @var{holddown} @var{flush}} {}
+Set RIP's timer.
+@end deffn
+
+@deffn {Interface command} {ip rip send version @var{varsion}} {}
+@var{varsion} can be `1', `2', `1 2'.  This configuration override
+router rip's version setting.
+@end deffn
+
+@deffn {Interface command} {ip rip receive version @var{varsion}} {}
+Version setting for incoming RIP packet.
 @end deffn
 
 @node ripd terminal mode commands,  , ripd configuration, ripd
 @comment  node-name,  next,  previous,  up
 @section ripd terminal mode commands
+
+@deffn Command {show ip rip} {}
+Show RIP routes.
+@end deffn
 
 @node ripngd, ospfd, ripd, Top
 @comment  node-name,  next,  previous,  up
@@ -1234,15 +1281,15 @@ it can be applied to any direction.
 @comment  node-name,  next,  previous,  up
 @section IP access-list
 
-@deffn {Command} {ip access-list permit @var{ipv4-network}} {}
-@deffnx {Command} {ip access-list deny @var{ipv4-network}} {}
+@deffn {Command} {access-list @var{name} permit @var{ipv4-network}} {}
+@deffnx {Command} {access-list @var{name} deny @var{ipv4-network}} {}
 @end deffn
 
 Basic filtering is done by access-list like below example.
 
 @example
-ip access-list deny 10.0.0.0/9
-ip access-list permit 10.0.0.0/8
+access-list filter deny 10.0.0.0/9
+access-list filter permit 10.0.0.0/8
 @end example
 
 @node IP prefix list, IP community list, IP access list, Filtering

@@ -23,18 +23,22 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "version.h"
 #include "getopt.h"
 #include "thread.h"
+#include "prefix.h"
 #include "linklist.h"
 #include "if.h"
 #include "vector.h"
 #include "vty.h"
 #include "command.h"
 #include "filter.h"
+#include "stream.h"
 #include "log.h"
 
-#include "ospfd/ospf_interface.h"
-#include "ospfd/ospf_zebra.h"
-#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospfd.h"
+#include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_neighbor.h"
+#include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_dump.h"
+#include "ospfd/ospf_zebra.h"
 #include "zebra/zebra.h"
 
 /* Configuration filename and directory. */
@@ -152,7 +156,7 @@ main (int argc, char **argv)
   /* get program name */
   progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
 
-  zlog_default = openzlog (progname, ZLOG_SYSLOG, ZLOG_OSPF,
+  zlog_default = openzlog (progname, ZLOG_NOLOG, ZLOG_OSPF,
 			   LOG_CONS|LOG_NDELAY|LOG_PID, LOG_DAEMON);
 
   while (1) 
@@ -221,7 +225,7 @@ main (int argc, char **argv)
   pid_output (PATH_OSPFD_PID);
 
   /* Create VTY socket */
-  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT, AF_INET);
+  vty_serv_sock (vty_port ? vty_port : OSPF_VTY_PORT);
 
   /* Print banner. */
   zlog (NULL, LOG_INFO, "OSPFd (%s) starts", ZEBRA_VERSION);

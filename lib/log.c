@@ -197,14 +197,80 @@ zlog(ZLOG *zl, int priority, const char *format, ...)
   
   if (zl->flags & ZLOG_SYSLOG)
     vsyslog(priority, format, args);
-  else if (zl->flags & ZLOG_STDOUT)
+
+  if (zl->flags & ZLOG_STDOUT)
     {
       time_print (stdout);
       vfprintf (stdout, format, args);
       fprintf (stdout, "\n");
       fflush (stdout);
     }
-  else if (zl->flags & ZLOG_FILE)
+
+  if (zl->flags & ZLOG_FILE)
+    {
+      time_print (zl->file);
+      vfprintf (zl->file, format, args);
+      fprintf (zl->file, "\n");
+      fflush (zl->file);
+    }
+}
+
+void
+zlog_info (const char *format, ...)
+{
+  va_list args;
+  int priority;
+  ZLOG *zl;
+
+  va_start(args, format);
+
+  zl = zlog_default;
+  priority = LOG_INFO;
+  
+  if (zl->flags & ZLOG_SYSLOG)
+    vsyslog(priority, format, args);
+
+  if (zl->flags & ZLOG_STDOUT)
+    {
+      time_print (stdout);
+      vfprintf (stdout, format, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+    }
+
+  if (zl->flags & ZLOG_FILE)
+    {
+      time_print (zl->file);
+      vfprintf (zl->file, format, args);
+      fprintf (zl->file, "\n");
+      fflush (zl->file);
+    }
+}
+
+void
+zlog_warn (const char *format, ...)
+{
+  va_list args;
+  int priority;
+  ZLOG *zl;
+
+  va_start(args, format);
+
+  zl = zlog_default;
+  priority = LOG_WARNING;
+  
+  if (zl->flags & ZLOG_SYSLOG)
+    vsyslog(priority, format, args);
+
+  if (zl->flags & ZLOG_STDOUT)
+    {
+      time_print (stdout);
+      vfprintf (stdout, format, args);
+      fprintf (stdout, "\n");
+      fflush (stdout);
+    }
+
+  if (zl->flags & ZLOG_FILE)
     {
       time_print (zl->file);
       vfprintf (zl->file, format, args);
@@ -226,14 +292,16 @@ zvlog(ZLOG *zl, int priority, const char *format, va_list args)
 
   if (zl->flags & ZLOG_SYSLOG)
     vsyslog(priority, zvformat, args);
-  else if (zl->flags & ZLOG_STDOUT)
+
+  if (zl->flags & ZLOG_STDOUT)
     {
       time_print (stdout);
       vfprintf (stdout, zvformat, args);
       fprintf (stdout, "\n");
       fflush (stdout);
     }
-  else if (zl->flags & ZLOG_FILE)
+
+  if (zl->flags & ZLOG_FILE)
     {
       time_print (zl->file);
       vfprintf (zl->file, zvformat, args);
@@ -330,7 +398,16 @@ zlog_set_flag (ZLOG *zl, int flags)
   if (zl == NULL)
     zl = zlog_default;
 
-  zl->flags = flags;
+  zl->flags |= flags;
+}
+
+void
+zlog_reset_flag (ZLOG *zl, int flags)
+{
+  if (zl == NULL)
+    zl = zlog_default;
+
+  zl->flags &= ~flags;
 }
 
 int
@@ -345,8 +422,22 @@ zlog_set_file (ZLOG *zl, int flags, char *filename)
   if (fp == NULL)
     return 0;
 
-  zl->flags = ZLOG_FILE;
+  zl->flags |= ZLOG_FILE;
   zl->file = fp;
+
+  return 1;
+}
+
+int
+zlog_reset_file (ZLOG *zl)
+{
+  if (zl == NULL)
+    zl = zlog_default;
+
+  zl->flags &= ~ZLOG_FILE;
+  if (zl->file)
+    fclose (zl->file);
+  zl->file = NULL;
 
   return 1;
 }

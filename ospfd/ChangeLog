@@ -1,3 +1,61 @@
+1999-07-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (ospf_init): Change to use install_default.
+
+1999-07-01  Rick Payne <rickp@rossfell.co.uk>
+
+	* ospf_zebra.c (zebra_init): Install standard commands to
+	ZEBRA_NODE.
+
+1999-06-30  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_dump.c: Whole debug command is improved.
+	(ISM|NSM) (events|status|timers) debug option added.
+	(show_debugging_ospf): new DEFUN added.
+
+1999-06-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsa.c (ospf_lsa_lookup_from_list): Change !IPV4_ADDR_CMP to
+	IPV4_ADDR_SAME.
+
+1999-06-29  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_dump.c (ospf_summary_lsa_dump): Add summary-LSA dump routine.
+	(ospf_as_external_lsa_dump): Add AS-external-LSA dump routine.
+
+	* ospf_nsm.c (nsm_twoway_received): fix condtion of adjacnet.
+
+	* ospf_ism.c (ospf_dr_election): fix DR Election.
+	
+	* ospf_dump.c (ospf_nbr_state_message): fix `show ip ospf neighbor'
+	command's state.
+
+1999-06-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_dump.c (ospf_router_lsa_dump): Add router-LSA dump routine.
+
+1999-06-28  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (show_ip_ospf_database_network): fix bug of
+	`show ip ospf database network' command output.
+
+	* ospf_nsm.c (nsm_inactivity_timer): Clear list of Link State
+	Retransmission, Database Summary and Link State Request.
+
+	* ospf_packet.c (ospf_ls_req_timer): New function added.
+	Set Link State Request retransmission timer.
+
+1999-06-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_main.c (main): Change default output from ZLOG_SYSLOG to
+	ZLOG_STDOUT.
+
+	* ospfd.c (ospf_init): Register show_ip_ospf_interface_cmd and
+	show_ip_ospf_neighbor_cmd to VIEW_NODE.
+
+	* ospf_lsa.c (ospf_lsa_init): Register show_ip_ospf_database_cmd
+	and show_ip_ospf_database_type_cmd to VIEW_NODE.
+
 1999-06-25  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_packet.c: fix bug of DD making.

@@ -105,8 +105,8 @@ vty_time_print (struct vty *vty)
 static void
 vty_hello (struct vty *vty)
 {
-  vty_out (vty, "\r\nHello, this is zebra (version %s)\r\n", ZEBRA_VERSION);
-  vty_out (vty, "Copyright 1996-1999 Kunihiro Ishiguro\r\n\r\n");
+  if (host.motd)
+    vty_out (vty, host.motd);
 }
 
 /* Put out prompt and wait input from user. */
@@ -780,7 +780,13 @@ vty_describe_command (struct vty *vty)
   /* Print out description. */
   for (i = 0; i < vector_max (describe); i++)
     if ((desc = vector_slot (describe, i)) != NULL)
-      vty_out (vty, "  %-17s %s\r\n", desc->cmd, desc->str ? desc->str : "");
+      {
+	if (*desc->cmd == '\0')
+	  continue;
+	else
+	  vty_out (vty, "  %-17s %s\r\n", desc->cmd, 
+		   desc->str ? desc->str : "");
+      }
 
   cmd_free_strvec (vline);
   vector_free (describe);
@@ -1240,9 +1246,25 @@ vty_accept (struct thread *thread)
   vty_sock = sockunion_accept (accept_sock, &su);
   if (vty_sock < 0)
     {
-      zlog (NULL, LOG_INFO, "can't accept vty socket : %m");
+      zlog (NULL, LOG_INFO, "can't accept vty socket : %s", strerror (errno));
       exit (1);
     }
+
+  /* Convert IPv4 compatible IPv6 address to IPv4 address. */
+#ifdef HAVE_IPV6
+  if (su.sa.sa_family == AF_INET6)
+    {
+      if (IN6_IS_ADDR_V4MAPPED (&su.sin6.sin6_addr))
+	{
+	  struct sockaddr_in sin;
+
+	  memset (&sin, 0, sizeof (struct sockaddr_in));
+	  sin.sin_family = AF_INET;
+	  memcpy (&sin.sin_addr, ((char *)&su.sin6.sin6_addr) + 12, 4);
+	  memcpy (&su, &sin, sizeof (struct sockaddr_in));
+	}
+    }
+#endif /* HAVE_IPV6 */
 
   /* VTY's accesslist apply. */
   if (vty_accesslist_name)
@@ -1255,7 +1277,7 @@ vty_accept (struct thread *thread)
       if (! (acl = access_list_lookup (vty_accesslist_name)) ||
 	  (access_list_apply (acl, p) != FILTER_PERMIT))
 	{
-	  char * buf;
+	  char *buf;
 	  zlog (NULL, LOG_INFO, "Vty connection refused from %s",
 		(buf = sockunion_su2str (&su)));
 	  free (buf);
@@ -1275,7 +1297,8 @@ vty_accept (struct thread *thread)
   ret = setsockopt (vty_sock, IPPROTO_TCP, TCP_NODELAY, 
 		    (char *) &on, sizeof (on));
   if (ret < 0)
-    zlog (NULL, LOG_INFO, "can't set sockopt to vty_sock : %m");
+    zlog (NULL, LOG_INFO, "can't set sockopt to vty_sock : %s", 
+	  strerror (errno));
 
   vty = vty_create (vty_sock, &su);
 
@@ -1285,15 +1308,67 @@ vty_accept (struct thread *thread)
   return 0;
 }
 
+#ifdef HAVE_IPV6
+void
+vty_serv_sock_addrinfo (unsigned short port)
+{
+  int ret;
+  struct addrinfo req;
+  struct addrinfo *ainfo;
+  struct addrinfo *ainfo_save;
+  int sock;
+  char port_str[BUFSIZ];
+
+  memset (&req, 0, sizeof (struct addrinfo));
+  req.ai_flags = AI_PASSIVE;
+  req.ai_family = AF_UNSPEC;
+  req.ai_socktype = SOCK_STREAM;
+  sprintf (port_str, "%d", port);
+
+  ret = getaddrinfo (NULL, port_str, &req, &ainfo);
+
+  if (ret != 0)
+    {
+      fprintf (stderr, "getaddrinfo failed: %s\n", strerror (errno));
+      exit (1);
+    }
+
+  ainfo_save = ainfo;
+
+  do
+    {
+      sock = socket (ainfo->ai_family, ainfo->ai_socktype, ainfo->ai_protocol);
+      if (sock < 0)
+	continue;
+
+      sockopt_reuseaddr (sock);
+      sockopt_reuseport (sock);
+
+      ret = bind (sock, ainfo->ai_addr, ainfo->ai_addrlen);
+      if (ret < 0)
+	continue;
+
+      ret = listen (sock, 3);
+      if (ret < 0) 
+	continue;
+
+      vty_event (VTY_SERV, sock, NULL);
+    }
+  while ((ainfo = ainfo->ai_next) != NULL);
+
+  freeaddrinfo (ainfo_save);
+}
+#endif /* HAVE_IPV6 */
+
 /* Make vty server socket. */
 void
-vty_serv_sock (unsigned short port, int family)
+vty_serv_sock_family (unsigned short port, int family)
 {
   int ret;
   union sockunion su;
   int accept_sock;
 
-  bzero (&su, sizeof (union sockunion));
+  memset (&su, 0, sizeof (union sockunion));
   su.sa.sa_family = family;
 
   /* Make new socket. */
@@ -1301,6 +1376,7 @@ vty_serv_sock (unsigned short port, int family)
 
   /* This is server, so reuse address. */
   sockopt_reuseaddr (accept_sock);
+  sockopt_reuseport (accept_sock);
 
   /* Bind socket to universal address and given port. */
   sockunion_bind (accept_sock, &su, port, NULL);
@@ -1315,6 +1391,17 @@ vty_serv_sock (unsigned short port, int family)
 
   /* Add vty server event. */
   vty_event (VTY_SERV, accept_sock, NULL);
+}
+
+/* Determine address family to bind. */
+void
+vty_serv_sock (unsigned short port)
+{
+#ifdef HAVE_IPV6
+  vty_serv_sock_addrinfo (port);
+#else
+  vty_serv_sock_family (port, AF_INET);
+#endif /* HAVE_IPV6 */
 }
 
 /* Close vty interface. */
@@ -1413,32 +1500,38 @@ vty_read_file (FILE *confp)
     }
 }
 
+#ifndef DIRECTORY_SEP
+#define DIRECTORY_SEP '/'
+#endif /* DIRECTORY_SEP */
+
+#ifndef IS_DIRECTORY_SEP
+#define IS_DIRECTORY_SEP(c) ((c) == DIRECTORY_SEP)
+#endif
+
 /* Read up configuration file from file_name. */
 void
 vty_read_config (char *config_file, 
 		 char *config_current_dir, 
 		 char *config_default_dir)
 {
-  FILE *confp;
-  char path[MAXPATHLEN];
   char *cwd;
-  char *file;
+  FILE *confp;
+  char *fullpath;
 
   /* If -f flag specified. */
   if (config_file != NULL)
     {
-      if (*config_file != '/')
+      if (! IS_DIRECTORY_SEP (config_file[0]))
 	{
 	  cwd = getcwd (NULL, MAXPATHLEN);
-	  file = strrchr (config_file, '/');
-	  if (file != NULL)
-	    sprintf (path, "%s/%s", cwd, file + 1);
-	  else 
-	    sprintf (path, "%s/%s", cwd, config_file);
-	  config_file = path;
+	  fullpath = XMALLOC (MTYPE_TMP, 
+				     strlen (cwd) + strlen (config_file) + 2);
+	  sprintf (fullpath, "%s/%s", cwd, config_file);
 	}
+      else
+	fullpath = config_file;
 
-      confp = fopen (config_file, "r");
+      confp = fopen (fullpath, "r");
 
       if (confp == NULL)
 	{
@@ -1463,21 +1556,22 @@ vty_read_config (char *config_file,
 	      exit (1);
 	    }      
 	  else
-	    config_file = config_default_dir;
+	    fullpath = config_default_dir;
 	}
       else
 	{
 	  /* Rleative path configuration file. */
 	  cwd = getcwd (NULL, MAXPATHLEN);
-	  sprintf (path, "%s/%s", cwd, config_current_dir);
-	  config_file = path;
+	  fullpath = XMALLOC (MTYPE_TMP, 
+			      strlen (cwd) + strlen (config_current_dir) + 2);
+	  sprintf (fullpath, "%s/%s", cwd, config_current_dir);
 	}  
     }  
   vty_read_file (confp);
 
   fclose (confp);
 
-  host_config_set (config_file);
+  host_config_set (fullpath);
 }
 
 /* Master of the threads. */
@@ -1615,6 +1709,8 @@ DEFUN (no_service_advanced_vty,
 int
 vty_config_write (struct vty *vty)
 {
+  int write = 0;
+
   if ((vty_timeout_val != VTY_TIMEOUT_DEFAULT) || vty_accesslist_name)
     {
       vty_out (vty, "line vty%s", VTY_NEWLINE);
@@ -1623,8 +1719,10 @@ vty_config_write (struct vty *vty)
 	vty_out (vty, " exec-timeout %d%s", vty_timeout_val, VTY_NEWLINE);
       if (vty_accesslist_name)
 	vty_out (vty, " access-class %s%s", vty_accesslist_name, VTY_NEWLINE);
+
+      write++;
     }
-  return 0;
+  return write;
 }
 
 struct cmd_node vty_node =
@@ -1647,9 +1745,8 @@ vty_init ()
   install_element (CONFIG_NODE, &line_vty_cmd);
   install_element (CONFIG_NODE, &service_advanced_vty_cmd);
   install_element (CONFIG_NODE, &no_service_advanced_vty_cmd);
-  install_element (VTY_NODE, &config_end_cmd);
-  install_element (VTY_NODE, &config_exit_cmd);
-  install_element (VTY_NODE, &config_help_cmd);
+
+  install_default (VTY_NODE);
   install_element (VTY_NODE, &exec_timeout_cmd);
   install_element (VTY_NODE, &vty_access_class_cmd);
   install_element (VTY_NODE, &no_vty_access_class_cmd);

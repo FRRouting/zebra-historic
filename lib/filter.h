@@ -23,6 +23,8 @@
 #ifndef _ZEBRA_FILTER_H
 #define _ZEBRA_FILTER_H
 
+#include "if.h"
+
 /* Filter type is made by `permit', `deny' and `dynamic'. */
 enum filter_type 
 {
@@ -61,5 +63,7 @@ enum filter_type access_list_apply (struct access_list *, void *);
 /* Prototypes for distribute-list. */
 void distribute_init ();
 void distribute_apply_all ();
+enum filter_type distribute_apply_in (struct interface *, struct prefix *);
+enum filter_type distribute_apply_out (struct interface *, struct prefix *);
 
 #endif /* _ZEBRA_FILTER_H */

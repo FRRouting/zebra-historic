@@ -33,7 +33,7 @@ ipforward ()
   char *buf;
   struct strioctl si;
 
-  buf = (char *) zmalloc (sizeof forward + 1);
+  buf = (char *) XMALLOC (MTYPE_TMP, sizeof forward + 1);
   strcpy (buf, forward);
 
   fd = open ("/dev/ip", O_RDWR);

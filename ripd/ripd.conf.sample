@@ -7,11 +7,19 @@
 hostname ripd
 password zebra
 !
-interface eth0
- accept default
-!
-router zebra
+! debug rip events
+! debug rip packet
 !
 router rip
+! network 11.0.0.0/8
+! network eth0
+! route 10.0.0.0/8
 !
-!log file ripd.log
+! access-list private-only permit 10.0.0.0/8
+! access-list private-only deny any
+! 
+! distribute-list private-only in eth0
+!
+! log file ripd.log
+!
+log stdout

@@ -63,12 +63,12 @@ struct ospf_neighbor
   /* Timer values. */
   u_int32_t v_inactivity;
   u_int32_t v_db_desc;
+  u_int32_t v_ls_req;
 
   /* Threads. */
-  struct thread *t_read;
-  struct thread *t_write;
   struct thread *t_inactivity;
   struct thread *t_db_desc;
+  struct thread *t_ls_req;
 
   /* Statistics Field */
 };

@@ -18,3 +18,55 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#include <zebra.h>
+
+#include "linklist.h"
+#include "prefix.h"
+#include "memory.h"
+
+#include "ospfd/ospfd.h"
+#include "ospfd/ospf_interface.h"
+#include "ospfd/ospf_ism.h"
+#include "ospfd/ospf_neighbor.h"
+#include "ospfd/ospf_nsm.h"
+#include "ospfd/ospf_lsa.h"
+#include "ospfd/ospf_spf.h"
+
+struct vertex *
+ospf_vertex_new ()
+{
+  struct vertex *new;
+
+  new = XMALLOC (MTYPE_OSPF_VERTEX, sizeof (struct vertex));
+  memset (new, 0, sizeof (struct vertex));
+  return new;
+}
+
+void
+ospf_vertex_free (struct vertex *v)
+{
+  XFREE (MTYPE_OSPF_VERTEX, v);
+}
+
+void
+ospf_spf_free ()
+{
+  ;
+}
+
+struct vertex *
+ospf_spf_lookup_top ()
+{
+  return NULL;
+}
+
+void
+ospf_spf_make ()
+{
+  struct vertex *v;
+
+  /* Free spf tree. */
+  ospf_spf_free ();
+
+  v = ospf_spf_lookup_top ();
+}

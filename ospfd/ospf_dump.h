@@ -29,13 +29,33 @@
 #define OSPF_DEBUG_LS_REQ	0x04
 #define OSPF_DEBUG_LS_UPD	0x08
 #define OSPF_DEBUG_LS_ACK	0x10
-#define OSPF_DEBUG_SEND		0x20
-#define OSPF_DEBUG_RECV		0x40
-#define OSPF_DEBUG_DETAIL	0x80
-#define OSPF_DEBUG_PACKET	0x7f
+#define OSPF_DEBUG_ALL		0x1f
 
-#define OSPF_DEBUG_ISM		0x01
-#define OSPF_DEBUG_NSM		0x01
+#define OSPF_DEBUG_SEND		0x01
+#define OSPF_DEBUG_RECV		0x02
+#define OSPF_DEBUG_SEND_RECV    0x03
+#define OSPF_DEBUG_DETAIL	0x04
+
+#define OSPF_DEBUG_ISM_STATUS	0x01
+#define OSPF_DEBUG_ISM_EVENTS	0x02
+#define OSPF_DEBUG_ISM_TIMERS	0x04
+#define OSPF_DEBUG_ISM		0x07
+#define OSPF_DEBUG_NSM_STATUS	0x01
+#define OSPF_DEBUG_NSM_EVENTS	0x02
+#define OSPF_DEBUG_NSM_TIMERS   0x04
+#define OSPF_DEBUG_NSM		0x07
+
+/* Macro for setting debug option. */
+#define DEBUG_PACKET_ON(a, b)		ospf_debug_packet[a] |= (b)
+#define DEBUG_PACKET_OFF(a, b)		ospf_debug_packet[a] &= ~(b)
+
+#define DEBUG_ON(a, b)			ospf_debug_ ## a |= (OSPF_DEBUG_ ## b)
+#define DEBUG_OFF(a, b)			ospf_debug_ ## a &= ~(OSPF_DEBUG_ ## b)
+
+/* Macro for checking debug option. */
+#define IS_OSPF_DEBUG_PACKET(a, b)	(ospf_debug_packet[a] & \
+                                         OSPF_DEBUG_ ## b)
+#define IS_OSPF_DEBUG(a, b)		(ospf_debug_ ## a & OSPF_DEBUG_ ## b)
 
 /* Message Strings. */
 extern char *ospf_packet_type_str[];
@@ -45,8 +65,9 @@ extern char *ospf_lsa_type_str[];
 char *mes_lookup (message *, int, int);
 void ospf_nbr_state_message (struct ospf_neighbor *, char *, size_t);
 char *ospf_timer_dump (struct thread *, char *, size_t);
-void ospf_ip_header_dump (struct stream *s);
-void ospf_packet_dump (struct stream *s);
+void ospf_ip_header_dump (struct stream *);
+void ospf_packet_dump (struct stream *);
+void ospf_lsa_header_dump (struct ospf_lsa *);
 void debug_init ();
 
 #endif /* _ZEBRA_OSPF_DUMP_H */

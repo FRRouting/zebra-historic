@@ -125,6 +125,7 @@ interface_config_write (struct vty *vty)
   listnode node;
   struct interface *ifp;
   struct ospf_interface *oi;
+  int write = 0;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
@@ -136,6 +137,8 @@ interface_config_write (struct vty *vty)
 
       vty_out (vty, "!%s", VTY_NEWLINE);
       vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
+
+      write++;
 
       /* Authentication Key print. */
       if (strlen (oi->auth_data))
@@ -172,7 +175,7 @@ interface_config_write (struct vty *vty)
 		 oi->transmit_delay, VTY_NEWLINE);
     }
 
-  return 0;
+  return write;
 }
 
 

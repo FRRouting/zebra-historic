@@ -37,6 +37,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_ism.h"
 #include "ospfd/ospf_neighbor.h"
 #include "ospfd/ospf_nsm.h"
+#include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_zebra.h"
@@ -114,7 +115,7 @@ ospf_area_lookup_by_area_id (struct in_addr area_id)
   for (node = listhead (ospf_top->areas); node; nextnode (node))
     {
       area = getdata (node);
-      if (!IPV4_ADDR_CMP (&area->area_id, &area_id))
+      if (IPV4_ADDR_SAME (&area->area_id, &area_id))
 	return area;
     }
 
@@ -847,7 +848,12 @@ show_ip_ospf_neighbor_sub (struct vty *vty, struct interface *ifp)
 
       nbr = rn->info;
 
-      if (!IPV4_ADDR_CMP (&nbr->router_id, &ospf_top->router_id))
+      /* Do not show myself. */
+      if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
+	continue;
+
+      /* Down state is not shown. */
+      if (nbr->status == NSM_Down)
 	continue;
 
       ospf_nbr_state_message (nbr, msgbuf, 16);
@@ -903,14 +909,17 @@ ospf_config_write (struct vty *vty)
   struct route_node *rn;
   listnode node;
   u_char buf[INET_ADDRSTRLEN];
+  int write = 0;
 
   if (ospf_top != NULL)
     {
       /* router ospf print. */
       vty_out (vty, "router ospf%s", VTY_NEWLINE);
 
+      write++;
+
       if (! ospf_top->networks)
-	return 0;
+	return write;
 
       /* network area print. */
       for (rn = route_top (ospf_top->networks); rn; rn = route_next (rn))
@@ -968,7 +977,7 @@ ospf_config_write (struct vty *vty)
 	}
     }
 
-  return 0;
+  return write;
 }
 
 struct cmd_node ospf_node =
@@ -985,14 +994,14 @@ ospf_init ()
   install_node (&ospf_node, ospf_config_write);
 
   /* Install ospf commands. */
+  install_element (VIEW_NODE, &show_ip_ospf_interface_cmd);
+  install_element (VIEW_NODE, &show_ip_ospf_neighbor_cmd);
   install_element (ENABLE_NODE, &show_ip_ospf_interface_cmd);
   install_element (ENABLE_NODE, &show_ip_ospf_neighbor_cmd);
   install_element (CONFIG_NODE, &router_ospf_cmd);
   install_element (CONFIG_NODE, &no_router_ospf_cmd);
 
-  install_element (OSPF_NODE, &config_end_cmd);
-  install_element (OSPF_NODE, &config_exit_cmd);
-  install_element (OSPF_NODE, &config_help_cmd);
+  install_default (OSPF_NODE);
   install_element (OSPF_NODE, &network_area_cmd);
   install_element (OSPF_NODE, &no_network_area_cmd);
   install_element (OSPF_NODE, &area_authentication_message_digest_cmd);

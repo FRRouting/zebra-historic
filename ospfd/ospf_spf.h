@@ -18,3 +18,16 @@ along with GNU Zebra; see the file COPYING.  If not, write to the Free
 Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
+#define OSPF_VERTEX_ROUTER  1
+#define OSPF_VERTEX_NETWORK 2
+
+struct vertex
+{
+  u_char type;
+  u_int16_t id;
+  struct ospf_lsa *lsa;
+  list nexthop;
+  u_int16_t distance;
+  list path;
+  struct vertex *parent;
+};

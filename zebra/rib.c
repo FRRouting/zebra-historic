@@ -66,6 +66,35 @@ struct
   { ZEBRA_ROUTE_BGP,     "B", "bgp",       70},
 };
 
+struct nexthop
+{
+  union
+  {
+    struct in_addr nexthop4;
+#ifdef HAVE_IPV6
+    struct in6_addr nexthop6;
+#endif /* HAVE_IPV6 */
+  } u;
+  char *ifname;
+};
+
+struct nexthop *
+nexthop_new ()
+{
+  struct nexthop *new;
+  new = XMALLOC (MTYPE_NEXTHOP, sizeof (struct nexthop));
+  bzero (new, sizeof (struct nexthop));
+  return new;
+}
+
+void
+nexthop_free (struct nexthop *nexthop)
+{
+  if (nexthop->ifname)
+    free (nexthop->ifname);
+  XFREE (MTYPE_NEXTHOP, nexthop);
+}
+
 /* New routing information base. */
 struct rib *
 rib_create (int type, int distance, int ifindex, int table)
@@ -519,12 +548,14 @@ rib_close_ipv4 ()
   for (np = route_top (ipv4_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
       if (!rib_system_route (rib->type) && IS_RIB_FIB (rib))
-	if (IS_RIB_LINK (rib))
-	  kernel_delete_ipv4 ((struct prefix_ipv4 *)&np->p, 
-			      NULL, rib->ifindex, 0, rib->table);
-	else
-	  kernel_delete_ipv4 ((struct prefix_ipv4 *)&np->p, 
-			      &rib->u.gate4, rib->ifindex, 0, rib->table);
+	{
+	  if (IS_RIB_LINK (rib))
+	    kernel_delete_ipv4 ((struct prefix_ipv4 *)&np->p, 
+				NULL, rib->ifindex, 0, rib->table);
+	  else
+	    kernel_delete_ipv4 ((struct prefix_ipv4 *)&np->p, 
+				&rib->u.gate4, rib->ifindex, 0, rib->table);
+	}
 }
 
 
@@ -821,6 +852,336 @@ rib_close_ipv6 ()
 			    rib->ifindex, 0, rib->table);
 }
 
+/* IPv6 static route add. */
+int
+ipv6_static_add (struct prefix_ipv6 *p, struct in6_addr *gate, char *ifname)
+{
+  struct nexthop *nexthop;
+  struct route_node *node;
+
+  node = route_node_get (ipv6_rib_static, (struct prefix *) p);
+
+  /* If same static route exists. */
+  if (node->info)
+    {
+      route_unlock_node (node);
+      return -1;
+    }
+
+  /* Allocate new nexthop structure. */
+  nexthop = nexthop_new ();
+
+  if (gate)
+    nexthop->u.nexthop6 = *gate;
+
+  if (ifname)
+    nexthop->ifname = strdup (ifname);
+
+  node->info = nexthop;
+
+  return 0;
+}
+
+/* IPv6 static route delete. */
+int
+ipv6_static_delete (struct prefix_ipv6 *p, struct in6_addr *gate, char *ifname)
+{
+  struct route_node *node;
+  struct nexthop *nexthop;
+
+  node = route_node_lookup (ipv6_rib_static, (struct prefix *) p);
+  if (! node)
+    return -1;
+
+  nexthop = node->info;
+  if (gate)
+    {
+      if (IPV6_ADDR_CMP (gate, &nexthop->u.nexthop6))
+	{
+	  route_unlock_node (node);
+	  return -1;
+	}
+    }
+  if (ifname)
+    {
+      if (!nexthop->ifname)
+	{
+	  route_unlock_node (node);
+	  return -1;
+	}
+      if (strcmp (ifname, nexthop->ifname))
+	{
+	  route_unlock_node (node);
+	  return -1;
+	}
+    }
+
+  nexthop_free (nexthop);
+  node->info = NULL;
+
+  route_unlock_node (node);
+  route_unlock_node (node);
+
+  return 0;
+}
+
+int
+ipv6_static_list (struct vty *vty)
+{
+  struct route_node *np;
+  struct nexthop *nexthop;
+  char b1[BUFSIZ];
+  char b2[BUFSIZ];
+  int write = 0;
+
+  for (np = route_top (ipv6_rib_static); np; np = route_next (np))
+    if ((nexthop = np->info) != NULL)
+      {
+	if (nexthop->ifname)
+	  vty_out (vty, "ipv6 route %s/%d %s %s%s",
+		   inet_ntop (np->p.family, &np->p.u.prefix, b1, BUFSIZ),
+		   np->p.prefixlen,
+		   inet_ntop (np->p.family, &nexthop->u.nexthop6, b2, BUFSIZ),
+		   nexthop->ifname,
+		   VTY_NEWLINE);
+	else
+	  vty_out (vty, "ipv6 route %s/%d %s%s",
+		   inet_ntop (np->p.family, &np->p.u.prefix, b1, BUFSIZ),
+		   np->p.prefixlen,
+		   inet_ntop (np->p.family, &nexthop->u.nexthop6, b2, BUFSIZ),
+		   VTY_NEWLINE);
+	write++;
+      }
+  return write;
+}
+
+DEFUN (ipv6_route, ipv6_route_cmd,
+       "ipv6 route IPV6_ADDRESS IPV6_ADDRESS",
+       "IP information\n"
+       "IP routing set\n"
+       "IP Address\n"
+       "Destination IP Address\n")
+{
+  int ret;
+  struct prefix_ipv6 p;
+  struct in6_addr gate;
+
+  /* Route prefix/prefixlength format check. */
+  ret = str2prefix_ipv6 (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed IPv6 address\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Gateway format check. */
+  ret = inet_pton (AF_INET6, argv[1], &gate);
+  if (!ret)
+    {
+      vty_out (vty, "Gateway address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv6 (&p);
+
+  /* We need rib error treatment here. */
+  ret = rib_add_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, 0);
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "route already exist\r\n");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable\r\n");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied\r\n");
+	  break;
+	default:
+	  break;
+	}
+      return CMD_WARNING;
+    }
+
+  ipv6_static_add (&p, &gate, NULL);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
+       "ipv6 route IPV6_ADDRESS IPV6_ADDRESS IFNAME",
+       "IP information\n"
+       "IP routing set\n"
+       "IP Address\n"
+       "Destination IP Address\n"
+       "Destination interface name\n")
+{
+  int ret;
+  struct prefix_ipv6 p;
+  struct in6_addr gate;
+  struct interface *ifp;
+
+  /* Route prefix/prefixlength format check. */
+  ret = str2prefix_ipv6 (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed IPv6 address\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Gateway format check. */
+  ret = inet_pton (AF_INET6, argv[1], &gate);
+  if (!ret)
+    {
+      vty_out (vty, "Gateway address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Interface name check. */
+  ifp = if_lookup_by_name (argv[2]);
+  if (!ifp)
+    {
+      vty_out (vty, "Can't find interface\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv6 (&p);
+
+  /* We need rib error treatment here. */
+  ret = rib_add_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, ifp->index, 0);
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "route already exist\r\n");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable\r\n");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied\r\n");
+	  break;
+	default:
+	  break;
+	}
+    }
+
+  ipv6_static_add (&p, &gate, argv[2]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_route,
+       no_ipv6_route_cmd,
+       "no ipv6 route IPV6_ADDRESS IPV6_ADDRESS",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP Address\n"
+       "IP Address\n"
+       "IP Netmask\n")
+{
+  int ret;
+  struct prefix_ipv6 p;
+  struct in6_addr gate;
+  
+  /* Check ipv6 prefix. */
+  ret = str2prefix_ipv6 (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed IPv6 address\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Check gateway. */
+  ret = inet_pton (AF_INET6, argv[1], &gate);
+  if (!ret)
+    {
+      vty_out (vty, "Gateway address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv6 (&p);
+
+  ret = rib_delete_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, 0, 0);
+
+  switch (ret)
+    {
+    default:
+      /* Success */
+      break;
+    }
+
+  ipv6_static_delete (&p, &gate, NULL);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_route_ifname,
+       no_ipv6_route_ifname_cmd,
+       "no ipv6 route IPV6_ADDRESS IPV6_ADDRESS IFNAME",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP Address\n"
+       "IP Address\n"
+       "Interface name\n")
+{
+  int ret;
+  struct prefix_ipv6 p;
+  struct in6_addr gate;
+  struct interface *ifp;
+  
+  /* Check ipv6 prefix. */
+  ret = str2prefix_ipv6 (argv[0], &p);
+  if (!ret)
+    {
+      vty_out (vty, "Malformed IPv6 address\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Check gateway. */
+  ret = inet_pton (AF_INET6, argv[1], &gate);
+  if (!ret)
+    {
+      vty_out (vty, "Gateway address is invalid\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Interface name check. */
+  ifp = if_lookup_by_name (argv[2]);
+  if (!ifp)
+    {
+      vty_out (vty, "Can't find interface\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv6 (&p);
+
+  ret = rib_delete_ipv6 (ZEBRA_ROUTE_STATIC, &p, &gate, ifp->index, 0);
+
+  switch (ret)
+    {
+    default:
+      /* Success */
+      break;
+    }
+
+  /* Check static configuration. */
+  ret = ipv6_static_delete (&p, &gate, argv[2]);
+
+  return CMD_SUCCESS;
+}
+
 /* show ip6 command*/
 DEFUN (show_ipv6, show_ipv6_cmd,
        "show ipv6 route [IPV6_ADDRESS]",
@@ -908,6 +1269,20 @@ rib_close ()
 #endif /* HAVE_IPV6 */
 }
 
+/* Static ip route configuration write function. */
+int
+config_write_ip (struct vty *vty)
+{
+  int write = 0;
+
+  write += rib_static_list (vty, ipv4_rib_table);
+#ifdef HAVE_IPV6
+  write += ipv6_static_list (vty);
+#endif /* HAVE_IPV6 */
+
+  return write;
+}
+
 /* Routing information base initialize. */
 void
 rib_init ()
@@ -918,6 +1293,12 @@ rib_init ()
 
 #ifdef HAVE_IPV6
   ipv6_rib_table = route_table_init ();
+  ipv6_rib_static = route_table_init ();
+  install_element (CONFIG_NODE, &ipv6_route_cmd);
+  install_element (CONFIG_NODE, &ipv6_route_ifname_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_route_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_route_ifname_cmd);
+
   install_element (VIEW_NODE, &show_ipv6_cmd);
   install_element (ENABLE_NODE, &show_ipv6_cmd);
 #endif /* HAVE_IPV6 */

@@ -208,29 +208,6 @@ sockunion_accept (int sock, union sockunion *su)
   newsock = accept (sock, (struct sockaddr *) su, &len);
   
   return newsock;
-
-#if 0
-#ifdef THREAD
-  int family = su->sa.sa_family;
-#else
-  int family = FD_SLOT[sock].family;
-#endif
-
-  if (family == AF_INET)
-    {
-      len = sizeof (struct sockaddr_in);
-      newsock = accept (sock, (struct sockaddr *) &su->sin, &len);
-      return newsock;
-    }
-#ifdef HAVE_IPV6
-  if (family == AF_INET6)
-    {
-      len = sizeof (struct sockaddr_in6);
-      newsock = accept (sock, (struct sockaddr *) &su->sin6, &len);
-      return newsock;
-    }
-#endif /* HAVE_IPV6 */
-#endif /* 0 */
 }
 
 /**/
@@ -336,8 +313,8 @@ sockunion_connect (int fd, union sockunion *su, unsigned short port)
     {
       if (errno != EINPROGRESS)
 	{
-	  zlog (NULL, LOG_INFO, "can't connect to %s fd %d : %m",
-		  sockunion_log (su), fd);
+	  zlog (NULL, LOG_INFO, "can't connect to %s fd %d : %s",
+		  sockunion_log (su), fd, strerror (errno));
 	  return connect_error;
 	}
     }
@@ -364,7 +341,7 @@ sockunion_stream_socket (union sockunion *su)
   return sock;
 }
 
-/**/
+/* Bind socket to specified address. */
 int
 sockunion_bind (int sock, union sockunion *su, unsigned short port, 
 		union sockunion *su_addr)
@@ -372,33 +349,39 @@ sockunion_bind (int sock, union sockunion *su, unsigned short port,
   int size = 0;
   int ret;
 
-  switch (su->sa.sa_family)
+  if (su->sa.sa_family == AF_INET)
     {
-    case AF_INET:
       size = sizeof (struct sockaddr_in);
       su->sin.sin_port = htons (port);
-      /* su->sin.sin_len = size; */
+#ifdef HAVE_SIN_LEN
+      su->sin.sin_len = size;
+#endif /* HAVE_SIN_LEN */
       if (su_addr == NULL)
 	su->sin.sin_addr.s_addr = htonl (INADDR_ANY);
-      break;
+    }
 #ifdef HAVE_IPV6
-    case AF_INET6:
+  else if (su->sa.sa_family == AF_INET6)
+    {
       size = sizeof (struct sockaddr_in6);
       su->sin6.sin6_port = htons (port);
-      /* su->sin6.sin6_len = size; */
+#ifdef SIN6_LEN
+      su->sin6.sin6_len = size;
+#endif /* SIN6_LEN */
       if (su_addr == NULL)
+	{
 #ifdef LINUX_IPV6
-	bzero (&su->sin6.sin6_addr, sizeof (struct in6_addr));
+	  bzero (&su->sin6.sin6_addr, sizeof (struct in6_addr));
 #else
-      	su->sin6.sin6_addr = in6addr_any;
+	  su->sin6.sin6_addr = in6addr_any;
 #endif /* LINUX_IPV6 */
-      break;
-#endif /* HAVE_IPV6 */
+	}
     }
+#endif /* HAVE_IPV6 */
+  
 
   ret = bind (sock, (struct sockaddr *)su, size);
   if (ret < 0)
-    zlog (NULL, LOG_WARNING, "can't bind socket : %m");
+    zlog (NULL, LOG_WARNING, "can't bind socket : %s", strerror (errno));
 
   return ret;
 }
@@ -535,20 +518,17 @@ sockunion_getsockname (int fd)
   if (name.sa.sa_family == AF_INET)
     {
       su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
-      bzero (su, sizeof (union sockunion));
-      su->sin = name.sin;
+      memcpy (su, &name, sizeof (struct sockaddr_in));
       return su;
     }
 #ifdef HAVE_IPV6
   if (name.sa.sa_family == AF_INET6)
     {
       su = XMALLOC (MTYPE_TMP, sizeof (union sockunion));
-      bzero (su, sizeof (union sockunion));
-      su->sin6 = name.sin6;
+      memcpy (su, &name, sizeof (struct sockaddr_in6));
       return su;
     }
 #endif /* HAVE_IPV6 */
-
   return NULL;
 }
 

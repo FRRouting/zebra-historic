@@ -184,7 +184,11 @@ main (int argc, char **argv)
     }
 
   /* pid file create */
+#if 0
   pid_output_lock (PATH_OSPF6D_PID);
+#else
+  pid_output (PATH_OSPF6D_PID);
+#endif
 
   /* thread master */
   master = thread_make_master ();
@@ -211,10 +215,7 @@ main (int argc, char **argv)
   ospf6_serv_sock ();
 
   /* Make ospf vty socket. */
-  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET);
-#ifdef KAME
-  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, AF_INET6);
-#endif /* KAME */
+  vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT);
 
   /* Print start message */
   zvlog_info ("OSPF6d (%s) starts", ZEBRA_VERSION);

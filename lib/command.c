@@ -36,6 +36,8 @@ vector cmdvec;
 /* Host information structure. */
 struct host host;
 
+char *default_motd = "\r\nHello, this is zebra (version " ZEBRA_VERSION ")\r\nCopyright 1996-1999 Kunihiro Ishiguro\r\n\r\n";
+
 /* Standard command node structures. */
 struct cmd_node auth_node =
 {
@@ -419,14 +421,20 @@ config_write_host (struct vty *vty)
   if (host.logfile)
     vty_out (vty, "log file %s%s", host.logfile, VTY_NEWLINE);
 
-  if (host.log)
-    vty_out (vty, "log %s%s", host.log, VTY_NEWLINE);
+  if (host.log_stdout)
+    vty_out (vty, "log stdout%s", VTY_NEWLINE);
+
+  if (host.log_syslog)
+    vty_out (vty, "log syslog%s", VTY_NEWLINE);
 
   if (host.advanced)
     vty_out (vty, "service advanced-vty%s", VTY_NEWLINE);
 
   if (host.encrypt)
     vty_out (vty, "service password-encryption%s", VTY_NEWLINE);
+
+  if (! host.motd)
+    vty_out (vty, "no banner motd%s", VTY_NEWLINE);
 
   return 1;
 }
@@ -510,48 +518,50 @@ cmd_filter_by_completion (char *command, vector v, int index)
   /* If command and cmd_element string does not match set NULL to vector */
   for (i = 0; i < vector_max (v); i++) 
     if ((cmd_element = vector_slot (v, i)) != NULL)
-      if (index < vector_max (cmd_element->strvec))
-	{
-	  int j;
-	  int matched = 0;
+      {
 
-	  descvec = vector_slot (cmd_element->strvec, index);
-	  
-	  for (j = 0; j < vector_max (descvec); j++)
-	    {
-	      desc = vector_slot (descvec, j);
-	      str = desc->cmd;
+	if (index < vector_max (cmd_element->strvec))
+	  {
+	    int j;
+	    int matched = 0;
 
-	      if (CMD_VARARG (str))
-		return vararg_match;
+	    descvec = vector_slot (cmd_element->strvec, index);
+	    
+	    for (j = 0; j < vector_max (descvec); j++)
+	      {
+		desc = vector_slot (descvec, j);
+		str = desc->cmd;
 
-	      /* Check is this point's argument optional ? */
-	      if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
-		{
-		  if (match_type < extend_match)
-		    match_type = extend_match;
-		  matched++;
-		}
-	      else if (strncmp (command, str, strlen (command)) == 0)
-		{
-		  if (strcmp (command, str) == 0) 
-		    match_type = exact_match;
-		  else
-		    {
-		      if (match_type < partly_match)
-			match_type = partly_match;
-		    }
-		  matched++;
-		}
-	    }
-	  if (! matched)
+		if (CMD_VARARG (str))
+		  return vararg_match;
+
+		/* Check is this point's argument optional ? */
+		if (CMD_OPT (str[0]) || CMD_EXT (str[0]))
+		  {
+		    if (match_type < extend_match)
+		      match_type = extend_match;
+		    matched++;
+		  }
+		else if (strncmp (command, str, strlen (command)) == 0)
+		  {
+		    if (strcmp (command, str) == 0) 
+		      match_type = exact_match;
+		    else
+		      {
+			if (match_type < partly_match)
+			  match_type = partly_match;
+		      }
+		    matched++;
+		  }
+	      }
+	    if (! matched)
+	      vector_slot (v, i) = NULL;
+	  }
+	else 
+	  {
 	    vector_slot (v, i) = NULL;
-	}
-      else
-	{
-	  vector_slot (v, i) = NULL;
-	}
-
+	  }
+      }
   return match_type;
 }
 
@@ -1244,6 +1254,12 @@ DEFUN (config_exit,
   return CMD_SUCCESS;
 }
 
+/* quit is alias of exit. */
+ALIAS (config_exit,
+       config_quit_cmd,
+       "quit",
+       "Exit current mode and down to previous mode\n")
+       
 /* End of configuration. */
 DEFUN (config_end,
        config_end_cmd,
@@ -1621,14 +1637,26 @@ DEFUN (config_lines, config_lines_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (config_log,
-       config_log_cmd,
+DEFUN (config_log_stdout,
+       config_log_stdout_cmd,
        "log stdout",
        "Logging control\n"
        "Logging goes to stdout\n")
 {
   zlog_set_flag (NULL, ZLOG_STDOUT);
-  host.log = "stdout";
+  host.log_stdout = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_config_log_stdout,
+       no_config_log_stdout_cmd,
+       "no log stdout",
+       NO_STR
+       "Logging control\n"
+       "Cancel logging to stdout\n")
+{
+  zlog_reset_flag (NULL, ZLOG_STDOUT);
+  host.log_stdout = 0;
   return CMD_SUCCESS;
 }
 
@@ -1637,7 +1665,7 @@ DEFUN (config_log_file,
        "log file FILENAME",
        "Logging control\n"
        "Logging to file\n"
-       "Loggin filename\n")
+       "Logging filename\n")
 {
   int ret;
 
@@ -1657,11 +1685,83 @@ DEFUN (config_log_file,
   return CMD_SUCCESS;
 }
 
+DEFUN (no_config_log_file,
+       no_config_log_file_cmd,
+       "no log file",
+       NO_STR
+       "Logging control\n"
+       "Cancel logging to file\n")
+{
+  zlog_reset_file (NULL);
+
+  if (host.logfile)
+    XFREE (MTYPE_TMP, host.logfile);
+
+  host.logfile = NULL;
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (config_log_syslog,
+       config_log_syslog_cmd,
+       "log syslog",
+       "Logging control\n"
+       "Logging goes to syslog\n")
+{
+  zlog_set_flag (NULL, ZLOG_SYSLOG);
+  host.log_syslog = 1;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_config_log_syslog,
+       no_config_log_syslog_cmd,
+       "no log syslog",
+       NO_STR
+       "Logging control\n"
+       "Cancel logging to syslog\n")
+{
+  zlog_reset_flag (NULL, ZLOG_SYSLOG);
+  host.log_syslog = 0;
+  return CMD_SUCCESS;
+}
+
+DEFUN (banner_motd_default,
+       banner_motd_default_cmd,
+       "banner motd default",
+       "Set banner string\n"
+       "Strings for motd\n"
+       "Default string\n")
+{
+  host.motd = default_motd;
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_banner_motd,
+       no_banner_motd_cmd,
+       "no banner motd",
+       NO_STR
+       "Set banner string\n"
+       "Strings for motd\n")
+{
+  host.motd = NULL;
+  return CMD_SUCCESS;
+}
+
 /* Set config filename.  Called from vty.c */
 void
 host_config_set (char *filename)
 {
   host.config = strdup (filename);
+}
+
+void
+install_default (enum node_type node)
+{
+  install_element (node, &config_exit_cmd);
+  install_element (node, &config_quit_cmd);
+  install_element (node, &config_end_cmd);
+  install_element (node, &config_help_cmd);
+  install_element (node, &config_list_cmd);
 }
 
 /* Initialize command interface. Install basic nodes and commands. */
@@ -1678,6 +1778,7 @@ cmd_init ()
   host.lines = -1;
   host.logfile = NULL;
   host.config = NULL;
+  host.motd = default_motd;
 
   /* Install top nodes. */
   install_node (&view_node, NULL);
@@ -1687,34 +1788,38 @@ cmd_init ()
   install_node (&config_node, config_write_host);
 
   /* Each node's basic commands. */
-  install_element (VIEW_NODE, &config_enable_cmd);
   install_element (VIEW_NODE, &config_exit_cmd);
+  install_element (VIEW_NODE, &config_quit_cmd);
   install_element (VIEW_NODE, &config_help_cmd);
   install_element (VIEW_NODE, &config_list_cmd);
+  install_element (VIEW_NODE, &config_enable_cmd);
   install_element (VIEW_NODE, &show_version_cmd);
+
+  install_default (ENABLE_NODE);
   install_element (ENABLE_NODE, &config_terminal_cmd);
-  install_element (ENABLE_NODE, &config_exit_cmd);
-  install_element (ENABLE_NODE, &config_help_cmd);
-  install_element (ENABLE_NODE, &config_list_cmd);
   install_element (ENABLE_NODE, &config_write_terminal_cmd);
   install_element (ENABLE_NODE, &show_running_config_cmd);
   install_element (ENABLE_NODE, &config_write_file_cmd);
   install_element (ENABLE_NODE, &config_write_memory_cmd);
   install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
-  install_element (CONFIG_NODE, &config_end_cmd);
-  install_element (CONFIG_NODE, &config_exit_cmd);
-  install_element (CONFIG_NODE, &config_help_cmd);
-  install_element (CONFIG_NODE, &config_list_cmd);
+
+  install_default (CONFIG_NODE);
   install_element (CONFIG_NODE, &hostname_cmd);
   install_element (CONFIG_NODE, &no_hostname_cmd);
   install_element (CONFIG_NODE, &password_cmd);
   install_element (CONFIG_NODE, &enable_password_cmd);
   install_element (CONFIG_NODE, &config_lines_cmd);
-  install_element (CONFIG_NODE, &config_log_cmd);
+  install_element (CONFIG_NODE, &config_log_stdout_cmd);
+  install_element (CONFIG_NODE, &no_config_log_stdout_cmd);
   install_element (CONFIG_NODE, &config_log_file_cmd);
+  install_element (CONFIG_NODE, &no_config_log_file_cmd);
+  install_element (CONFIG_NODE, &config_log_syslog_cmd);
+  install_element (CONFIG_NODE, &no_config_log_syslog_cmd);
   install_element (CONFIG_NODE, &service_password_encrypt_cmd);
   install_element (CONFIG_NODE, &no_service_password_encrypt_cmd);
+  install_element (CONFIG_NODE, &banner_motd_default_cmd);
+  install_element (CONFIG_NODE, &no_banner_motd_cmd);
 
   srand(time(NULL));
 }
