@@ -110,6 +110,13 @@ struct rip
   unsigned long update_time;
   unsigned long timeout_time;
   unsigned long garbage_time;
+
+  /* For redistribute route map. */
+  struct
+  {
+    char *name;
+    struct route_map *map;
+  } route_map[ZEBRA_ROUTE_MAX];
 };
 
 /* RIP routing table entry which belong to rip_packet. */
@@ -170,6 +177,11 @@ struct rip_info
   /* Garbage collect timer. */
   struct thread *t_timeout;
   struct thread *t_garbage_collect;
+
+  /* Route-map futures - this variables can be changed. */
+  struct in_addr nexthop_out;
+  u_int32_t      metric_out;
+  unsigned int   ifindex_out;
 
   struct route_node *rp;
 };
@@ -251,6 +263,8 @@ void zebra_start ();
 
 void rip_if_init ();
 
+void rip_route_map_init ();
+
 int 
 if_check_address (struct in_addr addr);
 
@@ -264,7 +278,8 @@ int
 rip_neighbor_lookup (struct sockaddr_in *);
 
 void
-rip_redistribute_add (int, int, struct prefix_ipv4 *, unsigned int);
+rip_redistribute_add (int, int, struct prefix_ipv4 *, unsigned int, 
+		      struct in_addr *);
 
 void
 rip_redistribute_delete (int, int, struct prefix_ipv4 *, unsigned int);
@@ -280,6 +295,12 @@ rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, unsigned int);
 
 void
 rip_interface_multicast_set (int, struct interface *);
+
+int
+config_write_rip_network (struct vty *, int);
+
+int
+config_write_rip_redistribute (struct vty *, int);
 
 extern struct thread_master *master;
 

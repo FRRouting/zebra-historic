@@ -32,10 +32,12 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_MAX_LSA		6
 
 #define OSPF_LSA_HEADER_SIZE	20
+#define OSPF_MAX_LSA_SIZE	1500
 
 /* OSPF LSA origination flag. */
-#define OSPF_LSA_SELF		1
-#define OSPF_LSA_OTHERS		2
+#define OSPF_LSA_SELF		0x01
+#define OSPF_LSA_RECEIVED	0x02
+#define OSPF_LSA_APPROVED	0x04
 
 /* OSPF LSA header. */
 struct lsa_header
@@ -54,7 +56,7 @@ struct lsa_header
 struct ospf_lsa
 {
   /* LSA origin flag. */
-  u_char flag;
+  u_char flags;
 
   /* LSA data. */
   struct lsa_header *data;
@@ -67,6 +69,14 @@ struct ospf_lsa
   
   /* Thread. */
   struct thread *t_age;
+
+  /* References to this LSA in neighbor retrans. lists*/
+  u_int  ref;
+
+  struct ospf_lsdb *lsdb;
+
+  /* Last time it was originated */
+  time_t originated; 
 };
 
 /* OSPF LSA Link Type. */
@@ -79,10 +89,12 @@ struct ospf_lsa
 #define ROUTER_LSA_VIRTUAL	       0x04
 #define ROUTER_LSA_EXTERNAL	       0x02
 #define ROUTER_LSA_BORDER	       0x01
+#define ROUTER_LSA_SHORTCUT	       0x10
 
 #define IS_ROUTER_LSA_VIRTUAL(x)       ((x)->flags & ROUTER_LSA_VIRTUAL)
 #define IS_ROUTER_LSA_EXTERNAL(x)      ((x)->flags & ROUTER_LSA_EXTERNAL)
 #define IS_ROUTER_LSA_BORDER(x)	       ((x)->flags & ROUTER_LSA_BORDER)
+#define IS_ROUTER_LSA_SHORTCUT(x)      ((x)->flags & ROUTER_LSA_SHORTCUT)
 
 /* OSPF Router-LSA Link information. */
 struct router_lsa_link
@@ -142,39 +154,77 @@ struct as_external_lsa
   } e[1];
 };
 
-/* Macros. */
+#define EXTERNAL_METRIC_TYPE_1      0
+#define EXTERNAL_METRIC_TYPE_2      1
 
-#define GET_METRIC(x)           ((x[0] << 16) | (x[1] << 8) | x[2])
+/* Macros. */
+#define GET_METRIC(x) get_metric(x)
 #define IS_EXTERNAL_METRIC(x)   ((x) & 0x80)
 
-#define LS_AGE(x)	    (ntohs ((x)->data->ls_age) + time (NULL) - (x)->ts)
+#define GET_AGE(x)      (ntohs ((x)->data->ls_age) + time (NULL) - (x)->ts)
+#define LS_AGE(x)       (OSPF_LSA_MAX_AGE < GET_AGE(x) ? \
+                                            OSPF_LSA_MAX_AGE : GET_AGE(x))
+
+struct ospf_route;
 
 /* Prototypes. */
-struct ospf_lsa *ospf_router_lsa (struct ospf_interface *);
+struct ospf_lsa *ospf_router_lsa (struct ospf_area *);
 struct ospf_lsa *ospf_network_lsa (struct ospf_interface *);
+struct ospf_lsa *ospf_summary_lsa (struct prefix_ipv4 *, u_int32_t,
+				   struct ospf_area *, struct ospf_lsa*);
+struct ospf_lsa *ospf_summary_asbr_lsa (struct prefix_ipv4 *, u_int32_t, 
+		                        struct ospf_area *, struct ospf_lsa *);
+struct ospf_lsa *ospf_external_lsa (struct prefix_ipv4 *, u_char ,
+				    u_int32_t, u_int32_t, struct ospf_lsa *);
 u_int16_t ospf_lsa_checksum (struct lsa_header *);
 struct ospf_lsa *ospf_lsa_new ();
 struct ospf_lsa *ospf_lsa_dup ();
 void ospf_lsa_free (struct ospf_lsa *lsa);
 struct lsa_header *ospf_lsa_data_new (size_t);
+struct lsa_header *ospf_lsa_data_dup (struct lsa_header *);
 void ospf_lsa_data_free (struct lsa_header *);
-void ospf_lsa_install (struct ospf_neighbor *, struct ospf_lsa *);
-void ospf_router_lsa_install (struct ospf_neighbor *, struct ospf_lsa *);
-void ospf_network_lsa_install (struct ospf_neighbor *, struct ospf_lsa *);
-void ospf_summary_lsa_install (struct ospf_neighbor *, struct ospf_lsa *);
+struct ospf_lsa *ospf_lsa_install (struct ospf_neighbor *, struct ospf_lsa *);
+
+struct ospf_lsa *ospf_router_lsa_install (struct ospf_area *, struct ospf_lsa *);
+struct ospf_lsa *ospf_network_lsa_install (struct ospf_interface *, struct ospf_lsa *);
+struct ospf_lsa *ospf_summary_lsa_install (struct ospf_area *, struct ospf_lsa *);
+struct ospf_lsa *ospf_summary_asbr_lsa_install (struct ospf_area *, struct ospf_lsa *);
+struct ospf_lsa *ospf_external_lsa_install (struct ospf_lsa *);
+
 struct ospf_lsa *ospf_lsa_lookup (struct ospf_area *, u_int32_t,
-				  struct in_addr);
+				  struct in_addr, struct in_addr);
+struct ospf_lsa *ospf_lsa_lookup_by_id (struct ospf_area *,u_int32_t, struct in_addr);
 struct ospf_lsa *ospf_lsa_lookup_by_header (struct ospf_area *,
 					    struct lsa_header *);
-listnode ospf_lsa_lookup_from_list (list, u_char, struct in_addr,
-				    struct in_addr);
-listnode ospf_lsa_data_lookup_from_list (list, u_char, struct in_addr,
-				    struct in_addr);
-int ospf_lsa_more_recent (struct lsa_header *, struct lsa_header *);
-int ospf_lsa_different (struct lsa_header *, struct lsa_header *);
-struct ospf_lsa  *ospf_lsa_is_self_originated (struct ospf_interface *,
-					       struct ospf_lsa *);
+int ospf_lsa_more_recent (struct ospf_lsa *, struct ospf_lsa *);
+int ospf_lsa_different (struct ospf_lsa *, struct ospf_lsa *);
+void ospf_lsa_flush_self_originated (struct ospf_neighbor *,
+				     struct ospf_lsa *, struct ospf_lsa *);
 int ospf_lsa_count (struct ospf_area *);
 void ospf_lsa_init ();
+
+int ospf_lsa_is_self_originated (struct ospf_lsa *);
+struct ospf_lsa *ospf_find_self_summary_lsa_by_prefix(struct ospf_area *, 
+						      struct prefix_ipv4 *);
+
+struct ospf_lsa *ospf_find_self_summary_asbr_lsa_by_prefix (struct ospf_area *, 
+							    struct prefix_ipv4 *);
+
+struct ospf_lsa *ospf_find_self_external_lsa_by_prefix (struct prefix_ipv4 *);
+void ospf_lsa_maxage (struct ospf_lsa *);
+u_int32_t get_metric(u_char *);
+void ospf_update_router_lsas();
+
+int ospf_lsa_maxage_walker (struct thread *);
+void ospf_schedule_update_router_lsas();
+
+int ospf_network_lsa_refresh (struct thread *);
+struct in_addr ospf_get_free_id_for_prefix (struct ospf_lsdb *,
+					    struct prefix_ipv4 *,
+					    struct in_addr);
+void ospf_schedule_lsa_flood_area(struct ospf_area *, struct ospf_lsa *);
+void ospf_schedule_lsa_flush_area(struct ospf_area *, struct ospf_lsa *);
+void ospf_schedule_router_lsa_originate(struct ospf_area *);
+void ospf_schedule_network_lsa_originate(struct ospf_interface *);
 
 #endif /* _ZEBRA_OSPF_LSA_H */

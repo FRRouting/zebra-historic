@@ -1,3 +1,259 @@
+1999-09-10  Alex Zinin  <zinin@amt.ru>
+	* Alternative ABR behaviors IBM/Cisco/Shortcut
+	implemented
+
+1999-09-10  Alex Zinin  <zinin@amt.ru>
+	* router and network-LSA origination
+	changed to honor MinLSInterval
+
+1999-09-08  Alex Zinin  <zinin@amt.ru>
+	* modified ABR behavior to honor VLs and transit
+	  areas
+
+1999-09-07  Alex Zinin  <zinin@amt.ru>
+	* completed VL functionality
+
+1999-09-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_asbr.c: New file.
+	ospf_asbr.h: New file.
+
+	* ospf_zebra.c (ospf_redistribute_connected): Add redistribute
+	related stuff.
+
+1999-09-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.h (OSPF_FLAG_VIRTUAL_LINK): Change OSPF_FLAG_VEND to
+	OSPF_FLAG_VIRTUAL_LINK for comprehensiveness.
+
+1999-09-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_spf.c (ospf_spf_register): Change name from
+	ospf_spf_route_add() to ospf_spf_register().
+	Include "ospfd/ospf_abr.h" for ospf_abr_task() prototype.
+
+1999-09-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsa.c (ospf_external_lsa_install): Change to update
+	lsa->data rather than install new one, when same id lsa is already
+	installed.
+
+1999-09-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsa.c (ospf_router_lsa_install): Return lsa value.
+	(ospf_network_lsa_install): Likewise.
+	(ospf_summary_lsa_install): Likewise.
+	(ospf_summary_asbr_lsa_install): Likewise.
+	(ospf_external_lsa_install): Likewise.
+
+	* ospf_spf.c (ospf_spf_calculate): Comment out debug function
+	ospf_rtrs_print().
+
+1999-08-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_spf.c (ospf_rtrs_free): Add ospf_spf_calculate() for
+	freeing rtrs.
+
+1999-08-31  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_lsa.c (show_ip_ospf_database_summary),
+	(show_ip_ospf_database_summary_asbr),
+	(show_ip_ospf_database_external): New function added.
+	`show ip ospf database summary',
+	`show ip ospf database asbr-summary'
+	`show ip ospf database external' command can be used.
+
+	* ospf_lsa.c (ospf_lsa_count_table): New function added.
+	(show_ip_ospf_database_all): show nothing if a type of LSA
+	does not exist.
+	
+1999-08-31  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsa.c (ospf_maxage_lsa_remover): Preserve next pointer when
+	the node is deleted.
+
+1999-08-31  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_flood.c (ospf_ls_retransmit_lookup): change to return
+	struct ospf_lsa *.
+	(ospf_ls_request_new), (ospf_ls_request_free),
+	(ospf_ls_request_add), (ospf_ls_request_delete),
+	(ospf_ls_request_delete_all), (ospf_ls_request_lookup):
+	New function added.
+
+	* ospf_packet.c (ospf_ls_upd_send_lsa): New function added.
+
+	* ospf_lsa.h (LS_AGE): Slightly change macro definition.
+
+	* ospf_lsa.c (ospf_lsa_more_recent), (ospf_lsa_diffrent):
+	Use LS_AGE macro.
+
+1999-08-30  Alex Zinin <zinin@amt.ru>
+	
+	* ospfd.c
+	fix a bug with area range config write
+	added "show ip ospf" command, it will be enhanced later on
+
+1999-08-30  Alex Zinin <zinin@amt.ru>
+
+	* ospf_lsa.c
+	updated ospf_router_lsa() to honor flags (B-bit)
+
+1999-08-30  Alex Zinin <zinin@amt.ru>
+
+      	* ospf_abr.c
+	wrote major functions implementing ABR activity
+
+1999-08-30  Alex Zinin <zinin@amt.ru>
+
+	* ospf_ia.c ospf_route.c ospf_route.h 
+	fixed the bug with ospf_route.origin field.
+	Now it holds pointer to lsa_header
+
+1999-08-30  Alex Zinin <zinin@amt.ru>
+
+	* ospf_flood.c ospf_flood.h:
+	transformed ospf_flood_if_select into ospf_flood_through_area()
+	added new ospf_flood_if_select() and ospf_flood_through_as()
+
+1999-08-30  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_flood.[ch]: New file added.
+
+	* ospf_packet.c (ospf_lsa_flooding),
+	(ospf_lsa_flooding_select_if): functions move to ospf_flood.c
+
+	* ospf_neighbor.c (ospf_put_lsa_on_retransm_list),
+	(ospf_remove_lsa_from_retransm_list),
+	(ospf_nbr_remove_all_lsas_from_retransm_list),
+	(ospf_lsa_remove_from_ls_retransmit):
+	(ospf_lsa_retransmit): functions move to
+	ospf_flood.c, and change function's name:
+
+	ospf_put_lsa_on_retransm_list ()
+	  -> ospf_ls_retransmit_add ()
+	ospf_remove_lsa_from_retransm_list ()
+	  -> ospf_ls_retransmit_delete ()
+	ospf_nbr_remove_all_lsas_from_retransm_list ()
+	  -> ospf_ls_retransmit_clear ()
+	ospf_lsa_remove_from_ls_retransmit ()
+	  -> ospf_ls_retransmit_delete_nbr_all ()
+	ospf_lsa_retransmit ()
+	  -> ospf_ls_retransmit_add_nbr_all ()
+
+	* ospf_lsa.c (ospf_lsa_lookup_from_list): function move to
+	ospf_flood.c, and change name to ospf_ls_retransmit_lookup ().
+
+1999-08-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_neighbor.c (ospf_nbr_lookup_by_addr): Use
+	route_node_lookup() instead of route_node_get().
+
+	* ospf_packet.c (ospf_ls_upd): Temporary comment out (6) check.
+
+1999-08-30  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_lookup_int_by_prefix): Add check of
+	oi->address.
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* ospf_lsa.c 
+	MaxAge LSA deletion functions added.
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+ 	* ospf_neighbor.c 
+	ospf_nbr_lookup_by_addr(): added route_unlock_node()
+	when function returns NULL if (rn->info == NULL)
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+ 	* ospfd.c
+	added a hack for area range deletion
+	
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* ospf_lsa.h 
+	included lsdb field into struct ospf_lsa, to find
+	LSDB easier when removing MaxAge LSAs.
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* ospf_lsa.c ospf_neighbor.c ospf_nsm.c 
+          ospf_packet.c changed to honor new retransmit list
+	  management functions
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* ospf_neighbor.c , .h added new retransmit list functions.
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* Makefile.in
+	added ospf_ase, ospf_abr, ospf_ia
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* ospf_spf.c:
+	- changed ospf_next_hop_calculation() to include interface
+	  and nexthop addr for directly connected routers---more informative
+	  and solves problem with route installation into the kernel
+	- changed ospf_nexthop_out_if_addr() to support routers, not only
+	  transit networks
+	- added ospf_process_stubs();
+
+1999-08-29  Alex Zinin <zinin@amt.ru>
+	* ospf_lsa.c:
+	- changed ospf_router_lsa() to provide correct links
+	  for p-t-p interfaces;
+	- changed ospf_summary_lsa_install() to support table
+	  of self-originated summary-LSAs;
+	- added ospf_summary_asbr_lsa_install() and ospf_external_lsa_install()
+	- changed ospf_lsa_install() accordingly
+	- changed show_ip_ospf_database_router_links() to support p-t-p
+
+1999-08-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_make_db_desc): Only master can clear more
+	flag.
+
+1999-08-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_read): Add check of IP src address.
+
+1999-08-28  Alex Zinin <zinin@amt.ru>
+	* ospf_neighbor.h
+	added ospf_nbr_lookup_by_routerid()
+
+1999-08-28  Alex Zinin <zinin@amt.ru>
+	* ospfd.h
+	added ABR/ASBR flag definitions and fields;
+	added iflist field to area structure;
+	summary_lsa_self and summary_lsa_asbr_self are changed
+	to be route tables;
+	added ranges field---configured area ranges;
+	A separate Routers RT added;
+	area range config commands and config write added
+
+
+1999-08-28  Alex Zinin <zinin@amt.ru>
+	* ospf_route.c :
+	ospf_route_free()--added code to free the list of paths;
+	The following functions added:
+		ospf_intra_add_router();
+		ospf_intra_add_transit();
+		ospf_intra_add_stub();
+	the last function uses new ospf_int_lookup_by_prefix();
+	show_ip_ospf_route_cmd()--changed to support new RT structure;
+	added ospf_cmp_routes()--general route comparision function;
+	added ospf_route_copy_nexthops() and ospf_route_copy_nexthops_from_vertex()
+	they are used in ASE and IA routing;
+	added ospf_subst_route() and ospf_add_route();
+
+1999-08-28  Alex Zinin <zinin@amt.ru>
+	* ospf_route.h :
+	changed struct ospf_path to include output interface,
+	changed struct ospf_route to support IA and ASE routing.
+	added prototypes of the function used in IA and ASE modules.
+
+1999-08-28  Alex Zinin <zinin@amt.ru>
+	* ospf_lsa.h ospf_lsa.c :
+	added ospf_my_lsa(), an interface independent version of
+	ospf_lsa_is_self_originated(), it will be used in ASE and IA-routing.
+
 1999-08-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ospf_interface.c (interface_config_write): Add check for

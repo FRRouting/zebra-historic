@@ -216,7 +216,7 @@ route_read ()
 	continue;
 
       if ((flags & RTF_PROTO2) && (flags & RTF_PROTO1))
-	zebra_flags |= ZEBRA_FLAGS_ZEBRA;	
+	zebra_flags |= ZEBRA_FLAG_SELFROUTE;	
 
       if (dest.sa.sa_family == AF_INET)
 	{

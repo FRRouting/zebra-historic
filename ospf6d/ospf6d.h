@@ -47,6 +47,7 @@
 #include "table.h"
 
 #define HASHVAL 64
+#define MAXIOVLIST 1024
 
 /* OSPF stuffs */
 #include "ospf6_types.h"
@@ -86,7 +87,6 @@ extern char *recent_reason;
 /* Default port values. */
 #define OSPF6_VTY_PORT             2606
 
-#define MAXIOVLIST 1024
 
 #ifdef INRIA_IPV6
 #ifndef IPV6_PKTINFO
@@ -115,6 +115,14 @@ extern char *recent_reason;
 #endif
 #endif
 
+
+#ifndef s6_addr32
+#define s6_addr32 u6_addr.u6_addr32
+#define s6_addr16 u6_addr.u6_addr16
+#define s6_addr8  u6_addr.u6_addr8
+#define s6_addr   u6_addr.u6_addr8
+#endif
+
 /* Command Description */
 #define V4NOTATION_STR     "specify by IPv4 address notation(e.g. 0.0.0.0)\n"
 #define OSPF6_NUMBER_STR    "Specify by number\n"
@@ -131,7 +139,7 @@ extern char *recent_reason;
 
 /* Function Prototypes */
 struct neighbor *make_neighbor (rtr_id_t, struct ospf6_if *);
-struct neighbor *nbr_lookup (rtr_id_t, struct ospf6 *);
+struct neighbor *nbr_lookup (rtr_id_t, struct ospf6_if *);
 int show_area (struct vty *, struct area *);
 int show_nbr (struct vty *, struct neighbor *);
 void ospf6_init ();

@@ -25,20 +25,20 @@
 
 int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 unsigned int index, int metric, int table);
+		 unsigned int index, int flags, int table);
 
 int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    unsigned int index, int metric, int table);
+		    unsigned int index, int flags, int table);
 
 #ifdef HAVE_IPV6
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 unsigned int index, int metric, int table);
+		 unsigned int index, int flags, int table);
 
 int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    unsigned int index, int metric, int table);
+		    unsigned int index, int flags, int table);
 #endif /* HAVE_IPV6 */
 
 #endif /* _ZEBRA_RT_H */

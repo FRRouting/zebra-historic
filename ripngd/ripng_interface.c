@@ -265,7 +265,7 @@ ripng_enable_if_lookup (char *ifname)
   return -1;
 }
 
-/* Add inteface to ripng_enable_if. */
+/* Add interface to ripng_enable_if. */
 int
 ripng_enable_if_add (char *ifname)
 {
@@ -280,7 +280,7 @@ ripng_enable_if_add (char *ifname)
   return 1;
 }
 
-/* Delete inteface from ripng_enable_if. */
+/* Delete interface from ripng_enable_if. */
 int
 ripng_enable_if_delete (char *ifname)
 {

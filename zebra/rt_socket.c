@@ -78,7 +78,8 @@ rtm_write (int message,
 	   union sockunion *dest,
 	   union sockunion *mask,
 	   union sockunion *gate,
-	   unsigned int index)
+	   unsigned int index,
+	   int zebra_flags)
 {
   int ret;
   caddr_t pnt;
@@ -121,6 +122,10 @@ rtm_write (int message,
   /* Tagging route with flags */
   msg.rtm.rtm_flags |= (RTF_PROTO2|RTF_PROTO1);
 
+  /* Additional flags. */
+  if (zebra_flags & ZEBRA_FLAG_BLACKHOLE)
+    msg.rtm.rtm_flags |= RTF_BLACKHOLE;
+  
   /* Route to the interface test.  This should be rewritten later on
      -- Kunihiro*/
   if (!gate)
@@ -259,7 +264,7 @@ noifname:
       if (errno == ENETUNREACH)
 	return ZEBRA_ERR_RTUNREACH;
       
-      zlog (NULL, LOG_WARNING, "write : %s (%d)", strerror (errno), errno);
+      zlog_warn ("write : %s (%d)", strerror (errno), errno);
       return -1;
     }
   return 0;
@@ -291,7 +296,7 @@ sin_masklen (struct in_addr mask)
 /* Interface between zebra message and rtm message. */
 int
 kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
-		 struct in_addr *gate, unsigned int index, int metric)
+		 struct in_addr *gate, unsigned int index, int flags)
 {
   struct sockaddr_in *mask;
   struct sockaddr_in sin_dest, sin_mask, sin_gate;
@@ -315,23 +320,24 @@ kernel_rtm_ipv4 (int message, struct prefix_ipv4 *dest,
 		    (union sockunion *)&sin_dest, 
 		    (union sockunion *)mask, 
 		    gate ? (union sockunion *)&sin_gate : NULL,
-		    index);
+		    index,
+		    flags);
 }
 
 /* Add IPv4 prefix to kernel routing table. */
 int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 unsigned int index, int metric, int table)
+		 unsigned int index, int flags, int table)
 {
-  return kernel_rtm_ipv4 (RTM_ADD, dest, gate, index, metric);
+  return kernel_rtm_ipv4 (RTM_ADD, dest, gate, index, flags);
 }
 
 /* Delete IPv4 prefix from kernel routing table. */
 int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    unsigned int index, int metric, int table)
+		    unsigned int index, int flags, int table)
 {
-  return kernel_rtm_ipv4 (RTM_DELETE, dest, gate, index, metric);
+  return kernel_rtm_ipv4 (RTM_DELETE, dest, gate, index, flags);
 }
 
 #ifdef HAVE_IPV6
@@ -371,7 +377,7 @@ sin6_masklen (struct in6_addr mask)
 /* Interface between zebra message and rtm message. */
 int
 kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
-		 struct in6_addr *gate, int index, int metric)
+		 struct in6_addr *gate, int index, int flags)
 {
   struct sockaddr_in6 *mask;
   struct sockaddr_in6 sin_dest, sin_mask, sin_gate;
@@ -403,26 +409,27 @@ kernel_rtm_ipv6 (int message, struct prefix_ipv6 *dest,
     mask = NULL;
 
   return rtm_write (message, 
-		   (union sockunion *) &sin_dest,
-		   (union sockunion *) mask,
-		   gate ? (union sockunion *)&sin_gate : NULL,
-		    index);
+		    (union sockunion *) &sin_dest,
+		    (union sockunion *) mask,
+		    gate ? (union sockunion *)&sin_gate : NULL,
+		    index,
+		    flags);
 }
 
 /* Add IPv6 route to the kernel. */
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 int index, int metric, int table)
+		 int index, int flags, int table)
 {
-  return kernel_rtm_ipv6 (RTM_ADD, dest, gate, index, metric);
+  return kernel_rtm_ipv6 (RTM_ADD, dest, gate, index, flags);
 }
 
 /* Delete IPv6 route from the kernel. */
 int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int metric, int table)
+		    int index, int flags, int table)
 {
-  return kernel_rtm_ipv6 (RTM_DELETE, dest, gate, index, metric);
+  return kernel_rtm_ipv6 (RTM_DELETE, dest, gate, index, flags);
 }
 #endif /* HAVE_IPV6 */
 

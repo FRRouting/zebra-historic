@@ -101,6 +101,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 /* Prototypes. */
 int ospf_nsm_event (struct thread *);
 void nsm_change_status (struct ospf_neighbor *, int);
+void ospf_check_nbr_loading(struct ospf_neighbor *);
 
 #endif /* _ZEBRA_OSPF_NSM_H */
 

@@ -86,7 +86,7 @@ proc_route_read ()
 	continue;
 
       if (flags & RTF_DYNAMIC)
-	zebra_flags |= ZEBRA_FLAGS_ZEBRA;
+	zebra_flags |= ZEBRA_FLAG_SELFROUTE;
 
       p.family = AF_INET;
       sscanf (dest, "%lX", (unsigned long *)&p.prefix);
@@ -147,7 +147,7 @@ proc_ipv6_route_read ()
 	continue;
 
       if (flags & RTF_DYNAMIC)
-	zebra_flags |= ZEBRA_FLAGS_ZEBRA;
+	zebra_flags |= ZEBRA_FLAG_SELFROUTE;
 
       p.family = AF_INET6;
       str2in6_addr (dest, &p.prefix);

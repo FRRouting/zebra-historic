@@ -239,7 +239,11 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
   int ret;
   struct ifreq ifreq;
   struct sockaddr_in addr;
+  struct sockaddr_in broad;
   struct sockaddr_in mask;
+  struct prefix_ipv4 ifaddr;
+
+  ifaddr = *p;
 
   ifreq_set_name (&ifreq, ifp);
 
@@ -250,7 +254,23 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
   if (ret < 0)
     return ret;
   
+  /* We need mask for make broadcast addr. */
   masklen2ip (p->prefixlen, &mask.sin_addr);
+
+  if (if_is_broadcast (ifp))
+    {
+      apply_mask_ipv4 (&ifaddr);
+      addr.sin_addr = ifaddr.prefix;
+
+      broad.sin_addr.s_addr = (addr.sin_addr.s_addr | ~mask.sin_addr.s_addr);
+      broad.sin_family = p->family;
+
+      memcpy (&ifreq.ifr_broadaddr, &broad, sizeof (struct sockaddr_in));
+      ret = if_ioctl (SIOCSIFBRDADDR, (caddr_t) &ifreq);
+      if (ret < 0)
+	return ret;
+    }
+
   mask.sin_family = p->family;
 #ifdef SUNOS_5
   memcpy (&mask, &ifreq.ifr_addr, sizeof (mask));
@@ -264,11 +284,8 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
   /* Linux version before 2.1.0 need to interface route setup. */
 #if LINUX_VERSION_CODE < 131328
   {
-    struct prefix_ipv4 ifroute;
-
-    ifroute = *p;
-    apply_mask_ipv4 (&ifroute);
-    kernel_add_ipv4 (&ifroute, NULL, ifp->ifindex, 0, 0);
+    apply_mask_ipv4 (&ifaddr);
+    kernel_add_ipv4 (&ifaddr, NULL, ifp->ifindex, 0, 0);
   }
 #endif /* LINUX_VERSION_CODE */
 

@@ -36,6 +36,25 @@
 #define OSPF_IF_DISABLE                 0
 #define OSPF_IF_ENABLE                  1
 
+struct ospf_interface;
+
+struct ospf_vl_data
+{
+  struct in_addr    vl_peer;		/* RID of the peer for VLs */
+  struct ospf_area *vl_area;		/* Transit area for this VL*/	
+  struct ospf_interface *vl_oi;		/* Int data structure for the VL*/
+  struct ospf_interface *out_oi;        /* The int to go out */
+  struct in_addr    peer_addr;		/* Address used to reach the peer */
+  u_char flags;
+};
+
+
+#define OSPF_VL_MAX_COUNT 256
+#define OSPF_VL_MTU	  1500
+
+#define OSPF_VL_FLAG_APPROVED 0x01
+
+
 /* OSPF interface structure */
 struct ospf_interface
 {
@@ -61,6 +80,8 @@ struct ospf_interface
 
   struct prefix *address;		/* Interface prefix */
 
+  struct ospf_vl_data *vl_data;		/* Data for Virtual Link */
+
   /*  u_char options;	*/		/* Options */
   /*  u_char priority;	*/		/* Router Priority */
   /* struct in_addr d_router;	*/	/* Designated Router */
@@ -79,6 +100,9 @@ struct ospf_interface
 
   struct ospf_lsa *network_lsa_self;	/* self-originated network-LSA */
   struct ospf_lsa *summary_lsa_self;	/* self-originated summary-LSA */
+
+  struct thread *t_network_lsa_self;    /* self-originated network-LSA
+                                           reflesh thread. */
 
   list ls_ack;				/* Link State Acknowledgment list. */
 
@@ -106,6 +130,8 @@ struct ospf_interface
   u_int32_t ls_ack_in;          /* LS Ack message input count. */
   u_int32_t ls_ack_out;         /* LS Ack message output count. */
   u_int32_t discarded;		/* discarded input count by error. */
+
+  u_int full_nbrs;
 };
 
 #define DR(I)			((I)->nbr_self->d_router)
@@ -119,8 +145,20 @@ struct ospf_interface *ospf_if_new ();
 struct ospf_interface *ospf_if_lookup_by_addr ();
 int ospf_if_new_hook (struct interface *);
 void ospf_if_init ();
-void ospf_if_stream_set (int, struct ospf_interface *);
+void ospf_if_stream_set (struct ospf_interface *);
 void ospf_if_stream_unset (struct ospf_interface *);
 int ospf_if_is_enable (struct interface *);
+
+struct ospf_vl_data * ospf_new_vl_data(struct ospf_area *, struct in_addr);
+void ospf_free_vl_data(struct ospf_vl_data *);
+struct ospf_interface * ospf_new_vl(struct ospf_vl_data *);
+void ospf_remove_vl(struct ospf_vl_data *);
+struct ospf_vl_data * ospf_lookup_vl(struct ospf_area *, struct in_addr);
+void ospf_add_vl(struct ospf_vl_data *);
+void ospf_remove_vl(struct ospf_vl_data *);
+void ospf_check_vl_up(struct ospf_area *, struct in_addr, struct vertex *);
+void ospf_vl_unapprove();
+void ospf_vl_shut_unapproved();
+int  ospf_full_virtual_nbrs(struct ospf_area *);
 
 #endif /* _ZEBRA_OSPF_INTERFACE_H */

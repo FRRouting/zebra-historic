@@ -1,3 +1,8 @@
+1999-09-01  "A.Waddington" <waddington@usa.net>
+
+	* zebra.texi: Replace @command with @code until it gets ready.
+	Remove @macro.
+
 1999-08-26  Andrew Waddington <waddington@usa.net>
 
 	* bgpd.1: Add man page.

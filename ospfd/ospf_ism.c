@@ -37,6 +37,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_dump.h"
 #include "ospfd/ospf_packet.h"
+#include "ospfd/ospf_flood.h"
+#include "ospfd/ospf_abr.h"
 
 extern unsigned long ospf_debug_ism;
 
@@ -100,7 +102,10 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
     dr = bdr;
 
   /* Set DR to interface. */
-  DR (oi) = dr->address.u.prefix4;
+  if (dr)
+     DR (oi) = dr->address.u.prefix4;
+  else 
+     DR(oi).s_addr = 0;
 
   list_delete_all (dr_list);
 
@@ -614,7 +619,6 @@ static char *ospf_ism_event_str[] =
 void
 ism_change_status (struct ospf_interface *oi, int status)
 {
-  struct ospf_lsa *lsa;
   int old_status;
 
   /* Logging change of status. */
@@ -626,23 +630,43 @@ ism_change_status (struct ospf_interface *oi, int status)
   old_status = oi->status;
   oi->status = status;
 
+  if ((old_status == ISM_Down) || (status == NSM_Down))
+     ospf_check_abr_status();
+
+
   /* Originate router-LSA. */
   if (oi->area)
     {
-      lsa = ospf_router_lsa (oi);
-      ospf_router_lsa_install (oi->nbr_self, lsa);
+
+     if (status == ISM_Down)
+       {
+	 if (oi->area->act_ints > 0)
+	   oi->area->act_ints--;
+       }
+     else if (old_status == ISM_Down)
+       oi->area->act_ints++;
+
+#if 0
+      lsa = ospf_router_lsa (oi->area);
+      lsa = ospf_router_lsa_install (oi->area, lsa);
 
       /* Add LSA to related neighbor's retransmission list. */
       if (oi->status == ISM_DR || oi->status == ISM_Backup ||
 	  oi->status == ISM_DROther)
-	ospf_ls_retransmit (oi, lsa);
+	ospf_ls_retransmit_add_nbr_all (oi, lsa);
+#endif /* 0 */
+
+      ospf_schedule_router_lsa_originate(oi->area);
     }
 
   /* Originate network-LSA. */
   if (old_status != ISM_DR && status == ISM_DR)
     {
-      lsa = ospf_network_lsa (oi);
-      ospf_network_lsa_install (oi->nbr_self, lsa);
+/*      lsa = ospf_network_lsa (oi);
+      ospf_network_lsa_install (oi, lsa); */
+
+      ospf_schedule_network_lsa_originate(oi);
+
     }
   else if (old_status == ISM_DR && status != ISM_DR)
     {
@@ -652,6 +676,9 @@ ism_change_status (struct ospf_interface *oi, int status)
     }
 
   /* Preserve old status? */
+
+  /* Check area border status.  */
+  ospf_check_abr_status ();
 }
 
 /* Execute ISM event process. */

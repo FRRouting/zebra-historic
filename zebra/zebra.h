@@ -55,9 +55,9 @@
 #define ZEBRA_ERR_RTNOEXIST        4
 
 /* Zebra message flags */
-/* #define ZEBRA_FLAG_EXTERNAL       0 */
-#define ZEBRA_FLAGS_INTERNAL       1
-#define ZEBRA_FLAGS_ZEBRA          2
+#define ZEBRA_FLAG_INTERNAL      0x01
+#define ZEBRA_FLAG_SELFROUTE     0x02
+#define ZEBRA_FLAG_BLACKHOLE     0x04
 
 /* Default port information. */
 #define ZEBRA_PORT           2600

@@ -1,5 +1,4 @@
-/*
- * Route map function.
+/* Route map function.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -34,10 +33,12 @@ typedef enum
 
 typedef enum
 {
-  ROUTE_MAP_BGP,
-  ROUTE_MAP_RIPNG
+  ROUTE_MAP_RIP,
+  ROUTE_MAP_RIPNG,
+  ROUTE_MAP_OSPF,
+  ROUTE_MAP_OSPF6,
+  ROUTE_MAP_BGP
 } route_map_object_t;
-
 
 /* Route map rule structure for matching and setting. */
 struct route_map_rule_cmd

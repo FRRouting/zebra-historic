@@ -29,5 +29,9 @@ void zebra_start ();
 
 void ospf_zebra_add (struct prefix_ipv4 *, struct in_addr *);
 void ospf_zebra_delete (struct prefix_ipv4 *, struct in_addr *);
+void ospf_zebra_add_discard (struct prefix_ipv4 *);
+void ospf_zebra_delete_discard (struct prefix_ipv4 *);
+
+int config_write_ospf_redistribute (struct vty *);
 
 #endif /* _ZEBRA_OSPF_ZEBRA_H */

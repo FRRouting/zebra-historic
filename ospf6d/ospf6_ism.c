@@ -31,9 +31,10 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
 
   ifs_prev = ospf6_if->state;
 
-  o6log.ism ("I/F [%s] %s -> %s (%s)",
-             ospf6_if->interface->name,
-             ifs_name[ifs_prev], ifs_name[ifs_next], reason);
+  if (IS_OSPF6_DUMP_INTERFACE)
+    zlog_info ("I/F [%s] %s -> %s (%s)",
+               ospf6_if->interface->name,
+               ifs_name[ifs_prev], ifs_name[ifs_next], reason);
 
   switch (ifs_prev)
     {
@@ -45,10 +46,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         case IFS_BDR:
           break;
         default:
-          if (mcast_leave (ospf6_sock, (struct sockaddr *)&alldrouters6,
-                           ospf6_if->interface->name,
-                           ospf6_if->interface->ifindex) < 0)
-            zvlog_warn ("mcast_leave() failed: %s", strerror (errno));
+          ospf6_leave_alldr (ospf6_if->interface->ifindex);
           break;
         }
       break;
@@ -57,11 +55,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         {
         case IFS_DR:
         case IFS_BDR:
-          if (mcast_join (ospf6_sock, (struct sockaddr *)&alldrouters6,
-                          ospf6_if->interface->name,
-                          ospf6_if->interface->ifindex) < 0)
-            zvlog_warn ("mcast_join(alldrouters6) failed for %s : %s",
-                        ospf6_if->interface->name, strerror (errno));
+          ospf6_join_alldr (ospf6_if->interface->ifindex);
           break;
         default:
           break;
@@ -94,15 +88,16 @@ dr_change (struct ospf6_if *ospf6_if)
       && ospf6_if->prevbdr == ospf6_if->bdr)
     return 0; /* Nothing has been changed */
 
-  {
-    char dr[16], bdr[16], prevdr[16], prevbdr[16];
-    inet_ntop (AF_INET, &ospf6_if->prevdr, prevdr, sizeof (prevdr));
-    inet_ntop (AF_INET, &ospf6_if->prevbdr, prevbdr, sizeof (prevbdr));
-    inet_ntop (AF_INET, &ospf6_if->dr, dr, sizeof (dr));
-    inet_ntop (AF_INET, &ospf6_if->bdr, bdr, sizeof (bdr));
-    o6log.ism ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
-               ospf6_if->interface->name, prevdr, prevbdr, dr, bdr);
-  }
+  if (IS_OSPF6_DUMP_INTERFACE)
+    {
+      char dr[16], bdr[16], prevdr[16], prevbdr[16];
+      inet_ntop (AF_INET, &ospf6_if->prevdr, prevdr, sizeof (prevdr));
+      inet_ntop (AF_INET, &ospf6_if->prevbdr, prevbdr, sizeof (prevbdr));
+      inet_ntop (AF_INET, &ospf6_if->dr, dr, sizeof (dr));
+      inet_ntop (AF_INET, &ospf6_if->bdr, bdr, sizeof (bdr));
+      o6log.ism ("I/F [%s] {dr:%s,bdr:%s} -> {dr:%s,bdr:%s}",
+                 ospf6_if->interface->name, prevdr, prevbdr, dr, bdr);
+    }
 
   /* construct Router-LSA */
   lsa = ospf6_make_router_lsa (ospf6_if->area);
@@ -208,7 +203,11 @@ interface_up (struct thread *thread)
       return -1;
     }
 
+#if 0
   thread_add_event (master, send_hello, ospf6_if, 0);
+#else
+  thread_add_event (master, ospf6_send_hello, ospf6_if, 0);
+#endif
 
   if (if_is_pointopoint (ospf6_if->interface))
     {

@@ -128,6 +128,7 @@ void ospf_hello_send (struct ospf_interface *);
 void ospf_db_desc_send (struct ospf_neighbor *);
 void ospf_db_desc_resend (struct ospf_neighbor *);
 void ospf_ls_req_send (struct ospf_neighbor *);
+void ospf_ls_upd_send_lsa (struct ospf_neighbor *, struct ospf_lsa *, int);
 void ospf_ls_upd_send (struct ospf_neighbor *, list, int);
 void ospf_ls_ack_send (struct ospf_neighbor *, struct ospf_lsa *);
 void ospf_ls_ack_send_delayed (struct ospf_interface *);

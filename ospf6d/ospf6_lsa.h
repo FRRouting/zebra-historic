@@ -28,12 +28,6 @@
 /* LSA definition */
 
 /* Type */
-#define LST_V2ROUTER_LSA               1
-#define LST_V2NETWORK_LSA              2
-#define LST_V2TYPE3_SUMMARY_LSA        3 /* routes to network */
-#define LST_V2TYPE4_SUMMARY_LSA        4 /* routes to ASBR */
-#define LST_V2AS_EXTERNAL_LSA          5
-
 #define LST_ROUTER_LSA              0x2001
 #define LST_NETWORK_LSA             0x2002
 #define LST_INTER_AREA_PREFIX_LSA   0x2003
@@ -151,7 +145,7 @@ struct ospf6_lsa_hdr
 struct ospf6_lsa
 {
   unsigned long          lock;      /* reference counter */
-  int                    summary;   /* indicate this is LSheader only */
+  int                    summary;   /* indicate this is LS header only */
   struct ospf6_lsa_hdr  *lsa_hdr;
   void                  *scope;     /* pointer of scoped data structure */
   unsigned char          flags;     /* use this to decide ack type */
@@ -168,6 +162,20 @@ struct ospf6_lsa
 #define OSPF6_LSA_FLOODBACK   (1 << 0)
 #define OSPF6_LSA_DUPLICATE   (1 << 1)
 #define OSPF6_LSA_IMPLIEDACK  (1 << 2)
+
+
+/* Back pointer check, Is X's reference field bound to Y? */
+#define x_ipl(x) ((struct intra_area_prefix_lsa *)LSH_NEXT((x)->lsa_hdr))
+#define is_reference_network_ok(x,y) \
+          ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsa_hdr->lsh_type &&\
+           (x_ipl(x))->intra_prefix_refer_lsid == (y)->lsa_hdr->lsh_id &&\
+           (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
+  /* referencing router's ifid must be 0,
+     see draft-ietf-ospf-ospfv6-06.txt */
+#define is_reference_router_ok(x,y) \
+          ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsa_hdr->lsh_type &&\
+           (x_ipl(x))->intra_prefix_refer_lsid == htonl (0) &&\
+           (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
 
 /* Function Prototypes */
 int past_min_ls_interval (struct ospf6_lsa *);
@@ -212,6 +220,10 @@ unsigned long ospf6_as_external_lsid (struct prefix_ipv6 *, struct ospf6 *);
 struct ospf6_lsa *ospf6_make_as_external_lsa (struct route_node *);
 
 void ospf6_lsa_maxage_remove (struct ospf6_lsa *);
+
+void ospf6_lsa_hdr_id_str (struct ospf6_lsa_hdr *, char *, size_t);
+void ospf6_lsa_hdr_str (struct ospf6_lsa_hdr *, char *, size_t);
+void ospf6_lsa_str (struct ospf6_lsa *, char *, size_t);
 
 #endif /* OSPF6_LSA_H */
 

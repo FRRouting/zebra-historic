@@ -26,7 +26,6 @@
 #include "log.h"
 #include "thread.h"
 #include "memory.h"
-#include "linklist.h"
 #include "if.h"
 #include "stream.h"
 #include "table.h"
@@ -39,18 +38,6 @@
 #include "ripngd/ripng_route.h"
 #include "ripngd/ripng_debug.h"
 #include "zebra/zebra.h"
-
-/* RIPng timer on/off macro. */
-#define RIPNG_TIMER_ON(T,F,V) \
-   if (!(T)) \
-      (T) = thread_add_timer (master, (F), rinfo, (V))
-
-#define RIPNG_TIMER_OFF(T) \
-   if (T) \
-     { \
-       thread_cancel(T); \
-       (T) = NULL; \
-     }
 
 /* RIPng structure which includes many parameters related to RIPng
    protocol. If ripng couldn't active or ripng doesn't configured,
@@ -296,7 +283,7 @@ ripng_recv_packet (int sock, u_char *buf, int bufsize,
       /* Incoming packet's multicast hop limit. */
       if (cmsgptr->cmsg_level == IPPROTO_IPV6 &&
 	  cmsgptr->cmsg_type == IPV6_HOPLIMIT)
-	*hoplimit = (int)(* ((u_char *) CMSG_DATA (cmsgptr)));
+	*hoplimit = *((int *) CMSG_DATA (cmsgptr));
     }
 
   /* Hoplimit check shold be done when destination address is

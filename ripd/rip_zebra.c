@@ -34,6 +34,7 @@
 #include "stream.h"
 #include "log.h"
 #include "zclient.h"
+#include "routemap.h"
 
 #include "ripd/rip_debug.h"
 
@@ -46,6 +47,7 @@ int rip_interface_add (int, struct zebra *, zebra_size_t);
 int rip_interface_delete (int, struct zebra *, zebra_size_t);
 int rip_interface_address_add (int, struct zebra *, zebra_size_t);
 int rip_interface_address_delete (int, struct zebra *, zebra_size_t);
+
 
 /* RIPd to zebra command interface. */
 void
@@ -98,7 +100,7 @@ rip_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
       stream_get (&p.prefix, s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rip_redistribute_add (type, 0, &p, ifindex);
+	rip_redistribute_add (type, 0, &p, ifindex, &nexthop);
       else 
 	rip_redistribute_delete (type, 0, &p, ifindex);
     }
@@ -119,6 +121,31 @@ rip_redistribute_set (int type)
   return CMD_SUCCESS;
 }
 
+/* RIP route-map set for redistribution */
+void
+rip_routemap_set (int type, char *name)
+{
+  if (rip->route_map[type].name)
+    free(rip->route_map[type].name);
+
+  rip->route_map[type].name = strdup (name);
+  rip->route_map[type].map = route_map_lookup_by_name (name);
+}
+
+/* RIP route-map unset for redistribution */
+void
+rip_routemap_unset (int type)
+{
+  if (! rip->route_map[type].name)
+    return;
+
+  free (rip->route_map[type].name);
+  rip->route_map[type].name = NULL;
+  rip->route_map[type].map = NULL;
+
+  return;
+}
+
 int
 rip_redistribute_unset (int type)
 {
@@ -136,6 +163,21 @@ rip_redistribute_unset (int type)
   return CMD_SUCCESS;
 }
 
+/* Redistribution types */
+struct {
+    int type;
+    int str_min_len;
+    char *str;
+} redist_type[] = {
+    {ZEBRA_ROUTE_CONNECT, 1, "connected"},
+    {ZEBRA_ROUTE_STATIC,  1, "static"},
+    {ZEBRA_ROUTE_OSPF,    1, "ospf"},
+    {ZEBRA_ROUTE_BGP,     1, "bgp"},
+    {0, 0, NULL}
+};
+
+#define REDIST_STR "[connected|static|ospf|bgp] route"
+
 DEFUN (router_zebra,
        router_zebra_cmd,
        "router zebra",
@@ -160,7 +202,7 @@ DEFUN (router_zebra,
 
 DEFUN (rip_redistribute_rip,
        rip_redistribute_rip_cmd,
-       "redistribute RIP",
+       "redistribute rip",
        "Redistribute control\n"
        "RIP route\n")
 {
@@ -170,7 +212,7 @@ DEFUN (rip_redistribute_rip,
 
 DEFUN (no_rip_redistribute_rip,
        no_rip_redistribute_rip_cmd,
-       "no redistribute RIP",
+       "no redistribute rip",
        NO_STR
        "Redistribute control\n"
        "RIP route\n")
@@ -179,6 +221,89 @@ DEFUN (no_rip_redistribute_rip,
   return CMD_SUCCESS;
 }
 
+DEFUN (rip_redistribute_type,
+       rip_redistribute_type_cmd,
+       "redistribute (connected|static|ospf|bgp)",
+       "Redistribute control\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "OSPF routes\n"
+       "BGP routes\n")
+{
+  int i;
+
+  for(i = 0; redist_type[i].str; i++) 
+    {
+      if (strncmp (redist_type[i].str, argv[0], 
+		   redist_type[i].str_min_len) == 0) 
+	{
+	  rip_redistribute_set (redist_type[i].type);
+	  return CMD_SUCCESS;
+	}
+    }
+
+  vty_out(vty, "Invalid type %s%s", argv[0], VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+DEFUN (no_rip_redistribute_type,
+       no_rip_redistribute_type_cmd,
+       "no redistribute (connected|static|ospf|bgp)",
+       NO_STR
+       "Redistribute control\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "OSPF routes\n"
+       "BGP routes\n")
+{
+  int i;
+
+  for (i = 0; redist_type[i].str; i++) 
+    {
+      if(strncmp(redist_type[i].str, argv[0], 
+		 redist_type[i].str_min_len) == 0) 
+	{
+	  rip_routemap_unset (redist_type[i].type);
+	  rip_redistribute_unset (redist_type[i].type);
+	  return CMD_SUCCESS;
+        }
+    }
+
+  vty_out(vty, "Invalid type %s%s", argv[0], VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+DEFUN (rip_redistribute_type_routemap,
+       rip_redistribute_type_routemap_cmd,
+       "redistribute (connected|static|ospf|bgp) route-map ROUTE_MAP_NAME",
+       "Redistribute control\n"
+       "Connected routes\n"
+       "Static routes\n"
+       "OSPF routes\n"
+       "BGP routes\n"
+       "Route map\n"
+       "Route map name\n")
+{
+  int i;
+
+  for (i = 0; redist_type[i].str; i++) {
+    if(strncmp(redist_type[i].str, argv[0],
+	       redist_type[i].str_min_len) == 0) 
+      {
+	rip_routemap_set (redist_type[i].type, argv[1]);
+	rip_redistribute_set (redist_type[i].type);
+	return CMD_SUCCESS;
+      }
+  }
+
+  vty_out(vty, "Invalid type %s%s", argv[0], VTY_NEWLINE);
+
+  return CMD_WARNING;
+}
+
+#if 0
 DEFUN (rip_redistribute_static,
        rip_redistribute_static_cmd,
        "redistribute static",
@@ -254,6 +379,7 @@ DEFUN (no_rip_redistribute_bgp,
 {
   return rip_redistribute_unset (ZEBRA_ROUTE_BGP);
 }
+#endif /* 0 */
 
 /* RIP configuration write function. */
 int
@@ -274,7 +400,7 @@ config_write_zebra (struct vty *vty)
 }
 
 int
-config_write_rip_redistribute (struct vty *vty)
+config_write_rip_redistribute (struct vty *vty, int config_mode)
 {
   int i;
   char *str[] = { "system", "kernel", "connected", "static", "rip",
@@ -282,7 +408,18 @@ config_write_rip_redistribute (struct vty *vty)
 
   for (i = 0; i < ZEBRA_ROUTE_MAX; i++)
     if (i != zebra->redist_default && zebra->redist[i])
-      vty_out (vty, " redistribute %s%s", str[i], VTY_NEWLINE);
+      {
+	if (config_mode)
+	  {
+	    if (rip->route_map[i].name)
+	      vty_out (vty, " redistribute %s route-map %s%s",
+		       str[i], rip->route_map[i].name, VTY_NEWLINE);
+	    else
+	      vty_out (vty, " redistribute %s%s", str[i], VTY_NEWLINE);
+	  }
+	else
+	  vty_out (vty, " %s", str[i]);
+      }
   return 0;
 }
 
@@ -328,6 +465,12 @@ zebra_init ()
   install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &rip_redistribute_rip_cmd);
   install_element (ZEBRA_NODE, &no_rip_redistribute_rip_cmd);
+
+  install_element (RIP_NODE, &rip_redistribute_type_cmd);
+  install_element (RIP_NODE, &rip_redistribute_type_routemap_cmd);
+  install_element (RIP_NODE, &no_rip_redistribute_type_cmd);
+
+#if 0
   install_element (RIP_NODE, &rip_redistribute_static_cmd);
   install_element (RIP_NODE, &no_rip_redistribute_static_cmd);
   install_element (RIP_NODE, &rip_redistribute_connected_cmd);
@@ -336,4 +479,5 @@ zebra_init ()
   install_element (RIP_NODE, &no_rip_redistribute_ospf_cmd);
   install_element (RIP_NODE, &rip_redistribute_bgp_cmd);
   install_element (RIP_NODE, &no_rip_redistribute_bgp_cmd);
+#endif /* 0 */
 }

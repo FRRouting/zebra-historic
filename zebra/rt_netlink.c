@@ -47,7 +47,7 @@ struct
 
 extern int rtm_table_default;
 
-/* Make socket for Linux netlink inteface. */
+/* Make socket for Linux netlink interface. */
 int
 netlink_socket ()
 {
@@ -447,7 +447,7 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
 
   /* Route which inserted by Zebra. */
   if (rtm->rtm_protocol == RTPROT_ZEBRA)
-    flags |= ZEBRA_FLAGS_ZEBRA;
+    flags |= ZEBRA_FLAG_SELFROUTE;
   
   index = 0;
   dest = NULL;
@@ -928,8 +928,8 @@ netlink_talk (struct nlmsghdr *n)
 
 /* Routing table change via netlink interface. */
 int
-netlink_route (int cmd, unsigned long flags, int family,
-	       void *dest, int length, void *gate, int index, int table)
+netlink_route (int cmd, unsigned long flags, int family, void *dest,
+	       int length, void *gate, int index, int zebra_flags, int table)
 {
   int ret;
   int bytelen;
@@ -959,7 +959,10 @@ netlink_route (int cmd, unsigned long flags, int family,
       req.r.rtm_scope = RT_SCOPE_UNIVERSE;
       /* req.r.rtm_scope = RT_SCOPE_HOST; */
       /* req.r.rtm_scope = RT_SCOPE_LINK; */
-      req.r.rtm_type = RTN_UNICAST;
+      if (zebra_flags & ZEBRA_FLAG_BLACKHOLE)
+	req.r.rtm_type = RTN_BLACKHOLE;
+      else
+	req.r.rtm_type = RTN_UNICAST;
     }
 
   if (gate)
@@ -984,24 +987,24 @@ netlink_route (int cmd, unsigned long flags, int family,
 /* Add IPv4 route to the kernel. */
 int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 int index, int metric, int table)
+		 int index, int flags, int table)
 {
   int ret;
 
-  ret = netlink_route (RTM_NEWROUTE, NLM_F_CREATE, AF_INET, 
-		       &dest->prefix, dest->prefixlen, gate, index, table);
+  ret = netlink_route (RTM_NEWROUTE, NLM_F_CREATE, AF_INET, &dest->prefix,
+		       dest->prefixlen, gate, index, flags, table);
   return ret;
 }
 
 /* Delete IPv4 route from the kernel. */
 int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    int index, int metric, int table)
+		    int index, int flags, int table)
 {
   int ret;
 
-  ret = netlink_route (RTM_DELROUTE, NLM_F_CREATE, AF_INET, 
-		       &dest->prefix, dest->prefixlen, gate, index, table);
+  ret = netlink_route (RTM_DELROUTE, NLM_F_CREATE, AF_INET, &dest->prefix,
+		       dest->prefixlen, gate, index, flags, table);
   return ret;
 }
 
@@ -1009,24 +1012,24 @@ kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 /* Add IPv6 route to the kernel. */
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int metric, int table)
+		    int index, int flags, int table)
 {
   int ret;
 
-  ret = netlink_route (RTM_NEWROUTE, NLM_F_CREATE, AF_INET6,
-		       &dest->prefix, dest->prefixlen, gate, index, table);
+  ret = netlink_route (RTM_NEWROUTE, NLM_F_CREATE, AF_INET6, &dest->prefix,
+		       dest->prefixlen, gate, index, flags, table);
   return ret;
 }
 
 /* Delete IPv6 route from the kernel. */
 int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int metric, int table)
+		    int index, int flags, int table)
 {
   int ret;
 
-  ret = netlink_route (RTM_DELROUTE, NLM_F_CREATE, AF_INET6,
-		       &dest->prefix, dest->prefixlen, gate, index, table);
+  ret = netlink_route (RTM_DELROUTE, NLM_F_CREATE, AF_INET6, &dest->prefix,
+		       dest->prefixlen, gate, index, flags, table);
   return ret;
 }
 #endif /* HAVE_IPV6 */

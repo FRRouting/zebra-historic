@@ -31,6 +31,7 @@
 #define IFS_DROTHER  5
 #define IFS_BDR      6
 #define IFS_DR       7
+#define IFS_MAX      8
 
 
 

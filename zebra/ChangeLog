@@ -1,3 +1,12 @@
+1999-09-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ioctl.c (if_set_prefix): Properly set broadcast address.
+
+1999-09-04  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* rib.c (rib_add_ipv6, rib_delete_ipv6): now protocol daemons
+	can install connected route to kernel via zebra
+
 1999-08-24  VOP <vop@unity.net>
 
 	* rib.c: Include "sockunion.h"

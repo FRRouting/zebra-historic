@@ -669,7 +669,7 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
     return;
 
   if (bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
-    flags |= ZEBRA_FLAGS_INTERNAL;
+    flags |= ZEBRA_FLAG_INTERNAL;
 
   if (p->family == AF_INET)
     {
@@ -724,7 +724,7 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
     return;
 
   if (bgp_peer_sort (info->peer) == BGP_PEER_IBGP)
-    flags |= ZEBRA_FLAGS_INTERNAL;
+    flags |= ZEBRA_FLAG_INTERNAL;
 
   if (p->family == AF_INET)
     zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_BGP, flags,

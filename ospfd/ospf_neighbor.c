@@ -38,6 +38,7 @@
 #include "ospfd/ospf_lsa.h"
 #include "ospfd/ospf_packet.h"
 #include "ospfd/ospf_network.h"
+#include "ospfd/ospf_flood.h"
 
 struct ospf_neighbor *
 ospf_nbr_new (struct ospf_interface *oi)
@@ -48,7 +49,7 @@ ospf_nbr_new (struct ospf_interface *oi)
   nbr = XMALLOC (MTYPE_OSPF_NEIGHBOR, sizeof (struct ospf_neighbor));
   bzero (nbr, sizeof (struct ospf_neighbor));
 
-  /* Relate Neighbor to Interface. */
+  /* Relate neighbor to interface. */
   nbr->oi = oi;
 
   /* Set default values. */
@@ -68,6 +69,7 @@ ospf_nbr_new (struct ospf_interface *oi)
 
   /* Initialize lists. */
   nbr->ls_retransmit = list_init ();
+zlog_info ("LLL: ls_retransmit=%d", listcount (nbr->ls_retransmit));
   nbr->db_summary = list_init ();
   nbr->ls_request = list_init ();
 
@@ -81,11 +83,16 @@ void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
   if (nbr->ls_retransmit != NULL && listcount (nbr->ls_retransmit))
-    list_delete_all (nbr->ls_retransmit);
+    {
+      ospf_ls_retransmit_clear (nbr);
+      list_delete_all (nbr->ls_retransmit);
+    }
+
   if (nbr->db_summary != NULL && listcount (nbr->db_summary))
     list_delete_all (nbr->db_summary);
+
   if (nbr->ls_request != NULL && listcount (nbr->ls_request))
-    list_delete_all (nbr->ls_request);
+    ospf_ls_request_delete_all (nbr);
 
 /*  if (nbr->host)
     free (nbr->host); */
@@ -158,20 +165,19 @@ ospf_nbr_add_self (struct ospf_interface *oi)
     }
   else
     {
+      /*
       nbr = ospf_nbr_new (oi);
-      rn->info = nbr;
+      */
+      rn->info = oi->nbr_self;
     }
 
+  /*
   nbr->status = NSM_TwoWay;
   nbr->router_id = ospf_top->router_id;
-  /*
-  nbr->d_router = oi->d_router;
-  nbr->bd_router = oi->bd_router;
-  nbr->priority = oi->priority;
-  */
   nbr->address = *oi->address;
 
   oi->nbr_self = nbr;
+  */
 }
 
 /* Get neighbor count by status. */
@@ -214,15 +220,43 @@ ospf_nbr_lookup_by_addr (struct route_table *nbrs,
   p.prefixlen = IPV4_MAX_BITLEN;
   p.u.prefix4 = *addr;
 
-  rn = route_node_get (nbrs, &p);
+  rn = route_node_lookup (nbrs, &p);
+
   if (rn == NULL)
     return NULL;
+
   if (rn->info == NULL)
-    return NULL;
+    {
+      route_unlock_node (rn);
+      return NULL;
+    }
 
   nbr = (struct ospf_neighbor *) rn->info;
   route_unlock_node (rn);
 
   return nbr;
+}
+
+struct ospf_neighbor *
+ospf_nbr_lookup_by_routerid (struct route_table *nbrs,
+			     struct in_addr *id)
+{
+  struct route_node *rn;
+  struct ospf_neighbor *nbr;
+
+  for (rn = route_top (nbrs); rn; rn = route_next (rn))
+    {
+      if (rn->info == NULL)
+	continue;
+      nbr = rn->info;
+
+      if (IPV4_ADDR_SAME (&nbr->router_id, id)){
+        route_unlock_node(rn);
+	return nbr;
+      }
+    }
+
+
+  return NULL;
 }
 

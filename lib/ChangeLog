@@ -1,3 +1,12 @@
+1999-09-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add new type MTYPE_OSPF_EXTERNAL_ROUTE.
+
+1999-08-31  Janos Farkas <chexum@shadow.banki.hu>
+
+	* vty.c (vty_read): Handle also 0x7f (alt-backspace), just like
+	esc-ctrl-h (delete word backwards).
+
 1999-08-24  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* if.h: Add if_nametoindex for NRL.

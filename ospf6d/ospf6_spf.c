@@ -120,6 +120,7 @@ transit_vertex_rtable_install (struct vertex *v, struct area *area)
     info.path_type = PTYPE_INTRA;
     info.cost = v->vtx_distance;
     info.nhlist = v->vtx_nexthops;
+    info.ls_origin = v->vtx_lsa;
 
     /* add area table */
     ospf6_route_add (&prefix, &info, area->table);
@@ -454,7 +455,7 @@ spf_calculation (struct thread *thread)
 
   area->spf_calc = (struct thread *)NULL;
 
-  o6log.spf ("Doing SPF Calculation for area %s", area->str);
+  zlog_info ("SPF Calculation for area %s", area->str);
 
   /* (1) */
   spf_init (area);

@@ -28,6 +28,10 @@
 #include "log.h"
 #include "thread.h"
 
+#ifndef INADDR_LOOPBACK
+#define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */
+#endif
+
 #define SMUX_PORT_DEFAULT 199
 
 #define SMUX_OPEN       (ASN_APPLICATION | ASN_CONSTRUCTOR | 0)

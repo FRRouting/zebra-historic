@@ -67,18 +67,45 @@ char *inet4str(unsigned long);
 void ospf6_log_init ();
 
 /* new */
-extern unsigned char ospf6_message_dump;
+extern unsigned char ospf6_message_hello_dump;
+extern unsigned char ospf6_message_dbdesc_dump;
+extern unsigned char ospf6_message_lsreq_dump;
+extern unsigned char ospf6_message_lsupdate_dump;
+extern unsigned char ospf6_message_lsack_dump;
 extern unsigned char ospf6_neighbor_dump;
 extern unsigned char ospf6_interface_dump;
 extern unsigned char ospf6_area_dump;
 extern unsigned char ospf6_lsa_dump;
 extern unsigned char ospf6_zebra_dump;
+extern unsigned char ospf6_config_dump;
+extern unsigned char ospf6_dbex_dump;
+extern unsigned char ospf6_route_dump;
 
-#define OSPF6_DUMP_HELLO (ospf6_message_dump & MSGT_HELLO)
-#define OSPF6_DUMP_DBDESC (ospf6_message_dump & MSGT_DATABASE_DESCRIPTION)
-#define OSPF6_DUMP_LSREQ (ospf6_message_dump & MSGT_LINKSTATE_REQUEST)
-#define OSPF6_DUMP_LSUPDATE (ospf6_message_dump & MSGT_LINKSTATE_UPDATE)
-#define OSPF6_DUMP_LSACK (ospf6_message_dump & MSGT_LINKSTATE_ACK)
+#define IS_OSPF6_DUMP_HELLO (ospf6_message_hello_dump)
+#define IS_OSPF6_DUMP_DBDESC (ospf6_message_dbdesc_dump)
+#define IS_OSPF6_DUMP_LSREQ (ospf6_message_lsreq_dump)
+#define IS_OSPF6_DUMP_LSUPDATE (ospf6_message_lsupdate_dump)
+#define IS_OSPF6_DUMP_LSACK (ospf6_message_lsack_dump)
+#define IS_OSPF6_DUMP_MESSAGE(x) (is_ospf6_message_dump(x))
+#define IS_OSPF6_DUMP_MESSAGE_ALL (IS_OSPF6_DUMP_HELLO && \
+                                   IS_OSPF6_DUMP_DBDESC && \
+                                   IS_OSPF6_DUMP_LSREQ && \
+                                   IS_OSPF6_DUMP_LSUPDATE && \
+                                   IS_OSPF6_DUMP_LSACK)
+
+#define IS_OSPF6_DUMP_NEIGHBOR (ospf6_neighbor_dump)
+#define IS_OSPF6_DUMP_INTERFACE (ospf6_interface_dump)
+#define IS_OSPF6_DUMP_AREA (ospf6_area_dump)
+#define IS_OSPF6_DUMP_LSA (ospf6_lsa_dump)
+#define IS_OSPF6_DUMP_ZEBRA (ospf6_zebra_dump)
+#define IS_OSPF6_DUMP_CONFIG (ospf6_config_dump)
+#define IS_OSPF6_DUMP_DBEX (ospf6_dbex_dump)
+#define IS_OSPF6_DUMP_ROUTE (ospf6_route_dump)
+
+char *ospf6_message_name (unsigned char);
+void ospf6_dump_message (struct iovec *);
+void ospf6_debug_init ();
+int is_ospf6_message_dump(char);
 
 #endif /* OSPF6_DUMP_H */
 

@@ -41,6 +41,7 @@ ospf_serv_sock (struct interface *ifp, int family)
 {
   int ospf_sock;
   int ret, tos;
+  struct ospf_interface *oi;
 
   ospf_sock = socket (family, SOCK_RAW, IPPROTO_OSPFIGP);
   if (ospf_sock < 0)
@@ -51,7 +52,14 @@ ospf_serv_sock (struct interface *ifp, int family)
   sockopt_reuseport (ospf_sock);
   */
   /* Set TTL to 1. */
-  ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_IP_TTL);
+
+  oi = ifp->info;
+  if (oi == NULL) return -1;
+
+  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
+     ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_VL_IP_TTL);
+  else 
+     ret = sockopt_ttl (AF_INET, ospf_sock, OSPF_IP_TTL);
   if (ret < 0)
     return ret;
 
@@ -203,7 +211,7 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
 	return ret;
 
       /* Create input/output buffer stream. */
-      ospf_if_stream_set (sock, oi);
+      ospf_if_stream_set (oi);
     }
 
   return 0;

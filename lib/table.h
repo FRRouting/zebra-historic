@@ -63,5 +63,6 @@ struct route_node *route_node_match (struct route_table *, struct prefix *);
 struct route_node *route_node_lookup (struct route_table *, struct prefix *);
 struct route_node * route_lock_node (struct route_node *node);
 void route_unlock_node (struct route_node *node);
+void route_node_delete (struct route_node *node);
 
 #endif

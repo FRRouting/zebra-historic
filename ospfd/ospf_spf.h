@@ -33,6 +33,7 @@ struct vertex
   u_int16_t distance;
   list child;
   list nexthop;
+  struct in_addr address; /* Address to use for VLs */
 };
 
 struct ospf_nexthop

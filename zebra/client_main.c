@@ -45,10 +45,10 @@ zebra_test_ipv4 (int command, int type, char *prefix, char *gateway)
   switch (command)
     {
     case ZEBRA_IPV4_ROUTE_ADD:
-      zebra_ipv4_add (sock, type, ZEBRA_FLAGS_INTERNAL, &p, &gate, 0);
+      zebra_ipv4_add (sock, type, ZEBRA_FLAG_INTERNAL, &p, &gate, 0);
       break;
     case ZEBRA_IPV4_ROUTE_DELETE:
-      zebra_ipv4_delete (sock, type, ZEBRA_FLAGS_INTERNAL, &p, &gate, 0);
+      zebra_ipv4_delete (sock, type, ZEBRA_FLAG_INTERNAL, &p, &gate, 0);
       break;
     }
 }

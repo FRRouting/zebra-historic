@@ -199,7 +199,7 @@ interface_list_proc ()
   dropline (fp);
   dropline (fp);
 
-  /* Look up all inteface from /proc/net/dev. */
+  /* Look up all interface from /proc/net/dev. */
   while (fgets (buf, IF_BUFSIZ, fp) != NULL)
     {
       int i, j;

@@ -1,5 +1,41 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.79
+
+* Changes in zebra
+
+** Broadcast address setting on Linux box bug is fixed.
+
+** Protocol daemon can install connected IPv6 route into the kernel.
+
+** Now zebra can handle blackhole route.
+
+* Changes in ripd
+
+** Add route-map feature for RIP protocol.
+
+** In case of RIP version 2 routing table entry has IPv4 address and
+netmask pair which host part bit is on, ignore the entry.
+
+* Changes in ripngd
+
+** Change CMSG_DATA cast from (u_char *) to (int *).  (u_char *) does
+not work for NetBSD-currnet on SparcStation 10.
+
+* Changes in ospfd
+
+** MaxAge LSA treatment is added.
+
+** ABR/ASBR functionality is added.
+
+** Virtual Link funtionality is added.
+
+** ABR behaviors IBM/Cisco/Shortcut is added.
+
+* Changes in ospf6d
+
+** Enclosed KAME specific part with #ifdef #endif
+
 * Changes in zebra-0.78
 
 * Changes in lib

@@ -60,7 +60,7 @@ static struct sockaddr_in sin_proto =
 /* Interface to ioctl route message. */
 int
 kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
-		 int index, int metric)
+		 int index, int flags)
 {
   int ret;
   int sock;
@@ -112,6 +112,9 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
 
   rtentry.rt_flags |= RTF_UP;
 
+  /* Additional flags */
+  rtentry.rt_flags |= flags;
+
   /* For tagging route. */
   /* rtentry.rt_flags |= RTF_DYNAMIC; */
 
@@ -155,18 +158,18 @@ kernel_ioctl_ipv4 (int type, struct prefix_ipv4 *dest, struct in_addr *gate,
 /* Add a route to the kernel routing table. */
 int
 kernel_add_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		 int index, int metric, int table)
+		 int index, int flags, int table)
 {
-  return kernel_ioctl_ipv4 (SIOCADDRT, dest, gate, index, metric);
+  return kernel_ioctl_ipv4 (SIOCADDRT, dest, gate, index, flags);
 }
 
 
 /* Delete a route from the kernel routing table. */
 int
 kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
-		    int index, int metric, int table)
+		    int index, int flags, int table)
 {
-  return kernel_ioctl_ipv4 (SIOCDELRT, dest, gate, index, metric);
+  return kernel_ioctl_ipv4 (SIOCDELRT, dest, gate, index, flags);
 }
 
 #ifdef HAVE_IPV6
@@ -185,7 +188,7 @@ kernel_delete_ipv4 (struct prefix_ipv4 *dest, struct in_addr *gate,
 
 int
 kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
-		   int index, int metric)
+		   int index, int flags)
 {
   int ret;
   int sock;
@@ -247,17 +250,17 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
 /* Add IPv6 route to the kernel. */
 int
 kernel_add_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		 int index, int metric, int table)
+		 int index, int flags, int table)
 {
-  return kernel_ioctl_ipv6 (SIOCADDRT, dest, gate, index, metric);
+  return kernel_ioctl_ipv6 (SIOCADDRT, dest, gate, index, flags);
 }
 
 /* Delete IPv6 route from the kernel. */
 int
 kernel_delete_ipv6 (struct prefix_ipv6 *dest, struct in6_addr *gate,
-		    int index, int metric, int table)
+		    int index, int flags, int table)
 {
-  return kernel_ioctl_ipv6 (SIOCDELRT, dest, gate, index, metric);
+  return kernel_ioctl_ipv6 (SIOCDELRT, dest, gate, index, flags);
 }
 
 #endif /* HAVE_IPV6 */

@@ -235,6 +235,17 @@ iov_free_all (int mtype, struct iovec *iov)
   return;
 }
 
+void
+iov_copy_all (struct iovec *dst, struct iovec *src, int size)
+{
+  int i;
+  for (i = 0; i < size; i++)
+    {
+      dst[i].iov_base = src[i].iov_base;
+      dst[i].iov_len = src[i].iov_len;
+    }
+}
+
 int
 sockunion_ospf6_socket (union sockunion *su)
 {
@@ -304,161 +315,123 @@ ospf6_serv_sock ()
   return 0;
 }
 
+void
+ospf6_join_alldr (u_int ifindex)
+{
+  struct ipv6_mreq mreq6;
+
+  assert (ifindex);
+
+  memcpy (&mreq6.ipv6mr_multiaddr, &alldrouters6.sin6_addr,
+          sizeof (struct in6_addr));
+  mreq6.ipv6mr_interface = ifindex;
+
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP,
+                  &mreq6, sizeof (mreq6)) < 0)
+    zlog_warn ("*** can't join AllDRouters6 on ifindex %d", ifindex);
+}
+
+void
+ospf6_leave_alldr (u_int ifindex)
+{
+  struct ipv6_mreq mreq6;
+
+  assert (ifindex);
+
+  memcpy (&mreq6.ipv6mr_multiaddr, &alldrouters6.sin6_addr,
+          sizeof (struct in6_addr));
+  mreq6.ipv6mr_interface = ifindex;
+
+  if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP,
+                  &mreq6, sizeof (mreq6)) < 0)
+    zlog_warn ("*** can't leave AllDRouters6 on ifindex %d", ifindex);
+}
+
+#ifndef s6_addr32
+#define s6_addr32 u6_addr.u6_addr32
+#define s6_addr16 u6_addr.u6_addr16
+#define s6_addr8  u6_addr.u6_addr8
+#define s6_addr   u6_addr.u6_addr8
+#endif
+
+void
+ospf6_ipv4_encode_ipv6 (struct in_addr *in4, struct in6_addr *in6)
+{
+  /* IPv4 address to IPv4 Mapped Address */
+  memset (in6, 0, sizeof (struct in6_addr));
+  in6->s6_addr16[5] = 0xffff;
+  in6->s6_addr32[3] = in4->s_addr;
+}
+
+void
+ospf6_ipv6_decode_ipv4 (struct in6_addr *in6, struct in_addr *in4)
+{
+  if (!IN6_IS_ADDR_V4MAPPED (in6))
+    zlog_warn (" *** converting address not IPv4MappedAddress!!");
+
+  /* IPv4 Mapped Address to IPv4 address*/
+  memset (in4, 0, sizeof (struct in_addr));
+  in4->s_addr = in6->s6_addr32[3];
+}
+
 int
 mcast_join (int sockfd, struct sockaddr *sa, char *ifname, u_int ifindex)
 {
+  struct ipv6_mreq mreq6;
 
   switch (sa->sa_family)
     {
-      case AF_INET:
-        {
-          struct ip_mreq mreq;
-          struct ifreq ifreq;
-
-          memcpy (&mreq.imr_multiaddr,
-                  &((struct sockaddr_in *) sa)->sin_addr,
-                  sizeof (struct in_addr));
-
-#ifdef HAVE_IPV6
-          if (ifindex > 0)
-            {
-              if (if_indextoname (ifindex, ifreq.ifr_name) == NULL)
-                {
-                  errno = ENXIO; /* i/f index not found */
-                  return -1;
-                }
-              goto doioctl;
-            }
-          else
-#endif
-          if (ifname != NULL)
-            {
-              strncpy (ifreq.ifr_name, ifname, IFNAMSIZ);
-doioctl:
-              if (ioctl (sockfd, SIOCGIFADDR, &ifreq) < 0)
-    {
-      log_warn ("Can't Get Address for %s, Can't Join Multicast Group\n",
-          ifname);
-      return -1;
-    }
-              memcpy (&mreq.imr_interface,
-                      &((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr,
-                      sizeof (struct in_addr));
-            }
-          else
-            mreq.imr_interface.s_addr = htonl (INADDR_ANY);
-
-          return (setsockopt (sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-                              &mreq, sizeof (mreq)));
-        }
-
-#ifdef HAVE_IPV6
       case AF_INET6:
-        {
-          struct ipv6_mreq mreq6;
+        memcpy (&mreq6.ipv6mr_multiaddr,
+                &((struct sockaddr_in6 *) sa)->sin6_addr,
+                sizeof (struct in6_addr));
 
-          memcpy (&mreq6.ipv6mr_multiaddr,
-                  &((struct sockaddr_in6 *) sa)->sin6_addr,
-                  sizeof (struct in6_addr));
-
-          if (ifindex > 0)
-            mreq6.ipv6mr_interface = ifindex;
-          else if (ifname != NULL)
-      {
-        if ((mreq6.ipv6mr_interface = if_nametoindex (ifname)) == 0)
-    {
-      errno = ENXIO;  /* i/f name not found */
-      return -1;
-    }
-      }
-    else
-      mreq6.ipv6mr_interface = 0;
-          return (setsockopt (sockfd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP,
-                              &mreq6, sizeof (mreq6)));
-        }
-#endif
-
+        if (ifindex > 0)
+          mreq6.ipv6mr_interface = ifindex;
+        else if (ifname != NULL)
+          {
+            if ((mreq6.ipv6mr_interface = if_nametoindex (ifname)) == 0)
+              {
+                errno = ENXIO;  /* i/f name not found */
+                return -1;
+              }
+          }
+        else
+          mreq6.ipv6mr_interface = 0;
+        return (setsockopt (sockfd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP,
+                            &mreq6, sizeof (mreq6)));
       default:
         errno = EPROTONOSUPPORT;
         return -1;
-  }
+    }
 }
 
 int
 mcast_leave (int sockfd, struct sockaddr *sa, char *ifname, u_int ifindex)
 {
+  struct ipv6_mreq mreq6;
 
   switch (sa->sa_family)
     {
-      case AF_INET:
-        {
-          struct ip_mreq mreq;
-          struct ifreq ifreq;
-
-          memcpy (&mreq.imr_multiaddr,
-                  &((struct sockaddr_in *) sa)->sin_addr,
-                  sizeof (struct in_addr));
-
-#ifdef HAVE_IPV6
-          if (ifindex > 0)
-            {
-              if (if_indextoname (ifindex, ifreq.ifr_name) == NULL)
-                {
-                  errno = ENXIO; /* i/f index not found */
-                  return -1;
-                }
-              goto doioctl;
-            }
-          else
-#endif
-          if (ifname != NULL)
-            {
-              strncpy (ifreq.ifr_name, ifname, IFNAMSIZ);
-doioctl:
-              if (ioctl (sockfd, SIOCGIFADDR, &ifreq) < 0)
-                {
-                  log_warn ("Can't Get Address for %s, "
-                            "Can't Join Multicast Group\n",
-                            ifname);
-                  return -1;
-                }
-              memcpy (&mreq.imr_interface,
-                      &((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr,
-                      sizeof (struct in_addr));
-            }
-          else
-            mreq.imr_interface.s_addr = htonl (INADDR_ANY);
-
-          return (setsockopt (sockfd, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-                              &mreq, sizeof (mreq)));
-        }
-
-#ifdef HAVE_IPV6
       case AF_INET6:
-        {
-          struct ipv6_mreq mreq6;
+        memcpy (&mreq6.ipv6mr_multiaddr,
+                &((struct sockaddr_in6 *) sa)->sin6_addr,
+                sizeof (struct in6_addr));
 
-          memcpy (&mreq6.ipv6mr_multiaddr,
-                  &((struct sockaddr_in6 *) sa)->sin6_addr,
-                  sizeof (struct in6_addr));
-
-          if (ifindex > 0)
-            mreq6.ipv6mr_interface = ifindex;
-          else if (ifname != NULL)
-            {
-              if ((mreq6.ipv6mr_interface = if_nametoindex (ifname)) == 0)
-                {
-                  errno = ENXIO;  /* i/f name not found */
-                  return -1;
-                }
-            }
-          else
-            mreq6.ipv6mr_interface = 0;
-          return (setsockopt (sockfd, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP,
-                              &mreq6, sizeof (mreq6)));
-        }
-#endif
-
+        if (ifindex > 0)
+          mreq6.ipv6mr_interface = ifindex;
+        else if (ifname != NULL)
+          {
+            if ((mreq6.ipv6mr_interface = if_nametoindex (ifname)) == 0)
+              {
+                errno = ENXIO;  /* i/f name not found */
+                return -1;
+              }
+          }
+        else
+          mreq6.ipv6mr_interface = 0;
+        return (setsockopt (sockfd, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP,
+                            &mreq6, sizeof (mreq6)));
       default:
         errno = EPROTONOSUPPORT;
         return -1;
@@ -588,7 +561,7 @@ send_database_description (struct thread *thread)
       /* Master need to set timer for retransmit Database Description packet */
       if (DD_IS_MSBIT_SET (nbr->dd_bits))
         {
-        /* Master */
+          /* Master */
           nbr->send_dd = thread_add_timer (master, send_database_description,
                                            nbr, nbr->ospf6_if->rxmt_interval);
         }

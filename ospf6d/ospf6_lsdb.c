@@ -36,8 +36,7 @@ lsa_change (struct ospf6_lsa *lsa)
         area->spf_calc = thread_add_event (master, spf_calculation,
                                            area, 0);
       if (area->route_calc == (struct thread *)NULL)
-        area->route_calc = thread_add_event (master,
-                                             routing_table_calculation,
+        area->route_calc = thread_add_event (master, ospf6_route_calc,
                                              area, 0);
       break;
     case LST_LINK_LSA:
@@ -47,15 +46,13 @@ lsa_change (struct ospf6_lsa *lsa)
         area->spf_calc = thread_add_event (master, spf_calculation,
                                            area, 0);
       if (area->route_calc == (struct thread *)NULL)
-        area->route_calc = thread_add_event (master,
-                                             routing_table_calculation,
+        area->route_calc = thread_add_event (master, ospf6_route_calc,
                                              area, 0);
       break;
     case LST_INTRA_AREA_PREFIX_LSA:
       area = (struct area *)lsa->scope;
       if (area->route_calc == (struct thread *)NULL)
-        area->route_calc = thread_add_event (master,
-                                             routing_table_calculation,
+        area->route_calc = thread_add_event (master, ospf6_route_calc,
                                              area, 0);
       break;
     default:
@@ -264,19 +261,21 @@ ospf6_add_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_remove_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  /* if not on retranslist, return */
   if (!ospf6_lookup_retrans (lsa, nbr))
-    {
-      o6log.lsdb ("%s not on %s retrans",
-                  print_lsahdr (lsa->lsa_hdr), nbr->str);
-      return;
-    }
+    return;
+
+  /* remove from retrans list */
   list_delete_by_val (nbr->retranslist, lsa);
   list_delete_by_val (lsa->retrans_nbr, nbr);
-  o6log.lsdb ("remove %s from %s retrans", print_lsahdr (lsa->lsa_hdr),
-              nbr->str);
   ospf6_lsa_unlock (lsa);
 
-  return;
+  /* if nbr's associated area has no neighbor in Exchange or Loading,
+     delete MaxAge LSAs. */
+  if (!count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_if->area) &&
+      !count_nbr_in_state (NBS_LOADING, nbr->ospf6_if->area) &&
+      ospf6_age_current (lsa) == MAXAGE)
+    ospf6_lsa_maxage_remove (lsa);
 }
 
 /* remove all lsa from retrans list of neighbor */
@@ -832,6 +831,9 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
   struct neighbor *nbr;
   struct ospf6_lsa *old;
 
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA Install %s", print_lsahdr (new->lsa_hdr));
+
   old = ospf6_lsdb_lookup (new->lsa_hdr->lsh_type,
                            new->lsa_hdr->lsh_id,
                            new->lsa_hdr->lsh_advrtr, new->scope);
@@ -855,14 +857,49 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
 }
 
 void
+ospf6_lsdb_maxage_remove_interface (struct ospf6_if *o6if)
+{
+  list l;
+  listnode n;
+  struct ospf6_lsa *lsa = NULL;
+
+  /* if this Interface's associated Area has neighbor in ExChange
+     or Loading, do nothing (return) */
+  if (count_nbr_in_state (NBS_EXCHANGE, o6if->area))
+    return;
+  if (count_nbr_in_state (NBS_LOADING, o6if->area))
+    return;
+
+  l = list_init ();
+  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      if (ospf6_age_current (lsa) == MAXAGE)
+        list_add_node (l, lsa);
+    }
+
+  for (n = listhead (l); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_lsa_maxage_remove (lsa);
+    }
+
+  list_delete_all (l);
+}
+
+void
 ospf6_lsdb_maxage_remove_area (struct area *area)
 {
   list l;
   listnode n;
   struct ospf6_lsa *lsa = NULL;
 
-  assert (!count_nbr_in_state (NBS_EXCHANGE, area));
-  assert (!count_nbr_in_state (NBS_LOADING, area));
+  /* if this Area has neighbor in ExChange or Loading,
+     do nothing (return) */
+  if (count_nbr_in_state (NBS_EXCHANGE, area))
+    return;
+  if (count_nbr_in_state (NBS_LOADING, area))
+    return;
 
   l = list_init ();
   for (n = listhead (area->lsdb); n; nextnode (n))
@@ -889,14 +926,16 @@ ospf6_lsdb_maxage_remove_as (struct ospf6 *ospf6)
   struct ospf6_lsa *lsa;
   struct area *area;
 
+  /* if one of Area in AS has neighbor in ExChange or Loading,
+     do nothing (return) */
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
       area = (struct area *) getdata (n);
-      assert (!count_nbr_in_state (NBS_EXCHANGE, area));
-      assert (!count_nbr_in_state (NBS_LOADING, area));
+      if (count_nbr_in_state (NBS_EXCHANGE, area))
+        return;
+      if (count_nbr_in_state (NBS_LOADING, area))
+        return;
     }
-
-  o6log.lsdb ("AS scope MaxAge LSA to delete");
 
   l = list_init ();
   for (n = listhead (ospf6->lsdb); n; nextnode (n))

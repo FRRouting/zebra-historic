@@ -1,6 +1,5 @@
-/*
- * Routing Information Base.
- * Copyright (C) 1997, 98 Kunihiro Ishiguro
+/* Routing Information Base.
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -300,7 +299,8 @@ rib_add_ipv4_internal (struct prefix_ipv4 *p, struct rib *rib, int table)
   if (fib->type == ZEBRA_ROUTE_CONNECT)
     {
       route_unlock_node (np);
-      return kernel_add_ipv4 (p, &rib->u.gate4, rib->u.ifindex, 0, table);
+      return kernel_add_ipv4 (p, &rib->u.gate4, rib->u.ifindex, rib->flags,
+			      table);
     }
 
   /* Save original nexthop. */
@@ -312,7 +312,7 @@ rib_add_ipv4_internal (struct prefix_ipv4 *p, struct rib *rib, int table)
 
   route_unlock_node (np);
   
-  return kernel_add_ipv4 (p, &rib->u.gate4, rib->u.ifindex, 0, table);
+  return kernel_add_ipv4 (p, &rib->u.gate4, rib->u.ifindex, rib->flags, table);
 }
 
 /* Add prefix into rib. If there is a same type prefix, then we assume
@@ -402,16 +402,17 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 	      kernel_delete_ipv4 (p, &fib->u.gate4, fib->u.ifindex, 0, 
 				  fib->table);
 
-	      if (gate && (flags & ZEBRA_FLAGS_INTERNAL))
+	      if (gate && (flags & ZEBRA_FLAG_INTERNAL))
 		ret = rib_add_ipv4_internal (p, rib, table);
 	      else
-		ret = kernel_add_ipv4 (p, &rib->u.gate4, ifindex, 0, table);
+		ret = kernel_add_ipv4 (p, &rib->u.gate4, ifindex, flags,
+				       table);
 	      
 	      if (ret != 0)
 		{
 		  /* Restore old route. */
 		  kernel_add_ipv4 (p, &fib->u.gate4,
-				   fib->u.ifindex, 0, fib->table);
+				   fib->u.ifindex, fib->flags, fib->table);
 		  goto finish;
 		}
 	      rib_fib_unset (np, fib);
@@ -423,10 +424,10 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
     {
       if (! rib_system_route (rib->type))
 	{
-	  if (gate && (flags & ZEBRA_FLAGS_INTERNAL))
+	  if (gate && (flags & ZEBRA_FLAG_INTERNAL))
 	    ret = rib_add_ipv4_internal (p, rib, table);
 	  else
-	    ret = kernel_add_ipv4 (p, gate, ifindex, 0, table);
+	    ret = kernel_add_ipv4 (p, gate, ifindex, flags, table);
 
 	  if (ret != 0)
 	    goto finish;
@@ -531,7 +532,7 @@ rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 	  if (! rib_system_route (fib->type))
 	    {
 	      ret = kernel_add_ipv4 (p, &fib->u.gate4, fib->u.ifindex,
-				     0, fib->table);
+				     fib->flags, fib->table);
 
 	      if (ret == 0)
 		rib_fib_set (np, fib);
@@ -905,12 +906,12 @@ rib_add_ipv6 (int type, int flags, struct prefix_ipv6 *p,
 	      rib_fib_unset (np, fib);
 	      
 	      /* Internal route have to check nexthop. */
-	      if (gate && (flags & ZEBRA_FLAGS_INTERNAL))
+	      if (gate && (flags & ZEBRA_FLAG_INTERNAL))
 		rib_ipv6_nexthop_set (p, rib);
 
 	      /* OK install into the kernel. */
-	      ret = kernel_add_ipv6 (p, &rib->u.gate6, rib->u.ifindex, 
-				     0, rib->table);
+	      ret = kernel_add_ipv6 (p, gate ? &rib->u.gate6 : NULL,
+                                     rib->u.ifindex, 0, rib->table);
 
 	      /* If we can't install the route into the kernel. Old
                  route comes back.*/
@@ -930,15 +931,19 @@ rib_add_ipv6 (int type, int flags, struct prefix_ipv6 *p,
     {
       if (! rib_system_route (rib->type))
 	{
-	  if (gate && (flags & ZEBRA_FLAGS_INTERNAL))
+	  if (gate && (flags & ZEBRA_FLAG_INTERNAL))
 	    rib_ipv6_nexthop_set (p, rib);
 
-	  ret = kernel_add_ipv6 (p, &rib->u.gate6, rib->u.ifindex,
-				 0, rib->table);
+	  ret = kernel_add_ipv6 (p, gate ? &rib->u.gate6 : NULL,
+                                 rib->u.ifindex, 0, rib->table);
 
 	  /* If we can't install the route into the kernel. */
 	  if (ret != 0)
-	    goto end;
+            {
+	      zlog_warn ("kernel add route failed: %s (%d)",
+			 strerror (errno), errno);
+	      goto end;
+            }
 	}
       rib_fib_set (np, rib);
     }
@@ -967,7 +972,9 @@ rib_delete_ipv6 (int type, int flags, struct prefix_ipv6 *p,
   struct route_node *np;
   struct rib *rib;
   struct rib *fib;
+  struct in6_addr nullgate;
   
+  memset (&nullgate, 0, sizeof (struct in6_addr));
   p->family = AF_INET6;
   apply_mask_ipv6 (p);
 
@@ -978,18 +985,20 @@ rib_delete_ipv6 (int type, int flags, struct prefix_ipv6 *p,
       if (rib->type == type &&
 	  (!table || rib->table == table))
 	{
+#if 0
 	  if (! gate)
-	    break;
+            break;
+#endif
 	  if (IS_RIB_INTERNAL (rib))
 	    {
 	      if (rib->i.ifindex == ifindex && 
-		  IPV6_ADDR_SAME (&rib->i.gate6, gate))
+		  IPV6_ADDR_SAME (&rib->i.gate6, gate ? gate : &nullgate))
 		break;
 	    }
 	  else
 	    {
 	      if (rib->u.ifindex == ifindex && 
-		  IPV6_ADDR_SAME (&rib->u.gate6, gate))
+		  IPV6_ADDR_SAME (&rib->u.gate6, gate ? gate : &nullgate))
 		break;
 	    }
 	}
@@ -1024,8 +1033,8 @@ rib_delete_ipv6 (int type, int flags, struct prefix_ipv6 *p,
     {
       if (! rib_system_route (type))
 	{
-	  ret = kernel_delete_ipv6 (p, &rib->u.gate6, rib->u.ifindex, 0, 
-				    rib->table);
+	  ret = kernel_delete_ipv6 (p, gate ? &rib->u.gate6 : NULL,
+                                    rib->u.ifindex, 0, rib->table);
 	}
 
       /* Redistribute it. */
@@ -1488,7 +1497,7 @@ zebra_sweep_table (struct route_table *rib_table)
 	next = rib->next;
 
         if ((rib->type == ZEBRA_ROUTE_KERNEL) && 
-	    (rib->flags & ZEBRA_FLAGS_ZEBRA))
+	    (rib->flags & ZEBRA_FLAG_SELFROUTE))
           {
 	    if (np->p.family == AF_INET)
 	      ret = kernel_delete_ipv4 ((struct prefix_ipv4 *)&np->p,

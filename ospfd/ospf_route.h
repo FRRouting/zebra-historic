@@ -20,6 +20,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #define OSPF_DESTINATION_ROUTER		1
 #define OSPF_DESTINATION_NETWORK	2
+#define OSPF_DESTINATION_DISCARD	3
 
 #define OSPF_PATH_INTRA_AREA		1
 #define OSPF_PATH_INTER_AREA		2
@@ -30,7 +31,20 @@ struct ospf_path
 {
   struct in_addr nexthop;
   struct in_addr adv_router;
+  struct interface *ifp;
 };
+
+/* Below is the structure linked to every
+   route node. Note that for Network routing
+   entries a single ospf_route is kept, while
+   for ABRs and ASBR (Router routing entries),
+   we link a list of paths, so
+
+   nr->info is a (struct ospf_route *) for OSPF_DESTINATION_NETWORK
+   but
+   nr->info is a list of (struct ospf_route *) for OSPF_DESTINATION_ROUTER
+*/
+
 
 struct ospf_route
 {
@@ -40,13 +54,56 @@ struct ospf_route
   u_char options;
   struct ospf_area *area;
   u_char path_type;
-  u_int16_t cost;
-  u_int16_t type2_cost;
-  struct in_addr origin;
+  u_int32_t cost;
+  u_int32_t type2_cost;
+  struct lsa_header * origin;
   list path;
+  u_char flags; 		/* From router-LSA */
+  struct ospf_route *asbr; 	/* only for external routes*/
+  u_int32_t tag;
+
 };
+
+struct ospf_path * ospf_path_new ();
+void ospf_path_free (struct ospf_path *op);
+struct ospf_route * ospf_route_new ();
+void ospf_route_free (struct ospf_route *or);
+void ospf_delete_route (struct route_table *rt);
+void ospf_route_table_free (struct route_table *rt);
 
 void ospf_install_route (struct route_table *);
 void ospf_route_table_dump (struct route_table *);
 void ospf_intra_route_add (struct route_table *, struct vertex *, 
 			   struct ospf_area *);
+
+void ospf_intra_add_router( struct route_table *,
+			    struct vertex *,
+			    struct ospf_area *);
+
+void ospf_intra_add_transit( struct route_table *,
+			     struct vertex *,
+			     struct ospf_area *);
+
+void ospf_intra_add_stub( struct route_table *,
+			  struct router_lsa_link *,
+ 		          struct vertex *,
+			  struct ospf_area *);
+
+int ospf_cmp_routes(struct ospf_route *, struct ospf_route *);
+void ospf_route_copy_nexthops ( struct ospf_route *, list );
+void ospf_route_copy_nexthops_from_vertex ( struct ospf_route *, struct vertex * );
+
+
+void ospf_subst_route ( struct route_node *,
+			    struct ospf_route *,
+			    struct ospf_route *);
+void ospf_add_route    ( struct route_table *,
+                            struct prefix_ipv4 *,
+			    struct ospf_route *,
+			    struct ospf_route *);
+
+void ospf_route_subst_nexthops (struct ospf_route *, list);
+void ospf_prune_unreachable_networks(struct route_table *);
+void ospf_prune_unreachable_routers(struct route_table *);
+int  ospf_add_discard_route(struct route_table *, struct ospf_area *, 
+			    struct prefix_ipv4 *);

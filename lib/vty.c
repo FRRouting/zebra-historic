@@ -1048,6 +1048,7 @@ vty_read (struct thread *thread)
 	      vty->escape = VTY_NORMAL;
 	      break;
 	    case CONTROL('H'):
+	    case 0x7f:
 	      vty_backward_kill_word (vty);
 	      vty->escape = VTY_NORMAL;
 	      break;

@@ -30,8 +30,6 @@ int
 nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
 {
   state_t nbs_previous;
-  listnode n;
-  struct area *area;
 
   nbs_previous = nbr->state;
   nbr->state = nbs_next;
@@ -39,35 +37,31 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
   if (nbs_previous == nbs_next)
     return 0;
 
-  if (reason)
-    zvlog_info ("nbr %s: [%s]->[%s](%s)",
-                 nbr->str,
-                 nbs_name[nbs_previous], nbs_name[nbs_next],
-                 reason);
-  else
-    zvlog_info ("nbr %s: [%s]->[%s]",
-                 nbr->str,
-                 nbs_name[nbs_previous], nbs_name[nbs_next]);
+  /* log */
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    {
+      if (reason)
+        zlog_info ("Neighbor status change %s: [%s]->[%s](%s)",
+                   nbr->str,
+                   nbs_name[nbs_previous], nbs_name[nbs_next],
+                   reason);
+      else
+        zlog_info ("Neighbor status change %s: [%s]->[%s]",
+                   nbr->str,
+                   nbs_name[nbs_previous], nbs_name[nbs_next]);
+    }
 
   if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
     nbs_full_change (nbr->ospf6_if);
 
   /* check for LSAs that already reached MaxAge */
+  /* for Interface scope LSA */
+  ospf6_lsdb_maxage_remove_interface (nbr->ospf6_if);
+
   /* for Area scope LSA */
-  if (!count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_if->area) &&
-      !count_nbr_in_state (NBS_LOADING, nbr->ospf6_if->area))
-    ospf6_lsdb_maxage_remove_area (nbr->ospf6_if->area);
+  ospf6_lsdb_maxage_remove_area (nbr->ospf6_if->area);
 
   /* for AS scope LSA */
-  for (n = listhead (nbr->ospf6_if->area->ospf6->area_list); n;
-       nextnode (n))
-    {
-      area = (struct area *) getdata (n);
-      /* when there's one area fits, return */
-      if (count_nbr_in_state (NBS_EXCHANGE, nbr->ospf6_if->area) ||
-          count_nbr_in_state (NBS_LOADING, nbr->ospf6_if->area))
-        return 0;
-    }
   ospf6_lsdb_maxage_remove_as (nbr->ospf6_if->area->ospf6);
 
   return 0;
@@ -123,6 +117,12 @@ neighbor_thread_cancel (struct neighbor *nbr)
 
   nbr->inactivity_timer = nbr->send_dd = nbr->send_lsreq = nbr->send_update
     = (struct thread *)NULL;
+
+  /* new */
+  if (nbr->thread_dbdesc_retrans)
+    thread_cancel (nbr->thread_dbdesc_retrans);
+  nbr->thread_dbdesc_retrans = (struct thread *) NULL;
+
   return 0;
 }
 
@@ -173,7 +173,8 @@ hello_received (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  zvlog_info ("nbr %s: *HelloReceived*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *HelloReceived*", nbr->str);
 
   if (nbr->inactivity_timer)
     thread_cancel (nbr->inactivity_timer);
@@ -196,7 +197,8 @@ twoway_received (struct thread *thread)
   if (nbr->state > NBS_INIT)
     return 0;
 
-  zvlog_info ("nbr %s: *2Way-Received*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *2Way-Received*", nbr->str);
 
   thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
 
@@ -206,19 +208,13 @@ twoway_received (struct thread *thread)
       return 0;
     }
   else
-    {
-      nbs_change (NBS_EXSTART, "Need Adjacency", nbr);
-    }
+    nbs_change (NBS_EXSTART, "Need Adjacency", nbr);
 
   DD_MSBIT_SET (nbr->dd_bits);
   DD_MBIT_SET (nbr->dd_bits);
   DD_IBIT_SET (nbr->dd_bits);
-  if (nbr->send_dd)
-    {
-      thread_cancel (nbr->send_dd);
-      nbr->send_dd = NULL;
-    }
-  thread_add_event (master, send_database_description, nbr, 0);
+
+  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
 
   return 0;
 }
@@ -234,7 +230,8 @@ negotiation_done (struct thread *thread)
   if (nbr->state != NBS_EXSTART)
     return 0;
 
-  zvlog_info ("nbr %s: *NegotiationDone*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *NegotiationDone*", nbr->str);
 
   nbs_change (NBS_EXCHANGE, "NegotiationDone", nbr);
   DD_IBIT_CLEAR (nbr->dd_bits);
@@ -258,7 +255,13 @@ exchange_done (struct thread *thread)
       thread_cancel (nbr->send_dd);
       nbr->send_dd = (struct thread *)NULL;
     }
-  zvlog_info ("nbr %s: *ExchangeDone*", nbr->str);
+
+  if (nbr->thread_dbdesc_retrans)
+    thread_cancel (nbr->thread_dbdesc_retrans);
+  nbr->thread_dbdesc_retrans = (struct thread *) NULL;
+
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *ExchangeDone*", nbr->str);
 
   list_delete_all_node (nbr->dd_retrans);
 
@@ -288,16 +291,12 @@ loading_done (struct thread *thread)
   if (nbr->state != NBS_LOADING)
     return 0;
 
-  zvlog_info ("nbr %s: *LoadingDone*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *LoadingDone*", nbr->str);
 
-  if (list_isempty (nbr->requestlist))
-    nbs_change (NBS_FULL, "LoadingDone", nbr);
-  else
-    {
-      zvlog_debug ("BUG: LoadingDone for %s but Requestlist Not Empty",
-                   nbr->str);
-      assert (0);
-    }
+  assert (list_isempty (nbr->requestlist));
+
+  nbs_change (NBS_FULL, "LoadingDone", nbr);
 
   return 0;
 }
@@ -310,7 +309,8 @@ adj_ok (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  zvlog_info ("nbr %s: *AdjOK?*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *AdjOK?*", nbr->str);
 
   if (nbr->state == NBS_TWOWAY)
     {
@@ -325,12 +325,9 @@ adj_ok (struct thread *thread)
       DD_MSBIT_SET (nbr->dd_bits);
       DD_MBIT_SET (nbr->dd_bits);
       DD_IBIT_SET (nbr->dd_bits);
-      if (nbr->send_dd)
-        {
-          thread_cancel (nbr->send_dd);
-          nbr->send_dd = NULL;
-        }
-      thread_add_event (master, send_database_description, nbr, 0);
+
+      thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
+
       return 0;
     }
 
@@ -358,19 +355,17 @@ seqnumber_mismatch (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-  zvlog_info ("nbr %s: *SeqNumberMismatch*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *SeqNumberMismatch*", nbr->str);
+
   nbs_change (NBS_EXSTART, "SeqNumberMismatch", nbr);
 
   DD_MSBIT_SET (nbr->dd_bits);
   DD_MBIT_SET (nbr->dd_bits);
   DD_IBIT_SET (nbr->dd_bits);
   list_cleared_of_lsa (nbr);
-  if (nbr->send_dd)
-    {
-      thread_cancel (nbr->send_dd);
-      nbr->send_dd = NULL;
-    }
-  thread_add_event (master, send_database_description, nbr, 0);
+
+  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
 
   return 0;
 }
@@ -386,7 +381,8 @@ bad_lsreq (struct thread *thread)
   if (nbr->state < NBS_EXCHANGE)
     return 0;
 
-  zvlog_info ("nbr %s: *BadLSReq*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *BadLSReq*", nbr->str);
 
   nbs_change (NBS_EXSTART, "BadLSReq", nbr);
 
@@ -394,12 +390,8 @@ bad_lsreq (struct thread *thread)
   DD_MBIT_SET (nbr->dd_bits);
   DD_IBIT_SET (nbr->dd_bits);
   list_cleared_of_lsa (nbr);
-  if (nbr->send_dd)
-    {
-      thread_cancel (nbr->send_dd);
-      nbr->send_dd = NULL;
-    }
-  thread_add_event (master, send_database_description, nbr, 0);
+
+  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
 
   return 0;
 }
@@ -415,7 +407,9 @@ oneway_received (struct thread *thread)
   if (nbr->state < NBS_TWOWAY)
     return 0;
 
-  zvlog_info ("nbr %s: *1Way-Received*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *1Way-Received*", nbr->str);
+
   nbs_change (NBS_INIT, "1Way-Received", nbr);
 
   thread_add_event (master, neighbor_change, nbr->ospf6_if, 0);
@@ -432,7 +426,8 @@ inactivity_timer (struct thread *thread)
   nbr = (struct neighbor *)THREAD_ARG  (thread);
   assert (nbr);
 
-  zvlog_info ("nbr %s: *InactivityTimer*", nbr->str);
+  if (IS_OSPF6_DUMP_NEIGHBOR)
+    zlog_info ("Neighbor Event %s: *InactivityTimer*", nbr->str);
 
   nbr->inactivity_timer = NULL;
   nbr->dr = nbr->bdr = nbr->prevdr = nbr->prevbdr = 0;
@@ -648,8 +643,8 @@ step_two:
                 }
               else
                 {
-                  o6log.neighbor ("!!the same router id"
-                                  " for different neighbor");
+                  zlog_warn ("!!!THE SAME ROUTER ID FOR DIFFERENT NEIGHBOR");
+                  zlog_warn ("!!!MISCONFIGURATION?");
                   list_delete_node (candidate_list, i);
                   continue;
                 }
@@ -745,5 +740,69 @@ count_nbr_in_state (state_t state, struct area *area)
         }
     }
   return count;
+}
+
+void
+ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *in6, struct in_addr *in4,
+                                   u_int ifindex)
+{
+  struct interface *ifp;
+  struct ospf6_if *o6if;
+  listnode n;
+  struct ospf6_lsa *lsa;
+  struct link_lsa *llsa;
+  unsigned long prefixnum;
+  struct ospf6_prefix *o6p;
+
+  memset (in4, 0, sizeof (struct in_addr));
+
+  ifp = if_lookup_by_index (ifindex);
+  if (!ifp)
+    {
+      zlog_warn ("  *** can't find interface (ifindex: %d)", ifindex);
+      return;
+    }
+  o6if = (struct ospf6_if *) ifp->info;
+  if (!o6if)
+    {
+      zlog_warn ("  *** can't find ospf6_if (ifindex: %d)", ifindex);
+      return;
+    }
+
+  /* find neighbor from linklocal address */
+  for (n = listhead (o6if->linklocal_lsa); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      llsa = (struct link_lsa *) LSH_NEXT (lsa->lsa_hdr);
+      if (memcmp (&llsa->llsa_linklocal, in6, sizeof (struct in6_addr)))
+        return;
+      prefixnum = ntohl (llsa->llsa_prefix_num);
+
+      zlog_info (" Debug IPv4 prefixnum %d", prefixnum);
+
+      for (o6p = (struct ospf6_prefix *) (llsa + 1);
+           (char *) o6p < (char *) lsa->lsa_hdr
+                          + ntohs (lsa->lsa_hdr->lsh_len) && prefixnum;
+           o6p = OSPF6_NEXT_PREFIX (o6p), prefixnum--)
+        {
+          struct in6_addr tmp;
+          if (!IN6_IS_ADDR_V4MAPPED (&tmp))
+            continue;
+          if (o6p->o6p_prefix_len != 128)
+            {
+              zlog_warn ("  *** prefix length not 128!!!: %d",
+                         o6p->o6p_prefix_len);
+              continue;
+            }
+          ospf6_prefix_in6_addr (o6p, &tmp);
+          ospf6_ipv6_decode_ipv4 (&tmp, in4);
+          {
+            char buf1[64], buf2[64];
+            inet_ntop (AF_INET6, &tmp, buf1, sizeof(buf1));
+            inet_ntop (AF_INET, in4, buf2, sizeof(buf2));
+            zlog_info (" Debug IPv4 : %s %s", buf1, buf2);
+          }
+        }
+    }
 }
 

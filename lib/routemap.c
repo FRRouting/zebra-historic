@@ -689,7 +689,7 @@ DEFUN (route_map, route_map_cmd,
     permit = ROUTE_MAP_DENY;
   else
     {
-      vty_out (vty, "the third field must be [permit|demy]\r\n");
+      vty_out (vty, "the third field must be [permit|deny]\r\n");
       return CMD_WARNING;
     }
 
@@ -736,7 +736,7 @@ DEFUN (no_route_map, no_route_map_cmd,
     permit = ROUTE_MAP_DENY;
   else
     {
-      vty_out (vty, "the third field must be [permit|demy]\r\n");
+      vty_out (vty, "the third field must be [permit|deny]\r\n");
       return CMD_WARNING;
     }
 

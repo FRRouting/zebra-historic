@@ -251,7 +251,7 @@ connected_dump_vty (struct vty *vty, struct connected *connected)
   struct prefix *p;
   struct interface *ifp;
 
-  /* Set inteface pointer. */
+  /* Set interface pointer. */
   ifp = connected->ifp;
 
   /* Print interface address. */

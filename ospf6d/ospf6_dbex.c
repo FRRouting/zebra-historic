@@ -32,7 +32,9 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
 
   assert (nbr);
 
-  o6log.dbex ("prepare summarylist for %s", nbr->str);
+  /* log */
+  if (IS_OSPF6_DUMP_DBEX)
+    zlog_info ("  Making summary list for %s", nbr->str);
 
   /* clear summary list of neighbor */
   ospf6_remove_summary_all (nbr);
@@ -133,16 +135,21 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
   struct ospf6_lsa *have, *received;
   struct ospf6_lsa_hdr *lsh;
   void *scope;
+  char buf[128];
 
   have = received = (struct ospf6_lsa *)NULL;
-
-  o6log.dbex ("check DD from %s", nbr->str);
 
   /* for each LSA listed in DD */
   while (iov_count (iov))
     {
       lsh = ospf6_message_get_lsa_hdr (iov);
-      o6log.dbex ("checking %s", print_lsahdr (lsh));
+
+      /* log */
+      if (IS_OSPF6_DUMP_DBDESC)
+        {
+          ospf6_lsa_hdr_str (lsh, buf, sizeof (buf));
+          zlog_info ("  %s", buf);
+        }
 
       /* make lsa structure for this LSA */
       received = make_ospf6_lsa_summary (lsh);
@@ -161,7 +168,7 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
             break;
           case SCOPE_RESERVED:
           default:
-            o6log.dbex ("unsupported scope, check DD failed");
+            zlog_warn ("unsupported scope, check DD failed");
             return -1;
         }
       received->scope = scope;
@@ -179,7 +186,7 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
         }
       else if (have)
         {
-          /* database copy is less recent */
+          /* if database copy is less recent, add request */
           if (ospf6_lsa_check_recent (received, have) < 0)
             ospf6_add_request (received, nbr);
         }
@@ -200,7 +207,8 @@ proceed_summarylist (struct neighbor *nbr)
   struct ospf6_lsa *lsa;
   listnode n;
 
-  o6log.dbex ("proceed summarylist of %s", nbr->str);
+  if (IS_OSPF6_DUMP_DBEX)
+    zlog_info ("  Proceed %s's summary list", nbr->str);
 
   /* clear DD packet to retransmit */
   for (n = listhead (nbr->dd_retrans); n; nextnode (n))
@@ -228,7 +236,8 @@ proceed_summarylist (struct neighbor *nbr)
   if (list_isempty (nbr->summarylist))
     {
       DD_MBIT_CLEAR (nbr->dd_bits);
-      o6log.dbex ("mbit for %s clear", nbr->str);
+      if (IS_OSPF6_DUMP_DBEX)
+        zlog_info ("  No more DbDesc to send to %s", nbr->str);
     }
 
   return;
@@ -244,9 +253,6 @@ direct_acknowledge (struct ospf6_lsa *lsa)
 
   /* clear pointers to fragments of packet for direct acknowledgement */
   iov_clear (directack, MAXIOVLIST);
-
-  o6log.dbex ("direct acknowledge to %s for %s",
-              lsa->from->str, print_lsahdr (lsa->lsa_hdr));
 
   /* set pointer of LSA to send */
   attach_lsa_hdr_to_iov (lsa, directack);
@@ -269,9 +275,6 @@ delayed_acknowledge (struct ospf6_lsa *lsa)
 
   o6if = lsa->from->ospf6_if;
   assert (o6if);
-
-  o6log.dbex ("schedule delayed acknowledge to %s for %s",
-              o6if->interface->name, print_lsahdr (lsa->lsa_hdr));
 
   /* attach delayed acknowledge list */
   ospf6_add_delayed_ack (lsa, o6if);
@@ -296,12 +299,15 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   listnode n;
   int ismore_recent, acktype;
   void *scope;
+  char lsh_str[128];
 
   received = have = (struct ospf6_lsa *)NULL;
   ismore_recent = -1;
   recent_reason = "no instance";
 
-  o6log.dbex ("receive %s", print_lsahdr (lsh));
+  ospf6_lsa_hdr_str (lsh, lsh_str, sizeof (lsh_str));
+  if (IS_OSPF6_DUMP_DBEX)
+    zlog_info ("LSA: Receive %s age:%hu", lsh_str, ntohs (lsh->lsh_age));
 
   /* make lsa structure for received lsa */
   received = make_ospf6_lsa (lsh);
@@ -320,7 +326,7 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
         break;
       case SCOPE_RESERVED:
       default:
-        o6log.dbex ("unsupported scope, lsa_receive() failed");
+        zlog_warn ("unsupported scope, lsa_receive() failed");
         /* always unlock before return after make_ospf6_lsa() */
         ospf6_lsa_unlock (received);
         return;
@@ -343,8 +349,8 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       case LST_INTER_AREA_PREFIX_LSA:
       case LST_INTER_AREA_ROUTER_LSA:
       default:
-        o6log.dbex ("Unsupported LSA Type: %#x, Ignore",
-                    ntohs (lsh->lsh_type));
+        zlog_warn ("Unsupported LSA Type: %#x, Ignore",
+                   ntohs (lsh->lsh_type));
         ospf6_lsa_unlock (received);
         return;
     }
@@ -355,16 +361,20 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
          is in states Exchange or Loading */
   if (ospf6_age_current (received) == MAXAGE)
     {
+      zlog_info ("  MaxAge LSA...");
+
       if (!ospf6_lsdb_lookup (lsh->lsh_type, lsh->lsh_id,
                               lsh->lsh_advrtr, received->scope))
         {
-          if (count_nbr_in_state (NBS_EXCHANGE,
-                                  received->from->ospf6_if->area) == 0 &&
-              count_nbr_in_state (NBS_LOADING,
-                                  received->from->ospf6_if->area) == 0)
+          if (!count_nbr_in_state (NBS_EXCHANGE,
+                                   received->from->ospf6_if->area) &&
+              !count_nbr_in_state (NBS_LOADING,
+                                  received->from->ospf6_if->area))
             {
-              o6log.dbex ("MaxAge, no database copy, and "
-                          "no neighbor in Exchange or Loading");
+              /* log */
+              if (IS_OSPF6_DUMP_DBEX)
+                zlog_info ("  MaxAge, no database copy, and "
+                           "no neighbor in Exchange or Loading");
               /* a) Acknowledge back to neighbor (13.5) */
                 /* Direct Acknowledgement */
               direct_acknowledge (received);
@@ -384,8 +394,6 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
   /* if no database copy or received is more recent */
   if (!have || (ismore_recent = ospf6_lsa_check_recent (received, have)) < 0) 
     {
-      o6log.dbex ("received is newer(%s)", recent_reason);
-
       /* in case we have no database copy */
       ismore_recent = -1;
 
@@ -393,7 +401,8 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       gettimeofday (&now, (struct timezone *)NULL);
       if (have && now.tv_sec - have->installed <= MIN_LS_ARRIVAL)
         {
-          o6log.dbex ("lsa arrived less than MinLSArrival(1sec)");
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Arrived less than MinLSArrival(1sec), drop");
 
           /* this will do free this lsa */
           ospf6_lsa_unlock (received);
@@ -425,21 +434,25 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       acktype = ack_type (received, ismore_recent);
       if (acktype == DIRECT_ACK)
         {
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Aknowledge: direct");
           direct_acknowledge (received);
         }
       else if (acktype == DELAYED_ACK)
         {
-          o6log.dbex ("%s aknowledge: delayed",
-                      print_lsahdr (received->lsa_hdr));
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Aknowledge: delayed");
           delayed_acknowledge (received);
         }
       else
-        o6log.dbex ("%s aknowledge: none", print_lsahdr (received->lsa_hdr));
+        {
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Aknowledge: none");
+        }
 
       /* (f) */
       /* Self Originated LSA, section 13.4 */
-      if (is_self_originated (received) && have &&
-          ospf6_lsa_check_recent (received, have) < 0)
+      if (is_self_originated (received) && have && ismore_recent < 0)
         {
           /* we're going to make new lsa or to flush this LSA. */
           ospf6_lsa_unlock (received);
@@ -454,9 +467,9 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       /* if no database copy, should go above state (5) */
       assert (have);
 
-      o6log.dbex ("database copy exists, received is not newer,"
-                  " and %s is on his requestlist -> BadLSReq",
-                  print_lsahdr (received->lsa_hdr));
+      if (IS_OSPF6_DUMP_DBEX)
+        zlog_info ("  database copy exists, received is not newer,"
+                   " and is on his requestlist -> BadLSReq");
 
       /* BadLSReq */
       thread_add_event (master, bad_lsreq, from, 0);
@@ -467,14 +480,14 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
     }
   else if (ismore_recent == 0) /* (7) if neither is more recent */
     {
-      o6log.dbex ("received and had is the same instance");
       ospf6_lsa_set_flag (received, OSPF6_LSA_DUPLICATE);
 
       /* (a) if on retranslist, Treat this LSA as an Ack: Implied Ack */
       if (ospf6_lookup_retrans (received, from))
         {
-          o6log.dbex ("treat %s as implied ack",
-                      print_lsahdr (received->lsa_hdr));
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Implied Ack");
+
           ospf6_remove_retrans (have, from);
 
           /* note occurrence of implied ack */
@@ -485,21 +498,26 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       acktype = ack_type (received, ismore_recent);
       if (acktype == DIRECT_ACK)
         {
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Aknowledge: direct");
           direct_acknowledge (received);
         }
       else if (acktype == DELAYED_ACK)
         {
-          o6log.dbex ("%s aknowledge: delayed",
-                      print_lsahdr (received->lsa_hdr));
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Aknowledge: delayed");
           delayed_acknowledge (received);
         }
       else
-        o6log.dbex ("%s aknowledge: none",
-                    print_lsahdr (received->lsa_hdr));
+        {
+          if (IS_OSPF6_DUMP_DBEX)
+            zlog_info ("  Aknowledge: none");
+        }
     }
   else /* (8) previous database copy is more recent */
     {
-      o6log.dbex ("already have newer copy");
+      if (IS_OSPF6_DUMP_DBEX)
+        zlog_info ("already have newer copy");
 
       /* XXX, Seqnumber Wrapping */
 
@@ -517,16 +535,19 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
              (MTYPE_OSPF6_MESSAGE, iov, sizeof (struct linkstate_update));
         if (!update)
           {
-            o6log.dbex ("iov_append() failed in send back");
+            zlog_warn ("  *** iov_append() failed in send back");
             ospf6_lsa_unlock (received);
             return;
           }
         update->lsupdate_num = ntohl (1);
+        ospf6_age_update_to_send (have, received->from->ospf6_if);
         attach_lsa_to_iov (have, iov);
         ospf6_send (MSGT_LINKSTATE_UPDATE, iov, (struct sockaddr *)&dst,
                     received->from->ospf6_if);
         iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
-        o6log.dbex ("send database copy back to neighbor");
+
+        if (IS_OSPF6_DUMP_DBEX)
+          zlog_info ("  send database copy back to neighbor");
       }
     }
   ospf6_lsa_unlock (received);
@@ -742,8 +763,8 @@ ospf6_lsa_flood_interface (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
   assert (lsupdate);
   lsupdate->lsupdate_num = htonl (1);
 
-  ospf6_send (MSGT_LINKSTATE_UPDATE, iov,
-             (struct sockaddr *)&dst, o6if);
+  ospf6_message_send (MSGT_LSUPDATE, iov, &dst.sin6_addr,
+                      o6if->interface->ifindex);
   iov_free (MTYPE_OSPF6_MESSAGE, iov, 0, 1);
 
   return;

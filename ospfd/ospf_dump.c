@@ -78,6 +78,17 @@ message ospf_lsa_type_msg[] =
 };
 int ospf_lsa_type_msg_max = OSPF_MAX_LSA;
 
+message ospf_link_state_id_type_msg[] =
+{
+  { OSPF_UNKNOWN_LSA,      "(unknown)" },
+  { OSPF_ROUTER_LSA,       "" },
+  { OSPF_NETWORK_LSA,      "(address of Designated Router)" },
+  { OSPF_SUMMARY_LSA,      "(summary Network Number)" },
+  { OSPF_SUMMARY_LSA_ASBR, "(AS Boundary Router address)" },
+  { OSPF_AS_EXTERNAL_LSA,  "(External Network Number)" },
+};
+int ospf_link_state_id_type_msg_max = OSPF_MAX_LSA;
+
 /* Debug option variables. */
 unsigned long ospf_debug_packet[5] = {0, 0, 0, 0, 0};
 unsigned long ospf_debug_event = 0;

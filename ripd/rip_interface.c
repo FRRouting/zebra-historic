@@ -125,7 +125,7 @@ rip_interface_multicast_set (int sock, struct interface *ifp)
 	{
 	  addr = p->prefix;
 
-	  if (setsockopt (rip->sock, IPPROTO_IP, IP_MULTICAST_IF,
+	  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF,
 			  &addr, sizeof (struct in_addr)) < 0) 
 	    {
 	      zlog_warn ("Can't setsockopt IP_MULTICAST_IF to fd %d", sock);
@@ -586,7 +586,7 @@ rip_enable_if_lookup (char *ifname)
   return -1;
 }
 
-/* Add inteface to rip_enable_if. */
+/* Add interface to rip_enable_if. */
 int
 rip_enable_if_add (char *ifname)
 {
@@ -601,7 +601,7 @@ rip_enable_if_add (char *ifname)
   return 1;
 }
 
-/* Delete inteface from rip_enable_if. */
+/* Delete interface from rip_enable_if. */
 int
 rip_enable_if_delete (char *ifname)
 {
@@ -641,7 +641,7 @@ rip_interface_wakeup (struct thread *t)
   return 0;
 }
 
-/* Update inteface status. */
+/* Update interface status. */
 void
 rip_enable_apply (struct interface *ifp)
 {
@@ -1161,7 +1161,7 @@ interface_config_write (struct vty *vty)
 }
 
 int
-config_write_rip_network (struct vty *vty)
+config_write_rip_network (struct vty *vty, int config_mode)
 {
   int i;
   char *ifname;
@@ -1170,18 +1170,23 @@ config_write_rip_network (struct vty *vty)
   /* Network type RIP enable interface statement. */
   for (node = route_top (rip_enable_network); node; node = route_next (node))
     if (node->info)
-      vty_out (vty, " network %s/%d%s", inet_ntoa (node->p.u.prefix4),
+      vty_out (vty, "%s%s/%d%s", 
+	       config_mode ? " network " : "    ",
+	       inet_ntoa (node->p.u.prefix4),
 	       node->p.prefixlen, VTY_NEWLINE);
 
   /* Interface name RIP enable statement. */
   for (i = 0; i < vector_max (rip_enable_if); i++)
     if ((ifname = vector_slot (rip_enable_if, i)) != NULL)
-      vty_out (vty, " network %s%s", ifname, VTY_NEWLINE);
+      vty_out (vty, "%s%s%s",
+	       config_mode ? " network " : "    ",
+	       ifname, VTY_NEWLINE);
 
   /* RIP neighbors listing. */
   for (node = route_top (rip->neighbor); node; node = route_next (node))
     if (node->info)
-      vty_out (vty, " neighbor %s%s", 
+      vty_out (vty, "%s%s%s", 
+	       config_mode ? " neighbor " : "    ",
 	       inet_ntoa (node->p.u.prefix4), VTY_NEWLINE);
 
   return 0;

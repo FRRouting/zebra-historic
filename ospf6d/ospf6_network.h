@@ -38,6 +38,7 @@ int iov_free (int mtype, struct iovec *iov, u_int begin, u_int end);
 void iov_trim_head (int, struct iovec *);
 void iov_free_all (int, struct iovec *);
 void *iov_detach_first (struct iovec *);
+void iov_copy_all (struct iovec *, struct iovec *, int);
 
 int sockunion_ospf6_socket (union sockunion *);
 int sockfd_to_family (int);
@@ -51,6 +52,11 @@ int send_database_description (struct thread *);
 int send_linkstate_request (struct thread *);
 int send_linkstate_update (struct thread *);
 int send_linkstate_ack (struct thread *);
+
+void ospf6_join_alldr (u_int);
+void ospf6_leave_alldr (u_int);
+void ospf6_ipv4_encode_ipv6 (struct in_addr *, struct in6_addr *);
+void ospf6_ipv6_decode_ipv4 (struct in6_addr *, struct in_addr *);
 
 #endif /* OSPF6_NETWORK_H */
 

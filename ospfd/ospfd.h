@@ -33,6 +33,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 /* IP TTL for OSPF protocol. */
 #define OSPF_IP_TTL		1
+#define OSPF_VL_IP_TTL		100
 
 /* Default configuration file name for ospfd. */
 #define OSPF_DEFAULT_CONFIG   "ospfd.conf"
@@ -55,6 +56,8 @@ enum
 #define OSPF_DEFAULT_DESTINATION	0x00000000	/* 0.0.0.0 */
 #define OSPF_INITIAL_SEQUENCE_NUMBER	0x80000001
 #define OSPF_MAX_SEQUENCE_NUMBER	0x7fffffff
+
+#define OSPF_LSA_MAX_AGE_CHECK_INTERVAL         30
 
 #define OSPF_ALLSPFROUTERS		0xe0000005	/* 224.0.0.5 */
 #define OSPF_ALLDROUTERS		0xe0000006	/* 224.0.0.6 */
@@ -101,53 +104,122 @@ enum
 #define OSPF_TRANSIT_FALSE		 0
 #define OSPF_TRANSIT_TRUE		 1
 
+
+/* OSPF ABR/ASBR internal flags */
+
+#define OSPF_FLAG_ABR 		0x0001
+#define OSPF_FLAG_ASBR		0x0002
+#define OSPF_FLAG_VIRTUAL_LINK  0x0004
+#define OSPF_FLAG_SHORTCUT      0x0010
+
+#define OSPF_IS_ABR \
+	(ospf_top->flags & OSPF_FLAG_ABR)
+
+#define OSPF_IS_ASBR \
+	(ospf_top->flags & OSPF_FLAG_ASBR)
+
+
+/* OSPF ABR types */
+#define OSPF_ABR_STAND		1
+#define OSPF_ABR_IBM		2
+#define OSPF_ABR_CISCO		3
+#define OSPF_ABR_SHORTCUT	4
+
+
+
 /* OSPF instance structure. */
 struct ospf
 {
   struct in_addr router_id;		/* OSPF Router ID. */
   struct in_addr router_id_static;	/* OSPF static Router ID. */
 
+  u_char    flags;			/* ABR/ASBR internal flags */
+  u_char    abr_type;			/* ABR type */
+
   list iflist;				/* Zebra interface list. */
+  list vlinks;				/* List of configured VLs */
 
   list areas;				/* OSPF areas. */
+  struct ospf_area   *backbone;		/* Pointer to the Backbone */
   struct route_table *networks;		/* OSPF config networks. */
 
-  struct route_table *external_lsa;	/* AS-External-LSAs. */
+  struct ospf_lsdb *external_lsa;	/* AS-External-LSAs. */
+  struct route_table *external_self;    /* Self-originated ASE-LSAs. */
 
   struct route_table *old_table;        /* Old routing table. */
   struct route_table *new_table;        /* Current routing table. */
 
+  struct route_table *old_rtrs;		/* Old ABR/ASBR RT */
+  struct route_table *new_rtrs;		/* New ABR/ASBR RT */
+
   int spf_calc;		                /* SPF calculation flag. */
   struct thread *t_spf_calc;	        /* SPF calculation timer. */
+
+  list maxage_lsa;			/* List of MaxAge LSA for deletion*/
+  struct thread *t_maxage;		/* The thread to delete MaxAge LSAs*/
+
+  struct thread *t_maxage_walker;       /* The thread of checking MaxAge 
+					   LASs */
+  struct thread *t_rlsa_update;		/* The thread to update Router-LSAs */
+  struct thread *t_abr_task;		/* Thread to run ABR functions */
+  struct thread *t_asbr_check;		/* Thread to check ASE-LSAs */
+
+  int	 redistribute;			/* Number of redistributed protocols */
 };
+
+
+#define OSPF_SCHEDULE_MAXAGE(T, F) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), 0, 2)
+
+#define OSPF_SCHEDULE_RLSA_UPDATE(T, F) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), 0, 2)
+
 
 /* OSPF area structure. */
 struct ospf_area
 {
   int count;				/* Reference count by ospf_network. */
 
+  list iflist;				/* list of Zebra if's belonging to
+					   the area			    */
   struct in_addr area_id;		/* Area ID. */
   char format;				/* Area ID format. */
   list address_range;
 
   /* Configuration variables. */
   int external_routing;			/* ExternalRoutingCapability. */
+  int shortcut_configured;		/* Area configured as shortcut */
+  int shortcut_capability;		/* Area will be used as shortcut */
   int default_cost;			/* StubDefaultCost. */
   int auth_type;			/* Authentication type. */
 
   /* Area related LSAs. */
-  struct route_table *lsa[4];
+  struct ospf_lsdb *lsa[4];
 
   /* self originated LSAs. */
   struct ospf_lsa *router_lsa_self;
-  struct ospf_lsa *summary_lsa_self;
-  struct ospf_lsa *summary_lsa_asbr_self;
+  /* struct route_table *summary_lsa_self; */
+  /* struct route_table *summary_lsa_asbr_self; */
+
+  /* self originated LSAs reflesh thread test. */
+  struct thread *t_router_lsa_self;
 
   /* Shortest Path Tree. */
   struct vertex *spf;
 
   /* TransitCapability. */
   u_char transit;
+
+  struct route_table *ranges;		/* Configured Area Ranges*/
+
+  u_int  act_ints;			/* Number of active interfaces */
+
+  u_int  full_nbrs;			/* Number of fully adjacent
+					   nbrs in this area        */
+  u_int  full_vls;			/* Number of fully adjacent
+					   virtual nbrs		    */
 };
 
 #define ROUTER_LSA(a)                   (a)->lsa[0]
@@ -174,13 +246,39 @@ typedef struct message
 /* Macro. */
 #define OSPF_AREA_SAME(X,Y)   (memcmp ((X->area_id), (Y->area_id), IPV4_MAX_BYTELEN) == 0)
 
+#define CHECK_FLAG(V,F)\
+	(V & F)
+
+#define SET_FLAG(V,F)\
+	V = V | F
+
+#define UNSET_FLAG(V,F)\
+	V = V & ~F
+
+
+#define LIST_ITERATOR(L, N) \
+      for ((N) = listhead ((L)); (N); nextnode(N))
+
+#define RT_ITERATOR(R, N) \
+      for ((N) = route_top ((R)); (N); (N) = route_next ((N)))
+
+
+#define OSPF_TIMER_OFF(X) \
+       if (X) \
+         { \
+           thread_cancel (X); \
+           (X) = NULL; \
+         }
+
 /* Messages */
 extern message ospf_ism_status_msg[];
 extern message ospf_nsm_status_msg[];
 extern message ospf_lsa_type_msg[];
+extern message ospf_link_state_id_type_msg[];
 extern int ospf_ism_status_msg_max;
 extern int ospf_nsm_status_msg_max;
 extern int ospf_lsa_type_msg_max;
+extern int ospf_link_state_id_type_msg_max;
 
 extern char *progname;
 
@@ -192,5 +290,8 @@ void ospf_route_init (void);
 
 extern struct thread_master *master;
 extern struct ospf *ospf_top;
+
+struct ospf_area * ospf_area_lookup_by_area_id (struct in_addr area_id);
+void ospf_interface_down (struct ospf *, struct prefix *, struct ospf_area *);
 
 #endif /* _ZEBRA_OSPFD_H */

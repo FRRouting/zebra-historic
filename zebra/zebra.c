@@ -220,11 +220,11 @@ zebra_request_all_interface (int sock)
       if (ifp->ifindex <= 0)
 	continue;
 
-      /* Set inteface's name. */
+      /* Set interface's name. */
       memcpy (pnt, ifp->name, INTERFACE_NAMSIZ);
       pnt += INTERFACE_NAMSIZ;
 
-      /* Set inteface's index. */
+      /* Set interface's index. */
       PUTC (ifp->ifindex ,pnt);
 
       /* Set interface's value. */

@@ -50,15 +50,17 @@ struct ospf6_nexthop
 
 struct ospf6_route_node_info
 {
-  unsigned char     dest_type;  /* Destination Type */
-  unsigned char     opt_cap[3]; /* Optional Capability */
+  unsigned char     dest_type;       /* Destination Type */
+  unsigned char     opt_cap[3];      /* Optional Capability */
   struct area      *area;            /* Associated area */
     /* note: multiple entry for the same ABR is different
        in routing table by index */
-  unsigned char     path_type;  /* Path-type */
-  unsigned long     cost;       /* Cost to this route */
+  unsigned char     path_type;       /* Path-type */
+  unsigned long     cost;            /* Cost to this route */
   struct ospf6_lsa *ls_origin;       /* Link State Origin, for MOSPF */
   list              nhlist;          /* nexthop list */
+
+  unsigned long     ase_lsid;        /* for ASE LSA origination */
 };
 
 
@@ -96,7 +98,7 @@ unsigned long ospf6_route_get_dst_ifid (struct prefix_ipv6 *);
 char *ospf6_route_str (struct route_node *, char *, size_t);
 void ospf6_route_vty (struct vty *, struct route_node *);
 
-void ospf6_route_calc (struct thread *);
+int ospf6_route_calc (struct thread *);
 void ospf6_route_update_zebra ();
 
 #endif /* OSPF6_RTABLE_H */

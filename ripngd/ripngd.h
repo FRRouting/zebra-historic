@@ -47,30 +47,30 @@
 #define RIPNG_DEFAULT_CONFIG "ripngd.conf"
 
 /* RIPng route types. */
-#define RIPNG_ROUTE_RTE              0
-#define RIPNG_ROUTE_STATIC           1
-#define RIPNG_ROUTE_AGGREGATE        2
+#define RIPNG_ROUTE_RTE                  0
+#define RIPNG_ROUTE_STATIC               1
+#define RIPNG_ROUTE_AGGREGATE            2
 
 /* Interface send/receive configuration. */
-#define RIPNG_SEND_UNSPEC            0
-#define RIPNG_SEND_OFF               1
-#define RIPNG_RECEIVE_UNSPEC         0
-#define RIPNG_RECEIVE_OFF            1
+#define RIPNG_SEND_UNSPEC                0
+#define RIPNG_SEND_OFF                   1
+#define RIPNG_RECEIVE_UNSPEC             0
+#define RIPNG_RECEIVE_OFF                1
 
 /* Split horizon definitions. */
-#define RIPNG_SPLIT_HORIZON_UNSPEC     0
-#define RIPNG_SPLIT_HORIZON_NONE       1
-#define RIPNG_SPLIT_HORIZON            2
-#define RIPNG_SPLIT_HORIZON_POISONED   3
+#define RIPNG_SPLIT_HORIZON_UNSPEC       0
+#define RIPNG_SPLIT_HORIZON_NONE         1
+#define RIPNG_SPLIT_HORIZON              2
+#define RIPNG_SPLIT_HORIZON_POISONED     3
 
 /* RIP default route's accept/announce methods. */
-#define RIPNG_DEFAULT_ADVERTISE_UNSPEC 0
-#define RIPNG_DEFAULT_ADVERTISE_NONE   1
-#define RIPNG_DEFAULT_ADVERTISE        2
+#define RIPNG_DEFAULT_ADVERTISE_UNSPEC   0
+#define RIPNG_DEFAULT_ADVERTISE_NONE     1
+#define RIPNG_DEFAULT_ADVERTISE          2
 
-#define RIPNG_DEFAULT_ACCEPT_UNSPEC    0
-#define RIPNG_DEFAULT_ACCEPT_NONE      1
-#define RIPNG_DEFAULT_ACCEPT           2
+#define RIPNG_DEFAULT_ACCEPT_UNSPEC      0
+#define RIPNG_DEFAULT_ACCEPT_NONE        1
+#define RIPNG_DEFAULT_ACCEPT             2
 
 /* RIPng structure. */
 struct ripng 
@@ -207,6 +207,7 @@ struct ripng_interface
   struct thread *t_wakeup;
 };
 
+/* All RIPng events. */
 enum ripng_event
 {
   RIPNG_READ,
@@ -216,35 +217,66 @@ enum ripng_event
   RIPNG_TRIGGERED_UPDATE,
 };
 
+/* RIPng timer on/off macro. */
+#define RIPNG_TIMER_ON(T,F,V) \
+   if (!(T)) \
+      (T) = thread_add_timer (master, (F), rinfo, (V))
+
+#define RIPNG_TIMER_OFF(T) \
+   if (T) \
+     { \
+       thread_cancel(T); \
+       (T) = NULL; \
+     }
+
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 
 /* Extern variables. */
 extern struct ripng *ripng;
 
-/* Prototypes. */
-void ripng_init ();
-void ripng_if_init ();
-void ripng_terminate ();
-void zebra_start ();
-
-struct ripng_info *ripng_info_new ();
-void ripng_info_free (struct ripng_info *rinfo);
-
-/* Function prototype for RIPngd event routine. */
-void ripng_event (enum ripng_event, int);
-
-int ripng_request (struct interface *ifp);
-
-void ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
-			   unsigned int ifindex);
-void ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
-			      unsigned int ifindex);
-
-void ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
-void ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
-void ripng_redistribute_withdraw (int type);
-
 extern struct thread_master *master;
+
+/* Prototypes. */
+void
+ripng_init ();
+
+void
+ripng_if_init ();
+
+void
+ripng_terminate ();
+
+void
+zebra_start ();
+
+struct ripng_info *
+ripng_info_new ();
+
+void
+ripng_info_free (struct ripng_info *rinfo);
+
+void
+ripng_event (enum ripng_event, int);
+
+int
+ripng_request (struct interface *ifp);
+
+void
+ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
+		      unsigned int ifindex);
+
+void
+ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
+			 unsigned int ifindex);
+
+void
+ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
+
+void
+ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
+
+void
+ripng_redistribute_withdraw (int type);
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

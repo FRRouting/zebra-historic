@@ -8,7 +8,8 @@ noinst_LIBRARIES = librip.a
 sbin_PROGRAMS = ripd
 
 librip_a_SOURCES = \
-	ripd.c rip_zebra.c rip_interface.c rip_debug.c rip_snmp.c
+	ripd.c rip_zebra.c rip_interface.c rip_debug.c rip_snmp.c \
+	rip_routemap.c
 
 noinst_HEADERS = \
 	ripd.h rip_debug.h
@@ -42,8 +43,8 @@ depend:
 ripd.o: ripd.c ../lib/if.h ../lib/linklist.h ../lib/command.h \
  ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/table.h \
  ../lib/thread.h ../lib/memory.h ../lib/roken.h ../lib/log.h \
- ../lib/stream.h ../lib/filter.h ../lib/sockunion.h ../zebra/zebra.h \
- ../ripd/ripd.h ../ripd/rip_debug.h
+ ../lib/stream.h ../lib/filter.h ../lib/sockunion.h ../lib/routemap.h \
+ ../zebra/zebra.h ../ripd/ripd.h ../ripd/rip_debug.h
 rip_debug.o: rip_debug.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../ripd/rip_debug.h
 rip_interface.o: rip_interface.c ../zebra/zebra.h ../lib/command.h \
@@ -56,9 +57,13 @@ rip_main.o: rip_main.c ../lib/version.h ../lib/thread.h \
  ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/memory.h \
  ../lib/prefix.h ../lib/log.h ../lib/filter.h ../lib/if.h \
  ../lib/linklist.h ../zebra/zebra.h ../ripd/ripd.h
+rip_routemap.o: rip_routemap.c ../zebra/zebra.h ../lib/memory.h \
+ ../lib/prefix.h ../lib/routemap.h ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/filter.h ../lib/if.h ../lib/linklist.h \
+ ../lib/log.h ../ripd/ripd.h
 rip_snmp.o: rip_snmp.c
 rip_zebra.o: rip_zebra.c ../zebra/zebra.h ../lib/thread.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/prefix.h ripd.h \
  ../lib/if.h ../lib/linklist.h ../lib/buffer.h ../lib/network.h \
  ../lib/client.h ../lib/stream.h ../lib/log.h ../lib/zclient.h \
- ../ripd/rip_debug.h
+ ../lib/routemap.h ../ripd/rip_debug.h

@@ -25,22 +25,22 @@
 struct neighbor
 {
   struct ospf6_if     *ospf6_if;
-  state_t              state;
+  unsigned char        state;
   struct thread       *inactivity_timer;
   struct thread       *send_dd;          /* Retransmit DD */
   struct thread       *send_lsreq;       /* Retransmit LSReq */
   struct thread       *send_update;      /* Retransmit LSUpdate */
-  ddbits_t             dd_bits;          /* including MASTER bit */
-  ddseqnum_t           dd_seqnum;        /* DD sequence number */
+  unsigned char        dd_bits;          /* including MASTER bit */
+  unsigned long        dd_seqnum;        /* DD sequence number */
   char                 str[16];          /* Router ID String */
-  rtr_id_t             rtr_id;           /* Router ID of this neighbor */
-  rtr_pri_t            rtr_pri;          /* Router Priority of this neighbor */
-  ifid_t               ifid;
-  ifid_t               prevdr;
-  ifid_t               dr;
-  ifid_t               prevbdr;
-  ifid_t               bdr;
-  struct sockaddr_in6  hisaddr;        /* IPaddrs of IF on our side link */
+  unsigned long        rtr_id;           /* Router ID of this neighbor */
+  unsigned char        rtr_pri;          /* Router Priority of this neighbor */
+  unsigned long        ifid;
+  unsigned long        prevdr;
+  unsigned long        dr;
+  unsigned long        prevbdr;
+  unsigned long        bdr;
+  struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link */
                                        /* Probably LinkLocal address     */
   struct database_description last_dd; /* last received DD , including     */
                                        /* OSPF capability of this neighbor */
@@ -53,6 +53,10 @@ struct neighbor
   list summarylist;
   list retranslist;
   list requestlist;
+
+  /* new member for dbdesc */
+  struct thread *thread_dbdesc_retrans;
+  struct iovec dbdesc_last_send[MAXIOVLIST];
 };
 
 /* Neighbor state */
@@ -93,6 +97,11 @@ int inactivity_timer (struct thread *);
 int dr_election (struct ospf6_if *);
 
 unsigned int count_nbr_in_state (state_t, struct area *);
+
+void
+ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *,
+                                        struct in_addr *,
+                                        u_int);
 
 #endif /* OSPF6_NEIGHBOR_H */
 

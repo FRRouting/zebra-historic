@@ -1,3 +1,26 @@
+1999-09-10  VOP <vop@unity.net>
+
+	* rip_zebra.c: Add redistribute route-map feature.
+
+1999-09-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_response_process): Add check for given prefix is
+	given mask applied one.
+
+1999-09-03  VOP <vop@unity.net>
+
+	* rip_interface.c (rip_interface_multicast_set): Bug fix about
+	setting multicast interface.
+
+1999-09-02  VOP <vop@unity.net>
+
+	* rip_routemap.c: New file added.
+
+1999-09-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (show_ip_protocols_rip): Show next update time.
+	(show_ip_protocols_rip): Show redistribute information.
+
 1999-08-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* RIPv2-MIB.txt: New file added.

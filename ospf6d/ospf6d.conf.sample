@@ -8,6 +8,14 @@ enable password zebra
 log file ospf6d.log
 log stdout
 !
+debug ospf6 message all
+debug ospf6 neighbor
+debug ospf6 interface
+debug ospf6 area
+debug ospf6 lsa
+debug ospf6 zebra
+debug ospf6 config
+!
 interface ep0
  ipv6 ospf6 cost 1
  ipv6 ospf6 hello-interval 10

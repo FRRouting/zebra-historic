@@ -43,7 +43,7 @@ int
 ospf6_lsa_check_recent (struct ospf6_lsa *a, struct ospf6_lsa *b)
 {
   signed long seqnuma, seqnumb;
-  int ab, ba;
+  unsigned short agea, ageb;
 
   assert (a && a->lsa_hdr);
   assert (b && b->lsa_hdr);
@@ -67,20 +67,20 @@ ospf6_lsa_check_recent (struct ospf6_lsa *a, struct ospf6_lsa *b)
 
   /* MaxAge check */
   recent_reason = "MaxAge";
-  if (ntohs (a->lsa_hdr->lsh_age) == MAXAGE
-      && ntohs (b->lsa_hdr->lsh_age) != MAXAGE)
+  if (ospf6_age_current (a) == MAXAGE
+      && ospf6_age_current (b) != MAXAGE)
     return -1;
-  else if (ntohs (a->lsa_hdr->lsh_age) != MAXAGE
-           && ntohs (b->lsa_hdr->lsh_age) == MAXAGE)
+  else if (ospf6_age_current (a) != MAXAGE
+           && ospf6_age_current (b) == MAXAGE)
     return 1;
 
   /* Age check */
   recent_reason = "Age";
-  ab = ospf6_age_current (a) - ospf6_age_current (b);
-  ba = ospf6_age_current (b) - ospf6_age_current (a);
-  if (ab > MAX_AGE_DIFF)
+  agea = ospf6_age_current (a);
+  ageb = ospf6_age_current (b);
+  if (agea > ageb && agea - ageb >= MAX_AGE_DIFF)
     return 1;
-  else if (ba > MAX_AGE_DIFF)
+  else if (agea < ageb && ageb - agea >= MAX_AGE_DIFF)
     return -1;
 
   /* neither recent */
@@ -303,7 +303,7 @@ get_ifindex_to_router (rtr_id_t rtrid, struct ospf6_lsa *lsa)
         if (!rlsd)
           {
             inet_ntop (AF_INET, &rtrid, rtrid_str, sizeof (rtrid_str));
-            o6log.lsa ("can't find ifindex from %s to %s",
+            zlog_warn ("can't find ifindex from %s to %s",
                        print_lsahdr (lsa->lsa_hdr), rtrid_str); 
             return 0;
           }
@@ -318,19 +318,6 @@ get_ifindex_to_router (rtr_id_t rtrid, struct ospf6_lsa *lsa)
 }
 
 
-
-/* Back pointer check, Is X's reference field bound to y? */
-#define x_ipl(x) ((struct intra_area_prefix_lsa *)LSH_NEXT((x)->lsa_hdr))
-#define is_reference_network_ok(x,y) \
-          ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsa_hdr->lsh_type &&\
-           (x_ipl(x))->intra_prefix_refer_lsid == (y)->lsa_hdr->lsh_id &&\
-           (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
-  /* referencing router's ifid must be 0,
-     see draft-ietf-ospf-ospfv6-06.txt */
-#define is_reference_router_ok(x,y) \
-          ((x_ipl(x))->intra_prefix_refer_lstype == (y)->lsa_hdr->lsh_type &&\
-           (x_ipl(x))->intra_prefix_refer_lsid == htonl (0) &&\
-           (x_ipl(x))->intra_prefix_refer_advrtr == (y)->lsa_hdr->lsh_advrtr)
 
 /* return list of LSAs that referencing this LSA(internal to area) */
 void
@@ -357,8 +344,6 @@ get_referencing_lsa (list l, struct ospf6_lsa *lsa)
             if (is_reference_router_ok (x, lsa))
               {
                 memcpy (tmpbuf, print_lsahdr (x->lsa_hdr), sizeof (tmpbuf));
-                o6log.lsa ("%s references %s",
-                           tmpbuf, print_lsahdr (lsa->lsa_hdr));
                 list_add_node (l, x);
               }
           }
@@ -372,8 +357,6 @@ get_referencing_lsa (list l, struct ospf6_lsa *lsa)
         if (x && is_reference_network_ok (x, lsa))
           {
             memcpy (tmpbuf, print_lsahdr (x->lsa_hdr), sizeof (tmpbuf));
-            o6log.lsa ("%s references %s",
-                       tmpbuf, print_lsahdr (lsa->lsa_hdr));
             list_add_node (l, x);
           }
         break;
@@ -428,7 +411,8 @@ reconstruct_lsa (struct ospf6_lsa *lsa)
         ifp = if_lookup_by_index (ifindex);
         if (!ifp)
           {
-            o6log.lsa ("interface not found: index %d", ifindex);
+            zlog_warn ("interface not found: index %d, "
+                       "can't reconstruct", ifindex);
             return (struct ospf6_lsa *) NULL;
           }
         o6if = (struct ospf6_if *) ifp->info;
@@ -447,7 +431,8 @@ reconstruct_lsa (struct ospf6_lsa *lsa)
         ifp = if_lookup_by_index (ifindex);
         if (!ifp)
           {
-            o6log.lsa ("interface not found: index %d", ifindex);
+            zlog_warn ("interface not found: index %d, "
+                       "can't reconstruct", ifindex);
             return (struct ospf6_lsa *) NULL;
           }
         o6if = (struct ospf6_if *) ifp->info;
@@ -482,7 +467,7 @@ reconstruct_lsa (struct ospf6_lsa *lsa)
         info = (struct ospf6_route_node_info *) rn->info;
         if (!info)
           {
-            o6log.lsa ("!node info not found for %s",
+            zlog_warn ("!node info not found for %s",
                        print_lsahdr (lsa->lsa_hdr));
             new = NULL;
           }
@@ -566,13 +551,6 @@ ospf6_lsa_unlock (struct ospf6_lsa *lsa)
   /* if no reference, do delete */
   if (lsa->lock == 0)
     {
-      /* log deletion */
-      if (lsa->summary)
-        o6log.lsa ("free LSA summary %s", print_lsahdr (lsa->lsa_hdr));
-      else
-        o6log.lsa ("free LSA %s", print_lsahdr (lsa->lsa_hdr));
-      o6log.pointer ("freeing %#x-%#x", lsa, lsa->lsa_hdr);
-
       /* threads */
       if (lsa->expire)
         thread_cancel (lsa->expire);
@@ -605,17 +583,17 @@ ospf6_lsa_maxage_remove (struct ospf6_lsa *lsa)
   /* assert MaxAge */
   assert (ospf6_age_current (lsa) == MAXAGE);
 
-  o6log.lsa ("remove MaxAge %s", print_lsahdr (lsa->lsa_hdr));
-
   /* assert this LSA is still on database */
   assert (ospf6_lsdb_lookup (lsa->lsa_hdr->lsh_type, lsa->lsa_hdr->lsh_id,
                              lsa->lsa_hdr->lsh_advrtr, lsa->scope));
 
+  /* if still included in someone's retrans list */
   if (lsa->lock != 1)
-    {
-      o6log.lsa ("still included in someone's retrans list");
-      return; /* this indicate some retrans list include this LSA */
-    }
+    return;
+
+  /* log */
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA: Remove MaxAge %s", print_lsahdr (lsa->lsa_hdr));
 
   /* remove from lsdb. this will free lsa */
   ospf6_lsdb_remove (lsa);
@@ -630,12 +608,14 @@ ospf6_lsa_expire (struct thread *thread)
   assert (lsa && lsa->lsa_hdr);
 
   /* assertion */
-  o6log.lsa ("age: %d", ospf6_age_current (lsa));
   assert (ospf6_age_current (lsa) >= MAXAGE);
   assert (!lsa->refresh);
 
-  o6log.lsa ("!expire %s", print_lsahdr (lsa->lsa_hdr));
   lsa->expire = (struct thread *) NULL;
+
+  /* log */
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA: Expire %s", print_lsahdr (lsa->lsa_hdr));
 
   /* reflood lsa */
   ospf6_lsa_flood (lsa);
@@ -656,9 +636,12 @@ ospf6_lsa_refresh (struct thread *thread)
   /* this will be used later as flag to decide really originate */
   lsa->refresh = (struct thread *)NULL;
 
-  o6log.lsa ("refresh %s", print_lsahdr (lsa->lsa_hdr));
+  /* log */
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA: Refresh %s", print_lsahdr (lsa->lsa_hdr));
+
   if (reconstruct_lsa (lsa) == NULL)
-    o6log.lsa ("refresh failed");
+    zlog_warn ("*** Refresh LSA failed");
 
   return 0;
 }
@@ -674,7 +657,7 @@ ospf6_age_set (struct ospf6_lsa *lsa)
   assert (lsa && lsa->lsa_hdr);
 
   if (gettimeofday (&now, (struct timezone *)NULL) < 0)
-    o6log.lsa ("gettimeofday () failed, may fail ages: %s",
+    zlog_warn ("*** gettimeofday failed, may fail ages: %s",
                strerror (errno));
 
   lsa->birth = now.tv_sec - ntohs (lsa->lsa_hdr->lsh_age);
@@ -693,7 +676,7 @@ ospf6_age_current (struct ospf6_lsa *lsa)
 
   /* current time */
   if (gettimeofday (&now, (struct timezone *)NULL) < 0)
-    o6log.lsa ("gettimeofday () failed, may fail ages: %s",
+    zlog_warn ("*** gettimeofday failed, may fail ages: %s",
                strerror (errno));
 
   /* calculate age */
@@ -723,7 +706,9 @@ ospf6_age_update_to_send (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 void
 ospf6_premature_aging (struct ospf6_lsa *lsa)
 {
-  o6log.lsa ("premature aging %s", print_lsahdr (lsa->lsa_hdr));
+  /* log */
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("LSA: Premature aging %s", print_lsahdr (lsa->lsa_hdr));
 
   if (lsa->expire)
     thread_cancel (lsa->expire);
@@ -766,9 +751,6 @@ make_ospf6_lsa (struct ospf6_lsa_hdr *hdr)
   lsa->request_nbr = list_init ();
   lsa->retrans_nbr = list_init ();
   lsa->delayed_ack_if = list_init ();
-
-  /* log appearance */
-  o6log.pointer ("allocate LSA %#x", lsa);
 
   /* leave other members */
   return lsa;
@@ -891,7 +873,7 @@ ospf6_router_lsd_set (struct router_lsd *rlsd, struct ospf6_if *o6if)
         {
           /* find DR */
           struct neighbor *dr;
-          dr = nbr_lookup (o6if->dr, o6if->area->ospf6);
+          dr = nbr_lookup (o6if->dr, o6if);
           assert (dr);
           rlsd->rlsd_neighbor_interface_id = htonl (dr->ifid);
           rlsd->rlsd_neighbor_router_id = dr->rtr_id;
@@ -1003,7 +985,7 @@ ospf6_make_network_lsa (struct ospf6_if *o6if)
   /* If not DR, return NULL */
   if (o6if->state != IFS_DR)
     {
-      o6log.lsa ("%s isn't DR, don't make NetworkLSA",
+      zlog_warn ("*** %s is not DR, don't make NetworkLSA",
                  o6if->interface->name);
       return (struct ospf6_lsa *) NULL;
     }
@@ -1013,11 +995,7 @@ ospf6_make_network_lsa (struct ospf6_if *o6if)
 
   /* if this link is stub, return NULL */
   if (!fullnbrnum)
-    {
-      o6log.lsa ("%s is stub, don't make NetworkLSA",
-                 o6if->interface->name);
-      return (struct ospf6_lsa *) NULL;
-    }
+    return (struct ospf6_lsa *) NULL;
 
   /* get space needed for my NetworkLSA */
     /* + 1 for my router id */
@@ -1145,15 +1123,11 @@ ospf6_make_link_lsa (struct ospf6_if *o6if)
   space -= sizeof (struct link_lsa) + sizeof (struct ospf6_lsa_hdr);
   for (i = listhead (prefix_connected); i; nextnode (i))
     {
-      char debug_str[128];
       p2 = (struct ospf6_prefix *) getdata (i);
 
       /* copy p2 to p1 */
       ospf6_prefix_copy (p1, p2, space);
       space -= OSPF6_PREFIX_SIZE(p2);
-
-      ospf6_prefix_str (p1, debug_str, sizeof (debug_str));
-      o6log.lsa ("advertise LinkLSA: %s", debug_str);
 
       p1 = OSPF6_NEXT_PREFIX (p1);
     }
@@ -1176,7 +1150,7 @@ ospf6_make_link_lsa (struct ospf6_if *o6if)
   /* in case fail to get linklocal address */
   if (fail)
     {
-      o6log.lsa ("failed to find %s linklocal, don't make LinkLSA",
+      zlog_warn ("*** failed to find %s linklocal, don't make LinkLSA",
                  o6if->interface->name);
       ospf6_lsa_unlock (lsa);
       return (struct ospf6_lsa *) NULL;
@@ -1205,8 +1179,6 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
   /* if not stub and not DR, don't make IntraAreaPrefixLSA */
   if (ospf6_if_count_full_nbr (o6if) != 0 && o6if->state != IFS_DR)
     {
-      o6log.lsa ("%s is not stub, don't make IntraAreaPrefixLSA",
-                 o6if->interface->name);
       list_delete_all (advertise);
       return (struct ospf6_lsa *)NULL;
     }
@@ -1231,7 +1203,7 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
                                    nbr->rtr_id, (void *)o6if);
           if (!lsa)
             {
-              o6log.lsa ("LinkLSA not found for full neighbor %s",
+              zlog_warn ("*** LinkLSA not found for full neighbor %s",
                          nbr->str);
               continue;
             }
@@ -1252,7 +1224,7 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
   lsa = ospf6_lsdb_lookup (htons (LST_LINK_LSA), htonl (o6if->ifid),
                            o6if->area->ospf6->router_id, (void *)o6if);
   if (!lsa)
-    o6log.lsa ("my LinkLSA not found for %s", o6if->interface->name);
+    zlog_warn ("*** My LinkLSA not found for %s", o6if->interface->name);
   else
     {
       llsa = (struct link_lsa *)(lsa->lsa_hdr + 1);
@@ -1272,9 +1244,6 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
   /* if no prefix, no need to make IntraAreaPrefixLSA */
   if (!prefixnum)
     {
-      o6log.lsa ("no prefix to advertise for %s, "
-                 "don't make IntraAreaPrefixLSA",
-                 o6if->interface->name);
       list_delete_all (advertise);
       return (struct ospf6_lsa *)NULL;
     }
@@ -1329,15 +1298,11 @@ ospf6_make_intra_prefix_lsa (struct ospf6_if *o6if)
            + sizeof (struct ospf6_lsa_hdr);
   for (n = listhead (advertise); n; nextnode (n))
     {
-      char debug_str[128];
       p2 = (struct ospf6_prefix *) getdata (n);
 
       /* copy p2 to p1 */
       ospf6_prefix_copy (p1, p2, space);
       space -= OSPF6_PREFIX_SIZE(p2);
-
-      ospf6_prefix_str (p1, debug_str, sizeof (debug_str));
-      o6log.lsa ("advertise IntraAreaPrefixLSA: %s", debug_str);
 
       p1 = OSPF6_NEXT_PREFIX (p1);
     }
@@ -1377,10 +1342,9 @@ ospf6_make_as_external_lsa (struct route_node *rn)
   lsa_hdr = malloc_ospf6_lsa_data (space);
 
   /* get LS ID */
-  if (info->ls_origin)
-    lsid = ntohl (info->ls_origin->lsa_hdr->lsh_id);
-  else
-    lsid = ospf6->ase_ls_id++;
+  if (!info->ase_lsid)
+    info->ase_lsid = ospf6->ase_ls_id++;
+  lsid = ntohl (info->ase_lsid);
 
   /* set lsa header */
   lsa_hdr->lsh_age = 0;
@@ -1435,5 +1399,88 @@ ospf6_make_as_external_lsa (struct route_node *rn)
   info->ls_origin = lsa;
 
   return lsa;
+}
+
+void
+ospf6_lsa_hdr_id_str (struct ospf6_lsa_hdr *lsa_hdr, char *buf, size_t bufsize)
+{
+  char *type, unknown[16], advrtr[16];
+
+  assert (lsa_hdr);
+
+  /* LS type */
+  switch (ntohs (lsa_hdr->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+        type = "Router-LSA";
+        break;
+      case LST_NETWORK_LSA:
+        type = "Network-LSA";
+        break;
+      case LST_AS_EXTERNAL_LSA:
+        type = "AS-external-LSA";
+        break;
+      case LST_LINK_LSA:
+        type = "Link-LSA";
+        break;
+      case LST_INTRA_AREA_PREFIX_LSA:
+        type = "Intra-Area-Prefix-LSA";
+        break;
+      default:
+        snprintf (unknown, sizeof (unknown), "unknown(%#x)",
+                  ntohs(lsa_hdr->lsh_type));
+        type = unknown;
+        break;
+    }
+
+  /* LS advrtr */
+  inet_ntop (AF_INET, &lsa_hdr->lsh_advrtr, advrtr, sizeof (advrtr));
+
+  snprintf (buf, bufsize, "%s: id:%lu advrtr:%s",
+            type, ntohl (lsa_hdr->lsh_id), advrtr);
+}
+
+void
+ospf6_lsa_hdr_str (struct ospf6_lsa_hdr *lsa_hdr, char *buf, size_t bufsize)
+{
+  char *cp;
+  size_t leftsize;
+
+  assert (lsa_hdr);
+
+  /* LSA identifier */
+  ospf6_lsa_hdr_id_str (lsa_hdr, buf, bufsize);
+
+  /* left bufsize */
+  leftsize = bufsize - strlen (buf);
+
+  /* current pointer */
+  cp = buf + strlen (buf);
+
+  snprintf (cp, leftsize, " seqnum:%#lx cksum:%#x len:%hu",
+            ntohl (lsa_hdr->lsh_seqnum), ntohs (lsa_hdr->lsh_cksum),
+            ntohs (lsa_hdr->lsh_len));
+}
+
+void
+ospf6_lsa_str (struct ospf6_lsa *lsa, char *buf, size_t bufsize)
+{
+  char *cp;
+  size_t leftsize;
+
+  assert (lsa);
+  assert (lsa->lsa_hdr);
+
+  /* LSA identifier */
+  ospf6_lsa_hdr_str (lsa->lsa_hdr, buf, bufsize);
+
+  /* left bufsize */
+  leftsize = bufsize - strlen (buf);
+
+  /* current pointer */
+  cp = buf + strlen (buf);
+
+  snprintf (cp, leftsize, " lock:%lu age:%hu",
+            lsa->lock, ospf6_age_current (lsa));
 }
 

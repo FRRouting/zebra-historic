@@ -25,12 +25,17 @@
 /* Message Definition */
 
 /* Type */
-#define MSGT_NONE                 0  /* Unknown message */
-#define MSGT_HELLO                1  /* Discover/maintain neighbors */
-#define MSGT_DATABASE_DESCRIPTION 2  /* Summarize database contents */
-#define MSGT_LINKSTATE_REQUEST    3  /* Database download */
-#define MSGT_LINKSTATE_UPDATE     4  /* Database update */
-#define MSGT_LINKSTATE_ACK        5  /* Flooding acknowledgment */
+#define MSGT_NONE                 0x0  /* Unknown message */
+#define MSGT_HELLO                0x1  /* Discover/maintain neighbors */
+#define MSGT_DATABASE_DESCRIPTION 0x2  /* Summarize database contents */
+#define MSGT_DBDESC               0x2  /* Summarize database contents */
+#define MSGT_LINKSTATE_REQUEST    0x3  /* Database download */
+#define MSGT_LSREQ                0x3  /* Database download */
+#define MSGT_LINKSTATE_UPDATE     0x4  /* Database update */
+#define MSGT_LSUPDATE             0x4  /* Database update */
+#define MSGT_LINKSTATE_ACK        0x5  /* Flooding acknowledgment */
+#define MSGT_LSACK                0x5  /* Flooding acknowledgment */
+#define MSGT_MAX                  0x6
 
 /* OSPF packet header */
 struct ospf6_hdr
@@ -58,6 +63,16 @@ struct hello
   rtr_id_t       bdr;
   /* Followed by Router-IDs */
 };
+struct ospf6_hello
+{
+  unsigned long  interface_id;
+  unsigned char  rtr_pri;
+  u_char         options[3];
+  unsigned short hello_interval;
+  unsigned short router_dead_interval;
+  unsigned long  dr;
+  unsigned long  bdr;
+};
 
 /* Databese Description */
 struct database_description
@@ -66,8 +81,19 @@ struct database_description
   u_char         options[3];
   unsigned short interface_mtu;
   u_char         mbz2;
-  ddbits_t       bits;
-  ddseqnum_t     sequence_number;
+  unsigned char  bits;
+  unsigned long  sequence_number;
+  /* Followed by LSAs */
+};
+/* new Database Description (name changed) */
+struct ospf6_dbdesc
+{
+  unsigned char  mbz1;
+  unsigned char  options[3];
+  unsigned short ifmtu;
+  unsigned char  mbz2;
+  unsigned char  bits;
+  unsigned long  seqnum;;
   /* Followed by LSAs */
 };
 #define DEFAULT_INTERFACE_MTU 1500
@@ -116,6 +142,10 @@ struct ospf6_lsa_hdr *
 ospf6_message_get_lsa_hdr (struct iovec *);
 
 int ospf6_receive (struct thread *);
+
+int ospf6_send_hello (struct thread *);
+int ospf6_send_dbdesc_retrans (struct thread *);
+int ospf6_send_dbdesc (struct thread *);
 
 #endif /* OSPF6_MESG_H */
 

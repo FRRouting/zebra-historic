@@ -178,7 +178,7 @@ zebra_interface_add (int sock, struct interface *ifp)
   /* Interface name. */
   stream_put (s, ifp->name, INTERFACE_NAMSIZ);
 
-  /* Set inteface's index. */
+  /* Set interface's index. */
   stream_putw (s, ifp->ifindex);
 
   /* Set interface's value. */
@@ -217,7 +217,7 @@ zebra_interface_add_read (struct stream *s)
       strncpy (ifp->name, ifname_tmp, IFNAMSIZ);
     }
 
-  /* Read inteface's index. */
+  /* Read interface's index. */
   ifp->ifindex = stream_getw (s);
 
   /* Read interface's value. */
@@ -246,7 +246,7 @@ zebra_interface_delete (int sock, struct interface *ifp)
   /* Interface name. */
   stream_put (s, ifp->name, INTERFACE_NAMSIZ);
 
-  /* Set inteface's index. */
+  /* Set interface's index. */
   stream_putw (s, ifp->ifindex);
 
   /* Write packet size. */
