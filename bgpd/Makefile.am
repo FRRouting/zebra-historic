@@ -52,14 +52,14 @@ depend:
 
 ## File dependency.
 bgp_aspath.o: bgp_aspath.c ../lib/hash.h ../lib/memory.h \
- ../lib/roken.h ../lib/vector.h ../lib/vty.h ../lib/str.h ../lib/log.h \
- ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_aspath.h
+ ../lib/vector.h ../lib/vty.h ../lib/str.h ../lib/log.h ../bgpd/bgpd.h \
+ ../lib/sockunion.h ../bgpd/bgp_aspath.h
 bgp_attr.o: bgp_attr.c ../lib/linklist.h ../lib/prefix.h \
- ../lib/memory.h ../lib/roken.h ../lib/vector.h ../lib/vty.h \
- ../lib/stream.h ../lib/log.h ../lib/hash.h ../lib/newlist.h \
- ../bgpd/bgpd.h ../lib/sockunion.h ../bgpd/bgp_attr.h \
- ../bgpd/bgp_route.h ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h \
- ../bgpd/bgp_debug.h ../bgpd/bgp_packet.h ../bgpd/bgp_ecommunity.h
+ ../lib/memory.h ../lib/vector.h ../lib/vty.h ../lib/stream.h \
+ ../lib/log.h ../lib/hash.h ../lib/newlist.h ../bgpd/bgpd.h \
+ ../lib/sockunion.h ../bgpd/bgp_attr.h ../bgpd/bgp_route.h \
+ ../bgpd/bgp_aspath.h ../bgpd/bgp_community.h ../bgpd/bgp_debug.h \
+ ../bgpd/bgp_packet.h ../bgpd/bgp_ecommunity.h
 bgp_btoa.o: bgp_btoa.c ../lib/stream.h ../lib/log.h ../lib/prefix.h \
  ../lib/command.h ../lib/vector.h ../lib/vty.h ../bgpd/bgpd.h \
  ../lib/sockunion.h ../bgpd/bgp_dump.h ../bgpd/bgp_attr.h \
@@ -68,8 +68,7 @@ bgp_clist.o: bgp_clist.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/memory.h ../lib/log.h ../lib/buffer.h ../bgpd/bgpd.h \
  ../lib/sockunion.h ../bgpd/bgp_community.h ../bgpd/bgp_clist.h
 bgp_community.o: bgp_community.c ../lib/hash.h ../lib/memory.h \
- ../lib/vector.h ../lib/vty.h ../lib/roken.h ../lib/str.h \
- ../bgpd/bgp_community.h
+ ../lib/vector.h ../lib/vty.h ../lib/str.h ../bgpd/bgp_community.h
 bgp_debug.o: bgp_debug.c ../lib/version.h ../lib/prefix.h \
  ../lib/linklist.h ../lib/stream.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/str.h ../lib/log.h ../lib/sockunion.h \
@@ -111,10 +110,10 @@ bgp_nexthop.o: bgp_nexthop.c ../lib/command.h ../lib/vector.h \
  ../lib/sockunion.h ../bgpd/bgp_route.h ../bgpd/bgp_attr.h \
  ../bgpd/bgp_nexthop.h
 bgp_open.o: bgp_open.c ../lib/linklist.h ../lib/prefix.h \
- ../lib/roken.h ../lib/stream.h ../lib/thread.h ../lib/log.h \
- ../lib/command.h ../lib/vector.h ../lib/vty.h ../bgpd/bgpd.h \
- ../lib/sockunion.h ../bgpd/bgp_attr.h ../bgpd/bgp_debug.h \
- ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h ../bgpd/bgp_open.h
+ ../lib/stream.h ../lib/thread.h ../lib/log.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../bgpd/bgpd.h ../lib/sockunion.h \
+ ../bgpd/bgp_attr.h ../bgpd/bgp_debug.h ../bgpd/bgp_fsm.h \
+ ../bgpd/bgp_packet.h ../bgpd/bgp_open.h
 bgp_packet.o: bgp_packet.c ../lib/thread.h ../lib/stream.h \
  ../lib/network.h ../lib/prefix.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/log.h ../lib/memory.h ../lib/sockunion.h \
@@ -145,17 +144,17 @@ bgp_routemap.o: bgp_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../bgpd/bgp_mplsvpn.h ../bgpd/bgp_ecommunity.h
 bgp_snmp.o: bgp_snmp.c
 bgp_zebra.o: bgp_zebra.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
- ../lib/stream.h ../lib/network.h ../lib/prefix.h ../lib/roken.h \
- ../lib/log.h ../lib/sockunion.h ../lib/zclient.h ../lib/if.h \
- ../lib/linklist.h ../lib/routemap.h ../lib/newlist.h ../bgpd/bgpd.h \
- ../bgpd/bgp_route.h ../bgpd/bgp_attr.h ../bgpd/bgp_nexthop.h
+ ../lib/stream.h ../lib/network.h ../lib/prefix.h ../lib/log.h \
+ ../lib/sockunion.h ../lib/zclient.h ../lib/if.h ../lib/linklist.h \
+ ../lib/routemap.h ../lib/newlist.h ../bgpd/bgpd.h ../bgpd/bgp_route.h \
+ ../bgpd/bgp_attr.h ../bgpd/bgp_nexthop.h
 bgpd.o: bgpd.c ../lib/prefix.h ../lib/thread.h ../lib/buffer.h \
  ../lib/stream.h ../lib/table.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/sockunion.h ../lib/network.h ../lib/memory.h \
- ../lib/roken.h ../lib/filter.h ../lib/if.h ../lib/linklist.h \
- ../lib/routemap.h ../lib/str.h ../lib/log.h ../lib/plist.h \
- ../lib/newlist.h ../bgpd/bgpd.h ../bgpd/bgp_aspath.h \
- ../bgpd/bgp_route.h ../bgpd/bgp_dump.h ../bgpd/bgp_debug.h \
- ../bgpd/bgp_attr.h ../bgpd/bgp_community.h ../bgpd/bgp_clist.h \
- ../bgpd/bgp_fsm.h ../bgpd/bgp_packet.h ../bgpd/bgp_zebra.h \
- ../bgpd/bgp_open.h ../bgpd/bgp_filter.h ../bgpd/bgp_nexthop.h
+ ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/routemap.h \
+ ../lib/str.h ../lib/log.h ../lib/plist.h ../lib/newlist.h \
+ ../bgpd/bgpd.h ../bgpd/bgp_aspath.h ../bgpd/bgp_route.h \
+ ../bgpd/bgp_dump.h ../bgpd/bgp_debug.h ../bgpd/bgp_attr.h \
+ ../bgpd/bgp_community.h ../bgpd/bgp_clist.h ../bgpd/bgp_fsm.h \
+ ../bgpd/bgp_packet.h ../bgpd/bgp_zebra.h ../bgpd/bgp_open.h \
+ ../bgpd/bgp_filter.h ../bgpd/bgp_nexthop.h

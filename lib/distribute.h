@@ -49,6 +49,7 @@ void distribute_list_add_hook (void (*) (struct distribute *));
 void distribute_list_delete_hook (void (*) (struct distribute *));
 struct distribute *distribute_lookup (char *);
 int config_write_distribute (struct vty *);
+int config_show_distribute (struct vty *);
 
 enum filter_type distribute_apply_in (struct interface *, struct prefix *);
 enum filter_type distribute_apply_out (struct interface *, struct prefix *);

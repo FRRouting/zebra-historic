@@ -37,6 +37,16 @@
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_community.h"
 
+unsigned long conf_bgp_debug_fsm;
+unsigned long conf_bgp_debug_events;
+unsigned long conf_bgp_debug_packet;
+unsigned long conf_bgp_debug_filter;
+
+unsigned long term_bgp_debug_fsm;
+unsigned long term_bgp_debug_events;
+unsigned long term_bgp_debug_packet;
+unsigned long term_bgp_debug_filter;
+
 /* messages for BGP-4 status */
 struct message bgp_status_msg[] = 
 {

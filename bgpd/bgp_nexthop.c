@@ -92,7 +92,7 @@ bgp_nexthop_lookup (struct peer *peer, struct in_addr addr)
     return 1;
 
   /* EBGP */
-  if (peer_sort (peer) == BGP_PEER_EBGP)
+  if (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl == 1)
     {
       rn = route_node_match (bgp_connected, &p);
       if (rn)
@@ -103,7 +103,7 @@ bgp_nexthop_lookup (struct peer *peer, struct in_addr addr)
       return 0;
     }
 
-  /* IBGP */
+  /* IBGP or ebgp-multihop */
   rn = route_node_get (bgp_nexthop_cache, &p);
 
   if (rn->info)
@@ -190,17 +190,21 @@ bgp_scan (struct thread *t)
 void
 bgp_connected_add (struct connected *c)
 {
-  struct prefix *p;
+  struct prefix_ipv4 *p;
+  struct prefix_ipv4 rib;
   struct route_node *rn;
 
-  p = c->address;
+  p = (struct prefix_ipv4 *)c->address;
 
   if (if_is_loopback (c->ifp))
     return;
 
   if (p->family == AF_INET)
     {
-      rn = route_node_get (bgp_connected, p);
+      rib = *p;
+      apply_mask_ipv4 (&rib);
+
+      rn = route_node_get (bgp_connected, (struct prefix *) &rib);
       if (rn->info)
 	route_unlock_node (rn);
       else
@@ -211,17 +215,21 @@ bgp_connected_add (struct connected *c)
 void
 bgp_connected_delete (struct connected *c)
 {
-  struct prefix *p;
+  struct prefix_ipv4 *p;
+  struct prefix_ipv4 rib;
   struct route_node *rn;
 
-  p = c->address;
+  p = (struct prefix_ipv4 *)c->address;
 
   if (if_is_loopback (c->ifp))
     return;
 
   if (p->family == AF_INET)
     {
-      rn = route_node_lookup (bgp_connected, p);
+      rib = *p;
+      apply_mask_ipv4 (&rib);
+
+      rn = route_node_lookup (bgp_connected, (struct prefix *)&rib);
       if (! rn)
 	return;
 
@@ -313,9 +321,9 @@ zlookup_connect (struct thread *t)
 DEFUN (bgp_scan_time,
        bgp_scan_time_cmd,
        "bgp scan-time <5-60>",
-       BGP_STR
+       "BGP specific commands\n"
        "Setting BGP route next-hop scanning interval time\n"
-       "BGP route next-hop scanning interval time\n")
+       "Scanner interval (seconds)\n")
 {
   bgp_scan_interval = atoi (argv[0]);
 
@@ -328,6 +336,33 @@ DEFUN (bgp_scan_time,
 
   return CMD_SUCCESS;
 }
+
+DEFUN (no_bgp_scan_time,
+       no_bgp_scan_time_cmd,
+       "no bgp scan-time",
+       NO_STR
+       "BGP specific commands\n"
+       "Setting BGP route next-hop scanning interval time\n")
+{
+  bgp_scan_interval = BGP_SCAN_INTERVAL_DEFAULT;
+
+  if (bgp_scan_thread)
+    {
+      thread_cancel (bgp_scan_thread);
+      bgp_scan_thread = 
+	thread_add_timer (master, bgp_scan, NULL, bgp_scan_interval);
+    }
+
+  return CMD_SUCCESS;
+}
+
+ALIAS (no_bgp_scan_time,
+       no_bgp_scan_time_val_cmd,
+       "no bgp scan-time <5-60>",
+       NO_STR
+       "BGP specific commands\n"
+       "Setting BGP route next-hop scanning interval time\n"
+       "Scanner interval (seconds)\n")
 
 DEFUN (show_ip_bgp_scan,
        show_ip_bgp_scan_cmd,
@@ -361,6 +396,14 @@ DEFUN (show_ip_bgp_scan,
   return CMD_SUCCESS;
 }
 
+int
+bgp_config_write_scan_time (struct vty *vty)
+{
+  if (bgp_scan_interval != BGP_SCAN_INTERVAL_DEFAULT)
+    vty_out (vty, " bgp scan-time %d%s", bgp_scan_interval, VTY_NEWLINE);
+  return CMD_SUCCESS;
+}
+
 void
 bgp_scan_init ()
 {
@@ -376,6 +419,8 @@ bgp_scan_init ()
   bgp_connected = route_table_init ();
 
   install_element (BGP_NODE, &bgp_scan_time_cmd);
+  install_element (BGP_NODE, &no_bgp_scan_time_cmd);
+  install_element (BGP_NODE, &no_bgp_scan_time_val_cmd);
   install_element (VIEW_NODE, &show_ip_bgp_scan_cmd);
   install_element (ENABLE_NODE, &show_ip_bgp_scan_cmd);
 }

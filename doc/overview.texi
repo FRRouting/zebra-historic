@@ -206,32 +206,42 @@ INRIA IPv6 stack for BSD.
 @item @asis{RFC1058}
 @cite{Routing Information Protocol. C.L. Hedrick. Jun-01-1988.}
 
-@item @asis{RFC1771} 
-@cite{A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.}
-
-@item @asis{RFC1997}
-@cite{BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.}
-
-@item @asis{RFC2080}
-@cite{RIPng for IPv6. G. Malkin, R. Minnear. January 1997.}
-
-@item @asis{RFC2283}
-@cite{Multiprotocol Extensions for BGP-4. T. Bates, R. Chandra, D.  Katz, Y. Rekhter. February 1998.}
-
-@item @asis{RFC2328}
-@cite{OSPF Version 2. J. Moy. April 1998.}
+@item @asis{RF2082}
+@cite{RIP-2 MD5 Authentication. F. Baker, R. Atkinson. January 1997.}
 
 @item @asis{RFC2453}
 @cite{RIP Version 2. G. Malkin. November 1998.}
 
-@item @asis{RFC2545}
-@cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
+@item @asis{RFC2080}
+@cite{RIPng for IPv6. G. Malkin, R. Minnear. January 1997.}
+
+@item @asis{RFC2328}
+@cite{OSPF Version 2. J. Moy. April 1998.}
 
 @item @asis{RFC2740}
 @cite{OSPF for IPv6. R. Coltun, D. Ferguson, J. Moy. December 1999.}
 
+@item @asis{RFC1771} 
+@cite{A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.}
+
+@item @asis{RFC1965}
+@cite{Autonomous System Confederations for BGP. P. Traina. June 1996.}
+
+@item @asis{RFC1997}
+@cite{BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.}
+
+@item @asis{RFC2545}
+@cite{Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain Routing. P. Marques, F. Dupont. March 1999.}
+
 @item @asis{RFC2796}
 @cite{BGP Route Reflection An alternative to full mesh IBGP. T. Bates & R. Chandrasekeran. June 1996.}
+
+@item @asis{RFC2858}
+@cite{Multiprotocol Extensions for BGP-4. T. Bates, Y. Rekhter, R. Chandra, D. Katz. June 2000.}
+
+@item @asis{RFC2842}
+@cite{Capabilities Advertisement with BGP-4. R. Chandra, J. Scudder. May 2000.}
+
 @end table
 
   When SNMP support is enabled, below RFC is also supported.

@@ -612,18 +612,7 @@ prefix_new ()
 void
 prefix_free (struct prefix *p)
 {
-  if (p->family == AF_INET)
-    prefix_ipv4_free ((struct prefix_ipv4 *) p);
-#ifdef HAVE_IPV6
-  else if (p->family == AF_INET6)
-    prefix_ipv6_free ((struct prefix_ipv6 *) p);
-#endif HAVE_IPV6  
-  else
-    {
-      zlog (NULL, LOG_INFO, "prefix_free(): Unknown address family %d",
-	      p->family);
-      assert (0);
-    }
+  XFREE (MTYPE_PREFIX, p);
 }
 
 /* Utility function.  Check the string only contains digit

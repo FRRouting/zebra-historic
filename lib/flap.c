@@ -1,5 +1,7 @@
 /* Route flap dampening
- * Copyright (C) 2000 Kunihiro Ishiguro
+ * Copyright (C) 2000 DML Networks, Inc.
+ *
+ * Written by Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -18,4 +20,14 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
+struct flap
+{
+  
+};
+
+struct flap_configuration
+{
+  ;
+};
 

@@ -30,8 +30,7 @@ struct ospf6_interface
   struct interface *interface;
 
   /* back pointer */
-  struct ospf6 *ospf6;
-  struct area *area;
+  struct ospf6_area *area;
 
   /* list of ospf6 neighbor */
   list neighbor_list;
@@ -108,8 +107,15 @@ void ospf6_interface_address_update (struct interface *);
 
 void ospf6_interface_init ();
 void delete_ospf6_interface (struct ospf6_interface *);
-struct ospf6_interface *ospf6_interface_lookup_by_index (int, struct ospf6 *);
-int ospf6_interface_count_full_nbr (struct ospf6_interface *);
+
+struct ospf6_interface *
+ospf6_interface_lookup_by_index (int, struct ospf6 *);
+struct ospf6_interface *
+ospf6_interface_lookup_by_name (char *, struct ospf6 *);
+
+int
+ospf6_interface_count_full_neighbor (struct ospf6_interface *);
+
 int ospf6_interface_is_enabled (struct ospf6_interface *);
 int show_if (struct vty *, struct interface *);
 int ospf6_interface_config_write (struct vty *);

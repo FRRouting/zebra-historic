@@ -156,17 +156,18 @@ ripng_interface_address_add (int command, struct zclient *zclient,
   if (c == NULL)
     return 0;
 
-  if (IS_RIPNG_DEBUG_ZEBRA)
+  p = c->address;
+
+  if (p->family == AF_INET6)
     {
-      p = c->address;
-      if (p->family == AF_INET6)
-	zlog_info ("RIPng connected address %s/%d", 
+      if (IS_RIPNG_DEBUG_ZEBRA)
+	zlog_info ("RIPng connected address %s/%d add",
 		   inet_ntop (AF_INET6, &p->u.prefix6, buf, INET6_ADDRSTRLEN),
 		   p->prefixlen);
+      
+      /* Check is this interface is RIP enabled or not.*/
+      ripng_enable_apply (c->ifp);
     }
-
-  /* Check is this interface is RIP enabled or not.*/
-  ripng_enable_apply (c->ifp);
 
   return 0;
 }
@@ -175,6 +176,30 @@ int
 ripng_interface_address_delete (int command, struct zclient *zclient,
 				zebra_size_t length)
 {
+  struct connected *ifc;
+  struct prefix *p;
+  char buf[INET6_ADDRSTRLEN];
+
+  ifc = zebra_interface_address_delete_read (zclient->ibuf);
+  
+  if (ifc)
+    {
+      p = ifc->address;
+
+      if (p->family == AF_INET6)
+	{
+	  if (IS_RIPNG_DEBUG_ZEBRA)
+	    zlog_info ("RIPng connected address %s/%d delete",
+		       inet_ntop (AF_INET6, &p->u.prefix6, buf,
+				  INET6_ADDRSTRLEN),
+		       p->prefixlen);
+
+	  /* Check is this interface is RIP enabled or not.*/
+	  ripng_enable_apply (ifc->ifp);
+	}
+      connected_free (ifc);
+    }
+
   return 0;
 }
 

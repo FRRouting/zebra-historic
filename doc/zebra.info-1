@@ -262,37 +262,47 @@ Supported RFC
 RFC1058
      `Routing Information Protocol. C.L. Hedrick. Jun-01-1988.'
 
+RF2082
+     `RIP-2 MD5 Authentication. F. Baker, R. Atkinson. January 1997.'
+
+RFC2453
+     `RIP Version 2. G. Malkin. November 1998.'
+
+RFC2080
+     `RIPng for IPv6. G. Malkin, R. Minnear. January 1997.'
+
+RFC2328
+     `OSPF Version 2. J. Moy. April 1998.'
+
+RFC2740
+     `OSPF for IPv6. R. Coltun, D. Ferguson, J. Moy. December 1999.'
+
 RFC1771
      `A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March
      1995.'
+
+RFC1965
+     `Autonomous System Confederations for BGP. P. Traina. June 1996.'
 
 RFC1997
      `BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August
      1996.'
 
-RFC2080
-     `RIPng for IPv6. G. Malkin, R. Minnear. January 1997.'
-
-RFC2283
-     `Multiprotocol Extensions for BGP-4. T. Bates, R. Chandra, D.
-     Katz, Y. Rekhter. February 1998.'
-
-RFC2328
-     `OSPF Version 2. J. Moy. April 1998.'
-
-RFC2453
-     `RIP Version 2. G. Malkin. November 1998.'
-
 RFC2545
      `Use of BGP-4 Multiprotocol Extensions for IPv6 Inter-Domain
      Routing. P. Marques, F. Dupont. March 1999.'
 
-RFC2740
-     `OSPF for IPv6. R. Coltun, D. Ferguson, J. Moy. December 1999.'
-
 RFC2796
      `BGP Route Reflection An alternative to full mesh IBGP. T. Bates &
      R. Chandrasekeran. June 1996.'
+
+RFC2858
+     `Multiprotocol Extensions for BGP-4. T. Bates, Y. Rekhter, R.
+     Chandra, D. Katz. June 2000.'
+
+RFC2842
+     `Capabilities Advertisement with BGP-4. R. Chandra, J. Scudder.
+     May 2000.'
 
    When SNMP support is enabled, below RFC is also supported.
 

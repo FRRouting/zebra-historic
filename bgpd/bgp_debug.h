@@ -59,15 +59,15 @@ void bgp_packet_dump (struct stream *);
 
 int debug (unsigned int option);
 
-unsigned long conf_bgp_debug_fsm;
-unsigned long conf_bgp_debug_events;
-unsigned long conf_bgp_debug_packet;
-unsigned long conf_bgp_debug_filter;
+extern unsigned long conf_bgp_debug_fsm;
+extern unsigned long conf_bgp_debug_events;
+extern unsigned long conf_bgp_debug_packet;
+extern unsigned long conf_bgp_debug_filter;
 
-unsigned long term_bgp_debug_fsm;
-unsigned long term_bgp_debug_events;
-unsigned long term_bgp_debug_packet;
-unsigned long term_bgp_debug_filter;
+extern unsigned long term_bgp_debug_fsm;
+extern unsigned long term_bgp_debug_events;
+extern unsigned long term_bgp_debug_packet;
+extern unsigned long term_bgp_debug_filter;
 
 #define BGP_DEBUG_FSM                 0x01
 #define BGP_DEBUG_EVENTS              0x01

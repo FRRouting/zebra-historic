@@ -21,6 +21,11 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include <libguile.h>
 #include "zebra-guile.h"
 
+#include "zebra.h"
+#include "thread.h"
+
+struct thread *master;
+
 static void
 init_libzebra ()
 {

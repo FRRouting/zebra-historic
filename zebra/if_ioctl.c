@@ -193,6 +193,104 @@ if_get_hwaddr (struct interface *ifp)
 }
 #endif /* SIOCGIFHWADDR */
 
+#ifdef HAVE_GETIFADDRS
+#include <ifaddrs.h>
+
+int
+if_getaddrs ()
+{
+  int ret;
+  struct ifaddrs *ifap;
+  struct ifaddrs *ifapfree;
+  struct interface *ifp;
+  int prefixlen;
+
+  ret = getifaddrs (&ifap); 
+  if (ret != 0)
+    {
+      zlog_err ("getifaddrs(): %s", strerror (errno));
+      return -1;
+    }
+
+  for (ifapfree = ifap; ifap; ifap = ifap->ifa_next)
+    {
+      ifp = if_lookup_by_name (ifap->ifa_name);
+      if (ifp == NULL)
+	{
+	  zlog_err ("if_getaddrs(): Can't lookup interface %s\n",
+		    ifap->ifa_name);
+	  continue;
+	}
+
+      if (ifap->ifa_addr->sa_family == AF_INET)
+	{
+	  struct sockaddr_in *addr;
+	  struct sockaddr_in *mask;
+	  struct sockaddr_in *dest;
+	  struct in_addr *dest_pnt;
+
+	  addr = (struct sockaddr_in *) ifap->ifa_addr;
+	  mask = (struct sockaddr_in *) ifap->ifa_netmask;
+	  prefixlen = ip_masklen (mask->sin_addr);
+
+	  dest_pnt = NULL;
+
+	  if (ifap->ifa_flags & IFF_POINTOPOINT) 
+	    {
+	      dest = (struct sockaddr_in *) ifap->ifa_dstaddr;
+	      dest_pnt = &dest->sin_addr;
+	    }
+
+	  if (ifap->ifa_flags & IFF_BROADCAST)
+	    {
+	      dest = (struct sockaddr_in *) ifap->ifa_broadaddr;
+	      dest_pnt = &dest->sin_addr;
+	    }
+
+	  connected_add_ipv4 (ifp, &addr->sin_addr, prefixlen, dest_pnt);
+	}
+#ifdef HAVE_IPV6
+      if (ifap->ifa_addr->sa_family == AF_INET6)
+	{
+	  struct sockaddr_in6 *addr;
+	  struct sockaddr_in6 *mask;
+	  struct sockaddr_in6 *dest;
+	  struct in6_addr *dest_pnt;
+
+	  addr = (struct sockaddr_in6 *) ifap->ifa_addr;
+	  mask = (struct sockaddr_in6 *) ifap->ifa_netmask;
+	  prefixlen = ip6_masklen (mask->sin6_addr);
+
+	  dest_pnt = NULL;
+
+	  if (ifap->ifa_flags & IFF_POINTOPOINT) 
+	    {
+	      if (ifap->ifa_dstaddr)
+		{
+		  dest = (struct sockaddr_in6 *) ifap->ifa_dstaddr;
+		  dest_pnt = &dest->sin6_addr;
+		}
+	    }
+
+	  if (ifap->ifa_flags & IFF_BROADCAST)
+	    {
+	      if (ifap->ifa_broadaddr)
+		{
+		  dest = (struct sockaddr_in6 *) ifap->ifa_broadaddr;
+		  dest_pnt = &dest->sin6_addr;
+		}
+	    }
+
+	  connected_add_ipv6 (ifp, &addr->sin6_addr, prefixlen, dest_pnt);
+	}
+#endif /* HAVE_IPV6 */
+    }
+
+  freeifaddrs (ifapfree);
+
+  return 0; 
+}
+#else /* HAVE_GETIFADDRS */
 /* Interface address lookup by ioctl.  This function only looks up
    IPv4 address. */
 int
@@ -281,6 +379,7 @@ if_get_addr (struct interface *ifp)
 
   return 0;
 }
+#endif /* HAVE_GETIFADDRS */
 
 /* Fetch interface information via ioctl(). */
 static void
@@ -298,7 +397,9 @@ interface_info_ioctl ()
       if_get_hwaddr (ifp);
 #endif /* SIOCGIFHWADDR */
       if_get_flags (ifp);
+#ifndef HAVE_GETIFADDRS
       if_get_addr (ifp);
+#endif /* ! HAVE_GETIFADDRS */
       if_get_mtu (ifp);
       if_get_metric (ifp);
     }
@@ -318,6 +419,10 @@ interface_list ()
   /* After listing is done, get index, address, flags and other
      interface's information. */
   interface_info_ioctl ();
+
+#ifdef HAVE_GETIFADDRS
+  if_getaddrs ();
+#endif /* HAVE_GETIFADDRS */
 
 #if defined(HAVE_IPV6) && defined(HAVE_PROC_NET_IF_INET6)
   /* Linux provides interface's IPv6 address via

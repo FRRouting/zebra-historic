@@ -24,7 +24,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "log.h"
 #include "bgpd/bgpd.h"
 
-static SCM scm_mark_bgp (SCM obj);
+/* static SCM scm_mark_bgp (SCM obj); */
 static size_t scm_free_bgp (SCM vect);
 static int scm_print_bgp (SCM vect, SCM port, scm_print_state *pstate);
 static SCM scm_equalp_bgp (SCM a, SCM b);
@@ -73,6 +73,7 @@ scm_router_bgp (SCM as_number)
   SCM cell;
   long num;
   struct bgp *bgp;
+  struct bgp *bgp_create ();
 
   SCM_ASSERT (SCM_INUMP (as_number), as_number, SCM_ARG1, "router-bgp");
 
@@ -81,7 +82,8 @@ scm_router_bgp (SCM as_number)
   num = gh_scm2long (as_number);
 
   /* Make new bgp object. */
-  bgp = bgp_get (num, NULL);
+  bgp = bgp_create ();
+  bgp->as = num;
 
   SCM_NEWCELL (cell);
   SCM_SETCAR (cell, scm_tag_bgp);

@@ -68,7 +68,7 @@ struct thread *smux_read_thread;
 struct thread *smux_connect_thread;
 
 /* SMUX debug flag. */
-int debug_smux = 1;
+int debug_smux = 0;
 
 /* SMUX failure count. */
 int fail = 0;
@@ -318,7 +318,10 @@ smux_getresp_send (oid objid[], size_t objid_len, long reqid, long errstat,
 }
 
 char *
-smux_var (char *ptr, int len, oid objid[], size_t *objid_len)
+smux_var (char *ptr, int len, oid objid[], size_t *objid_len,
+          size_t *var_val_len,
+          u_char *var_val_type,
+          void **var_value)
 {
   u_char type;
   u_char val_type;
@@ -343,6 +346,15 @@ smux_var (char *ptr, int len, oid objid[], size_t *objid_len)
   ptr = snmp_parse_var_op(ptr, objid, objid_len, &val_type, 
 			  &val_len, &val, &len);
 
+  if (var_val_len)
+    *var_val_len = val_len;
+
+  if (var_value)
+    *var_value = (void*) val;
+
+  if (var_val_type)
+    *var_val_type = val_type;
+
   /* Requested object id length is objid_len. */
   if (debug_smux)
     smux_oid_dump ("Request OID", objid, *objid_len);
@@ -351,6 +363,7 @@ smux_var (char *ptr, int len, oid objid[], size_t *objid_len)
     zlog_info ("SMUX val_type: %d", val_type);
 
   /* Check request value type. */
+  if (debug_smux)
   switch (val_type)
     {
     case ASN_NULL:
@@ -401,7 +414,77 @@ smux_var (char *ptr, int len, oid objid[], size_t *objid_len)
   return ptr;
 }
 
-/* exact version. */
+/* NOTE: all 3 functions (smux_set, smux_get & smux_getnext) are based on ucd-snmp
+   smux and as such suppose, that the peer recieves in the message only one variable */
+
+int
+smux_set (oid *reqid, size_t *reqid_len,
+          u_char val_type, void *val, size_t val_len, int action)
+{
+  int i, j;
+  struct subtree *subtree;
+  struct variable *v;
+  int subresult;
+  oid *suffix;
+  int suffix_len;
+  int result;
+  u_char *statP = NULL;
+  WriteMethod *write_method = NULL;
+
+  /* Check */
+  for (i = 0; i < vector_max (treevec); i++)
+    {
+      subtree = vector_slot (treevec, i);
+      subresult = oid_compare_part (reqid, *reqid_len,
+                                    subtree->name, subtree->name_len);
+
+      /* Subtree matched. */
+      if (subresult == 0)
+        {
+          /* Prepare suffix. */
+          suffix = reqid + subtree->name_len;
+          suffix_len = *reqid_len - subtree->name_len;
+          result = subresult;
+
+          /* Check variables. */
+          for (j = 0; j < subtree->variables_num; j++)
+            {
+              v = &subtree->variables[j];
+
+              /* Always check suffix */
+              result = oid_compare_part (suffix, suffix_len,
+                                         v->name, v->namelen);
+
+              /* This is exact match so result must be zero. */
+              if (result == 0)
+                {
+                  if (debug_smux)
+                    zlog_info ("SMUX function call index is %d", v->magic);
+
+                  statP = (*v->findVar) (v, suffix, &suffix_len, 1,
+                    &val_len, &write_method);
+
+                  if (write_method)
+                    {
+                      return (*write_method)(action, val, val_type, val_len, statP, suffix, suffix_len);
+
+                    }
+                  else
+                    {
+                      return SNMP_ERR_READONLY;
+                    }
+                }
+
+              /* If above execution is failed or oid is small (so
+                 there is no further match). */
+              if (result < 0)
+                return SNMP_NOSUCHOBJECT;
+            }
+        }
+    }
+  return SNMP_NOSUCHOBJECT;
+}
+
 int
 smux_get (oid *reqid, size_t *reqid_len, int exact, 
 	  u_char *val_type,void **val, size_t *val_len)
@@ -553,7 +636,7 @@ smux_parse_get_header (char *ptr, size_t *len, long *reqid)
   ptr = asn_parse_int (ptr, len, &type, reqid, sizeof (*reqid));
 
   if (debug_smux)
-    zlog_info ("SMUX GET reqid: %d len: %d", reqid, *len);
+    zlog_info ("SMUX GET reqid: %d len: %d", (int) *reqid, (int) *len);
 
   /* Error status. */
   ptr = asn_parse_int (ptr, len, &type, &errstat, sizeof (errstat));
@@ -568,6 +651,37 @@ smux_parse_get_header (char *ptr, size_t *len, long *reqid)
     zlog_info ("SMUX GET errindex %d len: %d", errindex, *len);
 
   return ptr;
+}
+
+void
+smux_parse_set (char *ptr, size_t len, int action)
+{
+  long reqid;
+  oid oid[MAX_OID_LEN];
+  size_t oid_len;
+  u_char val_type;
+  void *val;
+  size_t val_len;
+  int ret;
+
+  if (debug_smux)
+    zlog_info ("SMUX SET(%s) message parse: len %d",
+               (RESERVE1 == action) ? "RESERVE1" : ((FREE == action) ? "FREE" : "COMMIT"),
+               len);
+
+  /* Parse SET message header. */
+  ptr = smux_parse_get_header (ptr, &len, &reqid);
+
+  /* Parse SET message object ID. */
+  ptr = smux_var (ptr, len, oid, &oid_len, &val_len, &val_type, &val);
+
+  ret = smux_set (oid, &oid_len, val_type, val, val_len, action);
+  if (debug_smux)
+    zlog_info ("SMUX SET ret %d", ret);
+
+  /* Return result. */
+  if (RESERVE1 == action)
+    smux_getresp_send (oid, oid_len, reqid, ret, 3, ASN_NULL, NULL, 0);
 }
 
 void
@@ -587,8 +701,8 @@ smux_parse_get (char *ptr, size_t len, int exact)
   /* Parse GET message header. */
   ptr = smux_parse_get_header (ptr, &len, &reqid);
   
-  /* Parse GET message object ID. */
-  ptr = smux_var (ptr, len, oid, &oid_len);
+  /* Parse GET message object ID. We needn't the value come */
+  ptr = smux_var (ptr, len, oid, &oid_len, NULL, NULL, NULL);
 
   /* Traditional getstatptr. */
   if (exact)
@@ -634,7 +748,18 @@ smux_parse_rrsp (char *ptr, int len)
 int
 smux_parse (char *ptr, int len)
 {
+  /* this buffer we'll use for SOUT message. We could allocate it with malloc and 
+     save only static pointer/lenght, but IMHO static buffer is a faster solusion */
+  static u_char sout_save_buff[SMUXMAXPKTSIZE];
+  static int sout_save_len = 0;
+
+  int len_income = len; /* see note below: YYY */
   u_char type;
+  u_char rollback;
+
+  rollback = ptr[2]; /* important only for SMUX_SOUT */
+
+process_rest: /* see note below: YYY */
 
   /* Parse SMUX message type and subsequent length. */
   ptr = asn_parse_header (ptr, &len, &type);
@@ -655,9 +780,34 @@ smux_parse (char *ptr, int len)
       return -1;
       break;
     case SMUX_SOUT:
-      /* SMUX_SOUT message is invalid for us. */
-      zlog_warn ("SMUX_SOUT received: resetting connection.");
-      return -1;
+      /* SMUX_SOUT message is now valied for us. */
+      if (debug_smux)
+        zlog_info ("SMUX_SOUT(%s)", rollback ? "rollback" : "commit");
+
+      if (sout_save_len > 0)
+        {
+          smux_parse_set (sout_save_buff, sout_save_len, rollback ? FREE : COMMIT);
+          sout_save_len = 0;
+        }
+      else
+        zlog_warn ("SMUX_SOUT sout_save_len=%d - invalid", (int) sout_save_len);
+
+      if (len_income > 3) 
+        {
+          /* YYY: this strange code has to solve the "slow peer"
+             problem: When agent sends SMUX_SOUT message it doesn't
+             wait any responce and may send some next message to
+             subagent. Then the peer in 'smux_read()' will recieve
+             from socket the 'concatenated' buffer, contaning both
+             SMUX_SOUT message and the next one
+             (SMUX_GET/SMUX_GETNEXT/SMUX_GET). So we should check: if
+             the buffer is longer than 3 ( length of SMUX_SOUT ), we
+             must process the rest of it.  This effect may be observed
+             if 'debug_smux' is set to '1' */
+          ptr++;
+          len = len_income - 3;
+          goto process_rest;
+        }
       break;
     case SMUX_GETRSP:
       /* SMUX_GETRSP message is invalid for us. */
@@ -690,9 +840,14 @@ smux_parse (char *ptr, int len)
       smux_parse_get (ptr, len, 0);
       break;
     case SMUX_SET:
-      /* SMUX_SET is not yet supported. */
+      /* SMUX_SET is supported with some limitations. */
       if (debug_smux)
-	zlog_info ("SMUX_SET is not yet supported sorry.");
+	zlog_info ("SMUX_SET");
+
+      /* save the data for future SMUX_SOUT */
+      memcpy (sout_save_buff, ptr, len);
+      sout_save_len = len;
+      smux_parse_set (ptr, len, RESERVE1);
       break;
     default:
       zlog_info ("Unknown type: %d", type);
@@ -818,12 +973,13 @@ smux_register (int sock)
   long operation;
   struct subtree *subtree;
 
-  ptr = buf;
-  len = BUFSIZ;
   ret = 0;
 
   for (i = 0; i < vector_max (treevec); i++)
     {
+      ptr = buf;
+      len = BUFSIZ;
+
       subtree = vector_slot (treevec, i);
 
       /* SMUX RReq Header. */

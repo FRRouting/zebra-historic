@@ -273,6 +273,7 @@ unsigned char ospf6_neighbor_dump;
 unsigned char ospf6_interface_dump;
 unsigned char ospf6_area_dump;
 unsigned char ospf6_lsa_dump;
+unsigned char ospf6_lsdb_dump;
 unsigned char ospf6_zebra_dump;
 unsigned char ospf6_config_dump;
 unsigned char ospf6_dbex_dump;
@@ -554,7 +555,7 @@ DEFUN (no_debug_ospf6_message,
 
 DEFUN (debug_ospf6,
        debug_ospf6_cmd,
-       "debug ospf6 (neighbor|interface|area|lsdb|dbex|spf|route|zebra|config|all)",
+       "debug ospf6 (neighbor|interface|area|lsa|lsdb|dbex|spf|route|zebra|config|all)",
        "Debugging infomation\n"
        OSPF6_STR
        "OSPF6 Neighbor event\n"
@@ -575,8 +576,10 @@ DEFUN (debug_ospf6,
     ospf6_interface_dump = 1;
   else if (!strcmp ("area", argv[0]))
     ospf6_area_dump = 1;
-  else if (!strcmp ("lsdb", argv[0]))
+  else if (!strcmp ("lsa", argv[0]))
     ospf6_lsa_dump = 1;
+  else if (!strcmp ("lsdb", argv[0]))
+    ospf6_lsdb_dump = 1;
   else if (!strcmp ("dbex", argv[0]))
     ospf6_dbex_dump = 1;
   else if (!strcmp ("spf", argv[0]))
@@ -589,7 +592,7 @@ DEFUN (debug_ospf6,
     ospf6_config_dump = 1;
   else if (!strcmp ("all", argv[0]))
     ospf6_neighbor_dump = ospf6_interface_dump
-    = ospf6_area_dump = ospf6_lsa_dump
+    = ospf6_area_dump = ospf6_lsa_dump = ospf6_lsdb_dump
     = ospf6_dbex_dump = ospf6_spf_dump
     = ospf6_route_dump = ospf6_zebra_dump
     = ospf6_config_dump = 1;
@@ -600,7 +603,7 @@ DEFUN (debug_ospf6,
 
 DEFUN (no_debug_ospf6,
        no_debug_ospf6_cmd,
-       "no debug ospf6 (neighbor|interface|area|lsdb|dbex|spf|route|zebra|config|all)",
+       "no debug ospf6 (neighbor|interface|area|lsa|lsdb|dbex|spf|route|zebra|config|all)",
        NO_STR
        "Debugging infomation\n"
        OSPF6_STR
@@ -622,8 +625,10 @@ DEFUN (no_debug_ospf6,
     ospf6_interface_dump = 0;
   else if (!strcmp ("area", argv[0]))
     ospf6_area_dump = 0;
-  else if (!strcmp ("lsdb", argv[0]))
+  else if (!strcmp ("lsa", argv[0]))
     ospf6_lsa_dump = 0;
+  else if (!strcmp ("lsdb", argv[0]))
+    ospf6_lsdb_dump = 0;
   else if (!strcmp ("dbex", argv[0]))
     ospf6_dbex_dump = 0;
   else if (!strcmp ("spf", argv[0]))
@@ -636,7 +641,7 @@ DEFUN (no_debug_ospf6,
     ospf6_config_dump = 0;
   else if (!strcmp ("all", argv[0]))
     ospf6_neighbor_dump = ospf6_interface_dump
-    = ospf6_area_dump = ospf6_lsa_dump
+    = ospf6_area_dump = ospf6_lsa_dump = ospf6_lsdb_dump
     = ospf6_dbex_dump = ospf6_spf_dump
     = ospf6_route_dump = ospf6_zebra_dump
     = ospf6_config_dump = 0;
@@ -766,6 +771,8 @@ ospf6_config_write_debug (struct vty *vty)
   if (IS_OSPF6_DUMP_AREA)
     vty_out (vty, "debug ospf6 area%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_LSA)
+    vty_out (vty, "debug ospf6 lsa%s", VTY_NEWLINE);
+  if (IS_OSPF6_DUMP_LSDB)
     vty_out (vty, "debug ospf6 lsdb%s", VTY_NEWLINE);
   if (IS_OSPF6_DUMP_ZEBRA)
     vty_out (vty, "debug ospf6 zebra%s", VTY_NEWLINE);

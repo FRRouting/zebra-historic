@@ -82,11 +82,13 @@ ospf_if_reset_variables (struct ospf_interface *oi)
   oi->fd = -1;
 
   /* Set default values. */
-  /*Z: don't clear this flag.  oi->flag = OSPF_IF_DISABLE; */
+  /* don't clear this flag.  oi->flag = OSPF_IF_DISABLE; */
 
   if (oi->vl_data)
     oi->type = OSPF_IFTYPE_VIRTUALLINK;
   else 
+  /* preserve network-type */
+  if (oi->type != OSPF_IFTYPE_NBMA)
     oi->type = OSPF_IFTYPE_BROADCAST;
 
   oi->status = ISM_Down;
@@ -137,6 +139,9 @@ ospf_if_new (struct interface *ifp)
   /* Initialize neighbor list. */
   oi->nbrs = route_table_init ();
 
+  /* Initialize static neighbor list. */
+  oi->nbr_static = list_init ();
+
   /* Initialize Link State Acknowledgment list. */
   oi->ls_ack = list_init ();
   oi->ls_ack_direct.ls_ack = list_init ();
@@ -181,7 +186,7 @@ ospf_if_free (struct ospf_interface *oi)
   else
   */
   if(oi->area != NULL)
-    list_delete_by_val (oi->area->iflist, oi->ifp);
+    ospf_area_del_if (oi->area, oi->ifp);
 
   if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
     {
@@ -201,10 +206,31 @@ ospf_if_free (struct ospf_interface *oi)
   if (oi->t_network_lsa_self)
     OSPF_TIMER_OFF (oi->t_network_lsa_self);
 
+  /* Delete all static neighbors. */
+  for (node = listhead (oi->nbr_static); node; nextnode (node))
+    {
+      struct ospf_nbr_static *nbr_static;
+
+      nbr_static = getdata (node);
+
+      OSPF_POLL_TIMER_OFF (nbr_static->t_poll);
+
+      if (nbr_static->neighbor)
+	{
+	  nbr_static->neighbor->nbr_static = NULL;
+	  nbr_static->neighbor = NULL;
+	}
+      nbr_static->oi = NULL;
+    }
+  list_delete_all (oi->nbr_static);
+
   /* Delete all related neighbors. */
   for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
-    if (rn->info != NULL)
+    if (rn->info != NULL && rn->info != oi->nbr_self)
       ospf_nbr_free ((struct ospf_neighbor *) rn->info);
+
+  /* Delete pseudo neighbor. */
+  ospf_nbr_free (oi->nbr_self);
 
   route_table_finish (oi->nbrs);
   route_table_finish (oi->ls_upd_queue);
@@ -412,7 +438,8 @@ ospf_vl_data_new (struct ospf_area *area, struct in_addr vl_peer)
   bzero (vl_data, sizeof (struct ospf_vl_data));
 
   vl_data->vl_peer.s_addr = vl_peer.s_addr;
-  vl_data->vl_area = area;
+  vl_data->vl_area_id = area->area_id;
+  vl_data->format = area->format;
 
   return vl_data;
 }
@@ -442,23 +469,22 @@ ospf_vl_new (struct ospf_vl_data *vl_data)
   struct ospf_area *area;
   struct in_addr area_id;
 
-  zlog_info ("Z: ospf_vl_new(): Start");
-
+  zlog_info ("ospf_vl_new(): Start");
   if (vlink_count == OSPF_VL_MAX_COUNT)
     {
-      zlog_info ("Z: ospf_vl_new(): Alarm: "
+      zlog_info ("ospf_vl_new(): Alarm: "
                  "cannot create more than OSPF_MAX_VL_COUNT virtual links");
       return NULL;
     }
 
-  zlog_info ("Z: ospf_vl_new(): creating pseudo zebra interface");
+  zlog_info ("ospf_vl_new(): creating pseudo zebra interface");
 
   vi = if_create ();
   voi = vi->info;
 
   if (voi == NULL)
     {
-      zlog_info ("Z: ospf_vl_new(): Alarm: OSPF int structure is not created");
+      zlog_info ("ospf_vl_new(): Alarm: OSPF int structure is not created");
       return NULL;
     }
 
@@ -471,30 +497,21 @@ ospf_vl_new (struct ospf_vl_data *vl_data)
   ospf_vl_set_variables (voi);
 
   sprintf (ifname, "VLINK%d", vlink_count++);
-  zlog_info ("Z: ospf_vl_new(): Created name: %s", ifname);
-
+  zlog_info ("ospf_vl_new(): Created name: %s", ifname);
   strncpy (vi->name, ifname, IFNAMSIZ);
-  zlog_info ("Z: ospf_vl_new(): set if->name to %s", vi->name);
+  zlog_info ("ospf_vl_new(): set if->name to %s", vi->name);
 
   area_id.s_addr = 0;
-  area = ospf_area_lookup_by_area_id (area_id);
-  if (!area)
-    {
-      area = ospf_area_new (area_id);
-      area->format = OSPF_AREA_ID_FORMAT_ADDRESS;
-      list_add_node (ospf_top->areas, area);
-      ospf_check_abr_status ();
-    }
-
+  area = ospf_area_get (area_id, OSPF_AREA_ID_FORMAT_ADDRESS);
   voi->area = area;
 
-  zlog_info ("Z: ospf_vl_new(): set associated area to the backbone");
+  zlog_info ("ospf_vl_new(): set associated area to the backbone");
 
-  list_add_node (voi->area->iflist, vi);
+  ospf_area_add_if (voi->area, vi);
 
   ospf_if_stream_set (voi);
 
-  zlog_info ("Z: ospf_vl_new(): Stop");
+  zlog_info ("ospf_vl_new(): Stop");
   return voi;
 }
 
@@ -502,6 +519,7 @@ void
 ospf_vl_if_delete (struct ospf_vl_data *vl_data)
 {
   if_delete (vl_data->vl_oi->ifp);
+  vlink_count--;
 }
 
 struct ospf_vl_data *
@@ -513,10 +531,26 @@ ospf_vl_lookup (struct ospf_area *area, struct in_addr vl_peer)
   for (node = listhead (ospf_top->vlinks); node; nextnode (node))
     if ((vl_data = getdata (node)) != NULL)
       if (vl_data->vl_peer.s_addr == vl_peer.s_addr &&
-          vl_data->vl_area == area)
+          IPV4_ADDR_SAME (&vl_data->vl_area_id, &area->area_id))
         return vl_data;
 
   return NULL;
+}
+
+void 
+ospf_vl_shutdown (struct ospf_vl_data *vl_data)
+{
+  struct ospf_interface *oi;
+
+  if ((oi = vl_data->vl_oi) == NULL)
+    return;
+
+  oi->address->u.prefix4.s_addr = 0;
+  oi->address->prefixlen = 0;
+
+  UNSET_FLAG (oi->ifp->flags, IFF_UP);
+  /* OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceDown); */
+  OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceDown);
 }
 
 void
@@ -528,9 +562,11 @@ ospf_vl_add (struct ospf_vl_data *vl_data)
 void
 ospf_vl_delete (struct ospf_vl_data *vl_data)
 {
+  ospf_vl_shutdown (vl_data);
+  ospf_vl_if_delete (vl_data);
+
   list_delete_by_val (ospf_top->vlinks, vl_data);
 
-  ospf_vl_if_delete (vl_data);
   ospf_vl_data_free (vl_data);
 }
 
@@ -578,11 +614,11 @@ ospf_vl_set_params (struct ospf_vl_data *vl_data, struct vertex *v)
       switch (rl->link[i].type)
 	{
 	case LSA_LINK_TYPE_VIRTUALLINK:
-	  zlog_info ("Z: found back link through VL");
+	  zlog_info ("found back link through VL");
 	case LSA_LINK_TYPE_TRANSIT:
 	case LSA_LINK_TYPE_POINTOPOINT:
 	  vl_data->peer_addr = rl->link[i].link_data;
-	  zlog_info ("Z: %s peer address is %s\n",
+	  zlog_info ("%s peer address is %s\n",
 		     vl_data->vl_oi->ifp->name, inet_ntoa(vl_data->peer_addr));
 	  return;
 	}
@@ -598,36 +634,32 @@ ospf_vl_up_check (struct ospf_area * area, struct in_addr rid,
   struct ospf_vl_data *vl_data;
   struct ospf_interface *oi;
 
-  zlog_info ("Z: ospf_vl_up_check(): Start");
-  zlog_info ("Z: ospf_vl_up_check(): Router ID is %s", inet_ntoa (rid));
-  zlog_info ("Z: ospf_vl_up_check(): Area is %s", inet_ntoa (area->area_id));
+  zlog_info ("ospf_vl_up_check(): Start");
+  zlog_info ("ospf_vl_up_check(): Router ID is %s", inet_ntoa (rid));
+  zlog_info ("ospf_vl_up_check(): Area is %s", inet_ntoa (area->area_id));
 
-  LIST_ITERATOR (ospf_top->vlinks, node)
+  for (node = listhead (ospf_top->vlinks); node; nextnode (node))
     {
       if ((vl_data = getdata (node)) == NULL)
         continue;
   
-      zlog_info ("Z: ospf_vl_up_check(): considering VL, name: %s", 
+      zlog_info ("ospf_vl_up_check(): considering VL, name: %s", 
                  vl_data->vl_oi->ifp->name);
-      zlog_info ("Z: ospf_vl_up_check(): VL area: %s, peer ID: %s", 
-                 inet_ntoa (vl_data->vl_area->area_id),
+      zlog_info ("ospf_vl_up_check(): VL area: %s, peer ID: %s", 
+                 inet_ntoa (vl_data->vl_area_id),
                  inet_ntoa (vl_data->vl_peer));
 
-      /*
-      if (vl_data->vl_peer.s_addr == rid.s_addr &&
-          vl_data->vl_area == area)      */
-
       if (IPV4_ADDR_SAME (&vl_data->vl_peer, &rid) &&
-          vl_data->vl_area == area)
+          IPV4_ADDR_SAME (&vl_data->vl_area_id, &area->area_id))
         {
           oi = vl_data->vl_oi;
           SET_FLAG (vl_data->flags, OSPF_VL_FLAG_APPROVED);
 
-          zlog_info ("Z: ospf_vl_up_check(): this VL matched");
+          zlog_info ("ospf_vl_up_check(): this VL matched");
 
           if (oi->status == ISM_Down)
             {
-              zlog_info ("Z: ospf_vl_up_check(): VL is down, waking it up");
+              zlog_info ("ospf_vl_up_check(): VL is down, waking it up");
               SET_FLAG (oi->ifp->flags, IFF_UP);
               OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceUp);
             }
@@ -635,21 +667,6 @@ ospf_vl_up_check (struct ospf_area * area, struct in_addr rid,
           ospf_vl_set_params (vl_data, v);
         }
     }
-}
-
-void 
-ospf_vl_shutdown (struct ospf_vl_data *vl_data)
-{
-  struct ospf_interface *oi;
-
-  if ((oi = vl_data->vl_oi) == NULL)
-    return;
-
-  oi->address->u.prefix4.s_addr = 0;
-  oi->address->prefixlen = 0;
-
-  UNSET_FLAG (oi->ifp->flags, IFF_UP);
-  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceDown);
 }
 
 void
@@ -678,9 +695,9 @@ ospf_vl_shut_unapproved ()
 int
 ospf_full_virtual_nbrs (struct ospf_area *area)
 {
-  zlog_info ("Z: counting fully adjacent virtual neighbors in area %s",
+  zlog_info ("counting fully adjacent virtual neighbors in area %s",
              inet_ntoa (area->area_id));
-  zlog_info ("Z: there are %d of them", area->full_vls);
+  zlog_info ("there are %d of them", area->full_vls);
 
   return area->full_vls;
 }
@@ -694,7 +711,7 @@ ospf_vls_in_area (struct ospf_area *area)
 
   for (node = listhead (ospf_top->vlinks); node; nextnode (node))
     if ((vl_data = getdata (node)) != NULL)
-      if (vl_data->vl_area == area)
+      if (IPV4_ADDR_SAME (&vl_data->vl_area_id, &area->area_id))
         c++;
 
   return c;
@@ -789,6 +806,10 @@ interface_config_write (struct vty *vty)
         vty_out (vty, " description %s%s", ifp->desc,
                VTY_NEWLINE);
 
+#ifdef HAVE_IF_PSEUDO
+      if (IS_IF_PSEUDO (ifp))
+	 vty_out (vty, " pseudo %s", VTY_NEWLINE);
+#endif /* HAVE_IF_PSEUDO */
       write++;
 
       /* Interface Network print. */
@@ -1173,6 +1194,7 @@ DEFUN (ip_ospf_network,
 {
   struct interface *ifp = vty->index;
   struct ospf_interface *oi = ifp->info;
+  int old_type = oi->type;
 
   if (strncmp (argv[0], "b", 1) == 0)
     oi->type = OSPF_IFTYPE_BROADCAST;
@@ -1182,6 +1204,12 @@ DEFUN (ip_ospf_network,
     oi->type = OSPF_IFTYPE_POINTOMULTIPOINT;
   else if (strncmp (argv[0], "point-to-p", 10) == 0)
     oi->type = OSPF_IFTYPE_POINTOPOINT;
+
+  if (oi->type != old_type && oi->status > ISM_Down)
+    {
+      OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceDown);
+      OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceUp);
+    }
 
   return CMD_SUCCESS;
 }
@@ -1411,6 +1439,10 @@ ospf_if_init ()
   install_default (INTERFACE_NODE);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
+#ifdef HAVE_IF_PSEUDO  
+  install_element (INTERFACE_NODE, &interface_pseudo_cmd);
+  install_element (INTERFACE_NODE, &no_interface_pseudo_cmd);
+#endif /* HAVE_IF_PSEUDO */
   install_element (INTERFACE_NODE, &ip_ospf_authentication_key_cmd);
   install_element (INTERFACE_NODE, &no_ip_ospf_authentication_key_cmd);
   install_element (INTERFACE_NODE, &ip_ospf_message_digest_key_cmd);

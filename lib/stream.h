@@ -91,6 +91,7 @@ u_int32_t stream_get_ipv4 (struct stream *);
 #undef stream_read()
 #undef stream_write()
 int stream_read (struct stream *, int, size_t);
+int stream_read_unblock (struct stream *, int, size_t);
 int stream_write (struct stream *, u_char *, size_t);
 
 u_char *stream_pnt (struct stream *);

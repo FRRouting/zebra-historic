@@ -32,80 +32,45 @@
 
 #define MY_ROUTER_LSA_ID    0
 
+struct ospf6_lsdb
+{
+  u_int stat_router;
+  u_int stat_network;
+  u_int stat_inter_router;
+  u_int stat_inter_prefix;
+  u_int stat_intra_prefix;
+  u_int stat_as_external;
+  u_int stat_link;
+
+  list lsdb;
+};
+
 /* Function Prototypes */
-int lsa_change (struct ospf6_lsa *);
 struct ospf6_lsa_hdr *
 attach_lsa_hdr_to_iov (struct ospf6_lsa *, struct iovec *);
 struct ospf6_lsa_hdr *
 attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov);
-
-struct ospf6_lsa *
-ospf6_lookup_maxage (struct ospf6_lsa *lsa, struct ospf6 *);
-void ospf6_add_maxage (struct ospf6_lsa *, struct ospf6 *);
-void ospf6_remove_maxage (struct ospf6_lsa *, struct ospf6 *);
-
-struct ospf6_lsa *
-ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *);
-void ospf6_add_summary (struct ospf6_lsa *, struct neighbor *);
-void ospf6_remove_summary (struct ospf6_lsa *, struct neighbor *);
-void ospf6_remove_summary_all (struct neighbor *);
-
-struct ospf6_lsa *
-ospf6_lookup_request (struct ospf6_lsa *lsa, struct neighbor *nbr);
-void ospf6_add_request (struct ospf6_lsa *, struct neighbor *);
-void ospf6_remove_request (struct ospf6_lsa *, struct neighbor *);
-void ospf6_remove_request_all (struct neighbor *);
-
-struct ospf6_lsa *
-ospf6_lookup_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr);
-void ospf6_add_retrans (struct ospf6_lsa *, struct neighbor *);
-void ospf6_remove_retrans (struct ospf6_lsa *, struct neighbor *);
-void ospf6_remove_retrans_all (struct neighbor *);
 
 void
 ospf6_add_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
 void
 ospf6_remove_delayed_ack (struct ospf6_lsa *, struct ospf6_interface *);
 
-void ospf6_lsdb_collect_type_advrtr (list, unsigned short,
-                                     unsigned long, void *);
-void ospf6_lsdb_collect_type (list, unsigned short, void *);
+void
+ospf6_lsdb_collect_type_advrtr (list, unsigned short,
+                                unsigned long, void *);
 
 struct ospf6_lsa*
-ospf6_lsdb_lookup (unsigned short, unsigned long, unsigned long, void *);
-struct ospf6_lsa*
-ospf6_lsdb_lookup_new (u_int16_t, u_int32_t, u_int32_t, struct ospf6 *);
-void ospf6_lsdb_add (struct ospf6_lsa *);
-void ospf6_lsdb_remove (struct ospf6_lsa *);
-
-void ospf6_lsdb_init_neighbor (struct neighbor *);
-void ospf6_lsdb_finish_neighbor (struct neighbor *);
-void ospf6_lsdb_init_interface (struct ospf6_interface *);
-void ospf6_lsdb_finish_interface (struct ospf6_interface *);
-void ospf6_lsdb_init_area (struct area *);
-void ospf6_lsdb_finish_area (struct area *);
-void ospf6_lsdb_init_as (struct ospf6 *);
-void ospf6_lsdb_finish_as (struct ospf6 *);
+ospf6_lsdb_lookup (u_int16_t, u_int32_t, u_int32_t, struct ospf6 *);
 
 void ospf6_lsdb_install (struct ospf6_lsa *);
+void ospf6_lsdb_remove_all (list);
 
-void ospf6_lsdb_maxage_remove_interface (struct ospf6_interface *);
-void ospf6_lsdb_maxage_remove_area (struct area *);
-void ospf6_lsdb_maxage_remove_as (struct ospf6 *);
-void ospf6_lsdb_check_maxage_lsa (struct ospf6 *);
+void ospf6_lsdb_check_maxage_linklocal (struct ospf6_interface *);
+void ospf6_lsdb_check_maxage_area (struct ospf6_area *);
+void ospf6_lsdb_check_maxage_as (struct ospf6 *);
 
-void ospf6_lsdb_interface_update (struct ospf6_interface *);
 void ospf6_lsdb_init ();
-
-/* new */
-#if TEST
-
-struct ospf6_lsdb
-{
-  struct ospf6_list *list;
-};
-
-#endif /*TEST*/
 
 #endif /* OSPF6_LSDB_H */
 

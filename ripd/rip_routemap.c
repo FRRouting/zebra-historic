@@ -527,19 +527,17 @@ DEFUN (match_ip_nexthop,
        "Next hop address\n"
        "IP address of next hop\n")
 {
-  struct in_addr id;
-  char *id_str;
+  union sockunion su;
   int ret;
 
-  id_str = argv[0];
-  ret = inet_aton (id_str, &id);
-  if (!ret)
+  ret = str2sockunion (argv[0], &su);
+  if (ret < 0)
     {
-      vty_out (vty, "Malformed Next-hop address%s", VTY_NEWLINE);
+      vty_out (vty, "%% Malformed next-hop address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
-  return rip_route_match_add (vty, vty->index, "ip next-hop", inet_ntoa(id));
+  return rip_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_match_ip_nexthop,
@@ -618,19 +616,17 @@ DEFUN (set_ip_nexthop,
        "Next hop address\n"
        "IP address of next hop\n")
 {
-  struct in_addr id;
-  char *id_str;
+  union sockunion su;
   int ret;
 
-  id_str = argv[0];
-  ret = inet_aton (id_str, &id);
-  if (!ret)
+  ret = str2sockunion (argv[0], &su);
+  if (ret < 0)
     {
-      vty_out (vty, "Malformed Next-hop address%s", VTY_NEWLINE);
+      vty_out (vty, "%% Malformed next-hop address%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
-  return rip_route_set_add (vty, vty->index, "ip next-hop", inet_ntoa(id));
+  return rip_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
 DEFUN (no_set_ip_nexthop,

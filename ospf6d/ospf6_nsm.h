@@ -23,22 +23,30 @@
 #define OSPF6_NSM_H
 
 /* Neighbor state */
-#define NBS_DOWN     1
-#define NBS_ATTEMPT  2
-#define NBS_INIT     3
-#define NBS_TWOWAY   4
-#define NBS_EXSTART  5
-#define NBS_EXCHANGE 6
-#define NBS_LOADING  7
-#define NBS_FULL     8
+#define NBS_DOWN                      1
+#define OSPF6_NEIGHBOR_STATE_DOWN     1
+#define NBS_ATTEMPT                   2
+#define OSPF6_NEIGHBOR_STATE_ATTEMPT  2
+#define NBS_INIT                      3
+#define OSPF6_NEIGHBOR_STATE_INIT     3
+#define NBS_TWOWAY                    4
+#define OSPF6_NEIGHBOR_STATE_TWOWAY   4
+#define NBS_EXSTART                   5
+#define OSPF6_NEIGHBOR_STATE_EXSTART  5
+#define NBS_EXCHANGE                  6
+#define OSPF6_NEIGHBOR_STATE_EXCHANGE 6
+#define NBS_LOADING                   7
+#define OSPF6_NEIGHBOR_STATE_LOADING  7
+#define NBS_FULL                      8
+#define OSPF6_NEIGHBOR_STATE_FULL     8
 
 
 
 /* Function Prototypes */
 
-int nbs_change (state_t, char *, struct neighbor *);
+int nbs_change (state_t, char *, struct ospf6_neighbor *);
 int nbs_full_change (struct ospf6_interface *);
-int need_adjacency (struct neighbor *);
+int need_adjacency (struct ospf6_neighbor *);
 
 
 /* Neighbor event */

@@ -1,6 +1,5 @@
-/*
- * generic linked list header
- * Copyright (C) 1997 Kunihiro Ishiguro
+/* Generic linked list
+ * Copyright (C) 1997, 2000 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -23,25 +22,24 @@
 #ifndef _ZEBRA_LINKLIST_H
 #define _ZEBRA_LINKLIST_H
 
-typedef struct _list *list;
-typedef struct _listnode *listnode;
+typedef struct list *list;
+typedef struct listnode *listnode;
 
-struct _list 
+struct listnode 
 {
-  listnode head;
-  listnode tail;
-  void *up;
-  unsigned int count;
-};
-
-struct _listnode 
-{
-  listnode next;
-  listnode prev;
+  struct listnode *next;
+  struct listnode *prev;
   void *data;
 };
 
-list list_init();
+struct list 
+{
+  struct listnode *head;
+  struct listnode *tail;
+  unsigned int count;
+  int (*cmp) (void *val1, void *val2);
+  int (*del) (void *val);
+};
 
 #define nextnode(X) ((X) = (X)->next)
 #define listhead(X) ((X)->head)
@@ -49,8 +47,10 @@ list list_init();
 #define list_isempty(X) ((X)->head == NULL && (X)->tail == NULL)
 #define getdata(X) ((X)->data)
 
+list list_init();
 listnode list_lookup_node (list, void *);
 void list_add_node (list, void *);
+void list_add_sort_node (list, void *);
 void list_add_node_prev (list, listnode, void *);
 void list_add_node_next (list, listnode, void *);
 void list_add_list (list, list);
@@ -59,5 +59,16 @@ void list_delete_all_node (list);
 void list_delete_all (list);
 void list_free (list);
 void list_delete_node (list, listnode);
+
+struct list *list_new ();
+
+/* From newlist.c */
+void list_delete (struct list *);
+void *listnode_delete (struct list *list, void *val);
+
+/* List iteration macro. */
+#define LIST_LOOP(L,V,N) \
+  for ((N) = (L)->head; (N); (N) = (N)->next) \
+    if (((V) = (N)->data) != NULL)
 
 #endif /* _ZEBRA_LINKLIST_H */

@@ -73,7 +73,7 @@ iov_prepend (int mtype, struct iovec *iov, size_t len)
   base = (void *) XMALLOC (mtype, len);
   if (!base)
     {
-      zlog_warn ("*** iov_prepend failed");
+      zlog_warn ("Network: iov_prepend failed");
       return NULL;
     }
   memset (base, 0, len);
@@ -99,7 +99,7 @@ iov_append (int mtype, struct iovec *iov, size_t len)
   base = (void *)XMALLOC (mtype, len);
   if (!base)
     {
-      zlog_warn ("*** iov_append failed");
+      zlog_warn ("Network: iov_append failed");
       return NULL;
     }
   memset (base, 0, len);
@@ -197,7 +197,7 @@ ospf6_serv_sock ()
   ospf6_sock = socket (AF_INET6, SOCK_RAW, IPPROTO_OSPFIGP);
   if (ospf6_sock < 0)
     {
-      zlog_warn ("*** can't create OSPF6 socket.");
+      zlog_warn ("Network: can't create OSPF6 socket.");
       return -1;
     }
   sockopt_reuseaddr (ospf6_sock);
@@ -231,10 +231,10 @@ ospf6_join_allspfrouters (u_int ifindex)
                        &mreq6, sizeof (mreq6));
 
   if (retval < 0)
-    zlog_warn ("*** Join AllSPFRouters on ifindex %d failed: %s",
+    zlog_warn ("Network: Join AllSPFRouters on ifindex %d failed: %s",
                ifindex, strerror (errno));
   else
-    zlog_info ("Join AllSPFRouters on ifindex %d", ifindex);
+    zlog_info ("Network: Join AllSPFRouters on ifindex %d", ifindex);
 
   return retval;
 }
@@ -251,10 +251,10 @@ ospf6_leave_allspfrouters (u_int ifindex)
 
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
                   &mreq6, sizeof (mreq6)) < 0)
-    zlog_warn ("*** Leave AllSPFRouters on ifindex %d Failed: %s",
+    zlog_warn ("Network: Leave AllSPFRouters on ifindex %d Failed: %s",
                ifindex, strerror (errno));
   else
-    zlog_info ("Leave AllSPFRouters on ifindex %d", ifindex);
+    zlog_info ("Network: Leave AllSPFRouters on ifindex %d", ifindex);
 }
 
 void
@@ -269,10 +269,10 @@ ospf6_join_alldrouters (u_int ifindex)
 
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
                   &mreq6, sizeof (mreq6)) < 0)
-    zlog_warn ("*** Join AllDRouters on ifindex %d Failed: %s",
+    zlog_warn ("Network: Join AllDRouters on ifindex %d Failed: %s",
                ifindex, strerror (errno));
   else
-    zlog_info ("Join AllDRouters on ifindex %d", ifindex);
+    zlog_info ("Network: AllDRouters on ifindex %d", ifindex);
 }
 
 void
@@ -287,9 +287,9 @@ ospf6_leave_alldrouters (u_int ifindex)
 
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
                   &mreq6, sizeof (mreq6)) < 0)
-    zlog_warn ("*** Leave AllDRouters on ifindex %d Failed", ifindex);
+    zlog_warn ("Network: Leave AllDRouters on ifindex %d Failed", ifindex);
   else
-    zlog_info ("Leave AllDRouters on ifindex %d", ifindex);
+    zlog_info ("Network: Leave AllDRouters on ifindex %d", ifindex);
 }
 
 /* setsockopt MulticastLoop to off */
@@ -299,21 +299,22 @@ ospf6_reset_mcastloop ()
   u_int off = 0;
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
                   &off, sizeof (u_int)) < 0)
-    zlog_warn ("*** reset IPV6_MULTICAST_LOOP failed: %s", strerror (errno));
+    zlog_warn ("Network: reset IPV6_MULTICAST_LOOP failed: %s",
+               strerror (errno));
 }
 
 void
 ospf6_set_pktinfo ()
 {
   u_int on = 1;
-#ifdef IPV6_RECVPKTINFO		/*2292bis-01*/
+#ifdef IPV6_RECVPKTINFO	/*2292bis-01*/
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_RECVPKTINFO,
                   &on, sizeof (u_int)) < 0)
-    zlog_warn ("*** set IPV6_RECVPKTINFO failed: %s", strerror (errno));
-#else	/*RFC2292*/
+    zlog_warn ("Network: set IPV6_RECVPKTINFO failed: %s", strerror (errno));
+#else /*RFC2292*/
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_PKTINFO,
                   &on, sizeof (u_int)) < 0)
-    zlog_warn ("*** set IPV6_PKTINFO failed: %s", strerror (errno));
+    zlog_warn ("Network: set IPV6_PKTINFO failed: %s", strerror (errno));
 #endif
 }
 
@@ -324,9 +325,9 @@ ospf6_set_checksum ()
 #ifndef DISABLE_IPV6_CHECKSUM
   if (setsockopt (ospf6_sock, IPPROTO_IPV6, IPV6_CHECKSUM,
                   &offset, sizeof (offset)) < 0)
-    zlog_warn ("*** set IPV6_CHECKSUM failed: %s", strerror (errno));
+    zlog_warn ("Network: set IPV6_CHECKSUM failed: %s", strerror (errno));
 #else
-  zlog_warn ("*** Don't set IPV6_CHECKSUM");
+  zlog_warn ("Network: Don't set IPV6_CHECKSUM");
 #endif /* DISABLE_IPV6_CHECKSUM */
 }
 
@@ -377,7 +378,7 @@ ospf6_sendmsg (struct in6_addr *src, struct in6_addr *dst,
 
   retval = sendmsg (ospf6_sock, &smsghdr, 0);
   if (retval != iov_totallen (message))
-    zlog_warn ("*** sendmsg failed: %s", strerror (errno));
+    zlog_warn ("Network: sendmsg failed: %s", strerror (errno));
 }
 
 void
@@ -411,7 +412,7 @@ ospf6_recvmsg (struct in6_addr *src, struct in6_addr *dst,
 
   retval = recvmsg (ospf6_sock, &rmsghdr, 0);
   if (retval != iov_totallen (message))
-    zlog_warn ("*** recvmsg failed: %s", strerror (errno));
+    zlog_warn ("Network: recvmsg failed: %s", strerror (errno));
 
   /* source address */
   assert (src);
@@ -455,7 +456,7 @@ ospf6_recvmsg_peek (struct in6_addr *src, struct in6_addr *dst,
 
   retval = recvmsg (ospf6_sock, &rmsghdr, MSG_PEEK);
   if (retval != iov_totallen (message))
-    zlog_warn ("*** recvmsg failed: %s", strerror (errno));
+    zlog_warn ("Network: recvmsg failed: %s", strerror (errno));
 
   /* source address */
   assert (src);

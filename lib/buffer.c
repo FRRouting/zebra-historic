@@ -24,7 +24,6 @@
 
 #include "memory.h"
 #include "buffer.h"
-#include "roken.h"
 
 /* Make buffer data. */
 struct buffer_data *

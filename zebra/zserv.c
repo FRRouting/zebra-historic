@@ -28,7 +28,6 @@
 #include "stream.h"
 #include "memory.h"
 #include "rib.h"
-#include "roken.h"
 #include "network.h"
 #include "sockunion.h"
 #include "log.h"
@@ -1153,6 +1152,7 @@ DEFUN (show_ip_forwarding,
   return CMD_SUCCESS;
 }
 
+#ifndef HAVE_IF_PSEUDO
 DEFUN (ip_route, 
        ip_route_cmd,
        "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
@@ -1479,6 +1479,357 @@ DEFUN (no_ip_route_mask,
     }
   return CMD_SUCCESS;
 }
+#else
+DEFUN (ip_route, 
+       ip_route_cmd,
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct interface *ifp;
+
+  /* a.b.c.d/mask gateway format. */
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (ret <= 0)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", 
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_add_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0 , &p, NULL, ifp->name, table);
+      }
+      else {
+	ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifp->ifindex, table, 0, 0);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
+  }
+    
+
+  /* Error checking and display message. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix), p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+DEFUN (ip_route_mask,
+       ip_route_mask_cmd,
+       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct interface *ifp;
+  struct in_addr tmpmask;
+
+  /* A.B.C.D */
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* X.X.X.X */
+  ret = inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+
+  /* Make sure mask is applied and set type to static route*/
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[2], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[2]);
+      if (! ifp)
+	{
+	  vty_out (vty, "Gateway address or device name is invalid%s", 
+		   VTY_NEWLINE);
+	  return CMD_WARNING;
+	}
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_add_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0 , &p, NULL, ifp->name, table);
+      }
+      else {
+	ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifp->ifindex, table, 0 ,0);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_add_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table, 0, 0);
+  }
+    
+
+  /* Error checking and display message. */
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix), p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+DEFUN (no_ip_route, 
+       no_ip_route_cmd,
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE)",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix (e.g. 10.0.0.0/8)\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+
+  if (ret <= 0)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask "
+	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[1], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[1]);
+      if (! ifp)
+	{
+	  /* route on deleted interface */
+	  if (rib_delete_ipv4_pseudo(ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				     argv[1], table) == ZEBRA_ERR_RTNOEXIST){
+	    vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	    return CMD_WARNING;
+	  }
+	}
+      ifindex = ifp->ifindex;
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_delete_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				      ifp->name, table);
+      }
+      else{
+	ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+  }
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ip_route_mask,
+       no_ip_route_mask_cmd,
+       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE)",
+       NO_STR
+       "IP information\n"
+       "IP routing set\n"
+       "IP destination prefix\n"
+       "IP destination netmask\n"
+       "IP gateway\n"
+       "IP gateway interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+  struct in_addr gate;
+  int table = rtm_table_default;
+  struct in_addr tmpmask;
+  unsigned int ifindex = 0;
+  struct interface *ifp;
+
+  ret = inet_aton (argv[0], &p.prefix);
+  if (!ret)	
+    {
+      vty_out (vty, "destination address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING; 
+    }
+  inet_aton (argv[1], &tmpmask);
+  if (!ret)	
+    {
+      vty_out (vty, "netmask address is invalid%s", VTY_NEWLINE);
+      return CMD_WARNING; 
+    }
+  p.prefixlen = ip_masklen (tmpmask);
+      
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  /* Gateway. */
+  ret = inet_aton (argv[2], &gate);
+
+  /* direct route */
+  if (!ret)	
+    {
+      ifp = if_lookup_by_name (argv[2]);
+      if (! ifp)
+	{
+	  /* route on deleted interface */
+	  if (rib_delete_ipv4_pseudo(ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				     argv[2], table) == ZEBRA_ERR_RTNOEXIST){
+	    vty_out (vty, "Gateway address or device name is invalid%s", VTY_NEWLINE);
+	    return CMD_WARNING;
+	  }
+	}
+      ifindex = ifp->ifindex;
+      if (IS_IF_PSEUDO(ifp)){
+	ret = rib_delete_ipv4_pseudo (ZEBRA_ROUTE_STATIC, 0, &p, NULL,
+				      ifp->name, table);
+      }
+      else{
+	ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, NULL, ifindex, table);
+      }
+    }
+  /* route with gateway */
+  else {
+    ret = rib_delete_ipv4 (ZEBRA_ROUTE_STATIC, 0, &p, &gate, 0, table);
+  }
+  
+  if (ret)
+    {
+      switch (ret)
+	{
+	case ZEBRA_ERR_RTEXIST:
+	  vty_out (vty, "same static route already exists ");
+	  break;
+	case ZEBRA_ERR_RTUNREACH:
+	  vty_out (vty, "network is unreachable ");
+	  break;
+	case ZEBRA_ERR_EPERM:
+	  vty_out (vty, "permission denied ");
+	  break;
+	case ZEBRA_ERR_RTNOEXIST:
+	  vty_out (vty, "route doesn't match ");
+	  break;
+	default:
+	  vty_out (vty, "route delete error ");
+	  break;
+	}
+      vty_out (vty, "%s/%d.%s", inet_ntoa (p.prefix),
+	       p.prefixlen,
+	       VTY_NEWLINE);
+
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+#endif /* HAVE_IF_PSEUDO */
 
 #ifdef HAVE_IPV6
 /* Only display ipv6 forwarding is enabled or not. */

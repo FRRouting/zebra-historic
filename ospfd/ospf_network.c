@@ -203,6 +203,19 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
       return -1;
     }
 
+#ifdef SO_BINDTODEVICE
+  if (oi->type != OSPF_IFTYPE_VIRTUALLINK)
+    {
+      ret = setsockopt (sock, SOL_SOCKET, SO_BINDTODEVICE,
+			ifp->name, strlen(ifp->name)+1);
+  
+      if (ret < 0) {
+	zlog_warn ("can't bind socket to device %s", ifp->name);
+	return ret;
+      }
+    }
+#endif /* SO_BINDTODEVICE */
+
   oi->fd = sock;
 
   /* Point-to-Point and Broadcast Network should be joined to

@@ -229,6 +229,9 @@ main (int argc, char **argv)
   ospf_lsa_init ();
   ospf_route_init ();
   ospf_route_map_init ();
+#ifdef HAVE_SNMP
+  ospf_snmp_init ();
+#endif /* HAVE_SNMP */
   
   sort_node ();
 

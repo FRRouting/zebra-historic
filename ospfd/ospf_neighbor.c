@@ -70,6 +70,8 @@ ospf_nbr_new (struct ospf_interface *oi)
   /* Last received and sent DD. */
   nbr->last_send = NULL;
 
+  nbr->nbr_static = NULL;
+
   /* Initialize lists. */
   /* nbr->ls_retransmit = list_init (); */
   /* nbr->db_summary = list_init (); */
@@ -109,6 +111,12 @@ ospf_nbr_free (struct ospf_neighbor *nbr)
   /* Clear last send packet. */
   if (nbr->last_send)
     ospf_packet_free (nbr->last_send);
+
+  if (nbr->nbr_static)
+    {
+      nbr->nbr_static->neighbor = NULL;
+      nbr->nbr_static = NULL;
+    }
 
   /* Cancel all timers. */
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);

@@ -23,7 +23,6 @@
 
 #include "linklist.h"
 #include "prefix.h"
-#include "roken.h"
 #include "stream.h"
 #include "thread.h"
 #include "log.h"
@@ -518,7 +517,7 @@ bgp_open_capability (struct stream *s, struct peer *peer)
   /* Route refresh. */
   if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
     {
-      peer->refresh = 1;
+      peer->refresh_adv = 1;
       stream_putc (s, BGP_OPEN_OPT_CAP);
       stream_putc (s, CAPABILITY_CODE_REFRESH_LEN + 2);
       stream_putc (s, CAPABILITY_CODE_REFRESH);

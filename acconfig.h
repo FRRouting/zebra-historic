@@ -4,6 +4,9 @@
 /* Version of GNU Zebra */
 #undef VERSION
 
+/* Solaris on x86. */
+#undef SOLARIS_X86
+
 /* Package name of GNU Zebra */
 #undef PACKAGE
 
@@ -24,18 +27,6 @@
 
 /* Define if you have ipv6 stack.  */
 #undef HAVE_IPV6
-
-/* define if libc_r exists */
-#undef HAVE_LIBC_R
-
-/* Define if you have pthread.h and pthread library */
-#undef HAVE_LIBPTHREAD
-
-/* Define pthread_t in sys/types.h */
-#undef HAVE_PTHREAD
-
-/* Define if you have the <pthread.h> header file.  */
-#undef HAVE_PTHREAD_H
 
 /* whether system has GNU regex */
 #undef HAVE_GNU_REGEX
@@ -103,6 +94,9 @@
 /* Define this if htnol is broken, but can be fixed with define magic */
 #undef HAVE_REPAIRABLE_HTONL
 
+/* PAM support */
+#undef USE_PAM
+
 /* PATHS */
 #undef PATH_ZEBRA_PID
 #undef PATH_RIPD_PID
@@ -145,3 +139,8 @@ typedef unsigned short u_int8_t;
 #ifndef HAVE_SOCKLEN_T
 typedef int socklen_t;
 #endif /* HAVE_SOCKLEN_T */
+
+/* Pseudo interfaces */
+#undef HAVE_IF_PSEUDO
+/* #define RIP_API 1 */
+#undef RIP_API

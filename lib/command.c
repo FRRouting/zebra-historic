@@ -2513,9 +2513,9 @@ DEFUN (no_service_password_encrypt,
 
 DEFUN (config_terminal_length, config_terminal_length_cmd,
        "terminal length <0-512>",
-       "Terminal configuration setup\n"
-       "Terminal length setup\n"
-       "Number of lines of VTY (0 means no line control)\n")
+       "Set terminal line parameters\n"
+       "Set number of lines on a screen\n"
+       "Number of lines on screen (0 for no pausing)\n")
 {
   int lines;
   char *endptr = NULL;
@@ -2531,12 +2531,11 @@ DEFUN (config_terminal_length, config_terminal_length_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_config_terminal_length, no_config_terminal_length_cmd,
-       "no terminal length [<0-512>]",
+DEFUN (config_terminal_no_length, config_terminal_no_length_cmd,
+       "terminal no length",
+       "Set terminal line parameters\n"
        NO_STR
-       "Terminal configuration setup\n"
-       "Terminal length setup\n"
-       "Number of lines of VTY (0 means no line control)\n")
+       "Set number of lines on a screen\n")
 {
   vty->lines = -1;
   return CMD_SUCCESS;
@@ -2804,7 +2803,7 @@ cmd_init (int terminal)
       install_element (VIEW_NODE, &config_help_cmd);
       install_element (VIEW_NODE, &config_enable_cmd);
       install_element (VIEW_NODE, &config_terminal_length_cmd);
-      install_element (VIEW_NODE, &no_config_terminal_length_cmd);
+      install_element (VIEW_NODE, &config_terminal_no_length_cmd);
     }
 
   if (terminal)
@@ -2818,9 +2817,7 @@ cmd_init (int terminal)
   install_element (ENABLE_NODE, &copy_runningconfig_startupconfig_cmd);
   install_element (ENABLE_NODE, &show_version_cmd);
   install_element (ENABLE_NODE, &config_terminal_length_cmd);
-  install_element (ENABLE_NODE, &no_config_terminal_length_cmd);
-  install_element (ENABLE_NODE, &service_terminal_length_cmd);
-  install_element (ENABLE_NODE, &no_service_terminal_length_cmd);
+  install_element (ENABLE_NODE, &config_terminal_no_length_cmd);
 
   if (terminal)
     install_default (CONFIG_NODE);

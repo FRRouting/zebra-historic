@@ -1,3 +1,33 @@
+2000-09-24  Harald Welte <laforge@gnumonks.org>
+
+	* rt_netlink.c (netlink_interface_addr): Fix pont-to-point address
+	treatment in netlink interface.
+
+2000-09-21  David Lipovkov <dlipovkov@OpticalAccess.com>
+
+	* rib.c (rib_if_down): Pull static route only.  Protocol daemon
+	must withdraw routes when interface goes down.
+	(rib_add_ipv4): Check nexthop when replace route.
+
+2000-09-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if_ioctl.c (if_getaddrs): New function for looking up
+	interface's address by getifaddrs().
+
+2000-09-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* connected.c (connected_delete_ipv4): Add check for connected
+	address is found or not.
+	(connected_add_ipv6): Reflect IPv6 connected address change to
+	protocol daemons.
+	(connected_delete_ipv6): Likewise.
+
+2000-09-07  David Lipovkov <davidl@nbase.co.il>
+
+	* rib.c (rib_delete_ipv4): Reverted the change from pseudo
+	interface patch to original.  Because ospfd deletes routes using
+	zero ifindex.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.88 is released.

@@ -23,7 +23,7 @@
 
 #include "newlist.h"
 #include "memory.h"
-
+
 struct newlist *
 newlist_new ()
 {
@@ -55,7 +55,7 @@ newnode_free (struct newnode *newnode)
 {
   XFREE (MTYPE_NEWNODE, newnode);
 }
-
+
 void
 newnode_add (struct newlist *list, void *val)
 {
@@ -134,12 +134,4 @@ newlist_delete (struct newlist *list)
       newnode_free (n);
     }
   newlist_free (list);
-}
-
-void *
-newlist_first (struct newlist *list)
-{
-  if (list->head)
-    return list->head->data;
-  return NULL;
 }

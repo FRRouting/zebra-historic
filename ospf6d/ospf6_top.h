@@ -28,9 +28,8 @@
 /* ospfv3 top level data structure */
 struct ospf6
 {
-  /* process id & instance id*/
-  /* unsinged long instance_id; */
-  unsigned long process_id;
+  /* process id */
+  u_long process_id;
 
   /* start time */
   struct timeval starttime;
@@ -85,8 +84,8 @@ struct ospf6
     struct route_map *map;
   } rmap[ZEBRA_ROUTE_MAX];
 
-  /* Interfaces */
-  list ospf6_interface_list;
+  struct thread *route_calculation;
+  u_int stat_route_calculation_execed;
 };
 
 /* prototypes */

@@ -28,6 +28,20 @@ versions, except that this permission notice may be stated in a
 translation approved by Kunihiro Ishiguro.
 
 
+File: zebra.info,  Node: Router Advertisement,  Prev: IPv6 Supports,  Up: IPv6 Supports
+
+Router Advertisement
+====================
+
+ - Interface Command: ipv6 nd send-ra
+
+ - Interface Command: ipv6 nd prefix-advertisement IPV6PREFIX
+
+     interface eth0
+      ipv6 nd send-ra
+      ipv6 nd prefix-advertisement 3ffe:506:5009::/64
+
+
 File: zebra.info,  Node: Kernel Interface,  Next: SNMP Support,  Prev: IPv6 Supports,  Up: Top
 
 Kernel Interface

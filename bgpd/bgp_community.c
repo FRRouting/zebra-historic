@@ -1,5 +1,4 @@
-/*
- * Community attribute related functions.
+/* Community attribute related functions.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -26,13 +25,89 @@
 #include "memory.h"
 #include "vector.h"
 #include "vty.h"
-#include "roken.h"
 #include "str.h"
 
 #include "bgpd/bgp_community.h"
 
 /* Hash of community attribute. */
 struct Hash *comhash;
+
+struct community *
+community_new ()
+{
+  struct community *new;
+
+  new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
+  memset (new, 0, sizeof (struct community));
+  return new;
+}
+
+void
+community_free (struct community *com)
+{
+  if (com->val)
+    XFREE (MTYPE_COMMUNITY_VAL, com->val);
+  XFREE (MTYPE_COMMUNITY, com);
+}
+
+/* Add one community value to the community. */
+void
+community_add_val (struct community *com, u_int32_t val)
+{
+  com->size++;
+  if (com->val)
+    com->val = XREALLOC (MTYPE_COMMUNITY_VAL, com->val, com_length (com));
+  else
+    com->val = XMALLOC (MTYPE_COMMUNITY_VAL, com_length (com));
+  com_lastval (com) = htonl (val);
+}
+
+/* Callback function from qsort(). */
+int
+community_compare (const void *a1, const void *a2)
+{
+  u_int32_t v1 = ntohl (*((u_int32_t *) a1));
+  u_int32_t v2 = ntohl (*((u_int32_t *) a2));
+
+  if (v1 < v2)
+    return -1;
+  if (v1 > v2)
+    return 1;
+  return 0;
+}
+
+int
+community_include (struct community *com, u_int32_t val)
+{
+  int i;
+
+  for (i = 0; i < com->size; i++)
+    if (ntohl (com_nthval (com, i)) == val)
+      return 1;
+  return 0;
+}
+
+/* Sort and uniq given community. */
+struct community *
+community_uniq_sort (struct community *com)
+{
+  int i;
+  struct community *new;
+  u_int32_t val;
+  
+  new = community_new ();;
+  
+  for (i = 0; i < com->size; i++)
+    {
+      val = ntohl (com_nthval (com, i));
+      if (! community_include (new, val))
+	community_add_val (new, val);
+    }
+
+  qsort (new->val, new->size, sizeof (u_int32_t), community_compare);
+
+  return new;
+}
 
 /* Create new community attribute. */
 struct community *
@@ -50,44 +125,25 @@ community_parse (char *pnt, u_short length)
   tmp.size = length / 4;
   tmp.val = (u_int32_t *) pnt;
 
+  new = community_uniq_sort (&tmp);
+
   /* Looking up hash of community attribute. */
-  find = (struct community *) hash_search (comhash, &tmp);
+  find = (struct community *) hash_search (comhash, new);
   if (find)
     {
       find->refcnt++;
+      community_free (new);
       return find;
     }
 
-  /* Make new community attribute and intern it into hash. */
-  new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
-
-  /* new->refcnt = 1; */
   new->refcnt = 1;
-  new->size = length / 4;
-  new->val = (u_int32_t *) XMALLOC (MTYPE_COMMUNITY_VAL, length);
-  memcpy (new->val, pnt, length);
+  /* new->size = length / 4; */
+  /* new->val = (u_int32_t *) XMALLOC (MTYPE_COMMUNITY_VAL, length); */
+  /* memcpy (new->val, pnt, length); */
 
   hash_push (comhash, new);
 
   return new;
-}
-
-struct community *
-community_new ()
-{
-  struct community *new;
-
-  new = XMALLOC (MTYPE_COMMUNITY, sizeof (struct community));
-  bzero (new, sizeof (struct community));
-  return new;
-}
-
-void
-community_free (struct community *com)
-{
-  if (com->val)
-    XFREE (MTYPE_COMMUNITY_VAL, com->val);
-  XFREE (MTYPE_COMMUNITY, com);
 }
 
 struct community *
@@ -216,17 +272,6 @@ community_match (struct community *com1, struct community *com2)
 
   for (i = 0; i <= com1->size - com2->size; i++)
     if (memcmp (com1->val + i, com2->val, com2->size * 4) == 0)
-      return 1;
-  return 0;
-}
-
-int
-community_include (struct community *com, u_int32_t val)
-{
-  int i;
-
-  for (i = 0; i < com->size; i++)
-    if (com_nthval (com, i) == ntohl (val))
       return 1;
   return 0;
 }
@@ -415,23 +460,12 @@ community_gettoken (char *buf, enum community_token *token, u_int32_t *val)
   return p;
 }
 
-/* Add one community value to the community. */
-void
-community_add_val (struct community *com, u_int32_t val)
-{
-  com->size++;
-  if (com->val)
-    com->val = XREALLOC (MTYPE_COMMUNITY_VAL, com->val, com_length (com));
-  else
-    com->val = XMALLOC (MTYPE_COMMUNITY_VAL, com_length (com));
-  com_lastval (com) = htonl (val);
-}
-
 /* convert string to community structure */
 struct community *
 community_str2com (char *str)
 {
   struct community *com = NULL;
+  struct community *com_sort = NULL;
   u_int32_t val;
   enum community_token token;
 
@@ -455,7 +489,11 @@ community_str2com (char *str)
 	  break;
 	}
     }
-  return com;
+  
+  com_sort = community_uniq_sort (com);
+  community_free (com);
+
+  return com_sort;
 }
 
 void
@@ -463,9 +501,13 @@ community_test ()
 {
   struct community *com1;
   struct community *com2;
+  struct community *com3;
 
   com1 = community_str2com ("no-export local-AS 7675:1");
-  com2 = community_str2com ("3651:1 2");
-  community_merge (com1, com2);
-  printf ("%s\n", community_print (com1));
+  com2 = community_str2com ("1:3 1:2 1:1 1:3 1:1 1:2 1:3");
+  /* community_merge (com1, com2); */
+
+  printf ("%d %s\n", com2->size, community_print (com2));
+  com3 = community_uniq_sort (com2);
+  printf ("%d %s\n", com3->size, community_print (com3));
 }

@@ -186,8 +186,8 @@ nlri_parse_vpnv4 (struct peer *peer, struct attr *attr,
 DEFUN (address_family_vpnv4,
        address_family_vpnv4_cmd,
        "address-family vpnv4",
-       "Address family configuration\n"
-       "IPv4 MPLS-VPN\n")
+       "Enter Address Family command mode\n"
+       "Address family\n")
 {
   vty->node = BGP_VPNV4_NODE;
   return CMD_SUCCESS;
@@ -196,14 +196,14 @@ DEFUN (address_family_vpnv4,
 ALIAS (address_family_vpnv4,
        address_family_vpnv4_unicast_cmd,
        "address-family vpnv4 unicast",
-       "Address family configuration\n"
-       "IPv4 MPLS-VPN\n"
-       "Unicast\n")
+       "Enter Address Family command mode\n"
+       "Address family\n"
+       "Address Family Modifier\n")
 
 DEFUN (exit_address_family,
        exit_address_family_cmd,
        "exit-address-family",
-       "Exit from address family configuration\n")
+       "Exit from Address Family configuration mode\n")
 {
   if (vty->node == BGP_VPNV4_NODE)
     vty->node = BGP_NODE;
@@ -215,7 +215,7 @@ DEFUN (vpnv4_activate,
        "neighbor A.B.C.D activate",
        NEIGHBOR_STR
        "Neighbor address\n"
-       "Activate this peer\n")
+       "Enable the Address Family for this Neighbor\n")
 {
   return peer_activate (vty, argv[0], AFI_IP, SAFI_MPLS_VPN);
 }
@@ -226,7 +226,7 @@ DEFUN (no_vpnv4_activate,
        NO_STR
        NEIGHBOR_STR
        "Neighbor address\n"
-       "De-activate this peer\n")
+       "Enable the Address Family for this Neighbor\n")
 {
   return peer_deactivate (vty, argv[0], AFI_IP, SAFI_MPLS_VPN);
 }
@@ -307,12 +307,12 @@ str2tag (u_char *str, u_char *tag)
 /* For testing purpose, static route of MPLS-VPN. */
 DEFUN (vpnv4_network,
        vpnv4_network_cmd,
-       "network A.B.C.D/M rd WORD tag WORD",
-       "static route for VPNv4\n"
-       "prefix\n"
-       "rd\n"
-       "rd value\n"
-       "tag\n"
+       "network A.B.C.D/M rd ASN:nn_or_IP-address:nn tag WORD",
+       "Specify a network to announce via BGP\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Specify Route Distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "BGP tag\n"
        "tag value\n")
 {
   return bgp_static_set_vpnv4 (vty, argv[0], argv[1], argv[2]);
@@ -321,13 +321,13 @@ DEFUN (vpnv4_network,
 /* For testing purpose, static route of MPLS-VPN. */
 DEFUN (no_vpnv4_network,
        no_vpnv4_network_cmd,
-       "no network A.B.C.D/M rd WORD tag WORD",
+       "no network A.B.C.D/M rd ASN:nn_or_IP-address:nn tag WORD",
        NO_STR
-       "static route for VPNv4\n"
-       "prefix\n"
-       "rd\n"
-       "rd value\n"
-       "tag\n"
+       "Specify a network to announce via BGP\n"
+       "IP prefix <network>/<length>, e.g., 35.0.0.0/8\n"
+       "Specify Route Distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "BGP tag\n"
        "tag value\n")
 {
   return bgp_static_unset_vpnv4 (vty, argv[0], argv[1], argv[2]);
@@ -482,7 +482,7 @@ bgp_show_mpls_vpn_route (struct vty *vty, char *ip_str)
       }
   if (! display)
     {
-      vty_out (vty, "Can't find route%s", VTY_NEWLINE);
+      vty_out (vty, "%% Network not in table%s", VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -495,8 +495,8 @@ DEFUN (show_ip_bgp_vpnv4_all,
        SHOW_STR
        IP_STR
        BGP_STR
-       "VPNv4\n"
-       "All routes\n")
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n")
 {
   return bgp_show_mpls_vpn (vty, 0);
 }
@@ -508,9 +508,9 @@ DEFUN (show_ip_bgp_vpnv4_all_tags,
        SHOW_STR
        IP_STR
        BGP_STR
-       "VPNv4\n"
-       "All\n"
-       "Tags\n")
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "Display BGP tags for prefixes\n")
 {
   return bgp_show_mpls_vpn (vty, 1);
 }
@@ -521,9 +521,9 @@ DEFUN (show_ip_bgp_vpnv4_all_route,
        SHOW_STR
        IP_STR
        BGP_STR
-       "VPNv4\n"
-       "All RD routes\n"
-       "prefix to display\n")
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "Network in the BGP routing table to display\n")
 {
   return bgp_show_mpls_vpn_route (vty, argv[0]);
 }

@@ -1,3 +1,41 @@
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.89 is released.
+
+2000-09-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add check for Intel CPU for Solaris on x86 check.
+
+2000-09-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add check for getifaddrs().
+	Set AM_INIT_AUTOMAKE version to 0.89.
+
+2000-09-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* config.guess: Update to the latest version.
+
+	* config.sub: Likewise
+
+2000-09-14  David Lipovkov <dlipovkov@OpticalAccess.com>
+
+	* REPORTING-BUGS: New file is added.
+
+2000-08-27  itojun@iijlab.net
+
+	* configure.in: Add ncurses library check when --enable-vtysh is
+	specified.
+
+2000-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add check for readline/history.h.
+
+	* acconfig.h: Remove pthread related variables.
+
+	* configure.in: Add --with-libpam option for vtysh PAM
+	authentication.  Remove --disable-pthread because we don't support
+	pthread.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.88 is released.

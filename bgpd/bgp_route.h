@@ -82,6 +82,9 @@ struct bgp_info_tag
   /* Aggregate related information. */
   int suppress;
   
+  /* Nexthop reachability check. */
+  u_int32_t valid;
+
   /* Time */
   time_t uptime;
 

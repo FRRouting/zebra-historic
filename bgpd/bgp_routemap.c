@@ -210,46 +210,6 @@ struct route_map_rule_cmd route_match_ip_next_hop_cmd =
   route_match_ip_next_hop_free
 };
 
-/* `match ip prefix-list PREFIX_LIST' */
-
-route_map_result_t
-route_match_ip_prefix_list (void *rule, struct prefix *prefix, 
-			    route_map_object_t type, void *object)
-{
-  struct prefix_list *plist;
-
-  if (type == RMAP_BGP)
-    {
-      plist = prefix_list_lookup (AF_INET, (char *) rule);
-      if (plist == NULL)
-	return RMAP_NOMATCH;
-    
-      return (prefix_list_apply (plist, prefix) == PREFIX_DENY ?
-	      RMAP_NOMATCH : RMAP_MATCH);
-    }
-  return RMAP_NOMATCH;
-}
-
-void *
-route_match_ip_prefix_list_compile (char *arg)
-{
-  return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
-}
-
-void
-route_match_ip_prefix_list_free (void *rule)
-{
-  XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
-}
-
-struct route_map_rule_cmd route_match_ip_prefix_list_cmd =
-{
-  "ip prefix-list",
-  route_match_ip_prefix_list,
-  route_match_ip_prefix_list_compile,
-  route_match_ip_prefix_list_free
-};
-
 /* `match ip address prefix-list PREFIX_LIST' */
 
 route_map_result_t
@@ -927,6 +887,7 @@ route_map_result_t
 route_set_community_additive (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct community *com;
+  struct community *merge;
   struct community *old_com;
   struct community *new_com;
   struct bgp_info *bgp_info;
@@ -942,7 +903,11 @@ route_set_community_additive (void *rule, struct prefix *prefix, route_map_objec
       old_com = bgp_info->attr->community;
 
       if (old_com)
-	new_com = community_merge (community_dup (old_com), com);
+	{
+	  merge = community_merge (community_dup (old_com), com);
+	  new_com = community_uniq_sort (merge);
+	  community_free (merge);
+	}
       else
 	new_com = community_dup (com);
 
@@ -1398,10 +1363,10 @@ struct route_map_rule_cmd route_match_ipv6_next_hop_cmd =
   route_match_ipv6_next_hop_free
 };
 
-/* `match ipv6 prefix-list PREFIX_LIST' */
+/* `match ipv6 address prefix-list PREFIX_LIST' */
 
 route_map_result_t
-route_match_ipv6_prefix_list (void *rule, struct prefix *prefix, 
+route_match_ipv6_address_prefix_list (void *rule, struct prefix *prefix, 
 			      route_map_object_t type, void *object)
 {
   struct prefix_list *plist;
@@ -1419,23 +1384,23 @@ route_match_ipv6_prefix_list (void *rule, struct prefix *prefix,
 }
 
 void *
-route_match_ipv6_prefix_list_compile (char *arg)
+route_match_ipv6_address_prefix_list_compile (char *arg)
 {
   return XSTRDUP (MTYPE_ROUTE_MAP_COMPILED, arg);
 }
 
 void
-route_match_ipv6_prefix_list_free (void *rule)
+route_match_ipv6_address_prefix_list_free (void *rule)
 {
   XFREE (MTYPE_ROUTE_MAP_COMPILED, rule);
 }
 
-struct route_map_rule_cmd route_match_ipv6_prefix_list_cmd =
+struct route_map_rule_cmd route_match_ipv6_address_prefix_list_cmd =
 {
-  "ipv6 prefix-list",
-  route_match_ipv6_prefix_list,
-  route_match_ipv6_prefix_list_compile,
-  route_match_ipv6_prefix_list_free
+  "ipv6 address prefix-list",
+  route_match_ipv6_address_prefix_list,
+  route_match_ipv6_address_prefix_list_compile,
+  route_match_ipv6_address_prefix_list_free
 };
 
 /* `set ipv6 nexthop global IP_ADDRESS' */
@@ -1860,6 +1825,16 @@ DEFUN (match_ip_next_hop,
        "Match next-hop address of route\n"
        "IP address of next hop\n")
 {
+  union sockunion su;
+  int ret;
+
+  ret = str2sockunion (argv[0], &su);
+  if (ret < 0)
+    {
+      vty_out (vty, "%% Malformed Next-hop address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+ 
   return bgp_route_match_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
@@ -1875,29 +1850,6 @@ DEFUN (no_match_ip_next_hop,
   return bgp_route_match_delete (vty, vty->index, "ip next-hop", argv[0]);
 }
 
-DEFUN (match_ip_prefix_list, 
-       match_ip_prefix_list_cmd,
-       "match ip prefix-list WORD",
-       MATCH_STR
-       IP_STR
-       "Match entries of prefix-lists\n"
-       "IP prefix-list name\n")
-{
-  return bgp_route_match_add (vty, vty->index, "ip prefix-list", argv[0]);
-}
-
-DEFUN (no_match_ip_prefix_list,
-       no_match_ip_prefix_list_cmd,
-       "no match ip prefix-list WORD",
-       NO_STR
-       MATCH_STR
-       IP_STR
-       "Match entries of prefix-lists\n"
-       "IP prefix-list name\n")
-{
-  return bgp_route_match_delete (vty, vty->index, "ip prefix-list", argv[0]);
-}
-
 DEFUN (match_ip_address_prefix_list, 
        match_ip_address_prefix_list_cmd,
        "match ip address prefix-list WORD",
@@ -1909,6 +1861,14 @@ DEFUN (match_ip_address_prefix_list,
 {
   return bgp_route_match_add (vty, vty->index, "ip address prefix-list", argv[0]);
 }
+
+ALIAS (match_ip_address_prefix_list, 
+       match_ip_prefix_list_cmd,
+       "match ip prefix-list WORD",
+       MATCH_STR
+       IP_STR
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 
 DEFUN (no_match_ip_address_prefix_list,
        no_match_ip_address_prefix_list_cmd,
@@ -2092,6 +2052,16 @@ DEFUN (set_ip_nexthop,
        "Next hop address\n"
        "IP address of next hop\n")
 {
+  union sockunion su;
+  int ret;
+
+  ret = str2sockunion (argv[0], &su);
+  if (ret < 0)
+    {
+      vty_out (vty, "%% Malformed Next-hop address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+ 
   return bgp_route_set_add (vty, vty->index, "ip next-hop", argv[0]);
 }
 
@@ -2802,27 +2772,37 @@ DEFUN (no_match_ipv6_next_hop,
   return bgp_route_match_delete (vty, vty->index, "ipv6 next-hop", argv[0]);
 }
 
-DEFUN (match_ipv6_prefix_list, 
+DEFUN (match_ipv6_address_prefix_list, 
+       match_ipv6_address_prefix_list_cmd,
+       "match ipv6 address prefix-list WORD",
+       MATCH_STR
+       IPV6_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
+{
+  return bgp_route_match_add (vty, vty->index, "ipv6 address prefix-list", argv[0]);
+}
+
+ALIAS (match_ipv6_address_prefix_list, 
        match_ipv6_prefix_list_cmd,
        "match ipv6 prefix-list WORD",
        MATCH_STR
        IPV6_STR
-       "Match entries of IPv6 prefix-list\n"
-       "IPv6 prefix-list name\n")
-{
-  return bgp_route_match_add (vty, vty->index, "ipv6 prefix-list", argv[0]);
-}
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 
-DEFUN (no_match_ipv6_prefix_list,
-       no_match_ipv6_prefix_list_cmd,
-       "no match ipv6 prefix-list WORD",
+DEFUN (no_match_ipv6_address_prefix_list,
+       no_match_ipv6_address_prefix_list_cmd,
+       "no match ipv6 address prefix-list WORD",
        NO_STR
        MATCH_STR
        IPV6_STR
-       "Match entries of IPv6 prefix-list\n"
-       "IPv6 prefix-list name\n")
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 {
-  return bgp_route_match_delete (vty, vty->index, "ipv6 prefix-list", argv[0]);
+  return bgp_route_match_delete (vty, vty->index, "ipv6 address prefix-list", argv[0]);
 }
 
 DEFUN (set_ipv6_nexthop_global,
@@ -2977,7 +2957,6 @@ bgp_route_map_init ()
 
   route_map_install_match (&route_match_ip_address_cmd);
   route_map_install_match (&route_match_ip_next_hop_cmd);
-  route_map_install_match (&route_match_ip_prefix_list_cmd);
   route_map_install_match (&route_match_ip_address_prefix_list_cmd);
   route_map_install_match (&route_match_aspath_cmd);
   route_map_install_match (&route_match_community_cmd);
@@ -3006,7 +2985,6 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
   install_element (RMAP_NODE, &match_ip_prefix_list_cmd);
-  install_element (RMAP_NODE, &no_match_ip_prefix_list_cmd);
 
   install_element (RMAP_NODE, &match_ip_address_prefix_list_cmd);
   install_element (RMAP_NODE, &no_match_ip_address_prefix_list_cmd);
@@ -3064,7 +3042,7 @@ bgp_route_map_init ()
 #ifdef HAVE_IPV6
   route_map_install_match (&route_match_ipv6_address_cmd);
   route_map_install_match (&route_match_ipv6_next_hop_cmd);
-  route_map_install_match (&route_match_ipv6_prefix_list_cmd);
+  route_map_install_match (&route_match_ipv6_address_prefix_list_cmd);
   route_map_install_set (&route_set_ipv6_nexthop_global_cmd);
   route_map_install_set (&route_set_ipv6_nexthop_local_cmd);
 
@@ -3072,8 +3050,9 @@ bgp_route_map_init ()
   install_element (RMAP_NODE, &no_match_ipv6_address_cmd);
   install_element (RMAP_NODE, &match_ipv6_next_hop_cmd);
   install_element (RMAP_NODE, &no_match_ipv6_next_hop_cmd);
+  install_element (RMAP_NODE, &match_ipv6_address_prefix_list_cmd);
+  install_element (RMAP_NODE, &no_match_ipv6_address_prefix_list_cmd);
   install_element (RMAP_NODE, &match_ipv6_prefix_list_cmd);
-  install_element (RMAP_NODE, &no_match_ipv6_prefix_list_cmd);
   install_element (RMAP_NODE, &set_ipv6_nexthop_global_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_cmd);
   install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_val_cmd);

@@ -1202,6 +1202,26 @@ vtysh
 
    `vtysh' is integrated shell of Zebra software.
 
+   To use vtysh please specify --enable-vtysh to configure script.  To
+use PAM for authentication use --with-libapm option to configure script.
+
+   vtysh only search /usr/local/etc path for vtysh.conf which is vtysh
+configuration file.  Please not vtysh does not search current directory
+for configuration file.  Because the file include user authentication
+settings.
+
+   Currently vtysh.conf have only one command.
+
+     !
+     username foo nopassword
+     !
+
+   This set user foo does not need password authentication for user
+vtysh.  With PAM vtysh use PAM authentication mechanism.
+
+   If vtysh compiled without PAM authentication, every user can use
+vtysh without authentication.
+
 
 File: zebra.info,  Node: Filtering,  Next: Route Map,  Prev: vtysh,  Up: Top
 
@@ -1508,18 +1528,4 @@ advertisement messages to the all nodes that exist on the network.
 * Menu:
 
 * Router Advertisement::
-
-
-File: zebra.info,  Node: Router Advertisement,  Prev: IPv6 Supports,  Up: IPv6 Supports
-
-Router Advertisement
-====================
-
- - Interface Command: ipv6 nd send-ra
-
- - Interface Command: ipv6 nd prefix-advertisement IPV6PREFIX
-
-     interface eth0
-      ipv6 nd send-ra
-      ipv6 nd prefix-advertisement 3ffe:506:5009::/64
 

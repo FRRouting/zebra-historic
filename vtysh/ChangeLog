@@ -1,3 +1,32 @@
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am (noinst_HEADERS): Add vtysh_user.h.
+
+	* zebra-0.89 is released.
+
+2000-09-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh_main.c: Declare thread master.
+
+2000-08-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh_main.c (main): Add missing --help procudure.  Reported by
+	Patrick Rother <krd@roka.net>.
+
+2000-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh.c (DEFUNSH): "interface IFNAME" works.
+
+2000-08-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh_user.c: Change name from vtysh_pam.c.
+
+	* vtysh.conf.sample: New file for vtysh configuration.
+
+2000-08-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vtysh_pam.c (vtysh_pam): New file for PAM.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.88 is released.

@@ -1,7 +1,5 @@
-/*
- * Thread management routine
- * Inspired by Ikuo Nakagawa's em.[ch] event manager.
- * Copyright (C) 1998 Kunihiro Ishiguro
+/* Thread management routine
+ * Copyright (C) 1998, 2000 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
  * This file is part of GNU Zebra.
  *
@@ -21,7 +19,6 @@
  * 02111-1307, USA.  
  */
 
-/* #define PTHREAD */
 /* #define DEBUG */
 
 #include <zebra.h>
@@ -417,13 +414,6 @@ thread_cancel (struct thread *thread)
 #ifdef DEBUG
   thread_master_debug (thread->master);
 #endif /* DEBUG */
-
-#ifdef HAVE_PTHREAD
-  if (thread->id)
-    {
-      pthread_cancel (thread->id);
-    }
-#endif /* HAVE_PTHREAD */
 }
 
 /* Delete all events which has argument value arg. */
@@ -712,13 +702,8 @@ thread_get_id ()
 void
 thread_call (struct thread *thread)
 {
-#ifdef HAVE_PTHREAD
-  pthread_create (&thread->id, NULL, (void *(*)(void *))thread->func, thread);
-  pthread_detach (thread->id);
-#else
   thread->id = thread_get_id ();
   (*thread->func) (thread);
-#endif /* HAVE_PTHREAD */
 }
 
 /* Execute thread */

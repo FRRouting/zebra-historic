@@ -49,6 +49,7 @@
 #include "ospfd/ospf_abr.h"
 
 extern unsigned long term_debug_ospf_nsm;
+void nsm_reset_nbr (struct ospf_neighbor *);
 
 
 /* OSPF NSM Timer functions. */
@@ -156,12 +157,26 @@ nsm_hello_received (struct ospf_neighbor *nbr)
   OSPF_NSM_TIMER_ON (nbr->t_inactivity, ospf_inactivity_timer,
 		     nbr->v_inactivity);
 
+  if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_static)
+    OSPF_POLL_TIMER_OFF (nbr->nbr_static->t_poll);
+
   return 0;
 }
 
 int
 nsm_start (struct ospf_neighbor *nbr)
 {
+
+  nsm_reset_nbr (nbr);
+
+  if (nbr->nbr_static)
+      OSPF_POLL_TIMER_OFF (nbr->nbr_static->t_poll);
+
+  OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
+  
+  OSPF_NSM_TIMER_ON (nbr->t_inactivity, ospf_inactivity_timer,
+                     nbr->v_inactivity);
+
   return 0;
 }
 
@@ -266,7 +281,6 @@ ospf_db_summary_clear (struct ospf_neighbor *nbr)
 }
 
 
-void nsm_reset_nbr (struct ospf_neighbor *);
 
 /* The area link state database consists of the router-LSAs,
    network-LSAs and summary-LSAs contained in the area structure,
@@ -432,6 +446,7 @@ nsm_reset_nbr (struct ospf_neighbor *nbr)
   OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
   OSPF_NSM_TIMER_OFF (nbr->t_ls_req);
   OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
+  OSPF_NSM_TIMER_OFF (nbr->t_hello_reply);
 }
 
 int
@@ -445,6 +460,24 @@ nsm_kill_nbr (struct ospf_neighbor *nbr)
   
   /* Reset neighbor. */
   nsm_reset_nbr (nbr);
+
+  if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_static != NULL)
+    {
+      struct ospf_nbr_static *nbr_static = nbr->nbr_static;
+
+      nbr_static->neighbor = NULL;
+      nbr_static->state_change = nbr->state_change;
+
+      nbr->nbr_static = NULL;
+
+      OSPF_POLL_TIMER_ON (nbr_static->t_poll, ospf_poll_timer,
+			  nbr_static->v_poll);
+
+      if (IS_DEBUG_OSPF (nsm, NSM_EVENTS))
+	zlog_info ("NSM[%s:%s]: Down (PollIntervalTimer scheduled)",
+		   nbr->oi->ifp->name,
+		   inet_ntoa (nbr->address.u.prefix4));  
+    }
 
   /* Delete neighbor from interface. */
   ospf_nbr_delete (nbr);
@@ -656,7 +689,8 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 {
   int old_status;
   struct ospf_interface *oi;
-
+  struct ospf_area *vl_area = NULL;
+  
   /* Logging change of status. */
   if (IS_DEBUG_OSPF (nsm, NSM_STATUS))
     zlog_info ("NSM[%s:%s]: Status change %s -> %s",
@@ -674,6 +708,10 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
   nbr->state_change++;
 
   oi = nbr->oi;
+
+  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
+    vl_area = ospf_area_lookup_by_area_id (oi->vl_data->vl_area_id);
+  
   /* One of the neighboring routers changes to/from the FULL state. */
   if ((old_status != NSM_Full && status == NSM_Full) ||
       (old_status == NSM_Full && status != NSM_Full))
@@ -685,8 +723,8 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 
           ospf_check_abr_status ();
 
-	  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-            if (++oi->vl_data->vl_area->full_vls == 1)
+	  if (oi->type == OSPF_IFTYPE_VIRTUALLINK && vl_area)
+            if (++vl_area->full_vls == 1)
 	      ospf_schedule_abr_task ();
 	}
       else
@@ -696,19 +734,25 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
 
           ospf_check_abr_status ();
 
-	  if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-	    if (oi->vl_data->vl_area->full_vls > 0)
-	      if (--oi->vl_data->vl_area->full_vls == 0)
+	  if (oi->type == OSPF_IFTYPE_VIRTUALLINK && vl_area)
+	    if (vl_area->full_vls > 0)
+	      if (--vl_area->full_vls == 0)
 		ospf_schedule_abr_task ();
 	}
 
-      zlog_info ("Z: nsm_change_status(): "
+      zlog_info ("nsm_change_status(): "
 		 "scheduling new router-LSA origination");
 
       ospf_router_lsa_timer_add (oi->area);
 
       if (oi->type == OSPF_IFTYPE_VIRTUALLINK)
-	ospf_router_lsa_timer_add (oi->vl_data->vl_area);
+	{
+	  struct ospf_area *vl_area =
+	    ospf_area_lookup_by_area_id (oi->vl_data->vl_area_id);
+	  
+	  if (vl_area)
+	    ospf_router_lsa_timer_add (vl_area);
+	}
 
       /* Originate network-LSA. */
       if (oi->status == ISM_DR)
@@ -800,4 +844,3 @@ ospf_check_nbr_loading (struct ospf_neighbor *nbr)
 	ospf_ls_req_event (nbr);
     }
 }
-

@@ -81,7 +81,6 @@ if_zebra_new_hook (struct interface *ifp)
 int
 if_zebra_delete_hook (struct interface *ifp)
 {
-  rib_if_delete(ifp);
   if (ifp->info)
     XFREE (MTYPE_TMP, ifp->info);
   return 0;
@@ -146,7 +145,6 @@ zebra_interface_down_update (struct interface *ifp)
     if ((client = getdata (node)) != NULL)
       zsend_interface_down (client, ifp);
 }
-
 
 /* Interface goes down.  We have to manage different behavior of based
    OS. */
@@ -987,6 +985,13 @@ if_config_write (struct vty *vty)
 	vty_out (vty, " description %s%s", ifp->desc,
 		 VTY_NEWLINE);
 
+#ifdef HAVE_IF_PSEUDO
+      if (IS_IF_PSEUDO(ifp)){
+	vty_out (vty, " pseudo %s",
+		 VTY_NEWLINE);
+      }
+#endif /* HAVE_IF_PSEUDO */      
+
       /* Assign bandwidth here to avoid unnecessary interface flap
 	 while processing config script */
       if (ifp->bandwidth != 0)
@@ -1046,6 +1051,10 @@ zebra_if_init ()
   install_element (INTERFACE_NODE, &no_multicast_cmd);
   install_element (INTERFACE_NODE, &shutdown_if_cmd);
   install_element (INTERFACE_NODE, &no_shutdown_if_cmd);
+#ifdef HAVE_IF_PSEUDO
+  install_element (INTERFACE_NODE, &interface_pseudo_cmd);
+  install_element (INTERFACE_NODE, &no_interface_pseudo_cmd);
+#endif /* HAVE_IF_PSEUDO */  
   install_element (INTERFACE_NODE, &bandwidth_if_cmd);
   install_element (INTERFACE_NODE, &no_bandwidth_if_cmd);
   install_element (INTERFACE_NODE, &no_bandwidth_if_val_cmd);

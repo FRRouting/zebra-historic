@@ -1,4 +1,84 @@
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.89 is released.
+
+2000-09-26  Akihiro Mizutani <mizutani@dml.com>
+
+	* rip_routemap.c (match_ip_nexthop): Add next-hop format check.
+
+2000-09-18  David Lipovkov <dlipovkov@OpticalAccess.com>
+
+	* rip_interface.c (ripd_api_get_if_rx_version): Corrects rip SNMP
+	and rip API functions dealing with rip version.
+
+	* rip_snmp.c (Status_Valid): SNMPv2-TC TEXTUAL-CONVENTION.
+
+2000-09-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_snmp.c (rip2IfLookup): Use rip_ifaddr_lookup_next() instead
+	of rip_if_lookup_next().
+
+	* rip_interface.c (rip_enable_network_lookup): Interface enable
+	check by interface's address with /32 prefix.
+
+	* ripd.c (rip_read): When RIP is configured with authentication
+	and no authentication in incoming packet, drop the packet.
+
+	* rip_interface.c (rip_interface_reset): RIP_AUTH_SIMPLE_PASSWORD
+	is default mode of authentication.
+	(rip_interface_new): Likewise.
+	(no_ip_rip_authentication_mode): Likewise.
+
+	* ripd.c (rip_read): Likewise.
+
+2000-09-10  David Lipovkov <davidl@nbase.co.il>
+
+	* rip_snmp.c: Set ASN_INTEGER v->type where it is needed.
+
+2000-09-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_auth_simple_password): Simple password
+	authentication using key-chain.
+	(rip_write_rte): Likewise.
+
+	* rip_interface.c (ip_rip_authentication_key_chain): Add check for
+	authentication string configuration.
+
+2000-09-08  Akihiro Mizutani <mizutani@dml.com>
+
+	* ripd.c (rip_write_rte): Add check for ri->auth_str.
+
+2000-09-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd_api.h: New file is added.
+
+2000-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_rte_process): rip_route_process() is renamed to
+	rip_rte_process() to clarify meanings of the function.
+	rip_route_process() is newly added to process RIP route selection.
+
+2000-08-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_incoming_filter): Extract incoming filter code to
+	function from rip_route_process(). Add check for all interface
+	filter.
+	(rip_outgoing_filter): Extract incoming filter code to function
+	from rip_output_process().  Add check for all interface filter.
+
+	* rip_zebra.c (rip_redistribute_clean): Reset redistribute status
+	when "no router rip" is performed.
+
+	* rip_interface.c (rip_interface_clean): Reset interface's RIP
+	enable status.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_route_process): When metric infinity is received the
+	route is removed from service immediately.
+	(rip_timeout): Likewise.
+	(rip_garbage_collect): Do not delete route in garbage collection.
+	(rip_output_process): Check metric_out exceed metric infinity.
 
 	* zebra-0.88 is released.
 

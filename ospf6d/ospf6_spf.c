@@ -76,7 +76,7 @@ vertex_free (struct vertex *v)
 
 /* hold the intermediate results on area routing table */
 static void
-transit_vertex_rtable_install (struct vertex *v, struct area *area)
+transit_vertex_rtable_install (struct vertex *v, struct ospf6_area *area)
 {
   unsigned char dtype;
 
@@ -133,14 +133,14 @@ transit_vertex_rtable_install (struct vertex *v, struct area *area)
 }
 
 static int
-spf_install (struct vertex *v, struct area *area)
+spf_install (struct vertex *v, struct ospf6_area *area)
 {
   listnode n;
   struct vertex *parent;
 
   if (IS_OSPF6_DUMP_SPF)
     {
-      zlog_info ("SPF Install: Depth:%lu Distance:%lu %s",
+      zlog_info ("Spf: Install Depth:%lu Distance:%lu %s",
                  v->vtx_depth, v->vtx_distance, v->str);
     }
 
@@ -165,7 +165,7 @@ spf_install (struct vertex *v, struct area *area)
 }
 
 static int
-spf_init (struct area *area)
+spf_init (struct ospf6_area *area)
 {
   int i, j;
   listnode n;
@@ -206,12 +206,13 @@ spf_init (struct area *area)
     }
 
   /* Install myself as root */
-  myself = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER), htonl (MY_ROUTER_LSA_ID),
-                              area->ospf6->router_id, (void *) area);
+  myself = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
+                              htonl (MY_ROUTER_LSA_ID),
+                              area->ospf6->router_id, area->ospf6);
   if (!myself)
     {
       if (IS_OSPF6_DUMP_SPF)
-        zlog_warn (" *** Router-LSA of myself not found");
+        zlog_warn ("Spf: Router-LSA of myself not found");
       return -1;
     }
 
@@ -261,7 +262,7 @@ router_link (struct vertex *V)
       w_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_NETWORK),
                                  currentlink->rlsd_neighbor_interface_id,
                                  currentlink->rlsd_neighbor_router_id,
-                                 (void *)lsa->scope);
+                                 ospf6);
       if (!w_lsa || !w_lsa->lsa_hdr || ospf6_lsa_is_maxage (w_lsa))
         {
           currentlink++;
@@ -298,7 +299,7 @@ router_link (struct vertex *V)
       w_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
                                  htonl (MY_ROUTER_LSA_ID),
                                  currentlink->rlsd_neighbor_router_id,
-                                 (void *)lsa->scope);
+                                 ospf6);
       if (!w_lsa || !w_lsa->lsa_hdr
           || ospf6_lsa_is_maxage (w_lsa))
         {
@@ -336,8 +337,8 @@ router_link (struct vertex *V)
       return W;
 
     default:
-      zlog_warn ("*** unknown link type, stop calculation for area %s",
-                 ((struct area *)(V->vtx_lsa->scope))->str);
+      zlog_warn ("Spf: *** unknown link type, stop calculation for area %s",
+                 ((struct ospf6_area *)(V->vtx_lsa->scope))->str);
       lsa = (struct ospf6_lsa *)NULL;
       return (struct vertex *)NULL;
     }
@@ -374,7 +375,7 @@ network_link (struct vertex *V)
   linkback = 0;
   w_lsa = ospf6_lsdb_lookup (htons (OSPF6_LSA_TYPE_ROUTER),
                              htonl (MY_ROUTER_LSA_ID),
-                             *currentlink, lsa->scope);
+                             *currentlink, ospf6);
   if (!w_lsa || !w_lsa->lsa_hdr || ospf6_lsa_is_maxage (w_lsa))
     {
       currentlink++;
@@ -443,20 +444,20 @@ int
 spf_calculation (struct thread *thread)
 {
   listnode n;
-  struct area *area;
+  struct ospf6_area *area;
 
   list candidatelist;
   struct vertex *V, *W, *p, *closest;
   int already;
 
-  area = (struct area *)THREAD_ARG (thread);
+  area = (struct ospf6_area *)THREAD_ARG (thread);
   assert (area);
 
   area->spf_calc = (struct thread *)NULL;
 
   area->stat_spf_execed++;
   if (IS_OSPF6_DUMP_SPF)
-    zlog_info ("SPF Calculation for area %s", area->str);
+    zlog_info ("Spf: Calculation for area %s", area->str);
 
   /* (1) */
   if (spf_init (area) < 0)
@@ -470,10 +471,12 @@ spf_calculation (struct thread *thread)
       for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
         {
 
+#if 0
           if (IS_OSPF6_DUMP_SPF)
             {
-              zlog_info ("SPF Examining Vertex: %s", W->str);
+              zlog_info ("Spf: Examining Vertex: %s", W->str);
             }
+#endif
 
           already = 0;
           /* (c) */
@@ -516,9 +519,7 @@ spf_calculation (struct thread *thread)
                     {
                       if (IS_OSPF6_DUMP_SPF)
                         {
-                          zlog_info ("SPF MultiPath found:");
-                          zlog_info ("  merge %s's parent to %s's",
-                                     W->str, p->str);
+                          zlog_info ("Spf: MultiPath: New path through %s to %s", p->str, W->str);
                         }
 
                       /* This is ECMP */
@@ -558,7 +559,138 @@ spf_calculation (struct thread *thread)
   list_free (candidatelist);
 
   if (IS_OSPF6_DUMP_SPF)
-    zlog_info ("SPF Calculation for area %s done", area->str);
+    zlog_info ("Spf: Calculation for area %s done", area->str);
+  return 0;
+}
+
+
+/* RFC2328 section 16.1 */
+int
+ospf6_spf_calculation (u_int32_t area_id)
+{
+  listnode n;
+  struct ospf6_area *o6a;
+
+  list candidatelist;
+  struct vertex *V, *W, *p, *closest;
+  int already;
+
+  o6a = ospf6_area_lookup (area_id, ospf6);
+  if (!o6a)
+    {
+      char buf[64];
+      inet_ntop (AF_INET, &area_id, buf, sizeof (buf));
+      zlog_err ("Spf: no such area: %s", buf);
+      return -1;
+    }
+
+  o6a->spf_calc = (struct thread *)NULL;
+  o6a->stat_spf_execed++;
+
+  if (IS_OSPF6_DUMP_SPF)
+    zlog_info ("Spf: Calculation for area %s", o6a->str);
+
+  /* (1) */
+  if (spf_init (o6a) < 0)
+    return -1;
+  candidatelist = list_init ();
+  V = o6a->spftree.root;             /* Myself */
+
+  /* (2) */
+  while (1)
+    {
+      for (W = linktovertex (V); W; W = linktovertex (V))     /* (b) */
+        {
+
+#if 0
+          if (IS_OSPF6_DUMP_SPF)
+            {
+              zlog_info ("Spf: Examining Vertex: %s", W->str);
+            }
+#endif
+
+          already = 0;
+          /* (c) */
+          for (n = listhead (o6a->spftree.searchlist
+                             [hash(W->vtx_id[0])][hash(W->vtx_id[1])]);
+               n;
+               nextnode (n))
+            {
+              p = getdata (n);
+              if (p->vtx_id[0] == W->vtx_id[0] &&
+                  p->vtx_id[1] == W->vtx_id[1])
+                already++;
+            }
+          if (already)
+            {
+              vertex_free (W);
+              continue;
+            }
+
+          /* (d) */
+          for (n = listhead (candidatelist);
+               n;
+               nextnode (n))
+            {
+              p = getdata (n);
+              if (p->vtx_id[0] == W->vtx_id[0] &&
+                  p->vtx_id[1] == W->vtx_id[1])
+                {
+                  if (p->vtx_distance < W->vtx_distance)
+                    {
+                      vertex_free (W);
+                      goto not_candidate;
+                    }
+                  if (p->vtx_distance > W->vtx_distance)
+                    {
+                      list_delete_by_val (candidatelist, p);
+                      break;
+                    }
+                  if (p->vtx_distance == W->vtx_distance)
+                    {
+                      if (IS_OSPF6_DUMP_SPF)
+                        {
+                          zlog_info ("Spf: MultiPath: New path through %s to %s", p->str, W->str);
+                        }
+
+                      /* This is ECMP */
+                      spf_list_add_list (p->vtx_parent, W->vtx_parent);
+                      vertex_free (W);
+                      goto not_candidate;
+                    }
+                }
+            }
+          list_add_node (candidatelist, W);
+
+        not_candidate:
+        }
+
+      /* (3) */
+      if (listcount (candidatelist) == 0)
+        break;
+
+      closest = (struct vertex *)NULL;
+      for (n = listhead (candidatelist);
+           n;
+           nextnode (n))
+        {
+          p = getdata (n);
+          if (!closest || p->vtx_distance < closest->vtx_distance)
+            closest = p;
+          else if (p->vtx_distance == closest->vtx_distance &&
+                   IS_VTX_ROUTER_TYPE (closest))
+            closest = p;
+        }
+      list_delete_by_val (candidatelist, closest);
+      spf_install (closest, o6a);
+      V = closest;
+    }
+
+  assert (listcount (candidatelist) == 0);
+  list_free (candidatelist);
+
+  if (IS_OSPF6_DUMP_SPF)
+    zlog_info ("Spf: Calculation for area %s done", o6a->str);
   return 0;
 }
 

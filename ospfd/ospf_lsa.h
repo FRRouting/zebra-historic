@@ -89,7 +89,7 @@ struct ospf_lsa
   void *route;
 
   /* Refreshement List or Queue */
-  list refresh_list;
+  int refresh_list;
 };
 
 /* OSPF LSA Link Type. */
@@ -276,7 +276,8 @@ void ospf_schedule_lsa_flood_area (struct ospf_area *, struct ospf_lsa *);
 void ospf_schedule_lsa_flush_area (struct ospf_area *, struct ospf_lsa *);
 
 void ospf_refresher_register_lsa (struct ospf *, struct ospf_lsa *);
-void ospf_refresher_unregister_lsa (struct ospf_lsa *);
+void ospf_refresher_unregister_lsa (struct ospf *, struct ospf_lsa *);
+int ospf_lsa_refresh_walker (struct thread *);
 
 void ospf_lsa_init ();
 

@@ -312,6 +312,26 @@ stream_read (struct stream *s, int fd, size_t size)
   return nbytes;
 }
 
+/* Read size from fd. */
+int
+stream_read_unblock (struct stream *s, int fd, size_t size)
+{
+  int nbytes;
+  int val;
+
+  val = fcntl (fd, F_GETFL, 0);
+  fcntl (fd, F_SETFL, val|O_NONBLOCK);
+  nbytes = read (fd, s->data + s->putp, size);
+  fcntl (fd, F_SETFL, val);
+
+  if (nbytes > 0)
+    {
+      s->putp += nbytes;
+      s->endp += nbytes;
+    }
+  return nbytes;
+}
+
 /* Write data to buffer. */
 int
 stream_write (struct stream *s, u_char *ptr, size_t size)

@@ -95,7 +95,18 @@ ospf_interface_delete (int command, struct zclient *zclient,
     zlog_info ("Zebra: interface delete %s index %d flags %d metric %d mtu %d",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);  
 
-  if_delete (ifp);
+#ifdef HAVE_IF_PSEUDO
+  if (!IS_IF_PSEUDO(ifp))
+    {
+      if_delete(ifp);
+    }
+  else
+    {
+      ifp->ifindex=INTERFACE_PSEUDO;
+    }
+#else
+  if_delete(ifp);
+#endif /* HAVE_IF_PSEUDO */
 
   return 0;
 }
@@ -131,10 +142,12 @@ zebra_interface_if_set_value (struct stream *s, struct interface *ifp)
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
 
+#ifdef IS_IF_PSEUDO
   if (IS_IF_PSEUDO (ifp))
     IF_PSEUDO_SET (ifp);
   else
     IF_PSEUDO_UNSET (ifp);
+#endif
 }
 
 int

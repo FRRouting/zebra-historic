@@ -71,7 +71,7 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   connected->address = (struct prefix *) p;
   connected->ifp = ifp;
 
-  /* If there is boroadcast or pointopoint address. */
+  /* If there is broadcast or pointopoint address. */
   if (broad)
     {
       p = prefix_ipv4_new ();
@@ -94,25 +94,48 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   if (prefix_ipv4_any (&rib))
     return;
 
-  if (if_is_up(ifp)){
+  if (if_is_up(ifp))
     rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0, 0, 0);
+
+#if 0 /* PtP support */
+  /* PointToPoint address care */
+  if (ifp->flags & IFF_POINTOPOINT){
+    rib = *p;
+
+    apply_mask_ipv4 (&rib);
+
+    if (prefix_ipv4_any (&rib))
+      return;
+
+    if (if_is_up(ifp))
+      rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0, 0, 0);
   }
+#endif /* Ptp support */
 }
 
 /* Delete connected IPv4 route to the interface. */
 void
 connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr, 
-		    int prefixlen, struct in_addr *broad)
+		       int prefixlen, struct in_addr *broad)
 {
   struct prefix_ipv4 p;
   struct prefix_ipv4 mp;
+  struct connected *ifc;
 
   p.family = AF_INET;
   p.prefix = *addr;
   p.prefixlen = prefixlen;
   mp = p;
 
-  connected_delete_by_prefix (ifp, (struct prefix *) &p);
+  ifc = connected_delete_by_prefix (ifp, (struct prefix *) &p);
+
+  if (ifc)
+    {
+      /* Update interface address information to protocol daemon. */
+      zebra_interface_address_delete_update (ifp, ifc);
+
+      connected_free (ifc);
+    }
 
   /* Apply mask to the network. */
   apply_mask_ipv4 (&mp);
@@ -215,9 +238,11 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   connected_add (ifp, connected);
 
-  if (if_is_up(ifp)){
+  /* Update interface address information to protocol daemon. */
+  zebra_interface_address_add_update (ifp, connected);
+
+  if (if_is_up(ifp))
     rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0);
-  }
 }
 
 void
@@ -226,13 +251,22 @@ connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
 {
   struct prefix_ipv6 p;
   struct prefix_ipv6 mp;
-
+  struct connected *ifc;
+  
   p.family = AF_INET6;
-  memcpy(&p.prefix, address, sizeof(*address));
+  memcpy (&p.prefix, address, sizeof (struct in6_addr));
   p.prefixlen = prefixlen;
   mp = p;
 
-  connected_delete_by_prefix (ifp, (struct prefix *) &p);
+  ifc = connected_delete_by_prefix (ifp, (struct prefix *) &p);
+
+  if (ifc)
+    {
+      /* Update interface address information to protocol daemon. */
+      zebra_interface_address_delete_update (ifp, ifc);
+
+      connected_free (ifc);
+    }
 
   apply_mask_ipv6 (&mp);
 

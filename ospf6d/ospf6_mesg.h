@@ -120,11 +120,7 @@ struct ospf6_lsupdate
 /* Link State Acknowledgement will include only LSA header.*/
 
 /* Function Prototypes */
-struct ospf6_lsa_hdr *
-ospf6_message_get_lsa_hdr (struct iovec *);
-
 int ospf6_receive (struct thread *);
-int ospf6_receive_new (struct thread *);
 
 int ospf6_send_hello (struct thread *);
 int ospf6_send_dbdesc_retrans (struct thread *);
@@ -133,8 +129,7 @@ int ospf6_send_lsreq (struct thread *);
 int ospf6_send_lsupdate_retrans (struct thread *);
 int ospf6_send_lsack_delayed (struct thread *);
 
-void ospf6_message_send (unsigned char, struct iovec *,
-                         struct in6_addr *, u_int);
+void ospf6_message_send (u_char, struct iovec *, struct in6_addr *, u_int);
 
 #endif /* OSPF6_MESG_H */
 

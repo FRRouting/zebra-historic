@@ -167,6 +167,9 @@ bgp_write (struct thread *thread)
   u_char type;
   struct stream *s; 
   int ret;
+#ifdef MULTIPLE_OUTPUT
+  int i;
+#endif /* MULTIPLE_OUTPUT */
 
   /* Yes first of all get peer pointer. */
   peer = THREAD_ARG (thread);
@@ -182,55 +185,62 @@ bgp_write (struct thread *thread)
     }
 
   /* There should be at least one packet. */
-  s = stream_fifo_head (peer->obuf);
-  if (!s)
-    return 0;
-  assert (stream_get_endp (s) >= BGP_HEADER_SIZE);
-
-  /* peer->fd is writable. */
-  ret = writen (peer->fd, STREAM_DATA (s), stream_get_endp (s));
-  if (ret <= 0)
+#ifdef MULTIPLE_OUTPUT
+  for (i = 0; i < MULTIPLE_OUTPUT; i++)
     {
-      bgp_stop (peer);
-      peer->status = Idle;
-      bgp_timer_set (peer);
-      return 0;
+#endif /* MULTIPLE_OUTPUT */
+      s = stream_fifo_head (peer->obuf);
+      if (!s)
+	return 0;
+      assert (stream_get_endp (s) >= BGP_HEADER_SIZE);
+
+      /* peer->fd is writable. */
+      ret = writen (peer->fd, STREAM_DATA (s), stream_get_endp (s));
+      if (ret <= 0)
+	{
+	  bgp_stop (peer);
+	  peer->status = Idle;
+	  bgp_timer_set (peer);
+	  return 0;
+	}
+      
+      /* Retrieve BGP packet type. */
+      stream_set_getp (s, BGP_MARKER_SIZE + 2);
+      type = stream_getc (s);
+
+      switch (type)
+	{
+	case BGP_MSG_OPEN:
+	  peer->open_out++;
+	  break;
+	case BGP_MSG_UPDATE:
+	  peer->update_out++;
+	  break;
+	case BGP_MSG_NOTIFY:
+	  peer->notify_out++;
+	  /* Double start timer. */
+	  peer->v_start *= 2;
+
+	  /* Overflow check. */
+	  if (peer->v_start >= (60 * 2))
+	    peer->v_start = (60 * 2);
+
+	  /* BGP_EVENT_ADD (peer, BGP_Stop); */
+	  bgp_stop (peer);
+	  peer->status = Idle;
+	  bgp_timer_set (peer);
+	  return 0;
+	  break;
+	case BGP_MSG_KEEPALIVE:
+	  peer->keepalive_out++;
+	  break;
+	}
+
+      /* OK we send packet so delete it. */
+      bgp_packet_delete (peer);
+#ifdef MULTIPLE_OUTPUT
     }
-
-  /* Retrieve BGP packet type. */
-  stream_set_getp (s, BGP_MARKER_SIZE + 2);
-  type = stream_getc (s);
-
-  switch (type)
-    {
-    case BGP_MSG_OPEN:
-      peer->open_out++;
-      break;
-    case BGP_MSG_UPDATE:
-      peer->update_out++;
-      break;
-    case BGP_MSG_NOTIFY:
-      peer->notify_out++;
-      /* Double start timer. */
-      peer->v_start *= 2;
-
-      /* Overflow check. */
-      if (peer->v_start >= (60 * 2))
-	peer->v_start = (60 * 2);
-
-      /* BGP_EVENT_ADD (peer, BGP_Stop); */
-      bgp_stop (peer);
-      peer->status = Idle;
-      bgp_timer_set (peer);
-      return 0;
-      break;
-    case BGP_MSG_KEEPALIVE:
-      peer->keepalive_out++;
-      break;
-    }
-
-  /* OK we send packet so delete it. */
-  bgp_packet_delete (peer);
+#endif /* MULTIPLE_OUTPUT */
   
   /* If there is a packet still need bgp write thread. */
   if (stream_fifo_head (peer->obuf))
@@ -703,6 +713,7 @@ bgp_open_receive (struct peer *peer, bgp_size_t size)
       /* Transfer input buffer. */
       stream_free (realpeer->ibuf);
       realpeer->ibuf = peer->ibuf;
+      realpeer->packet_size = peer->packet_size;
       peer->ibuf = NULL;
 
       /* Transfer status. */
@@ -1137,20 +1148,32 @@ bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
 
 /* BGP read utility function. */
 int
-bgp_read_packet (struct peer *peer, bgp_size_t size)
+bgp_read_packet (struct peer *peer)
 {
   int nbytes;
+  int readsize;
+
+  readsize = peer->packet_size - peer->ibuf->putp;
+
+#ifdef NONBLOCK_DEBUG
+  printf ("peer->packet_size: %ld\n", peer->packet_size);
+  printf ("peer->ibuf->put: %ld\n", peer->ibuf->putp);
+  printf ("We need to read size: %d\n", readsize);
+#endif /* NONBLOCK_DEBUG. */
 
   /* If size is zero then return. */
-  if (! size)
+  if (! readsize)
     return 0;
 
   /* Read packet from fd. */
-  nbytes = stream_read (peer->ibuf, peer->fd, size);
+  nbytes = stream_read_unblock (peer->ibuf, peer->fd, readsize);
 
   /* If read byte is smaller than zero then error occured. */
   if (nbytes < 0) 
     {
+      if (errno == EAGAIN)
+	return -1;
+
       plog_err (peer->log, "%s [Error] bgp_read_packet error: %s",
 		 peer->host, strerror (errno));
       BGP_EVENT_ADD (peer, TCP_fatal_error);
@@ -1166,13 +1189,24 @@ bgp_read_packet (struct peer *peer, bgp_size_t size)
       return -1;
     }
 
+#ifdef NONBLOCK_DEBUG
+  printf ("  We read nbytes %d\n", nbytes);
+  printf ("  Whole packet %ld\n", peer->ibuf->putp);
+  if (peer->ibuf->putp == peer->packet_size)
+    printf ("  We got full packet\n");
+  else
+    printf ("  We got partial packet\n");
+#endif /* NONBLOCK_DEBUG */
+
   /* If header size is defferent print warning and return */
-  if (nbytes != size) 
+  if (peer->ibuf->putp != peer->packet_size)
     {
+#if 0
       plog_err (peer->log,
 		"%s [Error] bgp_read can't read all of packet %d/%d : %s",
 		peer->host, size, nbytes, strerror (errno));
       BGP_EVENT_ADD (peer, TCP_fatal_error);
+#endif /* 0 */
       return -1;
     }
   return 0;
@@ -1183,7 +1217,7 @@ int
 bgp_read (struct thread *thread)
 {
   int ret;
-  u_char type;
+  u_char type = 0;
   struct peer *peer;
   bgp_size_t size;
 
@@ -1200,63 +1234,68 @@ bgp_read (struct thread *thread)
   else
     BGP_READ_ON (peer->t_read, bgp_read, peer->fd);
 
-  /* Clear input buffer. */
-  stream_reset (peer->ibuf);
+  /* Read packet header to determine type of the packet */
+  if (peer->packet_size == 0)
+    peer->packet_size = BGP_HEADER_SIZE;
 
-  /* Read packet header to determin type of the packet */
-  ret = bgp_read_packet (peer, BGP_HEADER_SIZE);
-
-  /* Header read error. */
-  if (ret < 0) 
-    goto done;
-
-  /* Get size and type. */
-  stream_forward (peer->ibuf, BGP_MARKER_SIZE);
-  size = stream_getw (peer->ibuf);
-  type = stream_getc (peer->ibuf);
-
-  /* BGP type check. */
-  if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE 
-      && type != BGP_MSG_NOTIFY && type != BGP_MSG_KEEPALIVE 
-      && type != BGP_MSG_ROUTE_REFRESH && type != BGP_MSG_ROUTE_REFRESH_01)
+  if (peer->ibuf->putp < BGP_HEADER_SIZE)
     {
-      plog_err (peer->log,
-		"%s [Error] Unknown BGP packet type %d received",
-		peer->host, type);
-      bgp_notify_send (peer,
-		       BGP_NOTIFY_HEADER_ERR,
-		       BGP_NOTIFY_HEADER_BAD_MESTYPE);
-      goto done;
-    }
-  /* Mimimum packet length check. */
-  if ((size < BGP_HEADER_SIZE)
-      || (size > BGP_MAX_PACKET_SIZE)
-      || (type == BGP_MSG_OPEN && size < BGP_MSG_OPEN_MIN_SIZE)
-      || (type == BGP_MSG_UPDATE && size < BGP_MSG_UPDATE_MIN_SIZE)
-      || (type == BGP_MSG_NOTIFY && size < BGP_MSG_NOTIFY_MIN_SIZE)
-      || (type == BGP_MSG_KEEPALIVE && size != BGP_MSG_KEEPALIVE_MIN_SIZE)
-      || (type == BGP_MSG_ROUTE_REFRESH && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE)
-      || (type == BGP_MSG_ROUTE_REFRESH_01 && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE))
-    {
-      plog_err (peer->log,
-		"%s [Error] Bad BGP message length %d for BGP type %s",
-		peer->host, size, bgp_type_str[type]);
-      bgp_notify_send (peer,
-		       BGP_NOTIFY_HEADER_ERR,
-		       BGP_NOTIFY_HEADER_BAD_MESLEN);
-      goto done;
+      ret = bgp_read_packet (peer);
+
+      /* Header read error or partial read packet. */
+      if (ret < 0) 
+	goto done;
+
+      /* Get size and type. */
+      stream_forward (peer->ibuf, BGP_MARKER_SIZE);
+      size = stream_getw (peer->ibuf);
+      type = stream_getc (peer->ibuf);
+
+      /* BGP type check. */
+      if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE 
+	  && type != BGP_MSG_NOTIFY && type != BGP_MSG_KEEPALIVE 
+	  && type != BGP_MSG_ROUTE_REFRESH && type != BGP_MSG_ROUTE_REFRESH_01)
+	{
+	  plog_err (peer->log,
+		    "%s [Error] Unknown BGP packet type %d received",
+		    peer->host, type);
+	  bgp_notify_send (peer,
+			   BGP_NOTIFY_HEADER_ERR,
+			   BGP_NOTIFY_HEADER_BAD_MESTYPE);
+	  goto done;
+	}
+      /* Mimimum packet length check. */
+      if ((size < BGP_HEADER_SIZE)
+	  || (size > BGP_MAX_PACKET_SIZE)
+	  || (type == BGP_MSG_OPEN && size < BGP_MSG_OPEN_MIN_SIZE)
+	  || (type == BGP_MSG_UPDATE && size < BGP_MSG_UPDATE_MIN_SIZE)
+	  || (type == BGP_MSG_NOTIFY && size < BGP_MSG_NOTIFY_MIN_SIZE)
+	  || (type == BGP_MSG_KEEPALIVE && size != BGP_MSG_KEEPALIVE_MIN_SIZE)
+	  || (type == BGP_MSG_ROUTE_REFRESH && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE)
+	  || (type == BGP_MSG_ROUTE_REFRESH_01 && size != BGP_MSG_ROUTE_REFRESH_MIN_SIZE))
+	{
+	  plog_err (peer->log,
+		    "%s [Error] Bad BGP message length %d for BGP type %s",
+		    peer->host, size, bgp_type_str[type]);
+	  bgp_notify_send (peer,
+			   BGP_NOTIFY_HEADER_ERR,
+			   BGP_NOTIFY_HEADER_BAD_MESLEN);
+	  goto done;
+	}
+
+      /* Adjust size to message length. */
+      peer->packet_size = size;
     }
 
-  /* Adjust size to message length. */
-  size -= BGP_HEADER_SIZE;
-
-  ret = bgp_read_packet (peer, size);
+  ret = bgp_read_packet (peer);
   if (ret < 0) 
     goto done;
 
   /* BGP packet dump function. */
   bgp_dump_packet (peer, type, peer->ibuf);
   
+  size = (peer->packet_size - BGP_HEADER_SIZE);
+
   /* Read rest of the packet and call each sort of packet routine */
   switch (type) 
     {
@@ -1277,6 +1316,11 @@ bgp_read (struct thread *thread)
       bgp_route_refresh_receive (peer, size);
       break;
     }
+
+  /* Clear input buffer. */
+  peer->packet_size = 0;
+  if (peer->ibuf)
+    stream_reset (peer->ibuf);
 
  done:
   if (CHECK_FLAG (peer->sflags, PEER_STATUS_ACCEPT_PEER))

@@ -71,6 +71,7 @@ IF_METHOD = @IF_METHOD@
 IF_PROC = @IF_PROC@
 IPFORWARD = @IPFORWARD@
 KERNEL_METHOD = @KERNEL_METHOD@
+LIBPAM = @LIBPAM@
 LIB_IPV6 = @LIB_IPV6@
 LIB_REGEX = @LIB_REGEX@
 MAKEINFO = @MAKEINFO@
@@ -88,17 +89,19 @@ VTYSH = @VTYSH@
 ZEBRA = @ZEBRA@
 
 INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
-DEFS = @DEFS@ -I. -I$(srcdir)
+DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
-LIBS = @LIBS@ @CURSES@
+LIBS = @LIBS@ @CURSES@ @LIBPAM@
 
 bin_PROGRAMS = vtysh
 
-vtysh_SOURCES = vtysh.c vtysh_cmd.c
-noinst_HEADERS = vtysh.h
+vtysh_SOURCES = vtysh_main.c vtysh.c vtysh_cmd.c vtysh_user.c
+noinst_HEADERS = vtysh.h vtysh_user.h
 vtysh_LDADD = ../lib/libzebra.a
 
-EXTRA_DIST = extract.pl
+sysconf_DATA = vtysh.conf.sample
+
+EXTRA_DIST = extract.pl vtysh.conf.sample
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = ../config.h
 CONFIG_CLEAN_FILES = 
@@ -106,13 +109,15 @@ PROGRAMS =  $(bin_PROGRAMS)
 
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
-vtysh_OBJECTS =  vtysh.o vtysh_cmd.o
+vtysh_OBJECTS =  vtysh_main.o vtysh.o vtysh_cmd.o vtysh_user.o
 vtysh_DEPENDENCIES =  ../lib/libzebra.a
 vtysh_LDFLAGS = 
 CFLAGS = @CFLAGS@
 COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
+DATA =  $(sysconf_DATA)
+
 HEADERS =  $(noinst_HEADERS)
 
 DIST_COMMON =  ChangeLog Makefile.am Makefile.in
@@ -184,6 +189,25 @@ vtysh: $(vtysh_OBJECTS) $(vtysh_DEPENDENCIES)
 	@rm -f vtysh
 	$(LINK) $(vtysh_LDFLAGS) $(vtysh_OBJECTS) $(vtysh_LDADD) $(LIBS)
 
+install-sysconfDATA: $(sysconf_DATA)
+	@$(NORMAL_INSTALL)
+	$(mkinstalldirs) $(DESTDIR)$(sysconfdir)
+	@list='$(sysconf_DATA)'; for p in $$list; do \
+	  if test -f $(srcdir)/$$p; then \
+	    echo " $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(sysconfdir)/$$p"; \
+	    $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(sysconfdir)/$$p; \
+	  else if test -f $$p; then \
+	    echo " $(INSTALL_DATA) $$p $(DESTDIR)$(sysconfdir)/$$p"; \
+	    $(INSTALL_DATA) $$p $(DESTDIR)$(sysconfdir)/$$p; \
+	  fi; fi; \
+	done
+
+uninstall-sysconfDATA:
+	@$(NORMAL_UNINSTALL)
+	list='$(sysconf_DATA)'; for p in $$list; do \
+	  rm -f $(DESTDIR)$(sysconfdir)/$$p; \
+	done
+
 tags: TAGS
 
 ID: $(HEADERS) $(SOURCES) $(LISP)
@@ -236,7 +260,7 @@ check-am: all-am
 check: check-am
 installcheck-am:
 installcheck: installcheck-am
-install-exec-am: install-binPROGRAMS
+install-exec-am: install-binPROGRAMS install-sysconfDATA
 install-exec: install-exec-am
 
 install-data-am:
@@ -245,14 +269,14 @@ install-data: install-data-am
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 install: install-am
-uninstall-am: uninstall-binPROGRAMS
+uninstall-am: uninstall-binPROGRAMS uninstall-sysconfDATA
 uninstall: uninstall-am
-all-am: Makefile $(PROGRAMS) $(HEADERS)
+all-am: Makefile $(PROGRAMS) $(DATA) $(HEADERS)
 all-redirect: all-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install
 installdirs:
-	$(mkinstalldirs)  $(DESTDIR)$(bindir)
+	$(mkinstalldirs)  $(DESTDIR)$(bindir) $(DESTDIR)$(sysconfdir)
 
 
 mostlyclean-generic:
@@ -290,13 +314,13 @@ maintainer-clean: maintainer-clean-am
 .PHONY: mostlyclean-binPROGRAMS distclean-binPROGRAMS clean-binPROGRAMS \
 maintainer-clean-binPROGRAMS uninstall-binPROGRAMS install-binPROGRAMS \
 mostlyclean-compile distclean-compile clean-compile \
-maintainer-clean-compile tags mostlyclean-tags distclean-tags \
-clean-tags maintainer-clean-tags distdir info-am info dvi-am dvi check \
-check-am installcheck-am installcheck install-exec-am install-exec \
-install-data-am install-data install-am install uninstall-am uninstall \
-all-redirect all-am all installdirs mostlyclean-generic \
-distclean-generic clean-generic maintainer-clean-generic clean \
-mostlyclean distclean maintainer-clean
+maintainer-clean-compile uninstall-sysconfDATA install-sysconfDATA tags \
+mostlyclean-tags distclean-tags clean-tags maintainer-clean-tags \
+distdir info-am info dvi-am dvi check check-am installcheck-am \
+installcheck install-exec-am install-exec install-data-am install-data \
+install-am install uninstall-am uninstall all-redirect all-am all \
+installdirs mostlyclean-generic distclean-generic clean-generic \
+maintainer-clean-generic clean mostlyclean distclean maintainer-clean
 
 
 rebuild:
@@ -305,10 +329,14 @@ rebuild:
 depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
-vtysh.o: vtysh.c ../lib/version.h ../lib/command.h ../lib/vector.h \
- ../lib/vty.h ../vtysh/vtysh.h
+vtysh.o: vtysh.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../vtysh/vtysh.h
 vtysh_cmd.o: vtysh_cmd.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  vtysh.h
+vtysh_main.o: vtysh_main.c ../lib/version.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../vtysh/vtysh.h
+vtysh_user.o: vtysh_user.c ../lib/memory.h ../lib/newlist.h \
+ ../lib/command.h ../lib/vector.h ../lib/vty.h
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

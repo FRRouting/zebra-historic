@@ -11,7 +11,7 @@ libospf_a_SOURCES = \
 	ospfd.c ospf_zebra.c ospf_interface.c ospf_ism.c ospf_neighbor.c \
 	ospf_nsm.c ospf_dump.c ospf_network.c ospf_packet.c ospf_lsa.c \
 	ospf_spf.c ospf_route.c ospf_ase.c ospf_abr.c ospf_ia.c ospf_flood.c \
-	ospf_lsdb.c ospf_asbr.c ospf_routemap.c
+	ospf_lsdb.c ospf_asbr.c ospf_routemap.c ospf_snmp.c
 
 noinst_HEADERS = \
 	ospf_dump.h ospf_interface.h ospf_ism.h ospf_neighbor.h \

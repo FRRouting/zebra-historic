@@ -67,7 +67,7 @@ struct route_standard
   struct lsa_header *origin;
 
   /* Associated Area. */
-  struct ospf_area *area;	/* Link to an area structure. */
+  struct in_addr area_id;	/* The area the route belongs to */
 
   /* Optional Capability. */
   u_char options;		/* Get from LSA header. */

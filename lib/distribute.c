@@ -102,7 +102,10 @@ distribute_get (char *ifname)
   if (dist == NULL)
     {
       dist = distribute_new ();
-      dist->ifname = strdup (ifname);
+      if (ifname)
+	dist->ifname = strdup (ifname);
+      else
+	dist->ifname = NULL;
       hash_push (disthash, dist);
     }
   return dist;
@@ -115,8 +118,9 @@ distribute_hash_make (struct distribute *dist)
   int i;
 
   key = 0;
-  for (i = 0; i < strlen (dist->ifname); i++)
-    key += dist->ifname[i];
+  if (dist->ifname)
+    for (i = 0; i < strlen (dist->ifname); i++)
+      key += dist->ifname[i];
 
   return key %= HASHTABSIZE;
 }
@@ -126,7 +130,10 @@ distribute_hash_make (struct distribute *dist)
 int
 distribute_cmp (struct distribute *dist1, struct distribute *dist2)
 {
-  if (strcmp (dist1->ifname, dist2->ifname) == 0)
+  if (dist1->ifname && dist2->ifname)
+    if (strcmp (dist1->ifname, dist2->ifname) == 0)
+      return 1;
+  if (! dist1->ifname && ! dist2->ifname)
     return 1;
   return 0;
 }
@@ -294,7 +301,70 @@ distribute_list_prefix_unset (char *ifname, enum distribute_type type,
   return 1;
 }
 
-DEFUN (distribute_list, distribute_list_cmd,
+DEFUN (distribute_list_all,
+       distribute_list_all_cmd,
+       "distribute-list WORD (in|out)",
+       "Filter networks in routing updates\n"
+       "Access-list name\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n")
+{
+  enum distribute_type type;
+  struct distribute *dist;
+
+  /* Check of distribute list type. */
+  if (strncmp (argv[1], "i", 1) == 0)
+    type = DISTRIBUTE_IN;
+  else if (strncmp (argv[1], "o", 1) == 0)
+    type = DISTRIBUTE_OUT;
+  else
+    {
+      vty_out (vty, "distribute list direction must be [in|out]%s",
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Get interface name corresponding distribute list. */
+  dist = distribute_list_set (NULL, type, argv[0]);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_distribute_list_all,
+       no_distribute_list_all_cmd,
+       "no distribute-list WORD (in|out)",
+       NO_STR
+       "Filter networks in routing updates\n"
+       "Access-list name\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n")
+{
+  int ret;
+  enum distribute_type type;
+
+  /* Check of distribute list type. */
+  if (strncmp (argv[1], "i", 1) == 0)
+    type = DISTRIBUTE_IN;
+  else if (strncmp (argv[1], "o", 1) == 0)
+    type = DISTRIBUTE_OUT;
+  else
+    {
+      vty_out (vty, "distribute list direction must be [in|out]%s",
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = distribute_list_unset (NULL, type, argv[0]);
+  if (! ret)
+    {
+      vty_out (vty, "distribute list doesn't exist%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}
+
+DEFUN (distribute_list,
+       distribute_list_cmd,
        "distribute-list WORD (in|out) WORD",
        "Filter networks in routing updates\n"
        "Access-list name\n"
@@ -346,6 +416,70 @@ DEFUN (no_districute_list, no_distribute_list_cmd,
     }
 
   ret = distribute_list_unset (argv[2], type, argv[0]);
+  if (! ret)
+    {
+      vty_out (vty, "distribute list doesn't exist%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+  return CMD_SUCCESS;
+}       
+
+DEFUN (districute_list_prefix_all,
+       distribute_list_prefix_all_cmd,
+       "distribute-list prefix WORD (in|out)",
+       "Filter networks in routing updates\n"
+       "Filter prefixes in routing updates\n"
+       "Name of an IP prefix-list\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n")
+{
+  enum distribute_type type;
+  struct distribute *dist;
+
+  /* Check of distribute list type. */
+  if (strncmp (argv[1], "i", 1) == 0)
+    type = DISTRIBUTE_IN;
+  else if (strncmp (argv[1], "o", 1) == 0)
+    type = DISTRIBUTE_OUT;
+  else
+    {
+      vty_out (vty, "distribute list direction must be [in|out]%s", 
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  /* Get interface name corresponding distribute list. */
+  dist = distribute_list_prefix_set (NULL, type, argv[0]);
+
+  return CMD_SUCCESS;
+}       
+
+DEFUN (no_districute_list_prefix_all,
+       no_distribute_list_prefix_all_cmd,
+       "no distribute-list prefix WORD (in|out)",
+       NO_STR
+       "Filter networks in routing updates\n"
+       "Filter prefixes in routing updates\n"
+       "Name of an IP prefix-list\n"
+       "Filter incoming routing updates\n"
+       "Filter outgoing routing updates\n")
+{
+  int ret;
+  enum distribute_type type;
+
+  /* Check of distribute list type. */
+  if (strncmp (argv[1], "i", 1) == 0)
+    type = DISTRIBUTE_IN;
+  else if (strncmp (argv[1], "o", 1) == 0)
+    type = DISTRIBUTE_OUT;
+  else
+    {
+      vty_out (vty, "distribute list direction must be [in|out]%s", 
+	       VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  ret = distribute_list_prefix_unset (NULL, type, argv[0]);
   if (! ret)
     {
       vty_out (vty, "distribute list doesn't exist%s", VTY_NEWLINE);
@@ -418,6 +552,84 @@ DEFUN (no_districute_list_prefix, no_distribute_list_prefix_cmd,
   return CMD_SUCCESS;
 }       
 
+int
+config_show_distribute (struct vty *vty)
+{
+  int i;
+  HashBacket *mp;
+  struct distribute *dist;
+
+  /* Output filter configuration. */
+  dist = distribute_lookup (NULL);
+  if (dist && (dist->list[DISTRIBUTE_OUT] || dist->prefix[DISTRIBUTE_OUT]))
+    {
+      vty_out (vty, "  Outgoing update filter list for all interface is");
+      if (dist->list[DISTRIBUTE_OUT])
+	vty_out (vty, " %s", dist->list[DISTRIBUTE_OUT]);
+      if (dist->prefix[DISTRIBUTE_OUT])
+	vty_out (vty, "%s (prefix-list) %s",
+		 dist->list[DISTRIBUTE_OUT] ? "," : "",
+		 dist->prefix[DISTRIBUTE_OUT]);
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
+  else
+    vty_out (vty, "  Outgoing update filter list for all interface is not set%s", VTY_NEWLINE);
+
+  for (i = 0; i < HASHTABSIZE; i++)
+    for (mp = hash_head (disthash, i); mp; mp = mp->next)
+      {
+	dist = mp->data;
+	if (dist->ifname)
+	  if (dist->list[DISTRIBUTE_OUT] || dist->prefix[DISTRIBUTE_OUT])
+	    {
+	      vty_out (vty, "    %s filtered by", dist->ifname);
+	      if (dist->list[DISTRIBUTE_OUT])
+		vty_out (vty, " %s", dist->list[DISTRIBUTE_OUT]);
+	      if (dist->prefix[DISTRIBUTE_OUT])
+		vty_out (vty, "%s (prefix-list) %s",
+			 dist->list[DISTRIBUTE_OUT] ? "," : "",
+			 dist->prefix[DISTRIBUTE_OUT]);
+	      vty_out (vty, "%s", VTY_NEWLINE);
+	    }
+      }
+
+
+  /* Input filter configuration. */
+  dist = distribute_lookup (NULL);
+  if (dist && (dist->list[DISTRIBUTE_IN] || dist->prefix[DISTRIBUTE_IN]))
+    {
+      vty_out (vty, "  Incoming update filter list for all interface is");
+      if (dist->list[DISTRIBUTE_IN])
+	vty_out (vty, " %s", dist->list[DISTRIBUTE_IN]);
+      if (dist->prefix[DISTRIBUTE_IN])
+	vty_out (vty, "%s (prefix-list) %s",
+		 dist->list[DISTRIBUTE_IN] ? "," : "",
+		 dist->prefix[DISTRIBUTE_IN]);
+      vty_out (vty, "%s", VTY_NEWLINE);
+    }
+  else
+    vty_out (vty, "  Incoming update filter list for all interface is not set%s", VTY_NEWLINE);
+
+  for (i = 0; i < HASHTABSIZE; i++)
+    for (mp = hash_head (disthash, i); mp; mp = mp->next)
+      {
+	dist = mp->data;
+	if (dist->ifname)
+	  if (dist->list[DISTRIBUTE_IN] || dist->prefix[DISTRIBUTE_IN])
+	    {
+	      vty_out (vty, "    %s filtered by", dist->ifname);
+	      if (dist->list[DISTRIBUTE_IN])
+		vty_out (vty, " %s", dist->list[DISTRIBUTE_IN]);
+	      if (dist->prefix[DISTRIBUTE_IN])
+		vty_out (vty, "%s (prefix-list) %s",
+			 dist->list[DISTRIBUTE_IN] ? "," : "",
+			 dist->prefix[DISTRIBUTE_IN]);
+	      vty_out (vty, "%s", VTY_NEWLINE);
+	    }
+      }
+  return 0;
+}
+
 /* Configuration write function. */
 int
 config_write_distribute (struct vty *vty)
@@ -437,7 +649,7 @@ config_write_distribute (struct vty *vty)
 	  {
 	    vty_out (vty, " distribute-list %s in %s%s", 
 		     dist->list[DISTRIBUTE_IN],
-		     dist->ifname,
+		     dist->ifname ? dist->ifname : "",
 		     VTY_NEWLINE);
 	    write++;
 	  }
@@ -445,8 +657,9 @@ config_write_distribute (struct vty *vty)
 	if (dist->list[DISTRIBUTE_OUT])
 	  {
 	    vty_out (vty, " distribute-list %s out %s%s", 
+
 		     dist->list[DISTRIBUTE_OUT],
-		     dist->ifname,
+		     dist->ifname ? dist->ifname : "",
 		     VTY_NEWLINE);
 	    write++;
 	  }
@@ -455,7 +668,7 @@ config_write_distribute (struct vty *vty)
 	  {
 	    vty_out (vty, " distribute-list prefix %s in %s%s",
 		     dist->prefix[DISTRIBUTE_IN],
-		     dist->ifname,
+		     dist->ifname ? dist->ifname : "",
 		     VTY_NEWLINE);
 	    write++;
 	  }
@@ -464,7 +677,7 @@ config_write_distribute (struct vty *vty)
 	  {
 	    vty_out (vty, " distribute-list prefix %s out %s%s",
 		     dist->prefix[DISTRIBUTE_OUT],
-		     dist->ifname,
+		     dist->ifname ? dist->ifname : "",
 		     VTY_NEWLINE);
 	    write++;
 	  }
@@ -487,8 +700,14 @@ distribute_list_init (int node)
   disthash->hash_key = distribute_hash_make;
   disthash->hash_cmp = distribute_cmp;
 
+  install_element (node, &distribute_list_all_cmd);
+  install_element (node, &no_distribute_list_all_cmd);
+
   install_element (node, &distribute_list_cmd);
   install_element (node, &no_distribute_list_cmd);
+
+  install_element (node, &distribute_list_prefix_all_cmd);
+  install_element (node, &no_distribute_list_prefix_all_cmd);
 
   install_element (node, &distribute_list_prefix_cmd);
   install_element (node, &no_distribute_list_prefix_cmd);

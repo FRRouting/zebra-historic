@@ -96,6 +96,28 @@ nexthop_free (struct nexthop *nexthop)
   XFREE (MTYPE_NEXTHOP, nexthop);
 }
 
+
+#ifdef HAVE_IF_PSEUDO
+/* New routing information base. */
+struct rib *
+rib_create (int type, u_char flags, int distance, int ifindex, char *ifname, int table)
+{
+  struct rib *new;
+
+  new = XMALLOC (MTYPE_RIB, sizeof (struct rib));
+  bzero (new, sizeof (struct rib));
+  new->type = type;
+  new->flags = flags;
+  new->distance = distance;
+  new->u.ifindex = ifindex;
+  new->table = table;
+  if (ifname){
+    strncpy(new->u.ifname,ifname,INTERFACE_NAMSIZ);
+  }
+
+  return new;
+}
+#else
 /* New routing information base. */
 struct rib *
 rib_create (int type, u_char flags, int distance, int ifindex, int table,
@@ -114,6 +136,7 @@ rib_create (int type, u_char flags, int distance, int ifindex, int table,
 
   return new;
 }
+#endif /* HAVE_IF_PSEUDO */
 
 /* Free routing information base. */
 void
@@ -244,10 +267,19 @@ rib_if_check (struct rib *rib, unsigned int ifindex, struct in_addr *gate)
   else
     ifp = if_lookup_address(*gate);
 
+#ifdef HAVE_IF_PSEUDO  
+  if (ifp){
+    rib->u.ifindex = ifp->ifindex;
+    if_indextoname(rib->u.ifindex,rib->u.ifname);
+  }
+  else
+    rib->u.ifindex = INTERFACE_UNKNOWN;
+#else
   if (ifp)
     rib->u.ifindex = ifp->ifindex;
   else
     rib->u.ifindex = 0;
+#endif /* HAVE_IF_PSEUDO */
 }
 
 void
@@ -311,6 +343,51 @@ rib_add_ipv4_internal (struct prefix_ipv4 *p, struct rib *rib, int table)
   return kernel_add_ipv4 (p, &rib->u.gate4, rib->u.ifindex, rib->flags, table);
 }
 
+#ifdef HAVE_IF_PSEUDO
+int
+rib_add_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p, 
+	      struct in_addr *gate, char *ifname , int table)
+{
+
+  int distance;
+  struct route_node *np;
+  struct rib *rib;
+
+  /* currently no way to add pseudo route with gateway */
+  if (gate) return 1;
+  /* Make it sure prefixlen is applied to the prefix. */
+  p->family = AF_INET;
+  apply_mask_ipv4 (p);
+
+  /* Set default protocol distance. */
+  distance = route_info[type].distance;
+
+  if (! table)
+    table = RT_TABLE_MAIN;
+
+  /* Create new rib. */
+  rib = rib_create (type, flags, distance, 0, ifname, table);
+
+  RIB_LINK_SET (rib);
+  
+  /* Lookup route node. */
+  np = route_node_get (ipv4_rib_table, (struct prefix *) p);
+
+  /* Logging. */
+  rib_log ("add pseudo", (struct prefix *)p, rib);
+#if 0  
+  if ((ret = rib_add_ipv4_internal (p, rib, table)) != 0){	    
+    rib_log ("rib non-existent interface: couldn't add route", (struct prefix *)p, rib);
+  }
+#endif 
+
+  rib_fib_unset (np,rib);
+  rib_add_rib ((struct rib **) &np->info, rib);
+
+  return 0;
+  
+}
+#endif /* HAVE_IF_PSEUDO */
 /* Add prefix into rib. If there is a same type prefix, then we assume
    it as implicit replacement of the route. */
 int
@@ -325,7 +402,13 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
   struct rib *rib;
   struct rib *fib;
   struct rib *same;
+#ifdef HAVE_IF_PSEUDO
+  struct in_addr zero_gate;
+  char ifname[INTERFACE_NAMSIZ];
 
+  memset (&zero_gate,0, sizeof (struct in_addr)); 
+#endif /* HAVE_IF_PSEUDO */
+  
   /* Make it sure prefixlen is applied to the prefix. */
   p->family = AF_INET;
   apply_mask_ipv4 (p);
@@ -339,7 +422,7 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
       distance = route_info[type].distance;
 
       /* iBGP distance is 200. */
-      if (type == ZEBRA_ROUTE_BGP && CHECK_FLAG (flags, ZEBRA_FLAG_INTERNAL))
+      if (type == ZEBRA_ROUTE_BGP && CHECK_FLAG (flags, ZEBRA_FLAG_IBGP))
 	distance = 200;
     }
 
@@ -347,10 +430,26 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
   if (! table)
     table = RT_TABLE_MAIN;
 
+#ifdef HAVE_IF_PSEUDO
+  /* Create new rib. */
+  if (ifindex != INTERFACE_PSEUDO && ifindex != INTERFACE_UNKNOWN
+      && if_indextoname(ifindex,ifname))
+    rib = rib_create (type, flags, distance, ifindex, ifname, table);
+  else
+    rib = rib_create (type, flags, distance, ifindex, NULL, table);
+  
+  /* Set gateway address or gateway interface name. */
+  if (gate && !IPV4_ADDR_SAME(gate,&zero_gate)) 
+    {
+      rib->u.gate4 = *gate;
+      rib_if_check (rib, ifindex, gate);
+    }
+  else
+    rib_if_set (rib, ifindex);
+#else
   /* Create new rib. */
   rib = rib_create (type, flags, distance, ifindex, table, metric);
-
-  /* Set gateway address or gateway interface name. */
+  
   if (gate) 
     {
       rib->u.gate4 = *gate;
@@ -358,7 +457,8 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
     }
   else
     rib_if_set (rib, ifindex);
-
+#endif /* HAVE_IF_PSEUDO */
+  
   /* Lookup route node. */
   np = route_node_get (ipv4_rib_table, (struct prefix *) p);
 
@@ -368,7 +468,8 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
     {
       if (IS_RIB_FIB (rp))
 	fib = rp;
-      if (rp->type == type)
+      if ((rp->type == type) &&
+	  (IPV4_ADDR_SAME (&rp->u.gate4, &rib->u.gate4)))
 	same = rp;
     }
 
@@ -428,10 +529,23 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
     {
       if (! rib_system_route (rib->type))
 	{
+#ifndef HAVE_IF_PSEUDO
 	  if (gate && (flags & ZEBRA_FLAG_INTERNAL))
 	    ret = rib_add_ipv4_internal (p, rib, table);
 	  else
 	    ret = kernel_add_ipv4 (p, gate, ifindex, flags, table);
+#else	  
+	  if (gate && (flags & ZEBRA_FLAG_INTERNAL)){
+	    if ((ret = rib_add_ipv4_internal (p, rib, table)) != 0){	    
+	      rib_log ("internal rib: route unreachable", (struct prefix *)p, rib);
+	    }
+	  }
+	  else {
+	    if ((ret = kernel_add_ipv4 (p, gate, ifindex, flags, table)) != 0){
+	      rib_log ("kernel rib: couldn't add route", (struct prefix *)p, rib);
+	    }
+	  }
+#endif /* HAVE_IF_PSEUDO */
 
 	  if (ret != 0)
 	    goto finish;
@@ -455,6 +569,76 @@ rib_add_ipv4 (int type, int flags, struct prefix_ipv4 *p,
   return 0;
 }
 
+#ifdef HAVE_IF_PSEUDO
+int
+rib_delete_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p,
+		 struct in_addr *gate, char *ifname, int table)
+{
+  struct route_node *np;
+  struct rib *rib;
+
+  /* Make it sure prefixlen is applied to the prefix. */
+  p->family = AF_INET;
+  apply_mask_ipv4 (p);
+
+  /* Lookup route node. */
+  np = route_node_get (ipv4_rib_table, (struct prefix *) p);
+
+  /* Search delete rib. */
+  for (rib = np->info; rib; rib = rib->next)
+    {
+      if (rib->type == type && !strncmp(rib->u.ifname,ifname,INTERFACE_NAMSIZ) &&
+	  (!table || rib->table == table))
+	{
+	  if (! gate)
+	      break;
+
+	  if (IS_RIB_INTERNAL (rib))
+	    {
+	      if (IPV4_ADDR_SAME (&rib->i.gate4, gate))
+		break;
+	    }
+	  else
+	    {
+	      if (IPV4_ADDR_SAME (&rib->u.gate4, gate))
+		break;
+	    }
+	}
+    }
+  
+  /* If rib can't find. */
+  if (! rib)
+    {
+      char buf1[BUFSIZ];
+      char buf2[BUFSIZ];
+
+      if (gate)
+	zlog_info ("route %s/%d via %s ifname %s doesn't exist in rib",
+		   inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ), p->prefixlen,
+		   inet_ntop (AF_INET, gate, buf2, BUFSIZ),
+		   ifname);
+      else
+	zlog_info ("route %s/%d ifname %s doesn't exist in rib",
+		   inet_ntop (AF_INET, &p->prefix, buf1, BUFSIZ), p->prefixlen,
+		   ifname);
+      route_unlock_node (np);
+      return ZEBRA_ERR_RTNOEXIST;
+    }
+
+  /* Logging. */
+  rib_log ("delete pseudo", (struct prefix *)p, rib);
+
+  /* Deletion complete. */
+  rib_delete_rib ((struct rib **)&np->info, rib);
+  route_unlock_node (np);
+
+  rib_free (rib);
+  route_unlock_node (np);
+
+  return 0;
+}
+#endif /* HAVE_IF_PSEUDO */
+
 /* Delete prefix from the rib. */
 int
 rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
@@ -475,7 +659,7 @@ rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
   /* Search delete rib. */
   for (rib = np->info; rib; rib = rib->next)
     {
-      if (rib->type == type &&
+      if (rib->type == type && 
 	  (!table || rib->table == table))
 	{
 	  if (! gate)
@@ -569,15 +753,38 @@ rib_static_list (struct vty *vty, struct route_table *top)
 		     np->p.family == AF_INET ? "" : "v6",
 		     inet_ntop (np->p.family, &np->p.u.prefix, buf1, BUFSIZ),
 		     np->p.prefixlen,
-		     ifindex2ifname (rib->u.ifindex),
+#ifdef HAVE_IF_PSEUDO
+		     rib->u.ifname,
+#else
+		     ifindex2ifname(rib->u.ifindex),
+#endif
 		     VTY_NEWLINE);
+#ifndef HAVE_IF_PSEUDO
 	  else
+#else
+	  else{
+	    if (rib->u.ifindex == INTERFACE_PSEUDO){
+#endif /* HAVE_IF_PSEUDO */
 	    vty_out (vty, "ip%s route %s/%d %s%s",
 		     np->p.family == AF_INET ? "" : "v6",
 		     inet_ntop (np->p.family, &np->p.u.prefix, buf1, BUFSIZ),
 		     np->p.prefixlen,
+#ifdef HAVE_IF_PSEUDO
+		     rib->u.ifname,
+		     VTY_NEWLINE);
+	    }
+	    else {
+	      vty_out (vty, "ip%s route %s/%d %s%s",
+		     np->p.family == AF_INET ? "" : "v6",
+		     inet_ntop (np->p.family, &np->p.u.prefix, buf1, BUFSIZ),
+		     np->p.prefixlen,
+#endif /* HAVE_IF_PSEUDO */
 		     inet_ntop (np->p.family, &rib->u.gate4, buf2, BUFSIZ),
 		     VTY_NEWLINE);
+#ifdef HAVE_IF_PSEUDO
+	    }
+	  }
+#endif /* HAVE_IF_PSEUDO */
 	  write++;
 	}
   return write;
@@ -685,6 +892,9 @@ print_ip_route_vty (struct vty *vty, struct rib *rib, struct prefix *p)
 void
 show_ip_route_vty (struct vty *vty, struct route_node *np)
 {
+#ifdef HAVE_IF_PSEUDO
+  int len;
+#endif /* HAVE_IF_PSEUDO */
   struct rib *rib;
   for (rib = np->info; rib; rib = rib->next)
     {
@@ -1753,6 +1963,13 @@ rib_if_up (struct interface *ifp)
 	  /* Check interface. */
 	  if (IS_RIB_LINK (best))
 	    {
+#ifdef HAVE_IF_PSEUDO
+	      /* route with unknown interface */
+	      if (best->u.ifindex == INTERFACE_UNKNOWN &&
+		  !strncmp(best->u.ifname,ifp->name,INTERFACE_NAMSIZ)){
+		    best->u.ifindex=ifp->ifindex;
+	      }
+#endif /* HAVE_IF_PSEUDO */
 	      if (best->u.ifindex == ifp->ifindex)
 		{
 		  ret = kernel_add_ipv4 ((struct prefix_ipv4 *)&rn->p,
@@ -1771,6 +1988,9 @@ rib_if_up (struct interface *ifp)
 		    /* route with unknown interface */
 		    if (best->u.ifindex == INTERFACE_UNKNOWN){
 		      best->u.ifindex=ifp->ifindex;
+#ifdef HAVE_IF_PSEUDO
+		      strncpy (best->u.ifname,ifp->name,INTERFACE_NAMSIZ);
+#endif /* HAVE_IF_PSEUDO */
 		    }
 
 		    ret = kernel_add_ipv4 ((struct prefix_ipv4 *)&rn->p,
@@ -1798,7 +2018,7 @@ rib_if_down (struct interface *ifp)
 	{
 	  if (ifp->ifindex == rib->u.ifindex)
 	    {
-	      if (IS_RIB_FIB (rib))
+	      if (rib->type == ZEBRA_ROUTE_STATIC && IS_RIB_FIB (rib))
 		{
 		  RIB_FIB_UNSET (rib);
 		}
@@ -1820,7 +2040,15 @@ rib_if_delete (struct interface *ifp)
 	{
 	  if (ifp->ifindex == rib->u.ifindex)
 	    {
+#ifdef HAVE_IF_PSEUDO
+	      if (IS_IF_PSEUDO(ifp)){
+		rib->u.ifindex=INTERFACE_PSEUDO;
+	      }
+	      else
+		rib->u.ifindex=INTERFACE_UNKNOWN;
+#else
 	      rib->u.ifindex=INTERFACE_UNKNOWN;
+#endif /* HAVE_IF_PSEUDO */
 	      if (IS_RIB_FIB (rib))
 		{
 		  RIB_FIB_UNSET (rib);
@@ -1829,3 +2057,40 @@ rib_if_delete (struct interface *ifp)
 	}
     }
 }
+
+#ifdef HAVE_IF_PSEUDO	    
+void rib_ifindex_update_name(char *name,int ifindex_new)
+{
+  struct route_node *rn;
+  struct rib *rib;
+  struct rib tmp_rib;
+  struct prefix_ipv4 p;
+
+  /* Walk down all routes and update ifindex */
+  for (rn = route_top (ipv4_rib_table); rn; rn = route_next (rn))
+    {
+      for (rib = rn->info; rib; rib = rib->next)
+	{
+	  if (rib->u.ifname){
+	    if (!strncmp(rib->u.ifname,name,INTERFACE_NAMSIZ)){
+	      memset(&tmp_rib,0,sizeof (struct rib));
+	      memcpy(&tmp_rib,rib,sizeof (struct rib));
+	      memcpy(&p,(struct prefix_ipv4 *)&rn->p,sizeof (struct prefix_ipv4));
+
+	      rib_delete_ipv4_pseudo(rib->type,rib->flags,
+				     (struct prefix_ipv4 *)&rn->p,
+				     &rib->u.gate4,rib->u.ifname,rib->table);
+	      
+	      tmp_rib.u.ifindex=ifindex_new;
+#ifdef DEBUG
+	      printf ("rib ifname %s ifindex %d will be added",
+		      tmp_rib.u.ifname , tmp_rib.u.ifindex);
+#endif /* DEBUG */	      
+	      rib_add_ipv4(tmp_rib.type,tmp_rib.flags,&p,
+			   NULL,tmp_rib.u.ifindex,tmp_rib.table,0 ,0);
+	    }	    
+	  }
+	}
+    }  
+}
+#endif /* HAVE_IF_PSEUDO */     

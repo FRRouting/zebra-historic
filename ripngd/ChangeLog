@@ -1,3 +1,28 @@
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.89 is released.
+
+2000-09-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_send_packet): Use CMSG_SPACE instead of sizeof
+	hack.  Revert privious alignment patch.
+
+2000-09-20  URA Hiroshi <ura@hiru.aoba.yokohama.jp>
+
+	* ripngd.c (ripng_send_packet): Fix an alignment bug. Thus ripngd
+	can't send packets.
+
+2000-09-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_interface.c (ripng_interface_address_delete): Connected
+	address delete treatment added.
+
+2000-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripng_routemap.c (route_set_metric_compile): When checking '-'
+	character, argv[1] should be argv[0].  Reported by SHIRASAKI
+	Yasuhiro <yasuhiro@ocn.v6.ntt.net>.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.88 is released.

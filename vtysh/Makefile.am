@@ -1,17 +1,19 @@
 ## Process this file with Automake to create Makefile.in
 
 INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib
-DEFS = @DEFS@ -I. -I$(srcdir)
+DEFS = @DEFS@ -DSYSCONFDIR=\"$(sysconfdir)/\"
 
-LIBS = @LIBS@ @CURSES@
+LIBS = @LIBS@ @CURSES@ @LIBPAM@
 
 bin_PROGRAMS = vtysh
 
-vtysh_SOURCES = vtysh.c vtysh_cmd.c
-noinst_HEADERS = vtysh.h
+vtysh_SOURCES = vtysh_main.c vtysh.c vtysh_cmd.c vtysh_user.c
+noinst_HEADERS = vtysh.h vtysh_user.h
 vtysh_LDADD = ../lib/libzebra.a
 
-EXTRA_DIST = extract.pl
+sysconf_DATA = vtysh.conf.sample
+
+EXTRA_DIST = extract.pl vtysh.conf.sample
 
 rebuild:
 	./extract.pl ../zebra/*.c ../ripd/*.c ../ripngd/*.c ../ospfd/*.c ../ospf6d/*.c ../bgpd/*.c >vtysh_cmd.c
@@ -20,7 +22,11 @@ depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
 ## File dependency.
-vtysh.o: vtysh.c ../lib/version.h ../lib/command.h ../lib/vector.h \
- ../lib/vty.h ../vtysh/vtysh.h
+vtysh.o: vtysh.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
+ ../vtysh/vtysh.h
 vtysh_cmd.o: vtysh_cmd.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  vtysh.h
+vtysh_main.o: vtysh_main.c ../lib/version.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../vtysh/vtysh.h
+vtysh_user.o: vtysh_user.c ../lib/memory.h ../lib/newlist.h \
+ ../lib/command.h ../lib/vector.h ../lib/vty.h

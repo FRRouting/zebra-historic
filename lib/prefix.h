@@ -101,8 +101,9 @@ struct prefix_rd
 #endif /* INET6_BUFSIZ */
 
 /* Max bit/byte length of IPv4 address. */
-#define IPV4_MAX_BYTELEN   4
-#define IPV4_MAX_BITLEN   32
+#define IPV4_MAX_BYTELEN    4
+#define IPV4_MAX_BITLEN    32
+#define IPV4_MAX_PREFIXLEN 32
 #define IPV4_ADDR_CMP(D,S)   memcmp ((D), (S), IPV4_MAX_BYTELEN)
 #define IPV4_ADDR_SAME(D,S)  (memcmp ((D), (S), IPV4_MAX_BYTELEN) == 0)
 #define IPV4_ADDR_COPY(D,S)  memcpy ((D), (S), IPV4_MAX_BYTELEN)
@@ -111,8 +112,9 @@ struct prefix_rd
 #define IPV4_NET127(a)  ((((u_int32_t) (a)) & 0xff000000) == 0x7f000000)
 
 /* Max bit/byte length of IPv6 address. */
-#define IPV6_MAX_BYTELEN  16
-#define IPV6_MAX_BITLEN  128
+#define IPV6_MAX_BYTELEN    16
+#define IPV6_MAX_BITLEN    128
+#define IPV6_MAX_PREFIXLEN 128
 #define IPV6_ADDR_CMP(D,S)   memcmp ((D), (S), IPV6_MAX_BYTELEN)
 #define IPV6_ADDR_SAME(D,S)  (memcmp ((D), (S), IPV6_MAX_BYTELEN) == 0)
 #define IPV6_ADDR_COPY(D,S)  memcpy ((D), (S), IPV6_MAX_BYTELEN)

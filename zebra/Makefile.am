@@ -131,7 +131,7 @@ rtread_sysctl.o: rtread_sysctl.c ../lib/memory.h ../lib/log.h
 zebra_snmp.o: zebra_snmp.c
 zserv.o: zserv.c ../lib/prefix.h ../lib/command.h ../lib/vector.h \
  ../lib/vty.h ../lib/if.h ../lib/linklist.h ../lib/thread.h \
- ../lib/stream.h ../lib/memory.h rib.h ../lib/roken.h ../lib/network.h \
+ ../lib/stream.h ../lib/memory.h rib.h ../lib/network.h \
  ../lib/sockunion.h ../lib/log.h ../lib/table.h ../lib/zclient.h \
  ../zebra/zserv.h ../zebra/redistribute.h ../zebra/debug.h \
  ../zebra/ipforward.h

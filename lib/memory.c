@@ -275,6 +275,9 @@ struct memory_list memory_list_bgp[] =
   { MTYPE_AS_LIST,            "BGP as list     : %ld\r\n" },
   { MTYPE_AS_FILTER,          "BGP as filter   : %ld\r\n" },
   { 0,                        "---------------------\r\n" },
+  { MTYPE_COMMUNITY,          "Community       : %ld\r\n" },
+  { MTYPE_COMMUNITY_VAL,      "Community val   : %ld\r\n" },
+  { 0,                        "---------------------\r\n" },
   { MTYPE_CLUSTER,            "Cluster list    : %ld\r\n" },
   { MTYPE_CLUSTER_VAL,        "Cluster list val: %ld\r\n" },
   { 0,                        "---------------------\r\n" },
@@ -299,6 +302,9 @@ struct memory_list memory_list_ospf[] =
   { MTYPE_OSPF_AREA,          "OSPF area       : %ld\r\n" },
   { MTYPE_OSPF_AREA_RANGE,    "OSPF area range : %ld\r\n" },
   { MTYPE_OSPF_NETWORK,       "OSPF network    : %ld\r\n" },
+#ifdef NBMA_ENABLE
+  { MTYPE_OSPF_NEIGHBOR_STATIC,"OSPF static nbr : %ld\r\n" },
+#endif  /* NBMA_ENABLE */
   { MTYPE_OSPF_IF,            "OSPF interface  : %ld\r\n" },
   { MTYPE_OSPF_NEIGHBOR,      "OSPF neighbor   : %ld\r\n" },
   { MTYPE_OSPF_ROUTE,         "OSPF route      : %ld\r\n" },

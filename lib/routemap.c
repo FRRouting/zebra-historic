@@ -829,7 +829,7 @@ DEFUN (no_route_map_all, no_route_map_all_cmd,
   map = route_map_lookup_by_name (argv[0]);
   if (map == NULL)
     {
-      vty_out (vty, "can't find route-map with name %s%s",
+      vty_out (vty, "%% Could not find route-map %s%s",
 	       argv[0], VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -883,7 +883,7 @@ DEFUN (no_route_map, no_route_map_cmd,
   map = route_map_lookup_by_name (argv[0]);
   if (map == NULL)
     {
-      vty_out (vty, "can't find route-map with name %s%s",
+      vty_out (vty, "%% Could not find route-map %s%s",
 	       argv[0], VTY_NEWLINE);
       return CMD_WARNING;
     }
@@ -892,8 +892,8 @@ DEFUN (no_route_map, no_route_map_cmd,
   index = route_map_index_lookup (map, permit, pref);
   if (index == NULL)
     {
-      vty_out (vty, "can't find route-map %s %s %s%s", 
-	       argv[0], argv[1], argv[2], VTY_NEWLINE);
+      vty_out (vty, "%% Could not find route-map entry %s %s%s", 
+	       argv[0], argv[2], VTY_NEWLINE);
       return CMD_WARNING;
     }
 
@@ -1054,6 +1054,7 @@ route_map_init_vty ()
   install_element (CONFIG_NODE, &no_route_map_all_cmd);
 
   /* Install the on-match stuff */
+  install_element (RMAP_NODE, &route_map_cmd);
   install_element (RMAP_NODE, &rmap_onmatch_next_cmd);
   install_element (RMAP_NODE, &no_rmap_onmatch_next_cmd);
   install_element (RMAP_NODE, &rmap_onmatch_goto_cmd);

@@ -21,178 +21,447 @@
 
 #include "ospf6d.h"
 
-void
-delete_ospf6_nbr (struct neighbor *nbr)
-{
-}
+#include <zebra.h>
 
+#include "log.h"
+#include "thread.h"
+#include "linklist.h"
+#include "vty.h"
+
+#include "ospf6_list.h"
+#include "ospf6_lsa.h"
+#include "ospf6_mesg.h"
+#include "ospf6_neighbor.h"
+#include "ospf6_nsm.h"
+#include "ospf6_lsa.h"
+#include "ospf6_lsdb.h"
 int
-neighbor_thread_cancel (struct neighbor *nbr)
+ospf6_neighbor_last_dbdesc_release (struct thread *thread)
 {
-  if (nbr->inactivity_timer)
-    thread_cancel (nbr->inactivity_timer);
-  if (nbr->send_update)
-    thread_cancel (nbr->send_update);
+  struct ospf6_neighbor *o6n;
 
-  nbr->inactivity_timer = nbr->send_update
-    = (struct thread *)NULL;
-
-  /* new */
-  if (nbr->thread_dbdesc_retrans)
-    thread_cancel (nbr->thread_dbdesc_retrans);
-  nbr->thread_dbdesc_retrans = (struct thread *) NULL;
-
-  if (nbr->thread_lsreq_retrans)
-    thread_cancel (nbr->thread_lsreq_retrans);
-  nbr->thread_lsreq_retrans = (struct thread *) NULL;
-
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
+  memset (&o6n->last_dd, 0, sizeof (struct ospf6_dbdesc));
   return 0;
 }
 
-int
-list_cleared_of_lsa (struct neighbor *nbr)
+
+
+
+/* lookup lsa on lsa list of neighbor for dbdesc retransmit. */
+struct ospf6_lsa *
+ospf6_neighbor_dbdesc_lsa_lookup (struct ospf6_lsa *lsa,
+                                  struct ospf6_neighbor *o6n)
 {
-  list_delete_all_node (nbr->dd_retrans);
-  ospf6_lsdb_finish_neighbor (nbr);
-  ospf6_lsdb_init_neighbor (nbr);
-  return 0;
-}
-
-int
-free_last_dd (struct thread *thread)
-{
-  struct neighbor *nbr;
-
-  nbr = (struct neighbor *)THREAD_ARG (thread);
-  assert (nbr);
-  memset (&nbr->last_dd, 0, sizeof (struct ospf6_dbdesc));
-  return 0;
-}
-
-/* count neighbor which is in "state" in this area*/
-unsigned int
-count_nbr_in_state (state_t state, struct area *area)
-{
-  listnode n, o;
-  struct ospf6_interface *o6if;
-  struct neighbor *nbr;
-  unsigned int count = 0;
-
-  for (n = listhead (area->if_list); n; nextnode (n))
+  if (list_lookup_node (o6n->dbdesc_lsa, lsa))
     {
-      o6if = (struct ospf6_interface *) getdata (n);
-      for (o = listhead (o6if->neighbor_list); o; nextnode (o))
+#ifndef NDEBUG
+      if (!list_lookup_node (lsa->dbdesc_neighbor, o6n))
+        assert (0);
+#endif /* NDEBUG */
+      return lsa;
+    }
+  return NULL;
+}
+
+/* add lsa to summary list of neighbor */
+void
+ospf6_neighbor_dbdesc_lsa_add (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  if (ospf6_neighbor_summary_lookup (lsa, o6n))
+    return;
+
+  list_add_node (o6n->dbdesc_lsa, lsa);
+  list_add_node (lsa->dbdesc_neighbor, o6n);
+  ospf6_lsa_lock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: locked to be send in dbdesc to neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove lsa from summary list of neighbor */
+void
+ospf6_neighbor_dbdesc_lsa_remove (struct ospf6_lsa *lsa,
+                                  struct ospf6_neighbor *o6n)
+{
+  if (! ospf6_neighbor_dbdesc_lsa_lookup (lsa, o6n))
+    return;
+
+  list_delete_by_val (o6n->dbdesc_lsa, lsa);
+  list_delete_by_val (lsa->dbdesc_neighbor, o6n);
+  ospf6_lsa_unlock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: unlocked from being send in dbdesc to neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove all lsa from summary list of neighbor */
+void
+ospf6_neighbor_dbdesc_lsa_remove_all (struct ospf6_neighbor *o6n)
+{
+  struct ospf6_lsa *lsa;
+  listnode n;
+  while (listcount (o6n->dbdesc_lsa))
+    {
+      n = listhead (o6n->dbdesc_lsa);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_neighbor_dbdesc_lsa_remove (lsa, o6n);
+    }
+  return;
+}
+
+/* lookup lsa on summary list of neighbor */
+struct ospf6_lsa *
+ospf6_neighbor_summary_lookup (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  if (list_lookup_node (o6n->summarylist, lsa))
+    {
+#ifndef NDEBUG
+      if (!list_lookup_node (lsa->summary_nbr, o6n))
+        assert (0);
+#endif /* NDEBUG */
+      return lsa;
+    }
+  return NULL;
+}
+
+/* add lsa to summary list of neighbor */
+void
+ospf6_neighbor_summary_add (struct ospf6_lsa *lsa,
+                            struct ospf6_neighbor *o6n)
+{
+  if (ospf6_neighbor_summary_lookup (lsa, o6n))
+    return;
+
+  list_add_node (o6n->summarylist, lsa);
+  list_add_node (lsa->summary_nbr, o6n);
+  ospf6_lsa_lock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: locked from summary-list in neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove lsa from summary list of neighbor */
+void
+ospf6_neighbor_summary_remove (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  if (! ospf6_neighbor_summary_lookup (lsa, o6n))
+    return;
+
+  list_delete_by_val (o6n->summarylist, lsa);
+  list_delete_by_val (lsa->summary_nbr, o6n);
+  ospf6_lsa_unlock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: unlocked from summary-list in neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove all lsa from summary list of neighbor */
+void
+ospf6_neighbor_summary_remove_all (struct ospf6_neighbor *o6n)
+{
+  struct ospf6_lsa *lsa;
+  listnode n;
+  while (listcount (o6n->summarylist))
+    {
+      n = listhead (o6n->summarylist);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_neighbor_summary_remove (lsa, o6n);
+    }
+  return;
+}
+
+/* lookup lsa on request list of neighbor */
+/* this lookup is different from others, because this lookup is to find
+   the same LSA instance of different memory space */
+struct ospf6_lsa *
+ospf6_neighbor_request_lookup (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  listnode n;
+  struct ospf6_lsa *p;
+
+  for (n = listhead (o6n->requestlist); n; nextnode (n))
+    {
+      p = (struct ospf6_lsa *) getdata (n);
+      if (ospf6_lsa_issame ((struct ospf6_lsa_header *)p->lsa_hdr,
+                            (struct ospf6_lsa_header *)lsa->lsa_hdr))
         {
-          nbr = (struct neighbor *) getdata (o);
-          if (nbr->state == state)
-            count++;
+#ifndef NDEBUG
+          if (! list_lookup_node (p->request_nbr, o6n))
+          assert (0);
+#endif /* NDEBUG */
+          return p;
         }
     }
-  return count;
+  return NULL;
 }
 
-/* Neighbor section */
-/* Allocate new Neighbor data structure */
-static struct neighbor *
-neighbor_new ()
+/* add lsa to request list of neighbor */
+void
+ospf6_neighbor_request_add (struct ospf6_lsa *lsa,
+                            struct ospf6_neighbor *o6n)
 {
-  struct neighbor *new = (struct neighbor *)
-      XMALLOC (MTYPE_OSPF6_NEIGHBOR, sizeof (struct neighbor));
-  if (new)
-    memset (new, 0, sizeof (struct neighbor));
-  else
-    zlog_warn ("Can't malloc neighbor");
+  if (ospf6_neighbor_request_lookup (lsa, o6n))
+    return;
+
+  list_add_node (o6n->requestlist, lsa);
+  list_add_node (lsa->request_nbr, o6n);
+  ospf6_lsa_lock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: locked from request-list in neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove lsa from request list of neighbor */
+void
+ospf6_neighbor_request_remove (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  if (! ospf6_neighbor_request_lookup (lsa, o6n))
+    return;
+
+  list_delete_by_val (o6n->requestlist, lsa);
+  list_delete_by_val (lsa->request_nbr, o6n);
+  ospf6_lsa_unlock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: unlocked from request-list in neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove all lsa from request list of neighbor */
+void
+ospf6_neighbor_request_remove_all (struct ospf6_neighbor *o6n)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+  while (listcount (o6n->requestlist))
+    {
+      n = listhead (o6n->requestlist);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_neighbor_request_remove (lsa, o6n);
+    }
+  return;
+}
+
+/* lookup lsa on retrans list of neighbor */
+struct ospf6_lsa *
+ospf6_neighbor_retrans_lookup (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  if (list_lookup_node (o6n->retranslist, lsa))
+    {
+#ifndef NDEBUG
+      if (!list_lookup_node (lsa->retrans_nbr, o6n))
+        assert (0);
+#endif /* NDEBUG */
+      return lsa;
+    }
+  return NULL;
+}
+
+/* add lsa to retrans list of neighbor */
+void
+ospf6_neighbor_retrans_add (struct ospf6_lsa *lsa,
+                            struct ospf6_neighbor *o6n)
+{
+  if (ospf6_neighbor_retrans_lookup (lsa, o6n))
+    return;
+
+  list_add_node (o6n->retranslist, lsa);
+  list_add_node (lsa->retrans_nbr, o6n);
+  ospf6_lsa_lock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: locked from retrans-list in neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  return;
+}
+
+/* remove lsa from retrans list of neighbor */
+void
+ospf6_neighbor_retrans_remove (struct ospf6_lsa *lsa,
+                               struct ospf6_neighbor *o6n)
+{
+  /* if not on retranslist, return */
+  if (! ospf6_neighbor_retrans_lookup (lsa, o6n))
+    return;
+
+  /* remove from retrans list */
+  list_delete_by_val (o6n->retranslist, lsa);
+  list_delete_by_val (lsa->retrans_nbr, o6n);
+  ospf6_lsa_unlock (lsa);
+
+#if 0
+  if (IS_OSPF6_DUMP_LSA)
+    zlog_info ("lsa: unlocked from retrans-list in neighbor %s: %s (lock:%d)",
+               o6n->str, lsa->str, lsa->lock);
+#endif
+
+  /* if this LSA is MaxAge, try to delete */
+  if (ospf6_lsa_is_maxage (lsa))
+    {
+      struct ospf6_lsa_header *lsa_header =
+        (struct ospf6_lsa_header *) lsa->lsa_hdr;
+
+      if (OSPF6_LSA_IS_SCOPE_LINKLOCAL (ntohs (lsa_header->type)))
+        ospf6_lsdb_check_maxage_linklocal ((struct ospf6_interface *)
+                                            lsa->scope);
+      else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
+        ospf6_lsdb_check_maxage_area ((struct ospf6_area *) lsa->scope);
+      else if (OSPF6_LSA_IS_SCOPE_AREA (ntohs (lsa_header->type)))
+        ospf6_lsdb_check_maxage_as ((struct ospf6 *) lsa->scope);
+    }
+}
+
+/* remove all lsa from retrans list of neighbor */
+void
+ospf6_neighbor_retrans_remove_all (struct ospf6_neighbor *o6n)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+  while (listcount (o6n->retranslist))
+    {
+      n = listhead (o6n->retranslist);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_neighbor_retrans_remove (lsa, o6n);
+    }
+  return;
+}
+
+void
+ospf6_neighbor_thread_cancel_all (struct ospf6_neighbor *o6n)
+{
+  if (o6n->inactivity_timer)
+    thread_cancel (o6n->inactivity_timer);
+  o6n->inactivity_timer = (struct thread *) NULL;
+
+  if (o6n->send_update)
+    thread_cancel (o6n->send_update);
+  o6n->send_update = (struct thread *) NULL;
+
+  if (o6n->thread_dbdesc_retrans)
+    thread_cancel (o6n->thread_dbdesc_retrans);
+  o6n->thread_dbdesc_retrans = (struct thread *) NULL;
+
+  if (o6n->thread_lsreq_retrans)
+    thread_cancel (o6n->thread_lsreq_retrans);
+  o6n->thread_lsreq_retrans = (struct thread *) NULL;
+}
+
+
+void
+ospf6_neighbor_list_remove_all (struct ospf6_neighbor *o6n)
+{
+  ospf6_neighbor_dbdesc_lsa_remove_all (o6n);
+  ospf6_neighbor_summary_remove_all (o6n);
+  ospf6_neighbor_request_remove_all (o6n);
+  ospf6_neighbor_retrans_remove_all (o6n);
+}
+
+/* create ospf6_neighbor */
+struct ospf6_neighbor *
+ospf6_neighbor_create (u_int32_t router_id)
+{
+  struct ospf6_neighbor *new;
+
+  new = (struct ospf6_neighbor *)
+    XMALLOC (MTYPE_OSPF6_NEIGHBOR, sizeof (struct ospf6_neighbor));
+  if (new == NULL)
+    {
+      zlog_warn ("neighbor: malloc failed");
+      return NULL;
+    }
+
+  memset (new, 0, sizeof (struct ospf6_neighbor));
+
+  new->state = OSPF6_NEIGHBOR_STATE_DOWN;
+
+  new->rtr_id = router_id;
+  inet_ntop (AF_INET, &router_id, new->str, sizeof (new->str));
+  new->inactivity_timer = (struct thread *)NULL;
+
+  new->summarylist = list_init ();
+  new->retranslist = list_init ();
+  new->requestlist = list_init ();
+
+  new->dbdesc_lsa = list_init ();
+
   return new;
 }
 
-
-
-/* Make new neighbor structure */
-struct neighbor *
-make_neighbor (rtr_id_t rtr_id, struct ospf6_interface *ospf6_interface)
-{
-  struct neighbor *nbr = neighbor_new ();
-
-  if (!nbr)
-    return (struct neighbor *)NULL;
-  nbr->state = NBS_DOWN;
-  nbr->ospf6_interface = ospf6_interface;
-  nbr->rtr_id = rtr_id;
-  inet_ntop (AF_INET, &rtr_id, nbr->str, sizeof (nbr->str));
-  nbr->inactivity_timer = (struct thread *)NULL;
-  nbr->dd_retrans = list_init ();
-  nbr->summarylist = list_init ();
-  nbr->retranslist = list_init ();
-  nbr->requestlist = list_init ();
-  nbr->direct_ack = list_init ();
-  list_add_node (ospf6_interface->neighbor_list, nbr);
-
-  return nbr;
-}
-
-/* delete neighbor from ospf6_interface nbr_list */
 void
-delete_neighbor (struct neighbor *nbr, struct ospf6_interface *ospf6_interface)
+ospf6_neighbor_delete (struct ospf6_neighbor *o6n)
 {
-  /* xxx not yet */
-  return;
+  ospf6_neighbor_thread_cancel_all (o6n);
+  ospf6_neighbor_list_remove_all (o6n);
+
+  list_free (o6n->dbdesc_lsa);
+  list_free (o6n->summarylist);
+  list_free (o6n->requestlist);
+  list_free (o6n->retranslist);
+
+  XFREE (MTYPE_OSPF6_NEIGHBOR, o6n);
 }
 
-/* delete all neighbor on ospf6_interface nbr_list */
-void
-delete_all_neighbors (struct ospf6_interface *ospf6_interface)
+struct ospf6_neighbor *
+ospf6_neighbor_lookup (u_int32_t router_id,
+                       struct ospf6_interface *o6i)
 {
-  /* xxx not yet */
-  return;
-}
+  listnode n;
+  struct ospf6_neighbor *o6n;
 
-
-/* Lookup functions. */
-/* lookup neighbor from OSPF6 interface.
-   because neighbor may appear on two different OSPF interface */
-struct neighbor *
-nbr_lookup (rtr_id_t rtr_id, struct ospf6_interface *o6if)
-{
-  struct neighbor *nbr;
-  listnode k;
-
-  for (k = listhead (o6if->neighbor_list); k; nextnode (k))
+  for (n = listhead (o6i->neighbor_list); n; nextnode (n))
     {
-      nbr = (struct neighbor *)getdata (k);
-      if (nbr->rtr_id == rtr_id)
-        return nbr;
+      o6n = (struct ospf6_neighbor *) getdata (n);
+      if (o6n->rtr_id == router_id)
+        return o6n;
     }
-
-  return (struct neighbor *)NULL;
+  return (struct ospf6_neighbor *) NULL;
 }
 
 
-/* show specified area structure */
-
+/* vty functions */
 /* show neighbor structure */
-int
-show_nbr (struct vty *vty, struct neighbor *nbr)
-{
-  char rtrid[16], dr[16], bdr[16];
-
-#if 0
-  vty_out (vty, "%-15s %-6s %-8s %-15s %-15s %s[%s]%s",
-     "RouterID", "I/F-ID", "State", "DR", "BDR", "I/F", "State", VTY_NEWLINE);
-#endif
-
-  inet_ntop (AF_INET, &nbr->rtr_id, rtrid, sizeof (rtrid));
-  inet_ntop (AF_INET, &nbr->dr, dr, sizeof (dr));
-  inet_ntop (AF_INET, &nbr->bdr, bdr, sizeof (bdr));
-  vty_out (vty, "%-15s %6lu %-8s %-15s %-15s %s[%s]%s",
-           rtrid, nbr->ifid, nbs_name[nbr->state], dr, bdr,
-           nbr->ospf6_interface->interface->name,
-           ifs_name[nbr->ospf6_interface->state],
-	   VTY_NEWLINE);
-  return 0;
-}
-
 void
-ospf6_neighbor_vty_summary (struct vty *vty, struct neighbor *nbr)
+ospf6_neighbor_vty_summary (struct vty *vty, struct ospf6_neighbor *nbr)
 {
   char rtrid[16], dr[16], bdr[16];
 
@@ -213,7 +482,7 @@ ospf6_neighbor_vty_summary (struct vty *vty, struct neighbor *nbr)
 }
 
 void
-ospf6_neighbor_vty (struct vty *vty, struct neighbor *o6n)
+ospf6_neighbor_vty (struct vty *vty, struct ospf6_neighbor *o6n)
 {
   char hisaddr[64];
   inet_ntop (AF_INET6, &o6n->hisaddr.sin6_addr, hisaddr, sizeof (hisaddr));
@@ -230,7 +499,7 @@ ospf6_neighbor_vty (struct vty *vty, struct neighbor *o6n)
 }
 
 void
-ospf6_neighbor_vty_detail (struct vty *vty, struct neighbor *o6n)
+ospf6_neighbor_vty_detail (struct vty *vty, struct ospf6_neighbor *o6n)
 {
   char dbdesc_bit[64], hisdr[16], hisbdr[16];
   ospf6_neighbor_vty (vty, o6n);
@@ -250,10 +519,8 @@ ospf6_neighbor_vty_detail (struct vty *vty, struct neighbor *o6n)
                 " ifmtu:%hu bit:%s seqnum:%lu%s",
                 "xxx", ntohs (o6n->last_dd.ifmtu), dbdesc_bit,
                 ntohl (o6n->last_dd.seqnum), VTY_NEWLINE);
-  vty_out (vty, "    Number of LSAs retransmitting: %d%s",
-                listcount (o6n->dd_retrans), VTY_NEWLINE);
-  vty_out (vty, "    Number of LSAs direct-ack'ing: %d%s",
-                listcount (o6n->direct_ack), VTY_NEWLINE);
+  vty_out (vty, "    Number of LSAs in DbDesc retransmitting: %d%s",
+                listcount (o6n->dbdesc_lsa), VTY_NEWLINE);
   vty_out (vty, "    Number of LSAs in SummaryList: %d%s",
                 listcount (o6n->summarylist), VTY_NEWLINE);
   vty_out (vty, "    Number of LSAs in RequestList: %d%s",
@@ -279,4 +546,6 @@ ospf6_neighbor_vty_detail (struct vty *vty, struct neighbor *o6n)
                 "LSUpdateReceived", o6n->ospf6_stat_received_lsupdate,
                 VTY_NEWLINE);
 }
+
+
 

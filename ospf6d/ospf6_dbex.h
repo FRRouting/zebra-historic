@@ -28,16 +28,23 @@
 #define DIRECT_ACK   2
 
 /* Function Prototypes */
-void prepare_neighbor_lsdb (struct neighbor *);
-int check_neighbor_lsdb (struct iovec *, struct neighbor *);
-void proceed_summarylist (struct neighbor *);
-void direct_acknowledge (struct ospf6_lsa *);
-void delayed_acknowledge (struct ospf6_lsa *);
-void lsa_receive (struct ospf6_lsa_hdr *, struct neighbor *);
-int ack_type (struct ospf6_lsa *, int);
-void ospf6_lsa_flood_area (struct ospf6_lsa *, struct area *);
-void ospf6_lsa_flood_interface (struct ospf6_lsa *, struct ospf6_interface *);
-void ospf6_lsa_flood (struct ospf6_lsa *);
+void ospf6_dbex_prepare_summary (struct ospf6_neighbor *);
+
+int
+ospf6_dbex_check_dbdesc_lsa_header (struct ospf6_lsa_header *lsa_header,
+                                    struct ospf6_neighbor *from);
+
+void
+ospf6_dbex_acknowledge_delayed (struct ospf6_lsa *lsa,
+                                struct ospf6_interface *o6i);
+
+void
+ospf6_dbex_receive_lsa (struct ospf6_lsa_header *,
+                        struct ospf6_neighbor *);
+
+int ack_type (struct ospf6_lsa *, int, struct ospf6_neighbor *);
+
+void ospf6_dbex_flood (struct ospf6_lsa *, struct ospf6_neighbor *);
 
 #endif /* OSPF6_DBEX_H */
 

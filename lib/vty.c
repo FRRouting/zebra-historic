@@ -228,6 +228,7 @@ vty_new ()
   new->obuf = (struct buffer *) buffer_new (BUFFER_VTY, 100);
   new->buf = XMALLOC (MTYPE_VTY, VTY_BUFSIZ);
   new->max = VTY_BUFSIZ;
+  new->sb_buffer = NULL;
 
   return new;
 }
@@ -1910,6 +1911,10 @@ vty_close (struct vty *vty)
   /* Free input buffer. */
   buffer_free (vty->obuf);
 
+  /* Free SB buffer. */
+  if (vty->sb_buffer)
+    buffer_free (vty->sb_buffer);
+
   /* Free command history. */
   for (i = 0; i < VTY_MAXHIST; i++)
     if (vty->hist[i])
@@ -1919,7 +1924,8 @@ vty_close (struct vty *vty)
   vector_unset (vtyvec, vty->fd);
 
   /* Close socket. */
-  close (vty->fd);
+  if (vty->fd > 0)
+    close (vty->fd);
 
   if (vty->address)
     XFREE (0, vty->address);
@@ -1990,12 +1996,12 @@ vty_read_file (FILE *confp)
 
 /* Read up configuration file from file_name. */
 void
-vty_read_config (char *config_file, 
-		 char *config_current_dir, 
+vty_read_config (char *config_file,
+		 char *config_current_dir,
 		 char *config_default_dir)
 {
   char *cwd;
-  FILE *confp;
+  FILE *confp = NULL;
   char *fullpath;
 
   /* If -f flag specified. */
@@ -2023,7 +2029,8 @@ vty_read_config (char *config_file,
   else
     {
       /* Relative path configuration file open. */
-      confp = fopen (config_current_dir, "r");
+      if (config_current_dir)
+	confp = fopen (config_current_dir, "r");
 
       /* If there is no relative path exists, open system default file. */
       if (confp == NULL)
@@ -2095,8 +2102,8 @@ vty_config_unlock (struct vty *vty)
 }
 
 /* Master of the threads. */
-/* extern struct thread_master *master; */
-struct thread_master *master;
+extern struct thread_master *master;
+/* struct thread_master *master; */
 
 static void
 vty_event (enum event event, int sock, struct vty *vty)
@@ -2330,19 +2337,19 @@ DEFUN (no_service_advanced_vty,
 DEFUN (terminal_monitor,
        terminal_monitor_cmd,
        "terminal monitor",
-       "Terminal configuration setup\n"
-       "Show logging information to the terminal\n")
+       "Set terminal line parameters\n"
+       "Copy debug output to the current terminal line\n")
 {
   vty->monitor = 1;
   return CMD_SUCCESS;
 }
 
-DEFUN (no_terminal_monitor,
-       no_terminal_monitor_cmd,
-       "no terminal monitor",
+DEFUN (terminal_no_monitor,
+       terminal_no_monitor_cmd,
+       "terminal no monitor",
+       "Set terminal line parameters\n"
        NO_STR
-       "Terminal configuration setup\n"
-       "Show logging information to the terminal\n")
+       "Copy debug output to the current terminal line\n")
 {
   vty->monitor = 0;
   return CMD_SUCCESS;
@@ -2477,6 +2484,12 @@ vty_shell_serv (struct vty *vty)
   return vty->type == VTY_SHELL_SERV ? 1 : 0;
 }
 
+void
+vty_init_vtysh ()
+{
+  vtyvec = vector_init (VECTOR_MIN_SIZE);
+}
+
 /* Install vty's own commands like `who' command. */
 void
 vty_init ()
@@ -2500,7 +2513,7 @@ vty_init ()
   install_element (CONFIG_NODE, &no_service_advanced_vty_cmd);
   install_element (CONFIG_NODE, &show_history_cmd);
   install_element (ENABLE_NODE, &terminal_monitor_cmd);
-  install_element (ENABLE_NODE, &no_terminal_monitor_cmd);
+  install_element (ENABLE_NODE, &terminal_no_monitor_cmd);
   install_element (ENABLE_NODE, &show_history_cmd);
 
   install_default (VTY_NODE);

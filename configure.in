@@ -1,13 +1,13 @@
 ##
-## Configure template file for zebra.
+## Configure template file for Zebra.
 ## autoconf will generate configure script.
 ##
-##  Copyright (c) 1996, 97, 98, 99 Kunihiro Ishiguro <kunihiro@zebra.org>
+##  Copyright (c) 1996, 97, 98, 99, 2000 Kunihiro Ishiguro <kunihiro@zebra.org>
 ##
 AC_PREREQ(2.13)
 
 AC_INIT(lib/zebra.h)
-AM_INIT_AUTOMAKE(zebra, 0.1)
+AM_INIT_AUTOMAKE(zebra, 0.89)
 
 # Get macros
 builtin(include, aczebra.m4)
@@ -30,7 +30,7 @@ dnl --------
 AC_PROG_CC
 
 dnl -----------------------------------------
-dnl If CLFAGS doesn't exist set default value
+dnl If CLFAGS doesn\'t exist set default value
 dnl -----------------------------------------
 if test "x$cflags_specified" = "x"
 then
@@ -70,8 +70,6 @@ AC_ARG_ENABLE(ospfd,
 [  --disable-ospfd         do not build ospfd])
 AC_ARG_ENABLE(ospf6d,
 [  --disable-ospf6d        do not build ospf6d])
-AC_ARG_ENABLE(pthread,
-[  --disable-pthread       do not use pthread features])
 AC_ARG_ENABLE(guile,
 [  --enable-guile          build zebra-guile])
 AC_ARG_ENABLE(bgp-announce,
@@ -82,6 +80,8 @@ AC_ARG_ENABLE(broken-aliases,
 [  --enable-broken-aliases enable aliases as distinct interfaces for Linux 2.2.X])
 AC_ARG_ENABLE(snmp,
 [  --enable-snmp           enable SNMP support])
+AC_ARG_WITH(libpam,
+[  --with-libpam            use libpam for PAM support in vtysh])
 
 if test "${enable_broken_aliases}" = "yes"; then
   if test "${enable_netlink}" = "yes"
@@ -140,61 +140,49 @@ case "$host" in
   ;;
 esac
 
+case "${host_cpu}-${host_os}" in
+  i?86-solaris*)
+    AC_DEFINE(SOLARIS_X86)
+  ;;
+esac
+
+
 dnl ---------------------
 dnl Integrated VTY option
 dnl ---------------------
 case "${enable_vtysh}" in
   "yes") VTYSH="vtysh";
          AC_DEFINE(VTYSH)
+         AC_CHECK_LIB(ncurses, tputs)
          AC_CHECK_LIB(readline, main)
          if test $ac_cv_lib_readline_main = no; then
            AC_MSG_ERROR([vtysh need libreadline but was not found on your system.])
          fi
-         AC_CHECK_LIB(ncurses, tputs)
+	 AC_CHECK_HEADER(readline/history.h)
+	 if test $ac_cv_header_readline_history_h = no;then
+           AC_MSG_ERROR([readline is too old to have readline/history.h, please update to the latest readline library.])
+	 fi
          ;;
   "no" ) VTYSH="";;
   *    ) ;;
 esac
 
-if test "${enable_pthread}" = "yes"; then
-
-  dnl -----------------------------
-  dnl FreeBSD pthread library check
-  dnl At this moment (even with FreeBSD 2.2.7) this doesn't work correctly.
-  dnl So I commented out below section.
-  dnl --
-  dnl I have rewritten the test for specific OS issues - peter@knowledgle.com
-  dnl -----------------------------
-  AC_CHECK_LIB(c_r, main,
-  [AC_DEFINE(HAVE_LIBC_R)
-   PTHREAD_LIB="-lc_r"])
-  
-  AC_CHECK_LIB(pthread, main,
-   [AC_DEFINE(HAVE_LIBPTHREAD)
-   PTHREAD_LIB="-lpthread"])
-  
-  case "$host" in
-    *-openbsd*)
-      OCPPFLAGS=$CPPFLAGS
-      CPPFLAGS="-pthread $CPPFLAGS";;
-  esac
-    
-  AC_CHECK_HEADER(pthread.h,
-  [if test x"$PTHREAD_LIB" != "x"; then
-    AC_DEFINE(HAVE_PTHREAD)
-    AC_DEFINE(HAVE_PTHREAD_H)
-    case "$host" in
-        *-sunos5.6* | *-solaris2.6*)
-          CPPFLAGS=$OCPPFLAGS
-          LIBS="$PTHREAD_LIB $LIBS";;
-        *-freebsd*)
-          CPPFLAGS=$OCPPFLAGS;;
-        *-openbsd*)
-	  LIBS="$PTHREAD_LIB $LIBS";;
-    esac
-  fi])
-  
+dnl -----------------------------
+dnl   Pseudo interfaces option
+dnl ____________________________
+if test "${enable_if_pseudo}" = "yes"; then
+   AC_MSG_RESULT(pseudo interfaces)
+   AC_DEFINE(HAVE_IF_PSEUDO)
 fi
+
+dnl ----------
+dnl PAM module
+dnl ----------
+if test "$with_libpam" = "yes";then
+  LIBPAM="-lpam -lpam_misc -ldl"
+  AC_DEFINE(USE_PAM)
+fi
+AC_SUBST(LIBPAM)
 
 dnl -------------------------------
 dnl Endian-ness check
@@ -212,7 +200,7 @@ dnl AC_CHECK_SIZEOF(long)
 dnl ----------------------------
 dnl check existance of functions
 dnl ----------------------------
-AC_CHECK_FUNCS(bcopy bzero strerror inet_aton daemon snprintf vsnprintf strlcat strlcpy if_nametoindex if_indextoname)
+AC_CHECK_FUNCS(bcopy bzero strerror inet_aton daemon snprintf vsnprintf strlcat strlcpy if_nametoindex if_indextoname getifaddrs)
 dnl AC_REPLACE_FUNCS(vsnprintf)
 
 dnl ------------------------------------

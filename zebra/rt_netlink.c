@@ -324,6 +324,7 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   struct rtattr *tb [IFA_MAX + 1];
   struct interface *ifp;
   void *addr = NULL;
+  void *ptpaddr = NULL;
   void *broad = NULL;
 
   ifa = NLMSG_DATA (h);
@@ -366,8 +367,12 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
       if (tb[IFA_LOCAL])
 	{
 	  addr = RTA_DATA (tb[IFA_LOCAL]);
-	  if (tb[IFA_ADDRESS])
-	    broad = RTA_DATA (tb[IFA_ADDRESS]);
+	  if (tb[IFA_ADDRESS]) 
+	    {
+	      broad = RTA_DATA (tb[IFA_ADDRESS]);
+	      zlog(NULL,LOG_INFO,"setting ptpaddr");
+	      ptpaddr = RTA_DATA (tb[IFA_ADDRESS]);
+	    }
 	  else
 	    broad = NULL;
 	}
@@ -401,14 +406,31 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   /* Register interface address to the interface. */
   if (ifa->ifa_family == AF_INET)
     {
-      if (h->nlmsg_type == RTM_NEWADDR)
-	connected_add_ipv4 (ifp, 
-			    (struct in_addr *) addr, ifa->ifa_prefixlen, 
-			    (struct in_addr *) broad);
-      else
-	connected_delete_ipv4 (ifp, 
-			       (struct in_addr *) addr, ifa->ifa_prefixlen, 
-			       (struct in_addr *) broad);
+      if (h->nlmsg_type == RTM_NEWADDR) 
+	{
+	  connected_add_ipv4 (ifp, 
+			      (struct in_addr *) addr, ifa->ifa_prefixlen, 
+			      (struct in_addr *) broad);
+	  if (ptpaddr) 
+	    {
+	      connected_add_ipv4 (ifp,
+				  (struct in_addr *) ptpaddr, ifa->ifa_prefixlen,
+				  (struct in_addr *) broad);
+	    } 
+	  
+	}
+      else 
+	{
+	  connected_delete_ipv4 (ifp, 
+				 (struct in_addr *) addr, ifa->ifa_prefixlen, 
+				 (struct in_addr *) broad);
+	  if (ptpaddr) 
+	    {
+	      connected_delete_ipv4 (ifp,
+				     (struct in_addr *) ptpaddr, ifa->ifa_prefixlen,
+				     (struct in_addr *) broad);
+	    }
+	}
     }
 #ifdef HAVE_IPV6
   if (ifa->ifa_family == AF_INET6)
@@ -768,6 +790,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	}      
       else
 	{
+#ifndef HAVE_IF_PSEUDO
 	  /* Interface status change. */
 	  ifp->ifindex = ifi->ifi_index;
 	  ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
@@ -795,10 +818,61 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 #endif /* DEBUG */
 		}
 	    }
+#else
+	  /* real interface came into */ 
+	  if (IS_IF_PSEUDO(ifp) &&
+	      ifp->ifindex == INTERFACE_PSEUDO){
+	    zlog_info ("interface %s index %d is added.", 
+		       ifp->name, ifi->ifi_index);
+
+	    ifp->ifindex = ifi->ifi_index;
+	    ifp->flags = ifi->ifi_flags & 0x0000fffff;
+	    ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
+	    ifp->metric = 1;
+
+	    /* If new link is added. */
+	    zebra_interface_add_update (ifp);
+	  }
+	  else{
+	    /* Interface status change. */
+	    ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
+	    ifp->metric = 1;
+#ifdef DEBUG	    
+	    printf ("Changed status interface ifindex %d\n",ifi->ifi_index);
+#endif /* DEBUG */	    	    
+	    ifp->ifindex = ifi->ifi_index;
+	    if (if_is_up (ifp))
+	      {
+		ifp->flags = ifi->ifi_flags & 0x0000fffff;
+		if (! if_is_up (ifp))
+		  {
+		    if_down (ifp);
+#ifdef DEBUG
+		    printf ("Interface status changed to down message\n");
+#endif /* DEBUG */
+		  }
+	      }
+	    else
+	      {
+		ifp->flags = ifi->ifi_flags & 0x0000fffff;
+		if (if_is_up (ifp))
+		  {
+		    if (IS_IF_PSEUDO(ifp)){
+		      rib_ifindex_update_name(name,ifi->ifi_index);
+		    }
+		    if_up (ifp);
+#ifdef DEBUG
+		    printf ("Interface status changed to up message\n");
+#endif /* DEBUG */
+		  }
+	      }
+	  }
+#endif /* HAVE_IF_PSEUDO */
 	}
     }
   else
     {
+      /* RTM_DELLINK. */
       ifp = if_lookup_by_name (name);
 
       if (ifp == NULL)
@@ -808,9 +882,21 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
       zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
 	    ifp->name, ifp->ifindex);
 
+#ifdef HAVE_IF_PSEUDO      
+      rib_if_delete(ifp);
+#endif /* HAVE_IF_PSEUDO */      
       zebra_interface_delete_update (ifp);
       
+#ifndef HAVE_IF_PSEUDO
       if_delete (ifp);
+#else
+      if (!IS_IF_PSEUDO(ifp)){
+	  if_delete (ifp);
+      }
+      else{
+	ifp->ifindex=INTERFACE_PSEUDO;
+      }
+#endif /* HAVE_IF_PSEUDO */
     }
 
   return 0;
@@ -831,7 +917,7 @@ int
 netlink_information_fetch (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
 #ifdef DEBUG
-  printf ("%s: ", lookup(nlmsg_str, h->nlmsg_type));
+  printf ("DEBGU: %s\n", lookup(nlmsg_str, h->nlmsg_type));
 #endif /* DEBUG */
 
   switch (h->nlmsg_type)

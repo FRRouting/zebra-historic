@@ -23,7 +23,6 @@
 
 #include "hash.h"
 #include "memory.h"
-#include "roken.h"
 #include "vector.h"
 #include "vty.h"
 #include "str.h"
@@ -39,6 +38,9 @@
 
 /* Two octet is used for AS value. */
 #define AS_VALUE_SIZE         sizeof (as_t)
+
+/* AS segment octet length. */
+#define ASSEGMENT_LEN(X)  ((X)->length * AS_VALUE_SIZE + AS_HEADER_SIZE)
 
 /* To fetch and store as segment value. */
 struct assegment
@@ -614,12 +616,48 @@ aspath_cmp_left (struct aspath *aspath1, struct aspath *aspath2)
   seg1 = (struct assegment *) aspath1->data;
   seg2 = (struct assegment *) aspath2->data;
 
+  while (seg1 && seg1->length 
+	 && (seg1->type == AS_CONFED_SEQUENCE || seg1->type == AS_CONFED_SET))
+    seg1 = (struct assegment *) ((caddr_t) seg1 + ASSEGMENT_LEN (seg1));
+  while (seg2 && seg2->length 
+	 && (seg2->type == AS_CONFED_SEQUENCE || seg2->type == AS_CONFED_SET))
+    seg2 = (struct assegment *) ((caddr_t) seg2 + ASSEGMENT_LEN (seg2));
+
   /* Check as1's */
   if (seg1 == NULL || seg1->length == 0 || seg1->type != AS_SEQUENCE)
     return 0;
   as1 = seg1->asval[0];
 
   if (seg2 == NULL || seg2->length == 0 || seg2->type != AS_SEQUENCE)
+    return 0;
+  as2 = seg2->asval[0];
+
+  if (as1 == as2)
+    return 1;
+
+  return 0;
+}
+
+/* Compare leftmost AS value for MED check.  If as1's leftmost AS and
+   as2's leftmost AS is same return 1. (confederation as-path only)*/
+int
+aspath_cmp_left_confed (struct aspath *aspath1, struct aspath *aspath2)
+{
+  struct assegment *seg1;
+  struct assegment *seg2;
+  as_t as1;
+  as_t as2;
+
+  seg1 = (struct assegment *) aspath1->data;
+  seg2 = (struct assegment *) aspath2->data;
+
+  /* Check as1's */
+  if (seg1 == NULL || seg1->length == 0 || seg1->type != AS_CONFED_SEQUENCE)
+    return 0;
+  as1 = seg1->asval[0];
+
+  /* Check as2's */
+  if (seg2 == NULL || seg2->length == 0 || seg2->type != AS_CONFED_SEQUENCE)
     return 0;
   as2 = seg2->asval[0];
 

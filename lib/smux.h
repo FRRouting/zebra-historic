@@ -41,9 +41,18 @@
 #define SMUX_MAX_FAILURE 3
 
 /* Structures here are mostly compatible with UCD SNMP 4.1.1 */
-
 #define MATCH_FAILED     (-1)
 #define MATCH_SUCCEEDED  0
+
+/* SYNTAX TruthValue from SNMPv2-TC. */
+#define SNMP_TRUE  1
+#define SNMP_FALSE 2
+
+/* SYNTAX RowStatus from SNMPv2-TC. */
+#define SNMP_VALID  1
+#define SNMP_INVALID 2
+
+#define IN_ADDR_SIZE sizeof(struct in_addr)
 
 struct variable;
 
@@ -106,6 +115,25 @@ struct subtree
   /* Registered flag. */
   int registered;
 };
+
+/* Declare SMUX return value. */
+#define SNMP_LOCAL_VARIABLES \
+  static int32_t snmp_int_val; \
+  static struct in_addr snmp_in_addr_val;
+
+#define SNMP_INTEGER(V) \
+  ( \
+    *var_len = sizeof (int32_t), \
+    snmp_int_val = V, \
+    (u_char *) &snmp_int_val \
+  )
+
+#define SNMP_IPADDRESS(V) \
+  ( \
+    *var_len = sizeof (struct in_addr), \
+    snmp_in_addr_val = V, \
+    (u_char *) &snmp_in_addr_val \
+  )
 
 void smux_init (oid [], size_t);
 void smux_start (void);

@@ -26,7 +26,6 @@
 #include "vty.h"
 #include "sockunion.h"
 #include "memory.h"
-#include "roken.h"
 #include "str.h"
 #include "log.h"
 

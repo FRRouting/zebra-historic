@@ -1,6 +1,5 @@
-/*
- * Generic linked list routine.
- * Copyright (C) 1997 Kunihiro Ishiguro
+/* Generic linked list routine.
+ * Copyright (C) 1997, 2000 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -25,72 +24,51 @@
 #include "linklist.h"
 #include "memory.h"
 
-/* For memory leak debug. */
-unsigned long list_alloc = 0;
-unsigned long node_alloc = 0;
-
 /* Initialize linked list : allocate memory and return list */
-list
+struct list *
 list_init ()
 {
-  list l = XMALLOC (MTYPE_LINK_LIST, sizeof (struct _list));
-  l->head = l->tail = l->up = NULL;
-  l->count = 0;
-  list_alloc++;
-  
-  return l;
+  struct list *new;
+
+  new = XMALLOC (MTYPE_LINK_LIST, sizeof (struct list));
+  memset (new, 0, sizeof (struct list));
+  return new;
 }
 
 /* Free given list and decrement allocation counter. */
-void list_free (list list)
+void
+list_free (struct list *list)
 {
   XFREE (MTYPE_LINK_LIST, list);
-  list_alloc--;
 }
 
 /* Internal function to create new listnode structure. */
 static listnode
 listnode_new ()
 {
-  listnode node = XMALLOC (MTYPE_LINK_NODE, sizeof (struct _listnode));
-  node->next = node->prev = node->data = NULL;
-  node_alloc++;
+  listnode node;
+
+  node = XMALLOC (MTYPE_LINK_NODE, sizeof (struct listnode));
+  memset (node, 0, sizeof (struct listnode));
   return node;
 }
 
 /* Free given listnode and decrement allocation counter. */
-static void
+static
+void
 listnode_free (listnode n)
 {
   XFREE (MTYPE_LINK_NODE, n);
-  node_alloc--;
 }
-
-/* Add a new data to the top of the list. */
+
+/* Add new data to the list. */
 void
-list_add_node_head (list list, void *val)
+list_add_node (struct list *list, void *val)
 {
-  listnode node = listnode_new ();
+  struct listnode *node;
 
-  node->next = list->head;
-  node->prev = NULL;
-  node->data = val;
-
-  if (list_isempty (list))
-    list->tail = node;
-  else
-    list->head->prev = node;
-  list->head = node;
-  list->count++;
-}
-
-/* Add a new data to the end of the list. */
-void
-list_add_node_tail (list list, void *val)
-{
-  listnode node = listnode_new ();
-  
-  node->next = NULL;
+  node = listnode_new ();
+  /* node->next = NULL;  This is set in listnode_new(). */
   node->prev = list->tail;
   node->data = val;
 
@@ -99,59 +77,45 @@ list_add_node_tail (list list, void *val)
   else
     list->tail->next = node;
   list->tail = node;
+
   list->count++;
 }
 
 void
-list_add_node_prev (list list, listnode current, void *val)
+list_add_sort_node (struct list *list, void *val)
 {
-  listnode node = listnode_new ();
+  struct listnode *n;
+  struct listnode *new;
 
-  node->next = current;
-  node->data = val;
+  new = listnode_new ();
+  new->data = val;
 
-  if (current->prev == NULL)
-    list->head = node;
+  if (list->cmp)
+    {
+      for (n = list->head; n; n = n->next)
+	{
+	  if ((*list->cmp) (val, n->data) < 0)
+	    {	    
+	      new->next = n;
+	      new->prev = n->prev;
+
+	      if (n->prev)
+		n->prev->next = new;
+	      else
+		list->head = new;
+	      n->prev = new;
+	      list->count++;
+	      return;
+	    }
+	}
+    }
+  new->prev = list->tail;
+  if (list->tail)
+    list->tail->next = new;
   else
-    current->prev->next = node;
-
-  node->prev = current->prev;
-  current->prev = node;
+    list->head = new;
+  list->tail = new;
   list->count++;
-}
-
-void
-list_add_node_next (list list, listnode current, void *val)
-{
-  listnode node = listnode_new ();
-
-  node->prev = current;
-  node->data = val;
-
-  if (current->next == NULL)
-    list->tail = node;
-  else
-    current->next->prev = node;
-
-  node->next = current->next;
-  current->next = node;
-  list->count++;
-}
-
-void
-list_add_list (list l, list m)
-{
-  listnode n;
-
-  for (n = listhead (m); n; nextnode (n))
-    list_add_node (l, n->data);
-}
-
-/* Add new data to the list. */
-void
-list_add_node (list list, void *val)
-{
-  list_add_node_tail (list, val);
 }
 
 /* Delete all listnode from the list. */
@@ -172,29 +136,6 @@ list_delete_all (list list)
 {
   list_delete_all_node (list);
   list_free (list);
-}
-
-/* Delete the node from list. */
-void
-list_delete_node (list list, listnode node)
-{
-  listnode n;
-
-  for (n = list->head; n; n = n->next)
-    if (n == node)
-      {
-	if (n->prev)
-	  n->prev->next = n->next;
-	else
-	  list->head = n->next;
-	if (n->next)
-	  n->next->prev = n->prev;
-	else
-	  list->tail = n->prev;
-	list->count--;
-	listnode_free (n);
-	return;
-      }
 }
 
 /* Delete the node which has the val argument from list. */
@@ -223,7 +164,100 @@ list_delete_by_val (list list, void *val)
       }
 }
 
-/* Lookup the node which has given data. */
+void *
+listnode_delete (struct list *list, void *val)
+{
+  struct listnode *node;
+
+  for (node = list->head; node; node = node->next)
+    {
+      if (node->data == val)
+	{
+	  if (node->prev)
+	    node->prev->next = node->next;
+	  else
+	    list->head = node->next;
+
+	  if (node->next)
+	    node->next->prev = node->prev;
+	  else
+	    list->tail = node->prev;
+
+	  list->count--;
+	  listnode_free (node);
+	  return val;
+	}
+    }
+  return NULL;
+}
+
+void
+list_delete (struct list *list)
+{
+  struct listnode *node;
+  struct listnode *next;
+
+  for (node = list->head; node; node = next)
+    {
+      next = node->next;
+      if (list->del)
+	(list->del) (node->data);
+      listnode_free (node);
+    }
+  list_free (list);
+}
+
+/* Below three functions are only used in ospfd. */
+void
+list_add_node_prev (list list, listnode current, void *val)
+{
+  struct listnode *node;
+
+  node = listnode_new ();
+  node->next = current;
+  node->data = val;
+
+  if (current->prev == NULL)
+    list->head = node;
+  else
+    current->prev->next = node;
+
+  node->prev = current->prev;
+  current->prev = node;
+
+  list->count++;
+}
+
+void
+list_add_node_next (list list, listnode current, void *val)
+{
+  struct listnode *node;
+
+  node = listnode_new ();
+  node->prev = current;
+  node->data = val;
+
+  if (current->next == NULL)
+    list->tail = node;
+  else
+    current->next->prev = node;
+
+  node->next = current->next;
+  current->next = node;
+
+  list->count++;
+}
+
+void
+list_add_list (struct list *l, struct list *m)
+{
+  struct listnode *n;
+
+  for (n = listhead (m); n; nextnode (n))
+    list_add_node (l, n->data);
+}
+
+/* Lookup the node which has given data.  For ospfd and ospf6d. */
 listnode
 list_lookup_node (list list, void *data)
 {
@@ -235,46 +269,32 @@ list_lookup_node (list list, void *data)
   return NULL;
 }
 
-/* Only for debug. */
+/* Delete the node from list. */
 void
-list_alloc_print ()
+list_delete_node (list list, listnode node)
 {
-  printf ("list_alloc: %ld\n", list_alloc);
-  printf ("node_alloc: %ld\n", node_alloc);
-}
+  listnode n;
 
+  for (n = list->head; n; n = n->next)
+    if (n == node)
+      {
+	if (n->prev)
+	  n->prev->next = n->next;
+	else
+	  list->head = n->next;
+	if (n->next)
+	  n->next->prev = n->prev;
+	else
+	  list->tail = n->prev;
+	list->count--;
+	listnode_free (n);
+	return;
+      }
+}
+
 #ifdef TEST
 main ()
 {
-  list l;
-  listnode n;
-  char *kuni = "kuni";
-  char *mio = "mio";
-
-  l = list_init ();
-  list_add_node (l, kuni);
-  list_add_node (l, mio);
-  for (n = l->head; n; nextnode (n))
-    {
-      printf ("%s\n", getdata(n));
-    }
-  n = list_lookup_node (l, mio);
-
-  list_delete_node (l, n);
-  for (n = l->head; n; nextnode (n))
-    {
-      printf ("%s\n", getdata(n));
-    }
-  n = list_lookup_node (l, kuni);
-
-  list_delete_node (l, n);
-  for (n = l->head; n; nextnode (n))
-    {
-      printf ("%s\n", getdata(n));
-    }
-  list_alloc_print ();
-  if (list_isempty (l))
-    list_free (l);
-  list_alloc_print ();
+  ;
 }
 #endif /* TEST */

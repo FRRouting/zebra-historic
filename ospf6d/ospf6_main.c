@@ -35,16 +35,16 @@ void ospf6_init ();
 void ospf6_terminate ();
 void ospf6_log_init ();
 void nexthop_init ();
-int ospf6_receive_new (struct thread *);
+int ospf6_receive (struct thread *);
 
 extern int ospf6_sock;
 
-/* Default configuration file name for ospfd. */
+/* Default configuration file name for ospf6d. */
 #define OSPF6_DEFAULT_CONFIG       "ospf6d.conf"
 /* Default port values. */
 #define OSPF6_VTY_PORT             2606
 
-/* ospfd options, we use GNU getopt library. */
+/* ospf6d options, we use GNU getopt library. */
 struct option longopts[] = 
 {
   { "daemon",      no_argument,       NULL, 'd'},
@@ -59,7 +59,7 @@ struct option longopts[] =
 char config_current[] = OSPF6_DEFAULT_CONFIG;
 char config_default[] = SYSCONFDIR OSPF6_DEFAULT_CONFIG;
 
-/* ospfd program name. */
+/* ospf6d program name. */
 char *progname;
 /* is daemon? */
 int daemon_mode = 0;
@@ -75,7 +75,7 @@ usage (int status)
   else
     {    
       printf ("Usage : %s [OPTION...]\n\n\
-Daemon which manages OSPF version 2 and 3.\n\n\
+Daemon which manages OSPF version 3.\n\n\
 -d, --daemon       Runs in daemon mode\n\
 -f, --config_file  Set configuration file name\n\
 -P, --vty_port     Set vty's port number\n\
@@ -217,7 +217,7 @@ main (int argc, char **argv)
     }
 
   if (daemon_mode)
-    daemon (1, 0);
+    daemon (0, 0);
 
   /* pid file create */
 #if 0
@@ -245,7 +245,7 @@ main (int argc, char **argv)
 
   /* Make ospf protocol socket. */
   ospf6_serv_sock ();
-  thread_add_read (master, ospf6_receive_new, NULL, ospf6_sock);
+  thread_add_read (master, ospf6_receive, NULL, ospf6_sock);
 
   /* Make ospf vty socket. */
   vty_serv_sock (vty_port ? vty_port : OSPF6_VTY_PORT, OSPF6_VTYSH_PATH);

@@ -152,6 +152,26 @@ key_lookup_for_accept (struct keychain *keychain, u_int32_t index)
 }
 
 struct key *
+key_match_for_accept (struct keychain *keychain, char *auth_str)
+{
+  struct newnode *nn;
+  struct key *key;
+  time_t now;
+
+  now = time (NULL);
+
+  NEWLIST_LOOP (keychain->key, key, nn)
+    {
+      if (key->accept.start == 0 ||
+	  (key->accept.start <= now &&
+	   (key->send.end >= now || key->send.end == -1)))
+	if (strncmp (key->string, auth_str, 16) == 0)
+	  return key;
+    }
+  return NULL;
+}
+
+struct key *
 key_lookup_for_send (struct keychain *keychain)
 {
   struct newnode *nn;

@@ -40,14 +40,13 @@ struct neighbor
   unsigned long        prevbdr;
   unsigned long        bdr;
   char                 options[3];     /* Link-LSA's options field */
-  struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link */
-                                       /* Probably LinkLocal address     */
-  struct ospf6_dbdesc last_dd; /* last received DD , including     */
+  struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link   */
+                                       /* , should be LinkLocal address    */
+  struct ospf6_dbdesc last_dd;         /* last received DD , including     */
                                        /* OSPF capability of this neighbor */
 
   /* LSAs to retransmit to this neighbor */
-  list dd_retrans;
-  list direct_ack;  /* we will retrans in the case of direct ack. */
+  list dbdesc_lsa;
 
   /* LSA lists for this neighbor */
   list summarylist;
@@ -57,7 +56,7 @@ struct neighbor
   /* new member for dbdesc */
   /* retransmission thread */
   struct thread *thread_dbdesc_retrans;        /* Retransmit DbDesc */
-  struct iovec dbdesc_last_send[MAXIOVLIST];   /* placeholder for DbDesc */
+  struct iovec dbdesc_last_send[1024];   /* placeholder for DbDesc */
   struct thread *thread_lsreq_retrans;         /* Retransmit LsReq */
 
   /* statistics */
@@ -73,26 +72,115 @@ struct neighbor
   unsigned int ospf6_stat_received_lsa;
   unsigned int ospf6_stat_received_lsupdate;
 };
+struct ospf6_neighbor
+{
+  struct ospf6_interface *ospf6_interface;
+  u_char                  state;
+  u_char        dd_bits;          /* including MASTER bit */
+  u_int32_t     seqnum;        /* DD sequence number */
+  char                 str[16];          /* Router ID String */
+  u_int32_t        rtr_id;           /* Router ID of this neighbor */
+  u_char        rtr_pri;          /* Router Priority of this neighbor */
+  u_int32_t        ifid;
+  u_int32_t        prevdr;
+  u_int32_t        dr;
+  u_int32_t        prevbdr;
+  u_int32_t        bdr;
+  char                 options[3];     /* Link-LSA's options field */
+  struct sockaddr_in6  hisaddr;        /* IPaddr of I/F on our side link */
+                                       /* Probably LinkLocal address     */
+  struct ospf6_dbdesc last_dd; /* last received DD , including     */
+                                       /* OSPF capability of this neighbor */
+
+  /* LSAs to retransmit to this neighbor */
+  list dbdesc_lsa;
+
+  /* LSA lists for this neighbor */
+  list summarylist;
+  list requestlist;
+  list retranslist;
+
+  struct iovec dbdesc_last_send[1024];   /* placeholder for DbDesc */
+
+  struct thread          *inactivity_timer;
+  /* new member for dbdesc */
+  /* retransmission thread */
+  struct thread          *send_update;      /* Retransmit LSUpdate */
+  struct thread *thread_dbdesc_retrans;        /* Retransmit DbDesc */
+  struct thread *thread_lsreq_retrans;         /* Retransmit LsReq */
+
+  /* statistics */
+  u_int ospf6_stat_state_changed;
+  u_int ospf6_stat_seqnum_mismatch;
+  u_int ospf6_stat_bad_lsreq;
+  u_int ospf6_stat_oneway_received;
+  u_int ospf6_stat_inactivity_timer;
+  u_int ospf6_stat_dr_election;
+  u_int ospf6_stat_retrans_dbdesc;
+  u_int ospf6_stat_retrans_lsreq;
+  u_int ospf6_stat_retrans_lsupdate;
+  u_int ospf6_stat_received_lsa;
+  u_int ospf6_stat_received_lsupdate;
+};
 
 
-
 /* Function Prototypes */
-void delete_ospf6_nbr (struct neighbor *);
-int neighbor_thread_cancel (struct neighbor *);
-int list_cleared_of_lsa (struct neighbor *);
-int free_last_dd (struct thread *);
-unsigned int count_nbr_in_state (state_t, struct area *);
-void ospf6_ipv4_nexthop_from_linklocal (struct in6_addr *,
-                                        struct in_addr *,
-                                        u_int);
+int
+ospf6_neighbor_last_dbdesc_release (struct thread *);
 
-struct neighbor *make_neighbor (rtr_id_t, struct ospf6_interface *);
-struct neighbor *nbr_lookup (rtr_id_t, struct ospf6_interface *);
-int show_nbr (struct vty *, struct neighbor *);
+struct ospf6_lsa *
+ospf6_neighbor_dbdesc_lsa_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_dbdesc_lsa_add (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_dbdesc_lsa_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_dbdesc_lsa_remove_all (struct ospf6_neighbor *);
 
-void ospf6_neighbor_vty_summary (struct vty *, struct neighbor *);
-void ospf6_neighbor_vty (struct vty *, struct neighbor *);
-void ospf6_neighbor_vty_detail (struct vty *, struct neighbor *);
+struct ospf6_lsa *
+ospf6_neighbor_summary_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_summary_add (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_summary_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_summary_remove_all (struct ospf6_neighbor *);
+
+struct ospf6_lsa *
+ospf6_neighbor_request_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_request_add (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_request_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_request_remove_all (struct ospf6_neighbor *);
+
+struct ospf6_lsa *
+ospf6_neighbor_retrans_lookup (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_retrans_add (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_retrans_remove (struct ospf6_lsa *, struct ospf6_neighbor *);
+void
+ospf6_neighbor_retrans_remove_all (struct ospf6_neighbor *);
+
+void
+ospf6_neighbor_thread_cancel_all (struct ospf6_neighbor *);
+void
+ospf6_neighbor_list_remove_all (struct ospf6_neighbor *);
+
+struct ospf6_neighbor *
+ospf6_neighbor_create (u_int32_t);
+
+void
+ospf6_neighbor_delete (struct ospf6_neighbor *);
+
+struct ospf6_neighbor *
+ospf6_neighbor_lookup (u_int32_t, struct ospf6_interface *);
+
+void ospf6_neighbor_vty_summary (struct vty *, struct ospf6_neighbor *);
+void ospf6_neighbor_vty (struct vty *, struct ospf6_neighbor *);
+void ospf6_neighbor_vty_detail (struct vty *, struct ospf6_neighbor *);
 
 #endif /* OSPF6_NEIGHBOR_H */
 

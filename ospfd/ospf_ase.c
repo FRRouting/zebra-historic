@@ -73,7 +73,7 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
     for (node = listhead ((list) rn->info); node; nextnode (node))
       if ((or = getdata (node)) != NULL)
 	if (or->cost < OSPF_LS_INFINITY)
-	  if (!OSPF_IS_AREA_BACKBONE (or->u.std.area) &&
+	  if (!OSPF_IS_AREA_ID_BACKBONE (or->u.std.area_id) &&
 	      or->path_type == OSPF_PATH_INTRA_AREA)
 	    list_add_node (chosen, or);
 
@@ -94,8 +94,8 @@ ospf_find_asbr_route (struct route_table *rtrs, struct prefix_ipv4 *asbr)
 	  else if (best->cost > or->cost)
 	    best = or;
 	  else if (best->cost == or->cost &&
-		   IPV4_ADDR_CMP (&best->u.std.area->area_id,
-				  &or->u.std.area->area_id) < 0)
+		   IPV4_ADDR_CMP (&best->u.std.area_id,
+				  &or->u.std.area_id) < 0)
 	    best = or;
 	}
 
@@ -127,7 +127,7 @@ ospf_find_asbr_route_through_area (struct route_table *rtrs,
 
       for (node = listhead ((list) rn->info); node; nextnode (node))
 	if ((or = getdata (node)) != NULL)
-	  if (or->u.std.area == area)
+	  if (IPV4_ADDR_SAME (&or->u.std.area_id, &area->area_id))
 	    return or;
     }
 
@@ -190,30 +190,30 @@ ospf_ase_calculate_asbr_route (struct route_table *rt_network,
 
   if (asbr_route == NULL)
     {
-      zlog_info ("Z: ospf_ase_calculate(): Route to ASBR %s not found",
+      zlog_info ("ospf_ase_calculate(): Route to ASBR %s not found",
 		 inet_ntoa (asbr.prefix));
       return NULL;
     }
 
   if (!(asbr_route->u.std.flags & ROUTER_LSA_EXTERNAL))
     {
-      zlog_info ("Z: ospf_ase_calculate(): Originating router is not an ASBR");
+      zlog_info ("ospf_ase_calculate(): Originating router is not an ASBR");
       return NULL;
     }
    
   if (al->e[0].fwd_addr.s_addr != 0)
     {
-      zlog_info ("Z: ospf_ase_calculate(): "
+      zlog_info ("ospf_ase_calculate(): "
 		 "Forwarding address is not 0.0.0.0.");
 
       if (! ospf_ase_forward_address_check (al->e[0].fwd_addr))
 	{
-	  zlog_info ("Z: ospf_ase_calculate(): "
+	  zlog_info ("ospf_ase_calculate(): "
 		     "Forwarding address is one of our addresses, Ignore.");
 	  return NULL;
         }
 
-      zlog_info ("Z: ospf_ase_calculate(): "
+      zlog_info ("ospf_ase_calculate(): "
 		 "Looking up in the Network Routing Table.");
 
       /* Looking up the path to the fwd_addr from Network route. */
@@ -225,7 +225,7 @@ ospf_ase_calculate_asbr_route (struct route_table *rt_network,
    
       if (rn == NULL)
 	{
-	  zlog_info ("Z: ospf_ase_calculate(): "
+	  zlog_info ("ospf_ase_calculate(): "
 		     "Couldn't find a route to the forwarding address.");
 	  return NULL;
 	}
@@ -234,7 +234,7 @@ ospf_ase_calculate_asbr_route (struct route_table *rt_network,
 
       if ((asbr_route = rn->info) == NULL)
 	{
-	  zlog_info ("Z: ospf_ase_calculate(): "
+	  zlog_info ("ospf_ase_calculate(): "
 		     "Somehow OSPF route to ASBR is lost");
 	  return NULL;
 	}
@@ -569,8 +569,6 @@ ospf_ase_calculate_timer (struct thread *t)
   ospf = THREAD_ARG (t);
   ospf->t_ase_calc = NULL;
 
-  zlog_info ("T: ospf_ase_calculate_timer(): fired!");
-
   if (ospf->ase_calc)
     {
       ospf->ase_calc = 0;
@@ -694,6 +692,11 @@ ospf_ase_incremental_update (struct ospf_lsa *lsa, struct ospf *top)
   p.prefixlen = ip_masklen (al->mask);
   apply_mask_ipv4 (&p);
 
+  /* if new_table is NULL, there was no spf calculation, thus
+     incremental update is unneeded */
+  if (!top->new_table)
+    return;
+  
   /* If there is already an intra-area or inter-area route
      to the destination, no recalculation is necessary
      (internal routes take precedence). */

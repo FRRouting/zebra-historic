@@ -24,7 +24,6 @@
 #include "prefix.h"
 #include "stream.h"
 #include "network.h"
-#include "roken.h"
 #include "if.h"
 #include "log.h"
 #include "thread.h"
@@ -503,13 +502,15 @@ zebra_interface_add_read (struct stream *s)
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
 
+#ifdef HAVE_IF_PSEUDO
   if (IS_IF_PSEUDO(ifp)){
     IF_PSEUDO_SET(ifp);
   }
   else{
     IF_PSEUDO_UNSET(ifp);
   }
-
+#endif /* HAVE_IF_PSEUDO */
+  
   return ifp;
 }
 
@@ -539,13 +540,15 @@ zebra_interface_state_read (struct stream *s)
   ifp->mtu = stream_getl (s);
   ifp->bandwidth = stream_getl (s);
 
+#ifdef HAVE_IF_PSEUDO  
   if (IS_IF_PSEUDO(ifp)){
     IF_PSEUDO_SET(ifp);
   }
   else{
     IF_PSEUDO_UNSET(ifp);
   }
-
+#endif /* HAVE_IF_PSEUDO */
+  
   return ifp;
 }
 
@@ -566,7 +569,7 @@ zebra_interface_address_add_read (struct stream *s)
   ifp = if_lookup_by_index (ifindex);
   if (ifp == NULL)
     {
-      zlog_warn ("Can't find interface by ifindex: %d ", ifindex);
+      zlog_warn ("zebra_interface_address_add_read: Can't find interface by ifindex: %d ", ifindex);
       return NULL;
     }
 
@@ -597,6 +600,46 @@ zebra_interface_address_add_read (struct stream *s)
   return connected;
 }
 
+struct connected *
+zebra_interface_address_delete_read (struct stream *s)
+{
+  unsigned int ifindex;
+  struct interface *ifp;
+  struct connected *ifc;
+  struct prefix p;
+  struct prefix d;
+  int family;
+  int len;
+
+  /* Get interface index. */
+  ifindex = stream_getl (s);
+
+  /* Lookup index. */
+  ifp = if_lookup_by_index (ifindex);
+  if (ifp == NULL)
+    {
+      zlog_warn ("zebra_interface_address_delete_read: Can't find interface by ifindex: %d ", ifindex);
+      return NULL;
+    }
+
+  /* Allocate new connected address. */
+  ifc = connected_new ();
+
+  /* Fetch interface address. */
+  family = p.family = stream_getc (s);
+
+  len = prefix_blen (&p);
+  stream_get (&p.u.prefix, s, len);
+  p.prefixlen = stream_getc (s);
+
+  /* Fetch destination address. */
+  stream_get (&d.u.prefix, s, len);
+  d.family = family;
+
+  ifc = connected_delete_by_prefix (ifp, &p);
+
+  return ifc;
+}
 
 /* Zebra client message read function. */
 int

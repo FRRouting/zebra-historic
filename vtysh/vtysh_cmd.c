@@ -24,7 +24,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_OSPF6D, 
        no_debug_ospf6_cmd, 
-       "no debug ospf6 (neighbor|interface|area|lsdb|dbex|spf|route|zebra|config|all)", 
+       "no debug ospf6 (neighbor|interface|area|lsa|lsdb|dbex|spf|route|zebra|config|all)", 
        NO_STR
        "Debugging infomation\n"
        OSPF6_STR
@@ -66,16 +66,6 @@ DEFSH (VTYSH_OSPFD,
        "Distribute a default route\n"
        "Always advertise default route\n")
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_link_cmd, 
-       "show ipv6 ospf6 database link", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Link-LSA\n"
-       )
-
 DEFSH (VTYSH_BGPD, 
        no_neighbor_router_id_cmd, 
        NO_NEIGHBOR_CMD "router-id A.B.C.D", 
@@ -103,8 +93,8 @@ DEFSH (VTYSH_BGPD,
        "match ipv6 prefix-list WORD", 
        MATCH_STR
        IPV6_STR
-       "Match entries of IPv6 prefix-list\n"
-       "IPv6 prefix-list name\n")
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 
 DEFSH (VTYSH_RIPD, 
        no_rip_split_horizon_cmd, 
@@ -212,12 +202,36 @@ DEFSH (VTYSH_OSPFD,
        "Border Gateway Protocol (BGP)\n")
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community4_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
+DEFSH (VTYSH_BGPD, 
        show_ipv6_mbgp_neighbors_cmd, 
        "show ipv6 mbgp neighbors [PEER]", 
        SHOW_STR
        IPV6_STR
        MBGP_STR
-       "Detailed information on MBGP neighbor\n")
+       "Detailed information on TCP and BGP neighbor connections\n")
 
 DEFSH (VTYSH_RIPNGD, 
        show_debugging_ripng_cmd, 
@@ -228,12 +242,11 @@ DEFSH (VTYSH_RIPNGD,
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_description_cmd, 
-       NO_NEIGHBOR_CMD "description .LINE", 
+       NO_NEIGHBOR_CMD "description", 
        NO_STR
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
-       "Neighbor specific description\n"
-       "Up to 80 characters describing this neighbor\n")
+       "Neighbor specific description\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_redistribute_source_type_metric_routemap_cmd, 
@@ -258,7 +271,7 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IPV6_STR
        MBGP_STR
-       "Detailed information on BGP neighbor\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
        "Neighbor to display information about\n"
        "Display the routes advertised to a BGP neighbor\n")
@@ -318,21 +331,11 @@ DEFSH (VTYSH_OSPFD,
        "Start OSPF configuration\n")
 
 DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_peer_in_cmd, 
-       "clear ip bgp vpnv4 A.B.C.D in", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "VPNv4 peer\n"
-       "BGP neighbor address to clear\n"
-       "Soft reconfig inbound update\n")
-
-DEFSH (VTYSH_BGPD, 
        bgp_default_ipv4_unicast_cmd, 
        "bgp default ipv4-unicast", 
-       BGP_STR
-       "Default behavior\n"
-       "IPv4 unicast\n")
+       "BGP specific commands\n"
+       "Configure BGP defaults\n"
+       "Activate ipv4-unicast for a peer by default\n")
 
 DEFSH (VTYSH_RIPD, 
        ip_rip_authentication_string_cmd, 
@@ -363,6 +366,27 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
        "Disable the next hop calculation for this neighbor\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community_list_exact_cmd, 
+       "show ipv6 mbgp community-list WORD exact-match", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the community-list\n"
+       "community-list name\n"
+       "Exact match of the communities\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_vpnv4_out_cmd, 
+       "clear ip bgp <1-65535> vpnv4 unicast out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        bgp_redistribute_connected_cmd, 
@@ -458,7 +482,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD,  bgp_cluster_id32_cmd, 
        "bgp cluster-id <1-4294967295>", 
-       BGP_STR
+       "BGP specific commands\n"
        "Configure Route-Reflector Cluster-id\n"
        "Route-Reflector Cluster-id as 32 bit quantity\n")
 
@@ -512,13 +536,18 @@ DEFSH (VTYSH_RIPD,
        "Enable RIP\n"
        "IP prefix or interface name\n")
 
-DEFSH (VTYSH_OSPFD, 
-       show_ip_ospf_refresher_cmd, 
-       "show ip ospf refresher", 
-       SHOW_STR
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_ipv4_soft_in_cmd, 
+       "clear ip bgp A.B.C.D ipv4 (unicast|multicast) soft in", 
+       CLEAR_STR
        IP_STR
-       "OSPF information\n"
-       "LSA Refresher process info\n")
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_ZEBRA, 
        ip_irdp_minadvertinterval_cmd, 
@@ -527,6 +556,17 @@ DEFSH (VTYSH_ZEBRA,
        "ICMP Router discovery on this interface\n"
        "Set minimum time between advertisement\n"
        "Minimum advertisement interval in seconds\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_vpnv4_out_cmd, 
+       "clear ip bgp A.B.C.D vpnv4 unicast out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_ip_ospf_message_digest_key_cmd, 
@@ -551,6 +591,23 @@ DEFSH (VTYSH_BGPD,
        SET_STR
        "BGP community attribute\n"
        "No community attribute\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community2_exact_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_BGPD, 
        no_set_nlri_val_cmd, 
@@ -578,6 +635,16 @@ DEFSH (VTYSH_OSPFD,
        "IP Information\n"
        "OSPF interface commands\n"
        "Time between HELLO packets\n")
+
+DEFSH (VTYSH_BGPD, 
+       no_bgp_bestpath_med_cmd, 
+       "no bgp bestpath med (confed|missing-as-worst)", 
+       NO_STR
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "MED attribute\n"
+       "Compare MED among confederation paths\n"
+       "Treat missing MED as the least preferred one\n")
 
 DEFSH (VTYSH_BGPD, 
        debug_bgp_filter_cmd, 
@@ -609,15 +676,14 @@ DEFSH (VTYSH_RIPNGD,
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_description_cmd, 
-       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) description .LINE", 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) description", 
        NO_STR
        IPV6_STR
        BGP_STR
        NEIGHBOR_STR
        "IP address\n"
        "IPv6 address\n"
-       "Neighbor specific description\n"
-       "Up to 80 characters describing this neighbor\n")
+       "Neighbor specific description\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_debug_ospf_packet_all_cmd, 
@@ -656,17 +722,20 @@ DEFSH (VTYSH_BGPD,
        "Add a community list entry\n"
        "Community list name\n")
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_router_new_cmd, 
-       "show ipv6 ospf6 database router (advrtr A.B.C.D|) (ls-id <0-4294967295>|)", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSA\n"
-       "Advertising Router\n"
-       "Router-ID\n"
-       )
+DEFSH (VTYSH_BGPD, 
+       clear_ipv6_bgp_as_out_cmd, 
+       "clear ipv6 bgp <1-65535> out", 
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig outbound update\n")
+
+DEFSH (VTYSH_OSPFD, 
+       neighbor_cmd, 
+       "neighbor A.B.C.D", 
+       NEIGHBOR_STR
+       "Neighbor IP address\n")
 
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_neighbor_detail_cmd, 
@@ -686,17 +755,6 @@ DEFSH (VTYSH_ZEBRA,
        "IP Address\n"
        "IP Address\n"
        "IP Netmask\n")
-
-DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_peer_soft_in_cmd, 
-       "clear ip bgp vpnv4 A.B.C.D soft in", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "VPNv4 peer\n"
-       "BGP neighbor address to clear\n"
-       "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_cmd, 
@@ -740,11 +798,23 @@ DEFSH (VTYSH_BGPD,
        "Match entries of prefix-lists\n"
        "IP prefix-list name\n")
 
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_ipv4_filter_list_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) filter-list WORD", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes conforming to the filter-list\n"
+       "Regular expression access list name\n")
+
 DEFSH (VTYSH_BGPD, 
        no_bgp_multiple_instance_cmd, 
        "no bgp multiple-instance", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "BGP multiple instance\n")
 
 DEFSH (VTYSH_BGPD, 
@@ -753,9 +823,9 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IP_STR
        BGP_STR
-       "VPNv4\n"
-       "All RD routes\n"
-       "prefix to display\n")
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "Network in the BGP routing table to display\n")
 
 DEFSH (VTYSH_BGPD, 
        bgp_redistribute_static_cmd, 
@@ -863,9 +933,9 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IP_STR
        BGP_STR
-       "Detailed information on BGP neighbor\n"
-       "IP address\n"
-       "IPv6 address\n")
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n")
 
 DEFSH (VTYSH_ZEBRA,  
        config_table_cmd, 
@@ -885,7 +955,7 @@ DEFSH (VTYSH_OSPFD,
 DEFSH (VTYSH_BGPD, 
        exit_address_family_cmd, 
        "exit-address-family", 
-       "Exit from address family configuration\n")
+       "Exit from Address Family configuration mode\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_neighbor_dont_capability_negotiate_cmd, 
@@ -897,6 +967,30 @@ DEFSH (VTYSH_BGPD,
        "IP address\n"
        "IPv6 address\n"
        "Do not perform capability negotiation\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community4_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_debug_ospf_ism_cmd, 
@@ -926,7 +1020,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD,  bgp_router_id_cmd, 
        "bgp router-id A.B.C.D", 
-       BGP_STR
+       "BGP specific commands\n"
        "Override configured router identifier\n"
        "Manually configured router identifier\n")
 
@@ -960,6 +1054,11 @@ DEFSH (VTYSH_OSPFD,
        "Configure a virtual link\n"
        "Router ID of the remote ABR\n")
 
+DEFSH (VTYSH_OSPFD,  no_refresh_timer_cmd, 
+       "no refresh timer", 
+       "Adjust refresh parameters\n"
+       "Unset refresh timer\n")
+
 DEFSH (VTYSH_RIPD, 
        no_ip_rip_send_version_cmd, 
        "no ip rip send version", 
@@ -968,6 +1067,18 @@ DEFSH (VTYSH_RIPD,
        "RIP configuration\n"
        "Set interface's send RIP version control\n"
        "RIP version\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPFD, 
        area_import_list_cmd, 
@@ -1036,6 +1147,17 @@ DEFSH (VTYSH_BGPD,
        "multicast information\n")
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_neighbors_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) neighbors", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Detailed information on TCP and BGP neighbor connections\n")
+
+DEFSH (VTYSH_BGPD, 
        clear_ip_bgp_peer_soft_in_cmd, 
        "clear ip bgp A.B.C.D soft in", 
        CLEAR_STR
@@ -1085,7 +1207,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD,  bgp_confederation_peers_cmd, 
        "bgp confederation peers .<1-65535>", 
-       BGP_STR
+       "BGP specific commands\n"
        "AS confederation parameters\n"
        "Peer ASs in BGP confederation\n"
        AS_STR)
@@ -1143,8 +1265,8 @@ DEFSH (VTYSH_RIPNGD,
 DEFSH (VTYSH_BGPD, 
        bgp_distance_source_access_list_cmd, 
        "distance <1-255> A.B.C.D/M WORD", 
+       "Define an administrative distance\n"
        "Administrative distance\n"
-       "Distance value\n"
        "IP source prefix\n"
        "Access list name\n")
 
@@ -1154,6 +1276,17 @@ DEFSH (VTYSH_OSPFD,
        NO_STR
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_vpnv4_soft_cmd, 
+       "clear ip bgp <1-65535> vpnv4 unicast soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n")
 
 DEFSH (VTYSH_BGPD, 
        clear_ip_bgp_peer_cmd,  
@@ -1179,6 +1312,16 @@ DEFSH (VTYSH_OSPFD,
        SHOW_STR
        DEBUG_STR
        OSPF_STR)
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community_list_exact_cmd, 
+       "show ip bgp community-list WORD exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the community-list\n"
+       "community-list name\n"
+       "Exact match of the communities\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_ip_ospf_cost_cmd, 
@@ -1211,8 +1354,8 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IP_STR
        BGP_STR
-       "VPNv4\n"
-       "All routes\n")
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n")
 
 DEFSH (VTYSH_OSPFD, 
        area_stub_nosum_cmd, 
@@ -1228,18 +1371,26 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IPV6_STR
        BGP_STR
-       "Detailed information on BGP neighbor\n"
-       "IP address\n"
-       "IPv6 address\n")
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n")
 
 DEFSH (VTYSH_OSPF6D, 
        interface_area_cmd, 
-       "interface IFNAME area AREA_ID", 
+       "interface IFNAME area A.B.C.D", 
        "Enable routing on an IPv6 interface\n"
        IFNAME_STR
        "Set the OSPF6 area ID\n"
-       "A.B.C.D OSPF6 area ID in IP address format\n"
+       "OSPF6 area ID in IPv4 address notation\n"
        )
+
+DEFSH (VTYSH_OSPFD, 
+       neighbor_pollinterval_cmd, 
+       "neighbor A.B.C.D poll-interval <1-65535>", 
+       NEIGHBOR_STR
+       "Neighbor IP address\n"
+       "Dead Neighbor Polling interval\n"
+       "Seconds\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_transparent_as_cmd, 
@@ -1265,6 +1416,15 @@ DEFSH (VTYSH_BGPD,
        SET_STR
        "BGP origin code\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community_list_cmd, 
+       "show ip bgp community-list WORD", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the community-list\n"
+       "community-list name\n")
+
 DEFSH (VTYSH_OSPFD, 
        ip_ospf_priority_cmd, 
        "ip ospf priority <0-255>", 
@@ -1278,6 +1438,40 @@ DEFSH (VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD,
        "router zebra", 
        "Enable a routing process\n"
        "Make connection to zebra daemon\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community3_exact_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community_exact_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_BGPD,  
        show_ipv6_mbgp_summary_cmd, 
@@ -1422,6 +1616,27 @@ DEFSH (VTYSH_BGPD,
        "Specify a BGP neighbor\n"
        AS_STR)
 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community3_exact_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
+
 DEFSH (VTYSH_OSPF6D, 
        ospf6_routemap_set_metric_cmd, 
        "set metric <0-4294967295>", 
@@ -1440,6 +1655,18 @@ DEFSH (VTYSH_OSPF6D,
        "OSPF6 area ID\n"
        "detailed infomation\n"
        )
+
+DEFSH (VTYSH_BGPD, 
+       no_ipv6_bgp_neighbor_description_val_cmd, 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) description .LINE", 
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Neighbor specific description\n"
+       "Up to 80 characters describing this neighbor\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_ip_ospf_transmit_delay_cmd, 
@@ -1474,6 +1701,14 @@ DEFSH (VTYSH_BGPD,
        MATCH_STR
        "Match BGP AS path list\n"
        "AS path access-list name\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community_all_cmd, 
+       "show ip bgp community", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_prefix_list_cmd, 
@@ -1519,9 +1754,9 @@ DEFSH (VTYSH_BGPD,
        no_bgp_default_ipv4_unicast_cmd, 
        "no bgp default ipv4-unicast", 
        NO_STR
-       BGP_STR
-       "Default behavior\n"
-       "IPv4 unicast\n")
+       "BGP specific commands\n"
+       "Configure BGP defaults\n"
+       "Activate ipv4-unicast for a peer by default\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_transparent_as_cmd, 
@@ -1535,7 +1770,8 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_CMD "port <0-65535>", 
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
-       "Neighbor's BGP port\n")
+       "Neighbor's BGP port\n"
+       "TCP port number\n")
 
 DEFSH (VTYSH_OSPF6D, 
        show_ipv6_route_ospf6_detail_cmd, 
@@ -1600,6 +1836,18 @@ DEFSH (VTYSH_BGPD,
        "maximum no. of prefix limit\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_vpnv4_soft_out_cmd, 
+       "clear ip bgp <1-65535> vpnv4 unicast soft out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+
+DEFSH (VTYSH_BGPD, 
        clear_ip_bgp_peer_out_cmd, 
        "clear ip bgp A.B.C.D out", 
        CLEAR_STR
@@ -1611,9 +1859,18 @@ DEFSH (VTYSH_BGPD,
 DEFSH (VTYSH_BGPD, 
        address_family_vpnv4_unicast_cmd, 
        "address-family vpnv4 unicast", 
-       "Address family configuration\n"
-       "IPv4 MPLS-VPN\n"
-       "Unicast\n")
+       "Enter Address Family command mode\n"
+       "Address family\n"
+       "Address Family Modifier\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community_list_cmd, 
+       "show ipv6 bgp community-list WORD", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the community-list\n"
+       "community-list name\n")
 
 DEFSH (VTYSH_OSPFD, 
        area_vlink_cmd, 
@@ -1771,16 +2028,6 @@ DEFSH (VTYSH_OSPF6D,
        "Link State ID\n"
        )
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_intraprefix_cmd, 
-       "show ipv6 ospf6 database intra-area-prefix", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Intra-Area-Prefix-LSA\n"
-       )
-
 DEFSH (VTYSH_RIPD, 
        rip_distance_source_access_list_cmd, 
        "distance <1-255> A.B.C.D/M WORD", 
@@ -1828,7 +2075,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_OSPF6D, 
        debug_ospf6_cmd, 
-       "debug ospf6 (neighbor|interface|area|lsdb|dbex|spf|route|zebra|config|all)", 
+       "debug ospf6 (neighbor|interface|area|lsa|lsdb|dbex|spf|route|zebra|config|all)", 
        "Debugging infomation\n"
        OSPF6_STR
        "OSPF6 Neighbor event\n"
@@ -1874,6 +2121,33 @@ DEFSH (VTYSH_BGPD,
        "Send Community attribute to this neighbor (default enable)\n")
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_ipv4_in_cmd, 
+       "clear ip bgp A.B.C.D ipv4 (unicast|multicast) in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
        no_neighbor_route_reflector_client_cmd, 
        NO_NEIGHBOR_CMD "route-reflector-client", 
        NO_STR
@@ -1897,6 +2171,30 @@ DEFSH (VTYSH_OSPFD,
        "OSPF area ID in IP address format\n"
        "Enable authentication\n"
        "Use message-digest authentication\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community3_exact_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_BGPD, 
        no_set_aggregator_as_val_cmd, 
@@ -1970,6 +2268,19 @@ DEFSH (VTYSH_OSPF6D,
        "LS ID mapping\n")
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community_list_exact_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community-list WORD exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the community-list\n"
+       "community-list name\n"
+       "Exact match of the communities\n")
+
+DEFSH (VTYSH_BGPD, 
        no_ipv6_neighbor_strict_capability_cmd, 
        "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) strict-capability-match", 
        NO_STR
@@ -1979,6 +2290,25 @@ DEFSH (VTYSH_BGPD,
        "IP address\n"
        "IPv6 address\n"
        "Strict capability negotiation match\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community2_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_neighbor_id_cmd, 
@@ -1990,6 +2320,14 @@ DEFSH (VTYSH_OSPFD,
        "Neighbor ID\n")
 
 DEFSH (VTYSH_BGPD, 
+       no_vpnv4_activate_cmd, 
+       "no neighbor A.B.C.D activate", 
+       NO_STR
+       NEIGHBOR_STR
+       "Neighbor address\n"
+       "Enable the Address Family for this Neighbor\n")
+
+DEFSH (VTYSH_OSPFD|VTYSH_BGPD, 
        no_neighbor_cmd, 
        NO_NEIGHBOR_CMD, 
        NO_STR
@@ -1997,23 +2335,16 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_ADDR_STR)
 
 DEFSH (VTYSH_BGPD, 
-       no_vpnv4_activate_cmd, 
-       "no neighbor A.B.C.D activate", 
-       NO_STR
-       NEIGHBOR_STR
-       "Neighbor address\n"
-       "De-activate this peer\n")
-
-DEFSH (VTYSH_BGPD, 
-       neighbor_mbgp_advertised_route_cmd, 
-       "show ip mbgp neighbors (A.B.C.D|X:X::X:X) advertised-routes", 
-       SHOW_STR
+       clear_ip_bgp_all_ipv4_soft_cmd, 
+       "clear ip bgp * ipv4 (unicast|multicast) soft", 
+       CLEAR_STR
        IP_STR
-       MBGP_STR
-       "Detailed information on BGP neighbor\n"
-       "Neighbor to display information about\n"
-       "Neighbor to display information about\n"
-       "Display the routes advertised to a BGP neighbor\n")
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n")
 
 DEFSH (VTYSH_BGPD, 
        no_set_community_cmd, 
@@ -2030,7 +2361,8 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_STR
        "IP address\n"
        "IPv6 address\n"
-       "Neighbor's BGP port\n")
+       "Neighbor's BGP port\n"
+       "TCP port number\n")
 
 DEFSH (VTYSH_ZEBRA,  ip_tunnel_cmd, 
        "ip tunnel IP_address IP_address", 
@@ -2118,6 +2450,15 @@ DEFSH (VTYSH_BGPD,
        "IPv6 Routing Information Protocol (RIPng)\n"
        "Route map reference\n"
        "Pointer to route-map entries\n")
+
+DEFSH (VTYSH_BGPD,  
+       match_ipv6_address_prefix_list_cmd, 
+       "match ipv6 address prefix-list WORD", 
+       MATCH_STR
+       IPV6_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_ospf_default_information_originate_cmd, 
@@ -2234,15 +2575,14 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_weight_cmd, 
-       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) weight [<0-65535>]", 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) weight", 
        NO_STR
        IPV6_STR
        BGP_STR
        NEIGHBOR_STR
        "IP address\n"
        "IPv6 address\n"
-       "Set default weight for routes from this neighbor\n"
-       "default weight\n")
+       "Set default weight for routes from this neighbor\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_redistribute_source_metric_type_routemap_cmd, 
@@ -2340,17 +2680,6 @@ DEFSH (VTYSH_OSPFD,
        "OSPF metric\n")
 
 DEFSH (VTYSH_BGPD, 
-       ipv6_mbgp_neighbor_routes_cmd, 
-       "show ipv6 mbgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
-       SHOW_STR
-       IPV6_STR
-       MBGP_STR
-       "Detailed information on BGP neighbor\n"
-       "Neighbor to display information about\n"
-       "Neighbor to display information about\n"
-       "Display the received routes from neighbor\n")
-
-DEFSH (VTYSH_BGPD, 
        no_ipv6_aggregate_address_summary_only_cmd, 
        "no ipv6 bgp aggregate-address X:X::X:X/M summary-only", 
        NO_STR
@@ -2359,6 +2688,16 @@ DEFSH (VTYSH_BGPD,
        "Configure BGP aggregate entries\n"
        "Aggregate prefix\n"
        "Filter more specific routes from updates\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_soft_out_cmd, 
+       "clear ip bgp <1-65535> soft out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        ipv6_bgp_neighbor_update_source_cmd, 
@@ -2370,6 +2709,17 @@ DEFSH (VTYSH_BGPD,
        "IPv6 address\n"
        "Source of routing updates\n"
        "Interface name\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_vpnv4_in_cmd, 
+       "clear ip bgp <1-65535> vpnv4 unicast in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_redistribute_source_cmd, 
@@ -2388,14 +2738,6 @@ DEFSH (VTYSH_OSPFD,
        "IP Information\n"
        "OSPF interface commands\n"
        "Interval after which a neighbor is declared dead\n")
-
-DEFSH (VTYSH_BGPD, 
-       show_ip_mbgp_cmd, 
-       "show ip mbgp", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Network in the MBGP routing table to display\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_redistribute_source_type_cmd, 
@@ -2420,13 +2762,13 @@ DEFSH (VTYSH_RIPD,
 
 DEFSH (VTYSH_BGPD, 
        no_vpnv4_network_cmd, 
-       "no network A.B.C.D/M rd WORD tag WORD", 
+       "no network A.B.C.D/M rd ASN:nn_or_IP-address:nn tag WORD", 
        NO_STR
-       "static route for VPNv4\n"
-       "prefix\n"
-       "rd\n"
-       "rd value\n"
-       "tag\n"
+       "Specify a network to announce via BGP\n"
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
+       "Specify Route Distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "BGP tag\n"
        "tag value\n")
 
 DEFSH (VTYSH_RIPD, 
@@ -2487,6 +2829,22 @@ DEFSH (VTYSH_OSPFD,
        "Redistribute information from another routing protocol\n"
        "Kernel routes\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community2_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
 DEFSH (VTYSH_OSPFD, 
        debug_ospf_nsm_sub_cmd, 
        "debug ospf nsm (status|events|timers)", 
@@ -2503,9 +2861,9 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IPV6_STR
        MBGP_STR
-       "Detailed information on MBGP neighbor\n"
-       "IP address\n"
-       "IPv6 address\n")
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_weight_cmd, 
@@ -2534,7 +2892,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD,  bgp_confederation_identifier_cmd, 
        "bgp confederation identifier <1-65535>", 
-       BGP_STR
+       "BGP specific commands\n"
        "AS confederation parameters\n"
        "AS number\n"
        "Set routing domain confederation AS\n")
@@ -2626,6 +2984,14 @@ DEFSH (VTYSH_ZEBRA,  show_ip_route_cmd,
        SHOW_STR
        IP_STR
        "IP routing table\n")
+
+DEFSH (VTYSH_BGPD, 
+       no_bgp_scan_time_val_cmd, 
+       "no bgp scan-time <5-60>", 
+       NO_STR
+       "BGP specific commands\n"
+       "Setting BGP route next-hop scanning interval time\n"
+       "Scanner interval (seconds)\n")
 
 DEFSH (VTYSH_RIPNGD, 
        no_ripng_redistribute_bgp_cmd, 
@@ -2782,6 +3148,18 @@ DEFSH (VTYSH_OSPFD,
        "Seconds\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_vpnv4_soft_out_cmd, 
+       "clear ip bgp * vpnv4 unicast soft out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+
+DEFSH (VTYSH_BGPD, 
        show_ip_bgp_prefix_cmd, 
        "show ip bgp A.B.C.D/M", 
        SHOW_STR
@@ -2794,7 +3172,7 @@ DEFSH (VTYSH_BGPD,
        "no distance bgp <1-255> <1-255> <1-255>", 
        NO_STR
        "Define an administrative distance\n"
-       "BGP Administrative distance\n"
+       "BGP distance\n"
        "Distance for routes external to the AS\n"
        "Distance for routes internal to the AS\n"
        "Distance for local routes\n")
@@ -2856,7 +3234,7 @@ DEFSH (VTYSH_ZEBRA,
 DEFSH (VTYSH_BGPD, 
        bgp_always_compare_med_cmd, 
        "bgp always-compare-med", 
-       BGP_STR
+       "BGP specific commands\n"
        "Allow comparing MED from different neighbors\n")
 
 DEFSH (VTYSH_BGPD, 
@@ -2871,7 +3249,7 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD,  bgp_cluster_id_cmd, 
        "bgp cluster-id A.B.C.D", 
-       BGP_STR
+       "BGP specific commands\n"
        "Configure Route-Reflector Cluster-id\n"
        "Route-Reflector Cluster-id in IP address format\n")
 
@@ -2889,6 +3267,15 @@ DEFSH (VTYSH_RIPNGD,
        "redistribute connected", 
        "Redistribute control\n"
        "Connected route\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community_list_cmd, 
+       "show ipv6 mbgp community-list WORD", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the community-list\n"
+       "community-list name\n")
 
 DEFSH (VTYSH_RIPD, 
        no_rip_redistribute_type_routemap_cmd, 
@@ -2911,6 +3298,29 @@ DEFSH (VTYSH_BGPD,
        "BGP atomic aggregate attribute\n" )
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community3_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
+DEFSH (VTYSH_BGPD, 
        dump_bgp_all_interval_cmd, 
        "dump bgp all PATH INTERVAL", 
        "Dump packet\n"
@@ -2919,13 +3329,15 @@ DEFSH (VTYSH_BGPD,
        "Output filename\n"
        "Interval of output\n")
 
-DEFSH (VTYSH_BGPD,  
-       show_ip_mbgp_summary_cmd, 
-       "show ip mbgp summary", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Summary of MBGP neighbor status\n")
+DEFSH (VTYSH_OSPFD, 
+       neighbor_priority_pollinterval_cmd, 
+       "neighbor A.B.C.D priority <0-255> poll-interval <1-65535>", 
+       NEIGHBOR_STR
+       "Neighbor IP address\n"
+       "Neighbor Priority\n"
+       "Priority\n"
+       "Dead Neighbor Polling interval\n"
+       "Seconds\n")
 
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_database_type_id_adv_router_cmd, 
@@ -3016,14 +3428,24 @@ DEFSH (VTYSH_BGPD,
        "Send Community attribute to this neighbor (default enable)\n")
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_cmd, 
+       "show ip bgp ipv4 (unicast|multicast)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n")
+
+DEFSH (VTYSH_BGPD, 
        show_ip_bgp_vpnv4_all_tags_cmd, 
        "show ip bgp vpnv4 all tags", 
        SHOW_STR
        IP_STR
        BGP_STR
-       "VPNv4\n"
-       "All\n"
-       "Tags\n")
+       "Display VPNv4 NLRI specific information\n"
+       "Display information about all VPNv4 NLRIs\n"
+       "Display BGP tags for prefixes\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_ip_ospf_network_cmd, 
@@ -3056,21 +3478,32 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_ADDR_STR
        "Allow EBGP neighbors not on directly connected networks\n")
 
-DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_peer_soft_cmd, 
-       "clear ip bgp vpnv4 A.B.C.D soft", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "VPNv4 peer\n"
-       "BGP neighbor address to clear\n"
-       "Soft reconfig\n")
-
 DEFSH (VTYSH_OSPF6D, 
        ospf6_redistribute_bgp_cmd, 
        "redistribute bgp", 
        "Redistribute\n"
        "RIPng route\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community3_exact_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_OSPFD, 
        no_ospf_network_cmd, 
@@ -3110,7 +3543,7 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IPV6_STR
        BGP_STR
-       "Detailed information on BGP neighbor\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
        "Neighbor to display information about\n"
        "Display the routes advertised to a BGP neighbor\n")
@@ -3245,7 +3678,7 @@ DEFSH (VTYSH_ZEBRA,
 DEFSH (VTYSH_BGPD,  no_bgp_confederation_peers_cmd, 
        "no bgp confederation peers .<1-65535>", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "AS confederation parameters\n"
        "Peer ASs in BGP confederation\n"
        AS_STR)
@@ -3265,15 +3698,6 @@ DEFSH (VTYSH_BGPD,
        ROUTER_STR
        BGP_STR
        AS_STR)
-
-DEFSH (VTYSH_BGPD, 
-       no_match_ipv6_prefix_list_cmd, 
-       "no match ipv6 prefix-list WORD", 
-       NO_STR
-       MATCH_STR
-       IPV6_STR
-       "Match entries of IPv6 prefix-list\n"
-       "IPv6 prefix-list name\n")
 
 DEFSH (VTYSH_OSPFD, 
        area_stub_cmd, 
@@ -3320,8 +3744,8 @@ DEFSH (VTYSH_BGPD,
        no_bgp_distance_source_access_list_cmd, 
        "no distance <1-255> A.B.C.D/M WORD", 
        NO_STR
+       "Define an administrative distance\n"
        "Administrative distance\n"
-       "Distance value\n"
        "IP source prefix\n"
        "Access list name\n")
 
@@ -3350,6 +3774,17 @@ DEFSH (VTYSH_BGPD,
        BGP_STR
        "Specify a network to announce via BGP\n"
        "IPv6 prefix <network>/<length>,  e.g.,  3ffe::/16\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_vpnv4_out_cmd, 
+       "clear ip bgp * vpnv4 unicast out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_area_stub_nosum_cmd, 
@@ -3388,6 +3823,15 @@ DEFSH (VTYSH_BGPD,
        "Send Community attribute to this neighbor (default enable)\n"
        "Extended Community\n")
 
+DEFSH (VTYSH_BGPD,  
+       show_ipv6_mbgp_filter_list_cmd, 
+       "show ipv6 mbgp filter-list WORD", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes conforming to the filter-list\n"
+       "Regular expression access list name\n")
+
 DEFSH (VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_BGPD, 
        no_set_metric_cmd, 
        "no set metric", 
@@ -3418,15 +3862,23 @@ DEFSH (VTYSH_BGPD,
        "Clear all peers\n")
 
 DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_peer_soft_out_cmd, 
-       "clear ip bgp vpnv4 A.B.C.D soft out", 
-       CLEAR_STR
-       IP_STR
+       no_neighbor_port_val_cmd, 
+       NO_NEIGHBOR_CMD "port <0-65535>", 
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Neighbor's BGP port\n"
+       "TCP port number\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community_list_exact_cmd, 
+       "show ipv6 bgp community-list WORD exact-match", 
+       SHOW_STR
+       IPV6_STR
        BGP_STR
-       "VPNv4 peer\n"
-       "BGP neighbor address to clear\n"
-       "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Display routes matching the community-list\n"
+       "community-list name\n"
+       "Exact match of the communities\n")
 
 DEFSH (VTYSH_BGPD, 
        ipv6_bgp_redistribute_ripng_cmd, 
@@ -3455,6 +3907,26 @@ DEFSH (VTYSH_OSPFD,
        "OSPF area parameters\n"
        "OSPF area ID in IP address format\n"
        "Configure OSPF area as stub\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community3_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPF6D, 
        ospf6_redistribute_connected_cmd, 
@@ -3489,18 +3961,6 @@ DEFSH (VTYSH_BGPD,  ip_as_path_cmd,
        "Specify packets to reject\n"
        "Specify packets to forward\n"
        "A regular-expression to match the BGP AS paths\n")
-
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_router_advrtr_cmd, 
-       "show ipv6 ospf6 database router advrtr A.B.C.D", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSA\n"
-       "Advertising Router\n"
-       "Router-ID\n"
-       )
 
 DEFSH (VTYSH_OSPFD, 
        no_ospf_redistribute_source_cmd, 
@@ -3638,6 +4098,12 @@ DEFSH (VTYSH_BGPD,
        "Unicast NLRI setup\n"
        "Multicast NLRI setup\n")
 
+DEFSH (VTYSH_OSPFD,  no_refresh_timer_val_cmd, 
+       "no refresh timer <10-1800>", 
+       "Adjust refresh parameters\n"
+       "Unset refresh timer\n"
+       "Timer value in seconds\n")
+
 DEFSH (VTYSH_BGPD, 
        no_neighbor_transparent_as_cmd, 
        NO_NEIGHBOR_CMD "transparent-as", 
@@ -3704,6 +4170,31 @@ DEFSH (VTYSH_BGPD,
        "Filter incoming updates\n"
        "Filter outgoing updates\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community4_exact_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
+
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_neighbor_int_detail_cmd, 
        "show ip ospf neighbor INTERFACE detail", 
@@ -3715,23 +4206,34 @@ DEFSH (VTYSH_OSPFD,
        "detail of all neighbors")
 
 DEFSH (VTYSH_BGPD, 
-       show_ip_mbgp_neighbors_cmd, 
-       "show ip mbgp neighbors", 
+       bgp_bestpath_med2_cmd, 
+       "bgp bestpath med confed missing-as-worst", 
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "MED attribute\n"
+       "Compare MED among confederation paths\n"
+       "Treat missing MED as the least preferred one\n")
+
+DEFSH (VTYSH_BGPD,  
+       show_ipv6_bgp_filter_list_cmd, 
+       "show ipv6 bgp filter-list WORD", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes conforming to the filter-list\n"
+       "Regular expression access list name\n")
+
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_ipv4_regexp_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) regexp .LINE", 
        SHOW_STR
        IP_STR
-       MBGP_STR
-       "Detailed information on MBGP neighbor\n")
-
-DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_all_soft_out_cmd, 
-       "clear ip bgp vpnv4 * soft out", 
-       CLEAR_STR
-       IP_STR
        BGP_STR
-       "VPNv4 peer\n"
-       "Clear all peers\n"
-       "Soft reconfig\n"
-       "Soft reconfig outbound update\n")
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the AS path regular expression\n"
+       "A regular-expression to match the BGP AS paths\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_activate_cmd, 
@@ -3766,6 +4268,13 @@ DEFSH (VTYSH_OSPFD,
        "Metric for redistributed routes\n"
        "OSPF default metric\n")
 
+DEFSH (VTYSH_BGPD, 
+       bgp_client_to_client_reflection_cmd, 
+       "bgp client-to-client reflection", 
+       "BGP specific commands\n"
+       "Configure client to client route reflection\n"
+       "reflection of routes allowed\n")
+
 DEFSH (VTYSH_RIPNGD, 
        ripng_redistribute_ospf6_cmd, 
        "redistribute ospf6", 
@@ -3784,6 +4293,13 @@ DEFSH (VTYSH_BGPD,
        "Specify a BGP neighbor\n"
        AS_STR)
 
+DEFSH (VTYSH_BGPD, 
+       no_bgp_scan_time_cmd, 
+       "no bgp scan-time", 
+       NO_STR
+       "BGP specific commands\n"
+       "Setting BGP route next-hop scanning interval time\n")
+
 DEFSH (VTYSH_OSPFD, 
        ip_ospf_cost_cmd, 
        "ip ospf cost <1-65535>", 
@@ -3793,13 +4309,29 @@ DEFSH (VTYSH_OSPFD,
        "Cost")
 
 DEFSH (VTYSH_BGPD, 
-       no_match_ip_prefix_list_cmd, 
-       "no match ip prefix-list WORD", 
-       NO_STR
-       MATCH_STR
-       IP_STR
-       "Match entries of prefix-lists\n"
-       "IP prefix-list name\n")
+       show_ipv6_bgp_community4_exact_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_redistribute_source_routemap_cmd, 
@@ -3823,6 +4355,33 @@ DEFSH (VTYSH_BGPD,
        "IPv6 address\n"
        "Allow EBGP neighbors not on directly connected networks\n"
        "maximum hop count\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community4_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_RIPD, 
        no_rip_distance_source_access_list_cmd, 
@@ -3856,14 +4415,16 @@ DEFSH (VTYSH_BGPD,
 
 DEFSH (VTYSH_BGPD, 
        ipv6_bgp_neighbor_version_cmd, 
-       "ipv6 bgp neighbor (A.B.C.D|X:X::X:X) version BGP_VERSION", 
+       "ipv6 bgp neighbor (A.B.C.D|X:X::X:X) version (4|4+|4-)", 
        IPV6_STR
        BGP_STR
        NEIGHBOR_STR
        "IP address\n"
        "IPv6 address\n"
-       "Set the BGP version to match a neighbor\n"
-       "Neighbor's BGP version 4 or 4+ or 4-\n")
+       "Neighbor's BGP version\n"
+       "Border Gateway Protocol 4\n"
+       "Multiprotocol Extensions for BGP-4\n"
+       "Multiprotocol Extensions for BGP-4(Old Draft)\n")
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_translate_update_unimulti_cmd, 
@@ -3949,6 +4510,16 @@ DEFSH (VTYSH_BGPD,
        "Configure for multicast routes\n")
 
 DEFSH (VTYSH_BGPD, 
+       no_bgp_bestpath_med2_cmd, 
+       "no bgp bestpath med confed missing-as-worst", 
+       NO_STR
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "MED attribute\n"
+       "Compare MED among confederation paths\n"
+       "Treat missing MED as the least preferred one\n")
+
+DEFSH (VTYSH_BGPD, 
        no_aggregate_address_summary_only_cmd, 
        "no aggregate-address A.B.C.D/M summary-only", 
        NO_STR
@@ -3973,14 +4544,6 @@ DEFSH (VTYSH_OSPF6D,
        "Specify Advertising Router\n"
        "Router ID\n"
        )
-
-DEFSH (VTYSH_BGPD, 
-       no_bgp_bestpath_missing_as_worst_cmd, 
-       "no bgp bestpath missing-as-worst", 
-       NO_STR
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Missing MED value is compared as worst value\n")
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_activate_cmd, 
@@ -4041,6 +4604,17 @@ DEFSH (VTYSH_RIPD,
        "RIP version 1\n"
        "RIP version 2\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_vpnv4_in_cmd, 
+       "clear ip bgp * vpnv4 unicast in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig inbound update\n")
+
 DEFSH (VTYSH_RIPD, 
        no_ip_rip_authentication_mode_cmd, 
        "no ip rip authentication mode", 
@@ -4064,13 +4638,6 @@ DEFSH (VTYSH_OSPFD,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 
-DEFSH (VTYSH_OSPFD, 
-       refresh_per_slice_cmd, 
-       "refresh per-slice <0-10000>", 
-       "Adjust refresh parameters\n"
-       "Maximum LASs updates at once (0 means unlimited)\n"
-       "Set refresh per slice value\n")
-
 DEFSH (VTYSH_OSPF6D, 
        ospf6_routemap_no_set_metric_type_cmd, 
        "no set metric-type (type-1|type-2)", 
@@ -4080,6 +4647,16 @@ DEFSH (VTYSH_OSPF6D,
        "OSPF6 external type 1 metric\n"
        "OSPF6 external type 2 metric\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ipv6_bgp_as_soft_in_cmd, 
+       "clear ipv6 bgp <1-65535> soft in", 
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+
 DEFSH (VTYSH_OSPF6D, 
        ospf6_redistribute_static_cmd, 
        "redistribute static", 
@@ -4088,15 +4665,30 @@ DEFSH (VTYSH_OSPF6D,
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_version_cmd, 
-       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) version [BGP_VERSION]", 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) version", 
        NO_STR
        IPV6_STR
        BGP_STR
        NEIGHBOR_STR
        "IP address\n"
        "IPv6 address\n"
-       "Set the BGP version to match a neighbor\n"
-       "Neighbor's BGP version 4 or 4+ or 4-\n")
+       "Neighbor's BGP version\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community_exact_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_ZEBRA, 
        ip_irdp_address_cmd, 
@@ -4154,16 +4746,6 @@ DEFSH (VTYSH_BGPD,
        "Open Shortest Path First (OSPF)\n"
        "Route map reference\n"
        "Pointer to route-map entries\n")
-
-DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_peer_out_cmd, 
-       "clear ip bgp vpnv4 A.B.C.D out", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "VPNv4 peer\n"
-       "BGP neighbor address to clear\n"
-       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        clear_ipv6_bgp_as_cmd, 
@@ -4230,16 +4812,6 @@ DEFSH (VTYSH_OSPFD,
        "Set the filter for networks from other areas announced to the specified one\n"
        "Name of the access-list\n")
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_asexternal_cmd, 
-       "show ipv6 ospf6 database as-external", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "AS-External-LSA\n"
-       )
-
 DEFSH (VTYSH_BGPD, 
        no_match_nlri_cmd, 
        "no match nlri (multicast|unicast)", 
@@ -4248,6 +4820,47 @@ DEFSH (VTYSH_BGPD,
        "Match Network Layer Reachability Information\n"
        "Multicast\n"
        "Unicast\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_ipv4_soft_out_cmd, 
+       "clear ip bgp <1-65535> ipv4 (unicast|multicast) soft out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community4_exact_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_default_metric_cmd, 
@@ -4282,13 +4895,16 @@ DEFSH (VTYSH_BGPD,
        "Do not change nexthop even peer is EBGP peer\n")
 
 DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_all_out_cmd, 
-       "clear ip bgp vpnv4 * out", 
+       clear_ip_bgp_all_ipv4_soft_out_cmd, 
+       "clear ip bgp * ipv4 (unicast|multicast) soft out", 
        CLEAR_STR
        IP_STR
        BGP_STR
-       "VPNv4 peer\n"
        "Clear all peers\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
        "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_OSPFD, 
@@ -4404,6 +5020,15 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_ADDR_STR
        "Configure a neighbor as Route Server client\n")
 
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_filter_list_cmd, 
+       "show ip bgp filter-list WORD", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes conforming to the filter-list\n"
+       "Regular expression access list name\n")
+
 DEFSH (VTYSH_OSPF6D, 
        show_ipv6_ospf6_cmd, 
        "show ipv6 ospf6", 
@@ -4422,12 +5047,60 @@ DEFSH (VTYSH_BGPD,
        "Soft reconfig\n"
        "Soft reconfig outbound update\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_vpnv4_in_cmd, 
+       "clear ip bgp A.B.C.D vpnv4 unicast in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community4_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
 DEFSH (VTYSH_OSPFD, 
        no_ospf_priority_cmd, 
        "no ospf priority", 
        NO_STR
        "OSPF interface commands\n"
        "Router priority\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_ipv4_soft_out_cmd, 
+       "clear ip bgp A.B.C.D ipv4 (unicast|multicast) soft out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_update_source_cmd, 
@@ -4452,7 +5125,7 @@ DEFSH (VTYSH_BGPD,
 DEFSH (VTYSH_BGPD, 
        bgp_multiple_instance_cmd, 
        "bgp multiple-instance", 
-       BGP_STR
+       "BGP specific commands\n"
        "Enable bgp multiple instance\n")
 
 DEFSH (VTYSH_BGPD, 
@@ -4527,6 +5200,17 @@ DEFSH (VTYSH_BGPD,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_prefix_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) A.B.C.D/M", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n")
+
 DEFSH (VTYSH_RIPD, 
        no_debug_rip_zebra_cmd, 
        "no debug rip zebra", 
@@ -4534,14 +5218,6 @@ DEFSH (VTYSH_RIPD,
        DEBUG_STR
        RIP_STR
        "RIP and ZEBRA communication\n")
-
-DEFSH (VTYSH_BGPD,  
-       show_ip_mbgp_community_cmd, 
-       "show ip mbgp community", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Display routes matching the communities\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_debug_ospf_lsa_sub_cmd, 
@@ -4582,6 +5258,16 @@ DEFSH (VTYSH_OSPFD|VTYSH_OSPF6D,
        "Suppress routing updates on an interface\n"
        IFNAME_STR
        )
+
+DEFSH (VTYSH_BGPD, 
+       clear_ipv6_bgp_as_soft_out_cmd, 
+       "clear ipv6 bgp <1-65535> soft out", 
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_shutdown_cmd, 
@@ -4627,6 +5313,12 @@ DEFSH (VTYSH_BGPD,
        "Specify an access list name\n"
        "Regular expression access list name\n")
 
+DEFSH (VTYSH_OSPFD,  refresh_timer_cmd, 
+       "refresh timer <10-1800>", 
+       "Adjust refresh parameters\n"
+       "Set refresh timer\n"
+       "Timer value in seconds\n")
+
 DEFSH (VTYSH_OSPFD, 
        no_auto_cost_reference_bandwidth_cmd, 
        "no auto-cost reference-bandwidth", 
@@ -4636,12 +5328,11 @@ DEFSH (VTYSH_OSPFD,
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_weight_cmd, 
-       NO_NEIGHBOR_CMD "weight [<0-65535>]", 
+       NO_NEIGHBOR_CMD "weight", 
        NO_STR
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
-       "Set default weight for routes from this neighbor\n"
-       "default weight\n")
+       "Set default weight for routes from this neighbor\n")
 
 DEFSH (VTYSH_BGPD, 
        no_set_weight_val_cmd, 
@@ -4650,6 +5341,17 @@ DEFSH (VTYSH_BGPD,
        SET_STR
        "BGP weight for routing table\n"
        "Weight value\n")
+
+DEFSH (VTYSH_BGPD, 
+       ipv6_bgp_neighbor_received_routes_cmd, 
+       "show ipv6 bgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display the received routes from neighbor\n")
 
 DEFSH (VTYSH_BGPD, 
        show_ip_bgp_cmd, 
@@ -4693,6 +5395,18 @@ DEFSH (VTYSH_RIPNGD,
        "Debug option set for ripng and zebra communication\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_vpnv4_soft_in_cmd, 
+       "clear ip bgp <1-65535> vpnv4 unicast soft in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
        clear_ip_bgp_peer_in_cmd, 
        "clear ip bgp A.B.C.D in", 
        CLEAR_STR
@@ -4708,6 +5422,25 @@ DEFSH (VTYSH_BGPD,
        "BGP extended community attribute\n"
        "Route Target extened communityt\n"
        "VPN extended community\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_soft_in_cmd, 
+       "clear ip bgp <1-65535> soft in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
+       bgp_bestpath_med3_cmd, 
+       "bgp bestpath med missing-as-worst confed", 
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "MED attribute\n"
+       "Treat missing MED as the least preferred one\n"
+       "Compare MED among confederation paths\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_transparent_nexthop_cmd, 
@@ -4726,6 +5459,18 @@ DEFSH (VTYSH_BGPD,
        NO_STR
        SET_STR
        "Network Layer Reachability Information\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_vpnv4_soft_in_cmd, 
+       "clear ip bgp * vpnv4 unicast soft in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        show_ip_bgp_route_cmd, 
@@ -4773,6 +5518,18 @@ DEFSH (VTYSH_BGPD,
        "IPv6 address\n"
        "Configure a neighbor as Route Refresh enable\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_ipv4_out_cmd, 
+       "clear ip bgp <1-65535> ipv4 (unicast|multicast) out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig outbound update\n")
+
 DEFSH (VTYSH_OSPFD, 
        clear_ip_ospf_neighbor_cmd, 
        "clear ip ospf neighbor A.B.C.D", 
@@ -4803,6 +5560,14 @@ DEFSH (VTYSH_RIPD|VTYSH_BGPD,
        SET_STR
        IP_STR
        "Next hop address\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community_all_cmd, 
+       "show ipv6 mbgp community", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n")
 
 DEFSH (VTYSH_RIPD, 
        ip_rip_authentication_mode_cmd, 
@@ -4845,6 +5610,15 @@ DEFSH (VTYSH_ZEBRA,
        "shutdown", 
        "Shutdown the selected interface\n")
 
+DEFSH (VTYSH_BGPD, 
+       no_ipv6_aggregate_address_cmd, 
+       "no ipv6 bgp aggregate-address X:X::X:X/M", 
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       "Configure BGP aggregate entries\n"
+       "Aggregate prefix\n")
+
 DEFSH (VTYSH_OSPFD, 
        no_set_metric_type_cmd, 
        "no set metric-type (1|2)", 
@@ -4854,13 +5628,25 @@ DEFSH (VTYSH_OSPFD,
        "Set OSPF External Type 2 metrics\n")
 
 DEFSH (VTYSH_BGPD, 
-       no_ipv6_aggregate_address_cmd, 
-       "no ipv6 bgp aggregate-address X:X::X:X/M", 
+       no_neighbor_description_val_cmd, 
+       NO_NEIGHBOR_CMD "description .LINE", 
        NO_STR
-       IPV6_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Neighbor specific description\n"
+       "Up to 80 characters describing this neighbor\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_vpnv4_soft_in_cmd, 
+       "clear ip bgp A.B.C.D vpnv4 unicast soft in", 
+       CLEAR_STR
+       IP_STR
        BGP_STR
-       "Configure BGP aggregate entries\n"
-       "Aggregate prefix\n")
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_RIPNGD, 
        no_ripng_redistribute_ripng_cmd, 
@@ -4884,7 +5670,7 @@ DEFSH (VTYSH_BGPD,
        "no distance bgp", 
        NO_STR
        "Define an administrative distance\n"
-       "BGP Administrative distance\n")
+       "BGP distance\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_default_information_originate_metric_type_routemap_cmd, 
@@ -4922,6 +5708,16 @@ DEFSH (VTYSH_BGPD,
        "BGP extended community attribute\n"
        "Route Target extened communityt\n")
 
+DEFSH (VTYSH_BGPD, 
+       no_bgp_bestpath_med3_cmd, 
+       "no bgp bestpath med missing-as-worst confed", 
+       NO_STR
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "MED attribute\n"
+       "Treat missing MED as the least preferred one\n"
+       "Compare MED among confederation paths\n")
+
 DEFSH (VTYSH_RIPNGD, 
        debug_ripng_packet_direct_cmd, 
        "debug ripng packet (recv|send)", 
@@ -4945,6 +5741,18 @@ DEFSH (VTYSH_BGPD,
        BGP_STR
        "Redistribute information from another routing protocol\n"
        "Static routes\n")
+
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_ipv4_prefix_list_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) prefix-list WORD", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the prefix-list\n"
+       "IP prefix-list name\n")
 
 DEFSH (VTYSH_OSPF6D, 
        show_ipv6_ospf6_neighborlist_cmd, 
@@ -5011,10 +5819,18 @@ DEFSH (VTYSH_OSPFD,
        "Interface information\n"
        "Interface name\n")
 
+DEFSH (VTYSH_BGPD, 
+       no_bgp_default_local_preference_cmd, 
+       "no bgp default local-preference", 
+       NO_STR
+       "BGP specific commands\n"
+       "Configure BGP defaults\n"
+       "local preference (higher=more preferred)\n")
+
 DEFSH (VTYSH_BGPD,  no_bgp_router_id_cmd, 
        "no bgp router-id", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "Override configured router identifier\n")
 
 DEFSH (VTYSH_BGPD,  
@@ -5036,13 +5852,16 @@ DEFSH (VTYSH_RIPD,
        "Border Gateway Protocol (BGP)\n")
 
 DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_all_in_cmd, 
-       "clear ip bgp vpnv4 * in", 
+       clear_ip_bgp_all_ipv4_soft_in_cmd, 
+       "clear ip bgp * ipv4 (unicast|multicast) soft in", 
        CLEAR_STR
        IP_STR
        BGP_STR
-       "VPNv4 peer\n"
        "Clear all peers\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
        "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_RIPD, 
@@ -5055,11 +5874,17 @@ DEFSH (VTYSH_RIPD,
        "RIP version 2\n"
        "RIP version 1\n")
 
+DEFSH (VTYSH_OSPFD, 
+       ospf_compatible_rfc1583_cmd, 
+       "compatible rfc1583", 
+       "OSPF compatibility list\n"
+       "compatible with RFC 1583\n")
+
 DEFSH (VTYSH_BGPD, 
        address_family_vpnv4_cmd, 
        "address-family vpnv4", 
-       "Address family configuration\n"
-       "IPv4 MPLS-VPN\n")
+       "Enter Address Family command mode\n"
+       "Address family\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_default_information_originate_metric_cmd, 
@@ -5102,7 +5927,7 @@ DEFSH (VTYSH_ZEBRA,
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_port_cmd, 
-       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) port <0-65535>", 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) port", 
        NO_STR
        IPV6_STR
        BGP_STR
@@ -5176,6 +6001,15 @@ DEFSH (VTYSH_RIPD,
        "Default metric\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ipv6_bgp_as_soft_cmd, 
+       "clear ipv6 bgp <1-65535> soft", 
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n")
+
+DEFSH (VTYSH_BGPD, 
        ipv6_bgp_neighbor_prefix_list_cmd, 
        "ipv6 bgp neighbor (A.B.C.D|X:X::X:X) prefix-list WORD (in|out)", 
        IPV6_STR
@@ -5198,13 +6032,6 @@ DEFSH (VTYSH_RIPNGD,
        "Debug option set for receive packet\n"
        "Debug option set for send packet\n")
 
-DEFSH (VTYSH_OSPFD, 
-       refresh_age_diff_cmd, 
-       "refresh age-diff <0-100>", 
-       "Adjust refresh parameters\n"
-       "Max difference between LSA's age in the same group\n"
-       "Set age diffrence value\n")
-
 DEFSH (VTYSH_OSPF6D, 
        show_ipv6_ospf6_nexthoplist_cmd, 
        "show ipv6 ospf6 nexthop-list", 
@@ -5220,12 +6047,15 @@ DEFSH (VTYSH_RIPD,
        "RIP neighbor router address specification\n"
        "Address of the neighbor router\n")
 
-DEFSH (VTYSH_OSPFD, 
-       refresh_group_limit_cmd, 
-       "refresh group-limit <0-10000>", 
-       "Adjust refresh parameters\n"
-       "Maximum refresh group size (0 means unlimited)\n"
-       "Set group limit value\n")
+DEFSH (VTYSH_BGPD, 
+       no_match_ipv6_address_prefix_list_cmd, 
+       "no match ipv6 address prefix-list WORD", 
+       NO_STR
+       MATCH_STR
+       IPV6_STR
+       "Match address of route\n"
+       "Match entries of prefix-lists\n"
+       "IP prefix-list name\n")
 
 DEFSH (VTYSH_RIPD, 
        ip_rip_receive_version_1_cmd, 
@@ -5282,6 +6112,15 @@ DEFSH (VTYSH_OSPFD,
        "Redistribute information from another routing protocol\n"
        "Open Shortest Path First (OSPF)\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_out_cmd, 
+       "clear ip bgp <1-65535> out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig outbound update\n")
+
 DEFSH (VTYSH_ZEBRA,  ipv6_route_ifname_cmd, 
        "ipv6 route X:X::X:X/M X:X::X:X IFNAME", 
        "IP information\n"
@@ -5290,14 +6129,14 @@ DEFSH (VTYSH_ZEBRA,  ipv6_route_ifname_cmd,
        "Destination IP Address\n"
        "Destination interface name\n")
 
-DEFSH (VTYSH_BGPD,  
-       show_ip_mbgp_prefix_list_cmd, 
-       "show ip mbgp prefix-list WORD", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Display routes matching the prefix-list\n"
-       "IP prefix-list name\n")
+DEFSH (VTYSH_OSPFD, 
+       no_neighbor_pollinterval_cmd, 
+       "no neighbor A.B.C.D poll-interval <1-65535>", 
+       NO_STR
+       NEIGHBOR_STR
+       "Neighbor IP address\n"
+       "Dead Neighbor Polling interval\n"
+       "Seconds\n")
 
 DEFSH (VTYSH_OSPFD, 
        debug_ospf_lsa_sub_cmd, 
@@ -5308,6 +6147,17 @@ DEFSH (VTYSH_OSPFD,
        "LSA Generation\n"
        "LSA Flooding\n"
        "LSA Refresh\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_vpnv4_soft_cmd, 
+       "clear ip bgp * vpnv4 unicast soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n")
 
 DEFSH (VTYSH_OSPFD, 
        ip_ospf_hello_interval_cmd, 
@@ -5377,6 +6227,15 @@ DEFSH (VTYSH_BGPD,
        "Per neighbor soft reconfiguration\n"
        "Allow inbound soft reconfiguration for this neighbor\n")
 
+DEFSH (VTYSH_BGPD, 
+       no_neighbor_weight_val_cmd, 
+       NO_NEIGHBOR_CMD "weight <0-65535>", 
+       NO_STR
+       NEIGHBOR_STR
+       NEIGHBOR_ADDR_STR
+       "Set default weight for routes from this neighbor\n"
+       "default weight\n")
+
 DEFSH (VTYSH_OSPF6D, 
        show_version_ospf6_cmd, 
        "show version ospf6", 
@@ -5429,6 +6288,31 @@ DEFSH (VTYSH_ZEBRA,
        "Set holdtime value\n"
        "Holdtime value in seconds. Default is 1800 seconds\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community4_exact_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
+
 DEFSH (VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD, 
        match_interface_cmd, 
        "match interface WORD", 
@@ -5452,6 +6336,17 @@ DEFSH (VTYSH_OSPFD,
        NO_STR
        "Define an administrative distance\n"
        "OSPF Administrative distance\n")
+
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_ipv4_summary_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) summary", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Summary of BGP neighbor status\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_remote_as_multicast_cmd, 
@@ -5487,6 +6382,18 @@ DEFSH (VTYSH_OSPFD,
        "OSPF default metric\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_ipv4_in_cmd, 
+       "clear ip bgp <1-65535> ipv4 (unicast|multicast) in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
        no_dump_bgp_all_cmd, 
        "no dump bgp all [PATH] [INTERVAL]", 
        NO_STR
@@ -5498,7 +6405,7 @@ DEFSH (VTYSH_BGPD,
        bgp_distance_cmd, 
        "distance bgp <1-255> <1-255> <1-255>", 
        "Define an administrative distance\n"
-       "BGP Administrative distance\n"
+       "BGP distance\n"
        "Distance for routes external to the AS\n"
        "Distance for routes internal to the AS\n"
        "Distance for local routes\n")
@@ -5581,19 +6488,8 @@ DEFSH (VTYSH_ZEBRA,
        "Debug option set for zebra events\n")
 
 DEFSH (VTYSH_BGPD, 
-       ipv6_bgp_neighbor_routes_cmd, 
-       "show ipv6 bgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
-       SHOW_STR
-       IPV6_STR
-       BGP_STR
-       "Detailed information on BGP neighbor\n"
-       "Neighbor to display information about\n"
-       "Neighbor to display information about\n"
-       "Display the received routes from neighbor\n")
-
-DEFSH (VTYSH_BGPD, 
        no_neighbor_port_cmd, 
-       NO_NEIGHBOR_CMD "port <0-65535>", 
+       NO_NEIGHBOR_CMD "port", 
        NO_STR
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
@@ -5617,8 +6513,8 @@ DEFSH (VTYSH_BGPD,
        no_bgp_distance_source_cmd, 
        "no distance <1-255> A.B.C.D/M", 
        NO_STR
+       "Define an administrative distance\n"
        "Administrative distance\n"
-       "Distance value\n"
        "IP source prefix\n")
 
 DEFSH (VTYSH_BGPD,  
@@ -5642,7 +6538,7 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IP_STR
        BGP_STR
-       "Detailed information on BGP neighbor\n")
+       "Detailed information on TCP and BGP neighbor connections\n")
 
 DEFSH (VTYSH_BGPD, 
        ipv6_bgp_redistribute_kernel_cmd, 
@@ -5692,16 +6588,17 @@ DEFSH (VTYSH_BGPD,
        BGP_STR
        "Clear all peers\n")
 
-DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_all_soft_in_cmd, 
-       "clear ip bgp vpnv4 * soft in", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "VPNv4 peer\n"
-       "Clear all peers\n"
-       "Soft reconfig\n"
-       "Soft reconfig inbound update\n")
+DEFSH (VTYSH_OSPF6D, 
+       show_ipv6_ospf6_database_scope_cmd, 
+       "show ipv6 ospf6 database (as-scope|area-scope|linklocal-scope|)", 
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "AS scoped LSAs\n"
+       "Area scoped LSAs\n"
+       "Linklocal scoped LSAs\n"
+       )
 
 DEFSH (VTYSH_ZEBRA,  no_bandwidth_if_val_cmd, 
        "no bandwidth <1-10000000>", 
@@ -5743,6 +6640,19 @@ DEFSH (VTYSH_BGPD,
        "BGP connect timer\n"
        "Connect timer\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community_exact_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
+
 DEFSH (VTYSH_OSPF6D, 
        show_ipv6_ospf6_interface_cmd, 
        "show ipv6 ospf6 interface", 
@@ -5752,10 +6662,19 @@ DEFSH (VTYSH_OSPF6D,
        INTERFACE_STR
        )
 
+DEFSH (VTYSH_BGPD, 
+       no_bgp_default_local_preference_val_cmd, 
+       "no bgp default local-preference <0-4294967295>", 
+       NO_STR
+       "BGP specific commands\n"
+       "Configure BGP defaults\n"
+       "local preference (higher=more preferred)\n"
+       "Configure default local preference value\n")
+
 DEFSH (VTYSH_BGPD,  no_bgp_router_id_val_cmd, 
        "no bgp router-id A.B.C.D", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "Override configured router identifier\n"
        "Manually configured router identifier\n")
 
@@ -5803,12 +6722,39 @@ DEFSH (VTYSH_RIPD,
        "Enable a routing process\n"
        "Routing Information Protocol (RIP)\n")
 
+DEFSH (VTYSH_BGPD, 
+       ipv4_neighbor_advertised_route_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X) advertised-routes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display the routes advertised to a BGP neighbor\n")
+
 DEFSH (VTYSH_RIPD, 
        debug_rip_packet_cmd, 
        "debug rip packet", 
        DEBUG_STR
        RIP_STR
        "RIP packet\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community_exact_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_send_community_extended_cmd, 
@@ -5836,14 +6782,6 @@ DEFSH (VTYSH_BGPD,
        "IP address\n"
        "IPv6 address\n"
        "Configure a neighbor as Route Server client\n")
-
-DEFSH (VTYSH_BGPD, 
-       show_ip_mbgp_route_cmd, 
-       "show ip mbgp A.B.C.D", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Network in the MBGP routing table to display\n")
 
 DEFSH (VTYSH_RIPD, 
        no_rip_version_cmd, 
@@ -5900,16 +6838,6 @@ DEFSH (VTYSH_OSPFD,
        "ISM Event Information\n"
        "ISM TImer Information\n")
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_network_cmd, 
-       "show ipv6 ospf6 database network", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Network-LSA\n"
-       )
-
 DEFSH (VTYSH_RIPD, 
        no_rip_distance_cmd, 
        "no distance <1-255>", 
@@ -5947,17 +6875,6 @@ DEFSH (VTYSH_BGPD,
        "Per neighbor soft reconfiguration\n"
        "Allow inbound soft reconfiguration for this neighbor\n")
 
-DEFSH (VTYSH_BGPD, 
-       neighbor_mbgp_routes_cmd, 
-       "show ip mbgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Detailed information on BGP neighbor\n"
-       "Neighbor to display information about\n"
-       "Neighbor to display information about\n"
-       "Display the received routes from neighbor\n")
-
 DEFSH (VTYSH_OSPF6D, 
        no_debug_ospf6_message_cmd, 
        "no debug ospf6 message (hello|dbdesc|lsreq|lsupdate|lsack|all)", 
@@ -5994,6 +6911,20 @@ DEFSH (VTYSH_OSPFD,
        "Define an administrative distance\n"
        "OSPF Administrative distance\n"
        "OSPF Distance\n")
+
+DEFSH (VTYSH_BGPD, 
+       ipv4_neighbor_received_routes_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X) received-routes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display the received routes from neighbor\n")
 
 DEFSH (VTYSH_RIPD, 
        no_rip_offset_list_ifname_cmd, 
@@ -6060,6 +6991,14 @@ DEFSH (VTYSH_RIPNGD,
        "Redistribute control\n"
        "Static route\n")
 
+DEFSH (VTYSH_BGPD, 
+       no_bgp_client_to_client_reflection_cmd, 
+       "no bgp client-to-client reflection", 
+       NO_STR
+       "BGP specific commands\n"
+       "Configure client to client route reflection\n"
+       "reflection of routes allowed\n")
+
 DEFSH (VTYSH_OSPFD, 
        debug_ospf_lsa_cmd, 
        "debug ospf lsa", 
@@ -6082,12 +7021,31 @@ DEFSH (VTYSH_OSPFD,
        "Advertising Router link states\n"
        "Advertising Router (as an IP address)\n")
 
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_community_info_cmd, 
+       "show ip bgp community-info", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "List all bgp community information\n")
+
 DEFSH (VTYSH_BGPD, 
        no_bgp_always_compare_med_cmd, 
        "no bgp always-compare-med", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "Allow comparing MED from different neighbors\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_route_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) A.B.C.D", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Network in the BGP routing table to display\n")
 
 DEFSH (VTYSH_OSPFD, 
        ip_ospf_dead_interval_cmd, 
@@ -6109,7 +7067,7 @@ DEFSH (VTYSH_OSPFD,
 DEFSH (VTYSH_BGPD,  no_bgp_cluster_id_cmd, 
        "no bgp cluster-id", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "Configure Route-Reflector Cluster-id\n")
 
 DEFSH (VTYSH_OSPFD, 
@@ -6142,6 +7100,29 @@ DEFSH (VTYSH_RIPNGD,
        "Unset RIPng garbage timer in seconds\n"
        "Seconds\n")
 
+DEFSH (VTYSH_OSPFD, 
+       no_neighbor_priority_pollinterval_cmd, 
+       "no neighbor A.B.C.D priority <0-255> poll-interval <1-65535>", 
+       NO_STR
+       NEIGHBOR_STR
+       "Neighbor IP address\n"
+       "Neighbor Priority\n"
+       "Priority\n"
+       "Dead Neighbor Polling interval\n"
+       "Seconds\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_ipv4_in_cmd, 
+       "clear ip bgp * ipv4 (unicast|multicast) in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig inbound update\n")
+
 DEFSH (VTYSH_BGPD, 
        neighbor_distribute_list_cmd, 
        NEIGHBOR_CMD "distribute-list WORD (in|out)", 
@@ -6151,6 +7132,22 @@ DEFSH (VTYSH_BGPD,
        "IP Access-list name\n"
        "Filter incoming updates\n"
        "Filter outgoing updates\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_community2_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_ZEBRA, 
        no_debug_zebra_packet_direct_cmd, 
@@ -6164,12 +7161,12 @@ DEFSH (VTYSH_ZEBRA,
 
 DEFSH (VTYSH_BGPD, 
        vpnv4_network_cmd, 
-       "network A.B.C.D/M rd WORD tag WORD", 
-       "static route for VPNv4\n"
-       "prefix\n"
-       "rd\n"
-       "rd value\n"
-       "tag\n"
+       "network A.B.C.D/M rd ASN:nn_or_IP-address:nn tag WORD", 
+       "Specify a network to announce via BGP\n"
+       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
+       "Specify Route Distinguisher\n"
+       "VPN Route Distinguisher\n"
+       "BGP tag\n"
        "tag value\n")
 
 DEFSH (VTYSH_BGPD, 
@@ -6217,9 +7214,11 @@ DEFSH (VTYSH_RIPD|VTYSH_BGPD,
 
 DEFSH (VTYSH_OSPF6D, 
        no_interface_cmd, 
-       "no interface IFNAME [area AREA_ID]", 
-       INTERFACE_STR
-       "Delete Interface.")
+       "no interface IFNAME", 
+       NO_STR
+       "Disable routing on an IPv6 interface\n"
+       IFNAME_STR
+       )
 
 DEFSH (VTYSH_RIPNGD, 
        ripng_route_cmd, 
@@ -6336,6 +7335,19 @@ DEFSH (VTYSH_RIPD,
        "RIP version 1\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_ipv4_soft_in_cmd, 
+       "clear ip bgp <1-65535> ipv4 (unicast|multicast) soft in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
        clear_ipv6_bgp_peer_soft_in_cmd, 
        "clear ipv6 bgp (A.B.C.D|X:X::X:X) soft in", 
        CLEAR_STR
@@ -6418,31 +7430,12 @@ DEFSH (VTYSH_RIPD,
        "Redistribute information from another routing protocol\n"
        "Routing Information Protocol (RIP)\n")
 
-DEFSH (VTYSH_BGPD, 
-       clear_ip_bgp_vpnv4_all_soft_cmd, 
-       "clear ip bgp vpnv4 * soft", 
-       CLEAR_STR
-       IP_STR
-       BGP_STR
-       "VPNv4 peer\n"
-       "Clear all peers\n"
-       "Soft reconfig\n")
-
 DEFSH (VTYSH_RIPNGD, 
        no_default_information_originate_cmd, 
        "no default-information originate", 
        NO_STR
        "Default route information\n"
        "Distribute default route\n")
-
-DEFSH (VTYSH_BGPD,  
-       show_ip_mbgp_regexp_cmd, 
-       "show ip mbgp regexp .LINE", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "Display routes matching the AS path regular expression\n"
-       "A regular-expression to match the MBGP AS paths\n")
 
 DEFSH (VTYSH_ZEBRA, 
        show_table_cmd, 
@@ -6487,19 +7480,25 @@ DEFSH (VTYSH_RIPD,
 
 DEFSH (VTYSH_BGPD, 
        neighbor_version_cmd, 
-       NEIGHBOR_CMD "version BGP_VERSION", 
+       NEIGHBOR_CMD "version (4|4+|4-)", 
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
-       "Set the BGP version to match a neighbor\n"
-       "Neighbor's BGP version 4 or 4+ or 4-\n")
+       "Neighbor's BGP version\n"
+       "Border Gateway Protocol 4\n"
+       "Multiprotocol Extensions for BGP-4\n"
+       "Multiprotocol Extensions for BGP-4(Old Draft)\n")
 
-DEFSH (VTYSH_BGPD,  
+DEFSH (VTYSH_BGPD, 
        show_ip_bgp_community_cmd, 
-       "show ip bgp community", 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export)", 
        SHOW_STR
        IP_STR
        BGP_STR
-       "Display routes matching the communities\n")
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPFD, 
        area_stub_nosum_decimal_cmd, 
@@ -6556,6 +7555,19 @@ DEFSH (VTYSH_OSPF6D,
        )
 
 DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_neighbors_peer_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) neighbors (A.B.C.D|X:X::X:X)", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n")
+
+DEFSH (VTYSH_BGPD, 
        no_neighbor_dont_capability_negotiate_cmd, 
        NO_NEIGHBOR_CMD "dont-capability-negotiate", 
        NO_STR
@@ -6573,6 +7585,17 @@ DEFSH (VTYSH_BGPD,
        "Route map reference\n"
        "Pointer to route-map entries\n")
 
+DEFSH (VTYSH_BGPD, 
+       ipv6_mbgp_neighbor_received_routes_cmd, 
+       "show ipv6 mbgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display the received routes from neighbor\n")
+
 DEFSH (VTYSH_OSPFD, 
        no_ospf_message_digest_key_cmd, 
        "no ospf message-digest-key <1-255>", 
@@ -6587,6 +7610,15 @@ DEFSH (VTYSH_OSPFD,
        "OSPF interface commands\n"
        "Authentication password (key)\n"
        "The OSPF password (key)")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_in_cmd, 
+       "clear ip bgp <1-65535> in", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig inbound update\n")
 
 DEFSH (VTYSH_BGPD,  
        ipv6_bgp_neighbor_unicast_cmd,  
@@ -6633,7 +7665,7 @@ DEFSH (VTYSH_BGPD,
        BGP_STR
        "VPNv4\n"
        "All\n"
-       "Detailed information on BGP neighbor\n")
+       "Detailed information on TCP and BGP neighbor connections\n")
 
 DEFSH (VTYSH_BGPD, 
        ipv6_neighbor_dont_capability_negotiate_cmd, 
@@ -6651,10 +7683,22 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IP_STR
        BGP_STR
-       "Detailed information on BGP neighbor\n"
+       "Detailed information on TCP and BGP neighbor connections\n"
        "Neighbor to display information about\n"
        "Neighbor to display information about\n"
        "Display the routes advertised to a BGP neighbor\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_all_ipv4_out_cmd, 
+       "clear ip bgp * ipv4 (unicast|multicast) out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear all peers\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_BGPD, 
        no_match_aspath_cmd, 
@@ -6715,7 +7759,18 @@ DEFSH (VTYSH_BGPD,
        "neighbor A.B.C.D activate", 
        NEIGHBOR_STR
        "Neighbor address\n"
-       "Activate this peer\n")
+       "Enable the Address Family for this Neighbor\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community_all_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n")
 
 DEFSH (VTYSH_RIPD, 
        no_rip_network_cmd, 
@@ -6753,6 +7808,23 @@ DEFSH (VTYSH_BGPD,
        SET_STR
        "BGP weight for routing table\n"
        "Weight value\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community2_exact_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_BGPD, 
        no_ip_community_list_cmd, 
@@ -6809,6 +7881,14 @@ DEFSH (VTYSH_BGPD,
        "Prepend to the as-path\n"
        "AS number\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community_all_cmd, 
+       "show ipv6 bgp community", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n")
+
 DEFSH (VTYSH_OSPFD, 
        ospf_distance_ospf_external_inter_intra_cmd, 
        "distance ospf external <1-255> inter-area <1-255> intra-area <1-255>", 
@@ -6821,13 +7901,21 @@ DEFSH (VTYSH_OSPFD,
        "Intra-area routes\n"
        "Distance for intra-area routes\n")
 
-DEFSH (VTYSH_BGPD,  
-       show_ip_mbgp_paths_cmd, 
-       "show ip mbgp paths", 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community2_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
        SHOW_STR
-       IP_STR
+       IPV6_STR
        MBGP_STR
-       "Path information\n")
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_area_stub_decimal_cmd, 
@@ -6860,23 +7948,34 @@ DEFSH (VTYSH_BGPD,
        "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n"
        "Specify a BGP backdoor route\n")
 
-DEFSH (VTYSH_OSPFD, 
-       area_range_cmd, 
-       "area A.B.C.D range A.B.C.D/M", 
-       "OSPF area parameters\n"
-       "OSPF area ID in IP address format\n"
-       "Configure OSPF area range for route summarization\n"
-       "area range prefix\n")
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_soft_cmd, 
+       "clear ip bgp <1-65535> soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig\n")
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_router_cmd, 
-       "show ipv6 ospf6 database router", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "Router-LSA\n"
-       )
+DEFSH (VTYSH_OSPFD|VTYSH_OSPF6D, 
+       area_range_cmd, 
+       "area A.B.C.D range X:X::X:X/M", 
+       "OSPFv3 area parameters\n"
+       "OSPFv3 area ID in IPv4 address format\n"
+       "Summarize routes matching address/mask (border routers only)\n"
+       "IPv6 address range\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_as_ipv4_soft_cmd, 
+       "clear ip bgp <1-65535> ipv4 (unicast|multicast) soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_redistribute_ospf6_routemap_cmd, 
@@ -6888,6 +7987,23 @@ DEFSH (VTYSH_BGPD,
        "IPv6 Open Shortest Path First (OSPFv3)\n"
        "Route map reference\n"
        "Pointer to route-map entries\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community2_exact_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
 
 DEFSH (VTYSH_RIPD, 
        show_ip_protocols_rip_cmd, 
@@ -6922,6 +8038,39 @@ DEFSH (VTYSH_OSPFD,
        "router-id for the OSPF process\n"
        "OSPF router-id in IP address format\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ipv6_bgp_as_in_cmd, 
+       "clear ipv6 bgp <1-65535> in", 
+       CLEAR_STR
+       IPV6_STR
+       BGP_STR
+       "Clear peers with the AS number\n"
+       "Soft reconfig inbound update\n")
+
+DEFSH (VTYSH_BGPD, 
+       no_ipv6_bgp_neighbor_port_val_cmd, 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) port <0-65535>", 
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Neighbor's BGP port\n"
+       "TCP port number\n")
+
+DEFSH (VTYSH_BGPD, 
+       no_ipv6_bgp_neighbor_weight_val_cmd, 
+       "no ipv6 bgp neighbor (A.B.C.D|X:X::X:X) weight <0-65535>", 
+       NO_STR
+       IPV6_STR
+       BGP_STR
+       NEIGHBOR_STR
+       "IP address\n"
+       "IPv6 address\n"
+       "Set default weight for routes from this neighbor\n"
+       "default weight\n")
+
 DEFSH (VTYSH_RIPNGD, 
        no_ripng_timers_cmd, 
        "no timers basic", 
@@ -6935,6 +8084,29 @@ DEFSH (VTYSH_RIPNGD,
        NO_STR
        "Redistribute control\n"
        "Kernel route\n")
+
+DEFSH (VTYSH_BGPD,  
+       show_ip_bgp_ipv4_paths_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) paths", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Path information\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community_list_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community-list WORD", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the community-list\n"
+       "community-list name\n")
 
 DEFSH (VTYSH_BGPD, 
        debug_bgp_events_cmd, 
@@ -6952,6 +8124,15 @@ DEFSH (VTYSH_OSPFD,
        "Set default shortcutting behavior\n"
        "Enable shortcutting through the area\n"
        "Disable shortcutting through the area\n")
+
+DEFSH (VTYSH_OSPFD, 
+       show_ip_ospf_neighbor_all_cmd, 
+       "show ip ospf neighbor all", 
+       SHOW_STR
+       IP_STR
+       "OSPF information\n"
+       "Neighbor list\n"
+       "include down status neighbor\n")
 
 DEFSH (VTYSH_BGPD, 
        neighbor_timers_keepalive_cmd, 
@@ -7001,6 +8182,18 @@ DEFSH (VTYSH_OSPFD,
        "Inter-area routes\n"
        "Distance for inter-area routes\n")
 
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_ipv4_out_cmd, 
+       "clear ip bgp A.B.C.D ipv4 (unicast|multicast) out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Soft reconfig outbound update\n")
+
 DEFSH (VTYSH_OSPFD, 
        timers_spf_cmd, 
        "timers spf <0-4294967295> <0-4294967295>", 
@@ -7015,13 +8208,25 @@ DEFSH (VTYSH_BGPD,
        SHOW_STR
        IPV6_STR
        BGP_STR
-       "Detailed information on BGP neighbor\n")
+       "Detailed information on TCP and BGP neighbor connections\n")
 
 DEFSH (VTYSH_ZEBRA,  ip_address_cmd, 
        "ip address A.B.C.D/M", 
        "Interface Internet Protocol config commands\n"
        "Set the IP address of an interface\n"
        "IP address (e.g. 10.0.0.1/8)\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_ipv4_soft_cmd, 
+       "clear ip bgp A.B.C.D ipv4 (unicast|multicast) soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n")
 
 DEFSH (VTYSH_ZEBRA,  no_bandwidth_if_cmd, 
        "no bandwidth", 
@@ -7080,14 +8285,24 @@ DEFSH (VTYSH_BGPD,
        "Extended Community\n")
 
 DEFSH (VTYSH_BGPD, 
-       show_ip_mbgp_neighbors_peer_cmd, 
-       "show ip mbgp neighbors (A.B.C.D|X:X::X:X)", 
+       show_ip_bgp_community3_cmd, 
+       "show ip bgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
        SHOW_STR
        IP_STR
-       MBGP_STR
-       "Detailed information on MBGP neighbor\n"
-       "IP address\n"
-       "IPv6 address\n")
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
 
 DEFSH (VTYSH_OSPFD, 
        ospf_dead_interval_cmd, 
@@ -7122,14 +8337,6 @@ DEFSH (VTYSH_ZEBRA,
        "Preference level\n")
 
 DEFSH (VTYSH_BGPD, 
-       show_ip_mbgp_prefix_cmd, 
-       "show ip mbgp A.B.C.D/M", 
-       SHOW_STR
-       IP_STR
-       MBGP_STR
-       "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n")
-
-DEFSH (VTYSH_BGPD, 
        no_neighbor_translate_update_multicast_cmd, 
        NO_NEIGHBOR_CMD "translate-update nlri multicast", 
        NO_STR
@@ -7139,16 +8346,13 @@ DEFSH (VTYSH_BGPD,
        "Network Layer Reachable Information\n"
        "multicast information\n")
 
-DEFSH (VTYSH_BGPD, 
-       neighbor_routes_cmd, 
-       "show ip bgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
-       SHOW_STR
-       IP_STR
-       BGP_STR
-       "Detailed information on BGP neighbor\n"
-       "Neighbor to display information about\n"
-       "Neighbor to display information about\n"
-       "Display the received routes from neighbor\n")
+DEFSH (VTYSH_OSPFD, 
+       neighbor_priority_cmd, 
+       "neighbor A.B.C.D priority <0-255>", 
+       NEIGHBOR_STR
+       "Neighbor IP address\n"
+       "Neighbor Priority\n"
+       "Seconds\n")
 
 DEFSH (VTYSH_BGPD, 
        clear_ipv6_bgp_all_out_cmd, 
@@ -7189,21 +8393,23 @@ DEFSH (VTYSH_ZEBRA,  show_ip_route_prefix_cmd,
        "IP routing table\n"
        "IP prefix <network>/<length>,  e.g.,  35.0.0.0/8\n")
 
+DEFSH (VTYSH_BGPD, 
+       neighbor_received_routes_cmd, 
+       "show ip bgp neighbors (A.B.C.D|X:X::X:X) received-routes", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Detailed information on TCP and BGP neighbor connections\n"
+       "Neighbor to display information about\n"
+       "Neighbor to display information about\n"
+       "Display the received routes from neighbor\n")
+
 DEFSH (VTYSH_RIPD, 
        no_rip_route_cmd, 
        "no route A.B.C.D/M", 
        NO_STR
        "RIP static route configuration\n"
        "IP prefix <network>/<length>\n")
-
-DEFSH (VTYSH_BGPD,  
-       show_ip_bgp_summary_all_cmd, 
-       "show ip bgp summary all", 
-       SHOW_STR
-       IP_STR
-       BGP_STR
-       "Summary of BGP neighbor status\n"
-       "Display all peers\n")
 
 DEFSH (VTYSH_BGPD, 
        no_ipv6_bgp_neighbor_route_reflector_client_cmd, 
@@ -7251,6 +8457,17 @@ DEFSH (VTYSH_BGPD,
        "Pointer to route-map entries\n")
 
 DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_vpnv4_soft_cmd, 
+       "clear ip bgp A.B.C.D vpnv4 unicast soft", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n")
+
+DEFSH (VTYSH_BGPD, 
        no_neighbor_interface_cmd, 
        NO_NEIGHBOR_CMD "interface WORD", 
        NO_STR
@@ -7259,6 +8476,26 @@ DEFSH (VTYSH_BGPD,
        "Interface\n"
        "Interface name\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ip_bgp_ipv4_community2_exact_cmd, 
+       "show ip bgp ipv4 (unicast|multicast) community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) exact-match", 
+       SHOW_STR
+       IP_STR
+       BGP_STR
+       "Address family\n"
+       "Address Family modifier\n"
+       "Address Family modifier\n"
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "Exact match of the communities")
+
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_route_cmd, 
        "show ip ospf route", 
@@ -7266,6 +8503,13 @@ DEFSH (VTYSH_OSPFD,
        IP_STR
        "OSPF information\n"
        "OSPF routing table\n")
+
+DEFSH (VTYSH_OSPFD, 
+       no_ospf_compatible_rfc1583_cmd, 
+       "no compatible rfc1583", 
+       NO_STR
+       "OSPF compatibility list\n"
+       "compatible with RFC 1583\n")
 
 DEFSH (VTYSH_OSPF6D, 
        no_redistribute_ospf6_cmd, 
@@ -7308,6 +8552,15 @@ DEFSH (VTYSH_OSPF6D,
        "Database summary\n"
        )
 
+DEFSH (VTYSH_BGPD, 
+       bgp_bestpath_med_cmd, 
+       "bgp bestpath med (confed|missing-as-worst)", 
+       "BGP specific commands\n"
+       "Change the default bestpath selection\n"
+       "MED attribute\n"
+       "Compare MED among confederation paths\n"
+       "Treat missing MED as the least preferred one\n")
+
 DEFSH (VTYSH_RIPNGD,  show_ipv6_protocols_cmd, 
        "show ipv6 protocols", 
        SHOW_STR
@@ -7329,6 +8582,15 @@ DEFSH (VTYSH_RIPNGD,
        "aggregate-address X:X::X:X/M", 
        "Set aggregate RIPng route announcement\n"
        "Aggregate network\n")
+
+DEFSH (VTYSH_OSPFD, 
+       no_neighbor_priority_cmd, 
+       "no neighbor A.B.C.D priority <0-255>", 
+       NO_STR
+       NEIGHBOR_STR
+       "Neighbor IP address\n"
+       "Neighbor Priority\n"
+       "Priority\n")
 
 DEFSH (VTYSH_BGPD, 
        no_bgp_redistribute_ospf_routemap_cmd, 
@@ -7370,18 +8632,6 @@ DEFSH (VTYSH_RIPD,
        "Set a metric of redistribute routes\n"
        "Default metric\n")
 
-DEFSH (VTYSH_OSPF6D, 
-       show_ipv6_ospf6_database_asexternal_advrtr_cmd, 
-       "show ipv6 ospf6 database as-external advrtr A.B.C.D", 
-       SHOW_STR
-       IP6_STR
-       OSPF6_STR
-       "Database summary\n"
-       "AS-External-LSA\n"
-       "Advertising Router\n"
-       "Router ID\n"
-       )
-
 DEFSH (VTYSH_OSPFD, 
        no_area_range_decimal_cmd, 
        "no area <0-4294967295> range A.B.C.D/M", 
@@ -7404,8 +8654,8 @@ DEFSH (VTYSH_BGPD,
 DEFSH (VTYSH_BGPD, 
        bgp_distance_source_cmd, 
        "distance <1-255> A.B.C.D/M", 
+       "Define an administrative distance\n"
        "Administrative distance\n"
-       "Distance value\n"
        "IP source prefix\n")
 
 DEFSH (VTYSH_OSPFD, 
@@ -7546,9 +8796,9 @@ DEFSH (VTYSH_ZEBRA,
 DEFSH (VTYSH_BGPD, 
        bgp_scan_time_cmd, 
        "bgp scan-time <5-60>", 
-       BGP_STR
+       "BGP specific commands\n"
        "Setting BGP route next-hop scanning interval time\n"
-       "BGP route next-hop scanning interval time\n")
+       "Scanner interval (seconds)\n")
 
 DEFSH (VTYSH_BGPD, 
        clear_ipv6_bgp_all_soft_in_cmd, 
@@ -7582,18 +8832,29 @@ DEFSH (VTYSH_OSPFD,
 
 DEFSH (VTYSH_BGPD, 
        no_neighbor_version_cmd, 
-       NO_NEIGHBOR_CMD "version [BGP_VERSION]", 
+       NO_NEIGHBOR_CMD "version", 
        NO_STR
        NEIGHBOR_STR
        NEIGHBOR_ADDR_STR
-       "Set the BGP version to match a neighbor\n"
-       "Neighbor's BGP version 4 or 4+ or 4-\n")
+       "Neighbor's BGP version\n")
 
 DEFSH (VTYSH_RIPD, 
        rip_version_cmd, 
        "version <1-2>", 
        "Set routing protocol version\n"
        "version\n")
+
+DEFSH (VTYSH_BGPD, 
+       clear_ip_bgp_peer_vpnv4_soft_out_cmd, 
+       "clear ip bgp A.B.C.D vpnv4 unicast soft out", 
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor address to clear\n"
+       "Address family\n"
+       "Address Family Modifier\n"
+       "Soft reconfig\n"
+       "Soft reconfig outbound update\n")
 
 DEFSH (VTYSH_OSPFD, 
        no_area_default_cost_cmd, 
@@ -7631,7 +8892,7 @@ DEFSH (VTYSH_RIPNGD,
 DEFSH (VTYSH_BGPD,  no_bgp_confederation_identifier_cmd, 
        "no bgp confederation identifier <1-65535>", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "AS confederation parameters\n"
        "AS number\n"
        "Set routing domain confederation AS\n")
@@ -7682,23 +8943,48 @@ DEFSH (VTYSH_BGPD,
        NEIGHBOR_ADDR_STR
        "Allow EBGP neighbors not on directly connected networks\n")
 
-DEFSH (VTYSH_BGPD, 
-       bgp_bestpath_missing_as_worst_cmd, 
-       "bgp bestpath missing-as-worst", 
-       BGP_STR
-       "Change the default bestpath selection\n"
-       "Missing MED value is compared as worst value\n")
-
 DEFSH (VTYSH_RIPD, 
        rip_split_horizon_cmd, 
        "ip split-horizon", 
        IP_STR
        "Perform split horizon\n")
 
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_mbgp_community3_cmd, 
+       "show ipv6 mbgp community (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export) (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       MBGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
+DEFSH (VTYSH_BGPD, 
+       show_ipv6_bgp_community_cmd, 
+       "show ipv6 bgp community (AA:NN|local-AS|no-advertise|no-export)", 
+       SHOW_STR
+       IPV6_STR
+       BGP_STR
+       "Display routes matching the communities\n"
+       "community number\n"
+       "Do not send outside local AS (well-known community)\n"
+       "Do not advertise to any peer (well-known community)\n"
+       "Do not export to next AS (well-known community)\n")
+
 DEFSH (VTYSH_BGPD,  no_bgp_cluster_id_val_cmd, 
        "no bgp cluster-id A.B.C.D", 
        NO_STR
-       BGP_STR
+       "BGP specific commands\n"
        "Configure Route-Reflector Cluster-id\n"
        "Route-Reflector Cluster-id in IP address format\n")
 
@@ -7708,6 +8994,14 @@ DEFSH (VTYSH_OSPFD,
        "OSPF interface commands\n"
        "Time between retransmitting lost link state advertisements\n"
        "Seconds\n")
+
+DEFSH (VTYSH_BGPD, 
+       bgp_default_local_preference_cmd, 
+       "bgp default local-preference <0-4294967295>", 
+       "BGP specific commands\n"
+       "Configure BGP defaults\n"
+       "local preference (higher=more preferred)\n"
+       "Configure default local preference value\n")
 
 DEFSH (VTYSH_OSPFD, 
        show_ip_ospf_database_type_cmd, 
@@ -7723,6 +9017,15 @@ DEFSH (VTYSH_OSPFD,
        "Router link states\n"
        "Self-originated link states\n"
        "Network summary link states\n")
+
+DEFSH (VTYSH_OSPF6D, 
+       show_ipv6_ospf6_database_database_summary_cmd, 
+       "show ipv6 ospf6 database database-summary", 
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database Summary\n"
+       "Summary of Database\n")
 
 DEFSH (VTYSH_RIPNGD, 
        ripng_garbage_timer_cmd, 
@@ -8054,7 +9357,6 @@ install_element (VIEW_NODE, &show_ip_ospf_database_type_adv_router_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_database_type_id_self_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_database_type_self_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_database_cmd);
-install_element (VIEW_NODE, &show_ip_ospf_refresher_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_database_type_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_database_type_id_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_database_type_id_adv_router_cmd);
@@ -8062,7 +9364,6 @@ install_element (ENABLE_NODE, &show_ip_ospf_database_type_adv_router_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_database_type_id_self_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_database_type_self_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_database_cmd);
-install_element (ENABLE_NODE, &show_ip_ospf_refresher_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_route_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_route_cmd);
 install_element (RMAP_NODE, &match_ip_nexthop_cmd);
@@ -8123,6 +9424,7 @@ install_element (VIEW_NODE, &show_ip_ospf_neighbor_id_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_neighbor_detail_all_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_neighbor_detail_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_neighbor_cmd);
+install_element (VIEW_NODE, &show_ip_ospf_neighbor_all_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_interface_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_neighbor_int_detail_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_neighbor_int_cmd);
@@ -8130,6 +9432,7 @@ install_element (ENABLE_NODE, &show_ip_ospf_neighbor_id_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_neighbor_detail_all_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_neighbor_detail_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_neighbor_cmd);
+install_element (ENABLE_NODE, &show_ip_ospf_neighbor_all_cmd);
 install_element (ENABLE_NODE, &clear_ip_ospf_neighbor_cmd);
 install_element (CONFIG_NODE, &no_router_ospf_cmd);
 install_element (OSPF_NODE, &ospf_router_id_cmd);
@@ -8142,6 +9445,8 @@ install_element (OSPF_NODE, &ospf_abr_type_cmd);
 install_element (OSPF_NODE, &no_ospf_abr_type_cmd);
 install_element (OSPF_NODE, &ospf_rfc1583_flag_cmd);
 install_element (OSPF_NODE, &no_ospf_rfc1583_flag_cmd);
+install_element (OSPF_NODE, &ospf_compatible_rfc1583_cmd);
+install_element (OSPF_NODE, &no_ospf_compatible_rfc1583_cmd);
 install_element (OSPF_NODE, &network_area_cmd);
 install_element (OSPF_NODE, &no_network_area_decimal_cmd);
 install_element (OSPF_NODE, &no_network_area_cmd);
@@ -8187,11 +9492,19 @@ install_element (OSPF_NODE, &no_area_import_list_cmd);
 install_element (OSPF_NODE, &no_area_import_list_decimal_cmd);
 install_element (OSPF_NODE, &timers_spf_cmd);
 install_element (OSPF_NODE, &no_timers_spf_cmd);
-install_element (OSPF_NODE, &refresh_group_limit_cmd);
-install_element (OSPF_NODE, &refresh_per_slice_cmd);
-install_element (OSPF_NODE, &refresh_age_diff_cmd);
+install_element (OSPF_NODE, &refresh_timer_cmd);
+install_element (OSPF_NODE, &no_refresh_timer_val_cmd);
+install_element (OSPF_NODE, &no_refresh_timer_cmd);
 install_element (OSPF_NODE, &auto_cost_reference_bandwidth_cmd);
 install_element (OSPF_NODE, &no_auto_cost_reference_bandwidth_cmd);
+install_element (OSPF_NODE, &neighbor_cmd);
+install_element (OSPF_NODE, &no_neighbor_cmd);
+install_element (OSPF_NODE, &neighbor_priority_cmd);
+install_element (OSPF_NODE, &no_neighbor_priority_cmd);
+install_element (OSPF_NODE, &neighbor_pollinterval_cmd);
+install_element (OSPF_NODE, &no_neighbor_pollinterval_cmd);
+install_element (OSPF_NODE, &neighbor_priority_pollinterval_cmd);
+install_element (OSPF_NODE, &no_neighbor_priority_pollinterval_cmd);
 install_element (VIEW_NODE, &show_ip_ospf_cmd);
 install_element (ENABLE_NODE, &show_ip_ospf_cmd);
 install_element (VIEW_NODE, &show_debugging_ospf6_cmd);
@@ -8208,17 +9521,21 @@ install_element (INTERFACE_NODE, &ipv6_ospf6_retransmitinterval_cmd);
 install_element (INTERFACE_NODE, &ipv6_ospf6_transmitdelay_cmd);
 install_element (INTERFACE_NODE, &ipv6_ospf6_instance_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_database_cmd);
+install_element (VIEW_NODE, &show_ipv6_ospf6_database_scope_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_database_lsid_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_database_advrtr_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_advrtr_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_database_type_advrtr_lsid_cmd);
+install_element (VIEW_NODE, &show_ipv6_ospf6_database_database_summary_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_cmd);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_database_scope_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_lsid_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_advrtr_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_advrtr_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_database_type_advrtr_lsid_cmd);
+install_element (ENABLE_NODE, &show_ipv6_ospf6_database_database_summary_cmd);
 install_element (VIEW_NODE, &show_ipv6_ospf6_redistribute_map_cmd);
 install_element (ENABLE_NODE, &show_ipv6_ospf6_redistribute_map_cmd);
 install_element (RMAP_NODE, &ospf6_routemap_match_address_prefixlist_cmd);
@@ -8306,6 +9623,8 @@ install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_route_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_tags_cmd);
 install_element (BGP_NODE, &bgp_scan_time_cmd);
+install_element (BGP_NODE, &no_bgp_scan_time_cmd);
+install_element (BGP_NODE, &no_bgp_scan_time_val_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_scan_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_scan_cmd);
 install_element (BGP_NODE, &bgp_network_cmd);
@@ -8321,39 +9640,87 @@ install_element (BGP_NODE, &aggregate_address_summary_only_cmd);
 install_element (BGP_NODE, &no_aggregate_address_cmd);
 install_element (BGP_NODE, &no_aggregate_address_summary_only_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_route_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_route_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_prefix_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_prefix_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_view_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_view_route_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_view_prefix_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_regexp_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_regexp_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_prefix_list_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_route_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_prefix_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_regexp_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_prefix_list_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_prefix_list_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_filter_list_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_filter_list_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community_all_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_all_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community2_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community3_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community4_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community2_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community3_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community4_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community2_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community3_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community4_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community2_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community3_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community4_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community_list_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_list_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community_list_exact_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_community_list_exact_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_route_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_route_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_prefix_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_prefix_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_view_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_view_route_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_view_prefix_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_regexp_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_regexp_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_prefix_list_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_route_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_prefix_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_regexp_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_prefix_list_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_prefix_list_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_filter_list_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_filter_list_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community_all_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_all_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community2_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community3_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community4_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community2_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community3_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community4_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community2_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community3_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community4_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community2_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community3_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community4_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community_list_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_list_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community_list_exact_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_community_list_exact_cmd);
 install_element (VIEW_NODE, &neighbor_advertised_route_cmd);
+install_element (VIEW_NODE, &ipv4_neighbor_advertised_route_cmd);
 install_element (ENABLE_NODE, &neighbor_advertised_route_cmd);
-install_element (VIEW_NODE, &neighbor_mbgp_advertised_route_cmd);
-install_element (ENABLE_NODE, &neighbor_mbgp_advertised_route_cmd);
-install_element (VIEW_NODE, &neighbor_routes_cmd);
-install_element (ENABLE_NODE, &neighbor_routes_cmd);
-install_element (VIEW_NODE, &neighbor_mbgp_routes_cmd);
-install_element (ENABLE_NODE, &neighbor_mbgp_routes_cmd);
+install_element (ENABLE_NODE, &ipv4_neighbor_advertised_route_cmd);
+install_element (VIEW_NODE, &neighbor_received_routes_cmd);
+install_element (VIEW_NODE, &ipv4_neighbor_received_routes_cmd);
+install_element (ENABLE_NODE, &neighbor_received_routes_cmd);
+install_element (ENABLE_NODE, &ipv4_neighbor_received_routes_cmd);
 install_element (BGP_NODE, &ipv6_bgp_network_cmd);
 install_element (BGP_NODE, &ipv6_bgp_network_multicast_cmd);
 install_element (BGP_NODE, &ipv6_bgp_network_unicast_multicast_cmd);
@@ -8369,29 +9736,77 @@ install_element (VIEW_NODE, &show_ipv6_bgp_route_cmd);
 install_element (VIEW_NODE, &show_ipv6_bgp_prefix_cmd);
 install_element (VIEW_NODE, &show_ipv6_bgp_regexp_cmd);
 install_element (VIEW_NODE, &show_ipv6_bgp_prefix_list_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_filter_list_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community_all_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community2_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community3_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community4_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community2_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community3_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community4_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community_list_cmd);
+install_element (VIEW_NODE, &show_ipv6_bgp_community_list_exact_cmd);
 install_element (VIEW_NODE, &show_ipv6_mbgp_cmd);
 install_element (VIEW_NODE, &show_ipv6_mbgp_route_cmd);
 install_element (VIEW_NODE, &show_ipv6_mbgp_prefix_cmd);
 install_element (VIEW_NODE, &show_ipv6_mbgp_regexp_cmd);
 install_element (VIEW_NODE, &show_ipv6_mbgp_prefix_list_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_filter_list_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community_all_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community2_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community3_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community4_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community2_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community3_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community4_exact_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community_list_cmd);
+install_element (VIEW_NODE, &show_ipv6_mbgp_community_list_exact_cmd);
 install_element (ENABLE_NODE, &show_ipv6_bgp_cmd);
 install_element (ENABLE_NODE, &show_ipv6_bgp_route_cmd);
 install_element (ENABLE_NODE, &show_ipv6_bgp_prefix_cmd);
 install_element (ENABLE_NODE, &show_ipv6_bgp_regexp_cmd);
 install_element (ENABLE_NODE, &show_ipv6_bgp_prefix_list_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_filter_list_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community_all_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community2_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community3_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community4_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community2_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community3_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community4_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community_list_cmd);
+install_element (ENABLE_NODE, &show_ipv6_bgp_community_list_exact_cmd);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_cmd);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_route_cmd);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_prefix_cmd);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_regexp_cmd);
 install_element (ENABLE_NODE, &show_ipv6_mbgp_prefix_list_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_filter_list_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community_all_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community2_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community3_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community4_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community2_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community3_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community4_exact_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community_list_cmd);
+install_element (ENABLE_NODE, &show_ipv6_mbgp_community_list_exact_cmd);
 install_element (VIEW_NODE, &ipv6_bgp_neighbor_advertised_route_cmd);
 install_element (ENABLE_NODE, &ipv6_bgp_neighbor_advertised_route_cmd);
 install_element (VIEW_NODE, &ipv6_mbgp_neighbor_advertised_route_cmd);
 install_element (ENABLE_NODE, &ipv6_mbgp_neighbor_advertised_route_cmd);
-install_element (VIEW_NODE, &ipv6_bgp_neighbor_routes_cmd);
-install_element (ENABLE_NODE, &ipv6_bgp_neighbor_routes_cmd);
-install_element (VIEW_NODE, &ipv6_mbgp_neighbor_routes_cmd);
-install_element (ENABLE_NODE, &ipv6_mbgp_neighbor_routes_cmd);
+install_element (VIEW_NODE, &ipv6_bgp_neighbor_received_routes_cmd);
+install_element (ENABLE_NODE, &ipv6_bgp_neighbor_received_routes_cmd);
+install_element (VIEW_NODE, &ipv6_mbgp_neighbor_received_routes_cmd);
+install_element (ENABLE_NODE, &ipv6_mbgp_neighbor_received_routes_cmd);
 install_element (BGP_NODE, &bgp_distance_cmd);
 install_element (BGP_NODE, &no_bgp_distance_cmd);
 install_element (BGP_NODE, &no_bgp_distance2_cmd);
@@ -8404,7 +9819,6 @@ install_element (RMAP_NODE, &no_match_ip_address_cmd);
 install_element (RMAP_NODE, &match_ip_next_hop_cmd);
 install_element (RMAP_NODE, &no_match_ip_next_hop_cmd);
 install_element (RMAP_NODE, &match_ip_prefix_list_cmd);
-install_element (RMAP_NODE, &no_match_ip_prefix_list_cmd);
 install_element (RMAP_NODE, &match_ip_address_prefix_list_cmd);
 install_element (RMAP_NODE, &no_match_ip_address_prefix_list_cmd);
 install_element (RMAP_NODE, &match_aspath_cmd);
@@ -8459,8 +9873,9 @@ install_element (RMAP_NODE, &match_ipv6_address_cmd);
 install_element (RMAP_NODE, &no_match_ipv6_address_cmd);
 install_element (RMAP_NODE, &match_ipv6_next_hop_cmd);
 install_element (RMAP_NODE, &no_match_ipv6_next_hop_cmd);
+install_element (RMAP_NODE, &match_ipv6_address_prefix_list_cmd);
+install_element (RMAP_NODE, &no_match_ipv6_address_prefix_list_cmd);
 install_element (RMAP_NODE, &match_ipv6_prefix_list_cmd);
-install_element (RMAP_NODE, &no_match_ipv6_prefix_list_cmd);
 install_element (RMAP_NODE, &set_ipv6_nexthop_global_cmd);
 install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_cmd);
 install_element (RMAP_NODE, &no_set_ipv6_nexthop_global_val_cmd);
@@ -8526,12 +9941,21 @@ install_element (BGP_NODE, &bgp_cluster_id_cmd);
 install_element (BGP_NODE, &bgp_cluster_id32_cmd);
 install_element (BGP_NODE, &no_bgp_cluster_id_cmd);
 install_element (BGP_NODE, &no_bgp_cluster_id_val_cmd);
+install_element (BGP_NODE, &no_bgp_client_to_client_reflection_cmd);
+install_element (BGP_NODE, &bgp_client_to_client_reflection_cmd);
 install_element (BGP_NODE, &bgp_always_compare_med_cmd);
 install_element (BGP_NODE, &no_bgp_always_compare_med_cmd);
-install_element (BGP_NODE, &bgp_bestpath_missing_as_worst_cmd);
-install_element (BGP_NODE, &no_bgp_bestpath_missing_as_worst_cmd);
+install_element (BGP_NODE, &bgp_bestpath_med_cmd);
+install_element (BGP_NODE, &bgp_bestpath_med2_cmd);
+install_element (BGP_NODE, &bgp_bestpath_med3_cmd);
+install_element (BGP_NODE, &no_bgp_bestpath_med_cmd);
+install_element (BGP_NODE, &no_bgp_bestpath_med2_cmd);
+install_element (BGP_NODE, &no_bgp_bestpath_med3_cmd);
 install_element (BGP_NODE, &no_bgp_default_ipv4_unicast_cmd);
 install_element (BGP_NODE, &bgp_default_ipv4_unicast_cmd);
+install_element (BGP_NODE, &bgp_default_local_preference_cmd);
+install_element (BGP_NODE, &no_bgp_default_local_preference_cmd);
+install_element (BGP_NODE, &no_bgp_default_local_preference_val_cmd);
 install_element (CONFIG_NODE, &router_bgp_view_cmd);
 install_element (CONFIG_NODE, &no_router_bgp_cmd);
 install_element (CONFIG_NODE, &no_router_bgp_view_cmd);
@@ -8552,6 +9976,7 @@ install_element (BGP_NODE, &no_neighbor_ebgp_multihop_cmd);
 install_element (BGP_NODE, &no_neighbor_ebgp_multihop_ttl_cmd);
 install_element (BGP_NODE, &neighbor_description_cmd);
 install_element (BGP_NODE, &no_neighbor_description_cmd);
+install_element (BGP_NODE, &no_neighbor_description_val_cmd);
 install_element (BGP_NODE, &neighbor_version_cmd);
 install_element (BGP_NODE, &no_neighbor_version_cmd);
 install_element (BGP_NODE, &neighbor_interface_cmd);
@@ -8564,12 +9989,14 @@ install_element (BGP_NODE, &neighbor_default_originate_cmd);
 install_element (BGP_NODE, &no_neighbor_default_originate_cmd);
 install_element (BGP_NODE, &neighbor_port_cmd);
 install_element (BGP_NODE, &no_neighbor_port_cmd);
+install_element (BGP_NODE, &no_neighbor_port_val_cmd);
 install_element (BGP_NODE, &neighbor_send_community_cmd);
 install_element (BGP_NODE, &no_neighbor_send_community_cmd);
 install_element (BGP_NODE, &neighbor_send_community_extended_cmd);
 install_element (BGP_NODE, &no_neighbor_send_community_extended_cmd);
 install_element (BGP_NODE, &neighbor_weight_cmd);
 install_element (BGP_NODE, &no_neighbor_weight_cmd);
+install_element (BGP_NODE, &no_neighbor_weight_val_cmd);
 install_element (BGP_NODE, &neighbor_soft_reconfiguration_cmd);
 install_element (BGP_NODE, &no_neighbor_soft_reconfiguration_cmd);
 install_element (BGP_NODE, &neighbor_route_reflector_client_cmd);
@@ -8616,55 +10043,76 @@ install_element (BGP_NODE, &no_neighbor_transparent_as_cmd);
 install_element (BGP_NODE, &neighbor_transparent_nexthop_cmd);
 install_element (BGP_NODE, &no_neighbor_transparent_nexthop_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_summary_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_summary_cmd);
-install_element (VIEW_NODE, &show_ip_bgp_summary_all_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_summary_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_summary_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_summary_cmd);
-install_element (ENABLE_NODE, &show_ip_bgp_summary_all_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_summary_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_neighbors_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_neighbors_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_neighbors_peer_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_neighbors_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_neighbors_peer_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_neighbors_peer_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_neighbors_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_neighbors_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_neighbors_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_neighbors_peer_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_neighbors_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_neighbors_peer_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_neighbors_peer_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_neighbors_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_paths_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_paths_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_ipv4_paths_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_paths_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_paths_cmd);
-install_element (VIEW_NODE, &show_ip_bgp_community_cmd);
-install_element (VIEW_NODE, &show_ip_mbgp_community_cmd);
-install_element (ENABLE_NODE, &show_ip_bgp_community_cmd);
-install_element (ENABLE_NODE, &show_ip_mbgp_community_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_ipv4_paths_cmd);
+install_element (VIEW_NODE, &show_ip_bgp_community_info_cmd);
+install_element (ENABLE_NODE, &show_ip_bgp_community_info_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_all_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_group_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_as_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_soft_in_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_ipv4_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_ipv4_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_ipv4_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_ipv4_in_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_all_soft_in_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_all_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_ipv4_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_ipv4_in_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_soft_out_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_ipv4_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_ipv4_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_ipv4_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_ipv4_out_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_all_soft_out_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_all_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_ipv4_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_ipv4_out_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_peer_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_ipv4_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_ipv4_soft_cmd);
 install_element (ENABLE_NODE, &clear_ip_bgp_all_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_ipv4_soft_cmd);
 install_element (VIEW_NODE, &show_ip_bgp_vpnv4_all_summary_cmd);
 install_element (ENABLE_NODE, &show_ip_bgp_vpnv4_all_summary_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_soft_in_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_in_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_soft_in_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_in_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_soft_out_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_out_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_soft_out_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_out_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_peer_soft_cmd);
-install_element (ENABLE_NODE, &clear_ip_bgp_vpnv4_all_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_vpnv4_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_vpnv4_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_vpnv4_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_vpnv4_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_vpnv4_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_vpnv4_in_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_vpnv4_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_vpnv4_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_vpnv4_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_vpnv4_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_vpnv4_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_vpnv4_out_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_peer_vpnv4_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_as_vpnv4_soft_cmd);
+install_element (ENABLE_NODE, &clear_ip_bgp_all_vpnv4_soft_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_passive_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_unicast_cmd);
@@ -8680,6 +10128,7 @@ install_element (BGP_NODE, &no_ipv6_bgp_neighbor_ebgp_multihop_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_ebgp_multihop_ttl_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_description_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_description_cmd);
+install_element (BGP_NODE, &no_ipv6_bgp_neighbor_description_val_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_version_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_version_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_interface_cmd);
@@ -8692,12 +10141,14 @@ install_element (BGP_NODE, &ipv6_bgp_neighbor_default_originate_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_default_originate_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_port_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_port_cmd);
+install_element (BGP_NODE, &no_ipv6_bgp_neighbor_port_val_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_send_community_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_send_community_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_send_community_extended_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_send_community_extended_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_weight_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_weight_cmd);
+install_element (BGP_NODE, &no_ipv6_bgp_neighbor_weight_val_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_soft_reconfiguration_cmd);
 install_element (BGP_NODE, &no_ipv6_bgp_neighbor_soft_reconfiguration_cmd);
 install_element (BGP_NODE, &ipv6_bgp_neighbor_route_reflector_client_cmd);
@@ -8748,12 +10199,17 @@ install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_group_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_as_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_soft_in_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_in_cmd);
+install_element (ENABLE_NODE, &clear_ipv6_bgp_as_soft_in_cmd);
+install_element (ENABLE_NODE, &clear_ipv6_bgp_as_in_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_all_soft_in_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_all_in_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_soft_out_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_out_cmd);
+install_element (ENABLE_NODE, &clear_ipv6_bgp_as_soft_out_cmd);
+install_element (ENABLE_NODE, &clear_ipv6_bgp_as_out_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_all_soft_out_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_all_out_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_soft_cmd);
+install_element (ENABLE_NODE, &clear_ipv6_bgp_as_soft_cmd);
 install_element (ENABLE_NODE, &clear_ipv6_bgp_all_soft_cmd);
 }

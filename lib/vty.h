@@ -149,6 +149,7 @@ struct vty
 
 /* Prototypes. */
 void vty_init (void);
+void vty_init_vtysh (void);
 void vty_reset (void);
 struct vty *vty_new (void);
 int vty_out (struct vty *, const char *, ...);

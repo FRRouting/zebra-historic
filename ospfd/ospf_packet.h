@@ -43,6 +43,7 @@
 #define OSPF_SEND_PACKET_DIRECT         1
 #define OSPF_SEND_PACKET_INDIRECT       2
 
+#define OSPF_HELLO_REPLY_DELAY          1
 
 struct ospf_packet
 {
@@ -159,5 +160,8 @@ void ospf_ls_req_event (struct ospf_neighbor *);
 
 int ospf_ls_upd_timer (struct thread *);
 int ospf_ls_ack_timer (struct thread *);
+int ospf_poll_timer (struct thread *);
+int ospf_hello_reply_timer (struct thread *);
+void ospf_hello_send_sub (struct ospf_interface *, struct in_addr *);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

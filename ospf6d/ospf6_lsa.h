@@ -172,6 +172,7 @@ struct ospf6_intra_area_prefix_lsa
   u_int32_t refer_advrtr;
 };
 
+/* AS-External-LSA */
 struct ospf6_as_external_lsa
 {
   u_char    ase_bits;
@@ -197,7 +198,23 @@ struct ospf6_as_external_lsa
 #define ASE_LSA_ISSET(x,y)  ((x)->ase_bits &   (y))
 #define ASE_LSA_CLEAR(x,y)  ((x)->ase_bits &= ~(y))
 
-/* new */
+/* Inter-Area-Prefix-LSA */
+struct ospf6_lsa_inter_area_prefix_lsa
+{
+  u_int32_t metric;       /* 12bits reserved, 20bits metric */
+  /* followed by one address prefix */
+};
+
+/* Inter-Area-Router-LSA */
+struct ospf6_lsa_inter_area_router_lsa
+{
+  u_char reserved;
+  u_char options[3];      /* 20bits of options */
+  u_int32_t metric;       /* 12bits reserved, 20bits metric */
+  u_int32_t router_id;    /* Destination Router ID */
+};
+
+/* LSA Header */
 struct ospf6_lsa_hdr
 {
   u_int16_t lsh_age;      /* LS age */
@@ -226,11 +243,14 @@ struct ospf6_lsa_header
                          (x)->lsh_id == (y)->lsh_id && \
                          (x)->lsh_advrtr == (y)->lsh_advrtr)
 
+#define OSPF6_LSA_NEXT(x) ((struct ospf6_lsa_header *) \
+                             ((char *)(x) + ntohs ((x)->length)))
+
 struct ospf6_lsa
 {
   char                   str[256];  /* dump string */
 
-  unsigned long          lock;      /* reference counter */
+  u_long                 lock;      /* reference counter */
   int                    summary;   /* indicate this is LS header only */
   void                  *scope;     /* pointer of scoped data structure */
   unsigned char          flags;     /* use this to decide ack type */
@@ -238,11 +258,14 @@ struct ospf6_lsa
   unsigned long          installed; /* tv_sec when installed */
   struct thread         *expire;
   struct thread         *refresh;   /* For self-originated LSA */
-  struct neighbor       *from;      /* from which neighbor */
-  list                  summary_nbr;
-  list                  request_nbr;
-  list                  retrans_nbr;
-  list                  delayed_ack_if;
+  u_int32_t              from;      /* from which neighbor */
+
+  list                   summary_nbr;
+  list                   request_nbr;
+  list                   retrans_nbr;
+
+  list                   delayed_ack_if;
+  list                   dbdesc_neighbor;
 
   struct ospf6_lsa_hdr  *lsa_hdr;   /* lsa instance */
 };
@@ -269,10 +292,13 @@ extern char *ospf6_lsa_type_strings[];
 /* Function Prototypes */
 
 struct router_lsd *
-get_router_lsd (rtr_id_t, struct ospf6_lsa *);
-unsigned long get_ifindex_to_router (rtr_id_t, struct ospf6_lsa *);
+get_router_lsd (u_int32_t, struct ospf6_lsa *);
+unsigned long get_ifindex_to_router (u_int32_t, struct ospf6_lsa *);
 
 /* new */
+void
+ospf6_lsa_remove_all_reference (struct ospf6_lsa *);
+
 int ospf6_lsa_issame (struct ospf6_lsa_header *, struct ospf6_lsa_header *);
 int ospf6_lsa_match (u_int16_t, u_int32_t, u_int32_t,
                      struct ospf6_lsa_header *);
@@ -282,9 +308,8 @@ ospf6_lsa_vty (struct vty *, struct ospf6_lsa *);
 
 struct ospf6_lsa *
 ospf6_lsa_create (struct ospf6_lsa_header *);
-
-void
-ospf6_lsa_delete (struct ospf6_lsa *);
+struct ospf6_lsa *
+ospf6_lsa_summary_create (struct ospf6_lsa_header *);
 
 void ospf6_lsa_lock (struct ospf6_lsa *);
 void ospf6_lsa_unlock (struct ospf6_lsa *);
@@ -296,22 +321,23 @@ void ospf6_lsa_age_update_to_send (struct ospf6_lsa *,
 void ospf6_lsa_premature_aging (struct ospf6_lsa *);
 
 int ospf6_lsa_check_recent (struct ospf6_lsa *, struct ospf6_lsa *);
-u_int16_t ospf6_lsa_get_scope_type (u_int16_t);
 
 void ospf6_lsa_maxage_remove (struct ospf6_lsa *);
 
 int ospf6_lsa_expire (struct thread *);
 int ospf6_lsa_refresh (struct thread *);
 
-unsigned short ospf6_lsa_checksum (struct ospf6_lsa_hdr *);
+u_short ospf6_lsa_checksum (struct ospf6_lsa_header *);
 
-void ospf6_lsa_update_router (struct area *);
+void ospf6_lsa_update_router (struct ospf6_area *);
 void ospf6_lsa_update_network (struct ospf6_interface *);
 void ospf6_lsa_update_link (struct ospf6_interface *);
 void ospf6_lsa_update_as_external (u_int32_t ls_id, struct ospf6 *);
 void ospf6_lsa_update_intra_prefix_transit (struct ospf6_interface *);
-void ospf6_lsa_update_intra_prefix_stub (struct area *);
+void ospf6_lsa_update_intra_prefix_stub (struct ospf6_area *);
 void ospf6_lsa_reoriginate (struct ospf6_lsa *);
+
+u_int16_t ospf6_lsa_get_scope_type (u_int16_t);
 
 #endif /* OSPF6_LSA_H */
 

@@ -21,7 +21,6 @@
 
 #include <zebra.h>
 
-#include <stdio.h>
 #include <sys/un.h>
 #include <setjmp.h>
 #include <sys/wait.h>
@@ -29,29 +28,12 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-#include "version.h"
-#include "getopt.h"
 #include "command.h"
+
 #include "vtysh/vtysh.h"
-
-/* A static variable for holding the line. */
-static char *line_read;
-
-/* bgpd program name. */
-char *progname;
 
 /* Struct VTY. */
 struct vty *vty;
-
-char buf[100];
-
-/* For setjmp & longjmp */
-static sigjmp_buf jmpbuf;
-
-static int jmpflag = 0;
-
-/* flag for execute. */
-static int execute_flag = 0;
 
 /* VTY shell client structure. */
 struct vtysh_client
@@ -59,18 +41,6 @@ struct vtysh_client
   int fd;
 } vtysh_client[VTYSH_INDEX_MAX];
 
-/* SIGINT handler. */
-void
-sigint (int sig)
-{
-  if (! execute_flag)
-    {
-      rl_initialize ();
-      printf ("\n");
-      rl_forced_update_display ();
-    }
-}
-
 /* When '^Z' is received from vty, move down to the enable mode. */
 int
 vtysh_end ()
@@ -99,12 +69,19 @@ vtysh_end ()
       vty->node = ENABLE_NODE;
       break;
     default:
-      /* Unknown node, we have to ignore it. */
+      /* Unknown node, we ignore it. */
       break;
     }
-  /* sprintf (buf, cmd_prompt (vty->node), "zebra"); */
-  /* rl_prompt = buf; */
   return CMD_SUCCESS;
+}
+
+DEFUNSH (VTYSH_ALL,
+	 vtysh_end_all,
+	 vtysh_end_all_cmd,
+	 "end",
+	 "End current mode and down to previous mode\n")
+{
+  return vtysh_end (vty);
 }
 
 void
@@ -215,7 +192,7 @@ vtysh_client_execute (struct vtysh_client *vclient, char *line)
 
 /* Command execution over the vty interface. */
 void
-vtysh_execute (struct vty *vty, char *line)
+vtysh_execute (char *line)
 {
   int ret;
   vector vline;
@@ -277,122 +254,6 @@ vtysh_execute (struct vty *vty, char *line)
     }
  end:
   cmd_free_strvec (vline);
-}
-
-/* Execute command like shell. */
-int
-execute_command (char *command, char *arg)
-{
-  int status;
-  pid_t pid;
-  int ret;
-
-  if ((pid = fork ()) < 0)
-    {
-      fprintf (stderr, "Can't fork: %s\n", strerror (errno));
-      exit (1);
-    }
-      
-  if (pid == 0)
-    {
-      /* This is child process. */
-      ret = execlp (command, command, arg, NULL);
-      fprintf (stderr, "Can't execute %s: %s\n", command, strerror (errno));
-      exit (0);
-    }
-  else
-    {
-      /* This is parent. */
-      execute_flag = 1;
-      ret = wait4 (pid, &status, 0, NULL);
-      execute_flag = 0;
-    }
-
-  return 0;
-}
-
-DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD,
-	 vtysh_end_all,
-	 vtysh_end_all_cmd,
-	 "end",
-	 "End current mode and down to previous mode\n")
-{
-  return vtysh_end (vty);
-}
-
-/* SIGTSTP handler. */
-void
-sigtstp (int sig)
-{
-  struct cmd_element *cmd;
-  char line[] = "end\n";
-  int ret = CMD_SUCCESS;
-  cmd = &vtysh_end_all_cmd;
-
-  /* vtysh_execute (vty, end); */
-  /* vtysh_end (); */
-  if (vty->node != VIEW_NODE)
-    {
-      if (cmd->daemon & VTYSH_ZEBRA)
-	ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA], line);
-      if (cmd->daemon & VTYSH_RIPD)
-	ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP], line);
-      if (cmd->daemon & VTYSH_RIPNGD)
-	ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG], line);
-      if (cmd->daemon & VTYSH_OSPFD)
-	ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF], line);
-      if (cmd->daemon & VTYSH_OSPF6D)
-	ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_OSPF6], line);
-      if (cmd->daemon & VTYSH_BGPD)
-	ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP], line);
-      if (cmd->func && ret == CMD_SUCCESS)
-	(*cmd->func) (cmd, vty, 0, NULL);
-    }
-  
-  rl_initialize ();
-  printf ("\n");
-  /* rl_forced_update_display ();*/
-  /* printf ("sigtstp\n"); */
-  if (! jmpflag)
-    return;
-
-  jmpflag = 0;
-
-  siglongjmp (jmpbuf, 1);
-}
-
-/* Signale wrapper. */
-RETSIGTYPE *
-signal_set (int signo, void (*func)(int))
-{
-  int ret;
-  struct sigaction sig;
-  struct sigaction osig;
-
-  sig.sa_handler = func;
-  sigemptyset (&sig.sa_mask);
-  sig.sa_flags = 0;
-#ifdef SA_RESTART
-  sig.sa_flags |= SA_RESTART;
-#endif /* SA_RESTART */
-
-  ret = sigaction (signo, &sig, &osig);
-
-  if (ret < 0) 
-    return (SIG_ERR);
-  else
-    return (osig.sa_handler);
-}
-
-/* Initialization of signal handles. */
-void
-signal_init ()
-{
-  signal_set (SIGINT, sigint);
-  /* signal_set (SIGTERM, sigint); */
-  /* signal_set (SIGTSTP, SIG_IGN); */
-  signal_set (SIGTSTP, sigtstp);
-  signal_set (SIGPIPE, SIG_IGN);
 }
 
 void
@@ -558,29 +419,6 @@ vtysh_completion (char *text, int start, int end)
   return (char **) matched;
 }
 
-/* Read a string, and return a pointer to it.  Returns NULL on EOF. */
-char *
-vtysh_rl_gets ()
-{
-  /* If the buffer has already been allocated, return the memory
-     to the free pool. */
-  if (line_read)
-    {
-      free (line_read);
-      line_read = (char *) NULL;
-    }
-     
-  /* Get a line from the user. */
-  sprintf (buf, cmd_prompt (vty->node), "zebra");
-  line_read = readline (buf);
-     
-  /* If the line has any text in it, save it on the history. */
-  if (line_read && *line_read)
-    add_history (line_read);
-     
-  return (line_read);
-}
-
 /* BGP node structure. */
 struct cmd_node bgp_node =
 {
@@ -600,14 +438,6 @@ struct cmd_node interface_node =
   INTERFACE_NODE,
   "%s(config-if)# ",
 };
-
-void
-init_vty ()
-{
-  vty = vty_new ();
-  vty->type = VTY_SHELL;
-  vty->node = VIEW_NODE;
-}
 
 DEFUNSH (VTYSH_BGPD,
 	 router_bgp,
@@ -666,7 +496,7 @@ DEFUNSH (VTYSH_OSPF6D,
 }
 
 /* Enable command */
-DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD,
+DEFUNSH (VTYSH_ALL,
 	 vtysh_enable, 
 	 vtysh_enable_cmd,
 	 "enable",
@@ -677,7 +507,7 @@ DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD
 }
 
 /* Disable command */
-DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD,
+DEFUNSH (VTYSH_ALL,
 	 vtysh_disable, 
 	 vtysh_disable_cmd,
 	 "disable",
@@ -689,7 +519,7 @@ DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD
 }
 
 /* Configration from terminal */
-DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD,
+DEFUNSH (VTYSH_ALL,
 	 vtysh_config_terminal,
 	 vtysh_config_terminal_cmd,
 	 "configure terminal",
@@ -732,7 +562,7 @@ vtysh_exit (struct vty *vty)
   return CMD_SUCCESS;
 }
 
-DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD,
+DEFUNSH (VTYSH_ALL,
 	 vtysh_exit_all,
 	 vtysh_exit_all_cmd,
 	 "exit",
@@ -777,40 +607,24 @@ DEFUNSH (VTYSH_OSPFD,
   return vtysh_exit (vty);
 }
 
-DEFUNSH (VTYSH_ZEBRA,
-	 vtysh_end_zebra,
-	 vtysh_end_zebra_cmd,
-	 "end",
-	 "End current mode and down to previous mode\n")
+DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_OSPFD,
+	 vtysh_interface,
+	 vtysh_interface_cmd,
+	 "interface IFNAME",
+	 "Select an interface to configure\n"
+	 "Interface's name\n")
 {
-  return vtysh_end (vty);
+  vty->node = INTERFACE_NODE;
+  return CMD_SUCCESS;
 }
 
-DEFUNSH (VTYSH_RIPD,
-	 vtysh_end_ripd,
-	 vtysh_end_ripd_cmd,
-	 "end",
-	 "End current mode and down to previous mode\n")
+DEFUNSH (VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_OSPFD,
+	 vtysh_exit_interface,
+	 vtysh_exit_interface_cmd,
+	 "exit",
+	 "Exit current mode and down to previous mode\n")
 {
-  return vtysh_end (vty);
-}
-
-DEFUNSH (VTYSH_BGPD,
-	 vtysh_end_bgpd,
-	 vtysh_end_bgpd_cmd,
-	 "end",
-	 "End current mode and down to previous mode\n")
-{
-  return vtysh_end (vty);
-}
-
-DEFUNSH (VTYSH_OSPFD,
-	 vtysh_end_ospfd,
-	 vtysh_end_ospfd_cmd,
-	 "end",
-	 "End current mode and down to previous mode\n")
-{
-  return vtysh_end (vty);
+  return vtysh_exit (vty);
 }
 
 DEFUN (vtysh_write_terminal,
@@ -826,6 +640,8 @@ DEFUN (vtysh_write_terminal,
 	   VTY_NEWLINE);
   vty_out (vty, "!%s", VTY_NEWLINE);
 
+  /* user_config_write (); */
+
   ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_ZEBRA], line);
   ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIP], line);
   ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_RIPNG], line);
@@ -834,6 +650,48 @@ DEFUN (vtysh_write_terminal,
   ret = vtysh_client_execute (&vtysh_client[VTYSH_INDEX_BGP], line);
 
   return CMD_SUCCESS;
+}
+
+ALIAS (vtysh_write_terminal,
+       vtysh_show_running_config_cmd,
+       "show running-config",
+       SHOW_STR
+       "running configuration\n")
+
+/* Execute command in child process. */
+int
+execute_command (char *command, char *arg)
+{
+  int ret;
+  pid_t pid;
+  int status;
+
+  /* Call fork(). */
+  pid = fork ();
+
+  if (pid < 0)
+    {
+      /* Failure of fork(). */
+      fprintf (stderr, "Can't fork: %s\n", strerror (errno));
+      exit (1);
+    }
+  else if (pid == 0)
+    {
+      /* This is child process. */
+      ret = execlp (command, command, arg, NULL);
+
+      /* When execlp suceed, this part is not executed. */
+      fprintf (stderr, "Can't execute %s: %s\n", command, strerror (errno));
+      exit (1);
+    }
+  else
+    {
+      /* This is parent. */
+      execute_flag = 1;
+      ret = wait4 (pid, &status, 0, NULL);
+      execute_flag = 0;
+    }
+  return 0;
 }
 
 DEFUN (vtysh_ping,
@@ -894,7 +752,7 @@ DEFUN (vtysh_start_zsh,
   execute_command ("zsh", NULL);
   return CMD_SUCCESS;
 }
-
+
 /* Route map node structure. */
 struct cmd_node rmap_node =
 {
@@ -941,79 +799,6 @@ vtysh_install_default (enum node_type node)
   install_element (node, &config_list_cmd);
 }
 
-ALIAS (vtysh_write_terminal,
-       vtysh_show_running_config_cmd,
-       "show running-config",
-       SHOW_STR
-       "running configuration\n")
-
-void
-init_node ()
-{
-  cmd_init (0);
-
-  install_element (VIEW_NODE, &vtysh_enable_cmd);
-  install_element (ENABLE_NODE, &vtysh_config_terminal_cmd);
-
-  install_node (&bgp_node, NULL);
-  install_node (&rip_node, NULL);
-  install_node (&interface_node, NULL);
-  install_node (&rmap_node, NULL);
-  install_node (&zebra_node, NULL);
-  install_node (&bgp_vpnv4_node, NULL);
-  install_node (&ospf_node, NULL);
-  install_node (&ripng_node, NULL);
-  install_node (&ospf6_node, NULL);
-
-  vtysh_install_default (VIEW_NODE);
-  vtysh_install_default (ENABLE_NODE);
-  vtysh_install_default (CONFIG_NODE);
-
-  install_element (VIEW_NODE, &vtysh_exit_all_cmd);
-  install_element (CONFIG_NODE, &vtysh_exit_all_cmd);
-  install_element (ENABLE_NODE, &vtysh_exit_all_cmd);
-  install_element (BGP_NODE, &vtysh_exit_bgpd_cmd);
-  install_element (RIP_NODE, &vtysh_exit_ripd_cmd);
-  install_element (OSPF_NODE, &vtysh_exit_ospfd_cmd);
-
-  install_element (ENABLE_NODE, &vtysh_disable_cmd);
-
-  install_element (CONFIG_NODE, &vtysh_end_all_cmd);
-  install_element (ENABLE_NODE, &vtysh_end_all_cmd);
-  install_element (RIP_NODE, &vtysh_end_all_cmd);
-  install_element (RIPNG_NODE, &vtysh_end_all_cmd);
-  install_element (OSPF_NODE, &vtysh_end_all_cmd);
-  install_element (OSPF6_NODE, &vtysh_end_all_cmd);
-  install_element (BGP_NODE, &vtysh_end_all_cmd);
-
-  install_element (CONFIG_NODE, &router_rip_cmd);
-  install_element (CONFIG_NODE, &router_ripng_cmd);
-  install_element (CONFIG_NODE, &router_ospf_cmd);
-  install_element (CONFIG_NODE, &router_ospf6_cmd);
-  install_element (CONFIG_NODE, &router_bgp_cmd);
-
-  install_element (ENABLE_NODE, &vtysh_write_terminal_cmd);
-  install_element (ENABLE_NODE, &vtysh_show_running_config_cmd);
-
-  install_element (VIEW_NODE, &vtysh_ping_cmd);
-  install_element (VIEW_NODE, &vtysh_traceroute_cmd);
-  install_element (VIEW_NODE, &vtysh_telnet_cmd);
-  install_element (ENABLE_NODE, &vtysh_ping_cmd);
-  install_element (ENABLE_NODE, &vtysh_traceroute_cmd);
-  install_element (ENABLE_NODE, &vtysh_telnet_cmd);
-
-  install_element (ENABLE_NODE, &vtysh_start_shell_cmd);
-  install_element (ENABLE_NODE, &vtysh_start_bash_cmd);
-  install_element (ENABLE_NODE, &vtysh_start_zsh_cmd);
-}
-
-/* To disable readline's filename completion */
-int
-vtysh_completion_entry_fucntion (int ignore, int invoking_key)
-{
-  return 0;
-}
-
 /* Making connection to protocol daemon. */
 int
 vtysh_connect (struct vtysh_client *vclient, char *path)
@@ -1051,82 +836,9 @@ vtysh_connect (struct vtysh_client *vclient, char *path)
   return 0;
 }
 
-/* Help information display. */
-static void
-usage (int status)
+void
+vtysh_connect_all()
 {
-  if (status != 0)
-    fprintf (stderr, "Try `%s --help' for more information.\n", progname);
-  else
-    {    
-      printf ("Usage : %s [OPTION...]\n\n\
-Daemon which manages kernel routing table management and \
-redistribution between different routing protocols.\n\n\
--d, --daemon       Runs in daemon mode\n\
--f, --config_file  Set configuration file name\n\
--p, --bgp_port     Set bgp protocol's port number\n\
--P, --vty_port     Set vty's port number\n\
--r, --retain       When program terminates, retain added route by bgpd.\n\
--v, --version      Print program version\n\
--h, --help         Display this help and exit\n\
-\n\
-Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
-    }
-
-  exit (status);
-}
-
-/* bgpd options, we use GNU getopt library. */
-struct option longopts[] = 
-{
-  { "eval",        required_argument,       NULL, 'e'},
-  { 0 }
-};
-
-/* Main routine. */
-int
-main (int argc, char **argv, char **env)
-{
-  char *p;
-  int opt;
-  int eval_flag = 0;
-  char *eval_line = NULL;
-
-  /* Preserve name of myself. */
-  progname = ((p = strrchr (argv[0], '/')) ? ++p : argv[0]);
-
-  /* Option handling. */
-  while (1) 
-    {
-      opt = getopt_long (argc, argv, "e:", longopts, 0);
-    
-      if (opt == EOF)
-	break;
-
-      switch (opt) 
-	{
-	case 0:
-	  break;
-	case 'e':
-	  eval_flag = 1;
-	  eval_line = optarg;
-	  break;
-	default:
-	  usage (1);
-	  break;
-	}
-    }
-
-  /* Initialize user input buffer. */
-  line_read = NULL;
-
-  /* Signal and others. */
-  signal_init ();
-  init_node ();
-  init_vty ();
-  vtysh_init_cmd ();
-  sort_node ();
-
   /* Clear each daemons client structure. */
   vtysh_connect (&vtysh_client[VTYSH_INDEX_ZEBRA], ZEBRA_PATH);
   vtysh_connect (&vtysh_client[VTYSH_INDEX_RIP], RIP_PATH);
@@ -1134,28 +846,93 @@ main (int argc, char **argv, char **env)
   vtysh_connect (&vtysh_client[VTYSH_INDEX_OSPF], OSPF_PATH);
   vtysh_connect (&vtysh_client[VTYSH_INDEX_OSPF6], OSPF6_PATH);
   vtysh_connect (&vtysh_client[VTYSH_INDEX_BGP], BGP_PATH);
+}
 
-  /* If eval mode */
-  if (eval_flag)
-    {
-      vtysh_execute (vty, eval_line);
-      exit (0);
-    }
 
+/* To disable readline's filename completion */
+int
+vtysh_completion_entry_fucntion (int ignore, int invoking_key)
+{
+  return 0;
+}
+
+void
+vtysh_readline_init ()
+{
   /* readline related settings. */
   rl_bind_key ('?', vtysh_rl_describe);
   rl_completion_entry_function = vtysh_completion_entry_fucntion;
   rl_attempted_completion_function = (CPPFunction *)new_completion;
+}
 
-  vty_hello (vty);
+char *
+vtysh_prompt ()
+{
+  static char buf[100];
 
-  sigsetjmp (jmpbuf, 1);
-  jmpflag = 1;
+  sprintf (buf, cmd_prompt (vty->node), "zebra");
+  return buf;
+}
 
-  while (vtysh_rl_gets ())
-    vtysh_execute (vty, line_read);
+void
+vtysh_init_vty ()
+{
+  /* Make vty structure. */
+  vty = vty_new ();
+  vty->type = VTY_SHELL;
+  vty->node = VIEW_NODE;
 
-  printf ("\n");
+  /* Initialize commands. */
+  cmd_init (0);
 
-  exit (0);
+  /* Install nodes. */
+  install_node (&bgp_node, NULL);
+  install_node (&rip_node, NULL);
+  install_node (&interface_node, NULL);
+  install_node (&rmap_node, NULL);
+  install_node (&zebra_node, NULL);
+  install_node (&bgp_vpnv4_node, NULL);
+  install_node (&ospf_node, NULL);
+  install_node (&ripng_node, NULL);
+  install_node (&ospf6_node, NULL);
+
+  vtysh_install_default (VIEW_NODE);
+  vtysh_install_default (ENABLE_NODE);
+  vtysh_install_default (CONFIG_NODE);
+
+  install_element (VIEW_NODE, &vtysh_enable_cmd);
+  install_element (ENABLE_NODE, &vtysh_config_terminal_cmd);
+  install_element (VIEW_NODE, &vtysh_exit_all_cmd);
+  install_element (CONFIG_NODE, &vtysh_exit_all_cmd);
+  install_element (ENABLE_NODE, &vtysh_exit_all_cmd);
+  install_element (BGP_NODE, &vtysh_exit_bgpd_cmd);
+  install_element (RIP_NODE, &vtysh_exit_ripd_cmd);
+  install_element (OSPF_NODE, &vtysh_exit_ospfd_cmd);
+  install_element (ENABLE_NODE, &vtysh_disable_cmd);
+  install_element (CONFIG_NODE, &vtysh_end_all_cmd);
+  install_element (ENABLE_NODE, &vtysh_end_all_cmd);
+  install_element (RIP_NODE, &vtysh_end_all_cmd);
+  install_element (RIPNG_NODE, &vtysh_end_all_cmd);
+  install_element (OSPF_NODE, &vtysh_end_all_cmd);
+  install_element (OSPF6_NODE, &vtysh_end_all_cmd);
+  install_element (BGP_NODE, &vtysh_end_all_cmd);
+  install_element (INTERFACE_NODE, &vtysh_end_all_cmd);
+  install_element (INTERFACE_NODE, &vtysh_exit_interface_cmd);
+  install_element (CONFIG_NODE, &router_rip_cmd);
+  install_element (CONFIG_NODE, &router_ripng_cmd);
+  install_element (CONFIG_NODE, &router_ospf_cmd);
+  install_element (CONFIG_NODE, &router_ospf6_cmd);
+  install_element (CONFIG_NODE, &router_bgp_cmd);
+  install_element (CONFIG_NODE, &vtysh_interface_cmd);
+  install_element (ENABLE_NODE, &vtysh_write_terminal_cmd);
+  install_element (ENABLE_NODE, &vtysh_show_running_config_cmd);
+  install_element (VIEW_NODE, &vtysh_ping_cmd);
+  install_element (VIEW_NODE, &vtysh_traceroute_cmd);
+  install_element (VIEW_NODE, &vtysh_telnet_cmd);
+  install_element (ENABLE_NODE, &vtysh_ping_cmd);
+  install_element (ENABLE_NODE, &vtysh_traceroute_cmd);
+  install_element (ENABLE_NODE, &vtysh_telnet_cmd);
+  install_element (ENABLE_NODE, &vtysh_start_shell_cmd);
+  install_element (ENABLE_NODE, &vtysh_start_bash_cmd);
+  install_element (ENABLE_NODE, &vtysh_start_zsh_cmd);
 }

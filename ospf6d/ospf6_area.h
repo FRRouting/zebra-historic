@@ -47,12 +47,35 @@ struct area
 
   struct route_table *table; /* new route table */
 };
+struct ospf6_area
+{
+  char            str[16];
+
+  struct ospf6   *ospf6;      /* back pointer */
+  u_int32_t       area_id;
+  u_char          options[3]; /* OSPF Option including ExternalCapability */
+
+  list            if_list; /* OSPF interface to this area */
+  list            lsdb;
+  struct spftree  spftree;
+
+  struct thread  *spf_calc;
+  struct thread  *route_calc;
+  int             stat_spf_execed;
+  int             stat_route_execed;
+
+  struct route_table *table; /* new route table */
+
+  struct prefix_ipv6 area_range;
+};
+
 
 /* prototypes */
-struct area *ospf6_area_lookup (unsigned long);
-struct area *ospf6_area_init (unsigned long);
-void ospf6_area_delete (struct area *);
-void ospf6_area_vty (struct vty *, struct area *);
+int ospf6_area_is_stub (struct ospf6_area *o6a);
+struct ospf6_area *ospf6_area_lookup (u_int32_t, struct ospf6 *);
+struct ospf6_area *ospf6_area_create (u_int32_t);
+void ospf6_area_delete (struct ospf6_area *);
+void ospf6_area_vty (struct vty *, struct ospf6_area *);
 
 #endif /* OSPF_AREA_H */
 

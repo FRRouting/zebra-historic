@@ -74,9 +74,11 @@ struct ospf_neighbor
   struct thread *t_db_desc;
   struct thread *t_ls_req;
   struct thread *t_ls_upd;
+  struct thread *t_hello_reply;
 
   /* Statistics Field */
   u_int32_t state_change;
+  struct ospf_nbr_static *nbr_static;
 };
 
 /* Macros. */

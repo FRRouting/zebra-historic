@@ -68,8 +68,7 @@
 #include "ospf6_dump.h"
 #include "ospf6_routemap.h"
 
-
-#define OSPF6_DAEMON_VERSION    "0.6"
+#define OSPF6_DAEMON_VERSION    "0.7.d"
 
 /* Old Kame of FreeBSD crashes when tring to use IPV6_CHECKSUM. */
 /* #define DISABLE_IPV6_CHECKSUM */

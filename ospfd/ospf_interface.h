@@ -31,7 +31,8 @@ struct ospf_interface;
 struct ospf_vl_data
 {
   struct in_addr    vl_peer;	   /* Router-ID of the peer for VLs. */
-  struct ospf_area *vl_area;	   /* Transit area for this VL. */	
+  struct in_addr    vl_area_id;	   /* Transit area for this VL. */
+  int format;                      /* area ID format */
   struct ospf_interface *vl_oi;	   /* Interface data structure for the VL. */
   struct ospf_interface *out_oi;   /* The interface to go out. */
   struct in_addr    peer_addr;	   /* Address used to reach the peer. */
@@ -106,6 +107,8 @@ struct ospf_interface
 #define BDR(I)			((I)->nbr_self->bd_router)
 #define OPTIONS(I)		((I)->nbr_self->options)
 #define PRIORITY(I)		((I)->nbr_self->priority)
+
+  list nbr_static;
 
   /* self-originated LSAs. */
   struct ospf_lsa *network_lsa_self;	/* network-LSA. */

@@ -61,7 +61,7 @@ ripng_zebra.o: ripng_zebra.c ../lib/command.h ../lib/vector.h \
  ../lib/if.h ../lib/linklist.h ../lib/log.h ../ripngd/ripngd.h
 ripngd.o: ripngd.c ../lib/prefix.h ../lib/filter.h ../lib/if.h \
  ../lib/linklist.h ../lib/log.h ../lib/thread.h ../lib/memory.h \
- ../lib/stream.h ../lib/table.h ../lib/roken.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../lib/sockopt.h ../lib/distribute.h \
- ../lib/plist.h ../lib/routemap.h ../lib/if_rmap.h ../ripngd/ripngd.h \
+ ../lib/stream.h ../lib/table.h ../lib/command.h ../lib/vector.h \
+ ../lib/vty.h ../lib/sockopt.h ../lib/distribute.h ../lib/plist.h \
+ ../lib/routemap.h ../lib/if_rmap.h ../ripngd/ripngd.h \
  ../ripngd/ripng_route.h ../ripngd/ripng_debug.h

@@ -31,9 +31,16 @@
 #include "prefix.h"
 #include "zebra/connected.h"
 #include "memory.h"
+#include "table.h"
 #include "buffer.h"
 #include "str.h"
 #include "log.h"
+#ifdef RIP_API
+#include "ripd/ripd_api.h"
+#endif /* RIP_API */
+
+/* Master list of interfaces. */
+struct list *iflist;
 
 /* One for each program.  This structure is needed to store hooks. */
 struct if_master
@@ -41,10 +48,7 @@ struct if_master
   int (*if_new_hook) (struct interface *);
   int (*if_delete_hook) (struct interface *);
 } if_master;
-
-/* Export to user function. */
-list iflist;
-
+
 /* Create new interface structure. */
 struct interface *
 if_new ()
@@ -52,7 +56,7 @@ if_new ()
   struct interface *ifp;
 
   ifp = XMALLOC (MTYPE_IF, sizeof (struct interface));
-  bzero (ifp, sizeof (struct interface));
+  memset (ifp, 0, sizeof (struct interface));
   return ifp;
 }
 
@@ -77,8 +81,10 @@ void
 if_delete (struct interface *ifp)
 {
   list_delete_by_val (iflist, ifp);
+
   if (if_master.if_delete_hook)
     (*if_master.if_delete_hook) (ifp);
+
   XFREE (MTYPE_IF, ifp);
 }
 
@@ -350,7 +356,6 @@ if_index_address (struct in6_addr *addr)
 }
 #endif /* HAVE_IPV6 */
 
-
 DEFUN (interface_desc, 
        interface_desc_cmd,
        "description .LINE",
@@ -419,6 +424,7 @@ DEFUN (interface,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_IF_PSEUDO
 DEFUN (interface_pseudo,
        interface_pseudo_cmd,
        "pseudo",
@@ -459,25 +465,14 @@ DEFUN (no_interface_pseudo,
 
   return CMD_SUCCESS;
 }
-
-/* Initialize interface list. */
-void
-if_init ()
-{
-  iflist = list_init ();
-
-  if (iflist)
-    return;
-
-  bzero (&if_master, sizeof if_master);
-}
+#endif /* HAVE_IF_PSEUDO */
 
 /* Allocate connected structure. */
 struct connected *
 connected_new ()
 {
   struct connected *new = XMALLOC (MTYPE_CONNECTED, sizeof (struct connected));
-  bzero (new, sizeof (struct connected));
+  memset (new, 0, sizeof (struct connected));
   return new;
 }
 
@@ -496,7 +491,7 @@ connected_free (struct connected *connected)
 
 /* Print if_addr structure. */
 void
-connected_log (struct connected *connected)
+connected_log (struct connected *connected, char *str)
 {
   struct prefix *p;
   struct interface *ifp;
@@ -506,20 +501,16 @@ connected_log (struct connected *connected)
   ifp = connected->ifp;
   p = connected->address;
 
-  snprintf (logbuf, BUFSIZ, "interface %s %s %s/%d ", 
-       ifp->name, 
-       prefix_family_str (p),
-       inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-       p->prefixlen);
-  
+  snprintf (logbuf, BUFSIZ, "%s interface %s %s %s/%d ", 
+	    str, ifp->name, prefix_family_str (p),
+	    inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+	    p->prefixlen);
+
   p = connected->destination;
   if (p)
     {
-#if 0 /* want v6 connected address to be logged, too. */
-      if (p->family == AF_INET)
-#endif
-	strncat (logbuf, inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
-		 BUFSIZ - strlen(logbuf));
+      strncat (logbuf, inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ),
+	       BUFSIZ - strlen(logbuf));
     }
   zlog (NULL, LOG_INFO, logbuf);
 }
@@ -542,19 +533,28 @@ connected_same_prefix (struct prefix *p1, struct prefix *p2)
   return 0;
 }
 
+/* Add interface's address information. */
 void
 connected_add (struct interface *ifp, struct connected *connected)
 {
-  listnode node;
+  struct listnode *node;
+  struct listnode *next;
   struct connected *ifc;
 
-  /* In case of same prefix come, replace it with new one. */
-  for (node = listhead (ifp->connected); node; node = node->next)
+#ifdef CONNECTED_DEBUG
+  connected_log (connected, "add");
+#endif /* CONNECTED_DEBUG */
+
+  /* Check existing prefix information. */
+  for (node = listhead (ifp->connected); node; node = next)
     {
       ifc = getdata (node);
+      next = node->next;
+
       if (connected_same_prefix (ifc->address, connected->address))
 	{
-	  list_delete_by_val (ifp->connected, ifc);
+	  /* zlog_info ("same prefix %s", inet_ntoa (ifc->address->u.prefix4)); */
+	  listnode_delete (ifp->connected, ifc);
 	  break;
 	}
     }
@@ -562,26 +562,31 @@ connected_add (struct interface *ifp, struct connected *connected)
   /* Link connected address to interface. */
   connected->ifp = ifp;
   list_add_node (ifp->connected, connected);
-
-  /* connected_log (connected); */
 }
 
-void
+struct connected *
 connected_delete_by_prefix (struct interface *ifp, struct prefix *p)
 {
-  listnode node;
+  struct listnode *node;
+  struct listnode *next;
   struct connected *ifc;
 
   /* In case of same prefix come, replace it with new one. */
-  for (node = listhead (ifp->connected); node; node = node->next)
+  for (node = listhead (ifp->connected); node; node = next)
     {
       ifc = getdata (node);
+      next = node->next;
+
       if (connected_same_prefix (ifc->address, p))
 	{
-	  list_delete_by_val (ifp->connected, ifc);
-	  break;
+#ifdef CONNECTED_DEBUG
+	  connected_log (ifc, "delete");
+#endif /* CONNECTED_DEBUG */
+	  listnode_delete (ifp->connected, ifc);
+	  return ifc;
 	}
     }
+  return NULL;
 }
 
 #ifndef HAVE_IF_NAMETOINDEX
@@ -620,3 +625,218 @@ if_indextoname (unsigned int ifindex, char *name)
   return NULL;
 }
 #endif
+
+#ifdef RIP_API
+/*************************
+ Function:if_get_next_node
+ PURPOSE: Get the node after the current one ('prev_node') in the
+          'iflist' linked list.
+          If the 'prev_node' is NULL, get the fist node.
+          If "End of table" is a case, returns NULL
+ PARAMETERS:
+    IN    prev_node
+**************************/
+listnode
+if_get_next_node (listnode prev_node)
+{   
+  if (prev_node)
+    return nextnode(prev_node);
+  else if (iflist)
+    return listhead (iflist);
+  else
+    return NULL;
+}
+
+/*************************
+ Function:if_get_next_connected
+ PURPOSE: Lookup next interface/connected
+ PARAMETERS:
+    IN    listnode prev_connected_node
+    IN    listnode prev_ifp_node
+    OUT   listnode* next_ifp_node
+    RETURNS: listnode 'next_connected_node' (of NULL in "End of table" case)
+**************************/
+listnode
+if_get_next_connected (listnode prev_connected_node,
+                       listnode prev_ifp_node,
+                       listnode* next_ifp_node)
+{
+  interface_t*  ifp;
+  listnode      node = NULL;
+
+  if (prev_connected_node) {
+    prev_connected_node = if_get_next_node (prev_connected_node);
+    if (prev_connected_node) {
+      *next_ifp_node = prev_ifp_node;
+      return prev_connected_node;
+    }
+    node = prev_ifp_node;
+  }
+
+  for (node = if_get_next_node (node); node; node = if_get_next_node (node)) {
+    ifp = getdata (node);
+    prev_connected_node = listhead (ifp->connected);
+    if (prev_connected_node) {
+      *next_ifp_node = node;
+      return prev_connected_node;
+    }
+  }
+
+  return NULL;
+}
+
+/*************************
+ Function:if_lookup_next (was rip_if_lookup_next in rip_snmp.c)
+ PURPOSE: Lookup next interface by IPv4 address.
+ PARAMETERS:
+    INOUT    in_addr *src
+    OUT      in_addr *dst (Point-to-point link)
+    RETURNS: interface *ifp (of NULL in "End of table" case)
+ NOTE: it was moved from rip_snmp.c, old name was rip_if_lookup_next
+**************************/
+interface_t *
+if_lookup_next (struct in_addr *src, struct in_addr *dst)
+{
+  listnode node;
+  listnode cnode;
+  interface_t *ifp;
+  struct prefix *p;
+  connected_t *c;
+  struct in_addr *min_addr;
+  struct interface *min_ifp;
+  
+  min_addr=NULL;
+  min_ifp=NULL;
+
+  for (node = listhead (iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+        {
+          c = getdata (cnode);
+
+          p = c->address;
+
+          if (p && p->family == AF_INET)
+            {
+ 	      if (ntohl (p->u.prefix4.s_addr) > ntohl (src->s_addr))
+		if ((min_addr && (ntohl(min_addr->s_addr) > ntohl (p->u.prefix4.s_addr)))
+		    || (!min_addr))		   
+		  {
+		    min_addr = &(p->u.prefix4);
+		    min_ifp = ifp;
+		  }	       
+	    	      
+	    }
+        }
+    }
+  if (min_addr){
+    src->s_addr=min_addr->s_addr;
+    return min_ifp;
+  }
+  else
+    return NULL;    
+  
+}
+#endif /* RIP_API */
+
+/* Interface looking up by interface's address. */
+
+/* Interface's IPv4 address reverse lookup table. */
+struct route_table *ifaddr_ipv4_table;
+/* struct route_table *ifaddr_ipv6_table; */
+
+void
+ifaddr_ipv4_add (struct in_addr *ifaddr, struct interface *ifp)
+{
+  struct route_node *rn;
+  struct prefix_ipv4 p;
+
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_PREFIXLEN;
+  p.prefix = *ifaddr;
+
+  rn = route_node_get (ifaddr_ipv4_table, (struct prefix *) &p);
+  if (rn)
+    {
+      route_unlock_node (rn);
+      zlog_info ("ifaddr_ipv4_add(): address %s is already added",
+		 inet_ntoa (*ifaddr));
+      return;
+    }
+  rn->info = ifp;
+}
+
+void
+ifaddr_ipv4_delete (struct in_addr *ifaddr, struct interface *ifp)
+{
+  struct route_node *rn;
+  struct prefix_ipv4 p;
+
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_PREFIXLEN;
+  p.prefix = *ifaddr;
+
+  rn = route_node_lookup (ifaddr_ipv4_table, (struct prefix *) &p);
+  if (! rn)
+    {
+      zlog_info ("ifaddr_ipv4_delete(): can't find address %s",
+		 inet_ntoa (*ifaddr));
+      return;
+    }
+  rn->info = NULL;
+  route_unlock_node (rn);
+  route_unlock_node (rn);
+}
+
+/* Lookup interface by interface's IP address or interface index. */
+struct interface *
+ifaddr_ipv4_lookup (struct in_addr *addr, unsigned int ifindex)
+{
+  struct prefix_ipv4 p;
+  struct route_node *rn;
+  struct interface *ifp;
+  listnode node;
+
+  if (addr)
+    {
+      p.family = AF_INET;
+      p.prefixlen = IPV4_MAX_PREFIXLEN;
+      p.prefix = *addr;
+
+      rn = route_node_lookup (ifaddr_ipv4_table, (struct prefix *) &p);
+      if (! rn)
+	return NULL;
+      
+      ifp = rn->info;
+      route_unlock_node (rn);
+      return ifp;
+    }
+  else
+    {
+      for (node = listhead (iflist); node; nextnode (node))
+	{
+	  ifp = getdata (node);
+
+	  ;
+
+	  if (ifp->ifindex == ifindex)
+	    return ifp;
+	}
+    }
+  return NULL;
+}
+
+/* Initialize interface list. */
+void
+if_init ()
+{
+  iflist = list_init ();
+  ifaddr_ipv4_table = route_table_init ();
+
+  if (iflist)
+    return;
+
+  memset (&if_master, 0, sizeof if_master);
+}

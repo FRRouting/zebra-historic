@@ -40,6 +40,7 @@
 #define INTERFACE_NAMSIZ      20
 #define INTERFACE_HWADDR_MAX  20
 
+#ifdef HAVE_IF_PSEUDO
 #define IF_PSEUDO      0x01
 #define IF_PSEUDO_SET(IF) (((IF)->status) |= IF_PSEUDO)
 #define IF_PSEUDO_UNSET(IF) (((IF)->status) &= ~IF_PSEUDO)
@@ -50,7 +51,8 @@
 #define IF_UNKNOWN_SET(IF) (((IF)->status) |= IF_UNKNOWN)
 #define IF_UNKNOWN_UNSET(IF) (((IF)->status) &= ~IF_UNKNOWN)
 #define IS_IF_UNKNOWN(IF) (((IF)->status) & IF_UNKNOWN)
-#endif 
+#endif
+#endif /* HAVE_IF_PSEUDO */
 
 #ifndef INTERFACE_UNKNOWN
 #define INTERFACE_UNKNOWN 1000000
@@ -134,6 +136,10 @@ struct interface
 
   /* Connected address list. */
   list connected;
+#if 0
+  struct list *ifa_v4;
+  struct list *ifa_v6;
+#endif /* 0 */
 
   /* Daemon specific interface data pointer. */
   void *info;
@@ -205,9 +211,9 @@ char *ifindex2ifname (unsigned int);
 
 /* Connected address functions. */
 struct connected *connected_new ();
+void connected_free (struct connected *);
 void connected_add (struct interface *, struct connected *);
-void connected_delete_by_prefix (struct interface *, struct prefix *);
-void connected_log (struct connected *);
+struct connected  *connected_delete_by_prefix (struct interface *, struct prefix *);
 
 #ifndef HAVE_IF_NAMETOINDEX
 unsigned int if_nametoindex (const char *);

@@ -22,58 +22,63 @@
 
 #include "ospf6d.h"
 
-/* Make new area structure */
-struct area *
-ospf6_area_init (unsigned long area_id)
+int
+ospf6_area_is_stub (struct ospf6_area *o6a)
 {
-  struct area *o6a;
+  if (OSPF6_OPT_ISSET (o6a->options, OSPF6_OPT_E))
+    return 0;
+  return 1;
+}
+
+/* Make new area structure */
+struct ospf6_area *
+ospf6_area_create (u_int32_t area_id)
+{
+  struct ospf6_area *o6a;
 
   /* allocate memory */
-  o6a = (struct area *) XMALLOC (MTYPE_OSPF6_AREA, sizeof (struct area));
+  o6a = (struct ospf6_area *) XMALLOC (MTYPE_OSPF6_AREA,
+                                       sizeof (struct ospf6_area));
   if (!o6a)
     {
       char str[16];
       inet_ntop (AF_INET, &area_id, str, sizeof (str));
-      zlog_warn ("can't malloc area %s", str);
+      zlog_err ("can't malloc area %s", str);
       return NULL;
     }
 
   /* initialize */
-  memset (o6a, 0, sizeof (struct area));
+  memset (o6a, 0, sizeof (struct ospf6_area));
   inet_ntop (AF_INET, &area_id, o6a->str, sizeof (o6a->str));
-  o6a->ospf6 = ospf6;
   o6a->area_id = area_id;
   o6a->if_list = list_init ();
   o6a->table = ospf6_route_table_init ();
-  ospf6_lsdb_init_area (o6a);
+  o6a->lsdb = list_init ();
 
   /* xxx, set options */
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_V6);
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_E);
   OSPF6_OPT_SET (o6a->options, OSPF6_OPT_R);
 
-  /* add area list */
-  list_add_node (ospf6->area_list, o6a);
-
   return o6a;
 }
 
 void
-ospf6_area_delete (struct area *o6a)
+ospf6_area_delete (struct ospf6_area *o6a)
 {
   listnode n;
-  struct ospf6_interface *o6if;
+  struct ospf6_interface *o6i;
 
   /* ospf6 interface list */
   for (n = listhead (o6a->if_list); n; nextnode (n))
     {
-      o6if = (struct ospf6_interface *) getdata (n);
-      /* ospf6_interface_terminate (o6if); */
+      o6i = (struct ospf6_interface *) getdata (n);
+      /* ospf6_interface_delete (o6i); */
     }
   list_delete_all (o6a->if_list);
 
   /* terminate LSDB */
-  ospf6_lsdb_finish_area (o6a);
+  ospf6_lsdb_remove_all (o6a->lsdb);
 
   /* spf tree terminate */
   /* xxx */
@@ -93,23 +98,24 @@ ospf6_area_delete (struct area *o6a)
   XFREE (MTYPE_OSPF6_AREA, o6a);
 }
 
-struct area *
-ospf6_area_lookup (unsigned long area_id)
+struct ospf6_area *
+ospf6_area_lookup (u_int32_t area_id, struct ospf6 *o6)
 {
-  struct area *area;
+  struct ospf6_area *o6a;
   listnode n;
 
-  for (n = listhead (ospf6->area_list); n; nextnode (n))
+  for (n = listhead (o6->area_list); n; nextnode (n))
     {
-      area = (struct area *)getdata (n);
-      if (area->area_id == area_id)
-        return area;
+      o6a = (struct ospf6_area *) getdata (n);
+      if (o6a->area_id == area_id)
+        return o6a;
     }
-  return (struct area *)NULL;
+
+  return (struct ospf6_area *) NULL;
 }
 
 void
-ospf6_area_vty (struct vty *vty, struct area *o6a)
+ospf6_area_vty (struct vty *vty, struct ospf6_area *o6a)
 {
   listnode i;
   struct ospf6_interface *o6i;
@@ -124,8 +130,6 @@ ospf6_area_vty (struct vty *vty, struct area *o6a)
   vty_out (vty, "%s", VTY_NEWLINE);
   vty_out (vty, "        SPF algorithm executed %d times%s",
            o6a->stat_spf_execed, VTY_NEWLINE);
-  vty_out (vty, "        Route calculation executed %d times%s",
-           o6a->stat_route_execed, VTY_NEWLINE);
   vty_out (vty, "        Number of Area scoped LSAs is %u%s",
            listcount (o6a->lsdb), VTY_NEWLINE);
 }

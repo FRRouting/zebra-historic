@@ -128,7 +128,6 @@ ospf_vertex_add_parent (struct vertex *v)
       list_add_node (nh->parent->child, v);
     }
 }
-
 
 void
 ospf_spf_init (struct ospf_area *area)
@@ -139,6 +138,10 @@ ospf_spf_init (struct ospf_area *area)
   v = ospf_vertex_new (area->router_lsa_self);
 
   area->spf = v;
+
+  /* Reset ABR and ASBR router counts. */
+  area->abr_count = 0;
+  area->asbr_count = 0;
 }
 
 int
@@ -299,38 +302,38 @@ ospf_nexthop_calculation (struct ospf_area *area,
   struct ospf_neighbor * nbr;
   struct in_addr addr;
 
- zlog_info ("Z: ospf_nexthop_calculation(): Start");
+  zlog_info ("ospf_nexthop_calculation(): Start");
 
   /* W's parent is root. */
   if (v == area->spf)
     {
       nh = vertex_nexthop_new (v);
 
-      zlog_info ("Z: ospf_nexthop_calculation(): 1");
+      zlog_info ("ospf_nexthop_calculation(): 1");
 
       ospf_nexthop_out_if_addr (v, w, &addr);
-      zlog_info ("Z: ospf_nexthop_calculation(): 2");
+      zlog_info ("ospf_nexthop_calculation(): 2");
 
       if (addr.s_addr)
         oi = ospf_if_lookup_by_addr (&addr);
-      zlog_info ("Z: ospf_nexthop_calculation(): 3");
+      zlog_info ("ospf_nexthop_calculation(): 3");
 
       if (oi != NULL)
         {
           nh->ifp = oi->ifp;
 
-          zlog_info ("Z: ospf_nexthop_calculation(): 4");
+          zlog_info ("ospf_nexthop_calculation(): 4");
 
           if (w->type == OSPF_VERTEX_ROUTER)
             {
               nbr = ospf_nbr_lookup_by_routerid (oi->nbrs, &w->id);
 
-              zlog_info("Z: ospf_nexthop_calculation(): 5");
+              zlog_info("ospf_nexthop_calculation(): 5");
 
               if (nbr)
                 nh->router.s_addr = nbr->address.u.prefix4.s_addr;
               else
-                zlog_info("Z: couldn't find the nbr");
+                zlog_info("couldn't find the nbr");
             } 
         }
 
@@ -338,15 +341,10 @@ ospf_nexthop_calculation (struct ospf_area *area,
       if (w->type == OSPF_VERTEX_NETWORK)
         nh->router.s_addr = 0; 
 
-      zlog_info ("Z: resolved next hop: int: %s, next hop: %s",
-                 nh->ifp->name, inet_ntoa (nh->router));
+      zlog_info ("resolved next hop: int: %s, next hop: %s",
+		 nh->ifp->name, inet_ntoa (nh->router));
 
-/*      if (oi)*/
-
-        list_add_node (w->nexthop, nh);
-
-/*      else 
-        ospf_nexthop_free (nh);*/
+      list_add_node (w->nexthop, nh);
 
       return;
     }
@@ -460,24 +458,24 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
             case LSA_LINK_TYPE_POINTOPOINT:
             case LSA_LINK_TYPE_VIRTUALLINK:
               if (type == LSA_LINK_TYPE_VIRTUALLINK)
-                 zlog_info ("Z: looking up LSA through VL: %s",
-                            inet_ntoa (l->link_id));
+		zlog_info ("looking up LSA through VL: %s",
+			   inet_ntoa (l->link_id));
 
               w_lsa = ospf_lsa_lookup (area, OSPF_ROUTER_LSA, l->link_id,
                                        l->link_id);
               if (w_lsa)
-                zlog_info("Z: found the LSA");
+                zlog_info("found the LSA");
               break;
             case LSA_LINK_TYPE_TRANSIT:
-              zlog_info ("Z: Looking up Network LSA, ID: %s",
+              zlog_info ("Looking up Network LSA, ID: %s",
                          inet_ntoa(l->link_id));
               w_lsa = ospf_lsa_lookup_by_id (area, OSPF_NETWORK_LSA,
 					     l->link_id);
               if (w_lsa)
-                zlog_info("Z: found the LSA");
+                zlog_info("found the LSA");
               break;
             default:
-              zlog_warn ("Invalid LSA link type %d", type);
+	      zlog_warn ("Invalid LSA link type %d", type);
               continue;
             }
         }
@@ -502,7 +500,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 
       if (! ospf_lsa_has_link (w_lsa->data, v->lsa))
         {
-          zlog_info ("Z: The LSA doesn't have a link back");
+	  zlog_info ("The LSA doesn't have a link back");
           continue;
         }
 
@@ -510,7 +508,7 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
          the next link in the LSA. */
       if (ospf_spf_has_vertex (rv, nv, w_lsa->data))
         {
-          zlog_info ("Z: The LSA is already in SPF");
+          zlog_info ("The LSA is already in SPF");
           continue;
         }
 
@@ -576,8 +574,8 @@ ospf_spf_next (struct vertex *v, struct ospf_area *area,
 
 /* Add vertex V to SPF tree. */
 void
-ospf_spf_register (struct vertex *v, struct route_table *rv, 
-                   struct route_table *nv)
+ospf_spf_register (struct vertex *v, struct route_table *rv,
+		   struct route_table *nv)
 {
   struct prefix p;
   struct route_node *rn;
@@ -653,9 +651,8 @@ ospf_spf_process_stubs (struct ospf_area *area, struct vertex * v,
   listnode cnode;
   struct vertex *child;
 
-  zlog_info ("Z: ospf_process_stub():processing stubs for area %s",
-                 inet_ntoa (area->area_id));
-
+  zlog_info ("ospf_process_stub():processing stubs for area %s",
+	     inet_ntoa (area->area_id));
   if (v->type == OSPF_VERTEX_ROUTER)
     {
       u_char *p;
@@ -663,14 +660,12 @@ ospf_spf_process_stubs (struct ospf_area *area, struct vertex * v,
       struct router_lsa_link *l;
       struct router_lsa *rlsa;
 
-      zlog_info ("Z: ospf_process_stub():processing router LSA, id: %s",
+      zlog_info ("ospf_process_stub():processing router LSA, id: %s",
                  inet_ntoa (v->lsa->id));
-
       rlsa = (struct router_lsa *) v->lsa;
 
-      zlog_info ("Z: ospf_process_stub(): we have %d links to process",
+      zlog_info ("ospf_process_stub(): we have %d links to process",
                  ntohs (rlsa->links));
-
       p = ((u_char *) v->lsa) + 24;
       lim = ((u_char *) v->lsa) + ntohs (v->lsa->length);
 
@@ -686,11 +681,11 @@ ospf_spf_process_stubs (struct ospf_area *area, struct vertex * v,
         }
     }
 
-  zlog_info ("Z: children of V:");
+  zlog_info ("children of V:");
   for (cnode = listhead (v->child); cnode; nextnode (cnode))
     {
       child = getdata (cnode);
-      zlog_info ("Z:  child : %s", inet_ntoa (child->id));
+      zlog_info (" child : %s", inet_ntoa (child->id));
     }
 
   for (cnode = listhead (v->child); cnode; nextnode (cnode))
@@ -755,13 +750,13 @@ ospf_rtrs_print (struct route_table *rtrs)
             case OSPF_PATH_INTRA_AREA:
               zlog_info ("%s   [%d] area: %s", 
                          inet_ntop (AF_INET, &or->id, buf1, BUFSIZ), or->cost,
-                         inet_ntop (AF_INET, &or->u.std.area->area_id,
+                         inet_ntop (AF_INET, &or->u.std.area_id,
                                     buf2, BUFSIZ));
               break;
             case OSPF_PATH_INTER_AREA:
               zlog_info ("%s IA [%d] area: %s", 
                          inet_ntop (AF_INET, &or->id, buf1, BUFSIZ), or->cost,
-                         inet_ntop (AF_INET, &or->u.std.area->area_id,
+                         inet_ntop (AF_INET, &or->u.std.area_id,
                                     buf2, BUFSIZ));
               break;
             default:

@@ -19,10 +19,10 @@ libzebra_a_LIBADD = @LIB_REGEX@
 
 noinst_HEADERS = \
 	buffer.h command.h filter.h getopt.h hash.h if.h linklist.h log.h \
-	memory.h network.h prefix.h roken.h routemap.h distribute.h \
-	sockunion.h str.h stream.h table.h thread.h vector.h version.h \
-	vty.h zebra.h plist.h zclient.h sockopt.h smux.h md5-gnu.h if_rmap.h \
-	newlist.h flap.h keychain.h
+	memory.h network.h prefix.h routemap.h distribute.h sockunion.h \
+	str.h stream.h table.h thread.h vector.h version.h vty.h zebra.h \
+	plist.h zclient.h sockopt.h smux.h md5-gnu.h if_rmap.h newlist.h \
+	flap.h keychain.h
 
 EXTRA_DIST = regex.c regex-gnu.h
 
@@ -34,7 +34,7 @@ depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
 ## File dependency.
-buffer.o: buffer.c memory.h buffer.h roken.h
+buffer.o: buffer.c memory.h buffer.h
 checksum.o: checksum.c
 command.o: command.c command.h vector.h vty.h memory.h log.h version.h
 daemon.o: daemon.c
@@ -68,8 +68,8 @@ routemap.o: routemap.c linklist.h memory.h vector.h prefix.h \
  routemap.h command.h vty.h
 smux.o: smux.c
 sockopt.o: sockopt.c log.h
-sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h roken.h \
- str.h log.h
+sockunion.o: sockunion.c prefix.h vty.h sockunion.h memory.h str.h \
+ log.h
 str.o: str.c str.h
 stream.o: stream.c stream.h memory.h network.h prefix.h
 table.o: table.c prefix.h table.h memory.h sockunion.h
@@ -79,5 +79,5 @@ vector.o: vector.c vector.h memory.h
 version.o: version.c
 vty.o: vty.c linklist.h buffer.h version.h command.h vector.h vty.h \
  sockunion.h thread.h memory.h str.h log.h prefix.h filter.h if.h
-zclient.o: zclient.c prefix.h stream.h network.h roken.h if.h \
- linklist.h log.h thread.h zclient.h memory.h ../zebra/zserv.h
+zclient.o: zclient.c prefix.h stream.h network.h if.h linklist.h log.h \
+ thread.h zclient.h memory.h ../zebra/zserv.h

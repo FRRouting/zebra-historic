@@ -79,6 +79,9 @@ void new_lsdb_delete_all (struct new_lsdb *);
 struct ospf_lsa *new_lsdb_lookup (struct new_lsdb *, struct ospf_lsa *);
 struct ospf_lsa *new_lsdb_lookup_by_id (struct new_lsdb *, u_char,
 					struct in_addr, struct in_addr);
+struct ospf_lsa *new_lsdb_lookup_by_id_next (struct new_lsdb *, u_char,
+					     struct in_addr, struct in_addr,
+					     int);
 unsigned long new_lsdb_count_all (struct new_lsdb *);
 unsigned long new_lsdb_count (struct new_lsdb *, int);
 unsigned long new_lsdb_count_self (struct new_lsdb *, int);

@@ -41,6 +41,10 @@ struct ospf_area_range
 
 
 struct ospf_area_range *ospf_some_area_range_match (struct prefix_ipv4 *p);
+struct ospf_area_range *ospf_area_range_lookup (struct ospf_area *,
+						struct in_addr *);
+struct ospf_area_range *ospf_area_range_lookup_next (struct ospf_area *,
+						     struct in_addr *, int);
 int ospf_range_active (struct ospf_area_range *range);                       
 int ospf_act_bb_connection ();
 

@@ -25,7 +25,6 @@
 #include "stream.h"
 #include "network.h"
 #include "prefix.h"
-#include "roken.h"
 #include "log.h"
 #include "sockunion.h"
 #include "zclient.h"
@@ -1153,6 +1152,7 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info, struct bgp *bgp)
 {
   int flags;
   u_char distance;
+  struct peer *peer;
 
   if (zclient->sock < 0)
     return;
@@ -1160,10 +1160,17 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info, struct bgp *bgp)
   if (! zclient->redist[ZEBRA_ROUTE_BGP])
     return;
 
-  if (peer_sort (info->peer) == BGP_PEER_IBGP)
-    flags = ZEBRA_FLAG_INTERNAL;
-  else
-    flags = 0;
+  flags = 0;
+  peer = info->peer;
+
+  if (peer_sort (peer) == BGP_PEER_IBGP || peer_sort (peer) == BGP_PEER_CONFED)
+    {
+      SET_FLAG (flags, ZEBRA_FLAG_IBGP);
+      SET_FLAG (flags, ZEBRA_FLAG_INTERNAL);
+    }
+
+  if (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
+    SET_FLAG (flags, ZEBRA_FLAG_INTERNAL);
 
   if (p->family == AF_INET)
     {
@@ -1242,6 +1249,7 @@ void
 bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
 {
   int flags;
+  struct peer *peer;
 
   if (zclient->sock < 0)
     return;
@@ -1249,10 +1257,17 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
   if (! zclient->redist[ZEBRA_ROUTE_BGP])
     return;
 
-  if (peer_sort (info->peer) == BGP_PEER_IBGP)
-    flags = ZEBRA_FLAG_INTERNAL;
-  else
-    flags = 0;
+  peer = info->peer;
+  flags = 0;
+
+  if (peer_sort (peer) == BGP_PEER_IBGP)
+    {
+      SET_FLAG (flags, ZEBRA_FLAG_INTERNAL);
+      SET_FLAG (flags, ZEBRA_FLAG_IBGP);
+    }
+
+  if (peer_sort (peer) == BGP_PEER_EBGP && peer->ttl != 1)
+    SET_FLAG (flags, ZEBRA_FLAG_INTERNAL);
 
   if (p->family == AF_INET)
     {

@@ -43,10 +43,6 @@ struct host
   /* System wide terminal lines. */
   int lines;
 
-#ifdef HAVE_PTHREAD
-  /*   pthread_mutex_t mutex_lock; */
-#endif /* HAVE_PTHREAD */  
-
   /* Log filename. */
   char *logfile;
 
@@ -76,6 +72,7 @@ enum node_type
   ENABLE_NODE,			/* Enable node. */
   CONFIG_NODE,			/* Config node. Default mode of config file. */
   DEBUG_NODE,			/* Debug node. */
+  AAA_NODE,			/* AAA node. */
   KEYCHAIN_NODE,		/* Key-chain node. */
   KEYCHAIN_KEY_NODE,		/* Key-chain key node. */
   INTERFACE_NODE,		/* Interface mode node. */

@@ -139,7 +139,7 @@ route_set_metric_compile (char *arg)
       type = metric_increment;
       pnt++;
     }
-  else if (arg[1] == '-')
+  else if (arg[0] == '-')
     {
       type = metric_decrement;
       pnt++;

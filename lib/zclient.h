@@ -123,9 +123,10 @@ void zclient_redistribute_default_unset (struct zclient *);
 /* struct zebra *zebra_new (); */
 int zebra_redistribute_send (int, int, int);
 
-struct connected *zebra_interface_address_add_read (struct stream *);
 struct interface *zebra_interface_add_read (struct stream *);
 struct interface *zebra_interface_state_read (struct stream *s);
+struct connected *zebra_interface_address_add_read (struct stream *);
+struct connected *zebra_interface_address_delete_read (struct stream *);
 
 #ifdef HAVE_IPV6
 /* IPv6 prefix add and delete function prototype. */

@@ -27,10 +27,6 @@
 #define RIB_LINK      0x02
 #define RIB_INTERNAL  0x04
 
-#ifndef INTERFACE_UNKNOWN
-#define INTERFACE_UNKNOWN 0
-#endif /* INTERFACE_UNKNOWN */
-
 #define RIB_FIB_SET(RIB) (((RIB)->status) |= RIB_FIB)
 #define RIB_FIB_UNSET(RIB) (((RIB)->status) &= ~RIB_FIB)
 #define IS_RIB_FIB(RIB)  (((RIB)->status) & RIB_FIB)
@@ -59,6 +55,9 @@ struct rib
     struct in6_addr gate6;
 #endif
     unsigned int ifindex;
+#ifdef HAVE_IF_PSEUDO
+    char ifname[INTERFACE_NAMSIZ];
+#endif /* HAVE_IF_PSEUDO */
   } u;
   struct
   {
@@ -67,6 +66,9 @@ struct rib
     struct in6_addr gate6;
 #endif
     unsigned int ifindex;
+#ifdef HAVE_IF_PSEUDO    
+    char ifname[INTERFACE_NAMSIZ];
+#endif /* HAVE_IF_PSEUDO */
   } i;
 
   struct rib *next;
@@ -93,6 +95,15 @@ int
 rib_delete_ipv4 (int type, int flags, struct prefix_ipv4 *p,
 		 struct in_addr *gate, unsigned int ifindex, int table);
 
+#ifdef HAVE_IF_PSEUDO
+int
+rib_add_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p, 
+		     struct in_addr *gate, char *ifname , int table);
+
+int
+rib_delete_ipv4_pseudo (int type, int flags, struct prefix_ipv4 *p,
+		 struct in_addr *gate, char *ifname, int table);
+#endif /* HAVE_IF_PSEUDO */
 #ifdef HAVE_IPV6
 int
 rib_add_ipv6 (int type, int flags, struct prefix_ipv6 *p,
@@ -106,7 +117,9 @@ rib_delete_ipv6 (int type, int flags, struct prefix_ipv6 *p,
 void rib_if_up (struct interface *);
 void rib_if_down (struct interface *);
 void rib_if_delete (struct interface *);
-
+#ifdef HAVE_IF_PSEUDO
+void rib_ifindex_update_name(char *name,int ifindex_new);
+#endif /* HAVE_IF_PSEUDO */
 u_int32_t rib_lookup_ipv4_nexthop (struct in_addr);
 
 #endif /*_ZEBRA_RIB_H */

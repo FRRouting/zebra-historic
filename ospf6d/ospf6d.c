@@ -61,9 +61,9 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
 {
   rtr_id_t rtr_id;
   struct interface *ifp;
-  struct neighbor *nbr;
+  struct ospf6_neighbor *nbr;
   struct ospf6_interface *ospf6_interface;
-  struct area *area;
+  struct ospf6_area *area;
   listnode i, j, k;
 
   i = j = k = NULL;
@@ -84,7 +84,7 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
       if (argc > 1)
         {
           inet_pton (AF_INET, argv[1], &rtr_id);
-          nbr = nbr_lookup (rtr_id, ospf6_interface);
+          nbr = ospf6_neighbor_lookup (rtr_id, ospf6_interface);
           if (!nbr)
             return CMD_ERR_NO_MATCH;
           if (argc == 3)
@@ -96,7 +96,7 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
 
       for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
         {
-          nbr = (struct neighbor *) getdata (i);
+          nbr = (struct ospf6_neighbor *) getdata (i);
           ospf6_neighbor_vty_summary (vty, nbr);
         }
       return CMD_SUCCESS;
@@ -104,13 +104,13 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid_detail,
 
   for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
-      area = (struct area *)getdata (i);
+      area = (struct ospf6_area *)getdata (i);
       for (j = listhead (area->if_list); j; nextnode (j))
         {
           ospf6_interface = (struct ospf6_interface *)getdata (j);
           for (k = listhead (ospf6_interface->neighbor_list); k; nextnode (k))
             {
-              nbr = (struct neighbor *)getdata (k);
+              nbr = (struct ospf6_neighbor *)getdata (k);
               ospf6_neighbor_vty_summary (vty, nbr);
             }
         }
@@ -219,9 +219,9 @@ DEFUN (show_ipv6_ospf6_neighborlist,
        "Link State retransmission list\n"
        )
 {
-  struct area *o6a;
+  struct ospf6_area *o6a;
   struct ospf6_interface *o6i;
-  struct neighbor *o6n;
+  struct ospf6_neighbor *o6n;
   listnode i, j, k, l;
   struct ospf6_lsa *lsa;
   list lslist = NULL;
@@ -230,13 +230,13 @@ DEFUN (show_ipv6_ospf6_neighborlist,
 
   for (i = listhead (ospf6->area_list); i; nextnode (i))
     {
-      o6a = (struct area *) getdata (i);
+      o6a = (struct ospf6_area *) getdata (i);
       for (j = listhead (o6a->if_list); j; nextnode (j))
         {
           o6i = (struct ospf6_interface *) getdata (j);
           for (k = listhead (o6i->neighbor_list); k; nextnode (k))
             {
-              o6n = (struct neighbor *) getdata (k);
+              o6n = (struct ospf6_neighbor *) getdata (k);
 
               if (strncmp (argv[0], "sum", 3) == 0)
                 lslist = o6n->summarylist;
@@ -349,43 +349,143 @@ DEFUN (router_id,
 
 DEFUN (interface_area,
        interface_area_cmd,
-       "interface IFNAME area AREA_ID",
+       "interface IFNAME area A.B.C.D",
        "Enable routing on an IPv6 interface\n"
        IFNAME_STR
        "Set the OSPF6 area ID\n"
-       "A.B.C.D OSPF6 area ID in IP address format\n"
+       "OSPF6 area ID in IPv4 address notation\n"
        )
 {
+  struct ospf6 *o6;
   struct interface *ifp;
   struct ospf6_interface *o6i;
-  struct area *area;
-  area_id_t area_id;
+  struct ospf6_area *o6a;
+  u_int32_t area_id;
+
+  o6 = (struct ospf6 *) vty->index;
+
+  ifp = if_get_by_name (argv[0]);
+
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (!o6i)
+    o6i = ospf6_interface_create (ifp, ospf6);
 
   /* find/create ospf6 area */
   inet_pton (AF_INET, argv[1], &area_id);
-  area = ospf6_area_lookup (area_id);
-  if (!area)
-    area = ospf6_area_init (area_id);
+  o6a = ospf6_area_lookup (area_id, o6);
+  if (!o6a)
+    {
+      o6a = ospf6_area_create (area_id);
+      o6a->ospf6 = o6;
+      list_add_node (o6->area_list, o6a);
+    }
 
-  ifp = if_get_by_name (argv[0]);
-  o6i = (struct ospf6_interface *)ifp->info;
   if (o6i && o6i->area)
     {
-      if (o6i->area != area)
+      if (o6i->area != o6a)
         vty_out (vty, "Aready attached to area %s%s",
                  o6i->area->str, VTY_NEWLINE);
       return CMD_ERR_NOTHING_TODO;
     }
 
-  if (!o6i)
-    o6i = ospf6_interface_create (ifp, ospf6);
-
-  list_add_node (area->if_list, o6i);
-  o6i->area = area;
+  list_add_node (o6a->if_list, o6i);
+  o6i->area = o6a;
 
   /* must check if got already interface info from zebra */
   if (if_is_up (ifp))
     thread_add_event (master, interface_up, o6i, 0);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_interface,
+       no_interface_cmd,
+       "no interface IFNAME",
+       NO_STR
+       "Disable routing on an IPv6 interface\n"
+       IFNAME_STR
+       )
+{
+  listnode n;
+  struct interface *ifp;
+  struct ospf6_neighbor *o6n;
+  struct ospf6_interface *o6i;
+  struct ospf6_lsa *lsa;
+  struct ospf6 *o6;
+
+  o6 = (struct ospf6 *) vty->index;
+
+  ifp = if_lookup_by_name (argv[0]);
+  if (!ifp)
+    return CMD_ERR_NO_MATCH;
+
+  o6i = (struct ospf6_interface *) ifp->info;
+  if (!o6i)
+    return CMD_SUCCESS;
+
+  if (o6i->area)
+    thread_execute (master, interface_down, o6i, 0);
+
+  list_delete_by_val (o6i->area->if_list, o6i);
+  o6i->area = (struct ospf6_area *) NULL;
+
+  for (n = listhead (o6i->neighbor_list); n; nextnode (n))
+    {
+      o6n = (struct ospf6_neighbor *) getdata (n);
+      ospf6_neighbor_delete (o6n);
+    }
+  list_delete_all_node (o6i->neighbor_list);
+
+  if (o6i->thread_send_hello)
+    {
+      thread_cancel (o6i->thread_send_hello);
+      o6i->thread_send_hello = NULL;  
+    }
+  if (o6i->thread_send_lsack_delayed);
+    {
+      thread_cancel (o6i->thread_send_lsack_delayed);
+      o6i->thread_send_lsack_delayed = NULL;
+    }
+
+  while (listcount (o6i->lsa_delayed_ack))
+    {
+      n = listhead (o6i->lsa_delayed_ack);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_remove_delayed_ack (lsa, o6i);
+    }
+
+  ospf6_lsdb_remove_all (o6i->lsdb);
+  return CMD_SUCCESS;
+}
+
+DEFUN (area_range,
+       area_range_cmd,
+       "area A.B.C.D range X:X::X:X/M",
+       "OSPFv3 area parameters\n"
+       "OSPFv3 area ID in IPv4 address format\n"
+       "Summarize routes matching address/mask (border routers only)\n"
+       "IPv6 address range\n")
+{
+  struct ospf6 *o6;
+  struct ospf6_area *o6a;
+  u_int32_t area_id;
+  int ret;
+
+  o6 = (struct ospf6 *) vty->index;
+  inet_pton (AF_INET, argv[0], &area_id);
+  o6a = ospf6_area_lookup (area_id, o6);
+  if (! o6a)
+    {
+      vty_out (vty, "No such area%s", VTY_NEWLINE);
+      return CMD_ERR_NO_MATCH;
+    }
+
+  ret = str2prefix_ipv6 (argv[1], &o6a->area_range);
+  if (ret <= 0)
+    {
+      vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
+      return CMD_WARNING;
+    }
 
   return CMD_SUCCESS;
 }
@@ -444,8 +544,14 @@ int
 ospf6_config_write (struct vty *vty)
 {
   listnode j, k;
-  struct area *area;
+  struct ospf6_area *area;
   struct ospf6_interface *ospf6_interface;
+
+  if (!ospf6)
+    {
+      vty_out (vty, "!%s", VTY_NEWLINE);
+      return 0;
+    }
 
   /* OSPFv6 configuration. */
   vty_out (vty, "router ospf6%s", VTY_NEWLINE);
@@ -457,7 +563,7 @@ ospf6_config_write (struct vty *vty)
 
   for (j = listhead (ospf6->area_list); j; nextnode (j))
     {
-      area = (struct area *)getdata (j);
+      area = (struct ospf6_area *)getdata (j);
       for (k = listhead (area->if_list); k; nextnode (k))
         {
           ospf6_interface = (struct ospf6_interface *)getdata (k);
@@ -520,8 +626,10 @@ ospf6_init ()
   install_default (OSPF6_NODE);
   install_element (OSPF6_NODE, &router_id_cmd);
   install_element (OSPF6_NODE, &interface_area_cmd);
+  install_element (OSPF6_NODE, &no_interface_cmd);
   install_element (OSPF6_NODE, &passive_interface_cmd);
   install_element (OSPF6_NODE, &no_passive_interface_cmd);
+  install_element (OSPF6_NODE, &area_range_cmd);
 
   /* Make empty list of top list. */
   if_init ();

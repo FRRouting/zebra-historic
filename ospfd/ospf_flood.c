@@ -205,7 +205,7 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
       tv_cmp (tv_sub (now, current->tv_recv),
 	      int2tv (OSPF_MIN_LS_ARRIVAL)) < 0)
     {
-      zlog_info ("LSA[:Flooding]: LSA is received recently.");
+      zlog_info ("LSA[Flooding]: LSA is received recently.");
       return -1;
     }
 
@@ -232,9 +232,10 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
      timestamp the new LSA with the current time.  The flooding
      procedure cannot overwrite the newly installed LSA until
      MinLSArrival seconds have elapsed. */  
-//  if (!current || ospf_lsa_different (current, new))
-//    ospf_spf_calculate_schedule ();
-
+  /*
+    if (!current || ospf_lsa_different (current, new))
+      ospf_spf_calculate_schedule ();
+  */
   SET_FLAG (new->flags, OSPF_LSA_RECEIVED);
   ospf_lsa_is_self_originated (new); /* Let it set the flag */
   new = ospf_lsa_install (nbr->oi, new);
@@ -250,6 +251,9 @@ ospf_flood (struct ospf_neighbor *nbr, struct ospf_lsa *current,
      the routing domain. */
   if (ospf_lsa_is_self_originated (new))
     ospf_process_self_originated_lsa (new, oi->area);
+  else
+    /* Update statistics value for OSPF-MIB. */
+    ospf_top->rx_lsa_count++;
 
   return 0;
 }
@@ -266,8 +270,8 @@ ospf_flood_through_interface (struct interface *ifp,
   int retx_flag;
 
   if (ospf_zlog)
-    zlog_info ("Z: ospf_flood_through_interface(): considering int %s",
-	       ifp->name);
+    zlog_info ("ospf_flood_through_interface(): considering int %s",
+	       ifp->name); 
 
   if (!ospf_if_is_enable (ifp))
     return 0;
@@ -287,7 +291,7 @@ ospf_flood_through_interface (struct interface *ifp,
 
       onbr = rn->info;
       if (ospf_zlog)
-	zlog_info ("Z: ospf_flood_through_interface(): considering nbr %s",
+	zlog_info ("ospf_flood_through_interface(): considering nbr %s",
 		   inet_ntoa (onbr->router_id));
 
       /* If the neighbor is in a lesser state than Exchange, it
@@ -305,8 +309,7 @@ ospf_flood_through_interface (struct interface *ifp,
       if (onbr->status < NSM_Full)
 	{
 	  if (ospf_zlog)
-	    zlog_info ("Z: ospf_flood_through_interface(): nbr adj is not Full");
-
+	    zlog_info ("ospf_flood_through_interface(): nbr adj is not Full");
 	  ls_req = ospf_ls_request_lookup (onbr, lsa);
 	  if (ls_req != NULL)
 	    {
@@ -388,14 +391,29 @@ ospf_flood_through_interface (struct interface *ifp,
      value of MaxAge). */
 
   if (ospf_zlog)
-    zlog_info ("Z: ospf_flood_through_interface(): "
+    zlog_info ("ospf_flood_through_interface(): "
 	       "sending upd to int %s", oi->ifp->name);
+  /*  RFC2328  Section 13.3
+      On non-broadcast networks, separate	Link State Update
+      packets must be sent, as unicasts, to each adjacent	neighbor
+      (i.e., those in state Exchange or greater).	 The destination
+      IP addresses for these packets are the neighbors' IP
+      addresses.   */
+  if (oi->type == OSPF_IFTYPE_NBMA)
+    {
+      struct route_node *rn;
+      struct ospf_neighbor *nbr;
 
-  ospf_ls_upd_send_lsa (oi->nbr_self, lsa, OSPF_SEND_PACKET_INDIRECT);
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+        if ((nbr = rn->info) != NULL)
+	  if (nbr != oi->nbr_self && nbr->status >= NSM_Exchange)
+	    ospf_ls_upd_send_lsa (nbr, lsa, OSPF_SEND_PACKET_DIRECT);
+    }
+  else
+    ospf_ls_upd_send_lsa (oi->nbr_self, lsa, OSPF_SEND_PACKET_INDIRECT);
 
   return 0;
 }
-
 
 int
 ospf_flood_through_area (struct ospf_area * area,struct ospf_neighbor *inbr,

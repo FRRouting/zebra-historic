@@ -84,6 +84,7 @@ extern unsigned char ospf6_config_dump;
 extern unsigned char ospf6_dbex_dump;
 extern unsigned char ospf6_spf_dump;
 extern unsigned char ospf6_route_dump;
+extern unsigned char ospf6_lsdb_dump;
 
 #define IS_OSPF6_DUMP_HELLO (ospf6_message_hello_dump)
 #define IS_OSPF6_DUMP_DBDESC (ospf6_message_dbdesc_dump)
@@ -106,6 +107,7 @@ extern unsigned char ospf6_route_dump;
 #define IS_OSPF6_DUMP_DBEX (ospf6_dbex_dump)
 #define IS_OSPF6_DUMP_SPF (ospf6_spf_dump)
 #define IS_OSPF6_DUMP_ROUTE (ospf6_route_dump)
+#define IS_OSPF6_DUMP_LSDB (ospf6_lsdb_dump)
 
 char *ospf6_message_name (unsigned char);
 void ospf6_dump_message (struct iovec *);

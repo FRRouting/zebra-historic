@@ -291,6 +291,45 @@ new_lsdb_lookup_by_id (struct new_lsdb *lsdb, u_char type,
   return NULL;
 }
 
+struct ospf_lsa *
+new_lsdb_lookup_by_id_next (struct new_lsdb *lsdb, u_char type,
+			    struct in_addr id, struct in_addr adv_router,
+			    int first)
+{
+  struct route_table *table;
+  struct prefix_ls lp;
+  struct route_node *rn;
+  struct ospf_lsa *find;
+
+  table = lsdb->type[type].db;
+
+  memset (&lp, 0, sizeof (struct prefix_ls));
+  lp.family = 0;
+  lp.prefixlen = 64;
+  lp.id = id;
+  lp.adv_router = adv_router;
+
+  if (first)
+      rn = route_top (table);
+  else
+    {
+      rn = route_node_get (table, (struct prefix *) &lp);
+      rn = route_next (rn);
+    }
+
+  for (; rn; rn = route_next (rn))
+    if (rn->info)
+      break;
+
+  if (rn && rn->info)
+    {
+      find = rn->info;
+      route_unlock_node (rn);
+      return find;
+    }
+  return NULL;
+}
+
 unsigned long
 new_lsdb_count_all (struct new_lsdb *lsdb)
 {

@@ -32,7 +32,6 @@
 #include "if.h"
 #include "stream.h"
 #include "table.h"
-#include "roken.h"
 #include "command.h"
 #include "sockopt.h"
 #include "distribute.h"
@@ -194,7 +193,7 @@ ripng_send_packet (caddr_t buf, int bufsize, struct sockaddr_in6 *to,
   struct msghdr msg;
   struct iovec iov;
   struct cmsghdr  *cmsgptr;
-  char adata [sizeof (struct cmsghdr) + sizeof (struct in6_pktinfo)];
+  char adata [256];
   struct in6_pktinfo *pkt;
   struct sockaddr_in6 addr;
 
@@ -229,18 +228,18 @@ ripng_send_packet (caddr_t buf, int bufsize, struct sockaddr_in6 *to,
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;
   msg.msg_control = (void *) adata;
-  msg.msg_controllen = sizeof adata;
+  msg.msg_controllen = CMSG_SPACE(sizeof(struct in6_pktinfo));
 
   iov.iov_base = buf;
   iov.iov_len = bufsize;
 
   cmsgptr = (struct cmsghdr *)adata;
-  cmsgptr->cmsg_len = sizeof adata;
+  cmsgptr->cmsg_len = CMSG_LEN(sizeof (struct in6_pktinfo));
   cmsgptr->cmsg_level = IPPROTO_IPV6;
   cmsgptr->cmsg_type = IPV6_PKTINFO;
 
   pkt = (struct in6_pktinfo *) CMSG_DATA (cmsgptr);
-  bzero (&pkt->ipi6_addr, sizeof (struct in6_addr));
+  memset (&pkt->ipi6_addr, 0, sizeof (struct in6_addr));
   pkt->ipi6_ifindex = ifp->ifindex;
 
   ret = sendmsg (ripng->sock, &msg, 0);

@@ -40,4 +40,5 @@ struct community_list
 
 struct community_list *community_list_lookup (char *);
 int community_list_match (struct community *, struct community_list *);
+int community_list_match_exact (struct community *, struct community_list *);
 void community_list_init ();

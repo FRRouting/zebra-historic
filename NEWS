@@ -1,5 +1,99 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.89
+
+* Changes in lib
+
+** distribute-list can set all interface's access-list and prefix-list
+configuration.
+
+* Changes in rip
+
+** "show ip protocols" display proper distribute-list settings and
+distance settings.
+
+** When metric infinity route received withdraw the route from kernel
+immediately it used to be wait garbage collection.
+
+** key-chain can be used for simple password authentication.
+
+** RIPv2 MIB getnext interface bug is fixed.
+
+* Changes in vtysh
+
+** --with-libpam enable PAM authentication for vtysh.
+
+** Now vtysh read vtysh.conf.  This file should be
+${SYSCONFDIR}/etc/vtysh.conf for security reason.  Usually it is
+/usr/local/etc/vtysh.conf.
+
+** "username WORD nopassword" command is added to vtysh.
+
+* Chagees in ospfd
+
+** NBMA interface support is added.
+
+** OSPF area is sorted by area ID.
+
+** New implementation of OSPF refreesh.
+
+** OSPF-MIB read function is partly added.
+
+* Changes in bgpd
+
+** When the peering is done by ebgp-multihop, nexthop is looked up
+like IBGP routes.
+
+** "show ip mbgp" commands are changed to "show ip bgp ipv4
+multicast".
+
+** New terminal commands are added.
+  "show ip bgp ipv4 (unicast|multicast) filter-list WORD"
+  "show ip bgp ipv4 (unicast|multicast) community"
+  "show ip bgp ipv4 (unicast|multicast) community-list WORD"
+  "show ip bgp ipv4 (unicast|multicast) community-list WORD exact-match"
+
+** MBGP soft-reconfiguration command is added.
+  "clear ip bgp x.x.x.x ipv4 (unicast|multicast) in"
+  "clear ip bgp x.x.x.x ipv4 (unicast|multicast) out"
+  "clear ip bgp x.x.x.x ipv4 (unicast|multicast) soft"
+  "clear ip bgp <1-65535> ipv4 (unicast|multicast) in"
+  "clear ip bgp <1-65535> ipv4 (unicast|multicast) out"
+  "clear ip bgp <1-65535> ipv4 (unicast|multicast) soft"
+  "clear ip bgp * ipv4 (unicast|multicast) in"
+  "clear ip bgp * ipv4 (unicast|multicast) out"
+  "clear ip bgp * ipv4 (unicast|multicast) soft"
+
+** MED related commands are added.
+  "bgp deterministic-med"
+  "bgp bestpath med confed"
+  "bgp bestpath med missing-as-worst"
+
+** "bgp default local-preference" command is added.
+
+** BGP confederation peer's routes are passed to zebra like IBGP route.
+
+** Community match command is added.
+  "show ip bgp community <val>"
+  "show ip bgp community <val> exact-match"
+
+** EBGP multihop route treatment bug is fixed.  Now nexthop is
+resolved by IGP routes.
+
+** Some commands are added to show routes by filter-list and community
+value.
+  "show ip bgp ipv4 (unicast|multicast) filter-list WORD"
+  "show ip bgp ipv4 (unicast|multicast) community"
+  "show ip bgp ipv4 (unicast|multicast) community-list WORD"
+  "show ip bgp ipv4 (unicast|multicast) community-list WORD exact-match"
+
+* Changes in zebra
+
+** zebra read interface's address information using getifaddrs() when
+it is available.
+
+** Reflect IPv6 interface's address change to protocol daemons.
+
 * Changes in zebra-0.88
 
 * Changes in lib

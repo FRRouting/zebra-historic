@@ -322,6 +322,17 @@ community_list_match (struct community *com, struct community_list *list)
       return 1;
   return 0;
 }
+
+int
+community_list_match_exact (struct community *com, struct community_list *list)
+{
+  struct community_entry *entry;
+
+  for (entry = list->head; entry; entry = entry->next)
+    if (community_cmp (com, entry->com))
+      return 1;
+  return 0;
+}
 
 char *
 community_type_str (enum community_entry_type type)

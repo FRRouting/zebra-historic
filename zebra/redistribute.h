@@ -38,5 +38,7 @@ void zebra_interface_add_update (struct interface *ifp);
 void zebra_interface_delete_update (struct interface *ifp);
 void zebra_interface_address_add_update (struct interface *ifp, 
 					 struct connected *c);
+void zebra_interface_address_delete_update (struct interface *ifp, 
+					    struct connected *c);
 
 #endif /* _ZEBRA_REDISTRIBUTE_H */

@@ -53,6 +53,7 @@ struct spftree
 
 /* Function Prototypes */
 int spf_calculation (struct thread *);
+int ospf6_spf_calculation (u_int32_t);
 
 #endif /* OSPF6_SPF_H */
 

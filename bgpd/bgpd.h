@@ -83,12 +83,15 @@ struct bgp
   char *name;
 
   /* BGP configuration. */
-#define BGP_CONFIG_ROUTER_ID          0x01
-#define BGP_CONFIG_CLUSTER_ID         0x02
-#define BGP_CONFIG_CONFEDERATION      0x04
-#define BGP_CONFIG_ALWAYS_COMPARE_MED 0x08
-#define BGP_CONFIG_MISSING_AS_WORST   0x10
-#define BGP_CONFIG_NO_DEFAULT_IPV4    0x20
+#define BGP_CONFIG_ROUTER_ID            0x001
+#define BGP_CONFIG_CLUSTER_ID           0x002
+#define BGP_CONFIG_CONFEDERATION        0x004
+#define BGP_CONFIG_ALWAYS_COMPARE_MED   0x008
+#define BGP_CONFIG_DETERMINISTIC_MED    0x010
+#define BGP_CONFIG_MED_MISSING_AS_WORST 0x020
+#define BGP_CONFIG_MED_CONFED           0x040
+#define BGP_CONFIG_NO_DEFAULT_IPV4      0x080
+#define BGP_CONFIG_NO_CLIENT_TO_CLIENT  0x100
   u_int16_t config;
 
   /* BGP identifier. */
@@ -137,6 +140,9 @@ struct bgp
   u_char distance_ebgp;
   u_char distance_ibgp;
   u_char distance_local;
+  
+  /* BGP default local-preference. */
+  u_int32_t default_local_pref;
 };
 
 /* BGP peer-group support. */
@@ -279,7 +285,7 @@ struct peer
   u_char afc_nego[AFI_MAX][SAFI_MAX];
 
   /* Route refresh capability. */
-  u_char refresh;
+  u_char refresh_adv;
   u_char refresh_nego;
 
   /* User configuration flags. */
@@ -354,6 +360,9 @@ struct peer
 
   /* Notify data. */
   struct bgp_notify notify;
+
+  /* Whole packet size to be read. */
+  unsigned long packet_size;
 };
 
 /* This structure's member directly points incoming packet data

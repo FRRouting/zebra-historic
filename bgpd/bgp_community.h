@@ -45,6 +45,7 @@ struct community
 /* Prototypes of community attribute functions. */
 void community_init ();
 void community_free (struct community *);
+struct community *community_uniq_sort (struct community *);
 struct community *community_parse (char *, u_short);
 struct community *community_intern (struct community *);
 void community_unintern (struct community *);

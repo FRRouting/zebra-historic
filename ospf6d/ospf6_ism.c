@@ -65,7 +65,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_interface *ospf6_interf
   ospf6_interface->state = ifs_next;
 
   /* construct Router-LSA */
-  ospf6_lsa_update_router (ospf6_interface->area);
+  ospf6_lsa_update_router ((struct ospf6_area *) ospf6_interface->area);
 
   dr_change (ospf6_interface);
 
@@ -91,7 +91,7 @@ dr_change (struct ospf6_interface *ospf6_interface)
     }
 
   /* construct LSAs */
-  ospf6_lsa_update_router (ospf6_interface->area);
+  ospf6_lsa_update_router ((struct ospf6_area *) ospf6_interface->area);
   if (ospf6_interface->state == IFS_DR)
     {
       ospf6_lsa_update_network (ospf6_interface);
@@ -281,7 +281,7 @@ dr_election (struct ospf6_interface *ospf6_interface)
   list candidate_list = list_init ();
   listnode i, j, n;
   ifid_t prevdr, prevbdr, dr = 0, bdr;
-  struct neighbor *nbpi, *nbpj, myself, *nbr;
+  struct ospf6_neighbor *nbpi, *nbpj, myself, *nbr;
   int declare = 0;
   int gofive = 0;
 
@@ -311,7 +311,7 @@ step_two:
   declare = 0;
   for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
     {
-      nbpi = (struct neighbor *)getdata (i);
+      nbpi = (struct ospf6_neighbor *)getdata (i);
       if (nbpi->rtr_pri == 0)
         continue;
       if (nbpi->state < NBS_TWOWAY)
@@ -341,8 +341,8 @@ step_two:
       j = i;
       nextnode(j);
       assert (j);
-      nbpi = (struct neighbor *)getdata (i);
-      nbpj = (struct neighbor *)getdata (j);
+      nbpi = (struct ospf6_neighbor *)getdata (i);
+      nbpj = (struct ospf6_neighbor *)getdata (j);
       if (declare)
         {
           int deleted = 0;
@@ -390,7 +390,7 @@ step_two:
     {
       assert (candidate_list->count == 1);
       n = listhead (candidate_list);
-      nbr = (struct neighbor *)getdata (n);
+      nbr = (struct ospf6_neighbor *)getdata (n);
       bdr = nbr->rtr_id;
     }
   else
@@ -405,7 +405,7 @@ step_two:
   declare = 0;
   for (i = listhead (ospf6_interface->neighbor_list); i; nextnode (i))
     {
-      nbpi = (struct neighbor *)getdata (i);
+      nbpi = (struct ospf6_neighbor *)getdata (i);
       if (nbpi->rtr_pri == 0)
         continue;
       if (nbpi->state < NBS_TWOWAY)
@@ -442,8 +442,8 @@ step_two:
           j = i;
           nextnode (j);
           assert (j);
-          nbpi = (struct neighbor *)getdata (i);
-          nbpj = (struct neighbor *)getdata (j);
+          nbpi = (struct ospf6_neighbor *)getdata (i);
+          nbpj = (struct ospf6_neighbor *)getdata (j);
 
           if (nbpi->dr != nbpi->rtr_id)
             {
@@ -491,7 +491,7 @@ step_two:
         {
           assert (candidate_list->count == 1);
           n = listhead (candidate_list);
-          nbr = (struct neighbor *)getdata (n);
+          nbr = (struct ospf6_neighbor *)getdata (n);
           dr = nbr->rtr_id;
         }
       else

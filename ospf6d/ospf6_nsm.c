@@ -22,49 +22,48 @@
 #include "ospf6d.h"
 
 int
-nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
+nbs_change (state_t nbs_next, char *reason, struct ospf6_neighbor *o6n)
 {
   state_t nbs_previous;
 
-  nbs_previous = nbr->state;
-  nbr->state = nbs_next;
+  nbs_previous = o6n->state;
+  o6n->state = nbs_next;
 
   if (nbs_previous == nbs_next)
     return 0;
 
   /* statistics */
-  nbr->ospf6_stat_state_changed++;
+  o6n->ospf6_stat_state_changed++;
 
   /* log */
   if (IS_OSPF6_DUMP_NEIGHBOR)
     {
       if (reason)
         zlog_info ("Neighbor status change %s: [%s]->[%s](%s)",
-                   nbr->str,
+                   o6n->str,
                    nbs_name[nbs_previous], nbs_name[nbs_next],
                    reason);
       else
         zlog_info ("Neighbor status change %s: [%s]->[%s]",
-                   nbr->str,
+                   o6n->str,
                    nbs_name[nbs_previous], nbs_name[nbs_next]);
     }
 
   if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
-    nbs_full_change (nbr->ospf6_interface);
+    nbs_full_change (o6n->ospf6_interface);
 
-#if 0
   /* check for LSAs that already reached MaxAge */
-  /* for Interface scope LSA */
-  ospf6_lsdb_maxage_remove_interface (nbr->ospf6_interface);
+  if (nbs_previous == NBS_EXCHANGE || nbs_previous == NBS_LOADING)
+    {
+      /* for Linklocal scope LSA */
+      ospf6_lsdb_check_maxage_linklocal (o6n->ospf6_interface);
 
-  /* for Area scope LSA */
-  ospf6_lsdb_maxage_remove_area (nbr->ospf6_interface->area);
+      /* for Area scope LSA */
+      ospf6_lsdb_check_maxage_area (o6n->ospf6_interface->area);
 
-  /* for AS scope LSA */
-  ospf6_lsdb_maxage_remove_as (nbr->ospf6_interface->area->ospf6);
-#else
-  ospf6_lsdb_check_maxage_lsa (ospf6);
-#endif
+      /* for AS scope LSA */
+      ospf6_lsdb_check_maxage_as (o6n->ospf6_interface->area->ospf6);
+    }
 
   return 0;
 }
@@ -85,18 +84,18 @@ nbs_full_change (struct ospf6_interface *ospf6_interface)
 
 /* RFC2328 section 10.4 */
 int
-need_adjacency (struct neighbor *nbr)
+need_adjacency (struct ospf6_neighbor *o6n)
 {
 
-  if (nbr->ospf6_interface->state == IFS_PTOP)
+  if (o6n->ospf6_interface->state == IFS_PTOP)
     return 1;
-  if (nbr->ospf6_interface->state == IFS_DR)
+  if (o6n->ospf6_interface->state == IFS_DR)
     return 1;
-  if (nbr->ospf6_interface->state == IFS_BDR)
+  if (o6n->ospf6_interface->state == IFS_BDR)
     return 1;
-  if (nbr->rtr_id == nbr->ospf6_interface->dr)
+  if (o6n->rtr_id == o6n->ospf6_interface->dr)
     return 1;
-  if (nbr->rtr_id == nbr->ospf6_interface->bdr)
+  if (o6n->rtr_id == o6n->ospf6_interface->bdr)
     return 1;
 
   return 0;
@@ -105,53 +104,53 @@ need_adjacency (struct neighbor *nbr)
 int
 hello_received (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *HelloReceived*", nbr->str);
+    zlog_info ("Neighbor Event %s: *HelloReceived*", o6n->str);
 
-  if (nbr->inactivity_timer)
-    thread_cancel (nbr->inactivity_timer);
+  if (o6n->inactivity_timer)
+    thread_cancel (o6n->inactivity_timer);
 
-  nbr->inactivity_timer = thread_add_timer (master, inactivity_timer, nbr,
-                                            nbr->ospf6_interface->dead_interval);
-  if (nbr->state <= NBS_DOWN)
-    nbs_change (NBS_INIT, "HelloReceived", nbr);
+  o6n->inactivity_timer = thread_add_timer (master, inactivity_timer, o6n,
+                                            o6n->ospf6_interface->dead_interval);
+  if (o6n->state <= NBS_DOWN)
+    nbs_change (NBS_INIT, "HelloReceived", o6n);
   return 0;
 }
 
 int
 twoway_received (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state > NBS_INIT)
+  if (o6n->state > NBS_INIT)
     return 0;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *2Way-Received*", nbr->str);
+    zlog_info ("Neighbor Event %s: *2Way-Received*", o6n->str);
 
-  thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
+  thread_add_event (master, neighbor_change, o6n->ospf6_interface, 0);
 
-  if (!need_adjacency (nbr))
+  if (!need_adjacency (o6n))
     {
-      nbs_change (NBS_TWOWAY, "No Need Adjacency", nbr);
+      nbs_change (NBS_TWOWAY, "No Need Adjacency", o6n);
       return 0;
     }
   else
-    nbs_change (NBS_EXSTART, "Need Adjacency", nbr);
+    nbs_change (NBS_EXSTART, "Need Adjacency", o6n);
 
-  DD_MSBIT_SET (nbr->dd_bits);
-  DD_MBIT_SET (nbr->dd_bits);
-  DD_IBIT_SET (nbr->dd_bits);
+  DD_MSBIT_SET (o6n->dd_bits);
+  DD_MBIT_SET (o6n->dd_bits);
+  DD_IBIT_SET (o6n->dd_bits);
 
-  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
+  thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -159,19 +158,19 @@ twoway_received (struct thread *thread)
 int
 negotiation_done (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state != NBS_EXSTART)
+  if (o6n->state != NBS_EXSTART)
     return 0;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *NegotiationDone*", nbr->str);
+    zlog_info ("Neighbor Event %s: *NegotiationDone*", o6n->str);
 
-  nbs_change (NBS_EXCHANGE, "NegotiationDone", nbr);
-  DD_IBIT_CLEAR (nbr->dd_bits);
+  nbs_change (NBS_EXCHANGE, "NegotiationDone", o6n);
+  DD_IBIT_CLEAR (o6n->dd_bits);
 
   return 0;
 }
@@ -179,32 +178,32 @@ negotiation_done (struct thread *thread)
 int
 exchange_done (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state != NBS_EXCHANGE)
+  if (o6n->state != NBS_EXCHANGE)
     return 0;
 
-  if (nbr->thread_dbdesc_retrans)
-    thread_cancel (nbr->thread_dbdesc_retrans);
-  nbr->thread_dbdesc_retrans = (struct thread *) NULL;
+  if (o6n->thread_dbdesc_retrans)
+    thread_cancel (o6n->thread_dbdesc_retrans);
+  o6n->thread_dbdesc_retrans = (struct thread *) NULL;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *ExchangeDone*", nbr->str);
+    zlog_info ("Neighbor Event %s: *ExchangeDone*", o6n->str);
 
-  list_delete_all_node (nbr->dd_retrans);
+  list_delete_all_node (o6n->dbdesc_lsa);
 
-  thread_add_timer (master, free_last_dd, nbr,
-                    nbr->ospf6_interface->dead_interval);
+  thread_add_timer (master, ospf6_neighbor_last_dbdesc_release, o6n,
+                    o6n->ospf6_interface->dead_interval);
 
-  if (list_isempty (nbr->requestlist))
-    nbs_change (NBS_FULL, "Requestlist Empty", nbr);
+  if (list_isempty (o6n->requestlist))
+    nbs_change (NBS_FULL, "Requestlist Empty", o6n);
   else
     {
-      thread_add_event (master, ospf6_send_lsreq, nbr, 0);
-      nbs_change (NBS_LOADING, "Requestlist Not Empty", nbr);
+      thread_add_event (master, ospf6_send_lsreq, o6n, 0);
+      nbs_change (NBS_LOADING, "Requestlist Not Empty", o6n);
     }
   return 0;
 }
@@ -212,20 +211,20 @@ exchange_done (struct thread *thread)
 int
 loading_done (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *) THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state != NBS_LOADING)
+  if (o6n->state != NBS_LOADING)
     return 0;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *LoadingDone*", nbr->str);
+    zlog_info ("Neighbor Event %s: *LoadingDone*", o6n->str);
 
-  assert (list_isempty (nbr->requestlist));
+  assert (list_isempty (o6n->requestlist));
 
-  nbs_change (NBS_FULL, "LoadingDone", nbr);
+  nbs_change (NBS_FULL, "LoadingDone", o6n);
 
   return 0;
 }
@@ -233,41 +232,41 @@ loading_done (struct thread *thread)
 int
 adj_ok (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *AdjOK?*", nbr->str);
+    zlog_info ("Neighbor Event %s: *AdjOK?*", o6n->str);
 
-  if (nbr->state == NBS_TWOWAY)
+  if (o6n->state == NBS_TWOWAY)
     {
-      if (!need_adjacency (nbr))
+      if (!need_adjacency (o6n))
         {
-          nbs_change (NBS_TWOWAY, "No Need Adjacency", nbr);
+          nbs_change (NBS_TWOWAY, "No Need Adjacency", o6n);
           return 0;
         }
       else
-        nbs_change (NBS_EXSTART, "Need Adjacency", nbr);
+        nbs_change (NBS_EXSTART, "Need Adjacency", o6n);
 
-      DD_MSBIT_SET (nbr->dd_bits);
-      DD_MBIT_SET (nbr->dd_bits);
-      DD_IBIT_SET (nbr->dd_bits);
+      DD_MSBIT_SET (o6n->dd_bits);
+      DD_MBIT_SET (o6n->dd_bits);
+      DD_IBIT_SET (o6n->dd_bits);
 
-      thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
+      thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
       return 0;
     }
 
-  if (nbr->state >= NBS_EXSTART)
+  if (o6n->state >= NBS_EXSTART)
     {
-      if (need_adjacency (nbr))
+      if (need_adjacency (o6n))
         return 0;
       else
         {
-          nbs_change (NBS_TWOWAY, "No Need Adjacency", nbr);
-          list_cleared_of_lsa (nbr);
+          nbs_change (NBS_TWOWAY, "No Need Adjacency", o6n);
+          ospf6_neighbor_list_remove_all (o6n);
         }
     }
   return 0;
@@ -276,28 +275,28 @@ adj_ok (struct thread *thread)
 int
 seqnumber_mismatch (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state < NBS_EXCHANGE)
+  if (o6n->state < NBS_EXCHANGE)
     return 0;
 
   /* statistics */
-  nbr->ospf6_stat_seqnum_mismatch++;
+  o6n->ospf6_stat_seqnum_mismatch++;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *SeqNumberMismatch*", nbr->str);
+    zlog_info ("Neighbor Event %s: *SeqNumberMismatch*", o6n->str);
 
-  nbs_change (NBS_EXSTART, "SeqNumberMismatch", nbr);
+  nbs_change (NBS_EXSTART, "SeqNumberMismatch", o6n);
 
-  DD_MSBIT_SET (nbr->dd_bits);
-  DD_MBIT_SET (nbr->dd_bits);
-  DD_IBIT_SET (nbr->dd_bits);
-  list_cleared_of_lsa (nbr);
+  DD_MSBIT_SET (o6n->dd_bits);
+  DD_MBIT_SET (o6n->dd_bits);
+  DD_IBIT_SET (o6n->dd_bits);
+  ospf6_neighbor_list_remove_all (o6n);
 
-  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
+  thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -305,28 +304,28 @@ seqnumber_mismatch (struct thread *thread)
 int
 bad_lsreq (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state < NBS_EXCHANGE)
+  if (o6n->state < NBS_EXCHANGE)
     return 0;
 
   /* statistics */
-  nbr->ospf6_stat_bad_lsreq++;
+  o6n->ospf6_stat_bad_lsreq++;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *BadLSReq*", nbr->str);
+    zlog_info ("Neighbor Event %s: *BadLSReq*", o6n->str);
 
-  nbs_change (NBS_EXSTART, "BadLSReq", nbr);
+  nbs_change (NBS_EXSTART, "BadLSReq", o6n);
 
-  DD_MSBIT_SET (nbr->dd_bits);
-  DD_MBIT_SET (nbr->dd_bits);
-  DD_IBIT_SET (nbr->dd_bits);
-  list_cleared_of_lsa (nbr);
+  DD_MSBIT_SET (o6n->dd_bits);
+  DD_MBIT_SET (o6n->dd_bits);
+  DD_IBIT_SET (o6n->dd_bits);
+  ospf6_neighbor_list_remove_all (o6n);
 
-  thread_add_event (master, ospf6_send_dbdesc, nbr, 0);
+  thread_add_event (master, ospf6_send_dbdesc, o6n, 0);
 
   return 0;
 }
@@ -334,48 +333,51 @@ bad_lsreq (struct thread *thread)
 int
 oneway_received (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
-  if (nbr->state < NBS_TWOWAY)
+  if (o6n->state < NBS_TWOWAY)
     return 0;
 
   /* statistics */
-  nbr->ospf6_stat_oneway_received++;
+  o6n->ospf6_stat_oneway_received++;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *1Way-Received*", nbr->str);
+    zlog_info ("Neighbor Event %s: *1Way-Received*", o6n->str);
 
-  nbs_change (NBS_INIT, "1Way-Received", nbr);
+  nbs_change (NBS_INIT, "1Way-Received", o6n);
 
-  thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
-  neighbor_thread_cancel (nbr);
-  list_cleared_of_lsa (nbr);
+  thread_add_event (master, neighbor_change, o6n->ospf6_interface, 0);
+
+  ospf6_neighbor_thread_cancel_all (o6n);
+  ospf6_neighbor_list_remove_all (o6n);
   return 0;
 }
 
 int
 inactivity_timer (struct thread *thread)
 {
-  struct neighbor *nbr;
+  struct ospf6_neighbor *o6n;
 
-  nbr = (struct neighbor *)THREAD_ARG  (thread);
-  assert (nbr);
+  o6n = (struct ospf6_neighbor *) THREAD_ARG (thread);
+  assert (o6n);
 
   /* statistics */
-  nbr->ospf6_stat_inactivity_timer++;
+  o6n->ospf6_stat_inactivity_timer++;
 
   if (IS_OSPF6_DUMP_NEIGHBOR)
-    zlog_info ("Neighbor Event %s: *InactivityTimer*", nbr->str);
+    zlog_info ("Neighbor Event %s: *InactivityTimer*", o6n->str);
 
-  nbr->inactivity_timer = NULL;
-  nbr->dr = nbr->bdr = nbr->prevdr = nbr->prevbdr = 0;
-  nbs_change (NBS_DOWN, "InactivityTimer", nbr);
-  neighbor_thread_cancel (nbr);
-  list_cleared_of_lsa (nbr);
-  thread_add_event (master, neighbor_change, nbr->ospf6_interface, 0);
+  o6n->inactivity_timer = NULL;
+  o6n->dr = o6n->bdr = o6n->prevdr = o6n->prevbdr = 0;
+  nbs_change (NBS_DOWN, "InactivityTimer", o6n);
+
+  thread_add_event (master, neighbor_change, o6n->ospf6_interface, 0);
+
+  list_delete_by_val (o6n->ospf6_interface->neighbor_list, o6n);
+  ospf6_neighbor_delete (o6n);
 
   return 0;
 }

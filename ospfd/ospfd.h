@@ -43,15 +43,6 @@
 /* Default configuration file name for ospfd. */
 #define OSPF_DEFAULT_CONFIG   "ospfd.conf"
 
-#if 0
-enum
-{
-  /* Debug option. */
-  DEBUG_OSPF_ISM = 0x01,
-  DEBUG_OSPF_NSM = 0x02,
-};
-#endif
-
 /* Architectual Constants */
 #ifdef DEBUG
 #define OSPF_LS_REFRESH_TIME                   300
@@ -95,6 +86,9 @@ enum
 
 #define OSPF_DEFAULT_REF_BANDWIDTH	100000  /* Kbps */
 
+#define OSPF_POLL_INTERVAL_DEFAULT         60
+#define OSPF_NEIGHBOR_PRIORITY_DEFAULT      0
+
 /* OSPF options. */
 #define OSPF_OPTION_T                    0x01  /* TOS. */
 #define OSPF_OPTION_E                    0x02
@@ -111,6 +105,15 @@ enum
 
 /* Timer value. */
 #define OSPF_ROUTER_ID_UPDATE_DELAY             1
+
+
+#ifdef DEBUG
+#define OSPF_LS_REFRESH_SHIFT       30
+#define OSPF_LS_REFRESH_JITTER      10
+#else
+#define OSPF_LS_REFRESH_SHIFT       (60 * 15)
+#define OSPF_LS_REFRESH_JITTER      60
+#endif
 
 /* OSPF instance structure. */
 struct ospf
@@ -146,13 +149,14 @@ struct ospf
   struct route_table *networks;         /* OSPF config networks. */
   list vlinks;                          /* Configured Virtual-Links. */
   list areas;                           /* OSPF areas. */
+  list nbr_static;
   struct ospf_area *backbone;           /* Pointer to the Backbone Area. */
 
   list iflist;                          /* Zebra derived interfaces. */
 
   /* LSDB of AS-external-LSAs. */
   struct new_lsdb *lsdb;
-
+  
   /* Redistributed external information. */
   struct route_table *external_info[ZEBRA_ROUTE_MAX + 1];
 #define EXTERNAL_INFO(T)      ospf_top->external_info[T]
@@ -220,44 +224,34 @@ struct ospf
   
   int default_metric;		/* Default metric for redistribute. */
 
-  /* Refresh queue. */
-  list            refresh_queue;          /* LSA Refreshment Queue. */
-  struct thread * t_lsa_refresher;        /* Refreshment Queue Server. */
-  int             refresh_queue_interval; /* How often the is served. */
-  int             refresh_queue_limit;    /* How many LSAs per interval. */
-  int             refresh_queue_count;    /* How many updated. */
-  int             refresh_per_slice;      /* How many LSAs in one slice */
-  int             refresh_group_limit;    /* How many LSAs in one group */
-  int             refresh_age_dif;        /* Max age difference */
-
-  list            refresh_group;        /* LSA Refresh Group. */
-  struct thread * t_refresh_group;      /* Refresh Group Checker. */
-  u_int16_t       group_age;            /* Min AGE in the LSA Group. */
-
+#define OSPF_LSA_REFRESHER_GRANULARITY 10
+#define OSPF_LSA_REFRESHER_SLOTS ((OSPF_LS_REFRESH_TIME + \
+                                  OSPF_LS_REFRESH_SHIFT)/10 + 1)
+  struct
+  {
+    u_int16_t index;
+    list qs[OSPF_LSA_REFRESHER_SLOTS];
+  } lsa_refresh_queue;
+  
+  struct thread *t_lsa_refresher;
+  time_t lsa_refresher_started;
+#define OSPF_LSA_REFRESH_INTERVAL_DEFAULT 10
+  u_int16_t lsa_refresh_interval;
+  
   /* Distance parameter. */
   u_char distance_all;
   u_char distance_intra;
   u_char distance_inter;
   u_char distance_external;
 
+  /* Statistics for LSA origination. */
+  u_int32_t lsa_originate_count;
+
+  /* Statistics for LSA used for new instantiation. */
+  u_int32_t rx_lsa_count;
+ 
   struct route_table *distance_table;
 };
-
-/* OSPF refresher related variables. */
-#define OSPF_REFRESH_QUEUE_INTERVAL 1
-#define OSPF_REFRESH_QUEUE_RATE     70
-#define OSPF_REFRESH_PER_SLICE      25
-
-#ifdef DEBUG
-#define OSPF_LS_REFRESH_SHIFT       30
-#else
-#define OSPF_LS_REFRESH_SHIFT       (60 * 15)
-#endif
-#define OSPF_LS_REFRESH_JITTER      10
-
-#define OSPF_REFRESH_GROUP_TIME    1
-#define OSPF_REFRESH_GROUP_AGE_DIF 3    /* We don't care if age is +-1 sec. */
-#define OSPF_REFRESH_GROUP_LIMIT   10   
 
 /* OSPF area structure. */
 struct ospf_area
@@ -266,7 +260,7 @@ struct ospf_area
   struct ospf *top;
 
   /* Reference count by ospf_network. */
-  int count;
+  /* int count; */
 
   /* Zebra interface list belonging to the area. */
   list iflist;
@@ -331,23 +325,20 @@ struct ospf_area
   struct vertex *spf;
 
   /* Threads. */
-  struct thread *t_router_lsa_self;	/* Self-originated router-LSA timer. */
+  struct thread *t_router_lsa_self;/* Self-originated router-LSA timer. */
 
   /* Statistics field. */
-  u_int32_t spf_calculation;		/* SPF Calculation Count. */
+  u_int32_t spf_calculation;	/* SPF Calculation Count. */
+
+  /* Router count. */
+  u_int32_t abr_count;		/* ABR router in this area. */
+  u_int32_t asbr_count;		/* ASBR router in this area. */
 
   /* Counters. */
-  u_int  act_ints;                      /* Active interfaces. */
-  u_int  full_nbrs;                     /* Fully adjacent neighbors. */
-  u_int  full_vls;                      /* Fully adjacent virtual neighbors. */
+  u_int32_t act_ints;		/* Active interfaces. */
+  u_int32_t full_nbrs;		/* Fully adjacent neighbors. */
+  u_int32_t full_vls;		/* Fully adjacent virtual neighbors. */
 };
-
-#if 0
-#define ROUTER_LSA(a)                   (a)->lsa[0]
-#define NETWORK_LSA(a)                  (a)->lsa[1]
-#define SUMMARY_LSA(a)                  (a)->lsa[2]
-#define SUMMARY_LSA_ASBR(a)             (a)->lsa[3]
-#endif
 
 /* OSPF config network structure. */
 struct ospf_network
@@ -359,6 +350,22 @@ struct ospf_network
   struct interface *ifp;
 };
 
+/* OSPF static neighbor structure. */
+struct ospf_nbr_static
+{
+  struct ospf_interface *oi;
+  struct ospf_neighbor *neighbor;
+
+  struct in_addr addr;
+  int priority;
+
+  u_int32_t v_poll;
+
+  struct thread *t_poll;
+
+  u_int32_t state_change;
+};
+
 /* Macro. */
 #define OSPF_AREA_SAME(X,Y) \
         (memcmp ((X->area_id), (Y->area_id), IPV4_MAX_BYTELEN) == 0)
@@ -366,8 +373,8 @@ struct ospf_network
 #define OSPF_IS_ABR		(ospf_top->flags & OSPF_FLAG_ABR)
 #define OSPF_IS_ASBR		(ospf_top->flags & OSPF_FLAG_ASBR)
 
-#define OSPF_IS_AREA_BACKBONE(A) \
-	((A)->area_id.s_addr == OSPF_AREA_BACKBONE)
+#define OSPF_IS_AREA_ID_BACKBONE(I) ((I).s_addr == OSPF_AREA_BACKBONE)
+#define OSPF_IS_AREA_BACKBONE(A) OSPF_IS_AREA_ID_BACKBONE ((A)->area_id)
 
 #define CHECK_FLAG(V,F)        ((V) & (F))
 #define SET_FLAG(V,F)          (V) = (V) | (F)
@@ -386,6 +393,19 @@ struct ospf_network
 #define OSPF_AREA_TIMER_ON(T,F,V) \
       if (!(T)) \
         (T) = thread_add_timer (master, (F), area, (V))
+
+#define OSPF_POLL_TIMER_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), nbr_static, (V))
+
+#define OSPF_POLL_TIMER_OFF(X) \
+      do { \
+        if (X) \
+          { \
+            thread_cancel (X); \
+            (X) = NULL; \
+          } \
+      } while (0)
 
 #define OSPF_TIMER_OFF(X) \
       do { \
@@ -421,15 +441,24 @@ void ospf_init (void);
 void ospf_if_update (void);
 void ospf_terminate (void);
 void ospf_route_init (void);
+void ospf_nbr_static_if_update (struct ospf_interface *);
+struct ospf_nbr_static *ospf_nbr_static_lookup_by_addr (struct in_addr);
+struct ospf_nbr_static *ospf_nbr_static_lookup_next (struct in_addr *, int);
 
 extern struct thread_master *master;
 extern struct ospf *ospf_top;
 
 struct ospf_area *ospf_area_new (struct in_addr);
+struct ospf_area *ospf_area_get (struct in_addr, int format);
+void ospf_area_check_free (struct in_addr);
 struct ospf_area *ospf_area_lookup_by_area_id (struct in_addr);
+void ospf_area_add_if (struct ospf_area *, struct interface *);
+void ospf_area_del_if (struct ospf_area *, struct interface *);
 void ospf_interface_down (struct ospf *, struct prefix *, struct ospf_area *);
 
 void ospf_route_map_init ();
+
+void ospf_snmp_init ();
 
 extern int ospf_zlog;
 

@@ -86,8 +86,6 @@ ospf6_routemap_rule_set_metric_type (void *rule, struct prefix *prefix,
   metric_type = rule;
   info = object;
 
-  zlog_info ("DEBUG: metric-type %s", metric_type);
-
   if (strcmp (metric_type, "type-2") == 0)
     info->metric_type = 2;
   else
@@ -128,8 +126,6 @@ ospf6_routemap_rule_set_metric (void *rule, struct prefix *prefix,
 
   metric = rule;
   info = object;
-
-  zlog_info ("DEBUG: metric %s", metric);
 
   info->metric = atoi (metric);
 

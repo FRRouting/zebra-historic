@@ -32,25 +32,43 @@ ospf6_vty_redistribute_config (struct vty *vty, struct ospf6 *ospf6)
   else
     return;
 
-  if (ospf6->redist_static)
-    vty_out (vty, "    static with metric mapped to %hu%s",
-             ospf6->cost_static, VTY_NEWLINE);
-  if (ospf6->redist_kernel)
-    vty_out (vty, "    kernel with metric mapped to %hu%s",
-             ospf6->cost_kernel, VTY_NEWLINE);
-  if (ospf6->redist_ripng)
-    vty_out (vty, "    ripng with metric mapped to %hu%s",
-             ospf6->cost_ripng, VTY_NEWLINE);
-  if (ospf6->redist_bgp)
-    vty_out (vty, "    bgp with metric mapped to %hu%s",
-             ospf6->cost_bgp, VTY_NEWLINE);
+  if (ospf6->redist_static && ospf6->rmap[ZEBRA_ROUTE_STATIC].map)
+    vty_out (vty, "    static with route-map %s%s",
+             ospf6->rmap[ZEBRA_ROUTE_STATIC].name , VTY_NEWLINE);
+  else if (ospf6->redist_static)
+    vty_out (vty, "    static%s", VTY_NEWLINE);
+
+  if (ospf6->redist_kernel && ospf6->rmap[ZEBRA_ROUTE_KERNEL].map)
+    vty_out (vty, "    kernel with route-map %s%s",
+             ospf6->rmap[ZEBRA_ROUTE_KERNEL].name , VTY_NEWLINE);
+  else if (ospf6->redist_kernel)
+    vty_out (vty, "    kernel%s", VTY_NEWLINE);
+
+  if (ospf6->redist_connected && ospf6->rmap[ZEBRA_ROUTE_CONNECT].map)
+    vty_out (vty, "    connected with route-map %s%s",
+             ospf6->rmap[ZEBRA_ROUTE_CONNECT].name , VTY_NEWLINE);
+  else if (ospf6->redist_connected)
+    vty_out (vty, "    connected%s", VTY_NEWLINE);
+
+  if (ospf6->redist_ripng && ospf6->rmap[ZEBRA_ROUTE_RIPNG].map)
+    vty_out (vty, "    ripng with route-map %s%s",
+             ospf6->rmap[ZEBRA_ROUTE_RIPNG].name , VTY_NEWLINE);
+  else if (ospf6->redist_ripng)
+    vty_out (vty, "    ripng%s", VTY_NEWLINE);
+
+  if (ospf6->redist_bgp && ospf6->rmap[ZEBRA_ROUTE_BGP].map)
+    vty_out (vty, "    bgp with route-map %s%s",
+             ospf6->rmap[ZEBRA_ROUTE_BGP].name , VTY_NEWLINE);
+  else if (ospf6->redist_bgp)
+    vty_out (vty, "    bgp%s", VTY_NEWLINE);
+
 }
 
 void
 ospf6_vty (struct vty *vty)
 {
   listnode n;
-  struct area *area;
+  struct ospf6_area *area;
 
   /* process id, router id */
   {
@@ -83,26 +101,17 @@ ospf6_vty (struct vty *vty)
   /* LSAs */
   vty_out (vty, " Number of AS scoped LSAs is %u%s",
            listcount (ospf6->lsdb), VTY_NEWLINE);
+  vty_out (vty, " Route calculation executed %d times%s",
+           ospf6->stat_route_calculation_execed, VTY_NEWLINE);
 
   /* Areas */
   vty_out (vty, " Number of areas in this router is %u%s",
            listcount (ospf6->area_list), VTY_NEWLINE);
   for (n = listhead (ospf6->area_list); n; nextnode (n))
     {
-      area = (struct area *) getdata (n);
+      area = (struct ospf6_area *) getdata (n);
       ospf6_area_vty (vty, area);
     }
-
-#if 0
-  /* Interface */
-  vty_out (vty, " Number of interfaces in this OSPF is %u%s",
-           listcount (ospf6->ospf6_interface_list), VTY_NEWLINE);
-  for (n = listhead (ospf6->ospf6_interface_list); n; nextnode (n))
-    {
-      o6i = (struct ospf6_interface *) getdata (n);
-      ospf6_interface_vty (vty, o6i);
-    }
-#endif /*0*/
 
 }
 
@@ -135,8 +144,7 @@ ospf6_create (unsigned long process_id)
   ospf6->process_id = process_id;
   ospf6->version = OSPF6_VERSION;
   ospf6->area_list = list_init ();
-  ospf6_lsdb_init_as (ospf6);
-  ospf6->ospf6_interface_list = list_init ();
+  ospf6->lsdb = list_init ();
   ospf6->ase_ls_id = 0;
 
   /* route table init */
@@ -161,15 +169,21 @@ ospf6_delete (struct ospf6 *ospf6)
   return;
 #else
   listnode n;
-  struct area *area;
+  struct ospf6_area *o6a;
+  struct ospf6_interface *o6i;
+  struct ospf6_neighbor *o6n;
 
   /* shutdown areas */
-  for (n = listhead (ospf6->area_list); n; nextnode (n))
+  while (list_count (ospf6->ospf6_area_list))
     {
-      area = (struct area *) getdata (n);
-      ospf6_area_delete (area);
+      o6a = (struct ospf6_area *) getdata (n);
+      ospf6_area_delete (o6a);
+      list_delete_by_val (ospf6->ospf6_area_list, o6a);
     }
-  list_delete_all (ospf6->area_list);
+  list_delete_all (ospf6->ospf6_area_list);
+
+  /* neighbors should have been deleted while shutting down areas */
+  list_delete_all (ospf6->ospf6_neighbor_list);
 
   /* finish AS scope link state database */
   ospf6_lsdb_finish_as (ospf6);

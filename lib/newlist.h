@@ -33,7 +33,6 @@ struct newlist
 
 struct newnode
 {
-  struct newlist *parent;
   struct newnode *next;
   struct newnode *prev;
   void *data;

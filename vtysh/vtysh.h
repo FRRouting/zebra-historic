@@ -28,6 +28,7 @@
 #define VTYSH_OSPFD  0x08
 #define VTYSH_OSPF6D 0x10
 #define VTYSH_BGPD   0x20
+#define VTYSH_ALL    VTYSH_ZEBRA|VTYSH_RIPD|VTYSH_RIPNGD|VTYSH_OSPFD|VTYSH_OSPF6D|VTYSH_BGPD
 
 #define VTYSH_INDEX_ZEBRA 0
 #define VTYSH_INDEX_RIP   1
@@ -45,6 +46,21 @@
 #define OSPF6_PATH "/tmp/ospf6d"
 #define BGP_PATH "/tmp/bgpd"
 
+#define VTYSH_DEFAULT_CONFIG "vtysh.conf"
+
+void vtysh_init_vty ();
 void vtysh_init_cmd ();
+void vtysh_connect_all ();
+void vtysh_readline_init ();
+void vtysh_user_init ();
+
+void vtysh_execute (char *);
+
+char *vtysh_prompt ();
+
+/* Child process execution flag. */
+extern int execute_flag;
+
+extern struct vty *vty;
 
 #endif /* VTYSH_H */

@@ -74,7 +74,9 @@
 /* RIP route types. */
 #define RIP_ROUTE_RTE                    0
 #define RIP_ROUTE_STATIC                 1
-#define RIP_ROUTE_CONNECTED              2
+#define RIP_ROUTE_DEFAULT                2
+#define RIP_ROUTE_REDISTRIBUTE           3
+#define RIP_ROUTE_INTERFACE              4
 
 /* RIP MD5 authentication. */
 #define RIP_AUTH_MD5_SIZE               16
@@ -125,6 +127,7 @@ struct rip
 
   /* RIP default distance. */
   u_char distance;
+  struct route_table *distance_table;
 
   /* For redistribute route map. */
   struct
@@ -401,10 +404,11 @@ int rip_offset_list_apply_in (struct prefix_ipv4 *, struct interface *, u_int32_
 int rip_offset_list_apply_out (struct prefix_ipv4 *, struct interface *, u_int32_t *);
 void rip_offset_clean ();
 
-/* functions to deal with rip Routing Table */
 void rip_info_free (struct rip_info *);
-
 u_char rip_distance_apply (struct rip_info *);
+void rip_redistribute_clean ();
+void rip_ifaddr_add (struct interface *, struct connected *);
+void rip_ifaddr_delete (struct interface *, struct connected *);
 
 /* There is only one rip strucutre. */
 extern struct rip *rip;

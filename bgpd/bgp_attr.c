@@ -25,7 +25,6 @@
 #include "linklist.h"
 #include "prefix.h"
 #include "memory.h"
-#include "roken.h"
 #include "vector.h"
 #include "vty.h"
 #include "stream.h"
@@ -1244,6 +1243,7 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
 
   /* Route Reflector. */
   if (peer_sort (peer) == BGP_PEER_IBGP &&
+      peer_sort (from) == BGP_PEER_IBGP &&
       conf->bgp->reflector_cnt)
     {
       /* Originator ID. */
@@ -1251,18 +1251,10 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
       stream_putc (s, BGP_ATTR_ORIGINATOR_ID);
       stream_putc (s, 4);
 
-      /* If this route is other peer's route. */
-      if (from != peer_self)
-	{
-	  stream_put_in_addr (s, &from->remote_id);
-	}
+      if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
+	stream_put_in_addr (s, &attr->originator_id);
       else
-	{
-	  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
-	    stream_put_in_addr (s, &attr->originator_id);
-	  else
-	    stream_put_in_addr (s, &conf->bgp->id);
-	}
+	stream_put_in_addr (s, &from->remote_id);
 
       /* Cluster list. */
       stream_putc (s, ATTR_FLAG_OPTIONAL);
@@ -1271,16 +1263,22 @@ bgp_packet_attribute (struct peer_conf *conf, struct peer *peer,
       if (attr->cluster)
 	{
 	  stream_putc (s, attr->cluster->length + 4);
+	  /* If this peer configuration's parent BGP has cluster_id. */
+	  if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	    stream_put_in_addr (s, &conf->bgp->cluster);
+	  else
+	    stream_put_in_addr (s, &conf->bgp->id);
 	  stream_put (s, attr->cluster->list, attr->cluster->length);
 	}
       else
-	stream_putc (s, 4);
-
-      /* If this peer configuration's parent BGP has cluster_id. */
-      if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
-	stream_put_in_addr (s, &conf->bgp->cluster);
-      else
-	stream_put_in_addr (s, &conf->bgp->id);
+	{
+	  stream_putc (s, 4);
+	  /* If this peer configuration's parent BGP has cluster_id. */
+	  if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	    stream_put_in_addr (s, &conf->bgp->cluster);
+	  else
+	    stream_put_in_addr (s, &conf->bgp->id);
+	}
     }
 
 #ifdef HAVE_IPV6
@@ -1589,6 +1587,7 @@ bgp_dump_routes_attr (struct stream *s, struct attr *attr)
 #if 0
   /* Route Reflector. */
   if (peer_sort (peer) == BGP_PEER_IBGP &&
+      peer_sort (from) == BGP_PEER_IBGP &&
       conf->bgp->reflector_cnt)
     {
       /* Originator ID. */
@@ -1596,18 +1595,10 @@ bgp_dump_routes_attr (struct stream *s, struct attr *attr)
       stream_putc (s, BGP_ATTR_ORIGINATOR_ID);
       stream_putc (s, 4);
 
-      /* If this route is other peer's route. */
-      if (from != peer_self)
-	{
-	  stream_put_in_addr (s, &from->remote_id);
-	}
+      if (attr->flag & ATTR_FLAG_BIT(BGP_ATTR_ORIGINATOR_ID))
+	stream_put_in_addr (s, &attr->originator_id);
       else
-	{
-	  if (attr->flag & ATTR_FLAG_BIT (BGP_ATTR_ORIGINATOR_ID))
-	    stream_put_in_addr (s, &attr->originator_id);
-	  else
-	    stream_put_in_addr (s, &conf->bgp->id);
-	}
+	stream_put_in_addr (s, &from->remote_id);
 
       /* Cluster list. */
       stream_putc (s, ATTR_FLAG_OPTIONAL);
@@ -1616,16 +1607,22 @@ bgp_dump_routes_attr (struct stream *s, struct attr *attr)
       if (attr->cluster)
 	{
 	  stream_putc (s, attr->cluster->length + 4);
+	  /* If this peer configuration's parent BGP has cluster_id. */
+	  if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	    stream_put_in_addr (s, &conf->bgp->cluster);
+	  else
+	    stream_put_in_addr (s, &conf->bgp->id);
 	  stream_put (s, attr->cluster->list, attr->cluster->length);
 	}
       else
-	stream_putc (s, 4);
-
-      /* If this peer configuration's parent BGP has cluster_id. */
-      if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
-	stream_put_in_addr (s, &conf->bgp->cluster);
-      else
-	stream_put_in_addr (s, &conf->bgp->id);
+	{
+	  stream_putc (s, 4);
+	  /* If this peer configuration's parent BGP has cluster_id. */
+	  if (conf->bgp->config & BGP_CONFIG_CLUSTER_ID)
+	    stream_put_in_addr (s, &conf->bgp->cluster);
+	  else
+	    stream_put_in_addr (s, &conf->bgp->id);
+	}
     }
 
   /* Extended Communities attribute. */

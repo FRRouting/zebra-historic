@@ -285,6 +285,11 @@ bgp_stop (struct peer *peer)
   BGP_READ_OFF (peer->t_read);
   BGP_WRITE_OFF (peer->t_write);
 
+  /* Stream reset. */
+  peer->packet_size = 0;
+  if (peer->ibuf)
+    stream_reset (peer->ibuf);
+
   /* Stop all timers. */
   BGP_TIMER_OFF (peer->t_start);
   BGP_TIMER_OFF (peer->t_connect);
@@ -326,7 +331,8 @@ bgp_stop (struct peer *peer)
   peer->afc_nego[AFI_IP6][SAFI_MULTICAST] = 0;
 
   /* Reset route refresh flag. */
-  peer->refresh = 0;
+  peer->refresh_adv = 0;
+  peer->refresh_nego = 0;
 
   return 0;
 }

@@ -90,7 +90,7 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
       nbr = getdata (node);
 
       /* neighbor declared to be DR. */
-      if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router))
+      if (NBR_IS_DR (nbr))
 	list_add_node (dr_list, nbr);
 
       /* Preserve neighbor BDR. */
@@ -106,10 +106,12 @@ ospf_elect_dr (struct ospf_interface *oi, list el_list)
 
   /* Set DR to interface. */
   if (dr)
-    /* DR (oi) = dr->router_id; */
-    DR (oi) = dr->address.u.prefix4;
-  else 
-    DR (oi).s_addr = 0;
+    {
+      DR (oi) = dr->address.u.prefix4;
+      dr->d_router = dr->address.u.prefix4;
+    }
+  else
+      DR (oi).s_addr = 0;
 
   list_delete_all (dr_list);
 
@@ -132,11 +134,11 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
       nbr = getdata (node);
 
       /* neighbor declared to be DR. */
-      if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->d_router))
+      if (NBR_IS_DR (nbr))
 	continue;
 
       /* neighbor declared to be BDR. */
-      if (IPV4_ADDR_SAME (&nbr->address.u.prefix4, &nbr->bd_router))
+      if (NBR_IS_BDR (nbr))
 	list_add_node (bdr_list, nbr);
 
       list_add_node (no_dr_list, nbr);
@@ -150,8 +152,10 @@ ospf_elect_bdr (struct ospf_interface *oi, list el_list)
 
   /* Set BDR to interface. */
   if (bdr)
-    /* BDR (oi) = bdr->router_id; */
-    BDR (oi) = bdr->address.u.prefix4;
+    {
+      BDR (oi) = bdr->address.u.prefix4;
+      bdr->bd_router = bdr->address.u.prefix4;
+    }
   else
     BDR (oi).s_addr = 0;
 
@@ -234,12 +238,11 @@ ospf_dr_election (struct ospf_interface *oi)
   zlog_info ("DR-Election[1st]: Backup %s", inet_ntoa (BDR (oi)));
   zlog_info ("DR-Election[1st]: DR     %s", inet_ntoa (DR (oi)));
 
-  if (IPV4_ADDR_SAME (&DR (oi), &BDR (oi)))
+  if (new_status != old_status &&
+      !(new_status == ISM_DROther && old_status < ISM_DROther))
     {
-      list_delete_by_val (el_list, dr);
-
       ospf_elect_bdr (oi, el_list);
-   /* ospf_elect_dr (oi, el_list); */
+      ospf_elect_dr (oi, el_list); 
 
       new_status = ospf_ism_status (oi);
 
@@ -254,13 +257,16 @@ ospf_dr_election (struct ospf_interface *oi)
       !IPV4_ADDR_SAME (&old_bdr, &BDR (oi)))
     ospf_dr_change (oi->nbrs);
 
-  /* Multicast group change. */
-  if ((old_status != ISM_DR && old_status != ISM_Backup) &&
-      (new_status == ISM_DR || new_status == ISM_Backup))
-    ospf_if_add_alldrouters (oi->ifp, oi->fd, oi->address);
-  else if ((old_status == ISM_DR || old_status == ISM_Backup) &&
-	   (new_status != ISM_DR && new_status != ISM_Backup))
-    ospf_if_drop_alldrouters (oi->ifp, oi->fd, oi->address);
+  if (oi->type == OSPF_IFTYPE_BROADCAST || oi->type == OSPF_IFTYPE_POINTOPOINT)
+    {
+      /* Multicast group change. */
+      if ((old_status != ISM_DR && old_status != ISM_Backup) &&
+	  (new_status == ISM_DR || new_status == ISM_Backup))
+	ospf_if_add_alldrouters (oi->ifp, oi->fd, oi->address);
+      else if ((old_status == ISM_DR || old_status == ISM_Backup) &&
+	       (new_status != ISM_DR && new_status != ISM_Backup))
+	ospf_if_drop_alldrouters (oi->ifp, oi->fd, oi->address);
+    }
 
   return new_status;
 }
@@ -403,6 +409,9 @@ ism_interface_up (struct ospf_interface *oi)
     /* Otherwise, the state transitions to Waiting. */
     next_state = ISM_Waiting;
 
+  if (oi->type == OSPF_IFTYPE_NBMA)
+      ospf_nbr_static_if_update (oi);
+
   /*  ospf_ism_event (t); */
   return next_state;
 }
@@ -424,6 +433,29 @@ ism_interface_down (struct ospf_interface *oi)
 {
   struct route_node *rn;
   struct ospf_neighbor *nbr;
+
+  listnode node;
+
+  /* delete all static neighbors attached to this interface */
+  for (node = listhead (oi->nbr_static); node; )
+    {
+      struct ospf_nbr_static *nbr_static;
+
+      nbr_static = getdata (node);
+      nextnode (node);
+
+      OSPF_POLL_TIMER_OFF (nbr_static->t_poll);
+
+      if (nbr_static->neighbor)
+	{
+	  nbr_static->neighbor->nbr_static = NULL;
+	  nbr_static->neighbor = NULL;
+	}
+
+      nbr_static->oi = NULL;
+
+      list_delete_by_val (oi->nbr_static, nbr_static);
+    }
 
   /* send Neighbor event KillNbr to all associated neighbors. */
   for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))

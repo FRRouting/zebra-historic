@@ -1,3 +1,145 @@
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.89 is released.
+
+2000-09-29  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_snmp.c (ospfHostEntry): OSPF Host MIB is implemented.
+
+	* ospfd.c (ospf_nbr_static_cmp): OSPF neighbor is sorted by it's
+	address.
+
+2000-09-28  Michael Rozhavsky  <mike@nbase.co.il>
+
+	* ospf_interface.c (ospf_if_free):  Fix deleting self neighbor twice.
+
+2000-09-27  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_read): Solaris on x86 has ip_len with host
+	byte order.
+
+2000-09-25  Toshiaki Takada  <takada@zebra.org>
+
+	* ospfd.c (ospf_compatible_rfc1583), (no_ospf_compatible_rfc1583):
+	Add CISCO compatible command.
+
+2000-09-25  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_abr.c (ospf_area_range_lookup): New function is added for
+	area range lookup in OSPF-MIB.
+	(ospf_area_range_lookup_next): Likewise.
+
+2000-09-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (no_router_ospf): Delete virtual link before deleting
+	area structure.
+
+	* ospf_lsa.c (ospf_external_lsa_refresh_type): Check
+	EXTERNAL_INFO(type).
+
+	* ospfd.c (no_router_ospf): Call ospf_vl_delete() instead of
+	ospf_vl_data_free().
+
+	* ospf_interface.c (ospf_vl_shutdown): Execute ISM_InterfaceDown
+	when ospf_vl_shutdown is called.
+	(ospf_vl_delete): Call ospf_vl_shutdown() to delete virtual link
+	interface's thread.
+
+2000-09-21  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_lsa.c: New implementation of OSPF refresh.
+
+2000-09-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_snmp.c (ospfLsdbLookup): Add LSDB MIB implementation.
+
+2000-09-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_snmp.c (ospfStubAreaEntry): Add OSPF stub area MIB.
+
+2000-09-18  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_route.h (route_standard):  Change member from `struct area'
+	to area_id.
+
+	* ospf_abr.c (ospf_abr_announce_network), (ospf_abr_should_announce),
+	(ospf_abr_process_network_rt), (ospf_abr_announce_rtr), 
+	(ospf_abr_process_router_rt):
+	* ospf_ase.c (ospf_find_asbr_route),
+	(ospf_find_asbr_router_through_area),
+	* ospf_ia.c (ospf_find_abr_route), (ospf_ia_router_route),
+	(process_summary_lsa), (ospf_update_network_route),
+	(ospf_update_router_route):
+	* ospf_route.c (ospf_intra_route_add), (ospf_intra_add_router),
+	(ospf_intra_add_transit), (ospf_intra_add_stub),
+	(ospf_route_table_dump), (show_ip_ospf_route_network),
+	(show_ip_ospf_route_router), (ospf_asbr_route_cmp),
+	(ospf_prune_unreachable_routers):
+	* ospf_spf.c (ospf_rtrs_print):
+	* ospfd.c (ospf_rtrs_free):  Fix the struct change above.
+
+2000-09-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_network.c (ospf_serv_sock_init): Enclose SO_BINDTODEVICE
+	with ifdef.
+
+2000-09-13  Gleb Natapov  <gleb@nbase.co.il>
+
+	* ospf_ism.c (ospf_elect_dr), (ospf_elect_bdr):  Fix DR election.
+
+	* ospf_network.c (ospf_serv_sock_init):  Add socket option
+	SO_BINDTODEVICE on read socket.
+
+	* ospf_packet.c (ospf_hello):  Ignore Hello packet if E-bit does
+	not match.
+
+	* ospfd.c (ospf_area_check_free), (ospf_area_get),
+	(ospf_area_add_if):  New function added.
+	
+2000-09-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_route.c (ospf_intra_add_router): Update ABR and ASBR router
+	count.
+
+	* ospf_spf.c (ospf_spf_init): Rest ABR and ASBR router count
+	starting SPF calculation.
+
+	* ospfd.h (struct ospf_area): Add ABR and ASBR router count.
+
+2000-09-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospfd.c (ospf_area_id_cmp): New area structure is sorted by area
+	ID.
+
+	* ospf_lsa.c (ospf_router_lsa_originate): For OSPF MIB update
+	lsa_originate_count.
+	(ospf_network_lsa_originate): Likewise.
+	(ospf_summary_lsa_originate): Likewise.
+	(ospf_summary_asbr_lsa_originate): Likewise.
+	(ospf_external_lsa_originate): Likewise.
+
+2000-09-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_snmp.c (ospf_variables): ospfRouterID's type RouterID
+	syntax is IpAddress.
+	(ospf_admin_stat): New function for OSPF administrative status
+	check.
+
+2000-09-10  Jochen Friedrich <jochen@scram.de>
+
+	* ospf_snmp.c: Implement OSPF MIB skeleton.
+
+2000-09-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_snmp.c: New file is added.
+
+2000-09-07  David Lipovkov <davidl@nbase.co.il>
+
+	* ospf_zebra.c (ospf_interface_delete): Add pseudo interface
+	treatment.
+
+	* ospf_interface.c (interface_config_write): Likewise.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.88 is released.

@@ -1,3 +1,89 @@
+2000-10-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra-0.89 is released.
+
+2000-10-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* linklist.c (list_add_node_head): Delete unused function.
+	(list_add_node_tail): Likewise.
+
+2000-09-26  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* stream.c (stream_read_unblock): Add new function for unblocking
+	read.
+
+2000-09-26  Jochen Friedrich <jochen@nwe.de>
+
+	* smux.c (smux_register): Fix bug of can't register more than one
+	MIB with SMUX.
+
+2000-09-26  Makoto Otsuka <otsuka@inl.ntts.co.jp>
+
+	* vty.c (vty_close): Fix memory leak of sb_buffer.
+	(vty_new): Likewise.
+
+2000-09-21  steve@Watt.COM (Steve Watt)
+
+	* log.h: Do not declare zlog_priority[0] variable.
+
+2000-09-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* linklist.h (struct _list ): Add member cmp for compare function.
+	(struct _list ): Member up is deleted
+
+2000-09-12  David Lipovkov <dlipovkov@OpticalAccess.com>
+
+	* if.c: Include RIP_API header when RIP API is enabled.
+
+2000-09-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* prefix.c (prefix_free): Siplify prefix_free().
+
+	* keychain.c (key_match_for_accept): strncmp check bug is fixed.
+
+2000-09-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h: Merge roken.h into zebra.h.
+
+2000-09-05  Akihiro Mizutani <mizutani@dml.com>
+
+	* routemap.c (route_map_init_vty): Install route-map command to
+	RMAP_NODE.
+
+2000-08-22  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* thread.c (thread_get_id): Remove pthread related garbage.
+
+	* command.h (struct host): Likewise.
+
+	* zebra.h: Likewise.
+
+2000-08-20  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* command.h (node_type ): Add AAA node for authentication.
+
+	* vty.c (vty_close): Do not close stdout.
+
+2000-08-18  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_init_vtysh): Added for vtysh.
+
+	* distribute.c (districute_list_prefix_all): Interface independent
+	filter can be set.
+	(distribute_list_all): Likewise.
+	(config_show_distribute): Display current distribute-list status
+	for "show ip protocols".
+
+2000-08-18  Akihiro Mizutani <mizutani@dml.com>
+
+	* command.c (config_terminal_no_length): no terminal monitor ->
+	terminal no monitor
+	(cmd_init): Do not install service_terminal_length_cmd into
+	ENABLE_NODE.
+
+	* vty.c (terminal_no_monitor): no terminal length -> terminal no
+	length.
+
 2000-08-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* zebra-0.88 is released.

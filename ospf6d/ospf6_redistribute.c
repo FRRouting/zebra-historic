@@ -48,8 +48,10 @@ ospf6_redistribute_routemap_set (struct ospf6 *o6, int type, char *mapname)
   o6->rmap[type].name = strdup (mapname);
   o6->rmap[type].map = route_map_lookup_by_name (mapname);
 
+#if 0
   if (o6->rmap[type].map == NULL)
     zlog_info ("DEBUG: route-map set failed");
+#endif
 }
 
 void
@@ -120,6 +122,13 @@ ospf6_redistribute_route_add (int type, int ifindex, struct prefix_ipv6 *p)
 
   /* set redistribute info */
   info = XMALLOC (MTYPE_OSPF6_OTHER, sizeof (struct ospf6_redistribute_info));
+  if (!info)
+    {
+      zlog_err ("Redistribute: Can't malloc ospf6_redistribute_info");
+      return;
+    }
+
+  memset (info, 0, sizeof (struct ospf6_redistribute_info));
   info->metric_type = 1;
   info->metric = 100;
   info->type = type;

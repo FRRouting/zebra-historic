@@ -20,8 +20,10 @@
 
 /*
  * OSPF6 List:
+ *   - don't use "while" iteration
  *   - use ospf6_list_head () & ospf6_list_next () for iteration.
- *   - don't break while iteration, because lock will be broken
+ *   - don't forget to unlock current node
+ *     before "break"ing "for" iteration, because lock will be broken
  */
 
 #include <zebra.h>
