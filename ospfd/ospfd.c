@@ -739,7 +739,7 @@ DEFUN (network_area,
 
   /* get network prefix. */
   ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -826,7 +826,7 @@ DEFUN (no_network_area,
   ospf = (struct ospf *) vty->index;
 
   ret = str2prefix_ipv4 (argv[0], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -926,7 +926,7 @@ DEFUN (area_range,
     }
 
   ret = str2prefix_ipv4 (argv[1], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify area range as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -978,7 +978,7 @@ DEFUN (no_area_range,
     }
 
   ret = str2prefix_ipv4 (argv[1], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify area range as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -1043,7 +1043,7 @@ DEFUN (area_range_suppress,
     }
 
   ret = str2prefix_ipv4 (argv[1], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify area range as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -1091,7 +1091,7 @@ DEFUN (no_area_range_suppress,
     }
 
   ret = str2prefix_ipv4 (argv[1], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify area range as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -1148,7 +1148,7 @@ DEFUN (area_range_subst,
     }
 
   ret = str2prefix_ipv4 (argv[1], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify area range as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -1156,7 +1156,7 @@ DEFUN (area_range_subst,
     }
 
   ret = str2prefix_ipv4 (argv[2], &subst);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify network prefix as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -1216,7 +1216,7 @@ DEFUN (no_area_range_subst,
     }
 
   ret = str2prefix_ipv4 (argv[1], &p);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify area range as a.b.c.d/mask%s",
 	       VTY_NEWLINE);
@@ -1233,7 +1233,7 @@ DEFUN (no_area_range_subst,
   range = (struct ospf_area_range *) node->info;
 
   ret = str2prefix_ipv4 (argv[2], &subst);
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify network prefix as a.b.c.d/mask%s",
 	       VTY_NEWLINE);

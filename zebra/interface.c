@@ -666,7 +666,7 @@ DEFUN (ip_address, ip_address_cmd,
   ifp = (struct interface *) vty->index;
 
   ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -718,7 +718,7 @@ DEFUN (no_ip_address, no_ip_address_cmd,
   ifp = (struct interface *) vty->index;
 
   ret = str2prefix_ipv4 (argv[0], (struct prefix_ipv4 *) &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -759,7 +759,7 @@ DEFUN (ipv6_address, ipv6_address_cmd,
   ifp = (struct interface *) vty->index;
 
   ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify IPv6 prefix with prefixlen%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -804,7 +804,7 @@ DEFUN (no_ipv6_address, no_ipv6_address_cmd,
   ifp = (struct interface *) vty->index;
 
   ret = str2prefix_ipv6 (argv[0],(struct prefix_ipv6 *) &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify IPv6 prefix with prefixlen%s", VTY_NEWLINE);
       return CMD_WARNING;

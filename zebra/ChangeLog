@@ -1,3 +1,13 @@
+2000-01-21  Hideto Yamakawa <hideto.yamakawa@soliton.co.jp>
+
+	* rtread_getmsg.c: Set some definition for Solaris 2.5 and Solaris
+	2.5.1.
+
+2000-01-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c (no_ipv6_route_ifname): Fix buf of cheking return value
+	from str2prefix_ipv6().
+
 2000-01-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* rt_socket.c: Revert to use RTF_HOST for IPv4 with /32 route and

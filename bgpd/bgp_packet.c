@@ -512,6 +512,65 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p, afi_t afi, safi_t safi)
 
   BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
 }
+
+char *
+afi2str (afi_t afi)
+{
+  if (afi == AFI_IP)
+    return "AFI_IP";
+  else if (afi == AFI_IP6)
+    return "AFI_IP6";
+  else
+    return "Unknown AFI";
+}
+
+char *
+safi2str (safi_t safi)
+{
+  if (safi == SAFI_UNICAST)
+    return "SAFI_UNICAST";
+  else if (safi == SAFI_MULTICAST)
+    return "SAFI_MULTICAST";
+  else
+    return "Unknown SAFI";
+}
+
+/* Send route refresh message to the peer. */
+void
+bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi)
+{
+  struct stream *s;
+  struct stream *packet;
+
+#ifdef DISABLE_BGP_ANNOUNCE
+  return;
+#endif /* DISABLE_BGP_ANNOUNCE */
+
+  zlog (peer->log, LOG_INFO, "%s [Refresh:SEND] %s %s", 
+	peer->host, afi2str (afi), safi2str (safi));
+
+  s = stream_new (BGP_MAX_PACKET_SIZE);
+
+  /* Make BGP update packet. */
+  bgp_packet_set_marker (s, BGP_MSG_ROUTE_REFRESH);
+
+  /* Encode Route Refresh message. */
+  stream_putw (s, afi);
+  stream_putc (s, 0);
+  stream_putc (s, safi);
+  
+  /* Set packet size. */
+  bgp_packet_set_size (s, 0);
+
+  /* Make real packet. */
+  packet = bgp_packet_dup (s);
+  stream_free (s);
+
+  /* Add packet to the peer. */
+  bgp_packet_add (peer, packet);
+
+  BGP_WRITE_ON (peer->t_write, bgp_write, peer->fd);
+}
 
 /* RFC1771 6.8 Connection collision detection. */
 int
@@ -987,6 +1046,10 @@ bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
 void
 bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
 {
+  afi_t afi;
+  safi_t safi;
+  u_char reserved;
+
   /* If peer does not have the capability, send notification. */
   if (! peer->refresh)
     {
@@ -1002,14 +1065,38 @@ bgp_route_refresh_receive (struct peer *peer, bgp_size_t size)
   if (peer->status != Established) 
     {
       plog_err (peer->log,
-		"%s [FSM] Route refresh packet received under status %s",
+		"%s [Error] Route refresh packet received under status %s",
 		peer->host, LOOKUP (bgp_status_msg, peer->status));
       bgp_notify_send (peer, BGP_NOTIFY_FSM_ERR, 0);
       return;
     }
 
-  /* Check message length */
-  ;
+  /* Packet size of already check in bgp_read (). */
+  
+  /* Parse packet. */
+  afi = stream_getw (peer->ibuf);
+  reserved = stream_getc (peer->ibuf);
+  safi = stream_getc (peer->ibuf);
+
+  /* Check AFI and SAFI. */
+  if (afi != AFI_IP && afi != AFI_IP6)
+    {
+      plog_err (peer->log,
+		"%s [Error] Unknown AFI %d route refresh",
+		peer->host, afi);
+      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+      return;
+    }
+  if (safi != SAFI_UNICAST && safi != SAFI_MULTICAST)
+    {
+      plog_err (peer->log,
+		"%s [Error] Unknown SAFI %d route refresh", safi);
+      bgp_notify_send (peer, BGP_NOTIFY_CEASE, 0);
+      return;
+    }
+
+  /* Perform route refreshment to the peer */
+  bgp_announce_table (peer);
 }
 
 /* BGP read utility function. */

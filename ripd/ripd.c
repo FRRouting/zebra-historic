@@ -69,12 +69,12 @@ enum
 /* RIP command strings. */
 struct message rip_msg[] = 
 {
-  {RIP_REQUEST,    "request"},
-  {RIP_RESPONSE,   "response"},
-  {RIP_TRACEON,    "traceon"},
-  {RIP_TRACEOFF,   "traceoff"},
-  {RIP_POLL,       "poll"},
-  {RIP_POLL_ENTRY, "poll entry"},
+  {RIP_REQUEST,    "REQUEST"},
+  {RIP_RESPONSE,   "RESPONSE"},
+  {RIP_TRACEON,    "TRACEON"},
+  {RIP_TRACEOFF,   "TRACEOFF"},
+  {RIP_POLL,       "POLL"},
+  {RIP_POLL_ENTRY, "POLL ENTRY"},
   {0,              NULL}
 };
 
@@ -234,7 +234,7 @@ rip_route_process (struct rte *rte, struct sockaddr_in *from,
 			     (struct prefix *) &p) == FILTER_DENY)
 	{
 	  if (IS_RIP_DEBUG_PACKET)
-	    zlog_info ("RIP %s/%d filtered by distribute in",
+	    zlog_info ("%s/%d filtered by distribute in",
 		       inet_ntoa (p.prefix), p.prefixlen);
 	  return;
 	}
@@ -245,7 +245,7 @@ rip_route_process (struct rte *rte, struct sockaddr_in *from,
 			     (struct prefix *) &p) == PREFIX_DENY)
 	{
 	  if (IS_RIP_DEBUG_PACKET)
-	    zlog_info ("RIP %s/%d filtered by prefix-list in",
+	    zlog_info ("%s/%d filtered by prefix-list in",
 		       inet_ntoa (p.prefix), p.prefixlen);
 	  return;
 	}
@@ -408,12 +408,12 @@ rip_packet_dump (struct rip_packet *packet, int size, char *sndrcv)
 
   /* Set command string. */
   if (packet->command > 0 && packet->command < RIP_COMMAND_MAX)
-    command_str = rip_msg[packet->command].str;
+    command_str = lookup (rip_msg, packet->command);
   else
     command_str = "unknown";
 
   /* Dump packet header. */
-  zlog_info ("RIP%s command %s version %d packet size %d",
+  zlog_info ("%s %s version %d packet size %d",
 	     sndrcv, command_str, packet->version, size);
 
   /* Dump each routing table entry. */
@@ -509,7 +509,6 @@ void
 rip_response_process (struct rip_packet *packet, int size, 
 		      struct sockaddr_in *from, struct interface *ifp)
 {
-  
   caddr_t lim;
   struct rte *rte;
       
@@ -517,8 +516,9 @@ rip_response_process (struct rip_packet *packet, int size,
      port. (RFC2453 - Sec. 3.9.2)*/
   if (ntohs (from->sin_port) != RIP_PORT_DEFAULT) 
     {
-      zlog_info ("RIP response doesn't come from RIP port: %d",
+      zlog_info ("response doesn't come from RIP port: %d",
 		 from->sin_port);
+      rip_peer_bad_packet (from);
       return;
     }
 
@@ -529,6 +529,7 @@ rip_response_process (struct rip_packet *packet, int size,
     {
       zlog_info ("This datagram doesn't came from a valid neighbor: %s",
 		 inet_ntoa (from->sin_addr));
+      rip_peer_bad_packet (from);
       return;
     }
 
@@ -536,6 +537,9 @@ rip_response_process (struct rip_packet *packet, int size,
      of the router's own addresses. */
 
   ; /* Alredy done in rip_read () */
+
+  /* Update RIP peer. */
+  rip_peer_update (from, packet->version);
 
   /* Set RTE pointer. */
   rte = packet->rte;
@@ -566,6 +570,7 @@ rip_response_process (struct rip_packet *packet, int size,
       if (! rip_destination_check (rte->prefix))
         {
 	  zlog_info ("Network is net 127 or it is not unicast network");
+	  rip_peer_bad_route (from);
 	  continue;
 	} 
 
@@ -576,6 +581,7 @@ rip_response_process (struct rip_packet *packet, int size,
       if (! (rte->metric >= 1 && rte->metric <= 16))
 	{
 	  zlog_info ("Route's metric is not in the 1-16 range.");
+	  rip_peer_bad_route (from);
 	  continue;
 	}
 
@@ -584,6 +590,7 @@ rip_response_process (struct rip_packet *packet, int size,
 	{
 	  zlog_info ("RIPv1 packet with nexthop value %s",
 		     inet_ntoa (rte->nexthop));
+	  rip_peer_bad_route (from);
 	  continue;
 	}
 
@@ -596,6 +603,7 @@ rip_response_process (struct rip_packet *packet, int size,
 	    {
 	      zlog_info ("Next hop is not directly reachable %s", 
 			 inet_ntoa (rte->nexthop));
+	      rip_peer_bad_route (from);
 	      continue;
 	    }
 	}
@@ -644,6 +652,7 @@ rip_response_process (struct rip_packet *packet, int size,
 	{
 	  zlog_warn ("RIPv2 address %s is not mask /%d applied one",
 		     inet_ntoa (rte->prefix), ip_masklen (rte->mask));
+	  rip_peer_bad_route (from);
 	  continue;
 	}
 
@@ -703,7 +712,7 @@ rip_send_packet (caddr_t buf, int size, struct sockaddr_in *to,
 		sizeof (struct sockaddr_in));
 
   if (IS_RIP_DEBUG_EVENT)
-      zlog_info ("RIP SEND to socket %d port %d addr %s",
+      zlog_info ("SEND to socket %d port %d addr %s",
                  sock, ntohs (sin.sin_port), inet_ntoa(sin.sin_addr));
 
   if (ret < 0)
@@ -799,6 +808,9 @@ rip_request_process (struct rip_packet *packet, int size,
 
   /* Check RIP is enabled on this interface or not. */
   ;
+
+  /* RIP peer update. */
+  rip_peer_update (from, packet->version);
 
   lim = ((caddr_t) packet) + size;
   rte = packet->rte;
@@ -965,69 +977,76 @@ rip_read (struct thread *t)
       return len;
     }
 
-  /* Packet length check. */
-  if (len < RIP_PACKET_MINSIZ)
+  /* Check is this packet comming from myself? */
+  if (if_check_address (from.sin_addr)) 
     {
-      zlog_warn ("RIP packet size %d is smaller than minimum size %d",
-		 len, RIP_PACKET_MINSIZ);
-      return len;
+      if (IS_RIP_DEBUG_PACKET)
+	zlog_warn ("ignore packet comes from myself");
+      return -1;
     }
-  if (len > RIP_PACKET_MAXSIZ)
-    {
-      zlog_warn ("RIP packet size %d is larger than max size %d",
-		 len, RIP_PACKET_MAXSIZ);
-      return len;
-    }
-
-  /* Packet alignment check. */
-  if ((len - RIP_PACKET_MINSIZ) % 20)
-    {
-      zlog_warn ("RIP packet size %d is wrong for RIP packet alignment", len);
-      return len;
-    }
-
-  rtenum = ((len - RIP_PACKET_MINSIZ) / 20);
-
-  /* For easy to handle. */
-  packet = &rip_buf.rip_packet;
 
   /* Which interface is this packet comes from. */
   ifp = if_lookup_address (from.sin_addr);
 
   /* RIP packet received */
   if (IS_RIP_DEBUG_EVENT)
-    zlog_info ("RIP RECV packet from %s port %d on %s",
+    zlog_info ("RECV packet from %s port %d on %s",
 	       inet_ntoa (from.sin_addr), ntohs (from.sin_port),
 	       ifp ? ifp->name : "unknown");
-
-  /* Dump RIP packet. */
-  if (IS_RIP_DEBUG_PACKET)
-    rip_packet_dump (packet, len, " RECV");
-
-  /* Check is this packet comming from myself? */
-  if (if_check_address (from.sin_addr)) 
-    {
-      if (IS_RIP_DEBUG_PACKET)
-	zlog_warn ("  packet comes from myself");
-      return -1;
-    }
 
   /* If this packet come from unknown interface, ignore it. */
   if (ifp == NULL)
     {
-      zlog_info ("RIP packet comes from unknown interface");
+      zlog_info ("packet comes from unknown interface");
       return -1;
     }
+
+  /* Packet length check. */
+  if (len < RIP_PACKET_MINSIZ)
+    {
+      zlog_warn ("packet size %d is smaller than minimum size %d",
+		 len, RIP_PACKET_MINSIZ);
+      rip_peer_bad_packet (&from);
+      return len;
+    }
+  if (len > RIP_PACKET_MAXSIZ)
+    {
+      zlog_warn ("packet size %d is larger than max size %d",
+		 len, RIP_PACKET_MAXSIZ);
+      rip_peer_bad_packet (&from);
+      return len;
+    }
+
+  /* Packet alignment check. */
+  if ((len - RIP_PACKET_MINSIZ) % 20)
+    {
+      zlog_warn ("packet size %d is wrong for RIP packet alignment", len);
+      rip_peer_bad_packet (&from);
+      return len;
+    }
+
+  /* Set RTE number. */
+  rtenum = ((len - RIP_PACKET_MINSIZ) / 20);
+
+  /* For easy to handle. */
+  packet = &rip_buf.rip_packet;
 
   /* RIP version check. */
   if (packet->version == 0)
     {
-      zlog_info ("RIP version 0 which has command %d received.", 
-		 packet->command);
+      zlog_info ("version 0 with command %d received.", packet->command);
+      rip_peer_bad_packet (&from);
       return -1;
     }
 
-  /* RIP version adjust. */
+  /* Dump RIP packet. */
+  if (IS_RIP_DEBUG_PACKET)
+    rip_packet_dump (packet, len, "RECV");
+
+  /* RIP version adjust.  This code should rethink now.  RFC1058 says
+     that "Version 1 implementations are to ignore this extra data and
+     process only the fields specified in this document.". So RIPv3
+     packet should be treated as RIPv1 ignoring must be zero field. */
   if (packet->version > RIPv2)
     packet->version = RIPv2;
 
@@ -1037,6 +1056,7 @@ rip_read (struct thread *t)
     {
       if (IS_RIP_DEBUG_EVENT)
 	zlog_info ("RIP is not enabled on interface %s.", ifp->name);
+      rip_peer_bad_packet (&from);
       return -1;
     }
 
@@ -1051,6 +1071,7 @@ rip_read (struct thread *t)
 	      if (IS_RIP_DEBUG_PACKET)
 		zlog_warn ("  packet's v%d doesn't fit to my version %d", 
 			   packet->version, rip->version);
+	      rip_peer_bad_packet (&from);
 	      return -1;
 	    }
 	}
@@ -1062,6 +1083,7 @@ rip_read (struct thread *t)
 		if (IS_RIP_DEBUG_PACKET)
 		  zlog_warn ("  packet's v%d doesn't fit to if version spec", 
 			     packet->version);
+		rip_peer_bad_packet (&from);
 		return -1;
 	      }
 	  if (packet->version == RIPv2)
@@ -1070,6 +1092,7 @@ rip_read (struct thread *t)
 		if (IS_RIP_DEBUG_PACKET)
 		  zlog_warn ("  packet's v%d doesn't fit to if version spec", 
 			     packet->version);
+		rip_peer_bad_packet (&from);
 		return -1;
 	      }
 	}
@@ -1086,6 +1109,7 @@ rip_read (struct thread *t)
       if (IS_RIP_DEBUG_EVENT)
 	zlog_warn ("packet RIPv%d is dropped because authentication disabled", 
 		   packet->version);
+      rip_peer_bad_packet (&from);
       return -1;
     }
 
@@ -1105,6 +1129,7 @@ rip_read (struct thread *t)
 	{
 	  if (IS_RIP_DEBUG_PACKET)
 	    zlog_warn ("packet RIPv%d is dropped because authentication enabled", packet->version);
+	  rip_peer_bad_packet (&from);
 	  return -1;
 	}
       
@@ -1118,6 +1143,7 @@ rip_read (struct thread *t)
 		{
 		  if (IS_RIP_DEBUG_EVENT)
 		    zlog_warn ("RIP authentication failed");
+		  rip_peer_bad_packet (&from);
 		  return -1;
 		}
 	    }
@@ -1125,6 +1151,7 @@ rip_read (struct thread *t)
 	    {
 	      if (IS_RIP_DEBUG_EVENT)
 		zlog_warn ("RIP authentication failed: no authentication in packet");
+	      rip_peer_bad_packet (&from);
 	      return -1;
 	    }	
 	}
@@ -1144,13 +1171,16 @@ rip_read (struct thread *t)
     case RIP_TRACEOFF:
       zlog_info ("Obsolete command %s received, please sent it to routed", 
 		 lookup (rip_msg, packet->command));
+      rip_peer_bad_packet (&from);
       break;
     case RIP_POLL_ENTRY:
       zlog_info ("Obsolete command %s received", 
 		 lookup (rip_msg, packet->command));
+      rip_peer_bad_packet (&from);
       break;
     default:
       zlog_info ("Unknown RIP command %d received", packet->command);
+      rip_peer_bad_packet (&from);
       break;
     }
 
@@ -1283,11 +1313,10 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
   if (IS_RIP_DEBUG_EVENT)
     {
       if (to)
-	zlog_info ("RIP update routes to neighbor %s",
-		   inet_ntoa (to->sin_addr));
+	zlog_info ("update routes to neighbor %s", inet_ntoa (to->sin_addr));
       else
-	zlog_info ("RIP update routes on interface %s ifindex %d", ifp->name, 
-		   ifp->ifindex);
+	zlog_info ("update routes on interface %s ifindex %d",
+		   ifp->name, ifp->ifindex);
     }
 
   /* Set output stream. */
@@ -1313,7 +1342,7 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 				     (struct prefix *) p) == FILTER_DENY)
 		{
 		  if (IS_RIP_DEBUG_PACKET)
-		    zlog_info ("RIP %s/%d is filtered by distribute out",
+		    zlog_info ("%s/%d is filtered by distribute out",
 			       inet_ntoa (p->prefix), p->prefixlen);
 		  continue;
 		}
@@ -1324,7 +1353,7 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 				     (struct prefix *) p) == PREFIX_DENY)
 		{
 		  if (IS_RIP_DEBUG_PACKET)
-		    zlog_info ("RIP %s/%d is filtered by prefix-list out",
+		    zlog_info ("%s/%d is filtered by prefix-list out",
 			       inet_ntoa (p->prefix), p->prefixlen);
 		  continue;
 		}
@@ -1359,7 +1388,7 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 	      if (ret == RMAP_DENYMATCH) 
 		{
 		  if (IS_RIP_DEBUG_PACKET)
-		    zlog_info ("RIP %s/%d is filtered by route-map",
+		    zlog_info ("%s/%d is filtered by route-map",
 			       inet_ntoa (p->prefix), p->prefixlen);
 		  continue;
 		}
@@ -1374,7 +1403,7 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 
 	      if (ret >= 0 && IS_RIP_DEBUG_PACKET)
 		rip_packet_dump ((struct rip_packet *)STREAM_DATA (s),
-				 stream_get_endp(s), " SEND");
+				 stream_get_endp(s), "SEND");
 	      num = 0;
 	      stream_reset (s);
 	    }
@@ -1387,7 +1416,7 @@ rip_output_process (struct interface *ifp, struct sockaddr_in *to,
 
       if (ret >= 0 && IS_RIP_DEBUG_PACKET)
 	rip_packet_dump ((struct rip_packet *)STREAM_DATA (s),
-			 stream_get_endp (s), " SEND");
+			 stream_get_endp (s), "SEND");
       num = 0;
       stream_reset (s);
     }
@@ -1409,7 +1438,7 @@ rip_update_interface (struct interface *ifp, u_char version)
   if (version == RIPv2 && if_is_multicast (ifp)) 
     {
       if (IS_RIP_DEBUG_EVENT)
-	zlog_info ("RIP multicast announce on %s ", ifp->name);
+	zlog_info ("multicast announce on %s ", ifp->name);
 
       rip_output_process (ifp, NULL, rip_all_route, rip_split_horizon,
 			  version);
@@ -1435,7 +1464,7 @@ rip_update_interface (struct interface *ifp, u_char version)
 	      to.sin_port = htons (RIP_PORT_DEFAULT);
 
 	      if (IS_RIP_DEBUG_EVENT)
-		zlog_info ("RIP %s announce to %s on %s",
+		zlog_info ("%s announce to %s on %s",
 			   if_is_pointopoint (ifp) ? "unicast" : "broadcast",
 			   inet_ntoa (to.sin_addr), ifp->name);
 
@@ -1476,10 +1505,10 @@ rip_update_process (int route_type, int split_horizon)
 	  if (IS_RIP_DEBUG_EVENT) 
 	    {
 	      if (ifp->name) 
-		zlog_info ("RIP SEND update to %s ifindex %d",
+		zlog_info ("SEND UPDATE to %s ifindex %d",
 			   ifp->name, ifp->ifindex);
 	      else
-		zlog_info ("RIP SEND update to _unknown_ ifindex %d",
+		zlog_info ("SEND UPDATE to _unknown_ ifindex %d",
 			   ifp->ifindex);
 	    }
 
@@ -1536,7 +1565,7 @@ rip_update (struct thread *t)
   rip->t_update = NULL;
 
   if (IS_RIP_DEBUG_EVENT)
-    zlog_info ("RIP update timer fire!");
+    zlog_info ("update timer fire!");
 
   /* Process update output. */
   rip_update_process (rip_all_route, rip_split_horizon);
@@ -1604,7 +1633,7 @@ rip_triggered_update (struct thread *t)
 
   /* Logging triggered update. */
   if (IS_RIP_DEBUG_EVENT)
-    zlog_info ("RIP triggered update!");
+    zlog_info ("triggered update!");
 
   /* Split Horizon processing is done when generating triggered
      updates as well as normal updates (see section 2.6). */
@@ -2064,14 +2093,14 @@ DEFUN (show_ip_protocols_rip,
       if (ri->enable_network || ri->enable_interface)
 	{
 	  if (ri->ri_send == RI_RIP_UNSPEC)
-	    send_version = ri_version_msg[rip->version].str;
+	    send_version = lookup (ri_version_msg, rip->version);
 	  else
-	    send_version = ri_version_msg[ri->ri_send].str;
+	    send_version = lookup (ri_version_msg, ri->ri_send);
 
 	  if (ri->ri_receive == RI_RIP_UNSPEC)
-	    receive_version = ri_version_msg[rip->version].str;
+	    receive_version = lookup (ri_version_msg, rip->version);
 	  else
-	    receive_version = ri_version_msg[ri->ri_receive].str;
+	    receive_version = lookup (ri_version_msg, ri->ri_receive);
 	
 	  vty_out (vty, "    %-17s%-3s   %-3s%s", ifp->name,
 		   send_version,
@@ -2083,9 +2112,12 @@ DEFUN (show_ip_protocols_rip,
   vty_out (vty, "  Routing for Networks:%s", VTY_NEWLINE);
   config_write_rip_network (vty, 0);  
 
-#if 0
   vty_out (vty, "  Routing Information Sources:%s", VTY_NEWLINE);
-  vty_out (vty, "    Gateway         Distance      Last Update%s", VTY_NEWLINE);
+  vty_out (vty, "    Gateway          BadPackets BadRoutes  Distance Last Update%s",
+	   VTY_NEWLINE);
+  rip_peer_display (vty);
+
+#if 0
   for (;;)
     break;
   vty_out (vty, "  Distance: (default is 120)%s", VTY_NEWLINE);
@@ -2119,9 +2151,9 @@ config_write_rip (struct vty *vty)
       config_write_rip_redistribute (vty, 1);
 
       /* RIP timer configuration. */
-      if (rip->update_time != RIP_UPDATE_TIMER_DEFAULT ||
-	  rip->timeout_time != RIP_TIMEOUT_TIMER_DEFAULT ||
-	  rip->garbage_time != RIP_GARBAGE_TIMER_DEFAULT)
+      if (rip->update_time != RIP_UPDATE_TIMER_DEFAULT 
+	  || rip->timeout_time != RIP_TIMEOUT_TIMER_DEFAULT 
+	  || rip->garbage_time != RIP_GARBAGE_TIMER_DEFAULT)
 	vty_out (vty, " timers basic %lu %lu %lu%s",
 		 rip->update_time,
 		 rip->timeout_time,

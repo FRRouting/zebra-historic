@@ -148,10 +148,10 @@ vty_prompt (struct vty *vty)
   const char*hostname;
   hostname = host.name;
   if (!hostname)
-  {
-    uname (&names);
-    hostname = names.nodename;
-  }
+    {
+      uname (&names);
+      hostname = names.nodename;
+    }
   vty_out (vty, cmd_prompt (vty->node), hostname);
 }
 
@@ -1054,7 +1054,9 @@ vty_execute (struct vty *vty)
   vty->cp = vty->length = 0;
   vty_clear_buf (vty);
 
-  if (vty->status != VTY_CLOSE)
+  if (vty->status != VTY_CLOSE 
+      && vty->status != VTY_START
+      && vty->status != VTY_CONTINUE)
     vty_prompt (vty);
 }
 
@@ -1125,9 +1127,13 @@ vty_read (struct thread *thread)
 	    case CONTROL('C'):
 	    case 'q':
 	    case 'Q':
+	      if (vty->output_func)
+		(*vty->output_func) (vty, vty->output, 1);
 	      vty_buffer_reset (vty);
 	      break;
 	    default:
+	      if (vty->output_func)
+		(*vty->output_func) (vty, vty->output, 0);
 	      break;
 	    }
 	  continue;
@@ -1268,6 +1274,7 @@ static int
 vty_flush (struct thread *thread)
 {
   int erase;
+  int dont_more;
   int vty_sock = THREAD_FD (thread);
   struct vty *vty = THREAD_ARG (thread);
   vty->t_write = NULL;
@@ -1280,34 +1287,85 @@ vty_flush (struct thread *thread)
 	vty->t_read = NULL;
       }
 
-  if (vty->status == VTY_MORE)
-    erase = 1;
-  else
-    erase = 0;
-
-  if (vty->lines == 0)
-    buffer_flush_window (vty->obuf, vty->fd, vty->width, 25, 0, 1);
-  else
-    buffer_flush_window (vty->obuf, vty->fd, vty->width,
-			 vty->lines >= 0 ? vty->lines : vty->height,
-			 erase, 0);
-  
-  if (buffer_empty (vty->obuf))
+  /* Function execution continue. */
+  if (vty->status == VTY_START || vty->status == VTY_CONTINUE)
     {
-      if (vty->status == VTY_CLOSE)
-	vty_close (vty);
+      if (vty->status == VTY_CONTINUE)
+	erase = 1;
       else
-	vty->status = VTY_NORMAL;
+	erase = 0;
+
+      if (vty->output_func == NULL)
+	dont_more = 1;
+      else
+	dont_more = 0;
 
       if (vty->lines == 0)
-	vty_event (VTY_READ, vty_sock, vty);
+	{
+	  erase = 0;
+	  dont_more = 1;
+	}
+
+      buffer_flush_vty_all (vty->obuf, vty->fd, erase, dont_more);
+
+      if (vty->status == VTY_CLOSE)
+	{
+	  vty_close (vty);
+	  return 0;
+	}
+
+      if (vty->output_func == NULL)
+	{
+	  vty->status = VTY_NORMAL;
+	  vty_prompt (vty);
+	  vty_event (VTY_WRITE, vty_sock, vty);
+	}
+      else
+	vty->status = VTY_MORE;
+
+      if (vty->lines == 0)
+	{
+	  if (vty->output_func == NULL)
+	    vty_event (VTY_READ, vty_sock, vty);
+	  else
+	    {
+	      if (vty->output_func)
+		(*vty->output_func) (vty, vty->output, 0);
+	      vty_event (VTY_WRITE, vty_sock, vty);
+	    }
+	}
     }
   else
     {
-      vty->status = VTY_MORE;
+      if (vty->status == VTY_MORE)
+	erase = 1;
+      else
+	erase = 0;
 
       if (vty->lines == 0)
-	vty_event (VTY_WRITE, vty_sock, vty);
+	buffer_flush_window (vty->obuf, vty->fd, vty->width, 25, 0, 1);
+      else
+	buffer_flush_window (vty->obuf, vty->fd, vty->width,
+			     vty->lines >= 0 ? vty->lines : vty->height,
+			     erase, 0);
+  
+      if (buffer_empty (vty->obuf))
+	{
+	  if (vty->status == VTY_CLOSE)
+	    vty_close (vty);
+	  else
+	    vty->status = VTY_NORMAL;
+	  
+	  if (vty->lines == 0)
+	    vty_event (VTY_READ, vty_sock, vty);
+	}
+      else
+	{
+	  vty->status = VTY_MORE;
+
+	  if (vty->lines == 0)
+	    vty_event (VTY_WRITE, vty_sock, vty);
+	}
     }
 
   return 0;

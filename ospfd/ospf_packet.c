@@ -145,6 +145,7 @@ ospf_fifo_head (struct ospf_fifo *fifo)
   return fifo->head;
 }
 
+/* Flush ospf packet fifo. */
 void
 ospf_fifo_flush (struct ospf_fifo *fifo)
 {
@@ -160,6 +161,7 @@ ospf_fifo_flush (struct ospf_fifo *fifo)
   fifo->count = 0;
 }
 
+/* Free ospf packet fifo. */
 void
 ospf_fifo_free (struct ospf_fifo *fifo)
 {
@@ -240,12 +242,9 @@ ospf_packet_dup (struct ospf_packet *op)
 int
 ospf_packet_max (struct ospf_interface *oi)
 {
-  struct ospf_area *area;
   int max;
 
-  area = oi->area;
-
-  if (area->auth_type == OSPF_AUTH_CRYPTOGRAPHIC)
+  if (oi->area->auth_type == OSPF_AUTH_CRYPTOGRAPHIC)
     max = oi->ifp->mtu - OSPF_AUTH_MD5_SIZE - 88;
   else
     max = oi->ifp->mtu - 88;
@@ -265,9 +264,8 @@ ospf_ls_req_timer (struct thread *thread)
 
   oi = nbr->oi;
 
-  if (oi->passive_interface != OSPF_IF_PASSIVE)
   /* Send Link State Request. */
-    ospf_ls_req_send (nbr);
+  ospf_ls_req_send (nbr);
 
   /* Set LS Request retransmission timer. */
   OSPF_NSM_TIMER_ON (nbr->t_ls_req, ospf_ls_req_timer, nbr->v_ls_req);
@@ -367,7 +365,7 @@ ospf_write (struct thread *thread)
 	}
     }
 
-  /* rewrite the md5 signature & update the seq */
+  /* Rewrite the md5 signature & update the seq */
   ospf_make_md5_digest (oi, op);
 
   bzero (&sa_dst, sizeof (sa_dst));
@@ -433,8 +431,12 @@ ospf_hello (struct ip *iph, struct ospf_header *ospfh,
 
   hello = (struct ospf_hello *) STREAM_PNT (s);
 
-  /* if Hello is myself, silently discard. */
+  /* If Hello is myself, silently discard. */
   if (IPV4_ADDR_SAME (&ospfh->router_id, &ospf_top->router_id))
+    return;
+
+  /* If incoming interface is passive ignore Hello. */
+  if (oi->passive_interface == OSPF_IF_PASSIVE)
     return;
 
   /* get neighbor prefix. */
@@ -870,7 +872,6 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
       size -= 12;
     }
 
-  if (oi->passive_interface != OSPF_IF_PASSIVE)
   /* Now send LSAs requested. */
   ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
 
@@ -1208,20 +1209,19 @@ ospf_recv_packet (struct ospf_interface *oi)
   return ret;
 }
 
-
 struct ospf_interface *
-ospf_associate_packet_vl (struct ospf_area *area, struct in_addr rid)
+ospf_associate_packet_vl (struct ospf_area *area, struct in_addr router_id)
 {
   listnode node;
   struct ospf_vl_data *vl_data;
 
   LIST_ITERATOR (ospf_top->vlinks, node)
     {
-      vl_data = getdata (node);
-      if (vl_data == NULL)
+      if ((vl_data = getdata (node)) == NULL)
 	continue;
 
-      if (vl_data->vl_area == area && vl_data->vl_peer.s_addr == rid.s_addr)
+      if (OSPF_AREA_SAME (&vl_data->vl_area, &area) &&
+	  IPV4_ADDR_SAME (&vl_data->vl_peer, &router_id))
 	{
 	  zlog_info ("Z: associating packet with %s",
 		     vl_data->vl_oi->ifp->name);
@@ -1244,9 +1244,12 @@ int
 ospf_check_area_id (struct ospf_interface *oi, struct ospf_header *ospfh,
 		    struct ospf_interface **asoi)
 {
+  /* Check match the Area ID of the receiving interface. */
   if (OSPF_AREA_SAME (&oi->area, &ospfh))
     return 1;
-  else if (ospfh->area_id.s_addr == htonl (OSPF_AREA_BACKBONE))
+
+  /* If Backbone, check Virtual Link relation. */
+  if (ospfh->area_id.s_addr == htonl (OSPF_AREA_BACKBONE))
     {
       /* We cannot check whether the sending router is an ABR or not
          when we receive first packets, so skip this test */
@@ -1286,8 +1289,8 @@ ospf_check_network_mask (struct ospf_interface *oi, struct in_addr ip_src)
 
  if (IPV4_ADDR_SAME (&me, &him))
    return 1;
- else
-   return 0;
+
+ return 0;
 }
 
 int
@@ -1537,7 +1540,8 @@ ospf_read (struct thread *thread)
   if (ret < 0)
     return ret;
 
-  if (asoi == NULL) asoi = oi;
+  if (asoi == NULL)
+    asoi = oi;
 
   stream_forward (oi->ibuf, OSPF_HEADER_SIZE);
 
@@ -1588,9 +1592,6 @@ ospf_make_header (int type, struct ospf_interface *oi, struct stream *s)
   ospfh->area_id = oi->area->area_id;
   ospfh->auth_type = htons (oi->area->auth_type);
 
-  /*
-  if (ntohs (ospfh->auth_type) != OSPF_AUTH_CRYPTOGRAPHIC)
-  */
   bzero (ospfh->u.auth_data, OSPF_AUTH_SIMPLE_SIZE);
 
   ospf_output_forward (s, OSPF_HEADER_SIZE);
@@ -1605,14 +1606,13 @@ ospf_make_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
   switch (oi->area->auth_type)
     {
     case OSPF_AUTH_NULL:
-      /*
-      bzero (ospfh->u.auth_data, sizeof (ospfh->u.auth_data));
-      */
+      /* bzero (ospfh->u.auth_data, sizeof (ospfh->u.auth_data)); */
       break;
     case OSPF_AUTH_SIMPLE:
       memcpy (ospfh->u.auth_data, oi->auth_simple, OSPF_AUTH_SIMPLE_SIZE);
       break;
     case OSPF_AUTH_CRYPTOGRAPHIC:
+      /* If key is not set, then set 0. */
       if (list_isempty (oi->auth_crypt))
 	{
 	  ospfh->u.crypt.zero = 0;
@@ -1627,16 +1627,9 @@ ospf_make_auth (struct ospf_interface *oi, struct ospf_header *ospfh)
 	  ospfh->u.crypt.auth_data_len = OSPF_AUTH_MD5_SIZE;
 	}
       /* note: the seq is done in ospf_make_md5_digest() */
-      /*
-      ospfh->u.crypt.zero = 0;
-      ospfh->u.crypt.key_id = oi->auth_key_id;
-      ospfh->u.crypt.auth_data_len = OSPF_AUTH_MD5_SIZE;
-      */
       break;
     default:
-      /*
-      bzero (ospfh->u.auth_data, sizeof (ospfh->u.auth_data));
-      */
+      /* bzero (ospfh->u.auth_data, sizeof (ospfh->u.auth_data)); */
       break;
     }
 
@@ -1681,7 +1674,6 @@ ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
 /* This function is called from ospf_write(), it will detect the
    authentication scheme and if it is MD5, it will change the sequence
    and update the MD5 digest */
-
 int
 ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *op)
 {
@@ -1708,9 +1700,7 @@ ospf_make_md5_digest (struct ospf_interface *oi, struct ospf_packet *op)
   /* Generate a digest for the entire packet + our secret key */
   md5_init_ctx (&ctx);
   md5_process_bytes (ibuf, ntohs (ospfh->length), &ctx);
-  /*
-  md5_process_bytes (oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);
-  */
+  /*  md5_process_bytes (oi->auth_data, OSPF_AUTH_MD5_SIZE, &ctx);  */
   md5_process_bytes (ck->auth_key, OSPF_AUTH_MD5_SIZE, &ctx);
   md5_finish_ctx (&ctx, digest);
 
@@ -2069,6 +2059,7 @@ ospf_hello_send (struct ospf_interface *oi)
   struct ospf_packet *op;
   u_int16_t length = OSPF_HEADER_SIZE;
 
+  /* If this is passive interface, do not send OSPF Hello. */
   if (oi->passive_interface == OSPF_IF_PASSIVE)
     return;
 

@@ -1174,6 +1174,59 @@ peer_destroy (struct vty *vty, char *ip_str, char *as_str, int afi, int safi,
   return CMD_SUCCESS;
 }
 
+/* Change specified peer flag. */
+int
+peer_change_flag (struct vty *vty, char *ip_str, int afi, u_int16_t flag,
+		  int set)
+{
+  struct peer *peer;
+  struct peer_conf *conf;
+
+  conf = peer_conf_lookup_vty (vty, ip_str, afi);
+  if (! conf)
+    return CMD_WARNING;
+  peer = conf->peer;
+  
+  if (set)
+    SET_FLAG (peer->flags, flag);
+  else
+    UNSET_FLAG (peer->flags, flag);
+  return CMD_SUCCESS;
+}
+
+/* Change specified peer flag with resetting the connection.  If the
+   flag is not changed nothing occur. */
+int
+peer_change_flag_with_reset (struct vty *vty, char *ip_str, int afi,
+			     u_int16_t flag, int set)
+{
+  struct peer *peer;
+  struct peer_conf *conf;
+
+  conf = peer_conf_lookup_vty (vty, ip_str, afi);
+  if (! conf)
+    return CMD_WARNING;
+  peer = conf->peer;
+
+  if (set)
+    {
+      if (! CHECK_FLAG (peer->flags, flag))
+	{
+	  SET_FLAG (peer->flags, flag);
+	  BGP_EVENT_ADD (peer, BGP_Stop);
+	}
+    }
+  else
+    {
+      if (CHECK_FLAG (peer->flags, flag))
+	{
+	  UNSET_FLAG (peer->flags, flag);
+	  BGP_EVENT_ADD (peer, BGP_Stop);
+	}
+    }
+  return CMD_SUCCESS;
+}
+
 DEFUN (neighbor_remote_as,
        neighbor_remote_as_cmd,
        NEIGHBOR_CMD "remote-as <1-65535>",
@@ -1427,7 +1480,7 @@ DEFUN (no_neighbor_router_id,
 
 /* neighbor shutdown. */
 int
-peer_shutdown_set (struct vty *vty, char *ip_str, int afi)
+peer_shutdown (struct vty *vty, char *ip_str, int afi, int set)
 {
   struct peer *peer;
   struct peer_conf *conf;
@@ -1435,28 +1488,20 @@ peer_shutdown_set (struct vty *vty, char *ip_str, int afi)
   conf = peer_conf_lookup_vty (vty, ip_str, afi);
   if (! conf)
     return CMD_WARNING;
-
   peer = conf->peer;
-  bgp_stop (peer);
-  fsm_change_status (peer, Idle);
-  SET_FLAG (peer->flags, PEER_FLAG_SHUTDOWN);
 
-  return CMD_SUCCESS;
-}
+  if (set)
+    {
+      bgp_stop (peer);
+      fsm_change_status (peer, Idle);
+      SET_FLAG (peer->flags, PEER_FLAG_SHUTDOWN);
+    }
+  else
+    {
+      bgp_timer_set (peer);
+      UNSET_FLAG (peer->flags, PEER_FLAG_SHUTDOWN);
+    }
 
-int
-peer_shutdown_unset (struct vty *vty, char *ip_str, int afi)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-
-  peer = conf->peer;
-  UNSET_FLAG (peer->flags, PEER_FLAG_SHUTDOWN);
-  bgp_timer_set (peer);
   return CMD_SUCCESS;
 }
 
@@ -1467,7 +1512,7 @@ DEFUN (neighbor_shutdown,
        NEIGHBOR_ADDR_STR
        "Shutdown\n")
 {
-  return peer_shutdown_set (vty, argv[0], AFI_IP);
+  return peer_shutdown (vty, argv[0], AFI_IP, 1);
 }
 
 DEFUN (no_neighbor_shutdown,
@@ -1478,7 +1523,7 @@ DEFUN (no_neighbor_shutdown,
        NEIGHBOR_ADDR_STR
        "Shutdown\n")
 {
-  return peer_shutdown_unset (vty, argv[0], AFI_IP);
+  return peer_shutdown (vty, argv[0], AFI_IP, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_shutdown,
@@ -1491,7 +1536,7 @@ DEFUN (ipv6_bgp_neighbor_shutdown,
        "IPv6 address\n"
        "Shutdown\n")
 {
-  return peer_shutdown_set (vty, argv[0], AFI_IP6);
+  return peer_shutdown (vty, argv[0], AFI_IP6, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_shutdown,
@@ -1505,7 +1550,7 @@ DEFUN (no_ipv6_bgp_neighbor_shutdown,
        "IPv6 address\n"
        "Shutdown\n")
 {
-  return peer_shutdown_unset (vty, argv[0], AFI_IP6);
+  return peer_shutdown (vty, argv[0], AFI_IP6, 0);
 }
 
 /* neighbor ebgp-multihop. */
@@ -1808,25 +1853,6 @@ DEFUN (no_ipv6_bgp_neighbor_description,
 }
 
 /* neighbor next-hop-self. */
-int
-peer_nexthop_self (struct vty *vty, char *ip_str, int afi, int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-
-  if (set)
-    SET_FLAG (peer->flags, PEER_FLAG_NEXTHOP_SELF);
-  else
-    UNSET_FLAG (peer->flags, PEER_FLAG_NEXTHOP_SELF);
-
-  return CMD_SUCCESS;
-}
-
 DEFUN (neighbor_nexthop_self,
        neighbor_nexthop_self_cmd,
        NEIGHBOR_CMD "next-hop-self",
@@ -1834,7 +1860,7 @@ DEFUN (neighbor_nexthop_self,
        NEIGHBOR_ADDR_STR
        "Set nexthop value to self\n")
 {
-  return peer_nexthop_self (vty, argv[0], AFI_IP, 1);
+  return peer_change_flag (vty, argv[0], AFI_IP, PEER_FLAG_NEXTHOP_SELF, 1);
 }
 
 DEFUN (no_neighbor_nexthop_self,
@@ -1845,7 +1871,7 @@ DEFUN (no_neighbor_nexthop_self,
        NEIGHBOR_ADDR_STR
        "Set nexthop value to self\n")
 {
-  return peer_nexthop_self (vty, argv[0], AFI_IP, 0);
+  return peer_change_flag (vty, argv[0], AFI_IP, PEER_FLAG_NEXTHOP_SELF, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_nexthop_self,
@@ -1858,7 +1884,7 @@ DEFUN (ipv6_bgp_neighbor_nexthop_self,
        "IPv6 address\n"
        "Set nexthop value to self\n")
 {
-  return peer_nexthop_self (vty, argv[0], AFI_IP6, 1);
+  return peer_change_flag (vty, argv[0], AFI_IP6, PEER_FLAG_NEXTHOP_SELF, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_nexthop_self,
@@ -1872,7 +1898,7 @@ DEFUN (no_ipv6_bgp_neighbor_nexthop_self,
        "IPv6 address\n"
        "Set nexthop value to self\n")
 {
-  return peer_nexthop_self (vty, argv[0], AFI_IP6, 0);
+  return peer_change_flag (vty, argv[0], AFI_IP6, PEER_FLAG_NEXTHOP_SELF, 0);
 }
 
 /* neighbor update-source. */
@@ -1988,25 +2014,6 @@ DEFUN (no_ipv6_bgp_neighbor_update_source,
 }
 
 /* neighbor default-originate. */
-int
-peer_default_originate (struct vty *vty, char *ip_str, int afi, int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-
-  if (set)
-    SET_FLAG (peer->flags, PEER_FLAG_DEFAULT_ORIGINATE);
-  else
-    UNSET_FLAG (peer->flags, PEER_FLAG_DEFAULT_ORIGINATE);
-
-  return CMD_SUCCESS;
-}
-
 DEFUN (neighbor_default_originate,
        neighbor_default_originate_cmd,
        NEIGHBOR_CMD "default-originate",
@@ -2014,7 +2021,7 @@ DEFUN (neighbor_default_originate,
        NEIGHBOR_ADDR_STR
        "Permit announcement of default route to the neighbor\n")
 {
-  return peer_default_originate (vty, argv[0], AFI_IP, 1);
+  return peer_change_flag (vty, argv[0], AFI_IP, PEER_FLAG_DEFAULT_ORIGINATE, 1);
 }
 
 DEFUN (no_neighbor_default_originate,
@@ -2025,7 +2032,7 @@ DEFUN (no_neighbor_default_originate,
        NEIGHBOR_ADDR_STR
        "Permit announcement of default route to the neighbor\n")
 {
-  return peer_default_originate (vty, argv[0], AFI_IP, 0);
+  return peer_change_flag (vty, argv[0], AFI_IP, PEER_FLAG_DEFAULT_ORIGINATE, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_default_originate,
@@ -2038,7 +2045,7 @@ DEFUN (ipv6_bgp_neighbor_default_originate,
        "IPv6 address\n"
        "Permit announcement of default route to the neighbor\n")
 {
-  return peer_default_originate (vty, argv[0], AFI_IP6, 1);
+  return peer_change_flag (vty, argv[0], AFI_IP6, PEER_FLAG_DEFAULT_ORIGINATE, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_default_originate,
@@ -2052,7 +2059,7 @@ DEFUN (no_ipv6_bgp_neighbor_default_originate,
        "IPv6 address\n"
        "Permit announcement of default route to the neighbor\n")
 {
-  return peer_default_originate (vty, argv[0], AFI_IP6, 0);
+  return peer_change_flag (vty, argv[0], AFI_IP6, PEER_FLAG_DEFAULT_ORIGINATE, 0);
 }
 
 /* neighbor port. */
@@ -2145,25 +2152,6 @@ DEFUN (no_ipv6_bgp_neighbor_port,
 }
 
 /* neighbor send-community. */
-int
-peer_send_community (struct vty *vty, char *ip_str, int afi, int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-
-  if (set)
-    SET_FLAG (peer->flags, PEER_FLAG_SEND_COMMUNITY);
-  else
-    UNSET_FLAG (peer->flags, PEER_FLAG_SEND_COMMUNITY);
-
-  return CMD_SUCCESS;
-}
-
 DEFUN (neighbor_send_community,
        neighbor_send_community_cmd,
        NEIGHBOR_CMD "send-community",
@@ -2171,7 +2159,7 @@ DEFUN (neighbor_send_community,
        NEIGHBOR_ADDR_STR
        "Configure send community attribute to this neighbor\n")
 {
-  return peer_send_community (vty, argv[0], AFI_IP, 1);
+  return peer_change_flag (vty, argv[0], AFI_IP, PEER_FLAG_SEND_COMMUNITY, 1);
 }
 
 DEFUN (no_neighbor_send_community,
@@ -2182,7 +2170,7 @@ DEFUN (no_neighbor_send_community,
        NEIGHBOR_ADDR_STR
        "Configure send community attribute to this neighbor\n")
 {
-  return peer_send_community (vty, argv[0], AFI_IP, 0);
+  return peer_change_flag (vty, argv[0], AFI_IP, PEER_FLAG_SEND_COMMUNITY, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_send_community,
@@ -2195,7 +2183,7 @@ DEFUN (ipv6_bgp_neighbor_send_community,
        "IPv6 address\n"
        "Configure send community attribute to this neighbor\n")
 {
-  return peer_send_community (vty, argv[0], AFI_IP6, 1);
+  return peer_change_flag (vty, argv[0], AFI_IP6, PEER_FLAG_SEND_COMMUNITY, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_send_community,
@@ -2209,7 +2197,7 @@ DEFUN (no_ipv6_bgp_neighbor_send_community,
        "IPv6 address\n"
        "Configure send community attribute to this neighbor\n")
 {
-  return peer_send_community (vty, argv[0], AFI_IP6, 0);
+  return peer_change_flag (vty, argv[0], AFI_IP6, PEER_FLAG_SEND_COMMUNITY, 0);
 }
 
 /* neighbor weight. */
@@ -2313,36 +2301,6 @@ DEFUN (no_ipv6_bgp_neighbor_weight,
 }
 
 /* neighbor soft-reconfig. */
-int
-peer_soft_reconfig (struct vty *vty, char *ip_str, int afi, int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-
-  if (set)
-    {
-      if (! CHECK_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG))
-	{
-	  SET_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG);
-	  BGP_EVENT_ADD (peer, BGP_Stop);
-	}
-    }
-  else
-    {
-      if (CHECK_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG))
-	{
-	  UNSET_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG);
-	  BGP_EVENT_ADD (peer, BGP_Stop);
-	}
-    }
-  return CMD_SUCCESS;
-}
-
 DEFUN (neighbor_soft_reconfiguration,
        neighbor_soft_reconfiguration_cmd,
        NEIGHBOR_CMD "soft-reconfiguration inbound",
@@ -2351,7 +2309,8 @@ DEFUN (neighbor_soft_reconfiguration,
        "Configure this neighbor as soft reconfiguration\n"
        "Store inbound announcement\n")
 {
-  return peer_soft_reconfig (vty, argv[0], AFI_IP, 1);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_SOFT_RECONFIG, 1);
 }
 
 DEFUN (no_neighbor_soft_reconfiguration,
@@ -2363,7 +2322,8 @@ DEFUN (no_neighbor_soft_reconfiguration,
        "Configure this neighbor as soft reconfiguration\n"
        "Store inbound announcement\n")
 {
-  return peer_soft_reconfig (vty, argv[0], AFI_IP, 0);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_SOFT_RECONFIG, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_soft_reconfiguration,
@@ -2377,7 +2337,8 @@ DEFUN (ipv6_bgp_neighbor_soft_reconfiguration,
        "Configure this neighbor as soft reconfiguration\n"
        "Store inbound announcement\n")
 {
-  return peer_soft_reconfig (vty, argv[0], AFI_IP6, 1);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_SOFT_RECONFIG, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_soft_reconfiguration,
@@ -2392,7 +2353,8 @@ DEFUN (no_ipv6_bgp_neighbor_soft_reconfiguration,
        "Configure this neighbor as soft reconfiguration\n"
        "Store inbound announcement\n")
 {
-  return peer_soft_reconfig (vty, argv[0], AFI_IP6, 0);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_SOFT_RECONFIG, 0);
 }
 
 /* neighbor route-reflector. */
@@ -2480,36 +2442,6 @@ DEFUN (no_ipv6_bgp_neighbor_route_reflector_client,
 }
 
 /* neighbor route-server-client. */
-int
-peer_route_server (struct vty *vty, char *ip_str, int afi, int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-
-  if (set)
-    {
-      if (! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT))
-	{
-	  SET_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT);
-	  BGP_EVENT_ADD (peer, BGP_Stop);
-	}
-    }
-  else
-    {
-      if (CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT))
-	{
-	  UNSET_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT);
-	  BGP_EVENT_ADD (peer, BGP_Stop);
-	}
-    }
-  return CMD_SUCCESS;
-}
-
 DEFUN (neighbor_route_server_client,
        neighbor_route_server_client_cmd,
        NEIGHBOR_CMD "route-server-client",
@@ -2517,7 +2449,8 @@ DEFUN (neighbor_route_server_client,
        NEIGHBOR_ADDR_STR
        "Configure this neighbor as route server client\n")
 {
-  return peer_route_server (vty, argv[0], AFI_IP, 1);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_RSERVER_CLIENT, 1);
 }
 
 DEFUN (no_neighbor_route_server_client,
@@ -2528,7 +2461,8 @@ DEFUN (no_neighbor_route_server_client,
        NEIGHBOR_ADDR_STR
        "Configure this neighbor as route server client\n")
 {
-  return peer_route_server (vty, argv[0], AFI_IP, 0);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_RSERVER_CLIENT, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_route_server_client,
@@ -2541,7 +2475,8 @@ DEFUN (ipv6_bgp_neighbor_route_server_client,
        "IPv6 address\n"
        "Configure this neighbor as route server client\n")
 {
-  return peer_route_server (vty, argv[0], AFI_IP6, 1);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_RSERVER_CLIENT, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_route_server_client,
@@ -2555,40 +2490,11 @@ DEFUN (no_ipv6_bgp_neighbor_route_server_client,
        "IPv6 address\n"
        "Configure this neighbor as route server client\n")
 {
-  return peer_route_server (vty, argv[0], AFI_IP6, 0);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_RSERVER_CLIENT, 0);
 }
 
 /* neighbor route-refresh. */
-int
-peer_route_refresh (struct vty *vty, char *ip_str, int afi, int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-
-  if (set)
-    {
-      if (! CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
-	{
-	  SET_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH);
-	  BGP_EVENT_ADD (peer, BGP_Stop);
-	}
-    }
-  else
-    {
-      if (CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
-	{
-	  UNSET_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH);
-	  BGP_EVENT_ADD (peer, BGP_Stop);
-	}
-    }
-  return CMD_SUCCESS;
-}
-
 DEFUN (neighbor_route_refresh,
        neighbor_route_refresh_cmd,
        NEIGHBOR_CMD "route-refresh",
@@ -2596,7 +2502,8 @@ DEFUN (neighbor_route_refresh,
        NEIGHBOR_ADDR_STR
        "Configure this neighbor as route refresh enable\n")
 {
-  return peer_route_refresh (vty, argv[0], AFI_IP, 1);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP, 
+				      PEER_FLAG_ROUTE_REFRESH, 1);
 }
 
 DEFUN (no_neighbor_route_refresh,
@@ -2607,7 +2514,8 @@ DEFUN (no_neighbor_route_refresh,
        NEIGHBOR_ADDR_STR
        "Configure this neighbor as route refresh enable\n")
 {
-  return peer_route_refresh (vty, argv[0], AFI_IP, 0);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP,
+				      PEER_FLAG_ROUTE_REFRESH, 0);
 }
 
 DEFUN (ipv6_bgp_neighbor_route_refresh,
@@ -2620,7 +2528,8 @@ DEFUN (ipv6_bgp_neighbor_route_refresh,
        "IPv6 address\n"
        "Configure this neighbor as route refresh enable\n")
 {
-  return peer_route_refresh (vty, argv[0], AFI_IP6, 1);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_ROUTE_REFRESH, 1);
 }
 
 DEFUN (no_ipv6_bgp_neighbor_route_refresh,
@@ -2634,7 +2543,8 @@ DEFUN (no_ipv6_bgp_neighbor_route_refresh,
        "IPv6 address\n"
        "Configure this neighbor as route refresh enable\n")
 {
-  return peer_route_refresh (vty, argv[0], AFI_IP6, 0);
+  return peer_change_flag_with_reset (vty, argv[0], AFI_IP6,
+				      PEER_FLAG_ROUTE_REFRESH, 0);
 }
 
 /* neighbor translate-update. */
@@ -2716,26 +2626,7 @@ DEFUN (no_neighbor_translate_update_unimulti,
   return peer_translate_update (vty, argv[0], AFI_IP, 0);
 }
 
-/* Change specified peer flag. */
-int
-peer_change_flag (struct vty *vty, char *ip_str, int afi, u_int16_t flag,
-		  int set)
-{
-  struct peer *peer;
-  struct peer_conf *conf;
-
-  conf = peer_conf_lookup_vty (vty, ip_str, afi);
-  if (! conf)
-    return CMD_WARNING;
-  peer = conf->peer;
-  
-  if (set)
-    SET_FLAG (peer->flags, flag);
-  else
-    UNSET_FLAG (peer->flags, flag);
-  return CMD_SUCCESS;
-}
-
+/* neighbor dont-capability-negotiate */
 DEFUN (neighbor_dont_capability_negotiate,
        neighbor_dont_capability_negotiate_cmd,
        NEIGHBOR_CMD "dont-capability-negotiate",
@@ -4452,8 +4343,52 @@ DEFUN (clear_ipv6_bgp_as,
 
 /* Clear ip bgp neighbor soft in. */
 int
-clear_bgp_soft_in (struct vty *vty, char *ip_str)
+clear_bgp_soft_in (struct vty *vty, afi_t afi, char *ip_str)
 {
+  int ret;
+  union sockunion su;
+  struct peer *peer;
+  struct newnode *nn;
+  int cleared = 0;
+
+  /* Looking up peer with IP address string. */
+  ret = str2sockunion (ip_str, &su);
+  if (ret < 0)
+    {
+      vty_out (vty, "Malformed address: %s%s", ip_str, VTY_NEWLINE);
+      return CMD_WARNING;
+    }
+
+  NEWLIST_LOOP (peer_list, peer, nn)
+    {
+      if (peer_have_afi (peer, afi) && sockunion_same (&peer->su, &su))
+	{
+	  /* If neighbor has route refresh capability, send route refresh
+	     message to the peer. */
+	  if (peer->refresh && peer->status == Established)
+	    {
+	      bgp_route_refresh_send (peer, afi, SAFI_UNICAST);
+	      bgp_route_refresh_send (peer, afi, SAFI_MULTICAST);
+	      cleared = 1;
+	    }
+	  else
+	    {
+	      /* If neighbor has soft reconfiguration inbound flag.
+                 Use Adj-RIB-In database. */
+	      if (CHECK_FLAG (peer->flags, PEER_FLAG_SOFT_RECONFIG))
+		{
+		  bgp_soft_reconfig_in (peer);
+		  cleared = 1;
+		}
+	    }
+	}
+    }
+
+  if (cleared)
+    vty_out (vty, "Peer %s is cleared%s", ip_str, VTY_NEWLINE);
+  else
+    vty_out (vty, "Can't soft clear peer %s%s", ip_str, VTY_NEWLINE);
+
   return CMD_SUCCESS;
 }
 
@@ -4468,7 +4403,21 @@ DEFUN (clear_ip_bgp_neighbor_soft_in,
        "soft reconfiguration"
        "inbound\n")
 {
-  return clear_bgp_soft_in (vty, argv[0]);
+  return clear_bgp_soft_in (vty, AFI_IP, argv[0]);
+}
+
+DEFUN (clear_ipv6_bgp_neighbor_soft_in,
+       clear_ipv6_bgp_neighbor_soft_in_cmd,
+       "clear ipv6 bgp neighbor (A.B.C.D|X:X::X:X) soft in",
+       CLEAR_STR
+       IP_STR
+       BGP_STR
+       "BGP neighbor\n"
+       "IP address\n"
+       "soft reconfiguration"
+       "inbound\n")
+{
+  return clear_bgp_soft_in (vty, AFI_IP6, argv[0]);
 }
 
 /* Show BGP peer's summary information. */
@@ -5605,6 +5554,9 @@ bgp_init ()
   install_element (ENABLE_NODE, &clear_ip_bgp_peer_group_cmd);
   install_element (ENABLE_NODE, &clear_ip_bgp_as_cmd);
 
+  /* "clear ip bgp neighbor soft in "*/
+  install_element (ENABLE_NODE, &clear_ip_bgp_neighbor_soft_in_cmd);
+
 #ifdef HAVE_IPV6
   install_element (BGP_NODE, &ipv6_bgp_neighbor_cmd);
   install_element (BGP_NODE, &ipv6_bgp_neighbor_passive_cmd);
@@ -5709,6 +5661,8 @@ bgp_init ()
   install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_cmd);
   install_element (ENABLE_NODE, &clear_ipv6_bgp_peer_group_cmd);
   install_element (ENABLE_NODE, &clear_ipv6_bgp_as_cmd);
+
+  install_element (ENABLE_NODE, &clear_ipv6_bgp_neighbor_soft_in_cmd);
 #endif /* HAVE_IPV6 */
 
   /* Make global lists. */

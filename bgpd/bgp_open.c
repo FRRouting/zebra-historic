@@ -243,6 +243,8 @@ bgp_capability_parse (struct peer *peer, u_char *pnt, u_char length,
 	}
       else if (cap->code == CAPABILITY_CODE_REFRESH)
 	{
+	  zlog_info ("%s [Open:RECV] Route Refresh Capability", peer->host);
+
 	  /* Check length. */
 	  if (cap->length != 0)
 	    {
@@ -435,9 +437,10 @@ bgp_open_capability (struct stream *s, struct peer *peer)
     return;
     
   /* When the peer is IPv4 unicast only, do not send capability. */
-  if (! peer->afc[AFI_IP][SAFI_MULTICAST] && 
-      ! peer->afc[AFI_IP6][SAFI_UNICAST] && 
-      ! peer->afc[AFI_IP6][SAFI_MULTICAST])
+  if (! peer->afc[AFI_IP][SAFI_MULTICAST] 
+      && ! peer->afc[AFI_IP6][SAFI_UNICAST] 
+      && ! peer->afc[AFI_IP6][SAFI_MULTICAST]
+      && ! CHECK_FLAG (peer->flags, PEER_FLAG_ROUTE_REFRESH))
     return;
 
   /* IPv4 unicast. */

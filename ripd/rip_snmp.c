@@ -237,6 +237,51 @@ rip2IfLookup (struct variable *v, oid objid[], size_t *objid_len,
   return NULL;
 }
 
+struct rip_peer *
+rip2PeerLookup (struct variable *v, oid objid[], size_t *objid_len, 
+		struct in_addr *addr, int exact)
+{
+  int len;
+  struct rip_peer *peer;
+  
+  if (exact)
+    {
+      /* Check the length. */
+      if (*objid_len != v->name_len + sizeof (struct in_addr))
+	return NULL;
+
+      oid2in_addr (objid + v->name_len, sizeof (struct in_addr), addr);
+
+      return rip_peer_lookup (addr);
+    }
+  else
+    {
+      if (oid_compare (objid, *objid_len, v->name, v->name_len) < 0)
+	len = 0;
+      else
+	{
+	  len = *objid_len - v->name_len;
+	  if (len < 0)
+	    len = 0;
+	}
+
+      oid2in_addr (objid + v->name_len, len, addr);
+
+      peer = rip_peer_lookup_next (addr);
+
+      if (! peer)
+	return NULL;
+
+      oid_copy (objid, v->name, v->name_len);
+      oid_copy_addr (objid + v->name_len, &peer->addr,
+		     sizeof (struct in_addr));
+      *objid_len = v->name_len + sizeof (struct in_addr);
+
+      return peer;
+    }
+  return NULL;
+}
+
 int
 rip2IfStatEntry (struct variable *v, oid objid[], size_t *objid_len,
 		 void **val, size_t *val_len, int exact)
@@ -405,22 +450,41 @@ int
 rip2PeerTable (struct variable *v, oid objid[], size_t *objid_len,
 	       void **val, size_t *val_len, int exact)
 {
-  /* Not yet supported. */
-  return -1;
+  static struct in_addr addr;
+  struct rip_peer *peer;
+
+  memset (&addr, 0, sizeof (struct in_addr));
+  
+  /* Lookup interface. */
+  peer = rip2PeerLookup (v, objid, objid_len, &addr, exact);
+  if (! peer)
+    return -1;
 
   switch (v->index)
     {
     case RIP2PEERADDRESS:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
       break;
     case RIP2PEERDOMAIN:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
       break;
     case RIP2PEERLASTUPDATE:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
       break;
     case RIP2PEERVERSION:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
       break;
     case RIP2PEERRCVBADPACKETS:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
       break;
     case RIP2PEERRCVBADROUTES:
+      *val_len = sizeof (struct in_addr);
+      *val = &addr;
       break;
     default:
       return -1;

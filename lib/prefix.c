@@ -356,7 +356,7 @@ str2prefix_ipv6 (char *str, struct prefix_ipv6 *p)
   if (pnt == NULL) 
     {
       ret = inet_pton (AF_INET6, str, &p->prefix);
-      if (ret < 0)
+      if (ret != 1)
 	return 0;
       p->prefixlen = IPV6_MAX_BITLEN;
     }
@@ -369,7 +369,7 @@ str2prefix_ipv6 (char *str, struct prefix_ipv6 *p)
       *(cp + (pnt - str)) = '\0';
       ret = inet_pton (AF_INET6, cp, &p->prefix);
       free (cp);
-      if (ret < 0)
+      if (ret != 1)
 	return 0;
       plen = (u_char) atoi (++pnt);
       if (plen > 128)

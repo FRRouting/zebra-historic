@@ -730,7 +730,7 @@ DEFUN (show_ip, show_ip_cmd,
   if (argc == 1)
     {
       ret = str2prefix_ipv4 (argv[0], &p);
-      if (!ret)
+      if (ret <= 0)
 	{
 	  vty_out (vty, "Malformed IPv4 address%s", VTY_NEWLINE);
 	  return CMD_WARNING;
@@ -920,7 +920,9 @@ rib_add_ipv6 (int type, int flags, struct prefix_ipv6 *p,
 	      rib_fib_unset (np, fib);
 	      
 	      /* Internal route have to check nexthop. */
-	      if (gate && (flags & ZEBRA_FLAG_INTERNAL))
+	      if (gate 
+		  && ! IN6_IS_ADDR_LINKLOCAL (gate)
+		  && (flags & ZEBRA_FLAG_INTERNAL))
 		rib_ipv6_nexthop_set (p, rib);
 
 	      /* OK install into the kernel. */
@@ -945,7 +947,9 @@ rib_add_ipv6 (int type, int flags, struct prefix_ipv6 *p,
     {
       if (! rib_system_route (rib->type))
 	{
-	  if (gate && (flags & ZEBRA_FLAG_INTERNAL))
+	  if (gate 
+	      && ! IN6_IS_ADDR_LINKLOCAL (gate)
+	      && (flags & ZEBRA_FLAG_INTERNAL))
 	    rib_ipv6_nexthop_set (p, rib);
 
 	  ret = kernel_add_ipv6 (p, gate ? &rib->u.gate6 : NULL,
@@ -1193,7 +1197,7 @@ ipv6_static_list (struct vty *vty)
 }
 
 DEFUN (ipv6_route, ipv6_route_cmd,
-       "ipv6 route IPV6_ADDRESS IPV6_ADDRESS",
+       "ipv6 route X:X::X:X/M X:X::X:X",
        "IP information\n"
        "IP routing set\n"
        "IP Address\n"
@@ -1205,7 +1209,7 @@ DEFUN (ipv6_route, ipv6_route_cmd,
 
   /* Route prefix/prefixlength format check. */
   ret = str2prefix_ipv6 (argv[0], &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1250,7 +1254,7 @@ DEFUN (ipv6_route, ipv6_route_cmd,
 }
 
 DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
-       "ipv6 route IPV6_ADDRESS IPV6_ADDRESS IFNAME",
+       "ipv6 route X:X::X:X/M X:X::X:X IFNAME",
        "IP information\n"
        "IP routing set\n"
        "IP Address\n"
@@ -1264,7 +1268,7 @@ DEFUN (ipv6_route_ifname, ipv6_route_ifname_cmd,
 
   /* Route prefix/prefixlength format check. */
   ret = str2prefix_ipv6 (argv[0], &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1331,7 +1335,7 @@ DEFUN (no_ipv6_route,
   
   /* Check ipv6 prefix. */
   ret = str2prefix_ipv6 (argv[0], &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1379,7 +1383,7 @@ DEFUN (no_ipv6_route_ifname,
   
   /* Check ipv6 prefix. */
   ret = str2prefix_ipv6 (argv[0], &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed IPv6 address%s", VTY_NEWLINE);
       return CMD_WARNING;

@@ -356,12 +356,15 @@ Command Index
 * neighbor PEER maximum-prefix NUMBER:   Peer configuration.
 * neighbor PEER next-hop-self:           Peer configuration.
 * neighbor PEER override-capability:     Multiple Protocol Extension for BGP.
+* neighbor PEER port PORT:               Peer configuration.
 * neighbor PEER prefix-list NAME [in|out]: Peer filtering.
 * neighbor PEER remote-as AS-NUMBER:     BGP peer.
 * neighbor PEER route-map NAME [in|out]: Peer filtering.
 * neighbor PEER route-reflector-client:  Route Reflector.
+* neighbor PEER send-community:          Peer configuration.
 * neighbor PEER shutdown:                Peer configuration.
 * neighbor PEER strict-capability-match: Multiple Protocol Extension for BGP.
+* neighbor PEER update-source:           Peer configuration.
 * neighbor PEER version VERSION:         Peer configuration.
 * neighbor PEER weight WEIGHT:           Peer configuration.
 * network A.B.C.D/M area <0-4294967295>: OSPF router.
@@ -433,6 +436,7 @@ Command Index
 * no neighbor PEER route-reflector-client: Route Reflector.
 * no neighbor PEER shutdown:             Peer configuration.
 * no neighbor PEER strict-capability-match: Multiple Protocol Extension for BGP.
+* no neighbor PEER update-source:        Peer configuration.
 * no neighbor PEER weight WEIGHT:        Peer configuration.
 * no network A.B.C.D/M area <0-4294967295>: OSPF router.
 * no network A.B.C.D/M area A.B.C.D:     OSPF router.

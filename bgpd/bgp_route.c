@@ -38,6 +38,7 @@ static const char rcsid[] = "$Id$";
 #include "sockunion.h"
 #include "plist.h"
 #include "newlist.h"
+#include "thread.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_route.h"
@@ -476,6 +477,13 @@ bgp_adj_clear (struct route_table *table)
       }
 }
 
+/* Soft reconfiguration for input. */
+void
+bgp_soft_reconfig_in (struct peer *peer)
+{
+  ;
+}
+
 int
 bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf, 
 		    struct prefix *p, struct attr *attr)
@@ -580,30 +588,29 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
   /* next-hop-set */
   if ((ri->peer == peer_self) 
       || (! CHECK_FLAG (peer->flags, PEER_FLAG_RSERVER_CLIENT)
-	  && (peer_sort (peer) == BGP_PEER_EBGP 
-	      || CHECK_FLAG (peer->flags, PEER_FLAG_NEXTHOP_SELF))))
+          && (peer_sort (peer) == BGP_PEER_EBGP 
+              || CHECK_FLAG (peer->flags, PEER_FLAG_NEXTHOP_SELF))))
     {
+      /* Set IPv4 nexthop. */
       memcpy (&attr->nexthop, &peer->nexthop.v4, IPV4_MAX_BYTELEN);
 
 #ifdef HAVE_IPV6
+      /* Set IPv6 nexthop. */
       if (p->family == AF_INET6)
 	{
+	  /* IPv6 global nexthop must be included. */
 	  memcpy (&attr->mp_nexthop_global, &peer->nexthop.v6_global, 
 		  IPV6_MAX_BYTELEN);
-	  if (attr->mp_nexthop_len < 16)
-	    attr->mp_nexthop_len = 16;
-
-	  if (peer->shared_network &&
-	      !IN6_IS_ADDR_UNSPECIFIED (&peer->nexthop.v6_local))
+	  attr->mp_nexthop_len = 16;
+	  
+	  /* If the peer is on shared nextwork and we have link-local
+             nexthop set it. */
+	  if (peer->shared_network 
+	      && !IN6_IS_ADDR_UNSPECIFIED (&peer->nexthop.v6_local))
 	    {
 	      memcpy (&attr->mp_nexthop_local, &peer->nexthop.v6_local, 
 		      IPV6_MAX_BYTELEN);
-	      if (attr->mp_nexthop_len < 32)
-		attr->mp_nexthop_len = 32;
-	    }
-	  else
-	    {
-	      attr->mp_nexthop_len = 16;
+	      attr->mp_nexthop_len = 32;
 	    }
 	}
 #endif /* HAVE_IPV6 */
@@ -611,16 +618,19 @@ bgp_announce_check (struct bgp_info *ri, struct peer_conf *conf,
   else
     {
 #ifdef HAVE_IPV6
-      /* Link-local address should not be transit to different peer. */
-      attr->mp_nexthop_len = 16;
-
-      if (peer->shared_network &&
-	  !IN6_IS_ADDR_UNSPECIFIED (&peer->nexthop.v6_local))
+      if (p->family == AF_INET6)
 	{
-	  memcpy (&attr->mp_nexthop_local, &peer->nexthop.v6_local, 
-		  IPV6_MAX_BYTELEN);
-	  if (attr->mp_nexthop_len < 32)
-	    attr->mp_nexthop_len = 32;
+	  /* Link-local address should not be transit to different peer. */
+	  attr->mp_nexthop_len = 16;
+
+	  /* Set link-local address for shared network peer. */
+	  if (peer->shared_network 
+	      && ! IN6_IS_ADDR_UNSPECIFIED (&peer->nexthop.v6_local))
+	    {
+	      memcpy (&attr->mp_nexthop_local, &peer->nexthop.v6_local, 
+		      IPV6_MAX_BYTELEN);
+	      attr->mp_nexthop_len = 32;
+	    }
 	}
 #endif /* HAVE_IPV6 */
     }
@@ -2155,11 +2165,21 @@ route_vty_out_route (struct prefix *p, struct vty *vty)
   vty_out (vty, "%*s", len, " ");
 }
 
+/* Calculate line number of output data. */
+int
+vty_calc_line (struct vty *vty, unsigned long length)
+{
+  return vty->width ? (((vty->obuf->length - length) / vty->width) + 1) : 1;
+}
+
 /* called from terminal list command */
-void
+int
 route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 {
   struct attr *attr;
+  unsigned long length = 0;
+
+  length = vty->obuf->length;
 
   /* Route status display. */
   if (binfo->suppress)
@@ -2225,8 +2245,9 @@ route_vty_out (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
     else
       vty_out (vty, " %s", bgp_origin_str[attr->origin]);
   }
-
   vty_out (vty, "%s", VTY_NEWLINE);
+
+  return vty_calc_line (vty, length);
 }  
 
 /* called from terminal list command */
@@ -2305,10 +2326,14 @@ route_vty_out_route_ipv6 (struct prefix *p, struct vty *vty)
 }
 
 /* called from terminal list command */
-void
+int
 route_vty_out_ipv6 (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 {
   struct attr *attr;
+  unsigned long length;
+  int line = 0;
+
+  length = vty->obuf->length;
 
   /* Selected tag display. */
   vty_out (vty, "%s%s ", binfo->selected ? "*" : " ", 
@@ -2341,6 +2366,9 @@ route_vty_out_ipv6 (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 
   vty_out (vty, "%s", VTY_NEWLINE);
 
+  line = vty_calc_line (vty, length);
+  length = vty->obuf->length;
+
   if (attr) 
     {
       char buf[BUFSIZ];
@@ -2356,6 +2384,7 @@ route_vty_out_ipv6 (struct vty *vty, struct prefix *p, struct bgp_info *binfo)
 		 inet_ntop (AF_INET6, &attr->mp_nexthop_local, buf1, BUFSIZ),
 		 VTY_NEWLINE);
     }
+  return line + vty_calc_line (vty, length);
 }  
 
 /* called from terminal list command */
@@ -2525,16 +2554,76 @@ route_vty_out_detail (struct vty *vty, struct prefix *p,
 }  
 
 int
+bgp_show_callback (struct vty *vty, void *arg, int unlock)
+{
+  struct route_node *rn;
+  struct bgp_info *ri;
+  int count;
+  int limit;
+  unsigned long cp;
+
+  rn = arg;
+  limit = ((vty->lines == 0) 
+	   ? 10 : (vty->lines > 0 
+		   ? vty->lines : vty->height - 2));
+  limit = limit > 0 ? limit : 2;
+
+  if (unlock && rn)
+    {
+      route_unlock_node (rn);
+      vty->output = NULL;
+      vty->output_func = NULL;
+      return 0;
+    }
+
+  count = 0;
+
+  for (; rn; rn = route_next (rn)) 
+    for (ri = rn->info; ri; ri = ri->next)
+      {
+	cp = vty->obuf->length;
+	if (rn->p.family == AF_INET)
+	  count += route_vty_out (vty, &rn->p, ri);
+#ifdef HAVE_IPV6
+	else if (rn->p.family == AF_INET6)
+	  count += route_vty_out_ipv6 (vty, &rn->p, ri);
+#endif /* HAVE_IPV6 */
+
+	/* Remember current pointer then suspend output. */
+	if (count >= limit)
+	  {
+	    vty->status = VTY_CONTINUE;
+	    vty->output = route_next (rn);;
+	    vty->output_func = bgp_show_callback;
+	    return 0;
+	  }
+      }
+  vty->status = VTY_CONTINUE;
+  vty->output = NULL;
+  vty->output_func = NULL;
+  return 0;
+}
+
+int
 bgp_show (struct vty *vty, char *view_name, char *prefix_str,
 	  u_int16_t afi, u_char safi)
 {
   int ret;
-  int write;
   struct bgp *bgp;
   struct route_table *table;
   struct route_node *rn;
   struct bgp_info *ri;
   struct prefix match;
+  char v4_header[] = "   Network             Next Hop            Metric    LocPrf    Weight Path%s";
+  char v6_header[] = "   Network                                LocPrf Weight Path%s";
+  int first = 1;
+  int count;
+  int limit;
+
+  limit = ((vty->lines == 0) 
+	   ? 10 : (vty->lines > 0 
+		   ? vty->lines : vty->height - 2));
+  limit = limit > 0 ? limit : 2;
 
   /* BGP structure lookup. */
   if (! view_name)
@@ -2556,7 +2645,7 @@ bgp_show (struct vty *vty, char *view_name, char *prefix_str,
 	}
     }
 
-  write = 0;
+  count = 0;
   table = bgp->rib[afi][safi];
 
   /* `show ip bgp' command shows all of bgp routes. */
@@ -2569,22 +2658,46 @@ bgp_show (struct vty *vty, char *view_name, char *prefix_str,
 	    if (! write)
 	      {
 		if (afi == AFI_IP)
-		  vty_out (vty, "   Network             Next Hop            Metric    LocPrf    Weight Path%s", VTY_NEWLINE);
+		  vty_out (vty, v4_header, VTY_NEWLINE);
 		else if (afi == AFI_IP6)
-		  vty_out (vty, "   Network                                LocPrf Weight Path%s", VTY_NEWLINE);
-
-		write++;
+		  vty_out (vty, v6_header, VTY_NEWLINE);
+		count++;
 	      }
+
 	    if (afi == AFI_IP)
-	      route_vty_out (vty, &rn->p, ri);
+	      count += route_vty_out (vty, &rn->p, ri);
 #ifdef HAVE_IPV6
 	    else if (afi == AFI_IP6)
-	      route_vty_out_ipv6 (vty, &rn->p, ri);
+	      count += route_vty_out_ipv6 (vty, &rn->p, ri);
 #endif /* HAVE_IPV6 */
-	  }
 
-      if (! write)
+	    /* Remember current pointer then suspend output. */
+	    if (count >= limit)
+	      {
+		if (first)
+		  {
+		    vty->status = VTY_START;
+		    first = 0;
+		  }
+		else
+		  vty->status = VTY_CONTINUE;
+		vty->output = route_next (rn);
+		vty->output_func = bgp_show_callback;
+		return CMD_SUCCESS;
+	      }
+	  }
+      if (! count)
 	vty_out (vty, "No BGP network exists%s", VTY_NEWLINE);
+
+      if (first)
+	{
+	  vty->status = VTY_START;
+	  first = 0;
+	}
+      else
+	vty->status = VTY_CONTINUE;
+      vty->output = NULL;
+      vty->output_func = NULL;
 
       return CMD_SUCCESS;
     }

@@ -1,5 +1,24 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.84b
+
+* Changes in lib
+
+** Fix bug of inet_pton return value handling
+
+* Changes in bgpd
+
+** Fix bug of BGP-4+ link-local address nexthop check for IBGP peer.
+
+** Don't allocate whole buffer for displaying "show ip bgp".  Now it
+consume only one screen size memory.
+
+* Changes in ripd
+
+** Fix debug output string.
+
+** Add RIP peer handling.  RIP peer are shown by "show ip protocols".
+
 * Changes in zebra-0.84a
 
 * Changes in bgpd

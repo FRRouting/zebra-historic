@@ -31,7 +31,7 @@ translation approved by Kunihiro Ishiguro.
 Indirect:
 zebra.info-1: 1105
 zebra.info-2: 50171
-zebra.info-3: 89984
+zebra.info-3: 90248
 
 Tag Table:
 (Indirect)
@@ -102,41 +102,41 @@ Node: BGP peer63638
 Node: BGP network64249
 Node: Redistribute to BGP64952
 Node: Peer configuration65515
-Node: Peer filtering67808
-Node: BGP terminal mode commands68347
-Node: BGP Log Format68967
-Node: Multiple Protocol Extension for BGP69506
-Node: Route Reflector72796
-Node: Route Server73099
-Node: Multiple instance74150
-Node: BGP instance and view74742
-Node: Routing policy76115
-Node: Viewing the view76858
-Node: How to set up a 6-Bone connection77130
-Node: Dump BGP packet and table78434
-Node: Filtering78594
-Node: IP Access List78983
-Node: IP Prefix List79374
-Node: ip prefix-list description80685
-Node: ip prefix-list sequential number control80993
-Node: Showing ip prefix-list81323
-Node: Clear counter of ip prefix-list81983
-Node: IP Community List82282
-Node: AS Path Access List82483
-Node: Route Map82668
-Node: Route Map Command83170
-Node: Route Map Match Command83373
-Node: Route Map Set Command83981
-Node: IPv6 Supports84839
-Node: Router Advertisement85407
-Node: Kernel Interface85740
-Node: SNMP Support86956
-Node: How to get ucd-snmp87584
-Node: SMUX configuration88627
-Node: Linux Netlink89060
-Node: Zebra Protocol89844
-Node: Packet Binary Dump Format89984
-Node: Command Index101577
-Node: VTY Key Index122065
+Node: Peer filtering68072
+Node: BGP terminal mode commands68611
+Node: BGP Log Format69231
+Node: Multiple Protocol Extension for BGP69770
+Node: Route Reflector73060
+Node: Route Server73363
+Node: Multiple instance74414
+Node: BGP instance and view75006
+Node: Routing policy76379
+Node: Viewing the view77122
+Node: How to set up a 6-Bone connection77394
+Node: Dump BGP packet and table78698
+Node: Filtering78858
+Node: IP Access List79247
+Node: IP Prefix List79638
+Node: ip prefix-list description80949
+Node: ip prefix-list sequential number control81257
+Node: Showing ip prefix-list81587
+Node: Clear counter of ip prefix-list82247
+Node: IP Community List82546
+Node: AS Path Access List82747
+Node: Route Map82932
+Node: Route Map Command83434
+Node: Route Map Match Command83637
+Node: Route Map Set Command84245
+Node: IPv6 Supports85103
+Node: Router Advertisement85671
+Node: Kernel Interface86004
+Node: SNMP Support87220
+Node: How to get ucd-snmp87848
+Node: SMUX configuration88891
+Node: Linux Netlink89324
+Node: Zebra Protocol90108
+Node: Packet Binary Dump Format90248
+Node: Command Index101841
+Node: VTY Key Index122573
 
 End Tag Table

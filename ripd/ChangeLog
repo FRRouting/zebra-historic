@@ -1,3 +1,15 @@
+2000-01-17  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (show_ip_protocols_rip): Fix bug of "show ip protocls"
+	mis-display RIP version.
+
+	* ripd.h (struct rip_peer): Add timeout thread to rip_peer
+	structure.
+
+2000-01-16  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rip_peer.c: Add new file for supporting RIP peer.
+
 1999-12-26  David Lipovkov <davidl@nbase.co.il>
 
 	* ripd.c (rip_authentication): RIP authantication string is 16

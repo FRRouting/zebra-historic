@@ -55,6 +55,9 @@
 #define RIP_TIMEOUT_TIMER_DEFAULT      180
 #define RIP_GARBAGE_TIMER_DEFAULT      120
 
+/* RIP peer timeout value. */
+#define RIP_PEER_TIMER_DEFAULT         180
+
 /* RIP port number. */
 #define RIP_PORT_DEFAULT               520
 #define RIP_VTY_PORT                  2602
@@ -231,14 +234,17 @@ struct rip_peer
   int domain;
 
   /* Last update time. */
-  time_t last_update;
+  time_t uptime;
 
   /* Peer RIP version. */
-  int version;
+  u_char version;
 
   /* Statistics. */
   int recv_badpackets;
   int recv_badroutes;
+
+  /* Timeout thread. */
+  struct thread *t_timeout;
 };
 
 /* RIP accepet/announce methods. */
@@ -318,6 +324,14 @@ void rip_distribute_update_interface (struct interface *);
 
 int config_write_rip_network (struct vty *, int);
 int config_write_rip_redistribute (struct vty *, int);
+
+void rip_peer_init ();
+void rip_peer_update (struct sockaddr_in *, u_char);
+void rip_peer_bad_route (struct sockaddr_in *);
+void rip_peer_bad_packet (struct sockaddr_in *);
+void rip_peer_display (struct vty *);
+struct rip_peer *rip_peer_lookup (struct in_addr *);
+struct rip_peer *rip_peer_lookup_next (struct in_addr *);
 
 /* There is only one rip strucutre. */
 extern struct rip *rip;

@@ -222,6 +222,7 @@ main (int argc, char **argv)
   rip_init ();
   rip_if_init ();
   rip_zclient_init ();
+  rip_peer_init ();
   sort_node ();
 
   /* Get configuration file. */

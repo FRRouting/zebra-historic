@@ -496,31 +496,15 @@ Peer configuration
    In a `router bgp' clause there are neighbor specific configurations
 required.
 
- - BGP Command: neighbor PEER next-hop-self
- - BGP Command: no neighbor PEER next-hop-self
-     This command specifies an announced route's nexthop as being
-     equivalent to the address of the bgp beast.
-
- - BGP Command: neighbor PEER weight WEIGHT
- - BGP Command: no neighbor PEER weight WEIGHT
-     This command specifies a default WEIGHT value for the neighbor's
-     routes.
-
- - BGP Command: neighbor PEER maximum-prefix NUMBER
- - BGP Command: no neighbor PEER maximum-prefix NUMBER
-
- - BGP Command: neighbor PEER default-originate
- - BGP Command: no neighbor PEER default-originate
-     bgpd's default is to not announce the default route (0.0.0.0/0)
-     even it is in routing table.  When you want to announce default
-     routes to the peer, use this command.
-
  - BGP Command: neighbor PEER shutdown
  - BGP Command: no neighbor PEER shutdown
      Shutdown the peer.  We can delete the neighbor's configuration by
      `no neighbor PEER remote-as AS-NUMBER' but all configuration of
      the neighbor will be deleted.  When you want to preserve the
      configuration, but want to drop the BGP peer, use this syntax.
+
+ - BGP Command: neighbor PEER ebgp-multihop
+ - BGP Command: no neighbor PEER ebgp-multihop
 
  - BGP Command: neighbor PEER description ...
  - BGP Command: no neighbor PEER description ...
@@ -535,14 +519,39 @@ required.
      Extensions for BGP-4.  Some routing software is still using this
      version.
 
- - BGP Command: neighbor PEER ebgp-multihop
- - BGP Command: no neighbor PEER ebgp-multihop
-
  - BGP Command: neighbor PEER interface IFNAME
  - BGP Command: no neighbor PEER interface IFNAME
      When you connect to a BGP peer over an IPv6 link-local address,
      you have to specify the ifname of the interface used for the
      connection.
+
+ - BGP Command: neighbor PEER next-hop-self
+ - BGP Command: no neighbor PEER next-hop-self
+     This command specifies an announced route's nexthop as being
+     equivalent to the address of the bgp beast.
+
+ - BGP Command: neighbor PEER update-source
+ - BGP Command: no neighbor PEER update-source
+
+ - BGP Command: neighbor PEER default-originate
+ - BGP Command: no neighbor PEER default-originate
+     bgpd's default is to not announce the default route (0.0.0.0/0)
+     even it is in routing table.  When you want to announce default
+     routes to the peer, use this command.
+
+ - BGP Command: neighbor PEER port PORT
+ - BGP Command: neighbor PEER port PORT
+
+ - BGP Command: neighbor PEER send-community
+ - BGP Command: neighbor PEER send-community
+
+ - BGP Command: neighbor PEER weight WEIGHT
+ - BGP Command: no neighbor PEER weight WEIGHT
+     This command specifies a default WEIGHT value for the neighbor's
+     routes.
+
+ - BGP Command: neighbor PEER maximum-prefix NUMBER
+ - BGP Command: no neighbor PEER maximum-prefix NUMBER
 
 
 File: zebra.info,  Node: Peer filtering,  Next: BGP terminal mode commands,  Prev: Peer configuration,  Up: bgpd

@@ -31,6 +31,20 @@
 
 /* Solaris defines these in both <netinet/in.h> and <inet/in.h>, sigh */
 #ifdef SUNOS_5
+#include <sys/tiuser.h>
+#ifndef T_CURRENT
+#define T_CURRENT       MI_T_CURRENT
+#endif /* T_CURRENT */
+#ifndef IRE_CACHE
+#define IRE_CACHE               0x0020  /* Cached Route entry */
+#endif /* IRE_CACHE */
+#ifndef IRE_HOST_REDIRECT
+#define IRE_HOST_REDIRECT       0x0200  /* Host route entry from redirects */
+#endif /* IRE_HOST_REDIRECT */
+#ifndef IRE_CACHETABLE
+#define IRE_CACHETABLE          (IRE_CACHE | IRE_BROADCAST | IRE_LOCAL | \
+                                 IRE_LOOPBACK)
+#endif /* IRE_CACHETABLE */
 #undef IPOPT_EOL
 #undef IPOPT_NOP
 #undef IPOPT_LSRR

@@ -174,7 +174,7 @@ rip_request_interface_send (struct interface *ifp, u_char version)
     {
       
       if (IS_RIP_DEBUG_EVENT)
-	zlog_info ("RIP multicast request on %s", ifp->name);
+	zlog_info ("multicast request on %s", ifp->name);
 
       rip_request_send (NULL, ifp, version);
       return;
@@ -186,7 +186,7 @@ rip_request_interface_send (struct interface *ifp, u_char version)
       listnode cnode;
 
       if (IS_RIP_DEBUG_EVENT)
-	zlog (NULL, LOG_INFO, "RIP broadcast request to %s", ifp->name);
+	zlog_info ("broadcast request to %s", ifp->name);
 
       for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	{
@@ -204,7 +204,7 @@ rip_request_interface_send (struct interface *ifp, u_char version)
 
 #if 0
 	      if (IS_RIP_DEBUG_EVENT)
-		zlog_info ("RIP SEND request to %s", inet_ntoa (to.sin_addr));
+		zlog_info ("SEND request to %s", inet_ntoa (to.sin_addr));
 #endif /* 0 */
 	      
 	      rip_request_send (&to, ifp, version);
@@ -273,7 +273,7 @@ rip_request_neighbor_all ()
     return;
 
   if (IS_RIP_DEBUG_EVENT)
-    zlog_info ("RIP request to the all neighbor");
+    zlog_info ("request to the all neighbor");
 
   /* Send request to all neighbor. */
   for (rp = route_top (rip->neighbor); rp; rp = route_next (rp))
@@ -290,7 +290,7 @@ rip_multicast_join (struct interface *ifp, int sock)
   if (if_is_up (ifp) && if_is_multicast (ifp))
     {
       if (IS_RIP_DEBUG_EVENT)
-	zlog_info ("RIP multicast join at %s", ifp->name);
+	zlog_info ("multicast join at %s", ifp->name);
 
       for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	{
@@ -319,7 +319,7 @@ rip_multicast_leave (struct interface *ifp, int sock)
   if (if_is_up (ifp) && if_is_multicast (ifp))
     {
       if (IS_RIP_DEBUG_EVENT)
-	zlog_info ("RIP multicast leave from %s", ifp->name);
+	zlog_info ("multicast leave from %s", ifp->name);
 
       for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	{
@@ -444,7 +444,7 @@ rip_interface_add (int command, struct zebra *zebra, zebra_size_t length)
   ifp = zebra_interface_add_read (zebra->ibuf);
 
   if (IS_RIP_DEBUG_ZEBRA)
-    zlog_info ("RIP interface add %s index %d flags %d metric %d mtu %d",
+    zlog_info ("interface add %s index %d flags %d metric %d mtu %d",
 	       ifp->name, ifp->ifindex, ifp->flags, ifp->metric, ifp->mtu);
 
   /* Check is this interface is RIP enabled or not.*/
@@ -480,7 +480,7 @@ rip_interface_address_add (int command, struct zebra *zebra,
     {
       p = c->address;
       if (p->family == AF_INET)
-	zlog_info ("RIP connected address %s/%d", 
+	zlog_info ("connected address %s/%d", 
 		   inet_ntoa (p->u.prefix4), p->prefixlen);
     }
 
@@ -679,7 +679,7 @@ rip_enable_apply (struct interface *ifp)
       if (! ri->running)
 	{
 	  if (IS_RIP_DEBUG_EVENT)
-	    zlog_info ("RIP turn on %s", ifp->name);
+	    zlog_info ("turn on %s", ifp->name);
 
 	  /* Add interface wake up thread. */
 	  if (! ri->t_wakeup)
@@ -701,7 +701,7 @@ rip_enable_apply (struct interface *ifp)
       if (ri->running)
 	{
 	  if (IS_RIP_DEBUG_EVENT)
-	    zlog_info ("RIP turn off %s", ifp->name);
+	    zlog_info ("turn off %s", ifp->name);
 
 	  /* Leave from multicast group. */
 	  rip_multicast_leave (ifp, rip->sock);
@@ -871,7 +871,7 @@ DEFUN (rip_neighbor,
 
   ret = str2prefix_ipv4 (argv[0], &p);
 
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by A.B.C.D%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -895,7 +895,7 @@ DEFUN (no_rip_neighbor,
 
   ret = str2prefix_ipv4 (argv[0], &p);
 
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by A.B.C.D%s", VTY_NEWLINE);
       return CMD_WARNING;

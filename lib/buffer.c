@@ -119,6 +119,7 @@ buffer_reset (struct buffer *b)
     }
   b->head = b->tail = NULL;
   b->alloc = 0;
+  b->length = 0;
 }
 
 /* Add buffer_data to the end of buffer. */
@@ -155,6 +156,7 @@ buffer_write (struct buffer *b, u_char *ptr, size_t size)
   struct buffer_data *data;
 
   data = b->tail;
+  b->length += size;
 
   /* We use even last one byte of data buffer. */
   while (size)    
@@ -295,6 +297,88 @@ buffer_flush_all (struct buffer *b, int fd)
   buffer_reset (b);
 
   return ret;
+}
+
+/* Flush all buffer to the fd. */
+int
+buffer_flush_vty_all (struct buffer *b, int fd, int erase_flag,
+		      int no_more_flag)
+{
+  int nbytes;
+  int iov_index;
+  struct iovec *iov;
+  struct iovec small_iov[3];
+  char more[] = " --More-- ";
+  char erase[] = { 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+		   ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+		   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08};
+  struct buffer_data *data;
+  struct buffer_data *out;
+  struct buffer_data *next;
+
+  /* For erase and more data add two to b's buffer_data count.*/
+  if (b->alloc == 1)
+    iov = small_iov;
+  else
+    iov = XMALLOC (MTYPE_TMP, sizeof (struct iovec) * (b->alloc + 2));
+
+  data = b->head;
+  iov_index = 0;
+
+  /* Previously print out is performed. */
+  if (erase_flag)
+    {
+      iov[iov_index].iov_base = erase;
+      iov[iov_index].iov_len = sizeof erase;
+      iov_index++;
+    }
+
+  /* Output data. */
+  for (data = b->head; data; data = data->next)
+    {
+      iov[iov_index].iov_base = (char *)(data->data + data->sp);
+      iov[iov_index].iov_len = data->cp - data->sp;
+      iov_index++;
+    }
+
+  /* In case of `more' display need. */
+  if (! buffer_empty (b) && !no_more_flag)
+    {
+      iov[iov_index].iov_base = more;
+      iov[iov_index].iov_len = sizeof more;
+      iov_index++;
+    }
+
+  /* We use write or writev*/
+  nbytes = writev (fd, iov, iov_index);
+
+  /* Error treatment. */
+  if (nbytes < 0)
+    {
+      if (errno == EINTR)
+	;
+      if (errno == EWOULDBLOCK)
+	;
+    }
+
+  /* Free printed buffer data. */
+  for (out = b->head; out && out != data; out = next)
+    {
+      next = out->next;
+      if (next)
+	next->prev = NULL;
+      else
+	b->tail = next;
+      b->head = next;
+
+      buffer_data_free (out);
+      b->alloc--;
+    }
+
+  if (iov != small_iov)
+    XFREE (MTYPE_TMP, iov);
+
+  return nbytes;
 }
 
 /* Flush buffer to the file descriptor.  Mainly used from vty

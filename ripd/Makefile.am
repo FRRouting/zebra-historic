@@ -9,7 +9,7 @@ sbin_PROGRAMS = ripd
 
 librip_a_SOURCES = \
 	ripd.c rip_zebra.c rip_interface.c rip_debug.c rip_snmp.c \
-	rip_routemap.c
+	rip_routemap.c rip_peer.c
 
 noinst_HEADERS = \
 	ripd.h rip_debug.h
@@ -52,6 +52,9 @@ rip_main.o: rip_main.c ../lib/version.h ../lib/thread.h \
  ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/memory.h \
  ../lib/prefix.h ../lib/log.h ../lib/filter.h ../lib/if.h \
  ../lib/linklist.h ../ripd/ripd.h
+rip_peer.o: rip_peer.c ../lib/if.h ../lib/linklist.h ../lib/prefix.h \
+ ../lib/command.h ../lib/vector.h ../lib/vty.h ../lib/newlist.h \
+ ../lib/thread.h ../lib/memory.h ../ripd/ripd.h
 rip_routemap.o: rip_routemap.c ../lib/memory.h ../lib/prefix.h \
  ../lib/routemap.h ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../lib/filter.h ../lib/if.h ../lib/linklist.h ../lib/log.h \

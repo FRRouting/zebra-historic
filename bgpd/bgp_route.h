@@ -58,6 +58,7 @@ struct bgp_info
 void bgp_route_init ();
 void bgp_announce_table (struct peer *);
 void bgp_route_clear (struct peer *);
+void bgp_soft_reconfig_in (struct peer *);
 
 int nlri_sanity_check (struct peer *, int, u_char *, bgp_size_t);
 int nlri_parse (struct peer *, struct attr *, struct bgp_nlri *);

@@ -2192,12 +2192,12 @@ When program terminates, retain BGP routes added by zebra.
 @comment  node-name,  next,  previous,  up
 @section BGP router
 
-First of all you must configure BGP router with @command{router bgp}
+  First of all you must configure BGP router with @command{router bgp}
 command.  To configure BGP router, you need AS number.  AS number is an
 identification of autonomous system.  BGP protocol uses the AS number
 for detecting the BGP connection is internal one or external one.
 
-AS number is a digit between 1 and 65535.  How to use AS number is
+  AS number is a digit between 1 and 65535.  How to use AS number is
 described in RFC1930.  AS number 64512 through 65535 are defined as
 private AS number.  Private AS number must not to be advertised on the
 global Internet.
@@ -2220,6 +2220,8 @@ is selected as the largest IP Address of the interfaces.  When
 @code{router zebra} is not enabled bgpd can't get interface information
 so @code{router-id} is set to 0.0.0.0.  So please set router-id by hand.
 @end deffn
+
+
 
 @node BGP peer, BGP network, BGP router, bgpd
 @comment  node-name,  next,  previous,  up
@@ -2303,29 +2305,6 @@ Redistribute OSPF route to BGP process.
 In a @code{router bgp} clause there are neighbor specific configurations
 required.
 
-@deffn {BGP Command} {neighbor @var{peer} next-hop-self} {}
-@deffnx {BGP Command} {no neighbor @var{peer} next-hop-self} {}
-This command specifies an announced route's nexthop as being equivalent
-to the address of the bgp beast.
-@end deffn
-
-@deffn {BGP Command} {neighbor @var{peer} weight @var{weight}} {}
-@deffnx {BGP Command} {no neighbor @var{peer} weight @var{weight}} {}
-This command specifies a default @var{weight} value for the neighbor's
-routes.
-@end deffn
-
-@deffn {BGP Command} {neighbor @var{peer} maximum-prefix @var{number}} {}
-@deffnx {BGP Command} {no neighbor @var{peer} maximum-prefix @var{number}} {}
-@end deffn
-
-@deffn {BGP Command} {neighbor @var{peer} default-originate} {}
-@deffnx {BGP Command} {no neighbor @var{peer} default-originate} {}
-bgpd's default is to not announce the default route (0.0.0.0/0) even it
-is in routing table.  When you want to announce default routes to the
-peer, use this command.
-@end deffn
-
 @deffn {BGP Command} {neighbor @var{peer} shutdown} {}
 @deffnx {BGP Command} {no neighbor @var{peer} shutdown} {}
 Shutdown the peer.  We can delete the neighbor's configuration by
@@ -2333,6 +2312,10 @@ Shutdown the peer.  We can delete the neighbor's configuration by
 configuration of the neighbor will be deleted.  When you want to
 preserve the configuration, but want to drop the BGP peer, use this
 syntax.
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} ebgp-multihop} {}
+@deffnx {BGP Command} {no neighbor @var{peer} ebgp-multihop} {}
 @end deffn
 
 @deffn {BGP Command} {neighbor @var{peer} description ...} {}
@@ -2350,14 +2333,45 @@ Extensions for BGP-4.  Some routing software is still using this
 version.
 @end deffn
 
-@deffn {BGP Command} {neighbor @var{peer} ebgp-multihop} {}
-@deffnx {BGP Command} {no neighbor @var{peer} ebgp-multihop} {}
-@end deffn
-
 @deffn {BGP Command} {neighbor @var{peer} interface @var{ifname}} {}
 @deffnx {BGP Command} {no neighbor @var{peer} interface @var{ifname}} {}
 When you connect to a BGP peer over an IPv6 link-local address, you have
 to specify the ifname of the interface used for the connection.
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} next-hop-self} {}
+@deffnx {BGP Command} {no neighbor @var{peer} next-hop-self} {}
+This command specifies an announced route's nexthop as being equivalent
+to the address of the bgp beast.
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} update-source} {}
+@deffnx {BGP Command} {no neighbor @var{peer} update-source} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} default-originate} {}
+@deffnx {BGP Command} {no neighbor @var{peer} default-originate} {}
+bgpd's default is to not announce the default route (0.0.0.0/0) even it
+is in routing table.  When you want to announce default routes to the
+peer, use this command.
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} port @var{port}} {}
+@deffnx {BGP Command} {neighbor @var{peer} port @var{port}} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} send-community} {}
+@deffnx {BGP Command} {neighbor @var{peer} send-community} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} weight @var{weight}} {}
+@deffnx {BGP Command} {no neighbor @var{peer} weight @var{weight}} {}
+This command specifies a default @var{weight} value for the neighbor's
+routes.
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} maximum-prefix @var{number}} {}
+@deffnx {BGP Command} {no neighbor @var{peer} maximum-prefix @var{number}} {}
 @end deffn
 
 @node Peer filtering, BGP terminal mode commands, Peer configuration, bgpd

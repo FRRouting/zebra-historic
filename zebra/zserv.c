@@ -650,7 +650,7 @@ DEFUN (ip_route,
 
   /* a.b.c.d/mask gateway format. */
   ret = str2prefix_ipv4 (argv[0], &p);
-  if (!ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask "
 	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);
@@ -808,7 +808,7 @@ DEFUN (no_ip_route,
 
   ret = str2prefix_ipv4 (argv[0], &p);
 
-  if (! ret)
+  if (ret <= 0)
     {
       vty_out (vty, "Please specify address by a.b.c.d/mask "
 	       "or a.b.c.d x.x.x.x%s", VTY_NEWLINE);

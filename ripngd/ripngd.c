@@ -91,9 +91,11 @@ struct ripng_nexthop
 const char *
 inet6_ntop (struct in6_addr *p)
 {
-  static char buf[INET6_BUFSIZ];
+  static char buf[INET6_ADDRSTRLEN];
 
-  return inet_ntop (AF_INET6, p, buf, INET6_BUFSIZ);
+  inet_ntop (AF_INET6, p, buf, INET6_ADDRSTRLEN);
+
+  return buf;
 }
 
 /* Allocate new ripng information. */
@@ -639,9 +641,8 @@ ripng_route_process (struct rte *rte, struct sockaddr_in6 *from,
 	 to the address of the router from which the datagram came.
 	 If this datagram is from the same router as the existing
 	 route, reinitialize the timeout.  */
-      /* same = IN6_ARE_ADDR_EQUAL (&rinfo->from, &from->sin6_addr); */
-      if (rinfo->ifindex == ifp->ifindex)
-	same = 1;
+      same = (IN6_ARE_ADDR_EQUAL (&rinfo->from, &from->sin6_addr) 
+	      && (rinfo->ifindex == ifp->ifindex));
 
       if (same)
 	ripng_timeout_update (rinfo);
@@ -1656,10 +1657,8 @@ DEFUN (show_ipv6_ripng,
   /* Header of display. */ 
   vty_out (vty, "%sCodes: R - RIPng%s%s"
 	   "   Network                            "
-	   "Next Hop                Metric Tag Time%s", VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE,
-	   VTY_NEWLINE);
+	   "Next Hop                  If Met Tag Time%s", VTY_NEWLINE,
+	   VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
   
   for (rp = route_top (ripng_table); rp; rp = route_next (rp))
     {
@@ -1712,7 +1711,8 @@ DEFUN (show_ipv6_ripng,
 	  if (len > 0)
 	    vty_out (vty, "%*s", len, " ");
 
-	  vty_out (vty, "%4d %3d ", rinfo->metric, rinfo->tag);
+	  vty_out (vty, "%2d %2d %3d ",
+		   rinfo->ifindex, rinfo->metric, rinfo->tag);
 
 	  if (rinfo->sub_type == RIPNG_ROUTE_RTE)
 	    ripng_vty_out_uptime (vty, rinfo);
@@ -1760,7 +1760,7 @@ DEFUN (ripng_route,
   struct route_node *rp;
 
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
-  if (ret < 0)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1793,7 +1793,7 @@ DEFUN (no_ripng_route,
   struct route_node *rp;
 
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
-  if (ret < 0)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1819,7 +1819,7 @@ DEFUN (no_ripng_route,
 
 DEFUN (ripng_aggregate_address,
        ripng_aggregate_address_cmd,
-       "aggregate-address IPV6ADDR",
+       "aggregate-address X:X::X:X/M",
        "Set aggregate RIPng route announcement\n"
        "Aggregate network\n")
 {
@@ -1828,7 +1828,7 @@ DEFUN (ripng_aggregate_address,
   struct route_node *node;
 
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *)&p);
-  if (ret < 0)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;
@@ -1851,7 +1851,7 @@ DEFUN (ripng_aggregate_address,
 
 DEFUN (no_ripng_aggregate_address,
        no_ripng_aggregate_address_cmd,
-       "no aggregate-address IPV6ADDR",
+       "no aggregate-address X:X::X:X/M",
        NO_STR
        "Delete aggregate RIPng route announcement\n"
        "Aggregate network")
@@ -1861,7 +1861,7 @@ DEFUN (no_ripng_aggregate_address,
   struct route_node *node;
 
   ret = str2prefix_ipv6 (argv[0], (struct prefix_ipv6 *) &p);
-  if (ret < 0)
+  if (ret <= 0)
     {
       vty_out (vty, "Malformed address%s", VTY_NEWLINE);
       return CMD_WARNING;

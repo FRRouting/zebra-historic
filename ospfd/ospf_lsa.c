@@ -284,9 +284,6 @@ ospf_router_lsa (struct ospf_area *area)
       if (o->flag != OSPF_IF_ENABLE)
 	continue;
 
-      if (o->passive_interface == OSPF_IF_PASSIVE)
-        continue;
-
       /* No need for area check, since we go through area->iflist
       if (o->area == NULL)
 	continue;
@@ -948,9 +945,6 @@ ospf_network_lsa_refresh (struct thread *t)
   oi->t_network_lsa_self = NULL;
 
   zlog_info ("K: ospf_network_lsa_refresh: refresh router LSA start");
-
-  if (oi->passive_interface == OSPF_IF_PASSIVE)
-    return 0;
 
   lsa = ospf_network_lsa (oi);
   lsa = ospf_network_lsa_install (oi, lsa);

@@ -79,7 +79,7 @@ struct vty
   unsigned char escape;
 
   /* Current vty status. */
-  enum { VTY_NORMAL, VTY_CLOSE, VTY_ERROR, VTY_MORE } status;
+  enum {VTY_NORMAL, VTY_CLOSE, VTY_MORE, VTY_START, VTY_CONTINUE} status;
 
   /* Window width/height. */
   int width;
@@ -104,6 +104,14 @@ struct vty
   /* Timeout seconds and thread. */
   unsigned long v_timeout;
   struct thread *t_timeout;
+
+  /* Thread output function. */
+  struct thread *t_output;
+
+  /* Output data pointer. */
+  void *output;
+
+  int (*output_func) (struct vty *, void *, int);
 };
 
 /* Small macro to determine newline is newline only or linefeed needed. */

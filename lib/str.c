@@ -22,7 +22,7 @@ snprintf(char *str, size_t size, const char *format, ...)
 
   va_start (args, format);
 
-  return sprintf (str, format, args);
+  return vsprintf (str, format, args);
 }
 #endif
 

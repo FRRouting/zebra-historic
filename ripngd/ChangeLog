@@ -1,3 +1,9 @@
+2000-01-19  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_route_process): Fix bug of mis-checking of same
+	route.
+	(show_ipv6_ripng): Include ifindex to "show ipv6 ripng" output.
+
 1999-11-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripngd.c (ripng_output_process): Use MINMTU when mtu value is
