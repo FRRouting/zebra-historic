@@ -553,6 +553,12 @@ DEFUN (show_ip_bgp_summary,
   listnode node;
   struct peer *peer;
 
+  if (! listcount (peer_list))
+    {
+      vty_out (vty, "No neighbor is configured.\r\n");
+      return CMD_SUCCESS;
+    }
+
   vty_out (vty, "Neighbor        V     AS MsgRcvd MsgSent"
 	   "   TblVer  InQ OutQ Up/Down  State/Pref\r\n");
 
@@ -1388,6 +1394,7 @@ bgp_init ()
   /* BGP multiple instance. */
   bgp_multiple_instance = 0;
 
+  /* Init zebra. */
   zebra_init ();
 
   /* BGP inits. */
@@ -1396,6 +1403,7 @@ bgp_init ()
   bgp_route_init ();
   bgp_route_map_init ();
 
+  /* Access list initialize. */
   access_list_init ();
   access_list_add_hook (bgp_distribute_update);
   access_list_delete_hook (bgp_distribute_update);

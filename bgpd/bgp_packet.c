@@ -55,7 +55,7 @@ bgp_packet_set_marker (struct stream *s, u_char type)
   stream_putc (s, type);
 
   /* Return current stream size. */
-  return s->cp;
+  return stream_get_putp (s);
 }
 
 /* Set BGP packet header size entry.  If size is zero then use current
@@ -66,8 +66,8 @@ bgp_packet_set_size (struct stream *s, bgp_size_t size)
   int cp;
 
   /* Preserve current pointer. */
-  cp = s->cp;
-  stream_set_cursor (s, BGP_MARKER_SIZE);
+  cp = stream_get_putp (s);
+  stream_set_putp (s, BGP_MARKER_SIZE);
 
   /* If size is specifed use it. */
   if (size)
@@ -76,9 +76,9 @@ bgp_packet_set_size (struct stream *s, bgp_size_t size)
     stream_putw (s, cp);
 
   /* Write back current pointer. */
-  s->cp = cp;
+  stream_set_putp (s, cp);
 
-  return s->cp;
+  return cp;
 }
 
 /* Add new packet to the peer. */
@@ -102,13 +102,13 @@ bgp_packet_dup (struct stream *s)
 {
   struct stream *new;
 
-  new = stream_new (s->ep);
+  new = stream_new (stream_get_endp (s));
 
-  new->ep = s->ep;
-  new->sp = s->sp;
-  new->cp = s->cp;
+  new->endp = s->endp;
+  new->putp = s->putp;
+  new->getp = s->getp;
 
-  memcpy (new->data, s->data, s->ep);
+  memcpy (new->data, s->data, stream_get_endp (s));
 
   return new;
 }
@@ -170,17 +170,13 @@ bgp_write (struct thread *thread)
   /* There should be at least one packet. */
   s = stream_fifo_head (peer->obuf);
   assert (s);
-  assert (s->ep >= BGP_HEADER_SIZE);
+  assert (stream_get_endp (s) >= BGP_HEADER_SIZE);
 
   /* peer->fd is writable. */
-  writen (peer->fd, s->data, s->ep);
-
-#ifdef BGP_PACKET_DEBUG
-  printf ("BGP packet written : %ld\n", s->ep);
-#endif /* BGP_PACKET_DEBUG */
+  writen (peer->fd, STREAM_DATA (s), stream_get_endp (s));
 
   /* Retrieve BGP packet type. */
-  stream_set_sp (s, BGP_MARKER_SIZE + 2);
+  stream_set_getp (s, BGP_MARKER_SIZE + 2);
   type = stream_getc (s);
 
   switch (type)
@@ -319,7 +315,6 @@ bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr)
   struct stream *s;
   struct stream *packet;
   unsigned long pos;
-  unsigned long cp;
   bgp_size_t total_attr_len;
 
   s = stream_new (BGP_MAX_PACKET_SIZE);
@@ -331,15 +326,12 @@ bgp_update_send (struct peer *peer, struct prefix *p, struct attr *attr)
   stream_putw (s, 0);		
 
   /* Make place for total attribute length.  */
-  pos = stream_get_cp (s);
+  pos = stream_get_putp (s);
   stream_putw (s, 0);
   total_attr_len = bgp_packet_attribute (peer, s, attr, p);
 
   /* Set Total Path Attribute Length. */
-  cp = stream_get_cp (s);
-  s->cp = pos;
-  stream_putw (s, total_attr_len);
-  s->cp = cp;
+  stream_putw_at (s, pos, total_attr_len);
 
   /* NLRI set. */
   if (p->family == AF_INET)
@@ -377,20 +369,20 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p)
   bgp_packet_set_marker (s, BGP_MSG_UPDATE);
 
   /* Unfeasible Routes Length. */;
-  cp = stream_get_cp (s);
+  cp = stream_get_putp (s);
   stream_putw (s, 0);
 
   /* Withdrawn Routes. */
   if (p->family == AF_INET)
     stream_put_prefix (s, p);
 
-  unfeasible_len = stream_get_cp (s) - cp - 2;
+  unfeasible_len = stream_get_putp (s) - cp - 2;
   stream_putw_at (s, cp, unfeasible_len);
 
   /* Make attribute. */
   if (p->family == AF_INET6)
     {
-      pos = stream_get_cp (s);
+      pos = stream_get_putp (s);
       stream_putw (s, 0);
       total_attr_len = bgp_packet_withdraw (peer, s, p);
 
@@ -467,6 +459,10 @@ bgp_open (struct peer *peer, bgp_size_t size)
       return;
     }
 
+#ifdef DEBUG
+  bgp_packet_dump (peer->ibuf);
+#endif /* DEBUG */
+
   BGP_EVENT_ADD (peer, Receive_OPEN_message);
 }
 
@@ -492,8 +488,7 @@ bgp_update (struct peer *peer, bgp_size_t size)
   struct attr attr;
   bgp_size_t unfeasible_len;
   bgp_size_t attr_total_len;
-  u_char *pnt;
-  u_char *end;
+  u_char *endp;
   struct stream *s;
 
   /* Get input buffer. */
@@ -524,14 +519,14 @@ bgp_update (struct peer *peer, bgp_size_t size)
     }
 
   /* Set end pointer. */
-  end = stream_pnt (s) + size;
+  endp = stream_pnt (s) + size;
 
   /* Unfeasible treatment */
   unfeasible_len = stream_getw (s);
   if (unfeasible_len > 0) 
     {
       /* Check length of unfeasible length. */
-      if (stream_pnt (s) + unfeasible_len > end)
+      if (stream_pnt (s) + unfeasible_len > endp)
 	{
 	  zlog (peer->log, LOG_ERR, 
 		"neighbor %s: unfeasible length error %d", 
@@ -548,9 +543,6 @@ bgp_update (struct peer *peer, bgp_size_t size)
   /* Fetch attribute total length. */
   attr_total_len = stream_getw (s);
 
-  /* Size and point check. */
-  pnt = stream_pnt (s);
-
   /* Clear attribute structure. */
   bzero (&attr, sizeof attr);
 
@@ -559,22 +551,16 @@ bgp_update (struct peer *peer, bgp_size_t size)
   if (ret < 0)
     return;
 
-  /* Forward pointer. */
-  pnt += attr_total_len;
-
-#if 0
-  /* When packet only contain withdraw information check method is
-     different.*/
-
   /* Attribute check. */
-  ret = bgp_attr_check (peer, &attr);
-  if (ret < 0)
-    return;
-#endif /* 0 */
+  if (attr_total_len)
+    {
+      ret = bgp_attr_check (peer, &attr);
+      if (ret < 0)
+	return;
+    }
 
   /* Network Layer Reachability Information. */
-  nlri_parse (peer, &attr, pnt, 
-	      (size + BGP_HEADER_SIZE) - (pnt - peer->ibuf->data), AF_INET);
+  nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s), AF_INET);
 
   BGP_EVENT_ADD (peer, Receive_UPDATE_message);
 }

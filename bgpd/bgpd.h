@@ -265,6 +265,9 @@ struct bgp_notify
 #define BGP_CLEAR_CONNECT_RETRY    20
 #define BGP_DEFAULT_CONNECT_RETRY 120
 
+/* Macros. */
+#define BGP_INPUT(P)         ((P)->ibuf)
+#define BGP_INPUT_PNT(P)     (STREAM_PNT(BGP_INPUT(P)))
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
 

@@ -50,8 +50,11 @@ ospf_zebra_get_interface (struct stream *s, u_int16_t length)
   struct interface *ifp;
   struct connected *connected;
   u_int32_t connected_count;
+  unsigned long endp;
 
-  while (s->sp < s->ep)
+  endp = stream_get_endp (s);
+
+  while (stream_get_getp(s) < endp)
     {
       u_char tmpnam[INTERFACE_NAMSIZ + 1];
 

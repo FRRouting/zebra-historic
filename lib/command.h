@@ -111,6 +111,26 @@ struct cmd_element
   vector subconfig;		/* Sub configuration string */
 };
 
+enum cmd_doc_type {DOC_STR, DOC_FUNC};
+
+struct cmd_doc
+{
+  enum cmd_doc_type *type;
+  void *data;
+};
+
+/* Structure of command element. */
+struct cmd_element2
+{
+  char *string;			/* Command specification by string. */
+  int (*func) (struct cmd_element *, struct vty *, int, char **);
+  vector strvec;		/* Pointing out each command index */
+  vector descvec;		/* Pointing out each command index */
+  int cmdsize;			/* Command index count. */
+  char *config;			/* Configuration string */
+  vector subconfig;		/* Sub configuration string */
+};
+
 /* Command description structure. */
 struct desc
 {
@@ -151,11 +171,14 @@ struct desc
 /* New DEFUN for vty command interafce. */
 #define DEFUN2(funcname, cmdname, cmdstr, helpstr) \
   int funcname (struct cmd_element *, struct vty *, int, char **); \
+  struct cmd_doc hogehoge[] = \
+  { \
+    helpstr \
+  }; \
   struct cmd_element cmdname = \
   { \
     cmdstr, \
     funcname, \
-    helpstr \
   }; \
   int funcname \
   (struct cmd_element *self, struct vty *vty, int argc, char **argv)

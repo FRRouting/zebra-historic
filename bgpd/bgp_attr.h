@@ -31,6 +31,8 @@
 #define ATTR_FLAG_PARTIAL    0x20	/* Attribute is partial. */
 #define ATTR_FLAG_EXTLEN     0x10	/* Extended length flag. */
 
+#define BGP_ATTR_MIN_LEN        2       /* Attribute flag and type. */
+
 /* Address Family Identifier. */
 #define AFI_IP                   1
 #define AFI_IPV6                 2

@@ -9,8 +9,8 @@
 /ripng_radix.c/1.2/Tue Mar  2 12:13:43 1999/-ko/
 /ripng_route.c/1.2/Tue Mar  2 12:13:43 1999/-ko/
 /ripng_route.h/1.1.1.1/Thu Feb 25 09:41:25 1999/-ko/
-/ripng_zebra.c/1.6/Wed Mar 17 20:45:05 1999/-ko/
-/ripngd.c/1.5/Wed Mar 17 20:45:05 1999/-ko/
+/ripng_zebra.c/1.7/Sat Mar 20 14:43:02 1999/-ko/
+/ripngd.c/1.6/Sat Mar 20 14:43:02 1999/-ko/
 /ripngd.conf.sample/1.2/Wed Mar 17 06:55:52 1999/-ko/
 /ripngd.h/1.1.1.1/Thu Feb 25 09:41:26 1999/-ko/
 D

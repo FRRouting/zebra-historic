@@ -368,6 +368,7 @@ nlri_process (struct prefix *p, struct bgp_info *info)
       {
 	bgp_info_delete ((struct bgp_info **) &node->info, replace);
 	bgp_info_free (replace);
+	route_unlock_node (node);
 	repflag = 1;
 	break;
       }
@@ -528,7 +529,7 @@ nlri_delete (struct peer *peer, struct prefix *p)
   /* Withdraw route from route list. */
   if (del == NULL)
     {
-      zlog (peer->log, LOG_INFO, "Withdraw:[%s] %s/%d (not exist)",
+      zlog (peer->log, LOG_INFO, "Withdraw:[%s] %s/%d (does not exist)",
 	    peer->host, inet_ntoa(p->u.prefix4), (int) p->prefixlen);
       route_unlock_node (node);
       return 0;
@@ -548,23 +549,25 @@ nlri_delete (struct peer *peer, struct prefix *p)
 
   route_unlock_node (node);
 
+  route_unlock_node (node);
+
   return 1;
 }
 
-/* withdraw handling routine */
+/* Withdraw handling routine */
 void
 nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
 {
   u_char *pnt;
-  u_char *end;
+  u_char *endp;
   int psize;
   struct prefix p;
 
   /* Set data start pointer. */
   pnt = stream_pnt (peer->ibuf);
-  end = pnt + unfeasible_len;
+  endp = pnt + unfeasible_len;
   
-  while (pnt < end)
+  while (pnt < endp)
     {
       bzero (&p, sizeof p);
       p.family = AF_INET;
@@ -576,6 +579,7 @@ nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len)
 
       pnt += psize;
     }
+
   stream_forward (peer->ibuf, unfeasible_len);
 }
   
@@ -959,6 +963,7 @@ DEFUN (no_bgp_network,
   /* bgp_attr_free (np->info); */
   np->info = NULL;
 
+  route_unlock_node (np);
   route_unlock_node (np);
 
   return CMD_SUCCESS;

@@ -185,7 +185,7 @@ kernel_ioctl_ipv6 (int type, struct prefix_ipv6 *dest, struct in6_addr *gate,
   if (index)
     rtm.rtmsg_ifindex = index;
   else
-    rtm.rtmsg_ifindex = 1;
+    rtm.rtmsg_ifindex = 0;
 
   rtm.rtmsg_metric = 1;
   

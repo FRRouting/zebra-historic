@@ -1,7 +1,7 @@
 \input texinfo.tex              @c -*- texinfo -*-
 @c %**start of header
 @setfilename zebra.info
-@settitle GNU Zebra
+@settitle Zebra
 @c %**end of header
 
 @dircategory Routing Software
@@ -10,13 +10,14 @@
 @end direntry
 
 @titlepage
-@title GNU Zebra
+@title Zebra
 @subtitle A routing software for TCP/IP network
-@subtitle for snapshot zebra-19990319
+@subtitle for snapshot zebra-19990323
 @author Kunihiro Ishiguro
 @author @email{kunihir@@zebra.org}
 @end titlepage
 
+@ifinfo
 @node Top, Overview, (dir), (dir)
 @top Zebra
 		     
@@ -24,9 +25,10 @@ Zebra is a multi-server routing software which provides TCP/IP based
 routing protocols such as RIP, OSPF, BGP and so on.  Zebra turns your
 machine into a full powered router.
 
-This is Zebra Manual for snapshot zebra-19990319.
+This is Zebra Manual for snapshot zebra-19990323.
 
 This manual describes @code{zebra} and some other beasts.
+@end ifinfo
 
 @menu
 * Overview::                    Overview of the Zebra world.
@@ -61,6 +63,9 @@ Indices
   Zebra is a free routing software that manages TCP/IP based routing
 protocols.  IPv6 routing protocols are also supported.  Zebra is
 distributed under GNU General Public License (@pxref{Copying}).
+@iftex
+This manual describes @code{zebra} and some other beasts.
+@end iftex
 
   You can get the latest information from Zebra web page:
 @url{http://www.zebra.org/}.
@@ -97,6 +102,8 @@ dynamic routing protocol such as RIP, OSPF, BGP.  Zebra is for you.
 @table @samp
 @item RFC1771
 A Border Gateway Protocol 4 (BGP-4). Y. Rekhter & T. Li. March 1995.
+@item RFC1997
+BGP Communities Attribute. R. Chandra, P. Traina & T. Li. August 1996.
 @item RFC2080
 RIPng for IPv6. G. Malkin, R. Minnear. January 1997.
 @item RFC2283
@@ -108,6 +115,7 @@ OSPF Version 2. J. Moy. April 1998.
 RIP Version 2. G. Malkin. November 1998.
 @end table
 
+@page
 @node System architecture, Mailing list, What is Zebra, Overview
 @comment  node-name,  next,  previous,  up
 @section System Architecture
@@ -122,7 +130,7 @@ manager.
 supports OSPF version 2.  @code{bgpd} supports BGP-4 protocol.  For
 changing kernel routing table and for redistribution between different
 routing protocols, there is @code{zebra} daemon.  There is no need of
-these daemon to be running over the same machine.  This architecuture
+these daemon to be running over the same machine.  This architecture
 makes new possibility of the routing system.  It is pretty easy adding
 new routing protocol daemon to the system.
 
@@ -147,7 +155,7 @@ thread those OSes, instead we use select system call for multiplexing.
 
   When zebra runs under GNU Hurd kernel it will act as a kernel routing
 table itself.  Under GNU Hurd all TCP/IP services are provided by user
-processe called @code{pfinet}.  Zebra will provide all the routing
+processes called @code{pfinet}.  Zebra will provide all the routing
 selection mechanisms for the process.  This feature will be implemented
 in the future.
 
@@ -199,6 +207,7 @@ argument to the configure script please note about that.
 Zebra.  Zebra is still in development stage but please don't hesitate to
 send a bug report to @email{bug-zebra@@gnu.org}.
 
+@page
 @node Copying,  , Bug report, Overview
 @comment  node-name,  next,  previous,  up
 @unnumberedsec GNU GENERAL PUBLIC LICENSE
@@ -605,6 +614,9 @@ Zebra's development snapshot can be found at
 @url{ftp://ftp.zebra.org/pub/zebra/}.  Once it is released it will be
 found at GNU FTP archives.
 
+  Zebra installation is very easy by configure script.  But before you
+install Zebra please confirm kernel configuration of your machine.
+
 @menu
 * GNU/Linux configuration::     
 * Configure options::           
@@ -631,7 +643,7 @@ you specify this option, @code{zebra} can detect routing information
 updates from the kernel (@pxref{Kernel interface}).
 
 @item CONFIG_IP_MULTICAST
-IP: multicasting.  This option should be specified when you uses
+IP: multicasting.  This option should be specified when you use
 @code{ripd} or @code{ospfd} because these protocol use multicast.
 
 @end table
@@ -701,7 +713,7 @@ will create zebra and other beasts.  Installation is done by:
 
   This will install all of Zebra software under @var{prefix}/sbin.
 Sample configuration installed under @var{prefix}/etc.  If you want to
-change the installation directory.  Please speicify below option to the
+change the installation directory.  Please specify below option to the
 configure.
 
 @table @code
@@ -716,7 +728,7 @@ Read-only sample configuration file in @var{dir} [@var{prefix}/etc].
 @section VTY port setup
 
 Zebra daemon's has each own terminal interface which called VTY.  So
-after Zebra beasts installation you have to setup each progam's port
+after Zebra beasts installation you have to setup each program's port
 number for connecting to daemons.  Please add below entry to
 @file{/etc/services}.
 
@@ -734,12 +746,12 @@ If you use FreeBSD newer than 2.2.8, above entry is already added to
 
 @node Configuration File, VTY, Installation, Top
 @comment  node-name,  next,  previous,  up
-@chapter Configration File
+@chapter Configuration File
 
   Zebra daemon has it's own configuration file.  For example zebra's
 default configuration file name is @file{zebra.conf}.  Program name plus
 @file{.conf} is default configuration file name. You can specify
-configration file by -f or --config-file option to the daemon.
+configuration file by -f or --config-file option to the daemon.
 
   In configuration file, you can write debug option, vty's password,
 routing daemon configuration, logfile name and so on.
@@ -753,21 +765,42 @@ routing daemon configuration, logfile name and so on.
 @comment  node-name,  next,  previous,  up
 @section Basic configuration
 
-@table @code
-@findex hostname @var{hostname}
-@item hostname @var{hostname}
+@deffn Command {hostname @var{hostname}} {}
 Set hostname of the router.
-@findex password @var{password}
-@item password @var{password}
+@end deffn
+
+@deffn Command {password @var{password}} {}
 Set password for vty interface.  If there is no password vty don't
 accept connection.
-@findex enable password @var{password}
-@item enable password @var{password}
+@end deffn
+
+@deffn Command {enable password @var{password}} {}
 Set enable password.
-@findex log @var{TYPE}
-@item log @var{TYPE}
-@var{TYPE} can be @code{stdout}.
-@end table
+@end deffn
+
+@deffn Command {log stdout} {}
+@deffnx Command {log file @var{filename}} {}
+If you want to log into the file please specify @code{filename} as
+follow.
+@example
+log file /usr/local/etc/bgpd.log
+@end example
+@end deffn
+
+@deffn Command {write terminal} {}
+@end deffn
+
+@deffn Command {write file} {}
+@end deffn
+
+@deffn Command {config terminal} {}
+@end deffn
+
+@deffn Command {who} {}
+@end deffn
+
+@deffn Command {list} {}
+@end deffn
 
 @node   Sample Configuration,  , Basic configuration, Configuration File
 @comment  node-name,  next,  previous,  up
@@ -777,7 +810,7 @@ Below is sample configuration of zebra daemon.
 
 @example
 !
-! Zebra configration file
+! Zebra configuration file
 !
 hostname Router
 password zebra
@@ -788,7 +821,7 @@ log stdout
 
 '!' and '#' are comment character.  If the first character of the word
 is one of comment character, from the character to the end of line is
-ignored as commecnt.
+ignored as comment.
 
 @example
 password zebra!password
@@ -801,7 +834,7 @@ set to 'zebra!password'.
 
 @node  VTY, zebra, Configuration File, Top
 @comment  node-name,  next,  previous,  up
-@chapter Virtual ternminal interface
+@chapter Virtual terminal interface
 
 VTY -- Virtual Terminal [aka TeletYpe] Interface is command line
 interface to change and/or view current configuration.
@@ -822,15 +855,15 @@ interface to change and/or view current configuration.
 @comment  node-name,  next,  previous,  up
 @section What is VTY
 
-VTY stands for virtual teletype interface.  It means you can connect to
+VTY stands for Virtual TeletYpe interface.  It means you can connect to
 the daemon via telnet protocol.
 
 @node  How to use VTY, View mode and Enable mode, What is VTY, VTY
 @comment  node-name,  next,  previous,  up
 @section How to use VTY
 
-To enable VTY inteface, you have to setup vty password.  If there is no
-vty password one can not connect VTY inteface at all.
+To enable VTY interface, you have to setup vty password.  If there is no
+vty password one can not connect VTY interface at all.
 
 @example
 % telnet localhost 2601
@@ -849,7 +882,7 @@ Connection closed by foreign host.
 @comment  node-name,  next,  previous,  up
 @section View mode and Enable mode
 
-There is two big mode which has each characteritic.
+There is two big mode which has each characteristic.
 
 
 @node  Other modes, Command line editing, View mode and Enable mode, VTY
@@ -954,8 +987,10 @@ You can use command line completion by typing @key{TAB}.
 
 @kindex ?
 You can use command line help by typing @code{help} at the beginning of
-the line. Typing @kbd{?} at the any point of the line will show the
+the line.  Typing @kbd{?} at the any point of the line will show the
 command line help.
+
+
 
 @node zebra, ripd, VTY, Top
 @comment  node-name,  next,  previous,  up
@@ -1028,57 +1063,71 @@ When program terminates, retain added route by zebra.
 @comment  node-name,  next,  previous,  up
 @section Interface
 
-@table @samp
+@deffn Command {interface @var{ifname}} {}
+@end deffn
 
-@findex interface @var{ifname}
-@item interface @var{ifname}
+@deffn {Interface Command} {shutdown} {}
+@deffnx {Interface Command} {no shutdown} {}
+Up or down the current interface.
+@end deffn
 
-@findex ip address @var{address}
-@item ip address @var{address}
+@deffn {Interface Command} {ip address @var{address}} {}
 Set ip address to the interface.
+@end deffn
 
-@findex description @var{description}
-@item description @var{description}
+@deffn {Interface Command} {description @var{description}} {}
 Set description to the interface.
+@end deffn
 
-@findex multicast
-@item multicast
-Enable multicast flag of the interface.
-
-@findex no multicast
-@item no multicast
-Disable multicast flag of the interface.
-
-@end table
+@deffn {Interface Command} {multicast} {}
+@deffnx {Interface Command} {no multicast} {}
+Enable or disable multicast flag of the interface.
+@end deffn
 
 @node Static route, zebra terminal mode commands, Interface, zebra
 @comment  node-name,  next,  previous,  up
 @section Static route
 
-@table @samp
+@deffn Command {ip route @var{network} @var{gateway}} {}
+@end deffn
 
-@findex ip route @var{network} @var{gateway}
-@item ip route @var{network} @var{gateway}
-
-@end table
+@deffn Command {ipv6 route @var{network} @var{gateway}} {}
+@end deffn
 
 @node zebra terminal mode commands,  , Static route, zebra
 @comment  node-name,  next,  previous,  up
 @section zebra terminal mode commands
 
-@table @samp
+@deffn Command {show ip route} {}
+Display current routes which zebra hold.
 
-@findex show ip route
-@item show ip route
+@example
+Router# show ip route 
+Codes: K - kernel route, C - connected, S - static, R - RIP, B - BGP
+       * - FIB route.
 
-@findex show ipv6 route
-@item show ipv6 route
+K* 0.0.0.0/0              203.181.89.241
+S  0.0.0.0/0              203.181.89.1
+C* 127.0.0.0/8            lo
+C* 203.181.89.240/28      eth0
+@end example
+@end deffn
 
-@findex show interface
-@item show interface
+@deffn Command {show ipv6 route} {}
+@end deffn
 
-@end table
+@deffn Command {show interface} {}
+@end deffn
 
+@deffn Command {show ipforward} {}
+Display host's IP forward function is enabled or not.  Almost UNIX
+kernel can be configured as IP forward disable.  If so the box can't
+work as a router.
+@end deffn
+
+@deffn Command {show ipv6forward} {}
+Display host's IP version 6 forward is enabled or not.
+@end deffn
 
 @node ripd, ripngd, zebra, Top
 @comment  node-name,  next,  previous,  up
@@ -1141,51 +1190,42 @@ be specified (@pxref{Common invoking options}).
 @comment  node-name,  next,  previous,  up
 @section ripngd configuration
 
-Currently RIPngd supports following commands.
+Currently ripngd supports following commands.
 
-@example
-interface IFNAME
- describe DESCRIPTION
- ripng receive
- no ripng receive
- ripng send
- no ripng send
-@end example
+@deffn Command {router zebra} {}
+With this statement, RIPng routes go to the @code{zebra} daemon.  If you
+want to install RIPng routes into the kernel.  You have to specify this
+command.
+@end deffn
 
-@table @samp
+@deffn Command {router ripng} {}
+Enable RIPng.
+@end deffn
 
-@findex router ripng
-@item router ripng
+@deffn {RIPng Command} {flush_timer @var{time}} {}
+Set flush timer.
+@end deffn
 
-@findex flush_timer @var{time}
-@item flush_timer @var{time}
+@deffn {RIPng Command} {network @var{network}} {}
+Set RIPng enable interface by @var{network}
+@end deffn
 
-@findex network @var{network}
-@item network @var{network}
-
-@findex network @var{ifname}
-@item network @var{ifname}
-
-@end table
+@deffn {RIPng Command} {network @var{ifname}} {}
+Set RIPng enable interface by @var{ifname}
+@end deffn
 
 @node ripngd terminal mode commands, ripngd filtering commands, ripngd configuration, ripngd
 @comment  node-name,  next,  previous,  up
 @section ripngd terminal mode commands
 
-@table @samp
-
-@findex show ip ripng
-@item show ip ripng
-
-@end table
+@deffn Command {show ip ripng} {}
+@end deffn
 
 @node ripngd filtering commands,  , ripngd terminal mode commands, ripngd
 @comment  node-name,  next,  previous,  up
 @section ripngd filtering commands
 
-@table @samp
-@findex distribute-list @var{access_list} @var{direct} @var{ifname}
-@item distribute-list @var{access_list} @var{direct} @var{ifname}
+@deffn Command {distribute-list @var{access_list} @var{direct} @var{ifname}} {}
 You can apply access list to the interface by distribute-list command.
 @var{access_list} is access list name.  @var{direct} is @samp{in} or
 @samp{out}.  If @var{direct} is @samp{in} access list is applied to
@@ -1194,9 +1234,8 @@ input packet.
 @example
 distribute-list local-only out sit1
 @end example
+@end deffn
 
-
-@end table
 
 @node ospfd, bgpd, ripngd, Top
 @comment  node-name,  next,  previous,  up
@@ -1222,6 +1261,14 @@ specified (@pxref{Common invoking options}) to @code{ospfd}.
 @comment  node-name,  next,  previous,  up
 @section ospfd configuration
 
+@deffn Command {router ospf @var{process-id}} {}
+@deffnx Command {no router ospf @var{process-id}} {}
+Enable OSPF process under @var{process-id}.
+@end deffn
+
+@deffn {OSPF Command} {network @var{ipv4-network} area @var{area-id}} {}
+@end deffn
+
 @node ospfd terminal mode commands,  , ospfd configuration, ospfd
 @comment  node-name,  next,  previous,  up
 @section ospfd terminal mode commands
@@ -1233,7 +1280,7 @@ specified (@pxref{Common invoking options}) to @code{ospfd}.
 
 bgpd is a BGP-4 protocol daemon.  BGP version 4 protocol is described in
 RFC1771.  bgpd also supports BGP-4+ BGP version 4 Multi Protocol
-Extention which described in RFC2283.
+Extension which described in RFC2283.
 
 @menu
 * Invoking bgpd::               
@@ -1241,6 +1288,7 @@ Extention which described in RFC2283.
 * bgpd terminal mode commands::  
 * bgpd sample session::         
 * bgpd log format::             
+* How to set up 6bone connection::  
 @end menu
 
 @node Invoking bgpd, bgpd configuration, bgpd, bgpd
@@ -1269,59 +1317,80 @@ When program terminates, retain added route by zebra.
   There is some commands for configure bgpd.  Default configuration file
 is @file{bgpd.conf}.
 
-@table @code
-@findex router bgp @var{as-no}
-@item router bgp @var{as-no}
-Make BGP with specified @var{as-no}.
-@end table
+@deffn Command {router zebra} {}
+With this statement, BGP routes go to the @code{zebra} daemon.  If you
+want to install BGP routes into the kernel.  You have to specify this
+command.
+@end deffn
 
-  In @code{router bgp} clause there are neighbor specific configuration.
+@deffn Command {router bgp @var{as-number}} {}
+Enable BGP protocol process with specified @var{as-number}.
+@end deffn
 
-@table @code
-@findex bgp router-is @var{router-id}
-@item findex bgp router-is @var{router-id}
+In @code{router bgp} clause there are neighbor specific configuration.
+
+@deffn {BGP Command} {bgp router-id @var{router-id}} {}
 This command specify router ID.
-@findex network @var{network}
-@item network @var{network}
-@findex neighbor @var{peer} remote-as @var{as-no}
-@item neighbor @var{peer} remote-as @var{as-no}
-@findex neighbor @var{peer} distribute-list @var{direct}
-@item neighbor @var{peer} distribute-list @var{direct}
+@end deffn
+
+@deffn {BGP Command} {networ @var{network}} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} remote-as @var{as-number}} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} distribute-list @var{direct}} {}
 This command specify distribute-list to the peer.  @var{direct} is
 @samp{in} or @samp{out}.
-@findex neighbor @var{peer} route-map @var{direct}
-@item neighbor @var{peer} route-map @var{direct}
-@findex neighbor @var{peer} version
-@item neighbor @var{peer} version
-@findex neighbor @var{peer} ebgp-multihop
-@item neighbor @var{peer} ebgp-multihop
-@end table
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} route-map @var{direct}} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} version @var{version}} {}
+@end deffn
+
+@deffn {BGP Command} {neighbor @var{peer} ebgp-multihop} {}
+@end deffn
 
 @node bgpd terminal mode commands, bgpd sample session, bgpd configuration, bgpd
 @comment  node-name,  next,  previous,  up
 @section bgpd terminal mode commands
 
-@table @code
-@findex show ip bgp @var{network}
-@item show ip bgp @var{network}
-@findex show ip bgp summary
-@item show ip bgp summary
-@findex show ip bgp peer
-@item show ip bgp peer
-@findex show ip bgp
-@item show ip bgp
+@deffn {Command} {show ip bgp [@var{network}]} {}
 lists all routes which BGPd hold
-@findex clear ip bgp @var{peer}
-@item clear ip bgp @var{peer}
+@end deffn
+
+@deffn {Command} {show ip bgp summary} {}
+@end deffn
+
+@deffn {Command} {show ip bgp neighbor [@var{peer}]} {}
+@end deffn
+
+@deffn {Command} {clear ip bgp @var{peer}} {}
 clear peer which have address of X.X.X.X
-@item show debug
-@item debug event
-@item debug update
-@item debug keepalive
-@item no debug event
-@item no debug update
-@item no debug keepalive
-@end table
+@end deffn
+
+@deffn {Command} {show debug} {}
+@end deffn
+
+@deffn {Command} {debug event} {}
+@end deffn
+
+@deffn {Command} {debug update} {}
+@end deffn
+
+@deffn {Command} {debug keepalive} {}
+@end deffn
+
+@deffn {Command} {no debug event} {}
+@end deffn
+
+@deffn {Command} {no debug update} {}
+@end deffn
+
+@deffn {Command} {no debug keepalive} {}
+@end deffn
 
 @node bgpd sample session, bgpd log format, bgpd terminal mode commands, bgpd
 @comment  node-name,  next,  previous,  up
@@ -1329,7 +1398,7 @@ clear peer which have address of X.X.X.X
 
 This section is under construction.
 
-@node bgpd log format,  , bgpd sample session, bgpd
+@node bgpd log format, How to set up 6bone connection, bgpd sample session, bgpd
 @comment  node-name,  next,  previous,  up
 @section bgpd log format
 
@@ -1341,23 +1410,40 @@ packet sort:[peer IP address] routing information.
 1999/03/29 17:42:18 Update:[202.216.226.1] 130.58.0.0/16 med: 0 lpref: 0 nexthop: 202.216.226.1 aspath: 4691 3561 5119 3576 3782 i
 @end example
 
+@node How to set up 6bone connection,  , bgpd log format, bgpd
+@comment  node-name,  next,  previous,  up
+@section How to set up 6bone connection
+
+
+
 @node Filtering, Route map, bgpd, Top
 @comment  node-name,  next,  previous,  up
 @chapter Filtering
 
-Basic filtering is done by access-list.
+Basic filtering is done by access-list like below example.
 
 @example
 ip access-list deny 10.0.0.0/9
 ip access-list permit 10.0.0.0/8
 @end example
 
+@menu
+* IP access-list::              
+@end menu
+
+@node IP access-list,  , Filtering, Filtering
+@comment  node-name,  next,  previous,  up
+@section IP access-list
+
+@deffn {Command} {ip access-list permit @var{ipv4-network}} {}
+@deffnx {Command} {ip access-list deny @var{ipv4-network}} {}
+@end deffn
 
 @node Route map, IPv6 supports, Filtering, Top
 @comment  node-name,  next,  previous,  up
 @chapter Route map
 
-  Route map is very usefull functionality of zebra.  There is match and
+  Route map is very useful functionality of zebra.  There is match and
 set statement in route map.
 
 @example
@@ -1370,37 +1456,43 @@ route-map test permit 10
 local-preference value to 200.
 
 @menu
+* Route map command::           
 * IP address match command::    
 * BGP set command::             
 @end menu
 
-@node IP address match command, BGP set command, Route map, Route map
+@node Route map command, IP address match command, Route map, Route map
+@comment  node-name,  next,  previous,  up
+@section Route map command
+
+@deffn {Command} {route-map @var{route-map-name} permit @var{priority}} {}
+@end deffn
+
+@node IP address match command, BGP set command, Route map command, Route map
 @comment  node-name,  next,  previous,  up
 @section IP address match command
 
-@table @samp
-@findex match ip address @var{access_list}
-@item match ip address @var{access_list}
-@end table
+@deffn {Route-map Command} {match ip address @var{access_list}} {}
+@end deffn
 
 @node BGP set command,  , IP address match command, Route map
 @comment  node-name,  next,  previous,  up
 @section BGP set command
 
-@table @samp
-@findex set ip nexthop @var{ipv4_address}
-@item set ip nexthop @var{ipv4_address}
-@findex set ipv6 nexthop global @var{ipv6_address}
-@item set ipv6 nexthop global @var{ipv6_address}
-@findex set ipv6 nexthop local @var{ipv6_address}
-@item set ipv6 nexthop local @var{ipv6_address}
-@end table
+@deffn {Route-map Command} {set ip nexthop @var{ipv4_address}} {}
+@end deffn
+
+@deffn {Route-map Command} {set ipv6 nexthop global @var{ipv6_address}} {}
+@end deffn
+
+@deffn {Route-map Command} {set ipv6 nexthop local @var{ipv6_address}} {}
+@end deffn
 
 @node IPv6 supports, Kernel interface, Route map, Top
 @comment  node-name,  next,  previous,  up
 @chapter IPv6 supports
 
-Currently zebra supports both RIPng and BGP multiprotocol extention (aka
+Currently zebra supports both RIPng and BGP multi-protocol extension (aka
 BGP-4+).
 
 @node Kernel interface, Linux netlink, IPv6 supports, Top
@@ -1415,7 +1507,7 @@ information, update kernel routing table, and look up interfaces.
 @item ioctl
 @samp{ioctl} method is very traditional way for reading/writing kernel
 information.  @samp{ioctl} can be used for looking up interface and
-get/set interface's address, flags, mtu and other information.  Also
+get/set interface address, flags, mtu and other information.  Also
 @samp{ioctl} can insert and delete kernel routing table information.  It
 will available on almost platform which zebra supports but it is little
 bit ugly method so if more better method is supported by the kernel
@@ -1425,7 +1517,7 @@ zebra uses that.
 @samp{sysctl} can lookup kernel information by MIB (Management
 Information Base) syntax.  Normally it only provide a way of getting
 information from the kernel.  So one want to change kernel information
-the ohter method such as @samp{ioctl} will be required.
+the other method such as @samp{ioctl} will be required.
 
 @item proc filesystem
 @samp{proc filesystem} provide easy way of getting kernel information.
@@ -1442,13 +1534,13 @@ the ohter method such as @samp{ioctl} will be required.
 
 On recent Linux kernel (2.0.x and 2.2.x), there is a kernel/user
 communication support which called @code{netlink}.  It can make it
-possible asyncronous communication between kernel and Zebra such like
+possible asynchronous communication between kernel and Zebra such like
 routing socket over BSD systems.
 
 Before you use this feature, you are sure to select kernel support
 option 'Kernel/User network link driver' and 'Routing messages'.
 
-Today, /dev/route spectial device file is obsolete.  Netlink
+Today, /dev/route special device file is obsolete.  Netlink
 communication is done by read/write over netlink socket.
 
 After the kernel configuration, please reconfigure and make install
@@ -1460,8 +1552,10 @@ Zebra and kernel.
 @chapter Zebra protocol
 
   Zebra provides standard interface for updating kernel routing table
-and interface look up method.  If you want to write your oun routing
-protocol Zebra protocol is very useful to your program portable.
+and interface look up method.  If you want to write your own routing
+protocol Zebra protocol is very useful to you.  There is no need of
+knowing the detail of ugly OS interface.  You only send essential
+information to @code{zebra} daemon.
 
   Below is the list of Zebra protocol type.
 
@@ -1486,3 +1580,8 @@ ZEBRA_GET_HOSTINFO
 @unnumbered VTY Key Index
 
 @printindex ky
+
+@summarycontents
+@contents
+
+@bye

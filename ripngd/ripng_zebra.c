@@ -95,8 +95,8 @@ zebra_write (struct stream *s)
 
   if (zebra.sock >= 0)
     {
-      nbytes = writen (zebra.sock, s->data, s->ep);
-      if (nbytes != s->ep)
+      nbytes = writen (zebra.sock, STREAM_DATA (s), stream_get_endp (s));
+      if (nbytes != stream_get_endp (s))
 	{
 	  zlog (NULL, LOG_ERR, "can't write enough packet");
 	  return nbytes;

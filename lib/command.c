@@ -1,8 +1,6 @@
 /*
- * $Id: command.c,v 1.59 1999/02/22 12:15:38 developer Exp $
- *
- * Command interpret routine for virtual terminal [aka TeletYpe]
- * sinterface Copyright (C) 1997, 98 Kunihiro Ishiguro
+ * Command interpreter routine for virtual terminal [aka TeletYpe]
+ * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *  
@@ -29,7 +27,6 @@
 #include "command.h"
 #include "memory.h"
 #include "log.h"
-
 
 /* Command vector which includes some level of command lists. Normally
    each daemon maintains each own cmdvec. */
@@ -1288,30 +1285,6 @@ DEFUN (config_enable_password, enable_password_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (config_logfile,
-       config_logfile_cmd,
-       "logfile PATH",
-       "Log filename specify command\n"
-       "Pathname of logfile\n")
-{
-#if 0
-  char *str;
-
-  str = log_open (argv[0]);
-  if (str == NULL)
-    {
-      vty_out (vty, "can't open logfile %s\n", argv[0]);
-      return CMD_WARNING;
-    }
-#endif
-
-  if (host.logfile)
-    XFREE (0, host.logfile);
-
-  host.logfile = strdup (argv[0]);
-  return CMD_SUCCESS;
-}
-
 DEFUN (config_log,
        config_log_cmd,
        "log stdout",
@@ -1349,15 +1322,20 @@ DEFUN (config_log_file,
 }
 
 #if 0
+void func_name ()
+{
+  ;
+}
+
 DEFUN2 (test,
 	test_cmd,
 	"test command",
-	({DESC_STR, "Log filename specify command\n"},
-	 {DESC_FUNC, func_name}))
+        ({DOC_STR, "Log filename specify command\n"},
+	{DOC_FUNC, func_name}))
 {
   return 0;
 }
-#endif
+#endif /* 0 */
 
 /* Set config filename.  Called from vty.c */
 void

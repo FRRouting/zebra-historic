@@ -1,6 +1,4 @@
 /*
- * $Id: table.c,v 1.25 1999/02/19 17:01:49 developer Exp $
- *
  * Routing Table functions.
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
@@ -29,7 +27,6 @@
 #include "memory.h"
 
 void route_node_delete (struct route_node *);
-
 
 /* This mean only one table */
 struct route_table *
@@ -75,7 +72,6 @@ route_node_free (struct route_node *node)
 {
   XFREE (MTYPE_ROUTE_NODE, node);
 }
-
 
 /* Utility mask array. */
 static u_char maskbit[] = 
@@ -304,6 +300,7 @@ void
 route_node_delete (struct route_node *node)
 {
   struct route_node *child;
+  struct route_node *parent;
 
   assert (node->lock == 0);
   assert (node->info == NULL);
@@ -316,23 +313,29 @@ route_node_delete (struct route_node *node)
   else
     child = node->l_right;
 
-  if (child)
-    child->parent = node->parent;
+  parent = node->parent;
 
-  if (node->parent)
+  if (child)
+    child->parent = parent;
+
+  if (parent)
     {
-      if (node->parent->l_left == node)
-	node->parent->l_left = child;
+      if (parent->l_left == node)
+	parent->l_left = child;
       else
-	node->parent->l_right = child;
+	parent->l_right = child;
     }
   else
     node->table->top = child;
 
   route_node_free (node);
+
+  /* If parent node is stub then delete it also. */
+  if (parent && parent->lock == 0)
+    route_node_delete (parent);
 }
 
-/* Get fist node and lock it.  This function is usefull when one want
+/* Get fist node and lock it.  This function is useful when one want
    to lookup all the node exist in the routing table. */
 struct route_node *
 route_top (struct route_table *table)
@@ -350,10 +353,11 @@ route_top (struct route_table *table)
 struct route_node *
 route_next (struct route_node *node)
 {
-  /* Node may be deleted from route_unlock_node so we have to preserve
-     next node's pointer. */
   struct route_node *next;
   struct route_node *start;
+
+  /* Node may be deleted from route_unlock_node so we have to preserve
+     next node's pointer. */
 
   if (node->l_left)
     {

@@ -327,11 +327,12 @@ rib_static_list (struct vty *vty, struct route_table *top)
   for (np = route_top (top); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
       if (rib->type == ZEBRA_ROUTE_STATIC)
-	vty_out (vty, "ip%s route %s/%d %s\r\n",
+	vty_out (vty, "ip%s route %s/%d %s%s",
 		 np->p.family == AF_INET ? "" : "v6",
 		 inet_ntop (np->p.family, &np->p.u.prefix, buf1, BUFSIZ),
 		 np->p.prefixlen,
-		 inet_ntop (np->p.family, &rib->u.gate4, buf2, BUFSIZ));
+		 inet_ntop (np->p.family, &rib->u.gate4, buf2, BUFSIZ),
+		 VTY_NEWLINE);
 }
 
 /* Delete all added route and close rib. */

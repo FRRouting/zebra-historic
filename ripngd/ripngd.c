@@ -663,8 +663,8 @@ ripng_read (struct thread *thread)
   ripng->t_read = NULL;
 
   len = ripng_recv_packet (sock, 
-			   stream_get_data (ripng->ibuf),
-			   stream_get_size (ripng->ibuf), 
+			   STREAM_DATA (ripng->ibuf),
+			   STREAM_SIZE (ripng->ibuf), 
 			   &from, &ifindex);
 
   /* If we can't read RIPng packet, logging it and cancel to add new
@@ -675,7 +675,7 @@ ripng_read (struct thread *thread)
       return len;
     }
 
-  packet = (struct ripng_packet *) stream_get_data (ripng->ibuf);
+  packet = (struct ripng_packet *) STREAM_DATA (ripng->ibuf);
 
   /* OK I'm called so if debug option is set tell it to the user. */
   if (debug (DEBUG_EVENT))
@@ -862,10 +862,13 @@ ripng_supply (struct interface *ifp)
 	  if (nrte == maxrte)
 	    {
 	      nrte = 0;
-	      ret = ripng_send_packet (s->data, s->ep, NULL, ifp->index);
+	      ret = ripng_send_packet (STREAM_DATA (s),
+				       stream_get_endp (s),
+				       NULL, ifp->index);
 
 	      if (ret >= 0 && debug (DEBUG_PACKET))
-		ripng_packet_dump ((struct ripng_packet *)s->data, s->ep);
+		ripng_packet_dump ((struct ripng_packet *)STREAM_DATA (s),
+				   stream_get_endp(s));
 
 	      stream_reset (s);
 	    }
@@ -892,10 +895,13 @@ ripng_supply (struct interface *ifp)
 		{
 		  nrte = 0;
 
-		  ret = ripng_send_packet (s->data, s->ep, NULL, ifp->index);
+		  ret = ripng_send_packet (STREAM_DATA (s),
+					   stream_get_endp (s), NULL,
+					   ifp->index);
 
 		  if (ret >= 0 && debug (DEBUG_PACKET))
-		    ripng_packet_dump ((struct ripng_packet *)s->data, s->ep);
+		    ripng_packet_dump ((struct ripng_packet *)STREAM_DATA(s),
+				       stream_get_endp(s));
 		  stream_reset (s);
 		}
 	    }
@@ -905,10 +911,12 @@ ripng_supply (struct interface *ifp)
   /* If written routing entry exists, flush it. */
   if (nrte != 0)
     {
-      ret = ripng_send_packet (s->data, s->ep, NULL, ifp->index);
+      ret = ripng_send_packet (STREAM_DATA (s),
+			       stream_get_endp (s), NULL, ifp->index);
 
       if (ret >= 0 && debug (DEBUG_PACKET))
-	ripng_packet_dump ((struct ripng_packet *)s->data, s->ep);
+	ripng_packet_dump ((struct ripng_packet *)STREAM_DATA (s),
+			   stream_get_endp (s));
     }
   stream_reset (s);
 }
@@ -1062,12 +1070,10 @@ ripng_zebra (struct thread *thread)
       stream_write (s, &node->p.u.prefix, size);
       rinfo->fib = 0;
 
-      if (s->ep >= ZEBRA_MAX_PACKET_SIZ - 20)
+      if (stream_get_endp (s) >= ZEBRA_MAX_PACKET_SIZ - 20)
 	{
-	  u_short size;
-	  size = htons (s->ep);
-	  stream_set_cursor (s, 0);
-	  stream_write (s, (u_char *)&size, 2);
+	  stream_set_putp (s, 0);
+	  stream_putw (s, stream_get_endp (s));
 	  zebra_write (s);
 	  stream_reset (s);
 	}
@@ -1075,10 +1081,8 @@ ripng_zebra (struct thread *thread)
 
   if (! stream_empty (s))
     {
-      u_short size;
-      size = htons (s->ep);
-      stream_set_cursor (s, 0);
-      stream_write (s, (u_char *)&size, 2);
+      stream_set_putp (s, 0);
+      stream_putw (s, stream_get_endp (s));
       zebra_write (s);
     }
   return 0;

@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_zebra.c,v 1.19 1999/02/22 12:15:38 developer Exp $
- *
  * zebra connect library 
  * Copyright (C) 1997, 98 Kunihiro Ishiguro
  *

@@ -293,6 +293,9 @@ bgp_packet_open_dump (struct stream *s)
   printf ("as: %d ", stream_getw (s));
   printf ("holdtime: %d ", stream_getw (s));
   printf ("ident: %d\n", stream_getl (s));
+
+  /* Open message option. */
+  printf ("opt parm len: %d\n", stream_getc (s));
 }
 
 void
@@ -336,8 +339,8 @@ bgp_packet_dump (struct stream *s)
   unsigned long sp;
 
   /* Preserve pointer. */
-  sp = s->sp;
-  s->sp = 0;
+  sp = stream_get_getp (s);
+  stream_set_getp (s, 0);
 
   /* Marker dump. */
   printf ("BGP packet marker : ");
@@ -369,7 +372,7 @@ bgp_packet_dump (struct stream *s)
       bgp_packet_notify_dump (s);
       break;
     }
-  s->sp = sp;
+  stream_set_getp (s, sp);
 }
 
 /* Debug option setting interface. */
@@ -477,17 +480,8 @@ bgp_dump_set_header (struct stream *s)
 void
 bgp_dump_set_size (struct stream *s)
 {
-  int cp;
-
-  /* Preserve current pointer. */
-  cp = s->cp;
-  stream_set_cursor (s, 8);
-
   /* If size is specifed use it. */
-  stream_putl (s, cp);
-
-  /* Write back current pointer. */
-  s->cp = cp;
+  stream_putl_at (s, 8, stream_get_endp (s));
 
   return;
 }
@@ -523,13 +517,13 @@ bgp_dump_incoming (struct peer *peer, struct stream *packet)
 #endif /* HAVE_IPV6 */
 
   /* Packet contents. */
-  stream_memcpy (s, packet->data, packet->ep);
+  stream_memcpy (s, STREAM_DATA (packet), stream_get_endp (packet));
   
   /* Set length. */
   bgp_dump_set_size (s);
 
   /* Write to the stream. */
-  fwrite (s->data, s->cp, 1, bgp_dump_fp);
+  fwrite (STREAM_DATA (s), stream_get_putp (s), 1, bgp_dump_fp);
   fflush (bgp_dump_fp);
 
   /* Free dump stream. */

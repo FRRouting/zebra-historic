@@ -1,6 +1,4 @@
 /*
- * $Id: bgp_open.c,v 1.24 1999/02/22 12:15:37 developer Exp $
- *
  * BGP open message handling
  * Copyright (C) 1998 Kunihiro Ishiguro
  *
@@ -192,4 +190,3 @@ bgp_open_option_parse (struct peer *peer, u_char length)
     pnt += opt_length;
   }
 }
-

@@ -1,6 +1,4 @@
 /*
- * $Id: client.c,v 1.15 1999/02/19 17:01:47 developer Exp $
- *
  * zebra's client library.
  * Copyright (C) 1997, 1998 Kunihiro Ishiguro
  *
@@ -38,7 +36,7 @@ zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p,
 {
   int ret;
   struct stream *s;
-  u_short size;
+  u_short psize;
 
   s = stream_new (ZEBRA_MAX_PACKET_SIZ);
 
@@ -51,16 +49,15 @@ zebra_ipv4_route (int command, int sock, int type, struct prefix_ipv4 *p,
   stream_write (s, (u_char *)nexthop, 4);
 
   /* Put prefix information. */
-  size = PSIZE (p->prefixlen);
+  psize = PSIZE (p->prefixlen);
   stream_putc (s, p->prefixlen);
-  stream_write (s, (u_char *)&p->prefix, size);
+  stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Put length at the first point of the stream. */
-  size = htons (s->ep);
-  stream_set_cursor (s, 0);
-  stream_write (s, (u_char *)&size, 2);
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
 
-  ret = writen (sock, s->data, s->ep);
+  ret = writen (sock, s->data, stream_get_endp (s));
 
   stream_free (s);
 
@@ -91,7 +88,7 @@ zebra_ipv6_route (int command, int sock, int type, struct prefix_ipv6 *p,
 {
   int ret;
   struct stream *s;
-  u_short size;
+  u_short psize;
 
   s = stream_new (ZEBRA_MAX_PACKET_SIZ);
 
@@ -103,16 +100,15 @@ zebra_ipv6_route (int command, int sock, int type, struct prefix_ipv6 *p,
 
   /* Put prefix information. */
   stream_putl (s, ifindex);
-  size = PSIZE (p->prefixlen);
+  psize = PSIZE (p->prefixlen);
   stream_putc (s, p->prefixlen);
-  stream_write (s, (u_char *)&p->prefix, size);
+  stream_write (s, (u_char *)&p->prefix, psize);
 
   /* Write packet size. */
-  size = htons (s->ep);
-  stream_set_cursor (s, 0);
-  stream_write (s, (u_char *)&size, 2);
+  stream_set_putp (s, 0);
+  stream_putw (s, stream_get_endp (s));
 
-  ret = writen (sock, s->data, s->ep);
+  ret = writen (sock, s->data, stream_get_endp (s));
 
   stream_free (s);
 

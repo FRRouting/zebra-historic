@@ -1,6 +1,4 @@
 /*
- * $Id: stream.c,v 1.10 1999/02/20 16:05:34 developer Exp $
- *
  * Packet interface
  * Copyright (C) 1999 Kunihiro Ishiguro
  *
@@ -53,21 +51,66 @@ stream_free (struct stream *s)
   XFREE (MTYPE_STREAM, s);
 }
 
-/* Stream structre' stream pointer related functions.  */
-void
-stream_set_sp (struct stream *s, unsigned long pos)
+unsigned long
+stream_get_getp (struct stream *s)
 {
-  s->sp = pos;
+  return s->getp;
 }
 
+unsigned long
+stream_get_putp (struct stream *s)
+{
+  return s->putp;
+}
+
+unsigned long
+stream_get_endp (struct stream *s)
+{
+  return s->endp;
+}
+
+/* Please use STREAM_DATA(S)
+u_char *
+stream_get_data (struct stream *s)
+{
+  return s->data;
+}
+*/
+
+unsigned long
+stream_get_size (struct stream *s)
+{
+  return s->size;
+}
+
+/* Stream structre' stream pointer related functions.  */
+void
+stream_set_getp (struct stream *s, unsigned long pos)
+{
+  s->getp = pos;
+}
+
+void
+stream_set_putp (struct stream *s, unsigned long pos)
+{
+  s->putp = pos;
+}
+
+/* Forward pointer. */
+void
+stream_forward (struct stream *s, int size)
+{
+  s->getp += size;
+}
+
 /* Get next character from the stream. */
 u_char
 stream_getc (struct stream *s)
 {
   u_char c;
 
-  c = s->data[s->sp];
-  s->sp++;
+  c = s->data[s->getp];
+  s->getp++;
   return c;
 }
 
@@ -77,8 +120,8 @@ stream_getw (struct stream *s)
 {
   u_int16_t w;
 
-  w = s->data[s->sp++] << 8;
-  w |= s->data[s->sp++];
+  w = s->data[s->getp++] << 8;
+  w |= s->data[s->getp++];
   return w;
 }
 
@@ -88,10 +131,10 @@ stream_getl (struct stream *s)
 {
   u_int32_t l;
 
-  l  = s->data[s->sp++] << 24;
-  l |= s->data[s->sp++] << 16;
-  l |= s->data[s->sp++] << 8;
-  l |= s->data[s->sp++];
+  l  = s->data[s->getp++] << 24;
+  l |= s->data[s->getp++] << 16;
+  l |= s->data[s->getp++] << 8;
+  l |= s->data[s->getp++];
   return l;
 }
 
@@ -101,39 +144,20 @@ stream_get_ipv4 (struct stream *s)
 {
   u_int32_t l;
 
-  memcpy (&l, s->data + s->sp, 4);
-  s->sp += 4;
+  memcpy (&l, s->data + s->getp, 4);
+  s->getp += 4;
 
   return l;
 }
-
-/* Forward pointer. */
-void
-stream_forward (struct stream *s, int size)
-{
-  s->sp += size;
-}
 
-unsigned long
-stream_get_cp (struct stream *s)
-{
-  return s->cp;
-}
-
-void
-stream_set_cursor (struct stream *s, unsigned long pos)
-{
-  s->cp = pos;
-}
-
 /* Put character to the stream. */
 int
 stream_putc (struct stream *s, u_char c)
 {
-  s->data[s->cp] = c;
-  s->cp++;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  s->data[s->putp] = c;
+  s->putp++;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
   return 1;
 }
 
@@ -141,11 +165,11 @@ stream_putc (struct stream *s, u_char c)
 int
 stream_putw (struct stream *s, u_int16_t w)
 {
-  s->data[s->cp++] = (u_char)(w >>  8);
-  s->data[s->cp++] = (u_char) w;
+  s->data[s->putp++] = (u_char)(w >>  8);
+  s->data[s->putp++] = (u_char) w;
 
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
   return 2;
 }
 
@@ -153,60 +177,69 @@ stream_putw (struct stream *s, u_int16_t w)
 int
 stream_putl (struct stream *s, u_int32_t l)
 {
-  s->data[s->cp++] = (u_char)(l >> 24);
-  s->data[s->cp++] = (u_char)(l >> 16);
-  s->data[s->cp++] = (u_char)(l >>  8);
-  s->data[s->cp++] = (u_char)l;
+  s->data[s->putp++] = (u_char)(l >> 24);
+  s->data[s->putp++] = (u_char)(l >> 16);
+  s->data[s->putp++] = (u_char)(l >>  8);
+  s->data[s->putp++] = (u_char)l;
 
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
   return 4;
 }
 
 int
-stream_putc_at (struct stream *s, unsigned long cp, u_char c)
+stream_putc_at (struct stream *s, unsigned long putp, u_char c)
 {
-  s->data[cp] = c;
+  s->data[putp] = c;
   return 1;
 }
 
 int
-stream_putw_at (struct stream *s, unsigned long cp, u_int16_t w)
+stream_putw_at (struct stream *s, unsigned long putp, u_int16_t w)
 {
-  s->data[cp] = (u_char)(w >>  8);
-  s->data[cp + 1] = (u_char) w;
-
+  s->data[putp] = (u_char)(w >>  8);
+  s->data[putp + 1] = (u_char) w;
   return 2;
+}
+
+int
+stream_putl_at (struct stream *s, unsigned long putp, u_int32_t l)
+{
+  s->data[putp] = (u_char)(l >> 24);
+  s->data[putp + 1] = (u_char)(l >> 16);
+  s->data[putp + 2] = (u_char)(l >>  8);
+  s->data[putp + 3] = (u_char)l;
+  return 4;
 }
 
 void
 stream_memcpy (struct stream *s, void *src, size_t size)
 {
-  memcpy (s->data + s->cp, src, size);
-  s->cp += size;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  memcpy (s->data + s->putp, src, size);
+  s->putp += size;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
 }
 
 void
 stream_strncpy (void *dst, struct stream *s, size_t size)
 {
-  strncpy (dst, s->data + s->sp, size);
+  strncpy (dst, s->data + s->getp, size);
 
-  s->sp += size;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  s->getp += size;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
 }
 
 /* Put long word to the stream. */
 int
 stream_put_ipv4 (struct stream *s, u_int32_t l)
 {
-  memcpy (s->data + s->cp, &l, 4);
-  s->cp += 4;
+  memcpy (s->data + s->putp, &l, 4);
+  s->putp += 4;
 
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
   return 4;
 }
 
@@ -219,11 +252,11 @@ stream_put_prefix (struct stream *s, struct prefix *p)
   psize = PSIZE (p->prefixlen);
 
   stream_putc (s, p->prefixlen);
-  memcpy (s->data + s->cp, &p->u.prefix, psize);
-  s->cp += psize;
+  memcpy (s->data + s->putp, &p->u.prefix, psize);
+  s->putp += psize;
   
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
 
   return psize;
 }
@@ -234,12 +267,12 @@ stream_read (struct stream *s, int fd, size_t size)
 {
   int nbytes;
 
-  nbytes = readn (fd, s->data + s->cp, size);
+  nbytes = readn (fd, s->data + s->putp, size);
 
   if (nbytes > 0)
     {
-      s->cp += nbytes;
-      s->ep += nbytes;
+      s->putp += nbytes;
+      s->endp += nbytes;
     }
   return nbytes;
 }
@@ -248,10 +281,10 @@ stream_read (struct stream *s, int fd, size_t size)
 int
 stream_write (struct stream *s, u_char *ptr, size_t size)
 {
-  memcpy (s->data + s->cp, ptr, size);
-  s->cp += size;
-  if (s->cp > s->ep)
-    s->ep = s->cp;
+  memcpy (s->data + s->putp, ptr, size);
+  s->putp += size;
+  if (s->putp > s->endp)
+    s->endp = s->putp;
   return size;
 }
 
@@ -259,14 +292,14 @@ stream_write (struct stream *s, u_char *ptr, size_t size)
 u_char *
 stream_pnt (struct stream *s)
 {
-  return s->data + s->sp;
+  return s->data + s->getp;
 }
 
 /* Check does this stream empty? */
 int
 stream_empty (struct stream *s)
 {
-  if (s->cp == 0 && s->ep == 0 && s->sp == 0)
+  if (s->putp == 0 && s->endp == 0 && s->getp == 0)
     return 1;
   else
     return 0;
@@ -276,21 +309,9 @@ stream_empty (struct stream *s)
 void
 stream_reset (struct stream *s)
 {
-  s->cp = 0;
-  s->ep = 0;
-  s->sp = 0;
-}
-
-u_char *
-stream_get_data (struct stream *s)
-{
-  return s->data;
-}
-
-unsigned long
-stream_get_size (struct stream *s)
-{
-  return s->size;
+  s->putp = 0;
+  s->endp = 0;
+  s->getp = 0;
 }
 
 /* Write stream contens to the file discriptor. */
@@ -299,7 +320,7 @@ stream_flush (struct stream *s, int fd)
 {
   int nbytes;
 
-  nbytes = write (fd, s->data + s->sp, s->ep - s->sp);
+  nbytes = write (fd, s->data + s->getp, s->endp - s->getp);
 
   return nbytes;
 }

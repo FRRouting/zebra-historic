@@ -216,7 +216,7 @@ DEFUN (show_interface, show_interface_cmd,
       ifp = if_lookup_by_name (argv[0]);
       if (ifp == NULL) 
 	{
-	  vty_out (vty, "can't find interface [%s]\r\n", argv[0]);
+	  vty_out (vty, "Can't find interface [%s]\r\n", argv[0]);
 	  return CMD_WARNING;
 	}
       if_dump_vty (vty, ifp);
@@ -243,7 +243,7 @@ DEFUN (multicast,
   ret = if_set_flags (ifp, IFF_MULTICAST);
   if (ret < 0)
     {
-      vty_out (vty, "can't set multicast flag\r\n");
+      vty_out (vty, "Can't set multicast flag\r\n");
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -267,7 +267,7 @@ DEFUN (no_multicast,
   ret = if_unset_flags (ifp, IFF_MULTICAST);
   if (ret < 0)
     {
-      vty_out (vty, "can't unset multicast flag\r\n");
+      vty_out (vty, "Can't unset multicast flag\r\n");
       return CMD_WARNING;
     }
   if_get_flags (ifp);
@@ -290,7 +290,7 @@ DEFUN (shutdown_if,
   ret = if_unset_flags (ifp, IFF_UP);
   if (ret < 0)
     {
-      vty_out (vty, "can't shutdown interface\r\n");
+      vty_out (vty, "Can't shutdown interface\r\n");
       return CMD_WARNING;
     }
   if_get_flags (ifp);

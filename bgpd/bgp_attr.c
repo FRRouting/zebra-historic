@@ -1,6 +1,6 @@
 /*
  * BGP attributes management routines.
- * Copyright (C) 1996, 97, 98, 99 Kunihiro Ishiguro
+ * Copyright (C) 1996, 97, 98, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -220,11 +220,9 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
   if (length != 1)
     {
       zlog (peer->log, LOG_ERR, "Origin attribute length is not one [%d]",
-	      length);
-
-      bgp_notify_send (peer, 
-		       BGP_NOTIFY_UPDATE_ERR, 
-		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, 
+	    length);
+      bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR,
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR,
 		       NULL);
       return -1;
     }
@@ -232,9 +230,8 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
   /* Origin attribute must be transitive. */
   if (flag != ATTR_FLAG_TRANS)
     {
-      zlog (peer->log, LOG_ERR, "Origin attribute flag isn't transitive [%d]",
-	      flag);
-
+      zlog (peer->log, LOG_ERR, 
+	    "Origin attribute flag isn't transitive [%d]", flag);
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
 		       BGP_NOTIFY_UPDATE_ATTR_FLAG_ERR, 
@@ -243,7 +240,7 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
     }
 
   /* Fetch origin attribute. */
-  attr->origin = stream_getc (peer->ibuf);
+  attr->origin = stream_getc (BGP_INPUT (peer));
 
   /* If origin attribute is unknown return error. */
   if ((attr->origin != BGP_ORIGIN_IGP) &&
@@ -252,7 +249,6 @@ bgp_attr_origin (struct peer *peer, bgp_size_t length,
     {
       zlog (peer->log, LOG_ERR, "Origin attribute value is invalid [%d]",
 	      attr->origin);
-
       bgp_notify_send (peer, 
 		       BGP_NOTIFY_UPDATE_ERR, 
 		       BGP_NOTIFY_UPDATE_INVAL_ORIGIN,
@@ -282,7 +278,6 @@ bgp_attr_aspath (struct peer *peer, bgp_size_t length,
   /* In case of IBGP, length will be zero. */
   attr->aspath = aspath_parse (stream_pnt (peer->ibuf), length);
   stream_forward (peer->ibuf, length);
-
 
   /* Set aspath attribute flag. */
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_AS_PATH);
@@ -348,10 +343,11 @@ bgp_attr_local_pref (struct peer *peer, bgp_size_t length,
     attr->local_pref = stream_getl (peer->ibuf);
   else 
     attr->local_pref = 0;
-  return 0;
 
   /* Set atomic aggregate flag. */
   attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF);
+
+  return 0;
 }
 
 /* Atomic aggregate. */
@@ -511,45 +507,53 @@ bgp_mp_unreach_parse (struct peer *peer, int length)
 int
 bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 {
-  bgp_size_t cp;
+  u_char *endp;
   bgp_size_t length;
 
-  /* Get attributes until to the end of attribute length. */
-  for (cp = 0; cp < size;)
+  /* End pointer of BGP attribute. */
+  endp = BGP_INPUT_PNT (peer) + size;
+
+  /* Get attributes to the end of attribute length. */
+  while (BGP_INPUT_PNT (peer) < endp)
     {
       int ret;
       u_char flag;
       u_char type;
+      u_char *attr_endp;
+
+      /* Check remaining length check.*/
+      if (endp - BGP_INPUT_PNT (peer) < BGP_ATTR_MIN_LEN)
+	{
+	  zlog (peer->log, LOG_WARNING, 
+		"neighbor %s: BGP attribute error remaingin length is %d",
+		peer->host, endp - STREAM_PNT (BGP_INPUT (peer)));
+	  bgp_notify_send (peer, 
+			   BGP_NOTIFY_UPDATE_ERR, 
+			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+	}
 
       /* Fetch attribute flag and type. */
-      flag = stream_getc (peer->ibuf);
-      type = stream_getc (peer->ibuf);
-      cp += 2;
+      flag = stream_getc (BGP_INPUT (peer));
+      type = stream_getc (BGP_INPUT (peer));
 
       /* Check extended attribue length bit. */
       if (flag & ATTR_FLAG_EXTLEN)
-	{
-	  length = stream_getw (peer->ibuf);
-	  cp += 2;
-	}
+	length = stream_getw (BGP_INPUT (peer));
       else
-	{
-	  length = stream_getc (peer->ibuf);
-	  cp++;
-	}
-
+	length = stream_getc (BGP_INPUT (peer));
+      
       /* Overflow check. */
-      if (cp + length > size)
+      attr_endp =  BGP_INPUT_PNT (peer) + length;
+
+      if (attr_endp > endp)
 	{
 	  zlog (peer->log, LOG_WARNING, 
 		"neighbor %s: BGP attribute length is too large %d",
 		peer->host, length);
-	  bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR, 
+	  bgp_notify_send (peer, 
+			   BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
 	}
-
-      /* Clear return value flag. */
-      ret = 0;
 
       /* OK check attribute and store it's value. */
       switch (type)
@@ -581,6 +585,7 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 	case BGP_ATTR_ORIGINATOR:
 	case BGP_ATTR_CLUSTERLIST:
 	case BGP_ATTR_DPA:
+	  ret = 0;
 	  stream_forward (peer->ibuf, length);
 	  break;
 #ifdef HAVE_IPV6
@@ -593,18 +598,35 @@ bgp_attr_parse (struct peer *peer, struct attr *attr, bgp_size_t size)
 #endif /* HAVE_IPV6 */
 	default:
 	  /* Unknown attribute treatment. */
-	  zlog (peer->log, LOG_INFO, "Unknown attribute type %d length %d received", type, length);
+	  ret = 0;
+	  zlog (peer->log, LOG_INFO, 
+		"Unknown attribute type %d length %d received", type, length);
 	  stream_forward (peer->ibuf, length);
 	  break;
 	}
 
-      /* Check the length. */
+      /* Check the fetched length. */
+      if (BGP_INPUT_PNT (peer) != attr_endp)
+	{
+	  zlog (peer->log, LOG_WARNING, 
+		"neighbor %s: BGP attribute fetch error %d.", peer->host);
+	  bgp_notify_send (peer, 
+			   BGP_NOTIFY_UPDATE_ERR, 
+			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+	}
 
       /* If error occured we should free allocated attribute. */
       if (ret < 0)
 	  return ret;
+    }
 
-      cp += length;
+  if (BGP_INPUT_PNT (peer) != endp)
+    {
+      zlog (peer->log, LOG_WARNING, 
+	    "neighbor %s: BGP attribute length mismatch.", peer->host);
+      bgp_notify_send (peer, 
+		       BGP_NOTIFY_UPDATE_ERR, 
+		       BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
     }
   return 0;
 }
@@ -614,16 +636,23 @@ int
 bgp_attr_check (struct peer *peer, struct attr *attr)
 {
 #define IBGP_ATTR_BIT (ATTR_FLAG_BIT (BGP_ATTR_ORIGIN)   | \
+                       ATTR_FLAG_BIT (BGP_ATTR_AS_PATH)  | \
                        ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP) | \
                        ATTR_FLAG_BIT (BGP_ATTR_LOCAL_PREF))
 
 #define EBGP_ATTR_BIT (ATTR_FLAG_BIT (BGP_ATTR_ORIGIN)   | \
+                       ATTR_FLAG_BIT (BGP_ATTR_AS_PATH)  | \
 		       ATTR_FLAG_BIT (BGP_ATTR_NEXT_HOP))
 
   if (bgp_peer_sort (peer) == BGP_PEER_IBGP)
     {
       if ((attr->flag & IBGP_ATTR_BIT) != IBGP_ATTR_BIT)
 	{
+#ifdef DEBUG
+	  printf ("IBGP_ATTR_BIT %d\n", IBGP_ATTR_BIT);
+	  printf ("appried attr flag %d\n", attr->flag & IBGP_ATTR_BIT);
+#endif /* DEBUG */	  
+
 	  /* Missing well known attribute. */
 	  bgp_notify_send (peer, 
 			   BGP_NOTIFY_UPDATE_ERR, 
@@ -656,7 +685,7 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
   struct aspath *aspath;
 
   /* Remember current pointer. */
-  cp = s->cp;
+  cp = stream_get_putp (s);
 
   /* Origin attribute. */
   stream_putc (s, ATTR_FLAG_TRANS);
@@ -711,11 +740,11 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
   /* If p is IPv6 address put it into attribute. */
   if (p->family == AF_INET6)
     {
-      unsigned long size;
+      unsigned long sizep;
 
       stream_putc (s, ATTR_FLAG_OPTIONAL);
       stream_putc (s, BGP_ATTR_MP_REACH_NLRI);
-      size = stream_get_cp (s);
+      sizep = stream_get_putp (s);
       stream_putc (s, 0);	/* Length of this attribute. */
       stream_putw (s, AFI_IPV6);	/* AFI */
       stream_putc (s, SAFI_UNICAST);	/* SAFI */
@@ -736,12 +765,12 @@ bgp_packet_attribute (struct peer *peer, struct stream *s, struct attr *attr,
       stream_put_prefix (s, p);
 
       /* Set MP attribute length. */
-      stream_putc_at (s, size, s->cp - size - 1);
+      stream_putc_at (s, sizep, stream_get_putp (s) - sizep - 1);
     }
 #endif /* HAVE_IPV6 */
 
   /* Return total size of attribute. */
-  return s->cp - cp;
+  return stream_get_putp (s) - cp;
 }
 
 bgp_size_t
@@ -751,12 +780,12 @@ bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p)
   unsigned long attrlen_pnt;
   bgp_size_t size;
 
-  cp = stream_get_cp (s);
+  cp = stream_get_putp (s);
 
   stream_putc (s, ATTR_FLAG_OPTIONAL);
   stream_putc (s, BGP_ATTR_MP_UNREACH_NLRI);
 
-  attrlen_pnt = stream_get_cp (s);
+  attrlen_pnt = stream_get_putp (s);
   stream_putc (s, 0);		/* Length of this attribute. */
   stream_putw (s, AFI_IPV6);	/* AFI */
   stream_putc (s, SAFI_UNICAST); /* SAFI */
@@ -765,10 +794,10 @@ bgp_packet_withdraw (struct peer *peer, struct stream *s, struct prefix *p)
   stream_put_prefix (s, p);
 
   /* Set MP attribute length. */
-  size = s->cp - attrlen_pnt - 1;
+  size = stream_get_putp (s) - attrlen_pnt - 1;
   stream_putc_at (s, attrlen_pnt, size);
 
-  return s->cp - cp;
+  return stream_get_putp (s) - cp;
 }
 
 /* Initialization of attribute. */

@@ -32,7 +32,6 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "ospfd/ospf_dump.h"
 
 /* OSPF ISM functions. */
-static void ospf_start (struct interface *);
 
 int
 ism_hello_timer (struct thread *thread)
@@ -45,10 +44,20 @@ ism_hello_timer (struct thread *thread)
   zlog (NULL, LOG_DEBUG, "ISM [%s]:  Timer (Hello timer expire)",
 	oi->ifp->name);
 
+  /* sending hello packet. */
+  /* actually add write thread and fire. */
+
+  OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
   /*
     THREAD_VAL (thread) = Hello_timer_expired; */
-  ospf_ism_event (thread);
+  /* ospf_ism_event (thread); */
 
+  return 0;
+}
+
+int
+ism_wait_timer ()
+{
   return 0;
 }
 
@@ -61,45 +70,45 @@ ism_timer_set (struct ospf_interface *oi)
   switch (oi->status)
     {
     case ISM_Down:
-      /* First entry point of ospf interface state machine. From this
-	 timer timer_start function is called. All other timer must be
-         turned off. */
+      /* First entry point of ospf interface state machine. In this state
+	 interface parameters must be set to initial values, and timers are
+	 reset also. */
       OSPF_ISM_TIMER_OFF (oi->t_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_Loopback:
-      /*
-       */
+      /* In this state, the interface may be looped back and will be
+	 unavailable for regular data traffic. */
       OSPF_ISM_TIMER_OFF (oi->t_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_Waiting:
-      /*
-       */
-  /* start interval Hello Timer */
+      /* The router is trying to determine the identity of DRouter and
+	 BDRouter. The router begin to receive and send Hello Packets. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_PointToPoint:
-      /*
-       */
-      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
-      OSPF_ISM_TIMER_OFF (oi->t_wait);
-      break;
-    case ISM_Backup:
-      /*
-       */
+      /* The interface connects to a physical Point-to-point network or
+	 virtual link. The router attempts to form an adjacency with
+	 neighboring router. Hello packets are also sent. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_DROther:
-      /*
-       */
+      /* The network type of the interface is broadcast or NBMA network, and
+	 the router itself is Designated Router. */
+      OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
+      OSPF_ISM_TIMER_OFF (oi->t_wait);
+      break;
+    case ISM_Backup:
+      /* The network type of the interface is broadcast os NBMA network, and
+	 the router is Backup Designated Router. */
       OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
       break;
     case ISM_DR:
-      /*
+      /* The network type of the interface is broadcast or NBMA network, and
        */
       OSPF_ISM_TIMER_ON (oi->t_hello, ism_hello_timer, oi->v_hello);
       OSPF_ISM_TIMER_OFF (oi->t_wait);
@@ -119,24 +128,6 @@ ospf_ism_start (struct ospf_interface *oi)
 }
 
 int
-ism_inactivity_timer (struct thread *thread)
-{
-  return 0;
-}
-
-int
-ism_wait_timer ()
-{
-  return 0;
-}
-
-int
-ism_start (struct ospf_interface *oi)
-{
-  return 0;
-}
-
-int
 ism_stop (struct ospf_interface *oi)
 {
   return 0;
@@ -151,7 +142,7 @@ ism_interface_up (struct ospf_interface *oi)
       oi->type == OSPF_IFTYPE_POINTOMULTIPOINT ||
       oi->type == OSPF_IFTYPE_VIRTUALLINK)
     return ISM_PointToPoint;
-  /* Else if the router is not eligibl to DR, the state transitions to
+  /* Else if the router is not eligible to DR, the state transitions to
      DROther. */
   else if (0) /* router is eligible? */
     return ISM_DROther;
@@ -324,6 +315,7 @@ ism_change_status (struct ospf_interface *oi, int status)
 	LOOKUP (ospf_ism_status_msg, oi->status),
 	LOOKUP (ospf_ism_status_msg, status));
 
+  oi->status = status;
   /* Preserve old status? */
 }
 
