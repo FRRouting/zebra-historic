@@ -35,7 +35,6 @@ void log_warn (char *format, ...);
 
 char *log_open (char *);
 void log_close ();
-void log_rotate ();
 
 /* Logging flag. */
 extern int log_mode;
@@ -67,7 +66,8 @@ typedef struct _zlog
   const char *ident;
   zlog_proto_t protocol;
   int flags;
-  FILE *file;
+  FILE *fp;
+  char *filename;
   int syslog;
   int stat;
   int connected;
@@ -102,5 +102,6 @@ void zvlog_warn (const char *format, ...);
 void zvlog_notice (const char *format, ...);
 void zvlog_info (const char *format, ...);
 void zvlog_debug (const char *format, ...);
+int zlog_rotate ();
 
 #endif /* _ZEBRA_LOG_H */

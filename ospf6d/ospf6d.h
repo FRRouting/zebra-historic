@@ -49,19 +49,20 @@
 
 /* OSPF stuffs */
 #include "ospf6_types.h"
+#include "ospf6_prefix.h"
+#include "ospf6_mesg.h"
+#include "ospf6_spf.h"
+#include "ospf6_rtable.h"
+#include "ospf6_proto.h"
+#include "ospf6_area.h"
 #include "ospf6_interface.h"
+#include "ospf6_neighbor.h"
 #include "ospf6_ism.h"
 #include "ospf6_lsa.h"
 #include "ospf6_lsdb.h"
 #include "ospf6_dbex.h"
-#include "ospf6_spf.h"
-#include "ospf6_rtable.h"
-#include "ospf6_area.h"
-#include "ospf6_mesg.h"
 #include "ospf6_dump.h"
-#include "ospf6_neighbor.h"
 #include "ospf6_network.h"
-#include "ospf6_proto.h"
 #include "ospf6_zebra.h"
 
 /*
@@ -160,16 +161,11 @@ struct ospf6 *make_ospf6 (rtr_id_t);
 struct ospf6 *ospf6_lookup (instance_id_t);
 struct area  *make_area (area_id_t, struct ospf6 *);
 struct area *area_lookup (area_id_t, struct ospf6 *);
-struct ospf6_if *make_ospf6_if (char *);
-struct ospf6_if *ospf6_if_lookup (char *);
-struct ospf6_if *ospf6_if_lookup_by_addr (struct prefix *);
-struct ospf6_if *ospf6_if_lookup_by_addr_in_net (struct prefix *);
 struct neighbor *make_neighbor (rtr_id_t, struct ospf6_if *);
 struct neighbor *nbr_lookup (rtr_id_t, struct ospf6 *);
 void ospf6_terminate ();
 int show_ospf6_top (struct vty *, struct ospf6 *);
 int show_area (struct vty *, struct area *);
-int show_if (struct vty *, struct interface *);
 int show_nbr (struct vty *, struct neighbor *);
 void ospf6_init ();
 

@@ -268,7 +268,7 @@ if_set_prefix (struct interface *ifp, struct prefix_ipv4 *p)
 
     ifroute = *p;
     apply_mask_ipv4 (&ifroute);
-    kernel_add_ipv4 (&ifroute, NULL, ifp->index, 0, 0);
+    kernel_add_ipv4 (&ifroute, NULL, ifp->ifindex, 0, 0);
   }
 #endif /* LINUX_VERSION_CODE */
 
@@ -388,7 +388,7 @@ if_prefix_add_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
   memset (&ifreq, 0, sizeof (struct in6_ifreq));
 
   memcpy (&ifreq.ifr6_addr, &p->prefix, sizeof (struct in6_addr));
-  ifreq.ifr6_ifindex = ifp->index;
+  ifreq.ifr6_ifindex = ifp->ifindex;
   ifreq.ifr6_prefixlen = p->prefixlen;
 
   ret = if_ioctl_ipv6 (SIOCSIFADDR, (caddr_t) &ifreq);
@@ -405,7 +405,7 @@ if_prefix_delete_ipv6 (struct interface *ifp, struct prefix_ipv6 *p)
   memset (&ifreq, 0, sizeof (struct in6_ifreq));
 
   memcpy (&ifreq.ifr6_addr, &p->prefix, sizeof (struct in6_addr));
-  ifreq.ifr6_ifindex = ifp->index;
+  ifreq.ifr6_ifindex = ifp->ifindex;
   ifreq.ifr6_prefixlen = p->prefixlen;
 
   ret = if_ioctl_ipv6 (SIOCDIFADDR, (caddr_t) &ifreq);

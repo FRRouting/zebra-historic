@@ -325,26 +325,60 @@ nsm_oneway_received (struct ospf_neighbor *nbr)
   return 0;
 }
 
+void
+nsm_reset_nbr (struct ospf_neighbor *nbr)
+{
+  /* Clear Link State Retransmission list. */
+  if (list_isempty (nbr->ls_retransmit))
+    {
+      list_delete_all_node (nbr->ls_retransmit);
+      /*      nbr->ls_retransmit = NULL; */
+    }
+
+  /* Clear Database Summary list. */
+  if (list_isempty (nbr->db_summary))
+    {
+      list_delete_all_node (nbr->db_summary);
+      /*      nbr->db_summary = NULL; */
+    }
+
+  /* Clear Link State Request list. */
+  if (list_isempty (nbr->ls_request))
+    {
+      list_delete_all_node (nbr->ls_request);
+      /*      nbr->ls_request = NULL; */
+    }
+
+  /* Cancel thread. */
+  OSPF_NSM_TIMER_OFF (nbr->t_db_desc);
+  nbr->t_db_desc = NULL;
+
+  OSPF_NSM_TIMER_OFF (nbr->t_ls_req);
+  nbr->t_ls_req = NULL;
+
+  OSPF_NSM_TIMER_OFF (nbr->t_ls_upd);
+  nbr->t_ls_upd = NULL;
+}
+
 int
 nsm_kill_nbr (struct ospf_neighbor *nbr)
 {
+  /* Reset neighbor. */
+  nsm_reset_nbr (nbr);
+
+  OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
+
+  /* Delete neighbor from interface. */
+  /* ospf_nbr_delete (nbr); */
+
   return 0;
 }
 
 int
 nsm_inactivity_timer (struct ospf_neighbor *nbr)
 {
-  /* Clear Link State Retransmission list. */
-  if (nbr->ls_retransmit)
-    list_delete_all_node (nbr->ls_retransmit);
-
-  /* Clear Database Summary list. */
-  if (nbr->db_summary)
-    list_delete_all_node (nbr->db_summary);
-
-  /* Clear Link State Request list. */
-  if (nbr->ls_request)
-    list_delete_all_node (nbr->ls_request);
+  /* Reset neighbor. */
+  nsm_reset_nbr (nbr);
 
   /* Reset neighbor values. */
   nbr->dd_flags = OSPF_DD_FLAG_MS|OSPF_DD_FLAG_M|OSPF_DD_FLAG_I;
@@ -359,6 +393,9 @@ nsm_inactivity_timer (struct ospf_neighbor *nbr)
 int
 nsm_ll_down (struct ospf_neighbor *nbr)
 {
+  /* Reset neighbor. */
+  nsm_reset_nbr (nbr);
+
   return 0;
 }
 
@@ -567,6 +604,9 @@ nsm_change_status (struct ospf_neighbor *nbr, int status)
       lsa = ospf_router_lsa (oi);
       ospf_add_router_lsa (oi->area, lsa);
       oi->area->router_lsa_self = lsa;
+
+      /* Add LSA to related neighbor's retransmission list. */
+      ospf_ls_retransmit (oi, lsa);
     }
     
   /* Generete NeighborChange ISM event. */

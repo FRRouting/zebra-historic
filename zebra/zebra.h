@@ -33,6 +33,8 @@
 #define ZEBRA_GET_HOSTINFO         7
 #define ZEBRA_REDISTRIBUTE_ADD     8
 #define ZEBRA_REDISTRIBUTE_DELETE  9
+#define ZEBRA_INTERFACE_ADD       10
+#define ZEBRA_INTERFACE_DELETE    11
 
 /* Error code of zebra. */
 #define ZEBRA_ERR_RTEXIST          1

@@ -84,15 +84,33 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
   exit (status);
 }
 
+/* SIGHUP handler. */
+void 
+sighup (int sig)
+{
+  zlog (NULL, LOG_INFO, "SIGHUP received");
+
+  /* Reload of config file. */
+  ;
+}
+
 /* SIGINT handler. */
 void
 sigint (int sig)
 {
   zlog (NULL, LOG_INFO, "Terminating on signal");
-  if (!retain_mode)
-    rip_rib_close ();
+
+  if (! retain_mode)
+    rip_terminate ();
 
   exit (0);
+}
+
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
 }
 
 /* Signale wrapper. */
@@ -122,9 +140,11 @@ signal_set (int signo, void (*func)(int))
 void
 signal_init ()
 {
+  signal_set (SIGHUP, sighup);
   signal_set (SIGINT, sigint);
   signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
+  signal_set (SIGUSR1, sigusr1);
 }
 
 /* Main routine of ripd. */

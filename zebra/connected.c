@@ -87,7 +87,7 @@ connected_add_ipv4 (struct interface *ifp, struct in_addr *addr,
   if (prefix_ipv4_any (&rib))
     return;
 
-  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->index, 0);
+  rib_add_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0);
 }
 
 /* Delete connected IPv4 route to the interface. */
@@ -113,7 +113,7 @@ connected_delete_ipv4 (struct interface *ifp, struct in_addr *addr,
   if (prefix_ipv4_any (&mp))
     return;
 
-  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->index, 0);
+  rib_delete_ipv4 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->ifindex, 0);
 }
 
 #ifdef HAVE_IPV6
@@ -163,7 +163,7 @@ connected_add_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   connected_add (ifp, connected);
 
-  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->index, 0);
+  rib_add_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &rib, NULL, ifp->ifindex, 0);
 }
 
 void
@@ -182,6 +182,6 @@ connected_delete_ipv6 (struct interface *ifp, struct in6_addr *address,
 
   apply_mask_ipv6 (&mp);
 
-  rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->index, 0);
+  rib_delete_ipv6 (ZEBRA_ROUTE_CONNECT, 0, &mp, NULL, ifp->ifindex, 0);
 }
 #endif /* HAVE_IPV6 */

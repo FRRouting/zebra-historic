@@ -36,64 +36,61 @@
 #include "table.h"
 
 #include "ripngd/ripngd.h"
+#include "ripngd/ripng_debug.h"
 
 /* If RFC2133 definition is used. */
 #ifndef IPV6_JOIN_GROUP
-#define IPV6_JOIN_GROUP IPV6_ADD_MEMBERSHIP 
+#define IPV6_JOIN_GROUP  IPV6_ADD_MEMBERSHIP 
+#endif
+#ifndef IPV6_LEAVE_GROUP
+#define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP 
 #endif
 
 /* Static utility function. */
-static void ripng_enable_apply_all ();
+static void ripng_enable_apply (struct interface *);
 
-/* Join to the RIPng multicast group. */
+/* Join to the all rip routers multicast group. */
 int
-if_add_multicast (struct interface *ifp)
+ripng_multicast_join (struct interface *ifp)
 {
   int ret;
   struct ipv6_mreq mreq;
 
-  bzero (&mreq, sizeof (mreq));
+  memset (&mreq, 0, sizeof (mreq));
   inet_pton(AF_INET6, RIPNG_GROUP, &mreq.ipv6mr_multiaddr);
-
-  SET_IN6_LINKLOCAL_IFINDEX (mreq.ipv6mr_multiaddr, ifp->index);
-
-  mreq.ipv6mr_interface = ifp->index;
+  mreq.ipv6mr_interface = ifp->ifindex;
 
   ret = setsockopt (ripng->sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
 		    (char *) &mreq, sizeof (mreq));
-
   if (ret < 0)
-    zlog (NULL, LOG_ERR, 
-	  "can't setsockopt IPV6_JOIN_MEMBERSHIP:%s\n", strerror (errno));
+    zlog_warn ("can't setsockopt IPV6_JOIN_GROUP: %s", strerror (errno));
+
+  if (IS_RIPNG_DEBUG_EVENT)
+    zlog_info ("%s join to all-rip-routers multicast group", ifp->name);
 
   return ret;
 }
 
-/* Request routes at all interfaces. */
+/* Leave from the all rip routers multicast group. */
 int
-ripng_request_all (struct thread *t)
+ripng_multicast_leave (struct interface *ifp)
 {
-  listnode node;
-  struct interface *ifp;
-  struct ripng_interface *ri;
-  int ripng_request (struct interface *ifp);
+  int ret;
+  struct ipv6_mreq mreq;
 
-  /* Send RIPng request packet to each interface. */
-  for (node = listhead (iflist); node; nextnode (node))
-    {
-      ifp = getdata (node);
-      ri = ifp->if_data;
+  memset (&mreq, 0, sizeof (mreq));
+  inet_pton(AF_INET6, RIPNG_GROUP, &mreq.ipv6mr_multiaddr);
+  mreq.ipv6mr_interface = ifp->ifindex;
 
-      if (if_is_loopback (ifp) || !if_is_up (ifp))
-	continue;
+  ret = setsockopt (ripng->sock, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
+		    (char *) &mreq, sizeof (mreq));
+  if (ret < 0)
+    zlog_warn ("can't setsockopt IPV6_LEAVE_GROUP: %s\n", strerror (errno));
 
-      if (!ri->enable)
-	continue;
+  if (IS_RIPNG_DEBUG_EVENT)
+    zlog_info ("%s leave from all-rip-routers multicast group", ifp->name);
 
-      if_add_multicast (ifp);
-      ripng_request (ifp);
-    }
-  return 0;
+  return ret;
 }
 
 /* Check max mtu size. */
@@ -140,7 +137,7 @@ ripng_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
       ifp = if_get_by_name (tmpnam);
 
       /* Get interface's index and values. */
-      ifp->index = stream_getc (s);
+      ifp->ifindex = stream_getc (s);
       ifp->flags = stream_getl (s);
       ifp->metric = stream_getl (s);
       ifp->mtu = stream_getl (s);
@@ -172,10 +169,10 @@ ripng_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
 
 	  connected_add (ifp, connected);
 	}
-    }
 
-  /* RIPng enable interface. */
-  ripng_enable_apply_all ();
+      /* RIPng interface check. */
+      ripng_enable_apply (ifp);
+    }
 
   /* Apply distribute-list to the all interface. */
   distribute_apply_all ();
@@ -223,18 +220,22 @@ ripng_enable_network_lookup (struct interface *ifp)
 }
 
 /* Add RIPng enable network. */
-void
+int
 ripng_enable_network_add (struct prefix *p)
 {
   struct route_node *node;
 
   node = route_node_get (ripng_enable_network, p);
+
   if (node->info)
-    route_unlock_node (node);
+    {
+      route_unlock_node (node);
+      return -1;
+    }
   else
     node->info = "enabled";
 
-  ripng_enable_apply_all ();
+  return 1;
 }
 
 /* Delete RIPng enable network. */
@@ -253,9 +254,6 @@ ripng_enable_network_delete (struct prefix *p)
 
       /* Unlock lookup lock. */
       route_unlock_node (node);
-      
-      /* Apply new configuration. */
-      ripng_enable_apply_all ();
 
       return 1;
     }
@@ -277,18 +275,18 @@ ripng_enable_if_lookup (char *ifname)
 }
 
 /* Add inteface to ripng_enable_if. */
-void
+int
 ripng_enable_if_add (char *ifname)
 {
   int ret;
 
   ret = ripng_enable_if_lookup (ifname);
   if (ret >= 0)
-    return;
+    return -1;
 
   vector_set (ripng_enable_if, strdup (ifname));
 
-  ripng_enable_apply_all ();
+  return 1;
 }
 
 /* Delete inteface from ripng_enable_if. */
@@ -300,43 +298,90 @@ ripng_enable_if_delete (char *ifname)
 
   index = ripng_enable_if_lookup (ifname);
   if (index < 0)
-    return index;
+    return -1;
 
   str = vector_slot (ripng_enable_if, index);
   free (str);
   vector_unset (ripng_enable_if, index);
 
-  ripng_enable_apply_all ();
+  return 1;
+}
 
-  return index;
+/* Check RIPng is enabed on this interface. */
+void
+ripng_enable_apply (struct interface *ifp)
+{
+  int ret;
+  struct ripng_interface *ri = NULL;
+
+  /* Check interface. */
+  if (if_is_loopback (ifp))
+    return;
+
+  if (! if_is_up (ifp))
+    return;
+  
+  ri = ifp->info;
+
+  /* Check network configuration. */
+  ret = ripng_enable_network_lookup (ifp);
+
+  /* If the interface is matched. */
+  if (ret > 0)
+    ri->enable_network = 1;
+  else
+    ri->enable_network = 0;
+
+  /* Check interface name configuration. */
+  ret = ripng_enable_if_lookup (ifp->name);
+  if (ret >= 0)
+    ri->enable_interface = 1;
+  else
+    ri->enable_interface = 0;
+
+  /* Update running status of the interface. */
+  if (ri->enable_network || ri->enable_interface)
+    {
+      if (! ri->running)
+	{
+	  if (IS_RIPNG_DEBUG_EVENT)
+	    zlog_info ("RIPng turn on %s", ifp->name);
+
+	  /* Join to multicast group. */
+	  ripng_multicast_join (ifp);
+
+	  /* Send RIP request to the interface. */
+	  ripng_request (ifp);
+
+	  ri->running = 1;
+	}
+    }
+  else
+    {
+      if (ri->running)
+	{
+	  if (IS_RIPNG_DEBUG_EVENT)
+	    zlog_info ("RIPng turn off %s", ifp->name);
+
+	  /* Leave from multicast group. */
+	  ripng_multicast_leave (ifp);
+
+	  ri->running = 0;
+	}
+    }
 }
 
 /* Set distribute list to all interfaces. */
 static void
 ripng_enable_apply_all ()
 {
-  int ret;
   struct interface *ifp;
   listnode node;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
-      struct ripng_interface *ri;
-
       ifp = getdata (node);
-      ri = ifp->if_data;
-
-      ret = ripng_enable_if_lookup (ifp->name);
-      if (ret >= 0)
-	ri->enable = 1;
-      else
-	{
-	  ret = ripng_enable_network_lookup (ifp);
-	  if (ret >= 0)
-	    ri->enable = 1;
-	  else
-	    ri->enable = 0;
-	}
+      ripng_enable_apply (ifp);
     }
 }
 
@@ -382,9 +427,17 @@ DEFUN (ripng_network,
 
   /* Given string is IPv6 network or interface name. */
   if (ret)
-    ripng_enable_network_add (&p);
+    ret = ripng_enable_network_add (&p);
   else
-    ripng_enable_if_add (argv[0]);
+    ret = ripng_enable_if_add (argv[0]);
+
+  if (ret < 0)
+    {
+      vty_out (vty, "There is same network configuration %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  ripng_enable_apply_all ();
 
   return CMD_SUCCESS;
 }
@@ -414,6 +467,8 @@ DEFUN (no_ripng_network,
       return CMD_WARNING;
     }
   
+  ripng_enable_apply_all ();
+
   return CMD_SUCCESS;
 }
 
@@ -425,23 +480,13 @@ ri_new ()
   ri = XMALLOC (MTYPE_IF, sizeof (struct ripng_interface));
   bzero (ri, sizeof (struct ripng_interface));
 
-  /* Set default values. */
-#ifdef RIPNG_ADVANCE
-  ri->ri_send = RIPNG_SEND_UNSPEC;
-  ri->ri_receive = RIPNG_RECEIVE_UNSPEC;
-  ri->ri_default_send = RIPNG_DEFAULT_ADVERTISE;
-  ri->ri_default_receive = RIPNG_DEFAULT_ACCEPT;
-#endif /* RIPNG_ADVANCE */
-
-  ri->ri_split_horizon = RIPNG_SPLIT_HORIZON_UNSPEC;
-
   return ri;
 }
 
 int
 ripng_if_new_hook (struct interface *ifp)
 {
-  ifp->if_data = ri_new ();
+  ifp->info = ri_new ();
   return 0;
 }
 
@@ -457,24 +502,16 @@ interface_config_write (struct vty *vty)
   for (node = listhead (iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      ri = ifp->if_data;
+      ri = ifp->info;
 
       vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
       if (ifp->desc)
 	vty_out (vty, " description %s%s", ifp->desc, VTY_NEWLINE);
 
-#ifdef RIPNG_ADVANCE
-      if (ri->ri_send != RIPNG_SEND_UNSPEC)
-	vty_out (vty, " no ripng send%s", VTY_NEWLINE);
-      if (ri->ri_receive != RIPNG_RECEIVE_UNSPEC)
-	vty_out (vty, " no ripng receive%s", VTY_NEWLINE);
-#endif /* RIPNG_ADVANCE */
-
       vty_out (vty, "!%s", VTY_NEWLINE);
 
       write++;
     }
-
   return write;
 }
 
@@ -508,13 +545,6 @@ ripng_if_init ()
   install_element (INTERFACE_NODE, &config_help_cmd);
   install_element (INTERFACE_NODE, &interface_desc_cmd);
   install_element (INTERFACE_NODE, &no_interface_desc_cmd);
-
-#ifdef RIPNG_ADVANCE
-  install_element (INTERFACE_NODE, &ripng_receive_cmd);
-  install_element (INTERFACE_NODE, &no_ripng_receive_cmd);
-  install_element (INTERFACE_NODE, &ripng_send_cmd);
-  install_element (INTERFACE_NODE, &no_ripng_send_cmd);
-#endif /* RIPNG_ADVANCE */
 
   install_element (RIPNG_NODE, &ripng_network_cmd);
   install_element (RIPNG_NODE, &no_ripng_network_cmd);

@@ -1,3 +1,7 @@
+1999-08-08  davidm@nbase.co.il (David Mozes)
+
+	* rip_zebra.c (rip_zebra_read_ipv4): Fix split horizon problem.
+
 1999-07-03  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (rip_timer_set): Function added.

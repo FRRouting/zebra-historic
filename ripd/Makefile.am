@@ -39,10 +39,6 @@ depend:
 	@$(CPP) -MM $(INCLUDES) $(LDFLAGS) *.c
 
 ## File dependency.
-ripd.o: ripd.c ../lib/if.h ../lib/linklist.h ../lib/command.h \
- ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/table.h \
- ../lib/thread.h ../lib/memory.h ../lib/roken.h ../lib/log.h \
- ../lib/filter.h ../zebra/zebra.h ../ripd/ripd.h ../ripd/rip_debug.h
 rip_debug.o: rip_debug.c ../lib/command.h ../lib/vector.h ../lib/vty.h \
  ../ripd/rip_debug.h
 rip_interface.o: rip_interface.c ../zebra/zebra.h ../lib/command.h \
@@ -59,3 +55,8 @@ rip_zebra.o: rip_zebra.c ../zebra/zebra.h ../lib/thread.h \
  ../lib/vector.h ../lib/vty.h ../lib/command.h ../lib/prefix.h ripd.h \
  ../lib/buffer.h ../lib/network.h ../lib/client.h ../lib/stream.h \
  ../lib/log.h ../lib/zclient.h
+ripd.o: ripd.c ../lib/if.h ../lib/linklist.h ../lib/command.h \
+ ../lib/vector.h ../lib/vty.h ../lib/prefix.h ../lib/table.h \
+ ../lib/thread.h ../lib/memory.h ../lib/roken.h ../lib/log.h \
+ ../lib/stream.h ../lib/filter.h ../zebra/zebra.h ../ripd/ripd.h \
+ ../ripd/rip_debug.h

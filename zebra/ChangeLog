@@ -1,3 +1,22 @@
+1999-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* rib.c: show ip route A.B.C.D works.
+
+	* zebra.c (zebra_read_ipv4): Add ifindex to zebra messages.
+
+1999-08-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* zebra.h: New Zebra message ZEBRA_INTERFACE_{ADD,DELETE} added.
+
+1999-08-09  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* interface.h: New file.
+	* Makefile.am: Add interface.h
+
+1999-08-04  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* redistribute.c (zebra_redistribute): give ifindex to client.
+
 1999-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* main.c (longopts): -k, --keep_kernel option added.

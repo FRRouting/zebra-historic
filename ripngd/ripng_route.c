@@ -25,6 +25,7 @@
 #include "prefix.h"
 #include "table.h"
 #include "memory.h"
+#include "if.h"
 
 #include "ripngd/ripngd.h"
 #include "ripngd/ripng_route.h"

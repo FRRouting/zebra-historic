@@ -57,6 +57,7 @@ ospf_nbr_new (struct ospf_interface *oi)
   nbr->v_inactivity = oi->v_wait;
   nbr->v_db_desc = oi->retransmit_interval;
   nbr->v_ls_req = oi->retransmit_interval;
+  nbr->v_ls_upd = oi->retransmit_interval;
   nbr->priority = -1;
 
   /* DD flags. */
@@ -70,20 +71,53 @@ ospf_nbr_new (struct ospf_interface *oi)
   nbr->db_summary = list_init ();
   nbr->ls_request = list_init ();
 
+  /* */
+  OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
+
   return nbr;
 }
 
 void
 ospf_nbr_free (struct ospf_neighbor *nbr)
 {
-  list_delete_all (nbr->ls_retransmit);
-  list_delete_all (nbr->db_summary);
-  list_delete_all (nbr->ls_request);
+  if (nbr->ls_retransmit != NULL && listcount (nbr->ls_retransmit))
+    list_delete_all (nbr->ls_retransmit);
+  if (nbr->db_summary != NULL && listcount (nbr->db_summary))
+    list_delete_all (nbr->db_summary);
+  if (nbr->ls_request != NULL && listcount (nbr->ls_request))
+    list_delete_all (nbr->ls_request);
+
+/*  if (nbr->host)
+    free (nbr->host); */
 
   /* Cancel threads. */
   OSPF_NSM_TIMER_OFF (nbr->t_inactivity);
 
   XFREE (MTYPE_OSPF_NEIGHBOR, nbr);
+}
+
+void
+ospf_nbr_delete (struct ospf_neighbor *nbr)
+{
+  struct ospf_interface *oi;
+  struct route_node *rn;
+  struct prefix p;
+
+  oi = nbr->oi;
+
+  p.family = AF_INET;
+  p.prefixlen = IPV4_MAX_BITLEN;
+  p.u.prefix4 = nbr->address.u.prefix4;
+
+  ospf_nbr_free (nbr);
+
+  rn = route_node_get (oi->nbrs, &p);
+  if (rn != NULL)
+    {
+      rn->info = NULL;
+      while (rn->lock)
+	route_unlock_node (rn);
+    }
 }
 
 /* Check myself is in the neighbor list. */

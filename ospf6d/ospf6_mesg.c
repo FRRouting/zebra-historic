@@ -1571,7 +1571,7 @@ ospf6_process_dbdesc (struct iovec *iov, struct ospf6_if *o6if,
 
   /* dump database description */
   ospf6_dbdesc_bit_str (dbdesc->bits, dbdesc_bit_str);
-  o6log.packet ("DbDesc: opt:xxx ifmtu:%hu bit:%s seqnum:%lu",
+  o6log.packet ("receive DbDesc: opt:xxx ifmtu:%hu bit:%s seqnum:%lu",
                 ntohs (dbdesc->interface_mtu), dbdesc_bit_str,
                 ntohl (dbdesc->sequence_number));
 
@@ -1638,10 +1638,14 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
   /* clear buffer for response LSUpdate packet */
   iov_clear (response, MAXIOVLIST);
 
+  /* dump message */
+  o6log.packet ("receive LSReq");
+
   /* process each request */
   lsreq = (struct linkstate_request *) iov_detach_first (iov);
   while (lsreq)
     {
+      /* dump requested */
       o6log.packet (" requested: %s", print_lsreq (lsreq));
 
       /* get scope from request type */
@@ -1654,6 +1658,8 @@ ospf6_process_lsreq (struct iovec *iov, struct ospf6_if *o6if,
             scope = (void *) nbr->ospf6_if->area;
             break;
           case SCOPE_AS:
+            scope = (void *) nbr->ospf6_if->area->ospf6;
+            break;
           case SCOPE_RESERVED:
           default:
             o6log.packet ("unsupported type requested, ignore");
@@ -1739,8 +1745,10 @@ ospf6_process_lsupdate (struct iovec *iov, struct ospf6_if *o6if,
   lsupdate = (struct linkstate_update *) NULL;
   iov_trim_head (MTYPE_OSPF6_MESSAGE, iov);
 
-  /* dump message and process LSAs */
-  o6log.packet ("LSUpdate: %lu LSAs", lsanum);
+  /* dump message */
+  o6log.packet ("receive LSUpdate: LSAnumber %lu", lsanum);
+
+  /* process LSAs */
   for (lsa_hdr = (struct ospf6_lsa_hdr *) iov[0].iov_base;
        lsanum; lsanum--)
     {
@@ -1783,6 +1791,9 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
       return;
     }
 
+  /* dump message */
+  o6log.packet ("receive LSAck");
+
   /* process each LSA header */
   while (iov[0].iov_base)
     {
@@ -1804,6 +1815,8 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
             scope = (void *) nbr->ospf6_if->area;
             break;
           case SCOPE_AS:
+            scope = (void *) nbr->ospf6_if->area->ospf6;
+            break;
           case SCOPE_RESERVED:
           default:
             o6log.packet ("unsupported scope acknowledge, ignore");
@@ -1812,7 +1825,7 @@ ospf6_process_lsack (struct iovec *iov, struct ospf6_if *o6if,
         }
 
       /* dump acknowledged LSA */
-      o6log.packet ("acknowledge %s", print_lsahdr (lsa_hdr));
+      o6log.packet (" acknowledge %s", print_lsahdr (lsa_hdr));
 
       /* find database copy */
       copy = ospf6_lsdb_lookup (lsa_hdr->lsh_type, lsa_hdr->lsh_id,
@@ -1997,9 +2010,9 @@ ospf6_peek_hdr (int sockfd, struct msghdr *rmsghdrp,
 
   /* find received ospf6 interface */
   ifp = if_lookup_by_index (pktinfo->ipi6_ifindex);
-  if (!ifp || !ifp->if_data)
+  if (!ifp || !ifp->info)
     return;
-  *o6if = (struct ospf6_if *)ifp->if_data;
+  *o6if = (struct ospf6_if *)ifp->info;
   if (!(*o6if)->area)
     {
       o6log.packet ("received interface %s not attached to area",

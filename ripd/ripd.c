@@ -1,5 +1,4 @@
-/*
- * RIP version 1 and 2.
+/* RIP version 1 and 2.
  * Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -30,40 +29,53 @@
 #include "memory.h"
 #include "roken.h"
 #include "log.h"
+#include "stream.h"
 #include "filter.h"
 
 #include "zebra/zebra.h"
+
 #include "ripd/ripd.h"
 #include "ripd/rip_debug.h"
 
 /* RIP Structure. */
-struct rip rip;
+struct rip *rip = NULL;
 
-/* RIP routing table radix tree. */
-struct route_table *rip_table;
+/* RIP neighbor address table. */
+struct route_table *rip_neighbor_table;
 
-/* RIP's static routes table */
-struct route_table *rip_static_table;
+/* Prototypes. */
+void 
+rip_event (enum rip_event, int);
 
-/* RIP event. */
-enum rip_event {RIP_READ, RIP_WRITE};
+int
+rip_triggered_update (struct thread *);
 
-/* RIP events. */
-void rip_event (enum rip_event event, int sock);
-
-/* This struct carries information of type of response and which
-   interface this buffer is send to. */
-struct rip_send_buf
+void
+rip_output_process (struct interface *, struct sockaddr_in *, 
+		    int, int, u_char);
+
+/* Macro for timer turn on. */
+#define RIP_TIMER_ON(T,F,V) \
+      if (!(T)) \
+        (T) = thread_add_timer (master, (F), rinfo, (V))
+
+/* Macro for timer turn off. */
+#define RIP_TIMER_OFF(X) \
+      if (X) \
+	{ \
+	  thread_cancel (X); \
+	  (X) = NULL; \
+	}
+
+/* RIP output routes type. */
+enum
 {
-  int type;
-  u_char version;
-  struct sockaddr_in dest;
-  struct interface *ifp;
-  struct rte *rte;
-  struct rte *rtelim;
-  union rip_buf rip_buf;
-} rip_send_buf;
-
+  rip_all_route,
+  rip_changed_route,
+  rip_split_horizon,
+  rip_no_split_horizon
+};
+
 /* RIP command strings. */
 struct message rip_msg[] = 
 {
@@ -96,229 +108,6 @@ struct
   { ZEBRA_ROUTE_BGP,     "B", "bgp",       70},
 };
 
-void
-rip_info_free (struct rip_info *rinfo)
-{
-  XFREE (MTYPE_RIP_INFO, rinfo);
-}
-
-/* Add rip information to rip list. */
-void
-rip_add_rinfo (struct rip_info **rp, struct rip_info *rinfo)
-{
-  struct rip_info *cp;
-  struct rip_info *pp;
-
-  for (cp = pp = *rp; cp; pp = cp, cp = cp->next)
-    if (rinfo->pref <= cp->pref)
-      break;
-
-  if (cp == pp)
-    {
-      *rp = rinfo;
-
-      if (cp)
-	cp->prev = rinfo;
-      rinfo->next = cp;
-    }
-  else
-    {
-      if (pp)
-	pp->next = rinfo;
-      rinfo->prev = pp;
-
-      if (cp)
-	cp->prev = rinfo;
-      rinfo->next = cp;
-    }
-  
-}
-
-/* Delete rib from rib list. */
-void
-rip_delete_rinfo (struct rip_info **rp, struct rip_info *rinfo)
-{
-  if (rinfo->next)
-    rinfo->next->prev = rinfo->prev;
-  if (rinfo->prev)
-    rinfo->prev->next = rinfo->next;
-  else
-    *rp = rinfo->next;
-}
-
-/* RIP add route to routing table. */
-int
-rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo, 
-	       struct sockaddr_in *from, struct interface *ifp)
-{
-  int distance;
-  int update;
-  struct route_node *np;
-  struct rip_info *rp;
-  struct rip_info *fib;
-  struct rip_info *same;
-
-  /* Get index for the prefix. */
-  np = route_node_get (rip_table, (struct prefix *) p);
-  distance = route_info[rinfo->type].distance;
-
-  /* Check same type route and FIB route. */
-  fib = NULL;
-  same = NULL;
-
-  /* Lookup each rip information. */
-  for (rp = np->info; rp; rp = rp->next)
-    {
-      if (rp->fib)
-	fib = rp;
-      if (rp->type == rinfo->type)
-	same = rp;
-    }
-
-  /* If given route is redistributed route. */
-  if (rinfo->type != ZEBRA_ROUTE_RIP)
-    {
-      if (fib)
-	{
-	  if (distance <= route_info[fib->type].distance)
-	    {
-	      fib->fib = 0;
-	      rinfo->fib = 1;
-	    }
-	}
-      else
-	rinfo->fib = 1;
-
-      if (IS_RIP_DEBUG_ZEBRA)
-	zlog_info ("rip %s add %s/%d", 
-		   route_info[rinfo->type].str_long, 
-		   inet_ntoa (p->prefix), p->prefixlen);
-
-      rip_add_rinfo ((struct rip_info **) &np->info, rinfo);
-
-      if (same)
-	{
-	  rip_delete_rinfo ((struct rip_info **)&np->info, same);
-	  rip_info_free (same);
-	  route_unlock_node (np);
-	}
-
-      return 0;
-    }
-
-  /* There are three cases of add|replace|update. */
-  if (same)
-    {
-      /* Does this RIP info come from same neighbor? */
-      update = IPV4_ADDR_SAME (&same->from, &from->sin_addr);
-
-      /* Logging. */
-      if (IS_RIP_DEBUG_PACKET)
-	zlog (NULL, LOG_INFO, "rip %s route %s/%d", 
-	      update ? "update" : "replace",
-	      inet_ntoa (p->prefix), p->prefixlen);
-
-      /* If this datagram is from the same router as the existing
-	 route, reinitialize the timeout... RFC2453 */
-      if (update)
-	same->timer = rinfo->timer;
-
-      /* If the datagram is from the same router as the existing
-         route, and the new metric is different than the old one; or,
-         if the new metric is lower than the old one; do the following
-         actions... RFC2453 */
-      if ((update && rinfo->metric != same->metric) ||
-	  (rinfo->metric < same->metric))
-	{
-	  /* - Adopt the route from the datagram (i.e., put the new
-	     metric in and adjust the next hop address, if
-	     necessary). */
-	  same->tag = rinfo->tag;
-	  same->metric = rinfo->metric;
-	  same->from = rinfo->from;
-	  same->timer = rinfo->timer;
-	  
-	  if (IPV4_ADDR_CMP (&same->nexthop, &rinfo->nexthop) != 0)
-	    {
-	      same->nexthop = rinfo->nexthop;
-	      rip_zebra (ZEBRA_IPV4_ROUTE_ADD, p, &rinfo->nexthop);
-	    }
-
-	  /* - Set the route change flag and signal the output process
-             to trigger an update */
-	  /* rip_event (RIP_OUTPUT, 0); */
-
-	  /* - If the new metric is infinity, start the deletion
-	      process (described above); otherwise, re-initialize the
-	      timeout */
-
-	  /* Comment: Infinity route is handled in
-             rip_delete_route(). */
-	}
-
-      /* rinfo information is applied, free used rinfo now.*/
-      rip_info_free (rinfo);
-      route_unlock_node (np);
-    }
-  else
-    {
-      /* This is new rip route. */
-      if (IS_RIP_DEBUG_PACKET)
-	zlog_info ("rip add route %s/%d", 
-		   inet_ntoa (p->prefix), p->prefixlen);
-
-      if (fib)
-	{
-	  /* There is already fib route. */
-	  rip_info_free (rinfo);
-	  route_unlock_node (np);
-	}
-      else
-	{
-	  rinfo->fib = 1;
-	  rip_add_rinfo ((struct rip_info **) &np->info, rinfo);
-
-	  if (rinfo->sub_type != RIP_ROUTE_STATIC)
-	    rip_zebra (ZEBRA_IPV4_ROUTE_ADD, p, &rinfo->nexthop);
-	}
-    }
-  return 0;
-}
-
-/* Process delete of route. */
-int
-rip_delete_route (struct prefix_ipv4 *p, struct rip_info *rinfo,
-		  struct sockaddr_in *from, struct interface *ifp)
-{
-  struct route_node *np;
-  struct rip_info *rp;
-
-  /* If route is alread exist update timer. */
-  if (IS_RIP_DEBUG_PACKET)
-    zlog_info ("rip delete route %s/%d", inet_ntoa (p->prefix), p->prefixlen);
-
-  /* Get index for the prefix. */
-  np = route_node_get (rip_table, (struct prefix *) p);
-
-  for (rp = np->info; rp; rp = rp->next)
-    {
-      if (IPV4_ADDR_SAME (&rp->from, &from->sin_addr))
-	{
-	  rip_delete_rinfo ((struct rip_info **) &np->info, rp);
-
-	  if (rp->fib)
-	    rip_zebra (ZEBRA_IPV4_ROUTE_DELETE, p, &rp->nexthop);
-
-	  route_unlock_node (np);
-	  break;
-	}
-    }
-
-  route_unlock_node (np);
-
-  return 0;
-}
-
 /* Utility function to set boradcast option to the socket. */
 int
 sockopt_broadcast (int sock)
@@ -335,52 +124,6 @@ sockopt_broadcast (int sock)
   return 0;
 }
 
-/* Dump RIP packet */
-void
-rip_packet_dump (struct rip_packet *packet, int len,
-		 struct sockaddr_in *from, struct interface *ifp)
-{
-  caddr_t end;
-  struct rte *rte;
-  struct in_addr addr;
-  char pbuf[BUFSIZ], hbuf[BUFSIZ];
-
-  zlog_info ("RIP recieved v%d %s from %s:%d %d on %s",
-	     packet->version, LOOKUP (rip_msg, packet->command),
-	     inet_ntoa(from->sin_addr), ntohs (from->sin_port),
-	     len, ifp ? ifp->name : "unknown");
-
-  rte = packet->route;
-  end = ((caddr_t) packet) + len;
-  
-  while ((caddr_t) rte < end) 
-    {
-      u_char netmask = 0;
-
-      addr.s_addr = rte->prefix;
-      strncpy (pbuf, inet_ntoa (addr), BUFSIZ);
-
-      if (packet->version == RIPv2)
-	{
-	  addr.s_addr = rte->netmask;
-	  netmask = ip_masklen (addr);
-	}
-
-      addr.s_addr = rte->nexthop;
-      strncpy (hbuf, inet_ntoa (addr), BUFSIZ);
-
-      if (packet->version == RIPv2)
-	zlog_info ("  %s/%d -> %s family %d tag %d metric %d",
-		   pbuf, netmask, hbuf, 
-		   ntohs (rte->family), ntohs (rte->tag), ntohl (rte->metric));
-      else
-	zlog_info ("  %s family %d tag %d metric %d", 
-		   pbuf,
-		   ntohs (rte->family), ntohs (rte->tag), ntohl (rte->metric));
-      rte++;
-    }
-}
-
 struct rip_info *
 rip_info_new ()
 {
@@ -391,15 +134,315 @@ rip_info_new ()
   return new;
 }
 
+void
+rip_info_free (struct rip_info *rinfo)
+{
+  XFREE (MTYPE_RIP_INFO, rinfo);
+}
+
+/* RIP route garbage collect timer. */
+int
+rip_garbage_collect (struct thread *t)
+{
+  struct rip_info *rinfo;
+  struct route_node *rp;
+
+  rinfo = THREAD_ARG (t);
+  rinfo->t_garbage_collect = NULL;
+
+  /* Off timeout timer. */
+  RIP_TIMER_OFF (rinfo->t_timeout);
+  
+  /* Get route_node pointer. */
+  rp = rinfo->rp;
+
+  /* Delete this route from the kernel. */
+  rip_zebra_ipv4_delete ((struct prefix_ipv4 *)&rp->p, 
+			 &rinfo->nexthop, rinfo->ifindex);
+  rinfo->flags &= ~RIP_RTF_FIB;
+
+  /* Unlock route_node. */
+  rp->info = NULL;
+  route_unlock_node (rp);
+
+  /* Free RIP routing information. */
+  rip_info_free (rinfo);
+
+  return 0;
+}
+
+/* Timeout RIP routes. */
+int
+rip_timeout (struct thread *t)
+{
+  struct rip_info *rinfo;
+  struct route_node *rp;
+
+  rinfo = THREAD_ARG (t);
+  rinfo->t_timeout = NULL;
+
+  /* Get route_node pointer. */
+  rp = rinfo->rp;
+
+  /* - The garbage-collection timer is set for 120 seconds. */
+  RIP_TIMER_ON (rinfo->t_garbage_collect, rip_garbage_collect, 
+		rip->garbage_time);
+
+  /* - The metric for the route is set to 16 (infinity).  This causes
+     the route to be removed from service. */
+  rinfo->metric = RIP_METRIC_INFINITY;
+
+  /* - The route change flag is to indicate that this entry has been
+     changed. */
+  rinfo->flags |= RIP_RTF_CHANGED;
+
+  /* - The output process is signalled to trigger a response. */
+  rip_event (RIP_TRIGGERED_UPDATE, 0);
+
+  return 0;
+}
+
+void
+rip_timeout_update (struct rip_info *rinfo)
+{
+  if (rinfo->metric != RIP_METRIC_INFINITY)
+    {
+      RIP_TIMER_OFF (rinfo->t_timeout);
+      RIP_TIMER_ON (rinfo->t_timeout, rip_timeout, rip->timeout_time);
+    }
+}
+
+/* RIP add route to routing table. */
+void
+rip_route_process (struct rte *rte, struct sockaddr_in *from,
+		   struct interface *ifp)
+{
+  struct prefix_ipv4 p;
+  struct route_node *rp;
+  struct rip_info *rinfo;
+  struct in_addr *nexthop;
+  u_char oldmetric;
+  int same = 0;
+
+  /* Make prefix structure. */
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefix = rte->prefix;
+  p.prefixlen = ip_masklen (rte->mask);
+
+  /* Make sure mask is applied. */
+  apply_mask_ipv4 (&p);
+
+  /* Input distribute-list filtering. */
+  if (distribute_apply_in (ifp, (struct prefix *) &p) == FILTER_DENY)
+    {
+      if (IS_RIP_DEBUG_PACKET)
+	zlog_info ("RIP %s/%d filtered by distribute in",
+		   inet_ntoa (p.prefix), p.prefixlen);
+      return;
+    }
+
+  /* Set nexthop pointer. */
+  if (rte->nexthop.s_addr == 0)
+    nexthop = &from->sin_addr;
+  else
+    nexthop = &rte->nexthop;
+
+  /* Get index for the prefix. */
+  rp = route_node_get (rip->table, (struct prefix *) &p);
+
+  if (rp->info == NULL)
+    {
+      /* Now, check to see whether there is already an explicit route
+	 for the destination prefix.  If there is no such route, add
+	 this route to the routing table, unless the metric is
+	 infinity (there is no point in adding a route which
+	 unusable). */
+      if (rte->metric != RIP_METRIC_INFINITY)
+	{
+	  rinfo = rip_info_new ();
+	  
+	  /* - Setting the destination prefix and length to those in
+	     the RTE. */
+	  rp->info = rinfo;
+	  rinfo->rp = rp;
+
+	  /* - Setting the metric to the newly calculated metric (as
+	     described above). */
+	  rinfo->metric = rte->metric;
+	  rinfo->tag = ntohs (rte->tag);
+
+	  /* - Set the next hop address to be the address of the router
+	     from which the datagram came or the next hop address
+	     specified by a next hop RTE. */
+	  IPV4_ADDR_COPY (&rinfo->nexthop, nexthop);
+	  IPV4_ADDR_COPY (&rinfo->from, &from->sin_addr);
+	  rinfo->ifindex = ifp->ifindex;
+
+	  /* - Initialize the timeout for the route.  If the
+	     garbage-collection timer is running for this route, stop it
+	     (see section 2.3 for a discussion of the timers). */
+	  rip_timeout_update (rinfo);
+
+	  /* - Set the route change flag. */
+	  rinfo->flags |= RIP_RTF_CHANGED;
+
+	  /* - Signal the output process to trigger an update (see section
+	     2.5). */
+	  rip_event (RIP_TRIGGERED_UPDATE, 0);
+
+	  /* Finally, route goes into the kernel. */
+	  rinfo->type = ZEBRA_ROUTE_RIP;
+	  rinfo->sub_type = RIP_ROUTE_RTE;
+
+	  rip_zebra_ipv4_add (&p, &rinfo->nexthop, rinfo->ifindex);
+	  rinfo->flags |= RIP_RTF_FIB;
+	}
+    }
+  else
+    {
+      rinfo = rp->info;
+	  
+      /* If there is an existing route, compare the next hop address
+	 to the address of the router from which the datagram came.
+	 If this datagram is from the same router as the existing
+	 route, reinitialize the timeout.  */
+      same = IPV4_ADDR_SAME (&rinfo->from, &from->sin_addr);
+
+      if (same)
+	rip_timeout_update (rinfo);
+
+      /* Next, compare the metrics.  If the datagram is from the same
+	 router as the existing route, and the new metric is different
+	 than the old one; or, if the new metric is lower than the old
+	 one; do the following actions: */
+      if ((same && rinfo->metric != rte->metric) ||
+	  rte->metric < rinfo->metric)
+	{
+	  /* - Adopt the route from the datagram.  That is, put the
+	     new metric in, and adjust the next hop address (if
+	     necessary). */
+	  oldmetric = rinfo->metric;
+	  rinfo->metric = rte->metric;
+	  rinfo->tag = ntohs (rte->tag);
+
+	  if (! IPV4_ADDR_SAME (&rinfo->nexthop, nexthop))
+	    {
+	      rip_zebra_ipv4_delete (&p, &rinfo->nexthop, rinfo->ifindex);
+	      rip_zebra_ipv4_add (&p, nexthop, ifp->ifindex);
+	      rinfo->flags |= RIP_RTF_FIB;
+
+	      IPV4_ADDR_COPY (&rinfo->nexthop, nexthop);
+	    }
+	  IPV4_ADDR_COPY (&rinfo->from, &from->sin_addr);
+	  rinfo->ifindex = ifp->ifindex;
+
+	  /* - Set the route change flag and signal the output process
+	     to trigger an update. */
+	  rinfo->flags |= RIP_RTF_CHANGED;
+	  rip_event (RIP_TRIGGERED_UPDATE, 0);
+
+	  /* - If the new metric is infinity, start the deletion
+	     process (described above); */
+	  if (rinfo->metric == RIP_METRIC_INFINITY)
+	    {
+	      /* If the new metric is infinity, the deletion process
+		 begins for the route, which is no longer used for
+		 routing packets.  Note that the deletion process is
+		 started only when the metric is first set to
+		 infinity.  If the metric was already infinity, then a
+		 new deletion process is not started. */
+	      if (oldmetric != RIP_METRIC_INFINITY)
+		{
+		  /* - The garbage-collection timer is set for 120 seconds. */
+		  RIP_TIMER_ON (rinfo->t_garbage_collect, 
+				rip_garbage_collect, rip->garbage_time);
+		  RIP_TIMER_OFF (rinfo->t_timeout);
+
+		  /* - The metric for the route is set to 16
+		     (infinity).  This causes the route to be removed
+		     from service.*/
+		  /* - The route change flag is to indicate that this
+		     entry has been changed. */
+		  /* - The output process is signalled to trigger a
+                     response. */
+		  ;  /* Above processes are already done previously. */
+		}
+	    }
+	  else
+	    {
+	      /* otherwise, re-initialize the timeout. */
+	      rip_timeout_update (rinfo);
+
+	      /* Should a new route to this network be established
+		 while the garbage-collection timer is running, the
+		 new route will replace the one that is about to be
+		 deleted.  In this case the garbage-collection timer
+		 must be cleared. */
+	      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+	    }
+	}
+      /* Unlock tempolary lock of the route. */
+      route_unlock_node (rp);
+    }
+}
+
+/* Dump RIP packet */
+void
+rip_packet_dump (struct rip_packet *packet, int size)
+{
+  caddr_t lim;
+  struct rte *rte;
+  char *command_str;
+  char pbuf[BUFSIZ], nbuf[BUFSIZ];
+  u_char netmask = 0;
+
+  /* Set command string. */
+  if (packet->command > 0 && packet->command < RIP_COMMAND_MAX)
+    command_str = rip_msg[packet->command].str;
+  else
+    command_str = "unknown";
+
+  /* Dump packet header. */
+  zlog_info ("RIP command %s version %d packet size %d",
+	     command_str, packet->version, size);
+
+  /* Dump each routing table entry. */
+  rte = packet->rte;
+  
+  for (lim = (caddr_t) packet + size; (caddr_t) rte < lim; rte++)
+    {
+      if (packet->version == RIPv2)
+	{
+	  netmask = ip_masklen (rte->mask);
+
+	  zlog_info ("  %s/%d -> %s family %d tag %d metric %d",
+		     inet_ntop (AF_INET, &rte->prefix, pbuf, BUFSIZ), netmask,
+		     inet_ntop (AF_INET, &rte->nexthop, nbuf, BUFSIZ),
+		     ntohs (rte->family), ntohs (rte->tag), 
+		     ntohl (rte->metric));
+	}
+      else
+	{
+	  zlog_info ("  %s family %d tag %d metric %d", 
+		     inet_ntop (AF_INET, &rte->prefix, pbuf, BUFSIZ),
+		     ntohs (rte->family), ntohs (rte->tag),
+		     ntohl (rte->metric));
+	}
+    }
+}
+
 /* Check if the destination address is valid (unicast; not net 0
    or 127) (RFC2453 Section 3.9.2 - Page 26).  But we don't
    check net 0 because we accept default route. */
 int
-rip_check_address (u_int32_t addr)
+rip_destination_check (struct in_addr addr)
 {
-  addr = ntohl (addr);
+  u_int32_t netaddr;
 
-  if (IPV4_NET127 (addr))
+  netaddr = ntohl (addr.s_addr);
+
+  if (IPV4_NET127 (netaddr))
     return 0;
 
   /* Net 0 may match to the default route.
@@ -407,11 +450,11 @@ rip_check_address (u_int32_t addr)
     return 0;
   */
 
-  if (IN_CLASSA (addr))
+  if (IN_CLASSA (netaddr))
     return 1;
-  if (IN_CLASSB (addr))
+  if (IN_CLASSB (netaddr))
     return 1;
-  if (IN_CLASSC (addr))
+  if (IN_CLASSC (netaddr))
     return 1;
 
   return 0;
@@ -419,360 +462,304 @@ rip_check_address (u_int32_t addr)
 
 /* RIP routing information. */
 void
-rip_response_recv (struct rip_packet *packet, int size, 
-		   struct sockaddr_in *from, struct interface *ifp)
+rip_response_process (struct rip_packet *packet, int size, 
+		      struct sockaddr_in *from, struct interface *ifp)
 {
-  int ret;
-  caddr_t end;
+  caddr_t lim;
   struct rte *rte;
-  struct rip_info *rinfo;
-  time_t gettime;
-
-  /* Check port number of incoming packet. */
+      
+  /* The Response must be ignored if it is not from the RIP
+     port. (RFC2453 - Sec. 3.9.2)*/
   if (ntohs (from->sin_port) != RIP_PORT_DEFAULT) 
     {
-      zlog_info ("This packet doesn't come from rip port : %d", 
+      zlog_info ("RIP response doesn't come from RIP port: %d",
 		 from->sin_port);
       return;
     }
 
-  /* "The datagram's IPv4 source address should be checked to see
+  /* The datagram's IPv4 source address should be checked to see
      whether the datagram is from a valid neighbor; the source of the
-     datagram must be on a directly connected network" (RFC2453 -
-     Sec. 3.9.2) */
-  if (! if_valid_neighbor(from->sin_addr)) 
+     datagram must be on a directly connected network  */
+  if (! if_valid_neighbor (from->sin_addr)) 
     {
       zlog_info ("This datagram doesn't came from a valid neighbor: %s",
-		 inet_ntoa(from->sin_addr));
+		 inet_ntoa (from->sin_addr));
       return;
     }
 
-  /* Set current time.  This time value is common to all routes which
-     included in this packet. */
-  time (&gettime);
+  /* It is also worth checking to see whether the response is from one
+     of the router's own addresses. */
 
-  rte = packet->route;
-  end = ((caddr_t) packet) + size;
+  ; /* Alredy done in rip_read () */
 
-  while ((caddr_t) rte < end) 
+  /* Set RTE pointer. */
+  rte = packet->rte;
+
+  for (lim = (caddr_t) packet + size; (caddr_t) rte < lim; rte++)
     {
-      struct prefix_ipv4 p;
-      struct in_addr mask;
-      
+      /* - is the destination address valid (e.g., unicast; not net 0
+         or 127) */
+      if (! rip_destination_check (rte->prefix))
+        {
+	  zlog_info ("Network is net 127 or it is not unicast network");
+	  continue;
+	} 
+
+      /* Convert metric value to host byte order. */
+      rte->metric = ntohl (rte->metric);
+
+      /* - is the metric valid (i.e., between 1 and 16, inclusive) */
+      if (! (rte->metric >= 1 && rte->metric <= 16))
+	{
+	  zlog_info ("Route's metric is not in the 1-16 range.");
+	  continue;
+	}
+
       /* Address family check.  RIP only supports AF_INET. */
       if (ntohs (rte->family) != AF_INET)
 	{
 	  zlog_info ("Unsupported family %d from %s.",
 		     ntohs (rte->family), inet_ntoa (from->sin_addr));
-	  rte++;
 	  continue;
 	}
 
-      /* Network 127 and Class A, B, C check. */
-      if (! rip_check_address (rte->prefix))
-        {
-	  zlog_info ("Network is net 127 or it is not unicast network");
-	  rte++;
-	  continue;
-	} 
-
-      /* Check if the metric is valid  (STD-56 Section 3.9.2 - Page 27) */
-      if (ntohl (rte->metric) > RIP_METRIC_INFINITY)
-        {
-	  zlog_info ("Route's metric is not in the 1-16 range.");
-          rte++;
-          continue;
-        }
-
-      /* Allocate new rt_in. */
-      p.family = AF_INET;
-      p.prefix.s_addr = rte->prefix;
-      mask.s_addr = rte->netmask;
-      p.prefixlen = ip_masklen (mask);
-
-     /* For rip v1, there won't be a valid netmask.
-      *
-      * This is a best guess at the masks.  If everyone was using old Ciscos
-      * before the 'ip subnet zero' option, it would be almost right too :-)
-      *
-      * Ciscos summarize ripv1 advertisments to the classful boundary (/16 for
-      * class B's) except when the RIP packet does to inside the classful
-      * network in question.
-      */
-      if (packet->version == RIPv1 &&
-	  p.prefixlen == 0 &&
-	  (u_int32_t) (p.prefix.s_addr))
+      /* RIPv1 does not have nexthop value. */
+      if (packet->version == RIPv1 && rte->nexthop.s_addr != 0)
 	{
-	  if(ntohl ((u_int32_t) (p.prefix.s_addr)) & 0xff) 
+	  zlog_info ("RIPv1 packet with nexthop value %s",
+		     inet_ntoa (rte->nexthop));
+	  continue;
+	}
+
+      /* An address specified as a next hop must, per force, be
+	 directly reachable on the logical subnet over which the
+	 advertisement is made. */
+      if (packet->version == RIPv2 && rte->nexthop.s_addr != 0)
+	{
+	  if (! if_lookup_address (rte->nexthop))
 	    {
-	      mask.s_addr = 0xffffffff;
-	      p.prefixlen = 32;
+	      zlog_info ("Next hop is not directly reachable %s", 
+			 inet_ntoa (rte->nexthop));
+	      continue;
 	    }
-	  else if((ntohl ((u_int32_t) (p.prefix.s_addr)) & 0xff00) ||
-		  IN_CLASSC(p.prefix.s_addr)) 
+	}
+
+     /* For rip v1, there won't be a valid netmask.  
+
+	This is a best guess at the masks.  If everyone was using old
+	Ciscos before the 'ip subnet zero' option, it would be almost
+	right too :-)
+      
+	Cisco summarize ripv1 advertisments to the classful boundary
+	(/16 for class B's) except when the RIP packet does to inside
+	the classful network in question.  */
+
+      if (packet->version == RIPv1 && rte->prefix.s_addr != 0)
+	{
+	  if (ntohl (rte->prefix.s_addr) & 0xff) 
 	    {
-	      mask.s_addr = 0xffffff00;
-	      p.prefixlen = 24;
+	      masklen2ip (32, &rte->mask);
 	    }
-	  else if((ntohl ((u_int32_t) (p.prefix.s_addr)) & 0xff0000) ||
-		  IN_CLASSB(p.prefix.s_addr)) 
+	  else if ((ntohl (rte->prefix.s_addr) & 0xff00) ||
+		   IN_CLASSC (rte->prefix.s_addr)) 
 	    {
-	      mask.s_addr = 0xffff0000;
-	      p.prefixlen = 16;
+	      masklen2ip (24, &rte->mask);
+	    }
+	  else if ((ntohl (rte->prefix.s_addr) & 0xff0000) ||
+		   IN_CLASSB (rte->prefix.s_addr)) 
+	    {
+	      masklen2ip (16, &rte->mask);
 	    }
 	  else 
 	    {
-	      mask.s_addr = 0xff000000;
-	      p.prefixlen = 8;
+	      masklen2ip (8, &rte->mask);
 	    }
 	}
-
-      /* Input distribute-list filtering. */
-      if (distribute_apply_in (ifp, (struct prefix *) &p) == FILTER_DENY)
-	{
-	  if (IS_RIP_DEBUG_PACKET)
-	    zlog_info ("RIP %s/%d filtered by distribute in",
-		       inet_ntoa (p.prefix), p.prefixlen);
-	  continue;
-	}
-
-      /* Fetch information into rip_info structure */
-      rinfo = rip_info_new ();
-      rinfo->type = ZEBRA_ROUTE_RIP;
-      rinfo->pref = 10;
-      rinfo->from = from->sin_addr;
-      rinfo->tag = ntohl (rte->tag);
-      rinfo->timer = gettime;
-      rinfo->ifp = ifp;
 
       /* Once the entry has been validated, update the metric by
          adding the cost of the network on wich the message
          arrived. If the result is greater than infinity, use infinity
          (RFC2453 Sec. 3.9.2) */
-      rinfo->metric = ntohl (rte->metric);
-      rinfo->metric += ifp->metric;
-      if (rinfo->metric > RIP_METRIC_INFINITY)
-	rinfo->metric = RIP_METRIC_INFINITY;
+      rte->metric += ifp->metric;
+      if (rte->metric > RIP_METRIC_INFINITY)
+	rte->metric = RIP_METRIC_INFINITY;
 
-      /* Next Hop: The inmmediate next hop IP address wo which the
-	 packets to the destination specified by this route should be
-	 forwarded.  Specifying a value of 0.0.0.0 in this field
-	 indicates that routing should be via the originator of the
-	 RIP advertisement (RFC2453 Sec. 4.4)*/
-      if (ntohl (rte->nexthop) == 0)
-	rinfo->nexthop.s_addr = from->sin_addr.s_addr;
-      else 
-	{
-	  /* An address specified as next hop must be directly
-	     reachable on the logical subnet which the advertisement
-	     is made (NOT CHECKED!!! MUST BE CHECKED) */
-	  rinfo->nexthop.s_addr = rte->nexthop;
-	}
-
-      /* Check nexthop address. */
-      ret = if_check_address (rinfo->nexthop);
-      if (ret)
-	{
-	  zlog (NULL, LOG_INFO, 
-		"Route's nexthop set to myself! So ignore this route.");
-	  rte++;
-	  rip_info_free (rinfo);
-	  continue;
-	}
-
-      /* Check metric is INFINITY or not. */
-      if (rinfo->metric == RIP_METRIC_INFINITY) 
-	rip_delete_route (&p, rinfo, from, ifp);
-      else 
-	rip_add_route (&p, rinfo, from, ifp);
-
-      rte++;
+      /* Routing table updates. */
+      rip_route_process (rte, from, ifp);
     }
-}
-
-/* Set up initial send buffer. */
-void
-rip_send_init (u_char version)
-{
-  struct rip_packet *rip_packet;
-
-  rip_packet = &rip_send_buf.rip_buf.rip_packet;
-  rip_packet->command = RIP_RESPONSE;
-  rip_packet->version = version;
-  rip_packet->pad1 = 0;
-  rip_packet->pad2 = 0;
-
-  rip_send_buf.version = version;
-  rip_send_buf.rte = rip_packet->route;
-  rip_send_buf.rtelim = rip_packet->route + RIP_MAX_RTE;
-  rip_send_buf.ifp = NULL;
-  bzero (&rip_send_buf.dest, sizeof (struct sockaddr_in));
-  rip_send_buf.dest.sin_family = AF_INET;
-  rip_send_buf.dest.sin_port = htons (RIP_PORT_DEFAULT);
 }
 
 /* RIP packet send to destination address. */
 int
-rip_udp_send (int sock, u_char *pnt, int size, struct sockaddr_in *dest)
+rip_send_packet (caddr_t buf, int size, struct sockaddr_in *to)
 {
   int ret;
   struct sockaddr_in sin;
 
-  if (dest == NULL)
-    return 0;
-
+  /* Make destination address. */
+  memset (&sin, 0, sizeof (struct sockaddr_in));
+  sin.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
   sin.sin_len = sizeof (struct sockaddr_in);
 #endif /* HAVE_SIN_LEN */
-  sin.sin_family = AF_INET;
-  if (dest->sin_port == 0)
-    sin.sin_port = htons (RIP_PORT_DEFAULT);
-  else
-    sin.sin_port = dest->sin_port;
-  sin.sin_addr.s_addr = dest->sin_addr.s_addr;
 
-  ret = sendto (sock, pnt, size, 0, (struct sockaddr *)&sin,
-		sizeof(struct sockaddr_in));
+  /* When destination is specified, use it's port and address. */
+  if (to)
+    {
+      sin.sin_port = to->sin_port;
+      sin.sin_addr = to->sin_addr;
+    }
+  else
+    {
+      sin.sin_port = htons (RIP_PORT_DEFAULT);
+      sin.sin_addr.s_addr = htonl (INADDR_RIP_GROUP);
+    }
+
+  ret = sendto (rip->sock, buf, size, 0, (struct sockaddr *)&sin,
+		sizeof (struct sockaddr_in));
 
   if (ret < 0)
-    zlog (NULL, LOG_INFO, "can't send packet : %s", strerror (errno));
+    zlog_warn ("can't send packet : %s", strerror (errno));
 
   return ret;
 }
 
-/* Utility function to announce rip route. */
+/* Add redistributed route to RIP table. */
 void
-rip_send_announce ()
+rip_redistribute_add (int type, int sub_type, struct prefix_ipv4 *p, 
+		      unsigned int ifindex)
 {
-  int size;
-  caddr_t end = (caddr_t)rip_send_buf.rte;
-  caddr_t start = (caddr_t)&rip_send_buf.rip_buf;
-  struct sockaddr_in *sin = &rip_send_buf.dest;
-  struct rip_packet *rip_packet;
-
-  /* Reset pointer. */
-  rip_packet = &rip_send_buf.rip_buf.rip_packet;
-
-  size = end - start;
-
-  rip_udp_send (rip.sock, start, size, sin);
-  
-  rip_send_buf.rte = rip_packet->route;
-}
-
-/* Walkdown function of rip's radix tree. */
-void
-rip_announce_func (struct prefix *p, struct rip_info *rinfo,
-		   struct interface *ifp)
-{
-  struct rte *rte;
-  struct in_addr mask;
-  struct rip_interface *ri;
-
-  if (! rinfo->fib)
-    return;
-
-  /* Distribute-list out. */
-  if (distribute_apply_out (ifp, p) == FILTER_DENY)
-    {
-      if (IS_RIP_DEBUG_PACKET)
-	zlog_info ("RIP %s/%d filtered distribute out",
-		   inet_ntoa (p->u.prefix4), p->prefixlen);
-      return;
-    }
-
-  /* In case of RIP_POLL, do not perform split horizon/poisoned reverse. */
-  if (rip_send_buf.type != RIP_POLL &&
-      rip_send_buf.type != RIP_REQUEST)
-    {
-      ri = ifp->if_data;
-
-      /* Split horizon. */
-      if (ri->ri_split_horizon == RI_RIP_SPLIT_HORIZON_UNSPEC
-	  || ri->ri_split_horizon == RI_RIP_SPLIT_HORIZON)
-	if (rinfo->ifp == ifp)
-	  return;
-
-      /* Poisoned reverse. */
-      ;
-    }
-
-  /* Write routing information. */
-  ri = ifp->if_data;
-  rte = rip_send_buf.rte;
-  rte->family = htons (AF_INET);
-  rte->tag = 0;
-  masklen2ip (p->prefixlen, &mask);
-  rte->metric = htonl (rinfo->metric);
-  rip_send_buf.rte++;
-
-  if (rip_send_buf.version == RIPv1)
-    {
-      rte->prefix = (p->u.prefix4.s_addr) & mask.s_addr;
-      rte->netmask = 0;
-    }	
-  else
-    {
-      rte->prefix = p->u.prefix4.s_addr;
-      rte->netmask = mask.s_addr;
-    }
-
-  /* If buffer is full of routes, send it to neighbor. */
-  if (rip_send_buf.rte == rip_send_buf.rtelim)
-    rip_send_announce ();
-}
-
-/* Walkdown RIP routing table then call RIP announcement function for
-   each routes. */
-void
-rip_walkdown_send (struct interface *ifp)
-{
+  int ret;
   struct route_node *rp;
   struct rip_info *rinfo;
 
-  for (rp = route_top (rip_table); rp; rp = route_next (rp))
-    for (rinfo = rp->info; rinfo; rinfo = rinfo->next)
-      if (rinfo->fib)
-	rip_announce_func (&rp->p, rinfo, ifp);
-  rip_send_announce ();
+  /* Redistribute route  */
+  ret = rip_destination_check (p->prefix);
+  if (! ret)
+    return;
+
+  rp = route_node_get (rip->table, (struct prefix *) p);
+  rinfo = rp->info;
+
+  if (rinfo)
+    {
+      RIP_TIMER_OFF (rinfo->t_timeout);
+      RIP_TIMER_OFF (rinfo->t_garbage_collect);
+      route_unlock_node (rp);
+    }
+  else
+    {
+      rinfo = rip_info_new ();
+    }
+
+  rinfo->type = type;
+  rinfo->sub_type = sub_type;
+  rinfo->ifindex = ifindex;
+  rinfo->metric = 1;
+  rinfo->flags |= RIP_RTF_FIB;
+
+  rinfo->rp = rp;
+  rp->info = rinfo;
+}
+
+/* Delete redistributed route to RIP table. */
+void
+rip_redistribute_delete (int type, int sub_type, struct prefix_ipv4 *p, 
+			   unsigned int ifindex)
+{
+  int ret;
+  struct route_node *rp;
+  struct rip_info *rinfo;
+
+  ret = rip_destination_check (p->prefix);
+  if (! ret)
+    return;
+
+  rp = route_node_lookup (rip->table, (struct prefix *) p);
+
+  if (rp && (rinfo = rp->info) != NULL)
+    {
+      if (rinfo->type == type &&
+	  rinfo->sub_type == sub_type &&
+	  rinfo->ifindex == ifindex)
+	{
+	  rp->info = NULL;
+	  rip_info_free (rinfo);
+
+	  route_unlock_node (rp);
+	  route_unlock_node (rp);
+	}
+    }
 }
 
 /* Response to request called from rip_read ().*/
 void
-rip_request_recv (struct rip_packet *packet, int size, 
-		  struct sockaddr_in *from, struct interface *ifp)
+rip_request_process (struct rip_packet *packet, int size, 
+		     struct sockaddr_in *from, struct interface *ifp)
 {
+  caddr_t lim;
   struct rte *rte;
+  struct prefix_ipv4 p;
+  struct route_node *rp;
+  struct rip_info *rinfo;
+  /* struct rip_interface *ri; */
 
-  /* Set routing table entry pointer to incoming packet. */
-  rte = packet->route;
+  /* Check RIP is enabled on this interface or not. */
+  ;
 
-  /* Check address family. */
-  if (ntohs (rte->family) != AF_UNSPEC)
-    {
-      zlog (NULL, LOG_INFO, "rip query packet with non AF_UNSPEC family");
-      return;
-    }
-  /* Check tag command. */
-  if (rte->tag != 0)
-    {
-      zlog (NULL, LOG_INFO, "rip query packet with non zero tag value");
-      return;
-    }
-  /* If metric is not inifinity, it's error. */
-  if (ntohl (rte->metric) != RIP_METRIC_INFINITY)
-    {
-      zlog (NULL, LOG_INFO, "RIP query packet with non metric 16");
-      return;
-    }
+  lim = ((caddr_t) packet) + size;
+  rte = packet->rte;
 
-  /* Make response packet header. */
-  rip_send_init (packet->version);
-  rip_send_buf.dest = *from;
-  rip_send_buf.ifp = ifp;
-  rip_send_buf.type = packet->command;
-  
-  rip_walkdown_send (ifp);
+  /* The Request is processed entry by entry.  If there are no
+     entries, no response is given. */
+  if (lim == (caddr_t) rte)
+    return;
+
+  /* There is one special case.  If there is exactly one entry in the
+     request, and it has an address family identifier of zero and a
+     metric of infinity (i.e., 16), then this is a request to send the
+     entire routing table. */
+  if (lim == ((caddr_t) (rte + 1)) &&
+      ntohs (rte->family) == 0 &&
+      ntohl (rte->metric) == RIP_METRIC_INFINITY)
+    {	
+      /* All route with split horizon */
+      rip_output_process (ifp, from, rip_all_route, rip_split_horizon,
+			  packet->version);
+    }
+  else
+    {
+      /* Examine the list of RTEs in the Request one by one.  For each
+	 entry, look up the destination in the router's routing
+	 database and, if there is a route, put that route's metric in
+	 the metric field of the RTE.  If there is no explicit route
+	 to the specified destination, put infinity in the metric
+	 field.  Once all the entries have been filled in, change the
+	 command from Request to Response and send the datagram back
+	 to the requestor. */
+      p.family = AF_INET;
+
+      for (; ((caddr_t) rte) < lim; rte++)
+	{
+	  p.prefix = rte->prefix;
+	  p.prefixlen = ip_masklen (rte->mask);
+	  apply_mask_ipv4 (&p);
+	  
+	  rp = route_node_lookup (rip->table, (struct prefix *) &p);
+
+	  if (rp)
+	    {
+	      rinfo = rp->info;
+	      rte->metric = htonl (rinfo->metric);
+	      route_unlock_node (rp);
+	    }
+	  else
+	    rte->metric = RIP_METRIC_INFINITY;
+	}
+      packet->command = RIP_RESPONSE;
+
+      rip_send_packet ((caddr_t) packet, size, from);
+    }
 }
 
 #if RIP_RECVMSG
@@ -865,6 +852,9 @@ rip_read (struct thread *t)
 
   /* Fetch socket then register myself. */
   sock = THREAD_FD (t);
+  rip->t_read = NULL;
+
+  /* Add myself to tne next event */
   rip_event (RIP_READ, sock);
 
   /* RIPd manages only IPv4. */
@@ -885,17 +875,23 @@ rip_read (struct thread *t)
   /* Which interface is this packet comes from. */
   ifp = if_lookup_address (from.sin_addr);
 
+  /* RIP packet received */
+  if (IS_RIP_DEBUG_EVENT)
+    zlog_info ("RIP packet received  from %s port %d on %s",
+	       inet_ntoa (from.sin_addr), ntohs (from.sin_port),
+	       ifp ? ifp->name : "unknown");
+
+  /* Dump RIP packet. */
+  if (IS_RIP_DEBUG_PACKET)
+    rip_packet_dump (packet, len);
+
   /* Check is this packet comming from myself? */
   if (if_check_address (from.sin_addr)) 
     {
       if (IS_RIP_DEBUG_PACKET)
-	zlog_warn ("RIP packet comes from myself");
+	zlog_warn ("  packet comes from myself");
       return -1;
     }
-
-  /* Dump RIP packet. */
-  if (IS_RIP_DEBUG_PACKET)
-    rip_packet_dump (packet, len, &from, ifp);
 
   /* If this packet come from unknown inteface, ignore it. */
   if (ifp == NULL)
@@ -916,18 +912,28 @@ rip_read (struct thread *t)
   if (packet->version > RIPv2)
     packet->version = RIPv2;
 
-  /* We accept RIP_POLL. */
-  if (packet->command != RIP_POLL && packet->command != RIP_REQUEST)
+  /* Is RIP running ?*/
+  ri = ifp->info;
+
+  /* Check neighbor. */
+  if (! ri->running && ! rip_neighbor_lookup (&from))
     {
-      ri = ifp->if_data;
+      if (IS_RIP_DEBUG_EVENT)
+	zlog_info ("RIP is not enabled on interface %s.", ifp->name);
+      return -1;
+    }
+
+  /* RIP Version check. */
+  if (packet->command == RIP_RESPONSE)
+    {
 
       if (ri->ri_receive == RI_RIP_UNSPEC)
 	{
-	  if (packet->version != rip.version) 
+	  if (packet->version != rip->version) 
 	    {
 	      if (IS_RIP_DEBUG_PACKET)
 		zlog_warn ("  packet's v%d doesn't fit to my version %d", 
-			   packet->version, rip.version);
+			   packet->version, rip->version);
 	      return -1;
 	    }
 	}
@@ -956,11 +962,11 @@ rip_read (struct thread *t)
   switch (packet->command)
     {
     case RIP_RESPONSE:
-      rip_response_recv (packet, len, &from, ifp);
+      rip_response_process (packet, len, &from, ifp);
       break;
     case RIP_REQUEST:
     case RIP_POLL:
-      rip_request_recv (packet, len, &from, ifp);
+      rip_request_process (packet, len, &from, ifp);
       break;
     case RIP_TRACEON:
     case RIP_TRACEOFF:
@@ -1023,290 +1029,468 @@ rip_create_socket ()
   return sock;
 }
 
-void
-ripv2_make_auth ()
+/* Write routing table entry to the stream and return next index of
+   the routing table entry in the stream. */
+int
+rip_write_rte (int num, struct stream *s, struct prefix_ipv4 *p,
+	       u_char version, struct rip_info *rinfo)
 {
-  /* family = 0xffff, route tag = 2 */
-  ;
+  struct in_addr mask;
+
+  /* RIP packet header. */
+  if (num == 0)
+    {
+      stream_putc (s, RIP_RESPONSE);
+      stream_putc (s, version);
+      stream_putw (s, 0);
+    }
+
+  /* Write routing table entry. */
+  if (version == RIPv1)
+    {
+      stream_putw (s, AF_INET);
+      stream_putw (s, 0);
+      stream_put_ipv4 (s, p->prefix.s_addr);
+      stream_put_ipv4 (s, 0);
+      stream_put_ipv4 (s, 0);
+      stream_putl (s, rinfo->metric);
+    }
+  else
+    {
+      masklen2ip (p->prefixlen, &mask);
+
+      stream_putw (s, AF_INET);
+      stream_putw (s, rinfo->tag);
+      stream_put_ipv4 (s, p->prefix.s_addr);
+      stream_put_ipv4 (s, mask.s_addr);
+      stream_put_ipv4 (s, 0);
+      /* stream_put_ipv4 (s, rinfo->nexthop.s_addr); */
+      stream_putl (s, rinfo->metric);
+    }
+
+  return ++num;
 }
 
-/* Update rip routes and if it expire, delete route from routing table. */
+/* Send update to the ifp or spcified neighbor. */
 void
-rip_invalid_route (unsigned long invalid)
+rip_output_process (struct interface *ifp, struct sockaddr_in *to,
+		    int route_type, int split_horizon, u_char version)
 {
-  struct route_node *np;
+  int ret;
+  struct stream *s;
+  struct route_node *rp;
   struct rip_info *rinfo;
-  struct rip_info *next;
-  time_t current_time;
+  struct prefix_ipv4 *p;
+  int num;
+  int rtemax;
+  
+  /* Logging output event. */
+  if (IS_RIP_DEBUG_EVENT)
+    {
+      if (to)
+	zlog_info ("RIP update routes to neighbor %s", 
+		   inet_ntoa (to->sin_addr));
+      else
+	zlog_info ("RIP update routes on interface %s", ifp->name);
+    }
 
-  /* Set current time. */
-  time (&current_time);
+  /* Set output stream. */
+  s = rip->obuf;
 
-  /* Walk down routing table and update timer. */
-  for (np = route_top (rip_table); np; np = route_next (np))
-    for (rinfo = np->info; rinfo; rinfo = next)
+  /* Reset stream and RTE counter. */
+  stream_reset (s);
+  num = 0;
+  rtemax = (RIP_PACKET_MAXSIZ - 4) / 20;
+
+  for (rp = route_top (rip->table); rp; rp = route_next (rp))
+    if ((rinfo = rp->info) != NULL)
       {
-	struct prefix_ipv4 *p;
+	  p = (struct prefix_ipv4 *) &rp->p;
 
-	/* Pre fetch next pointer. */
-	next = rinfo->next;
-	p = (struct prefix_ipv4 *)&np->p;
+	  /* Output distribute-list filter.*/
+	  if (distribute_apply_out (ifp, (struct prefix *) p) == FILTER_DENY)
+	    {
+	      if (IS_RIP_DEBUG_PACKET)
+		zlog_info ("RIP %s/%d is filtered by distribute out",
+			   inet_ntoa (p->prefix), p->prefixlen);
+	      continue;
+	    }
 
-	if (rinfo->type != ZEBRA_ROUTE_RIP)
-	  continue;
-	if (rinfo->sub_type == RIP_ROUTE_STATIC)
-	  continue;
+	  /* Changed route only output. */
+	  if (route_type == rip_changed_route &&
+	      (! (rinfo->flags & RIP_RTF_CHANGED)))
+	    continue;
 
-	if (rinfo->timer < (current_time - invalid))
-	  {
-	    zlog_info ("route expired %s/%d", 
-		       inet_ntoa (p->prefix), p->prefixlen);
+	  /* Split horizon. */
+	  if (split_horizon == rip_split_horizon &&
+	      rinfo->ifindex == ifp->ifindex)
+	    continue;
+	
+	  /* Write RTE to the stream. */
+	  num = rip_write_rte (num, s, p, version, rinfo);
+	  if (num == rtemax)
+	    {
+	      ret = rip_send_packet (STREAM_DATA (s), stream_get_endp (s), to);
 
-	    rip_delete_rinfo ((struct rip_info **) &np->info, rinfo);
-
-	    if (rinfo->fib)
-	      rip_zebra (ZEBRA_IPV4_ROUTE_DELETE, p, &rinfo->nexthop);
-	  }
+	      if (ret >= 0 && IS_RIP_DEBUG_PACKET)
+		rip_packet_dump ((struct rip_packet *)STREAM_DATA (s),
+				 stream_get_endp(s));
+	      num = 0;
+	      stream_reset (s);
+	    }
       }
+
+  /* Flush unwritten RTE. */
+  if (num != 0)
+    {
+      ret = rip_send_packet (STREAM_DATA (s), stream_get_endp (s), to);
+
+      if (ret >= 0 && IS_RIP_DEBUG_PACKET)
+	rip_packet_dump ((struct rip_packet *)STREAM_DATA (s),
+			 stream_get_endp (s));
+      num = 0;
+      stream_reset (s);
+    }
 }
 
+/* Send RIP packet to the interface. */
 void
-rip_update_interface_version (struct interface *ifp, u_char version)
+rip_update_interface (struct interface *ifp, u_char version)
 {
   struct prefix_ipv4 *p;
   struct connected *connected;
-  listnode cnode;
+  listnode node;
+  struct sockaddr_in to;
 
+  /* When RIP version is 2 and multicast enable interface. */
   if (version == RIPv2 && if_is_multicast (ifp)) 
     {
-      rip_send_init (version);
-      rip_send_buf.dest.sin_addr.s_addr = htonl (INADDR_RIP_GROUP);
-      rip_send_buf.type = RIP_RESPONSE;
-      rip_send_buf.ifp = ifp;
-
       if (IS_RIP_DEBUG_EVENT)
 	zlog_info ("RIP multicast announce on %s ", ifp->name);
 
-      rip_walkdown_send (ifp);
+      rip_output_process (ifp, NULL, rip_all_route, rip_split_horizon,
+			  version);
       return;
     }
 
+  /* If we can't send multicast packet, send it with unicast. */
   if (if_is_broadcast (ifp) || if_is_pointopoint (ifp))
     {
-      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+      for (node = listhead (ifp->connected); node; nextnode (node))
 	{	    
-	  connected = getdata (cnode);
+	  connected = getdata (node);
 
+	  /* Fetch broadcast address or poin-to-point destination
+             address . */
 	  p = (struct prefix_ipv4 *) connected->destination;
- 
-	  rip_send_init (version);
-	  rip_send_buf.dest.sin_addr = p->prefix;
-	  rip_send_buf.type = RIP_RESPONSE;
-	  rip_send_buf.ifp = ifp;
+
+	  /* Destination address and port setting. */
+	  memset (&to, 0, sizeof (struct sockaddr_in));
+	  to.sin_addr = p->prefix;
+	  to.sin_port = htons (RIP_PORT_DEFAULT);
 
 	  if (IS_RIP_DEBUG_EVENT)
-	    zlog_info ("RIP unicast announce on %s ", ifp->name);
+	    zlog_info ("RIP unicast announce to %s on %s",
+		       inet_ntoa (to.sin_addr), ifp->name);
 
-	  rip_walkdown_send (ifp);
+	  rip_output_process (ifp, &to, rip_all_route, rip_split_horizon,
+			      version);
 	}
     }
 }
 
+/* Update send to all interface and neighbor. */
 void
-rip_update_interface_send (struct interface *ifp)
-{
-  struct rip_interface *ri;
-
-  ri = ifp->if_data;
-
-  if (ri->ri_send == RI_RIP_UNSPEC)
-    {
-      if (rip.version == RIPv1)
-	rip_update_interface_version (ifp, RIPv1);
-      else
-	rip_update_interface_version (ifp, RIPv2);
-    }
-  else
-    {
-      if (ri->ri_send & RIPv1)
-	rip_update_interface_version (ifp, RIPv1);
-      if (ri->ri_send & RIPv2)
-	rip_update_interface_version (ifp, RIPv2);
-    }
-}
-
-/* Update routes of the interfaces. */
-void
-rip_update_interface ()
+rip_update_process (int route_type, int split_horizon)
 {
   listnode node;
-  extern list iflist;
   struct interface *ifp;
+  struct rip_interface *ri;
+  struct route_node *rp;
+  struct sockaddr_in to;
+  struct prefix_ipv4 *p;
 
-  /* We need interface loop here. */
+  /* Send RIP update to each interface. */
   for (node = listhead (iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      if (! if_is_up (ifp))
-	continue;
 
       if (if_is_loopback (ifp))
 	continue;
 
-      if (rip_interface_enable (ifp))
-	rip_update_interface_send (ifp);
+      if (! if_is_up (ifp))
+	continue;
+      
+      /* Fetch RIP interface information. */
+      ri = ifp->info;
+
+      if (ri->running)
+	{
+	  /* If there is no version configuration in the interface,
+             use rip's version setting. */
+	  if (ri->ri_send == RI_RIP_UNSPEC)
+	    {
+	      if (rip->version == RIPv1)
+		rip_update_interface (ifp, RIPv1);
+	      else
+		rip_update_interface (ifp, RIPv2);
+	    }
+	  /* If interface has RIP version configuration use it. */
+	  else
+	    {
+	      if (ri->ri_send & RIPv1)
+		rip_update_interface (ifp, RIPv1);
+	      if (ri->ri_send & RIPv2)
+		rip_update_interface (ifp, RIPv2);
+	    }
+	}
     }
-}
 
-/* RIP announce route to neighbor. */
-void
-rip_update_neighbor ()
-{
-  struct route_node *node;
-  extern struct route_table *rip_neighbor_table;
-  struct interface *ifp = NULL;
-
-  for (node = route_top (rip_neighbor_table); node; node = route_next (node))
-    if (node->info)
+  /* RIP send updates to each neighbor. */
+  for (rp = route_top (rip->neighbor); rp; rp = route_next (rp))
+    if (rp->info != NULL)
       {
-	ifp = if_lookup_address (node->p.u.prefix4);
+	p = (struct prefix_ipv4 *) &rp->p;
+
+	ifp = if_lookup_address (p->prefix);
 	if (! ifp)
 	  {
-	    if (IS_RIP_DEBUG_EVENT)
-	      zlog_info ("neighbor %s doesn't exist direct connected network",
-			 inet_ntoa (node->p.u.prefix4));
+	    zlog_warn ("Neighbor %s doesn't exist direct connected network",
+		       inet_ntoa (p->prefix));
 	    continue;
 	  }
-	rip_send_init (rip.version);
-	rip_send_buf.type = RIP_RESPONSE;
-	rip_send_buf.ifp = ifp;
-	rip_send_buf.dest.sin_addr = node->p.u.prefix4;
 
-	rip_walkdown_send (ifp);
+	/* Set destination address and port */
+	memset (&to, 0, sizeof (struct sockaddr_in));
+	to.sin_addr = p->prefix;
+	to.sin_port = htons (RIP_PORT_DEFAULT);
+
+	/* RIP version is rip's configuration. */
+	rip_output_process (ifp, &to, rip_all_route, rip_split_horizon, 
+			    rip->version);
       }
-}
-
-/* This function is called both rip_update_timer and RIP's output
-   process tigger. */
-void
-rip_update ()
-{
-  rip_update_interface ();
-  rip_update_neighbor ();
 }
 
 /* RIP's periodical timer. */
 int
-rip_update_timer (struct thread *thread)
+rip_update (struct thread *t)
 {
   /* Clear timer pointer. */
-  rip.t_update = NULL;
+  rip->t_update = NULL;
 
   if (IS_RIP_DEBUG_EVENT)
     zlog_info ("RIP update timer fire!");
 
-  rip_update ();
+  /* Process update output. */
+  rip_update_process (rip_all_route, rip_split_horizon);
+
+  /* Triggered updates may be suppressed if a regular update is due by
+     the time the triggered update would be sent. */
+  if (rip->t_triggered_interval)
+    {
+      thread_cancel (rip->t_triggered_interval);
+      rip->t_triggered_interval = NULL;
+    }
+  rip->trigger = 0;
 
   /* Register myself. */
-  RIP_TIMER_ON (rip.t_update, rip_update_timer, rip.v_update);
+  rip_event (RIP_UPDATE_EVENT, 0);
 
   return 0;
 }
 
-/* RIP's invalid timer. */
-int
-rip_invalid_timer (struct thread *t)
+/* Walk down the RIP routing table then clear changed flag. */
+void
+rip_clear_changed_flag ()
 {
-  rip.t_invalid = NULL;
-  RIP_TIMER_ON (rip.t_invalid, rip_invalid_timer, rip.v_invalid);
+  struct route_node *rp;
+  struct rip_info *rinfo;
 
-  rip_invalid_route (rip.v_invalid);
-
-  /* Register myself. */
-  RIP_TIMER_ON (rip.t_invalid, rip_invalid_timer, rip.v_invalid);
-
-  return 0;
+  for (rp = route_top (rip->table); rp; rp = route_next (rp))
+    if ((rinfo = rp->info) != NULL)
+      if (rinfo->flags & RIP_RTF_CHANGED)
+	rinfo->flags &= ~RIP_RTF_CHANGED;
 }
 
-/* RIP's holddown timer. */
+/* Triggered update interval timer. */
 int
-rip_holddown (struct thread *t)
+rip_triggered_interval (struct thread *t)
 {
-  rip.t_holddown = NULL;
-  RIP_TIMER_ON (rip.t_holddown, rip_holddown, rip.v_holddown);
+  rip->t_triggered_interval = NULL;
+
+  if (rip->trigger)
+    {
+      rip->trigger = 0;
+      rip_triggered_update (t);
+    }
   return 0;
-}
+}     
 
+/* Execute triggered update. */
 int
-rip_flush (struct thread *t)
+rip_triggered_update (struct thread *t)
 {
-  rip.t_flush = NULL;
-  RIP_TIMER_ON (rip.t_flush, rip_flush, rip.v_flush);
-  return 0;
-}
+  int interval;
 
-/* Set each RIP timer. */
-int
-rip_timer_set (int update, int invalid, int holddown, int flush)
-{
-  if (rip.v_update != update)
-    {
-      rip.v_update = update;
-      RIP_TIMER_OFF (rip.t_update);
-      RIP_TIMER_ON (rip.t_update, rip_update_timer, rip.v_update);
-    }
+  /* Clear thred pointer. */
+  rip->t_triggered_update = NULL;
 
-  if (rip.v_invalid != invalid)
+  /* Cancel interval timer. */
+  if (rip->t_triggered_interval)
     {
-      rip.v_invalid = invalid;
-      RIP_TIMER_OFF (rip.t_invalid);
-      RIP_TIMER_ON (rip.t_invalid, rip_invalid_timer, rip.v_invalid);
+      thread_cancel (rip->t_triggered_interval);
+      rip->t_triggered_interval = NULL;
     }
+  rip->trigger = 0;
 
-  if (rip.v_holddown != holddown)
-    {
-      rip.v_holddown = holddown;
-      RIP_TIMER_OFF (rip.t_holddown);
-      RIP_TIMER_ON (rip.t_holddown, rip_holddown, rip.v_holddown);
-    }
+  /* Logging triggered update. */
+  if (IS_RIP_DEBUG_EVENT)
+    zlog_info ("RIP triggered update!");
 
-  if (rip.v_flush != flush)
-    {
-      rip.v_flush = flush;
-      RIP_TIMER_OFF (rip.t_flush);
-      RIP_TIMER_ON (rip.t_flush, rip_flush, rip.v_flush);
-    }
+  /* Split Horizon processing is done when generating triggered
+     updates as well as normal updates (see section 2.6). */
+  rip_update_process (rip_changed_route, rip_split_horizon);
+
+  /* Once all of the triggered updates have been generated, the route
+     change flags should be cleared. */
+  rip_clear_changed_flag ();
+
+  /* After a triggered update is sent, a timer should be set for a
+   random interval between 1 and 5 seconds.  If other changes that
+   would trigger updates occur before the timer expires, a single
+   update is triggered when the timer expires. */
+  interval = (random () % 5) + 1;
+
+  rip->t_triggered_interval = 
+    thread_add_timer (master, rip_triggered_interval, NULL, interval);
 
   return 0;
 }
 
 /* Delete all added rip route. */
 void
-rip_rib_close ()
+rip_terminate ()
 {
-  struct route_node *np;
+  struct route_node *rp;
   struct rip_info *rinfo;
 
-  for (np = route_top (rip_table); np; np = route_next (np))
-    for (rinfo = np->info; rinfo; rinfo = rinfo->next)
+  for (rp = route_top (rip->table); rp; rp = route_next (rp))
+    if ((rinfo = rp->info) != NULL)
       {
-	struct prefix_ipv4 *p;
-
-	p = (struct prefix_ipv4 *) &np->p;
-	if (rinfo->type == ZEBRA_ROUTE_RIP && rinfo->fib)
-	  rip_zebra (ZEBRA_IPV4_ROUTE_DELETE, p, &rinfo->nexthop);
+	if (rinfo->type == ZEBRA_ROUTE_RIP &&
+	    rinfo->sub_type == RIP_ROUTE_RTE)
+	  rip_zebra_ipv4_delete ((struct prefix_ipv4 *)&rp->p,
+				 &rinfo->nexthop, rinfo->ifindex);
       }
 }
+
+/* Withdraw redistributed route. */
+void
+rip_redistribute_withdraw (int type)
+{
+  struct route_node *rp;
+  struct rip_info *rinfo;
+
+  for (rp = route_top (rip->table); rp; rp = route_next (rp))
+    if ((rinfo = rp->info) != NULL)
+      {
+	if (rinfo->type == type)
+	  {
+	    rinfo->rp->info = NULL;
+	    route_unlock_node (rp);
+
+	    rip_info_free (rinfo);
+	  }
+      }
+}
+
+/* Create new RIP instance and set it to global variable. */
+int
+rip_create ()
+{
+  if (rip != NULL)
+    log_warn ("RIP is already made");
+
+  rip = XMALLOC (0, sizeof (struct rip));
+  memset (rip, 0, sizeof (struct rip));
+
+  /* Set initial value. */
+  rip->version = RIPv2;
+  rip->update_time = RIP_UPDATE_TIMER_DEFAULT;
+  rip->timeout_time = RIP_TIMEOUT_TIMER_DEFAULT;
+  rip->garbage_time = RIP_GARBAGE_TIMER_DEFAULT;
+
+  /* Make socket. */
+  rip->sock = rip_create_socket ();
+  if (rip->sock < 0)
+    return rip->sock;
+
+  /* Initialize RIP routig table. */
+  rip->table = route_table_init ();
+  rip->route = route_table_init ();
+  rip->neighbor = route_table_init ();
+
+  /* Make output stream. */
+  rip->obuf = stream_new (1500);
+
+  /* Create read and timer thread. */
+  rip_event (RIP_READ, rip->sock);
+  rip_event (RIP_UPDATE_EVENT, 1);
+
+  return 0;
+}
+
+/* Sned RIP request to the destination. */
+int
+rip_request_send (struct sockaddr_in *to, u_char version)
+{
+  struct rte *rte;
+  struct rip_packet rip_packet;
+
+  memset (&rip_packet, 0, sizeof (rip_packet));
+
+  rip_packet.command = RIP_REQUEST;
+  rip_packet.version = version;
+  rte = rip_packet.rte;
+  rte->metric = htonl (RIP_METRIC_INFINITY);
+
+  return rip_send_packet ((caddr_t) &rip_packet, sizeof (rip_packet), to);
+}
 
+int
+rip_update_jitter (int time)
+{
+  return ((rand () % (time + 1)) - (time / 2));
+}
+
 void
 rip_event (enum rip_event event, int sock)
 {
+  int jitter = 0;
+
   switch (event)
     {
     case RIP_READ:
       thread_add_read (master, rip_read, NULL, sock);
       break;
-    case RIP_WRITE:
+    case RIP_UPDATE_EVENT:
+      if (rip->t_update)
+	{
+	  thread_cancel (rip->t_update);
+	  rip->t_update = NULL;
+	}
+      jitter = rip_update_jitter (rip->update_time);
+      rip->t_update = thread_add_timer (master, rip_update, NULL, 
+					sock ? 1 : rip->update_time + jitter);
+      break;
+    case RIP_TRIGGERED_UPDATE:
+      if (rip->t_triggered_interval)
+	rip->trigger = 1;
+      else if (! rip->t_triggered_update)
+	rip->t_triggered_update = 
+	  thread_add_event (master, rip_triggered_update, NULL, 0);
+      break;
+    default:
       break;
     }
 }
@@ -1317,26 +1501,21 @@ DEFUN (router_rip,
        "Enable a routing process\n"
        "Start RIP configuration\n")
 {
-  vty->node = RIP_NODE;
+  int ret;
 
-  if (!rip.enable)
+  /* If rip is not enabled before. */
+  if (! rip)
     {
-      rip.enable = 1;
-      rip.sock = rip_create_socket ();
-
-      if (rip.sock < 0)
+      ret = rip_create ();
+      if (ret < 0)
 	{
-	  zlog_info ("Can't make RIP socket");
+	  zlog_info ("Can't create RIP");
 	  return CMD_WARNING;
 	}
-
-      /* Create read and timer thread. */
-      rip_event (RIP_READ, rip.sock);
-
-      /* RIP timer on. */
-      rip_timer_set (RIP_DEFAULT_UPDATE_TIMER, RIP_DEFAULT_INVALID_TIMER,
-		     RIP_DEFAULT_HOLDDOWN_TIMER, RIP_DEFAULT_FLUSH_TIMER);
     }
+
+  /* Change to RIP node. */
+  vty->node = RIP_NODE;
 
   return CMD_SUCCESS;
 }
@@ -1354,7 +1533,7 @@ DEFUN (rip_version, rip_version_cmd,
       vty_out (vty, "invalid rip version %d\r\n", version);
       return CMD_WARNING;
     }
-  rip.version = version;
+  rip->version = version;
 
   return CMD_SUCCESS;
 } 
@@ -1368,7 +1547,6 @@ DEFUN (rip_route,
   int ret;
   struct prefix_ipv4 p;
   struct route_node *node;
-  struct rip_info *rinfo;
 
   ret = str2prefix_ipv4 (argv[0], &p);
   if (ret < 0)
@@ -1376,9 +1554,10 @@ DEFUN (rip_route,
       vty_out (vty, "Malformed address\r\n");
       return CMD_WARNING;
     }
+  apply_mask_ipv4 (&p);
 
   /* For router rip configuration. */
-  node = route_node_get (rip_static_table, (struct prefix *) &p);
+  node = route_node_get (rip->route, (struct prefix *) &p);
 
   if (node->info)
     {
@@ -1389,46 +1568,61 @@ DEFUN (rip_route,
 
   node->info = "static";
 
-  /* Add this route to RIP routing information base. */
-  rinfo = (struct rip_info *) rip_info_new ();
-  rinfo->pref = -10;
-  rinfo->fib = 1;
-  rinfo->type = ZEBRA_ROUTE_RIP;
-  rinfo->sub_type = RIP_ROUTE_STATIC;
-  rinfo->ifp = NULL;
-  rinfo->metric = 1;
-  
-  /* Register route to rip table. */
-  rip_add_route (&p, rinfo, NULL, NULL);
+  rip_redistribute_add (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0);
 
   return CMD_SUCCESS;
 }
 
 DEFUN (no_rip_route,
        no_rip_route_cmd,
-       "no rip route A.B.C.D/M",
+       "no route A.B.C.D/M",
        NO_STR
        "RIP configuration\n"
        "RIP static route\n"
        "RIP static route\n")
 {
+  int ret;
+  struct prefix_ipv4 p;
+  struct route_node *node;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+  if (ret < 0)
+    {
+      vty_out (vty, "Malformed address\r\n");
+      return CMD_WARNING;
+    }
+  apply_mask_ipv4 (&p);
+
+  /* For router rip configuration. */
+  node = route_node_lookup (rip->route, (struct prefix *) &p);
+
+  if (! node)
+    {
+      vty_out (vty, "Can't find route %s.\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  rip_redistribute_delete (ZEBRA_ROUTE_RIP, RIP_ROUTE_STATIC, &p, 0);
+  route_unlock_node (node);
+
+  node->info = NULL;
+  route_unlock_node (node);
+
   return CMD_SUCCESS;
 }
 
 DEFUN (rip_timers,
        rip_timers_cmd,
-       "timers basic <update> <invalid> <holddown> <flush>",
+       "timers basic <update> <timeout> <garbage>",
        "RIP timers setup\n"
        "Basic timer\n"
        "Routing table update timer value in second. Default is 30.\n"
-       "Routing information becomes invalid timer. Default is 180.\n"
-       "Holddown timer for routing information. Default is 180.\n"
-       "Flush timer for routing information. Default is 240.\n")
+       "Routing information timeout timer. Default is 180.\n"
+       "Garbage collection timer. Default is 120.\n")
 {
   unsigned long update;
-  unsigned long invalid;
-  unsigned long holddown;
-  unsigned long flush;
+  unsigned long timeout;
+  unsigned long garbage;
   char *endptr = NULL;
 
   update = strtoul (argv[0], &endptr, 10);
@@ -1438,28 +1632,27 @@ DEFUN (rip_timers,
       return CMD_WARNING;
     }
   
-  invalid = strtoul (argv[1], &endptr, 10);
-  if (invalid == ULONG_MAX || *endptr != '\0')
+  timeout = strtoul (argv[1], &endptr, 10);
+  if (timeout == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "invalid timer value error\r\n");
+      vty_out (vty, "timeout timer value error\r\n");
       return CMD_WARNING;
     }
   
-  holddown = strtoul (argv[2], &endptr, 10);
-  if (holddown == ULONG_MAX || *endptr != '\0')
+  garbage = strtoul (argv[2], &endptr, 10);
+  if (garbage == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "holddown timer value error\r\n");
-      return CMD_WARNING;
-    }
-  
-  flush = strtoul (argv[3], &endptr, 10);
-  if (flush == ULONG_MAX || *endptr != '\0')
-    {
-      vty_out (vty, "flush timer value error\r\n");
+      vty_out (vty, "garbage timer value error\r\n");
       return CMD_WARNING;
     }
 
-  rip_timer_set (update, invalid, holddown, flush);
+  /* Set each timer value. */
+  rip->update_time = update;
+  rip->timeout_time = timeout;
+  rip->garbage_time = garbage;
+
+  /* Reset update timer thread. */
+  rip_event (RIP_UPDATE_EVENT, 0);
 
   return CMD_SUCCESS;
 }
@@ -1471,8 +1664,14 @@ DEFUN (no_rip_timers,
        "RIP timers setup\n"
        "Basic timer\n")
 {
-  rip_timer_set (RIP_DEFAULT_UPDATE_TIMER, RIP_DEFAULT_INVALID_TIMER,
-		 RIP_DEFAULT_HOLDDOWN_TIMER, RIP_DEFAULT_FLUSH_TIMER);
+  /* Set each timer value to the default. */
+  rip->update_time = RIP_UPDATE_TIMER_DEFAULT;
+  rip->timeout_time = RIP_TIMEOUT_TIMER_DEFAULT;
+  rip->garbage_time = RIP_GARBAGE_TIMER_DEFAULT;
+
+  /* Reset update timer thread. */
+  rip_event (RIP_UPDATE_EVENT, 0);
+
   return CMD_SUCCESS;
 }
 
@@ -1480,16 +1679,29 @@ DEFUN (no_rip_timers,
 void
 rip_vty_out_uptime (struct vty *vty, struct rip_info *rinfo)
 {
+  struct timeval timer_now;
   time_t clock;
   struct tm *tm;
 #define TIME_BUF 25
   char timebuf [TIME_BUF];
+  struct thread *thread;
 
-  time (&clock);
-  clock -= rinfo->timer;
-  tm = gmtime (&clock);
-  strftime (timebuf, TIME_BUF, "%H:%M:%S", tm);
-  vty_out (vty, "%7s", timebuf);
+  gettimeofday (&timer_now, NULL);
+
+  if ((thread = rinfo->t_timeout) != NULL)
+    {
+      clock = thread->u.sands.tv_sec - timer_now.tv_sec;
+      tm = gmtime (&clock);
+      strftime (timebuf, TIME_BUF, "%M:%S", tm);
+      vty_out (vty, "%5s", timebuf);
+    }
+  else if ((thread = rinfo->t_garbage_collect) != NULL)
+    {
+      clock = thread->u.sands.tv_sec - timer_now.tv_sec;
+      tm = gmtime (&clock);
+      strftime (timebuf, TIME_BUF, "%M:%S", tm);
+      vty_out (vty, "%5s", timebuf);
+    }
 }
 
 DEFUN (show_ip_rip,
@@ -1503,17 +1715,17 @@ DEFUN (show_ip_rip,
   struct rip_info *rinfo;
 
   vty_out (vty, "\r\nCodes: R - RIP C - connected\r\n"
-	   "   Network            Next Hop    Metric From            Time\r\n");
+	   "   Network            Next Hop         Metric From            Time\r\n");
   
-  for (np = route_top (rip_table); np; np = route_next (np))
-    for (rinfo = np->info; rinfo; rinfo = rinfo->next)
+  for (np = route_top (rip->table); np; np = route_next (np))
+    if ((rinfo = np->info) != NULL)
       {
 	int len;
 
-	len = vty_out (vty, "%s%c %s/%d",
+	len = vty_out (vty, "%s%s %s/%d",
 		       /* np->lock, For debugging. */
 		       route_info[rinfo->type].str,
-		       rinfo->fib ? '*' : ' ',
+		       " ",
 		       inet_ntoa (np->p.u.prefix4), np->p.prefixlen);
 	
 	len = 22 - len;
@@ -1526,7 +1738,7 @@ DEFUN (show_ip_rip,
 	  {
 	  case ZEBRA_ROUTE_RIP:
 	    {
-	      vty_out (vty, "%-15s %2d ", 
+	      vty_out (vty, "%-20s %2d ",
 		       inet_ntoa (rinfo->nexthop), rinfo->metric);
 	      if (rinfo->sub_type == RIP_ROUTE_NORMAL)
 		{
@@ -1537,7 +1749,7 @@ DEFUN (show_ip_rip,
 	    }
 	    break;
 	  default:
-	    vty_out (vty, "                %2d ", rinfo->metric);
+	    vty_out (vty, "                     %2d ", rinfo->metric);
 	    break;
 	  }
 	vty_out (vty, "\r\n");
@@ -1554,15 +1766,15 @@ config_write_rip (struct vty *vty)
   int config_write_rip_network (struct vty *);
   int config_write_rip_redistribute (struct vty *);
 
-  if (rip.enable)
+  if (rip)
     {
       /* Router RIP statement. */
       vty_out (vty, "router rip%s", VTY_NEWLINE);
       write++;
   
       /* RIP version statement.  Default is RIP version 2. */
-      if (rip.version != RIPv2)
-	vty_out (vty, " version %d%s", rip.version, VTY_NEWLINE);
+      if (rip->version != RIPv2)
+	vty_out (vty, " version %d%s", rip->version, VTY_NEWLINE);
 
       /* RIP enabled network and interface configuration. */
       config_write_rip_network (vty);
@@ -1571,19 +1783,19 @@ config_write_rip (struct vty *vty)
       config_write_rip_redistribute (vty);
 
       /* RIP timer configuration. */
-      if (rip.v_update != RIP_DEFAULT_UPDATE_TIMER ||
-	  rip.v_invalid != RIP_DEFAULT_INVALID_TIMER ||
-	  rip.v_holddown != RIP_DEFAULT_HOLDDOWN_TIMER ||
-	  rip.v_flush != RIP_DEFAULT_FLUSH_TIMER)
-	vty_out (vty, " timers basic %lu %lu %lu %lu%s",
-		 rip.v_update, rip.v_invalid, rip.v_holddown, rip.v_flush,
+      if (rip->update_time != RIP_UPDATE_TIMER_DEFAULT ||
+	  rip->timeout_time != RIP_TIMEOUT_TIMER_DEFAULT ||
+	  rip->garbage_time != RIP_GARBAGE_TIMER_DEFAULT)
+	vty_out (vty, " timers basic %lu %lu %lu%s",
+		 rip->update_time, rip->timeout_time, rip->garbage_time,
 		 VTY_NEWLINE);
 
       /* RIP static route configuration. */
-      for (node = route_top (rip_static_table); node; node = route_next (node))
+      for (node = route_top (rip->route); node; node = route_next (node))
 	if (node->info)
-	  vty_out (vty, " route %s%s", 
-		   inet_ntoa (node->p.u.prefix4), VTY_NEWLINE);
+	  vty_out (vty, " route %s/%d%s", 
+		   inet_ntoa (node->p.u.prefix4), node->p.prefixlen,
+		   VTY_NEWLINE);
     }
   return write;
 }
@@ -1599,16 +1811,8 @@ struct cmd_node rip_node =
 void
 rip_init ()
 {
-  /* Make rip instance and set default value.*/
-  bzero (&rip, sizeof (struct rip));
-
-  /* Set initial value. */
-  rip.sock = -1;
-  rip.version = RIPv2;
-
-  /* RIP routig table. */
-  rip_table = route_table_init ();
-  rip_static_table = route_table_init ();
+  /* Randomize. */
+  srand (time (NULL));
 
   /* Debug related init. */
   rip_debug_init ();
@@ -1630,4 +1834,5 @@ rip_init ()
   install_element (RIP_NODE, &rip_timers_cmd);
   install_element (RIP_NODE, &no_rip_timers_cmd);
   install_element (RIP_NODE, &rip_route_cmd);
+  install_element (RIP_NODE, &no_rip_route_cmd);
 }

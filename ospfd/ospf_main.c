@@ -104,6 +104,13 @@ sigint (int sig)
   exit (0);
 }
 
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
+}
+
 /* Signal wrapper. */
 RETSIGTYPE *
 signal_set (int signo, void (*func)(int))
@@ -144,6 +151,7 @@ signal_init ()
 #ifdef SIGTTOU
   signal_set (SIGTTOU, SIG_IGN);
 #endif
+  signal_set (SIGUSR1, sigusr1);
 }
 
 /* OSPFd main routine. */

@@ -124,6 +124,7 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
   char ifname[16];
   struct ospf6_if *o6if;
   struct ospf6_lsa *lsa;
+  struct ospf6_lsa_hdr *lsa_hdr;
   struct link_lsa *linklsa;
   list m;
 
@@ -151,8 +152,9 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
       assert (parent->vtx_depth == 0);
 
       ifindex = get_ifindex_to_router (dst->vtx_rtrid, parent->vtx_lsa);
-      assert (ifindex);
       memset (&ipaddr, 0, sizeof (struct in6_addr)); /* XXX P2MP not yet */
+
+      assert (ifindex);
       p = nexthop_make (ifindex, &ipaddr, 0);
       list_add_node (l, p);
       return;
@@ -162,31 +164,39 @@ nexthop_add_from_vertex (struct vertex *dst, struct vertex *parent, list l)
       assert (IS_VTX_ROUTER_TYPE (dst));
       assert (IS_VTX_NETWORK_TYPE (parent));
 
-      /* simply inherit from the parent network */
+      /* simply inherit ifindex from the parent network */
       assert (listcount (parent->vtx_nexthops) == 1);
       p = getdata (listhead (parent->vtx_nexthops));
       ifindex = p->ifindex;
       assert (ifindex);
 
+      /* get ospf6_if data structure */
       if_indextoname (ifindex, ifname);
       o6if = ospf6_if_lookup (ifname);
       assert (o6if);
+
+      /* get LinkLSA of destination router */
       m = list_init ();
       ospf6_lsdb_collect_type_advrtr (m, htons (LST_LINK_LSA),
                                       dst->vtx_rtrid, (void *)o6if);
+      /* set nexthop address */
       if (list_isempty (m))
         {
+          /* if no LinkLSA found, set to :: */
           o6log.rtable ("Can't find Link-LSA for %s, null nexthop",
                         inet4str (dst->vtx_rtrid));
           memset (&ipaddr, 0, sizeof (struct in6_addr));
         }
       else
         {
+          assert (listcount (m) == 1);
           lsa = (struct ospf6_lsa *) getdata (listhead (m));
-          linklsa = (struct link_lsa *)(lsa + 1);
+          lsa_hdr = lsa->lsa_hdr;
+          linklsa = (struct link_lsa *)(lsa_hdr + 1);
           memcpy (&ipaddr, &linklsa->llsa_linklocal,
                   sizeof (struct in6_addr));
         }
+
       p = nexthop_make (ifindex, &ipaddr, 0);
       list_add_node (l, p);
       list_delete_all (m);
@@ -259,21 +269,38 @@ rtable_lookup (unsigned char dest_type, union dest_id *dest_id,
       switch (dest_type)
         {
           case DTYPE_PREFIX:
-            if (IN6_ARE_ADDR_EQUAL (&dest_id->prefix.prefix,
-                                    &p->dest_id.prefix.prefix))
-              return p;
+            if (p->dest_type != DTYPE_PREFIX)
+              break;
+            if (dest_id->prefix.family != p->dest_id.prefix.family)
+              break;
+            if (dest_id->prefix.prefixlen != p->dest_id.prefix.prefixlen)
+              break;
+            if (!IN6_ARE_ADDR_EQUAL (&dest_id->prefix.prefix,
+                                     &p->dest_id.prefix.prefix))
+              break;
+            return p;
 
           case DTYPE_ASBR:
+            if (p->dest_type != DTYPE_ASBR)
+              break;
+            if (dest_id->router_id == p->dest_id.router_id)
+              return p;
             break;
 
           case DTYPE_INTRA_ROUTER:
+            if (p->dest_type != DTYPE_INTRA_ROUTER)
+              break;
             if (dest_id->router_id == p->dest_id.router_id)
               return p;
+            break;
 
           case DTYPE_INTRA_LINK:
+            if (p->dest_type != DTYPE_INTRA_LINK)
+              break;
             if (dest_id->network_id[0] == p->dest_id.network_id[0] &&
                 dest_id->network_id[1] == p->dest_id.network_id[1])
               return p;
+            break;
 
           default:
             break;
@@ -420,6 +447,8 @@ area_entry_install (struct ospf6_rtentry *r, struct ospf6 *ospf6)
 
           if (r->dest_type == DTYPE_INTRA_ROUTER) /* Indicating router. */
             cost = r->cost + ntohs (prefix->o6p_prefix_metric);
+          else if (r->dest_type == DTYPE_ASBR)
+            cost = r->cost + ntohs (prefix->o6p_prefix_metric);
           else if (r->dest_type == DTYPE_INTRA_LINK) /* network */
             cost = r->cost;
           else
@@ -437,6 +466,73 @@ area_entry_install (struct ospf6_rtentry *r, struct ospf6 *ospf6)
   return;
 }
 
+static void
+external_route_install (struct ospf6_rtentry *r, struct ospf6 *ospf6)
+{
+  list l;
+  listnode n;
+  struct as_external_lsa *aselsa;
+  struct ospf6_lsa *lsa;
+  struct ospf6_prefix *prefix;
+  union dest_id dest_id;
+  cost_t cost = 0;
+  char rtrid_str[64];
+  unsigned char ptype;
+
+  /* if not ASBR, return */
+  if (r->dest_type != DTYPE_ASBR)
+    return;
+
+  /* if calculating router itself, ignore */
+  if (r->dest_id.router_id == ospf6->router_id)
+    return;
+
+  l = list_init ();
+  ospf6_lsdb_collect_type_advrtr (l, htons (LST_AS_EXTERNAL_LSA),
+                                  r->dest_id.router_id, (void *)ospf6);
+  if (list_isempty (l))
+    {
+      inet_ntop (AF_INET, &r->dest_id.router_id,
+                 rtrid_str, sizeof (rtrid_str));
+      o6log.rtable ("no ASExternalLSA found for ASBR %s", rtrid_str);
+      list_delete_all (l);
+      return;
+    }
+
+  for (n = listhead (l); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      aselsa = (struct as_external_lsa *)(lsa->lsa_hdr + 1);
+      o6log.rtable ("external_route: %s found", print_lsahdr (lsa->lsa_hdr));
+
+      /* type and cost */
+      if (ASE_LSA_ISSET (aselsa, ASE_LSA_BIT_E))
+        {
+          /* type 2 metric */
+          ptype = PTYPE_TYPE2_EXTERNAL;
+          cost = ntohs (aselsa->ase_metric);
+        }
+      else
+        {
+          /* type 1 metric */
+          ptype = PTYPE_TYPE1_EXTERNAL;
+          cost = ntohs (aselsa->ase_metric) + r->cost;;
+        }
+
+      /* set dest_id */
+      prefix = (struct ospf6_prefix *) (&aselsa->ase_prefix_len);
+      dest_id.prefix.family = AF_INET6;
+      dest_id.prefix.prefixlen = aselsa->ase_prefix_len;
+      ospf6_prefix_in6_addr (prefix, &dest_id.prefix.prefix);
+
+      rtable_install (DTYPE_PREFIX, &dest_id, cost, ptype,
+                      r->nexthops, lsa, &ospf6->rtable);
+    }
+
+  list_delete_all (l);
+  return;
+}
+
 /* check prefixes of each entry in area, and install
    table in ospf top data structure */
 static void
@@ -446,7 +542,10 @@ rtable_area_to_top (struct area *area)
 
   rtable_init (&area->ospf6->rtable); /* multi-area not yet */
   for (r = area->rtable.current_top; r; r = r->next)
-    area_entry_install (r, area->ospf6);
+    {
+      area_entry_install (r, area->ospf6);
+      external_route_install (r, area->ospf6);
+    }
 
   return;
 }
@@ -508,7 +607,10 @@ dtype_str (struct ospf6_rtentry *p, char *buf, int bufsize)
         break;
 
       case DTYPE_ASBR:
-        assert (0); /* not yet */
+        inet_ntop (AF_INET, &p->dest_id.router_id, buf, bufsize);
+        ptr = index (buf, '\0');
+        snprintf (ptr, bufsize - strlen (buf), "(ASBR)");
+        break;
 
       case DTYPE_INTRA_ROUTER:
         inet_ntop (AF_INET, &p->dest_id.router_id, buf, bufsize);
@@ -597,7 +699,7 @@ char *
 print_rtentry (struct ospf6_rtentry *p, char *buf, int bufsize)
 {
   int ptrsize;
-  char *ptr, destination[64], gateway[32];
+  char *ptr, destination[64], gateway[64];
   char path_type[16], netif[32], cost[32];
   listnode n;
   struct ospf6_nexthop *q;
@@ -621,7 +723,7 @@ print_rtentry (struct ospf6_rtentry *p, char *buf, int bufsize)
   /* save about root (myself) in area rtable */
   if (list_isempty (p->nexthops))
     {
-      snprintf (ptr, ptrsize, "{g:-- i:--}]");
+      snprintf (ptr, ptrsize, "{g:none i:none}]");
       return buf;
     }
 

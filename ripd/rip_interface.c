@@ -41,16 +41,7 @@
 #include "ripd/ripd.h"
 #include "ripd/rip_debug.h"
 
-/* RIP enabled network vector. */
-vector rip_enable_vector;
-
-/* RIP enabled interface table. */
-struct route_table *rip_enable_table;
-
-/* RIP neighbor address table. */
-struct route_table *rip_neighbor_table;
-
-int rip_enable_apply_all ();
+void rip_enable_apply (struct interface *);
 
 static struct message ri_version_msg[] = 
 {
@@ -60,210 +51,8 @@ static struct message ri_version_msg[] =
   {RI_RIP_VERSION_1_AND_2, "version 1 2"},
   {RI_RIP_NONE,            "none"},
 };
-
-static struct message ri_split_horizon_msg[] = 
-{
-  {RI_RIP_SPLIT_HORIZON_UNSPEC,   NULL},
-  {RI_RIP_SPLIT_HORIZON_NONE,     "none"},
-  {RI_RIP_SPLIT_HORIZON,          ""},
-  {RI_RIP_SPLIT_HORIZON_POISONED, "poisoned"},
-};
-
-/* Allocate new RIP's interface configuration. */
-struct rip_interface *
-rip_interface_new ()
-{
-  struct rip_interface *ri;
-
-  ri = XMALLOC (MTYPE_IF, sizeof (struct rip_interface));
-  bzero (ri, sizeof (struct rip_interface));
-  ri->ri_split_horizon = RI_RIP_SPLIT_HORIZON_UNSPEC;
-  ri->enable = 0;
-
-#ifdef RIP_ADVANCED
-  ri->ri_send = RI_RIP_UNSPEC;
-  ri->ri_receive = RI_RIP_UNSPEC;
-  ri->ri_default_send = RIP_DEFAULT_ADVERTISE_UNSPEC;
-  ri->ri_default_receive = RIP_DEFAULT_ACCEPT_UNSPEC;
-#endif /* RIP_ADVANCED */
-
-  return ri;
-}
-
-int
-rip_interface_enable (struct interface *ifp)
-{
-  struct rip_interface *ri;
-
-  ri = ifp->if_data;
-  return ri->enable;
-}
-
-/* Make RIP request packet. */
-int
-rip_make_request (struct stream *s, int version)
-{
-  /*
-   * RIP's query packet is made from
-   *  command = RIP_REQUEST
-   *  family  = AF_UNSPEC
-   *  metric  = 16 (RIP_METRIC_INFINITY)
-   */
-  stream_reset (s);
-  stream_putc (s, RIP_REQUEST);	/* command */
-  stream_putc (s, version);	/* version */
-  stream_putw (s, 0);		/* domain */
-  stream_putw (s, AF_UNSPEC);	/* family */
-  stream_putw (s, 0);		/* tag */
-  stream_putl (s, 0);		/* prefix */
-  stream_putl (s, 0);		/* netmask */
-  stream_putl (s, 0);		/* nexthop */
-  stream_putl (s, RIP_METRIC_INFINITY); /* metric */
-
-  /* Return size of the packet. */
-  return s->endp;
-}
-
-/* Ask routes at specific interface.  This will be executed when
- interface goes up. */
-void
-rip_request_interface (struct interface *ifp, int sock)
-{
-  int size;
-#define REQUEST_BUF 256
-  struct sockaddr_in sin;
-  struct stream *s;
-
-  /* If interface is down, don't send RIP packet. */
-  if (! if_is_up (ifp))
-    return;
-
-  /* In default ripd doesn't send RIP_REQUEST to the loopback interface. */
-  if (if_is_loopback (ifp))
-    return;
-
-  s = stream_new (RIP_REQUEST_PACKET_SIZE);
-
-  size = rip_make_request (s, rip.version);
-
-  if (size > RIP_REQUEST_PACKET_SIZE)
-    {
-      zlog (NULL, LOG_WARNING, "RIP request packet size overflow");
-      exit (1);
-    }
-
-  if (if_is_multicast (ifp)) 
-    {
-      listnode node;
-      
-      if (IS_RIP_DEBUG_EVENT)
-	zlog (NULL, LOG_INFO, "multicast RIP request at %s", ifp->name);
-
-      for (node = listhead (ifp->connected); node; nextnode (node))
-	{
-	  struct prefix_ipv4 *p;
-	  struct connected *connected;
-	  struct in_addr addr;
-
-	  connected = getdata (node);
-	  p = (struct prefix_ipv4 *) connected->address;
-
-	  if (p->family != AF_INET)
-	    continue;
-
-	  addr = p->prefix;
-
-	  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF,
-			  &addr, sizeof(addr)) < 0) 
-	    {
-	      perror ("setsockopt");
-	      return;
-	    }
-	}
-    
-      bzero (&sin, sizeof (struct sockaddr_in));
-      sin.sin_family = AF_INET;
-      sin.sin_port = htons (RIP_PORT_DEFAULT);
-      sin.sin_addr.s_addr = htonl (INADDR_RIP_GROUP);
-
-      if (IS_RIP_DEBUG_EVENT)
-	zlog_info ("send RIP request to %s", inet_ntoa (sin.sin_addr));
-
-      rip_udp_send (sock, STREAM_DATA (s), size, &sin);
-    }
-
-  if (if_is_pointopoint (ifp) || 
-      (! if_is_multicast (ifp) && if_is_broadcast (ifp)))
-    {
-      listnode cnode;
-
-      if (IS_RIP_DEBUG_EVENT)
-	zlog (NULL, LOG_INFO, "broadcast RIP request at %s", ifp->name);
-
-      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
-	{
-	  struct prefix_ipv4 *p;
-	  struct connected *connected;
-
-	  connected = getdata (cnode);
-	  p = (struct prefix_ipv4 *) connected->destination;
-
-	  bzero (&sin, sizeof (struct sockaddr_in));
-	  sin.sin_port = htons (RIP_PORT_DEFAULT);
-	  sin.sin_addr = p->prefix;
-
-	  if (IS_RIP_DEBUG_EVENT)
-	    zlog_info ("send RIP request to %s", inet_ntoa (sin.sin_addr));
-	  
-	  rip_udp_send (sock, STREAM_DATA (s), size, &sin);
-	}
-    }
-  stream_free (s);
-}
-
-void
-rip_request_neighbor (struct in_addr addr)
-{
-  int size;
-  struct sockaddr_in sin;
-  struct stream *s;
-
-  s = stream_new (RIP_REQUEST_PACKET_SIZE);
-
-  size = rip_make_request (s, rip.version);
-
-  if (size > RIP_REQUEST_PACKET_SIZE)
-    {
-      zlog (NULL, LOG_WARNING, "RIP request packet size overflow");
-      exit (1);
-    }
-  
-  bzero (&sin, sizeof (struct sockaddr_in));
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons (RIP_PORT_DEFAULT);
-  sin.sin_addr = addr;
-
-  rip_udp_send (rip.sock, STREAM_DATA (s), size, &sin);
-
-  stream_free (s);
-}
-
-/* Request routes at all interfaces. */
-void
-rip_request_neighbor_all ()
-{
-  struct route_node *rp;
-
-  if (IS_RIP_DEBUG_EVENT)
-    zlog_info ("RIP request to the all neighbor");
-
-  /* Send request to all neighbor. */
-  for (rp = route_top (rip_neighbor_table); rp; rp = route_next (rp))
-    if (rp->info)
-      rip_request_neighbor (rp->p.u.prefix4);
-}
-
-/* Join to the rip version 2 multicast group. */
+
+/* Join to the RIP version 2 multicast group. */
 int
 ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
 {
@@ -282,22 +71,188 @@ ipv4_multicast_join (int sock, struct in_addr group, struct in_addr ifa)
   return ret;
 }
 
+/* Leave from the RIP version 2 multicast group. */
+int
+ipv4_multicast_leave (int sock, struct in_addr group, struct in_addr ifa)
+{
+  int ret;
+  struct ip_mreq mreq;
+
+  mreq.imr_multiaddr.s_addr = group.s_addr;
+  mreq.imr_interface.s_addr = ifa.s_addr;
+
+  ret = setsockopt (sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, 
+		    (char *)&mreq, sizeof (mreq));
+
+  if (ret < 0) 
+    zlog (NULL, LOG_INFO, "can't setsockopt IP_DROP_MEMBERSHIP");
+
+  return ret;
+}
+
+/* Allocate new RIP's interface configuration. */
+struct rip_interface *
+rip_interface_new ()
+{
+  struct rip_interface *ri;
+
+  ri = XMALLOC (MTYPE_IF, sizeof (struct rip_interface));
+  bzero (ri, sizeof (struct rip_interface));
+
+  return ri;
+}
+
+/* Send RIP request packet to specified interface. */
+void
+rip_request_interface_send (struct interface *ifp, u_char version)
+{
+  struct sockaddr_in to;
+
+  /* RIPv2 support multicast. */
+  if (version == RIPv2 && if_is_multicast (ifp))
+    {
+      listnode node;
+      
+      if (IS_RIP_DEBUG_EVENT)
+	zlog_info ("RIP multicast request on %s", ifp->name);
+
+      for (node = listhead (ifp->connected); node; nextnode (node))
+	{
+	  struct prefix_ipv4 *p;
+	  struct connected *connected;
+	  struct in_addr addr;
+
+	  connected = getdata (node);
+	  p = (struct prefix_ipv4 *) connected->address;
+
+	  if (p->family != AF_INET)
+	    continue;
+
+	  addr = p->prefix;
+
+	  if (setsockopt (rip->sock, IPPROTO_IP, IP_MULTICAST_IF,
+			  &addr, sizeof(addr)) < 0) 
+	    {
+	      perror ("setsockopt");
+	      return;
+	    }
+	}
+      rip_request_send (NULL, version);
+      return;
+    }
+
+  /* RIPv1 and non multicast interface. */
+  if (if_is_pointopoint (ifp) || if_is_broadcast (ifp))
+    {
+      listnode cnode;
+
+      if (IS_RIP_DEBUG_EVENT)
+	zlog (NULL, LOG_INFO, "broadcast RIP request at %s", ifp->name);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct prefix_ipv4 *p;
+	  struct connected *connected;
+
+	  connected = getdata (cnode);
+	  p = (struct prefix_ipv4 *) connected->destination;
+
+	  bzero (&to, sizeof (struct sockaddr_in));
+	  to.sin_port = htons (RIP_PORT_DEFAULT);
+	  to.sin_addr = p->prefix;
+
+	  if (IS_RIP_DEBUG_EVENT)
+	    zlog_info ("send RIP request to %s", inet_ntoa (to.sin_addr));
+	  
+	  rip_request_send (&to, version);
+	}
+    }
+}
+
+/* This will be executed when interface goes up. */
+void
+rip_request_interface (struct interface *ifp)
+{
+  struct rip_interface *ri;
+
+  /* In default ripd doesn't send RIP_REQUEST to the loopback interface. */
+  if (if_is_loopback (ifp))
+    return;
+
+  /* If interface is down, don't send RIP packet. */
+  if (! if_is_up (ifp))
+    return;
+
+  /* Fetch RIP interface information. */
+  ri = ifp->info;
+
+
+  /* If there is no version configuration in the interface,
+     use rip's version setting. */
+  if (ri->ri_send == RI_RIP_UNSPEC)
+    {
+      if (rip->version == RIPv1)
+	rip_request_interface_send (ifp, RIPv1);
+      else
+	rip_request_interface_send (ifp, RIPv2);
+    }
+  /* If interface has RIP version configuration use it. */
+  else
+    {
+      if (ri->ri_send & RIPv1)
+	rip_request_interface_send (ifp, RIPv1);
+      if (ri->ri_send & RIPv2)
+	rip_request_interface_send (ifp, RIPv2);
+    }
+}
+
+/* Send RIP request to the neighbor. */
+void
+rip_request_neighbor (struct in_addr addr)
+{
+  struct sockaddr_in to;
+
+  bzero (&to, sizeof (struct sockaddr_in));
+  to.sin_port = htons (RIP_PORT_DEFAULT);
+  to.sin_addr = addr;
+
+  rip_request_send (&to, rip->version);
+}
+
+/* Request routes at all interfaces. */
+void
+rip_request_neighbor_all ()
+{
+  struct route_node *rp;
+
+  if (! rip)
+    return;
+
+  if (IS_RIP_DEBUG_EVENT)
+    zlog_info ("RIP request to the all neighbor");
+
+  /* Send request to all neighbor. */
+  for (rp = route_top (rip->neighbor); rp; rp = route_next (rp))
+    if (rp->info)
+      rip_request_neighbor (rp->p.u.prefix4);
+}
+
 /* Multicast packet receive socket. */
 void
-rip_multicast_interface (struct interface *ifp, int sock)
+rip_multicast_join (struct interface *ifp, int sock)
 {
   listnode cnode;
 
   if (if_is_up (ifp) && if_is_multicast (ifp))
     {
       if (IS_RIP_DEBUG_EVENT)
-	zlog (NULL, LOG_INFO, "multicast enabled at %s", ifp->name);
+	zlog_info ("RIP multicast join at %s", ifp->name);
 
       for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	{
 	  struct prefix_ipv4 *p;
 	  struct connected *connected;
-	  struct in_addr any;
+	  struct in_addr group;
 	      
 	  connected = getdata (cnode);
 	  p = (struct prefix_ipv4 *) connected->address;
@@ -305,8 +260,37 @@ rip_multicast_interface (struct interface *ifp, int sock)
 	  if (p->family != AF_INET)
 	    continue;
       
-	  any.s_addr = htonl (INADDR_RIP_GROUP);
-	  ipv4_multicast_join (sock, any, p->prefix);
+	  group.s_addr = htonl (INADDR_RIP_GROUP);
+	  ipv4_multicast_join (sock, group, p->prefix);
+	}
+    }
+}
+
+/* Leave from multicast group. */
+void
+rip_multicast_leave (struct interface *ifp, int sock)
+{
+  listnode cnode;
+
+  if (if_is_up (ifp) && if_is_multicast (ifp))
+    {
+      if (IS_RIP_DEBUG_EVENT)
+	zlog_info ("RIP multicast leave from %s", ifp->name);
+
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
+	{
+	  struct prefix_ipv4 *p;
+	  struct connected *connected;
+	  struct in_addr group;
+	      
+	  connected = getdata (cnode);
+	  p = (struct prefix_ipv4 *) connected->address;
+      
+	  if (p->family != AF_INET)
+	    continue;
+      
+	  group.s_addr = htonl (INADDR_RIP_GROUP);
+	  ipv4_multicast_leave (sock, group, p->prefix);
 	}
     }
 }
@@ -413,42 +397,40 @@ if_lookup_address (struct in_addr src)
 {
   listnode node;
   struct prefix_ipv4 addr;
-  
+  listnode cnode;
+  struct interface *ifp;
+  struct prefix *p;
+  struct connected *c;
+
   addr.family = AF_INET;
   addr.prefix = src;
   addr.prefixlen = IPV4_MAX_BITLEN;
 
   for (node = listhead (iflist); node; nextnode (node))
     {
-      listnode cnode;
-      struct interface *ifp;
-
       ifp = getdata (node);
 
-      for (cnode = listhead(ifp->connected); cnode; nextnode (cnode))
+      for (cnode = listhead (ifp->connected); cnode; nextnode (cnode))
 	{
-	  struct prefix *p;
-	  struct connected *connected;
-
-	  connected = getdata (cnode);
+	  c = getdata (cnode);
 
 	  if (if_is_pointopoint (ifp))
 	    {
-	      p = connected->address;
+	      p = c->address;
 
 	      if (p && p->family == AF_INET)
 		{
 		  if (IPV4_ADDR_SAME (&p->u.prefix4, &src))
 		    return ifp;
 
-		  p = connected->destination;
+		  p = c->destination;
 		  if (p && IPV4_ADDR_SAME (&p->u.prefix4, &src))
 		    return ifp;
 		}
 	    }
 	  else
 	    {
-	      p = connected->address;
+	      p = c->address;
 
 	      if (p->family == AF_INET)
 		{
@@ -459,27 +441,6 @@ if_lookup_address (struct in_addr src)
 	}
     }
   return NULL;
-}
-
-/* Called when new interface is added. */
-void
-rip_enable_interface (struct interface *ifp)
-{
-  struct rip_interface *ri;
-
-  /* Check is this interface rip enabled or not. */
-  rip_enable_apply_all ();
-
-  ri = ifp->if_data;
-
-  if (ri->enable)
-    {
-      /* Join to multicast group. */
-      rip_multicast_interface (ifp, rip.sock);
-
-      /* Send RIP request to the interface. */
-      rip_request_interface (ifp, rip.sock);
-    }
 }
 
 /* Get all interface information. */
@@ -508,7 +469,7 @@ rip_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
       ifp = if_get_by_name (tmpnam);
 
       /* Get interface's index and values. */
-      ifp->index = stream_getc (s);
+      ifp->ifindex = stream_getc (s);
       ifp->flags = stream_getl (s);
       ifp->metric = stream_getl (s);
       ifp->mtu = stream_getl (s);
@@ -545,40 +506,20 @@ rip_zebra_get_interface (int command, struct zebra *zebra, u_int16_t length)
 	  if (p->family == AF_INET)
 	      connected_add (ifp, connected);
 	}
-      rip_enable_interface (ifp);
+      rip_enable_apply (ifp);
     }
   distribute_apply_all ();
 
   rip_request_neighbor_all ();
 }
 
-int
-config_write_rip_network (struct vty *vty)
-{
-  int i;
-  char *ifname;
-  struct route_node *node;
+/* RIP enabled network vector. */
+vector rip_enable_if;
 
-  /* Network type RIP enable interface statement. */
-  for (node = route_top (rip_enable_table); node; node = route_next (node))
-    if (node->info)
-      vty_out (vty, " network %s/%d%s", inet_ntoa (node->p.u.prefix4),
-	       node->p.prefixlen, VTY_NEWLINE);
+/* RIP enabled interface table. */
+struct route_table *rip_enable_network;
 
-  /* Interface name RIP enable statement. */
-  for (i = 0; i < vector_max (rip_enable_vector); i++)
-    if ((ifname = vector_slot (rip_enable_vector, i)) != NULL)
-      vty_out (vty, " network %s%s", ifname, VTY_NEWLINE);
-
-  /* RIP neighbors listing. */
-  for (node = route_top (rip_neighbor_table); node; node = route_next (node))
-    if (node->info)
-      vty_out (vty, " neighbor %s%s", 
-	       inet_ntoa (node->p.u.prefix4), VTY_NEWLINE);
-
-  return 0;
-}
-
+/* Check interface is enabled by network statement. */
 int
 rip_enable_network_lookup (struct interface *ifp)
 {
@@ -595,7 +536,7 @@ rip_enable_network_lookup (struct interface *ifp)
 
 	if (p->family == AF_INET)
 	  {
-	    node = route_node_match (rip_enable_table, p);
+	    node = route_node_match (rip_enable_network, p);
 	    if (node)
 	      {
 		route_unlock_node (node);
@@ -606,79 +547,191 @@ rip_enable_network_lookup (struct interface *ifp)
   return -1;
 }
 
-/* Lookup function. */
+/* Add RIP enable network. */
 int
-rip_enable_vector_lookup (char *ifname)
+rip_enable_network_add (struct prefix *p)
+{
+  struct route_node *node;
+
+  node = route_node_get (rip_enable_network, p);
+
+  if (node->info)
+    {
+      route_unlock_node (node);
+      return -1;
+    }
+  else
+    node->info = "enabled";
+
+  return 1;
+}
+
+/* Delete RIP enable network. */
+int
+rip_enable_network_delete (struct prefix *p)
+{
+  struct route_node *node;
+
+  node = route_node_lookup (rip_enable_network, p);
+  if (node)
+    {
+      node->info = NULL;
+
+      /* Unlock info lock. */
+      route_unlock_node (node);
+
+      /* Unlock lookup lock. */
+      route_unlock_node (node);
+
+      return 1;
+    }
+  return -1;
+}
+
+/* Check interface is enabled by ifname statement. */
+int
+rip_enable_if_lookup (char *ifname)
 {
   int i;
   char *str;
 
-  for (i = 0; i < vector_max (rip_enable_vector); i++)
-    if ((str = vector_slot (rip_enable_vector, i)) != NULL)
+  for (i = 0; i < vector_max (rip_enable_if); i++)
+    if ((str = vector_slot (rip_enable_if, i)) != NULL)
       if (strcmp (str, ifname) == 0)
 	return i;
   return -1;
 }
 
+/* Add inteface to rip_enable_if. */
 int
-rip_enable_apply_all ()
+rip_enable_if_add (char *ifname)
 {
   int ret;
-  struct interface *ifp;
+
+  ret = rip_enable_if_lookup (ifname);
+  if (ret >= 0)
+    return -1;
+
+  vector_set (rip_enable_if, strdup (ifname));
+
+  return 1;
+}
+
+/* Delete inteface from rip_enable_if. */
+int
+rip_enable_if_delete (char *ifname)
+{
+  int index;
+  char *str;
+
+  index = rip_enable_if_lookup (ifname);
+  if (index < 0)
+    return -1;
+
+  str = vector_slot (rip_enable_if, index);
+  free (str);
+  vector_unset (rip_enable_if, index);
+
+  return 1;
+}
+
+/* Update inteface status. */
+void
+rip_enable_apply (struct interface *ifp)
+{
+  int ret;
   struct rip_interface *ri = NULL;
+
+  /* Check interface. */
+  if (if_is_loopback (ifp))
+    return;
+
+  if (! if_is_up (ifp))
+    return;
+
+  ri = ifp->info;
+
+  /* Check network configuration. */
+  ret = rip_enable_network_lookup (ifp);
+
+  /* If the interface is matched. */
+  if (ret > 0)
+    ri->enable_network = 1;
+  else
+    ri->enable_network = 0;
+
+  /* Check interface name configuration. */
+  ret = rip_enable_if_lookup (ifp->name);
+  if (ret >= 0)
+    ri->enable_interface = 1;
+  else
+    ri->enable_interface = 0;
+
+  /* Update running status of the interface. */
+  if (ri->enable_network || ri->enable_interface)
+    {
+      if (! ri->running)
+	{
+	  if (IS_RIP_DEBUG_EVENT)
+	    zlog_info ("RIP turn on %s", ifp->name);
+
+	  /* Join to multicast group. */
+	  rip_multicast_join (ifp, rip->sock);
+
+	  /* Send RIP request to the interface. */
+	  rip_request_interface (ifp);
+
+	  ri->running = 1;
+	}
+    }
+  else
+    {
+      if (ri->running)
+	{
+	  if (IS_RIP_DEBUG_EVENT)
+	    zlog_info ("RIP turn off %s", ifp->name);
+
+	  /* Leave from multicast group. */
+	  rip_multicast_leave (ifp, rip->sock);
+
+	  ri->running = 0;
+	}
+    }
+}
+
+/* Apply network configuration to all interface. */
+void
+rip_enable_apply_all ()
+{
+  struct interface *ifp;
   listnode node;
 
+  /* Check each interface. */
   for (node = listhead (iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      ri = ifp->if_data;
-
-      ret = rip_enable_vector_lookup (ifp->name);
-      if (ret >= 0)
-	ri->enable = 1;
-      else
-	{
-	  ret = rip_enable_network_lookup (ifp);
-	  if (ret >= 0)
-	    ri->enable = 1;
-	  else
-	    ri->enable = 0;
-	}
+      rip_enable_apply (ifp);
     }
-  return 0;
 }
 
-/* Add RIPng enable network. */
-void
-rip_enable_network_add (struct prefix_ipv4 *p)
+int
+rip_neighbor_lookup (struct sockaddr_in *from)
 {
+  struct prefix_ipv4 p;
   struct route_node *node;
 
-  node = route_node_get (rip_enable_table, (struct prefix *) p);
-  if (node->info)
+  memset (&p, 0, sizeof (struct prefix_ipv4));
+  p.family = AF_INET;
+  p.prefix = from->sin_addr;
+  p.prefixlen = IPV4_MAX_BITLEN;
+
+  node = route_node_lookup (rip->neighbor, (struct prefix *) &p);
+  if (node)
     {
       route_unlock_node (node);
-      return;
+      return 1;
     }
-  else
-    node->info = "enabled";
-
-  rip_enable_apply_all ();
-}
-
-/* Add inteface to rip_enable_vectro. */
-void
-rip_enable_vector_add (char *ifname)
-{
-  int ret;
-
-  ret = rip_enable_vector_lookup (ifname);
-  if (ret >= 0)
-    return;
-
-  vector_set (rip_enable_vector, strdup (ifname));
-
-  rip_enable_apply_all ();
+  return 0;
 }
 
 /* Add new RIP neighbor to the neighbor tree. */
@@ -687,12 +740,12 @@ rip_neighbor_add (struct prefix_ipv4 *p)
 {
   struct route_node *node;
 
-  node = route_node_get (rip_neighbor_table, (struct prefix *) p);
+  node = route_node_get (rip->neighbor, (struct prefix *) p);
 
   if (node->info)
     return -1;
 
-  node->info = rip_neighbor_table;
+  node->info = rip->neighbor;
 
   return 0;
 }
@@ -704,7 +757,7 @@ rip_neighbor_delete (struct prefix_ipv4 *p)
   struct route_node *node;
 
   /* Lock for look up. */
-  node = route_node_lookup (rip_neighbor_table, (struct prefix *) p);
+  node = route_node_lookup (rip->neighbor, (struct prefix *) p);
 
   if (! node)
     return -1;
@@ -719,14 +772,13 @@ rip_neighbor_delete (struct prefix_ipv4 *p)
 
   return 0;
 }
-
-
+
 /* RIP enable network or interface configuration. */
 DEFUN (rip_network,
        rip_network_cmd,
        "network IPV4_ADDR",
-       "Set announced network for RIP\n"
-       "IP Address\n")
+       "Enable RIP\n"
+       "IP prefix or interface name\n")
 {
   int ret;
   struct prefix_ipv4 p;
@@ -734,13 +786,49 @@ DEFUN (rip_network,
   ret = str2prefix_ipv4 (argv[0], &p);
 
   if (ret)
-    rip_enable_network_add (&p);
+    ret = rip_enable_network_add ((struct prefix *) &p);
   else
-    rip_enable_vector_add (argv[0]);
+    ret = rip_enable_if_add (argv[0]);
+
+  if (ret < 0)
+    {
+      vty_out (vty, "There is a same network configuration %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  rip_enable_apply_all ();
 
   return CMD_SUCCESS;
 }
 
+/* RIP enable network or interface configuration. */
+DEFUN (no_rip_network,
+       no_rip_network_cmd,
+       "no network IPV4_ADDR",
+       NO_STR
+       "Disable RIP\n"
+       "IP prefix or interface name\n")
+{
+  int ret;
+  struct prefix_ipv4 p;
+
+  ret = str2prefix_ipv4 (argv[0], &p);
+
+  if (ret)
+    ret = rip_enable_network_delete ((struct prefix *) &p);
+  else
+    ret = rip_enable_if_delete (argv[0]);
+
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't find network configuration %s\r\n", argv[0]);
+      return CMD_WARNING;
+    }
+
+  rip_enable_apply_all ();
+
+  return CMD_SUCCESS;
+}
 
 /* RIP neighbor configuration set. */
 DEFUN (rip_neighbor,
@@ -803,7 +891,7 @@ DEFUN (ip_rip_receive_version,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   /* Version 1. */
   if (atoi (argv[0]) == 1)
@@ -833,7 +921,7 @@ DEFUN (ip_rip_receive_version_1,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   /* Version 1 and 2. */
   ri->ri_receive = RI_RIP_VERSION_1_AND_2;
@@ -854,7 +942,7 @@ DEFUN (ip_rip_receive_version_2,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   /* Version 1 and 2. */
   ri->ri_receive = RI_RIP_VERSION_1_AND_2;
@@ -874,7 +962,7 @@ DEFUN (no_ip_rip_receive_version,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   ri->ri_receive = RI_RIP_UNSPEC;
   return CMD_SUCCESS;
@@ -894,7 +982,7 @@ DEFUN (ip_rip_send_version,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   /* Version 1. */
   if (atoi (argv[0]) == 1)
@@ -924,7 +1012,7 @@ DEFUN (ip_rip_send_version_1,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   /* Version 1 and 2. */
   ri->ri_send = RI_RIP_VERSION_1_AND_2;
@@ -945,7 +1033,7 @@ DEFUN (ip_rip_send_version_2,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   /* Version 1 and 2. */
   ri->ri_send = RI_RIP_VERSION_1_AND_2;
@@ -965,7 +1053,7 @@ DEFUN (no_ip_rip_send_version,
   struct rip_interface *ri;
 
   ifp = (struct interface *)vty->index;
-  ri = ifp->if_data;
+  ri = ifp->info;
 
   ri->ri_send = RI_RIP_UNSPEC;
   return CMD_SUCCESS;
@@ -983,7 +1071,7 @@ interface_config_write (struct vty *vty)
       struct rip_interface *ri;
 
       ifp = getdata (node);
-      ri = ifp->if_data;
+      ri = ifp->info;
 
       vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
 
@@ -998,21 +1086,35 @@ interface_config_write (struct vty *vty)
 	vty_out (vty, " ip rip receive %s%s",
 		 LOOKUP (ri_version_msg, ri->ri_receive), VTY_NEWLINE);
 
-#ifdef RIP_ADVANCED
-      if (ri->ri_default_send != RIP_DEFAULT_ADVERTISE_UNSPEC)
-	vty_out (vty, " advertize default%s", VTY_NEWLINE);
-
-      if (ri->ri_default_receive != RIP_DEFAULT_ACCEPT_UNSPEC)
-	vty_out (vty, " accept default%s", VTY_NEWLINE);
-#endif /* RIP_ADVANCED */
-
-      if (ri->ri_split_horizon != RI_RIP_SPLIT_HORIZON_UNSPEC)
-	vty_out (vty, " split horizon %s%s", 
-		 LOOKUP (ri_split_horizon_msg, ri->ri_split_horizon),
-		 VTY_NEWLINE);
-
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
+  return 0;
+}
+
+int
+config_write_rip_network (struct vty *vty)
+{
+  int i;
+  char *ifname;
+  struct route_node *node;
+
+  /* Network type RIP enable interface statement. */
+  for (node = route_top (rip_enable_network); node; node = route_next (node))
+    if (node->info)
+      vty_out (vty, " network %s/%d%s", inet_ntoa (node->p.u.prefix4),
+	       node->p.prefixlen, VTY_NEWLINE);
+
+  /* Interface name RIP enable statement. */
+  for (i = 0; i < vector_max (rip_enable_if); i++)
+    if ((ifname = vector_slot (rip_enable_if, i)) != NULL)
+      vty_out (vty, " network %s%s", ifname, VTY_NEWLINE);
+
+  /* RIP neighbors listing. */
+  for (node = route_top (rip->neighbor); node; node = route_next (node))
+    if (node->info)
+      vty_out (vty, " neighbor %s%s", 
+	       inet_ntoa (node->p.u.prefix4), VTY_NEWLINE);
+
   return 0;
 }
 
@@ -1026,7 +1128,7 @@ struct cmd_node interface_node =
 int
 rip_interface_new_hook (struct interface *ifp)
 {
-  ifp->if_data = rip_interface_new ();
+  ifp->info = rip_interface_new ();
   return 0;
 }
 
@@ -1039,10 +1141,8 @@ rip_if_init ()
   if_add_hook (IF_NEW_HOOK, rip_interface_new_hook);
 
   /* RIP network init. */
-  rip_enable_vector = vector_init (1);
-  rip_enable_table = route_table_init ();
-
-  rip_neighbor_table = route_table_init ();
+  rip_enable_if = vector_init (1);
+  rip_enable_network = route_table_init ();
 
   /* Install interface node. */
   install_node (&interface_node, interface_config_write);
@@ -1069,4 +1169,5 @@ rip_if_init ()
   install_element (INTERFACE_NODE, &no_ip_rip_receive_version_cmd);
 
   install_element (RIP_NODE, &rip_network_cmd);
+  install_element (RIP_NODE, &no_rip_network_cmd);
 }

@@ -33,40 +33,45 @@
 #include "ioctl.h"
 #include "connected.h"
 
-/* For interface multicast configuration. */
-#define IF_ZEBRA_MULTICAST_UNSPEC 0
-#define IF_ZEBRA_MULTICAST_ON     1
-#define IF_ZEBRA_MULTICAST_OFF    2
-
-/* For interface shutdown configuration. */
-#define IF_ZEBRA_SHUTDOWN_UNSPEC 0
-#define IF_ZEBRA_SHUTDOWN_ON     1
-#define IF_ZEBRA_SHUTDOWN_OFF    2
-
-/* `zebra' daemon local interface structure. */
-struct if_zebra
-{
-  int shutdown;
-  int multicast;
-
-  /* Interface's address. */
-  list address;
-};
+#include "zebra/interface.h"
+#include "zebra/rtadv.h"
 
 /* Called when new interface is added. */
 int
 if_zebra_new_hook (struct interface *ifp)
 {
-  struct if_zebra *if_data;
+  struct zebra_if *zebra_if;
 
-  if_data = XMALLOC (MTYPE_TMP, sizeof (struct if_zebra));
-  bzero (if_data, sizeof (struct if_zebra));
+  zebra_if = XMALLOC (MTYPE_TMP, sizeof (struct zebra_if));
+  memset (zebra_if, 0, sizeof (struct zebra_if));
 
-  if_data->multicast = IF_ZEBRA_MULTICAST_UNSPEC;
-  if_data->shutdown = IF_ZEBRA_SHUTDOWN_UNSPEC;
-  if_data->address = list_init ();
+  zebra_if->multicast = IF_ZEBRA_MULTICAST_UNSPEC;
+  zebra_if->shutdown = IF_ZEBRA_SHUTDOWN_UNSPEC;
+  zebra_if->address = list_init ();
 
-  ifp->if_data = if_data;
+#ifdef RTADV
+  {
+    /* Set default router advertise values. */
+    struct rtadvconf *rtadv;
+
+    rtadv = &zebra_if->rtadv;
+
+    rtadv->AdvSendAdvertisements = 0;
+    rtadv->MaxRtrAdvInterval = 600;
+    rtadv->MinRtrAdvInterval = 0.33 * rtadv->MaxRtrAdvInterval;
+    rtadv->AdvManagedFlag = 0;
+    rtadv->AdvOtherConfigFlag = 0;
+    rtadv->AdvLinkMTU = 0;
+    rtadv->AdvReachableTime = 0;
+    rtadv->AdvRetransTimer = 0;
+    rtadv->AdvCurHopLimit = 0;
+    rtadv->AdvDefaultLifetime = 3 * rtadv->MaxRtrAdvInterval;
+
+    rtadv->AdvPrefixList = list_init ();
+  }    
+#endif /* RTADV */
+
+  ifp->info = zebra_if;
   return 0;
 }
 
@@ -74,8 +79,8 @@ if_zebra_new_hook (struct interface *ifp)
 int
 if_zebra_delete_hook (struct interface *ifp)
 {
-  if (ifp->if_data)
-    XFREE (MTYPE_TMP, ifp->if_data);
+  if (ifp->info)
+    XFREE (MTYPE_TMP, ifp->info);
   return 0;
 }
 
@@ -83,12 +88,12 @@ int
 if_addr_add (struct interface *ifp, struct prefix *p)
 {
   struct prefix *addr;
-  struct if_zebra *if_data;
+  struct zebra_if *if_data;
 
   addr = prefix_new ();
   *addr = *p;
 
-  if_data = (struct if_zebra *) ifp->if_data;
+  if_data = (struct zebra_if *) ifp->info;
   list_add_node (if_data->address, addr);
 
   /* Address check. */
@@ -113,11 +118,11 @@ if_addr_add (struct interface *ifp, struct prefix *p)
 int
 if_addr_delete (struct interface *ifp, struct prefix *p)
 {
-  struct if_zebra *if_data;
+  struct zebra_if *if_data;
   listnode node;
   struct prefix *addr = NULL;
 
-  if_data = (struct if_zebra *) ifp->if_data;
+  if_data = (struct zebra_if *) ifp->info;
 
   for (node = listhead (if_data->address); node; node = nextnode (node))
     {
@@ -154,7 +159,7 @@ if_tun_add (struct interface *ifsp, struct interface *ifdp,
 #if 0				/* Commented out by Kunihiro. */
   int ret;
   struct prefix *saddr, daddr;
-  struct if_zebra *if_sdata, *if_ddata;
+  struct zebra_if *if_sdata, *if_ddata;
     
   ret = if_set_prefix (ifsp, (struct prefix_ipv4 *) sp);
   if (ret < 0)
@@ -168,9 +173,9 @@ if_tun_add (struct interface *ifsp, struct interface *ifdp,
   *saddr = *sp;
   *daddr = *dp;
     
-  if_sdata = (struct if_zebra *) ifsp->if_data;
+  if_sdata = (struct zebra_if *) ifsp->if_data;
   list_add_node (if_sdata->address, saddr);
-  if_ddata = (struct if_zebra *) ifdp->if_data;
+  if_ddata = (struct zebra_if *) ifdp->if_data;
   list_add_node (if_ddata->address, daddr);
     
   /* Address check. */
@@ -287,9 +292,20 @@ if_dump_vty (struct vty *vty, struct interface *ifp)
   if (ifp->desc)
     vty_out (vty, "  Description: %s\r\n", ifp->desc);
   vty_out (vty, "  index %d metric %d mtu %d ",
-	   ifp->index, ifp->metric, ifp->mtu);
+	   ifp->ifindex, ifp->metric, ifp->mtu);
   if_flag_dump_vty (vty, ifp->flags);
   vty_out (vty, "\r\n");
+
+  /* Hardware address. */
+  if (ifp->hw_addr_len != 0)
+    {
+      int i;
+
+      vty_out (vty, "  HWaddr: ");
+      for (i = 0; i < ifp->hw_addr_len; i++)
+	vty_out (vty, "%s%02x", i == 0 ? "" : ":", ifp->hw_addr[i]);
+      vty_out (vty, "\r\n");
+    }
   
   for (node = listhead (ifp->connected); node; nextnode (node))
     {
@@ -354,7 +370,7 @@ DEFUN (multicast,
 {
   int ret;
   struct interface *ifp;
-  struct if_zebra *if_data;
+  struct zebra_if *if_data;
 
   ifp = (struct interface *) vty->index;
   ret = if_set_flags (ifp, IFF_MULTICAST);
@@ -364,7 +380,7 @@ DEFUN (multicast,
       return CMD_WARNING;
     }
   if_get_flags (ifp);
-  if_data = ifp->if_data;
+  if_data = ifp->info;
   if_data->multicast = IF_ZEBRA_MULTICAST_ON;
   
   return CMD_SUCCESS;
@@ -378,7 +394,7 @@ DEFUN (no_multicast,
 {
   int ret;
   struct interface *ifp;
-  struct if_zebra *if_data;
+  struct zebra_if *if_data;
 
   ifp = (struct interface *) vty->index;
   ret = if_unset_flags (ifp, IFF_MULTICAST);
@@ -388,7 +404,7 @@ DEFUN (no_multicast,
       return CMD_WARNING;
     }
   if_get_flags (ifp);
-  if_data = ifp->if_data;
+  if_data = ifp->info;
   if_data->multicast = IF_ZEBRA_MULTICAST_OFF;
 
   return CMD_SUCCESS;
@@ -401,7 +417,7 @@ DEFUN (shutdown_if,
 {
   int ret;
   struct interface *ifp;
-  struct if_zebra *if_data;
+  struct zebra_if *if_data;
 
   ifp = (struct interface *) vty->index;
   ret = if_unset_flags (ifp, IFF_UP);
@@ -411,7 +427,7 @@ DEFUN (shutdown_if,
       return CMD_WARNING;
     }
   if_get_flags (ifp);
-  if_data = ifp->if_data;
+  if_data = ifp->info;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_ON;
 
   return CMD_SUCCESS;
@@ -425,7 +441,7 @@ DEFUN (no_shutdown_if,
 {
   int ret;
   struct interface *ifp;
-  struct if_zebra *if_data;
+  struct zebra_if *if_data;
 
   ifp = (struct interface *) vty->index;
   ret = if_set_flags (ifp, IFF_UP | IFF_RUNNING);
@@ -435,7 +451,7 @@ DEFUN (no_shutdown_if,
       return CMD_WARNING;
     }
   if_get_flags (ifp);
-  if_data = ifp->if_data;
+  if_data = ifp->info;
   if_data->shutdown = IF_ZEBRA_SHUTDOWN_OFF;
 
   return CMD_SUCCESS;
@@ -608,26 +624,26 @@ DEFUN (ip_tunnel, ip_tunnel_cmd,
        "KAME ip tunneling configuration commands\n"
        "Set FROM IP address and TO IP address\n")
 {
-    /* variable define */
-    int ret;
-    struct interface *ifsp, *ifdp;
-    struct prefix sp, dp;
+  /* variable define */
+  int ret;
+  struct interface *ifsp, *ifdp;
+  struct prefix sp, dp;
 
-    ifsp = (struct interface *) vty->index;
-    ifdp = (struct interface *) vty->index; /* 大うそ臭い */
-    ret = str2prefix (argv[0], &sp);
-    if (!ret)
-	{
-	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
-	    return CMD_WARNING;
-	}
+  ifsp = (struct interface *) vty->index;
+  ifdp = (struct interface *) vty->index;
+  ret = str2prefix (argv[0], &sp);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
 
-    ret = str2prefix (argv[1], &dp);
-    if (!ret)
-	{
-	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
-	    return CMD_WARNING;
-	}
+  ret = str2prefix (argv[1], &dp);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
 
   ret = if_tun_add (ifsp, ifdp, &sp, &dp);
   if (ret < 0)
@@ -645,36 +661,36 @@ DEFUN (no_ip_tunnel, no_ip_tunnel_cmd,
        "Negate KAME ip tunneling configuration commands\n"
        "Set FROM IP address and TO IP address\n")
 {
-    /* variable define */
-    int ret;
-    struct interface *ifp;
-    struct interface *ifsp = NULL;
-    struct prefix sp, dp;
+  /* variable define */
+  int ret;
+  struct interface *ifp;
+  struct interface *ifsp = NULL;
+  struct prefix sp, dp;
 
-    ifp = (struct interface *) vty->index;
-    ret = str2prefix (argv[0], &sp);
-    if (!ret)
-	{
-	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
-	    return CMD_WARNING;
-	}
+  ifp = (struct interface *) vty->index;
+  ret = str2prefix (argv[0], &sp);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
 
-    ret = str2prefix (argv[1], &dp);
-    if (!ret)
-	{
-	    vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
-	    return CMD_WARNING;
-	}
+  ret = str2prefix (argv[1], &dp);
+  if (!ret)
+    {
+      vty_out (vty, "Please specify address by a.b.c.d/mask\r\n");
+      return CMD_WARNING;
+    }
 
-    ret = if_tun_delete (ifsp, ifp, &sp, &dp);
-    if (ret < 0)
-	{
-	    vty_out (vty, "Can't set tunnel address: %s.\r\n", 
-		     strerror(errno));
-	    return CMD_WARNING;
-	}
+  ret = if_tun_delete (ifsp, ifp, &sp, &dp);
+  if (ret < 0)
+    {
+      vty_out (vty, "Can't set tunnel address: %s.\r\n", 
+	       strerror(errno));
+      return CMD_WARNING;
+    }
     
-    return CMD_SUCCESS;
+  return CMD_SUCCESS;
 }
 #endif /* KAME */
 
@@ -687,12 +703,12 @@ if_config_write (struct vty *vty)
 
   for (node = listhead (iflist); node; nextnode (node))
     {
-      struct if_zebra *if_data;
+      struct zebra_if *if_data;
       listnode addrnode;
       struct prefix *p;
 
       ifp = getdata (node);
-      if_data = ifp->if_data;
+      if_data = ifp->info;
       
       vty_out (vty, "interface %s%s", ifp->name, VTY_NEWLINE);
 
@@ -720,6 +736,10 @@ if_config_write (struct vty *vty)
 		     if_data->multicast == IF_ZEBRA_MULTICAST_ON ? "" : "no ",
 		     VTY_NEWLINE);
 	}
+
+#ifdef RTADV
+      rtadv_config_write (vty, ifp);
+#endif /* RTADV */
 
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
@@ -752,12 +772,10 @@ zebra_if_init ()
   install_element (INTERFACE_NODE, &no_shutdown_if_cmd);
   install_element (INTERFACE_NODE, &ip_address_cmd);
   install_element (INTERFACE_NODE, &no_ip_address_cmd);
-
 #ifdef HAVE_IPV6
   install_element (INTERFACE_NODE, &ipv6_address_cmd);
   install_element (INTERFACE_NODE, &no_ipv6_address_cmd);
 #endif /* HAVE_IPV6 */
-  
 #ifdef KAME
   install_element (INTERFACE_NODE, &ip_tunnel_cmd);
   install_element (INTERFACE_NODE, &no_ip_tunnel_cmd);

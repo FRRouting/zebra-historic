@@ -31,6 +31,8 @@
 #include "log.h"
 #include "sockunion.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"

@@ -22,7 +22,7 @@
 #ifndef OSPF6_RTABLE_H
 #define OSPF6_RTABLE_H
 
-/* Destination Types (from InternetDraft 3.3) */
+/* Destination Types (from draft-ietf-ospf-ospfv6-06.txt 3.3) */
 #define DTYPE_PREFIX         1   /* IPv6 prefix */
 #define DTYPE_ASBR           2   /* AS boundary router */
 #define DTYPE_INTRA_ROUTER   3   /* each router in the area */

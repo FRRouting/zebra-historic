@@ -27,6 +27,8 @@
 #include "log.h"
 #include "buffer.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"

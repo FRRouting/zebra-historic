@@ -155,21 +155,6 @@ log_close ()
   fclose (logfp);
 }
 
-/* Reopen log file. */
-void
-log_rotate ()
-{
-  if (logfp == stdout)
-    return;
-
-  log_close ();
-  
-  logfp = fopen (log_filename, "a");
-
-  if (logfp == NULL)
-    fprintf (stderr, "Can't open logfile %s\n", log_filename);
-}
-
 const char *zlog_proto_names[] = {
   "NONE",
   "DEFAULT",
@@ -208,10 +193,10 @@ zlog(ZLOG *zl, int priority, const char *format, ...)
 
   if (zl->flags & ZLOG_FILE)
     {
-      time_print (zl->file);
-      vfprintf (zl->file, format, args);
-      fprintf (zl->file, "\n");
-      fflush (zl->file);
+      time_print (zl->fp);
+      vfprintf (zl->fp, format, args);
+      fprintf (zl->fp, "\n");
+      fflush (zl->fp);
     }
 }
 
@@ -240,10 +225,10 @@ zlog_info (const char *format, ...)
 
   if (zl->flags & ZLOG_FILE)
     {
-      time_print (zl->file);
-      vfprintf (zl->file, format, args);
-      fprintf (zl->file, "\n");
-      fflush (zl->file);
+      time_print (zl->fp);
+      vfprintf (zl->fp, format, args);
+      fprintf (zl->fp, "\n");
+      fflush (zl->fp);
     }
 }
 
@@ -272,10 +257,10 @@ zlog_warn (const char *format, ...)
 
   if (zl->flags & ZLOG_FILE)
     {
-      time_print (zl->file);
-      vfprintf (zl->file, format, args);
-      fprintf (zl->file, "\n");
-      fflush (zl->file);
+      time_print (zl->fp);
+      vfprintf (zl->fp, format, args);
+      fprintf (zl->fp, "\n");
+      fflush (zl->fp);
     }
 }
 
@@ -303,10 +288,10 @@ zvlog(ZLOG *zl, int priority, const char *format, va_list args)
 
   if (zl->flags & ZLOG_FILE)
     {
-      time_print (zl->file);
-      vfprintf (zl->file, zvformat, args);
-      fprintf (zl->file, "\n");
-      fflush (zl->file);
+      time_print (zl->fp);
+      vfprintf (zl->fp, zvformat, args);
+      fprintf (zl->fp, "\n");
+      fflush (zl->fp);
     }
 }
 
@@ -386,7 +371,7 @@ void
 closezlog(ZLOG *zl)
 {
   closelog();
-  fclose (zl->file);
+  fclose (zl->fp);
 
   XFREE(MTYPE_ZLOG, zl);
 }
@@ -415,19 +400,27 @@ zlog_set_file (ZLOG *zl, int flags, char *filename)
 {
   FILE *fp;
 
+  /* There is opend file.  */
+  zlog_reset_file (zl);
+
+  /* Set default zl. */
   if (zl == NULL)
     zl = zlog_default;
 
+  /* Open file. */
   fp = fopen (filename, "a");
   if (fp == NULL)
     return 0;
 
+  /* Set flags. */
+  zl->filename = strdup (filename);
   zl->flags |= ZLOG_FILE;
-  zl->file = fp;
+  zl->fp = fp;
 
   return 1;
 }
 
+/* Reset opend file. */
 int
 zlog_reset_file (ZLOG *zl)
 {
@@ -435,9 +428,38 @@ zlog_reset_file (ZLOG *zl)
     zl = zlog_default;
 
   zl->flags &= ~ZLOG_FILE;
-  if (zl->file)
-    fclose (zl->file);
-  zl->file = NULL;
+
+  if (zl->fp)
+    fclose (zl->fp);
+  zl->fp = NULL;
+
+  if (zl->filename)
+    free (zl->filename);
+  zl->filename = NULL;
+
+  return 1;
+}
+
+/* Reopen log file. */
+int
+zlog_rotate (ZLOG *zl)
+{
+  FILE *fp;
+
+  if (zl == NULL)
+    zl = zlog_default;
+
+  if (zl->fp)
+    fclose (zl->fp);
+  zl->fp = NULL;
+
+  if (zl->filename)
+    {
+      fp = fopen (zl->filename, "a");
+      if (fp == NULL)
+	return -1;
+      zl->fp = fp;
+    }
 
   return 1;
 }

@@ -53,11 +53,28 @@ struct ospf6_if
   list              delayed_ack;
 
   list              linklocal_lsa;   /* include Link-LSA */
+
+  list prefix_connected;
+  list prefix_static;
+  list prefix_ripng;
+  list prefix_bgp;
+
+  signed long     link_lsa_seqnum;      /* Signed 32bit integer */
+  signed long     network_lsa_seqnum;   /* Signed 32bit integer */
+  signed long     intra_prefix_seqnum;  /* Signed 32bit integer */
 };
 
 
 
 /* Function Prototypes */
+void ospf6_if_init ();
+struct ospf6_if *make_ospf6_if (struct interface *);
+void delete_ospf6_if (struct ospf6_if *);
+struct ospf6_if *ospf6_if_lookup (char *);
+int ospf6_if_count_full_nbr (struct ospf6_if *);
+int ospf6_if_get_linklocal (struct in6_addr *, struct ospf6_if *);
+int show_if (struct vty *, struct interface *);
+int ospf6_if_config_write (struct vty *);
 void ospf6_if_init ();
 
 #endif /* OSPF6_INTERFACE_H */

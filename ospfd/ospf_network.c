@@ -158,7 +158,7 @@ ospf_serv_sock_init (struct interface *ifp, struct prefix *p)
   struct ospf_interface *oi;
   int ret, sock, tos;
 
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   /* Create raw socket. */
 

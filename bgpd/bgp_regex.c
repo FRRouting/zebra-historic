@@ -26,6 +26,8 @@
 #include "command.h"
 #include "memory.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd.h"
 #include "bgp_aspath.h"
 #include "bgp_regex.h"

@@ -103,11 +103,41 @@ char *print_lsreq (struct linkstate_request *lsreq)
       case LST_NETWORK_LSA:
       case LST_LINK_LSA:
       case LST_INTRA_AREA_PREFIX_LSA:
+      case LST_AS_EXTERNAL_LSA:
         type = lstype_name[typeindex(lsreq->lsreq_type)];
         break;
       default:
         snprintf (unknown, sizeof (unknown),
                   "Unknown(%#x)", ntohs (lsreq->lsreq_type));
+        type = unknown;
+        break;
+    }
+
+  snprintf (buf, sizeof (buf), "%s[id:%s,adv:%s]",
+            type, id, advrtr);
+  return buf;
+}
+
+char *print_ls_reference (struct ospf6_lsa_hdr *lsh)
+{
+  static char buf[256];
+  char advrtr[64], id[64];
+  char *type, unknown[64];
+
+  inet_ntop (AF_INET, &lsh->lsh_advrtr, advrtr, sizeof (advrtr));
+  snprintf (id, sizeof (id), "%lu", ntohl (lsh->lsh_id));
+  switch (ntohs (lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+      case LST_NETWORK_LSA:
+      case LST_LINK_LSA:
+      case LST_INTRA_AREA_PREFIX_LSA:
+      case LST_AS_EXTERNAL_LSA:
+        type = lstype_name[typeindex(lsh->lsh_type)];
+        break;
+      default:
+        snprintf (unknown, sizeof (unknown),
+                  "Unknown(%#x)", ntohs (lsh->lsh_type));
         type = unknown;
         break;
     }
@@ -132,6 +162,7 @@ char *print_lsahdr (struct ospf6_lsa_hdr *lsh)
       case LST_NETWORK_LSA:
       case LST_LINK_LSA:
       case LST_INTRA_AREA_PREFIX_LSA:
+      case LST_AS_EXTERNAL_LSA:
         type = lstype_name[typeindex(lsh->lsh_type)];
         break;
       default:
@@ -172,8 +203,8 @@ ospf6_log_init ()
   o6log.rtable = o6log_on;
   o6log.zebra = o6log_on;
   /* for debug */
-  o6log.debug = o6log_on;
-  o6log.pointer = o6log_on;
+  o6log.debug = o6log_off;
+  o6log.pointer = o6log_off;
   return;
 }
 

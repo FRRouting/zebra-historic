@@ -1,3 +1,15 @@
+1999-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripngd.c (ripng_request_process): When request packet comes,
+	check RIPng process is enabled on the interface.
+	(ripng_redistribute_withdraw): Delete routes when `no
+	redistribute' is executed.
+
+1999-08-13  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ripng_zebra.c (ripng_redistribute_ospf6_cmd): Add OSPF6
+	redistribute command.
+
 1999-07-21  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripngd.c (default_information_originate): Add

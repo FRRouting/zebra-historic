@@ -37,6 +37,8 @@ struct prefix_list
   char *name;
   char *desc;
 
+  struct prefix_master *master;
+
   enum prefix_name_type type;
 
   int count;
@@ -48,9 +50,10 @@ struct prefix_list
 };
 
 void prefix_list_init ();
-struct prefix_list *prefix_list_lookup (char *);
-enum prefix_list_type
-prefix_list_apply (struct prefix_list *, void *);
+
+struct prefix_list *prefix_list_lookup (int family, char *);
+
+enum prefix_list_type prefix_list_apply (struct prefix_list *, void *);
 
 void
 prefix_list_add_hook (void (*func) ());

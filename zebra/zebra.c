@@ -91,35 +91,38 @@ zebra_read_ipv4 (int command, struct zebra_client *client, u_short length)
   u_char type;
   u_char flags;
   struct in_addr nexthop;
-  u_char *pnt;
+  struct stream *s;
   u_char *lim;
+  unsigned int ifindex;
 
-  pnt = stream_pnt (client->ibuf);
-  lim = pnt + length;
+  s = client->ibuf;
+  lim = stream_pnt (s) + length;
 
   /* Fetch type and nexthop first. */
-  type = *pnt++;
-  flags = *pnt++;
-  memcpy(&nexthop, pnt, 4);
-  pnt += 4;
+  type = stream_getc (s);
+  flags = stream_getc (s);
+  memcpy (&nexthop, stream_pnt (s), sizeof (struct in_addr));
+  stream_forward (s, sizeof (struct in_addr));
 
   /* Then fetch IPv4 prefixes. */
-  while (pnt < lim)
+  while (stream_pnt (s) < lim)
     {
       int size;
       struct prefix_ipv4 p;
 
+      ifindex = stream_getl (client->ibuf);
+
       bzero (&p, sizeof (struct prefix_ipv4));
       p.family = AF_INET;
-      p.prefixlen = *pnt++;
+      p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, pnt, size);
-      pnt += size;
+      memcpy (&p.prefix, stream_pnt (s), size);
+      stream_forward (s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rib_add_ipv4 (type, flags, &p, &nexthop, 0, client->rtm_table);
+	rib_add_ipv4 (type, flags, &p, &nexthop, ifindex, client->rtm_table);
       else
-	rib_delete_ipv4 (type, flags, &p, &nexthop, 0, client->rtm_table);
+	rib_delete_ipv4 (type, flags, &p, &nexthop, ifindex, client->rtm_table);
     }
 }
 
@@ -228,7 +231,7 @@ zebra_request_all_interface (int sock)
       pnt += INTERFACE_NAMSIZ;
 
       /* Set inteface's index. */
-      PUTC (ifp->index ,pnt);
+      PUTC (ifp->ifindex ,pnt);
 
       /* Set interface's value. */
       PUTL (ifp->flags, pnt);
@@ -472,8 +475,9 @@ zebra_accept (struct thread *thread)
 void
 zebra_serv ()
 {
+  int ret;
   int accept_sock;
-  struct sockaddr_in me;
+  struct sockaddr_in addr;
 
   accept_sock = socket (AF_INET, SOCK_STREAM, 0);
 
@@ -483,25 +487,29 @@ zebra_serv ()
       return;
     }
 
+  memset (&addr, 0, sizeof (struct sockaddr_in));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons (ZEBRA_PORT);
+#ifdef HAVE_SIN_LEN
+  addr.sin_len = sizeof (struct sockaddr_in);
+#endif /* HAVE_SIN_LEN */
+  addr.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
+
   sockopt_reuseaddr (accept_sock);
   sockopt_reuseport (accept_sock);
 
-  memset (&me, 0, sizeof (struct sockaddr_in));
-  me.sin_family = AF_INET;
-  me.sin_port = htons (ZEBRA_PORT);
-
-  /* Loopback address only. */
-  me.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
-
-  if (bind (accept_sock, (struct sockaddr *)&me, sizeof (me)) < 0) 
+  ret  = bind (accept_sock, (struct sockaddr *)&addr, 
+	       sizeof (struct sockaddr_in));
+  if (ret < 0)
     {
-      zlog (NULL, LOG_WARNING, "can't bind socket");
+      zlog_warn ("can't bind socket");
       exit (1);
     }
 
-  if (listen (accept_sock, 1) < 0)
+  ret = listen (accept_sock, 1);
+  if (ret < 0)
     {
-      zlog (NULL, LOG_WARNING, "can't listen socket");
+      zlog_warn ("can't listen socket");
       exit (1);
     }
 
@@ -644,7 +652,7 @@ DEFUN (ip_route,
 	  vty_out (vty, "Gateway address or device name is invalid\r\n");
 	  return CMD_WARNING;
 	}
-      ifindex = ifp->index;
+      ifindex = ifp->ifindex;
     }
 
   /* Make sure mask is applied and set type to static route*/
@@ -725,7 +733,7 @@ DEFUN (ip_route_mask,
 	  vty_out (vty, "Gateway address or device name is invalid\r\n");
 	  return CMD_WARNING;
 	}
-      ifindex = ifp->index;
+      ifindex = ifp->ifindex;
     }
 
   /* Make sure mask is applied and set type to static route*/
@@ -797,7 +805,7 @@ DEFUN (no_ip_route,
 	  vty_out (vty, "Gateway address or device name is invalid\r\n");
 	  return CMD_WARNING;
 	}
-      ifindex = ifp->index;
+      ifindex = ifp->ifindex;
     }
 
   /* Make sure mask is applied. */
@@ -876,7 +884,7 @@ DEFUN (no_ip_route_mask,
 	  vty_out (vty, "Gateway address or device name is invalid\r\n");
 	  return CMD_WARNING;
 	}
-      ifindex = ifp->index;
+      ifindex = ifp->ifindex;
     }
 
   /* Make sure mask is applied. */

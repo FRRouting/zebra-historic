@@ -255,6 +255,35 @@ ospf_ls_req_timer (struct thread *thread)
   return 0;
 }
 
+int
+ospf_ls_upd_timer (struct thread *thread)
+{
+  struct ospf_neighbor *nbr;
+  list update;
+  listnode node;
+
+  update = list_init ();
+
+  nbr = THREAD_ARG (thread);
+  nbr->t_ls_upd = NULL;
+
+  /* Send Link State Update. */
+  if (listcount (nbr->ls_retransmit) > 0)
+    {
+      for (node = listhead (nbr->ls_retransmit); node; nextnode (node))
+	list_add_node (update, node->data);
+
+      ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_DIRECT);
+    }
+
+  /* Set LS Update retransmission timer. */
+  OSPF_NSM_TIMER_ON (nbr->t_ls_upd, ospf_ls_upd_timer, nbr->v_ls_upd);
+
+  list_free (update);
+
+  return 0;
+}
+
 
 int
 ospf_write (struct thread *thread)
@@ -716,7 +745,9 @@ ospf_ls_req (struct ip *iph, struct ospf_header *ospfh,
     }
 
   /* Now send LSAs requested. */
-  ospf_ls_upd_send (nbr, update);
+  ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_INDIRECT);
+
+  list_free (update);
 }
 
 void
@@ -864,7 +895,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 	      /* Reflooding LSA. */
 	      update = list_init ();
 	      list_add_node (update, self);
-	      ospf_ls_upd_send (nbr, update);
+	      ospf_ls_upd_send (nbr, update, OSPF_SEND_PACKET_INDIRECT);
 	      list_free (update);
 	      zlog_info ("Resend self-originated LSA");
 	    }
@@ -925,8 +956,62 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
 					lsa->id, lsa->adv_router);
 
       list_delete_node (nbr->ls_request, node);
-    }
 
+      /* Flooding procedure. */
+      {
+	listnode n2;
+
+	for (n2 = listhead (ospf_top->iflist); n2; nextnode (n2))
+	  {
+	    struct interface *ifp;
+	    struct ospf_interface *ospfi;
+	    /*	    struct ospf_neighbor *nbr2; */
+
+	    ifp = getdata (n2);
+	    ospfi = ifp->info;
+
+	    if (if_is_loopback (ifp))
+	      continue;
+
+	    if (!if_is_up (ifp))
+	      continue;
+
+	    if (ospfi->flag != OSPF_IF_ENABLE)
+	      continue;
+
+	    if (!IPV4_ADDR_SAME (&oi->area->area_id, &ospfi->area->area_id))
+	      continue;
+
+	    /*
+	    for (rn = route_top (ospfi->nbrs); rn; rn = route_next (rn))
+	      {
+		if (rn->info == NULL)
+		  continue;
+
+		nbr2 = rn->info;
+
+		if (nbr->status < NSM_Exchange)
+		  continue;
+
+		if (nbr->status < NSM_Full)
+		  {
+		    for (n3 = listhead (nbr2->ls_request); n3; nextnode (n3))
+		      {
+			
+		      }
+		  }
+
+		if (nbr2 == nbr)
+		  continue;
+
+		list_add_node (nbr2->ls_retransmit, lsa);
+
+		}
+	    */
+	  }
+      }
+    }
+  
   /* If Link State Request List is empty, generate NSM Event LoadingDone. */
   if (list_isempty (nbr->ls_request))
     OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_LoadingDone);
@@ -1622,7 +1707,7 @@ ospf_ls_req_send (struct ospf_neighbor *nbr)
 
 /* Send Link State Update. */
 void
-ospf_ls_upd_send (struct ospf_neighbor *nbr, list update)
+ospf_ls_upd_send (struct ospf_neighbor *nbr, list update, int flag)
 {
   struct ospf_interface *oi;
   struct ospf_packet *op;
@@ -1654,7 +1739,9 @@ ospf_ls_upd_send (struct ospf_neighbor *nbr, list update)
   op->length = length;
 
   /* Decide destination address. */
-  if (oi->status == ISM_DR || oi->status == ISM_Backup)
+  if (flag == OSPF_SEND_PACKET_DIRECT)
+    op->dst = nbr->address.u.prefix4;
+  else if (oi->status == ISM_DR || oi->status == ISM_Backup)
     op->dst.s_addr = htonl (OSPF_ALLSPFROUTERS);
   else
     op->dst.s_addr = htonl (OSPF_ALLDROUTERS);
@@ -1699,3 +1786,43 @@ ospf_ls_ack_send_direct (struct ospf_neighbor *nbr, struct ospf_lsa *lsa)
   OSPF_ISM_WRITE_ON (oi->t_write, ospf_write, oi->fd);
 }
 
+void
+ospf_ls_retransmit (struct ospf_interface *ospfi, struct ospf_lsa *lsa)
+{
+  listnode node;
+  struct route_node *rn;
+  struct interface *ifp;
+  struct ospf_interface *oi;
+  struct ospf_neighbor *nbr;
+
+  for (node = listhead (ospf_top->iflist); node; nextnode (node))
+    {
+      ifp = getdata (node);
+      oi = ifp->info;
+
+      if (if_is_loopback (ifp))
+	continue;
+
+      if (!if_is_up (ifp))
+	continue;
+
+      if (oi->flag != OSPF_IF_ENABLE)
+	continue;
+
+      if (!IPV4_ADDR_SAME (&ospfi->area->area_id, &oi->area->area_id))
+	continue;
+
+      for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
+	{
+	  if (rn->info == NULL)
+	    continue;
+
+	  nbr = rn->info;
+
+	  if (nbr->status != NSM_Full)
+	    continue;
+
+	  list_add_node (nbr->ls_retransmit, lsa);
+	}
+    }
+}

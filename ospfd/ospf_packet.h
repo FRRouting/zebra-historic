@@ -36,6 +36,10 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #define OSPF_MSG_LS_UPD	       4  /* OSPF Link State Update Message. */
 #define OSPF_MSG_LS_ACK	       5  /* OSPF Link State Acknoledgement Message. */
 
+#define OSPF_SEND_PACKET_DIRECT		1
+#define OSPF_SEND_PACKET_INDIRECT	2
+
+
 struct ospf_packet
 {
   struct ospf_packet *next;
@@ -116,7 +120,7 @@ void ospf_fifo_flush (struct ospf_fifo *);
 void ospf_fifo_free (struct ospf_fifo *);
 void ospf_packet_add (struct ospf_interface *, struct ospf_packet *);
 void ospf_packet_delete (struct ospf_interface *);
-struct stream * ospf_stream_dup (struct stream *);
+struct stream *ospf_stream_dup (struct stream *);
 struct ospf_packet *ospf_packet_dup (struct ospf_packet *);
 
 int ospf_read (struct thread *);
@@ -124,7 +128,10 @@ void ospf_hello_send (struct ospf_interface *);
 void ospf_db_desc_send (struct ospf_neighbor *);
 void ospf_db_desc_resend (struct ospf_neighbor *);
 void ospf_ls_req_send (struct ospf_neighbor *);
-void ospf_ls_upd_send (struct ospf_neighbor *, list);
+void ospf_ls_upd_send (struct ospf_neighbor *, list, int);
 void ospf_ls_ack_send_direct (struct ospf_neighbor *, struct ospf_lsa *);
+void ospf_ls_retransmit (struct ospf_interface *, struct ospf_lsa *);
+
+int ospf_ls_upd_timer (struct thread *);
 
 #endif /* _ZEBRA_OSPF_PACKET_H */

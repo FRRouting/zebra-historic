@@ -73,6 +73,9 @@
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
 
+/* Define if you have NRL ipv6 stack.  */
+#undef NRL
+
 /* Define if one-vty option is specified. */
 #undef ONE_VTY
 
@@ -166,6 +169,9 @@ typedef unsigned short u_int8_t;
 
 /* Define if you have the <netdb.h> header file.  */
 #undef HAVE_NETDB_H
+
+/* Define if you have the <netinet/icmp6.h> header file.  */
+#undef HAVE_NETINET_ICMP6_H
 
 /* Define if you have the <netinet/in.h> header file.  */
 #undef HAVE_NETINET_IN_H

@@ -40,6 +40,23 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   /* malloc temporary_list */
   l = list_init ();
 
+  /* add as scope LSAs to summarylist */
+  scope = (void *) nbr->ospf6_if->area->ospf6;
+
+    /* add AS-external-LSAs */
+  ospf6_lsdb_collect_type (l, htons (LST_AS_EXTERNAL_LSA), scope);
+  for (n = listhead (l); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      /* MaxAge LSA are added to retrans list, instead of summary list.
+         (RFC2328, section 14) */
+      if (ospf6_age_current (lsa) == MAXAGE)
+        ospf6_add_retrans (lsa, nbr);
+      else
+        ospf6_add_summary (lsa, nbr);
+    }
+  list_delete_all_node (l);
+
   /* add area scope LSAs to summarylist */
   scope = (void *) nbr->ospf6_if->area;
 
@@ -48,7 +65,12 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   for (n = listhead (l); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_add_summary (lsa, nbr);
+      /* MaxAge LSA are added to retrans list, instead of summary list.
+         (RFC2328, section 14) */
+      if (ospf6_age_current (lsa) == MAXAGE)
+        ospf6_add_retrans (lsa, nbr);
+      else
+        ospf6_add_summary (lsa, nbr);
     }
   list_delete_all_node (l);
 
@@ -57,7 +79,12 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   for (n = listhead (l); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_add_summary (lsa, nbr);
+      /* MaxAge LSA are added to retrans list, instead of summary list.
+         (RFC2328, section 14) */
+      if (ospf6_age_current (lsa) == MAXAGE)
+        ospf6_add_retrans (lsa, nbr);
+      else
+        ospf6_add_summary (lsa, nbr);
     }
   list_delete_all_node (l);
 
@@ -66,7 +93,12 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   for (n = listhead (l); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_add_summary (lsa, nbr);
+      /* MaxAge LSA are added to retrans list, instead of summary list.
+         (RFC2328, section 14) */
+      if (ospf6_age_current (lsa) == MAXAGE)
+        ospf6_add_retrans (lsa, nbr);
+      else
+        ospf6_add_summary (lsa, nbr);
     }
   list_delete_all_node (l);
 
@@ -78,7 +110,12 @@ prepare_neighbor_lsdb (struct neighbor *nbr)
   for (n = listhead (l); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
-      ospf6_add_summary (lsa, nbr);
+      /* MaxAge LSA are added to retrans list, instead of summary list.
+         (RFC2328, section 14) */
+      if (ospf6_age_current (lsa) == MAXAGE)
+        ospf6_add_retrans (lsa, nbr);
+      else
+        ospf6_add_summary (lsa, nbr);
     }
 
   /* free temporary list */
@@ -120,6 +157,8 @@ check_neighbor_lsdb (struct iovec *iov, struct neighbor *nbr)
             scope = (void *) nbr->ospf6_if->area;
             break;
           case SCOPE_AS:
+            scope = (void *) nbr->ospf6_if->area->ospf6;
+            break;
           case SCOPE_RESERVED:
           default:
             o6log.dbex ("unsupported scope, check DD failed");
@@ -161,7 +200,14 @@ proceed_summarylist (struct neighbor *nbr)
   struct ospf6_lsa *lsa;
   listnode n;
 
+  o6log.dbex ("proceed summarylist of %s", nbr->str);
+
   /* clear DD packet to retransmit */
+  for (n = listhead (nbr->dd_retrans); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_remove_summary (lsa, nbr);
+    }
   list_delete_all_node (nbr->dd_retrans);
 
   /* DD packet size must be less than InterfaceMTU.
@@ -169,18 +215,14 @@ proceed_summarylist (struct neighbor *nbr)
   size = sizeof (struct ospf6_hdr) + sizeof (struct database_description);
 
   /* XXX, invalid method to access summarylist */
-  for (n = listhead (nbr->summarylist); n;
-       n = listhead (nbr->summarylist))
+  for (n = listhead (nbr->summarylist); n; nextnode (n))
     {
       lsa = (struct ospf6_lsa *) getdata (n);
       if (DEFAULT_INTERFACE_MTU - size <= sizeof (struct ospf6_lsa_hdr))
         break;
       list_add_node (nbr->dd_retrans, lsa);
-      ospf6_remove_summary (lsa, nbr);
       size += sizeof (struct ospf6_lsa_hdr);
     }
-
-  o6log.dbex ("proceed summarylist of %s", nbr->str);
 
   /* clear More bit of DD */
   if (list_isempty (nbr->summarylist))
@@ -260,33 +302,9 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
 
   o6log.dbex ("receive %s", print_lsahdr (lsh));
 
-  /* (1) XXX, LSA Checksum */
-
-  /* (2) XXX, should be relaxed */
-  switch (ntohs (lsh->lsh_type))
-    {
-      case LST_ROUTER_LSA:
-      case LST_NETWORK_LSA:
-      case LST_LINK_LSA:
-      case LST_INTRA_AREA_PREFIX_LSA:
-        break;
-      case LST_INTER_AREA_PREFIX_LSA:
-      case LST_INTER_AREA_ROUTER_LSA:
-      case LST_AS_EXTERNAL_LSA:
-      default:
-        o6log.dbex ("Unsupported LSA Type: %#x, Ignore",
-                    ntohs (lsh->lsh_type));
-        return;
-    }
-
-  /* (3) XXX, Ebit Missmatch: AS-External-LSA */
-
-  /* (4) XXX, if MaxAge LSA and if we have no instance */
-
   /* make lsa structure for received lsa */
   received = make_ospf6_lsa (lsh);
   received->lsa_hdr = make_ospf6_lsa_data (lsh, ntohs (lsh->lsh_len));
-
   /* set scope */
   switch (ospf6_lsa_get_scope_type (received->lsa_hdr->lsh_type))
     {
@@ -297,6 +315,8 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
         scope = (void *) from->ospf6_if->area;
         break;
       case SCOPE_AS:
+        scope = (void *) from->ospf6_if->area->ospf6;
+        break;
       case SCOPE_RESERVED:
       default:
         o6log.dbex ("unsupported scope, lsa_receive() failed");
@@ -305,9 +325,55 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
         return;
     }
   received->scope = scope;
-
   /* set sending neighbor */
   received->from = from;
+
+  /* (1) XXX, LSA Checksum */
+
+  /* (2) XXX, should be relaxed */
+  switch (ntohs (lsh->lsh_type))
+    {
+      case LST_ROUTER_LSA:
+      case LST_NETWORK_LSA:
+      case LST_LINK_LSA:
+      case LST_INTRA_AREA_PREFIX_LSA:
+      case LST_AS_EXTERNAL_LSA:
+        break;
+      case LST_INTER_AREA_PREFIX_LSA:
+      case LST_INTER_AREA_ROUTER_LSA:
+      default:
+        o6log.dbex ("Unsupported LSA Type: %#x, Ignore",
+                    ntohs (lsh->lsh_type));
+        ospf6_lsa_unlock (received);
+        return;
+    }
+
+  /* (3) XXX, Ebit Missmatch: AS-External-LSA */
+
+  /* (4) if MaxAge LSA and if we have no instance, and no neighbor
+         is in states Exchange or Loading */
+  if (ospf6_age_current (received) == MAXAGE)
+    {
+      if (!ospf6_lsdb_lookup (lsh->lsh_type, lsh->lsh_id,
+                              lsh->lsh_advrtr, received->scope))
+        {
+          if (count_nbr_in_state (NBS_EXCHANGE,
+                                  received->from->ospf6_if->area) == 0 &&
+              count_nbr_in_state (NBS_LOADING,
+                                  received->from->ospf6_if->area) == 0)
+            {
+              o6log.dbex ("MaxAge, no database copy, and "
+                          "no neighbor in Exchange or Loading");
+              /* a) Acknowledge back to neighbor (13.5) */
+                /* Direct Acknowledgement */
+              direct_acknowledge (received);
+
+              /* b) Discard */
+              ospf6_lsa_unlock (received);
+              return;
+            }
+        }
+    }
 
   /* (5) */
   /* lookup the same database copy in lsdb */
@@ -340,7 +406,8 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       /* (c) remove database copy from all neighbor's retranslist */
       if (have)
         {
-          for (n = listhead (have->retrans_nbr); n; nextnode (n))
+          for (n = listhead (have->retrans_nbr); n;
+               n = listhead (have->retrans_nbr))
             {
               nbr = (struct neighbor *)getdata (n);
               ospf6_remove_retrans (have, nbr);
@@ -374,11 +441,10 @@ lsa_receive (struct ospf6_lsa_hdr *lsh, struct neighbor *from)
       if (is_self_originated (received) && have &&
           which_is_more_recent (received, have) < 0)
         {
-          update_ls_seqnum (received);
-          reconstruct_lsa (received);
-          /* XXX prematuer aging */
-          /* this installed lsa will be removed in
-             reconstructing do not unlock */
+          /* we're going to make new lsa or to flush this LSA. */
+          ospf6_lsa_unlock (received);
+          if (reconstruct_lsa (received) == NULL)
+            ospf6_premature_aging (received);
           return;
         }
     }
@@ -704,6 +770,25 @@ ospf6_lsa_flood_area (struct ospf6_lsa *lsa, struct area *area)
   return;
 }
 
+void
+ospf6_lsa_flood_as (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
+{
+  listnode n;
+  struct area *area;
+
+  assert (lsa && lsa->lsa_hdr && ospf6);
+  o6log.dbex ("flooding %s in AS", print_lsahdr (lsa->lsa_hdr));
+
+  /* for each attached area */
+  for (n = listhead (ospf6->area_list); n; nextnode (n))
+    {
+      area = (struct area *) getdata (n);
+      ospf6_lsa_flood_area (lsa, area);
+    }
+
+  return;
+}
+
 /* flood ospf6_lsa within appropriate scope */
 void
 ospf6_lsa_flood (struct ospf6_lsa *lsa)
@@ -711,6 +796,7 @@ ospf6_lsa_flood (struct ospf6_lsa *lsa)
   unsigned short scope_type;
   struct area *area;
   struct ospf6_if *o6if;
+  struct ospf6 *ospf6;
 
   scope_type = ospf6_lsa_get_scope_type (lsa->lsa_hdr->lsh_type);
   switch (scope_type)
@@ -728,6 +814,11 @@ ospf6_lsa_flood (struct ospf6_lsa *lsa)
         return;
 
       case SCOPE_AS:
+        ospf6 = (struct ospf6 *) lsa->scope;
+        assert (ospf6);
+        ospf6_lsa_flood_as (lsa, ospf6);
+        return;
+
       case SCOPE_RESERVED:
       default:
         o6log.dbex ("unsupported scope, can't flood");

@@ -32,6 +32,8 @@
 #include "log.h"
 #include "hash.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_route.h"
@@ -39,8 +41,6 @@
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_dump.h"
 #include "bgpd/bgp_packet.h"
-
-#include "zebra/zebra.h"
 
 /* Attribute strings for logging. */
 message attr_str [] = 
@@ -684,20 +684,26 @@ bgp_mp_unreach_parse (struct peer *peer, int length)
   u_int16_t afi;
   u_char safi;
   u_char *lim;
+  struct prefix p;
+  int psize;
 
   lim = stream_pnt (peer->ibuf) + length;
 
   afi = stream_getw (peer->ibuf);
   safi = stream_getc (peer->ibuf);
 
-  if (afi == AF_INET6 && safi == SAFI_UNICAST)
+  if (afi == AFI_IPV6 && safi == SAFI_UNICAST)
     {
       while (stream_pnt (peer->ibuf) < lim)
 	{
-	  u_char nlri_len;
+	  bzero (&p, sizeof p);
+	  p.family = AF_INET6;
+	  p.prefixlen = stream_getc (peer->ibuf);
+	  psize = PSIZE (p.prefixlen);
+	  memcpy (&p.u.prefix6, STREAM_PNT (peer->ibuf), psize);
+	  stream_forward (peer->ibuf, psize);
 
-	  nlri_len = stream_getc (peer->ibuf);
-	  stream_forward (peer->ibuf, PSIZE (nlri_len));
+	  nlri_delete (peer, &p);
 	}
     }
   else

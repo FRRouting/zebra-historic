@@ -1,8 +1,17 @@
+1999-08-15  Arkadiusz Mi-B¶kiewicz-A <misiek@misiek.eu.org>
+
+	* configure.in: When --enable-ipv6 specified, then only kernel
+	version is checked.
+
+1999-08-14  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Add GNU libc 2.1 check.
+
 1999-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* configure.in: Fix privious Linux IPv6 check changes.
 
-1999-08-02  Arkadiusz Mi¶kiewicz <misiek@misiek.eu.org>
+1999-08-02  Arkadiusz Mi-B¶kiewicz-A <misiek@misiek.eu.org>
 
 	* configure.in: Improve Linux IPv6 feature check.
 

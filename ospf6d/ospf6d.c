@@ -57,11 +57,26 @@ make_ospf6 (rtr_id_t rtr_id)
       return (struct ospf6 *)NULL;
     }
 
+  memset (ospf6, 0, sizeof (struct ospf6));
+
   ospf6->version = OSPF_V3;
   ospf6->instance_id = 1;      /* xxx multiple instance not yet */
   ospf6->router_id = rtr_id;
   ospf6->area_list = list_init ();
+
+  ospf6->maxagelist = list_init ();
+
+  rtable_init (&ospf6->redist_table);
+
+  ospf6->redist_static = 0;
+  ospf6->redist_connected = 1;
+  ospf6->redist_ripng = 0;
+  ospf6->redist_bgp = 0;
+
   list_add_node (ospf6_list, ospf6);
+  ospf6_lsdb_init_as (ospf6);
+  ospf6->ase_ls_id = 1;
+
   return ospf6;
 }
 
@@ -99,10 +114,7 @@ make_area (area_id_t area_id, struct ospf6 *ospf6)
   inet_ntop (AF_INET, &area_id, area->str, sizeof (area->str));
   area->ospf6_if_list = list_init ();
 
-  area->router_lsa_seqnum = area->network_lsa_seqnum
-                          = area->link_lsa_seqnum
-                          = area->intra_prefix_seqnum
-                          = INITIAL_SEQUENCE_NUMBER;
+  area->router_lsa_seqnum = INITIAL_SEQUENCE_NUMBER;
 
   /* Initialize LSDB */
   ospf6_lsdb_init_area (area);
@@ -341,7 +353,7 @@ DEFUN (show_ipv6_ospf6_neighbor_ifname_nbrid,
       if (!ifp)
         return CMD_ERR_NO_MATCH;
 
-      ospf6_if = (struct ospf6_if *) ifp->if_data;
+      ospf6_if = (struct ospf6_if *) ifp->info;
       if (!ospf6_if)
         return CMD_ERR_NO_MATCH;
 
@@ -754,6 +766,32 @@ DEFUN (show_ipv6_ospf6_database_intraprefix,
   return CMD_SUCCESS;
 }
 
+DEFUN (show_ipv6_ospf6_database_asexternal,
+       show_ipv6_ospf6_database_asexternal_cmd,
+       "show ipv6 ospf6 database as-external",
+       SHOW_STR
+       IP6_STR
+       OSPF6_STR
+       "Database summary\n"
+       "AS-External-LSA\n"
+       )
+{
+  listnode i, j;
+  struct ospf6 *ospf6;
+
+  for (i = listhead (ospf6_list); i; nextnode (i))
+    {
+      ospf6 = (struct ospf6 *) getdata (i);
+      vty_out (vty, "OSPF: instance %d\r\n", ospf6->instance_id);
+      for (j = listhead (ospf6->lsdb); j; nextnode (j))
+        {
+          vty_lsa (vty, (struct ospf6_lsa *) getdata (j));
+        }
+    }
+
+  return CMD_SUCCESS;
+}
+
 DEFUN (show_ipv6_ospf6_database,
        show_ipv6_ospf6_database_cmd,
        "show ipv6 ospf6 database",
@@ -770,6 +808,8 @@ DEFUN (show_ipv6_ospf6_database,
   show_ipv6_ospf6_database_link (&show_ipv6_ospf6_database_link_cmd,
                                  vty, 0, NULL);
   show_ipv6_ospf6_database_intraprefix (&show_ipv6_ospf6_database_intraprefix_cmd,
+                                        vty, 0, NULL);
+  show_ipv6_ospf6_database_asexternal (&show_ipv6_ospf6_database_asexternal_cmd,
                                         vty, 0, NULL);
   return CMD_SUCCESS;
 }
@@ -868,6 +908,99 @@ DEFUN (router_id,
   return CMD_SUCCESS;
 }
 
+DEFUN (ospf6_redistribute_static,
+       ospf6_redistribute_static_cmd,
+       "redistribute static",
+       "Redistribute\n"
+       "Static route\n")
+{
+  struct ospf6 *ospf6;
+
+  ospf6 = (struct ospf6 *) vty->index;
+
+  ospf6->redist_static = 1;
+  ospf6_zebra_redistribute (ZEBRA_ROUTE_STATIC);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf6_redistribute_static,
+       no_ospf6_redistribute_static_cmd,
+       "no redistribute static",
+       NO_STR
+       "Redistribute\n"
+       "Static route\n")
+{
+  struct ospf6 *ospf6;
+
+  ospf6 = (struct ospf6 *) vty->index;
+
+  ospf6->redist_static = 0;
+  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_STATIC);
+  return CMD_SUCCESS;
+}
+
+DEFUN (ospf6_redistribute_connected,
+       ospf6_redistribute_connected_cmd,
+       "redistribute connected",
+       "Redistribute\n"
+       "Connected route\n")
+{
+  struct ospf6 *ospf6;
+
+  ospf6 = (struct ospf6 *) vty->index;
+
+  ospf6->redist_connected = 1;
+  ospf6_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf6_redistribute_connected,
+       no_ospf6_redistribute_connected_cmd,
+       "no redistribute connected",
+       NO_STR
+       "Redistribute\n"
+       "Connected route\n")
+{
+  struct ospf6 *ospf6;
+
+  ospf6 = (struct ospf6 *) vty->index;
+
+  ospf6->redist_connected = 0;
+  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_CONNECT);
+  return CMD_SUCCESS;
+}
+
+DEFUN (ospf6_redistribute_ripng,
+       ospf6_redistribute_ripng_cmd,
+       "redistribute ripng",
+       "Redistribute\n"
+       "RIPng route\n")
+{
+  struct ospf6 *ospf6;
+
+  ospf6 = (struct ospf6 *) vty->index;
+
+  ospf6->redist_ripng = 1;
+  ospf6_zebra_redistribute (ZEBRA_ROUTE_RIPNG);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ospf6_redistribute_ripng,
+       no_ospf6_redistribute_ripng_cmd,
+       "no redistribute ripng",
+       NO_STR
+       "Redistribute\n"
+       "RIPng route\n")
+{
+  struct ospf6 *ospf6;
+
+  ospf6 = (struct ospf6 *) vty->index;
+
+  ospf6->redist_ripng = 0;
+  ospf6_zebra_no_redistribute (ZEBRA_ROUTE_RIPNG);
+  return CMD_SUCCESS;
+}
+
 DEFUN (interface_area,
        interface_area_cmd,
        "interface IFNAME area AREA_ID",
@@ -883,12 +1016,7 @@ DEFUN (interface_area,
   struct ospf6 *ospf6;
   area_id_t area_id;
 
-  ifp = if_lookup_by_name (argv[0]);
-  if (!ifp)
-    {
-      vty_out (vty, "No such interface: %s\r\n", argv[0]);
-      return CMD_WARNING;
-    }
+  ifp = if_get_by_name (argv[0]);
 
   ospf6 = (struct ospf6 *) vty->index;
   assert (ospf6);
@@ -898,10 +1026,10 @@ DEFUN (interface_area,
   if (!area)
     area = make_area (area_id, ospf6);
 
-  ospf6_if = (struct ospf6_if *)ifp->if_data;
+  ospf6_if = (struct ospf6_if *)ifp->info;
   if (!ospf6_if)
     {
-      ospf6_if = make_ospf6_if (ifp->name);
+      ospf6_if = make_ospf6_if (ifp);
     }
   else
     {
@@ -918,10 +1046,9 @@ DEFUN (interface_area,
   list_add_node (area->ospf6_if_list, ospf6_if);
   ospf6_if->area = area;
 
-/* XXX must check if got already interface info from zebra
-  if (ospf6_if->interface)
+  /* must check if got already interface info from zebra */
+  if (if_is_up (ifp))
     thread_add_event (master, interface_up, ospf6_if, 0);
-*/
 
   return CMD_SUCCESS;
 }
@@ -945,6 +1072,15 @@ ospf6_config_write (struct vty *vty)
       vty_out (vty, " router-id %s%s",
                      inet4str(ospf6->router_id),
                      VTY_NEWLINE);
+
+      /* redistribution */
+      if (ospf6->redist_static)
+        vty_out (vty, " redistribute static%s", VTY_NEWLINE);
+      if (ospf6->redist_connected)
+        vty_out (vty, " redistribute connected%s", VTY_NEWLINE);
+      if (ospf6->redist_ripng)
+        vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
+
       for (j = listhead (ospf6->area_list); j; nextnode (j))
         {
           area = (struct area *)getdata (j);
@@ -985,6 +1121,7 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_router_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_link_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
+  install_element (VIEW_NODE, &show_ipv6_ospf6_database_asexternal_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_interface_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (VIEW_NODE, &show_ipv6_ospf6_neighbor_cmd);
@@ -994,13 +1131,14 @@ ospf6_init ()
   install_element (VIEW_NODE, &show_ipv6_route_ospf6_area_cmd);
 
   install_element (ENABLE_NODE, &show_ipv6_ospf6_cmd);
-  install_element (ENABLE_NODE, &show_ipv6_ospf6_instance_cmd);
+  /* install_element (ENABLE_NODE, &show_ipv6_ospf6_instance_cmd); */
   install_element (ENABLE_NODE, &show_ipv6_ospf6_requestlist_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_network_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_router_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_link_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_database_intraprefix_cmd);
+  install_element (ENABLE_NODE, &show_ipv6_ospf6_database_asexternal_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_interface_ifname_cmd);
   install_element (ENABLE_NODE, &show_ipv6_ospf6_neighbor_cmd);
@@ -1014,6 +1152,12 @@ ospf6_init ()
   install_element (CONFIG_NODE, &interface_cmd);
 
   install_default (OSPF6_NODE);
+  install_element (OSPF6_NODE, &ospf6_redistribute_static_cmd);
+  install_element (OSPF6_NODE, &no_ospf6_redistribute_static_cmd);
+  install_element (OSPF6_NODE, &ospf6_redistribute_connected_cmd);
+  install_element (OSPF6_NODE, &no_ospf6_redistribute_connected_cmd);
+  install_element (OSPF6_NODE, &ospf6_redistribute_ripng_cmd);
+  install_element (OSPF6_NODE, &no_ospf6_redistribute_ripng_cmd);
   install_element (OSPF6_NODE, &router_id_cmd);
   install_element (OSPF6_NODE, &interface_area_cmd);
 

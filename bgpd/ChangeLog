@@ -1,3 +1,21 @@
+1999-08-15  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgp_zebra.c (bgp_redistribute_set): Fix redistribute bug.
+
+1999-08-13  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* bgpd.c (bgp_peer_display): show ip bgp neighbors PEER only list
+	the peer not all of them.
+
+1999-08-11  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_route.c (bgp_announce): Remove MED if its an EBGP peer -
+	will get overwritten by route-maps.
+
+1999-08-08  Rick Payne <rickp@rossfell.co.uk>
+
+	* bgp_routemap.c: Multi protocol route-map modification.
+
 1999-08-01  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* bgp_route.c: Set network statement route's origin attribute as

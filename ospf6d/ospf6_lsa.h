@@ -107,6 +107,27 @@ struct intra_area_prefix_lsa
   unsigned long  intra_prefix_refer_advrtr;
 };
 
+struct as_external_lsa
+{
+  unsigned char  ase_bits;
+  unsigned char  ase_pre_metric; /* 1st byte of metric */
+  unsigned short ase_metric;     /* 2nd, 3rd byte of metric */
+  unsigned char  ase_prefix_len;
+  unsigned char  ase_prefix_opt;
+  unsigned short ase_refer_lstype;
+  /* followed by one address prefix */
+  /* followed by none or one forwarding address */
+  /* followed by none or one external route tag */
+  /* followed by none or one referenced LS-ID */
+};
+#define ASE_LSA_BIT_T     (1 << 0)
+#define ASE_LSA_BIT_F     (1 << 1)
+#define ASE_LSA_BIT_E     (1 << 2)
+
+#define ASE_LSA_SET(x,y)    ((x)->ase_bits |=  (y))
+#define ASE_LSA_ISSET(x,y)  ((x)->ase_bits &   (y))
+#define ASE_LSA_CLEAR(x,y)  ((x)->ase_bits &= ~(y))
+
 /* new */
 struct ospf6_lsa_hdr
 {
@@ -166,14 +187,16 @@ unsigned long get_ifindex_to_router (rtr_id_t, struct ospf6_lsa *);
 void get_referencing_lsa (list, struct ospf6_lsa *);
 int is_self_originated (struct ospf6_lsa *);
 void update_ls_seqnum (struct ospf6_lsa *);
-void reconstruct_lsa (struct ospf6_lsa *);
+struct ospf6_lsa *reconstruct_lsa (struct ospf6_lsa *);
 
 void ospf6_lsa_lock (struct ospf6_lsa *);
 void ospf6_lsa_unlock (struct ospf6_lsa *);
+void ospf6_maxage_remove (struct ospf6_lsa *);
 int ospf6_lsa_expire (struct thread *);
 int ospf6_lsa_refresh (struct thread *);
 unsigned short ospf6_age_current (struct ospf6_lsa *);
 void ospf6_age_update_to_send (struct ospf6_lsa *, struct ospf6_if *);
+void ospf6_premature_aging (struct ospf6_lsa *);
 struct ospf6_lsa_hdr *make_ospf6_lsa_data (struct ospf6_lsa_hdr *, int);
 struct ospf6_lsa *make_ospf6_lsa (struct ospf6_lsa_hdr *);
 unsigned short ospf6_lsa_get_type (struct ospf6_lsa *);
@@ -182,6 +205,17 @@ void ospf6_lsa_clear_flag (struct ospf6_lsa *);
 void ospf6_lsa_set_flag (struct ospf6_lsa *, unsigned char);
 int ospf6_lsa_test_flag (struct ospf6_lsa *, unsigned char);
 int ospf6_lsa_issame (struct ospf6_lsa_hdr *, struct ospf6_lsa_hdr *);
+
+struct ospf6_lsa *ospf6_make_router_lsa (struct area *);
+struct ospf6_lsa *ospf6_make_network_lsa (struct ospf6_if *);
+struct ospf6_lsa *ospf6_make_link_lsa (struct ospf6_if *);
+struct ospf6_lsa *ospf6_make_intra_prefix_lsa (struct ospf6_if *);
+
+unsigned long ospf6_as_external_lsid (struct prefix_ipv6 *, struct ospf6 *);
+struct ospf6_lsa *ospf6_make_as_external_lsa (unsigned long,
+                                              struct ospf6_prefix *,
+                                              struct ospf6 *);
+struct ospf6_lsa *ospf6_refresh_as_external_lsa (struct ospf6_lsa *);
 
 #endif /* OSPF6_LSA_H */
 

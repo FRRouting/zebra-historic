@@ -24,6 +24,31 @@
 /* information about zebra. */
 struct zebra *zebra = NULL;
 
+/* redistribute function */
+void
+ospf6_zebra_redistribute (int type)
+{
+  if (zebra->redist[type])
+    return;
+
+  zebra->redist[type] = 1;
+
+  if (zebra->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, type);
+}
+
+void
+ospf6_zebra_no_redistribute (int type)
+{
+  if (!zebra->redist[type])
+    return;
+
+  zebra->redist[type] = 0;
+
+  if (zebra->sock > 0)
+    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+}
+
 int
 ospf6_zebra_get_interface (int command, struct zebra *zebra,
                            zebra_size_t length)
@@ -50,7 +75,7 @@ ospf6_zebra_get_interface (int command, struct zebra *zebra,
       ifp = if_get_by_name (tmpnam);
 
       /* Get interface's index and values. */
-      ifp->index = stream_getc (s);
+      ifp->ifindex = stream_getc (s);
       ifp->flags = stream_getl (s);
       ifp->metric = stream_getl (s);
       ifp->mtu = stream_getl (s);
@@ -98,8 +123,10 @@ ospf6_zebra_get_interface (int command, struct zebra *zebra,
 
       /* XXX Daemon specific process. should be replaced by hook. */
       {
-        struct ospf6_if *o6if = (struct ospf6_if *)ifp->if_data;
-        if (o6if && o6if->area)
+        struct ospf6_if *o6if = (struct ospf6_if *)ifp->info;
+        if (!o6if)
+          o6if = make_ospf6_if (ifp);
+        else if (o6if->area)
           {
             /* Already attached to area. start OSPF6 */
             thread_add_event (master, interface_up, o6if, 0);
@@ -161,6 +188,49 @@ ospf6_zebra_delete (struct ospf6_rtentry *p)
       prefix2str ((struct prefix *)&p->dest_id.prefix, buf, sizeof (buf));
       o6log.zebra ("zebra delete %s", buf);
     }
+}
+
+int
+ospf6_zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
+{
+  u_char type;
+  u_char flags;
+  struct in6_addr nexthop;
+  u_char *lim;
+  struct stream *s;
+
+  s = zebra->ibuf;
+
+  lim = stream_pnt (s) + length;
+
+  /* get type and gateway */
+  type = stream_getc (s);
+  flags = stream_getc (s);
+  memcpy (&nexthop, stream_pnt (s), sizeof (struct in6_addr));
+  stream_forward (s, sizeof (struct in6_addr));
+
+  /* get IPv6 prefixes */
+  while (stream_pnt (s) < lim)
+    {
+      int size;
+      struct prefix_ipv6 p;
+      unsigned int ifindex;
+
+      ifindex = stream_getl (s);
+
+      memset (&p, 0, sizeof (struct prefix_ipv6));
+      p.family = AF_INET6;
+      p.prefixlen = stream_getc (s);
+      size = PSIZE (p.prefixlen);
+      memcpy (&p.prefix, stream_pnt (s), size);
+      stream_forward (s, size);
+
+      if (command == ZEBRA_IPV6_ROUTE_ADD)
+        ospf6_redist_route_add (type, ifindex, &p);
+      else
+        ospf6_redist_route_delete (type, ifindex, &p);
+    }
+  return 0;
 }
 
 
@@ -273,8 +343,8 @@ ospf6_zebra_init ()
   /* Set call back functions. */
   zebra->ipv4_route_add = NULL;
   zebra->ipv4_route_delete = NULL;
-  zebra->ipv6_route_add = NULL;
-  zebra->ipv6_route_delete = NULL;
+  zebra->ipv6_route_add = ospf6_zebra_read_ipv6;
+  zebra->ipv6_route_delete = ospf6_zebra_read_ipv6;
   zebra->get_all_interface = ospf6_zebra_get_interface;
 
   /* Install zebra node. */

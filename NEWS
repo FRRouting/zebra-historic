@@ -1,5 +1,76 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.77
+
+* Changes in lib
+
+** SIGUSR1 reopen logging file.
+
+** route-map is extended to support multi-protocol routing
+information.
+
+** When compiling under GNU libc 2.1 environment don't use inet6-apps.
+
+* Changes in zebra
+
+** Basic IPv6 router advertisement codes added.  It is not yet usable.
+
+** Fix IPv6 route addition/deletion bug is fixed.
+
+** `show ip route A.B.C.D' works
+
+* Changes in bgpd
+
+** When invalid unfeasible routes length comes, bgpd send notify then
+continue to process the packet.  Now bgpd stop parsing invalid packet
+then return to main loop.
+
+** BGP-4+ withdrawn routes parse bug is fixed.
+
+** When BGP-4+ information passed to non shared network's peer, trim
+link-local next-hop information.
+
+** `no redistribute ROUTE_TYPE' withdraw installed routes from BGP
+routing information.
+
+** `show ipv6 route IPV6ADDR' command added.
+
+** BGP start timer has jitter.
+
+** Holdtimer configuration bug is fixed.  Now configuration does not
+show unconfigured hold time value.
+
+* Changes in ripngd
+
+** Now update timer (default 30 seconds) has +/- 50% jitter value.
+
+** Add timers basic command.
+
+** `network' configuration is dynamically reflected.
+
+** `timers basic <update> <timeout> <garbage>' added.
+
+* Changes in ripd
+
+** Reconstruct almost codes.
+
+** `network' configuration is dynamically reflected.
+
+** RIP timers now conforms to RFC2453.  So user can configure update,
+timeout, garbage timer.
+
+** `timers basic <update> <timeout> <garbage>' works.
+
+* Changes in ospfd
+
+** Bug of originating network LSA is fixed.
+
+** `no router ospf' core dump bug is fixed.
+
+* Changes in ospf6d
+
+** Redistribute route works.
+
 * Changes in zebra-0.76
 
 * Changes in lib

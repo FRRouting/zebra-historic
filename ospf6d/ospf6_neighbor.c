@@ -30,6 +30,9 @@ int
 nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
 {
   state_t nbs_previous;
+  list l = list_init ();
+  listnode n;
+  struct ospf6_lsa *lsa;
 
   nbs_previous = nbr->state;
   nbr->state = nbs_next;
@@ -50,17 +53,54 @@ nbs_change (state_t nbs_next, char *reason, struct neighbor *nbr)
   if (nbs_previous == NBS_FULL || nbs_next == NBS_FULL)
     nbs_full_change (nbr->ospf6_if);
 
+  /* check for LSAs that already reached MaxAge */
+    /* copy to temporary list */
+  for (n = listhead (nbr->ospf6_if->area->ospf6->maxagelist);
+       n; nextnode (n))
+    list_add_node (l, getdata (n));
+
+  for (n = listhead (l); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_maxage_remove (lsa);
+    }
+
+  list_delete_all (l);
   return 0;
 }
 
 int
 nbs_full_change (struct ospf6_if *ospf6_if)
 {
-  construct_router_lsa (ospf6_if->area);
+  struct ospf6_lsa *lsa;
+
+  /* construct Router-LSA */
+  lsa = ospf6_make_router_lsa (ospf6_if->area);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+    }
+
   if (ospf6_if->state == IFS_DR)
     {
-      construct_network_lsa (ospf6_if);
-      construct_intra_prefix_lsa (ospf6_if);
+      /* construct Network-LSA */
+      lsa = ospf6_make_network_lsa (ospf6_if);
+      if (lsa)
+        {
+          ospf6_lsa_flood (lsa);
+          ospf6_lsdb_install (lsa);
+          ospf6_lsa_unlock (lsa);
+        }
+      /* construct Intra-Area-Prefix-LSA */
+      lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
+      if (lsa)
+        {
+          ospf6_lsa_flood (lsa);
+          ospf6_lsdb_install (lsa);
+          ospf6_lsa_unlock (lsa);
+        }
     }
   return 0;
 }
@@ -674,5 +714,27 @@ step_five:
     }
   else
     return IFS_DROTHER;
+}
+
+/* count neighbor which is in "state" in this area*/
+unsigned int
+count_nbr_in_state (state_t state, struct area *area)
+{
+  listnode n, o;
+  struct ospf6_if *o6if;
+  struct neighbor *nbr;
+  unsigned int count = 0;
+
+  for (n = listhead (area->ospf6_if_list); n; nextnode (n))
+    {
+      o6if = (struct ospf6_if *) getdata (n);
+      for (o = listhead (o6if->nbr_list); o; nextnode (o))
+        {
+          nbr = (struct neighbor *) getdata (o);
+          if (nbr->state == state)
+            count++;
+        }
+    }
+  return count;
 }
 

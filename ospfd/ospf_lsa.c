@@ -160,7 +160,7 @@ ospf_router_lsa (struct ospf_interface *oi)
       u_int16_t link_cost = 0;
 
       ifp = getdata (node);
-      o = ifp->if_data;
+      o = ifp->info;
 
       if (o->flag != OSPF_IF_ENABLE)
 	continue;
@@ -173,8 +173,8 @@ ospf_router_lsa (struct ospf_interface *oi)
 	continue;
 
       /* if status is Down. */
-      /* if (o->status == ISM_Down
-	  continue; */
+      if (o->status == ISM_Down)
+	continue;
 
       /* Describe link. */
       switch (o->type)
@@ -515,7 +515,7 @@ ospf_lsa_is_self_originated (struct ospf_interface *oi, struct ospf_lsa *lsa)
       for (node = listhead (ospf_top->iflist); node; nextnode (node))
 	{
 	  ifp = getdata (node);
-	  oi2 = ifp->if_data;
+	  oi2 = ifp->info;
 
 	  if (if_is_loopback (ifp))
 	    continue;
@@ -826,7 +826,7 @@ show_ip_ospf_database_self_originate (struct vty *vty)
 	  struct interface *ifp;
 
 	  ifp = getdata (n2);
-	  oi = ifp->if_data;
+	  oi = ifp->info;
 
 	  if (!oi)
 	    continue;

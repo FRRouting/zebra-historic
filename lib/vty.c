@@ -1336,7 +1336,7 @@ vty_accept (struct thread *thread)
   return 0;
 }
 
-#ifdef HAVE_IPV6
+#if defined(HAVE_IPV6) && !defined(NRL)
 void
 vty_serv_sock_addrinfo (unsigned short port)
 {
@@ -1386,7 +1386,7 @@ vty_serv_sock_addrinfo (unsigned short port)
 
   freeaddrinfo (ainfo_save);
 }
-#endif /* HAVE_IPV6 */
+#endif /* HAVE_IPV6 && ! NRL */
 
 /* Make vty server socket. */
 void
@@ -1426,8 +1426,13 @@ void
 vty_serv_sock (unsigned short port)
 {
 #ifdef HAVE_IPV6
+#ifdef NRL
+  vty_serv_sock_family (port, AF_INET);
+  vty_serv_sock_family (port, AF_INET6);
+#else /* ! NRL */
   vty_serv_sock_addrinfo (port);
-#else
+#endif /* NRL*/
+#else /* ! HAVE_IPV6 */
   vty_serv_sock_family (port, AF_INET);
 #endif /* HAVE_IPV6 */
 }
@@ -1528,14 +1533,6 @@ vty_read_file (FILE *confp)
     }
 }
 
-#ifndef DIRECTORY_SEP
-#define DIRECTORY_SEP '/'
-#endif /* DIRECTORY_SEP */
-
-#ifndef IS_DIRECTORY_SEP
-#define IS_DIRECTORY_SEP(c) ((c) == DIRECTORY_SEP)
-#endif
-
 /* Read up configuration file from file_name. */
 void
 vty_read_config (char *config_file, 
@@ -1553,7 +1550,7 @@ vty_read_config (char *config_file,
 	{
 	  cwd = getcwd (NULL, MAXPATHLEN);
 	  fullpath = XMALLOC (MTYPE_TMP, 
-				     strlen (cwd) + strlen (config_file) + 2);
+			      strlen (cwd) + strlen (config_file) + 2);
 	  sprintf (fullpath, "%s/%s", cwd, config_file);
 	}
       else

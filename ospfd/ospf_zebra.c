@@ -73,7 +73,7 @@ ospf_zebra_get_interface (int command, struct zebra *zebra, zebra_size_t len)
       ifp = if_get_by_name (tmpnam);
 
       /* Get interface's index and values. */
-      ifp->index = stream_getc (s);
+      ifp->ifindex = stream_getc (s);
       ifp->flags = stream_getl (s);
       ifp->metric = stream_getl (s);
       ifp->mtu = stream_getl (s);

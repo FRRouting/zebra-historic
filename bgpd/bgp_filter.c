@@ -27,6 +27,8 @@
 #include "memory.h"
 #include "buffer.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_regex.h"

@@ -102,7 +102,7 @@ bgp_get_all_interface (int command, struct zebra *zebra, zebra_size_t length)
       ifp = if_get_by_name (tmpnam);
 
       /* Get interface's index and values. */
-      ifp->index = stream_getc (s);
+      ifp->ifindex = stream_getc (s);
       ifp->flags = stream_getl (s);
       ifp->metric = stream_getl (s);
       ifp->mtu = stream_getl (s);
@@ -148,34 +148,34 @@ zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
   u_char type;
   u_char flags;
   struct in_addr nexthop;
-  u_char *pnt;
   u_char *lim;
   struct stream *s;
+  unsigned int ifindex;
 
   s = zebra->ibuf;
-
-  pnt = stream_pnt (s);
-  lim = pnt + length;
+  lim = stream_pnt (s) + length;
 
   /* Fetch type and nexthop first. */
-  type = *pnt++;
-  flags = *pnt++;
-  memcpy(&nexthop, pnt, 4);
-  pnt += 4;
+  type = stream_getc (s);
+  flags = stream_getc (s);
+  memcpy (&nexthop, stream_pnt (s), sizeof (struct in_addr));
+  stream_forward (s, sizeof (struct in_addr));
 
   /* Then fetch IPv4 prefixes. */
-  while (pnt < lim)
+  while (stream_pnt (s) < lim)
     {
       int size;
       struct prefix_ipv4 p;
       struct bgp_info *bgp_info;
 
+      ifindex = stream_getl (s);
+
       bzero (&p, sizeof (struct prefix_ipv4));
       p.family = AF_INET;
-      p.prefixlen = *pnt++;
+      p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, pnt, size);
-      pnt += size;
+      memcpy (&p.prefix, stream_pnt (s), size);
+      stream_forward (s, size);
 
       bgp_info = bgp_info_new ();
       bgp_info->type = type;
@@ -202,7 +202,6 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
   struct stream *s;
 
   s = zebra->ibuf;
-
   lim = stream_pnt (s) + length;
 
   /* Fetch type and nexthop first. */
@@ -241,32 +240,177 @@ zebra_read_ipv6 (int command, struct zebra *zebra, zebra_size_t length)
   return 0;
 }
 #endif /* HAVE_IPV6 */
-
-/* Redistribute static */
+
+/* Other routes redistribution into BGP. */
 void
-bgp_zebra_redistribute (int type)
+bgp_redistribute_set (struct bgp *bgp, int route_type)
 {
-  if (zebra->redist[type])
+  /* Set flag to BGP instance. */
+  bgp->redist[route_type] = 1;
+
+  /* Return if already redistribute flag is set. */
+  if (zebra->redist[route_type])
     return;
+  zebra->redist[route_type] = 1;
 
-  zebra->redist[type] = 1;
-
-  if (zebra->sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, type);
+  /* Return if zebra connection is not established. */
+  if (zebra->sock < 0)
+    return;
+    
+  /* Send distribute add message to zebra. */
+  zebra_redistribute_send (ZEBRA_REDISTRIBUTE_ADD, zebra->sock, route_type);
 }
 
+/* Unset redistribution. */
 void
-bgp_zebra_no_redistribute (int type)
+bgp_redistribute_unset (struct bgp *bgp, int route_type)
 {
-  if (! zebra->redist[type])
+  /* Unset flag from BGP instance. */
+  bgp->redist[route_type] = 0;
+
+  /* Return if zebra connection is disabled. */
+  if (! zebra->redist[route_type])
     return;
 
-  zebra->redist[type] = 0;
+  zebra->redist[route_type] = 0;
 
-  if (zebra->sock > 0)
-    zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+  /* Return if zebra connection is not established. */
+  if (zebra->sock < 0)
+    return;
+
+  /* Send distribute delete message to zebra. */
+  zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, route_type);
+
+  /* Withdraw redistributed routes from current BGP's routing table. */
+  bgp_redistribute_withdraw (bgp, route_type);
 }
 
+DEFUN (bgp_redistribute_static,
+       bgp_redistribute_static_cmd,
+       "redistribute static",
+       "Redistribute\n"
+       "Static route\n")
+{
+  bgp_redistribute_set ((struct bgp *) vty->index, ZEBRA_ROUTE_STATIC);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_static,
+       no_bgp_redistribute_static_cmd,
+       "no redistribute static",
+       NO_STR
+       "Redistribute\n"
+       "Static route\n")
+{
+  bgp_redistribute_unset ((struct bgp *) vty->index, ZEBRA_ROUTE_STATIC);
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_connected,
+       bgp_redistribute_connected_cmd,
+       "redistribute connected",
+       "Redistribute\n"
+       "Connected route\n")
+{
+  bgp_redistribute_set ((struct bgp *) vty->index, ZEBRA_ROUTE_CONNECT);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_connected,
+       no_bgp_redistribute_connected_cmd,
+       "no redistribute connected",
+       NO_STR
+       "Redistribute\n"
+       "Connected route\n")
+{
+  bgp_redistribute_unset ((struct bgp *) vty->index, ZEBRA_ROUTE_CONNECT);
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_rip,
+       bgp_redistribute_rip_cmd,
+       "redistribute rip",
+       "Redistribute\n"
+       "RIP route\n")
+{
+  bgp_redistribute_set ((struct bgp *) vty->index, ZEBRA_ROUTE_RIP);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_rip,
+       no_bgp_redistribute_rip_cmd,
+       "no redistribute rip",
+       NO_STR
+       "Redistribute\n"
+       "RIP route\n")
+{
+  bgp_redistribute_unset ((struct bgp *) vty->index, ZEBRA_ROUTE_RIP);
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_ripng,
+       bgp_redistribute_ripng_cmd,
+       "redistribute ripng",
+       "Redistribute\n"
+       "RIPng route\n")
+{
+  bgp_redistribute_set ((struct bgp *) vty->index, ZEBRA_ROUTE_RIPNG);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_ripng,
+       no_bgp_redistribute_ripng_cmd,
+       "no redistribute ripng",
+       NO_STR
+       "Redistribute\n"
+       "RIPng route\n")
+{
+  bgp_redistribute_unset ((struct bgp *) vty->index, ZEBRA_ROUTE_RIPNG);
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_ospf,
+       bgp_redistribute_ospf_cmd,
+       "redistribute ospf",
+       "Redistribute\n"
+       "OSPF route\n")
+{
+  bgp_redistribute_set ((struct bgp *) vty->index, ZEBRA_ROUTE_OSPF);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_ospf,
+       no_bgp_redistribute_ospf_cmd,
+       "no redistribute ospf",
+       NO_STR
+       "Redistribute\n"
+       "OSPF route\n")
+{
+  bgp_redistribute_unset ((struct bgp *) vty->index, ZEBRA_ROUTE_OSPF);
+  return CMD_SUCCESS;
+}
+
+DEFUN (bgp_redistribute_ospf6,
+       bgp_redistribute_ospf6_cmd,
+       "redistribute ospf6",
+       "Redistribute\n"
+       "OSPF for IPv6 route\n")
+{
+  bgp_redistribute_set ((struct bgp *) vty->index, ZEBRA_ROUTE_OSPF6);
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_bgp_redistribute_ospf6,
+       no_bgp_redistribute_ospf6_cmd,
+       "no redistribute ospf6",
+       NO_STR
+       "Redistribute\n"
+       "OSPF for IPv6 route\n")
+{
+  bgp_redistribute_unset ((struct bgp *) vty->index, ZEBRA_ROUTE_OSPF6);
+  return CMD_SUCCESS;
+}
+
 struct interface *
 if_lookup_by_ipv4 (struct in_addr *addr)
 {
@@ -393,7 +537,10 @@ bgp_nexthop_set (union sockunion *local, union sockunion *remote,
     return -1;
 
   if (local->sa.sa_family == AF_INET)
-    ifp = if_lookup_by_ipv4 (&local->sin.sin_addr);
+    {
+      nexthop->v4 = local->sin.sin_addr;
+      ifp = if_lookup_by_ipv4 (&local->sin.sin_addr);
+    }
 #ifdef HAVE_IPV6
   if (local->sa.sa_family == AF_INET6)
     {
@@ -415,8 +562,6 @@ bgp_nexthop_set (union sockunion *local, union sockunion *remote,
   /* IPv4 connection. */
   if (local->sa.sa_family == AF_INET)
     {
-      nexthop->v4 = local->sin.sin_addr;
-
 #ifdef HAVE_IPV6
       /* IPv6 nexthop*/
       ret = if_get_ipv6_global (ifp, &nexthop->v6_global);
@@ -463,9 +608,15 @@ bgp_nexthop_set (union sockunion *local, union sockunion *remote,
 		    IPV6_MAX_BYTELEN);
 	}
     }
-#endif /* HAVE_IPV6 */
+
+  if (IN6_IS_ADDR_LINKLOCAL (&local->sin6.sin6_addr) ||
+      if_lookup_by_ipv6 (&remote->sin6.sin6_addr))
+    peer->shared_network = 1;
+  else
+    peer->shared_network = 0;
 
   return 0;
+#endif /* HAVE_IPV6 */
 }
 
 #ifdef HAVE_IPV6
@@ -496,7 +647,7 @@ bgp_ifindex_by_nexthop (struct in6_addr *addr)
 	  if (cp->family == AF_INET6)
 	    {
 	      if (prefix_match (cp, (struct prefix *)&p))
-		return ifp->index;
+		return ifp->ifindex;
 	    }
 	}
     }
@@ -543,7 +694,7 @@ bgp_zebra_announce (struct prefix *p, struct bgp_info *info)
 	{
 	  nexthop = &info->attr->mp_nexthop_local;
 	  if (info->peer->nexthop.ifp)
-	    ifindex = info->peer->nexthop.ifp->index;
+	    ifindex = info->peer->nexthop.ifp->ifindex;
 	}
 
       if (nexthop == NULL)
@@ -595,7 +746,7 @@ bgp_zebra_withdraw (struct prefix *p, struct bgp_info *info)
 	{
 	  nexthop = &info->attr->mp_nexthop_local;
 	  if (info->peer->nexthop.ifp)
-	    ifindex = info->peer->nexthop.ifp->index;
+	    ifindex = info->peer->nexthop.ifp->ifindex;
 	}
 
       if (nexthop == NULL)
@@ -727,16 +878,27 @@ zebra_init (int enable)
 #endif /* HAVE_IPV6 */
   zebra->get_all_interface = bgp_get_all_interface;
 
-  /* Install zebra node. */
   install_node (&zebra_node, zebra_config_write);
 
-  /* Install command element for zebra node. */ 
   install_element (CONFIG_NODE, &router_zebra_cmd);
   install_element (CONFIG_NODE, &no_router_zebra_cmd);
 
   install_default (ZEBRA_NODE);
   install_element (ZEBRA_NODE, &redistribute_bgp_cmd);
   install_element (ZEBRA_NODE, &no_redistribute_bgp_cmd);
+
+  install_element (BGP_NODE, &bgp_redistribute_static_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_static_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_connected_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_connected_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_rip_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_rip_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_ripng_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ripng_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_ospf_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ospf_cmd);
+  install_element (BGP_NODE, &bgp_redistribute_ospf6_cmd);
+  install_element (BGP_NODE, &no_bgp_redistribute_ospf6_cmd);
 
   /* Interface related init. */
   if_init ();

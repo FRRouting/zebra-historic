@@ -34,6 +34,7 @@
 #include "buffer.h"
 #include "str.h"
 #include "log.h"
+
 /* One for each program.  This structure is needed to store hooks. */
 struct if_master
 {
@@ -97,7 +98,7 @@ if_lookup_by_index (int index)
   for (node = listhead (iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      if (ifp->index == index)
+      if (ifp->ifindex == index)
 	return ifp;
     }
   return NULL;
@@ -229,7 +230,7 @@ if_dump (struct interface *ifp)
   listnode node;
 
   zlog (NULL, LOG_INFO, "Interface %s index %d metric %d mtu %d %s",
-       ifp->name, ifp->index, ifp->metric, ifp->mtu, if_flag_dump (ifp->flags));
+       ifp->name, ifp->ifindex, ifp->metric, ifp->mtu, if_flag_dump (ifp->flags));
   
   for (node = listhead (ifp->connected); node; nextnode (node))
     ;
@@ -316,7 +317,7 @@ DEFUN (interface,
     {
       ifp = if_new ();
       strncpy (ifp->name, argv[0], INTERFACE_NAMSIZ);
-      ifp->index = -1;
+      ifp->ifindex = -1;
     }
   vty->index = ifp;
   vty->node = INTERFACE_NODE;

@@ -78,7 +78,7 @@ dnl -------------------
 dnl Check header files.
 dnl -------------------
 AC_STDC_HEADERS
-AC_CHECK_HEADERS(string.h stropts.h sys/conf.h sys/ksym.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h sys/types.h net/if_dl.h net/if_var.h linux/version.h kvm.h netdb.h netinet/in.h net/netopt.h netinet/in_var.h netinet/in6_var.h netinet/in6.h inet/nd.h asm/types.h linux/rtnetlink.h)
+AC_CHECK_HEADERS(string.h stropts.h sys/conf.h sys/ksym.h sys/time.h sys/times.h sys/select.h sys/sysctl.h sys/sockio.h sys/types.h net/if_dl.h net/if_var.h linux/version.h kvm.h netdb.h netinet/in.h net/netopt.h netinet/in_var.h netinet/in6_var.h netinet/in6.h inet/nd.h asm/types.h linux/rtnetlink.h netinet/icmp6.h)
 
 dnl check some types
 AC_C_CONST
@@ -273,9 +273,9 @@ AC_SUBST(IPFORWARD)
 
 AC_CHECK_FUNCS(getaddrinfo, [have_getaddrinfo=yes], [have_getaddrinfo=no])
 
-dnl --------------------------------------------------------
-dnl IPv6 check (currently only supports INRIA and KAME)
-dnl --------------------------------------------------------
+dnl ----------
+dnl IPv6 check
+dnl ----------
 AC_MSG_CHECKING(whether does this OS have IPv6 stack)
 if test "${enable_ipv6}" = "no"; then
   AC_MSG_RESULT(disabled)
@@ -304,7 +304,7 @@ if grep WIDE /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    if test "$have_getaddrinfo" = "no" -a -d /usr/local/v6/lib -a -f /usr/local/v6/lib/libinet6.a; then
       LIB_IPV6="-L/usr/local/v6/lib -linet6"
    fi
-   AC_MSG_RESULT(Kame)
+   AC_MSG_RESULT(KAME)
 fi
 dnl ------------
 dnl OpenBSD 2.4+
@@ -312,6 +312,7 @@ dnl ------------
 if grep NRL /usr/include/netinet6/in6.h >/dev/null 2>&1; then
    zebra_cv_ipv6=yes
    AC_DEFINE(HAVE_IPV6)
+   AC_DEFINE(NRL)
    RIPNGD="ripngd"
    OSPF6D="ospf6d"
    AC_MSG_RESULT(OpenBSD/NRL)
@@ -320,29 +321,41 @@ fi
 dnl ----------
 dnl Linux IPv6
 dnl ----------
-dnl AC_EGREP_CPP(yes, [dnl
-dnl #include <linux/version.h>
-dnl /* 2.1.128 or later */
-dnl #if LINUX_VERSION_CODE >= 0x020180
-dnl yes
-dnl #endif],
-dnl   [zebra_cv_ipv6=yes
+if test "${enable_ipv6}" = "yes"; then
+   AC_EGREP_CPP(yes, [dnl
+   #include <linux/version.h>
+   /* 2.1.128 or later */
+   #if LINUX_VERSION_CODE >= 0x020180
+   yes
+   #endif],
+   [zebra_cv_ipv6=yes; zebra_cv_linux_ipv6=yes;AC_MSG_RESULT(Linux IPv6)])
+else
+   if test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route"
+   then
+      zebra_cv_ipv6=yes
+      zebra_cv_linux_ipv6=yes
+      AC_MSG_RESULT(Linux IPv6)
+   fi
+fi
 
-if test x`ls /proc/net/ipv6_route 2>/dev/null` = x"/proc/net/ipv6_route"
-then
-   zebra_cv_ipv6=yes
+if test "$zebra_cv_linux_ipv6" = "yes";then
    AC_DEFINE(HAVE_IPV6)
+   AC_MSG_CHECKING(for GNU libc 2.1)
+   AC_EGREP_CPP(yes, [
+#include <features.h>
+#if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 1
+  yes
+#endif], [glibc=yes; AC_MSG_RESULT(yes)], AC_MSG_RESULT(no))
    AC_DEFINE(LINUX_IPV6)   
    RIPNGD="ripngd"
    OSPF6D="ospf6d"
-   INCLUDES="-I/usr/inet6/include"
-   if test x`ls /usr/inet6/lib/libinet6.a 2>/dev/null` != x;then
-     LIB_IPV6="-L/usr/inet6/lib -linet6"
+   if test "$glibc" != "yes"; then
+      INCLUDES="-I/usr/inet6/include"
+      if test x`ls /usr/inet6/lib/libinet6.a 2>/dev/null` != x;then
+         LIB_IPV6="-L/usr/inet6/lib -linet6"
+      fi
    fi
-   AC_MSG_RESULT(Linux IPv6)
 fi
-
-dnl   AC_MSG_RESULT(Linux IPv6)])
 
 dnl -----------------------
 dnl Set IPv6 related values

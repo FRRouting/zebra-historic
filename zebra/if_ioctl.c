@@ -62,13 +62,13 @@ if_get_index (struct interface *ifp)
     /* Make fake index for the interface */
     if (ret < 0)
       {
-	ifp->index= fake_index++;
+	ifp->ifindex= fake_index++;
 	return;
       }
-    ifp->index = ifreq.ifr_ifindex;
+    ifp->ifindex = ifreq.ifr_ifindex;
     /* If there is method to get interface's index. Make fake index for
        the interface. */
-    ifp->index= fake_index++;
+    ifp->ifindex= fake_index++;
   }
 #endif /* SIOCGIFINDEX */
 }
@@ -341,7 +341,7 @@ interface_list_ipv6 ()
 	  ifp = if_new ();
 	  strcpy (ifp->name, ifstr);
 	}
-      ifp->index = ifindex;
+      ifp->ifindex = ifindex;
       
       str2in6_addr (addr, &p.prefix);
       p.prefixlen = plen;

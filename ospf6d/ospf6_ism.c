@@ -26,6 +26,7 @@
 int
 ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
 {
+  struct ospf6_lsa *lsa;
   state_t ifs_prev;
 
   ifs_prev = ospf6_if->state;
@@ -46,7 +47,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         default:
           if (mcast_leave (ospf6_sock, (struct sockaddr *)&alldrouters6,
                            ospf6_if->interface->name,
-                           ospf6_if->interface->index) < 0)
+                           ospf6_if->interface->ifindex) < 0)
             zvlog_warn ("mcast_leave() failed: %s", strerror (errno));
           break;
         }
@@ -58,7 +59,7 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
         case IFS_BDR:
           if (mcast_join (ospf6_sock, (struct sockaddr *)&alldrouters6,
                           ospf6_if->interface->name,
-                          ospf6_if->interface->index) < 0)
+                          ospf6_if->interface->ifindex) < 0)
             zvlog_warn ("mcast_join(alldrouters6) failed for %s : %s",
                         ospf6_if->interface->name, strerror (errno));
           break;
@@ -70,7 +71,15 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
 
   ospf6_if->state = ifs_next;
 
-  construct_router_lsa (ospf6_if->area);
+  /* construct Router-LSA */
+  lsa = ospf6_make_router_lsa (ospf6_if->area);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+    }
+
   dr_change (ospf6_if);
 
   return 0;
@@ -79,6 +88,8 @@ ifs_change (state_t ifs_next, char *reason, struct ospf6_if *ospf6_if)
 int
 dr_change (struct ospf6_if *ospf6_if)
 {
+  struct ospf6_lsa *lsa;
+
   if (ospf6_if->prevdr == ospf6_if->dr
       && ospf6_if->prevbdr == ospf6_if->bdr)
     return 0; /* Nothing has been changed */
@@ -93,11 +104,34 @@ dr_change (struct ospf6_if *ospf6_if)
                ospf6_if->interface->name, prevdr, prevbdr, dr, bdr);
   }
 
-  construct_router_lsa (ospf6_if->area);
+  /* construct Router-LSA */
+  lsa = ospf6_make_router_lsa (ospf6_if->area);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+    }
+
   if (ospf6_if->state == IFS_DR)
     {
-      construct_network_lsa (ospf6_if);
-      construct_intra_prefix_lsa (ospf6_if);
+      /* construct Network-LSA */
+      lsa = ospf6_make_network_lsa (ospf6_if);
+      if (lsa)
+        {
+          ospf6_lsa_flood (lsa);
+          ospf6_lsdb_install (lsa);
+          ospf6_lsa_unlock (lsa);
+        }
+
+      /* construct Intra-Area-Prefix-LSA */
+      lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
+      if (lsa)
+        {
+          ospf6_lsa_flood (lsa);
+          ospf6_lsdb_install (lsa);
+          ospf6_lsa_unlock (lsa);
+        }
     }
 
   return 0;
@@ -110,6 +144,7 @@ interface_up (struct thread *thread)
 {
   u_int on, off;
   struct ospf6_if *ospf6_if;
+  struct ospf6_lsa *lsa;
 
   on = 1; off = 0;
 
@@ -134,7 +169,7 @@ interface_up (struct thread *thread)
     }
 
   /* ifid of this interface */
-  ospf6_if->ifid = ospf6_if->interface->index;
+  ospf6_if->ifid = ospf6_if->interface->ifindex;
   zvlog_debug ("interface %s: ifid %lu", ospf6_if->interface->name,
                ospf6_if->ifid);
 
@@ -155,7 +190,7 @@ interface_up (struct thread *thread)
 
   if (mcast_join (ospf6_sock, (struct sockaddr *)&allspfrouters6,
                   ospf6_if->interface->name,
-                  ospf6_if->interface->index) < 0)
+                  ospf6_if->interface->ifindex) < 0)
     zvlog_warn ("mcast_join(allspfrouters6) failed for %s: %s\n",
                 ospf6_if->interface->name, strerror (errno));
 
@@ -190,7 +225,22 @@ interface_up (struct thread *thread)
                         ospf6_if->rtr_dead_interval);
     }
 
-  construct_link_lsa (ospf6_if);
+  /* construct Link-LSA */
+  lsa = ospf6_make_link_lsa (ospf6_if);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+    }
+  /* construct Intra-Area-Prefix-LSA */
+  lsa = ospf6_make_intra_prefix_lsa (ospf6_if);
+  if (lsa)
+    {
+      ospf6_lsa_flood (lsa);
+      ospf6_lsdb_install (lsa);
+      ospf6_lsa_unlock (lsa);
+    }
   return 0;
 }
 

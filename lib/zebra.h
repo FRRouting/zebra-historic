@@ -142,4 +142,8 @@
 #include <netinet6/ip6.h>
 #endif /* HAVE_NETINET6_IP6_H */
 
+#ifdef HAVE_NETINET_ICMP6_H
+#include <netinet/icmp6.h>
+#endif /* HAVE_NETINET_ICMP6_H */
+
 #endif /* _ZEBRA_H */

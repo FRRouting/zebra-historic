@@ -1,6 +1,5 @@
-/*
- * Zebra version
- * Copyright (c) 1997, 1999 Kunihiro Ishiguro
+/* Router advertisement
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -20,21 +19,13 @@
  * 02111-1307, USA.  
  */
 
-#ifndef _ZEBRA_VERSION_H
-#define _ZEBRA_VERSION_H
+#ifndef _ZEBRA_SOCKOPT_H
+#define _ZEBRA_SOCKOPT_H
 
-#define ZEBRA_VERSION     "0.77"
+int setsockopt_ipv6_pktinfo (int, int);
+int setsockopt_ipv6_checksum (int, int);
+int setsockopt_ipv6_multicast_hops (int, int);
+int setsockopt_ipv6_unicast_hops (int, int);
+int setsockopt_ipv6_hoplimit (int, int);
 
-#define ZEBRA_BUG_ADDRESS "bug-zebra@gnu.org"
-
-extern char *host_name;
-
-void print_version();
-pid_t pid_output (char *);
-pid_t pid_output_lock (char *);
-
-#ifndef HAVE_DAEMON
-int daemon(int, int);
-#endif
-
-#endif /* _ZEBRA_VERSION_H */
+#endif /*_ZEBRA_SOCKOPT_H */

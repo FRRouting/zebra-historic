@@ -92,5 +92,7 @@ int inactivity_timer (struct thread *);
 
 int dr_election (struct ospf6_if *);
 
+unsigned int count_nbr_in_state (state_t, struct area *);
+
 #endif /* OSPF6_NEIGHBOR_H */
 

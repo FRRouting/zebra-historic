@@ -60,13 +60,14 @@ struct bgp_info *bgp_info_new ();
 void bgp_route_init ();
 void bgp_peer_delete (struct peer *peer);
 void bgp_announce_table (struct peer *peer);
-void route_parse (u_char *pnt, int rsize, struct attr *attr, struct peer *peer);
-void withdraw_route(unsigned char *pnt, int unfeasible_len, struct peer *peer);
+
 void nlri_process (struct prefix *p, struct bgp_info *br);
-void nlri_parse (struct peer *peer, struct attr *attr, u_char *pnt, int len, int family);
-void nlri_unfeasible (struct peer *peer, bgp_size_t unfeasible_len);
-int nlri_delete (struct peer *peer, struct prefix *p);
-void bgp_dump_attr (struct peer *peer, struct attr *attr, char *attrstr, size_t size);
+void nlri_parse (struct peer *, struct attr *, u_char *, int, int);
+void nlri_unfeasible (struct peer *, bgp_size_t);
+int nlri_delete (struct peer *, struct prefix *);
+
+void bgp_dump_attr (struct peer *, struct attr *, char *, size_t);
 void bgp_peer_delete (struct peer *peer);
+void bgp_redistribute_withdraw (struct bgp *, int);
 
 #endif /* _ZEBRA_BGP_ROUTE_H */

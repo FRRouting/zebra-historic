@@ -39,6 +39,8 @@
 #include "log.h"
 #include "plist.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_route.h"
@@ -48,8 +50,6 @@
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
-
-#include "zebra/zebra.h"
 
 /* List head of bgp instance list. */
 list bgp_list;
@@ -580,6 +580,125 @@ DEFUN (no_bgp_cluster_id, no_bgp_cluster_id_cmd,
   return CMD_SUCCESS;
 }
 
+void
+bgp_peer_display (struct vty *vty, struct peer *p)
+{
+  char buf[BUFSIZ];
+
+  vty_out (vty, "%-15s ", p->host);
+  switch (p->version) {
+  case BGP_VERSION_4:
+    vty_out (vty, "4  ");
+    break;
+  case BGP_VERSION_MP_4:
+    vty_out (vty, "4+ ");
+    break;
+  case BGP_VERSION_MP_4_DRAFT_00:
+    vty_out (vty, "4- ");
+    break;
+  }
+  vty_out(vty, "%5d %7d %7d %8d %4d %4d ", p->as,
+	  p->open_in+p->update_in+p->withdrow_in+p->keepalive_in,
+	  p->open_out+p->update_out+p->withdrow_out+p->keepalive_out,
+	  0, 0, 0);
+
+  peer_uptime_vty (vty, p);
+
+  /* Description. */
+  if (p->desc)
+    vty_out (vty, "\r\n  Description: %s", p->desc);
+
+  /* Remote router ID */
+  {
+    struct in_addr bgp_ident;
+    bgp_ident.s_addr = p->ident;
+    vty_out (vty, "\r\n  Remote router ID %s\r\n",
+	     inet_ntoa (bgp_ident));
+  }
+
+  /* Local address. */
+  vty_out (vty, "  Local address: ");
+  if (p->su_local)
+    sockunion_vty_out (vty, p->su_local);
+  else
+    vty_out (vty, "None");
+
+  /* Remote address. */
+  vty_out (vty, "  Remote address: ");
+  if (p->su_remote)
+    sockunion_vty_out (vty, p->su_remote);
+  else
+    vty_out (vty, "None");
+  vty_out (vty, "\r\n");
+
+  /* Nexthop display. */
+  if (p->su_local)
+    {
+      vty_out (vty, "  Nexthop: %s\r\n", inet_ntoa (p->nexthop.v4));
+#ifdef HAVE_IPV6
+      vty_out (vty, "  Nexthop global: %s", 
+	       inet_ntop (AF_INET6, &p->nexthop.v6_global, buf, BUFSIZ));
+      vty_out (vty, "  Nexthop local: %s\r\n",
+	       inet_ntop (AF_INET6, &p->nexthop.v6_local, buf, BUFSIZ));
+      vty_out (vty, "  BGP connection: %s\r\n",
+	       p->shared_network ? "shared network" : "not shared network");
+#endif /* HAVE_IPV6 */
+    }
+
+  vty_out (vty,
+	   "  Status: %-12s keepalive: %d holdtime: %d"
+	   "\r\n  open: in/out %d/%d"
+	   "  update: in/out %d+%d/%d+%d"
+	   "  keepalive: in/out %d/%d\r\n",
+	   LOOKUP (bgp_status_msg, p->status),
+	   p->v_keepalive, p->v_holdtime,
+	   p->open_in, p->open_out,
+	   p->update_in, p->withdrow_in,
+	   p->update_out, p->withdrow_out,
+	   p->keepalive_in, p->keepalive_out
+	   );
+  vty_out (vty, "  read thread: %s  write thread: %s\r\n", 
+	   p->t_read ? "on" : "off",
+	   p->t_write ? "on" : "off");
+
+  if (p->distribute[BGP_FILTER_IN].name)
+    vty_out (vty, "  distribute-list in: %s%s\r\n",
+	     p->distribute[BGP_FILTER_IN].list ? "*" : "",
+	     p->distribute[BGP_FILTER_IN].name);
+  if (p->distribute[BGP_FILTER_OUT].name)
+    vty_out (vty, "  distribute-list out: %s%s\r\n",
+	     p->distribute[BGP_FILTER_OUT].list ? "*" : "",
+	     p->distribute[BGP_FILTER_OUT].name);
+
+  if (p->plist[BGP_FILTER_IN].name)
+    vty_out (vty, "  prefix-list in: %s%s\r\n",
+	     p->plist[BGP_FILTER_IN].plist ? "*" : "",
+	     p->plist[BGP_FILTER_IN].name);
+  if (p->plist[BGP_FILTER_OUT].name)
+    vty_out (vty, "  prefix-list out: %s%s\r\n",
+	     p->plist[BGP_FILTER_OUT].plist ? "*" : "",
+	     p->plist[BGP_FILTER_OUT].name);
+
+
+  if (p->filter[BGP_FILTER_IN].name)
+    vty_out (vty, "  filter-list in: %s%s\r\n",
+	     p->filter[BGP_FILTER_IN].filter ? "*" : "",
+	     p->filter[BGP_FILTER_IN].name);
+  if (p->filter[BGP_FILTER_OUT].name)
+    vty_out (vty, "  filter-list out: %s%s\r\n",
+	     p->filter[BGP_FILTER_OUT].filter ? "*" : "",
+	     p->filter[BGP_FILTER_OUT].name);
+
+  if (p->route_map[BGP_FILTER_IN].name)
+    vty_out (vty, "  route-map in: %s%s\r\n",
+	     p->route_map[BGP_FILTER_IN].map ? "*" : "",
+	     p->route_map[BGP_FILTER_IN].name);
+  if (p->route_map[BGP_FILTER_OUT].name)
+    vty_out (vty, "  route-map out: %s%s\r\n",
+	     p->route_map[BGP_FILTER_OUT].map ? "*" : "",
+	     p->route_map[BGP_FILTER_OUT].name);
+}
+
 DEFUN (show_ip_bgp_neighbors,
        show_ip_bgp_neighbors_cmd,
        "show ip bgp neighbors [PEER]",
@@ -591,125 +710,26 @@ DEFUN (show_ip_bgp_neighbors,
 {
   struct peer *p;
   listnode node;
-  char buf[BUFSIZ];
 
   vty_out (vty, "Neighbor        V     AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down.\r\n");
 
-  for (node = listhead (peer_list); node; nextnode (node))
+  if (argc == 1)
     {
-      p = getdata (node);
-
-      vty_out (vty, "%-15s ", p->host);
-      switch (p->version) {
-      case BGP_VERSION_4:
-	vty_out (vty, "4  ");
-	break;
-      case BGP_VERSION_MP_4:
-	vty_out (vty, "4+ ");
-	break;
-      case BGP_VERSION_MP_4_DRAFT_00:
-	vty_out (vty, "4- ");
-	break;
-      }
-      vty_out(vty, "%5d %7d %7d %8d %4d %4d ", p->as,
-	       p->open_in+p->update_in+p->withdrow_in+p->keepalive_in,
-	       p->open_out+p->update_out+p->withdrow_out+p->keepalive_out,
-	       0, 0, 0);
-
-      peer_uptime_vty (vty, p);
-
-      /* Description. */
-      if (p->desc)
-	  vty_out (vty, "\r\n  Description: %s", p->desc);
-
-      /* Remote router ID */
-      {
-	struct in_addr bgp_ident;
-	bgp_ident.s_addr = p->ident;
-	vty_out (vty, "\r\n  Remote router ID %s\r\n",
-		 inet_ntoa (bgp_ident));
-      }
-
-      /* Local address. */
-      vty_out (vty, "  Local address: ");
-      if (p->su_local)
-	sockunion_vty_out (vty, p->su_local);
-      else
-	vty_out (vty, "None");
-
-      /* Remote address. */
-      vty_out (vty, "  Remote address: ");
-      if (p->su_remote)
-	sockunion_vty_out (vty, p->su_remote);
-      else
-	vty_out (vty, "None");
-      vty_out (vty, "\r\n");
-
-      /* Nexthop display. */
-      if (p->su_local)
+      p = peer_lookup_by_host (argv[0]);
+      if (! p)
 	{
-	  vty_out (vty, "  Nexthop: %s\r\n", inet_ntoa (p->nexthop.v4));
-#ifdef HAVE_IPV6
-	  vty_out (vty, "  Nexthop global: %s", 
-		   inet_ntop (AF_INET6, &p->nexthop.v6_global, buf, BUFSIZ));
-	  vty_out (vty, "  Nexthop local: %s\r\n",
-		   inet_ntop (AF_INET6, &p->nexthop.v6_local, buf, BUFSIZ));
-#endif /* HAVE_IPV6 */
+	  vty_out (vty, "can't find neighbor %s\r\n", argv[0]);
+	  return CMD_WARNING;
 	}
-
-      vty_out (vty,
-	       "  Status: %-12s keepalive: %d holdtime: %d"
-	       "\r\n  open: in/out %d/%d"
-	       "  update: in/out %d+%d/%d+%d"
-	       "  keepalive: in/out %d/%d\r\n",
-	       LOOKUP (bgp_status_msg, p->status),
-	       p->v_keepalive, p->v_holdtime,
-	       p->open_in, p->open_out,
-	       p->update_in, p->withdrow_in,
-	       p->update_out, p->withdrow_out,
-	       p->keepalive_in, p->keepalive_out
-	       );
-      vty_out (vty, "  read thread: %s  write thread: %s\r\n", 
-	       p->t_read ? "on" : "off",
-	       p->t_write ? "on" : "off");
-
-      if (p->distribute[BGP_FILTER_IN].name)
-	vty_out (vty, "  distribute-list in: %s%s\r\n",
-		 p->distribute[BGP_FILTER_IN].list ? "*" : "",
-		 p->distribute[BGP_FILTER_IN].name);
-      if (p->distribute[BGP_FILTER_OUT].name)
-	vty_out (vty, "  distribute-list out: %s%s\r\n",
-		 p->distribute[BGP_FILTER_OUT].list ? "*" : "",
-		 p->distribute[BGP_FILTER_OUT].name);
-
-      if (p->plist[BGP_FILTER_IN].name)
-	vty_out (vty, "  prefix-list in: %s%s\r\n",
-		 p->plist[BGP_FILTER_IN].plist ? "*" : "",
-		 p->plist[BGP_FILTER_IN].name);
-      if (p->plist[BGP_FILTER_OUT].name)
-	vty_out (vty, "  prefix-list out: %s%s\r\n",
-		 p->plist[BGP_FILTER_OUT].plist ? "*" : "",
-		 p->plist[BGP_FILTER_OUT].name);
-
-
-      if (p->filter[BGP_FILTER_IN].name)
-	vty_out (vty, "  filter-list in: %s%s\r\n",
-		 p->filter[BGP_FILTER_IN].filter ? "*" : "",
-		 p->filter[BGP_FILTER_IN].name);
-      if (p->filter[BGP_FILTER_OUT].name)
-	vty_out (vty, "  filter-list out: %s%s\r\n",
-		 p->filter[BGP_FILTER_OUT].filter ? "*" : "",
-		 p->filter[BGP_FILTER_OUT].name);
-
-      if (p->route_map[BGP_FILTER_IN].name)
-	vty_out (vty, "  route-map in: %s%s\r\n",
-		 p->route_map[BGP_FILTER_IN].map ? "*" : "",
-		 p->route_map[BGP_FILTER_IN].name);
-      if (p->route_map[BGP_FILTER_OUT].name)
-	vty_out (vty, "  route-map out: %s%s\r\n",
-		 p->route_map[BGP_FILTER_OUT].map ? "*" : "",
-		 p->route_map[BGP_FILTER_OUT].name);
-
+      bgp_peer_display (vty, p);
+    }
+  else
+    {
+      for (node = listhead (peer_list); node; nextnode (node))
+	{
+	  p = getdata (node);
+	  bgp_peer_display (vty, p);
+	}
     }
 
   return CMD_SUCCESS;
@@ -1132,7 +1152,7 @@ bgp_prefix_list_set (struct peer *peer, int direct, char *alist)
     free (peer->plist[direct].name);
 
   peer->plist[direct].name = strdup (alist);
-  peer->plist[direct].plist = prefix_list_lookup (alist);
+  peer->plist[direct].plist = prefix_list_lookup (AF_INET, alist);
 }
 
 static int
@@ -1165,14 +1185,14 @@ bgp_prefix_list_update ()
       /* Input filter update. */
       if (peer->plist[BGP_FILTER_IN].name)
 	peer->plist[BGP_FILTER_IN].plist = 
-	  prefix_list_lookup (peer->plist[BGP_FILTER_IN].name);
+	  prefix_list_lookup (AF_INET, peer->plist[BGP_FILTER_IN].name);
       else
 	peer->plist[BGP_FILTER_IN].plist = NULL;
 
       /* Output filter update. */
       if (peer->plist[BGP_FILTER_OUT].name)
 	peer->plist[BGP_FILTER_OUT].plist = 
-	  prefix_list_lookup (peer->plist[BGP_FILTER_OUT].name);
+	  prefix_list_lookup (AF_INET, peer->plist[BGP_FILTER_OUT].name);
       else
 	peer->plist[BGP_FILTER_OUT].plist = NULL;
     }
@@ -1967,7 +1987,7 @@ DEFUN (no_neighbor_default_originate,
 
 DEFUN (neighbor_timers_holdtime,
        neighbor_timers_holdtime_cmd,
-       "neighbor PEER timers holdtime TIMER",
+       "neighbor PEER timers holdtime <0-65535>",
        NEIGHBOR_STR
        "IP address\n"
        "BGP timers\n"
@@ -1976,6 +1996,8 @@ DEFUN (neighbor_timers_holdtime,
 {
   struct bgp *bgp;
   struct peer *peer;
+  unsigned long holdtime;
+  char *endptr = NULL;
   
   /* One should be inside router bgp statement. */
   bgp = (struct bgp *) vty->index;
@@ -1987,13 +2009,26 @@ DEFUN (neighbor_timers_holdtime,
       return CMD_WARNING;
     }
 
-  if (! all_digit (argv[1]))
+  /* Hold time value check. */
+  holdtime = strtoul (argv[1], &endptr, 10);
+
+  if (holdtime == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "timer value must be digit %s\r\n", argv[1]);
+      vty_out (vty, "hold time value must be positive integer\r\n");
+      return CMD_WARNING;
+    }
+  if (holdtime > 65535)
+    {
+      vty_out (vty, "hold time value must be <0-65535>\r\n");
       return CMD_WARNING;
     }
 
-  peer->v_holdtime = strtol (argv[1], NULL, 10);
+  /* Set value to the configuration. */
+  peer->config |= PEER_CONFIG_HOLDTIME;
+  peer->holdtime = holdtime;
+
+  /* Set value to timer setting. */
+  peer->v_holdtime = holdtime;
 
   return CMD_SUCCESS;
 }
@@ -2010,6 +2045,8 @@ DEFUN (no_neighbor_timers_holdtime,
 {
   struct bgp *bgp;
   struct peer *peer;
+  unsigned long holdtime;
+  char *endptr = NULL;
   
   /* One should be inside router bgp statement. */
   bgp = (struct bgp *) vty->index;
@@ -2023,19 +2060,32 @@ DEFUN (no_neighbor_timers_holdtime,
 
   if (argc == 2)
     {
-      if (! all_digit (argv[1]))
+      /* Hold time value check. */
+      holdtime = strtoul (argv[1], &endptr, 10);
+
+      if (holdtime == ULONG_MAX || *endptr != '\0')
 	{
-	  vty_out (vty, "timer value must be digit %s\r\n", argv[1]);
+	  vty_out (vty, "hold time value must be positive integer\r\n");
+	  return CMD_WARNING;
+	}
+      if (holdtime > 65535)
+	{
+	  vty_out (vty, "hold time value must be <0-65535>\r\n");
 	  return CMD_WARNING;
 	}
 
-      if (peer->v_holdtime != strtol (argv[1], NULL, 10))
+      if (peer->holdtime != holdtime)
 	{
 	  vty_out (vty, "timer value does not match %s\r\n", argv[1]);
 	  return CMD_WARNING;
 	}
     }
 
+  /* Clear configuration. */
+  peer->config &= ~PEER_CONFIG_HOLDTIME;
+  peer->holdtime = 0;
+
+  /* Set timer setting to default value. */
   peer->v_holdtime = BGP_DEFAULT_HOLDTIME;
 
   return CMD_SUCCESS;
@@ -2216,204 +2266,6 @@ DEFUN (clear_ip_bgp,
     vty_out (vty, "Peer %s cleared.\r\n", argv[0]);
   else
     vty_out (vty, "Can't find peer %s.\r\n", argv[0]);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_static,
-       bgp_redistribute_static_cmd,
-       "redistribute static",
-       "Redistribute\n"
-       "Static route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_static = 1;
-  bgp_zebra_redistribute (ZEBRA_ROUTE_STATIC);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_redistribute_static,
-       no_bgp_redistribute_static_cmd,
-       "no redistribute static",
-       NO_STR
-       "Redistribute\n"
-       "Static route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_static = 0;
-  bgp_zebra_no_redistribute (ZEBRA_ROUTE_STATIC);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_connected,
-       bgp_redistribute_connected_cmd,
-       "redistribute connected",
-       "Redistribute\n"
-       "Connected route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_connect = 1;
-  bgp_zebra_redistribute (ZEBRA_ROUTE_CONNECT);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_redistribute_connected,
-       no_bgp_redistribute_connected_cmd,
-       "no redistribute connected",
-       NO_STR
-       "Redistribute\n"
-       "Connected route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_connect = 0;
-  bgp_zebra_no_redistribute (ZEBRA_ROUTE_CONNECT);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_rip,
-       bgp_redistribute_rip_cmd,
-       "redistribute rip",
-       "Redistribute\n"
-       "RIP route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_rip = 1;
-  bgp_zebra_redistribute (ZEBRA_ROUTE_RIP);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_redistribute_rip,
-       no_bgp_redistribute_rip_cmd,
-       "no redistribute rip",
-       NO_STR
-       "Redistribute\n"
-       "RIP route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_rip = 0;
-  bgp_zebra_no_redistribute (ZEBRA_ROUTE_RIP);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_ripng,
-       bgp_redistribute_ripng_cmd,
-       "redistribute ripng",
-       "Redistribute\n"
-       "RIPng route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_ripng = 1;
-  bgp_zebra_redistribute (ZEBRA_ROUTE_RIPNG);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_redistribute_ripng,
-       no_bgp_redistribute_ripng_cmd,
-       "no redistribute ripng",
-       NO_STR
-       "Redistribute\n"
-       "RIPng route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_ripng = 0;
-  bgp_zebra_no_redistribute (ZEBRA_ROUTE_RIPNG);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_ospf,
-       bgp_redistribute_ospf_cmd,
-       "redistribute ospf",
-       "Redistribute\n"
-       "OSPF route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_ospf = 1;
-  bgp_zebra_redistribute (ZEBRA_ROUTE_OSPF);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_redistribute_ospf,
-       no_bgp_redistribute_ospf_cmd,
-       "no redistribute ospf",
-       NO_STR
-       "Redistribute\n"
-       "OSPF route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_ospf = 0;
-  bgp_zebra_no_redistribute (ZEBRA_ROUTE_OSPF);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (bgp_redistribute_ospf6,
-       bgp_redistribute_ospf6_cmd,
-       "redistribute ospf6",
-       "Redistribute\n"
-       "OSPF for IPv6 route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_ospf6 = 1;
-  bgp_zebra_redistribute (ZEBRA_ROUTE_OSPF6);
-
-  return CMD_SUCCESS;
-}
-
-DEFUN (no_bgp_redistribute_ospf6,
-       no_bgp_redistribute_ospf6_cmd,
-       "no redistribute ospf6",
-       NO_STR
-       "Redistribute\n"
-       "OSPF for IPv6 route\n")
-{
-  struct bgp *bgp;
-
-  bgp = (struct bgp *) vty->index;
-
-  bgp->redist_ospf6 = 0;
-  bgp_zebra_no_redistribute (ZEBRA_ROUTE_OSPF6);
 
   return CMD_SUCCESS;
 }
@@ -2607,11 +2459,11 @@ bgp_peer_config_write (struct vty *vty, list bgp_peer)
 		   peer->route_map[BGP_FILTER_OUT].name, VTY_NEWLINE);
 	}
 
-      if (peer->v_holdtime != BGP_DEFAULT_HOLDTIME)
+      if (peer->config & PEER_CONFIG_HOLDTIME)
 	{
 	  vty_out (vty, " neighbor ");
 	  sockunion_vty_out (vty, peer->su);
-	  vty_out (vty, " timers holdtime %ld%s", peer->v_holdtime,
+	  vty_out (vty, " timers holdtime %ld%s", peer->holdtime,
 		   VTY_NEWLINE);
 	}
     }
@@ -2633,12 +2485,13 @@ bgp_config_write (struct vty *vty)
       vty_out (vty, "!%s", VTY_NEWLINE);
     }
 
-  /* BGP neighbor's configuration. */
+  /* Each BGP instance configuration. */
   for (node = listhead (bgp_list); node; nextnode (node))
     {
       bgp = getdata (node);
 
       vty_out (vty, "router bgp %d%s", bgp->as, VTY_NEWLINE);
+
       if (bgp->config & BGP_CONFIG_ROUTER_ID)
 	{
 	  struct in_addr ident;
@@ -2646,6 +2499,7 @@ bgp_config_write (struct vty *vty)
 	  vty_out (vty, " bgp router-id %s%s", inet_ntoa (ident), 
 		   VTY_NEWLINE);
 	}
+
       if (bgp->config & BGP_CONFIG_CLUSTER_ID)
 	{
 	  struct in_addr cluster;
@@ -2656,19 +2510,21 @@ bgp_config_write (struct vty *vty)
 
       config_write_network (vty, bgp);
 
-      if (bgp->redist_static)
+      /* Redistribute configuration. */
+      if (bgp->redist[ZEBRA_ROUTE_STATIC])
 	vty_out (vty, " redistribute static%s", VTY_NEWLINE);
-      if (bgp->redist_connect)
+      if (bgp->redist[ZEBRA_ROUTE_CONNECT])
 	vty_out (vty, " redistribute connected%s", VTY_NEWLINE);
-      if (bgp->redist_rip)
+      if (bgp->redist[ZEBRA_ROUTE_RIP])
 	vty_out (vty, " redistribute rip%s", VTY_NEWLINE);
-      if (bgp->redist_ripng)
+      if (bgp->redist[ZEBRA_ROUTE_RIPNG])
 	vty_out (vty, " redistribute ripng%s", VTY_NEWLINE);
-      if (bgp->redist_ospf)
+      if (bgp->redist[ZEBRA_ROUTE_OSPF])
 	vty_out (vty, " redistribute ospf%s", VTY_NEWLINE);
-      if (bgp->redist_ospf6)
+      if (bgp->redist[ZEBRA_ROUTE_OSPF6])
 	vty_out (vty, " redistribute ospf6%s", VTY_NEWLINE);
 
+      /* This BGP instance's peer configuration. */
       bgp_peer_config_write (vty, bgp->peer);
 
       write++;
@@ -2689,6 +2545,9 @@ bgp_init ()
 {
   void as_list_add_hook (void (*func) ());
   void as_list_delete_hook (void (*func) ());
+
+  /* Randomize. */
+  srand (time (NULL));
 
   /* Install bgp top node. */
   install_node (&bgp_node, bgp_config_write);
@@ -2711,18 +2570,6 @@ bgp_init ()
   install_element (CONFIG_NODE, &no_bgp_multiple_instance_cmd);
 
   install_default (BGP_NODE);
-  install_element (BGP_NODE, &bgp_redistribute_static_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_static_cmd);
-  install_element (BGP_NODE, &bgp_redistribute_connected_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_connected_cmd);
-  install_element (BGP_NODE, &bgp_redistribute_rip_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_rip_cmd);
-  install_element (BGP_NODE, &bgp_redistribute_ripng_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_ripng_cmd);
-  install_element (BGP_NODE, &bgp_redistribute_ospf_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_ospf_cmd);
-  install_element (BGP_NODE, &bgp_redistribute_ospf6_cmd);
-  install_element (BGP_NODE, &no_bgp_redistribute_ospf6_cmd);
   install_element (BGP_NODE, &neighbor_cmd);
   install_element (BGP_NODE, &no_neighbor_cmd);
   install_element (BGP_NODE, &neighbor_ebgp_multihop_cmd);

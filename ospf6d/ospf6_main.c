@@ -91,6 +91,13 @@ sigint (int sig)
   terminate (0);
 }
 
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
+}
+
 /* Signale wrapper. */
 RETSIGTYPE *
 signal_set (int signo, void (*func)(int))
@@ -131,6 +138,7 @@ signal_init ()
 #ifdef SIGTTOU
   signal_set (SIGTTOU, SIG_IGN);
 #endif
+  signal_set (SIGUSR1, sigusr1);
 }
 
 /* Main routine of ospf6d. Treatment of argument and start ospf finite
@@ -182,6 +190,9 @@ main (int argc, char **argv)
         }
     }
 
+  if (daemon_mode)
+    daemon (0, 0);
+
   /* pid file create */
 #if 0
   pid_output_lock (PATH_OSPF6D_PID);
@@ -208,9 +219,6 @@ main (int argc, char **argv)
 
   /* parse config file */
   vty_read_config (config_file, config_current, config_default);
-
-  if (daemon_mode)
-    daemon (0, 0);
 
   /* Make ospf protocol socket. */
   ospf6_serv_sock ();

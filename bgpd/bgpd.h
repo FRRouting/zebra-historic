@@ -36,23 +36,28 @@ typedef u_int16_t bgp_size_t;
 /* BGP instance structure. bgpd can handle multiple BGP instance. */
 struct bgp 
 {
-  as_t as;			/* BGP instance's AS. */
-  ident_t ident;		/* BGP identifier. */
-  ident_t cluster;		/* BGP route reflector cluster ID */
-  int reflector_cnt;		/* BGP route reflector neighbor count. */
+  /* BGP instance's AS. */
+  as_t as;
 
+  /* BGP identifier. */
+  ident_t ident;
+
+  /* BGP route reflector cluster ID. */
+  ident_t cluster;
+
+  /* BGP route reflector neighbor count. */
+  int reflector_cnt;
+
+  /* BGP configuration. */
 #define BGP_CONFIG_ROUTER_ID  1
 #define BGP_CONFIG_CLUSTER_ID 2
-  u_int16_t config;		/* BGP configuration. */
+  u_int16_t config;
 
-  u_char redist_static;		/* Redistribute static route. */
-  u_char redist_connect;	/* Redistribute connected route. */
-  u_char redist_rip;		/* Redistribute rip route. */
-  u_char redist_ripng;		/* Redistribute ripng route. */
-  u_char redist_ospf;		/* Redistribute ospf route. */
-  u_char redist_ospf6;		/* Redistribute ospf6 route. */
+  /* BGP redistribute configuration. */
+  u_char redist[ZEBRA_ROUTE_MAX];
 
-  struct _list *peer;		/* BGP neighbor list */
+  /* BGP neighbor list. */
+  struct _list *peer;
 };
 
 /* Next hop self address. */
@@ -81,6 +86,7 @@ struct peer
   union sockunion *su;		/* Sockunion address of the peer. */
   union sockunion *su_local;	/* Sockunion of local address.  */
   union sockunion *su_remote;	/* Sockunion of remote address.  */
+  int shared_network;		/* Is this peer shared same network. */
   int fd;			/* File descriptor */
   int ttl;			/* TTL of TCP connection to the peer. */
   char *desc;			/* Description of the peer. */
@@ -105,11 +111,13 @@ struct peer
   int ostatus;			/* Old peer status. */
 
   /* Default attribute value for this peer. */
-#define PEER_CONFIG_WEIGHT     1
-#define PEER_DEFAULT_ORIGINATE 2
+#define PEER_CONFIG_WEIGHT       0x1
+#define PEER_DEFAULT_ORIGINATE   0x2
+#define PEER_CONFIG_HOLDTIME     0x4
   u_int32_t config;		/* Option set flag. */
   long localpref;		/* Default local preference. */
   u_int32_t weight;		/* Default weight.  */
+  u_int32_t holdtime;		/* Holdtime configuration. */
   int send_community;		/* Community attribute send flag. */
   int reflector_client;		/* Route reflector client. */
   time_t uptime;		/* Last Up/Down time */
@@ -382,8 +390,6 @@ void peer_delete (struct peer *peer);
 void bgp_open_recv (struct peer *peer, u_int16_t size);
 void bgp_notify_print(struct peer *peer, struct bgp_notify *bgp_notify);
 
-void bgp_zebra_redistribute (int);
-void bgp_zebra_no_redistribute (int);
 int
 bgp_nexthop_set (union sockunion *, union sockunion *, 
 		 struct bgp_nexthop *, struct peer *);

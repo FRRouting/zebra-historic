@@ -531,8 +531,12 @@ thread_fetch (struct thread_master *m,
       if (errno != EINTR)
 	{
 	  /* Real error. */
+	  zlog_warn ("select error: %s", strerror (errno));
+	  goto retry;
 	}
+
       /* Signal is coming. */
+      goto retry;
     }
 
 #ifdef DEBUG

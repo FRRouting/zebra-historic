@@ -93,6 +93,16 @@ Report bugs to %s\n", progname, ZEBRA_BUG_ADDRESS);
   exit (status);
 }
 
+/* SIGHUP handler. */
+void 
+sighup (int sig)
+{
+  zlog (NULL, LOG_INFO, "SIGHUP received");
+
+  /* Reload of config file. */
+  ;
+}
+
 /* SIGINT handler. */
 void
 sigint (int sig)
@@ -106,6 +116,13 @@ sigint (int sig)
     rib_close ();
 
   exit (0);
+}
+
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
 }
 
 /* Signale wrapper. */
@@ -135,9 +152,11 @@ signal_set (int signo, void (*func)(int))
 void
 signal_init ()
 {
+  signal_set (SIGHUP, sighup);
   signal_set (SIGINT, sigint);
   signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
+  signal_set (SIGUSR1, sigusr1);
 }
 
 /* Main startup routine. */
@@ -229,6 +248,10 @@ main (int argc, char **argv)
 
   /* Sort VTY commands. */
   sort_node ();
+
+#ifdef RTADV_TEST
+  rtadv_init ();
+#endif /* RTADV_TEST */
 
   /* Clean up self inserted route. */
   if (! keep_kernel_mode)

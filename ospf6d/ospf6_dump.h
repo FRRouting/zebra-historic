@@ -56,8 +56,9 @@ extern char   *rlsatype_name[];
 #define typeindex(x)     (((ntohs (x)) & 0x000f) - 1)
 
 /* Function Prototypes */
-char *print_lsahdr (struct ospf6_lsa_hdr *);
 char *print_lsreq (struct linkstate_request *);
+char *print_ls_reference (struct ospf6_lsa_hdr *);
+char *print_lsahdr (struct ospf6_lsa_hdr *);
 void ospf6_log_init ();
 char *inet4str(unsigned long);
 void log_pointer (const char *, ...);

@@ -159,7 +159,10 @@ filter_lookup (struct access_list *access, struct prefix *prefix,
 static int
 filter_match (struct filter *filter, struct prefix *p)
 {
-  return prefix_match (&filter->prefix, p);
+  if (filter->prefix.family == p->family)
+    return prefix_match (&filter->prefix, p);
+  else
+    return 0;
 }
 
 /* Allocate new access list structure. */

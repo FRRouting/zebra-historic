@@ -29,6 +29,8 @@
 #include "if.h"
 #include "prefix.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_fsm.h"
 

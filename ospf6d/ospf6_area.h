@@ -30,18 +30,16 @@
 
 struct area
 {
-  struct ospf6   *ospf6;         /* back pointer */
+  struct ospf6   *ospf6;      /* back pointer */
   unsigned long   area_id;
-  char            str[16];       /* Area ID string */
-  unsigned char   options[3];    /* OSPF Option including external capability */
-  list            ospf6_if_list; /* OSPF interface to this area */
-  list            lsdb;
+  char            str[16];    /* Area ID string */
+  unsigned char   options[3]; /* OSPF Option including external capability */
   unsigned long   stub_default_cost;
 
+  list            ospf6_if_list; /* OSPF interface to this area */
+  list            lsdb;
+
   signed long     router_lsa_seqnum;    /* Signed 32bit integer */
-  signed long     network_lsa_seqnum;   /* Signed 32bit integer */
-  signed long     link_lsa_seqnum;      /* Signed 32bit integer */
-  signed long     intra_prefix_seqnum;  /* Signed 32bit integer */
 
   struct spftree  spftree;
 

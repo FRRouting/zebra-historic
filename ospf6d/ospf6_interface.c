@@ -69,37 +69,38 @@ set_ospf6_if_default_val (struct ospf6_if *ospf6_if)
 
 /* Make new ospf6 interface structure */
 struct ospf6_if *
-make_ospf6_if (char *ifname)
+make_ospf6_if (struct interface *ifp)
 {
   struct ospf6_if *ospf6_if;
-  struct interface *interface;
 
-  interface = if_lookup_by_name (ifname);
-  if (!interface)
-    {
-      o6log.interface ("can't find interface: %s", ifname);
-    }
-  if (interface && interface->if_data)
-    {
-      o6log.interface ("already have ospf6_if");
-      return (struct ospf6_if *)NULL;
-    }
+  assert (ifp);
 
   ospf6_if = ospf6_if_new ();
   if (!ospf6_if)
     {
-      zvlog_err ("Can't allocate ospf6_if for %s", ifname);
+      zvlog_err ("Can't allocate ospf6_if for %s", ifp->name);
       return (struct ospf6_if *)NULL;
     }
 
-  ospf6_if->interface = interface;
   ospf6_if->instance_id = 1; /* XXX multiple instance not yet */
-  ospf6_if->ifid = interface->index;
+  ospf6_if->ifid =  ifp->ifindex;
   ospf6_if->area = (struct area *)NULL; /* not yet attached to Area. */
   ospf6_if->state = IFS_DOWN;
   ospf6_if->nbr_list = list_init ();
   ospf6_lsdb_init_interface (ospf6_if);
-  interface->if_data = ospf6_if;
+
+  ospf6_if->prefix_connected = list_init ();
+  ospf6_if->prefix_static = list_init ();
+  ospf6_if->prefix_ripng = list_init ();
+  ospf6_if->prefix_bgp = list_init ();
+
+  ospf6_if->link_lsa_seqnum = ospf6_if->network_lsa_seqnum
+                            = ospf6_if->intra_prefix_seqnum
+                            = INITIAL_SEQUENCE_NUMBER;
+
+  /* make double link */
+  ospf6_if->interface = ifp;
+  ifp->info = ospf6_if;
 
   set_ospf6_if_default_val (ospf6_if);
 
@@ -138,7 +139,7 @@ ospf6_if_lookup (char *ifname)
       zlog (NULL, LOG_WARNING, "no such interface: %s", ifname);
       return (struct ospf6_if *)NULL;
     }
-  ospf6_if = (struct ospf6_if *)ifp->if_data;
+  ospf6_if = (struct ospf6_if *)ifp->info;
   if (!ospf6_if)
     {
       zlog (NULL, LOG_WARNING, "no such ospf6 interface: %s", ifname);
@@ -146,6 +147,67 @@ ospf6_if_lookup (char *ifname)
     }
 
   return ospf6_if;
+}
+
+/* count number of full neighbor */
+int
+ospf6_if_count_full_nbr (struct ospf6_if *o6if)
+{
+  listnode n;
+  struct neighbor *nbr;
+  int count = 0;
+
+  for (n = listhead (o6if->nbr_list); n; nextnode (n))
+    {
+      nbr = (struct neighbor *) getdata (n);
+      if (nbr->state == NBS_FULL)
+        count++;
+    }
+
+  return count;
+}
+
+/* write linklocal address to buf. if linklocal not found, return -1 */
+int
+ospf6_if_get_linklocal (struct in6_addr *buf, struct ospf6_if *o6if)
+{
+  listnode n;
+  struct connected *c;
+  struct in6_addr *linklocal = (struct in6_addr *) NULL;
+
+  /* for each connected address */
+  for (n = listhead (o6if->interface->connected); n; nextnode (n))
+    {
+      c = (struct connected *) getdata (n);
+
+      /* if family not AF_INET6, ignore */
+      if (c->address->family != AF_INET6)
+        continue;
+
+      /* linklocal scope check */
+      if (IN6_IS_ADDR_LINKLOCAL (&c->address->u.prefix6))
+        linklocal = &c->address->u.prefix6;
+    }
+
+  /* if no linklocal address, return -1 */
+  if (!linklocal)
+    return -1;
+
+  /* copy linklocal to buf */
+  memcpy (buf, linklocal, sizeof (struct in6_addr));
+
+#ifdef KAME
+  /* if KAME, clear ifindex included in address */
+  if (buf->s6_addr8[1] & 0x0f)
+    {
+      char linklocal_str[64];
+      buf->s6_addr8[3] &= ~((char)0x0f);
+      inet_ntop (AF_INET6, buf, linklocal_str, sizeof (linklocal_str));
+      o6log.interface ("clear kame ifindex, %s", linklocal_str);
+    }
+#endif /* KAME */
+
+  return 0;
 }
 
 /* show specified interface structure */
@@ -173,13 +235,13 @@ show_if (struct vty *vty, struct interface *iface)
   vty_out (vty, "%s is %s, type %s\r\n",
            iface->name, updown[if_is_up (iface)], type);
 
-  if (iface->if_data == NULL)
+  if (iface->info == NULL)
     {
       vty_out (vty, "   OSPF not enabled on this interface\r\n");
       return 0;
     }
   else
-    ospf6_if = (struct ospf6_if *)iface->if_data;
+    ospf6_if = (struct ospf6_if *)iface->info;
 
   vty_out (vty, "  Internet Address:\r\n");
   for (i = listhead (iface->connected); i; nextnode (i))
@@ -294,9 +356,9 @@ DEFUN (ip6_ospf6_cost,
   ifp = (struct interface *)vty->index;
   assert (ifp);
 
-  ospf6_if = (struct ospf6_if *)ifp->if_data;
+  ospf6_if = (struct ospf6_if *)ifp->info;
   if (!ospf6_if)
-    ospf6_if = make_ospf6_if (ifp->name);
+    ospf6_if = make_ospf6_if (ifp);
   assert (ospf6_if);
 
   ospf6_if->cost = strtol (argv[0], NULL, 10);
@@ -318,9 +380,9 @@ DEFUN (ip6_ospf6_hellointerval,
 
   ifp = (struct interface *) vty->index;
   assert (ifp);
-  ospf6_if = (struct ospf6_if *) ifp->if_data;
+  ospf6_if = (struct ospf6_if *) ifp->info;
   if (!ospf6_if)
-    ospf6_if = make_ospf6_if (ifp->name);
+    ospf6_if = make_ospf6_if (ifp);
   assert (ospf6_if);
 
   ospf6_if->hello_interval = strtol (argv[0], NULL, 10);
@@ -342,9 +404,9 @@ DEFUN (ip6_ospf6_deadinterval,
 
   ifp = (struct interface *) vty->index;
   assert (ifp);
-  ospf6_if = (struct ospf6_if *) ifp->if_data;
+  ospf6_if = (struct ospf6_if *) ifp->info;
   if (!ospf6_if)
-    ospf6_if = make_ospf6_if (ifp->name);
+    ospf6_if = make_ospf6_if (ifp);
   assert (ospf6_if);
 
   ospf6_if->rtr_dead_interval = strtol (argv[0], NULL, 10);
@@ -366,9 +428,9 @@ DEFUN (ip6_ospf6_transmitdelay,
 
   ifp = (struct interface *) vty->index;
   assert (ifp);
-  ospf6_if = (struct ospf6_if *) ifp->if_data;
+  ospf6_if = (struct ospf6_if *) ifp->info;
   if (!ospf6_if)
-    ospf6_if = make_ospf6_if (ifp->name);
+    ospf6_if = make_ospf6_if (ifp);
   assert (ospf6_if);
 
   ospf6_if->inf_trans_delay = strtol (argv[0], NULL, 10);
@@ -390,9 +452,9 @@ DEFUN (ip6_ospf6_retransmitinterval,
 
   ifp = (struct interface *) vty->index;
   assert (ifp);
-  ospf6_if = (struct ospf6_if *) ifp->if_data;
+  ospf6_if = (struct ospf6_if *) ifp->info;
   if (!ospf6_if)
-    ospf6_if = make_ospf6_if (ifp->name);
+    ospf6_if = make_ospf6_if (ifp);
   assert (ospf6_if);
 
   ospf6_if->rxmt_interval = strtol (argv[0], NULL, 10);
@@ -414,9 +476,9 @@ DEFUN (ip6_ospf6_priority,
 
   ifp = (struct interface *) vty->index;
   assert (ifp);
-  ospf6_if = (struct ospf6_if *)ifp->if_data;
+  ospf6_if = (struct ospf6_if *)ifp->info;
   if (!ospf6_if)
-    ospf6_if = make_ospf6_if (ifp->name);
+    ospf6_if = make_ospf6_if (ifp);
   assert (ospf6_if);
 
   ospf6_if->rtr_pri = strtol (argv[0], NULL, 10);

@@ -1,5 +1,5 @@
 /* accconfig.h -- `autoheader' will generate config.h.in for zebra.
-   Copyright (C) 1998 Kunihiro Ishiguro <kunihiro@zebra.org> */
+   Copyright (C) 1998, 1999 Kunihiro Ishiguro <kunihiro@zebra.org> */
 
 /* Version of GNU Zebra */
 #undef VERSION
@@ -63,6 +63,9 @@
 
 /* Define if you have Linux ipv6 stack.  */
 #undef LINUX_IPV6
+
+/* Define if you have NRL ipv6 stack.  */
+#undef NRL
 
 /* Define if one-vty option is specified. */
 #undef ONE_VTY

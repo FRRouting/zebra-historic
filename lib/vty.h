@@ -110,6 +110,15 @@ struct vty
 /* Vty read buffer size. */
 #define VTY_READ_BUFSIZ 512
 
+/* Directory separator. */
+#ifndef DIRECTORY_SEP
+#define DIRECTORY_SEP '/'
+#endif /* DIRECTORY_SEP */
+
+#ifndef IS_DIRECTORY_SEP
+#define IS_DIRECTORY_SEP(c) ((c) == DIRECTORY_SEP)
+#endif
+
 /* Prototypes. */
 struct vty *vty_new ();
 int vty_out (struct vty *, char *, ...);

@@ -26,7 +26,10 @@
 #include "stream.h"
 #include "network.h"
 #include "prefix.h"
+#include "command.h"
 #include "log.h"
+
+#include "zebra/zebra.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_dump.h"
@@ -35,6 +38,8 @@
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_packet.h"
 #include "bgpd/bgp_open.h"
+#include "bgpd/bgp_aspath.h"
+#include "bgpd/bgp_community.h"
 
 int stream_put_prefix (struct stream *, struct prefix *);
 
@@ -383,10 +388,12 @@ bgp_withdraw_send (struct peer *peer, struct prefix *p)
 
   /* Withdrawn Routes. */
   if (p->family == AF_INET)
-    stream_put_prefix (s, p);
+    {
+      stream_put_prefix (s, p);
 
-  unfeasible_len = stream_get_putp (s) - cp - 2;
-  stream_putw_at (s, cp, unfeasible_len);
+      unfeasible_len = stream_get_putp (s) - cp - 2;
+      stream_putw_at (s, cp, unfeasible_len);
+    }
 
   /* Make attribute. */
   if (p->family == AF_INET6)
@@ -553,6 +560,7 @@ bgp_update (struct peer *peer, bgp_size_t size)
 		peer->host, unfeasible_len);
 	  bgp_notify_send (peer, BGP_NOTIFY_UPDATE_ERR, 
 			   BGP_NOTIFY_UPDATE_ATTR_LENG_ERR, NULL);
+	  return;
 	}
       peer->withdrow_in++;
       nlri_unfeasible (peer, unfeasible_len);
@@ -584,6 +592,13 @@ bgp_update (struct peer *peer, bgp_size_t size)
 
   /* Network Layer Reachability Information. */
   nlri_parse (peer, &attr, STREAM_PNT (s), endp - STREAM_PNT (s), AF_INET);
+
+  /* All things should be done at here.  So if unused aspath or
+     community must be freed. */
+  if (attr.aspath && attr.aspath->refcnt == 0)
+    aspath_unintern (attr.aspath);
+  if (attr.community && attr.community->refcnt == 0)
+    community_unintern (attr.community);
 
   BGP_EVENT_ADD (peer, Receive_UPDATE_message);
 }

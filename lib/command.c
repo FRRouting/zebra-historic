@@ -22,8 +22,6 @@
 
 #include <zebra.h>
 
-#include "vector.h"
-#include "vty.h"
 #include "command.h"
 #include "memory.h"
 #include "log.h"
@@ -1778,8 +1776,21 @@ DEFUN (config_log_file,
        "Logging filename\n")
 {
   int ret;
+  char *cwd;
+  char *fullpath;
 
-  ret = zlog_set_file (NULL, ZLOG_FILE, argv[0]);
+  /* Path detection. */
+  if (! IS_DIRECTORY_SEP (*argv[0]))
+    {
+      cwd = getcwd (NULL, MAXPATHLEN);
+      fullpath = XMALLOC (MTYPE_TMP,
+			  strlen (cwd) + strlen (argv[0]) + 2);
+      sprintf (fullpath, "%s/%s", cwd, argv[0]);
+    }
+  else
+    fullpath = argv[0];
+
+  ret = zlog_set_file (NULL, ZLOG_FILE, fullpath);
 
   if (!ret)
     {

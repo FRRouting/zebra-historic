@@ -49,13 +49,13 @@ ifm_interface_add (struct if_msghdr *ifm)
     }
 
   /* Set ifm value into struct interface. */
-  ifp->index = ifm->ifm_index;
+  ifp->ifindex = ifm->ifm_index;
   ifp->flags = ifm->ifm_flags;
 
   if_get_mtu (ifp);
   if_get_metric (ifp);
 
-  zlog (NULL, LOG_DEBUG, "interface %s index %d", ifp->name, ifp->index);
+  zlog (NULL, LOG_DEBUG, "interface %s index %d", ifp->name, ifp->ifindex);
 }
 
 /* Supported address family check. */
@@ -238,7 +238,7 @@ ifm_read_ifinfo (struct if_msghdr *ifm)
   if (ifp == NULL)
     {
       ifp = if_new();
-      ifp->index = ifm->ifm_index;
+      ifp->ifindex = ifm->ifm_index;
       zlog (NULL, LOG_INFO, "New interface from routing socket");
     }
   else

@@ -1,5 +1,4 @@
-/*
- * RIP related values and structures.
+/* RIP related values and structures.
  * Copyright (C) 1997, 1998 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
@@ -34,12 +33,12 @@
 #define RIP_TRACEOFF         4	/* obsolete? */
 #define RIP_POLL             5
 #define RIP_POLL_ENTRY       6
+#define RIP_COMMAND_MAX      7
 
 /* RIP metric infinity value.*/
 #define RIP_METRIC_INFINITY 16
 
 /* Normal RIP packet max size. */
-#define RIP_REQUEST_PACKET_SIZE   24
 #define RIP_PACKET_MAXSIZ        512
 
 /* Max count of routing table entry in one rip packet. */
@@ -51,42 +50,68 @@
 #endif
 
 /* RIP timers */
-#define RIP_DEFAULT_UPDATE_TIMER       30
-#define RIP_DEFAULT_INVALID_TIMER     180
-#define RIP_DEFAULT_HOLDDOWN_TIMER    180
-#define RIP_DEFAULT_FLUSH_TIMER       240
+#define RIP_UPDATE_TIMER_DEFAULT       30
+#define RIP_TIMEOUT_TIMER_DEFAULT     180
+#define RIP_GARBAGE_TIMER_DEFAULT     120
+
+#if 0
+#define RIP_INVALID_TIMER_DEFAULT     180
+#define RIP_HOLDDOWN_TIMER_DEFAULT    180
+#define RIP_FLUSH_TIMER_DEFALUT       240
+#endif /*0 */
 
 /* RIP route type */
 #define RIP_ROUTE_NORMAL              0
 #define RIP_ROUTE_STATIC              1
 
 /* RIP port number. */
-#define RIP_PORT_DEFAULT   520
-#define RIP_VTY_PORT      2602
+#define RIP_PORT_DEFAULT            520
+#define RIP_VTY_PORT               2602
 
 /* Default configuration file name. */
 #define RIPD_DEFAULT_CONFIG "ripd.conf"
 
+/* RIPng route types. */
+#define RIP_ROUTE_RTE              0
+#define RIP_ROUTE_STATIC           1
+
 /* RIP structure. */
 struct rip 
 {
-  int sock;			/* RIP socket. */
-  int enable;			/* RIP is enabled or not. */
-  u_char version;		/* Default version of rip instance. */
+  /* RIP socket. */
+  int sock;
 
+  /* Default version of rip instance. */
+  u_char version;
+
+  /* Output buffer of RIP. */
+  struct stream *obuf;
+
+  /* RIP routing information base. */
+  struct route_table *table;
+
+  /* RIP only static routing information. */
+  struct route_table *route;
+  
+  /* RIP neighbor. */
+  struct route_table *neighbor;
+  
+  /* RIP threads. */
   struct thread *t_read;
 
-  /* RIP timer values. */
-  unsigned long v_update;
-  unsigned long v_invalid;
-  unsigned long v_holddown;
-  unsigned long v_flush;
-
-  /* RIP timers. */
+  /* Update and garbage timer. */
   struct thread *t_update;
-  struct thread *t_invalid;
-  struct thread *t_holddown;
-  struct thread *t_flush;
+  struct thread *t_garbage;
+
+  /* Triggered update hack. */
+  int trigger;
+  struct thread *t_triggered_update;
+  struct thread *t_triggered_interval;
+
+  /* RIP timer values. */
+  unsigned long update_time;
+  unsigned long timeout_time;
+  unsigned long garbage_time;
 };
 
 /* RIP routing table entry which belong to rip_packet. */
@@ -94,9 +119,9 @@ struct rte
 {
   u_int16_t family;		/* Address family of this route. */
   u_int16_t tag;		/* Route Tag which included in RIP2 packet. */
-  u_int32_t prefix;		/* Prefix of rip route. */
-  u_int32_t netmask;		/* Netmask of rip route. */
-  u_int32_t nexthop;		/* Next hop of rip route. */
+  struct in_addr prefix;	/* Prefix of rip route. */
+  struct in_addr mask;		/* Netmask of rip route. */
+  struct in_addr nexthop;	/* Next hop of rip route. */
   u_int32_t metric;		/* Metric value of rip route. */
 };
 
@@ -107,7 +132,7 @@ struct rip_packet
   unsigned char version;	/* RIP version which coming from peer. */
   unsigned char pad1;		/* Padding of RIP packet header. */
   unsigned char pad2;		/* Same as above. */
-  struct rte route[1];		/* Address structure. */
+  struct rte rte[1];		/* Address structure. */
 };
 
 /* Buffer to read RIP packet. */
@@ -120,33 +145,50 @@ union rip_buf
 /* RIP route information. */
 struct rip_info
 {
-  /* For doubly linked list. */
-  struct rip_info *next;
-  struct rip_info *prev;
+  /* This route's type. */
+  int type;
 
-  int fib;			/* Forwarding information base. */
-  int type;			/* RIP|Static|Connected route type. */
-  int sub_type;			/* RIP's staic route. */
-  int pref;			/* Preference of this route. */
-  u_int32_t tag;		/* Tag information of this route. */
-  u_int32_t metric;		/* Metric of this route. */
-  struct in_addr nexthop;	/* Nexthop of this route. */
-  struct in_addr from;		/* From which gateway this route is listen. */
-  struct interface *ifp;	/* Interface. */
-  time_t timer;			/* Update timer of this route. */
+  /* Sub type. */
+  int sub_type;
+
+  /* RIP nexthop. */
+  struct in_addr nexthop;
+  struct in_addr from;
+
+  /* Which interface does this route come from. */
+  unsigned int ifindex;
+
+  /* Metric of this route. */
+  u_int32_t metric;
+
+  /* Tag information of this route. */
+  u_int16_t tag;
+
+  /* Flags of RIP route. */
+#define RIP_RTF_FIB      1
+#define RIP_RTF_CHANGED  2
+  u_char flags;
+
+  /* Garbage collect timer. */
+  struct thread *t_timeout;
+  struct thread *t_garbage_collect;
+
+  struct route_node *rp;
 };
 
 /* RIP specific interface configuration. */
 struct rip_interface
 {
-  int enable;
+  /* RIP is enabled on this interface. */
+  int enable_network;
+  int enable_interface;
 
+  /* RIP is running on this interface. */
+  int running;
+
+  /* RIP version control. */
   int ri_send;
   int ri_receive;
-  int ri_split_horizon;
-  int ri_default_send;
-  int ri_default_receive;
-  int ri_multicast;
 };
 
 /* RIP accepet/announce methods. */
@@ -182,48 +224,59 @@ struct message
   char *str;
 };
 
-/* Macro for timer turn on. */
-#define RIP_TIMER_ON(T,F,V) \
-      if (!(T)) \
-        (T) = thread_add_timer (master, (F), NULL, (V))
-
-/* Macro for timer turn off. */
-#define RIP_TIMER_OFF(X) \
-      if (X) \
-	{ \
-	  thread_cancel (X); \
-	  (X) = NULL; \
-	}
+/* RIP event. */
+enum rip_event 
+{
+  RIP_READ,
+  RIPNG_REQUEST_EVENT,
+  RIP_UPDATE_EVENT,
+  RIP_TRIGGERED_UPDATE,
+};
 
 #define LOOKUP(X, Y)  (X)[(Y)].str
 
 /* There is only one rip strucutre. */
-extern struct rip rip;
+extern struct rip *rip;
 
 /* Prototypes. */
-void zebra_start ();
-int rip_start ();
 void rip_init ();
-void rip_rib_close ();
-void rip_if_init ();
-void rip_delete_rinfo (struct rip_info **rp, struct rip_info *rinfo);
-int rip_udp_send (int sock, u_char *pnt, int size, struct sockaddr_in *dest);
-struct rip_info *rip_info_new ();
 
-/* rip_interface.c */
-int if_check_address (struct in_addr addr);
-int if_valid_neighbor (struct in_addr addr);
-struct interface *if_lookup_address (struct in_addr addr);
-void rip_multicast_enable (int sock);
-int zebra_get_interface (int sock, u_int16_t length);
+void rip_terminate ();
+
+void zebra_start ();
+
+void rip_if_init ();
+
+int 
+if_check_address (struct in_addr addr);
+
+int 
+if_valid_neighbor (struct in_addr addr);
+
+int 
+rip_request_send (struct sockaddr_in *to, u_char version);
+
+struct interface *
+if_lookup_address (struct in_addr);
+
 int
-rip_add_route (struct prefix_ipv4 *p, struct rip_info *rinfo, 
-	       struct sockaddr_in *from, struct interface *ifp);
-int
-rip_interface_enable (struct interface *ifp);
+rip_neighbor_lookup (struct sockaddr_in *);
+
+void
+rip_redistribute_add (int, int, struct prefix_ipv4 *, unsigned int);
+
+void
+rip_redistribute_delete (int, int, struct prefix_ipv4 *, unsigned int);
+
+void
+rip_redistribute_withdraw (int);
+
+void
+rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *, unsigned int);
+
+void
+rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, unsigned int);
 
 extern struct thread_master *master;
 
-/* Extern function. */
-void rip_zebra (int, struct prefix_ipv4 *, struct in_addr *);
 #endif /* _ZEBRA_RIP_H */

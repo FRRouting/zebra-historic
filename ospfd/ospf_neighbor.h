@@ -64,11 +64,13 @@ struct ospf_neighbor
   u_int32_t v_inactivity;
   u_int32_t v_db_desc;
   u_int32_t v_ls_req;
+  u_int32_t v_ls_upd;
 
   /* Threads. */
   struct thread *t_inactivity;
   struct thread *t_db_desc;
   struct thread *t_ls_req;
+  struct thread *t_ls_upd;
 
   /* Statistics Field */
 };
@@ -76,6 +78,7 @@ struct ospf_neighbor
 /* Prototypes. */
 struct ospf_neighbor *ospf_nbr_new (struct ospf_interface *);
 void ospf_nbr_free (struct ospf_neighbor *);
+void ospf_nbr_delete (struct ospf_neighbor *);
 int ospf_nbr_bidirectional (struct in_addr *, struct in_addr *, int);
 void ospf_nbr_add_myself (struct ospf_interface *);
 int ospf_nbr_count (struct route_table *, int);

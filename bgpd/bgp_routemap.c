@@ -36,6 +36,8 @@
 #endif /* HAVE_GNU_REGEX */
 #include "buffer.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_aspath.h"
@@ -44,6 +46,9 @@
 #include "bgpd/bgp_community.h"
 #include "bgpd/bgp_clist.h"
 #include "bgpd/bgp_filter.h"
+
+#include "table.h"
+#include "sockunion.h"
 
 /* Memo of route-map commands.
 
@@ -98,15 +103,22 @@ o Local extention
 /* Match function should return 1 if match is success else return
    zero. */
 route_map_result_t
-route_match_ip_address (void *rule, struct prefix *prefix, void *object)
+route_match_ip_address (void *rule, struct prefix *prefix, 
+			route_map_object_t type, void *object)
 {
   struct access_list *alist;
+  /* struct prefix_ipv4 match; */
 
-  alist = access_list_lookup ((char *) rule);
-  if (alist == NULL)
-    return RM_NOMATCH;
-
-  return (access_list_apply (alist, prefix) == FILTER_DENY ? RM_NOMATCH : RM_MATCH);
+  if (type == ROUTE_MAP_BGP)
+    {
+      alist = access_list_lookup ((char *) rule);
+      if (alist == NULL)
+	return RM_NOMATCH;
+    
+      return (access_list_apply (alist, prefix) == FILTER_DENY ?
+	      RM_NOMATCH : RM_MATCH);
+    }
+  return RM_NOMATCH;
 }
 
 /* Route map `ip address' match statement.  `arg' should be
@@ -137,18 +149,23 @@ struct route_map_rule_cmd route_match_ip_address_cmd =
 
 /* Match function return 1 if match is success else return zero. */
 route_map_result_t
-route_match_ip_next_hop (void *rule, struct prefix *prefix, void *object)
+route_match_ip_next_hop (void *rule, struct prefix *prefix, 
+			 route_map_object_t type, void *object)
 {
   struct in_addr *addr;
   struct bgp_info *bgp_info;
 
-  addr = rule;
-  bgp_info = object;
+  if(type == ROUTE_MAP_BGP){
+    addr = rule;
+    bgp_info = object;
+    
+    if (IPV4_ADDR_CMP (&bgp_info->attr->nexthop, rule) == 0)
+      return RM_MATCH;
+    else
+      return RM_NOMATCH;
+  }
 
-  if (IPV4_ADDR_CMP (&bgp_info->attr->nexthop, rule) == 0)
-    return RM_MATCH;
-  else
-    return RM_NOMATCH;
+  return RM_NOMATCH;
 }
 
 /* Route map `ip next-hop' match statement. `arg' is IP address
@@ -191,18 +208,23 @@ struct route_map_rule_cmd route_match_ip_next_hop_cmd =
 
 /* Match function return 1 if match is success else return zero. */
 route_map_result_t
-route_match_metric (void *rule, struct prefix *prefix, void *object)
+route_match_metric (void *rule, struct prefix *prefix, 
+		    route_map_object_t type, void *object)
 {
   u_int32_t *med;
   struct bgp_info *bgp_info;
 
-  med = rule;
-  bgp_info = object;
-
-  if (bgp_info->attr->med == *med)
-    return RM_MATCH;
-  else
-    return RM_NOMATCH;
+  if (type == ROUTE_MAP_BGP)
+    {
+      med = rule;
+      bgp_info = object;
+    
+      if (bgp_info->attr->med == *med)
+	return RM_MATCH;
+      else
+	return RM_NOMATCH;
+    }
+  return RM_NOMATCH;
 }
 
 /* Route map `match metric' match statement. `arg' is MED value */
@@ -237,20 +259,25 @@ struct route_map_rule_cmd route_match_metric_cmd =
 
 /* Match function for as-path match.  I assume given object is */
 route_map_result_t
-route_match_aspath (void *rule, struct prefix *prefix, void *object)
+route_match_aspath (void *rule, struct prefix *prefix, 
+		    route_map_object_t type, void *object)
 {
   
   struct as_list *as_list;
   struct bgp_info *bgp_info;
 
-  as_list = as_list_lookup ((char *) rule);
-  if (as_list == NULL)
-    return RM_NOMATCH;
-
-  bgp_info = object;
-  
-  /* Perform match. */
-  return ((as_list_apply (as_list, bgp_info->attr->aspath) == AS_FILTER_DENY) ? RM_NOMATCH : RM_MATCH);
+  if (type == ROUTE_MAP_BGP)
+    {
+      as_list = as_list_lookup ((char *) rule);
+      if (as_list == NULL)
+	return RM_NOMATCH;
+    
+      bgp_info = object;
+    
+      /* Perform match. */
+      return ((as_list_apply (as_list, bgp_info->attr->aspath) == AS_FILTER_DENY) ? RM_NOMATCH : RM_MATCH);
+    }
+  return RM_NOMATCH;
 }
 
 /* Compile function for as-path match. */
@@ -329,19 +356,24 @@ struct route_map_rule_cmd route_match_aspath_cmd =
 
 /* Match function for community match. */
 route_map_result_t
-route_match_community (void *rule, struct prefix *prefix, void *object)
+route_match_community (void *rule, struct prefix *prefix, 
+		       route_map_object_t type, void *object)
 {
   struct community_list *list;
   struct bgp_info *bgp_info;
 
-  list = community_list_lookup ((char *) rule);
-  bgp_info = object;
-
-  if (list == NULL || bgp_info->attr->community == NULL)
-    return RM_NOMATCH;
-  
-  /* Perform match. */
-  return (community_list_match (bgp_info->attr->community, list) ? RM_MATCH : RM_NOMATCH);
+  if (type == ROUTE_MAP_BGP) 
+    {
+      list = community_list_lookup ((char *) rule);
+      bgp_info = object;
+    
+      if (list == NULL || bgp_info->attr->community == NULL)
+	return RM_NOMATCH;
+    
+      /* Perform match. */
+      return (community_list_match (bgp_info->attr->community, list) ? RM_MATCH : RM_NOMATCH);
+    }
+  return RM_NOMATCH;
 }
 
 /* Compile function for community match. */
@@ -371,17 +403,19 @@ struct route_map_rule_cmd route_match_community_cmd =
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
 route_map_result_t
-route_set_ip_nexthop (void *rule, struct prefix *prefix, void *object)
+route_set_ip_nexthop (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct in_addr *address;
   struct bgp_info *bgp_info;
 
-  /* Fetch routemap's rule information. */
-  address = rule;
-  bgp_info = object;
-
-  /* Set next hop value. */ 
-  bgp_info->attr->nexthop = *address;
+  if(type == ROUTE_MAP_BGP){
+    /* Fetch routemap's rule information. */
+    address = rule;
+    bgp_info = object;
+    
+    /* Set next hop value. */ 
+    bgp_info->attr->nexthop = *address;
+  }
 
   return RM_OKAY;
 }
@@ -428,21 +462,23 @@ struct route_map_rule_cmd route_set_ip_nexthop_cmd =
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
 route_map_result_t
-route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, void *object)
+route_set_ipv6_nexthop_global (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct in6_addr *address;
   struct bgp_info *bgp_info;
 
-  /* Fetch routemap's rule information. */
-  address = rule;
-  bgp_info = object;
-
-  /* Set next hop value. */ 
-  bgp_info->attr->mp_nexthop_global = *address;
-
-  /* Set nexthop length. */
-  if (bgp_info->attr->mp_nexthop_len == 0)
-    bgp_info->attr->mp_nexthop_len = 16;
+  if(type == ROUTE_MAP_BGP){
+    /* Fetch routemap's rule information. */
+    address = rule;
+    bgp_info = object;
+    
+    /* Set next hop value. */ 
+    bgp_info->attr->mp_nexthop_global = *address;
+    
+    /* Set nexthop length. */
+    if (bgp_info->attr->mp_nexthop_len == 0)
+      bgp_info->attr->mp_nexthop_len = 16;
+  }
 
   return RM_OKAY;
 }
@@ -488,21 +524,23 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_global_cmd =
 
 /* Set nexthop to object.  ojbect must be pointer to struct attr. */
 route_map_result_t
-route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix, void *object)
+route_set_ipv6_nexthop_local (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct in6_addr *address;
   struct bgp_info *bgp_info;
 
-  /* Fetch routemap's rule information. */
-  address = rule;
-  bgp_info = object;
-
-  /* Set next hop value. */ 
-  bgp_info->attr->mp_nexthop_local = *address;
-
-  /* Set nexthop length. */
-  if (bgp_info->attr->mp_nexthop_len != 32)
-    bgp_info->attr->mp_nexthop_len = 32;
+  if(type == ROUTE_MAP_BGP){
+    /* Fetch routemap's rule information. */
+    address = rule;
+    bgp_info = object;
+    
+    /* Set next hop value. */ 
+    bgp_info->attr->mp_nexthop_local = *address;
+    
+    /* Set nexthop length. */
+    if (bgp_info->attr->mp_nexthop_len != 32)
+      bgp_info->attr->mp_nexthop_len = 32;
+  }
 
   return RM_OKAY;
 }
@@ -549,17 +587,19 @@ struct route_map_rule_cmd route_set_ipv6_nexthop_local_cmd =
 
 /* Set local preference. */
 route_map_result_t
-route_set_local_pref (void *rule, struct prefix *prefix, void *object)
+route_set_local_pref (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   u_int32_t *local_pref;
   struct bgp_info *bgp_info;
 
-  /* Fetch routemap's rule information. */
-  local_pref = rule;
-  bgp_info = object;
-
-  /* Set local preference value. */ 
-  bgp_info->attr->local_pref = *local_pref;
+  if(type == ROUTE_MAP_BGP){
+    /* Fetch routemap's rule information. */
+    local_pref = rule;
+    bgp_info = object;
+    
+    /* Set local preference value. */ 
+    bgp_info->attr->local_pref = *local_pref;
+  }
 
   return RM_OKAY;
 }
@@ -605,17 +645,19 @@ struct route_map_rule_cmd route_set_local_pref_cmd =
 
 /* Set weight. */
 route_map_result_t
-route_set_weight (void *rule, struct prefix *prefix, void *object)
+route_set_weight (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   u_int32_t *weight;
   struct bgp_info *bgp_info;
 
-  /* Fetch routemap's rule information. */
-  weight = rule;
-  bgp_info = object;
-
-  /* Set weight value. */ 
-  bgp_info->attr->weight = *weight;
+  if(type == ROUTE_MAP_BGP){
+    /* Fetch routemap's rule information. */
+    weight = rule;
+    bgp_info = object;
+    
+    /* Set weight value. */ 
+    bgp_info->attr->weight = *weight;
+  }
 
   return RM_OKAY;
 }
@@ -661,19 +703,22 @@ struct route_map_rule_cmd route_set_weight_cmd =
 
 /* Set metric to attribute. */
 route_map_result_t
-route_set_metric (void *rule, struct prefix *prefix, void *object)
+route_set_metric (void *rule, struct prefix *prefix, 
+		  route_map_object_t type, void *object)
 {
   char *metric;
   struct bgp_info *bgp_info;
 
-  /* Fetch routemap's rule information. */
-  metric = rule;
-  bgp_info = object;
-
-  /* Set next hop value. */ 
-  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC);
-  bgp_info->attr->med = atoi (metric);
-
+  if(type == ROUTE_MAP_BGP)
+    {
+      /* Fetch routemap's rule information. */
+      metric = rule;
+      bgp_info = object;
+    
+      /* Set next hop value. */ 
+      bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_MULTI_EXIT_DISC);
+      bgp_info->attr->med = atoi (metric);
+    }
   return RM_OKAY;
 }
 
@@ -705,15 +750,17 @@ struct route_map_rule_cmd route_set_metric_cmd =
 
 /* For AS path prepend mechanism. */
 route_map_result_t
-route_set_aspath_prepend (void *rule, struct prefix *prefix, void *object)
+route_set_aspath_prepend (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct aspath *aspath;
   struct bgp_info *bgp_info;
 
-  aspath = rule;
-  bgp_info = object;
-  
-  aspath_prepend (aspath, bgp_info->attr->aspath);
+  if(type == ROUTE_MAP_BGP){
+    aspath = rule;
+    bgp_info = object;
+    
+    aspath_prepend (aspath, bgp_info->attr->aspath);
+  }
 
   return RM_OKAY;
 }
@@ -751,22 +798,24 @@ struct route_map_rule_cmd route_set_aspath_prepend_cmd =
 
 /* For community set mechanism. */
 route_map_result_t
-route_set_community (void *rule, struct prefix *prefix, void *object)
+route_set_community (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct community *com;
   struct bgp_info *bgp_info;
 
-  com = rule;
-  bgp_info = object;
-  
-  if (!com)
-    return RM_OKAY;
-
-  if (bgp_info->attr->community)
-    community_free (bgp_info->attr->community);
-
-  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
-  bgp_info->attr->community = community_dup (com);
+  if(type == ROUTE_MAP_BGP){
+    com = rule;
+    bgp_info = object;
+    
+    if (!com)
+      return RM_OKAY;
+    
+    if (bgp_info->attr->community)
+      community_free (bgp_info->attr->community);
+    
+    bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
+    bgp_info->attr->community = community_dup (com);
+  }
 
   return RM_OKAY;
 }
@@ -803,15 +852,17 @@ struct route_map_rule_cmd route_set_community_cmd =
 
 /* For origin set. */
 route_map_result_t
-route_set_origin (void *rule, struct prefix *prefix, void *object)
+route_set_origin (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   u_char *origin;
   struct bgp_info *bgp_info;
 
-  origin = rule;
-  bgp_info = object;
-
-  bgp_info->attr->origin = *origin;
+  if(type == ROUTE_MAP_BGP){
+    origin = rule;
+    bgp_info = object;
+    
+    bgp_info->attr->origin = *origin;
+  }
 
   return RM_OKAY;
 }
@@ -863,12 +914,15 @@ struct route_map_rule_cmd route_set_origin_cmd =
 
 /* For atomic aggregate set. */
 route_map_result_t
-route_set_atomic_aggregate (void *rule, struct prefix *prefix, void *object)
+route_set_atomic_aggregate (void *rule, struct prefix *prefix, route_map_object_t type, void *object)
 {
   struct bgp_info *bgp_info;
 
-  bgp_info = object;
-  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE);
+  if(type == ROUTE_MAP_BGP){
+    bgp_info = object;
+    bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_ATOMIC_AGGREGATE);
+  }
+
   return RM_OKAY;
 }
 
@@ -903,17 +957,20 @@ struct aggregator
 };
 
 route_map_result_t
-route_set_aggregator_as (void *rule, struct prefix *prefix, void *object)
+route_set_aggregator_as (void *rule, struct prefix *prefix, 
+			 route_map_object_t type, void *object)
 {
   struct bgp_info *bgp_info;
   struct aggregator *aggregator;
 
-  bgp_info = object;
-  aggregator = rule;
-
-  bgp_info->attr->aggregator_as = aggregator->as;
-  bgp_info->attr->aggregator_addr = aggregator->address;
-  bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR);
+  if(type == ROUTE_MAP_BGP){
+    bgp_info = object;
+    aggregator = rule;
+    
+    bgp_info->attr->aggregator_as = aggregator->as;
+    bgp_info->attr->aggregator_addr = aggregator->address;
+    bgp_info->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_AGGREGATOR);
+  }
 
   return RM_OKAY;
 }

@@ -246,7 +246,7 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
   int len;
   struct ifinfomsg *ifi;
-  struct rtattr *tb [IFLA_MAX + 1];
+  struct rtattr *tb[IFLA_MAX + 1];
   struct interface *ifp;
   char *name;
 
@@ -269,14 +269,31 @@ netlink_interface (struct sockaddr_nl *snl, struct nlmsghdr *h)
   /* Add interface. */
   ifp = if_get_by_name (name);
   
-  ifp->index = ifi->ifi_index;
+  ifp->ifindex = ifi->ifi_index;
   ifp->flags = ifi->ifi_flags & 0x0000fffff;
   ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
   ifp->metric = 1;
 
+  /* Hardware type and address. */
+  ifp->hw_type = ifi->ifi_type;
+  if (tb[IFLA_ADDRESS])
+    {
+      int hw_addr_len;
+
+      hw_addr_len = RTA_PAYLOAD(tb[IFLA_ADDRESS]);
+
+      if (hw_addr_len > INTERFACE_HWADDR_MAX)
+	zlog_warn ("Hardware address is too large: %d", hw_addr_len);
+      else
+	{      
+	  ifp->hw_addr_len = hw_addr_len;
+	  memcpy (ifp->hw_addr, RTA_DATA(tb[IFLA_ADDRESS]), hw_addr_len);
+	}
+    }
+
   /* If verbose mode log interface index. */
   if (log_mode)
-    zlog (NULL, LOG_INFO, "interface %s index %d.\n", ifp->name, ifp->index);
+    zlog (NULL, LOG_INFO, "interface %s index %d.\n", ifp->name, ifp->ifindex);
 
   return 0;
 }
@@ -615,7 +632,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	  zlog (NULL, LOG_INFO, "interface %s index %d is added.",
 		ifp->name, ifi->ifi_index);
 	}      
-      ifp->index = ifi->ifi_index;
+      ifp->ifindex = ifi->ifi_index;
       ifp->flags = ifi->ifi_flags & 0x0000fffff;
       ifp->mtu = *(int *)RTA_DATA (tb[IFLA_MTU]);
       ifp->metric = 1;
@@ -632,7 +649,7 @@ netlink_link_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 	      ifp->name);
 
       zlog (NULL, LOG_INFO, "interface %s index %d is deleted.",
-	    ifp->name, ifp->index);
+	    ifp->name, ifp->ifindex);
 
       if_delete (ifp);
     }

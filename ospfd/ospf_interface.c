@@ -100,7 +100,7 @@ ospf_if_lookup_by_addr (struct in_addr *address)
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      oi = ifp->if_data;
+      oi = ifp->info;
 
       if (if_is_loopback (ifp))
 	continue;
@@ -145,9 +145,10 @@ ospf_if_stream_unset (struct ospf_interface *oi)
 int
 ospf_if_new_hook (struct interface *ifp)
 {
-  ifp->if_data = ospf_if_new (ifp);
+  ifp->info = ospf_if_new (ifp);
   return 0;
 }
+
 
 /* Configuration write function for ospfd. */
 int
@@ -161,7 +162,7 @@ interface_config_write (struct vty *vty)
   for (node = listhead (iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      oi = ifp->if_data;
+      oi = ifp->info;
 
       if (!if_is_up (ifp))
 	continue;
@@ -220,7 +221,7 @@ DEFUN (if_ospf_authentication_key,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   bzero (oi->auth_data, OSPF_AUTH_SIZE);
   strncpy (oi->auth_data, argv[0], OSPF_AUTH_SIZE);
@@ -238,7 +239,7 @@ DEFUN (no_if_ospf_authentication_key,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   bzero (oi->auth_data, OSPF_AUTH_SIZE);
 
@@ -269,7 +270,7 @@ DEFUN (if_ospf_cost,
   u_int32_t cost;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   cost = strtol (argv[0], NULL, 10);
 
@@ -296,7 +297,7 @@ DEFUN (no_if_ospf_cost,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->output_cost = OSPF_OUTPUT_COST_DEFAULT;
 
@@ -315,7 +316,7 @@ DEFUN (if_ospf_dead_interval,
   u_int32_t seconds;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -342,7 +343,7 @@ DEFUN (no_if_ospf_dead_interval,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->v_wait = OSPF_ROUTER_DEAD_INTERVAL_DEFAULT;
 
@@ -361,7 +362,7 @@ DEFUN (if_ospf_hello_interval,
   u_int32_t seconds;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -388,7 +389,7 @@ DEFUN (no_if_ospf_hello_interval,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->v_hello = OSPF_HELLO_INTERVAL_DEFAULT;
 
@@ -409,7 +410,7 @@ DEFUN (if_ospf_network,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   if (strncmp (argv[0], "b", 1) == 0)
     oi->type = OSPF_IFTYPE_BROADCAST;
@@ -434,7 +435,7 @@ DEFUN (no_if_ospf_network,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->type = OSPF_IFTYPE_POINTOPOINT;
 
@@ -453,7 +454,7 @@ DEFUN (if_ospf_priority,
   u_int32_t priority;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   priority = strtol (argv[0], NULL, 10);
 
@@ -480,7 +481,7 @@ DEFUN (no_if_ospf_priority,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->priority = OSPF_ROUTER_PRIORITY_DEFAULT;
 
@@ -499,7 +500,7 @@ DEFUN (if_ospf_retransmit_interval,
   u_int32_t seconds;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -526,7 +527,7 @@ DEFUN (no_if_ospf_retransmit_interval,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->retransmit_interval = OSPF_RETRANSMIT_INTERVAL_DEFAULT;
 
@@ -545,7 +546,7 @@ DEFUN (if_ospf_transmit_delay,
   u_int32_t seconds;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   seconds = strtol (argv[0], NULL, 10);
 
@@ -572,7 +573,7 @@ DEFUN (no_if_ospf_transmit_delay,
   struct ospf_interface *oi;
 
   ifp = vty->index;
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   oi->transmit_delay = OSPF_TRANSMIT_DELAY_DEFAULT;
 

@@ -1,3 +1,14 @@
+1999-08-12  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_nsm.c (nsm_reset_nbr): New function added.
+	KillNbr and LLDown neighbor event call this function.
+	
+1999-08-10  Toshiaki Takada  <takada@zebra.org>
+
+	* ospf_packet.c (ospf_ls_retransmit)
+	(ospf_ls_upd_timer): New function added.
+	Set retransmission timer for Link State Update.
+
 1999-07-29  Toshiaki Takada  <takada@zebra.org>
 
 	* ospf_ism.c (ospf_dr_election): Fix bug of DR election.

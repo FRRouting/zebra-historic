@@ -23,13 +23,21 @@
 #ifndef _ZEBRA_ROUTEMAP_H
 #define _ZEBRA_ROUTEMAP_H
 
-typedef enum {
+typedef enum 
+{
   RM_MATCH,
   RM_DENYMATCH,
   RM_NOMATCH,
   RM_ERROR,
-  RM_OKAY,
+  RM_OKAY
 } route_map_result_t;
+
+typedef enum
+{
+  ROUTE_MAP_BGP,
+  ROUTE_MAP_RIPNG
+} route_map_object_t;
+
 
 /* Route map rule structure for matching and setting. */
 struct route_map_rule_cmd
@@ -38,7 +46,8 @@ struct route_map_rule_cmd
   char *str;
 
   /* Function for value set or match. */
-  route_map_result_t (*func_apply)(void *, struct prefix *, void *);
+  route_map_result_t (*func_apply)(void *, struct prefix *, 
+				   route_map_object_t, void *);
 
   /* Compile argument and return result as void *. */
   void *(*func_compile)(char *);
@@ -148,7 +157,8 @@ route_map_lookup_by_name (char *name);
 
 /* Apply route map to the object. */
 route_map_result_t
-route_map_apply (struct route_map *map, struct prefix *, void *object);
+route_map_apply (struct route_map *map, struct prefix *, 
+		 route_map_object_t object_type, void *object);
 
 void
 route_map_add_hook (void (*func) ());

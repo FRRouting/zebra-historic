@@ -1,6 +1,5 @@
-/*
- * Zebra version
- * Copyright (c) 1997, 1999 Kunihiro Ishiguro
+/* Router advertisement
+ * Copyright (C) 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -20,21 +19,29 @@
  * 02111-1307, USA.  
  */
 
-#ifndef _ZEBRA_VERSION_H
-#define _ZEBRA_VERSION_H
+#ifndef _ZEBRA_RTADV_H
+#define _ZEBRA_RTADV_H
 
-#define ZEBRA_VERSION     "0.77"
+/* Router advertisement prefix. */
+struct rtadv_prefix
+{
+  /* Prefix to be advertised. */
+  struct prefix prefix;
+  
+  /* The value to be placed in the Valid Lifetime in the Prefix */
+  int AdvValidLifetime;
 
-#define ZEBRA_BUG_ADDRESS "bug-zebra@gnu.org"
+  /* The value to be placed in the on-link flag */
+  int AdvOnLinkFlag;
 
-extern char *host_name;
+  /* The value to be placed in the Preferred Lifetime in the Prefix
+     Information option, in seconds.*/
+  int AdvPreferredLifetime;
 
-void print_version();
-pid_t pid_output (char *);
-pid_t pid_output_lock (char *);
+  /* The value to be placed in the Autonomous Flag. */
+  int AdvAutonomousFlag;
+};
 
-#ifndef HAVE_DAEMON
-int daemon(int, int);
-#endif
+void rtadv_config_write (struct vty *, struct interface *);
 
-#endif /* _ZEBRA_VERSION_H */
+#endif /* _ZEBRA_RTADV_H */

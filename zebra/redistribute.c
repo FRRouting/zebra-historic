@@ -71,14 +71,14 @@ zebra_redistribute (struct zebra_client *client, int type)
     for (rib = np->info; rib; rib = rib->next)
       if (IS_RIB_FIB (rib) && rib->type == type && zebra_check_addr (&np->p))
 	zebra_ipv4_add (client->fd, type, 0, (struct prefix_ipv4 *)&np->p,
-			&rib->u.gate4, 0);
+			&rib->u.gate4, rib->u.ifindex);
 
 #ifdef HAVE_IPV6
   for (np = route_top (ipv6_rib_table); np; np = route_next (np))
     for (rib = np->info; rib; rib = rib->next)
       if (IS_RIB_FIB (rib) && rib->type == type && zebra_check_addr (&np->p))
 	zebra_ipv6_add (client->fd, type, 0, (struct prefix_ipv6 *)&np->p,
-			&rib->u.gate6, 0);
+			&rib->u.gate6, rib->u.ifindex);
 #endif /* HAVE_IPV6 */
 }
 
@@ -96,11 +96,13 @@ redistribute_add (struct route_node *np, struct rib *rib)
 	{
 	  if (np->p.family == AF_INET)
 	    zebra_ipv4_add (client->fd, rib->type, 0, 
-			    (struct prefix_ipv4 *)&np->p, &rib->u.gate4, 0);
+			    (struct prefix_ipv4 *)&np->p, &rib->u.gate4,
+			    rib->u.ifindex);
 #ifdef HAVE_IPV6
 	  if (np->p.family == AF_INET6)
 	    zebra_ipv6_add (client->fd, rib->type, 0,
-			    (struct prefix_ipv6 *)&np->p, &rib->u.gate6, 0);
+			    (struct prefix_ipv6 *)&np->p, &rib->u.gate6,
+			    rib->u.ifindex);
 #endif /* HAVE_IPV6 */	  
 	}
 }
@@ -117,11 +119,13 @@ redistribute_delete (struct route_node *np, struct rib *rib)
 	{
 	  if (np->p.family == AF_INET)
 	    zebra_ipv4_delete (client->fd, rib->type, 0, 
-			       (struct prefix_ipv4 *)&np->p, &rib->u.gate4, 0);
+			       (struct prefix_ipv4 *)&np->p, &rib->u.gate4,
+			       rib->u.ifindex);
 #ifdef HAVE_IPV6
 	  if (np->p.family == AF_INET6)
 	    zebra_ipv6_delete (client->fd, rib->type, 0,
-			       (struct prefix_ipv6 *)&np->p, &rib->u.gate6, 0);
+			       (struct prefix_ipv6 *)&np->p, &rib->u.gate6,
+			       rib->u.ifindex);
 #endif /* HAVE_IPV6 */	  
 	}
 }

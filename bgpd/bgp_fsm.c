@@ -32,6 +32,8 @@
 #include "stream.h"
 #include "memory.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_dump.h"
@@ -58,19 +60,29 @@ static int bgp_keepalive_timer (struct thread *);
 /* BGP FSM functions. */
 static void bgp_start (struct peer *);
 
+/* BGP start timer jitter. */
+int
+bgp_start_jitter (int time)
+{
+  return ((rand () % (time + 1)) - (time / 2));
+}
+
 /* Hook function called after bgp event is occered.  And vty's
    neighbor command invoke this function after making neighbor
    structure. */
 void
 bgp_timer_set (struct peer *peer)
 {
+  int jitter = 0;
+
   switch (peer->status)
     {
     case Idle:
       /* First entry point of peer's finite state machine.  In Idle
 	 status timer_start is on.  All other timer must be turned
 	 off. */
-      BGP_TIMER_ON (peer->t_start, bgp_start_timer, peer->v_start);
+      jitter = bgp_start_jitter (peer->v_start);
+      BGP_TIMER_ON (peer->t_start, bgp_start_timer, peer->v_start + jitter);
       BGP_TIMER_OFF (peer->t_connect);
       BGP_TIMER_OFF (peer->t_holdtime);
       BGP_TIMER_OFF (peer->t_keepalive);

@@ -30,6 +30,7 @@
 #include "thread.h"
 #include "log.h"
 #include "prefix.h"
+#include "if.h"
 
 #include "ripngd/ripngd.h"
 #include "zebra/zebra.h"
@@ -102,6 +103,13 @@ sigint (int sig)
   exit (0);
 }
 
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
+}
+
 /* Signale wrapper. */
 RETSIGTYPE *
 signal_set (int signo, void (*func)(int))
@@ -133,6 +141,7 @@ signal_init ()
   signal_set (SIGINT, sigint);
   signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
+  signal_set (SIGUSR1, sigusr1);
 }
 
 /* RIPngd main routine. */

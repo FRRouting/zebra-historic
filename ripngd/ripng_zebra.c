@@ -24,8 +24,6 @@
 
 #include "zebra/zebra.h"
 #include "thread.h"
-#include "vector.h"
-#include "vty.h"
 #include "command.h"
 #include "prefix.h"
 #include "stream.h"
@@ -34,6 +32,7 @@
 #include "network.h"
 #include "client.h"
 #include "zclient.h"
+#include "if.h"
 
 #include "ripngd/ripngd.h"
 
@@ -129,6 +128,8 @@ ripng_redistribute_unset (int type)
   if (zebra->sock > 0)
     zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
 
+  ripng_redistribute_withdraw (type);
+  
   return CMD_SUCCESS;
 }
 
@@ -232,6 +233,25 @@ DEFUN (no_ripng_redistribute_bgp,
   return ripng_redistribute_unset (ZEBRA_ROUTE_BGP);
 }
 
+DEFUN (ripng_redistribute_ospf6,
+       ripng_redistribute_ospf6_cmd,
+       "redistribute ospf6",
+       "Redistribute control\n"
+       "OSPF6 route\n")
+{
+  return ripng_redistribute_set (ZEBRA_ROUTE_OSPF6);
+}
+
+DEFUN (no_ripng_redistribute_ospf6,
+       no_ripng_redistribute_ospf6_cmd,
+       "no redistribute ospf6",
+       NO_STR
+       "Redistribute control\n"
+       "OSPF6 route\n")
+{
+  return ripng_redistribute_unset (ZEBRA_ROUTE_OSPF6);
+}
+
 void
 ripng_redistribute_write (struct vty *vty)
 {
@@ -308,4 +328,6 @@ zebra_init ()
   install_element (RIPNG_NODE, &no_ripng_redistribute_connected_cmd);
   install_element (RIPNG_NODE, &ripng_redistribute_bgp_cmd);
   install_element (RIPNG_NODE, &no_ripng_redistribute_bgp_cmd);
+  install_element (RIPNG_NODE, &ripng_redistribute_ospf6_cmd);
+  install_element (RIPNG_NODE, &no_ripng_redistribute_ospf6_cmd);
 }

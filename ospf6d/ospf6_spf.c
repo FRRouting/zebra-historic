@@ -79,7 +79,15 @@ transit_vertex_rtable_install (struct vertex *v, struct area *area)
 
   if (IS_VTX_ROUTER_TYPE (v))
     {
-      dtype = DTYPE_INTRA_ROUTER;
+      struct router_lsa *rlsa;
+
+      /* check for E bit of router lsa */
+      rlsa = (struct router_lsa *) (v->vtx_lsa->lsa_hdr + 1);
+      if (ROUTER_LSA_ISSET (rlsa, ROUTER_LSA_BIT_E))
+        dtype = DTYPE_ASBR;
+      else
+        dtype = DTYPE_INTRA_ROUTER;
+
       did.router_id = v->vtx_id[0];
     }
   else if (IS_VTX_NETWORK_TYPE (v))
@@ -105,7 +113,7 @@ spf_install (struct vertex *v, struct area *area)
   listnode n;
   struct vertex *parent;
 
-  o6log.spf ("SPF install, depth:%lu, distance:%lu",
+  o6log.spf ("spf_install, depth:%lu, distance:%lu",
              v->vtx_depth, v->vtx_distance);
   print_vertex (v);
 
@@ -123,7 +131,9 @@ spf_install (struct vertex *v, struct area *area)
                                          [hash (v->vtx_id[1])], v);
   list_add_node (area->spftree.depthlist [v->vtx_depth], v);
 
-  transit_vertex_rtable_install (v, area);
+  if (v->vtx_depth != 0) /* don't install root to routing table */
+    transit_vertex_rtable_install (v, area);
+
   return 0;
 }
 

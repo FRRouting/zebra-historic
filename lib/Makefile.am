@@ -10,7 +10,7 @@ libzebra_a_SOURCES = \
 	print_version.c checksum.c vector.c linklist.c dropline.c \
 	vty.c command.c sockunion.c prefix.c thread.c if.c memory.c \
 	buffer.c buffer.c table.c client.c hash.c filter.c routemap.c \
-	distribute.c stream.c str.c log.c plist.c zclient.c
+	distribute.c stream.c str.c log.c plist.c zclient.c sockopt.c
 
 libzebra_a_DEPENDENCIES = @LIB_REGEX@
 
@@ -20,7 +20,7 @@ noinst_HEADERS = \
 	buffer.h client.h command.h dropline.h filter.h getopt.h hash.h \
 	if.h linklist.h log.h memory.h network.h prefix.h roken.h \
 	routemap.h sockunion.h str.h stream.h table.h thread.h vector.h \
-	version.h vty.h zebra.h plist.h zclient.h
+	version.h vty.h zebra.h plist.h zclient.h sockopt.h
 
 
 EXTRA_DIST = regex.c regex-gnu.h

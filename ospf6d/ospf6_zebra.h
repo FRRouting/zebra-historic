@@ -24,12 +24,17 @@
 
 extern struct zebra *zebra;
 
+void ospf6_zebra_redistribute (int);
+void ospf6_zebra_no_redistribute (int);
+
 int ospf6_zebra_get_interface (int, struct zebra *, zebra_size_t);
 int ospf6_zebra_read (struct thread *); 
 void ospf6_zebra_init ();
 void zebra_start ();
 void ospf6_zebra_add (struct ospf6_rtentry *);
 void ospf6_zebra_delete (struct ospf6_rtentry *);
+
+int ospf6_zebra_read_ipv6 (int, struct zebra *, zebra_size_t);
 
 #endif /*OSPF6_ZEBRA_H*/
 

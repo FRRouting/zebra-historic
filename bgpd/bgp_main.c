@@ -31,6 +31,8 @@
 #include "memory.h"
 #include "log.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_network.h"
 
@@ -90,7 +92,9 @@ void
 sighup (int sig)
 {
   zlog (NULL, LOG_INFO, "SIGHUP received");
-  /*  log_rotate (); */
+
+  /* Reload of config file. */
+  ;
 }
 
 /* SIGINT handler. */
@@ -103,6 +107,13 @@ sigint (int sig)
     bgp_terminate ();
 
   exit (0);
+}
+
+/* SIGUSR1 handler. */
+void
+sigusr1 (int sig)
+{
+  zlog_rotate (NULL);
 }
 
 /* Signale wrapper. */
@@ -136,6 +147,7 @@ signal_init ()
   signal_set (SIGINT, sigint);
   signal_set (SIGTERM, sigint);
   signal_set (SIGPIPE, SIG_IGN);
+  signal_set (SIGUSR1, sigusr1);
 }
 
 

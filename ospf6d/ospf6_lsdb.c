@@ -86,6 +86,45 @@ attach_lsa_hdr_to_iov (struct ospf6_lsa *lsa, struct iovec *iov)
 }
 
 
+/* lookup lsa on maxage list */
+struct ospf6_lsa *
+ospf6_lookup_maxage (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
+{
+  if (list_lookup_node (ospf6->maxagelist, lsa))
+    return lsa;
+  return NULL;
+}
+
+/* add lsa to maxage list */
+void
+ospf6_add_maxage (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
+{
+  if (ospf6_lookup_maxage (lsa, ospf6))
+    {
+      o6log.lsdb ("%s already on maxage", print_lsahdr (lsa->lsa_hdr));
+      return;
+    }
+  list_add_node (ospf6->maxagelist, lsa);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("add %s to maxage", print_lsahdr (lsa->lsa_hdr));
+  return;
+}
+
+/* remove lsa from maxage list */
+void
+ospf6_remove_maxage (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
+{
+  if (!ospf6_lookup_maxage (lsa, ospf6))
+    {
+      o6log.lsdb ("%s not on maxage", print_lsahdr (lsa->lsa_hdr));
+      return;
+    }
+  list_delete_by_val (ospf6->maxagelist, lsa);
+  o6log.lsdb ("remove %s from maxage", print_lsahdr (lsa->lsa_hdr));
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
 /* lookup lsa on summary list of neighbor */
 struct ospf6_lsa *
 ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
@@ -105,6 +144,12 @@ ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_add_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  if (ospf6_lookup_summary (lsa, nbr))
+    {
+      o6log.lsdb ("%s already on %s request", print_lsahdr (lsa->lsa_hdr),
+                  nbr->str);
+      return;
+    }
   list_add_node (nbr->summarylist, lsa);
   list_add_node (lsa->summary_nbr, nbr);
   ospf6_lsa_lock (lsa);
@@ -117,6 +162,12 @@ ospf6_add_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_remove_summary (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  if (!ospf6_lookup_summary (lsa, nbr))
+    {
+      o6log.lsdb ("%s not on %s request", print_lsahdr (lsa->lsa_hdr),
+                  nbr->str);
+      return;
+    }
   list_delete_by_val (nbr->summarylist, lsa);
   list_delete_by_val (lsa->summary_nbr, nbr);
   o6log.lsdb ("remove %s from %s summary", print_lsahdr (lsa->lsa_hdr),
@@ -168,6 +219,12 @@ ospf6_lookup_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_add_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  if (ospf6_lookup_request (lsa, nbr))
+    {
+      o6log.lsdb ("%s already on %s request", print_lsahdr (lsa->lsa_hdr),
+                  nbr->str);
+      return;
+    }
   list_add_node (nbr->requestlist, lsa);
   list_add_node (lsa->request_nbr, nbr);
   ospf6_lsa_lock (lsa);
@@ -180,6 +237,12 @@ ospf6_add_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_remove_request (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  if (!ospf6_lookup_request (lsa, nbr))
+    {
+      o6log.lsdb ("%s not on %s request", print_lsahdr (lsa->lsa_hdr),
+                  nbr->str);
+      return;
+    }
   list_delete_by_val (nbr->requestlist, lsa);
   list_delete_by_val (lsa->request_nbr, nbr);
   o6log.lsdb ("remove %s from %s request", print_lsahdr (lsa->lsa_hdr),
@@ -222,6 +285,12 @@ ospf6_lookup_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_add_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  if (ospf6_lookup_retrans (lsa, nbr))
+    {
+      o6log.lsdb ("%s already on %s retrans",
+                  print_lsahdr (lsa->lsa_hdr), nbr->str);
+      return;
+    }
   list_add_node (nbr->retranslist, lsa);
   list_add_node (lsa->retrans_nbr, nbr);
   ospf6_lsa_lock (lsa);
@@ -234,11 +303,23 @@ ospf6_add_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 void
 ospf6_remove_retrans (struct ospf6_lsa *lsa, struct neighbor *nbr)
 {
+  if (!ospf6_lookup_retrans (lsa, nbr))
+    {
+      o6log.lsdb ("%s not on %s retrans",
+                  print_lsahdr (lsa->lsa_hdr), nbr->str);
+      return;
+    }
   list_delete_by_val (nbr->retranslist, lsa);
   list_delete_by_val (lsa->retrans_nbr, nbr);
   o6log.lsdb ("remove %s from %s retrans", print_lsahdr (lsa->lsa_hdr),
               nbr->str);
   ospf6_lsa_unlock (lsa);
+
+  /* before return, check for this LSA's age.
+     if MaxAge and no neighbor is in Exchange or Loading,
+     the LSA must be removed from database.*/
+  ospf6_maxage_remove (lsa);
+
   return;
 }
 
@@ -258,12 +339,35 @@ ospf6_remove_retrans_all (struct neighbor *nbr)
 }
 
 
+/* lookup delayed acknowledge list of ospf6_if */
+struct ospf6_lsa *
+ospf6_lookup_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
+{
+  if (list_lookup_node (o6if->delayed_ack, lsa))
+    {
+#ifndef NDEBUG
+      if (!list_lookup_node (lsa->delayed_ack_if, o6if))
+        assert (0);
+#endif /* NDEBUG */
+      return lsa;
+    }
+  return NULL;
+}
+
 /* add to delayed acknowledge list of ospf6_if */
 void
 ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
+  if (ospf6_lookup_delayed_ack (lsa, o6if))
+    {
+      o6log.lsdb ("%s already on delayed ack of %s",
+                  print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
+      return;
+    }
   list_add_node (o6if->delayed_ack, lsa);
   list_add_node (lsa->delayed_ack_if, o6if);
+  o6log.lsdb ("add %s to %s delayed_ack",
+              print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
   ospf6_lsa_lock (lsa);
   return;
 }
@@ -272,8 +376,16 @@ ospf6_add_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 void
 ospf6_remove_delayed_ack (struct ospf6_lsa *lsa, struct ospf6_if *o6if)
 {
+  if (!ospf6_lookup_delayed_ack (lsa, o6if))
+    {
+      o6log.lsdb ("%s not on delayed ack of %s",
+                  print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
+      return;
+    }
   list_delete_by_val (o6if->delayed_ack, lsa);
   list_delete_by_val (lsa->delayed_ack_if, o6if);
+  o6log.lsdb ("remove %s from %s delayed_ack",
+              print_lsahdr (lsa->lsa_hdr), o6if->interface->name);
   ospf6_lsa_unlock (lsa);
   return;
 }
@@ -376,6 +488,50 @@ ospf6_lsdb_remove_area (struct ospf6_lsa *lsa, struct area *area)
   return;
 }
 
+/* as scope */
+/* lookup from as lsdb */
+static struct ospf6_lsa *
+ospf6_lsdb_lookup_as (unsigned short type, unsigned long id,
+                        unsigned long advrtr, struct ospf6 *ospf6)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+
+  assert (ospf6);
+
+  for (n = listhead (ospf6->lsdb); n; nextnode (n))
+    {
+      lsa = (struct ospf6_lsa *) getdata (n);
+      if (lsa->lsa_hdr->lsh_type == type &&
+          lsa->lsa_hdr->lsh_id == id &&
+          lsa->lsa_hdr->lsh_advrtr == advrtr)
+        return lsa;
+    }
+  return NULL;
+}
+
+/* add to as lsdb */
+static void
+ospf6_lsdb_add_as (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
+{
+  assert (ospf6);
+  list_add_node (ospf6->lsdb, lsa);
+  ospf6_lsa_lock (lsa);
+  o6log.lsdb ("lsdb_add %s to as", print_lsahdr (lsa->lsa_hdr));
+  return;
+}
+
+/* remove from as lsdb */
+static void
+ospf6_lsdb_remove_as (struct ospf6_lsa *lsa, struct ospf6 *ospf6)
+{
+  assert (ospf6);
+  o6log.lsdb ("lsdb_remove %s from as", print_lsahdr (lsa->lsa_hdr));
+  list_delete_by_val (ospf6->lsdb, lsa);
+  ospf6_lsa_unlock (lsa);
+  return;
+}
+
 /* lsdb lookup */
   /* It is better to specify scope when lookup lsdb, because there may
      be the same LSAs in different scoped structure. this will happen
@@ -387,6 +543,7 @@ void
 ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
                                 unsigned long advrtr, void *scope)
 {
+  struct ospf6 *ospf6;
   struct area *area;
   struct ospf6_if *o6if;
   listnode n;
@@ -420,6 +577,17 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
         break;
 
       case SCOPE_AS:
+        ospf6 = (struct ospf6 *) scope;
+        for (n = listhead (ospf6->lsdb); n; nextnode (n))
+          {
+            lsa = (struct ospf6_lsa *) getdata (n);
+            o6log.debug ("as lsdb %s", print_lsahdr (lsa->lsa_hdr));
+            if (lsa->lsa_hdr->lsh_type == type &&
+                lsa->lsa_hdr->lsh_advrtr == advrtr)
+              list_add_node (l, lsa);
+          }
+        break;
+
       case SCOPE_RESERVED:
       default:
         o6log.lsdb ("unsupported scope, can't collect advrtr from lsdb");
@@ -432,6 +600,7 @@ ospf6_lsdb_collect_type_advrtr (list l, unsigned short type,
 void
 ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
 {
+  struct ospf6 *ospf6;
   struct ospf6_if *o6if;
   struct area *area;
   listnode n;
@@ -464,6 +633,16 @@ ospf6_lsdb_collect_type (list l, unsigned short type, void *scope)
         break;
 
       case SCOPE_AS:
+        /* used by show_ipv6_ospf6_database_as_external_cmd */
+        ospf6 = (struct ospf6 *) scope;
+        for (n = listhead (ospf6->lsdb); n; nextnode (n))
+          {
+            lsa = (struct ospf6_lsa *) getdata (n);
+            o6log.debug ("as lsdb %s", print_lsahdr (lsa->lsa_hdr));
+            if (lsa->lsa_hdr->lsh_type == type)
+              list_add_node (l, lsa);
+          }
+        break;
       case SCOPE_RESERVED:
       default:
         o6log.lsdb ("unsupported scope, can't collect advrtr from lsdb");
@@ -479,6 +658,7 @@ ospf6_lsdb_lookup (unsigned short type, unsigned long id,
 {
   struct ospf6_if *o6if;
   struct area *area;
+  struct ospf6 *ospf6;
   struct ospf6_lsa *found;
 
   switch (ospf6_lsa_get_scope_type (type))
@@ -492,6 +672,9 @@ ospf6_lsdb_lookup (unsigned short type, unsigned long id,
         found = ospf6_lsdb_lookup_area (type, id, advrtr, area);
         return found;
       case SCOPE_AS:
+        ospf6 = (struct ospf6 *) scope;
+        found = ospf6_lsdb_lookup_as (type, id, advrtr, ospf6);
+        return found;
       case SCOPE_RESERVED:
       default:
         o6log.lsdb ("unsupported scope, can't lookup lsdb");
@@ -505,6 +688,7 @@ ospf6_lsdb_add (struct ospf6_lsa *lsa)
 {
   struct ospf6_if *o6if;
   struct area *area;
+  struct ospf6 *ospf6;
   struct timeval now;
 
   assert (lsa && lsa->lsa_hdr);
@@ -527,6 +711,9 @@ ospf6_lsdb_add (struct ospf6_lsa *lsa)
         ospf6_lsdb_add_area (lsa, area);
         break;
       case SCOPE_AS:
+        ospf6 = (struct ospf6 *) lsa->scope;
+        ospf6_lsdb_add_as (lsa, ospf6);
+        break;
       case SCOPE_RESERVED:
       default:
         o6log.lsdb ("unsupported scope, can't add lsdb");
@@ -541,6 +728,7 @@ ospf6_lsdb_remove (struct ospf6_lsa *lsa)
 {
   struct ospf6_if *o6if;
   struct area *area;
+  struct ospf6 *ospf6;
   listnode n;
 
   /* LSA going to be removed from lsdb should not be (delayed)
@@ -564,6 +752,9 @@ ospf6_lsdb_remove (struct ospf6_lsa *lsa)
         ospf6_lsdb_remove_area (lsa, area);
         break;
       case SCOPE_AS:
+        ospf6 = (struct ospf6 *) lsa->scope;
+        ospf6_lsdb_remove_as (lsa, ospf6);
+        break;
       case SCOPE_RESERVED:
       default:
         o6log.lsdb ("unsupported scope, can't add lsdb");
@@ -654,6 +845,29 @@ ospf6_lsdb_finish_area (struct area *area)
   return;
 }
 
+/* as lsdb */
+void
+ospf6_lsdb_init_as (struct ospf6 *ospf6)
+{
+  ospf6->lsdb = list_init ();
+  return;
+}
+
+void
+ospf6_lsdb_finish_as (struct ospf6 *ospf6)
+{
+  listnode n;
+  struct ospf6_lsa *lsa;
+  while (listcount (ospf6->lsdb))
+    {
+      n = listhead (ospf6->lsdb);
+      lsa = (struct ospf6_lsa *) getdata (n);
+      ospf6_lsdb_remove_as (lsa, ospf6);
+    }
+  list_delete_all (ospf6->lsdb);
+  return;
+}
+
 /* when installing more recent LSA, must detach less recent database copy
    from LS-lists of neighbors, and attach new one. */
 void ospf6_lsdb_install (struct ospf6_lsa *new)
@@ -668,19 +882,16 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
 
   if (old)
     {
-      while (listcount (old->summary_nbr))
-        {
-          n = listhead (old->summary_nbr);
-          nbr = (struct neighbor *) getdata (n);
-          ospf6_remove_summary (old, nbr);
-          ospf6_add_summary (new, nbr);
-        }
-    
-      /* xxx, request list should not be done this way, i think.
+
+      /* changes in summary list cause linklist function failure
+         there's no need to update summarylist, because receiving
+         LSA newer than requesting is usual. */
+
+      /* xxx, request list should not be changed here, i think.
          because self-originated LSA will not appear on request list,
          and receiving new LSA (via flood) deletes the one
          on request list. */
-    
+
       while (listcount (old->retrans_nbr))
         {
           n = listhead (old->retrans_nbr);
@@ -688,7 +899,7 @@ void ospf6_lsdb_install (struct ospf6_lsa *new)
           ospf6_remove_retrans (old, nbr);
           ospf6_add_retrans (new, nbr);
         }
-    
+
       ospf6_lsdb_remove (old);
       ospf6_lsdb_add (new);
     }

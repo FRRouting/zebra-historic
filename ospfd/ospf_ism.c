@@ -458,18 +458,22 @@ ism_interface_down (struct ospf_interface *oi)
 	continue;
       nbr = rn->info;
 
+      /* This is myself. */
       if (IPV4_ADDR_SAME (&nbr->router_id, &ospf_top->router_id))
 	continue;
 
-      OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_KillNbr);
+      OSPF_NSM_EVENT_EXECUTE (nbr, NSM_KillNbr);
     }
 
   /* Reset interface variables. */
   ospf_if_reset_variables (oi);
 
-  /* Cancel Timers. */
+  /* Cancel Threads. */
   OSPF_ISM_TIMER_OFF (oi->t_hello);
   OSPF_ISM_TIMER_OFF (oi->t_wait);
+
+  OSPF_ISM_READ_OFF (oi->t_read);
+  OSPF_ISM_WRITE_OFF (oi->t_write);
 
   return 0;
 }
@@ -540,7 +544,7 @@ struct {
     { ism_ignore,          ISM_Down },          /* NeighborChange */
     { ism_loop_ind,        ISM_Loopback },      /* LoopInd        */
     { ism_ignore,          ISM_Down },          /* UnloopInd      */
-    { ism_ignore,          ISM_Down },          /* InterfaceDown  */
+    { ism_interface_down,  ISM_Down },          /* InterfaceDown  */
   },
   {
     /* Loopback: */
@@ -643,6 +647,11 @@ ism_change_status (struct ospf_interface *oi, int status)
       lsa = ospf_router_lsa (oi);
       ospf_add_router_lsa (oi->area, lsa);
       oi->area->router_lsa_self = lsa;
+
+      /* Add LSA to related neighbor's retransmission list. */
+      if (oi->status == ISM_DR || oi->status == ISM_Backup ||
+	  oi->status == ISM_DROther)
+	ospf_ls_retransmit (oi, lsa);
     }
 
   /* Originate network-LSA. */

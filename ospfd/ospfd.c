@@ -221,7 +221,7 @@ ospf_loopback_run (struct ospf *ospf)
   for (node = listhead (ospf->iflist); node; nextnode (node))
     {
       ifp = getdata (node);
-      oi = ifp->if_data;
+      oi = ifp->info;
 
       if (if_is_up (ifp))
 	{
@@ -231,7 +231,7 @@ ospf_loopback_run (struct ospf *ospf)
 	      {	      
 		oi->flag = OSPF_IF_ENABLE;
 		zlog (NULL, LOG_INFO, "OSPF ISM[%s] start.", ifp->name);
-		OSPF_ISM_EVENT_SCHEDULE (ifp->if_data, ISM_LoopInd);
+		OSPF_ISM_EVENT_SCHEDULE (ifp->info, ISM_LoopInd);
 	      }
 	}
     }
@@ -257,7 +257,7 @@ ospf_interface_run (struct ospf *ospf, struct prefix *p,
       u_char flag = OSPF_IF_DISABLE;
 
       ifp = getdata (node);
-      oi = ifp->if_data;
+      oi = ifp->info;
 
       /* is interface up? */
       if (! if_is_up (ifp))
@@ -321,14 +321,14 @@ ospf_interface_down (struct ospf *ospf, struct prefix *p,
       u_char flag = OSPF_IF_ENABLE;
 
       ifp = getdata (node);
-      oi = ifp->if_data;
+      oi = ifp->info;
 
       if (oi->flag == OSPF_IF_DISABLE)
 	continue;
 
       if (oi->area == area)
 	{
-	  /* close socket. */
+	  /* Close socket. */
 	  close (oi->fd);
 
 	  /* clear input/output buffer stream. */
@@ -338,7 +338,7 @@ ospf_interface_down (struct ospf *ospf, struct prefix *p,
 	  flag = OSPF_IF_DISABLE;
 
 	  /* This interface goes down. */
-	  OSPF_ISM_EVENT_SCHEDULE (oi, ISM_InterfaceDown);
+	  OSPF_ISM_EVENT_EXECUTE (oi, ISM_InterfaceDown);
 	}
     }
 }
@@ -464,7 +464,7 @@ DEFUN (no_router_ospf,
       route_unlock_node (rn);
     }
 
-  /* reset interface. */
+  /* Reset interface. */
   for (node = listhead (ospf_top->iflist); node; nextnode (node))
     {
       struct interface *ifp;
@@ -472,7 +472,7 @@ DEFUN (no_router_ospf,
       struct route_node *rn;      
 
       ifp = getdata (node);
-      oi = ifp->if_data;
+      oi = ifp->info;
 
       /* Clear neighbors. */
       for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
@@ -483,7 +483,9 @@ DEFUN (no_router_ospf,
 	    continue;
 
 	  nbr = rn->info;
-	  ospf_nbr_free (nbr);
+	  ospf_nbr_delete (nbr);
+	  /*	  ospf_nbr_free (nbr); 
+		  rn->info = NULL; */
 	}
       /* Reset interface variables. */
       ospf_if_reset_variables (oi);
@@ -765,7 +767,7 @@ show_ip_ospf_interface_sub (struct vty *vty, struct interface *ifp)
   else
     vty_out (vty, "%s is down, line protocol is down\r\n", ifp->name);
 
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   /* is interface OSPF enabled? */
   if (oi == NULL)
@@ -900,7 +902,7 @@ show_ip_ospf_neighbor_sub (struct vty *vty, struct interface *ifp)
   char msgbuf[16];
   char timebuf[9];
 
-  oi = ifp->if_data;
+  oi = ifp->info;
 
   for (rn = route_top (oi->nbrs); rn; rn = route_next (rn))
     {

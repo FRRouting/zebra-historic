@@ -36,17 +36,32 @@
  /usr/include/net/if.h and it's like this:
 
 */
-#define INTERFACE_NAMSIZ 20  
+
+#define INTERFACE_NAMSIZ      20
+#define INTERFACE_HWADDR_MAX  20
 
 /* Interface structure */
 struct interface 
 {
-  /* Common interface data. */
-  unsigned int index;
-  char name [INTERFACE_NAMSIZ + 1];
+  /* Interface name. */
+  char name[INTERFACE_NAMSIZ + 1];
+
+  /* Interface index. */
+  unsigned int ifindex;
+
+  /* Interface flags. */
   unsigned long flags;
+
+  /* Interface metric */
   int metric;
+
+  /* INterface MTU. */
   int mtu;
+
+  /* Hardware address. */
+  unsigned short hw_type;
+  u_char hw_addr[INTERFACE_HWADDR_MAX];
+  int hw_addr_len;
 
   /* description of the interface. */
   char *desc;			
@@ -59,7 +74,7 @@ struct interface
   list connected;
 
   /* Daemon specific interface data pointer. */
-  void *if_data;
+  void *info;
 };
 
 /* Connected address structure. */

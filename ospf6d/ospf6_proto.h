@@ -61,6 +61,19 @@ struct ospf6
   rtr_id_t      router_id;
   list          area_list;
   struct ospf6_rtable rtable;
+  struct ospf6_rtable redist_table;
+
+  /* for LSAs not on any retrans list,
+     but can't be removed because neighbor state */
+  list            maxagelist;
+
+  int redist_connected;
+  int redist_static;
+  int redist_ripng;
+  int redist_bgp;
+
+  list lsdb;
+  unsigned long ase_ls_id;
 };
 
 /* OSPF options */

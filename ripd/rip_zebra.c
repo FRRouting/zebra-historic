@@ -24,8 +24,6 @@
 
 #include "zebra/zebra.h"
 #include "thread.h"
-#include "vector.h"
-#include "vty.h"
 #include "command.h"
 #include "prefix.h"
 #include "ripd.h"
@@ -45,22 +43,19 @@ int rip_zebra_get_interface (int, struct zebra *, zebra_size_t);
 
 /* RIPd to zebra command interface. */
 void
-rip_zebra (int command, struct prefix_ipv4 *p, struct in_addr *nexthop)
+rip_zebra_ipv4_add (struct prefix_ipv4 *p, struct in_addr *nexthop, 
+		    unsigned int ifindex)
 {
-  if (zebra->sock < 0)
-    return;
+  if (zebra->redist[ZEBRA_ROUTE_RIP])
+    zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, ifindex);
+}
 
-  switch (command)
-    {
-    case ZEBRA_IPV4_ROUTE_ADD:
-      if (zebra->redist[ZEBRA_ROUTE_RIP])
-	zebra_ipv4_add (zebra->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, 0);
-      break;
-    case ZEBRA_IPV4_ROUTE_DELETE:
-      if (zebra->redist[ZEBRA_ROUTE_RIP])
-	zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, 0);
-      break;
-    }
+void
+rip_zebra_ipv4_delete (struct prefix_ipv4 *p, struct in_addr *nexthop, 
+		       unsigned int ifindex)
+{
+  if (zebra->redist[ZEBRA_ROUTE_RIP])
+    zebra_ipv4_delete (zebra->sock, ZEBRA_ROUTE_RIP, 0, p, nexthop, ifindex);
 }
 
 /* Zebra route add and delete treatment. */
@@ -70,45 +65,38 @@ rip_zebra_read_ipv4 (int command, struct zebra *zebra, zebra_size_t length)
   u_char type;
   u_char flags;
   struct in_addr nexthop;
-  u_char *pnt;
   u_char *lim;
   struct stream *s;
+  unsigned int ifindex;
 
   s = zebra->ibuf;
-
-  pnt = stream_pnt (s);
-  lim = pnt + length;
+  lim = stream_pnt (s) + length;
 
   /* Fetch type and nexthop first. */
-  type = *pnt++;
-  flags = *pnt++;
-  memcpy(&nexthop, pnt, 4);
-  pnt += 4;
+  type = stream_getc (s);
+  flags = stream_getc (s);
+  memcpy (&nexthop, stream_pnt (s), sizeof (struct in_addr));
+  stream_forward (s, sizeof (struct in_addr));
 
   /* Then fetch IPv4 prefixes. */
-  while (pnt < lim)
+  while (stream_pnt (s) < lim)
     {
       int size;
       struct prefix_ipv4 p;
-      struct rip_info *rinfo;
+
+      ifindex = stream_getl (s);
 
       bzero (&p, sizeof (struct prefix_ipv4));
       p.family = AF_INET;
-      p.prefixlen = *pnt++;
+      p.prefixlen = stream_getc (s);
       size = PSIZE (p.prefixlen);
-      memcpy (&p.prefix, pnt, size);
-      pnt += size;
-
-      rinfo = rip_info_new ();
-      rinfo->pref = -10;
-      rinfo->fib = 1;
-      rinfo->type = type;
-      rinfo->metric = 1;
+      memcpy (&p.prefix, stream_pnt (s), size);
+      stream_forward (s, size);
 
       if (command == ZEBRA_IPV4_ROUTE_ADD)
-	rip_add_route (&p, rinfo, NULL, NULL);
-      else
-	;
+	rip_redistribute_add (type, 0, &p, ifindex);
+      else 
+	rip_redistribute_delete (type, 0, &p, ifindex);
     }
   return 0;
 }
@@ -137,6 +125,9 @@ rip_redistribute_unset (int type)
 
   if (zebra->sock > 0)
     zebra_redistribute_send (ZEBRA_REDISTRIBUTE_DELETE, zebra->sock, type);
+
+  /* Remove the routes from RIP table. */
+  rip_redistribute_withdraw (type);
 
   return CMD_SUCCESS;
 }
@@ -220,6 +211,25 @@ DEFUN (no_rip_redistribute_connected,
        "Connected route\n")
 {
   return rip_redistribute_unset (ZEBRA_ROUTE_CONNECT);
+}
+
+DEFUN (rip_redistribute_ospf,
+       rip_redistribute_ospf_cmd,
+       "redistribute ospf",
+       "Redistribute control\n"
+       "OSPF route\n")
+{
+  return rip_redistribute_set (ZEBRA_ROUTE_OSPF);
+}
+
+DEFUN (no_rip_redistribute_ospf,
+       no_rip_redistribute_ospf_cmd,
+       "no redistribute ospf",
+       NO_STR
+       "Redistribute control\n"
+       "OSPF route\n")
+{
+  return rip_redistribute_unset (ZEBRA_ROUTE_OSPF);
 }
 
 DEFUN (rip_redistribute_bgp,
@@ -315,6 +325,8 @@ zebra_init ()
   install_element (RIP_NODE, &no_rip_redistribute_static_cmd);
   install_element (RIP_NODE, &rip_redistribute_connected_cmd);
   install_element (RIP_NODE, &no_rip_redistribute_connected_cmd);
+  install_element (RIP_NODE, &rip_redistribute_ospf_cmd);
+  install_element (RIP_NODE, &no_rip_redistribute_ospf_cmd);
   install_element (RIP_NODE, &rip_redistribute_bgp_cmd);
   install_element (RIP_NODE, &no_rip_redistribute_bgp_cmd);
 }

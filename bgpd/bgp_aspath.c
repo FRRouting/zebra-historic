@@ -30,6 +30,8 @@
 #include "str.h"
 #include "log.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_aspath.h"
 
@@ -91,28 +93,6 @@ aspath_unintern (struct aspath *aspath)
       assert (ret != NULL);
       aspath_free (aspath);
     }
-}
-
-/* Duplicate aspath structure.  Created same aspath structure but
-   reference count is cleared. */
-struct aspath *
-aspath_dup (struct aspath *aspath)
-{
-  struct aspath *new;
-
-  new = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
-  bzero (new, sizeof (struct aspath));
-  new->length = aspath->length;
-
-  if (new->length)
-    {
-      new->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
-      memcpy (new->data, aspath->data, aspath->length);
-    }
-  else
-    new->data = NULL;
-
-  return new;
 }
 
 /* Convert aspath structure to string expression. */
@@ -243,6 +223,30 @@ aspath_make_str_count (struct aspath *as)
   return str_buf;
 }
 
+/* Duplicate aspath structure.  Created same aspath structure but
+   reference count is cleared. */
+struct aspath *
+aspath_dup (struct aspath *aspath)
+{
+  struct aspath *new;
+
+  new = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
+  bzero (new, sizeof (struct aspath));
+  new->length = aspath->length;
+
+  if (new->length)
+    {
+      new->data = XMALLOC (MTYPE_AS_SEG, aspath->length);
+      memcpy (new->data, aspath->data, aspath->length);
+    }
+  else
+    new->data = NULL;
+
+  new->str = aspath_make_str_count (aspath);
+
+  return new;
+}
+
 /* AS path parse function.  pnt is a pointer to byte stream and length
    is length of byte stream.  If there is same aspath in the aspath
    hash then return it else make new aspath structure. */
@@ -268,6 +272,7 @@ aspath_parse (caddr_t pnt, int length)
 
   /* New aspath strucutre is needed. */
   aspath = XMALLOC (MTYPE_AS_PATH, sizeof (struct aspath));
+  bzero((void *)aspath, sizeof(struct aspath));
   aspath->length = length;
 
   /* In case of IBGP connection aspath's length can be zero. */

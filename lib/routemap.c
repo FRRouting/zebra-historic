@@ -584,7 +584,7 @@ route_map_delete_set (struct route_map_index *index, char *set_name,
 */
 route_map_result_t
 route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
-                       void *object)
+                       route_map_object_t type, void *object)
 {
   int ret;
   struct route_map_rule *match;
@@ -596,7 +596,7 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
       /* Try each match statement in turn. If any return something
        other than RM_MATCH then we don't need to check anymore and can
        return */
-      ret = (*match->cmd->func_apply)(match->value, prefix, object);
+      ret = (*match->cmd->func_apply)(match->value, prefix, type, object);
       if (ret != RM_MATCH)
 	return ret;
     }
@@ -610,7 +610,7 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
     {
       for (set = index->set_list.head; set; set = set->next)
 	{
-	  ret = (*set->cmd->func_apply)(set->value, prefix, object);
+	  ret = (*set->cmd->func_apply)(set->value, prefix, type, object);
 
 	  /* I believe a Cisco will ignore set statements that don't
 	 apply to what we're filtering - think "set default interface"
@@ -618,30 +618,33 @@ route_map_apply_index (struct route_map_index *index, struct prefix *prefix,
 	/* if (ret != RM_OKAY) */
 	/*  return ret; */
 	}
+      return RM_MATCH;
     }
   else 
     {
       return RM_DENYMATCH;
     }
   /* Should not get here! */
-  return RM_ERROR;
+  return RM_MATCH;
 }
 
 /* Apply route map to the object. */
 route_map_result_t
-route_map_apply (struct route_map *map, struct prefix *prefix, void *object)
+route_map_apply (struct route_map *map, struct prefix *prefix, 
+		 route_map_object_t type, void *object)
 {
-  int ret;
+  int ret = 0;
   struct route_map_index *index;
 
   for (index = map->head; index; index = index->next)
     {
-      /* Apply this index. End here if we get a RM_DENYMATCH */
-      ret = route_map_apply_index (index, prefix, object);
-      if (ret == RM_DENYMATCH)
+      /* Apply this index. End here if we get a RM_NOMATCH */
+      ret = route_map_apply_index (index, prefix, type, object);
+
+      if (ret != RM_NOMATCH)
 	return ret;
     }
-  return RM_OKAY;
+  return ret;
 }
 
 void
@@ -666,7 +669,7 @@ route_map_init ()
 
 /* VTY related functions. */
 DEFUN (route_map, route_map_cmd,
-       "route-map WORD (deny|permit) <0-65535>",
+       "route-map WORD (deny|permit) <1-65535>",
        "Create route-map or enter route-map command mode\n"
        "Route map tag name\n"
        "Route map denies set operations\n"
@@ -674,14 +677,15 @@ DEFUN (route_map, route_map_cmd,
        "Route map sequence number\n")
 {
   int permit;
-  int pref;
+  unsigned long pref;
   struct route_map *map;
   struct route_map_index *index;
+  char *endptr = NULL;
 
   /* Permit check. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "permit", strlen (argv[1])) == 0)
     permit = ROUTE_MAP_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "deny", strlen (argv[1])) == 0)
     permit = ROUTE_MAP_DENY;
   else
     {
@@ -690,10 +694,15 @@ DEFUN (route_map, route_map_cmd,
     }
 
   /* Preference check. */
-  pref = atoi (argv[2]);
-  if (pref == 0)
+  pref = strtoul (argv[2], &endptr, 10);
+  if (pref == ULONG_MAX || *endptr != '\0')
     {
-      vty_out (vty, "the fourth field must be positive integer");
+      vty_out (vty, "the fourth field must be positive integer\r\n");
+      return CMD_WARNING;
+    }
+  if (pref == 0 || pref > 65535)
+    {
+      vty_out (vty, "the fourth field must be <1-65535>\r\n");
       return CMD_WARNING;
     }
 
@@ -707,7 +716,7 @@ DEFUN (route_map, route_map_cmd,
 }
 
 DEFUN (no_route_map, no_route_map_cmd,
-       "no route-map NAME PERMIT PREF",
+       "no route-map NAME (deny|permit) <1-65535>",
        NO_STR
        "Create route-map or enter route-map command mode\n"
        "Route map tag\n"
@@ -715,14 +724,15 @@ DEFUN (no_route_map, no_route_map_cmd,
        "Route map preference\n")
 {
   int permit;
-  int pref;
+  unsigned long pref;
   struct route_map *map;
   struct route_map_index *index;
+  char *endptr = NULL;
 
   /* Permit check. */
-  if (strcmp (argv[1], "permit") == 0)
+  if (strncmp (argv[1], "permit", strlen (argv[1])) == 0)
     permit = ROUTE_MAP_PERMIT;
-  else if (strcmp (argv[1], "deny") == 0)
+  else if (strncmp (argv[1], "deny", strlen (argv[1])) == 0)
     permit = ROUTE_MAP_DENY;
   else
     {
@@ -731,10 +741,15 @@ DEFUN (no_route_map, no_route_map_cmd,
     }
 
   /* Preference. */
-  pref = atoi (argv[2]);
-  if (pref == 0)
+  pref = strtoul (argv[2], &endptr, 10);
+  if (pref == ULONG_MAX || *endptr != '\0')
     {
       vty_out (vty, "the fourth field must be positive integer\r\n");
+      return CMD_WARNING;
+    }
+  if (pref == 0 || pref > 65535)
+    {
+      vty_out (vty, "the fourth field must be <1-65535>\r\n");
       return CMD_WARNING;
     }
 

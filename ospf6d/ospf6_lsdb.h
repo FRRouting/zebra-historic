@@ -40,7 +40,12 @@ struct ospf6_lsa_hdr *
 attach_lsa_to_iov (struct ospf6_lsa *lsa, struct iovec *iov);
 
 struct ospf6_lsa *
-ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *nbr);
+ospf6_lookup_maxage (struct ospf6_lsa *lsa, struct ospf6 *);
+void ospf6_add_maxage (struct ospf6_lsa *, struct ospf6 *);
+void ospf6_remove_maxage (struct ospf6_lsa *, struct ospf6 *);
+
+struct ospf6_lsa *
+ospf6_lookup_summary (struct ospf6_lsa *lsa, struct neighbor *);
 void ospf6_add_summary (struct ospf6_lsa *, struct neighbor *);
 void ospf6_remove_summary (struct ospf6_lsa *, struct neighbor *);
 void ospf6_remove_summary_all (struct neighbor *);
@@ -77,6 +82,8 @@ void ospf6_lsdb_init_interface (struct ospf6_if *);
 void ospf6_lsdb_finish_interface (struct ospf6_if *);
 void ospf6_lsdb_init_area (struct area *);
 void ospf6_lsdb_finish_area (struct area *);
+void ospf6_lsdb_init_as (struct ospf6 *);
+void ospf6_lsdb_finish_as (struct ospf6 *);
 
 void ospf6_lsdb_install (struct ospf6_lsa *);
 

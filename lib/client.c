@@ -82,6 +82,7 @@ zebra_ipv4_route (int sock, int command, int type, int flags,
   stream_write (s, (u_char *)nexthop, 4);
 
   /* Put prefix information. */
+  stream_putl (s, ifindex);
   psize = PSIZE (p->prefixlen);
   stream_putc (s, p->prefixlen);
   stream_write (s, (u_char *)&p->prefix, psize);
@@ -198,11 +199,12 @@ zebra_connect ()
     return sock;
   
   /* Make server socket. */ 
+  memset (&serv, 0, sizeof (struct sockaddr_in));
   serv.sin_family = AF_INET;
   serv.sin_port = htons (ZEBRA_PORT);
-#ifdef HAVE_SINLEN
+#ifdef HAVE_SIN_LEN
   serv.sin_len = sizeof (struct sockaddr_in);
-#endif /* HAVE_SINLEN */
+#endif /* HAVE_SIN_LEN */
 
   /* Lookup hostname. */
   hp = gethostbyname ("localhost");

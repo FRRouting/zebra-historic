@@ -1,3 +1,32 @@
+1999-08-12  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* memory.h (enum): Add MTYPE_RTADV_PREFIX.
+
+1999-08-11  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.h (struct interface ): hw_address, hw_address_len added.
+
+1999-08-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* if.h (struct interface ): Change structure member if_data to
+	info, index to ifindex.
+
+1999-08-08  Rick Payne <rickp@rossfell.co.uk>
+
+	* routemap.c: Multi protocol route-map modification.
+
+	* routemap.c (route_map_apply): Route match process bug is fixed.
+
+1999-08-05  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* thread.c (thread_fetch): When signal comes, goto retry point.
+
+1999-08-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Makefile.am: Add sockopt.c and sockopt.h
+	* sockopt.c: New file.
+	* sockopt.h: New file.
+	
 1999-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* version.h (ZEBRA_VERSION): Release zebra-0.75

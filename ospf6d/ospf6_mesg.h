@@ -101,16 +101,7 @@ struct linkstate_update
 /* Link State Acknowledgement will include only LSA header.*/
 
 /* Function Prototypes */
-int proc_hello (struct sockaddr_in6 *, struct iovec *, struct ospf6_if *);
-int proc_database_description (struct sockaddr_in6 *, struct iovec *,
-                               struct ospf6_if *);
-int proc_linkstate_request (struct sockaddr_in6 *, struct iovec *,
-                            struct ospf6_if *);
-int proc_linkstate_update (struct sockaddr_in6 *, struct iovec *,
-                           struct ospf6_if *);
-int proc_linkstate_ack (struct sockaddr_in6 *, struct iovec *,
-                        struct ospf6_if *);
-int proc_ospf6_hdr (struct iovec *, struct ospf6_if *);
+#if 0
 int make_ospf6_hdr (msgtype_t, struct iovec *, struct ospf6_if *);
 int make_hello (struct iovec *, struct sockaddr_in6 *, struct ospf6_if *);
 int make_database_description (struct iovec *, struct sockaddr_in6 *,
@@ -119,6 +110,7 @@ int make_linkstate_request (struct iovec *, struct sockaddr_in6 *,
                             struct neighbor *);
 int make_linkstate_update (struct iovec *, struct sockaddr_in6 *,
                            struct neighbor *);
+#endif
 
 struct ospf6_lsa_hdr *
 ospf6_message_get_lsa_hdr (struct iovec *);

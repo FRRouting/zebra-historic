@@ -1,6 +1,6 @@
 /*
  * BGP open message handling
- * Copyright (C) 1998 Kunihiro Ishiguro
+ * Copyright (C) 1998, 1999 Kunihiro Ishiguro
  *
  * This file is part of GNU Zebra.
  *
@@ -30,13 +30,15 @@
 #include "thread.h"
 #include "log.h"
 
+#include "zebra/zebra.h"
+
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_dump.h"
 #include "bgpd/bgp_fsm.h"
 #include "bgpd/bgp_packet.h"
 
-/* draft-marques-bgp4-cap-mp-01.txt
+/* draft-ietf-idr-bgp4-cap-neg-03.txt
 
 3. MP Capability Code
 
@@ -171,22 +173,24 @@ bgp_open_option_parse (struct peer *peer, u_char length)
   pnt = stream_pnt (peer->ibuf);
 
   lim = pnt + length;
-  while (pnt < lim) {
-    opt_type = *pnt++;
-    opt_length = *pnt++;
 
-    switch (opt_type)
-      {
-      case BGP_OPEN_OPT_AUTH:
-	/* auth_parse (pnt, opt_length); */
-	break;
-      case BGP_OPEN_OPT_CAP:
-	capability_parse (pnt, opt_length);
-	break;
-      default:
-	/* Unknown open option parameter */
-	break;
-      }
-    pnt += opt_length;
-  }
+  while (pnt < lim) 
+    {
+      opt_type = *pnt++;
+      opt_length = *pnt++;
+
+      switch (opt_type)
+	{
+	case BGP_OPEN_OPT_AUTH:
+	  /* auth_parse (pnt, opt_length); */
+	  break;
+	case BGP_OPEN_OPT_CAP:
+	  capability_parse (pnt, opt_length);
+	  break;
+	default:
+	  /* Unknown open option parameter */
+	  break;
+	}
+      pnt += opt_length;
+    }
 }

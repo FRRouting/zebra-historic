@@ -39,9 +39,9 @@
 #define RIPNG_GROUP              "ff02::9"
 
 /* RIPng timers. */
-#define RIPNG_FLUSH_TIMER               30
-#define RIPNG_TIMEOUT_TIMER            180
-#define RIPNG_GARBAGE_TIMER            120
+#define RIPNG_UPDATE_TIMER_DEFAULT      30
+#define RIPNG_TIMEOUT_TIMER_DEFAULT    180
+#define RIPNG_GARBAGE_TIMER_DEFAULT    120
 
 /* Default config file name. */
 #define RIPNG_DEFAULT_CONFIG "ripngd.conf"
@@ -79,11 +79,11 @@ struct ripng
   int sock;
 
   /* RIPng Parameters.*/
-  unsigned char command;
-  unsigned char version;
-  unsigned int update_time;
-  unsigned int timeout_time;
-  unsigned int garbage_time;
+  u_char command;
+  u_char version;
+  unsigned long update_time;
+  unsigned long timeout_time;
+  unsigned long garbage_time;
   int max_mtu;
   int default_information;
 
@@ -91,14 +91,14 @@ struct ripng
   struct stream *ibuf;
   struct stream *obuf;
 
-  /* Threads. */
+  /* RIPng threads. */
   struct thread *t_read;
   struct thread *t_write;
   struct thread *t_update;
   struct thread *t_garbage;
   struct thread *t_zebra;
 
-  /* Triggered update trick. */
+  /* Triggered update hack. */
   int trigger;
   struct thread *t_triggered_update;
   struct thread *t_triggered_interval;
@@ -135,14 +135,14 @@ struct ripng_info
   struct in6_addr nexthop;	
   struct in6_addr from;
 
-  /* Which interface this route comes from. */
+  /* Which interface does this route come from. */
   unsigned int ifindex;		
 
   /* Metric of this route.  */
   u_char metric;		
 
   /* Tag field of RIPng packet.*/
-  u_short tag;		
+  u_int16_t tag;		
 
   /* For aggregation. */
   unsigned int suppress;
@@ -159,23 +159,52 @@ struct ripng_info
   struct route_node *rp;
 };
 
+/* RIPng tag structure. */
+struct ripng_tag
+{
+  /* Tag value. */
+  u_int16_t tag;
+
+  /* Port. */
+  u_int16_t port;
+
+  /* Multicast group. */
+  struct in6_addr maddr;
+
+  /* Table number. */
+  int table;
+
+  /* Distance. */
+  int distance;
+
+  /* Split horizon. */
+  u_char split_horizon;
+
+  /* Poison reverse. */
+  u_char poison_reverse;
+};
+
 /* RIPng specific interface configuration. */
 struct ripng_interface
 {
   /* RIPng is enabled on this interface. */
-  int enable;
+  int enable_network;
+  int enable_interface;
 
-  /* Default route configuration. */
-  int ri_send;
-  int ri_receive;
-  int ri_default_send;
-  int ri_default_receive;
+  /* RIPng is running on this interface. */
+  int running;
 
-  /* Split horizon configuration. */
-  int ri_split_horizon;
+  /* RIPng tag configuration. */
+  struct ripng_tag *rtag;
+
+  /* Default information originate. */
+  u_char default_originate;
+
+  /* Default information only. */
+  u_char default_only;
 };
 
-enum event
+enum ripng_event
 {
   RIPNG_READ,
   RIPNG_ZEBRA,
@@ -186,20 +215,6 @@ enum event
 
 /* Count prefix size from mask length */
 #define PSIZE(a) (((a) + 7) / (8))
-
-/* Macro to set link local index to the IPv6 address.  For KAME IPv6
-   stack. */
-#ifdef KAME
-#define	IN6_LINKLOCAL_IFINDEX(a)  ((a).s6_addr8[2] << 8 | (a).s6_addr8[3])
-#define SET_IN6_LINKLOCAL_IFINDEX(a, i) \
-  do { \
-    (a).s6_addr8[2] = ((i) >> 8) & 0xff; \
-    (a).s6_addr8[3] = (i) & 0xff; \
-  } while (0)
-#else
-#define	IN6_LINKLOCAL_IFINDEX(a)
-#define SET_IN6_LINKLOCAL_IFINDEX(a, i)
-#endif /* KAME */
 
 /* Extern variables. */
 extern struct ripng *ripng;
@@ -214,7 +229,9 @@ struct ripng_info *ripng_info_new ();
 void ripng_info_free (struct ripng_info *rinfo);
 
 /* Function prototype for RIPngd event routine. */
-void ripng_event (enum event, int);
+void ripng_event (enum ripng_event, int);
+
+int ripng_request (struct interface *ifp);
 
 void ripng_zebra_ipv6_add (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 			   unsigned int ifindex);
@@ -223,5 +240,6 @@ void ripng_zebra_ipv6_delete (struct prefix_ipv6 *p, struct in6_addr *nexthop,
 
 void ripng_redistribute_add (int, int, struct prefix_ipv6 *, unsigned int);
 void ripng_redistribute_delete (int, int, struct prefix_ipv6 *, unsigned int);
+void ripng_redistribute_withdraw (int type);
 
 #endif /* _ZEBRA_RIPNG_RIPNGD_H */

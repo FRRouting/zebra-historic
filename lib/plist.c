@@ -27,7 +27,6 @@
 #include "memory.h"
 #include "plist.h"
 
-
 struct prefix_list_entry
 {
   int seq;
@@ -67,29 +66,59 @@ struct prefix_master
   void (*delete_hook) ();
 };
 
-/* Static structure of all prefix_list's master. */
-static struct prefix_master prefix_master = 
+/* Static structure of IPv4 prefix_list's master. */
+static struct prefix_master prefix_master_ipv4 = 
 { 
   {NULL, NULL},
   {NULL, NULL},
   NULL,
   NULL,
 };
+
+#ifdef HAVE_IPV6
+/* Static structure of IPv6 prefix-list's master. */
+static struct prefix_master prefix_master_ipv6 = 
+{ 
+  {NULL, NULL},
+  {NULL, NULL},
+  NULL,
+  NULL,
+};
+#endif /* HAVE_IPV6*/
 
+struct prefix_master *
+prefix_master_get (int family)
+{
+  struct prefix_master *master = NULL;
+
+  if (family == AF_INET)
+    master = &prefix_master_ipv4;
+#ifdef HAVE_IPV6
+  else if (family == AF_INET6)
+    master = &prefix_master_ipv6;
+#endif /* HAVE_IPV6 */
+  return master;
+}
+
 /* Lookup prefix_list from list of prefix_list by name. */
 struct prefix_list *
-prefix_list_lookup (char *name)
+prefix_list_lookup (int family, char *name)
 {
   struct prefix_list *plist;
+  struct prefix_master *master;
 
   if (name == NULL)
     return NULL;
 
-  for (plist = prefix_master.num.head; plist; plist = plist->next)
+  master = prefix_master_get (family);
+  if (master == NULL)
+    return NULL;
+
+  for (plist = master->num.head; plist; plist = plist->next)
     if (strcmp (plist->name, name) == 0)
       return plist;
 
-  for (plist = prefix_master.str.head; plist; plist = plist->next)
+  for (plist = master->str.head; plist; plist = plist->next)
     if (strcmp (plist->name, name) == 0)
       return plist;
 
@@ -109,17 +138,23 @@ prefix_list_new ()
 /* Insert new prefix list to list of prefix_list.  Each prefix_list
    is sorted by the name. */
 struct prefix_list *
-prefix_list_insert (char *name)
+prefix_list_insert (int family, char *name)
 {
   int i;
   long number;
   struct prefix_list *plist;
   struct prefix_list *point;
   struct prefix_list_list *list;
+  struct prefix_master *master;
+
+  master = prefix_master_get (family);
+  if (master == NULL)
+    return NULL;
 
   /* Allocate new prefix_list and copy given name. */
   plist = prefix_list_new ();
   plist->name = strdup (name);
+  plist->master = master;
 
   /* If name is made by all digit character.  We treat it as
      number. */
@@ -137,7 +172,7 @@ prefix_list_insert (char *name)
       plist->type = PREFIX_TYPE_NUMBER;
 
       /* Set prefix_list to number list. */
-      list = &prefix_master.num;
+      list = &master->num;
 
       for (point = list->head; point; point = point->next)
 	if (atol (point->name) >= number)
@@ -148,7 +183,7 @@ prefix_list_insert (char *name)
       plist->type = PREFIX_TYPE_STRING;
 
       /* Set prefix_list to string list. */
-      list = &prefix_master.str;
+      list = &master->str;
   
       /* Set point to insertion point. */
       for (point = list->head; point; point = point->next)
@@ -193,14 +228,14 @@ prefix_list_insert (char *name)
 }
 
 struct prefix_list *
-prefix_list_get (char *name)
+prefix_list_get (int family, char *name)
 {
   struct prefix_list *prefix_list;
 
-  prefix_list = prefix_list_lookup (name);
+  prefix_list = prefix_list_lookup (family, name);
 
   if (prefix_list == NULL)
-    prefix_list = prefix_list_insert (name);
+    prefix_list = prefix_list_insert (family, name);
   return prefix_list;
 }
 
@@ -246,14 +281,20 @@ prefix_list_entry_make (struct prefix *prefix, enum prefix_list_type type,
 void
 prefix_list_add_hook (void (*func) ())
 {
-  prefix_master.add_hook = func;
+  prefix_master_ipv4.add_hook = func;
+#ifdef HAVE_IPV6
+  prefix_master_ipv6.delete_hook = func;
+#endif /* HAVE_IPV6 */
 }
 
 /* Delete hook function. */
 void
 prefix_list_delete_hook (void (*func) ())
 {
-  prefix_master.delete_hook = func;
+  prefix_master_ipv4.delete_hook = func;
+#ifdef HAVE_IPV6
+  prefix_master_ipv6.delete_hook = func;
+#endif /* HAVE_IPVt6 */
 }
 
 /* Calculate new sequential number. */
@@ -347,8 +388,8 @@ prefix_list_entry_delete (struct prefix_list *plist,
 
   prefix_list_entry_free (pentry);
 
-  if (prefix_master.delete_hook)
-    (*prefix_master.delete_hook) ();
+  if (plist->master->delete_hook)
+    (*plist->master->delete_hook) ();
 }
 
 void
@@ -400,8 +441,8 @@ prefix_list_entry_add (struct prefix_list *plist,
   plist->count++;
 
   /* Run hook function. */
-  if (prefix_master.add_hook)
-    (*prefix_master.add_hook) ();
+  if (plist->master->add_hook)
+    (*plist->master->add_hook) ();
 }
 
 /* Return string of prefix_list_type. */
@@ -495,7 +536,7 @@ prefix_list_print (struct prefix_list *plist)
     }
 }
 
-DEFUN (prefix_list, prefix_list_cmd,
+DEFUN (ip_prefix_list, ip_prefix_list_cmd,
        "ip prefix-list NAME ...",
        IP_STR
        "Set prefix list definition\n"
@@ -514,7 +555,7 @@ DEFUN (prefix_list, prefix_list_cmd,
   int ge = -1;
 
   /* Get prefix_list with name. */
-  plist = prefix_list_get (argv[0]);
+  plist = prefix_list_get (AF_INET, argv[0]);
 
   /* Set option index. */
   optind = 1;
@@ -642,7 +683,7 @@ DEFUN (prefix_list, prefix_list_cmd,
   return CMD_SUCCESS;
 }
 
-DEFUN (no_prefix_list, no_prefix_list_cmd,
+DEFUN (no_ip_prefix_list, no_ip_prefix_list_cmd,
        "no ip prefix-list NAME ...",
        NO_STR
        IP_STR
@@ -662,7 +703,7 @@ DEFUN (no_prefix_list, no_prefix_list_cmd,
   int ge = -1;
 
   /* Check prefix list name. */
-  plist = prefix_list_lookup (argv[0]);
+  plist = prefix_list_lookup (AF_INET, argv[0]);
   if (! plist)
     {
       vty_out (vty, "Can't find specified prefix-list\r\n");
@@ -801,6 +842,314 @@ DEFUN (no_prefix_list, no_prefix_list_cmd,
   return CMD_SUCCESS;
 }
 
+#ifdef HAVE_IPV6
+DEFUN (ipv6_prefix_list, ipv6_prefix_list_cmd,
+       "ipv6 prefix-list NAME ...",
+       IP_STR
+       "Set prefix list definition\n"
+       "Prefix list name\n"
+       "Prefix list type\n")
+{
+  int ret;
+  enum prefix_list_type type;
+  struct prefix_list *plist;
+  struct prefix_list_entry *pentry;
+  struct prefix p;
+  int optind;
+  int any = 0;
+  int seq = -1;
+  int le = -1;
+  int ge = -1;
+
+  /* Get prefix_list with name. */
+  plist = prefix_list_get (AF_INET6, argv[0]);
+
+  /* Set option index. */
+  optind = 1;
+
+  /* Check of first argument. */
+  if (strcmp (argv[optind], "seq") == 0)
+    {
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify seq number\r\n");
+	  return CMD_WARNING;
+	}
+      if (seq != -1)
+	{
+	  vty_out (vty, "Seq number is already specified\r\n");
+	}
+      seq = atoi (argv[optind]);
+
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify type\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  /* Check of filter type. */
+  if (strcmp (argv[optind], "permit") == 0)
+    type = PREFIX_PERMIT;
+  else if (strcmp (argv[optind], "deny") == 0)
+    type = PREFIX_DENY;
+  else
+    {
+      vty_out (vty, "prefix type must be [permit|deny]\r\n");
+      return CMD_WARNING;
+    }
+
+  optind++;
+  if (optind == argc)
+    {
+      vty_out (vty, "Please specify prefix\r\n");
+      return CMD_WARNING;
+    }
+  
+  /* "any" is special token of matching IP addresses.  */
+  if (strcmp (argv[optind], "any") == 0)
+    any = 1;
+  else
+    {
+      /* Check string format of prefix and prefixlen. */
+      ret = str2prefix (argv[optind], &p);
+      if (ret <= 0)
+	{
+	  vty_out (vty, "IP address prefix/prefixlen is malformed\r\n");
+	  return CMD_WARNING;
+	}
+    }
+  optind++;
+
+  /* seq, ge and le check. */
+  while (optind < argc)
+    {
+      if (strcmp (argv[optind], "seq") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify seq number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (seq != -1)
+	    {
+	      vty_out (vty, "Seq number is already specified\r\n");
+	    }
+	  seq = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "ge") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify ge number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (ge != -1)
+	    {
+	      vty_out (vty, "ge number is already specified\r\n");
+	    }
+	  ge = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "le") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify le number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (le != -1)
+	    {
+	      vty_out (vty, "le number is already specified\r\n");
+	    }
+	  le = atoi (argv[optind++]);
+	}
+      else
+	{
+	  vty_out (vty, "Unknown prefix-list option: %s\r\n", argv[optind]);
+	  return CMD_WARNING;
+	}
+    }
+
+  if (any)
+    pentry = prefix_list_entry_make (NULL, type, seq, le, ge);
+  else
+    pentry = prefix_list_entry_make (&p, type, seq, le, ge);
+    
+  
+  /* Install new filter to the access_list. */
+  prefix_list_entry_add (plist, pentry);
+
+  return CMD_SUCCESS;
+}
+
+DEFUN (no_ipv6_prefix_list, no_ipv6_prefix_list_cmd,
+       "no ipv6 prefix-list NAME ...",
+       NO_STR
+       IP_STR
+       "Set prefix list definition\n"
+       "Prefix list name\n"
+       "Prefix list type\n")
+{
+  int ret;
+  enum prefix_list_type type;
+  struct prefix_list *plist;
+  struct prefix_list_entry *pentry;
+  struct prefix p;
+  int optind;
+  int any = 0;
+  int seq = -1;
+  int le = -1;
+  int ge = -1;
+
+  /* Check prefix list name. */
+  plist = prefix_list_lookup (AF_INET6, argv[0]);
+  if (! plist)
+    {
+      vty_out (vty, "Can't find specified prefix-list\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Set parse start option index. */
+  optind = 1;
+
+  /* Check of first argument. */
+  if (strcmp (argv[optind], "seq") == 0)
+    {
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify seq number\r\n");
+	  return CMD_WARNING;
+	}
+      if (seq != -1)
+	{
+	  vty_out (vty, "Seq number is already specified\r\n");
+	}
+      seq = atoi (argv[optind]);
+
+      optind++;
+      if (optind == argc)
+	{
+	  vty_out (vty, "Please specify type\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  /* Check of filter type. */
+  if (strcmp (argv[optind], "permit") == 0)
+    type = PREFIX_PERMIT;
+  else if (strcmp (argv[optind], "deny") == 0)
+    type = PREFIX_DENY;
+  else
+    {
+      vty_out (vty, "prefix type must be [permit|deny]\r\n");
+      return CMD_WARNING;
+    }
+
+  optind++;
+  if (optind == argc)
+    {
+      vty_out (vty, "Please specify prefix\r\n");
+      return CMD_WARNING;
+    }
+
+  /* "any" is special token of matching IP addresses.  */
+  if (strcmp (argv[optind], "any") == 0)
+    any = 1;
+  else
+    {
+      /* Check string format of prefix and prefixlen. */
+      ret = str2prefix (argv[optind], &p);
+      if (ret <= 0)
+	{
+	  vty_out (vty, "IP address prefix/prefixlen is malformed\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  optind++;
+
+  /* seq, ge and le check. */
+  while (optind < argc)
+    {
+      if (strcmp (argv[optind], "seq") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify seq number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (seq != -1)
+	    {
+	      vty_out (vty, "Seq number is already specified\r\n");
+	    }
+	  seq = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "ge") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify ge number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (ge != -1)
+	    {
+	      vty_out (vty, "ge number is already specified\r\n");
+	    }
+	  ge = atoi (argv[optind++]);
+	}
+      else if (strcmp (argv[optind], "le") == 0)
+	{
+	  optind++;
+
+	  if (optind == argc)
+	    {
+	      vty_out (vty, "Please specify le number\r\n");
+	      return CMD_WARNING;
+	    }
+	  if (le != -1)
+	    {
+	      vty_out (vty, "le number is already specified\r\n");
+	    }
+	  le = atoi (argv[optind++]);
+	}
+      else
+	{
+	  vty_out (vty, "Unknown option\r\n");
+	  return CMD_WARNING;
+	}
+    }
+
+  if (any)
+    pentry = prefix_list_entry_lookup (plist, NULL, type, seq, le, ge);
+  else
+    pentry = prefix_list_entry_lookup (plist, &p, type, seq, le, ge);
+
+  if (pentry == NULL)
+    {
+      vty_out (vty, "Can't find specified prefix-list\r\n");
+      return CMD_WARNING;
+    }
+
+  /* Install new filter to the access_list. */
+  prefix_list_entry_delete (plist, pentry);
+
+  return CMD_SUCCESS;
+}
+#endif /* HAVE_IPV6 */
+
 /* Prefix-list node. */
 struct cmd_node prefix_node =
 {
@@ -810,16 +1159,22 @@ struct cmd_node prefix_node =
 
 /* Configuration write function. */
 int
-config_write_prefix (struct vty *vty)
+config_write_prefix_family (int family, struct vty *vty)
 {
   struct prefix_list *plist;
   struct prefix_list_entry *pentry;
+  struct prefix_master *master;
   int write = 0;
 
-  for (plist = prefix_master.num.head; plist; plist = plist->next)
+  master = prefix_master_get (family);
+  if (master == NULL)
+    return 0;
+
+  for (plist = master->num.head; plist; plist = plist->next)
     for (pentry = plist->head; pentry; pentry = pentry->next)
       {
-	vty_out (vty, "ip prefix-list %s seq %d %s",
+	vty_out (vty, "ip%s prefix-list %s seq %d %s",
+		 family == AF_INET ? "" : "v6",
 		 plist->name,
 		 pentry->seq, prefix_list_type_str (pentry));
 
@@ -842,10 +1197,11 @@ config_write_prefix (struct vty *vty)
 	write++;
       }
 
-  for (plist = prefix_master.str.head; plist; plist = plist->next)
+  for (plist = master->str.head; plist; plist = plist->next)
     for (pentry = plist->head; pentry; pentry = pentry->next)
       {
-	vty_out (vty, "ip prefix-list %s seq %d %s",
+	vty_out (vty, "ip%s prefix-list %s seq %d %s",
+		 family == AF_INET ? "" : "v6",
 		 plist->name,
 		 pentry->seq, prefix_list_type_str (pentry));
 
@@ -871,43 +1227,33 @@ config_write_prefix (struct vty *vty)
   return write;
 }
 
+int
+config_write_prefix (struct vty *vty)
+{
+  int write;
+
+  write = config_write_prefix_family (AF_INET, vty);
+
+#ifdef HAVE_IPV6
+  if (write)
+    vty_out (vty, "!\r\n");
+  write = config_write_prefix_family (AF_INET6, vty);
+#endif /* HAVE_IPV6 */
+
+  return write;
+}
+
 /* Install vty related command.*/
 void
 prefix_list_init ()
 {
   install_node (&prefix_node, config_write_prefix);
 
-  install_element (CONFIG_NODE, &prefix_list_cmd);
-  install_element (CONFIG_NODE, &no_prefix_list_cmd);
+  install_element (CONFIG_NODE, &ip_prefix_list_cmd);
+  install_element (CONFIG_NODE, &no_ip_prefix_list_cmd);
+
+#ifdef HAVE_IPV6
+  install_element (CONFIG_NODE, &ipv6_prefix_list_cmd);
+  install_element (CONFIG_NODE, &no_ipv6_prefix_list_cmd);
+#endif /* HAVE_IPV6 */
 }
-
-#ifdef TEST
-int
-main ()
-{
-  struct prefix_list *plist;
-  struct prefix_list_entry *pentry;
-  struct prefix p;
-
-  plist = prefix_list_get ("kuni");
-
-  str2prefix ("10.0.0.0/8", &p);
-  pentry = prefix_list_entry_make (&p, PREFIX_PERMIT, -1, 0, -1);
-  prefix_list_entry_add (plist, pentry);
-
-  str2prefix ("0.0.0.0/0", &p);
-  pentry = prefix_list_entry_make (&p, PREFIX_PERMIT, 5, -1, 1);
-  prefix_list_entry_add (plist, pentry);
-
-  prefix_list_print (plist);
-
-  str2prefix ("0.0.0.0/0", &p);
-
-  if (prefix_list_apply (plist, &p))
-    printf ("ok\n");
-  else
-    printf ("not ok\n");
-
-  exit (0);
-}
-#endif /* TEST */
