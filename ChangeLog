@@ -1,3 +1,8 @@
+1999-12-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* Set version to 0.83a.  This is for *BSD static route lookup
+	problem.
+
 1999-12-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* Set version to 0.83.

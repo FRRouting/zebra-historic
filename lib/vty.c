@@ -1353,14 +1353,18 @@ vty_accept (struct thread *thread)
   struct access_list *acl = NULL;
 
   accept_sock = THREAD_FD (thread);
+
+  /* We continue hearing vty socket. */
+  vty_event (VTY_SERV, accept_sock, NULL);
+
   memset (&su, 0, sizeof (union sockunion));
 
   /* We can handle IPv4 or IPv6 socket. */
   vty_sock = sockunion_accept (accept_sock, &su);
   if (vty_sock < 0)
     {
-      zlog (NULL, LOG_INFO, "can't accept vty socket : %s", strerror (errno));
-      exit (1);
+      zlog_warn ("can't accept vty socket : %s", strerror (errno));
+      return -1;
     }
 
   /* Convert IPv4 compatible IPv6 address to IPv4 address. */
@@ -1435,9 +1439,6 @@ vty_accept (struct thread *thread)
 	  strerror (errno));
 
   vty = vty_create (vty_sock, &su);
-
-  /* We continue hearing vty socket. */
-  vty_event (VTY_SERV, accept_sock, NULL);
 
   return 0;
 }

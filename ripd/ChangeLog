@@ -1,3 +1,9 @@
+1999-12-07  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ripd.c (rip_response_process): In case of packet is RIPv2 and
+	network is non zero and netmask is zero, apply netmask rule as
+	same as RIPv1.
+
 1999-11-06  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* ripd.c (rip_timers): Fix bug of timers basic argument format.

@@ -616,7 +616,9 @@ rip_response_process (struct rip_packet *packet, int size,
 	(/16 for class B's) except when the RIP packet does to inside
 	the classful network in question.  */
 
-      if (packet->version == RIPv1 && rte->prefix.s_addr != 0)
+      if ((packet->version == RIPv1 && rte->prefix.s_addr != 0) 
+	  || (packet->version == RIPv2 
+	      && (rte->prefix.s_addr != 0 && rte->mask.s_addr == 0)))
 	{
 	  u_int32_t destination;
 
@@ -642,8 +644,9 @@ rip_response_process (struct rip_packet *packet, int size,
 
       /* In case of RIPv2, if prefix in RTE is not netmask applied one
          ignore the entry.  */
-      if ((packet->version == RIPv2) &&
-	  ((rte->prefix.s_addr & rte->mask.s_addr) != rte->prefix.s_addr))
+      if ((packet->version == RIPv2) 
+	  && (rte->mask.s_addr != 0) 
+	  && ((rte->prefix.s_addr & rte->mask.s_addr) != rte->prefix.s_addr))
 	{
 	  zlog_warn ("RIPv2 address %s is not mask /%d applied one",
 		     inet_ntoa (rte->prefix), ip_masklen (rte->mask));

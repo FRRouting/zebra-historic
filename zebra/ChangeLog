@@ -1,3 +1,8 @@
+1999-12-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* kernel_socket.c (rtm_read): When message is RTM_GET, it has own
+	process's pid.
+
 1999-12-04  Kunihiro Ishiguro  <kunihiro@zebra.org>
 
 	* main.c (main): Change to default log output to ZLOG_STDOUT.

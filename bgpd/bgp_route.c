@@ -20,7 +20,7 @@
  * 02111-1307, USA.  
  */
 
-static char rcsid[] = "$Id$";
+static char rcsid[] = "$Id: bgp_route.c,v 1.134 1999/12/05 13:05:29 kunihiro Exp $";
 #include <zebra.h>
 
 #include "prefix.h"

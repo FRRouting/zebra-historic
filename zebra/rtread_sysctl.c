@@ -65,9 +65,7 @@ route_read ()
   for (end = buf + bufsiz; buf < end; buf += rtm->rtm_msglen) 
     {
       rtm = (struct rt_msghdr *) buf;
-
-      if (rtm->rtm_type == RTM_ADD || rtm->rtm_type == RTM_DELETE)
-	rtm_read (rtm);
+      rtm_read (rtm);
     }
 
   /* Free buffer. */

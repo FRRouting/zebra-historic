@@ -2,7 +2,7 @@
 !
 ! BGPd sample configuratin file
 !
-! $Id: bgpd.conf.sample,v 1.19 1999/02/19 17:17:27 developer Exp $
+! $Id: bgpd.conf.sample,v 1.8 1999/10/25 09:51:09 kunihiro Exp $
 !
 hostname bgpd
 password zebra

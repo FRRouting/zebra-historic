@@ -1,3 +1,7 @@
+1999-12-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* vty.c (vty_accept): Instead of immediate exit() return -1.
+
 1999-12-04  Rumen Svobodnikov <rumen@linux.tu-varna.acad.bg>
 
 	* memory.c (struct mstat): Revert to support MEMORY_LOG.

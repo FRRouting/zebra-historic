@@ -395,7 +395,8 @@ rtm_read (struct rt_msghdr *rtm)
   zebra_flags = 0;
 
   /* Discard self send message. */
-  if (rtm->rtm_pid == pid || rtm->rtm_pid == old_pid)
+  if (rtm->rtm_type != RTM_GET 
+      && (rtm->rtm_pid == pid || rtm->rtm_pid == old_pid))
     return;
 
   /* Read destination and netmask and gateway from rtm message
@@ -405,7 +406,7 @@ rtm_read (struct rt_msghdr *rtm)
   if ((rtm->rtm_type == RTM_ADD) && ! (flags & RTF_UP))
     return;
 
-  /* Ignore route which does not have HOST and GATEWAY attribute. */
+  /* Ignore route which has both HOST and GATEWAY attribute. */
   if ((flags & RTF_GATEWAY) && (flags & RTF_HOST))
     return;
   if (! (flags & RTF_GATEWAY))
@@ -428,7 +429,7 @@ rtm_read (struct rt_msghdr *rtm)
       p.prefix = dest.sin.sin_addr;
       p.prefixlen = ip_masklen (mask.sin.sin_addr);
 
-      if (rtm->rtm_type == RTM_ADD)
+      if (rtm->rtm_type == RTM_GET || rtm->rtm_type == RTM_ADD)
 	rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, zebra_flags, 
 		      &p, &gate.sin.sin_addr, 0, 0);
       else
@@ -444,7 +445,7 @@ rtm_read (struct rt_msghdr *rtm)
       p.prefix = dest.sin6.sin6_addr;
       p.prefixlen = ip6_masklen (mask.sin6.sin6_addr);
 
-      if (rtm->rtm_type == RTM_ADD)
+      if (rtm->rtm_type == RTM_GET || rtm->rtm_type == RTM_ADD)
 	rib_add_ipv6 (ZEBRA_ROUTE_KERNEL, zebra_flags,
 		      &p, &gate.sin6.sin6_addr, 0, 0);
       else
