@@ -1,3 +1,7 @@
+1999-08-02  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* configure.in: Fix privious Linux IPv6 check changes.
+
 1999-08-02  Arkadiusz Mi¶kiewicz <misiek@misiek.eu.org>
 
 	* configure.in: Improve Linux IPv6 feature check.

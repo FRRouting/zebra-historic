@@ -33,7 +33,7 @@ TCP/IP based routing protocols such as RIPv1, RIPv2, OSPFv2, OSPFv3,
 BGP-4, BGP-4+ and so on.  Zebra turns your machine into a full powered
 router.
 
-   This is the Zebra Manual for zebra-0.74.
+   This is the Zebra Manual for zebra-0.76.
 
 * Menu:
 
@@ -562,7 +562,7 @@ is no vty password one can not connect VTY interface at all.
      Connected to localhost.
      Escape character is '^]'.
      
-     Hello, this is zebra (version 0.74)
+     Hello, this is zebra (version 0.76)
      Copyright 1997-1999 Kunihiro Ishiguro
      
      
@@ -755,6 +755,10 @@ Below is `zebra' specific invoking options.
 `--batch'
      Runs in batch mode.  `zebra' parse configuration file and terminate
      immediately.
+
+`-k'
+`--keep_kernel'
+     When zebra starts up, don't delete old self inserted route.
 
 `-r'
 `--retain'
@@ -1868,46 +1872,46 @@ Node: Command line help20057
 Node: zebra20337
 Node: Common invoking options20677
 Node: Invoking zebra21189
-Node: Interface21624
-Node: Static route22168
-Node: zebra terminal mode commands22559
-Node: ripd23460
-Node: Invoking ripd25510
-Node: ripd configuration25810
-Node: Filtering RIP route30484
-Node: ripd terminal mode commands31587
-Node: ripd debug commands32087
-Node: ripngd33081
-Node: Invoking ripngd33402
-Node: ripngd configuration33657
-Node: ripngd terminal mode commands34421
-Node: ripngd filtering commands34772
-Node: ospfd35237
-Node: Invoking ospfd35530
-Node: ospfd configuration35780
-Node: ospfd terminal mode commands36482
-Node: ospf6d36945
-Node: Invoking ospf6d37062
-Node: bgpd37167
-Node: Invoking bgpd37724
-Node: bgpd configuration38100
-Node: bgpd terminal mode commands41973
-Node: bgpd sample session42612
-Node: bgpd log format42772
-Node: How to set up 6bone connection43262
-Node: Filtering44493
-Node: IP access list44871
-Node: IP prefix list45245
-Node: IP community list45467
-Node: AS path access list45668
-Node: Route map45853
-Node: Route map command46341
-Node: Route map match command46544
-Node: Route map set command47155
-Node: IPv6 supports47981
-Node: Kernel interface48192
-Node: Linux netlink49322
-Node: Command Index50104
-Node: VTY Key Index58704
+Node: Interface21711
+Node: Static route22255
+Node: zebra terminal mode commands22646
+Node: ripd23547
+Node: Invoking ripd25597
+Node: ripd configuration25897
+Node: Filtering RIP route30571
+Node: ripd terminal mode commands31674
+Node: ripd debug commands32174
+Node: ripngd33168
+Node: Invoking ripngd33489
+Node: ripngd configuration33744
+Node: ripngd terminal mode commands34508
+Node: ripngd filtering commands34859
+Node: ospfd35324
+Node: Invoking ospfd35617
+Node: ospfd configuration35867
+Node: ospfd terminal mode commands36569
+Node: ospf6d37032
+Node: Invoking ospf6d37149
+Node: bgpd37254
+Node: Invoking bgpd37811
+Node: bgpd configuration38187
+Node: bgpd terminal mode commands42060
+Node: bgpd sample session42699
+Node: bgpd log format42859
+Node: How to set up 6bone connection43349
+Node: Filtering44580
+Node: IP access list44958
+Node: IP prefix list45332
+Node: IP community list45554
+Node: AS path access list45755
+Node: Route map45940
+Node: Route map command46428
+Node: Route map match command46631
+Node: Route map set command47242
+Node: IPv6 supports48068
+Node: Kernel interface48279
+Node: Linux netlink49409
+Node: Command Index50191
+Node: VTY Key Index58791
 
 End Tag Table

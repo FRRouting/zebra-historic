@@ -1,5 +1,15 @@
 GNU Zebra is not yet released, so this NEWS is about beta version.
 
+* Changes in zebra-0.76
+
+* Changes in lib
+
+** configure.in Linux IPv6 detection problem is fixed.
+
+** Include SERVICES file to the distribution
+
+** Update zebra.texi to zebra-0.76.
+
 * Changes in zebra-0.75
 
 * Changes in lib

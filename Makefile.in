@@ -85,7 +85,7 @@ ZEBRA = @ZEBRA@
 
 SUBDIRS = lib @ZEBRA@ @BGPD@ @RIPD@ @RIPNGD@ @OSPFD@ @OSPF6D@ @GUILE@ doc
 
-EXTRA_DIST = guile.m4
+EXTRA_DIST = guile.m4 SERVICES
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = config.h

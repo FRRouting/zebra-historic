@@ -10,7 +10,7 @@
 @c  correct all ` and ' characters
 
 @set EDITION 0
-@set VERSION 0.74
+@set VERSION 0.76
 @set UPDATED July 1999
 
 @dircategory Routing Software
@@ -825,6 +825,10 @@ is @code{zebra} specific invoking options.
 @itemx --batch
 Runs in batch mode.  @code{zebra} parse configuration file and terminate
 immediately.
+
+@item -k
+@itemx --keep_kernel
+When zebra starts up, don't delete old self inserted route.
 
 @item -r
 @itemx --retain
