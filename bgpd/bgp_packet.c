@@ -251,12 +251,9 @@ bgp_update_packet_eor (struct peer *peer, afi_t afi, safi_t safi)
   struct stream *s;
   struct stream *packet;
 
-#ifdef DISABLE_BGP_ANNOUNCE
-  return;
-#endif /* DISABLE_BGP_ANNOUNCE */
-
   if (BGP_DEBUG (normal, NORMAL))
-    zlog_info ("send End-of-RIB for %s to %s", afi_safi_print (afi, safi), peer->host);
+    zlog_info ("Send End-of-RIB for AF %s to neighbor %s",
+	       afi_safi_print(afi, safi), peer->host);
 
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
@@ -776,9 +773,6 @@ bgp_keepalive_send (struct peer *peer)
  
   if (BGP_DEBUG (keepalive, KEEPALIVE))  
     zlog_info ("%s sending KEEPALIVE", peer->host); 
-  if (BGP_DEBUG (normal, NORMAL))
-    zlog_info ("%s send message type %d, length (incl. header) %d",
-               peer->host, BGP_MSG_KEEPALIVE, length);
 
   /* Add packet to the peer. */
   bgp_packet_add (peer, s);
@@ -966,11 +960,16 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
   int length;
   struct bgp_filter *filter;
   int orf_refresh = 0;
+  int msg_type;
 
 #ifdef DISABLE_BGP_ANNOUNCE
   return;
 #endif /* DISABLE_BGP_ANNOUNCE */
 
+  if (CHECK_FLAG (peer->cap, PEER_CAP_REFRESH_NEW_RCV))
+    msg_type = BGP_MSG_ROUTE_REFRESH_NEW;
+  else
+    msg_type = BGP_MSG_ROUTE_REFRESH_OLD;
   filter = &peer->filter[afi][safi];
 
   /* Adjust safi code. */
@@ -980,10 +979,7 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
   s = stream_new (BGP_MAX_PACKET_SIZE);
 
   /* Make BGP update packet. */
-  if (CHECK_FLAG (peer->cap, PEER_CAP_REFRESH_NEW_RCV))
-    bgp_packet_set_marker (s, BGP_MSG_ROUTE_REFRESH_NEW);
-  else
-    bgp_packet_set_marker (s, BGP_MSG_ROUTE_REFRESH_OLD);
+  bgp_packet_set_marker (s, msg_type);
 
   /* Encode Route Refresh message. */
   stream_putw (s, afi);
@@ -1037,11 +1033,10 @@ bgp_route_refresh_send (struct peer *peer, afi_t afi, safi_t safi,
   if (BGP_DEBUG (normal, NORMAL))
     {
       if (! orf_refresh)
-	zlog_info ("%s sending REFRESH_REQ for afi/safi: %d/%d", 
-		   peer->host, afi, safi);
+	zlog_info ("%s sending REFRESH_REQ(%d) for afi/safi: %d/%d", 
+		   peer->host, msg_type, afi, safi);
       zlog_info ("%s send message type %d, length (incl. header) %d",
-		 peer->host, CHECK_FLAG (peer->cap, PEER_CAP_REFRESH_NEW_RCV) ?
-		 BGP_MSG_ROUTE_REFRESH_NEW : BGP_MSG_ROUTE_REFRESH_OLD, length);
+		 peer->host, msg_type, length);
     }
 
   /* Make real packet. */
@@ -1594,8 +1589,8 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  SET_FLAG (peer->af_sflags[AFI_IP][SAFI_UNICAST], PEER_STATUS_EOR_RECEIVED);
 
 	  if (BGP_DEBUG (normal, NORMAL))
-	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv4 Unicast from %s",
-		  peer->host);
+	    zlog_info ("neighbor %s sent End-of-RIB marker for IPv4 Unicast",
+		       peer->host);
 
 	  /* NSF delete stale route */
 	  if (peer->nsf[AFI_IP][SAFI_UNICAST])
@@ -1623,8 +1618,8 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  SET_FLAG (peer->af_sflags[AFI_IP][SAFI_MULTICAST], PEER_STATUS_EOR_RECEIVED);
 
 	  if (BGP_DEBUG (normal, NORMAL))
-	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv4 Multicast from %s",
-		  peer->host);
+	    zlog_info ("neighbor %s sent End-of-RIB marker for IPv4 Multicast",
+		       peer->host);
 
 	  /* NSF delete stale route */
 	  if (peer->nsf[AFI_IP][SAFI_MULTICAST])
@@ -1652,8 +1647,8 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  SET_FLAG (peer->af_sflags[AFI_IP6][SAFI_UNICAST], PEER_STATUS_EOR_RECEIVED);
 
 	  if (BGP_DEBUG (normal, NORMAL))
-	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv6 Unicast from %s",
-		  peer->host);
+	    zlog_info ("neighbor %s sent End-of-RIB marker for IPv6 Unicast",
+		       peer->host);
 
 	  /* NSF delete stale route */
 	  if (peer->nsf[AFI_IP6][SAFI_UNICAST])
@@ -1680,9 +1675,9 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	  /* End-of-RIB received */
 	  SET_FLAG (peer->af_sflags[AFI_IP6][SAFI_MULTICAST], PEER_STATUS_EOR_RECEIVED);
 
-	  if (BGP_DEBUG (update, UPDATE_IN))
-	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for IPv6 Multicast from %s",
-		  peer->host);
+	  if (BGP_DEBUG (normal, NORMAL))
+	    zlog_info ("neighbor %s sent End-of-RIB marker for IPv6 Multicast",
+		       peer->host);
 
 	  /* NSF delete stale route */
 	  if (peer->nsf[AFI_IP6][SAFI_MULTICAST])
@@ -1708,9 +1703,9 @@ bgp_update_receive (struct peer *peer, bgp_size_t size)
 	{
 	  /* End-of-RIB received */
 
-	  if (BGP_DEBUG (update, UPDATE_IN))
-	    zlog (peer->log, LOG_INFO, "rcvd End-of-RIB for VPNv4 Unicast from %s",
-		  peer->host);
+	  if (BGP_DEBUG (normal, NORMAL))
+	    zlog_info ("neighbor %s sent End-of-RIB marker for VPNv4 Unicast",
+		       peer->host);
 	}
     }
 
@@ -1826,7 +1821,7 @@ void
 bgp_keepalive_receive (struct peer *peer, bgp_size_t size)
 {
   if (BGP_DEBUG (keepalive, KEEPALIVE))  
-    zlog_info ("%s KEEPALIVE rcvd", peer->host); 
+    zlog_info ("%s received KEEPALIVE, length (excl. header) %d", peer->host, size); 
   
   BGP_EVENT_ADD (peer, Receive_KEEPALIVE_message);
 }
@@ -2277,7 +2272,8 @@ bgp_read (struct thread *thread)
       size = stream_getw (peer->ibuf);
       type = stream_getc (peer->ibuf);
 
-      if (BGP_DEBUG (normal, NORMAL) && type != 2 && type != 0)
+      if (BGP_DEBUG (normal, NORMAL))
+	if (type && type != BGP_MSG_UPDATE && type != BGP_MSG_KEEPALIVE)
 	zlog_info ("%s rcv message type %d, length (excl. header) %d",
 		   peer->host, type, size - BGP_HEADER_SIZE);
 

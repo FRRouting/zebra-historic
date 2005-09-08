@@ -2439,38 +2439,6 @@ ospf_check_nbr_status (struct ospf *ospf)
 }
 
 
-#ifdef ORIGINAL_CODING
-/* This function flood the maxaged LSA to DR. */
-void
-ospf_maxage_flood (struct ospf_lsa *lsa)
-{
-  switch (lsa->data->type)
-    {
-    case OSPF_ROUTER_LSA:
-    case OSPF_NETWORK_LSA:
-    case OSPF_SUMMARY_LSA:
-    case OSPF_ASBR_SUMMARY_LSA:
-#ifdef HAVE_NSSA
-    case OSPF_AS_NSSA_LSA:
-#endif /* HAVE_NSSA */
-#ifdef HAVE_OPAQUE_LSA
-    case OSPF_OPAQUE_LINK_LSA:
-    case OSPF_OPAQUE_AREA_LSA:
-#endif /* HAVE_OPAQUE_LSA */
-      ospf_flood_through_area (lsa->area, NULL, lsa);
-      break;
-    case OSPF_AS_EXTERNAL_LSA:
-#ifdef HAVE_OPAQUE_LSA
-    case OSPF_OPAQUE_AS_LSA:
-#endif /* HAVE_OPAQUE_LSA */
-      ospf_flood_through_as (NULL, lsa);
-      break;
-    default:
-      break;
-    }
-}
-#endif /* ORIGINAL_CODING */
-
 int
 ospf_maxage_lsa_remover (struct thread *thread)
 {
@@ -2509,11 +2477,7 @@ ospf_maxage_lsa_remover (struct thread *thread)
                      lsa->data->type, inet_ntoa (lsa->data->id));
 
 	/* Flood max age LSA. */
-#ifdef ORIGINAL_CODING
-	ospf_maxage_flood (lsa);
-#else /* ORIGINAL_CODING */
         ospf_flood_through (ospf, NULL, lsa);
-#endif /* ORIGINAL_CODING */
 
 	/* Remove from lsdb. */
         ospf_discard_from_db (ospf, lsa->lsdb, lsa);
@@ -2873,61 +2837,21 @@ ospf_lsa_different (struct ospf_lsa *l1, struct ospf_lsa *l2)
   if (l1->data->length != l2->data->length)
     return 1;
 
-  if (l1->data->length ==  0)
+  if (l1->data->length == 0)
     return 1;
 
-  assert (l1->data->length > OSPF_LSA_HEADER_SIZE);
+  assert (ntohs (l1->data->length) > OSPF_LSA_HEADER_SIZE);
 
   p1 = (char *) l1->data;
   p2 = (char *) l2->data;
 
   if (memcmp (p1 + OSPF_LSA_HEADER_SIZE, p2 + OSPF_LSA_HEADER_SIZE,
-              ntohs( l1->data->length ) - OSPF_LSA_HEADER_SIZE) != 0)
+              ntohs (l1->data->length) - OSPF_LSA_HEADER_SIZE) != 0)
     return 1;
 
   return 0;
 }
 
-#ifdef ORIGINAL_CODING
-void
-ospf_lsa_flush_self_originated (struct ospf_neighbor *nbr,
-                                struct ospf_lsa *self,
-                                struct ospf_lsa *new)
-{
-  u_int32_t seqnum;
-
-  /* Adjust LS Sequence Number. */
-  seqnum = ntohl (new->data->ls_seqnum) + 1;
-  self->data->ls_seqnum = htonl (seqnum);
-
-  /* Recalculate LSA checksum. */
-  ospf_lsa_checksum (self->data);
-
-  /* Reflooding LSA. */
-  /*  RFC2328  Section 13.3
-	    On non-broadcast networks, separate	Link State Update
-	    packets must be sent, as unicasts, to each adjacent	neighbor
-	    (i.e., those in state Exchange or greater).	 The destination
-	    IP addresses for these packets are the neighbors' IP
-	    addresses.   */
-  if (nbr->oi->type == OSPF_IFTYPE_NBMA)
-    {
-      struct route_node *rn;
-      struct ospf_neighbor *onbr;
-
-      for (rn = route_top (nbr->oi->nbrs); rn; rn = route_next (rn))
-	if ((onbr = rn->info) != NULL)
-	  if (onbr != nbr->oi->nbr_self && onbr->status >= NSM_Exchange)
-	    ospf_ls_upd_send_lsa (onbr, self, OSPF_SEND_PACKET_DIRECT);
-    }
-  else
-  ospf_ls_upd_send_lsa (nbr, self, OSPF_SEND_PACKET_INDIRECT);
-
-  if (IS_DEBUG_OSPF (lsa, LSA_GENERATE))
-    zlog_info ("LSA[Type%d:%s]: Flush self-originated LSA",
-	       self->data->type, inet_ntoa (self->data->id));
-}
-#else /* ORIGINAL_CODING */
 static int
 ospf_lsa_flush_schedule (struct ospf *ospf, struct ospf_lsa *lsa)
 {
@@ -3040,7 +2964,6 @@ ospf_flush_self_originated_lsas_now (struct ospf *ospf)
 
   return;
 }
-#endif /* ORIGINAL_CODING */
 
 /* If there is self-originated LSA, then return 1, otherwise return 0. */
 /* An interface-independent version of ospf_lsa_is_self_originated */

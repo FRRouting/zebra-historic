@@ -22,7 +22,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "sockunion.h"
 
 /* ZEBRA BGPd Version */
-#define ZEBRA_BGPD_VERSION "0.95 build 25"
+#define ZEBRA_BGPD_VERSION "0.95 build 26"
 
 /* Typedef BGP specific types.  */
 typedef u_int16_t as_t;

@@ -719,18 +719,11 @@ ospf_ase_unregister_external_lsa (struct ospf_lsa *lsa, struct ospf *top)
 
   rn = route_node_get (top->external_lsas, (struct prefix *) &p);
   lst = rn->info;
-#ifdef ORIGINAL_CODING
-  assert (lst);
-
-  listnode_delete (lst, lsa);
-  ospf_lsa_unlock (lsa);
-#else /* ORIGINAL_CODING */
   /* XXX lst can be NULL */
   if (lst) {
     listnode_delete (lst, lsa);
     ospf_lsa_unlock (lsa);
   }
-#endif /* ORIGINAL_CODING */
 }
 
 void

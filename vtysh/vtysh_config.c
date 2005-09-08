@@ -166,6 +166,8 @@ vtysh_config_parse_line (char *line)
 	{
 	  if (strncmp (line, " address-family vpnv4", strlen (" address-family vpnv4")) == 0)
 	    config = config_get (BGP_VPNV4_NODE, line);
+	  else if (strncmp (line, " address-family ipv4", strlen (" address-family ipv4")) == 0)
+	    config = config_get (BGP_IPV4_NODE, line);
 	  else if (strncmp (line, " address-family ipv4 multicast", strlen (" address-family ipv4 multicast")) == 0)
 	    config = config_get (BGP_IPV4M_NODE, line);
 	  else if (strncmp (line, " address-family ipv6", strlen (" address-family ipv6")) == 0)

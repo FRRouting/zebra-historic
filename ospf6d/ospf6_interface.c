@@ -1102,7 +1102,7 @@ DEFUN (ipv6_ospf6_ifmtu,
     {
       on = (struct ospf6_neighbor *) getdata (node);
       THREAD_OFF (on->inactivity_timer);
-      thread_execute (master, inactivity_timer, on, 0);
+      thread_add_event (master, inactivity_timer, on, 0);
     }
 
   return CMD_SUCCESS;
@@ -1151,7 +1151,7 @@ DEFUN (no_ipv6_ospf6_ifmtu,
     {
       on = (struct ospf6_neighbor *) getdata (node);
       THREAD_OFF (on->inactivity_timer);
-      thread_execute (master, inactivity_timer, on, 0);
+      thread_add_event (master, inactivity_timer, on, 0);
     }
 
   return CMD_SUCCESS;
@@ -1378,7 +1378,7 @@ DEFUN (ipv6_ospf6_passive,
     {
       on = (struct ospf6_neighbor *) getdata (node);
       THREAD_OFF (on->inactivity_timer);
-      thread_execute (master, inactivity_timer, on, 0);
+      thread_add_event (master, inactivity_timer, on, 0);
     }
 
   return CMD_SUCCESS;

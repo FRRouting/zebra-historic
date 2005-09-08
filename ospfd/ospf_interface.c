@@ -258,6 +258,9 @@ ospf_if_cleanup (struct ospf_interface *oi)
   oi->nbr_self = ospf_nbr_new (oi);
   oi->nbr_self->state = NSM_TwoWay;
   oi->nbr_self->priority = OSPF_IF_PARAM (oi, priority);
+  oi->nbr_self->router_id = oi->ospf->router_id;
+  oi->nbr_self->src = oi->address->u.prefix4;
+  oi->nbr_self->address = *oi->address;
 
   switch (oi->area->external_routing)
     {
@@ -275,6 +278,7 @@ ospf_if_cleanup (struct ospf_interface *oi)
 #endif /* HAVE_NSSA */
     }
 
+  ospf_nbr_add_self (oi);
   ospf_lsa_unlock (oi->network_lsa_self);
   oi->network_lsa_self = NULL;
   OSPF_TIMER_OFF (oi->t_network_lsa_self);

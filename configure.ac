@@ -687,7 +687,7 @@ if test "${enable_snmp}" = "yes"; then
       ac_snmps="${ac_snmps} ${link_dir}/${ac_snmp_dir}/asn1.h"
     done
   done
-  ac_snmps="${ac_snmps} /dev/null"
+  ac_snmps="${ac_snmps}"
 
   for ac_snmp in '' ${ac_snmps}; do
     test -z ${ac_snmp} && continue

@@ -1,3 +1,36 @@
+2005-09-08  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_lsdb.c: Include "log.h".
+
+2005-06-21  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf_packet.c (ospf_ls_upd): fix memory leak when NSSA enabled.
+	reported by [zebra 22449].
+
+2005-06-02  Akihiro Mizutani  <mizutani@net-chef.net>
+
+	* ospf_interface.c (ospf_if_cleanup): nbr_self added to neighbor list
+        when interface was changed from Down to Up.
+
+2005-06-01  Akihiro Mizutani  <mizutani@net-chef.net>
+
+	* ospf_ism.c (ospf_elect_bdr/ospf_elect_dr): Fix DR election bug.
+
+2005-05-26  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf_lsa.c (ospf_lsa_different): Asserting LSA length without
+	byte order conversion is fixed.
+
+2005-05-26  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
+
+	* ospf_abr.c (ospf_abr_update_aggregate): Cost of aggregated route
+	for an area is fixed (from smallest to largest).
+
+2005-05-10  Kunihiro Ishiguro  <kunihiro@zebra.org>
+
+	* ospf_packet.c (ospf_check_md5_digest): Suggested by Donald Sharp
+	<sharpd@cisco.com>
+
 2004-11-24  Yasuhiro Ohara  <yasu@sfc.wide.ad.jp>
 
 	* ospf_snmp.c: ospf_nbr_nbma_lookup_next() added for SNMP.

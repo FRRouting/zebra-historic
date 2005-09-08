@@ -270,7 +270,7 @@ ospf_check_md5_digest (struct ospf_interface *oi, struct stream *s,
   ospfh = (struct ospf_header *) ibuf;
 
   /* Get pointer to the end of the packet. */
-  pdigest = ibuf + length;
+  pdigest = (unsigned char *) ibuf + length;
 
   /* Get secret key. */
   ck = ospf_crypt_key_lookup (OSPF_IF_PARAM (oi, auth_crypt),
@@ -1166,10 +1166,6 @@ ospf_db_desc (struct ip *iph, struct ospf_header *ospfh,
       /* Check DD Options. */
       if (dd->options != nbr->options)
 	{
-#ifdef ORIGINAL_CODING
-	  /* Save the new options for debugging */
-	  nbr->options = dd->options;
-#endif /* ORIGINAL_CODING */
 	  zlog_warn ("Packet[DD]: options mismatch.");
 	  OSPF_NSM_EVENT_SCHEDULE (nbr, NSM_SeqNumberMismatch);
 	  break;
@@ -1785,6 +1781,7 @@ ospf_ls_upd (struct ip *iph, struct ospf_header *ospfh,
   if (listcount (mylsa_upds) > 0)
     ospf_opaque_self_originated_lsa_received (nbr, mylsa_upds);
 
+  list_delete (mylsa_acks);
   list_delete (mylsa_upds);
 #endif /* HAVE_OPAQUE_LSA */
 
@@ -2054,6 +2051,8 @@ ospf_check_auth (struct ospf_interface *oi, struct stream *ibuf,
 {
   int ret = 0;
   struct crypt_key *ck;
+  list list;
+  listnode node;
 
   switch (ntohs (ospfh->auth_type))
     {
@@ -2067,19 +2066,24 @@ ospf_check_auth (struct ospf_interface *oi, struct stream *ibuf,
 	ret = 0;
       break;
     case OSPF_AUTH_CRYPTOGRAPHIC:
-      if ((ck = getdata (OSPF_IF_PARAM (oi,auth_crypt)->tail)) == NULL)
-	{
-	  ret = 0;
-	  break;
-	}
-      
-      /* This is very basic, the digest processing is elsewhere */
-      if (ospfh->u.crypt.auth_data_len == OSPF_AUTH_MD5_SIZE && 
-          ospfh->u.crypt.key_id == ck->key_id &&
-          ntohs (ospfh->length) + OSPF_AUTH_SIMPLE_SIZE <= stream_get_size (ibuf))
-        ret = 1;
-      else
-        ret = 0;
+      ret = 0;
+      list = OSPF_IF_PARAM (oi, auth_crypt);
+      for (node = listhead (list); node; nextnode (node))
+        {
+          ck = getdata (node);
+          if (ck == NULL)
+            continue;
+
+          /* This is very basic, the digest processing is elsewhere */
+          if (ospfh->u.crypt.auth_data_len == OSPF_AUTH_MD5_SIZE && 
+              ospfh->u.crypt.key_id == ck->key_id &&
+              ntohs (ospfh->length) + OSPF_AUTH_SIMPLE_SIZE <=
+                stream_get_size (ibuf))
+            {
+              ret = 1;
+              break;
+            }
+        }
       break;
     default:
       ret = 0;

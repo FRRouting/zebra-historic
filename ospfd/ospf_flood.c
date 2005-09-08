@@ -447,11 +447,6 @@ ospf_flood_through_interface (struct ospf_interface *oi,
 
       /* If the new LSA was received from this neighbor,
 	 examine the next neighbor. */
-#ifdef ORIGINAL_CODING
-      if (inbr)
-	if (IPV4_ADDR_SAME (&inbr->router_id, &onbr->router_id))
-	  continue;
-#else /* ORIGINAL_CODING */
       if (inbr)
         {
           /*
@@ -478,7 +473,6 @@ ospf_flood_through_interface (struct ospf_interface *oi,
               continue;
             }
         }
-#endif /* ORIGINAL_CODING */
 
       /* Add the new LSA to the Link state retransmission list
 	 for the adjacency. The LSA will be retransmitted
@@ -710,39 +704,6 @@ ospf_flood_through (struct ospf *ospf,
      As usual, Type-5 LSA's (if not DISCARDED because we are STUB or
      NSSA) are flooded throughout the AS, and are updated in the
      global table.  */
-#ifdef ORIGINAL_CODING
-  switch (lsa->data->type)
-    {
-    case OSPF_ROUTER_LSA:
-    case OSPF_NETWORK_LSA:
-    case OSPF_SUMMARY_LSA:
-    case OSPF_ASBR_SUMMARY_LSA:
-#ifdef HAVE_OPAQUE_LSA
-    case OSPF_OPAQUE_LINK_LSA: /* ospf_flood_through_interface ? */
-    case OSPF_OPAQUE_AREA_LSA:
-#endif /* HAVE_OPAQUE_LSA */
-      lsa_ack_flag = ospf_flood_through_area (inbr->oi->area, inbr, lsa);
-      break;
-    case OSPF_AS_EXTERNAL_LSA: /* Type-5 */
-#ifdef HAVE_OPAQUE_LSA
-    case OSPF_OPAQUE_AS_LSA:
-#endif /* HAVE_OPAQUE_LSA */
-      lsa_ack_flag = ospf_flood_through_as (ospf, inbr, lsa);
-      break;
-#ifdef HAVE_NSSA
-      /* Type-7 Only received within NSSA, then flooded */
-    case OSPF_AS_NSSA_LSA:
-      /* Any P-bit was installed with the Type-7. */
-      lsa_ack_flag = ospf_flood_through_area (inbr->oi->area, inbr, lsa);
-
-      if (IS_DEBUG_OSPF_NSSA)
-	zlog_info ("ospf_flood_through: LOCAL NSSA FLOOD of Type-7.");
-      break;
-#endif /* HAVE_NSSA */
-    default:
-      break;
-    }
-#else /* ORIGINAL_CODING */
   /*
    * At the common sub-sub-function "ospf_flood_through_interface()",
    * a parameter "inbr" will be used to distinguish the called context
@@ -776,7 +737,6 @@ ospf_flood_through (struct ospf *ospf,
       lsa_ack_flag = ospf_flood_through_area (lsa->area, inbr, lsa);
       break;
     }
-#endif /* ORIGINAL_CODING */
   
   return (lsa_ack_flag);
 }
